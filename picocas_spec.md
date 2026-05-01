@@ -3306,6 +3306,82 @@ In[13]:= TrigFactor[Sin[x]^2 + Cos[x]^2 == 1]
 Out[13]= True
 ```
 
+#### TrigReduce
+
+`TrigReduce[expr]` rewrites products and integer powers of single-argument
+trigonometric functions in `expr` in terms of trigonometric functions with
+combined arguments. It is the inverse-of-`TrigExpand` direction for the
+product/power identities: given a trigonometric polynomial, `TrigReduce`
+typically yields a linear expression involving trigonometric functions
+with more complicated arguments.
+
+- `TrigReduce[expr]`
+
+**Features**:
+- Applies the classical product-to-sum identities (Sin·Cos, Sin·Sin,
+  Cos·Cos, plus the four hyperbolic analogues) and the power-reduction
+  identities (Sin² → (1 − Cos[2x])/2, etc., extended recursively to
+  any positive integer power).
+- Operates on both circular and hyperbolic functions; rewrites
+  `Tan`/`Cot`/`Sec`/`Csc` (and the hyperbolic reciprocals) as `Sin`/`Cos`
+  ratios before reduction, then restores the reciprocal head where the
+  result has the matching shape.
+- Recognises angle-addition forms produced after `Together`
+  (`Sin[a]·Cos[b] + Cos[a]·Sin[b] → Sin[a + b]` and analogues), with
+  sign variants and hyperbolic counterparts.
+- Includes a sign-cancellation pass for the `Sin[a − b] + Sin[b − a] = 0`
+  shape that arises when the product-to-sum rules bind asymmetrically;
+  the same pass handles the corresponding `Cos`/`Sinh`/`Cosh` parities.
+- Applies an `Expand`/`Together` cleanup at the end so trivial outer
+  fractions (`1/2 (2 X + 2 Y)`) flatten while genuine rationals
+  (`(3 − 4 Cos[2 x] + Cos[4 x])/2`) survive in normalised form.
+- Memoised through the same `FactorMemo` mechanism used by
+  `TrigExpand`/`TrigFactor`/`TrigToExp`, so repeated invocations during
+  `Simplify` candidate-set search amortise.
+- `Listable`, plus explicit threading over `Equal`, `Unequal`, `Less`,
+  `LessEqual`, `Greater`, `GreaterEqual`, `SameQ`, `UnsameQ`, `And`,
+  `Or`, `Not`, `Xor`, `Implies` (mirrors `TrigExpand` / `TrigFactor`).
+- Idempotent on already-reduced inputs and a no-op on non-trig
+  expressions or single trig calls of compound arguments.
+
+```mathematica
+In[1]:= TrigReduce[2 Cos[x]^2]
+Out[1]= 1 + Cos[2 x]
+
+In[2]:= TrigReduce[2 Sin[x] Cos[y]]
+Out[2]= Sin[x + y] + Sin[x - y]
+
+In[3]:= TrigReduce[2 Cosh[x] Cosh[y]]
+Out[3]= Cosh[x + y] + Cosh[x - y]
+
+In[4]:= TrigReduce[Sin[a] (Cos[b] - Sin[b]) + Cos[a] (Sin[b] + Cos[b])]
+Out[4]= Cos[a + b] + Sin[a + b]
+
+In[5]:= TrigReduce[Tan[x] + Tan[y]]
+Out[5]= Sec[x] Sec[y] Sin[x + y]
+
+In[6]:= TrigReduce[Coth[x] + Coth[y]]
+Out[6]= Csch[x] Csch[y] Sinh[x + y]
+
+In[7]:= TrigReduce[Sin[x]^4]
+Out[7]= 1/8 (3 - 4 Cos[2 x] + Cos[4 x])
+
+In[8]:= TrigReduce[2 Sin[x + y] Cos[x - y]]
+Out[8]= Sin[2 x] + Sin[2 y]
+
+In[9]:= TrigReduce[{Tan[x] + Cot[y], Tanh[x] - Coth[y]}]
+Out[9]= {Cos[x - y] Csc[y] Sec[x], -Cosh[x - y] Csch[y] Sech[x]}
+
+In[10]:= TrigReduce[4 Sin[x]^4 == 1 && 2 Cos[x]^2 >= 1]
+Out[10]= 1/2 (3 - 4 Cos[2 x] + Cos[4 x]) == 1 && 1 + Cos[2 x] >= 1
+```
+
+`TrigReduce` is also offered as a `Simplify` transform: when the search
+sees an angle-addition expansion such as
+`Sin[a] (Cos[b] − Sin[b]) + Cos[a] (Sin[b] + Cos[b])`, the reduced form
+`Cos[a + b] + Sin[a + b]` has fewer leaves and the score-gate selects
+it.
+
 #### Piecewise and Rounding Functions
 `Floor`, `Ceiling`, `Round`, `IntegerPart`, `FractionalPart`.
 

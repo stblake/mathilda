@@ -7,6 +7,7 @@ Expr* builtin_trigtoexp(Expr* res);
 Expr* builtin_exptotrig(Expr* res);
 Expr* builtin_trigexpand(Expr* res);
 Expr* builtin_trigfactor(Expr* res);
+Expr* builtin_trigreduce(Expr* res);
 
 void trigsimp_init(void);
 

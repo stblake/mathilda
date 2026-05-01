@@ -134,6 +134,40 @@ void info_init(void) {
         "TrigExpand[expr]\n\texpands out trigonometric functions in expr.\n\tTrigExpand operates on both circular and hyperbolic functions.\n\tTrigExpand splits up sums and integer multiples that appear in arguments of\n\ttrigonometric functions, and then expands out products of trigonometric\n\tfunctions into sums of powers, using trigonometric identities when possible.\n\tTrigExpand automatically threads over lists, as well as equations,\n\tinequalities, and logic functions.");
     symtab_set_docstring("TrigFactor",
         "TrigFactor[expr]\n\tfactors trigonometric functions in expr.\n\tTrigFactor operates on both circular and hyperbolic functions.\n\tTrigFactor factors polynomials in trigonometric functions and collapses\n\tPythagorean, angle-addition, and double-angle identities where possible,\n\tbroadly acting as the inverse of TrigExpand.\n\tTrigFactor automatically threads over lists, as well as equations,\n\tinequalities, and logic functions.");
+    symtab_set_docstring("TrigReduce",
+        "TrigReduce[expr]\n"
+        "\trewrites products and powers of trigonometric functions in expr in terms\n"
+        "\tof trigonometric functions with combined arguments.\n"
+        "\tTrigReduce operates on both circular and hyperbolic functions.\n"
+        "\tGiven a trigonometric polynomial, TrigReduce typically yields a linear\n"
+        "\texpression involving trigonometric functions with more complicated\n"
+        "\targuments.\n"
+        "\tTrigReduce automatically threads over lists, as well as equations,\n"
+        "\tinequalities and logic functions.\n"
+        "\n"
+        "\tReduce trigonometric expressions:\n"
+        "\t  TrigReduce[2 Cos[x]^2]            ->  1 + Cos[2 x]\n"
+        "\t  TrigReduce[2 Sin[x] Cos[y]]       ->  Sin[x - y] + Sin[x + y]\n"
+        "\n"
+        "\tReduce hyperbolic trigonometric expressions:\n"
+        "\t  TrigReduce[2 Cosh[x]^2]           ->  1 + Cosh[2 x]\n"
+        "\t  TrigReduce[2 Sinh[x] Cosh[y]]     ->  Sinh[x - y] + Sinh[x + y]\n"
+        "\n"
+        "\tTrigonometric expressions:\n"
+        "\t  TrigReduce[2 Sin[x + y] Cos[x - y]]  ->  Sin[2 x] + Sin[2 y]\n"
+        "\t  TrigReduce[Tan[x] + Tan[y]]          ->  Sec[x] Sec[y] Sin[x + y]\n"
+        "\n"
+        "\tHyperbolic trigonometric expressions:\n"
+        "\t  TrigReduce[2 Cosh[x] Cosh[y]]     ->  Cosh[x - y] + Cosh[x + y]\n"
+        "\t  TrigReduce[Coth[x] + Coth[y]]     ->  Csch[x] Csch[y] Sinh[x + y]\n"
+        "\n"
+        "\tThreads over lists:\n"
+        "\t  TrigReduce[{Tan[x] + Cot[y], Tanh[x] - Coth[y]}]\n"
+        "\t    -> {Cos[x - y] Csc[y] Sec[x], -Cosh[x - y] Csch[y] Sech[x]}\n"
+        "\n"
+        "\tThreads over equations, inequalities, and logical operations:\n"
+        "\t  TrigReduce[4 Sin[x]^4 == 1 && 2 Cos[x]^2 >= 1]\n"
+        "\t    -> 1/2 (3 - 4 Cos[2 x] + Cos[4 x]) == 1 && 1 + Cos[2 x] >= 1");
 
     // Piecewise / Rounding
     symtab_set_docstring("Floor", "Floor[x] gives the greatest integer less than or equal to x.");

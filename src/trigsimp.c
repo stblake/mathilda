@@ -109,6 +109,9 @@ static Expr* trig_factor_to_sincos = NULL;
 static Expr* trig_factor_identities = NULL;
 static Expr* trig_factor_from_sincos = NULL;
 
+static Expr* trig_reduce_rules = NULL;
+static Expr* trig_reduce_collapse = NULL;
+
 Expr* builtin_exptotrig(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
@@ -819,6 +822,125 @@ static Expr* builtin_trigfactor_impl(Expr* res) {
     return result_a;
 }
 
+/*
+ * TrigReduce -- inverse of TrigExpand for the product/power direction.
+ *
+ * Rewrites products and integer powers of single-argument circular and
+ * hyperbolic trig calls into single trig calls of compound (sum/multiple)
+ * arguments. The classical product-to-sum and power-reduction identities:
+ *
+ *   Sin[a] Cos[b]   = (Sin[a + b] + Sin[a - b]) / 2
+ *   Cos[a] Cos[b]   = (Cos[a + b] + Cos[a - b]) / 2
+ *   Sin[a] Sin[b]   = (Cos[a - b] - Cos[a + b]) / 2
+ *   Sin[x]^2        = (1 - Cos[2 x]) / 2
+ *   Cos[x]^2        = (1 + Cos[2 x]) / 2
+ * (and hyperbolic analogues).
+ *
+ * Pipeline:
+ *   1. Convert reciprocal heads (Tan/Cot/Sec/Csc and hyperbolic analogues)
+ *      to Sin/Cos ratios so the product-to-sum rules can see ratios.
+ *   2. Iterate (ReplaceRepeated rules, Expand) until fixed point. The
+ *      iteration is necessary because Expand re-exposes Cos[2 x]^2 terms
+ *      hidden inside (1 - Cos[2 x])^2 / 4 after a power-reduction pass on
+ *      Sin[x]^4, etc.
+ *   3. Together to renormalise denominators (e.g. Tan[x] + Tan[y] becomes
+ *      a single rational).
+ *   4. Apply angle-addition collapse rules so numerators of the form
+ *      Sin[a] Cos[b] + Cos[a] Sin[b] become Sin[a + b].
+ *   5. Restore reciprocal trig (Tan/Sec/Csc, etc.) where possible.
+ *
+ * Threading over List is delivered by ATTR_LISTABLE; equations,
+ * inequalities, and logical operators are threaded explicitly here using
+ * the same helper as TrigExpand / TrigFactor.
+ */
+static Expr* trigreduce_apply_rules(Expr* input, Expr* rules) {
+    Expr* args[2] = { input, expr_copy(rules) };
+    Expr* call = expr_new_function(expr_new_symbol("ReplaceRepeated"),
+                                   args, 2);
+    Expr* result = evaluate(call);
+    expr_free(call);
+    return result;
+}
+
+static Expr* trigreduce_call_unary(const char* name, Expr* input) {
+    Expr* args[1] = { input };
+    Expr* call = expr_new_function(expr_new_symbol(name), args, 1);
+    Expr* result = evaluate(call);
+    expr_free(call);
+    return result;
+}
+
+static Expr* builtin_trigreduce_impl(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1)
+        return NULL;
+    Expr* arg = res->data.function.args[0];
+
+    /* Thread over equations, inequalities, and logic heads. List
+     * threading is delivered by ATTR_LISTABLE in the attribute
+     * system. */
+    if (arg->type == EXPR_FUNCTION &&
+        arg->data.function.head &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        trigexpand_threads_over(arg->data.function.head->data.symbol)) {
+        size_t n = arg->data.function.arg_count;
+        Expr** new_args = (Expr**)calloc(n, sizeof(Expr*));
+        if (!new_args) return NULL;
+        for (size_t i = 0; i < n; i++) {
+            Expr* inner[1] = { expr_copy(arg->data.function.args[i]) };
+            Expr* wrap = expr_new_function(expr_new_symbol("TrigReduce"),
+                                           inner, 1);
+            new_args[i] = evaluate(wrap);
+            expr_free(wrap);
+        }
+        return expr_new_function(expr_copy(arg->data.function.head),
+                                 new_args, n);
+    }
+
+    /* Step 1: rewrite reciprocal heads so the polynomial structure is
+     * visible to the product-to-sum rules. */
+    Expr* current = expr_copy(arg);
+    current = trigreduce_apply_rules(current, trig_factor_to_sincos);
+
+    /* Step 2: iterate (ReplaceRepeated, Expand) until fixed point. The
+     * safety bound caps work on pathological inputs. Sin[x]^(2^k) needs
+     * k iterations to fully reduce, so 16 covers exponents up through
+     * Sin[x]^65536 -- well beyond any realistic input. */
+    Expr* prev = NULL;
+    for (int iter = 0; iter < 16; iter++) {
+        Expr* before = expr_copy(current);
+        current = trigreduce_apply_rules(current, trig_reduce_rules);
+        current = trigreduce_call_unary("Expand", current);
+        int converged = expr_eq(before, current);
+        expr_free(before);
+        if (prev) expr_free(prev);
+        prev = NULL;
+        if (converged) break;
+    }
+    if (prev) expr_free(prev);
+
+    /* Step 3: combine over a common denominator so collapse rules can
+     * see numerators as a single Plus. */
+    current = trigreduce_call_unary("Together", current);
+
+    /* Step 4: angle-addition collapse rules. Idempotent on inputs
+     * lacking the matching shape. */
+    current = trigreduce_apply_rules(current, trig_reduce_collapse);
+
+    /* Step 5: restore Tan/Cot/Sec/Csc (and hyperbolic analogues) where
+     * the result has the corresponding ratio or reciprocal shape. */
+    current = trigreduce_apply_rules(current, trig_factor_from_sincos);
+
+    /* Step 6: final canonicalisation. Expand distributes any remaining
+     * outer scalar (e.g. `1/2 (2 Cos[a+b] + 2 Sin[a+b])` flattens to
+     * `Cos[a+b] + Sin[a+b]` which Together leaves untouched, while
+     * irreducible fractions like `(3 - 4 Cos[2x] + Cos[4x])/2` are
+     * preserved as a single rational by the trailing Together). */
+    current = trigreduce_call_unary("Expand", current);
+    current = trigreduce_call_unary("Together", current);
+
+    return current;
+}
+
 /* Public entry points: route through trig_memo_call so the FactorMemo
  * (when active inside a Simplify call) caches results, then delegate
  * to the implementation on a cache miss. */
@@ -828,6 +950,10 @@ Expr* builtin_trigexpand(Expr* res) {
 
 Expr* builtin_trigfactor(Expr* res) {
     return trig_memo_call(res, "TrigFactor", builtin_trigfactor_impl);
+}
+
+Expr* builtin_trigreduce(Expr* res) {
+    return trig_memo_call(res, "TrigReduce", builtin_trigreduce_impl);
 }
 
 void trigsimp_init(void) {
@@ -1153,6 +1279,107 @@ void trigsimp_init(void) {
     "}";
     trig_factor_from_sincos = parse_expression(from_sincos_str);
 
+    /*
+     * TrigReduce rules.
+     *
+     * Two parallel directions of trig identity:
+     *   - Power reduction:   Sin[x]^n / Cos[x]^n / Sinh[x]^n / Cosh[x]^n
+     *     for integer n >= 2 are each pulled down by two powers, with
+     *     the (1 +/- Cos[2 x])/2 (resp. hyperbolic) factor surfacing.
+     *     Repeated application drops Sin[x]^4 -> Sin[x]^2 (1 - Cos[2 x])/2
+     *     -> ((1 - Cos[2 x])/2)^2, after which the Expand step in the
+     *     pipeline distributes the square and the rule fires again on
+     *     any newly-exposed Cos[2 x]^2 term.
+     *   - Product-to-sum: pairs of single-argument trig calls multiplied
+     *     together collapse into single trig calls of compound arguments.
+     *
+     * picocas's Times is Orderless, so the matcher commutes the factors
+     * in `Sin[a_] Cos[b_]` to align with whichever order the canonical
+     * sort produced. Only one direction of each pair is needed -- the
+     * commuted form is delivered by the matcher.
+     */
+    /* The Expand wrappers around the constructed arguments are needed
+     * because picocas does not auto-distribute Times across Plus
+     * (e.g. 2 (x + y) does not flatten to 2 x + 2 y, and (a + b) - (a - b)
+     * stays as Plus[a, b, Times[-1, Plus[a, -b]]] rather than reducing to
+     * 2 b). Without the Expand, the rule body would leave canonical-but-
+     * unsimplified arguments inside the Sin/Cos/Sinh/Cosh wrappers, and
+     * later Together/collapse passes could not see the actual scalar
+     * (e.g. Sin[2 y] hidden inside Sin[(x + y) - (x - y)]). Expand inside
+     * the rule body is evaluated as part of the substitution, so the
+     * argument is canonicalised before the surrounding trig head sees
+     * it. */
+    const char* reduce_rules_str = "{ "
+        "Sin[x_]^n_Integer /; n >= 2 :> Sin[x]^(n - 2) (1 - Cos[Expand[2 x]]) / 2, "
+        "Cos[x_]^n_Integer /; n >= 2 :> Cos[x]^(n - 2) (1 + Cos[Expand[2 x]]) / 2, "
+        "Sinh[x_]^n_Integer /; n >= 2 :> Sinh[x]^(n - 2) (-1 + Cosh[Expand[2 x]]) / 2, "
+        "Cosh[x_]^n_Integer /; n >= 2 :> Cosh[x]^(n - 2) (1 + Cosh[Expand[2 x]]) / 2, "
+        "Sin[a_] Cos[b_] r___ :> r (Sin[Expand[a + b]] + Sin[Expand[a - b]]) / 2, "
+        "Sin[a_] Sin[b_] r___ :> r (Cos[Expand[a - b]] - Cos[Expand[a + b]]) / 2, "
+        "Cos[a_] Cos[b_] r___ :> r (Cos[Expand[a + b]] + Cos[Expand[a - b]]) / 2, "
+        "Sinh[a_] Cosh[b_] r___ :> r (Sinh[Expand[a + b]] + Sinh[Expand[a - b]]) / 2, "
+        "Sinh[a_] Sinh[b_] r___ :> r (Cosh[Expand[a + b]] - Cosh[Expand[a - b]]) / 2, "
+        "Cosh[a_] Cosh[b_] r___ :> r (Cosh[Expand[a + b]] + Cosh[Expand[a - b]]) / 2 "
+    "}";
+    trig_reduce_rules = parse_expression(reduce_rules_str);
+
+    /*
+     * Angle-addition collapse rules.
+     *
+     * Run after Together so a numerator of the form
+     *   Sin[a] Cos[b] + Cos[a] Sin[b]
+     * (often produced by Tan[a] + Tan[b] passing through the to-sin/cos
+     * rewrite then Together) collapses to Sin[a + b]. Each rule has
+     * sign variants because the sort that picocas applies inside the
+     * Plus may surface either coefficient orientation.
+     *
+     * Trailing `r___` lets the rule fire inside a larger sum without
+     * requiring an exact two-term match.
+     */
+    /*
+     * The final four cancellation rules pull Sin[-X] = -Sin[X] (and the
+     * Sinh analogue) and the even-function combinations Cos[-X] = Cos[X]
+     * (and Cosh) out of sum-of-trig terms. picocas canonicalises
+     * Sin[Times[-1, x]] but does NOT canonicalise Sin[Plus[Times[-1, a],
+     * b]] (i.e. Sin[-a + b] is left as-is rather than simplifying to
+     * -Sin[a - b]). After applying the product-to-sum rules to a Sin[a]
+     * Cos[b] + Cos[a] Sin[b] form whose factors disagree on which
+     * variable lands in the Sin slot, the matcher binds the rule's
+     * pattern variables in opposite directions for the two terms,
+     * producing Sin[a - b] + Sin[b - a] which mathematically equals zero
+     * but is not recognised by the auto-evaluator. The condition
+     * `SameQ[Expand[a + b], 0]` confirms the two argument expressions
+     * are negatives of each other; the rules then combine the
+     * coefficients with the appropriate sign for each parity (Sin/Sinh
+     * are odd; Cos/Cosh are even).
+     */
+    const char* collapse_str = "{ "
+        /* Circular angle-addition collapses */
+        "Sin[a_] Cos[b_] + Cos[a_] Sin[b_] + r___ :> Sin[Expand[a + b]] + r, "
+        "-Sin[a_] Cos[b_] - Cos[a_] Sin[b_] + r___ :> -Sin[Expand[a + b]] + r, "
+        "Sin[a_] Cos[b_] - Cos[a_] Sin[b_] + r___ :> Sin[Expand[a - b]] + r, "
+        "-Sin[a_] Cos[b_] + Cos[a_] Sin[b_] + r___ :> -Sin[Expand[a - b]] + r, "
+        "Cos[a_] Cos[b_] - Sin[a_] Sin[b_] + r___ :> Cos[Expand[a + b]] + r, "
+        "-Cos[a_] Cos[b_] + Sin[a_] Sin[b_] + r___ :> -Cos[Expand[a + b]] + r, "
+        "Cos[a_] Cos[b_] + Sin[a_] Sin[b_] + r___ :> Cos[Expand[a - b]] + r, "
+        "-Cos[a_] Cos[b_] - Sin[a_] Sin[b_] + r___ :> -Cos[Expand[a - b]] + r, "
+        /* Hyperbolic angle-addition collapses */
+        "Sinh[a_] Cosh[b_] + Cosh[a_] Sinh[b_] + r___ :> Sinh[Expand[a + b]] + r, "
+        "-Sinh[a_] Cosh[b_] - Cosh[a_] Sinh[b_] + r___ :> -Sinh[Expand[a + b]] + r, "
+        "Sinh[a_] Cosh[b_] - Cosh[a_] Sinh[b_] + r___ :> Sinh[Expand[a - b]] + r, "
+        "-Sinh[a_] Cosh[b_] + Cosh[a_] Sinh[b_] + r___ :> -Sinh[Expand[a - b]] + r, "
+        "Cosh[a_] Cosh[b_] + Sinh[a_] Sinh[b_] + r___ :> Cosh[Expand[a + b]] + r, "
+        "-Cosh[a_] Cosh[b_] - Sinh[a_] Sinh[b_] + r___ :> -Cosh[Expand[a + b]] + r, "
+        "Cosh[a_] Cosh[b_] - Sinh[a_] Sinh[b_] + r___ :> Cosh[Expand[a - b]] + r, "
+        "-Cosh[a_] Cosh[b_] + Sinh[a_] Sinh[b_] + r___ :> -Cosh[Expand[a - b]] + r, "
+        /* Negative-argument cancellations */
+        "c1_. Sin[a_] + c2_. Sin[b_] + r___ /; SameQ[Expand[a + b], 0] :> (c1 - c2) Sin[a] + r, "
+        "c1_. Cos[a_] + c2_. Cos[b_] + r___ /; SameQ[Expand[a + b], 0] :> (c1 + c2) Cos[a] + r, "
+        "c1_. Sinh[a_] + c2_. Sinh[b_] + r___ /; SameQ[Expand[a + b], 0] :> (c1 - c2) Sinh[a] + r, "
+        "c1_. Cosh[a_] + c2_. Cosh[b_] + r___ /; SameQ[Expand[a + b], 0] :> (c1 + c2) Cosh[a] + r "
+    "}";
+    trig_reduce_collapse = parse_expression(collapse_str);
+
     symtab_add_builtin("ExpToTrig", builtin_exptotrig);
     symtab_get_def("ExpToTrig")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
 
@@ -1164,4 +1391,7 @@ void trigsimp_init(void) {
 
     symtab_add_builtin("TrigFactor", builtin_trigfactor);
     symtab_get_def("TrigFactor")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
+
+    symtab_add_builtin("TrigReduce", builtin_trigreduce);
+    symtab_get_def("TrigReduce")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
 }

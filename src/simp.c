@@ -2071,6 +2071,27 @@ static bool contains_power(const Expr* e) {
     return false;
 }
 
+/* True iff a Plus, Times, or Power head appears anywhere in `e`. Used by
+ * the TrigReduce gate to short-circuit on a bare single trig call (no
+ * product or power means no product-to-sum work). Power is included
+ * because Sin[x]^2 is the canonical TrigReduce input. */
+static bool contains_plus_or_times(const Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        if (strcmp(h, "Plus")  == 0 ||
+            strcmp(h, "Times") == 0 ||
+            strcmp(h, "Power") == 0) return true;
+    }
+    if (contains_plus_or_times(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (contains_plus_or_times(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
 /* True iff any non-numeric-constant symbol leaf appears anywhere in `e`.
  * Pi, E, EulerGamma, Degree, Catalan, Glaisher, Khinchin do not count --
  * they are positive numeric constants. Used to short-circuit transforms
@@ -2325,6 +2346,13 @@ static const char* SIMP_TRANSFORMS[] = {
     "Apart",
     "TrigExpand",
     "TrigFactor",
+    /* TrigReduce shrinks angle-addition forms (Sin[a]Cos[b]+Cos[a]Sin[b]
+     * -> Sin[a+b]) and pulls integer powers / products of single-arg
+     * trig calls into single trig calls of compound arguments. The
+     * round-loop's score-gate keeps the reduction only when its leaf
+     * count is no greater than the parent's, which is the typical case
+     * for genuine angle-addition shapes. */
+    "TrigReduce",
     /* TrigToExp surfaces the exp form directly so that hyperbolic
      * combinations whose exp form is strictly simpler (e.g. Sinh[x] +
      * Cosh[x] -> E^x) win the score tiebreak. The full trig roundtrip
@@ -2394,8 +2422,17 @@ static bool transform_can_fire(const char* name, const Expr* e,
     if (strcmp(name, "TrigExpand") == 0 ||
         strcmp(name, "TrigFactor") == 0 ||
         strcmp(name, "TrigToExp") == 0 ||
-        strcmp(name, "TrigRoundtrip") == 0) {
+        strcmp(name, "TrigRoundtrip") == 0 ||
+        strcmp(name, "TrigReduce") == 0) {
         if (!contains_trig_or_hyperbolic(e)) return false;
+    }
+    /* TrigReduce additionally needs Plus or Times anywhere in the input;
+     * a single trig call with no enclosing arithmetic produces no
+     * product-to-sum work and the rule list is a no-op. Without this
+     * gate every Sin/Cos seed would seed a TrigReduce candidate and
+     * waste a memo slot per leaf. */
+    if (strcmp(name, "TrigReduce") == 0) {
+        if (!contains_plus_or_times(e)) return false;
     }
     /* Abs rules. */
     if (strcmp(name, "AbsRules") == 0) {
