@@ -302,7 +302,7 @@ self-contained and exhaustively unit-tested.
 | 5b | Wang's leading-coefficient correction (handles non-monic) — same as Phase F1 | Not started — see §12 |
 | 5c | Retire `factor_roots` once F1 + F2 + F3 land | Not started — see §12 |
 | F1 | Wang's lc correction (replaces 5b) — bivariate non-monic via leading-coefficient pre-distribution | **Stages 1 + 2 + 3 done** — Stage 1 (LC = -1 negate path): pre-negate P, run the monic Hensel on -P, absorb the sign into the highest-x-degree factor via `Expand[-1 · factor]`.  Stage 2 (constant `\|a\| > 1` LC): Wang's monic-substitution recipe.  Form `Q = a^(d-1) · P(x/a, y)` (monic in x with integer coefficients), factor Q via the existing monic Hensel into G_1 ... G_r, then recover the true factors via `F_i = G_i(a·x, y) / cont_Z(G_i(a·x, y))`.  Stage 3 (polynomial-in-y LC, MVP scope): predicted-LC two-factor Hensel.  When `lc_x(P)(y)` is a non-constant polynomial `A(y)`, factor `A` over `Z[y]`, find `α` with `A(α) = +1` so the squarefree univariate image `P(x, α)` has monic factors `u`, `v`, then enumerate distributions of `A`'s irreducible factors between predicted leading coefficients `q_u, q_v` (with `q_u · q_v = A`) such that `q_u(α) = q_v(α) = +1`.  For each surviving distribution, the new `bpoly_hensel_lift_2_lc` runs the Hensel iteration with the leading-x coefficient of each `Δu` correction PINNED to the y^k coefficient of `q_u` and only the lower x-degree part solved via Diophantine — that keeps `lc_x(U)(y) = q_u(y)` invariant across the lift, so `Π U_i = P` exactly without the `A^(r-1)` content-division step from textbook Wang.  Unlocks bivariates like `Factor[Expand[(xy+1)(xy+2)]]`, `Factor[Expand[((y²+1)x+1)(x+3)]]`, `Factor[Expand[((y+1)x+1)((y+1)x+2)]]`.  MVP limitations: r = 2 only (more factors fall through), both univariate factors must be monic (often achievable when `A(α) = ±1`), `\|cont(A)\| = 1`, and inputs that have a non-trivial monomial content fall through so the `heuristic_factor` Phase 0 path produces the canonical fully-factored form. |
-| F2 | True multivariate Hensel for n ≥ 3 — MPoly type + n-variate Hensel iteration | Not started — largest LOC budget, ~1000-1500 LOC |
+| F2 | True multivariate Hensel for n ≥ 3 — MPoly type + n-variate Hensel iteration | **MVP done** — Stage 2.1 (MPoly substrate `src/mpoly.{c,h}`, ~600 LOC + 38 tests) gives a sparse Z[x_1,...,x_n] type with mpz_t coefficients in lex descending order, full arithmetic, substitution, Expr round-trip.  Stage 2.2 (trivariate Hensel `src/mvfactor3.{c,h}`, ~500 LOC + 9 tests) adds a bivariate Diophantine solver via Hensel iteration on top of zupoly_diophantine, plus a trivariate two-factor lift (`mpoly_hensel_lift_3_2`).  Stage 2.3 (`factor_trivariate_via_mhensel` in `src/facpoly.c`) wires the trivariate path into `heuristic_factor` between Phase 4 and the irreducibility gate.  Algorithm: pick monic-in-main variable, try (α_y, α_z) tuples, factor univariate image via existing BZ, lift to bivariate via `bpoly_hensel_lift_2`, lift to trivariate via `mpoly_hensel_lift_3_2`, verify product.  **Unblocks the user-reported case 2 from §12**: `Factor[Expand[(zx - x² - y²)(3z + 4xy - y²)]]` 6 s (returned input unchanged) → 0.33 s (correctly factored).  Other simpler trivariate cases like `(z+xy)(z-xy)`, `(z+x)(z+y)`, `(z²+x)(z+y)` factor in single-digit ms.  Drive-by fix: corrected `extract_monomial` to descend into nested Times (was missing `Times[-1, Times[Power[x,2], Power[y,2]]]` factor structure, breaking `factor_binomial` on certain trivariate inputs).  MVP scope: monic-in-main two-factor only; non-monic Wang correction and r ≥ 3 recombination follow in subsequent phases. |
 | F3 | Bivariate Hensel performance — incremental U·V update, Mignotte fast-fail, sorted us[] | Not started — required for F1 to be fast, ~200-400 LOC |
 | F4 | Faster multivariate FactorSquareFree — cheap squarefree pre-check before full GCD | **Phase 1 done** — `sqfree_cheap_check` in `facpoly.c` substitutes integer values for the non-main variables, computes the univariate gcd-with-derivative, and skips the expensive multivariate `gcd(pp, pp')` when the image is squarefree at any of seven test alphas.  Sound after content extraction (a constant-in-x repeated factor would have divided content; a non-constant repeated factor specialises to a non-squarefree image at all but a finite alpha set).  Measured: 4-variable squarefree Hensel-style input 6.27 s → 0.95 s (6.6×); 3-variable squarefree typical 60-150 ms unchanged because the multivariate GCD was not the bottleneck there.  Non-squarefree inputs fall through to the original Yun loop; tests in `tests/test_facpoly.c` cover both branches. |
 | F5 | Recombination cap & heuristics — singleton ordering, partial-lift signal, budget cap | **Done** — partial-lift signal landed in `lift_multi_internal` (`src/mvfactor.c`).  Singleton ordering was already done as F3a.  The lift-2 internal helper now reports a `completed_iters` flag distinguishing "lift bailed early on Diophantine non-integer or Mignotte coefficient overflow" from "lift completed all B y-iterations and only failed the final `U·V == P` verify".  When an entire k-pass produces no completion signal AND k ≥ 2, the recombination loop short-circuits and returns P as irreducible bivariately.  k = 1 is always exhausted so legitimate singleton lifts still fire; k = 2 is always tried before any short-circuit so all current k = 2 recombination cases (e.g. `(x²-y)(x²-4y)`) remain correct.  Measured: `Factor[Expand[x²⁴+y²-1]]` 117 → 84 ms (-29 %), `Factor[Expand[x¹²+y⁴-1]]` 24 → 20 ms (-17 %), `Factor[Expand[x¹²+y²-1]]` 23 → 20 ms (-13 %).  Larger savings on bivariate-irreducible inputs whose univariate image factors into 6+ pieces (cyclotomic-rich); no regression on the existing recombination test suite. |
@@ -858,7 +858,7 @@ The reference user-failure cases (and the gap each exposes):
 | Case | Picocas current | Mathematica | Gap |
 |---|---|---|---|
 | `Factor[3 - 3x² + 4xy - 4x³y - 4y² + x²y² - 4xy³ + y⁴]` | **5 ms** ✓ (after the v_count==2 fast-path commit on the previous turn) | 0.15 ms | 30× — algorithmic constant factor |
-| `Factor[(zx - x² - y²)(3z + 4xy - y²)]` (expanded) | ~6 s, returns input unchanged | < 1 ms, factors correctly | **F2** — every factor depends on every variable; needs true multivariate Hensel |
+| `Factor[(zx - x² - y²)(3z + 4xy - y²)]` (expanded) | **0.33 s** ✓ (after F2 MVP, 2026-05-02; previously ~6 s returning input unchanged) | < 1 ms | algorithmic constant factor only |
 | `Factor[(1 - x¹²)(x - y¹³)(y - z¹⁴)]` (expanded) | **84 ms** ✓ (after the `univariate_squarefree`→`zupoly_gcd` fix; previously hung because F4's pre-check ran a univariate gcd over a degree-30 image through Knuth-style primitive PRS, which exhibits exponential coefficient growth) | few ms | algorithmic constant factor only |
 | `Factor[x²(1 - x¹²)(1 + x - y¹³)(1 - y - z¹⁴)]` (expanded) | **167 ms** ✓ (same fix) | few ms | algorithmic constant factor only |
 | `Factor[Expand[x²(z¹³-x¹²)(z⁴+3x⁹-y¹³)(17-5y-z¹⁴)]]` (user-reported 2026-04) | **0.9 s** ✓ (same fix; previously hung at >120 s in F4 pre-check) | 2 ms | algorithmic constant factor only |
@@ -988,13 +988,106 @@ on the others); also overlaps with F2's multivariate cases.
 
 **Estimated** (Stage 3): 300-500 LOC implementation + 150-200 LOC tests.
 
-### Phase F2 — True multivariate Hensel for n ≥ 3
+### Phase F2 — True multivariate Hensel for n ≥ 3 (MVP DONE 2026-05-02)
 
-The current Phase 4 (`factor_via_z_independent_split`) only handles
+The previous Phase 4 (`factor_via_z_independent_split`) only handled
 inputs where at least one factor is independent of one variable.
 Cases like `(zx - x² - y²)(3z + 4xy - y²)` -- where every factor
 depends on every variable -- need actual multivariate Hensel
 lifting.
+
+The MVP implementation lands in three stages:
+
+#### Stage F2.1 -- MPoly substrate (DONE)
+
+`src/mpoly.{c,h}`: sparse Z[x_1, ..., x_n] with mpz_t coefficients,
+lex descending term order, row-major exponent storage parallel to
+coefficient array.  Operations: construction
+(new/zero/from_int/from_mpz/monomial/copy), term manipulation
+(push_term/set_coef/get_coef/normalize), arithmetic
+(add/sub/neg/mul/scale), substitution (subst_var_int/shift_var_int/
+coef_of_var/lc_var), Expr round-trip.  38 unit tests in
+`tests/test_mpoly.c`.
+
+#### Stage F2.2 -- Trivariate Hensel lift (DONE)
+
+`src/mvfactor3.{c,h}`:
+
+- **Bivariate Diophantine** (`mpoly_diophantine_2`): solve Δu·V +
+  Δv·U = E over Z[var_main, var_y].  Algorithm: specialise var_y to
+  a chosen integer α_y where U(x, α_y), V(x, α_y) remain coprime and
+  degree-preserving in var_main; solve univariate Diophantine via
+  zupoly_diophantine; lift in var_y via Hensel iteration up to
+  deg_{var_y}(E).  At each iteration solve the residual at y^k via
+  another zupoly_diophantine (over u(x, 0), v(x, 0)).  Tries up to
+  11 alpha values before giving up.
+
+- **Trivariate two-factor Hensel** (`mpoly_hensel_lift_3_2`): given
+  P ∈ MPoly{n vars} and bivariate seeds U_xy, V_xy with var_z-degree
+  0 such that U_xy · V_xy = P|var_z=α_z, lift to U, V ∈ MPoly{n vars}
+  with U·V = P.  Shifts var_z by α_z, iterates degrees k = 1..B_z
+  computing residual (P_sh - U·V)[z^k], solves bivariate Diophantine
+  on the residual, updates U += z^k Δu, V += z^k Δv.  Verifies final
+  product.
+
+- **MPoly ↔ BPoly converters** (`mpoly_to_bpoly_in`,
+  `bpoly_to_mpoly_in`) so the orchestrator can reuse the existing
+  bivariate Hensel for the y-lift step.
+
+9 unit tests in `tests/test_mvfactor3.c` cover MPoly ↔ ZUPoly
+round-trip, the bivariate Diophantine solver, and the trivariate
+two-factor lift.
+
+#### Stage F2.3 -- heuristic_factor wiring (DONE)
+
+`src/facpoly.c`: `factor_trivariate_via_mhensel` is invoked in
+`heuristic_factor` between Phase 4 (specialise-and-divide) and the
+is_likely_irreducible_multivariate gate, but only for v_count == 3.
+The orchestrator:
+
+1. Convert P to MPoly.
+2. Try each variable as main, requiring deg ≥ 1 and lc = constant 1.
+3. Try (α_y, α_z) ∈ {0, ±1, ±2, ±3}^2 = 49 alpha tuples.
+4. For each: compute univariate image, check squarefree, factor via
+   existing `factor_via_bz_callback`, require r = 2.
+5. Specialise z = α_z, shift y by α_y, run `bpoly_hensel_lift_2`.
+6. Convert bivariate factors to MPoly, unshift y, then run
+   `mpoly_hensel_lift_3_2` to introduce z.
+7. Verify product == P, convert back to Expr, return.
+
+Drive-by fix: corrected `extract_monomial` to descend into nested
+Times.  Without the fix, `factor_binomial` on inputs like
+`Plus[Power[z,2], Times[-1, Times[Power[x,2], Power[y,2]]]]`
+silently dropped the `x²y²` structure (the inner Times wasn't
+recognised), causing `Factor[z² - x²y²]` to incorrectly return
+`(z-1)(z+1)`.
+
+#### Measured impact
+
+| Workload | Pre-F2 | Post-F2 |
+|---|---|---|
+| `Factor[Expand[(zx - x² - y²)(3z + 4xy - y²)]]` | ~6 s, unfactored | **0.33 s, factored correctly** |
+| `Factor[Expand[(z + xy)(z - xy)]]` | wrong (z-1)(z+1) | 15 ms, correct |
+| `Factor[Expand[(z + x)(z + y)]]` | wrong | 12 ms, correct |
+| `Factor[Expand[(z² + x)(z + y)]]` | wrong | 5 ms, correct |
+
+#### MVP scope and follow-ups
+
+What this MVP handles:
+- n = 3 inputs, monic in some main variable.
+- Two-factor outputs (r = 2).
+- alpha tuples in a small budget (49 attempts).
+
+What it doesn't yet handle:
+- n ≥ 4 (extension is recursive but requires more glue).
+- Non-monic-in-main inputs (need Wang's lc correction at the
+  trivariate level, similar to F1's bivariate Wang).
+- r ≥ 3 outputs (need multifactor Hensel + recombination at the
+  trivariate level).
+- Inputs where 49 alpha tuples don't yield a good seed.
+
+These extensions land in subsequent phases.  The current MVP
+unblocks the most user-visible case from §12.
 
 Sketch:
 
@@ -1311,7 +1404,7 @@ test suite to verify no regressions.
 | 2 | **F4** (cheap squarefree check) | 50 ms - 200 ms savings on every multivariate Factor; blocks nothing. | **Done** (Stages 1+2) |
 | 3 | **F3** (Hensel performance) | Required for F1 to actually be fast on high-degree inputs. | **Done** (Stages a+b+c) |
 | 4 | **F5** (recombination heuristics) | Cheap, marginal but real. | **Done** (partial-lift signal short-circuit) |
-| 5 | **F2** (multivariate Hensel) | Largest LOC budget; deferred if user pressure on case-2 type inputs is acceptable. | Not started |
+| 5 | **F2** (multivariate Hensel) | Largest LOC budget; deferred if user pressure on case-2 type inputs is acceptable. | **MVP done** (n=3, monic-in-main, two-factor) |
 | 6 | **5c** (retire `factor_roots`) | After F1, F3.  Optional cleanup; F2 only required if we want to drop `factor_roots` BEFORE accepting case-2 limitations. | Not started |
 
 Total: ~2-3 person-weeks for F1+F3+F4+F5+5c (without F2).  Adding

@@ -475,6 +475,47 @@ static void test_f5_irreducible_r6_x12_y4(void) {
     }
 }
 
+/* ====================================================================== */
+/*  Phase F2 MVP: trivariate two-factor Hensel via MPoly                  */
+/* ====================================================================== */
+
+static void test_f2_trivariate_z_plus_xy_times_z_minus_xy(void) {
+    /* P = (z + x y)(z - x y) = z^2 - x^2 y^2.  Both factors depend on
+     * every variable.  Phase 4 (factor_via_z_independent_split) cannot
+     * find this because no variable specialisation exposes a clean
+     * factor; F2's trivariate Hensel is required. */
+    check_factor_expands_to(
+        "Factor[Expand[(z + x y)(z - x y)]]",
+        "Plus[Times[-1, Times[Power[x, 2], Power[y, 2]]], Power[z, 2]]");
+}
+
+static void test_f2_trivariate_z_plus_x_z_plus_y(void) {
+    /* P = (z + x)(z + y).  Linear in z; each factor depends on a
+     * different second-tier variable. */
+    check_factor_expands_to(
+        "Factor[Expand[(z + x)(z + y)]]",
+        "Plus[Power[z, 2], Times[x, y], Times[x, z], Times[y, z]]");
+}
+
+static void test_f2_trivariate_user_reported(void) {
+    /* The user-reported case from FACTOR_PLAN.md §12: every factor
+     * depends on every variable.  Pre-F2 took ~6s and returned input
+     * unchanged; F2 factors it correctly in ~300 ms.
+     *
+     * P = (z x - x^2 - y^2)(3 z + 4 x y - y^2). */
+    check_factor_expands_to(
+        "Factor[Expand[(z*x - x^2 - y^2)*(3*z + 4*x*y - y^2)]]",
+        "Plus[Times[-1, Times[x, Power[y, 2], z]], "
+             "Times[-4, Times[x, Power[y, 3]]], "
+             "Times[3, Times[x, Power[z, 2]]], "
+             "Times[4, Times[Power[x, 2], y, z]], "
+             "Times[-3, Times[Power[x, 2], z]], "
+             "Times[-4, Times[Power[x, 3], y]], "
+             "Power[y, 4], "
+             "Times[-3, Times[Power[y, 2], z]], "
+             "Times[Power[x, 2], Power[y, 2]]]");
+}
+
 static void test_f5_recombination_still_works_k2(void) {
     /* (x^2 - y)(x^2 - 4y): both bivariate factors have reducible
      * univariate images at alpha = 1 (x^2 - 1 = (x-1)(x+1) and
@@ -546,6 +587,11 @@ int main(void) {
     TEST(test_f5_irreducible_r8_x24);
     TEST(test_f5_irreducible_r6_x12_y4);
     TEST(test_f5_recombination_still_works_k2);
+
+    /* Phase F2 MVP: trivariate two-factor monic Hensel via MPoly */
+    TEST(test_f2_trivariate_z_plus_xy_times_z_minus_xy);
+    TEST(test_f2_trivariate_z_plus_x_z_plus_y);
+    TEST(test_f2_trivariate_user_reported);
 
     printf("All factor_recombine tests passed!\n");
     return 0;

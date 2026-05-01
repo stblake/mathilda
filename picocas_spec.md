@@ -8178,3 +8178,114 @@ the per-k-pass signal is absent and k ≥ 2).
 short-circuit on bivariate-irreducible inputs whose univariate
 image has 6 or 8 factors; the last verifies F5 does not regress
 legitimate k = 2 recombination.
+
+## Factor: trivariate two-factor monic Hensel via MPoly (Phase F2 MVP, 2026-05-02)
+
+The previous Phase 4 (`factor_via_z_independent_split`) handled n ≥ 3
+inputs only when at least one factor was independent of one variable.
+Cases like `(zx - x² - y²)(3z + 4xy - y²)` -- where every factor
+depends on every variable -- fell through to `factor_roots` which
+caught only `(var - c)` shapes, then ultimately returned the input
+unchanged after ~6 seconds.  Phase F2 adds the missing multivariate
+Hensel pipeline.
+
+### MPoly substrate (`src/mpoly.{c,h}`)
+
+Sparse Z[x_1, ..., x_n] type with arbitrary-precision (mpz_t)
+coefficients.  Terms are stored in lex descending monomial order with
+parallel row-major exponent and coefficient arrays.  Operations:
+
+- Construction: `mpoly_new`, `mpoly_zero`, `mpoly_from_int`,
+  `mpoly_from_mpz`, `mpoly_monomial`, `mpoly_copy`.
+- Term manipulation: `mpoly_push_term` (bulk append, then
+  `mpoly_normalize` to sort/dedup/drop-zero), `mpoly_set_coef`,
+  `mpoly_get_coef`.
+- Predicates: `mpoly_is_zero`, `mpoly_eq`, `mpoly_deg_var`,
+  `mpoly_total_deg`, `mpoly_is_constant_in_var`.
+- Arithmetic: `mpoly_add` (merge sort), `mpoly_sub`, `mpoly_neg`,
+  `mpoly_mul` (full term-by-term then normalise), `mpoly_scale`.
+- Substitution: `mpoly_subst_var_int` (x_i := alpha),
+  `mpoly_shift_var_int` (x_i := x_i + alpha via binomial expansion),
+  `mpoly_coef_of_var` (returns the polynomial coefficient of x_i^k),
+  `mpoly_lc_var`.
+- Expr round-trip: `expr_to_mpoly`, `mpoly_to_expr`.
+
+### Trivariate Hensel pipeline (`src/mvfactor3.{c,h}`)
+
+Two new primitives:
+
+- **Bivariate Diophantine** (`mpoly_diophantine_2`): solve
+  `Δu·V + Δv·U = E` over Z[x_main, x_y] with monic-in-x_main U, V
+  coprime over Q(x_y)[x_main].  Algorithm: try alpha values for
+  x_y; for each promising alpha, solve the univariate Diophantine
+  via `zupoly_diophantine`; then Hensel-lift in x_y up to
+  `deg_{x_y}(E)`.
+
+- **Trivariate two-factor Hensel** (`mpoly_hensel_lift_3_2`): given
+  P ∈ MPoly{n vars} with bivariate seeds U_xy, V_xy at x_z = α_z,
+  lift to U, V satisfying U·V = P over Z[x_main, x_y, x_z].  Shifts
+  x_z by α_z, iterates degrees k = 1..deg_{x_z}(P_sh), solves the
+  bivariate Diophantine on each residual, accumulates the
+  corrections, verifies the final product.
+
+The implementation reuses the existing `bpoly_hensel_lift_2`
+machinery for the inner y-lift step via MPoly ↔ BPoly converters
+(`mpoly_to_bpoly_in`, `bpoly_to_mpoly_in`).
+
+### Wiring (`src/facpoly.c::factor_trivariate_via_mhensel`)
+
+Invoked in `heuristic_factor` between Phase 4 (specialise-and-divide)
+and the irreducibility gate, only for `v_count == 3`.  The
+orchestrator:
+
+1. Convert P to MPoly.
+2. Try each variable as main, requiring degree ≥ 1 and constant
+   leading coefficient = 1.
+3. Try (α_y, α_z) ∈ {0, ±1, ±2, ±3}^2 = 49 alpha tuples.
+4. For each: compute univariate image, check squarefree, factor via
+   existing `factor_via_bz_callback`, require r = 2.
+5. Specialise z = α_z, shift y by α_y, run `bpoly_hensel_lift_2`.
+6. Convert bivariate factors to MPoly, unshift y, then run
+   `mpoly_hensel_lift_3_2` to introduce z.
+7. Verify product == P, convert back to Expr, return.
+
+### Drive-by fix to `extract_monomial`
+
+The trivariate test case `(z + xy)(z - xy)` exposed a pre-existing
+bug in `extract_monomial`: the function did not descend into nested
+Times structures.  For `Plus[Power[z,2], Times[-1, Times[Power[x,2],
+Power[y,2]]]]`, the inner Times was silently dropped, so
+`factor_binomial` saw the polynomial as `z² + (constant -1)` and
+incorrectly returned `(z-1)(z+1)`.  Fixed `extract_monomial` to
+recursively descend into nested Times via a new
+`extract_monomial_walk` helper.
+
+### Measured impact
+
+| Workload | Pre-F2 | Post-F2 |
+|---|---|---|
+| `Factor[Expand[(zx - x² - y²)(3z + 4xy - y²)]]` | ~6 s, returns input unchanged | **0.33 s, correctly factored** |
+| `Factor[Expand[(z + xy)(z - xy)]]` | (-1+z)(1+z) WRONG | 15 ms, correct |
+| `Factor[Expand[(z + x)(z + y)]]` | (-1+z)(1+z) WRONG | 12 ms, correct |
+| `Factor[Expand[(z² + x)(z + y)]]` | wrong | 5 ms, correct |
+
+### MVP scope
+
+What it handles: n = 3 inputs, monic in some main variable, exactly
+two factors, with a good (α_y, α_z) found in 49 attempts.
+
+What it doesn't handle yet (follow-up phases):
+- n ≥ 4 (extension is recursive but needs more glue code).
+- Non-monic-in-main inputs (needs Wang's lc correction at the
+  trivariate level, mirroring F1 at the bivariate level).
+- r ≥ 3 outputs (needs trivariate multifactor Hensel + recombination).
+
+### Files touched
+
+- New: `src/mpoly.{c,h}`, `src/mvfactor3.{c,h}`,
+  `tests/test_mpoly.c`, `tests/test_mvfactor3.c`.
+- Modified: `src/facpoly.c` (added `factor_trivariate_via_mhensel`,
+  fixed `extract_monomial` for nested Times),
+  `tests/CMakeLists.txt` (registered new test targets and source
+  files), `tests/test_factor_recombine.c` (added 3 F2 end-to-end
+  tests including the user-reported case).

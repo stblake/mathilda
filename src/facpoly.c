@@ -10,7 +10,9 @@
 #include "rationalize.h"
 #include "zupoly.h"
 #include "bpoly.h"
+#include "mpoly.h"
 #include "mvfactor.h"
+#include "mvfactor3.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -392,30 +394,68 @@ static int64_t int_root(int64_t n, int64_t k) {
     return -1;
 }
 
-static void extract_monomial(Expr* e, int64_t* c, Expr*** vars, int64_t** exps, size_t* count) {
-    *c = 1; *count = 0;
-    if (e->type == EXPR_INTEGER) { *c = e->data.integer; return; }
-    if (e->type == EXPR_SYMBOL) { *vars = malloc(sizeof(Expr*)); *exps = malloc(sizeof(int64_t)); (*vars)[0] = e; (*exps)[0] = 1; *count = 1; return; }
-    if (e->type == EXPR_FUNCTION && strcmp(e->data.function.head->data.symbol, "Power") == 0) {
-        *vars = malloc(sizeof(Expr*)); *exps = malloc(sizeof(int64_t)); 
-        (*vars)[0] = e->data.function.args[0]; 
-        (*exps)[0] = e->data.function.args[1]->data.integer; 
-        *count = 1; return;
+/* Recursively absorb a single Expr into the running monomial state.
+ * Handles INTEGER (multiplies into c), SYMBOL (adds variable), Power
+ * (adds variable with exponent), and nested Times (recurses).  Bumps
+ * `*cap` and reallocs vars/exps if needed.  Returns false if `e` is
+ * not a recognised polynomial-monomial factor (e.g., Plus, non-integer
+ * Power exponent, etc.); on false the monomial is unusable. */
+static bool extract_monomial_walk(Expr* e, int64_t* c,
+                                  Expr*** vars, int64_t** exps,
+                                  size_t* count, size_t* cap) {
+    if (e->type == EXPR_INTEGER) {
+        *c *= e->data.integer;
+        return true;
     }
-    if (e->type == EXPR_FUNCTION && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
-        size_t ac = e->data.function.arg_count;
-        *vars = malloc(sizeof(Expr*) * ac);
-        *exps = malloc(sizeof(int64_t) * ac);
-        for(size_t i=0; i<ac; i++) {
-            Expr* a = e->data.function.args[i];
-            if (a->type == EXPR_INTEGER) *c *= a->data.integer;
-            else if (a->type == EXPR_SYMBOL) { (*vars)[*count] = a; (*exps)[*count] = 1; (*count)++; }
-            else if (a->type == EXPR_FUNCTION && strcmp(a->data.function.head->data.symbol, "Power") == 0) {
-                (*vars)[*count] = a->data.function.args[0];
-                (*exps)[*count] = a->data.function.args[1]->data.integer;
-                (*count)++;
+    if (e->type == EXPR_SYMBOL) {
+        if (*count == *cap) {
+            *cap = *cap ? *cap * 2 : 4;
+            *vars = realloc(*vars, sizeof(Expr*)   * (*cap));
+            *exps = realloc(*exps, sizeof(int64_t) * (*cap));
+        }
+        (*vars)[*count] = e;
+        (*exps)[*count] = 1;
+        (*count)++;
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol, "Power") == 0
+        && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_INTEGER) {
+        if (*count == *cap) {
+            *cap = *cap ? *cap * 2 : 4;
+            *vars = realloc(*vars, sizeof(Expr*)   * (*cap));
+            *exps = realloc(*exps, sizeof(int64_t) * (*cap));
+        }
+        (*vars)[*count] = e->data.function.args[0];
+        (*exps)[*count] = e->data.function.args[1]->data.integer;
+        (*count)++;
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (!extract_monomial_walk(e->data.function.args[i],
+                                       c, vars, exps, count, cap)) {
+                return false;
             }
         }
+        return true;
+    }
+    return false;
+}
+
+static void extract_monomial(Expr* e, int64_t* c, Expr*** vars, int64_t** exps, size_t* count) {
+    *c = 1; *count = 0;
+    *vars = NULL; *exps = NULL;
+    size_t cap = 0;
+    if (!extract_monomial_walk(e, c, vars, exps, count, &cap)) {
+        /* On failure, leave outputs in a safe state: caller still needs
+         * to free *vars and *exps (which may be partially populated). */
     }
 }
 
@@ -2164,6 +2204,199 @@ static Expr* factor_via_z_independent_split(Expr* P, Expr** vars, size_t v_count
     return NULL;
 }
 
+/* ===================================================================== */
+/*  Phase F2 MVP -- trivariate two-factor Hensel via MPoly                */
+/*                                                                       */
+/*  Handles n = 3 polynomials that are monic in some main variable and   */
+/*  factor as a product of exactly two genuinely-trivariate factors.     */
+/*  This is the case Phase 4's specialise-and-divide (factor_via_z_      */
+/*  independent_split) cannot catch -- where every factor depends on     */
+/*  every variable.                                                      */
+/*                                                                       */
+/*  Algorithm:                                                           */
+/*    1. Convert P to MPoly.                                             */
+/*    2. For each candidate main_idx with monic LC:                      */
+/*       For each (alpha_y, alpha_z) tuple in a small budget:            */
+/*         a. Compute univariate image P|y=alpha_y, z=alpha_z.           */
+/*         b. Verify squarefree, degree-preserving, two-factor.          */
+/*         c. Lift y-direction via existing bivariate Hensel             */
+/*            (bpoly_hensel_lift_2) over BPoly{main, var_y}.             */
+/*         d. Lift z-direction via mpoly_hensel_lift_3_2.                */
+/*         e. Verify product == P, return factored.                      */
+/*  Returns NULL if no productive (alpha_y, alpha_z, main_idx) was       */
+/*  found within the search budget.                                      */
+/* ===================================================================== */
+
+static Expr* factor_trivariate_via_mhensel(Expr* P, Expr** vars, size_t v_count) {
+    if (v_count != 3) return NULL;
+
+    MPoly* P_mp = expr_to_mpoly(P, vars, (int)v_count);
+    if (!P_mp) return NULL;
+
+    Expr* result = NULL;
+
+    static const int64_t alpha_choices[] = { 0, 1, -1, 2, -2, 3, -3 };
+    enum { N_ALPHAS = sizeof(alpha_choices) / sizeof(alpha_choices[0]) };
+
+    for (int main_idx = 0; main_idx < 3 && !result; main_idx++) {
+        int d_main = mpoly_deg_var(P_mp, main_idx);
+        if (d_main < 1) continue;
+
+        /* Check monic-in-main: LC must be the constant integer 1. */
+        MPoly* lc = mpoly_lc_var(P_mp, main_idx);
+        bool monic = (lc->n_terms == 1) &&
+                     (mpz_cmp_ui(lc->coefs[0], 1) == 0);
+        if (monic) {
+            const int* row = lc->exps;
+            for (int v = 0; v < (int)v_count; v++) {
+                if (row[v] != 0) { monic = false; break; }
+            }
+        }
+        mpoly_free(lc);
+        if (!monic) continue;
+
+        /* Pick the two secondary variables. */
+        int v_y = -1, v_z = -1;
+        for (int i = 0; i < (int)v_count; i++) {
+            if (i == main_idx) continue;
+            if (v_y < 0) v_y = i;
+            else        v_z = i;
+        }
+
+        /* Try (alpha_y, alpha_z) tuples. */
+        for (size_t ai = 0; ai < N_ALPHAS && !result; ai++) {
+            for (size_t bi = 0; bi < N_ALPHAS && !result; bi++) {
+                int64_t alpha_y = alpha_choices[ai];
+                int64_t alpha_z = alpha_choices[bi];
+
+                /* Univariate image at the alpha tuple. */
+                MPoly* P_y  = mpoly_subst_var_int(P_mp, v_y, alpha_y);
+                MPoly* P_yz = mpoly_subst_var_int(P_y,  v_z, alpha_z);
+                mpoly_free(P_y);
+                ZUPoly* uni = mpoly_to_zupoly_in(P_yz, main_idx);
+                mpoly_free(P_yz);
+                if (!uni || uni->deg != d_main) {
+                    zupoly_free(uni);
+                    continue;
+                }
+
+                /* Squarefree probe via gcd(uni, uni'). */
+                ZUPoly* uni_d = zupoly_new(uni->deg);
+                for (int i = 1; i <= uni->deg; i++) {
+                    const mpz_t* ci = zupoly_getcoef(uni, i);
+                    if (!ci) continue;
+                    mpz_t scaled; mpz_init(scaled);
+                    mpz_mul_ui(scaled, *ci, (unsigned long)i);
+                    zupoly_setcoef(uni_d, i - 1, scaled);
+                    mpz_clear(scaled);
+                }
+                ZUPoly* g = zupoly_gcd(uni, uni_d);
+                bool sqf = (g->deg == 0);
+                zupoly_free(g); zupoly_free(uni_d);
+                if (!sqf) {
+                    zupoly_free(uni);
+                    continue;
+                }
+
+                /* Factor univariately.  We piggyback on the existing
+                 * `factor_via_bz_callback` (defined earlier in this
+                 * file) which does ZUPoly -> Expr -> bz_factor_to_expr
+                 * -> ZUPoly. */
+                ZUPoly** uni_factors = NULL;
+                int r = 0;
+                bool fac_ok = factor_via_bz_callback(uni, &uni_factors, &r, NULL);
+                zupoly_free(uni);
+                if (!fac_ok || r != 2 || !uni_factors) {
+                    if (uni_factors) {
+                        for (int i = 0; i < r; i++) zupoly_free(uni_factors[i]);
+                        free(uni_factors);
+                    }
+                    continue;
+                }
+                ZUPoly* u = uni_factors[0];
+                ZUPoly* v = uni_factors[1];
+
+                /* Step 1 -- y-lift via existing bivariate Hensel.
+                 * Specialise z = alpha_z on the original P_mp; convert to
+                 * BPoly{main, v_y}; run bpoly_hensel_lift_2 with seeds u, v. */
+                MPoly* P_z   = mpoly_subst_var_int(P_mp, v_z, alpha_z);
+                /* Shift y = y + alpha_y so the bivariate lift sees u, v at y = 0.
+                 * bpoly_hensel_lift_2 expects u, v to satisfy u*v = P_xy(x, 0). */
+                MPoly* P_z_sh = mpoly_shift_var_int(P_z, v_y, alpha_y);
+                BPoly* P_xy_b = mpoly_to_bpoly_in(P_z_sh, main_idx, v_y);
+                mpoly_free(P_z); mpoly_free(P_z_sh);
+                if (!P_xy_b) {
+                    zupoly_free(u); zupoly_free(v); free(uni_factors);
+                    continue;
+                }
+
+                BPoly* U_xy_b = NULL;
+                BPoly* V_xy_b = NULL;
+                bool lift2_ok = bpoly_hensel_lift_2(P_xy_b, u, v,
+                                                    &U_xy_b, &V_xy_b);
+                bpoly_free(P_xy_b);
+                zupoly_free(u); zupoly_free(v); free(uni_factors);
+                if (!lift2_ok) {
+                    bpoly_free(U_xy_b); bpoly_free(V_xy_b);
+                    continue;
+                }
+
+                /* Convert BPoly factors back to MPoly{n=3 vars}, then
+                 * unshift y = y - alpha_y. */
+                MPoly* U_xy_mp_sh = bpoly_to_mpoly_in(U_xy_b, (int)v_count,
+                                                     main_idx, v_y);
+                MPoly* V_xy_mp_sh = bpoly_to_mpoly_in(V_xy_b, (int)v_count,
+                                                     main_idx, v_y);
+                bpoly_free(U_xy_b); bpoly_free(V_xy_b);
+                MPoly* U_xy_mp = mpoly_shift_var_int(U_xy_mp_sh, v_y, -alpha_y);
+                MPoly* V_xy_mp = mpoly_shift_var_int(V_xy_mp_sh, v_y, -alpha_y);
+                mpoly_free(U_xy_mp_sh); mpoly_free(V_xy_mp_sh);
+
+                /* Step 2 -- z-lift via mpoly_hensel_lift_3_2. */
+                MPoly* U_full = NULL;
+                MPoly* V_full = NULL;
+                bool lift3_ok = mpoly_hensel_lift_3_2(
+                    P_mp, U_xy_mp, V_xy_mp,
+                    main_idx, v_y, v_z, alpha_z,
+                    &U_full, &V_full);
+                mpoly_free(U_xy_mp); mpoly_free(V_xy_mp);
+                if (!lift3_ok) {
+                    mpoly_free(U_full); mpoly_free(V_full);
+                    continue;
+                }
+
+                /* Verify product == P_mp. */
+                MPoly* product = mpoly_mul(U_full, V_full);
+                bool match = mpoly_eq(product, P_mp);
+                mpoly_free(product);
+                if (!match) {
+                    mpoly_free(U_full); mpoly_free(V_full);
+                    continue;
+                }
+
+                /* Convert factors back to Expr. */
+                Expr* U_e = mpoly_to_expr(U_full, vars);
+                Expr* V_e = mpoly_to_expr(V_full, vars);
+                mpoly_free(U_full); mpoly_free(V_full);
+
+                Expr* U_eval = evaluate(U_e); expr_free(U_e);
+                Expr* V_eval = evaluate(V_e); expr_free(V_e);
+
+                Expr** factor_args = (Expr**)malloc(sizeof(Expr*) * 2);
+                factor_args[0] = U_eval;
+                factor_args[1] = V_eval;
+                Expr* product_expr = expr_new_function(
+                    expr_new_symbol("Times"), factor_args, 2);
+                result = evaluate(product_expr);
+                expr_free(product_expr);
+            }
+        }
+    }
+
+    mpoly_free(P_mp);
+    return result;
+}
+
 static Expr* heuristic_factor(Expr* P) {
     if (P->type != EXPR_FUNCTION) return expr_copy(P);
     if (strcmp(P->data.function.head->data.symbol, "Times") == 0 || strcmp(P->data.function.head->data.symbol, "Power") == 0) {
@@ -2266,6 +2499,20 @@ static Expr* heuristic_factor(Expr* P) {
         if (tri) {
             for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
             return tri;
+        }
+    }
+
+    /* Phase F2 MVP: trivariate two-factor monic Hensel via MPoly.
+     * Catches n=3 polynomials whose factors depend on every variable
+     * (which Phase 4 cannot find because no variable specialisation
+     * exposes a clean factor).  Currently restricted to two-factor
+     * outputs with monic-in-main inputs; extends to higher n and
+     * non-monic Wang correction in future phases. */
+    if (v_count == 3) {
+        Expr* tri_mh = factor_trivariate_via_mhensel(P, vars, v_count);
+        if (tri_mh) {
+            for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+            return tri_mh;
         }
     }
 

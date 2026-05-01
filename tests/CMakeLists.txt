@@ -95,6 +95,7 @@ set(COMMON_SRC
     ../src/bpoly.c
     ../src/mpoly.c
     ../src/mvfactor.c
+    ../src/mvfactor3.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -254,6 +255,15 @@ if(USE_ECM)
     target_link_libraries(mpoly_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
 else()
     target_link_libraries(mpoly_tests gmp m)
+endif()
+
+add_executable(mvfactor3_tests test_mvfactor3.c ${COMMON_SRC})
+target_include_directories(mvfactor3_tests PRIVATE ../src /usr/local/include)
+target_link_directories(mvfactor3_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(mvfactor3_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(mvfactor3_tests gmp m)
 endif()
 
 add_executable(mvfactor_tests test_mvfactor.c ${COMMON_SRC})
