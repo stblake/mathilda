@@ -13,10 +13,14 @@ Expr* evaluate(Expr* e);
 
 // Recursion-depth limit for nested evaluate() calls. Guards C-stack overflow
 // when expressions trigger deeply recursive sub-evaluation (Listable, Flat,
-// user DownValues that re-evaluate, etc.). Default 512.
+// user DownValues that re-evaluate, etc.). Default 1024 (matches Mathematica).
 int  eval_get_recursion_limit(void);
 void eval_set_recursion_limit(int n);
 int  eval_get_recursion_depth(void);
+
+// Seeds the user-visible $RecursionLimit symbol with its default value
+// and installs the docstring. Call after symtab_init().
+void eval_init(void);
 
 // Helper to evaluate and free the input expression
 static inline Expr* eval_and_free(Expr* e) {

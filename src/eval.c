@@ -17,6 +17,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 
 /*
  * The maximum number of evaluation steps to prevent infinite recursion
@@ -31,11 +32,17 @@
  * return the expression wrapped in Hold[] (so it cannot re-enter the
  * evaluator) and emit a $RecursionLimit::reclim message.
  *
- * The default of 512 leaves comfortable headroom under the typical 8 MB
- * thread stack while still catching pathological recursion (e.g. a self-
- * referential rule like f[x_] := f[x] + 1).
+ * The default of 1024 matches modern Mathematica and leaves comfortable
+ * headroom under the typical 8 MB thread stack while still catching
+ * pathological recursion (e.g. a self-referential rule like
+ * f[x_] := f[x] + 1).
+ *
+ * Minimum enforced at 20 (Mathematica-compatible) so users cannot brick
+ * the evaluator by setting a value below the depth its own bookkeeping
+ * needs.
  */
-#define DEFAULT_RECURSION_LIMIT 512
+#define DEFAULT_RECURSION_LIMIT 1024
+#define MIN_RECURSION_LIMIT     20
 static int  eval_recursion_depth = 0;
 static int  eval_recursion_limit = DEFAULT_RECURSION_LIMIT;
 /* Once the recursion limit is hit anywhere in the evaluation tree, this
@@ -50,7 +57,69 @@ static bool eval_overflow = false;
 int  eval_get_recursion_limit(void) { return eval_recursion_limit; }
 int  eval_get_recursion_depth(void) { return eval_recursion_depth; }
 void eval_set_recursion_limit(int n) {
-    eval_recursion_limit = (n > 0) ? n : DEFAULT_RECURSION_LIMIT;
+    eval_recursion_limit = (n >= MIN_RECURSION_LIMIT) ? n : DEFAULT_RECURSION_LIMIT;
+}
+
+/*
+ * eval_init:
+ * Registers the user-visible $RecursionLimit symbol with its default value
+ * as an OwnValue so that the user can read or assign to it from the REPL.
+ * The C-side state is kept in sync via the hook in apply_assignment.
+ *
+ * Must be called after symtab_init().
+ */
+void eval_init(void) {
+    Expr* sym = expr_new_symbol("$RecursionLimit");
+    Expr* val = expr_new_integer(eval_recursion_limit);
+    symtab_add_own_value("$RecursionLimit", sym, val);
+    expr_free(sym);
+    expr_free(val);
+
+    symtab_set_docstring("$RecursionLimit",
+        "$RecursionLimit\n"
+        "\tgives the maximum length of the evaluation stack -- the maximum\n"
+        "\tnumber of nested invocations of the evaluator that can occur.\n"
+        "\n"
+        "Assigning a positive integer N (>= 20) updates the limit; smaller\n"
+        "values are rejected with a $RecursionLimit::limset message.");
+}
+
+/*
+ * sync_recursion_limit_from_value:
+ * Inspect a candidate value (typically the RHS of $RecursionLimit = ...)
+ * and, if it is a positive integer >= MIN_RECURSION_LIMIT, push it into
+ * the C-level limit. Otherwise emit a $RecursionLimit::limset message and
+ * leave the C state untouched. Bigints are clamped to INT_MAX.
+ */
+static void sync_recursion_limit_from_value(Expr* value) {
+    long n = -1;
+    if (value->type == EXPR_INTEGER) {
+        n = (long)value->data.integer;
+    } else if (value->type == EXPR_BIGINT) {
+        /* Anything large enough not to fit in a long is far beyond any
+         * useful recursion limit; treat it as "huge and acceptable". */
+        if (mpz_fits_slong_p(value->data.bigint)) {
+            n = mpz_get_si(value->data.bigint);
+        } else if (mpz_sgn(value->data.bigint) > 0) {
+            n = (long)INT_MAX;
+        }
+    }
+
+    if (n < MIN_RECURSION_LIMIT) {
+        fprintf(stderr,
+                "$RecursionLimit::limset: Cannot set $RecursionLimit to a value below %d.\n",
+                MIN_RECURSION_LIMIT);
+        /* Restore the OwnValue to the current C-side limit so the symbol
+         * does not lie about the active value. */
+        Expr* sym  = expr_new_symbol("$RecursionLimit");
+        Expr* curr = expr_new_integer(eval_recursion_limit);
+        symtab_add_own_value("$RecursionLimit", sym, curr);
+        expr_free(sym);
+        expr_free(curr);
+        return;
+    }
+    if (n > INT_MAX) n = INT_MAX;
+    eval_set_recursion_limit((int)n);
 }
 
 /*
@@ -242,6 +311,18 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
     if (lhs->type == EXPR_SYMBOL) {
         /* Standard symbol assignment */
         symtab_add_own_value(lhs->data.symbol, lhs, rhs);
+
+        /* Special system variables: keep their C-side mirror state in sync.
+         * Set has HoldFirst, so for `$RecursionLimit = expr` the rhs is
+         * already evaluated; for SetDelayed, we evaluate a copy here so the
+         * limit reflects the value the user expects to see when they read
+         * the symbol back. If validation fails, the OwnValue is rolled back
+         * to the current C-side limit. */
+        if (strcmp(lhs->data.symbol, "$RecursionLimit") == 0) {
+            Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
+            sync_recursion_limit_from_value(probe);
+            expr_free(probe);
+        }
         return true;
     } else if (lhs->type == EXPR_FUNCTION) {
         if (lhs->data.function.head->type == EXPR_SYMBOL && 

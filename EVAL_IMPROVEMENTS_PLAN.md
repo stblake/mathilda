@@ -27,12 +27,14 @@ References to Withoff use "[W §X.Y]". Source references use `file:line`.
     suppresses arg evaluation, Sequence flattening, Unevaluated stripping,
     and Flat — but rules and built-ins on the head still apply
     (`Length[HoldComplete[a,b,c]]` works).
-  - 1.5 `$RecursionLimit` (default 512) added as a C-stack guard. On
-    overflow we wrap the offending sub-expression in `Hold[]`, set a
-    sticky `eval_overflow` flag, and bail out of every enclosing
-    fixed-point loop so the unwind doesn't burn `$IterationLimit` at
-    every level. Settable via `eval_set_recursion_limit()`. Wiring this
-    to a user-visible `$RecursionLimit` symbol is a pending tier-4 item.
+  - 1.5 `$RecursionLimit` (default 1024, matching modern Mathematica)
+    added as a C-stack guard. On overflow we wrap the offending sub-
+    expression in `Hold[]`, set a sticky `eval_overflow` flag, and bail
+    out of every enclosing fixed-point loop so the unwind doesn't burn
+    `$IterationLimit` at every level. Exposed as a user-visible OwnValue
+    (`eval_init` seeds it; `apply_assignment` syncs the C-side limit on
+    `$RecursionLimit = N`). Values below 20 are rejected with a
+    `$RecursionLimit::limset` message.
   - 4.4 Reclassified — picocas's existing strip-without-restore matches
     real Mathematica's observed behaviour (`h[Unevaluated[Plus[a,b]]] →
     h[a+b]`) and the existing `tests/test_unevaluated.c` already locks
@@ -84,9 +86,9 @@ Withoff's algorithm [§3.1] is reproduced here next to the PicoCAS step
 | 10 | Flatten `Sequence` heads | ✅ `flatten_sequences`, with explicit skip-list for Set/SetDelayed/Rule/RuleDelayed | OK, but skip-list approach is fragile. |
 | 11 | `Listable`: thread over list args | ✅ `apply_listable` | **Order bug:** PicoCAS runs Listable *before* Flat (`src/eval.c:438-457`). Withoff's order is Flat → Sequence → Listable → Orderless. |
 | 12 | `Orderless`: sort `eᵢ` | ✅ `qsort` on `eval_compare_expr_ptrs` | OK |
-| 13 | Apply user-defined `UpValues` of symbolic heads of `eᵢ` | ❌ **Missing.** | Major gap. |
-| 14 | Apply internal `UpValues` (up code) | ❌ **Missing.** | Major gap. |
-| 15 | Apply user `DownValues` if head is symbol; else user `SubValues` of symbolic head | ⚠ Only `DownValues` for symbolic head. **No `SubValues` path** for `f[1][x]`. Pure-function application of a `Function[...]` head is special-cased separately (`src/eval.c:552-560`), but user cannot attach rules to `f` for `f[x][y]` shape. |
+| 13 | Apply user-defined `UpValues` of symbolic heads of `eᵢ` | ❌ **Not implemented — intentional.** See §4. |
+| 14 | Apply internal `UpValues` (up code) | ❌ **Not implemented — intentional.** See §4. |
+| 15 | Apply user `DownValues` if head is symbol; else user `SubValues` of symbolic head | ⚠ Only `DownValues` for symbolic head. **No `SubValues` path** for `f[1][x]` — intentional, see §4. Pure-function application of a `Function[...]` head is special-cased separately (`src/eval.c:552-560`). |
 | 16 | Apply internal `DownValues` (down code), or sub code if head is not a symbol | ⚠ Built-ins are run *before* user `DownValues`, not after (`src/eval.c:460-467` vs. `:540-544`). Withoff's order is **user rules first**, then internal. PicoCAS inverts this. |
 | 17 | Restore the head `Unevaluated` if no rules found | ❌ **Missing.** | Required by spec; ties in with #8. |
 | 18 | Discard the head `Return` from results of user rules | ❌ **Missing.** No `Return[x]` semantics; `Return` is just an unknown symbol. | |
@@ -185,30 +187,7 @@ below for the historical record. All 79 unit tests still pass.
 
 ### Tier 2 — Major missing features
 
-**2.1 Implement `UpValues`** — Withoff [§2.2, §3.1]
-- Files: `src/symtab.{c,h}` (add `up_values` field, `apply_up_values`),
-  `src/eval.c` (insert step between Orderless and DownValues), `src/replace.c`
-  (parse `f /: g[f[...]] := ...` via `TagSet` / `TagSetDelayed`).
-- Adds a new step in `evaluate_step` that, for each symbolic head among
-  the `eᵢ`, tries that symbol's `up_values` against the *parent*
-  expression. First match wins. UpValues fire **before** DownValues per
-  Withoff.
-- Test idea: `Sin /: f[Sin[x_]] := g[x]` then `f[Sin[a]]` → `g[a]`.
-- Risk: medium. Touches the parser too (`TagSet`, `TagSetDelayed`,
-  `/:` operator), and `apply_assignment` to dispatch into `UpValues`
-  storage when the LHS uses tag-set syntax.
-
-**2.2 Implement `SubValues`** — Withoff [§2.2, §3.1]
-- Files: `src/symtab.{c,h}`, `src/eval.c`.
-- For an expression whose head is itself a normal expression (e.g.
-  `f[a][b]`), look up `SubValues` on the symbolic head of the head
-  (i.e. `f`). Currently PicoCAS handles this only through the
-  pure-function special case and `Derivative[...]` (`src/eval.c:552-575`).
-- Test idea: `f[x_][y_] := x + y` then `f[1][2]` → `3`. This currently
-  installs as a `DownValues` rule on `f` and only matches because
-  `apply_down_values` walks the whole expression — verify and adjust.
-
-**2.3 Implement `NValues`** — Withoff [§2.2]
+**2.1 Implement `NValues`** — Withoff [§2.2]
 - Files: new `src/nvalues.c` or extend `numeric.c`; `src/eval.c` for
   `N[expr, prec]` to consult `NValues` of subexpression heads before
   falling through.
@@ -216,7 +195,7 @@ below for the historical record. All 79 unit tests still pass.
   user code can teach `N[]` how to numericize a user-defined function.
 - Risk: medium. Interacts with MPFR precision tracking.
 
-**2.4 Implement `Messages` table and `$MessageList`**
+**2.2 Implement `Messages` table and `$MessageList`**
 - Files: new `src/messages.{c,h}`; `src/eval.c` (clear `$MessageList` at
   the start of each top-level evaluation, populate on emission); `src/repl.c`
   (assign `MessageList[n]` after each Out).
@@ -226,7 +205,7 @@ below for the historical record. All 79 unit tests still pass.
 - Risk: low. Mostly mechanical refactor; preserves existing behaviour
   through a default formatter.
 
-**2.5 Implement `FormatValues` (format code)**
+**2.3 Implement `FormatValues` (format code)**
 - Files: `src/print.c`, `src/symtab.{c,h}`.
 - Allow user rules of the form `Format[expr] := ...` to alter output.
   Default print remains the current path when no `FormatValues` are set.
@@ -357,24 +336,20 @@ so each can be reviewed independently.
 4.4 (Unevaluated restore). Pure correctness changes that bring the
 evaluator closer to Withoff §3.1. No data-structure churn.
 
-**M2 — UpValues / SubValues (Tier 2 core).** 2.1 and 2.2. Together they
-make PicoCAS able to host the dispatch patterns Mathematica users
-expect for operator overloading and curried-call rules.
-
-**M3 — Symbol interning (Tier 3 prep).** 3.1 and 4.1. Mechanical, but
-unlocks the perf gains in M4 by making "is this the symbol `List`?"
+**M2 — Symbol interning (Tier 3 prep).** 3.1 and 4.1. Mechanical, but
+unlocks the perf gains in M3 by making "is this the symbol `List`?"
 checks free.
 
-**M4 — Refcount + timestamps (Tier 3 hot loop).** 3.2, 3.3, 3.4 land
+**M3 — Refcount + timestamps (Tier 3 hot loop).** 3.2, 3.3, 3.4 land
 together. The first iteration uses a global eval-clock and a single
 shared/copy-on-write Expr. Big perf milestone.
 
-**M5 — Dispatch and rule ordering (Tier 3 polish).** 3.5, 3.6. Becomes
-worthwhile only after M3/M4 because it depends on cheap symbol
+**M4 — Dispatch and rule ordering (Tier 3 polish).** 3.5, 3.6. Becomes
+worthwhile only after M2/M3 because it depends on cheap symbol
 comparisons and stable ownership semantics.
 
-**M6 — Messages / Format / NValues / Return (Tier 2 trailing + Tier 4).**
-2.3, 2.4, 2.5, 4.3, 4.5, 4.6. Quality-of-life features that round out
+**M5 — Messages / Format / NValues / Return (Tier 2 + Tier 4).**
+2.1, 2.2, 2.3, 4.3, 4.5, 4.6. Quality-of-life features that round out
 the Mathematica fidelity.
 
 ---
@@ -383,6 +358,10 @@ the Mathematica fidelity.
 
 These appear in Withoff but are deliberately not part of this plan:
 
+- **`UpValues` and `SubValues`** (Withoff §2.2, §3.1 steps 13–15) — the
+  dispatch semantics they enable (`f /: g[f[x_]] := ...`, `f[x_][y_] :=
+  ...`) are intentionally excluded. They make evaluation order harder
+  to reason about and are not a target for PicoCAS.
 - Notebook front-end and `MathLink` (Withoff §1, §4) — PicoCAS targets a
   text REPL.
 - `Dump` for snapshotting kernel state (Withoff §1.3) — a substantial

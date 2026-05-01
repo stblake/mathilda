@@ -1196,12 +1196,13 @@ Expr* builtin_polynomialgcd(Expr* res) {
     }
 
     size_t count = res->data.function.arg_count;
+    if (count == 0) return NULL;
     BPList* bps = malloc(sizeof(BPList) * count);
     for (size_t i = 0; i < count; i++) {
         bp_init(&bps[i]);
         decompose_to_bp(res->data.function.args[i], &bps[i]);
     }
-    
+
     Expr* numG = expr_new_integer(0);
     for (size_t i = 0; i < count; i++) {
         Expr* num_i = expr_new_integer(1);
@@ -1367,12 +1368,13 @@ Expr* builtin_polynomiallcm(Expr* res) {
     }
 
     size_t count = res->data.function.arg_count;
+    if (count == 0) return NULL;
     BPList* bps = malloc(sizeof(BPList) * count);
     for (size_t i = 0; i < count; i++) {
         bp_init(&bps[i]);
         decompose_to_bp(res->data.function.args[i], &bps[i]);
     }
-    
+
     Expr* numL = expr_new_integer(1);
     for (size_t i = 0; i < count; i++) {
         Expr* num_i = expr_new_integer(1);

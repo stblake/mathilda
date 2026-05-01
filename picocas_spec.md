@@ -7761,11 +7761,12 @@ For example:
 
 Nested `evaluate()` calls now track a static depth counter (the REPL is
 single-threaded so a static suffices). When the counter would exceed
-`eval_recursion_limit` (default 512), the input is wrapped in `Hold[]`,
-a sticky `eval_overflow` flag is set, and a `$RecursionLimit::reclim`
-message is emitted. Every enclosing fixed-point loop checks the flag
-on each iteration and bails out so the unwind doesn't burn
-`$IterationLimit` × 512 iterations of redundant rewrite attempts.
+`eval_recursion_limit` (default 1024, matching modern Mathematica), the
+input is wrapped in `Hold[]`, a sticky `eval_overflow` flag is set, and
+a `$RecursionLimit::reclim` message is emitted. Every enclosing
+fixed-point loop checks the flag on each iteration and bails out so the
+unwind doesn't burn `$IterationLimit` × 1024 iterations of redundant
+rewrite attempts.
 
 Concretely, a self-referential rule like
 
@@ -7776,14 +7777,36 @@ now terminates in milliseconds with a clear `$RecursionLimit` message
 rather than running C-stack-bound recursion plus `$IterationLimit`
 worth of futile rewrites at every depth.
 
-The limit is settable via `eval_set_recursion_limit(int n)` from C;
-exposing it as a user-facing `$RecursionLimit` symbol (read/write
-through OwnValues) is a follow-up item.
+## $RecursionLimit user-visible symbol (M1 close-out, 2026-05-01)
+
+The C-side limit is now exposed as a writable system variable. At
+startup, `eval_init()` seeds an OwnValue of 1024 on `$RecursionLimit`
+and installs a docstring. When the user assigns to it via `Set` or
+`SetDelayed`, `apply_assignment` validates the RHS and pushes the new
+value into `eval_set_recursion_limit()`:
+
+    $RecursionLimit              (* → 1024 *)
+    $RecursionLimit = 256        (* → 256, C-side limit also 256 *)
+    f[x_] := f[x] + 1
+    f[1]                         (* aborts at depth 256 *)
+    $RecursionLimit = 5          (* $RecursionLimit::limset, OwnValue rolled back *)
+
+Validation rules:
+
+- The RHS must evaluate to a positive integer.
+- Values below 20 are rejected with a `$RecursionLimit::limset`
+  message; the OwnValue is rolled back to the active C-side limit so
+  the symbol does not lie about the in-effect value.
+- Bigints that don't fit in `INT_MAX` are clamped.
+- `SetDelayed` (`$RecursionLimit := ...`) is supported by evaluating a
+  copy of the RHS at assignment time so the limit reflects the value
+  the user expects to read back.
+
+This closes out the M1 milestone of `EVAL_IMPROVEMENTS_PLAN.md`. The
+plan itself has also been revised to remove UpValues / SubValues from
+scope (those Mathematica semantics are intentionally not pursued).
 
 ### Files touched
 
-`src/eval.c`, `src/eval.h`, `src/arithmetic.c`, `src/boolean.c`,
-`src/power.c`, plus the new planning document
-`EVAL_IMPROVEMENTS_PLAN.md` which sets out the wider Withoff-alignment
-roadmap (M2 onwards covers UpValues, SubValues, NValues, Messages,
-symbol interning, refcounted expressions, evaluation timestamps).
+`src/eval.c`, `src/eval.h`, `src/core.c`, `src/arithmetic.c`,
+`src/boolean.c`, `src/power.c`, plus `EVAL_IMPROVEMENTS_PLAN.md`.

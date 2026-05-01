@@ -56,6 +56,10 @@ void core_init(void) {
     /* Context system must come first: the parser calls context_resolve_name
      * on every identifier, including those produced while loading init.m. */
     context_init();
+    /* Seed user-visible system variables ($RecursionLimit, ...) early so
+     * any subsequent init step that triggers evaluation can already see
+     * them. */
+    eval_init();
     parfrac_init();
     modular_init();
     symtab_add_builtin("AtomQ", builtin_atomq);
