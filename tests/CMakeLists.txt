@@ -93,6 +93,7 @@ set(COMMON_SRC
     ../src/rationalize.c
     ../src/zupoly.c
     ../src/bpoly.c
+    ../src/mpoly.c
     ../src/mvfactor.c
 )
 
@@ -244,6 +245,15 @@ if(USE_ECM)
     target_link_libraries(bpoly_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
 else()
     target_link_libraries(bpoly_tests gmp m)
+endif()
+
+add_executable(mpoly_tests test_mpoly.c ${COMMON_SRC})
+target_include_directories(mpoly_tests PRIVATE ../src /usr/local/include)
+target_link_directories(mpoly_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(mpoly_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(mpoly_tests gmp m)
 endif()
 
 add_executable(mvfactor_tests test_mvfactor.c ${COMMON_SRC})

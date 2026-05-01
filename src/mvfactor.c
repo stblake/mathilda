@@ -184,10 +184,27 @@ static ZUPoly* bpoly_uv_cross_yk(const BPoly* U, const BPoly* V, int k) {
     return acc;
 }
 
-bool bpoly_hensel_lift_2(const BPoly* P, const ZUPoly* u, const ZUPoly* v,
-                        BPoly** U_out, BPoly** V_out) {
+/* Internal variant of bpoly_hensel_lift_2 that additionally exposes a
+ * "did the iteration loop complete?" signal via *completed_iters_out.
+ * This signal is the F5 partial-lift indicator: a failed lift that
+ * finished all B y-degree iterations (failing only at the final
+ * U*V == P verification) means the chosen subset is "near-correct"
+ * and a slightly different recombination might succeed.  By contrast,
+ * a lift that bailed early (Diophantine non-integer or Mignotte
+ * coefficient overflow) signals divergence -- the subset is far from
+ * any true bivariate factor.
+ *
+ * lift_multi_internal aggregates this signal across k-subsets of size
+ * k to decide whether to short-circuit the recombination loop.  The
+ * public wrapper (bpoly_hensel_lift_2 below) calls this with a local
+ * dummy and discards the signal. */
+static bool bpoly_hensel_lift_2_internal(const BPoly* P,
+                                         const ZUPoly* u, const ZUPoly* v,
+                                         BPoly** U_out, BPoly** V_out,
+                                         bool* completed_iters_out) {
     *U_out = NULL;
     *V_out = NULL;
+    if (completed_iters_out) *completed_iters_out = false;
 
     /* Sanity: P must be non-zero, u and v non-zero, and u*v must
      * equal P(x, 0).  We don't verify u*v == P(x,0) here because the
@@ -278,6 +295,11 @@ bool bpoly_hensel_lift_2(const BPoly* P, const ZUPoly* u, const ZUPoly* v,
     mpz_clear(mignotte_M);
     bpoly_free(UV);
 
+    /* All B iterations completed without diophantine failure or
+     * Mignotte overflow.  Signal "completed all iterations" so the
+     * caller can use it as a partial-lift indicator (F5). */
+    if (completed_iters_out) *completed_iters_out = true;
+
     /* Final verification: full U*V must equal P exactly.  (The
      * incremental UV only tracks mod y^{B+1}; high-y-degree
      * cancellation must still be checked.) */
@@ -293,6 +315,12 @@ bool bpoly_hensel_lift_2(const BPoly* P, const ZUPoly* u, const ZUPoly* v,
     *U_out = U;
     *V_out = V;
     return true;
+}
+
+bool bpoly_hensel_lift_2(const BPoly* P, const ZUPoly* u, const ZUPoly* v,
+                        BPoly** U_out, BPoly** V_out) {
+    bool dummy = false;
+    return bpoly_hensel_lift_2_internal(P, u, v, U_out, V_out, &dummy);
 }
 
 /* ====================================================================== */
@@ -591,11 +619,24 @@ static bool lift_multi_internal(const BPoly* P, const ZUPoly** us, int r,
      *
      * On failure (no subset of size k yields a successful lift), try
      * the next size.  When k > r/2 we've exhausted all distinct
-     * partitions -- return P as the sole factor (irreducible). */
+     * partitions -- return P as the sole factor (irreducible).
+     *
+     * F5 short-circuit (recombination cap & heuristics): track whether
+     * any subset at the current k completed all lift iterations
+     * (failing only at the final U*V == P check).  That is the
+     * "near-success" signal: such a subset was almost a true factor,
+     * so a slightly different recombination at the next k may succeed.
+     * If, at the end of an entire k-pass, no subset shows that signal
+     * AND k >= 2, every wrong subset diverged early -- recombination at
+     * higher k is very unlikely to succeed, so we break out of the loop
+     * and return P as irreducible.  k=1 is always exhausted before
+     * giving up; this only kicks in for r >= 5 (where k >= 3 exists). */
     for (int k = 1; k * 2 <= r; k++) {
         /* Starting mask: k lowest bits set. */
         uint64_t mask = ((uint64_t)1 << k) - 1u;
         uint64_t end  = (r >= 64) ? UINT64_MAX : ((uint64_t)1 << r);
+
+        bool any_completion_at_k = false;
 
         while (mask < end) {
             /* Symmetry-break for k = r/2 with even r: skip subsets
@@ -614,9 +655,12 @@ static bool lift_multi_internal(const BPoly* P, const ZUPoly** us, int r,
                     /* Should not happen with k in [1, r-1]. */
                     zupoly_free(uS); zupoly_free(uC);
                 } else {
-                                    BPoly *U_part = NULL, *V_part = NULL;
-                    bool ok = bpoly_hensel_lift_2(P, uS, uC, &U_part, &V_part);
-                                    zupoly_free(uS); zupoly_free(uC);
+                    BPoly *U_part = NULL, *V_part = NULL;
+                    bool completed_iters = false;
+                    bool ok = bpoly_hensel_lift_2_internal(
+                        P, uS, uC, &U_part, &V_part, &completed_iters);
+                    zupoly_free(uS); zupoly_free(uC);
+                    if (completed_iters) any_completion_at_k = true;
 
                     if (ok) {
                         /* Found one true factor.  Recurse on V_part
@@ -679,6 +723,16 @@ static bool lift_multi_internal(const BPoly* P, const ZUPoly** us, int r,
             if (nxt <= mask) break;  /* overflow guard */
             mask = nxt;
         }
+
+        /* F5 short-circuit: every subset at this k diverged early
+         * (Diophantine non-integer or Mignotte coefficient overflow
+         * inside the lift loop).  None showed the partial-success
+         * pattern of "completed all iterations but failed final
+         * verify".  Recombination at k+1 is very unlikely to behave
+         * differently, so stop early.  We always exhaust k = 1 first
+         * to give the cheap-singleton path its full chance; the
+         * short-circuit only fires once we reach k >= 2. */
+        if (!any_completion_at_k && k >= 2) break;
     }
 
     /* No subset yielded a valid lift.  P is irreducible bivariately

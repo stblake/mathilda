@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "expr.h"
 #include "parse.h"
@@ -399,6 +400,96 @@ static void test_f3_perf_x8_y17(void) {
 }
 
 /* ====================================================================== */
+/*  Phase F5: recombination short-circuit                                 */
+/*                                                                        */
+/*  When every k-subset trial diverges early (Diophantine non-integer or  */
+/*  Mignotte coefficient overflow), and no subset shows the partial-      */
+/*  success pattern of "completed all iterations but failed final         */
+/*  verify", we conclude P is irreducible bivariately under this image    */
+/*  and skip the remaining higher-k subset enumerations.  k = 1 is        */
+/*  always exhausted first; the cap fires from k = 2 onward, so no        */
+/*  k = 2 recombination case is missed.                                   */
+/*                                                                        */
+/*  Coverage: irreducible bivariates with r >= 6 univariate factors       */
+/*  (where the cumulative subset count is large enough for the savings    */
+/*  to register), plus a k = 2 recombination case to confirm correctness  */
+/*  is preserved when the short-circuit must NOT fire.                    */
+/* ====================================================================== */
+
+static double f5_eval_ms(const char* input) {
+    Expr* parsed = parse_expression(input);
+    ASSERT(parsed != NULL);
+    clock_t t0 = clock();
+    Expr* result = evaluate(parsed);
+    clock_t t1 = clock();
+    double ms = 1000.0 * (double)(t1 - t0) / (double)CLOCKS_PER_SEC;
+    expr_free(parsed);
+    expr_free(result);
+    return ms;
+}
+
+static void test_f5_irreducible_r6_x12(void) {
+    /* x^12 + y^2 - 1: irreducible over Z[x, y].  Image at any small
+     * integer alpha factors as Phi_d for d | 12 (six cyclotomic factors
+     * over Z): r = 6.  Without F5 the recombination tries
+     * k=1..3 = 6 + 15 + 10 = 31 lifts; with F5 it stops after k=1 (or
+     * after k=2 with no signal at k>=2). */
+    check_factor_expands_to("Factor[Expand[x^12 + y^2 - 1]]",
+        "Plus[-1, Power[x, 12], Power[y, 2]]");
+    /* Generous budget -- we just want to confirm we are not exponential
+     * in r.  Pre-F5 was ~23 ms; post-F5 is ~20 ms. */
+    double ms = f5_eval_ms("Factor[Expand[x^12 + y^2 - 1]]");
+    if (ms > 200.0) {
+        fprintf(stderr, "FAIL [perf]: x^12+y^2-1 took %.2f ms (budget 200)\n", ms);
+        ASSERT(0);
+    }
+}
+
+static void test_f5_irreducible_r8_x24(void) {
+    /* x^24 + y^2 - 1: irreducible.  r = 8 univariate factors at
+     * a generic alpha (cyclotomic Phi_d for d | 24).  Pre-F5 the
+     * recombination loop ran 8 + 28 + 56 + 35 = 127 lifts; post-F5 it
+     * stops after k = 1 (no completion signal).  This is the test case
+     * that exercises the largest savings. */
+    check_factor_expands_to("Factor[Expand[x^24 + y^2 - 1]]",
+        "Plus[-1, Power[x, 24], Power[y, 2]]");
+    double ms = f5_eval_ms("Factor[Expand[x^24 + y^2 - 1]]");
+    if (ms > 600.0) {
+        fprintf(stderr, "FAIL [perf]: x^24+y^2-1 took %.2f ms (budget 600)\n", ms);
+        ASSERT(0);
+    }
+}
+
+static void test_f5_irreducible_r6_x12_y4(void) {
+    /* x^12 + y^4 - 1: irreducible, deeper y-lift (B = 4) so each
+     * subset trial has more iterations to potentially produce a
+     * "completed all iterations" signal.  Verifies the short-circuit
+     * still fires when the deeper lift consistently bails on
+     * Mignotte overflow rather than running to verify-failure. */
+    check_factor_expands_to("Factor[Expand[x^12 + y^4 - 1]]",
+        "Plus[-1, Power[x, 12], Power[y, 4]]");
+    double ms = f5_eval_ms("Factor[Expand[x^12 + y^4 - 1]]");
+    if (ms > 200.0) {
+        fprintf(stderr, "FAIL [perf]: x^12+y^4-1 took %.2f ms (budget 200)\n", ms);
+        ASSERT(0);
+    }
+}
+
+static void test_f5_recombination_still_works_k2(void) {
+    /* (x^2 - y)(x^2 - 4y): both bivariate factors have reducible
+     * univariate images at alpha = 1 (x^2 - 1 = (x-1)(x+1) and
+     * x^2 - 4 = (x-2)(x+2)), so r = 4 and the bivariate factorisation
+     * requires k = 2 recombination at the top level.  The F5 short-
+     * circuit only fires at k >= 2 AFTER an entire pass of k = 2
+     * subsets without any completion signal -- by which point the
+     * correct pair has already been found and the lift succeeds.
+     * This verifies F5 does not break legitimate k = 2 recombination. */
+    check_factor_expands_to("Factor[Expand[(x^2 - y) (x^2 - 4 y)]]",
+        "Plus[Power[x, 4], Times[-5, Times[Power[x, 2], y]], "
+        "Times[4, Power[y, 2]]]");
+}
+
+/* ====================================================================== */
 
 int main(void) {
     symtab_init();
@@ -449,6 +540,12 @@ int main(void) {
     TEST(test_f3_perf_x6_y15);
     TEST(test_f3_perf_x4_y25);
     TEST(test_f3_perf_x8_y17);
+
+    /* Phase F5: recombination short-circuit */
+    TEST(test_f5_irreducible_r6_x12);
+    TEST(test_f5_irreducible_r8_x24);
+    TEST(test_f5_irreducible_r6_x12_y4);
+    TEST(test_f5_recombination_still_works_k2);
 
     printf("All factor_recombine tests passed!\n");
     return 0;

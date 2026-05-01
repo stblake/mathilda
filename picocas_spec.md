@@ -8118,3 +8118,63 @@ final `evaluate` restores).
 
 `src/simp.c` (new `simp_split_multiplicative`; `simp_dispatch` calls
 it after `simp_split_additive`).
+
+## Factor: recombination short-circuit (Phase F5, 2026-05-02)
+
+After Phase F3 made the bivariate Hensel inner loop fast, the
+remaining hot spot for r-large irreducible bivariate inputs (e.g.
+`x²⁴ + y² - 1` whose univariate image at any small alpha factors
+into 8 cyclotomic pieces) was the exhaustive k-subset enumeration in
+`lift_multi_internal`.  For r = 8 the loop tries 8 + 28 + 56 + 35 =
+127 lifts before concluding "irreducible".  Phase F5 adds a
+near-success heuristic that short-circuits the loop early.
+
+### The signal
+
+`bpoly_hensel_lift_2_internal` (a new file-static helper in
+`src/mvfactor.c`) exposes a `completed_iters_out` flag.  It is set
+to `true` only when the y-iteration loop completed all B steps
+without bailing on a Diophantine non-integer or Mignotte
+coefficient overflow.  Such a lift "almost worked" -- only the
+final `U·V == P` over Z verify failed -- which is the natural
+signal that recombination at the next k might find the right
+partition.
+
+The public `bpoly_hensel_lift_2` is a thin wrapper passing a local
+dummy flag; existing call sites are unaffected.
+
+### The short-circuit
+
+`lift_multi_internal` aggregates the flag across all k-subsets of a
+given size.  When an entire k-pass produces no completion signal
+AND k ≥ 2, the loop breaks and returns P as irreducible
+bivariately.  k = 1 is always exhausted unconditionally, so
+legitimate singleton lifts (e.g. `{x²+1}` peeling off `x²+y` from
+`x⁴ - y²`) still fire.  k = 2 is always tried before any
+short-circuit, so all current k = 2 recombination cases (e.g.
+`(x²-y)(x²-4y)` with r = 4 image (x-1)(x+1)(x-2)(x+2)) remain
+correct.
+
+### Measured impact
+
+| Workload | Pre-F5 | Post-F5 | Δ |
+|---|---|---|---|
+| `Factor[Expand[x¹²+y²-1]]` (r=6) | 23 ms | 20 ms | -13 % |
+| `Factor[Expand[x¹²+y⁴-1]]` (r=6, B=4) | 24 ms | 20 ms | -17 % |
+| `Factor[Expand[x²⁰+y²-1]]` (r=6) | 31 ms | 28 ms | -10 % |
+| `Factor[Expand[x²⁴+y²-1]]` (r=8) | 117 ms | 84 ms | -29 % |
+| `Factor[Expand[x³⁰+y²-1]]` (r=8) | -- | 59 ms | (new) |
+
+### Files touched
+
+`src/mvfactor.c`: `bpoly_hensel_lift_2_internal` (new; carries the
+`completed_iters_out` output), `bpoly_hensel_lift_2` (thin wrapper),
+`lift_multi_internal` (tracks `any_completion_at_k`, breaks when
+the per-k-pass signal is absent and k ≥ 2).
+
+`tests/test_factor_recombine.c`: `test_f5_irreducible_r6_x12`,
+`test_f5_irreducible_r8_x24`, `test_f5_irreducible_r6_x12_y4`,
+`test_f5_recombination_still_works_k2`.  The first three pin the
+short-circuit on bivariate-irreducible inputs whose univariate
+image has 6 or 8 factors; the last verifies F5 does not regress
+legitimate k = 2 recombination.

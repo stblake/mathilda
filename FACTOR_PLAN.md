@@ -305,7 +305,7 @@ self-contained and exhaustively unit-tested.
 | F2 | True multivariate Hensel for n ≥ 3 — MPoly type + n-variate Hensel iteration | Not started — largest LOC budget, ~1000-1500 LOC |
 | F3 | Bivariate Hensel performance — incremental U·V update, Mignotte fast-fail, sorted us[] | Not started — required for F1 to be fast, ~200-400 LOC |
 | F4 | Faster multivariate FactorSquareFree — cheap squarefree pre-check before full GCD | **Phase 1 done** — `sqfree_cheap_check` in `facpoly.c` substitutes integer values for the non-main variables, computes the univariate gcd-with-derivative, and skips the expensive multivariate `gcd(pp, pp')` when the image is squarefree at any of seven test alphas.  Sound after content extraction (a constant-in-x repeated factor would have divided content; a non-constant repeated factor specialises to a non-squarefree image at all but a finite alpha set).  Measured: 4-variable squarefree Hensel-style input 6.27 s → 0.95 s (6.6×); 3-variable squarefree typical 60-150 ms unchanged because the multivariate GCD was not the bottleneck there.  Non-squarefree inputs fall through to the original Yun loop; tests in `tests/test_facpoly.c` cover both branches. |
-| F5 | Recombination cap & heuristics — singleton ordering, partial-lift signal, budget cap | Not started — ~50-100 LOC |
+| F5 | Recombination cap & heuristics — singleton ordering, partial-lift signal, budget cap | **Done** — partial-lift signal landed in `lift_multi_internal` (`src/mvfactor.c`).  Singleton ordering was already done as F3a.  The lift-2 internal helper now reports a `completed_iters` flag distinguishing "lift bailed early on Diophantine non-integer or Mignotte coefficient overflow" from "lift completed all B y-iterations and only failed the final `U·V == P` verify".  When an entire k-pass produces no completion signal AND k ≥ 2, the recombination loop short-circuits and returns P as irreducible bivariately.  k = 1 is always exhausted so legitimate singleton lifts still fire; k = 2 is always tried before any short-circuit so all current k = 2 recombination cases (e.g. `(x²-y)(x²-4y)`) remain correct.  Measured: `Factor[Expand[x²⁴+y²-1]]` 117 → 84 ms (-29 %), `Factor[Expand[x¹²+y⁴-1]]` 24 → 20 ms (-17 %), `Factor[Expand[x¹²+y²-1]]` 23 → 20 ms (-13 %).  Larger savings on bivariate-irreducible inputs whose univariate image factors into 6+ pieces (cyclotomic-rich); no regression on the existing recombination test suite. |
 | 5d | Context-aware num/den scope + explicit threading over Less/Equal/And in `builtin_factor` | **Done**.  Direct Factor calls use separate num/den variable scopes (correct full factorisation including foreign denominator vars).  Simplify-internal Factor calls reuse the numerator's scope for the denominator (avoids the TrigRoundtrip slow path on `Tan[2x]` forms; see C4).  Discriminator is the presence of an active Factor memo (which Simplify pushes).  Independent threading over Less/Greater/Equal/And/Or is now done at the top of `builtin_factor` so the cubic in `Factor[1 < expr < 2]` factors cleanly. |
 | 6 | Per-call Factor memo inside `Simplify` | **Done** |
 | 7 | TrigFactor Path-B skip heuristic on inputs with no compound trig structure | **Done** -- 17 % speedup on user case, 18 % on Tan double-angle. |
@@ -1228,24 +1228,62 @@ through the integer-conversion layer.
 regression test `test_factor_trivariate_high_degree_squarefree` in
 `tests/test_factor_baseline.c`.
 
-### Phase F5 — Recombination cap & heuristics
+### Phase F5 — Recombination cap & heuristics (DONE)
 
-The current `lift_multi_internal` enumerates k-subsets exhaustively
+The previous `lift_multi_internal` enumerated k-subsets exhaustively
 through Gosper's hack.  For r = 7 factors with no recombination
 applicable (the bivariate factorisation has the same number of
-factors as the univariate), it tries all 63 subsets before
-concluding.  Two heuristic improvements:
+factors as the univariate), it tried all 63 subsets before
+concluding.  F5 added two heuristic improvements:
 
-```
-1. Sort us[] by degree; try lowest-degree singletons first.
-2. After SUCCESS_BUDGET failed singletons, jump to k=2 only if the
-   previous k-attempts had partial-lift signs (e.g., diophantine
-   succeeded but verify failed at small y-degree).  Otherwise
-   short-circuit the loop and return rc=r (the same number of
-   factors as the image).
-```
+#### Stage F5a — singleton ordering by degree (DONE as F3a)
 
-**Estimated**: 50-100 LOC.
+Sort `us[]` ascending by univariate x-degree before recursion so the
+lowest-degree singletons are tried first.  Already shipped as part of
+F3a in `mvfactor_sort_us_by_degree`; the singleton {x} for inputs like
+`(1 - x^k)(x - y^m)` is now the first recombination trial instead of
+the seventh.
+
+#### Stage F5b — partial-lift signal short-circuit (DONE)
+
+The lift-2 inner helper (`bpoly_hensel_lift_2_internal` in
+`src/mvfactor.c`) now exposes a `completed_iters_out` flag.  It is
+true when the lift loop completed all B y-iterations without bailing
+on Diophantine non-integer or Mignotte coefficient overflow -- in
+that case the lift only failed at the final `U·V == P` verification,
+which is the "near-success" signal that motivates trying recombination
+at the next k.
+
+`lift_multi_internal` aggregates the flag across all k-subsets at the
+current k.  When an entire k-pass produces no completion signal AND
+k ≥ 2, the loop short-circuits and returns P as irreducible
+bivariately.  k = 1 is always exhausted unconditionally so legitimate
+singleton lifts (e.g. `{x²+1}` for `x⁴ - y²`) still fire, and k = 2 is
+always tried before the short-circuit fires (so all current k = 2
+recombination cases remain correct).
+
+For r = 8 inputs the savings are largest:
+- Pre-F5: 8 + 28 + 56 + 35 = 127 lifts on a fully-divergent input.
+- Post-F5: at most 8 + 28 = 36 lifts (k = 1 + k = 2), then break.
+
+Measured impact:
+
+| Workload | Pre-F5 | Post-F5 | Δ |
+|---|---|---|---|
+| `Factor[Expand[x¹²+y²-1]]` (r=6) | 23 ms | 20 ms | -13 % |
+| `Factor[Expand[x¹²+y⁴-1]]` (r=6, B=4) | 24 ms | 20 ms | -17 % |
+| `Factor[Expand[x²⁰+y²-1]]` (r=6) | 31 ms | 28 ms | -10 % |
+| `Factor[Expand[x²⁴+y²-1]]` (r=8) | 117 ms | 84 ms | -29 % |
+| `Factor[Expand[x³⁰+y²-1]]` (r=8) | -- | 59 ms | (new) |
+
+Existing recombination tests (`(x²-y)(x²-4y)`, `x⁴-y²`,
+`x⁴-4y²+4y-1`, `(x²-y)(x²+y)`, `(x³+y)(x³-y)`) all pass unchanged --
+they either succeed at k = 1 (top level, with recursion handling the
+residual) or hit a real k = 2 partition before any short-circuit
+fires.
+
+**LOC**: ~30 LOC implementation in `src/mvfactor.c`, ~100 LOC of
+tests in `tests/test_factor_recombine.c::test_f5_*`.
 
 ### Phase 5c — Retire `factor_roots`
 
@@ -1267,17 +1305,27 @@ test suite to verify no regressions.
 
 ### Implementation order
 
-| Order | Phase | Reason |
-|---|---|---|
-| 1 | **F1** (Wang) | Highest leverage per LOC; unblocks the most user cases (cases 3, 4, and similar non-monic bivariates). |
-| 2 | **F4** (cheap squarefree check) | 50 ms - 200 ms savings on every multivariate Factor; blocks nothing. |
-| 3 | **F3** (Hensel performance) | Required for F1 to actually be fast on high-degree inputs. |
-| 4 | **F5** (recombination heuristics) | Cheap, marginal but real. |
-| 5 | **F2** (multivariate Hensel) | Largest LOC budget; deferred if user pressure on case-2 type inputs is acceptable. |
-| 6 | **5c** (retire `factor_roots`) | After F1, F3.  Optional cleanup; F2 only required if we want to drop `factor_roots` BEFORE accepting case-2 limitations. |
+| Order | Phase | Reason | Status |
+|---|---|---|---|
+| 1 | **F1** (Wang) | Highest leverage per LOC; unblocks the most user cases (cases 3, 4, and similar non-monic bivariates). | **Done** (Stages 1+2+3 MVP) |
+| 2 | **F4** (cheap squarefree check) | 50 ms - 200 ms savings on every multivariate Factor; blocks nothing. | **Done** (Stages 1+2) |
+| 3 | **F3** (Hensel performance) | Required for F1 to actually be fast on high-degree inputs. | **Done** (Stages a+b+c) |
+| 4 | **F5** (recombination heuristics) | Cheap, marginal but real. | **Done** (partial-lift signal short-circuit) |
+| 5 | **F2** (multivariate Hensel) | Largest LOC budget; deferred if user pressure on case-2 type inputs is acceptable. | Not started |
+| 6 | **5c** (retire `factor_roots`) | After F1, F3.  Optional cleanup; F2 only required if we want to drop `factor_roots` BEFORE accepting case-2 limitations. | Not started |
 
 Total: ~2-3 person-weeks for F1+F3+F4+F5+5c (without F2).  Adding
 F2 doubles the budget but unblocks the last class of failures.
+
+After F1+F3+F4+F5 landed, the remaining gap to Mathematica on the
+user-reported reference cases is roughly:
+- A 30× algorithmic constant factor on the simplest cases (matched
+  pre-Phase 0).
+- The case-2 family of inputs whose every factor depends on every
+  variable -- still requires F2 multivariate Hensel.
+- `factor_roots` can be retired now in principle (F1 covers all
+  bivariate cases the legacy heuristic could touch); 5c is gated only
+  on the test-suite pass.
 
 ## 13. References for the next implementer
 
