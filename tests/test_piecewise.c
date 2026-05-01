@@ -57,6 +57,30 @@ void test_piecewise() {
         {"FractionalPart[Complex[5/2, -5/2]]", "Complex[Rational[1, 2], Rational[-1, 2]]"},
         {"FractionalPart[Complex[2, 3]]", "0"}, // Real 0, Im 0 -> integer 0
         
+        // Sign extraction (symbolic)
+        {"Floor[-x]", "Times[-1, Ceiling[x]]"},
+        {"Ceiling[-x]", "Times[-1, Floor[x]]"},
+        {"Round[-x]", "Times[-1, Round[x]]"},
+        {"Floor[-2 x]", "Times[-1, Ceiling[Times[2, x]]]"},
+        {"Ceiling[Times[-3, x, y]]", "Times[-1, Floor[Times[3, x, y]]]"},
+        {"Floor[-x] + Ceiling[x]", "0"},
+
+        // Idempotency / composition (symbolic)
+        {"Floor[Floor[x]]", "Floor[x]"},
+        {"Ceiling[Ceiling[x]]", "Ceiling[x]"},
+        {"Round[Round[x]]", "Round[x]"},
+        {"Floor[Ceiling[x]]", "Ceiling[x]"},
+        {"Ceiling[Floor[x]]", "Floor[x]"},
+        {"Floor[Round[x]]", "Round[x]"},
+        {"Ceiling[Round[x]]", "Round[x]"},
+        {"Round[Floor[x]]", "Floor[x]"},
+        {"Round[Ceiling[x]]", "Ceiling[x]"},
+        {"Ceiling[Floor[Ceiling[x]]]", "Ceiling[x]"},
+
+        // IntegerPart / FractionalPart do NOT participate in these rules
+        {"IntegerPart[-x]", "IntegerPart[Times[-1, x]]"},
+        {"FractionalPart[Floor[x]]", "FractionalPart[Floor[x]]"},
+
         // Two argument forms
         {"Floor[7, 3]", "6"},
         {"Ceiling[7, 3]", "9"},

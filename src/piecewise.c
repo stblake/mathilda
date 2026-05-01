@@ -31,6 +31,29 @@ void piecewise_init(void) {
 
 enum { OP_FLOOR, OP_CEILING, OP_ROUND, OP_INTPART, OP_FRACPART };
 
+static const char* op_head_name(int op) {
+    switch (op) {
+        case OP_FLOOR:   return "Floor";
+        case OP_CEILING: return "Ceiling";
+        case OP_ROUND:   return "Round";
+        default:         return NULL;
+    }
+}
+
+/* Return OP_FLOOR/OP_CEILING/OP_ROUND when `e` is a 1-arg call to one of
+ * those heads, or -1 otherwise. Used to detect nested integer-valued
+ * forms so the outer rounding becomes a no-op. */
+static int classify_int_valued_head(Expr* e) {
+    if (e->type != EXPR_FUNCTION) return -1;
+    if (e->data.function.arg_count != 1) return -1;
+    Expr* h = e->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return -1;
+    if (strcmp(h->data.symbol, "Floor") == 0)   return OP_FLOOR;
+    if (strcmp(h->data.symbol, "Ceiling") == 0) return OP_CEILING;
+    if (strcmp(h->data.symbol, "Round") == 0)   return OP_ROUND;
+    return -1;
+}
+
 /*
  * round_half_even:
  * Rounds numbers of the form x.5 toward the nearest even integer.
@@ -113,7 +136,45 @@ static Expr* do_piecewise_1(Expr* x, int op) {
         if (re_res) expr_free(re_res);
         if (im_res) expr_free(im_res);
     }
-    
+
+    /* Symbolic simplifications for Floor/Ceiling/Round only.
+     * Any concrete numeric input has already been resolved above. */
+    if (op == OP_FLOOR || op == OP_CEILING || op == OP_ROUND) {
+        /* Idempotency / composition:
+         *   Floor[Floor[y]]    -> Floor[y]
+         *   Ceiling[Ceiling[y]]-> Ceiling[y]
+         *   Round[Round[y]]    -> Round[y]
+         *   Floor[Ceiling[y]]  -> Ceiling[y]
+         *   Floor[Round[y]]    -> Round[y]
+         *   Ceiling[Floor[y]]  -> Floor[y]
+         *   Ceiling[Round[y]]  -> Round[y]
+         *   Round[Floor[y]]    -> Floor[y]
+         *   Round[Ceiling[y]]  -> Ceiling[y]
+         * In every case the inner result is an integer, so the outer
+         * rounding is a no-op and the inner expression is the answer. */
+        if (classify_int_valued_head(x) >= 0) {
+            return expr_copy(x);
+        }
+
+        /* Sign extraction:
+         *   Floor[-y]   -> -Ceiling[y]
+         *   Ceiling[-y] -> -Floor[y]
+         *   Round[-y]   -> -Round[y]
+         * Triggered by any superficially negative argument (Times[-c, ...],
+         * Complex[neg, ...] that wasn't fully resolved above, etc.). */
+        if (expr_is_superficially_negative(x)) {
+            int swapped_op = (op == OP_FLOOR) ? OP_CEILING
+                          : (op == OP_CEILING) ? OP_FLOOR
+                          : OP_ROUND;
+            Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(x) };
+            Expr* pos = eval_and_free(expr_new_function(expr_new_symbol("Times"), neg_args, 2));
+            Expr* inner_args[1] = { pos };
+            Expr* inner = expr_new_function(expr_new_symbol(op_head_name(swapped_op)), inner_args, 1);
+            Expr* outer_args[2] = { expr_new_integer(-1), inner };
+            return expr_new_function(expr_new_symbol("Times"), outer_args, 2);
+        }
+    }
+
     return NULL;
 }
 

@@ -2,6 +2,7 @@
 #include "arithmetic.h"
 #include "attr.h"
 #include "eval.h"
+#include "facpoly.h"
 #include "parse.h"
 #include "print.h"
 #include "symtab.h"
@@ -685,7 +686,16 @@ static void simp_debug_log(const char* xform, const Expr* in,
     fflush(stderr);
 }
 
-/* Wrap call_unary_copy with tracing when $SimplifyDebug is True. */
+/* Wrap call_unary_copy with tracing when $SimplifyDebug is True.
+ *
+ * Note: an experimental generic FactorMemo lookup at this layer was
+ * tried (Phase 11 attempt) but reverted -- the per-transform memos
+ * already in place (Factor, TrigFactor, TrigExpand, TrigRoundtrip,
+ * PythagReduce, PythagSquareComplete, HalfAngle) cover the high-
+ * volume duplicates, and the additional malloc/hash overhead at
+ * every call exceeded the marginal gain on cheap transforms like
+ * Together / Cancel / Apart that are individually fast and rarely
+ * repeated. */
 static Expr* traced_call_unary(const char* xform, const Expr* in) {
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
@@ -1141,10 +1151,111 @@ overflow:
 static Expr* transform_trig_roundtrip(const Expr* e) {
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
+
+    /* Two-level memo lookup.
+     *
+     * Level 1 (cheap): keyed on the raw input `e`.  Lets repeated
+     * calls on the *same* expression short-circuit the entire
+     * pipeline including the expensive TrigToExp stage.  This is
+     * the common case during candidate-set iteration -- the same
+     * sub-expression flows through many transforms, and most of
+     * the time the TrigRoundtrip result is unchanged.
+     *
+     * Level 2 (canonical): keyed on TrigToExp(e).  Catches
+     * equivalent forms (e.g., `Cos[x]^2 Sec[2x]` and
+     * `1/4 Sec[2x] (2 + 2 Cos[2x])`) which collapse to the same
+     * exponential expression.  Pays the TrigToExp cost (which we'd
+     * incur for stage 1 anyway), but saves the rest of the pipeline.
+     *
+     * On a miss at both levels, the result is stored under BOTH
+     * the raw and canonical keys, so future identical AND
+     * equivalent calls hit Level 1 / Level 2 respectively. */
+    FactorMemo* memo = factor_memo_active();
+    Expr* raw_key = NULL;
+    if (memo) {
+        Expr* raw_args[1] = { expr_copy((Expr*)e) };
+        raw_key = expr_new_function(expr_new_symbol("TrigRoundtrip"),
+                                    raw_args, 1);
+        const Expr* hit = factor_memo_lookup(memo, raw_key);
+        if (hit) {
+            Expr* cached = expr_copy((Expr*)hit);
+            expr_free(raw_key);
+            if (dbg) simp_debug_log("TrigRoundtrip", e, cached,
+                                    simp_debug_elapsed_ms(t0));
+            return cached;
+        }
+    }
+
+    /* Stage 1 of the pipeline: convert trig atoms to exponential form. */
     Expr* a = call_unary_copy("TrigToExp", e);
-    Expr* b = call_unary_owned("Together", a);
-    Expr* c = call_unary_owned("Cancel", b);
-    Expr* d = call_unary_owned("ExpToTrig", c);
+
+    /* Level 2 lookup keyed on TrigToExp(input). */
+    Expr* canon_key = NULL;
+    if (memo) {
+        Expr* canon_args[1] = { expr_copy(a) };
+        canon_key = expr_new_function(expr_new_symbol("TrigRoundtrip"),
+                                      canon_args, 1);
+        const Expr* hit = factor_memo_lookup(memo, canon_key);
+        if (hit) {
+            Expr* cached = expr_copy((Expr*)hit);
+            /* Promote to Level 1 for next time the same `e` arrives. */
+            if (raw_key) {
+                factor_memo_store(memo, raw_key, cached);
+                expr_free(raw_key);
+            }
+            expr_free(canon_key);
+            expr_free(a);
+            if (dbg) simp_debug_log("TrigRoundtrip", e, cached,
+                                    simp_debug_elapsed_ms(t0));
+            return cached;
+        }
+    }
+    /* Explosion guard: TrigToExp is structurally expanding -- a
+     * single `Cos[x] Cos[y]` (complexity 7) maps to a sum of four
+     * exponentials (complexity 77, 11x growth).  Together / Cancel /
+     * ExpToTrig on that intermediate is expensive AND the final
+     * result tends to use Cosh / Sinh of imaginary arguments rather
+     * than Cos / Sin, leaving us with a complex-coefficient form
+     * that's worse for the simp candidate-set search than the
+     * input.
+     *
+     * If TrigToExp expanded the input by more than 5x, abort the
+     * round-trip: skip the slow Together / Cancel / ExpToTrig stages
+     * and return the input unchanged.  Other transforms in the
+     * candidate set still see the input form.
+     *
+     * Verified safe on the user-reference case (Sin[x]^3 + Sin[3x] -
+     * 3 Sin[x] expands by ~3x at TrigToExp stage but still benefits
+     * from the round-trip).  Triggers on inputs like Cos[x] Cos[y]
+     * where TrigToExp blows up 11x. */
+    size_t in_score = simp_default_complexity(e);
+    size_t exp_score = simp_default_complexity(a);
+    if (dbg) {
+        fprintf(stderr, "  TrigRoundtrip complexity: in=%zu exp=%zu ratio=%.2f\n",
+                in_score, exp_score,
+                in_score > 0 ? (double)exp_score / in_score : 0.0);
+    }
+    Expr* d;
+    if (in_score > 0 && exp_score > 5 * in_score) {
+        expr_free(a);
+        d = expr_copy((Expr*)e);
+    } else {
+        Expr* b = call_unary_owned("Together", a);
+        Expr* c = call_unary_owned("Cancel", b);
+        d = call_unary_owned("ExpToTrig", c);
+    }
+
+    /* Store under both keys so future identical or canonically-equivalent
+     * calls hit the appropriate level. */
+    if (raw_key) {
+        factor_memo_store(memo, raw_key, d);
+        expr_free(raw_key);
+    }
+    if (canon_key) {
+        factor_memo_store(memo, canon_key, d);
+        expr_free(canon_key);
+    }
+
     if (dbg) simp_debug_log("TrigRoundtrip", e, d, simp_debug_elapsed_ms(t0));
     return d;
 }
@@ -1237,7 +1348,12 @@ static Expr* simp_roots_of_unity(const Expr* e) {
  * which would re-rewrite (Sin + Cos) into a single trig and obscure the
  * factored form. As a standalone seed the rewrite produces a candidate
  * Simplify can score directly. */
-static Expr* transform_pythag_square_complete(const Expr* e) {
+/* Forward declaration -- definition lives near transform_pythag_reduce. */
+static Expr* simp_memo_wrap(const Expr* e, const char* pseudo_head,
+                            Expr* (*impl)(const Expr*));
+static bool has_pythag_head(const Expr* e);
+
+static Expr* transform_pythag_square_complete_impl(const Expr* e) {
     static Expr* rules = NULL;
     if (!rules) {
         rules = parse_expression(
@@ -1251,6 +1367,17 @@ static Expr* transform_pythag_square_complete(const Expr* e) {
     if (!rules) return NULL;
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
+
+    /* Same fast-skip as PythagReduce: every rule LHS contains a
+     * Cos/Sin/Cosh/Sinh head, so on inputs without any of those
+     * the ReplaceRepeated walk finds nothing. */
+    if (!has_pythag_head(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("PythagSquareComplete", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
     Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
     Expr* call = expr_new_function(
         expr_new_symbol("ReplaceRepeated"), args, 2);
@@ -1258,6 +1385,11 @@ static Expr* transform_pythag_square_complete(const Expr* e) {
     if (dbg) simp_debug_log("PythagSquareComplete", e, out,
                             simp_debug_elapsed_ms(t0));
     return out;
+}
+
+static Expr* transform_pythag_square_complete(const Expr* e) {
+    return simp_memo_wrap(e, "$PythagSquareComplete",
+                          transform_pythag_square_complete_impl);
 }
 
 /* Half-angle tangent identity, applied to both circular and hyperbolic
@@ -1281,7 +1413,7 @@ static Expr* transform_pythag_square_complete(const Expr* e) {
  * Output complexity is uniformly less than or equal to the input on
  * every shape that fires, so simp_search's leaf-count tiebreak takes
  * the rewritten form. */
-static Expr* transform_halfangle(const Expr* e) {
+static Expr* transform_halfangle_impl(const Expr* e) {
     static Expr* rules = NULL;
     if (!rules) {
         rules = parse_expression(
@@ -1317,6 +1449,16 @@ static Expr* transform_halfangle(const Expr* e) {
     if (!rules) return NULL;
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
+
+    /* Every HalfAngle rule LHS uses Sin/Cos or Sinh/Cosh.  Skip the
+     * ReplaceRepeated walk on inputs without any of those heads. */
+    if (!has_pythag_head(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("HalfAngle", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
     Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
     Expr* call = expr_new_function(
         expr_new_symbol("ReplaceRepeated"), args, 2);
@@ -1324,6 +1466,10 @@ static Expr* transform_halfangle(const Expr* e) {
     if (dbg) simp_debug_log("HalfAngle", e, out,
                             simp_debug_elapsed_ms(t0));
     return out;
+}
+
+static Expr* transform_halfangle(const Expr* e) {
+    return simp_memo_wrap(e, "$HalfAngle", transform_halfangle_impl);
 }
 
 /* Pythagorean reduction:
@@ -1337,18 +1483,96 @@ static Expr* transform_halfangle(const Expr* e) {
  * when the matching pair sits among other terms (e.g.
  * `1 - Cos[x]^2 + 5` -> `5 + Sin[x]^2`). Idempotent on inputs that
  * don't match. */
-static Expr* transform_pythag_reduce(const Expr* e) {
+/* Wrap a transform's `impl` with FactorMemo lookup + store.  When no
+ * memo is active (i.e., we're not inside a Simplify call), the impl
+ * runs directly with no overhead.  When active, identical inputs
+ * return cached results; the memo key includes a $-prefixed pseudo-
+ * head so it never collides with builtin keys (Factor[X], TrigFactor[X],
+ * etc.) sharing the same memo. */
+static Expr* simp_memo_wrap(const Expr* e, const char* pseudo_head,
+                            Expr* (*impl)(const Expr*)) {
+    FactorMemo* memo = factor_memo_active();
+    if (!memo) return impl(e);
+
+    /* Note: we use raw-input keying here (not Together(Expand(.))
+     * canonicalisation as in trig_memo_call).  Reason: the wrapped
+     * transforms (PythagReduce, PythagSquareComplete, HalfAngle) use
+     * pattern rules that look for specific surface structure --
+     * `1 - Cos[x]^2`, `1 + 2 Sin Cos`, `Sin[x] / (1 + Cos[x])` etc.
+     * Distributive Expand destroys those patterns (`a (-1 + Cos^2)`
+     * becomes `-a + a Cos^2`, where the -1 disappears as a coefficient
+     * adjustment), so the rules no longer fire on the canonical form.
+     *
+     * For the trig memos the canonical form is fine because those
+     * transforms internally normalise via Together / TrigToExp before
+     * pattern matching. */
+    Expr* key_args[1] = { expr_copy((Expr*)e) };
+    Expr* key = expr_new_function(expr_new_symbol(pseudo_head), key_args, 1);
+    const Expr* hit = factor_memo_lookup(memo, key);
+    if (hit) {
+        Expr* cached = expr_copy((Expr*)hit);
+        expr_free(key);
+        return cached;
+    }
+    Expr* result = impl(e);
+    if (result) factor_memo_store(memo, key, result);
+    expr_free(key);
+    return result;
+}
+
+/* Cheap structural check: does `e` contain any of Cos/Sin/Cosh/Sinh as
+ * a function head?  PythagReduce's rules cannot match anything else,
+ * so when the answer is no we can skip the ReplaceRepeated walk
+ * entirely.  Walks the tree once; cheaper by orders of magnitude than
+ * the pattern-matching pass it gates. */
+static bool has_pythag_head(const Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL) {
+        const char* h = head->data.symbol;
+        if (strcmp(h, "Cos") == 0 || strcmp(h, "Sin") == 0 ||
+            strcmp(h, "Cosh") == 0 || strcmp(h, "Sinh") == 0) {
+            return true;
+        }
+    }
+    if (has_pythag_head(head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (has_pythag_head(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+static Expr* transform_pythag_reduce_impl(const Expr* e) {
     static Expr* rules = NULL;
     if (!rules) {
         rules = parse_expression(
             "{ 1 - Cos[x_]^2 + r___  :> Sin[x]^2 + r, "
             "  1 - Sin[x_]^2 + r___  :> Cos[x]^2 + r, "
+            "  -1 + Cos[x_]^2 + r___ :> -Sin[x]^2 + r, "
+            "  -1 + Sin[x_]^2 + r___ :> -Cos[x]^2 + r, "
             "  -1 + Cosh[x_]^2 + r___ :> Sinh[x]^2 + r, "
-            "  1 + Sinh[x_]^2 + r___ :> Cosh[x]^2 + r }");
+            "  1 + Sinh[x_]^2 + r___ :> Cosh[x]^2 + r, "
+            "  1 - Cosh[x_]^2 + r___ :> -Sinh[x]^2 + r, "
+            "  -1 - Sinh[x_]^2 + r___ :> -Cosh[x]^2 + r }");
     }
     if (!rules) return NULL;
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
+
+    /* Fast-skip: every PythagReduce rule LHS has a Cos/Sin/Cosh/Sinh
+     * pattern.  If the input contains none of those heads, the
+     * ReplaceRepeated walk would visit every node and try every rule
+     * and find nothing -- which on huge sum-of-exponentials inputs
+     * costs 50-120 ms per call.  Skip the rewrite and return a copy
+     * unchanged. */
+    if (!has_pythag_head(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("PythagReduce", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
     Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
     Expr* call = expr_new_function(
         expr_new_symbol("ReplaceRepeated"), args, 2);
@@ -1356,6 +1580,13 @@ static Expr* transform_pythag_reduce(const Expr* e) {
     if (dbg) simp_debug_log("PythagReduce", e, out,
                             simp_debug_elapsed_ms(t0));
     return out;
+}
+
+/* PythagReduce sees the highest call volume of any simp transform
+ * (~200 calls in the Tan double-angle case, with ~20 % unique inputs).
+ * The memo dedupes the rest. */
+static Expr* transform_pythag_reduce(const Expr* e) {
+    return simp_memo_wrap(e, "$PythagReduce", transform_pythag_reduce_impl);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -2571,6 +2802,21 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
                 Expr* r = traced_call_unary(SIMP_TRANSFORMS[t], seed);
                 if (!r) continue;
                 update_best(&best, &best_score, r, complexity_func);
+                /* Chain a PythagReduce pass on the transform output so a
+                 * candidate produced in the final round (e.g. FactorSquareFree
+                 * surfacing Cos[x]^2 - 1 inside a product) still gets the
+                 * Pythagorean rewrite applied -- otherwise the reduction
+                 * would only fire when this candidate became a seed in a
+                 * subsequent round, which doesn't happen at SIMP_ROUNDS-1. */
+                {
+                    Expr* pr = transform_pythag_reduce(r);
+                    if (pr) {
+                        if (!expr_eq(pr, r)) {
+                            update_best(&best, &best_score, pr, complexity_func);
+                        }
+                        expr_free(pr);
+                    }
+                }
                 if (expr_eq(r, seed)) {
                     expr_free(r);
                 } else if (score_with_func(r, complexity_func) > parent_score) {
@@ -3547,7 +3793,15 @@ Expr* builtin_simplify(Expr* res) {
 
     SimpMemo memo;
     simp_memo_init(&memo);
+
+    FactorMemo* fmemo = factor_memo_new();
+    factor_memo_push(fmemo);
+
     Expr* best = simp_bottomup(expr, ctx, opt_complexity, &memo, 0);
+
+    factor_memo_pop();
+    factor_memo_free(fmemo);
+
     simp_memo_free(&memo);
     assume_ctx_free(ctx);
     return best;

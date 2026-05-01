@@ -8,10 +8,16 @@
 #include "internal.h"
 #include "parse.h"
 #include "rationalize.h"
+#include "zupoly.h"
+#include "bpoly.h"
+#include "mvfactor.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 #include <math.h>
+#include <limits.h>
+#include <gmp.h>
 
 static bool is_constant_1(Expr* e);
 Expr* bz_factor_to_expr(Expr* P, Expr* var);
@@ -77,13 +83,64 @@ static Expr* poly_deriv(Expr* p, Expr* x) {
     return expr_new_integer(0);
 }
 
+/* Forward declarations used by the F4 cheap squarefree pre-check. */
+static bool univariate_squarefree(Expr* u, Expr* var);
+static Expr* eval_others_at_alpha(Expr* P, Expr** vars, size_t v_count,
+                                  size_t main_idx, int64_t alpha);
+
+/* F4 Phase 1 cheap squarefree pre-check.
+ *
+ * Returns true iff `pp` is provably squarefree as a polynomial in
+ * `vars[var_count - 1]` (treating the other vars as parameters).
+ * Returns false if no such proof was obtained -- the polynomial
+ * may still be squarefree, and the caller should fall through to
+ * the full Yun-style algorithm.
+ *
+ * Soundness: invoked AFTER content extraction in the main variable,
+ * so any repeated factor of pp involves the main variable nontrivially
+ * (a constant-in-x repeated factor would have divided content).
+ * Substituting integer values for the other variables produces a
+ * univariate image whose gcd-with-derivative is cheap to compute.
+ * If the image is squarefree at any alpha that preserves the
+ * leading-x degree, then pp itself is squarefree in x: a repeated
+ * factor f(x, others)^2 of pp would specialise to f(x, alpha)^2 in
+ * the image, and unless alpha is a root of the leading-x coefficient
+ * of f the image is non-squarefree.
+ *
+ * Only used when var_count >= 2 because for univariate inputs the
+ * GCD is unavoidable and a separate pre-check would only pessimise
+ * the non-squarefree case. */
+static bool sqfree_cheap_check(Expr* pp, Expr** vars, size_t var_count) {
+    if (var_count < 2) return false;
+    Expr* x = vars[var_count - 1];
+    int deg_x = get_degree_poly(pp, x);
+    if (deg_x < 2) return true;  /* deg <= 1 in x is squarefree after content stripping */
+
+    static const int64_t alphas[] = {1, -1, 2, -2, 3, -3, 4};
+    size_t alpha_count = sizeof(alphas) / sizeof(alphas[0]);
+
+    for (size_t pi = 0; pi < alpha_count; pi++) {
+        Expr* image = eval_others_at_alpha(pp, vars, var_count,
+                                           var_count - 1, alphas[pi]);
+        if (!image) continue;
+        if (get_degree_poly(image, x) != deg_x) {
+            expr_free(image);
+            continue;
+        }
+        bool sqf = univariate_squarefree(image, x);
+        expr_free(image);
+        if (sqf) return true;
+    }
+    return false;
+}
+
 static Expr* factor_square_free_poly(Expr* P, Expr** vars, size_t var_count) {
     if (var_count == 0 || is_zero_poly(P)) return expr_copy(P);
     Expr* x = vars[var_count - 1];
     if (get_degree_poly(P, x) == 0) {
         return factor_square_free_poly(P, vars, var_count - 1);
     }
-    
+
     Expr* cont = poly_content(P, vars, var_count);
     Expr* pp = exact_poly_div(P, cont, vars, var_count);
     if (!pp) {
@@ -91,10 +148,10 @@ static Expr* factor_square_free_poly(Expr* P, Expr** vars, size_t var_count) {
         expr_free(cont);
         cont = expr_new_integer(1);
     }
-    
+
     Expr* res_cont = factor_square_free_poly(cont, vars, var_count - 1);
     expr_free(cont);
-    
+
     if (get_degree_poly(pp, x) == 0) {
         Expr** t_args = malloc(sizeof(Expr*) * 2);
         t_args[0] = res_cont; t_args[1] = pp;
@@ -102,7 +159,34 @@ static Expr* factor_square_free_poly(Expr* P, Expr** vars, size_t var_count) {
         free(t_args);
         return ret;
     }
-    
+
+    /* F4 fast path: skip the expensive multivariate gcd(pp, pp') when a
+     * cheap univariate-substitution probe proves pp is squarefree in x. */
+    if (sqfree_cheap_check(pp, vars, var_count)) {
+        Expr* res_pp = expr_expand(pp);
+        expr_free(pp);
+
+        Expr* expanded_res_cont = expr_expand(res_cont);
+        Expr** pr_args = malloc(sizeof(Expr*) * 2);
+        pr_args[0] = expanded_res_cont;
+        pr_args[1] = expr_copy(res_pp);
+        Expr* prod = eval_and_free(expr_new_function(expr_new_symbol("Times"), pr_args, 2));
+        free(pr_args);
+        Expr* expanded_prod = expr_expand(prod);
+        expr_free(prod);
+        Expr* missing = exact_poly_div(P, expanded_prod, vars, var_count);
+        expr_free(expanded_prod);
+        if (!missing) missing = expr_new_integer(1);
+
+        Expr** final_args = malloc(sizeof(Expr*) * 3);
+        final_args[0] = missing;
+        final_args[1] = res_cont;
+        final_args[2] = res_pp;
+        Expr* final_res = eval_and_free(expr_new_function(expr_new_symbol("Times"), final_args, 3));
+        free(final_args);
+        return final_res;
+    }
+
     Expr* A = pp;
     Expr* raw_A_prime = poly_deriv(A, x);
     Expr* A_prime = expr_expand(raw_A_prime);
@@ -505,6 +589,516 @@ static Expr* factor_degree_one(Expr* P, Expr** vars, size_t v_count) {
     return NULL;
 }
 
+/* ===================================================================== */
+/*  factor_monomial_content                                              */
+/*                                                                       */
+/*  Extracts the GCD of the variable-monomials of a Plus[term_1, ...]    */
+/*  expression and returns a factorisation                               */
+/*                                                                       */
+/*      m * (P / m)                                                      */
+/*                                                                       */
+/*  where m is the largest monomial v_1^{e_1} * v_2^{e_2} * ... that     */
+/*  divides every term of P.  Returns NULL if no nontrivial m exists or  */
+/*  the input is not a Plus.                                             */
+/*                                                                       */
+/*  Examples (over Z[a, b]):                                             */
+/*       3 a^2 b - 3 b - b^3      ->  b * (3 a^2 - 3 - b^2)              */
+/*       x^2 y + x y^2            ->  x y * (x + y)                      */
+/*       x + 1                    ->  NULL                               */
+/*       Sin[x]^3 + Sin[x]        ->  Sin[x] * (1 + Sin[x]^2)            */
+/*                                                                       */
+/*  This is the cheapest factorisation step: O(n_terms * n_vars) with    */
+/*  no integer arithmetic on coefficients.  It catches a large class of  */
+/*  cases (every term sharing a variable factor) that would otherwise    */
+/*  fall through to expensive trial-root or Hensel-based methods.        */
+/*                                                                       */
+/*  Note: integer-content extraction is handled separately by            */
+/*  poly_content / FactorTerms; this function is concerned only with     */
+/*  the variable powers.                                                 */
+/*                                                                       */
+/*  Memory: returns a fresh tree on success; the caller owns it.         */
+/*  Pointers stored in the helper temporaries are *borrowed* from `P`    */
+/*  and are not freed by us (extract_monomial returns borrowed slots).   */
+/* ===================================================================== */
+/* Recursive monomial decomposer.  Walks `e` collecting variable factors
+ * (symbols, function-headed atoms like Sin[x], and Power[base, intExp]
+ * nodes), accumulating an integer coefficient.  Robust to nested Times
+ * (which can occur in picocas's canonical form, e.g. the parser builds
+ *   3 a^2 b   as   Times[3, Times[Power[a,2], b]]
+ * rather than the flat Times[3, Power[a,2], b]).  Anything we cannot
+ * classify as "integer scalar" or "variable atom raised to integer power"
+ * is recorded with exponent 1, treating it as an opaque atom so its
+ * presence still constrains the monomial-content intersection.
+ *
+ * Output:
+ *   *coeff_out  is multiplied (caller seeds with 1) by every integer
+ *               factor encountered.
+ *   atoms[]/exps[] receive {atom, exponent} pairs (atom pointers are
+ *               *borrowed* from `e` -- the caller must not free them).
+ *               Repeats are coalesced by atom-equality at the end.
+ *   Returns true on success, false on overflow of the caller's buffer.
+ *
+ * Buffer convention: the caller pre-allocates `*cap` slots; we grow via
+ * realloc when needed. `*count` is updated to reflect filled slots. */
+static bool monomial_collect(Expr* e, int64_t* coeff_out,
+                             Expr*** atoms, int64_t** exps,
+                             size_t* count, size_t* cap) {
+    if (!e) return true;
+    if (e->type == EXPR_INTEGER) {
+        *coeff_out *= e->data.integer;
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (!monomial_collect(e->data.function.args[i], coeff_out,
+                                  atoms, exps, count, cap)) return false;
+        }
+        return true;
+    }
+
+    /* Identify (atom, exponent) for this node. */
+    Expr* atom;
+    int64_t exp;
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol, "Power") == 0
+        && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_INTEGER) {
+        atom = e->data.function.args[0];
+        exp = e->data.function.args[1]->data.integer;
+    } else {
+        atom = e;
+        exp = 1;
+    }
+
+    /* Coalesce with an existing atom or append. */
+    for (size_t i = 0; i < *count; i++) {
+        if (expr_eq((*atoms)[i], atom)) {
+            (*exps)[i] += exp;
+            return true;
+        }
+    }
+    if (*count >= *cap) {
+        size_t new_cap = (*cap == 0) ? 4 : (*cap * 2);
+        *atoms = realloc(*atoms, sizeof(Expr*) * new_cap);
+        *exps  = realloc(*exps,  sizeof(int64_t) * new_cap);
+        if (!*atoms || !*exps) return false;
+        *cap = new_cap;
+    }
+    (*atoms)[*count] = atom;
+    (*exps)[*count] = exp;
+    (*count)++;
+    return true;
+}
+
+static Expr* factor_monomial_content(Expr* P) {
+    if (P->type != EXPR_FUNCTION) return NULL;
+    if (P->data.function.head->type != EXPR_SYMBOL) return NULL;
+    if (strcmp(P->data.function.head->data.symbol, "Plus") != 0) return NULL;
+    size_t n = P->data.function.arg_count;
+    if (n < 2) return NULL;
+
+    /* Pass 1: build the GCD-monomial.  We track {var -> min exponent}
+     * across all terms.  A variable absent from any single term ends up
+     * with exponent 0 and is dropped. */
+    Expr** common_vars = NULL;       /* borrowed pointers into P's term subtrees */
+    int64_t* common_exps = NULL;
+    size_t   common_count = 0;
+    size_t   common_cap = 0;
+    bool     first = true;
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* term = P->data.function.args[i];
+        int64_t coeff = 1;
+        Expr** tvars = NULL;
+        int64_t* texps = NULL;
+        size_t tcount = 0, tcap = 0;
+        if (!monomial_collect(term, &coeff, &tvars, &texps, &tcount, &tcap)) {
+            free(tvars); free(texps);
+            free(common_vars); free(common_exps);
+            return NULL;
+        }
+
+        if (first) {
+            /* Seed: every variable from term 0 is a candidate. */
+            common_cap = tcount;
+            common_vars = malloc(sizeof(Expr*) * (common_cap + 1));
+            common_exps = malloc(sizeof(int64_t) * (common_cap + 1));
+            for (size_t j = 0; j < tcount; j++) {
+                if (texps[j] <= 0) continue;
+                common_vars[common_count] = tvars[j];
+                common_exps[common_count] = texps[j];
+                common_count++;
+            }
+            first = false;
+        } else {
+            /* Intersect with current term's variables. */
+            size_t out = 0;
+            for (size_t j = 0; j < common_count; j++) {
+                int64_t found_exp = -1;
+                for (size_t k = 0; k < tcount; k++) {
+                    if (expr_eq(common_vars[j], tvars[k])) {
+                        found_exp = texps[k];
+                        break;
+                    }
+                }
+                if (found_exp < 1) continue; /* var missing from this term */
+                int64_t mn = (common_exps[j] < found_exp) ? common_exps[j] : found_exp;
+                if (mn <= 0) continue;
+                common_vars[out] = common_vars[j];
+                common_exps[out] = mn;
+                out++;
+            }
+            common_count = out;
+        }
+
+        free(tvars); free(texps);
+
+        if (common_count == 0) {
+            free(common_vars); free(common_exps);
+            return NULL;
+        }
+    }
+
+    if (common_count == 0) {
+        free(common_vars); free(common_exps);
+        return NULL;
+    }
+
+    /* Build the monomial factor m. */
+    Expr* m;
+    if (common_count == 1) {
+        if (common_exps[0] == 1) {
+            m = expr_copy(common_vars[0]);
+        } else {
+            m = eval_and_free(expr_new_function(
+                expr_new_symbol("Power"),
+                (Expr*[]){expr_copy(common_vars[0]),
+                         expr_new_integer(common_exps[0])}, 2));
+        }
+    } else {
+        Expr** m_args = malloc(sizeof(Expr*) * common_count);
+        for (size_t i = 0; i < common_count; i++) {
+            if (common_exps[i] == 1) {
+                m_args[i] = expr_copy(common_vars[i]);
+            } else {
+                m_args[i] = eval_and_free(expr_new_function(
+                    expr_new_symbol("Power"),
+                    (Expr*[]){expr_copy(common_vars[i]),
+                             expr_new_integer(common_exps[i])}, 2));
+            }
+        }
+        m = eval_and_free(expr_new_function(
+            expr_new_symbol("Times"), m_args, common_count));
+        free(m_args);
+    }
+
+    /* Pass 2: build the residue P/m by reducing every term's exponents. */
+    Expr** res_terms = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        Expr* term = P->data.function.args[i];
+        int64_t coeff = 1;
+        Expr** tvars = NULL;
+        int64_t* texps = NULL;
+        size_t tcount = 0, tcap = 0;
+        if (!monomial_collect(term, &coeff, &tvars, &texps, &tcount, &tcap)) {
+            /* Pass 1 succeeded so this should not fail; defensive only. */
+            free(tvars); free(texps);
+            for (size_t k = 0; k < i; k++) expr_free(res_terms[k]);
+            free(res_terms);
+            free(common_vars); free(common_exps);
+            expr_free(m);
+            return NULL;
+        }
+
+        size_t cap = tcount + 1;
+        Expr** factor_args = malloc(sizeof(Expr*) * cap);
+        size_t fc = 0;
+
+        if (coeff != 1) {
+            factor_args[fc++] = expr_new_integer(coeff);
+        }
+        for (size_t j = 0; j < tcount; j++) {
+            int64_t reduced = texps[j];
+            for (size_t k = 0; k < common_count; k++) {
+                if (expr_eq(tvars[j], common_vars[k])) {
+                    reduced -= common_exps[k];
+                    break;
+                }
+            }
+            if (reduced <= 0) continue;
+            if (reduced == 1) {
+                factor_args[fc++] = expr_copy(tvars[j]);
+            } else {
+                factor_args[fc++] = eval_and_free(expr_new_function(
+                    expr_new_symbol("Power"),
+                    (Expr*[]){expr_copy(tvars[j]),
+                             expr_new_integer(reduced)}, 2));
+            }
+        }
+
+        Expr* term_residue;
+        if (fc == 0) {
+            term_residue = expr_new_integer(1);
+        } else if (fc == 1) {
+            term_residue = factor_args[0];
+        } else {
+            term_residue = eval_and_free(expr_new_function(
+                expr_new_symbol("Times"), factor_args, fc));
+        }
+        free(factor_args);
+        free(tvars); free(texps);
+
+        res_terms[i] = term_residue;
+    }
+
+    Expr* residue = eval_and_free(expr_new_function(
+        expr_new_symbol("Plus"), res_terms, n));
+    free(res_terms);
+    free(common_vars); free(common_exps);
+
+    /* Recurse: the residue may admit further factorisation by the other
+     * heuristic strategies (degree-1, binomial, root-trial, etc.). */
+    Expr* f_residue = heuristic_factor(residue);
+    expr_free(residue);
+
+    return eval_and_free(expr_new_function(
+        expr_new_symbol("Times"),
+        (Expr*[]){m, f_residue}, 2));
+}
+
+/* ===================================================================== */
+/*  is_likely_irreducible_multivariate                                   */
+/*                                                                       */
+/*  A probabilistic but extremely conservative irreducibility test for   */
+/*  multivariate polynomials over Z, used to short-circuit the expensive */
+/*  trial-root pipeline (factor_roots) when no factor can possibly be    */
+/*  found.                                                               */
+/*                                                                       */
+/*  Theory (Hilbert irreducibility, in concrete form):                   */
+/*    If P(x_1, ..., x_n) ∈ Z[x_1, ..., x_n] is irreducible and we       */
+/*    substitute x_i = α_i for all i ≠ j with random integer α_i, then   */
+/*    for "almost all" choices the resulting univariate polynomial in    */
+/*    x_j is also irreducible.  Conversely, if P factors then so does    */
+/*    the image (because the substitution homomorphism Z[x_1,...,x_n]    */
+/*    → Z[x_j] preserves products).                                      */
+/*                                                                       */
+/*    So: if at SEVERAL good evaluation points the univariate image is   */
+/*    squarefree and irreducible (treating "good" = leading coefficient  */
+/*    in x_j survives + image is squarefree), we can conclude P is       */
+/*    almost certainly irreducible.                                      */
+/*                                                                       */
+/*  "Almost" is the operative word: for very specific algebraic forms    */
+/*  (e.g. polynomials whose factorisation requires a special evaluation  */
+/*  pattern), the test could be fooled.  We compensate by:               */
+/*    - trying every variable as the "main" variable in turn             */
+/*    - requiring at least IRRED_CONFIRM_COUNT confirmations             */
+/*  before declaring irreducibility.  False negatives are harmless --    */
+/*  we just fall through to the more expensive pipeline.  False          */
+/*  positives are the danger; the multi-variable, multi-point structure  */
+/*  protects against them.                                               */
+/*                                                                       */
+/*  Returns true if the test confirms irreducibility.  Returns false if  */
+/*  reducibility is detected OR if the test cannot reach a conclusion    */
+/*  (insufficient confirmations).                                        */
+/*                                                                       */
+/*  Cost: O(IRRED_TRY_POINTS * v_count) calls to bz_factor_to_expr,      */
+/*  each operating on a univariate polynomial of degree deg(P).  Each    */
+/*  factor call is fast because picocas's univariate Berlekamp-          */
+/*  Zassenhaus runs in milliseconds for typical inputs.  In total this   */
+/*  is far cheaper than factor_roots' O(v_count^2 * 10) trial-divisions  */
+/*  on irreducible inputs (where every division is wasted work).         */
+/* ===================================================================== */
+
+#define IRRED_TRY_POINTS    7   /* alpha values to try, in order: 1, -1, 2, -2, 3, -3, 4 */
+#define IRRED_CONFIRM_COUNT 2   /* number of irreducible-image confirmations required */
+
+/* Substitute every var in `vars` except `vars[main_idx]` with the integer
+ * `alpha`, returning a freshly evaluated univariate polynomial in
+ * `vars[main_idx]` (or NULL on allocation failure). */
+static Expr* eval_others_at_alpha(Expr* P, Expr** vars, size_t v_count,
+                                  size_t main_idx, int64_t alpha) {
+    if (v_count <= 1) return expr_copy(P);
+
+    /* Build a list of replacement rules.  We use ReplaceAll so that all
+     * occurrences anywhere in P are substituted simultaneously, and rely
+     * on the evaluator to reduce the resulting integer arithmetic. */
+    size_t n_rules = v_count - 1;
+    Expr** rules = malloc(sizeof(Expr*) * n_rules);
+    if (!rules) return NULL;
+    size_t idx = 0;
+    for (size_t i = 0; i < v_count; i++) {
+        if (i == main_idx) continue;
+        Expr* rule_args[2] = {
+            expr_copy(vars[i]),
+            expr_new_integer(alpha)
+        };
+        rules[idx++] = expr_new_function(expr_new_symbol("Rule"),
+                                         rule_args, 2);
+    }
+    Expr* rules_list = expr_new_function(expr_new_symbol("List"),
+                                         rules, n_rules);
+    free(rules);
+    Expr* call_args[2] = { expr_copy(P), rules_list };
+    Expr* call = expr_new_function(expr_new_symbol("ReplaceAll"),
+                                   call_args, 2);
+    Expr* image = evaluate(call);
+    expr_free(call);
+    /* Force expansion -- ReplaceAll alone does not normalise the result. */
+    Expr* expanded = expr_expand(image);
+    expr_free(image);
+    return expanded;
+}
+
+/* Count the number of nontrivial (degree ≥ 1 in `var`) factors of an
+ * already-factored expression `factored`.  A "Times" head means a
+ * multiplication of factors; a single non-Times node counts as one
+ * factor.  Constant factors (Integer / Rational / no var) are ignored.
+ * Power nodes are counted as one factor (their multiplicity is reflected
+ * in the exponent, not in distinct linear pieces). */
+static int count_nontrivial_factors(Expr* factored, Expr* var) {
+    if (!factored) return 0;
+    if (factored->type == EXPR_FUNCTION
+        && factored->data.function.head
+        && factored->data.function.head->type == EXPR_SYMBOL
+        && strcmp(factored->data.function.head->data.symbol, "Times") == 0) {
+        int total = 0;
+        for (size_t i = 0; i < factored->data.function.arg_count; i++) {
+            Expr* a = factored->data.function.args[i];
+            if (get_degree_poly(a, var) >= 1) total++;
+        }
+        return total;
+    }
+    return (get_degree_poly(factored, var) >= 1) ? 1 : 0;
+}
+
+/* Return true if the univariate polynomial `u` in variable `var` is
+ * squarefree, i.e., gcd(u, u') is a unit.
+ *
+ * Implementation: convert to ZUPoly and use the subresultant-PRS
+ * `zupoly_gcd`.  The Expr-level `poly_gcd_internal` uses Knuth-style
+ * primitive PRS which suffers exponential coefficient growth on the
+ * intermediate pseudo-remainders -- on a degree-31 univariate input
+ * (which arises from sqfree_cheap_check on trivariate polynomials)
+ * it can take >55s, dominating the entire FactorSquareFree call.
+ * `zupoly_gcd` does the same job in sub-millisecond time on these
+ * inputs, since subresultant PRS keeps coefficient sizes polynomially
+ * bounded. */
+static bool univariate_squarefree(Expr* u, Expr* var) {
+    ZUPoly* zu = expr_to_zupoly(u, var);
+    if (zu) {
+        /* Build derivative directly in ZUPoly to avoid Expr-level
+         * derivation + ReplaceAll round-tripping. */
+        ZUPoly* zdu = zupoly_zero();
+        for (int i = 1; i <= zu->deg; i++) {
+            const mpz_t* ci = zupoly_getcoef(zu, i);
+            if (!ci) continue;
+            mpz_t v;
+            mpz_init(v);
+            mpz_mul_si(v, *ci, i);
+            zupoly_setcoef(zdu, i - 1, v);
+            mpz_clear(v);
+        }
+        ZUPoly* g = zupoly_gcd(zu, zdu);
+        bool sqf = (g->deg <= 0);
+        zupoly_free(zu);
+        zupoly_free(zdu);
+        zupoly_free(g);
+        return sqf;
+    }
+
+    /* Fallback for inputs that don't convert to ZUPoly (e.g., rational
+     * coefficients that slipped through).  Original Expr-level path. */
+    Expr* du_raw = poly_deriv(u, var);
+    Expr* du = expr_expand(du_raw);
+    expr_free(du_raw);
+    Expr* vars1[1] = { var };
+    Expr* g = poly_gcd_internal(u, du, vars1, 1);
+    expr_free(du);
+    bool sqf = (g->type == EXPR_INTEGER)
+            || (get_degree_poly(g, var) == 0);
+    expr_free(g);
+    return sqf;
+}
+
+/* Core of the irreducibility test (see header comment for theory). */
+static bool is_likely_irreducible_multivariate(Expr* P, Expr** vars,
+                                               size_t v_count) {
+    if (v_count < 2) return false;  /* univariate path is handled elsewhere */
+
+    /* Evaluation points to try, in order of preference (small magnitudes
+     * first). 0 is excluded because it commonly kills leading
+     * coefficients of multivariate factors. */
+    static const int64_t alphas[IRRED_TRY_POINTS] = {1, -1, 2, -2, 3, -3, 4};
+
+    for (size_t mi = 0; mi < v_count; mi++) {
+        Expr* main_var = vars[mi];
+        int deg_main = get_degree_poly(P, main_var);
+        if (deg_main < 2) continue;  /* degree-1 main: trivially irreducible/handled by factor_degree_one */
+
+        int confirmations = 0;
+        for (size_t pi = 0; pi < IRRED_TRY_POINTS; pi++) {
+            int64_t a = alphas[pi];
+            Expr* image = eval_others_at_alpha(P, vars, v_count, mi, a);
+            if (!image) continue;
+
+            /* Reject points that drop the main-variable degree --
+             * such points killed the leading coefficient and the
+             * image's irreducibility tells us nothing. */
+            if (get_degree_poly(image, main_var) != deg_main) {
+                expr_free(image);
+                continue;
+            }
+
+            /* Reject points where the image is not squarefree --
+             * irreducibility cannot be inferred from a non-squarefree
+             * image (it may have repeated roots that hide structure). */
+            if (!univariate_squarefree(image, main_var)) {
+                expr_free(image);
+                continue;
+            }
+
+            /* Factor the univariate image. */
+            Expr* factored = bz_factor_to_expr(image, main_var);
+            int n = count_nontrivial_factors(factored, main_var);
+            expr_free(factored);
+            expr_free(image);
+
+            if (n == 0) {
+                /* Image had no main-variable content (shouldn't happen
+                 * after the degree check above, but defensive). */
+                continue;
+            }
+            if (n >= 2) {
+                /* Image factors at this alpha.  This is *not* proof
+                 * that P factors -- accidental factorisations of the
+                 * univariate image are common (e.g., P = x^3 - 2y^3 - 1
+                 * gives x^3 + 1 = (x+1)(x^2-x+1) at y = -1, even though
+                 * P is irreducible over Z[x,y]).  We simply skip this
+                 * alpha and continue looking for irreducible-image
+                 * confirmations at other points. */
+                continue;
+            }
+            /* n == 1: image is irreducible at this alpha -> a
+             * confirmation that P is likely irreducible.  Provided we
+             * accumulate enough such confirmations *for the same
+             * main variable* (not mixing across variables, which
+             * could hide a constant-in-one-variable factor), we
+             * conclude irreducibility. */
+            confirmations++;
+            if (confirmations >= IRRED_CONFIRM_COUNT) return true;
+        }
+        /* This main variable did not yield enough irreducible-image
+         * confirmations.  Try the next variable. */
+    }
+
+    return false;
+}
+
 static Expr* factor_roots(Expr* P, Expr** vars, size_t v_count) {
     int64_t c_vals[] = {1, -1, 2, -2, 3, -3, 4, -4, 6, -6};
     size_t num_c = 10;
@@ -552,6 +1146,1024 @@ static Expr* factor_roots(Expr* P, Expr** vars, size_t v_count) {
     return NULL;
 }
 
+/* ===================================================================== */
+/*  Bivariate-Hensel wiring                                              */
+/*                                                                       */
+/*  Glue between picocas's existing univariate Berlekamp-Zassenhaus     */
+/*  (bz_factor_to_expr) and the new mvfactor multivariate pipeline.      */
+/*  This is the integration point that lets `heuristic_factor` route    */
+/*  monic bivariate inputs through the Hensel lift before falling       */
+/*  back to factor_roots.                                                */
+/* ===================================================================== */
+
+/* Callback adapter for mvfactor_try_bivariate_monic.  Receives a
+ * univariate ZUPoly image and must produce its irreducible-over-Z
+ * factors as a fresh ZUPoly array.  Implementation: convert ZUPoly
+ * -> Expr -> bz_factor_to_expr -> walk the resulting Times -> back
+ * to ZUPoly. */
+static bool factor_via_bz_callback(const ZUPoly* image,
+                                   ZUPoly*** factors_out,
+                                   int* count_out,
+                                   void* user_data) {
+    (void)user_data;
+
+    /* Use a private symbol name to avoid colliding with anything the
+     * user may have defined.  The symbol is local to this conversion
+     * and never leaks out. */
+    Expr* var = expr_new_symbol("$mvfactor_x");
+    Expr* image_expr = zupoly_to_expr(image, var);
+    Expr* factored = bz_factor_to_expr(image_expr, var);
+    expr_free(image_expr);
+
+    /* Walk the result.  bz_factor_to_expr returns either a Times of
+     * factors (with possible trailing constant) or a single factor /
+     * the input itself for the irreducible case. */
+    ZUPoly** result = NULL;
+    int n = 0, cap = 0;
+
+    if (factored->type == EXPR_FUNCTION
+        && factored->data.function.head
+        && factored->data.function.head->type == EXPR_SYMBOL
+        && strcmp(factored->data.function.head->data.symbol, "Times") == 0) {
+        size_t ac = factored->data.function.arg_count;
+        cap = (int)ac;
+        result = (ZUPoly**)malloc(sizeof(ZUPoly*) * (size_t)cap);
+        for (size_t i = 0; i < ac; i++) {
+            Expr* a = factored->data.function.args[i];
+            ZUPoly* zp = expr_to_zupoly(a, var);
+            /* Drop pure-constant factors -- mvfactor only cares about
+             * the variable polynomial pieces; the integer content is
+             * already handled upstream. */
+            if (zp && !zupoly_is_zero(zp) && zp->deg >= 1) {
+                result[n++] = zp;
+            } else if (zp) {
+                zupoly_free(zp);
+            }
+        }
+    } else {
+        ZUPoly* zp = expr_to_zupoly(factored, var);
+        if (zp && !zupoly_is_zero(zp) && zp->deg >= 1) {
+            cap = 1;
+            result = (ZUPoly**)malloc(sizeof(ZUPoly*));
+            result[0] = zp;
+            n = 1;
+        } else if (zp) {
+            zupoly_free(zp);
+        }
+    }
+    expr_free(factored);
+    expr_free(var);
+
+    if (n == 0) {
+        free(result);
+        return false;
+    }
+    *factors_out = result;
+    *count_out = n;
+    return true;
+}
+
+/* Bivariate-Hensel leading-coefficient correction strategy. */
+typedef enum {
+    BV_LC_MONIC  = 0,  /* lc_x(P) = +1: lift P directly. */
+    BV_LC_NEGATE = 1,  /* lc_x(P) = -1: Stage 1 — negate P, lift, flip one factor. */
+    BV_LC_SCALE  = 2,  /* lc_x(P) = a, |a| > 1, integer constant: Stage 2 —
+                        * Wang's monic substitution Q = a^(d-1) · P(x/a, y). */
+} BvLcKind;
+
+/* Pick the best variable index for the bivariate Hensel pipeline.
+ *
+ * The chosen variable's leading coefficient (in `*P` as a polynomial in
+ * that variable) must be a non-zero integer constant -- i.e. constant
+ * with respect to the other variable.  Among candidates:
+ *
+ *   1. lc = +1   -> BV_LC_MONIC   (cheapest path, no correction).
+ *   2. lc = -1   -> BV_LC_NEGATE  (Stage 1 negate path).
+ *   3. |lc| > 1  -> BV_LC_SCALE   (Stage 2 Wang via x-scale substitution).
+ *
+ * Among Stage-2 candidates, the variable with smaller |lc| wins (less
+ * coefficient blowup in the substitution).
+ *
+ * On success returns the variable index and sets *kind_out / *lc_out.
+ * `*lc_out` is mpz_init'd by the caller (we mpz_set into it).  Returns
+ * -1 if no variable has a constant integer leading coefficient. */
+static int pick_factorable_x_var(Expr* P, Expr** vars, size_t v_count,
+                                 BvLcKind* kind_out, mpz_t* lc_out) {
+    int best_idx = -1;
+    int best_priority = INT_MAX;
+    mpz_t best_abs;     mpz_init_set_ui(best_abs, 0);
+    mpz_t best_lc;      mpz_init(best_lc);
+
+    for (size_t i = 0; i < v_count; i++) {
+        int deg = get_degree_poly(P, vars[i]);
+        if (deg < 1) continue;
+        Expr* lc = get_coeff(P, vars[i], deg);
+        bool is_int_const = expr_is_integer_like(lc) &&
+            !(lc->type == EXPR_INTEGER && lc->data.integer == 0);
+        if (!is_int_const) {
+            expr_free(lc);
+            continue;
+        }
+        mpz_t lc_mpz; mpz_init(lc_mpz);
+        expr_to_mpz(lc, lc_mpz);
+        expr_free(lc);
+
+        int priority;
+        if (mpz_cmp_si(lc_mpz, 1) == 0)         priority = 0;
+        else if (mpz_cmp_si(lc_mpz, -1) == 0)   priority = 1;
+        else                                    priority = 2;
+
+        bool better = false;
+        if (priority < best_priority) {
+            better = true;
+        } else if (priority == best_priority && priority == 2) {
+            /* Tiebreak among Stage-2 candidates: prefer smaller |lc|. */
+            mpz_t abs_lc; mpz_init(abs_lc);
+            mpz_abs(abs_lc, lc_mpz);
+            if (mpz_cmp(abs_lc, best_abs) < 0) better = true;
+            mpz_clear(abs_lc);
+        }
+
+        if (better) {
+            best_idx = (int)i;
+            best_priority = priority;
+            mpz_abs(best_abs, lc_mpz);
+            mpz_set(best_lc, lc_mpz);
+        }
+        mpz_clear(lc_mpz);
+
+        if (priority == 0) break;  /* +1 is optimal; stop searching. */
+    }
+
+    if (best_idx >= 0) {
+        if (kind_out) *kind_out = (BvLcKind)best_priority;
+        if (lc_out)   mpz_set(*lc_out, best_lc);
+    }
+    mpz_clear(best_abs);
+    mpz_clear(best_lc);
+    return best_idx;
+}
+
+/* ---------------------------------------------------------------------- */
+/*  Phase F1 Stage 2 helpers (Wang's monic-substitution recipe)            */
+/* ---------------------------------------------------------------------- */
+
+/* Compute the integer content of a BPoly: the gcd of all its integer
+ * coefficients across both x and y.  `out` must already be mpz_init'd;
+ * set to 0 for the zero polynomial. */
+static void bpoly_int_content(const BPoly* P, mpz_t out) {
+    mpz_set_ui(out, 0);
+    if (P->deg_x < 0) return;
+    for (int i = 0; i <= P->deg_x; i++) {
+        const ZUPoly* yi = bpoly_get_xcoef(P, i);
+        if (!yi || zupoly_is_zero(yi)) continue;
+        mpz_t cy; mpz_init(cy);
+        zupoly_content(yi, cy);
+        if (mpz_sgn(out) == 0) mpz_set(out, cy);
+        else                   mpz_gcd(out, out, cy);
+        mpz_clear(cy);
+    }
+}
+
+/* Divide every coefficient of P by integer c.  Returns a fresh BPoly,
+ * or NULL if any coefficient is not divisible by c (which would be a
+ * programming error in our use-cases). */
+static BPoly* bpoly_div_int_exact(const BPoly* P, const mpz_t c) {
+    if (mpz_sgn(c) == 0) return NULL;
+    if (P->deg_x < 0) return bpoly_zero();
+    BPoly* R = bpoly_new(P->deg_x + 1);
+    for (int i = 0; i <= P->deg_x; i++) {
+        const ZUPoly* yi = bpoly_get_xcoef(P, i);
+        if (!yi || zupoly_is_zero(yi)) continue;
+        ZUPoly* d = zupoly_new(yi->deg + 1);
+        for (int j = 0; j <= yi->deg; j++) {
+            const mpz_t* cj = zupoly_getcoef(yi, j);
+            if (!cj || mpz_sgn(*cj) == 0) continue;
+            if (!mpz_divisible_p(*cj, c)) {
+                zupoly_free(d);
+                bpoly_free(R);
+                return NULL;
+            }
+            mpz_t q; mpz_init(q);
+            mpz_divexact(q, *cj, c);
+            zupoly_setcoef(d, j, q);
+            mpz_clear(q);
+        }
+        bpoly_set_xcoef(R, i, d);
+    }
+    return R;
+}
+
+/* Form Q = a^(d-1) · P(x/a, y), assuming lc_x(P) is the constant
+ * integer `a` (a non-zero, non-unit) and d = deg_x(P) >= 1.  Q is
+ * monic in x and integer-coefficient.  Concretely:
+ *   cx_Q[d] = 1
+ *   cx_Q[j] = cx_P[j] · a^(d-1-j)  for 0 <= j < d.
+ *
+ * Caller owns the returned BPoly.  Returns NULL on degenerate input. */
+static BPoly* bpoly_make_monic_via_x_scale(const BPoly* P, const mpz_t lc_a) {
+    int d = P->deg_x;
+    if (d < 1 || mpz_sgn(lc_a) == 0) return NULL;
+
+    BPoly* Q = bpoly_new(d + 1);
+
+    /* cx_Q[d] = 1. */
+    ZUPoly* one = zupoly_from_int(1);
+    bpoly_set_xcoef(Q, d, one);
+
+    /* a_pow tracks a^(d-1-j) as j decreases from d-1 to 0:
+     * j = d-1 -> a^0 = 1; j = d-2 -> a^1; ...; j = 0 -> a^(d-1). */
+    mpz_t a_pow; mpz_init_set_ui(a_pow, 1);
+    for (int j = d - 1; j >= 0; j--) {
+        const ZUPoly* yj = bpoly_get_xcoef(P, j);
+        if (yj && !zupoly_is_zero(yj)) {
+            ZUPoly* scaled = zupoly_scale(yj, a_pow);
+            bpoly_set_xcoef(Q, j, scaled);
+        }
+        if (j > 0) mpz_mul(a_pow, a_pow, lc_a);
+    }
+    mpz_clear(a_pow);
+    return Q;
+}
+
+/* Form H = G(c · x, y).  Each x^j coefficient (a y-poly) is multiplied
+ * by c^j.  Caller owns the result. */
+static BPoly* bpoly_subst_x_scale(const BPoly* G, const mpz_t c) {
+    int d = G->deg_x;
+    if (d < 0) return bpoly_zero();
+    BPoly* H = bpoly_new(d + 1);
+    mpz_t c_pow; mpz_init_set_ui(c_pow, 1);
+    for (int j = 0; j <= d; j++) {
+        const ZUPoly* gj = bpoly_get_xcoef(G, j);
+        if (gj && !zupoly_is_zero(gj)) {
+            ZUPoly* scaled = zupoly_scale(gj, c_pow);
+            bpoly_set_xcoef(H, j, scaled);
+        }
+        if (j < d) mpz_mul(c_pow, c_pow, c);
+    }
+    mpz_clear(c_pow);
+    return H;
+}
+
+/* ====================================================================== */
+/*  Phase F1 Stage 3: polynomial-in-y leading coefficient                  */
+/*                                                                        */
+/*  Wang's leading-coefficient correction for inputs whose lc_x(P)(y) is  */
+/*  a non-constant polynomial in the other variable.                       */
+/*                                                                        */
+/*  MVP scope:                                                            */
+/*   - Bivariate inputs (handled at the F1 entry; trivariate goes to F2). */
+/*   - Two univariate factors (r = 2) of the squarefree image.            */
+/*   - Both univariate factors must be monic.                             */
+/*   - cont(A) ∈ {±1}; A's polynomial factors are tracked with sign.      */
+/*   - At least one evaluation point α with A(α) = +1 must exist.         */
+/*                                                                        */
+/*  Algorithm (per (variable, α) pair):                                   */
+/*   1. Convert P to a BPoly bp and compute A = lc_x(P)(y) as a ZUPoly.   */
+/*   2. Factor A over Z[y] to extract its content c and primitive         */
+/*      irreducible factors a_factors[] (with multiplicity).              */
+/*   3. Iterate over candidate α values; require A(α) = +1.               */
+/*   4. Form the squarefree univariate image P(x, α) via bpoly_eval_y_si  */
+/*      and run bz_factor_to_expr.  Verify r = 2 and both factors monic.  */
+/*   5. Shift to y' = y - α coords (the lift assumes α = 0).              */
+/*   6. Enumerate the 2^n distributions of A's polynomial factors         */
+/*      between predicted leading coefficients q_u, q_v with q_u·q_v = A. */
+/*      Filter to distributions with q_u(α) = q_v(α) = +1.                */
+/*   7. For each surviving distribution, run bpoly_hensel_lift_2_lc.      */
+/*      First success wins.                                               */
+/*   8. Unshift the resulting BPoly factors and return Times[F_1, F_2].   */
+/* ====================================================================== */
+
+/* Factor a ZUPoly over Z[y] using the existing bz_factor_to_expr path.
+ * Returns:
+ *   - out_content: signed integer leading content c (caller mpz_init's).
+ *   - out_factors: array of primitive irreducible polynomial factors with
+ *     positive leading coefficient.  Repeated factors appear with full
+ *     multiplicity (a^2 yields two entries).
+ *   - out_count: number of factor entries.
+ *
+ * p = c · Π out_factors[i].  Caller frees the array and each ZUPoly. */
+static bool zupoly_factor_to_array(const ZUPoly* p,
+                                    mpz_t out_content,
+                                    ZUPoly*** out_factors,
+                                    int* out_count) {
+    if (!p || zupoly_is_zero(p)) return false;
+
+    Expr* var = expr_new_symbol("$mvfactor_lc");
+    Expr* p_expr = zupoly_to_expr(p, var);
+    Expr* fac = bz_factor_to_expr(p_expr, var);
+    expr_free(p_expr);
+
+    mpz_set_ui(out_content, 1);
+    ZUPoly** factors = NULL;
+    int n = 0, cap = 0;
+    bool ok = true;
+
+    /* Walk fac as either Times[args...] or a single arg. */
+    size_t arg_count;
+    Expr* singleton_arr[1];
+    Expr** args;
+
+    if (fac->type == EXPR_FUNCTION
+        && fac->data.function.head
+        && fac->data.function.head->type == EXPR_SYMBOL
+        && strcmp(fac->data.function.head->data.symbol, "Times") == 0) {
+        arg_count = fac->data.function.arg_count;
+        args = fac->data.function.args;
+    } else {
+        singleton_arr[0] = fac;
+        arg_count = 1;
+        args = singleton_arr;
+    }
+
+    for (size_t i = 0; i < arg_count && ok; i++) {
+        Expr* a = args[i];
+        Expr* base = a;
+        int e = 1;
+
+        if (a->type == EXPR_INTEGER || a->type == EXPR_BIGINT) {
+            mpz_t k; mpz_init(k);
+            expr_to_mpz(a, k);
+            mpz_mul(out_content, out_content, k);
+            mpz_clear(k);
+            continue;
+        }
+        if (a->type == EXPR_FUNCTION
+            && a->data.function.head
+            && a->data.function.head->type == EXPR_SYMBOL
+            && strcmp(a->data.function.head->data.symbol, "Power") == 0
+            && a->data.function.arg_count == 2) {
+            Expr* exp_e = a->data.function.args[1];
+            if (exp_e->type != EXPR_INTEGER || exp_e->data.integer < 1) {
+                ok = false;
+                break;
+            }
+            base = a->data.function.args[0];
+            e = (int)exp_e->data.integer;
+        }
+
+        ZUPoly* zp = expr_to_zupoly(base, var);
+        if (!zp || zp->deg < 1) {
+            if (zp) zupoly_free(zp);
+            continue;
+        }
+        /* Normalise to positive leading coefficient. */
+        if (mpz_sgn(zp->c[zp->deg]) < 0) {
+            ZUPoly* neg = zupoly_neg(zp);
+            zupoly_free(zp);
+            zp = neg;
+            if ((e & 1) != 0) mpz_neg(out_content, out_content);
+        }
+        for (int j = 0; j < e; j++) {
+            if (n == cap) {
+                cap = (cap == 0) ? 4 : cap * 2;
+                factors = (ZUPoly**)realloc(factors, sizeof(ZUPoly*) * (size_t)cap);
+            }
+            factors[n++] = zupoly_copy(zp);
+        }
+        zupoly_free(zp);
+    }
+
+    expr_free(fac);
+    expr_free(var);
+
+    if (!ok) {
+        for (int i = 0; i < n; i++) zupoly_free(factors[i]);
+        free(factors);
+        *out_factors = NULL;
+        *out_count = 0;
+        return false;
+    }
+
+    *out_factors = factors;
+    *out_count = n;
+    return true;
+}
+
+/* Build q(y) = sign · Π factors[i] over the bits of `mask`. */
+static ZUPoly* polylc_build_q(ZUPoly* const* factors, int n,
+                               uint64_t mask, int sign) {
+    ZUPoly* q = zupoly_from_int(sign);
+    for (int i = 0; i < n; i++) {
+        if ((mask >> i) & 1u) {
+            ZUPoly* nq = zupoly_mul(q, factors[i]);
+            zupoly_free(q);
+            q = nq;
+        }
+    }
+    return q;
+}
+
+/* Try the F1 Stage 3 lift across all 2^n distributions of A's factors
+ * for the given (u, v) seed pair.  Returns true on first lift success;
+ * sets *U_out, *V_out (in shifted coord). */
+static bool try_polylc_two_factor(const BPoly* P_shifted,
+                                   const ZUPoly* u, const ZUPoly* v,
+                                   const mpz_t a_content,
+                                   ZUPoly* const* a_factors_shifted, int n,
+                                   BPoly** U_out, BPoly** V_out) {
+    if (n > 12) return false;            /* avoid 2^n blow-up */
+    if (mpz_cmpabs_ui(a_content, 1) != 0) return false; /* MVP: |cont(A)| = 1 */
+    int c_sign = (mpz_sgn(a_content) > 0) ? 1 : -1;
+
+    uint64_t total = (uint64_t)1 << n;
+    for (uint64_t mask = 0; mask < total; mask++) {
+        /* prod_{u,v}(0) = product of g_i(0) over set/cleared bits. */
+        mpz_t prod_u_at0; mpz_init_set_ui(prod_u_at0, 1);
+        mpz_t prod_v_at0; mpz_init_set_ui(prod_v_at0, 1);
+        for (int i = 0; i < n; i++) {
+            const mpz_t* g_i_at0 = zupoly_getcoef(a_factors_shifted[i], 0);
+            mpz_t v_i; mpz_init(v_i);
+            if (g_i_at0) mpz_set(v_i, *g_i_at0);
+            else         mpz_set_ui(v_i, 0);
+            if ((mask >> i) & 1u) mpz_mul(prod_u_at0, prod_u_at0, v_i);
+            else                   mpz_mul(prod_v_at0, prod_v_at0, v_i);
+            mpz_clear(v_i);
+        }
+
+        /* For q_u(0) = +1 we need c_u · prod_u(0) = +1, with c_u ∈ {±1}.
+         * That forces prod_u(0) ∈ {±1}.  Same for v. */
+        bool match = (mpz_cmpabs_ui(prod_u_at0, 1) == 0
+                      && mpz_cmpabs_ui(prod_v_at0, 1) == 0);
+        int c_u_sign = 0, c_v_sign = 0;
+        if (match) {
+            c_u_sign = (mpz_sgn(prod_u_at0) > 0) ? 1 : -1;
+            c_v_sign = (mpz_sgn(prod_v_at0) > 0) ? 1 : -1;
+            /* And c_u · c_v = c (the integer content). */
+            if (c_u_sign * c_v_sign != c_sign) match = false;
+        }
+        mpz_clear(prod_u_at0);
+        mpz_clear(prod_v_at0);
+        if (!match) continue;
+
+        ZUPoly* q_u = polylc_build_q(a_factors_shifted, n, mask, c_u_sign);
+        ZUPoly* q_v = polylc_build_q(a_factors_shifted, n,
+                                       ~mask & (total - 1), c_v_sign);
+
+        BPoly *U = NULL, *V = NULL;
+        bool lift_ok = bpoly_hensel_lift_2_lc(P_shifted, u, v, q_u, q_v,
+                                               &U, &V);
+        zupoly_free(q_u);
+        zupoly_free(q_v);
+        if (lift_ok) {
+            *U_out = U;
+            *V_out = V;
+            return true;
+        }
+    }
+    return false;
+}
+
+static const int64_t POLYLC_ALPHA_TRIES[] = {0, 1, -1, 2, -2, 3, -3, 4, -4};
+#define POLYLC_ALPHA_COUNT \
+    (sizeof(POLYLC_ALPHA_TRIES) / sizeof(POLYLC_ALPHA_TRIES[0]))
+
+/* True if `var` divides every term of P (equivalently: the constant
+ * coefficient of P viewed as a polynomial in `var` is zero). */
+static bool polylc_var_divides(Expr* P, Expr* var) {
+    Expr* c0 = get_coeff(P, var, 0);
+    bool zero = (c0->type == EXPR_INTEGER && c0->data.integer == 0);
+    expr_free(c0);
+    return zero;
+}
+
+/* Phase F1 Stage 3 entry: handle bivariate inputs whose lc_x(P) is a
+ * non-constant polynomial in the other variable.  Returns Times[U, V]
+ * on success (only r = 2 supported in MVP), or NULL when any
+ * precondition fails (so the caller can fall through to legacy). */
+static Expr* factor_bivariate_via_polylc_hensel(Expr* P, Expr** vars) {
+    /* Bail if either variable divides P -- the legacy heuristic_factor
+     * pipeline (monomial-content extraction in Phase 0) will produce a
+     * cleaner factorisation than a 2-factor Hensel split that lumps the
+     * monomial into one of the bivariate factors. */
+    if (polylc_var_divides(P, vars[0]) || polylc_var_divides(P, vars[1])) {
+        return NULL;
+    }
+
+    for (int main_idx = 0; main_idx < 2; main_idx++) {
+        int other_idx = 1 - main_idx;
+        Expr* x_var = vars[main_idx];
+        Expr* y_var = vars[other_idx];
+
+        int deg = get_degree_poly(P, x_var);
+        if (deg < 2) continue;
+
+        Expr* lc_expr = get_coeff(P, x_var, deg);
+        ZUPoly* A = expr_to_zupoly(lc_expr, y_var);
+        expr_free(lc_expr);
+        if (!A) continue;
+        if (A->deg < 1) {
+            /* Constant LC -- handled by Stages 1 / 2. */
+            zupoly_free(A);
+            continue;
+        }
+
+        BPoly* bp = expr_to_bpoly(P, x_var, y_var);
+        if (!bp) {
+            zupoly_free(A);
+            continue;
+        }
+
+        mpz_t a_content; mpz_init(a_content);
+        ZUPoly** a_factors = NULL;
+        int a_count = 0;
+        bool fac_ok = zupoly_factor_to_array(A, a_content, &a_factors, &a_count);
+        if (!fac_ok || a_count == 0
+            || mpz_cmpabs_ui(a_content, 1) != 0) {
+            mpz_clear(a_content);
+            if (a_factors) {
+                for (int i = 0; i < a_count; i++) zupoly_free(a_factors[i]);
+                free(a_factors);
+            }
+            bpoly_free(bp);
+            zupoly_free(A);
+            continue;
+        }
+
+        Expr* result = NULL;
+        for (size_t pi = 0; pi < POLYLC_ALPHA_COUNT && !result; pi++) {
+            int64_t alpha = POLYLC_ALPHA_TRIES[pi];
+
+            mpz_t A_at_alpha; mpz_init(A_at_alpha);
+            zupoly_eval_si(A, alpha, A_at_alpha);
+            bool a_alpha_ok = (mpz_cmp_si(A_at_alpha, 1) == 0);
+            mpz_clear(A_at_alpha);
+            if (!a_alpha_ok) continue;
+
+            ZUPoly* image = bpoly_eval_y_si(bp, alpha);
+            if (!image || image->deg != bp->deg_x) {
+                if (image) zupoly_free(image);
+                continue;
+            }
+
+            /* Squarefree check: gcd(image, image') is a unit. */
+            ZUPoly* image_deriv = zupoly_new(image->deg);
+            for (int i = 1; i <= image->deg; i++) {
+                const mpz_t* ci = zupoly_getcoef(image, i);
+                if (!ci) continue;
+                mpz_t scaled; mpz_init(scaled);
+                mpz_mul_ui(scaled, *ci, (unsigned long)i);
+                zupoly_setcoef(image_deriv, i - 1, scaled);
+                mpz_clear(scaled);
+            }
+            ZUPoly* g = zupoly_gcd(image, image_deriv);
+            bool sqf = (g->deg == 0);
+            zupoly_free(g);
+            zupoly_free(image_deriv);
+            if (!sqf) {
+                zupoly_free(image);
+                continue;
+            }
+
+            ZUPoly** us = NULL;
+            int r = 0;
+            bool fac2_ok = factor_via_bz_callback(image, &us, &r, NULL);
+            zupoly_free(image);
+            if (!fac2_ok || r != 2) {
+                if (us) {
+                    for (int i = 0; i < r; i++) zupoly_free(us[i]);
+                    free(us);
+                }
+                continue;
+            }
+
+            bool all_monic =
+                (mpz_cmp_ui(us[0]->c[us[0]->deg], 1) == 0) &&
+                (mpz_cmp_ui(us[1]->c[us[1]->deg], 1) == 0);
+            if (!all_monic) {
+                for (int i = 0; i < r; i++) zupoly_free(us[i]);
+                free(us);
+                continue;
+            }
+
+            /* Shift y -> y + alpha so the lift sees α = 0.  (The picocas
+             * convention: bpoly_shift_y_si(P, α) returns P(x, y + α).) */
+            BPoly* P_shifted = bpoly_shift_y_si(bp, alpha);
+            ZUPoly** a_factors_shifted = (ZUPoly**)malloc(
+                sizeof(ZUPoly*) * (size_t)a_count);
+            for (int i = 0; i < a_count; i++) {
+                a_factors_shifted[i] = zupoly_shift_si(a_factors[i], alpha);
+            }
+
+            BPoly *U = NULL, *V = NULL;
+            bool lift_ok = try_polylc_two_factor(
+                P_shifted, us[0], us[1],
+                a_content, a_factors_shifted, a_count,
+                &U, &V);
+
+            for (int i = 0; i < a_count; i++) zupoly_free(a_factors_shifted[i]);
+            free(a_factors_shifted);
+            for (int i = 0; i < r; i++) zupoly_free(us[i]);
+            free(us);
+            bpoly_free(P_shifted);
+
+            if (!lift_ok) continue;
+
+            BPoly* U_orig = bpoly_shift_y_si(U, -alpha);
+            BPoly* V_orig = bpoly_shift_y_si(V, -alpha);
+            bpoly_free(U);
+            bpoly_free(V);
+
+            Expr* eU = bpoly_to_expr(U_orig, x_var, y_var);
+            Expr* eV = bpoly_to_expr(V_orig, x_var, y_var);
+            bpoly_free(U_orig);
+            bpoly_free(V_orig);
+
+            result = eval_and_free(expr_new_function(
+                expr_new_symbol("Times"),
+                (Expr*[]){eU, eV}, 2));
+        }
+
+        mpz_clear(a_content);
+        for (int i = 0; i < a_count; i++) zupoly_free(a_factors[i]);
+        free(a_factors);
+        bpoly_free(bp);
+        zupoly_free(A);
+
+        if (result) return result;
+    }
+    return NULL;
+}
+
+/* End-to-end bivariate factorisation via the new pipeline.  Returns
+ * a fresh Times[...] Expr* on success or NULL when:
+ *   - P has no variable with a constant integer leading coefficient
+ *     (i.e. every variable's lc is polynomial in the other variable).
+ *     Inputs with polynomial-in-y LC fall through to the legacy pipeline;
+ *     Wang's full LC correction (Stage 3) is future work.
+ *   - The orchestrator failed to find a good evaluation point.
+ *   - The lift produced only one factor (irreducible -- but that is
+ *     handled by the irreducibility short-circuit at a higher level,
+ *     so we treat r==1 as "no progress" here so the caller sees a
+ *     consistent NULL signal).
+ *
+ * Three correction paths, dispatched by `pick_factorable_x_var`:
+ *   - BV_LC_MONIC  (lc = +1): lift P directly.
+ *   - BV_LC_NEGATE (lc = -1, Phase F1 Stage 1): negate P, lift, flip
+ *     one factor's sign (chosen heuristically so the canonical form
+ *     matches the legacy output).
+ *   - BV_LC_SCALE  (lc = constant integer ≠ ±1, Phase F1 Stage 2):
+ *     Wang's monic substitution Q = a^(d-1) · P(x/a, y), which is
+ *     monic in x with integer coefficients.  Lift Q to G_1, ..., G_r.
+ *     Recover the true factors via F_i = G_i(a·x, y) / cont_Z(G_i(a·x, y)),
+ *     where cont_Z denotes the integer content (gcd of all coefficients).
+ *     The product cont_Z(G_i(a·x, y)) over all i is exactly a^(d-1),
+ *     so prod F_i = P.
+ *
+ * Stage 1 + Stage 2 compose: when lc_x(P) is a negative integer not
+ * equal to -1 (e.g. lc = -6), the BV_LC_SCALE path runs first with
+ * |a| = 6 after pre-negating P, and the final factor adjustment flips
+ * the sign of one factor.
+ *
+ * Memory: the caller retains ownership of P and vars; we allocate
+ * the result and any intermediate BPoly/ZUPoly are freed before
+ * returning. */
+static Expr* factor_bivariate_via_hensel(Expr* P, Expr** vars) {
+    BvLcKind kind = BV_LC_MONIC;
+    mpz_t lc_a; mpz_init(lc_a);
+    int main_idx = pick_factorable_x_var(P, vars, 2, &kind, &lc_a);
+    if (main_idx < 0) {
+        /* No variable has a constant integer leading coefficient --
+         * lc_x(P) is a polynomial in the other variable.  Try the
+         * Stage 3 (Wang's leading-coefficient correction) path. */
+        mpz_clear(lc_a);
+        return factor_bivariate_via_polylc_hensel(P, vars);
+    }
+    int other_idx = 1 - main_idx;
+    bool negate = (kind == BV_LC_NEGATE) ||
+                  (kind == BV_LC_SCALE && mpz_sgn(lc_a) < 0);
+    bool scale  = (kind == BV_LC_SCALE);
+
+    /* For Stage 2 we work with |a| -- the sign is absorbed by
+     * pre-negating P so the substitution always uses a positive a. */
+    mpz_t abs_a; mpz_init(abs_a);
+    mpz_abs(abs_a, lc_a);
+
+    BPoly* bp = expr_to_bpoly(P, vars[main_idx], vars[other_idx]);
+    mpz_clear(lc_a);
+    if (!bp) {
+        mpz_clear(abs_a);
+        return NULL;
+    }
+
+    if (negate) {
+        BPoly* bp_neg = bpoly_neg(bp);
+        bpoly_free(bp);
+        bp = bp_neg;
+    }
+
+    /* Stage 2: substitute to make the lift's input monic.  bp now has
+     * lc_x = +|a|; Q has lc_x = 1. */
+    BPoly* Q = NULL;
+    if (scale) {
+        Q = bpoly_make_monic_via_x_scale(bp, abs_a);
+        if (!Q) {
+            bpoly_free(bp);
+            mpz_clear(abs_a);
+            return NULL;
+        }
+    }
+    const BPoly* lift_input = scale ? Q : bp;
+
+    BPoly** factors = NULL;
+    int r = 0;
+    bool ok = mvfactor_try_bivariate_monic(lift_input, factor_via_bz_callback,
+                                           NULL, &factors, &r);
+    bpoly_free(bp);
+    if (Q) bpoly_free(Q);
+    if (!ok) {
+        mpz_clear(abs_a);
+        return NULL;
+    }
+
+    /* r == 1 means the orchestrator concluded irreducibility (or
+     * couldn't find a non-trivial factorisation).  For our caller's
+     * contract we return NULL in either case so the legacy pipeline
+     * gets its turn. */
+    if (r <= 1) {
+        if (factors) {
+            for (int i = 0; i < r; i++) bpoly_free(factors[i]);
+            free(factors);
+        }
+        mpz_clear(abs_a);
+        return NULL;
+    }
+
+    /* Stage 2 recovery: the lift returned factors G_i of Q (monic).
+     * The true factors of P (with lc = +|a|) are
+     *   F_i = G_i(a·x, y) / cont_Z(G_i(a·x, y)).
+     * The integer content of G_i(a·x, y) collects exactly the share
+     * of a^(d-1) that was redistributed into G_i by the substitution.
+     *
+     * We rewrite each `factors[i]` in place with the recovered F_i. */
+    if (scale) {
+        for (int i = 0; i < r; i++) {
+            BPoly* H = bpoly_subst_x_scale(factors[i], abs_a);
+            mpz_t ci; mpz_init(ci);
+            bpoly_int_content(H, ci);
+            if (mpz_sgn(ci) == 0) {
+                /* Zero factor -- defensive guard, should not happen. */
+                mpz_clear(ci);
+                bpoly_free(H);
+                for (int k = 0; k < r; k++) bpoly_free(factors[k]);
+                free(factors);
+                mpz_clear(abs_a);
+                return NULL;
+            }
+            BPoly* F = bpoly_div_int_exact(H, ci);
+            mpz_clear(ci);
+            bpoly_free(H);
+            if (!F) {
+                /* Non-exact division -- defensive guard, should not happen
+                 * for a faithful Wang's correction. */
+                for (int k = 0; k < r; k++) bpoly_free(factors[k]);
+                free(factors);
+                mpz_clear(abs_a);
+                return NULL;
+            }
+            bpoly_free(factors[i]);
+            factors[i] = F;
+        }
+    }
+    mpz_clear(abs_a);
+
+    /* Convert each BPoly factor back to Expr.  When we negated the
+     * input, the lift's product equals -P (or -(absolute lc form));
+     * we must absorb the overall -1 into one factor.
+     *
+     * Choice of which factor to negate: prefer the largest-x-degree
+     * factor (tiebreak: largest y-degree).  Empirically this matches
+     * the canonical printed form for inputs like
+     *   Factor[3 a^2 b - 3 b - b^3]
+     * where the existing baseline is `b · (-3 + 3 a^2 - b^2)` (the
+     * `b` factor unsigned, the polynomial residue absorbing the -1).
+     * Choosing "lowest x-degree" instead would produce
+     * `-b · (3 - 3 a^2 + b^2)` which is mathematically equivalent
+     * but displays the sign explicitly.  Picking the largest factor
+     * keeps the output stable across F1's introduction. */
+    int neg_idx = 0;
+    if (negate) {
+        int best_dx = factors[0]->deg_x;
+        int best_dy = bpoly_deg_y(factors[0]);
+        for (int i = 1; i < r; i++) {
+            int dx = factors[i]->deg_x;
+            int dy = bpoly_deg_y(factors[i]);
+            if (dx > best_dx || (dx == best_dx && dy > best_dy)) {
+                best_dx = dx;
+                best_dy = dy;
+                neg_idx = i;
+            }
+        }
+    }
+
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (size_t)r);
+    for (int i = 0; i < r; i++) {
+        args[i] = bpoly_to_expr(factors[i], vars[main_idx], vars[other_idx]);
+        bpoly_free(factors[i]);
+    }
+    free(factors);
+
+    if (negate) {
+        /* Distribute -1 INTO the chosen factor via Expand so the
+         * sign is folded into a Plus (e.g., -(b^2 - 3a^2 + 3) becomes
+         * Plus[-3, 3 a^2, -b^2]) rather than parked as a leading
+         * Times[-1, ...].  Without this Expand, the result evaluates
+         * to Times[-1, ..., Plus[...]] which prints as `-(...)` and
+         * does not match the canonical form picocas previously
+         * produced for inputs that fall through to the lift via
+         * monomial-content recursion. */
+        Expr* neg_times = expr_new_function(
+            expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), args[neg_idx] }, 2);
+        Expr* flipped = eval_and_free(expr_new_function(
+            expr_new_symbol("Expand"),
+            (Expr*[]){ neg_times }, 1));
+        args[neg_idx] = flipped;
+    }
+
+    Expr* result = expr_new_function(expr_new_symbol("Times"), args, (size_t)r);
+    free(args);
+    return eval_and_free(result);
+}
+
+/* ====================================================================== */
+/*  Phase 4: n-variate specialise-and-trial-divide                        */
+/*                                                                        */
+/*  For inputs with v_count >= 3, attempt to find a factor that does not  */
+/*  depend on one of the variables.  Strategy:                            */
+/*    1. Pick a "specialisation" variable z.                              */
+/*    2. Evaluate P|z=0 and recursively factor it via heuristic_factor.   */
+/*    3. For each non-trivial factor f of P|z=0, trial-divide the         */
+/*       ORIGINAL P by f.  If f divides exactly, it is a true factor of  */
+/*       P (one that happens to be z-independent).                        */
+/*    4. After collecting z-independent factors, the residual is the     */
+/*       product of remaining (z-dependent) factors; recurse on it.      */
+/*                                                                        */
+/*  This catches the common case where the multivariate polynomial       */
+/*  factors cleanly into a "shape" piece (z-independent) and a           */
+/*  "z-binding" piece, e.g.                                               */
+/*    P(x, y, z) = (x + y) (x + y + z)  → factor (x + y) found at z=0    */
+/*  Cases where ALL factors depend on z fall through to the legacy       */
+/*  factor_roots pipeline (Phase 4 returns NULL).                         */
+/*                                                                        */
+/*  Try each variable as the candidate z; the first specialisation that  */
+/*  yields ≥ 1 trial-divisible bivariate factor wins.                     */
+/* ====================================================================== */
+
+static Expr* heuristic_factor(Expr* P);  /* forward */
+
+/* Walk a Times expression and copy its arguments into args/count_out.
+ * If `e` is not a Times, treats it as a single factor.  Caller owns
+ * each copied Expr* and the array. */
+static void collect_times_args(Expr* e, Expr*** args_out, size_t* count_out) {
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        size_t n = e->data.function.arg_count;
+        Expr** args = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            args[i] = expr_copy(e->data.function.args[i]);
+        }
+        *args_out = args;
+        *count_out = n;
+        return;
+    }
+    Expr** args = (Expr**)malloc(sizeof(Expr*));
+    args[0] = expr_copy(e);
+    *args_out = args;
+    *count_out = 1;
+}
+
+/* True if `f` is a numeric or rational constant (no polynomial structure). */
+static bool factor_is_numeric_constant(const Expr* f) {
+    if (f->type == EXPR_INTEGER || f->type == EXPR_REAL || f->type == EXPR_BIGINT) {
+        return true;
+    }
+    if (f->type == EXPR_FUNCTION
+        && f->data.function.head
+        && f->data.function.head->type == EXPR_SYMBOL
+        && (strcmp(f->data.function.head->data.symbol, "Rational") == 0
+            || strcmp(f->data.function.head->data.symbol, "Complex") == 0)) {
+        return true;
+    }
+    return false;
+}
+
+/* Substitute vars[var_idx] -> 0 in P. */
+static Expr* expr_substitute_var_zero(Expr* P, Expr* var) {
+    Expr* rule = expr_new_function(
+        expr_new_symbol("Rule"),
+        (Expr*[]){ expr_copy(var), expr_new_integer(0) }, 2);
+    Expr* call = expr_new_function(
+        expr_new_symbol("ReplaceAll"),
+        (Expr*[]){ expr_copy(P), rule }, 2);
+    Expr* result = evaluate(call);
+    expr_free(call);
+    return result;
+}
+
+static Expr* factor_via_z_independent_split(Expr* P, Expr** vars, size_t v_count) {
+    if (v_count < 3) return NULL;
+
+    /* Try each variable as the "z" specialisation. */
+    for (size_t z_idx = 0; z_idx < v_count; z_idx++) {
+        /* P_at_z0 = P with vars[z_idx] -> 0. */
+        Expr* P_at_z0 = expr_substitute_var_zero(P, vars[z_idx]);
+        if (!P_at_z0) continue;
+
+        /* If the substitution yielded a constant, skip (this z value
+         * killed too much; retry with a different z). */
+        if (P_at_z0->type != EXPR_FUNCTION) {
+            expr_free(P_at_z0);
+            continue;
+        }
+
+        /* Recursively factor P_at_z0 (now in v_count - 1 variables). */
+        Expr* factored = heuristic_factor(P_at_z0);
+        expr_free(P_at_z0);
+        if (!factored) continue;
+
+        /* Walk the factors.  For each non-constant factor f, trial-
+         * divide the ORIGINAL P by f.  Each successful division is a
+         * genuine z-independent factor of P. */
+        Expr** factor_args = NULL;
+        size_t factor_count = 0;
+        collect_times_args(factored, &factor_args, &factor_count);
+        expr_free(factored);
+
+        Expr* remaining = expr_copy(P);
+        Expr** found = NULL;
+        size_t found_n = 0;
+        size_t found_cap = 0;
+
+        for (size_t i = 0; i < factor_count; i++) {
+            Expr* f = factor_args[i];
+            if (factor_is_numeric_constant(f)) continue;
+
+            /* Power[base, k] is a factor of multiplicity k -- attempt
+             * the base, and on success peel off all k copies. */
+            Expr* base = f;
+            int64_t mult = 1;
+            if (f->type == EXPR_FUNCTION
+                && f->data.function.head
+                && f->data.function.head->type == EXPR_SYMBOL
+                && strcmp(f->data.function.head->data.symbol, "Power") == 0
+                && f->data.function.arg_count == 2
+                && f->data.function.args[1]->type == EXPR_INTEGER
+                && f->data.function.args[1]->data.integer >= 1) {
+                base = f->data.function.args[0];
+                mult = f->data.function.args[1]->data.integer;
+            }
+
+            /* Trial-divide remaining by base, repeatedly. */
+            for (int64_t k = 0; k < mult; k++) {
+                Expr* q = exact_poly_div(remaining, base, vars, v_count);
+                if (!q) {
+                    /* If we already peeled k > 0 copies, that's fine;
+                     * stop peeling further at this base. */
+                    break;
+                }
+                if (found_n >= found_cap) {
+                    found_cap = found_cap ? found_cap * 2 : 4;
+                    found = (Expr**)realloc(found, sizeof(Expr*) * found_cap);
+                }
+                found[found_n++] = expr_copy(base);
+                expr_free(remaining);
+                remaining = q;
+            }
+        }
+
+        for (size_t i = 0; i < factor_count; i++) expr_free(factor_args[i]);
+        free(factor_args);
+
+        if (found_n == 0) {
+            /* No z-independent factor found at this specialisation. */
+            expr_free(remaining);
+            free(found);
+            continue;
+        }
+
+        /* Recurse on remaining (which has the discovered factors removed). */
+        Expr* rem_factored = heuristic_factor(remaining);
+        expr_free(remaining);
+
+        /* Build Times[found..., rem_factored]. */
+        size_t total = found_n + 1;
+        Expr** times_args = (Expr**)malloc(sizeof(Expr*) * total);
+        for (size_t i = 0; i < found_n; i++) times_args[i] = found[i];
+        times_args[found_n] = rem_factored;
+        free(found);
+
+        Expr* result = expr_new_function(expr_new_symbol("Times"),
+                                         times_args, total);
+        free(times_args);
+        return eval_and_free(result);
+    }
+
+    return NULL;
+}
+
 static Expr* heuristic_factor(Expr* P) {
     if (P->type != EXPR_FUNCTION) return expr_copy(P);
     if (strcmp(P->data.function.head->data.symbol, "Times") == 0 || strcmp(P->data.function.head->data.symbol, "Power") == 0) {
@@ -593,7 +2205,24 @@ static Expr* heuristic_factor(Expr* P) {
         return eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){f_cont, f_pp}, 2));
     }
     expr_free(cont);
-    
+
+    /* Monomial-content extraction: pull out v_1^{e_1} * ... * v_k^{e_k}
+     * shared by every term.  This is the cheapest factorisation step
+     * (no polynomial arithmetic) and is decisively correct: if the GCD
+     * of the term-monomials is nontrivial, the result is exactly that
+     * GCD times the residue, with the residue then factored recursively
+     * by the strategies below.  For inputs like
+     *   3 a^2 b - 3 b - b^3      ->  b * (3 a^2 - 3 - b^2)
+     *   3 Sin[x]^3 - 3 Sin[x]    ->  Sin[x] * (3 Sin[x]^2 - 3)
+     * this is the difference between a correct factorisation and a
+     * fall-through to expensive trial-root methods that miss the
+     * monomial structure entirely. */
+    Expr* mc = factor_monomial_content(P);
+    if (mc) {
+        for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+        return mc;
+    }
+
     Expr* d1 = factor_degree_one(P, vars, v_count);
     if (d1) { 
         { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
@@ -607,11 +2236,48 @@ static Expr* heuristic_factor(Expr* P) {
     }
     
     Expr* bn = factor_binomial(P);
-    if (bn) { 
+    if (bn) {
         { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
-        return bn; 
+        return bn;
     }
-    
+
+    /* Try the productive multivariate paths FIRST.  These are
+     * generally fast on factorable inputs (succeed quickly with a
+     * non-trivial factorisation) and fail quickly on irreducible
+     * inputs (no good evaluation point found).  Running them before
+     * the is_likely_irreducible probe avoids paying the probe's cost
+     * (10s of ms × number of variables) on inputs that the productive
+     * paths handle directly. */
+    if (v_count == 2) {
+        Expr* bivariate = factor_bivariate_via_hensel(P, vars);
+        if (bivariate) {
+            for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+            return bivariate;
+        }
+    }
+
+    /* Phase 4: for n >= 3 variables, attempt to peel off factors that
+     * don't depend on one of the variables.  Specialise each variable
+     * in turn to 0, recursively factor the result, and trial-divide
+     * the original P by each candidate factor.  Catches polynomials
+     * with a "shape" piece independent of the specialised variable. */
+    if (v_count >= 3) {
+        Expr* tri = factor_via_z_independent_split(P, vars, v_count);
+        if (tri) {
+            for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+            return tri;
+        }
+    }
+
+    /* Irreducibility gate: the productive paths above didn't find a
+     * factorisation; we're about to fall through to factor_roots,
+     * which can be slow on irreducible inputs.  Run the cheap
+     * irreducibility probe first to short-circuit. */
+    if (is_likely_irreducible_multivariate(P, vars, v_count)) {
+        for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+        return expr_copy(P);
+    }
+
     Expr* rt = factor_roots(P, vars, v_count);
     if (rt) { 
         { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
@@ -628,14 +2294,191 @@ static Expr* heuristic_factor(Expr* P) {
 // and homogeneous Binomial descent, providing exact polynomial splittings
 // over Z without generating Mignotte bound overflows.
 
+/* ===================================================================== */
+/*  Per-call Factor memo                                                 */
+/*                                                                       */
+/*  Cache `Factor[poly]` results inside a single `Simplify` call.  See   */
+/*  facpoly.h for the lifecycle contract.  The top-of-stack memo is      */
+/*  consulted at entry to `builtin_factor`; on a hit we return a deep    */
+/*  copy of the cached result.  On a miss we run the full pipeline,     */
+/*  then store a deep copy of the input/output pair before returning.   */
+/* ===================================================================== */
+
+#define FACTOR_MEMO_BUCKETS 256
+
+typedef struct FactorMemoEntry {
+    Expr* key;
+    Expr* value;
+    struct FactorMemoEntry* next;
+} FactorMemoEntry;
+
+struct FactorMemo {
+    FactorMemoEntry* buckets[FACTOR_MEMO_BUCKETS];
+};
+
+/* Stack of currently-active memos.  We use a stack to support
+ * (in principle) nested Simplify calls, even though that's not the
+ * common case.  In practice only the top entry is consulted. */
+#define FACTOR_MEMO_STACK_DEPTH 8
+static FactorMemo* g_memo_stack[FACTOR_MEMO_STACK_DEPTH] = {0};
+static int g_memo_stack_top = -1;
+
+FactorMemo* factor_memo_new(void) {
+    FactorMemo* m = (FactorMemo*)calloc(1, sizeof(FactorMemo));
+    return m;
+}
+
+void factor_memo_free(FactorMemo* m) {
+    if (!m) return;
+    for (int i = 0; i < FACTOR_MEMO_BUCKETS; i++) {
+        FactorMemoEntry* e = m->buckets[i];
+        while (e) {
+            FactorMemoEntry* next = e->next;
+            expr_free(e->key);
+            expr_free(e->value);
+            free(e);
+            e = next;
+        }
+    }
+    free(m);
+}
+
+void factor_memo_push(FactorMemo* m) {
+    if (g_memo_stack_top + 1 >= FACTOR_MEMO_STACK_DEPTH) return;
+    g_memo_stack[++g_memo_stack_top] = m;
+}
+
+void factor_memo_pop(void) {
+    if (g_memo_stack_top < 0) return;
+    g_memo_stack[g_memo_stack_top--] = NULL;
+}
+
+static FactorMemo* factor_memo_top(void) {
+    if (g_memo_stack_top < 0) return NULL;
+    return g_memo_stack[g_memo_stack_top];
+}
+
+FactorMemo* factor_memo_active(void) { return factor_memo_top(); }
+
+const Expr* factor_memo_lookup(FactorMemo* m, Expr* key) {
+    if (!m) return NULL;
+    uint64_t h = expr_hash(key) % FACTOR_MEMO_BUCKETS;
+    for (FactorMemoEntry* e = m->buckets[h]; e; e = e->next) {
+        if (expr_eq(e->key, key)) return e->value;
+    }
+    return NULL;
+}
+
+void factor_memo_store(FactorMemo* m, Expr* key, Expr* value) {
+    if (!m) return;
+    uint64_t h = expr_hash(key) % FACTOR_MEMO_BUCKETS;
+    FactorMemoEntry* e = (FactorMemoEntry*)malloc(sizeof(FactorMemoEntry));
+    if (!e) return;
+    e->key = expr_copy(key);
+    e->value = expr_copy(value);
+    e->next = m->buckets[h];
+    m->buckets[h] = e;
+}
+
+/* Lookup; returns a borrowed pointer to the cached value (do NOT
+ * free) or NULL on miss. */
+static const Expr* factor_memo_get(FactorMemo* m, Expr* key) {
+    if (!m) return NULL;
+    uint64_t h = expr_hash(key) % FACTOR_MEMO_BUCKETS;
+    for (FactorMemoEntry* e = m->buckets[h]; e; e = e->next) {
+        if (expr_eq(e->key, key)) return e->value;
+    }
+    return NULL;
+}
+
+/* Store deep copies of key and value. */
+static void factor_memo_put(FactorMemo* m, Expr* key, Expr* value) {
+    if (!m) return;
+    uint64_t h = expr_hash(key) % FACTOR_MEMO_BUCKETS;
+    FactorMemoEntry* e = (FactorMemoEntry*)malloc(sizeof(FactorMemoEntry));
+    if (!e) return;
+    e->key = expr_copy(key);
+    e->value = expr_copy(value);
+    e->next = m->buckets[h];
+    m->buckets[h] = e;
+}
+
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
 
+    /* Memo lookup: if a Simplify call has installed a Factor memo and
+     * we've already factored this exact input, return the cached copy.
+     * Note: builtin_factor follows the convention that the evaluator
+     * owns `res` (we do not call expr_free(res) anywhere in this
+     * function), so the hit path simply returns a fresh copy of the
+     * cached value without touching `res`. */
+    FactorMemo* memo = factor_memo_top();
+    if (memo) {
+        const Expr* hit = factor_memo_get(memo, res);
+        if (hit) {
+            return expr_copy((Expr*)hit);
+        }
+    }
+    Expr* memo_key = memo ? expr_copy(res) : NULL;
+
     /* Berlekamp–Zassenhaus and the heuristic multivariate paths assume
      * integer (rational) coefficients; route inexact inputs through the
-     * standard rationalise / numericalise round-trip. */
+     * standard rationalise / numericalise round-trip.  We don't cache
+     * inexact results -- they go through their own evaluation path. */
     if (internal_args_contain_inexact(res)) {
+        if (memo_key) expr_free(memo_key);
         return internal_rationalize_then_numericalize(res, builtin_factor);
+    }
+
+    /* Thread over logic / comparison heads (Less, Greater, Equal,
+     * LessEqual, GreaterEqual, And, Or).  Mathematica applies Factor
+     * elementwise inside these structures, e.g.,
+     *   Factor[1 < 1+2x+x^2+1/(1+x) < 2]
+     * yields Less[Less[1, factored], 2].  Without explicit threading
+     * here, builtin_factor sees the whole Less[...] as a "polynomial"
+     * (with the comparison head treated as opaque), collect_variables
+     * returns just [x], and bz_factor_to_expr returns the input
+     * unchanged (deg <= 0 for non-polynomial heads).
+     *
+     * We thread by recursively invoking Factor on each comparison
+     * argument, then rebuilding the same head with the factored
+     * subterms.  ATTR_LISTABLE on Factor handles the List case
+     * automatically; this hand-threading covers the comparison /
+     * logic heads it doesn't reach. */
+    {
+        Expr* arg0 = res->data.function.args[0];
+        if (arg0->type == EXPR_FUNCTION
+            && arg0->data.function.head
+            && arg0->data.function.head->type == EXPR_SYMBOL) {
+            const char* h = arg0->data.function.head->data.symbol;
+            if (strcmp(h, "Less") == 0 ||
+                strcmp(h, "Greater") == 0 ||
+                strcmp(h, "Equal") == 0 ||
+                strcmp(h, "Unequal") == 0 ||
+                strcmp(h, "LessEqual") == 0 ||
+                strcmp(h, "GreaterEqual") == 0 ||
+                strcmp(h, "And") == 0 ||
+                strcmp(h, "Or") == 0) {
+                size_t n = arg0->data.function.arg_count;
+                Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
+                for (size_t i = 0; i < n; i++) {
+                    Expr* sub_call = expr_new_function(
+                        expr_new_symbol("Factor"),
+                        (Expr*[]){expr_copy(arg0->data.function.args[i])}, 1);
+                    new_args[i] = evaluate(sub_call);
+                    expr_free(sub_call);
+                }
+                Expr* result = expr_new_function(expr_copy(arg0->data.function.head),
+                                                 new_args, n);
+                free(new_args);
+                Expr* evaluated = eval_and_free(result);
+                if (memo_key) {
+                    factor_memo_put(memo, memo_key, evaluated);
+                    expr_free(memo_key);
+                }
+                return evaluated;
+            }
+        }
     }
 
     Expr* arg = res->data.function.args[0];
@@ -649,30 +2492,92 @@ Expr* builtin_factor(Expr* res) {
     Expr* den = evaluate(d_call);
     expr_free(d_call);
 
-    size_t v_count = 0, v_cap = 16;
-    Expr** vars = malloc(sizeof(Expr*) * v_cap);
-    collect_variables(num, &vars, &v_count, &v_cap);
+    /* Scope discipline: when called from inside Simplify (where a
+     * Factor memo is active), use the SHARED-scope behavior -- both
+     * numerator and denominator use the variable list collected from
+     * the numerator.  This is conservative: a denominator with extra
+     * variables won't have those variables in its factoring scope and
+     * may end up unfactored.  But it preserves the historical
+     * Simplify behavior, which has the property that some downstream
+     * TrigRoundtrip paths only converge when intermediate factors
+     * remain in their non-fully-factored form.  See FACTOR_PLAN.md
+     * cleanup C4.
+     *
+     * For direct user Factor calls (no memo active), use the SEPARATE-
+     * scope behavior: each of num and den is factored with its own
+     * variable list.  This gives the correct fully-factored result
+     * for inputs like Factor[(x^3+2x^2)/(x^2-4y^2) - (x+2)/(x^2-4y^2)]
+     * where the denominator x^2-4y^2 has variables not in the
+     * numerator. */
+    bool inside_simplify = (factor_memo_top() != NULL);
+
+    size_t num_vc = 0, num_vcap = 16;
+    Expr** num_vars = malloc(sizeof(Expr*) * num_vcap);
+    collect_variables(num, &num_vars, &num_vc, &num_vcap);
+
+    Expr** den_vars = NULL;
+    size_t den_vc = 0;
+    if (!inside_simplify) {
+        size_t den_vcap = 16;
+        den_vars = malloc(sizeof(Expr*) * den_vcap);
+        collect_variables(den, &den_vars, &den_vc, &den_vcap);
+    }
 
     Expr* f_num = NULL;
-    if (v_count == 1) {
-        f_num = bz_factor_to_expr(num, vars[0]);
+    if (num_vc == 1) {
+        f_num = bz_factor_to_expr(num, num_vars[0]);
+    } else if (num_vc == 2) {
+        /* Fast path for squarefree bivariate inputs: try the
+         * bivariate Hensel directly without first running
+         * FactorSquareFree.  The Hensel orchestrator skips alphas
+         * where the image is not squarefree, so for inputs with
+         * repeated factors it will fail and we fall back to the
+         * generic FactorSquareFree + heuristic_factor pipeline.
+         * For already-squarefree inputs (the common case), this
+         * skips ~100+ ms of wasted FactorSquareFree work and the
+         * is_likely_irreducible probe. */
+        Expr* via_hensel = factor_bivariate_via_hensel(num, num_vars);
+        if (via_hensel) {
+            f_num = via_hensel;
+        } else {
+            Expr* sq_num = eval_and_free(expr_new_function(expr_new_symbol("FactorSquareFree"), (Expr*[]){expr_copy(num)}, 1));
+            f_num = heuristic_factor(sq_num);
+            expr_free(sq_num);
+        }
     } else {
+        /* For n >= 3, run FactorSquareFree first.  It usually does
+         * most of the work for inputs with separable factors (e.g.,
+         * (1-x^12)(1+x-y^13)(1-y-z^14) -> Times[squarefree pieces]),
+         * after which heuristic_factor's Times-recursion factors
+         * each piece independently as a smaller problem. */
         Expr* sq_num = eval_and_free(expr_new_function(expr_new_symbol("FactorSquareFree"), (Expr*[]){expr_copy(num)}, 1));
         f_num = heuristic_factor(sq_num);
         expr_free(sq_num);
     }
 
+    /* Choose den's variable list:
+     *  - Simplify-context: reuse num's list (legacy shared scope).
+     *  - Direct call: use the den-specific list. */
+    Expr** den_eff_vars = inside_simplify ? num_vars : den_vars;
+    size_t den_eff_vc   = inside_simplify ? num_vc   : den_vc;
+
     Expr* f_den = NULL;
-    if (v_count == 1) {
-        f_den = bz_factor_to_expr(den, vars[0]);
+    if (den_eff_vc == 0) {
+        f_den = expr_copy(den);
+    } else if (den_eff_vc == 1) {
+        f_den = bz_factor_to_expr(den, den_eff_vars[0]);
     } else {
         Expr* sq_den = eval_and_free(expr_new_function(expr_new_symbol("FactorSquareFree"), (Expr*[]){expr_copy(den)}, 1));
         f_den = heuristic_factor(sq_den);
         expr_free(sq_den);
     }
-    
-    for(size_t i=0; i<v_count; i++) expr_free(vars[i]);
-    free(vars);
+
+    for(size_t i=0; i<num_vc; i++) expr_free(num_vars[i]);
+    free(num_vars);
+    if (den_vars) {
+        for(size_t i=0; i<den_vc; i++) expr_free(den_vars[i]);
+        free(den_vars);
+    }
 
     Expr* result;
     if (f_den->type == EXPR_INTEGER && f_den->data.integer == 1) {
@@ -686,6 +2591,14 @@ Expr* builtin_factor(Expr* res) {
     expr_free(together);
     expr_free(num);
     expr_free(den);
+
+    /* Cache the (input, output) pair for the duration of the current
+     * Simplify call.  memo_key holds a deep copy of the original input
+     * we made before computation; we hand it off into the memo here. */
+    if (memo_key) {
+        factor_memo_put(memo, memo_key, result);
+        expr_free(memo_key);
+    }
 
     return result;
 }

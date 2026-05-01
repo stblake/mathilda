@@ -715,6 +715,8 @@ Pulls out any multiple factors in a polynomial using Yun's algorithm.
 - `Listable`, `Protected`.
 - Automatically threads over lists, as well as equations, inequalities and logic functions.
 - Works on both univariate and multivariate polynomials.
+- Multivariate inputs use a cheap squarefree pre-check (F4 Stage 1): after content extraction in the main variable, `sqfree_cheap_check` substitutes integer values from `{1, -1, 2, -2, 3, -3, 4}` for the other variables and tests `gcd(image, image')` over `Z[x]`.  If any image is squarefree at an alpha that preserves the leading-x degree, the pre-check proves `pp` is squarefree in x and the expensive multivariate `gcd(pp, pp')` is skipped.  Soundness comes from content extraction guaranteeing any repeated factor of `pp` involves the main variable nontrivially.  Measured 6.6× speedup on 4-variable squarefree inputs (6.27 s → 0.95 s); non-squarefree inputs fall through to the original Yun loop with negligible overhead.
+- The cheap pre-check's univariate `gcd(image, image')` runs through `zupoly_gcd` (subresultant PRS, GMP `mpz_t` coefficients).  The previous implementation used `poly_gcd_internal` (Knuth-style primitive PRS at the Expr level) which suffers exponential coefficient growth on the intermediate pseudo-remainders; on a degree-31 univariate image (e.g. `Factor[Expand[x^2 (z^13 - x^12)(z^4 + 3 x^9 - y^13)(17 - 5 y - z^14)]]`) it ran for >120 s.  Routing the same gcd through subresultant PRS keeps coefficient sizes polynomially bounded and runs in sub-millisecond time on the same input, bringing the full Factor call to under 1 s.
 
 ```mathematica
 In[1]:= FactorSquareFree[x^5 - x^3 - x^2 + 1]
@@ -739,6 +741,9 @@ Factors a polynomial over the integers.
 - When given a rational expression, first resolves dependencies over `Together` before factoring.
 - Uses exact root isolation (Rational Root Theorem limits) and binomial descents structured identically to Zassenhaus recombination, evaluating combinations exact and memory safe.
 - Threads natively across lists, logic structures, and numeric groupings perfectly.
+- Bivariate inputs whose leading coefficient (in some variable) is the constant `-1` are handled via Wang's leading-coefficient correction, Stage 1: the input is pre-negated to make it monic, the existing monic Hensel pipeline runs on `-P`, and the overall sign is absorbed into the highest-degree factor via `Expand`.  This unlocks inputs of shape `Factor[(1 - x^k)(x - y^m)]` (and similar non-monic cases with constant `±1` LC) that previously fell back to the legacy linear-trial-division loop.
+- Bivariate inputs whose leading coefficient (in some variable) is a non-unit integer constant `a` (with `|a| > 1`) are handled via Wang's leading-coefficient correction, Stage 2: the monic substitution `Q(x, y) = a^(d-1) · P(x/a, y)` makes the lift's input monic in x with integer coefficients.  After lifting `Q = G_1 · ... · G_r` via the existing pipeline, the true factors of `P` are recovered as `F_i = G_i(a·x, y) / cont_Z(G_i(a·x, y))`, where the integer content collects exactly the share of `a^(d-1)` redistributed into G_i by the substitution.  Stages 1 and 2 compose, so inputs with negative non-unit LC (e.g. `lc_x(P) = -6`) also enter the structured pipeline.  This unlocks inputs like `Factor[Expand[(2x+3y)(3x+5y)]]`, `Factor[2 a^2 - 5 a b + 3 b^2]`, and three-factor non-monic forms whose LCs are constant in y (or constant in x).
+- Bivariate inputs whose leading coefficient (in some variable) is a non-constant polynomial in the other variable are handled via Wang's leading-coefficient correction, Stage 3 (predicted-LC two-factor Hensel).  When `lc_x(P)(y) = A(y)`, picocas factors `A` over `Z[y]`, finds `α` with `A(α) = +1` so the squarefree univariate image `P(x, α)` factors into monic Z[x] pieces `u`, `v`, then enumerates distributions of `A`'s irreducible factors between two predicted leading coefficients `q_u, q_v` (with `q_u · q_v = A` and `q_u(α) = q_v(α) = +1`).  The Hensel iteration is modified so each `Δu` correction has its leading-x coefficient PINNED to the y^k coefficient of `q_u`, keeping `lc_x(U)(y) = q_u(y)` invariant across the lift.  This unlocks inputs like `Factor[Expand[(xy+1)(xy+2)]]`, `Factor[Expand[((y²+1)x+1)(x+3)]]`, `Factor[Expand[((y+1)x+1)((y+1)x+2)]]`.  MVP scope: r = 2 (two univariate factors), both monic, `|cont(A)| = 1`, and inputs with non-trivial monomial content fall through so `heuristic_factor`'s Phase 0 path produces the canonical fully-factored form.
 
 ```mathematica
 In[1]:= Factor[1 + 2x + x^2]
@@ -3310,12 +3315,40 @@ Out[13]= True
 - `Round` rounds to the nearest even integer for ties.
 - `Floor[x, a]` returns the greatest multiple of `a` $\le x$.
 
+**Symbolic simplifications** (`Floor`, `Ceiling`, `Round` only -- `IntegerPart` and `FractionalPart` are excluded):
+
+*Sign extraction* -- pulls a leading `-1` out through the rounding head, swapping `Floor`/`Ceiling` (and leaving `Round` unchanged):
+- `Floor[-x]   :> -Ceiling[x]`
+- `Ceiling[-x] :> -Floor[x]`
+- `Round[-x]   :> -Round[x]`
+
+The trigger is `expr_is_superficially_negative`, so `Floor[-2 x]` and `Ceiling[-3 x y]` reduce as well.
+
+*Idempotency / composition* -- the inner expression is already an integer, so the outer rounding is a no-op:
+- `Floor[Floor[x]]   :> Floor[x]`
+- `Ceiling[Ceiling[x]] :> Ceiling[x]`
+- `Round[Round[x]]   :> Round[x]`
+- `Floor[Ceiling[x]] :> Ceiling[x]`
+- `Ceiling[Floor[x]] :> Floor[x]`
+- `Floor[Round[x]]   :> Round[x]`
+- `Ceiling[Round[x]] :> Round[x]`
+- `Round[Floor[x]]   :> Floor[x]`
+- `Round[Ceiling[x]] :> Ceiling[x]`
+
+These rules compose under fixed-point evaluation, so e.g. `Ceiling[Floor[Ceiling[x]]] -> Ceiling[x]`, and `Floor[-x] + Ceiling[x] -> 0`.
+
 ```mathematica
 In[1]:= Round[2.5]
 Out[1]= 2
 
 In[2]:= Round[3.5]
 Out[2]= 4
+
+In[3]:= Floor[-x] + Ceiling[x]
+Out[3]= 0
+
+In[4]:= Ceiling[Floor[Ceiling[x]]]
+Out[4]= Ceiling[x]
 ```
 
 ### Lists and Iteration
@@ -7530,3 +7563,122 @@ from running for over a minute on the per-round expansion of the
   form requested by the user.
 * `test_simplify_pythag_reduce_sinh_cube|cosh_cube` -- hyperbolic
   product collapse, exercising the `TrigRoundtrip` score-gate path.
+
+## Simplify: sign-flipped Pythagorean reduction + per-transform PythagReduce chain (2026-04-29)
+
+Two follow-on fixes to the Pythagorean reduction pass close gaps that
+left `Simplify[Sin[x]^3 + Sin[3 x] - 3 Sin[x]]` stuck at
+`3 Sin[x] (-1 + Cos[x]^2)` instead of reaching `-3 Sin[x]^3`.
+
+### Sign-flipped Pythagorean rule pairs
+
+`transform_pythag_reduce` now carries the negated counterparts of the
+existing rules so that the reduction fires on either canonical sign of
+the constant term in a `Plus`:
+
+```
+1 - Cos[x_]^2 + r___  :>  Sin[x]^2 + r
+1 - Sin[x_]^2 + r___  :>  Cos[x]^2 + r
+-1 + Cos[x_]^2 + r___ :> -Sin[x]^2 + r       (* new *)
+-1 + Sin[x_]^2 + r___ :> -Cos[x]^2 + r       (* new *)
+-1 + Cosh[x_]^2 + r___ :> Sinh[x]^2 + r
+1 + Sinh[x_]^2 + r___ :> Cosh[x]^2 + r
+1 - Cosh[x_]^2 + r___ :> -Sinh[x]^2 + r      (* new *)
+-1 - Sinh[x_]^2 + r___ :> -Cosh[x]^2 + r     (* new *)
+```
+
+Without these, `FactorSquareFree[3 Cos[x]^2 Sin[x] - 3 Sin[x]]` (which
+`simp_search` produces while exploring the triple-angle expansion)
+yields `3 Sin[x] (-1 + Cos[x]^2)`, and the inner Plus has the canonical
+form `-1 + Cos[x]^2`, not `1 - Cos[x]^2`, so the pre-existing rules
+never matched.
+
+### Chained PythagReduce inside the round loop
+
+`simp_search` runs `SIMP_ROUNDS` (= 2) of seed expansion. Each round
+calls every entry in `SIMP_TRANSFORMS` on each seed, and separately
+calls `transform_pythag_reduce` once per seed. A candidate produced
+mid-round (say, FactorSquareFree's output) only gets a Pythagorean
+reduction when it is promoted to a seed in the *next* round -- but if
+this happens at the final round, the loop exits before that follow-up
+fires.
+
+The fix calls `transform_pythag_reduce` on every transform output
+inside the round, immediately after `update_best`. This adds at most
+~0.5 ms per transform output (the rule list is parsed once and
+`ReplaceRepeated` short-circuits when nothing matches), and lets the
+final-round candidates pick up the Pythagorean rewrite without
+requiring a third round.
+
+With both fixes:
+
+```
+Simplify[Sin[x]^3 + Sin[3 x] - 3 Sin[x]]
+    (* TrigExpand -> 3 Cos[x]^2 Sin[x] - 3 Sin[x]
+       FactorSquareFree (round 1) -> 3 Sin[x] (-1 + Cos[x]^2)
+       PythagReduce on that output -> -3 Sin[x]^3 *)
+->  -3 Sin[x]^3
+```
+
+### Test
+
+`tests/test_simplify.c` adds `test_simplify_sin_triple_angle_collapse`
+covering the user-reported expression.
+
+## Factor: bivariate Hensel performance (Phase F3, 2026-04-30)
+
+Three optimisations land in `src/mvfactor.c`'s bivariate two-factor
+Hensel lift, targeting the per-iteration polynomial-arithmetic cost
+and the recombination order:
+
+### F3a -- sort `us[]` by ascending degree before recombination
+
+`bpoly_hensel_lift_multi` now sorts the borrowed `us[]` array by
+univariate x-degree at entry, so the smallest-degree singletons get
+tried first by `lift_multi_internal`'s subset enumeration.  For
+inputs whose true bivariate factor has a low-degree univariate image
+(e.g. `(1 - x^k)(x - y^m)` whose `(x - y^m)` reduces to `x` at α=0),
+the singleton `{x}` is now the first recombination trial instead of
+being one of `r` possibilities.  The complement-side recursion
+preserves relative order, so a single sort at the public entry is
+enough.
+
+### F3b -- incremental U·V update across Hensel iterations
+
+The previous lift recomputed `U*V mod y^{k+1}` from scratch each
+iteration via `bpoly_mul_truncate_y`, paying O(d_x² · k²) per step
+and O(d_x² · B³) cumulative for a y-degree-B lift.  F3b maintains a
+running `UV` BPoly tracking `U_{k-1} · V_{k-1} mod y^{k+1}` and
+extends/updates it incrementally: at the start of iteration k we add
+the cross sum `Σ_{a=1}^{k-1} U[y^a] · V[y^{k-a}]` at y^k, and after
+the diophantine update we add `Δu · V_0 + U_0 · Δv` at y^k (the
+`y^{2k} · Δu · Δv` term vanishes mod y^{k+1} for k ≥ 1).  Cumulative
+cost drops to O(d_x² · B²) -- a factor-of-B speedup.  Applied to
+both `bpoly_hensel_lift_2` and `bpoly_hensel_lift_2_lc`; for the LC
+variant, the y^0 polynomials are `qu_0 · u` and `qv_0 · v` instead
+of plain `u, v`.
+
+### F3c -- Mignotte coefficient bound fast-fail
+
+Each lift call computes a conservative integer-coefficient bound
+`M = 2^(deg_x(P) + deg_y(P)) · ceil(||P||_2)` once at entry and
+checks it after every iteration: if any coefficient of `U` or `V`
+exceeds `M` in absolute value, the subset cannot lift to an integer
+factor of P, so the lift aborts immediately rather than running the
+remaining iterations on a divergent candidate.
+
+### Tests
+
+`tests/test_factor_recombine.c` adds `test_f3_perf_x6_y15`,
+`test_f3_perf_x4_y25`, and `test_f3_perf_x8_y17` covering high-y-
+degree inputs (B ∈ {15, 17, 25}) where the lift inner loop dominates.
+Each completes in single-digit milliseconds end-to-end.
+
+### Out of scope
+
+`Factor[Expand[(1 - x^12)(x - y^13)]]` was previously cited as the
+F3 motivating case.  Tracing showed the hang is actually inside
+`bz_factor_to_expr(x^13 - x)` -- the univariate Berlekamp-Zassenhaus
+factorizer -- before the bivariate path runs.  `Factor[x^13 - x]`
+and `Factor[x^13 - 1]` hang in isolation.  Fixing that is a separate
+task (univariate BZ performance, not bivariate Hensel).

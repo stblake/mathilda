@@ -314,6 +314,14 @@ void test_simplify_pythag_reduce_cosh_cube(void) {
     assert_eval_eq("Simplify[Cosh[x] (1 + Sinh[x]^2)]", "Cosh[x]^3", 0);
 }
 
+/* Triple-angle identity collapses to -3 Sin[x]^3 once TrigExpand surfaces
+ * Cos[x]^2 Sin[x] terms and the sign-flipped Pythagorean rule
+ * (Cos[x]^2 - 1 :> -Sin[x]^2) fires inside the factored product. */
+void test_simplify_sin_triple_angle_collapse(void) {
+    assert_eval_eq("Simplify[Sin[x]^3 + Sin[3 x] - 3 Sin[x]]",
+                   "-3 Sin[x]^3", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -367,6 +375,7 @@ int main(void) {
     TEST(test_simplify_halfangle_tanh_power);
     TEST(test_simplify_pythag_reduce_sinh_cube);
     TEST(test_simplify_pythag_reduce_cosh_cube);
+    TEST(test_simplify_sin_triple_angle_collapse);
 
     printf("All Simplify tests passed!\n");
     return 0;

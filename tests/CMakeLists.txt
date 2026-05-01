@@ -91,6 +91,9 @@ set(COMMON_SRC
     ../src/numeric.c
     ../src/precision.c
     ../src/rationalize.c
+    ../src/zupoly.c
+    ../src/bpoly.c
+    ../src/mvfactor.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -215,6 +218,42 @@ target_include_directories(datetime_tests PRIVATE ../src)
 
 add_executable(facpoly_tests test_facpoly.c ${COMMON_SRC})
 target_include_directories(facpoly_tests PRIVATE ../src)
+
+add_executable(factor_phase0_tests test_factor_phase0.c ${COMMON_SRC})
+target_include_directories(factor_phase0_tests PRIVATE ../src)
+
+add_executable(factor_baseline_tests test_factor_baseline.c ${COMMON_SRC})
+target_include_directories(factor_baseline_tests PRIVATE ../src)
+
+add_executable(factor_recombine_tests test_factor_recombine.c ${COMMON_SRC})
+target_include_directories(factor_recombine_tests PRIVATE ../src)
+
+add_executable(zupoly_tests test_zupoly.c ${COMMON_SRC})
+target_include_directories(zupoly_tests PRIVATE ../src /usr/local/include)
+target_link_directories(zupoly_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(zupoly_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(zupoly_tests gmp m)
+endif()
+
+add_executable(bpoly_tests test_bpoly.c ${COMMON_SRC})
+target_include_directories(bpoly_tests PRIVATE ../src /usr/local/include)
+target_link_directories(bpoly_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(bpoly_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(bpoly_tests gmp m)
+endif()
+
+add_executable(mvfactor_tests test_mvfactor.c ${COMMON_SRC})
+target_include_directories(mvfactor_tests PRIVATE ../src /usr/local/include)
+target_link_directories(mvfactor_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(mvfactor_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(mvfactor_tests gmp m)
+endif()
 
 add_executable(factor_terms_tests test_factor_terms.c ${COMMON_SRC})
 target_include_directories(factor_terms_tests PRIVATE ../src)

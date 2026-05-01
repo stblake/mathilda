@@ -39,6 +39,37 @@ void test_factorsquarefree() {
     run_test("FactorSquareFree[(1 - x^3)^2]", "Power[Plus[1, Times[-1, Power[x, 3]]], 2]");
 }
 
+/* F4 Phase 1: cheap squarefree pre-check.  These cases exercise the
+ * fast path (multivariate squarefree inputs) and ensure the slow path
+ * still kicks in correctly when a real repeated factor is present.
+ * Expected outputs match the pre-F4 baseline -- the optimisation is
+ * meant to be observationally invisible. */
+void test_factorsquarefree_f4_fastpath() {
+    /* Multivariate squarefree -- the recursive content extraction
+     * still pulls out the (xy-1) factor; the pre-check just skips
+     * the expensive multivariate gcd inside Yun's algorithm. */
+    run_test("FactorSquareFree[Expand[(x*y - 1)*(x + y + z)*(x*y*z + 1)]]",
+             "Times[Plus[-1, Times[x, y]], Plus[x, y, z, Times[x, y, Power[z, 2]], Times[x, Power[y, 2], z], Times[Power[x, 2], y, z]]]");
+
+    /* Multivariate non-squarefree -- slow path must catch (x*y-1)^2. */
+    run_test("FactorSquareFree[Expand[(x*y - 1)^2*(x + y + z)]]",
+             "Times[Power[Plus[-1, Times[x, y]], 2], Plus[x, y, z]]");
+
+    /* Multivariate non-squarefree with two squared factors. */
+    run_test("FactorSquareFree[Expand[(x + y)^2*(x - y)^2*(x*y - 1)]]",
+             "Times[Plus[-1, Times[x, y]], Power[Plus[Times[-1, Power[x, 2]], Power[y, 2]], 2]]");
+
+    /* Three-variable squarefree input -- this is the kind of case
+     * the F4 fast path is targeting. */
+    run_test("FactorSquareFree[Expand[(1 - x^3)*(1 + y^4)*(1 + z^5)]]",
+             "Times[Plus[-1, Power[x, 3]], Plus[-1, Times[-1, Power[z, 5]]], Plus[1, Power[y, 4]]]");
+
+    /* Repeated factor that is constant in the main variable (the
+     * recursive content path catches it). */
+    run_test("FactorSquareFree[Expand[(y + 1)^2*(x + y)]]",
+             "Times[Power[Plus[1, y], 2], Plus[x, y]]");
+}
+
 /* Regression: x^p - c with p equal to the prime first tried by
  * factor_zassenhaus (p = 13) used to hang in the squarefree probe.
  * The derivative p*x^(p-1) is identically zero mod p, leaving an
@@ -78,6 +109,7 @@ int main() {
 
     printf("Running facpoly tests...\n");
     TEST(test_factorsquarefree);
+    TEST(test_factorsquarefree_f4_fastpath);
     TEST(test_factor_xp_minus_c_regression);
     TEST(test_factor);
     printf("All facpoly tests passed!\n");

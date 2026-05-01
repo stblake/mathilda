@@ -1,10 +1,91 @@
 #include "trigsimp.h"
 #include "attr.h"
 #include "eval.h"
+#include "facpoly.h"
 #include "parse.h"
 #include "symtab.h"
 #include <stdlib.h>
 #include <string.h>
+
+/* Per-call memo helpers (Phase 9): builtin_trigexpand and
+ * builtin_trigfactor are invoked many times during the Simplify
+ * candidate-set search.  When Simplify pushes a FactorMemo we cache
+ * results here, keyed on `TrigExpand[X]` / `TrigFactor[X]`.  These
+ * keys never collide with `Factor[X]` / `TrigRoundtrip[X]` because
+ * the head is part of the hash.
+ *
+ * The wrapper pattern: the public entry point looks up in the memo,
+ * delegates to the impl on miss, then stores the result.  The impl
+ * does the actual work.  We don't wrap the threading-over-logic-
+ * heads short-circuit because that recursively re-invokes the
+ * builtin, which itself goes through the memo. */
+/* Compute a canonical form of `arg` for memo lookup.  picocas's
+ * evaluator handles Plus/Times orderless+flat normalisation but does
+ * not auto-distribute scalars (`1/8 (-18 a + 6 b)` is structurally
+ * different from `-9/4 a + 3/4 b`) or auto-combine fractions
+ * (`(s + t)/(c + d)` vs `(s/(c+d)) + (t/(c+d))`).  Running
+ * Together(Expand(.)) once unifies these surface forms.
+ *
+ * Note: an experimental switch to TrigToExp(arg) keying (which folds
+ * in trig identities like `Cos[x]^2 = (1 + Cos[2x])/2`) was tried
+ * but reverted -- TrigToExp's per-call cost (~5 ms) exceeded the
+ * dedup gains for TrigFactor / TrigExpand on typical Simplify
+ * intermediates, where most inputs are unique post-canonicalisation.
+ * It worked for TrigRoundtrip (Phase 14) only because TrigToExp is
+ * the first stage of TrigRoundtrip's pipeline anyway -- the cost
+ * was free-rider.  For TrigFactor / TrigExpand the first stage is
+ * different, so the TrigToExp computation is purely overhead. */
+static Expr* trig_canonicalize(Expr* arg) {
+    Expr* expand_args[1] = { expr_copy(arg) };
+    Expr* expand_call = expr_new_function(expr_new_symbol("Expand"),
+                                          expand_args, 1);
+    Expr* expanded = evaluate(expand_call);
+    expr_free(expand_call);
+
+    Expr* together_args[1] = { expanded };
+    Expr* together_call = expr_new_function(expr_new_symbol("Together"),
+                                            together_args, 1);
+    Expr* canonical = evaluate(together_call);
+    expr_free(together_call);
+    return canonical;
+}
+
+static Expr* trig_memo_call(Expr* res, const char* name,
+                            Expr* (*impl)(Expr*)) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        return impl(res);
+    }
+    FactorMemo* memo = factor_memo_active();
+    if (!memo) return impl(res);
+
+    Expr* arg = res->data.function.args[0];
+    Expr* canonical = trig_canonicalize(arg);
+
+    Expr* key_args[1] = { canonical };  /* takes ownership */
+    Expr* key = expr_new_function(expr_new_symbol(name), key_args, 1);
+
+    const Expr* hit = factor_memo_lookup(memo, key);
+    if (hit) {
+        Expr* cached = expr_copy((Expr*)hit);
+        expr_free(key);
+        return cached;
+    }
+
+    /* On a cache miss, pass the ORIGINAL input (not the canonical
+     * form) to impl: TrigFactor / TrigExpand expect trig atoms, not
+     * exponential forms, so calling impl on `TrigToExp(input)` would
+     * produce a useless un-factored result.  Caching under the
+     * canonical key + computing on the original is correct: any two
+     * inputs that share the canonical key are algebraically equal,
+     * so impl(input1) and impl(input2) are mathematically equivalent
+     * even if they differ in surface form.  We accept the cached
+     * result as the canonical output. */
+    Expr* result = impl(res);
+
+    if (result) factor_memo_store(memo, key, result);
+    expr_free(key);
+    return result;
+}
 
 /*
  * trigsimp.c
@@ -59,6 +140,32 @@ Expr* builtin_trigtoexp(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    /* Memo lookup keyed on the raw input.  TrigToExp is pure
+     * (ReplaceAll + Expand) and shows up both as a Simplify
+     * candidate-set transform AND inside transform_trig_roundtrip's
+     * miss path.  On Tan-rich inputs each call costs 30-130 ms; the
+     * candidate-set search re-enters with structurally identical
+     * subexpressions across iterations.  Caching under the raw input
+     * lets the second call (and any TrigRoundtrip internal call on
+     * the same expression) hit immediately.
+     *
+     * The result is keyed under a `TrigToExp` head so it never
+     * collides with the `TrigRoundtrip` / `TrigFactor` / `Factor`
+     * entries that share the same FactorMemo. */
+    FactorMemo* memo = factor_memo_active();
+    Expr* memo_key = NULL;
+    if (memo) {
+        Expr* key_args[1] = { expr_copy(arg) };
+        memo_key = expr_new_function(expr_new_symbol("TrigToExp"),
+                                     key_args, 1);
+        const Expr* hit = factor_memo_lookup(memo, memo_key);
+        if (hit) {
+            Expr* cached = expr_copy((Expr*)hit);
+            expr_free(memo_key);
+            return cached;
+        }
+    }
+
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(trig_to_exp_rules) };
     Expr* replace_expr = expr_new_function(expr_new_symbol("ReplaceAll"), replace_args, 2);
     Expr* replaced = evaluate(replace_expr);
@@ -68,6 +175,11 @@ Expr* builtin_trigtoexp(Expr* res) {
     Expr* expand_expr = expr_new_function(expr_new_symbol("Expand"), expand_args, 1);
     Expr* result = evaluate(expand_expr);
     expr_free(expand_expr);
+
+    if (memo_key) {
+        factor_memo_store(memo, memo_key, result);
+        expr_free(memo_key);
+    }
 
     return result;
 }
@@ -342,7 +454,7 @@ static int has_reciprocal_power(const Expr* e) {
     return 0;
 }
 
-Expr* builtin_trigexpand(Expr* res) {
+static Expr* builtin_trigexpand_impl(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
@@ -543,7 +655,99 @@ static Expr* trigfactor_run_pipeline(Expr* input) {
  * Threading over equations, inequalities, and logic heads is applied before
  * the pipeline (List threading is delivered by ATTR_LISTABLE).
  */
-Expr* builtin_trigfactor(Expr* res) {
+/* Names of the unary trig / hyperbolic atoms that TrigFactor and
+ * TrigExpand operate on. */
+static bool is_trig_head(const char* h) {
+    return strcmp(h, "Sin") == 0 || strcmp(h, "Cos") == 0 ||
+           strcmp(h, "Tan") == 0 || strcmp(h, "Cot") == 0 ||
+           strcmp(h, "Sec") == 0 || strcmp(h, "Csc") == 0 ||
+           strcmp(h, "Sinh") == 0 || strcmp(h, "Cosh") == 0 ||
+           strcmp(h, "Tanh") == 0 || strcmp(h, "Coth") == 0 ||
+           strcmp(h, "Sech") == 0 || strcmp(h, "Csch") == 0;
+}
+
+/* True if `e` is a unary trig atom: Sin[arg], Cos[arg], etc. */
+static bool is_trig_atom(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && is_trig_head(e->data.function.head->data.symbol)
+        && e->data.function.arg_count == 1;
+}
+
+/* Does the expression contain a structural pattern that TrigExpand
+ * could plausibly turn into a cancellable form?  Specifically: a
+ * Power[trig_atom, k] with k >= 2, or a Times of two or more distinct
+ * trig atoms (or trig atoms times other things).  Plain
+ * sums/products with bare trig atoms (no powers, no trig-trig
+ * products) won't gain cancellations from TrigExpand -- the expansion
+ * just reinverts after factoring.
+ *
+ * We walk recursively through Plus, Times, Power, and division
+ * structure, returning true at the first cancellable shape we find. */
+static bool has_compound_trig_structure(const Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL) return false;
+
+    const char* h = e->data.function.head->data.symbol;
+
+    /* Power[trig_atom, k] with k != 1: cancellable. */
+    if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        if (is_trig_atom(base) && exp->type == EXPR_INTEGER &&
+            (exp->data.integer >= 2 || exp->data.integer <= -2)) {
+            return true;
+        }
+        /* Also recurse: Power[X, n] where X is compound. */
+        return has_compound_trig_structure(base);
+    }
+
+    if (strcmp(h, "Times") == 0) {
+        /* Count distinct trig atoms (ignoring numeric factors).  Two
+         * or more trig atoms in a single Times product means
+         * TrigExpand may expose product-to-sum cancellations. */
+        int trig_count = 0;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            Expr* a = e->data.function.args[i];
+            if (is_trig_atom(a)) trig_count++;
+            else if (a->type == EXPR_FUNCTION
+                     && a->data.function.head
+                     && a->data.function.head->type == EXPR_SYMBOL
+                     && strcmp(a->data.function.head->data.symbol, "Power") == 0
+                     && a->data.function.arg_count == 2
+                     && is_trig_atom(a->data.function.args[0])) {
+                /* Power of a trig atom -- compound on its own. */
+                return true;
+            }
+            else if (has_compound_trig_structure(a)) return true;
+        }
+        return trig_count >= 2;
+    }
+
+    if (strcmp(h, "Plus") == 0) {
+        /* Sums by themselves of bare trig atoms aren't cancellable
+         * (Sin[x] + Sin[3x] doesn't gain from TrigExpand→Factor).
+         * Recurse only -- we're looking for compound structure
+         * inside one of the terms. */
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (has_compound_trig_structure(e->data.function.args[i])) return true;
+        }
+        return false;
+    }
+
+    /* Trig atom on its own is NOT compound. */
+    if (is_trig_atom(e)) return false;
+
+    /* For other heads, recurse into args. */
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (has_compound_trig_structure(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+static Expr* builtin_trigfactor_impl(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
@@ -579,6 +783,24 @@ Expr* builtin_trigfactor(Expr* res) {
         return result_a;
     }
 
+    /* Cheap-skip heuristic: when Path A is a no-op AND the input has
+     * no compound trig structure (no Power[trig, k>=2], no
+     * Times[trig, trig, ...], no nested compound forms), Path B's
+     * TrigExpand → Factor → identity-rules cycle empirically reduces
+     * to the input itself.  These are typical Simplify intermediates
+     * like Sin[x] + Sin[3x] over 2(Cos[x]+Cos[3x]), where TrigExpand
+     * just reinverts after factoring.  Skipping them saves 50-250 ms
+     * per call without losing any genuine cancellation: the user's
+     * primary case Sin[x]^3 + Sin[3x] - 3 Sin[x] still benefits
+     * because it has Sin[x]^3 (a Power[trig, 3]).
+     *
+     * The predicate is conservative: only inputs we are confident
+     * about get the skip.  Anything with a power, product, or
+     * compound substructure stays on Path B. */
+    if (!has_compound_trig_structure(arg)) {
+        return result_a;
+    }
+
     /* Path B: apply TrigExpand first, then run the pipeline. */
     Expr* te_args[1] = { expr_copy(arg) };
     Expr* te_expr = expr_new_function(expr_new_symbol("TrigExpand"), te_args, 1);
@@ -595,6 +817,17 @@ Expr* builtin_trigfactor(Expr* res) {
     }
     expr_free(result_b);
     return result_a;
+}
+
+/* Public entry points: route through trig_memo_call so the FactorMemo
+ * (when active inside a Simplify call) caches results, then delegate
+ * to the implementation on a cache miss. */
+Expr* builtin_trigexpand(Expr* res) {
+    return trig_memo_call(res, "TrigExpand", builtin_trigexpand_impl);
+}
+
+Expr* builtin_trigfactor(Expr* res) {
+    return trig_memo_call(res, "TrigFactor", builtin_trigfactor_impl);
 }
 
 void trigsimp_init(void) {
