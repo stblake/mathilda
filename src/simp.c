@@ -3009,6 +3009,129 @@ static Expr* simp_split_additive(const Expr* input, const AssumeCtx* ctx,
     return sum;
 }
 
+/* simp_split_multiplicative: the multiplicative analog of
+ * simp_split_additive. Decomposes a Times node whose factors fall into
+ * 2+ variable-disjoint components (with at least one component holding
+ * 2+ factors). Each component's sub-Times is dispatched in isolation,
+ * then the per-component results are multiplied.
+ *
+ * Same correctness argument as the additive splitter: every transform
+ * in SIMP_TRANSFORMS (Together, Cancel, Expand, Factor, TrigExpand,
+ * TrigToExp, TrigFactor, TrigRoundtrip, Collect, Pythag*, half-angle,
+ * Radicals) acts within a single variable's algebraic/trigonometric
+ * structure -- variable-disjoint factors cannot interact under any of
+ * them, so component-wise simplification preserves the answer.
+ *
+ * Without this pass, a stray independent factor inflates simp_search's
+ * effective free-symbol budget and the heuristic gives up. With it,
+ *   Tan[z] Cos[x] Cos[y] Sec[x+y] (Tan[x]+Tan[y])
+ *     -> Tan[z] * simp_dispatch[Cos[x] Cos[y] Sec[x+y] (Tan[x]+Tan[y])]
+ *     -> Tan[z] Tan[x+y]
+ */
+static Expr* simp_split_multiplicative(const Expr* input,
+                                       const AssumeCtx* ctx,
+                                       const Expr* complexity_func) {
+    if (!input || input->type != EXPR_FUNCTION) return NULL;
+    if (!input->data.function.head ||
+        input->data.function.head->type != EXPR_SYMBOL ||
+        strcmp(input->data.function.head->data.symbol, "Times") != 0)
+        return NULL;
+    size_t n = input->data.function.arg_count;
+    if (n < 3) return NULL;
+
+    SplitSymSet* sets = (SplitSymSet*)calloc(n, sizeof(SplitSymSet));
+    int* parent = (int*)malloc(n * sizeof(int));
+    if (!sets || !parent) {
+        free(sets); free(parent);
+        return NULL;
+    }
+    for (size_t i = 0; i < n; i++) {
+        split_symset_init(&sets[i]);
+        split_collect_addend_symbols(input->data.function.args[i], &sets[i]);
+        parent[i] = (int)i;
+    }
+    /* Pairwise union by symbol intersection. Empty sets (constants) stay
+     * in their own singleton component -- no point dragging them in. */
+    for (size_t i = 0; i < n; i++) {
+        if (sets[i].count == 0) continue;
+        for (size_t j = i + 1; j < n; j++) {
+            if (sets[j].count == 0) continue;
+            if (split_symset_intersects(&sets[i], &sets[j])) {
+                split_uf_union(parent, (int)i, (int)j);
+            }
+        }
+    }
+    int* root_per = (int*)malloc(n * sizeof(int));
+    for (size_t i = 0; i < n; i++) root_per[i] = split_uf_find(parent, (int)i);
+    int* size_by_root = (int*)calloc(n, sizeof(int));
+    for (size_t i = 0; i < n; i++) size_by_root[root_per[i]]++;
+
+    int comp_count = 0, max_size = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (size_by_root[i] == 0) continue;
+        comp_count++;
+        if (size_by_root[i] > max_size) max_size = size_by_root[i];
+    }
+    /* Useful split: 2+ components AND at least one component holds 2+
+     * factors (singleton-only splits would just re-dispatch each atom
+     * for no win). */
+    if (comp_count < 2 || max_size < 2) {
+        for (size_t i = 0; i < n; i++) split_symset_free(&sets[i]);
+        free(sets); free(parent); free(root_per); free(size_by_root);
+        return NULL;
+    }
+
+    int* root_to_idx = (int*)malloc(n * sizeof(int));
+    for (size_t i = 0; i < n; i++) root_to_idx[i] = -1;
+    int next_idx = 0;
+    for (size_t i = 0; i < n; i++) {
+        int r = root_per[i];
+        if (root_to_idx[r] == -1) root_to_idx[r] = next_idx++;
+    }
+    Expr*** comp_factors = (Expr***)calloc(comp_count, sizeof(Expr**));
+    int* comp_alloc = (int*)calloc(comp_count, sizeof(int));
+    int* comp_n = (int*)calloc(comp_count, sizeof(int));
+    for (size_t i = 0; i < n; i++) {
+        int idx = root_to_idx[root_per[i]];
+        if (comp_n[idx] == comp_alloc[idx]) {
+            int nc = comp_alloc[idx] == 0 ? 4 : comp_alloc[idx] * 2;
+            comp_factors[idx] = (Expr**)realloc(comp_factors[idx],
+                                                nc * sizeof(Expr*));
+            comp_alloc[idx] = nc;
+        }
+        comp_factors[idx][comp_n[idx]++] =
+            expr_copy(input->data.function.args[i]);
+    }
+
+    Expr** results = (Expr**)calloc(comp_count, sizeof(Expr*));
+    for (int c = 0; c < comp_count; c++) {
+        Expr* sub;
+        if (comp_n[c] == 1) {
+            sub = comp_factors[c][0];
+        } else {
+            Expr* p = expr_new_function(expr_new_symbol("Times"),
+                                        comp_factors[c], comp_n[c]);
+            sub = evaluate(p);
+            expr_free(p);
+        }
+        results[c] = simp_dispatch(sub, ctx, complexity_func);
+        expr_free(sub);
+    }
+    Expr* prod_raw = expr_new_function(expr_new_symbol("Times"),
+                                       results, comp_count);
+    Expr* prod = evaluate(prod_raw);
+    expr_free(prod_raw);
+
+    for (size_t i = 0; i < n; i++) split_symset_free(&sets[i]);
+    free(sets); free(parent); free(root_per); free(size_by_root);
+    free(root_to_idx);
+    for (int c = 0; c < comp_count; c++) free(comp_factors[c]);
+    free(comp_factors); free(comp_alloc); free(comp_n);
+    free(results);
+
+    return prod;
+}
+
 /* simp_dispatch is the public entry point. It runs the shape classifier
  * and forwards to a specialised pipeline. SHAPE_TRIG and SHAPE_GENERAL
  * fall through to simp_search; trig is the heuristic search's strongest
@@ -3021,6 +3144,10 @@ static Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
      * simp_dispatch terminates in one level. */
     Expr* split = simp_split_additive(input, ctx, complexity_func);
     if (split) return split;
+    /* Same idea for Times: lift variable-disjoint factors out of the
+     * search space. */
+    Expr* tsplit = simp_split_multiplicative(input, ctx, complexity_func);
+    if (tsplit) return tsplit;
 
     SimpShape shape = simp_classify(input);
     switch (shape) {

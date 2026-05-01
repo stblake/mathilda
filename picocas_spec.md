@@ -7974,3 +7974,70 @@ under `Plus`'s `Flat | Orderless` attributes).
 `simp_split_additive`; `simp_dispatch` calls it first),
 `tests/test_simplify.c` (one new test
 `test_simplify_trig_radical_angle_addition_two_vars`).
+
+## simp_split_multiplicative: disjoint-variable Times decomposition (2026-05-01)
+
+### Motivation
+
+The multiplicative analog of `simp_split_additive`. A `Times` node
+whose factors fall into 2+ variable-disjoint components inflates
+`simp_search`'s effective free-symbol budget, and the heuristic gives
+up before reaching trig identities that exist within a single
+component. Concretely:
+
+```
+Simplify[Cos[x] Cos[y] Sec[x+y] (Tan[x] + Tan[y])]            -> Tan[x+y]
+Simplify[Tan[z] Cos[x] Cos[y] Sec[x+y] (Tan[x] + Tan[y])]      (no reduction)
+```
+
+The standalone product collapses via `TrigFactor`. Adding the
+disjoint factor `Tan[z]` adds a third free symbol; the search budget
+fans out across more candidates and the reduction never lands.
+
+The full motivating case is the nested tan-addition formula:
+
+```
+Simplify[(Tan[z] + (Tan[x]+Tan[y])/(1 - Tan[x] Tan[y]))
+       / (1 - (Tan[x]+Tan[y]) Tan[z]/(1 - Tan[x] Tan[y]))]   -> Tan[x+y+z]
+```
+
+`simp_bottomup` recurses into the denominator's `Times` subterm
+`Times[-1, Cos[x], Cos[y], Sec[x+y], Tan[z], Plus[Tan[x], Tan[y]]]`,
+where `simp_split_multiplicative` lifts `Tan[z]` (and the literal
+`-1`) into singleton components and dispatches the
+variable-{x,y} subgroup -- which then collapses to `Tan[x+y]`.
+
+### Algorithm
+
+1. Fire only on `Times[a1, a2, ..., an]` with `n >= 3`.
+2. Collect free symbols per factor with the same walker used by the
+   additive splitter (`split_collect_addend_symbols`), so that
+   numeric-constant symbols (Pi, E, ...) and pure function heads
+   (Sin, Cos, ...) are excluded.
+3. Pairwise union-find: two factors are unioned iff their free-symbol
+   sets intersect. Empty sets (numeric-only factors) stay singleton.
+4. Bail out unless the partition gives 2+ components AND at least one
+   component holds 2+ factors. (A 4-singleton split would just
+   re-dispatch every atom for no win.)
+5. For each component, build a sub-`Times`, evaluate it (so canonical
+   form invariants hold), and recursively `simp_dispatch` it.
+6. Multiply the per-component results back together and return the
+   evaluated product.
+
+### Why disjoint factor splits are safe
+
+Same argument as the additive case. Every transform in
+`SIMP_TRANSFORMS` (`Together`, `Cancel`, `Expand`, `Factor`,
+`TrigExpand`, `TrigToExp`, `TrigFactor`, `TrigRoundtrip`,
+`Collect[_, _]`, the Pythagorean rules, half-angle, `Radicals`) acts
+within a single variable's algebraic or trigonometric structure.
+Variable-disjoint factors share no common base, no common angle, no
+common Pythagorean pair -- so the product of the per-component
+simplifications equals the simplification of the whole product,
+modulo `Times`'s `Flat | Orderless` canonicalisation (which the
+final `evaluate` restores).
+
+### Files touched
+
+`src/simp.c` (new `simp_split_multiplicative`; `simp_dispatch` calls
+it after `simp_split_additive`).

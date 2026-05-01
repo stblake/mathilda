@@ -388,6 +388,31 @@ void test_simplify_trig_radical_angle_addition_two_vars(void) {
         "0", 0);
 }
 
+/* Multiplicative analog of the disjoint-Plus split: the inner subterm
+ * Cos[x] Cos[y] Sec[x+y] (Tan[x] + Tan[y]) collapses to Tan[x+y] in
+ * isolation, but adding the variable-disjoint factor Tan[z] inflates
+ * simp_search's free-symbol budget and the heuristic gives up.
+ * simp_split_multiplicative lifts Tan[z] into a singleton component
+ * and dispatches the remaining {x,y}-component, recovering the
+ * reduction. */
+void test_simplify_trig_split_multiplicative_extra_factor(void) {
+    assert_eval_eq(
+        "Simplify[Cos[x] Cos[y] Sec[x+y] Tan[z] (Tan[x] + Tan[y])]",
+        "Tan[z] Tan[x + y]", 0);
+}
+
+/* Nested tan(α+β+γ) addition formula. The denominator's disjoint
+ * Tan[z] factor would otherwise block the inner Tan[x+y] reduction;
+ * with simp_split_multiplicative wired in, the whole expression
+ * collapses through two nested applications of the tan-addition
+ * recogniser. */
+void test_simplify_tan_three_angle_addition(void) {
+    assert_eval_eq(
+        "Simplify[(Tan[z] + (Tan[x] + Tan[y])/(1 - Tan[x] Tan[y]))/"
+        "(1 - (Tan[x] + Tan[y]) Tan[z]/(1 - Tan[x] Tan[y]))]",
+        "Tan[x + y + z]", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -451,6 +476,8 @@ int main(void) {
     TEST(test_simplify_sin_triple_angle_collapse);
     TEST(test_simplify_trig_radical_angle_addition);
     TEST(test_simplify_trig_radical_angle_addition_two_vars);
+    TEST(test_simplify_trig_split_multiplicative_extra_factor);
+    TEST(test_simplify_tan_three_angle_addition);
 
     printf("All Simplify tests passed!\n");
     return 0;
