@@ -751,8 +751,70 @@ static void dixon_factor_mpz(mpz_t factor, mpz_t n) {
 }
 
 
+/* Try a single (a, b) pair: assume p ~ c*(a/b)^k, descend Q <- floor(b*Q/a)
+ * and probe gcd(Q +/- j, n) for small j. Returns 1 if a non-trivial factor
+ * is set in `factor`, 0 otherwise. Requires a > b > 0. */
+static int rbd_try_pair(mpz_t factor, const mpz_t n,
+                        const mpz_t a, const mpz_t b) {
+    if (mpz_sgn(b) <= 0 || mpz_cmp(a, b) <= 0) return 0;
+
+    mpz_t diff, search_limit_z, tmp;
+    mpz_inits(diff, search_limit_z, tmp, NULL);
+    mpz_sub(diff, a, b);
+
+    /* search_limit ~ (2a - b - 1)/(a - b) + 2: small for a/b far from 1,
+     * larger when the descent step is gentle. */
+    mpz_add(tmp, a, diff);
+    mpz_sub_ui(tmp, tmp, 1);
+    mpz_fdiv_q(search_limit_z, tmp, diff);
+    mpz_add_ui(search_limit_z, search_limit_z, 2);
+
+    if (!mpz_fits_ulong_p(search_limit_z)) {
+        mpz_clears(diff, search_limit_z, tmp, NULL);
+        return 0;
+    }
+    unsigned long search_limit = mpz_get_ui(search_limit_z);
+
+    mpz_t Q, g;
+    mpz_init_set(Q, n);
+    mpz_init(g);
+
+    int found = 0;
+    while (1) {
+        mpz_mul(tmp, b, Q);
+        mpz_fdiv_q(Q, tmp, a);
+
+        if (mpz_cmp_ui(Q, 2) < 0) break;
+
+        for (unsigned long j = 0; j <= search_limit; j++) {
+            mpz_sub_ui(tmp, Q, j);
+            mpz_gcd(g, tmp, n);
+            if (mpz_cmp_ui(g, 1) > 0 && mpz_cmp(g, n) < 0) {
+                mpz_set(factor, g);
+                found = 1;
+                goto done;
+            }
+
+            if (j > 0) {
+                mpz_add_ui(tmp, Q, j);
+                mpz_gcd(g, tmp, n);
+                if (mpz_cmp_ui(g, 1) > 0 && mpz_cmp(g, n) < 0) {
+                    mpz_set(factor, g);
+                    found = 1;
+                    goto done;
+                }
+            }
+        }
+    }
+
+done:
+    mpz_clears(diff, search_limit_z, tmp, Q, g, NULL);
+    return found;
+}
+
 static void rbd_factor_mpz(mpz_t factor, mpz_t n, Expr* method_opt) {
     mpz_set_ui(factor, 0);
+    if (mpz_cmp_ui(n, 4) < 0) return;
     if (mpz_even_p(n)) {
         mpz_set_ui(factor, 2);
         return;
@@ -761,78 +823,55 @@ static void rbd_factor_mpz(mpz_t factor, mpz_t n, Expr* method_opt) {
         mpz_sqrt(factor, n);
         return;
     }
-    
+
     mpz_t a, b;
     mpz_inits(a, b, NULL);
     mpz_set_ui(b, 1);
-    
-    bool valid = false;
+
+    bool have_base = false;
     if (method_opt) {
-        if (method_opt->type == EXPR_FUNCTION && method_opt->data.function.head->type == EXPR_SYMBOL && strcmp(method_opt->data.function.head->data.symbol, "Rational") == 0 && method_opt->data.function.arg_count == 2) {
+        if (method_opt->type == EXPR_FUNCTION
+            && method_opt->data.function.head->type == EXPR_SYMBOL
+            && strcmp(method_opt->data.function.head->data.symbol, "Rational") == 0
+            && method_opt->data.function.arg_count == 2) {
             expr_to_mpz(method_opt->data.function.args[0], a);
             expr_to_mpz(method_opt->data.function.args[1], b);
-            valid = true;
-        } else if (method_opt->type == EXPR_INTEGER || method_opt->type == EXPR_BIGINT) {
+            have_base = true;
+        } else if (method_opt->type == EXPR_INTEGER
+                   || method_opt->type == EXPR_BIGINT) {
             expr_to_mpz(method_opt, a);
-            valid = true;
+            have_base = true;
         }
     }
-    
-    if (!valid || mpz_cmp(a, b) <= 0) {
+
+    if (have_base) {
+        rbd_try_pair(factor, n, a, b);
         mpz_clears(a, b, NULL);
         return;
     }
-    
-    mpz_t diff, search_limit_z;
-    mpz_inits(diff, search_limit_z, NULL);
-    mpz_sub(diff, a, b);
-    
-    mpz_t tmp;
-    mpz_init(tmp);
-    mpz_add(tmp, a, diff);
-    mpz_sub_ui(tmp, tmp, 1);
-    mpz_fdiv_q(search_limit_z, tmp, diff);
-    mpz_add_ui(search_limit_z, search_limit_z, 2);
-    
-    if (!mpz_fits_ulong_p(search_limit_z)) {
-        mpz_clears(a, b, diff, search_limit_z, tmp, NULL);
-        return;
-    }
-    unsigned long search_limit = mpz_get_ui(search_limit_z);
-    
-    mpz_t Q, g;
-    mpz_init_set(Q, n);
-    mpz_init(g);
-    
-    while (1) {
-        mpz_mul(tmp, b, Q);
-        mpz_fdiv_q(Q, tmp, a);
-        
-        if (mpz_cmp_ui(Q, 2) < 0) {
-            break;
-        }
-        
-        for (unsigned long j = 0; j <= search_limit; j++) {
-            mpz_sub_ui(tmp, Q, j);
-            mpz_gcd(g, tmp, n);
-            if (mpz_cmp_ui(g, 1) > 0 && mpz_cmp(g, n) < 0) {
-                mpz_set(factor, g);
-                goto end_rbd;
-            }
-            
-            if (j > 0) {
-                mpz_add_ui(tmp, Q, j);
-                mpz_gcd(g, tmp, n);
-                if (mpz_cmp_ui(g, 1) > 0 && mpz_cmp(g, n) < 0) {
-                    mpz_set(factor, g);
-                    goto end_rbd;
-                }
+
+    /* No explicit base: walk j = 3, 4, ... unbounded and try every coprime
+     * partition a + b = j with a > b >= 1. Mirrors the reference Python
+     * factor_rational_base() exhaustive search; runs until a factor is
+     * found (or the user interrupts). */
+    for (unsigned long j = 3; ; j++) {
+        for (unsigned long bb = 1; 2 * bb < j; bb++) {
+            unsigned long aa = j - bb;
+            /* coprimality */
+            unsigned long u = aa, v = bb;
+            while (v) { unsigned long t = u % v; u = v; v = t; }
+            if (u != 1) continue;
+
+            mpz_set_ui(a, aa);
+            mpz_set_ui(b, bb);
+            if (rbd_try_pair(factor, n, a, b)) {
+                mpz_clears(a, b, NULL);
+                return;
             }
         }
     }
-    
-end_rbd:
-    mpz_clears(a, b, diff, search_limit_z, tmp, Q, g, NULL);
+
+    mpz_clears(a, b, NULL);
 }
 
 static int squfof_single(mpz_t f, const mpz_t n, unsigned long k, unsigned long max_iters) {
@@ -1247,6 +1286,7 @@ Expr* builtin_factorinteger(Expr* res) {
                     else if (strcmp(rhs->data.string, "WilliamsP+1") == 0) method = METHOD_WILLIAMS_P1;
                     else if (strcmp(rhs->data.string, "Dixon") == 0) method = METHOD_DIXON;
                     else if (strcmp(rhs->data.string, "ShanksSquareForms") == 0) method = METHOD_SQUFOF;
+                    else if (strcmp(rhs->data.string, "BlakeRationalBaseDescent") == 0) method = METHOD_RBD;
                     else if (strcmp(rhs->data.string, "Automatic") == 0) method = METHOD_AUTOMATIC;
                 } else if (rhs->type == EXPR_SYMBOL && strcmp(rhs->data.symbol, "Automatic") == 0) {
                     method = METHOD_AUTOMATIC;
