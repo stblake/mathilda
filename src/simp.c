@@ -3033,10 +3033,46 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
                         expr_free(pr);
                     }
                 }
+                /* Chain a simp_radicals pass on the transform output.
+                 * Together / Cancel after TrigExpand can surface
+                 * intermediate forms with adjacent radical factors
+                 * (Sqrt[a] Sqrt[b]) -- e.g.
+                 * Together[4/3 Sin/Sqrt[2] - 2/9 Sqrt[3] Sqrt[6] Sin + ...]
+                 *   -> (-12 Sqrt[2] Sqrt[3] Sin + 12 Sqrt[6] Sin)/(9 Sqrt[2] Sqrt[6])
+                 * whose combination collapses the numerator to 0. Without
+                 * this chain, simp_radicals would only fire when r becomes
+                 * a seed next round -- which doesn't happen at the final
+                 * round. */
+                {
+                    Expr* rd = simp_radicals(r);
+                    if (rd) {
+                        if (!expr_eq(rd, r)) {
+                            update_best(&best, &best_score, rd, complexity_func);
+                        }
+                        expr_free(rd);
+                    }
+                }
                 if (expr_eq(r, seed)) {
                     expr_free(r);
                 } else if (score_with_func(r, complexity_func) > parent_score) {
-                    expr_free(r);
+                    /* TrigExpand expands Sin[a+b]/Cos[a+b] into
+                     * Sin[a]Cos[b]+Cos[a]Sin[b] etc., which usually grows
+                     * the leaf count but surfaces radical products
+                     * (Sqrt[a]Sqrt[b]) and rationalisable coefficients that
+                     * subsequent transforms (Together, simp_radicals,
+                     * Collect) can collapse -- sometimes all the way to 0.
+                     * The default score gate would drop those candidates;
+                     * loosen it for TrigExpand using the same bound
+                     * TrigRoundtrip uses at the seed phase (2*input + 8) so
+                     * pathological blow-ups (Sin[a+b+c+d]) still get
+                     * pruned. */
+                    if (strcmp(SIMP_TRANSFORMS[t], "TrigExpand") == 0 &&
+                        score_with_func(r, complexity_func) <=
+                            2 * parent_score + 8) {
+                        cs_add_or_free(&next, r);
+                    } else {
+                        expr_free(r);
+                    }
                 } else {
                     cs_add_or_free(&next, r);
                 }

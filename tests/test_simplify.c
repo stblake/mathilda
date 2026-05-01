@@ -357,6 +357,22 @@ void test_simplify_sin_triple_angle_collapse(void) {
                    "-3 Sin[x]^3", 0);
 }
 
+/* Linear combination of rationalised trig terms vs. its angle-addition
+ * form. Validates the TrigExpand seed-propagation gate (allowing the
+ * expanded candidate through the round loop despite a higher leaf count)
+ * combined with the chained simp_radicals pass on transform outputs.
+ *   e1 = (Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2]) (1 + 1/3)
+ *   e2 = (4/9) Sqrt[6] Sin[Pi/6 + x]
+ * Expanding Sin[Pi/6 + x] in e2, fusing Sqrt[3] Sqrt[6] -> Sqrt[18] -> 3 Sqrt[2]
+ * via simp_radicals on the Together intermediate, and combining like Sin[x] /
+ * Cos[x] coefficients drives the difference to 0. */
+void test_simplify_trig_radical_angle_addition(void) {
+    assert_eval_eq(
+        "Simplify[(Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2] + Cos[x]/Sqrt[6]/3 + "
+        "Sin[x]/Sqrt[2]/3) - 4 Sqrt[6] Sin[x + Pi/6]/9]",
+        "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -418,6 +434,7 @@ int main(void) {
     TEST(test_simplify_pythag_reduce_sinh_cube);
     TEST(test_simplify_pythag_reduce_cosh_cube);
     TEST(test_simplify_sin_triple_angle_collapse);
+    TEST(test_simplify_trig_radical_angle_addition);
 
     printf("All Simplify tests passed!\n");
     return 0;

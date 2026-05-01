@@ -7862,3 +7862,53 @@ short-circuits to a copy.
 `tests/test_simplify.c` (seven new test cases covering two-, three-,
 and cube-root combines, perfect-square collapse, the targeted
 cancellation cases, and the symbolic-base no-op).
+
+## TrigExpand seed propagation + chained simp_radicals (2026-05-01)
+
+Two follow-on changes to `simp_search` (`src/simp.c`) so that linear
+combinations of rationalised trig terms now collapse against their
+angle-addition forms. Concretely:
+
+    e1 = (Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2])(1 + 1/3)
+    e2 = (4/9) Sqrt[6] Sin[x + Pi/6]
+    Simplify[e1 - e2]                    →  0
+
+Previously `Simplify` returned the input unchanged because the
+`TrigExpand` candidate -- which expands `Sin[x + Pi/6]` into
+`(1/2) Cos[x] + (Sqrt[3]/2) Sin[x]` and surfaces `Sqrt[3] Sqrt[6]`
+products -- has a higher leaf count than the input, so the round-loop
+score gate dropped it before `Together` / `simp_radicals` got a chance
+to combine and cancel.
+
+### Change 1: TrigExpand bypasses the score gate, with a bound
+
+In the round loop's standard transform dispatcher, when the firing
+transform is `TrigExpand` and the result has higher leaf count than
+the seed, the result is still added to the next round's seed set
+provided `score(r) <= 2 * parent_score + 8` (the same bound
+`TrigRoundtrip` uses at the seed phase). This lets the expanded form
+seed a follow-on round of `Together` / `Cancel` / `simp_radicals` /
+per-variable `Collect` while still pruning pathological blow-ups
+(e.g. `Sin[a + b + c + d]` cascades).
+
+### Change 2: simp_radicals chained on transform outputs
+
+After every `SIMP_TRANSFORMS` entry fires, the result is passed
+through `simp_radicals` and `update_best`-tested before being
+score-gated for next-round propagation. This mirrors the chained
+`transform_pythag_reduce` pass already in place. Without it, a
+`Together` output like
+
+    (1/9 (-12 Sqrt[2] Sqrt[3] Sin[x] + 12 Sqrt[6] Sin[x])) /
+        (Sqrt[2] Sqrt[6])
+
+would only feed `simp_radicals` after becoming a seed in the next
+round -- which doesn't happen at the final round (`SIMP_ROUNDS = 2`).
+Chaining catches the `Sqrt[2] Sqrt[3] -> Sqrt[6]` fusion that drives
+the numerator to zero.
+
+### Files touched
+
+`src/simp.c` (round-loop score gate + chained simp_radicals),
+`tests/test_simplify.c` (one new test
+`test_simplify_trig_radical_angle_addition`).
