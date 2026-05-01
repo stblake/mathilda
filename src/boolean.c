@@ -18,7 +18,11 @@ Expr* builtin_not(Expr* res) {
 Expr* builtin_and(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count == 0) return expr_new_symbol("True");
-    
+    if (res->data.function.arg_count == 1) {
+        /* And has HoldAll, so the single arg has not been evaluated yet. */
+        return evaluate(res->data.function.args[0]);
+    }
+
     bool changed = false;
     Expr** new_args = malloc(sizeof(Expr*) * res->data.function.arg_count);
     size_t new_count = 0;
@@ -60,7 +64,11 @@ Expr* builtin_and(Expr* res) {
 Expr* builtin_or(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count == 0) return expr_new_symbol("False");
-    
+    if (res->data.function.arg_count == 1) {
+        /* Or has HoldAll, so the single arg has not been evaluated yet. */
+        return evaluate(res->data.function.args[0]);
+    }
+
     bool changed = false;
     Expr** new_args = malloc(sizeof(Expr*) * res->data.function.arg_count);
     size_t new_count = 0;

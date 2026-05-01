@@ -7682,3 +7682,108 @@ F3 motivating case.  Tracing showed the hang is actually inside
 factorizer -- before the bivariate path runs.  `Factor[x^13 - x]`
 and `Factor[x^13 - 1]` hang in isolation.  Fixing that is a separate
 task (univariate BZ performance, not bivariate Hensel).
+
+
+## Evaluator alignment with Withoff §3.1 (M1 milestone, 2026-05-01)
+
+The PicoCAS evaluator (`src/eval.c::evaluate_step`) was audited against
+the algorithm described in David Withoff's 1992 *Mathematica Internals:
+A Tutorial* (§3.1). Five correctness gaps were closed. All 79 unit tests
+continue to pass.
+
+### 1. Flat now runs before Listable
+
+The structural-attribute order is now `Flat → Sequence (already done) →
+Listable → Orderless`, matching Withoff §3.1. Previously Listable ran
+first and missed lists that only surfaced after flattening. Concretely,
+`Plus[Plus[a, {1,2}], 3]` now correctly threads to `{4 + a, 5 + a}` —
+Flat first promotes the inner `Plus` so that Listable sees the list arg.
+
+### 2. User DownValues now run before built-ins
+
+The dispatch order inside `evaluate_step` is now:
+
+1. apply user-defined DownValues
+2. call the head's `builtin_func` (the equivalent of Mathematica's
+   internal "down code")
+3. handle `Set` / `SetDelayed` primitives
+
+Mathematica's documented order is "user rules first, then internal".
+Protected symbols are unaffected because `apply_assignment` already
+refuses to install DownValues on a Protected target. The visible effect
+is that a user can override a non-Protected built-in if one exists,
+matching Mathematica behaviour.
+
+### 3. OneIdentity restricted to pattern matching
+
+`ATTR_ONEIDENTITY` is no longer applied as an evaluation rewrite. The
+1-arg collapse (`Plus[x] → x`, `Times[x] → x`, `Power[x] → x`,
+`GCD[x] → x`, `LCM[x] → x`, `And[x] → x`, `Or[x] → x`, `Dot[x] → x`)
+is now performed inside each head's builtin via an explicit
+`if (n == 1) return expr_copy(args[0])` early-return. Pattern-matching
+OneIdentity in `src/match.c` is unchanged.
+
+The visible behaviour change: a user-defined OneIdentity head that has
+no rule of its own no longer collapses. For example,
+
+    SetAttributes[g, OneIdentity]
+    g[x]               (* now stays as g[x], previously rewrote to x *)
+
+This matches Mathematica's actual semantics for OneIdentity (it is a
+pattern-matching attribute, not an evaluation-time rewrite). Builtins
+modified to handle `n == 1` themselves: `builtin_plus`, `builtin_times`
+(both already had it), `builtin_power`, `builtin_gcd`, `builtin_lcm`,
+`builtin_and`, `builtin_or`.
+
+### 4. HoldAllComplete no longer short-circuits the evaluator
+
+Previously, a head with `ATTR_HOLDALLCOMPLETE` caused `evaluate_step`
+to return immediately, skipping built-ins, DownValues, Flat,
+Listable, and Orderless. This made it impossible for a HoldAllComplete
+head to do useful work via its builtin or rules.
+
+The new behaviour suppresses only:
+
+- argument evaluation (including the `Evaluate[]` override)
+- `Sequence` flattening
+- `Unevaluated` stripping
+- `Flat` flattening (matches Mathematica's documented HoldAllComplete
+  behaviour)
+
+…but lets built-ins and DownValues attached to the head still run.
+For example:
+
+    Length[HoldComplete[a, b, c]]    →    3
+    HoldComplete[Sequence[a, b, c]]  →    HoldComplete[Sequence[a, b, c]]
+    HoldComplete[Unevaluated[1+2]]   →    HoldComplete[Unevaluated[1 + 2]]
+
+### 5. $RecursionLimit C-stack guard
+
+Nested `evaluate()` calls now track a static depth counter (the REPL is
+single-threaded so a static suffices). When the counter would exceed
+`eval_recursion_limit` (default 512), the input is wrapped in `Hold[]`,
+a sticky `eval_overflow` flag is set, and a `$RecursionLimit::reclim`
+message is emitted. Every enclosing fixed-point loop checks the flag
+on each iteration and bails out so the unwind doesn't burn
+`$IterationLimit` × 512 iterations of redundant rewrite attempts.
+
+Concretely, a self-referential rule like
+
+    f[x_] := f[x] + 1
+    f[1]
+
+now terminates in milliseconds with a clear `$RecursionLimit` message
+rather than running C-stack-bound recursion plus `$IterationLimit`
+worth of futile rewrites at every depth.
+
+The limit is settable via `eval_set_recursion_limit(int n)` from C;
+exposing it as a user-facing `$RecursionLimit` symbol (read/write
+through OwnValues) is a follow-up item.
+
+### Files touched
+
+`src/eval.c`, `src/eval.h`, `src/arithmetic.c`, `src/boolean.c`,
+`src/power.c`, plus the new planning document
+`EVAL_IMPROVEMENTS_PLAN.md` which sets out the wider Withoff-alignment
+roadmap (M2 onwards covers UpValues, SubValues, NValues, Messages,
+symbol interning, refcounted expressions, evaluation timestamps).

@@ -32,6 +32,7 @@ Expr* builtin_gcd(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
     if (count == 0) return expr_new_integer(0);
+    if (count == 1) return expr_copy(res->data.function.args[0]);
 
     // Single pass: detect any bigint while confirming all args are integer-like
     bool any_bigint = false, all_integer_like = true;
@@ -79,6 +80,7 @@ Expr* builtin_lcm(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
     if (count == 0) return expr_new_integer(1);
+    if (count == 1) return expr_copy(res->data.function.args[0]);
 
     int64_t running_n = 0;
     int64_t running_d = 0;

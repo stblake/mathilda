@@ -160,10 +160,11 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
 
 Expr* builtin_power(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    
+
     size_t n_args = res->data.function.arg_count;
-    if (n_args == 0) return NULL; 
-    
+    if (n_args == 0) return NULL;
+    if (n_args == 1) return expr_copy(res->data.function.args[0]);
+
     if (n_args > 2) {
         Expr** sub_args = malloc(sizeof(Expr*) * (n_args - 1));
         for (size_t i = 0; i < n_args - 1; i++) {

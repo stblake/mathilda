@@ -18,11 +18,40 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* 
+/*
  * The maximum number of evaluation steps to prevent infinite recursion
- * in cases of circular definitions. 
+ * in cases of circular definitions.
  */
 #define MAX_ITERATIONS 4096
+
+/*
+ * $RecursionLimit guard. The REPL is single-threaded so a static counter
+ * suffices. Each call to evaluate() bumps eval_recursion_depth on entry and
+ * decrements on exit; if the depth would exceed eval_recursion_limit we
+ * return the expression wrapped in Hold[] (so it cannot re-enter the
+ * evaluator) and emit a $RecursionLimit::reclim message.
+ *
+ * The default of 512 leaves comfortable headroom under the typical 8 MB
+ * thread stack while still catching pathological recursion (e.g. a self-
+ * referential rule like f[x_] := f[x] + 1).
+ */
+#define DEFAULT_RECURSION_LIMIT 512
+static int  eval_recursion_depth = 0;
+static int  eval_recursion_limit = DEFAULT_RECURSION_LIMIT;
+/* Once the recursion limit is hit anywhere in the evaluation tree, this
+ * sticky flag tells *every* enclosing evaluate() loop to stop iterating
+ * and return its current value. Without it, the wrap-in-Hold result
+ * causes outer fixed-point loops to perceive endless "progress" (each
+ * iteration adds another Hold wrapper) and chew through all 4096
+ * outer iterations at every level of the unwind. The flag is cleared
+ * at the top of each top-level evaluate() call. */
+static bool eval_overflow = false;
+
+int  eval_get_recursion_limit(void) { return eval_recursion_limit; }
+int  eval_get_recursion_depth(void) { return eval_recursion_depth; }
+void eval_set_recursion_limit(int n) {
+    eval_recursion_limit = (n > 0) ? n : DEFAULT_RECURSION_LIMIT;
+}
 
 /*
  * eval_compare_expr_ptrs:
@@ -359,30 +388,31 @@ Expr* evaluate_step(Expr* e) {
                 attrs = pure_function_attributes(head);
             }
             
-            /* 2. Handle 'Hold' attributes */
-            
-            /* ATTR_HOLDALLCOMPLETE: Do not evaluate arguments or process attributes */
-            if (attrs & ATTR_HOLDALLCOMPLETE) {
-                Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
-                for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                    new_args[i] = expr_copy(e->data.function.args[i]);
-                }
-                Expr* ret = expr_new_function(head, new_args, e->data.function.arg_count);
-                free(new_args);
-                return ret;
-            }
-            
-            /* Evaluate arguments unless suppressed by HoldFirst, HoldRest, or HoldAll */
+            /* 2. Handle 'Hold' attributes.
+             *
+             * HoldAllComplete is like HoldAll but additionally suppresses
+             * Sequence flattening, Unevaluated stripping, Flat flattening,
+             * and (eventually) UpValues lookup. Inside a HoldAllComplete
+             * head, Evaluate[expr] does NOT force evaluation. Built-ins and
+             * DownValues attached to the head still apply -- this is what
+             * lets Hold-style heads do useful work (e.g. Length[Hold[a,b,c]]
+             * via the down code on Hold). */
+            bool hold_all_complete = (attrs & ATTR_HOLDALLCOMPLETE) != 0;
+
+            /* Evaluate arguments unless suppressed by HoldFirst, HoldRest,
+             * HoldAll, or HoldAllComplete. */
             Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                bool hold = false;
+                bool hold = hold_all_complete;
                 if (i == 0 && (attrs & ATTR_HOLDFIRST)) hold = true;
                 if (i > 0 && (attrs & ATTR_HOLDREST)) hold = true;
 
                 if (hold) {
-                    /* Check for Evaluate[expr] - overrides Hold attributes */
+                    /* Check for Evaluate[expr] - overrides HoldFirst/HoldRest/HoldAll
+                     * but NOT HoldAllComplete. */
                     Expr* arg = e->data.function.args[i];
-                    if (arg->type == EXPR_FUNCTION &&
+                    if (!hold_all_complete &&
+                        arg->type == EXPR_FUNCTION &&
                         arg->data.function.head->type == EXPR_SYMBOL &&
                         strcmp(arg->data.function.head->data.symbol, "Evaluate") == 0 &&
                         arg->data.function.arg_count == 1) {
@@ -398,8 +428,12 @@ Expr* evaluate_step(Expr* e) {
             Expr* res = expr_new_function(head, new_args, e->data.function.arg_count);
             free(new_args);
             
-    /* 2.5 Flatten Sequences - must happen before attributes */
-    if (head->type == EXPR_SYMBOL &&
+    /* 2.5 Flatten Sequences - must happen before attributes.
+     * Suppressed under HoldAllComplete and inside Set/SetDelayed/Rule/RuleDelayed
+     * (whose pattern syntax preserves Sequence as a literal head). */
+    if (hold_all_complete) {
+        /* HoldAllComplete leaves Sequence intact */
+    } else if (head->type == EXPR_SYMBOL &&
         (strcmp(head->data.symbol, "Set") == 0 || strcmp(head->data.symbol, "SetDelayed") == 0 ||
          strcmp(head->data.symbol, "Rule") == 0 || strcmp(head->data.symbol, "RuleDelayed") == 0)) {
         // Do not flatten sequences in assignments or rules
@@ -417,7 +451,7 @@ Expr* evaluate_step(Expr* e) {
              * stays as Hold[Unevaluated[1+2]]) and for HoldAllComplete heads
              * (already handled by the early return above). */
             for (size_t i = 0; i < res->data.function.arg_count; i++) {
-                bool held = false;
+                bool held = hold_all_complete;
                 if (i == 0 && (attrs & ATTR_HOLDFIRST)) held = true;
                 if (i > 0 && (attrs & ATTR_HOLDREST)) held = true;
                 if (held) continue;
@@ -433,7 +467,17 @@ Expr* evaluate_step(Expr* e) {
                 }
             }
 
-            /* 3. Apply structural and semantic attributes */
+            /* 3. Apply structural and semantic attributes.
+             * Order follows Withoff §3.1: Flat → Sequence (already done above) →
+             * Listable → Orderless. Flat must run before Listable so that lists
+             * exposed by flattening get threaded, e.g. Plus[Plus[a,{1,2}],3]
+             * → Plus[a,{1,2},3] → {Plus[a,1,3], Plus[a,2,3]}. */
+
+            /* Flat: associative flattening (requires symbolic head, suppressed by HoldAllComplete) */
+            if (head->type == EXPR_SYMBOL && (attrs & ATTR_FLAT) && !hold_all_complete) {
+                eval_flatten_args(res, head->data.symbol);
+            }
+
             /* Listable: automatic threading */
             if ((attrs & ATTR_LISTABLE) && has_list_arg(res)) {
                 Expr* list_res = apply_listable(res);
@@ -445,18 +489,27 @@ Expr* evaluate_step(Expr* e) {
 
             if (head->type == EXPR_SYMBOL) {
                 const char* head_name = head->data.symbol;
-                
-                /* Flat: associative flattening */
-                if (attrs & ATTR_FLAT) {
-                    eval_flatten_args(res, head_name);
-                }
-                
+
                 /* Orderless: commutative sorting */
                 if (attrs & ATTR_ORDERLESS) {
                     qsort(res->data.function.args, res->data.function.arg_count, sizeof(Expr*), eval_compare_expr_ptrs);
                 }
 
-                /* 4. Call C-level Built-in Functions */
+                /* 4. Apply user-defined DownValues FIRST (Withoff §3.1).
+                 * In Mathematica's evaluation pipeline, user-defined
+                 * DownValues take precedence over internal "down code"
+                 * (built-in implementations). This lets a user override
+                 * a built-in for non-Protected symbols, while Protected
+                 * symbols (which is most builtin-bearing heads) are
+                 * unaffected because apply_assignment refuses to install
+                 * DownValues on a Protected target. */
+                Expr* down = apply_down_values(res);
+                if (down) {
+                    expr_free(res);
+                    return down;
+                }
+
+                /* 5. Call C-level Built-in Functions (internal "down code") */
                 SymbolDef* def = symtab_get_def(head_name);
                 if (def && def->builtin_func) {
                     Expr* ret = def->builtin_func(res);
@@ -465,8 +518,8 @@ Expr* evaluate_step(Expr* e) {
                         return ret;
                     }
                 }
-                
-                /* 5. Special primitives (Set, SetDelayed) */
+
+                /* 6. Special primitives (Set, SetDelayed) */
                 if ((strcmp(head_name, "Set") == 0 || strcmp(head_name, "SetDelayed") == 0) && res->data.function.arg_count == 2) {
                     Expr* lhs = res->data.function.args[0];
                     Expr* rhs = res->data.function.args[1];
@@ -536,19 +589,17 @@ Expr* evaluate_step(Expr* e) {
                     if (free_target) expr_free(target_lhs);
                 }
                 
-                /* 6. Apply User-defined Rules (DownValues) via Pattern Matching */
-                Expr* down = apply_down_values(res);
-                if (down) {
-                    expr_free(res);
-                    return down;
-                }
-
-                /* OneIdentity: f[x] -> x if f is OneIdentity and no other rules applied */
-                if ((attrs & ATTR_ONEIDENTITY) && res->data.function.arg_count == 1) {
-                    Expr* inner = expr_copy(res->data.function.args[0]);
-                    expr_free(res);
-                    return inner;
-                }
+                /* OneIdentity is intentionally NOT rewritten at evaluation
+                 * time. In Mathematica it is purely a pattern-matching
+                 * attribute: it lets f[x_, y_:def] match a literal `a`.
+                 * The 1-arg collapse f[x] -> x is the responsibility of
+                 * each head's builtin (Plus, Times, Power, GCD, LCM, And,
+                 * Or, Dot all handle the n==1 case explicitly), so a
+                 * user-defined OneIdentity head like
+                 *   SetAttributes[g, OneIdentity]
+                 * leaves g[x] as g[x] rather than rewriting to x.
+                 * The pattern-matching half lives in src/match.c (search
+                 * for ATTR_ONEIDENTITY). */
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
                        strcmp(head->data.function.head->data.symbol, "Function") == 0) {
 
@@ -589,26 +640,59 @@ Expr* evaluate_step(Expr* e) {
  */
 Expr* evaluate(Expr* e) {
     if (!e) return NULL;
-    
+
+    bool is_top_level = (eval_recursion_depth == 0);
+    if (is_top_level) eval_overflow = false;
+
+    /* Guard the C stack: when nested evaluate() calls would exceed the
+     * recursion limit, wrap the input in Hold[] so it stops re-entering
+     * the evaluator, set the sticky overflow flag so all enclosing
+     * fixed-point loops bail, and emit a message exactly once per
+     * top-level evaluation. */
+    if (eval_recursion_depth >= eval_recursion_limit) {
+        if (!eval_overflow) {
+            fprintf(stderr,
+                    "$RecursionLimit::reclim: Recursion depth of %d exceeded.\n",
+                    eval_recursion_limit);
+        }
+        eval_overflow = true;
+        Expr** wrap = malloc(sizeof(Expr*));
+        wrap[0] = expr_copy(e);
+        Expr* held = expr_new_function(expr_new_symbol("Hold"), wrap, 1);
+        free(wrap);
+        return held;
+    }
+
+    eval_recursion_depth++;
+
     Expr* current = expr_copy(e);
     Expr* next = NULL;
     int iterations = 0;
-    
+
     while (iterations < MAX_ITERATIONS) {
         next = evaluate_step(current);
-        
+
         /* Fixed point check: if step produced an identical expression, we are done */
         if (expr_eq(current, next)) {
             expr_free(next);
+            eval_recursion_depth--;
             return current;
         }
-        
+
         /* Prepare for the next iteration */
         expr_free(current);
         current = next;
         iterations++;
+
+        /* If a deeper call hit the recursion limit, the rewrites
+         * above are no longer making real progress -- bail out so the
+         * unwind doesn't burn $IterationLimit at every level. */
+        if (eval_overflow) break;
     }
-    
-    fprintf(stderr, "$IterationLimit exceeded\n");
+
+    if (iterations >= MAX_ITERATIONS) {
+        fprintf(stderr, "$IterationLimit exceeded\n");
+    }
+    eval_recursion_depth--;
     return current;
 }

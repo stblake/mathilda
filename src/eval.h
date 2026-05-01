@@ -11,6 +11,13 @@ Expr* evaluate_step(Expr* e);
 // Full infinite evaluation loop (stops at fixed point)
 Expr* evaluate(Expr* e);
 
+// Recursion-depth limit for nested evaluate() calls. Guards C-stack overflow
+// when expressions trigger deeply recursive sub-evaluation (Listable, Flat,
+// user DownValues that re-evaluate, etc.). Default 512.
+int  eval_get_recursion_limit(void);
+void eval_set_recursion_limit(int n);
+int  eval_get_recursion_depth(void);
+
 // Helper to evaluate and free the input expression
 static inline Expr* eval_and_free(Expr* e) {
     if (!e) return NULL;
