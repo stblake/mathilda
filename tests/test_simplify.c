@@ -373,6 +373,21 @@ void test_simplify_trig_radical_angle_addition(void) {
         "0", 0);
 }
 
+/* Two-variable form of test_simplify_trig_radical_angle_addition. The
+ * difference splits cleanly into an x-piece and a y-piece -- each
+ * collapses to 0 in the same way as the single-variable case, but the
+ * combined 6-term sum hits $RecursionLimit and runs for minutes if
+ * simplified as a whole. simp_split_additive partitions the addends by
+ * disjoint free-symbol sets ({x} and {y}), simplifies each component
+ * independently, and sums the results. */
+void test_simplify_trig_radical_angle_addition_two_vars(void) {
+    assert_eval_eq(
+        "Simplify[(Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2] + Cos[y]/Sqrt[6]/3 + "
+        "Sin[y]/Sqrt[2]/3) - (Sqrt[6] Sin[x + Pi/6]/3 + "
+        "Sqrt[6] Sin[y + Pi/6]/9)]",
+        "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -435,6 +450,7 @@ int main(void) {
     TEST(test_simplify_pythag_reduce_cosh_cube);
     TEST(test_simplify_sin_triple_angle_collapse);
     TEST(test_simplify_trig_radical_angle_addition);
+    TEST(test_simplify_trig_radical_angle_addition_two_vars);
 
     printf("All Simplify tests passed!\n");
     return 0;

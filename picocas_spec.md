@@ -7912,3 +7912,65 @@ the numerator to zero.
 `src/simp.c` (round-loop score gate + chained simp_radicals),
 `tests/test_simplify.c` (one new test
 `test_simplify_trig_radical_angle_addition`).
+
+## simp_split_additive: disjoint-variable Plus decomposition (2026-05-01)
+
+A new pre-pass at the top of `simp_dispatch` (`src/simp.c`) that
+decomposes `Plus[a_1, ..., a_n]` into connected components in the
+free-symbol-sharing graph, simplifies each component independently
+through `simp_dispatch`, and returns the canonicalised sum.
+
+### Motivation
+
+The two-variable form of the rationalised-trig angle-addition test
+case,
+
+    e1 = Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2] +
+         Cos[y]/Sqrt[6]/3 + Sin[y]/Sqrt[2]/3
+    e2 = Sqrt[6] Sin[x + Pi/6]/3 + Sqrt[6] Sin[y + Pi/6]/9
+    Simplify[e1 - e2]                              →  0
+
+hit `$RecursionLimit::reclim` and ran for minutes when simplified as
+a whole. Each three-term piece (the x-piece and the y-piece, each
+analogous to the one-variable case above) collapses to 0 in ~1s on
+its own. The cost of `simp_search`'s trig transforms (`Together`,
+`TrigExpand`, `Cancel`) is super-linear in the number of addends, and
+addends over disjoint user-symbol sets cannot interact under any of
+those transforms.
+
+### Algorithm
+
+1. If the input is not a `Plus` with at least 4 addends, return NULL
+   (let the regular pipeline run).
+2. For each addend, collect its "free symbols": symbol leaves
+   appearing in argument position only -- numeric constants
+   (`Pi`, `E`, `EulerGamma`, ...) and symbols that appear ONLY as
+   function heads (`Sin`, `Cos`, ...) are excluded. Without the
+   head-skip rule, every all-trig addend would glom into one
+   component and the split would never fire.
+3. Union-find over addends, joining pairs whose free-symbol sets
+   intersect.
+4. If there are fewer than 2 components, or every component is a
+   singleton, return NULL.
+5. For each component, build a sub-`Plus` of its addends, evaluate
+   to canonicalise, run `simp_dispatch` on it.
+6. Return `evaluate(Plus[results...])`.
+
+### Why disjoint splits are safe
+
+`Together`, `TrigExpand`, `Cancel`, `Factor`, `Collect`, and the
+trig roundtrip all operate on the algebraic structure of the
+expression. Two addends with disjoint free-symbol sets share no
+common factor, common denominator, or common angle, so no transform
+in `SIMP_TRANSFORMS` can produce a cross-term that didn't exist in
+either piece individually. The sum of the per-component
+simplifications is therefore equal to the simplification of the sum,
+modulo evaluator canonicalisation (which also operates additively
+under `Plus`'s `Flat | Orderless` attributes).
+
+### Files touched
+
+`src/simp.c` (new helpers `split_symset_*`, `split_uf_*`,
+`simp_split_additive`; `simp_dispatch` calls it first),
+`tests/test_simplify.c` (one new test
+`test_simplify_trig_radical_angle_addition_two_vars`).

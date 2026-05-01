@@ -2794,12 +2794,234 @@ static Expr* simp_pipeline_logexp(const Expr* input,
     return best;
 }
 
+/* ----------------------------------------------------------------------- */
+/* Additive-subexpression splitter                                         */
+/* ----------------------------------------------------------------------- */
+
+/*
+ * When the input is a Plus whose addends partition into >=2 disjoint
+ * connected components in the free-symbol-sharing graph (e.g.
+ * Cos[x] + Sin[x] + Cos[y] + Sin[y] splits into the {x} group and the
+ * {y} group), simplify each component independently and return the
+ * sum.
+ *
+ * Why: simp_search's trig transforms (Together, TrigExpand, Cancel)
+ * cost super-linearly in the number of addends. When the addends
+ * decompose over disjoint user-symbol sets, those pieces cannot
+ * interact under any of those transforms -- simplifying each component
+ * independently preserves the result while keeping each call cheap.
+ * The concrete trigger was the 6-term sum
+ *   Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2] + Cos[y]/Sqrt[6]/3 + Sin[y]/Sqrt[2]/3
+ *     - Sqrt[6] Sin[x+Pi/6]/3 - Sqrt[6] Sin[y+Pi/6]/9
+ * which hits $RecursionLimit and runs for minutes when simplified as a
+ * whole; each three-term piece simplifies to 0 in ~1s on its own.
+ *
+ * Free-symbol semantics: an addend's "free symbols" are symbol leaves
+ * appearing in its argument tree, EXCLUDING numeric constants
+ * (Pi, E, EulerGamma, ...) and symbols that appear ONLY as function
+ * heads. So Sin[x] contributes {x}, Cos[x+y] contributes {x, y}, but
+ * Sin and Cos themselves are not counted -- otherwise every all-trig
+ * addend would glom into a single component and the split would never
+ * fire on inputs like the case above.
+ */
+
+typedef struct {
+    const char** names;     /* borrowed pointers into the input expr */
+    size_t count;
+    size_t cap;
+} SplitSymSet;
+
+static void split_symset_init(SplitSymSet* s) {
+    s->names = NULL; s->count = 0; s->cap = 0;
+}
+static void split_symset_free(SplitSymSet* s) {
+    free((void*)s->names);
+    s->names = NULL; s->count = 0; s->cap = 0;
+}
+static bool split_symset_contains(const SplitSymSet* s, const char* name) {
+    for (size_t i = 0; i < s->count; i++) {
+        if (strcmp(s->names[i], name) == 0) return true;
+    }
+    return false;
+}
+static void split_symset_add(SplitSymSet* s, const char* name) {
+    if (split_symset_contains(s, name)) return;
+    if (s->count == s->cap) {
+        size_t nc = s->cap == 0 ? 4 : s->cap * 2;
+        const char** nn = (const char**)realloc((void*)s->names,
+                                                nc * sizeof(char*));
+        if (!nn) return;
+        s->names = nn;
+        s->cap = nc;
+    }
+    s->names[s->count++] = name;
+}
+static bool split_symset_intersects(const SplitSymSet* a,
+                                    const SplitSymSet* b) {
+    for (size_t i = 0; i < a->count; i++) {
+        if (split_symset_contains(b, a->names[i])) return true;
+    }
+    return false;
+}
+
+/* Walk into args only (skip the head). Symbol leaves that aren't
+ * numeric constants are added to `out`. */
+static void split_collect_addend_symbols(const Expr* e, SplitSymSet* out) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (is_real_constant_symbol(e->data.symbol)) return;
+        split_symset_add(out, e->data.symbol);
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        split_collect_addend_symbols(e->data.function.args[i], out);
+    }
+}
+
+/* Tiny union-find (path-compressed). */
+static int split_uf_find(int* parent, int x) {
+    while (parent[x] != x) {
+        parent[x] = parent[parent[x]];
+        x = parent[x];
+    }
+    return x;
+}
+static void split_uf_union(int* parent, int x, int y) {
+    int rx = split_uf_find(parent, x);
+    int ry = split_uf_find(parent, y);
+    if (rx != ry) parent[rx] = ry;
+}
+
+/* Forward declaration: the splitter recurses through simp_dispatch. */
+static Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
+                           const Expr* complexity_func);
+
+/* Returns NULL when the input doesn't decompose, has fewer than 4
+ * addends, or every component is a singleton (no win). On a successful
+ * split, returns a freshly allocated, evaluated sum of per-component
+ * simplifications. */
+static Expr* simp_split_additive(const Expr* input, const AssumeCtx* ctx,
+                                 const Expr* complexity_func) {
+    if (!input || input->type != EXPR_FUNCTION) return NULL;
+    if (!input->data.function.head ||
+        input->data.function.head->type != EXPR_SYMBOL ||
+        strcmp(input->data.function.head->data.symbol, "Plus") != 0)
+        return NULL;
+    size_t n = input->data.function.arg_count;
+    if (n < 4) return NULL;
+
+    SplitSymSet* sets = (SplitSymSet*)calloc(n, sizeof(SplitSymSet));
+    int* parent = (int*)malloc(n * sizeof(int));
+    if (!sets || !parent) {
+        free(sets); free(parent);
+        return NULL;
+    }
+    for (size_t i = 0; i < n; i++) {
+        split_symset_init(&sets[i]);
+        split_collect_addend_symbols(input->data.function.args[i], &sets[i]);
+        parent[i] = (int)i;
+    }
+    /* Pairwise union by symbol intersection. Empty sets (constants)
+     * stay in their own singleton component; we don't glom them onto
+     * an arbitrary first match. */
+    for (size_t i = 0; i < n; i++) {
+        if (sets[i].count == 0) continue;
+        for (size_t j = i + 1; j < n; j++) {
+            if (sets[j].count == 0) continue;
+            if (split_symset_intersects(&sets[i], &sets[j])) {
+                split_uf_union(parent, (int)i, (int)j);
+            }
+        }
+    }
+    int* root_per = (int*)malloc(n * sizeof(int));
+    for (size_t i = 0; i < n; i++) root_per[i] = split_uf_find(parent, (int)i);
+    int* size_by_root = (int*)calloc(n, sizeof(int));
+    for (size_t i = 0; i < n; i++) size_by_root[root_per[i]]++;
+
+    int comp_count = 0, max_size = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (size_by_root[i] == 0) continue;
+        comp_count++;
+        if (size_by_root[i] > max_size) max_size = size_by_root[i];
+    }
+    /* Useful split: 2+ components AND at least one component has 2+
+     * addends (otherwise we'd just be re-dispatching every atom for no
+     * win, and bottomup has already simplified each addend in
+     * isolation). */
+    if (comp_count < 2 || max_size < 2) {
+        for (size_t i = 0; i < n; i++) split_symset_free(&sets[i]);
+        free(sets); free(parent); free(root_per); free(size_by_root);
+        return NULL;
+    }
+
+    /* Compact root -> 0..comp_count-1 index. */
+    int* root_to_idx = (int*)malloc(n * sizeof(int));
+    for (size_t i = 0; i < n; i++) root_to_idx[i] = -1;
+    int next_idx = 0;
+    for (size_t i = 0; i < n; i++) {
+        int r = root_per[i];
+        if (root_to_idx[r] == -1) root_to_idx[r] = next_idx++;
+    }
+    /* Bucket addend pointers per component. */
+    Expr*** comp_addends = (Expr***)calloc(comp_count, sizeof(Expr**));
+    int* comp_alloc = (int*)calloc(comp_count, sizeof(int));
+    int* comp_n = (int*)calloc(comp_count, sizeof(int));
+    for (size_t i = 0; i < n; i++) {
+        int idx = root_to_idx[root_per[i]];
+        if (comp_n[idx] == comp_alloc[idx]) {
+            int nc = comp_alloc[idx] == 0 ? 4 : comp_alloc[idx] * 2;
+            comp_addends[idx] = (Expr**)realloc(comp_addends[idx],
+                                                nc * sizeof(Expr*));
+            comp_alloc[idx] = nc;
+        }
+        comp_addends[idx][comp_n[idx]++] =
+            expr_copy(input->data.function.args[i]);
+    }
+
+    /* Simplify each component, place results into a Plus. */
+    Expr** results = (Expr**)calloc(comp_count, sizeof(Expr*));
+    for (int c = 0; c < comp_count; c++) {
+        Expr* sub;
+        if (comp_n[c] == 1) {
+            sub = comp_addends[c][0];
+        } else {
+            Expr* p = expr_new_function(expr_new_symbol("Plus"),
+                                        comp_addends[c], comp_n[c]);
+            sub = evaluate(p);
+            expr_free(p);
+        }
+        results[c] = simp_dispatch(sub, ctx, complexity_func);
+        expr_free(sub);
+    }
+    Expr* sum_raw = expr_new_function(expr_new_symbol("Plus"),
+                                      results, comp_count);
+    Expr* sum = evaluate(sum_raw);
+    expr_free(sum_raw);
+
+    for (size_t i = 0; i < n; i++) split_symset_free(&sets[i]);
+    free(sets); free(parent); free(root_per); free(size_by_root);
+    free(root_to_idx);
+    for (int c = 0; c < comp_count; c++) free(comp_addends[c]);
+    free(comp_addends); free(comp_alloc); free(comp_n);
+    free(results);
+
+    return sum;
+}
+
 /* simp_dispatch is the public entry point. It runs the shape classifier
  * and forwards to a specialised pipeline. SHAPE_TRIG and SHAPE_GENERAL
  * fall through to simp_search; trig is the heuristic search's strongest
  * domain, and general inputs need the full machinery. */
 static Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
                            const Expr* complexity_func) {
+    /* Try to decompose a Plus into disjoint-variable components and
+     * simplify each independently. Each connected component's sub-Plus
+     * cannot itself decompose further, so the recursion through
+     * simp_dispatch terminates in one level. */
+    Expr* split = simp_split_additive(input, ctx, complexity_func);
+    if (split) return split;
+
     SimpShape shape = simp_classify(input);
     switch (shape) {
         case SIMP_SHAPE_POLYNOMIAL:
