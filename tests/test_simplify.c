@@ -186,6 +186,41 @@ void test_simplify_sqrt_product_three(void) {
                    "-x y z", 0);
 }
 
+/* simp_radicals: positive-integer radicals with the same exponent are
+ * fused so structurally distinct equivalent forms can cancel.  The
+ * combine is sound only for positive integer bases (the principal
+ * value of Sqrt[a]*Sqrt[b] differs from Sqrt[a*b] for negatives). */
+void test_simplify_radicals_two_factor(void) {
+    assert_eval_eq("Simplify[Sqrt[2] Sqrt[3]]", "Sqrt[6]", 0);
+}
+
+void test_simplify_radicals_difference_zero(void) {
+    assert_eval_eq("Simplify[Sqrt[6] - Sqrt[2] Sqrt[3]]", "0", 0);
+}
+
+void test_simplify_radicals_difference_with_factor(void) {
+    assert_eval_eq("Simplify[-Sqrt[2] Sqrt[3] x + Sqrt[6] x]", "0", 0);
+}
+
+void test_simplify_radicals_three_factor(void) {
+    assert_eval_eq("Simplify[Sqrt[2] Sqrt[3] Sqrt[5]]", "Sqrt[30]", 0);
+}
+
+void test_simplify_radicals_perfect_square_collapses(void) {
+    /* Sqrt[2]*Sqrt[3]*Sqrt[6] -> Sqrt[36] -> 6. */
+    assert_eval_eq("Simplify[Sqrt[2] Sqrt[3] Sqrt[6]]", "6", 0);
+}
+
+void test_simplify_radicals_cube_root(void) {
+    assert_eval_eq("Simplify[2^(1/3) 3^(1/3) 5^(1/3)]", "30^(1/3)", 0);
+}
+
+/* Symbolic bases must NOT be combined: Sqrt[a]*Sqrt[b] could differ
+ * from Sqrt[a*b] for negative or non-real a/b. */
+void test_simplify_radicals_symbolic_base_unchanged(void) {
+    assert_eval_eq("Simplify[Sqrt[a] Sqrt[b]]", "Sqrt[a] Sqrt[b]", 0);
+}
+
 /* Cos[k Pi]^m with k integer and m even should collapse to 1 -- both via
  * the explicit even-integer rule (literal 4) and via the Mod[m, 2] == 0
  * symbolic-even path. */
@@ -354,6 +389,13 @@ int main(void) {
     TEST(test_simplify_inequality_polarity_flip);
     TEST(test_simplify_sqrt_product_signs);
     TEST(test_simplify_sqrt_product_three);
+    TEST(test_simplify_radicals_two_factor);
+    TEST(test_simplify_radicals_difference_zero);
+    TEST(test_simplify_radicals_difference_with_factor);
+    TEST(test_simplify_radicals_three_factor);
+    TEST(test_simplify_radicals_perfect_square_collapses);
+    TEST(test_simplify_radicals_cube_root);
+    TEST(test_simplify_radicals_symbolic_base_unchanged);
     TEST(test_simplify_cos_k_pi_to_even_int_power);
     TEST(test_simplify_cos_k_pi_to_even_symbolic_power);
     TEST(test_simplify_cos_sin_fourth_power);

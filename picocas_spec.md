@@ -7810,3 +7810,55 @@ scope (those Mathematica semantics are intentionally not pursued).
 
 `src/eval.c`, `src/eval.h`, `src/core.c`, `src/arithmetic.c`,
 `src/boolean.c`, `src/power.c`, plus `EVAL_IMPROVEMENTS_PLAN.md`.
+
+## simp_radicals: cross-base radical fusion in Simplify (2026-05-01)
+
+`Simplify` now combines distinct positive-integer radicals that share
+an exponent inside any `Times` node:
+
+    Sqrt[2] Sqrt[3]                    →  Sqrt[6]
+    Sqrt[2] Sqrt[3] Sqrt[5]            →  Sqrt[30]
+    Sqrt[2] Sqrt[3] Sqrt[6]            →  6           (Sqrt[36] collapses)
+    2^(1/3) 3^(1/3) 5^(1/3)            →  30^(1/3)
+    Sqrt[6] - Sqrt[2] Sqrt[3]          →  0
+    -Sqrt[2] Sqrt[3] x + Sqrt[6] x     →  0
+
+The evaluator does not perform this combine automatically because, in
+general,
+
+    a^(p/q) * b^(p/q)  ≠  (a*b)^(p/q)
+
+once `a` or `b` can be negative or non-real -- the principal-value
+branch shifts (`Sqrt[-2] Sqrt[-3] = -Sqrt[6]`, not `+Sqrt[6]`).
+Restricting to **positive integer bases** keeps the rewrite sound.
+Same-base products (`Sqrt[2] Sqrt[2] -> 2`) were already collapsed by
+`Power`'s exponent merging in the evaluator; this transform fills the
+cross-base gap that previously left `Sqrt[6] - Sqrt[2] Sqrt[3]`
+unsimplified.
+
+### Implementation
+
+`simp_radicals` (`src/simp.c`) is a memoised bottom-up walker. For each
+`Times` node it buckets `Power[+integer, Rational[p, q]]` factors by
+exponent; multi-element buckets are fused into a single
+`Power[product_of_bases, p/q]` which is then evaluated so the
+perfect-power detection in `builtin_power` collapses
+`Power[36, 1/2] -> 6`. Symbolic, negative-integer, and rational-non-
+integer bases are left alone.
+
+### Wiring
+
+`simp_radicals` is registered both as a force-take seed in
+`simp_search`'s seed phase (alongside `transform_pythag_reduce`,
+`transform_halfangle`, etc.) and as a per-candidate rewrite inside the
+round loop, so it can fire on `Together` / `Cancel` outputs that
+surface fresh `Sqrt[a] Sqrt[b]` products. The transform is gated by
+`has_non_integer_power`, so on inputs without any radicals the walker
+short-circuits to a copy.
+
+### Files touched
+
+`src/simp.c` (new transform + seed/round wiring),
+`tests/test_simplify.c` (seven new test cases covering two-, three-,
+and cube-root combines, perfect-square collapse, the targeted
+cancellation cases, and the symbolic-base no-op).

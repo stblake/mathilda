@@ -1352,6 +1352,8 @@ static Expr* simp_roots_of_unity(const Expr* e) {
 static Expr* simp_memo_wrap(const Expr* e, const char* pseudo_head,
                             Expr* (*impl)(const Expr*));
 static bool has_pythag_head(const Expr* e);
+static bool has_non_integer_power(const Expr* e);
+static bool is_rational_literal(const Expr* e);
 
 static Expr* transform_pythag_square_complete_impl(const Expr* e) {
     static Expr* rules = NULL;
@@ -1470,6 +1472,206 @@ static Expr* transform_halfangle_impl(const Expr* e) {
 
 static Expr* transform_halfangle(const Expr* e) {
     return simp_memo_wrap(e, "$HalfAngle", transform_halfangle_impl);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Radical product canonicaliser: simp_radicals                            */
+/* ----------------------------------------------------------------------- */
+
+/*
+ * simp_radicals combines distinct positive-integer radicals that share an
+ * exponent inside any Times node, e.g.
+ *
+ *     Power[2, 1/2] * Power[3, 1/2]   ->  Power[6, 1/2]
+ *     Power[2, 1/3] * Power[3, 1/3]   ->  Power[6, 1/3]
+ *
+ * The evaluator does NOT auto-perform this combine because in general
+ *     Power[a, p/q] * Power[b, p/q] != Power[a*b, p/q]
+ * once a or b can be negative or non-real (the principal-value branch
+ * shifts: e.g. Sqrt[-2] Sqrt[-3] = -Sqrt[6]). Restricting to positive
+ * integer bases keeps the rewrite sound. Same-base products
+ * (Sqrt[2]*Sqrt[2] -> 2) are already collapsed by Power's exponent
+ * merging in the evaluator; this transform targets the cross-base case
+ * so that
+ *     Simplify[Sqrt[6] - Sqrt[2] Sqrt[3]]            -> 0
+ *     Simplify[-Sqrt[2] Sqrt[3] x + Sqrt[6] x]       -> 0
+ * after the rebuilt Times feeds back into the surrounding Plus and the
+ * Sqrt[6] terms cancel.
+ *
+ * Implementation: a bottom-up structural walker. Each Times node has its
+ * positive-integer radical factors bucketed by exponent; multi-element
+ * buckets are fused into a single Power[product_of_bases, exp] which is
+ * then evaluated so the perfect-power detection in builtin_power can
+ * collapse e.g. Power[36, 1/2] -> 6.
+ */
+
+static bool radical_base_is_positive_integer(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) return e->data.integer > 0;
+    if (e->type == EXPR_BIGINT)  return mpz_sgn(e->data.bigint) > 0;
+    return false;
+}
+
+/* Match Power[positive integer, Rational[p, q]]. On success, populates
+ * out_base and out_exp with borrowed pointers into the input. */
+static bool radical_factor_split(const Expr* e,
+                                 const Expr** out_base,
+                                 const Expr** out_exp) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL) return false;
+    if (strcmp(e->data.function.head->data.symbol, "Power") != 0) return false;
+    if (e->data.function.arg_count != 2) return false;
+    const Expr* base = e->data.function.args[0];
+    const Expr* exp  = e->data.function.args[1];
+    if (!radical_base_is_positive_integer(base)) return false;
+    if (!is_rational_literal(exp)) return false;
+    /* Rational[p, 1] should never reach us (the evaluator canonicalises
+     * to the bare integer); guard defensively anyway. */
+    const Expr* den = exp->data.function.args[1];
+    if (den->type == EXPR_INTEGER && den->data.integer == 1) return false;
+    *out_base = base;
+    *out_exp  = exp;
+    return true;
+}
+
+/* Combine same-exponent positive-integer radical factors of a Times
+ * node. Returns NULL when no combine fires. */
+static Expr* simp_radicals_combine_times(const Expr* tn) {
+    size_t n = tn->data.function.arg_count;
+    if (n < 2) return NULL;
+
+    bool*  consumed = (bool*) calloc(n, sizeof(bool));
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t out = 0;
+    bool changed = false;
+
+    for (size_t i = 0; i < n; i++) {
+        if (consumed[i]) continue;
+        const Expr* arg_i = tn->data.function.args[i];
+        const Expr* base_i;
+        const Expr* exp_i;
+        if (!radical_factor_split(arg_i, &base_i, &exp_i)) {
+            new_args[out++] = expr_copy((Expr*)arg_i);
+            consumed[i] = true;
+            continue;
+        }
+
+        Expr* prod_base = expr_copy((Expr*)base_i);
+        size_t group = 1;
+        for (size_t j = i + 1; j < n; j++) {
+            if (consumed[j]) continue;
+            const Expr* arg_j = tn->data.function.args[j];
+            const Expr* base_j;
+            const Expr* exp_j;
+            if (!radical_factor_split(arg_j, &base_j, &exp_j)) continue;
+            if (!expr_eq((Expr*)exp_i, (Expr*)exp_j)) continue;
+
+            Expr* mul_args[2] = { prod_base, expr_copy((Expr*)base_j) };
+            Expr* mul = expr_new_function(expr_new_symbol("Times"),
+                                          mul_args, 2);
+            prod_base = evaluate(mul);
+            expr_free(mul);
+            consumed[j] = true;
+            group++;
+        }
+        consumed[i] = true;
+
+        if (group >= 2) {
+            Expr* pow_args[2] = { prod_base, expr_copy((Expr*)exp_i) };
+            Expr* pow = expr_new_function(expr_new_symbol("Power"),
+                                          pow_args, 2);
+            new_args[out++] = evaluate(pow);
+            expr_free(pow);
+            changed = true;
+        } else {
+            expr_free(prod_base);
+            new_args[out++] = expr_copy((Expr*)arg_i);
+        }
+    }
+
+    free(consumed);
+    if (!changed) {
+        for (size_t k = 0; k < out; k++) expr_free(new_args[k]);
+        free(new_args);
+        return NULL;
+    }
+    Expr* rebuilt = expr_new_function(expr_new_symbol("Times"),
+                                      new_args, out);
+    Expr* canonical = evaluate(rebuilt);
+    expr_free(rebuilt);
+    return canonical;
+}
+
+/* Bottom-up walker: rewrites children, rebuilds the node, then tries
+ * the Times combine at the top.  Returns NULL when nothing changed. */
+static Expr* simp_radicals_walk(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = NULL;
+    bool any = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = simp_radicals_walk(e->data.function.args[i]);
+        if (r) {
+            if (!new_args) {
+                new_args = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+                for (size_t j = 0; j < i; j++) {
+                    new_args[j] = expr_copy(e->data.function.args[j]);
+                }
+            }
+            new_args[i] = r;
+            any = true;
+        } else if (new_args) {
+            new_args[i] = expr_copy(e->data.function.args[i]);
+        }
+    }
+
+    Expr* current = NULL;
+    if (any) {
+        Expr* head_copy = expr_copy(e->data.function.head);
+        Expr* rebuilt = expr_new_function(head_copy, new_args, n);
+        free(new_args);
+        current = evaluate(rebuilt);
+        expr_free(rebuilt);
+    }
+
+    const Expr* target = current ? current : e;
+    if (target->type == EXPR_FUNCTION
+        && target->data.function.head
+        && target->data.function.head->type == EXPR_SYMBOL
+        && strcmp(target->data.function.head->data.symbol, "Times") == 0) {
+        Expr* combined = simp_radicals_combine_times(target);
+        if (combined) {
+            if (current) expr_free(current);
+            return combined;
+        }
+    }
+    return current;  /* may be NULL when no change */
+}
+
+static Expr* simp_radicals_impl(const Expr* e) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+
+    /* Cheap precondition: if there is no Power with a non-integer
+     * exponent anywhere, no radical combine can fire. */
+    if (!has_non_integer_power(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("Radicals", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    Expr* r = simp_radicals_walk(e);
+    Expr* out = r ? r : expr_copy((Expr*)e);
+    if (dbg) simp_debug_log("Radicals", e, out,
+                            simp_debug_elapsed_ms(t0));
+    return out;
+}
+
+static Expr* simp_radicals(const Expr* e) {
+    return simp_memo_wrap(e, "$Radicals", simp_radicals_impl);
 }
 
 /* Pythagorean reduction:
@@ -2754,6 +2956,20 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         }
     }
 
+    /* Radical product seed: collapses Sqrt[a]*Sqrt[b] -> Sqrt[a*b] for
+     * positive integer a, b (and similarly for higher rational
+     * exponents).  Inert on inputs without Power[+integer, Rational]
+     * factors. */
+    {
+        Expr* alt = simp_radicals(input);
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+
     /* Roots-of-unity seed. Reduces sums of (-1)^(p/q) and E^(I p Pi/q)
      * via the minimal polynomial Phi_{2Q}(x); see
      * simp_roots_of_unity above. Idempotent and inert when the input
@@ -2885,6 +3101,22 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
                         expr_free(ha);
                     } else {
                         cs_add_or_free(&next, ha);
+                    }
+                }
+            }
+            /* Radical product combine on each candidate. Together /
+             * Cancel can surface fresh Sqrt[a]*Sqrt[b] products in their
+             * output; this lets the combine fire on the intermediate. */
+            {
+                Expr* rd = simp_radicals(seed);
+                if (rd) {
+                    update_best(&best, &best_score, rd, complexity_func);
+                    if (expr_eq(rd, seed)) {
+                        expr_free(rd);
+                    } else if (score_with_func(rd, complexity_func) > parent_score) {
+                        expr_free(rd);
+                    } else {
+                        cs_add_or_free(&next, rd);
                     }
                 }
             }
