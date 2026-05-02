@@ -67,6 +67,22 @@ void info_init(void) {
     symtab_set_docstring("RootMeanSquare", "RootMeanSquare[list] gives the root mean square of values in list.");
     symtab_set_docstring("Variance", "Variance[data] gives the unbiased variance estimate of the elements in data.");
     symtab_set_docstring("StandardDeviation", "StandardDeviation[data] gives the standard deviation estimate of the elements in data.");
+    symtab_set_docstring("MovingAverage",
+        "MovingAverage[list, r]\n"
+        "\tgives the moving average of list, computed by averaging runs of r elements.\n"
+        "MovingAverage[list, {w_1, w_2, ..., w_r}]\n"
+        "\tgives the weighted moving average of list with weights w_i (effective weights w_i / Sum[w_i]).\n"
+        "MovingAverage returns a list of length Length[list] - r + 1, and stays unevaluated when r < 1 or r > Length[list].");
+    symtab_set_docstring("MovingMedian",
+        "MovingMedian[list, r]\n"
+        "\tgives the moving median of list, computed using spans of r elements.\n"
+        "MovingMedian returns a list of length Length[list] - r + 1; for matrix input the medians are taken column-wise within each row-window.\n"
+        "MovingMedian requires real-valued numeric data and stays unevaluated when r < 1 or r > Length[list].");
+    symtab_set_docstring("ExponentialMovingAverage",
+        "ExponentialMovingAverage[list, alpha]\n"
+        "\tgives the exponential moving average of list with smoothing constant alpha.\n"
+        "Defined by the recurrence y_1 = x_1, y_{i+1} = y_i + alpha (x_{i+1} - y_i).\n"
+        "The output has the same length as list. The smoothing constant alpha is typically a number between 0 and 1, but may be any expression; ExponentialMovingAverage handles both numerical (machine and arbitrary precision) and symbolic data.");
 
     // Functional Programming
     symtab_set_docstring("Map", "f /@ expr or Map[f, expr] applies f to each element of expr.");

@@ -721,6 +721,310 @@ Expr* builtin_quartiles(Expr* res) {
     return expr_new_function(expr_new_symbol("List"), results, 3);
 }
 
+/* ------------------- MovingAverage ------------------- */
+
+/*
+ * MovingAverage[list, r]                — simple moving average over runs of r elements.
+ * MovingAverage[list, {w1, ..., wr}]    — weighted moving average with weights w_k
+ *                                         (output uses w_k / Sum[w_k] as effective weights).
+ *
+ * Output length is Length[list] - r + 1 when 1 <= r <= Length[list]; the function
+ * stays unevaluated otherwise.  The unweighted form delegates to Mean so it inherits
+ * Mean's exact rational / bigint / real / symbolic handling.  The weighted form builds
+ * Plus[Times[w_k/wsum, x_{i+k}], ...] and lets the evaluator simplify.
+ */
+Expr* builtin_moving_average(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* data = res->data.function.args[0];
+    Expr* spec = res->data.function.args[1];
+
+    if (data->type != EXPR_FUNCTION ||
+        data->data.function.head->type != EXPR_SYMBOL ||
+        strcmp(data->data.function.head->data.symbol, "List") != 0) {
+        return NULL;
+    }
+
+    size_t n = data->data.function.arg_count;
+    size_t r = 0;
+    Expr** weights = NULL; /* borrowed; non-NULL means weighted form */
+
+    if (spec->type == EXPR_INTEGER) {
+        if (spec->data.integer < 1) return NULL;
+        if ((uint64_t)spec->data.integer > (uint64_t)n) return NULL;
+        r = (size_t)spec->data.integer;
+    } else if (spec->type == EXPR_BIGINT) {
+        if (mpz_sgn(spec->data.bigint) <= 0) return NULL;
+        if (!mpz_fits_ulong_p(spec->data.bigint)) return NULL;
+        unsigned long rr = mpz_get_ui(spec->data.bigint);
+        if ((size_t)rr > n) return NULL;
+        r = (size_t)rr;
+    } else if (spec->type == EXPR_FUNCTION &&
+               spec->data.function.head->type == EXPR_SYMBOL &&
+               strcmp(spec->data.function.head->data.symbol, "List") == 0) {
+        r = spec->data.function.arg_count;
+        if (r == 0 || r > n) return NULL;
+        weights = spec->data.function.args;
+    } else {
+        return NULL;
+    }
+
+    size_t out_n = n - r + 1;
+    Expr** out = malloc(sizeof(Expr*) * out_n);
+    if (!out) return NULL;
+
+    if (weights == NULL) {
+        for (size_t i = 0; i < out_n; i++) {
+            Expr** sub = malloc(sizeof(Expr*) * r);
+            for (size_t k = 0; k < r; k++) {
+                sub[k] = expr_copy(data->data.function.args[i + k]);
+            }
+            Expr* sublist = expr_new_function(expr_new_symbol("List"), sub, r);
+            free(sub);
+            out[i] = eval_and_free(expr_new_function(
+                expr_new_symbol("Mean"), (Expr*[]){ sublist }, 1));
+        }
+    } else {
+        Expr** w_copies = malloc(sizeof(Expr*) * r);
+        for (size_t k = 0; k < r; k++) w_copies[k] = expr_copy(weights[k]);
+        Expr* wsum = eval_and_free(expr_new_function(
+            expr_new_symbol("Plus"), w_copies, r));
+        free(w_copies);
+
+        Expr* wsum_inv = eval_and_free(expr_new_function(
+            expr_new_symbol("Power"),
+            (Expr*[]){ wsum, expr_new_integer(-1) }, 2));
+
+        Expr** coefs = malloc(sizeof(Expr*) * r);
+        for (size_t k = 0; k < r; k++) {
+            coefs[k] = eval_and_free(expr_new_function(
+                expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(weights[k]), expr_copy(wsum_inv) }, 2));
+        }
+        expr_free(wsum_inv);
+
+        for (size_t i = 0; i < out_n; i++) {
+            Expr** terms = malloc(sizeof(Expr*) * r);
+            for (size_t k = 0; k < r; k++) {
+                terms[k] = eval_and_free(expr_new_function(
+                    expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(coefs[k]),
+                               expr_copy(data->data.function.args[i + k]) }, 2));
+            }
+            out[i] = eval_and_free(expr_new_function(
+                expr_new_symbol("Plus"), terms, r));
+            free(terms);
+        }
+
+        for (size_t k = 0; k < r; k++) expr_free(coefs[k]);
+        free(coefs);
+    }
+
+    Expr* result = expr_new_function(expr_new_symbol("List"), out, out_n);
+    free(out);
+    return result;
+}
+
+/* ------------------- MovingMedian ------------------- */
+
+/*
+ * MovingMedian[list, r]
+ *   gives the moving median of list, computed using spans of r elements.
+ *
+ * Output length is Length[list] - r + 1 when 1 <= r <= Length[list]; the
+ * function stays unevaluated otherwise. Operates on real-valued vectors and
+ * matrices; for matrices each row-window is reduced via Median, which yields
+ * a column-wise median vector. Non-numeric data triggers the MovingMedian::arg1
+ * message and the expression remains unevaluated.
+ */
+Expr* builtin_moving_median(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* data = res->data.function.args[0];
+    Expr* spec = res->data.function.args[1];
+
+    if (data->type != EXPR_FUNCTION ||
+        data->data.function.head->type != EXPR_SYMBOL ||
+        strcmp(data->data.function.head->data.symbol, "List") != 0) {
+        return NULL;
+    }
+
+    size_t n = data->data.function.arg_count;
+    size_t r = 0;
+    if (spec->type == EXPR_INTEGER) {
+        if (spec->data.integer < 1) return NULL;
+        if ((uint64_t)spec->data.integer > (uint64_t)n) return NULL;
+        r = (size_t)spec->data.integer;
+    } else if (spec->type == EXPR_BIGINT) {
+        if (mpz_sgn(spec->data.bigint) <= 0) return NULL;
+        if (!mpz_fits_ulong_p(spec->data.bigint)) return NULL;
+        unsigned long rr = mpz_get_ui(spec->data.bigint);
+        if ((size_t)rr > n) return NULL;
+        r = (size_t)rr;
+    } else {
+        return NULL;
+    }
+
+    if (n == 0) return NULL;
+
+    /* Decide vector vs matrix based on whether the first element is a List. */
+    bool matrix_mode = (data->data.function.args[0]->type == EXPR_FUNCTION &&
+                        data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+                        strcmp(data->data.function.args[0]->data.function.head->data.symbol, "List") == 0);
+
+    /* Validate that every leaf is a real-valued numeric. Matrices must be rectangular. */
+    bool ok = true;
+    if (matrix_mode) {
+        size_t cols = data->data.function.args[0]->data.function.arg_count;
+        for (size_t i = 0; i < n && ok; i++) {
+            Expr* row = data->data.function.args[i];
+            if (row->type != EXPR_FUNCTION ||
+                row->data.function.head->type != EXPR_SYMBOL ||
+                strcmp(row->data.function.head->data.symbol, "List") != 0 ||
+                row->data.function.arg_count != cols) {
+                ok = false;
+                break;
+            }
+            for (size_t j = 0; j < cols && ok; j++) {
+                if (!is_real_numeric(row->data.function.args[j])) ok = false;
+            }
+        }
+    } else {
+        for (size_t i = 0; i < n && ok; i++) {
+            if (!is_real_numeric(data->data.function.args[i])) ok = false;
+        }
+    }
+
+    if (!ok) {
+        char* str = expr_to_string(data);
+        printf("MovingMedian::arg1: The first argument %s must be a vector or matrix of real values.\n", str);
+        free(str);
+        return expr_copy(res);
+    }
+
+    size_t out_n = n - r + 1;
+    Expr** out = malloc(sizeof(Expr*) * out_n);
+    if (!out) return NULL;
+
+    for (size_t i = 0; i < out_n; i++) {
+        Expr** sub = malloc(sizeof(Expr*) * r);
+        for (size_t k = 0; k < r; k++) {
+            sub[k] = expr_copy(data->data.function.args[i + k]);
+        }
+        Expr* sublist = expr_new_function(expr_new_symbol("List"), sub, r);
+        free(sub);
+        out[i] = eval_and_free(expr_new_function(
+            expr_new_symbol("Median"), (Expr*[]){ sublist }, 1));
+    }
+
+    Expr* result = expr_new_function(expr_new_symbol("List"), out, out_n);
+    free(out);
+    return result;
+}
+
+/* ------------------- ExponentialMovingAverage ------------------- */
+
+/*
+ * ExponentialMovingAverage[list, alpha]
+ *   gives the exponential moving average of list with smoothing constant alpha.
+ *
+ * The recurrence is y[1] = x[1], y[i+1] = y[i] + alpha * (x[i+1] - y[i]).
+ * Output has the same length as the input list. Stays unevaluated when the
+ * first argument is not a List, or when the list is empty.
+ *
+ * Two evaluation strategies:
+ *   1. Fast path (machine precision): if at least one element of the list or
+ *      alpha itself is a real number, we evaluate the recurrence in C using
+ *      doubles. This is O(n) with no Expr allocations beyond the output and
+ *      keeps numeric stability comparable to Mathematica's N[...] form.
+ *   2. Symbolic path: build the recurrence as Plus / Times nodes and let the
+ *      evaluator handle exact rational arithmetic, bignum promotion, and
+ *      symbolic simplification. Works for arbitrary alpha (including symbolic).
+ */
+Expr* builtin_exponential_moving_average(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* data = res->data.function.args[0];
+    Expr* alpha = res->data.function.args[1];
+
+    if (data->type != EXPR_FUNCTION ||
+        data->data.function.head->type != EXPR_SYMBOL ||
+        strcmp(data->data.function.head->data.symbol, "List") != 0) {
+        return NULL;
+    }
+
+    size_t n = data->data.function.arg_count;
+    if (n == 0) return NULL;
+
+    /* Decide whether the fast double-precision path applies: at least one
+     * element of list or alpha must be EXPR_REAL, and every list element plus
+     * alpha must be a real-valued numeric (Integer / Real / Rational, no
+     * Complex, no symbolic). Bignums fall through to the symbolic path so we
+     * don't lose precision in cases where the exact value is wanted. */
+    bool any_real = (alpha->type == EXPR_REAL);
+    if (!any_real) {
+        for (size_t i = 0; i < n; i++) {
+            if (data->data.function.args[i]->type == EXPR_REAL) {
+                any_real = true;
+                break;
+            }
+        }
+    }
+    bool fast_ok = any_real;
+    if (fast_ok) {
+        bool cplx = false;
+        if (!is_numeric(alpha, NULL, &cplx) || cplx) fast_ok = false;
+    }
+    if (fast_ok) {
+        for (size_t i = 0; i < n && fast_ok; i++) {
+            bool cplx = false;
+            if (!is_numeric(data->data.function.args[i], NULL, &cplx) || cplx) {
+                fast_ok = false;
+            }
+        }
+    }
+
+    if (fast_ok) {
+        double a = 0.0;
+        is_numeric(alpha, &a, NULL);
+        Expr** out = malloc(sizeof(Expr*) * n);
+        if (!out) return NULL;
+        double y = 0.0;
+        is_numeric(data->data.function.args[0], &y, NULL);
+        out[0] = expr_new_real(y);
+        for (size_t i = 1; i < n; i++) {
+            double x = 0.0;
+            is_numeric(data->data.function.args[i], &x, NULL);
+            y = y + a * (x - y);
+            out[i] = expr_new_real(y);
+        }
+        Expr* result = expr_new_function(expr_new_symbol("List"), out, n);
+        free(out);
+        return result;
+    }
+
+    /* Symbolic / exact-rational / bignum path. */
+    Expr** out = malloc(sizeof(Expr*) * n);
+    if (!out) return NULL;
+    out[0] = expr_copy(data->data.function.args[0]);
+    for (size_t i = 1; i < n; i++) {
+        Expr* x_i = expr_copy(data->data.function.args[i]);
+        Expr* neg_y_prev = eval_and_free(expr_new_function(
+            expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(out[i-1]) }, 2));
+        Expr* diff = eval_and_free(expr_new_function(
+            expr_new_symbol("Plus"),
+            (Expr*[]){ x_i, neg_y_prev }, 2));
+        Expr* alpha_diff = eval_and_free(expr_new_function(
+            expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(alpha), diff }, 2));
+        out[i] = eval_and_free(expr_new_function(
+            expr_new_symbol("Plus"),
+            (Expr*[]){ expr_copy(out[i-1]), alpha_diff }, 2));
+    }
+
+    Expr* result = expr_new_function(expr_new_symbol("List"), out, n);
+    free(out);
+    return result;
+}
+
 void stats_init(void) {
     symtab_add_builtin("Mean", builtin_mean);
     symtab_add_builtin("RootMeanSquare", builtin_rootmeansquare);
@@ -730,9 +1034,15 @@ void stats_init(void) {
     symtab_get_def("Quartiles")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Variance", builtin_variance);
     symtab_add_builtin("StandardDeviation", builtin_standard_deviation);
+    symtab_add_builtin("MovingAverage", builtin_moving_average);
+    symtab_add_builtin("MovingMedian", builtin_moving_median);
+    symtab_add_builtin("ExponentialMovingAverage", builtin_exponential_moving_average);
 
     symtab_get_def("Mean")->attributes |= ATTR_PROTECTED;
     symtab_get_def("RootMeanSquare")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Variance")->attributes |= ATTR_PROTECTED;
     symtab_get_def("StandardDeviation")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("MovingAverage")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("MovingMedian")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ExponentialMovingAverage")->attributes |= ATTR_PROTECTED;
 }

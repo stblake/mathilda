@@ -1966,6 +1966,102 @@ In[1]:= StandardDeviation[{1, 2, 3}]
 Out[1]= 1
 ```
 
+#### MovingAverage
+Gives the moving average over a list, with either a uniform window length or a list of weights.
+- `MovingAverage[list, r]`: averages runs of `r` consecutive elements.
+- `MovingAverage[list, {w_1, w_2, ..., w_r}]`: weighted moving average with effective weights $w_i / \sum_j w_j$.
+
+**Features**:
+- `Protected`.
+- Output length is `Length[list] - r + 1`.
+- Stays unevaluated when `r < 1`, when `r > Length[list]`, when the second argument is non-integer / non-list, or when the first argument is not a `List`.
+- Exact rational arithmetic for integer / rational data; bignums (arbitrary-precision integers) handled natively. Real-valued data or weights yield approximate output. Symbolic data and weights are supported.
+- The unweighted form delegates to `Mean` for each window, so it inherits `Mean`'s exact / numeric / symbolic dispatch.
+
+```mathematica
+In[1]:= MovingAverage[{1, 5, 7, 3, 6, 2}, 3]
+Out[1]= {13/3, 5, 16/3, 11/3}
+
+In[2]:= MovingAverage[{1.2, 5.2, 3.4, 4.5, 2.3, 4.5}, 3]
+Out[2]= {3.26667, 4.36667, 3.4, 3.76667}
+
+In[3]:= MovingAverage[{a, b, c, d, e}, 2]
+Out[3]= {1/2 (a + b), 1/2 (b + c), 1/2 (c + d), 1/2 (d + e)}
+
+In[4]:= MovingAverage[{a, b, c, d, e}, {1, 2}]
+Out[4]= {1/3 a + 2/3 b, 1/3 b + 2/3 c, 1/3 c + 2/3 d, 1/3 d + 2/3 e}
+
+In[5]:= MovingAverage[{2^100, 2^101, 2^102, 2^103}, 2]
+Out[5]= {1901475900342344102245054808064, 3802951800684688204490109616128, 7605903601369376408980219232256}
+
+In[6]:= MovingAverage[{1, 2, 3, 4, 5}, 6]
+Out[6]= MovingAverage[{1, 2, 3, 4, 5}, 6]
+```
+
+#### MovingMedian
+Gives the moving median of a list, taken over spans of `r` consecutive elements.
+- `MovingMedian[list, r]`: medians of runs of `r` elements.
+
+**Features**:
+- `Protected`.
+- Output length is `Length[list] - r + 1`.
+- Operates on real-valued vectors and matrices. For matrix input, each window of `r` consecutive rows is reduced via `Median`, yielding a column-wise median vector per window.
+- Exact rationals, bignums (arbitrary-precision integers), machine-precision reals, and `NumericQ`-real symbolic constants (`Pi`, `E`, ...) are all supported. Even-window medians yield exact rational midpoints when the data is exact.
+- Stays unevaluated when `r < 1`, when `r > Length[list]`, when `r` is non-integer, or when the first argument is not a `List`.
+- Non-numeric data triggers the `MovingMedian::arg1` message and the expression remains unevaluated.
+
+```mathematica
+In[1]:= MovingMedian[{1, 2, 5, 6, 1, 4, 3}, 3]
+Out[1]= {2, 5, 5, 4, 3}
+
+In[2]:= MovingMedian[{{1, 2}, {5, 3}, {1, 4}, {3, 2}, {5, 5}}, 2]
+Out[2]= {{3, 5/2}, {3, 7/2}, {2, 3}, {4, 7/2}}
+
+In[3]:= MovingMedian[N[{1, 5, 7, 3, 6, 2}], 3]
+Out[3]= {5.0, 5.0, 6.0, 3.0}
+
+In[4]:= MovingMedian[{1, 2, 3, 4}, 2]
+Out[4]= {3/2, 5/2, 7/2}
+
+In[5]:= MovingMedian[{2^100, 2^101, 2^102, 2^103}, 2]
+Out[5]= {1901475900342344102245054808064, 3802951800684688204490109616128, 7605903601369376408980219232256}
+
+In[6]:= MovingMedian[{a, b, c}, 2]
+MovingMedian::arg1: The first argument {a, b, c} must be a vector or matrix of real values.
+Out[6]= MovingMedian[{a, b, c}, 2]
+```
+
+#### ExponentialMovingAverage
+Gives the exponential moving average of a list with smoothing constant `alpha`.
+- `ExponentialMovingAverage[list, alpha]`: produces the recurrence $y_1 = x_1$, $y_{i+1} = y_i + \alpha (x_{i+1} - y_i)$.
+
+**Features**:
+- `Protected`.
+- Output has the same length as `list`.
+- Two evaluation strategies: a fast O(n) double-precision path activates when at least one element of `list` or `alpha` itself is a machine-precision real and every other entry is a real-valued numeric (Integer, Real, Rational); otherwise a symbolic recurrence path is taken so exact rationals, bignums (arbitrary-precision integers), and symbolic alpha all work.
+- The smoothing constant `alpha` is typically a number between 0 and 1 but may be any expression; with `alpha = 0` the output is constant at `x_1`, and with `alpha = 1` the output equals the input.
+- Stays unevaluated when the first argument is not a `List`, when the list is empty, or when the call has the wrong arity.
+
+```mathematica
+In[1]:= ExponentialMovingAverage[Range[10], 1/3]
+Out[1]= {1, 4/3, 17/9, 70/27, 275/81, 1036/243, 3773/729, 13378/2187, 46439/6561, 158488/19683}
+
+In[2]:= ExponentialMovingAverage[N[{1, 5, 7, 3, 6, 2}], 1/2]
+Out[2]= {1.0, 3.0, 5.0, 4.0, 5.0, 3.5}
+
+In[3]:= ExponentialMovingAverage[{a, b, c, d}, 0]
+Out[3]= {a, a, a, a}
+
+In[4]:= ExponentialMovingAverage[{a, b, c, d}, 1]
+Out[4]= {a, b, c, d}
+
+In[5]:= ExponentialMovingAverage[{a, b}, x]
+Out[5]= {a, a + x (-a + b)}
+
+In[6]:= ExponentialMovingAverage[{2^100, 2^200}, 1/2]
+Out[6]= {1267650600228229401496703205376, 803469022129495137770981046171215126561215611592144769253376}
+```
+
 ### Random Number Generation
 
 #### RandomInteger
