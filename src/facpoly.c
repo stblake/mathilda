@@ -1102,6 +1102,25 @@ static bool is_likely_irreducible_multivariate(Expr* P, Expr** vars,
                 continue;
             }
 
+            /* Skip alphas whose image has a BIGINT coefficient.
+             * `bz_factor_to_expr` cannot ingest such coefficients (its
+             * int64 UPoly substrate would silently return the input
+             * unchanged), and `count_nontrivial_factors` would then
+             * miscount the bare Plus as a single irreducible factor --
+             * a false "irreducible" confirmation.  See FACTOR_PLAN.md
+             * §12.F6 for the trace. */
+            bool image_has_bigint = false;
+            for (int i = 0; i <= deg_main; i++) {
+                Expr* c = get_coeff(image, main_var, i);
+                if (c->type == EXPR_BIGINT) image_has_bigint = true;
+                expr_free(c);
+                if (image_has_bigint) break;
+            }
+            if (image_has_bigint) {
+                expr_free(image);
+                continue;
+            }
+
             /* Factor the univariate image. */
             Expr* factored = bz_factor_to_expr(image, main_var);
             int n = count_nontrivial_factors(factored, main_var);
@@ -1207,6 +1226,17 @@ static bool factor_via_bz_callback(const ZUPoly* image,
                                    void* user_data) {
     (void)user_data;
 
+    /* Bail when any image coefficient overflows int64.  The int64-based
+     * UPoly substrate inside `bz_factor_to_expr` cannot ingest such
+     * inputs and would silently return them unchanged, which the
+     * orchestrator above misreads as "image is irreducible" (a single
+     * Plus factor).  Returning false instead lets the orchestrator try
+     * the next alpha. See FACTOR_PLAN.md §12.F6 for the Fateman trace. */
+    for (int i = 0; i <= image->deg; i++) {
+        const mpz_t* ci = zupoly_getcoef(image, i);
+        if (ci && !mpz_fits_slong_p(*ci)) return false;
+    }
+
     /* Use a private symbol name to avoid colliding with anything the
      * user may have defined.  The symbol is local to this conversion
      * and never leaks out. */
@@ -1288,13 +1318,15 @@ typedef enum {
  * `*lc_out` is mpz_init'd by the caller (we mpz_set into it).  Returns
  * -1 if no variable has a constant integer leading coefficient. */
 static int pick_factorable_x_var(Expr* P, Expr** vars, size_t v_count,
-                                 BvLcKind* kind_out, mpz_t* lc_out) {
+                                 BvLcKind* kind_out, mpz_t* lc_out,
+                                 int excluded_idx) {
     int best_idx = -1;
     int best_priority = INT_MAX;
     mpz_t best_abs;     mpz_init_set_ui(best_abs, 0);
     mpz_t best_lc;      mpz_init(best_lc);
 
     for (size_t i = 0; i < v_count; i++) {
+        if ((int)i == excluded_idx) continue;
         int deg = get_degree_poly(P, vars[i]);
         if (deg < 1) continue;
         Expr* lc = get_coeff(P, vars[i], deg);
@@ -1858,17 +1890,16 @@ static Expr* factor_bivariate_via_polylc_hensel(Expr* P, Expr** vars) {
  * Memory: the caller retains ownership of P and vars; we allocate
  * the result and any intermediate BPoly/ZUPoly are freed before
  * returning. */
-static Expr* factor_bivariate_via_hensel(Expr* P, Expr** vars) {
-    BvLcKind kind = BV_LC_MONIC;
-    mpz_t lc_a; mpz_init(lc_a);
-    int main_idx = pick_factorable_x_var(P, vars, 2, &kind, &lc_a);
-    if (main_idx < 0) {
-        /* No variable has a constant integer leading coefficient --
-         * lc_x(P) is a polynomial in the other variable.  Try the
-         * Stage 3 (Wang's leading-coefficient correction) path. */
-        mpz_clear(lc_a);
-        return factor_bivariate_via_polylc_hensel(P, vars);
-    }
+/* Run the bivariate Hensel pipeline with a specific choice of main
+ * variable index and leading-coefficient kind.  Returns the factored
+ * Expr on success or NULL when the lift produces ≤1 factor or any
+ * intermediate step fails.  Used by factor_bivariate_via_hensel which
+ * tries each variable in priority order, falling back to the next when
+ * the prior choice's image factorisation hits the BIGINT bail in the
+ * BZ ingestion path (Phase F6). */
+static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
+                                                int main_idx, BvLcKind kind,
+                                                const mpz_t lc_a) {
     int other_idx = 1 - main_idx;
     bool negate = (kind == BV_LC_NEGATE) ||
                   (kind == BV_LC_SCALE && mpz_sgn(lc_a) < 0);
@@ -1880,7 +1911,6 @@ static Expr* factor_bivariate_via_hensel(Expr* P, Expr** vars) {
     mpz_abs(abs_a, lc_a);
 
     BPoly* bp = expr_to_bpoly(P, vars[main_idx], vars[other_idx]);
-    mpz_clear(lc_a);
     if (!bp) {
         mpz_clear(abs_a);
         return NULL;
@@ -2024,6 +2054,48 @@ static Expr* factor_bivariate_via_hensel(Expr* P, Expr** vars) {
     Expr* result = expr_new_function(expr_new_symbol("Times"), args, (size_t)r);
     free(args);
     return eval_and_free(result);
+}
+
+/* Bivariate Hensel entry point with main-variable fallback (Phase F6).
+ *
+ * The picker chooses one variable based on its leading-coefficient kind
+ * priority (MONIC > NEGATE > SCALE).  For inputs like the Fateman
+ * benchmark `Expand[(x^200 + y^200 + 1)(x^200 - y + 1)]` the picker
+ * prefers `x` (lc_x = +1, MONIC) but `P(x, alpha)` for any |alpha| ≥ 2
+ * produces alpha^200 -- a 60-digit BIGINT that the int64 UPoly substrate
+ * inside `bz_factor_to_expr` cannot ingest, so every alpha bails and the
+ * orchestrator returns "no factorisation".  Picking `y` instead (lc_y =
+ * -1, NEGATE) and evaluating at alpha_x = 0 yields a clean image
+ * `(1-y)(1+y^200)` with ±1 coefficients that BZ handles fine.
+ *
+ * We try the picker's preferred variable first, then fall back to the
+ * other variable (with whatever lc kind it has) if the first attempt
+ * yields no progress.  The polynomial-LC fallback fires only when the
+ * very first picker call returns -1 (no integer-LC variable at all).
+ */
+static Expr* factor_bivariate_via_hensel(Expr* P, Expr** vars) {
+    int tried_idx = -1;
+    for (int attempt = 0; attempt < 2; attempt++) {
+        BvLcKind kind = BV_LC_MONIC;
+        mpz_t lc_a; mpz_init(lc_a);
+        int main_idx = pick_factorable_x_var(P, vars, 2, &kind, &lc_a, tried_idx);
+        if (main_idx < 0) {
+            mpz_clear(lc_a);
+            if (attempt == 0) {
+                /* No variable has a constant integer leading coefficient
+                 * -- lc_x(P) is a polynomial in the other variable.  Try
+                 * the Stage 3 (Wang's leading-coefficient correction)
+                 * path. */
+                return factor_bivariate_via_polylc_hensel(P, vars);
+            }
+            break;
+        }
+        Expr* res = try_bivariate_via_hensel_with_main(P, vars, main_idx, kind, lc_a);
+        mpz_clear(lc_a);
+        if (res) return res;
+        tried_idx = main_idx;
+    }
+    return NULL;
 }
 
 /* ====================================================================== */

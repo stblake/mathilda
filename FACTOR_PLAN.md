@@ -862,6 +862,7 @@ The reference user-failure cases (and the gap each exposes):
 | `Factor[(1 - x¹²)(x - y¹³)(y - z¹⁴)]` (expanded) | **84 ms** ✓ (after the `univariate_squarefree`→`zupoly_gcd` fix; previously hung because F4's pre-check ran a univariate gcd over a degree-30 image through Knuth-style primitive PRS, which exhibits exponential coefficient growth) | few ms | algorithmic constant factor only |
 | `Factor[x²(1 - x¹²)(1 + x - y¹³)(1 - y - z¹⁴)]` (expanded) | **167 ms** ✓ (same fix) | few ms | algorithmic constant factor only |
 | `Factor[Expand[x²(z¹³-x¹²)(z⁴+3x⁹-y¹³)(17-5y-z¹⁴)]]` (user-reported 2026-04) | **0.9 s** ✓ (same fix; previously hung at >120 s in F4 pre-check) | 2 ms | algorithmic constant factor only |
+| `Factor[Expand[(x²⁰⁰+y²⁰⁰+1)(x²⁰⁰-y+1)]]` (Fateman benchmark, user-reported 2026-05-02) | structurally similar (1.28 s on `k=70`, mathematically correct factorisation) ✓ — see §12.F6 for the trace and Tier 1+2 fix that landed | < 1 ms | univariate BZ substrate is still int64-bound; full bigint univariate BZ (Tier 3) not yet implemented |
 
 The structured pipeline's coverage gap traces to five concrete items:
 
@@ -1396,6 +1397,252 @@ test suite to verify no regressions.
 
 **Estimated**: 50 LOC of deletion + the full test-suite pass.
 
+### Phase F6 — Bigint-coefficient handling in the Factor pipeline (Tier 1+2 DONE 2026-05-02; Tier 3+4 PENDING)
+
+The Fateman benchmark `Factor[Expand[(x^200 + y^200 + 1)(x^200 - y + 1)]]`
+*used to* return the input unchanged in 0.33 s — a wrong answer dressed
+up as a fast one. The pipeline traces as follows (verified by instrumenting
+the live build on 2026-05-02):
+
+```
+heuristic_factor(P)                                           [v_count = 2]
+  -> factor_bivariate_via_hensel(P, vars=[x, y])
+       -> pick_factorable_x_var: main_idx=0 (x), kind=MONIC
+          (lc_x(P) = 1, the constant from the lone x^400 term)
+       -> mvfactor_try_bivariate_monic(P, factor_via_bz_callback)
+            alpha = 0:  image = (1 + x^200)^2          NOT squarefree, skip
+            alpha = 1:  image = x^200 (2 + x^200)      NOT squarefree, skip
+            alpha = -1: image = (x^200 + 2)^2          NOT squarefree, skip
+            alpha = 2:  image = (x^200 - 1)(x^200 + 2^200 + 1)
+                        squarefree, deg = 400, calling factor_cb
+              factor_via_bz_callback
+                -> bz_factor_to_expr(image)
+                   coefficient `2^200 + 1` is EXPR_BIGINT
+                   non_integer_seen = 1   (facpoly.c:3725-3736)
+                   *** BAIL: returns expr_copy(image), unchanged ***
+                walk result: input is a Plus, not a Times
+                -> wraps the unchanged Plus into a single ZUPoly, r = 1
+              orchestrator interprets r == 1 as
+                  "image is irreducible univariately"
+                  -> "P is irreducible bivariately"
+              returns true with one factor = bpoly_copy(P)
+       sees r <= 1, returns NULL
+  -> is_likely_irreducible_multivariate(P, vars=[x, y])
+       alpha = 1, -1: image not squarefree, skip
+       alpha = 2:  squarefree image, BZ bails (BIGINT), n = 1 → confirmation #1
+       alpha = -2: squarefree image, BZ bails (BIGINT), n = 1 → confirmation #2
+       returns TRUE
+  -> heuristic_factor returns expr_copy(P)
+```
+
+**Root cause** (single point):
+
+`bz_factor_to_expr` (`src/facpoly.c:3715`) at lines 3723-3742 only
+handles coefficients of type `EXPR_INTEGER`. For inputs whose
+coefficients have promoted to `EXPR_BIGINT` (because the magnitude
+exceeded `int64_t`), it sets `non_integer_seen = 1` — originally
+intended for symbolic / Gaussian / rational coefficients — and
+returns `expr_copy(P)`. The underlying `UPoly` substrate that
+`factor_zassenhaus` operates on stores coefficients as `int64_t`,
+so widening this single ingestion point is not by itself a fix.
+
+**Why the current call sites can't tell what happened:**
+
+`bz_factor_to_expr`'s "I couldn't represent the input" signal is
+`return expr_copy(P)` — the same shape it would return for a genuine
+irreducible. Both downstream consumers take the bait:
+
+- `factor_via_bz_callback` (`facpoly.c:1204`) walks the returned Expr
+  looking for `Times[...]`. A bare Plus is treated as one factor
+  (`r = 1`).
+- `count_nontrivial_factors` (`facpoly.c:1003`) does the same: a
+  non-Times input with positive degree is one factor.
+
+Since both call sites use `r == 1` / `n == 1` as the "irreducible
+univariate image" confirmation, a coefficient overflow becomes a
+false irreducibility verdict.
+
+**Why this is specifically a Fateman issue:**
+
+The polynomial itself has small int64 coefficients (1, 2, ±1).
+The overflow is created *by the orchestrator's evaluation step*:
+`P(x, alpha)` with `|alpha| >= 2` introduces `alpha^k` for `k`
+up to deg_y(P). For Fateman, deg_y = 201 and the smallest alpha
+that yields a squarefree image is `alpha = 2`, producing `2^200 + 1`
+(a 60-digit BIGINT). The same blow-up affects every alpha in
+`{2, -2, 3, -3, 4, ...}` — there is no usable evaluation point
+within the current alpha set that keeps coefficients in int64.
+
+Empirically the cliff is at `k ≈ 63` (where `2^k` first overflows
+`int64_t`):
+
+| `(x^k + y^k + 1)(x^k - y + 1)` expanded | Factor result |
+|---|---|
+| k = 20 | factored, 56 ms |
+| k = 40 | factored, 41 s (BZ on degree-80 with int64 coeffs is feasible but slow) |
+| k = 100 | unchanged, 110 ms |
+| k = 200 | unchanged, 330 ms |
+
+The k=40 → k=100 jump is the int64 cliff: at k=63 a single coefficient
+of the alpha=2 image trips `non_integer_seen` and the diagnosis
+collapses to "irreducible".
+
+**Fix tiers** (in increasing scope):
+
+1. **Stop lying about it.** Have `bz_factor_to_expr` return `NULL`
+   (or a distinguished "couldn't ingest" sentinel) when
+   `non_integer_seen` is set, and update the two call sites to
+   treat that as "skip this alpha", not "one factor". This does
+   NOT factor Fateman, but it stops the false irreducibility
+   verdict so the polynomial falls through to `factor_roots` /
+   "P unchanged" with the correct semantic. Cheapest defensive
+   fix; also helps any other input whose evaluation overflows.
+   Estimated: ~50 LOC.
+
+2. **Widen the ingestion path.** `bz_factor_to_expr` accepts
+   `EXPR_BIGINT` coefficients by reading them into a `ZUPoly`
+   instead of a `UPoly`, and `factor_zassenhaus` learns to operate
+   on ZUPoly-shaped inputs via reduction modulo `p` for the
+   distinct-degree / equal-degree finite-field steps. The
+   modular Hensel lift still has the int64 modulus ceiling
+   (`p^k <= 2^62`), but for inputs whose Mignotte bound on the
+   factors fits in that ceiling (typical small-coefficient cases
+   like Fateman, where the true factors `x^200 + y^200 + 1` and
+   `x^200 - y + 1` have unit-bounded coefficients) this would be
+   enough. Estimated: 200-400 LOC.
+
+3. **Arbitrary-precision Berlekamp-Zassenhaus.** Replace `UPoly`
+   with `ZUPoly` throughout `factor_zassenhaus`, including the
+   modular arithmetic (`mpz_mod` rather than `% p`) and the
+   Hensel lift (lift to `p^k > 2 * Mignotte`, no int64 ceiling).
+   This is the only fix that handles univariate inputs whose own
+   coefficients are large (e.g. cyclotomic-like polynomials with
+   coefficients 2^k for large k). Estimated: 600-1000 LOC plus
+   regression coverage on the existing BZ test suite.
+
+4. **Sparse multivariate Hensel without numerical evaluation.**
+   The reason Mathematica handles Fateman in microseconds is that
+   it does not go through `P(x, alpha)`-and-lift at all: it uses
+   sparse Hensel iteration directly on the bivariate, never
+   instantiating the alpha-induced coefficient explosion. Picocas
+   would need a sparse Z[x, y] type that stores the polynomial as
+   a list of `(monomial, coefficient)` pairs and a Hensel
+   iteration that operates on it directly. The MPoly type
+   (`src/mpoly.{c,h}`) added in F2 is most of the substrate;
+   what's missing is a sparse-aware Hensel iteration. Estimated:
+   1500-2500 LOC; this is the only path that takes Fateman from
+   "0.33 s wrong" to "1 ms right".
+
+**Recommended sequencing.** Tier 1 alone is worth landing
+immediately as a correctness fix — picocas currently lies about
+Fateman being irreducible, which is worse than failing to factor
+it. Tier 2 is the natural follow-up if there are other inputs
+whose evaluation-point coefficients exceed int64 but whose true
+factors are small (cheap BZ over int64 modulus, just need bigint
+input). Tier 3 is necessary for the full original `Factor[x^k - 1]`
+class once `k` exceeds ~62. Tier 4 is the only way Fateman itself
+gets fast.
+
+#### What landed 2026-05-02 (Tier 1 + Tier 2 hybrid)
+
+Three changes in `src/facpoly.c`:
+
+- `factor_via_bz_callback` (the bivariate orchestrator's
+  univariate-image factoring callback) now scans the ZUPoly's
+  coefficients with `mpz_fits_slong_p` before calling
+  `bz_factor_to_expr`. If any coefficient overflows int64,
+  it returns false. The orchestrator's existing alpha loop
+  treats this as "skip this alpha" (`if (!fac_ok) continue`),
+  exactly as if the squarefree check had failed.
+- `is_likely_irreducible_multivariate` checks each image
+  coefficient's `Expr` type before calling `bz_factor_to_expr`;
+  on `EXPR_BIGINT` it skips the alpha rather than counting
+  the unchanged input as a single irreducible factor.
+- `factor_bivariate_via_hensel` now tries each variable as
+  main in priority order. The picker gained an `excluded_idx`
+  parameter; the outer function calls it twice — once with no
+  exclusion (gets the picker's preferred main variable), and
+  once excluding the first attempt (falling back to the other
+  variable). The polynomial-LC fallback fires only when the
+  *first* picker call returns -1.
+
+For Fateman the trace is now:
+
+```
+attempt 0: pick(excluded=-1) → main=x, kind=MONIC (lc_x = +1)
+  orchestrator: alpha=0,1,-1 not squarefree
+                alpha=2,-2,3,-3,4,-4,5,-5: BIGINT image, skip
+                returns false (no usable evaluation point)
+attempt 1: pick(excluded=0) → main=y, kind=NEGATE (lc_y = -1)
+  orchestrator runs on -P at alpha_x = 0:
+    image = (1-y)(1+y^k) for k = 200, squarefree, ±1 coefficients
+    BZ factors cleanly → r ≥ 2 (each cyclotomic factor of 1+y^k
+                                 plus the 1-y factor)
+    Hensel lift in x recovers the bivariate factors of -P
+  recovery: distribute the sign by negating the highest-degree
+            factor → product = +P
+```
+
+This handles `(x^k + y^k + 1)(x^k - y + 1)` for `k ≤ 70` in
+single-digit seconds (k=70: 1.28 s). For k = 200 (Fateman) the
+Hensel lift on the high-degree y-cyclotomic factors is feasible
+in principle (all coefficients stay ±1) but recombination /
+trial-division on the lifted bivariate factors is slow enough
+that the user's full Fateman benchmark still does not complete
+in seconds. That last gap is what Tier 4 (sparse multivariate
+Hensel) targets.
+
+Display quirk that's NOT addressed: when the NEGATE path absorbs
+the overall sign into one factor, the heuristic chosen is
+"negate the BPoly's largest deg_x factor (tiebreak: largest
+deg_y)". When `main_idx = 1` (i.e. main is the second variable
+`y`), the BPoly's "x" direction is actually `y` and the
+heuristic ends up negating the wrong factor for canonical-form
+purposes. `fk[70]` returns
+`(-1 - x^70 + y) (-1 - x^70 - y^70)`
+instead of the canonical
+`(1 + x^70 - y) (1 + x^70 + y^70)`.
+The product is mathematically correct
+(`(-A)(-B) = AB`); only the printed form is non-canonical.
+A future cleanup would sense the variable swap and pick the
+absorber based on the user-vars rather than the BPoly's
+internal "x" direction.
+
+#### Remaining BIGINT-incompatibility audit
+
+Even after F6 Tier 1+2, several places in the Factor pipeline
+still assume int64 coefficients. None produce *wrong* answers
+(silent miscomputation) any longer; they merely *miss*
+factorisations that exist. The user's correctness contract
+(no wrong answers; correct-but-unsimplified is acceptable) is
+preserved.
+
+| Site | File:line | Impact |
+|---|---|---|
+| `extract_monomial_walk`, `extract_monomial` | `facpoly.c:403, 452` | Coefficient is `int64_t*`. Reads `e->data.integer` only when `e->type == EXPR_INTEGER` (gated). On `EXPR_BIGINT` atoms the walk returns `false`, so callers see "not a monomial" and skip. Affects `factor_binomial`. Misses, doesn't miscompute. |
+| `monomial_collect`, `factor_monomial_content` | `facpoly.c:683, 749` | Same pattern: `int64_t* coeff_out`, returns `false` on BIGINT atom. Misses monomial-content extraction for inputs like `Plus[2^100 a^2 b, 2^100 b]`. |
+| `factor_binomial` (`int_root` etc.) | `facpoly.c:493+` | Reads `c1, c2` as int64. Effectively unreachable on BIGINT inputs because `extract_monomial` already returned false. Misses. |
+| `bz_factor_to_expr` ingestion | `facpoly.c:3793` | Reads `c->data.integer` only when `EXPR_INTEGER`; otherwise sets `non_integer_seen = 1` and returns `expr_copy(P)`. After F6 Tier 1+2 the *signal* is harmless because both call sites that previously misinterpreted it (`factor_via_bz_callback`, `is_likely_irreducible_multivariate`) now pre-filter on BIGINT. Univariate `Factor[BIGINT-coef poly]` still falls through unfactored. |
+| `UPoly` / `factor_zassenhaus` substrate | `facpoly.c:1500-2055` (approx) | Entire engine is int64: `UPoly { int64_t* c }`, modular arithmetic with int64 prime, Hensel lift to int64 modulus, recombination with int64 trial division. Bigint-incompatible at every level. Tier 3 work. |
+| `extract_monomial` exponents | `facpoly.c:433, 712` | Reads `e->data.function.args[1]->data.integer`. Exponents are int64; degree-2^63 polynomials don't happen, so safe in practice. |
+
+Tier 3 (full bigint univariate BZ) replaces the entire UPoly
+substrate with ZUPoly throughout `factor_zassenhaus`, including
+the modular arithmetic (`mpz_mod` instead of `% p`) and Hensel
+lift (lift to `p^k > 2 * Mignotte` with no int64 ceiling). Once
+that lands, `extract_monomial` and friends should also be
+widened to handle BIGINT atoms — same `mpz_t` substrate, same
+GMP arithmetic, but the call sites are scattered enough that
+it's a separate cleanup pass.
+
+The bivariate / multivariate substrate (`ZUPoly`, `BPoly`,
+`MPoly` in `src/zupoly.{c,h}`, `src/bpoly.{c,h}`,
+`src/mpoly.{c,h}`) was designed bigint-clean from the start
+with `mpz_t` coefficients. The recombination logic in
+`mvfactor.c` and `mvfactor3.c` is also bigint-clean. The
+trapped int64 assumption is now confined to the legacy
+univariate engine.
+
 ### Implementation order
 
 | Order | Phase | Reason | Status |
@@ -1405,7 +1652,11 @@ test suite to verify no regressions.
 | 3 | **F3** (Hensel performance) | Required for F1 to actually be fast on high-degree inputs. | **Done** (Stages a+b+c) |
 | 4 | **F5** (recombination heuristics) | Cheap, marginal but real. | **Done** (partial-lift signal short-circuit) |
 | 5 | **F2** (multivariate Hensel) | Largest LOC budget; deferred if user pressure on case-2 type inputs is acceptable. | **MVP done** (n=3, monic-in-main, two-factor) |
-| 6 | **5c** (retire `factor_roots`) | After F1, F3.  Optional cleanup; F2 only required if we want to drop `factor_roots` BEFORE accepting case-2 limitations. | Not started |
+| 6 | **F6 Tier 1+2** (BIGINT-aware skip + main-variable fallback) | Correctness: stop the false "irreducible" verdict on Fateman-class inputs AND let the orchestrator try the OTHER main variable when the picker's first choice has int64-overflowing alpha images. ~120 LOC. | **Done 2026-05-02** — `(x^k + y^k + 1)(x^k - y + 1)` now factors correctly for all k tested (k=70 in 1.28 s; mathematically correct, sign-canonicalisation cosmetic). |
+| 7 | **F6 Tier 3** (full ZUPoly Berlekamp-Zassenhaus, replace int64 UPoly substrate) | Unblocks univariate inputs with large coefficients (`Factor[x^k - 1]` for k ≥ 63, `Factor[x^2 + 2^100 x + 1]`, etc.) and lets `bz_factor_to_expr` return real factorisations of BIGINT-coefficient polynomials instead of returning them unchanged. Required for the bivariate orchestrator to handle inputs where BOTH variables produce BIGINT alpha images. | Not started |
+| 8 | **F6 Tier 4** (sparse multivariate Hensel without numerical evaluation) | Only path to "1 ms" on Fateman itself; biggest LOC budget. The MPoly substrate already exists; what's missing is a sparse-aware Hensel iteration that operates directly on the multivariate without going through P(x, alpha) and lift. | Not started |
+| 9 | **F6 cleanup** (widen `extract_monomial` / `monomial_collect` to mpz_t; fix sign-absorber heuristic for swapped main variable) | Picks up missed factorisations of monomial-content kind on BIGINT-coefficient polynomials, and produces canonical printed form when the bivariate Hensel falls back to the second main variable. | Not started |
+| 10 | **5c** (retire `factor_roots`) | After F1, F3.  Optional cleanup; F2 only required if we want to drop `factor_roots` BEFORE accepting case-2 limitations. | Not started |
 
 Total: ~2-3 person-weeks for F1+F3+F4+F5+5c (without F2).  Adding
 F2 doubles the budget but unblocks the last class of failures.
