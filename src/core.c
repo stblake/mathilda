@@ -63,6 +63,12 @@ void core_init(void) {
     parfrac_init();
     modular_init();
     symtab_add_builtin("AtomQ", builtin_atomq);
+    symtab_add_builtin("Identity", builtin_identity);
+    symtab_get_def("Identity")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Composition", builtin_composition);
+    symtab_get_def("Composition")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED;
+    symtab_add_builtin("ComposeList", builtin_compose_list);
+    symtab_get_def("ComposeList")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Length", builtin_length);
     symtab_add_builtin("Dimensions", builtin_dimensions);
     symtab_add_builtin("Clear", builtin_clear);
@@ -708,9 +714,139 @@ Expr* builtin_out(Expr* res) {
     return val;
 }
 
+Expr* builtin_identity(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        return NULL;
+    }
+    return expr_copy(res->data.function.args[0]);
+}
+
+/* Composition[f1, f2, ...] represents the symbolic composition f1 . f2 . ...
+ * Composition has the attributes Flat and OneIdentity. The evaluator handles
+ * the application Composition[f1, ..., fn][args...] -> f1[f2[...[fn[args...]]]]
+ * directly (see eval.c). This builtin only performs the algebraic
+ * simplifications: Composition[]  -> Identity, Composition[f] -> f, drop
+ * Identity arguments, and cancel adjacent f / InverseFunction[f] pairs. */
+Expr* builtin_composition(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+
+    if (n == 0) return expr_new_symbol("Identity");
+    if (n == 1) return expr_copy(res->data.function.args[0]);
+
+    Expr** args = res->data.function.args;
+    Expr** out = malloc(sizeof(Expr*) * n);
+    if (!out) return NULL;
+    size_t out_count = 0;
+    bool changed = false;
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = args[i];
+        if (a->type == EXPR_SYMBOL && strcmp(a->data.symbol, "Identity") == 0) {
+            changed = true;
+            continue;
+        }
+        out[out_count++] = a; /* shallow ref into res; copied below */
+    }
+
+    /* Cancel adjacent f / InverseFunction[f] pairs (in either order). */
+    bool pair_changed;
+    do {
+        pair_changed = false;
+        for (size_t i = 0; i + 1 < out_count; i++) {
+            Expr* a = out[i];
+            Expr* b = out[i + 1];
+            bool cancel = false;
+            if (a->type == EXPR_FUNCTION &&
+                a->data.function.head->type == EXPR_SYMBOL &&
+                strcmp(a->data.function.head->data.symbol, "InverseFunction") == 0 &&
+                a->data.function.arg_count == 1 &&
+                expr_eq(a->data.function.args[0], b)) {
+                cancel = true;
+            }
+            if (!cancel &&
+                b->type == EXPR_FUNCTION &&
+                b->data.function.head->type == EXPR_SYMBOL &&
+                strcmp(b->data.function.head->data.symbol, "InverseFunction") == 0 &&
+                b->data.function.arg_count == 1 &&
+                expr_eq(b->data.function.args[0], a)) {
+                cancel = true;
+            }
+            if (cancel) {
+                for (size_t j = i; j + 2 < out_count; j++) out[j] = out[j + 2];
+                out_count -= 2;
+                pair_changed = true;
+                changed = true;
+                break;
+            }
+        }
+    } while (pair_changed);
+
+    if (!changed) {
+        free(out);
+        return NULL;
+    }
+
+    if (out_count == 0) {
+        free(out);
+        return expr_new_symbol("Identity");
+    }
+    if (out_count == 1) {
+        Expr* result = expr_copy(out[0]);
+        free(out);
+        return result;
+    }
+
+    Expr** copies = malloc(sizeof(Expr*) * out_count);
+    if (!copies) {
+        free(out);
+        return NULL;
+    }
+    for (size_t i = 0; i < out_count; i++) copies[i] = expr_copy(out[i]);
+    Expr* result = expr_new_function(expr_new_symbol("Composition"), copies, out_count);
+    free(copies);
+    free(out);
+    return result;
+}
+
+/* ComposeList[{f1, f2, ..., fn}, x] generates a list of length n+1 of the
+ * form {x, f1[x], f2[f1[x]], ..., fn[...f2[f1[x]]...]}. The list of
+ * functions can be any expression with head List; the symbolic
+ * applications are constructed and the outer evaluator reduces them
+ * to fixed point. */
+Expr* builtin_compose_list(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) {
+        return NULL;
+    }
+    Expr* fns = res->data.function.args[0];
+    Expr* x = res->data.function.args[1];
+
+    if (fns->type != EXPR_FUNCTION ||
+        fns->data.function.head->type != EXPR_SYMBOL ||
+        strcmp(fns->data.function.head->data.symbol, "List") != 0) {
+        return NULL;
+    }
+
+    size_t n = fns->data.function.arg_count;
+    size_t out_count = n + 1;
+    Expr** out = malloc(sizeof(Expr*) * out_count);
+    if (!out) return NULL;
+
+    out[0] = expr_copy(x);
+    for (size_t i = 0; i < n; i++) {
+        Expr* fi = fns->data.function.args[i];
+        Expr* arg = expr_copy(out[i]);
+        out[i + 1] = expr_new_function(expr_copy(fi), &arg, 1);
+    }
+
+    Expr* result = expr_new_function(expr_new_symbol("List"), out, out_count);
+    free(out);
+    return result;
+}
+
 Expr* builtin_atomq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
-        return NULL; 
+        return NULL;
     }
 
     Expr* arg = res->data.function.args[0];

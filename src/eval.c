@@ -705,8 +705,32 @@ Expr* evaluate_step(Expr* e) {
                     expr_free(res);
                     return reduced;
                 }
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       strcmp(head->data.function.head->data.symbol, "Composition") == 0 &&
+                       head->data.function.arg_count >= 1) {
+                /* 7c. Composition[f1, ..., fn][args...] -> f1[f2[...[fn[args...]]]].
+                 * The innermost call carries all the user-supplied arguments;
+                 * each outer fk wraps the previous result as a single argument. */
+                size_t nf = head->data.function.arg_count;
+                size_t na = res->data.function.arg_count;
+                Expr** call_args = malloc(sizeof(Expr*) * na);
+                for (size_t i = 0; i < na; i++) {
+                    call_args[i] = expr_copy(res->data.function.args[i]);
+                }
+                Expr* inner = expr_new_function(
+                    expr_copy(head->data.function.args[nf - 1]),
+                    call_args, na);
+                free(call_args);
+                for (size_t k = nf - 1; k > 0; k--) {
+                    Expr* one[1] = { inner };
+                    inner = expr_new_function(
+                        expr_copy(head->data.function.args[k - 1]),
+                        one, 1);
+                }
+                expr_free(res);
+                return inner;
             }
-            
+
             return res;
         }
     }

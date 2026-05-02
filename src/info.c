@@ -93,6 +93,55 @@ void info_init(void) {
 
     // Predicates
     symtab_set_docstring("AtomQ", "AtomQ[expr] gives True if expr is an atomic object.");
+    symtab_set_docstring("Identity", "Identity[expr] gives expr (the identity operation).");
+    symtab_set_docstring("Composition",
+        "Composition[f1, f2, f3, ...]\n"
+        "\trepresents a composition of the functions f1, f2, f3, ....\n"
+        "\n"
+        "Composition allows you to build up compositions of functions which can\n"
+        "later be applied to specific arguments. Applied to arguments, the\n"
+        "composition acts innermost-first:\n"
+        "\tComposition[f, g, h][x, y]  ->  f[g[h[x, y]]].\n"
+        "\n"
+        "Composition has the attributes Flat and OneIdentity.\n"
+        "Composition can be entered in the form f1 @* f2 @* ....\n"
+        "\n"
+        "Composition objects containing Identity or InverseFunction[f] are\n"
+        "automatically simplified when possible:\n"
+        "\tComposition[]                       ->  Identity\n"
+        "\tComposition[f]                      ->  f\n"
+        "\tComposition[f, Identity, g]         ->  Composition[f, g]\n"
+        "\tComposition[f, InverseFunction[f]]  ->  Identity.");
+    symtab_set_docstring("ComposeList",
+        "ComposeList[{f1, f2, ...}, x]\n"
+        "\tgenerates a list of the form {x, f1[x], f2[f1[x]], ...}.\n"
+        "\n"
+        "ComposeList applies its functions innermost-first and accumulates\n"
+        "the intermediate results. The output list has one more element than\n"
+        "the input list of functions. Function applications are evaluated\n"
+        "in the normal way after construction:\n"
+        "\tComposeList[{a, b, c}, x]  ->  {x, a[x], b[a[x]], c[b[a[x]]]}.\n"
+        "\n"
+        "ComposeList has the attribute Protected.");
+    symtab_set_docstring("Accumulate",
+        "Accumulate[list]\n"
+        "\tgives a list of the successive accumulated totals of elements in\n"
+        "\tlist. The result has the same length as list.\n"
+        "\n"
+        "Accumulate[list] is effectively equivalent to FoldList[Plus, list].\n"
+        "Accumulate works with integers, arbitrary-precision bignums, machine\n"
+        "doubles, and symbolic expressions, and threads naturally over rows\n"
+        "(so for a matrix it accumulates within columns). The head of the\n"
+        "input is preserved:\n"
+        "\tAccumulate[{a, b, c, d}]    ->  {a, a + b, a + b + c, a + b + c + d}\n"
+        "\tAccumulate[f[a, b, c, d]]   ->  f[a, a + b, a + b + c, a + b + c + d]\n"
+        "\n"
+        "Accumulate[list, Method -> \"CompensatedSummation\"] uses Kahan\n"
+        "compensated summation to reduce numerical error when every element\n"
+        "of list is a machine number. For symbolic or mixed input the option\n"
+        "is ignored and the standard symbolic accumulation is returned.\n"
+        "\n"
+        "Accumulate has the attribute Protected.");
     symtab_set_docstring("NumberQ", "NumberQ[expr] gives True if expr is a number.");
     symtab_set_docstring("NumericQ", "NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.\nAn expression is considered a numeric quantity if it is either an explicit number or a mathematical constant such as Pi, or is a function that has attribute NumericFunction and all of whose arguments are numeric quantities.");
     symtab_set_docstring("IntegerQ", "IntegerQ[expr] gives True if expr is an integer.");

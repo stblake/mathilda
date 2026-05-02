@@ -1135,6 +1135,65 @@ Predicates for testing lists and their structures.
 - `EvenQ[n]`: `True` if `n` is an even integer.
 - `OddQ[n]`: `True` if `n` is an odd integer.
 
+#### Identity
+- `Identity[expr]` returns `expr` unchanged. Useful as a default callable in higher-order functions.
+- Attributes: `Protected`.
+
+```mathematica
+In[1]:= Identity[x]
+Out[1]= x
+
+In[2]:= Identity[1 + 2]
+Out[2]= 3
+
+In[3]:= Map[Identity, {a, b, c}]
+Out[3]= {a, b, c}
+```
+
+#### Composition
+- `Composition[f1, f2, f3, ...]` represents the symbolic composition of the functions `f1, f2, f3, ...`. Applied to arguments, the composition acts innermost-first:
+  `Composition[f, g, h][x, y]` -> `f[g[h[x, y]]]`.
+- Attributes: `Flat`, `OneIdentity`, `Protected`.
+- Algebraic simplifications applied automatically:
+  - `Composition[]` -> `Identity`
+  - `Composition[f]` -> `f`
+  - `Identity` arguments are dropped: `Composition[f, Identity, g]` -> `Composition[f, g]`
+  - Adjacent inverse pairs cancel: `Composition[f, InverseFunction[f]]` -> `Identity`, and similarly for the reverse order.
+- Infix syntax: `f1 @* f2 @* ...` parses as `Composition[f1, f2, ...]` (precedence 625, left-associative). The `Flat` attribute then flattens any nested `Composition` calls produced by the parser.
+
+```mathematica
+In[1]:= Composition[f, g, h][x, y]
+Out[1]= f[g[h[x, y]]]
+
+In[2]:= f @* g @* h @ x
+Out[2]= f[g[h[x]]]
+
+In[3]:= Composition[f, Identity, g]
+Out[3]= Composition[f, g]
+
+In[4]:= Composition[f, InverseFunction[f]][x]
+Out[4]= x
+
+In[5]:= Composition[f, g] @* Composition[a, b]
+Out[5]= Composition[f, g, a, b]
+```
+
+#### ComposeList
+- `ComposeList[{f1, f2, ..., fn}, x]` generates the list `{x, f1[x], f2[f1[x]], ..., fn[...f2[f1[x]]...]}`. The output has `n + 1` elements.
+- Attributes: `Protected`.
+- ComposeList builds the symbolic applications and lets the evaluator reduce them in the normal way, so it composes naturally with pure functions and explicit operator-style sequences.
+
+```mathematica
+In[1]:= ComposeList[{a, b, c, d}, x]
+Out[1]= {x, a[x], b[a[x]], c[b[a[x]]], d[c[b[a[x]]]]}
+
+In[2]:= ComposeList[{f, g}[[{1, 2, 1, 1, 2}]], x]
+Out[2]= {x, f[x], g[f[x]], f[g[f[x]]], f[f[g[f[x]]]], g[f[f[g[f[x]]]]]}
+
+In[3]:= ComposeList[{1 - # &, 1/# &}[[{2, 2, 1, 2, 2, 1}]], x]
+Out[3]= {x, 1/x, x, 1 - x, 1/(1 - x), 1 - x, x}
+```
+
 #### Print
 - `Print[expr1, expr2, ...]` prints the expressions to stdout and returns `Null`.
 - Supports `FullForm` and `InputForm` wrappers.
@@ -2351,6 +2410,36 @@ Out[3]= 10
 
 In[4]:= Total[{{1, 2}, {3}}, 2]
 Out[4]= 6
+```
+
+#### Accumulate
+Gives the running cumulative totals of the elements in a list.
+- `Accumulate[list]`
+- `Accumulate[list, Method -> "CompensatedSummation"]`
+
+**Features**:
+- `Protected`.
+- `Accumulate[list]` has the same length as `list`, and is effectively equivalent to `FoldList[Plus, list]`.
+- The head of the input is preserved, so `Accumulate[f[a, b, c]]` returns `f[a, a + b, a + b + c]`.
+- Threads naturally over rows via `Listable` `Plus`, so `Accumulate` of a matrix accumulates within columns.
+- Works on machine integers, GMP arbitrary-precision integers, machine-precision doubles, and symbolic expressions.
+- With `Method -> "CompensatedSummation"`, Kahan compensated summation is used in double precision when every element is a machine number, reducing floating-point round-off error. For symbolic or mixed input the option is silently ignored and the standard symbolic accumulation is returned.
+
+```mathematica
+In[1]:= Accumulate[{a, b, c, d}]
+Out[1]= {a, a + b, a + b + c, a + b + c + d}
+
+In[2]:= Accumulate[{{a, b}, {c, d}, {e, f}}]
+Out[2]= {{a, b}, {a + c, b + d}, {a + c + e, b + d + f}}
+
+In[3]:= Accumulate[f[a, b, c, d]]
+Out[3]= f[a, a + b, a + b + c, a + b + c + d]
+
+In[4]:= Accumulate[{1, 2, 3, 4, 5}]
+Out[4]= {1, 3, 6, 10, 15}
+
+In[5]:= Accumulate[{1.0, 2.0, 3.0}, Method -> "CompensatedSummation"]
+Out[5]= {1., 3., 6.}
 ```
 
 #### Times (*)

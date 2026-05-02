@@ -485,7 +485,8 @@ typedef enum {
     OP_DECREMENT,
     OP_ADDTO,
     OP_SUBTRACTFROM,
-    OP_DERIVATIVE
+    OP_DERIVATIVE,
+    OP_COMPOSITION
 } OperatorType;
 
 typedef struct {
@@ -515,6 +516,8 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_REPLACEALL; def.prec = 110; def.right_assoc = 0; def.head_name = "ReplaceAll"; def.len = 2;
     } else if (strncmp(pos, "@@", 2) == 0) {
         def.type = OP_APPLY; def.prec = 620; def.right_assoc = 1; def.head_name = "Apply"; def.len = 2;
+    } else if (strncmp(pos, "@*", 2) == 0) {
+        def.type = OP_COMPOSITION; def.prec = 625; def.right_assoc = 0; def.head_name = "Composition"; def.len = 2;
     } else if (strncmp(pos, "/@", 2) == 0) {
         def.type = OP_MAP; def.prec = 620; def.right_assoc = 1; def.head_name = "Map"; def.len = 2;
     } else if (strncmp(pos, ":>", 2) == 0) {
