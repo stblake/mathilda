@@ -12,6 +12,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "numeric.h"
+#include "sym_names.h"
 #include <math.h>
 #ifndef M_PI
 #define M_PI 3.14159265358979323846264338327950288
@@ -69,17 +70,17 @@ static Expr* make_sqrt_expr(Expr* e) {
  */
 static bool extract_pi_multiplier(Expr* e, int64_t* n, int64_t* d) {
     // Case 1: Pi
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, "Pi") == 0) {
+    if (e->type == EXPR_SYMBOL && e->data.symbol == SYM_Pi) {
         *n = 1; *d = 1;
         return true;
     }
     
     // Case 2: n/d * Pi (Times[Rational[n, d], Pi])
-    if (e->type == EXPR_FUNCTION && strcmp(e->data.function.head->data.symbol, "Times") == 0 && e->data.function.arg_count == 2) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Times && e->data.function.arg_count == 2) {
         Expr* first = e->data.function.args[0];
         Expr* second = e->data.function.args[1];
         
-        if (second->type == EXPR_SYMBOL && strcmp(second->data.symbol, "Pi") == 0) {
+        if (second->type == EXPR_SYMBOL && second->data.symbol == SYM_Pi) {
             if (is_rational(first, n, d)) return true;
         }
     }
@@ -139,7 +140,7 @@ static Expr* peel_imaginary_unit(Expr* arg) {
         return expr_copy(im);
     }
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Times") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Times &&
         arg->data.function.arg_count > 0) {
         Expr* first = arg->data.function.args[0];
         Expr* fre; Expr* fim;

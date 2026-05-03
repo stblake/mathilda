@@ -58,6 +58,7 @@
 #include "eval.h"
 #include "numeric.h"
 #include "symtab.h"
+#include "sym_names.h"
 
 #include <float.h>
 #include <math.h>
@@ -110,11 +111,11 @@ static bool is_inexact_leaf(const Expr* e) {
 static bool is_hold_head_sym(const Expr* head) {
     if (!head || head->type != EXPR_SYMBOL) return false;
     const char* s = head->data.symbol;
-    return strcmp(s, "Hold")        == 0
-        || strcmp(s, "HoldForm")    == 0
-        || strcmp(s, "HoldComplete") == 0
-        || strcmp(s, "HoldPattern") == 0
-        || strcmp(s, "Unevaluated") == 0;
+    return s == SYM_Hold
+        || s == SYM_HoldForm
+        || s == SYM_HoldComplete
+        || s == SYM_HoldPattern
+        || s == SYM_Unevaluated;
 }
 
 /* True iff `e` would be considered a NumericQ — borrowed from core.c's
@@ -129,13 +130,13 @@ static bool is_numeric_quantity(const Expr* e) {
 #endif
     if (e->type == EXPR_SYMBOL) {
         const char* name = e->data.symbol;
-        return strcmp(name, "Pi") == 0 || strcmp(name, "E") == 0 || strcmp(name, "I") == 0
-            || strcmp(name, "EulerGamma") == 0 || strcmp(name, "GoldenRatio") == 0
-            || strcmp(name, "Catalan") == 0 || strcmp(name, "Degree") == 0;
+        return name == SYM_Pi || name == SYM_E || name == SYM_I
+            || name == SYM_EulerGamma || name == SYM_GoldenRatio
+            || name == SYM_Catalan || name == SYM_Degree;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* head_name = e->data.function.head->data.symbol;
-        if (strcmp(head_name, "Complex") == 0 || strcmp(head_name, "Rational") == 0) {
+        if (head_name == SYM_Complex || head_name == SYM_Rational) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (!is_numeric_quantity(e->data.function.args[i])) return false;
             }

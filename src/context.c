@@ -2,6 +2,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "expr.h"
+#include "sym_names.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -376,7 +377,7 @@ static Expr* builtin_begin_package(Expr* res) {
     if (needs_list) {
         if (needs_list->type != EXPR_FUNCTION
             || needs_list->data.function.head->type != EXPR_SYMBOL
-            || strcmp(needs_list->data.function.head->data.symbol, "List") != 0) {
+            || needs_list->data.function.head->data.symbol != SYM_List) {
             return NULL;
         }
         needs_count = needs_list->data.function.arg_count;

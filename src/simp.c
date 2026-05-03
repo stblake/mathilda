@@ -8,6 +8,7 @@
 #include "symtab.h"
 #include "expr.h"
 #include "rationalize.h"
+#include "sym_names.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -92,8 +93,8 @@ size_t simp_default_complexity(const Expr* e) {
              * SimplifyCount adds 1 for the wrapper, not the head's own
              * SimplifyCount. */
             if (head && head->type == EXPR_SYMBOL && argc == 2) {
-                if (strcmp(head->data.symbol, "Rational") == 0 ||
-                    strcmp(head->data.symbol, "Complex")  == 0) {
+                if (head->data.symbol == SYM_Rational ||
+                    head->data.symbol == SYM_Complex) {
                     return simp_default_complexity(e->data.function.args[0])
                          + simp_default_complexity(e->data.function.args[1])
                          + 1;
@@ -143,8 +144,8 @@ static void ctx_push(AssumeCtx* ctx, const Expr* fact) {
 static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
     if (!a) return;
     if (a->type == EXPR_SYMBOL) {
-        if (strcmp(a->data.symbol, "True") == 0) return;
-        if (strcmp(a->data.symbol, "False") == 0) {
+        if (a->data.symbol == SYM_True) return;
+        if (a->data.symbol == SYM_False) {
             ctx->inconsistent = true;
             return;
         }
@@ -155,7 +156,7 @@ static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
         a->data.function.head &&
         a->data.function.head->type == EXPR_SYMBOL) {
         const char* h = a->data.function.head->data.symbol;
-        if (strcmp(h, "And") == 0 || strcmp(h, "List") == 0) {
+        if (h == SYM_And || h == SYM_List) {
             for (size_t i = 0; i < a->data.function.arg_count; i++) {
                 ctx_walk(ctx, a->data.function.args[i]);
             }
@@ -217,28 +218,28 @@ static bool fact_implies_strict_positive(const Expr* f, const Expr* x) {
     Expr* b = f->data.function.args[1];
 
     /* Greater[x, c] with c >= 0 (any sign with c == 0 still means x > 0). */
-    if (strcmp(h, "Greater") == 0) {
+    if (h == SYM_Greater) {
         if (expr_eq(a, x)) {
             int s = numeric_sign(b);
             return (s == 0 || s == 1);
         }
     }
     /* Less[c, x] with c >= 0. */
-    if (strcmp(h, "Less") == 0) {
+    if (h == SYM_Less) {
         if (expr_eq(b, x)) {
             int s = numeric_sign(a);
             return (s == 0 || s == 1);
         }
     }
     /* GreaterEqual[x, c] with c > 0. */
-    if (strcmp(h, "GreaterEqual") == 0) {
+    if (h == SYM_GreaterEqual) {
         if (expr_eq(a, x)) {
             int s = numeric_sign(b);
             return s == 1;
         }
     }
     /* LessEqual[c, x] with c > 0. */
-    if (strcmp(h, "LessEqual") == 0) {
+    if (h == SYM_LessEqual) {
         if (expr_eq(b, x)) {
             int s = numeric_sign(a);
             return s == 1;
@@ -256,11 +257,11 @@ static bool fact_implies_nonneg(const Expr* f, const Expr* x) {
     Expr* a = f->data.function.args[0];
     Expr* b = f->data.function.args[1];
     /* x >= c with c >= 0 ; or c <= x with c >= 0. */
-    if (strcmp(h, "GreaterEqual") == 0 && expr_eq(a, x)) {
+    if (h == SYM_GreaterEqual && expr_eq(a, x)) {
         int s = numeric_sign(b);
         return (s == 0 || s == 1);
     }
-    if (strcmp(h, "LessEqual") == 0 && expr_eq(b, x)) {
+    if (h == SYM_LessEqual && expr_eq(b, x)) {
         int s = numeric_sign(a);
         return (s == 0 || s == 1);
     }
@@ -275,22 +276,22 @@ static bool fact_implies_strict_negative(const Expr* f, const Expr* x) {
     Expr* a = f->data.function.args[0];
     Expr* b = f->data.function.args[1];
     /* Less[x, c] with c <= 0. */
-    if (strcmp(h, "Less") == 0 && expr_eq(a, x)) {
+    if (h == SYM_Less && expr_eq(a, x)) {
         int s = numeric_sign(b);
         return (s == 0 || s == -1);
     }
     /* Greater[c, x] with c <= 0. */
-    if (strcmp(h, "Greater") == 0 && expr_eq(b, x)) {
+    if (h == SYM_Greater && expr_eq(b, x)) {
         int s = numeric_sign(a);
         return (s == 0 || s == -1);
     }
     /* LessEqual[x, c] with c < 0. */
-    if (strcmp(h, "LessEqual") == 0 && expr_eq(a, x)) {
+    if (h == SYM_LessEqual && expr_eq(a, x)) {
         int s = numeric_sign(b);
         return s == -1;
     }
     /* GreaterEqual[c, x] with c < 0. */
-    if (strcmp(h, "GreaterEqual") == 0 && expr_eq(b, x)) {
+    if (h == SYM_GreaterEqual && expr_eq(b, x)) {
         int s = numeric_sign(a);
         return s == -1;
     }
@@ -305,11 +306,11 @@ static bool fact_implies_nonpos(const Expr* f, const Expr* x) {
     const char* h = f->data.function.head->data.symbol;
     Expr* a = f->data.function.args[0];
     Expr* b = f->data.function.args[1];
-    if (strcmp(h, "LessEqual") == 0 && expr_eq(a, x)) {
+    if (h == SYM_LessEqual && expr_eq(a, x)) {
         int s = numeric_sign(b);
         return (s == 0 || s == -1);
     }
-    if (strcmp(h, "GreaterEqual") == 0 && expr_eq(b, x)) {
+    if (h == SYM_GreaterEqual && expr_eq(b, x)) {
         int s = numeric_sign(a);
         return (s == 0 || s == -1);
     }
@@ -340,12 +341,12 @@ static bool fact_implies_even(const Expr* f, const Expr* x) {
     if (a->type == EXPR_FUNCTION &&
         a->data.function.head &&
         a->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(a->data.function.head->data.symbol, "Mod") == 0) {
+        a->data.function.head->data.symbol == SYM_Mod) {
         mod = a; zero = b;
     } else if (b->type == EXPR_FUNCTION &&
                b->data.function.head &&
                b->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(b->data.function.head->data.symbol, "Mod") == 0) {
+               b->data.function.head->data.symbol == SYM_Mod) {
         mod = b; zero = a;
     }
     if (!mod || !zero) return false;
@@ -456,14 +457,14 @@ static bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
         /* Times: positive iff every factor positive. */
-        if (strcmp(h, "Times") == 0 && n > 0) {
+        if (h == SYM_Times && n > 0) {
             for (size_t i = 0; i < n; i++) {
                 if (!prov_pos(ctx, a[i])) return false;
             }
             return true;
         }
         /* Plus: at least one strictly positive, all others non-negative. */
-        if (strcmp(h, "Plus") == 0 && n > 0) {
+        if (h == SYM_Plus && n > 0) {
             bool any = false;
             for (size_t i = 0; i < n; i++) {
                 if (prov_pos(ctx, a[i])) { any = true; continue; }
@@ -473,17 +474,17 @@ static bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
             return any;
         }
         /* Power: positive base raised to anything is positive. */
-        if (strcmp(h, "Power") == 0 && n == 2) {
+        if (h == SYM_Power && n == 2) {
             if (prov_pos(ctx, a[0])) return true;
         }
         /* Exp[real] is strictly positive. */
-        if (strcmp(h, "Exp") == 0 && n == 1) {
+        if (h == SYM_Exp && n == 1) {
             if (prov_re(ctx, a[0])) return true;
         }
         /* Abs[x] >= 0; strictly > 0 only when x != 0, which we cannot prove
          * from sign alone, so fall back to nonneg here. */
         /* Cosh[real] >= 1 > 0. */
-        if (strcmp(h, "Cosh") == 0 && n == 1 && prov_re(ctx, a[0])) return true;
+        if (h == SYM_Cosh && n == 1 && prov_re(ctx, a[0])) return true;
         /* Sqrt[positive] is positive (and Sqrt is Power[_, 1/2]; that path
          * handled above already). */
     }
@@ -502,23 +503,23 @@ static bool prov_nn(const AssumeCtx* ctx, const Expr* x) {
         const char* h = x->data.function.head->data.symbol;
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
-        if (strcmp(h, "Times") == 0 && n > 0) {
+        if (h == SYM_Times && n > 0) {
             for (size_t i = 0; i < n; i++) {
                 if (!prov_nn(ctx, a[i])) return false;
             }
             return true;
         }
-        if (strcmp(h, "Plus") == 0 && n > 0) {
+        if (h == SYM_Plus && n > 0) {
             for (size_t i = 0; i < n; i++) {
                 if (!prov_nn(ctx, a[i])) return false;
             }
             return true;
         }
         /* Abs[real] >= 0. */
-        if (strcmp(h, "Abs") == 0 && n == 1 && prov_re(ctx, a[0])) return true;
+        if (h == SYM_Abs && n == 1 && prov_re(ctx, a[0])) return true;
         /* x^(2k) is non-negative for real x and integer k -- common case
          * x^2 covered via the integer-2 literal exponent. */
-        if (strcmp(h, "Power") == 0 && n == 2 && prov_re(ctx, a[0])) {
+        if (h == SYM_Power && n == 2 && prov_re(ctx, a[0])) {
             if (a[1]->type == EXPR_INTEGER && (a[1]->data.integer % 2) == 0) return true;
         }
     }
@@ -557,14 +558,14 @@ static bool prov_int(const AssumeCtx* ctx, const Expr* x) {
         const char* h = x->data.function.head->data.symbol;
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
-        if ((strcmp(h, "Times") == 0 || strcmp(h, "Plus") == 0) && n > 0) {
+        if ((h == SYM_Times || h == SYM_Plus) && n > 0) {
             for (size_t i = 0; i < n; i++) {
                 if (!prov_int(ctx, a[i])) return false;
             }
             return true;
         }
         /* Power[int, nonneg-int] is integer. */
-        if (strcmp(h, "Power") == 0 && n == 2 &&
+        if (h == SYM_Power && n == 2 &&
             prov_int(ctx, a[0]) &&
             a[1]->type == EXPR_INTEGER && a[1]->data.integer >= 0) return true;
     }
@@ -594,32 +595,32 @@ static bool prov_re(const AssumeCtx* ctx, const Expr* x) {
         const char* h = x->data.function.head->data.symbol;
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
-        if ((strcmp(h, "Times") == 0 || strcmp(h, "Plus") == 0) && n > 0 && all_real(ctx, x)) {
+        if ((h == SYM_Times || h == SYM_Plus) && n > 0 && all_real(ctx, x)) {
             return true;
         }
         /* Power[positive, real] is real. Power[real, integer] is real. */
-        if (strcmp(h, "Power") == 0 && n == 2) {
+        if (h == SYM_Power && n == 2) {
             if (prov_pos(ctx, a[0]) && prov_re(ctx, a[1])) return true;
             if (prov_re(ctx, a[0]) && prov_int(ctx, a[1])) return true;
         }
         /* Real-valued elementary functions of real arguments. */
         if (n == 1 && prov_re(ctx, a[0])) {
-            if (strcmp(h, "Sin")  == 0 || strcmp(h, "Cos")  == 0 ||
-                strcmp(h, "Tan")  == 0 || strcmp(h, "Cot")  == 0 ||
-                strcmp(h, "Sec")  == 0 || strcmp(h, "Csc")  == 0 ||
-                strcmp(h, "Sinh") == 0 || strcmp(h, "Cosh") == 0 ||
-                strcmp(h, "Tanh") == 0 || strcmp(h, "Coth") == 0 ||
-                strcmp(h, "Sech") == 0 || strcmp(h, "Csch") == 0 ||
-                strcmp(h, "Exp")  == 0 || strcmp(h, "Abs")  == 0 ||
-                strcmp(h, "Floor") == 0 || strcmp(h, "Ceiling") == 0 ||
-                strcmp(h, "Round") == 0 || strcmp(h, "Sign") == 0) return true;
+            if (h == SYM_Sin || h == SYM_Cos ||
+                h == SYM_Tan || h == SYM_Cot ||
+                h == SYM_Sec || h == SYM_Csc ||
+                h == SYM_Sinh || h == SYM_Cosh ||
+                h == SYM_Tanh || h == SYM_Coth ||
+                h == SYM_Sech || h == SYM_Csch ||
+                h == SYM_Exp || h == SYM_Abs ||
+                h == SYM_Floor || h == SYM_Ceiling ||
+                h == SYM_Round || h == SYM_Sign) return true;
         }
         /* Log[positive] is real. */
-        if (strcmp(h, "Log") == 0 && n == 1 && prov_pos(ctx, a[0])) return true;
+        if (h == SYM_Log && n == 1 && prov_pos(ctx, a[0])) return true;
         /* ArcTan[real] is real, ArcSinh[real] real. */
         if (n == 1 && prov_re(ctx, a[0])) {
-            if (strcmp(h, "ArcTan") == 0 || strcmp(h, "ArcSinh") == 0 ||
-                strcmp(h, "ArcCot") == 0) return true;
+            if (h == SYM_ArcTan || h == SYM_ArcSinh ||
+                h == SYM_ArcCot) return true;
         }
     }
     return false;
@@ -665,7 +666,7 @@ static bool simp_debug_enabled(void) {
     Rule* r = symtab_get_own_values("$SimplifyDebug");
     if (!r || !r->replacement) return false;
     Expr* v = r->replacement;
-    return v->type == EXPR_SYMBOL && strcmp(v->data.symbol, "True") == 0;
+    return v->type == EXPR_SYMBOL && v->data.symbol == SYM_True;
 }
 
 static double simp_debug_elapsed_ms(clock_t t0) {
@@ -709,7 +710,7 @@ static bool is_rule_with_lhs(const Expr* e, const char* lhs_symbol) {
     if (e->data.function.arg_count != 2) return false;
     if (!e->data.function.head || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol;
-    if (strcmp(h, "Rule") != 0 && strcmp(h, "RuleDelayed") != 0) return false;
+    if (h != SYM_Rule && h != SYM_RuleDelayed) return false;
     Expr* k = e->data.function.args[0];
     return k && k->type == EXPR_SYMBOL && strcmp(k->data.symbol, lhs_symbol) == 0;
 }
@@ -865,7 +866,7 @@ static void collect_known_symbols(const AssumeCtx* ctx,
             } else if (a->type == EXPR_FUNCTION &&
                        a->data.function.head &&
                        a->data.function.head->type == EXPR_SYMBOL &&
-                       strcmp(a->data.function.head->data.symbol, "Mod") == 0 &&
+                       a->data.function.head->data.symbol == SYM_Mod &&
                        a->data.function.arg_count == 2 &&
                        a->data.function.args[0]->type == EXPR_SYMBOL) {
                 Expr* sym = a->data.function.args[0];
@@ -1032,7 +1033,7 @@ static Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         if (diff->type == EXPR_FUNCTION &&
             diff->data.function.head &&
             diff->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(diff->data.function.head->data.symbol, "Plus") == 0 &&
+            diff->data.function.head->data.symbol == SYM_Plus &&
             diff->data.function.arg_count >= 3) {
             for (size_t j = 0; j < diff->data.function.arg_count; j++) {
                 Expr* term = diff->data.function.args[j];
@@ -1082,7 +1083,7 @@ static Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         if (diff->type == EXPR_FUNCTION &&
             diff->data.function.head &&
             diff->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(diff->data.function.head->data.symbol, "Plus") == 0 &&
+            diff->data.function.head->data.symbol == SYM_Plus &&
             diff->data.function.arg_count >= 3) {
             size_t n = diff->data.function.arg_count;
             /* Pick the first non-numeric term, breaking ties by canonical
@@ -1520,7 +1521,7 @@ static bool radical_factor_split(const Expr* e,
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (!e->data.function.head ||
         e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (strcmp(e->data.function.head->data.symbol, "Power") != 0) return false;
+    if (e->data.function.head->data.symbol != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     const Expr* base = e->data.function.args[0];
     const Expr* exp  = e->data.function.args[1];
@@ -1640,7 +1641,7 @@ static Expr* simp_radicals_walk(const Expr* e) {
     if (target->type == EXPR_FUNCTION
         && target->data.function.head
         && target->data.function.head->type == EXPR_SYMBOL
-        && strcmp(target->data.function.head->data.symbol, "Times") == 0) {
+        && target->data.function.head->data.symbol == SYM_Times) {
         Expr* combined = simp_radicals_combine_times(target);
         if (combined) {
             if (current) expr_free(current);
@@ -1733,8 +1734,8 @@ static bool has_pythag_head(const Expr* e) {
     Expr* head = e->data.function.head;
     if (head && head->type == EXPR_SYMBOL) {
         const char* h = head->data.symbol;
-        if (strcmp(h, "Cos") == 0 || strcmp(h, "Sin") == 0 ||
-            strcmp(h, "Cosh") == 0 || strcmp(h, "Sinh") == 0) {
+        if (h == SYM_Cos || h == SYM_Sin ||
+            h == SYM_Cosh || h == SYM_Sinh) {
             return true;
         }
     }
@@ -1882,7 +1883,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
 
     /* Log[Times[u1,...,un]] -> Sum Log[ui]  when every ui is positive.
      * Log[Power[x, p]]      -> p Log[x]      when x positive and p real. */
-    if (strcmp(h, "Log") == 0 && n == 1) {
+    if (h == SYM_Log && n == 1) {
         Expr* inner = a[0];
         if (inner->type == EXPR_FUNCTION &&
             inner->data.function.head &&
@@ -1891,7 +1892,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
             size_t in = inner->data.function.arg_count;
             Expr** ia = inner->data.function.args;
 
-            if (strcmp(ih, "Times") == 0 && in > 0) {
+            if (ih == SYM_Times && in > 0) {
                 bool all_pos = true;
                 for (size_t i = 0; i < in; i++) {
                     if (!prov_pos(ctx, ia[i])) { all_pos = false; break; }
@@ -1908,7 +1909,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
                     return canon;
                 }
             }
-            if (strcmp(ih, "Power") == 0 && in == 2) {
+            if (ih == SYM_Power && in == 2) {
                 Expr* base = ia[0];
                 Expr* p    = ia[1];
                 if (prov_pos(ctx, base) && prov_re(ctx, p)) {
@@ -1924,7 +1925,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
 
     /* Power[Times[u1,...,un], a]  -> Times[ui^a]  when every ui positive.
      * Power[Power[x, p], q]       -> Power[x, p*q] when x positive, p real. */
-    if (strcmp(h, "Power") == 0 && n == 2) {
+    if (h == SYM_Power && n == 2) {
         Expr* base = a[0];
         Expr* exp_  = a[1];
 
@@ -1935,7 +1936,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
             size_t bn = base->data.function.arg_count;
             Expr** ba = base->data.function.args;
 
-            if (strcmp(bh, "Times") == 0 && bn > 0) {
+            if (bh == SYM_Times && bn > 0) {
                 bool all_pos = true;
                 for (size_t i = 0; i < bn; i++) {
                     if (!prov_pos(ctx, ba[i])) { all_pos = false; break; }
@@ -1952,7 +1953,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
                     return canon;
                 }
             }
-            if (strcmp(bh, "Power") == 0 && bn == 2) {
+            if (bh == SYM_Power && bn == 2) {
                 Expr* xx = ba[0];
                 Expr* pp = ba[1];
                 if (prov_pos(ctx, xx) && prov_re(ctx, pp)) {
@@ -2007,7 +2008,7 @@ static bool contains_abs(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Abs") == 0) return true;
+        e->data.function.head->data.symbol == SYM_Abs) return true;
     if (contains_abs(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_abs(e->data.function.args[i])) return true;
@@ -2050,7 +2051,7 @@ static bool contains_log(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Log") == 0) return true;
+        e->data.function.head->data.symbol == SYM_Log) return true;
     if (contains_log(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_log(e->data.function.args[i])) return true;
@@ -2063,7 +2064,7 @@ static bool contains_power(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0) return true;
+        e->data.function.head->data.symbol == SYM_Power) return true;
     if (contains_power(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_power(e->data.function.args[i])) return true;
@@ -2081,9 +2082,9 @@ static bool contains_plus_or_times(const Expr* e) {
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol;
-        if (strcmp(h, "Plus")  == 0 ||
-            strcmp(h, "Times") == 0 ||
-            strcmp(h, "Power") == 0) return true;
+        if (h == SYM_Plus ||
+            h == SYM_Times ||
+            h == SYM_Power) return true;
     }
     if (contains_plus_or_times(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -2158,7 +2159,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
     /* Universal: idempotency Abs[Abs[x]] -> Abs[x]. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Abs") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Abs &&
         arg->data.function.arg_count == 1) {
         return expr_copy((Expr*)arg);
     }
@@ -2166,7 +2167,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
     /* Universal: conjugate symmetry Abs[Conjugate[x]] -> Abs[x]. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Conjugate") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Conjugate &&
         arg->data.function.arg_count == 1) {
         Expr* a[1] = { expr_copy(arg->data.function.args[0]) };
         return expr_new_function(expr_new_symbol("Abs"), a, 1);
@@ -2176,10 +2177,10 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * exponential is e^(real part of the exponent). */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Power") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Power &&
         arg->data.function.arg_count == 2 &&
         arg->data.function.args[0]->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.args[0]->data.symbol, "E") == 0) {
+        arg->data.function.args[0]->data.symbol == SYM_E) {
         Expr* re_in[1] = { expr_copy(arg->data.function.args[1]) };
         Expr* re_call = expr_new_function(expr_new_symbol("Re"), re_in, 1);
         Expr* pa[2] = { expr_new_symbol("E"), re_call };
@@ -2191,7 +2192,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * Abs[x/y] case since x/y is Times[x, Power[y, -1]]. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Times") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Times &&
         arg->data.function.arg_count >= 2) {
         size_t n = arg->data.function.arg_count;
         Expr** new_args = (Expr**)calloc(n, sizeof(Expr*));
@@ -2210,7 +2211,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * rule applies only to integer exponents. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Power") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Power &&
         arg->data.function.arg_count == 2 &&
         (arg->data.function.args[1]->type == EXPR_INTEGER ||
          arg->data.function.args[1]->type == EXPR_BIGINT)) {
@@ -2241,7 +2242,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * an Element[y, Reals] assumption. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Power") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Power &&
         arg->data.function.arg_count == 2 &&
         assume_known_real(ctx, arg->data.function.args[1])) {
         Expr* base = arg->data.function.args[0];
@@ -2257,7 +2258,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
      * Log[x]] and the second factor has unit modulus. */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Power") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Power &&
         arg->data.function.arg_count == 2 &&
         assume_known_positive(ctx, arg->data.function.args[0])) {
         Expr* base = arg->data.function.args[0];
@@ -2308,7 +2309,7 @@ static Expr* abs_walk(const Expr* e, const AssumeCtx* ctx) {
     /* Rule fires only on Abs[_]. */
     bool is_abs = e->data.function.head &&
                   e->data.function.head->type == EXPR_SYMBOL &&
-                  strcmp(e->data.function.head->data.symbol, "Abs") == 0 &&
+                  e->data.function.head->data.symbol == SYM_Abs &&
                   e->data.function.arg_count == 1;
     if (is_abs) {
         const Expr* inner = this_form ? this_form->data.function.args[0]
@@ -2377,7 +2378,7 @@ static bool has_non_integer_power(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         if (exp->type != EXPR_INTEGER && exp->type != EXPR_BIGINT) return true;
@@ -2485,7 +2486,7 @@ static void try_collect_per_variable(const Expr* seed, size_t parent_score,
     if (vars->type != EXPR_FUNCTION ||
         !vars->data.function.head ||
         vars->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(vars->data.function.head->data.symbol, "List") != 0) {
+        vars->data.function.head->data.symbol != SYM_List) {
         expr_free(vars);
         return;
     }
@@ -2562,7 +2563,7 @@ static bool simp_is_polynomial_in_own_vars(const Expr* e) {
     if (vars->type != EXPR_FUNCTION ||
         !vars->data.function.head ||
         vars->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(vars->data.function.head->data.symbol, "List") != 0) {
+        vars->data.function.head->data.symbol != SYM_List) {
         expr_free(vars);
         return false;
     }
@@ -2579,7 +2580,7 @@ static bool simp_is_polynomial_in_own_vars(const Expr* e) {
     Expr* r = evaluate(pq);
     expr_free(pq);
     bool ok = (r && r->type == EXPR_SYMBOL &&
-               strcmp(r->data.symbol, "True") == 0);
+               r->data.symbol == SYM_True);
     if (r) expr_free(r);
     return ok;
 }
@@ -2943,7 +2944,7 @@ static Expr* simp_split_additive(const Expr* input, const AssumeCtx* ctx,
     if (!input || input->type != EXPR_FUNCTION) return NULL;
     if (!input->data.function.head ||
         input->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(input->data.function.head->data.symbol, "Plus") != 0)
+        input->data.function.head->data.symbol != SYM_Plus)
         return NULL;
     size_t n = input->data.function.arg_count;
     if (n < 4) return NULL;
@@ -3071,7 +3072,7 @@ static Expr* simp_split_multiplicative(const Expr* input,
     if (!input || input->type != EXPR_FUNCTION) return NULL;
     if (!input->data.function.head ||
         input->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(input->data.function.head->data.symbol, "Times") != 0)
+        input->data.function.head->data.symbol != SYM_Times)
         return NULL;
     size_t n = input->data.function.arg_count;
     if (n < 3) return NULL;
@@ -3849,7 +3850,7 @@ static bool is_complex_literal(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && e->data.function.head->data.symbol == SYM_Complex
         && e->data.function.arg_count == 2;
 }
 
@@ -3857,7 +3858,7 @@ static bool is_rational_literal(const Expr* e) {
     return e && e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Rational") == 0
+        && e->data.function.head->data.symbol == SYM_Rational
         && e->data.function.arg_count == 2;
 }
 
@@ -3931,8 +3932,8 @@ static int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) 
 
     if (strcmp(dom, "Booleans") == 0) {
         if (x->type == EXPR_SYMBOL) {
-            if (strcmp(x->data.symbol, "True") == 0)  return 1;
-            if (strcmp(x->data.symbol, "False") == 0) return 1;
+            if (x->data.symbol == SYM_True)  return 1;
+            if (x->data.symbol == SYM_False) return 1;
         }
         return -1;
     }
@@ -3942,8 +3943,8 @@ static int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) 
             Expr* primeq = call_unary_copy("PrimeQ", x);
             int ans = -1;
             if (primeq && primeq->type == EXPR_SYMBOL) {
-                if (strcmp(primeq->data.symbol, "True")  == 0) ans = 1;
-                if (strcmp(primeq->data.symbol, "False") == 0) ans = 0;
+                if (primeq->data.symbol == SYM_True) ans = 1;
+                if (primeq->data.symbol == SYM_False) ans = 0;
             }
             if (primeq) expr_free(primeq);
             return ans;
@@ -3956,8 +3957,8 @@ static int element_decide(const Expr* x, const char* dom, const AssumeCtx* ctx) 
             Expr* primeq = call_unary_copy("PrimeQ", x);
             int ans = -1;
             if (primeq && primeq->type == EXPR_SYMBOL) {
-                if (strcmp(primeq->data.symbol, "True")  == 0) ans = 0;
-                if (strcmp(primeq->data.symbol, "False") == 0) ans = 1;
+                if (primeq->data.symbol == SYM_True) ans = 0;
+                if (primeq->data.symbol == SYM_False) ans = 1;
             }
             if (primeq) expr_free(primeq);
             return ans;
@@ -3980,7 +3981,7 @@ Expr* builtin_element(Expr* res) {
      * undetermined we leave them as Element[xi, dom]. */
     if (x->type == EXPR_FUNCTION && x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(x->data.function.head->data.symbol, "List") == 0) {
+        x->data.function.head->data.symbol == SYM_List) {
         size_t n = x->data.function.arg_count;
         Expr** out = (Expr**)calloc(n, sizeof(Expr*));
         for (size_t i = 0; i < n; i++) {
@@ -4113,12 +4114,12 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
     const Expr* h = relation->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return NULL;
     const char* hn = h->data.symbol;
-    bool ok = (strcmp(hn, "Equal") == 0 ||
-               strcmp(hn, "Unequal") == 0 ||
-               strcmp(hn, "Less") == 0 ||
-               strcmp(hn, "LessEqual") == 0 ||
-               strcmp(hn, "Greater") == 0 ||
-               strcmp(hn, "GreaterEqual") == 0);
+    bool ok = (hn == SYM_Equal ||
+               hn == SYM_Unequal ||
+               hn == SYM_Less ||
+               hn == SYM_LessEqual ||
+               hn == SYM_Greater ||
+               hn == SYM_GreaterEqual);
     if (!ok) return NULL;
 
     /* d = lhs - rhs, evaluated. */
@@ -4203,10 +4204,10 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
 
     const char* out_head = hn;
     if (flipped) {
-        if      (strcmp(hn, "Less") == 0)         out_head = "Greater";
-        else if (strcmp(hn, "Greater") == 0)      out_head = "Less";
-        else if (strcmp(hn, "LessEqual") == 0)    out_head = "GreaterEqual";
-        else if (strcmp(hn, "GreaterEqual") == 0) out_head = "LessEqual";
+        if      (hn == SYM_Less)         out_head = "Greater";
+        else if (hn == SYM_Greater)      out_head = "Less";
+        else if (hn == SYM_LessEqual)    out_head = "GreaterEqual";
+        else if (hn == SYM_GreaterEqual) out_head = "LessEqual";
     }
 
     /* Build LHS from positive-coef variable terms, RHS from
@@ -4361,7 +4362,7 @@ Expr* builtin_simplify(Expr* res) {
      * Automatic[candidate] (which would never reduce). */
     if (opt_complexity &&
         opt_complexity->type == EXPR_SYMBOL &&
-        strcmp(opt_complexity->data.symbol, "Automatic") == 0) {
+        opt_complexity->data.symbol == SYM_Automatic) {
         opt_complexity = NULL;
     }
 
@@ -4481,7 +4482,7 @@ Expr* builtin_assuming(Expr* res) {
     if (assum->type == EXPR_FUNCTION &&
         assum->data.function.head &&
         assum->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(assum->data.function.head->data.symbol, "List") == 0) {
+        assum->data.function.head->data.symbol == SYM_List) {
         size_t n = assum->data.function.arg_count;
         Expr** copies = (Expr**)calloc(n, sizeof(Expr*));
         for (size_t i = 0; i < n; i++) copies[i] = expr_copy(assum->data.function.args[i]);

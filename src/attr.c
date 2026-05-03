@@ -1,6 +1,7 @@
 #include "attr.h"
 #include "symtab.h"
 #include "eval.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -227,7 +228,7 @@ static void set_attributes_for_symbol(Expr* sym_expr, Expr* attr_spec) {
         add_single_attribute(def, attr_spec);
     } else if (attr_spec->type == EXPR_FUNCTION && 
                attr_spec->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(attr_spec->data.function.head->data.symbol, "List") == 0) {
+               attr_spec->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < attr_spec->data.function.arg_count; i++) {
             add_single_attribute(def, attr_spec->data.function.args[i]);
         }
@@ -249,7 +250,7 @@ static void clear_attributes_for_symbol(Expr* sym_expr, Expr* attr_spec) {
         remove_single_attribute(def, attr_spec);
     } else if (attr_spec->type == EXPR_FUNCTION &&
                attr_spec->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(attr_spec->data.function.head->data.symbol, "List") == 0) {
+               attr_spec->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < attr_spec->data.function.arg_count; i++) {
             remove_single_attribute(def, attr_spec->data.function.args[i]);
         }
@@ -267,7 +268,7 @@ Expr* builtin_clear_attributes(Expr* res) {
         clear_attributes_for_symbol(sym_spec, attr_spec);
     } else if (sym_spec->type == EXPR_FUNCTION &&
                sym_spec->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(sym_spec->data.function.head->data.symbol, "List") == 0) {
+               sym_spec->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < sym_spec->data.function.arg_count; i++) {
             clear_attributes_for_symbol(sym_spec->data.function.args[i], attr_spec);
         }
@@ -287,7 +288,7 @@ Expr* builtin_set_attributes(Expr* res) {
         set_attributes_for_symbol(sym_spec, attr_spec);
     } else if (sym_spec->type == EXPR_FUNCTION && 
                sym_spec->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(sym_spec->data.function.head->data.symbol, "List") == 0) {
+               sym_spec->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < sym_spec->data.function.arg_count; i++) {
             set_attributes_for_symbol(sym_spec->data.function.args[i], attr_spec);
         }

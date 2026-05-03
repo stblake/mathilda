@@ -5,6 +5,7 @@
 #include "eval.h"
 #include "arithmetic.h"
 #include "complex.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
@@ -62,7 +63,7 @@ Expr* builtin_mean(Expr* res) {
     Expr* matrixq_call = expr_new_function(expr_new_symbol("MatrixQ"), matrixq_args, 1);
     Expr* is_matrix = evaluate(matrixq_call);
     expr_free(matrixq_call);
-    if (is_matrix->type == EXPR_SYMBOL && strcmp(is_matrix->data.symbol, "True") == 0) {
+    if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol == SYM_True) {
         expr_free(is_matrix);
         return apply_columnwise("Mean", data);
     }
@@ -73,7 +74,7 @@ Expr* builtin_mean(Expr* res) {
     Expr* listq_call = expr_new_function(expr_new_symbol("ListQ"), listq_args, 1);
     Expr* is_list = evaluate(listq_call);
     expr_free(listq_call);
-    if (is_list->type == EXPR_SYMBOL && strcmp(is_list->data.symbol, "False") == 0) {
+    if (is_list->type == EXPR_SYMBOL && is_list->data.symbol == SYM_False) {
         expr_free(is_list);
         return NULL;
     }
@@ -156,7 +157,7 @@ Expr* builtin_rootmeansquare(Expr* res) {
     Expr* matrixq_call = expr_new_function(expr_new_symbol("MatrixQ"), matrixq_args, 1);
     Expr* is_matrix = evaluate(matrixq_call);
     expr_free(matrixq_call);
-    if (is_matrix->type == EXPR_SYMBOL && strcmp(is_matrix->data.symbol, "True") == 0) {
+    if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol == SYM_True) {
         expr_free(is_matrix);
         return apply_columnwise("RootMeanSquare", data);
     }
@@ -167,7 +168,7 @@ Expr* builtin_rootmeansquare(Expr* res) {
     Expr* listq_call = expr_new_function(expr_new_symbol("ListQ"), listq_args, 1);
     Expr* is_list = evaluate(listq_call);
     expr_free(listq_call);
-    if (is_list->type == EXPR_SYMBOL && strcmp(is_list->data.symbol, "False") == 0) {
+    if (is_list->type == EXPR_SYMBOL && is_list->data.symbol == SYM_False) {
         expr_free(is_list);
         return NULL;
     }
@@ -275,7 +276,7 @@ Expr* builtin_variance(Expr* res) {
     Expr* matrixq_call = expr_new_function(expr_new_symbol("MatrixQ"), matrixq_args, 1);
     Expr* is_matrix = evaluate(matrixq_call);
     expr_free(matrixq_call);
-    if (is_matrix->type == EXPR_SYMBOL && strcmp(is_matrix->data.symbol, "True") == 0) {
+    if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol == SYM_True) {
         expr_free(is_matrix);
         return apply_columnwise("Variance", data);
     }
@@ -286,7 +287,7 @@ Expr* builtin_variance(Expr* res) {
     Expr* listq_call = expr_new_function(expr_new_symbol("ListQ"), listq_args, 1);
     Expr* is_list = evaluate(listq_call);
     expr_free(listq_call);
-    if (is_list->type == EXPR_SYMBOL && strcmp(is_list->data.symbol, "False") == 0) {
+    if (is_list->type == EXPR_SYMBOL && is_list->data.symbol == SYM_False) {
         expr_free(is_list);
         return NULL;
     }
@@ -414,7 +415,7 @@ Expr* builtin_standard_deviation(Expr* res) {
     Expr* matrixq_call = expr_new_function(expr_new_symbol("MatrixQ"), matrixq_args, 1);
     Expr* is_matrix = evaluate(matrixq_call);
     expr_free(matrixq_call);
-    if (is_matrix->type == EXPR_SYMBOL && strcmp(is_matrix->data.symbol, "True") == 0) {
+    if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol == SYM_True) {
         expr_free(is_matrix);
         return apply_columnwise("StandardDeviation", data);
     }
@@ -465,7 +466,7 @@ static bool is_real_numeric(Expr* e) {
     Expr* numq = expr_new_function(expr_new_symbol("NumericQ"), (Expr*[]){expr_copy(e)}, 1);
     Expr* numq_eval = evaluate(numq);
     expr_free(numq);
-    if (numq_eval->type != EXPR_SYMBOL || strcmp(numq_eval->data.symbol, "True") != 0) {
+    if (numq_eval->type != EXPR_SYMBOL || numq_eval->data.symbol != SYM_True) {
         expr_free(numq_eval);
         return false;
     }
@@ -474,7 +475,7 @@ static bool is_real_numeric(Expr* e) {
     Expr* freeq = expr_new_function(expr_new_symbol("FreeQ"), (Expr*[]){expr_copy(e), expr_new_symbol("I")}, 2);
     Expr* freeq_eval = evaluate(freeq);
     expr_free(freeq);
-    if (freeq_eval->type != EXPR_SYMBOL || strcmp(freeq_eval->data.symbol, "True") != 0) {
+    if (freeq_eval->type != EXPR_SYMBOL || freeq_eval->data.symbol != SYM_True) {
         expr_free(freeq_eval);
         return false;
     }
@@ -488,7 +489,7 @@ Expr* builtin_median(Expr* res) {
     Expr* data = res->data.function.args[0];
 
     // Check if it's a vector or tensor. If it's empty or not a list, return NULL.
-    if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL || strcmp(data->data.function.head->data.symbol, "List") != 0) {
+    if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL || data->data.function.head->data.symbol != SYM_List) {
         return expr_copy(res);
     }
 
@@ -498,7 +499,7 @@ Expr* builtin_median(Expr* res) {
     // Check if it's a matrix/tensor by checking if the first element is a List.
     if (data->data.function.args[0]->type == EXPR_FUNCTION && 
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL && 
-        strcmp(data->data.function.args[0]->data.function.head->data.symbol, "List") == 0) {
+        data->data.function.args[0]->data.function.head->data.symbol == SYM_List) {
         // Apply columnwise via Transpose and Map
         return apply_columnwise("Median", data);
     }
@@ -560,7 +561,7 @@ Expr* builtin_quartiles(Expr* res) {
         param_expr = res->data.function.args[1];
     }
 
-    if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL || strcmp(data->data.function.head->data.symbol, "List") != 0) {
+    if (data->type != EXPR_FUNCTION || data->data.function.head->type != EXPR_SYMBOL || data->data.function.head->data.symbol != SYM_List) {
         return expr_copy(res);
     }
 
@@ -569,7 +570,7 @@ Expr* builtin_quartiles(Expr* res) {
 
     if (data->data.function.args[0]->type == EXPR_FUNCTION && 
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL && 
-        strcmp(data->data.function.args[0]->data.function.head->data.symbol, "List") == 0) {
+        data->data.function.args[0]->data.function.head->data.symbol == SYM_List) {
         
         Expr* t_expr = expr_new_function(expr_new_symbol("Transpose"), (Expr*[]){expr_copy(data)}, 1);
         Expr* t_eval = evaluate(t_expr);
@@ -740,7 +741,7 @@ Expr* builtin_moving_average(Expr* res) {
 
     if (data->type != EXPR_FUNCTION ||
         data->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(data->data.function.head->data.symbol, "List") != 0) {
+        data->data.function.head->data.symbol != SYM_List) {
         return NULL;
     }
 
@@ -760,7 +761,7 @@ Expr* builtin_moving_average(Expr* res) {
         r = (size_t)rr;
     } else if (spec->type == EXPR_FUNCTION &&
                spec->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(spec->data.function.head->data.symbol, "List") == 0) {
+               spec->data.function.head->data.symbol == SYM_List) {
         r = spec->data.function.arg_count;
         if (r == 0 || r > n) return NULL;
         weights = spec->data.function.args;
@@ -843,7 +844,7 @@ Expr* builtin_moving_median(Expr* res) {
 
     if (data->type != EXPR_FUNCTION ||
         data->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(data->data.function.head->data.symbol, "List") != 0) {
+        data->data.function.head->data.symbol != SYM_List) {
         return NULL;
     }
 
@@ -868,7 +869,7 @@ Expr* builtin_moving_median(Expr* res) {
     /* Decide vector vs matrix based on whether the first element is a List. */
     bool matrix_mode = (data->data.function.args[0]->type == EXPR_FUNCTION &&
                         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
-                        strcmp(data->data.function.args[0]->data.function.head->data.symbol, "List") == 0);
+                        data->data.function.args[0]->data.function.head->data.symbol == SYM_List);
 
     /* Validate that every leaf is a real-valued numeric. Matrices must be rectangular. */
     bool ok = true;
@@ -878,7 +879,7 @@ Expr* builtin_moving_median(Expr* res) {
             Expr* row = data->data.function.args[i];
             if (row->type != EXPR_FUNCTION ||
                 row->data.function.head->type != EXPR_SYMBOL ||
-                strcmp(row->data.function.head->data.symbol, "List") != 0 ||
+                row->data.function.head->data.symbol != SYM_List ||
                 row->data.function.arg_count != cols) {
                 ok = false;
                 break;
@@ -946,7 +947,7 @@ Expr* builtin_exponential_moving_average(Expr* res) {
 
     if (data->type != EXPR_FUNCTION ||
         data->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(data->data.function.head->data.symbol, "List") != 0) {
+        data->data.function.head->data.symbol != SYM_List) {
         return NULL;
     }
 

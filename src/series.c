@@ -31,6 +31,7 @@
 #include "arithmetic.h"
 #include "poly.h"
 #include "rationalize.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -145,7 +146,7 @@ bool series_split_two_term(Expr* e, Expr* x,
     const char* head = e->data.function.head->data.symbol;
     size_t n = e->data.function.arg_count;
 
-    if (strcmp(head, "Plus") == 0) {
+    if (head == SYM_Plus) {
         Expr* a_sum = expr_new_integer(0);
         Expr* b_sum = NULL;
         int64_t cn = 0, cd = 1;
@@ -180,7 +181,7 @@ bool series_split_two_term(Expr* e, Expr* x,
         return true;
     }
 
-    if (strcmp(head, "Times") == 0) {
+    if (head == SYM_Times) {
         Expr* prod = expr_new_integer(1);
         Expr* a_inner = NULL;
         Expr* b_inner = NULL;
@@ -222,7 +223,7 @@ bool series_split_two_term(Expr* e, Expr* x,
         return true;
     }
 
-    if (strcmp(head, "Power") == 0 && n == 2) {
+    if (head == SYM_Power && n == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
         if (expr_eq(base, x) && expr_free_of(exp, x)) {
@@ -548,9 +549,9 @@ static bool so_is_purely_numeric(Expr* e) {
             Expr* h = e->data.function.head;
             if (h->type != EXPR_SYMBOL) return false;
             const char* s = h->data.symbol;
-            if (strcmp(s, "Rational") != 0 && strcmp(s, "Complex") != 0 &&
-                strcmp(s, "Times") != 0 && strcmp(s, "Plus") != 0 &&
-                strcmp(s, "Power") != 0) return false;
+            if (s != SYM_Rational && s != SYM_Complex &&
+                s != SYM_Times && s != SYM_Plus &&
+                s != SYM_Power) return false;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (!so_is_purely_numeric(e->data.function.args[i])) return false;
             }
@@ -1430,15 +1431,15 @@ static bool has_infinity(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) {
         const char* s = e->data.symbol;
-        return (strcmp(s, "Infinity") == 0 ||
-                strcmp(s, "ComplexInfinity") == 0 ||
-                strcmp(s, "Indeterminate") == 0);
+        return (s == SYM_Infinity ||
+                s == SYM_ComplexInfinity ||
+                s == SYM_Indeterminate);
     }
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
             const char* h = e->data.function.head->data.symbol;
-            if (strcmp(h, "DirectedInfinity") == 0 ||
-                strcmp(h, "Indeterminate") == 0) return true;
+            if (h == SYM_DirectedInfinity ||
+                h == SYM_Indeterminate) return true;
         }
         if (has_infinity(e->data.function.head)) return true;
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -1534,20 +1535,20 @@ static Expr* rewrite_reciprocal_head(Expr* e) {
     if (e->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* h = e->data.function.head->data.symbol;
     Expr* arg = expr_copy(e->data.function.args[0]);
-    if (strcmp(h, "Sec")  == 0) return mk_power(mk_fn1("Cos",  arg), expr_new_integer(-1));
-    if (strcmp(h, "Csc")  == 0) return mk_power(mk_fn1("Sin",  arg), expr_new_integer(-1));
-    if (strcmp(h, "Cot")  == 0) return mk_times(mk_fn1("Cos",  expr_copy(arg)),
+    if (h == SYM_Sec) return mk_power(mk_fn1("Cos",  arg), expr_new_integer(-1));
+    if (h == SYM_Csc) return mk_power(mk_fn1("Sin",  arg), expr_new_integer(-1));
+    if (h == SYM_Cot) return mk_times(mk_fn1("Cos",  expr_copy(arg)),
                                                 mk_power(mk_fn1("Sin",  arg), expr_new_integer(-1)));
-    if (strcmp(h, "Sech") == 0) return mk_power(mk_fn1("Cosh", arg), expr_new_integer(-1));
-    if (strcmp(h, "Csch") == 0) return mk_power(mk_fn1("Sinh", arg), expr_new_integer(-1));
-    if (strcmp(h, "Coth") == 0) return mk_times(mk_fn1("Cosh", expr_copy(arg)),
+    if (h == SYM_Sech) return mk_power(mk_fn1("Cosh", arg), expr_new_integer(-1));
+    if (h == SYM_Csch) return mk_power(mk_fn1("Sinh", arg), expr_new_integer(-1));
+    if (h == SYM_Coth) return mk_times(mk_fn1("Cosh", expr_copy(arg)),
                                                 mk_power(mk_fn1("Sinh", arg), expr_new_integer(-1)));
     /* Inverse-reciprocal identities. simp() collapses 1/(1/x) back to x, so
      * e.g. ArcSec[1/x] becomes ArcCos[x] and dispatches to the ArcCos kernel. */
-    if (strcmp(h, "ArcSec")  == 0) return mk_fn1("ArcCos",  simp(mk_power(arg, expr_new_integer(-1))));
-    if (strcmp(h, "ArcCsc")  == 0) return mk_fn1("ArcSin",  simp(mk_power(arg, expr_new_integer(-1))));
-    if (strcmp(h, "ArcSech") == 0) return mk_fn1("ArcCosh", simp(mk_power(arg, expr_new_integer(-1))));
-    if (strcmp(h, "ArcCsch") == 0) return mk_fn1("ArcSinh", simp(mk_power(arg, expr_new_integer(-1))));
+    if (h == SYM_ArcSec) return mk_fn1("ArcCos",  simp(mk_power(arg, expr_new_integer(-1))));
+    if (h == SYM_ArcCsc) return mk_fn1("ArcSin",  simp(mk_power(arg, expr_new_integer(-1))));
+    if (h == SYM_ArcSech) return mk_fn1("ArcCosh", simp(mk_power(arg, expr_new_integer(-1))));
+    if (h == SYM_ArcCsch) return mk_fn1("ArcSinh", simp(mk_power(arg, expr_new_integer(-1))));
     expr_free(arg);
     return NULL;
 }
@@ -1997,7 +1998,7 @@ static bool has_negative_power_in(Expr* e, Expr* x) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -2022,7 +2023,7 @@ static bool all_negative_powers_polynomial(Expr* e, Expr* x) {
     if (!e) return true;
     if (e->type != EXPR_FUNCTION) return true;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -2057,7 +2058,7 @@ static bool all_negative_powers_polynomial(Expr* e, Expr* x) {
 static bool has_non_rational_power_in(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
@@ -2158,7 +2159,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
     bool at_zero_or_infinity =
         is_lit_zero(x0_eval) ||
         (x0_eval->type == EXPR_SYMBOL &&
-         strcmp(x0_eval->data.symbol, "Infinity") == 0);
+         x0_eval->data.symbol == SYM_Infinity);
     if (at_zero_or_infinity) {
         Expr* body = NULL;
         Expr* pf = try_factor_power_prefactor(f_eval, x, &body);
@@ -2171,7 +2172,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
 
     /* Handle expansion at Infinity by substituting x -> 1/u. */
     bool at_infinity = (x0_eval->type == EXPR_SYMBOL &&
-                        (strcmp(x0_eval->data.symbol, "Infinity") == 0));
+                        (x0_eval->data.symbol == SYM_Infinity));
     Expr* f_use  = f_used_for_expand;
     Expr* x_use  = x;
     Expr* x0_use = x0_eval;

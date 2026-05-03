@@ -3,6 +3,7 @@
 #include "eval.h"
 #include "match.h"
 #include "core.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,7 +11,7 @@ static int64_t get_expr_depth_patterns(Expr* e, bool heads) {
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol;
-        if (strcmp(h, "Rational") == 0 || strcmp(h, "Complex") == 0) return 1;
+        if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
     int64_t max_d = 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -103,27 +104,27 @@ Expr* builtin_cases(Expr* res) {
             } else {
                 min_l = 1; max_l = ls->data.integer;
             }
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "All") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_All) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "Infinity") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_Infinity) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && strcmp(ls->data.function.head->data.symbol, "List") == 0) {
+        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_List) {
             if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
                 min_l = max_l = ls->data.function.args[0]->data.integer;
             } else if (ls->data.function.arg_count == 2) {
                 if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
                 if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && strcmp(ls->data.function.args[1]->data.symbol, "Infinity") == 0) max_l = 1000000;
+                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol == SYM_Infinity) max_l = 1000000;
             }
         }
     }
 
     for (size_t i = 2; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && strcmp(opt->data.function.head->data.symbol, "Rule") == 0 && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[0]->data.symbol, "Heads") == 0) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "True") == 0) heads = true;
-                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "False") == 0) heads = false;
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule && opt->data.function.arg_count == 2) {
+            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_True) heads = true;
+                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_False) heads = false;
             }
         }
     }
@@ -140,13 +141,13 @@ Expr* builtin_cases(Expr* res) {
     Expr* replacement = NULL;
     bool delayed = false;
 
-    if (patt_arg->type == EXPR_FUNCTION && (strcmp(patt_arg->data.function.head->data.symbol, "Rule") == 0 || strcmp(patt_arg->data.function.head->data.symbol, "RuleDelayed") == 0) && patt_arg->data.function.arg_count == 2) {
+    if (patt_arg->type == EXPR_FUNCTION && (patt_arg->data.function.head->data.symbol == SYM_Rule || patt_arg->data.function.head->data.symbol == SYM_RuleDelayed) && patt_arg->data.function.arg_count == 2) {
         pattern = patt_arg->data.function.args[0];
         replacement = patt_arg->data.function.args[1];
-        delayed = (strcmp(patt_arg->data.function.head->data.symbol, "RuleDelayed") == 0);
-    } else if (patt_arg->type == EXPR_FUNCTION && strcmp(patt_arg->data.function.head->data.symbol, "HoldPattern") == 0 && patt_arg->data.function.arg_count == 1) {
+        delayed = (patt_arg->data.function.head->data.symbol == SYM_RuleDelayed);
+    } else if (patt_arg->type == EXPR_FUNCTION && patt_arg->data.function.head->data.symbol == SYM_HoldPattern && patt_arg->data.function.arg_count == 1) {
         Expr* hp_arg = patt_arg->data.function.args[0];
-        if (hp_arg->type == EXPR_FUNCTION && (strcmp(hp_arg->data.function.head->data.symbol, "Rule") == 0 || strcmp(hp_arg->data.function.head->data.symbol, "RuleDelayed") == 0) && hp_arg->data.function.arg_count == 2) {
+        if (hp_arg->type == EXPR_FUNCTION && (hp_arg->data.function.head->data.symbol == SYM_Rule || hp_arg->data.function.head->data.symbol == SYM_RuleDelayed) && hp_arg->data.function.arg_count == 2) {
             pattern = hp_arg; // Just match the rule itself
         }
     }
@@ -244,27 +245,27 @@ Expr* builtin_position(Expr* res) {
             } else {
                 min_l = 1; max_l = ls->data.integer;
             }
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "All") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_All) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "Infinity") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_Infinity) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && strcmp(ls->data.function.head->data.symbol, "List") == 0) {
+        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_List) {
             if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
                 min_l = max_l = ls->data.function.args[0]->data.integer;
             } else if (ls->data.function.arg_count == 2) {
                 if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
                 if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && strcmp(ls->data.function.args[1]->data.symbol, "Infinity") == 0) max_l = 1000000;
+                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol == SYM_Infinity) max_l = 1000000;
             }
         }
     }
 
     for (size_t i = 2; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && strcmp(opt->data.function.head->data.symbol, "Rule") == 0 && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[0]->data.symbol, "Heads") == 0) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "True") == 0) heads = true;
-                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "False") == 0) heads = false;
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule && opt->data.function.arg_count == 2) {
+            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_True) heads = true;
+                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_False) heads = false;
             }
         }
     }
@@ -348,27 +349,27 @@ Expr* builtin_count(Expr* res) {
             } else {
                 min_l = 1; max_l = ls->data.integer;
             }
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "All") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_All) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "Infinity") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_Infinity) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && strcmp(ls->data.function.head->data.symbol, "List") == 0) {
+        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_List) {
             if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
                 min_l = max_l = ls->data.function.args[0]->data.integer;
             } else if (ls->data.function.arg_count == 2) {
                 if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
                 if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && strcmp(ls->data.function.args[1]->data.symbol, "Infinity") == 0) max_l = 1000000;
+                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol == SYM_Infinity) max_l = 1000000;
             }
         }
     }
 
     for (size_t i = 2; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && strcmp(opt->data.function.head->data.symbol, "Rule") == 0 && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[0]->data.symbol, "Heads") == 0) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "True") == 0) heads = true;
-                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "False") == 0) heads = false;
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule && opt->data.function.arg_count == 2) {
+            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_True) heads = true;
+                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_False) heads = false;
             }
         }
     }
@@ -442,27 +443,27 @@ Expr* builtin_memberq(Expr* res) {
             } else {
                 min_l = 1; max_l = ls->data.integer;
             }
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "All") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_All) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "Infinity") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_Infinity) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && strcmp(ls->data.function.head->data.symbol, "List") == 0) {
+        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_List) {
             if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
                 min_l = max_l = ls->data.function.args[0]->data.integer;
             } else if (ls->data.function.arg_count == 2) {
                 if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
                 if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && strcmp(ls->data.function.args[1]->data.symbol, "Infinity") == 0) max_l = 1000000;
+                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol == SYM_Infinity) max_l = 1000000;
             }
         }
     }
 
     for (size_t i = 2; i < argc; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && strcmp(opt->data.function.head->data.symbol, "Rule") == 0 && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[0]->data.symbol, "Heads") == 0) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "True") == 0) heads = true;
-                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "False") == 0) heads = false;
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule && opt->data.function.arg_count == 2) {
+            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_True) heads = true;
+                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_False) heads = false;
             }
         }
     }

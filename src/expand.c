@@ -3,6 +3,7 @@
 #include "symtab.h"
 #include "arithmetic.h"
 #include "match.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -24,8 +25,8 @@ static bool expr_contains_patt(Expr* e, Expr* patt) {
 }
 
 static Expr* multiply_two(Expr* a, Expr* b) {
-    bool a_is_plus = (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL && strcmp(a->data.function.head->data.symbol, "Plus") == 0);
-    bool b_is_plus = (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL && strcmp(b->data.function.head->data.symbol, "Plus") == 0);
+    bool a_is_plus = (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL && a->data.function.head->data.symbol == SYM_Plus);
+    bool b_is_plus = (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL && b->data.function.head->data.symbol == SYM_Plus);
 
     if (a_is_plus && b_is_plus) {
         size_t count = a->data.function.arg_count * b->data.function.arg_count;
@@ -180,7 +181,7 @@ Expr* builtin_expand(Expr* res) {
 static bool is_negative_int_power(Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
-    if (strcmp(e->data.function.head->data.symbol, "Power") != 0) return false;
+    if (e->data.function.head->data.symbol != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
     Expr* exp = e->data.function.args[1];
     return exp->type == EXPR_INTEGER && exp->data.integer < 0;

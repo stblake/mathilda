@@ -51,6 +51,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
+#include "sym_names.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -148,11 +149,11 @@ static bool expr_free_of(const Expr* f, const Expr* x) {
 static bool is_dt_constant_symbol(const Expr* e) {
     if (!e || e->type != EXPR_SYMBOL) return false;
     const char* s = e->data.symbol;
-    return !strcmp(s, "Pi") || !strcmp(s, "E") || !strcmp(s, "I") ||
-           !strcmp(s, "Infinity") || !strcmp(s, "ComplexInfinity") ||
-           !strcmp(s, "EulerGamma") || !strcmp(s, "Catalan") ||
-           !strcmp(s, "GoldenRatio") || !strcmp(s, "Degree") ||
-           !strcmp(s, "True") || !strcmp(s, "False");
+    return s == SYM_Pi || s == SYM_E || s == SYM_I ||
+           s == SYM_Infinity || s == SYM_ComplexInfinity ||
+           s == SYM_EulerGamma || s == SYM_Catalan ||
+           s == SYM_GoldenRatio || s == SYM_Degree ||
+           s == SYM_True || s == SYM_False;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -411,7 +412,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
         const char* h = head->data.symbol;
 
         /* --- Plus: sum of derivatives. --- */
-        if (!strcmp(h, "Plus")) {
+        if (h == SYM_Plus) {
             Expr** ts = malloc(sizeof(Expr*) * n);
             for (size_t i = 0; i < n; i++) ts[i] = deriv_of(args[i], x);
             return mk_fnN_adopt("Plus", ts, n);
@@ -421,7 +422,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
          *      sum_i (d/dx arg_i) * prod_{j!=i} arg_j.
          * We build each term directly; the evaluator handles
          * simplification of Times[0, ...] and trivial identities. --- */
-        if (!strcmp(h, "Times")) {
+        if (h == SYM_Times) {
             Expr** ts = malloc(sizeof(Expr*) * n);
             for (size_t i = 0; i < n; i++) {
                 Expr** factors = malloc(sizeof(Expr*) * n);
@@ -442,7 +443,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
          * fight to remove (and which are problematic for non-positive
          * bases). We detect "g is constant" by computing d g / d x once
          * and checking for the literal 0. */
-        if (!strcmp(h, "Power") && n == 2) {
+        if (h == SYM_Power && n == 2) {
             Expr* a = args[0];
             Expr* b = args[1];
             Expr* da = deriv_of(a, x);
@@ -469,14 +470,14 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
         }
 
         /* --- List: thread element-wise. --- */
-        if (!strcmp(h, "List")) {
+        if (h == SYM_List) {
             Expr** ts = malloc(sizeof(Expr*) * n);
             for (size_t i = 0; i < n; i++) ts[i] = deriv_of(args[i], x);
             return mk_fnN_adopt("List", ts, n);
         }
 
         /* --- Log[b, f]: reduce to Log[f]/Log[b]. --- */
-        if (!strcmp(h, "Log") && n == 2) {
+        if (h == SYM_Log && n == 2) {
             Expr* lb = mk_fn1("Log", expr_copy(args[0]));
             Expr* lf = mk_fn1("Log", expr_copy(args[1]));
             Expr* quot = mk_fn2("Times", lf, mk_fn2("Power", lb, mk_int(-1)));
@@ -690,7 +691,7 @@ Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn) {
         body = pure_fn->data.function.args[1];
 
         if (params->type == EXPR_SYMBOL &&
-            strcmp(params->data.symbol, "Null") == 0) {
+            params->data.symbol == SYM_Null) {
             /* Function[Null, body, attrs]: slot form with attributes. */
             for (size_t i = 0; i < m; i++) vars[i] = make_slot((int64_t)(i + 1));
         } else if (params->type == EXPR_SYMBOL) {

@@ -3,6 +3,7 @@
 #include "arithmetic.h"
 #include "times.h"
 #include "numeric.h"
+#include "sym_names.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -98,11 +99,11 @@ static bool is_head_call(Expr* e, const char* name, size_t argc) {
 static Expr* simplify_exp_log(Expr* base, Expr* exp) {
     bool exp_is_times = exp->type == EXPR_FUNCTION &&
                         exp->data.function.head->type == EXPR_SYMBOL &&
-                        strcmp(exp->data.function.head->data.symbol, "Times") == 0;
+                        exp->data.function.head->data.symbol == SYM_Times;
     size_t nf = exp_is_times ? exp->data.function.arg_count : 1;
     Expr** factors = exp_is_times ? exp->data.function.args : &exp;
 
-    bool base_is_E = (base->type == EXPR_SYMBOL && strcmp(base->data.symbol, "E") == 0);
+    bool base_is_E = (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E);
 
     int log_idx = -1;
     Expr* a = NULL;
@@ -509,7 +510,7 @@ Expr* builtin_power(Expr* res) {
         }
     }
 
-    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && strcmp(base->data.function.head->data.symbol, "Times") == 0) {
+    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol == SYM_Times) {
         size_t bc = base->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * bc);
         for (size_t i = 0; i < bc; i++) {
@@ -521,7 +522,7 @@ Expr* builtin_power(Expr* res) {
         return result;
     }
 
-    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && strcmp(base->data.function.head->data.symbol, "Power") == 0) {
+    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol == SYM_Power) {
         if (base->data.function.arg_count == 2) {
             Expr* inner_base = base->data.function.args[0];
             Expr* inner_exp = base->data.function.args[1];

@@ -1,5 +1,6 @@
 #include "expr.h"
 #include "eval.h"
+#include "sym_names.h"
 #include <string.h>
 
 Expr* get_default_value(Expr* pat_head, int pos, int total_pats) {
@@ -40,8 +41,8 @@ Expr* get_default_value(Expr* pat_head, int pos, int total_pats) {
     
     // Built-in fallbacks
     const char* hn = pat_head->data.symbol;
-    if (strcmp(hn, "Plus") == 0) return expr_new_integer(0);
-    if (strcmp(hn, "Times") == 0 || strcmp(hn, "Power") == 0) return expr_new_integer(1);
+    if (hn == SYM_Plus) return expr_new_integer(0);
+    if (hn == SYM_Times || hn == SYM_Power) return expr_new_integer(1);
     
     return NULL;
 }

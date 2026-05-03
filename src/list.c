@@ -4,6 +4,7 @@
 #include "eval.h"
 #include "core.h"
 #include "arithmetic.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -44,7 +45,7 @@ Expr* builtin_table(Expr* res) {
     double min_val = 0, max_val = 0, di_val = 0;
     bool is_real = false;
 
-    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && strcmp(spec->data.function.head->data.symbol, "List") == 0) {
+    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && spec->data.function.head->data.symbol == SYM_List) {
         size_t len = spec->data.function.arg_count;
         if (len == 1) {
             imax_e = evaluate(spec->data.function.args[0]);
@@ -55,7 +56,7 @@ Expr* builtin_table(Expr* res) {
             
             if (len == 2) {
                 Expr* bound = evaluate(spec->data.function.args[1]);
-                if (bound->type == EXPR_FUNCTION && bound->data.function.head->type == EXPR_SYMBOL && strcmp(bound->data.function.head->data.symbol, "List") == 0) {
+                if (bound->type == EXPR_FUNCTION && bound->data.function.head->type == EXPR_SYMBOL && bound->data.function.head->data.symbol == SYM_List) {
                     list_e = bound;
                     is_list_iter = 1;
                 } else {
@@ -212,7 +213,7 @@ static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_co
     Expr* a_expr = NULL;
     Expr* b_expr = NULL;
     
-    if (r_expr && r_expr->type == EXPR_FUNCTION && r_expr->data.function.head->type == EXPR_SYMBOL && strcmp(r_expr->data.function.head->data.symbol, "List") == 0 && r_expr->data.function.arg_count == 2) {
+    if (r_expr && r_expr->type == EXPR_FUNCTION && r_expr->data.function.head->type == EXPR_SYMBOL && r_expr->data.function.head->data.symbol == SYM_List && r_expr->data.function.arg_count == 2) {
         is_range = 1;
         a_expr = r_expr->data.function.args[0];
         b_expr = r_expr->data.function.args[1];
@@ -265,7 +266,7 @@ Expr* builtin_array(Expr* res) {
     Expr* r_spec = res->data.function.arg_count == 3 ? res->data.function.args[2] : NULL;
     
     size_t dim_count = 1;
-    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL && strcmp(n_spec->data.function.head->data.symbol, "List") == 0) {
+    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL && n_spec->data.function.head->data.symbol == SYM_List) {
         dim_count = n_spec->data.function.arg_count;
         if (dim_count == 0) return NULL;
     }
@@ -273,14 +274,14 @@ Expr* builtin_array(Expr* res) {
     Expr** n_array = malloc(sizeof(Expr*) * dim_count);
     Expr** r_array = malloc(sizeof(Expr*) * dim_count);
     
-    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL && strcmp(n_spec->data.function.head->data.symbol, "List") == 0) {
+    if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->type == EXPR_SYMBOL && n_spec->data.function.head->data.symbol == SYM_List) {
         for(size_t i=0; i<dim_count; i++) n_array[i] = n_spec->data.function.args[i];
     } else {
         n_array[0] = n_spec;
     }
     
     if (r_spec) {
-        if (r_spec->type == EXPR_FUNCTION && r_spec->data.function.head->type == EXPR_SYMBOL && strcmp(r_spec->data.function.head->data.symbol, "List") == 0 && r_spec->data.function.arg_count == dim_count) {
+        if (r_spec->type == EXPR_FUNCTION && r_spec->data.function.head->type == EXPR_SYMBOL && r_spec->data.function.head->data.symbol == SYM_List && r_spec->data.function.arg_count == dim_count) {
             for(size_t i=0; i<dim_count; i++) r_array[i] = r_spec->data.function.args[i];
         } else {
             for(size_t i=0; i<dim_count; i++) r_array[i] = r_spec;
@@ -313,9 +314,9 @@ static bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices,
     bool is_none = false;
 
     if (spec->type == EXPR_SYMBOL) {
-        if (strcmp(spec->data.symbol, "All") == 0) {
+        if (spec->data.symbol == SYM_All) {
             is_all = true;
-        } else if (strcmp(spec->data.symbol, "None") == 0) {
+        } else if (spec->data.symbol == SYM_None) {
             is_none = true;
         } else {
             return false;
@@ -510,7 +511,7 @@ Expr* builtin_flatten(Expr* res) {
         n = res->data.function.args[1]->data.integer;
     }
 
-    const char* h = "List";
+    const char* h = SYM_List;
     if (res->data.function.arg_count == 3) {
         if (res->data.function.args[2]->type != EXPR_SYMBOL) return NULL;
         h = res->data.function.args[2]->data.symbol;
@@ -536,7 +537,7 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
     // Get n and d for this level
     int64_t n = -1;
     bool n_upto = false;
-    Expr* n_e = (n_spec->type == EXPR_FUNCTION && strcmp(n_spec->data.function.head->data.symbol, "List") == 0) ? 
+    Expr* n_e = (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol == SYM_List) ? 
                 (level_idx < n_spec->data.function.arg_count ? n_spec->data.function.args[level_idx] : NULL) : 
                 (level_idx == 0 ? n_spec : NULL);
     
@@ -544,7 +545,7 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
 
     if (n_e->type == EXPR_INTEGER) {
         n = n_e->data.integer;
-    } else if (n_e->type == EXPR_FUNCTION && strcmp(n_e->data.function.head->data.symbol, "UpTo") == 0 && n_e->data.function.arg_count == 1) {
+    } else if (n_e->type == EXPR_FUNCTION && n_e->data.function.head->data.symbol == SYM_UpTo && n_e->data.function.arg_count == 1) {
         if (n_e->data.function.args[0]->type == EXPR_INTEGER) {
             n = n_e->data.function.args[0]->data.integer;
             n_upto = true;
@@ -554,7 +555,7 @@ static Expr* partition_rec(Expr* list, Expr* n_spec, Expr* d_spec, size_t level_
 
     int64_t d = n;
     if (d_spec) {
-        Expr* d_e = (d_spec->type == EXPR_FUNCTION && strcmp(d_spec->data.function.head->data.symbol, "List") == 0) ? 
+        Expr* d_e = (d_spec->type == EXPR_FUNCTION && d_spec->data.function.head->data.symbol == SYM_List) ? 
                     (level_idx < d_spec->data.function.arg_count ? d_spec->data.function.args[level_idx] : NULL) : 
                     (level_idx == 0 ? d_spec : NULL);
         if (d_e && d_e->type == EXPR_INTEGER) {
@@ -611,7 +612,7 @@ static Expr* rotate_rec(Expr* expr, Expr* n_spec, size_t level_idx) {
     int64_t n = 0;
     if (n_spec->type == EXPR_INTEGER) {
         if (level_idx == 0) n = n_spec->data.integer;
-    } else if (n_spec->type == EXPR_FUNCTION && strcmp(n_spec->data.function.head->data.symbol, "List") == 0) {
+    } else if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol == SYM_List) {
         if (level_idx < n_spec->data.function.arg_count) {
             Expr* sub_n = n_spec->data.function.args[level_idx];
             if (sub_n->type == EXPR_INTEGER) n = sub_n->data.integer;
@@ -662,7 +663,7 @@ Expr* builtin_rotateright(Expr* res) {
         neg_n_spec = expr_new_integer(-1);
     } else if (n_spec->type == EXPR_INTEGER) {
         neg_n_spec = expr_new_integer(-n_spec->data.integer);
-    } else if (n_spec->type == EXPR_FUNCTION && strcmp(n_spec->data.function.head->data.symbol, "List") == 0) {
+    } else if (n_spec->type == EXPR_FUNCTION && n_spec->data.function.head->data.symbol == SYM_List) {
         Expr** neg_args = malloc(sizeof(Expr*) * n_spec->data.function.arg_count);
         for (size_t i = 0; i < n_spec->data.function.arg_count; i++) {
             if (n_spec->data.function.args[i]->type == EXPR_INTEGER) {
@@ -685,7 +686,7 @@ Expr* builtin_rotateright(Expr* res) {
 static bool should_reverse_at_level(Expr* level_spec, size_t current_level) {
     if (!level_spec) return current_level == 1;
     if (level_spec->type == EXPR_INTEGER) return (size_t)level_spec->data.integer == current_level;
-    if (level_spec->type == EXPR_FUNCTION && strcmp(level_spec->data.function.head->data.symbol, "List") == 0) {
+    if (level_spec->type == EXPR_FUNCTION && level_spec->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < level_spec->data.function.arg_count; i++) {
             if (level_spec->data.function.args[i]->type == EXPR_INTEGER && 
                 (size_t)level_spec->data.function.args[i]->data.integer == current_level) return true;
@@ -783,7 +784,7 @@ Expr* builtin_transpose(Expr* res) {
         for (int i = 2; i < in_depth; i++) perm[i] = i + 1;
     } else {
         Expr* spec = res->data.function.args[1];
-        if (spec->type != EXPR_FUNCTION || strcmp(spec->data.function.head->data.symbol, "List") != 0 || 
+        if (spec->type != EXPR_FUNCTION || spec->data.function.head->data.symbol != SYM_List || 
             spec->data.function.arg_count != (size_t)in_depth) {
             free(perm); return NULL;
         }
@@ -831,10 +832,10 @@ Expr* builtin_union(Expr* res) {
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(arg->data.function.head->data.symbol, "Rule") == 0 &&
+            arg->data.function.head->data.symbol == SYM_Rule &&
             arg->data.function.arg_count == 2 &&
             arg->data.function.args[0]->type == EXPR_SYMBOL &&
-            strcmp(arg->data.function.args[0]->data.symbol, "SameTest") == 0) {
+            arg->data.function.args[0]->data.symbol == SYM_SameTest) {
             same_test = arg->data.function.args[1];
             if (i < last_arg) last_arg = i;
         }
@@ -889,7 +890,7 @@ Expr* builtin_union(Expr* res) {
                 Expr* call_args[2] = { expr_copy(all_args[i]), expr_copy(unique_args[unique_count - 1]) };
                 Expr* call = expr_new_function(expr_copy(same_test), call_args, 2);
                 Expr* eval_res = evaluate(call);
-                if (eval_res->type == EXPR_SYMBOL && strcmp(eval_res->data.symbol, "True") == 0) {
+                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
                     is_dup = true;
                 }
                 expr_free(eval_res);
@@ -1004,7 +1005,7 @@ Expr* builtin_tally(Expr* res) {
                 Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_elems[j]) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 2);
                 Expr* eval_res = evaluate(call);
-                if (eval_res->type == EXPR_SYMBOL && strcmp(eval_res->data.symbol, "True") == 0) {
+                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
                     found_idx = (int)j;
                     expr_free(eval_res);
                     expr_free(call);
@@ -1075,7 +1076,7 @@ Expr* builtin_deleteduplicates(Expr* res) {
                 Expr* call_args[2] = { expr_copy(elem), expr_copy(unique_args[j]) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 2);
                 Expr* eval_res = evaluate(call);
-                if (eval_res->type == EXPR_SYMBOL && strcmp(eval_res->data.symbol, "True") == 0) {
+                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
                     is_duplicate = true;
                     expr_free(eval_res);
                     expr_free(call);
@@ -1124,7 +1125,7 @@ Expr* builtin_split(Expr* res) {
                 Expr* call_args[2] = { expr_copy(prev), expr_copy(curr) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 2);
                 Expr* eval_res = evaluate(call);
-                if (eval_res->type == EXPR_SYMBOL && strcmp(eval_res->data.symbol, "True") == 0) {
+                if (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True) {
                     identical = true;
                 }
                 expr_free(eval_res);
@@ -1188,7 +1189,7 @@ Expr* builtin_commonest(Expr* res) {
         if (n_arg->type == EXPR_INTEGER) {
             n = n_arg->data.integer;
         } else if (n_arg->type == EXPR_FUNCTION && n_arg->data.function.head->type == EXPR_SYMBOL && 
-                   strcmp(n_arg->data.function.head->data.symbol, "UpTo") == 0 && n_arg->data.function.arg_count == 1) {
+                   n_arg->data.function.head->data.symbol == SYM_UpTo && n_arg->data.function.arg_count == 1) {
             if (n_arg->data.function.args[0]->type == EXPR_INTEGER) {
                 n = n_arg->data.function.args[0]->data.integer;
                 n_upto = true;
@@ -1328,21 +1329,21 @@ void list_init(void) {
 
 static bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, "Overflow") == 0;
+           e->data.function.head->data.symbol == SYM_Overflow;
 }
 
 static bool is_listq(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, "List") == 0;
+           e->data.function.head->data.symbol == SYM_List;
 }
 
 static bool is_infinity(Expr* e) {
-    return e->type == EXPR_SYMBOL && strcmp(e->data.symbol, "Infinity") == 0;
+    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
 }
 
 static bool is_minus_infinity(Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Times") == 0 &&
+        e->data.function.head->data.symbol == SYM_Times &&
         e->data.function.arg_count == 2) {
         Expr* a1 = e->data.function.args[0];
         Expr* a2 = e->data.function.args[1];
@@ -1371,7 +1372,7 @@ static int64_t get_depth_for_total(Expr* e) {
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol;
-        if (strcmp(h, "Rational") == 0 || strcmp(h, "Complex") == 0) return 1;
+        if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
     int64_t max_d = 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -1480,11 +1481,11 @@ static bool accumulate_is_compensated_method(Expr* opt) {
     if (opt->type != EXPR_FUNCTION) return false;
     if (opt->data.function.head->type != EXPR_SYMBOL) return false;
     const char* hd = opt->data.function.head->data.symbol;
-    if ((strcmp(hd, "Rule") != 0 && strcmp(hd, "RuleDelayed") != 0) ||
+    if ((hd != SYM_Rule && hd != SYM_RuleDelayed) ||
         opt->data.function.arg_count != 2) return false;
     Expr* lhs = opt->data.function.args[0];
     Expr* rhs = opt->data.function.args[1];
-    if (lhs->type != EXPR_SYMBOL || strcmp(lhs->data.symbol, "Method") != 0) return false;
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method) return false;
     if (rhs->type != EXPR_STRING) return false;
     return strcmp(rhs->data.string, "CompensatedSummation") == 0;
 }
@@ -1595,7 +1596,7 @@ Expr* builtin_vectorq(Expr* res) {
             Expr* call_args[1] = { expr_copy(elem) };
             Expr* call = expr_new_function(expr_copy(test), call_args, 1);
             Expr* eval_res = evaluate(call);
-            bool is_true = (eval_res->type == EXPR_SYMBOL && strcmp(eval_res->data.symbol, "True") == 0);
+            bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
             expr_free(eval_res);
             expr_free(call);
             if (!is_true) return expr_new_symbol("False");
@@ -1635,7 +1636,7 @@ Expr* builtin_matrixq(Expr* res) {
                 Expr* call_args[1] = { expr_copy(elem) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 1);
                 Expr* eval_res = evaluate(call);
-                bool is_true = (eval_res->type == EXPR_SYMBOL && strcmp(eval_res->data.symbol, "True") == 0);
+                bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
                 expr_free(eval_res);
                 expr_free(call);
                 if (!is_true) return expr_new_symbol("False");
@@ -1656,7 +1657,7 @@ Expr* builtin_min(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-            strcmp(arg->data.function.head->data.symbol, "List") == 0) {
+            arg->data.function.head->data.symbol == SYM_List) {
             has_list = true;
             break;
         }
@@ -1667,7 +1668,7 @@ Expr* builtin_min(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-                strcmp(arg->data.function.head->data.symbol, "List") == 0) {
+                arg->data.function.head->data.symbol == SYM_List) {
                 new_count += arg->data.function.arg_count;
             } else {
                 new_count++;
@@ -1679,7 +1680,7 @@ Expr* builtin_min(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-                strcmp(arg->data.function.head->data.symbol, "List") == 0) {
+                arg->data.function.head->data.symbol == SYM_List) {
                 for (size_t j = 0; j < arg->data.function.arg_count; j++) {
                     new_args[k++] = expr_copy(arg->data.function.args[j]);
                 }
@@ -1767,7 +1768,7 @@ Expr* builtin_max(Expr* res) {
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
         if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-            strcmp(arg->data.function.head->data.symbol, "List") == 0) {
+            arg->data.function.head->data.symbol == SYM_List) {
             has_list = true;
             break;
         }
@@ -1778,7 +1779,7 @@ Expr* builtin_max(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-                strcmp(arg->data.function.head->data.symbol, "List") == 0) {
+                arg->data.function.head->data.symbol == SYM_List) {
                 new_count += arg->data.function.arg_count;
             } else {
                 new_count++;
@@ -1790,7 +1791,7 @@ Expr* builtin_max(Expr* res) {
         for (size_t i = 0; i < n; i++) {
             Expr* arg = res->data.function.args[i];
             if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && 
-                strcmp(arg->data.function.head->data.symbol, "List") == 0) {
+                arg->data.function.head->data.symbol == SYM_List) {
                 for (size_t j = 0; j < arg->data.function.arg_count; j++) {
                     new_args[k++] = expr_copy(arg->data.function.args[j]);
                 }

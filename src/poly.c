@@ -49,6 +49,7 @@
 #include "print.h"
 #include "match.h"
 #include "rationalize.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -113,11 +114,11 @@ static void decompose_to_bp(Expr* e, BPList* l) {
     if (!e) return;
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol;
-        if (strcmp(head, "Times") == 0) {
+        if (head == SYM_Times) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) decompose_to_bp(e->data.function.args[i], l);
             return;
         }
-        if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+        if (head == SYM_Power && e->data.function.arg_count == 2) {
             Expr* base = e->data.function.args[0];
             Expr* exp = e->data.function.args[1];
             if (exp->type == EXPR_INTEGER || is_rational(exp, NULL, NULL)) {
@@ -125,7 +126,7 @@ static void decompose_to_bp(Expr* e, BPList* l) {
                 return;
             }
             if (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL &&
-                strcmp(exp->data.function.head->data.symbol, "Plus") == 0) {
+                exp->data.function.head->data.symbol == SYM_Plus) {
                 for (size_t i = 0; i < exp->data.function.arg_count; i++) {
                     Expr* sub_exp = exp->data.function.args[i];
                     Expr* sub_p = internal_power((Expr*[]){expr_copy(base), expr_copy(sub_exp)}, 2);
@@ -197,7 +198,7 @@ static bool var_is_atomic(Expr* var) {
         var->type == EXPR_STRING) return true;
     if (var->type == EXPR_FUNCTION && var->data.function.head->type == EXPR_SYMBOL) {
         const char* h = var->data.function.head->data.symbol;
-        return strcmp(h, "Plus") != 0 && strcmp(h, "Times") != 0 && strcmp(h, "Power") != 0;
+        return h != SYM_Plus && h != SYM_Times && h != SYM_Power;
     }
     return false;
 }
@@ -214,7 +215,7 @@ static bool var_is_atomic(Expr* var) {
 static int factor_var_exp(Expr* f, Expr* var) {
     if (expr_eq(f, var)) return 1;
     if (f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(f->data.function.head->data.symbol, "Power") == 0 &&
+        f->data.function.head->data.symbol == SYM_Power &&
         f->data.function.arg_count == 2 &&
         expr_eq(f->data.function.args[0], var)) {
         Expr* exp = f->data.function.args[1];
@@ -238,7 +239,7 @@ static int factor_var_exp(Expr* f, Expr* var) {
 static int collect_term_factors(Expr* term, Expr* var,
                                 Expr*** kept, size_t* kept_count, size_t* kept_cap) {
     if (term->type == EXPR_FUNCTION && term->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(term->data.function.head->data.symbol, "Times") == 0) {
+        term->data.function.head->data.symbol == SYM_Times) {
         int total_deg = 0;
         for (size_t j = 0; j < term->data.function.arg_count; j++) {
             int sub = collect_term_factors(term->data.function.args[j], var,
@@ -289,7 +290,7 @@ static Expr* get_coeff_expanded(Expr* expanded, Expr* var, int n) {
 
     bool is_plus = (expanded->type == EXPR_FUNCTION &&
                     expanded->data.function.head->type == EXPR_SYMBOL &&
-                    strcmp(expanded->data.function.head->data.symbol, "Plus") == 0);
+                    expanded->data.function.head->data.symbol == SYM_Plus);
     Expr** terms = is_plus ? expanded->data.function.args : &expanded;
     size_t term_count = is_plus ? expanded->data.function.arg_count : 1;
 
@@ -320,7 +321,7 @@ static bool get_all_coeffs_expanded(Expr* expanded, Expr* var, int max_deg,
 
     bool is_plus = (expanded && expanded->type == EXPR_FUNCTION &&
                     expanded->data.function.head->type == EXPR_SYMBOL &&
-                    strcmp(expanded->data.function.head->data.symbol, "Plus") == 0);
+                    expanded->data.function.head->data.symbol == SYM_Plus);
     Expr** terms = is_plus ? expanded->data.function.args : &expanded;
     size_t term_count = expanded ? (is_plus ? expanded->data.function.arg_count : 1) : 0;
 
@@ -432,7 +433,7 @@ Expr* builtin_coefficient(Expr* res) {
 
     size_t term_count = 1;
     Expr** terms = &expanded;
-    if (expanded->type == EXPR_FUNCTION && expanded->data.function.head->type == EXPR_SYMBOL && strcmp(expanded->data.function.head->data.symbol, "Plus") == 0) {
+    if (expanded->type == EXPR_FUNCTION && expanded->data.function.head->type == EXPR_SYMBOL && expanded->data.function.head->data.symbol == SYM_Plus) {
         term_count = expanded->data.function.arg_count;
         terms = expanded->data.function.args;
     }
@@ -525,8 +526,8 @@ bool contains_any_symbol_from(Expr* expr, Expr* var) {
 static bool is_constant_symbol(Expr* e) {
     if (e->type != EXPR_SYMBOL) return false;
     const char* s = e->data.symbol;
-    return (strcmp(s, "Pi") == 0 || strcmp(s, "E") == 0 || strcmp(s, "I") == 0 || 
-            strcmp(s, "Infinity") == 0 || strcmp(s, "ComplexInfinity") == 0);
+    return (s == SYM_Pi || s == SYM_E || s == SYM_I || 
+            s == SYM_Infinity || s == SYM_ComplexInfinity);
 }
 
 static bool is_number(Expr* e) {
@@ -624,7 +625,7 @@ Expr* builtin_polynomialq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars_expr = res->data.function.args[1];
     Expr** vars = NULL; size_t var_count = 0; bool free_vars = false;
-    if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && strcmp(vars_expr->data.function.head->data.symbol, "List") == 0) {
+    if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol == SYM_List) {
         var_count = vars_expr->data.function.arg_count;
         if (var_count > 0) { vars = malloc(sizeof(Expr*) * var_count); for (size_t i = 0; i < var_count; i++) vars[i] = vars_expr->data.function.args[i]; free_vars = true; }
     } else { vars = &res->data.function.args[1]; var_count = 1; }
@@ -680,7 +681,7 @@ bool is_zero_poly(Expr* e) {
                 Expr* clist = internal_coefficientlist((Expr*[]){expr_copy(expanded), expr_copy(var)}, 2);
                 if (clist && clist->type == EXPR_FUNCTION && 
                     clist->data.function.head->type == EXPR_SYMBOL &&
-                    strcmp(clist->data.function.head->data.symbol, "List") == 0) {
+                    clist->data.function.head->data.symbol == SYM_List) {
                     bool all_zero = true;
                     for (size_t i = 0; i < clist->data.function.arg_count; i++) {
                         if (!is_zero_poly(clist->data.function.args[i])) {
@@ -705,10 +706,10 @@ static bool is_negative(Expr* e) {
     if (e->type == EXPR_INTEGER && e->data.integer < 0) return true;
     if (e->type == EXPR_REAL && e->data.real < 0.0) return true;
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
-        if (strcmp(e->data.function.head->data.symbol, "Times") == 0 && e->data.function.arg_count > 0) {
+        if (e->data.function.head->data.symbol == SYM_Times && e->data.function.arg_count > 0) {
             return is_negative(e->data.function.args[0]);
         }
-        if (strcmp(e->data.function.head->data.symbol, "Rational") == 0 && e->data.function.arg_count == 2) {
+        if (e->data.function.head->data.symbol == SYM_Rational && e->data.function.arg_count == 2) {
             return is_negative(e->data.function.args[0]);
         }
     }
@@ -719,11 +720,11 @@ static int64_t get_int_content(Expr* e) {
     if (!e) return 1;
     if (e->type == EXPR_INTEGER) return llabs(e->data.integer);
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Complex") == 0 && e->data.function.arg_count == 2) {
+        e->data.function.head->data.symbol == SYM_Complex && e->data.function.arg_count == 2) {
         return gcd(get_int_content(e->data.function.args[0]), get_int_content(e->data.function.args[1]));
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        e->data.function.head->data.symbol == SYM_Times) {
         int64_t c = 1;
         for (size_t i=0; i<e->data.function.arg_count; i++) {
             c *= get_int_content(e->data.function.args[i]);
@@ -749,20 +750,20 @@ int get_degree_poly(Expr* e, Expr* var) {
     if (expr_eq(e, var)) return 1;
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol;
-        if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+        if (head == SYM_Power && e->data.function.arg_count == 2) {
             if (expr_eq(e->data.function.args[0], var)) {
                 if (e->data.function.args[1]->type == EXPR_INTEGER) {
                     return (int)e->data.function.args[1]->data.integer;
                 }
             }
-        } else if (strcmp(head, "Plus") == 0) {
+        } else if (head == SYM_Plus) {
             int max_deg = 0;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 int d = get_degree_poly(e->data.function.args[i], var);
                 if (d > max_deg) max_deg = d;
             }
             return max_deg;
-        } else if (strcmp(head, "Times") == 0) {
+        } else if (head == SYM_Times) {
             int sum_deg = 0;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 sum_deg += get_degree_poly(e->data.function.args[i], var);
@@ -1548,8 +1549,8 @@ Expr* builtin_polynomiallcm(Expr* res) {
             if (!Q1) Q1 = expr_copy(cur_lcm); 
             if (!Q2) Q2 = expr_copy(rems[i]); 
             
-            int c1 = (Q1->type == EXPR_FUNCTION && Q1->data.function.head->type == EXPR_SYMBOL && strcmp(Q1->data.function.head->data.symbol, "Plus") == 0) ? Q1->data.function.arg_count : 1;
-            int c2 = (Q2->type == EXPR_FUNCTION && Q2->data.function.head->type == EXPR_SYMBOL && strcmp(Q2->data.function.head->data.symbol, "Plus") == 0) ? Q2->data.function.arg_count : 1;
+            int c1 = (Q1->type == EXPR_FUNCTION && Q1->data.function.head->type == EXPR_SYMBOL && Q1->data.function.head->data.symbol == SYM_Plus) ? Q1->data.function.arg_count : 1;
+            int c2 = (Q2->type == EXPR_FUNCTION && Q2->data.function.head->type == EXPR_SYMBOL && Q2->data.function.head->data.symbol == SYM_Plus) ? Q2->data.function.arg_count : 1;
             
             if (c1 <= c2) {
                 next_lcm = internal_times((Expr*[]){Q1, expr_copy(rems[i])}, 2);
@@ -1602,10 +1603,10 @@ Expr* builtin_polynomiallcm(Expr* res) {
 static bool is_threadable_head(Expr* head) {
     if (head->type != EXPR_SYMBOL) return false;
     const char* s = head->data.symbol;
-    return strcmp(s, "List") == 0 || strcmp(s, "Equal") == 0 || strcmp(s, "Unequal") == 0 ||
-           strcmp(s, "Less") == 0 || strcmp(s, "LessEqual") == 0 || strcmp(s, "Greater") == 0 ||
-           strcmp(s, "GreaterEqual") == 0 || strcmp(s, "And") == 0 || strcmp(s, "Or") == 0 ||
-           strcmp(s, "Not") == 0 || strcmp(s, "SameQ") == 0 || strcmp(s, "UnsameQ") == 0;
+    return s == SYM_List || s == SYM_Equal || s == SYM_Unequal ||
+           s == SYM_Less || s == SYM_LessEqual || s == SYM_Greater ||
+           s == SYM_GreaterEqual || s == SYM_And || s == SYM_Or ||
+           s == SYM_Not || s == SYM_SameQ || s == SYM_UnsameQ;
 }
 
 typedef struct {
@@ -1639,7 +1640,7 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
 
     size_t term_count = 1;
     Expr** terms = &expanded;
-    if (expanded->type == EXPR_FUNCTION && expanded->data.function.head->type == EXPR_SYMBOL && strcmp(expanded->data.function.head->data.symbol, "Plus") == 0) {
+    if (expanded->type == EXPR_FUNCTION && expanded->data.function.head->type == EXPR_SYMBOL && expanded->data.function.head->data.symbol == SYM_Plus) {
         term_count = expanded->data.function.arg_count;
         terms = expanded->data.function.args;
     }
@@ -1779,7 +1780,7 @@ Expr* builtin_collect(Expr* res) {
     size_t num_vars = 1;
     Expr** vars = &vars_expr;
 
-    if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && strcmp(vars_expr->data.function.head->data.symbol, "List") == 0) {
+    if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol == SYM_List) {
         num_vars = vars_expr->data.function.arg_count;
         vars = vars_expr->data.function.args;
     }
@@ -1827,7 +1828,7 @@ Expr* builtin_coefficientlist(Expr* res) {
     size_t num_vars = 1;
     Expr** vars = &vars_expr;
 
-    if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && strcmp(vars_expr->data.function.head->data.symbol, "List") == 0) {
+    if (vars_expr->type == EXPR_FUNCTION && vars_expr->data.function.head->type == EXPR_SYMBOL && vars_expr->data.function.head->data.symbol == SYM_List) {
         num_vars = vars_expr->data.function.arg_count;
         vars = vars_expr->data.function.args;
         if (num_vars == 0) return expr_copy(expr);
@@ -2089,7 +2090,7 @@ Expr* builtin_decompose(Expr* res) {
     Expr* x = res->data.function.args[1];
     
     Expr* pq = internal_polynomialq((Expr*[]){expr_copy(poly), expr_copy(x)}, 2);
-    bool is_poly = (pq->type == EXPR_SYMBOL && strcmp(pq->data.symbol, "True") == 0);
+    bool is_poly = (pq->type == EXPR_SYMBOL && pq->data.symbol == SYM_True);
     expr_free(pq);
     
     if (!is_poly) {
@@ -2111,7 +2112,7 @@ static Expr* horner_form_rec(Expr* expr, Expr** vars, size_t num_vars) {
     Expr* expanded = expr_expand(expr);
     
     Expr* pq = internal_polynomialq((Expr*[]){expr_copy(expanded), expr_copy(v)}, 2);
-    bool is_poly = (pq->type == EXPR_SYMBOL && strcmp(pq->data.symbol, "True") == 0);
+    bool is_poly = (pq->type == EXPR_SYMBOL && pq->data.symbol == SYM_True);
     expr_free(pq);
     
     if (!is_poly) {
@@ -2122,7 +2123,7 @@ static Expr* horner_form_rec(Expr* expr, Expr** vars, size_t num_vars) {
     Expr* cl = eval_and_free(expr_new_function(expr_new_symbol("CoefficientList"), (Expr*[]){expr_copy(expanded), expr_copy(v)}, 2));
     expr_free(expanded);
     
-    if (!cl || cl->type != EXPR_FUNCTION || strcmp(cl->data.function.head->data.symbol, "List") != 0) {
+    if (!cl || cl->type != EXPR_FUNCTION || cl->data.function.head->data.symbol != SYM_List) {
         if (cl) expr_free(cl);
         return NULL;
     }
@@ -2176,7 +2177,7 @@ Expr* builtin_hornerform(Expr* res) {
     Expr* num = NULL;
     Expr* den = NULL;
     
-    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && strcmp(expr->data.function.head->data.symbol, "Times") == 0) {
+    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && expr->data.function.head->data.symbol == SYM_Times) {
         size_t n_cap = 16, n_count = 0;
         size_t d_cap = 16, d_count = 0;
         Expr** n_args = malloc(sizeof(Expr*) * n_cap);
@@ -2184,10 +2185,10 @@ Expr* builtin_hornerform(Expr* res) {
         
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {
             Expr* arg = expr->data.function.args[i];
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && strcmp(arg->data.function.head->data.symbol, "Power") == 0 && arg->data.function.arg_count == 2) {
+            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol == SYM_Power && arg->data.function.arg_count == 2) {
                 Expr* exp = arg->data.function.args[1];
                 if ((exp->type == EXPR_INTEGER && exp->data.integer < 0) || 
-                    (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL && strcmp(exp->data.function.head->data.symbol, "Rational") == 0 && exp->data.function.args[0]->data.integer < 0)) {
+                    (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL && exp->data.function.head->data.symbol == SYM_Rational && exp->data.function.args[0]->data.integer < 0)) {
                     if (d_count == d_cap) { d_cap *= 2; d_args = realloc(d_args, sizeof(Expr*) * d_cap); }
                     if (exp->type == EXPR_INTEGER) {
                         if (exp->data.integer == -1) {
@@ -2215,7 +2216,7 @@ Expr* builtin_hornerform(Expr* res) {
         else den = internal_times(d_args, d_count);
         
         free(n_args); free(d_args);
-    } else if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && strcmp(expr->data.function.head->data.symbol, "Power") == 0 && expr->data.function.arg_count == 2) {
+    } else if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && expr->data.function.head->data.symbol == SYM_Power && expr->data.function.arg_count == 2) {
         Expr* exp = expr->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
             num = expr_new_integer(1);
@@ -2247,10 +2248,10 @@ Expr* builtin_hornerform(Expr* res) {
         vars2_expr = expr_copy(res->data.function.args[2]);
     }
     
-    if (vars1_expr && (vars1_expr->type != EXPR_FUNCTION || vars1_expr->data.function.head->type != EXPR_SYMBOL || strcmp(vars1_expr->data.function.head->data.symbol, "List") != 0)) {
+    if (vars1_expr && (vars1_expr->type != EXPR_FUNCTION || vars1_expr->data.function.head->type != EXPR_SYMBOL || vars1_expr->data.function.head->data.symbol != SYM_List)) {
         vars1_expr = eval_and_free(expr_new_function(expr_new_symbol("List"), (Expr*[]){vars1_expr}, 1));
     }
-    if (vars2_expr && (vars2_expr->type != EXPR_FUNCTION || vars2_expr->data.function.head->type != EXPR_SYMBOL || strcmp(vars2_expr->data.function.head->data.symbol, "List") != 0)) {
+    if (vars2_expr && (vars2_expr->type != EXPR_FUNCTION || vars2_expr->data.function.head->type != EXPR_SYMBOL || vars2_expr->data.function.head->data.symbol != SYM_List)) {
         vars2_expr = eval_and_free(expr_new_function(expr_new_symbol("List"), (Expr*[]){vars2_expr}, 1));
     }
     
@@ -2317,7 +2318,7 @@ Expr* builtin_hornerform(Expr* res) {
 /* takes its determinant (delegated to the linalg module).             */
 static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
     if (P->type == EXPR_FUNCTION && P->data.function.head->type == EXPR_SYMBOL) {
-        if (strcmp(P->data.function.head->data.symbol, "Times") == 0) {
+        if (P->data.function.head->data.symbol == SYM_Times) {
             size_t count = P->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
@@ -2326,14 +2327,14 @@ static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
             Expr* res = internal_times(args, count);
             free(args);
             return res;
-        } else if (strcmp(P->data.function.head->data.symbol, "Power") == 0 && P->data.function.arg_count == 2) {
+        } else if (P->data.function.head->data.symbol == SYM_Power && P->data.function.arg_count == 2) {
             Expr* r = resultant_internal(P->data.function.args[0], Q, var);
             return internal_power((Expr*[]){r, expr_copy(P->data.function.args[1])}, 2);
         }
     }
     
     if (Q->type == EXPR_FUNCTION && Q->data.function.head->type == EXPR_SYMBOL) {
-        if (strcmp(Q->data.function.head->data.symbol, "Times") == 0) {
+        if (Q->data.function.head->data.symbol == SYM_Times) {
             size_t count = Q->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
@@ -2342,7 +2343,7 @@ static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
             Expr* res = internal_times(args, count);
             free(args);
             return res;
-        } else if (strcmp(Q->data.function.head->data.symbol, "Power") == 0 && Q->data.function.arg_count == 2) {
+        } else if (Q->data.function.head->data.symbol == SYM_Power && Q->data.function.arg_count == 2) {
             Expr* r = resultant_internal(P, Q->data.function.args[0], var);
             return internal_power((Expr*[]){r, expr_copy(Q->data.function.args[1])}, 2);
         }
@@ -2438,11 +2439,11 @@ Expr* builtin_resultant(Expr* res) {
     Expr* var = res->data.function.args[2];
     
     Expr* pq1 = internal_polynomialq((Expr*[]){expr_copy(p1), expr_copy(var)}, 2);
-    bool is_poly1 = (pq1->type == EXPR_SYMBOL && strcmp(pq1->data.symbol, "True") == 0);
+    bool is_poly1 = (pq1->type == EXPR_SYMBOL && pq1->data.symbol == SYM_True);
     expr_free(pq1);
     
     Expr* pq2 = internal_polynomialq((Expr*[]){expr_copy(p2), expr_copy(var)}, 2);
-    bool is_poly2 = (pq2->type == EXPR_SYMBOL && strcmp(pq2->data.symbol, "True") == 0);
+    bool is_poly2 = (pq2->type == EXPR_SYMBOL && pq2->data.symbol == SYM_True);
     expr_free(pq2);
     
     if (!is_poly1 || !is_poly2) {
@@ -2505,7 +2506,7 @@ Expr* builtin_discriminant(Expr* res) {
     Expr* var = res->data.function.args[1];
     
     Expr* pq = internal_polynomialq((Expr*[]){expr_copy(poly), expr_copy(var)}, 2);
-    bool is_poly = (pq->type == EXPR_SYMBOL && strcmp(pq->data.symbol, "True") == 0);
+    bool is_poly = (pq->type == EXPR_SYMBOL && pq->data.symbol == SYM_True);
     expr_free(pq);
     
     if (!is_poly) return NULL;
@@ -2548,7 +2549,7 @@ static Expr* apply_floor_to_coeffs(Expr* e) {
     if (!e) return NULL;
     if (e->type == EXPR_INTEGER) return expr_copy(e);
     if (e->type == EXPR_REAL) return expr_new_integer((int64_t)floor(e->data.real));
-    if (e->type == EXPR_FUNCTION && strcmp(e->data.function.head->data.symbol, "Rational") == 0) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Rational) {
         int64_t n = e->data.function.args[0]->data.integer;
         int64_t d = e->data.function.args[1]->data.integer;
         int64_t q = n / d;
@@ -2556,13 +2557,13 @@ static Expr* apply_floor_to_coeffs(Expr* e) {
         if (r != 0 && ((n < 0) ^ (d < 0))) q -= 1;
         return expr_new_integer(q);
     }
-    if (e->type == EXPR_FUNCTION && strcmp(e->data.function.head->data.symbol, "Plus") == 0) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Plus) {
         Expr** args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for(size_t i=0; i<e->data.function.arg_count; i++) args[i] = apply_floor_to_coeffs(e->data.function.args[i]);
         Expr* res = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, e->data.function.arg_count));
         free(args); return res;
     }
-    if (e->type == EXPR_FUNCTION && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Times) {
         Expr** args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for(size_t i=0; i<e->data.function.arg_count; i++) {
             if (i == 0) args[i] = apply_floor_to_coeffs(e->data.function.args[i]); 
@@ -2571,7 +2572,7 @@ static Expr* apply_floor_to_coeffs(Expr* e) {
         Expr* res = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, e->data.function.arg_count));
         free(args); return res;
     }
-    if (e->type == EXPR_FUNCTION && strcmp(e->data.function.head->data.symbol, "Complex") == 0) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Complex) {
         Expr* re = apply_floor_to_coeffs(e->data.function.args[0]);
         Expr* im = apply_floor_to_coeffs(e->data.function.args[1]);
         Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Complex"), (Expr*[]){re, im}, 2));
@@ -2606,7 +2607,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
         if (m_val < 0) m_val = -m_val;
         
         Expr* expanded = expr_expand(poly);
-        if (expanded->type == EXPR_FUNCTION && strcmp(expanded->data.function.head->data.symbol, "Plus") == 0) {
+        if (expanded->type == EXPR_FUNCTION && expanded->data.function.head->data.symbol == SYM_Plus) {
             Expr** args = malloc(sizeof(Expr*) * expanded->data.function.arg_count);
             for(size_t i=0; i<expanded->data.function.arg_count; i++) {
                 Expr* term = expanded->data.function.args[i];
@@ -2614,7 +2615,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
                     int64_t c = term->data.integer % m_val;
                     if (c < 0) c += m_val;
                     args[i] = expr_new_integer(c);
-                } else if (term->type == EXPR_FUNCTION && strcmp(term->data.function.head->data.symbol, "Times") == 0 && term->data.function.args[0]->type == EXPR_INTEGER) {
+                } else if (term->type == EXPR_FUNCTION && term->data.function.head->data.symbol == SYM_Times && term->data.function.args[0]->type == EXPR_INTEGER) {
                     int64_t c = term->data.function.args[0]->data.integer % m_val;
                     if (c < 0) c += m_val;
                     Expr** t_args = malloc(sizeof(Expr*) * term->data.function.arg_count);
@@ -2622,7 +2623,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
                     for(size_t j=1; j<term->data.function.arg_count; j++) t_args[j] = expr_copy(term->data.function.args[j]);
                     args[i] = internal_times(t_args, term->data.function.arg_count);
                     free(t_args);
-                } else if (term->type == EXPR_FUNCTION && strcmp(term->data.function.head->data.symbol, "Complex") == 0) {
+                } else if (term->type == EXPR_FUNCTION && term->data.function.head->data.symbol == SYM_Complex) {
                     int64_t r = term->data.function.args[0]->data.integer % m_val;
                     if (r < 0) r += m_val;
                     int64_t i_val = term->data.function.args[1]->data.integer % m_val;
@@ -2646,7 +2647,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
                 int64_t c = term->data.integer % m_val;
                 if (c < 0) c += m_val;
                 res = expr_new_integer(c);
-            } else if (term->type == EXPR_FUNCTION && strcmp(term->data.function.head->data.symbol, "Times") == 0 && term->data.function.args[0]->type == EXPR_INTEGER) {
+            } else if (term->type == EXPR_FUNCTION && term->data.function.head->data.symbol == SYM_Times && term->data.function.args[0]->type == EXPR_INTEGER) {
                 int64_t c = term->data.function.args[0]->data.integer % m_val;
                 if (c < 0) c += m_val;
                 Expr** t_args = malloc(sizeof(Expr*) * term->data.function.arg_count);
@@ -2654,7 +2655,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
                 for(size_t j=1; j<term->data.function.arg_count; j++) t_args[j] = expr_copy(term->data.function.args[j]);
                 res = internal_times(t_args, term->data.function.arg_count);
                 free(t_args);
-            } else if (term->type == EXPR_FUNCTION && strcmp(term->data.function.head->data.symbol, "Complex") == 0) {
+            } else if (term->type == EXPR_FUNCTION && term->data.function.head->data.symbol == SYM_Complex) {
                 int64_t r = term->data.function.args[0]->data.integer % m_val;
                 if (r < 0) r += m_val;
                 int64_t i_val = term->data.function.args[1]->data.integer % m_val;
@@ -2718,7 +2719,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
         
         size_t t_count = 0;
         Expr** terms = NULL;
-        if (curr_poly->type == EXPR_FUNCTION && strcmp(curr_poly->data.function.head->data.symbol, "Plus") == 0) {
+        if (curr_poly->type == EXPR_FUNCTION && curr_poly->data.function.head->data.symbol == SYM_Plus) {
             t_count = curr_poly->data.function.arg_count;
             terms = curr_poly->data.function.args;
         } else {
@@ -2783,7 +2784,7 @@ Expr* builtin_polynomialmod(Expr* res) {
         }
     }
     
-    if (m->type == EXPR_FUNCTION && strcmp(m->data.function.head->data.symbol, "List") == 0) {
+    if (m->type == EXPR_FUNCTION && m->data.function.head->data.symbol == SYM_List) {
         Expr* curr = expr_copy(expr);
         bool has_integer = false;
         for (size_t i = 0; i < m->data.function.arg_count; i++) {
@@ -2843,8 +2844,8 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
     Expr* mod_p = NULL;
     if (res->data.function.arg_count == 4) {
         Expr* rule = res->data.function.args[3];
-        if (rule->type == EXPR_FUNCTION && strcmp(rule->data.function.head->data.symbol, "Rule") == 0 &&
-            rule->data.function.args[0]->type == EXPR_SYMBOL && strcmp(rule->data.function.args[0]->data.symbol, "Modulus") == 0) {
+        if (rule->type == EXPR_FUNCTION && rule->data.function.head->data.symbol == SYM_Rule &&
+            rule->data.function.args[0]->type == EXPR_SYMBOL && rule->data.function.args[0]->data.symbol == SYM_Modulus) {
             mod_p = rule->data.function.args[1];
         } else {
             return NULL;

@@ -1,6 +1,7 @@
 #include "parse.h"
 #include "expr.h"
 #include "context.h"
+#include "sym_names.h"
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -418,7 +419,7 @@ static Expr* parse_function(ParserState* s, Expr* head) {
     }
     s->pos++;  // Skip ']'
 
-    if (head && head->type == EXPR_SYMBOL && strcmp(head->data.symbol, "Sqrt") == 0 && count == 1) {
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Sqrt && count == 1) {
         expr_free(head);
         Expr* rat_args[2] = { expr_new_integer(1), expr_new_integer(2) };
         Expr* half = expr_new_function(expr_new_symbol("Rational"), rat_args, 2);

@@ -10,6 +10,7 @@
 #include "complex.h"
 #include "times.h"
 #include "numeric.h"
+#include "sym_names.h"
 
 #ifdef USE_MPFR
 /* Reciprocal-input helpers for ArcCoth, ArcSech, ArcCsch. Each computes
@@ -89,7 +90,7 @@ static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
 }
 
 static bool is_infinity(Expr* e) {
-    return e->type == EXPR_SYMBOL && strcmp(e->data.symbol, "Infinity") == 0;
+    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
 }
 
 /*
@@ -139,7 +140,7 @@ static Expr* peel_imaginary_unit(Expr* arg) {
         return expr_copy(im);
     }
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "Times") == 0 &&
+        arg->data.function.head->data.symbol == SYM_Times &&
         arg->data.function.arg_count > 0) {
         Expr* first = arg->data.function.args[0];
         Expr* fre; Expr* fim;
@@ -195,7 +196,7 @@ static Expr* strip_inverse_call(Expr* arg, const char* inverse_name) {
 
 static bool is_minus_infinity(Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 && 
-        e->data.function.head->type == EXPR_SYMBOL && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_Times) {
         Expr* a1 = e->data.function.args[0];
         Expr* a2 = e->data.function.args[1];
         if (a1->type == EXPR_INTEGER && a1->data.integer == -1 && is_infinity(a2)) return true;

@@ -4,6 +4,7 @@
 #include "expr.h"
 #include "arithmetic.h"
 #include "sym_intern.h"
+#include "sym_names.h"
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
@@ -477,10 +478,10 @@ static Expr* get_main_factor(Expr* e) {
     Expr* head = e->data.function.head;
     if (head->type != EXPR_SYMBOL) return e;
     
-    if (strcmp(head->data.symbol, "Power") == 0 && e->data.function.arg_count >= 1) {
+    if (head->data.symbol == SYM_Power && e->data.function.arg_count >= 1) {
         return get_main_factor(e->data.function.args[0]);
     }
-    if (strcmp(head->data.symbol, "Times") == 0 && e->data.function.arg_count >= 1) {
+    if (head->data.symbol == SYM_Times && e->data.function.arg_count >= 1) {
         Expr* first = e->data.function.args[0];
         if (first->type == EXPR_INTEGER || first->type == EXPR_REAL || first->type == EXPR_BIGINT || is_rational(first, NULL, NULL)) {
             if (e->data.function.arg_count == 2) return get_main_factor(e->data.function.args[1]);
@@ -563,18 +564,18 @@ int expr_compare(const Expr* a, const Expr* b) {
             Expr* ha = a->data.function.head;
             Expr* hb = b->data.function.head;
             
-            bool plus_a = (ha->type == EXPR_SYMBOL && strcmp(ha->data.symbol, "Plus") == 0);
-            bool plus_b = (hb->type == EXPR_SYMBOL && strcmp(hb->data.symbol, "Plus") == 0);
+            bool plus_a = (ha->type == EXPR_SYMBOL && ha->data.symbol == SYM_Plus);
+            bool plus_b = (hb->type == EXPR_SYMBOL && hb->data.symbol == SYM_Plus);
             if (plus_a && !plus_b) return 1;
             if (!plus_a && plus_b) return -1;
 
             if (ha->type == EXPR_SYMBOL && hb->type == EXPR_SYMBOL) {
                 const char* na = ha->data.symbol;
                 const char* nb = hb->data.symbol;
-                if (strcmp(na, "Times") == 0 && strcmp(nb, "Power") == 0) return -1;
-                if (strcmp(na, "Power") == 0 && strcmp(nb, "Times") == 0) return 1;
+                if (na == SYM_Times && nb == SYM_Power) return -1;
+                if (na == SYM_Power && nb == SYM_Times) return 1;
 
-                if (strcmp(na, "Times") == 0 && strcmp(nb, "Times") == 0) {
+                if (na == SYM_Times && nb == SYM_Times) {
                     size_t start_a = (a->data.function.arg_count > 0 && 
                                       (a->data.function.args[0]->type == EXPR_INTEGER || 
                                        a->data.function.args[0]->type == EXPR_REAL ||

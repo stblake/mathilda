@@ -3,6 +3,7 @@
 #include "complex.h"
 #include "eval.h"
 #include "numeric.h"
+#include "sym_names.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -12,7 +13,7 @@
 
 static bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, "Overflow") == 0;
+           e->data.function.head->data.symbol == SYM_Overflow;
 }
 
 /* True for positive numeric expressions: positive int/bigint, positive real,
@@ -286,7 +287,7 @@ Expr* builtin_times(Expr* res) {
 
         if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL)) {
             Expr* next = multiply_numbers(num_prod, arg); expr_free(num_prod); num_prod = next;
-        } else if (is_complex(arg, NULL, NULL) || (arg->type == EXPR_SYMBOL && strcmp(arg->data.symbol, "I") == 0)) {
+        } else if (is_complex(arg, NULL, NULL) || (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_I)) {
             Expr* c_arg;
             if (arg->type == EXPR_SYMBOL) {
                 Expr* z0 = expr_new_integer(0);
@@ -312,7 +313,7 @@ Expr* builtin_times(Expr* res) {
             }
         } else {
             Expr* base = arg; Expr* exponent;
-            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && strcmp(arg->data.function.head->data.symbol, "Power") == 0 && arg->data.function.arg_count == 2) {
+            if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol == SYM_Power && arg->data.function.arg_count == 2) {
                 base = arg->data.function.args[0]; exponent = expr_copy(arg->data.function.args[1]);
             } else { exponent = expr_new_integer(1); }
             

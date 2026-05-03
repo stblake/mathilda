@@ -8,6 +8,7 @@
 #include "arithmetic.h"
 #include "complex.h"
 #include "numeric.h"
+#include "sym_names.h"
 
 /*
  * logexp_init:
@@ -65,7 +66,7 @@ static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
  * Checks if the given expression represents the symbol 'Infinity'.
  */
 static bool is_infinity(Expr* e) {
-    return e->type == EXPR_SYMBOL && strcmp(e->data.symbol, "Infinity") == 0;
+    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
 }
 
 /*
@@ -75,7 +76,7 @@ static bool is_infinity(Expr* e) {
  */
 static bool is_minus_infinity(Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 && 
-        e->data.function.head->type == EXPR_SYMBOL && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_Times) {
         Expr* a1 = e->data.function.args[0];
         Expr* a2 = e->data.function.args[1];
         if (a1->type == EXPR_INTEGER && a1->data.integer == -1 && is_infinity(a2)) return true;
@@ -118,8 +119,8 @@ static bool is_positive_known(Expr* e) {
     if (is_rational(e, &n, &d)) return n > 0;
     if (e->type == EXPR_SYMBOL) {
         const char* s = e->data.symbol;
-        if (strcmp(s, "E") == 0)  return true;
-        if (strcmp(s, "Pi") == 0) return true;
+        if (s == SYM_E)  return true;
+        if (s == SYM_Pi) return true;
     }
     return false;
 }
@@ -128,7 +129,7 @@ static bool is_positive_known(Expr* e) {
 static bool is_power_call(Expr* e) {
     return e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+           e->data.function.head->data.symbol == SYM_Power &&
            e->data.function.arg_count == 2;
 }
 
@@ -188,7 +189,7 @@ Expr* builtin_log(Expr* res) {
             Expr* ret = expr_new_symbol("Infinity"); // Log[Infinity] = Infinity
             return ret;
         }
-        if (z->type == EXPR_SYMBOL && strcmp(z->data.symbol, "E") == 0) {
+        if (z->type == EXPR_SYMBOL && z->data.symbol == SYM_E) {
             Expr* ret = expr_new_integer(1); // Log[E] = 1
             return ret;
         }
@@ -201,7 +202,7 @@ Expr* builtin_log(Expr* res) {
             Expr* pbase = z->data.function.args[0];
             Expr* pexp  = z->data.function.args[1];
             if (pbase->type == EXPR_SYMBOL &&
-                strcmp(pbase->data.symbol, "E") == 0 &&
+                pbase->data.symbol == SYM_E &&
                 is_real_numeric_expr(pexp)) {
                 return expr_copy(pexp);
             }
@@ -321,14 +322,14 @@ Expr* builtin_exp(Expr* res) {
 
     // Exact evaluation of Exp[I * q * Pi] using Euler's formula (e^{i x} = Cos[x] + I Sin[x])
     // The argument z may be internally structured as Times[Complex[0, q], Pi]
-    if (z->type == EXPR_FUNCTION && strcmp(z->data.function.head->data.symbol, "Times") == 0) {
+    if (z->type == EXPR_FUNCTION && z->data.function.head->data.symbol == SYM_Times) {
         bool has_pi = false;
         Expr* im_coeff = NULL;
 
         // Scan the arguments of Times to identify a pure imaginary coefficient and Pi
         for (size_t i = 0; i < z->data.function.arg_count; i++) {
             Expr* arg = z->data.function.args[i];
-            if (arg->type == EXPR_SYMBOL && strcmp(arg->data.symbol, "Pi") == 0) {
+            if (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_Pi) {
                 has_pi = true;
             } else {
                 Expr *re, *im;

@@ -2,6 +2,7 @@
 
 #include "eval.h"
 #include "symtab.h"
+#include "sym_names.h"
 
 static bool is_atomic(Expr* e);
 
@@ -45,20 +46,20 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                 new_args[k - 1] = replaced;
             }
         }
-    } else if (idx->type == EXPR_SYMBOL && strcmp(idx->data.symbol, "All") == 0) {
+    } else if (idx->type == EXPR_SYMBOL && idx->data.symbol == SYM_All) {
         for (size_t i = 0; i < len; i++) {
             Expr* replaced = expr_part_assign_rec(new_args[i], rest, nrest, rhs, rhs_idx, is_rhs_list);
             expr_free(new_args[i]);
             new_args[i] = replaced;
         }
-    } else if (idx->type == EXPR_FUNCTION && strcmp(idx->data.function.head->data.symbol, "Span") == 0) {
+    } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->data.symbol == SYM_Span) {
         int64_t start = 1, end = len, step = 1;
         size_t span_argc = idx->data.function.arg_count;
         if (span_argc >= 1) {
             Expr* a1 = idx->data.function.args[0];
             if (a1->type == EXPR_INTEGER) { start = a1->data.integer; if (start < 0) start = len + start + 1; }
-            else if (a1->type == EXPR_SYMBOL && strcmp(a1->data.symbol, "All") == 0) start = 1;
-            else if (a1->type == EXPR_FUNCTION && strcmp(a1->data.function.head->data.symbol, "UpTo") == 0 && a1->data.function.arg_count == 1 && a1->data.function.args[0]->type == EXPR_INTEGER) {
+            else if (a1->type == EXPR_SYMBOL && a1->data.symbol == SYM_All) start = 1;
+            else if (a1->type == EXPR_FUNCTION && a1->data.function.head->data.symbol == SYM_UpTo && a1->data.function.arg_count == 1 && a1->data.function.args[0]->type == EXPR_INTEGER) {
                 start = a1->data.function.args[0]->data.integer;
                 if (start > (int64_t)len) start = len;
                 if (start < 0) start = len + start + 1;
@@ -67,8 +68,8 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
         if (span_argc >= 2) {
             Expr* a2 = idx->data.function.args[1];
             if (a2->type == EXPR_INTEGER) { end = a2->data.integer; if (end < 0) end = len + end + 1; }
-            else if (a2->type == EXPR_SYMBOL && strcmp(a2->data.symbol, "All") == 0) end = len;
-            else if (a2->type == EXPR_FUNCTION && strcmp(a2->data.function.head->data.symbol, "UpTo") == 0 && a2->data.function.arg_count == 1 && a2->data.function.args[0]->type == EXPR_INTEGER) {
+            else if (a2->type == EXPR_SYMBOL && a2->data.symbol == SYM_All) end = len;
+            else if (a2->type == EXPR_FUNCTION && a2->data.function.head->data.symbol == SYM_UpTo && a2->data.function.arg_count == 1 && a2->data.function.args[0]->type == EXPR_INTEGER) {
                 end = a2->data.function.args[0]->data.integer;
                 if (end > (int64_t)len) end = len;
                 if (end < 0) end = len + end + 1;
@@ -77,7 +78,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
         if (span_argc >= 3) {
             Expr* a3 = idx->data.function.args[2];
             if (a3->type == EXPR_INTEGER) step = a3->data.integer;
-            else if (a3->type == EXPR_SYMBOL && strcmp(a3->data.symbol, "All") == 0) step = 1;
+            else if (a3->type == EXPR_SYMBOL && a3->data.symbol == SYM_All) step = 1;
         }
 
         if (step > 0) {
@@ -93,7 +94,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
                 new_args[i - 1] = replaced;
             }
         }
-    } else if (idx->type == EXPR_FUNCTION && strcmp(idx->data.function.head->data.symbol, "List") == 0) {
+    } else if (idx->type == EXPR_FUNCTION && idx->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < idx->data.function.arg_count; i++) {
             Expr* sub_idx = idx->data.function.args[i];
             if (sub_idx->type == EXPR_INTEGER) {
@@ -120,7 +121,7 @@ static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, E
 }
 
 Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
-    if (lhs->type != EXPR_FUNCTION || lhs->data.function.head->type != EXPR_SYMBOL || strcmp(lhs->data.function.head->data.symbol, "Part") != 0) return NULL;
+    if (lhs->type != EXPR_FUNCTION || lhs->data.function.head->type != EXPR_SYMBOL || lhs->data.function.head->data.symbol != SYM_Part) return NULL;
     if (lhs->data.function.arg_count < 2) return NULL;
     
     Expr* sym = lhs->data.function.args[0];
@@ -129,7 +130,7 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
     Expr* current_val = symtab_get_own_values(sym->data.symbol) ? evaluate(sym) : NULL;
     if (!current_val) return NULL;
     
-    bool is_rhs_list = (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL && strcmp(rhs->data.function.head->data.symbol, "List") == 0);
+    bool is_rhs_list = (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL && rhs->data.function.head->data.symbol == SYM_List);
     
     size_t rhs_idx = 0;
     Expr* new_val = expr_part_assign_rec(current_val, lhs->data.function.args + 1, lhs->data.function.arg_count - 1, rhs, &rhs_idx, is_rhs_list);
@@ -147,7 +148,7 @@ static bool is_atomic(Expr* e) {
     if (e->type != EXPR_FUNCTION) return true;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol;
-        if (strcmp(h, "Complex") == 0 || strcmp(h, "Rational") == 0) return true;
+        if (h == SYM_Complex || h == SYM_Rational) return true;
     }
     return false;
 }
@@ -201,7 +202,7 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     }
 
     // Handle "Span"
-    if (idx->type == EXPR_FUNCTION && strcmp(idx->data.function.head->data.symbol, "Span") == 0) {
+    if (idx->type == EXPR_FUNCTION && idx->data.function.head->data.symbol == SYM_Span) {
         if (is_atomic(expr)) return NULL;
         int64_t len = (int64_t)expr->data.function.arg_count;
         int64_t start = 1, end = len, step = 1;
@@ -212,9 +213,9 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
             if (a1->type == EXPR_INTEGER) {
                 start = a1->data.integer;
                 if (start < 0) start = len + start + 1;
-            } else if (a1->type == EXPR_SYMBOL && strcmp(a1->data.symbol, "All") == 0) {
+            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol == SYM_All) {
                 start = 1;
-            } else if (a1->type == EXPR_FUNCTION && strcmp(a1->data.function.head->data.symbol, "UpTo") == 0 && a1->data.function.arg_count == 1 && a1->data.function.args[0]->type == EXPR_INTEGER) {
+            } else if (a1->type == EXPR_FUNCTION && a1->data.function.head->data.symbol == SYM_UpTo && a1->data.function.arg_count == 1 && a1->data.function.args[0]->type == EXPR_INTEGER) {
                 start = a1->data.function.args[0]->data.integer;
                 if (start > len) start = len;
                 if (start < 0) start = len + start + 1;
@@ -225,9 +226,9 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
             if (a2->type == EXPR_INTEGER) {
                 end = a2->data.integer;
                 if (end < 0) end = len + end + 1;
-            } else if (a2->type == EXPR_SYMBOL && strcmp(a2->data.symbol, "All") == 0) {
+            } else if (a2->type == EXPR_SYMBOL && a2->data.symbol == SYM_All) {
                 end = len;
-            } else if (a2->type == EXPR_FUNCTION && strcmp(a2->data.function.head->data.symbol, "UpTo") == 0 && a2->data.function.arg_count == 1 && a2->data.function.args[0]->type == EXPR_INTEGER) {
+            } else if (a2->type == EXPR_FUNCTION && a2->data.function.head->data.symbol == SYM_UpTo && a2->data.function.arg_count == 1 && a2->data.function.args[0]->type == EXPR_INTEGER) {
                 end = a2->data.function.args[0]->data.integer;
                 if (end > len) end = len;
                 if (end < 0) end = len + end + 1;
@@ -236,7 +237,7 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
         if (span_argc >= 3) {
             Expr* a3 = idx->data.function.args[2];
             if (a3->type == EXPR_INTEGER) step = a3->data.integer;
-            else if (a3->type == EXPR_SYMBOL && strcmp(a3->data.symbol, "All") == 0) step = 1;
+            else if (a3->type == EXPR_SYMBOL && a3->data.symbol == SYM_All) step = 1;
             else return NULL;
             if (step == 0) return NULL; // invalid step
         }
@@ -287,7 +288,7 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     }
 
     // Handle "All"
-    if (idx->type == EXPR_SYMBOL && strcmp(idx->data.symbol, "All") == 0) {
+    if (idx->type == EXPR_SYMBOL && idx->data.symbol == SYM_All) {
         if (is_atomic(expr)) return NULL;
         size_t len = expr->data.function.arg_count;
         Expr** args = NULL;
@@ -319,7 +320,7 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     }
 
     // Handle List of indices
-    if (idx->type == EXPR_FUNCTION && strcmp(idx->data.function.head->data.symbol, "List") == 0) {
+    if (idx->type == EXPR_FUNCTION && idx->data.function.head->data.symbol == SYM_List) {
         if (is_atomic(expr)) return NULL;
         size_t len = idx->data.function.arg_count;
         Expr** args = NULL;
@@ -372,7 +373,7 @@ Expr* builtin_part(Expr* res) {
 }
 
 static Expr* extract_single(Expr* expr, Expr* pos, Expr* h) {
-    if (pos->type != EXPR_FUNCTION || strcmp(pos->data.function.head->data.symbol, "List") != 0) return NULL;
+    if (pos->type != EXPR_FUNCTION || pos->data.function.head->data.symbol != SYM_List) return NULL;
     size_t nindices = pos->data.function.arg_count;
     Expr** indices = pos->data.function.args;
     Expr* part = expr_part(expr, indices, nindices);
@@ -403,8 +404,8 @@ Expr* builtin_extract(Expr* res) {
     Expr* h = (argc == 3) ? res->data.function.args[2] : NULL;
 
     bool is_list_of_pos = false;
-    if (pos->type == EXPR_FUNCTION && strcmp(pos->data.function.head->data.symbol, "List") == 0) {
-        if (pos->data.function.arg_count > 0 && pos->data.function.args[0]->type == EXPR_FUNCTION && strcmp(pos->data.function.args[0]->data.function.head->data.symbol, "List") == 0) {
+    if (pos->type == EXPR_FUNCTION && pos->data.function.head->data.symbol == SYM_List) {
+        if (pos->data.function.arg_count > 0 && pos->data.function.args[0]->type == EXPR_FUNCTION && pos->data.function.args[0]->data.function.head->data.symbol == SYM_List) {
             is_list_of_pos = true;
         } else if (pos->data.function.arg_count == 0) {
             is_list_of_pos = false;
@@ -555,7 +556,7 @@ Expr* expr_insert(Expr* expr, Expr* elem, Expr* pos) {
     if (!expr || !elem || !pos) return NULL;
     
     // Case 3: List of positions
-    if (pos->type == EXPR_FUNCTION && strcmp(pos->data.function.head->data.symbol, "List") == 0) {
+    if (pos->type == EXPR_FUNCTION && pos->data.function.head->data.symbol == SYM_List) {
         bool all_lists = true;
         for (size_t i = 0; i < pos->data.function.arg_count; i++) {
             if (pos->data.function.args[i]->type != EXPR_FUNCTION) {
@@ -690,7 +691,7 @@ Expr* expr_delete(Expr* expr, Expr* pos) {
     if (!expr || !pos) return NULL;
     
     // Case 3: List of positions
-    if (pos->type == EXPR_FUNCTION && strcmp(pos->data.function.head->data.symbol, "List") == 0) {
+    if (pos->type == EXPR_FUNCTION && pos->data.function.head->data.symbol == SYM_List) {
         bool all_lists = true;
         for (size_t i = 0; i < pos->data.function.arg_count; i++) {
             if (pos->data.function.args[i]->type != EXPR_FUNCTION) {

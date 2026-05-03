@@ -2,6 +2,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "core.h"
+#include "sym_names.h"
 #include <string.h>
 
 Expr* builtin_if(Expr* res) {
@@ -12,9 +13,9 @@ Expr* builtin_if(Expr* res) {
     Expr* cond = res->data.function.args[0];
 
     if (cond->type == EXPR_SYMBOL) {
-        if (strcmp(cond->data.symbol, "True") == 0) {
+        if (cond->data.symbol == SYM_True) {
             return expr_copy(res->data.function.args[1]);
-        } else if (strcmp(cond->data.symbol, "False") == 0) {
+        } else if (cond->data.symbol == SYM_False) {
             if (argc >= 3) {
                 return expr_copy(res->data.function.args[2]);
             } else {
@@ -34,7 +35,7 @@ Expr* builtin_trueq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     
     Expr* cond = res->data.function.args[0];
-    bool is_true = (cond->type == EXPR_SYMBOL && strcmp(cond->data.symbol, "True") == 0);
+    bool is_true = (cond->type == EXPR_SYMBOL && cond->data.symbol == SYM_True);
     
     return expr_new_symbol(is_true ? "True" : "False");
 }

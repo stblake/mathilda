@@ -382,9 +382,9 @@ Expr* builtin_compoundexpression(Expr* res) {
         last_val = evaluate(res->data.function.args[i]);
         if (last_val->type == EXPR_FUNCTION && last_val->data.function.head->type == EXPR_SYMBOL) {
             const char* hname = last_val->data.function.head->data.symbol;
-            if (strcmp(hname, "Return") == 0 || strcmp(hname, "Break") == 0 || 
-                strcmp(hname, "Continue") == 0 || strcmp(hname, "Throw") == 0 || 
-                strcmp(hname, "Abort") == 0 || strcmp(hname, "Quit") == 0) {
+            if (hname == SYM_Return || hname == SYM_Break || 
+                hname == SYM_Continue || hname == SYM_Throw || 
+                hname == SYM_Abort || hname == SYM_Quit) {
                 break;
             }
         }
@@ -748,7 +748,7 @@ Expr* builtin_composition(Expr* res) {
 
     for (size_t i = 0; i < n; i++) {
         Expr* a = args[i];
-        if (a->type == EXPR_SYMBOL && strcmp(a->data.symbol, "Identity") == 0) {
+        if (a->type == EXPR_SYMBOL && a->data.symbol == SYM_Identity) {
             changed = true;
             continue;
         }
@@ -765,7 +765,7 @@ Expr* builtin_composition(Expr* res) {
             bool cancel = false;
             if (a->type == EXPR_FUNCTION &&
                 a->data.function.head->type == EXPR_SYMBOL &&
-                strcmp(a->data.function.head->data.symbol, "InverseFunction") == 0 &&
+                a->data.function.head->data.symbol == SYM_InverseFunction &&
                 a->data.function.arg_count == 1 &&
                 expr_eq(a->data.function.args[0], b)) {
                 cancel = true;
@@ -773,7 +773,7 @@ Expr* builtin_composition(Expr* res) {
             if (!cancel &&
                 b->type == EXPR_FUNCTION &&
                 b->data.function.head->type == EXPR_SYMBOL &&
-                strcmp(b->data.function.head->data.symbol, "InverseFunction") == 0 &&
+                b->data.function.head->data.symbol == SYM_InverseFunction &&
                 b->data.function.arg_count == 1 &&
                 expr_eq(b->data.function.args[0], a)) {
                 cancel = true;
@@ -829,7 +829,7 @@ Expr* builtin_compose_list(Expr* res) {
 
     if (fns->type != EXPR_FUNCTION ||
         fns->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(fns->data.function.head->data.symbol, "List") != 0) {
+        fns->data.function.head->data.symbol != SYM_List) {
         return NULL;
     }
 
@@ -860,7 +860,7 @@ Expr* builtin_atomq(Expr* res) {
     if (arg->type == EXPR_FUNCTION) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = arg->data.function.head->data.symbol;
-            if (strcmp(head_name, "Complex") == 0 || strcmp(head_name, "Rational") == 0) {
+            if (head_name == SYM_Complex || head_name == SYM_Rational) {
                 return expr_new_symbol("True");
             }
         }
@@ -884,7 +884,7 @@ Expr* builtin_numberq(Expr* res) {
     if (arg->type == EXPR_FUNCTION) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = arg->data.function.head->data.symbol;
-            if (strcmp(head_name, "Complex") == 0 || strcmp(head_name, "Rational") == 0) {
+            if (head_name == SYM_Complex || head_name == SYM_Rational) {
                 return expr_new_symbol("True");
             }
         }
@@ -897,10 +897,10 @@ static bool is_numeric_quantity(Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
     if (e->type == EXPR_SYMBOL) {
         const char* name = e->data.symbol;
-        if (strcmp(name, "Pi") == 0 || strcmp(name, "E") == 0 || strcmp(name, "I") == 0 ||
-            strcmp(name, "Infinity") == 0 || strcmp(name, "ComplexInfinity") == 0 ||
-            strcmp(name, "EulerGamma") == 0 || strcmp(name, "GoldenRatio") == 0 ||
-            strcmp(name, "Catalan") == 0 || strcmp(name, "Degree") == 0) {
+        if (name == SYM_Pi || name == SYM_E || name == SYM_I ||
+            name == SYM_Infinity || name == SYM_ComplexInfinity ||
+            name == SYM_EulerGamma || name == SYM_GoldenRatio ||
+            name == SYM_Catalan || name == SYM_Degree) {
             return true;
         }
         return false;
@@ -908,7 +908,7 @@ static bool is_numeric_quantity(Expr* e) {
     if (e->type == EXPR_FUNCTION) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = e->data.function.head->data.symbol;
-            if (strcmp(head_name, "Complex") == 0 || strcmp(head_name, "Rational") == 0) return true;
+            if (head_name == SYM_Complex || head_name == SYM_Rational) return true;
             
             SymbolDef* def = symtab_get_def(head_name);
             if (def && (def->attributes & ATTR_NUMERICFUNCTION)) {
@@ -1184,7 +1184,7 @@ static int64_t get_expr_depth(Expr* e, bool heads) {
     // Rational and Complex are considered atomic in terms of Depth/Length in Mathematica
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol;
-        if (strcmp(h, "Rational") == 0 || strcmp(h, "Complex") == 0) return 1;
+        if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
 
     int64_t max_d = 0;
@@ -1205,9 +1205,9 @@ Expr* builtin_depth(Expr* res) {
     bool heads = false;
     for (size_t i = 1; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && strcmp(opt->data.function.head->data.symbol, "Rule") == 0) {
-            if (strcmp(opt->data.function.args[0]->data.symbol, "Heads") == 0) {
-                if (strcmp(opt->data.function.args[1]->data.symbol, "True") == 0) heads = true;
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule) {
+            if (opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                if (opt->data.function.args[1]->data.symbol == SYM_True) heads = true;
             }
         }
     }
@@ -1238,9 +1238,9 @@ Expr* builtin_leafcount(Expr* res) {
     
     if (res->data.function.arg_count == 2) {
         Expr* opt = res->data.function.args[1];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->type == EXPR_SYMBOL && strcmp(opt->data.function.head->data.symbol, "Rule") == 0 && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[0]->data.symbol, "Heads") == 0) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "False") == 0) {
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->type == EXPR_SYMBOL && opt->data.function.head->data.symbol == SYM_Rule && opt->data.function.arg_count == 2) {
+            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_False) {
                     heads = false;
                 }
             }
@@ -1323,24 +1323,24 @@ Expr* builtin_level(Expr* res) {
     int64_t min_l = 1, max_l = 1;
     if (ls->type == EXPR_INTEGER) {
         max_l = ls->data.integer;
-    } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "Infinity") == 0) {
+    } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_Infinity) {
         max_l = 1000000;
-    } else if (ls->type == EXPR_FUNCTION && strcmp(ls->data.function.head->data.symbol, "List") == 0) {
+    } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_List) {
         if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
             min_l = max_l = ls->data.function.args[0]->data.integer;
         } else if (ls->data.function.arg_count == 2) {
             if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
             if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-            else if (ls->data.function.args[1]->type == EXPR_SYMBOL && strcmp(ls->data.function.args[1]->data.symbol, "Infinity") == 0) max_l = 1000000;
+            else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol == SYM_Infinity) max_l = 1000000;
         }
     }
 
     bool heads = false;
     for (size_t i = 2; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && strcmp(opt->data.function.head->data.symbol, "Rule") == 0) {
-            if (strcmp(opt->data.function.args[0]->data.symbol, "Heads") == 0) {
-                if (strcmp(opt->data.function.args[1]->data.symbol, "True") == 0) heads = true;
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule) {
+            if (opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                if (opt->data.function.args[1]->data.symbol == SYM_True) heads = true;
             }
         }
     }
@@ -1382,7 +1382,7 @@ static const char* lvalue_symbol_name(Expr* lhs) {
     if (lhs->type == EXPR_FUNCTION &&
         lhs->data.function.head->type == EXPR_SYMBOL &&
         lhs->data.function.arg_count >= 1 &&
-        strcmp(lhs->data.function.head->data.symbol, "Part") == 0) {
+        lhs->data.function.head->data.symbol == SYM_Part) {
         return lvalue_symbol_name(lhs->data.function.args[0]);
     }
     return NULL;

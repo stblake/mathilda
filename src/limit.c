@@ -41,6 +41,7 @@
                           * Power::infy / Infinity::indet messages that our
                           * internal probes would otherwise emit while poking
                           * at candidate sub-expressions. */
+#include "sym_names.h"
 /* Note: Series and D are invoked symbolically (through the evaluator),
  * not via direct C calls, so series.h / deriv.h are intentionally not
  * included here. Adding the Series and Derivative symbols to the symbol
@@ -349,7 +350,7 @@ static Expr* rewrite_hyperbolic_to_exp(Expr* e) {
     if (e->data.function.head->type == EXPR_SYMBOL && n == 1) {
         const char* hn = e->data.function.head->data.symbol;
         Expr* z = rewrite_hyperbolic_to_exp(e->data.function.args[0]);
-        if (strcmp(hn, "Sinh") == 0) {
+        if (hn == SYM_Sinh) {
             /* (E^z - E^-z)/2 */
             Expr* ez  = mk_fn1("Exp", expr_copy(z));
             Expr* enz = mk_fn1("Exp", mk_neg(expr_copy(z)));
@@ -357,14 +358,14 @@ static Expr* rewrite_hyperbolic_to_exp(Expr* e) {
             Expr* diff = mk_fn2("Plus", ez, mk_neg(enz));
             return mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)), diff);
         }
-        if (strcmp(hn, "Cosh") == 0) {
+        if (hn == SYM_Cosh) {
             Expr* ez  = mk_fn1("Exp", expr_copy(z));
             Expr* enz = mk_fn1("Exp", mk_neg(expr_copy(z)));
             expr_free(z);
             Expr* sum = mk_fn2("Plus", ez, enz);
             return mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)), sum);
         }
-        if (strcmp(hn, "Tanh") == 0) {
+        if (hn == SYM_Tanh) {
             Expr* ez1 = mk_fn1("Exp", expr_copy(z));
             Expr* enz1 = mk_fn1("Exp", mk_neg(expr_copy(z)));
             Expr* num = mk_fn2("Plus", ez1, mk_neg(enz1));
@@ -398,33 +399,33 @@ static Expr* rewrite_reciprocal_trig(Expr* e) {
         /* Recurse into the argument first so nested reciprocal-trig
          * expressions are all rewritten. */
         Expr* z = rewrite_reciprocal_trig(e->data.function.args[0]);
-        if      (strcmp(hn, "Csc") == 0) {
+        if      (hn == SYM_Csc) {
             Expr* r = mk_fn2("Power", mk_fn1("Sin", z), mk_int(-1));
             return r;
         }
-        else if (strcmp(hn, "Sec") == 0) {
+        else if (hn == SYM_Sec) {
             Expr* r = mk_fn2("Power", mk_fn1("Cos", z), mk_int(-1));
             return r;
         }
-        else if (strcmp(hn, "Cot") == 0) {
+        else if (hn == SYM_Cot) {
             Expr* r = mk_times(mk_fn1("Cos", expr_copy(z)),
                                mk_fn2("Power", mk_fn1("Sin", z), mk_int(-1)));
             return r;
         }
-        else if (strcmp(hn, "Csch") == 0) {
+        else if (hn == SYM_Csch) {
             Expr* r = mk_fn2("Power", mk_fn1("Sinh", z), mk_int(-1));
             return r;
         }
-        else if (strcmp(hn, "Sech") == 0) {
+        else if (hn == SYM_Sech) {
             Expr* r = mk_fn2("Power", mk_fn1("Cosh", z), mk_int(-1));
             return r;
         }
-        else if (strcmp(hn, "Coth") == 0) {
+        else if (hn == SYM_Coth) {
             Expr* r = mk_times(mk_fn1("Cosh", expr_copy(z)),
                                mk_fn2("Power", mk_fn1("Sinh", z), mk_int(-1)));
             return r;
         }
-        else if (strcmp(hn, "Tan") == 0) {
+        else if (hn == SYM_Tan) {
             /* Rewriting Tan -> Sin/Cos lets the Series layer expand
              * around Cos-zeros (e.g. Tan[3x] at x = Pi/2) where a direct
              * Series on Tan would hit the Tan[Pi/2] = ComplexInfinity
@@ -433,7 +434,7 @@ static Expr* rewrite_reciprocal_trig(Expr* e) {
                                mk_fn2("Power", mk_fn1("Cos", z), mk_int(-1)));
             return r;
         }
-        else if (strcmp(hn, "Tanh") == 0) {
+        else if (hn == SYM_Tanh) {
             Expr* r = mk_times(mk_fn1("Sinh", expr_copy(z)),
                                mk_fn2("Power", mk_fn1("Cosh", z), mk_int(-1)));
             return r;
@@ -2572,7 +2573,7 @@ static Expr* run_multivariate(Expr* f_in, Expr* vars, Expr* points) {
  * picked up an imaginary part. */
 static bool contains_imaginary_unit(Expr* e) {
     if (!e) return false;
-    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, "I") == 0;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol == SYM_I;
     if (e->type == EXPR_FUNCTION) {
         if (has_head(e, "Complex") && e->data.function.arg_count == 2) {
             Expr* im = e->data.function.args[1];

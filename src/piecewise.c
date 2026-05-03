@@ -15,6 +15,7 @@
 #include "eval.h"
 #include "arithmetic.h"
 #include "complex.h"
+#include "sym_names.h"
 
 void piecewise_init(void) {
     symtab_add_builtin("Floor", builtin_floor);
@@ -48,9 +49,9 @@ static int classify_int_valued_head(Expr* e) {
     if (e->data.function.arg_count != 1) return -1;
     Expr* h = e->data.function.head;
     if (!h || h->type != EXPR_SYMBOL) return -1;
-    if (strcmp(h->data.symbol, "Floor") == 0)   return OP_FLOOR;
-    if (strcmp(h->data.symbol, "Ceiling") == 0) return OP_CEILING;
-    if (strcmp(h->data.symbol, "Round") == 0)   return OP_ROUND;
+    if (h->data.symbol == SYM_Floor)   return OP_FLOOR;
+    if (h->data.symbol == SYM_Ceiling) return OP_CEILING;
+    if (h->data.symbol == SYM_Round)   return OP_ROUND;
     return -1;
 }
 
@@ -69,12 +70,12 @@ static double round_half_even(double x) {
 }
 
 static bool is_infinity(Expr* e) {
-    return e->type == EXPR_SYMBOL && (strcmp(e->data.symbol, "Infinity") == 0 || strcmp(e->data.symbol, "ComplexInfinity") == 0);
+    return e->type == EXPR_SYMBOL && (e->data.symbol == SYM_Infinity || e->data.symbol == SYM_ComplexInfinity);
 }
 
 static bool is_minus_infinity(Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 && 
-        e->data.function.head->type == EXPR_SYMBOL && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_Times) {
         Expr* a1 = e->data.function.args[0];
         Expr* a2 = e->data.function.args[1];
         if (a1->type == EXPR_INTEGER && a1->data.integer == -1 && is_infinity(a2)) return true;

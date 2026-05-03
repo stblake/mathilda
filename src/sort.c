@@ -1,6 +1,7 @@
 #include "sort.h"
 #include "eval.h"
 #include "symtab.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,8 +31,8 @@ static int custom_compare(const void* a, const void* b) {
         else if (result->data.integer == 0) cmp = 0;
         else if (result->data.integer == -1) cmp = 1;
     } else if (result->type == EXPR_SYMBOL) {
-        if (strcmp(result->data.symbol, "True") == 0) cmp = -1;
-        else if (strcmp(result->data.symbol, "False") == 0) cmp = 1;
+        if (result->data.symbol == SYM_True) cmp = -1;
+        else if (result->data.symbol == SYM_False) cmp = 1;
     }
     
     expr_free(result);
@@ -115,8 +116,8 @@ Expr* builtin_orderedq(Expr* res) {
                 else if (result->data.integer == 0) cmp = 0;
                 else if (result->data.integer == -1) cmp = 1;
             } else if (result->type == EXPR_SYMBOL) {
-                if (strcmp(result->data.symbol, "True") == 0) cmp = -1;
-                else if (strcmp(result->data.symbol, "False") == 0) cmp = 1;
+                if (result->data.symbol == SYM_True) cmp = -1;
+                else if (result->data.symbol == SYM_False) cmp = 1;
             }
             expr_free(result);
         }

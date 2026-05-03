@@ -5,6 +5,7 @@
 #include "match.h"
 #include "print.h"
 #include "sym_intern.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -105,7 +106,7 @@ static const Expr* strip_pattern_wrappers(const Expr* p) {
            p->data.function.head->type == EXPR_SYMBOL &&
            p->data.function.arg_count >= 1) {
         const char* h = p->data.function.head->data.symbol;
-        if (strcmp(h, "HoldPattern") == 0 || strcmp(h, "Verbatim") == 0) {
+        if (h == SYM_HoldPattern || h == SYM_Verbatim) {
             p = p->data.function.args[0];
             continue;
         }
@@ -125,14 +126,14 @@ static bool slot_is_variable_length(const Expr* p) {
         return false;
     }
     const char* h = p->data.function.head->data.symbol;
-    if (strcmp(h, "BlankSequence") == 0) return true;
-    if (strcmp(h, "BlankNullSequence") == 0) return true;
-    if (strcmp(h, "Optional") == 0) return true;
-    if (strcmp(h, "Repeated") == 0) return true;
-    if (strcmp(h, "RepeatedNull") == 0) return true;
-    if (strcmp(h, "OptionsPattern") == 0) return true;
+    if (h == SYM_BlankSequence) return true;
+    if (h == SYM_BlankNullSequence) return true;
+    if (h == SYM_Optional) return true;
+    if (h == SYM_Repeated) return true;
+    if (h == SYM_RepeatedNull) return true;
+    if (h == SYM_OptionsPattern) return true;
     /* Pattern[x, q] is variable iff q is. */
-    if (strcmp(h, "Pattern") == 0 && p->data.function.arg_count == 2) {
+    if (h == SYM_Pattern && p->data.function.arg_count == 2) {
         return slot_is_variable_length(p->data.function.args[1]);
     }
     return false;
@@ -166,7 +167,7 @@ static const char* pattern_arg_head_canon(const Expr* p) {
     const char* h = head->data.symbol;
 
     /* Blank[] -> wildcard; Blank[h] -> h. */
-    if (strcmp(h, "Blank") == 0) {
+    if (h == SYM_Blank) {
         if (p->data.function.arg_count == 0) return NULL;
         Expr* head_arg = p->data.function.args[0];
         if (head_arg && head_arg->type == EXPR_SYMBOL) {
@@ -175,25 +176,25 @@ static const char* pattern_arg_head_canon(const Expr* p) {
         return NULL;
     }
     /* Pattern[x, q] -> use q's head. */
-    if (strcmp(h, "Pattern") == 0 && p->data.function.arg_count == 2) {
+    if (h == SYM_Pattern && p->data.function.arg_count == 2) {
         return pattern_arg_head_canon(p->data.function.args[1]);
     }
     /* Sequence-like or optional patterns are wildcards w.r.t. head. */
-    if (strcmp(h, "BlankSequence") == 0 || strcmp(h, "BlankNullSequence") == 0 ||
-        strcmp(h, "Optional") == 0 || strcmp(h, "Repeated") == 0 ||
-        strcmp(h, "RepeatedNull") == 0 || strcmp(h, "OptionsPattern") == 0) {
+    if (h == SYM_BlankSequence || h == SYM_BlankNullSequence ||
+        h == SYM_Optional || h == SYM_Repeated ||
+        h == SYM_RepeatedNull || h == SYM_OptionsPattern) {
         /* For typed BlankSequence[h] etc., picking up h would still be
          * unsafe because the matcher binds whole sequences. Stay safe. */
         return NULL;
     }
     /* Condition[p, c] / PatternTest[p, t] are transparent for head. */
-    if ((strcmp(h, "Condition") == 0 || strcmp(h, "PatternTest") == 0) &&
+    if ((h == SYM_Condition || h == SYM_PatternTest) &&
         p->data.function.arg_count >= 1) {
         return pattern_arg_head_canon(p->data.function.args[0]);
     }
     /* Alternatives[a, b, ...] -- only safe to specialize when every
      * branch agrees on a head. */
-    if (strcmp(h, "Alternatives") == 0) {
+    if (h == SYM_Alternatives) {
         const char* acc = NULL;
         for (size_t i = 0; i < p->data.function.arg_count; i++) {
             const char* hi = pattern_arg_head_canon(p->data.function.args[i]);
@@ -268,30 +269,30 @@ static int32_t pattern_specificity(const Expr* p) {
         const char* h = head->data.symbol;
         size_t ac = p->data.function.arg_count;
 
-        if (strcmp(h, "HoldPattern") == 0 || strcmp(h, "Verbatim") == 0) {
+        if (h == SYM_HoldPattern || h == SYM_Verbatim) {
             return ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0;
         }
-        if (strcmp(h, "Pattern") == 0) {
+        if (h == SYM_Pattern) {
             /* Pattern[name, q] -- the name is irrelevant for matching power. */
             return ac >= 2 ? pattern_specificity(p->data.function.args[1]) : 0;
         }
-        if (strcmp(h, "Blank") == 0) {
+        if (h == SYM_Blank) {
             if (ac == 0) return -10;
             return 20; /* typed blank */
         }
-        if (strcmp(h, "BlankSequence") == 0) return -100;
-        if (strcmp(h, "BlankNullSequence") == 0) return -200;
-        if (strcmp(h, "Optional") == 0) return -50;
-        if (strcmp(h, "Repeated") == 0) {
+        if (h == SYM_BlankSequence) return -100;
+        if (h == SYM_BlankNullSequence) return -200;
+        if (h == SYM_Optional) return -50;
+        if (h == SYM_Repeated) {
             return (ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0) - 50;
         }
-        if (strcmp(h, "RepeatedNull") == 0) {
+        if (h == SYM_RepeatedNull) {
             return (ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0) - 100;
         }
-        if (strcmp(h, "Condition") == 0 || strcmp(h, "PatternTest") == 0) {
+        if (h == SYM_Condition || h == SYM_PatternTest) {
             return (ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0) + 10;
         }
-        if (strcmp(h, "Alternatives") == 0) {
+        if (h == SYM_Alternatives) {
             if (ac == 0) return 0;
             int32_t best = pattern_specificity(p->data.function.args[0]);
             for (size_t i = 1; i < ac; i++) {
@@ -300,7 +301,7 @@ static int32_t pattern_specificity(const Expr* p) {
             }
             return best;
         }
-        if (strcmp(h, "OptionsPattern") == 0) return -150;
+        if (h == SYM_OptionsPattern) return -150;
     }
 
     /* Plain function call: literal head + sum of children. */

@@ -4,6 +4,7 @@
 #include "facpoly.h"
 #include "parse.h"
 #include "symtab.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -238,7 +239,7 @@ static void collect_trig_squares(const Expr* e, TrigSquareList* L) {
     if (e->type != EXPR_FUNCTION) return;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
@@ -409,7 +410,7 @@ static int64_t max_trig_atom_power(const Expr* e) {
     int64_t best = 0;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* base = e->data.function.args[0];
         const Expr* exp  = e->data.function.args[1];
@@ -445,7 +446,7 @@ static int has_reciprocal_power(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return 0;
     if (e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         const Expr* exp = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER && exp->data.integer < 0) return 1;
@@ -696,7 +697,7 @@ static bool has_compound_trig_structure(const Expr* e) {
     const char* h = e->data.function.head->data.symbol;
 
     /* Power[trig_atom, k] with k != 1: cancellable. */
-    if (strcmp(h, "Power") == 0 && e->data.function.arg_count == 2) {
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
         if (is_trig_atom(base) && exp->type == EXPR_INTEGER &&
@@ -707,7 +708,7 @@ static bool has_compound_trig_structure(const Expr* e) {
         return has_compound_trig_structure(base);
     }
 
-    if (strcmp(h, "Times") == 0) {
+    if (h == SYM_Times) {
         /* Count distinct trig atoms (ignoring numeric factors).  Two
          * or more trig atoms in a single Times product means
          * TrigExpand may expose product-to-sum cancellations. */
@@ -718,7 +719,7 @@ static bool has_compound_trig_structure(const Expr* e) {
             else if (a->type == EXPR_FUNCTION
                      && a->data.function.head
                      && a->data.function.head->type == EXPR_SYMBOL
-                     && strcmp(a->data.function.head->data.symbol, "Power") == 0
+                     && a->data.function.head->data.symbol == SYM_Power
                      && a->data.function.arg_count == 2
                      && is_trig_atom(a->data.function.args[0])) {
                 /* Power of a trig atom -- compound on its own. */
@@ -729,7 +730,7 @@ static bool has_compound_trig_structure(const Expr* e) {
         return trig_count >= 2;
     }
 
-    if (strcmp(h, "Plus") == 0) {
+    if (h == SYM_Plus) {
         /* Sums by themselves of bare trig atoms aren't cancellable
          * (Sin[x] + Sin[3x] doesn't gain from TrigExpand→Factor).
          * Recurse only -- we're looking for compound structure

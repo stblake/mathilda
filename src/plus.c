@@ -4,6 +4,7 @@
 #include "complex.h"
 #include "eval.h"
 #include "numeric.h"
+#include "sym_names.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -25,7 +26,7 @@ static int classify_plus_term(Expr* e) {
     if (is_infinity_sym(e)) return 1;
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        e->data.function.head->data.symbol == SYM_Times) {
         size_t ac = e->data.function.arg_count;
         bool has_inf = false, has_cinf = false, has_indet = false;
         for (size_t i = 0; i < ac; i++) {
@@ -48,7 +49,7 @@ static int classify_plus_term(Expr* e) {
 
 static bool is_overflow(Expr* e) {
     return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, "Overflow") == 0;
+           e->data.function.head->data.symbol == SYM_Overflow;
 }
 
 /* Helper: extract numeric coefficient and base expression from a term. 
@@ -67,7 +68,7 @@ static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_b
         return;
     }
 
-    if (e->type == EXPR_FUNCTION && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Times) {
         if (e->data.function.arg_count >= 2) {
             Expr* first = e->data.function.args[0];
             if (expr_is_numeric_like(first) || is_complex(first, NULL, NULL)) {

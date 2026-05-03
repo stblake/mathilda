@@ -14,6 +14,7 @@
 #include "attr.h"
 #include "eval.h"
 #include "symtab.h"
+#include "sym_names.h"
 
 #include <limits.h>
 #include <math.h>
@@ -299,11 +300,11 @@ bool get_approx_mpfr(const Expr* e, mpfr_t re, mpfr_t im, bool* is_inexact) {
 static bool is_hold_head(const Expr* head) {
     if (!head || head->type != EXPR_SYMBOL) return false;
     const char* s = head->data.symbol;
-    return strcmp(s, "HoldForm")    == 0
-        || strcmp(s, "Hold")        == 0
-        || strcmp(s, "HoldComplete") == 0
-        || strcmp(s, "HoldPattern") == 0
-        || strcmp(s, "Unevaluated") == 0;
+    return s == SYM_HoldForm
+        || s == SYM_Hold
+        || s == SYM_HoldComplete
+        || s == SYM_HoldPattern
+        || s == SYM_Unevaluated;
 }
 
 /* ------------------------------------------------------------------------
@@ -433,7 +434,7 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     const bool is_power_int_exp =
         (n == 2)
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Power") == 0
+        && e->data.function.head->data.symbol == SYM_Power
         && (e->data.function.args[1]->type == EXPR_INTEGER
             || e->data.function.args[1]->type == EXPR_BIGINT);
 
@@ -596,7 +597,7 @@ Expr** numeric_contagion_args(Expr* const* args, size_t n) {
 static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
     /* MachinePrecision symbol → machine mode. */
     if (prec->type == EXPR_SYMBOL
-        && strcmp(prec->data.symbol, "MachinePrecision") == 0) {
+        && prec->data.symbol == SYM_MachinePrecision) {
         *out_spec = numeric_machine_spec();
         return true;
     }

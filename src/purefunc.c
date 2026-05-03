@@ -6,29 +6,30 @@
 #include <stdint.h>
 
 #include "attr.h"
+#include "sym_names.h"
 
 static uint32_t parse_pure_attr(Expr* attr_expr) {
     if (attr_expr->type == EXPR_SYMBOL) {
         const char* name = attr_expr->data.symbol;
-        if (strcmp(name, "Listable") == 0) return ATTR_LISTABLE;
-        if (strcmp(name, "Flat") == 0) return ATTR_FLAT;
-        if (strcmp(name, "Orderless") == 0) return ATTR_ORDERLESS;
-        if (strcmp(name, "NumericFunction") == 0) return ATTR_NUMERICFUNCTION;
-        if (strcmp(name, "OneIdentity") == 0) return ATTR_ONEIDENTITY;
-        if (strcmp(name, "HoldFirst") == 0) return ATTR_HOLDFIRST;
-        if (strcmp(name, "HoldRest") == 0) return ATTR_HOLDREST;
-        if (strcmp(name, "HoldAll") == 0) return ATTR_HOLDALL;
-        if (strcmp(name, "HoldAllComplete") == 0) return ATTR_HOLDALLCOMPLETE;
-        if (strcmp(name, "SequenceHold") == 0) return ATTR_SEQUENCEHOLD;
-        if (strcmp(name, "NHoldRest") == 0) return ATTR_NHOLDREST;
-        if (strcmp(name, "Protected") == 0) return ATTR_PROTECTED;
+        if (name == SYM_Listable) return ATTR_LISTABLE;
+        if (name == SYM_Flat) return ATTR_FLAT;
+        if (name == SYM_Orderless) return ATTR_ORDERLESS;
+        if (name == SYM_NumericFunction) return ATTR_NUMERICFUNCTION;
+        if (name == SYM_OneIdentity) return ATTR_ONEIDENTITY;
+        if (name == SYM_HoldFirst) return ATTR_HOLDFIRST;
+        if (name == SYM_HoldRest) return ATTR_HOLDREST;
+        if (name == SYM_HoldAll) return ATTR_HOLDALL;
+        if (name == SYM_HoldAllComplete) return ATTR_HOLDALLCOMPLETE;
+        if (name == SYM_SequenceHold) return ATTR_SEQUENCEHOLD;
+        if (name == SYM_NHoldRest) return ATTR_NHOLDREST;
+        if (name == SYM_Protected) return ATTR_PROTECTED;
     }
     return ATTR_NONE;
 }
 
 uint32_t pure_function_attributes(Expr* func) {
     if (func->type == EXPR_FUNCTION && func->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(func->data.function.head->data.symbol, "Function") == 0) {
+        func->data.function.head->data.symbol == SYM_Function) {
         /* Mathematica default: Function[params, body] has no Hold attributes,
          * so its arguments are evaluated normally before being substituted
          * into body. The 3-arg form Function[params, body, attrs] can opt in
@@ -41,7 +42,7 @@ uint32_t pure_function_attributes(Expr* func) {
                 attrs |= parse_pure_attr(attr_spec);
             } else if (attr_spec->type == EXPR_FUNCTION &&
                        attr_spec->data.function.head->type == EXPR_SYMBOL &&
-                       strcmp(attr_spec->data.function.head->data.symbol, "List") == 0) {
+                       attr_spec->data.function.head->data.symbol == SYM_List) {
                 for (size_t i = 0; i < attr_spec->data.function.arg_count; i++) {
                     attrs |= parse_pure_attr(attr_spec->data.function.args[i]);
                 }
@@ -79,7 +80,7 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
         // If it's another Function, don't recurse into it. 
         // We only substitute slots for the current level.
         if (e->data.function.head->type == EXPR_SYMBOL && 
-            strcmp(e->data.function.head->data.symbol, "Function") == 0) {
+            e->data.function.head->data.symbol == SYM_Function) {
             return expr_copy(e);
         }
         
@@ -87,7 +88,7 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
             const char* head = e->data.function.head->data.symbol;
             
-            if (strcmp(head, "Slot") == 0 && e->data.function.arg_count == 1) {
+            if (head == SYM_Slot && e->data.function.arg_count == 1) {
                 Expr* arg = e->data.function.args[0];
                 if (arg->type == EXPR_INTEGER) {
                     int64_t idx = arg->data.integer;
@@ -97,7 +98,7 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
                 }
             }
             
-            if (strcmp(head, "SlotSequence") == 0 && e->data.function.arg_count == 1) {
+            if (head == SYM_SlotSequence && e->data.function.arg_count == 1) {
                 Expr* arg = e->data.function.args[0];
                 if (arg->type == EXPR_INTEGER) {
                     int64_t idx = arg->data.integer;
@@ -156,7 +157,7 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) 
          * parameters and the outer parameters may be shadowed. We copy
          * the whole nested Function as-is. */
         if (e->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(e->data.function.head->data.symbol, "Function") == 0) {
+            e->data.function.head->data.symbol == SYM_Function) {
             return expr_copy(e);
         }
 
@@ -210,7 +211,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
 
     /* Function[Null, body, ...] -- slot form with attributes.
      * (Null indicates "use slots" rather than named parameters.) */
-    if (params->type == EXPR_SYMBOL && strcmp(params->data.symbol, "Null") == 0) {
+    if (params->type == EXPR_SYMBOL && params->data.symbol == SYM_Null) {
         Expr* substituted = substitute_slots(body, args, arg_count);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
@@ -230,7 +231,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
     /* Function[{x1, x2, ...}, body] -- list of named parameters */
     if (params->type == EXPR_FUNCTION &&
         params->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(params->data.function.head->data.symbol, "List") == 0) {
+        params->data.function.head->data.symbol == SYM_List) {
         size_t var_count = params->data.function.arg_count;
         if (var_count == 0) {
             Expr* result = evaluate(body);

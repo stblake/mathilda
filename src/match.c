@@ -9,6 +9,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "default_helper.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,7 +19,7 @@ static bool is_atom(const Expr* e) {
     if (e->type != EXPR_FUNCTION) return true;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head_name = e->data.function.head->data.symbol;
-        if (strcmp(head_name, "Complex") == 0 || strcmp(head_name, "Rational") == 0) {
+        if (head_name == SYM_Complex || head_name == SYM_Rational) {
             return true;
         }
     }
@@ -84,7 +85,7 @@ Expr* env_get(MatchEnv* env, const char* symbol) {
 
 static bool is_pattern(Expr* e, Expr** sym_out, Expr** pat_out) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
-        if (strcmp(e->data.function.head->data.symbol, "Pattern") == 0) {
+        if (e->data.function.head->data.symbol == SYM_Pattern) {
             if (e->data.function.arg_count == 2) {
                 if (sym_out) *sym_out = e->data.function.args[0];
                 if (pat_out) *pat_out = e->data.function.args[1];
@@ -97,7 +98,7 @@ static bool is_pattern(Expr* e, Expr** sym_out, Expr** pat_out) {
 
 static bool is_blank(Expr* e, Expr** head_out) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
-        if (strcmp(e->data.function.head->data.symbol, "Blank") == 0) {
+        if (e->data.function.head->data.symbol == SYM_Blank) {
             if (e->data.function.arg_count == 0) {
                 if (head_out) *head_out = NULL;
                 return true;
@@ -113,12 +114,12 @@ static bool is_blank(Expr* e, Expr** head_out) {
 static bool is_sequence_blank(Expr* e, Expr** head_out, int* min_len) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol;
-        if (strcmp(head, "BlankSequence") == 0) {
+        if (head == SYM_BlankSequence) {
             if (min_len) *min_len = 1;
             if (head_out) *head_out = (e->data.function.arg_count == 1) ? e->data.function.args[0] : NULL;
             return true;
         }
-        if (strcmp(head, "BlankNullSequence") == 0) {
+        if (head == SYM_BlankNullSequence) {
             if (min_len) *min_len = 0;
             if (head_out) *head_out = (e->data.function.arg_count == 1) ? e->data.function.args[0] : NULL;
             return true;
@@ -130,8 +131,8 @@ static bool is_sequence_blank(Expr* e, Expr** head_out, int* min_len) {
 static bool is_repeated(Expr* e, Expr** rep_pat, int* min_len, int* max_len) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* head = e->data.function.head->data.symbol;
-    bool is_rep = (strcmp(head, "Repeated") == 0);
-    bool is_rep_null = (strcmp(head, "RepeatedNull") == 0);
+    bool is_rep = (head == SYM_Repeated);
+    bool is_rep_null = (head == SYM_RepeatedNull);
     if (!is_rep && !is_rep_null) return false;
 
     *min_len = is_rep ? 1 : 0;
@@ -147,7 +148,7 @@ static bool is_repeated(Expr* e, Expr** rep_pat, int* min_len, int* max_len) {
         Expr* spec = e->data.function.args[1];
         if (spec->type == EXPR_INTEGER) {
             *max_len = (int)spec->data.integer;
-        } else if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && strcmp(spec->data.function.head->data.symbol, "List") == 0) {
+        } else if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && spec->data.function.head->data.symbol == SYM_List) {
             if (spec->data.function.arg_count == 1 && spec->data.function.args[0]->type == EXPR_INTEGER) {
                 *min_len = (int)spec->data.function.args[0]->data.integer;
                 *max_len = *min_len;
@@ -157,7 +158,7 @@ static bool is_repeated(Expr* e, Expr** rep_pat, int* min_len, int* max_len) {
                 }
                 if (spec->data.function.args[1]->type == EXPR_INTEGER) {
                     *max_len = (int)spec->data.function.args[1]->data.integer;
-                } else if (spec->data.function.args[1]->type == EXPR_SYMBOL && strcmp(spec->data.function.args[1]->data.symbol, "Infinity") == 0) {
+                } else if (spec->data.function.args[1]->type == EXPR_SYMBOL && spec->data.function.args[1]->data.symbol == SYM_Infinity) {
                     *max_len = -1;
                 }
             }
@@ -242,14 +243,14 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
      * being evaluated when the rule LHS is formed, so patterns that would
      * otherwise simplify (e.g. _+_ becoming 2 Blank[]) are preserved. */
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(pattern->data.function.head->data.symbol, "HoldPattern") == 0 &&
+        pattern->data.function.head->data.symbol == SYM_HoldPattern &&
         pattern->data.function.arg_count == 1) {
         return match_internal(expr, pattern->data.function.args[0], env, parent);
     }
 
     // Handle Except
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(pattern->data.function.head->data.symbol, "Except") == 0) {
+        pattern->data.function.head->data.symbol == SYM_Except) {
         if (pattern->data.function.arg_count == 1) {
             size_t saved_env_count = env->count;
             if (match_internal(expr, pattern->data.function.args[0], env, NULL)) {
@@ -276,7 +277,7 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
 
     // Handle Condition
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(pattern->data.function.head->data.symbol, "Condition") == 0) {
+        pattern->data.function.head->data.symbol == SYM_Condition) {
         if (pattern->data.function.arg_count != 2) return false;
         
         Expr* inner_pat = pattern->data.function.args[0];
@@ -302,7 +303,7 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
         Expr* expanded_test = replace_bindings(cond, env);
         Expr* result = evaluate(expanded_test);
         expr_free(expanded_test);
-        bool success = (result->type == EXPR_SYMBOL && strcmp(result->data.symbol, "True") == 0);
+        bool success = (result->type == EXPR_SYMBOL && result->data.symbol == SYM_True);
         expr_free(result);
         if (!success) {
             env_rollback(env, saved_env_count);
@@ -320,10 +321,10 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
             if (h) head_ok = expr_eq(h, b_head);
             else if (b_head->type == EXPR_SYMBOL) {
                 const char* hn = b_head->data.symbol;
-                if (expr->type == EXPR_INTEGER && strcmp(hn, "Integer") == 0) head_ok = true;
-                else if (expr->type == EXPR_REAL && strcmp(hn, "Real") == 0) head_ok = true;
-                else if (expr->type == EXPR_SYMBOL && strcmp(hn, "Symbol") == 0) head_ok = true;
-                else if (expr->type == EXPR_STRING && strcmp(hn, "String") == 0) head_ok = true;
+                if (expr->type == EXPR_INTEGER && hn == SYM_Integer) head_ok = true;
+                else if (expr->type == EXPR_REAL && hn == SYM_Real) head_ok = true;
+                else if (expr->type == EXPR_SYMBOL && hn == SYM_Symbol) head_ok = true;
+                else if (expr->type == EXPR_STRING && hn == SYM_String) head_ok = true;
             }
         }
         if (head_ok) return call_parent(env, parent);
@@ -340,10 +341,10 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
             if (h) head_ok = expr_eq(h, b_head);
             else if (b_head->type == EXPR_SYMBOL) {
                 const char* hn = b_head->data.symbol;
-                if (expr->type == EXPR_INTEGER && strcmp(hn, "Integer") == 0) head_ok = true;
-                else if (expr->type == EXPR_REAL && strcmp(hn, "Real") == 0) head_ok = true;
-                else if (expr->type == EXPR_SYMBOL && strcmp(hn, "Symbol") == 0) head_ok = true;
-                else if (expr->type == EXPR_STRING && strcmp(hn, "String") == 0) head_ok = true;
+                if (expr->type == EXPR_INTEGER && hn == SYM_Integer) head_ok = true;
+                else if (expr->type == EXPR_REAL && hn == SYM_Real) head_ok = true;
+                else if (expr->type == EXPR_SYMBOL && hn == SYM_Symbol) head_ok = true;
+                else if (expr->type == EXPR_STRING && hn == SYM_String) head_ok = true;
             }
         }
         if (head_ok) return call_parent(env, parent);
@@ -381,7 +382,7 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
 
     // Handle Alternatives
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(pattern->data.function.head->data.symbol, "Alternatives") == 0) {
+        pattern->data.function.head->data.symbol == SYM_Alternatives) {
         size_t saved_env_count = env->count;
         for (size_t i = 0; i < pattern->data.function.arg_count; i++) {
             if (match_internal(expr, pattern->data.function.args[i], env, parent)) return true;
@@ -392,7 +393,7 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
 
     // Handle PatternTest
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(pattern->data.function.head->data.symbol, "PatternTest") == 0) {
+        pattern->data.function.head->data.symbol == SYM_PatternTest) {
         if (pattern->data.function.arg_count != 2) return false;
         size_t saved_env_count = env->count;
         if (!match_internal(expr, pattern->data.function.args[0], env, NULL)) {
@@ -405,7 +406,7 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
         Expr* result = evaluate(test_call);
         expr_free(test_call);
         
-        bool success = (result->type == EXPR_SYMBOL && strcmp(result->data.symbol, "True") == 0);
+        bool success = (result->type == EXPR_SYMBOL && result->data.symbol == SYM_True);
         expr_free(result);
         if (!success) {
             env_rollback(env, saved_env_count);
@@ -491,7 +492,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
             Expr* expanded_test = replace_bindings(condition, env);
             Expr* result = evaluate(expanded_test);
             expr_free(expanded_test);
-            bool success = (result->type == EXPR_SYMBOL && strcmp(result->data.symbol, "True") == 0);
+            bool success = (result->type == EXPR_SYMBOL && result->data.symbol == SYM_True);
             expr_free(result);
             if (!success) return false;
         }
@@ -510,17 +511,17 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
 
     while (current_p->type == EXPR_FUNCTION && current_p->data.function.head->type == EXPR_SYMBOL && current_p->data.function.arg_count >= 1) {
         const char* head = current_p->data.function.head->data.symbol;
-        if (strcmp(head, "Pattern") == 0 && current_p->data.function.arg_count == 2) {
+        if (head == SYM_Pattern && current_p->data.function.arg_count == 2) {
             bind_sym = current_p->data.function.args[0];
             current_p = current_p->data.function.args[1];
-        } else if (strcmp(head, "Shortest") == 0) {
+        } else if (head == SYM_Shortest) {
             is_shortest = true;
             current_p = current_p->data.function.args[0];
-        } else if (strcmp(head, "Longest") == 0) {
+        } else if (head == SYM_Longest) {
             is_longest = true;
             is_shortest = false;
             current_p = current_p->data.function.args[0];
-        } else if (strcmp(head, "Optional") == 0) {
+        } else if (head == SYM_Optional) {
             is_optional = true;
             opt_container = current_p;
             current_p = current_p->data.function.args[0];
@@ -636,10 +637,10 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
                             if (h) ok = expr_eq(h, b_head);
                             else if (b_head->type == EXPR_SYMBOL) {
                                 const char* hn = b_head->data.symbol;
-                                if (subset[i]->type == EXPR_INTEGER && strcmp(hn, "Integer") == 0) ok = true;
-                                else if (subset[i]->type == EXPR_REAL && strcmp(hn, "Real") == 0) ok = true;
-                                else if (subset[i]->type == EXPR_SYMBOL && strcmp(hn, "Symbol") == 0) ok = true;
-                                else if (subset[i]->type == EXPR_STRING && strcmp(hn, "String") == 0) ok = true;
+                                if (subset[i]->type == EXPR_INTEGER && hn == SYM_Integer) ok = true;
+                                else if (subset[i]->type == EXPR_REAL && hn == SYM_Real) ok = true;
+                                else if (subset[i]->type == EXPR_SYMBOL && hn == SYM_Symbol) ok = true;
+                                else if (subset[i]->type == EXPR_STRING && hn == SYM_String) ok = true;
                             }
                             if (!ok) { type_ok = false; break; }
                         }
@@ -780,10 +781,10 @@ Expr* replace_bindings(Expr* expr, MatchEnv* env) {
         
         bool skip_flattening = false;
         if (new_head->type == EXPR_SYMBOL && (
-            strcmp(new_head->data.symbol, "Set") == 0 ||
-            strcmp(new_head->data.symbol, "SetDelayed") == 0 ||
-            strcmp(new_head->data.symbol, "Rule") == 0 ||
-            strcmp(new_head->data.symbol, "RuleDelayed") == 0)) {
+            new_head->data.symbol == SYM_Set ||
+            new_head->data.symbol == SYM_SetDelayed ||
+            new_head->data.symbol == SYM_Rule ||
+            new_head->data.symbol == SYM_RuleDelayed)) {
             skip_flattening = true;
         }
 
@@ -794,7 +795,7 @@ Expr* replace_bindings(Expr* expr, MatchEnv* env) {
             temp_args[i] = replace_bindings(expr->data.function.args[i], env);
             if (!skip_flattening && temp_args[i]->type == EXPR_FUNCTION && 
                 temp_args[i]->data.function.head->type == EXPR_SYMBOL &&
-                strcmp(temp_args[i]->data.function.head->data.symbol, "Sequence") == 0) {
+                temp_args[i]->data.function.head->data.symbol == SYM_Sequence) {
                 new_count += temp_args[i]->data.function.arg_count;
             } else {
                 new_count++;
@@ -806,7 +807,7 @@ Expr* replace_bindings(Expr* expr, MatchEnv* env) {
         for (size_t i = 0; i < expr->data.function.arg_count; i++) {
             if (!skip_flattening && temp_args[i]->type == EXPR_FUNCTION && 
                 temp_args[i]->data.function.head->type == EXPR_SYMBOL &&
-                strcmp(temp_args[i]->data.function.head->data.symbol, "Sequence") == 0) {
+                temp_args[i]->data.function.head->data.symbol == SYM_Sequence) {
                 for (size_t j = 0; j < temp_args[i]->data.function.arg_count; j++) {
                     final_args[idx++] = expr_copy(temp_args[i]->data.function.args[j]);
                 }

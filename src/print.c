@@ -11,6 +11,7 @@
 #include "expr.h"
 #include "arithmetic.h"
 #include "context.h"
+#include "sym_names.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -34,19 +35,19 @@ static int get_expr_prec(Expr* e) {
     
     const char* head = e->data.function.head->data.symbol;
 
-    if (strcmp(head, "Set") == 0 || strcmp(head, "SetDelayed") == 0) return 40;
-    if (strcmp(head, "Rule") == 0 || strcmp(head, "RuleDelayed") == 0) return 120;
-    if (strcmp(head, "Condition") == 0) return 130;
-    if (strcmp(head, "Alternatives") == 0) return 160;
-    if (strcmp(head, "Repeated") == 0 || strcmp(head, "RepeatedNull") == 0) return 170;
-    if (strcmp(head, "And") == 0) return 215;
-    if (strcmp(head, "Or") == 0) return 215;
-    if (strcmp(head, "Equal") == 0 || strcmp(head, "Unequal") == 0 || strcmp(head, "Less") == 0 || strcmp(head, "Greater") == 0 || strcmp(head, "LessEqual") == 0 || strcmp(head, "GreaterEqual") == 0 || strcmp(head, "SameQ") == 0 || strcmp(head, "UnsameQ") == 0) return 290;
-    if (strcmp(head, "Plus") == 0) return 310;
+    if (head == SYM_Set || head == SYM_SetDelayed) return 40;
+    if (head == SYM_Rule || head == SYM_RuleDelayed) return 120;
+    if (head == SYM_Condition) return 130;
+    if (head == SYM_Alternatives) return 160;
+    if (head == SYM_Repeated || head == SYM_RepeatedNull) return 170;
+    if (head == SYM_And) return 215;
+    if (head == SYM_Or) return 215;
+    if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ) return 290;
+    if (head == SYM_Plus) return 310;
 
-    if (strcmp(head, "Times") == 0) return 400;
-    if (strcmp(head, "Divide") == 0) return 470;
-    if (strcmp(head, "Power") == 0) {
+    if (head == SYM_Times) return 400;
+    if (head == SYM_Divide) return 470;
+    if (head == SYM_Power) {
         if (e->data.function.arg_count == 2) {
             Expr* exp = e->data.function.args[1];
             if (exp->type == EXPR_INTEGER && exp->data.integer < 0) return 470;
@@ -56,8 +57,8 @@ static int get_expr_prec(Expr* e) {
         }
         return 590;
     }
-    if (strcmp(head, "Rational") == 0) return 470;
-    if (strcmp(head, "Complex") == 0) return 310;
+    if (head == SYM_Rational) return 470;
+    if (head == SYM_Complex) return 310;
     return 1000;
 }
 
@@ -135,29 +136,29 @@ static void print_standard(Expr* e, int parent_prec) {
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol;
         
-        if (strcmp(head, "FullForm") == 0 && e->data.function.arg_count == 1) {
+        if (head == SYM_FullForm && e->data.function.arg_count == 1) {
             expr_print_fullform(e->data.function.args[0]);
         }
-        else if (strcmp(head, "TeXForm") == 0 && e->data.function.arg_count == 1) {
+        else if (head == SYM_TeXForm && e->data.function.arg_count == 1) {
             print_tex(e->data.function.args[0], 0);
         }
-        else if (strcmp(head, "InputForm") == 0 && e->data.function.arg_count == 1) {
+        else if (head == SYM_InputForm && e->data.function.arg_count == 1) {
             g_inputform_depth++;
             print_standard(e->data.function.args[0], parent_prec);
             g_inputform_depth--;
         }
-        else if (strcmp(head, "SeriesData") == 0 && e->data.function.arg_count == 6 && g_inputform_depth == 0) {
+        else if (head == SYM_SeriesData && e->data.function.arg_count == 6 && g_inputform_depth == 0) {
             print_series_data(e, parent_prec);
         }
-        else if (strcmp(head, "HoldForm") == 0 && e->data.function.arg_count == 1) {
+        else if (head == SYM_HoldForm && e->data.function.arg_count == 1) {
             print_standard(e->data.function.args[0], parent_prec);
         }
-        else if (strcmp(head, "Rational") == 0 && e->data.function.arg_count == 2) {
+        else if (head == SYM_Rational && e->data.function.arg_count == 2) {
             print_standard(e->data.function.args[0], 470);
             printf("/");
             print_standard(e->data.function.args[1], 470);
         }
-        else if (strcmp(head, "Complex") == 0 && e->data.function.arg_count == 2) {
+        else if (head == SYM_Complex && e->data.function.arg_count == 2) {
             Expr* re = e->data.function.args[0];
             Expr* im = e->data.function.args[1];
             bool re_zero = (re->type == EXPR_INTEGER && re->data.integer == 0);
@@ -190,7 +191,7 @@ static void print_standard(Expr* e, int parent_prec) {
             else if (im_abs) { print_standard(im_abs, 400); printf("*I"); expr_free(im_abs); }
             else { print_standard(im, 400); printf("*I"); }
         }
-        else if (strcmp(head, "Power") == 0 && e->data.function.arg_count == 2) {
+        else if (head == SYM_Power && e->data.function.arg_count == 2) {
             Expr* exp = e->data.function.args[1];
             int64_t n, d;
             bool is_negative = false;
@@ -243,7 +244,7 @@ static void print_standard(Expr* e, int parent_prec) {
                 print_standard(e->data.function.args[1], 590);
             }
         }
-        else if (strcmp(head, "Times") == 0) {
+        else if (head == SYM_Times) {
             size_t count = e->data.function.arg_count;
 
             /* Pull a leading negative numeric factor out as unary minus so
@@ -272,7 +273,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     }
                 } else if (a0->type == EXPR_FUNCTION &&
                            a0->data.function.head->type == EXPR_SYMBOL &&
-                           strcmp(a0->data.function.head->data.symbol, "Rational") == 0 &&
+                           a0->data.function.head->data.symbol == SYM_Rational &&
                            a0->data.function.arg_count == 2 &&
                            a0->data.function.args[0]->type == EXPR_INTEGER &&
                            a0->data.function.args[0]->data.integer < 0) {
@@ -291,7 +292,7 @@ static void print_standard(Expr* e, int parent_prec) {
 
             for (size_t i = lead_start; i < count; i++) {
                 Expr* arg = (i == 0 && flipped_head) ? flipped_head : e->data.function.args[i];
-                if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && strcmp(arg->data.function.head->data.symbol, "Power") == 0 && arg->data.function.arg_count == 2) {
+                if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol == SYM_Power && arg->data.function.arg_count == 2) {
                     Expr* exp = arg->data.function.args[1];
                     bool is_neg = false;
                     int64_t n, d;
@@ -363,31 +364,31 @@ static void print_standard(Expr* e, int parent_prec) {
             if (flipped_head) expr_free(flipped_head);
         }
 
-        else if ((strcmp(head, "Equal") == 0 || strcmp(head, "Unequal") == 0 || strcmp(head, "Less") == 0 || strcmp(head, "Greater") == 0 || strcmp(head, "LessEqual") == 0 || strcmp(head, "GreaterEqual") == 0 || strcmp(head, "SameQ") == 0 || strcmp(head, "UnsameQ") == 0 || strcmp(head, "Set") == 0 || strcmp(head, "SetDelayed") == 0 || strcmp(head, "Rule") == 0 || strcmp(head, "RuleDelayed") == 0 || strcmp(head, "Condition") == 0 || strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 || strcmp(head, "Alternatives") == 0) && e->data.function.arg_count >= 2) {
+        else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives) && e->data.function.arg_count >= 2) {
             const char* op = "";
-            if (strcmp(head, "Equal") == 0) op = " == ";
-            else if (strcmp(head, "Unequal") == 0) op = " != ";
-            else if (strcmp(head, "Less") == 0) op = " < ";
-            else if (strcmp(head, "Greater") == 0) op = " > ";
-            else if (strcmp(head, "LessEqual") == 0) op = " <= ";
-            else if (strcmp(head, "GreaterEqual") == 0) op = " >= ";
-            else if (strcmp(head, "SameQ") == 0) op = " === ";
-            else if (strcmp(head, "UnsameQ") == 0) op = " =!= ";
-            else if (strcmp(head, "Set") == 0) op = " = ";
-            else if (strcmp(head, "SetDelayed") == 0) op = " := ";
-            else if (strcmp(head, "Rule") == 0) op = " -> ";
-            else if (strcmp(head, "RuleDelayed") == 0) op = " :> ";
-            else if (strcmp(head, "Condition") == 0) op = " /; ";
-            else if (strcmp(head, "And") == 0) op = " && ";
-            else if (strcmp(head, "Or") == 0) op = " || ";
-            else if (strcmp(head, "Alternatives") == 0) op = " | ";
+            if (head == SYM_Equal) op = " == ";
+            else if (head == SYM_Unequal) op = " != ";
+            else if (head == SYM_Less) op = " < ";
+            else if (head == SYM_Greater) op = " > ";
+            else if (head == SYM_LessEqual) op = " <= ";
+            else if (head == SYM_GreaterEqual) op = " >= ";
+            else if (head == SYM_SameQ) op = " === ";
+            else if (head == SYM_UnsameQ) op = " =!= ";
+            else if (head == SYM_Set) op = " = ";
+            else if (head == SYM_SetDelayed) op = " := ";
+            else if (head == SYM_Rule) op = " -> ";
+            else if (head == SYM_RuleDelayed) op = " :> ";
+            else if (head == SYM_Condition) op = " /; ";
+            else if (head == SYM_And) op = " && ";
+            else if (head == SYM_Or) op = " || ";
+            else if (head == SYM_Alternatives) op = " | ";
 
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (i > 0) printf("%s", op);
                 print_standard(e->data.function.args[i], my_prec);
             }
         }
-        else if (strcmp(head, "Plus") == 0) {
+        else if (head == SYM_Plus) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 Expr* arg = e->data.function.args[i];
                 bool is_negative = false;
@@ -404,7 +405,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     to_print = t_copy;
                 } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
                     const char* h = arg->data.function.head->data.symbol;
-                    if (strcmp(h, "Times") == 0 && arg->data.function.arg_count > 0) {
+                    if (h == SYM_Times && arg->data.function.arg_count > 0) {
                         Expr* f_arg = arg->data.function.args[0];
                         if (f_arg->type == EXPR_INTEGER && f_arg->data.integer < 0) {
                             is_negative = true;
@@ -429,7 +430,7 @@ static void print_standard(Expr* e, int parent_prec) {
                             expr_free(t_copy->data.function.args[0]);
                             t_copy->data.function.args[0] = expr_new_real(-f_arg->data.real);
                             to_print = t_copy;
-                        } else if (f_arg->type == EXPR_FUNCTION && f_arg->data.function.head->type == EXPR_SYMBOL && strcmp(f_arg->data.function.head->data.symbol, "Rational") == 0) {
+                        } else if (f_arg->type == EXPR_FUNCTION && f_arg->data.function.head->type == EXPR_SYMBOL && f_arg->data.function.head->data.symbol == SYM_Rational) {
                             Expr* num = f_arg->data.function.args[0];
                             if (num->type == EXPR_INTEGER && num->data.integer < 0) {
                                 is_negative = true;
@@ -443,7 +444,7 @@ static void print_standard(Expr* e, int parent_prec) {
                                 to_print = t_copy;
                             }
                         }
-                    } else if (strcmp(h, "Rational") == 0 && arg->data.function.arg_count == 2) {
+                    } else if (h == SYM_Rational && arg->data.function.arg_count == 2) {
                         Expr* num = arg->data.function.args[0];
                         if (num->type == EXPR_INTEGER && num->data.integer < 0) {
                             is_negative = true;
@@ -471,7 +472,7 @@ static void print_standard(Expr* e, int parent_prec) {
                 if (t_copy) expr_free(t_copy);
             }
         }
-        else if (strcmp(head, "List") == 0) {
+        else if (head == SYM_List) {
             printf("{");
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (i > 0) printf(", ");
@@ -644,7 +645,7 @@ static Expr* series_build_term(Expr* coef, Expr* power /* borrowed, may be NULL 
          * Times to force the Times printer to add parentheses. */
         if (power->type == EXPR_FUNCTION &&
             power->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(power->data.function.head->data.symbol, "Plus") == 0) {
+            power->data.function.head->data.symbol == SYM_Plus) {
             Expr* targs[1] = { expr_copy(power) };
             return expr_new_function(expr_new_symbol("Times"), targs, 1);
         }
@@ -678,7 +679,7 @@ static void print_series_data(Expr* e, int parent_prec) {
 
     bool coefs_ok = (coefs->type == EXPR_FUNCTION &&
                      coefs->data.function.head->type == EXPR_SYMBOL &&
-                     strcmp(coefs->data.function.head->data.symbol, "List") == 0);
+                     coefs->data.function.head->data.symbol == SYM_List);
     bool ints_ok  = (nmin_e->type == EXPR_INTEGER &&
                      nmax_e->type == EXPR_INTEGER &&
                      den_e->type  == EXPR_INTEGER &&
@@ -893,14 +894,14 @@ static void print_tex(Expr* e, int parent_prec) {
         const char* head = head_expr->data.symbol;
         size_t argc = e->data.function.arg_count;
 
-        if (strcmp(head, "Rational") == 0 && argc == 2) {
+        if (head == SYM_Rational && argc == 2) {
             printf("\\frac{");
             print_tex(e->data.function.args[0], 0);
             printf("}{");
             print_tex(e->data.function.args[1], 0);
             printf("}");
         }
-        else if (strcmp(head, "Complex") == 0 && argc == 2) {
+        else if (head == SYM_Complex && argc == 2) {
             Expr* re = e->data.function.args[0];
             Expr* im = e->data.function.args[1];
             bool re_zero = (re->type == EXPR_INTEGER && re->data.integer == 0);
@@ -919,32 +920,32 @@ static void print_tex(Expr* e, int parent_prec) {
             else if (im_abs) { print_tex(im_abs, 400); printf(" i"); expr_free(im_abs); }
             else { print_tex(im, 400); printf(" i"); }
         }
-        else if (strcmp(head, "Sqrt") == 0 && argc == 1) {
+        else if (head == SYM_Sqrt && argc == 1) {
             printf("\\sqrt{");
             print_tex(e->data.function.args[0], 0);
             printf("}");
         }
-        else if (strcmp(head, "Abs") == 0 && argc == 1) {
+        else if (head == SYM_Abs && argc == 1) {
             printf("\\left| ");
             print_tex(e->data.function.args[0], 0);
             printf("\\right| ");
         }
-        else if (strcmp(head, "Floor") == 0 && argc == 1) {
+        else if (head == SYM_Floor && argc == 1) {
             printf("\\left\\lfloor ");
             print_tex(e->data.function.args[0], 0);
             printf("\\right\\rfloor ");
         }
-        else if (strcmp(head, "Ceiling") == 0 && argc == 1) {
+        else if (head == SYM_Ceiling && argc == 1) {
             printf("\\left\\lceil ");
             print_tex(e->data.function.args[0], 0);
             printf("\\right\\rceil ");
         }
-        else if (strcmp(head, "Conjugate") == 0 && argc == 1) {
+        else if (head == SYM_Conjugate && argc == 1) {
             printf("\\overline{");
             print_tex(e->data.function.args[0], 0);
             printf("}");
         }
-        else if (strcmp(head, "Power") == 0 && argc == 2) {
+        else if (head == SYM_Power && argc == 2) {
             Expr* base = e->data.function.args[0];
             Expr* exp = e->data.function.args[1];
             int64_t n, d;
@@ -999,7 +1000,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 printf("}");
             }
         }
-        else if (strcmp(head, "Times") == 0) {
+        else if (head == SYM_Times) {
             size_t count = argc;
             int64_t lead_start = 0;
             bool flipped_sign = false;
@@ -1033,7 +1034,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 Expr* arg = (i == 0 && flipped_head) ? flipped_head : e->data.function.args[i];
                 bool den_ok = false;
                 if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
-                    && strcmp(arg->data.function.head->data.symbol, "Power") == 0
+                    && arg->data.function.head->data.symbol == SYM_Power
                     && arg->data.function.arg_count == 2) {
                     Expr* exp = arg->data.function.args[1];
                     int64_t n, d;
@@ -1087,7 +1088,7 @@ static void print_tex(Expr* e, int parent_prec) {
             free(den_args);
             if (flipped_head) expr_free(flipped_head);
         }
-        else if (strcmp(head, "Plus") == 0) {
+        else if (head == SYM_Plus) {
             for (size_t i = 0; i < argc; i++) {
                 Expr* arg = e->data.function.args[i];
                 bool is_neg = false;
@@ -1099,7 +1100,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 } else if (arg->type == EXPR_REAL && arg->data.real < 0.0) {
                     is_neg = true; owned = expr_new_real(-arg->data.real); to_print = owned;
                 } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
-                           && strcmp(arg->data.function.head->data.symbol, "Times") == 0
+                           && arg->data.function.head->data.symbol == SYM_Times
                            && arg->data.function.arg_count > 0) {
                     Expr* f0 = arg->data.function.args[0];
                     if (f0->type == EXPR_INTEGER && f0->data.integer < 0) {
@@ -1145,7 +1146,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 if (owned) expr_free(owned);
             }
         }
-        else if (strcmp(head, "List") == 0) {
+        else if (head == SYM_List) {
             printf("\\{");
             for (size_t i = 0; i < argc; i++) {
                 if (i > 0) printf(",");
@@ -1153,33 +1154,33 @@ static void print_tex(Expr* e, int parent_prec) {
             }
             printf("\\}");
         }
-        else if ((strcmp(head, "Equal") == 0 || strcmp(head, "Unequal") == 0
-                  || strcmp(head, "Less") == 0 || strcmp(head, "Greater") == 0
-                  || strcmp(head, "LessEqual") == 0 || strcmp(head, "GreaterEqual") == 0
-                  || strcmp(head, "SameQ") == 0 || strcmp(head, "UnsameQ") == 0
-                  || strcmp(head, "Rule") == 0 || strcmp(head, "RuleDelayed") == 0
-                  || strcmp(head, "Set") == 0 || strcmp(head, "SetDelayed") == 0
-                  || strcmp(head, "And") == 0 || strcmp(head, "Or") == 0) && argc >= 2) {
+        else if ((head == SYM_Equal || head == SYM_Unequal
+                  || head == SYM_Less || head == SYM_Greater
+                  || head == SYM_LessEqual || head == SYM_GreaterEqual
+                  || head == SYM_SameQ || head == SYM_UnsameQ
+                  || head == SYM_Rule || head == SYM_RuleDelayed
+                  || head == SYM_Set || head == SYM_SetDelayed
+                  || head == SYM_And || head == SYM_Or) && argc >= 2) {
             const char* op = "";
-            if (strcmp(head, "Equal") == 0) op = "=";
-            else if (strcmp(head, "Unequal") == 0) op = "\\neq ";
-            else if (strcmp(head, "Less") == 0) op = "<";
-            else if (strcmp(head, "Greater") == 0) op = ">";
-            else if (strcmp(head, "LessEqual") == 0) op = "\\leq ";
-            else if (strcmp(head, "GreaterEqual") == 0) op = "\\geq ";
-            else if (strcmp(head, "SameQ") == 0) op = "\\equiv ";
-            else if (strcmp(head, "UnsameQ") == 0) op = "\\not\\equiv ";
-            else if (strcmp(head, "Rule") == 0 || strcmp(head, "RuleDelayed") == 0) op = "\\to ";
-            else if (strcmp(head, "Set") == 0) op = "=";
-            else if (strcmp(head, "SetDelayed") == 0) op = ":=";
-            else if (strcmp(head, "And") == 0) op = "\\land ";
-            else if (strcmp(head, "Or") == 0)  op = "\\lor ";
+            if (head == SYM_Equal) op = "=";
+            else if (head == SYM_Unequal) op = "\\neq ";
+            else if (head == SYM_Less) op = "<";
+            else if (head == SYM_Greater) op = ">";
+            else if (head == SYM_LessEqual) op = "\\leq ";
+            else if (head == SYM_GreaterEqual) op = "\\geq ";
+            else if (head == SYM_SameQ) op = "\\equiv ";
+            else if (head == SYM_UnsameQ) op = "\\not\\equiv ";
+            else if (head == SYM_Rule || head == SYM_RuleDelayed) op = "\\to ";
+            else if (head == SYM_Set) op = "=";
+            else if (head == SYM_SetDelayed) op = ":=";
+            else if (head == SYM_And) op = "\\land ";
+            else if (head == SYM_Or)  op = "\\lor ";
             for (size_t i = 0; i < argc; i++) {
                 if (i > 0) printf("%s", op);
                 print_tex(e->data.function.args[i], my_prec);
             }
         }
-        else if (strcmp(head, "Not") == 0 && argc == 1) {
+        else if (head == SYM_Not && argc == 1) {
             printf("\\neg ");
             print_tex(e->data.function.args[0], 1000);
         }

@@ -6,6 +6,7 @@
 #include "poly.h"
 #include "expand.h"
 #include "rationalize.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -27,7 +28,7 @@ static bool is_superficially_negative(Expr* e) {
     if (e->type == EXPR_REAL) return e->data.real < 0.0;
     int64_t n, d;
     if (is_rational(e, &n, &d)) return n < 0;
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_Times) {
         if (e->data.function.arg_count > 0) {
             Expr* first = e->data.function.args[0];
             if (first->type == EXPR_INTEGER) return first->data.integer < 0;
@@ -62,12 +63,12 @@ static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         return;
     }
 
-    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (strcmp(expr->data.function.head->data.symbol, "Power") == 0 || strcmp(expr->data.function.head->data.symbol, "Exp") == 0)) {
-        bool is_exp = strcmp(expr->data.function.head->data.symbol, "Exp") == 0;
+    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol == SYM_Power || expr->data.function.head->data.symbol == SYM_Exp)) {
+        bool is_exp = expr->data.function.head->data.symbol == SYM_Exp;
         Expr* base = is_exp ? expr_new_symbol("E") : expr->data.function.args[0];
         Expr* exp = is_exp ? expr->data.function.args[0] : expr->data.function.args[1];
 
-        if (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL && strcmp(exp->data.function.head->data.symbol, "Plus") == 0) {
+        if (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL && exp->data.function.head->data.symbol == SYM_Plus) {
             size_t count = exp->data.function.arg_count;
             Expr** num_args = malloc(sizeof(Expr*) * count);
             Expr** den_args = malloc(sizeof(Expr*) * count);
@@ -113,7 +114,7 @@ static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         }
     }
 
-    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && strcmp(expr->data.function.head->data.symbol, "Times") == 0) {
+    if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && expr->data.function.head->data.symbol == SYM_Times) {
         size_t count = expr->data.function.arg_count;
         Expr** n_args = malloc(sizeof(Expr*) * count);
         Expr** d_args = malloc(sizeof(Expr*) * count);
@@ -192,11 +193,11 @@ static Expr* cancel_recursive(Expr* e) {
     
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol;
-        if (strcmp(head, "List") == 0 || strcmp(head, "Plus") == 0 ||
-            strcmp(head, "Equal") == 0 || strcmp(head, "Less") == 0 ||
-            strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 ||
-            strcmp(head, "GreaterEqual") == 0 || strcmp(head, "And") == 0 ||
-            strcmp(head, "Or") == 0 || strcmp(head, "Not") == 0) {
+        if (head == SYM_List || head == SYM_Plus ||
+            head == SYM_Equal || head == SYM_Less ||
+            head == SYM_LessEqual || head == SYM_Greater ||
+            head == SYM_GreaterEqual || head == SYM_And ||
+            head == SYM_Or || head == SYM_Not) {
             
             size_t count = e->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
@@ -292,7 +293,7 @@ static Expr* together_recursive(Expr* e) {
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol;
         
-        if (strcmp(head, "Plus") == 0) {
+        if (head == SYM_Plus) {
             size_t count = e->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
@@ -341,11 +342,11 @@ static Expr* together_recursive(Expr* e) {
             return res;
         }
         
-        if (strcmp(head, "List") == 0 ||
-            strcmp(head, "Equal") == 0 || strcmp(head, "Less") == 0 ||
-            strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 ||
-            strcmp(head, "GreaterEqual") == 0 || strcmp(head, "And") == 0 ||
-            strcmp(head, "Or") == 0 || strcmp(head, "Not") == 0) {
+        if (head == SYM_List ||
+            head == SYM_Equal || head == SYM_Less ||
+            head == SYM_LessEqual || head == SYM_Greater ||
+            head == SYM_GreaterEqual || head == SYM_And ||
+            head == SYM_Or || head == SYM_Not) {
             
             size_t count = e->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
@@ -386,7 +387,7 @@ static Expr* together_recursive(Expr* e) {
 static bool find_first_frac_base(Expr* e, const char** base_out) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* b = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];
@@ -408,7 +409,7 @@ static bool find_first_frac_base(Expr* e, const char** base_out) {
 static bool gather_denoms(Expr* e, const char* base_sym, int64_t* m_out) {
     if (e->type != EXPR_FUNCTION) return true;
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* b = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];
@@ -436,7 +437,7 @@ static Expr* subst_to_g(Expr* e, const char* base_sym, int64_t m, const char* g_
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* b = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];
@@ -467,7 +468,7 @@ static Expr* subst_g_back(Expr* e, const char* base_sym, int64_t m, const char* 
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
     if (e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Power") == 0 &&
+        e->data.function.head->data.symbol == SYM_Power &&
         e->data.function.arg_count == 2) {
         Expr* b = e->data.function.args[0];
         Expr* exp = e->data.function.args[1];

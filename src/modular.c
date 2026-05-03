@@ -5,6 +5,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "attr.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -33,8 +34,8 @@ typedef struct ScopingEnv {
 static bool is_scoping_construct(Expr* e) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol;
-    return strcmp(h, "Module") == 0 || strcmp(h, "Block") == 0 || strcmp(h, "With") == 0 || 
-           strcmp(h, "Function") == 0 || strcmp(h, "Table") == 0;
+    return h == SYM_Module || h == SYM_Block || h == SYM_With || 
+           h == SYM_Function || h == SYM_Table;
 }
 
 static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
@@ -56,13 +57,13 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     
     if (is_scoping_construct(e) && e->data.function.arg_count >= 1) {
         Expr* vars = e->data.function.args[0];
-        if (vars->type == EXPR_FUNCTION && strcmp(vars->data.function.head->data.symbol, "List") == 0) {
+        if (vars->type == EXPR_FUNCTION && vars->data.function.head->data.symbol == SYM_List) {
             // Create a filtered env that doesn't contain variables redefined here
             for (size_t i = 0; i < vars->data.function.arg_count; i++) {
                 Expr* v = vars->data.function.args[i];
                 const char* shadowed_name = NULL;
                 if (v->type == EXPR_SYMBOL) shadowed_name = v->data.symbol;
-                else if (v->type == EXPR_FUNCTION && strcmp(v->data.function.head->data.symbol, "Set") == 0 && v->data.function.arg_count == 2) {
+                else if (v->type == EXPR_FUNCTION && v->data.function.head->data.symbol == SYM_Set && v->data.function.arg_count == 2) {
                     if (v->data.function.args[0]->type == EXPR_SYMBOL) shadowed_name = v->data.function.args[0]->data.symbol;
                 }
 
@@ -126,7 +127,7 @@ Expr* builtin_module(Expr* res) {
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
-    if (vars->type != EXPR_FUNCTION || strcmp(vars->data.function.head->data.symbol, "List") != 0) return NULL;
+    if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol != SYM_List) return NULL;
 
     size_t var_count = vars->data.function.arg_count;
     ScopingEnv* env = NULL;
@@ -157,7 +158,7 @@ Expr* builtin_module(Expr* res) {
 
         if (v->type == EXPR_SYMBOL) {
             orig_name = v->data.symbol;
-        } else if (v->type == EXPR_FUNCTION && strcmp(v->data.function.head->data.symbol, "Set") == 0 && v->data.function.arg_count == 2) {
+        } else if (v->type == EXPR_FUNCTION && v->data.function.head->data.symbol == SYM_Set && v->data.function.arg_count == 2) {
             if (v->data.function.args[0]->type == EXPR_SYMBOL) {
                 orig_name = v->data.function.args[0]->data.symbol;
                 init_val = evaluate(v->data.function.args[1]);
@@ -209,7 +210,7 @@ Expr* builtin_block(Expr* res) {
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
-    if (vars->type != EXPR_FUNCTION || strcmp(vars->data.function.head->data.symbol, "List") != 0) return NULL;
+    if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol != SYM_List) return NULL;
 
     size_t var_count = vars->data.function.arg_count;
     
@@ -227,7 +228,7 @@ Expr* builtin_block(Expr* res) {
 
         if (v->type == EXPR_SYMBOL) {
             name = v->data.symbol;
-        } else if (v->type == EXPR_FUNCTION && strcmp(v->data.function.head->data.symbol, "Set") == 0 && v->data.function.arg_count == 2) {
+        } else if (v->type == EXPR_FUNCTION && v->data.function.head->data.symbol == SYM_Set && v->data.function.arg_count == 2) {
             if (v->data.function.args[0]->type == EXPR_SYMBOL) {
                 name = v->data.function.args[0]->data.symbol;
                 init_val = evaluate(v->data.function.args[1]);
@@ -278,7 +279,7 @@ Expr* builtin_with(Expr* res) {
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
-    if (vars->type != EXPR_FUNCTION || strcmp(vars->data.function.head->data.symbol, "List") != 0) return NULL;
+    if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol != SYM_List) return NULL;
 
     size_t var_count = vars->data.function.arg_count;
     ScopingEnv* env = NULL;
@@ -290,10 +291,10 @@ Expr* builtin_with(Expr* res) {
 
         if (v->type == EXPR_FUNCTION && v->data.function.arg_count == 2) {
             const char* h = v->data.function.head->data.symbol;
-            if (strcmp(h, "Set") == 0 || strcmp(h, "SetDelayed") == 0) {
+            if (h == SYM_Set || h == SYM_SetDelayed) {
                 if (v->data.function.args[0]->type == EXPR_SYMBOL) {
                     name = v->data.function.args[0]->data.symbol;
-                    if (strcmp(h, "Set") == 0) {
+                    if (h == SYM_Set) {
                         val = evaluate(v->data.function.args[1]);
                     } else {
                         val = expr_copy(v->data.function.args[1]);

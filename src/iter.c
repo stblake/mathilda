@@ -43,6 +43,7 @@
 #include "eval.h"
 #include "core.h"
 #include "arithmetic.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -61,12 +62,12 @@ static const char* is_flow_control_head(Expr* e) {
     if (e->type != EXPR_FUNCTION) return NULL;
     if (e->data.function.head->type != EXPR_SYMBOL) return NULL;
     const char* h = e->data.function.head->data.symbol;
-    if (strcmp(h, "Return")   == 0 ||
-        strcmp(h, "Break")    == 0 ||
-        strcmp(h, "Continue") == 0 ||
-        strcmp(h, "Throw")    == 0 ||
-        strcmp(h, "Abort")    == 0 ||
-        strcmp(h, "Quit")     == 0) {
+    if (h == SYM_Return ||
+        h == SYM_Break ||
+        h == SYM_Continue ||
+        h == SYM_Throw ||
+        h == SYM_Abort ||
+        h == SYM_Quit) {
         return h;
     }
     return NULL;
@@ -134,7 +135,7 @@ Expr* builtin_do(Expr* res) {
     bool is_real = false;
     bool is_inf  = false;
 
-    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && strcmp(spec->data.function.head->data.symbol, "List") == 0) {
+    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && spec->data.function.head->data.symbol == SYM_List) {
         size_t len = spec->data.function.arg_count;
         if (len == 1) {
             /* {n} -- repeat count only */
@@ -148,7 +149,7 @@ Expr* builtin_do(Expr* res) {
             if (len == 2) {
                 /* {i, bound} -- either {i, imax} or {i, list} depending on bound type. */
                 Expr* bound = evaluate(spec->data.function.args[1]);
-                if (bound->type == EXPR_FUNCTION && bound->data.function.head->type == EXPR_SYMBOL && strcmp(bound->data.function.head->data.symbol, "List") == 0) {
+                if (bound->type == EXPR_FUNCTION && bound->data.function.head->type == EXPR_SYMBOL && bound->data.function.head->data.symbol == SYM_List) {
                     list_e = bound;
                     is_list_iter = 1;
                 } else {
@@ -178,14 +179,14 @@ Expr* builtin_do(Expr* res) {
 
     /* ---- Validate and convert iterator bounds ---- */
     if (is_n_times) {
-        if (imax_e->type == EXPR_SYMBOL && strcmp(imax_e->data.symbol, "Infinity") == 0) {
+        if (imax_e->type == EXPR_SYMBOL && imax_e->data.symbol == SYM_Infinity) {
             is_inf = true;
         } else if (imax_e->type != EXPR_INTEGER) {
             expr_free(imax_e);
             return NULL;
         }
     } else if (!is_list_iter) {
-        if (imax_e->type == EXPR_SYMBOL && strcmp(imax_e->data.symbol, "Infinity") == 0) {
+        if (imax_e->type == EXPR_SYMBOL && imax_e->data.symbol == SYM_Infinity) {
             is_inf = true;
         }
         /* Decide whether to iterate in double precision or exact arithmetic. */
@@ -255,16 +256,16 @@ Expr* builtin_do(Expr* res) {
             Expr* eval_expr = evaluate(expr);
             const char* hname = is_flow_control_head(eval_expr);
             if (hname) {
-                if (strcmp(hname, "Return") == 0) {
+                if (hname == SYM_Return) {
                     returned_val = (eval_expr->data.function.arg_count > 0)
                         ? expr_copy(eval_expr->data.function.args[0])
                         : expr_new_symbol("Null");
                     expr_free(eval_expr);
                     break;
-                } else if (strcmp(hname, "Break") == 0) {
+                } else if (hname == SYM_Break) {
                     expr_free(eval_expr);
                     break;
-                } else if (strcmp(hname, "Continue") == 0) {
+                } else if (hname == SYM_Continue) {
                     expr_free(eval_expr);
                     continue;
                 } else {
@@ -282,16 +283,16 @@ Expr* builtin_do(Expr* res) {
             Expr* eval_expr = evaluate(expr);
             const char* hname = is_flow_control_head(eval_expr);
             if (hname) {
-                if (strcmp(hname, "Return") == 0) {
+                if (hname == SYM_Return) {
                     returned_val = (eval_expr->data.function.arg_count > 0)
                         ? expr_copy(eval_expr->data.function.args[0])
                         : expr_new_symbol("Null");
                     expr_free(eval_expr);
                     break;
-                } else if (strcmp(hname, "Break") == 0) {
+                } else if (hname == SYM_Break) {
                     expr_free(eval_expr);
                     break;
-                } else if (strcmp(hname, "Continue") == 0) {
+                } else if (hname == SYM_Continue) {
                     expr_free(eval_expr);
                     continue;
                 } else {
@@ -323,16 +324,16 @@ Expr* builtin_do(Expr* res) {
 
             const char* hname = is_flow_control_head(eval_expr);
             if (hname) {
-                if (strcmp(hname, "Return") == 0) {
+                if (hname == SYM_Return) {
                     returned_val = (eval_expr->data.function.arg_count > 0)
                         ? expr_copy(eval_expr->data.function.args[0])
                         : expr_new_symbol("Null");
                     expr_free(eval_expr);
                     break;
-                } else if (strcmp(hname, "Break") == 0) {
+                } else if (hname == SYM_Break) {
                     expr_free(eval_expr);
                     break;
-                } else if (strcmp(hname, "Continue") == 0) {
+                } else if (hname == SYM_Continue) {
                     /* Still advance the iterator before re-testing the loop. */
                     expr_free(eval_expr);
                     Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
@@ -439,7 +440,7 @@ Expr* builtin_for(Expr* res) {
     while (true) {
         /* --- Test --- */
         Expr* eval_test = evaluate(test);
-        bool condition_met = (eval_test->type == EXPR_SYMBOL && strcmp(eval_test->data.symbol, "True") == 0);
+        bool condition_met = (eval_test->type == EXPR_SYMBOL && eval_test->data.symbol == SYM_True);
         expr_free(eval_test);
         if (!condition_met) break;
 
@@ -448,16 +449,16 @@ Expr* builtin_for(Expr* res) {
             Expr* eval_body = evaluate(body);
             const char* hname = is_flow_control_head(eval_body);
             if (hname) {
-                if (strcmp(hname, "Return") == 0) {
+                if (hname == SYM_Return) {
                     returned_val = (eval_body->data.function.arg_count > 0)
                         ? expr_copy(eval_body->data.function.args[0])
                         : expr_new_symbol("Null");
                     expr_free(eval_body);
                     break;
-                } else if (strcmp(hname, "Break") == 0) {
+                } else if (hname == SYM_Break) {
                     expr_free(eval_body);
                     break;
-                } else if (strcmp(hname, "Continue") == 0) {
+                } else if (hname == SYM_Continue) {
                     /* Fall through to incr. */
                     expr_free(eval_body);
                 } else {
@@ -473,16 +474,16 @@ Expr* builtin_for(Expr* res) {
         Expr* eval_incr = evaluate(incr);
         const char* hname = is_flow_control_head(eval_incr);
         if (hname) {
-            if (strcmp(hname, "Return") == 0) {
+            if (hname == SYM_Return) {
                 returned_val = (eval_incr->data.function.arg_count > 0)
                     ? expr_copy(eval_incr->data.function.args[0])
                     : expr_new_symbol("Null");
                 expr_free(eval_incr);
                 break;
-            } else if (strcmp(hname, "Break") == 0) {
+            } else if (hname == SYM_Break) {
                 expr_free(eval_incr);
                 break;
-            } else if (strcmp(hname, "Continue") == 0) {
+            } else if (hname == SYM_Continue) {
                 expr_free(eval_incr);
                 /* Proceed to the next test. */
             } else {
@@ -538,16 +539,16 @@ Expr* builtin_while(Expr* res) {
         /* Honour flow-control from within the test expression itself. */
         const char* thead = is_flow_control_head(eval_test);
         if (thead) {
-            if (strcmp(thead, "Return") == 0) {
+            if (thead == SYM_Return) {
                 returned_val = (eval_test->data.function.arg_count > 0)
                     ? expr_copy(eval_test->data.function.args[0])
                     : expr_new_symbol("Null");
                 expr_free(eval_test);
                 break;
-            } else if (strcmp(thead, "Break") == 0) {
+            } else if (thead == SYM_Break) {
                 expr_free(eval_test);
                 break;
-            } else if (strcmp(thead, "Continue") == 0) {
+            } else if (thead == SYM_Continue) {
                 /* A Continue inside `test` just restarts the loop. */
                 expr_free(eval_test);
                 continue;
@@ -559,7 +560,7 @@ Expr* builtin_while(Expr* res) {
         }
 
         /* Exit the loop unless the test evaluated to the symbol True. */
-        bool condition_met = (eval_test->type == EXPR_SYMBOL && strcmp(eval_test->data.symbol, "True") == 0);
+        bool condition_met = (eval_test->type == EXPR_SYMBOL && eval_test->data.symbol == SYM_True);
         expr_free(eval_test);
         if (!condition_met) break;
 
@@ -568,16 +569,16 @@ Expr* builtin_while(Expr* res) {
             Expr* eval_body = evaluate(body);
             const char* bhead = is_flow_control_head(eval_body);
             if (bhead) {
-                if (strcmp(bhead, "Return") == 0) {
+                if (bhead == SYM_Return) {
                     returned_val = (eval_body->data.function.arg_count > 0)
                         ? expr_copy(eval_body->data.function.args[0])
                         : expr_new_symbol("Null");
                     expr_free(eval_body);
                     break;
-                } else if (strcmp(bhead, "Break") == 0) {
+                } else if (bhead == SYM_Break) {
                     expr_free(eval_body);
                     break;
-                } else if (strcmp(bhead, "Continue") == 0) {
+                } else if (bhead == SYM_Continue) {
                     /* Skip rest of this iteration; re-evaluate test next. */
                     expr_free(eval_body);
                     continue;

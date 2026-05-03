@@ -2,6 +2,7 @@
 #include "symtab.h"
 #include "expr.h"
 #include "eval.h"
+#include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -9,8 +10,8 @@ Expr* builtin_not(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     if (arg->type == EXPR_SYMBOL) {
-        if (strcmp(arg->data.symbol, "True") == 0) return expr_new_symbol("False");
-        if (strcmp(arg->data.symbol, "False") == 0) return expr_new_symbol("True");
+        if (arg->data.symbol == SYM_True) return expr_new_symbol("False");
+        if (arg->data.symbol == SYM_False) return expr_new_symbol("True");
     }
     return NULL;
 }
@@ -29,12 +30,12 @@ Expr* builtin_and(Expr* res) {
     
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* evaluated_arg = evaluate(res->data.function.args[i]);
-        if (evaluated_arg->type == EXPR_SYMBOL && strcmp(evaluated_arg->data.symbol, "False") == 0) {
+        if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_False) {
             expr_free(evaluated_arg);
             for (size_t j = 0; j < new_count; j++) expr_free(new_args[j]);
             free(new_args);
             return expr_new_symbol("False");
-        } else if (evaluated_arg->type == EXPR_SYMBOL && strcmp(evaluated_arg->data.symbol, "True") == 0) {
+        } else if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_True) {
             expr_free(evaluated_arg);
             changed = true;
         } else {
@@ -75,12 +76,12 @@ Expr* builtin_or(Expr* res) {
     
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         Expr* evaluated_arg = evaluate(res->data.function.args[i]);
-        if (evaluated_arg->type == EXPR_SYMBOL && strcmp(evaluated_arg->data.symbol, "True") == 0) {
+        if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_True) {
             expr_free(evaluated_arg);
             for (size_t j = 0; j < new_count; j++) expr_free(new_args[j]);
             free(new_args);
             return expr_new_symbol("True");
-        } else if (evaluated_arg->type == EXPR_SYMBOL && strcmp(evaluated_arg->data.symbol, "False") == 0) {
+        } else if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_False) {
             expr_free(evaluated_arg);
             changed = true;
         } else {

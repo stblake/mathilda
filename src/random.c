@@ -37,6 +37,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "attr.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -112,7 +113,7 @@ static bool parse_range(Expr* arg, mpz_t imin, mpz_t imax) {
     /* Check for List[imin, imax] */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "List") == 0 &&
+        arg->data.function.head->data.symbol == SYM_List &&
         arg->data.function.arg_count == 2) {
 
         Expr* lo = arg->data.function.args[0];
@@ -249,7 +250,7 @@ Expr* builtin_randominteger(Expr* res) {
 
         if (dim_arg->type == EXPR_FUNCTION &&
             dim_arg->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(dim_arg->data.function.head->data.symbol, "List") == 0) {
+            dim_arg->data.function.head->data.symbol == SYM_List) {
             /* Multi-dimensional array */
             /* Validate all dimensions are non-negative integers */
             for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
@@ -346,7 +347,7 @@ static bool parse_real_range(Expr* arg, double* xmin, double* xmax) {
     /* Check for List[xmin, xmax] */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "List") == 0 &&
+        arg->data.function.head->data.symbol == SYM_List &&
         arg->data.function.arg_count == 2) {
 
         Expr* lo = arg->data.function.args[0];
@@ -447,7 +448,7 @@ Expr* builtin_randomreal(Expr* res) {
 
         if (dim_arg->type == EXPR_FUNCTION &&
             dim_arg->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(dim_arg->data.function.head->data.symbol, "List") == 0) {
+            dim_arg->data.function.head->data.symbol == SYM_List) {
             /* Multi-dimensional array */
             for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
                 Expr* d = dim_arg->data.function.args[i];
@@ -545,7 +546,7 @@ static bool parse_complex_range(Expr* arg,
     /* Check for List[zmin, zmax] */
     if (arg->type == EXPR_FUNCTION &&
         arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, "List") == 0 &&
+        arg->data.function.head->data.symbol == SYM_List &&
         arg->data.function.arg_count == 2) {
 
         Expr* lo = arg->data.function.args[0];
@@ -670,7 +671,7 @@ Expr* builtin_randomcomplex(Expr* res) {
 
         if (dim_arg->type == EXPR_FUNCTION &&
             dim_arg->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(dim_arg->data.function.head->data.symbol, "List") == 0) {
+            dim_arg->data.function.head->data.symbol == SYM_List) {
             /* Multi-dimensional array */
             for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
                 Expr* d = dim_arg->data.function.args[i];
@@ -814,7 +815,7 @@ static Expr* weighted_choice_array(Expr** choices, size_t choice_count,
 static bool is_rule(Expr* e, Expr** wlist, Expr** elist) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "Rule") == 0 &&
+        e->data.function.head->data.symbol == SYM_Rule &&
         e->data.function.arg_count == 2) {
         *wlist = e->data.function.args[0];
         *elist = e->data.function.args[1];
@@ -830,7 +831,7 @@ static bool is_rule(Expr* e, Expr** wlist, Expr** elist) {
 static bool is_nonempty_list(Expr* e, Expr*** args, size_t* count) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "List") == 0 &&
+        e->data.function.head->data.symbol == SYM_List &&
         e->data.function.arg_count > 0) {
         *args = e->data.function.args;
         *count = e->data.function.arg_count;
@@ -921,7 +922,7 @@ Expr* builtin_randomchoice(Expr* res) {
 
         if (dim_arg->type == EXPR_FUNCTION &&
             dim_arg->data.function.head->type == EXPR_SYMBOL &&
-            strcmp(dim_arg->data.function.head->data.symbol, "List") == 0) {
+            dim_arg->data.function.head->data.symbol == SYM_List) {
             for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
                 Expr* d = dim_arg->data.function.args[i];
                 if (d->type != EXPR_INTEGER || d->data.integer < 0) {
@@ -971,7 +972,7 @@ Expr* builtin_randomchoice(Expr* res) {
 
     if (dim_arg->type == EXPR_FUNCTION &&
         dim_arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(dim_arg->data.function.head->data.symbol, "List") == 0) {
+        dim_arg->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
             Expr* d = dim_arg->data.function.args[i];
             if (d->type != EXPR_INTEGER || d->data.integer < 0) {
@@ -1063,7 +1064,7 @@ static size_t* weighted_sample_without_replacement(double* weights, size_t count
 static bool is_upto(Expr* e, int64_t* val) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "UpTo") == 0 &&
+        e->data.function.head->data.symbol == SYM_UpTo &&
         e->data.function.arg_count == 1 &&
         e->data.function.args[0]->type == EXPR_INTEGER) {
         *val = e->data.function.args[0]->data.integer;

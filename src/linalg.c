@@ -5,12 +5,13 @@
 #include "print.h"
 #include "poly.h"
 #include "expand.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
 static int get_tensor_dims(Expr* e, int64_t* dims) {
-    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL || strcmp(e->data.function.head->data.symbol, "List") != 0) {
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL || e->data.function.head->data.symbol != SYM_List) {
         return 0; // rank 0
     }
     int64_t len = e->data.function.arg_count;
@@ -30,7 +31,7 @@ static int get_tensor_dims(Expr* e, int64_t* dims) {
 }
 
 static void flatten_tensor(Expr* e, Expr** flat, size_t* idx) {
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL && strcmp(e->data.function.head->data.symbol, "List") == 0) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL && e->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             flatten_tensor(e->data.function.args[i], flat, idx);
         }
@@ -250,7 +251,7 @@ Expr* builtin_cross(Expr* res) {
     bool valid = true;
     for (size_t i = 0; i < m; i++) {
         Expr* arg = res->data.function.args[i];
-        if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL || strcmp(arg->data.function.head->data.symbol, "List") != 0) {
+        if (arg->type != EXPR_FUNCTION || arg->data.function.head->type != EXPR_SYMBOL || arg->data.function.head->data.symbol != SYM_List) {
             valid = false;
             break;
         }
@@ -335,7 +336,7 @@ Expr* builtin_norm(Expr* res) {
         
         Expr* result = NULL;
         
-        if (p && p->type == EXPR_SYMBOL && strcmp(p->data.symbol, "Infinity") == 0) {
+        if (p && p->type == EXPR_SYMBOL && p->data.symbol == SYM_Infinity) {
             if (N == 0) {
                 result = expr_new_integer(0);
             } else {
@@ -390,7 +391,7 @@ Expr* builtin_norm(Expr* res) {
 static int64_t get_default_trace_depth(Expr* list) {
     int64_t depth = 0;
     Expr* curr = list;
-    while (curr->type == EXPR_FUNCTION && curr->data.function.head->type == EXPR_SYMBOL && strcmp(curr->data.function.head->data.symbol, "List") == 0) {
+    while (curr->type == EXPR_FUNCTION && curr->data.function.head->type == EXPR_SYMBOL && curr->data.function.head->data.symbol == SYM_List) {
         depth++;
         if (curr->data.function.arg_count == 0) break;
         curr = curr->data.function.args[0];
@@ -401,7 +402,7 @@ static int64_t get_default_trace_depth(Expr* list) {
 static Expr* extract_diagonal_element(Expr* list, int64_t n, size_t index) {
     Expr* curr = list;
     for (int64_t level = 0; level < n; level++) {
-        if (curr->type != EXPR_FUNCTION || curr->data.function.head->type != EXPR_SYMBOL || strcmp(curr->data.function.head->data.symbol, "List") != 0) {
+        if (curr->type != EXPR_FUNCTION || curr->data.function.head->type != EXPR_SYMBOL || curr->data.function.head->data.symbol != SYM_List) {
             return NULL; // Not a list at this level
         }
         if (index >= curr->data.function.arg_count) {
@@ -419,7 +420,7 @@ Expr* builtin_tr(Expr* res) {
 
     Expr* list = res->data.function.args[0];
 
-    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || strcmp(list->data.function.head->data.symbol, "List") != 0) {
+    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || list->data.function.head->data.symbol != SYM_List) {
         return expr_copy(list);
     }
 
@@ -666,7 +667,7 @@ Expr* builtin_identitymatrix(Expr* res) {
     if (arg->type == EXPR_INTEGER) {
         m = arg->data.integer;
         n = m;
-    } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && strcmp(arg->data.function.head->data.symbol, "List") == 0) {
+    } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL && arg->data.function.head->data.symbol == SYM_List) {
         if (arg->data.function.arg_count == 2) {
             Expr* arg_m = arg->data.function.args[0];
             Expr* arg_n = arg->data.function.args[1];
@@ -702,7 +703,7 @@ Expr* builtin_diagonalmatrix(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 3) return NULL;
     
     Expr* list = res->data.function.args[0];
-    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || strcmp(list->data.function.head->data.symbol, "List") != 0) {
+    if (list->type != EXPR_FUNCTION || list->data.function.head->type != EXPR_SYMBOL || list->data.function.head->data.symbol != SYM_List) {
         return expr_copy(res);
     }
     
@@ -725,7 +726,7 @@ Expr* builtin_diagonalmatrix(Expr* res) {
         if (dim_expr->type == EXPR_INTEGER) {
             m = dim_expr->data.integer;
             n = m;
-        } else if (dim_expr->type == EXPR_FUNCTION && dim_expr->data.function.head->type == EXPR_SYMBOL && strcmp(dim_expr->data.function.head->data.symbol, "List") == 0) {
+        } else if (dim_expr->type == EXPR_FUNCTION && dim_expr->data.function.head->type == EXPR_SYMBOL && dim_expr->data.function.head->data.symbol == SYM_List) {
             if (dim_expr->data.function.arg_count == 2) {
                 Expr* arg_m = dim_expr->data.function.args[0];
                 Expr* arg_n = dim_expr->data.function.args[1];
@@ -997,7 +998,7 @@ Expr* builtin_matrixpower(Expr* res) {
     bool is_real = (exp_arg->type == EXPR_REAL);
 
     if (exp_arg->type == EXPR_FUNCTION && exp_arg->data.function.head->type == EXPR_SYMBOL
-        && strcmp(exp_arg->data.function.head->data.symbol, "Rational") == 0) {
+        && exp_arg->data.function.head->data.symbol == SYM_Rational) {
         is_rational = true;
     }
 
@@ -1053,7 +1054,7 @@ Expr* builtin_matrixpower(Expr* res) {
 
         /* Check if Inverse returned unevaluated (singular matrix) */
         if (inv_result->type == EXPR_FUNCTION && inv_result->data.function.head->type == EXPR_SYMBOL
-            && strcmp(inv_result->data.function.head->data.symbol, "Inverse") == 0) {
+            && inv_result->data.function.head->data.symbol == SYM_Inverse) {
             expr_free(inv_result);
             return NULL; /* Singular: Inverse already printed warning */
         }

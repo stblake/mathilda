@@ -2,6 +2,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "match.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -25,18 +26,18 @@ static void add_raw_rule(RawRule** rules, size_t* cap, size_t* count, Expr* path
 static void parse_single_rule(Expr* rule_expr, RawRule** rules, size_t* cap, size_t* count) {
     if (rule_expr->type != EXPR_FUNCTION) return;
     bool delayed = false;
-    if (strcmp(rule_expr->data.function.head->data.symbol, "Rule") == 0) delayed = false;
-    else if (strcmp(rule_expr->data.function.head->data.symbol, "RuleDelayed") == 0) delayed = true;
+    if (rule_expr->data.function.head->data.symbol == SYM_Rule) delayed = false;
+    else if (rule_expr->data.function.head->data.symbol == SYM_RuleDelayed) delayed = true;
     else return;
 
     if (rule_expr->data.function.arg_count != 2) return;
     Expr* lhs = rule_expr->data.function.args[0];
     Expr* rhs = rule_expr->data.function.args[1];
 
-    if (lhs->type == EXPR_FUNCTION && strcmp(lhs->data.function.head->data.symbol, "List") == 0) {
+    if (lhs->type == EXPR_FUNCTION && lhs->data.function.head->data.symbol == SYM_List) {
         if (lhs->data.function.arg_count > 0 && 
             lhs->data.function.args[0]->type == EXPR_FUNCTION &&
-            strcmp(lhs->data.function.args[0]->data.function.head->data.symbol, "List") == 0) {
+            lhs->data.function.args[0]->data.function.head->data.symbol == SYM_List) {
             for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
                 add_raw_rule(rules, cap, count, lhs->data.function.args[i], rhs, delayed);
             }
@@ -203,7 +204,7 @@ Expr* builtin_replace_part(Expr* res) {
         size_t num_rules = 0;
         RawRule* rules = malloc(sizeof(RawRule) * cap);
 
-        if (rules_expr->type == EXPR_FUNCTION && strcmp(rules_expr->data.function.head->data.symbol, "List") == 0) {
+        if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol == SYM_List) {
             for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
                 parse_single_rule(rules_expr->data.function.args[i], &rules, &cap, &num_rules);
             }
@@ -239,7 +240,7 @@ static int64_t get_expr_depth_replace(Expr* e, bool heads) {
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol;
-        if (strcmp(h, "Rational") == 0 || strcmp(h, "Complex") == 0) return 1;
+        if (h == SYM_Rational || h == SYM_Complex) return 1;
     }
     int64_t max_d = 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
@@ -313,11 +314,11 @@ static bool is_rule(Expr* e) {
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol;
-    return (strcmp(h, "Rule") == 0 || strcmp(h, "RuleDelayed") == 0);
+    return (h == SYM_Rule || h == SYM_RuleDelayed);
 }
 
 static Expr* apply_replace_nested(Expr* expr, Expr* rules_expr, int64_t min_l, int64_t max_l, bool heads) {
-    if (rules_expr->type == EXPR_FUNCTION && strcmp(rules_expr->data.function.head->data.symbol, "List") == 0) {
+    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
@@ -334,21 +335,21 @@ static Expr* apply_replace_nested(Expr* expr, Expr* rules_expr, int64_t min_l, i
     size_t num_rules = 0;
     ReplaceRule* rules = malloc(sizeof(ReplaceRule) * cap);
     
-    if (rules_expr->type == EXPR_FUNCTION && strcmp(rules_expr->data.function.head->data.symbol, "List") == 0) {
+    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
             Expr* r = rules_expr->data.function.args[i];
             if (is_rule(r) && r->data.function.arg_count == 2) {
                 if (num_rules == cap) { cap *= 2; rules = realloc(rules, sizeof(ReplaceRule) * cap); }
                 rules[num_rules].pattern = r->data.function.args[0];
                 rules[num_rules].replacement = r->data.function.args[1];
-                rules[num_rules].delayed = strcmp(r->data.function.head->data.symbol, "RuleDelayed") == 0;
+                rules[num_rules].delayed = r->data.function.head->data.symbol == SYM_RuleDelayed;
                 num_rules++;
             }
         }
     } else if (is_rule(rules_expr) && rules_expr->data.function.arg_count == 2) {
         rules[num_rules].pattern = rules_expr->data.function.args[0];
         rules[num_rules].replacement = rules_expr->data.function.args[1];
-        rules[num_rules].delayed = strcmp(rules_expr->data.function.head->data.symbol, "RuleDelayed") == 0;
+        rules[num_rules].delayed = rules_expr->data.function.head->data.symbol == SYM_RuleDelayed;
         num_rules++;
     }
     
@@ -374,27 +375,27 @@ Expr* builtin_replace(Expr* res) {
         Expr* ls = res->data.function.args[2];
         if (ls->type == EXPR_INTEGER) {
             min_l = 1; max_l = ls->data.integer;
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "All") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_All) {
             min_l = 0; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && strcmp(ls->data.symbol, "Infinity") == 0) {
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol == SYM_Infinity) {
             min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && strcmp(ls->data.function.head->data.symbol, "List") == 0) {
+        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol == SYM_List) {
             if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
                 min_l = max_l = ls->data.function.args[0]->data.integer;
             } else if (ls->data.function.arg_count == 2) {
                 if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
                 if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && strcmp(ls->data.function.args[1]->data.symbol, "Infinity") == 0) max_l = 1000000;
+                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol == SYM_Infinity) max_l = 1000000;
             }
         }
     }
     
     for (size_t i = 2; i < res->data.function.arg_count; i++) {
         Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && strcmp(opt->data.function.head->data.symbol, "Rule") == 0 && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[0]->data.symbol, "Heads") == 0) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "True") == 0) heads = true;
-                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && strcmp(opt->data.function.args[1]->data.symbol, "False") == 0) heads = false;
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol == SYM_Rule && opt->data.function.arg_count == 2) {
+            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol == SYM_Heads) {
+                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_True) heads = true;
+                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol == SYM_False) heads = false;
             }
         }
     }
@@ -430,7 +431,7 @@ static Expr* do_replace_all(Expr* e, ReplaceRule* rules, size_t num_rules) {
 }
 
 static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr) {
-    if (rules_expr->type == EXPR_FUNCTION && strcmp(rules_expr->data.function.head->data.symbol, "List") == 0) {
+    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
@@ -447,21 +448,21 @@ static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr) {
     size_t num_rules = 0;
     ReplaceRule* rules = malloc(sizeof(ReplaceRule) * cap);
     
-    if (rules_expr->type == EXPR_FUNCTION && strcmp(rules_expr->data.function.head->data.symbol, "List") == 0) {
+    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
             Expr* r = rules_expr->data.function.args[i];
             if (is_rule(r) && r->data.function.arg_count == 2) {
                 if (num_rules == cap) { cap *= 2; rules = realloc(rules, sizeof(ReplaceRule) * cap); }
                 rules[num_rules].pattern = r->data.function.args[0];
                 rules[num_rules].replacement = r->data.function.args[1];
-                rules[num_rules].delayed = strcmp(r->data.function.head->data.symbol, "RuleDelayed") == 0;
+                rules[num_rules].delayed = r->data.function.head->data.symbol == SYM_RuleDelayed;
                 num_rules++;
             }
         }
     } else if (is_rule(rules_expr) && rules_expr->data.function.arg_count == 2) {
         rules[num_rules].pattern = rules_expr->data.function.args[0];
         rules[num_rules].replacement = rules_expr->data.function.args[1];
-        rules[num_rules].delayed = strcmp(rules_expr->data.function.head->data.symbol, "RuleDelayed") == 0;
+        rules[num_rules].delayed = rules_expr->data.function.head->data.symbol == SYM_RuleDelayed;
         num_rules++;
     }
     
@@ -484,7 +485,7 @@ Expr* builtin_replace_all(Expr* res) {
 }
 
 static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr) {
-    if (rules_expr->type == EXPR_FUNCTION && strcmp(rules_expr->data.function.head->data.symbol, "List") == 0) {
+    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol == SYM_List) {
         if (rules_expr->data.function.arg_count > 0 && !is_rule(rules_expr->data.function.args[0])) {
             size_t count = rules_expr->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
@@ -571,21 +572,21 @@ Expr* builtin_replacelist(Expr* res) {
     size_t num_rules = 0;
     ReplaceRule* rules = malloc(sizeof(ReplaceRule) * cap);
     
-    if (rules_expr->type == EXPR_FUNCTION && strcmp(rules_expr->data.function.head->data.symbol, "List") == 0) {
+    if (rules_expr->type == EXPR_FUNCTION && rules_expr->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
             Expr* r = rules_expr->data.function.args[i];
             if (is_rule(r) && r->data.function.arg_count == 2) {
                 if (num_rules == cap) { cap *= 2; rules = realloc(rules, sizeof(ReplaceRule) * cap); }
                 rules[num_rules].pattern = r->data.function.args[0];
                 rules[num_rules].replacement = r->data.function.args[1];
-                rules[num_rules].delayed = strcmp(r->data.function.head->data.symbol, "RuleDelayed") == 0;
+                rules[num_rules].delayed = r->data.function.head->data.symbol == SYM_RuleDelayed;
                 num_rules++;
             }
         }
     } else if (is_rule(rules_expr) && rules_expr->data.function.arg_count == 2) {
         rules[num_rules].pattern = rules_expr->data.function.args[0];
         rules[num_rules].replacement = rules_expr->data.function.args[1];
-        rules[num_rules].delayed = strcmp(rules_expr->data.function.head->data.symbol, "RuleDelayed") == 0;
+        rules[num_rules].delayed = rules_expr->data.function.head->data.symbol == SYM_RuleDelayed;
         num_rules++;
     }
     
@@ -633,21 +634,21 @@ static ReplaceRule* parse_replace_rules(Expr* rules_expr, size_t* out_count) {
 
     if (rules_expr->type == EXPR_FUNCTION &&
         rules_expr->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(rules_expr->data.function.head->data.symbol, "List") == 0) {
+        rules_expr->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < rules_expr->data.function.arg_count; i++) {
             Expr* r = rules_expr->data.function.args[i];
             if (is_rule(r) && r->data.function.arg_count == 2) {
                 if (count == cap) { cap *= 2; rules = realloc(rules, sizeof(ReplaceRule) * cap); }
                 rules[count].pattern = r->data.function.args[0];
                 rules[count].replacement = r->data.function.args[1];
-                rules[count].delayed = strcmp(r->data.function.head->data.symbol, "RuleDelayed") == 0;
+                rules[count].delayed = r->data.function.head->data.symbol == SYM_RuleDelayed;
                 count++;
             }
         }
     } else if (is_rule(rules_expr) && rules_expr->data.function.arg_count == 2) {
         rules[count].pattern = rules_expr->data.function.args[0];
         rules[count].replacement = rules_expr->data.function.args[1];
-        rules[count].delayed = strcmp(rules_expr->data.function.head->data.symbol, "RuleDelayed") == 0;
+        rules[count].delayed = rules_expr->data.function.head->data.symbol == SYM_RuleDelayed;
         count++;
     }
     *out_count = count;
@@ -721,7 +722,7 @@ static Expr* replaceat_at_path(ReplaceRule* rules, size_t num_rules, Expr* expr,
                 new_args[k - 1] = r;
             }
         }
-    } else if (idx->type == EXPR_SYMBOL && strcmp(idx->data.symbol, "All") == 0) {
+    } else if (idx->type == EXPR_SYMBOL && idx->data.symbol == SYM_All) {
         for (size_t i = 0; i < len; i++) {
             Expr* r = replaceat_at_path(rules, num_rules, expr->data.function.args[i], path + 1, plen - 1);
             expr_free(new_args[i]);
@@ -729,7 +730,7 @@ static Expr* replaceat_at_path(ReplaceRule* rules, size_t num_rules, Expr* expr,
         }
     } else if (idx->type == EXPR_FUNCTION &&
                idx->data.function.head->type == EXPR_SYMBOL &&
-               strcmp(idx->data.function.head->data.symbol, "Span") == 0) {
+               idx->data.function.head->data.symbol == SYM_Span) {
         int64_t start = 1, end = (int64_t)len, step = 1;
         size_t span_argc = idx->data.function.arg_count;
         if (span_argc >= 1) {
@@ -737,7 +738,7 @@ static Expr* replaceat_at_path(ReplaceRule* rules, size_t num_rules, Expr* expr,
             if (a1->type == EXPR_INTEGER) {
                 start = a1->data.integer;
                 if (start < 0) start = (int64_t)len + start + 1;
-            } else if (a1->type == EXPR_SYMBOL && strcmp(a1->data.symbol, "All") == 0) {
+            } else if (a1->type == EXPR_SYMBOL && a1->data.symbol == SYM_All) {
                 start = 1;
             }
         }
@@ -746,7 +747,7 @@ static Expr* replaceat_at_path(ReplaceRule* rules, size_t num_rules, Expr* expr,
             if (a2->type == EXPR_INTEGER) {
                 end = a2->data.integer;
                 if (end < 0) end = (int64_t)len + end + 1;
-            } else if (a2->type == EXPR_SYMBOL && strcmp(a2->data.symbol, "All") == 0) {
+            } else if (a2->type == EXPR_SYMBOL && a2->data.symbol == SYM_All) {
                 end = (int64_t)len;
             }
         }
@@ -779,7 +780,7 @@ static Expr* replaceat_at_path(ReplaceRule* rules, size_t num_rules, Expr* expr,
 static bool replaceat_is_list(Expr* e) {
     return e->type == EXPR_FUNCTION &&
            e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, "List") == 0;
+           e->data.function.head->data.symbol == SYM_List;
 }
 
 Expr* builtin_replace_at(Expr* res) {

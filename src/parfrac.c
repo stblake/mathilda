@@ -9,6 +9,7 @@
 #include "expand.h"
 #include "core.h"
 #include "rationalize.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -79,8 +80,8 @@ Expr* builtin_apart(Expr* res) {
     Expr* npq = eval_and_free(expr_new_function(expr_new_symbol("PolynomialQ"), npq_args, 2));
     Expr* dpq_args[2] = { expr_copy(D), expr_copy(var) };
     Expr* dpq = eval_and_free(expr_new_function(expr_new_symbol("PolynomialQ"), dpq_args, 2));
-    bool n_poly = (npq->type == EXPR_SYMBOL && strcmp(npq->data.symbol, "True") == 0);
-    bool d_poly = (dpq->type == EXPR_SYMBOL && strcmp(dpq->data.symbol, "True") == 0);
+    bool n_poly = (npq->type == EXPR_SYMBOL && npq->data.symbol == SYM_True);
+    bool d_poly = (dpq->type == EXPR_SYMBOL && dpq->data.symbol == SYM_True);
     expr_free(npq); expr_free(dpq);
     if (!n_poly || !d_poly) {
         expr_free(N); expr_free(D); expr_free(var);
@@ -103,7 +104,7 @@ Expr* builtin_apart(Expr* res) {
     
     size_t num_args = 1;
     Expr** args = &f_den;
-    if (f_den->type == EXPR_FUNCTION && strcmp(f_den->data.function.head->data.symbol, "Times") == 0) {
+    if (f_den->type == EXPR_FUNCTION && f_den->data.function.head->data.symbol == SYM_Times) {
         num_args = f_den->data.function.arg_count;
         args = f_den->data.function.args;
     }
@@ -117,7 +118,7 @@ Expr* builtin_apart(Expr* res) {
         Expr* factor = args[i];
         Expr* base = factor;
         int64_t k = 1;
-        if (factor->type == EXPR_FUNCTION && strcmp(factor->data.function.head->data.symbol, "Power") == 0) {
+        if (factor->type == EXPR_FUNCTION && factor->data.function.head->data.symbol == SYM_Power) {
             base = factor->data.function.args[0];
             if (factor->data.function.args[1]->type == EXPR_INTEGER) {
                 k = factor->data.function.args[1]->data.integer;
@@ -214,7 +215,7 @@ Expr* builtin_apart(Expr* res) {
     Expr* reduced = eval_and_free(expr_new_function(expr_new_symbol("RowReduce"), (Expr*[]){matrix_expr}, 1));
     
     Expr* pfrac_sum = expr_new_integer(0);
-    if (reduced->type == EXPR_FUNCTION && strcmp(reduced->data.function.head->data.symbol, "List") == 0 && reduced->data.function.arg_count == (size_t)S) {
+    if (reduced->type == EXPR_FUNCTION && reduced->data.function.head->data.symbol == SYM_List && reduced->data.function.arg_count == (size_t)S) {
         col = 0;
         for (size_t i = 0; i < m; i++) {
             Expr* exp_base = expr_expand(bases[i]);

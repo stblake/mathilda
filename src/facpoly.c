@@ -13,6 +13,7 @@
 #include "mpoly.h"
 #include "mvfactor.h"
 #include "mvfactor3.h"
+#include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -421,7 +422,7 @@ static bool extract_monomial_walk(Expr* e, int64_t* c,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Power") == 0
+        && e->data.function.head->data.symbol == SYM_Power
         && e->data.function.arg_count == 2
         && e->data.function.args[1]->type == EXPR_INTEGER) {
         if (*count == *cap) {
@@ -437,7 +438,7 @@ static bool extract_monomial_walk(Expr* e, int64_t* c,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        && e->data.function.head->data.symbol == SYM_Times) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (!extract_monomial_walk(e->data.function.args[i],
                                        c, vars, exps, count, cap)) {
@@ -487,7 +488,7 @@ static Expr* make_binomial_sum(Expr* A, Expr* B, int k, bool is_diff) {
 static Expr* heuristic_factor(Expr* P);
 
 static Expr* factor_binomial(Expr* P) {
-    if (P->type != EXPR_FUNCTION || strcmp(P->data.function.head->data.symbol, "Plus") != 0) return NULL;
+    if (P->type != EXPR_FUNCTION || P->data.function.head->data.symbol != SYM_Plus) return NULL;
     if (P->data.function.arg_count != 2) return NULL;
     
     int64_t c1, c2;
@@ -691,7 +692,7 @@ static bool monomial_collect(Expr* e, int64_t* coeff_out,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        && e->data.function.head->data.symbol == SYM_Times) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (!monomial_collect(e->data.function.args[i], coeff_out,
                                   atoms, exps, count, cap)) return false;
@@ -705,7 +706,7 @@ static bool monomial_collect(Expr* e, int64_t* coeff_out,
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Power") == 0
+        && e->data.function.head->data.symbol == SYM_Power
         && e->data.function.arg_count == 2
         && e->data.function.args[1]->type == EXPR_INTEGER) {
         atom = e->data.function.args[0];
@@ -738,7 +739,7 @@ static bool monomial_collect(Expr* e, int64_t* coeff_out,
 static Expr* factor_monomial_content(Expr* P) {
     if (P->type != EXPR_FUNCTION) return NULL;
     if (P->data.function.head->type != EXPR_SYMBOL) return NULL;
-    if (strcmp(P->data.function.head->data.symbol, "Plus") != 0) return NULL;
+    if (P->data.function.head->data.symbol != SYM_Plus) return NULL;
     size_t n = P->data.function.arg_count;
     if (n < 2) return NULL;
 
@@ -1005,7 +1006,7 @@ static int count_nontrivial_factors(Expr* factored, Expr* var) {
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head
         && factored->data.function.head->type == EXPR_SYMBOL
-        && strcmp(factored->data.function.head->data.symbol, "Times") == 0) {
+        && factored->data.function.head->data.symbol == SYM_Times) {
         int total = 0;
         for (size_t i = 0; i < factored->data.function.arg_count; i++) {
             Expr* a = factored->data.function.args[i];
@@ -1254,7 +1255,7 @@ static bool factor_via_bz_callback(const ZUPoly* image,
     if (factored->type == EXPR_FUNCTION
         && factored->data.function.head
         && factored->data.function.head->type == EXPR_SYMBOL
-        && strcmp(factored->data.function.head->data.symbol, "Times") == 0) {
+        && factored->data.function.head->data.symbol == SYM_Times) {
         size_t ac = factored->data.function.arg_count;
         cap = (int)ac;
         result = (ZUPoly**)malloc(sizeof(ZUPoly*) * (size_t)cap);
@@ -1539,7 +1540,7 @@ static bool zupoly_factor_to_array(const ZUPoly* p,
     if (fac->type == EXPR_FUNCTION
         && fac->data.function.head
         && fac->data.function.head->type == EXPR_SYMBOL
-        && strcmp(fac->data.function.head->data.symbol, "Times") == 0) {
+        && fac->data.function.head->data.symbol == SYM_Times) {
         arg_count = fac->data.function.arg_count;
         args = fac->data.function.args;
     } else {
@@ -1563,7 +1564,7 @@ static bool zupoly_factor_to_array(const ZUPoly* p,
         if (a->type == EXPR_FUNCTION
             && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
-            && strcmp(a->data.function.head->data.symbol, "Power") == 0
+            && a->data.function.head->data.symbol == SYM_Power
             && a->data.function.arg_count == 2) {
             Expr* exp_e = a->data.function.args[1];
             if (exp_e->type != EXPR_INTEGER || exp_e->data.integer < 1) {
@@ -2131,7 +2132,7 @@ static void collect_times_args(Expr* e, Expr*** args_out, size_t* count_out) {
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Times") == 0) {
+        && e->data.function.head->data.symbol == SYM_Times) {
         size_t n = e->data.function.arg_count;
         Expr** args = (Expr**)malloc(sizeof(Expr*) * n);
         for (size_t i = 0; i < n; i++) {
@@ -2155,8 +2156,8 @@ static bool factor_is_numeric_constant(const Expr* f) {
     if (f->type == EXPR_FUNCTION
         && f->data.function.head
         && f->data.function.head->type == EXPR_SYMBOL
-        && (strcmp(f->data.function.head->data.symbol, "Rational") == 0
-            || strcmp(f->data.function.head->data.symbol, "Complex") == 0)) {
+        && (f->data.function.head->data.symbol == SYM_Rational
+            || f->data.function.head->data.symbol == SYM_Complex)) {
         return true;
     }
     return false;
@@ -2220,7 +2221,7 @@ static Expr* factor_via_z_independent_split(Expr* P, Expr** vars, size_t v_count
             if (f->type == EXPR_FUNCTION
                 && f->data.function.head
                 && f->data.function.head->type == EXPR_SYMBOL
-                && strcmp(f->data.function.head->data.symbol, "Power") == 0
+                && f->data.function.head->data.symbol == SYM_Power
                 && f->data.function.arg_count == 2
                 && f->data.function.args[1]->type == EXPR_INTEGER
                 && f->data.function.args[1]->data.integer >= 1) {
@@ -2471,16 +2472,16 @@ static Expr* factor_trivariate_via_mhensel(Expr* P, Expr** vars, size_t v_count)
 
 static Expr* heuristic_factor(Expr* P) {
     if (P->type != EXPR_FUNCTION) return expr_copy(P);
-    if (strcmp(P->data.function.head->data.symbol, "Times") == 0 || strcmp(P->data.function.head->data.symbol, "Power") == 0) {
+    if (P->data.function.head->data.symbol == SYM_Times || P->data.function.head->data.symbol == SYM_Power) {
         Expr** args = malloc(sizeof(Expr*) * P->data.function.arg_count);
         for(size_t i=0; i<P->data.function.arg_count; i++) args[i] = heuristic_factor(P->data.function.args[i]);
         Expr* res = eval_and_free(expr_new_function(expr_copy(P->data.function.head), args, P->data.function.arg_count));
         free(args);
         return res;
     }
-    if (strcmp(P->data.function.head->data.symbol, "List") == 0 || strcmp(P->data.function.head->data.symbol, "Equal") == 0 || strcmp(P->data.function.head->data.symbol, "Less") == 0 || 
-        strcmp(P->data.function.head->data.symbol, "LessEqual") == 0 || strcmp(P->data.function.head->data.symbol, "Greater") == 0 || strcmp(P->data.function.head->data.symbol, "GreaterEqual") == 0 ||
-        strcmp(P->data.function.head->data.symbol, "And") == 0 || strcmp(P->data.function.head->data.symbol, "Or") == 0 || strcmp(P->data.function.head->data.symbol, "Not") == 0) {
+    if (P->data.function.head->data.symbol == SYM_List || P->data.function.head->data.symbol == SYM_Equal || P->data.function.head->data.symbol == SYM_Less || 
+        P->data.function.head->data.symbol == SYM_LessEqual || P->data.function.head->data.symbol == SYM_Greater || P->data.function.head->data.symbol == SYM_GreaterEqual ||
+        P->data.function.head->data.symbol == SYM_And || P->data.function.head->data.symbol == SYM_Or || P->data.function.head->data.symbol == SYM_Not) {
         Expr** args = malloc(sizeof(Expr*) * P->data.function.arg_count);
         for(size_t i=0; i<P->data.function.arg_count; i++) args[i] = heuristic_factor(P->data.function.args[i]);
         Expr* res = eval_and_free(expr_new_function(expr_copy(P->data.function.head), args, P->data.function.arg_count));
@@ -2770,14 +2771,14 @@ Expr* builtin_factor(Expr* res) {
             && arg0->data.function.head
             && arg0->data.function.head->type == EXPR_SYMBOL) {
             const char* h = arg0->data.function.head->data.symbol;
-            if (strcmp(h, "Less") == 0 ||
-                strcmp(h, "Greater") == 0 ||
-                strcmp(h, "Equal") == 0 ||
-                strcmp(h, "Unequal") == 0 ||
-                strcmp(h, "LessEqual") == 0 ||
-                strcmp(h, "GreaterEqual") == 0 ||
-                strcmp(h, "And") == 0 ||
-                strcmp(h, "Or") == 0) {
+            if (h == SYM_Less ||
+                h == SYM_Greater ||
+                h == SYM_Equal ||
+                h == SYM_Unequal ||
+                h == SYM_LessEqual ||
+                h == SYM_GreaterEqual ||
+                h == SYM_And ||
+                h == SYM_Or) {
                 size_t n = arg0->data.function.arg_count;
                 Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
                 for (size_t i = 0; i < n; i++) {
@@ -3126,7 +3127,7 @@ static Expr* ft_compute_list(Expr* poly, Expr** S, size_t S_count) {
 static void ft_extract_vars(Expr* var_arg, Expr*** S_out, size_t* S_count_out) {
     if (var_arg->type == EXPR_FUNCTION &&
         var_arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(var_arg->data.function.head->data.symbol, "List") == 0) {
+        var_arg->data.function.head->data.symbol == SYM_List) {
         size_t n = var_arg->data.function.arg_count;
         *S_out = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
         *S_count_out = n;

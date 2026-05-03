@@ -12,6 +12,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "eval.h"
+#include "sym_names.h"
 #include <string.h>
 
 /*
@@ -85,7 +86,7 @@ static bool collect_strings(Expr* e, const char*** strs, size_t* count, size_t* 
         return true;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "List") == 0) {
+        && e->data.function.head->data.symbol == SYM_List) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (!collect_strings(e->data.function.args[i], strs, count, cap))
                 return false;
@@ -185,7 +186,7 @@ Expr* builtin_stringpart(Expr* res) {
     /* StringPart[{s1, s2, ...}, spec] - map over list of strings */
     if (arg0->type == EXPR_FUNCTION &&
         arg0->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg0->data.function.head->data.symbol, "List") == 0) {
+        arg0->data.function.head->data.symbol == SYM_List) {
         size_t n = arg0->data.function.arg_count;
         Expr** results = malloc(sizeof(Expr*) * n);
         if (!results) return NULL;
@@ -219,7 +220,7 @@ Expr* builtin_stringpart(Expr* res) {
     /* StringPart["string", {n1, n2, ...}] - list of indices */
     if (spec->type == EXPR_FUNCTION &&
         spec->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(spec->data.function.head->data.symbol, "List") == 0) {
+        spec->data.function.head->data.symbol == SYM_List) {
         size_t n = spec->data.function.arg_count;
         Expr** results = malloc(sizeof(Expr*) * n);
         if (!results) return NULL;
@@ -240,7 +241,7 @@ Expr* builtin_stringpart(Expr* res) {
     /* StringPart["string", m;;n] or StringPart["string", m;;n;;s] - Span */
     if (spec->type == EXPR_FUNCTION &&
         spec->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(spec->data.function.head->data.symbol, "Span") == 0) {
+        spec->data.function.head->data.symbol == SYM_Span) {
         int64_t start = 1, end = len, step = 1;
         size_t span_argc = spec->data.function.arg_count;
 
@@ -250,7 +251,7 @@ Expr* builtin_stringpart(Expr* res) {
                 start = a1->data.integer;
                 if (start < 0) start = len + start + 1;
             } else if (a1->type == EXPR_SYMBOL &&
-                       strcmp(a1->data.symbol, "All") == 0) {
+                       a1->data.symbol == SYM_All) {
                 start = 1;
             } else return NULL;
         }
@@ -260,7 +261,7 @@ Expr* builtin_stringpart(Expr* res) {
                 end = a2->data.integer;
                 if (end < 0) end = len + end + 1;
             } else if (a2->type == EXPR_SYMBOL &&
-                       strcmp(a2->data.symbol, "All") == 0) {
+                       a2->data.symbol == SYM_All) {
                 end = len;
             } else return NULL;
         }
@@ -312,7 +313,7 @@ Expr* builtin_stringpart(Expr* res) {
 static bool is_upto(Expr* e, int64_t* out) {
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, "UpTo") == 0 &&
+        e->data.function.head->data.symbol == SYM_UpTo &&
         e->data.function.arg_count == 1 &&
         e->data.function.args[0]->type == EXPR_INTEGER) {
         *out = e->data.function.args[0]->data.integer;
@@ -359,7 +360,7 @@ Expr* builtin_stringtake(Expr* res) {
     /* StringTake[{s1, s2, ...}, spec] - map over list of strings */
     if (arg0->type == EXPR_FUNCTION &&
         arg0->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg0->data.function.head->data.symbol, "List") == 0) {
+        arg0->data.function.head->data.symbol == SYM_List) {
         size_t n = arg0->data.function.arg_count;
         Expr** results = malloc(sizeof(Expr*) * n);
         if (!results) return NULL;
@@ -410,7 +411,7 @@ Expr* builtin_stringtake(Expr* res) {
     /* StringTake["string", {spec}] - list spec */
     if (spec->type == EXPR_FUNCTION &&
         spec->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(spec->data.function.head->data.symbol, "List") == 0) {
+        spec->data.function.head->data.symbol == SYM_List) {
         size_t spec_argc = spec->data.function.arg_count;
 
         /* StringTake["string", {n}] - single character */
