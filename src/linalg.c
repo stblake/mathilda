@@ -616,7 +616,11 @@ Expr* builtin_rowreduce(Expr* res) {
                         Expr* t = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){new_num, expr_new_integer(-1)}, 2));
                         new_num = expr_expand(t);
                         expr_free(t);
-                        new_den->data.integer = -new_den->data.integer;
+                        /* Replace, don't mutate: the integer atom may be
+                         * shared (M3 atom-sharing). */
+                        int64_t v = -new_den->data.integer;
+                        expr_free(new_den);
+                        new_den = expr_new_integer(v);
                     }
                     
                     if (new_den->type == EXPR_INTEGER && new_den->data.integer == 1) {
@@ -909,7 +913,10 @@ Expr* builtin_inverse(Expr* res) {
                     (Expr*[]){new_num, expr_new_integer(-1)}, 2));
                 new_num = expr_expand(t);
                 expr_free(t);
-                new_den->data.integer = -new_den->data.integer;
+                /* Replace, don't mutate: the integer atom may be shared. */
+                int64_t v = -new_den->data.integer;
+                expr_free(new_den);
+                new_den = expr_new_integer(v);
             }
 
             if (new_den->type == EXPR_INTEGER && new_den->data.integer == 1) {

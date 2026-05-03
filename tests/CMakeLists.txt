@@ -96,6 +96,8 @@ set(COMMON_SRC
     ../src/mpoly.c
     ../src/mvfactor.c
     ../src/mvfactor3.c
+    ../src/sym_intern.c
+    ../src/sym_names.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -299,6 +301,42 @@ else()
     target_link_libraries(bigint_tests gmp m)
 endif()
 
+add_executable(expr_sharing_tests test_expr_sharing.c ${COMMON_SRC})
+target_include_directories(expr_sharing_tests PRIVATE ../src /usr/local/include)
+target_link_directories(expr_sharing_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(expr_sharing_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(expr_sharing_tests gmp m)
+endif()
+
+add_executable(eval_timestamps_tests test_eval_timestamps.c ${COMMON_SRC})
+target_include_directories(eval_timestamps_tests PRIVATE ../src /usr/local/include)
+target_link_directories(eval_timestamps_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(eval_timestamps_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(eval_timestamps_tests gmp m)
+endif()
+
+add_executable(eval_eager_exit_tests test_eval_eager_exit.c ${COMMON_SRC})
+target_include_directories(eval_eager_exit_tests PRIVATE ../src /usr/local/include)
+target_link_directories(eval_eager_exit_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(eval_eager_exit_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(eval_eager_exit_tests gmp m)
+endif()
+
+add_executable(rule_dispatch_tests test_rule_dispatch.c ${COMMON_SRC})
+target_include_directories(rule_dispatch_tests PRIVATE ../src /usr/local/include)
+target_link_directories(rule_dispatch_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(rule_dispatch_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(rule_dispatch_tests gmp m)
+endif()
+
 add_executable(integrals_tests test_integrals.c ${COMMON_SRC})
 target_include_directories(integrals_tests PRIVATE ../src)
 if(USE_ECM)
@@ -420,6 +458,10 @@ if(USE_ECM)
     add_dependencies(parfrac_tests build_ecm)
     add_dependencies(polymod_tests build_ecm)
     add_dependencies(bigint_tests build_ecm)
+    add_dependencies(expr_sharing_tests build_ecm)
+    add_dependencies(eval_timestamps_tests build_ecm)
+    add_dependencies(eval_eager_exit_tests build_ecm)
+    add_dependencies(rule_dispatch_tests build_ecm)
     add_dependencies(integrals_tests build_ecm)
     add_dependencies(print_tests build_ecm)
     add_dependencies(random_tests build_ecm)

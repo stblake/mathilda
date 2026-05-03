@@ -4278,8 +4278,11 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
             for (size_t i = 0; i < cn; i++) {
                 /* Negate the leading coefficient. */
                 if (const_terms[i]->type == EXPR_INTEGER) {
-                    const_terms[i]->data.integer = -const_terms[i]->data.integer;
-                    rhs_terms[rt++] = const_terms[i];
+                    /* Replace, don't mutate: the integer atom may be
+                     * shared (M3 atom-sharing). */
+                    int64_t v = -const_terms[i]->data.integer;
+                    expr_free(const_terms[i]);
+                    rhs_terms[rt++] = expr_new_integer(v);
                 } else {
                     /* Wrap in Times[-1, ...]. */
                     Expr* args[2] = { expr_new_integer(-1), const_terms[i] };

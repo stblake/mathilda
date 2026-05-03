@@ -30,6 +30,28 @@ typedef enum {
 
 typedef struct Expr {
     ExprType type;
+    /* Reference count for shared-ownership / copy-on-write semantics
+     * (M3 milestone). Every successful expr_new_* / expr_copy returns a
+     * node with refcount == 1; expr_ref bumps it; expr_free decrements
+     * and only physically frees on transition to 0. Atoms are eligible
+     * to be shared today (see expr_copy); compound (FUNCTION) nodes
+     * remain deep-copied for now and therefore always have refcount==1
+     * in current code paths. */
+    unsigned refcount;
+    /* M3 phase-3 evaluation timestamp. The value of `eval_clock_get()` at
+     * the moment this node was last evaluated to a fixed point. Fresh
+     * (parser- or builtin-constructed) nodes carry 0, which never matches
+     * the live clock (clock starts at 1) so they always evaluate on the
+     * first call. Once `evaluate(e)` reaches fixed point it stamps the
+     * result with the current clock; a subsequent `evaluate(e)` with the
+     * same clock returns an inc-ref'd view immediately, skipping the
+     * outer fixed-point loop and all of `evaluate_step`. The clock is
+     * bumped by every symbol-table mutation (Set, SetDelayed, Clear,
+     * SetAttributes, ClearAttributes), so any user definition change
+     * cleanly invalidates every cached evaluation in one shot. The
+     * field is benign metadata and is intentionally NOT considered by
+     * `expr_eq` / `expr_hash`; updating it on a shared node is safe. */
+    uint64_t last_evaluated_at;
     union {
         int64_t integer;
         double real;
@@ -54,6 +76,21 @@ Expr* expr_new_string(const char* str);
 Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count);
 void expr_free(Expr* e);
 Expr* expr_copy(Expr* e);
+/* Inc-ref `e` (no copy) and return the same pointer. Pairs with
+ * expr_free, which dec-refs. NULL is passed through. Use this in places
+ * that previously called expr_copy on an immutable atom. */
+Expr* expr_ref(Expr* e);
+
+/* M3 phase-2 copy-on-write helper. Returns a refcount==1 Expr that is
+ * logically equal to `e`, consuming the input ref. If `e->refcount` is
+ * already 1, returns `e` unchanged (zero work). Otherwise builds a
+ * one-level private copy: a fresh top-level node with a private args[]
+ * array (FUNCTION) or owned mpz_t/mpfr_t/string payload (others), with
+ * children inc-ref'd via expr_copy. The caller may then mutate the
+ * returned node's *direct* fields (args[i], arg_count, head, etc.).
+ * To mutate deeper than one level, unshare each interior node along
+ * the path. NULL passes through. */
+Expr* expr_unshare(Expr* e);
 
 #include <stdbool.h>
 bool expr_eq(const Expr* a, const Expr* b);

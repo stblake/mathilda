@@ -51,8 +51,14 @@
 #include "numeric.h"
 #include "precision.h"
 #include "rationalize.h"
+#include "sym_names.h"
 
 void core_init(void) {
+    /* Cache canonical pointers for well-known symbol names. Doing this
+     * before any other init step guarantees every later expr_new_symbol
+     * with one of these names returns the same pointer the SYM_*
+     * constants hold, so eval-time pointer comparisons are valid. */
+    sym_names_init();
     /* Context system must come first: the parser calls context_resolve_name
      * on every identifier, including those produced while loading init.m. */
     context_init();

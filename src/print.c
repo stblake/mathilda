@@ -408,9 +408,10 @@ static void print_standard(Expr* e, int parent_prec) {
                         Expr* f_arg = arg->data.function.args[0];
                         if (f_arg->type == EXPR_INTEGER && f_arg->data.integer < 0) {
                             is_negative = true;
-                            t_copy = expr_copy(arg);
-                            t_copy->data.function.args[0]->data.integer = -f_arg->data.integer;
-                            
+                            t_copy = expr_unshare(expr_copy(arg));
+                            expr_free(t_copy->data.function.args[0]);
+                            t_copy->data.function.args[0] = expr_new_integer(-f_arg->data.integer);
+
                             if (t_copy->data.function.args[0]->data.integer == 1 && t_copy->data.function.arg_count > 1) {
                                 Expr** new_args = malloc(sizeof(Expr*) * (t_copy->data.function.arg_count - 1));
                                 for (size_t k = 1; k < t_copy->data.function.arg_count; k++) {
@@ -424,15 +425,21 @@ static void print_standard(Expr* e, int parent_prec) {
                             to_print = t_copy;
                         } else if (f_arg->type == EXPR_REAL && f_arg->data.real < 0) {
                             is_negative = true;
-                            t_copy = expr_copy(arg);
-                            t_copy->data.function.args[0]->data.real = -f_arg->data.real;
+                            t_copy = expr_unshare(expr_copy(arg));
+                            expr_free(t_copy->data.function.args[0]);
+                            t_copy->data.function.args[0] = expr_new_real(-f_arg->data.real);
                             to_print = t_copy;
                         } else if (f_arg->type == EXPR_FUNCTION && f_arg->data.function.head->type == EXPR_SYMBOL && strcmp(f_arg->data.function.head->data.symbol, "Rational") == 0) {
                             Expr* num = f_arg->data.function.args[0];
                             if (num->type == EXPR_INTEGER && num->data.integer < 0) {
                                 is_negative = true;
-                                t_copy = expr_copy(arg);
-                                t_copy->data.function.args[0]->data.function.args[0]->data.integer = -num->data.integer;
+                                t_copy = expr_unshare(expr_copy(arg));
+                                /* Need to mutate the rational nested inside
+                                 * t_copy.args[0]: unshare that level too. */
+                                Expr* rat = expr_unshare(t_copy->data.function.args[0]);
+                                t_copy->data.function.args[0] = rat;
+                                expr_free(rat->data.function.args[0]);
+                                rat->data.function.args[0] = expr_new_integer(-num->data.integer);
                                 to_print = t_copy;
                             }
                         }
@@ -440,8 +447,9 @@ static void print_standard(Expr* e, int parent_prec) {
                         Expr* num = arg->data.function.args[0];
                         if (num->type == EXPR_INTEGER && num->data.integer < 0) {
                             is_negative = true;
-                            t_copy = expr_copy(arg);
-                            t_copy->data.function.args[0]->data.integer = -num->data.integer;
+                            t_copy = expr_unshare(expr_copy(arg));
+                            expr_free(t_copy->data.function.args[0]);
+                            t_copy->data.function.args[0] = expr_new_integer(-num->data.integer);
                             to_print = t_copy;
                         }
                     }
@@ -1096,8 +1104,9 @@ static void print_tex(Expr* e, int parent_prec) {
                     Expr* f0 = arg->data.function.args[0];
                     if (f0->type == EXPR_INTEGER && f0->data.integer < 0) {
                         is_neg = true;
-                        owned = expr_copy(arg);
-                        owned->data.function.args[0]->data.integer = -f0->data.integer;
+                        owned = expr_unshare(expr_copy(arg));
+                        expr_free(owned->data.function.args[0]);
+                        owned->data.function.args[0] = expr_new_integer(-f0->data.integer);
                         if (owned->data.function.args[0]->data.integer == 1 && owned->data.function.arg_count > 1) {
                             Expr** na = malloc(sizeof(Expr*) * (owned->data.function.arg_count - 1));
                             for (size_t k = 1; k < owned->data.function.arg_count; k++) na[k-1] = expr_copy(owned->data.function.args[k]);
@@ -1107,14 +1116,15 @@ static void print_tex(Expr* e, int parent_prec) {
                         to_print = owned;
                     } else if (f0->type == EXPR_REAL && f0->data.real < 0.0) {
                         is_neg = true;
-                        owned = expr_copy(arg);
-                        owned->data.function.args[0]->data.real = -f0->data.real;
+                        owned = expr_unshare(expr_copy(arg));
+                        expr_free(owned->data.function.args[0]);
+                        owned->data.function.args[0] = expr_new_real(-f0->data.real);
                         to_print = owned;
                     } else {
                         int64_t rn, rd;
                         if (is_rational(f0, &rn, &rd) && rn < 0) {
                             is_neg = true;
-                            owned = expr_copy(arg);
+                            owned = expr_unshare(expr_copy(arg));
                             Expr* new_rat = make_rational(-rn, rd);
                             expr_free(owned->data.function.args[0]);
                             owned->data.function.args[0] = new_rat;

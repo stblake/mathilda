@@ -3,35 +3,52 @@
 #endif
 #include "expr.h"
 #include "arithmetic.h"
+#include "sym_intern.h"
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
 #include <string.h>
 
-// Create/allocate a new integer expression. 
+// Create/allocate a new integer expression.
 Expr* expr_new_integer(int64_t value) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
     e->type = EXPR_INTEGER;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
     e->data.integer = value;
     return e;
 }
 
-// Create/allocate a new real (double) expression. 
+// Create/allocate a new real (double) expression.
 Expr* expr_new_real(double value) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
     e->type = EXPR_REAL;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
     e->data.real = value;
     return e;
 }
 
-// Create/allocate a new symbol expression. 
+// Create/allocate a new symbol expression.
+//
+// The symbol name is funneled through the global interner so that two
+// symbols with the same name share the same `const char*`. This makes:
+//   - expr_eq() on symbols a pointer compare,
+//   - expr_copy() of a symbol a pointer copy,
+//   - expr_free() of a symbol a no-op for the name field.
+//
+// The cast to `char*` is intentional: `data.symbol` retains its existing
+// type for ABI stability, but the memory is owned by the interner and
+// must never be freed by Expr code.
 Expr* expr_new_symbol(const char* name) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
     e->type = EXPR_SYMBOL;
-    e->data.symbol = strdup(name);
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.symbol = (char*)intern_symbol(name);
     if (!e->data.symbol) {
         free(e);
         return NULL;
@@ -39,12 +56,14 @@ Expr* expr_new_symbol(const char* name) {
     return e;
 }
 
-// Create/allocate a new string expression. 
+// Create/allocate a new string expression.
 Expr* expr_new_string(const char* str) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
-    
+
     e->type = EXPR_STRING;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
     e->data.string = strdup(str);
     if (!e->data.string) {
         free(e);
@@ -57,9 +76,11 @@ Expr* expr_new_string(const char* str) {
 Expr* expr_new_function(Expr* head, Expr** args, size_t arg_count) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
-    
+
     e->type = EXPR_FUNCTION;
-    e->data.function.head = head;  
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.function.head = head;
     if (arg_count > 0) {
         e->data.function.args = calloc(arg_count, sizeof(Expr*));
         if (!e->data.function.args) {
@@ -79,6 +100,8 @@ Expr* expr_new_bigint_from_mpz(const mpz_t val) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
     e->type = EXPR_BIGINT;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
     mpz_init_set(e->data.bigint, val);
     return e;
 }
@@ -87,6 +110,8 @@ Expr* expr_new_bigint_from_int64(int64_t val) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
     e->type = EXPR_BIGINT;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
     mpz_init_set_si(e->data.bigint, val);
     return e;
 }
@@ -95,6 +120,8 @@ Expr* expr_new_bigint_from_str(const char* str) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
     e->type = EXPR_BIGINT;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
     if (mpz_init_set_str(e->data.bigint, str, 10) == -1) {
         mpz_clear(e->data.bigint);
         free(e);
@@ -111,6 +138,8 @@ Expr* expr_new_mpfr_bits(mpfr_prec_t bits) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) return NULL;
     e->type = EXPR_MPFR;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
     mpfr_init2(e->data.mpfr, bits);
     mpfr_set_zero(e->data.mpfr, +1);
     return e;
@@ -144,6 +173,8 @@ Expr* expr_new_mpfr_move(mpfr_t src) {
     Expr* e = malloc(sizeof(Expr));
     if (!e) { mpfr_clear(src); return NULL; }
     e->type = EXPR_MPFR;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
     /* mpfr_t is an array-type alias for __mpfr_struct[1]; `memcpy` moves
      * the header — MPFR's documentation (mpfr_swap, GMP's mpz semantics)
      * sanctions this as long as the source is then treated as uninit. */
@@ -198,21 +229,108 @@ Expr* expr_bigint_normalize(Expr* e) {
     if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
         long val = mpz_get_si(e->data.bigint);
         Expr* result = expr_new_integer((int64_t)val);
-        mpz_clear(e->data.bigint);
-        free(e);
+        /* Refcount-safe: dec-ref the BigInt; if shared, the original
+         * stays alive for other holders (each will normalize on their
+         * own); if unique (refcount==1, the common case), expr_free
+         * physically clears the mpz_t and frees the node. */
+        expr_free(e);
         return result;
     }
     return e;
 }
 
-// Deallocate an expression.
+/* Inc-ref. NULL passes through. */
+Expr* expr_ref(Expr* e) {
+    if (e) e->refcount++;
+    return e;
+}
+
+/* M3 phase-2 copy-on-write helper. See header doc. */
+Expr* expr_unshare(Expr* e) {
+    if (!e) return NULL;
+    if (e->refcount == 1) return e;
+
+    /* Build a one-level private copy. Children stay shared (inc-ref). */
+    Expr* fresh = malloc(sizeof(Expr));
+    if (!fresh) return e;  /* OOM: fall back to (still-shared) original */
+    fresh->type = e->type;
+    fresh->refcount = 1;
+    /* Reset the eval timestamp on unshare. The caller is preparing to
+     * mutate this node; even if they do not, treating the node as
+     * "never evaluated" only costs one extra evaluation, whereas
+     * inheriting the timestamp risks a false cache hit on a node that
+     * the caller subsequently rewrites. */
+    fresh->last_evaluated_at = 0;
+
+    switch (e->type) {
+        case EXPR_INTEGER:
+            fresh->data.integer = e->data.integer;
+            break;
+        case EXPR_REAL:
+            fresh->data.real = e->data.real;
+            break;
+        case EXPR_SYMBOL:
+            fresh->data.symbol = e->data.symbol;  /* interned */
+            break;
+        case EXPR_STRING:
+            fresh->data.string = e->data.string ? strdup(e->data.string) : NULL;
+            break;
+        case EXPR_BIGINT:
+            mpz_init(fresh->data.bigint);
+            mpz_set(fresh->data.bigint, e->data.bigint);
+            break;
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+            mpfr_init2(fresh->data.mpfr, mpfr_get_prec(e->data.mpfr));
+            mpfr_set(fresh->data.mpfr, e->data.mpfr, MPFR_RNDN);
+            break;
+#endif
+        case EXPR_FUNCTION:
+            fresh->data.function.head = expr_copy(e->data.function.head);
+            fresh->data.function.arg_count = e->data.function.arg_count;
+            if (e->data.function.arg_count > 0) {
+                fresh->data.function.args = malloc(sizeof(Expr*) * e->data.function.arg_count);
+                if (!fresh->data.function.args) {
+                    if (fresh->data.function.head) expr_free(fresh->data.function.head);
+                    free(fresh);
+                    return e;
+                }
+                for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                    fresh->data.function.args[i] = expr_copy(e->data.function.args[i]);
+                }
+            } else {
+                fresh->data.function.args = NULL;
+            }
+            break;
+        default:
+            break;
+    }
+
+    /* Drop the caller's ref on the original. */
+    expr_free(e);
+    return fresh;
+}
+
+// Deallocate an expression. Decrements the refcount; only physically
+// destroys the node (and its children, for FUNCTION) when refcount
+// drops to 0. Atoms are eligible to have refcount > 1 starting in M3
+// (see expr_copy). FUNCTION nodes always have refcount == 1 today
+// because expr_copy still deep-copies them.
 void expr_free(Expr* e) {
     if (!e) return;
+    if (e->refcount > 1) {
+        e->refcount--;
+        return;
+    }
+    /* refcount == 1 (or, defensively, 0 — should not happen, but treat
+     * as last reference). Physically free. */
 
     switch (e->type) {
         case EXPR_SYMBOL:
+            /* data.symbol is interned (owned by sym_intern); never free. */
+            break;
         case EXPR_STRING:
-            if (e->data.symbol) free(e->data.symbol);
+            if (e->data.string) free(e->data.string);
             break;
         case EXPR_FUNCTION:
             if (e->data.function.head) expr_free(e->data.function.head);
@@ -239,54 +357,21 @@ void expr_free(Expr* e) {
 
 
 
-// Create a copy of an expression in memory. 
+// Logically copy an expression. M3 phase-2: every node type, INCLUDING
+// FUNCTION, is shared via inc-ref. Mutating helpers must call
+// expr_unshare() to obtain a private (refcount==1) version before
+// rewriting fields in place. The audit (commit notes) verified that
+// the only sites that mutated a possibly-shared FUNCTION node lived
+// in print.c; those now wrap their expr_copy() in expr_unshare().
+// Other mutators (eval_flatten_args, flatten_sequences, builtin_plus
+// numeric-contagion args[i] writes, parse.c arg appending, match.c
+// sequence-binding writes, core.c QuotientRemainder zeroing, etc.)
+// all act on freshly-constructed FUNCTION nodes whose refcount is
+// guaranteed to be 1 at the point of mutation.
 Expr* expr_copy(Expr* e) {
     if (!e) return NULL;
-    
-    Expr* copy = malloc(sizeof(Expr));
-    if (!copy) return NULL;
-    
-    memcpy(copy, e, sizeof(Expr));
-    
-    switch (e->type) {
-        case EXPR_SYMBOL:
-        case EXPR_STRING:
-            copy->data.symbol = strdup(e->data.symbol);
-            if (!copy->data.symbol) {
-                free(copy);
-                return NULL;
-            }
-            break;
-        case EXPR_FUNCTION:
-            copy->data.function.head = expr_copy(e->data.function.head);
-            if (e->data.function.arg_count > 0) {
-                copy->data.function.args = malloc(sizeof(Expr*) * e->data.function.arg_count);
-                if (!copy->data.function.args) {
-                    expr_free(copy->data.function.head);
-                    free(copy);
-                    return NULL;
-                }
-                for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                    copy->data.function.args[i] = expr_copy(e->data.function.args[i]);
-                }
-            } else {
-                copy->data.function.args = NULL;
-            }
-            break;
-        case EXPR_BIGINT:
-            mpz_init_set(copy->data.bigint, e->data.bigint);
-            break;
-#ifdef USE_MPFR
-        case EXPR_MPFR:
-            mpfr_init2(copy->data.mpfr, mpfr_get_prec(e->data.mpfr));
-            mpfr_set(copy->data.mpfr, e->data.mpfr, MPFR_RNDN);
-            break;
-#endif
-        default:
-            break;
-    }
-
-    return copy;
+    e->refcount++;
+    return e;
 }
 
 bool expr_eq(const Expr* a, const Expr* b) {
@@ -314,7 +399,8 @@ bool expr_eq(const Expr* a, const Expr* b) {
             if (isnan(a->data.real) && isnan(b->data.real)) return true;
             return a->data.real == b->data.real;
         case EXPR_SYMBOL:
-            return strcmp(a->data.symbol, b->data.symbol) == 0;
+            /* Interned: same name guarantees same pointer. */
+            return a->data.symbol == b->data.symbol;
         case EXPR_STRING:
             return strcmp(a->data.string, b->data.string) == 0;
         case EXPR_FUNCTION: {
@@ -468,6 +554,10 @@ int expr_compare(const Expr* a, const Expr* b) {
         case 2: // String
             return string_compare_canonical(a->data.string, b->data.string);
         case 3: // Symbol
+            /* Interned: identical names share a pointer. Short-circuit
+             * the strcmp on identity; otherwise fall back to lexicographic
+             * order, which is what canonical sorting expects. */
+            if (a->data.symbol == b->data.symbol) return 0;
             return strcmp(a->data.symbol, b->data.symbol);
         case 4: { // General Function
             Expr* ha = a->data.function.head;

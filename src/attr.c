@@ -1,5 +1,6 @@
 #include "attr.h"
 #include "symtab.h"
+#include "eval.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -151,7 +152,14 @@ void set_attributes(const char* symbol_name, uint32_t attrs) {
     if (def) {
         // If the symbol is Locked, we cannot change its attributes
         if (def->attributes & ATTR_LOCKED) return;
-        def->attributes = attrs;
+        if (def->attributes != attrs) {
+            def->attributes = attrs;
+            /* Attribute changes (Hold*, Listable, Flat, Orderless,
+             * NumericFunction, Protected, OneIdentity, ...) all change
+             * how the evaluator handles a head, so a cached evaluation
+             * could be stale. Bump the global eval clock to invalidate. */
+            eval_clock_bump();
+        }
     }
 }
 
@@ -181,8 +189,10 @@ static void remove_single_attribute(SymbolDef* def, Expr* attr_expr) {
 
     if (attr_name) {
         uint32_t bit = string_to_attribute(attr_name);
-        if (bit != ATTR_NONE) {
+        if (bit != ATTR_NONE && (def->attributes & bit)) {
             def->attributes &= ~bit;
+            /* Real attribute change -- invalidate cached evaluations. */
+            eval_clock_bump();
         }
     }
 }
@@ -191,11 +201,13 @@ static void add_single_attribute(SymbolDef* def, Expr* attr_expr) {
     const char* attr_name = NULL;
     if (attr_expr->type == EXPR_SYMBOL) attr_name = attr_expr->data.symbol;
     else if (attr_expr->type == EXPR_STRING) attr_name = attr_expr->data.string;
-    
+
     if (attr_name) {
         uint32_t bit = string_to_attribute(attr_name);
-        if (bit != ATTR_NONE) {
+        if (bit != ATTR_NONE && !(def->attributes & bit)) {
             def->attributes |= bit;
+            /* Real attribute change -- invalidate cached evaluations. */
+            eval_clock_bump();
         }
     }
 }

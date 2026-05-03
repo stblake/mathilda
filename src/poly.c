@@ -1211,7 +1211,8 @@ Expr* builtin_polynomialgcd(Expr* res) {
                 if (is_number(bps[i].data[j].base)) {
                     Expr* next = internal_times((Expr*[]){num_i, expr_copy(bps[i].data[j].base)}, 2);
                     num_i = next;
-                    bps[i].data[j].exp->data.integer = 0;
+                    expr_free(bps[i].data[j].exp);
+                    bps[i].data[j].exp = expr_new_integer(0);
                 }
             }
         }
@@ -1258,29 +1259,31 @@ Expr* builtin_polynomialgcd(Expr* res) {
             for (size_t k = 0; k < count; k++) {
                 for (size_t j = 0; j < bps[k].count; j++) {
                     if (expr_eq(bps[k].data[j].base, base)) {
-                        bps[k].data[j].exp->data.integer -= min_exp;
+                        int64_t v = bps[k].data[j].exp->data.integer - min_exp;
+                        expr_free(bps[k].data[j].exp);
+                        bps[k].data[j].exp = expr_new_integer(v);
                         break;
                     }
                 }
             }
         }
     }
-    
+
     Expr** rems = malloc(sizeof(Expr*) * count);
     for (size_t i = 0; i < count; i++) {
         rems[i] = rebuild_from_bp(&bps[i]);
         bp_free(&bps[i]);
     }
     free(bps);
-    
+
     size_t v_count = 0, v_cap = 16;
     Expr** vars = malloc(sizeof(Expr*) * v_cap);
     for (size_t i = 0; i < count; i++) {
         collect_variables(rems[i], &vars, &v_count, &v_cap);
     }
     if (v_count > 0) qsort(vars, v_count, sizeof(Expr*), compare_expr_ptrs);
-    
-    
+
+
     // Check if arguments are polynomials
     bool all_poly = true;
     for (size_t i = 0; i < count; i++) {
@@ -1383,7 +1386,8 @@ Expr* builtin_polynomiallcm(Expr* res) {
                 if (is_number(bps[i].data[j].base)) {
                     Expr* next = internal_times((Expr*[]){num_i, expr_copy(bps[i].data[j].base)}, 2);
                     num_i = next;
-                    bps[i].data[j].exp->data.integer = 0;
+                    expr_free(bps[i].data[j].exp);
+                    bps[i].data[j].exp = expr_new_integer(0);
                 }
             }
         }
@@ -1432,14 +1436,16 @@ Expr* builtin_polynomiallcm(Expr* res) {
             for (size_t k = 0; k < count; k++) {
                 for (size_t j = 0; j < bps[k].count; j++) {
                     if (expr_eq(bps[k].data[j].base, base)) {
-                        bps[k].data[j].exp->data.integer -= min_exp;
+                        int64_t v = bps[k].data[j].exp->data.integer - min_exp;
+                        expr_free(bps[k].data[j].exp);
+                        bps[k].data[j].exp = expr_new_integer(v);
                         break;
                     }
                 }
             }
         }
     }
-    
+
     // Handle denominators (negative exponents)
     Expr** den_bases = malloc(sizeof(Expr*) * 1024);
     size_t den_bases_count = 0;
@@ -1486,13 +1492,14 @@ Expr* builtin_polynomiallcm(Expr* res) {
         for (size_t k = 0; k < count; k++) {
             for (size_t j = 0; j < bps[k].count; j++) {
                 if (expr_eq(bps[k].data[j].base, base)) {
-                    bps[k].data[j].exp->data.integer = 0; 
+                    expr_free(bps[k].data[j].exp);
+                    bps[k].data[j].exp = expr_new_integer(0);
                     break;
                 }
             }
         }
     }
-    
+
     for (size_t i = 0; i < den_bases_count; i++) expr_free(den_bases[i]);
     free(den_bases);
 

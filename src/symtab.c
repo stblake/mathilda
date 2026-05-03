@@ -4,6 +4,7 @@
 #include "symtab.h"
 #include "match.h"
 #include "print.h"
+#include "sym_intern.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -26,38 +27,44 @@ void symtab_init(void) {
     memset(symtab, 0, sizeof(symtab));
 }
 
+/* Both lookup helpers below first intern the input name, then key on
+ * the canonical pointer. This collapses the per-bucket strcmp into a
+ * pointer compare and is correct because the bucket entries' symbol_name
+ * fields are themselves interned at creation time. */
 SymbolDef* symtab_get_def(const char* symbol_name) {
-    unsigned int idx = hash(symbol_name);
+    const char* canon = intern_symbol(symbol_name);
+    unsigned int idx = hash(canon);
     SymEntry* entry = symtab[idx];
     while (entry) {
-        if (strcmp(entry->def->symbol_name, symbol_name) == 0) {
+        if (entry->def->symbol_name == canon) {
             return entry->def;
         }
         entry = entry->next;
     }
-    
+
     // Create new symbol definition
     SymbolDef* def = malloc(sizeof(SymbolDef));
-    def->symbol_name = strdup(symbol_name);
+    def->symbol_name = (char*)canon;  /* interned; symtab does not own the storage */
     def->own_values = NULL;
     def->down_values = NULL;
     def->builtin_func = NULL;
     def->attributes = 0;
     def->docstring = NULL;
-    
+
     SymEntry* new_entry = malloc(sizeof(SymEntry));
     new_entry->def = def;
     new_entry->next = symtab[idx];
     symtab[idx] = new_entry;
-    
+
     return def;
 }
 
 SymbolDef* symtab_lookup(const char* symbol_name) {
-    unsigned int idx = hash(symbol_name);
+    const char* canon = intern_symbol(symbol_name);
+    unsigned int idx = hash(canon);
     SymEntry* entry = symtab[idx];
     while (entry) {
-        if (strcmp(entry->def->symbol_name, symbol_name) == 0) {
+        if (entry->def->symbol_name == canon) {
             return entry->def;
         }
         entry = entry->next;
@@ -81,56 +88,271 @@ const char* symtab_get_docstring(const char* symbol_name) {
     return def->docstring;
 }
 
-static bool has_patterns(Expr* e) {
-    if (!e) return false;
-    if (e->type == EXPR_SYMBOL) {
-        return strcmp(e->data.symbol, "Blank") == 0 ||
-               strcmp(e->data.symbol, "BlankSequence") == 0 ||
-               strcmp(e->data.symbol, "BlankNullSequence") == 0;
+/* ============================================================
+ * §3.5/§3.6: dispatch-key extraction and specificity scoring.
+ *
+ * These run once per rule at insertion time. The output is a cheap
+ * pre-computed key (dispatch_arity, first_arg_head_canon) and an
+ * integer specificity score that lets apply_down_values short-circuit
+ * unmatchable rules and the rule list stay sorted "most specific first."
+ * ============================================================ */
+
+/* Strip transparent pattern wrappers down to the inner pattern.
+ * HoldPattern / Verbatim are transparent for matching, so the dispatch
+ * key should look through them. */
+static const Expr* strip_pattern_wrappers(const Expr* p) {
+    while (p && p->type == EXPR_FUNCTION && p->data.function.head &&
+           p->data.function.head->type == EXPR_SYMBOL &&
+           p->data.function.arg_count >= 1) {
+        const char* h = p->data.function.head->data.symbol;
+        if (strcmp(h, "HoldPattern") == 0 || strcmp(h, "Verbatim") == 0) {
+            p = p->data.function.args[0];
+            continue;
+        }
+        break;
     }
-    if (e->type != EXPR_FUNCTION) return false;
-    if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
-        if (strcmp(h, "Pattern") == 0 || strcmp(h, "Blank") == 0 || 
-            strcmp(h, "BlankSequence") == 0 || strcmp(h, "BlankNullSequence") == 0) return true;
+    return p;
+}
+
+/* True when `p`, considered as a top-level argument slot in a DownValue
+ * pattern, can absorb a variable number of input arguments. Patterns
+ * that satisfy this force dispatch_arity = -1. */
+static bool slot_is_variable_length(const Expr* p) {
+    p = strip_pattern_wrappers(p);
+    if (!p) return false;
+    if (p->type != EXPR_FUNCTION || !p->data.function.head ||
+        p->data.function.head->type != EXPR_SYMBOL) {
+        return false;
     }
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        if (has_patterns(e->data.function.args[i])) return true;
+    const char* h = p->data.function.head->data.symbol;
+    if (strcmp(h, "BlankSequence") == 0) return true;
+    if (strcmp(h, "BlankNullSequence") == 0) return true;
+    if (strcmp(h, "Optional") == 0) return true;
+    if (strcmp(h, "Repeated") == 0) return true;
+    if (strcmp(h, "RepeatedNull") == 0) return true;
+    if (strcmp(h, "OptionsPattern") == 0) return true;
+    /* Pattern[x, q] is variable iff q is. */
+    if (strcmp(h, "Pattern") == 0 && p->data.function.arg_count == 2) {
+        return slot_is_variable_length(p->data.function.args[1]);
     }
     return false;
 }
 
+/* Extract the canonical head symbol that any concrete value matching
+ * this pattern slot must have. Returns NULL when the slot is wildcard
+ * with respect to head (Blank[], _, anything sequence-like, or anything
+ * we are not willing to specialize on). */
+static const char* pattern_arg_head_canon(const Expr* p) {
+    p = strip_pattern_wrappers(p);
+    if (!p) return NULL;
+
+    /* Atoms in patterns match themselves -- their head equals the head
+     * of the corresponding atomic input value. */
+    if (p->type == EXPR_INTEGER || p->type == EXPR_BIGINT) {
+        return intern_symbol("Integer");
+    }
+    if (p->type == EXPR_REAL) return intern_symbol("Real");
+    if (p->type == EXPR_STRING) return intern_symbol("String");
+    if (p->type == EXPR_SYMBOL) {
+        /* Bare symbol used as a literal (e.g. f[True, x_]). Head is
+         * "Symbol" -- the filter will only reject inputs whose first arg
+         * is not a symbol (e.g. an integer or a function call). */
+        return intern_symbol("Symbol");
+    }
+    if (p->type != EXPR_FUNCTION) return NULL;
+
+    Expr* head = p->data.function.head;
+    if (!head || head->type != EXPR_SYMBOL) return NULL;
+    const char* h = head->data.symbol;
+
+    /* Blank[] -> wildcard; Blank[h] -> h. */
+    if (strcmp(h, "Blank") == 0) {
+        if (p->data.function.arg_count == 0) return NULL;
+        Expr* head_arg = p->data.function.args[0];
+        if (head_arg && head_arg->type == EXPR_SYMBOL) {
+            return intern_symbol(head_arg->data.symbol);
+        }
+        return NULL;
+    }
+    /* Pattern[x, q] -> use q's head. */
+    if (strcmp(h, "Pattern") == 0 && p->data.function.arg_count == 2) {
+        return pattern_arg_head_canon(p->data.function.args[1]);
+    }
+    /* Sequence-like or optional patterns are wildcards w.r.t. head. */
+    if (strcmp(h, "BlankSequence") == 0 || strcmp(h, "BlankNullSequence") == 0 ||
+        strcmp(h, "Optional") == 0 || strcmp(h, "Repeated") == 0 ||
+        strcmp(h, "RepeatedNull") == 0 || strcmp(h, "OptionsPattern") == 0) {
+        /* For typed BlankSequence[h] etc., picking up h would still be
+         * unsafe because the matcher binds whole sequences. Stay safe. */
+        return NULL;
+    }
+    /* Condition[p, c] / PatternTest[p, t] are transparent for head. */
+    if ((strcmp(h, "Condition") == 0 || strcmp(h, "PatternTest") == 0) &&
+        p->data.function.arg_count >= 1) {
+        return pattern_arg_head_canon(p->data.function.args[0]);
+    }
+    /* Alternatives[a, b, ...] -- only safe to specialize when every
+     * branch agrees on a head. */
+    if (strcmp(h, "Alternatives") == 0) {
+        const char* acc = NULL;
+        for (size_t i = 0; i < p->data.function.arg_count; i++) {
+            const char* hi = pattern_arg_head_canon(p->data.function.args[i]);
+            if (!hi) return NULL;          /* one branch is wildcard */
+            if (acc && acc != hi) return NULL; /* branches disagree */
+            acc = hi;
+        }
+        return acc;
+    }
+    /* Plain function call in a pattern -- head must match. */
+    return intern_symbol(h);
+}
+
+/* §3.5 dispatch_arity: count of top-level arg slots, or -1 when any
+ * slot is variable-length. Pattern is the WHOLE LHS, e.g. f[a, b]; we
+ * inspect the top-level function's args. */
+static int32_t pattern_dispatch_arity(const Expr* pattern) {
+    pattern = strip_pattern_wrappers(pattern);
+    if (!pattern || pattern->type != EXPR_FUNCTION) return -1;
+    size_t n = pattern->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        if (slot_is_variable_length(pattern->data.function.args[i])) return -1;
+    }
+    return (int32_t)n;
+}
+
+/* §3.5 first_arg_head_canon: NULL when arity is variable (a leading
+ * sequence pattern would absorb the first arg) OR the first slot is
+ * wildcard. */
+static const char* pattern_first_arg_head(const Expr* pattern) {
+    pattern = strip_pattern_wrappers(pattern);
+    if (!pattern || pattern->type != EXPR_FUNCTION) return NULL;
+    if (pattern->data.function.arg_count == 0) return NULL;
+    /* If any slot at or before the first is variable-length, the "first
+     * arg" of the input might end up bound to the sequence. Be safe. */
+    if (slot_is_variable_length(pattern->data.function.args[0])) return NULL;
+    return pattern_arg_head_canon(pattern->data.function.args[0]);
+}
+
+/* §3.6 specificity score. Computed recursively over the pattern tree.
+ *
+ *   literal atoms                  : +100 (most discriminating)
+ *   typed Blank[h]                 :  +20
+ *   plain Blank[]                  :  -10
+ *   BlankSequence[]                : -100
+ *   BlankNullSequence[]            : -200
+ *   Optional[...]                  :  -50
+ *   Repeated[p]                    : score(p) - 50
+ *   RepeatedNull[p]                : score(p) - 100
+ *   Condition / PatternTest        : score(inner) + 10 (extra constraint)
+ *   HoldPattern / Verbatim         : score(inner) (transparent)
+ *   Alternatives[a, b, ...]        : min(score(a_i)) (weakest branch wins)
+ *   plain function call f[a, b...] :  +50 + sum(score(arg_i))
+ *   Pattern[name, q]               : score(q) (named binding adds nothing)
+ *
+ * Scores are added across siblings, so a 3-arg literal call beats a
+ * 2-arg literal call. Insertion order is used as the tie-break, so two
+ * structurally-similar pattern rules keep the user's chosen ordering. */
+static int32_t pattern_specificity(const Expr* p) {
+    if (!p) return 0;
+    if (p->type == EXPR_INTEGER || p->type == EXPR_BIGINT ||
+        p->type == EXPR_REAL || p->type == EXPR_STRING) {
+        return 100;
+    }
+    if (p->type == EXPR_SYMBOL) {
+        return 100;
+    }
+    if (p->type != EXPR_FUNCTION) return 0;
+
+    Expr* head = p->data.function.head;
+    if (head && head->type == EXPR_SYMBOL) {
+        const char* h = head->data.symbol;
+        size_t ac = p->data.function.arg_count;
+
+        if (strcmp(h, "HoldPattern") == 0 || strcmp(h, "Verbatim") == 0) {
+            return ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0;
+        }
+        if (strcmp(h, "Pattern") == 0) {
+            /* Pattern[name, q] -- the name is irrelevant for matching power. */
+            return ac >= 2 ? pattern_specificity(p->data.function.args[1]) : 0;
+        }
+        if (strcmp(h, "Blank") == 0) {
+            if (ac == 0) return -10;
+            return 20; /* typed blank */
+        }
+        if (strcmp(h, "BlankSequence") == 0) return -100;
+        if (strcmp(h, "BlankNullSequence") == 0) return -200;
+        if (strcmp(h, "Optional") == 0) return -50;
+        if (strcmp(h, "Repeated") == 0) {
+            return (ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0) - 50;
+        }
+        if (strcmp(h, "RepeatedNull") == 0) {
+            return (ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0) - 100;
+        }
+        if (strcmp(h, "Condition") == 0 || strcmp(h, "PatternTest") == 0) {
+            return (ac >= 1 ? pattern_specificity(p->data.function.args[0]) : 0) + 10;
+        }
+        if (strcmp(h, "Alternatives") == 0) {
+            if (ac == 0) return 0;
+            int32_t best = pattern_specificity(p->data.function.args[0]);
+            for (size_t i = 1; i < ac; i++) {
+                int32_t s = pattern_specificity(p->data.function.args[i]);
+                if (s < best) best = s; /* weakest branch wins */
+            }
+            return best;
+        }
+        if (strcmp(h, "OptionsPattern") == 0) return -150;
+    }
+
+    /* Plain function call: literal head + sum of children. */
+    int32_t score = 50;
+    if (head) score += pattern_specificity(head);
+    for (size_t i = 0; i < p->data.function.arg_count; i++) {
+        score += pattern_specificity(p->data.function.args[i]);
+    }
+    return score;
+}
+
 // Helper to add a rule to a list
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
+    /* Any change to an OwnValue/DownValue list could change the meaning
+     * of any expression that touches this symbol, so bump the global
+     * eval clock. This invalidates every cached evaluation in one shot
+     * (conservative variant of EVAL_IMPROVEMENTS_PLAN §3.3). */
+    eval_clock_bump();
+
     // Check if rule with same pattern already exists
-    Rule* curr = *list;
-    Rule* prev = NULL;
-    while (curr) {
+    for (Rule* curr = *list; curr; curr = curr->next) {
         if (expr_eq(curr->pattern, pattern)) {
-            // Replace replacement
+            // Replace replacement in place; sort key is unchanged.
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
             return;
         }
-        prev = curr;
-        curr = curr->next;
     }
 
     Rule* new_rule = malloc(sizeof(Rule));
     new_rule->pattern = expr_copy(pattern);
     new_rule->replacement = expr_copy(replacement);
+    new_rule->dispatch_arity = pattern_dispatch_arity(pattern);
+    new_rule->first_arg_head_canon =
+        (new_rule->dispatch_arity == -1) ? NULL : pattern_first_arg_head(pattern);
+    new_rule->specificity = pattern_specificity(pattern);
+    new_rule->next = NULL;
 
-    // Heuristic: specific rules (no patterns) go to the front
-    if (!has_patterns(pattern)) {
-        new_rule->next = *list;
-        *list = new_rule;
+    /* §3.6 stable insertion: walk until we find a rule with strictly
+     * lower specificity, then insert before it. Equal-specificity rules
+     * keep insertion order (earlier additions stay earlier). */
+    Rule* prev = NULL;
+    Rule* curr = *list;
+    while (curr && curr->specificity >= new_rule->specificity) {
+        prev = curr;
+        curr = curr->next;
+    }
+    new_rule->next = curr;
+    if (prev) {
+        prev->next = new_rule;
     } else {
-        new_rule->next = NULL;
-        if (prev == NULL) {
-            *list = new_rule;
-        } else {
-            prev->next = new_rule;
-        }
+        *list = new_rule;
     }
 }
 void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacement) {
@@ -144,6 +366,10 @@ void symtab_add_down_value(const char* symbol_name, Expr* pattern, Expr* replace
 }
 
 void symtab_clear_symbol(const char* symbol_name) {
+    /* Removing rules invalidates cached evaluations that might have
+     * relied on them; bump the eval clock unconditionally. */
+    eval_clock_bump();
+
     SymbolDef* def = symtab_get_def(symbol_name);
     Rule* curr = def->own_values;
     while (curr) {
@@ -194,7 +420,7 @@ void symtab_clear(void) {
             entry->def->down_values = NULL;
 
             if (entry->def->docstring) free(entry->def->docstring);
-            free(entry->def->symbol_name);
+            /* symbol_name is interned and owned by sym_intern; do not free. */
             free(entry->def);
             free(entry);
             entry = next;
@@ -205,10 +431,11 @@ void symtab_clear(void) {
 
 
 Rule* symtab_get_own_values(const char* symbol_name) {
-    unsigned int idx = hash(symbol_name);
+    const char* canon = intern_symbol(symbol_name);
+    unsigned int idx = hash(canon);
     SymEntry* entry = symtab[idx];
     while (entry) {
-        if (strcmp(entry->def->symbol_name, symbol_name) == 0) {
+        if (entry->def->symbol_name == canon) {
             return entry->def->own_values;
         }
         entry = entry->next;
@@ -217,10 +444,11 @@ Rule* symtab_get_own_values(const char* symbol_name) {
 }
 
 Rule* symtab_get_down_values(const char* symbol_name) {
-    unsigned int idx = hash(symbol_name);
+    const char* canon = intern_symbol(symbol_name);
+    unsigned int idx = hash(canon);
     SymEntry* entry = symtab[idx];
     while (entry) {
-        if (strcmp(entry->def->symbol_name, symbol_name) == 0) {
+        if (entry->def->symbol_name == canon) {
             return entry->def->down_values;
         }
         entry = entry->next;
@@ -228,15 +456,61 @@ Rule* symtab_get_down_values(const char* symbol_name) {
     return NULL;
 }
 
+/* §3.5 input-side dispatch key. Returns the canonical head of an
+ * input-call's first argument, or NULL when we can't safely
+ * specialize on it. The classification mirrors pattern_arg_head_canon
+ * so a head set on a rule's pattern will line up with the head we
+ * compute here for an input expression. */
+static const char* input_arg_head_canon(const Expr* arg) {
+    if (!arg) return NULL;
+    if (arg->type == EXPR_INTEGER || arg->type == EXPR_BIGINT) {
+        return intern_symbol("Integer");
+    }
+    if (arg->type == EXPR_REAL) return intern_symbol("Real");
+    if (arg->type == EXPR_STRING) return intern_symbol("String");
+    if (arg->type == EXPR_SYMBOL) return intern_symbol("Symbol");
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head &&
+        arg->data.function.head->type == EXPR_SYMBOL) {
+        return intern_symbol(arg->data.function.head->data.symbol);
+    }
+    return NULL;
+}
+
 Expr* apply_down_values(Expr* expr) {
     if (!expr || expr->type != EXPR_FUNCTION) return NULL;
-    
+
     Expr* head = expr->data.function.head;
     if (head->type != EXPR_SYMBOL) return NULL;
-    
+
     SymbolDef* def = symtab_get_def(head->data.symbol);
-    Rule* rule = def->down_values;
-    while (rule) {
+    if (!def->down_values) return NULL;
+
+    /* §3.5 dispatch filter: pre-compute the input's shape once, then
+     * compare against each rule's cached key before invoking the
+     * (much more expensive) matcher. A NULL key on either side means
+     * "wildcard" -- we always scan in that case. */
+    const int32_t input_arity = (int32_t)expr->data.function.arg_count;
+    const char* input_first_head =
+        (input_arity > 0)
+            ? input_arg_head_canon(expr->data.function.args[0])
+            : NULL;
+
+    for (Rule* rule = def->down_values; rule; rule = rule->next) {
+        /* Arity filter: only skip when both sides committed to a
+         * specific arity that disagrees. A rule with -1 arity (variable)
+         * always passes; an input never has variable arity. */
+        if (rule->dispatch_arity != -1 && rule->dispatch_arity != input_arity) {
+            continue;
+        }
+        /* First-arg head filter: only skip when the rule expects a
+         * specific head and we determined the input's first-arg head and
+         * the two disagree. Pointer compare is sound because both are
+         * interned. */
+        if (rule->first_arg_head_canon && input_first_head &&
+            rule->first_arg_head_canon != input_first_head) {
+            continue;
+        }
+
         MatchEnv* env = env_new();
         if (match(expr, rule->pattern, env)) {
             Expr* result = replace_bindings(rule->replacement, env);
@@ -244,7 +518,6 @@ Expr* apply_down_values(Expr* expr) {
             return result;
         }
         env_free(env);
-        rule = rule->next;
     }
     return NULL;
 }

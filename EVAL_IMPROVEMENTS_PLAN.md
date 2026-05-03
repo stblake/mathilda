@@ -11,6 +11,38 @@ References to Withoff use "[W §X.Y]". Source references use `file:line`.
 
 ## 0. Status
 
+- **M2 — Symbol interning:** ✅ complete (Tier 3 prep, item 3.1).
+  - New `src/sym_intern.{c,h}` provides a global string interner. Every
+    `expr_new_symbol(name)` now stores the canonical `const char*`
+    returned by `intern_symbol`, so two symbols with the same name share
+    the same pointer. Lifetime is program-lifetime; `intern_clear()`
+    is available for shutdown but is not called by the REPL today.
+  - `expr_eq` for `EXPR_SYMBOL` is now a pointer compare. `expr_copy`
+    of a symbol shares the canonical pointer instead of `strdup`-ing.
+    `expr_free` skips the symbol-name field (interner owns it).
+    `expr_compare` short-circuits on pointer equality before falling
+    back to lexicographic `strcmp`.
+  - `symtab_get_def` / `symtab_lookup` / `symtab_get_own_values` /
+    `symtab_get_down_values` now intern their input name first, then
+    do pointer-compare bucket scans instead of `strcmp`. Stored
+    `SymbolDef::symbol_name` is the interned pointer; `symtab_clear`
+    no longer frees it.
+  - New `src/sym_names.{c,h}` exposes cached pointers (`SYM_List`,
+    `SYM_Plus`, ..., `SYM_Composition`) populated once via
+    `sym_names_init()` at the top of `core_init()`. Hot evaluator
+    paths (`has_list_arg`, `apply_listable`, `flatten_sequences`,
+    `evaluate_step`'s held-Evaluate / Set / SetDelayed / Rule /
+    RuleDelayed / Unevaluated / Function / Derivative / Composition /
+    Condition / Part / List checks, plus `assignment_target_symbol`)
+    now compare with `==` against these cached pointers instead of
+    `strcmp` against literals.
+  - `eval_flatten_args` re-interns its `head_name` argument on entry so
+    callers (notably `internal_call_impl`, which passes plain C string
+    literals like `"Plus"`) keep working without per-call-site changes.
+  - All 83 unit tests pass; valgrind shows interner allocations as
+    still-reachable (program-lifetime), with no new definitely-lost
+    leaks.
+
 - **M1 — Correctness alignment:** ✅ complete.
   - 1.1 Flat now runs before Listable — `Plus[Plus[a,{1,2}],3]` threads to
     `{4+a, 5+a}`.
@@ -212,18 +244,22 @@ below for the historical record. All 79 unit tests still pass.
 
 ### Tier 3 — Performance work
 
-**3.1 Symbol interning**
-- Files: `src/expr.{c,h}`, `src/symtab.{c,h}`, plus a sweep over the
-  tree (`grep "data.symbol" src/`).
-- Replace `Expr->data.symbol: char*` with `Expr->data.symbol: SymbolDef*`
-  (or a stable `const char*` returned by an interner). All "is the head
-  named `List`" checks become pointer compares against well-known
-  `SymbolDef*` constants cached at init time.
-- Wins: every `strcmp(head->data.symbol, "List")` (there are dozens in
-  `evaluate_step` alone) becomes a single pointer compare.
-- Risk: high — touches every module. Stage by introducing a `sym_id_t`
-  type alongside the existing string, migrate hot paths, then drop the
-  string field.
+**3.1 Symbol interning** ✅ DONE (M2)
+- Files added: `src/sym_intern.{c,h}`, `src/sym_names.{c,h}`.
+- Files touched: `src/expr.c` (symbol creation/copy/free/eq/compare),
+  `src/symtab.c` (lookups + storage), `src/eval.c` (hot-path
+  comparisons, `eval_flatten_args` defensive intern), `src/core.c`
+  (call `sym_names_init()`), `tests/CMakeLists.txt` (new sources).
+- Implementation: `data.symbol` keeps its `char*` declared type, but
+  the memory is owned by the interner and shared across every Expr
+  with that name. Pattern stages cleanly into Tier 3 follow-ups:
+  later work can convert the field to a typed `sym_id_t` without
+  re-touching every consumer, since equality and identity are now
+  pointer-based throughout.
+- Followups intentionally deferred: a sweep across the remaining
+  ~700 `strcmp(...->data.symbol, "...")` sites in non-hot modules
+  (poly.c, simp.c, etc.) -- they continue to work via interned
+  string contents, and migrating them is mechanical when needed.
 
 **3.2 Reference-counted, immutable expressions** — Withoff [§2.1]
 - Files: `src/expr.{c,h}`, every caller of `expr_copy` / `expr_free`.
@@ -237,56 +273,275 @@ below for the historical record. All 79 unit tests still pass.
   before mutating, or be rewritten to return new nodes. This is the
   largest single change in the document and should be its own milestone.
 
+**Status — Phase 1 (atom sharing) DONE 2026-05-03.** Landed in three
+commits' worth of staged work:
+- *Phase 1.* Added `unsigned refcount` to `Expr`; constructors initialize
+  to 1; `expr_ref(e)` bumps; `expr_free` dec-refs and only physically
+  frees on transition to 0. No semantic change yet (`expr_copy` still
+  deep-copies). Commit-ready intermediate.
+- *Phase 2.* Audited every in-place atom-payload mutation across the
+  tree. Converted nine sites to free-and-replace (`print.c` ×6,
+  `linalg.c` ×2, `simp.c` ×1) plus five in `poly.c` exposed by the test
+  failure on Phase-3 flip (BPList exponent mutation: lines ~1214, 1261,
+  1386, 1435, 1489). Audit script:
+  ```
+  grep -nE "data\.(integer|real)\s*[+\-*/]?="    src/*.c   # → only expr.c constructors
+  grep -nE "->type\s*=\s*EXPR_"                  src/*.c   # → only expr.c
+  grep -nE "mpz_\w+\s*\(\s*\S+->data\.bigint"    src/*.c   # → only expr.c
+  grep -nE "mpfr_\w+\s*\(\s*\S+->data\.mpfr"     src/*.c   # → expr.c + numeric.c (numeric.c writes target a fresh r — safe)
+  ```
+  Function-node mutations (`->data.function.{args,arg_count,head} = …`
+  in `eval.c` `flatten_args`, `core.c`, `parse.c`) are still safe because
+  FUNCTION nodes are NOT yet shared.
+- *Phase 3.* Flipped `expr_copy` to `++refcount; return e` for every
+  non-FUNCTION type. FUNCTION still deep-copies (so a function-node's
+  `args[]` and arg_count remain privately mutable). All 83 unit tests
+  green.
+
+**Status — Phase 2 (FUNCTION-node sharing) DONE 2026-05-03.** Followed the
+Phase-1 staging:
+- Added `Expr* expr_unshare(Expr* e)` (`src/expr.{c,h}`): consumes one
+  ref and returns a refcount==1 logical equivalent. Fast-path for
+  refcount==1 (zero work). Otherwise allocates a one-level private node:
+  args[] / mpz / mpfr / string payload owned by the new node, children
+  inc-ref'd via `expr_copy`. After the call the caller may freely
+  rewrite the returned node's *direct* fields. Deep mutation requires
+  unsharing each level along the path.
+- Audited every `args[i] = …`, `arg_count = …`, `args = …`, `head = …`
+  write outside `expr.c`. The vast majority operate on freshly built
+  FUNCTION nodes (refcount==1 at the point of mutation): `eval.c`
+  flatten_args / flatten_sequences / Unevaluated stripping / qsort,
+  `internal.c` `internal_call_impl`, `core.c` QuotientRemainder
+  arg_count zeroing, `parse.c` argv extension, `match.c` Sequence /
+  Repeated binding writes, `series.c` SeriesData coefficient
+  recursion, `plus.c` and `times.c` numeric-contagion args[i] writes.
+  The only unsafe sites lived in `print.c` (8 sites): the negative-
+  prefix print path did `t_copy = expr_copy(arg); …mutate t_copy.args[0]`,
+  which under sharing would have corrupted the caller's tree. All 8
+  sites now `expr_unshare(expr_copy(arg))`; the nested-Rational case
+  unshares two levels.
+- Flipped `expr_copy` to `++e->refcount; return e` unconditionally for
+  every node type, including FUNCTION.
+- New stress suite `tests/test_expr_sharing.c` (84th binary): refcount
+  inc/dec mechanics, `expr_unshare` semantics on every type, hot-path
+  mutator stability under repetition (Plus/Times contagion, Flat
+  flatten, Orderless qsort, Sequence flatten, QuotientRemainder,
+  print-negative does-not-mutate-input, deep nested rational), pattern
+  binding repeated substitution, polynomial Factor/PolynomialGCD/
+  Simplify/D fixed-point loops, and a deterministic xorshift random
+  share/unshare/mutate/free walk over a 32-tree population for 4000
+  iterations.
+
+**Measured win (Phase 2).** REPL smoke script (Expand + GCD + Factor +
+trig + D + Together + Cases + Map + TrigToExp + Simplify + Quit):
+- Pre-Phase-2: 224,564 allocs / 203,358 frees / 6,660,295 bytes
+- Phase-2:      83,550 allocs /  67,795 frees / 3,118,302 bytes
+- Reduction: −62.8% allocs, −53.2% bytes.
+
+Valgrind on `poly_tests` and on `expr_sharing_tests` reports zero
+invalid-read/write/use-after-free errors. The 28 KB pre-existing
+amplified leaks from Phase-1 are unchanged by Phase-2 (FUNCTION
+sharing did not introduce new lost stacks; those leaks were already
+all on shared atoms).
+
+Next work in this lane is 3.3 / 3.4 (timestamps + eager early-exit) —
+those ride on the now-complete refcount infrastructure.
+
+**Known cost (Phase 1):** valgrind on `poly_tests` shows definitely-lost
+bytes rising from 4,360 (137 blocks) to 28,832 (749 blocks). All the
+extra-leaked stacks are pre-existing imbalanced ownership — paths that
+called `expr_copy` without a matching `expr_free`. Pre-Phase-3 they
+leaked one fresh atom node each (40 B); now they pin the original atom
+alive at refcount > 0. None are new bugs; they are all amplifications
+of pre-existing leaks. Tests pass functionally; a follow-up sweep will
+balance the ownership in `get_coeff_expanded`, `poly_div_rem`,
+`builtin_polynomial{quotient,gcd,extendedgcd}` once we have the time
+budget.
+
 **3.3 Evaluation timestamps / "evaluated" mark** — Withoff [§2.1, §3.1 step 4]
-- Files: `src/expr.{c,h}`, `src/eval.c`, `src/symtab.c`.
-- Maintain a global monotonic counter `eval_clock` incremented whenever
-  *any* symbol is mutated (own/down/up/sub-value added or cleared,
-  attribute changed). Each `Expr` carries `last_evaluated_at` (uint64).
-- In `evaluate_step`, before doing any work, if `e->last_evaluated_at`
-  is greater than or equal to the most recent change of any symbol the
-  expression depends on, return `e` as-is.
-- Conservative variant: a single global counter is checked; bumping any
-  symbol invalidates everyone. Already a huge win because most evaluation
-  cycles do not modify the symbol table at all.
-- Refined variant: per-symbol clocks plus a per-expression "max clock of
-  any referenced symbol" cached on construction.
-- Cuts re-evaluation cost on the second and subsequent iterations of the
-  outer fixed-point loop, and on REPL reuse via `In[n]`/`Out[n]`.
-- Risk: medium-high once cache invalidation is dependency-aware. Start
-  with the global-counter variant.
+✅ DONE 2026-05-03 (conservative single-counter variant).
+- Files touched: `src/expr.{c,h}` (added `uint64_t last_evaluated_at`,
+  initialised to 0 in every constructor, reset to 0 in `expr_unshare`);
+  `src/eval.{c,h}` (declared and defined `eval_clock_get/bump`, added
+  the early-exit check at the top of `evaluate()` and the timestamp
+  stamp on the clean fixed-point exit); `src/symtab.c` (`add_rule`,
+  `symtab_clear_symbol` bump the clock); `src/attr.c` (`set_attributes`,
+  `add_single_attribute`, `remove_single_attribute` bump only on actual
+  state changes).
+- Mechanism: a single 64-bit `g_eval_clock` starts at 1. Every Expr
+  records the clock value at the moment it was last evaluated to a
+  fixed point. `evaluate(e)` checks at entry: if `e->type == EXPR_FUNCTION`
+  and `e->last_evaluated_at == g_eval_clock`, return an inc-ref'd view
+  immediately — the entire outer fixed-point loop and `evaluate_step`
+  body are skipped. Atom paths already short-circuit cheaply inside
+  `evaluate_step`, so the pre-check is restricted to FUNCTION nodes
+  to avoid an extra branch on the common atom path. The stamp is
+  written on the *clean* fixed-point exit only — overflow and
+  iteration-cap paths leave the field untouched so a later evaluator
+  gets a fresh chance to make progress.
+- Cache invalidation: `Set`, `SetDelayed`, `Clear`, `SetAttributes`,
+  `ClearAttributes` all bump the clock through their respective
+  symtab/attr mutators. Pure builtin calls (Sin, Factor, Expand, ...)
+  do NOT bump, so re-evaluating the result of a pure call is now
+  effectively free.
+- Tests: new `tests/test_eval_timestamps.c` (16 tests, the 85th
+  binary): clock starts non-zero and is monotonic; pure-builtin calls
+  do not bump; fresh exprs have zero timestamp; evaluate() stamps the
+  result; re-evaluation under same clock returns the same pointer
+  (refcount-shared); Set/SetDelayed/Clear/SetAttributes invalidate
+  caches; pre-cached subexpressions reused inside a fresh outer call
+  still produce correct end-to-end results; `expr_eq` ignores the
+  timestamp; interleaved Set / re-evaluate produces fresh values; a
+  200-iter random-walk test alternates Set/Clear/Read across three
+  symbols and verifies every read against a shadow state, ensuring
+  no stale cache survives a definition change.
+- All 85 unit-test binaries pass; valgrind on `eval_timestamps_tests`
+  reports zero invalid-read/write/use-after-free errors.
+- Memory cost: 8 bytes per Expr (uint64_t + alignment). On a 32-byte
+  Expr layout this is +25%; in practice the savings from the cache
+  on hot-loop workloads outweigh the per-node overhead.
+- Refined variants left for future work: per-symbol clocks + a
+  per-expression "max clock of any referenced symbol" cached on
+  construction, which would let `f[Sin[Pi/4]]` survive an unrelated
+  `g = ...` assignment without losing its cached value. The conservative
+  variant is the natural first step and what currently ships.
 
-**3.4 Eager early-exit fixed-point loop**
-- Files: `src/eval.c:590-614`.
-- Replace `expr_eq(current, next)` with a "did anything fire" boolean
-  threaded through `evaluate_step`. When nothing fired, we are done —
-  no full structural compare needed.
-- Companion: when `evaluate_step` does not produce a change, return the
-  *same* pointer (refcount-bumped, or shared) rather than a deep copy.
-- Risk: low if combined with 3.2; medium standalone (need to be careful
-  not to leak the original).
+**3.4 Eager early-exit fixed-point loop** ✅ DONE (2026-05-03)
+- Files: `src/eval.h` (new `evaluate_step(Expr*, bool*)` signature with
+  contract doc); `src/eval.c` (the `bool* changed` instrumentation
+  inside `evaluate_step` and the `step_changed || expr_eq` hybrid in
+  the outer fixed-point loop); `src/eval.c` (the helpers
+  `flatten_sequences` and `eval_flatten_args` now return `bool` so the
+  caller can cheaply detect a no-op flatten); `tests/test_eval_eager_exit.c`
+  (15 new tests); `tests/CMakeLists.txt` (86th binary registered).
+- Mechanism: `evaluate_step` now takes a `bool* changed` out-parameter
+  and sets `*changed = true` whenever any of these fired during the
+  step: head re-evaluation produced a different subtree
+  (pointer-inequality after refcount sharing), arg evaluation reduced
+  any sub-expression, an `Evaluate[]` wrapper was stripped, Sequence
+  flattening reshaped the args, an Unevaluated wrapper was removed,
+  Flat flattened a nested same-head call, Listable threaded over a
+  list, Orderless re-sorted out-of-order args, a DownValue matched, a
+  built-in returned non-NULL, Set/SetDelayed installed a rule, a pure
+  Function applied, Derivative-of-Function reduced, or Composition
+  unfolded. The outer loop in `evaluate()` then exits the moment
+  `step_changed` is false — saving the O(tree) `expr_eq(current, next)`
+  compare on the common case where the input is already a fixed point
+  (atoms, bare symbols, fully-reduced functions). Pointer-identity
+  works as a "did sub-evaluation change anything" check because
+  `expr_copy()` is now refcount-share (no deep copy) per phase-2.
+- False-positive handling: some built-ins (notably `builtin_plus` and
+  `builtin_times`) unconditionally rebuild their output even when no
+  terms combine, so they trip the change flag on every step. To preserve
+  termination on `a + b + c`-style inputs without losing the §3.4 win,
+  the outer loop falls back to `expr_eq(current, next)` *only when*
+  the change flag was true. Cost on the slow path is identical to the
+  pre-§3.4 path; the win is the cheap boolean fast-path on the common
+  case where no rewrite fires.
+- Idempotence guarantee: false-positives are correctness-safe (one
+  extra outer iteration at worst); false-negatives would terminate
+  too early and are the bug to avoid. The instrumentation in
+  `evaluate_step` is therefore conservative — every potentially-rewriting
+  branch sets the flag explicitly, with a one-line comment naming the
+  reason (e.g. "DownValue rule fired", "List threading reshaped the
+  call", "Composition unrolled").
+- Test coverage: `tests/test_eval_eager_exit.c` exercises the atom
+  no-change invariant, bare-symbol no-change, bound-symbol-changes,
+  built-in-fires-and-changes, NULL out-param tolerance, the
+  `Plus[a,b,c]` regression case (which would diverge under a
+  no-fallback design), `repeated_evaluate_uses_timestamp_path` (the
+  §3.3 + §3.4 interaction), Listable threading, Flat flattening,
+  Sequence flattening, Orderless re-sorting, DownValue matches, a
+  50-rep heavy-eval byte-stability sweep, a 30-rep deep-nested
+  no-op stability sweep, and a Set+evaluate cycle that depends on
+  the §3.3 clock invalidation kicking in.
+- Combined §3.3 + §3.4 picture: on the *first* evaluation of an
+  expression whose every sub-step is already a fixed point, §3.4
+  saves the second outer iteration plus the converging `expr_eq`
+  compare; on *subsequent* evaluations under an unchanged clock,
+  §3.3's early-exit at the top of `evaluate()` short-circuits the
+  whole thing in O(1) without entering `evaluate_step` at all.
 
-**3.5 DownValue dispatch index**
-- Files: `src/symtab.c`, `src/match.c`.
-- Bucket rules on a cheap key — most commonly arity, then the symbolic
-  head of the *first* argument when present. `apply_down_values` then
-  scans only the relevant bucket.
-- Risk: low. Buckets fall back to linear scan for rules whose key is
-  ambiguous (sequence patterns).
+**3.5 DownValue dispatch index** ✅ DONE (2026-05-03, M4)
+- Files touched: `src/symtab.h`, `src/symtab.c`, `tests/test_rule_dispatch.c`,
+  `tests/CMakeLists.txt`.
+- Mechanism: each `Rule` now carries two pre-computed dispatch keys,
+  set once at insertion time:
+    * `dispatch_arity` — the number of args the pattern accepts at the
+      top level. Set to `-1` whenever the pattern has a top-level
+      `BlankSequence`, `BlankNullSequence`, `Optional`, `Repeated`,
+      `RepeatedNull`, or `OptionsPattern`. Variable-arity rules always
+      pass the filter.
+    * `first_arg_head_canon` — interned pointer to the first arg's head
+      symbol. `Sin`, `Plus`, `Integer`, `Real`, `Symbol`, etc.
+      Computed by `pattern_arg_head_canon` which looks through
+      `HoldPattern` / `Verbatim`, recurses into `Pattern[name, q]`,
+      `Condition`, `PatternTest`, agreeing branches of `Alternatives`,
+      and treats sequence/optional patterns as wildcard. NULL means
+      "scan unconditionally."
+- `apply_down_values` (`src/symtab.c:apply_down_values`) computes the
+  input call's `(arity, first_arg_head_canon)` once, then for each
+  rule:
+    * skips when the rule committed to a specific arity that disagrees
+      with the input;
+    * skips when both rule and input committed to a specific first-arg
+      head and the canonical pointers differ;
+    * otherwise invokes the matcher exactly as before.
+  Both checks are pointer compares against interned strings, so the
+  filter is a few nanoseconds per skipped rule.
+- Soundness: a rule that *could* match the input is never skipped. A
+  rule whose `dispatch_arity` is -1 (variable arity) always passes the
+  arity gate; a rule with NULL `first_arg_head_canon` always passes the
+  head gate; an input with no extractable first-arg head only filters
+  on arity. Wrong-shape rules can never reach the matcher.
+- Stress test: `test_heavy_downvalue_dispatch` adds 100 specific
+  literal rules `hv[k] -> k+1000` plus a wildcard fallback. Numeric
+  inputs hit their specific rule under the dispatch filter; symbolic
+  input cleanly falls through to the fallback.
 
-**3.6 Improve rule-ordering specificity**
-- Files: `src/symtab.c:103-135`.
-- Replace the binary "has patterns or not" sort with a real pattern
-  specificity score (number of literal sub-expressions, presence of
-  sequence blanks, presence of `Condition`/`PatternTest`). Match
-  Mathematica's `DownValues` ordering documentation.
-- Risk: medium. Some test fixtures may rely on insertion order.
+**3.6 Improve rule-ordering specificity** ✅ DONE (2026-05-03, M4)
+- Files touched: `src/symtab.h`, `src/symtab.c`, `tests/test_rule_dispatch.c`.
+- Mechanism: every `Rule` now carries an `int32_t specificity` score
+  computed at insertion time by `pattern_specificity`. The score
+  combines:
+    * literal atoms                      → +100 each
+    * plain function calls               → +50 + sum of children
+    * typed `Blank[h]`                   →  +20
+    * `Pattern[x, q]`                    → score(q) (binding is free)
+    * `HoldPattern` / `Verbatim`         → transparent
+    * `Condition` / `PatternTest`        → score(inner) +10
+    * plain `Blank[]`                    →  -10
+    * `BlankSequence[]`                  → -100
+    * `BlankNullSequence[]`              → -200
+    * `OptionsPattern[]`                 → -150
+    * `Optional[...]`                    →  -50
+    * `Repeated[p]` / `RepeatedNull[p]`  → score(p) -50 / -100
+    * `Alternatives[a, ...]`             → min(score(a_i)) (weakest wins)
+- `add_rule` now does a single linear walk to find the position with
+  strictly lower specificity, then stable-inserts the new rule before
+  it. Equal-specificity rules retain insertion order; identical
+  patterns still replace in place (so the in-place RHS update from the
+  pre-M4 design is preserved).
+- This subsumes the old binary `has_patterns` heuristic: literal-arg
+  rules score ≥100 and dominate the same head's pattern rules; typed
+  blanks dominate plain blanks; sequence-pattern rules sink to the
+  bottom; user-supplied insertion order is preserved among equals.
+- Risk audit: full 87-binary test suite passes unchanged. The
+  Mathematica-style "more specific first" ordering is now strict
+  rather than binary, but the only behavioural shift is that pattern
+  rules of *unequal* specificity may now fire in a different order
+  from their insertion sequence — the `test_classical_recursion_dispatch`
+  case (`fib[n_]` defined before `fib[0]` and `fib[1]`) demonstrates
+  the desirable form of this shift.
+- M4 is the last Tier-3 milestone (Refcount + timestamps + eager exit
+  + dispatch index + specificity ordering).
 
 ### Tier 4 — Cleanups and small features
 
-**4.1 Move literal head-name strings to a header**
-- Files: new `src/sym_names.h` with `extern const char* const SYM_LIST;`
-  etc., plus a small init that interns them.
-- Even before full interning (3.1), this de-duplicates literals.
+**4.1 Move literal head-name strings to a header** ✅ DONE (folded into M2)
+- Files: `src/sym_names.{c,h}` shipped together with 3.1; further
+  symbols can be added by extending the `extern const char*`
+  declarations and the `sym_names_init` body.
 
 **4.2 Consolidate the assignment-target detection**
 - Files: `src/eval.c:167-182`, `src/eval.c:467-537`.
@@ -336,8 +591,10 @@ so each can be reviewed independently.
 4.4 (Unevaluated restore). Pure correctness changes that bring the
 evaluator closer to Withoff §3.1. No data-structure churn.
 
-**M2 — Symbol interning (Tier 3 prep).** 3.1 and 4.1. Mechanical, but
-unlocks the perf gains in M3 by making "is this the symbol `List`?"
+**M2 — Symbol interning (Tier 3 prep).** 3.1 ✅ DONE (4.1 folded in:
+the cached `SYM_*` pointers in `sym_names.h` already serve the same
+deduplication purpose, so the separate `sym_names.h` task is closed.)
+Unlocks the perf gains in M3 by making "is this the symbol `List`?"
 checks free.
 
 **M3 — Refcount + timestamps (Tier 3 hot loop).** 3.2, 3.3, 3.4 land
