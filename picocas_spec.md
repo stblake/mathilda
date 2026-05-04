@@ -9383,3 +9383,106 @@ undefined for rational divisors and would produce spurious results.
   `alg_u_is_polynomial`, plus the per-surd extraction loop in
   `simp_algebraic_impl`.
 - `tests/test_simplify.c`: `test_simplify_algebraic_u_power_extraction`.
+
+## Numericalize: preserve rational exponents over symbolic bases (2026-05-04)
+
+Fixed a long-standing inexact-contagion bug where `Times` / `Plus` /
+`N[...]` would demote rational exponents to machine reals whenever any
+factor was inexact, producing ugly output like
+
+    1/(2 Sqrt[x] (1+x)) + (0.5 (1+x) (...))/...  // Simplify
+        ->  1/(x + x^0.5 + x^1.5 + x^2)        (was)
+        ->  1/(x + Sqrt[x] + x^(3/2) + x^2)    (now)
+
+### Cause
+
+`numericalize_function` in `src/numeric.c` recursively numericalized
+function arguments. For `Power[x, Rational[1,2]]` this dropped the
+rational exponent down to a `0.5` real even though the symbolic base
+`x` carried no inexactness. The result rebuilt as `Power[x, 0.5]` and
+then propagated through `Times` / `Plus` -- contaminating any
+downstream simplification.
+
+### Fix
+
+In `numericalize_function`, the existing "preserve integer exponent"
+rule is generalised: for `Power[base, exp]`, if the numericalized base
+is *not* numeric (per `expr_is_numeric_like`), the original exponent
+is preserved verbatim. This keeps `Sqrt[x]`, `(1+x)^(1/2)`, `x^(-1/2)`,
+etc. structurally intact under contagion while still letting genuinely
+numeric bases collapse: `1.0 Sqrt[2] Sqrt[x] -> 1.41421 Sqrt[x]`,
+`N[Sqrt[Pi]] -> 1.77245`. Matches Mathematica's behaviour for
+`N[Sqrt[x]]` (returns `Sqrt[x]`).
+
+### Files touched
+
+- `src/numeric.c`: `numericalize_function` Power branch generalised.
+
+## Simplify final-form polish: common-factor lift + sign canonicalization (2026-05-04)
+
+Two new post-search passes run after `simp_bottomup` returns its best
+candidate. They are surgical -- applied once at the top level only --
+to avoid destabilising the heuristic search on multi-variable trig
+inputs (the trig two-vars regression caught when an earlier draft wired
+the lift into the seed phase).
+
+### Common-factor lift (`simp_lift_common_factor`)
+
+Pulls a shared multiplicative factor out of a top-level `Plus`, or out
+of a `Plus` child of a top-level `Times` (the numerator of a fraction
+whose denominator carries a non-integer power). picocas's `Factor` and
+`FactorTerms` decompose polynomials over `K[x_1, ..., x_n]` using
+`Variables[]` to discover the generator set, and `Variables[]` does
+not return non-integer-power expressions like `(1+x^2)^(3/2)` or
+`Sqrt[x]`. So a `Plus` that obviously shares an algebraic generator
+across all terms slips past `Factor` untouched. The lift takes a
+structural multiset view: a non-numeric factor is either an algebraic
+generator (`Power` with non-integer exponent, or any opaque token
+whose exponent we can't reduce) treated as one indivisible token, or
+a `Power[base, n]` with `n` a small positive integer that we split
+into `n` copies of `base`. Numeric coefficients merge via rational
+GCD. The lifted result is `gcd_coef * Times(common_tokens) * Plus[t_i
+/ lift_factor]`, with the per-term divisions handed back to
+`evaluate()` for cancellation.
+
+Cases this enables that `Factor` cannot:
+
+    (8/105)(1+x^2)^(3/2) - (4/35) x^2 (1+x^2)^(3/2) + (1/7) x^4 (1+x^2)^(3/2)
+        ->  (1/105) (1+x^2)^(3/2) (8 - 12 x^2 + 15 x^4)
+
+    (-x^3/Sqrt[5+2x] + 3 x^2 Sqrt[5+2x]) / (5+2x)
+      Cancel ->  (15 x^2 + 5 x^3) / (5+2x)^(3/2)
+      lift   ->  (5 x^2 (3 + x)) / (5+2x)^(3/2)
+
+The lift fires only when there is a real shared algebraic factor
+(`common_count > 0`); a coefficient-only GCD pull-out is left to
+`Together` / `Cancel` because it doesn't expose new structure and can
+trigger long downstream rationalisation chains.
+
+### Sign canonicalization (`canon_negate_pairs`)
+
+Mathematica's printed form prefers each binomial to lead with its
+positive-coefficient term: it prints `(a - c)(b - d)`, not the
+algebraically-equal `(-a + c)(-b + d)` that picocas's facpoly emits
+(the canonical Plus order sorts `Times[-1, a]` before `c` because the
+sort key strips the leading -1 coefficient). This pass walks a
+top-level `Times`, counts negatively-leading `Plus` factors, and
+flips them in pairs. Paired flips are value-preserving: each pair
+contributes `(-1) * (-1) = 1` to the product. Odd-count cases are
+left alone (lifting an extra -1 onto an outer numeric is not always
+a canonical win for the score function).
+
+Concrete win:
+
+    Simplify[1/(a*b) - 1/(b*c) - 1/(a*d) + 1/(c*d)]
+        was -> ((-a + c) (-b + d)) / (a b c d)
+        now -> ((a - c) (b - d)) / (a b c d)
+
+### Files touched
+
+- `src/simp.c`: `simp_lift_common_factor`, `canon_negate_pairs`,
+  and the final-form polish in `builtin_simplify`.
+- `tests/test_simplify.c`: eleven new user-supplied regression cases
+  exercising these passes plus existing simplification machinery.
+- `tests/test_numeric.c`: aligned `N[x^(1/2)]` expectation with the
+  numericalize fix above (`Sqrt[x]`, not `x^0.5`).

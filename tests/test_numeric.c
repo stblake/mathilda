@@ -105,8 +105,11 @@ static void test_n_preserves_integer_exponents(void) {
     assert_eval_eq("N[3 x^2 + 3 x + 1]", "1.0 + 3.0 x + 3.0 x^2", 0);
     /* Base is still numericalized. */
     assert_eval_eq("N[(Pi)^2]", "9.8696", 0);
-    /* Non-integer exponents are still numericalized. */
-    assert_eval_eq("N[x^(1/2)]", "x^0.5", 0);
+    /* Non-integer exponents are also preserved when the base remains
+     * symbolic after numericalization: keeping Sqrt[x] in Sqrt[x] form
+     * (rather than x^0.5) preserves polynomial structure for downstream
+     * Together / Cancel and matches the contagion fix in numericalize_function. */
+    assert_eval_eq("N[x^(1/2)]", "Sqrt[x]", 0);
 }
 
 static void test_n_two_arg_fallback(void) {

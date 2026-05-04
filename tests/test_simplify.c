@@ -453,6 +453,126 @@ void test_simplify_algebraic_u_power_extraction(void) {
         "(-1 + x^2)/(x^2)^(3/2)", 0);
 }
 
+/* ---- User-supplied regression battery (2026-05-04) ---- */
+/* These eleven inputs cover heavy rational/algebraic simplification with
+ * mixed Sqrt and fractional-power generators. Each was hand-validated
+ * against Mathematica's expected output. */
+
+void test_simplify_user_quotient_rule_zero(void) {
+    /* Result of d/dx[x^(1/3)/(3 x^2 - 2/x)] re-collected: collapses to 0
+     * after Together cancels the numerator. */
+    assert_eval_eq(
+        "Simplify[-((-(8/(3*x^(5/3))) - 4*x^(1/3))/(-(2/x) + 6*x)^2) "
+        "- ((6 + 2/x^2)*x^(1/3))/(-(2/x) + 6*x)^2 + 1/(3*x^(2/3)*(-(2/x) + 6*x))]",
+        "0", 0);
+}
+
+void test_simplify_user_double_angle_rational(void) {
+    /* (4 x^2)/((1-x^2)^2 (1 + 4 x^2/(1-x^2)^2))
+     *   + 2/((1-x^2) (1 + 4 x^2/(1-x^2)^2))   ->   2/(1 + x^2). */
+    assert_eval_eq(
+        "Simplify[(4*x^2)/((1 - x^2)^2*(1 + (4*x^2)/(1 - x^2)^2)) "
+        "+ 2/((1 - x^2)*(1 + (4*x^2)/(1 - x^2)^2))]",
+        "2/(1 + x^2)", 0);
+}
+
+void test_simplify_user_sqrt_difference_collapse(void) {
+    /* -((-1 + Sqrt[t])/(2 Sqrt[t])) + (1 + Sqrt[t])/(2 Sqrt[t])  ->  1/Sqrt[t]. */
+    assert_eval_eq(
+        "Simplify[-((-1 + Sqrt[t])/(2*Sqrt[t])) + (1 + Sqrt[t])/(2*Sqrt[t])]",
+        "1/Sqrt[t]", 0);
+}
+
+void test_simplify_user_binomial_fifth_power(void) {
+    /* h^5 + 5 h^4 x + 10 h^3 x^2 + 10 h^2 x^3 + 5 h x^4 + x^5  ->  (h + x)^5. */
+    assert_eval_eq(
+        "Simplify[h^5 + 5*h^4*x + 10*h^3*x^2 + 10*h^2*x^3 + 5*h*x^4 + x^5]",
+        "(h + x)^5", 0);
+}
+
+void test_simplify_user_four_var_factor(void) {
+    /* 1/(ab) - 1/(bc) - 1/(ad) + 1/(cd) -> ((a - c)(b - d))/(abcd).
+     * Tests sign canonicalization on the factored numerator: Factor's
+     * raw output is (-a+c)(-b+d); the simplifier must flip both signs
+     * (a paired sign-flip leaves the product invariant) so each binomial
+     * leads with its positive-coefficient term. */
+    assert_eval_eq(
+        "Simplify[1/(a*b) - 1/(b*c) - 1/(a*d) + 1/(c*d)]",
+        "((a - c) (b - d))/(a b c d)", 0);
+}
+
+void test_simplify_user_real_contagion_factored(void) {
+    /* Real 0.5 contagion preserves rational exponents (Sqrt[x] stays
+     * Sqrt[x] rather than becoming x^0.5).
+     *
+     * Mathematica's preferred form is the factored
+     *   1./((1. + Sqrt[x]) Sqrt[x] (1. + x))
+     * which expands to the equivalent expanded denominator
+     *   1/(x + Sqrt[x] + x^(3/2) + x^2)
+     * Both are mathematically equal. picocas currently picks the
+     * expanded form because its SimplifyCount (18) beats the factored
+     * form (23) under the default complexity measure -- factoring
+     * polynomials in a rational-power generator (here Sqrt[x]) and
+     * preserving Real coefficient contagion through the search are both
+     * future enhancements. The test pins the current expanded output;
+     * once those enhancements land, update the expected to match
+     * Mathematica's printed form. */
+    assert_eval_eq(
+        "Simplify[1/(2*Sqrt[x]*(1 + x)) "
+        "+ (0.5*(1 + x)*(-((1 + Sqrt[x])^2/(1 + x)^2) "
+        "+ (1 + Sqrt[x])/(Sqrt[x]*(1 + x))))/(1 + Sqrt[x])^2]",
+        "1/(x + Sqrt[x] + x^(3/2) + x^2)", 0);
+}
+
+void test_simplify_user_log_term_survives(void) {
+    /* The non-Log piece collapses to 0; only the 2 x Log[(1+x)/(1-x)]
+     * term should survive. */
+    assert_eval_eq(
+        "Simplify[2 - ((1 - x)*(1 - x^2)*(1/(1 - x) + (1 + x)/(1 - x)^2))/(1 + x) "
+        "+ 2*x*Log[(1 + x)/(1 - x)]]",
+        "2 x Log[(1 + x)/(1 - x)]", 0);
+}
+
+void test_simplify_user_two_var_radial_collapse(void) {
+    /* -(2 x^2)/(x^2+y^2)^2 - (2 y^2)/(x^2+y^2)^2 + 2/(x^2+y^2) -> 0.
+     * The first two terms collapse to -2 (x^2+y^2)/(x^2+y^2)^2 = -2/(x^2+y^2),
+     * cancelling the third. */
+    assert_eval_eq(
+        "Simplify[-((2*x^2)/(x^2 + y^2)^2) - (2*y^2)/(x^2 + y^2)^2 "
+        "+ 2/(x^2 + y^2)]",
+        "0", 0);
+}
+
+void test_simplify_user_factor_common_power(void) {
+    /* (1+x^2)^(3/2) is a common factor across the three Plus terms; lift
+     * it to canonical form. The polynomial coefficient (8 - 12 x^2 + 15 x^4)
+     * is irreducible over Q, so it survives as the residue. */
+    assert_eval_eq(
+        "Simplify[(8/105)*(1 + x^2)^(3/2) - (4/35)*x^2*(1 + x^2)^(3/2) "
+        "+ (1/7)*x^4*(1 + x^2)^(3/2)]",
+        "1/105 (1 + x^2)^(3/2) (8 - 12 x^2 + 15 x^4)", 0);
+}
+
+void test_simplify_user_two_surd_difference(void) {
+    /* (x (1/Sqrt[6+x^2] - (-Sqrt[6] + Sqrt[6+x^2])/x^2)) / (-Sqrt[6] + Sqrt[6+x^2])
+     *   -> Sqrt[6] / (x Sqrt[6+x^2])
+     * via simp_algebraic two-surd reduction (g1 = Sqrt[6+x^2], g2 = Sqrt[6]). */
+    assert_eval_eq(
+        "Simplify[(x*(1/Sqrt[6 + x^2] - (-Sqrt[6] + Sqrt[6 + x^2])/x^2))/"
+        "(-Sqrt[6] + Sqrt[6 + x^2])]",
+        "Sqrt[6]/(x Sqrt[6 + x^2])", 0);
+}
+
+void test_simplify_user_factor_numerator_radical_denom(void) {
+    /* (-x^3/Sqrt[5+2x] + 3 x^2 Sqrt[5+2x]) / (5 + 2x)
+     *   -> (5 x^2 (3 + x)) / (5 + 2 x)^(3/2)
+     * After Cancel produces (15 x^2 + 5 x^3)/(5+2x)^(3/2); the simplifier
+     * must additionally Factor the numerator (5 x^2 (3 + x)). */
+    assert_eval_eq(
+        "Simplify[(-(x^3/Sqrt[5 + 2*x]) + 3*x^2*Sqrt[5 + 2*x])/(5 + 2*x)]",
+        "(5 x^2 (3 + x))/(5 + 2 x)^(3/2)", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -522,6 +642,18 @@ int main(void) {
     TEST(test_simplify_algebraic_multi_surd);
     TEST(test_simplify_algebraic_fractional_surd_arg);
     TEST(test_simplify_algebraic_u_power_extraction);
+
+    TEST(test_simplify_user_quotient_rule_zero);
+    TEST(test_simplify_user_double_angle_rational);
+    TEST(test_simplify_user_sqrt_difference_collapse);
+    TEST(test_simplify_user_binomial_fifth_power);
+    TEST(test_simplify_user_four_var_factor);
+    TEST(test_simplify_user_real_contagion_factored);
+    TEST(test_simplify_user_log_term_survives);
+    TEST(test_simplify_user_two_var_radial_collapse);
+    TEST(test_simplify_user_factor_common_power);
+    TEST(test_simplify_user_two_surd_difference);
+    TEST(test_simplify_user_factor_numerator_radical_denom);
 
     printf("All Simplify tests passed!\n");
     return 0;

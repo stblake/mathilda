@@ -428,13 +428,20 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
     const size_t n = e->data.function.arg_count;
     Expr* new_head = numericalize(e->data.function.head, spec);
 
-    /* Power[base, exp] with an integer (or bigint) exponent: preserve the
-     * exponent verbatim. This matches Mathematica — N[x^2] is x^2, not
-     * x^2.0 — and keeps polynomial structure intact under N[]. */
-    const bool is_power_int_exp =
+    /* Power[base, exp] needs special handling for two cases:
+     *   1. Integer/bigint exponent: preserve verbatim. Matches Mathematica —
+     *      N[x^2] is x^2, not x^2.0 — and keeps polynomial structure intact.
+     *   2. Symbolic base + rational exponent: preserve the rational exponent
+     *      so Sqrt[x] stays Sqrt[x] under contagion (1.0 * Sqrt[x] should not
+     *      become x^0.5). Only when the base numericalizes to an actual number
+     *      (e.g. Sqrt[2], Sqrt[Pi]) do we want the exponent demoted so the
+     *      Power can collapse to a numeric value. */
+    const bool is_power =
         (n == 2)
         && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.head->data.symbol == SYM_Power;
+    const bool exp_is_int =
+        is_power
         && (e->data.function.args[1]->type == EXPR_INTEGER
             || e->data.function.args[1]->type == EXPR_BIGINT);
 
@@ -444,12 +451,23 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         expr_free(new_head);
         return expr_copy((Expr*)e);
     }
+    /* Numericalize args left-to-right. For Power, decide whether to preserve
+     * the exponent based on the (already-computed) numericalized base. */
+    bool preserve_power_exp = exp_is_int;
     for (size_t i = 0; i < n; ++i) {
-        if (is_power_int_exp && i == 1) {
-            new_args[i] = expr_copy(e->data.function.args[i]);
-        } else {
-            new_args[i] = numericalize(e->data.function.args[i], spec);
+        if (is_power && i == 1) {
+            /* By now new_args[0] holds the numericalized base. If the base
+             * is still non-numeric, keep the exponent symbolic so e.g.
+             * Power[x, 1/2] does not become Power[x, 0.5]. */
+            if (!preserve_power_exp && !expr_is_numeric_like(new_args[0])) {
+                preserve_power_exp = true;
+            }
+            if (preserve_power_exp) {
+                new_args[i] = expr_copy(e->data.function.args[i]);
+                continue;
+            }
         }
+        new_args[i] = numericalize(e->data.function.args[i], spec);
     }
     Expr* rebuilt = expr_new_function(new_head, new_args, n);
     free(new_args);  /* expr_new_function copies the pointer list. */
