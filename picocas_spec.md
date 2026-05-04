@@ -9563,3 +9563,32 @@ final-form polish runs `transform_pythag_reduce` on the
   polish pass in `builtin_simplify`.
 - `tests/test_simplify.c`: five regression tests covering the
   Exp→Sech path and each reciprocal-pair identity.
+
+## Top-level rational shortcut in builtin_simplify (2026-05-04)
+
+When the input classifies as `SHAPE_RATIONAL` -- meaning no trig, log,
+abs, or non-integer-power generators are present and `Together[input]`
+factors as poly/poly -- the simplifier now dispatches once at the top
+via `simp_dispatch` instead of recursing through `simp_bottomup` first.
+
+Why: `simp_bottomup` descends into every Plus / Times child before
+dispatching. For a rational input, each child re-classifies as
+`SHAPE_RATIONAL` and re-enters `simp_pipeline_rational` (Together,
+Cancel, ExpandNumerator, ExpandDenominator, Apart, Factor, per-variable
+Collect). Together at the top combines all children into a single
+canonical num/den, so the per-child work is subsumed.
+
+On `a/b + c/d - e/f + 1/(g h) - 1/(i j) - 1/(b k l)`:
+- baseline: 8.7-8.9 s
+- with shortcut: 7.2-7.5 s  (~18% faster)
+
+The classifier is conservative: anything with trig, log, Abs, or
+non-integer powers falls through to `simp_bottomup` as before, so
+search-driven domains (the heuristic's strongest area) are unaffected.
+The polish passes (lift_common_factor, PythagReduce,
+canon_negate_pairs) still run on the result.
+
+### Files touched
+
+- `src/simp.c`: branch in `builtin_simplify` selecting `simp_dispatch`
+  vs `simp_bottomup` based on `simp_classify`.

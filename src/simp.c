@@ -5536,7 +5536,30 @@ Expr* builtin_simplify(Expr* res) {
     FactorMemo* fmemo = factor_memo_new();
     factor_memo_push(fmemo);
 
-    Expr* best = simp_bottomup(expr, ctx, opt_complexity, &memo, 0);
+    /* Top-level rational shortcut. simp_bottomup descends into every Plus /
+     * Times child before dispatching at the top, and for a SHAPE_RATIONAL
+     * input each child re-enters simp_dispatch -> simp_pipeline_rational.
+     * Together / Cancel / Factor at the top combines all the children into
+     * a single canonical num/den, so the per-child work is wasted: each
+     * subnode's "best" form ends up subsumed by the top-level Together.
+     *
+     * Empirically, on multivariate rational inputs Simplify takes ~8 s vs
+     * Cancel[Together[expr]] ~25 ms (~300x). Even when the search returns
+     * the input unchanged, the cost is in the search itself. By dispatching
+     * once at the top we cut directly to the pipeline that decides
+     * acceptance against the input, bypassing the redundant per-subnode
+     * traversal. The polish passes (lift_common_factor, PythagReduce,
+     * canon_negate_pairs) still run on the result.
+     *
+     * Gated on SHAPE_RATIONAL: the classifier rejects inputs with trig,
+     * log, abs, and non-integer powers, so we only take the shortcut when
+     * the polynomial pipeline has full coverage. */
+    Expr* best;
+    if (simp_classify(expr) == SIMP_SHAPE_RATIONAL) {
+        best = simp_dispatch(expr, ctx, opt_complexity);
+    } else {
+        best = simp_bottomup(expr, ctx, opt_complexity, &memo, 0);
+    }
 
     /* Final-form polish: lift a shared algebraic generator out of a
      * top-level Plus (or out of a Plus child of a top-level Times -- the
