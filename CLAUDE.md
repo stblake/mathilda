@@ -9,6 +9,8 @@ The goal of this project is to use Gemini cli to create a small (pico) computer 
 
 -- Every time a builtin function is implemented, we should add it to the symbol table so its accessible in the repl. 
 
+-- Internal symbols should be defined in sym_names.c 
+
 -- Every time a builtin function is implemented or modified, we should update the picocas_spec.md file. 
 
 -- Every time a builtin function is implemented we should also assign the appropriate Attributes to that function. 

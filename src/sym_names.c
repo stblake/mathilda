@@ -66,6 +66,7 @@ const char* SYM_DirectedInfinity = NULL;
 const char* SYM_DiscreteDelta = NULL;
 const char* SYM_Divide = NULL;
 const char* SYM_Dixon = NULL;
+const char* SYM_Do = NULL;
 const char* SYM_E = NULL;
 const char* SYM_ECM = NULL;
 const char* SYM_Equal = NULL;
@@ -80,6 +81,7 @@ const char* SYM_False = NULL;
 const char* SYM_Fermat = NULL;
 const char* SYM_Flat = NULL;
 const char* SYM_Floor = NULL;
+const char* SYM_For = NULL;
 const char* SYM_FractionalPart = NULL;
 const char* SYM_Frobenius = NULL;
 const char* SYM_FromAbove = NULL;
@@ -207,6 +209,7 @@ const char* SYM_UnitStep = NULL;
 const char* SYM_UnsameQ = NULL;
 const char* SYM_UpTo = NULL;
 const char* SYM_Verbatim = NULL;
+const char* SYM_While = NULL;
 const char* SYM_With = NULL;
 const char* SYM_Xor = NULL;
 
@@ -270,6 +273,7 @@ void sym_names_init(void) {
     SYM_DiscreteDelta              = intern_symbol("DiscreteDelta");
     SYM_Divide                     = intern_symbol("Divide");
     SYM_Dixon                      = intern_symbol("Dixon");
+    SYM_Do                         = intern_symbol("Do");
     SYM_E                          = intern_symbol("E");
     SYM_ECM                        = intern_symbol("ECM");
     SYM_Equal                      = intern_symbol("Equal");
@@ -284,6 +288,7 @@ void sym_names_init(void) {
     SYM_Fermat                     = intern_symbol("Fermat");
     SYM_Flat                       = intern_symbol("Flat");
     SYM_Floor                      = intern_symbol("Floor");
+    SYM_For                        = intern_symbol("For");
     SYM_FractionalPart             = intern_symbol("FractionalPart");
     SYM_Frobenius                  = intern_symbol("Frobenius");
     SYM_FromAbove                  = intern_symbol("FromAbove");
@@ -411,6 +416,7 @@ void sym_names_init(void) {
     SYM_UnsameQ                    = intern_symbol("UnsameQ");
     SYM_UpTo                       = intern_symbol("UpTo");
     SYM_Verbatim                   = intern_symbol("Verbatim");
+    SYM_While                      = intern_symbol("While");
     SYM_With                       = intern_symbol("With");
     SYM_Xor                        = intern_symbol("Xor");
 }

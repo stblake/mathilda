@@ -372,6 +372,22 @@ void info_init(void) {
     symtab_set_docstring("Module", "Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.");
     symtab_set_docstring("Block", "Block[{x, y, ...}, expr] evaluates expr with local values for x, y, ....");
     symtab_set_docstring("With", "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.");
+    symtab_set_docstring("Return",
+        "Return[expr]\n"
+        "\treturns the value expr from a function.\n"
+        "Return[]\n"
+        "\treturns the value Null.\n"
+        "Return[expr, h]\n"
+        "\treturns expr from the nearest enclosing construct whose head is h.\n"
+        "\n"
+        "Return[expr] exits control structures within the definition of a function,\n"
+        "and gives the value expr for the whole function.\n"
+        "Return takes effect as soon as it is evaluated, even if it appears inside\n"
+        "other functions.\n"
+        "\n"
+        "The recognised boundary heads are Function, Module, Block, With, Do, For,\n"
+        "and While. CompoundExpression and other Hold-free heads pass Return through\n"
+        "unchanged so that it can reach the boundary.");
 
     // Rules and Replacements
     symtab_set_docstring("Rule", "lhs -> rhs represents a rule that transforms lhs to rhs.");

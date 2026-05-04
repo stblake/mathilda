@@ -550,13 +550,59 @@ budget.
   `assignment_target_symbol` already knows. Extract into
   `apply_set_or_set_delayed(Expr* res, bool delayed)` for readability.
 
-**4.3 Implement `Return[x]`** — Withoff [§3.1 last bullet]
-- Files: `src/eval.c`, plus probably a `Return` builtin to ensure correct
-  Hold attributes.
-- After applying user rules, if the result is `Return[x]`, replace with
-  `x` at the appropriate scope boundary (`Function`, `CompoundExpression`,
-  `Module`, `Block`, `With`, `Do`, `For`, `While`).
-- Risk: medium — needs scope-boundary detection.
+**4.3 Implement `Return[x]`** ✅ DONE (2026-05-04, includes 2-arg form)
+- Files touched: `src/eval.{h,c}` (new `EvalReturnAction` enum +
+  `eval_classify_return` helper), `src/iter.c` (Do/For/While now route
+  through a unified `iter_flow_classify` that calls the helper before
+  the legacy Break/Continue/Throw/Abort/Quit cascade), `src/modular.c`
+  (Module/Block/With each trap a Return targeting their own head after
+  the body evaluates and before local-binding cleanup), `src/purefunc.c`
+  (`apply_pure_function` runs every body evaluation through a
+  file-static `trap_return` covering all four Function shapes),
+  `src/attr.c` (`Return` registered with `ATTR_PROTECTED`), `src/info.c`
+  (docstring describing all three call shapes), `src/sym_names.{h,c}`
+  (added interned `SYM_Do`, `SYM_For`, `SYM_While` so the boundary
+  classifier can do pointer-equality checks), `tests/test_return.c`
+  (new 36-test binary; 88th test target overall), `tests/CMakeLists.txt`
+  (registered `return_tests`), `picocas_spec.md` (new Return entry under
+  Control Flow with examples).
+- Mechanism: a single `eval_classify_return(e, boundary_head, &out)`
+  helper inspects `e` once and returns `EVAL_RETURN_NONE` (not a Return
+  marker), `EVAL_RETURN_CONSUME` (this boundary should yield `*out`,
+  freshly allocated as `Null` for `Return[]` or an `expr_copy` of the
+  payload), or `EVAL_RETURN_PROPAGATE` (2-arg form whose target `h`
+  does not match — caller hands the marker upward unchanged). Each
+  boundary calls the helper after `evaluate(body)` returns. CompoundExpression
+  and `If/Which/Switch` keep their existing pass-through behaviour, so
+  the marker can reach the boundary even when nested inside them.
+- Two-arg form: `Return[expr, h]` lets the user skip past intervening
+  boundaries to a specific enclosing construct (e.g. `Return[5, Module]`
+  inside a `Do` propagates through the `Do` and is consumed by the
+  enclosing `Module`). When no boundary in scope matches `h`, the
+  marker survives at the top level as a literal expression — same
+  semantics as Mathematica.
+- Test coverage: `tests/test_return.c` exercises the marker at the top
+  level (no boundary present), every supported boundary head
+  (Function/Module/Block/With/Do/For/While) with both 0-arg and 1-arg
+  forms, `Return[expr, h]` with matching and mismatched targets,
+  propagation through CompoundExpression and through If branches, the
+  innermost-boundary rule for the 1-arg form, edge cases (Return inside
+  user-defined `f[x_] := ...` rules — survives at top level without
+  Module wrapping; consumed when wrapped), and a deeply-nested mixed
+  Function/Module/Do/For/While stack to confirm 2-arg targeting hops
+  past every intervening construct.
+- Memory hygiene: valgrind on `return_tests` reports zero invalid
+  reads/writes/use-after-free errors. Definitely-lost bytes match the
+  baseline of `iter_tests` ± 16 bytes (one extra program-lifetime
+  malloc for the new `Return` symbol-table entry); no per-call leaks
+  introduced.
+- Out of scope (intentional): Return that aborts evaluation of an
+  enclosing Plus/Times/etc. argument list mid-step. Mathematica's spec
+  ("takes effect as soon as it is evaluated, even if it appears inside
+  other functions") would require a longjmp-style unwind that PicoCAS
+  doesn't implement; in practice the common usage patterns
+  (`If[..., Return[x]]`, `Module[{...}, Return[x]]`, loop bodies) are
+  all covered.
 
 **4.4 Track and restore `Unevaluated`** — Withoff [§3.1] ⚠️ NO-OP
 - On closer inspection, picocas's strip-without-restore behaviour matches

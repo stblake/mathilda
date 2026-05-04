@@ -190,6 +190,28 @@ static Expr* substitute_names(Expr* e, char** names, Expr** vals, size_t count) 
  * see the substituted expression. Nested Function expressions are treated
  * as opaque to avoid capture.
  */
+/*
+ * trap_return:
+ * Strip a Return[v] / Return[] marker that targets *this* Function
+ * boundary. Return[v, h] is consumed only when h == Function; otherwise
+ * the marker is handed upward unchanged so an enclosing Module / Block
+ * / loop with the matching head can claim it.
+ *
+ * Takes ownership of `result` and returns either the original pointer
+ * (when the marker is absent or propagating) or a freshly-owned
+ * unwrapped value (when the marker is consumed). Frees `result` on the
+ * consume path.
+ */
+static Expr* trap_return(Expr* result) {
+    Expr* rv = NULL;
+    EvalReturnAction ra = eval_classify_return(result, SYM_Function, &rv);
+    if (ra == EVAL_RETURN_CONSUME) {
+        expr_free(result);
+        return rv;
+    }
+    return result;
+}
+
 Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
     if (head->type != EXPR_FUNCTION) return NULL;
 
@@ -201,7 +223,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
         Expr* substituted = substitute_slots(body, args, arg_count);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
-        return result;
+        return trap_return(result);
     }
 
     if (head_argc < 2) return NULL;
@@ -215,7 +237,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
         Expr* substituted = substitute_slots(body, args, arg_count);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
-        return result;
+        return trap_return(result);
     }
 
     /* Function[x, body] -- single named parameter */
@@ -225,7 +247,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
         Expr* substituted = substitute_names(body, &name, &val, 1);
         Expr* result = evaluate(substituted);
         expr_free(substituted);
-        return result;
+        return trap_return(result);
     }
 
     /* Function[{x1, x2, ...}, body] -- list of named parameters */
@@ -235,7 +257,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
         size_t var_count = params->data.function.arg_count;
         if (var_count == 0) {
             Expr* result = evaluate(body);
-            return result;
+            return trap_return(result);
         }
 
         char** names = malloc(sizeof(char*) * var_count);
@@ -258,7 +280,7 @@ Expr* apply_pure_function(Expr* head, Expr** args, size_t arg_count) {
         expr_free(substituted);
         free(names);
         free(vals);
-        return result;
+        return trap_return(result);
     }
 
     return NULL;

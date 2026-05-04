@@ -189,6 +189,20 @@ Expr* builtin_module(Expr* res) {
     Expr* final_res = evaluate(substituted_body);
     expr_free(substituted_body);
 
+    /* Trap Return targeting this Module. Return[v] (1-arg) is consumed
+     * unconditionally; Return[v, h] is consumed only when h == Module,
+     * else the marker is handed upward unchanged so an enclosing
+     * boundary with the matching head can claim it. */
+    {
+        Expr* rv = NULL;
+        EvalReturnAction ra = eval_classify_return(final_res, SYM_Module, &rv);
+        if (ra == EVAL_RETURN_CONSUME) {
+            expr_free(final_res);
+            final_res = rv;
+        }
+        /* PROPAGATE / NONE: final_res is returned unchanged. */
+    }
+
     // Cleanup env and info
     while (env) {
         ScopingEnv* next = env->next;
@@ -250,6 +264,16 @@ Expr* builtin_block(Expr* res) {
     }
 
     Expr* final_res = evaluate(body);
+
+    /* Trap Return targeting this Block. Symmetric to the Module path. */
+    {
+        Expr* rv = NULL;
+        EvalReturnAction ra = eval_classify_return(final_res, SYM_Block, &rv);
+        if (ra == EVAL_RETURN_CONSUME) {
+            expr_free(final_res);
+            final_res = rv;
+        }
+    }
 
     // Restore
     for (size_t i = 0; i < var_count; i++) {
@@ -315,6 +339,16 @@ Expr* builtin_with(Expr* res) {
     Expr* substituted_body = substitute_scoping(body, env);
     Expr* final_res = evaluate(substituted_body);
     expr_free(substituted_body);
+
+    /* Trap Return targeting this With. Symmetric to Module / Block. */
+    {
+        Expr* rv = NULL;
+        EvalReturnAction ra = eval_classify_return(final_res, SYM_With, &rv);
+        if (ra == EVAL_RETURN_CONSUME) {
+            expr_free(final_res);
+            final_res = rv;
+        }
+    }
 
     while (env) {
         ScopingEnv* next = env->next;

@@ -74,6 +74,70 @@ static const char* is_flow_control_head(Expr* e) {
 }
 
 /*
+ * IterFlowAction / iter_flow_classify
+ *
+ * Single decision point for "what should this Do/For/While step do
+ * with the value just produced by evaluate(body)?". Wraps:
+ *
+ *   - eval_classify_return  -- handles Return[], Return[v], Return[v,h]
+ *                              including the 2-arg targeted form.
+ *   - is_flow_control_head  -- handles Break, Continue, Throw, Abort, Quit.
+ *
+ * The Return classifier runs first so that Return[v,h] for h !=
+ * boundary_head propagates correctly past the loop.
+ *
+ *   ITER_FLOW_NONE        -- the value is a normal expression. Caller
+ *                              should free eval_expr and continue
+ *                              iterating.
+ *   ITER_FLOW_BREAK       -- Break[]. Caller frees eval_expr and breaks
+ *                              out of its loop; the loop yields Null.
+ *   ITER_FLOW_CONTINUE    -- Continue[]. Caller frees eval_expr and
+ *                              jumps to the next iteration (Do
+ *                              arithmetic-progression must still
+ *                              advance its counter before looping).
+ *   ITER_FLOW_RETURN_VAL  -- Return targeted at this loop. *value_out
+ *                              is set to the caller-owned payload
+ *                              (Null for Return[], expr_copy of args[0]
+ *                              otherwise). Caller stores it as
+ *                              returned_val, frees eval_expr, breaks.
+ *   ITER_FLOW_PROPAGATE   -- Throw/Abort/Quit, OR Return[v,h] whose
+ *                              target h does not match boundary_head.
+ *                              Caller hands eval_expr up unchanged
+ *                              (assigns to returned_val and breaks)
+ *                              WITHOUT freeing it.
+ */
+typedef enum {
+    ITER_FLOW_NONE,
+    ITER_FLOW_BREAK,
+    ITER_FLOW_CONTINUE,
+    ITER_FLOW_RETURN_VAL,
+    ITER_FLOW_PROPAGATE
+} IterFlowAction;
+
+static IterFlowAction iter_flow_classify(Expr* eval_expr,
+                                         const char* boundary_head,
+                                         Expr** value_out) {
+    if (value_out) *value_out = NULL;
+
+    Expr* rv = NULL;
+    EvalReturnAction ra = eval_classify_return(eval_expr, boundary_head, &rv);
+    if (ra == EVAL_RETURN_CONSUME) {
+        if (value_out) *value_out = rv;
+        else expr_free(rv);
+        return ITER_FLOW_RETURN_VAL;
+    }
+    if (ra == EVAL_RETURN_PROPAGATE) return ITER_FLOW_PROPAGATE;
+
+    const char* h = is_flow_control_head(eval_expr);
+    if (!h) return ITER_FLOW_NONE;
+    if (h == SYM_Break)    return ITER_FLOW_BREAK;
+    if (h == SYM_Continue) return ITER_FLOW_CONTINUE;
+    /* Throw / Abort / Quit propagate unchanged. Return cannot reach
+     * here: eval_classify_return above already dispatched it. */
+    return ITER_FLOW_PROPAGATE;
+}
+
+/*
  * ============================================================================
  *  Do
  * ============================================================================
@@ -254,26 +318,12 @@ Expr* builtin_do(Expr* res) {
         int64_t n = is_inf ? 0 : imax_e->data.integer;
         for (int64_t i = 0; is_inf || i < n; i++) {
             Expr* eval_expr = evaluate(expr);
-            const char* hname = is_flow_control_head(eval_expr);
-            if (hname) {
-                if (hname == SYM_Return) {
-                    returned_val = (eval_expr->data.function.arg_count > 0)
-                        ? expr_copy(eval_expr->data.function.args[0])
-                        : expr_new_symbol("Null");
-                    expr_free(eval_expr);
-                    break;
-                } else if (hname == SYM_Break) {
-                    expr_free(eval_expr);
-                    break;
-                } else if (hname == SYM_Continue) {
-                    expr_free(eval_expr);
-                    continue;
-                } else {
-                    /* Throw/Abort/Quit -- propagate unchanged. */
-                    returned_val = eval_expr;
-                    break;
-                }
-            }
+            Expr* rv = NULL;
+            IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
+            if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_expr); break; }
+            if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_expr;                       break; }
+            if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_expr); break; }
+            if (f == ITER_FLOW_CONTINUE)   {                            expr_free(eval_expr); continue; }
             expr_free(eval_expr);
         }
     } else if (is_list_iter) {
@@ -281,25 +331,12 @@ Expr* builtin_do(Expr* res) {
         for (size_t i = 0; i < list_e->data.function.arg_count; i++) {
             symtab_add_own_value(var_sym->data.symbol, var_sym, list_e->data.function.args[i]);
             Expr* eval_expr = evaluate(expr);
-            const char* hname = is_flow_control_head(eval_expr);
-            if (hname) {
-                if (hname == SYM_Return) {
-                    returned_val = (eval_expr->data.function.arg_count > 0)
-                        ? expr_copy(eval_expr->data.function.args[0])
-                        : expr_new_symbol("Null");
-                    expr_free(eval_expr);
-                    break;
-                } else if (hname == SYM_Break) {
-                    expr_free(eval_expr);
-                    break;
-                } else if (hname == SYM_Continue) {
-                    expr_free(eval_expr);
-                    continue;
-                } else {
-                    returned_val = eval_expr;
-                    break;
-                }
-            }
+            Expr* rv = NULL;
+            IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
+            if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_expr); break; }
+            if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_expr;                       break; }
+            if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_expr); break; }
+            if (f == ITER_FLOW_CONTINUE)   {                            expr_free(eval_expr); continue; }
             expr_free(eval_expr);
         }
     } else {
@@ -322,39 +359,29 @@ Expr* builtin_do(Expr* res) {
             Expr* eval_expr = evaluate(expr);
             expr_free(i_val);
 
-            const char* hname = is_flow_control_head(eval_expr);
-            if (hname) {
-                if (hname == SYM_Return) {
-                    returned_val = (eval_expr->data.function.arg_count > 0)
-                        ? expr_copy(eval_expr->data.function.args[0])
-                        : expr_new_symbol("Null");
-                    expr_free(eval_expr);
-                    break;
-                } else if (hname == SYM_Break) {
-                    expr_free(eval_expr);
-                    break;
-                } else if (hname == SYM_Continue) {
-                    /* Still advance the iterator before re-testing the loop. */
-                    expr_free(eval_expr);
-                    Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
-                    Expr* next_expr = expr_new_function(expr_new_symbol("Plus"), next_args, 2);
-                    Expr* next_e = evaluate(next_expr);
-                    expr_free(next_expr);
-                    expr_free(curr_e);
-                    curr_e = next_e;
-                    if (!is_real) {
-                        int64_t n, d;
-                        if (curr_e->type == EXPR_INTEGER) val = (double)curr_e->data.integer;
-                        else if (curr_e->type == EXPR_REAL) val = curr_e->data.real;
-                        else if (is_rational(curr_e, &n, &d)) val = (double)n / d;
-                    } else {
-                        val += di_val;
-                    }
-                    continue;
+            Expr* rv = NULL;
+            IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
+            if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_expr); break; }
+            if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_expr;                       break; }
+            if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_expr); break; }
+            if (f == ITER_FLOW_CONTINUE)   {
+                /* Still advance the iterator before re-testing the loop. */
+                expr_free(eval_expr);
+                Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
+                Expr* next_expr = expr_new_function(expr_new_symbol("Plus"), next_args, 2);
+                Expr* next_e = evaluate(next_expr);
+                expr_free(next_expr);
+                expr_free(curr_e);
+                curr_e = next_e;
+                if (!is_real) {
+                    int64_t n, d;
+                    if (curr_e->type == EXPR_INTEGER) val = (double)curr_e->data.integer;
+                    else if (curr_e->type == EXPR_REAL) val = curr_e->data.real;
+                    else if (is_rational(curr_e, &n, &d)) val = (double)n / d;
                 } else {
-                    returned_val = eval_expr;
-                    break;
+                    val += di_val;
                 }
+                continue;
             }
             expr_free(eval_expr);
 
@@ -447,50 +474,26 @@ Expr* builtin_for(Expr* res) {
         /* --- Body --- */
         if (body) {
             Expr* eval_body = evaluate(body);
-            const char* hname = is_flow_control_head(eval_body);
-            if (hname) {
-                if (hname == SYM_Return) {
-                    returned_val = (eval_body->data.function.arg_count > 0)
-                        ? expr_copy(eval_body->data.function.args[0])
-                        : expr_new_symbol("Null");
-                    expr_free(eval_body);
-                    break;
-                } else if (hname == SYM_Break) {
-                    expr_free(eval_body);
-                    break;
-                } else if (hname == SYM_Continue) {
-                    /* Fall through to incr. */
-                    expr_free(eval_body);
-                } else {
-                    returned_val = eval_body;
-                    break;
-                }
-            } else {
-                expr_free(eval_body);
-            }
+            Expr* rv = NULL;
+            IterFlowAction f = iter_flow_classify(eval_body, SYM_For, &rv);
+            if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_body); break; }
+            if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_body;                       break; }
+            if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_body); break; }
+            /* ITER_FLOW_CONTINUE: fall through to the increment step.
+             * ITER_FLOW_NONE:     normal value, discard. */
+            expr_free(eval_body);
         }
 
         /* --- Increment --- */
         Expr* eval_incr = evaluate(incr);
-        const char* hname = is_flow_control_head(eval_incr);
-        if (hname) {
-            if (hname == SYM_Return) {
-                returned_val = (eval_incr->data.function.arg_count > 0)
-                    ? expr_copy(eval_incr->data.function.args[0])
-                    : expr_new_symbol("Null");
-                expr_free(eval_incr);
-                break;
-            } else if (hname == SYM_Break) {
-                expr_free(eval_incr);
-                break;
-            } else if (hname == SYM_Continue) {
-                expr_free(eval_incr);
-                /* Proceed to the next test. */
-            } else {
-                returned_val = eval_incr;
-                break;
-            }
-        } else {
+        {
+            Expr* rv = NULL;
+            IterFlowAction f = iter_flow_classify(eval_incr, SYM_For, &rv);
+            if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_incr); break; }
+            if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_incr;                       break; }
+            if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_incr); break; }
+            /* ITER_FLOW_CONTINUE here: a Continue[] inside the increment
+             * proceeds to the next test (same as a normal increment). */
             expr_free(eval_incr);
         }
     }
@@ -537,26 +540,13 @@ Expr* builtin_while(Expr* res) {
         Expr* eval_test = evaluate(test);
 
         /* Honour flow-control from within the test expression itself. */
-        const char* thead = is_flow_control_head(eval_test);
-        if (thead) {
-            if (thead == SYM_Return) {
-                returned_val = (eval_test->data.function.arg_count > 0)
-                    ? expr_copy(eval_test->data.function.args[0])
-                    : expr_new_symbol("Null");
-                expr_free(eval_test);
-                break;
-            } else if (thead == SYM_Break) {
-                expr_free(eval_test);
-                break;
-            } else if (thead == SYM_Continue) {
-                /* A Continue inside `test` just restarts the loop. */
-                expr_free(eval_test);
-                continue;
-            } else {
-                /* Throw/Abort/Quit -- propagate. */
-                returned_val = eval_test;
-                break;
-            }
+        {
+            Expr* rv = NULL;
+            IterFlowAction f = iter_flow_classify(eval_test, SYM_While, &rv);
+            if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_test); break; }
+            if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_test;                       break; }
+            if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_test); break; }
+            if (f == ITER_FLOW_CONTINUE)   { /* restart the loop */     expr_free(eval_test); continue; }
         }
 
         /* Exit the loop unless the test evaluated to the symbol True. */
@@ -567,27 +557,17 @@ Expr* builtin_while(Expr* res) {
         /* --- Evaluate the body (if any) --- */
         if (body) {
             Expr* eval_body = evaluate(body);
-            const char* bhead = is_flow_control_head(eval_body);
-            if (bhead) {
-                if (bhead == SYM_Return) {
-                    returned_val = (eval_body->data.function.arg_count > 0)
-                        ? expr_copy(eval_body->data.function.args[0])
-                        : expr_new_symbol("Null");
-                    expr_free(eval_body);
-                    break;
-                } else if (bhead == SYM_Break) {
-                    expr_free(eval_body);
-                    break;
-                } else if (bhead == SYM_Continue) {
-                    /* Skip rest of this iteration; re-evaluate test next. */
-                    expr_free(eval_body);
-                    continue;
-                } else {
-                    /* Throw/Abort/Quit -- propagate. */
-                    returned_val = eval_body;
-                    break;
-                }
+            Expr* rv = NULL;
+            IterFlowAction f = iter_flow_classify(eval_body, SYM_While, &rv);
+            if (f == ITER_FLOW_RETURN_VAL) { returned_val = rv;        expr_free(eval_body); break; }
+            if (f == ITER_FLOW_PROPAGATE)  { returned_val = eval_body;                       break; }
+            if (f == ITER_FLOW_BREAK)      {                            expr_free(eval_body); break; }
+            if (f == ITER_FLOW_CONTINUE)   {
+                /* Skip rest of this iteration; re-evaluate test next. */
+                expr_free(eval_body);
+                continue;
             }
+            /* ITER_FLOW_NONE: discard body value and loop. */
             expr_free(eval_body);
         }
     }

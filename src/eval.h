@@ -71,6 +71,61 @@ static inline Expr* eval_and_free(Expr* e) {
 // Attributes built-in
 Expr* builtin_attributes(Expr* res);
 
+/* ------------------------------------------------------------------------
+ * Return[] flow-control classifier (Withoff §3.1, EVAL_IMPROVEMENTS_PLAN
+ * §4.3).
+ *
+ * Mathematica's Return is a marker that propagates outward through the
+ * current evaluation tree until it hits a "scope boundary" -- the body
+ * of a Function, a Module/Block/With, or a Do/For/While loop. The
+ * boundary strips the marker and yields the wrapped value as its own
+ * result. Return takes effect as soon as it is evaluated, even inside
+ * other functions (CompoundExpression and other Hold-free heads pass
+ * it through).
+ *
+ * Three argument forms:
+ *
+ *   Return[]        -- yield Null from the enclosing boundary.
+ *   Return[expr]    -- yield expr from the enclosing boundary.
+ *   Return[expr, h] -- yield expr from the *nearest enclosing* boundary
+ *                      whose head is the symbol h. Boundaries with a
+ *                      different head must propagate the Return outward
+ *                      unchanged so that h can be reached.
+ *
+ * `eval_classify_return` is the single decision point used by every
+ * scope-boundary builtin. It inspects `e` once and reports whether the
+ * caller should:
+ *
+ *   EVAL_RETURN_NONE       -- `e` is not a Return marker. Treat as a
+ *                              normal value (no behavioural change).
+ *   EVAL_RETURN_CONSUME    -- `e` is a Return targeting *this*
+ *                              boundary. *out_value is set to a freshly
+ *                              owned Expr (Null for Return[], an
+ *                              expr_copy of the payload otherwise) that
+ *                              the caller should yield as its own
+ *                              result. The caller still owns `e` and
+ *                              must free it.
+ *   EVAL_RETURN_PROPAGATE  -- `e` is Return[v, h] but `h` does not match
+ *                              `boundary_head`. The caller should hand
+ *                              `e` upward as its own result without
+ *                              freeing it (the next boundary outward
+ *                              gets to classify it).
+ *
+ * `boundary_head` is the interned canonical pointer of the enclosing
+ * construct's head (e.g. SYM_Module, SYM_Function, SYM_Do). It may be
+ * NULL, in which case 2-arg Return is always treated as PROPAGATE.
+ *
+ * The classifier never frees `e` and never bumps the eval clock. */
+typedef enum {
+    EVAL_RETURN_NONE,
+    EVAL_RETURN_CONSUME,
+    EVAL_RETURN_PROPAGATE
+} EvalReturnAction;
+
+EvalReturnAction eval_classify_return(Expr* e,
+                                      const char* boundary_head,
+                                      Expr** out_value);
+
 /* Flatten nested same-head sub-expressions in place. Returns true iff
  * the args list was actually rewritten; callers in the §3.4 fixed-point
  * detector use the return value to decide whether to count this as a

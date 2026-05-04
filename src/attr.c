@@ -71,6 +71,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Block", ATTR_HOLDALL | ATTR_PROTECTED},
     {"With", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Range", ATTR_LISTABLE | ATTR_PROTECTED},
+    {"Return", ATTR_PROTECTED},
     {"Array", ATTR_PROTECTED},
     {"Take", ATTR_NHOLDREST | ATTR_PROTECTED},
     {"Drop", ATTR_NHOLDREST | ATTR_PROTECTED},

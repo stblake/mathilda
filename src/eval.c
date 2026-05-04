@@ -72,6 +72,63 @@ uint64_t eval_clock_get(void) { return g_eval_clock; }
 void     eval_clock_bump(void) { g_eval_clock++; }
 
 /*
+ * eval_classify_return:
+ * See the contract in eval.h. Pointer-equality on interned symbols is
+ * the dispatch primitive: every Expr_Symbol's `data.symbol` field is the
+ * canonical interned pointer (sym_intern.c), so checks like
+ * `head->data.symbol == SYM_Return` and `target->data.symbol ==
+ * boundary_head` are O(1) and never strcmp.
+ *
+ * Care is taken to keep this side-effect free: no eval_clock_bump,
+ * no expr_free, no allocation when the answer is NONE/PROPAGATE. The
+ * single allocation on CONSUME is either a fresh `Null` symbol (for the
+ * 0-arg form) or an expr_copy of args[0] (for 1-arg / 2-arg forms).
+ * That copy is necessary because the caller will free `e` after
+ * yielding the value.
+ */
+EvalReturnAction eval_classify_return(Expr* e,
+                                      const char* boundary_head,
+                                      Expr** out_value) {
+    if (out_value) *out_value = NULL;
+    if (!e) return EVAL_RETURN_NONE;
+    if (e->type != EXPR_FUNCTION) return EVAL_RETURN_NONE;
+    if (e->data.function.head->type != EXPR_SYMBOL) return EVAL_RETURN_NONE;
+    if (e->data.function.head->data.symbol != SYM_Return) return EVAL_RETURN_NONE;
+
+    size_t argc = e->data.function.arg_count;
+
+    /* Return[]: yield Null at the nearest boundary. */
+    if (argc == 0) {
+        if (out_value) *out_value = expr_new_symbol("Null");
+        return EVAL_RETURN_CONSUME;
+    }
+
+    /* Return[expr]: yield expr at the nearest boundary, regardless of
+     * boundary_head. */
+    if (argc == 1) {
+        if (out_value) *out_value = expr_copy(e->data.function.args[0]);
+        return EVAL_RETURN_CONSUME;
+    }
+
+    /* Return[expr, h, ...]: target the nearest boundary whose head is h.
+     * Extra arguments are ignored (Mathematica accepts up to 2 args; we
+     * accept the same and leave further args to a caller-side message
+     * if the user supplies them).
+     *
+     * The target must be an EXPR_SYMBOL for the comparison to be
+     * meaningful. If it isn't, fall back to PROPAGATE so that the
+     * marker isn't accidentally consumed by an arbitrary boundary. */
+    Expr* target = e->data.function.args[1];
+    if (boundary_head &&
+        target->type == EXPR_SYMBOL &&
+        target->data.symbol == boundary_head) {
+        if (out_value) *out_value = expr_copy(e->data.function.args[0]);
+        return EVAL_RETURN_CONSUME;
+    }
+    return EVAL_RETURN_PROPAGATE;
+}
+
+/*
  * eval_init:
  * Registers the user-visible $RecursionLimit symbol with its default value
  * as an OwnValue so that the user can read or assign to it from the REPL.
