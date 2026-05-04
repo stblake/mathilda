@@ -442,6 +442,17 @@ void test_simplify_algebraic_fractional_surd_arg(void) {
         "(1 + x)/(x Sqrt[(1 + x)/(1 - x)])", 0);
 }
 
+/* simp_algebraic with implicit u^k factor in the denominator: x^4 in
+ * the denominator and Sqrt[x^2] in the numerator look coprime to
+ * Cancel until the polynomial-division u-power extraction lifts x^4 =
+ * (x^2)^2 = (Sqrt[x^2])^4 into the generator's algebraic ring, where
+ * the Sqrt[x^2] numerator factor cancels three of the four powers. */
+void test_simplify_algebraic_u_power_extraction(void) {
+    assert_eval_eq(
+        "Simplify[(Sqrt[x^2] - 1/Sqrt[x^2])/x^2]",
+        "(-1 + x^2)/(x^2)^(3/2)", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -510,6 +521,7 @@ int main(void) {
     TEST(test_simplify_algebraic_single_surd);
     TEST(test_simplify_algebraic_multi_surd);
     TEST(test_simplify_algebraic_fractional_surd_arg);
+    TEST(test_simplify_algebraic_u_power_extraction);
 
     printf("All Simplify tests passed!\n");
     return 0;

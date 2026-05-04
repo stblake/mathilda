@@ -9346,3 +9346,40 @@ part change cannot be silently absorbed.
   (`test_simplify_algebraic_single_surd`,
   `test_simplify_algebraic_multi_surd`,
   `test_simplify_algebraic_fractional_surd_arg`).
+
+## simp_algebraic: u-power extraction (2026-05-04)
+
+Extended `simp_algebraic` so an implicit `Power[u_i, k]` factor in the
+denominator -- e.g. `x^4 = (x^2)^2` when `u = x^2` -- gets lifted into
+the generator's algebraic ring before `Cancel` runs. Without this step
+the surd factor in the numerator and the `u`-power in the denominator
+look coprime to ordinary polynomial GCD even though
+`Sqrt[u]^2 = u` would let them combine.
+
+    Simplify[(Sqrt[x^2] - 1/Sqrt[x^2])/x^2]
+        →  (-1 + x^2)/(x^2)^(3/2)
+
+### Mechanism
+
+After step 5 of `simp_algebraic` (denominator rationalised, both
+numerator and denominator are polynomials in `(vars, g_1, ..., g_n)`
+with each `g_i` at most degree 1), for every surd whose argument
+`u_i` is itself a polynomial we iteratively divide both numerator
+and denominator by `u_i` (via `PolynomialQuotient` /
+`PolynomialRemainder` against the first variable in `Variables[u_i]`).
+Each successful division increments the multiplicity counter `k`.
+The extracted factor `Power[u_i, k]` is then re-attached as
+`Power[g_i, 2k]` (using the relation `g_i^2 = u_i`), so that the
+subsequent `Cancel` over `Q[vars, g_1, ..., g_n]` can combine the
+generator powers between numerator and denominator.
+
+The extraction is gated on `alg_u_is_polynomial`: rational `u_i`
+(e.g. `(x+1)/(1-x)`) skips this step, since `PolynomialQuotient` is
+undefined for rational divisors and would produce spurious results.
+
+### Files touched
+
+- `src/simp.c`: `alg_extract_u_power`, `alg_pick_var`,
+  `alg_u_is_polynomial`, plus the per-surd extraction loop in
+  `simp_algebraic_impl`.
+- `tests/test_simplify.c`: `test_simplify_algebraic_u_power_extraction`.

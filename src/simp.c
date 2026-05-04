@@ -1931,6 +1931,85 @@ static Expr* alg_reduce_one_gen(const Expr* poly, const char* gi_sym,
                   (Expr*[]){a_sum, b_gi}, 2));
 }
 
+/* Polynomial-divide `poly` by `u` repeatedly (treating both as
+ * polynomials in `var`) until the division has a non-zero remainder.
+ * Returns the residual quotient and writes the multiplicity to *k_out
+ * so that `poly = u^(*k_out) * residual` modulo non-divisibility.
+ *
+ * Used so that an implicit u_i^k factor inside den_r (e.g. x^4 hiding
+ * (x^2)^2 when u = x^2) can be lifted into Power[g_i, 2k] -- once the
+ * u-power is expressed in terms of the generator, polynomial GCD over
+ * Q[vars, g_1, ..., g_n] cancels it against any g_i factors carried by
+ * the multilinear numerator. */
+static Expr* alg_extract_u_power(const Expr* poly, const Expr* u,
+                                 const Expr* var, int* k_out) {
+    int k = 0;
+    Expr* cur = expr_copy((Expr*)poly);
+    for (;;) {
+        Expr* qa[3] = { expr_copy(cur), expr_copy((Expr*)u), expr_copy((Expr*)var) };
+        Expr* qcall = expr_new_function(expr_new_symbol("PolynomialQuotient"), qa, 3);
+        Expr* q = evaluate(qcall);
+        expr_free(qcall);
+
+        Expr* ra[3] = { expr_copy(cur), expr_copy((Expr*)u), expr_copy((Expr*)var) };
+        Expr* rcall = expr_new_function(expr_new_symbol("PolynomialRemainder"), ra, 3);
+        Expr* r = evaluate(rcall);
+        expr_free(rcall);
+
+        bool zero = (r && r->type == EXPR_INTEGER && r->data.integer == 0);
+        if (r) expr_free(r);
+        if (!zero) { expr_free(q); break; }
+        expr_free(cur);
+        cur = q;
+        k++;
+        /* Defensive cap: prevent runaway when PolynomialQuotient
+         * misbehaves (e.g. floating-point coefficients sneaking in). */
+        if (k > 100) break;
+    }
+    *k_out = k;
+    return cur;
+}
+
+/* Returns true iff u is a polynomial in its own variables -- i.e.,
+ * every Power[base, exp] in u has a non-negative integer exp. Rational
+ * u (e.g. (x+1)/(1-x)) is rejected so the polynomial-division u-power
+ * extraction never tries to divide by a non-polynomial divisor. */
+static bool alg_u_is_polynomial(const Expr* u) {
+    if (!u) return false;
+    if (u->type != EXPR_FUNCTION) return true;   /* leaf is always polynomial */
+    if (u->data.function.head &&
+        u->data.function.head->type == EXPR_SYMBOL &&
+        u->data.function.head->data.symbol == SYM_Power &&
+        u->data.function.arg_count == 2) {
+        Expr* exp = u->data.function.args[1];
+        if (exp->type != EXPR_INTEGER && exp->type != EXPR_BIGINT) return false;
+        if (exp->type == EXPR_INTEGER && exp->data.integer < 0) return false;
+        if (exp->type == EXPR_BIGINT && mpz_sgn(exp->data.bigint) < 0) return false;
+    }
+    if (!alg_u_is_polynomial(u->data.function.head)) return false;
+    for (size_t i = 0; i < u->data.function.arg_count; i++) {
+        if (!alg_u_is_polynomial(u->data.function.args[i])) return false;
+    }
+    return true;
+}
+
+/* Pick the first variable in Variables[u]. Returns NULL when u is
+ * variable-free (numeric / constant), in which case alg_extract_u_power
+ * is undefined and the caller should skip the u-power-extraction step. */
+static Expr* alg_pick_var(const Expr* u) {
+    Expr* vars = call_unary_copy("Variables", u);
+    if (!vars || vars->type != EXPR_FUNCTION ||
+        vars->data.function.head->type != EXPR_SYMBOL ||
+        vars->data.function.head->data.symbol != SYM_List ||
+        vars->data.function.arg_count == 0) {
+        if (vars) expr_free(vars);
+        return NULL;
+    }
+    Expr* v = expr_copy(vars->data.function.args[0]);
+    expr_free(vars);
+    return v;
+}
+
 /* Reduce poly modulo all relations {gi_sym^2 - u_i}_i by sweeping each
  * generator once. The result is multilinear in (g_1, ..., g_n). The
  * input is Expand-ed before each generator pass so CoefficientList sees
@@ -2033,6 +2112,52 @@ static Expr* simp_algebraic_impl(const Expr* e) {
         }
         num_r = num_next;
         den_r = den_next;
+    }
+
+    /* Step 6 (pre): pull each implicit u_i^k factor out of num_r and
+     * den_r, replacing it with g_i^(2k) so that Cancel over
+     * Q[vars, g_1, ..., g_n] sees the cancellation between the
+     * multilinear g_i factor in the numerator and an implicit u_i^k
+     * factor in the denominator. Without this step, x^4 in the
+     * denominator and Sqrt[x^2] in the numerator look like coprime
+     * polynomial atoms to Cancel even though x^4 = u^2 = g^4 modulo
+     * the algebraic relation g^2 = u. */
+    for (size_t i = 0; i < n; i++) {
+        if (!alg_u_is_polynomial(bases[i])) continue;  /* rational u: skip */
+        Expr* var = alg_pick_var(bases[i]);
+        if (!var) continue;     /* numeric u_i: no polynomial division */
+
+        int kn = 0, kd = 0;
+        Expr* num_resid = alg_extract_u_power(num_r, bases[i], var, &kn);
+        Expr* den_resid = alg_extract_u_power(den_r, bases[i], var, &kd);
+        expr_free(var);
+
+        if (kn == 0 && kd == 0) {
+            expr_free(num_resid); expr_free(den_resid);
+            continue;
+        }
+        /* num_r = num_resid * Power[g_i, 2*kn]
+         * den_r = den_resid * Power[g_i, 2*kd] */
+        if (kn > 0) {
+            Expr* g_pow = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                          (Expr*[]){expr_new_symbol(gens[i]), expr_new_integer(2 * kn)}, 2));
+            expr_free(num_r);
+            num_r = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                      (Expr*[]){num_resid, g_pow}, 2));
+        } else {
+            expr_free(num_r);
+            num_r = num_resid;
+        }
+        if (kd > 0) {
+            Expr* g_pow = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                          (Expr*[]){expr_new_symbol(gens[i]), expr_new_integer(2 * kd)}, 2));
+            expr_free(den_r);
+            den_r = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                      (Expr*[]){den_resid, g_pow}, 2));
+        } else {
+            expr_free(den_r);
+            den_r = den_resid;
+        }
     }
 
     /* Step 6: assemble num_r / den_r, substitute generators back, clean.
