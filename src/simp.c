@@ -9,6 +9,7 @@
 #include "expr.h"
 #include "rationalize.h"
 #include "sym_names.h"
+#include "sym_intern.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1673,6 +1674,411 @@ static Expr* simp_radicals_impl(const Expr* e) {
 
 static Expr* simp_radicals(const Expr* e) {
     return simp_memo_wrap(e, "$Radicals", simp_radicals_impl);
+}
+
+/* ----------------------------------------------------------------------- */
+/* Algebraic-extension reduction: simp_algebraic                           */
+/* ----------------------------------------------------------------------- */
+
+/*
+ * simp_algebraic rewrites an expression that contains one or more
+ * distinct square-root sub-expressions Sqrt[u_i] by treating each
+ * Sqrt[u_i] as a generator g_i of the algebraic extension
+ *   K(vars)[g_1, ..., g_n] / (g_1^2 - u_1, ..., g_n^2 - u_n).
+ * Standard rational arithmetic (Together) followed by reduction modulo
+ * the relation ideal and successive rationalisation of the denominator
+ * collapses identities that ordinary Together / Cancel cannot see, e.g.
+ *
+ *   (x/Sqrt[x^2+1] + 1) / ((Sqrt[x^2+1] + x)^2 + 1)  ->  1/(2 + 2 x^2)
+ *   (x/(Sqrt[x^2+6] - Sqrt[6]))(1/Sqrt[x^2+6]
+ *      - (Sqrt[x^2+6] - Sqrt[6])/x^2)                ->  Sqrt[6]/(x Sqrt[x^2+6])
+ *   2/(Sqrt[(x+1)/(1-x)] - 1/Sqrt[(x+1)/(1-x)])      ->  Sqrt[(x+1)/(1-x)] (1-x)/x
+ *
+ * Algorithm:
+ *   1. Walk the expression collecting every distinct surd argument
+ *      u_i where Power[u_i, p/q] appears with q != 1. Bail if any q != 2
+ *      (cube roots etc.), if any u_i contains an explicit complex
+ *      literal, or if more than ALG_MAX_SURDS distinct bases appear.
+ *   2. Substitute Sqrt[u_i] -> g_i for fresh distinct generator symbols.
+ *      After substitution, the expression is a rational function in
+ *      (vars, g_1, ..., g_n).
+ *   3. Together  ->  N / D, both polynomials in (vars, g_1, ..., g_n).
+ *   4. Reduce both N and D modulo the relation ideal {g_i^2 - u_i}_i
+ *      via successive CoefficientList[..., g_i] decomposition. After
+ *      one sweep across all generators the polynomial is multilinear
+ *      in {g_i}: every g_i appears at degree 0 or 1.
+ *   5. For i = 1..n, rationalise the i-th generator out of the
+ *      denominator: multiply numerator and denominator by sigma_i(D)
+ *      (D with g_i sign-flipped), then reduce again. After each step
+ *      g_i has been eliminated from the denominator. The product
+ *      D * sigma_i(D) lies in K[g_1, ..., g_{i-1}, g_{i+1}, ..., g_n]
+ *      because the g_i terms in (a + b g_i)(a - b g_i) = a^2 - b^2 u_i
+ *      cancel.
+ *   6. Substitute g_i -> Sqrt[u_i] back, run Together / Cancel for
+ *      cleanup, and accept the result iff its complexity score is
+ *      strictly lower than the input.
+ *
+ * Principal-branch concern: the substitution Sqrt[u_i]^2 = u_i is only
+ * sound where u_i lies in the principal branch's domain. We accept the
+ * Mathematica-style convention (Simplify treats this as an identity on
+ * the natural domain where the input is real) but skip when any u_i
+ * contains an explicit complex literal (Complex[..,..] or the symbol I)
+ * so we never produce a result that swallows a sign-of-imaginary-part
+ * change silently.
+ */
+
+#define ALG_MAX_SURDS 4
+
+/* Walk e collecting distinct surd bases. The walker enforces:
+ *   - every Power[base, p/q] with q != 1 has q == 2,
+ *   - distinct bases (by structural equality, expr_eq) accumulate into
+ *     bases[0..*n_bases-1] up to max_n,
+ *   - returns false on q != 2 or when bases would overflow max_n.
+ *
+ * Borrowed pointers into `e`. */
+static bool alg_collect_sqrt_bases(const Expr* e, const Expr** bases,
+                                   size_t* n_bases, size_t max_n) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        Expr* exp        = e->data.function.args[1];
+        int64_t p, q;
+        if (is_rational(exp, &p, &q) && q != 1) {
+            if (q != 2) return false;
+            bool seen = false;
+            for (size_t i = 0; i < *n_bases; i++) {
+                if (expr_eq((Expr*)base, (Expr*)bases[i])) { seen = true; break; }
+            }
+            if (!seen) {
+                if (*n_bases >= max_n) return false;
+                bases[(*n_bases)++] = base;
+            }
+        }
+    }
+    if (!alg_collect_sqrt_bases(e->data.function.head, bases, n_bases, max_n))
+        return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (!alg_collect_sqrt_bases(e->data.function.args[i], bases, n_bases, max_n))
+            return false;
+    }
+    return true;
+}
+
+/* Returns true if any sub-expression has head Complex or contains the
+ * symbol I. Used to gate simp_algebraic off explicit-complex inputs
+ * whose Sqrt[]^2 = arg identity could mask a branch flip. */
+static bool contains_explicit_complex(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL && e->data.symbol == SYM_I) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Complex) return true;
+    if (contains_explicit_complex(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (contains_explicit_complex(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* For every Power[bases[i], p/2] in e, replace with bases[i]^floor(p/2)
+ * * gens[i]^(p mod 2) (computed via floor-division so negative p is
+ * handled correctly). Bases that don't appear are passed through. */
+static Expr* alg_subst_sqrt_to_gens(const Expr* e, const Expr** bases,
+                                    const char** gens, size_t n) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        Expr* exp = e->data.function.args[1];
+        int64_t p, q;
+        if (is_rational(exp, &p, &q) && q == 2) {
+            const Expr* base = e->data.function.args[0];
+            for (size_t i = 0; i < n; i++) {
+                if (expr_eq((Expr*)base, (Expr*)bases[i])) {
+                    int64_t m = p / 2;
+                    int64_t r = p - 2 * m;
+                    if (r < 0) { m -= 1; r += 2; }
+                    Expr* base_pow = (m == 0)
+                        ? expr_new_integer(1)
+                        : eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                              (Expr*[]){expr_copy((Expr*)base), expr_new_integer(m)}, 2));
+                    Expr* g_pow = (r == 0)
+                        ? expr_new_integer(1)
+                        : expr_new_symbol(gens[i]);
+                    return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                              (Expr*[]){base_pow, g_pow}, 2));
+                }
+            }
+        }
+    }
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (count ? count : 1));
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = alg_subst_sqrt_to_gens(e->data.function.args[i], bases, gens, n);
+    }
+    Expr* new_head = alg_subst_sqrt_to_gens(e->data.function.head, bases, gens, n);
+    Expr* result = eval_and_free(expr_new_function(new_head, new_args, count));
+    free(new_args);
+    return result;
+}
+
+/* For each generator symbol gens[i], replace with Sqrt[bases[i]]. */
+static Expr* alg_subst_gens_to_sqrt(const Expr* e, const char** gens,
+                                    const Expr** bases, size_t n) {
+    if (!e) return NULL;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < n; i++) {
+            if (e->data.symbol == gens[i]) {
+                return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                          (Expr*[]){expr_copy((Expr*)bases[i]), make_rational(1, 2)}, 2));
+            }
+        }
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (count ? count : 1));
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = alg_subst_gens_to_sqrt(e->data.function.args[i], gens, bases, n);
+    }
+    Expr* new_head = alg_subst_gens_to_sqrt(e->data.function.head, gens, bases, n);
+    Expr* result = eval_and_free(expr_new_function(new_head, new_args, count));
+    free(new_args);
+    return result;
+}
+
+/* Replace every occurrence of generator gi_sym with -gi_sym in e. Used
+ * to compute sigma_i(den) for rationalisation. */
+static Expr* alg_sigma_negate(const Expr* e, const char* gi_sym) {
+    if (!e) return NULL;
+    if (e->type == EXPR_SYMBOL && e->data.symbol == gi_sym) {
+        return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                  (Expr*[]){expr_new_integer(-1), expr_copy((Expr*)e)}, 2));
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (count ? count : 1));
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = alg_sigma_negate(e->data.function.args[i], gi_sym);
+    }
+    Expr* new_head = alg_sigma_negate(e->data.function.head, gi_sym);
+    Expr* result = eval_and_free(expr_new_function(new_head, new_args, count));
+    free(new_args);
+    return result;
+}
+
+/* Reduce poly modulo gi_sym^2 - u_i: returns A + B*gi where
+ *   A = sum_{k even} a_k u^(k/2)
+ *   B = sum_{k odd}  a_k u^((k-1)/2)
+ * with a_k extracted via CoefficientList[poly, gi_sym]. The caller is
+ * expected to have Expand-ed `poly` first. Returns NULL if
+ * CoefficientList didn't yield a List. */
+static Expr* alg_reduce_one_gen(const Expr* poly, const char* gi_sym,
+                                const Expr* ui) {
+    Expr* cl_args[2] = { expr_copy((Expr*)poly), expr_new_symbol(gi_sym) };
+    Expr* cl_call = expr_new_function(expr_new_symbol("CoefficientList"),
+                                      cl_args, 2);
+    Expr* coefs = evaluate(cl_call);
+    expr_free(cl_call);
+    if (!coefs || coefs->type != EXPR_FUNCTION ||
+        coefs->data.function.head->type != EXPR_SYMBOL ||
+        coefs->data.function.head->data.symbol != SYM_List) {
+        if (coefs) expr_free(coefs);
+        return NULL;
+    }
+
+    size_t n = coefs->data.function.arg_count;
+    Expr** evens = (Expr**)malloc(sizeof(Expr*) * (n + 1));
+    Expr** odds  = (Expr**)malloc(sizeof(Expr*) * (n + 1));
+    size_t ne = 0, no = 0;
+    for (size_t k = 0; k < n; k++) {
+        Expr* ck = coefs->data.function.args[k];
+        int64_t exp_u = (int64_t)(k / 2);
+        Expr* upow = (exp_u == 0)
+            ? expr_new_integer(1)
+            : eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                  (Expr*[]){expr_copy((Expr*)ui), expr_new_integer(exp_u)}, 2));
+        Expr* term = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                  (Expr*[]){expr_copy(ck), upow}, 2));
+        if ((k & 1) == 0) evens[ne++] = term;
+        else              odds[no++]  = term;
+    }
+    expr_free(coefs);
+
+    Expr* a_sum;
+    if (ne == 0)      a_sum = expr_new_integer(0);
+    else if (ne == 1) a_sum = evens[0];
+    else              a_sum = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+                                                              evens, ne));
+    Expr* b_sum;
+    if (no == 0)      b_sum = expr_new_integer(0);
+    else if (no == 1) b_sum = odds[0];
+    else              b_sum = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+                                                              odds, no));
+    free(evens);
+    free(odds);
+
+    /* Combine A + B*gi into a single expression. */
+    Expr* b_gi = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                  (Expr*[]){b_sum, expr_new_symbol(gi_sym)}, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+                  (Expr*[]){a_sum, b_gi}, 2));
+}
+
+/* Reduce poly modulo all relations {gi_sym^2 - u_i}_i by sweeping each
+ * generator once. The result is multilinear in (g_1, ..., g_n). The
+ * input is Expand-ed before each generator pass so CoefficientList sees
+ * the canonical polynomial form. Returns NULL on any inner failure. */
+static Expr* alg_reduce_all(const Expr* poly, const char** gens,
+                            const Expr** us, size_t n) {
+    Expr* cur = call_unary_copy("Expand", poly);
+    for (size_t i = 0; i < n; i++) {
+        Expr* nxt = alg_reduce_one_gen(cur, gens[i], us[i]);
+        expr_free(cur);
+        if (!nxt) return NULL;
+        cur = call_unary_owned("Expand", nxt);
+    }
+    return cur;
+}
+
+static Expr* simp_algebraic_impl(const Expr* e) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+
+    /* Cheap precondition: nothing to do without a half-integer Power. */
+    if (!has_non_integer_power(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("Algebraic", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    const Expr* bases[ALG_MAX_SURDS];
+    size_t n = 0;
+    if (!alg_collect_sqrt_bases(e, bases, &n, ALG_MAX_SURDS) || n == 0) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("Algebraic", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+    /* Each surd's argument must itself be surd-free and contain no
+     * explicit complex literals. */
+    for (size_t i = 0; i < n; i++) {
+        if (has_non_integer_power(bases[i]) ||
+            contains_explicit_complex(bases[i])) {
+            Expr* out = expr_copy((Expr*)e);
+            if (dbg) simp_debug_log("Algebraic", e, out,
+                                    simp_debug_elapsed_ms(t0));
+            return out;
+        }
+    }
+    if (contains_explicit_complex(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("Algebraic", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    /* Allocate a fresh interned generator symbol per surd. The names
+     * are $-prefixed so they won't collide with user symbols. */
+    const char* gens[ALG_MAX_SURDS];
+    static const char* gen_names[ALG_MAX_SURDS] = {
+        "$pc_alggen0$", "$pc_alggen1$", "$pc_alggen2$", "$pc_alggen3$"
+    };
+    for (size_t i = 0; i < n; i++) gens[i] = intern_symbol(gen_names[i]);
+
+    /* Step 2-3: substitute and Together. */
+    Expr* sub = alg_subst_sqrt_to_gens(e, bases, gens, n);
+    Expr* tg  = call_unary_owned("Together", sub);
+    Expr* num = call_unary_copy("Numerator",   tg);
+    Expr* den = call_unary_copy("Denominator", tg);
+    expr_free(tg);
+
+    /* Step 4: reduce both modulo the relation ideal. */
+    Expr* num_r = alg_reduce_all(num, gens, bases, n);
+    Expr* den_r = alg_reduce_all(den, gens, bases, n);
+    expr_free(num); expr_free(den);
+    if (!num_r || !den_r) {
+        if (num_r) expr_free(num_r);
+        if (den_r) expr_free(den_r);
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("Algebraic", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    /* Step 5: rationalise each generator out of the denominator in turn. */
+    for (size_t i = 0; i < n; i++) {
+        Expr* sig = alg_sigma_negate(den_r, gens[i]);
+        Expr* num_mul = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                          (Expr*[]){num_r, expr_copy(sig)}, 2));
+        Expr* den_mul = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                          (Expr*[]){den_r, sig}, 2));
+        Expr* num_next = alg_reduce_all(num_mul, gens, bases, n);
+        Expr* den_next = alg_reduce_all(den_mul, gens, bases, n);
+        expr_free(num_mul); expr_free(den_mul);
+        if (!num_next || !den_next) {
+            if (num_next) expr_free(num_next);
+            if (den_next) expr_free(den_next);
+            Expr* out = expr_copy((Expr*)e);
+            if (dbg) simp_debug_log("Algebraic", e, out,
+                                    simp_debug_elapsed_ms(t0));
+            return out;
+        }
+        num_r = num_next;
+        den_r = den_next;
+    }
+
+    /* Step 6: assemble num_r / den_r, substitute generators back, clean.
+     *
+     * Apply Factor to the polynomial-in-(vars, g_1..g_n) numerator and
+     * denominator before substituting g_i -> Sqrt[u_i]. Without this
+     * step, Cancel sees expanded polynomials whose common (u_i)^k
+     * factors share denominators with Sqrt[u_i]^(2k); Factor exposes
+     * the (u_i)^k structure so Cancel can combine
+     * Power[u_i, k] * Power[u_i, 1/2] / Power[u_i, j]
+     * into a single Power[u_i, ...] term. */
+    Expr* num_factored = call_unary_owned("Factor", num_r);
+    Expr* den_factored = call_unary_owned("Factor", den_r);
+
+    Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                  (Expr*[]){den_factored, expr_new_integer(-1)}, 2));
+    Expr* quot = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                  (Expr*[]){num_factored, den_inv}, 2));
+
+    Expr* with_sqrt = alg_subst_gens_to_sqrt(quot, gens, bases, n);
+    expr_free(quot);
+    Expr* result = call_unary_owned("Cancel", with_sqrt);
+
+    /* Complexity gate: accept any form whose complexity score is no
+     * greater than the input. The strict ">=" rejection used by the
+     * simp_search round loop is too tight here because rationalisation
+     * often hits a tied score (e.g. 1/(Sqrt[a]+Sqrt[b]) trades the
+     * Power[..,-1] head for a single Times[-1, ...] term while keeping
+     * two Sqrt leaves -- equal complexity but the rationalised form is
+     * the conventionally preferred shape). simp_search's later round
+     * loop will still pick the strictly-better form when one exists. */
+    if (simp_default_complexity(result) > simp_default_complexity(e)) {
+        expr_free(result);
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("Algebraic", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    if (dbg) simp_debug_log("Algebraic", e, result,
+                            simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+static Expr* simp_algebraic(const Expr* e) {
+    return simp_memo_wrap(e, "$Algebraic", simp_algebraic_impl);
 }
 
 /* Pythagorean reduction:
@@ -3349,6 +3755,23 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
      * factors. */
     {
         Expr* alt = simp_radicals(input);
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+
+    /* Algebraic-extension seed: substitute each Sqrt[u_i] by a fresh
+     * generator g_i, reduce in K(vars)[g_1,...,g_n]/(g_i^2 - u_i), and
+     * rationalise the denominator by successive sigma-conjugation.
+     * Collapses identities ordinary Together / Cancel cannot see, e.g.
+     *   (x/Sqrt[x^2+1] + 1) / ((Sqrt[x^2+1] + x)^2 + 1)  ->  1/(2 + 2 x^2)
+     * Inert when there is no surd, when any surd has q != 2, or when
+     * the input contains an explicit complex literal. */
+    {
+        Expr* alt = simp_algebraic(input);
         if (alt && !expr_eq(alt, input)) {
             update_best(&best, &best_score, alt, complexity_func);
             cs_add_or_free(&seeds, alt);

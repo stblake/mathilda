@@ -9274,3 +9274,75 @@ locks in:
   binary) and added it to the `build_ecm` dependency list.
 - `EVAL_IMPROVEMENTS_PLAN.md`: §3.5 and §3.6 marked done with the
   implementation notes; M4 closed.
+
+
+## simp_algebraic: algebraic-extension reduction in Simplify (2026-05-04)
+
+`Simplify` now collapses identities involving square-root surds that
+ordinary `Together` / `Cancel` cannot see, by treating each distinct
+`Sqrt[u_i]` as a generator `g_i` of the algebraic extension
+
+    K(vars)[g_1, ..., g_n] / (g_1^2 - u_1, ..., g_n^2 - u_n)
+
+and rationalising the denominator via successive sigma-conjugation.
+
+### Examples
+
+    Simplify[(x/Sqrt[x^2 + 1] + 1)/((Sqrt[x^2 + 1] + x)^2 + 1)]
+        →  1/(2 + 2 x^2)
+
+    Simplify[(x*(1/Sqrt[x^2 + 6] - (Sqrt[x^2 + 6] - Sqrt[6])/x^2))/
+             (Sqrt[x^2 + 6] - Sqrt[6])]
+        →  Sqrt[6]/(x Sqrt[6 + x^2])
+
+    Simplify[2/(Sqrt[(x + 1)/(1 - x)] - 1/Sqrt[(x + 1)/(1 - x)])]
+        →  (1 + x)/(x Sqrt[(1 + x)/(1 - x)])
+
+### Algorithm
+
+1. Walk the input collecting every distinct surd argument `u_i` from
+   `Power[u_i, p/q]` with `q != 1`. Bail if any `q != 2`, if more
+   than `ALG_MAX_SURDS` (currently 4) distinct bases appear, or if
+   any `u_i` contains an explicit complex literal (`Complex[..,..]`,
+   the symbol `I`).
+2. Substitute `Sqrt[u_i] -> g_i` for fresh `$pc_alggen{i}$` symbols.
+3. `Together` -> `N / D`, both polynomials in `(vars, g_1, ..., g_n)`.
+4. Reduce `N` and `D` modulo the relation ideal `{g_i^2 - u_i}_i` via
+   successive `CoefficientList[..., g_i]` decomposition. After one
+   sweep across all generators the polynomial is multilinear in the
+   `g_i` (each `g_i` appears at degree 0 or 1).
+5. For `i = 1..n`, multiply numerator and denominator by `sigma_i(D)`
+   (denominator with `g_i` sign-flipped) and reduce again. Each step
+   eliminates `g_i` from the denominator because
+   `(a + b g_i)(a - b g_i) = a^2 - b^2 u_i` is `g_i`-free.
+6. `Factor` numerator and denominator separately to expose shared
+   `Power[u_i, k]` factors that would otherwise be hidden by the
+   expanded polynomial form, then substitute `g_i -> Sqrt[u_i]`,
+   `Cancel` to combine `Power[u_i, k] * Power[u_i, 1/2]` terms.
+
+The transform is wired as a one-shot seed in `simp_search`. A
+complexity gate (`>` rather than `>=`) lets it preserve a tied score
+for outputs that are conventionally preferred (e.g. the rationalised
+form of `1/(Sqrt[a]+Sqrt[b])`); strictly worse forms are rejected.
+
+### Principal-branch caveat
+
+The substitution `Sqrt[u]^2 = u` is only sound where `u` lies in the
+principal branch's domain. We accept the Mathematica-style convention
+(`Simplify` treats this as an identity on the natural real-domain
+where the input is real) but skip the transform when any surd
+argument contains an explicit complex literal so a sign-of-imaginary-
+part change cannot be silently absorbed.
+
+### Files touched
+
+- `src/simp.c`: new `simp_algebraic_impl` plus helpers
+  (`alg_collect_sqrt_bases`, `alg_subst_sqrt_to_gens`,
+  `alg_subst_gens_to_sqrt`, `alg_sigma_negate`, `alg_reduce_one_gen`,
+  `alg_reduce_all`, `contains_explicit_complex`); wired as a seed in
+  `simp_search` alongside `simp_radicals`. Includes `sym_intern.h`
+  for canonical generator-symbol pointers.
+- `tests/test_simplify.c`: three new tests
+  (`test_simplify_algebraic_single_surd`,
+  `test_simplify_algebraic_multi_surd`,
+  `test_simplify_algebraic_fractional_surd_arg`).

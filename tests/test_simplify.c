@@ -413,6 +413,35 @@ void test_simplify_tan_three_angle_addition(void) {
         "Tan[x + y + z]", 0);
 }
 
+/* simp_algebraic single-surd reduction. Substitution Sqrt[x^2+1] -> g
+ * with relation g^2 = x^2+1 turns ((g+x)^2 + 1) into 2g(g+x), which
+ * cancels the (g+x) numerator and leaves 1/(2*(x^2+1)). */
+void test_simplify_algebraic_single_surd(void) {
+    assert_eval_eq(
+        "Simplify[(x/Sqrt[x^2 + 1] + 1)/((Sqrt[x^2 + 1] + x)^2 + 1)]",
+        "1/(2 + 2 x^2)", 0);
+}
+
+/* simp_algebraic multi-surd reduction. Two surds, Sqrt[x^2+6] and
+ * Sqrt[6], are introduced as independent generators g1, g2 with
+ * relations g1^2 = x^2+6 and g2^2 = 6. Successive sigma-conjugation
+ * rationalisation collapses the expression to Sqrt[6]/(x Sqrt[x^2+6]). */
+void test_simplify_algebraic_multi_surd(void) {
+    assert_eval_eq(
+        "Simplify[(x*(1/Sqrt[x^2 + 6] - (Sqrt[x^2 + 6] - Sqrt[6])/x^2))/"
+        "(Sqrt[x^2 + 6] - Sqrt[6])]",
+        "Sqrt[6]/(x Sqrt[6 + x^2])", 0);
+}
+
+/* simp_algebraic with a fractional surd argument. The substitution
+ * Sqrt[(x+1)/(1-x)] -> g with relation g^2 = (x+1)/(1-x) reduces
+ * 2/(g - 1/g) = 2g/(g^2 - 1) to a Sqrt-multiplied rational form. */
+void test_simplify_algebraic_fractional_surd_arg(void) {
+    assert_eval_eq(
+        "Simplify[2/(Sqrt[(x + 1)/(1 - x)] - 1/Sqrt[(x + 1)/(1 - x)])]",
+        "(1 + x)/(x Sqrt[(1 + x)/(1 - x)])", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -478,6 +507,9 @@ int main(void) {
     TEST(test_simplify_trig_radical_angle_addition_two_vars);
     TEST(test_simplify_trig_split_multiplicative_extra_factor);
     TEST(test_simplify_tan_three_angle_addition);
+    TEST(test_simplify_algebraic_single_surd);
+    TEST(test_simplify_algebraic_multi_surd);
+    TEST(test_simplify_algebraic_fractional_surd_arg);
 
     printf("All Simplify tests passed!\n");
     return 0;
