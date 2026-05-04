@@ -9486,3 +9486,80 @@ Concrete win:
   exercising these passes plus existing simplification machinery.
 - `tests/test_numeric.c`: aligned `N[x^(1/2)]` expectation with the
   numericalize fix above (`Sqrt[x]`, not `x^0.5`).
+
+## ExpToTrig seed + reciprocal Pythagorean identities (2026-05-04)
+
+`Simplify` previously could not collapse pure-Exp inputs whose natural
+canonical form lives in the hyperbolic trig algebra. Two gaps:
+
+1. **The `TrigRoundtrip` seed in `simp_search` was gated on
+   `contains_trig_or_hyperbolic(input)`**, so an input like
+   `-1 + (E^x - E^-x)^2 / (E^x + E^-x)^2` -- which has no Cosh / Sinh
+   head -- skipped the entire trig pipeline. The result rolled out as
+   `-(4 E^(2x)) / (1 + 2 E^(2x) + E^(4x))`.
+
+2. **`PythagReduce` carried no rules for the reciprocal pairs**
+   (Tanh ⇄ Sech, Coth ⇄ Csch, Tan ⇄ Sec, Cot ⇄ Csc). Even after
+   `simp_search` reached the intermediate `-1 + Tanh[x]^2`, neither
+   PythagReduce nor anything else could collapse it to `-Sech[x]^2` --
+   and `simp_search`'s `update_best` uses a strict `<` tiebreak, so the
+   tied-score plateau (both forms cost 7) preferred whichever arrived
+   first.
+
+### Fix A: `ExpToTrig` seed
+
+A new seed in `simp_search` runs `ExpToTrig[input]` when:
+
+- the input contains a `Power[E, _]` subexpression
+  (`contains_exp_form`), AND
+- the input does **not** already contain trig / hyperbolic heads
+  (`TrigRoundtrip` handles those).
+
+The result is added as a candidate (with the same 2x score-blowup
+guard as `TrigRoundtrip`), giving the round loop access to forms
+like `Sinh[x]^2 / Cosh[x]^2 - 1` that the existing `Together` /
+`Cancel` / `Pythag*` pipeline can drive to closure.
+
+### Fix B: Reciprocal Pythagorean rules + polish pass
+
+`PythagReduce`'s rule list was extended with eight new entries:
+
+    1 - Tanh[x_]^2 -> Sech[x]^2
+    -1 + Tanh[x_]^2 -> -Sech[x]^2
+    -1 + Coth[x_]^2 -> Csch[x]^2
+    1 - Coth[x_]^2 -> -Csch[x]^2
+    1 + Tan[x_]^2 -> Sec[x]^2
+    -1 - Tan[x_]^2 -> -Sec[x]^2
+    1 + Cot[x_]^2 -> Csc[x]^2
+    -1 - Cot[x_]^2 -> -Csc[x]^2
+
+`has_pythag_head` was extended to include Tan / Cot / Tanh / Coth so
+the cheap fast-skip gate still applies when the input has none of
+those heads.
+
+These rules tie on `SimplifyCount` (both forms cost 7), so they would
+lose the strict-`<` tiebreak inside `simp_search`. To resolve the tie
+in favour of the structurally-collapsed reciprocal-head form, a new
+final-form polish runs `transform_pythag_reduce` on the
+`simp_bottomup` result and accepts on `<=`. The polish lives next to
+`simp_lift_common_factor` and `canon_negate_pairs` in
+`builtin_simplify`.
+
+### Concrete wins
+
+    Simplify[-1 + (-E^(-x) + E^x)^2 / (E^(-x) + E^x)^2]
+        was -> -(4 E^(2 x)) / (1 + 2 E^(2 x) + E^(4 x))
+        now -> -Sech[x]^2
+
+    Simplify[-1 + Tanh[x]^2]   ->  -Sech[x]^2
+    Simplify[1 + Tan[x]^2]     ->  Sec[x]^2
+    Simplify[1 + Cot[x]^2]     ->  Csc[x]^2
+    Simplify[-1 + Coth[x]^2]   ->  Csch[x]^2
+
+### Files touched
+
+- `src/simp.c`: `contains_exp_form`, ExpToTrig seed in `simp_search`,
+  extended `PythagReduce` rule list, extended `has_pythag_head`, new
+  polish pass in `builtin_simplify`.
+- `tests/test_simplify.c`: five regression tests covering the
+  Exp→Sech path and each reciprocal-pair identity.

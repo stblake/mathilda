@@ -2715,7 +2715,9 @@ static bool has_pythag_head(const Expr* e) {
     if (head && head->type == EXPR_SYMBOL) {
         const char* h = head->data.symbol;
         if (h == SYM_Cos || h == SYM_Sin ||
-            h == SYM_Cosh || h == SYM_Sinh) {
+            h == SYM_Cosh || h == SYM_Sinh ||
+            h == SYM_Tan || h == SYM_Cot ||
+            h == SYM_Tanh || h == SYM_Coth) {
             return true;
         }
     }
@@ -2737,7 +2739,25 @@ static Expr* transform_pythag_reduce_impl(const Expr* e) {
             "  -1 + Cosh[x_]^2 + r___ :> Sinh[x]^2 + r, "
             "  1 + Sinh[x_]^2 + r___ :> Cosh[x]^2 + r, "
             "  1 - Cosh[x_]^2 + r___ :> -Sinh[x]^2 + r, "
-            "  -1 - Sinh[x_]^2 + r___ :> -Cosh[x]^2 + r }");
+            "  -1 - Sinh[x_]^2 + r___ :> -Cosh[x]^2 + r, "
+            /* Reciprocal-pair identities. tanh^2 + sech^2 == 1, so
+             *   1 - Tanh^2 -> Sech^2  and  -1 + Tanh^2 -> -Sech^2.
+             * coth^2 - csch^2 == 1, so
+             *   -1 + Coth^2 -> Csch^2 and  1 - Coth^2 -> -Csch^2.
+             * tan^2 + 1 == sec^2, cot^2 + 1 == csc^2 (real-valued
+             * Pythagorean trig).  These resolve a tied-score plateau
+             * where the simp_search round loop's strict `<` tiebreak
+             * would otherwise prefer the bare Plus form (e.g. score 7 =
+             * score 7 for `-1 + Tanh^2` vs `-Sech^2`); fired here, the
+             * structural collapse to a single Power head wins outright. */
+            "  1 - Tanh[x_]^2 + r___  :> Sech[x]^2 + r, "
+            "  -1 + Tanh[x_]^2 + r___ :> -Sech[x]^2 + r, "
+            "  -1 + Coth[x_]^2 + r___ :> Csch[x]^2 + r, "
+            "  1 - Coth[x_]^2 + r___  :> -Csch[x]^2 + r, "
+            "  1 + Tan[x_]^2 + r___   :> Sec[x]^2 + r, "
+            "  -1 - Tan[x_]^2 + r___  :> -Sec[x]^2 + r, "
+            "  1 + Cot[x_]^2 + r___   :> Csc[x]^2 + r, "
+            "  -1 - Cot[x_]^2 + r___  :> -Csc[x]^2 + r }");
     }
     if (!rules) return NULL;
     bool dbg = simp_debug_enabled();
@@ -3022,6 +3042,31 @@ static bool contains_trig_or_hyperbolic(const Expr* e) {
     if (contains_trig_or_hyperbolic(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_trig_or_hyperbolic(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* True iff `e` contains a Power[E, _] subexpression -- i.e. an Exp atom in
+ * exponential form (E^x, E^(-x), E^(I Pi), ...). Used to gate the
+ * ExpToTrig seed: pure-Exp inputs miss every trig-gated transform
+ * (TrigRoundtrip, PythagReduce, TrigFactor, ...) because their gates
+ * check for Cos/Sin/Cosh/Sinh heads. ExpToTrig converts the Exp form
+ * to Cosh/Sinh, opening those transforms to subsequent rounds. */
+static bool contains_exp_form(const Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        if (base && base->type == EXPR_SYMBOL && base->data.symbol == SYM_E) {
+            return true;
+        }
+    }
+    if (contains_exp_form(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (contains_exp_form(e->data.function.args[i])) return true;
     }
     return false;
 }
@@ -4287,6 +4332,36 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         }
     }
 
+    /* ExpToTrig seed. TrigRoundtrip is gated on contains_trig_or_hyperbolic
+     * which rejects pure-Exp inputs (e.g.
+     * `-1 + (-E^-x + E^x)^2/(E^-x + E^x)^2` has no Cosh/Sinh head and so
+     * misses the entire trig pipeline). ExpToTrig converts E^... into
+     * Cosh/Sinh form, after which PythagReduce / Together / Cancel can
+     * collapse the result (the example above lands at `-Sech[x]^2`).
+     * Score-gate the seed propagation the same way TrigRoundtrip does:
+     * keep wins as the new best, but only forward seeds that haven't
+     * blown up the structure. Skip when the input already has trig or
+     * hyperbolic heads -- TrigRoundtrip handles that case. */
+    if (contains_exp_form(input) && !contains_trig_or_hyperbolic(input)) {
+        bool dbg = simp_debug_enabled();
+        clock_t t0 = dbg ? clock() : 0;
+        Expr* alt = call_unary_copy("ExpToTrig", input);
+        if (dbg) simp_debug_log("ExpToTrigSeed", input, alt,
+                                simp_debug_elapsed_ms(t0));
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            size_t alt_score = score_with_func(alt, complexity_func);
+            size_t input_score = score_with_func(input, complexity_func);
+            if (alt_score <= 2 * input_score + 8) {
+                cs_add_or_free(&seeds, alt);
+            } else {
+                expr_free(alt);
+            }
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+
     /* Pythagorean square-completion seed. Idempotent on inputs without the
      * 1 +/- 2 Sin Cos shape, so always cheap to try. */
     {
@@ -5488,6 +5563,31 @@ Expr* builtin_simplify(Expr* res) {
             }
         } else if (lifted) {
             expr_free(lifted);
+        }
+    }
+
+    /* Pythagorean polish: PythagReduce already runs as a seed inside
+     * simp_search, but its result enters update_best with a strict `<`
+     * tiebreak, so structurally-collapsed forms that tie on
+     * SimplifyCount (e.g. `-Sech[x]^2` vs `-1 + Tanh[x]^2`, both score
+     * 7) lose to whatever arrived at the score plateau first. As a
+     * polish, accept on `<=`: when the pythag rules turn the result
+     * into a single Power-of-trig head with the same score or lower,
+     * take it. Bypass when the Tanh/Coth/Tan/Cot rules cannot fire
+     * (no relevant head present). */
+    {
+        Expr* reduced = transform_pythag_reduce(best);
+        if (reduced && !expr_eq(reduced, best)) {
+            size_t s_red  = score_with_func(reduced, opt_complexity);
+            size_t s_best = score_with_func(best, opt_complexity);
+            if (s_red <= s_best) {
+                expr_free(best);
+                best = reduced;
+            } else {
+                expr_free(reduced);
+            }
+        } else if (reduced) {
+            expr_free(reduced);
         }
     }
 

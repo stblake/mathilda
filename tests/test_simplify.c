@@ -573,6 +573,30 @@ void test_simplify_user_factor_numerator_radical_denom(void) {
         "(5 x^2 (3 + x))/(5 + 2 x)^(3/2)", 0);
 }
 
+/* Reciprocal-pair Pythagorean identities: simplifier must recognise the
+ * Tanh/Coth/Tan/Cot squared minus/plus 1 forms and collapse them to the
+ * matching reciprocal head. The motivating user case is the pure-Exp
+ * input -1 + (E^x - E^-x)^2/(E^x + E^-x)^2: ExpToTrig converts it to
+ * Sinh^2/Cosh^2 - 1 = -1 + Tanh^2 which then must reduce to -Sech^2.
+ * See PythagReduce rule extension and the polish pass in
+ * builtin_simplify. */
+void test_simplify_user_neg_sech_squared_from_exp_form(void) {
+    assert_eval_eq("Simplify[-1 + (-E^(-x) + E^x)^2/(E^(-x) + E^x)^2]",
+                   "-Sech[x]^2", 0);
+}
+void test_simplify_user_neg_one_plus_tanh_squared(void) {
+    assert_eval_eq("Simplify[-1 + Tanh[x]^2]", "-Sech[x]^2", 0);
+}
+void test_simplify_user_one_plus_tan_squared(void) {
+    assert_eval_eq("Simplify[1 + Tan[x]^2]", "Sec[x]^2", 0);
+}
+void test_simplify_user_one_plus_cot_squared(void) {
+    assert_eval_eq("Simplify[1 + Cot[x]^2]", "Csc[x]^2", 0);
+}
+void test_simplify_user_neg_one_plus_coth_squared(void) {
+    assert_eval_eq("Simplify[-1 + Coth[x]^2]", "Csch[x]^2", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -654,6 +678,11 @@ int main(void) {
     TEST(test_simplify_user_factor_common_power);
     TEST(test_simplify_user_two_surd_difference);
     TEST(test_simplify_user_factor_numerator_radical_denom);
+    TEST(test_simplify_user_neg_sech_squared_from_exp_form);
+    TEST(test_simplify_user_neg_one_plus_tanh_squared);
+    TEST(test_simplify_user_one_plus_tan_squared);
+    TEST(test_simplify_user_one_plus_cot_squared);
+    TEST(test_simplify_user_neg_one_plus_coth_squared);
 
     printf("All Simplify tests passed!\n");
     return 0;
