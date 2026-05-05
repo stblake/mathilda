@@ -4,6 +4,7 @@
 #include "part.h"
 #include "eval.h"
 #include "symtab.h"
+#include "repl_hooks.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +15,7 @@
 
 void process_input(const char* input, int line_number) {
     if (strlen(input) == 0) return;
-    
+
     // Update $Line
     Expr* line_sym = expr_new_symbol("$Line");
     Expr* line_val = expr_new_integer(line_number);
@@ -22,38 +23,60 @@ void process_input(const char* input, int line_number) {
     expr_free(line_sym);
     expr_free(line_val);
 
-    // Parse the input
-    Expr* parsed = parse_expression(input);
+    /* $PreRead: text-level hook applied to the raw input string
+     * before parsing. Pass-through (a strdup of `input`) when unset. */
+    char* cooked_input = repl_apply_pre_read(input);
+    if (!cooked_input) {
+        printf("Parse error\n\n");
+        return;
+    }
+
+    // Parse the (possibly hook-transformed) input
+    Expr* parsed = parse_expression(cooked_input);
+    free(cooked_input);
     if (!parsed) {
         printf("Parse error\n\n");
         return;
     }
-    
-    // Evaluate
-    Expr* evaluated = evaluate(parsed);
-    
-    // Store In[line_number] = parsed
+
+    /* Store In[line_number] = parsed BEFORE running $Pre/$Post so that
+     * In[n] reflects what the user typed, not whatever a hook did. */
     Expr* in_sym = expr_new_symbol("In");
     Expr* in_arg = expr_new_integer(line_number);
     Expr* in_args[] = {in_arg};
     Expr* in_pattern = expr_new_function(in_sym, in_args, 1);
     symtab_add_down_value("In", in_pattern, parsed);
     expr_free(in_pattern);
-    
-    // Store Out[line_number] = evaluated
+
+    /* $Pre: applied to the parsed expression. Consumes our reference
+     * to `parsed`; we treat the result as the new input to evaluate. */
+    Expr* pre_input = repl_apply_pre(expr_copy(parsed));
+    Expr* evaluated = evaluate(pre_input);
+    expr_free(pre_input);
+
+    /* $Post: applied to the evaluator's result. Consumes our reference
+     * to `evaluated`. */
+    evaluated = repl_apply_post(evaluated);
+
+    /* Store Out[line_number] = evaluated (post-$Post, pre-$PrePrint:
+     * Mathematica's documented ordering). */
     Expr* out_sym = expr_new_symbol("Out");
     Expr* out_arg = expr_new_integer(line_number);
     Expr* out_args[] = {out_arg};
     Expr* out_pattern = expr_new_function(out_sym, out_args, 1);
     symtab_add_down_value("Out", out_pattern, evaluated);
     expr_free(out_pattern);
-    
-    // Print the result
+
+    /* $PrePrint: applied only for display. Out[n] keeps the
+     * pre-$PrePrint value above; here we render a possibly modified
+     * copy. */
+    Expr* to_print = repl_apply_pre_print(expr_copy(evaluated));
+
     printf("Out[%d]= ", line_number);
-    expr_print(evaluated);
+    expr_print(to_print);
     printf("\n"); // extra blank line
-    
-    // Clean up
+
+    expr_free(to_print);
     expr_free(parsed);
     expr_free(evaluated);
 }
@@ -80,7 +103,9 @@ void repl_loop() {
         char* line = readline(prompt);
         if (!line) {
             printf("\n");
-            break; // EOF
+            /* EOF: run $Epilog before tearing down. */
+            repl_apply_epilog();
+            break;
         }
         
         size_t line_len = strlen(line);
@@ -128,6 +153,8 @@ void repl_loop() {
             add_history(full_input);
             
             if (strcmp(full_input, "Quit[]") == 0) {
+                /* User-requested shutdown: run $Epilog first. */
+                repl_apply_epilog();
                 free(line);
                 break;
             }

@@ -52,6 +52,7 @@
 #include "precision.h"
 #include "rationalize.h"
 #include "sym_names.h"
+#include "repl_hooks.h"
 
 void core_init(void) {
     /* Cache canonical pointers for well-known symbol names. Doing this
@@ -66,6 +67,7 @@ void core_init(void) {
      * any subsequent init step that triggers evaluation can already see
      * them. */
     eval_init();
+    repl_hooks_init();
     parfrac_init();
     modular_init();
     symtab_add_builtin("AtomQ", builtin_atomq);

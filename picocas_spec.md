@@ -9771,3 +9771,81 @@ benefits indirectly via its `Together` precondition.
   `cancel_recursive` post-cancellation sign check from
   "denominator is a negative integer" to "denominator has a globally
   negative lead".
+
+
+## REPL session hooks: `$PreRead`, `$Pre`, `$Post`, `$PrePrint`, `$Epilog` (2026-05-05)
+
+PicoCAS now exposes the standard Mathematica REPL hooks. Each is a
+global symbol whose OwnValue, if assigned, is consulted at a specific
+phase of the read/eval/print loop. With no assignment every hook is a
+no-op pass-through, so existing scripts are unaffected.
+
+### Hooks
+
+- **`$PreRead`** — text-level. Applied to the raw input string after
+  it is read by readline but before parsing. Must be assigned a
+  function that takes one string and returns a string. If the
+  assigned function returns a non-string value the helper emits a
+  `$PreRead::strret` diagnostic and falls back to the original input.
+- **`$Pre`** — applied to the parsed Expr before evaluation. Without
+  HoldAll the wrapped expression is evaluated before `$Pre` sees it
+  (matching Mathematica's documented behaviour, which makes the
+  effect indistinguishable from `$Post`). Assigning a head with
+  HoldAll lets `$Pre` intercept the raw parse tree.
+- **`$Post`** — applied to the evaluator's result.
+- **`$PrePrint`** — applied to the result expression just before
+  printing. `Out[n]` retains the pre-`$PrePrint` value, so display
+  rewrites do not contaminate later `Out[k]` references.
+- **`$Epilog`** — evaluated once when the session terminates (Quit[]
+  or EOF). `Set` assigns the evaluated RHS once; use `SetDelayed` if
+  you want the body to fire on every shutdown.
+
+### REPL ordering
+
+```
+read -> $PreRead -> parse -> [In[n]=parsed] -> $Pre ->
+evaluate -> $Post -> [Out[n]=result] -> $PrePrint -> print
+```
+
+`In[n]` records what the user typed (post-`$PreRead`, pre-`$Pre`) so
+history reflects the user's input. `Out[n]` records the evaluator's
+answer with `$Post` applied but without `$PrePrint` rewrites.
+
+### Examples
+
+```mathematica
+$PreRead = Function[s, StringJoin[s, " + 1"]]
+3                       (* parsed as 3 + 1, evaluated to 4 *)
+
+$Pre = Function[x, 2 x]
+5                       (* $Pre[5] -> 10 *)
+
+$Post = Function[x, wrap[x]]
+1 + 2                   (* prints wrap[3] *)
+
+$PrePrint = Function[x, displayWrap[x]]
+1 + 2                   (* Out[n] = 3, prints displayWrap[3] *)
+
+$Epilog := Print["Goodbye!"]
+Quit[]                  (* prints Goodbye! before exiting *)
+```
+
+### Files
+
+- `src/repl_hooks.{c,h}` — new module exposing
+  `repl_hooks_init`, `repl_apply_pre_read`, `repl_apply_pre`,
+  `repl_apply_post`, `repl_apply_pre_print`, `repl_apply_epilog`. All
+  helpers are unit-testable independently of the readline-driven
+  REPL loop.
+- `src/core.c` — `core_init` calls `repl_hooks_init()` so docstrings
+  are available before any user code runs.
+- `src/repl.c` — `process_input` runs the read pipeline through the
+  helpers; EOF and `Quit[]` paths in `repl_loop` invoke
+  `repl_apply_epilog()` before tearing down.
+- `tests/test_repl_hooks.c` — 32 tests covering init, each hook's
+  unset/identity/transforming/clear-disables paths, fallback on
+  non-string `$PreRead` returns, HoldAll-attributed `$Pre`
+  intercepting raw input, `$Post` chaining on evaluator output,
+  `$PrePrint` rewriting display only, the
+  Set-vs-SetDelayed distinction for `$Epilog`, end-to-end pipeline
+  composition, and reassignment-replaces-behaviour semantics.

@@ -98,6 +98,7 @@ set(COMMON_SRC
     ../src/mvfactor3.c
     ../src/sym_intern.c
     ../src/sym_names.c
+    ../src/repl_hooks.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -556,3 +557,13 @@ else()
     target_link_libraries(return_tests gmp m)
 endif()
 add_test(NAME return_tests COMMAND return_tests)
+
+add_executable(repl_hooks_tests test_repl_hooks.c ${COMMON_SRC})
+target_include_directories(repl_hooks_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(repl_hooks_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(repl_hooks_tests build_ecm)
+else()
+    target_link_libraries(repl_hooks_tests gmp m)
+endif()
+add_test(NAME repl_hooks_tests COMMAND repl_hooks_tests)

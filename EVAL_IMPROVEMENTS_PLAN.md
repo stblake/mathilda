@@ -615,10 +615,68 @@ budget.
   introspection). Unless we discover a concrete divergence, no change is
   required here.
 
-**4.5 Implement `$Pre`, `$Post`, `$PrePrint`** — Withoff [§1.4]
-- Files: `src/repl.c`.
-- Apply these hooks if defined as `OwnValues` of the corresponding
-  symbols. Today the REPL has no such hooks.
+**4.5 Implement `$PreRead`, `$Pre`, `$Post`, `$PrePrint`, `$Epilog`** — Withoff [§1.4] ✅ DONE (2026-05-05)
+- Files added: `src/repl_hooks.{c,h}`, `tests/test_repl_hooks.c`.
+- Files touched: `src/core.c` (`#include "repl_hooks.h"` + call
+  `repl_hooks_init()` from `core_init` right after `eval_init()` so the
+  symbols and docstrings exist before any user code runs), `src/repl.c`
+  (`process_input` now runs the read pipeline as
+  `$PreRead -> parse -> $Pre -> evaluate -> $Post -> $PrePrint -> print`;
+  `repl_loop`'s EOF and Quit[] paths call `repl_apply_epilog()` before
+  tearing down), `tests/CMakeLists.txt` (registered `repl_hooks.c` in
+  `COMMON_SRC` and the new `repl_hooks_tests` binary as the 92nd
+  target).
+- Mechanism: each hook is a global symbol whose OwnValue, if assigned,
+  is consulted at a specific REPL phase and applied to that phase's
+  payload. Detection is "hook is set iff `symtab_get_own_values(name)`
+  returns a non-empty rule list." `repl_hooks_init()` registers each
+  symbol (so `?$Pre` surfaces a docstring) and installs *no* default
+  OwnValue, so out-of-the-box every hook is a no-op pass-through.
+  Each helper builds `<HookSymbol>[arg]` and calls `evaluate()`, so
+  pattern matching, attributes, and recursion guards all behave
+  exactly as they would for any user-issued call.
+  - `repl_apply_pre_read(const char*)` — input-string transform; the
+    helper builds `$PreRead[<input>]`, evaluates it, expects a String
+    return, and falls back (with a `$PreRead::strret` diagnostic) to
+    the original input on a non-string return.
+  - `repl_apply_pre(Expr*)`, `repl_apply_post(Expr*)`,
+    `repl_apply_pre_print(Expr*)` — Expr transforms with
+    "consume the input, return a fresh result" ownership semantics.
+    When the hook is unset they return the input unchanged (the caller
+    still owns it), so the REPL can chain them without per-call
+    branching.
+  - `repl_apply_epilog(void)` — evaluates the bare symbol `$Epilog`
+    once when set; called from both EOF and `Quit[]` shutdown paths.
+- REPL ordering matches Mathematica's documented pipeline: `In[n]` is
+  assigned the parsed-but-pre-`$Pre` expression so the user's recorded
+  history reflects what they typed; `Out[n]` is assigned the
+  post-`$Post`, pre-`$PrePrint` value so the stored result is the
+  evaluator's answer (with `$Post` applied) but display can still be
+  rewritten by `$PrePrint` without contaminating future `Out[k]`
+  references.
+- Test coverage (`tests/test_repl_hooks.c`, the 92nd binary, 32
+  tests): init creates the symbols + docstrings; each hook's
+  unset/identity/transforming/clear-disables paths; non-string
+  `$PreRead` return fallback path; HoldAll-attributed `$Pre` sees the
+  raw unevaluated input (mirrors the documented use case for
+  intercepting parse trees); `$Post` chains on the evaluator's output;
+  `$PrePrint` rewrites for display only and does not contaminate the
+  post-`$Post` value the REPL would store as `Out[n]`; `$Epilog` with
+  `Set` is a one-shot static value while `SetDelayed` re-fires the
+  body on every call; full pipeline test composes all four
+  transforming hooks (`$PreRead`, `$Pre`, `$Post`, `$PrePrint`)
+  against a single input and verifies the documented ordering
+  end-to-end; reassignment swaps behaviour cleanly without stacking;
+  the user-set OwnValue is visible through `symtab_get_own_values`
+  exactly like any other OwnValue.
+- Out of scope (intentional): per-line `$PreRead` invocation in
+  multi-line input mode (the spec describes "typically applied"
+  per-line; we apply it once to the assembled input). `$SyntaxHandler`
+  integration (the spec mentions `$PreRead` is applied to strings
+  returned by `$SyntaxHandler` — picocas has no `$SyntaxHandler`
+  today). `InString[n]` storage of the post-`$PreRead` text — picocas
+  has no `InString` mechanism. These can be added incrementally
+  without disturbing the hook helpers.
 
 **4.6 Migrate diagnostic output to the streams model**
 - Files: `src/eval.c`, `src/repl.c`, every module that calls
