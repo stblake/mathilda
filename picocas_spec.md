@@ -9680,3 +9680,36 @@ Out[6]= (1 + Log[r]^(1/6))/Sqrt[Log[r]]
 - `tests/test_radical_polyops.c`: new test file pinning the four
   headline behaviours (Factor radical-symbol, Factor radical-Log[r],
   Factor exponential, Apart radical, no-trigger).
+
+## Pattern: HoldFirst attribute (2026-05-05)
+
+`Pattern` is now declared with `HoldFirst | Protected`, matching
+Mathematica. The first argument of `Pattern[name, body]` is the
+pattern variable name and must be held literally; without `HoldFirst`,
+the evaluator would resolve the name through any pre-existing
+`OwnValue` before the rule was installed.
+
+### Symptoms before the fix
+
+```
+v = 99;
+f[v_] := v^2          (* installs a malformed DownValue f[Pattern[99,Blank[]]] *)
+f[3]                  (* segfaults: matcher treats integer 99 as a binding name *)
+```
+
+A subtler manifestation: `simp_install_roots_of_unity_helpers` parses
+its `$ruSimplify[expr_] := ...` definition lazily on first use of
+roots-of-unity simplification. If the user had previously assigned
+`expr = (rational expression)`, the lazy install evaluated
+`Pattern[expr, Blank[]]` against the user's `OwnValue`, baked the
+user's value into the rule, and corrupted every later `Simplify`
+call. With `HoldFirst` on `Pattern` the LHS-evaluation step at
+`eval.c:760-787` (Set/SetDelayed inner-arg evaluation, intentional so
+that `f[2+3] = ...` becomes `f[5] = ...`) leaves the pattern variable
+untouched.
+
+### Files touched
+
+- `src/attr.c`: added `{"Pattern", ATTR_HOLDFIRST | ATTR_PROTECTED}`
+  to `builtin_attrs[]`. Picked up by `attr_init()` and
+  `get_attributes("Pattern")` automatically.
