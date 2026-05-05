@@ -9713,3 +9713,61 @@ untouched.
 - `src/attr.c`: added `{"Pattern", ATTR_HOLDFIRST | ATTR_PROTECTED}`
   to `builtin_attrs[]`. Picked up by `attr_init()` and
   `get_attributes("Pattern")` automatically.
+
+## Cancel / Together: push negative lead from denominator into numerator (2026-05-05)
+
+After the polynomial GCD step, `cancel_recursive` already flipped the
+sign of the result when the denominator collapsed to a literal
+negative integer. It did not flip when the denominator was a
+polynomial whose leading coefficient happened to be negative — so
+PolynomialGCD's sign convention could leave both numerator and
+denominator with negative leading terms, e.g.
+
+```
+((2 x - y) (x^2 - x y - 6 y^2)) / ((x + y) (2 x^2 + 3 x y - 2 y^2)) // Cancel
+```
+
+came back as `(-x + 3 y) / (-x - y)` (SimplifyCount 21) rather than
+the canonical `(x - 3 y) / (x + y)` (SimplifyCount 13). Worse,
+`Simplify` then preferred `Apart`'s `-3 - 4 x / (-x - y)`
+(SimplifyCount 20) over the Cancel form because it scored slightly
+lower, never seeing the truly simple form.
+
+### Fix
+
+`src/rat.c` adds `den_has_negative_lead`, called immediately after
+`cancel_exact_div_wrapper` produces `new_num` / `new_den`. It returns
+true when either:
+
+1. `is_superficially_negative(new_den)` — the den is a literal
+   negative number, a negative `Rational[n, d]`, or a `Times` whose
+   leading factor is negative.
+2. `new_den` is a `Plus` and **every** term is superficially negative
+   (`Plus[-x, -y]`, `Plus[-1, -x]`, `Plus[-x, -3 y]`, …) — i.e. the
+   whole sum is `-1 *` (positive-lead sum).
+
+Mixed-sign sums like `Plus[-1, x]` (== `x - 1`) and `Plus[-x, y]`
+(== `y - x`) are deliberately **not** flipped: both orderings have
+the same leaf count and either choice would be arbitrary, so we
+preserve the canonical-sort order.
+
+`Together` benefits transparently because `together_recursive` calls
+`cancel_recursive` after combining over a common denominator. `Apart`
+benefits indirectly via its `Together` precondition.
+
+### Examples
+
+| Input | Before | After |
+|-------|--------|-------|
+| `Cancel[(x^2-y^2)/(y-x)]` | `(-x - y)` ✓ already, but for the wrong reason | `-x - y` ✓ |
+| `Cancel[(x+1)/(-2)]` | `(x+1)/(-2)` | `(1/2) (-1 - x)` |
+| `Cancel[((2x-y)(x^2-xy-6y^2))/((x+y)(2x^2+3xy-2y^2))]` | `(-x + 3 y)/(-x - y)` | `(x - 3 y)/(x + y)` |
+| `Together[1/(b-a)]` | `1/(-a + b)` | `1/(-a + b)` (unchanged — mixed sign) |
+| `Cancel[1/(x-1)]` | `1/(-1 + x)` | `1/(-1 + x)` (unchanged) |
+
+### Files touched
+
+- `src/rat.c`: added `den_has_negative_lead`; widened the
+  `cancel_recursive` post-cancellation sign check from
+  "denominator is a negative integer" to "denominator has a globally
+  negative lead".

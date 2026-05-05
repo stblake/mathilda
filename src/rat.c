@@ -37,6 +37,32 @@ static bool is_superficially_negative(Expr* e) {
     return false;
 }
 
+/* den_has_negative_lead: true when the post-cancellation denominator
+ * carries a globally negative sign that should be pushed up into the
+ * numerator. PolynomialGCD's sign convention can leave both num and den
+ * with negative leading coefficients (e.g. (x-3y)/(x+y) coming back as
+ * (-x+3y)/(-x-y)); the leaf-count tiebreak in Simplify then picks the
+ * uglier form. We treat two shapes as "negative lead":
+ *   1. is_superficially_negative — a literal negative number, or
+ *      a Times whose leading factor is negative.
+ *   2. A Plus whose every term is superficially negative — i.e. the
+ *      whole sum can be factored as -1 * (positive-lead sum).
+ * Mixed-sign Plus (e.g. -x + y) is left alone since both orderings are
+ * equally complex and either choice is arbitrary. */
+static bool den_has_negative_lead(Expr* e) {
+    if (!e) return false;
+    if (is_superficially_negative(e)) return true;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Plus &&
+        e->data.function.arg_count > 0) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (!is_superficially_negative(e->data.function.args[i])) return false;
+        }
+        return true;
+    }
+    return false;
+}
+
 static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
     int64_t n, d;
     if (is_rational(expr, &n, &d)) {
@@ -221,7 +247,7 @@ static Expr* cancel_recursive(Expr* e) {
     Expr* new_num = cancel_exact_div_wrapper(num, g);
     Expr* new_den = cancel_exact_div_wrapper(den, g);
     
-    if (new_den && new_den->type == EXPR_INTEGER && new_den->data.integer < 0) {
+    if (new_num && new_den && den_has_negative_lead(new_den)) {
         Expr* t1 = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), new_num}, 2));
         Expr* t2 = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), new_den}, 2));
         new_num = expr_expand(t1);
