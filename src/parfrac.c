@@ -44,8 +44,35 @@ Expr* builtin_apart(Expr* res) {
         }
     }
     
+    /* Algebraic-generator pass (1-arg form): if the input has a
+     * sub-expression u with fractional rational exponents, substitute
+     * u -> g^m so the rational function becomes polynomial in g, run
+     * Apart in g recursively, then back-substitute.  This converts
+     * Apart[1/(-1+r^(3/7))] into partial fractions in r^(1/7).
+     * The 2-arg form Apart[expr, x] explicitly fixes the partial-
+     * fraction variable, so we do not auto-substitute there. */
+    if (res->data.function.arg_count == 1) {
+        Expr* base = NULL;
+        Expr* atom = NULL;
+        int64_t m = 1;
+        if (poly_find_radical_gen(expr, &base, &atom, &m)) {
+            char* gen = poly_make_fresh_gen(expr);
+            Expr* substituted = poly_subst_radical_to_gen(expr, base, atom, m, gen);
+            Expr* call = expr_new_function(expr_new_symbol("Apart"),
+                              (Expr*[]){substituted}, 1);
+            Expr* result_in_g = evaluate(call);
+            expr_free(call);
+            Expr* final = poly_subst_radical_from_gen(result_in_g, base, atom, m, gen);
+            expr_free(result_in_g);
+            expr_free(base);
+            expr_free(atom);
+            free(gen);
+            return final;
+        }
+    }
+
     Expr* together = eval_and_free(expr_new_function(expr_new_symbol("Together"), (Expr*[]){expr_copy(expr)}, 1));
-    
+
     Expr* var = NULL;
     if (res->data.function.arg_count == 2) {
         var = expr_copy(res->data.function.args[1]);

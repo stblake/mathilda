@@ -2803,6 +2803,38 @@ Expr* builtin_factor(Expr* res) {
 
     Expr* arg = res->data.function.args[0];
 
+    /* Algebraic-generator (radical) pass.  When the input contains a
+     * sub-expression u with a fractional rational exponent (u^(p/q),
+     * q != 1) — e.g. r^(1/5), Log[r]^(2/3), (x+1)^(1/2) — substitute
+     * u -> g^m where m is the lcm of all such q's, factor as a polynomial
+     * in g, then back-substitute g -> u^(1/m).  The result is fed back
+     * through evaluate() so that any residual fractional bases get
+     * processed recursively (each level picks a fresh generator name to
+     * avoid colliding with previously-introduced ones). */
+    {
+        Expr* base = NULL;
+        Expr* atom = NULL;
+        int64_t m = 1;
+        if (poly_find_radical_gen(arg, &base, &atom, &m)) {
+            char* gen = poly_make_fresh_gen(arg);
+            Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
+            Expr* call = expr_new_function(expr_new_symbol("Factor"),
+                          (Expr*[]){substituted}, 1);
+            Expr* result_in_g = evaluate(call);
+            expr_free(call);
+            Expr* final = poly_subst_radical_from_gen(result_in_g, base, atom, m, gen);
+            expr_free(result_in_g);
+            expr_free(base);
+            expr_free(atom);
+            free(gen);
+            if (memo_key) {
+                factor_memo_put(memo, memo_key, final);
+                expr_free(memo_key);
+            }
+            return final;
+        }
+    }
+
     Expr* together = eval_and_free(expr_new_function(expr_new_symbol("Together"), (Expr*[]){expr_copy(arg)}, 1));
     Expr* n_call = expr_new_function(expr_new_symbol("Numerator"), (Expr*[]){expr_copy(together)}, 1);
     Expr* num = evaluate(n_call);

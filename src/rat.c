@@ -11,12 +11,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
-/* Algebraic generator pass helpers: defined below; used by builtin_cancel
- * and builtin_together. */
-static bool find_first_frac_base(Expr* e, const char** base_out);
-static bool gather_denoms(Expr* e, const char* base_sym, int64_t* m_out);
-static Expr* subst_to_g(Expr* e, const char* base_sym, int64_t m, const char* g_sym);
-static Expr* subst_g_back(Expr* e, const char* base_sym, int64_t m, const char* g_sym);
+/* Together's recursive walker.  Cancel and Together both share the
+ * algebraic-generator (radical) pass exported from poly.c, but
+ * together_recursive is internal because it embeds the Plus-merging
+ * logic specific to combining over a common denominator. */
 static Expr* together_recursive(Expr* e);
 
 static Expr* negate_expr(Expr* e) {
@@ -264,22 +262,27 @@ Expr* builtin_cancel(Expr* res) {
 
     Expr* arg = res->data.function.args[0];
 
-    const char* base_sym = NULL;
-    if (find_first_frac_base(arg, &base_sym)) {
+    /* Algebraic-generator pass: if the input contains a sub-expression
+     * u with fractional rational exponents (u^(p/q), q != 1), substitute
+     * u -> g^m, run Together's recursive normalisation in g, then
+     * substitute back.  together_recursive is preferred over
+     * cancel_recursive directly because the substituted form may have
+     * Plus terms with different g-exponents that need fraction
+     * combination before GCD cancellation can fire. */
+    {
+        Expr* base = NULL;
+        Expr* atom = NULL;
         int64_t m = 1;
-        if (gather_denoms(arg, base_sym, &m) && m > 1) {
-            const char* g_sym = "$pc_ratgen$";
-            Expr* substituted = subst_to_g(arg, base_sym, m, g_sym);
-            /* together_recursive combines Plus terms with differing
-             * g-exponents into a single fraction and applies
-             * cancel_recursive at the end, which is what we want. Calling
-             * cancel_recursive directly would miss expressions like
-             * 1/(g^2 - 1/g) where the denominator is itself a Plus of
-             * terms with different g-denominators. */
+        if (poly_find_radical_gen(arg, &base, &atom, &m)) {
+            char* gen = poly_make_fresh_gen(arg);
+            Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
             Expr* combined = together_recursive(substituted);
             expr_free(substituted);
-            Expr* final = subst_g_back(combined, base_sym, m, g_sym);
+            Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
             expr_free(combined);
+            expr_free(base);
+            expr_free(atom);
+            free(gen);
             return final;
         }
     }
@@ -374,128 +377,6 @@ static Expr* together_recursive(Expr* e) {
     return cancel_recursive(e);
 }
 
-/* Algebraic generator pass for Together.
- *
- * If the input contains fractional rational powers of a single symbol
- * (e.g. y^(1/3), y^(2/3), y^(73/24)), classical polynomial-GCD machinery
- * cannot combine them. We work around this by treating the symbol as an
- * algebraic generator: pick m = lcm of all denominators, substitute
- *   y -> g^m,  y^(p/q) -> g^(p*m/q)
- * so the expression becomes a Laurent polynomial in g, run the standard
- * together_recursive, then substitute back g^k -> y^(k/m). */
-
-static bool find_first_frac_base(Expr* e, const char** base_out) {
-    if (e->type != EXPR_FUNCTION) return false;
-    if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
-        e->data.function.arg_count == 2) {
-        Expr* b = e->data.function.args[0];
-        Expr* exp = e->data.function.args[1];
-        if (b->type == EXPR_SYMBOL) {
-            int64_t p, q;
-            if (is_rational(exp, &p, &q) && q != 1) {
-                *base_out = b->data.symbol;
-                return true;
-            }
-        }
-    }
-    if (find_first_frac_base(e->data.function.head, base_out)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        if (find_first_frac_base(e->data.function.args[i], base_out)) return true;
-    }
-    return false;
-}
-
-static bool gather_denoms(Expr* e, const char* base_sym, int64_t* m_out) {
-    if (e->type != EXPR_FUNCTION) return true;
-    if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
-        e->data.function.arg_count == 2) {
-        Expr* b = e->data.function.args[0];
-        Expr* exp = e->data.function.args[1];
-        if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol, base_sym) == 0) {
-            int64_t p, q;
-            if (is_rational(exp, &p, &q)) {
-                *m_out = lcm(*m_out, q);
-                return true;
-            }
-            /* Non-rational exponent on the chosen base: cannot algebraic-substitute. */
-            return false;
-        }
-    }
-    if (!gather_denoms(e->data.function.head, base_sym, m_out)) return false;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        if (!gather_denoms(e->data.function.args[i], base_sym, m_out)) return false;
-    }
-    return true;
-}
-
-static Expr* subst_to_g(Expr* e, const char* base_sym, int64_t m, const char* g_sym) {
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, base_sym) == 0) {
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
-                  (Expr*[]){expr_new_symbol(g_sym), expr_new_integer(m)}, 2));
-    }
-    if (e->type != EXPR_FUNCTION) return expr_copy(e);
-    if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
-        e->data.function.arg_count == 2) {
-        Expr* b = e->data.function.args[0];
-        Expr* exp = e->data.function.args[1];
-        if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol, base_sym) == 0) {
-            int64_t p, q;
-            if (is_rational(exp, &p, &q)) {
-                int64_t k = p * (m / q);
-                return eval_and_free(expr_new_function(expr_new_symbol("Power"),
-                          (Expr*[]){expr_new_symbol(g_sym), expr_new_integer(k)}, 2));
-            }
-        }
-    }
-    size_t count = e->data.function.arg_count;
-    Expr** new_args = malloc(sizeof(Expr*) * count);
-    for (size_t i = 0; i < count; i++) {
-        new_args[i] = subst_to_g(e->data.function.args[i], base_sym, m, g_sym);
-    }
-    Expr* new_head = subst_to_g(e->data.function.head, base_sym, m, g_sym);
-    Expr* result = eval_and_free(expr_new_function(new_head, new_args, count));
-    free(new_args);
-    return result;
-}
-
-static Expr* subst_g_back(Expr* e, const char* base_sym, int64_t m, const char* g_sym) {
-    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, g_sym) == 0) {
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
-                  (Expr*[]){expr_new_symbol(base_sym), make_rational(1, m)}, 2));
-    }
-    if (e->type != EXPR_FUNCTION) return expr_copy(e);
-    if (e->data.function.head->type == EXPR_SYMBOL &&
-        e->data.function.head->data.symbol == SYM_Power &&
-        e->data.function.arg_count == 2) {
-        Expr* b = e->data.function.args[0];
-        Expr* exp = e->data.function.args[1];
-        if (b->type == EXPR_SYMBOL && strcmp(b->data.symbol, g_sym) == 0) {
-            int64_t pp, qq;
-            if (is_rational(exp, &pp, &qq)) {
-                Expr* new_exp = make_rational(pp, qq * m);
-                return eval_and_free(expr_new_function(expr_new_symbol("Power"),
-                          (Expr*[]){expr_new_symbol(base_sym), new_exp}, 2));
-            }
-            Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol("Times"),
-                      (Expr*[]){expr_copy(exp), make_rational(1, m)}, 2));
-            return eval_and_free(expr_new_function(expr_new_symbol("Power"),
-                      (Expr*[]){expr_new_symbol(base_sym), new_exp}, 2));
-        }
-    }
-    size_t count = e->data.function.arg_count;
-    Expr** new_args = malloc(sizeof(Expr*) * count);
-    for (size_t i = 0; i < count; i++) {
-        new_args[i] = subst_g_back(e->data.function.args[i], base_sym, m, g_sym);
-    }
-    Expr* new_head = subst_g_back(e->data.function.head, base_sym, m, g_sym);
-    Expr* result = eval_and_free(expr_new_function(new_head, new_args, count));
-    free(new_args);
-    return result;
-}
-
 Expr* builtin_together(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
 
@@ -507,16 +388,21 @@ Expr* builtin_together(Expr* res) {
 
     Expr* arg = res->data.function.args[0];
 
-    const char* base_sym = NULL;
-    if (find_first_frac_base(arg, &base_sym)) {
+    /* Algebraic-generator pass (see builtin_cancel for the rationale). */
+    {
+        Expr* base = NULL;
+        Expr* atom = NULL;
         int64_t m = 1;
-        if (gather_denoms(arg, base_sym, &m) && m > 1) {
-            const char* g_sym = "$pc_ratgen$";
-            Expr* substituted = subst_to_g(arg, base_sym, m, g_sym);
+        if (poly_find_radical_gen(arg, &base, &atom, &m)) {
+            char* gen = poly_make_fresh_gen(arg);
+            Expr* substituted = poly_subst_radical_to_gen(arg, base, atom, m, gen);
             Expr* combined = together_recursive(substituted);
             expr_free(substituted);
-            Expr* final = subst_g_back(combined, base_sym, m, g_sym);
+            Expr* final = poly_subst_radical_from_gen(combined, base, atom, m, gen);
             expr_free(combined);
+            expr_free(base);
+            expr_free(atom);
+            free(gen);
             return final;
         }
     }

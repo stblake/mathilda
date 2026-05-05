@@ -9592,3 +9592,91 @@ canon_negate_pairs) still run on the result.
 
 - `src/simp.c`: branch in `builtin_simplify` selecting `simp_dispatch`
   vs `simp_bottomup` based on `simp_classify`.
+
+## Factor / Apart / Together / Cancel: shared algebraic-generator pass (2026-05-05)
+
+`Together` and `Cancel` historically had a private "algebraic generator"
+pass that handled fractional rational powers of a *symbol* — substitute
+`y -> g^m`, run polynomially in `g`, substitute back. The pass has been
+generalised in two directions and lifted into `poly.c` so all four
+rational-function builtins (`Factor`, `Apart`, `Together`, `Cancel`)
+share it.
+
+### Generalisations
+
+1. **Non-symbol bases.** The base may now be any sub-expression matched
+   structurally via `expr_eq`, not only an `EXPR_SYMBOL`. Inputs like
+   `Log[r]^(1/5)` or `Sqrt[Log[r]]` are treated as algebraic generators
+   in the same way `r^(1/5)` is.
+
+2. **Exponential atom.** A `Power[B, c*A]` form (where `c` is rational
+   and `A` is any sub-expression) is recognised as a polynomial site in
+   `g = Power[B, A/m]`. With `m = lcm` of c-denominators, every matching
+   `Power[B, c*A]` becomes `g^(c*m)`. This makes `Factor[Exp[2x] + 2 Exp[x] + 1]`
+   collapse to `(1 + E^x)^2` via the substitution `g = E^x`.
+
+### Trigger conditions
+
+- **Radical case** (atom `A = 1`): trigger when at least one fractional
+  exponent exists (`m > 1`). Bare occurrences of the base count as
+  `Power[B, 1]`, so `r + r^(1/2)` factors via `g = r^(1/2)`.
+- **Exponential case** (atom `A != 1`): trigger when at least one
+  matching site has coefficient `c != 1`, i.e. the substituted form is
+  a non-trivial polynomial in `g`. Single `Power[B, A]` alone (which the
+  substitution would just rename) does not trigger.
+
+### API
+
+Exposed from `poly.h`:
+
+```c
+bool  poly_find_radical_gen(Expr* e, Expr** base_out, Expr** atom_out, int64_t* m_out);
+Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen);
+Expr* poly_subst_radical_from_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen);
+char* poly_make_fresh_gen(Expr* e);
+```
+
+`poly_make_fresh_gen` walks the expression to pick a `$pc_radgenN$`
+symbol name not already present, so recursive calls (e.g. multiple
+distinct radical bases in the same input) don't collide on the
+substitution variable.
+
+### Examples
+
+```
+In[1]:= Factor[1 + r^(1/5) - 2 r^(2/5) - r^(3/5) - 2 r^(4/5)]
+Out[1]= -(1 + 2 r^(1/5)) (-1 + r^(1/5) + r^(3/5))
+
+In[2]:= Factor[1 + Log[r]^(1/5) - 2 Log[r]^(2/5) - Log[r]^(3/5) - 2 Log[r]^(4/5)]
+Out[2]= -(1 + 2 Log[r]^(1/5)) (-1 + Log[r]^(1/5) + Log[r]^(3/5))
+
+In[3]:= Factor[Exp[2x] + 2 Exp[x] + 1]
+Out[3]= (1 + E^x)^2
+
+In[4]:= Factor[E^(4x) - 1]
+Out[4]= (-1 + E^x) (1 + E^x) (1 + E^(2 x))
+
+In[5]:= Apart[1/(-1 + r^(3/7))]
+Out[5]= (-2/3 - 1/3 r^(1/7))/(1 + r^(1/7) + r^(2/7)) + 1/3/(-1 + r^(1/7))
+
+In[6]:= Together[1/Log[r]^(1/2) + 1/Log[r]^(1/3)]
+Out[6]= (1 + Log[r]^(1/6))/Sqrt[Log[r]]
+```
+
+### Files touched
+
+- `src/poly.h`, `src/poly.c`: new `poly_find_radical_gen`,
+  `poly_subst_radical_to_gen`, `poly_subst_radical_from_gen`,
+  `poly_make_fresh_gen`. Internal helpers `decompose_exponent`,
+  `is_target_power`, `walk_find_radical_base`, `walk_gather`.
+- `src/rat.c`: removed the private symbol-only helpers; `builtin_cancel`
+  and `builtin_together` now go through the shared `poly_*` helpers.
+- `src/parfrac.c`: 1-arg `Apart` runs through the radical pass before
+  its standard partial-fraction logic.
+- `src/facpoly.c`: `builtin_factor` runs through the radical pass before
+  the existing `Together`/`Numerator`/`Denominator` setup.
+- `tests/test_rat.c`: added `test_cancel_nonsymbol_base` and a
+  Log-base case in `test_together_algebraic_generator`.
+- `tests/test_radical_polyops.c`: new test file pinning the four
+  headline behaviours (Factor radical-symbol, Factor radical-Log[r],
+  Factor exponential, Apart radical, no-trigger).

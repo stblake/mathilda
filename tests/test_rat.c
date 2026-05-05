@@ -124,6 +124,16 @@ void test_cancel_algebraic_generator() {
              "Times[Power[y, Rational[27, 8]], Power[Plus[-1, y], -1]]");
 }
 
+/* The generator pass also handles non-symbol bases such as Log[r] and
+ * Sqrt[Log[r]] -- any sub-expression with at least one fractional rational
+ * exponent is treated as the algebraic generator (matched via expr_eq). */
+void test_cancel_nonsymbol_base() {
+    run_test("Cancel[(Log[r] - 1)/(Sqrt[Log[r]] - 1)]",
+             "Plus[1, Power[Log[r], Rational[1, 2]]]");
+    run_test("Cancel[(Log[r]^(2/3) - 1)/(Log[r]^(1/3) - 1)]",
+             "Plus[1, Power[Log[r], Rational[1, 3]]]");
+}
+
 /* Together must apply the same algebraic-generator pass.
  * The headline regression: y^(5/8) (y^(19/8) - y^(73/24)/(y^(2/3) - 1/y^(1/3)))
  * with denominators {8, 8, 24, 3, 3} yields lcm m = 24, and after substitution
@@ -139,6 +149,10 @@ void test_together_algebraic_generator() {
     /* 1/y^(1/2) + 1/y^(1/3)  =  (1 + y^(1/6))/y^(1/2) */
     run_test("Together[1/y^(1/2) + 1/y^(1/3)]",
              "Times[Power[y, Rational[-1, 2]], Plus[1, Power[y, Rational[1, 6]]]]");
+
+    /* Non-symbol base: Log[r]^(p/q) is treated identically. */
+    run_test("Together[1/Log[r]^(1/2) + 1/Log[r]^(1/3)]",
+             "Times[Power[Log[r], Rational[-1, 2]], Plus[1, Power[Log[r], Rational[1, 6]]]]");
 }
 
 void test_together() {
@@ -160,6 +174,7 @@ int main() {
     TEST(test_denominator);
     TEST(test_cancel);
     TEST(test_cancel_algebraic_generator);
+    TEST(test_cancel_nonsymbol_base);
     TEST(test_together);
     TEST(test_together_algebraic_generator);
     printf("All rat tests passed!\n");

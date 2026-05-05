@@ -42,6 +42,37 @@ void  collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capaci
 int   compare_expr_ptrs(const void* a, const void* b);
 bool  contains_any_symbol_from(Expr* expr, Expr* var);
 
+/* ------------------------------------------------------------------ */
+/* Algebraic-generator substitution helpers.                          */
+/*                                                                    */
+/* Detect a (base B, atom A) pair such that the input is a polynomial */
+/* / rational function in Power[B, A] (after fixing a common rational */
+/* scaling of exponents), substitute Power[B, A] -> g (g a fresh      */
+/* symbol), let the caller run the polynomial operation in g, then    */
+/* substitute back.  Two flavours fall under this scheme:             */
+/*                                                                    */
+/*   * Radical case (A = 1): exponents are pure rationals p/q.        */
+/*     We pick m = lcm of q's, substitute B -> g^m so that            */
+/*     B^(p/q) -> g^(p*m/q) is an integer power.  Triggers when       */
+/*     at least one fractional exponent exists (m > 1).               */
+/*                                                                    */
+/*   * Exponential case (A != 1): exponents are rational multiples    */
+/*     of a common atom A, e.g. Power[E, 2x] and Power[E, x] share    */
+/*     atom A = x.  We pick m = lcm of the rational scalings'         */
+/*     denominators (commonly 1), substitute g = Power[B, A/m] so     */
+/*     that Power[B, c*A] -> g^(c*m) is an integer power.  Triggers   */
+/*     when at least two matching Power sites exist (i.e. the         */
+/*     polynomial in g is non-trivial).                               */
+/*                                                                    */
+/* Both B and A may be arbitrary expressions; structural identity     */
+/* across occurrences is checked via expr_eq.                         */
+/* ------------------------------------------------------------------ */
+
+bool  poly_find_radical_gen(Expr* e, Expr** base_out, Expr** atom_out, int64_t* m_out);
+Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen);
+Expr* poly_subst_radical_from_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen);
+char* poly_make_fresh_gen(Expr* e);
+
 void poly_init(void);
 
 #endif /* POLY_H */

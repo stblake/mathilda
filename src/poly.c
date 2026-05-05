@@ -52,6 +52,7 @@
 #include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <limits.h>
 
 bool contains_any_symbol_from(Expr* expr, Expr* var);
@@ -559,6 +560,308 @@ void collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacit
 }
 
 int compare_expr_ptrs(const void* a, const void* b) { return expr_compare(*(Expr**)a, *(Expr**)b); }
+
+/* ====================================================================
+ * Algebraic-generator substitution
+ *
+ * Detect a (base B, exponent atom A) pair such that the input is a
+ * polynomial / rational function in Power[B, A] up to a common rational
+ * scaling of exponents.  Substitute Power[B, A/m] -> g (g a fresh
+ * symbol, m = lcm of the rational scalings' denominators) so all
+ * matching Power sites become integer powers of g, let the caller run
+ * a polynomial operation in g, then back-substitute g -> Power[B, A/m].
+ *
+ * Two flavours fall under this scheme:
+ *
+ *   * Radical case (A = 1, m > 1).  Power[B, p/q] -> g^(p*m/q).
+ *     A bare occurrence of B (not wrapped in Power) counts as
+ *     Power[B, 1] and substitutes to g^m.
+ *
+ *   * Exponential case (A != 1, multiple matching Power sites).
+ *     For Power[B, c*A] (c rational), substitutes to g^(c*m).
+ *
+ * ==================================================================== */
+
+/* Decompose an exponent expression `exp` into a leading rational
+ * coefficient (c_n / c_d) and an "atom" sub-expression A, such that
+ * exp = (c_n / c_d) * A.  Concretely:
+ *   - If exp is itself rational, c = exp and A = 1.
+ *   - If exp = Times[r, rest...] with r rational, c = r and
+ *     A = Times[rest...]  (or the single rest arg if there is one).
+ *   - Otherwise c = 1 and A = exp.
+ * The returned A is always a fresh deep copy that the caller frees.
+ */
+static void decompose_exponent(Expr* exp, int64_t* c_n, int64_t* c_d, Expr** A_out) {
+    int64_t p, q;
+    if (is_rational(exp, &p, &q)) {
+        *c_n = p; *c_d = q;
+        *A_out = expr_new_integer(1);
+        return;
+    }
+    if (exp->type == EXPR_FUNCTION &&
+        exp->data.function.head->type == EXPR_SYMBOL &&
+        exp->data.function.head->data.symbol == SYM_Times &&
+        exp->data.function.arg_count >= 2 &&
+        is_rational(exp->data.function.args[0], &p, &q)) {
+        *c_n = p; *c_d = q;
+        size_t n = exp->data.function.arg_count - 1;
+        if (n == 1) {
+            *A_out = expr_copy(exp->data.function.args[1]);
+        } else {
+            Expr** rest = malloc(sizeof(Expr*) * n);
+            for (size_t i = 0; i < n; i++) {
+                rest[i] = expr_copy(exp->data.function.args[i + 1]);
+            }
+            *A_out = eval_and_free(expr_new_function(expr_new_symbol("Times"), rest, n));
+            free(rest);
+        }
+        return;
+    }
+    *c_n = 1; *c_d = 1;
+    *A_out = expr_copy(exp);
+}
+
+/* True iff `e` is the integer 1. */
+static bool atom_is_one(Expr* e) {
+    return e && e->type == EXPR_INTEGER && e->data.integer == 1;
+}
+
+/* Find the first Power[B, exp] subterm with a non-trivial decomposition:
+ *   - exp is rational with non-trivial denominator (radical case), or
+ *   - exp has a non-trivial atom (exponential case).
+ * Returns a fresh deep-copy of B in *base_out and of the atom in
+ * *atom_out (always non-null on success). */
+static bool walk_find_radical_base(Expr* e, Expr** base_out, Expr** atom_out) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        Expr* exp = e->data.function.args[1];
+        int64_t cn, cd;
+        Expr* A = NULL;
+        decompose_exponent(exp, &cn, &cd, &A);
+        bool A_one = atom_is_one(A);
+        if ((A_one && cd != 1) || !A_one) {
+            *base_out = expr_copy(e->data.function.args[0]);
+            *atom_out = A;
+            return true;
+        }
+        expr_free(A);
+    }
+    if (walk_find_radical_base(e->data.function.head, base_out, atom_out)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (walk_find_radical_base(e->data.function.args[i], base_out, atom_out)) return true;
+    }
+    return false;
+}
+
+/* Test whether `e` is a "target Power" for the (B, A) pair: either
+ *   - e == Power[B, c*A] with c rational, or
+ *   - A is integer 1 and e == B (bare base, treated as c = 1).
+ * On success, populate *c_n / *c_d with the rational coefficient. */
+static bool is_target_power(Expr* e, Expr* B, Expr* A, int64_t* c_n, int64_t* c_d) {
+    if (!e) return false;
+    bool A_one = atom_is_one(A);
+    if (A_one && expr_eq(e, B)) {
+        *c_n = 1; *c_d = 1;
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2 &&
+        expr_eq(e->data.function.args[0], B)) {
+        Expr* exp = e->data.function.args[1];
+        int64_t cn, cd;
+        Expr* A_actual = NULL;
+        decompose_exponent(exp, &cn, &cd, &A_actual);
+        bool match = expr_eq(A_actual, A);
+        expr_free(A_actual);
+        if (match) {
+            *c_n = cn;
+            *c_d = cd;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Walk e: at every (B, A)-matching Power site update *m_out with lcm of
+ * c-denominators, increment *count_out, and set *nontrivial_out true if
+ * the c coefficient there is anything other than 1.  Always returns
+ * true (the walk never blocks — non-matching sub-expressions are simply
+ * left for the substitution pass to copy verbatim). */
+static void walk_gather(Expr* e, Expr* B, Expr* A,
+                        int64_t* m_out, size_t* count_out,
+                        bool* nontrivial_out) {
+    if (!e) return;
+    int64_t cn, cd;
+    if (is_target_power(e, B, A, &cn, &cd)) {
+        int64_t qa = cd < 0 ? -cd : cd;
+        *m_out = lcm(*m_out, qa);
+        (*count_out)++;
+        if (!(cn == 1 && cd == 1)) *nontrivial_out = true;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    walk_gather(e->data.function.head, B, A, m_out, count_out, nontrivial_out);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        walk_gather(e->data.function.args[i], B, A, m_out, count_out, nontrivial_out);
+    }
+}
+
+bool poly_find_radical_gen(Expr* e, Expr** base_out, Expr** atom_out, int64_t* m_out) {
+    Expr* base = NULL;
+    Expr* atom = NULL;
+    if (!walk_find_radical_base(e, &base, &atom)) return false;
+    int64_t m = 1;
+    size_t count = 0;
+    bool nontrivial_c = false;
+    walk_gather(e, base, atom, &m, &count, &nontrivial_c);
+    bool A_one = atom_is_one(atom);
+    /* Trigger conditions:
+     *   - Radical case (A == 1): m > 1 (at least one fractional exp).
+     *   - Exponential case (A != 1): at least one Power[B, c*A] with
+     *     c != 1, so g^c gives a non-trivial polynomial term.  When all
+     *     matching sites have c = 1 the substitution g = Power[B, A]
+     *     just renames Power[B, A] -> g and the operation gains nothing.
+     */
+    bool trigger = A_one ? (m > 1) : (count >= 1 && nontrivial_c);
+    if (!trigger) {
+        expr_free(base); expr_free(atom);
+        return false;
+    }
+    *base_out = base;
+    *atom_out = atom;
+    *m_out = m;
+    return true;
+}
+
+Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen) {
+    if (!e) return NULL;
+    int64_t cn, cd;
+    if (is_target_power(e, base, atom, &cn, &cd)) {
+        int64_t k = cn * (m / cd);
+        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                  (Expr*[]){expr_new_symbol(gen), expr_new_integer(k)}, 2));
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = malloc(sizeof(Expr*) * count);
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = poly_subst_radical_to_gen(e->data.function.args[i], base, atom, m, gen);
+    }
+    Expr* new_head = poly_subst_radical_to_gen(e->data.function.head, base, atom, m, gen);
+    Expr* result = eval_and_free(expr_new_function(new_head, new_args, count));
+    free(new_args);
+    return result;
+}
+
+/* Build Power[B, A * (k/m)] for given integer k. */
+static Expr* build_back_power(Expr* base, Expr* atom, int64_t k, int64_t m) {
+    if (atom_is_one(atom)) {
+        Expr* exp = make_rational(k, m);
+        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                  (Expr*[]){expr_copy(base), exp}, 2));
+    }
+    /* Power[B, (k/m)*A]. */
+    Expr* coeff = make_rational(k, m);
+    Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                  (Expr*[]){coeff, expr_copy(atom)}, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+              (Expr*[]){expr_copy(base), new_exp}, 2));
+}
+
+Expr* poly_subst_radical_from_gen(Expr* e, Expr* base, Expr* atom, int64_t m, const char* gen) {
+    if (!e) return NULL;
+    /* Bare gen: g -> Power[B, A/m]. */
+    if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, gen) == 0) {
+        return build_back_power(base, atom, 1, m);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    /* Power[gen, k] -> Power[B, k*A/m]. */
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_SYMBOL &&
+        strcmp(e->data.function.args[0]->data.symbol, gen) == 0) {
+        Expr* exp = e->data.function.args[1];
+        int64_t pp, qq;
+        if (is_rational(exp, &pp, &qq)) {
+            /* g^(pp/qq) -> Power[B, A * (pp / (qq * m))]. */
+            if (atom_is_one(atom)) {
+                Expr* new_exp = make_rational(pp, qq * m);
+                return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                          (Expr*[]){expr_copy(base), new_exp}, 2));
+            }
+            Expr* coeff = make_rational(pp, qq * m);
+            Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                      (Expr*[]){coeff, expr_copy(atom)}, 2));
+            return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                      (Expr*[]){expr_copy(base), new_exp}, 2));
+        }
+        /* g^exp where exp is symbolic — Power[B, exp*A/m]. */
+        Expr* one_over_m = make_rational(1, m);
+        Expr** factors;
+        size_t nf;
+        if (atom_is_one(atom)) {
+            factors = malloc(sizeof(Expr*) * 2);
+            factors[0] = expr_copy(exp);
+            factors[1] = one_over_m;
+            nf = 2;
+        } else {
+            factors = malloc(sizeof(Expr*) * 3);
+            factors[0] = expr_copy(exp);
+            factors[1] = one_over_m;
+            factors[2] = expr_copy(atom);
+            nf = 3;
+        }
+        Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol("Times"), factors, nf));
+        free(factors);
+        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                  (Expr*[]){expr_copy(base), new_exp}, 2));
+    }
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = malloc(sizeof(Expr*) * count);
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = poly_subst_radical_from_gen(e->data.function.args[i], base, atom, m, gen);
+    }
+    Expr* new_head = poly_subst_radical_from_gen(e->data.function.head, base, atom, m, gen);
+    Expr* result = eval_and_free(expr_new_function(new_head, new_args, count));
+    free(new_args);
+    return result;
+}
+
+static bool walk_has_symbol_name(Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, name) == 0;
+    if (e->type == EXPR_FUNCTION) {
+        if (walk_has_symbol_name(e->data.function.head, name)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (walk_has_symbol_name(e->data.function.args[i], name)) return true;
+        }
+    }
+    return false;
+}
+
+char* poly_make_fresh_gen(Expr* e) {
+    char buf[64];
+    for (int n = 0; n < 1000; n++) {
+        snprintf(buf, sizeof(buf), "$pc_radgen%d$", n);
+        if (!walk_has_symbol_name(e, buf)) {
+            size_t len = strlen(buf);
+            char* out = malloc(len + 1);
+            memcpy(out, buf, len + 1);
+            return out;
+        }
+    }
+    /* Fallback (collision-prone but extremely unlikely). */
+    const char* fb = "$pc_radgen$";
+    size_t len = strlen(fb);
+    char* out = malloc(len + 1);
+    memcpy(out, fb, len + 1);
+    return out;
+}
 
 Expr* builtin_variables(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
