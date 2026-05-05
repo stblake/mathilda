@@ -3612,10 +3612,28 @@ static bool simp_is_polynomial_in_own_vars(const Expr* e) {
 
 /* Helper: build Together[e], extract Numerator/Denominator, check both
  * are polynomial in their own variables. Returns false (and frees nothing
- * external) if any step fails. */
+ * external) if any step fails.
+ *
+ * Numeric collapse: when Together[e] reduces to a numeric leaf (or
+ * Rational[p,q]), Numerator/Denominator yield zero-variable
+ * expressions which simp_is_polynomial_in_own_vars rejects (its
+ * empty-Variables clause is intentional for the polynomial classifier
+ * but spurious here). Treat that case as trivially rational so the
+ * shortcut still fires -- e.g. ((x-y)/(x+y) - (x+y)/(x-y)) /
+ * (1 - (x^2-x*y-y^2)/(x^2-y^2)) collapses to -4 and routes to the
+ * rational pipeline instead of falling through to GENERAL/bottomup. */
 static bool simp_is_rational(const Expr* e) {
     Expr* tg = call_unary_copy("Together", e);
     if (!tg) return false;
+    bool tg_is_numeric_leaf =
+        tg->type == EXPR_INTEGER ||
+        tg->type == EXPR_BIGINT ||
+        tg->type == EXPR_REAL ||
+        is_rational_literal(tg);
+    if (tg_is_numeric_leaf) {
+        expr_free(tg);
+        return true;
+    }
     Expr* num = call_unary_copy("Numerator", tg);
     Expr* den = call_unary_copy("Denominator", tg);
     bool ok = false;
