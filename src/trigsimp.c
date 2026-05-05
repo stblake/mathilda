@@ -1392,24 +1392,24 @@ void trigsimp_init(void) {
      * are odd; Cos/Cosh are even).
      */
     const char* collapse_str = "{ "
-        /* Circular angle-addition collapses */
-        "Sin[a_] Cos[b_] + Cos[a_] Sin[b_] + r___ :> Sin[Expand[a + b]] + r, "
-        "-Sin[a_] Cos[b_] - Cos[a_] Sin[b_] + r___ :> -Sin[Expand[a + b]] + r, "
-        "Sin[a_] Cos[b_] - Cos[a_] Sin[b_] + r___ :> Sin[Expand[a - b]] + r, "
-        "-Sin[a_] Cos[b_] + Cos[a_] Sin[b_] + r___ :> -Sin[Expand[a - b]] + r, "
-        "Cos[a_] Cos[b_] - Sin[a_] Sin[b_] + r___ :> Cos[Expand[a + b]] + r, "
-        "-Cos[a_] Cos[b_] + Sin[a_] Sin[b_] + r___ :> -Cos[Expand[a + b]] + r, "
-        "Cos[a_] Cos[b_] + Sin[a_] Sin[b_] + r___ :> Cos[Expand[a - b]] + r, "
-        "-Cos[a_] Cos[b_] - Sin[a_] Sin[b_] + r___ :> -Cos[Expand[a - b]] + r, "
-        /* Hyperbolic angle-addition collapses */
-        "Sinh[a_] Cosh[b_] + Cosh[a_] Sinh[b_] + r___ :> Sinh[Expand[a + b]] + r, "
-        "-Sinh[a_] Cosh[b_] - Cosh[a_] Sinh[b_] + r___ :> -Sinh[Expand[a + b]] + r, "
-        "Sinh[a_] Cosh[b_] - Cosh[a_] Sinh[b_] + r___ :> Sinh[Expand[a - b]] + r, "
-        "-Sinh[a_] Cosh[b_] + Cosh[a_] Sinh[b_] + r___ :> -Sinh[Expand[a - b]] + r, "
-        "Cosh[a_] Cosh[b_] + Sinh[a_] Sinh[b_] + r___ :> Cosh[Expand[a + b]] + r, "
-        "-Cosh[a_] Cosh[b_] - Sinh[a_] Sinh[b_] + r___ :> -Cosh[Expand[a + b]] + r, "
-        "Cosh[a_] Cosh[b_] - Sinh[a_] Sinh[b_] + r___ :> Cosh[Expand[a - b]] + r, "
-        "-Cosh[a_] Cosh[b_] + Sinh[a_] Sinh[b_] + r___ :> -Cosh[Expand[a - b]] + r, "
+        /* Circular angle-addition collapses, coefficient-aware.  c_. on
+         * both sides defaults to 1, so the four rules subsume the eight
+         * literal-coefficient cases (including the +1 / -1 split that
+         * was previously enumerated).  Forcing the same `c` on both
+         * Plus children is what lets a coefficient-bearing numerator
+         * like
+         *   k Cos[a] Cos[b] - k Sin[a] Sin[b]   ->  k Cos[a + b]
+         * collapse -- the literal-1 form was the only case the prior
+         * eight rules handled. */
+        "c_. Sin[a_] Cos[b_] + c_. Cos[a_] Sin[b_] + r___ :> c Sin[Expand[a + b]] + r, "
+        "c_. Sin[a_] Cos[b_] - c_. Cos[a_] Sin[b_] + r___ :> c Sin[Expand[a - b]] + r, "
+        "c_. Cos[a_] Cos[b_] - c_. Sin[a_] Sin[b_] + r___ :> c Cos[Expand[a + b]] + r, "
+        "c_. Cos[a_] Cos[b_] + c_. Sin[a_] Sin[b_] + r___ :> c Cos[Expand[a - b]] + r, "
+        /* Hyperbolic angle-addition collapses, coefficient-aware. */
+        "c_. Sinh[a_] Cosh[b_] + c_. Cosh[a_] Sinh[b_] + r___ :> c Sinh[Expand[a + b]] + r, "
+        "c_. Sinh[a_] Cosh[b_] - c_. Cosh[a_] Sinh[b_] + r___ :> c Sinh[Expand[a - b]] + r, "
+        "c_. Cosh[a_] Cosh[b_] + c_. Sinh[a_] Sinh[b_] + r___ :> c Cosh[Expand[a + b]] + r, "
+        "c_. Cosh[a_] Cosh[b_] - c_. Sinh[a_] Sinh[b_] + r___ :> c Cosh[Expand[a - b]] + r, "
         /* Negative-argument cancellations */
         "c1_. Sin[a_] + c2_. Sin[b_] + r___ /; SameQ[Expand[a + b], 0] :> (c1 - c2) Sin[a] + r, "
         "c1_. Cos[a_] + c2_. Cos[b_] + r___ /; SameQ[Expand[a + b], 0] :> (c1 + c2) Cos[a] + r, "

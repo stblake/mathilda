@@ -23,6 +23,7 @@
 
 #include "trig_canon.h"
 #include "sym_names.h"
+#include "eval.h"
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,7 +33,21 @@
 static int g_suppress = 0;
 
 void trig_canon_suppress_inc(void) { g_suppress++; }
-void trig_canon_suppress_dec(void) { if (g_suppress > 0) g_suppress--; }
+void trig_canon_suppress_dec(void) {
+    if (g_suppress > 0) g_suppress--;
+    /* Cache-coherence on the evaluator's last_evaluated_at timestamps:
+     * subexpressions reduced while suppression was active have been
+     * stamped at g_eval_clock, but their evaluation result is only valid
+     * under the suppress flag.  Once the suppress region ends, the outer
+     * evaluator's evaluate() short-circuit would otherwise return those
+     * cached forms unchanged, even when trig_canon would now collapse
+     * them (e.g. Cos[a] Sec[a] -> 1 inside a Plus child of a TrigReduce
+     * result -- exactly the failure mode behind the Tan-addition
+     * Simplify regression).  Bumping the clock on the outermost dec
+     * invalidates the suppressed-mode cache so the next evaluate() pass
+     * actually walks the tree and the trig canonicalization applies. */
+    if (g_suppress == 0) eval_clock_bump();
+}
 
 /* Classify a base expression as a member of the trig or hyperbolic ratio
  * family. Returns 1 on hit, 0 otherwise. On hit, fills *arg_out (a borrowed

@@ -106,6 +106,15 @@ void test_trigreduce_angle_addition_circular(void) {
     assert_eval_eq("TrigReduce[Cos[a] Cos[b] + Sin[a] Sin[b]]",
                    "Cos[a - b]", 0);
 }
+/* Coefficient-aware angle-addition collapses.  Same identities, but
+ * with a shared scalar coefficient on both Plus children -- the rules
+ * use `c_.` to bind k uniformly and lift it through the rewrite. */
+void test_trigreduce_angle_addition_circular_with_coeff(void) {
+    assert_eval_eq("TrigReduce[Sqrt[3] Sin[a] Cos[b] + Sqrt[3] Cos[a] Sin[b]]",
+                   "Sqrt[3] Sin[a + b]", 0);
+    assert_eval_eq("TrigReduce[k Cos[a] Cos[b] - k Sin[a] Sin[b]]",
+                   "k Cos[a + b]", 0);
+}
 void test_trigreduce_angle_addition_hyperbolic(void) {
     assert_eval_eq("TrigReduce[Sinh[a] Cosh[b] + Cosh[a] Sinh[b]]",
                    "Sinh[a + b]", 0);
@@ -246,6 +255,7 @@ int main(void) {
     TEST(test_trigreduce_double_angle);
 
     TEST(test_trigreduce_angle_addition_circular);
+    TEST(test_trigreduce_angle_addition_circular_with_coeff);
     TEST(test_trigreduce_angle_addition_hyperbolic);
     TEST(test_trigreduce_compound_angle_addition);
 
