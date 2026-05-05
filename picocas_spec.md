@@ -9935,3 +9935,152 @@ Quit[]                  (* prints Goodbye! before exiting *)
   `$PrePrint` rewriting display only, the
   Set-vs-SetDelayed distinction for `$Epilog`, end-to-end pipeline
   composition, and reassignment-replaces-behaviour semantics.
+
+## Simplify: trig at rational multiples of Pi (2026-05-05)
+
+Adds a Simplify-time tree walker (`simp_trig_pi_canon` in
+`src/simp.c`) that rewrites every `Sin`, `Cos`, `Tan`, `Cot`, `Sec`,
+`Csc` of a rational multiple of Pi into the representation whose
+reduced fraction has the smaller numerator.  The rewrite uses the
+complement identities (`Cos[a] == Sin[Pi/2 - a]` etc.) under the
+post-quadrant reduction, so
+
+```
+Cos[4 Pi/9]   ->  Sin[Pi/18]      (4/9 vs 1/18 picks 1)
+Cos[5 Pi/9]   ->  -Sin[Pi/18]     (sign flip via Cos[Pi - x] = -Cos[x])
+Tan[7 Pi/18]  ->  Cot[Pi/9]       (7/18 vs 1/9 picks 1)
+```
+
+Wired into `simp_search` at the seed phase and chained on every
+transform output in the round loop.  Idempotent on its own output
+and inert when the input has no rational-Pi trig calls.
+
+### Why a Simplify-only transform
+
+`builtin_cos` / `builtin_sin` already handle a whitelist of "nice"
+denominators (1, 2, 3, 4, 5, 6, 10, 12) at evaluation time and
+otherwise leave the call as-is.  Wiring this rewrite into the global
+`Cos` / `Sin` builtins would change every user-facing print of e.g.
+`Cos[4 Pi/9]` and break parity with Mathematica.  The unified
+representation is only needed during Simplify, where the goal is to
+make additive cancellation discover that two structurally distinct
+calls denote the same value.
+
+### Cases fixed
+
+```
+Simplify[Cos[4/9 Pi] - Sin[Pi/18]]                   ->  0
+Simplify[Cos[Pi/9] Cos[2Pi/9] Cos[3Pi/9] Cos[4Pi/9]
+          - 1/16]                                    ->  0
+```
+
+For the second, `Cos[3 Pi/9]` is `Cos[Pi/3] = 1/2`, so the product
+equals `(1/2) Cos[Pi/9] Cos[2 Pi/9] Cos[4 Pi/9]`.  TrigReduce's
+product-to-sum machinery already lands at
+`1/8 (Cos[4 Pi/9] + Cos[5 Pi/9])`; the canonicalizer then collapses
+both Cos calls to (`Sin[Pi/18]`, `-Sin[Pi/18]`) and the Plus
+cancels.
+
+### Files
+
+- `src/simp.c` — `simp_trig_pi_canon`, `trig_pi_canon_one`,
+  `trig_pi_canon_walk`, plus helpers `trig_pi_extract`,
+  `trig_pi_make_arg`, `trig_pi_i64_gcd`, `trig_pi_reduce_frac`.
+  Wired into `simp_search` at the seed phase and the round loop's
+  per-transform chain.
+- `tests/test_simplify.c` — `test_simplify_cos_minus_sin_complement`
+  and `test_simplify_morrie_product_minus_constant` cover both
+  reported cases.
+
+## TrigReduce: coefficient-aware angle-addition + cache coherence (2026-05-05)
+
+Two adjacent improvements to the TrigReduce pipeline.
+
+### Coefficient-aware angle-addition collapse rules
+
+`trig_reduce_collapse` previously enumerated eight literal-coefficient
+rules of the form `Sin[a] Cos[b] + Cos[a] Sin[b] -> Sin[a+b]` (with
+sign / Cos / Sinh / Cosh variants).  These match only when the Plus
+children are bare products of two trig calls.  Replaced with four
+`c_.`-keyed rules that bind the same coefficient on both Plus
+children:
+
+```
+c_. Sin[a_] Cos[b_] + c_. Cos[a_] Sin[b_] + r___ :> c Sin[Expand[a + b]] + r
+c_. Sin[a_] Cos[b_] - c_. Cos[a_] Sin[b_] + r___ :> c Sin[Expand[a - b]] + r
+c_. Cos[a_] Cos[b_] - c_. Sin[a_] Sin[b_] + r___ :> c Cos[Expand[a + b]] + r
+c_. Cos[a_] Cos[b_] + c_. Sin[a_] Sin[b_] + r___ :> c Cos[Expand[a - b]] + r
+```
+
+(Plus the four hyperbolic analogues.)  `c_.` defaults to 1 so the
+literal cases still match, and inputs like `k Cos[a] Cos[b] -
+k Sin[a] Sin[b]` now reduce to `k Cos[a + b]`.
+
+### Cache coherence on `trig_canon_suppress_dec`
+
+`trig_canon_suppress_dec` now bumps `eval_clock` when the suppress
+counter drops to zero.  Subexpressions evaluated while suppression
+was active have their `last_evaluated_at` field stamped at the
+current clock, but that stamp records "fully evaluated under the
+suppress flag", not "fully evaluated unconditionally".  Without the
+bump, `evaluate()` short-circuits on the cached form even after the
+suppress region ends, so structures like
+
+```
+Cos[5 Pi/18] Sec[5 Pi/18] Sec[7 Pi/18] Sin[7 Pi/18]
+```
+
+inside Plus children of a TrigReduce result stay visible instead of
+collapsing to `4 Tan[7 Pi/18]`.  Bumping invalidates the
+suppressed-mode cache so the next `evaluate()` pass walks the tree
+with `trig_canon` active.
+
+### Files
+
+- `src/trig_canon.c` — `trig_canon_suppress_dec` calls
+  `eval_clock_bump()` on the outermost dec.
+- `src/trigsimp.c` — `trig_reduce_collapse` rules rewritten to use
+  `c_.` coefficients.
+- `tests/test_trigreduce.c` —
+  `test_trigreduce_angle_addition_circular_with_coeff` covers both
+  the `Sqrt[3]` and the symbolic-`k` cases.
+
+## Simplify / Together / Cancel: depth guards on heuristic_factor (2026-05-05)
+
+`heuristic_factor` (in `src/facpoly.c`) had two unbounded-recursion
+paths that blow the C stack on inputs whose "polynomial variables"
+are opaque atoms (e.g. `Power[base, n]` with symbolic `n` --
+`collect_variables` treats those as single generators):
+
+1. The cont/pp split inside `heuristic_factor` calls
+   `heuristic_factor(cont)` recursively.  When `poly_content` extracts
+   a non-trivial GCD that itself shares all variables of `P`, the
+   recursion never makes progress on `v_count`.
+2. `factor_via_z_independent_split` per-z peel calls
+   `heuristic_factor(remaining)` at the same `v_count`.
+
+Two guards added:
+
+- A reentrancy depth counter (`heuristic_factor_depth`, max 64)
+  short-circuits to `expr_copy(P)` when the depth limit is hit.
+- A structural progress check: if `exact_poly_div(P, cont)` yields
+  `pp == 1`, then `cont == P` up to a constant and recursing on
+  `cont` is identical to recursing on `P` -- bail and return `P`
+  unchanged.
+
+### Cases fixed (segfault → correct-but-unsimplified)
+
+```
+Simplify[(-14 Sin[x]^3 + 35 Sin[x] + 6 Sqrt[3] Cos[x]^3
+           + 9 Sqrt[3] Cos[x]) / (Cos[2 x] + 4)
+           - (7 Sin[x] + 3 Sqrt[3] Cos[x])]
+   was: SIGSEGV in cancel_recursive ↔ together_recursive mutual
+        recursion via PolynomialGCD.
+
+Simplify[(Cos[x] - 1)^n (Cos[x] + 1)^n - (-Sin[x]^2)^n]
+Simplify[(Sin[x] - 1)^n (Sin[x] + 1)^n - (-Cos[x]^2)^n]
+   were: SIGSEGV in heuristic_factor ↔ factor_via_z_independent_split
+         cycle at v_count = 3.
+```
+
+All three now return correct-but-unsimplified results.
