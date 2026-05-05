@@ -1533,7 +1533,7 @@ Expr* builtin_accumulate(Expr* res) {
             double sum = 0.0;
             double c = 0.0;
             for (size_t i = 0; i < n; i++) {
-                double x;
+                double x = 0.0;
                 accumulate_to_double(lst->data.function.args[i], &x);
                 double y = x - c;
                 double t = sum + y;

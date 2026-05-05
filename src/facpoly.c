@@ -2470,8 +2470,32 @@ static Expr* factor_trivariate_via_mhensel(Expr* P, Expr** vars, size_t v_count)
     return result;
 }
 
+/* Reentrancy guard for heuristic_factor.  The cont/pp split below can
+ * keep producing inputs of the same variable count when poly_content
+ * extracts a non-trivial GCD that itself shares all variables of P.
+ * factor_via_z_independent_split, in turn, recurses on its `remaining`
+ * factor at the same v_count when the polynomial structure looks like
+ * a true atom in disguise (e.g. Power[base, n] with symbolic n that
+ * the variable collector treats as opaque).  Without this guard the
+ * cycle blows the C stack -- see the (Cos[x]-1)^n (Cos[x]+1)^n -
+ * (-Sin[x]^2)^n regression. */
+#define HEURISTIC_FACTOR_MAX_DEPTH 64
+static int heuristic_factor_depth = 0;
+
+static Expr* heuristic_factor_impl(Expr* P);
+
 static Expr* heuristic_factor(Expr* P) {
     if (P->type != EXPR_FUNCTION) return expr_copy(P);
+    if (heuristic_factor_depth >= HEURISTIC_FACTOR_MAX_DEPTH) {
+        return expr_copy(P);
+    }
+    heuristic_factor_depth++;
+    Expr* r = heuristic_factor_impl(P);
+    heuristic_factor_depth--;
+    return r;
+}
+
+static Expr* heuristic_factor_impl(Expr* P) {
     if (P->data.function.head->data.symbol == SYM_Times || P->data.function.head->data.symbol == SYM_Power) {
         Expr** args = malloc(sizeof(Expr*) * P->data.function.arg_count);
         for(size_t i=0; i<P->data.function.arg_count; i++) args[i] = heuristic_factor(P->data.function.args[i]);
@@ -2479,7 +2503,7 @@ static Expr* heuristic_factor(Expr* P) {
         free(args);
         return res;
     }
-    if (P->data.function.head->data.symbol == SYM_List || P->data.function.head->data.symbol == SYM_Equal || P->data.function.head->data.symbol == SYM_Less || 
+    if (P->data.function.head->data.symbol == SYM_List || P->data.function.head->data.symbol == SYM_Equal || P->data.function.head->data.symbol == SYM_Less ||
         P->data.function.head->data.symbol == SYM_LessEqual || P->data.function.head->data.symbol == SYM_Greater || P->data.function.head->data.symbol == SYM_GreaterEqual ||
         P->data.function.head->data.symbol == SYM_And || P->data.function.head->data.symbol == SYM_Or || P->data.function.head->data.symbol == SYM_Not) {
         Expr** args = malloc(sizeof(Expr*) * P->data.function.arg_count);
@@ -2488,7 +2512,7 @@ static Expr* heuristic_factor(Expr* P) {
         free(args);
         return res;
     }
-    
+
     size_t v_count = 0, v_cap = 16;
     Expr** vars = malloc(sizeof(Expr*) * v_cap);
     collect_variables(P, &vars, &v_count, &v_cap);
@@ -2504,6 +2528,14 @@ static Expr* heuristic_factor(Expr* P) {
     Expr* cont = poly_content(P, vars, v_count);
     if (!(cont->type == EXPR_INTEGER && cont->data.integer == 1)) {
         Expr* pp = exact_poly_div(P, cont, vars, v_count);
+        /* Guard against the no-progress case: if exact_poly_div left us
+         * with pp == 1 (i.e. cont == P up to a constant), recursing on
+         * cont = P loops indefinitely.  Bail and return the input. */
+        if (pp && pp->type == EXPR_INTEGER && pp->data.integer == 1) {
+            { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
+            expr_free(cont); expr_free(pp);
+            return expr_copy(P);
+        }
         Expr* f_cont = heuristic_factor(cont);
         Expr* f_pp = heuristic_factor(pp);
         { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
@@ -2525,7 +2557,7 @@ static Expr* heuristic_factor(Expr* P) {
      * monomial structure entirely. */
     Expr* mc = factor_monomial_content(P);
     if (mc) {
-        for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+        { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
         return mc;
     }
 
@@ -2557,7 +2589,7 @@ static Expr* heuristic_factor(Expr* P) {
     if (v_count == 2) {
         Expr* bivariate = factor_bivariate_via_hensel(P, vars);
         if (bivariate) {
-            for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+            { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
             return bivariate;
         }
     }
@@ -2570,7 +2602,7 @@ static Expr* heuristic_factor(Expr* P) {
     if (v_count >= 3) {
         Expr* tri = factor_via_z_independent_split(P, vars, v_count);
         if (tri) {
-            for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+            { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
             return tri;
         }
     }
@@ -2584,7 +2616,7 @@ static Expr* heuristic_factor(Expr* P) {
     if (v_count == 3) {
         Expr* tri_mh = factor_trivariate_via_mhensel(P, vars, v_count);
         if (tri_mh) {
-            for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+            { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
             return tri_mh;
         }
     }
@@ -2594,7 +2626,7 @@ static Expr* heuristic_factor(Expr* P) {
      * which can be slow on irreducible inputs.  Run the cheap
      * irreducibility probe first to short-circuit. */
     if (is_likely_irreducible_multivariate(P, vars, v_count)) {
-        for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars);
+        { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
         return expr_copy(P);
     }
 
