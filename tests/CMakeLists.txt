@@ -63,6 +63,7 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp.c
     ../src/complex.c
     ../src/trig.c
+    ../src/trig_canon.c
     ../src/hyperbolic.c
     ../src/logexp.c
     ../src/piecewise.c
@@ -148,6 +149,9 @@ target_include_directories(core_tests PRIVATE ../src)
 
 add_executable(trig_tests test_trig.c ${COMMON_SRC})
 target_include_directories(trig_tests PRIVATE ../src)
+
+add_executable(trig_canon_tests test_trig_canon.c ${COMMON_SRC})
+target_include_directories(trig_canon_tests PRIVATE ../src)
 
 add_executable(hyperbolic_tests test_hyperbolic.c ${COMMON_SRC})
 target_include_directories(hyperbolic_tests PRIVATE ../src)
@@ -431,6 +435,7 @@ if(USE_ECM)
     add_dependencies(replace_tests build_ecm)
     add_dependencies(core_tests build_ecm)
     add_dependencies(trig_tests build_ecm)
+    add_dependencies(trig_canon_tests build_ecm)
     add_dependencies(hyperbolic_tests build_ecm)
     add_dependencies(logexp_tests build_ecm)
     add_dependencies(piecewise_tests build_ecm)

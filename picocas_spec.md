@@ -9773,6 +9773,92 @@ benefits indirectly via its `Together` precondition.
   negative lead".
 
 
+## Times: trig / hyperbolic ratio canonicalization (2026-05-05)
+
+`Times` now automatically rewrites products and quotients of trigonometric
+(and hyperbolic) functions sharing an argument into the shortest available
+naming. The rewrite is a structural identity (`Sec[x] := 1/Cos[x]`,
+`Tan[x] := Sin[x]/Cos[x]`, etc.) applied at the moment `builtin_times` (or
+`builtin_power`, for the parser-collapsed `1/Cos[x]` shape) finishes its
+base-grouping pass.
+
+### What gets rewritten
+
+| Input pattern | Output |
+|--------------|--------|
+| `1/Cos[x]`, `1/Sin[x]`, `1/Tan[x]`, `1/Cot[x]`, `1/Sec[x]`, `1/Csc[x]` | `Sec[x]`, `Csc[x]`, `Cot[x]`, `Tan[x]`, `Cos[x]`, `Sin[x]` |
+| `1/Cosh[x]`, `1/Sinh[x]`, `1/Tanh[x]`, `1/Coth[x]`, `1/Sech[x]`, `1/Csch[x]` | `Sech[x]`, `Csch[x]`, `Coth[x]`, `Tanh[x]`, `Cosh[x]`, `Sinh[x]` |
+| `Sin[x]/Cos[x]` | `Tan[x]` |
+| `Cos[x]/Sin[x]` | `Cot[x]` |
+| `Sin[x]^2/Cos[x]^2` | `Tan[x]^2` |
+| `Sin[x] Csc[x]`, `Cos[x] Sec[x]`, `Tan[x] Cot[x]` | `1` |
+| `Cos[x] Tan[x]`, `Sin[x] Cot[x]` | `Sin[x]`, `Cos[x]` |
+| `Tan[x] Csc[x]`, `Cot[x] Sec[x]` | `Sec[x]`, `Csc[x]` |
+| `Sin[x]^3 / Cos[x]` | `Sin[x]^2 Tan[x]` |
+| `Sin[x] / Cos[x]^3` | `Sec[x]^2 Tan[x]` |
+| `1/Cos[x]^3` | `Sec[x]^3` |
+| `Sinh[x]/Cosh[x]`, `Cosh[x]/Sinh[x]` | `Tanh[x]`, `Coth[x]` |
+
+### Algorithm
+
+Each contributing factor is mapped to its `(Sin^a · Cos^b)` decomposition:
+
+```
+Sin[x]  → ( 1,  0)     Cos[x]  → ( 0,  1)
+Tan[x]  → ( 1, -1)     Cot[x]  → (-1,  1)
+Sec[x]  → ( 0, -1)     Csc[x]  → (-1,  0)
+```
+
+Factors sharing the same argument (compared by `expr_eq`) are summed into a
+single `(a, b)` pair, then re-emitted using the shortest naming for that
+sign pattern: pure positive `(a, 0)` → `Sin^a`; mixed `(a > 0, b < 0)` with
+`a + b = 0` → `Tan^a`; with `a + b > 0` → `Sin^(a+b) Tan^|b|`; etc. The
+hyperbolic family `{Sinh, Cosh, Tanh, Coth, Sech, Csch}` is handled
+identically but in a separate bucket from the trig family.
+
+### Skipped cases
+
+- Non-integer exponents (`Cos[x]^(1/2)`, `Sin[x]^n`).
+- Different arguments do not merge: `Sin[x] Cos[y]` stays as is.
+- Solo positive-exponent canonical names (`Sin[x]`, `Tan[x]^2`, `Sec[x]^3`)
+  are left alone — already canonical.
+- Multi-contributor buckets whose canonical re-emission would be the same
+  multiset of factors are skipped (avoids perturbing the canonical sort
+  order downstream).
+
+### Suppression for trigsimp internals
+
+The pipelines inside `TrigReduce`, `TrigFactor`, `TrigExpand`, `TrigToExp`,
+and `ExpToTrig` rewrite `Tan[x] :> Sin[x]/Cos[x]` (and friends) as a first
+step so that polynomial machinery (Together, Factor, identity rules) can
+operate on the resulting Sin/Cos polynomial form. Without protection, the
+new Times-level canonicalizer would immediately re-collapse the Sin/Cos
+form back to `Tan` and the rule pipeline would never make progress.
+
+A reentrant suppress counter (`trig_canon_suppress_inc/dec` in
+`src/trig_canon.h`) lets these pipelines disable the rewrite for the
+duration of their internal work. The outer evaluator re-evaluates whatever
+they return, so the user-visible result is still canonicalized.
+
+### Files
+
+- `src/trig_canon.h`, `src/trig_canon.c` — new module containing
+  `trig_canon_groups` (Times entry), `trig_canon_power` (Power entry), and
+  the suppress counter.
+- `src/times.c` — uses the shared `BasePower` typedef and calls
+  `trig_canon_groups` after radical fusion.
+- `src/power.c` — calls `trig_canon_power` just before the final
+  `return NULL` so `1/Cos[x]` rewrites even when the parser collapses it
+  directly to `Power[Cos[x], -1]`.
+- `src/trigsimp.c` — wraps `builtin_exptotrig`, `builtin_trigtoexp`,
+  `builtin_trigexpand_impl`, `builtin_trigreduce_impl`, and
+  `trigfactor_run_pipeline` with `trig_canon_suppress_inc/dec`.
+- `tests/test_trig_canon.c` — 19 test groups covering solo reciprocals,
+  pair collapses, full cancellations, productive simplifications, leftover
+  powers, hyperbolic family, mixed arguments, non-integer / symbolic
+  exponents, FullForm structure, compound arguments, numeric coefficients,
+  and explicit no-rewrite-outside-Times/Power assertions.
+
 ## REPL session hooks: `$PreRead`, `$Pre`, `$Post`, `$PrePrint`, `$Epilog` (2026-05-05)
 
 PicoCAS now exposes the standard Mathematica REPL hooks. Each is a

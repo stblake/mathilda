@@ -5,6 +5,7 @@
 #include "parse.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "trig_canon.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -117,6 +118,12 @@ Expr* builtin_exptotrig(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    /* Disable trig_canon so the intermediate Sin/Cos forms produced by
+     * exp_to_trig_rules (e.g. Cosh[x] -> (Exp[x] + Exp[-x])/2 unwound) are
+     * not prematurely collapsed into Tan/Sec/Csc shapes that the rule set
+     * doesn't recognise. */
+    trig_canon_suppress_inc();
+
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(exp_to_trig_rules) };
     Expr* replace_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), replace_args, 2);
     Expr* replaced = evaluate(replace_expr);
@@ -137,6 +144,7 @@ Expr* builtin_exptotrig(Expr* res) {
     Expr* result = evaluate(rep_simp);
     expr_free(rep_simp);
 
+    trig_canon_suppress_dec();
     return result;
 }
 
@@ -170,6 +178,12 @@ Expr* builtin_trigtoexp(Expr* res) {
         }
     }
 
+    /* Suppress trig_canon for the duration: Tan[x] under trig_to_exp_rules
+     * rewrites to (Sin[x]/Cos[x] expressed via E^(I x)). Without suppression,
+     * the Sin/Cos rewrite would prematurely re-collapse to Tan, defeating the
+     * rule. */
+    trig_canon_suppress_inc();
+
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(trig_to_exp_rules) };
     Expr* replace_expr = expr_new_function(expr_new_symbol("ReplaceAll"), replace_args, 2);
     Expr* replaced = evaluate(replace_expr);
@@ -179,6 +193,8 @@ Expr* builtin_trigtoexp(Expr* res) {
     Expr* expand_expr = expr_new_function(expr_new_symbol("Expand"), expand_args, 1);
     Expr* result = evaluate(expand_expr);
     expr_free(expand_expr);
+
+    trig_canon_suppress_dec();
 
     if (memo_key) {
         factor_memo_store(memo, memo_key, result);
@@ -479,6 +495,11 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
         return expr_new_function(expr_copy(arg->data.function.head), new_args, n);
     }
 
+    /* Suppress trig_canon for the duration of the pipeline: the expansion
+     * rules rewrite Tan[2x] etc. into ratios of Sin/Cos, which the Times
+     * canonicalizer would otherwise immediately re-collapse back to Tan. */
+    trig_canon_suppress_inc();
+
     /* Apply the angle-addition and multiple-angle rules to a fixed point. */
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(trig_expand_rules) };
     Expr* replace_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), replace_args, 2);
@@ -541,6 +562,7 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
     Expr* result = evaluate(final_expr);
     expr_free(final_expr);
 
+    trig_canon_suppress_dec();
     return result;
 }
 
@@ -564,6 +586,11 @@ static size_t trigfactor_leaf_count(const Expr* e) {
  * Takes ownership of `input` and returns a new Expr*.
  */
 static Expr* trigfactor_run_pipeline(Expr* input) {
+    /* See builtin_trigreduce_impl for the rationale: the to_sincos rewrite
+     * needs trig_canon disabled so the Sin/Cos polynomial form survives
+     * long enough for Factor and the identity rules to act on it. */
+    trig_canon_suppress_inc();
+
     /* Rewrite reciprocal heads as Sin/Cos ratios. */
     Expr* ts_args[2] = { input, expr_copy(trig_factor_to_sincos) };
     Expr* ts_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), ts_args, 2);
@@ -619,6 +646,7 @@ static Expr* trigfactor_run_pipeline(Expr* input) {
     Expr* result = evaluate(fs_expr);
     expr_free(fs_expr);
 
+    trig_canon_suppress_dec();
     return result;
 }
 
@@ -897,6 +925,14 @@ static Expr* builtin_trigreduce_impl(Expr* res) {
                                  new_args, n);
     }
 
+    /* Suppress Times/Power-level trig canonicalization for the entire
+     * pipeline: step 1's Tan -> Sin/Cos rewrite would otherwise be undone
+     * immediately when its result evaluates back through Times. The outer
+     * evaluator re-evaluates whatever we return, at which point trig_canon
+     * fires on the final Sin/Cos result and (together with step 5's explicit
+     * from_sincos rules) yields a clean Tan/Sec/Csc-named answer. */
+    trig_canon_suppress_inc();
+
     /* Step 1: rewrite reciprocal heads so the polynomial structure is
      * visible to the product-to-sum rules. */
     Expr* current = expr_copy(arg);
@@ -939,6 +975,7 @@ static Expr* builtin_trigreduce_impl(Expr* res) {
     current = trigreduce_call_unary("Expand", current);
     current = trigreduce_call_unary("Together", current);
 
+    trig_canon_suppress_dec();
     return current;
 }
 

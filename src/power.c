@@ -4,6 +4,7 @@
 #include "times.h"
 #include "numeric.h"
 #include "sym_names.h"
+#include "trig_canon.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -582,6 +583,14 @@ Expr* builtin_power(Expr* res) {
             Expr* t_args[2] = { coeff, residue };
             return expr_new_function(expr_new_symbol("Times"), t_args, 2);
         }
+    }
+
+    /* Trig / hyperbolic reciprocal naming: Power[Cos[x], -k] -> Sec[x]^k, etc.
+     * The parser collapses 1/Cos[x] to Power[Cos[x], -1] without going through
+     * Times, so the Times-level canonicalizer never sees these solo cases. */
+    if (exp->type == EXPR_INTEGER) {
+        Expr* tc = trig_canon_power(base, exp->data.integer);
+        if (tc) return tc;
     }
 
     return NULL;

@@ -54,7 +54,11 @@ void test_exptotrig() {
     printf("testing %s\n", "ExpToTrig[TrigToExp[Sinh[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Sinh[x]]]", "Sinh[x]", 0);
     printf("testing %s\n", "ExpToTrig[TrigToExp[Cosh[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Cosh[x]]]", "Cosh[x]", 0);
     printf("testing %s\n", "ExpToTrig[TrigToExp[Tanh[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Tanh[x]]]", "Tanh[x]", 0);
-    printf("testing %s\n", "ExpToTrig[TrigToExp[Coth[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Coth[x]]]", "-Cosh[x] Csch[x]", 0);
+    /* Note: the round-trip currently produces a sign-flipped result
+     * (-Coth[x] instead of Coth[x]) due to a pre-existing TrigToExp/ExpToTrig
+     * issue. The Times-level trig canonicalizer collapses -Cosh[x] Csch[x]
+     * (the historical printed form) into the equivalent -Coth[x]. */
+    printf("testing %s\n", "ExpToTrig[TrigToExp[Coth[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Coth[x]]]", "-Coth[x]", 0);
     printf("testing %s\n", "ExpToTrig[TrigToExp[Sech[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Sech[x]]]", "Sech[x]", 0);
     printf("testing %s\n", "ExpToTrig[TrigToExp[Csch[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Csch[x]]]", "Csch[x]", 0);
 }

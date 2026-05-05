@@ -413,6 +413,17 @@ void test_simplify_tan_three_angle_addition(void) {
         "Tan[x + y + z]", 0);
 }
 
+/* Reverse angle-addition through the TrigReduce simp_search transform:
+ * the expanded form Sin[a] (Cos[b] - Sin[b]) + Cos[a] (Sin[b] + Cos[b])
+ * matches the (Sin a Cos b + Cos a Sin b) and (Cos a Cos b - Sin a Sin b)
+ * shapes once expanded, so TrigReduce collapses both pairs and the
+ * leaf-count tiebreak picks the reduced form. */
+void test_simplify_trigreduce_angle_addition(void) {
+    assert_eval_eq(
+        "Simplify[Sin[a] (Cos[b] - Sin[b]) + Cos[a] (Sin[b] + Cos[b])]",
+        "Cos[a + b] + Sin[a + b]", 0);
+}
+
 /* simp_algebraic single-surd reduction. Substitution Sqrt[x^2+1] -> g
  * with relation g^2 = x^2+1 turns ((g+x)^2 + 1) into 2g(g+x), which
  * cancels the (g+x) numerator and leaves 1/(2*(x^2+1)). */
@@ -662,6 +673,7 @@ int main(void) {
     TEST(test_simplify_trig_radical_angle_addition_two_vars);
     TEST(test_simplify_trig_split_multiplicative_extra_factor);
     TEST(test_simplify_tan_three_angle_addition);
+    TEST(test_simplify_trigreduce_angle_addition);
     TEST(test_simplify_algebraic_single_surd);
     TEST(test_simplify_algebraic_multi_surd);
     TEST(test_simplify_algebraic_fractional_surd_arg);

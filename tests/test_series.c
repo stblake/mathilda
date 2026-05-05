@@ -295,36 +295,38 @@ static void test_series_at_nonzero_point(void) {
  * spun indefinitely inside evaluate(). */
 static void test_series_coth_at_symbolic_point(void) {
     setup_full();
+    /* Times-level trig canonicalization rewrites Cosh[a]/Sinh[a] -> Coth[a]
+     * and Cosh[a]^2/Sinh[a]^2 -> Coth[a]^2 in the coefficient list. */
     assert_fullform(
         "Series[Coth[x], {x, a, 1}]",
-        "SeriesData[x, a, List[Times[Cosh[a], Power[Sinh[a], -1]], "
-        "Plus[1, Times[-1, Times[Power[Cosh[a], 2], Power[Sinh[a], -2]]]]], "
-        "0, 2, 1]");
+        "SeriesData[x, a, List[Coth[a], "
+        "Plus[1, Times[-1, Power[Coth[a], 2]]]], 0, 2, 1]");
 }
 
 static void test_series_tanh_at_symbolic_point(void) {
     setup_full();
     assert_fullform(
         "Series[Tanh[x], {x, a, 1}]",
-        "SeriesData[x, a, List[Times[Power[Cosh[a], -1], Sinh[a]], "
-        "Plus[1, Times[-1, Times[Power[Cosh[a], -2], Power[Sinh[a], 2]]]]], "
-        "0, 2, 1]");
+        "SeriesData[x, a, List[Tanh[a], "
+        "Plus[1, Times[-1, Power[Tanh[a], 2]]]], 0, 2, 1]");
 }
 
 static void test_series_sec_at_symbolic_point(void) {
     setup_full();
+    /* 1/Cos[a] -> Sec[a] and Sin[a]/Cos[a]^2 -> Sec[a] Tan[a]. */
     assert_fullform(
         "Series[Sec[x], {x, a, 1}]",
-        "SeriesData[x, a, List[Power[Cos[a], -1], "
-        "Times[Power[Cos[a], -2], Sin[a]]], 0, 2, 1]");
+        "SeriesData[x, a, List[Sec[a], "
+        "Times[Sec[a], Tan[a]]], 0, 2, 1]");
 }
 
 static void test_series_recip_cosh_at_symbolic_point(void) {
     setup_full();
+    /* 1/Cosh[a] -> Sech[a] and Sinh[a]/Cosh[a]^2 -> Sech[a] Tanh[a]. */
     assert_fullform(
         "Series[1/Cosh[x], {x, a, 1}]",
-        "SeriesData[x, a, List[Power[Cosh[a], -1], "
-        "Times[-1, Power[Cosh[a], -2], Sinh[a]]], 0, 2, 1]");
+        "SeriesData[x, a, List[Sech[a], "
+        "Times[-1, Sech[a], Tanh[a]]], 0, 2, 1]");
 }
 
 /* Fibonacci generating function: x/(1-x-x^2) produces Fibonacci numbers. */

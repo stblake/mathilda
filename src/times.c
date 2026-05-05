@@ -4,6 +4,7 @@
 #include "eval.h"
 #include "numeric.h"
 #include "sym_names.h"
+#include "trig_canon.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -180,10 +181,8 @@ Expr* make_times(Expr* a, Expr* b) {
     return expr_new_function(expr_new_symbol("Times"), args, 2);
 }
 
-typedef struct {
-    Expr* base;
-    Expr* exponent;
-} BasePower;
+/* BasePower (the (base, exponent) pair) is shared with trig_canon.h, which
+ * mutates the array we build here. */
 
 Expr* builtin_times(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -391,6 +390,13 @@ Expr* builtin_times(Expr* res) {
             break;
         }
     }
+
+    /* Trig / hyperbolic ratio canonicalization. After base grouping, look for
+     * factors of the form Sin/Cos/Tan/Cot/Sec/Csc[arg] (or hyperbolic
+     * counterparts) sharing an arg and re-emit the shortest form:
+     *   Sin[x]/Cos[x] -> Tan[x],   1/Cos[x] -> Sec[x],   1/Tanh[x] -> Coth[x],
+     *   Sin[x]*Csc[x] -> 1,        Cos[x]*Tan[x] -> Sin[x], etc. */
+    trig_canon_groups(groups, &group_count);
 
     if (complex_val && !(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) {
         Expr *re, *im; is_complex(complex_val, &re, &im);
