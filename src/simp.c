@@ -2728,6 +2728,246 @@ static bool has_pythag_head(const Expr* e) {
     return false;
 }
 
+/* ----------------------------------------------------------------------- */
+/* Trig at rational multiples of Pi: shortest-numerator canonicalization   */
+/* ----------------------------------------------------------------------- */
+
+/* For inputs like Cos[4 Pi/9] - Sin[Pi/18] the difference is exactly 0
+ * by the complement identity Cos[Pi/2 - x] == Sin[x] (here Pi/2 - 4Pi/9
+ * = Pi/18).  builtin_cos / builtin_sin handle a whitelist of "nice"
+ * denominators (1,2,3,4,5,6,10,12) and otherwise leave the call as is,
+ * so the two terms never become structurally equal and additive
+ * cancellation in simp_search never fires.
+ *
+ * This transform rewrites every Sin/Cos/Tan/Cot/Sec/Csc of a rational
+ * multiple of Pi into a unique form: pick the (Sin vs Cos / Tan vs Cot
+ * / Sec vs Csc) representation whose reduced fraction has the smaller
+ * numerator.  After the rewrite, Cos[4 Pi/9] and Sin[Pi/18] both land
+ * at Sin[Pi/18] and the surrounding Plus collapses to 0.  Cos[5 Pi/9]
+ * lands at -Sin[Pi/18] (since 5/9 > 1/2 picks up a sign via Cos[Pi -
+ * x] = -Cos[x] before the complement swap), which lets the Morrie's-
+ * law product 1/8 (Cos[4Pi/9] + Cos[5Pi/9]) collapse to 0 too.
+ *
+ * Idempotent: re-applying to the canonical form returns it unchanged,
+ * so it is safe to seed without bounding the round count.
+ *
+ * Why a Simplify-only transform (rather than wiring into builtin_cos
+ * / builtin_sin): the user-facing default print for Cos[4 Pi/9] should
+ * stay as-written, both to match Mathematica and to keep regression
+ * tests stable.  Only Simplify needs the unified representation. */
+
+static int64_t trig_pi_i64_gcd(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b) { int64_t t = a % b; a = b; b = t; }
+    return a;
+}
+
+static void trig_pi_reduce_frac(int64_t* n, int64_t* d) {
+    if (*d == 0) return;
+    int64_t g = trig_pi_i64_gcd(*n, *d);
+    if (g > 1) { *n /= g; *d /= g; }
+    if (*d < 0) { *d = -*d; *n = -*n; }
+}
+
+/* Returns true if `arg` is structurally (n/d) * Pi or Pi (n=d=1) and
+ * sets n, d.  Mirrors trig.c's extract_pi_multiplier; duplicated here
+ * so simp.c does not have to expose that file-static helper. */
+static bool trig_pi_extract(const Expr* arg, int64_t* n_out, int64_t* d_out) {
+    if (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_Pi) {
+        *n_out = 1; *d_out = 1; return true;
+    }
+    if (arg->type != EXPR_FUNCTION || !arg->data.function.head ||
+        arg->data.function.head->type != EXPR_SYMBOL ||
+        arg->data.function.head->data.symbol != SYM_Times ||
+        arg->data.function.arg_count != 2) {
+        return false;
+    }
+    Expr* a0 = arg->data.function.args[0];
+    Expr* a1 = arg->data.function.args[1];
+    if (!(a1->type == EXPR_SYMBOL && a1->data.symbol == SYM_Pi)) return false;
+    return is_rational(a0, n_out, d_out);
+}
+
+/* Build (out_n / out_d) * Pi as an Expr*. */
+static Expr* trig_pi_make_arg(int64_t n, int64_t d) {
+    if (n == 0) return expr_new_integer(0);
+    if (n == 1 && d == 1) return expr_new_symbol("Pi");
+    Expr* coeff;
+    if (d == 1) {
+        coeff = expr_new_integer(n);
+    } else {
+        coeff = expr_new_function(expr_new_symbol("Rational"),
+            (Expr*[]){ expr_new_integer(n), expr_new_integer(d) }, 2);
+    }
+    Expr* args[2] = { coeff, expr_new_symbol("Pi") };
+    return eval_and_free(expr_new_function(expr_new_symbol("Times"), args, 2));
+}
+
+/* Compute the canonical (head, n, d, sign) for `head[(n/d) Pi]`.  See
+ * the file-header comment block above for the rule set.
+ *
+ * `head_in` is one of the SYM_* trig pointers (Sin/Cos/Tan/Cot/Sec/Csc).
+ * On success returns true and fills the outputs; on failure (head not
+ * recognised, integer overflow, etc.) returns false and outputs are
+ * untouched. */
+static bool trig_pi_canon_one(const char* head_in, int64_t n, int64_t d,
+                              const char** head_out, int64_t* n_out,
+                              int64_t* d_out, int* sign_out) {
+    if (d <= 0) return false;
+    /* Guard against multiplication overflow when computing 2*d, alt_d. */
+    if (d > (INT64_MAX / 4)) return false;
+    if (n > (INT64_MAX / 4) || n < -(INT64_MAX / 4)) return false;
+
+    int sign = 1;
+
+    bool is_tan_family = (head_in == SYM_Tan || head_in == SYM_Cot);
+    bool is_sin_like = (head_in == SYM_Sin || head_in == SYM_Csc);
+    bool is_cos_like = (head_in == SYM_Cos || head_in == SYM_Sec);
+    if (!is_tan_family && !is_sin_like && !is_cos_like) return false;
+
+    if (is_tan_family) {
+        /* Period Pi.  Reduce to [0, d). */
+        n = n % d;
+        if (n < 0) n += d;
+        /* Tan[Pi - x] = -Tan[x], Cot[Pi - x] = -Cot[x]. */
+        if (2 * n > d) {
+            sign = -sign;
+            n = d - n;
+        }
+        /* n in [0, d/2]. */
+    } else {
+        int64_t two_d = 2 * d;
+        n = n % two_d;
+        if (n < 0) n += two_d;
+        if (is_sin_like) {
+            /* Sin[Pi + x] = -Sin[x], Csc[Pi + x] = -Csc[x]. */
+            if (n > d) { sign = -sign; n -= d; }
+            /* Now n in [0, d].  Sin[Pi - x] = Sin[x], Csc same. */
+            if (2 * n > d) n = d - n;
+        } else { /* cos-like */
+            /* Cos[2 Pi - x] = Cos[x], Sec same. */
+            if (n > d) n = two_d - n;
+            /* Now n in [0, d].  Cos[Pi - x] = -Cos[x], Sec same. */
+            if (2 * n > d) { sign = -sign; n = d - n; }
+        }
+        /* n in [0, d/2]. */
+    }
+
+    trig_pi_reduce_frac(&n, &d);
+
+    /* n == 0: argument collapsed to 0 (Sin[0]=0, Tan[0]=0, Cos[0]=1, ...).
+     * builtin_sin / builtin_cos / etc. already handle the EXPR_INTEGER 0
+     * case, so just emit head[0] -- the surrounding evaluate() pass will
+     * resolve it. */
+    if (n == 0) {
+        *head_out = head_in;
+        *n_out = 0;
+        *d_out = 1;
+        *sign_out = sign;
+        return true;
+    }
+
+    /* Complement: head[(n/d) Pi] == alt_head[(d - 2n)/(2d) Pi].  The
+     * sign relation is the identity Sin = Cos ∘ (Pi/2 - .) etc., which
+     * is sign-preserving under the post-quadrant reduction we did above. */
+    int64_t alt_n = d - 2 * n;
+    int64_t alt_d = 2 * d;
+    trig_pi_reduce_frac(&alt_n, &alt_d);
+
+    const char* alt_head;
+    if      (head_in == SYM_Sin) alt_head = "Cos";
+    else if (head_in == SYM_Cos) alt_head = "Sin";
+    else if (head_in == SYM_Tan) alt_head = "Cot";
+    else if (head_in == SYM_Cot) alt_head = "Tan";
+    else if (head_in == SYM_Sec) alt_head = "Csc";
+    else                          alt_head = "Sec"; /* SYM_Csc */
+
+    /* Pick the rep with the smaller reduced numerator.  Tie-break: keep
+     * the input head so we never thrash on already-canonical forms. */
+    if (alt_n < n) {
+        *head_out = alt_head;
+        *n_out = alt_n;
+        *d_out = alt_d;
+    } else {
+        *head_out = head_in;
+        *n_out = n;
+        *d_out = d;
+    }
+    *sign_out = sign;
+    return true;
+}
+
+/* Walk `e`, applying trig_pi_canon_one at every Sin/Cos/Tan/Cot/Sec/Csc
+ * call whose argument is a rational multiple of Pi.  Returns a freshly
+ * owned, evaluated tree (always non-NULL).  Idempotent on the canonical
+ * form. */
+static Expr* simp_trig_pi_canon_walk(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    /* Apply at this node when shape matches. */
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.arg_count == 1) {
+        const char* h = e->data.function.head->data.symbol;
+        bool is_trig = (h == SYM_Sin || h == SYM_Cos ||
+                        h == SYM_Tan || h == SYM_Cot ||
+                        h == SYM_Sec || h == SYM_Csc);
+        if (is_trig) {
+            int64_t n, d;
+            if (trig_pi_extract(e->data.function.args[0], &n, &d)) {
+                const char* out_h;
+                int64_t out_n, out_d;
+                int out_sign;
+                if (trig_pi_canon_one(h, n, d, &out_h, &out_n, &out_d, &out_sign)) {
+                    Expr* arg = trig_pi_make_arg(out_n, out_d);
+                    Expr* call = expr_new_function(
+                        expr_new_symbol(out_h),
+                        (Expr*[]){ arg }, 1);
+                    Expr* call_eval = eval_and_free(call);
+                    if (out_sign == -1) {
+                        Expr* neg = expr_new_function(
+                            expr_new_symbol("Times"),
+                            (Expr*[]){ expr_new_integer(-1), call_eval }, 2);
+                        return eval_and_free(neg);
+                    }
+                    return call_eval;
+                }
+            }
+        }
+    }
+
+    /* Recurse into children. */
+    size_t n_args = e->data.function.arg_count;
+    Expr** new_args = malloc(sizeof(Expr*) * n_args);
+    bool any_changed = false;
+    for (size_t i = 0; i < n_args; i++) {
+        Expr* nc = simp_trig_pi_canon_walk(e->data.function.args[i]);
+        if (!expr_eq(nc, e->data.function.args[i])) any_changed = true;
+        new_args[i] = nc;
+    }
+    /* Walk the head too in case of e.g. Hold[Sin][...]. */
+    Expr* new_head = simp_trig_pi_canon_walk(e->data.function.head);
+    if (!expr_eq(new_head, e->data.function.head)) any_changed = true;
+
+    if (!any_changed) {
+        for (size_t i = 0; i < n_args; i++) expr_free(new_args[i]);
+        free(new_args);
+        expr_free(new_head);
+        return expr_copy((Expr*)e);
+    }
+    Expr* res = expr_new_function(new_head, new_args, n_args);
+    free(new_args);
+    return eval_and_free(res);
+}
+
+/* Idempotent (re-application is a structural fixed point).  Inert on
+ * inputs without a Sin/Cos/Tan/Cot/Sec/Csc of a rational multiple of
+ * Pi -- the walker descends but never triggers a rewrite. */
+static Expr* simp_trig_pi_canon(const Expr* e) {
+    return simp_trig_pi_canon_walk(e);
+}
+
 static Expr* transform_pythag_reduce_impl(const Expr* e) {
     static Expr* rules = NULL;
     if (!rules) {
@@ -4404,6 +4644,23 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         }
     }
 
+    /* Trig-at-rational-Pi canonicalization seed.  Picks a unique
+     * Sin-vs-Cos / Tan-vs-Cot / Sec-vs-Csc representation per pair,
+     * which lets pairs like Cos[4 Pi/9] - Sin[Pi/18] (both lower to
+     * Sin[Pi/18]) and 1/8 (Cos[4 Pi/9] + Cos[5 Pi/9]) (lowers to
+     * 1/8 (Sin[Pi/18] + (-Sin[Pi/18])) = 0) cancel additively in
+     * the surrounding Plus.  Idempotent and inert when the input
+     * has no rational-Pi trig calls. */
+    {
+        Expr* alt = simp_trig_pi_canon(input);
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+
     /* Half-angle tangent / Tanh seed. Idempotent on inputs without
      * the Sin/(1+Cos) (resp. Sinh/(1+Cosh)) shape. */
     {
@@ -4533,6 +4790,23 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
                             update_best(&best, &best_score, rd, complexity_func);
                         }
                         expr_free(rd);
+                    }
+                }
+                /* Chain a trig-Pi canonicalization pass on the transform
+                 * output.  TrigReduce on Cos[Pi/9] Cos[2Pi/9] Cos[3Pi/9]
+                 * Cos[4Pi/9] - 1/16 surfaces the intermediate
+                 * 1/8 (Cos[4 Pi/9] + Cos[5 Pi/9]); only after canonicalising
+                 * Cos[5 Pi/9] -> -Sin[Pi/18] (equivalently -Cos[4 Pi/9])
+                 * does the Plus collapse to 0.  Without this chain the
+                 * canonicalizer would have to wait for r to become a seed
+                 * next round, which does not happen at SIMP_ROUNDS-1. */
+                {
+                    Expr* tc = simp_trig_pi_canon(r);
+                    if (tc) {
+                        if (!expr_eq(tc, r)) {
+                            update_best(&best, &best_score, tc, complexity_func);
+                        }
+                        expr_free(tc);
                     }
                 }
                 if (expr_eq(r, seed)) {

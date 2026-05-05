@@ -424,6 +424,25 @@ void test_simplify_trigreduce_angle_addition(void) {
         "Cos[a + b] + Sin[a + b]", 0);
 }
 
+/* Trig-at-rational-Pi canonicalization.  Cos[4 Pi/9] and Sin[Pi/18]
+ * both map to Sin[Pi/18] under the smaller-numerator rule (4/9 vs
+ * 1/18 -> picks 1), so Cos[4 Pi/9] - Sin[Pi/18] collapses to 0. */
+void test_simplify_cos_minus_sin_complement(void) {
+    assert_eval_eq("Simplify[Cos[4/9*Pi] - Sin[Pi/18]]", "0", 0);
+}
+
+/* Morrie's-law product variant.  Cos[3 Pi/9] = 1/2 reduces the
+ * product to (1/2) Cos[Pi/9] Cos[2 Pi/9] Cos[4 Pi/9].  TrigReduce's
+ * product-to-sum rules collapse this to 1/8 (Cos[4 Pi/9] +
+ * Cos[5 Pi/9]); the trig-Pi canonicalizer then maps Cos[5 Pi/9] to
+ * -Sin[Pi/18] and Cos[4 Pi/9] to Sin[Pi/18], so the Plus collapses
+ * to 0 and the constant 1/16 cancels. */
+void test_simplify_morrie_product_minus_constant(void) {
+    assert_eval_eq(
+        "Simplify[Cos[Pi/9]*Cos[2/9*Pi]*Cos[3/9*Pi]*Cos[4/9*Pi] - 1/16]",
+        "0", 0);
+}
+
 /* simp_algebraic single-surd reduction. Substitution Sqrt[x^2+1] -> g
  * with relation g^2 = x^2+1 turns ((g+x)^2 + 1) into 2g(g+x), which
  * cancels the (g+x) numerator and leaves 1/(2*(x^2+1)). */
@@ -674,6 +693,8 @@ int main(void) {
     TEST(test_simplify_trig_split_multiplicative_extra_factor);
     TEST(test_simplify_tan_three_angle_addition);
     TEST(test_simplify_trigreduce_angle_addition);
+    TEST(test_simplify_cos_minus_sin_complement);
+    TEST(test_simplify_morrie_product_minus_constant);
     TEST(test_simplify_algebraic_single_surd);
     TEST(test_simplify_algebraic_multi_surd);
     TEST(test_simplify_algebraic_fractional_surd_arg);
