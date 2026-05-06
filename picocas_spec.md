@@ -10760,3 +10760,97 @@ Simplify[ArcSin[I x] - I ArcSinh[x]]                                    -> 0
 Simplify[ArcTan[I x] - I ArcTanh[x]]                                    -> 0
 Simplify[ArcCos[I x] - (Pi/2 - I ArcSinh[x])]                           -> 0
 ```
+
+## Sqrt-of-Sqrt denesting (`simp_denest_sqrt`, 2026-05-06)
+
+Phase 1 of an algorithmic radical-simplification project. Closes
+five user-supplied test cases that prior `Simplify` left unchanged:
+
+```
+Simplify[Sqrt[3 + 2 Sqrt[2]] - (1 + Sqrt[2])]                                -> 0
+Simplify[Sqrt[17 - 12 Sqrt[2]] - (3 - 2 Sqrt[2])]                            -> 0
+Simplify[Sqrt[2 + Sqrt[3]] - (Sqrt[6] + Sqrt[2])/2]                          -> 0
+Assuming[x>0 && y>0, Simplify[Sqrt[x+y+2 Sqrt[x y]] - (Sqrt[x]+Sqrt[y])]]    -> 0
+Assuming[x>y && y>0, Simplify[Sqrt[x+Sqrt[x^2-y^2]]
+                              - (Sqrt[(x+y)/2]+Sqrt[(x-y)/2])]]              -> 0
+```
+
+### The single primitive
+
+A new `simp_denest_sqrt` Simplify seed applies the half-sum identity
+
+```
+Sqrt[A + Sqrt[B]] = Sqrt[(A + s)/2] + Sqrt[(A - s)/2]
+```
+
+at every `Sqrt[Plus[...]]` subtree, where `s` is a closed-form
+square root of `A^2 - B`. The identity holds in the principal branch
+when both `(A +/- s)/2` are nonneg. When the input is `Sqrt[A - b Sqrt[C]]`
+with `b > 0`, the same `s` (computed from `B = b^2 C`) gives the
+sign-flipped form `Sqrt[(A+s)/2] - Sqrt[(A-s)/2]`.
+
+### How `s` is detected
+
+`sqrt_if_clean_square(D, ctx)` returns a closed-form `s` (sign-agnostic)
+when `D` is one of:
+
+- A nonneg integer/rational perfect square (via GMP `mpz_perfect_square_p`).
+- `Power[u, 2k]` for any integer `k >= 1`.
+- A polynomial Plus that `Expand[D]` then `FactorSquareFree[.]` reduces
+  to `Power[u, 2k]`. This path catches the symbolic discriminants
+  `(x-y)^2` (case 6) and `y^2` (case 7).
+
+When no clean square is detected, the identity is not applied — the
+input is returned unchanged. This preserves the project-wide soundness
+invariant that `Simplify` never produces a wrong result.
+
+### Branch validation
+
+After computing `P = (A+s)/2` and `Q = (A-s)/2`, the transform requires
+both to be provably nonneg under the active `AssumeCtx` before firing.
+The standard `assume_known_nonneg` does not perform transitive chaining
+or the subtraction pattern needed by some Phase-1 cases, so the module
+introduces local helpers:
+
+- `denest_prov_nonneg` / `denest_prov_pos` chain inequality facts:
+  `x > y && y > 0` implies `x > 0`.
+- A 2-arg Plus subtraction-pattern detector recognises
+  `Plus[u, Times[-1, v]]` and looks for `Greater[u, v]` /
+  `GreaterEqual[u, v]` in the assumption set. Required for case 7,
+  where `Q = (x - y)/2` is provably nonneg under `x > y` even though
+  the literal Plus decomposition fails on `-y`.
+- A `numeric_is_nonneg` fast path covers `Rational[p, q]`, which the
+  stock `numeric_sign` only handles for `INTEGER`/`BIGINT`/`REAL`.
+
+### Sqrt-of-Rational rationalisation
+
+The denesting often produces inner radicands like `3/2` and `1/2`;
+`Sqrt[3/2] + Sqrt[1/2]` must canonicalise to `(Sqrt[6]+Sqrt[2])/2`
+for case 3 to cancel against the user-supplied form. The existing
+`transform_radical_canon` only handles `Sqrt[1/n]` because the
+evaluator re-merges `Times[Power[m, 1/2], Power[n, -1/2]]` back
+into `Power[m/n, 1/2]` for `m > 1`, undoing the split. The Phase-1
+denest module includes `denest_rationalise_sqrt_of_rational`, which
+builds `Sqrt[m*n] * (1/n)` directly so the re-merge cannot fire.
+
+### Files
+
+- `src/simp.c`: ~600 LOC of new code in a `simp_denest_sqrt` section
+  inserted between `simp_radicals` and `simp_algebraic`. Wired as a
+  new seed in `simp_search` next to `simp_algebraic` (line ~6831).
+  Forward-declares `transform_radical_canon` and `is_sqrt`.
+- `tests/test_radical_simplify.c`: 14 tests covering all five Phase-1
+  user cases, four branch-soundness subtests, the case-9 regression
+  sentinel, and four Phase-2/3 cases gated by `#define PHASE_N`
+  macros (skipped until those phases land).
+- `tests/CMakeLists.txt`: registers `radical_simplify_tests` next to
+  `invtrig_simplify_tests`.
+
+### Out of scope (Phase 2/3 placeholders)
+
+- Multi-generator algebraic-number reduction (cases 8, 10): denominator
+  rationalisation in `Q(α₁, ..., αₖ)` requires a new module.
+- Cube-root denesting (cases 4, 5): Borodin–Fagin–Hopcroft–Tompa for
+  `(p + q√r)^(1/3)` and Cardano-discriminant for sum-of-conjugate
+  cube roots.
+

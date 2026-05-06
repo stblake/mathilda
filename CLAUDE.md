@@ -55,6 +55,8 @@
 
 The goal of this project is to use Gemini cli to create a small (pico) computer algebra system (CAS), called picocas. The CAS should be a faithful recreation of the core architecture (parser, pattern matcher, symbol table, evaluator) of Mathematica (or the Wolfram Language) and a recreation of the core simple mathematical functions of Mathematica (Plus, Times, Power, Divide, etc.)
 
+-- When working on a task, do not pause to ask for feedback. Proceed through the plan continuously. If tests pass, move to the next phase immediately.
+
 -- No code changes should be made to any libraries in @src/external/
 
 -- Before any coding takes place the document @SPEC.md should be read to get an understanding of the system. 

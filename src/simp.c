@@ -1695,6 +1695,974 @@ static Expr* simp_radicals(const Expr* e) {
 }
 
 /* ----------------------------------------------------------------------- */
+/* Sqrt-of-Sqrt denesting: simp_denest_sqrt                                */
+/* ----------------------------------------------------------------------- */
+
+/* Forward declaration -- defined below in the RadicalCanon section. The
+ * denesting walker calls it on its final result so that Sqrt[Rational[
+ * p, q]] forms produced inside (P + s)/2 get canonicalised to
+ * Sqrt[p*q]/q before the result lands in the seed set. Without this
+ * post-pass, my candidate has the same complexity as the inputs (two
+ * unsimplified Sqrt[Rational] leaves vs one Sqrt[nested] leaf) and the
+ * round-loop's RadicalCanon pass isn't in SIMP_TRANSFORMS, so the
+ * canonicalisation never fires. */
+static Expr* transform_radical_canon(const Expr* e);
+
+/* Forward declaration -- defined just below. */
+static bool is_sqrt(const Expr* e);
+
+/* Rewrite every Power[Rational[m, n], 1/2] subtree to Times[Sqrt[m*n],
+ * Rational[1, n]] (i.e. Sqrt[m*n]/n) for positive m, n. Returns a fresh
+ * tree (caller owns); the input is not mutated.
+ *
+ * `transform_radical_canon` already attempts this rewrite, but the
+ * picocas evaluator re-merges Times[Power[m, 1/2], Power[n, -1/2]]
+ * back into Power[m/n, 1/2] for m > 1 (only m = 1 escapes because
+ * Power[1, 1/2] evaluates to the integer 1 and drops out of the Times,
+ * leaving Power[n, -1/2] for the negative-exponent rule). This helper
+ * sidesteps the re-merge by constructing Sqrt[m*n] / n directly, which
+ * the evaluator does not collapse back. */
+static Expr* denest_rationalise_sqrt_of_rational(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    /* Recurse into children first (bottom-up). */
+    size_t n = e->data.function.arg_count;
+    Expr* head_copy = expr_copy(e->data.function.head);
+    Expr** new_args = NULL;
+    if (n > 0) {
+        new_args = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = denest_rationalise_sqrt_of_rational(
+                e->data.function.args[i]);
+        }
+    }
+    Expr* rebuilt = expr_new_function(head_copy, new_args, n);
+    if (new_args) free(new_args);
+
+    /* Match Power[Rational[m, n], Rational[1, 2]] with m > 0, n > 0. */
+    if (is_sqrt(rebuilt)) {
+        Expr* base = rebuilt->data.function.args[0];
+        if (is_rational_literal(base)) {
+            Expr* num = base->data.function.args[0];
+            Expr* den = base->data.function.args[1];
+            if (num->type == EXPR_INTEGER && den->type == EXPR_INTEGER &&
+                num->data.integer > 0 && den->data.integer > 1) {
+                int64_t m = num->data.integer;
+                int64_t nn = den->data.integer;
+                int64_t mn;
+                if (!__builtin_mul_overflow(m, nn, &mn)) {
+                    /* Build Times[Power[m*n, 1/2], Rational[1, n]]. */
+                    Expr* sqrt_args[2] = {
+                        expr_new_integer(mn),
+                        make_rational(1, 2)
+                    };
+                    Expr* sqrt_call = expr_new_function(
+                        expr_new_symbol("Power"), sqrt_args, 2);
+                    Expr* sqrt_e = evaluate(sqrt_call);
+                    expr_free(sqrt_call);
+                    Expr* prod_args[2] = {
+                        sqrt_e,
+                        make_rational(1, nn)
+                    };
+                    Expr* prod = expr_new_function(
+                        expr_new_symbol("Times"), prod_args, 2);
+                    Expr* out = evaluate(prod);
+                    expr_free(prod);
+                    expr_free(rebuilt);
+                    return out;
+                }
+            }
+        }
+    }
+    return rebuilt;
+}
+
+/*
+ * simp_denest_sqrt rewrites Sqrt[A + b * Sqrt[C]] using the half-sum
+ * identity
+ *
+ *     Sqrt[A + Sqrt[B]] = Sqrt[(A + s)/2] + Sqrt[(A - s)/2]
+ *
+ * where B = b^2 * C and s is a closed-form representative of
+ * Sqrt[A^2 - B] (so s^2 = A^2 - B). The identity holds in the principal
+ * branch for any (A, B) with A^2 - B >= 0 and the radicand A + Sqrt[B]
+ * itself nonneg, provided the two inner radicands (A +/- s)/2 are both
+ * nonneg -- which is the additional precondition we explicitly verify
+ * via the AssumeCtx (or via direct numeric evaluation when A, s are
+ * rational).
+ *
+ * When the original radicand is A - b * Sqrt[C] (i.e. b < 0), the
+ * identity becomes
+ *
+ *     Sqrt[A - Sqrt[B]] = Sqrt[(A + s)/2] - Sqrt[(A - s)/2]
+ *
+ * (sign flipped on the second term). Since |A - b Sqrt[C]| = |A + (-b) Sqrt[C]|
+ * after squaring, the discriminant D = A^2 - B is identical for the two
+ * branches; only the output sign convention differs.
+ *
+ * The single primitive closes five user-supplied test cases:
+ *   - Sqrt[3 + 2 Sqrt[2]]            -> 1 + Sqrt[2]                (A=3, B=8)
+ *   - Sqrt[17 - 12 Sqrt[2]]          -> 3 - 2 Sqrt[2]              (A=17, B=288)
+ *   - Sqrt[2 + Sqrt[3]]              -> (Sqrt[6]+Sqrt[2])/2        (A=2, B=3)
+ *   - Sqrt[x+y+2 Sqrt[xy]]           -> Sqrt[x] + Sqrt[y]          (x,y>0)
+ *   - Sqrt[x+Sqrt[x^2-y^2]]          -> Sqrt[(x+y)/2]+Sqrt[(x-y)/2] (x>y>0)
+ *
+ * Soundness: the transform refuses to fire whenever it cannot verify
+ * P, Q >= 0 from purely numeric reasoning or the active AssumeCtx.
+ * That is, a borderline case yields the input unchanged rather than a
+ * possibly-wrong-branch denesting -- the standing Simplify-soundness
+ * invariant.
+ */
+
+/* True iff e == Power[_, Rational[1, 2]] (a sqrt). The representation
+ * the parser/evaluator settles on for `Sqrt[x]`. */
+static bool is_sqrt(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Power) return false;
+    if (e->data.function.arg_count != 2) return false;
+    Expr* exp = e->data.function.args[1];
+    if (!is_rational_literal(exp)) return false;
+    Expr* num = exp->data.function.args[0];
+    Expr* den = exp->data.function.args[1];
+    return num->type == EXPR_INTEGER && num->data.integer == 1 &&
+           den->type == EXPR_INTEGER && den->data.integer == 2;
+}
+
+/* Forward declaration: nonneg check used to combine multiple sqrt
+ * factors into one when each base is provably nonneg. */
+static bool denest_is_nonneg(const Expr* e, const AssumeCtx* ctx);
+
+/* If `e` is a "sqrt-radical decomposition target" -- a single expression
+ * that can be written as b * Sqrt[C] with a single radicand C -- populate
+ * *out_b (a fresh expression representing b, possibly 1) and *out_C
+ * (a fresh deep copy of the radicand). Returns false otherwise.
+ *
+ * Three forms are recognised:
+ *   1. Power[C, 1/2]                          -- the bare-sqrt case (b=1).
+ *   2. Power[c, p/2] for odd integer p > 0    -- canonicalised by the
+ *      evaluator from "c^k * Sqrt[c]"; p=2k+1 gives b = c^k, C = c.
+ *      (Case 1 of the user tests hits this: 2*Sqrt[2] surfaces inside
+ *      Simplify as Power[2, 3/2].)
+ *   3. Times node with one or more Power[_, 1/2] factors plus
+ *      arbitrary other factors. When there are multiple sqrt factors,
+ *      we combine them into a single Sqrt[Times[c1, c2, ...]] only if
+ *      every sqrt base is provably nonneg under ctx (otherwise the
+ *      combine breaks the principal-branch identity Sqrt[a]Sqrt[b] =
+ *      Sqrt[ab], which fails for negative arguments). The non-sqrt
+ *      factors collapse into b via evaluator-driven Times canonicalisation.
+ *      (Case 6 of the user tests hits this: 2*Sqrt[x*y] is canonicalised
+ *      to 2*Sqrt[x]*Sqrt[y] for symbolic x, y.)
+ *
+ * Returns false when e doesn't match any of the above. */
+static bool extract_sqrt_term(const Expr* e, const AssumeCtx* ctx,
+                              Expr** out_b, Expr** out_C) {
+    if (!e) return false;
+
+    /* Form 1: bare Sqrt. */
+    if (is_sqrt(e)) {
+        *out_b = expr_new_integer(1);
+        *out_C = expr_copy(e->data.function.args[0]);
+        return true;
+    }
+
+    /* Form 2: Power[c, p/2] with odd p > 0. */
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2
+        && is_rational_literal(e->data.function.args[1])) {
+        Expr* exp = e->data.function.args[1];
+        Expr* num = exp->data.function.args[0];
+        Expr* den = exp->data.function.args[1];
+        if (num->type == EXPR_INTEGER && den->type == EXPR_INTEGER &&
+            den->data.integer == 2 && num->data.integer > 0 &&
+            (num->data.integer % 2) == 1) {
+            int64_t p = num->data.integer;
+            int64_t k = (p - 1) / 2;
+            Expr* base = e->data.function.args[0];
+            Expr* b;
+            if (k == 0) {
+                b = expr_new_integer(1);
+            } else if (k == 1) {
+                b = expr_copy(base);
+            } else {
+                Expr* pa[2] = { expr_copy(base), expr_new_integer(k) };
+                Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                b = evaluate(pc);
+                expr_free(pc);
+            }
+            *out_b = b;
+            *out_C = expr_copy(base);
+            return true;
+        }
+    }
+
+    /* Form 3: Times with sqrt factors. */
+    if (e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Times) return false;
+
+    /* Flatten nested Times via a depth-first walk: Simplify's
+     * intermediate forms can land us with shapes like
+     * Times[2, Times[Sqrt[x], Sqrt[y]]] even though Times has the FLAT
+     * attribute, because some seed paths construct the tree without
+     * re-evaluating it. We collect the leaf factors (those whose head
+     * is not Times) into one flat list. */
+    Expr** flat = NULL;
+    size_t flat_n = 0;
+    size_t flat_cap = 0;
+    /* iterative DFS using a small stack of cursors */
+    typedef struct { const Expr* node; size_t idx; } Cur;
+    Cur stack[16];
+    int sp = 0;
+    stack[sp++] = (Cur){ e, 0 };
+    while (sp > 0) {
+        Cur* top = &stack[sp - 1];
+        if (top->node->type != EXPR_FUNCTION ||
+            !top->node->data.function.head ||
+            top->node->data.function.head->type != EXPR_SYMBOL ||
+            top->node->data.function.head->data.symbol != SYM_Times) {
+            /* leaf factor: append */
+            if (flat_n == flat_cap) {
+                flat_cap = flat_cap ? flat_cap * 2 : 8;
+                flat = (Expr**)realloc(flat, sizeof(Expr*) * flat_cap);
+            }
+            flat[flat_n++] = (Expr*)top->node;
+            sp--;
+            continue;
+        }
+        if (top->idx >= top->node->data.function.arg_count) {
+            sp--;
+            continue;
+        }
+        const Expr* child = top->node->data.function.args[top->idx++];
+        if (sp >= 16) {
+            /* Bail out (extremely deep nesting); not worth handling. */
+            free(flat);
+            return false;
+        }
+        stack[sp++] = (Cur){ child, 0 };
+    }
+
+    size_t sqrt_count = 0;
+    for (size_t i = 0; i < flat_n; i++) {
+        if (is_sqrt(flat[i])) sqrt_count++;
+    }
+    if (sqrt_count == 0) {
+        free(flat);
+        return false;
+    }
+
+    /* When >1 sqrt factors, combine into one only if all bases are
+     * provably nonneg (so that Sqrt[a]*Sqrt[b] = Sqrt[a*b] is sound). */
+    if (sqrt_count > 1) {
+        for (size_t i = 0; i < flat_n; i++) {
+            if (is_sqrt(flat[i])) {
+                Expr* bi = flat[i]->data.function.args[0];
+                if (!denest_is_nonneg(bi, ctx)) {
+                    free(flat);
+                    return false;
+                }
+            }
+        }
+    }
+
+    /* Bucket factors: sqrt-bases vs non-sqrt-factors. */
+    Expr** sqrt_bases = (Expr**)malloc(sizeof(Expr*) * (flat_n ? flat_n : 1));
+    Expr** other     = (Expr**)malloc(sizeof(Expr*) * (flat_n ? flat_n : 1));
+    size_t si = 0, oi = 0;
+    for (size_t i = 0; i < flat_n; i++) {
+        if (is_sqrt(flat[i])) {
+            sqrt_bases[si++] = expr_copy(flat[i]->data.function.args[0]);
+        } else {
+            other[oi++] = expr_copy(flat[i]);
+        }
+    }
+    free(flat);
+
+    /* Combined radicand C. */
+    Expr* C;
+    if (si == 1) {
+        C = sqrt_bases[0];
+    } else {
+        Expr* tn = expr_new_function(expr_new_symbol("Times"),
+                                      sqrt_bases, si);
+        C = evaluate(tn);
+        expr_free(tn);
+    }
+    free(sqrt_bases);
+
+    /* Combined b. */
+    Expr* b;
+    if (oi == 0) {
+        free(other);
+        b = expr_new_integer(1);
+    } else if (oi == 1) {
+        b = other[0];
+        free(other);
+    } else {
+        Expr* tn = expr_new_function(expr_new_symbol("Times"), other, oi);
+        b = evaluate(tn);
+        expr_free(tn);
+    }
+
+    *out_b = b;
+    *out_C = C;
+    return true;
+}
+
+/* Given a clean square D, return a closed-form expression s with
+ * s^2 = D (sign-agnostic; the caller is expected to validate the
+ * downstream nonnegativity of (A+s)/2 and (A-s)/2 -- if both are
+ * provably nonneg, the sign of s itself doesn't matter for the
+ * identity).
+ *
+ * Returns NULL when no closed form is detected. The four cases handled
+ * are:
+ *   - integer/bigint nonneg perfect square                 -> integer sqrt
+ *   - rational with perfect-square num and den             -> rational sqrt
+ *   - Power[u, 2k]                                          -> Power[u, k]
+ *   - polynomial Plus whose Expand+FactorSquareFree is a
+ *     pure even-power Power[u, 2k]                          -> Power[u, k]
+ *
+ * The polynomial path covers the symbolic discriminants that case 6
+ * ((x-y)^2) and case 7 (y^2) produce after expansion.
+ */
+static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
+    (void)ctx;
+
+    /* Numeric atoms. */
+    if (D->type == EXPR_INTEGER) {
+        int64_t d = D->data.integer;
+        if (d < 0) return NULL;
+        if (d == 0) return expr_new_integer(0);
+        mpz_t z, r;
+        mpz_init_set_si(z, d);
+        if (!mpz_perfect_square_p(z)) { mpz_clear(z); return NULL; }
+        mpz_init(r);
+        mpz_sqrt(r, z);
+        Expr* out;
+        if (mpz_fits_slong_p(r)) {
+            out = expr_new_integer((int64_t)mpz_get_si(r));
+        } else {
+            out = expr_new_bigint_from_mpz(r);
+        }
+        mpz_clear(r); mpz_clear(z);
+        return out;
+    }
+    if (D->type == EXPR_BIGINT) {
+        if (mpz_sgn(D->data.bigint) < 0) return NULL;
+        if (mpz_sgn(D->data.bigint) == 0) return expr_new_integer(0);
+        if (!mpz_perfect_square_p(D->data.bigint)) return NULL;
+        mpz_t r; mpz_init(r);
+        mpz_sqrt(r, D->data.bigint);
+        Expr* out;
+        if (mpz_fits_slong_p(r)) {
+            out = expr_new_integer((int64_t)mpz_get_si(r));
+        } else {
+            out = expr_new_bigint_from_mpz(r);
+        }
+        mpz_clear(r);
+        return out;
+    }
+    if (is_rational_literal(D)) {
+        Expr* sn = sqrt_if_clean_square(D->data.function.args[0], ctx);
+        if (!sn) return NULL;
+        Expr* sd = sqrt_if_clean_square(D->data.function.args[1], ctx);
+        if (!sd) { expr_free(sn); return NULL; }
+        Expr* inv_args[2] = { sd, expr_new_integer(-1) };
+        Expr* inv = expr_new_function(expr_new_symbol("Power"), inv_args, 2);
+        Expr* inv_e = evaluate(inv);
+        expr_free(inv);
+        Expr* prod_args[2] = { sn, inv_e };
+        Expr* prod = expr_new_function(expr_new_symbol("Times"), prod_args, 2);
+        Expr* out = evaluate(prod);
+        expr_free(prod);
+        return out;
+    }
+
+    /* Power[u, 2k] direct. */
+    if (D->type == EXPR_FUNCTION
+        && D->data.function.head
+        && D->data.function.head->type == EXPR_SYMBOL
+        && D->data.function.head->data.symbol == SYM_Power
+        && D->data.function.arg_count == 2) {
+        Expr* exp = D->data.function.args[1];
+        if (exp->type == EXPR_INTEGER &&
+            exp->data.integer >= 2 &&
+            (exp->data.integer % 2) == 0) {
+            int64_t k = exp->data.integer / 2;
+            Expr* u = expr_copy(D->data.function.args[0]);
+            if (k == 1) return u;
+            Expr* pa[2] = { u, expr_new_integer(k) };
+            Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+            Expr* out = evaluate(pc);
+            expr_free(pc);
+            return out;
+        }
+    }
+
+    /* Polynomial Plus: try Expand + FactorSquareFree. The factoriser
+     * stalls on inputs containing non-integer Power exponents (e.g. an
+     * inner Sqrt that survived expansion), so gate on that. */
+    if (D->type == EXPR_FUNCTION
+        && D->data.function.head
+        && D->data.function.head->type == EXPR_SYMBOL
+        && D->data.function.head->data.symbol == SYM_Plus) {
+        if (has_non_integer_power(D)) return NULL;
+        Expr* expanded = call_unary_copy("Expand", D);
+        if (!expanded) return NULL;
+        if (has_non_integer_power(expanded)) {
+            expr_free(expanded);
+            return NULL;
+        }
+        Expr* fsf = call_unary_owned("FactorSquareFree", expanded);
+        if (!fsf) return NULL;
+        if (fsf->type == EXPR_FUNCTION
+            && fsf->data.function.head
+            && fsf->data.function.head->type == EXPR_SYMBOL
+            && fsf->data.function.head->data.symbol == SYM_Power
+            && fsf->data.function.arg_count == 2) {
+            Expr* fsf_exp = fsf->data.function.args[1];
+            if (fsf_exp->type == EXPR_INTEGER &&
+                fsf_exp->data.integer >= 2 &&
+                (fsf_exp->data.integer % 2) == 0) {
+                int64_t k = fsf_exp->data.integer / 2;
+                Expr* u = expr_copy(fsf->data.function.args[0]);
+                expr_free(fsf);
+                if (k == 1) return u;
+                Expr* pa[2] = { u, expr_new_integer(k) };
+                Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                Expr* out = evaluate(pc);
+                expr_free(pc);
+                return out;
+            }
+        }
+        expr_free(fsf);
+    }
+    return NULL;
+}
+
+/* Given a Plus expression, partition its arguments into
+ *   (A, b, C)
+ * such that the Plus equals  A + b * Sqrt[C]  with a single sqrt-bearing
+ * term. Returns true on a successful partition. *out_A, *out_b, *out_C
+ * are caller-owned allocations on success.
+ *
+ * Two failure modes are explicit: zero sqrt-bearing terms (nothing to
+ * denest) and two-or-more sqrt-bearing terms (multi-extension, phase 2).
+ *
+ * The ctx is forwarded to extract_sqrt_term so that multi-sqrt Times
+ * factors with provably-nonneg bases can be combined into a single
+ * sqrt-bearing term. */
+static bool split_plus_into_a_plus_b_sqrt_c(const Expr* plus_node,
+                                            const AssumeCtx* ctx,
+                                            Expr** out_A,
+                                            Expr** out_b,
+                                            Expr** out_C) {
+    if (!plus_node || plus_node->type != EXPR_FUNCTION) return false;
+    if (!plus_node->data.function.head ||
+        plus_node->data.function.head->type != EXPR_SYMBOL ||
+        plus_node->data.function.head->data.symbol != SYM_Plus) return false;
+
+    size_t n = plus_node->data.function.arg_count;
+    if (n < 2) return false;
+
+    /* Find the unique sqrt-bearing term and bucket the rest into A. */
+    size_t sqrt_idx = SIZE_MAX;
+    Expr* b = NULL;
+    Expr* C = NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* bi = NULL; Expr* Ci = NULL;
+        if (extract_sqrt_term(plus_node->data.function.args[i], ctx,
+                              &bi, &Ci)) {
+            if (sqrt_idx != SIZE_MAX) {
+                /* Second sqrt-bearing term — abort. */
+                expr_free(bi); expr_free(Ci);
+                if (b) expr_free(b);
+                if (C) expr_free(C);
+                return false;
+            }
+            sqrt_idx = i;
+            b = bi;
+            C = Ci;
+        }
+    }
+    if (sqrt_idx == SIZE_MAX) return false;
+
+    /* Build A as Plus of remaining args, evaluating to canonicalise. */
+    if (n == 2) {
+        *out_A = expr_copy(plus_node->data.function.args[1 - sqrt_idx]);
+    } else {
+        Expr** a_args = (Expr**)malloc(sizeof(Expr*) * (n - 1));
+        size_t ai = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (i == sqrt_idx) continue;
+            a_args[ai++] = expr_copy(plus_node->data.function.args[i]);
+        }
+        Expr* pn = expr_new_function(expr_new_symbol("Plus"), a_args, ai);
+        *out_A = evaluate(pn);
+        expr_free(pn);
+    }
+    *out_b = b;
+    *out_C = C;
+    return true;
+}
+
+/* Local transitive nonneg prover for the denesting branch checks. The
+ * stock assume_known_nonneg / assume_known_positive don't do
+ * transitive chaining: x > y && y > 0 doesn't imply x > 0 to them. We
+ * extend with a one-step chain: scan facts of the form Greater[x, z]
+ * or GreaterEqual[x, z] (in either argument order's natural rendering)
+ * and recursively check that z is itself nonneg / positive. The recursion
+ * is bounded by the fact set, so cycles are not possible (each step
+ * moves to a different right-hand side from the original).
+ *
+ * Uses `depth` to bound the chain (4 is plenty for any realistic
+ * assumption set we'd see; deeper chains would be unusual). */
+static bool denest_prov_nonneg(const AssumeCtx* ctx, const Expr* x, int depth);
+
+static bool denest_prov_pos(const AssumeCtx* ctx, const Expr* x, int depth) {
+    if (assume_known_positive(ctx, x)) return true;
+    if (depth <= 0) return false;
+    if (!ctx) return false;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        if (!f || f->type != EXPR_FUNCTION) continue;
+        if (!f->data.function.head ||
+            f->data.function.head->type != EXPR_SYMBOL) continue;
+        if (f->data.function.arg_count != 2) continue;
+        const char* h = f->data.function.head->data.symbol;
+        const Expr* a = f->data.function.args[0];
+        const Expr* b = f->data.function.args[1];
+        /* Greater[x, z] or Less[z, x] with z provably nonneg => x > 0. */
+        if (h == SYM_Greater && expr_eq((Expr*)a, (Expr*)x)) {
+            if (denest_prov_nonneg(ctx, b, depth - 1)) return true;
+        }
+        if (h == SYM_Less && expr_eq((Expr*)b, (Expr*)x)) {
+            if (denest_prov_nonneg(ctx, a, depth - 1)) return true;
+        }
+        /* GreaterEqual[x, z] with z provably positive => x > 0. */
+        if (h == SYM_GreaterEqual && expr_eq((Expr*)a, (Expr*)x)) {
+            if (denest_prov_pos(ctx, b, depth - 1)) return true;
+        }
+        if (h == SYM_LessEqual && expr_eq((Expr*)b, (Expr*)x)) {
+            if (denest_prov_pos(ctx, a, depth - 1)) return true;
+        }
+    }
+    return false;
+}
+
+/* Forward declaration: numeric_is_nonneg is defined just below. */
+static bool numeric_is_nonneg(const Expr* e);
+
+static bool denest_prov_nonneg(const AssumeCtx* ctx, const Expr* x, int depth) {
+    /* Numeric literal fast-path. Important: covers Rational[p, q] which
+     * the stock assume_known_nonneg doesn't (its numeric_sign only
+     * handles INTEGER/BIGINT/REAL). The factor 1/2 inside (x+y)/2 needs
+     * this to be recognised as nonneg. */
+    if (numeric_is_nonneg(x)) return true;
+    if (assume_known_nonneg(ctx, x)) return true;
+    /* x > z && z >= 0 implies x > 0 implies x >= 0; routes through
+     * denest_prov_pos. */
+    if (denest_prov_pos(ctx, x, depth)) return true;
+    if (depth <= 0) return false;
+    if (!ctx) return false;
+    for (size_t i = 0; i < ctx->count; i++) {
+        const Expr* f = ctx->facts[i];
+        if (!f || f->type != EXPR_FUNCTION) continue;
+        if (!f->data.function.head ||
+            f->data.function.head->type != EXPR_SYMBOL) continue;
+        if (f->data.function.arg_count != 2) continue;
+        const char* h = f->data.function.head->data.symbol;
+        const Expr* a = f->data.function.args[0];
+        const Expr* b = f->data.function.args[1];
+        if (h == SYM_GreaterEqual && expr_eq((Expr*)a, (Expr*)x)) {
+            if (denest_prov_nonneg(ctx, b, depth - 1)) return true;
+        }
+        if (h == SYM_LessEqual && expr_eq((Expr*)b, (Expr*)x)) {
+            if (denest_prov_nonneg(ctx, a, depth - 1)) return true;
+        }
+    }
+    /* Plus decomposition with subtraction-pattern recognition.
+     *
+     * Two-arg case Plus[u, Times[-1, v]] = u - v: nonneg iff u >= v
+     * iff ctx has Greater[u, v] or GreaterEqual[u, v]. This is the
+     * key path for case 7's Q = (x-y)/2 — purely additive nonneg
+     * decomposition fails (one summand has a negative coefficient),
+     * but the inequality fact x > y entails x - y >= 0 directly.
+     *
+     * General case: every summand provably nonneg. Routes through our
+     * transitive prover so chained facts are visible.
+     */
+    if (x && x->type == EXPR_FUNCTION && x->data.function.head &&
+        x->data.function.head->type == EXPR_SYMBOL &&
+        x->data.function.head->data.symbol == SYM_Plus) {
+        size_t pn = x->data.function.arg_count;
+        if (pn == 2) {
+            /* Subtraction pattern: u + (-1)*v. */
+            const Expr* u = NULL;
+            const Expr* v = NULL;
+            for (size_t i = 0; i < 2; i++) {
+                const Expr* arg = x->data.function.args[i];
+                const Expr* other = x->data.function.args[1 - i];
+                if (arg->type == EXPR_FUNCTION &&
+                    arg->data.function.head &&
+                    arg->data.function.head->type == EXPR_SYMBOL &&
+                    arg->data.function.head->data.symbol == SYM_Times &&
+                    arg->data.function.arg_count == 2) {
+                    Expr* c = arg->data.function.args[0];
+                    Expr* w = arg->data.function.args[1];
+                    if (c->type == EXPR_INTEGER && c->data.integer == -1) {
+                        u = other;
+                        v = w;
+                        break;
+                    }
+                }
+            }
+            if (u && v) {
+                /* Look for Greater[u, v] / GreaterEqual[u, v] in ctx. */
+                for (size_t i = 0; i < ctx->count; i++) {
+                    const Expr* f = ctx->facts[i];
+                    if (!f || f->type != EXPR_FUNCTION) continue;
+                    if (!f->data.function.head ||
+                        f->data.function.head->type != EXPR_SYMBOL) continue;
+                    if (f->data.function.arg_count != 2) continue;
+                    const char* h = f->data.function.head->data.symbol;
+                    const Expr* a = f->data.function.args[0];
+                    const Expr* b = f->data.function.args[1];
+                    if ((h == SYM_Greater || h == SYM_GreaterEqual) &&
+                        expr_eq((Expr*)a, (Expr*)u) &&
+                        expr_eq((Expr*)b, (Expr*)v)) {
+                        return true;
+                    }
+                    if ((h == SYM_Less || h == SYM_LessEqual) &&
+                        expr_eq((Expr*)a, (Expr*)v) &&
+                        expr_eq((Expr*)b, (Expr*)u)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        /* General case: each summand nonneg. */
+        bool all_nn = true;
+        for (size_t i = 0; i < pn; i++) {
+            if (!denest_prov_nonneg(ctx, x->data.function.args[i],
+                                    depth - 1)) {
+                all_nn = false;
+                break;
+            }
+        }
+        if (all_nn) return true;
+    }
+    /* Times: every factor nonneg => product nonneg (sign-symmetric:
+     * negative * negative is also nonneg, but the simpler positive
+     * decomposition covers the cases we hit in practice).
+     *
+     * Also: Times[c, Plus[...]] for positive c reduces to Plus's
+     * nonnegativity check on the inner Plus. This catches the factored
+     * forms Times[1/2, Plus[x, -y]] that picocas's evaluator produces
+     * before Expand distributes them. */
+    if (x && x->type == EXPR_FUNCTION && x->data.function.head &&
+        x->data.function.head->type == EXPR_SYMBOL &&
+        x->data.function.head->data.symbol == SYM_Times) {
+        bool all_nn = true;
+        for (size_t i = 0; i < x->data.function.arg_count; i++) {
+            if (!denest_prov_nonneg(ctx, x->data.function.args[i],
+                                    depth - 1)) {
+                all_nn = false;
+                break;
+            }
+        }
+        if (all_nn) return true;
+    }
+    return false;
+}
+
+/* Numeric-only nonneg check for a plain integer or rational literal. */
+static bool numeric_is_nonneg(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) return e->data.integer >= 0;
+    if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint) >= 0;
+    if (is_rational_literal(e)) {
+        const Expr* num = e->data.function.args[0];
+        const Expr* den = e->data.function.args[1];
+        bool num_nn = (num->type == EXPR_INTEGER && num->data.integer >= 0) ||
+                      (num->type == EXPR_BIGINT  && mpz_sgn(num->data.bigint) >= 0);
+        bool den_pos = (den->type == EXPR_INTEGER && den->data.integer >  0) ||
+                       (den->type == EXPR_BIGINT  && mpz_sgn(den->data.bigint) >  0);
+        return num_nn && den_pos;
+    }
+    return false;
+}
+
+/* Decide whether `e` is provably nonneg under the active context.
+ * Numeric literals get a free direct check; everything else routes
+ * through assume_known_nonneg, augmented by a local transitive prover
+ * (denest_prov_nonneg) that chains inequality facts. The transitive
+ * step is required for case 7's branch check: x > y && y > 0 implies
+ * (x+y)/2 >= 0, but assume_known_nonneg alone can't see it. */
+static bool denest_is_nonneg(const Expr* e, const AssumeCtx* ctx) {
+    if (numeric_is_nonneg(e)) return true;
+    return denest_prov_nonneg(ctx, e, 4);
+}
+
+/* Try the half-sum identity on a Sqrt[plus] node. plus_node is the
+ * inner Plus expression (the radicand). Returns the denested form, or
+ * NULL when no clean denesting exists or when branch validity cannot
+ * be verified. */
+static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
+                                      const AssumeCtx* ctx) {
+    Expr* A = NULL; Expr* b = NULL; Expr* C = NULL;
+    if (!split_plus_into_a_plus_b_sqrt_c(plus_node, ctx, &A, &b, &C)) return NULL;
+
+    /* Determine sign of b by inspection of its sign. We require b's
+     * sign to be syntactically determinable -- a symbolic b with
+     * unknown sign aborts the identity (we'd need to know which
+     * principal-branch convention applies to the result). */
+    bool b_is_negative;
+    if (expr_is_superficially_negative(b)) {
+        b_is_negative = true;
+    } else if (numeric_is_nonneg(b) || (b->type == EXPR_INTEGER && b->data.integer == 1)) {
+        b_is_negative = false;
+    } else {
+        /* Symbolic b with unknown sign. */
+        if (assume_known_nonneg(ctx, b)) {
+            b_is_negative = false;
+        } else if (assume_known_nonpos(ctx, b)) {
+            b_is_negative = true;
+        } else {
+            expr_free(A); expr_free(b); expr_free(C);
+            return NULL;
+        }
+    }
+
+    /* B = b^2 * C; evaluate so symbolic b^2 simplifies and rational
+     * b^2 collapses to a literal. */
+    Expr* b2_args[2] = { expr_copy(b), expr_new_integer(2) };
+    Expr* b2_pow = expr_new_function(expr_new_symbol("Power"), b2_args, 2);
+    Expr* b2 = evaluate(b2_pow);
+    expr_free(b2_pow);
+    Expr* B_args[2] = { b2, expr_copy(C) };
+    Expr* B_times = expr_new_function(expr_new_symbol("Times"), B_args, 2);
+    Expr* B = evaluate(B_times);
+    expr_free(B_times);
+
+    /* D = A^2 - B; Expand to put it in canonical polynomial form so
+     * sqrt_if_clean_square's FactorSquareFree path has a chance. */
+    Expr* A2_args[2] = { expr_copy(A), expr_new_integer(2) };
+    Expr* A2_pow = expr_new_function(expr_new_symbol("Power"), A2_args, 2);
+    Expr* A2 = evaluate(A2_pow);
+    expr_free(A2_pow);
+    Expr* negB_args[2] = { expr_new_integer(-1), B };
+    Expr* negB_times = expr_new_function(expr_new_symbol("Times"), negB_args, 2);
+    Expr* negB = evaluate(negB_times);
+    expr_free(negB_times);
+    Expr* D_args[2] = { A2, negB };
+    Expr* D_plus = expr_new_function(expr_new_symbol("Plus"), D_args, 2);
+    Expr* D_unexp = evaluate(D_plus);
+    expr_free(D_plus);
+    /* call_unary_owned consumes D_unexp; if it returns NULL we treat as
+     * a soft failure and abort the denesting cleanly. In practice
+     * Expand on a numeric/polynomial expression never returns NULL. */
+    Expr* D = call_unary_owned("Expand", D_unexp);
+    if (!D) {
+        expr_free(A); expr_free(b); expr_free(C);
+        return NULL;
+    }
+
+    Expr* s = sqrt_if_clean_square(D, ctx);
+    expr_free(D);
+    if (!s) {
+        expr_free(A); expr_free(b); expr_free(C);
+        return NULL;
+    }
+
+    /* Compute P = (A + s)/2 and Q = (A - s)/2. picocas's evaluator
+     * keeps Times[-1, Plus[...]] factored rather than distributing,
+     * so a raw evaluate of Plus[A, -s] / 2 leaves Q in a factored form
+     * the surrounding pipeline can't reason about (e.g. case 6 saw
+     * Q = 1/2 (x + y - (-x + y)) instead of Q = x). We call Together
+     * on each, which combines redundant fractions back into a single
+     * canonical Times[1/c, Plus[...]] form so the nonneg check below
+     * sees a clean expression. We DON'T use Expand: distributing the
+     * 1/2 across (x - y) wraps each summand in a numeric coefficient,
+     * obscuring the simple "u - v >= 0" subtraction pattern that the
+     * branch check uses on case 7. */
+    Expr* Ap_args[2] = { expr_copy(A), expr_copy(s) };
+    Expr* Ap = expr_new_function(expr_new_symbol("Plus"), Ap_args, 2);
+    Expr* Ap_e = evaluate(Ap);
+    expr_free(Ap);
+    Expr* halfP_args[2] = { make_rational(1, 2), Ap_e };
+    Expr* halfP = expr_new_function(expr_new_symbol("Times"), halfP_args, 2);
+    Expr* P_raw = evaluate(halfP);
+    expr_free(halfP);
+    /* call_unary_owned consumes P_raw; Expand never returns NULL on a
+     * polynomial-shaped input but guard anyway. */
+    Expr* P = call_unary_owned("Together", P_raw);
+    if (!P) {
+        expr_free(b); expr_free(C);
+        /* A was already freed below; we're early-returning, so
+         * that hasn't happened yet — unwind. */
+        expr_free(A);
+        return NULL;
+    }
+
+    Expr* neg_s_args[2] = { expr_new_integer(-1), s };
+    Expr* neg_s = expr_new_function(expr_new_symbol("Times"), neg_s_args, 2);
+    Expr* neg_s_e = evaluate(neg_s);
+    expr_free(neg_s);
+    Expr* Am_args[2] = { expr_copy(A), neg_s_e };
+    Expr* Am = expr_new_function(expr_new_symbol("Plus"), Am_args, 2);
+    Expr* Am_e = evaluate(Am);
+    expr_free(Am);
+    Expr* halfQ_args[2] = { make_rational(1, 2), Am_e };
+    Expr* halfQ = expr_new_function(expr_new_symbol("Times"), halfQ_args, 2);
+    Expr* Q_raw = evaluate(halfQ);
+    expr_free(halfQ);
+    Expr* Q = call_unary_owned("Together", Q_raw);
+    if (!Q) {
+        expr_free(P);
+        expr_free(A); expr_free(b); expr_free(C);
+        return NULL;
+    }
+
+    expr_free(A); expr_free(b); expr_free(C);
+
+    /* Branch validity: P and Q must both be provably nonneg. If we
+     * can't prove it, refuse rather than risk a wrong-branch result.
+     * The denest_is_nonneg prover (defined in this section) extends
+     * assume_known_nonneg with one-step transitive chaining over
+     * inequality facts plus a subtraction-pattern detector for
+     * Plus[u, -v]; without these case 7 would fail because its P, Q
+     * are (x+y)/2 and (x-y)/2 which require chained reasoning under
+     * the user's x > y && y > 0 assumptions. */
+    if (!denest_is_nonneg(P, ctx) || !denest_is_nonneg(Q, ctx)) {
+        expr_free(P); expr_free(Q);
+        return NULL;
+    }
+
+    /* Build Sqrt[P] +/- Sqrt[Q]. */
+    Expr* sP_args[2] = { P, make_rational(1, 2) };
+    Expr* sP = expr_new_function(expr_new_symbol("Power"), sP_args, 2);
+    Expr* sP_e = evaluate(sP);
+    expr_free(sP);
+    Expr* sQ_args[2] = { Q, make_rational(1, 2) };
+    Expr* sQ = expr_new_function(expr_new_symbol("Power"), sQ_args, 2);
+    Expr* sQ_e = evaluate(sQ);
+    expr_free(sQ);
+
+    Expr* result;
+    if (b_is_negative) {
+        Expr* neg_sQ_args[2] = { expr_new_integer(-1), sQ_e };
+        Expr* neg_sQ = expr_new_function(expr_new_symbol("Times"),
+                                          neg_sQ_args, 2);
+        Expr* neg_sQ_e = evaluate(neg_sQ);
+        expr_free(neg_sQ);
+        Expr* sum_args[2] = { sP_e, neg_sQ_e };
+        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+        result = evaluate(sum);
+        expr_free(sum);
+    } else {
+        Expr* sum_args[2] = { sP_e, sQ_e };
+        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+        result = evaluate(sum);
+        expr_free(sum);
+    }
+    /* Rationalise any Sqrt[Rational[m, n]] subterms. This is needed
+     * because transform_radical_canon's existing logic only rationalises
+     * Sqrt[1/n] (where the integer-1 base lets Times[1, Power[n, -1/2]]
+     * collapse to a bare negative-exponent Power that the negative-exp
+     * rule then handles). For Sqrt[m/n] with m > 1, the evaluator
+     * re-merges Power[m, 1/2] * Power[n, -1/2] back into
+     * Power[m/n, 1/2], undoing the split. denest_rationalise_sqrt_of_rational
+     * sidesteps the re-merge by directly building Sqrt[m*n] * (1/n).
+     *
+     * Without this step the candidate Sqrt[3/2]+Sqrt[1/2] doesn't
+     * canonicalise to (Sqrt[6]+Sqrt[2])/2 and case 3 fails to cancel
+     * with the user's expected form. */
+    Expr* rationalised = denest_rationalise_sqrt_of_rational(result);
+    if (rationalised && !expr_eq(rationalised, result)) {
+        expr_free(result);
+        result = rationalised;
+    } else if (rationalised) {
+        expr_free(rationalised);
+    }
+    return result;
+}
+
+/* Bottom-up walker: find every Sqrt[Plus] subtree and try the half-sum
+ * identity at each. Returns a fully-rewritten copy of e on any
+ * successful denesting; NULL when no node fired. */
+static Expr* simp_denest_sqrt_walk(const Expr* e, const AssumeCtx* ctx) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = NULL;
+    bool any = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* r = simp_denest_sqrt_walk(e->data.function.args[i], ctx);
+        if (r) {
+            if (!new_args) {
+                new_args = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+                for (size_t j = 0; j < i; j++) {
+                    new_args[j] = expr_copy(e->data.function.args[j]);
+                }
+            }
+            new_args[i] = r;
+            any = true;
+        } else if (new_args) {
+            new_args[i] = expr_copy(e->data.function.args[i]);
+        }
+    }
+
+    Expr* current = NULL;
+    if (any) {
+        Expr* head_copy = expr_copy(e->data.function.head);
+        Expr* rebuilt = expr_new_function(head_copy, new_args, n);
+        free(new_args);
+        current = evaluate(rebuilt);
+        expr_free(rebuilt);
+    }
+
+    /* Now check whether this very node is a Sqrt[Plus[...]] we can
+     * denest. We use `current` (post-children-rewrite) when present so
+     * structural changes propagate. */
+    const Expr* target = current ? current : e;
+    if (is_sqrt(target)) {
+        Expr* radicand = target->data.function.args[0];
+        if (radicand->type == EXPR_FUNCTION
+            && radicand->data.function.head
+            && radicand->data.function.head->type == EXPR_SYMBOL
+            && radicand->data.function.head->data.symbol == SYM_Plus) {
+            Expr* d = try_denest_sqrt_radicand(radicand, ctx);
+            if (d) {
+                if (current) expr_free(current);
+                return d;
+            }
+        }
+    }
+    return current;  /* may be NULL when no descendant or this node fired */
+}
+
+/* Top-level entry point. Returns a new Expr* (caller owns); never
+ * NULL. When no denesting fires, returns expr_copy(e). */
+static Expr* simp_denest_sqrt(const Expr* e, const AssumeCtx* ctx) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+    Expr* r = simp_denest_sqrt_walk(e, ctx);
+    Expr* out = r ? r : expr_copy((Expr*)e);
+    if (dbg) simp_debug_log("DenestSqrt", e, out,
+                            simp_debug_elapsed_ms(t0));
+    return out;
+}
+
+/* ----------------------------------------------------------------------- */
 /* Algebraic-extension reduction: simp_algebraic                           */
 /* ----------------------------------------------------------------------- */
 
@@ -6181,6 +7149,23 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
      * seed. Wiring it into the round loop or the seed phase changes the
      * structural shape of intermediate forms in ways that interact badly
      * with TrigExpand / TrigReduce on multi-variable trig inputs. */
+
+    /* Sqrt-of-Sqrt denesting seed (phase-1 radical denesting). Fires the
+     * half-sum identity Sqrt[A + b Sqrt[C]] -> Sqrt[(A+s)/2] +/- Sqrt[(A-s)/2]
+     * where s^2 = A^2 - b^2 C is detected via integer/rational
+     * perfect-square or polynomial FactorSquareFree. Inert (returns the
+     * input copy) when no Sqrt[Plus[...]] subtree denests cleanly under
+     * the active assumption set. See the simp_denest_sqrt section above
+     * for branch-soundness preconditions. */
+    {
+        Expr* alt = simp_denest_sqrt(input, ctx);
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
 
     /* Algebraic-extension seed: substitute each Sqrt[u_i] by a fresh
      * generator g_i, reduce in K(vars)[g_1,...,g_n]/(g_i^2 - u_i), and
