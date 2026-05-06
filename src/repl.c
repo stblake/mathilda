@@ -8,13 +8,39 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
 #define MAX_INPUT_LEN 10240
 
+/* True if `s` consists only of whitespace and (* ... *) comments
+ * (nested comments allowed). Used to distinguish a no-op line from a
+ * genuine parse failure, so the REPL doesn't shout "Parse error" at a
+ * stray comment. */
+static int is_blank_or_comment_only(const char* s) {
+    while (*s) {
+        if (isspace((unsigned char)*s)) {
+            s++;
+        } else if (s[0] == '(' && s[1] == '*') {
+            int depth = 1;
+            s += 2;
+            while (*s && depth > 0) {
+                if (s[0] == '(' && s[1] == '*') { depth++; s += 2; }
+                else if (s[0] == '*' && s[1] == ')') { depth--; s += 2; }
+                else { s++; }
+            }
+            if (depth > 0) return 0;  /* unterminated comment is a real error */
+        } else {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 void process_input(const char* input, int line_number) {
     if (strlen(input) == 0) return;
+    if (is_blank_or_comment_only(input)) return;
 
     // Update $Line
     Expr* line_sym = expr_new_symbol("$Line");
@@ -57,6 +83,14 @@ void process_input(const char* input, int line_number) {
     /* $Post: applied to the evaluator's result. Consumes our reference
      * to `evaluated`. */
     evaluated = repl_apply_post(evaluated);
+
+    /* A NULL result means the evaluation produced nothing displayable
+     * (e.g. a hook absorbed the value). Skip Out[n] storage and the
+     * "Out[n]= " banner rather than crashing in expr_copy. */
+    if (!evaluated) {
+        expr_free(parsed);
+        return;
+    }
 
     /* Store Out[line_number] = evaluated (post-$Post, pre-$PrePrint:
      * Mathematica's documented ordering). */
