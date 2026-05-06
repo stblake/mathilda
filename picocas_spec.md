@@ -10084,3 +10084,69 @@ Simplify[(Sin[x] - 1)^n (Sin[x] + 1)^n - (-Cos[x]^2)^n]
 ```
 
 All three now return correct-but-unsimplified results.
+
+## Simplify: PythagCanon top-level short-circuit (2026-05-06)
+
+A new `transform_pythag_canon` (in `src/simp.c`) replaces the
+substitution-bound version of the Pythagorean identity:
+
+```
+Cos[x_]^n_Integer /; n >= 2 && EvenQ[n] :> (1 - Sin[x]^2)^(n/2)
+Sin[x_]^n_Integer /; n >= 2 && EvenQ[n] :> (1 - Cos[x]^2)^(n/2)
+Cosh[x_]^n_Integer /; n >= 2 && EvenQ[n] :> (1 + Sinh[x]^2)^(n/2)
+Sinh[x_]^n_Integer /; n >= 2 && EvenQ[n] :> (-1 + Cosh[x]^2)^(n/2)
+```
+
+The transform Expands the input, applies each rule set via
+`ReplaceRepeated`, Expands again, scores all four results plus the
+input, and returns the lowest-scoring strict win (or a copy of the
+input when no direction beats it). It is wrapped in `simp_memo_wrap`
+under the pseudo-head `$PythagCanon` so repeated calls with the same
+input are O(1).
+
+The transform fires in two places:
+
+1. As a seed inside `simp_search` alongside `transform_pythag_reduce`
+   and `transform_pythag_square_complete`. Same role as those: feed
+   the round-loop with a coefficient-blind alternative.
+
+2. As a top-level short-circuit at the very top of `simp_bottomup`,
+   gated to `depth == 0`. If the canon strictly improves the score,
+   the local `input` pointer is swapped to point at the canon result
+   and the rest of `simp_bottomup` runs on that smaller form. With
+   the swap, an input like
+
+   ```
+   18 (Cos[x]+1)(Cos[x]-1)(Cos[y]^2-1)^2 (x-1)
+       + 18 (x-1) Sin[x]^2 Sin[y]^4
+   ```
+
+   collapses to `0` in ~5 ms instead of ~6.5 s -- the recursive
+   descent into every Plus/Times subnode no longer happens because
+   the parent has already become an atom. A defensive check for
+   `input->type != EXPR_FUNCTION` after the swap returns early to
+   avoid dereferencing the function-union member on a literal.
+
+### Why we need it
+
+The bare `PythagReduce` rules look for `1 +/- Cos[x_]^2 + r___`
+shapes with unit constant and unit coefficient. After Expand, a
+typical input like `(Cos+1)(Cos-1) (x-1) 18` yields
+`-18 (x-1) + 18 (x-1) Cos[x]^2`, where the `1` is now `-18 (x-1)` --
+a coefficient PythagReduce cannot match. The substitution-based
+canonicalizer is coefficient-blind and operates directly on the
+Power node.
+
+### Coverage
+
+12 new unit tests in `tests/test_simplify.c` cover:
+
+- the original 6.5 s user case -> 0
+- difference-of-squares trig products in 1 and 2 variables
+- higher even powers (`Cos[x]^4 + 2 Cos[x]^2 Sin[x]^2 + Sin[x]^4 -> 1`)
+- hyperbolic counterpart (`(Cosh+1)(Cosh-1) - Sinh^2 -> 0`)
+- scalar-multiple Pythagoras (`5 Cos^2 + 5 Sin^2 -> 5`)
+- negative regressions: bare atoms, no-op when no even-power trig,
+  preservation of `Sin[x]^2`, `Cos[x]^2` etc. as canonical forms,
+  no destabilisation of the existing `1 - Sin[x]^2 -> Cos[x]^2`
+  rewrite.

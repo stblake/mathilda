@@ -601,6 +601,39 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     } else if (is_flat) {
         min_k = 1;
         max_k = n_exprs;
+        /* Pruning: if inner_p is a specific Function pattern whose head
+         * is neither pat_head's symbol nor a pattern-construct head that
+         * may match anything, then no constructed
+         * Function[pat_head, subset...] (k > 1) can ever match it -- it
+         * would fail at the head check. The only exception is when
+         * inner_p's head has OneIdentity AND has exactly one pattern arg
+         * (e.g., Plus[a_]), in which case ONEIDENTITY lets the
+         * constructed multi-factor value be absorbed into that single
+         * arg. Without this guard the orderless+Flat enumeration is
+         * exponential in the factor count even though k > 1 cannot
+         * succeed -- dominates Simplify on multi-factor trig products. */
+        if (inner_p && inner_p->type == EXPR_FUNCTION
+            && inner_p->data.function.head
+            && inner_p->data.function.head->type == EXPR_SYMBOL
+            && pat_head && pat_head->type == EXPR_SYMBOL) {
+            const char* inner_hn = inner_p->data.function.head->data.symbol;
+            if (inner_hn != pat_head->data.symbol
+                && inner_hn != SYM_Blank && inner_hn != SYM_BlankSequence
+                && inner_hn != SYM_BlankNullSequence && inner_hn != SYM_Pattern
+                && inner_hn != SYM_HoldPattern
+                && inner_hn != SYM_Alternatives && inner_hn != SYM_Condition
+                && inner_hn != SYM_PatternTest && inner_hn != SYM_Optional
+                && inner_hn != SYM_Shortest && inner_hn != SYM_Longest
+                && inner_hn != SYM_Repeated && inner_hn != SYM_RepeatedNull) {
+                SymbolDef* idef = symtab_get_def(inner_hn);
+                bool has_oid = idef && (idef->attributes & ATTR_ONEIDENTITY);
+                bool oid_can_absorb = has_oid
+                    && inner_p->data.function.arg_count == 1;
+                if (!oid_can_absorb) {
+                    max_k = (n_exprs > 0) ? 1 : 0;
+                }
+            }
+        }
     } else {
         min_k = 1;
         max_k = (n_exprs > 0) ? 1 : 0;

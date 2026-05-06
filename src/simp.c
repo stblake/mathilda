@@ -3032,6 +3032,119 @@ static Expr* transform_pythag_reduce(const Expr* e) {
     return simp_memo_wrap(e, "$PythagReduce", transform_pythag_reduce_impl);
 }
 
+/* PythagCanon: substitution-based Pythagorean canonicalizer.
+ *
+ * The bare PythagReduce rules look for `1 +/- Cos[x_]^2 + r___` style
+ * shapes -- they fire only when the unit constant and the squared trig
+ * appear additively, with unit coefficient. After a generic Expand of an
+ * input like
+ *     18 (Cos[x]+1)(Cos[x]-1)(Cos[y]^2-1)^2 (x-1) + 18 (x-1) Sin[x]^2 Sin[y]^4
+ * we get a polynomial in Cos[x], Cos[y] whose individual Cos^2 / Cos^4
+ * factors carry coefficients other than 1, so PythagReduce misses every
+ * one of them -- and the cancellation against the Sin^2 Sin^4 term is
+ * never recognised by the round loop.
+ *
+ * This transform is coefficient-blind. It substitutes every even-power
+ *     Cos[x_]^(2k) -> (1 - Sin[x_]^2)^k
+ * (and the reverse Sin -> Cos, plus the hyperbolic counterparts) via a
+ * single ReplaceRepeated pass, then Expands. For each of the four
+ * directions it scores the result against the input and keeps the best
+ * strict win. Idempotent on inputs without an even Cos^k / Sin^k power;
+ * inert (returns a structural copy of the input) when no direction beats
+ * the input score.
+ *
+ * Why all four directions: the choice of "all-Sin" vs "all-Cos" depends
+ * on which side already has more mass. A user input that is mostly
+ * Sin^2 + small Cos^2 minus 1 wants Cos -> 1 - Sin; the reverse leaves
+ * the small Cos^2 term and bloats the rest. Trying both keeps us
+ * agnostic. The hyperbolic pair is exactly analogous via
+ * Cosh^2 - Sinh^2 = 1. */
+static Expr* transform_pythag_canon_impl(const Expr* e) {
+    static Expr* rules_to_sin = NULL;
+    static Expr* rules_to_cos = NULL;
+    static Expr* rules_to_sinh = NULL;
+    static Expr* rules_to_cosh = NULL;
+    if (!rules_to_sin) {
+        rules_to_sin = parse_expression(
+            "{ Cos[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (1 - Sin[x]^2)^(n/2) }");
+        rules_to_cos = parse_expression(
+            "{ Sin[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (1 - Cos[x]^2)^(n/2) }");
+        rules_to_sinh = parse_expression(
+            "{ Cosh[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (1 + Sinh[x]^2)^(n/2) }");
+        rules_to_cosh = parse_expression(
+            "{ Sinh[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (-1 + Cosh[x]^2)^(n/2) }");
+    }
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+
+    /* Same fast-skip as PythagReduce: every rule LHS targets a
+     * Cos/Sin/Cosh/Sinh head. Without one nothing can fire. */
+    if (!has_pythag_head(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("PythagCanon", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    Expr* best = expr_copy((Expr*)e);
+    size_t best_score = score_with_func(best, NULL);
+
+    /* Expand first: the substitution rule matches Power[Cos[x], 2k]
+     * literally, which only appears after distributing factored forms
+     * like (Cos+1)(Cos-1) -> Cos^2 - 1. Without the pre-Expand the
+     * rules cannot fire on the user's typical input shape. */
+    Expr* pre_args[1] = { expr_copy((Expr*)e) };
+    Expr* pre_call = expr_new_function(
+        expr_new_symbol("Expand"), pre_args, 1);
+    Expr* pre_expanded = evaluate(pre_call);
+    if (!pre_expanded) {
+        if (dbg) simp_debug_log("PythagCanon", e, best,
+                                simp_debug_elapsed_ms(t0));
+        return best;
+    }
+
+    Expr* rule_sets[4] = { rules_to_sin, rules_to_cos,
+                            rules_to_sinh, rules_to_cosh };
+    for (int i = 0; i < 4; i++) {
+        if (!rule_sets[i]) continue;
+        Expr* ra_args[2] = { expr_copy(pre_expanded),
+                              expr_copy(rule_sets[i]) };
+        Expr* ra_call = expr_new_function(
+            expr_new_symbol("ReplaceRepeated"), ra_args, 2);
+        Expr* substituted = evaluate(ra_call);
+        if (!substituted) continue;
+        if (expr_eq(substituted, pre_expanded)) {
+            expr_free(substituted);
+            continue;
+        }
+        Expr* exp_args[1] = { substituted };
+        Expr* exp_call = expr_new_function(
+            expr_new_symbol("Expand"), exp_args, 1);
+        Expr* expanded = evaluate(exp_call);
+        if (!expanded) continue;
+        size_t s = score_with_func(expanded, NULL);
+        if (s < best_score) {
+            expr_free(best);
+            best = expanded;
+            best_score = s;
+        } else {
+            expr_free(expanded);
+        }
+    }
+    expr_free(pre_expanded);
+    if (dbg) simp_debug_log("PythagCanon", e, best,
+                            simp_debug_elapsed_ms(t0));
+    return best;
+}
+
+static Expr* transform_pythag_canon(const Expr* e) {
+    return simp_memo_wrap(e, "$PythagCanon", transform_pythag_canon_impl);
+}
+
 /* ----------------------------------------------------------------------- */
 /* Log/Power rewriter (positive-real cascade, v1)                          */
 /* ----------------------------------------------------------------------- */
@@ -4644,6 +4757,22 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         }
     }
 
+    /* Pythagorean canonicalizer seed: substitute Cos^(2k) -> (1 - Sin^2)^k
+     * (or the reverse) globally and Expand. Catches difference-of-squares
+     * trig products that, after Expand, leave coefficient-bearing Cos^2
+     * factors PythagReduce cannot match. The transform itself only
+     * returns a strict-score win, so passing it through update_best is
+     * safe: it never propagates a worse seed. */
+    {
+        Expr* alt = transform_pythag_canon(input);
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+
     /* Trig-at-rational-Pi canonicalization seed.  Picks a unique
      * Sin-vs-Cos / Tan-vs-Cot / Sec-vs-Csc representation per pair,
      * which lets pairs like Cos[4 Pi/9] - Sin[Pi/18] (both lower to
@@ -5127,9 +5256,64 @@ static Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
         return simp_dispatch(input, ctx, complexity_func);
     }
 
+    /* Top-level Pythagorean short-circuit. Try a one-shot
+     * substitution-and-Expand pass before descending into children: if
+     * Cos^(2k) <-> 1 -/+ Sin^(2k) (or the hyperbolic counterpart)
+     * collapses the input to a strictly smaller form, recurse on the
+     * collapsed form instead. Without this short-circuit, on inputs like
+     *   18 (Cos[x]+1)(Cos[x]-1)(Cos[y]^2-1)^2 (x-1) +
+     *      18 (x-1) Sin[x]^2 Sin[y]^4
+     * simp_bottomup descends into every Plus/Times subnode, runs the
+     * full search on each, and only after all that work rediscovers the
+     * difference-of-squares cancellation at the root (~6.5 s). With the
+     * short-circuit, the canon collapses the whole thing to 0 in tens
+     * of ms.
+     *
+     * Gated to depth == 0: the canon is expensive on large inputs and
+     * we only want one chance at it per Simplify call. The recursive
+     * call below uses depth + 1 so it does not retry. */
+    Expr* canon_owned = NULL;
+    if (depth == 0) {
+        Expr* alt = transform_pythag_canon(input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_in = score_with_func(input, complexity_func);
+                size_t s_alt = score_with_func(alt, complexity_func);
+                if (s_alt < s_in) {
+                    canon_owned = alt;
+                    input = alt;
+                } else {
+                    expr_free(alt);
+                }
+            } else {
+                expr_free(alt);
+            }
+        }
+    }
+
+    /* If the canon collapsed input to an atom (e.g. 0 or a literal),
+     * the rest of simp_bottomup -- which dereferences input->data.function
+     * -- would read garbage. Short-circuit to the atom branch's behaviour:
+     * with no assumptions, return the atom; with assumptions, defer to
+     * simp_dispatch in case an assumption-driven rewrite still applies. */
+    if (canon_owned && input->type != EXPR_FUNCTION) {
+        Expr* result;
+        if (!ctx || ctx->count == 0) {
+            result = expr_copy((Expr*)input);
+        } else {
+            result = simp_dispatch(input, ctx, complexity_func);
+        }
+        expr_free(canon_owned);
+        return result;
+    }
+
     /* Memo lookup. */
     const Expr* hit = simp_memo_get(memo, input);
-    if (hit) return expr_copy((Expr*)hit);
+    if (hit) {
+        Expr* cached = expr_copy((Expr*)hit);
+        if (canon_owned) expr_free(canon_owned);
+        return cached;
+    }
 
     /* Held heads: don't descend, but still run top-level search. */
     const Expr* head = input->data.function.head;
@@ -5138,6 +5322,7 @@ static Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
         if (simp_skip_recursion_head(hn) || simp_head_holds_args(hn)) {
             Expr* result = simp_dispatch(input, ctx, complexity_func);
             simp_memo_put(memo, input, result);
+            if (canon_owned) expr_free(canon_owned);
             return result;
         }
     }
@@ -5196,6 +5381,7 @@ static Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
     }
 
     simp_memo_put(memo, input, result);
+    if (canon_owned) expr_free(canon_owned);
     return result;
 }
 

@@ -627,6 +627,103 @@ void test_simplify_user_neg_one_plus_coth_squared(void) {
     assert_eval_eq("Simplify[-1 + Coth[x]^2]", "Csch[x]^2", 0);
 }
 
+/* ---- Pythagorean substitution-and-Expand canonicalizer (PythagCanon) ----
+ *
+ * These cases are the motivation for the canonicalizer: factored
+ * difference-of-squares trig products that, after Expand, leave
+ * Cos^(2k) factors with non-unit coefficients which the bare PythagReduce
+ * rules cannot match. The canonicalizer substitutes
+ *     Cos[x]^(2k) -> (1 - Sin[x]^2)^k    (and the reverse, plus hyperbolic)
+ * and Expands. */
+
+void test_simplify_pythag_canon_user_case(void) {
+    /* The motivating user report. Without PythagCanon this took 6.5 s;
+     * with it, sub-10 ms. The whole Plus collapses to 0 because both
+     * branches reduce to the same -18 (x-1) Sin[x]^2 Sin[y]^4 (with
+     * opposite sign) after the substitution. */
+    assert_eval_eq(
+        "Simplify[(Cos[x]+1)*(Cos[x]-1)*(Cos[y]-1)*2*(Cos[y]+1)*"
+        "(3*(Cos[y]-1))*(3*(Cos[y]+1))*(x-1) - "
+        "(-18*((x-1)*Sin[x]^2*Sin[y]^4))]",
+        "0", 0);
+}
+
+void test_simplify_pythag_canon_diff_of_squares_one_var(void) {
+    /* (Cos[x]+1)(Cos[x]-1) + Sin[x]^2 = (Cos^2 - 1) + Sin^2 = 0. */
+    assert_eval_eq(
+        "Simplify[(Cos[x]+1)(Cos[x]-1) + Sin[x]^2]", "0", 0);
+}
+
+void test_simplify_pythag_canon_diff_of_squares_two_vars(void) {
+    /* (Cos[x]^2-1)(Cos[y]^2-1) - Sin[x]^2 Sin[y]^2 = 0. */
+    assert_eval_eq(
+        "Simplify[(Cos[x]+1)(Cos[x]-1)(Cos[y]+1)(Cos[y]-1) - "
+        "Sin[x]^2 Sin[y]^2]", "0", 0);
+}
+
+void test_simplify_pythag_canon_higher_power(void) {
+    /* Cos[x]^4 + 2 Cos[x]^2 Sin[x]^2 + Sin[x]^4 = (Sin^2 + Cos^2)^2 = 1.
+     * Exercises the n=4 branch of the substitution (Cos[x]^4 ->
+     * (1 - Sin[x]^2)^2). */
+    assert_eval_eq(
+        "Simplify[Cos[x]^4 + 2 Cos[x]^2 Sin[x]^2 + Sin[x]^4]", "1", 0);
+}
+
+void test_simplify_pythag_canon_hyperbolic(void) {
+    /* (Cosh[x]+1)(Cosh[x]-1) - Sinh[x]^2 = (Cosh^2 - 1) - Sinh^2 = 0. */
+    assert_eval_eq(
+        "Simplify[(Cosh[x]+1)(Cosh[x]-1) - Sinh[x]^2]", "0", 0);
+}
+
+void test_simplify_pythag_canon_mixed_const(void) {
+    /* 5 Cos[x]^2 + 5 Sin[x]^2 = 5. The unit-coefficient PythagReduce
+     * rules miss this; the substitution-based canonicalizer collapses it. */
+    assert_eval_eq("Simplify[5 Cos[x]^2 + 5 Sin[x]^2]", "5", 0);
+}
+
+void test_simplify_pythag_canon_mixed_const_hyperbolic(void) {
+    /* 7 Cosh[x]^2 - 7 Sinh[x]^2 = 7. */
+    assert_eval_eq("Simplify[7 Cosh[x]^2 - 7 Sinh[x]^2]", "7", 0);
+}
+
+/* Negative regression checks: inputs where the canonicalizer should
+ * NOT trigger or should not produce a bigger answer. */
+
+void test_simplify_pythag_canon_no_op_on_atom(void) {
+    /* Bare atoms are short-circuited before canon runs. */
+    assert_eval_eq("Simplify[Sin[x]]", "Sin[x]", 0);
+    assert_eval_eq("Simplify[Cos[x]]", "Cos[x]", 0);
+}
+
+void test_simplify_pythag_canon_inert_when_no_squared_trig(void) {
+    /* Sin[x] + Cos[x] has no even-power trig; canon must not mangle it. */
+    assert_eval_eq("Simplify[Sin[x] + Cos[x]]", "Cos[x] + Sin[x]", 0);
+}
+
+void test_simplify_pythag_canon_keeps_canonical_pythag(void) {
+    /* Sin[x]^2 + Cos[x]^2 -> 1 still works after canon (was already
+     * caught by PythagReduce; canon must not interfere). */
+    assert_eval_eq("Simplify[Sin[x]^2 + Cos[x]^2]", "1", 0);
+}
+
+void test_simplify_pythag_canon_preserves_sin_squared(void) {
+    /* Bare Sin[x]^2 with no Cos counterpart should not bloat to
+     * 1 - Cos[x]^2 (the canon trial-substitutes both directions but
+     * picks the smaller-scoring one; a single Sin^2 stays put). */
+    assert_eval_eq("Simplify[Sin[x]^2]", "Sin[x]^2", 0);
+    assert_eval_eq("Simplify[Cos[x]^2]", "Cos[x]^2", 0);
+    assert_eval_eq("Simplify[Sinh[x]^2]", "Sinh[x]^2", 0);
+    assert_eval_eq("Simplify[Cosh[x]^2]", "Cosh[x]^2", 0);
+}
+
+void test_simplify_pythag_canon_keeps_one_minus_sin_squared(void) {
+    /* 1 - Sin[x]^2 -> Cos[x]^2 (both have score 4; PythagReduce wins
+     * the tie via its existing rule). Canon's extra trial substitution
+     * should not destabilise this. */
+    assert_eval_eq("Simplify[1 - Sin[x]^2]", "Cos[x]^2", 0);
+    assert_eval_eq("Simplify[1 - Cos[x]^2]", "Sin[x]^2", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -716,6 +813,19 @@ int main(void) {
     TEST(test_simplify_user_one_plus_tan_squared);
     TEST(test_simplify_user_one_plus_cot_squared);
     TEST(test_simplify_user_neg_one_plus_coth_squared);
+
+    TEST(test_simplify_pythag_canon_user_case);
+    TEST(test_simplify_pythag_canon_diff_of_squares_one_var);
+    TEST(test_simplify_pythag_canon_diff_of_squares_two_vars);
+    TEST(test_simplify_pythag_canon_higher_power);
+    TEST(test_simplify_pythag_canon_hyperbolic);
+    TEST(test_simplify_pythag_canon_mixed_const);
+    TEST(test_simplify_pythag_canon_mixed_const_hyperbolic);
+    TEST(test_simplify_pythag_canon_no_op_on_atom);
+    TEST(test_simplify_pythag_canon_inert_when_no_squared_trig);
+    TEST(test_simplify_pythag_canon_keeps_canonical_pythag);
+    TEST(test_simplify_pythag_canon_preserves_sin_squared);
+    TEST(test_simplify_pythag_canon_keeps_one_minus_sin_squared);
 
     printf("All Simplify tests passed!\n");
     return 0;
