@@ -178,6 +178,101 @@ static Expr* hyp_i_fold(Expr* arg, const char* counterpart, int coeff_kind) {
     return make_times(coeff, inner);
 }
 
+/*
+ * try_simp_forward_of_inverse_hyp:
+ * Universal forward-of-inverse identities for hyperbolic functions, mirroring
+ * try_simp_forward_of_inverse in trig.c. `outer` is the forward head
+ * ("Sinh","Cosh","Tanh",...), `arg` the body of that call. Returns the
+ * rewritten Expr* on a hit, NULL otherwise. Identities follow the
+ * principal-branch conventions:
+ *   Sinh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1]    (NB: not Sqrt[x^2-1])
+ *   Cosh[ArcSinh[x]] -> Sqrt[1+x^2]
+ *   Sinh[ArcTanh[x]] -> x/Sqrt[1-x^2]
+ *   Cosh[ArcTanh[x]] -> 1/Sqrt[1-x^2]
+ *   Tanh[ArcSinh[x]] -> x/Sqrt[1+x^2]
+ *   Tanh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1]/x
+ *   Tanh[ArcCoth[x]] -> 1/x                    Coth[ArcTanh[x]] -> 1/x
+ * The Sqrt[x-1]*Sqrt[x+1] form (rather than Sqrt[x^2-1]) is the
+ * principal-branch identity Mathematica uses; the two forms differ on
+ * the branch cut x in (-1,1) where Sqrt[x-1]*Sqrt[x+1] = i*Sqrt[1-x^2]
+ * agrees with the Sinh[ArcCosh[x]] continuation but Sqrt[x^2-1] does not.
+ */
+static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
+    if (arg->type != EXPR_FUNCTION || arg->data.function.arg_count != 1) return NULL;
+    if (!arg->data.function.head ||
+        arg->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* inner = arg->data.function.head->data.symbol;
+    Expr* x = arg->data.function.args[0];
+
+    #define SQRT_OF(arg_e)                                                     \
+        eval_and_free(expr_new_function(expr_new_symbol("Power"),              \
+            (Expr*[]){ (arg_e), make_rational(1, 2) }, 2))
+    #define X_SQ() \
+        eval_and_free(expr_new_function(expr_new_symbol("Power"),              \
+            (Expr*[]){ expr_copy(x), expr_new_integer(2) }, 2))
+    #define ONE_PLUS_X_SQ() \
+        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+            (Expr*[]){ expr_new_integer(1), X_SQ() }, 2))
+    #define ONE_MINUS_X_SQ() \
+        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+            (Expr*[]){ expr_new_integer(1),                                    \
+                       eval_and_free(expr_new_function(expr_new_symbol("Times"), \
+                           (Expr*[]){ expr_new_integer(-1), X_SQ() }, 2)) }, 2))
+    #define X_PLUS_K(k) \
+        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+            (Expr*[]){ expr_new_integer(k), expr_copy(x) }, 2))
+    /* Sqrt[(x-1)(x+1)] expressed as Sqrt[x-1]*Sqrt[x+1] -- the principal-
+     * branch form Mathematica returns for Sinh[ArcCosh[x]]. Storing it as
+     * a product of two single-arg sqrts (rather than Sqrt[x^2-1]) preserves
+     * the right branch cut and lets the assumption-aware rules in simp.c
+     * collapse it cleanly when x > 1. */
+    #define SQRT_X_MINUS_1_TIMES_SQRT_X_PLUS_1() \
+        make_times(SQRT_OF(X_PLUS_K(-1)), SQRT_OF(X_PLUS_K(1)))
+
+    if (strcmp(outer, "Sinh") == 0 && strcmp(inner, "ArcCosh") == 0) {
+        return SQRT_X_MINUS_1_TIMES_SQRT_X_PLUS_1();
+    }
+    if (strcmp(outer, "Cosh") == 0 && strcmp(inner, "ArcSinh") == 0) {
+        return SQRT_OF(ONE_PLUS_X_SQ());
+    }
+    if (strcmp(outer, "Sinh") == 0 && strcmp(inner, "ArcTanh") == 0) {
+        Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ den, expr_new_integer(-1) }, 2));
+        return make_times(expr_copy(x), inv);
+    }
+    if (strcmp(outer, "Cosh") == 0 && strcmp(inner, "ArcTanh") == 0) {
+        Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
+        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ den, expr_new_integer(-1) }, 2));
+    }
+    if (strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcSinh") == 0) {
+        Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ den, expr_new_integer(-1) }, 2));
+        return make_times(expr_copy(x), inv);
+    }
+    if (strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcCosh") == 0) {
+        Expr* num = SQRT_X_MINUS_1_TIMES_SQRT_X_PLUS_1();
+        Expr* inv_x = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
+        return make_times(num, inv_x);
+    }
+    if ((strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcCoth") == 0) ||
+        (strcmp(outer, "Coth") == 0 && strcmp(inner, "ArcTanh") == 0)) {
+        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
+    }
+
+    #undef SQRT_OF
+    #undef X_SQ
+    #undef ONE_PLUS_X_SQ
+    #undef ONE_MINUS_X_SQ
+    #undef X_PLUS_K
+    #undef SQRT_X_MINUS_1_TIMES_SQRT_X_PLUS_1
+    return NULL;
+}
+
 /* If arg is a one-argument call whose head is `inverse_name`, return a deep
  * copy of its single argument; otherwise NULL. Folds the direct
  * hyperbolic forward/inverse identities (Sinh[ArcSinh[x]] -> x, etc.):
@@ -210,6 +305,9 @@ Expr* builtin_sinh(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcSinh"); if (inv) return inv; }
+
+    // Sinh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1], Sinh[ArcTanh[x]] -> x/Sqrt[1-x^2]
+    { Expr* f = try_simp_forward_of_inverse_hyp("Sinh", arg); if (f) return f; }
 
     // Sinh is odd: Sinh[-x] -> -Sinh[x]
     { Expr* f = odd_fold(arg, "Sinh"); if (f) return f; }
@@ -246,6 +344,9 @@ Expr* builtin_cosh(Expr* res) {
 
     { Expr* inv = strip_inverse_call(arg, "ArcCosh"); if (inv) return inv; }
 
+    // Cosh[ArcSinh[x]] -> Sqrt[1+x^2], Cosh[ArcTanh[x]] -> 1/Sqrt[1-x^2]
+    { Expr* f = try_simp_forward_of_inverse_hyp("Cosh", arg); if (f) return f; }
+
     // Cosh is even: Cosh[-x] -> Cosh[x]
     { Expr* f = even_fold(arg, "Cosh"); if (f) return f; }
 
@@ -276,6 +377,10 @@ Expr* builtin_tanh(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcTanh"); if (inv) return inv; }
+
+    // Tanh[ArcSinh[x]] -> x/Sqrt[1+x^2], Tanh[ArcCosh[x]] -> Sqrt[x-1]*Sqrt[x+1]/x,
+    // Tanh[ArcCoth[x]] -> 1/x.
+    { Expr* f = try_simp_forward_of_inverse_hyp("Tanh", arg); if (f) return f; }
 
     // Tanh is odd: Tanh[-x] -> -Tanh[x]
     { Expr* f = odd_fold(arg, "Tanh"); if (f) return f; }
@@ -308,6 +413,9 @@ Expr* builtin_coth(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCoth"); if (inv) return inv; }
+
+    // Coth[ArcTanh[x]] -> 1/x
+    { Expr* f = try_simp_forward_of_inverse_hyp("Coth", arg); if (f) return f; }
 
     // Coth is odd: Coth[-x] -> -Coth[x]
     { Expr* f = odd_fold(arg, "Coth"); if (f) return f; }
@@ -400,7 +508,13 @@ Expr* builtin_csch(Expr* res) {
 Expr* builtin_arcsinh(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcSinh is odd: ArcSinh[-x] -> -ArcSinh[x]
+    { Expr* f = odd_fold(arg, "ArcSinh"); if (f) return f; }
+
+    // ArcSinh[I y] -> I ArcSin[y]  (principal-branch identity)
+    { Expr* f = hyp_i_fold(arg, "ArcSin", +1); if (f) return f; }
+
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(0);
     if (is_infinity(arg)) return expr_new_symbol("Infinity");
 
@@ -446,7 +560,13 @@ Expr* builtin_arccosh(Expr* res) {
 Expr* builtin_arctanh(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcTanh is odd: ArcTanh[-x] -> -ArcTanh[x]
+    { Expr* f = odd_fold(arg, "ArcTanh"); if (f) return f; }
+
+    // ArcTanh[I y] -> I ArcTan[y]
+    { Expr* f = hyp_i_fold(arg, "ArcTan", +1); if (f) return f; }
+
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(0);
 
     double complex c;
@@ -472,7 +592,13 @@ Expr* builtin_arctanh(Expr* res) {
 Expr* builtin_arccoth(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcCoth is odd: ArcCoth[-x] -> -ArcCoth[x]
+    { Expr* f = odd_fold(arg, "ArcCoth"); if (f) return f; }
+
+    // ArcCoth[I y] -> -I ArcCot[y]
+    { Expr* f = hyp_i_fold(arg, "ArcCot", -1); if (f) return f; }
+
     if (is_infinity(arg) || is_minus_infinity(arg)) return expr_new_integer(0);
 
     double complex c;
@@ -516,7 +642,13 @@ Expr* builtin_arcsech(Expr* res) {
 Expr* builtin_arccsch(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcCsch is odd: ArcCsch[-x] -> -ArcCsch[x]
+    { Expr* f = odd_fold(arg, "ArcCsch"); if (f) return f; }
+
+    // ArcCsch[I y] -> -I ArcCsc[y]
+    { Expr* f = hyp_i_fold(arg, "ArcCsc", -1); if (f) return f; }
+
     if (is_infinity(arg) || is_minus_infinity(arg)) return expr_new_integer(0);
 
     double complex c;

@@ -413,6 +413,9 @@ target_include_directories(element_tests PRIVATE ../src)
 add_executable(logexp_simplify_tests test_logexp_simplify.c ${COMMON_SRC})
 target_include_directories(logexp_simplify_tests PRIVATE ../src)
 
+add_executable(invtrig_simplify_tests test_invtrig_simplify.c ${COMMON_SRC})
+target_include_directories(invtrig_simplify_tests PRIVATE ../src)
+
 add_executable(rationalize_tests test_rationalize.c ${COMMON_SRC})
 target_include_directories(rationalize_tests PRIVATE ../src)
 
@@ -491,6 +494,7 @@ if(USE_ECM)
     add_dependencies(assuming_tests build_ecm)
     add_dependencies(element_tests build_ecm)
     add_dependencies(logexp_simplify_tests build_ecm)
+    add_dependencies(invtrig_simplify_tests build_ecm)
     add_dependencies(rationalize_tests build_ecm)
     add_dependencies(inexact_dispatch_tests build_ecm)
 endif()

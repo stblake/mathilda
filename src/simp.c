@@ -924,6 +924,20 @@ static Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Abs[%s] :> %s", x, x);
         /* Log[x^p] -> p Log[x]  for x > 0 (any real p; v1 accepts symbolic p too) */
         SEP(); EMIT("Log[Power[%s, p_]] :> p Log[%s]", x, x);
+        /* Inverse-trig sum identity: ArcTan[x] + ArcTan[1/x] -> Pi/2  for x > 0.
+         * picocas's matcher does NOT perform orderless-Plus subset matching
+         * out of the box (unlike Mathematica), so the rule must explicitly
+         * absorb the trailing terms via `+ rest___` and re-emit them. The
+         * BlankNullSequence pattern matches 0 or more remaining terms, so
+         * the bare two-term sum reduces too. */
+        SEP(); EMIT("ArcTan[%s] + ArcTan[Power[%s, -1]] + rest___ :> Pi/2 + rest", x, x);
+        /* ArcCosh double-angle reduction: ArcCosh[2x^2 - 1] -> 2 ArcCosh[x]
+         * for x > 0. The identity holds for any complex x with the
+         * principal branch (verified for x in [0,1] via the i*ArcCos bridge
+         * and for x >= 1 directly), so the x > 0 condition is the weakest
+         * sufficient assumption. The Plus arg list is canonical
+         * (Plus[-1, Times[2, x^2]]). */
+        SEP(); EMIT("ArcCosh[Plus[-1, Times[2, Power[%s, 2]]]] :> 2 ArcCosh[%s]", x, x);
     }
 
     for (size_t i = 0; i < nneg; i++) {
@@ -934,6 +948,10 @@ static Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         SEP(); EMIT("Power[Power[%s, 2], Rational[1, 2]] :> -%s", x, x);
         /* Sqrt[x^2 * rest] -> -x * Sqrt[rest] for x < 0. */
         SEP(); EMIT("Power[Times[Power[%s, 2], rest___], Rational[1, 2]] :> -%s Power[Times[rest], Rational[1, 2]]", x, x);
+        /* Mirror of the x > 0 inverse-trig sum: ArcTan[x] + ArcTan[1/x]
+         * -> -Pi/2 for x < 0. Same `+ rest___` trick as above to handle
+         * the embedded-in-larger-sum case. */
+        SEP(); EMIT("ArcTan[%s] + ArcTan[Power[%s, -1]] + rest___ :> -Pi/2 + rest", x, x);
     }
 
     /* For real-but-unknown-sign, Sqrt[x^2] -> Abs[x]. Skip symbols already

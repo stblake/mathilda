@@ -10621,3 +10621,142 @@ governs Simplify correctness.
 - `src/simp.c`: `transform_power_distribute` (~180 LOC) inserted between
   `transform_power_oneify` and `transform_radical_canon`; new dispatch
   block in `simp_dispatch` next to the existing rebase / oneify gates.
+
+## Inverse-trig and inverse-hyperbolic auto-evaluation + Simplify (2026-05-06)
+
+Three families of identity now fire either during normal evaluation or
+during `Simplify`, closing a long-standing gap where the system left
+expressions like `ArcCos[-x] + ArcCos[x] - Pi` unsimplified even though
+each piece is a textbook identity.
+
+### 1. Negation reflection (auto-evaluation)
+
+The inverse trig and hyperbolic functions canonicalise their arguments'
+sign through the same `expr_is_superficially_negative` test the forward
+trig functions already use. Odd inverses fold negation through a sign
+flip; the two reflection-shifted inverses (`ArcCos`, `ArcSec`) emit a
+`Pi - f[|arg|]` rewrite. Concretely:
+
+| Function | Rule |
+|----------|------|
+| `ArcSin[-x]`  | `-ArcSin[x]`     |
+| `ArcCos[-x]`  | `Pi - ArcCos[x]` |
+| `ArcTan[-x]`  | `-ArcTan[x]`     |
+| `ArcCot[-x]`  | `-ArcCot[x]`     |
+| `ArcSec[-x]`  | `Pi - ArcSec[x]` |
+| `ArcCsc[-x]`  | `-ArcCsc[x]`     |
+| `ArcSinh[-x]` | `-ArcSinh[x]`    |
+| `ArcTanh[-x]` | `-ArcTanh[x]`    |
+| `ArcCoth[-x]` | `-ArcCoth[x]`    |
+| `ArcCsch[-x]` | `-ArcCsch[x]`    |
+
+`ArcCosh` and `ArcSech` have no clean negation identity and are left
+alone.
+
+### 2. Imaginary-axis bridge (auto-evaluation)
+
+When the argument is of the form `I*y` (`Times[Complex[0, k], rest...]`
+with `k > 0`) the inverse functions cross between trig and hyperbolic
+branches via the principal-branch identities:
+
+| Trig inverse | Hyperbolic inverse |
+|--------------|---------------------|
+| `ArcSin[I y]  -> I ArcSinh[y]`        | `ArcSinh[I y]  -> I ArcSin[y]`  |
+| `ArcCos[I y]  -> Pi/2 - I ArcSinh[y]` | `ArcCosh[I y]` left unchanged   |
+| `ArcTan[I y]  -> I ArcTanh[y]`        | `ArcTanh[I y]  -> I ArcTan[y]`  |
+| `ArcCot[I y]  -> -I ArcCoth[y]`       | `ArcCoth[I y]  -> -I ArcCot[y]` |
+| `ArcCsc[I y]  -> -I ArcCsch[y]`       | `ArcCsch[I y]  -> -I ArcCsc[y]` |
+
+The `ArcCos[I y]` rule emits `Pi/2 - I ArcSinh[y]` directly through a
+new `arccos_i_fold` helper alongside the existing `trig_i_fold` /
+`hyp_i_fold` infrastructure.
+
+### 3. Forward-of-inverse algebraic identities (auto-evaluation)
+
+`try_simp_forward_of_inverse` (trig) and `try_simp_forward_of_inverse_hyp`
+(hyperbolic) are invoked from each forward builtin (`Sin`, `Cos`, ...,
+`Sinh`, `Cosh`, ...) right after the existing `strip_inverse_call` pass.
+They fold known closed forms:
+
+| Trig | Hyperbolic |
+|------|------------|
+| `Sin[ArcCos[x]] -> Sqrt[1 - x^2]`             | `Sinh[ArcCosh[x]] -> Sqrt[x-1] Sqrt[x+1]` |
+| `Cos[ArcSin[x]] -> Sqrt[1 - x^2]`             | `Cosh[ArcSinh[x]] -> Sqrt[1 + x^2]` |
+| `Sin[ArcTan[x]] -> x / Sqrt[1 + x^2]`         | `Sinh[ArcTanh[x]] -> x / Sqrt[1 - x^2]` |
+| `Cos[ArcTan[x]] -> 1 / Sqrt[1 + x^2]`         | `Cosh[ArcTanh[x]] -> 1 / Sqrt[1 - x^2]` |
+| `Tan[ArcSin[x]] -> x / Sqrt[1 - x^2]`         | `Tanh[ArcSinh[x]] -> x / Sqrt[1 + x^2]` |
+| `Tan[ArcCos[x]] -> Sqrt[1 - x^2] / x`         | `Tanh[ArcCosh[x]] -> Sqrt[x-1] Sqrt[x+1] / x` |
+| `Tan[ArcCot[x]] -> 1/x`, `Cot[ArcTan[x]] -> 1/x` | `Tanh[ArcCoth[x]] -> 1/x`, `Coth[ArcTanh[x]] -> 1/x` |
+
+The `Sqrt[x-1] Sqrt[x+1]` form (rather than `Sqrt[x^2 - 1]`) is the
+principal-branch identity Mathematica uses; the two forms differ on the
+branch cut `x in (-1, 1)` where `Sqrt[x-1] Sqrt[x+1] = i Sqrt[1 - x^2]`
+agrees with the `Sinh[ArcCosh[x]]` analytic continuation but
+`Sqrt[x^2 - 1]` does not.
+
+### 4. ArcTan reciprocal sum (assumption-driven)
+
+`apply_assumption_rules` in `src/simp.c` synthesises a per-symbol rule
+for every positively-signed and every negatively-signed symbol in scope:
+
+```
+ArcTan[x] + ArcTan[1/x] + rest___ :> Pi/2 + rest    (x > 0)
+ArcTan[x] + ArcTan[1/x] + rest___ :> -Pi/2 + rest   (x < 0)
+```
+
+The trailing `rest___` is required because picocas's pattern matcher
+does not perform orderless-Plus subset matching out of the box: the
+explicit `BlankNullSequence` absorbs and re-emits the surrounding terms
+of any larger sum so that, for example, `ArcTan[x] + ArcTan[1/x] - Pi/2`
+collapses cleanly to `0` under `x > 0`.
+
+### 5. ArcCosh double-angle (assumption-driven)
+
+A second per-positive-symbol rule reduces the two-step ArcCosh form:
+
+```
+ArcCosh[2 x^2 - 1] :> 2 ArcCosh[x]    (x > 0)
+```
+
+The identity holds for any complex `x` under the principal branch
+(verified for `x in [0, 1]` via the `i*ArcCos` bridge and for `x >= 1`
+directly), so `x > 0` is the weakest sufficient assumption. The
+canonical Plus form `Plus[-1, Times[2, Power[x, 2]]]` is matched
+literally.
+
+### Files
+
+- `src/trig.c`: `arc_pi_minus_fold`, `arccos_i_fold`,
+  `try_simp_forward_of_inverse`; new fold calls inserted near the top
+  of `builtin_arcsin`, `builtin_arccos`, `builtin_arctan`,
+  `builtin_arccot`, `builtin_arcsec`, `builtin_arccsc`, and
+  `try_simp_forward_of_inverse` calls in `builtin_sin`, `builtin_cos`,
+  `builtin_tan`, `builtin_cot`.
+- `src/hyperbolic.c`: `try_simp_forward_of_inverse_hyp`; new fold calls
+  in `builtin_arcsinh`, `builtin_arctanh`, `builtin_arccoth`,
+  `builtin_arccsch`, and forward-of-inverse calls in `builtin_sinh`,
+  `builtin_cosh`, `builtin_tanh`, `builtin_coth`.
+- `src/simp.c`: two new EMITs in the `npos` loop and one new EMIT in
+  the `nneg` loop of `apply_assumption_rules`.
+- `tests/test_invtrig_simplify.c`: 41 tests covering all five families
+  above. Registered in `tests/CMakeLists.txt` next to
+  `logexp_simplify_tests`.
+
+### User-facing impact
+
+All identities from the user-reference test set now `Simplify` to `0`
+(or to the canonical scalar where appropriate):
+
+```
+Simplify[Sin[ArcCos[x]] - Sqrt[1 - x^2]]                                -> 0
+Simplify[Tan[ArcSin[x]] - x / Sqrt[1 - x^2]]                            -> 0
+Simplify[ArcCos[-x] + ArcCos[x] - Pi]                                   -> 0
+Simplify[ArcSin[x] + ArcCos[x] - Pi/2]                                  -> 0
+Assuming[x > 0, Simplify[ArcTan[x] + ArcTan[1/x] - Pi/2]]               -> 0
+Assuming[x < 0, Simplify[ArcTan[x] + ArcTan[1/x] + Pi/2]]               -> 0
+Assuming[x > 1, Simplify[Sinh[ArcCosh[x]] - Sqrt[x-1] Sqrt[x+1]]]       -> 0
+Assuming[x > 1, Simplify[ArcCosh[2 x^2 - 1] - 2 ArcCosh[x]]]            -> 0
+Simplify[ArcSin[I x] - I ArcSinh[x]]                                    -> 0
+Simplify[ArcTan[I x] - I ArcTanh[x]]                                    -> 0
+Simplify[ArcCos[I x] - (Pi/2 - I ArcSinh[x])]                           -> 0
+```

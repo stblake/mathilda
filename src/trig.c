@@ -182,6 +182,126 @@ static Expr* trig_i_fold(Expr* arg, const char* counterpart, int coeff_kind) {
 }
 
 /*
+ * arc_pi_minus_fold:
+ * Negation reflection for inverse functions whose negation introduces a Pi
+ * shift rather than a sign flip:  ArcCos[-x] -> Pi - ArcCos[x],
+ * ArcSec[-x] -> Pi - ArcSec[x]. Returns NULL when arg is not superficially
+ * negative; otherwise returns Plus[Pi, Times[-1, head_name[|arg|]]] for
+ * the canonicalising evaluator to flatten.
+ */
+static Expr* arc_pi_minus_fold(Expr* arg, const char* head_name) {
+    if (!expr_is_superficially_negative(arg)) return NULL;
+    Expr* neg = flip_sign(arg);
+    Expr* inner_args[1] = { neg };
+    Expr* inner = expr_new_function(expr_new_symbol(head_name), inner_args, 1);
+    Expr* neg_inner = make_times(expr_new_integer(-1), inner);
+    Expr* sum_args[2] = { expr_new_symbol("Pi"), neg_inner };
+    return expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+}
+
+/*
+ * arccos_i_fold:
+ * Imaginary-axis bridge for ArcCos: ArcCos[I y] -> Pi/2 - I*ArcSinh[y].
+ * Mirrors trig_i_fold's I-extraction but emits a constant + scaled hyperbolic
+ * inverse instead of a single scaled call. Returns NULL when arg is not of
+ * the form I*y with positive imaginary coefficient.
+ */
+static Expr* arccos_i_fold(Expr* arg) {
+    Expr* y = peel_imaginary_unit(arg);
+    if (!y) return NULL;
+    Expr* a[1] = { y };
+    Expr* asinh_call = expr_new_function(expr_new_symbol("ArcSinh"), a, 1);
+    Expr* neg_i = make_complex(expr_new_integer(0), expr_new_integer(-1));
+    Expr* neg_i_asinh = make_times(neg_i, asinh_call);
+    Expr* half = make_rational(1, 2);
+    Expr* pi = expr_new_symbol("Pi");
+    Expr* half_pi = make_times(half, pi);
+    Expr* sum_args[2] = { half_pi, neg_i_asinh };
+    return expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+}
+
+/*
+ * try_simp_forward_of_inverse:
+ * Universal forward-of-inverse identities for trig functions. `outer` is the
+ * forward head ("Sin","Cos","Tan",...), `arg` is the body of that call. If
+ * `arg` is an inverse-trig call whose pairing with `outer` yields a closed
+ * algebraic form, return the rewritten Expr*; otherwise NULL. Identities
+ * follow the principal-branch conventions Mathematica exposes:
+ *   Sin[ArcCos[x]] -> Sqrt[1-x^2]      Cos[ArcSin[x]] -> Sqrt[1-x^2]
+ *   Sin[ArcTan[x]] -> x/Sqrt[1+x^2]    Cos[ArcTan[x]] -> 1/Sqrt[1+x^2]
+ *   Tan[ArcSin[x]] -> x/Sqrt[1-x^2]    Tan[ArcCos[x]] -> Sqrt[1-x^2]/x
+ *   Tan[ArcCot[x]] -> 1/x              Cot[ArcTan[x]] -> 1/x
+ * The inverse-of-forward direction (e.g. ArcSin[Sin[x]]) is intentionally
+ * NOT folded -- those reduce to x only on the principal domain of each f.
+ */
+static Expr* try_simp_forward_of_inverse(const char* outer, Expr* arg) {
+    if (arg->type != EXPR_FUNCTION || arg->data.function.arg_count != 1) return NULL;
+    if (!arg->data.function.head ||
+        arg->data.function.head->type != EXPR_SYMBOL) return NULL;
+    const char* inner = arg->data.function.head->data.symbol;
+    Expr* x = arg->data.function.args[0];
+
+    /* Helpers to build common subexpressions: Sqrt[1 - x^2], Sqrt[1 + x^2],
+     * x / Sqrt[1 - x^2], etc. We construct the unevaluated tree and let the
+     * outer evaluator canonicalise (it folds Plus, Power, Times). */
+    #define SQRT_OF(arg_e)                                                     \
+        eval_and_free(expr_new_function(expr_new_symbol("Power"),              \
+            (Expr*[]){ (arg_e), make_rational(1, 2) }, 2))
+    #define X_SQ() \
+        eval_and_free(expr_new_function(expr_new_symbol("Power"),              \
+            (Expr*[]){ expr_copy(x), expr_new_integer(2) }, 2))
+    #define ONE_MINUS_X_SQ() \
+        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+            (Expr*[]){ expr_new_integer(1),                                    \
+                       eval_and_free(expr_new_function(expr_new_symbol("Times"), \
+                           (Expr*[]){ expr_new_integer(-1), X_SQ() }, 2)) }, 2))
+    #define ONE_PLUS_X_SQ() \
+        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+            (Expr*[]){ expr_new_integer(1), X_SQ() }, 2))
+
+    if (strcmp(outer, "Sin") == 0 && strcmp(inner, "ArcCos") == 0) {
+        return SQRT_OF(ONE_MINUS_X_SQ());
+    }
+    if (strcmp(outer, "Cos") == 0 && strcmp(inner, "ArcSin") == 0) {
+        return SQRT_OF(ONE_MINUS_X_SQ());
+    }
+    if (strcmp(outer, "Sin") == 0 && strcmp(inner, "ArcTan") == 0) {
+        Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ den, expr_new_integer(-1) }, 2));
+        return make_times(expr_copy(x), inv);
+    }
+    if (strcmp(outer, "Cos") == 0 && strcmp(inner, "ArcTan") == 0) {
+        Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
+        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ den, expr_new_integer(-1) }, 2));
+    }
+    if (strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcSin") == 0) {
+        Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ den, expr_new_integer(-1) }, 2));
+        return make_times(expr_copy(x), inv);
+    }
+    if (strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcCos") == 0) {
+        Expr* num = SQRT_OF(ONE_MINUS_X_SQ());
+        Expr* inv_x = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
+        return make_times(num, inv_x);
+    }
+    if ((strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcCot") == 0) ||
+        (strcmp(outer, "Cot") == 0 && strcmp(inner, "ArcTan") == 0)) {
+        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
+    }
+
+    #undef SQRT_OF
+    #undef X_SQ
+    #undef ONE_MINUS_X_SQ
+    #undef ONE_PLUS_X_SQ
+    return NULL;
+}
+
+/*
  * get_approx:
  * Tries to get a numeric complex approximation of the expression.
  */
@@ -537,6 +657,9 @@ Expr* builtin_sin(Expr* res) {
 
     { Expr* inv = strip_inverse_call(arg, "ArcSin"); if (inv) return inv; }
 
+    // Sin[ArcCos[x]] -> Sqrt[1-x^2], Sin[ArcTan[x]] -> x/Sqrt[1+x^2]
+    { Expr* f = try_simp_forward_of_inverse("Sin", arg); if (f) return f; }
+
     // Sin is odd: Sin[-x] -> -Sin[x]
     { Expr* f = odd_fold(arg, "Sin"); if (f) return f; }
 
@@ -581,6 +704,9 @@ Expr* builtin_cos(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCos"); if (inv) return inv; }
+
+    // Cos[ArcSin[x]] -> Sqrt[1-x^2], Cos[ArcTan[x]] -> 1/Sqrt[1+x^2]
+    { Expr* f = try_simp_forward_of_inverse("Cos", arg); if (f) return f; }
 
     // Cos is even: Cos[-x] -> Cos[x]
     { Expr* f = even_fold(arg, "Cos"); if (f) return f; }
@@ -627,6 +753,10 @@ Expr* builtin_tan(Expr* res) {
 
     { Expr* inv = strip_inverse_call(arg, "ArcTan"); if (inv) return inv; }
 
+    // Tan[ArcSin[x]] -> x/Sqrt[1-x^2], Tan[ArcCos[x]] -> Sqrt[1-x^2]/x,
+    // Tan[ArcCot[x]] -> 1/x.
+    { Expr* f = try_simp_forward_of_inverse("Tan", arg); if (f) return f; }
+
     // Tan is odd: Tan[-x] -> -Tan[x]
     { Expr* f = odd_fold(arg, "Tan"); if (f) return f; }
 
@@ -671,6 +801,9 @@ Expr* builtin_cot(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     { Expr* inv = strip_inverse_call(arg, "ArcCot"); if (inv) return inv; }
+
+    // Cot[ArcTan[x]] -> 1/x
+    { Expr* f = try_simp_forward_of_inverse("Cot", arg); if (f) return f; }
 
     // Cot is odd: Cot[-x] -> -Cot[x]
     { Expr* f = odd_fold(arg, "Cot"); if (f) return f; }
@@ -913,7 +1046,13 @@ static Expr* exact_arccsc(Expr* arg) {
 Expr* builtin_arcsin(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcSin is odd: ArcSin[-x] -> -ArcSin[x]
+    { Expr* f = odd_fold(arg, "ArcSin"); if (f) return f; }
+
+    // ArcSin[I y] -> I ArcSinh[y]  (principal-branch identity)
+    { Expr* f = trig_i_fold(arg, "ArcSinh", +1); if (f) return f; }
+
     // Attempt exact inverse evaluation
     Expr* exact = exact_arcsin(arg);
     if (exact) return exact;
@@ -949,7 +1088,13 @@ Expr* builtin_arcsin(Expr* res) {
 Expr* builtin_arccos(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcCos[-x] -> Pi - ArcCos[x]
+    { Expr* f = arc_pi_minus_fold(arg, "ArcCos"); if (f) return f; }
+
+    // ArcCos[I y] -> Pi/2 - I ArcSinh[y]
+    { Expr* f = arccos_i_fold(arg); if (f) return f; }
+
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccos(arg);
     if (exact) return exact;
@@ -988,7 +1133,13 @@ Expr* builtin_arctan(Expr* res) {
     // Single argument ArcTan[z]
     if (res->data.function.arg_count == 1) {
         Expr* arg = res->data.function.args[0];
-        
+
+        // ArcTan is odd: ArcTan[-x] -> -ArcTan[x]
+        { Expr* f = odd_fold(arg, "ArcTan"); if (f) return f; }
+
+        // ArcTan[I y] -> I ArcTanh[y]
+        { Expr* f = trig_i_fold(arg, "ArcTanh", +1); if (f) return f; }
+
         // Attempt exact inverse evaluation
         Expr* exact = exact_arctan(arg);
         if (exact) return exact;
@@ -1077,7 +1228,13 @@ Expr* builtin_arctan(Expr* res) {
 Expr* builtin_arccot(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcCot is odd (Mathematica convention): ArcCot[-x] -> -ArcCot[x]
+    { Expr* f = odd_fold(arg, "ArcCot"); if (f) return f; }
+
+    // ArcCot[I y] -> -I ArcCoth[y]
+    { Expr* f = trig_i_fold(arg, "ArcCoth", -1); if (f) return f; }
+
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccot(arg);
     if (exact) return exact;
@@ -1109,7 +1266,10 @@ Expr* builtin_arccot(Expr* res) {
 Expr* builtin_arcsec(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcSec[-x] -> Pi - ArcSec[x]
+    { Expr* f = arc_pi_minus_fold(arg, "ArcSec"); if (f) return f; }
+
     // Attempt exact inverse evaluation
     Expr* exact = exact_arcsec(arg);
     if (exact) return exact;
@@ -1141,7 +1301,13 @@ Expr* builtin_arcsec(Expr* res) {
 Expr* builtin_arccsc(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    
+
+    // ArcCsc is odd: ArcCsc[-x] -> -ArcCsc[x]
+    { Expr* f = odd_fold(arg, "ArcCsc"); if (f) return f; }
+
+    // ArcCsc[I y] -> -I ArcCsch[y]
+    { Expr* f = trig_i_fold(arg, "ArcCsch", -1); if (f) return f; }
+
     // Attempt exact inverse evaluation
     Expr* exact = exact_arccsc(arg);
     if (exact) return exact;
