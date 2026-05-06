@@ -3248,10 +3248,12 @@ static Expr* transform_pythag_canon(const Expr* e) {
  *     f[4^x * 2^(-x) * 2^(-x)] - f[1]  ->  0  (rebase inside f's arg)
  *     2^(2^(2 x) x) - 2^(x*4^x)     ->  0  (rebase inside an exponent)
  *
- * Branch-cut-sensitive shapes ((-4)^x via (-2), (a*b)^n distribution,
- * (a/b)^n distribution) are deliberately NOT handled: those need
- * PowerExpand semantics with explicit assumptions and remain documented
- * limitations.
+ * Branch-cut-sensitive shapes -- negative-integer-base split
+ * ((-4)^x -> (-1)^x 4^x), constant-positive distribute
+ * ((c1 c2)^e -> c1^e c2^e for ci > 0), and integer-exponent distribute
+ * ((a b)^n -> a^n b^n for n integer) -- are handled by
+ * `transform_power_distribute` (defined just below); see the comment
+ * block there for the soundness argument and the dispatch wiring.
  */
 
 /* If n is a perfect prime power p^k with k >= 2, set *p_out = p,
@@ -3484,6 +3486,272 @@ static Expr* transform_power_oneify_impl(const Expr* e) {
 
 static Expr* transform_power_oneify(const Expr* e) {
     return simp_memo_wrap(e, "$PowerOneify", transform_power_oneify_impl);
+}
+
+/* ----------------------------------------------------------------------- */
+/* PowerDistribute: distribute Power over Times in three universally       */
+/* sound shapes.  Walks the tree once; each shape independently rewrites   */
+/* matching nodes in place, then evaluate() is called on the result.       */
+/*                                                                         */
+/*   (A) Power[neg_int, e]  ->  Power[-1, e] * Power[|neg_int|, e]         */
+/*       Soundness: principal-branch identity for any e (real or           */
+/*       symbolic).  Picocas uses principal branches everywhere.           */
+/*       Why: lets prime_rebase + Times same-base merge cancel mixed-sign  */
+/*       products like (-4)^x * (-2)^(-x) * 2^(-x) -> 1.                   */
+/*                                                                         */
+/*   (B) Power[Times[c1,...,ck, u1,...,um], e]                             */
+/*           ->  Times[c1^e, ..., ck^e, Power[Times[u1,...,um], e]]        */
+/*       when each ci is a constant positive (literal positive numeric,    */
+/*       or a recognised positive constant symbol like Pi/E/...).          */
+/*       Soundness: (a b)^c = a^c b^c whenever a > 0, valid for any b      */
+/*       and any c.  Why: collapses identities like                        */
+/*           Exp[x] Exp[y] 2^x 2^y - (2 Exp[1])^(x+y) -> 0                 */
+/*       which need (2 E)^(x+y) -> 2^(x+y) E^(x+y) to align with the LHS.  */
+/*                                                                         */
+/*   (C) Power[Times[u1,...,un], e]  ->  Power[u1, e] * ... * Power[un, e] */
+/*       and Power[Power[u, p], e]   ->  Power[u, p*e]                     */
+/*       when prov_int(ctx, e) (the exponent is provably integer, either   */
+/*       as a literal or via an Element[_, Integers] assumption).          */
+/*       Soundness: integer exponents distribute through products and      */
+/*       through nested Power without branch cuts, for any complex base.   */
+/*       Why: handles (y/x)^(-n) - x^n y^(-n) -> 0 under                   */
+/*       Element[n, Integers].                                             */
+/*                                                                         */
+/* All three shapes are inert when no matching node exists.  After any     */
+/* rewrite we evaluate() the result so the canonical Times same-base       */
+/* merge collapses adjacent Power[u, ?] factors.                           */
+/* ----------------------------------------------------------------------- */
+
+static bool is_constant_positive_factor(const Expr* x) {
+    if (!x) return false;
+    if (numeric_sign(x) == 1) return true;
+    if (x->type == EXPR_SYMBOL && is_positive_constant_symbol(x->data.symbol))
+        return true;
+    return false;
+}
+
+/* Cheap structural gate for shape (A). */
+static bool has_distributable_power(const Expr* e, const AssumeCtx* ctx) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp_  = e->data.function.args[1];
+        /* (A) negative integer base */
+        if (base && base->type == EXPR_INTEGER && base->data.integer < -1)
+            return true;
+        /* (B)/(C) Power[Times[...], e] */
+        if (base && base->type == EXPR_FUNCTION && base->data.function.head
+            && base->data.function.head->type == EXPR_SYMBOL
+            && base->data.function.head->data.symbol == SYM_Times
+            && base->data.function.arg_count > 0) {
+            /* (B) any constant-positive factor? */
+            for (size_t i = 0; i < base->data.function.arg_count; i++) {
+                if (is_constant_positive_factor(base->data.function.args[i]))
+                    return true;
+            }
+            /* (C) integer exponent triggers full distribute */
+            if (prov_int(ctx, exp_)) return true;
+        }
+        /* (C) Power[Power[u, p], e] with e integer */
+        if (base && base->type == EXPR_FUNCTION && base->data.function.head
+            && base->data.function.head->type == EXPR_SYMBOL
+            && base->data.function.head->data.symbol == SYM_Power
+            && base->data.function.arg_count == 2
+            && prov_int(ctx, exp_)) {
+            return true;
+        }
+    }
+    if (has_distributable_power(head, ctx)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (has_distributable_power(e->data.function.args[i], ctx)) return true;
+    }
+    return false;
+}
+
+static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t n = e->data.function.arg_count;
+    Expr* new_head = power_distribute_walk(e->data.function.head, ctx);
+    Expr** new_args = NULL;
+    if (n > 0) {
+        new_args = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = power_distribute_walk(e->data.function.args[i], ctx);
+        }
+    }
+
+    /* Only Power[_, _] triggers any rewrite at this level. */
+    if (!(new_head && new_head->type == EXPR_SYMBOL
+          && new_head->data.symbol == SYM_Power
+          && n == 2 && new_args && new_args[0] && new_args[1])) {
+        Expr* result = expr_new_function(new_head, new_args, n);
+        if (new_args) free(new_args);
+        return result;
+    }
+
+    Expr* base = new_args[0];
+    Expr* exp_ = new_args[1];
+
+    /* (A) Power[neg_int, e] -> Power[-1, e] * Power[|neg_int|, e] */
+    if (base->type == EXPR_INTEGER && base->data.integer < -1) {
+        int64_t v = base->data.integer;
+        Expr* p1_args[2] = { expr_new_integer(-1), expr_copy(exp_) };
+        Expr* p1 = expr_new_function(expr_new_symbol("Power"), p1_args, 2);
+        Expr* p2_args[2] = { expr_new_integer(-v), exp_ };
+        Expr* p2 = expr_new_function(expr_new_symbol("Power"), p2_args, 2);
+        Expr* tm_args[2] = { p1, p2 };
+        Expr* tm = expr_new_function(expr_new_symbol("Times"), tm_args, 2);
+        expr_free(base);             /* original neg-int base */
+        free(new_args);
+        expr_free(new_head);
+        return tm;
+    }
+
+    /* (B) and (C) Power[Times[args...], e] */
+    if (base->type == EXPR_FUNCTION && base->data.function.head
+        && base->data.function.head->type == EXPR_SYMBOL
+        && base->data.function.head->data.symbol == SYM_Times
+        && base->data.function.arg_count > 0) {
+        size_t bn = base->data.function.arg_count;
+        Expr** ba = base->data.function.args;
+        bool exp_is_int = prov_int(ctx, exp_);
+
+        /* (C) integer exponent: distribute over every factor. */
+        if (exp_is_int) {
+            Expr** powers = (Expr**)malloc(sizeof(Expr*) * bn);
+            for (size_t i = 0; i < bn; i++) {
+                Expr* pa[2] = { expr_copy(ba[i]), expr_copy(exp_) };
+                powers[i] = expr_new_function(
+                    expr_new_symbol("Power"), pa, 2);
+            }
+            Expr* tm = expr_new_function(
+                expr_new_symbol("Times"), powers, bn);
+            expr_free(base);
+            expr_free(exp_);
+            free(new_args);
+            expr_free(new_head);
+            return tm;
+        }
+
+        /* (B) split off constant-positive factors. */
+        size_t pos_count = 0;
+        for (size_t i = 0; i < bn; i++) {
+            if (is_constant_positive_factor(ba[i])) pos_count++;
+        }
+        if (pos_count > 0 && pos_count < bn) {
+            /* Split: pos_count Power[ci, e] factors + Power[Times[rest], e] */
+            Expr** out = (Expr**)malloc(sizeof(Expr*) * (pos_count + 1));
+            size_t out_i = 0;
+            size_t rest_n = bn - pos_count;
+            Expr** rest = (Expr**)malloc(sizeof(Expr*) * rest_n);
+            size_t rest_i = 0;
+            for (size_t i = 0; i < bn; i++) {
+                if (is_constant_positive_factor(ba[i])) {
+                    Expr* pa[2] = { expr_copy(ba[i]), expr_copy(exp_) };
+                    out[out_i++] = expr_new_function(
+                        expr_new_symbol("Power"), pa, 2);
+                } else {
+                    rest[rest_i++] = expr_copy(ba[i]);
+                }
+            }
+            Expr* rest_times;
+            if (rest_n == 1) {
+                rest_times = rest[0];
+                free(rest);
+            } else {
+                rest_times = expr_new_function(
+                    expr_new_symbol("Times"), rest, rest_n);
+            }
+            Expr* pa[2] = { rest_times, expr_copy(exp_) };
+            out[out_i++] = expr_new_function(
+                expr_new_symbol("Power"), pa, 2);
+            Expr* tm = expr_new_function(
+                expr_new_symbol("Times"), out, pos_count + 1);
+            expr_free(base);
+            expr_free(exp_);
+            free(new_args);
+            expr_free(new_head);
+            return tm;
+        }
+        if (pos_count == bn) {
+            /* All factors constant-positive: full distribute. */
+            Expr** powers = (Expr**)malloc(sizeof(Expr*) * bn);
+            for (size_t i = 0; i < bn; i++) {
+                Expr* pa[2] = { expr_copy(ba[i]), expr_copy(exp_) };
+                powers[i] = expr_new_function(
+                    expr_new_symbol("Power"), pa, 2);
+            }
+            Expr* tm = expr_new_function(
+                expr_new_symbol("Times"), powers, bn);
+            expr_free(base);
+            expr_free(exp_);
+            free(new_args);
+            expr_free(new_head);
+            return tm;
+        }
+    }
+
+    /* (C) Power[Power[u, p], e] -> Power[u, p*e] when e provably integer. */
+    if (base->type == EXPR_FUNCTION && base->data.function.head
+        && base->data.function.head->type == EXPR_SYMBOL
+        && base->data.function.head->data.symbol == SYM_Power
+        && base->data.function.arg_count == 2
+        && prov_int(ctx, exp_)) {
+        Expr* u  = base->data.function.args[0];
+        Expr* p  = base->data.function.args[1];
+        Expr* tm_args[2] = { expr_copy(p), exp_ };
+        Expr* prod = expr_new_function(expr_new_symbol("Times"), tm_args, 2);
+        Expr* pa[2] = { expr_copy(u), prod };
+        Expr* po = expr_new_function(expr_new_symbol("Power"), pa, 2);
+        expr_free(base);
+        free(new_args);
+        expr_free(new_head);
+        return po;
+    }
+
+    Expr* result = expr_new_function(new_head, new_args, n);
+    if (new_args) free(new_args);
+    return result;
+}
+
+static Expr* transform_power_distribute_impl(const Expr* e,
+                                              const AssumeCtx* ctx) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+
+    if (!has_distributable_power(e, ctx)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("PowerDistribute", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    Expr* split = power_distribute_walk(e, ctx);
+    if (!split) split = expr_copy((Expr*)e);
+
+    /* Re-evaluate so canonical Times same-base merge collapses the
+     * newly-introduced Power[u, e] factors against existing same-base
+     * factors elsewhere in the surrounding Times. */
+    Expr* result = evaluate(split);
+    if (!result) result = expr_copy((Expr*)e);
+
+    if (dbg) simp_debug_log("PowerDistribute", e, result,
+                            simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+/* Note: ctx-dependent, so we cannot use simp_memo_wrap (which keys on
+ * the input expression alone).  PowerDistribute is invoked at most a
+ * few times per Simplify call from simp_dispatch and is structurally
+ * cheap (single tree walk, no recursive search), so the caching loss
+ * is negligible. */
+static Expr* transform_power_distribute(const Expr* e,
+                                         const AssumeCtx* ctx) {
+    return transform_power_distribute_impl(e, ctx);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -5532,6 +5800,26 @@ static Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
     }
     {
         Expr* alt = transform_power_oneify(input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_alt = score_with_func(alt, complexity_func);
+                size_t s_in = score_with_func(input, complexity_func);
+                if (s_alt < s_in) {
+                    Expr* result = simp_dispatch(alt, ctx, complexity_func);
+                    expr_free(alt);
+                    return result;
+                }
+            }
+            expr_free(alt);
+        }
+    }
+    /* PowerDistribute: principal-branch power-distribution rewrites that
+     * are universally sound -- (-c)^e split, constant-positive base
+     * distribute, and integer-exponent distribute (via ctx).  Same
+     * recursion shape as the rebase / oneify gates above: only adopt
+     * the rewrite when it strictly beats the input on score. */
+    {
+        Expr* alt = transform_power_distribute(input, ctx);
         if (alt) {
             if (!expr_eq(alt, input)) {
                 size_t s_alt = score_with_func(alt, complexity_func);

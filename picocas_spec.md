@@ -10507,3 +10507,117 @@ Two compounding issues:
   `mk_one_minus_tan_prod` removed.
 - `tests/test_simplify.c`: new `tan_addition_mixed_sec_tan` unit test
   pinning the 7.6 ms regression guard for the user-reported case.
+
+## Simplify: PowerDistribute -- principal-branch power-distribution rewrites (2026-05-06)
+
+### Symptom
+
+Three Simplify identities returned the input unchanged:
+
+```
+Simplify[(-4)^x * (-2)^(-x) * 2^(-x) - 1]
+  expected:  0
+  actual:    -1 + (-4)^x (-2)^(-x) 2^(-x)
+
+Simplify[Exp[x] Exp[y] 2^x 2^y - (2 Exp[1])^(x + y)]
+  expected:  0
+  actual:    -(2 E)^(x + y) + 2^(x + y) E^(x + y)
+
+Simplify[y^n (y/x)^(-n) - x^n, Assumptions -> Element[n, Integers]]
+  expected:  0
+  actual:    -x^n + y^n (y/x)^(-n)
+```
+
+### Root cause
+
+Three independent gaps in the existing power-rewrite cascade:
+
+1. **No negative-base split.** `prime_rebase` rewrites `c^e -> p^(k e)`
+   only for *positive* perfect-prime-power bases (`n >= 4`). `(-4)^x`
+   and `(-2)^x` were left alone, so they sat in distinct base buckets
+   in the canonical Times and never cancelled the explicit `2^(-x)`
+   factor, blocking the chain
+       (-4)^x (-2)^(-x) 2^(-x) -> 1.
+
+2. **`apply_logexp_rules` was gated on `ctx_has_facts(ctx)`.**  The
+   distribute identity `Power[Times[c1,...,ck], e] -> Times[ci^e]` for
+   constant-positive bases (which holds without any user assumption,
+   since 2 and `E` are unconditionally positive) never fired when the
+   user supplied no `Assumptions` argument.  `(2 E)^(x+y)` therefore
+   stayed wrapped, structurally distinct from the LHS's
+   `2^(x+y) E^(x+y)` form.
+
+3. **`apply_logexp_rules` distribute required *every* base positive.**
+   Even with `Element[n, Integers]` provided, `Power[Times[y, x^(-1)],
+   -n]` could not distribute because `y` and `x^(-1)` are symbolic
+   (positivity unknown).  The integer-exponent identity
+   `(a b)^n = a^n b^n` (universally valid for integer `n`) had no
+   path through the rewrite cascade.
+
+### Fix (`src/simp.c`)
+
+New transform `transform_power_distribute(e, ctx)`, inserted in
+`simp_dispatch` right after `transform_prime_rebase` /
+`transform_power_oneify`.  Single structural walk; on each `Power[B, e]`
+node it tries three universally-sound rewrites in order:
+
+(A) **Negate-base split**: `Power[neg_int, e] -> Power[-1, e] *
+    Power[|neg_int|, e]`.  Principal-branch identity for any `e` (real
+    or symbolic); valid without assumptions.  After the split, prime
+    rebase + Times same-base merge collapses
+    `(-4)^x (-2)^(-x) 2^(-x)` into
+    `(-1)^x 2^(2x) (-1)^(-x) 2^(-x) 2^(-x)` and on to `1`.
+
+(B) **Constant-positive base distribute**: when `Power[Times[args], e]`
+    has at least one factor that's a literal positive numeric or a
+    recognised positive-constant symbol (`Pi`, `E`, `EulerGamma`,
+    `GoldenRatio`, `Catalan`, `Degree`, `Glaisher`, `Khinchin`), peel
+    those factors off as `Power[ci, e]`.  When *every* factor is a
+    constant positive, distribute fully into `Times[ci^e]`.  Soundness:
+    `(a b)^c = a^c b^c` holds whenever `a > 0`.
+
+(C) **Integer-exponent distribute**: when `prov_int(ctx, e)` succeeds
+    (literal integer exponent or via `Element[_, Integers]`
+    assumption), distribute over `Power[Times[args], e]` regardless of
+    base positivity, *and* collapse `Power[Power[u, p], e] -> Power[u,
+    p e]`.  Soundness: integer exponents distribute through products
+    and through nested Power without branch cuts, for any complex base.
+
+After any rewrite, `evaluate()` is called so the canonical Times same-
+base merge collapses adjacent `Power[u, ?]` factors against existing
+factors elsewhere in the surrounding Times.  The transform is gated by
+a cheap structural check (`has_distributable_power`) and is inert when
+no matching node exists (microseconds-cheap).
+
+The new transform sits in the same strict-win recursion shape used by
+`transform_prime_rebase`: only adopt the rewrite when it strictly beats
+the input on score; otherwise fall through.  Because `evaluate()` runs
+inside the impl, a productive split + cancellation lands as a
+strictly-shorter expression and the dispatcher recurses.
+
+### Coverage
+
+| Input | Before | After |
+|-------|--------|-------|
+| `(-4)^x (-2)^(-x) 2^(-x) - 1` | unchanged | `0` |
+| `Exp[x] Exp[y] 2^x 2^y - (2 E)^(x+y)` | 2-term sum | `0` |
+| `y^n (y/x)^(-n) - x^n` w/ `Element[n, Integers]` | unchanged | `0` |
+
+All 21 cases in the user's Simplify regression set now collapse to `0`,
+the slowest at 0.21 s; full project test suite (91 binaries) passes.
+
+### Soundness note
+
+The constant-positive-distribute (B) and integer-exponent-distribute
+(C) cases are unconditionally valid (positivity / integer-exponent
+guarantee no branch cut).  The negate-base split (A) is a
+principal-branch identity -- the same convention picocas uses
+everywhere else (e.g. `Sqrt[-1] = I`, `Power[-1, 1/3] = (-1)^(1/3)`).
+None of the three depends on the no-numeric-sampling-zero rule that
+governs Simplify correctness.
+
+### Files
+
+- `src/simp.c`: `transform_power_distribute` (~180 LOC) inserted between
+  `transform_power_oneify` and `transform_radical_canon`; new dispatch
+  block in `simp_dispatch` next to the existing rebase / oneify gates.
