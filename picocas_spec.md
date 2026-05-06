@@ -10425,3 +10425,85 @@ way; the integer-arg case is just the one most surprising to TrigExpand.
   `inside_f_prime_power_collapse`, `2_to_2_to_2x_x`, `one_over_x_log2_combine`,
   `tan_addition_three_angles`, plus 4 user-reported new cases for sqrt/
   algebraic/log/halfangle/compound-angle).
+
+## Simplify: TanAddition uniform Sin/Cos primitives + depth-0 short-circuit (2026-05-06)
+
+### Symptom
+
+Mixed Tan/Sec angle-addition input hung past 900 ms:
+
+```
+m1 = Tan[z] Cos[x] Cos[y] Sec[x+y] (Tan[x] + Tan[y]);
+m2 = Tan[z] Tan[x+y];
+Simplify[m1 - m2]               (* = 0 by Tan[x]+Tan[y] = Sin[x+y]/(Cos[x] Cos[y]) *)
+```
+
+Mathematica returns `0` in <1 ms; picocas took ~960 ms.
+
+### Root cause
+
+Two compounding issues:
+
+1. **TanAddition's Tan[c]/Cot[c] rule RHS used Tan[a]/Tan[b] primitives.**
+   On a (a, b, c=a+b) triple where the input contains *both* `Tan[c]` and
+   `Sec[c]`, the Tan[c] rule produced
+   `(Tan[a]+Tan[b]) / (1 - Tan[a] Tan[b])` while the Sec[c] rule produced
+   `1 / (Cos[a] Cos[b] - Sin[a] Sin[b])`. The two denominators are equal
+   by trig identity but structurally distinct -- Together / Cancel could
+   not unify them, so the substituted form failed to collapse.
+
+2. **TrigReduce's depth-0 short-circuit blew up the input.**
+   On the same input, `TrigReduce[m1 - m2]` produced a 9-term
+   `Cos[...] Sec[x] Sec[z] Sec[x+y]` polynomial in ~700 ms (allocated,
+   scored, and discarded by the strict-win gate). 700 ms wasted before
+   the search loop ever ran TanAddition at the parent level.
+
+### Fix (`src/simp.c`)
+
+1. **`append_addition_rules_for_triple` refactored** to compute the two
+   Sin/Cos primitives once
+   ```
+   sin_rhs = Sin[a] Cos[b] + Cos[a] Sin[b]   (= Sin[a + b])
+   cos_rhs = Cos[a] Cos[b] - Sin[a] Sin[b]   (= Cos[a + b])
+   ```
+   and reuse them across all six head rules:
+   ```
+   Tan[c] -> sin_rhs / cos_rhs
+   Cot[c] -> cos_rhs / sin_rhs
+   Sin[c] -> sin_rhs
+   Cos[c] -> cos_rhs
+   Sec[c] -> 1 / cos_rhs
+   Csc[c] -> 1 / sin_rhs
+   ```
+   The substituted form now has uniform Sin/Cos denominator structure.
+   Cancel internally rewrites bare `Tan[x] = Sin[x]/Cos[x]` during its
+   polynomial-GCD pass, so any leftover `Tan[a]+Tan[b]` factor combines
+   with the new denominator and the whole expression collapses to 0.
+   Helpers `mk_tan_sum` and `mk_one_minus_tan_prod` are removed.
+
+2. **TanAddition added as depth-0 short-circuit in `simp_bottomup`**,
+   immediately before the existing TrigReduce short-circuit.  TanAddition's
+   gate (`has_pythag_head` + 3+ distinct trig args + a sum-witnessing
+   triple) keeps it cheap when inert.  When it produces a strict-win
+   result (typically 0 directly), `input` is replaced and the
+   `canon_owned && input->type != EXPR_FUNCTION` early-return fires,
+   so the still-expensive TrigReduce short-circuit never even runs.
+
+### Performance
+
+| Case | Before | After |
+|------|--------|-------|
+| `Tan[z] Cos[x] Cos[y] Sec[x+y] (Tan[x]+Tan[y]) - Tan[z] Tan[x+y]` | 960 ms | 7.6 ms |
+| `Tan[2] Tan[3] B A - (-Tan[2]/Tan[5] - Tan[3]/Tan[5] + 1) B A` | ~1.3 s | ~5 ms (new formula still works; existing test passes) |
+| `(Sin[x]+Cos[x])^4 - (1+Sin[2 x])^2` | 5 ms | 5 ms (no regression) |
+| `(Sec[x]+1)(Sec[x]-1) - Tan[x]^2` | 5 ms | 5 ms (no regression) |
+| `(Cosh[x]+Sinh[x])^3 - (Cosh[3 x]+Sinh[3 x])` | 4 ms | 4 ms (no regression) |
+
+### Files
+
+- `src/simp.c`: `append_addition_rules_for_triple` rewritten around
+  shared Sin/Cos primitives; `simp_bottomup` gains a depth-0 TanAddition
+  short-circuit before TrigReduce; helpers `mk_tan_sum` /
+  `mk_one_minus_tan_prod` removed.
+- `tests/test_simplify.c`: new `tan_addition_mixed_sec_tan` unit test
+  pinning the 7.6 ms regression guard for the user-reported case.

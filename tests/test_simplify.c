@@ -956,6 +956,24 @@ void test_simplify_tan_addition_three_angles(void) {
         " (-Tan[2]/Tan[5] - Tan[3]/Tan[5] + 1)*B*A]", "0", 0);
 }
 
+void test_simplify_tan_addition_mixed_sec_tan(void) {
+    /* Tan[z] Cos[x] Cos[y] Sec[x+y] (Tan[x] + Tan[y]) - Tan[z] Tan[x+y] = 0
+     * by the angle-addition identity Tan[x]+Tan[y] = Sin[x+y]/(Cos[x] Cos[y]),
+     * giving Tan[z] Sec[x+y] Sin[x+y] = Tan[z] Tan[x+y].
+     *
+     * The mixed Tan/Sec shape is the regression that motivated switching
+     * the TanAddition Tan[c]/Cot[c] rule RHSs to Sin/Cos primitives: the
+     * old (Tan[a]+Tan[b])/(1-Tan[a]Tan[b]) form left mismatched 1-Tan[x]Tan[y]
+     * vs Cos[x]Cos[y]-Sin[x]Sin[y] denominators that Together+Cancel
+     * couldn't unify, and the input fell through to TrigReduce which blew
+     * up to a 9-term Cos/Sec product (~700 ms). With Sin/Cos primitives
+     * shared across all six head rules and the depth-0 short-circuit that
+     * runs TanAddition before TrigReduce, the input collapses in ~7 ms. */
+    assert_eval_eq(
+        "Simplify[Tan[z]*Cos[x]*Cos[y]*Sec[x+y]*(Tan[x] + Tan[y]) -"
+        " Tan[z]*Tan[x+y]]", "0", 0);
+}
+
 void test_simplify_cos_four_pi_ninth_minus_sin_pi_eighteenth(void) {
     /* Cos[4 Pi/9] - Sin[Pi/18] = 0 because Cos[4 Pi/9] = Sin[Pi/2 - 4 Pi/9]
      * = Sin[Pi/18].  Already handled by simp_trig_pi_canon, which picks
@@ -1183,6 +1201,7 @@ int main(void) {
     TEST(test_simplify_z_x_z_y_outer_x);
     TEST(test_simplify_one_over_x_log2_combine);
     TEST(test_simplify_tan_addition_three_angles);
+    TEST(test_simplify_tan_addition_mixed_sec_tan);
     TEST(test_simplify_cos_four_pi_ninth_minus_sin_pi_eighteenth);
     TEST(test_simplify_minus_one_fifth_root_alternating_sum);
     TEST(test_simplify_algebraic_sqrt_x_squared_plus_one);

@@ -3814,28 +3814,6 @@ static Expr* mk_unary_call(const char* head, Expr* arg) {
     return expr_new_function(expr_new_symbol(head), args, 1);
 }
 
-/* Build (Tan[a]+Tan[b]) and (1 - Tan[a] Tan[b]) shape components.  Each
- * call returns an owned tree.  Templates for the four Tan/Cot/Sin/Cos
- * substitution RHSs are assembled by callers from these primitives. */
-static Expr* mk_tan_sum(const Expr* a, const Expr* b) {
-    Expr* args[2] = {
-        mk_unary_call("Tan", expr_copy((Expr*)a)),
-        mk_unary_call("Tan", expr_copy((Expr*)b))
-    };
-    return expr_new_function(expr_new_symbol("Plus"), args, 2);
-}
-static Expr* mk_one_minus_tan_prod(const Expr* a, const Expr* b) {
-    Expr* prod_args[3] = {
-        expr_new_integer(-1),
-        mk_unary_call("Tan", expr_copy((Expr*)a)),
-        mk_unary_call("Tan", expr_copy((Expr*)b))
-    };
-    Expr* prod = expr_new_function(
-        expr_new_symbol("Times"), prod_args, 3);
-    Expr* args[2] = { expr_new_integer(1), prod };
-    return expr_new_function(expr_new_symbol("Plus"), args, 2);
-}
-
 static Expr* mk_div(Expr* num, Expr* den) {
     Expr* inv_args[2] = { den, expr_new_integer(-1) };
     Expr* inv = expr_new_function(
@@ -3860,34 +3838,29 @@ static void append_addition_rules_for_triple(Expr* input,
         (*rules)[(*rcount)++] = (node);                       \
     } while (0)
 
-    if (tree_contains_trig_at(input, SYM_Tan, c)) {
-        Expr* rhs = mk_div(mk_tan_sum(a, b), mk_one_minus_tan_prod(a, b));
-        Expr* lhs = mk_unary_call("Tan", expr_copy((Expr*)c));
-        Expr* rule_args[2] = { lhs, rhs };
-        Expr* rule = expr_new_function(
-            expr_new_symbol("RuleDelayed"), rule_args, 2);
-        RAPPEND(rule);
-    }
-    if (tree_contains_trig_at(input, SYM_Cot, c)) {
-        Expr* rhs = mk_div(mk_one_minus_tan_prod(a, b), mk_tan_sum(a, b));
-        Expr* lhs = mk_unary_call("Cot", expr_copy((Expr*)c));
-        Expr* rule_args[2] = { lhs, rhs };
-        Expr* rule = expr_new_function(
-            expr_new_symbol("RuleDelayed"), rule_args, 2);
-        RAPPEND(rule);
-    }
-    /* Sin / Cos / Sec / Csc additions: similar shape, formulas
-     *     Sin[c] = Sin[a] Cos[b] + Cos[a] Sin[b]
-     *     Cos[c] = Cos[a] Cos[b] - Sin[a] Sin[b]
-     *     Sec[c] = 1 / (Cos[a] Cos[b] - Sin[a] Sin[b])
-     *     Csc[c] = 1 / (Sin[a] Cos[b] + Cos[a] Sin[b])
-     * Built only when the matching head actually occurs at c. */
+    /* All six rules (Tan/Cot/Sin/Cos/Sec/Csc at c) are expressed in terms
+     * of the same two Sin/Cos primitives:
+     *     sin_rhs = Sin[a] Cos[b] + Cos[a] Sin[b]   (= Sin[a + b])
+     *     cos_rhs = Cos[a] Cos[b] - Sin[a] Sin[b]   (= Cos[a + b])
+     * Using the same primitives for Tan[c] = sin_rhs / cos_rhs and
+     * Sec[c] = 1 / cos_rhs (rather than the Tan-based identity Tan[c] =
+     * (Tan[a]+Tan[b])/(1 - Tan[a] Tan[b])) gives the post-substitution
+     * expression a uniform Sin/Cos denominator structure, so a single
+     * Together / Cancel pass collapses mixed Sec[c] + Tan[c] inputs that
+     * the Tan-based formula leaves with mismatched (1 - Tan[a] Tan[b])
+     * vs (Cos[a] Cos[b] - Sin[a] Sin[b]) denominators. */
+    bool need_tan = tree_contains_trig_at(input, SYM_Tan, c);
+    bool need_cot = tree_contains_trig_at(input, SYM_Cot, c);
     bool need_sin = tree_contains_trig_at(input, SYM_Sin, c);
     bool need_csc = tree_contains_trig_at(input, SYM_Csc, c);
     bool need_cos = tree_contains_trig_at(input, SYM_Cos, c);
     bool need_sec = tree_contains_trig_at(input, SYM_Sec, c);
-    if (need_sin || need_csc) {
-        /* Sin[a] Cos[b] + Cos[a] Sin[b] */
+
+    bool need_sin_rhs = need_sin || need_csc || need_tan || need_cot;
+    bool need_cos_rhs = need_cos || need_sec || need_tan || need_cot;
+
+    Expr* sin_rhs = NULL;
+    if (need_sin_rhs) {
         Expr* sa_cb_args[2] = {
             mk_unary_call("Sin", expr_copy((Expr*)a)),
             mk_unary_call("Cos", expr_copy((Expr*)b))
@@ -3901,29 +3874,12 @@ static void append_addition_rules_for_triple(Expr* input,
         Expr* ca_sb = expr_new_function(
             expr_new_symbol("Times"), ca_sb_args, 2);
         Expr* sin_args[2] = { sa_cb, ca_sb };
-        Expr* sin_rhs = expr_new_function(
+        sin_rhs = expr_new_function(
             expr_new_symbol("Plus"), sin_args, 2);
-        if (need_sin) {
-            Expr* lhs = mk_unary_call("Sin", expr_copy((Expr*)c));
-            Expr* rule_args[2] = { lhs, expr_copy(sin_rhs) };
-            Expr* rule = expr_new_function(
-                expr_new_symbol("RuleDelayed"), rule_args, 2);
-            RAPPEND(rule);
-        }
-        if (need_csc) {
-            Expr* lhs = mk_unary_call("Csc", expr_copy((Expr*)c));
-            Expr* inv_args[2] = { expr_copy(sin_rhs), expr_new_integer(-1) };
-            Expr* inv = expr_new_function(
-                expr_new_symbol("Power"), inv_args, 2);
-            Expr* rule_args[2] = { lhs, inv };
-            Expr* rule = expr_new_function(
-                expr_new_symbol("RuleDelayed"), rule_args, 2);
-            RAPPEND(rule);
-        }
-        expr_free(sin_rhs);
     }
-    if (need_cos || need_sec) {
-        /* Cos[a] Cos[b] - Sin[a] Sin[b] */
+
+    Expr* cos_rhs = NULL;
+    if (need_cos_rhs) {
         Expr* ca_cb_args[2] = {
             mk_unary_call("Cos", expr_copy((Expr*)a)),
             mk_unary_call("Cos", expr_copy((Expr*)b))
@@ -3938,27 +3894,63 @@ static void append_addition_rules_for_triple(Expr* input,
         Expr* neg_sa_sb = expr_new_function(
             expr_new_symbol("Times"), neg_sa_sb_args, 3);
         Expr* cos_args[2] = { ca_cb, neg_sa_sb };
-        Expr* cos_rhs = expr_new_function(
+        cos_rhs = expr_new_function(
             expr_new_symbol("Plus"), cos_args, 2);
-        if (need_cos) {
-            Expr* lhs = mk_unary_call("Cos", expr_copy((Expr*)c));
-            Expr* rule_args[2] = { lhs, expr_copy(cos_rhs) };
-            Expr* rule = expr_new_function(
-                expr_new_symbol("RuleDelayed"), rule_args, 2);
-            RAPPEND(rule);
-        }
-        if (need_sec) {
-            Expr* lhs = mk_unary_call("Sec", expr_copy((Expr*)c));
-            Expr* inv_args[2] = { expr_copy(cos_rhs), expr_new_integer(-1) };
-            Expr* inv = expr_new_function(
-                expr_new_symbol("Power"), inv_args, 2);
-            Expr* rule_args[2] = { lhs, inv };
-            Expr* rule = expr_new_function(
-                expr_new_symbol("RuleDelayed"), rule_args, 2);
-            RAPPEND(rule);
-        }
-        expr_free(cos_rhs);
     }
+
+    if (need_sin) {
+        Expr* lhs = mk_unary_call("Sin", expr_copy((Expr*)c));
+        Expr* rule_args[2] = { lhs, expr_copy(sin_rhs) };
+        Expr* rule = expr_new_function(
+            expr_new_symbol("RuleDelayed"), rule_args, 2);
+        RAPPEND(rule);
+    }
+    if (need_csc) {
+        Expr* lhs = mk_unary_call("Csc", expr_copy((Expr*)c));
+        Expr* inv_args[2] = { expr_copy(sin_rhs), expr_new_integer(-1) };
+        Expr* inv = expr_new_function(
+            expr_new_symbol("Power"), inv_args, 2);
+        Expr* rule_args[2] = { lhs, inv };
+        Expr* rule = expr_new_function(
+            expr_new_symbol("RuleDelayed"), rule_args, 2);
+        RAPPEND(rule);
+    }
+    if (need_cos) {
+        Expr* lhs = mk_unary_call("Cos", expr_copy((Expr*)c));
+        Expr* rule_args[2] = { lhs, expr_copy(cos_rhs) };
+        Expr* rule = expr_new_function(
+            expr_new_symbol("RuleDelayed"), rule_args, 2);
+        RAPPEND(rule);
+    }
+    if (need_sec) {
+        Expr* lhs = mk_unary_call("Sec", expr_copy((Expr*)c));
+        Expr* inv_args[2] = { expr_copy(cos_rhs), expr_new_integer(-1) };
+        Expr* inv = expr_new_function(
+            expr_new_symbol("Power"), inv_args, 2);
+        Expr* rule_args[2] = { lhs, inv };
+        Expr* rule = expr_new_function(
+            expr_new_symbol("RuleDelayed"), rule_args, 2);
+        RAPPEND(rule);
+    }
+    if (need_tan) {
+        Expr* lhs = mk_unary_call("Tan", expr_copy((Expr*)c));
+        Expr* rhs = mk_div(expr_copy(sin_rhs), expr_copy(cos_rhs));
+        Expr* rule_args[2] = { lhs, rhs };
+        Expr* rule = expr_new_function(
+            expr_new_symbol("RuleDelayed"), rule_args, 2);
+        RAPPEND(rule);
+    }
+    if (need_cot) {
+        Expr* lhs = mk_unary_call("Cot", expr_copy((Expr*)c));
+        Expr* rhs = mk_div(expr_copy(cos_rhs), expr_copy(sin_rhs));
+        Expr* rule_args[2] = { lhs, rhs };
+        Expr* rule = expr_new_function(
+            expr_new_symbol("RuleDelayed"), rule_args, 2);
+        RAPPEND(rule);
+    }
+
+    if (sin_rhs) expr_free(sin_rhs);
+    if (cos_rhs) expr_free(cos_rhs);
     #undef RAPPEND
 }
 
@@ -6344,6 +6336,40 @@ static Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
                 size_t s_in = score_with_func(input, complexity_func);
                 size_t s_alt = score_with_func(alt, complexity_func);
                 if (s_alt < s_in) {
+                    canon_owned = alt;
+                    input = alt;
+                } else {
+                    expr_free(alt);
+                }
+            } else {
+                expr_free(alt);
+            }
+        }
+    }
+
+    /* Top-level TanAddition short-circuit.  Sits BEFORE the TrigReduce
+     * short-circuit because TrigReduce on inputs containing Sec[a+b] /
+     * Csc[a+b] alongside multiple distinct Plus-arg trig calls expands
+     * to a much larger Cos[...] Sec[...] Sec[...] product (e.g. a 13-leaf
+     * Tan[z] Cos[x] Cos[y] Sec[x+y] (Tan[x]+Tan[y]) - Tan[z] Tan[x+y]
+     * blows up to 9 Cos/Sec terms in ~700 ms, only to be rejected by the
+     * score gate).  TanAddition's gate (has_pythag_head + 3+ distinct
+     * trig args + a sum-witnessing triple) keeps it cheap when inert,
+     * and on the case above it collapses the input directly to 0.
+     *
+     * Same depth==0 gating and strict-score gate as the other short-
+     * circuits.  When TanAddition produces an atom (typically 0), the
+     * `canon_owned && input->type != EXPR_FUNCTION` branch below returns
+     * immediately, so the still-expensive TrigReduce short-circuit never
+     * even runs. */
+    if (depth == 0) {
+        Expr* alt = transform_tan_addition(input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_in = score_with_func(input, complexity_func);
+                size_t s_alt = score_with_func(alt, complexity_func);
+                if (s_alt < s_in) {
+                    if (canon_owned) expr_free(canon_owned);
                     canon_owned = alt;
                     input = alt;
                 } else {
