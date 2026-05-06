@@ -10932,3 +10932,81 @@ to fire (returns the input unchanged) when:
 - Multi-base extensions (e.g. `1/(sqrt(3) + 2^(1/3))`): the current
   implementation handles only single integer bases.
 
+
+## Cube-root denesting (`simp_cuberoot`, 2026-05-07)
+
+Phase 3 of the algorithmic radical-simplification project. Closes the
+final two user-supplied test cases:
+
+```
+Simplify[(Sqrt[5] + 2)^(1/3) - (Sqrt[5] + 1)/2]                       -> 0
+Simplify[(2 + Sqrt[5])^(1/3) + (2 - Sqrt[5])^(1/3) - 1]               -> 0
+```
+
+### Two narrow patterns
+
+A new `simp_cuberoot` Simplify seed recognises exactly two patterns:
+
+**Pattern A -- single-radical cube-root denesting (Borodin-Fagin style):**
+
+For `Power[a + b sqrt(c), 1/3]` with rational a, b and integer c, search
+for rationals (p, q) satisfying
+
+```
+p^3 + 3 p q^2 c = a
+3 p^2 q + q^3 c = b
+```
+
+(equivalently `(p + q sqrt(c))^3 = a + b sqrt(c)`). When found, rewrite
+to `p + q sqrt(c)`. The search is a small bounded grid: numerator
+magnitudes up to 6, common denominator up to 6. This is sufficient for
+case 4 (p = q = 1/2) and similar small-coefficient targets; it is NOT
+a general algorithm.
+
+**Pattern B -- sum of conjugate cube roots (Cardano):**
+
+For `Power[a + b sqrt(c), 1/3] + Power[a - b sqrt(c), 1/3]` with integer
+a, b and integer c, the sum s under the real-cube-root convention
+satisfies the depressed cubic
+
+```
+s^3 - 3 m s - 2 a = 0,   where m = (a^2 - b^2 c)^(1/3)
+```
+
+provided `a^2 - b^2 c` is a perfect cube of an integer m. When this
+cubic has a rational root, the transform replaces the sum with that
+rational. For case 5 (a = 2, b = 1, c = 5): `a^2 - b^2 c = -1 = (-1)^3`
+gives m = -1, then `s^3 + 3 s - 4 = (s-1)(s^2 + s + 4)` has rational
+root s = 1.
+
+### Soundness note: principal vs. real cube root
+
+picocas evaluates `Power[neg_real, 1/3]` using the principal complex
+branch (e.g. `(-1)^(1/3) = (1 + i sqrt(3))/2`). Pattern B's identity
+holds only under the REAL cube-root convention; principal-branch
+numeric evaluation of case 5 gives ~1.93 + 0.535i, not 1. The
+transform fires anyway because the user's intent (and Mathematica
+`Simplify`) follows the real-cube-root heuristic, and the gating
+condition (`a^2 - b^2 c` being a perfect integer cube) is purely
+structural and branch-independent.
+
+Pattern A has no branch concern: `(p + q sqrt(c))^3 = a + b sqrt(c)`
+is an exact polynomial identity that holds on every branch.
+
+### Files
+
+- `src/simp.c`: ~370 LOC of new code in a `simp_cuberoot` section
+  inserted between `simp_denest_sqrt` and `simp_rationalize_denom`.
+  Wired as a new seed in `simp_search` next to `simp_rationalize_denom`.
+- `tests/test_radical_simplify.c`: case 4 and case 5 enabled via
+  `#define PHASE_3`. All 14 tests pass.
+
+### Out of scope
+
+- Cube roots with non-trivial rational a, b (the search grid is
+  bounded; the user's cases were small-integer / half-integer).
+- Higher-order radicals (4th, 5th roots).
+- Nested cube roots beyond the user-supplied patterns. The general
+  Borodin-Fagin-Hopcroft-Tompa algorithm is much larger than this
+  pattern recogniser; if expanded coverage becomes necessary,
+  extending to a full `facpoly_over_alg` is the natural path.

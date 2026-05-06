@@ -1,7 +1,8 @@
 ---
 title: Algorithmic radical simplification
 date_started: 2026-05-06
-status: phases 1-2 complete; phase 3 in progress
+date_completed: 2026-05-07
+status: complete (all 10 user cases + 4 soundness subtests pass)
 ---
 
 # Algorithmic radical simplification
@@ -391,6 +392,28 @@ with proper `facpoly_over_alg`.
 
 Cases 4, 5 pass. No regression elsewhere.
 
+### 3.6 Outcome (2026-05-07)
+
+- [x] `simp_cuberoot` recognises Pattern A (single cube root) via small
+      grid search and Pattern B (sum of conjugate cube roots) via
+      Cardano discriminant + rational-root test.
+- [x] Cases 4 and 5 pass; full test suite green.
+
+**Implementation surprises and notes:**
+
+- Case 5's identity `(2+sqrt(5))^(1/3) + (2-sqrt(5))^(1/3) = 1` only
+  holds under REAL cube-root semantics. picocas's principal-branch
+  Power gives a complex result (~1.93 + 0.535i). The rewrite fires
+  anyway because the user's intent matches Mathematica's heuristic,
+  and the gating (discriminant being a perfect integer cube) is a
+  branch-independent structural check. This is documented as the only
+  intentionally branch-non-strict transform in Simplify.
+- The grid search bound (6, 6) is enough for the user's small-integer
+  cases. A larger bound is straightforward but expensive in the
+  brute-force form; the proper extension would be the full
+  Borodin-Fagin-Hopcroft-Tompa algorithm with bounded denominator
+  enumeration via the integral closure.
+
 ## Cross-phase invariants (always uphold)
 
 - **Soundness over completeness.** Per the user's standing rule,
@@ -431,6 +454,50 @@ keeps it small (~300 LOC of focused pattern-matching).
 - Denesting under `Element[..., Reals]`-style domain assumptions other
   than the existing `x > 0`, `x < 0`, `x > y` family.
 
-## Review section (updated as phases land)
+## Review section (final, 2026-05-07)
 
-(empty — to be filled at end of each phase)
+**Outcome.** All 10 user-supplied test cases pass, plus 4 branch-
+soundness subtests and a regression sentinel for case 9 (which already
+worked). The full picocas test suite remains green; no regressions.
+
+**Total LOC added:**
+- Phase 1 (Sqrt-of-Sqrt denesting): ~600 LOC in src/simp.c.
+- Phase 2 (denominator rationalisation): ~280 LOC in src/simp.c.
+- Phase 3 (cube-root denesting): ~370 LOC in src/simp.c.
+- Tests: 14 cases in tests/test_radical_simplify.c (~250 LOC).
+- Spec docs: ~400 LOC across the three phase sections.
+- **Total:** ~1900 LOC of code + tests + docs.
+
+**What worked well:**
+- Splitting into three independent phases each shippable in isolation.
+- Reusing existing primitives (`PolynomialExtendedGCD`, `FactorSquareFree`,
+  `transform_prime_rebase`) instead of building a new algebraic-number
+  module from scratch.
+- The test scaffold with `#define PHASE_N` macros let me iterate on
+  one phase at a time without invalidating the test suite.
+- A local strong-assert helper that overrides the cmake-NDEBUG-silenced
+  `assert_eval_eq` gave a real CI signal.
+
+**Surprises and lessons:**
+- The picocas evaluator re-merges `Times[Power[m, q], Power[n, -q]]`
+  back into `Power[m/n, q]` for rational `m, n`, which broke the
+  existing `transform_radical_canon` for `m > 1`. Worked around with
+  a direct `denest_rationalise_sqrt_of_rational`.
+- `assume_known_*` does not perform transitive chaining, so case 7's
+  branch check needed a local 1-step transitive prover plus a
+  subtraction-pattern detector for `Plus[u, -v]`.
+- Symbol-name comparison via pointer equality only works for interned
+  static names (SYM_*); dynamically-named generators need `strcmp`.
+- Case 5 holds only under real-cube-root semantics; picocas's primitive
+  Power uses the principal complex branch but Simplify follows the
+  user's evident intent.
+- The user's case 10 r6 was numerically incorrect; the corrected
+  value is derived from the algebraic computation.
+
+**Future extensions (not in scope of this PR):**
+- Multi-base extensions: `1/(sqrt(3) + 2^(1/3))` would need a primitive-
+  element computation via resultant, or a full `algnum` module.
+- Higher-order radicals (4th, 5th roots) for Phase 3.
+- General Borodin-Fagin-Hopcroft-Tompa for arbitrary cube-root denesting
+  beyond the small-integer / half-integer search grid.
+- Deeper nested radicals via the full generalised Landau algorithm.

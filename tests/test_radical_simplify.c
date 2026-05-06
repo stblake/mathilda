@@ -56,7 +56,7 @@ static void check_eval_eq(const char* input, const char* expected) {
 
 #define PHASE_1
 #define PHASE_2
-/* #define PHASE_3 */
+#define PHASE_3
 
 #define SKIP_PHASE(reason) do { \
     printf("  [SKIP] %s (phase not enabled): %s\n", __func__, reason); \
