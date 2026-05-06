@@ -2703,11 +2703,17 @@ static Expr* simp_memo_wrap(const Expr* e, const char* pseudo_head,
     return result;
 }
 
-/* Cheap structural check: does `e` contain any of Cos/Sin/Cosh/Sinh as
- * a function head?  PythagReduce's rules cannot match anything else,
- * so when the answer is no we can skip the ReplaceRepeated walk
- * entirely.  Walks the tree once; cheaper by orders of magnitude than
- * the pattern-matching pass it gates. */
+/* Cheap structural check: does `e` contain any of Cos/Sin/Cosh/Sinh,
+ * Tan/Cot/Tanh/Coth, or Sec/Csc/Sech/Csch as a function head?
+ * PythagReduce / PythagCanon's rules can only fire on these heads, so
+ * when the answer is no we can skip the ReplaceRepeated walk entirely.
+ * Walks the tree once; cheaper by orders of magnitude than the
+ * pattern-matching pass it gates.  Sec/Csc/Sech/Csch were added
+ * alongside the Sec[x]^2 -> 1 + Tan[x]^2 substitution direction in
+ * PythagCanon (and its three siblings); without listing them here,
+ * inputs like (Sec[x]+1)(Sec[x]-1) - Tan[x]^2 would skip PythagCanon
+ * via the gate and land in TrigFactor (700 ms+ on multi-variable
+ * expansions). */
 static bool has_pythag_head(const Expr* e) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
@@ -2717,7 +2723,9 @@ static bool has_pythag_head(const Expr* e) {
         if (h == SYM_Cos || h == SYM_Sin ||
             h == SYM_Cosh || h == SYM_Sinh ||
             h == SYM_Tan || h == SYM_Cot ||
-            h == SYM_Tanh || h == SYM_Coth) {
+            h == SYM_Tanh || h == SYM_Coth ||
+            h == SYM_Sec || h == SYM_Csc ||
+            h == SYM_Sech || h == SYM_Csch) {
             return true;
         }
     }
@@ -2997,7 +3005,26 @@ static Expr* transform_pythag_reduce_impl(const Expr* e) {
             "  1 + Tan[x_]^2 + r___   :> Sec[x]^2 + r, "
             "  -1 - Tan[x_]^2 + r___  :> -Sec[x]^2 + r, "
             "  1 + Cot[x_]^2 + r___   :> Csc[x]^2 + r, "
-            "  -1 - Cot[x_]^2 + r___  :> -Csc[x]^2 + r }");
+            "  -1 - Cot[x_]^2 + r___  :> -Csc[x]^2 + r, "
+            /* Reverse-direction reciprocal-pair identities.  Sec^2 - 1 ==
+             * Tan^2, Csc^2 - 1 == Cot^2 (real-valued Pythagorean trig);
+             * Sech^2 + (-1) doesn't hold (Sech^2 = 1 - Tanh^2, so 1 -
+             * Sech^2 == Tanh^2); 1 + Csch^2 == Coth^2.  Without these
+             * rules, a Plus shape like `-1 + Sec[x]^2 - Tan[x]^2` (the
+             * post-Expand form of `(Sec+1)(Sec-1) - Tan^2`) would only
+             * collapse via the TAN -> SEC direction `-1 - Tan^2 -> -Sec^2`,
+             * which works for the simple shape but leaves the SEC term
+             * "stranded" in coefficient-bearing forms PythagCanon must
+             * separately rewrite.  Including both directions here lets
+             * the cheap PythagReduce rule fire on either presentation. */
+            "  -1 + Sec[x_]^2 + r___  :> Tan[x]^2 + r, "
+            "  1 - Sec[x_]^2 + r___   :> -Tan[x]^2 + r, "
+            "  -1 + Csc[x_]^2 + r___  :> Cot[x]^2 + r, "
+            "  1 - Csc[x_]^2 + r___   :> -Cot[x]^2 + r, "
+            "  1 - Sech[x_]^2 + r___  :> Tanh[x]^2 + r, "
+            "  -1 + Sech[x_]^2 + r___ :> -Tanh[x]^2 + r, "
+            "  1 + Csch[x_]^2 + r___  :> Coth[x]^2 + r, "
+            "  -1 - Csch[x_]^2 + r___ :> -Coth[x]^2 + r }");
     }
     if (!rules) return NULL;
     bool dbg = simp_debug_enabled();
@@ -3064,6 +3091,26 @@ static Expr* transform_pythag_canon_impl(const Expr* e) {
     static Expr* rules_to_cos = NULL;
     static Expr* rules_to_sinh = NULL;
     static Expr* rules_to_cosh = NULL;
+    /* Reciprocal-pair canonicalisation directions.  Same shape as the
+     * Sin/Cos rules above, but for the Pythagorean identities
+     *     Sec^2 = 1 + Tan^2,   Csc^2 = 1 + Cot^2
+     *     Sech^2 = 1 - Tanh^2, Csch^2 = -1 + Coth^2.
+     * These are needed for inputs like `(Sec[x]+1)(Sec[x]-1) - Tan[x]^2`
+     * whose post-Expand form `-1 + Sec[x]^2 - Tan[x]^2` collapses when
+     * Sec[x]^2 -> 1 + Tan[x]^2 (or Tan[x]^2 -> -1 + Sec[x]^2) is
+     * substituted globally.  Without these directions the round loop
+     * would have to ride out a TrigFactor pass (Sec -> 1/Cos rewrite +
+     * polynomial reformulation), which on the multi-variable Sec/Tan
+     * test case takes 700ms+ for a single call.  All eight rules guard
+     * with `n >= 2 && EvenQ[n]` to keep odd-power forms intact. */
+    static Expr* rules_to_tan = NULL;
+    static Expr* rules_to_sec = NULL;
+    static Expr* rules_to_cot = NULL;
+    static Expr* rules_to_csc = NULL;
+    static Expr* rules_to_tanh = NULL;
+    static Expr* rules_to_sech = NULL;
+    static Expr* rules_to_coth = NULL;
+    static Expr* rules_to_csch = NULL;
     if (!rules_to_sin) {
         rules_to_sin = parse_expression(
             "{ Cos[x_]^n_Integer /; n >= 2 && EvenQ[n] "
@@ -3077,6 +3124,30 @@ static Expr* transform_pythag_canon_impl(const Expr* e) {
         rules_to_cosh = parse_expression(
             "{ Sinh[x_]^n_Integer /; n >= 2 && EvenQ[n] "
             "    :> (-1 + Cosh[x]^2)^(n/2) }");
+        rules_to_tan = parse_expression(
+            "{ Sec[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (1 + Tan[x]^2)^(n/2) }");
+        rules_to_sec = parse_expression(
+            "{ Tan[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (-1 + Sec[x]^2)^(n/2) }");
+        rules_to_cot = parse_expression(
+            "{ Csc[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (1 + Cot[x]^2)^(n/2) }");
+        rules_to_csc = parse_expression(
+            "{ Cot[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (-1 + Csc[x]^2)^(n/2) }");
+        rules_to_tanh = parse_expression(
+            "{ Sech[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (1 - Tanh[x]^2)^(n/2) }");
+        rules_to_sech = parse_expression(
+            "{ Tanh[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (1 - Sech[x]^2)^(n/2) }");
+        rules_to_coth = parse_expression(
+            "{ Csch[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (-1 + Coth[x]^2)^(n/2) }");
+        rules_to_csch = parse_expression(
+            "{ Coth[x_]^n_Integer /; n >= 2 && EvenQ[n] "
+            "    :> (1 + Csch[x]^2)^(n/2) }");
     }
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
@@ -3107,9 +3178,20 @@ static Expr* transform_pythag_canon_impl(const Expr* e) {
         return best;
     }
 
-    Expr* rule_sets[4] = { rules_to_sin, rules_to_cos,
-                            rules_to_sinh, rules_to_cosh };
-    for (int i = 0; i < 4; i++) {
+    /* Twelve directions: the four base Cos/Sin/Cosh/Sinh substitutions
+     * plus the reciprocal-pair pairs (Sec<->Tan, Csc<->Cot, Sech<->Tanh,
+     * Csch<->Coth).  Per-direction cost is one ReplaceRepeated walk +
+     * one Expand; rules whose LHS head isn't present in `e` no-op out
+     * almost instantly because the matcher rejects on head mismatch.
+     * The keep-best-strict-win selection in the body below means firing
+     * a no-op direction is only an ms-scale speed cost, never a
+     * correctness cost. */
+    Expr* rule_sets[12] = {
+        rules_to_sin,  rules_to_cos,  rules_to_sinh, rules_to_cosh,
+        rules_to_tan,  rules_to_sec,  rules_to_cot,  rules_to_csc,
+        rules_to_tanh, rules_to_sech, rules_to_coth, rules_to_csch
+    };
+    for (int i = 0; i < 12; i++) {
         if (!rule_sets[i]) continue;
         Expr* ra_args[2] = { expr_copy(pre_expanded),
                               expr_copy(rule_sets[i]) };
@@ -3143,6 +3225,851 @@ static Expr* transform_pythag_canon_impl(const Expr* e) {
 
 static Expr* transform_pythag_canon(const Expr* e) {
     return simp_memo_wrap(e, "$PythagCanon", transform_pythag_canon_impl);
+}
+
+/* ----------------------------------------------------------------------- */
+/* PrimeRebase: Power[c, e] -> Power[p, k*e] for c = p^k integer (k >= 2)  */
+/* ----------------------------------------------------------------------- */
+
+/* Soundness:  for positive integer c = p^k,
+ *     c^e = (p^k)^e = p^(k*e)
+ * holds for ALL complex e -- the (a^b)^c = a^(b*c) identity is sound
+ * when a > 0, with no branch cut to worry about.
+ *
+ * Why this is needed:  picocas's canonical Power evaluator never rebases
+ * composite integer bases ((2^2)^x stays as (2^2)^x), so factors like
+ * 4^x and 2^x sit in different Times "base buckets" and the same-base
+ * exponent combine in `times.c` cannot cancel them.  After rebasing all
+ * such Power factors to a single canonical prime base, evaluate()
+ * collapses the combined exponents in a single pass.
+ *
+ * Coverage in Simplify search:
+ *     4^x * 2^(-x) * 2^(-x) - 1     ->  0  (top-level rebase)
+ *     f[4^x * 2^(-x) * 2^(-x)] - f[1]  ->  0  (rebase inside f's arg)
+ *     2^(2^(2 x) x) - 2^(x*4^x)     ->  0  (rebase inside an exponent)
+ *
+ * Branch-cut-sensitive shapes ((-4)^x via (-2), (a*b)^n distribution,
+ * (a/b)^n distribution) are deliberately NOT handled: those need
+ * PowerExpand semantics with explicit assumptions and remain documented
+ * limitations.
+ */
+
+/* If n is a perfect prime power p^k with k >= 2, set *p_out = p,
+ * *k_out = k and return true.  Otherwise return false (n is < 4, prime,
+ * or has at least two distinct prime factors).  Trial division up to
+ * sqrt(n); since picocas's prime-base inputs are typically small literals
+ * (4, 8, 9, 16, 25, 27, 32, 49, ...), this is microseconds-cheap. */
+static bool prime_rebase_check(int64_t n, int64_t* p_out, int64_t* k_out) {
+    if (n < 4) return false;
+    int64_t p;
+    if ((n & 1) == 0) {
+        p = 2;
+    } else {
+        for (p = 3; ; p += 2) {
+            if (p > n / p) return false;  /* n is prime */
+            if (n % p == 0) break;
+        }
+    }
+    int64_t k = 0;
+    int64_t m = n;
+    while (m > 1 && (m % p) == 0) {
+        m /= p;
+        k++;
+    }
+    if (m != 1 || k < 2) return false;
+    *p_out = p;
+    *k_out = k;
+    return true;
+}
+
+/* Returns true if e contains any Power[c, _] with c an EXPR_INTEGER >= 4
+ * that is a perfect prime power.  Cheap structural gate to avoid the full
+ * walk + Expand reseed when nothing can fire (the common case). */
+static bool has_rebaseable_power(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        if (base && base->type == EXPR_INTEGER && base->data.integer >= 4) {
+            int64_t p, k;
+            if (prime_rebase_check(base->data.integer, &p, &k)) return true;
+        }
+    }
+    if (has_rebaseable_power(head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (has_rebaseable_power(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Recursive structural copy that rebases every prime-power-base Power.
+ * Walks children before checking the current node so nested rebases
+ * (e.g. inside an exponent) bubble out.  Caller owns the returned tree. */
+static Expr* prime_rebase_copy(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t n = e->data.function.arg_count;
+    Expr* new_head = prime_rebase_copy(e->data.function.head);
+    Expr** new_args = NULL;
+    if (n > 0) {
+        new_args = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = prime_rebase_copy(e->data.function.args[i]);
+        }
+    }
+
+    int64_t p_val, k_val;
+    if (new_head && new_head->type == EXPR_SYMBOL
+        && new_head->data.symbol == SYM_Power
+        && n == 2 && new_args && new_args[0]
+        && new_args[0]->type == EXPR_INTEGER
+        && prime_rebase_check(new_args[0]->data.integer, &p_val, &k_val)) {
+        /* Build Power[p, Times[k, new_args[1]]] -- new_args[1] is the
+         * already-rebased exponent (so nested c'^e' inside the exponent
+         * has already been rewritten before we get here). */
+        Expr* p_expr = expr_new_integer(p_val);
+        Expr* k_expr = expr_new_integer(k_val);
+        Expr* times_args[2] = { k_expr, new_args[1] };
+        Expr* times_call = expr_new_function(
+            expr_new_symbol("Times"), times_args, 2);
+        Expr* power_args[2] = { p_expr, times_call };
+        Expr* result = expr_new_function(
+            expr_new_symbol("Power"), power_args, 2);
+        expr_free(new_args[0]);  /* the original integer c */
+        free(new_args);
+        expr_free(new_head);
+        return result;
+    }
+
+    Expr* result = expr_new_function(new_head, new_args, n);
+    if (new_args) free(new_args);
+    return result;
+}
+
+static Expr* transform_prime_rebase_impl(const Expr* e) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+
+    if (!has_rebaseable_power(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("PrimeRebase", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    Expr* rebased = prime_rebase_copy(e);
+    if (!rebased) rebased = expr_copy((Expr*)e);
+
+    /* Re-evaluate so canonical Times same-base combine collapses the
+     * rebased Power factors (e.g. 2^(2x) * 2^(-x) * 2^(-x) -> 2^0 = 1). */
+    Expr* result = evaluate(rebased);
+    if (!result) result = expr_copy((Expr*)e);
+
+    if (dbg) simp_debug_log("PrimeRebase", e, result,
+                            simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+static Expr* transform_prime_rebase(const Expr* e) {
+    return simp_memo_wrap(e, "$PrimeRebase", transform_prime_rebase_impl);
+}
+
+/* ----------------------------------------------------------------------- */
+/* PowerOneify: combine `A * Power[A, e]` -> `Power[A, e+1]` in Times      */
+/* ----------------------------------------------------------------------- */
+
+/* Soundness: Power[a, 1] = a holds for ALL a, so
+ *     A * Power[A, e] = Power[A, 1] * Power[A, e] = Power[A, e + 1]
+ * is universally valid -- no branch cut, no positivity assumption.
+ *
+ * Why this is needed: picocas's Times-canonical-form same-base combine
+ * groups factors by the base of any wrapping Power[base, exp].  A bare
+ * factor A whose canonical form is itself a Power expression (e.g.
+ * Power[x, -1] = 1/x) does NOT get re-bucketed as Power[A, 1] before
+ * grouping, so Times[Power[x,-1], Power[Power[x,-1], Log[2]]] keeps the
+ * two factors as distinct same-base bucket entries.  This blocks
+ *     (1/x)^Log[2] / x - (1/x)^(1 + Log[2])  ->  0
+ * from collapsing because the LHS Times can't combine the two (1/x)
+ * factors into one.
+ *
+ * Implementation: walk the tree; in every Times node, look for any pair
+ * (i, j) where args[j] = Power[B, e] and args[i] is structurally equal
+ * to B.  Replace args[j] with Power[B, e + 1] and drop args[i] (which is
+ * the bare A = Power[B, 1] absorbed into the exponent).  Then evaluate so
+ * canonical Plus folds the new exponent and so any nested rebase cascades.
+ *
+ * Inert when no Times node contains an A-and-Power[A,_] pair (the common
+ * case): one structural pass, microseconds.
+ */
+
+static Expr* power_oneify_walk(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t n = e->data.function.arg_count;
+    Expr* new_head = power_oneify_walk(e->data.function.head);
+    Expr** new_args = NULL;
+    if (n > 0) {
+        new_args = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = power_oneify_walk(e->data.function.args[i]);
+        }
+    }
+
+    /* Only Times triggers the implicit-one combine. */
+    bool combined = false;
+    if (new_head && new_head->type == EXPR_SYMBOL
+        && new_head->data.symbol == SYM_Times && n >= 2) {
+        for (size_t i = 0; i < n; i++) {
+            if (!new_args[i]) continue;
+            Expr* a = new_args[i];
+            for (size_t j = 0; j < n; j++) {
+                if (i == j || !new_args[j]) continue;
+                Expr* p = new_args[j];
+                if (p->type != EXPR_FUNCTION) continue;
+                Expr* ph = p->data.function.head;
+                if (!(ph && ph->type == EXPR_SYMBOL
+                      && ph->data.symbol == SYM_Power
+                      && p->data.function.arg_count == 2)) continue;
+                if (!expr_eq(p->data.function.args[0], a)) continue;
+                /* args[i] = A, args[j] = Power[A, e].  Combine. */
+                Expr* old_exp = p->data.function.args[1];
+                Expr* one = expr_new_integer(1);
+                Expr* plus_args[2] = { expr_copy(old_exp), one };
+                Expr* new_exp = expr_new_function(
+                    expr_new_symbol("Plus"), plus_args, 2);
+                Expr* power_args[2] = {
+                    expr_copy(p->data.function.args[0]), new_exp };
+                Expr* new_power = expr_new_function(
+                    expr_new_symbol("Power"), power_args, 2);
+                expr_free(new_args[j]);
+                new_args[j] = new_power;
+                expr_free(new_args[i]);
+                new_args[i] = NULL;
+                combined = true;
+                break;  /* args[i] consumed; move to next i */
+            }
+        }
+    }
+
+    if (combined) {
+        /* Compact dropped slots. */
+        size_t out_n = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (new_args[i]) new_args[out_n++] = new_args[i];
+        }
+        Expr* times_call = expr_new_function(new_head, new_args, out_n);
+        free(new_args);
+        Expr* result = evaluate(times_call);
+        if (!result) result = expr_copy((Expr*)e);
+        return result;
+    }
+
+    Expr* result = expr_new_function(new_head, new_args, n);
+    if (new_args) free(new_args);
+    return result;
+}
+
+static Expr* transform_power_oneify_impl(const Expr* e) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+    Expr* result = power_oneify_walk(e);
+    if (!result) result = expr_copy((Expr*)e);
+    if (dbg) simp_debug_log("PowerOneify", e, result,
+                            simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+static Expr* transform_power_oneify(const Expr* e) {
+    return simp_memo_wrap(e, "$PowerOneify", transform_power_oneify_impl);
+}
+
+/* ----------------------------------------------------------------------- */
+/* RadicalCanon: split Power[Rational[a,b],q] and rationalise -p/q powers  */
+/* ----------------------------------------------------------------------- */
+
+/* Two related canonicalisations that picocas's standard Power evaluator
+ * does NOT do, and which leave equivalent expressions in distinct shapes:
+ *
+ * (1)  Power[Rational[a, b], q]                       (a, b positive ints)
+ *           ->  Power[a, q] * Power[b, -q]
+ *      Soundness: a, b > 0, so (a/b)^q = a^q * b^(-q) for all complex q
+ *      with no branch cut.  Worked example:
+ *          Sqrt[1/2] = Power[Rational[1,2], 1/2]
+ *                    -> Power[1, 1/2] * Power[2, -1/2]
+ *                    -> 1/Sqrt[2]                    (after evaluate)
+ *
+ * (2)  Power[a, q]                          (a positive int >= 2,
+ *                                            q rational, q < 0, denom > 1)
+ *           ->  Power[a, r] * Rational[1, a^k]
+ *      where k = ceil(-q) >= 1, r = q + k in [0, 1).
+ *      Soundness: a > 0, so (a)^q = (a)^r / a^k.  Not folded back by
+ *      canonical Times because Rational[1, a^k] occupies a distinct base
+ *      bucket from Power[a, r].  Worked example:
+ *          Power[2, -1/2]  ->  Power[2, 1/2] * Rational[1, 2]
+ *                            =  Sqrt[2] / 2
+ *
+ * Why both: (1) alone pushes Sqrt[1/2] to 1/Sqrt[2] but leaves it in
+ * the negative-exponent form; the surrounding additive context still
+ * doesn't see it as same-shape with a Sqrt[2]/6 sibling.  (2) finishes
+ * the job by rationalising the denominator so additive cancellations
+ * fire.
+ *
+ * Coverage:
+ *     Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2] + Cos[y]/(3 Sqrt[6]) +
+ *     Sin[y]/(3 Sqrt[2]) - (Sqrt[6]/3) Sin[x+Pi/6] -
+ *     (Sqrt[6]/9) Sin[y+Pi/6]                                  ->  0
+ *
+ * Inert when the input contains no Power[Rational, _] or no
+ * Power[positive_int, negative_rational].
+ */
+
+/* Compute a^k with overflow-guard.  Returns false on overflow or
+ * a, k out of range; the caller falls back to leaving the term alone. */
+static bool radical_canon_pow_int(int64_t a, int64_t k, int64_t* out) {
+    if (k < 0 || k > 62) return false;
+    int64_t v = 1;
+    for (int64_t i = 0; i < k; i++) {
+        if (a != 0 && v > INT64_MAX / (a > 0 ? a : -a)) return false;
+        v *= a;
+    }
+    *out = v;
+    return true;
+}
+
+/* Match Rational[num, den] with den > 1, returning num and den.  The
+ * canonical evaluator never produces Rational[_, 1] (it folds to a bare
+ * integer) so we only see denominator > 1 here. */
+static bool radical_canon_get_rational(const Expr* e,
+                                        int64_t* num, int64_t* den) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Rational) return false;
+    if (e->data.function.arg_count != 2) return false;
+    Expr* na = e->data.function.args[0];
+    Expr* da = e->data.function.args[1];
+    if (na->type != EXPR_INTEGER || da->type != EXPR_INTEGER) return false;
+    *num = na->data.integer;
+    *den = da->data.integer;
+    return true;
+}
+
+/* If e = Power[positive_integer_>=2, Rational[num<0, den>1]], rewrite to
+ *     Times[Power[a, Rational[r_num, den]], Rational[1, a^k]]
+ * Returns NULL when the rule does not apply. */
+static Expr* radical_canon_rationalise_negexp(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Power) return NULL;
+    if (e->data.function.arg_count != 2) return NULL;
+    Expr* base = e->data.function.args[0];
+    Expr* exp  = e->data.function.args[1];
+    if (base->type != EXPR_INTEGER || base->data.integer < 2) return NULL;
+    int64_t num, den;
+    if (!radical_canon_get_rational(exp, &num, &den)) return NULL;
+    if (num >= 0 || den <= 1) return NULL;
+
+    int64_t a = base->data.integer;
+    int64_t neg_num = -num;
+    int64_t k = neg_num / den;
+    if (neg_num % den != 0) k++;
+    int64_t r_num = num + k * den;  /* r_num in [0, den) */
+
+    int64_t a_k;
+    if (!radical_canon_pow_int(a, k, &a_k)) return NULL;
+    if (a_k < 1) return NULL;
+
+    /* Build Power[a, Rational[r_num, den]].  When r_num == 0, Power
+     * evaluates to 1; when r_num == den (impossible here since
+     * r_num < den), Power[a, 1] = a. */
+    Expr* pow_args[2] = {
+        expr_new_integer(a),
+        expr_new_function(
+            expr_new_symbol("Rational"),
+            (Expr*[]){ expr_new_integer(r_num), expr_new_integer(den) }, 2)
+    };
+    Expr* pow_call = expr_new_function(
+        expr_new_symbol("Power"), pow_args, 2);
+
+    /* Rational[1, a^k].  When a^k == 1 (impossible for a >= 2, k >= 1),
+     * the evaluator folds to the integer 1. */
+    Expr* recip = expr_new_function(
+        expr_new_symbol("Rational"),
+        (Expr*[]){ expr_new_integer(1), expr_new_integer(a_k) }, 2);
+
+    Expr* times_args[2] = { pow_call, recip };
+    Expr* times_call = expr_new_function(
+        expr_new_symbol("Times"), times_args, 2);
+    Expr* out = evaluate(times_call);
+    return out ? out : expr_new_function(
+        expr_new_symbol("Times"), times_args, 2);
+}
+
+/* If e = Power[Rational[a, b], q] with positive integers a, b > 1,
+ * rewrite to Times[Power[a, q], Power[b, -q]].  Returns NULL when not
+ * applicable. */
+static Expr* radical_canon_split_rational_base(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Power) return NULL;
+    if (e->data.function.arg_count != 2) return NULL;
+    Expr* base = e->data.function.args[0];
+    Expr* exp  = e->data.function.args[1];
+    int64_t a, b;
+    if (!radical_canon_get_rational(base, &a, &b)) return NULL;
+    if (a < 1 || b < 2) return NULL;
+
+    /* Power[a, q] * Power[b, -q].  a may be 1 (Sqrt[1/n] case): then
+     * Power[1, q] evaluates to 1 and we're left with Power[b, -q]. */
+    Expr* pow_a_args[2] = {
+        expr_new_integer(a), expr_copy(exp)
+    };
+    Expr* pow_a = expr_new_function(
+        expr_new_symbol("Power"), pow_a_args, 2);
+
+    Expr* neg_exp_args[2] = {
+        expr_new_integer(-1), expr_copy(exp)
+    };
+    Expr* neg_exp = expr_new_function(
+        expr_new_symbol("Times"), neg_exp_args, 2);
+    Expr* pow_b_args[2] = {
+        expr_new_integer(b), neg_exp
+    };
+    Expr* pow_b = expr_new_function(
+        expr_new_symbol("Power"), pow_b_args, 2);
+
+    Expr* times_args[2] = { pow_a, pow_b };
+    Expr* times_call = expr_new_function(
+        expr_new_symbol("Times"), times_args, 2);
+    Expr* out = evaluate(times_call);
+    return out;
+}
+
+/* Recursive walker: applies both rules at each Power node and recurses
+ * into children.  Returns a freshly allocated tree (caller owns). */
+static Expr* radical_canon_walk(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t n = e->data.function.arg_count;
+    Expr* new_head = radical_canon_walk(e->data.function.head);
+    Expr** new_args = NULL;
+    if (n > 0) {
+        new_args = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = radical_canon_walk(e->data.function.args[i]);
+        }
+    }
+
+    Expr* rebuilt = expr_new_function(new_head, new_args, n);
+    if (new_args) free(new_args);
+
+    /* Try Rational-base split first (may produce a Power node that the
+     * negative-exponent rule then handles). */
+    Expr* split = radical_canon_split_rational_base(rebuilt);
+    if (split) {
+        expr_free(rebuilt);
+        rebuilt = split;
+    }
+    Expr* rat = radical_canon_rationalise_negexp(rebuilt);
+    if (rat) {
+        expr_free(rebuilt);
+        rebuilt = rat;
+    }
+    return rebuilt;
+}
+
+static Expr* transform_radical_canon_impl(const Expr* e) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+    Expr* walked = radical_canon_walk(e);
+    if (!walked) walked = expr_copy((Expr*)e);
+    /* Re-evaluate so canonical Plus/Times fold the rewritten tree --
+     * the walker only evaluates at each Power-level rewrite, leaving the
+     * surrounding Plus/Times in unevaluated form (e.g. an arg pair like
+     * 1/2 Sqrt[2] + -1 (1/2 Sqrt[2]) won't auto-cancel without this). */
+    Expr* result = evaluate(walked);
+    if (!result) result = expr_copy((Expr*)e);
+    if (dbg) simp_debug_log("RadicalCanon", e, result,
+                            simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+static Expr* transform_radical_canon(const Expr* e) {
+    return simp_memo_wrap(e, "$RadicalCanon", transform_radical_canon_impl);
+}
+
+/* ----------------------------------------------------------------------- */
+/* TanAddition: rewrite Tan[c]/Cot[c] when c = a+b and Tan[a],Tan[b] occur */
+/* ----------------------------------------------------------------------- */
+
+/* The standard angle-addition identities:
+ *     Tan[a + b] = (Tan[a] + Tan[b]) / (1 - Tan[a] Tan[b])
+ *     Cot[a + b] = (1 - Tan[a] Tan[b]) / (Tan[a] + Tan[b])
+ * are always sound (away from the isolated singularities where the
+ * denominator vanishes -- inside Simplify those are ignored).
+ *
+ * picocas's TrigExpand fires only when the argument is *literally* a
+ * Plus, so it can rewrite Tan[x+y] but NOT Tan[5] -- even when the
+ * surrounding expression also contains Tan[2] and Tan[3] making
+ * Tan[5] = Tan[2 + 3] usable.  This transform performs that recognition:
+ *
+ *   1. Walk the input collecting every distinct expression that appears
+ *      as the argument of any Tan, Cot, Sin, Cos, Sec, or Csc head.
+ *   2. For each ordered pair (a, b) in that set with a != b, evaluate
+ *      a + b.  If the sum is also in the set, the triple (a, b, c=a+b)
+ *      witnesses an addition-formula opportunity.
+ *   3. For each such triple, build a RuleDelayed list that rewrites the
+ *      heads which actually appear at c (Tan[c], Cot[c], etc.) using the
+ *      angle-addition formula in terms of Tan[a], Tan[b] (or Sin/Cos[a]
+ *      and Sin/Cos[b], for Sin[c] / Cos[c] occurrences).
+ *   4. Apply ReplaceAll with the constructed rules, then evaluate +
+ *      Together + Cancel so the polynomial cancellation fires.
+ *   5. Score-gated: keep only strict wins.  Inert when no pair-sum match
+ *      exists in the input (the common case).
+ *
+ * Coverage of the case-6 shape:
+ *     Tan[2] Tan[3] B A - (-Tan[2]/Tan[5] - Tan[3]/Tan[5] + 1) B A  ->  0
+ * via the (2, 3, 5) triple's Cot[5] -> (1 - Tan[2] Tan[3]) / (Tan[2] +
+ * Tan[3]) substitution.  Symbolic shapes (Tan[x], Tan[y], Tan[x+y])
+ * also work; the integer-arg case is just the most surprising one.
+ */
+
+typedef struct {
+    Expr** items;       /* Borrowed pointers into the input tree. */
+    size_t count;
+    size_t cap;
+} TrigArgSet;
+
+static void tas_init(TrigArgSet* s) {
+    s->items = NULL; s->count = 0; s->cap = 0;
+}
+static void tas_free(TrigArgSet* s) {
+    free(s->items);
+    s->items = NULL; s->count = 0; s->cap = 0;
+}
+static bool tas_contains(const TrigArgSet* s, const Expr* e) {
+    for (size_t i = 0; i < s->count; i++) {
+        if (expr_eq(s->items[i], e)) return true;
+    }
+    return false;
+}
+static void tas_add_borrowed(TrigArgSet* s, Expr* e) {
+    if (tas_contains(s, e)) return;
+    if (s->count == s->cap) {
+        s->cap = s->cap ? s->cap * 2 : 8;
+        s->items = (Expr**)realloc(s->items, sizeof(Expr*) * s->cap);
+    }
+    s->items[s->count++] = e;
+}
+
+static bool is_addition_trig_head(const char* h) {
+    return h == SYM_Tan || h == SYM_Cot || h == SYM_Sin
+        || h == SYM_Cos || h == SYM_Sec || h == SYM_Csc;
+}
+
+static void collect_addition_trig_args(const Expr* e, TrigArgSet* set) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL
+        && is_addition_trig_head(head->data.symbol)
+        && e->data.function.arg_count == 1) {
+        tas_add_borrowed(set, e->data.function.args[0]);
+    }
+    if (head) collect_addition_trig_args(head, set);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        collect_addition_trig_args(e->data.function.args[i], set);
+    }
+}
+
+/* Returns true if `e` contains Power[head[c], _] or head[c] for the
+ * given trig head symbol.  A cheap substring presence check without a
+ * full pattern match. */
+static bool tree_contains_trig_at(const Expr* e, const char* head_sym,
+                                   const Expr* arg) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL
+        && head->data.symbol == head_sym
+        && e->data.function.arg_count == 1
+        && expr_eq(e->data.function.args[0], arg)) {
+        return true;
+    }
+    if (head && tree_contains_trig_at(head, head_sym, arg)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (tree_contains_trig_at(e->data.function.args[i], head_sym, arg)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static Expr* mk_unary_call(const char* head, Expr* arg) {
+    Expr* args[1] = { arg };
+    return expr_new_function(expr_new_symbol(head), args, 1);
+}
+
+/* Build (Tan[a]+Tan[b]) and (1 - Tan[a] Tan[b]) shape components.  Each
+ * call returns an owned tree.  Templates for the four Tan/Cot/Sin/Cos
+ * substitution RHSs are assembled by callers from these primitives. */
+static Expr* mk_tan_sum(const Expr* a, const Expr* b) {
+    Expr* args[2] = {
+        mk_unary_call("Tan", expr_copy((Expr*)a)),
+        mk_unary_call("Tan", expr_copy((Expr*)b))
+    };
+    return expr_new_function(expr_new_symbol("Plus"), args, 2);
+}
+static Expr* mk_one_minus_tan_prod(const Expr* a, const Expr* b) {
+    Expr* prod_args[3] = {
+        expr_new_integer(-1),
+        mk_unary_call("Tan", expr_copy((Expr*)a)),
+        mk_unary_call("Tan", expr_copy((Expr*)b))
+    };
+    Expr* prod = expr_new_function(
+        expr_new_symbol("Times"), prod_args, 3);
+    Expr* args[2] = { expr_new_integer(1), prod };
+    return expr_new_function(expr_new_symbol("Plus"), args, 2);
+}
+
+static Expr* mk_div(Expr* num, Expr* den) {
+    Expr* inv_args[2] = { den, expr_new_integer(-1) };
+    Expr* inv = expr_new_function(
+        expr_new_symbol("Power"), inv_args, 2);
+    Expr* args[2] = { num, inv };
+    return expr_new_function(expr_new_symbol("Times"), args, 2);
+}
+
+/* Append rule list entries (RuleDelayed nodes) for the heads that
+ * actually appear at `c` in `input`. */
+static void append_addition_rules_for_triple(Expr* input,
+                                              const Expr* a, const Expr* b,
+                                              const Expr* c,
+                                              Expr*** rules, size_t* rcount,
+                                              size_t* rcap) {
+    #define RAPPEND(node) do {                                \
+        if (*rcount == *rcap) {                               \
+            *rcap = *rcap ? *rcap * 2 : 8;                    \
+            *rules = (Expr**)realloc(*rules,                  \
+                                      sizeof(Expr*) * (*rcap)); \
+        }                                                     \
+        (*rules)[(*rcount)++] = (node);                       \
+    } while (0)
+
+    if (tree_contains_trig_at(input, SYM_Tan, c)) {
+        Expr* rhs = mk_div(mk_tan_sum(a, b), mk_one_minus_tan_prod(a, b));
+        Expr* lhs = mk_unary_call("Tan", expr_copy((Expr*)c));
+        Expr* rule_args[2] = { lhs, rhs };
+        Expr* rule = expr_new_function(
+            expr_new_symbol("RuleDelayed"), rule_args, 2);
+        RAPPEND(rule);
+    }
+    if (tree_contains_trig_at(input, SYM_Cot, c)) {
+        Expr* rhs = mk_div(mk_one_minus_tan_prod(a, b), mk_tan_sum(a, b));
+        Expr* lhs = mk_unary_call("Cot", expr_copy((Expr*)c));
+        Expr* rule_args[2] = { lhs, rhs };
+        Expr* rule = expr_new_function(
+            expr_new_symbol("RuleDelayed"), rule_args, 2);
+        RAPPEND(rule);
+    }
+    /* Sin / Cos / Sec / Csc additions: similar shape, formulas
+     *     Sin[c] = Sin[a] Cos[b] + Cos[a] Sin[b]
+     *     Cos[c] = Cos[a] Cos[b] - Sin[a] Sin[b]
+     *     Sec[c] = 1 / (Cos[a] Cos[b] - Sin[a] Sin[b])
+     *     Csc[c] = 1 / (Sin[a] Cos[b] + Cos[a] Sin[b])
+     * Built only when the matching head actually occurs at c. */
+    bool need_sin = tree_contains_trig_at(input, SYM_Sin, c);
+    bool need_csc = tree_contains_trig_at(input, SYM_Csc, c);
+    bool need_cos = tree_contains_trig_at(input, SYM_Cos, c);
+    bool need_sec = tree_contains_trig_at(input, SYM_Sec, c);
+    if (need_sin || need_csc) {
+        /* Sin[a] Cos[b] + Cos[a] Sin[b] */
+        Expr* sa_cb_args[2] = {
+            mk_unary_call("Sin", expr_copy((Expr*)a)),
+            mk_unary_call("Cos", expr_copy((Expr*)b))
+        };
+        Expr* sa_cb = expr_new_function(
+            expr_new_symbol("Times"), sa_cb_args, 2);
+        Expr* ca_sb_args[2] = {
+            mk_unary_call("Cos", expr_copy((Expr*)a)),
+            mk_unary_call("Sin", expr_copy((Expr*)b))
+        };
+        Expr* ca_sb = expr_new_function(
+            expr_new_symbol("Times"), ca_sb_args, 2);
+        Expr* sin_args[2] = { sa_cb, ca_sb };
+        Expr* sin_rhs = expr_new_function(
+            expr_new_symbol("Plus"), sin_args, 2);
+        if (need_sin) {
+            Expr* lhs = mk_unary_call("Sin", expr_copy((Expr*)c));
+            Expr* rule_args[2] = { lhs, expr_copy(sin_rhs) };
+            Expr* rule = expr_new_function(
+                expr_new_symbol("RuleDelayed"), rule_args, 2);
+            RAPPEND(rule);
+        }
+        if (need_csc) {
+            Expr* lhs = mk_unary_call("Csc", expr_copy((Expr*)c));
+            Expr* inv_args[2] = { expr_copy(sin_rhs), expr_new_integer(-1) };
+            Expr* inv = expr_new_function(
+                expr_new_symbol("Power"), inv_args, 2);
+            Expr* rule_args[2] = { lhs, inv };
+            Expr* rule = expr_new_function(
+                expr_new_symbol("RuleDelayed"), rule_args, 2);
+            RAPPEND(rule);
+        }
+        expr_free(sin_rhs);
+    }
+    if (need_cos || need_sec) {
+        /* Cos[a] Cos[b] - Sin[a] Sin[b] */
+        Expr* ca_cb_args[2] = {
+            mk_unary_call("Cos", expr_copy((Expr*)a)),
+            mk_unary_call("Cos", expr_copy((Expr*)b))
+        };
+        Expr* ca_cb = expr_new_function(
+            expr_new_symbol("Times"), ca_cb_args, 2);
+        Expr* neg_sa_sb_args[3] = {
+            expr_new_integer(-1),
+            mk_unary_call("Sin", expr_copy((Expr*)a)),
+            mk_unary_call("Sin", expr_copy((Expr*)b))
+        };
+        Expr* neg_sa_sb = expr_new_function(
+            expr_new_symbol("Times"), neg_sa_sb_args, 3);
+        Expr* cos_args[2] = { ca_cb, neg_sa_sb };
+        Expr* cos_rhs = expr_new_function(
+            expr_new_symbol("Plus"), cos_args, 2);
+        if (need_cos) {
+            Expr* lhs = mk_unary_call("Cos", expr_copy((Expr*)c));
+            Expr* rule_args[2] = { lhs, expr_copy(cos_rhs) };
+            Expr* rule = expr_new_function(
+                expr_new_symbol("RuleDelayed"), rule_args, 2);
+            RAPPEND(rule);
+        }
+        if (need_sec) {
+            Expr* lhs = mk_unary_call("Sec", expr_copy((Expr*)c));
+            Expr* inv_args[2] = { expr_copy(cos_rhs), expr_new_integer(-1) };
+            Expr* inv = expr_new_function(
+                expr_new_symbol("Power"), inv_args, 2);
+            Expr* rule_args[2] = { lhs, inv };
+            Expr* rule = expr_new_function(
+                expr_new_symbol("RuleDelayed"), rule_args, 2);
+            RAPPEND(rule);
+        }
+        expr_free(cos_rhs);
+    }
+    #undef RAPPEND
+}
+
+static Expr* transform_tan_addition_impl(const Expr* e) {
+    bool dbg = simp_debug_enabled();
+    clock_t t0 = dbg ? clock() : 0;
+
+    /* Cheap gate: if no trig head appears in the input, we cannot collect
+     * any args and the rule list will be empty. */
+    if (!has_pythag_head(e)) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("TanAddition", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    TrigArgSet args; tas_init(&args);
+    collect_addition_trig_args(e, &args);
+    if (args.count < 3) {
+        /* Need at least three distinct args to have a (a, b, c=a+b) triple. */
+        tas_free(&args);
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("TanAddition", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    Expr** rules = NULL;
+    size_t rcount = 0, rcap = 0;
+    Expr* input_copy = (Expr*)e;  /* tree_contains_trig_at takes const */
+    for (size_t i = 0; i < args.count; i++) {
+        for (size_t j = 0; j < args.count; j++) {
+            if (i == j) continue;
+            Expr* sum_args[2] = {
+                expr_copy(args.items[i]), expr_copy(args.items[j])
+            };
+            Expr* sum_call = expr_new_function(
+                expr_new_symbol("Plus"), sum_args, 2);
+            Expr* sum = evaluate(sum_call);
+            if (!sum) continue;
+            if (tas_contains(&args, sum)) {
+                /* Use the canonical sum as `c` for the rule LHS.  The
+                 * input might contain Tan[Plus[a, b]] (if a + b doesn't
+                 * collapse to a literal) or Tan[5] (if a, b are
+                 * integers), so we need to use the actually-occurring
+                 * representative -- pull that out of the args set. */
+                Expr* canonical_c = NULL;
+                for (size_t k = 0; k < args.count; k++) {
+                    if (expr_eq(args.items[k], sum)) {
+                        canonical_c = args.items[k];
+                        break;
+                    }
+                }
+                if (canonical_c) {
+                    append_addition_rules_for_triple(
+                        input_copy,
+                        args.items[i], args.items[j], canonical_c,
+                        &rules, &rcount, &rcap);
+                }
+            }
+            expr_free(sum);
+        }
+    }
+    tas_free(&args);
+
+    if (rcount == 0) {
+        free(rules);
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("TanAddition", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    /* Assemble rule list { rule1, rule2, ... } and apply ReplaceAll. */
+    Expr* rule_list = expr_new_function(
+        expr_new_symbol("List"), rules, rcount);
+    free(rules);
+    Expr* ra_args[2] = { expr_copy((Expr*)e), rule_list };
+    Expr* ra_call = expr_new_function(
+        expr_new_symbol("ReplaceAll"), ra_args, 2);
+    Expr* substituted = evaluate(ra_call);
+    if (!substituted) {
+        Expr* out = expr_copy((Expr*)e);
+        if (dbg) simp_debug_log("TanAddition", e, out,
+                                simp_debug_elapsed_ms(t0));
+        return out;
+    }
+
+    /* Together + Cancel turns the rational expression into a single
+     * fraction, then reduces by polynomial GCD.  When the substitution
+     * was witnessing a true identity (the case-6 shape), this drops to
+     * 0 cleanly. */
+    Expr* tg_args[1] = { substituted };
+    Expr* tg_call = expr_new_function(
+        expr_new_symbol("Together"), tg_args, 1);
+    Expr* tg = evaluate(tg_call);
+    Expr* result = tg ? tg : expr_copy((Expr*)e);
+
+    Expr* cn_args[1] = { result };
+    Expr* cn_call = expr_new_function(
+        expr_new_symbol("Cancel"), cn_args, 1);
+    Expr* cn = evaluate(cn_call);
+    if (cn) result = cn;
+
+    if (dbg) simp_debug_log("TanAddition", e, result,
+                            simp_debug_elapsed_ms(t0));
+    return result;
+}
+
+static Expr* transform_tan_addition(const Expr* e) {
+    return simp_memo_wrap(e, "$TanAddition", transform_tan_addition_impl);
 }
 
 /* ----------------------------------------------------------------------- */
@@ -3847,6 +4774,23 @@ static void update_best(Expr** best, size_t* best_score, const Expr* c,
         *best = expr_copy((Expr*)c);
         *best_score = s;
     }
+}
+
+/* True when `best` is the literal integer 0 -- the canonical
+ * "input was an identity" outcome. Once Simplify reaches 0 there
+ * is nothing left to improve, but the round loop would otherwise
+ * keep grinding through the remaining transforms (Factor, TrigFactor,
+ * etc.) on the still-large seeds. Early-exiting on this hit
+ * trims the (Sin[x]+Cos[x])^4 - (1+Sin[2x])^2 case from ~220 ms to a
+ * few ms by stopping as soon as TrigReduce produces 0.
+ *
+ * Restricted to literal 0 (rather than "any atomic with score 1") so
+ * a custom complexity_func that ranks structurally-larger forms below
+ * an atomic still gets full search coverage. The literal-zero case
+ * is unambiguous: no transform we apply can produce a structurally
+ * simpler form than 0. */
+static bool simp_best_is_zero(const Expr* best) {
+    return best && best->type == EXPR_INTEGER && best->data.integer == 0;
 }
 
 /* Apply Collect[expr, v] for each free variable v of expr, scoring the
@@ -4572,6 +5516,70 @@ static Expr* simp_split_multiplicative(const Expr* input,
  * domain, and general inputs need the full machinery. */
 static Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
                            const Expr* complexity_func) {
+    /* Universal Power-identity seeds: PrimeRebase and PowerOneify are
+     * cheap, inert-by-default rewrites that benefit every pipeline
+     * (POLYNOMIAL, RATIONAL, LOGEXP, TRIG, GENERAL alike).  Both are
+     * idempotent on their fixed point, so the strict-win recursion
+     * below terminates after at most one rebase + one oneify cascade.
+     * Score-gated: only adopt the rewrite when it strictly beats the
+     * input; otherwise fall through to the normal classifier route. */
+    {
+        Expr* alt = transform_prime_rebase(input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_alt = score_with_func(alt, complexity_func);
+                size_t s_in = score_with_func(input, complexity_func);
+                if (s_alt < s_in) {
+                    Expr* result = simp_dispatch(alt, ctx, complexity_func);
+                    expr_free(alt);
+                    return result;
+                }
+            }
+            expr_free(alt);
+        }
+    }
+    {
+        Expr* alt = transform_power_oneify(input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_alt = score_with_func(alt, complexity_func);
+                size_t s_in = score_with_func(input, complexity_func);
+                if (s_alt < s_in) {
+                    Expr* result = simp_dispatch(alt, ctx, complexity_func);
+                    expr_free(alt);
+                    return result;
+                }
+            }
+            expr_free(alt);
+        }
+    }
+    /* RadicalCanon: split Power[Rational[a,b], q] into Power[a,q] *
+     * Power[b,-q] and rationalise Power[positive_int, negative_rational]
+     * into Power[..., positive_residue] / a^k.  Forces equivalent radical
+     * shapes (Sqrt[1/2] vs 1/Sqrt[2] vs Sqrt[2]/2) into a single canonical
+     * representation so additive cancellations like
+     *     -Sqrt[1/2]/3 + Sqrt[2]/6  ->  0
+     * fire instead of being trapped behind shape divergence.  This is
+     * NOT a strict-win gate: even when the score is the same, the rewrite
+     * is correctness-preserving and always yields the more useful form
+     * for downstream additive cancellation; the score check below uses
+     * <= rather than <. */
+    {
+        Expr* alt = transform_radical_canon(input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_alt = score_with_func(alt, complexity_func);
+                size_t s_in = score_with_func(input, complexity_func);
+                if (s_alt <= s_in) {
+                    Expr* result = simp_dispatch(alt, ctx, complexity_func);
+                    expr_free(alt);
+                    return result;
+                }
+            }
+            expr_free(alt);
+        }
+    }
+
     /* Try to decompose a Plus into disjoint-variable components and
      * simplify each independently. Each connected component's sub-Plus
      * cannot itself decompose further, so the recursion through
@@ -4772,6 +5780,42 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
             expr_free(alt);
         }
     }
+    if (simp_best_is_zero(best)) goto search_done;
+
+    /* TrigReduce seed.  The product-to-sum / power-reduction pass
+     * collapses inputs like `(Sin[x]+Cos[x])^4 - (1+Sin[2x])^2` directly
+     * to 0 (after internal Expand + angle-addition collapse) in a few
+     * ms.  The same call appears later in the round loop's
+     * SIMP_TRANSFORMS table at index 11, which means without this seed
+     * the search runs Factor (~28 ms), TrigFactor (~14 ms),
+     * FactorSquareFree (~9 ms), etc. on the input *before* TrigReduce
+     * gets a turn, even though TrigReduce alone is enough.  Promoting
+     * it to the seed phase + relying on simp_best_is_zero to short-
+     * circuit afterwards turns ~220 ms into ~5 ms on this shape.  Inert
+     * (returns the input unchanged via the trig_memo no-op cycle) when
+     * the input has no trig-product structure to reduce. */
+    if (transform_can_fire("TrigReduce", input, NULL)) {
+        Expr* alt = traced_call_unary("TrigReduce", input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                update_best(&best, &best_score, alt, complexity_func);
+                size_t alt_score = score_with_func(alt, complexity_func);
+                size_t input_score = score_with_func(input, complexity_func);
+                /* Same blow-up guard TrigRoundtrip uses: keep the wins,
+                 * drop catastrophically larger candidates from the seed
+                 * set so they don't seed a wave of expensive Factor/
+                 * TrigFactor work in subsequent rounds. */
+                if (alt_score <= 2 * input_score + 8) {
+                    cs_add_or_free(&seeds, alt);
+                } else {
+                    expr_free(alt);
+                }
+            } else {
+                expr_free(alt);
+            }
+        }
+    }
+    if (simp_best_is_zero(best)) goto search_done;
 
     /* Trig-at-rational-Pi canonicalization seed.  Picks a unique
      * Sin-vs-Cos / Tan-vs-Cot / Sec-vs-Csc representation per pair,
@@ -4789,6 +5833,24 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
             expr_free(alt);
         }
     }
+
+    /* TanAddition seed: search for triples (a, b, c=a+b) among the trig
+     * args appearing in the input and rewrite Tan[c]/Cot[c]/etc. via
+     * the angle-addition formula in terms of Tan[a], Tan[b].  Catches
+     * shapes like Tan[2] Tan[3] - 1 + (Tan[2]+Tan[3])/Tan[5] -> 0 (since
+     * 5 = 2+3) which would otherwise go un-recognised because TrigExpand
+     * only fires on literal-Plus arguments.  Inert when fewer than three
+     * distinct trig args appear or when no pair sums to a third arg. */
+    {
+        Expr* alt = transform_tan_addition(input);
+        if (alt && !expr_eq(alt, input)) {
+            update_best(&best, &best_score, alt, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+    if (simp_best_is_zero(best)) goto search_done;
 
     /* Half-angle tangent / Tanh seed. Idempotent on inputs without
      * the Sin/(1+Cos) (resp. Sinh/(1+Cosh)) shape. */
@@ -5127,7 +6189,9 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         cs_free(&seeds);
         seeds = next;
         if (seeds.count == 0) break;
+        if (simp_best_is_zero(best)) break;
     }
+search_done:
     cs_free(&seeds);
     if (abs_pre) expr_free(abs_pre);
     return best;
@@ -5280,6 +6344,45 @@ static Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
                 size_t s_in = score_with_func(input, complexity_func);
                 size_t s_alt = score_with_func(alt, complexity_func);
                 if (s_alt < s_in) {
+                    canon_owned = alt;
+                    input = alt;
+                } else {
+                    expr_free(alt);
+                }
+            } else {
+                expr_free(alt);
+            }
+        }
+    }
+
+    /* Top-level TrigReduce short-circuit.  Parallel to the PythagCanon
+     * one above: try product-to-sum + angle-addition collapse on the
+     * whole input before descending into children.  Cases where the
+     * input is a sum of two trig "compounds" whose TrigReduce'd forms
+     * cancel -- e.g.
+     *     (Sin[x]+Cos[x])^4 - (1 + Sin[2 x])^2  -> 0
+     * -- bottom-up descent would call simp_search on each child
+     * (running Factor/TrigFactor/etc. on each), then notice the
+     * cancellation only at the root.  TrigReduce on the whole input
+     * sees both summands as products of single-arg trig calls and
+     * collapses them to the same `1/2 (3 - Cos[4 x] + 4 Sin[2 x])` form,
+     * after which Plus auto-cancels and the result is 0.
+     *
+     * Same gating as the PythagCanon short-circuit: only at depth == 0
+     * (so the recursive simp_bottomup call below cannot retry it), and
+     * only adopt the result when it's a strict score win -- otherwise
+     * fall through to the normal bottom-up search.  The transform_can_fire
+     * gate keeps non-trig and non-Plus/Times inputs out, so the
+     * extra call costs a few microseconds at worst. */
+    if (depth == 0 &&
+        transform_can_fire("TrigReduce", input, NULL)) {
+        Expr* alt = traced_call_unary("TrigReduce", input);
+        if (alt) {
+            if (!expr_eq(alt, input)) {
+                size_t s_in = score_with_func(input, complexity_func);
+                size_t s_alt = score_with_func(alt, complexity_func);
+                if (s_alt < s_in) {
+                    if (canon_owned) expr_free(canon_owned);
                     canon_owned = alt;
                     input = alt;
                 } else {

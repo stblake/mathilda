@@ -724,6 +724,336 @@ void test_simplify_pythag_canon_keeps_one_minus_sin_squared(void) {
     assert_eval_eq("Simplify[1 - Cos[x]^2]", "Sin[x]^2", 0);
 }
 
+/* ---- User-reported Simplify cases (round 2): trig reciprocal-pair
+ * Pythagoreans, double-angle/triple-angle products, and assorted
+ * power-arithmetic identities. The first batch (Sec/Tan, (Sin+Cos)^4)
+ * was the motivation for adding Sec/Csc/Sech/Csch to PythagCanon and
+ * for promoting TrigReduce into the depth-0 short-circuit; without
+ * those, cases (a)-(b) hung or took 200ms+. */
+
+void test_simplify_sec_tan_pythag_two_var(void) {
+    /* (Sec[x]+1)(Sec[x]-1) * 2(Sec[y]-1)(Sec[y]+1) * 9(Sec[y]-1)(Sec[y]+1)
+     * (x-1) - 18 (x-1) Tan[x]^2 Tan[y]^4 = 0.
+     * Pre-fix: hung (PythagReduce skipped because has_pythag_head missed
+     * Sec/Csc; PythagCanon had no Sec->Tan substitution direction).
+     * Post-fix: ~5 ms via PythagCanon's Sec[x]^(2k) -> (1+Tan[x]^2)^k
+     * direction collapsing the two halves to identical Tan^2 Tan^4 forms. */
+    assert_eval_eq(
+        "Simplify["
+        "(Sec[x]+1)*(Sec[x]-1) * (Sec[y]-1)*2*(Sec[y]+1) *"
+        "(3*(Sec[y]-1))*(3*(Sec[y]+1)) * (x-1) -"
+        "18*((x-1)*Tan[x]^2*Tan[y]^4) ]",
+        "0", 0);
+}
+
+void test_simplify_csc_cot_pythag_two_var(void) {
+    /* Reciprocal-pair analogue of the Cos/Sin and Sec/Tan cases,
+     * exercising the Csc -> Cot direction added to PythagCanon. */
+    assert_eval_eq(
+        "Simplify["
+        "(Csc[x]+1)*(Csc[x]-1) * (Csc[y]-1)*2*(Csc[y]+1) *"
+        "(3*(Csc[y]-1))*(3*(Csc[y]+1)) * (x-1) -"
+        "18*((x-1)*Cot[x]^2*Cot[y]^4) ]",
+        "0", 0);
+}
+
+void test_simplify_sin_plus_cos_fourth_power(void) {
+    /* (Sin[x]+Cos[x])^4 - (1+Sin[2x])^2 = 0 by
+     *   (Sin+Cos)^2 = 1 + 2 Sin Cos = 1 + Sin[2x].
+     * TrigReduce on the whole input collapses both summands to the same
+     * `1/2 (3 - Cos[4 x] + 4 Sin[2 x])` form; the difference auto-cancels.
+     * Pre-fix: ~200ms (TrigReduce was only in the round loop, not the
+     * depth-0 short-circuit, so simp_bottomup descended into both
+     * children and ran Factor / TrigFactor on each first). */
+    assert_eval_eq(
+        "Simplify[(Sin[x]+Cos[x])^4 - (1+Sin[2 x])^2]", "0", 0);
+}
+
+void test_simplify_cosh_plus_sinh_cubed(void) {
+    /* (Cosh[x]+Sinh[x])^3 - (Cosh[3x]+Sinh[3x]) = 0.
+     * Already handled pre-fix; this is a regression guard now that
+     * the TrigReduce short-circuit is wired in. */
+    assert_eval_eq(
+        "Simplify[(Cosh[x]+Sinh[x])^3 - (Cosh[3 x]+Sinh[3 x])]", "0", 0);
+}
+
+void test_simplify_cos_cube_minus_sin_cube_factor(void) {
+    /* Cos[x]^3 - Sin[x]^3 - (Cos[x]-Sin[x])(1+Sin[x]Cos[x]) = 0
+     * by the difference-of-cubes factorisation a^3-b^3=(a-b)(a^2+ab+b^2)
+     * and Sin^2+Cos^2=1.  Already handled pre-fix; regression guard. */
+    assert_eval_eq(
+        "Simplify[Cos[x]^3 - Sin[x]^3 - (Cos[x]-Sin[x])*(1+Sin[x]*Cos[x])]",
+        "0", 0);
+}
+
+/* ---- Trig reciprocal-pair Pythagorean (single-variable) ---- */
+
+void test_simplify_csc_squared_minus_one_plus_cot_squared(void) {
+    /* (1 - 1/Sin[x]^2) + Cot[x]^2 = (1 - Csc[x]^2) + Cot[x]^2 = 0
+     * via the Csc[x]^2 - 1 = Cot[x]^2 Pythagorean identity. */
+    assert_eval_eq("Simplify[(1 - 1/Sin[x]^2) + Cot[x]^2]", "0", 0);
+}
+
+void test_simplify_sec_squared_minus_one_plus_tan_squared(void) {
+    /* (1 - 1/Cos[x]^2) + Tan[x]^2 = (1 - Sec[x]^2) + Tan[x]^2 = 0
+     * via Sec[x]^2 - 1 = Tan[x]^2. */
+    assert_eval_eq("Simplify[(1 - 1/Cos[x]^2) + Tan[x]^2]", "0", 0);
+}
+
+void test_simplify_tan_squared_inverse_versus_cot_squared(void) {
+    /* (1 - 1/Tan[x]^2) - (1 - Cot[x]^2) = (1 - Cot[x]^2) - (1 - Cot[x]^2)
+     * = 0.  Tests recognition of 1/Tan[x] == Cot[x]. */
+    assert_eval_eq(
+        "Simplify[(1 - 1/Tan[x]^2) - (1 - Cot[x]^2)]", "0", 0);
+}
+
+void test_simplify_double_angle_with_factors(void) {
+    /* 2 Cos[x] Sin[x] B A - Sin[2 x] B A = 0.  Tests that the constant
+     * factors B and A don't break the double-angle recognition. */
+    assert_eval_eq(
+        "Simplify[(2*Cos[x]*Sin[x]*B*A) - Sin[2*x]*B*A]", "0", 0);
+}
+
+/* ---- Power-arithmetic identities (currently failing; tests document
+ * the gap between picocas and Mathematica). These are filed against the
+ * `power-arithmetic Simplify cases' work item; the assertions below
+ * pin the present output so any future fix immediately surfaces here as
+ * a strict test win.  When the underlying transform is implemented,
+ * change the expected string to "0" and the test becomes a regression
+ * guard for the new behaviour. */
+
+void test_simplify_prime_power_combine_2x_4x(void) {
+    /* 4^x * 2^(-x) * 2^(-x) = (2^2)^x * 2^(-x) * 2^(-x) = 2^(2x-x-x) = 1.
+     * Resolved by the PrimeRebase Simplify seed: it rewrites Power[c, e]
+     * -> Power[p, k*e] for c = p^k an integer prime power, after which
+     * canonical Times same-base combine collapses the exponents. */
+    assert_eval_eq("Simplify[4^x * 2^(-x) * 2^(-x) - 1]", "0", 0);
+}
+
+void test_simplify_prime_power_neg_base(void) {
+    /* (-4)^x * (-2)^(-x) * 2^(-x) = (-4)^x * (-4)^(-x) = 1.
+     * Mathematica: 0.  Branch-cut sensitive (negative bases), so a
+     * naive PowerExpand can't take this without an integer assumption
+     * on x.  Pinned to current output. */
+    assert_eval_eq(
+        "Simplify[(-4)^x * (-2)^(-x) * 2^(-x) - 1]",
+        "-1 + (-4)^x (-2)^(-x) 2^(-x)", 0);
+}
+
+void test_simplify_self_difference_inside_f(void) {
+    /* f[<expr>] - f[<expr>] = 0 by structural equality, regardless of
+     * whether <expr> itself simplifies.  Already handled. */
+    assert_eval_eq(
+        "Simplify[f[4^x*2^(-x)*2^(-x)] - f[4^x*2^(-x)*2^(-x)]]",
+        "0", 0);
+}
+
+void test_simplify_inside_f_prime_power_collapse(void) {
+    /* f[4^x * 2^(-x) * 2^(-x)] - f[1].  Resolved by PrimeRebase firing
+     * inside f's argument: the argument collapses to 1 after the rebase,
+     * after which the surrounding Plus auto-cancels f[1] - f[1]. */
+    assert_eval_eq(
+        "Simplify[f[4^x*2^(-x)*2^(-x)] - f[1]]", "0", 0);
+}
+
+void test_simplify_exp_combine(void) {
+    /* Exp[x] * Exp[y] - Exp[x+y] = 0.  Already handled by the basic
+     * Power[E, _] combination rule. */
+    assert_eval_eq("Simplify[Exp[x]*Exp[y] - Exp[x+y]]", "0", 0);
+}
+
+void test_simplify_power_of_product_two_e(void) {
+    /* Exp[x] Exp[y] 2^x 2^y - (2 E)^(x+y) = 0.
+     * Requires distributing (2 E)^(x+y) -> 2^(x+y) E^(x+y), which
+     * picocas doesn't do today (PowerExpand is not implemented).
+     * Pinned to current output. */
+    assert_eval_eq(
+        "Simplify[Exp[x]*Exp[y]*2^x*2^y - (2*Exp[1])^(x+y)]",
+        "-(2 E)^(x + y) + 2^(x + y) E^(x + y)", 0);
+}
+
+void test_simplify_exp_times_two_to_x_combine(void) {
+    /* Exp[x] Exp[y] 2^x 2^y - Exp[x+y] 2^(x+y) = 0.  No (a*b)^n
+     * distribution required: each side already has separated bases. */
+    assert_eval_eq(
+        "Simplify[Exp[x]*Exp[y]*2^x*2^y - Exp[x+y]*2^(x+y)]", "0", 0);
+}
+
+void test_simplify_exp_two_combine_with_extra_terms(void) {
+    /* Distractor terms (Sin[y], 2^x*2^y) on each side should cancel
+     * structurally; the Exp[x+y+2] arm should also reduce. */
+    assert_eval_eq(
+        "Simplify[Exp[x]*Exp[y]*Exp[2]*Sin[x] + Sin[y] + 2^x*2^y -"
+        " (Exp[2 + x + y]*Sin[x] + Sin[y] + 2^(x + y))]", "0", 0);
+}
+
+void test_simplify_sin_of_exp_combine(void) {
+    /* Sin[Exp[x] Exp[y]] - Sin[Exp[x+y]] = 0 because the inner
+     * arguments combine via the basic Exp rule. */
+    assert_eval_eq(
+        "Simplify[Sin[Exp[x]*Exp[y]] - Sin[Exp[x+y]]]", "0", 0);
+}
+
+void test_simplify_x_squared_x_y_combine(void) {
+    /* x^2 * x^y - x^(2+y) = 0 by like-base power combination. */
+    assert_eval_eq("Simplify[x^2*x^y - x^(2+y)]", "0", 0);
+}
+
+void test_simplify_y_n_y_over_x_neg_n(void) {
+    /* y^n (y/x)^(-n) - x^n = 0 (n integer).  Requires distributing
+     * (y/x)^(-n) -> y^(-n) x^n (or (x/y)^n), which picocas doesn't do
+     * even with the integer assumption.  Pinned to current output. */
+    assert_eval_eq(
+        "Simplify[y^n*(y/x)^(-n) - x^n,"
+        " Assumptions -> Element[n, Integers]]",
+        "-x^n + y^n (y/x)^(-n)", 0);
+}
+
+void test_simplify_2_to_2_to_2x_x(void) {
+    /* 2^(2^(2x) x) - 2^(x 4^x) = 0 by 2^(2x) = 4^x in the exponent.
+     * Resolved by PrimeRebase: the walk descends into the exponent and
+     * rewrites 4^x -> 2^(2 x), after which the two outer 2^... terms
+     * have structurally identical exponents and the Plus auto-cancels. */
+    assert_eval_eq(
+        "Simplify[2^(2^(2*x)*x) - 2^(x*4^x)]", "0", 0);
+}
+
+void test_simplify_z_x_z_y_to_x(void) {
+    /* x y^(z^x z^y) - x y^(z^(x+y)) = 0.  The inner z^x z^y collapses
+     * to z^(x+y), then the whole arg matches.  Already handled. */
+    assert_eval_eq(
+        "Simplify[x*y^(z^x*z^y) - x*y^(z^(x + y))]", "0", 0);
+}
+
+void test_simplify_z_x_z_y_outer_x(void) {
+    /* (z^x z^y)^x - (z^(x+y))^x = 0.  Same shape as above; the
+     * z^x z^y -> z^(x+y) reduction happens inside the outer ^x. */
+    assert_eval_eq(
+        "Simplify[(z^x*z^y)^x - (z^(x + y))^x]", "0", 0);
+}
+
+void test_simplify_one_over_x_log2_combine(void) {
+    /* (1/x)^Log[2] / x - (1/x)^(1 + Log[2]) = 0 via combining same-base
+     * powers using Power[A, 1] = A.  Resolved by the PowerOneify
+     * Simplify seed: walks Times nodes and combines factors of the form
+     *     A * Power[A, e]  ->  Power[A, e+1]
+     * which lets the LHS Times collapse to Power[Power[x,-1], 1+Log[2]],
+     * structurally matching the RHS so the surrounding Plus auto-cancels. */
+    assert_eval_eq(
+        "Simplify[(1/x)^Log[2]/x - (1/x)^(1 + Log[2])]", "0", 0);
+}
+
+void test_simplify_tan_addition_three_angles(void) {
+    /* Tan[2] Tan[3] B A - (-Tan[2]/Tan[5] - Tan[3]/Tan[5] + 1) B A = 0
+     * by Tan[5] = Tan[2+3] = (Tan[2]+Tan[3])/(1 - Tan[2] Tan[3]).
+     * Resolved by the TanAddition Simplify seed: it collects every
+     * trig argument occurring in the input ({2, 3, 5} here), finds the
+     * pair (2, 3) whose evaluated sum 5 is also in the set, and applies
+     * the angle-addition formula via ReplaceAll + Together + Cancel.
+     * Generalises to any (a, b, c=a+b) triple including symbolic a, b. */
+    assert_eval_eq(
+        "Simplify[Tan[2]*Tan[3]*B*A -"
+        " (-Tan[2]/Tan[5] - Tan[3]/Tan[5] + 1)*B*A]", "0", 0);
+}
+
+void test_simplify_cos_four_pi_ninth_minus_sin_pi_eighteenth(void) {
+    /* Cos[4 Pi/9] - Sin[Pi/18] = 0 because Cos[4 Pi/9] = Sin[Pi/2 - 4 Pi/9]
+     * = Sin[Pi/18].  Already handled by simp_trig_pi_canon, which picks
+     * a canonical Sin-vs-Cos representation per (numerator/denom) pair so
+     * the two terms collapse into the same shape and the surrounding Plus
+     * auto-cancels. */
+    assert_eval_eq("Simplify[Cos[4*Pi/9] - Sin[Pi/18]]", "0", 0);
+}
+
+void test_simplify_minus_one_fifth_root_alternating_sum(void) {
+    /* Roots-of-unity alternating sum: 1 - (-1)^(1/5) + (-1)^(2/5) -
+     * (-1)^(3/5) + (-1)^(4/5) = 0 by the identity
+     *     Sum[(-1)^(k/n), {k, 0, n-1}] = 0  for odd n.
+     * Already handled by picocas's RootsOfUnity / cyclotomic reduction
+     * in the simp pipeline. */
+    assert_eval_eq(
+        "Simplify[1 - (-1)^(1/5) + (-1)^(2/5) - (-1)^(3/5) + (-1)^(4/5)]",
+        "0", 0);
+}
+
+void test_simplify_algebraic_sqrt_x_squared_plus_one(void) {
+    /* (x/Sqrt[x^2+1] + 1)/((Sqrt[x^2+1]+x)^2 + 1) - 1/(2 + 2x^2) = 0.
+     * Already handled by simp_algebraic which substitutes each Sqrt[u_i]
+     * by a fresh generator and rationalises the denominator by sigma-
+     * conjugation. */
+    assert_eval_eq(
+        "Simplify[(x/Sqrt[x^2+1] + 1)/((Sqrt[x^2+1]+x)^2 + 1)"
+        "         - 1/(2 + 2 x^2)]",
+        "0", 0);
+}
+
+void test_simplify_one_plus_x_squared_three_halves_polynomial(void) {
+    /* (8/105)(1+x^2)^(3/2) - (4/35) x^2 (1+x^2)^(3/2) + (1/7) x^4 (1+x^2)^(3/2)
+     * == (1/105)(1+x^2)^(3/2) (8 - 12 x^2 + 15 x^4)
+     * This is a coefficient identity in (1+x^2)^(3/2) -- both sides have
+     * the same polynomial coefficient on the shared radical factor. */
+    assert_eval_eq(
+        "Simplify[(8/105)*(1+x^2)^(3/2) - (4/35)*x^2*(1+x^2)^(3/2)"
+        " + (1/7)*x^4*(1+x^2)^(3/2)"
+        " - (1/105)*(1+x^2)^(3/2)*(8 - 12*x^2 + 15*x^4)]",
+        "0", 0);
+}
+
+void test_simplify_sqrt_30_factorisation(void) {
+    /* Sqrt[2] Sqrt[3] Sqrt[5] x = Sqrt[30] x by the same-exponent
+     * radical combine in simp_radicals. */
+    assert_eval_eq(
+        "Simplify[Sqrt[2] * Sqrt[3] * Sqrt[5] * x - Sqrt[30] * x]",
+        "0", 0);
+}
+
+void test_simplify_log_xy2_under_positivity(void) {
+    /* Log[x y^2] - (Log[x] + 2 Log[y]) = 0 under x > 0, y > 0.  Handled
+     * by the LogExp positive-real cascade. */
+    assert_eval_eq(
+        "Assuming[x > 0 && y > 0,"
+        " Simplify[Log[x * y^2] - (Log[x] + 2*Log[y])]]",
+        "0", 0);
+}
+
+void test_simplify_half_angle_tangent_via_sin_cos_cube(void) {
+    /* Sin[x]^3 / (8 (1 + Cos[x])^3) - Tan[x/2]^3 / 8 = 0
+     * via the half-angle identity Tan[x/2] = Sin[x] / (1 + Cos[x]).
+     * Handled by the existing HalfAngle Simplify seed. */
+    assert_eval_eq(
+        "Simplify[Sin[x]^3 / (8 * (1 + Cos[x])^3) - Tan[x/2]^3 / 8]",
+        "0", 0);
+}
+
+void test_simplify_tan_z_compound_angle_factorisation(void) {
+    /* Tan[z] Cos[x] Cos[y] Sec[x+y] (Tan[x] + Tan[y]) - Tan[z] Tan[x+y] = 0
+     * via Tan[x+y] = Sin[x+y] / Cos[x+y] = (Sin x Cos y + Cos x Sin y) /
+     * Cos[x+y] = Cos[x] Cos[y] (Tan x + Tan y) / Cos[x+y]. */
+    assert_eval_eq(
+        "Simplify[Tan[z] * Cos[x] * Cos[y] * Sec[x+y] * (Tan[x] + Tan[y])"
+        " - Tan[z] * Tan[x+y]]",
+        "0", 0);
+}
+
+void test_simplify_sqrt_half_sin_y_combination(void) {
+    /* (Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2]) +
+     * (Cos[y]/(3 Sqrt[6]) + Sin[y]/(3 Sqrt[2])) +
+     * (-(Sqrt[6]/3) Sin[x + Pi/6] - (Sqrt[6]/9) Sin[y + Pi/6]) = 0.
+     *
+     * Resolved by the RadicalCanon Simplify seed: Sqrt[1/2] (=
+     * Power[Rational[1,2], 1/2]) is split into Power[1,1/2]*Power[2,-1/2]
+     * and the negative-exponent Power[2,-1/2] is rationalised to
+     * Sqrt[2]/2.  Both summands then share the same Sqrt[2] base, the
+     * coefficient Plus auto-cancels, and the Sin[y] factor multiplies
+     * into 0. */
+    assert_eval_eq(
+        "t1 = Cos[x]/Sqrt[6] + Sin[x]/Sqrt[2];"
+        "t2 = Cos[y]/(3*Sqrt[6]) + Sin[y]/(3*Sqrt[2]);"
+        "t3 = -(Sqrt[6]/3)*Sin[x + Pi/6] - (Sqrt[6]/9)*Sin[y + Pi/6];"
+        "Simplify[t1 + t2 + t3]",
+        "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -826,6 +1156,42 @@ int main(void) {
     TEST(test_simplify_pythag_canon_keeps_canonical_pythag);
     TEST(test_simplify_pythag_canon_preserves_sin_squared);
     TEST(test_simplify_pythag_canon_keeps_one_minus_sin_squared);
+
+    /* Round-2 user cases. */
+    TEST(test_simplify_sec_tan_pythag_two_var);
+    TEST(test_simplify_csc_cot_pythag_two_var);
+    TEST(test_simplify_sin_plus_cos_fourth_power);
+    TEST(test_simplify_cosh_plus_sinh_cubed);
+    TEST(test_simplify_cos_cube_minus_sin_cube_factor);
+    TEST(test_simplify_csc_squared_minus_one_plus_cot_squared);
+    TEST(test_simplify_sec_squared_minus_one_plus_tan_squared);
+    TEST(test_simplify_tan_squared_inverse_versus_cot_squared);
+    TEST(test_simplify_double_angle_with_factors);
+    TEST(test_simplify_prime_power_combine_2x_4x);
+    TEST(test_simplify_prime_power_neg_base);
+    TEST(test_simplify_self_difference_inside_f);
+    TEST(test_simplify_inside_f_prime_power_collapse);
+    TEST(test_simplify_exp_combine);
+    TEST(test_simplify_power_of_product_two_e);
+    TEST(test_simplify_exp_times_two_to_x_combine);
+    TEST(test_simplify_exp_two_combine_with_extra_terms);
+    TEST(test_simplify_sin_of_exp_combine);
+    TEST(test_simplify_x_squared_x_y_combine);
+    TEST(test_simplify_y_n_y_over_x_neg_n);
+    TEST(test_simplify_2_to_2_to_2x_x);
+    TEST(test_simplify_z_x_z_y_to_x);
+    TEST(test_simplify_z_x_z_y_outer_x);
+    TEST(test_simplify_one_over_x_log2_combine);
+    TEST(test_simplify_tan_addition_three_angles);
+    TEST(test_simplify_cos_four_pi_ninth_minus_sin_pi_eighteenth);
+    TEST(test_simplify_minus_one_fifth_root_alternating_sum);
+    TEST(test_simplify_algebraic_sqrt_x_squared_plus_one);
+    TEST(test_simplify_one_plus_x_squared_three_halves_polynomial);
+    TEST(test_simplify_sqrt_30_factorisation);
+    TEST(test_simplify_log_xy2_under_positivity);
+    TEST(test_simplify_half_angle_tangent_via_sin_cos_cube);
+    TEST(test_simplify_tan_z_compound_angle_factorisation);
+    TEST(test_simplify_sqrt_half_sin_y_combination);
 
     printf("All Simplify tests passed!\n");
     return 0;

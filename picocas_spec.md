@@ -10150,3 +10150,278 @@ Power node.
   preservation of `Sin[x]^2`, `Cos[x]^2` etc. as canonical forms,
   no destabilisation of the existing `1 - Sin[x]^2 -> Cos[x]^2`
   rewrite.
+
+## Simplify: reciprocal-pair Pythagorean canonicalisation + TrigReduce short-circuit (2026-05-06)
+
+### Symptom
+
+Two pairs of user-reported failure modes:
+
+1. **Sec/Csc Pythagorean products (HANG)**.
+   `(Sec[x]+1)(Sec[x]-1) - Tan[x]^2` and the two-variable version
+   `(Sec[x]+1)(Sec[x]-1) * 2(Sec[y]-1)(Sec[y]+1) * 9(Sec[y]-1)(Sec[y]+1)
+   * (x-1) - 18(x-1) Tan[x]^2 Tan[y]^4`
+   Mathematica: `0` in <1 ms.  picocas: hung past 2 minutes.
+
+2. **(Sin+Cos)^4 / (1+Sin[2x])^2 (slow)**.
+   `Simplify[(Sin[x]+Cos[x])^4 - (1+Sin[2 x])^2]`.
+   Mathematica: `0` in <1 ms.  picocas: ~220 ms.
+
+### Root cause
+
+The `has_pythag_head` gate that fast-skips `PythagReduce` /
+`PythagCanon` listed only `Cos/Sin/Cosh/Sinh/Tan/Cot/Tanh/Coth`,
+never `Sec/Csc/Sech/Csch`.  And `PythagCanon` carried only four
+substitution directions (`Cos->Sin`, `Sin->Cos`, `Cosh->Sinh`,
+`Sinh->Cosh`); it had nothing for the reciprocal-pair identities
+`Sec^2 = 1 + Tan^2`, `Csc^2 = 1 + Cot^2`, `Sech^2 = 1 - Tanh^2`,
+`Csch^2 = -1 + Coth^2`.  Inputs that survived the gate fell through
+to `TrigFactor` (~700 ms on the two-variable Sec/Tan case), which
+rewrote `Sec/Csc` to `1/Cos`, `1/Sin` and produced a polynomial in
+`Cos`, `Sin` that nothing else in the round loop could collapse
+within the search-budget rounds.
+
+For (Sin+Cos)^4: `TrigReduce` was a SIMP_TRANSFORMS entry but not a
+seed.  Bottom-up descent ran the full search on each child of the
+top-level Plus before the parent step ever called TrigReduce; the
+children's searches ran Factor / TrigFactor / FactorSquareFree
+(28 + 14 + 9 ms) on `(Sin[x]+Cos[x])^4` and `(1+Sin[2x])^2`
+individually -- even though TrigReduce on the *whole* input lands
+on `0` in 3 ms.
+
+### Fix (three pieces in `src/simp.c`)
+
+1. **`has_pythag_head` extended** with `Sec/Csc/Sech/Csch`.  Now the
+   reciprocal-pair gate passes whenever any of those heads appear.
+
+2. **`PythagReduce` rule list extended** with eight reverse-direction
+   reciprocal identities: `-1 + Sec^2 -> Tan^2`, `1 - Sec^2 -> -Tan^2`,
+   `-1 + Csc^2 -> Cot^2`, `1 - Csc^2 -> -Cot^2`,
+   `1 - Sech^2 -> Tanh^2`, `-1 + Sech^2 -> -Tanh^2`,
+   `1 + Csch^2 -> Coth^2`, `-1 - Csch^2 -> -Coth^2`.  These complement
+   the existing eight (Tan -> Sec, etc.) so a Plus with a `1 +/- Sec^2`
+   shape collapses without going through TrigFactor.
+
+3. **`PythagCanon` rule sets extended** from four to twelve.  The new
+   directions are
+   ```
+   Sec[x_]^(2k) -> (1 + Tan[x]^2)^k       (Sec -> Tan)
+   Tan[x_]^(2k) -> (-1 + Sec[x]^2)^k      (Tan -> Sec)
+   Csc[x_]^(2k) -> (1 + Cot[x]^2)^k       (Csc -> Cot)
+   Cot[x_]^(2k) -> (-1 + Csc[x]^2)^k      (Cot -> Csc)
+   Sech[x_]^(2k) -> (1 - Tanh[x]^2)^k     (Sech -> Tanh)
+   Tanh[x_]^(2k) -> (1 - Sech[x]^2)^k     (Tanh -> Sech)
+   Csch[x_]^(2k) -> (-1 + Coth[x]^2)^k    (Csch -> Coth)
+   Coth[x_]^(2k) -> (1 + Csch[x]^2)^k     (Coth -> Csch)
+   ```
+   Same `n >= 2 && EvenQ[n]` guard as the existing four.  The
+   keep-best-strict-win selection means firing a no-op direction is
+   only an ms-scale speed cost, never a correctness cost.
+
+4. **TrigReduce promoted to seed and to depth-0 short-circuit**.
+   Two new call sites:
+
+   - In `simp_search`, a `TrigReduce` seed runs after `PythagCanon`.
+     Score-gated like `TrigRoundtrip` (drop seeds whose leaf count
+     exceeds `2 * input + 8` to avoid pathological blow-ups).
+
+   - In `simp_bottomup`, at `depth == 0`, a `TrigReduce` short-circuit
+     runs in parallel with the existing `PythagCanon` short-circuit:
+     try `TrigReduce[input]` once before descending into children;
+     adopt the result only when it's a strict score win.  This is
+     the move that turns the `(Sin+Cos)^4` case from 220 ms to 5 ms:
+     bottom-up no longer wastes a full search on each child.
+
+5. **`simp_search` early-exit on literal zero**.  Once `best` becomes
+   the literal integer `0`, no transform can produce anything
+   structurally simpler, so the round loop and remaining seed-phase
+   blocks short-circuit via a `goto search_done` label.  Restricted
+   to literal `0` so that custom `ComplexityFunction` callers still
+   get full search coverage for non-zero atomic answers.
+
+### Performance (before -> after)
+
+| Case                                                  | Before | After |
+|-------------------------------------------------------|--------|-------|
+| `(Cos+1)(Cos-1) ... - Sin^2 Sin^4` (two-var)          | 4 ms   | 5 ms  |
+| `(Cosh+1)(Cosh-1) ... - Sinh^2 Sinh^4`                | 4 ms   | 5 ms  |
+| `(Sec+1)(Sec-1) ... - Tan^2 Tan^4` (two-var)          | hung   | 5 ms  |
+| `(Sin[x]+Cos[x])^4 - (1+Sin[2x])^2`                   | 220 ms | 5 ms  |
+| `(Cosh[x]+Sinh[x])^3 - (Cosh[3x]+Sinh[3x])`           | 31 ms  | 4 ms  |
+| `Cos[x]^3 - Sin[x]^3 - (Cos-Sin)(1+Sin Cos)`          | 14 ms  | 2 ms  |
+
+### Files
+
+- `src/simp.c` -- `has_pythag_head` extended; `transform_pythag_reduce_impl`
+  rule list extended with eight reciprocal identities;
+  `transform_pythag_canon_impl` extended with eight substitution
+  directions; `simp_search` gains a TrigReduce seed and a literal-zero
+  early-exit; `simp_bottomup` gains a depth-0 TrigReduce short-circuit;
+  `simp_best_is_zero` helper added.
+- `tests/test_simplify.c` -- 25 new unit tests covering the round-2
+  user cases.  Passing: Sec/Csc Pythagoreans, (Sin+Cos)^4,
+  (Cosh+Sinh)^3, Cos^3-Sin^3, single-variable reciprocal-pair Pythags
+  (`1 - 1/Sin^2 + Cot^2`, etc.), double-angle with constant factors,
+  and the chain of Exp / 2^x identities (cases 11, 13, 14, 15, 16, 19, 20).
+  Pinned to current output (TODO: should be 0): the eight
+  power-arithmetic identities (cases 7, 8, 10, 12, 17, 18, 21) and the
+  Tan-addition identity (case 6).  Each pinned test carries a comment
+  pointing at the missing transform; replacing the expected string
+  with `"0"` becomes a regression guard once the transform lands.
+
+### Known limitations (tracked in the pinned tests)
+
+- **Power-arithmetic / prime-base rebasing**: `4^x * 2^(-x) * 2^(-x)`
+  does not collapse to `1` because picocas does not recognise that
+  `4 = 2^2` and rebase to a common prime base.  Touches cases 7, 10.
+- **Power-of-product distribution**: `(2 E)^(x+y)` is not split into
+  `2^(x+y) E^(x+y)`.  picocas has no `PowerExpand` builtin, and
+  Simplify doesn't apply `(a*b)^n -> a^n b^n` unconditionally
+  (Mathematica's Simplify does this internally with branch-cut
+  awareness).  Touches case 12.
+- **Quotient power with integer assumption**: `(y/x)^(-n)` is not
+  split to `x^n / y^n` even when `n` is asserted Integer.  Touches
+  case 17.
+- **Same-base combination across structural representations**:
+  `(1/x)^Log[2] / x` does not combine with `(1/x)^(1+Log[2])` because
+  `1/x` and `(1/x)^1` are not treated as a common base in the search.
+  Touches case 21.
+- **Tan-addition recognition**: `Tan[2] Tan[3] - (-Tan[2]/Tan[5] -
+  Tan[3]/Tan[5] + 1)` does not collapse via `Tan[a+b] = (Tan[a]+Tan[b])
+  / (1 - Tan[a] Tan[b])` because picocas has no inverse-of-TrigExpand
+  recognition for tangents.  Touches case 6.
+
+## Simplify: PrimeRebase, PowerOneify, RadicalCanon, TanAddition (2026-05-06)
+
+Four new universal Simplify seeds that close power-arithmetic, radical-
+canonicalisation, and trigonometric-addition gaps.  All wired into
+`simp_dispatch` (the first three) or `simp_search`'s seed phase (the
+fourth) so they reach every shape pipeline.  Each is score-gated and
+inert by default -- no regressions on the existing 91 test binaries.
+
+### PrimeRebase
+
+Rewrites `Power[c, e] -> Power[p, k*e]` when the integer `c = p^k` is a
+perfect prime power (`k >= 2`).  Sound for ALL complex `e` because the
+identity `(a^b)^c = a^(b*c)` is unconditional when `a > 0`.  Closes the
+"different base bucket" gap in canonical Times for inputs mixing `4^x`
+and `2^x` style factors.  Walks the tree once (recursing into exponents
+so nested rebasable powers like `4^x` inside `2^(x*4^x)` bubble out),
+then a single `evaluate()` collapses same-base factors via Times'
+canonical exponent combine.
+
+Coverage:
+
+| Input | Was | Now |
+|------|-----|-----|
+| `Simplify[4^x * 2^(-x) * 2^(-x) - 1]` | `-1 + 2^(-2 x) 4^x` | `0` |
+| `Simplify[f[4^x*2^(-x)*2^(-x)] - f[1]]` | `-f[1] + f[2^(-2 x) 4^x]` | `0` |
+| `Simplify[2^(2^(2 x) x) - 2^(x*4^x)]` | `-2^(4^x x) + 2^(2^(2 x) x)` | `0` |
+
+Branch-cut-sensitive shapes (e.g. `(-4)^x` -> `(-2)^(2x)`,
+`(a*b)^n` -> `a^n*b^n` for non-integer `n`) are deliberately NOT
+handled: those need PowerExpand semantics with explicit assumptions and
+remain documented limitations (test cases 8, 12, 17 stay pinned).
+
+### PowerOneify
+
+In every `Times` node, combines factors of the form `A * Power[A, e]`
+into `Power[A, e + 1]` using the universally valid identity
+`Power[a, 1] = a`.  Closes the "bare-A vs Power[A, _] mismatch" in
+canonical Times bucketing -- canonical Times groups factors by the base
+of any wrapping `Power[base, exp]`, but a bare `A` whose canonical form
+is itself a `Power` (e.g. `Power[x, -1] = 1/x`) does NOT get re-bucketed
+as `Power[A, 1]` before grouping.
+
+Coverage:
+
+| Input | Was | Now |
+|------|-----|-----|
+| `Simplify[(1/x)^Log[2]/x - (1/x)^(1 + Log[2])]` | `-(1/x)^(1+Log[2]) + (1/x)^Log[2]/x` | `0` |
+
+### RadicalCanon
+
+Two related Power-canonicalisations that picocas's standard Power
+evaluator does not perform, leaving equivalent expressions in distinct
+shapes that block additive cancellation:
+
+1. **Rational-base split** -- `Power[Rational[a, b], q] ->
+   Power[a, q] * Power[b, -q]` for positive integer `a`, `b`.  Sound
+   because `a, b > 0` -> `(a/b)^q = a^q * b^(-q)` for all complex `q`
+   with no branch cut.  Worked example: `Sqrt[1/2] = Power[Rational[1,2],
+   1/2]` -> `Power[2, -1/2]`.
+2. **Negative-rational-exponent rationalisation** -- `Power[a, q] ->
+   Power[a, r] * Rational[1, a^k]` for `q < 0` rational with denominator
+   `> 1`, where `k = ceil(-q)` and `r = q + k in [0, 1)`.  Worked example:
+   `Power[2, -1/2]` -> `Power[2, 1/2] * 1/2` = `Sqrt[2]/2`.  The result
+   does NOT fold back: `Rational[1, a^k]` occupies a distinct base bucket
+   from `Power[a, r]` in canonical Times.
+
+Together these two rules force radical shapes (`Sqrt[1/2]` vs `1/Sqrt[2]`
+vs `Sqrt[2]/2`) into a single canonical representation so that pairs
+like `-Sqrt[1/2]/3 + Sqrt[2]/6` cancel additively.
+
+Coverage:
+
+| Input | Was | Now |
+|------|-----|-----|
+| `Simplify[Sqrt[1/2] - 1/Sqrt[2]]` | `Sqrt[1/2] - 1/Sqrt[2]` | `0` |
+| `Simplify[Sqrt[2] Sqrt[3] Sqrt[5] x - Sqrt[30] x]` | -- | `0` (~2 ms) |
+| `Simplify[c1 - c2]` (polynomial * `(1+x^2)^(3/2)` identity) | -- | `0` (~12 ms) |
+| `Simplify[t1 + t2 + t3]` (Sin/Cos/Sqrt mix, see test) | `Sin[y] (-1/3 Sqrt[1/2] + 1/6 Sqrt[2])` (505 ms, wrong) | `0` (~380 ms) |
+
+The score gate for RadicalCanon is `<=` rather than `<`: even when the
+score is the same, the rewrite is correctness-preserving and always
+yields the more useful form for downstream additive cancellation.  This
+mirrors how the existing `LogExpRules` cascade treats force-take rewrites.
+
+### TanAddition
+
+Recognises angle-addition shapes that picocas's TrigExpand misses
+because the latter only fires on literal-Plus arguments.  Algorithm:
+
+1. Walk the input collecting every distinct expression appearing as the
+   argument of any `Tan, Cot, Sin, Cos, Sec, Csc` head (a borrowed-pointer
+   set; structural equality via `expr_eq`).
+2. For each ordered pair `(i, j)` with `i != j`, evaluate
+   `args[i] + args[j]`.  If the sum also belongs to the set, the triple
+   `(a, b, c=a+b)` witnesses an addition-formula opportunity.
+3. For each triple, build a `RuleDelayed` for each Trig head that
+   actually appears at `c` in the input (a cheap structural check) using
+   the angle-addition formula in terms of `Tan[a], Tan[b]` (or
+   `Sin/Cos[a], Sin/Cos[b]` for Sin/Cos heads).
+4. Apply `ReplaceAll` with the rule list, then `Together` + `Cancel` so
+   the polynomial cancellation fires.
+5. Score-gated; inert when fewer than three distinct trig args appear or
+   when no pair-sum matches a third arg.
+
+Coverage:
+
+| Input | Was | Now |
+|------|-----|-----|
+| `Simplify[Tan[2] Tan[3] B A - (-Tan[2]/Tan[5] - Tan[3]/Tan[5] + 1) B A]` | `A B (-1 + Cot[5] Tan[2] + Cot[5] Tan[3] + Tan[2] Tan[3])` | `0` (~1.3 s) |
+
+Symbolic shapes (e.g. `Tan[x], Tan[y], Tan[x+y]` triples) work the same
+way; the integer-arg case is just the one most surprising to TrigExpand.
+
+### Wiring
+
+- `transform_prime_rebase`, `transform_power_oneify`,
+  `transform_radical_canon` all live in `simp_dispatch` ahead of the
+  shape classifier.  They run on every Simplify call regardless of the
+  input's shape (POLYNOMIAL / RATIONAL / LOGEXP / TRIG / GENERAL).
+  Each is run once, score-gated; on a strict win the dispatcher recurses
+  on the rewritten form.
+- `transform_tan_addition` lives in `simp_search`'s seed phase alongside
+  the other trig seeds (PythagCanon, TrigReduce, trig_pi_canon, halfangle,
+  radicals, algebraic).
+- All four are wrapped in `simp_memo_wrap` so identical inputs inside
+  the same Simplify call share a single impl invocation.
+
+### Files
+
+- `src/simp.c`: new transform implementations (~600 LOC) and seed wiring.
+- `tests/test_simplify.c`: 9 additional unit tests (`prime_power_combine_2x_4x`,
+  `inside_f_prime_power_collapse`, `2_to_2_to_2x_x`, `one_over_x_log2_combine`,
+  `tan_addition_three_angles`, plus 4 user-reported new cases for sqrt/
+  algebraic/log/halfangle/compound-angle).
