@@ -8268,6 +8268,32 @@ under `Plus`'s `Flat | Orderless` attributes).
 `tests/test_simplify.c` (one new test
 `test_simplify_trig_radical_angle_addition_two_vars`).
 
+### Idempotency fix: glom singleton constants (2026-05-07)
+
+The original splitter left empty-symset addends (pure constants)
+in their own singleton components. On polynomial inputs this could
+break `Simplify == Simplify[Simplify[...]]`: simplifying the
+non-constant component independently can introduce a fresh constant
+(e.g. `Factor[-1 - x^3/6 - x^4/6]` -> `-1/6 (6 + x^3 + x^4)` --
+constant `-1` is now `-6/6` hidden inside the factored Plus), and
+re-summing with the split-out constant no longer cancels:
+`1 + (-1/6)(6 + x^3 + x^4)` instead of `-1/6 x^3 (1 + x)`.
+
+A second `Simplify` pass would then have only 2 addends (n < 4) and
+skip the splitter, reaching the optimal form via the polynomial
+pipeline -- breaking idempotency.
+
+The fix unions every empty-symset addend into the first non-empty
+component before computing component sizes. Constants thus tag
+along with one variable component for joint simplification, while
+the variable structure of the split (and its disjoint-variable
+correctness argument above) is preserved. Repro:
+
+    c1 = Series[Exp[Sin[x]], {x, 0, 4}];
+    c2 = Series[Exp[x],      {x, 0, 4}];
+    Simplify[Normal[c1] - Normal[c2]]
+    (* now: -1/6 x^3 (1 + x), idempotent *)
+
 ## simp_split_multiplicative: disjoint-variable Times decomposition (2026-05-01)
 
 ### Motivation

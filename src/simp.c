@@ -7398,15 +7398,35 @@ static Expr* simp_split_additive(const Expr* input, const AssumeCtx* ctx,
         split_collect_addend_symbols(input->data.function.args[i], &sets[i]);
         parent[i] = (int)i;
     }
-    /* Pairwise union by symbol intersection. Empty sets (constants)
-     * stay in their own singleton component; we don't glom them onto
-     * an arbitrary first match. */
+    /* Pairwise union by symbol intersection. */
     for (size_t i = 0; i < n; i++) {
         if (sets[i].count == 0) continue;
         for (size_t j = i + 1; j < n; j++) {
             if (sets[j].count == 0) continue;
             if (split_symset_intersects(&sets[i], &sets[j])) {
                 split_uf_union(parent, (int)i, (int)j);
+            }
+        }
+    }
+    /* Glom each constant addend (empty symset) into the first variable
+     * component so it gets simplified alongside variable terms. Without
+     * this, splitting `1 + Plus[..variable terms..]` into `{1}` and the
+     * rest can mask outer/inner constant cancellations: simplifying the
+     * variable component independently may introduce a new constant
+     * (e.g. Factor turning -1 - x^3/6 - x^4/6 into -1/6*(6 + x^3 + x^4))
+     * that no longer cancels with the split-out `1`, leaving Simplify
+     * non-idempotent. The glom is into a single non-empty component, not
+     * duplicated, so the variable structure of the split is preserved. */
+    {
+        int first_non_empty = -1;
+        for (size_t i = 0; i < n; i++) {
+            if (sets[i].count != 0) { first_non_empty = (int)i; break; }
+        }
+        if (first_non_empty >= 0) {
+            for (size_t i = 0; i < n; i++) {
+                if (sets[i].count == 0) {
+                    split_uf_union(parent, (int)i, first_non_empty);
+                }
             }
         }
     }
