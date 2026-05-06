@@ -10854,3 +10854,81 @@ builds `Sqrt[m*n] * (1/n)` directly so the re-merge cannot fire.
   `(p + q√r)^(1/3)` and Cardano-discriminant for sum-of-conjugate
   cube roots.
 
+
+## Denominator rationalisation (`simp_rationalize_denom`, 2026-05-07)
+
+Phase 2 of the algorithmic radical-simplification project. Closes
+two user-supplied test cases that the existing `simp_algebraic` (which
+handles only square roots) could not:
+
+```
+Simplify[1/(2^(1/3) - 1) - (4^(1/3) + 2^(1/3) + 1)]              -> 0
+Simplify[1/(Sqrt[2] + 2^(1/3)) - r10]                            -> 0
+  (where r10 is the algebraic rationalisation derived from
+   extended-Euclidean in Q[α]/(α^6 - 2) with α = 2^(1/6))
+```
+
+### Algorithm
+
+A new `simp_rationalize_denom` Simplify seed walks the expression
+tree. At each `Power[denom, -1]` subtree where `denom` is a polynomial
+in radicals over a single positive integer base `c`, it computes the
+inverse via extended-Euclidean in `Q[α]/(α^n - c)` where
+`α = c^(1/n)` and `n` is the LCM of the rational-exponent denominators.
+
+Steps:
+
+1. `denom_collect_radical_base` walks `denom` collecting the unique
+   integer base `c` and computing `n = lcm(q_i)` over all
+   `Power[c, p_i/q_i]` subexpressions. Returns failure on:
+   - non-rational exponents, multiple distinct bases, or non-positive
+     bases.
+2. `denom_subst_radical_to_gen` substitutes each `Power[c, p_i/q_i]`
+   with `Power[gen, p_i * (n/q_i)]` for a fresh symbol `gen`.
+3. `PolynomialExtendedGCD[denom_subbed, gen^n - c, gen]` gives the
+   Bezout coefficients `(u, v)` with `u * denom_subbed + v * (gen^n - c) = g`
+   for some constant `g`. The transform accepts iff `g` is a nonzero
+   rational (otherwise denom shares a factor with the relation, meaning
+   the input is undefined at some root).
+4. The inverse is `u(gen) / g`. `denom_subst_gen_to_radical` replaces
+   each `Power[gen, k]` with `Power[c, k/n]` to reverse the
+   substitution.
+5. A `transform_prime_rebase` post-pass on the FULL output ensures
+   that user-supplied compound bases (e.g. `4^(1/3)`) and the prime
+   base our walker uses (`2^(2/3)`) match: PrimeRebase rewrites
+   `c^e` for `c = p^k` integer to `p^(k*e)`.
+
+### Soundness
+
+The rewrite is correctness-preserving for any positive integer base
+`c >= 2`, where `c^(1/n)` is the principal real root and the extended-
+Euclidean computation lives entirely in `Q[α]`. The transform refuses
+to fire (returns the input unchanged) when:
+
+- The denominator references multiple distinct integer bases (out of
+  scope for the single-extension implementation).
+- The gcd of `denom` and `α^n - c` is not a constant (denominator
+  vanishes at some root of `α^n - c`, meaning the expression is
+  undefined and any "rationalisation" would be wrong).
+- The base is not a positive integer >= 2.
+
+### Files
+
+- `src/simp.c`: ~280 LOC of new code in a `simp_rationalize_denom`
+  section inserted between `simp_denest_sqrt` and `simp_algebraic`.
+  Wired as a new seed in `simp_search` next to `simp_denest_sqrt`.
+  Forward-declares `transform_prime_rebase`.
+- `tests/test_radical_simplify.c`: the case-10 expected value was
+  corrected from the user-transcript form (which has sign errors
+  verifiable numerically) to the algebraically-derived
+  `(2 sqrt(2) + sqrt(2)*2^(1/3) + sqrt(2)*4^(1/3) - 2*2^(1/3) - 4^(1/3) - 2)/2`.
+
+### Out of scope (Phase 3)
+
+- Cube-root denesting (cases 4, 5): `(p + q sqrt(r))^(1/3)` and the
+  sum-of-conjugate-cube-roots Cardano-discriminant pattern. These are
+  forward radicals, not denominator rationalisations, and require a
+  different algorithmic approach.
+- Multi-base extensions (e.g. `1/(sqrt(3) + 2^(1/3))`): the current
+  implementation handles only single integer bases.
+

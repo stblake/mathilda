@@ -55,7 +55,7 @@ static void check_eval_eq(const char* input, const char* expected) {
  */
 
 #define PHASE_1
-/* #define PHASE_2 */
+#define PHASE_2
 /* #define PHASE_3 */
 
 #define SKIP_PHASE(reason) do { \
@@ -198,12 +198,23 @@ void test_radical_case8_cube_root_minus_one_inverse(void) {
 
 void test_radical_case10_mixed_extension_inverse(void) {
     /* 1/(sqrt(2) + 2^(1/3))
-     *    = (2^(2/3) + 2 - sqrt(2)*2^(1/3) - sqrt(2)*4^(1/3)) / 2.
+     *
+     * The user's original transcript provided an r6 with sign errors
+     * — it is NOT equal to 1/(sqrt(2) + 2^(1/3)) (verifiable
+     * numerically). The correct rationalisation, derived via
+     * extended Euclidean in Q[α]/(α^6 - 2) with α = 2^(1/6) the
+     * primitive element of Q(sqrt(2), 2^(1/3)):
+     *
+     *   1/(sqrt(2) + 2^(1/3))
+     *     = (2 sqrt(2) + sqrt(2)*2^(1/3) + sqrt(2)*4^(1/3)
+     *        - 2*2^(1/3) - 4^(1/3) - 2) / 2.
+     *
      * Mixed extension Q(sqrt(2), 2^(1/3)), dim 6 over Q. */
 #ifdef PHASE_2
     assert_eval_eq(
         "Simplify[1/(Sqrt[2] + 2^(1/3)) - "
-        "(2^(2/3) + 2 - Sqrt[2]*2^(1/3) - Sqrt[2]*4^(1/3))/2]",
+        "(2 Sqrt[2] + Sqrt[2]*2^(1/3) + Sqrt[2]*4^(1/3) "
+        " - 2*2^(1/3) - 4^(1/3) - 2)/2]",
         "0", 0);
 #else
     SKIP_PHASE("Phase 2: algebraic-number rationalisation");

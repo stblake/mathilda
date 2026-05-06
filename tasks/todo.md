@@ -1,7 +1,7 @@
 ---
 title: Algorithmic radical simplification
 date_started: 2026-05-06
-status: phase 1 complete; phase 2 in progress
+status: phases 1-2 complete; phase 3 in progress
 ---
 
 # Algorithmic radical simplification
@@ -285,6 +285,41 @@ Steps:
 
 Cases 8, 10 pass. No regression in trig / log / radical / assumption
 tests.
+
+### 2.5 Outcome (2026-05-07)
+
+- [x] `simp_rationalize_denom` walks the tree and rationalises any
+      `Power[denom, -1]` whose `denom` is a polynomial in radicals
+      over a single positive integer base.
+- [x] Uses existing `PolynomialExtendedGCD` for the extended-Euclidean
+      step (no new module needed — the simpler design proved
+      sufficient for the two phase-2 cases).
+- [x] `transform_prime_rebase` post-pass on the full output reconciles
+      our prime-base output (e.g. `2^(2/3)`) with user-supplied
+      compound bases (e.g. `4^(1/3)`).
+- [x] Case 10's expected r6 corrected — the user's original transcript
+      form is numerically not equal to `1/(sqrt(2) + 2^(1/3))`.
+- [x] Full test suite still green; no regressions.
+
+**Implementation surprises and notes for Phase 3:**
+
+- The user's case-10 r6 was numerically incorrect (sign errors in
+  the radical terms). I derived the correct rationalisation
+  algebraically via extended-Euclidean in `Q[α]/(α^6 - 2)` with
+  `α = 2^(1/6)` (the primitive element of `Q(sqrt(2), 2^(1/3))`)
+  and updated the test. Phase 3 cases (4, 5) need similar numeric
+  verification before relying on the user-supplied expected values.
+- `PrimeRebase` is an essential post-pass — it's what reconciles
+  `c^e` for compound `c` with the prime-base output we produce.
+- The original plan called for a new `algnum.c` module with an
+  AlgRing/AlgNum API; it turned out to be unnecessary because
+  `PolynomialExtendedGCD` was sufficient for the single-extension
+  case. If multi-base extensions are needed in future phases, the
+  algnum module would be the natural place for them.
+- Symbol comparison via pointer equality (`e->data.symbol == gen`)
+  doesn't work for dynamically-named generators because
+  `expr_new_symbol` interns the string, returning a different
+  pointer than our stack buffer. Use `strcmp` instead.
 
 ## Phase 3 — Cube-root denesting (cases 4, 5)
 
