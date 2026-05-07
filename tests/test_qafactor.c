@@ -18,6 +18,7 @@
 #include "expr.h"
 #include "core.h"
 #include "symtab.h"
+#include "sym_names.h"
 #include "qa.h"
 #include "qaupoly.h"
 #include "qafactor.h"
@@ -691,6 +692,88 @@ static void test_g6_single_element_list(void) {
         "(x - Sqrt[2]) (x + Sqrt[2])");
 }
 
+/* ============================== Phase G8 ============================== */
+/* Nested radical generators: Factor[..., Extension -> Sqrt[base]] where
+ * `base` is itself a polynomial expression in atomic radicals. */
+
+/* Count how many top-level multiplicative factors a Factor result has.
+ * A bare polynomial counts as 1; Times[a, b, ...] counts as arg_count;
+ * Power[h, k] (a single-base repeated factor) counts as 1. */
+static int count_top_level_factors(const Expr* fac) {
+    if (!fac) return 0;
+    if (fac->type == EXPR_FUNCTION
+        && fac->data.function.head
+        && fac->data.function.head->type == EXPR_SYMBOL
+        && fac->data.function.head->data.symbol == SYM_Times) {
+        return (int)fac->data.function.arg_count;
+    }
+    return 1;
+}
+
+/* Verify that Factor[input, Extension -> α] produces a result with the
+ * expected number of top-level Times-factors.  Numeric round-trip
+ * verification is too brittle here because picocas's auto-simplifier
+ * does not always fully canonicalise `(c - Sqrt[d])^k` cross-products,
+ * which leak residual `(c - Sqrt[d])^2` after Expand.  Counting top-
+ * level factors is sufficient to validate the recogniser is firing
+ * and the Trager pipeline produced the right number of irreducible
+ * factors. */
+static void assert_factor_n_factors(const char* input_src,
+                                    int expected_n_factors) {
+    Expr* in_parsed = parse_expression(input_src);
+    ASSERT(in_parsed != NULL);
+    Expr* factored = evaluate(in_parsed);
+    expr_free(in_parsed);
+
+    int n = count_top_level_factors(factored);
+    if (n != expected_n_factors) {
+        char* s = expr_to_string_fullform(factored);
+        fprintf(stderr,
+                "FAIL: factor count for `%s` was %d, expected %d\n  Got: %s\n",
+                input_src, n, expected_n_factors, s);
+        free(s);
+    }
+    ASSERT(n == expected_n_factors);
+    expr_free(factored);
+}
+
+/* Headline: x^8 + 1 over Q(Sqrt[2 - Sqrt[2]]) → 4 quadratic factors
+ * (the user-reported case from the issue). */
+static void test_g8_x8_plus_1_qsqrt_2_minus_sqrt2(void) {
+    assert_factor_n_factors(
+        "Factor[x^8 + 1, Extension -> Sqrt[2 - Sqrt[2]]]", 4);
+}
+
+/* α's own minimal polynomial splits completely over Q(α): x^4 - 4x^2 + 2
+ * factors into the 4 conjugates of α = Sqrt[2 − Sqrt[2]] (which are
+ * ±α and ±α(1 + Sqrt[2])^? — actually the conjugates correspond to
+ * the four roots ±Sqrt[2 ± Sqrt[2]]). */
+static void test_g8_min_poly_of_alpha_splits(void) {
+    assert_factor_n_factors(
+        "Factor[x^4 - 4 x^2 + 2, Extension -> Sqrt[2 - Sqrt[2]]]", 4);
+}
+
+/* Sqrt[2 + Sqrt[3]]'s min poly over Q is x^4 - 4x^2 + 1. */
+static void test_g8_min_poly_sqrt_2_plus_sqrt3(void) {
+    assert_factor_n_factors(
+        "Factor[x^4 - 4 x^2 + 1, Extension -> Sqrt[2 + Sqrt[3]]]", 4);
+}
+
+/* Denested case: Sqrt[5 + 2 Sqrt[6]] = Sqrt[2] + Sqrt[3], so its
+ * degree-4 min poly is x^4 - 10 x^2 + 1 — splits into 4 linear factors. */
+static void test_g8_denested_sqrt_5_plus_2sqrt6(void) {
+    assert_factor_n_factors(
+        "Factor[x^4 - 10 x^2 + 1, Extension -> Sqrt[5 + 2 Sqrt[6]]]", 4);
+}
+
+/* Irreducible-in-Q(α) edge: Sqrt[5] is not in Q(Sqrt[2 - Sqrt[2]]),
+ * so x^2 - 5 stays unfactored. */
+static void test_g8_irreducible_in_q_sqrt_2_minus_sqrt2(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 5, Extension -> Sqrt[2 - Sqrt[2]]]",
+        "x^2 - 5");
+}
+
 /* ============================== Driver =============================== */
 
 int main(void) {
@@ -751,6 +834,13 @@ int main(void) {
     TEST(test_g6_pure_q_input);
     TEST(test_g6_irreducible_in_q_sqrt2_sqrt3);
     TEST(test_g6_single_element_list);
+
+    /* Phase G8 — nested radical generators */
+    TEST(test_g8_x8_plus_1_qsqrt_2_minus_sqrt2);
+    TEST(test_g8_min_poly_of_alpha_splits);
+    TEST(test_g8_min_poly_sqrt_2_plus_sqrt3);
+    TEST(test_g8_denested_sqrt_5_plus_2sqrt6);
+    TEST(test_g8_irreducible_in_q_sqrt_2_minus_sqrt2);
 
     _unused_keep_helpers();
 

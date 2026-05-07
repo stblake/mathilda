@@ -11398,3 +11398,116 @@ the set, not the sequence) and gracefully degrades:
   is expanded and auto-simplification of `Sqrt[c]^2 → c` collapses
   the resulting terms.
 - `tests/test_qafactor.c`: 9 new tests (40 total).
+
+## Factor: nested radical generators in `Extension -> α` (Phase G8, 2026-05-07)
+
+`Factor[poly, Extension -> Sqrt[base]]` (and the analogous `base^(1/n)`
+form) now works when `base` is itself a polynomial expression in
+atomic radicals.  Previously `qa_resolve_extension` accepted only
+literal-integer arguments to `Sqrt`/`c^(1/n)`; nested radicals like
+`Sqrt[2 - Sqrt[2]]` fell through, `qa_factor_with_extension` returned
+NULL, and `Factor` silently degraded to plain Q-factoring (returning
+the input unchanged for irreducible cases).
+
+The new branch is internal — no syntactic change — and resolves α to
+its absolute minimal polynomial over `Q` automatically.  For
+`Sqrt[2 - Sqrt[2]]` the min poly is `y^4 − 4 y^2 + 2` (irreducible by
+Eisenstein at p = 2), giving a degree-4 `Q(α)` that contains
+`Sqrt[2] = 2 − α^2`.
+
+```mathematica
+Factor[x^8 + 1, Extension -> Sqrt[2 - Sqrt[2]]]
+    ==>  (1 + x^2 + x Sqrt[2 - Sqrt[2]])
+        (1 - x Sqrt[2 - Sqrt[2]] + x^2)
+        (1 + Sqrt[2] x Sqrt[2 - Sqrt[2]] + x^2 + x Sqrt[2 - Sqrt[2]])
+        (1 - Sqrt[2] x Sqrt[2 - Sqrt[2]] - x Sqrt[2 - Sqrt[2]] + x^2)
+    (* the four real quadratic factors of x^8 + 1 over Q(α);
+       the four complex-conjugate pairs of 16th roots of unity are
+       2*cos(π/8) = Sqrt[2 - Sqrt[2]]·(1 + Sqrt[2]) and
+       2*cos(3π/8) = Sqrt[2 - Sqrt[2]] *)
+
+Factor[x^4 - 4 x^2 + 2, Extension -> Sqrt[2 - Sqrt[2]]]
+    ==>  4 linear factors  (* the min poly of α itself splits *)
+
+Factor[x^4 - 4 x^2 + 1, Extension -> Sqrt[2 + Sqrt[3]]]
+    ==>  4 linear factors
+
+Factor[x^4 - 10 x^2 + 1, Extension -> Sqrt[5 + 2 Sqrt[6]]]
+    ==>  4 linear factors
+    (* Sqrt[5 + 2 Sqrt[6]] denests to Sqrt[2] + Sqrt[3]; recogniser
+       computes the absolute degree-4 min poly over Q via resultant *)
+
+Factor[x^2 - 5, Extension -> Sqrt[2 - Sqrt[2]]]
+    ==>  x^2 - 5    (* Sqrt[5] is not in Q(Sqrt[2 - Sqrt[2]]) *)
+```
+
+### Algorithm (Phase G8, FACTOR_PLAN.md §14)
+
+For α = `Power[base, 1/n]` with non-integer `base`:
+
+1. Walk `base` recursively to enumerate every atomic radical subtree
+   (`Sqrt[c]`, `c^(1/m)`, `I`) with rational/integer argument.  Reject
+   if `base` contains any non-atomic, non-arithmetic structure.
+2. Build a sub-tower `Q(γ_sub) = Q(β_1, …, β_k)` from the atomic
+   radicals using the existing `qa_resolve_extension_tower` (Phase
+   G6 machinery).
+3. Substitute each β_i in `base` with its `Q(γ_sub)`-representation,
+   yielding `B(w) ∈ Q[w]` where `w` is the placeholder for γ_sub.
+4. Compute `Res_w( P_sub(w),  z^n − B(w) ) ∈ Q[z]` via picocas's
+   `internal_resultant` — this polynomial vanishes at z = α.
+5. Take the squarefree part (drops spurious multiplicity coming from
+   algebraic dependencies among γ_sub conjugates).
+6. Verify the squarefree part is Q-irreducible (via `internal_factor`
+   and a non-constant-factor count); if not, return NULL (caller
+   falls back to plain Q-factoring).
+7. Build the QAExt from the irreducible min poly via
+   `qaext_from_q_expr`.
+
+Worked example for α = `Sqrt[2 - Sqrt[2]]`:
+- atomic radicals: `[Sqrt[2]]`
+- sub-tower: `Q(Sqrt[2])` with `P_sub(w) = w^2 − 2`
+- `B(w) = 2 − w`
+- `Res_w(w^2 − 2, z^2 − (2 − w)) = (z^2 − 2)^2 − 2 = z^4 − 4 z^2 + 2`
+- irreducible ⇒ QAExt of degree 4 over Q
+- α renders back as the user's `Sqrt[2 - Sqrt[2]]` literal; powers of
+  α auto-canonicalise (`α^2 → 2 − Sqrt[2]`, `α^4 → 6 − 4 Sqrt[2]`).
+
+### Scope and limitations (MVP)
+
+- **Square-root nesting** (n = 2) is the well-tested path.  Higher
+  radical degrees (n ≥ 3) are accepted by the recogniser but the
+  resulting min poly often has large coefficients that the
+  univariate Q-factor inner loop processes slowly.
+- The input polynomial must have **Q-rational coefficients**.  If
+  the input itself contains a sub-radical (e.g.
+  `Factor[Sqrt[2] x + 1, Extension -> Sqrt[2 - Sqrt[2]]]`), the
+  current input lifter does not recognise the sub-radical as a
+  Q(α)-element and the recogniser returns NULL.  Workaround: pass
+  the tower form `Extension -> {Sqrt[2], Sqrt[2 - Sqrt[2]]}` once
+  the latter is added as a tower-acceptable generator.
+- **Depth-1 nesting only**.  `Sqrt[2 + Sqrt[2 + Sqrt[2]]]` (a
+  Sqrt-of-Sqrt-of-Sqrt) is not currently accepted because the
+  atomic-radical walk treats `Sqrt[2 + Sqrt[2]]` as a non-atomic
+  Power node and rejects.  Recursion-of-recogniser is a
+  straightforward extension if needed.
+- **Cleaner output basis** (Mathematica's
+  `Sqrt[2 − Sqrt[2]] + Sqrt[2 (2 − Sqrt[2])]` form) is not
+  attempted; picocas renders coefficients as polynomials in α, then
+  relies on `Sqrt[base]^k` auto-canonicalisation.  The result is
+  mathematically correct but sometimes uglier — the headline test
+  case happens to come out in Mathematica's exact form because
+  `α (1 + Sqrt[2])` distributes naturally.
+
+### Files
+
+- `src/qafactor.c`: new file-static helpers
+  `expr_is_atomic_algebraic`, `exprlist_push_unique_borrowed`,
+  `expr_collect_atomic_algebraics`, `expr_zn_minus_base`,
+  `expr_qx_squarefree_part`, `expr_qx_is_irreducible`,
+  `qa_resolve_nested_radical`, plus a forward declaration at the
+  top of the file.  `qa_resolve_extension`'s `c^(1/n)` branch falls
+  through to the new branch on non-integer base.
+- `tests/test_qafactor.c`: 5 new tests (45 total) — headline
+  `x^8 + 1` over `Q(Sqrt[2 - Sqrt[2]])`, the min-poly-of-α splits
+  case, Sqrt[2+Sqrt[3]], the denested Sqrt[5+2Sqrt[6]] case, and
+  the `Sqrt[5] ∉ Q(α)` irreducible-stays-unfactored edge.

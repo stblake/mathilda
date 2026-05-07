@@ -25,6 +25,14 @@ extern Expr* internal_call_impl(const char* name,
                                 Expr* (*builtin_func)(Expr*),
                                 Expr** args, size_t count);
 
+/* Forward decl: nested-radical extension recogniser (Phase G8).
+ * Defined at the bottom of this file; called from qa_resolve_extension
+ * when the surface form is `Sqrt[base]` / `base^(1/n)` with non-integer
+ * `base`.  Returns a fresh QAExt (caller owns) and writes
+ * `*render_out` on success; NULL on unrecognised shapes. */
+static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
+                                        Expr** render_out);
+
 /* ============================== mpq → Expr ============================== */
 
 /* Convert an mpq_t to a picocas Expr.  Returns Integer when the
@@ -637,7 +645,9 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
         }
     }
 
-    /* c^(1/n)  →  P_α(y) = yⁿ − c, render = c^(1/n). */
+    /* c^(1/n)  →  P_α(y) = yⁿ − c, render = c^(1/n).  Integer-base case
+     * only; non-integer bases (nested radicals) fall through to the
+     * Phase G8 branch below. */
     if (alpha_expr->type == EXPR_FUNCTION
         && alpha_expr->data.function.head
         && alpha_expr->data.function.head->type == EXPR_SYMBOL
@@ -652,6 +662,14 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
             QAExt* ext = qaext_root_si((long)c->data.integer, (unsigned)q);
             *render_out = expr_copy((Expr*)alpha_expr);
             return ext;
+        }
+        /* Phase G8: `base^(1/n)` with non-integer base — try to resolve
+         * `base` as an element of a sub-tower built from the atomic
+         * radicals it contains.  Falls through if any sub-radical is
+         * itself non-atomic (depth-1 MVP). */
+        if (is_rational(exp, &p, &q) && p == 1 && q >= 2) {
+            QAExt* ext = qa_resolve_nested_radical(alpha_expr, render_out);
+            if (ext) return ext;
         }
         return NULL;
     }
@@ -1376,4 +1394,371 @@ Expr* qa_factor_with_extension_tower(const Expr* poly,
     expr_free(poly_internal);
     qa_tower_free(t);
     return result;
+}
+
+/* ============================== Phase G8 ============================== */
+/* Nested radical generators: `Sqrt[base]` / `base^(1/n)` where `base`
+ * is a polynomial expression in atomic radicals (Sqrt[c], c^(1/m), I).
+ * See FACTOR_PLAN.md §14 / Phase G8 for the design. */
+
+/* Atomic-algebraic recogniser: returns true iff `e` is one of the four
+ * surface forms the original `qa_resolve_extension` accepts:
+ *   - the imaginary unit (bare I or Complex[0, 1])
+ *   - Sqrt[c] / Power[c, 1/2] with integer c
+ *   - I·Sqrt[c]   (auto-evaluated form of Sqrt[-c])
+ *   - c^(1/n) with integer c, integer n ≥ 2
+ *
+ * This is a strict-shape predicate: it does NOT recurse into nested
+ * radicals.  By construction, anything passing this test resolves
+ * through the original (non-G8) branches of qa_resolve_extension. */
+static bool expr_is_atomic_algebraic(const Expr* e) {
+    if (!e) return false;
+
+    if (expr_is_imaginary_unit(e)) return true;
+
+    long c;
+    if (expr_is_sqrt_int(e, &c)) return true;
+
+    /* I·Sqrt[c]  =  Sqrt[-c]  (picocas auto-evaluation). */
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Times
+        && e->data.function.arg_count == 2) {
+        Expr* a = e->data.function.args[0];
+        Expr* b = e->data.function.args[1];
+        long cc = 0;
+        if ((expr_is_imaginary_unit(a) && expr_is_sqrt_int(b, &cc)) ||
+            (expr_is_imaginary_unit(b) && expr_is_sqrt_int(a, &cc))) {
+            return cc > 0;
+        }
+    }
+
+    /* c^(1/n) with integer c, n ≥ 2.  Exclude the 1/2 case already
+     * matched by expr_is_sqrt_int. */
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        int64_t p, q;
+        if (base->type == EXPR_INTEGER
+            && is_rational(exp, &p, &q)
+            && p == 1 && q >= 2) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/* Push `e` onto a growing dedup'd Expr-list (deduplicated by expr_eq).
+ * The list owns no references — entries point into the original tree
+ * the caller is walking; callers must not free entries individually. */
+static void exprlist_push_unique_borrowed(const Expr* e,
+                                          const Expr*** list,
+                                          int* n, int* cap) {
+    for (int i = 0; i < *n; i++) {
+        if (expr_eq((Expr*)(*list)[i], (Expr*)e)) return;
+    }
+    if (*n + 1 > *cap) {
+        *cap = *cap ? (*cap) * 2 : 4;
+        *list = (const Expr**)realloc(*list, sizeof(Expr*) * (*cap));
+    }
+    (*list)[(*n)++] = e;
+}
+
+/* Walk `e` and collect every subtree recognised by
+ * `expr_is_atomic_algebraic` into `*atoms`.  Recursion stops at atomic
+ * subtrees (so nested-inside-atomic content is not enumerated).
+ *
+ * Returns false if `e` contains any non-atomic, non-arithmetic
+ * subexpression — i.e. an unrecognised radical-like Power node, an
+ * unbound symbol, etc.  In that case the caller should reject the
+ * input as out-of-MVP-scope.
+ *
+ * Accepted polynomial structure (the "skeleton" between atomics):
+ * Plus, Times, Power[base, integer-exp], integer/rational/bigint
+ * constants. */
+static bool expr_collect_atomic_algebraics(const Expr* e,
+                                           const Expr*** atoms,
+                                           int* n_atoms, int* cap) {
+    if (!e) return false;
+
+    /* Constants are fine. */
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    int64_t p, q;
+    if (is_rational((Expr*)e, &p, &q)) return true;
+
+    /* An atomic algebraic generator: record and stop. */
+    if (expr_is_atomic_algebraic(e)) {
+        exprlist_push_unique_borrowed(e, atoms, n_atoms, cap);
+        return true;
+    }
+
+    if (e->type != EXPR_FUNCTION
+        || !e->data.function.head
+        || e->data.function.head->type != EXPR_SYMBOL) return false;
+
+    const char* head = e->data.function.head->data.symbol;
+
+    /* Plus / Times: recurse on every argument. */
+    if (head == SYM_Plus || head == SYM_Times) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (!expr_collect_atomic_algebraics(
+                    e->data.function.args[i], atoms, n_atoms, cap)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /* Power[base, integer]: recurse into base. */
+    if (head == SYM_Power && e->data.function.arg_count == 2) {
+        Expr* exp = e->data.function.args[1];
+        if (exp->type == EXPR_INTEGER) {
+            return expr_collect_atomic_algebraics(
+                e->data.function.args[0], atoms, n_atoms, cap);
+        }
+        /* Power[base, non-integer]: only allowed if it's atomic itself
+         * (handled above).  Anything else (nested radical inside the
+         * skeleton, fractional Power of a non-rational base) is out
+         * of MVP scope. */
+        return false;
+    }
+
+    /* Anything else (Cos, Log, free symbol, ...) is unrecognised. */
+    return false;
+}
+
+/* Build z^n  −  base_internal  as an Expr in (alpha_internal, z_internal).
+ * Used as the second resultant argument when computing the absolute
+ * minimal polynomial of α = base^(1/n) over Q. */
+static Expr* expr_zn_minus_base(const Expr* base_internal,
+                                int n, const char* z_name) {
+    /* z^n */
+    Expr* zpow_args[2] = { expr_new_symbol(z_name),
+                           expr_new_integer((int64_t)n) };
+    Expr* zpow = expr_new_function(expr_new_symbol("Power"),
+                                   zpow_args, 2);
+    /* −base_internal */
+    Expr* neg_args[2] = { expr_new_integer(-1),
+                          expr_copy((Expr*)base_internal) };
+    Expr* neg_base = expr_new_function(expr_new_symbol("Times"),
+                                       neg_args, 2);
+    /* z^n + (−base_internal) */
+    Expr* sum_args[2] = { zpow, neg_base };
+    Expr* sum = expr_new_function(expr_new_symbol("Plus"),
+                                  sum_args, 2);
+    Expr* expanded = expr_expand(sum);
+    expr_free(sum);
+    return expanded;
+}
+
+/* Reduce R(z) ∈ Q[z] to its squarefree part: R / gcd(R, R').  Returns
+ * a new Expr (caller owns).  Returns a copy of R unchanged when R is
+ * already squarefree. */
+static Expr* expr_qx_squarefree_part(const Expr* R, const char* z_name) {
+    /* dR/dz */
+    Expr* d_args[2] = { expr_copy((Expr*)R), expr_new_symbol(z_name) };
+    Expr* dR = internal_call_impl("D", builtin_d, d_args, 2);
+    Expr* dR_eval = evaluate(dR);
+    expr_free(dR);
+
+    /* gcd(R, R') */
+    Expr* g_args[2] = { expr_copy((Expr*)R), dR_eval };
+    Expr* g = internal_polynomialgcd(g_args, 2);
+    Expr* g_eval = evaluate(g);
+    expr_free(g);
+
+    /* If gcd is degree 0 (a nonzero constant), R is already squarefree. */
+    Expr* z_sym = expr_new_symbol(z_name);
+    int gdeg = get_degree_poly(g_eval, z_sym);
+    if (gdeg <= 0) {
+        expr_free(z_sym);
+        expr_free(g_eval);
+        return expr_copy((Expr*)R);
+    }
+
+    /* R / gcd(R, R') via PolynomialQuotient. */
+    Expr* q_args[3] = { expr_copy((Expr*)R), g_eval, z_sym };
+    Expr* qexpr = internal_polynomialquotient(q_args, 3);
+    Expr* qeval = evaluate(qexpr);
+    expr_free(qexpr);
+    return qeval;
+}
+
+/* True if R ∈ Q[z] is irreducible over Q.  Conservative: factors via
+ * picocas's `Factor`; returns true iff the Q-factorisation contains a
+ * single non-constant factor (with multiplicity 1).  Returns false
+ * (out parameter unchanged) on any analysis failure — caller treats
+ * that as "not provably irreducible". */
+static bool expr_qx_is_irreducible(const Expr* R, const char* z_name) {
+    Expr* fac_args[1] = { expr_copy((Expr*)R) };
+    Expr* factored = internal_factor(fac_args, 1);
+    if (!factored) return false;
+    Expr* fe = evaluate(factored);
+    expr_free(factored);
+
+    int n_nontrivial = 0;
+    Expr* z_sym = expr_new_symbol(z_name);
+
+    /* Walk the Factor result.  Times[poly1, poly2, ...] / Power[poly, k]
+     * / a single poly all need handling.  We count distinct non-constant
+     * factors, treating any Power exponent > 1 as multiplicity > 1
+     * (which means the Q-factorisation is NOT irreducible). */
+    if (fe->type == EXPR_FUNCTION
+        && fe->data.function.head
+        && fe->data.function.head->type == EXPR_SYMBOL
+        && fe->data.function.head->data.symbol == SYM_Times) {
+        for (size_t i = 0; i < fe->data.function.arg_count; i++) {
+            Expr* a = fe->data.function.args[i];
+            if (a->type == EXPR_FUNCTION
+                && a->data.function.head
+                && a->data.function.head->type == EXPR_SYMBOL
+                && a->data.function.head->data.symbol == SYM_Power
+                && a->data.function.arg_count == 2) {
+                Expr* k = a->data.function.args[1];
+                if (k->type == EXPR_INTEGER && k->data.integer > 1) {
+                    expr_free(z_sym);
+                    expr_free(fe);
+                    return false;  /* multiplicity > 1 ⇒ not irreducible */
+                }
+                int d = get_degree_poly(a->data.function.args[0], z_sym);
+                if (d > 0) n_nontrivial++;
+            } else {
+                int d = get_degree_poly(a, z_sym);
+                if (d > 0) n_nontrivial++;
+            }
+        }
+    } else if (fe->type == EXPR_FUNCTION
+               && fe->data.function.head
+               && fe->data.function.head->type == EXPR_SYMBOL
+               && fe->data.function.head->data.symbol == SYM_Power
+               && fe->data.function.arg_count == 2) {
+        Expr* k = fe->data.function.args[1];
+        if (k->type == EXPR_INTEGER && k->data.integer > 1) {
+            expr_free(z_sym);
+            expr_free(fe);
+            return false;
+        }
+        int d = get_degree_poly(fe->data.function.args[0], z_sym);
+        if (d > 0) n_nontrivial++;
+    } else {
+        int d = get_degree_poly(fe, z_sym);
+        if (d > 0) n_nontrivial++;
+    }
+
+    expr_free(z_sym);
+    expr_free(fe);
+    return n_nontrivial == 1;
+}
+
+/* Phase G8 entry: resolve `Sqrt[base]` / `base^(1/n)` with non-rational
+ * `base` to a (QAExt, render) pair via the algorithm in FACTOR_PLAN
+ * §14 Phase G8. */
+static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
+                                        Expr** render_out) {
+    if (!alpha_expr || alpha_expr->type != EXPR_FUNCTION) return NULL;
+    if (!alpha_expr->data.function.head
+        || alpha_expr->data.function.head->type != EXPR_SYMBOL
+        || alpha_expr->data.function.head->data.symbol != SYM_Power
+        || alpha_expr->data.function.arg_count != 2) return NULL;
+
+    Expr* base = alpha_expr->data.function.args[0];
+    Expr* exp  = alpha_expr->data.function.args[1];
+
+    int64_t p, q;
+    if (!is_rational(exp, &p, &q) || p != 1 || q < 2) return NULL;
+    int n = (int)q;
+
+    /* 1) Collect atomic radicals from `base`.  Reject if `base`
+     * contains any unrecognised structure. */
+    const Expr** atoms = NULL;
+    int n_atoms = 0;
+    int cap = 0;
+    if (!expr_collect_atomic_algebraics(base, &atoms, &n_atoms, &cap)) {
+        free(atoms);
+        return NULL;
+    }
+    if (n_atoms == 0) {
+        /* `base` is purely Q-rational — caller's c^(1/n) branch should
+         * have caught this when c was integer.  Reject non-integer
+         * rational `base` for now (not in MVP). */
+        free(atoms);
+        return NULL;
+    }
+
+    /* 2) Build sub-tower Q(γ_sub) = Q(β_1, ..., β_k). */
+    Expr** atom_args = (Expr**)malloc(sizeof(Expr*) * n_atoms);
+    for (int i = 0; i < n_atoms; i++) {
+        atom_args[i] = (Expr*)atoms[i];   /* qa_resolve_extension_tower
+                                           * borrows; we own the tree
+                                           * the atoms point into. */
+    }
+    QATower* sub = qa_resolve_extension_tower(atom_args, n_atoms);
+    free(atom_args);
+    free(atoms);
+    if (!sub) return NULL;
+
+    /* 3) Substitute each atom in `base` with its Q(γ_sub) representation
+     * (a polynomial in QA_ALPHA_INTERNAL). */
+    Expr* base_internal = expr_copy((Expr*)base);
+    for (int i = 0; i < sub->n; i++) {
+        Expr* atom_in_gamma_int = qanum_to_expr_in_gamma_sym(
+            sub->alphas[i], QA_ALPHA_INTERNAL);
+        Expr* old = base_internal;
+        base_internal = expr_subst(old, sub->alpha_renders[i],
+                                   atom_in_gamma_int);
+        expr_free(old);
+        expr_free(atom_in_gamma_int);
+    }
+    Expr* base_canon = evaluate(expr_expand(base_internal));
+    expr_free(base_internal);
+    base_internal = base_canon;
+
+    /* 4) Compute Res_w(P_sub(w), z^n − base(w))  ∈  Q[z]. */
+    const char* w_name = QA_ALPHA_INTERNAL;
+    const char* z_name = QA_Z_INTERNAL;
+
+    Expr* P_sub_in_w = qaext_min_poly_expr(sub->ext, w_name);
+    Expr* zn_minus_base = expr_zn_minus_base(base_internal, n, z_name);
+
+    Expr* res_args[3] = { P_sub_in_w,
+                          zn_minus_base,
+                          expr_new_symbol(w_name) };
+    Expr* min_poly_raw = internal_resultant(res_args, 3);
+    expr_free(base_internal);
+
+    if (!min_poly_raw) {
+        qa_tower_free(sub);
+        return NULL;
+    }
+    Expr* min_poly = expr_expand(min_poly_raw);
+    expr_free(min_poly_raw);
+
+    /* 5) Take the squarefree part — drops any spurious multiplicity
+     * coming from algebraic dependencies among γ_sub conjugates. */
+    Expr* min_poly_sf = expr_qx_squarefree_part(min_poly, z_name);
+    expr_free(min_poly);
+
+    /* 6) MVP guard: require the squarefree part to be Q-irreducible.
+     * If not, α actually lies in a smaller subextension or has
+     * conjugates that split — out of MVP scope for now. */
+    if (!expr_qx_is_irreducible(min_poly_sf, z_name)) {
+        expr_free(min_poly_sf);
+        qa_tower_free(sub);
+        return NULL;
+    }
+
+    /* 7) Build the QAExt from the irreducible min poly. */
+    QAExt* ext = qaext_from_q_expr(min_poly_sf, z_name);
+    expr_free(min_poly_sf);
+    qa_tower_free(sub);
+
+    if (!ext) return NULL;
+    *render_out = expr_copy((Expr*)alpha_expr);
+    return ext;
 }

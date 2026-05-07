@@ -426,6 +426,8 @@ bool expr_eq(const Expr* a, const Expr* b) {
     return false;
 }
 
+static bool is_numeric_coefficient_factor(const Expr* e); /* fwd decl */
+
 static int get_canonical_rank(const Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL || is_rational((Expr*)e, NULL, NULL)) return 0;
 #ifdef USE_MPFR
@@ -434,6 +436,13 @@ static int get_canonical_rank(const Expr* e) {
     if (is_complex((Expr*)e, NULL, NULL)) return 1;
     if (e->type == EXPR_STRING) return 2;
     if (e->type == EXPR_SYMBOL) return 3;
+    /* Treat constants built from arithmetic/radicals (Sqrt[2], Sqrt[2-Sqrt[2]],
+     * (1+Sqrt[3])/2, ...) as numeric for canonical-order purposes, so they
+     * sort before symbols inside Times and inside Plus's main-factor
+     * comparison. Without this, `Sqrt[2-Sqrt[2]] x` would be stored as
+     * Times[x, Sqrt[2-Sqrt[2]]] (rank 3 < rank 4), preventing the
+     * leading-numeric strip in get_main_factor from ever firing. */
+    if (is_numeric_coefficient_factor(e)) return 0;
     return 4; // General function
 }
 
@@ -476,11 +485,12 @@ static int string_compare_canonical(const char* s1, const char* s2) {
 /* True if `e` should be treated as a numeric coefficient when stripping
  * the leading factor of a Times for canonical-order comparison. Covers the
  * obvious atomic numerics (Integer/Real/BigInt/MPFR), Rational[n,d],
- * Complex[re,im] over numeric components, and Power[numeric, numeric]
- * (i.e. radicals like Sqrt[2] = Power[2, 1/2] and 2^(1/3)). Without the
- * Power case, monomials like `Sqrt[2] x` would not have their main factor
- * recognised as `x`, so canonical sort placed them after `x^2` instead of
- * before. */
+ * Complex[re,im] over numeric components, Power[numeric, numeric] (i.e.
+ * radicals like Sqrt[2] = Power[2, 1/2] and 2^(1/3)), and arbitrarily
+ * nested Plus/Times of numeric components (so `Sqrt[2 - Sqrt[2]]` and
+ * `(1 + Sqrt[3])/2` are recognised as constants). Without this, monomials
+ * like `Sqrt[2 - Sqrt[2]] x` would not have their main factor recognised
+ * as `x`, so canonical sort placed them after `x^2` instead of before. */
 static bool is_numeric_coefficient_factor(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT
@@ -495,6 +505,12 @@ static bool is_numeric_coefficient_factor(const Expr* e) {
         if (h == SYM_Power && e->data.function.arg_count == 2) {
             return is_numeric_coefficient_factor(e->data.function.args[0])
                 && is_numeric_coefficient_factor(e->data.function.args[1]);
+        }
+        if ((h == SYM_Plus || h == SYM_Times) && e->data.function.arg_count > 0) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                if (!is_numeric_coefficient_factor(e->data.function.args[i])) return false;
+            }
+            return true;
         }
         if (h == SYM_Complex) {
             Expr *re, *im;
@@ -524,6 +540,20 @@ static Expr* get_main_factor(Expr* e) {
     return e;
 }
 
+/* True for the atomic numeric kinds that have an extractable double value:
+ * Integer, BigInt, Real, Rational, MPFR. False for symbolic numeric
+ * constants like Sqrt[2-Sqrt[2]] which canonical-sort as numbers but have
+ * no meaningful get_numeric_value(). */
+static bool is_atomic_numeric(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (is_rational((Expr*)e, NULL, NULL)) return true;
+    return false;
+}
+
 int expr_compare(const Expr* a, const Expr* b) {
     if (a == b) return 0;
     if (!a) return -1;
@@ -550,28 +580,40 @@ int expr_compare(const Expr* a, const Expr* b) {
 
     switch (rank_a) {
         case 0: { // Number
-            // Fast path: plain int64 comparison without GMP overhead
-            if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {
-                if (a->data.integer < b->data.integer) return -1;
-                if (a->data.integer > b->data.integer) return 1;
+            /* Atomic numerics (Integer/BigInt/Real/Rational/MPFR) have an
+             * extractable double; symbolic numeric constants reach rank 0
+             * via is_numeric_coefficient_factor but get_numeric_value
+             * returns 0 for them, so the value path would falsely report
+             * equality. Compare those structurally below. */
+            bool a_atomic = is_atomic_numeric(a);
+            bool b_atomic = is_atomic_numeric(b);
+            if (a_atomic && b_atomic) {
+                if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {
+                    if (a->data.integer < b->data.integer) return -1;
+                    if (a->data.integer > b->data.integer) return 1;
+                    return 0;
+                }
+                if (expr_is_integer_like(a) && expr_is_integer_like(b)) {
+                    mpz_t ma2, mb2;
+                    expr_to_mpz(a, ma2);
+                    expr_to_mpz(b, mb2);
+                    int cmp = mpz_cmp(ma2, mb2);
+                    mpz_clear(ma2);
+                    mpz_clear(mb2);
+                    return cmp;
+                }
+                double va = get_numeric_value(a);
+                double vb = get_numeric_value(b);
+                if (va < vb) return -1;
+                if (va > vb) return 1;
+                if (a->type != b->type) return (int)a->type - (int)b->type;
                 return 0;
             }
-            // Exact comparison when either operand is a BigInt
-            if (expr_is_integer_like(a) && expr_is_integer_like(b)) {
-                mpz_t ma, mb;
-                expr_to_mpz(a, ma);
-                expr_to_mpz(b, mb);
-                int cmp = mpz_cmp(ma, mb);
-                mpz_clear(ma);
-                mpz_clear(mb);
-                return cmp;
-            }
-            double va = get_numeric_value(a);
-            double vb = get_numeric_value(b);
-            if (va < vb) return -1;
-            if (va > vb) return 1;
-            if (a->type != b->type) return (int)a->type - (int)b->type;
-            return 0;
+            /* Atomic numeric vs symbolic numeric constant: atomic first. */
+            if (a_atomic) return -1;
+            if (b_atomic) return 1;
+            /* Both symbolic. Fall through to general-function compare. */
+            goto general_function_compare;
         }
         case 1: { // Complex
             Expr *re_a, *im_a, *re_b, *im_b;
@@ -593,7 +635,8 @@ int expr_compare(const Expr* a, const Expr* b) {
              * order, which is what canonical sorting expects. */
             if (a->data.symbol == b->data.symbol) return 0;
             return strcmp(a->data.symbol, b->data.symbol);
-        case 4: { // General Function
+        case 4:
+        general_function_compare: { // General Function
             Expr* ha = a->data.function.head;
             Expr* hb = b->data.function.head;
             

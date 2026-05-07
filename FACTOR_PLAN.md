@@ -2043,6 +2043,214 @@ extensions (Trager §5).
 
 - Estimated: ~300 LOC source + ~200 LOC tests.
 
+#### Phase G8 — Nested radical generators in `Extension -> α`
+
+**Motivation.** Today `qa_resolve_extension` (`src/qafactor.c:591`)
+recognises only four shapes for the surface form of `α`: `I`,
+`Sqrt[c]` with integer `c`, `I·Sqrt[c]`, and `c^(1/n)` with integer
+`c`.  Anything outside this list — most importantly, *nested radicals*
+like `Sqrt[2 - Sqrt[2]]` — falls through and `qa_factor_with_extension`
+returns NULL, so `Factor[poly, Extension -> Sqrt[2 − Sqrt[2]]]`
+silently degrades to plain Q-factoring.
+
+The headline target is
+
+```
+Factor[x^8 + 1, Extension -> Sqrt[2 - Sqrt[2]]]
+```
+
+which Mathematica returns as four real quadratic factors with roots
+`e^(±i(2k+1)π/8)` (the 16th roots of unity in pairs of complex
+conjugates).  Q(Sqrt[2 − Sqrt[2]]) = Q(2 sin(π/8)) is a degree-4
+extension of Q with minimal polynomial `y⁴ − 4y² + 2`, and Sqrt[2] =
+2 − α² lies inside it.
+
+**Scope (MVP).** Recognise `Sqrt[base]` and `base^(1/n)` where `base`
+is an arithmetic expression composed of:
+  - rational integers, and
+  - sub-radicals (`Sqrt[c]`, `c^(1/m)`, `I`) over rationals, recursively,
+joined by `Plus` / `Times` / integer `Power`.  In particular this
+covers `Sqrt[2 − Sqrt[2]]`, `Sqrt[2 + Sqrt[3]]`, `Sqrt[5 − 2 Sqrt[6]]`,
+`(1 + Sqrt[5])^(1/3)`, etc.  The minimal polynomial of α over Q is
+computed automatically.
+
+**Out of MVP scope** (deferred):
+1. Sums-of-radicals as the *whole* generator (e.g.
+   `Extension -> Sqrt[2] + Sqrt[3]`).  Workaround: the user passes the
+   tower form `Extension -> {Sqrt[2], Sqrt[3]}`, which already works.
+2. Input polynomials that themselves contain the *sub-radicals*
+   (e.g. `Factor[Sqrt[2] x + 1, Extension -> Sqrt[2 - Sqrt[2]]]`).
+   Even though `Sqrt[2] ∈ Q(α)`, the input lifter
+   (`qa_expr_to_qaupoly_with_alpha`) currently substitutes only the
+   user's literal α surface form for the internal placeholder, so it
+   would treat the residual `Sqrt[2]` as a free symbol and refuse the
+   lift.  Fixable later by extending the lifter to substitute the full
+   list of sub-radicals with their Q(α)-representations.
+3. Pretty-printing on the relative `Q(γ_sub)`-basis (Mathematica's
+   form: `Sqrt[2 − Sqrt[2]] + Sqrt[2(2 − Sqrt[2])]`).  Picocas will
+   render on the absolute Q-basis, i.e. as a polynomial in α with
+   integer powers `α⁰..α^{deg-1}`; auto-canonicalisation collapses
+   `α^k` (e.g. `(2 − Sqrt[2])^(3/2)` for `k = 3` when `α =
+   Sqrt[2 − Sqrt[2]]`).  Functionally correct but sometimes uglier
+   than Mathematica's output.
+
+**Algorithm.** The new branch in `qa_resolve_extension` handles α =
+`Power[base, Rational[1, n]]` (with `Sqrt[base]` canonicalising to the
+same shape).  Steps:
+
+1. **Decompose α.** Pattern-match `Power[base, 1/n]`; if `base` is a
+   plain rational integer, defer to the existing `Sqrt[c]` /
+   `c^(1/n)` branches.
+
+2. **Collect atomic radicals from `base`.** Walk `base` recursively;
+   the *atomic radicals* are subtrees that the existing
+   `qa_resolve_extension` already accepts (`Sqrt[c]` integer arg,
+   `c^(1/m)` integer arg, `I`).  Recursive `Sqrt[Sqrt[..]]` shapes
+   recurse into the new branch.  Result: an ordered list `β = [β_1,
+   ..., β_k]` of generators (deduplicated by structural equality).
+
+3. **Build the sub-tower.** If `k = 0`, no sub-tower needed —
+   `base` is rational; the new α generator is `α^n − base = 0` (an
+   integer / rational).  Build a degree-`n` QAExt directly.
+
+   Otherwise, call the existing `qa_resolve_extension_tower(β, k)` to
+   build the compositum `Q(γ_sub)` with primitive element `γ_sub` and
+   minimal polynomial `P_sub(w) ∈ Q[w]`.
+
+4. **Express `base` as a polynomial in `γ_sub`.** Substitute each β_i
+   in `base` with its `Q(γ_sub)`-representation (already computed in
+   `tower_sub->alphas[i]`, which is a QANum), and reduce to a polynomial
+   `B(w)` in `γ_sub` with rational coefficients (`mpq_t[]` of length
+   `deg P_sub`).  `qa_expr_to_qaupoly_with_alpha` does the heavy lifting
+   if we treat `base` as a degree-0 polynomial in a dummy x-variable.
+
+5. **Compute α's minimal polynomial over Q.** α^n = base = B(γ_sub).
+   The polynomial `Q_α(z) := Res_w(P_sub(w), z^n − B(w))` ∈ Q[z]
+   vanishes at z = α.  Compute it via picocas's existing
+   `internal_resultant` (already used by `expr_resultant_z` and
+   `find_primitive_shift` in qafactor.c).
+
+   The resultant has degree `n · deg(γ_sub)`, but may be reducible —
+   take its squarefree part; if still reducible, factor it over Q
+   (using `internal_factor`) and pick an irreducible factor.  By
+   construction, exactly one such factor has α as a root; the simplest
+   sound choice when `Q_α` is squarefree is to factor it and pick the
+   factor of largest degree (the irreducible factor containing α; ties
+   broken by structural preference; the typical non-degenerate case
+   has `Q_α` already irreducible).
+
+   *Soundness note:* if `Q_α` factors as `f₁ · f₂` over Q with degrees
+   `d₁, d₂` and we pick the wrong factor, the resulting QAExt would
+   not contain α and downstream factoring would silently produce wrong
+   results.  To stay safe under the project's "Simplify must never be
+   wrong" doctrine: when `Q_α` is reducible we pick by *symbolic
+   evaluation* — substitute α's user surface form for `z` in each
+   factor and check via picocas's `Simplify`/numeric-bigfloat probe
+   that the value is identically zero.  If we cannot decide, return
+   NULL (caller falls back to plain Q-factor).
+
+6. **Build the QAExt.** Convert the chosen min poly via
+   `qaext_from_q_expr` (already implemented for G6).  Render-form is
+   `expr_copy(α_expr)` — picocas's auto-canonicalisation collapses
+   `α^k` correctly because for `α = Sqrt[base]`, `α^(2j) = base^j`
+   collapses on the existing `Power[Plus[...], k/2]` rule path.
+
+**Concrete worked example: α = Sqrt[2 − Sqrt[2]].**
+
+- Step 1: `α = Power[2 − Sqrt[2], 1/2]`, n = 2, base = 2 − Sqrt[2].
+- Step 2: atomic radicals in `base`: just `[Sqrt[2]]`.
+- Step 3: sub-tower = Q(Sqrt[2]) with `P_sub(w) = w² − 2`,
+  `γ_sub = Sqrt[2]`.
+- Step 4: `base = 2 − γ_sub`, so `B(w) = 2 − w` (mpq_t array `[2, −1]`).
+- Step 5: `Q_α(z) = Res_w(w² − 2, z² − (2 − w))
+                  = Res_w(w² − 2, w + z² − 2)
+                  = (z² − 2)² − 2
+                  = z⁴ − 4z² + 2`
+  (irreducible over Q — Eisenstein at p=2).
+- Step 6: QAExt with `P_α = y⁴ − 4y² + 2`, render =
+  `Sqrt[2 − Sqrt[2]]`.
+
+Plug into the unchanged Trager pipeline: `qa_factor_with_extension`
+lifts `x⁸ + 1` to a QAUPoly over Q(α), `qa_alg_factor` produces 4
+quadratic factors, and rendering substitutes α → `Sqrt[2 − Sqrt[2]]`.
+Each factor's coefficients are polynomials in α of degree ≤ 3:
+  - simple form: `x² ± α x + 1` (the 3π/8 and 5π/8 pairs)
+  - α³ form:    `x² ± (3α − α³) x + 1`  (the π/8 and 7π/8 pairs)
+After substitution `(3α − α³)` evaluates to
+`3 Sqrt[2 − Sqrt[2]] − (2 − Sqrt[2])^(3/2)`, which equals
+`Sqrt[2 + Sqrt[2]] = 2 cos(π/8)` numerically.  Mathematica writes the
+same coefficient as `Sqrt[2 − Sqrt[2]] + Sqrt[2(2 − Sqrt[2])]`; picocas's
+form is correct but visually different.
+
+**Module layout.**
+
+- `src/qafactor.c`: extend `qa_resolve_extension` with a new
+  fall-through branch that calls the new helpers below.  No
+  signature change.
+- New static helpers in `src/qafactor.c`:
+  - `expr_collect_atomic_radicals(expr, out)`: recursive walk
+    enumerating subtrees recognised by the original
+    `qa_resolve_extension` branches (deduped by `expr_eq`).
+  - `expr_to_qanum_in_subtower(expr, tower)`: substitute each β_i in
+    `expr` with the corresponding QANum from `tower->alphas[i]`,
+    expand, and reduce to a single QANum in `tower->ext`.
+  - `min_poly_of_nested_radical(base_expr, n, out_min_poly_expr)`:
+    glue for steps 4-5 — returns the min poly as a Q[z] Expr.
+  - `qaext_from_min_poly_choosing_irred_factor(min_poly_expr,
+    alpha_expr, z_name)`: factor `min_poly_expr` over Q via
+    `internal_factor`; if multiple Q-irreducible factors, picks the
+    one that vanishes at α (numeric-probe + Simplify); returns the
+    chosen QAExt or NULL.
+- No header signature changes (all new helpers are file-static).
+
+**Tests.**  Add to `tests/test_qafactor.c` under a new "Phase G8"
+section.  Headline cases:
+
+1. `Factor[x^8 + 1, Extension -> Sqrt[2 - Sqrt[2]]]` — the user-reported
+   case.  Expect 4 quadratic factors; product equals `x⁸ + 1`.
+2. `Factor[x^4 - 4 x^2 + 2, Extension -> Sqrt[2 - Sqrt[2]]]` — the
+   minimal polynomial of α itself splits completely
+   (`(x − α)(x + α)(x − (2 − Sqrt[2])^(3/2)/(2 − Sqrt[2]) · α)
+   (x + ...)` — i.e., the 4 conjugates of α).
+3. `Factor[x^2 - (2 - Sqrt[2]), Extension -> Sqrt[2 - Sqrt[2]]]` —
+   simplest non-trivial: `(x − α)(x + α)`.  *Note: this only works
+   if the input lifter handles Sqrt[2] as a sub-radical of α; if not,
+   marked as "deferred" with the input-substitution scope above.*
+4. `Factor[x^2 - 2, Extension -> Sqrt[2 - Sqrt[2]]]` — `Sqrt[2] ∈ Q(α)`
+   so this should split as `(x − (2 − α²))(x + (2 − α²))`.  *Same
+   caveat as #3.*
+5. Irreducible-input edge: `Factor[x^2 - 5, Extension -> Sqrt[2 - Sqrt[2]]]`
+   stays unfactored (Sqrt[5] ∉ Q(α)).
+6. Recogniser-only unit tests (no factoring): `qa_resolve_extension`
+   on `Sqrt[2 − Sqrt[2]]`, `Sqrt[2 + Sqrt[3]]`, `Sqrt[5 − 2 Sqrt[6]]`
+   produces the expected min poly degree (`{4, 4, 4}` respectively;
+   note `Sqrt[5 − 2 Sqrt[6]] = Sqrt[3] − Sqrt[2]` denests but that's a
+   separate concern — we accept the degree-4 redundant rep).
+
+**Risks and gotchas.**
+
+- *Reducible `Q_α`.*  Happens when α actually lies in a smaller
+  extension than the naive `n · deg(γ_sub)` degree predicts (e.g.
+  `α = Sqrt[5 − 2 Sqrt[6]] = Sqrt[3] − Sqrt[2]`, where the naive min
+  poly is `(z² − 5 + 2 Sqrt[6])(z² − 5 − 2 Sqrt[6])` — irreducible
+  pre-Sqrt[6]-elimination, so post-elimination is `(z² − (Sqrt[3] −
+  Sqrt[2])²)(z² − (Sqrt[3] + Sqrt[2])²) = (z² − 5 + 2 Sqrt[6])
+  (z² − 5 − 2 Sqrt[6])` after Sqrt[6] = α'² − 5)... actually the
+  resultant gives the product, irreducible over Q at degree 4 — but
+  α also satisfies the degree-2 `z² − 5 + 2√6` over Q(Sqrt[6]).  The
+  Q[z] resultant gives the degree-4 absolute min poly; this is fine
+  for our purposes.
+- *Numeric probe for irreducible-factor selection.*  Use picocas's
+  bigfloat evaluation at sufficient precision to distinguish factors;
+  if two factors evaluate within 10^-30 of zero, escalate to a
+  symbolic Simplify-based test.  Refuse on ambiguity.
+- *Recursion depth.*  Triple-nested radicals (`Sqrt[2 + Sqrt[2 +
+  Sqrt[2]]]`) recurse through the new branch.  Cap at a reasonable
+  depth (8) to bound build time; in practice depth ≤ 3 covers nearly
+  all cases of interest.
+
+**Estimated.** ~250 LOC source + ~150 LOC tests.
+
 ### 14.5 Connections to existing code
 
 | Existing | Used by Phase G | Where |
