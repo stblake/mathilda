@@ -1783,7 +1783,7 @@ Soundness:
 
 ### 14.4 Phased implementation plan
 
-#### Phase G1 — `Q(α)` element type
+#### Phase G1 — `Q(α)` element type (DONE 2026-05-07)
 
 `src/qa.{c,h}`: an element of `Q(α) = Q[α]/(P_α(α))`.
 
@@ -1791,15 +1791,25 @@ Soundness:
   coefficients, dense representation.
 - `QAExt`: the extension's minimal polynomial `P_α`, stored as an
   `mpq_t[]` of length `deg P_α + 1`, plus `deg P_α`.
-- Operations: `qa_zero`, `qa_one`, `qa_from_mpq`, `qa_from_int`,
-  `qa_copy`, `qa_add`, `qa_sub`, `qa_neg`, `qa_mul`
+- Operations: `qa_zero`, `qa_one`, `qa_alpha`, `qa_from_mpq`,
+  `qa_from_si`, `qa_copy`, `qa_add`, `qa_sub`, `qa_neg`, `qa_mul`
   (multiply then reduce mod `P_α` via long division), `qa_inverse`
   (extended Euclidean over `Q[y]` → Bézout coefficients), `qa_div`,
-  `qa_eq`, `qa_is_zero`, `qa_is_one`, `qa_to_expr`, `expr_to_qa`.
-- Tests: arithmetic identities; `Sqrt[2] · Sqrt[2] → 2` (in `Q(√2)`);
-  inversion of every non-zero element; cyclotomic
-  identities like `ω · ω² → ω³ ≡ 1` for `ω` a primitive 3rd root.
-- Estimated: ~250 LOC source + ~200 LOC tests.
+  `qa_eq`, `qa_is_zero`, `qa_is_one`, `qa_scale_mpq`, `qa_scale_si`.
+- Convenience extension constructors: `qaext_sqrt_si(c)`
+  (P_α = y² − c), `qaext_root_si(c, n)` (P_α = y^n − c).
+- Tests: 18 cases in `tests/test_qa.c` covering arithmetic identities,
+  `√2 · √2 = 2` reduction, `α³ ≡ 2` in Q(2^(1/3)),
+  `(3+4i)(3−4i) = 25` in Q(i), `1/(1+√2) = √2 − 1` extended-Euclidean
+  inverse, `1/α = α²/2` in Q(2^(1/3)), and division round-trip.
+- Implementation note: the polynomial arithmetic for multiplication-
+  with-reduction and extended-Euclidean inversion is inlined as
+  plain `mpq_t` array manipulation, deliberately avoiding the static
+  `QUPoly` substrate in `zupoly.c`.  Promoting `QUPoly` to a public
+  module is a separable refactor (orthogonal to G1 and not blocking
+  G2-G7).
+- Actual: 232 LOC source (`src/qa.h` 95 + `src/qa.c` 137 minus
+  comments) + 332 LOC tests.  All 95 test binaries pass.
 
 #### Phase G2 — `Q(α)[x]` univariate polynomial type
 
@@ -1960,7 +1970,8 @@ Updated implementation order (extending §12's table):
 | 8 | F6 Tier 4 | Sparse multivariate Hensel | Not started |
 | 9 | F6 cleanup | Widen `extract_monomial` to mpz_t; sign-absorber heuristic | Not started |
 | 10 | 5c | Retire `factor_roots` | Not started |
-| 11 | **G1-G2** (Q(α), Q(α)[x] substrate) | Self-contained; parallelisable with F6 cleanup. | Not started |
+| 11 | **G1** (Q(α) element type) | Self-contained; parallelisable with F6 cleanup. | **Done 2026-05-07** — `src/qa.{c,h}` + 18 tests in `tests/test_qa.c`, all passing. |
+| 11b | **G2** (Q(α)[x] univariate) | Polynomial-in-x with QA coefficients. | Not started |
 | 12 | **G3-G4** (norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | Not started |
 | 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | Not started |
 | 14 | **G6** (tower of extensions) | Multi-radical inputs. | Not started |

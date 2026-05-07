@@ -97,6 +97,7 @@ set(COMMON_SRC
     ../src/mpoly.c
     ../src/mvfactor.c
     ../src/mvfactor3.c
+    ../src/qa.c
     ../src/sym_intern.c
     ../src/sym_names.c
     ../src/repl_hooks.c
@@ -244,6 +245,16 @@ if(USE_ECM)
     target_link_libraries(zupoly_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
 else()
     target_link_libraries(zupoly_tests gmp m)
+endif()
+
+# Phase G1: Q(α) algebraic-number type (Trager's algebraic factoring).
+add_executable(qa_tests test_qa.c ${COMMON_SRC})
+target_include_directories(qa_tests PRIVATE ../src /usr/local/include)
+target_link_directories(qa_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(qa_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(qa_tests gmp m)
 endif()
 
 add_executable(bpoly_tests test_bpoly.c ${COMMON_SRC})
