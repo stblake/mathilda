@@ -54,4 +54,59 @@ struct Expr* qaupoly_norm(const QAUPoly* f,
                           const char* x_name,
                           const char* y_name);
 
+/* ============================ Phase G4 ============================ */
+
+/* Result of Trager's sqfr_norm.  Caller owns `g` (qaupoly_free) and
+ * `R` (expr_free).  `s == -1` signals failure (e.g. f == 0 or the
+ * shift loop did not converge within QA_SQFR_NORM_MAX_TRIES). */
+typedef struct QASqfrNormResult {
+    int   s;
+    QAUPoly*     g;
+    struct Expr* R;
+} QASqfrNormResult;
+
+/* Maximum shifts to try before giving up.  Trager's theorem guarantees
+ * finite termination; in practice s ∈ {0, 1, 2} for nearly all inputs.
+ * Public for tests / introspection. */
+#ifndef QA_SQFR_NORM_MAX_TRIES
+#define QA_SQFR_NORM_MAX_TRIES 32
+#endif
+
+/* Trager's squarefree-norm: find smallest s ≥ 0 such that
+ *
+ *     R(x) = Norm( f(x − s α) )
+ *
+ * is squarefree over Q.  Returns the shift, the shifted polynomial
+ * g(x) = f(x − sα) ∈ Q(α)[x], and the squarefree norm R(x) ∈ Q[x].
+ *
+ * Squarefree-detection is gcd(R, R') over Q[x] via the existing
+ * PolynomialGCD builtin: R is squarefree iff that gcd has degree 0
+ * in x. */
+QASqfrNormResult qa_sqfr_norm(const QAUPoly* f,
+                              const char* x_name,
+                              const char* y_name);
+
+/* Free the owned fields of a sqfr_norm result.  No-op for failure
+ * results.  Does NOT free the struct itself (it is a value type). */
+void qa_sqfr_norm_result_free(QASqfrNormResult* r);
+
+/* Trager's algebraic-factoring of squarefree f ∈ Q(α)[x].
+ *
+ * Returns a freshly-allocated array of `*n_out` monic irreducible
+ * factors over Q(α).  The product of these factors equals f up to
+ * a leading-coefficient unit (which equals 1 when f itself is monic).
+ *
+ * For irreducible f returns an array of length 1 containing a copy
+ * of f (made monic).
+ *
+ * Returns NULL with *n_out = 0 on failure (zero input, sqfr_norm
+ * non-convergence, or arithmetic failure in qaupoly_gcd).
+ *
+ * Ownership: caller must qaupoly_free each entry and free() the
+ * outer array. */
+QAUPoly** qa_alg_factor(const QAUPoly* f,
+                        const char* x_name,
+                        const char* y_name,
+                        int* n_out);
+
 #endif

@@ -1867,19 +1867,50 @@ coefficients.
 - Actual: 95 LOC header (`src/qafactor.h`) + 158 LOC implementation
   (`src/qafactor.c`) + 200 LOC tests.
 
-#### Phase G4 — `sqfr_norm` and `alg_factor`
+#### Phase G4 — `sqfr_norm` and `alg_factor` — **Done 2026-05-07**
 
-`src/qafactor.c`:
+`src/qafactor.c` (extending the G3 module):
 
-- `qa_sqfr_norm(QAUPoly f, QAExt ext) → (int s, QAUPoly g, ZUPoly R)`.
-- `qa_alg_factor(QAUPoly f, QAExt ext) → array of QAUPoly`.
-- Inner loop calls `bz_factor_to_expr` on `R` (after converting to
-  `Expr`) — alternatively expose a new `bz_factor_zupoly` entry point
-  that operates directly on `ZUPoly` to skip the `Expr` round-trip.
-- gcd-back uses Phase G2's `qaupoly_gcd`.
-- Squarefree pre-decomposition: `gcd(f, f')` over `Q(α)[x]` (Phase G2).
-- Tests: at least the six rows from §14.2.
-- Estimated: ~250 LOC source + ~200 LOC tests.
+- `qa_sqfr_norm(QAUPoly* f, x_name, y_name) → QASqfrNormResult`,
+  where `QASqfrNormResult = { int s; QAUPoly* g; Expr* R; }`.  The
+  squarefree-norm algorithm walks `s = 0, 1, 2, …`, builds
+  `g(x) = f(x − sα) ∈ Q(α)[x]` via `qaupoly_shift`, recomputes
+  `R(x) = qaupoly_norm(g) ∈ Q[x]`, and returns the first iteration for
+  which `gcd(R, R')` over `Q[x]` is constant (i.e. `R` is squarefree).
+  Squarefree-detection routes through picocas's existing `D` and
+  `PolynomialGCD` builtins via `internal_call_impl` — no new gcd
+  machinery is added.  Trager's theorem 2.3 / corollary 2.5 guarantees
+  termination; we cap at `QA_SQFR_NORM_MAX_TRIES = 32` shifts as a
+  defensive bound (in practice `s ∈ {0, 1, 2}`).
+- `qa_alg_factor(QAUPoly* f, x_name, y_name, int* n_out) → QAUPoly**`.
+  Calls `sqfr_norm`, factors `R(x) ∈ Q[x]` via `internal_factor`
+  (single-arg `Factor[poly]` — it routes Q[x] inputs through the
+  existing `Together` / `bz_factor_to_expr` Z[x] pipeline so we don't
+  need a `ZUPoly` round-trip), walks the resulting `Times[…]` /
+  `Power[…]` tree to collect Q-rational factors `h_i(x)`, lifts each
+  to a Q(α)-factor of `g` via `qaupoly_gcd(h_i, g)` (Phase G2's
+  Euclidean monic gcd), divides the lift out of `g`, and undoes the
+  linear shift `x → x + sα` via `qaupoly_shift`.  When `R` is
+  Q-irreducible (single factor walked out), returns `[make_monic(f)]`.
+- Two implementation gotchas worth recording:
+  1. `PolynomialGCD` is variadic over polynomials — passing a third
+     `x` symbol silently coerces it into the three-way gcd
+     `gcd(R, R', x)` which is always 1 (a phantom-squarefree result).
+     Fix: pass exactly two args.
+  2. `Factor` requires `arg_count == 1`; passing a `(poly, var)` pair
+     causes `builtin_factor` to return `NULL`, leaving the caller with
+     an unevaluated `Factor[…]` tree that the factor-walker then
+     misinterprets as a single irreducible.  Fix: `Factor[poly]`
+     accepts a univariate Q[x] input directly.
+- Tests: 9 new cases in `tests/test_qafactor.c` (now 20 in total)
+  covering the six `§14.2` rows — `x²−2`, `x⁴+1`, `x⁴−5x²+6`, `x³−2`,
+  `x²+1`, `x²+x+1` over `Q(√2) / Q(√2) / Q(√2) / Q(∛2) / Q(i) / Q(√−3)`
+  respectively — plus the irreducible-input edge case (`x²−3` over
+  `Q(√2)`) and two direct sqfr_norm tests (`s = 0` for already-square­
+  free, `s ≥ 1` for Q-rational input where Norm is `f²`).
+- Actual: 95 LOC header (delta from G3) + 220 LOC source delta (G3
+  module grew from 158 to 378 LOC) + 270 LOC test delta (test file
+  grew from 200 to 470 LOC).  All 97 test binaries pass.
 
 #### Phase G5 — picocas-level API
 
@@ -1997,7 +2028,7 @@ Updated implementation order (extending §12's table):
 | 11 | **G1** (Q(α) element type) | Self-contained; parallelisable with F6 cleanup. | **Done 2026-05-07** — `src/qa.{c,h}` + 18 tests in `tests/test_qa.c`, all passing. |
 | 11b | **G2** (Q(α)[x] univariate) | Polynomial-in-x with QA coefficients. | **Done 2026-05-07** — `src/qaupoly.{c,h}` + 17 tests in `tests/test_qaupoly.c`, all passing.  Headline: `gcd(x²-2, x-√2) = x-√2` over Q(√2) (the Trager lift step). |
 | 11c | **G3** (norm via resultant) | Field-norm of `f ∈ Q(α)[x]` via `Resultant_y(P_α, f)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qaupoly_norm` + 11 tests in `tests/test_qafactor.c`, all passing.  Headlines: `Norm(x − √2) = x² − 2`, `Norm(x − ∛2) = x³ − 2`, `Norm(x² + √2 x + 1) = x⁴ + 1` (cyclotomic Φ_8). |
-| 12 | **G4** (sqfr_norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | Not started |
+| 12 | **G4** (sqfr_norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qa_sqfr_norm` + `qa_alg_factor` + 9 new tests (20 total in `test_qafactor.c`).  Headlines: `x²−2` over `Q(√2)` → `(x−√2)(x+√2)`; `x⁴+1` over `Q(√2)` → `(x²−√2 x+1)(x²+√2 x+1)`; `x⁴−5x²+6` over `Q(√2)` → `(x−√2)(x+√2)(x²−3)`; `x³−2` over `Q(∛2)` → `(x−∛2)(x²+∛2 x+∛4)`; `x²+1` over `Q(i)`, `x²+x+1` over `Q(√−3)`, plus the `x²−3` over `Q(√2)` irreducible-input edge case. |
 | 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | Not started |
 | 14 | **G6** (tower of extensions) | Multi-radical inputs. | Not started |
 | 15 | **G7** (splitting fields) | Foundation for symbolic integration over algebraic extensions (Trager §5). | Deferred |
