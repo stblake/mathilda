@@ -11036,3 +11036,82 @@ is an exact polynomial identity that holds on every branch.
   Borodin-Fagin-Hopcroft-Tompa algorithm is much larger than this
   pattern recogniser; if expanded coverage becomes necessary,
   extending to a full `facpoly_over_alg` is the natural path.
+
+---
+
+## Limit: `Abs[g(x)]` direction-aware rewrite (`layer_abs_rewrite`, 2026-05-07)
+
+`Abs` is continuous everywhere on the real line but
+non-differentiable at the kink. Both Series and L'Hospital silently
+failed on shapes like `Abs[x]/x` near `x = 0`: Series cannot
+expand `Abs[x]` (its leading coefficient is `Derivative[1][Abs][0]`,
+itself unevaluated), and L'Hospital differentiates `Abs[x]` into the
+same `Derivative[1][Abs][x]` and then accepts `Derivative[1][Abs][0]
+/ 1` as a "clean" answer because the determinacy classifier only
+looks for zero, infinity, and `Indeterminate`. The dispatcher
+returned `Derivative[1][Abs][0]` for every direction setting,
+including the canonical disagreement at `x -> 0`.
+
+### The fix
+
+A new `layer_abs_rewrite` runs **before** Series and L'Hospital and
+performs three short-circuiting checks:
+
+1.  **Continuity fast path.** If `f` is exactly `Abs[g(x)]` and
+    `Limit[g, x -> a]` resolves to a value (finite, `±Infinity`,
+    `ComplexInfinity`, or `DirectedInfinity[...]`), return `Abs` of
+    that value, with all infinity flavours folded to `Infinity`.
+    Direction-invariant (Abs is continuous everywhere), so it
+    handles `Abs[Tan[x]]` near `Pi/2`, `Abs[1/x]` near 0,
+    `Abs[Log[x]]` near 0+, etc.
+2.  **One-sided structural rewrite.** For
+    `Direction -> "FromAbove"` or `"FromBelow"` (also the integer
+    `-1 / +1` Mathematica synonyms), walk `f` and replace every
+    x-dependent `Abs[g]` subterm by `g` or `-g` according to the
+    sign of `g` approaching the limit point in that direction. The
+    rewritten expression then drops back through the standard
+    pipeline without any `Abs` blocking Series / L'Hospital.
+    Sign analysis when `g(a) = 0` uses iterated derivatives at the
+    point: if `g^(k)(a)` is the first nonzero derivative,
+    `g(a + t) = g^(k)(a)/k! · t^k + O(t^(k+1))`, so
+
+        FromAbove (t > 0):  sign(g) = sign(g^(k)(a))
+        FromBelow (t < 0):  sign(g) = sign(g^(k)(a)) · (-1)^k
+3.  **Two-sided splitting.** When `Direction` is `TwoSided` or
+    `Reals` and an x-dependent `Abs` is present, probe the two
+    one-sided limits via `compute_limit`. Agreeing values pass
+    through; disagreeing values yield `Indeterminate`. This
+    triggers only on `Abs`-bearing inputs so the rest of the
+    two-sided surface (which already has the narrower
+    `layer_onesided_disagree`) is unchanged.
+
+### Examples
+
+```
+Limit[Abs[x]/x, x -> 0, Direction -> -1]              ==> 1
+Limit[Abs[x]/x, x -> 0, Direction -> 1]               ==> -1
+Limit[Abs[x]/x, x -> 0]                               ==> Indeterminate
+Limit[Abs[x^2 - 1]/(x - 1), x -> 1, Direction -> -1]  ==> 2
+Limit[Abs[x^2 - 1]/(x - 1), x -> 1]                   ==> Indeterminate
+Limit[Abs[Sin[x] - x]/x^3, x -> 0, Direction -> -1]   ==> 1/6
+Limit[Abs[Cos[x] - 1]/x^2, x -> 0]                    ==> 1/2
+Limit[Abs[E^(2 x) - 1]/x, x -> 0, Direction -> -1]    ==> 2
+Limit[(Abs[x] + x)/x, x -> 0, Direction -> -1]        ==> 2
+Limit[(Abs[x] + x)/x, x -> 0, Direction -> 1]         ==> 0
+Limit[Abs[1/x], x -> 0]                               ==> Infinity
+Limit[Abs[Log[x]], x -> 0, Direction -> -1]           ==> Infinity
+Limit[Abs[Tan[x]], x -> Pi/2]                         ==> Infinity
+Limit[Abs[x]/x, x -> Infinity]                        ==> 1
+Limit[Abs[x]/x, x -> -Infinity]                       ==> -1
+```
+
+### Files
+
+- `src/limit.c`: ~140 new LOC for `sign_at_finite_zero`,
+  `sign_via_inner_limit`, `sign_near_point`, `rewrite_abs_in_expr`,
+  `contains_abs_over`, and `layer_abs_rewrite`. Wired into
+  `compute_limit` immediately after `layer1_fast_paths`.
+- `tests/test_limit.c`: `test_abs_directional` group with ~30
+  assertions covering one-sided rewrites, two-sided disagreement,
+  even/odd-order vanishing, leading-Taylor-term shapes, and the
+  divergent-inner-limit continuity fast path.

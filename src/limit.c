@@ -312,6 +312,7 @@ static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx);
 static Expr* layer_log_merge(Expr* f, LimitCtx* ctx);
 static Expr* layer_log_of_finite(Expr* f, LimitCtx* ctx);
 static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx);
+static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx);
 static Expr* rewrite_reciprocal_trig(Expr* e);
 static Expr* magnitude_upper_bound(Expr* e, Expr* x);
 static bool  contains_bounded_head(Expr* e);
@@ -1984,6 +1985,233 @@ static Expr* layer_atom_substitute(Expr* f, LimitCtx* ctx) {
 /* (the failure mode we're after), and only near the top of the recursion */
 /* (depth cap prevents a combinatorial explosion in deeply nested Limits). */
 /* ---------------------------------------------------------------------- */
+
+/* ------------------------------------------------------------------ */
+/* Abs rewrite layer                                                  */
+/*                                                                    */
+/* For one-sided limits, rewrite Abs[g(x)] -> g(x) or -g(x) according */
+/* to the sign of g approaching the limit point in the given          */
+/* direction. For two-sided limits where the rewrite would give       */
+/* different answers on the two sides, return Indeterminate. This     */
+/* layer catches the canonical Limit[Abs[g(x)]/h(x), x -> a, ...]     */
+/* shapes where the kink at the zero of g would otherwise reach       */
+/* L'Hospital / Series and produce Derivative[1][Abs][a] (a non-      */
+/* numeric symbolic value that those layers cannot classify and       */
+/* mistakenly accept as "determinate").                               */
+/*                                                                    */
+/* Sign analysis for a g that vanishes at a finite point uses the     */
+/* iterated derivative test: if g^(k)(a) is the first nonzero         */
+/* derivative, then g(a + t) = g^(k)(a)/k! * t^k + O(t^(k+1)), so     */
+/*   FromAbove (t > 0+):  sign(g) = sign(g^(k)(a))                    */
+/*   FromBelow (t < 0):   sign(g) = sign(g^(k)(a)) * (-1)^k           */
+/* ------------------------------------------------------------------ */
+static int sign_at_finite_zero(Expr* g, LimitCtx* ctx) {
+    Expr* current = expr_copy(g);
+    int sign = 0;
+    for (int order = 1; order <= 5; order++) {
+        Expr* d = simp(mk_fn2("D", current, expr_copy(ctx->x)));
+        current = d;
+        Expr* at_pt = subst_eval(current, ctx->x, ctx->point);
+        int s = literal_sign(at_pt);
+        bool zero = is_lit_zero(at_pt);
+        bool divergent = is_divergent(at_pt);
+        bool x_residual = expr_contains(at_pt, ctx->x);
+        expr_free(at_pt);
+        if (s != 0) {
+            int side = +1;
+            if (ctx->dir == LIMIT_DIR_FROMBELOW) {
+                side = (order % 2 == 0) ? +1 : -1;
+            }
+            sign = s * side;
+            break;
+        }
+        if (zero) continue;          /* derivative still vanishes -- try next order */
+        if (divergent || x_residual) break; /* unresolved symbolic -- give up */
+        break;                       /* unsigned literal we can't classify -- give up */
+    }
+    expr_free(current);
+    return sign;
+}
+
+/* Use a recursive one-sided Limit on g to classify its sign. Falls back
+ * to 0 (undetermined) when the inner limit cannot be resolved or the
+ * value still depends on x. */
+static int sign_via_inner_limit(Expr* g, LimitCtx* ctx) {
+    LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth };
+    Expr* g_lim = compute_limit(g, &sub);
+    if (!g_lim) return 0;
+    int sgn = 0;
+    if (is_infinity_sym(g_lim)) sgn = +1;
+    else if (is_neg_infinity(g_lim)) sgn = -1;
+    else if (!expr_contains(g_lim, ctx->x)) sgn = literal_sign(g_lim);
+    expr_free(g_lim);
+    return sgn;
+}
+
+/* Returns +1 / -1 / 0 (undetermined). Only meaningful for one-sided dir. */
+static int sign_near_point(Expr* g, LimitCtx* ctx) {
+    if (ctx->dir != LIMIT_DIR_FROMABOVE && ctx->dir != LIMIT_DIR_FROMBELOW) {
+        return 0;
+    }
+
+    Expr* g_at = subst_eval(g, ctx->x, ctx->point);
+    if (is_infinity_sym(g_at)) { expr_free(g_at); return +1; }
+    if (is_neg_infinity(g_at)) { expr_free(g_at); return -1; }
+    int s = literal_sign(g_at);
+    if (s != 0) { expr_free(g_at); return s; }
+    bool zero = is_lit_zero(g_at);
+    bool divergent = is_divergent(g_at);
+    bool x_residual = expr_contains(g_at, ctx->x);
+    expr_free(g_at);
+
+    /* g(point) is a literal zero: leading-order derivative test
+     * (only applies at finite points; at infinity we'd need a 1/x
+     * substitution which is delegated to the inner-limit fallback below). */
+    if (zero && !is_infinity_sym(ctx->point) && !is_neg_infinity(ctx->point) &&
+        !is_complex_infinity(ctx->point)) {
+        int s2 = sign_at_finite_zero(g, ctx);
+        if (s2 != 0) return s2;
+    }
+
+    /* Either g(point) is divergent (ComplexInfinity, DirectedInfinity,
+     * Indeterminate, ...), or naive substitution left an x-residual, or
+     * the leading-order test was inconclusive. Recurse: compute the
+     * proper one-sided Limit of g. This handles Abs[1/x] (1/x diverges
+     * with a definite one-sided sign), Abs[Tan[x]] near Pi/2, Abs[Log[x]]
+     * near 0+, etc. */
+    if (divergent || x_residual || zero) {
+        return sign_via_inner_limit(g, ctx);
+    }
+    return 0;
+}
+
+/* Walk e, rewriting each x-dependent Abs[g] to g or -g per direction
+ * sign. Sets *changed if any rewrite fires. */
+static Expr* rewrite_abs_in_expr(Expr* e, LimitCtx* ctx, bool* changed) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+
+    size_t n = e->data.function.arg_count;
+    Expr* head = rewrite_abs_in_expr(e->data.function.head, ctx, changed);
+    Expr** args = (Expr**)malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        args[i] = rewrite_abs_in_expr(e->data.function.args[i], ctx, changed);
+    }
+    Expr* current = expr_new_function(head, args, n);
+    free(args);
+
+    if (current->data.function.head->type == EXPR_SYMBOL && n == 1 &&
+        current->data.function.head->data.symbol == SYM_Abs &&
+        expr_contains(current->data.function.args[0], ctx->x)) {
+        Expr* g = current->data.function.args[0];
+        int s = sign_near_point(g, ctx);
+        if (s == +1) {
+            Expr* gcopy = expr_copy(g);
+            expr_free(current);
+            *changed = true;
+            return gcopy;
+        }
+        if (s == -1) {
+            Expr* neg = simp(mk_neg(expr_copy(g)));
+            expr_free(current);
+            *changed = true;
+            return neg;
+        }
+    }
+    return current;
+}
+
+static bool contains_abs_over(Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Abs &&
+        e->data.function.arg_count == 1 &&
+        expr_contains(e->data.function.args[0], x)) {
+        return true;
+    }
+    if (contains_abs_over(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (contains_abs_over(e->data.function.args[i], x)) return true;
+    }
+    return false;
+}
+
+static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx) {
+    if (!contains_abs_over(f, ctx->x)) return NULL;
+
+    /* Fast path: f is exactly Abs[g(x)]. Abs is continuous everywhere
+     * (including the kink at zero), so Limit[Abs[g], x->a] = Abs[Limit[g,
+     * x->a]] for every direction. Resolves shapes like Abs[Tan[x]] near
+     * Pi/2, Abs[1/x] near 0, Abs[Log[x]] near 0+, etc., where the inner
+     * limit diverges and the structural rewrite path would produce an
+     * intermediate -g that the rest of the pipeline cannot simplify. */
+    if (has_head(f, "Abs") && f->data.function.arg_count == 1 &&
+        expr_contains(f->data.function.args[0], ctx->x)) {
+        LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth };
+        Expr* g_lim = compute_limit(f->data.function.args[0], &sub);
+        if (g_lim) {
+            if (is_infinity_sym(g_lim) || is_neg_infinity(g_lim) ||
+                is_complex_infinity(g_lim) || is_directed_infinity(g_lim)) {
+                expr_free(g_lim);
+                return mk_sym("Infinity");
+            }
+            if (is_indeterminate(g_lim)) {
+                return g_lim;
+            }
+            if (!expr_contains(g_lim, ctx->x)) {
+                return simp(mk_fn1("Abs", g_lim));
+            }
+            expr_free(g_lim);
+        }
+        /* Inner limit unresolved; fall through to the structural rewrite
+         * which may still resolve via direction-aware sign analysis. */
+    }
+
+    /* One-sided: rewrite x-dependent Abs[g] using the direction's sign,
+     * then recurse on the (Abs-free, or strictly simpler) rewritten form. */
+    if (ctx->dir == LIMIT_DIR_FROMABOVE || ctx->dir == LIMIT_DIR_FROMBELOW) {
+        bool changed = false;
+        Expr* rewritten = rewrite_abs_in_expr(f, ctx, &changed);
+        if (!changed) {
+            expr_free(rewritten);
+            return NULL;
+        }
+        Expr* result = compute_limit(rewritten, ctx);
+        expr_free(rewritten);
+        return result;
+    }
+
+    /* Two-sided / Reals: probe the two sides. If they agree we have the
+     * common limit; if they disagree the two-sided limit is genuinely
+     * Indeterminate. Only fires when an x-dependent Abs is present so we
+     * don't reroute every two-sided limit through the disagree pair. */
+    if (ctx->dir == LIMIT_DIR_TWOSIDED || ctx->dir == LIMIT_DIR_REALS) {
+        if (ctx->depth > LIMIT_MAX_DEPTH - 4) return NULL;
+        LimitCtx left  = { ctx->x, ctx->point, LIMIT_DIR_FROMBELOW, ctx->depth };
+        LimitCtx right = { ctx->x, ctx->point, LIMIT_DIR_FROMABOVE, ctx->depth };
+        Expr* L = compute_limit(f, &left);
+        if (!L) return NULL;
+        if (expr_contains(L, ctx->x) || is_indeterminate(L)) {
+            expr_free(L);
+            return NULL;
+        }
+        Expr* R = compute_limit(f, &right);
+        if (!R) { expr_free(L); return NULL; }
+        if (expr_contains(R, ctx->x) || is_indeterminate(R)) {
+            expr_free(L); expr_free(R);
+            return NULL;
+        }
+        if (expr_eq(L, R)) {
+            expr_free(R);
+            return L;
+        }
+        expr_free(L); expr_free(R);
+        return mk_sym("Indeterminate");
+    }
+
+    return NULL;
+}
+
 static Expr* layer_onesided_disagree(Expr* f, LimitCtx* ctx) {
     if (ctx->dir != LIMIT_DIR_TWOSIDED) return NULL;
     if (!is_numeric_literal_point(ctx->point)) return NULL;
@@ -2080,6 +2308,12 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
 
     /* Layer 1: structural fast paths, including continuous substitution. */
     r = layer1_fast_paths(f, ctx);
+    if (r) { expr_free(f); ctx->depth--; return r; }
+
+    /* Abs[g(x)] direction-aware rewrite. Runs early so the kink at the
+     * zero of g is resolved before L'Hospital / Series can latch onto
+     * Derivative[1][Abs][...] as a "clean" answer. */
+    r = layer_abs_rewrite(f, ctx);
     if (r) { expr_free(f); ctx->depth--; return r; }
 
     /* ArcTan / ArcCot of a divergent inner argument. */

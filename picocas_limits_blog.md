@@ -723,11 +723,92 @@ whole new layer.
 | `Sqrt`/`Log` at negative real, `Direction -> I` | WP-9 |
 | `Limit[{f1, f2, ...}, ...]` list threading  | WP-9   |
 | Simple `Log[dom + rest]` Gruntz rewrite     | WP-7   |
+| `Abs[g(x)]/h(x)` at a kink of `g`           | Abs-rewrite |
 | Full Gruntz MRV (stacked exp, iterated log) | future work |
 
 Each row maps to its own `test_wp*` in `tests/test_limit.c`. The
 test battery now stands at 24 groups and ~130 assertions, all
 passing under Valgrind with zero leaks.
+
+---
+
+### Layer -- `Abs[g(x)]` direction-aware rewrite
+
+`Abs` is continuous everywhere on the real line but
+non-differentiable at the kink. Both Series and L'Hospital fail
+silently on shapes like `Abs[x]/x` near `x = 0`: Series cannot
+expand `Abs[x]` (the leading coefficient is `Derivative[1][Abs][0]`,
+itself an unevaluated symbolic value) and L'Hospital differentiates
+`Abs[x]` into the same `Derivative[1][Abs][x]`, then accepts
+`Derivative[1][Abs][0] / 1` as a "clean" answer because the
+classifier only checks for zero, infinity, and `Indeterminate` --
+nothing tells it that the numerator is a non-numeric symbolic head.
+
+The fix is a dedicated layer that runs *before* Series and
+L'Hospital. It does three things, each cheap enough to short-circuit
+when it cannot make progress:
+
+1.  **Continuity fast path.** If `f` is exactly `Abs[g(x)]` and
+    `Limit[g, x -> a]` resolves, return `Abs` of that value
+    (with `Abs[Infinity] = Abs[-Infinity] = Abs[ComplexInfinity] =
+    Infinity` folded). This handles `Abs[1/x]` near 0, `Abs[Tan[x]]`
+    near `Pi/2`, and `Abs[Log[x]]` near `0+` -- shapes where the
+    inner limit diverges and the structural rewrite path would
+    produce an intermediate `-g` that downstream layers can't
+    classify (`Limit[-Log[x], x -> 0+]` is itself a separate gap).
+
+2.  **One-sided structural rewrite.** For `Direction -> "FromAbove"`
+    or `"FromBelow"`, walk `f` and replace each x-dependent
+    `Abs[g]` subterm by `g` or `-g` according to the sign of `g`
+    approaching the limit point in that direction:
+
+    -   If `g(a)` evaluates to a non-zero literal (or to `±Infinity`),
+        the sign is immediate.
+    -   If `g(a) = 0`, the leading-order derivative test gives the
+        sign: if `g^(k)(a)` is the first non-zero derivative,
+        `g(a + t) = g^(k)(a)/k! · t^k + O(t^(k+1))`, so
+
+            FromAbove  (t > 0):  sign(g) = sign(g^(k)(a))
+            FromBelow  (t < 0):  sign(g) = sign(g^(k)(a)) · (-1)^k
+
+    -   If `g(a)` is itself a `ComplexInfinity` / `DirectedInfinity`
+        / unsigned divergent, recurse with `compute_limit(g, ...)`
+        on the same direction and use the sign of that result.
+
+    The rewritten expression is then handed back to `compute_limit`,
+    which drops through the rest of the pipeline without any `Abs`
+    in the way.
+
+3.  **Two-sided splitting.** When `Direction` is `TwoSided` (or
+    `Reals`), the sign of `g` may differ on either side of the
+    kink, so the structural rewrite cannot pick a single
+    replacement. The layer probes both one-sided limits via
+    `compute_limit` and either returns the common value (when they
+    agree) or `Indeterminate` (when they disagree). Two-sided
+    splitting is only triggered when `f` actually contains an
+    x-dependent `Abs` -- the existing
+    `layer_onesided_disagree` is unchanged for the rest of the
+    surface.
+
+Concrete examples now resolving correctly:
+
+```
+Limit[Abs[x]/x, x -> 0, Direction -> -1]              ==> 1
+Limit[Abs[x]/x, x -> 0, Direction -> 1]               ==> -1
+Limit[Abs[x]/x, x -> 0]                               ==> Indeterminate
+Limit[Abs[x^2 - 1]/(x - 1), x -> 1, Direction -> -1]  ==> 2
+Limit[Abs[Sin[x] - x]/x^3, x -> 0, Direction -> -1]   ==> 1/6
+Limit[Abs[Cos[x] - 1]/x^2, x -> 0]                    ==> 1/2
+Limit[Abs[E^(2x) - 1]/x, x -> 0, Direction -> -1]     ==> 2
+Limit[Abs[1/x], x -> 0]                               ==> Infinity
+Limit[Abs[Log[x]], x -> 0, Direction -> -1]           ==> Infinity
+Limit[Abs[Tan[x]], x -> Pi/2]                         ==> Infinity
+Limit[Abs[x]/x, x -> Infinity]                        ==> 1
+Limit[Abs[x]/x, x -> -Infinity]                       ==> -1
+```
+
+Coverage lives in `test_abs_directional` in
+`tests/test_limit.c`.
 
 ## Conclusion
 

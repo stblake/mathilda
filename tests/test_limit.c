@@ -642,6 +642,110 @@ static void test_wp7_gruntz_log_sum(void) {
     check_equiv("Limit[Log[x^2 + x] - 2 Log[x], x -> Infinity]", "0");
 }
 
+/* ----------------------------------------------------------------- */
+/* Abs[g(x)] in directional limits                                    */
+/*                                                                    */
+/* Abs is continuous everywhere but non-differentiable at the kink.   */
+/* L'Hospital and Series both fail on Abs[g(x)] near a zero of g and  */
+/* would otherwise emit Derivative[1][Abs][a] -- a non-numeric        */
+/* symbolic value -- as a "clean" answer. The Abs-rewrite layer       */
+/* resolves these by direction:                                       */
+/*                                                                    */
+/*   FromAbove (x -> a^+):  Abs[g(x)] -> sign(g near a^+) g(x)        */
+/*   FromBelow (x -> a^-):  Abs[g(x)] -> sign(g near a^-) g(x)        */
+/*                                                                    */
+/* For two-sided limits where the one-sided values disagree, the      */
+/* genuine answer is Indeterminate. The continuity identity           */
+/* Abs[Limit[g]] = Limit[Abs[g]] handles divergent inner limits        */
+/* (Abs[Tan[x]] near Pi/2, Abs[1/x] near 0, Abs[Log[x]] near 0+, ...).*/
+/* ----------------------------------------------------------------- */
+static void test_abs_directional(void) {
+    /* The canonical kink: Abs[x]/x at x = 0. Direction -> -1 and +1 use
+     * Mathematica's sign convention (-1 = approach from above). */
+    check_equiv("Limit[Abs[x]/x, x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[Abs[x]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Abs[x]/x, x -> 0, Direction -> \"FromAbove\"]", "1");
+    check_equiv("Limit[Abs[x]/x, x -> 0, Direction -> \"FromBelow\"]", "-1");
+    check_equiv("Limit[Abs[x]/x, x -> 0]", "Indeterminate");
+
+    /* Polynomial argument with a zero at the limit point: factor
+     * (x-1)(x+1) so the sign of x^2 - 1 changes through x = 1. */
+    check_equiv("Limit[Abs[x^2 - 1]/(x - 1), x -> 1, Direction -> -1]", "2");
+    check_equiv("Limit[Abs[x^2 - 1]/(x - 1), x -> 1, Direction -> 1]", "-2");
+    check_equiv("Limit[Abs[x^2 - 1]/(x - 1), x -> 1]", "Indeterminate");
+
+    /* Linear argument vanishing at a non-zero point. */
+    check_equiv("Limit[Abs[x + 1]/(x + 1), x -> -1, Direction -> -1]", "1");
+    check_equiv("Limit[Abs[x + 1]/(x + 1), x -> -1, Direction -> 1]", "-1");
+    check_equiv("Limit[Abs[x + 1]/(x + 1), x -> -1]", "Indeterminate");
+
+    /* Even-order vanishing: x^2 >= 0 globally so both sides agree. */
+    check_equiv("Limit[Abs[x^2]/x^2, x -> 0]", "1");
+    check_equiv("Limit[Abs[x^2]/x, x -> 0]", "0");
+
+    /* Cubic kink (odd order vanishing): sides disagree. */
+    check_equiv("Limit[Abs[x^3]/x^3, x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[Abs[x^3]/x^3, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Abs[x^3]/x^3, x -> 0]", "Indeterminate");
+
+    /* Trig argument vanishing at the limit point: sign of Sin[x] near 0
+     * matches the side. */
+    check_equiv("Limit[Abs[Sin[x]]/x, x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[Abs[Sin[x]]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Abs[Sin[x]]/x, x -> 0]", "Indeterminate");
+
+    /* Non-trivial Taylor leading term: Sin[x] - x = -x^3/6 + ... */
+    check_equiv("Limit[Abs[Sin[x] - x]/x^3, x -> 0, Direction -> -1]", "1/6");
+    check_equiv("Limit[Abs[Sin[x] - x]/x^3, x -> 0, Direction -> 1]", "-1/6");
+    check_equiv("Limit[Abs[Sin[x] - x]/x^3, x -> 0]", "Indeterminate");
+
+    /* Even-leading-order argument: Cos[x] - 1 = -x^2/2 + ... is negative
+     * on both sides of 0, so Abs[Cos[x] - 1] = 1 - Cos[x] and the limit
+     * is unambiguous (no direction split needed). */
+    check_equiv("Limit[Abs[Cos[x] - 1]/x^2, x -> 0]", "1/2");
+    check_equiv("Limit[Abs[1 - Cos[x]]/x^2, x -> 0]", "1/2");
+
+    /* Exponential-minus-one: leading term is x. */
+    check_equiv("Limit[Abs[E^x - 1]/x, x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[Abs[E^x - 1]/x, x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[Abs[E^(2 x) - 1]/x, x -> 0, Direction -> -1]", "2");
+    check_equiv("Limit[Abs[E^(2 x) - 1]/x, x -> 0, Direction -> 1]", "-2");
+    check_equiv("Limit[Abs[E^(2 x) - 1]/x, x -> 0]", "Indeterminate");
+
+    /* Sign-cancellation in a sum: Abs[x] + x equals 2x for x>0, 0 for x<0. */
+    check_equiv("Limit[(Abs[x] + x)/x, x -> 0, Direction -> -1]", "2");
+    check_equiv("Limit[(Abs[x] + x)/x, x -> 0, Direction -> 1]", "0");
+
+    /* x/Abs[x] is the sign function -- one-sided gives ±1, two-sided is
+     * the canonical disagreement. */
+    check_equiv("Limit[x/Abs[x], x -> 0, Direction -> -1]", "1");
+    check_equiv("Limit[x/Abs[x], x -> 0, Direction -> 1]", "-1");
+    check_equiv("Limit[x/Abs[x], x -> 0]", "Indeterminate");
+
+    /* Continuity identity Abs[Limit[g]] = Limit[Abs[g]] for divergent
+     * inner limits. */
+    check_equiv("Limit[Abs[1/x], x -> 0, Direction -> -1]", "Infinity");
+    check_equiv("Limit[Abs[1/x], x -> 0, Direction -> 1]", "Infinity");
+    check_equiv("Limit[Abs[1/x], x -> 0]", "Infinity");
+    check_equiv("Limit[Abs[Tan[x]], x -> Pi/2, Direction -> -1]", "Infinity");
+    check_equiv("Limit[Abs[Tan[x]], x -> Pi/2, Direction -> 1]", "Infinity");
+    check_equiv("Limit[Abs[Tan[x]], x -> Pi/2]", "Infinity");
+    check_equiv("Limit[Abs[Log[x]], x -> 0, Direction -> -1]", "Infinity");
+
+    /* Abs of the limit variable approaching a finite point or infinity
+     * stays continuous. */
+    check_equiv("Limit[Abs[x], x -> 0]", "0");
+    check_equiv("Limit[x Abs[x], x -> 0]", "0");
+    check_equiv("Limit[Abs[x]/x, x -> Infinity]", "1");
+    check_equiv("Limit[Abs[x]/x, x -> -Infinity]", "-1");
+
+    /* Nested / product Abs: each subterm resolves independently. */
+    check_equiv("Limit[Abs[x - 1] Abs[x + 1], x -> 0]", "1");
+
+    /* Bounded oscillator times Abs[x] -- |Sin[1/x]| <= 1 squeezes to 0. */
+    check_equiv("Limit[Abs[x] Sin[1/x], x -> 0]", "0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -673,6 +777,7 @@ int main(void) {
     TEST(test_wp5_dominant_term_at_infinity);
     TEST(test_wp9_branch_cuts);
     TEST(test_wp7_gruntz_log_sum);
+    TEST(test_abs_directional);
 
     printf("All limit tests passed.\n");
     return 0;
