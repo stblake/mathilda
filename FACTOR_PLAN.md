@@ -1655,7 +1655,7 @@ univariate engine.
 | 6 | **F6 Tier 1+2** (BIGINT-aware skip + main-variable fallback) | Correctness: stop the false "irreducible" verdict on Fateman-class inputs AND let the orchestrator try the OTHER main variable when the picker's first choice has int64-overflowing alpha images. ~120 LOC. | **Done 2026-05-02** — `(x^k + y^k + 1)(x^k - y + 1)` now factors correctly for all k tested (k=70 in 1.28 s; mathematically correct, sign-canonicalisation cosmetic). |
 | 7 | **F6 Tier 3** (full ZUPoly Berlekamp-Zassenhaus, replace int64 UPoly substrate) | Unblocks univariate inputs with large coefficients (`Factor[x^k - 1]` for k ≥ 63, `Factor[x^2 + 2^100 x + 1]`, etc.) and lets `bz_factor_to_expr` return real factorisations of BIGINT-coefficient polynomials instead of returning them unchanged. Required for the bivariate orchestrator to handle inputs where BOTH variables produce BIGINT alpha images. | Not started |
 | 8 | **F6 Tier 4** (sparse multivariate Hensel without numerical evaluation) | Only path to "1 ms" on Fateman itself; biggest LOC budget. The MPoly substrate already exists; what's missing is a sparse-aware Hensel iteration that operates directly on the multivariate without going through P(x, alpha) and lift. | Not started |
-| 9 | **F6 cleanup** (widen `extract_monomial` / `monomial_collect` to mpz_t; fix sign-absorber heuristic for swapped main variable) | Picks up missed factorisations of monomial-content kind on BIGINT-coefficient polynomials, and produces canonical printed form when the bivariate Hensel falls back to the second main variable. | Not started |
+| 9 | **F6 cleanup** (widen `extract_monomial` / `monomial_collect` to mpz_t; fix sign-absorber heuristic for swapped main variable) | Picks up missed factorisations of monomial-content kind on BIGINT-coefficient polynomials, and produces canonical printed form when the bivariate Hensel falls back to the second main variable. | **Stage 1 done 2026-05-07** — `monomial_collect` and `factor_monomial_content` now use `mpz_t` for the integer coefficient.  The walker correctly multiplies `EXPR_BIGINT` factors into the running coefficient instead of treating them as opaque atoms, and the residue emitter normalises via `expr_from_mpz_normalized` (INTEGER when fits in int64, BIGINT otherwise).  Two regression tests in `tests/test_factor_phase0.c::test_monomial_bigint_*` cover the path.  Stage 2 (widen `extract_monomial` / `extract_monomial_walk` + `factor_binomial`'s `c1, c2` and `int_root` to `mpz_t`) and Stage 3 (sign-absorber heuristic for swapped main variable) are still open — the binomial widening additionally needs an `mpz_root`-based variant of `int_root` (~30 LOC + tests). |
 | 10 | **5c** (retire `factor_roots`) | After F1, F3.  Optional cleanup; F2 only required if we want to drop `factor_roots` BEFORE accepting case-2 limitations. | Not started |
 
 Total: ~2-3 person-weeks for F1+F3+F4+F5+5c (without F2).  Adding
@@ -1685,3 +1685,296 @@ user-reported reference cases is roughly:
 - For the Hilbert irreducibility heuristic, the practical
   formulation in Bernardin's "On square-free factorization of
   multivariate polynomials over a finite field" §3 is concise.
+- **Barry M. Trager — *Algebraic Factoring and Rational Function
+  Integration*** (Proc. 1976 ACM SYMSAC, pp. 219-226).  The core
+  reference for Phase G (factoring over algebraic number fields).
+  PDF in repo root: `Trager - Algebraic Factoring and Rational
+  Function Integration.pdf`.
+
+---
+
+## 14. Phase G — Factoring over Algebraic Extensions (Trager's algorithm)
+
+This section plans the addition of `Factor[poly, Extension -> α]` where
+`α` is an algebraic number satisfying a minimal polynomial
+`P_α(y) ∈ Q[y]`.  The reference algorithm is Barry Trager's *Algebraic
+Factoring and Rational Function Integration* (1976) — the standard
+method used by Mathematica, Macsyma, Maple, and SageMath.
+
+Phase G is **complementary** to the existing factoring pipeline rather
+than a replacement.  The inner loop calls the existing `Factor[]` over
+`Q[x]` (the `bz_factor_to_expr` substrate from §3.4 / §F6) on the norm
+`R(x) = Resultant_y(P_α(y), f(x, y))`, then lifts the rational
+factorisation back to `Q(α)[x]` via `gcd` over `Q(α)[x]`.
+
+### 14.1 Why now
+
+Three things make Trager fit cleanly into the current pipeline:
+
+1. **Resultant infrastructure exists.**  `poly_resultant` and the
+   `Resultant`/`Discriminant` builtins (`src/poly.c:2616`+) already
+   compute resultants in a chosen variable.  The norm
+   `Norm(f) = Resultant_y(P_α(y), f(x, y))` is a direct application.
+2. **Squarefree univariate `Factor` over Q is solid.**  Phases 0-5 +
+   F6 Tier 1+2 deliver a substrate that handles bigint coefficients,
+   multi-α evaluation strategies, and recombination.  The norm is fed
+   straight in.
+3. **Algebraic-generator groundwork.**  `simp_algebraic` (`src/simp.c`,
+   commit `57f505a`) and `lift_algebraic_generator_pass` (`src/poly.c`,
+   commit `548bee3`) already detect algebraic generators in expressions
+   and lift them into a variable-based representation.  Phase G builds
+   on the same machinery for input pre-processing and output
+   canonicalisation.
+
+### 14.2 Target test cases
+
+| Input | Expected output over Q(α) |
+|---|---|
+| `Factor[x^4 + 1, Extension -> Sqrt[2]]` | `(x^2 - Sqrt[2] x + 1)(x^2 + Sqrt[2] x + 1)` |
+| `Factor[x^2 - 2, Extension -> Sqrt[2]]` | `(x - Sqrt[2])(x + Sqrt[2])` |
+| `Factor[x^4 - 5 x^2 + 6, Extension -> Sqrt[2]]` | `(x - Sqrt[2])(x + Sqrt[2])(x^2 - 3)` |
+| `Factor[x^4 - 5 x^2 + 6, Extension -> {Sqrt[2], Sqrt[3]}]` | `(x - Sqrt[2])(x + Sqrt[2])(x - Sqrt[3])(x + Sqrt[3])` |
+| `Factor[x^2 + x + 1, Extension -> Sqrt[-3]]` | `(x - (-1 + Sqrt[-3])/2)(x - (-1 - Sqrt[-3])/2)` |
+| `Factor[x^3 - 2, Extension -> 2^(1/3)]` | `(x - 2^(1/3))(x^2 + 2^(1/3) x + 2^(2/3))` |
+
+### 14.3 Algorithm reference
+
+Trager's full pipeline (paper §2):
+
+```
+Algorithm sqfr_norm:
+  input : f(x, α) ∈ Q(α)[x] squarefree, P_α the minimal polynomial of α
+  output: integer s ≥ 0,
+          g(x, α) = f(x - s α, α),
+          R(x)    = Norm(g(x, α))   (squarefree over Q)
+
+  s := 0; g := f
+  loop:
+    R(x) := Resultant_y( P_α(y), g(x, y) )      (substitute α → y)
+    if gcd(R, R') is a unit: return (s, g, R)
+    s := s + 1
+    g(x, α) := f(x - s α, α)
+```
+
+```
+Algorithm alg_factor:
+  input : f(x, α) ∈ Q(α)[x] squarefree
+  output: irreducible factors of f over Q(α)
+
+  (s, g, R) := sqfr_norm(f, P_α)
+  L := Factor(R(x))                              (existing facpoly: over Q)
+  if |L| = 1: return [f]                         (f irreducible over Q(α))
+  factors := []
+  for h(x) in L:
+    h(x, α)   := gcd_{Q(α)[x]}( h(x), g(x, α) ) (monic gcd over Q(α))
+    g         := g / h(x, α)                    (exact division in Q(α)[x])
+    h(x, α)   := h(x + s α, α)                  (undo linear shift)
+    factors.append( h(x, α) )
+  return factors
+```
+
+Soundness:
+- **Theorem 2.1** (Trager): `Norm(f)` is a power of `Norm(f₁)` whenever
+  `f` is irreducible over `Q(α)` and `f₁` is its image-shift conjugate.
+- **Theorem 2.2** (Trager): for squarefree-norm input, the
+  factor-by-factor gcd lift recovers the true factors of `f` over `Q(α)`.
+- **Theorem 2.3 / Corollary 2.5** (Trager): only finitely many `s` give
+  a non-squarefree norm — `sqfr_norm` always terminates.
+
+### 14.4 Phased implementation plan
+
+#### Phase G1 — `Q(α)` element type
+
+`src/qa.{c,h}`: an element of `Q(α) = Q[α]/(P_α(α))`.
+
+- `QANum`: a polynomial in `α` of degree `< deg P_α`, `mpq_t`
+  coefficients, dense representation.
+- `QAExt`: the extension's minimal polynomial `P_α`, stored as an
+  `mpq_t[]` of length `deg P_α + 1`, plus `deg P_α`.
+- Operations: `qa_zero`, `qa_one`, `qa_from_mpq`, `qa_from_int`,
+  `qa_copy`, `qa_add`, `qa_sub`, `qa_neg`, `qa_mul`
+  (multiply then reduce mod `P_α` via long division), `qa_inverse`
+  (extended Euclidean over `Q[y]` → Bézout coefficients), `qa_div`,
+  `qa_eq`, `qa_is_zero`, `qa_is_one`, `qa_to_expr`, `expr_to_qa`.
+- Tests: arithmetic identities; `Sqrt[2] · Sqrt[2] → 2` (in `Q(√2)`);
+  inversion of every non-zero element; cyclotomic
+  identities like `ω · ω² → ω³ ≡ 1` for `ω` a primitive 3rd root.
+- Estimated: ~250 LOC source + ~200 LOC tests.
+
+#### Phase G2 — `Q(α)[x]` univariate polynomial type
+
+`src/qaupoly.{c,h}`: univariate polynomial in `x` with `QANum`
+coefficients.
+
+- Storage: dense `QANum*` array indexed by x-degree (mirrors `ZUPoly`).
+- Operations: `qaupoly_add`, `_sub`, `_neg`, `_mul`, `_scale`,
+  `_divrem` (long division — leading coefficient must be invertible
+  in `Q(α)`, which it always is for non-zero LCs since `Q(α)` is a
+  field), `_gcd` (Euclidean PRS over a field), `_shift`
+  (`f(x + c)` for `c ∈ Q(α)` via Horner), `_eval` (evaluate at
+  `c ∈ Q(α)`), `_to_expr`, `_from_expr`.
+- Tests: arithmetic identities; `gcd(x²-2, x-√2) = x-√2` over `Q(√2)`;
+  `gcd(x²+1, x²-1) = 1`; division corner cases; shift-then-shift-back
+  round trip.
+- Estimated: ~300 LOC source + ~250 LOC tests.
+
+#### Phase G3 — Norm via resultant
+
+`src/qafactor.{c,h}::qaupoly_norm`:
+
+- Build `g(x, y) ∈ Q[x, y]` from `f(x, α) ∈ Q(α)[x]` by substituting
+  `α → y`.  Each `QANum` coefficient becomes a polynomial in `y`.
+- Clear denominators (multiply through by `lcm` of all `mpq_t`
+  denominators in `g(x, y)` and `P_α(y)`) to land in `Z[x, y]`,
+  representable as the existing `BPoly`.
+- Compute `R_z(x) = Resultant_y(P_α(y), g(x, y))` via `poly_resultant`
+  (or a direct subresultant PRS over `BPoly` when performance demands).
+  Returns a polynomial in `x` over `Z`.
+- Re-rationalise: divide `R_z` by the appropriate denominator power.
+- Estimated: ~150 LOC source + ~100 LOC tests.
+
+#### Phase G4 — `sqfr_norm` and `alg_factor`
+
+`src/qafactor.c`:
+
+- `qa_sqfr_norm(QAUPoly f, QAExt ext) → (int s, QAUPoly g, ZUPoly R)`.
+- `qa_alg_factor(QAUPoly f, QAExt ext) → array of QAUPoly`.
+- Inner loop calls `bz_factor_to_expr` on `R` (after converting to
+  `Expr`) — alternatively expose a new `bz_factor_zupoly` entry point
+  that operates directly on `ZUPoly` to skip the `Expr` round-trip.
+- gcd-back uses Phase G2's `qaupoly_gcd`.
+- Squarefree pre-decomposition: `gcd(f, f')` over `Q(α)[x]` (Phase G2).
+- Tests: at least the six rows from §14.2.
+- Estimated: ~250 LOC source + ~200 LOC tests.
+
+#### Phase G5 — picocas-level API
+
+- Parser/evaluator: recognise `Extension -> α` option for `Factor`
+  (parse rule `Extension` is already a known option pattern in
+  `picocas`'s evaluator; needs a hook in `builtin_factor` to read it).
+- Resolve `α` to a minimal polynomial:
+  - `Sqrt[c]` for rational `c` → `y² - c`
+  - `c^(1/n)` for rational `c` → `y^n - c`
+  - `Root[p, k]` → use the polynomial `p` directly
+  - `AlgebraicNumber[α, coeffs]` (Mathematica's representation) — TBD,
+    out of scope for the MVP
+- Output formatting: render `QANum` back to `Sqrt[...]` / `Root[...]`
+  forms when the extension came from one of those — share the
+  printing logic with `simp_algebraic`'s output.
+- Estimated: ~200 LOC source + ~100 LOC tests.
+
+#### Phase G6 — Tower of extensions
+
+For inputs like `Factor[..., Extension -> {Sqrt[2], Sqrt[3]}]` Trager
+§3 gives a primitive-element algorithm (`primitive_element`) that
+reduces a tower `Q(α, β)` to a single-extension form
+`Q(γ) = Q(α + s β)` for an integer `s ≥ 0` chosen so the resultant is
+squarefree.  Iterates: compute `s` via `sqfr_norm`; compute
+`R(x) = Norm(Q_β(x, α))`; factor `R`; locate `α` and `β` in `Q(γ)` via
+`linsolve` of the gcd.
+
+- Estimated: ~250 LOC source + ~150 LOC tests.
+
+#### Phase G7 — Splitting fields
+
+Trager §4 (Algorithm `split_field`): repeatedly apply
+`primitive_element` to construct the splitting field of an irreducible
+polynomial over `Q`.  Useful for partial-fraction decomposition over
+the minimal extension (Phase G applications).  Out of MVP scope; can
+land later as the foundation for symbolic integration over algebraic
+extensions (Trager §5).
+
+- Estimated: ~300 LOC source + ~200 LOC tests.
+
+### 14.5 Connections to existing code
+
+| Existing | Used by Phase G | Where |
+|---|---|---|
+| `poly_resultant` | G3 norm computation | `src/poly.c` |
+| `bz_factor_to_expr` | G4 inner factor over `Q` | `src/facpoly.c:3793` |
+| `lift_algebraic_generator_pass` | G5 input pre-processing | `src/poly.c` (commit `548bee3`) |
+| `simp_algebraic` | G5 output canonicalisation | `src/simp.c:4043` |
+| `Resultant`, `Discriminant` | exposed builtins | already in symtab |
+| `ZUPoly` | G3 intermediate, G4 norm representation | `src/zupoly.{c,h}` |
+| `BPoly` | G3 bivariate-resultant intermediate | `src/bpoly.{c,h}` |
+| `MinimalPolynomial[Sqrt[c]]` | G5 extension resolution | `simp_algebraic` already computes this |
+
+### 14.6 Risks and open questions
+
+1. **Norm performance.**  Bivariate resultants are
+   `O(deg(P_α)³ · deg_x(f)²)` via subresultant PRS; for typical inputs
+   `deg(P_α) ≤ 4`, so the resultant computation is bounded.  High-degree
+   `α` (cyclotomic over Q, degree 100+) would need a modular resultant.
+2. **Coefficient blow-up in `f(x - sα)`.**  Each shift increases
+   coefficient sizes by `O(s · deg P_α)`.  In practice `s ≤ 3` for
+   nearly all inputs; the paper conjectures (and we observe) that
+   `s ∈ {0, 1}` suffices for most real-world cases.
+3. **Squarefree input pre-processing.**  `alg_factor` requires
+   squarefree input.  The reduction is `gcd(f, f')` over `Q(α)[x]`,
+   which Phase G2 supports directly.
+4. **Real vs. complex extensions.**  Trager's algorithm is field-
+   agnostic — `Q(i) = Q[y]/(y²+1)` is handled identically to `Q(√2)`.
+   Picocas's `Sqrt[-c]` lifts to this directly.
+5. **Multivariate input `f(x_1, ..., x_n, α)` over `Q(α)`.**  Falls
+   out of Phase G4 *if* the existing bivariate Hensel is taught to
+   accept `Q(α)`-valued `cy[]` coefficients.  Significant additional
+   scope, deferred to a Phase G8 if user demand materialises.
+6. **Interaction with `simp_algebraic`.**  The Simplify-level algebraic-
+   reduction logic should not double-process inputs: when `Factor` is
+   called with an explicit `Extension`, the algebraic generator is
+   resolved at parse time and the input is normalised over `Q(α)`
+   *before* entering `alg_factor`.
+
+### 14.7 Estimated total budget
+
+| Phase | LOC source | LOC tests |
+|---|---|---|
+| G1 — `Q(α)` element type | 250 | 200 |
+| G2 — `Q(α)[x]` univariate | 300 | 250 |
+| G3 — Norm via resultant | 150 | 100 |
+| G4 — sqfr_norm + alg_factor | 250 | 200 |
+| G5 — picocas API | 200 | 100 |
+| G6 — tower of extensions | 250 | 150 |
+| G7 — splitting fields (deferred) | 300 | 200 |
+| **MVP total (G1-G5)** | **1150** | **850** |
+| **Full Phase G (G1-G6)** | **1400** | **1000** |
+
+Approximately **2-3 person-weeks** for the MVP `Factor[..., Extension
+-> Sqrt[c]]`; **3-4 person-weeks** for the full Phase G including
+towers; **+1 week** for G7.
+
+### 14.8 Where Phase G slots into the overall implementation order
+
+Phase G has **no hard dependencies** on outstanding F-work: it can
+land in parallel with F6 Tier 3/4 if there is appetite.  F6 Tier 3
+(full ZUPoly Berlekamp-Zassenhaus) does benefit Phase G indirectly
+because the norm `R(x)` may have large coefficients when `deg P_α` is
+large.
+
+Updated implementation order (extending §12's table):
+
+| Order | Phase | Reason | Status |
+|---|---|---|---|
+| 1-6 | (existing F1..F6 Tier 1+2) | (see §12 implementation order) | Done |
+| 7 | F6 Tier 3 | Bigint univariate BZ | Not started |
+| 8 | F6 Tier 4 | Sparse multivariate Hensel | Not started |
+| 9 | F6 cleanup | Widen `extract_monomial` to mpz_t; sign-absorber heuristic | Not started |
+| 10 | 5c | Retire `factor_roots` | Not started |
+| 11 | **G1-G2** (Q(α), Q(α)[x] substrate) | Self-contained; parallelisable with F6 cleanup. | Not started |
+| 12 | **G3-G4** (norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | Not started |
+| 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | Not started |
+| 14 | **G6** (tower of extensions) | Multi-radical inputs. | Not started |
+| 15 | **G7** (splitting fields) | Foundation for symbolic integration over algebraic extensions (Trager §5). | Deferred |
+
+Recommended near-term sequence:
+1. **F6 cleanup (item 9)** — small, immediate value; widens
+   `extract_monomial` to handle bigint-coefficient monomials.
+2. **G1 + G2** (Trager substrate) — isolated, well-tested; ~5 days.
+3. **G3 + G4** (norm + factor) — the first user-visible Phase G
+   capability; depends only on G1+G2 + the existing `poly_resultant`
+   and `bz_factor_to_expr` substrate.
+4. **G5** (`Extension -> ...` syntax) — small wire-up step.
+
+That pre-G6 sequence delivers `Factor[x^4 + 1, Extension -> Sqrt[2]]`
+and friends in approximately two weeks of focused work, ahead of the
+larger F6 Tier 3/4 efforts.

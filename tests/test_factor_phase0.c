@@ -165,6 +165,39 @@ static void test_monomial_negative_coefficient(void) {
                     "Times[x, y, Plus[Times[-1, x], Times[-1, y]]]");
 }
 
+static void test_monomial_bigint_coefficient(void) {
+    /* F6 cleanup item 9: monomial_collect now uses mpz_t coefficients,
+     * so terms whose integer scalar promotes to EXPR_BIGINT (|c| > 2^63)
+     * are still recognised as having an integer coefficient instead of
+     * being treated as opaque atoms.  After widening, the residue
+     * extraction sees the real "variables" {a, b} and the coefficient
+     * 2^100 is folded back as an integer factor by poly_content.
+     *
+     * Pre-fix the old behaviour treated EXPR_BIGINT as an opaque atom
+     * which happened to produce the correct answer for *this* exact
+     * shape (since both terms shared the same BIGINT atom), but failed
+     * for shapes where different BIGINTs share a common variable
+     * pattern (Plus[Times[2^100, a, b], Times[3*2^100, b]]).  The
+     * post-fix path always produces the correct factorisation by
+     * routing the BIGINT through the integer-content extractor. */
+    expect_fullform("Factor[2^100 * a^2 * b + 2^100 * b]",
+                    "Times[1267650600228229401496703205376, b, "
+                    "Plus[1, Power[a, 2]]]");
+}
+
+static void test_monomial_bigint_mixed_coefficients(void) {
+    /* Plus[Times[2^100, a, b], Times[3 * 2^100, b]] = 2^100 * b * (a + 3).
+     * The two terms have *different* BIGINT coefficients (2^100 and
+     * 3 * 2^100); the GCD-monomial in *variables* is {b} only -- which
+     * is what factor_monomial_content (the F6-widened path) extracts.
+     * The residue 3*2^100 + 2^100 a remains as-is because poly_content
+     * is still int64-bound (a follow-up cleanup item).  The b
+     * extraction is the F6 deliverable verified here. */
+    expect_fullform("Factor[2^100 * a * b + 3 * 2^100 * b]",
+                    "Times[b, Plus[3802951800684688204490109616128, "
+                    "Times[1267650600228229401496703205376, a]]]");
+}
+
 /* =====================================================================
  *  (b) Performance: irreducible inputs must complete fast
  * =====================================================================
@@ -350,6 +383,8 @@ int main(void) {
     TEST(test_monomial_higher_powers);
     TEST(test_monomial_no_common_factor);
     TEST(test_monomial_negative_coefficient);
+    TEST(test_monomial_bigint_coefficient);
+    TEST(test_monomial_bigint_mixed_coefficients);
 
     /* (b) Irreducibility short-circuit -- performance */
     TEST(test_irreducible_bivariate_quadratic);

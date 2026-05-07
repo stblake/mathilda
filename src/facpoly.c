@@ -672,8 +672,9 @@ static Expr* factor_degree_one(Expr* P, Expr** vars, size_t v_count) {
  * presence still constrains the monomial-content intersection.
  *
  * Output:
- *   *coeff_out  is multiplied (caller seeds with 1) by every integer
- *               factor encountered.
+ *   coeff_out   GMP mpz_t multiplied (caller seeds with 1) by every
+ *               integer or bigint factor encountered.  Caller is
+ *               responsible for mpz_init/mpz_clear.
  *   atoms[]/exps[] receive {atom, exponent} pairs (atom pointers are
  *               *borrowed* from `e` -- the caller must not free them).
  *               Repeats are coalesced by atom-equality at the end.
@@ -681,12 +682,16 @@ static Expr* factor_degree_one(Expr* P, Expr** vars, size_t v_count) {
  *
  * Buffer convention: the caller pre-allocates `*cap` slots; we grow via
  * realloc when needed. `*count` is updated to reflect filled slots. */
-static bool monomial_collect(Expr* e, int64_t* coeff_out,
+static bool monomial_collect(Expr* e, mpz_t coeff_out,
                              Expr*** atoms, int64_t** exps,
                              size_t* count, size_t* cap) {
     if (!e) return true;
     if (e->type == EXPR_INTEGER) {
-        *coeff_out *= e->data.integer;
+        mpz_mul_si(coeff_out, coeff_out, (long)e->data.integer);
+        return true;
+    }
+    if (e->type == EXPR_BIGINT) {
+        mpz_mul(coeff_out, coeff_out, e->data.bigint);
         return true;
     }
     if (e->type == EXPR_FUNCTION
@@ -736,6 +741,15 @@ static bool monomial_collect(Expr* e, int64_t* coeff_out,
     return true;
 }
 
+/* Build an INTEGER (when fits in int64) or BIGINT Expr from an mpz_t.
+ * Helper for emitting the coefficient back into a residue term. */
+static Expr* expr_from_mpz_normalized(const mpz_t v) {
+    if (mpz_fits_slong_p(v)) {
+        return expr_new_integer((int64_t)mpz_get_si(v));
+    }
+    return expr_new_bigint_from_mpz(v);
+}
+
 static Expr* factor_monomial_content(Expr* P) {
     if (P->type != EXPR_FUNCTION) return NULL;
     if (P->data.function.head->type != EXPR_SYMBOL) return NULL;
@@ -754,15 +768,18 @@ static Expr* factor_monomial_content(Expr* P) {
 
     for (size_t i = 0; i < n; i++) {
         Expr* term = P->data.function.args[i];
-        int64_t coeff = 1;
+        mpz_t coeff;
+        mpz_init_set_si(coeff, 1);
         Expr** tvars = NULL;
         int64_t* texps = NULL;
         size_t tcount = 0, tcap = 0;
-        if (!monomial_collect(term, &coeff, &tvars, &texps, &tcount, &tcap)) {
+        if (!monomial_collect(term, coeff, &tvars, &texps, &tcount, &tcap)) {
+            mpz_clear(coeff);
             free(tvars); free(texps);
             free(common_vars); free(common_exps);
             return NULL;
         }
+        mpz_clear(coeff);
 
         if (first) {
             /* Seed: every variable from term 0 is a candidate. */
@@ -842,12 +859,14 @@ static Expr* factor_monomial_content(Expr* P) {
     Expr** res_terms = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* term = P->data.function.args[i];
-        int64_t coeff = 1;
+        mpz_t coeff;
+        mpz_init_set_si(coeff, 1);
         Expr** tvars = NULL;
         int64_t* texps = NULL;
         size_t tcount = 0, tcap = 0;
-        if (!monomial_collect(term, &coeff, &tvars, &texps, &tcount, &tcap)) {
+        if (!monomial_collect(term, coeff, &tvars, &texps, &tcount, &tcap)) {
             /* Pass 1 succeeded so this should not fail; defensive only. */
+            mpz_clear(coeff);
             free(tvars); free(texps);
             for (size_t k = 0; k < i; k++) expr_free(res_terms[k]);
             free(res_terms);
@@ -860,9 +879,10 @@ static Expr* factor_monomial_content(Expr* P) {
         Expr** factor_args = malloc(sizeof(Expr*) * cap);
         size_t fc = 0;
 
-        if (coeff != 1) {
-            factor_args[fc++] = expr_new_integer(coeff);
+        if (mpz_cmp_si(coeff, 1) != 0) {
+            factor_args[fc++] = expr_from_mpz_normalized(coeff);
         }
+        mpz_clear(coeff);
         for (size_t j = 0; j < tcount; j++) {
             int64_t reduced = texps[j];
             for (size_t k = 0; k < common_count; k++) {
