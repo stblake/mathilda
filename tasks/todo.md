@@ -1,5 +1,148 @@
 ---
-title: Algorithmic radical simplification
+title: simp_factorial — general factorial simplification in Simplify
+date_started: 2026-05-07
+status: in progress
+---
+
+# simp_factorial — General factorial simplification in Simplify
+
+## Goal
+
+Implement a single, principled algorithm for `Simplify` that handles
+factorial-bearing expressions across the listed test classes
+(ratio reduction, polynomial absorption, powers and cross-denominator
+cancellation, additive collapse, multivariate / edge cases). No
+case-by-case pattern table — one general procedure that subsumes them all.
+
+## Algorithm
+
+**Step A — Argument decomposition.**
+For every `Factorial[arg]` subexpression, split `arg = sym + c` where
+`c` is the integer constant addend (zero if `arg` has no integer
+constant) and `sym` is everything else (a single non-numeric term, or
+a `Plus` of non-numeric terms).
+
+**Step B — Group by symbolic part.**
+Two factorials are in the same group iff their `sym` parts are
+structurally equal *after* `Expand`. The group base is
+`b = sym + min(c_i)`, and each member's offset is
+`k_i = c_i - min(c_i) >= 0`.
+
+**Step C — Shift normalization.**
+Replace each `Factorial[b + k]` with the explicit Pochhammer expansion
+`Factorial[b] * (b+1) * (b+2) * ... * (b+k)`. The product is left
+unevaluated (Times applied symbolically) so subsequent algebraic
+simplification can cancel against denominators / sums.
+
+**Step D — Algebraic combine.**
+Run the result through `Together`, then `Cancel`, then `Expand` (or a
+short cycle that picks the best-scoring outcome) so that `Factorial[b]`
+factors common to numerator and denominator cancel and additive
+collapses fire (`(n+1)! - n n! -> n!`, `1/n! - 1/(n+1)! -> n/(n+1)!`).
+
+**Step E — Re-fold.**
+Walk the combined expression. Wherever a `Factorial[b]` appears with
+a polynomial cofactor (in a Times product or as numerator of a Times
+of a Power[..., -1]):
+
+1. Factor the polynomial cofactor over the integers (`FactorSquareFree`).
+2. Identify factors of the form `(b + j)` with integer `j >= 1`.
+3. If they form a contiguous block `1, 2, ..., k`, replace
+   `Factorial[b] * (b+1)(b+2)...(b+k)` with `Factorial[b+k]`.
+4. Allow at most a small gap (size <= 2): if factors are `(b+1) ... (b+k)`
+   missing one or two `(b+m)` terms, fold via the multiply-and-divide
+   identity (`Factorial[b]*(b+1)(b+3) = Factorial[b+3]/(b+2)`).
+
+The same logic in mirror form on the denominator handles
+`Factorial[b] / (b(b-1)...(b-k+1)) -> Factorial[b-k]`.
+
+Step E is bounded (one pass) and converges because each fold strictly
+reduces the polynomial degree around the factorial.
+
+**Step F — Score gate.**
+The seed contributes via `update_best`/`cs_add_or_free`. Only the
+strictly-shorter form survives the standard Simplify complexity
+tiebreak; otherwise the input is preserved.
+
+## Test 5.5 — `(2n)! / (2^n n!) -> (2n-1)!!`
+
+Falls outside Steps A–E because `2n` and `n` have different symbolic
+parts. Handle separately: implement `Factorial2` (the double factorial)
+as a builtin and recognize the canonical `(c v)! / (c^v v!)` shape for
+`c = 2`, rewriting to `Factorial2[2 v - 1]`.
+
+## Files touched
+
+- `src/simp.c` — new `simp_factorial` (Steps A–E) + the (2n)! identity.
+- `src/simp.c::simp_search` — add a seed call.
+- `src/core.c`, `src/info.c` — register `Factorial2`.
+- `tests/test_factorial_simplify.c` (new) — every listed case as a unit test.
+- `tests/CMakeLists.txt` — register the new test binary.
+- `picocas_spec.md` — document `Factorial2` and the new Simplify capability.
+
+## Done criteria
+
+- All 18 listed test cases pass via `assert_eval_eq`.
+- `make` is clean under `-std=c99 -Wall -Wextra`.
+- No regressions in `simplify_tests`, `simp_tests`, `core_tests`,
+  `bigint_tests`.
+- Valgrind: no leaks on the test binary.
+
+## Review (2026-05-07)
+
+**Outcome.** All 18 user-listed test cases pass plus 7 additional
+soundness sentinels (no-factorial pass-through, single-call no-op,
+concrete-value short-circuit, Factorial2 concrete + symbolic). The
+full picocas test suite remains green: 94/94 binary tests pass with
+no regressions.
+
+**Total LOC added:**
+- `src/simp.c`: ~700 LOC for the `simp_factorial` cluster + `simp_classify`
+  routing patch + simp_search seed wiring + transform_can_fire gate.
+- `src/arithmetic.c` + `arithmetic.h`: ~70 LOC for `builtin_factorial2`.
+- `src/core.c`, `src/info.c`: 4 LOC for `Factorial2` registration +
+  attributes + docstring.
+- `src/parse.c`: 4 LOC for the `OP_FACTORIAL2` (`!!`) postfix operator.
+- `tests/test_factorial_simplify.c`: 25 unit tests (~210 LOC).
+- `tests/CMakeLists.txt`: 4 LOC to register the new test binary.
+- Spec docs (`picocas_spec.md`): ~110 LOC.
+- Lessons (`tasks/lessons.md`): ~60 LOC.
+
+**Surprises and lessons (saved to `tasks/lessons.md`):**
+
+1. picocas's `Factor` *changes behaviour* inside Simplify
+   (`factor_memo_top() != NULL` toggles a num/den variable-list policy
+   that prevents factoring out symbolic constants from a denominator
+   Plus). Workaround: `factor_memo_push(NULL)` around the Factor call.
+2. picocas's evaluator does NOT auto-coalesce
+   `Times[Power[a,-1], Power[b,-1]]` into `Power[Times[a,b], -1]`;
+   the un-coalesced form scores higher under SimplifyCount, so a
+   factorial rewrite that lands there can lose the round-loop
+   tiebreak. Wrote `simp_fact_combine_inverses` to coalesce manually.
+3. picocas's `Together` always expands the polynomial denominator
+   (`n/(Factorial[n]*(n+1))` -> `n/(Factorial[n] + n*Factorial[n])`),
+   so we run Factor + combine_inverses afterwards to recover the
+   factored form before re-fold can recognise the (Factorial[n], n+1)
+   pair.
+4. The rational pipeline short-circuits past `simp_search`, so
+   factorial-bearing inputs need an explicit `simp_classify` carve-out
+   to route them to the general pipeline.
+5. Factorial-free candidates score higher than factorial-bearing input
+   under SimplifyCount; force-take semantics (mirroring
+   LogExpRules / AssumptionRules) are required to make the rewrite
+   stick.
+
+**Out of scope (deferred):**
+- Pretty-printing `Factorial2[x]` as `x!!` in the printer (parser does
+  it already; only the print side is missing).
+- Factorial2 of half-integer arguments (e.g. `(1/2)!! = sqrt(2/Pi)`),
+  which would mirror Factorial's half-integer Gamma path.
+- More aggressive gap-filling in re-fold (current budget is 2; larger
+  would handle longer Pochhammer-with-gap shapes that did not appear
+  in the listed test suite).
+
+---
+title: Algebraic radical simplification (previous task)
 date_started: 2026-05-06
 date_completed: 2026-05-07
 status: complete (all 10 user cases + 4 soundness subtests pass)

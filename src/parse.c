@@ -479,6 +479,7 @@ typedef enum {
     OP_COLON,
     OP_INFORMATION,
     OP_FACTORIAL,
+    OP_FACTORIAL2,
     OP_REPEATED,
     OP_REPEATEDNULL,
     OP_STRINGJOIN,
@@ -591,6 +592,8 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_PREFIX; def.prec = 620; def.right_assoc = 1; def.head_name = "Prefix"; def.len = 1;
     } else if (*pos == '[') {
         def.type = OP_CALL; def.prec = 1000; def.len = 1;
+    } else if (*pos == '!' && pos[1] == '!') {
+        def.type = OP_FACTORIAL2; def.prec = 710; def.head_name = "Factorial2"; def.len = 2;
     } else if (*pos == '!' && pos[1] != '=') {
         def.type = OP_FACTORIAL; def.prec = 710; def.head_name = "Factorial"; def.len = 1;
     } else if (*pos == '\'') {
@@ -828,6 +831,10 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         } else if (op_def.type == OP_FACTORIAL) {
             Expr* args[1] = { left };
             left = expr_new_function(expr_new_symbol("Factorial"), args, 1);
+            continue;
+        } else if (op_def.type == OP_FACTORIAL2) {
+            Expr* args[1] = { left };
+            left = expr_new_function(expr_new_symbol("Factorial2"), args, 1);
             continue;
         } else if (op_def.type == OP_DERIVATIVE) {
             /* Collapse consecutive apostrophes: f'''  ->  Derivative[3][f]. */

@@ -15,6 +15,7 @@ void info_init(void) {
     symtab_set_docstring("LCM", "LCM[n1, n2, ...] gives the least common multiple of the integers ni.");
     symtab_set_docstring("PowerMod", "PowerMod[a, b, m] gives a^b mod m.\nPowerMod[a, -1, m] finds the modular inverse of a modulo m.\nPowerMod[a, 1/r, m] finds a modular r-th root of a.");
     symtab_set_docstring("Factorial", "n! gives the factorial of n.\nFor integers and half integers, Factorial automatically evaluates to exact values.");
+    symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Binomial", "Binomial[n, m] gives the binomial coefficient.");
 
     // Structural Manipulation

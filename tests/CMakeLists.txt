@@ -404,6 +404,9 @@ target_include_directories(numeric_tests PRIVATE ../src)
 add_executable(simplify_tests test_simplify.c ${COMMON_SRC})
 target_include_directories(simplify_tests PRIVATE ../src)
 
+add_executable(factorial_simplify_tests test_factorial_simplify.c ${COMMON_SRC})
+target_include_directories(factorial_simplify_tests PRIVATE ../src)
+
 add_executable(assuming_tests test_assuming.c ${COMMON_SRC})
 target_include_directories(assuming_tests PRIVATE ../src)
 
@@ -494,6 +497,7 @@ if(USE_ECM)
     add_dependencies(increment_tests build_ecm)
     add_dependencies(numeric_tests build_ecm)
     add_dependencies(simplify_tests build_ecm)
+    add_dependencies(factorial_simplify_tests build_ecm)
     add_dependencies(assuming_tests build_ecm)
     add_dependencies(element_tests build_ecm)
     add_dependencies(logexp_simplify_tests build_ecm)

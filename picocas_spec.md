@@ -11115,3 +11115,116 @@ Limit[Abs[x]/x, x -> -Infinity]                       ==> -1
   assertions covering one-sided rewrites, two-sided disagreement,
   even/odd-order vanishing, leading-Taylor-term shapes, and the
   divergent-inner-limit continuity fast path.
+
+## Factorial simplification (`simp_factorial`, 2026-05-07)
+
+A single principled procedure inside `Simplify` that handles factorial-bearing
+expressions across five categories: ratio reduction, polynomial absorption,
+powers and cross-denominator cancellation, additive collapse, multivariate /
+edge cases. No per-pattern table; one general algorithm subsumes them all.
+
+### Algorithm
+
+For every `Factorial[arg]` subexpression:
+
+1. **Decompose** `arg` (after `Expand`) as `sym + c` where `c` is the
+   integer constant addend and `sym` is the rest.
+2. **Group** factorials by structural equality of their `sym`. Within a
+   group of offsets `c_1, ..., c_k`, the **base** is `b = sym + min(c_i)`
+   and each member's offset is `k_i = c_i - min(c_i) >= 0`.
+3. **Shift-normalize**: rewrite `Factorial[b + k]` as
+   `Factorial[b] * (b+1) * (b+2) * ... * (b+k)`. The Pochhammer expansion
+   is built as a literal `Times` product.
+4. **Algebraic combine**: `Expand` distributes products over sums (so
+   additive collapses fire), then two paths feed the re-fold:
+   - **Path A**: `Factor` on the expanded form (`factor_memo_push(NULL)`
+     to opt out of the Simplify-internal variable-list narrowing) +
+     `combine_inverses` + re-fold.
+   - **Path B**: `Together` + `Factor` + `combine_inverses` + re-fold.
+   The score tiebreak picks whichever lands at the lower SimplifyCount.
+5. **Re-fold**: walk every Times node holding a `Factorial[b]` factor
+   and absorb consecutive `(b+1)(b+2)...(b+k)` cofactors back into
+   `Factorial[b+k]`. A budget-2 gap-fill allows shapes like
+   `Factorial[b] * (b+1)(b+3)  ->  Factorial[b+3] / (b+2)` (cofactor
+   `n^2 - 1` against `Factorial[n-2]` is the user-facing case).
+6. **Combine inverses**: coalesce `Times[Power[a,-1], Power[b,-1], ...]`
+   into a single `Power[Times[a,b,...], -1]` so the factored denominator
+   scores under the un-coalesced form (picocas's evaluator does not
+   auto-coalesce these even though Mathematica does, which would
+   otherwise leave the simplified form penalised by SimplifyCount and
+   undone by the round loop).
+
+### Force-take semantics
+
+The transform contributes a Simplify seed that is force-taken whenever
+the number of `Factorial` atoms strictly drops in the candidate. This
+mirrors `LogExpRules` / `AssumptionRules`: a shape-changing factorial
+rewrite is by definition "more simplified" even when SimplifyCount
+ties (and the default complexity measure cannot distinguish e.g.
+`(n-2)!/n!` from `1/(n^2-n)` -- both score 11).
+
+### `Factorial2` builtin
+
+The classical double factorial `Factorial2[n]`, with parser support for
+the postfix `!!` operator (precedence 710, same as `!`). For
+non-negative integer `n`: `n!! = n*(n-2)*(n-4)*...` down to 1 or 2.
+Negative integer arguments below `-1` give `ComplexInfinity`. Symbolic
+arguments stay unevaluated. Used by simp_factorial to recognise the
+`(2v)! / (2^v v!) -> Factorial2[2v - 1]` identity (the only test in
+the canonical user suite that falls outside the shift-normalisation
+because the factorial arguments `2n` and `n` have different symbolic
+parts).
+
+### Examples
+
+```
+Simplify[n!/(n-1)!]                       ==> n
+Simplify[(n+3)!/(n+1)!]                   ==> (2 + n) (3 + n)
+Simplify[(n-2)!/n!]                       ==> 1/(n (-1 + n))
+Simplify[(2n)!/(2n-2)!]                   ==> 2 n (-1 + 2 n)
+Simplify[n*(n-1)!]                        ==> Factorial[n]
+Simplify[(n^2 + n)*(n-1)!]                ==> Factorial[1 + n]
+Simplify[(n^2 - 1)*(n-2)!]                ==> Factorial[1 + n] / n
+Simplify[(n!)^2 / ((n-1)!*(n+1)!)]        ==> n / (1 + n)
+Simplify[((n+1)!)^3 / (n!)^3]             ==> (1 + n)^3
+Simplify[(n!/(n-2)!)^2 - (n^2 - n)^2]     ==> 0
+Simplify[(n+1)! - n n!]                   ==> Factorial[n]
+Simplify[1/n! - 1/(n+1)!]                 ==> n / Factorial[1 + n]
+Simplify[(n+k)!/(n+k-1)!]                 ==> k + n
+Simplify[(2n)!/(2^n n!)]                  ==> Factorial2[-1 + 2 n]
+```
+
+### Files
+
+- `src/simp.c`: ~700 new LOC for the `simp_factorial` cluster
+  (`simp_fact_decompose`, `simp_fact_gather`, `simp_fact_rewrite`,
+  `simp_fact_pochhammer_expansion`, `simp_fact_refold_times`,
+  `simp_fact_refold`, `simp_fact_combine_inverses`,
+  `simp_fact_double_factorial`, `simp_fact_double_factorial_walk`,
+  `simp_factorial`). Wired into `simp_search` as a new seed and into
+  `simp_classify` so factorial-bearing inputs always flow through the
+  general pipeline rather than the rational / polynomial fast paths.
+- `src/arithmetic.c`, `arithmetic.h`: `builtin_factorial2` (~60 LOC).
+- `src/core.c`: registers `Factorial2` and assigns
+  `ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE`.
+- `src/info.c`: `Factorial2` docstring.
+- `src/parse.c`: `OP_FACTORIAL2` token (`!!`, precedence 710).
+- `tests/test_factorial_simplify.c`: 25 unit tests covering the five
+  user categories plus soundness sentinels.
+
+### Soundness
+
+- The Pochhammer expansion `Factorial[b+k] = Factorial[b] (b+1)...(b+k)`
+  is an exact identity for non-negative integer `k`, which is what the
+  decompose / group step guarantees.
+- The `factor_memo_push(NULL)` only changes Factor's internal
+  variable-scope policy for the duration of the simp_factorial call;
+  it does NOT bypass any correctness check or memoisation of other
+  transforms.
+- `combine_inverses` only collapses exponent `-1` (the trivial
+  denominator case); mixed-sign exponents are left untouched, so the
+  rewrite is structurally lossless.
+- The `Factorial2` recognition fires only when the input contains
+  exactly the canonical `Factorial[2v] * Power[Factorial[v], -1] *
+  Power[2, -v]` triple with the same `v`; non-matching shapes pass
+  through unchanged.
