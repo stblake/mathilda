@@ -1811,22 +1811,37 @@ Soundness:
 - Actual: 232 LOC source (`src/qa.h` 95 + `src/qa.c` 137 minus
   comments) + 332 LOC tests.  All 95 test binaries pass.
 
-#### Phase G2 — `Q(α)[x]` univariate polynomial type
+#### Phase G2 — `Q(α)[x]` univariate polynomial type (DONE 2026-05-07)
 
 `src/qaupoly.{c,h}`: univariate polynomial in `x` with `QANum`
 coefficients.
 
 - Storage: dense `QANum*` array indexed by x-degree (mirrors `ZUPoly`).
-- Operations: `qaupoly_add`, `_sub`, `_neg`, `_mul`, `_scale`,
-  `_divrem` (long division — leading coefficient must be invertible
-  in `Q(α)`, which it always is for non-zero LCs since `Q(α)` is a
-  field), `_gcd` (Euclidean PRS over a field), `_shift`
-  (`f(x + c)` for `c ∈ Q(α)` via Horner), `_eval` (evaluate at
-  `c ∈ Q(α)`), `_to_expr`, `_from_expr`.
-- Tests: arithmetic identities; `gcd(x²-2, x-√2) = x-√2` over `Q(√2)`;
-  `gcd(x²+1, x²-1) = 1`; division corner cases; shift-then-shift-back
-  round trip.
-- Estimated: ~300 LOC source + ~250 LOC tests.
+- Operations: `qaupoly_add`, `_sub`, `_neg`, `_mul`, `_scale_qa`,
+  `_scale_si`, `_divrem` (long division over Q(α), which is a field
+  for irreducible P_α so the leading-coefficient inverse always
+  succeeds), `_gcd` (Euclidean PRS, returned monic),
+  `_make_monic`, `_shift` (`f(x + c)` for `c ∈ Q(α)` via Horner-style
+  rebuild), `_eval` (evaluate at `c ∈ Q(α)` via Horner).
+- Construction: `qaupoly_new`, `_zero`, `_from_qa`, `_from_si`,
+  `_x` (the indeterminate), `_copy`, `_setcoef`, `_getcoef`,
+  `_normalize`.
+- Predicates: `qaupoly_is_zero`, `qaupoly_eq`.
+- Tests: 17 cases in `tests/test_qaupoly.c`.  Headline test:
+  `gcd(x² − 2, x − √2) = x − √2` over Q(√2) (the Trager lift step).
+  Other coverage: `divrem` exact + with-remainder; `gcd` coprime / self
+  / over Q(i); arithmetic identities including `(x − √2)(x + √2) = x² − 2`;
+  evaluation at √2 of `x² − 2` (yields 0); shift-then-shift-back round
+  trip recovering the original poly.
+- Implementation note: Phase G2 hardens `test_qaupoly.c` with a non-
+  elided `ASSERT` macro because Release builds (default cmake) define
+  `-DNDEBUG`, which compiles `assert(cond)` to `((void)0)` and elides
+  side-effecting calls.  This caught a real bug in the test suite where
+  `ASSERT(qaupoly_divrem(...))` left `q`/`r` uninitialised in Release;
+  the fix landed both as the local override and as a project-wide
+  lesson in `tasks/lessons.md`.
+- Actual: 200 LOC source (`src/qaupoly.h`) + 320 LOC implementation
+  (`src/qaupoly.c`) + 360 LOC tests.  All 96 test binaries pass.
 
 #### Phase G3 — Norm via resultant
 
@@ -1971,7 +1986,7 @@ Updated implementation order (extending §12's table):
 | 9 | F6 cleanup | Widen `extract_monomial` to mpz_t; sign-absorber heuristic | Not started |
 | 10 | 5c | Retire `factor_roots` | Not started |
 | 11 | **G1** (Q(α) element type) | Self-contained; parallelisable with F6 cleanup. | **Done 2026-05-07** — `src/qa.{c,h}` + 18 tests in `tests/test_qa.c`, all passing. |
-| 11b | **G2** (Q(α)[x] univariate) | Polynomial-in-x with QA coefficients. | Not started |
+| 11b | **G2** (Q(α)[x] univariate) | Polynomial-in-x with QA coefficients. | **Done 2026-05-07** — `src/qaupoly.{c,h}` + 17 tests in `tests/test_qaupoly.c`, all passing.  Headline: `gcd(x²-2, x-√2) = x-√2` over Q(√2) (the Trager lift step). |
 | 12 | **G3-G4** (norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | Not started |
 | 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | Not started |
 | 14 | **G6** (tower of extensions) | Multi-radical inputs. | Not started |

@@ -64,3 +64,41 @@ defined after `simp_search` cannot be called from `simp_search` /
 `transform_can_fire` without a forward decl. Putting the forward
 decls right above `SIMP_TRANSFORMS[]` (the earliest place they're
 needed) keeps the cluster discoverable.
+
+## ASSERT() elides its argument under Release / NDEBUG
+
+`tests/test_utils.h` has `#define ASSERT(cond) assert(cond)`. The
+project's CMake `Release` build (the default) defines `-DNDEBUG`, so
+`assert(cond)` becomes `((void)0)` — and the **expression `cond` is
+not evaluated**.
+
+Placing a side-effecting call inside `ASSERT` will silently skip the
+call in Release builds. Symptom seen 2026-05-07: `test_qaupoly_*`
+tests crashed in cleanup because
+
+```c
+ASSERT(qaupoly_divrem(a, b, &q, &r));   // evaluated only in Debug
+qaupoly_free(q);                         // q is uninitialized in Release
+```
+
+The fix is the standard pattern used by `test_zupoly.c`:
+
+```c
+bool ok = qaupoly_divrem(a, b, &q, &r);
+ASSERT(ok);
+qaupoly_free(q);
+```
+
+Or override `ASSERT` at the top of the test file to always evaluate
+its argument (the trick `test_zupoly.c` uses):
+
+```c
+#undef ASSERT
+#define ASSERT(cond) do { if (!(cond)) { fprintf(stderr, "FAIL: %s\n", #cond); exit(1); } } while (0)
+```
+
+When auditing other test files, look for `ASSERT(funcname(...))`
+where `funcname` allocates / mutates / writes via output-pointer.
+Pure predicate checks (`ASSERT(qa_eq(a, b))`, `ASSERT(p->deg == 1)`)
+are safe to elide in Release because they only weaken the test, not
+break setup.
