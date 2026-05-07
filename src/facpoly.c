@@ -14,6 +14,7 @@
 #include "mvfactor.h"
 #include "mvfactor3.h"
 #include "sym_names.h"
+#include "qafactor.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -2776,7 +2777,63 @@ static void factor_memo_put(FactorMemo* m, Expr* key, Expr* value) {
 }
 
 Expr* builtin_factor(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    /* Phase G5: Extension -> α option.  Walk trailing args looking for
+     * Rule[Extension, α] / RuleDelayed[Extension, α].  When present,
+     * dispatch to the algebraic-factoring path in qafactor.c (Trager).
+     *
+     * The memo is bypassed for this branch: the cache key is the
+     * polynomial alone, but the result depends on the extension too. */
+    if (res->data.function.arg_count >= 2) {
+        Expr* alpha_expr = NULL;
+        for (size_t i = 1; i < res->data.function.arg_count; i++) {
+            Expr* opt = res->data.function.args[i];
+            if (opt->type == EXPR_FUNCTION
+                && opt->data.function.head
+                && opt->data.function.head->type == EXPR_SYMBOL
+                && (opt->data.function.head->data.symbol == SYM_Rule
+                    || opt->data.function.head->data.symbol == SYM_RuleDelayed)
+                && opt->data.function.arg_count == 2) {
+                Expr* lhs = opt->data.function.args[0];
+                Expr* rhs = opt->data.function.args[1];
+                if (lhs->type == EXPR_SYMBOL && lhs->data.symbol == SYM_Extension) {
+                    alpha_expr = rhs;
+                }
+            }
+        }
+        if (alpha_expr) {
+            Expr* poly = res->data.function.args[0];
+            /* Pick the polynomial variable.  Q(α)-factoring works in a
+             * single indeterminate; we collect the free symbols of poly
+             * and require exactly one (after stripping α's surface
+             * form).  Multivariate algebraic factoring is out of MVP
+             * scope. */
+            Expr** vars = NULL;
+            size_t vc = 0, vcap = 8;
+            vars = (Expr**)malloc(sizeof(Expr*) * vcap);
+            collect_variables(poly, &vars, &vc, &vcap);
+
+            Expr* poly_var = NULL;
+            size_t live = 0;
+            for (size_t i = 0; i < vc; i++) {
+                if (alpha_expr && expr_eq(vars[i], alpha_expr)) continue;
+                /* Also skip the symbol I when α == I. */
+                poly_var = vars[i];
+                live++;
+            }
+            if (live == 1 && poly_var) {
+                Expr* result = qa_factor_with_extension(poly, alpha_expr, poly_var);
+                for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+                free(vars);
+                if (result) return result;
+                /* Fall through to plain Factor on failure. */
+            } else {
+                for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+                free(vars);
+            }
+        }
+    }
 
     /* Memo lookup: if a Simplify call has installed a Factor memo and
      * we've already factored this exact input, return the cached copy.

@@ -509,3 +509,444 @@ QAUPoly** qa_alg_factor(const QAUPoly* f,
     if (n_out) *n_out = n_factors;
     return out;
 }
+
+/* ============================== Phase G5 ============================== */
+
+/* Internal symbol used as the α-placeholder when round-tripping through
+ * picocas's polynomial machinery (Coefficient, Expand).  Picked to be
+ * unlikely to collide with user input; in the rare case the user
+ * actually defines this symbol the worst outcome is a NULL return from
+ * qa_factor_with_extension, which the caller treats as "leave
+ * unfactored". */
+#define QA_ALPHA_INTERNAL "$qa$alpha$"
+
+/* Recursive structural substitution: replace every sub-expression
+ * structurally equal to `target` with a fresh copy of `replacement`.
+ * Returns a freshly-allocated tree; caller owns. */
+static Expr* expr_subst(const Expr* e,
+                        const Expr* target,
+                        const Expr* replacement) {
+    if (!e) return NULL;
+    if (expr_eq((Expr*)e, (Expr*)target)) {
+        return expr_copy((Expr*)replacement);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    Expr* new_head = expr_subst(e->data.function.head, target, replacement);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = expr_subst(e->data.function.args[i], target, replacement);
+    }
+    Expr* result = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return result;
+}
+
+/* Recognise the imaginary unit, in either of its picocas forms:
+ * the bare symbol I or the canonical Complex[0, 1]. */
+static bool expr_is_imaginary_unit(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL && e->data.symbol == SYM_I) return true;
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Complex
+        && e->data.function.arg_count == 2) {
+        Expr* re = e->data.function.args[0];
+        Expr* im = e->data.function.args[1];
+        if (re->type == EXPR_INTEGER && re->data.integer == 0
+            && im->type == EXPR_INTEGER && im->data.integer == 1) return true;
+    }
+    return false;
+}
+
+/* Recognise Sqrt[c] with integer c, returning c via *out_c.  picocas
+ * canonicalises Sqrt[c] as Power[c, Rational[1, 2]] so we accept that
+ * form too. */
+static bool expr_is_sqrt_int(const Expr* e, long* out_c) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head
+        || e->data.function.head->type != EXPR_SYMBOL
+        || e->data.function.arg_count < 1) return false;
+    const char* head = e->data.function.head->data.symbol;
+    if (head == SYM_Sqrt && e->data.function.arg_count == 1) {
+        Expr* c = e->data.function.args[0];
+        if (c->type != EXPR_INTEGER) return false;
+        *out_c = (long)c->data.integer;
+        return true;
+    }
+    if (head == SYM_Power && e->data.function.arg_count == 2) {
+        Expr* c   = e->data.function.args[0];
+        Expr* exp = e->data.function.args[1];
+        int64_t p, q;
+        if (c->type != EXPR_INTEGER) return false;
+        if (!is_rational(exp, &p, &q) || p != 1 || q != 2) return false;
+        *out_c = (long)c->data.integer;
+        return true;
+    }
+    return false;
+}
+
+QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
+    if (!alpha_expr || !render_out) return NULL;
+
+    /* I  →  P_α(y) = y² + 1, render = I.  picocas auto-evaluates the
+     * literal `I` into `Complex[0, 1]` and `Sqrt[-1]` likewise, so by
+     * the time we see the option both forms have collapsed to the
+     * canonical Complex[0, 1].  We accept the bare symbol I as a
+     * defensive convenience. */
+    if (expr_is_imaginary_unit(alpha_expr)) {
+        QAExt* ext = qaext_new(2);
+        qaext_set_coef_si(ext, 0,  1, 1);   /* +1 */
+        qaext_set_coef_si(ext, 1,  0, 1);
+        qaext_set_coef_si(ext, 2,  1, 1);   /* y² */
+        *render_out = expr_new_symbol("I");
+        return ext;
+    }
+
+    /* Sqrt[c]  →  P_α(y) = y² − c, render = Sqrt[c]. */
+    {
+        long c;
+        if (expr_is_sqrt_int(alpha_expr, &c)) {
+            QAExt* ext = qaext_sqrt_si(c);
+            *render_out = expr_copy((Expr*)alpha_expr);
+            return ext;
+        }
+    }
+
+    /* Times[I, Sqrt[c]]  =  Sqrt[-c]  →  P_α(y) = y² + c.  picocas
+     * auto-evaluates Sqrt[-c] for negative argument into I·Sqrt[c],
+     * so `Extension -> Sqrt[-3]` arrives here as Times[Complex[0,1],
+     * Sqrt[3]].  We accept either ordering of the two factors. */
+    if (alpha_expr->type == EXPR_FUNCTION
+        && alpha_expr->data.function.head
+        && alpha_expr->data.function.head->type == EXPR_SYMBOL
+        && alpha_expr->data.function.head->data.symbol == SYM_Times
+        && alpha_expr->data.function.arg_count == 2) {
+        Expr* a = alpha_expr->data.function.args[0];
+        Expr* b = alpha_expr->data.function.args[1];
+        long c = 0;
+        Expr* rad = NULL;
+        if (expr_is_imaginary_unit(a) && expr_is_sqrt_int(b, &c)) rad = b;
+        else if (expr_is_imaginary_unit(b) && expr_is_sqrt_int(a, &c)) rad = a;
+        if (rad && c > 0) {
+            QAExt* ext = qaext_sqrt_si(-c);   /* P_α(y) = y² + c */
+            *render_out = expr_copy((Expr*)alpha_expr);
+            return ext;
+        }
+    }
+
+    /* c^(1/n)  →  P_α(y) = yⁿ − c, render = c^(1/n). */
+    if (alpha_expr->type == EXPR_FUNCTION
+        && alpha_expr->data.function.head
+        && alpha_expr->data.function.head->type == EXPR_SYMBOL
+        && alpha_expr->data.function.head->data.symbol == SYM_Power
+        && alpha_expr->data.function.arg_count == 2) {
+        Expr* c   = alpha_expr->data.function.args[0];
+        Expr* exp = alpha_expr->data.function.args[1];
+        int64_t p, q;
+        if (c->type == EXPR_INTEGER
+            && is_rational(exp, &p, &q)
+            && p == 1 && q >= 2) {
+            QAExt* ext = qaext_root_si((long)c->data.integer, (unsigned)q);
+            *render_out = expr_copy((Expr*)alpha_expr);
+            return ext;
+        }
+        return NULL;
+    }
+
+    return NULL;
+}
+
+/* Build α^j ∈ Q(α) (j ≥ 0).  α^0 = 1, α^1 = α, then iterated multiply. */
+static QANum* qa_alpha_power(const QAExt* ext, int j) {
+    if (j == 0) return qa_one(ext);
+    QANum* alpha = qa_alpha(ext);
+    if (j == 1) return alpha;
+    QANum* acc = qa_copy(alpha);
+    for (int k = 1; k < j; k++) {
+        QANum* tmp = qa_mul(acc, alpha);
+        qa_free(acc);
+        acc = tmp;
+    }
+    qa_free(alpha);
+    return acc;
+}
+
+/* Lift an Expr polynomial in `var` (whose coefficients may be
+ * polynomials in `alpha_render`) to a QAUPoly over `ext`.  Returns
+ * NULL if any coefficient is not in Q(α) (e.g. contains a free symbol
+ * other than `var` and `alpha_render`).
+ *
+ * Strategy: substitute alpha_render → an internal placeholder symbol,
+ * then use Coefficient[..] to peel off (var^i)(α^j) terms. */
+static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
+                                              const Expr* var,
+                                              const Expr* alpha_render,
+                                              const QAExt* ext) {
+    Expr* alpha_sym = expr_new_symbol(QA_ALPHA_INTERNAL);
+
+    /* Stage 1 — substitute α's surface form with an opaque symbol. */
+    Expr* poly_sub = alpha_render
+        ? expr_subst(poly, alpha_render, alpha_sym)
+        : expr_copy((Expr*)poly);
+
+    /* Stage 2 — Expand so that nested Power / Times terms collapse to
+     * a canonical Plus-of-monomials form.  Without this,
+     * get_degree_poly on (a*x + b)^2 returns 0 (it doesn't see x). */
+    Expr* poly_x = expr_expand(poly_sub);
+    expr_free(poly_sub);
+
+    int xdeg = get_degree_poly(poly_x, (Expr*)var);
+    if (xdeg < 0) {
+        expr_free(poly_x);
+        expr_free(alpha_sym);
+        return qaupoly_zero(ext);
+    }
+
+    QAUPoly* p = qaupoly_new(ext, xdeg + 1);
+    bool ok = true;
+
+    for (int i = 0; i <= xdeg && ok; i++) {
+        Expr* c_in_x = get_coeff(poly_x, (Expr*)var, i);
+        Expr* c_expanded = expr_expand(c_in_x);
+        expr_free(c_in_x);
+
+        int adeg = get_degree_poly(c_expanded, alpha_sym);
+        if (adeg < 0) {
+            /* Zero coefficient — leave c[i] = 0 in QAUPoly. */
+            expr_free(c_expanded);
+            continue;
+        }
+        if ((size_t)adeg >= ext->deg) {
+            /* α-degree exceeds the extension's; refuse.  In practice
+             * picocas auto-reduces e.g. Sqrt[2]^3 → 2 Sqrt[2] before
+             * we even see the input, so this branch only fires when
+             * the input is genuinely outside Q(α). */
+            expr_free(c_expanded);
+            ok = false;
+            break;
+        }
+
+        QANum* qn = qa_zero(ext);
+        for (int j = 0; j <= adeg; j++) {
+            Expr* aj = get_coeff(c_expanded, alpha_sym, j);
+            mpq_t q;
+            mpq_init(q);
+            if (!expr_coef_to_mpq(aj, q)) {
+                mpq_clear(q);
+                expr_free(aj);
+                qa_free(qn);
+                qn = NULL;
+                ok = false;
+                break;
+            }
+            QANum* aj_pow  = qa_alpha_power(ext, j);
+            QANum* term    = qa_scale_mpq(aj_pow, q);
+            qa_free(aj_pow);
+            QANum* sum     = qa_add(qn, term);
+            qa_free(qn);
+            qa_free(term);
+            qn = sum;
+            mpq_clear(q);
+            expr_free(aj);
+        }
+        expr_free(c_expanded);
+
+        if (ok) {
+            qaupoly_setcoef(p, i, qn);
+            qa_free(qn);
+        }
+    }
+    expr_free(poly_x);
+    expr_free(alpha_sym);
+
+    if (!ok) {
+        qaupoly_free(p);
+        return NULL;
+    }
+    qaupoly_normalize(p);
+    return p;
+}
+
+Expr* qaupoly_to_expr_alpha(const QAUPoly* f,
+                            const char* x_name,
+                            const Expr* alpha_render) {
+    /* Round-trip through qaupoly_to_expr with an internal y-symbol,
+     * then ReplaceAll y → alpha_render and evaluate.  Evaluation
+     * collapses Sqrt[c]^k / c^(k/n) etc. into canonical form. */
+    Expr* in_y = qaupoly_to_expr(f, x_name, QA_ALPHA_INTERNAL);
+    Expr* y_sym = expr_new_symbol(QA_ALPHA_INTERNAL);
+    Expr* in_alpha = expr_subst(in_y, y_sym, alpha_render);
+    expr_free(in_y);
+    expr_free(y_sym);
+    Expr* canon = evaluate(in_alpha);
+    expr_free(in_alpha);
+    return canon;
+}
+
+Expr* qa_factor_with_extension(const Expr* poly,
+                               const Expr* alpha_expr,
+                               const Expr* var) {
+    if (!poly || !alpha_expr || !var) return NULL;
+    if (var->type != EXPR_SYMBOL) return NULL;
+
+    /* 1) Resolve α. */
+    Expr* alpha_render = NULL;
+    QAExt* ext = qa_resolve_extension(alpha_expr, &alpha_render);
+    if (!ext) return NULL;
+
+    const char* x_name = var->data.symbol;
+    const char* y_name = QA_ALPHA_INTERNAL;
+
+    /* 2) Lift input poly → QAUPoly. */
+    QAUPoly* f = qa_expr_to_qaupoly_with_alpha(poly, var, alpha_render, ext);
+    if (!f) {
+        qaext_free(ext);
+        expr_free(alpha_render);
+        return NULL;
+    }
+
+    /* Degenerate cases: zero or constant poly — return as-is (no
+     * non-trivial factoring possible). */
+    if (f->deg <= 0) {
+        Expr* result = qaupoly_to_expr_alpha(f, x_name, alpha_render);
+        qaupoly_free(f);
+        qaext_free(ext);
+        expr_free(alpha_render);
+        return result;
+    }
+
+    /* Trager's algorithm requires squarefree input.  Reduce by
+     * dividing out gcd(f, f'). */
+    QAUPoly* f_for_alg;
+    {
+        /* Build f' via finite-difference style: derivative of
+         * sum c[i] x^i  is  sum i c[i] x^(i-1). */
+        QAUPoly* fp = qaupoly_new(f->ext, f->deg > 0 ? f->deg : 1);
+        for (int i = 1; i <= f->deg; i++) {
+            QANum* scaled = qa_scale_si(f->c[i], (long)i, 1);
+            qaupoly_setcoef(fp, i - 1, scaled);
+            qa_free(scaled);
+        }
+        qaupoly_normalize(fp);
+        QAUPoly* g = qaupoly_gcd(f, fp);
+        qaupoly_free(fp);
+        if (!g || g->deg <= 0) {
+            /* Already squarefree (gcd is constant).  Use f directly. */
+            if (g) qaupoly_free(g);
+            f_for_alg = qaupoly_copy(f);
+        } else {
+            QAUPoly *q_div, *r_div;
+            if (!qaupoly_divrem(f, g, &q_div, &r_div) || !qaupoly_is_zero(r_div)) {
+                if (q_div) qaupoly_free(q_div);
+                if (r_div) qaupoly_free(r_div);
+                qaupoly_free(g);
+                qaupoly_free(f);
+                qaext_free(ext);
+                expr_free(alpha_render);
+                return NULL;
+            }
+            qaupoly_free(r_div);
+            qaupoly_free(g);
+            f_for_alg = q_div;
+        }
+    }
+
+    /* 3) Factor the squarefree part. */
+    int n_factors = 0;
+    QAUPoly** factors = qa_alg_factor(f_for_alg, x_name, y_name, &n_factors);
+    qaupoly_free(f_for_alg);
+
+    if (!factors || n_factors <= 0) {
+        if (factors) free(factors);
+        qaupoly_free(f);
+        qaext_free(ext);
+        expr_free(alpha_render);
+        return NULL;
+    }
+
+    /* 4) Determine multiplicities by trial division of `f` by each
+     * factor (handles non-squarefree input). */
+    int* mult = (int*)calloc((size_t)n_factors, sizeof(int));
+    QAUPoly* remaining = qaupoly_copy(f);
+    for (int i = 0; i < n_factors; i++) {
+        while (remaining->deg >= factors[i]->deg) {
+            QAUPoly *q_div, *r_div;
+            if (!qaupoly_divrem(remaining, factors[i], &q_div, &r_div)) {
+                if (q_div) qaupoly_free(q_div);
+                if (r_div) qaupoly_free(r_div);
+                break;
+            }
+            if (!qaupoly_is_zero(r_div)) {
+                qaupoly_free(q_div);
+                qaupoly_free(r_div);
+                break;
+            }
+            qaupoly_free(r_div);
+            qaupoly_free(remaining);
+            remaining = q_div;
+            mult[i]++;
+        }
+    }
+    /* `remaining` should now be a unit (constant) — the leading
+     * coefficient of f. */
+    QANum* leading = remaining->deg < 0 ? qa_one(ext) : qa_copy(remaining->c[0]);
+    qaupoly_free(remaining);
+
+    /* 5) Render each factor back as Expr with multiplicity. */
+    size_t n_terms = 0;
+    for (int i = 0; i < n_factors; i++) if (mult[i] > 0) n_terms++;
+    bool unit_is_one = qa_is_one(leading);
+    if (!unit_is_one) n_terms++;
+
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (n_terms > 0 ? n_terms : 1));
+    size_t out = 0;
+
+    if (!unit_is_one) {
+        /* Express the leading-coefficient unit as a polynomial in α
+         * via the same renderer. */
+        QAUPoly* unit_poly = qaupoly_from_qa(leading);
+        terms[out++] = qaupoly_to_expr_alpha(unit_poly, x_name, alpha_render);
+        qaupoly_free(unit_poly);
+    }
+    qa_free(leading);
+
+    for (int i = 0; i < n_factors; i++) {
+        if (mult[i] <= 0) continue;
+        Expr* h = qaupoly_to_expr_alpha(factors[i], x_name, alpha_render);
+        if (mult[i] == 1) {
+            terms[out++] = h;
+        } else {
+            Expr* p_args[2] = { h, expr_new_integer((int64_t)mult[i]) };
+            terms[out++] = expr_new_function(expr_new_symbol("Power"),
+                                             p_args, 2);
+        }
+    }
+
+    Expr* result;
+    if (n_terms == 0) {
+        result = expr_new_integer(1);
+    } else if (n_terms == 1) {
+        result = terms[0];
+    } else {
+        result = expr_new_function(expr_new_symbol("Times"),
+                                   terms, n_terms);
+    }
+    free(terms);
+    free(mult);
+
+    /* Final evaluate to canonicalise Times / signs. */
+    Expr* canon = evaluate(result);
+    expr_free(result);
+
+    /* Cleanup. */
+    for (int i = 0; i < n_factors; i++) qaupoly_free(factors[i]);
+    free(factors);
+    qaupoly_free(f);
+    qaext_free(ext);
+    expr_free(alpha_render);
+
+    return canon;
+}

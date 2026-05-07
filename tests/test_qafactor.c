@@ -515,6 +515,98 @@ static void _unused_keep_helpers(void) {
     (void)assert_qaupoly_eq_str;
 }
 
+/* ============================ Phase G5 ============================ */
+/* End-to-end picocas-API tests: parse `Factor[poly, Extension -> α]`,
+ * evaluate, and compare the result (as FullForm) to the expected
+ * factored form parsed and evaluated through the same pipeline. */
+
+static void assert_factor_eq_str(const char* input_src,
+                                 const char* expected_src) {
+    Expr* in_parsed = parse_expression(input_src);
+    ASSERT(in_parsed != NULL);
+    Expr* actual = evaluate(in_parsed);
+    expr_free(in_parsed);
+    assert_expr_eq_str(actual, expected_src);
+}
+
+/* x² − 2 over Q(√2) → (x − √2)(x + √2). */
+static void test_g5_x2_minus_2_qsqrt2(void) {
+    assert_factor_eq_str("Factor[x^2 - 2, Extension -> Sqrt[2]]",
+                         "(x - Sqrt[2]) (x + Sqrt[2])");
+}
+
+/* x⁴ + 1 over Q(√2) → (x² − √2 x + 1)(x² + √2 x + 1). */
+static void test_g5_x4_plus_1_qsqrt2(void) {
+    assert_factor_eq_str("Factor[x^4 + 1, Extension -> Sqrt[2]]",
+                         "(x^2 - Sqrt[2] x + 1) (x^2 + Sqrt[2] x + 1)");
+}
+
+/* x⁴ − 5x² + 6 over Q(√2) → (x − √2)(x + √2)(x² − 3). */
+static void test_g5_x4_5x2_6_qsqrt2(void) {
+    assert_factor_eq_str("Factor[x^4 - 5 x^2 + 6, Extension -> Sqrt[2]]",
+                         "(x - Sqrt[2]) (x + Sqrt[2]) (x^2 - 3)");
+}
+
+/* x³ − 2 over Q(∛2) → (x − ∛2)(x² + ∛2 x + ∛4). */
+static void test_g5_x3_minus_2_qcbrt2(void) {
+    assert_factor_eq_str("Factor[x^3 - 2, Extension -> 2^(1/3)]",
+                         "(x - 2^(1/3)) (x^2 + 2^(1/3) x + 2^(2/3))");
+}
+
+/* x² + 1 over Q(i) → (x − I)(x + I). */
+static void test_g5_x2_plus_1_qi(void) {
+    assert_factor_eq_str("Factor[x^2 + 1, Extension -> I]",
+                         "(x - I) (x + I)");
+}
+
+/* x² + 4 over Q(i) → (x − 2I)(x + 2I) — coefficient handling. */
+static void test_g5_x2_plus_4_qi(void) {
+    assert_factor_eq_str("Factor[x^2 + 4, Extension -> I]",
+                         "(x - 2 I) (x + 2 I)");
+}
+
+/* x⁴ + 4 over Q(i) — degree-2 extension, Sophie-Germain identity:
+ * x⁴ + 4 = (x² + 2x + 2)(x² − 2x + 2) over Q, but each of those
+ * further factors over Q(i): (x² + 2x + 2) = (x + 1 − i)(x + 1 + i),
+ * etc.  Final form has 4 linear factors. */
+static void test_g5_x4_plus_4_qi(void) {
+    assert_factor_eq_str(
+        "Factor[x^4 + 4, Extension -> I]",
+        "(x - 1 - I) (x - 1 + I) (x + 1 - I) (x + 1 + I)");
+}
+
+/* x² + x + 1 over Q(√−3) → (x − ω)(x − ω̄) where ω = (−1 + I√3)/2.
+ * Picocas renders this as (x + 1/2 + I√3/2)(x + 1/2 − I√3/2). */
+static void test_g5_x2_x_1_qsqrtm3(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 + x + 1, Extension -> Sqrt[-3]]",
+        "(x + 1/2 - I Sqrt[3]/2) (x + 1/2 + I Sqrt[3]/2)");
+}
+
+/* α-bearing input: x² − 2√2 x + 2 = (x − √2)² over Q(√2).  Tests the
+ * recognition of `Sqrt[2]` as α inside the input polynomial and the
+ * multiplicity-detection trial-division loop. */
+static void test_g5_alpha_in_input(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 2 Sqrt[2] x + 2, Extension -> Sqrt[2]]",
+        "(x - Sqrt[2])^2");
+}
+
+/* Repeated-factor input: (x² − 2)² over Q(√2) → (x − √2)²(x + √2)². */
+static void test_g5_repeated_factor_qsqrt2(void) {
+    assert_factor_eq_str(
+        "Factor[(x^2 - 2)^2, Extension -> Sqrt[2]]",
+        "(x - Sqrt[2])^2 (x + Sqrt[2])^2");
+}
+
+/* Irreducible over the supplied extension: x² − 3 over Q(√2)
+ * stays unfactored as x² − 3 (the extension does not contain √3). */
+static void test_g5_irreducible_in_qsqrt2(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 3, Extension -> Sqrt[2]]",
+        "x^2 - 3");
+}
+
 /* ============================== Driver =============================== */
 
 int main(void) {
@@ -551,6 +643,19 @@ int main(void) {
 
     /* Phase G4 — irreducible-input edge case */
     TEST(test_alg_factor_irreducible_input);
+
+    /* Phase G5 — picocas-level Factor[..., Extension -> α] API */
+    TEST(test_g5_x2_minus_2_qsqrt2);
+    TEST(test_g5_x4_plus_1_qsqrt2);
+    TEST(test_g5_x4_5x2_6_qsqrt2);
+    TEST(test_g5_x3_minus_2_qcbrt2);
+    TEST(test_g5_x2_plus_1_qi);
+    TEST(test_g5_x2_plus_4_qi);
+    TEST(test_g5_x4_plus_4_qi);
+    TEST(test_g5_x2_x_1_qsqrtm3);
+    TEST(test_g5_alpha_in_input);
+    TEST(test_g5_repeated_factor_qsqrt2);
+    TEST(test_g5_irreducible_in_qsqrt2);
 
     _unused_keep_helpers();
 

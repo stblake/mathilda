@@ -11228,3 +11228,71 @@ Simplify[(2n)!/(2^n n!)]                  ==> Factorial2[-1 + 2 n]
   exactly the canonical `Factorial[2v] * Power[Factorial[v], -1] *
   Power[2, -v]` triple with the same `v`; non-matching shapes pass
   through unchanged.
+
+## Factor: algebraic factoring over Q(α) — `Extension -> α` (Phase G5, 2026-05-07)
+
+`Factor[poly, Extension -> alpha]` factors `poly` over the algebraic
+extension `Q(alpha)`, where `alpha` is one of:
+
+- `Sqrt[c]` for integer `c` (positive or negative)
+- `Sqrt[-c]` (auto-evaluated by picocas to `I Sqrt[c]`; recognised in
+  that compound form)
+- `c^(1/n)` for integer `c` and integer `n >= 2`
+- `I` (the imaginary unit; equivalent to `Extension -> Sqrt[-1]`)
+
+The implementation follows Trager's algorithm (Trager 1976,
+"Algebraic Factoring and Rational Function Integration"):
+
+1. Resolve `alpha` to a minimal polynomial `P_α(y) ∈ Q[y]` and lift
+   the input to `Q(α)[x]`.
+2. Run `qa_sqfr_norm` to find the smallest non-negative integer `s`
+   such that `Norm(f(x − sα))` is squarefree over `Q`.
+3. Factor that norm `R(x)` over `Q` via the existing
+   Berlekamp–Zassenhaus pipeline.
+4. Lift each `Q`-factor back to a `Q(α)`-factor of the shifted
+   polynomial via `gcd(h_i(x), g(x))` over `Q(α)[x]`.
+5. Undo the shift `x → x + sα` and trial-divide the original input
+   to recover multiplicities for non-squarefree cases.
+6. Render each `QAUPoly` factor as a picocas Expr in the user's
+   surface form (`Sqrt[c]`, `c^(1/n)`, `I`, …).
+
+### Examples
+
+```
+Factor[x^2 - 2, Extension -> Sqrt[2]]                    ==> (x - Sqrt[2]) (x + Sqrt[2])
+Factor[x^4 + 1, Extension -> Sqrt[2]]                    ==> (x^2 - Sqrt[2] x + 1) (x^2 + Sqrt[2] x + 1)
+Factor[x^4 - 5 x^2 + 6, Extension -> Sqrt[2]]            ==> (x - Sqrt[2]) (x + Sqrt[2]) (x^2 - 3)
+Factor[x^3 - 2, Extension -> 2^(1/3)]                    ==> (x - 2^(1/3)) (x^2 + 2^(1/3) x + 2^(2/3))
+Factor[x^2 + 1, Extension -> I]                          ==> (x - I) (x + I)
+Factor[x^2 + 4, Extension -> I]                          ==> (x - 2 I) (x + 2 I)
+Factor[x^4 + 4, Extension -> I]                          ==> (x - 1 - I) (x - 1 + I) (x + 1 - I) (x + 1 + I)
+Factor[x^2 + x + 1, Extension -> Sqrt[-3]]               ==> (x + 1/2 - I Sqrt[3]/2) (x + 1/2 + I Sqrt[3]/2)
+Factor[x^2 - 2 Sqrt[2] x + 2, Extension -> Sqrt[2]]      ==> (x - Sqrt[2])^2
+Factor[(x^2 - 2)^2, Extension -> Sqrt[2]]                ==> (x - Sqrt[2])^2 (x + Sqrt[2])^2
+Factor[x^2 - 3, Extension -> Sqrt[2]]                    ==> x^2 - 3   (irreducible over Q(Sqrt[2]))
+```
+
+The input polynomial may itself contain occurrences of `alpha`'s
+surface form; those are recognised structurally and lifted into the
+`α`-component of each `QAUPoly` coefficient.
+
+If any coefficient is not in `Q(α)` (e.g. contains a free symbol
+other than the polynomial variable and `alpha`), or if `sqfr_norm`
+fails to converge within 32 shifts, the algebraic-factoring path
+returns to the caller and `builtin_factor` falls back to plain
+non-extension factoring over `Q`.
+
+### Files
+
+- `src/qafactor.{c,h}`: `qa_resolve_extension`,
+  `qa_factor_with_extension`, `qaupoly_to_expr_alpha`, plus the
+  static helpers `expr_is_imaginary_unit`, `expr_is_sqrt_int`,
+  `qa_alpha_power`, `qa_expr_to_qaupoly_with_alpha`, `expr_subst`.
+  Sits on top of the Phase G1–G4 layers (`qa.{c,h}`,
+  `qaupoly.{c,h}`, and the rest of `qafactor.{c,h}`).
+- `src/facpoly.c::builtin_factor`: relaxed argument-count guard,
+  added Extension-option scan, dispatch to the algebraic path with
+  fall-through to plain Factor on failure.
+- `src/sym_names.{c,h}`: `SYM_Extension`.
+- `src/info.c`: extended Factor docstring.
+- `tests/test_qafactor.c`: 11 new tests (31 total).

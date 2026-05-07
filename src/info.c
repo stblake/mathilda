@@ -472,7 +472,11 @@ void info_init(void) {
     symtab_set_docstring("Collect", "Collect[expr, x] collects together terms involving the same powers of objects matching x.");
     symtab_set_docstring("PolynomialMod", "PolynomialMod[poly,m] gives the polynomial poly reduced modulo m.\nPolynomialMod[poly,{Subscript[m, 1],Subscript[m, 2],...}] reduces modulo all of the Subscript[m, i].");
     symtab_set_docstring("FactorSquareFree", "FactorSquareFree[poly] pulls out any multiple factors in a polynomial.");
-    symtab_set_docstring("Factor", "Factor[poly] factors a polynomial over the integers.");
+    symtab_set_docstring("Factor",
+        "Factor[poly] factors a polynomial over the integers.\n"
+        "Factor[poly, Extension -> alpha] factors over Q(alpha), where alpha is\n"
+        "Sqrt[c], c^(1/n) (rational c), or I.  Implements Trager's algebraic-\n"
+        "factoring algorithm via norm + sqfr_norm + alg_factor.");
     symtab_set_docstring("FactorTerms",
         "FactorTerms[poly]\n\tpulls out any overall numerical factor in poly.\n"
         "FactorTerms[poly, x]\n\tpulls out any overall factor in poly that does not depend on x.\n"

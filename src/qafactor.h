@@ -109,4 +109,50 @@ QAUPoly** qa_alg_factor(const QAUPoly* f,
                         const char* y_name,
                         int* n_out);
 
+/* ============================ Phase G5 ============================ */
+
+/* Resolve an `Extension -> α` argument to a (QAExt, surface-render-form)
+ * pair.
+ *
+ * Recognised forms:
+ *   Sqrt[c]         (rational c, |c| ≤ INT64 / 2)   →  P_α = y² − c
+ *   c^(1/n)         (rational c, integer n ≥ 2)     →  P_α = yⁿ − c
+ *   I                                                →  P_α = y² + 1
+ *
+ * On success returns a fresh QAExt (caller owns: qaext_free) and writes
+ * a fresh `*render_out` Expr (caller owns: expr_free).  The render-form
+ * is what α should look like in user-visible output — typically a copy
+ * of `alpha_expr` itself.
+ *
+ * Returns NULL on unsupported or non-rational inputs; *render_out is
+ * left untouched in that case. */
+QAExt* qa_resolve_extension(const struct Expr* alpha_expr,
+                            struct Expr** render_out);
+
+/* Render a QAUPoly over Q(α) as a picocas Expr in `x_name` and
+ * `alpha_render` (the surface form for α, e.g. Sqrt[2]).  The result
+ * is post-evaluated so that `Sqrt[c]^k` collapses to its canonical
+ * form. */
+struct Expr* qaupoly_to_expr_alpha(const QAUPoly* f,
+                                   const char* x_name,
+                                   const struct Expr* alpha_render);
+
+/* Public picocas-level wrapper: factor `poly` ∈ Q(α)[x] over Q(α),
+ * where `alpha_expr` selects the extension (per qa_resolve_extension)
+ * and `var` is the polynomial indeterminate.
+ *
+ * The input may itself contain `alpha_expr` as a sub-expression (e.g.
+ * `Factor[x^2 - 2 Sqrt[2] x + 2, Extension -> Sqrt[2]]`); occurrences
+ * are recognised structurally and lifted into the α-component of the
+ * QAUPoly coefficients.
+ *
+ * Returns a fresh Expr — typically `Times[h_1, h_2, ...]` of the monic
+ * factors, prefixed by the leading-coefficient unit when it is not 1.
+ * Returns NULL on unsupported inputs (non-Q(α) coefficient, sqfr_norm
+ * non-convergence, multiple variables, etc.); the caller should fall
+ * back to non-extension factoring in that case. */
+struct Expr* qa_factor_with_extension(const struct Expr* poly,
+                                      const struct Expr* alpha_expr,
+                                      const struct Expr* var);
+
 #endif

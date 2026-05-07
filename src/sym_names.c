@@ -74,6 +74,7 @@ const char* SYM_EulerGamma = NULL;
 const char* SYM_Evaluate = NULL;
 const char* SYM_Except = NULL;
 const char* SYM_Exp = NULL;
+const char* SYM_Extension = NULL;
 const char* SYM_Factor = NULL;
 const char* SYM_FactorSquareFree = NULL;
 const char* SYM_FactorTerms = NULL;
@@ -281,6 +282,7 @@ void sym_names_init(void) {
     SYM_Evaluate                   = intern_symbol("Evaluate");
     SYM_Except                     = intern_symbol("Except");
     SYM_Exp                        = intern_symbol("Exp");
+    SYM_Extension                  = intern_symbol("Extension");
     SYM_Factor                     = intern_symbol("Factor");
     SYM_FactorSquareFree           = intern_symbol("FactorSquareFree");
     SYM_FactorTerms                = intern_symbol("FactorTerms");

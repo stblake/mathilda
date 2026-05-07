@@ -1912,21 +1912,61 @@ coefficients.
   module grew from 158 to 378 LOC) + 270 LOC test delta (test file
   grew from 200 to 470 LOC).  All 97 test binaries pass.
 
-#### Phase G5 — picocas-level API
+#### Phase G5 — picocas-level API — **Done 2026-05-07**
 
-- Parser/evaluator: recognise `Extension -> α` option for `Factor`
-  (parse rule `Extension` is already a known option pattern in
-  `picocas`'s evaluator; needs a hook in `builtin_factor` to read it).
-- Resolve `α` to a minimal polynomial:
-  - `Sqrt[c]` for rational `c` → `y² - c`
-  - `c^(1/n)` for rational `c` → `y^n - c`
-  - `Root[p, k]` → use the polynomial `p` directly
-  - `AlgebraicNumber[α, coeffs]` (Mathematica's representation) — TBD,
-    out of scope for the MVP
-- Output formatting: render `QANum` back to `Sqrt[...]` / `Root[...]`
-  forms when the extension came from one of those — share the
-  printing logic with `simp_algebraic`'s output.
-- Estimated: ~200 LOC source + ~100 LOC tests.
+User-facing entry point: `Factor[poly, Extension -> α]` now routes
+through Trager for any `α` whose minimal polynomial we can build.
+
+- Public API in `qafactor.{c,h}`:
+  - `qa_resolve_extension(alpha_expr, **render_out) -> QAExt*`
+    recognises:
+    - `Sqrt[c]` (integer c, including negative) → `y² − c`
+    - `c^(1/n)` (integer c, integer n ≥ 2) → `yⁿ − c`
+    - `I` / `Complex[0, 1]` → `y² + 1`
+    - `Times[I, Sqrt[c]]` (the canonical form of `Sqrt[-c]` after
+      picocas's auto-evaluation) → `y² + c`
+    Picocas canonicalises `Sqrt[c]` as `Power[c, Rational[1, 2]]`,
+    so the recogniser accepts both spellings.
+  - `qa_expr_to_qaupoly_with_alpha` (static): walks an Expr
+    polynomial in `var` whose coefficients may contain `alpha_render`
+    and lifts it to a QAUPoly.  Strategy: substitute the surface form
+    of α with an internal placeholder symbol `$qa$alpha$`, then peel
+    off `(varⁱ)(αʲ)` terms via `Coefficient[…]`.  Returns `NULL` if
+    any coefficient is not in `Q(α)` (caller falls back to plain
+    Factor).
+  - `qaupoly_to_expr_alpha`: round-trips a QAUPoly through
+    `qaupoly_to_expr` with the internal placeholder, then substitutes
+    the placeholder back to the user's surface form and re-evaluates
+    so that `Sqrt[c]^k` collapses to its canonical form.
+  - `qa_factor_with_extension(poly, alpha_expr, var)`: top-level
+    orchestrator.  Includes a squarefree-reduction pre-pass via
+    `gcd(f, f') / gcd` and a multiplicity-detection trial-division
+    loop, so non-squarefree inputs like `(x²−2)²` come out as
+    `(x−√2)²(x+√2)²` rather than just `(x−√2)(x+√2)`.
+- Hook in `builtin_factor` (`src/facpoly.c`): the arg-count guard
+  now allows trailing options.  Trailing `Rule[Extension, α]` is
+  picked up; multivariate inputs (after stripping α) are rejected
+  back to plain Factor.
+- Internal symbol: added `SYM_Extension` to `sym_names.{c,h}`.
+- Surface-form gotchas (documented as comments in `qa_resolve_extension`):
+  - The literal `I` auto-evaluates to `Complex[0, 1]`, so the
+    resolver tests both spellings.
+  - `Sqrt[-c]` for positive c auto-evaluates to `Times[I, Sqrt[c]]`,
+    so the resolver matches that compound form too.
+  - `Sqrt[c]` is stored canonically as `Power[c, Rational[1, 2]]`.
+- Tests: 11 new tests in `tests/test_qafactor.c` covering the §14.2
+  headlines plus `x⁴+4` (4 linear factors over Q(i)), an α-bearing
+  input (`x² − 2√2 x + 2 = (x − √2)²` over Q(√2)), a repeated-factor
+  input ((x²−2)² over Q(√2)), and an irreducible-over-extension
+  guard (x² − 3 over Q(√2) stays unfactored).  All 31 qafactor tests
+  pass; full 97-binary suite green.
+- Updates: `Factor` docstring in `src/info.c` mentions the new
+  option.  No additions to internal `.m` files (the dispatch is
+  entirely in C).
+- Out of MVP: `Root[p, k]` (the symbolic-root form) and
+  `AlgebraicNumber[α, coeffs]` (Mathematica's normalised
+  representation).  Both can land later without disturbing the
+  current API.
 
 #### Phase G6 — Tower of extensions
 
@@ -2029,7 +2069,7 @@ Updated implementation order (extending §12's table):
 | 11b | **G2** (Q(α)[x] univariate) | Polynomial-in-x with QA coefficients. | **Done 2026-05-07** — `src/qaupoly.{c,h}` + 17 tests in `tests/test_qaupoly.c`, all passing.  Headline: `gcd(x²-2, x-√2) = x-√2` over Q(√2) (the Trager lift step). |
 | 11c | **G3** (norm via resultant) | Field-norm of `f ∈ Q(α)[x]` via `Resultant_y(P_α, f)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qaupoly_norm` + 11 tests in `tests/test_qafactor.c`, all passing.  Headlines: `Norm(x − √2) = x² − 2`, `Norm(x − ∛2) = x³ − 2`, `Norm(x² + √2 x + 1) = x⁴ + 1` (cyclotomic Φ_8). |
 | 12 | **G4** (sqfr_norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qa_sqfr_norm` + `qa_alg_factor` + 9 new tests (20 total in `test_qafactor.c`).  Headlines: `x²−2` over `Q(√2)` → `(x−√2)(x+√2)`; `x⁴+1` over `Q(√2)` → `(x²−√2 x+1)(x²+√2 x+1)`; `x⁴−5x²+6` over `Q(√2)` → `(x−√2)(x+√2)(x²−3)`; `x³−2` over `Q(∛2)` → `(x−∛2)(x²+∛2 x+∛4)`; `x²+1` over `Q(i)`, `x²+x+1` over `Q(√−3)`, plus the `x²−3` over `Q(√2)` irreducible-input edge case. |
-| 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | Not started |
+| 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | **Done 2026-05-07** — hook in `src/facpoly.c::builtin_factor` reads the `Rule[Extension, α]` option; `qa_factor_with_extension` in `src/qafactor.c` dispatches to Trager and renders results.  11 new tests (31 total in `test_qafactor.c`).  Headlines: `Factor[x^2-2, Extension->Sqrt[2]]` → `(x-Sqrt[2])(x+Sqrt[2])`; `Factor[x^4+1, Extension->Sqrt[2]]` → `(x^2-Sqrt[2] x+1)(x^2+Sqrt[2] x+1)`; `Factor[x^3-2, Extension->2^(1/3)]` → `(x-2^(1/3))(x^2+2^(1/3) x+2^(2/3))`; `Factor[x^2+1, Extension->I]` → `(x-I)(x+I)`; `Factor[x^2+x+1, Extension->Sqrt[-3]]` → `(x+1/2-I Sqrt[3]/2)(x+1/2+I Sqrt[3]/2)`; α-bearing inputs (`x^2 - 2 Sqrt[2] x + 2` → `(x-Sqrt[2])^2`); repeated factors with multiplicity ((x²-2)² → (x−√2)²(x+√2)²). |
 | 14 | **G6** (tower of extensions) | Multi-radical inputs. | Not started |
 | 15 | **G7** (splitting fields) | Foundation for symbolic integration over algebraic extensions (Trager §5). | Deferred |
 
