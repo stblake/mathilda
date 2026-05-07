@@ -155,4 +155,53 @@ struct Expr* qa_factor_with_extension(const struct Expr* poly,
                                       const struct Expr* alpha_expr,
                                       const struct Expr* var);
 
+/* ============================ Phase G6 ============================ */
+
+/* QATower — compositum extension Q(α_1, ..., α_n) reduced to a single
+ * primitive element γ via Trager §3.  Built iteratively: start with
+ * Q(α_1), then absorb α_2, α_3, ..., each step finding the smallest
+ * shift s_i ≥ 0 such that γ_i = γ_{i-1} + s_i α_i is a primitive
+ * element of the new compositum.
+ *
+ * Invariants:
+ *   - `ext` is the (monic, irreducible-over-Q) minimal polynomial of γ.
+ *   - `alphas[i]` is α_i expressed as a Q(γ)-element (a polynomial in γ
+ *     with rational coefficients).  All `alphas[i]` share `ext`.
+ *   - `alpha_renders[i]` is the user-visible surface form of α_i
+ *     (e.g. Sqrt[2], 2^(1/3), I).
+ *   - `gamma_render` is the surface form for γ — accumulated as
+ *     α_1 + s_2 α_2 + s_3 α_3 + ... + s_n α_n.  Used only for output
+ *     rendering (substituted into the internal placeholder symbol). */
+typedef struct QATower {
+    QAExt* ext;
+    int n;
+    QANum** alphas;
+    struct Expr** alpha_renders;
+    struct Expr* gamma_render;
+} QATower;
+
+/* Resolve a list of n ≥ 1 algebraic generators to a tower.  Each
+ * α_i must be recognised by qa_resolve_extension.  Iteratively builds
+ * the compositum via Trager's primitive-element algorithm; returns
+ * NULL on non-convergence or if any α_i is unrecognised.  The single-
+ * generator case (n == 1) is delegated to `qa_resolve_extension` and
+ * wrapped as a one-element tower for symmetry.  Caller owns the
+ * returned tower (qa_tower_free). */
+QATower* qa_resolve_extension_tower(struct Expr* const* alpha_exprs, int n);
+void     qa_tower_free(QATower* t);
+
+/* Public picocas-level wrapper for towers.  Parallel to
+ * qa_factor_with_extension but accepts a list of α-generators
+ * (`alpha_exprs[0..n_alphas-1]`).  For n_alphas == 1 this is exactly
+ * qa_factor_with_extension; for n_alphas ≥ 2 it builds the compositum
+ * Q(γ), substitutes each α_i in the input with its Q(γ)-representation,
+ * and dispatches to the same Trager core as G5.
+ *
+ * Returns NULL on resolution / shift-search / lift failures (caller
+ * falls back to non-extension factoring). */
+struct Expr* qa_factor_with_extension_tower(const struct Expr* poly,
+                                            struct Expr* const* alpha_exprs,
+                                            int n_alphas,
+                                            const struct Expr* var);
+
 #endif

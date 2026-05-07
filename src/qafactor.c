@@ -775,46 +775,57 @@ Expr* qaupoly_to_expr_alpha(const QAUPoly* f,
                             const Expr* alpha_render) {
     /* Round-trip through qaupoly_to_expr with an internal y-symbol,
      * then ReplaceAll y → alpha_render and evaluate.  Evaluation
-     * collapses Sqrt[c]^k / c^(k/n) etc. into canonical form. */
+     * collapses Sqrt[c]^k / c^(k/n) etc. into canonical form.
+     *
+     * Compound `alpha_render` (Phase G6 — γ = α_1 + s_2 α_2 + ... is a
+     * Plus expression) needs an extra Expand pass: picocas's evaluator
+     * does not auto-distribute (a + b)^k, so γ^k would otherwise leak
+     * through unsimplified.  Expand turns it into a sum of products
+     * of α_i powers, after which auto-evaluation collapses Sqrt[c]^2
+     * → c and friends. */
     Expr* in_y = qaupoly_to_expr(f, x_name, QA_ALPHA_INTERNAL);
     Expr* y_sym = expr_new_symbol(QA_ALPHA_INTERNAL);
     Expr* in_alpha = expr_subst(in_y, y_sym, alpha_render);
     expr_free(in_y);
     expr_free(y_sym);
-    Expr* canon = evaluate(in_alpha);
+    Expr* expanded = expr_expand(in_alpha);
     expr_free(in_alpha);
+    Expr* canon = evaluate(expanded);
+    expr_free(expanded);
     return canon;
 }
 
-Expr* qa_factor_with_extension(const Expr* poly,
-                               const Expr* alpha_expr,
-                               const Expr* var) {
-    if (!poly || !alpha_expr || !var) return NULL;
+/* Trager core, factored out so both G5 (single α) and G6 (tower) can
+ * share it.  Lifts `poly` → QAUPoly[x] over `ext`, runs the squarefree
+ * pre-pass + qa_alg_factor + multiplicity trial-division, and renders
+ * each factor back as a picocas Expr using `alpha_render_output` as the
+ * surface form for the algebraic generator.
+ *
+ * `poly` may already contain `alpha_render_input` literally; that
+ * occurrence is structurally substituted with the internal placeholder
+ * symbol (QA_ALPHA_INTERNAL) before lifting.  Pass NULL to skip the
+ * substitution (when `poly` already uses the internal symbol).
+ *
+ * `ext` and the two render Exprs are borrowed; the caller frees them. */
+static Expr* qa_factor_inner(const Expr* poly,
+                             const QAExt* ext,
+                             const Expr* alpha_render_input,
+                             const Expr* alpha_render_output,
+                             const Expr* var) {
+    if (!poly || !ext || !alpha_render_output || !var) return NULL;
     if (var->type != EXPR_SYMBOL) return NULL;
-
-    /* 1) Resolve α. */
-    Expr* alpha_render = NULL;
-    QAExt* ext = qa_resolve_extension(alpha_expr, &alpha_render);
-    if (!ext) return NULL;
 
     const char* x_name = var->data.symbol;
     const char* y_name = QA_ALPHA_INTERNAL;
 
-    /* 2) Lift input poly → QAUPoly. */
-    QAUPoly* f = qa_expr_to_qaupoly_with_alpha(poly, var, alpha_render, ext);
-    if (!f) {
-        qaext_free(ext);
-        expr_free(alpha_render);
-        return NULL;
-    }
+    /* 1) Lift input poly → QAUPoly. */
+    QAUPoly* f = qa_expr_to_qaupoly_with_alpha(poly, var, alpha_render_input, ext);
+    if (!f) return NULL;
 
-    /* Degenerate cases: zero or constant poly — return as-is (no
-     * non-trivial factoring possible). */
+    /* Degenerate cases: zero or constant poly. */
     if (f->deg <= 0) {
-        Expr* result = qaupoly_to_expr_alpha(f, x_name, alpha_render);
+        Expr* result = qaupoly_to_expr_alpha(f, x_name, alpha_render_output);
         qaupoly_free(f);
-        qaext_free(ext);
-        expr_free(alpha_render);
         return result;
     }
 
@@ -822,8 +833,6 @@ Expr* qa_factor_with_extension(const Expr* poly,
      * dividing out gcd(f, f'). */
     QAUPoly* f_for_alg;
     {
-        /* Build f' via finite-difference style: derivative of
-         * sum c[i] x^i  is  sum i c[i] x^(i-1). */
         QAUPoly* fp = qaupoly_new(f->ext, f->deg > 0 ? f->deg : 1);
         for (int i = 1; i <= f->deg; i++) {
             QANum* scaled = qa_scale_si(f->c[i], (long)i, 1);
@@ -834,7 +843,6 @@ Expr* qa_factor_with_extension(const Expr* poly,
         QAUPoly* g = qaupoly_gcd(f, fp);
         qaupoly_free(fp);
         if (!g || g->deg <= 0) {
-            /* Already squarefree (gcd is constant).  Use f directly. */
             if (g) qaupoly_free(g);
             f_for_alg = qaupoly_copy(f);
         } else {
@@ -844,8 +852,6 @@ Expr* qa_factor_with_extension(const Expr* poly,
                 if (r_div) qaupoly_free(r_div);
                 qaupoly_free(g);
                 qaupoly_free(f);
-                qaext_free(ext);
-                expr_free(alpha_render);
                 return NULL;
             }
             qaupoly_free(r_div);
@@ -854,7 +860,7 @@ Expr* qa_factor_with_extension(const Expr* poly,
         }
     }
 
-    /* 3) Factor the squarefree part. */
+    /* 2) Factor the squarefree part. */
     int n_factors = 0;
     QAUPoly** factors = qa_alg_factor(f_for_alg, x_name, y_name, &n_factors);
     qaupoly_free(f_for_alg);
@@ -862,13 +868,11 @@ Expr* qa_factor_with_extension(const Expr* poly,
     if (!factors || n_factors <= 0) {
         if (factors) free(factors);
         qaupoly_free(f);
-        qaext_free(ext);
-        expr_free(alpha_render);
         return NULL;
     }
 
-    /* 4) Determine multiplicities by trial division of `f` by each
-     * factor (handles non-squarefree input). */
+    /* 3) Multiplicity recovery: trial-divide `f` by each squarefree
+     * factor as many times as it goes. */
     int* mult = (int*)calloc((size_t)n_factors, sizeof(int));
     QAUPoly* remaining = qaupoly_copy(f);
     for (int i = 0; i < n_factors; i++) {
@@ -890,12 +894,10 @@ Expr* qa_factor_with_extension(const Expr* poly,
             mult[i]++;
         }
     }
-    /* `remaining` should now be a unit (constant) — the leading
-     * coefficient of f. */
     QANum* leading = remaining->deg < 0 ? qa_one(ext) : qa_copy(remaining->c[0]);
     qaupoly_free(remaining);
 
-    /* 5) Render each factor back as Expr with multiplicity. */
+    /* 4) Render. */
     size_t n_terms = 0;
     for (int i = 0; i < n_factors; i++) if (mult[i] > 0) n_terms++;
     bool unit_is_one = qa_is_one(leading);
@@ -905,17 +907,15 @@ Expr* qa_factor_with_extension(const Expr* poly,
     size_t out = 0;
 
     if (!unit_is_one) {
-        /* Express the leading-coefficient unit as a polynomial in α
-         * via the same renderer. */
         QAUPoly* unit_poly = qaupoly_from_qa(leading);
-        terms[out++] = qaupoly_to_expr_alpha(unit_poly, x_name, alpha_render);
+        terms[out++] = qaupoly_to_expr_alpha(unit_poly, x_name, alpha_render_output);
         qaupoly_free(unit_poly);
     }
     qa_free(leading);
 
     for (int i = 0; i < n_factors; i++) {
         if (mult[i] <= 0) continue;
-        Expr* h = qaupoly_to_expr_alpha(factors[i], x_name, alpha_render);
+        Expr* h = qaupoly_to_expr_alpha(factors[i], x_name, alpha_render_output);
         if (mult[i] == 1) {
             terms[out++] = h;
         } else {
@@ -926,27 +926,454 @@ Expr* qa_factor_with_extension(const Expr* poly,
     }
 
     Expr* result;
-    if (n_terms == 0) {
-        result = expr_new_integer(1);
-    } else if (n_terms == 1) {
-        result = terms[0];
-    } else {
-        result = expr_new_function(expr_new_symbol("Times"),
-                                   terms, n_terms);
-    }
+    if (n_terms == 0)      result = expr_new_integer(1);
+    else if (n_terms == 1) result = terms[0];
+    else                   result = expr_new_function(expr_new_symbol("Times"),
+                                                      terms, n_terms);
     free(terms);
     free(mult);
 
-    /* Final evaluate to canonicalise Times / signs. */
     Expr* canon = evaluate(result);
     expr_free(result);
 
-    /* Cleanup. */
     for (int i = 0; i < n_factors; i++) qaupoly_free(factors[i]);
     free(factors);
     qaupoly_free(f);
+    return canon;
+}
+
+Expr* qa_factor_with_extension(const Expr* poly,
+                               const Expr* alpha_expr,
+                               const Expr* var) {
+    if (!poly || !alpha_expr || !var) return NULL;
+
+    Expr* alpha_render = NULL;
+    QAExt* ext = qa_resolve_extension(alpha_expr, &alpha_render);
+    if (!ext) return NULL;
+
+    /* G5: input is in user surface form; let qa_factor_inner handle the
+     * α_user → QA_ALPHA_INTERNAL substitution by passing the surface
+     * render as `alpha_render_input`. */
+    Expr* result = qa_factor_inner(poly, ext, alpha_render, alpha_render, var);
+
     qaext_free(ext);
     expr_free(alpha_render);
+    return result;
+}
 
-    return canon;
+/* ============================== Phase G6 ============================== */
+/* Tower of extensions Q(α_1, ..., α_n) → primitive element γ.
+ *
+ * Iterative construction (Trager §3):
+ *   - Resolve α_1 individually: ext_1 has min poly P_1(y), γ_1 = α_1.
+ *   - For i = 2..n:
+ *       (a) Resolve α_i individually: it has min poly Q_i(z) ∈ Q[z].
+ *       (b) Find smallest s ∈ [0, QA_SQFR_NORM_MAX_TRIES] such that
+ *
+ *               R_i(w) = Res_z(Q_i(z), P_{i-1}(w − s·z))
+ *
+ *           is squarefree over Q.  R_i is the min poly of the new
+ *           primitive element γ_i = γ_{i-1} + s·α_i.
+ *       (c) Recover α_i ∈ Q(γ_i) via gcd_z(Q_i(z), P_{i-1}(γ_i − s·z))
+ *           in Q(γ_i)[z].  By construction the gcd has degree 1
+ *           (z − α_i), so α_i = −(constant term of monic gcd).
+ *       (d) Re-embed each previous α_j ∈ Q(γ_{i-1}) into Q(γ_i): we
+ *           have γ_{i-1} = γ_i − s·α_i ∈ Q(γ_i), so each α_j (a
+ *           polynomial-in-γ_{i-1} with rational coefficients) is
+ *           Horner-evaluated at the new base.
+ *
+ * Symbol layout: γ uses QA_ALPHA_INTERNAL (also reused as the algebraic
+ * placeholder during input-poly lifting; safe because both are
+ * construction-time only). The resultant elimination variable z uses
+ * a separate internal symbol QA_Z_INTERNAL. */
+
+#define QA_Z_INTERNAL "$qa$z$"
+
+/* ===== Tower-construction helpers ===== */
+
+/* Reify a QAExt's minimal polynomial as a picocas Expr in `y_name`. */
+static Expr* qaext_min_poly_expr(const QAExt* ext, const char* y_name) {
+    return mpq_array_to_poly_expr(ext->coef, ext->deg + 1, y_name);
+}
+
+/* Build (y_name − s·z_name) as an Expr. */
+static Expr* expr_y_minus_s_z(const char* y_name, const char* z_name, int s) {
+    if (s == 0) return expr_new_symbol(y_name);
+    Expr* sz_args[2] = { expr_new_integer((int64_t)s),
+                         expr_new_symbol(z_name) };
+    Expr* sz = expr_new_function(expr_new_symbol("Times"), sz_args, 2);
+    Expr* neg_args[2] = { expr_new_integer(-1), sz };
+    Expr* neg_sz = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+    Expr* sum_args[2] = { expr_new_symbol(y_name), neg_sz };
+    return expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+}
+
+/* Substitute y_name → (y_name − s·z_name) in P, then expand. */
+static Expr* expr_p_at_y_minus_sz(const Expr* P, const char* y_name,
+                                  const char* z_name, int s) {
+    Expr* y_sym = expr_new_symbol(y_name);
+    Expr* repl  = expr_y_minus_s_z(y_name, z_name, s);
+    Expr* sub   = expr_subst(P, y_sym, repl);
+    expr_free(y_sym);
+    expr_free(repl);
+    Expr* expanded = expr_expand(sub);
+    expr_free(sub);
+    return expanded;
+}
+
+/* Compute Res_z(Q, P) ∈ Q[w] via picocas's internal_resultant. */
+static Expr* expr_resultant_z(const Expr* P, const Expr* Q,
+                              const char* z_name) {
+    Expr* args[3] = { expr_copy((Expr*)P),
+                      expr_copy((Expr*)Q),
+                      expr_new_symbol(z_name) };
+    Expr* r = internal_resultant(args, 3);
+    if (!r) return NULL;
+    Expr* expanded = expr_expand(r);
+    expr_free(r);
+    return expanded;
+}
+
+/* Walk a Q[w] Expr and convert to a fresh monic-mpq array of length
+ * deg+1 (caller mpq_clears each entry and frees the array).  Returns
+ * the original (pre-monic) leading coefficient via *lc_out (caller
+ * mpq_inits + mpq_clears) when non-NULL.  Returns deg, or -1 on
+ * non-rational input or deg < 1. */
+static int q_poly_to_mpq_array_monic(const Expr* P, const char* w_name,
+                                     mpq_t** out) {
+    Expr* w_var = expr_new_symbol(w_name);
+    int deg = get_degree_poly((Expr*)P, w_var);
+    if (deg < 1) {
+        expr_free(w_var);
+        return -1;
+    }
+    mpq_t* coef = (mpq_t*)malloc(sizeof(mpq_t) * (deg + 1));
+    for (int i = 0; i <= deg; i++) mpq_init(coef[i]);
+
+    bool ok = true;
+    for (int i = 0; i <= deg; i++) {
+        Expr* c = get_coeff((Expr*)P, w_var, i);
+        if (!expr_coef_to_mpq(c, coef[i])) ok = false;
+        expr_free(c);
+        if (!ok) break;
+    }
+    expr_free(w_var);
+    if (!ok) {
+        for (int i = 0; i <= deg; i++) mpq_clear(coef[i]);
+        free(coef);
+        return -1;
+    }
+    if (mpq_sgn(coef[deg]) == 0) {
+        for (int i = 0; i <= deg; i++) mpq_clear(coef[i]);
+        free(coef);
+        return -1;
+    }
+    if (mpq_cmp_ui(coef[deg], 1, 1) != 0) {
+        mpq_t lc; mpq_init(lc); mpq_set(lc, coef[deg]);
+        for (int i = 0; i <= deg; i++) mpq_div(coef[i], coef[i], lc);
+        mpq_clear(lc);
+    }
+    *out = coef;
+    return deg;
+}
+
+/* Convert a monic Q[w] Expr to a QAExt. */
+static QAExt* qaext_from_q_expr(const Expr* P, const char* w_name) {
+    mpq_t* coef = NULL;
+    int deg = q_poly_to_mpq_array_monic(P, w_name, &coef);
+    if (deg < 1) return NULL;
+    QAExt* ext = qaext_new((size_t)deg);
+    for (int i = 0; i <= deg; i++) {
+        qaext_set_coef_mpq(ext, (size_t)i, coef[i]);
+        mpq_clear(coef[i]);
+    }
+    free(coef);
+    return ext;
+}
+
+/* Find smallest s such that R(w) = Res_z(Q(z), P(w − s·z)) is squarefree.
+ * Returns the resulting Q[w] Expr (caller owns) and writes `*s_out`;
+ * NULL on non-convergence within QA_SQFR_NORM_MAX_TRIES. */
+static Expr* find_primitive_shift(const Expr* P_old_in_w,
+                                  const Expr* Q_new_in_z,
+                                  const char* w_name, const char* z_name,
+                                  int* s_out) {
+    for (int s = 0; s <= QA_SQFR_NORM_MAX_TRIES; s++) {
+        Expr* P_shifted = expr_p_at_y_minus_sz(P_old_in_w, w_name, z_name, s);
+        Expr* R = expr_resultant_z(P_shifted, Q_new_in_z, z_name);
+        expr_free(P_shifted);
+        if (!R) continue;
+        if (expr_qx_is_squarefree(R, w_name)) {
+            *s_out = s;
+            return R;
+        }
+        expr_free(R);
+    }
+    return NULL;
+}
+
+/* Recover α_new ∈ Q(γ_new) via gcd_z(Q_new(z), P_old(γ_new − s·z))
+ * in Q(γ_new)[z].  By Trager that gcd is z − α_new (linear, monic). */
+static QANum* qa_recover_alpha_in_new(const QAExt* new_ext,
+                                      const Expr* P_old_in_w,
+                                      const Expr* Q_new_in_z,
+                                      const char* w_name, const char* z_name,
+                                      int s) {
+    Expr* P_at_g_minus_sz = expr_p_at_y_minus_sz(P_old_in_w, w_name, z_name, s);
+
+    Expr* z_var     = expr_new_symbol(z_name);
+    Expr* gamma_sym = expr_new_symbol(w_name);
+
+    QAUPoly* P_lifted = qa_expr_to_qaupoly_with_alpha(
+        P_at_g_minus_sz, z_var, gamma_sym, new_ext);
+    QAUPoly* Q_lifted = qa_expr_to_qaupoly_with_alpha(
+        Q_new_in_z, z_var, gamma_sym, new_ext);
+
+    expr_free(P_at_g_minus_sz);
+    expr_free(z_var);
+    expr_free(gamma_sym);
+
+    if (!P_lifted || !Q_lifted) {
+        if (P_lifted) qaupoly_free(P_lifted);
+        if (Q_lifted) qaupoly_free(Q_lifted);
+        return NULL;
+    }
+    QAUPoly* g = qaupoly_gcd(P_lifted, Q_lifted);
+    qaupoly_free(P_lifted);
+    qaupoly_free(Q_lifted);
+    if (!g || g->deg != 1) {
+        if (g) qaupoly_free(g);
+        return NULL;
+    }
+    QAUPoly* monic = qaupoly_make_monic(g);
+    qaupoly_free(g);
+    if (!monic) return NULL;
+    /* α_new = -(constant term) of (z − α_new). */
+    QANum* alpha = qa_neg(monic->c[0]);
+    qaupoly_free(monic);
+    return alpha;
+}
+
+/* Re-embed an old QANum (polynomial-in-γ_old with rational coeffs)
+ * into Q(γ_new) by Horner-evaluating at `gamma_old_in_new` (= γ_new
+ * − s·α_new ∈ Q(γ_new)). */
+static QANum* qa_reembed_old(const QANum* old, const QAExt* new_ext,
+                             const QANum* gamma_old_in_new) {
+    int top = -1;
+    for (int i = (int)old->ext->deg - 1; i >= 0; i--) {
+        if (mpq_sgn(old->coef[i]) != 0) { top = i; break; }
+    }
+    if (top < 0) return qa_zero(new_ext);
+
+    QANum* acc = qa_from_mpq(new_ext, old->coef[top]);
+    for (int i = top - 1; i >= 0; i--) {
+        QANum* m    = qa_mul(acc, gamma_old_in_new);
+        QANum* term = qa_from_mpq(new_ext, old->coef[i]);
+        QANum* sum  = qa_add(m, term);
+        qa_free(m);
+        qa_free(term);
+        qa_free(acc);
+        acc = sum;
+    }
+    return acc;
+}
+
+/* Render a QANum as Σ_k coef[k] · γ^k where γ is `gamma_name`. */
+static Expr* qanum_to_expr_in_gamma_sym(const QANum* qn, const char* gamma_name) {
+    return mpq_array_to_poly_expr(qn->coef, qn->ext->deg, gamma_name);
+}
+
+/* Extend a tower in place by absorbing one more α.  Returns false on
+ * any failure (caller is responsible for freeing the tower). */
+static bool qa_tower_extend(QATower* t, const Expr* alpha_new) {
+    Expr* alpha_render_new = NULL;
+    QAExt* alpha_ext = qa_resolve_extension(alpha_new, &alpha_render_new);
+    if (!alpha_ext) return false;
+
+    const char* w_name = QA_ALPHA_INTERNAL;
+    const char* z_name = QA_Z_INTERNAL;
+
+    Expr* P_old_in_w = qaext_min_poly_expr(t->ext, w_name);
+    Expr* Q_new_in_z = qaext_min_poly_expr(alpha_ext, z_name);
+
+    int s = -1;
+    Expr* R = find_primitive_shift(P_old_in_w, Q_new_in_z, w_name, z_name, &s);
+    if (!R) {
+        expr_free(P_old_in_w);
+        expr_free(Q_new_in_z);
+        qaext_free(alpha_ext);
+        expr_free(alpha_render_new);
+        return false;
+    }
+
+    QAExt* new_ext = qaext_from_q_expr(R, w_name);
+    expr_free(R);
+    if (!new_ext) {
+        expr_free(P_old_in_w);
+        expr_free(Q_new_in_z);
+        qaext_free(alpha_ext);
+        expr_free(alpha_render_new);
+        return false;
+    }
+
+    QANum* alpha_new_in_new = qa_recover_alpha_in_new(
+        new_ext, P_old_in_w, Q_new_in_z, w_name, z_name, s);
+    expr_free(P_old_in_w);
+    expr_free(Q_new_in_z);
+    qaext_free(alpha_ext);
+    if (!alpha_new_in_new) {
+        qaext_free(new_ext);
+        expr_free(alpha_render_new);
+        return false;
+    }
+
+    /* γ_old ∈ Q(γ_new) = γ_new − s·α_new. */
+    QANum* gamma_new_qa     = qa_alpha(new_ext);
+    QANum* s_alpha_new      = qa_scale_si(alpha_new_in_new, (long)s, 1);
+    QANum* gamma_old_in_new = qa_sub(gamma_new_qa, s_alpha_new);
+    qa_free(gamma_new_qa);
+    qa_free(s_alpha_new);
+
+    QANum** new_alphas = (QANum**)malloc(sizeof(QANum*) * (t->n + 1));
+    bool ok = true;
+    for (int i = 0; i < t->n; i++) {
+        QANum* re = qa_reembed_old(t->alphas[i], new_ext, gamma_old_in_new);
+        if (!re) { ok = false; break; }
+        new_alphas[i] = re;
+    }
+    qa_free(gamma_old_in_new);
+    if (!ok) {
+        for (int i = 0; i < t->n; i++) if (new_alphas[i]) qa_free(new_alphas[i]);
+        free(new_alphas);
+        qa_free(alpha_new_in_new);
+        qaext_free(new_ext);
+        expr_free(alpha_render_new);
+        return false;
+    }
+    new_alphas[t->n] = alpha_new_in_new;
+
+    Expr** new_renders = (Expr**)malloc(sizeof(Expr*) * (t->n + 1));
+    for (int i = 0; i < t->n; i++) new_renders[i] = t->alpha_renders[i];
+    new_renders[t->n] = alpha_render_new;
+
+    Expr* new_gamma_render;
+    if (s == 0) {
+        /* γ_new = γ_old + 0 — render is unchanged. */
+        new_gamma_render = t->gamma_render;
+    } else {
+        Expr* term;
+        if (s == 1) {
+            term = expr_copy(alpha_render_new);
+        } else {
+            Expr* args[2] = { expr_new_integer((int64_t)s),
+                              expr_copy(alpha_render_new) };
+            term = expr_new_function(expr_new_symbol("Times"), args, 2);
+        }
+        Expr* args[2] = { t->gamma_render, term };
+        new_gamma_render = expr_new_function(expr_new_symbol("Plus"), args, 2);
+        /* t->gamma_render is consumed into the new tree — null out to
+         * avoid double-free below. */
+    }
+
+    /* Replace tower fields. Old t->alpha_renders[i] elements are now
+     * owned by new_renders[i]; we just free the outer array.  Old
+     * t->alphas[i] are replaced (we owned them), so qa_free each. */
+    for (int i = 0; i < t->n; i++) qa_free(t->alphas[i]);
+    free(t->alphas);
+    free(t->alpha_renders);
+    qaext_free(t->ext);
+
+    t->ext = new_ext;
+    t->n  += 1;
+    t->alphas = new_alphas;
+    t->alpha_renders = new_renders;
+    t->gamma_render = new_gamma_render;
+    return true;
+}
+
+void qa_tower_free(QATower* t) {
+    if (!t) return;
+    if (t->alphas) {
+        for (int i = 0; i < t->n; i++) if (t->alphas[i]) qa_free(t->alphas[i]);
+        free(t->alphas);
+    }
+    if (t->alpha_renders) {
+        for (int i = 0; i < t->n; i++)
+            if (t->alpha_renders[i]) expr_free(t->alpha_renders[i]);
+        free(t->alpha_renders);
+    }
+    if (t->gamma_render) expr_free(t->gamma_render);
+    if (t->ext) qaext_free(t->ext);
+    free(t);
+}
+
+QATower* qa_resolve_extension_tower(Expr* const* alpha_exprs, int n) {
+    if (!alpha_exprs || n < 1) return NULL;
+
+    Expr* render_1 = NULL;
+    QAExt* ext_1 = qa_resolve_extension(alpha_exprs[0], &render_1);
+    if (!ext_1) return NULL;
+
+    QATower* t = (QATower*)calloc(1, sizeof(QATower));
+    if (!t) {
+        qaext_free(ext_1);
+        expr_free(render_1);
+        return NULL;
+    }
+    t->ext = ext_1;
+    t->n   = 1;
+    t->alphas = (QANum**)malloc(sizeof(QANum*));
+    t->alphas[0] = qa_alpha(ext_1);
+    t->alpha_renders = (Expr**)malloc(sizeof(Expr*));
+    t->alpha_renders[0] = render_1;
+    t->gamma_render = expr_copy(render_1);
+
+    for (int i = 1; i < n; i++) {
+        if (!qa_tower_extend(t, alpha_exprs[i])) {
+            qa_tower_free(t);
+            return NULL;
+        }
+    }
+    return t;
+}
+
+Expr* qa_factor_with_extension_tower(const Expr* poly,
+                                     Expr* const* alpha_exprs,
+                                     int n_alphas,
+                                     const Expr* var) {
+    if (!poly || !alpha_exprs || n_alphas < 1 || !var) return NULL;
+    if (var->type != EXPR_SYMBOL) return NULL;
+
+    /* Single-element list reduces to G5. */
+    if (n_alphas == 1) {
+        return qa_factor_with_extension(poly, alpha_exprs[0], var);
+    }
+
+    QATower* t = qa_resolve_extension_tower(alpha_exprs, n_alphas);
+    if (!t) return NULL;
+
+    /* Substitute each user-side α_i (its surface form) with its
+     * polynomial-in-γ_internal Expr in the input.  After this pass,
+     * `poly_internal`'s only "extension symbol" is QA_ALPHA_INTERNAL,
+     * so qa_factor_inner can lift it directly without further surface-
+     * level substitution. */
+    Expr* poly_internal = expr_copy((Expr*)poly);
+    for (int i = 0; i < t->n; i++) {
+        Expr* alpha_in_gamma_int = qanum_to_expr_in_gamma_sym(
+            t->alphas[i], QA_ALPHA_INTERNAL);
+        Expr* old = poly_internal;
+        poly_internal = expr_subst(old, t->alpha_renders[i], alpha_in_gamma_int);
+        expr_free(old);
+        expr_free(alpha_in_gamma_int);
+    }
+
+    Expr* result = qa_factor_inner(
+        poly_internal, t->ext,
+        /* alpha_render_input = */ NULL,    /* poly already uses internal sym */
+        /* alpha_render_output = */ t->gamma_render,
+        var);
+
+    expr_free(poly_internal);
+    qa_tower_free(t);
+    return result;
 }

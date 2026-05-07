@@ -607,6 +607,90 @@ static void test_g5_irreducible_in_qsqrt2(void) {
         "x^2 - 3");
 }
 
+/* ============================ Phase G6 ============================ */
+/* End-to-end picocas-API tests for `Factor[poly, Extension ->
+ * {α_1, α_2, ...}]`.  The compositum Q(γ) is built via Trager's
+ * primitive-element algorithm; γ = α_1 + s_2 α_2 + ... for shifts
+ * s_i chosen by the squarefree-norm test. */
+
+/* Headline: x⁴ − 10 x² + 1 over Q(√2, √3) → 4 linear factors
+ * (±√2 ± √3).  This polynomial is the minimal polynomial of √2 + √3
+ * over Q, so factoring it over Q(√2, √3) is the canonical witness
+ * that the tower is correctly resolved. */
+static void test_g6_min_poly_sqrt2_sqrt3(void) {
+    assert_factor_eq_str(
+        "Factor[x^4 - 10 x^2 + 1, Extension -> {Sqrt[2], Sqrt[3]}]",
+        "(x - Sqrt[2] - Sqrt[3]) (x - Sqrt[2] + Sqrt[3])"
+        " (x + Sqrt[2] - Sqrt[3]) (x + Sqrt[2] + Sqrt[3])");
+}
+
+/* Each individual generator must factor inside the compositum: x² − 2
+ * over Q(√2, √3) uses √2 alone. */
+static void test_g6_x2_minus_2_q_sqrt2_sqrt3(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 2, Extension -> {Sqrt[2], Sqrt[3]}]",
+        "(x - Sqrt[2]) (x + Sqrt[2])");
+}
+
+/* x² − 3 over Q(√2, √3) uses √3 alone — exercises α_2 recovery
+ * (Sqrt[3] must be reachable inside Q(γ) where γ = √2 + √3). */
+static void test_g6_x2_minus_3_q_sqrt2_sqrt3(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 3, Extension -> {Sqrt[2], Sqrt[3]}]",
+        "(x - Sqrt[3]) (x + Sqrt[3])");
+}
+
+/* Generator-order independence: same compositum, swapped list order. */
+static void test_g6_order_independence(void) {
+    assert_factor_eq_str(
+        "Factor[x^4 - 10 x^2 + 1, Extension -> {Sqrt[3], Sqrt[2]}]",
+        "(x - Sqrt[2] - Sqrt[3]) (x - Sqrt[2] + Sqrt[3])"
+        " (x + Sqrt[2] - Sqrt[3]) (x + Sqrt[2] + Sqrt[3])");
+}
+
+/* Mixed real+complex: x⁴ + 1 over Q(√2, I) factors completely into
+ * 4 linear factors involving (±1 ± I)/√2 = ±(1±I)/Sqrt[2].  Picocas
+ * renders these as `(1/2 ± I/2) Sqrt[2]` (rationalised denominator). */
+static void test_g6_x4_plus_1_q_sqrt2_i(void) {
+    assert_factor_eq_str(
+        "Factor[x^4 + 1, Extension -> {Sqrt[2], I}]",
+        "(x + (-1/2 - 1/2*I) Sqrt[2]) (x + (-1/2 + 1/2*I) Sqrt[2])"
+        " (x + (1/2 - 1/2*I) Sqrt[2])  (x + (1/2 + 1/2*I) Sqrt[2])");
+}
+
+/* α-bearing input: x² − 2 √3 x + 3 = (x − √3)² over Q(√2, √3).
+ * Tests that user-side α surface forms are correctly recognised
+ * inside the input polynomial and substituted with their
+ * Q(γ)-representation before lifting. */
+static void test_g6_alpha_in_input(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 2 Sqrt[3] x + 3, Extension -> {Sqrt[2], Sqrt[3]}]",
+        "(x - Sqrt[3])^2");
+}
+
+/* Q-rational input: x² − 1 = (x − 1)(x + 1) factors entirely over Q,
+ * regardless of the extension. */
+static void test_g6_pure_q_input(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 1, Extension -> {Sqrt[2], Sqrt[3]}]",
+        "(x - 1) (x + 1)");
+}
+
+/* Irreducible over the supplied compositum: x² − 5 over Q(√2, √3)
+ * stays unfactored — Q(√2, √3) does not contain √5. */
+static void test_g6_irreducible_in_q_sqrt2_sqrt3(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 5, Extension -> {Sqrt[2], Sqrt[3]}]",
+        "x^2 - 5");
+}
+
+/* Single-element list: should reduce to G5's behaviour. */
+static void test_g6_single_element_list(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - 2, Extension -> {Sqrt[2]}]",
+        "(x - Sqrt[2]) (x + Sqrt[2])");
+}
+
 /* ============================== Driver =============================== */
 
 int main(void) {
@@ -656,6 +740,17 @@ int main(void) {
     TEST(test_g5_alpha_in_input);
     TEST(test_g5_repeated_factor_qsqrt2);
     TEST(test_g5_irreducible_in_qsqrt2);
+
+    /* Phase G6 — tower of extensions: Factor[..., Extension -> {α_1,...}] */
+    TEST(test_g6_min_poly_sqrt2_sqrt3);
+    TEST(test_g6_x2_minus_2_q_sqrt2_sqrt3);
+    TEST(test_g6_x2_minus_3_q_sqrt2_sqrt3);
+    TEST(test_g6_order_independence);
+    TEST(test_g6_x4_plus_1_q_sqrt2_i);
+    TEST(test_g6_alpha_in_input);
+    TEST(test_g6_pure_q_input);
+    TEST(test_g6_irreducible_in_q_sqrt2_sqrt3);
+    TEST(test_g6_single_element_list);
 
     _unused_keep_helpers();
 

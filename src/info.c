@@ -476,7 +476,11 @@ void info_init(void) {
         "Factor[poly] factors a polynomial over the integers.\n"
         "Factor[poly, Extension -> alpha] factors over Q(alpha), where alpha is\n"
         "Sqrt[c], c^(1/n) (rational c), or I.  Implements Trager's algebraic-\n"
-        "factoring algorithm via norm + sqfr_norm + alg_factor.");
+        "factoring algorithm via norm + sqfr_norm + alg_factor.\n"
+        "Factor[poly, Extension -> {alpha_1, ..., alpha_n}] factors over the\n"
+        "compositum Q(alpha_1, ..., alpha_n).  The tower is reduced to a single\n"
+        "primitive element gamma = alpha_1 + s_2 alpha_2 + ... via Trager's\n"
+        "primitive-element algorithm (Phase G6).");
     symtab_set_docstring("FactorTerms",
         "FactorTerms[poly]\n\tpulls out any overall numerical factor in poly.\n"
         "FactorTerms[poly, x]\n\tpulls out any overall factor in poly that does not depend on x.\n"

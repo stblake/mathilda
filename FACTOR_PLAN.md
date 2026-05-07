@@ -1968,17 +1968,69 @@ through Trager for any `α` whose minimal polynomial we can build.
   representation).  Both can land later without disturbing the
   current API.
 
-#### Phase G6 — Tower of extensions
+#### Phase G6 — Tower of extensions  *(Done 2026-05-07)*
 
 For inputs like `Factor[..., Extension -> {Sqrt[2], Sqrt[3]}]` Trager
-§3 gives a primitive-element algorithm (`primitive_element`) that
-reduces a tower `Q(α, β)` to a single-extension form
-`Q(γ) = Q(α + s β)` for an integer `s ≥ 0` chosen so the resultant is
-squarefree.  Iterates: compute `s` via `sqfr_norm`; compute
-`R(x) = Norm(Q_β(x, α))`; factor `R`; locate `α` and `β` in `Q(γ)` via
-`linsolve` of the gcd.
+§3 gives a primitive-element algorithm that reduces a tower
+`Q(α_1, ..., α_n)` to a single-extension form
+`Q(γ) = Q(α_1 + s_2 α_2 + ... + s_n α_n)` for integer shifts
+`s_i ≥ 0` chosen so each step's resultant is squarefree.
+
+**Delivered:**
+- `QATower` struct (`src/qafactor.h`): compositum extension `ext` (min
+  poly of γ), array of `α_i ∈ Q(γ)` as QANums, surface-form renders for
+  each α_i, accumulated surface form for γ.
+- `qa_resolve_extension_tower(alpha_exprs, n)`: iterative builder.
+  Resolves α_1, then absorbs α_2, ..., α_n one at a time via
+  `qa_tower_extend`.
+- `qa_tower_extend` (static): for each new α with min poly `Q(z) ∈ Q[z]`:
+    1. Find smallest `s ∈ [0, 32]` such that
+       `R(w) = Res_z(Q(z), P_old(w − s·z))` is squarefree over Q.
+    2. Build `new_ext` from `R(w)` (made monic).
+    3. Recover `α_new ∈ Q(γ_new)` via `gcd_z(Q(z), P_old(γ_new − s·z))`
+       in `Q(γ_new)[z]` — that gcd is `z − α_new` by Trager.
+    4. Re-embed each previous `α_j ∈ Q(γ_old)` into `Q(γ_new)` by
+       Horner-evaluating at `γ_old = γ_new − s·α_new ∈ Q(γ_new)`.
+- `qa_factor_with_extension_tower(poly, alpha_exprs, n_alphas, var)`:
+  user-level entry point.  Builds tower; substitutes each surface α_i
+  in `poly` with its Q(γ)-polynomial form (using the shared
+  `QA_ALPHA_INTERNAL` placeholder); dispatches to a refactored
+  `qa_factor_inner` (extracted from G5's `qa_factor_with_extension`).
+- `builtin_factor` hook: when the `Extension` rhs is a `List[α_1, ...]`,
+  routes to the tower path.  Single-element lists transparently reduce
+  to G5's single-α path.
+- `qaupoly_to_expr_alpha`: now calls `expr_expand` after substituting
+  γ → surface render — required because picocas's evaluator does not
+  auto-distribute `(a + b)^k`, so γ^k would otherwise leak through
+  unsimplified.  After expansion picocas auto-collapses `Sqrt[c]^2 → c`.
+
+**Headlines** (REPL-tested, all in `tests/test_qafactor.c`):
+- `Factor[x^4 - 10 x^2 + 1, Extension -> {Sqrt[2], Sqrt[3]}]` → 4 linear
+  factors `(x ± Sqrt[2] ± Sqrt[3])` — the canonical witness (this is
+  the minimal polynomial of γ = √2 + √3, so factoring it over the
+  compositum verifies the tower is correctly resolved).
+- `Factor[x^4 + 1, Extension -> {Sqrt[2], I}]` →
+  `(x + (±1/2 ± I/2) Sqrt[2])` — mixed real+complex tower.
+- `Factor[x^2 - 2 Sqrt[3] x + 3, Extension -> {Sqrt[2], Sqrt[3]}]`
+  → `(x − Sqrt[3])^2` — α-bearing input recognised inside the
+  polynomial.
+- Order-independence: `{Sqrt[3], Sqrt[2]}` gives identical factoring.
+- Irreducible-in-compositum: `x^2 − 5` over `Q(√2, √3)` stays
+  unfactored.
+
+**Out of MVP follow-ups:**
+- Algebraically-dependent generators (e.g. `{Sqrt[2], Sqrt[8]}`):
+  currently returns NULL on resultant non-convergence; could detect
+  the dependency and skip redundant α's.
+- Cleaner output basis: present Q(γ)-elements on the
+  `{1, α_1, α_2, α_1 α_2, ...}` basis (via inverse linsolve) rather
+  than as expanded γ-polynomials.  Mathematica's `RootReduce` does
+  this; deferred.
 
 - Estimated: ~250 LOC source + ~150 LOC tests.
+- Actual: ~360 LOC `src/qafactor.c` + 75 LOC `src/qafactor.h` (incl.
+  refactor of G5's qa_factor_with_extension into `qa_factor_inner`),
+  ~110 LOC `tests/test_qafactor.c` (9 new tests).
 
 #### Phase G7 — Splitting fields
 
@@ -2070,7 +2122,7 @@ Updated implementation order (extending §12's table):
 | 11c | **G3** (norm via resultant) | Field-norm of `f ∈ Q(α)[x]` via `Resultant_y(P_α, f)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qaupoly_norm` + 11 tests in `tests/test_qafactor.c`, all passing.  Headlines: `Norm(x − √2) = x² − 2`, `Norm(x − ∛2) = x³ − 2`, `Norm(x² + √2 x + 1) = x⁴ + 1` (cyclotomic Φ_8). |
 | 12 | **G4** (sqfr_norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qa_sqfr_norm` + `qa_alg_factor` + 9 new tests (20 total in `test_qafactor.c`).  Headlines: `x²−2` over `Q(√2)` → `(x−√2)(x+√2)`; `x⁴+1` over `Q(√2)` → `(x²−√2 x+1)(x²+√2 x+1)`; `x⁴−5x²+6` over `Q(√2)` → `(x−√2)(x+√2)(x²−3)`; `x³−2` over `Q(∛2)` → `(x−∛2)(x²+∛2 x+∛4)`; `x²+1` over `Q(i)`, `x²+x+1` over `Q(√−3)`, plus the `x²−3` over `Q(√2)` irreducible-input edge case. |
 | 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | **Done 2026-05-07** — hook in `src/facpoly.c::builtin_factor` reads the `Rule[Extension, α]` option; `qa_factor_with_extension` in `src/qafactor.c` dispatches to Trager and renders results.  11 new tests (31 total in `test_qafactor.c`).  Headlines: `Factor[x^2-2, Extension->Sqrt[2]]` → `(x-Sqrt[2])(x+Sqrt[2])`; `Factor[x^4+1, Extension->Sqrt[2]]` → `(x^2-Sqrt[2] x+1)(x^2+Sqrt[2] x+1)`; `Factor[x^3-2, Extension->2^(1/3)]` → `(x-2^(1/3))(x^2+2^(1/3) x+2^(2/3))`; `Factor[x^2+1, Extension->I]` → `(x-I)(x+I)`; `Factor[x^2+x+1, Extension->Sqrt[-3]]` → `(x+1/2-I Sqrt[3]/2)(x+1/2+I Sqrt[3]/2)`; α-bearing inputs (`x^2 - 2 Sqrt[2] x + 2` → `(x-Sqrt[2])^2`); repeated factors with multiplicity ((x²-2)² → (x−√2)²(x+√2)²). |
-| 14 | **G6** (tower of extensions) | Multi-radical inputs. | Not started |
+| 14 | **G6** (tower of extensions) | Multi-radical inputs. | **Done 2026-05-07** — `src/qafactor.{c,h}::qa_resolve_extension_tower` + `qa_factor_with_extension_tower` + 9 new tests (40 total in `test_qafactor.c`).  Headlines: `Factor[x^4 − 10 x^2 + 1, Extension → {Sqrt[2], Sqrt[3]}]` → 4 linear factors `(x ± √2 ± √3)`; `Factor[x^4 + 1, Extension → {Sqrt[2], I}]` → `(x + (±1/2 ± I/2) Sqrt[2])`; `Factor[x^2 − 2 Sqrt[3] x + 3, Extension → {Sqrt[2], Sqrt[3]}]` → `(x − Sqrt[3])^2` (α-bearing input); order-independence (`{Sqrt[3], Sqrt[2]}` → same as `{Sqrt[2], Sqrt[3]}`); irreducible-in-compositum (`x^2 − 5` over `Q(√2, √3)` stays unfactored). |
 | 15 | **G7** (splitting fields) | Foundation for symbolic integration over algebraic extensions (Trager §5). | Deferred |
 
 Recommended near-term sequence:

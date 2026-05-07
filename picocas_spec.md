@@ -11296,3 +11296,104 @@ non-extension factoring over `Q`.
 - `src/sym_names.{c,h}`: `SYM_Extension`.
 - `src/info.c`: extended Factor docstring.
 - `tests/test_qafactor.c`: 11 new tests (31 total).
+
+## Factor: tower of extensions — `Extension -> {α_1, α_2, ...}` (Phase G6, 2026-05-07)
+
+`Factor[poly, Extension -> {alpha_1, alpha_2, ..., alpha_n}]` factors
+`poly` over the compositum extension
+`Q(alpha_1, alpha_2, ..., alpha_n)`, where each `alpha_i` is an
+algebraic generator recognised by Phase G5 (`Sqrt[c]`, `Sqrt[-c]`,
+`c^(1/n)`, `I`).
+
+The implementation follows Trager §3's primitive-element algorithm:
+the tower `Q(alpha_1, ..., alpha_n)` is reduced to a single algebraic
+extension `Q(γ)` where `γ = alpha_1 + s_2 alpha_2 + ... + s_n alpha_n`
+for non-negative integer shifts `s_i ≥ 0` chosen so each iterative
+resultant is squarefree.
+
+Algorithm (per `qa_resolve_extension_tower`):
+
+1. Start with `Q(γ_1) = Q(alpha_1)`.
+2. For each subsequent `alpha_i` (with min poly `Q_i(z) ∈ Q[z]`):
+   a. Find the smallest `s ∈ [0, 32]` such that
+      `R_i(w) = Res_z(Q_i(z), P_{i-1}(w − s·z))` is squarefree over Q
+      (where `P_{i-1}` is the min poly of the current `γ_{i-1}`).
+   b. `R_i` becomes the min poly of the new primitive element
+      `γ_i = γ_{i-1} + s·alpha_i`.
+   c. Recover `alpha_i ∈ Q(γ_i)` via the gcd
+      `gcd_z(Q_i(z), P_{i-1}(γ_i − s·z))` over `Q(γ_i)[z]` — by
+      Trager that gcd is `z − alpha_i` (linear, monic).
+   d. Re-embed each previous `alpha_j ∈ Q(γ_{i-1})` into `Q(γ_i)` by
+      Horner-evaluating its polynomial-in-γ_{i-1} representation at
+      `γ_{i-1} = γ_i − s·alpha_i`.
+
+Once the tower is resolved, the user's polynomial is lifted to
+`Q(γ)[x]` by structurally substituting each surface `alpha_i` with
+its `Q(γ)`-polynomial form, and dispatched to the same Trager core
+(`qa_factor_inner`, refactored out of G5's
+`qa_factor_with_extension`).  Output factors are rendered by
+substituting `γ → γ_render` (the surface-form sum) and then
+calling `Expand`, which collapses `(alpha_1 + s_2 alpha_2 + ...)^k`
+into per-radical sums and lets picocas's auto-evaluator simplify
+`Sqrt[c]^2 → c`.
+
+### Examples
+
+```
+Factor[x^4 - 10 x^2 + 1, Extension -> {Sqrt[2], Sqrt[3]}]
+    ==> (x - Sqrt[2] - Sqrt[3]) (x - Sqrt[2] + Sqrt[3])
+        (x + Sqrt[2] - Sqrt[3]) (x + Sqrt[2] + Sqrt[3])
+
+Factor[x^2 - 2, Extension -> {Sqrt[2], Sqrt[3]}]
+    ==> (x - Sqrt[2]) (x + Sqrt[2])
+
+Factor[x^2 - 3, Extension -> {Sqrt[2], Sqrt[3]}]
+    ==> (x - Sqrt[3]) (x + Sqrt[3])
+
+Factor[x^4 + 1, Extension -> {Sqrt[2], I}]
+    ==> (x + (-1/2 - 1/2*I) Sqrt[2]) (x + (-1/2 + 1/2*I) Sqrt[2])
+        (x + (1/2 - 1/2*I) Sqrt[2])  (x + (1/2 + 1/2*I) Sqrt[2])
+
+Factor[x^2 - 2 Sqrt[3] x + 3, Extension -> {Sqrt[2], Sqrt[3]}]
+    ==> (x - Sqrt[3])^2
+
+Factor[x^2 - 1, Extension -> {Sqrt[2], Sqrt[3]}]   ==> (x - 1) (x + 1)
+
+Factor[x^2 - 5, Extension -> {Sqrt[2], Sqrt[3]}]   ==> x^2 - 5
+    (* Q(Sqrt[2], Sqrt[3]) does not contain Sqrt[5] *)
+```
+
+The list-form is order-independent (the primitive element depends on
+the set, not the sequence) and gracefully degrades:
+
+- A single-element list `Extension -> {alpha}` reduces transparently
+  to G5's single-α path.
+- The input polynomial may itself contain occurrences of any
+  `alpha_i`'s surface form; those are recognised structurally and
+  lifted into the corresponding `Q(γ)`-component.
+- If the resultant fails to be squarefree within 32 shifts at any
+  step (e.g. algebraically-dependent generators like
+  `{Sqrt[2], Sqrt[8]}`), the tower path returns NULL and
+  `builtin_factor` falls back to plain factoring over `Q`.
+
+### Files
+
+- `src/qafactor.{c,h}`: `QATower` struct,
+  `qa_resolve_extension_tower`, `qa_tower_free`,
+  `qa_factor_with_extension_tower`, plus the static helpers
+  `qa_tower_extend`, `find_primitive_shift`,
+  `qa_recover_alpha_in_new`, `qa_reembed_old`,
+  `qaext_min_poly_expr`, `expr_y_minus_s_z`,
+  `expr_p_at_y_minus_sz`, `expr_resultant_z`,
+  `q_poly_to_mpq_array_monic`, `qaext_from_q_expr`,
+  `qanum_to_expr_in_gamma_sym`, plus the refactored shared core
+  `qa_factor_inner` (extracted from G5's
+  `qa_factor_with_extension`).
+- `src/facpoly.c::builtin_factor`: extended Extension-option dispatch
+  to recognise `Rule[Extension, List[α_1, ...]]` and route to the
+  tower path.
+- `src/qafactor.c::qaupoly_to_expr_alpha`: now calls `expr_expand`
+  after substituting γ → surface render, so that `(α_1 + s_2 α_2 + …)^k`
+  is expanded and auto-simplification of `Sqrt[c]^2 → c` collapses
+  the resulting terms.
+- `tests/test_qafactor.c`: 9 new tests (40 total).

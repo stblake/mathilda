@@ -2804,6 +2804,22 @@ Expr* builtin_factor(Expr* res) {
         }
         if (alpha_expr) {
             Expr* poly = res->data.function.args[0];
+
+            /* Phase G6: when α is a List[α_1, α_2, ...], dispatch
+             * to the tower-of-extensions path.  Otherwise (G5) treat
+             * it as a single algebraic generator. */
+            Expr** alpha_list = NULL;
+            int n_alphas = 0;
+            bool is_tower = false;
+            if (alpha_expr->type == EXPR_FUNCTION
+                && alpha_expr->data.function.head
+                && alpha_expr->data.function.head->type == EXPR_SYMBOL
+                && alpha_expr->data.function.head->data.symbol == SYM_List) {
+                is_tower = true;
+                n_alphas = (int)alpha_expr->data.function.arg_count;
+                alpha_list = alpha_expr->data.function.args;  /* borrowed */
+            }
+
             /* Pick the polynomial variable.  Q(α)-factoring works in a
              * single indeterminate; we collect the free symbols of poly
              * and require exactly one (after stripping α's surface
@@ -2817,13 +2833,29 @@ Expr* builtin_factor(Expr* res) {
             Expr* poly_var = NULL;
             size_t live = 0;
             for (size_t i = 0; i < vc; i++) {
-                if (alpha_expr && expr_eq(vars[i], alpha_expr)) continue;
-                /* Also skip the symbol I when α == I. */
+                bool is_alpha = false;
+                if (is_tower) {
+                    for (int k = 0; k < n_alphas; k++) {
+                        if (expr_eq(vars[i], alpha_list[k])) {
+                            is_alpha = true;
+                            break;
+                        }
+                    }
+                } else if (expr_eq(vars[i], alpha_expr)) {
+                    is_alpha = true;
+                }
+                if (is_alpha) continue;
                 poly_var = vars[i];
                 live++;
             }
             if (live == 1 && poly_var) {
-                Expr* result = qa_factor_with_extension(poly, alpha_expr, poly_var);
+                Expr* result;
+                if (is_tower) {
+                    result = qa_factor_with_extension_tower(
+                        poly, alpha_list, n_alphas, poly_var);
+                } else {
+                    result = qa_factor_with_extension(poly, alpha_expr, poly_var);
+                }
                 for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
                 free(vars);
                 if (result) return result;
