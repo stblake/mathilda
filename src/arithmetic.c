@@ -164,7 +164,7 @@ Expr* builtin_rational(Expr* res) {
     return NULL;
 }
 
-bool is_rational(Expr* e, int64_t* n, int64_t* d) {
+bool is_rational(const Expr* e, int64_t* n, int64_t* d) {
     if (e->type == EXPR_INTEGER) {
         if (n) *n = e->data.integer;
         if (d) *d = 1;

@@ -13,7 +13,7 @@ int64_t lcm(int64_t a, int64_t b);
 Expr* make_rational(int64_t n, int64_t d);
 
 // Check if expression is a Rational[...]
-bool is_rational(Expr* e, int64_t* n, int64_t* d);
+bool is_rational(const Expr* e, int64_t* n, int64_t* d);
 
 // Check if expression is a Complex[re, im]
 bool is_complex(Expr* e, Expr** re, Expr** im);

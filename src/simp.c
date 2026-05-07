@@ -4110,7 +4110,7 @@ static bool lift_expr_to_mpq(const Expr* e, mpq_t out) {
         return true;
     }
     int64_t n, d;
-    if (is_rational((Expr*)e, &n, &d)) {
+    if (is_rational(e, &n, &d)) {
         mpq_set_si(out, (long)n, (unsigned long)d);
         mpq_canonicalize(out);
         return true;
