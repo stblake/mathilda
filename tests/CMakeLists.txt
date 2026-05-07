@@ -99,6 +99,7 @@ set(COMMON_SRC
     ../src/mvfactor3.c
     ../src/qa.c
     ../src/qaupoly.c
+    ../src/qafactor.c
     ../src/sym_intern.c
     ../src/sym_names.c
     ../src/repl_hooks.c
@@ -266,6 +267,17 @@ if(USE_ECM)
     target_link_libraries(qaupoly_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
 else()
     target_link_libraries(qaupoly_tests gmp m)
+endif()
+
+# Phase G3: Norm via resultant (qaupoly_norm).
+add_executable(qafactor_tests test_qafactor.c ${COMMON_SRC})
+target_include_directories(qafactor_tests PRIVATE ../src /usr/local/include)
+target_link_directories(qafactor_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(qafactor_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(qafactor_tests build_ecm)
+else()
+    target_link_libraries(qafactor_tests gmp m)
 endif()
 
 add_executable(bpoly_tests test_bpoly.c ${COMMON_SRC})

@@ -1843,20 +1843,29 @@ coefficients.
 - Actual: 200 LOC source (`src/qaupoly.h`) + 320 LOC implementation
   (`src/qaupoly.c`) + 360 LOC tests.  All 96 test binaries pass.
 
-#### Phase G3 — Norm via resultant
+#### Phase G3 — Norm via resultant — **Done 2026-05-07**
 
 `src/qafactor.{c,h}::qaupoly_norm`:
 
 - Build `g(x, y) ∈ Q[x, y]` from `f(x, α) ∈ Q(α)[x]` by substituting
   `α → y`.  Each `QANum` coefficient becomes a polynomial in `y`.
-- Clear denominators (multiply through by `lcm` of all `mpq_t`
-  denominators in `g(x, y)` and `P_α(y)`) to land in `Z[x, y]`,
-  representable as the existing `BPoly`.
-- Compute `R_z(x) = Resultant_y(P_α(y), g(x, y))` via `poly_resultant`
-  (or a direct subresultant PRS over `BPoly` when performance demands).
-  Returns a polynomial in `x` over `Z`.
-- Re-rationalise: divide `R_z` by the appropriate denominator power.
-- Estimated: ~150 LOC source + ~100 LOC tests.
+- Compute `R(x) = Resultant_y(P_α(y), g(x, y))` via `internal_resultant`
+  (which dispatches to the existing Sylvester-matrix routine in
+  `src/poly.c::resultant_internal`).  The result lands in `Q[x]`
+  directly — denominator clearing is unnecessary because picocas's
+  Resultant builtin handles `Rational[]` coefficients natively, and
+  the Sylvester determinant of a `Q[x, y]` system is already in `Q[x]`.
+- The result is post-Expanded for canonical sum-of-monomials form.
+- Two helpers (`qaext_to_expr`, `qaupoly_to_expr`) lift `QAExt` /
+  `QAUPoly` into picocas Expr trees — they're exposed publicly because
+  G4's `sqfr_norm` will reuse them when computing norms of shifted
+  inputs `f(x − sα, α)`.
+- Tests: `tests/test_qafactor.c` (11 cases) — covers `Norm(x − √2) = x²
+  − 2`, `Norm(x − ∛2) = x³ − 2`, rational-input squared in `Q(i)`,
+  `Norm(x² − √2) = x⁴ − 2`, `Norm(x² + √2 x + 1) = x⁴ + 1` (cyclotomic
+  Φ_8), and the constant case `Norm(3) = 9` over `Q(√2)`.
+- Actual: 95 LOC header (`src/qafactor.h`) + 158 LOC implementation
+  (`src/qafactor.c`) + 200 LOC tests.
 
 #### Phase G4 — `sqfr_norm` and `alg_factor`
 
@@ -1987,7 +1996,8 @@ Updated implementation order (extending §12's table):
 | 10 | 5c | Retire `factor_roots` | Not started |
 | 11 | **G1** (Q(α) element type) | Self-contained; parallelisable with F6 cleanup. | **Done 2026-05-07** — `src/qa.{c,h}` + 18 tests in `tests/test_qa.c`, all passing. |
 | 11b | **G2** (Q(α)[x] univariate) | Polynomial-in-x with QA coefficients. | **Done 2026-05-07** — `src/qaupoly.{c,h}` + 17 tests in `tests/test_qaupoly.c`, all passing.  Headline: `gcd(x²-2, x-√2) = x-√2` over Q(√2) (the Trager lift step). |
-| 12 | **G3-G4** (norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | Not started |
+| 11c | **G3** (norm via resultant) | Field-norm of `f ∈ Q(α)[x]` via `Resultant_y(P_α, f)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qaupoly_norm` + 11 tests in `tests/test_qafactor.c`, all passing.  Headlines: `Norm(x − √2) = x² − 2`, `Norm(x − ∛2) = x³ − 2`, `Norm(x² + √2 x + 1) = x⁴ + 1` (cyclotomic Φ_8). |
+| 12 | **G4** (sqfr_norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | Not started |
 | 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | Not started |
 | 14 | **G6** (tower of extensions) | Multi-radical inputs. | Not started |
 | 15 | **G7** (splitting fields) | Foundation for symbolic integration over algebraic extensions (Trager §5). | Deferred |
