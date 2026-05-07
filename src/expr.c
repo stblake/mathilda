@@ -473,17 +473,50 @@ static int string_compare_canonical(const char* s1, const char* s2) {
     return 0;
 }
 
+/* True if `e` should be treated as a numeric coefficient when stripping
+ * the leading factor of a Times for canonical-order comparison. Covers the
+ * obvious atomic numerics (Integer/Real/BigInt/MPFR), Rational[n,d],
+ * Complex[re,im] over numeric components, and Power[numeric, numeric]
+ * (i.e. radicals like Sqrt[2] = Power[2, 1/2] and 2^(1/3)). Without the
+ * Power case, monomials like `Sqrt[2] x` would not have their main factor
+ * recognised as `x`, so canonical sort placed them after `x^2` instead of
+ * before. */
+static bool is_numeric_coefficient_factor(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT
+#ifdef USE_MPFR
+        || e->type == EXPR_MPFR
+#endif
+        ) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (is_rational((Expr*)e, NULL, NULL)) return true;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        if (h == SYM_Power && e->data.function.arg_count == 2) {
+            return is_numeric_coefficient_factor(e->data.function.args[0])
+                && is_numeric_coefficient_factor(e->data.function.args[1]);
+        }
+        if (h == SYM_Complex) {
+            Expr *re, *im;
+            if (is_complex((Expr*)e, &re, &im)) {
+                return is_numeric_coefficient_factor(re) && is_numeric_coefficient_factor(im);
+            }
+        }
+    }
+    return false;
+}
+
 static Expr* get_main_factor(Expr* e) {
     if (e->type != EXPR_FUNCTION) return e;
     Expr* head = e->data.function.head;
     if (head->type != EXPR_SYMBOL) return e;
-    
+
     if (head->data.symbol == SYM_Power && e->data.function.arg_count >= 1) {
         return get_main_factor(e->data.function.args[0]);
     }
     if (head->data.symbol == SYM_Times && e->data.function.arg_count >= 1) {
         Expr* first = e->data.function.args[0];
-        if (first->type == EXPR_INTEGER || first->type == EXPR_REAL || first->type == EXPR_BIGINT || is_rational(first, NULL, NULL)) {
+        if (is_numeric_coefficient_factor(first)) {
             if (e->data.function.arg_count == 2) return get_main_factor(e->data.function.args[1]);
             return e->data.function.args[1];
         }
