@@ -1856,6 +1856,139 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
     return sum;
 }
 
+/* ====================================================================
+ * Phase 5 — IntegrateRealRationalFunction-style per-summand loop.
+ * ====================================================================
+ *
+ * Apart-split a squarefree-denominator residual h, ExtractConstants
+ * each summand to keep coefficients out of the subresultant chain,
+ * and process each piece independently.  If *every* piece closes via
+ * the derivative-recognition / LRT / LogToReal pipeline we return
+ * the sum; otherwise NULL so the caller can attempt the whole-h LRT
+ * path (or surface the integral as unevaluated).
+ *
+ * Direct port of IntegrateRational.m:534-587, minus the `NaiveLogPart`
+ * fallback (we prefer to surface the integral as unevaluated rather
+ * than emit a symbolic RootSum that picocas can't yet differentiate
+ * back to the integrand).
+ */
+
+/* Try to close `r/d` via the LRT-then-LogToReal pipeline.  Returns
+ * NULL on failure. */
+static Expr* try_lrt_close(Expr* num, Expr* den, Expr* x) {
+    if (is_zero_poly(num)) return expr_new_integer(0);
+    Expr* h = internal_divide(
+        (Expr*[]){expr_copy(num), expr_copy(den)}, 2);
+    Expr* h_eval = eval_and_free(h);
+
+    Expr* t_sym = expr_new_symbol("Integrate`Private`tt$");
+    Expr* lrt_pairs = intrat_int_rational_log_part(h_eval, x, t_sym, false);
+    expr_free(h_eval);
+    if (!lrt_pairs) { expr_free(t_sym); return NULL; }
+
+    size_t npairs = lrt_pairs->data.function.arg_count;
+    Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * (npairs ? npairs : 1));
+    size_t lr_count = 0;
+    bool all_ok = true;
+    for (size_t i = 0; i < npairs; i++) {
+        Expr* pair = lrt_pairs->data.function.args[i];
+        Expr* Qi = list_get(pair, 1);
+        Expr* Si = list_get(pair, 2);
+        if (!Qi || !Si) { all_ok = false; if (Qi) expr_free(Qi); if (Si) expr_free(Si); break; }
+        Expr* term = intrat_log_to_real(Qi, Si, x, t_sym);
+        expr_free(Qi); expr_free(Si);
+        if (!term) { all_ok = false; break; }
+        lr_terms[lr_count++] = term;
+    }
+    if (!all_ok) {
+        for (size_t k = 0; k < lr_count; k++) expr_free(lr_terms[k]);
+        free(lr_terms);
+        /* Linear-Q fallback: every Q_i factors completely over Q. */
+        Expr* closed = intrat_linear_q_closer(lrt_pairs, x, t_sym);
+        expr_free(lrt_pairs); expr_free(t_sym);
+        return closed;
+    }
+    expr_free(lrt_pairs); expr_free(t_sym);
+    if (lr_count == 0) { free(lr_terms); return expr_new_integer(0); }
+    if (lr_count == 1) { Expr* r = lr_terms[0]; free(lr_terms); return r; }
+    Expr* sum = internal_plus(lr_terms, lr_count);
+    free(lr_terms);
+    return eval_and_free(sum);
+}
+
+/* Process h piece-by-piece via Apart, ExtractConstants, and the
+ * derivative-recognition / LRT pipeline.  Returns the closed sum or
+ * NULL if any piece can't be closed. */
+static Expr* intrat_integrate_summands(Expr* h, Expr* x) {
+    Expr* pieces = intrat_apart_list(h, x, NULL);
+    if (!pieces || pieces->type != EXPR_FUNCTION
+        || pieces->data.function.head->type != EXPR_SYMBOL
+        || pieces->data.function.head->data.symbol != SYM_List) {
+        if (pieces) expr_free(pieces);
+        return NULL;
+    }
+    size_t n = pieces->data.function.arg_count;
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nterms = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* piece = pieces->data.function.args[i];
+
+        /* Skip pure polynomial summands — they belong to the Q part. */
+        if (intrat_polyq_test(piece, x)) {
+            Expr* poly_int = intrat_integrate_polynomial(piece, x);
+            if (!poly_int) goto fail;
+            terms[nterms++] = poly_int;
+            continue;
+        }
+
+        /* ExtractConstants — pull scalar prefactors out of num/den. */
+        Expr* ec = intrat_extract_constants(piece, x);
+        Expr* c_const = list_get(ec, 1);
+        Expr* residue = list_get(ec, 2);
+        expr_free(ec);
+        if (!c_const || !residue) {
+            if (c_const) expr_free(c_const);
+            if (residue) expr_free(residue);
+            goto fail;
+        }
+
+        Expr* num = intrat_numerator(residue);
+        Expr* den = intrat_denominator(residue);
+        Expr* num_e = eval_and_free(num);
+        Expr* den_e = eval_and_free(den);
+        expr_free(residue);
+
+        /* Derivative-recognition fast path. */
+        Expr* fast = intrat_derivative_recognition(num_e, den_e, x);
+        Expr* piece_int = NULL;
+        if (fast) piece_int = fast;
+        else      piece_int = try_lrt_close(num_e, den_e, x);
+        expr_free(num_e); expr_free(den_e);
+
+        if (!piece_int) {
+            expr_free(c_const);
+            goto fail;
+        }
+        Expr* scaled = internal_times(
+            (Expr*[]){c_const, piece_int}, 2);
+        terms[nterms++] = eval_and_free(scaled);
+    }
+
+    expr_free(pieces);
+    if (nterms == 0) { free(terms); return expr_new_integer(0); }
+    if (nterms == 1) { Expr* r = terms[0]; free(terms); return r; }
+    Expr* sum = internal_plus(terms, nterms);
+    free(terms);
+    return eval_and_free(sum);
+
+fail:
+    expr_free(pieces);
+    for (size_t k = 0; k < nterms; k++) expr_free(terms[k]);
+    free(terms);
+    return NULL;
+}
+
 /* ------------------------------------------------------------------ */
 /* IntegrateRational top-level (Phase 1 skeleton + Phase 2 hookup).    */
 /* ------------------------------------------------------------------ */
@@ -1942,85 +2075,27 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         return result;
     }
 
-    /* Otherwise try derivative recognition on h. */
-    Expr* h_num = intrat_numerator(h);
-    Expr* h_den = intrat_denominator(h);
-    h_num = eval_and_free(h_num);
-    h_den = eval_and_free(h_den);
-
-    Expr* h_int = intrat_derivative_recognition(h_num, h_den, x);
-    if (h_int) {
-        expr_free(h_num); expr_free(h_den); expr_free(h);
+    /* Phase 5 — IntegrateRealRationalFunction-style per-summand loop.
+     *
+     * We process the squarefree-denominator residual h piece-by-piece:
+     * Apart-split it, ExtractConstants to keep coefficients out of the
+     * subresultant chain, then run derivative-recognition / LRT /
+     * LogToReal on each piece.  If every piece closes we sum them up
+     * with the Hermite g and the polynomial part; otherwise we fall
+     * back to running LRT on h whole (Phase 4 path).
+     */
+    Expr* per_summand = intrat_integrate_summands(h, x);
+    if (per_summand) {
+        expr_free(h);
         Expr* sum = internal_plus(
-            (Expr*[]){poly_int, g, h_int}, 3);
+            (Expr*[]){poly_int, g, per_summand}, 3);
         Expr* result = eval_and_free(sum);
         intrat_trace("IntegrateRational", "OUT", result);
         return result;
     }
 
-    /* Phase 2/4 — Lazard-Rioboo-Trager log part.  Run
-     * IntRationalLogPart on the squarefree-denominator residual,
-     * then for each {Q_i, S_i} pair invoke LogToReal which closes
-     * every linear / quadratic factor over Q (the bounded-Solve
-     * scope from the plan).  When LogToReal fails on any pair we
-     * fall back to the linear-Q-only closer; if that also fails
-     * the integral stays unevaluated. */
-    Expr* t_sym = expr_new_symbol("Integrate`Private`tt$");
-    Expr* lrt_pairs = intrat_int_rational_log_part(h, x, t_sym, false);
-    expr_free(h);
-
-    if (lrt_pairs) {
-        /* First try LogToReal on every (Q_i, S_i) pair. */
-        size_t npairs = lrt_pairs->data.function.arg_count;
-        Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * npairs);
-        bool all_ok = true;
-        size_t lrt_count = 0;
-        for (size_t i = 0; i < npairs; i++) {
-            Expr* pair = lrt_pairs->data.function.args[i];
-            Expr* Qi = list_get(pair, 1);
-            Expr* Si = list_get(pair, 2);
-            if (!Qi || !Si) { all_ok = false; if (Qi) expr_free(Qi); if (Si) expr_free(Si); break; }
-            Expr* term = intrat_log_to_real(Qi, Si, x, t_sym);
-            expr_free(Qi); expr_free(Si);
-            if (!term) { all_ok = false; break; }
-            lr_terms[lrt_count++] = term;
-        }
-        if (all_ok) {
-            Expr* lr_sum;
-            if (lrt_count == 0) lr_sum = expr_new_integer(0);
-            else if (lrt_count == 1) { lr_sum = lr_terms[0]; }
-            else lr_sum = eval_and_free(internal_plus(lr_terms, lrt_count));
-            free(lr_terms);
-            expr_free(lrt_pairs); expr_free(t_sym);
-            expr_free(h_num); expr_free(h_den);
-            Expr* sum = internal_plus(
-                (Expr*[]){poly_int, g, lr_sum}, 3);
-            Expr* result = eval_and_free(sum);
-            intrat_trace("IntegrateRational", "OUT", result);
-            return result;
-        }
-        /* Some factor too complex for LogToReal — try the linear-Q
-         * closer (handles all-rational-roots fallback). */
-        for (size_t k = 0; k < lrt_count; k++) expr_free(lr_terms[k]);
-        free(lr_terms);
-
-        Expr* closed = intrat_linear_q_closer(lrt_pairs, x, t_sym);
-        expr_free(lrt_pairs);
-        if (closed) {
-            expr_free(t_sym);
-            expr_free(h_num); expr_free(h_den);
-            Expr* sum = internal_plus(
-                (Expr*[]){poly_int, g, closed}, 3);
-            Expr* result = eval_and_free(sum);
-            intrat_trace("IntegrateRational", "OUT", result);
-            return result;
-        }
-    }
-    expr_free(t_sym);
-    expr_free(h_num); expr_free(h_den);
-
-    /* Beyond Phase 4's bounded-Solve scope — leave unevaluated. */
-    expr_free(g); expr_free(poly_int);
+    /* Beyond Phase 5's combined scope — leave unevaluated. */
+    expr_free(h); expr_free(g); expr_free(poly_int);
     intrat_trace("IntegrateRational", "OUT (unresolved)", f);
     return NULL;
 }
