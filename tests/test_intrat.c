@@ -301,6 +301,19 @@ static void test_integrate_arctan(void) {
     assert_integral_correct("(x+2)/((x^2+1)(x-1))");
 }
 
+static void test_integrate_arctanh_simplification(void) {
+    /* Phase 6 collapses c Log[A] - c Log[B] into ArcTanh when the
+     * resulting argument is rational in x. */
+    run_eq("Integrate[1/(x^2 - 1), x]", "-ArcTanh[x]");
+    /* Linear-pole pair: Log[x-2] - Log[x-1] -> -2 ArcTanh[-3 + 2 x]. */
+    run_eq("Integrate[1/((x-1)(x-2)), x]", "-2 ArcTanh[-3 + 2 x]");
+    /* The combined LogToArcTanh builtin can be invoked directly. */
+    run_eq("Integrate`LogToArcTanh[1/2 Log[-1+x] - 1/2 Log[1+x], x]",
+           "-ArcTanh[x]");
+    run_eq("Integrate`LogToArcTanh[Log[1+x] + Log[-1+x], x]",
+           "Log[-1 + x^2]");
+}
+
 static void test_integrate_quartic_factorable(void) {
     /* x^4 + x^2 + 1 = (x^2 + x + 1)(x^2 - x + 1) — two quadratics
      * with negative discriminants give two ArcTans + two Logs. */
@@ -376,8 +389,9 @@ int main(void) {
     TEST(test_logtoatan_recursive);
 
     TEST(test_integrate_arctan);
+    TEST(test_integrate_arctanh_simplification);
     TEST(test_integrate_quartic_factorable);
 
-    printf("All Phase 1-4 (Hermite + LRT + LogToAtan + LogToReal) tests passed!\n");
+    printf("All Phase 1-6 (LRT + LogToReal + ArcTanh post-processing) tests passed!\n");
     return 0;
 }

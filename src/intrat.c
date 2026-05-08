@@ -1857,6 +1857,229 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
 }
 
 /* ====================================================================
+ * Phase 6 — LogToArcTan / LogToArcTanh post-processing.
+ * ====================================================================
+ *
+ * Combines `c Log[A] + c Log[B] -> c Log[A B]` and
+ * `c Log[A] - c Log[B] -> c Log[A/B]` into single logarithms, then
+ * recognises the `c Log[A] - c Log[B] -> 2 c ArcTanh[(B-A)/(B+A)]`
+ * pattern when the ArcTanh argument simplifies to a rational
+ * function in x.  Direct port of IntegrateRational.m:1722-1761
+ * (LogToArcTanh) and :1896-1958 (LogToArcTan).
+ *
+ * Implemented as direct C transformations on Plus[...] of Log[...]
+ * terms (per the plan note) rather than pattern-rewriting at the
+ * picocas rule-engine layer.  The transformations are
+ * differentiation-equivalent — they only beautify the output — so
+ * the universal correctness check stays green either way.
+ */
+
+/* Decompose a term of a Plus head into (coeff, log_arg) when it
+ * matches `coeff * Log[log_arg]`.  Returns true on success. */
+static bool decompose_log_term(Expr* term, Expr** coeff_out, Expr** log_arg_out) {
+    /* Plain Log[x]. */
+    if (term->type == EXPR_FUNCTION
+        && term->data.function.head->type == EXPR_SYMBOL
+        && term->data.function.head->data.symbol == SYM_Log
+        && term->data.function.arg_count == 1) {
+        *coeff_out = expr_new_integer(1);
+        *log_arg_out = expr_copy(term->data.function.args[0]);
+        return true;
+    }
+    /* Times[..., Log[arg], ...].  Find the Log factor; the rest is
+     * the coefficient. */
+    if (term->type != EXPR_FUNCTION
+        || term->data.function.head->type != EXPR_SYMBOL
+        || term->data.function.head->data.symbol != SYM_Times) return false;
+
+    size_t n = term->data.function.arg_count;
+    Expr* log_arg = NULL;
+    size_t log_idx = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* arg = term->data.function.args[i];
+        if (arg->type == EXPR_FUNCTION
+            && arg->data.function.head->type == EXPR_SYMBOL
+            && arg->data.function.head->data.symbol == SYM_Log
+            && arg->data.function.arg_count == 1) {
+            if (log_arg) return false;  /* Multiple Log factors. */
+            log_arg = arg->data.function.args[0];
+            log_idx = i;
+        }
+    }
+    if (!log_arg) return false;
+
+    /* Build coeff = product of all other factors. */
+    if (n == 1) {
+        *coeff_out = expr_new_integer(1);
+        *log_arg_out = expr_copy(log_arg);
+        return true;
+    }
+    Expr** rest = (Expr**)malloc(sizeof(Expr*) * (n - 1));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (i != log_idx) rest[k++] = expr_copy(term->data.function.args[i]);
+    }
+    Expr* coeff;
+    if (k == 1) coeff = rest[0];
+    else coeff = eval_and_free(internal_times(rest, k));
+    free(rest);
+    *coeff_out = coeff;
+    *log_arg_out = expr_copy(log_arg);
+    return true;
+}
+
+/* zeroQ[e] = TrueQ[Cancel[Together[e]] === 0] for a single expression. */
+static bool intrat_zero_q(Expr* e) {
+    Expr* canon = intrat_canonic(e);
+    bool ok = is_zero_poly(canon);
+    expr_free(canon);
+    return ok;
+}
+
+/* Simplify a Plus of Log terms by:
+ *  1) merging `c Log[A] + c Log[B] -> c Log[Expand[A B]]`,
+ *  2) merging `c Log[A] - c Log[B] -> c Log[A/B]` when
+ *     Denominator[Cancel[Together[A/B]]] is FreeQ[..., x],
+ *  3) rewriting `c Log[A] - c Log[B] -> 2 c ArcTanh[(B-A)/(B+A)]`
+ *     when Denominator[Cancel[Together[(B-A)/(B+A)]]] is FreeQ[..., x].
+ *
+ * Always preserves D[result, x] up to canonic-zero. */
+static Expr* intrat_log_to_arctanh(Expr* e, Expr* x) {
+    if (!e) return NULL;
+    if (!(e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Plus)) {
+        return expr_copy(e);
+    }
+
+    size_t n = e->data.function.arg_count;
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * n);
+    bool* used = (bool*)calloc(n, sizeof(bool));
+    Expr** coeffs = (Expr**)calloc(n, sizeof(Expr*));
+    Expr** logargs = (Expr**)calloc(n, sizeof(Expr*));
+    bool* is_log = (bool*)calloc(n, sizeof(bool));
+
+    for (size_t i = 0; i < n; i++) {
+        terms[i] = e->data.function.args[i];
+        is_log[i] = decompose_log_term(terms[i], &coeffs[i], &logargs[i]);
+    }
+
+    Expr** out = (Expr**)malloc(sizeof(Expr*) * (n * 2));
+    size_t out_n = 0;
+
+    for (size_t i = 0; i < n; i++) {
+        if (used[i]) continue;
+        if (!is_log[i]) {
+            out[out_n++] = expr_copy(terms[i]);
+            used[i] = true;
+            continue;
+        }
+        /* Try to pair with another Log term j > i. */
+        bool merged = false;
+        for (size_t j = i + 1; j < n; j++) {
+            if (used[j] || !is_log[j]) continue;
+            if (!intrat_freeq_test(coeffs[i], x) || !intrat_freeq_test(coeffs[j], x)) continue;
+
+            /* Same coefficient -> Log[A*B]. */
+            Expr* delta = internal_subtract(
+                (Expr*[]){expr_copy(coeffs[i]), expr_copy(coeffs[j])}, 2);
+            if (intrat_zero_q(delta)) {
+                expr_free(delta);
+                Expr* prod = expr_expand(internal_times(
+                    (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2));
+                Expr* logp = expr_new_function(expr_new_symbol("Log"),
+                    (Expr*[]){prod}, 1);
+                Expr* combined = internal_times(
+                    (Expr*[]){expr_copy(coeffs[i]), logp}, 2);
+                out[out_n++] = eval_and_free(combined);
+                used[i] = used[j] = true; merged = true; break;
+            }
+            expr_free(delta);
+
+            /* Opposite coefficient: try ArcTanh first, then Log[A/B]. */
+            Expr* sumcoef = internal_plus(
+                (Expr*[]){expr_copy(coeffs[i]), expr_copy(coeffs[j])}, 2);
+            if (intrat_zero_q(sumcoef)) {
+                expr_free(sumcoef);
+                /* Mathematica's log2ArcTanhRule emits
+                 *   (c2 - c1) ArcTanh[(A + B) / (B - A)]
+                 * for c1 Log[A] + c2 Log[B] with c1 + c2 == 0.
+                 * Equivalent to 2 c2 ArcTanh[…].  We require the
+                 * ArcTanh argument's Denominator to be free of x; if
+                 * not, fall back to the simpler Log[A/B] rewrite. */
+                Expr* sumAB_raw = internal_plus(
+                    (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2);
+                Expr* sumAB = expr_expand(sumAB_raw); expr_free(sumAB_raw);
+                Expr* diffBA_raw = internal_subtract(
+                    (Expr*[]){expr_copy(logargs[j]), expr_copy(logargs[i])}, 2);
+                Expr* diffBA = expr_expand(diffBA_raw); expr_free(diffBA_raw);
+
+                Expr* arg_raw = internal_divide(
+                    (Expr*[]){expr_copy(sumAB), expr_copy(diffBA)}, 2);
+                Expr* arg_can = intrat_canonic(arg_raw); expr_free(arg_raw);
+                Expr* arg_den = intrat_denominator(arg_can);
+                Expr* arg_den_eval = eval_and_free(arg_den);
+                bool atanh_ok = intrat_freeq_test(arg_den_eval, x)
+                              && !is_zero_poly(arg_can);
+                expr_free(arg_den_eval);
+                if (atanh_ok) {
+                    /* (c2 - c1) ArcTanh[(A + B) / (B - A)] */
+                    Expr* coef_diff = internal_subtract(
+                        (Expr*[]){expr_copy(coeffs[j]), expr_copy(coeffs[i])}, 2);
+                    coef_diff = eval_and_free(coef_diff);
+                    Expr* atanh = expr_new_function(expr_new_symbol("ArcTanh"),
+                        (Expr*[]){arg_can}, 1);
+                    Expr* term = internal_times(
+                        (Expr*[]){coef_diff, atanh}, 2);
+                    out[out_n++] = eval_and_free(term);
+                    expr_free(sumAB); expr_free(diffBA);
+                    used[i] = used[j] = true; merged = true; break;
+                }
+                expr_free(arg_can);
+
+                /* Log[A/B] with denominator free of x. */
+                Expr* AoverB_raw = internal_divide(
+                    (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2);
+                Expr* AoverB = intrat_canonic(AoverB_raw); expr_free(AoverB_raw);
+                Expr* AoverB_den = intrat_denominator(AoverB);
+                Expr* AoverB_den_eval = eval_and_free(AoverB_den);
+                bool divlog_ok = intrat_freeq_test(AoverB_den_eval, x);
+                expr_free(AoverB_den_eval);
+                if (divlog_ok) {
+                    Expr* logp = expr_new_function(expr_new_symbol("Log"),
+                        (Expr*[]){AoverB}, 1);
+                    Expr* term = internal_times(
+                        (Expr*[]){expr_copy(coeffs[i]), logp}, 2);
+                    out[out_n++] = eval_and_free(term);
+                    expr_free(sumAB); expr_free(diffBA);
+                    used[i] = used[j] = true; merged = true; break;
+                }
+                expr_free(AoverB);
+                expr_free(sumAB); expr_free(diffBA);
+                continue;
+            }
+            expr_free(sumcoef);
+        }
+        if (!merged) {
+            out[out_n++] = expr_copy(terms[i]);
+            used[i] = true;
+        }
+    }
+
+    for (size_t i = 0; i < n; i++) {
+        if (coeffs[i])  expr_free(coeffs[i]);
+        if (logargs[i]) expr_free(logargs[i]);
+    }
+    free(coeffs); free(logargs); free(is_log); free(used); free(terms);
+
+    Expr* result;
+    if (out_n == 0) { free(out); result = expr_new_integer(0); }
+    else if (out_n == 1) { result = out[0]; free(out); }
+    else { result = eval_and_free(internal_plus(out, out_n)); free(out); }
+    return result;
+}
+
+/* ====================================================================
  * Phase 5 — IntegrateRealRationalFunction-style per-summand loop.
  * ====================================================================
  *
@@ -2089,7 +2312,12 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         expr_free(h);
         Expr* sum = internal_plus(
             (Expr*[]){poly_int, g, per_summand}, 3);
-        Expr* result = eval_and_free(sum);
+        Expr* sum_eval = eval_and_free(sum);
+        /* Phase 6 final pass: combine c Log[A] ± c Log[B] terms and
+         * promote them to Log[A B] / Log[A/B] / 2c ArcTanh[...]
+         * where the simplified argument is rational in x. */
+        Expr* result = intrat_log_to_arctanh(sum_eval, x);
+        expr_free(sum_eval);
         intrat_trace("IntegrateRational", "OUT", result);
         return result;
     }
@@ -2235,6 +2463,14 @@ Expr* builtin_intrat_logtoreal(Expr* res) {
     return intrat_log_to_real(r, s, x, t);
 }
 
+Expr* builtin_intrat_logtoarctanh(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* e = res->data.function.args[0];
+    Expr* x = res->data.function.args[1];
+    if (x->type != EXPR_SYMBOL) return NULL;
+    return intrat_log_to_arctanh(e, x);
+}
+
 /* ------------------------------------------------------------------ */
 /* Init.                                                              */
 /* ------------------------------------------------------------------ */
@@ -2325,6 +2561,17 @@ void intrat_init(void) {
             "in K[x] whose derivative equals D[I Log[(A + I B)/(A - I B)], x].\n"
             "Used by LogToReal (Phase 4) to convert complex log pairs into real\n"
             "ArcTan summands. Bronstein, Symbolic Integration I, p. 63 (Rioboo).");
+
+    /* Phase 6 — Log post-processing. */
+    install("Integrate`LogToArcTanh",
+            builtin_intrat_logtoarctanh,
+            "Integrate`LogToArcTanh[expr, x] combines pairs of Log terms in\n"
+            "expr's top-level Plus head: c Log[A] + c Log[B] -> c Log[A*B];\n"
+            "c Log[A] - c Log[B] -> 2 c ArcTanh[(B-A)/(B+A)] when the\n"
+            "ArcTanh argument is rational in x, else c Log[A/B] when A/B is\n"
+            "rational in x. Beautifies the rational integrator's output\n"
+            "without affecting differentiation; cf. IntegrateRational.m\n"
+            "lines 1722-1761.");
 
     /* Phase 4 — Rioboo's LogToReal. */
     install("Integrate`LogToReal",
