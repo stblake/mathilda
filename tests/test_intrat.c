@@ -211,6 +211,65 @@ static void test_integrate_unevaluated(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Phase 2 — LRT log part                                              */
+/* ------------------------------------------------------------------ */
+
+static void test_helpers_squarefree(void) {
+    /* Multiplicity-indexed list. */
+    run_eq("Integrate`Helpers`SquareFree[(x-1)^2 (x+1)]",
+           "{{1 + x, 1}, {-1 + x, 2}}");
+    run_eq("Integrate`Helpers`SquareFree[1 + 4 t^2]",
+           "{{1 + 4 t^2, 1}}");
+}
+
+static void test_helpers_extract_constants(void) {
+    run_eq("Integrate`Helpers`ExtractConstants[(2 x)/(3 (x^2+1)), x]",
+           "{2/3, x/(1 + x^2)}");
+    run_eq("Integrate`Helpers`ExtractConstants[5/(x^2+1), x]",
+           "{5, 1/(1 + x^2)}");
+}
+
+static void test_helpers_apartlist(void) {
+    /* Three-pole partial-fraction expansion as a List. */
+    run_eq("Integrate`Helpers`ApartList[1/((x-1)(x-2)(x-3)), x]",
+           "{1/2/(-3 + x), -1/(-2 + x), 1/2/(-1 + x)}");
+}
+
+static void test_intrationallogpart(void) {
+    /* Bronstein Example 2.4.1 — 1/(x^4+1).
+     * Resultant(D, A - t D') = 1 + 256 t^4. */
+    run_eq("Integrate`IntRationalLogPart[1/(x^4+1), x, t]",
+           "{{1 + 256 t^4, 4 t + x}}");
+    /* Simple: 1/(x^2+1) ⇒ Q=1+4t^2, S=2t+x. */
+    run_eq("Integrate`IntRationalLogPart[1/(x^2+1), x, t]",
+           "{{1 + 4 t^2, 2 t + x}}");
+    /* Linear factors: 1/((x-1)(x-2)). */
+    run_eq("Integrate`IntRationalLogPart[1/((x-1)(x-2)), x, t]",
+           "{{1 - t^2, -3/2 - 1/2 t + x}}");
+    /* RootSum -> True wraps in symbolic RootSum heads. */
+    run_eq("Integrate`IntRationalLogPart[1/(x^2+1), x, t, RootSum -> True]",
+           "RootSum[Function[t, 1 + 4 t^2], Function[t, t Log[2 t + x]]]");
+}
+
+static void test_integrate_lrt_linear_q(void) {
+    /* When the resultant Q factors completely into linear pieces over
+     * Q, the integrator now closes the integral end-to-end. */
+    assert_integral_correct("1/((x-1)(x-2))");
+    assert_integral_correct("1/(x^2 - 1)");
+    assert_integral_correct("(2 x - 1)/((x-1)(x-2)(x-3))");
+    /* Higher degree with rational roots. */
+    assert_integral_correct("1/(x (x-1) (x-2) (x-3))");
+}
+
+static void test_integrate_lrt_unresolved(void) {
+    /* Q with irrational/complex roots — Phase 4 territory. */
+    run_eq("Integrate[1/(x^2 + 1), x]", "Integrate[1/(1 + x^2), x]");
+    run_eq("Integrate[1/(x^4 + 1), x]", "Integrate[1/(1 + x^4), x]");
+    /* Q with a mixed rational+complex factorisation falls back too. */
+    run_eq("Integrate[1/(x^3 - 1), x]", "Integrate[1/(-1 + x^3), x]");
+}
+
+/* ------------------------------------------------------------------ */
 /* PolynomialQuotientRemainder & SubresultantPolynomialRemainders      */
 /* ------------------------------------------------------------------ */
 
@@ -266,6 +325,13 @@ int main(void) {
     TEST(test_polynomial_quotient_remainder);
     TEST(test_subresultant_chain);
 
-    printf("All Phase 1 (IntegrateRational scaffolding + Hermite) tests passed!\n");
+    TEST(test_helpers_squarefree);
+    TEST(test_helpers_extract_constants);
+    TEST(test_helpers_apartlist);
+    TEST(test_intrationallogpart);
+    TEST(test_integrate_lrt_linear_q);
+    TEST(test_integrate_lrt_unresolved);
+
+    printf("All Phase 1+2 (IntegrateRational + Hermite + LRT log-part) tests passed!\n");
     return 0;
 }

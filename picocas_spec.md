@@ -3108,10 +3108,19 @@ following classes of integrand:
 - **Derivative-recognition fast path** — when the residual `h` has
   the form `c * D'/D^k` with `c` free of `x` and `k >= 1`, emits the
   closed form `c Log[D]` (k=1) or `-c/((k-1) D^(k-1))` (k>=2).
+- **Lazard-Rioboo-Trager log part with linear-Q closure** — Phase 2
+  hooks `Integrate`IntRationalLogPart` into the pipeline so the
+  squarefree-denominator residual gets the LRT treatment.  When every
+  resultant Q_i factors completely into linear pieces over Q, each
+  linear factor `(t - α)` contributes `α Log[S_i(α, x)]` and the
+  integral closes end-to-end.  Catches the
+  `1/((x-a)(x-b)(x-c)(...))` family as well as cases like
+  `1/(x^2 - 1)` whose resultant has only rational roots.
 
-Anything outside these patterns (Lazard-Rioboo-Trager log part,
-`LogToReal`, `LogToArcTan`) is deferred to Phases 2-7 of the plan;
-those inputs return `Integrate[f, x]` unevaluated.
+Anything outside these patterns (LogToReal for quadratic Q with
+negative discriminant, LogToArcTan post-processing) is deferred to
+Phases 3-7 of the plan; those inputs return `Integrate[f, x]`
+unevaluated.
 
 **Features**:
 - `Protected`.
@@ -3134,16 +3143,47 @@ Out[3]= -1/(-a + x)
 In[4]:= Integrate[(2x+3)/(x^2+3x+5)^2, x]
 Out[4]= -1/(5 + 3 x + x^2)
 
-In[5]:= Integrate[1/(x^2 + 1), x]                (* needs LRT, Phase 2 *)
-Out[5]= Integrate[1/(1 + x^2), x]
+In[5]:= Integrate[1/((x-1)(x-2)(x-3)), x]          (* Phase 2 LRT closes this *)
+Out[5]= 1/2 Log[-3 + x] - Log[-2 + x] + 1/2 Log[-1 + x]
+
+In[6]:= Integrate[1/(x^2 + 1), x]                  (* needs LogToReal, Phase 4 *)
+Out[6]= Integrate[1/(1 + x^2), x]
 ```
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
-`Integrate`IntegrateRational` (the explicit form), and the unit-test
-helpers `Integrate`Helpers`Content`, `...`Primitive`,
-`...`Monic`, `...`LeadingCoefficient`.  All are `Protected,
+`Integrate`IntegrateRational` (the explicit form),
+`Integrate`IntRationalLogPart` (Phase 2's LRT computation), and
+the unit-test helpers `Integrate`Helpers`Content`, `...`Primitive`,
+`...`Monic`, `...`LeadingCoefficient`, `...`SquareFree`,
+`...`ExtractConstants`, `...`ApartList`.  All are `Protected,
 ReadProtected`.
+
+#### Integrate`IntRationalLogPart
+
+The Lazard-Rioboo-Trager logarithmic-part computation
+(Bronstein, *Symbolic Integration I*, p. 51).
+
+- `Integrate`IntRationalLogPart[A/D, x, t]` returns a list of
+  `{Q_i(t), S_i(t, x)}` pairs encoding the integral as
+  `Σ_i RootSum[Q_i(t)==0, t Log[S_i(t, x)]]`.
+- `Integrate`IntRationalLogPart[A/D, x, t, RootSum -> True]` returns
+  the symbolic `Sum[RootSum[Function[t, Q_i], Function[t, t Log[S_i]]]]`
+  form directly.
+
+The denominator `D` is assumed squarefree; the typical caller is
+`Integrate`IntegrateRational` after Hermite reduction.
+
+```mathematica
+In[1]:= Integrate`IntRationalLogPart[1/(x^4+1), x, t]
+Out[1]= {{1 + 256 t^4, 4 t + x}}
+
+In[2]:= Integrate`IntRationalLogPart[1/((x-1)(x-2)), x, t]
+Out[2]= {{1 - t^2, -3/2 - 1/2 t + x}}
+
+In[3]:= Integrate`IntRationalLogPart[1/(x^2+1), x, t, RootSum -> True]
+Out[3]= RootSum[Function[t, 1 + 4 t^2], Function[t, t Log[2 t + x]]]
+```
 
 #### PolynomialQuotientRemainder
 

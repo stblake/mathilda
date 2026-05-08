@@ -48,6 +48,24 @@ Expr* builtin_intrat_helpers_primitive(Expr* res);            /* p / Content[p, 
 Expr* builtin_intrat_helpers_monic(Expr* res);                /* p / lc[p, x]      */
 Expr* builtin_intrat_helpers_leadingcoefficient(Expr* res);   /* coeff at top deg  */
 
+/* Phase 2 — Lazard-Rioboo-Trager log part. */
+
+/* IntRationalLogPart[A/D, x, t]: returns either a list of {Q_i(t),
+ * S_i(t,x)} pairs (RootSum -> False, the default for tooling) or a
+ * sum of RootSum heads (RootSum -> True). */
+Expr* builtin_intrat_intrationallogpart(Expr* res);
+
+/* SquareFree[p]: list of {factor, multiplicity} pairs indexed
+ * densely by multiplicity 1..max.  IntegrateRational.m:1474-1487. */
+Expr* builtin_intrat_helpers_squarefree(Expr* res);
+
+/* ExtractConstants[f, x]: returns {const, simplified_f}. */
+Expr* builtin_intrat_helpers_extractconstants(Expr* res);
+
+/* ApartList[f, x, Extension -> alpha]: returns Apart's output as a
+ * list of summands. */
+Expr* builtin_intrat_helpers_apartlist(Expr* res);
+
 /* Register every Integrate` package symbol in the global symbol table.
  * Called from integrate_init() during core_init().  Idempotent (each
  * registration is a fresh symtab_add_builtin / attribute set). */
