@@ -1,0 +1,56 @@
+/* intrat.h — rational-function integrator (`Integrate`` package).
+ *
+ * This header declares the C entry points that back every public
+ * symbol in the `Integrate`` context.  Each builtin is exposed under
+ * its fully qualified name (e.g. `Integrate`HermiteReduce`) so that
+ * package consumers can call them directly from the REPL for
+ * end-to-end testing of the pipeline.
+ *
+ * Phase 1 of INTEGRATE_PLAN.md:
+ *   * IntegrateRational    — top-level package entry (skeleton, expanded
+ *                            in later phases).
+ *   * IntegratePolynomial  — term-by-term integration of polynomials.
+ *   * HermiteReduce        — Mack's linear Hermite reduction.
+ *   * Helpers              — Content / Primitive / Monic /
+ *                            LeadingCoefficient unit-test handles.
+ *
+ * Memory contract follows the standard picocas BuiltinFunc rule: the
+ * caller (evaluator) owns `res`.  On success the builtin returns a new
+ * Expr*; on failure it returns NULL and the evaluator preserves the
+ * call unevaluated.
+ */
+
+#ifndef PICOCAS_INTRAT_H
+#define PICOCAS_INTRAT_H
+
+#include "expr.h"
+
+/* Public package entry: corresponds to the Mathematica function
+ * `IntegrateRational[f, x]`.  Phase 1 ships a thin implementation that
+ * (a) tries the derivative-recognition fast path (`c*D'/D^k`),
+ * (b) splits into HermiteReduce + IntegratePolynomial when possible,
+ * and (c) returns the call unevaluated otherwise (the
+ * Lazard-Rioboo-Trager log part lands in Phase 2). */
+Expr* builtin_intrat_integraterational(Expr* res);
+
+/* Polynomial-only term-by-term integration.  Expand[f,x] then maps
+ * a*x^n -> a*x^(n+1)/(n+1) (with the n=-1 → Log[x] special case). */
+Expr* builtin_intrat_integratepolynomial(Expr* res);
+
+/* HermiteReduce[f, x]: returns {g, h} with f == D[g, x] + h and
+ * Denominator[h] squarefree.  Direct port of the Mathematica
+ * implementation at IntegrateRational.m:1303-1323. */
+Expr* builtin_intrat_hermitereduce(Expr* res);
+
+/* Helpers exposed for unit-testing of the lower-level building blocks. */
+Expr* builtin_intrat_helpers_content(Expr* res);              /* gcd of CoefficientList */
+Expr* builtin_intrat_helpers_primitive(Expr* res);            /* p / Content[p, x] */
+Expr* builtin_intrat_helpers_monic(Expr* res);                /* p / lc[p, x]      */
+Expr* builtin_intrat_helpers_leadingcoefficient(Expr* res);   /* coeff at top deg  */
+
+/* Register every Integrate` package symbol in the global symbol table.
+ * Called from integrate_init() during core_init().  Idempotent (each
+ * registration is a fresh symtab_add_builtin / attribute set). */
+void intrat_init(void);
+
+#endif /* PICOCAS_INTRAT_H */

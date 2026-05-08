@@ -18,6 +18,8 @@ Expr* builtin_polynomialgcd(Expr* res);
 Expr* builtin_polynomiallcm(Expr* res);
 Expr* builtin_polynomialquotient(Expr* res);
 Expr* builtin_polynomialremainder(Expr* res);
+Expr* builtin_polynomialquotientremainder(Expr* res);
+Expr* builtin_subresultantpolynomialremainders(Expr* res);
 Expr* builtin_polynomialmod(Expr* res);
 Expr* builtin_polynomialextendedgcd(Expr* res);
 Expr* builtin_collect(Expr* res);

@@ -3088,6 +3088,103 @@ In[3]:= D[f[x, y], y]
 Out[3]= Derivative[0, 1][f][x, y]
 ```
 
+#### Integrate (rational-function integration, Phase 1)
+
+`Integrate[f, x]` is the public entry point for the rational-function
+integrator implemented in `src/integrate.c` (System dispatcher) and
+`src/intrat.c` (algorithm package).  Phase 1 of the
+`IntegrateRational.m` port (see `INTEGRATE_PLAN.md`) closes the
+following classes of integrand:
+
+- **Polynomials in `x`** — term-by-term integration via
+  `Integrate`IntegratePolynomial`: `a x^n -> a x^(n+1)/(n+1)` for
+  `n != -1`, `a/x -> a Log[x]`.
+- **Improper rational functions** — split into polynomial part +
+  proper rational via `PolynomialQuotientRemainder`.
+- **Repeated roots** — Mack's linear Hermite reduction
+  (`Integrate`HermiteReduce`) extracts the rational part `g` such
+  that `f = D[g, x] + h` with `Denominator[h]` squarefree
+  (Bronstein, *Symbolic Integration I*, p. 44).
+- **Derivative-recognition fast path** — when the residual `h` has
+  the form `c * D'/D^k` with `c` free of `x` and `k >= 1`, emits the
+  closed form `c Log[D]` (k=1) or `-c/((k-1) D^(k-1))` (k>=2).
+
+Anything outside these patterns (Lazard-Rioboo-Trager log part,
+`LogToReal`, `LogToArcTan`) is deferred to Phases 2-7 of the plan;
+those inputs return `Integrate[f, x]` unevaluated.
+
+**Features**:
+- `Protected`.
+- Validates input via `PolynomialQ[f, x] || rationalQ[f, x]` before
+  forwarding to the package; non-rational integrands return
+  unevaluated.
+- Universal correctness predicate: `Cancel[Together[D[Integrate[f,x],x] - f]] === 0`.
+
+**Examples**:
+```mathematica
+In[1]:= Integrate[3 + 5 x + 2 x^2, x]
+Out[1]= 3 x + 5/2 x^2 + 2/3 x^3
+
+In[2]:= Integrate[2 x/(x^2 + 1), x]
+Out[2]= Log[1 + x^2]
+
+In[3]:= Integrate[1/(x - a)^2, x]
+Out[3]= -1/(-a + x)
+
+In[4]:= Integrate[(2x+3)/(x^2+3x+5)^2, x]
+Out[4]= -1/(5 + 3 x + x^2)
+
+In[5]:= Integrate[1/(x^2 + 1), x]                (* needs LRT, Phase 2 *)
+Out[5]= Integrate[1/(1 + x^2), x]
+```
+
+The `Integrate`` package also exposes the lower-level helpers
+`Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
+`Integrate`IntegrateRational` (the explicit form), and the unit-test
+helpers `Integrate`Helpers`Content`, `...`Primitive`,
+`...`Monic`, `...`LeadingCoefficient`.  All are `Protected,
+ReadProtected`.
+
+#### PolynomialQuotientRemainder
+
+Single-pass companion to `PolynomialQuotient` / `PolynomialRemainder`.
+
+- `PolynomialQuotientRemainder[p, q, x]` returns `{Quotient,
+  Remainder}` such that `p == Quotient*q + Remainder` and
+  `deg(Remainder, x) < deg(q, x)`.
+- Accepts an optional `Extension -> alpha` rule (default `None`) for
+  division over `Q(alpha)[x]` rather than the rational coefficient
+  field.
+
+```mathematica
+In[1]:= PolynomialQuotientRemainder[x^3 + x + 1, x^2 + 1, x]
+Out[1]= {x, 1}
+
+In[2]:= PolynomialQuotientRemainder[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[2]= {Sqrt[2] + x, 0}
+```
+
+#### SubresultantPolynomialRemainders
+
+Polynomial-remainder chain in `K(coeffs)[x]`, used by the
+Lazard-Rioboo-Trager log-part computation in the
+`Integrate`` package (Phase 2 of `INTEGRATE_PLAN.md`).
+
+- `SubresultantPolynomialRemainders[a, b, x]` gives the chain
+  `{a, b, R_2, R_3, ...}` obtained by iterating pseudo-remainder
+  until a constant or zero remainder is reached.
+
+The chain is correct modulo content scaling, which downstream
+consumers strip via the `primitive[]` operation; this is the
+property the LRT algorithm depends on (it consumes the degree of
+each chain element and the primitive part of each, both of which are
+content-invariant).
+
+```mathematica
+In[1]:= SubresultantPolynomialRemainders[x^4 + 1, 2 x^3, x]
+Out[1]= {1 + x^4, 2 x^3, 2}
+```
+
 ### Power Series
 
 #### SeriesData

@@ -1444,6 +1444,105 @@ Expr* builtin_polynomialremainder(Expr* res) {
     return R;
 }
 
+/* PolynomialQuotientRemainder[p, q, x] returns {Q, R} such that          */
+/* p == Q*q + R with deg(R) < deg(q).  Two-output companion to            */
+/* PolynomialQuotient / PolynomialRemainder; required by the              */
+/* IntegrateRational pipeline (ExtendedEuclidean).                         */
+Expr* builtin_polynomialquotientremainder(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+
+    size_t poly_argc = res->data.function.arg_count;
+    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    if (poly_argc != 3) return NULL;
+
+    Expr* p = res->data.function.args[0];
+    Expr* q = res->data.function.args[1];
+    Expr* x = res->data.function.args[2];
+
+    if (alpha) {
+        /* For the extension path we run the divrem twice -- the slow        */
+        /* path keeps the implementation simple and still avoids the         */
+        /* multivariate stall that the no-Extension path would trigger.     */
+        Expr* qext = polynomialdivrem_with_extension(p, q, x, alpha, 0);
+        Expr* rext = polynomialdivrem_with_extension(p, q, x, alpha, 1);
+        if (qext && rext) {
+            Expr* list = expr_new_function(expr_new_symbol("List"),
+                                           (Expr*[]){qext, rext}, 2);
+            return list;
+        }
+        if (qext) expr_free(qext);
+        if (rext) expr_free(rext);
+        /* Fall through to plain path on lift failure. */
+    }
+
+    Expr *Q, *R;
+    poly_div_rem(p, q, x, &Q, &R);
+    if (!Q || !R) {
+        if (Q) expr_free(Q);
+        if (R) expr_free(R);
+        return NULL;
+    }
+    Expr* expanded_Q = expr_expand(Q);
+    expr_free(Q);
+    Expr* list = expr_new_function(expr_new_symbol("List"),
+                                   (Expr*[]){expanded_Q, R}, 2);
+    return list;
+}
+
+/* SubresultantPolynomialRemainders[a, b, x] returns the polynomial-       */
+/* remainder chain {a, b, R_2, R_3, ...} in K(coeffs)[x], iterating         */
+/* pseudo-remainder until a constant or zero remainder is reached.          */
+/*                                                                          */
+/* Note: this is *not* the Lazard-scaled subresultant chain.  For the      */
+/* IntegrateRational / Lazard-Rioboo-Trager use case the algorithm only     */
+/* consumes (i) the degree of each chain element in x and (ii) the         */
+/* primitive part (in the auxiliary variable t) of each element.  Both      */
+/* properties are invariant under content scaling, so the simpler          */
+/* pseudo-rem chain is a correct substrate without the Lazard arithmetic.  */
+Expr* builtin_subresultantpolynomialremainders(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+
+    Expr* A = res->data.function.args[0];
+    Expr* B = res->data.function.args[1];
+    Expr* x = res->data.function.args[2];
+
+    if (x->type != EXPR_SYMBOL) return NULL;
+
+    Expr* a0 = expr_expand(A);
+    Expr* b0 = expr_expand(B);
+
+    /* Ensure deg(a0) >= deg(b0) per the standard chain orientation.
+     * Mathematica's SubresultantPolynomialRemainders documents that the
+     * first argument has higher degree; if not, swap so the chain
+     * starts properly. */
+    int dA = get_degree_poly(a0, x);
+    int dB = get_degree_poly(b0, x);
+    if (dA < dB) {
+        Expr* t = a0; a0 = b0; b0 = t;
+    }
+
+    size_t cap = 8, n = 0;
+    Expr** chain = (Expr**)malloc(sizeof(Expr*) * cap);
+    chain[n++] = a0;
+    chain[n++] = b0;
+
+    while (true) {
+        Expr* prev = chain[n - 2];
+        Expr* cur  = chain[n - 1];
+        if (is_zero_poly(cur)) break;
+        int dcur = get_degree_poly(cur, x);
+        if (dcur <= 0) break;
+        Expr* r = pseudo_rem(prev, cur, x);
+        if (is_zero_poly(r)) { expr_free(r); break; }
+        if (n >= cap) { cap *= 2; chain = (Expr**)realloc(chain, sizeof(Expr*) * cap); }
+        chain[n++] = r;
+    }
+
+    Expr* list = expr_new_function(expr_new_symbol("List"), chain, n);
+    free(chain);
+    return list;
+}
+
 Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count);
 
 /* The polynomial content -- the GCD of A's coefficients with respect  */
@@ -3580,6 +3679,22 @@ void poly_init(void) {
     symtab_get_def("PolynomialQuotient")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PolynomialRemainder", builtin_polynomialremainder);
     symtab_get_def("PolynomialRemainder")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("PolynomialQuotientRemainder", builtin_polynomialquotientremainder);
+    symtab_get_def("PolynomialQuotientRemainder")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("PolynomialQuotientRemainder",
+        "PolynomialQuotientRemainder[p, q, x] returns {Quotient, Remainder}\n"
+        "such that p == Quotient*q + Remainder, with deg(Remainder) < deg(q)\n"
+        "in x. Single-pass companion to PolynomialQuotient/PolynomialRemainder.\n"
+        "Accepts an optional Extension -> alpha rule (default None) to perform\n"
+        "the division over Q(alpha)[x] rather than the rational coefficient field.");
+    symtab_add_builtin("SubresultantPolynomialRemainders", builtin_subresultantpolynomialremainders);
+    symtab_get_def("SubresultantPolynomialRemainders")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("SubresultantPolynomialRemainders",
+        "SubresultantPolynomialRemainders[a, b, x] gives the polynomial-remainder\n"
+        "chain {a, b, R_2, R_3, ...} obtained by iterating pseudo-remainder over\n"
+        "K(coeffs)[x] until a constant or zero remainder is reached. Used by the\n"
+        "Lazard-Rioboo-Trager rational integration pipeline; the chain is correct\n"
+        "modulo content scaling, which downstream consumers strip with primitive[].");
     symtab_add_builtin("PolynomialMod", builtin_polynomialmod);
     symtab_get_def("PolynomialMod")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Collect", builtin_collect);

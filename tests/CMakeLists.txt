@@ -104,6 +104,8 @@ set(COMMON_SRC
     ../src/sym_names.c
     ../src/repl_hooks.c
     ../src/options.c
+    ../src/integrate.c
+    ../src/intrat.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -629,3 +631,13 @@ else()
     target_link_libraries(extension_options_tests gmp m)
 endif()
 add_test(NAME extension_options_tests COMMAND extension_options_tests)
+
+add_executable(intrat_tests test_intrat.c ${COMMON_SRC})
+target_include_directories(intrat_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(intrat_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(intrat_tests build_ecm)
+else()
+    target_link_libraries(intrat_tests gmp m)
+endif()
+add_test(NAME intrat_tests COMMAND intrat_tests)
