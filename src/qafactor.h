@@ -137,6 +137,20 @@ struct Expr* qaupoly_to_expr_alpha(const QAUPoly* f,
                                    const char* x_name,
                                    const struct Expr* alpha_render);
 
+/* Lift a polynomial Expr in `var` (whose coefficients may contain the
+ * surface form `alpha_render`, e.g. Sqrt[2]) to a QAUPoly over `ext`.
+ * Returns NULL when any coefficient is outside Q(α) (e.g. contains a
+ * free symbol other than `var` and `alpha_render`).  Caller owns the
+ * returned QAUPoly via qaupoly_free.
+ *
+ * Used by Extension-aware GCD / LCM / Cancel / Together / Apart paths
+ * that need direct access to qaupoly_gcd / qaupoly_divrem rather than
+ * the higher-level qa_factor_with_extension wrapper. */
+QAUPoly* qa_expr_to_qaupoly(const struct Expr* poly,
+                            const struct Expr* var,
+                            const struct Expr* alpha_render,
+                            const QAExt* ext);
+
 /* Public picocas-level wrapper: factor `poly` ∈ Q(α)[x] over Q(α),
  * where `alpha_expr` selects the extension (per qa_resolve_extension)
  * and `var` is the polynomial indeterminate.

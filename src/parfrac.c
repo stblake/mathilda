@@ -10,13 +10,22 @@
 #include "core.h"
 #include "rationalize.h"
 #include "sym_names.h"
+#include "options.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
 
 Expr* builtin_apart(Expr* res) {
-    if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    /* Strip a trailing Extension -> α option, if any.  When present,
+     * the option is propagated to the Factor[D, ...] call below so the
+     * denominator is split over Q(α) before partial-fraction
+     * decomposition runs. */
+    size_t apart_argc = res->data.function.arg_count;
+    const Expr* apart_alpha = extract_extension_option(res, &apart_argc);
+    if (apart_argc != 1 && apart_argc != 2) return NULL;
 
     /* Apart relies on PolynomialQuotient/Remainder and partial-fraction
      * decomposition over rationals — inexact coefficients break both. */
@@ -25,25 +34,44 @@ Expr* builtin_apart(Expr* res) {
     }
 
     Expr* expr = res->data.function.args[0];
-    
+
+    /* Build a fresh Apart[<inner>, <var?>, Extension -> α?] call.  Used
+     * to recursively dispatch under threading and the radical-gen
+     * substitution path.  `inner_var` may be NULL (1-arg form). */
+    /* Forward declaration not needed; we inline construct via lambdas. */
+
     // Check if it's an equation, inequality, list, or logical function to thread over
     if (expr->type == EXPR_FUNCTION) {
         const char* head = expr->data.function.head->type == EXPR_SYMBOL ? expr->data.function.head->data.symbol : "";
         if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Unequal") == 0 ||
-            strcmp(head, "Less") == 0 || strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 || 
-            strcmp(head, "GreaterEqual") == 0 || strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 || 
+            strcmp(head, "Less") == 0 || strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 ||
+            strcmp(head, "GreaterEqual") == 0 || strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 ||
             strcmp(head, "Not") == 0) {
             Expr** args = malloc(sizeof(Expr*) * expr->data.function.arg_count);
             for (size_t i = 0; i < expr->data.function.arg_count; i++) {
-                Expr** ap_args = res->data.function.arg_count == 1 ? (Expr*[]){expr_copy(expr->data.function.args[i])} : (Expr*[]){expr_copy(expr->data.function.args[i]), expr_copy(res->data.function.args[1])};
-                args[i] = eval_and_free(expr_new_function(expr_new_symbol("Apart"), ap_args, res->data.function.arg_count));
+                /* Build Apart[args[i], var?, Extension -> α?]. */
+                size_t inner_argc = apart_argc + (apart_alpha ? 1 : 0);
+                Expr** ap_args = malloc(sizeof(Expr*) * inner_argc);
+                ap_args[0] = expr_copy(expr->data.function.args[i]);
+                if (apart_argc == 2) ap_args[1] = expr_copy(res->data.function.args[1]);
+                if (apart_alpha) {
+                    ap_args[apart_argc] = expr_new_function(
+                        expr_new_symbol("Rule"),
+                        (Expr*[]){
+                            expr_new_symbol("Extension"),
+                            expr_copy((Expr*)apart_alpha)
+                        }, 2);
+                }
+                args[i] = eval_and_free(expr_new_function(
+                    expr_new_symbol("Apart"), ap_args, inner_argc));
+                free(ap_args);
             }
             Expr* ret = eval_and_free(expr_new_function(expr_copy(expr->data.function.head), args, expr->data.function.arg_count));
             free(args);
             return ret;
         }
     }
-    
+
     /* Algebraic-generator pass (1-arg form): if the input has a
      * sub-expression u with fractional rational exponents, substitute
      * u -> g^m so the rational function becomes polynomial in g, run
@@ -51,15 +79,28 @@ Expr* builtin_apart(Expr* res) {
      * Apart[1/(-1+r^(3/7))] into partial fractions in r^(1/7).
      * The 2-arg form Apart[expr, x] explicitly fixes the partial-
      * fraction variable, so we do not auto-substitute there. */
-    if (res->data.function.arg_count == 1) {
+    if (apart_argc == 1) {
         Expr* base = NULL;
         Expr* atom = NULL;
         int64_t m = 1;
         if (poly_find_radical_gen(expr, &base, &atom, &m)) {
             char* gen = poly_make_fresh_gen(expr);
             Expr* substituted = poly_subst_radical_to_gen(expr, base, atom, m, gen);
+            /* Recursive Apart call, propagating the extension if any. */
+            size_t inner_argc = 1 + (apart_alpha ? 1 : 0);
+            Expr** ap_args = malloc(sizeof(Expr*) * inner_argc);
+            ap_args[0] = substituted;
+            if (apart_alpha) {
+                ap_args[1] = expr_new_function(
+                    expr_new_symbol("Rule"),
+                    (Expr*[]){
+                        expr_new_symbol("Extension"),
+                        expr_copy((Expr*)apart_alpha)
+                    }, 2);
+            }
             Expr* call = expr_new_function(expr_new_symbol("Apart"),
-                              (Expr*[]){substituted}, 1);
+                              ap_args, inner_argc);
+            free(ap_args);
             Expr* result_in_g = evaluate(call);
             expr_free(call);
             Expr* final = poly_subst_radical_from_gen(result_in_g, base, atom, m, gen);
@@ -71,10 +112,29 @@ Expr* builtin_apart(Expr* res) {
         }
     }
 
-    Expr* together = eval_and_free(expr_new_function(expr_new_symbol("Together"), (Expr*[]){expr_copy(expr)}, 1));
+    /* Pre-combine into a single fraction (with Extension if supplied,
+     * so any algebraic-number cancellations fire before partial-fraction
+     * decomposition starts). */
+    Expr* together;
+    if (apart_alpha) {
+        together = eval_and_free(expr_new_function(
+            expr_new_symbol("Together"),
+            (Expr*[]){
+                expr_copy(expr),
+                expr_new_function(
+                    expr_new_symbol("Rule"),
+                    (Expr*[]){
+                        expr_new_symbol("Extension"),
+                        expr_copy((Expr*)apart_alpha)
+                    }, 2)
+            }, 2));
+    } else {
+        together = eval_and_free(expr_new_function(
+            expr_new_symbol("Together"), (Expr*[]){expr_copy(expr)}, 1));
+    }
 
     Expr* var = NULL;
-    if (res->data.function.arg_count == 2) {
+    if (apart_argc == 2) {
         var = expr_copy(res->data.function.args[1]);
     } else {
         size_t v_count = 0, v_cap = 16;
@@ -126,7 +186,27 @@ Expr* builtin_apart(Expr* res) {
     Expr* Q = eval_and_free(expr_new_function(expr_new_symbol("PolynomialQuotient"), (Expr*[]){expr_copy(N), expr_copy(D), expr_copy(var)}, 3));
     Expr* R = eval_and_free(expr_new_function(expr_new_symbol("PolynomialRemainder"), (Expr*[]){expr_copy(N), expr_copy(D), expr_copy(var)}, 3));
     
-    Expr* f_den = eval_and_free(expr_new_function(expr_new_symbol("Factor"), (Expr*[]){expr_copy(D)}, 1));
+    /* Factor the denominator over Q (default) or Q(α) when an Extension
+     * option was supplied to Apart.  Splitting D over the extension lets
+     * partial-fraction decomposition produce e.g. linear factors in
+     * Sqrt[2] for `Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]`. */
+    Expr* f_den;
+    if (apart_alpha) {
+        f_den = eval_and_free(expr_new_function(
+            expr_new_symbol("Factor"),
+            (Expr*[]){
+                expr_copy(D),
+                expr_new_function(
+                    expr_new_symbol("Rule"),
+                    (Expr*[]){
+                        expr_new_symbol("Extension"),
+                        expr_copy((Expr*)apart_alpha)
+                    }, 2)
+            }, 2));
+    } else {
+        f_den = eval_and_free(expr_new_function(
+            expr_new_symbol("Factor"), (Expr*[]){expr_copy(D)}, 1));
+    }
     expr_free(N); expr_free(D);
     
     size_t num_args = 1;

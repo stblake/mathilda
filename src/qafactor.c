@@ -788,6 +788,17 @@ static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
     return p;
 }
 
+/* Public wrapper for the internal `_with_alpha` variant, exposed via
+ * qafactor.h so that other modules (poly.c, rat.c, parfrac.c) can lift
+ * polynomials into Q(α)[x] without duplicating the alpha-substitution +
+ * coefficient-peeling logic. */
+QAUPoly* qa_expr_to_qaupoly(const Expr* poly,
+                            const Expr* var,
+                            const Expr* alpha_render,
+                            const QAExt* ext) {
+    return qa_expr_to_qaupoly_with_alpha(poly, var, alpha_render, ext);
+}
+
 Expr* qaupoly_to_expr_alpha(const QAUPoly* f,
                             const char* x_name,
                             const Expr* alpha_render) {

@@ -50,6 +50,10 @@
 #include "match.h"
 #include "rationalize.h"
 #include "sym_names.h"
+#include "options.h"
+#include "qa.h"
+#include "qaupoly.h"
+#include "qafactor.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -1339,12 +1343,74 @@ static void poly_div_rem(Expr* p, Expr* q, Expr* x, Expr** out_Q, Expr** out_R) 
     *out_R = R;
 }
 
+/* PolynomialQuotient[a, b, x, Extension -> α] /                        */
+/* PolynomialRemainder[a, b, x, Extension -> α].                        */
+/*                                                                      */
+/* Lifts `a` and `b` into Q(α)[x] via qa_expr_to_qaupoly and runs       */
+/* qaupoly_divrem.  Returns the quotient (which==0) or remainder        */
+/* (which==1) rendered back as a picocas Expr, or NULL if the lift      */
+/* fails (caller falls back to the standard Q-treats-α-as-opaque path). */
+/*                                                                      */
+/* Without this path, PolynomialQuotient[(x - Sqrt[2])(x + Sqrt[2]), …] */
+/* runs poly_div_rem with multivariate Q[Sqrt[2], x] coefficients,      */
+/* whose Together+Cancel reconciliation step inside the inner loop is   */
+/* exponentially slow on hard inputs (the slow path that previously     */
+/* stalled together_recursive_ext).                                      */
+static Expr* polynomialdivrem_with_extension(Expr* p, Expr* q, Expr* x,
+                                             const Expr* alpha, int which) {
+    if (!alpha) return NULL;
+    if (x->type != EXPR_SYMBOL) return NULL;
+
+    Expr* alpha_render = NULL;
+    QAExt* ext = qa_resolve_extension(alpha, &alpha_render);
+    if (!ext) return NULL;
+
+    QAUPoly* pp = qa_expr_to_qaupoly(p, x, alpha_render, ext);
+    QAUPoly* qq = pp ? qa_expr_to_qaupoly(q, x, alpha_render, ext) : NULL;
+
+    Expr* result = NULL;
+    if (pp && qq && !qaupoly_is_zero(qq)) {
+        QAUPoly* Q = NULL;
+        QAUPoly* R = NULL;
+        if (qaupoly_divrem(pp, qq, &Q, &R)) {
+            QAUPoly* out = (which == 0) ? Q : R;
+            if (qaupoly_is_zero(out)) {
+                result = expr_new_integer(0);
+            } else {
+                result = qaupoly_to_expr_alpha(out, x->data.symbol,
+                                               alpha_render);
+            }
+        }
+        if (Q) qaupoly_free(Q);
+        if (R) qaupoly_free(R);
+    }
+
+    if (pp) qaupoly_free(pp);
+    if (qq) qaupoly_free(qq);
+    if (alpha_render) expr_free(alpha_render);
+    qaext_free(ext);
+    return result;
+}
+
 Expr* builtin_polynomialquotient(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+
+    /* Strip a trailing Extension -> α option, if any. */
+    size_t poly_argc = res->data.function.arg_count;
+    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    if (poly_argc != 3) return NULL;
+
     Expr* p = res->data.function.args[0];
     Expr* q = res->data.function.args[1];
     Expr* x = res->data.function.args[2];
-    
+
+    if (alpha) {
+        Expr* ext_result = polynomialdivrem_with_extension(p, q, x, alpha, 0);
+        if (ext_result) return ext_result;
+        /* Fall through to non-extension path on lift failure (e.g.
+         * coefficients outside Q(α), unrecognised α, multivariate). */
+    }
+
     Expr *Q, *R;
     poly_div_rem(p, q, x, &Q, &R);
     if (!Q) return NULL;
@@ -1355,11 +1421,22 @@ Expr* builtin_polynomialquotient(Expr* res) {
 }
 
 Expr* builtin_polynomialremainder(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
+
+    /* Strip a trailing Extension -> α option, if any. */
+    size_t poly_argc = res->data.function.arg_count;
+    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    if (poly_argc != 3) return NULL;
+
     Expr* p = res->data.function.args[0];
     Expr* q = res->data.function.args[1];
     Expr* x = res->data.function.args[2];
-    
+
+    if (alpha) {
+        Expr* ext_result = polynomialdivrem_with_extension(p, q, x, alpha, 1);
+        if (ext_result) return ext_result;
+    }
+
     Expr *Q, *R;
     poly_div_rem(p, q, x, &Q, &R);
     if (!R) return NULL;
@@ -1479,6 +1556,108 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     return expanded_res;
 }
 
+/* Extension-aware polynomial GCD: lift each input to QAUPoly[x] over Q(α)
+ * and fold via qaupoly_gcd.  Inputs must be univariate in the same
+ * variable (after the alpha-render symbols are excluded).  Returns NULL
+ * on any structural failure — the caller is expected to fall back to the
+ * standard (over-Q) GCD path or to leave the call unevaluated.
+ *
+ * Multi-arg form folds left-to-right: gcd(a, b, c) = gcd(gcd(a, b), c).
+ */
+static Expr* polynomialgcd_with_extension(Expr** argv, size_t argc,
+                                          const Expr* alpha) {
+    if (argc < 1 || !alpha) return NULL;
+
+    Expr* alpha_render = NULL;
+    QAExt* ext = qa_resolve_extension(alpha, &alpha_render);
+    if (!ext) return NULL;
+
+    /* Determine the polynomial variable.  Collect free symbols across
+     * every input, drop the alpha-render symbol(s), require exactly one
+     * remaining variable. */
+    size_t vc = 0, vcap = 8;
+    Expr** vars = malloc(sizeof(Expr*) * vcap);
+    for (size_t i = 0; i < argc; i++) {
+        collect_variables(argv[i], &vars, &vc, &vcap);
+    }
+
+    Expr* poly_var = NULL;
+    size_t live = 0;
+    for (size_t i = 0; i < vc; i++) {
+        if (alpha_render && expr_eq(vars[i], alpha_render)) continue;
+        poly_var = vars[i];
+        live++;
+    }
+
+    if (live > 1) {
+        /* Multivariate: not supported on the extension path. */
+        for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+        free(vars);
+        if (alpha_render) expr_free(alpha_render);
+        qaext_free(ext);
+        return NULL;
+    }
+
+    /* live == 0 means every input is a constant (in Q(α)).  Treat as a
+     * "GCD of constants"; we delegate to the standard path. */
+    if (live == 0) {
+        for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+        free(vars);
+        if (alpha_render) expr_free(alpha_render);
+        qaext_free(ext);
+        return NULL;
+    }
+
+    /* Lift each input. */
+    QAUPoly** ps = malloc(sizeof(QAUPoly*) * argc);
+    for (size_t i = 0; i < argc; i++) ps[i] = NULL;
+    bool ok = true;
+    for (size_t i = 0; i < argc; i++) {
+        ps[i] = qa_expr_to_qaupoly(argv[i], poly_var, alpha_render, ext);
+        if (!ps[i]) { ok = false; break; }
+    }
+
+    Expr* result = NULL;
+    if (ok) {
+        QAUPoly* g = qaupoly_copy(ps[0]);
+        for (size_t i = 1; i < argc && g; i++) {
+            QAUPoly* next = qaupoly_gcd(g, ps[i]);
+            qaupoly_free(g);
+            g = next;
+        }
+        if (g && !qaupoly_is_zero(g)) {
+            result = qaupoly_to_expr_alpha(g, poly_var->data.symbol,
+                                           alpha_render);
+        }
+        if (g) qaupoly_free(g);
+    }
+
+    for (size_t i = 0; i < argc; i++) {
+        if (ps[i]) qaupoly_free(ps[i]);
+    }
+    free(ps);
+    for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+    free(vars);
+    if (alpha_render) expr_free(alpha_render);
+    qaext_free(ext);
+
+    return result;
+}
+
+/* Build a fresh function-call Expr with `head_sym` as the head and the
+ * given args (deep-copied).  Used by the extension-stripping wrappers
+ * that need to dispatch to the standard (no-option) builtin path with a
+ * shorter argument list. */
+static Expr* expr_rebuild_call(const Expr* original, Expr** args,
+                               size_t argc) {
+    Expr** new_args = malloc(sizeof(Expr*) * argc);
+    for (size_t i = 0; i < argc; i++) new_args[i] = expr_copy(args[i]);
+    Expr* call = expr_new_function(
+        expr_copy(original->data.function.head), new_args, argc);
+    free(new_args);
+    return call;
+}
+
 /* PolynomialGCD[p1, p2, ...]                                          */
 /*                                                                     */
 /* Pre-processes the inputs by extracting:                              */
@@ -1487,8 +1666,35 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
 /*     argument (handles `Sqrt[x]`-style irrational generators);        */
 /* Then defers to `poly_gcd_internal` for the symbolic remainder.       */
 /* The final result is `numG * common_factors * symbolic_gcd`.          */
+/*                                                                     */
+/* Option `Extension -> α`: factor over Q(α) using the QAUPoly         */
+/* machinery (see polynomialgcd_with_extension above).  `Extension ->   */
+/* None` and `Extension -> Automatic` are accepted and treated as the   */
+/* default (no extension; the option is consumed but otherwise          */
+/* ignored).                                                             */
 Expr* builtin_polynomialgcd(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    /* Strip a trailing Extension -> α option, if any. */
+    size_t poly_argc = res->data.function.arg_count;
+    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    if (poly_argc != res->data.function.arg_count) {
+        if (poly_argc == 0) return NULL;
+        if (alpha) {
+            Expr* ext_result = polynomialgcd_with_extension(
+                res->data.function.args, poly_argc, alpha);
+            if (ext_result) return ext_result;
+            /* Fall through to non-extension path on failure (multivariate,
+             * unrecognised α, lift failure, etc.). */
+        }
+        /* Rebuild the call with options removed and recurse so the rest
+         * of this function works against the trimmed argument list. */
+        Expr* trimmed = expr_rebuild_call(res, res->data.function.args,
+                                          poly_argc);
+        Expr* result = builtin_polynomialgcd(trimmed);
+        expr_free(trimmed);
+        return result;
+    }
 
     /* Inexact coefficients (e.g. PolynomialGCD[x^2 - 1.0, x - 1.0]) cannot
      * be reasoned about by the rational-arithmetic GCD machinery below.
@@ -1664,8 +1870,104 @@ static Expr* my_number_lcm(Expr* a, Expr* b) {
 /* The final result also folds in the largest negative exponents of    */
 /* any denominator generators, matching Mathematica's handling of      */
 /* rational expressions.                                                */
+/* Extension-aware polynomial LCM via QAUPoly: lcm(a, b) = a*b / gcd(a, b).
+ * Multi-arg form folds left-to-right. */
+static Expr* polynomiallcm_with_extension(Expr** argv, size_t argc,
+                                          const Expr* alpha) {
+    if (argc < 1 || !alpha) return NULL;
+
+    Expr* alpha_render = NULL;
+    QAExt* ext = qa_resolve_extension(alpha, &alpha_render);
+    if (!ext) return NULL;
+
+    size_t vc = 0, vcap = 8;
+    Expr** vars = malloc(sizeof(Expr*) * vcap);
+    for (size_t i = 0; i < argc; i++) {
+        collect_variables(argv[i], &vars, &vc, &vcap);
+    }
+    Expr* poly_var = NULL;
+    size_t live = 0;
+    for (size_t i = 0; i < vc; i++) {
+        if (alpha_render && expr_eq(vars[i], alpha_render)) continue;
+        poly_var = vars[i];
+        live++;
+    }
+    if (live != 1) {
+        for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+        free(vars);
+        if (alpha_render) expr_free(alpha_render);
+        qaext_free(ext);
+        return NULL;
+    }
+
+    QAUPoly** ps = malloc(sizeof(QAUPoly*) * argc);
+    for (size_t i = 0; i < argc; i++) ps[i] = NULL;
+    bool ok = true;
+    for (size_t i = 0; i < argc; i++) {
+        ps[i] = qa_expr_to_qaupoly(argv[i], poly_var, alpha_render, ext);
+        if (!ps[i]) { ok = false; break; }
+    }
+
+    Expr* result = NULL;
+    if (ok) {
+        QAUPoly* L = qaupoly_copy(ps[0]);
+        for (size_t i = 1; i < argc && L; i++) {
+            QAUPoly* g = qaupoly_gcd(L, ps[i]);
+            QAUPoly* prod = qaupoly_mul(L, ps[i]);
+            QAUPoly *q = NULL, *r = NULL;
+            if (g && qaupoly_divrem(prod, g, &q, &r)) {
+                qaupoly_free(L);
+                L = q;
+                qaupoly_free(r);
+            } else {
+                /* Should not happen — gcd divides product exactly. */
+                if (q) qaupoly_free(q);
+                if (r) qaupoly_free(r);
+                qaupoly_free(L);
+                L = NULL;
+            }
+            if (g) qaupoly_free(g);
+            qaupoly_free(prod);
+        }
+        if (L && !qaupoly_is_zero(L)) {
+            QAUPoly* monic = qaupoly_make_monic(L);
+            if (monic) {
+                result = qaupoly_to_expr_alpha(monic, poly_var->data.symbol,
+                                               alpha_render);
+                qaupoly_free(monic);
+            }
+        }
+        if (L) qaupoly_free(L);
+    }
+
+    for (size_t i = 0; i < argc; i++) if (ps[i]) qaupoly_free(ps[i]);
+    free(ps);
+    for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+    free(vars);
+    if (alpha_render) expr_free(alpha_render);
+    qaext_free(ext);
+    return result;
+}
+
 Expr* builtin_polynomiallcm(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+    /* Strip a trailing Extension -> α option, if any. */
+    size_t poly_argc = res->data.function.arg_count;
+    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    if (poly_argc != res->data.function.arg_count) {
+        if (poly_argc == 0) return NULL;
+        if (alpha) {
+            Expr* ext_result = polynomiallcm_with_extension(
+                res->data.function.args, poly_argc, alpha);
+            if (ext_result) return ext_result;
+        }
+        Expr* trimmed = expr_rebuild_call(res, res->data.function.args,
+                                          poly_argc);
+        Expr* result = builtin_polynomiallcm(trimmed);
+        expr_free(trimmed);
+        return result;
+    }
 
     /* Force-rationalise inexact coefficients so the exact LCM algorithm
      * applies; numericalise the final result. See builtin_polynomialgcd

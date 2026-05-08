@@ -465,10 +465,25 @@ void info_init(void) {
         "\tinequalities, and logic functions.");
     symtab_set_docstring("Coefficient", "Coefficient[expr, form] gives the coefficient of form in expr.\nCoefficient[expr, form, n] gives the coefficient of form^n in expr.");
     symtab_set_docstring("CoefficientList", "CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.\nCoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.");
-    symtab_set_docstring("PolynomialGCD", "PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.");
+    symtab_set_docstring("PolynomialGCD",
+        "PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.\n"
+        "Option Extension -> alpha computes the GCD over Q(alpha), where alpha is an\n"
+        "algebraic number recognised by qa_resolve_extension (Sqrt[c], c^(1/n), or I).\n"
+        "Default Extension -> None and Extension -> Automatic compute over the rationals,\n"
+        "treating any algebraic numbers in the input as independent variables.");
+    symtab_set_docstring("PolynomialLCM",
+        "PolynomialLCM[poly1, poly2, ...] gives the least common multiple of the polynomials.\n"
+        "Option Extension -> alpha computes the LCM over Q(alpha) via\n"
+        "lcm(a, b) = a*b / PolynomialGCD[a, b, Extension -> alpha].\n"
+        "Default Extension -> None computes over the rationals.");
     symtab_set_docstring("PolynomialExtendedGCD", "PolynomialExtendedGCD[poly1, poly2, x] gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.");
-    symtab_set_docstring("PolynomialQuotient", "PolynomialQuotient[p, q, x] gives the quotient of p and q, treated as polynomials in x, with any remainder dropped.");
-    symtab_set_docstring("PolynomialRemainder", "PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.");
+    symtab_set_docstring("PolynomialQuotient",
+        "PolynomialQuotient[p, q, x] gives the quotient of p and q, treated as polynomials in x, with any remainder dropped.\n"
+        "Option: Extension -> alpha (default None) divides over Q(alpha) using the Q(alpha)[x] long-division substrate; Sqrt[c], c^(1/n), and I are recognised forms for alpha.\n"
+        "Extension -> None and Extension -> Automatic are accepted and currently behave as the default (no extension).");
+    symtab_set_docstring("PolynomialRemainder",
+        "PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.\n"
+        "Option: Extension -> alpha (default None) computes the remainder over Q(alpha); see PolynomialQuotient for the recognised alpha forms.");
     symtab_set_docstring("Collect", "Collect[expr, x] collects together terms involving the same powers of objects matching x.");
     symtab_set_docstring("PolynomialMod", "PolynomialMod[poly,m] gives the polynomial poly reduced modulo m.\nPolynomialMod[poly,{Subscript[m, 1],Subscript[m, 2],...}] reduces modulo all of the Subscript[m, i].");
     symtab_set_docstring("FactorSquareFree", "FactorSquareFree[poly] pulls out any multiple factors in a polynomial.");
@@ -498,7 +513,17 @@ void info_init(void) {
     symtab_set_docstring("Discriminant", "Discriminant[poly, var] computes the discriminant of the polynomial poly with respect to the variable var.");
     symtab_set_docstring("Numerator", "Numerator[expr] gives the numerator of expr.\nNumerator picks out terms which do not have superficially negative exponents.");
     symtab_set_docstring("Denominator", "Denominator[expr] gives the denominator of expr.\nDenominator picks out terms which have superficially negative exponents.");
-    symtab_set_docstring("Cancel", "Cancel[expr] cancels out common factors in the numerator and denominator of expr.");
+    symtab_set_docstring("Cancel",
+        "Cancel[expr] cancels out common factors in the numerator and denominator of expr.\n"
+        "Option Extension -> alpha cancels factors over Q(alpha) (e.g. simplifies\n"
+        "(x^2 - 2)/(x - Sqrt[2]) to x + Sqrt[2] when Extension -> Sqrt[2]).\n"
+        "Default Extension -> None treats algebraic numbers as opaque.");
+    symtab_set_docstring("Together",
+        "Together[expr] combines fractions over a common denominator, then cancels.\n"
+        "Option Extension -> alpha runs the final cancellation over Q(alpha) so\n"
+        "algebraic-coefficient simplifications fire (e.g. 1/(x-Sqrt[2]) + 1/(x+Sqrt[2])\n"
+        "collapses to (2 x)/(x^2 - 2) under Extension -> Sqrt[2]).\n"
+        "Default Extension -> None combines and cancels over the rationals only.");
     symtab_set_docstring("Rationalize",
         "Rationalize[x]\n"
         "\tconverts an approximate number x to a nearby rational with small denominator.\n"
@@ -509,7 +534,13 @@ void info_init(void) {
         "Rationalize[x, dx] works with exact numbers x: the value is first numericalised, then rationalised.\n"
         "Rationalize[x, 0] forces conversion of any inexact number x to rational form, using a tolerance derived from the precision of x.\n"
         "Rationalize threads over compound expressions and Complex[re, im], so e.g. Rationalize[1.2 + 6.7 x] gives 6/5 + (67 x)/10.");
-    symtab_set_docstring("Apart", "Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.\nApart[expr,var] treats all variables other than var as constants.");
+    symtab_set_docstring("Apart",
+        "Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.\n"
+        "Apart[expr, var] treats all variables other than var as constants.\n"
+        "Option Extension -> alpha factors the denominator over Q(alpha) before\n"
+        "decomposition, splitting (x^2 - 2) into (x - Sqrt[2])(x + Sqrt[2]) under\n"
+        "Extension -> Sqrt[2] and producing the corresponding linear-factor\n"
+        "partial fractions.  Default Extension -> None decomposes over Q.");
     symtab_set_docstring("Simplify",
         "Simplify[expr]\n\tperforms a sequence of algebraic and other transformations on expr and returns the simplest form it finds.\n"
         "Simplify[expr, assum]\n\tdoes simplification using assumptions assum.\n"

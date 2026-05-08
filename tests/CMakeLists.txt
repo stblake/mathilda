@@ -103,6 +103,7 @@ set(COMMON_SRC
     ../src/sym_intern.c
     ../src/sym_names.c
     ../src/repl_hooks.c
+    ../src/options.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -618,3 +619,13 @@ else()
     target_link_libraries(repl_hooks_tests gmp m)
 endif()
 add_test(NAME repl_hooks_tests COMMAND repl_hooks_tests)
+
+add_executable(extension_options_tests test_extension_options.c ${COMMON_SRC})
+target_include_directories(extension_options_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(extension_options_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(extension_options_tests build_ecm)
+else()
+    target_link_libraries(extension_options_tests gmp m)
+endif()
+add_test(NAME extension_options_tests COMMAND extension_options_tests)

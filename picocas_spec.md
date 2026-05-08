@@ -856,12 +856,14 @@ Out[5]= 7 (9 + 2 x + 5 x y + 3 y)
 #### PolynomialGCD
 Gives the greatest common divisor of the polynomials.
 - `PolynomialGCD[poly1, poly2, ...]`
+- `PolynomialGCD[poly1, poly2, ..., Extension -> alpha]`
 
 **Features**:
 - `Protected`, `Listable`.
 - Handles univariate and multivariate polynomials.
 - Treats algebraic numbers (like `I`) as independent variables or constants seamlessly during complex arithmetic evaluations.
 - Pre-extracts common factors before falling back to a full primitive Euclidean algorithm computation.
+- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan): computes the GCD over `Q(alpha)` for `alpha` ∈ {`Sqrt[c]`, `c^(1/n)`, `I`} via lifting both inputs into the QAUPoly substrate (`src/qaupoly.h`) and folding `qaupoly_gcd`. Extension support requires univariate inputs (after stripping the alpha-render symbol). Defaults `Extension -> None` and `Extension -> Automatic` work over the rationals and treat algebraic numbers as opaque variables. `Extension -> {alpha_1, ..., alpha_n}` (tower form) currently falls back to the no-extension path; tower-aware GCD is a Phase 0.5 follow-up.
 
 ```mathematica
 In[1]:= PolynomialGCD[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]
@@ -872,6 +874,12 @@ Out[2]= 1
 
 In[3]:= PolynomialGCD[x^2-1, x^3-1, x^4-1, x^5-1, x^6-1, x^7-1]
 Out[3]= -1 + x
+
+In[4]:= PolynomialGCD[x^2 - 2, x - Sqrt[2], Extension -> Sqrt[2]]
+Out[4]= -Sqrt[2] + x
+
+In[5]:= PolynomialGCD[x^3 - 2, x - 2^(1/3), Extension -> 2^(1/3)]
+Out[5]= -2^(1/3) + x
 ```
 
 #### PolynomialExtendedGCD
@@ -897,12 +905,14 @@ Out[2]= {b + x, {-(1/(a (a - b))), 1/(a - b)}}
 #### PolynomialLCM
 Gives the least common multiple of the polynomials.
 - `PolynomialLCM[poly1, poly2, ...]`
+- `PolynomialLCM[poly1, poly2, ..., Extension -> alpha]`
 
 **Features**:
 - `Protected`, `Listable`.
 - Handles univariate and multivariate polynomials.
 - Treats algebraic numbers (like `I`) as independent variables or constants seamlessly during complex arithmetic evaluations.
 - Preserves explicit factored forms where possible.
+- **Option `Extension -> alpha`** computes the LCM over `Q(alpha)` via `lcm(a, b) = a*b / PolynomialGCD[a, b, Extension -> alpha]`, returning the monic, expanded form. Same scope and fallback as `PolynomialGCD`'s extension option.
 
 ```mathematica
 In[1]:= PolynomialLCM[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]
@@ -910,15 +920,21 @@ Out[1]= (1+x)^2 (2+x) (3+x) (4+x)
 
 In[2]:= PolynomialLCM[x^4-4, x^4+4 x^2+4]
 Out[2]= (-2+x^2) (4+4 x^2+x^4)
+
+In[3]:= PolynomialLCM[x - Sqrt[2], x + Sqrt[2], Extension -> Sqrt[2]]
+Out[3]= -2 + x^2
 ```
 
 #### PolynomialQuotient
 Gives the quotient of $p$ and $q$, treated as polynomials in $x$, with any remainder dropped.
 - `PolynomialQuotient[p, q, x]`
+- `PolynomialQuotient[p, q, x, Extension -> alpha]` -- divide over $\mathbb{Q}(\alpha)$.
 
 **Features**:
 - `Protected`.
-- Uses polynomial long division over the field of rational functions in the coefficients.
+- Default path uses polynomial long division over the field of rational functions in the coefficients.
+- Option `Extension -> alpha` (default `None`) lifts $p, q$ into $\mathbb{Q}(\alpha)[x]$ and runs the Q($\alpha$)-aware long division (`qaupoly_divrem`). Recognised forms for $\alpha$: `Sqrt[c]`, `c^(1/n)`, and `I`. `Extension -> None` and `Extension -> Automatic` are accepted and currently behave as the default. The extension path requires univariate input (a single live polynomial variable other than the alpha generator); multivariate inputs fall through to the standard path.
+- Threading Extension here keeps the polynomial arithmetic in the Q($\alpha$)[x] substrate and avoids the multivariate Q[$\alpha$, x] subresultant-PRS path that is exponentially slow on Sqrt[$\alpha$]-laden coefficients.
 
 ```mathematica
 In[1]:= PolynomialQuotient[x^4+2x+1, x^2+1, x]
@@ -929,16 +945,27 @@ Out[2]= 0
 
 In[3]:= PolynomialQuotient[x^2+x+1, 2x+1, x]
 Out[3]= 1/4 + x/2
+
+In[4]:= PolynomialQuotient[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[4]= Sqrt[2] + x
+
+In[5]:= PolynomialQuotient[x^3 - 2, x - 2^(1/3), x, Extension -> 2^(1/3)]
+Out[5]= 2^(2/3) + 2^(1/3) x + x^2
+
+In[6]:= PolynomialQuotient[x^2 + 1, x - I, x, Extension -> I]
+Out[6]= I + x
 ```
 
 #### PolynomialRemainder
 Gives the remainder from dividing $p$ by $q$, treated as polynomials in $x$.
 - `PolynomialRemainder[p, q, x]`
+- `PolynomialRemainder[p, q, x, Extension -> alpha]` -- compute the remainder over $\mathbb{Q}(\alpha)$.
 
 **Features**:
 - `Protected`.
 - The degree of the result in $x$ is guaranteed to be smaller than the degree of $q$.
 - If the dividend is a multiple of the divisor, then the remainder is zero.
+- Option `Extension -> alpha`: see `PolynomialQuotient` for the recognised alpha forms and the fall-through rules.
 
 ```mathematica
 In[1]:= PolynomialRemainder[x^4+2x+1, x^2+1, x]
@@ -946,6 +973,12 @@ Out[1]= 2 + 2 x
 
 In[2]:= PolynomialRemainder[x^3, a x+b, x]
 Out[2]= -(b^3/a^3)
+
+In[3]:= PolynomialRemainder[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[3]= 0
+
+In[4]:= PolynomialRemainder[x^2 - 3, x - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[4]= -1
 ```
 
 #### PolynomialQ
@@ -2619,6 +2652,7 @@ Out[2]= 77
 #### Cancel
 Cancels out common factors in the numerator and denominator of an expression.
 - `Cancel[expr]`
+- `Cancel[expr, Extension -> alpha]`
 
 **Features**:
 - `Protected`, `Listable`.
@@ -2626,6 +2660,7 @@ Cancels out common factors in the numerator and denominator of an expression.
 - Evaluates greatest common divisors via polynomial GCD derivations avoiding extraneous expansions.
 - Handles a single symbolic base appearing with rational fractional exponents (e.g. `Sqrt[y]`, `y^(1/3)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial cancellation in `g`, then substitutes back.
 - The algebraic-generator pass runs `Together` on the substituted form (not just GCD-cancellation), so inputs whose `g`-substituted denominator is a Plus of terms with different `g`-denominators (e.g. `1/(g^2 - 1/g)` from `1/(y^(2/3) - 1/y^(1/3))`) are handled correctly.
+- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) cancels common factors over `Q(alpha)` instead of `Q`. Implementation: lifts numerator and denominator into `Q(alpha)[x]` via the QAUPoly machinery, runs `qaupoly_gcd`, divides both sides by `g`, and re-renders. Works for single-fraction inputs; `Plus` inputs (sums of fractions) currently fall back to the no-extension path because `PolynomialQuotient` does not yet accept `Extension` (Phase 0.5 follow-up).
 
 ```mathematica
 In[1]:= Cancel[(x^2 - 1) / (x - 1)]
@@ -2642,17 +2677,25 @@ Out[4]= 1 + y^(1/3) + y^(2/3)
 
 In[5]:= Cancel[1/(y^(2/3) - 1/y^(1/3))]
 Out[5]= y^(1/3)/(-1 + y)
+
+In[6]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
+Out[6]= Sqrt[2] + x
+
+In[7]:= Cancel[(x^3 - 2)/(x - 2^(1/3)), Extension -> 2^(1/3)]
+Out[7]= 2^(2/3) + 2^(1/3) x + x^2
 ```
 
 #### Together
 Puts terms in a sum over a common denominator, and cancels factors in the result.
 - `Together[expr]`
+- `Together[expr, Extension -> alpha]`
 
 **Features**:
 - `Protected`, `Listable`.
 - Makes a sum of terms into a single rational function.
 - Computes lowest common multiples (LCM) of denominators securely without unconditionally destroying pre-factored bases unnecessarily.
 - Handles a single symbolic base appearing with rational fractional exponents (e.g. `y^(1/3)`, `y^(2/3)`, `y^(73/24)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial pipeline in `g`, then substitutes back.
+- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) combines into a single fraction with the standard combiner, then runs `Cancel[..., Extension -> alpha]` on the result so algebraic-coefficient cancellations fire. Effective on simple inputs like `1/(x - Sqrt[2]) + 1/(x + Sqrt[2])`, which collapses to `(2 x)/(x^2 - 2)`. Inputs whose summands themselves carry algebraic-coefficient denominators are deferred to Phase 0.5 (which will plumb `Extension` through `PolynomialLCM` / `PolynomialQuotient` / `together_recursive`).
 
 ```mathematica
 In[1]:= Together[a/b + c/d]
@@ -2669,12 +2712,16 @@ Out[4]= x
 
 In[5]:= Together[y^(5/8)*(y^(19/8) - y^(73/24)/(y^(2/3) - 1/y^(1/3)))]
 Out[5]= -y^3 / (-1 + y)
+
+In[6]:= Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]
+Out[6]= (2 x)/(-2 + x^2)
 ```
 
 #### Apart
 Gives the partial fraction decomposition of a rational expression.
 - `Apart[expr]`
 - `Apart[expr, var]`
+- `Apart[expr, var, Extension -> alpha]`
 
 **Features**:
 - `Protected`, `Listable`.
@@ -2682,6 +2729,7 @@ Gives the partial fraction decomposition of a rational expression.
 - If `var` is not specified, intelligently selects the main polynomial variable natively.
 - Implements exact undetermined coefficients algebraically leveraging row-reduced identity expansions over algebraic inputs avoiding recursive fractional losses natively.
 - When `Together[expr]` produces a numerator or denominator that is not polynomial in the chosen variable (e.g. fractional-power inputs whose Together'd form is `y^(1/3)/(y - 1)`), the matrix-of-coefficients algorithm cannot apply; Apart returns the `Together` form unchanged rather than synthesising a spurious zero.
+- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) factors the denominator over `Q(alpha)` before partial-fraction decomposition runs, splitting reducible-over-extension factors (e.g. `x^2 - 2` into `(x - Sqrt[2])(x + Sqrt[2])` under `Extension -> Sqrt[2]`) and producing the corresponding linear-factor partial fractions. The pre-`Together` step is also extension-aware so any algebraic-number cancellations in numerator/denominator fire before splitting.
 
 ```mathematica
 In[1]:= Apart[1/((1+x)(5+x))]
@@ -2695,6 +2743,9 @@ Out[3]= 2 y/((1 + y)^2 (x - y)) - (-1 + y)/((1 + x) (1 + y)^2)
 
 In[4]:= Apart[1/(y^(2/3) - 1/y^(1/3))]
 Out[4]= y^(1/3)/(-1 + y)
+
+In[5]:= Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]
+Out[5]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/4 Sqrt[2]/(-Sqrt[2] + x)
 ```
 
 #### Mod, Quotient, QuotientRemainder
