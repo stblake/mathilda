@@ -374,6 +374,8 @@ void core_init(void) {
     numeric_init();
     precision_init();
     rationalize_init();
+    void root_init(void);
+    root_init();
     void integrate_init(void);
     integrate_init();
 }

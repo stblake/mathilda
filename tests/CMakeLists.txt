@@ -106,6 +106,7 @@ set(COMMON_SRC
     ../src/options.c
     ../src/integrate.c
     ../src/intrat.c
+    ../src/root.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})

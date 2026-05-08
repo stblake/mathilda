@@ -167,6 +167,7 @@ const char* SYM_Reals = NULL;
 const char* SYM_Repeated = NULL;
 const char* SYM_RepeatedNull = NULL;
 const char* SYM_Return = NULL;
+const char* SYM_Root = NULL;
 const char* SYM_RootSum = NULL;
 const char* SYM_Round = NULL;
 const char* SYM_Rule = NULL;
@@ -376,6 +377,7 @@ void sym_names_init(void) {
     SYM_Reals                      = intern_symbol("Reals");
     SYM_Repeated                   = intern_symbol("Repeated");
     SYM_RepeatedNull               = intern_symbol("RepeatedNull");
+    SYM_Root                       = intern_symbol("Root");
     SYM_RootSum                    = intern_symbol("RootSum");
     SYM_Return                     = intern_symbol("Return");
     SYM_Round                      = intern_symbol("Round");

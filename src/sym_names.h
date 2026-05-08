@@ -182,6 +182,7 @@ extern const char* SYM_Reals;
 extern const char* SYM_Repeated;
 extern const char* SYM_RepeatedNull;
 extern const char* SYM_Return;
+extern const char* SYM_Root;
 extern const char* SYM_RootSum;
 extern const char* SYM_Round;
 extern const char* SYM_Rule;

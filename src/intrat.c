@@ -2714,11 +2714,7 @@ void intrat_init(void) {
         expr_free(pat); expr_free(val);
     }
 
-    /* RootSum: passive head, registered with no builtin so it appears
-     * verbatim in output (Phase 2 will upgrade this). */
-    symtab_get_def("RootSum")->attributes |= ATTR_PROTECTED;
-    symtab_set_docstring("RootSum",
-        "RootSum[fn, summand] is a symbolic placeholder used by the rational\n"
-        "integrator to denote a sum over the roots of fn. Phase 2 upgrades\n"
-        "this to a fully-evaluating head once LogToReal is implemented.");
+    /* RootSum is registered in src/root.c (Phase 8b-prereq) — the
+     * canonical home of held algebraic-root machinery.  Nothing to
+     * do here. */
 }
