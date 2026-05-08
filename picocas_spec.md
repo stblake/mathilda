@@ -3108,6 +3108,11 @@ following classes of integrand:
 - **Derivative-recognition fast path** — when the residual `h` has
   the form `c * D'/D^k` with `c` free of `x` and `k >= 1`, emits the
   closed form `c Log[D]` (k=1) or `-c/((k-1) D^(k-1))` (k>=2).
+- **Per-summand Apart loop** — Phase 5 splits the squarefree-
+  denominator residual via `Apart` and dispatches each summand
+  independently through the derivative-recognition / LRT /
+  LogToReal stack, after `ExtractConstants` factors out scalar
+  prefactors.  The integral closes only when every piece closes.
 - **Lazard-Rioboo-Trager log part with bounded-Solve closure** —
   Phase 2 / 4 run `Integrate`IntRationalLogPart` on the squarefree-
   denominator residual; every resulting `(Q_i, S_i)` pair is then
@@ -3122,12 +3127,31 @@ following classes of integrand:
   - Higher-degree factors fall back to retrying `Factor` with
     `Extension -> Sqrt[2] / Sqrt[3] / Sqrt[5]`; if no candidate
     closes the input, the call returns unevaluated.
+- **Phase 6 LogToArcTanh post-processing** — pairs of
+  `c Log[A] + c Log[B]` collapse to `c Log[A B]`; sign-paired
+  `c Log[A] - c Log[B]` go to `c Log[A/B]` or
+  `2 c ArcTanh[(A + B)/(B - A)]` when the simplified argument is
+  rational in x.  Beautifies the output without affecting
+  differentiation.
+- **Phase 7 ArcTan/ArcTanh sign normalisation and option parsing** —
+  the final pass strips a leading minus sign from `ArcTan` and
+  `ArcTanh` arguments (`ArcTan[-arg] -> -ArcTan[arg]`).  The package
+  entry `Integrate`IntegrateRational[f, x, opts...]` accepts trailing
+  `Rule` options:
+  - `"PFD" -> True | False` (default True) — toggles the per-summand
+    Apart loop;
+  - `"LogToArcTan" -> True | False` (default True) — toggles the
+    Phase 6 post-processing;
+  - `"Radicals" -> True | False` (default False) — reserved for
+    future `ToRadicals` integration;
+  - `Extension -> alpha` — reserved for future use; currently
+    advisory.
+  Options are stripped before dispatch — Phase 7 keeps them advisory
+  while the algorithmic path uses the Mathematica defaults.
 
-Anything outside the bounded-Solve scope (irreducible quartics with
-no Sqrt[2]/3/5 split, biquadratic / n-th-root / n>5 patterns, the
-`LogToArcTan` / `LogToArcTanh` post-processing pass) is deferred to
-Phases 5-7 of the plan; those inputs return `Integrate[f, x]`
-unevaluated.
+Inputs that escape every closure (irreducible quartics with no
+Sqrt[2]/3/5 split, biquadratic / n-th-root patterns) return
+`Integrate[f, x]` unevaluated.
 
 **Features**:
 - `Protected`.

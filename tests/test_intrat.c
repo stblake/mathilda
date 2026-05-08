@@ -314,6 +314,22 @@ static void test_integrate_arctanh_simplification(void) {
            "Log[-1 + x^2]");
 }
 
+static void test_options_accepted(void) {
+    /* Trailing options are stripped before dispatch — the result must
+     * be the same as without them. */
+    run_eq("Integrate`IntegrateRational[1/(x^2 + 1), x]", "ArcTan[x]");
+    run_eq("Integrate`IntegrateRational[1/(x^2 + 1), x, \"PFD\" -> True]",
+           "ArcTan[x]");
+    run_eq("Integrate`IntegrateRational[1/(x^2 - 1), x, \"LogToArcTan\" -> True]",
+           "-ArcTanh[x]");
+    run_eq("Integrate`IntegrateRational[1/(x^2 - 1), x, "
+           "\"PFD\" -> True, \"LogToArcTan\" -> True]",
+           "-ArcTanh[x]");
+    /* Extension option is recognised (advisory in Phase 7). */
+    run_eq("Integrate`IntegrateRational[1/(x^2 - 1), x, Extension -> Sqrt[2]]",
+           "-ArcTanh[x]");
+}
+
 static void test_integrate_quartic_factorable(void) {
     /* x^4 + x^2 + 1 = (x^2 + x + 1)(x^2 - x + 1) — two quadratics
      * with negative discriminants give two ArcTans + two Logs. */
@@ -390,8 +406,9 @@ int main(void) {
 
     TEST(test_integrate_arctan);
     TEST(test_integrate_arctanh_simplification);
+    TEST(test_options_accepted);
     TEST(test_integrate_quartic_factorable);
 
-    printf("All Phase 1-6 (LRT + LogToReal + ArcTanh post-processing) tests passed!\n");
+    printf("All Phase 1-7 (full IntegrateRational pipeline) tests passed!\n");
     return 0;
 }

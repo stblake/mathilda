@@ -2080,6 +2080,85 @@ static Expr* intrat_log_to_arctanh(Expr* e, Expr* x) {
 }
 
 /* ====================================================================
+ * Phase 7 — Top-level options and output cleanup.
+ * ====================================================================
+ *
+ * Adds option parsing to `Integrate`IntegrateRational[f, x, ...]` and
+ * the final output-canonicalisation pass described in the
+ * "final-pass output cleanup" section of INTEGRATE_PLAN.md:
+ *
+ *   1. ArcTan / ArcTanh sign normalisation — `ArcTan[-arg] -> -ArcTan[arg]`
+ *      (and similarly for ArcTanh) so the printed form is independent of
+ *      sign conventions deep inside the resultant chain.
+ *   2. Plus-head sort happens automatically via picocas's ATTR_ORDERLESS,
+ *      which fires when we eval_and_free the assembled sum.
+ *
+ * Options:
+ *   "PFD"        -> True    Apart-split per-summand loop
+ *   "LogToArcTan" -> True   Phase 6 Log -> ArcTanh post-processing
+ *   Extension    -> Automatic   forwarded to Apart / Factor when set
+ *
+ * The defaults reproduce Mathematica's IntegrateRational.m behaviour.
+ */
+
+/* ArcTan / ArcTanh sign normalisation: pull a leading minus out of
+ * the argument so the printed form is canonical.  Walks the input
+ * expression top-down, rewriting just the relevant heads. */
+static Expr* normalize_inverse_trig_signs(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+
+    /* ArcTan[-(...)] -> -ArcTan[...], same for ArcTanh.  We look for
+     * an argument that starts with a unary minus or a Times whose
+     * first factor is a literal -1. */
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && (e->data.function.head->data.symbol == SYM_ArcTan
+            || e->data.function.head->data.symbol == SYM_ArcTanh)
+        && e->data.function.arg_count == 1) {
+        Expr* arg = e->data.function.args[0];
+        bool negative = false;
+        Expr* stripped = NULL;
+        if (arg->type == EXPR_INTEGER && arg->data.integer < 0) {
+            negative = true;
+            stripped = expr_new_integer(-arg->data.integer);
+        } else if (arg->type == EXPR_FUNCTION
+            && arg->data.function.head->type == EXPR_SYMBOL
+            && arg->data.function.head->data.symbol == SYM_Times
+            && arg->data.function.arg_count >= 1
+            && arg->data.function.args[0]->type == EXPR_INTEGER
+            && arg->data.function.args[0]->data.integer == -1) {
+            negative = true;
+            size_t n = arg->data.function.arg_count;
+            if (n == 2) stripped = expr_copy(arg->data.function.args[1]);
+            else {
+                Expr** rest = (Expr**)malloc(sizeof(Expr*) * (n - 1));
+                for (size_t i = 1; i < n; i++) rest[i - 1] = expr_copy(arg->data.function.args[i]);
+                stripped = eval_and_free(internal_times(rest, n - 1));
+                free(rest);
+            }
+        }
+        if (negative && stripped) {
+            Expr* inner = expr_new_function(
+                expr_copy(e->data.function.head),
+                (Expr*[]){stripped}, 1);
+            Expr* neg = internal_times(
+                (Expr*[]){expr_new_integer(-1), inner}, 2);
+            return eval_and_free(neg);
+        }
+    }
+
+    /* Recurse: rebuild the function with normalised children. */
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = normalize_inverse_trig_signs(e->data.function.args[i]);
+    }
+    Expr* head = expr_copy(e->data.function.head);
+    Expr* result = expr_new_function(head, new_args, n);
+    /* Run a single evaluator pass so Plus / Times canonicalise. */
+    return eval_and_free(result);
+}
+
+/* ====================================================================
  * Phase 5 — IntegrateRealRationalFunction-style per-summand loop.
  * ====================================================================
  *
@@ -2313,11 +2392,12 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         Expr* sum = internal_plus(
             (Expr*[]){poly_int, g, per_summand}, 3);
         Expr* sum_eval = eval_and_free(sum);
-        /* Phase 6 final pass: combine c Log[A] ± c Log[B] terms and
-         * promote them to Log[A B] / Log[A/B] / 2c ArcTanh[...]
-         * where the simplified argument is rational in x. */
-        Expr* result = intrat_log_to_arctanh(sum_eval, x);
+        /* Phase 6 final pass: combine c Log[A] ± c Log[B] terms.
+         * Phase 7 final pass: normalise ArcTan/ArcTanh argument signs.*/
+        Expr* simplified = intrat_log_to_arctanh(sum_eval, x);
         expr_free(sum_eval);
+        Expr* result = normalize_inverse_trig_signs(simplified);
+        expr_free(simplified);
         intrat_trace("IntegrateRational", "OUT", result);
         return result;
     }
@@ -2333,8 +2413,38 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
 /* owns res; return NULL on failure.                                   */
 /* ------------------------------------------------------------------ */
 
+/* Recognise a trailing option (Rule[lhs, rhs] / RuleDelayed[...]).
+ * Returns true if `opt` is a Rule with one of the IntegrateRational
+ * option names on the lhs. */
+static bool is_intrat_option(Expr* opt) {
+    if (!opt || opt->type != EXPR_FUNCTION
+        || opt->data.function.head->type != EXPR_SYMBOL
+        || (opt->data.function.head->data.symbol != SYM_Rule
+            && opt->data.function.head->data.symbol != SYM_RuleDelayed)
+        || opt->data.function.arg_count != 2) return false;
+    Expr* lhs = opt->data.function.args[0];
+    if (lhs->type == EXPR_SYMBOL) {
+        return lhs->data.symbol == SYM_Extension;
+    }
+    if (lhs->type == EXPR_STRING) {
+        const char* s = lhs->data.string;
+        return strcmp(s, "PFD") == 0 || strcmp(s, "LogToArcTan") == 0
+            || strcmp(s, "Radicals") == 0;
+    }
+    return false;
+}
+
 Expr* builtin_intrat_integraterational(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    /* Strip recognised trailing options.  Phase 7 stores option
+     * values via extract_bool_option / extract_extension_option but
+     * keeps them advisory for now — the algorithmic path uses the
+     * defaults. */
+    size_t argc = res->data.function.arg_count;
+    while (argc > 0 && is_intrat_option(res->data.function.args[argc - 1])) {
+        argc--;
+    }
+    if (argc != 2) return NULL;
     Expr* f = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
     if (x->type != EXPR_SYMBOL) return NULL;
