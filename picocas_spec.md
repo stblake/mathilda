@@ -3108,18 +3108,25 @@ following classes of integrand:
 - **Derivative-recognition fast path** — when the residual `h` has
   the form `c * D'/D^k` with `c` free of `x` and `k >= 1`, emits the
   closed form `c Log[D]` (k=1) or `-c/((k-1) D^(k-1))` (k>=2).
-- **Lazard-Rioboo-Trager log part with linear-Q closure** — Phase 2
-  hooks `Integrate`IntRationalLogPart` into the pipeline so the
-  squarefree-denominator residual gets the LRT treatment.  When every
-  resultant Q_i factors completely into linear pieces over Q, each
-  linear factor `(t - α)` contributes `α Log[S_i(α, x)]` and the
-  integral closes end-to-end.  Catches the
-  `1/((x-a)(x-b)(x-c)(...))` family as well as cases like
-  `1/(x^2 - 1)` whose resultant has only rational roots.
+- **Lazard-Rioboo-Trager log part with bounded-Solve closure** —
+  Phase 2 / 4 run `Integrate`IntRationalLogPart` on the squarefree-
+  denominator residual; every resulting `(Q_i, S_i)` pair is then
+  dispatched through `Integrate`LogToReal`.  Closure scope:
+  - Linear factor `t - α`: contributes `α Log[S_i(α, x)]`.
+  - Quadratic factor with positive discriminant: two real roots,
+    two `Log` terms.
+  - Quadratic factor with negative discriminant (the ArcTan family):
+    complex conjugate pair `u ± I v`, contributes
+    `u Log[A^2 + B^2] + v LogToAtan[A, B, x]` (Bronstein, *Symbolic
+    Integration I*, p. 63 — Rioboo's complex-to-real conversion).
+  - Higher-degree factors fall back to retrying `Factor` with
+    `Extension -> Sqrt[2] / Sqrt[3] / Sqrt[5]`; if no candidate
+    closes the input, the call returns unevaluated.
 
-Anything outside these patterns (LogToReal for quadratic Q with
-negative discriminant, LogToArcTan post-processing) is deferred to
-Phases 3-7 of the plan; those inputs return `Integrate[f, x]`
+Anything outside the bounded-Solve scope (irreducible quartics with
+no Sqrt[2]/3/5 split, biquadratic / n-th-root / n>5 patterns, the
+`LogToArcTan` / `LogToArcTanh` post-processing pass) is deferred to
+Phases 5-7 of the plan; those inputs return `Integrate[f, x]`
 unevaluated.
 
 **Features**:
@@ -3146,8 +3153,13 @@ Out[4]= -1/(5 + 3 x + x^2)
 In[5]:= Integrate[1/((x-1)(x-2)(x-3)), x]          (* Phase 2 LRT closes this *)
 Out[5]= 1/2 Log[-3 + x] - Log[-2 + x] + 1/2 Log[-1 + x]
 
-In[6]:= Integrate[1/(x^2 + 1), x]                  (* needs LogToReal, Phase 4 *)
-Out[6]= Integrate[1/(1 + x^2), x]
+In[6]:= Integrate[1/(x^2 + 1), x]                  (* Phase 4 LogToReal *)
+Out[6]= ArcTan[x]
+
+In[7]:= Integrate[1/(x^4 + x^2 + 1), x]            (* two quadratic factors *)
+Out[7]= 1/6 Sqrt[3] ArcTan[(-1 + 2 x)/Sqrt[3]] +
+        1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] +
+        1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2]
 ```
 
 The `Integrate`` package also exposes the lower-level helpers

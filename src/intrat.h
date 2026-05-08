@@ -66,6 +66,12 @@ Expr* builtin_intrat_helpers_extractconstants(Expr* res);
  * list of summands. */
 Expr* builtin_intrat_helpers_apartlist(Expr* res);
 
+/* Phase 3 — LogToAtan (Rioboo recursive). */
+Expr* builtin_intrat_logtoatan(Expr* res);
+
+/* Phase 4 — LogToReal (Rioboo: complex Log → real Log + ArcTan). */
+Expr* builtin_intrat_logtoreal(Expr* res);
+
 /* Register every Integrate` package symbol in the global symbol table.
  * Called from integrate_init() during core_init().  Idempotent (each
  * registration is a fresh symtab_add_builtin / attribute set). */

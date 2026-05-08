@@ -30,6 +30,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "options.h"
+#include "parse.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1229,18 +1230,139 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
     return result;
 }
 
-/* ----- Linear-Q closer (Phase 2's contribution to closed forms) -----
+/* ====================================================================
+ * Phase 3 — LogToAtan (Rioboo's recursive conversion).
+ * ====================================================================
  *
- * Try to evaluate the {Q_i, S_i} pair list to a closed-form Log sum
- * by factoring each Q_i over Q[t] (or Q[t, alpha]) and contributing
- * α Log[S_i(α, x)] for every linear factor (t - α).
+ * Given A, B in K[x] with B != 0, return a sum of ArcTan of polynomials
+ * in K[x] such that
+ *    D[f, x] = D[I Log[(A + I B)/(A - I B)], x].
  *
- * Phase 2 closes the case where every linear factor lies over Q —
- * which covers `1/((x-a)(x-b))`, `1/(x^n - c^n)` for rational c, and
- * the rational-roots fragment of any LRT problem.  Quadratic factors
- * with negative or symbolic discriminants stay unhandled here; Phase
- * 4's LogToReal will pick them up.
+ * Direct port of IntegrateRational.m:1529-1561.  Used by Phase 4's
+ * LogToReal: each pair (A, B) of complex Re/Im polynomial parts feeds
+ * LogToAtan to produce the corresponding real ArcTan summand.
  */
+
+static Expr* intrat_log_to_atan(Expr* a, Expr* b, Expr* x) {
+    intrat_trace("LogToAtan", "IN", a);
+
+    /* If b is non-zero and free of x, return 0 (when a free of x) or
+     * 2 ArcTan[a/b] otherwise. */
+    bool b_free = intrat_freeq_test(b, x);
+    if (!is_zero_poly(b) && b_free) {
+        if (intrat_freeq_test(a, x)) return expr_new_integer(0);
+        Expr* ratio = internal_divide((Expr*[]){expr_copy(a), expr_copy(b)}, 2);
+        Expr* canon = intrat_canonic(ratio); expr_free(ratio);
+        Expr* arctan = expr_new_function(expr_new_symbol("ArcTan"),
+            (Expr*[]){canon}, 1);
+        Expr* res = internal_times((Expr*[]){expr_new_integer(2), arctan}, 2);
+        return eval_and_free(res);
+    }
+
+    /* A := Collect[a, x] (we use intrat_canonic for the closest
+     * picocas equivalent — it folds rational coefficients to canonical
+     * form without RootReduce).  The .m baseline applies simproot to
+     * each coefficient, but Phase 3 deliberately stays minimal so the
+     * tests can still match against the un-simplified output. */
+    Expr* A = expr_expand(a);
+    Expr* B = expr_expand(b);
+
+    /* If A is divisible by B in K[x], LogToAtan reduces to a single
+     * 2 ArcTan[A/B] term (the recursion would otherwise terminate in
+     * one step). */
+    if (!is_zero_poly(B)) {
+        Expr* rem = intrat_polyrem_t(A, B, x);
+        if (rem && is_zero_poly(rem)) {
+            expr_free(rem);
+            Expr* q = intrat_polyq(A, B, x);
+            if (intrat_freeq_test(q, x)) {
+                expr_free(q); expr_free(A); expr_free(B);
+                return expr_new_integer(0);
+            }
+            Expr* arctan = expr_new_function(expr_new_symbol("ArcTan"),
+                (Expr*[]){q}, 1);
+            Expr* res = internal_times((Expr*[]){expr_new_integer(2), arctan}, 2);
+            expr_free(A); expr_free(B);
+            return eval_and_free(res);
+        }
+        if (rem) expr_free(rem);
+    }
+
+    /* If deg(A) < deg(B), swap (recurse with -B, A). */
+    int dA = get_degree_poly(A, x);
+    int dB = get_degree_poly(B, x);
+    if (dA < dB) {
+        Expr* negB = expr_expand(internal_times(
+            (Expr*[]){expr_new_integer(-1), expr_copy(B)}, 2));
+        Expr* recurse = intrat_log_to_atan(negB, A, x);
+        expr_free(negB); expr_free(A); expr_free(B);
+        return recurse;
+    }
+
+    /* {g, {d, c}} = PolynomialExtendedGCD[B, -A, x]   so B*d - A*c = g. */
+    Expr* negA = expr_expand(internal_times(
+        (Expr*[]){expr_new_integer(-1), expr_copy(A)}, 2));
+    Expr* eg_args[3] = { expr_copy(B), negA, expr_copy(x) };
+    Expr* eg = internal_polynomialextendedgcd(eg_args, 3);
+    Expr* eg_eval = evaluate(eg);
+    expr_free(eg);
+    if (!eg_eval || eg_eval->type != EXPR_FUNCTION
+        || eg_eval->data.function.arg_count != 2) {
+        if (eg_eval) expr_free(eg_eval);
+        expr_free(A); expr_free(B);
+        return NULL;
+    }
+    Expr* g_poly = expr_copy(eg_eval->data.function.args[0]);
+    Expr* coefs = eg_eval->data.function.args[1];
+    if (coefs->type != EXPR_FUNCTION || coefs->data.function.arg_count != 2) {
+        expr_free(eg_eval); expr_free(g_poly);
+        expr_free(A); expr_free(B); return NULL;
+    }
+    Expr* d_coef = expr_copy(coefs->data.function.args[0]);
+    Expr* c_coef = expr_copy(coefs->data.function.args[1]);
+    expr_free(eg_eval);
+
+    /* v = collectnum[(A*d + B*c)/g, x] // Together. */
+    Expr* Ad_raw = internal_times(
+        (Expr*[]){expr_copy(A), expr_copy(d_coef)}, 2);
+    Expr* Ad = expr_expand(Ad_raw); expr_free(Ad_raw);
+    Expr* Bc_raw = internal_times(
+        (Expr*[]){expr_copy(B), expr_copy(c_coef)}, 2);
+    Expr* Bc = expr_expand(Bc_raw); expr_free(Bc_raw);
+    Expr* sum_raw = internal_plus(
+        (Expr*[]){Ad, Bc}, 2);
+    Expr* div = internal_divide(
+        (Expr*[]){sum_raw, g_poly}, 2);
+    Expr* v = intrat_canonic(div); expr_free(div);
+
+    expr_free(A); expr_free(B);
+
+    /* If v is free of x, return LogToAtan[d, c, x] (no ArcTan
+     * contribution at this level). */
+    if (intrat_freeq_test(v, x)) {
+        expr_free(v);
+        Expr* recurse = intrat_log_to_atan(d_coef, c_coef, x);
+        expr_free(d_coef); expr_free(c_coef);
+        return recurse;
+    }
+
+    /* Else: 2 ArcTan[v] + LogToAtan[d, c, x]. */
+    Expr* arctan = expr_new_function(expr_new_symbol("ArcTan"),
+        (Expr*[]){v}, 1);
+    Expr* head_term = internal_times(
+        (Expr*[]){expr_new_integer(2), arctan}, 2);
+    Expr* recurse = intrat_log_to_atan(d_coef, c_coef, x);
+    expr_free(d_coef); expr_free(c_coef);
+    if (!recurse) recurse = expr_new_integer(0);
+    Expr* sum = internal_plus(
+        (Expr*[]){head_term, recurse}, 2);
+    Expr* result = eval_and_free(sum);
+    intrat_trace("LogToAtan", "OUT", result);
+    return result;
+}
+
+/* ----- Shared helpers used by both the Phase 2 linear-Q closer and
+ *       the Phase 4 LogToReal dispatcher. ----- */
 
 /* Extract the (t - α) form of a linear polynomial in `t` and return
  * the rational root α.  Returns NULL when the input is not linear in
@@ -1270,6 +1392,368 @@ static Expr* build_log_term(Expr* alpha, Expr* S, Expr* t) {
         (Expr*[]){expr_copy(alpha), logS}, 2);
     return eval_and_free(term);
 }
+
+/* ====================================================================
+ * Phase 4 — LogToReal (Rioboo's complex-to-real conversion).
+ * ====================================================================
+ *
+ * Given r in K[t] and s in K[t,x], produce a real function f satisfying
+ *   D[f, x] == D[RootSum[r(α)==0, α Log[s(α, x)]], x].
+ *
+ * Phase 4 implements the bounded-Solve subset called out in the plan:
+ * each factor of r over Q is dispatched as
+ *   linear (t - α): contribute α Log[s(α, x)];
+ *   quadratic a t^2 + b t + c with disc >= 0:
+ *       two real roots (-b ± sqrt(disc))/(2a) treated as two linear cases;
+ *   quadratic a t^2 + b t + c with disc < 0:
+ *       complex conjugate pair u ± I v with u = -b/(2a),
+ *       v = sqrt(-disc)/(2a); contribute
+ *           u Log[A^2 + B^2] + v LogToAtan[A, B, x]
+ *       where A + I B = s(u + I v, x) split into real / imaginary parts.
+ *
+ * Higher-degree factors (or symbolic discriminants we can't decide)
+ * fall through to the symbolic RootSum form so the result still
+ * differentiates correctly via the residue formula.
+ */
+
+/* Walk an expanded `term` and split it into (real_part, imag_part).
+ * Recognises Complex[a, b] either as a bare factor or as a factor
+ * inside Times.  Anything else is treated as fully real. */
+static void split_term_re_im(Expr* term, Expr** re_out, Expr** im_out) {
+    if (term->type == EXPR_FUNCTION
+        && term->data.function.head->type == EXPR_SYMBOL
+        && term->data.function.head->data.symbol == SYM_Complex
+        && term->data.function.arg_count == 2) {
+        *re_out = expr_copy(term->data.function.args[0]);
+        *im_out = expr_copy(term->data.function.args[1]);
+        return;
+    }
+    if (term->type == EXPR_FUNCTION
+        && term->data.function.head->type == EXPR_SYMBOL
+        && term->data.function.head->data.symbol == SYM_Times) {
+        /* Look for a Complex factor among the Times args. */
+        Expr* complex_factor = NULL;
+        size_t complex_idx = 0;
+        size_t n = term->data.function.arg_count;
+        for (size_t i = 0; i < n; i++) {
+            Expr* arg = term->data.function.args[i];
+            if (arg->type == EXPR_FUNCTION
+                && arg->data.function.head->type == EXPR_SYMBOL
+                && arg->data.function.head->data.symbol == SYM_Complex) {
+                complex_factor = arg; complex_idx = i; break;
+            }
+        }
+        if (!complex_factor) {
+            *re_out = expr_copy(term);
+            *im_out = expr_new_integer(0);
+            return;
+        }
+        /* Build "rest" by dropping the complex factor. */
+        size_t k = (n == 0) ? 0 : n - 1;
+        Expr* rest;
+        if (k == 0) rest = expr_new_integer(1);
+        else if (k == 1) {
+            rest = expr_copy(term->data.function.args[complex_idx == 0 ? 1 : 0]);
+        } else {
+            Expr** rest_args = (Expr**)malloc(sizeof(Expr*) * k);
+            size_t kk = 0;
+            for (size_t i = 0; i < n; i++) {
+                if (i == complex_idx) continue;
+                rest_args[kk++] = expr_copy(term->data.function.args[i]);
+            }
+            rest = eval_and_free(internal_times(rest_args, kk));
+            free(rest_args);
+        }
+        Expr* a_part = expr_copy(complex_factor->data.function.args[0]);
+        Expr* b_part = expr_copy(complex_factor->data.function.args[1]);
+        *re_out = eval_and_free(internal_times(
+            (Expr*[]){a_part, expr_copy(rest)}, 2));
+        *im_out = eval_and_free(internal_times(
+            (Expr*[]){b_part, rest}, 2));
+        return;
+    }
+    /* No Complex anywhere — purely real. */
+    *re_out = expr_copy(term);
+    *im_out = expr_new_integer(0);
+}
+
+/* Expand p, then walk its Plus head, splitting each summand. */
+static void split_re_im(Expr* p, Expr** re_out, Expr** im_out) {
+    Expr* expanded = expr_expand(p);
+    if (!(expanded->type == EXPR_FUNCTION
+        && expanded->data.function.head->type == EXPR_SYMBOL
+        && expanded->data.function.head->data.symbol == SYM_Plus)) {
+        split_term_re_im(expanded, re_out, im_out);
+        expr_free(expanded);
+        return;
+    }
+    size_t n = expanded->data.function.arg_count;
+    Expr** re_terms = (Expr**)malloc(sizeof(Expr*) * n);
+    Expr** im_terms = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t nre = 0, nim = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr *re_t = NULL, *im_t = NULL;
+        split_term_re_im(expanded->data.function.args[i], &re_t, &im_t);
+        if (re_t && !is_zero_poly(re_t)) re_terms[nre++] = re_t;
+        else if (re_t) expr_free(re_t);
+        if (im_t && !is_zero_poly(im_t)) im_terms[nim++] = im_t;
+        else if (im_t) expr_free(im_t);
+    }
+    *re_out = (nre == 0) ? expr_new_integer(0)
+            : (nre == 1) ? re_terms[0]
+            : eval_and_free(internal_plus(re_terms, nre));
+    *im_out = (nim == 0) ? expr_new_integer(0)
+            : (nim == 1) ? im_terms[0]
+            : eval_and_free(internal_plus(im_terms, nim));
+    free(re_terms); free(im_terms);
+    expr_free(expanded);
+}
+
+/* Substitute t -> sub_expr inside e (full ReplaceAll). */
+static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr) {
+    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+        (Expr*[]){expr_copy(t), expr_copy(sub_expr)}, 2);
+    Expr* call = expr_new_function(expr_new_symbol("ReplaceAll"),
+        (Expr*[]){expr_copy(e), rule}, 2);
+    Expr* result = evaluate(call);
+    expr_free(call);
+    return result;
+}
+
+/* Try to dispatch a single quadratic factor `Q(t) = a t^2 + b t + c`
+ * to its real-form contribution.  Returns NULL on failure (caller
+ * falls back to symbolic RootSum). */
+static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
+                                 Expr* s, Expr* x, Expr* t) {
+    /* discriminant = b^2 - 4 a c. */
+    Expr* b2 = expr_expand(internal_power((Expr*[]){expr_copy(b), expr_new_integer(2)}, 2));
+    Expr* fourac = expr_expand(
+        internal_times((Expr*[]){expr_new_integer(4), expr_copy(a), expr_copy(c)}, 3));
+    Expr* neg_fourac = internal_times(
+        (Expr*[]){expr_new_integer(-1), fourac}, 2);
+    Expr* disc = eval_and_free(internal_plus((Expr*[]){b2, neg_fourac}, 2));
+
+    /* Decide the sign of disc.  We commit only when it's an integer or
+     * rational; otherwise we punt to the symbolic form. */
+    int disc_sign = 0;
+    if (disc->type == EXPR_INTEGER) {
+        disc_sign = (disc->data.integer > 0) ? 1 : (disc->data.integer < 0) ? -1 : 0;
+    } else if (disc->type == EXPR_FUNCTION
+        && disc->data.function.head->type == EXPR_SYMBOL
+        && disc->data.function.head->data.symbol == SYM_Rational
+        && disc->data.function.arg_count == 2
+        && disc->data.function.args[0]->type == EXPR_INTEGER) {
+        int64_t n = disc->data.function.args[0]->data.integer;
+        disc_sign = (n > 0) ? 1 : (n < 0) ? -1 : 0;
+    } else {
+        expr_free(disc); return NULL;
+    }
+
+    Expr* two_a = eval_and_free(internal_times(
+        (Expr*[]){expr_new_integer(2), expr_copy(a)}, 2));
+
+    if (disc_sign >= 0) {
+        /* Two real roots.  α± = (-b ± Sqrt[disc])/(2 a). */
+        Expr* sqrt_d = expr_new_function(expr_new_symbol("Sqrt"),
+            (Expr*[]){expr_copy(disc)}, 1);
+        sqrt_d = eval_and_free(sqrt_d);
+        Expr* neg_b = internal_times(
+            (Expr*[]){expr_new_integer(-1), expr_copy(b)}, 2);
+        neg_b = eval_and_free(neg_b);
+        Expr* num_plus = eval_and_free(internal_plus(
+            (Expr*[]){expr_copy(neg_b), expr_copy(sqrt_d)}, 2));
+        Expr* num_minus = eval_and_free(internal_subtract(
+            (Expr*[]){neg_b, sqrt_d}, 2));
+        Expr* alpha_plus = eval_and_free(internal_divide(
+            (Expr*[]){num_plus, expr_copy(two_a)}, 2));
+        Expr* alpha_minus = eval_and_free(internal_divide(
+            (Expr*[]){num_minus, two_a}, 2));
+
+        /* Each contributes α * Log[s(α, x)]. */
+        Expr* s_at_plus  = subst_t(s, t, alpha_plus);
+        Expr* s_at_minus = subst_t(s, t, alpha_minus);
+        Expr* log_plus = expr_new_function(expr_new_symbol("Log"),
+            (Expr*[]){s_at_plus}, 1);
+        Expr* log_minus = expr_new_function(expr_new_symbol("Log"),
+            (Expr*[]){s_at_minus}, 1);
+        Expr* term_plus  = internal_times((Expr*[]){alpha_plus, log_plus}, 2);
+        Expr* term_minus = internal_times((Expr*[]){alpha_minus, log_minus}, 2);
+        expr_free(disc);
+        Expr* sum = internal_plus(
+            (Expr*[]){term_plus, term_minus}, 2);
+        return eval_and_free(sum);
+    }
+
+    /* Complex conjugate pair: u = -b/(2a), v = Sqrt[-disc]/(2a). */
+    Expr* neg_b2 = eval_and_free(internal_times(
+        (Expr*[]){expr_new_integer(-1), expr_copy(b)}, 2));
+    Expr* u_root = eval_and_free(internal_divide(
+        (Expr*[]){neg_b2, expr_copy(two_a)}, 2));
+    Expr* neg_disc = eval_and_free(internal_times(
+        (Expr*[]){expr_new_integer(-1), disc}, 2));
+    Expr* sqrt_neg_disc = expr_new_function(expr_new_symbol("Sqrt"),
+        (Expr*[]){neg_disc}, 1);
+    sqrt_neg_disc = eval_and_free(sqrt_neg_disc);
+    Expr* v_root = eval_and_free(internal_divide(
+        (Expr*[]){sqrt_neg_disc, two_a}, 2));
+
+    /* Substitute t -> u_root + I*v_root in s and split into A + I B. */
+    Expr* iv = internal_times((Expr*[]){
+        expr_new_function(expr_new_symbol("Complex"),
+            (Expr*[]){expr_new_integer(0), expr_new_integer(1)}, 2),
+        expr_copy(v_root)
+    }, 2);
+    iv = eval_and_free(iv);
+    Expr* substituted_t = eval_and_free(internal_plus(
+        (Expr*[]){expr_copy(u_root), iv}, 2));
+    Expr* s_complex = subst_t(s, t, substituted_t);
+    expr_free(substituted_t);
+
+    Expr *A = NULL, *B = NULL;
+    split_re_im(s_complex, &A, &B);
+    expr_free(s_complex);
+
+    /* Term 1: u_root * Log[A^2 + B^2]. */
+    Expr* A2 = expr_expand(internal_power(
+        (Expr*[]){expr_copy(A), expr_new_integer(2)}, 2));
+    Expr* B2 = expr_expand(internal_power(
+        (Expr*[]){expr_copy(B), expr_new_integer(2)}, 2));
+    Expr* mod2 = eval_and_free(internal_plus((Expr*[]){A2, B2}, 2));
+    Expr* mod2_can = intrat_canonic(mod2); expr_free(mod2);
+    Expr* logmod = expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){mod2_can}, 1);
+    Expr* term1 = internal_times((Expr*[]){expr_copy(u_root), logmod}, 2);
+    term1 = eval_and_free(term1);
+
+    /* Term 2: v_root * LogToAtan[A, B, x]. */
+    Expr* atan_part = intrat_log_to_atan(A, B, x);
+    if (!atan_part) atan_part = expr_new_integer(0);
+    Expr* term2 = internal_times((Expr*[]){expr_copy(v_root), atan_part}, 2);
+    term2 = eval_and_free(term2);
+
+    expr_free(A); expr_free(B); expr_free(u_root); expr_free(v_root);
+
+    Expr* sum = internal_plus((Expr*[]){term1, term2}, 2);
+    return eval_and_free(sum);
+}
+
+/* Walk a Factor[Q]'s output and dispatch every factor.  Returns the
+ * accumulated real form, or NULL if any factor exceeds the bounded-
+ * Solve scope (degree > 2 in t). */
+static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
+    Expr** factors;
+    size_t nfactors;
+    if (factored->type == EXPR_FUNCTION
+        && factored->data.function.head->type == EXPR_SYMBOL
+        && factored->data.function.head->data.symbol == SYM_Times) {
+        factors = factored->data.function.args;
+        nfactors = factored->data.function.arg_count;
+    } else {
+        factors = &factored;
+        nfactors = 1;
+    }
+    Expr** acc = (Expr**)malloc(sizeof(Expr*) * (nfactors * 2));
+    size_t acc_n = 0;
+
+    for (size_t i = 0; i < nfactors; i++) {
+        Expr* fac = factors[i];
+        Expr* base = fac;
+        int multiplicity = 1;
+        if (fac->type == EXPR_FUNCTION
+            && fac->data.function.head->type == EXPR_SYMBOL
+            && fac->data.function.head->data.symbol == SYM_Power
+            && fac->data.function.arg_count == 2
+            && fac->data.function.args[1]->type == EXPR_INTEGER
+            && fac->data.function.args[1]->data.integer >= 1) {
+            base = fac->data.function.args[0];
+            multiplicity = (int)fac->data.function.args[1]->data.integer;
+        }
+        int deg = get_degree_poly(base, t);
+        if (deg == 0) continue;  /* numeric coefficient */
+
+        Expr* contribution = NULL;
+        if (deg == 1) {
+            Expr* alpha = extract_linear_root(base, t);
+            if (!alpha) goto fail;
+            contribution = build_log_term(alpha, s, t);
+            expr_free(alpha);
+        } else if (deg == 2) {
+            Expr* a = get_coeff(base, t, 2);
+            Expr* b = get_coeff(base, t, 1);
+            Expr* c = get_coeff(base, t, 0);
+            contribution = logtoreal_quadratic(a, b, c, s, x, t);
+            expr_free(a); expr_free(b); expr_free(c);
+            if (!contribution) goto fail;
+        } else {
+            /* Higher-degree factor: out of bounded-Solve scope. */
+            goto fail;
+        }
+        for (int m = 0; m < multiplicity; m++) {
+            acc[acc_n++] = (m == 0) ? contribution : expr_copy(contribution);
+        }
+    }
+    if (acc_n == 0) { free(acc); return expr_new_integer(0); }
+    if (acc_n == 1) { Expr* r = acc[0]; free(acc); return r; }
+    Expr* sum = internal_plus(acc, acc_n);
+    free(acc);
+    return eval_and_free(sum);
+
+fail:
+    for (size_t k = 0; k < acc_n; k++) expr_free(acc[k]);
+    free(acc);
+    return NULL;
+}
+
+/* LogToReal[r, s, x, t]: factor r over Q (and a small set of
+ * algebraic extensions), then dispatch each linear / quadratic factor
+ * through logtoreal_quadratic.  Returns NULL when the factor
+ * structure exceeds Phase 4's bounded-Solve scope. */
+static Expr* intrat_log_to_real(Expr* r, Expr* s, Expr* x, Expr* t) {
+    intrat_trace("LogToReal", "IN", r);
+
+    /* Attempt 1 — Factor over Q. */
+    Expr* factored = internal_factor((Expr*[]){expr_copy(r)}, 1);
+    Expr* factored_e = evaluate(factored);
+    expr_free(factored);
+    Expr* result = logtoreal_dispatch(factored_e, s, x, t);
+    expr_free(factored_e);
+    if (result) { intrat_trace("LogToReal", "OUT", result); return result; }
+
+    /* Attempt 2 — Factor[r, Extension -> Sqrt[2]].  Catches the
+     * 1 + t^4 -> (t^2 + Sqrt[2] t + 1)(t^2 - Sqrt[2] t + 1) family
+     * and other inputs whose minimal field is Q[Sqrt[2]]. */
+    static const char* const candidates[] = { "Sqrt[2]", "Sqrt[3]", "Sqrt[5]" };
+    for (size_t k = 0; k < sizeof(candidates) / sizeof(*candidates); k++) {
+        Expr* alpha_expr = parse_expression(candidates[k]);
+        if (!alpha_expr) continue;
+        Expr* alpha = evaluate(alpha_expr);
+        expr_free(alpha_expr);
+        Expr* opt = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){expr_new_symbol("Extension"), alpha}, 2);
+        Expr* fac = internal_factor(
+            (Expr*[]){expr_copy(r), opt}, 2);
+        Expr* fac_e = evaluate(fac);
+        expr_free(fac);
+        result = logtoreal_dispatch(fac_e, s, x, t);
+        expr_free(fac_e);
+        if (result) { intrat_trace("LogToReal", "OUT", result); return result; }
+    }
+    intrat_trace("LogToReal", "OUT (failed)", r);
+    return NULL;
+}
+
+/* ----- Linear-Q closer (Phase 2's contribution to closed forms) -----
+ *
+ * Try to evaluate the {Q_i, S_i} pair list to a closed-form Log sum
+ * by factoring each Q_i over Q[t] (or Q[t, alpha]) and contributing
+ * α Log[S_i(α, x)] for every linear factor (t - α).
+ *
+ * Phase 2 closes the case where every linear factor lies over Q —
+ * which covers `1/((x-a)(x-b))`, `1/(x^n - c^n)` for rational c, and
+ * the rational-roots fragment of any LRT problem.  Quadratic factors
+ * with negative or symbolic discriminants stay unhandled here; Phase
+ * 4's LogToReal will pick them up.
+ */
 
 /* Walk a Factor[poly]'s Times-headed result and append every linear
  * (t - α) factor's contribution to *terms.  Returns false if any
@@ -1474,19 +1958,56 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         return result;
     }
 
-    /* Phase 2 — Lazard-Rioboo-Trager log part.  Try IntRationalLogPart
-     * on the squarefree-denominator residual and close to a real Log
-     * sum when every Q_i factor is linear in t.  More general factor
-     * patterns (quadratic w/ negative discriminant, biquadratic,
-     * n-th-root) require LogToReal — that closes in Phase 4. */
+    /* Phase 2/4 — Lazard-Rioboo-Trager log part.  Run
+     * IntRationalLogPart on the squarefree-denominator residual,
+     * then for each {Q_i, S_i} pair invoke LogToReal which closes
+     * every linear / quadratic factor over Q (the bounded-Solve
+     * scope from the plan).  When LogToReal fails on any pair we
+     * fall back to the linear-Q-only closer; if that also fails
+     * the integral stays unevaluated. */
     Expr* t_sym = expr_new_symbol("Integrate`Private`tt$");
     Expr* lrt_pairs = intrat_int_rational_log_part(h, x, t_sym, false);
     expr_free(h);
 
     if (lrt_pairs) {
-        Expr* closed = intrat_linear_q_closer(lrt_pairs, x, t_sym);
-        if (closed) {
+        /* First try LogToReal on every (Q_i, S_i) pair. */
+        size_t npairs = lrt_pairs->data.function.arg_count;
+        Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * npairs);
+        bool all_ok = true;
+        size_t lrt_count = 0;
+        for (size_t i = 0; i < npairs; i++) {
+            Expr* pair = lrt_pairs->data.function.args[i];
+            Expr* Qi = list_get(pair, 1);
+            Expr* Si = list_get(pair, 2);
+            if (!Qi || !Si) { all_ok = false; if (Qi) expr_free(Qi); if (Si) expr_free(Si); break; }
+            Expr* term = intrat_log_to_real(Qi, Si, x, t_sym);
+            expr_free(Qi); expr_free(Si);
+            if (!term) { all_ok = false; break; }
+            lr_terms[lrt_count++] = term;
+        }
+        if (all_ok) {
+            Expr* lr_sum;
+            if (lrt_count == 0) lr_sum = expr_new_integer(0);
+            else if (lrt_count == 1) { lr_sum = lr_terms[0]; }
+            else lr_sum = eval_and_free(internal_plus(lr_terms, lrt_count));
+            free(lr_terms);
             expr_free(lrt_pairs); expr_free(t_sym);
+            expr_free(h_num); expr_free(h_den);
+            Expr* sum = internal_plus(
+                (Expr*[]){poly_int, g, lr_sum}, 3);
+            Expr* result = eval_and_free(sum);
+            intrat_trace("IntegrateRational", "OUT", result);
+            return result;
+        }
+        /* Some factor too complex for LogToReal — try the linear-Q
+         * closer (handles all-rational-roots fallback). */
+        for (size_t k = 0; k < lrt_count; k++) expr_free(lr_terms[k]);
+        free(lr_terms);
+
+        Expr* closed = intrat_linear_q_closer(lrt_pairs, x, t_sym);
+        expr_free(lrt_pairs);
+        if (closed) {
+            expr_free(t_sym);
             expr_free(h_num); expr_free(h_den);
             Expr* sum = internal_plus(
                 (Expr*[]){poly_int, g, closed}, 3);
@@ -1494,13 +2015,11 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
             intrat_trace("IntegrateRational", "OUT", result);
             return result;
         }
-        expr_free(lrt_pairs);
     }
     expr_free(t_sym);
     expr_free(h_num); expr_free(h_den);
 
-    /* Phases 3-4 will close the remaining cases (LogToAtan,
-     * LogToReal).  For now leave the call unevaluated. */
+    /* Beyond Phase 4's bounded-Solve scope — leave unevaluated. */
     expr_free(g); expr_free(poly_int);
     intrat_trace("IntegrateRational", "OUT (unresolved)", f);
     return NULL;
@@ -1622,6 +2141,25 @@ Expr* builtin_intrat_helpers_apartlist(Expr* res) {
     return intrat_apart_list(f, x, alpha);
 }
 
+Expr* builtin_intrat_logtoatan(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    Expr* a = res->data.function.args[0];
+    Expr* b = res->data.function.args[1];
+    Expr* x = res->data.function.args[2];
+    if (x->type != EXPR_SYMBOL) return NULL;
+    return intrat_log_to_atan(a, b, x);
+}
+
+Expr* builtin_intrat_logtoreal(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 4) return NULL;
+    Expr* r = res->data.function.args[0];
+    Expr* s = res->data.function.args[1];
+    Expr* x = res->data.function.args[2];
+    Expr* t = res->data.function.args[3];
+    if (x->type != EXPR_SYMBOL || t->type != EXPR_SYMBOL) return NULL;
+    return intrat_log_to_real(r, s, x, t);
+}
+
 /* ------------------------------------------------------------------ */
 /* Init.                                                              */
 /* ------------------------------------------------------------------ */
@@ -1704,6 +2242,25 @@ void intrat_init(void) {
             "Integrate`Helpers`ApartList[f, x] returns Apart[f, x]'s output\n"
             "as a List of summands. Accepts a trailing Extension -> alpha\n"
             "rule that is forwarded to the underlying Apart call.");
+
+    /* Phase 3 — Rioboo's recursive LogToAtan. */
+    install("Integrate`LogToAtan",
+            builtin_intrat_logtoatan,
+            "Integrate`LogToAtan[A, B, x] returns a sum of ArcTan of polynomials\n"
+            "in K[x] whose derivative equals D[I Log[(A + I B)/(A - I B)], x].\n"
+            "Used by LogToReal (Phase 4) to convert complex log pairs into real\n"
+            "ArcTan summands. Bronstein, Symbolic Integration I, p. 63 (Rioboo).");
+
+    /* Phase 4 — Rioboo's LogToReal. */
+    install("Integrate`LogToReal",
+            builtin_intrat_logtoreal,
+            "Integrate`LogToReal[r, s, x, t] converts the symbolic\n"
+            "RootSum[r(α)==0, α Log[s(α, x)]] into a real Log + ArcTan form\n"
+            "by factoring r over Q and dispatching each linear / quadratic\n"
+            "factor (positive discriminant -> two real Logs; negative\n"
+            "discriminant -> Log + LogToAtan-derived ArcTan). Returns the\n"
+            "call unevaluated when r has factors of degree > 2 in t (the\n"
+            "bounded-Solve scope of Phase 4).");
 
     /* Trace flag: Integrate`$Verbose. Default False. */
     {

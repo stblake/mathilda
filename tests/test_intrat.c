@@ -204,8 +204,6 @@ static void test_integrate_rational_via_recognition(void) {
 }
 
 static void test_integrate_unevaluated(void) {
-    /* No closed form via Phase 1 (LRT is Phase 2). */
-    run_eq("Integrate[1/(x^2 + 1), x]", "Integrate[1/(1 + x^2), x]");
     /* Non-rational integrand: stays as Integrate[...]. */
     run_eq("Integrate[Sin[x], x]", "Integrate[Sin[x], x]");
 }
@@ -261,12 +259,54 @@ static void test_integrate_lrt_linear_q(void) {
     assert_integral_correct("1/(x (x-1) (x-2) (x-3))");
 }
 
+/* ------------------------------------------------------------------ */
+/* Phase 3 — LogToAtan                                                 */
+/* ------------------------------------------------------------------ */
+
+static void test_logtoatan_constant_b(void) {
+    /* B free of x with A not free of x: 2 ArcTan[A/B]. */
+    run_eq("Integrate`LogToAtan[x, a, x]", "2 ArcTan[x/a]");
+    run_eq("Integrate`LogToAtan[x, 1, x]", "2 ArcTan[x]");
+    /* Both free of x: 0. */
+    run_eq("Integrate`LogToAtan[a, b, x]", "0");
+}
+
+static void test_logtoatan_recursive(void) {
+    /* The chain x^3 - 3 x divided by x^2 - 2 should produce a sum of
+     * ArcTan terms that matches the Rioboo recursion (cf.
+     * IntegrateRational.m:1587-1589 reference test). */
+    run_eq("Integrate`LogToAtan[x^3 - 3 x, x^2 - 2, x]",
+           "2 ArcTan[x] + 2 ArcTan[x^3] + 2 ArcTan[1/2 (x - 3 x^3 + x^5)]");
+}
+
 static void test_integrate_lrt_unresolved(void) {
-    /* Q with irrational/complex roots — Phase 4 territory. */
-    run_eq("Integrate[1/(x^2 + 1), x]", "Integrate[1/(1 + x^2), x]");
+    /* Quartic with no rational / quadratic factorisation in Q[Sqrt[2]]
+     * stays unevaluated — needs the biquadratic / n-th-root closer. */
     run_eq("Integrate[1/(x^4 + 1), x]", "Integrate[1/(1 + x^4), x]");
-    /* Q with a mixed rational+complex factorisation falls back too. */
-    run_eq("Integrate[1/(x^3 - 1), x]", "Integrate[1/(-1 + x^3), x]");
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 4 — LogToReal closing                                         */
+/* ------------------------------------------------------------------ */
+
+static void test_integrate_arctan(void) {
+    /* Quadratic with negative discriminant — closes to ArcTan. */
+    run_eq("Integrate[1/(x^2 + 1), x]", "ArcTan[x]");
+    run_eq("Integrate[1/(x^2 + 4), x]", "1/2 ArcTan[1/2 x]");
+    /* Quadratic with linear shift. */
+    run_eq("Integrate[1/(x^2 + 2 x + 5), x]",
+           "1/2 ArcTan[1/2 (1 + x)]");
+    /* Mixed linear + quadratic factor. */
+    assert_integral_correct("1/((x^2+1)(x-1))");
+    assert_integral_correct("(x+2)/((x^2+1)(x-1))");
+}
+
+static void test_integrate_quartic_factorable(void) {
+    /* x^4 + x^2 + 1 = (x^2 + x + 1)(x^2 - x + 1) — two quadratics
+     * with negative discriminants give two ArcTans + two Logs. */
+    assert_integral_correct("1/(x^4 + x^2 + 1)");
+    /* Cubic with one rational + irreducible-quadratic factor over Q. */
+    assert_integral_correct("1/(x^3 - 1)");
 }
 
 /* ------------------------------------------------------------------ */
@@ -332,6 +372,12 @@ int main(void) {
     TEST(test_integrate_lrt_linear_q);
     TEST(test_integrate_lrt_unresolved);
 
-    printf("All Phase 1+2 (IntegrateRational + Hermite + LRT log-part) tests passed!\n");
+    TEST(test_logtoatan_constant_b);
+    TEST(test_logtoatan_recursive);
+
+    TEST(test_integrate_arctan);
+    TEST(test_integrate_quartic_factorable);
+
+    printf("All Phase 1-4 (Hermite + LRT + LogToAtan + LogToReal) tests passed!\n");
     return 0;
 }
