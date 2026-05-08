@@ -31,6 +31,7 @@
 #include "print.h"
 #include "options.h"
 #include "rationalize.h"
+#include "root.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1015,6 +1016,93 @@ static Expr* find_prs_at_degree(Expr* prs, Expr* x, int target_deg) {
         expr_free(el_e);
     }
     return NULL;
+}
+
+/* ------------------------------------------------------------------ */
+/* NaiveLogPart — RootSum fallback for the log part.                   */
+/* ------------------------------------------------------------------ */
+
+/* Direct port of IntegrateRational.m:1116-1124.
+ *
+ *   NaiveLogPart[f, x] = Σ_{α : d(α) = 0}  a(α) Log(x - α) / d'(α)
+ *
+ * for f = a/d.  Returned in held-symbolic RootSum form
+ *
+ *   RootSum[ Function[t, d(t)],
+ *            Function[t, a(t) Log(x - t) / d'(t)] ]
+ *
+ * with `t` a fresh bound variable distinct from the outer integration
+ * variable x.  The result is the universal fallback when LogToReal
+ * cannot close the log part to a real elementary expression — every
+ * proper rational integrand admits this representation, and the
+ * D[RootSum] rule wired in src/deriv.c differentiates it back to f.
+ *
+ * This routine deliberately does NOT call ToRadicals on the
+ * biquadratic case (cf. IntegrateRational.m:1121).  Algebraic-extension
+ * radical closure is the responsibility of Solve / ToRadicals which we
+ * have not yet implemented; until then RootSum is the honest answer. */
+static Expr* intrat_naive_log_part(Expr* f, Expr* x) {
+    intrat_trace("NaiveLogPart", "IN", f);
+
+    /* a/d split.  We canonicalise f via Together so a and d are
+     * polynomial in x even when f arrived as a sum of partial-fraction
+     * pieces or with rational coefficients. */
+    Expr* tg = internal_together((Expr*[]){expr_copy(f)}, 1);
+    Expr* combined = evaluate(tg);
+    expr_free(tg);
+    if (!combined) return NULL;
+
+    Expr* a = eval_and_free(intrat_numerator(combined));
+    Expr* d = eval_and_free(intrat_denominator(combined));
+    expr_free(combined);
+
+    /* d'(x), expanded so polynomial divisions downstream see it in
+     * normal form. */
+    Expr* dprime = intrat_d(d, x);
+    Expr* dd = expr_expand(dprime); expr_free(dprime);
+
+    /* Fresh bound variable.  The Private subcontext keeps it well clear
+     * of any user symbol the caller might have set globally — using a
+     * bare `t` would be unsafe because ReplaceAll evaluates the rule's
+     * RHS, so a user-bound t = 5 would corrupt the substitution. */
+    Expr* t = expr_new_symbol("Integrate`Private`t");
+
+    /* Substitute t for x in a, d, dd via ReplaceAll. */
+    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+        (Expr*[]){ expr_copy(x), expr_copy(t) }, 2);
+
+    Expr* a_t = eval_and_free(internal_replace_all(
+        (Expr*[]){ a, expr_copy(rule) }, 2));
+    Expr* d_t = eval_and_free(internal_replace_all(
+        (Expr*[]){ d, expr_copy(rule) }, 2));
+    Expr* dd_t = eval_and_free(internal_replace_all(
+        (Expr*[]){ dd, expr_copy(rule) }, 2));
+    expr_free(rule);
+
+    /* Build the body: a_t * Log[x - t] / dd_t. */
+    Expr* neg_t = internal_times((Expr*[]){
+        expr_new_integer(-1),
+        expr_copy(t)
+    }, 2);
+    Expr* x_minus_t = internal_plus(
+        (Expr*[]){ expr_copy(x), neg_t }, 2);
+    Expr* x_minus_t_e = eval_and_free(x_minus_t);
+
+    Expr* log_term = expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){ x_minus_t_e }, 1);
+
+    Expr* numer = internal_times(
+        (Expr*[]){ a_t, log_term }, 2);
+    Expr* numer_e = eval_and_free(numer);
+
+    Expr* body = internal_divide(
+        (Expr*[]){ numer_e, dd_t }, 2);
+    Expr* body_e = eval_and_free(body);
+
+    /* Wrap in RootSum[Function[t, d_t], Function[t, body_e]]. */
+    Expr* result = root_make_rootsum(t, d_t, body_e);
+    intrat_trace("NaiveLogPart", "OUT", result);
+    return result;
 }
 
 /* IntRationalLogPart core. Returns either the {Q, S} pair list
@@ -2593,6 +2681,14 @@ Expr* builtin_intrat_logtoarctanh(Expr* res) {
     return intrat_log_to_arctanh(e, x);
 }
 
+Expr* builtin_intrat_naive_log_part(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* x = res->data.function.args[1];
+    if (x->type != EXPR_SYMBOL) return NULL;
+    return intrat_naive_log_part(f, x);
+}
+
 /* ------------------------------------------------------------------ */
 /* Init.                                                              */
 /* ------------------------------------------------------------------ */
@@ -2705,6 +2801,20 @@ void intrat_init(void) {
             "discriminant -> Log + LogToAtan-derived ArcTan). Returns the\n"
             "call unevaluated when r has factors of degree > 2 in t (the\n"
             "bounded-Solve scope of Phase 4).");
+
+    /* Phase 8b — NaiveLogPart RootSum fallback. */
+    install("Integrate`NaiveLogPart",
+            builtin_intrat_naive_log_part,
+            "Integrate`NaiveLogPart[f, x] returns the held-symbolic\n"
+            "RootSum form of the logarithmic part of Integrate[f, x]\n"
+            "for a rational function f = a/d:\n"
+            "  RootSum[Function[t, d(t)],\n"
+            "          Function[t, a(t) Log(x - t) / d'(t)]].\n"
+            "Used as the universal fallback by the rational integrator\n"
+            "whenever LogToReal cannot close the log part to a real\n"
+            "elementary expression.  The result differentiates back to f\n"
+            "via the D[RootSum, x] rule wired in src/deriv.c.\n"
+            "Direct port of IntegrateRational.m:1116-1124.");
 
     /* Trace flag: Integrate`$Verbose. Default False. */
     {

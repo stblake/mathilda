@@ -75,6 +75,18 @@ Expr* builtin_intrat_logtoreal(Expr* res);
 /* Phase 6 — Log → ArcTanh / combined Log post-processing. */
 Expr* builtin_intrat_logtoarctanh(Expr* res);
 
+/* Phase 8b — NaiveLogPart RootSum fallback.  Direct port of
+ * IntegrateRational.m:1116-1124.  Returns the held-symbolic
+ * RootSum form of the log part of Integrate[a/d, x]:
+ *
+ *   RootSum[Function[t, d(t)],
+ *           Function[t, a(t) Log(x - t) / d'(t)]]
+ *
+ * Used as the universal fallback by the rational integrator when
+ * LogToReal cannot close the log part to a real elementary
+ * expression (Phase 8c). */
+Expr* builtin_intrat_naive_log_part(Expr* res);
+
 /* Register every Integrate` package symbol in the global symbol table.
  * Called from integrate_init() during core_init().  Idempotent (each
  * registration is a fresh symtab_add_builtin / attribute set). */
