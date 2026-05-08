@@ -2253,39 +2253,70 @@ static Expr* try_lrt_close(Expr* num, Expr* den, Expr* x) {
         (Expr*[]){expr_copy(num), expr_copy(den)}, 2);
     Expr* h_eval = eval_and_free(h);
 
+    /* Closure preference (matches IntegrateRational.m:560-572):
+     *   1.  IntRationalLogPart -> LogToReal on every pair  (real elementary)
+     *   2.  Linear-Q closer (every Q_i factors over Q)     (Log + ArcTanh)
+     *   3.  NaiveLogPart                                    (held RootSum)
+     *
+     * Only step 3 is universal — every proper rational integrand
+     * admits the Lagrange RootSum form regardless of the algebraic
+     * complexity of the roots of d.  We fall through to it whenever
+     * the higher-quality closures fail, so try_lrt_close never
+     * returns NULL for a well-formed integrand. */
+    Expr* result = NULL;
     Expr* t_sym = expr_new_symbol("Integrate`Private`tt$");
     Expr* lrt_pairs = intrat_int_rational_log_part(h_eval, x, t_sym, false);
-    expr_free(h_eval);
-    if (!lrt_pairs) { expr_free(t_sym); return NULL; }
-
-    size_t npairs = lrt_pairs->data.function.arg_count;
-    Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * (npairs ? npairs : 1));
-    size_t lr_count = 0;
-    bool all_ok = true;
-    for (size_t i = 0; i < npairs; i++) {
-        Expr* pair = lrt_pairs->data.function.args[i];
-        Expr* Qi = list_get(pair, 1);
-        Expr* Si = list_get(pair, 2);
-        if (!Qi || !Si) { all_ok = false; if (Qi) expr_free(Qi); if (Si) expr_free(Si); break; }
-        Expr* term = intrat_log_to_real(Qi, Si, x, t_sym);
-        expr_free(Qi); expr_free(Si);
-        if (!term) { all_ok = false; break; }
-        lr_terms[lr_count++] = term;
-    }
-    if (!all_ok) {
-        for (size_t k = 0; k < lr_count; k++) expr_free(lr_terms[k]);
+    if (lrt_pairs) {
+        size_t npairs = lrt_pairs->data.function.arg_count;
+        Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * (npairs ? npairs : 1));
+        size_t lr_count = 0;
+        bool all_ok = true;
+        for (size_t i = 0; i < npairs; i++) {
+            Expr* pair = lrt_pairs->data.function.args[i];
+            Expr* Qi = list_get(pair, 1);
+            Expr* Si = list_get(pair, 2);
+            if (!Qi || !Si) {
+                all_ok = false;
+                if (Qi) expr_free(Qi);
+                if (Si) expr_free(Si);
+                break;
+            }
+            Expr* term = intrat_log_to_real(Qi, Si, x, t_sym);
+            expr_free(Qi); expr_free(Si);
+            if (!term) { all_ok = false; break; }
+            lr_terms[lr_count++] = term;
+        }
+        if (all_ok) {
+            if (lr_count == 0) {
+                result = expr_new_integer(0);
+            } else if (lr_count == 1) {
+                result = lr_terms[0];
+                lr_terms[0] = NULL;  /* prevent double-free */
+            } else {
+                Expr* sum = internal_plus(lr_terms, lr_count);
+                /* lr_terms ownership transferred to sum's args. */
+                memset(lr_terms, 0, sizeof(Expr*) * lr_count);
+                result = eval_and_free(sum);
+            }
+        } else {
+            /* LogToReal failed on at least one pair — drop partial
+             * results and try the linear-Q closer. */
+            for (size_t k = 0; k < lr_count; k++) {
+                if (lr_terms[k]) expr_free(lr_terms[k]);
+            }
+            result = intrat_linear_q_closer(lrt_pairs, x, t_sym);
+        }
         free(lr_terms);
-        /* Linear-Q fallback: every Q_i factors completely over Q. */
-        Expr* closed = intrat_linear_q_closer(lrt_pairs, x, t_sym);
-        expr_free(lrt_pairs); expr_free(t_sym);
-        return closed;
+        expr_free(lrt_pairs);
     }
-    expr_free(lrt_pairs); expr_free(t_sym);
-    if (lr_count == 0) { free(lr_terms); return expr_new_integer(0); }
-    if (lr_count == 1) { Expr* r = lr_terms[0]; free(lr_terms); return r; }
-    Expr* sum = internal_plus(lr_terms, lr_count);
-    free(lr_terms);
-    return eval_and_free(sum);
+    expr_free(t_sym);
+
+    /* Universal fallback. */
+    if (!result) {
+        result = intrat_naive_log_part(h_eval, x);
+    }
+    expr_free(h_eval);
+    return result;
 }
 
 /* Process h piece-by-piece via Apart, ExtractConstants, and the

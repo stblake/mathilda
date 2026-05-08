@@ -279,10 +279,18 @@ static void test_logtoatan_recursive(void) {
            "2 ArcTan[x] + 2 ArcTan[x^3] + 2 ArcTan[1/2 (x - 3 x^3 + x^5)]");
 }
 
-static void test_integrate_lrt_unresolved(void) {
-    /* Quartic with no rational / quadratic factorisation in Q[Sqrt[2]]
-     * stays unevaluated — needs the biquadratic / n-th-root closer. */
-    run_eq("Integrate[1/(x^4 + 1), x]", "Integrate[1/(1 + x^4), x]");
+static void test_integrate_lrt_naivelogpart_fallback(void) {
+    /* Quartic with no rational / quadratic factorisation: Phase 4's
+     * LogToReal cannot close it, so Phase 8c falls back to
+     * NaiveLogPart and the result is a held RootSum form rather than
+     * leaving the integrand unevaluated. */
+    Expr* e = parse_expression("Integrate[1/(x^4 + 1), x]");
+    Expr* r = evaluate(e);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") == 0);
+    expr_free(e);
+    expr_free(r);
 }
 
 /* ------------------------------------------------------------------ */
@@ -465,7 +473,7 @@ int main(void) {
     TEST(test_helpers_apartlist);
     TEST(test_intrationallogpart);
     TEST(test_integrate_lrt_linear_q);
-    TEST(test_integrate_lrt_unresolved);
+    TEST(test_integrate_lrt_naivelogpart_fallback);
 
     TEST(test_logtoatan_constant_b);
     TEST(test_logtoatan_recursive);
