@@ -17,9 +17,12 @@
 #include "symtab.h"
 #include "attr.h"
 #include "internal.h"
+#include "rationalize.h"
 #include "sym_names.h"
 
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,6 +30,22 @@
  * predicates we call below return either True or False. */
 static bool is_true_symbol(const Expr* e) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
+}
+
+/* Recursively scan `e` for any EXPR_REAL leaf.  picocas's rational
+ * integrator cannot reason about inexact numbers; we surface them at
+ * dispatch with an Integrate::inexact message rather than letting the
+ * pipeline produce ComplexInfinity / 1/0 partway through. */
+static bool expr_contains_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type == EXPR_FUNCTION) {
+        if (expr_contains_real(e->data.function.head)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (expr_contains_real(e->data.function.args[i])) return true;
+        }
+    }
+    return false;
 }
 
 /* Test whether `f` is a polynomial in `x`.  Calls the existing
@@ -82,13 +101,42 @@ Expr* builtin_integrate(Expr* res) {
      * compute derivatives, partial fractions, ... in it. */
     if (x->type != EXPR_SYMBOL) return NULL;
 
-    bool dispatch = is_polynomial_in(f, x) || is_rational_in(f, x);
-    if (!dispatch) return NULL;
+    /* Inexact integrands: try Rationalize[f] first.  Floats with an
+     * exact rational equivalent within the default tolerance (4.5,
+     * 3.125, ...) coerce cleanly; transcendental floats (N[Pi], ...)
+     * survive Rationalize unchanged, in which case we emit
+     * Integrate::inexact and bubble back unevaluated.  Hash-dedupe
+     * so the eval-loop's repeated re-entry doesn't double-print. */
+    Expr* coerced = NULL;
+    Expr* effective_f = f;
+    if (expr_contains_real(f)) {
+        coerced = internal_rationalize_expr(f, 0.0, RATIONALIZE_DEFAULT);
+        if (!coerced || expr_contains_real(coerced)) {
+            static uint64_t last_warned_hash = 0;
+            uint64_t h = expr_hash(res);
+            if (h != last_warned_hash) {
+                fprintf(stderr,
+                    "Integrate::inexact: Integrand contains inexact numbers which "
+                    "cannot be coerced to exact numbers with Rationalize[number].\n");
+                last_warned_hash = h;
+            }
+            if (coerced) expr_free(coerced);
+            return NULL;
+        }
+        effective_f = coerced;
+    }
+
+    bool dispatch = is_polynomial_in(effective_f, x) || is_rational_in(effective_f, x);
+    if (!dispatch) {
+        if (coerced) expr_free(coerced);
+        return NULL;
+    }
 
     /* Forward to the Integrate` package entry point. */
     Expr* call = expr_new_function(
         expr_new_symbol("Integrate`IntegrateRational"),
-        (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
+        (Expr*[]){ expr_copy(effective_f), expr_copy(x) }, 2);
+    if (coerced) expr_free(coerced);
     Expr* result = evaluate(call);
     expr_free(call);
     if (!result) return NULL;

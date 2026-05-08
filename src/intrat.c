@@ -30,7 +30,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "options.h"
-#include "parse.h"
+#include "rationalize.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1704,14 +1704,15 @@ fail:
     return NULL;
 }
 
-/* LogToReal[r, s, x, t]: factor r over Q (and a small set of
- * algebraic extensions), then dispatch each linear / quadratic factor
- * through logtoreal_quadratic.  Returns NULL when the factor
- * structure exceeds Phase 4's bounded-Solve scope. */
+/* LogToReal[r, s, x, t]: factor r over Q, then dispatch each linear /
+ * quadratic factor through logtoreal_quadratic.  Returns NULL when r
+ * has any irreducible factor of degree >= 3 over Q — the caller is
+ * expected to fall back to NaiveLogPart in that case.  We deliberately
+ * do NOT guess algebraic extensions here; algebraic-extension closure
+ * is the responsibility of Solve (in solve.c, forthcoming). */
 static Expr* intrat_log_to_real(Expr* r, Expr* s, Expr* x, Expr* t) {
     intrat_trace("LogToReal", "IN", r);
 
-    /* Attempt 1 — Factor over Q. */
     Expr* factored = internal_factor((Expr*[]){expr_copy(r)}, 1);
     Expr* factored_e = evaluate(factored);
     expr_free(factored);
@@ -1719,25 +1720,6 @@ static Expr* intrat_log_to_real(Expr* r, Expr* s, Expr* x, Expr* t) {
     expr_free(factored_e);
     if (result) { intrat_trace("LogToReal", "OUT", result); return result; }
 
-    /* Attempt 2 — Factor[r, Extension -> Sqrt[2]].  Catches the
-     * 1 + t^4 -> (t^2 + Sqrt[2] t + 1)(t^2 - Sqrt[2] t + 1) family
-     * and other inputs whose minimal field is Q[Sqrt[2]]. */
-    static const char* const candidates[] = { "Sqrt[2]", "Sqrt[3]", "Sqrt[5]" };
-    for (size_t k = 0; k < sizeof(candidates) / sizeof(*candidates); k++) {
-        Expr* alpha_expr = parse_expression(candidates[k]);
-        if (!alpha_expr) continue;
-        Expr* alpha = evaluate(alpha_expr);
-        expr_free(alpha_expr);
-        Expr* opt = expr_new_function(expr_new_symbol("Rule"),
-            (Expr*[]){expr_new_symbol("Extension"), alpha}, 2);
-        Expr* fac = internal_factor(
-            (Expr*[]){expr_copy(r), opt}, 2);
-        Expr* fac_e = evaluate(fac);
-        expr_free(fac);
-        result = logtoreal_dispatch(fac_e, s, x, t);
-        expr_free(fac_e);
-        if (result) { intrat_trace("LogToReal", "OUT", result); return result; }
-    }
     intrat_trace("LogToReal", "OUT (failed)", r);
     return NULL;
 }
@@ -2434,6 +2416,21 @@ static bool is_intrat_option(Expr* opt) {
     return false;
 }
 
+/* Recursively scan for any EXPR_REAL leaf.  Mirrors the same guard in
+ * src/integrate.c; here it is silent (no Integrate::inexact message)
+ * so the user-visible diagnostic comes from the public Integrate head. */
+static bool intrat_contains_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type == EXPR_FUNCTION) {
+        if (intrat_contains_real(e->data.function.head)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (intrat_contains_real(e->data.function.args[i])) return true;
+        }
+    }
+    return false;
+}
+
 Expr* builtin_intrat_integraterational(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     /* Strip recognised trailing options.  Phase 7 stores option
@@ -2448,7 +2445,22 @@ Expr* builtin_intrat_integraterational(Expr* res) {
     Expr* f = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
     if (x->type != EXPR_SYMBOL) return NULL;
-    return intrat_integrate_rational(f, x);
+    /* Try to coerce inexact integrands to exact rationals.  Silent
+     * here — the public Integrate head owns the user-visible
+     * diagnostic.  If Rationalize cannot eliminate every EXPR_REAL,
+     * bubble back unevaluated. */
+    Expr* coerced = NULL;
+    if (intrat_contains_real(f)) {
+        coerced = internal_rationalize_expr(f, 0.0, RATIONALIZE_DEFAULT);
+        if (!coerced || intrat_contains_real(coerced)) {
+            if (coerced) expr_free(coerced);
+            return NULL;
+        }
+        f = coerced;
+    }
+    Expr* result = intrat_integrate_rational(f, x);
+    if (coerced) expr_free(coerced);
+    return result;
 }
 
 Expr* builtin_intrat_integratepolynomial(Expr* res) {
