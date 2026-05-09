@@ -642,3 +642,21 @@ else()
     target_link_libraries(intrat_tests gmp m)
 endif()
 add_test(NAME intrat_tests COMMAND intrat_tests)
+
+# Comprehensive corpus runner for IntegrateRationalTests.m and
+# IntegrateRationalInlineCases.m.  Loads the .m file at runtime and
+# runs every {integrand, var, ...} entry through the rational
+# integrator with a differential check; uses fork-per-case to
+# isolate hangs and crashes from later cases.
+add_executable(intrat_corpus_tests test_intrat_corpus.c ${COMMON_SRC})
+target_include_directories(intrat_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(intrat_corpus_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(intrat_corpus_tests build_ecm)
+else()
+    target_link_libraries(intrat_corpus_tests gmp m)
+endif()
+add_test(NAME intrat_corpus_tests
+         COMMAND intrat_corpus_tests ../../IntegrateRationalTests.m)
+add_test(NAME intrat_inline_corpus_tests
+         COMMAND intrat_corpus_tests ../../IntegrateRationalInlineCases.m)
