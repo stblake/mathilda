@@ -3124,9 +3124,34 @@ following classes of integrand:
     complex conjugate pair `u ± I v`, contributes
     `u Log[A^2 + B^2] + v LogToAtan[A, B, x]` (Bronstein, *Symbolic
     Integration I*, p. 63 — Rioboo's complex-to-real conversion).
-  - Higher-degree factors fall back to retrying `Factor` with
-    `Extension -> Sqrt[2] / Sqrt[3] / Sqrt[5]`; if no candidate
-    closes the input, the call returns unevaluated.
+  - Higher-degree irreducible-over-Q factors fall through to
+    `Integrate`NaiveLogPart` (Phase 8b/c) — never to a
+    speculative-extension retry.  Algebraic-extension closure is
+    deferred to `solve.c` / `ToRadicals`.
+- **Phase 8b — NaiveLogPart RootSum fallback** —
+  `Integrate`NaiveLogPart[f, x]` returns the held-symbolic
+  `RootSum[Function[t, d(t)], Function[t, a(t) Log(x - t) / d'(t)]]`
+  representation of the log part, mirroring the Lagrange / Bronstein
+  closed form `int a/d dx = sum_α a(α) Log(x - α) / d'(α)`.  This is
+  universal — every proper rational integrand admits this form, with
+  derivatives flowing through the body via the `D[RootSum, x]` rule
+  in `src/deriv.c`.  See `src/root.c` for the held `Root` and
+  `RootSum` constructs (HoldAll + Protected).  Direct port of
+  `IntegrateRational.m:1116-1124`.
+- **Phase 8c — NaiveLogPart wired as universal LogToReal fallback** —
+  the closure preference becomes
+    1. `IntRationalLogPart -> LogToReal` (real elementary form),
+    2. linear-Q closer (`Log + ArcTanh` combination),
+    3. `NaiveLogPart` (held `RootSum` form),
+  with step 3 universal so `try_lrt_close` never returns NULL for a
+  well-formed proper rational input.
+- **Phase 8d-bonus — radical-form root expansion** —
+  the tail of `NaiveLogPart` runs `expand_simple_rootsum`: when
+  `d(t)` is one of the polynomial shapes whose roots have an explicit
+  radical-formula closed form (linear / quadratic / biquadratic), the
+  `RootSum` is expanded in place to a `Plus` of `body` evaluated at
+  each root via the quadratic formula and `Sqrt`.  Higher-degree
+  factors stay in held `RootSum` form until `solve.c` is implemented.
 - **Phase 6 LogToArcTanh post-processing** — pairs of
   `c Log[A] + c Log[B]` collapse to `c Log[A B]`; sign-paired
   `c Log[A] - c Log[B]` go to `c Log[A/B]` or
@@ -3149,9 +3174,46 @@ following classes of integrand:
   Options are stripped before dispatch — Phase 7 keeps them advisory
   while the algorithmic path uses the Mathematica defaults.
 
-Inputs that escape every closure (irreducible quartics with no
-Sqrt[2]/3/5 split, biquadratic / n-th-root patterns) return
-`Integrate[f, x]` unevaluated.
+Inputs whose denominator is real-irreducible-over-Q with degree > 4
+or non-biquadratic degree 4 close in held `RootSum` form rather than
+unevaluated — see Phase 8b / 8c above.  Phase 8a-bonus emits
+`Integrate::inexact` and bubbles back unevaluated when the integrand
+contains a real-valued constant that cannot be coerced to an exact
+rational by `Rationalize` (e.g. `N[Pi]`); `4.5` and `3.125`-style
+exact-rational floats are silently coerced and processed.
+
+**Inexact integrand handling**:
+```mathematica
+In[?]:= Integrate[1/(4.5 x^4 - 3.125), x]
+        (* Rationalize coerces 4.5 -> 9/2, 3.125 -> 25/8, then
+           closes via the standard pipeline. *)
+
+In[?]:= Integrate[1/(4.5 x^4 - N[Pi]), x]
+        Integrate::inexact: Integrand contains inexact numbers...
+Out[?]= Integrate[1/(-3.14159 + 4.5 x^4), x]  (* unevaluated *)
+```
+
+**Comprehensive corpus runner** (Phase 8d/8e):
+`tests/test_intrat_corpus.c` loads any `IntegrateRational` test
+corpus file at runtime via picocas's own `Get[]`, runs every
+`{integrand, var, ...}` entry through the rational integrator using
+fork-per-case isolation, and classifies the result via differential
+check.  Two CTest entries are wired:
+- `intrat_corpus_tests` — RUBI corpus `IntegrateRationalTests.m`
+  (113 reference cases with optimal antiderivatives).
+- `intrat_inline_corpus_tests` — `IntegrateRationalInlineCases.m`
+  generated from the inline `(*IntegrateRational[...]*)` test cells
+  in `IntegrateRational.m` via `tools/extract_inline_cases.py`
+  (96 cases).
+
+Per-case 10 s timeout + 5 s parent grace.  The corpus runner is the
+public progress dashboard for the rational integrator: each phase
+that lands new closure machinery moves cases out of TIMEOUT /
+RootSum into `diff_zero` (closed in real elementary form, with
+`D[result, x] - integrand` reducing to 0).  The
+`CORPUS_DIFF_NONZERO_BASELINE` constant in the test source is the
+high-water mark of known-broken cases — improvements drive it
+monotonically down.
 
 **Features**:
 - `Protected`.

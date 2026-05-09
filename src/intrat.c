@@ -1019,6 +1019,162 @@ static Expr* find_prs_at_degree(Expr* prs, Expr* x, int target_deg) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Simple-root expansion (Phase 8d-bonus).                             */
+/* ------------------------------------------------------------------ */
+
+/* Tiny tree builders used only by the radical-form root extraction.
+ * Each takes ownership of every Expr* arg and returns a fresh tree
+ * the caller owns.  All paths route through eval_and_free at the
+ * end so the outer Plus/Times can fold trivial identities. */
+static Expr* nlp_neg(Expr* a) {
+    return internal_times((Expr*[]){ expr_new_integer(-1), a }, 2);
+}
+static Expr* nlp_sqrt(Expr* a) {
+    /* Power[a, 1/2] — picocas's Power evaluator turns this into the
+     * canonical Sqrt[..] surface form during printing. */
+    return expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ a,
+                   expr_new_function(expr_new_symbol("Rational"),
+                       (Expr*[]){ expr_new_integer(1),
+                                  expr_new_integer(2) }, 2) },
+        2);
+}
+static Expr* nlp_sub_body(Expr* body, Expr* bvar, Expr* value) {
+    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+        (Expr*[]){ expr_copy(bvar), expr_copy(value) }, 2);
+    Expr* sub = internal_replace_all(
+        (Expr*[]){ expr_copy(body), rule }, 2);
+    return eval_and_free(sub);
+}
+
+/* When `poly` (a univariate polynomial in `bvar`) is one of the
+ * structural shapes whose roots have a closed-form radical formula,
+ * expand `RootSum[Function[bvar, poly], Function[bvar, body]]` into
+ * an explicit Plus[body[α₁], body[α₂], ...] and return it.  Returns
+ * NULL when the polynomial does not match any of the supported
+ * shapes — currently:
+ *
+ *   degree 1                                         (1 root)
+ *   degree 2                                         (2 roots)
+ *   degree 4 with only constant / x^2 / x^4 terms    (4 roots)
+ *
+ * Once Solve / ToRadicals lands, this routine is superseded by a
+ * call to Solve[poly == 0, bvar, Reals] followed by the same body
+ * substitution loop. */
+static Expr* expand_simple_rootsum(Expr* poly, Expr* bvar, Expr* body) {
+    Expr* cl_call = expr_new_function(expr_new_symbol("CoefficientList"),
+        (Expr*[]){ expr_copy(poly), expr_copy(bvar) }, 2);
+    Expr* cl = evaluate(cl_call);
+    expr_free(cl_call);
+    if (!cl || cl->type != EXPR_FUNCTION
+        || cl->data.function.head->type != EXPR_SYMBOL
+        || cl->data.function.head->data.symbol != SYM_List) {
+        if (cl) expr_free(cl);
+        return NULL;
+    }
+
+    size_t n = cl->data.function.arg_count;
+    Expr* result = NULL;
+
+    if (n == 2) {
+        /* c0 + c1 t = 0  =>  t = -c0 / c1. */
+        Expr* c0 = expr_copy(cl->data.function.args[0]);
+        Expr* c1 = expr_copy(cl->data.function.args[1]);
+        Expr* root_raw = internal_divide(
+            (Expr*[]){ nlp_neg(c0), c1 }, 2);
+        Expr* root = eval_and_free(root_raw);
+        result = nlp_sub_body(body, bvar, root);
+        expr_free(root);
+    } else if (n == 3) {
+        /* c0 + c1 t + c2 t^2 = 0
+         * t = (-c1 ± Sqrt[c1² - 4 c0 c2]) / (2 c2). */
+        Expr* c0 = expr_copy(cl->data.function.args[0]);
+        Expr* c1 = expr_copy(cl->data.function.args[1]);
+        Expr* c2 = expr_copy(cl->data.function.args[2]);
+
+        Expr* disc_raw = internal_plus((Expr*[]){
+            internal_times((Expr*[]){ expr_copy(c1), expr_copy(c1) }, 2),
+            nlp_neg(internal_times((Expr*[]){
+                expr_new_integer(4),
+                expr_copy(c0), expr_copy(c2) }, 3))
+        }, 2);
+        Expr* disc = eval_and_free(disc_raw);
+        Expr* sqd  = eval_and_free(nlp_sqrt(disc));
+
+        Expr* two_c2 = eval_and_free(internal_times(
+            (Expr*[]){ expr_new_integer(2), expr_copy(c2) }, 2));
+
+        Expr* num_p = eval_and_free(internal_plus((Expr*[]){
+            nlp_neg(expr_copy(c1)), expr_copy(sqd) }, 2));
+        Expr* num_m = eval_and_free(internal_plus((Expr*[]){
+            nlp_neg(expr_copy(c1)), nlp_neg(expr_copy(sqd)) }, 2));
+        expr_free(sqd); expr_free(c0); expr_free(c1); expr_free(c2);
+
+        Expr* root_p = eval_and_free(internal_divide(
+            (Expr*[]){ num_p, expr_copy(two_c2) }, 2));
+        Expr* root_m = eval_and_free(internal_divide(
+            (Expr*[]){ num_m, two_c2 }, 2));
+
+        Expr* t1 = nlp_sub_body(body, bvar, root_p);
+        Expr* t2 = nlp_sub_body(body, bvar, root_m);
+        expr_free(root_p); expr_free(root_m);
+
+        result = eval_and_free(internal_plus((Expr*[]){ t1, t2 }, 2));
+    } else if (n == 5) {
+        /* Biquadratic: only c0, c2, c4 are non-zero.
+         *   c0 + c2 t² + c4 t⁴ = 0
+         *   u = (-c2 ± Sqrt[c2² - 4 c0 c4]) / (2 c4),  t = ±Sqrt[u]. */
+        Expr* c1 = cl->data.function.args[1];
+        Expr* c3 = cl->data.function.args[3];
+        bool zero_c1 = (c1->type == EXPR_INTEGER && c1->data.integer == 0);
+        bool zero_c3 = (c3->type == EXPR_INTEGER && c3->data.integer == 0);
+        if (zero_c1 && zero_c3) {
+            Expr* c0 = expr_copy(cl->data.function.args[0]);
+            Expr* c2 = expr_copy(cl->data.function.args[2]);
+            Expr* c4 = expr_copy(cl->data.function.args[4]);
+
+            Expr* disc_raw = internal_plus((Expr*[]){
+                internal_times((Expr*[]){ expr_copy(c2), expr_copy(c2) }, 2),
+                nlp_neg(internal_times((Expr*[]){
+                    expr_new_integer(4),
+                    expr_copy(c0), expr_copy(c4) }, 3))
+            }, 2);
+            Expr* disc = eval_and_free(disc_raw);
+            Expr* sqd  = eval_and_free(nlp_sqrt(disc));
+
+            Expr* two_c4 = eval_and_free(internal_times(
+                (Expr*[]){ expr_new_integer(2), expr_copy(c4) }, 2));
+
+            Expr* up_num = eval_and_free(internal_plus((Expr*[]){
+                nlp_neg(expr_copy(c2)), expr_copy(sqd) }, 2));
+            Expr* um_num = eval_and_free(internal_plus((Expr*[]){
+                nlp_neg(expr_copy(c2)), nlp_neg(expr_copy(sqd)) }, 2));
+            expr_free(sqd); expr_free(c0); expr_free(c2); expr_free(c4);
+
+            Expr* u_p = eval_and_free(internal_divide(
+                (Expr*[]){ up_num, expr_copy(two_c4) }, 2));
+            Expr* u_m = eval_and_free(internal_divide(
+                (Expr*[]){ um_num, two_c4 }, 2));
+
+            Expr* sp = eval_and_free(nlp_sqrt(u_p));
+            Expr* sm = eval_and_free(nlp_sqrt(u_m));
+
+            Expr* t1 = nlp_sub_body(body, bvar, sp);
+            Expr* t2 = nlp_sub_body(body, bvar, eval_and_free(nlp_neg(expr_copy(sp))));
+            Expr* t3 = nlp_sub_body(body, bvar, sm);
+            Expr* t4 = nlp_sub_body(body, bvar, eval_and_free(nlp_neg(expr_copy(sm))));
+            expr_free(sp); expr_free(sm);
+
+            result = eval_and_free(internal_plus(
+                (Expr*[]){ t1, t2, t3, t4 }, 4));
+        }
+    }
+
+    expr_free(cl);
+    return result;
+}
+
+/* ------------------------------------------------------------------ */
 /* NaiveLogPart — RootSum fallback for the log part.                   */
 /* ------------------------------------------------------------------ */
 
@@ -1098,6 +1254,19 @@ static Expr* intrat_naive_log_part(Expr* f, Expr* x) {
     Expr* body = internal_divide(
         (Expr*[]){ numer_e, dd_t }, 2);
     Expr* body_e = eval_and_free(body);
+
+    /* Phase 8d-bonus finishing pass: if the polynomial d(t) has a
+     * closed-form radical-formula root set (linear, quadratic, or
+     * biquadratic), expand the RootSum to an explicit Plus over the
+     * 1/2/4 roots and evaluate the body at each.  Otherwise fall
+     * back to the held RootSum form.  Once Solve / ToRadicals lands
+     * the simple-shape detector is replaced by Solve. */
+    Expr* expanded = expand_simple_rootsum(d_t, t, body_e);
+    if (expanded) {
+        expr_free(t); expr_free(d_t); expr_free(body_e);
+        intrat_trace("NaiveLogPart", "OUT (expanded)", expanded);
+        return expanded;
+    }
 
     /* Wrap in RootSum[Function[t, d_t], Function[t, body_e]]. */
     Expr* result = root_make_rootsum(t, d_t, body_e);
