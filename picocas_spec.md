@@ -3152,6 +3152,20 @@ following classes of integrand:
   `RootSum` is expanded in place to a `Plus` of `body` evaluated at
   each root via the quadratic formula and `Sqrt`.  Higher-degree
   factors stay in held `RootSum` form until `solve.c` is implemented.
+- **Plus/Times BigInt-Rational stability fix** — running the corpus
+  surfaced 9 child-process crashes (SIGSEGV) on inputs whose
+  resultant computations promoted intermediate coefficients into
+  `Rational[BigInt, ...]` territory.  `add_numbers` and
+  `multiply_numbers` had fast paths only for
+  `Rational[Integer, Integer]` and returned `NULL` on
+  `Rational[BigInt, ...]`; the callers in `builtin_plus` and
+  `builtin_times` then dereferenced the `NULL` via
+  `is_overflow()`.  Both helpers now fall through to a generic
+  GMP rational add/multiply that recognises any combination of
+  `Integer / BigInt / Rational[Integer-or-BigInt,
+  Integer-or-BigInt]`, and the callers defensively re-stash the
+  operand on a NULL return.  Locked in by
+  `tests/test_bigint.c::test_plus_rational_with_bigint_parts`.
 - **Phase 6 LogToArcTanh post-processing** — pairs of
   `c Log[A] + c Log[B]` collapse to `c Log[A B]`; sign-paired
   `c Log[A] - c Log[B]` go to `c Log[A/B]` or
