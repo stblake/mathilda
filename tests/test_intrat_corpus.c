@@ -247,10 +247,22 @@ int main(int argc, char** argv) {
                 Expr* d_res = evaluate(d_call);
                 expr_free(d_call);
 
+                /* Rationalise the integrand before subtracting so the
+                 * comparison is exact symbolic rather than tainted by
+                 * floating-point contagion when the integrand contains
+                 * inexact numbers (e.g. 3.5 in 1/(-3.5 + 4.5 x^4)).
+                 * Integrate itself rationalises internally, so this
+                 * keeps the diff check consistent with the integration
+                 * pipeline. */
+                Expr* rat_call = expr_new_function(expr_new_symbol("Rationalize"),
+                    (Expr*[]){ expr_copy(integrand) }, 1);
+                Expr* rat_integrand = evaluate(rat_call);
+                expr_free(rat_call);
+
                 Expr* neg_int = expr_new_function(expr_new_symbol("Times"),
                     (Expr*[]){
                         expr_new_integer(-1),
-                        expr_copy(integrand)
+                        rat_integrand
                     }, 2);
                 Expr* diff_raw = expr_new_function(expr_new_symbol("Plus"),
                     (Expr*[]){ d_res, neg_int }, 2);
