@@ -487,6 +487,238 @@ static void test_negative_coefficient(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Same-exponent product collapse (Times generalized fusion, k = +1)   */
+/* ------------------------------------------------------------------ */
+
+static void test_same_exponent_sqrt(void) {
+    /* a^q * b^q -> (a*b)^q  for positive numeric bases */
+    assert_eval_eq("Sqrt[2] Sqrt[3]",           "Sqrt[6]",      0);
+    assert_eval_eq("Sqrt[2] Sqrt[5]",           "Sqrt[10]",     0);
+    assert_eval_eq("Sqrt[3] Sqrt[5]",           "Sqrt[15]",     0);
+    /* Three-way chain via repeated pairwise fusion. */
+    assert_eval_eq("Sqrt[2] Sqrt[3] Sqrt[5]",   "Sqrt[30]",     0);
+    assert_eval_eq("Sqrt[2] Sqrt[3] Sqrt[5] Sqrt[7]", "Sqrt[210]", 0);
+}
+
+static void test_same_exponent_cube_root(void) {
+    /* Cube-root product collapse. */
+    assert_eval_eq("2^(1/3) 3^(1/3)",           "6^(1/3)",      0);
+    assert_eval_eq("2^(1/3) 5^(1/3)",           "10^(1/3)",     0);
+    assert_eval_eq("3^(1/3) 5^(1/3) 7^(1/3)",   "105^(1/3)",    0);
+    /* The product collapses to a perfect cube and Power's perfect-cube
+     * reduction then fires -- 2^(1/3) * 4^(1/3) = 8^(1/3) = 2. */
+    assert_eval_eq("2^(1/3) 4^(1/3)",           "2",            0);
+    /* 4^(1/3) auto-unifies to 2^(2/3) before fusion can pair it with
+     * 2^(1/3); the generalized-fusion k=+2 path then collapses
+     * 2^(1/3) * 2^(2/3) -> 2^1 = 2. Same result either way. */
+}
+
+static void test_same_exponent_higher_q(void) {
+    /* Quartic and quintic radicals collapse the same way. */
+    assert_eval_eq("2^(1/4) 3^(1/4)",           "6^(1/4)",      0);
+    assert_eval_eq("2^(1/5) 3^(1/5)",           "6^(1/5)",      0);
+    /* k = +2 with q = 3: a^(1/3) * b^(2/3) -> (a*b^2)^(1/3) */
+    assert_eval_eq("2^(1/3) 3^(2/3)",           "18^(1/3)",     0);
+    assert_eval_eq("2^(2/3) 3^(1/3)",           "12^(1/3)",     0);
+    /* Same exponent with rational coefficient. The (1/2) gets absorbed
+     * into Sqrt[2]'s exponent before fusion, then the generalized
+     * fusion sees Power[2, -1/2] * Power[3, 1/2] and produces the
+     * combined-base form Sqrt[3/2] = Sqrt[6]/2. */
+    assert_eval_eq("(1/2) Sqrt[2] Sqrt[3]",     "Sqrt[3/2]",    0);
+}
+
+/* ------------------------------------------------------------------ */
+/* Generalized fusion for integer-ratio exponents (k = -2, +2, ...)    */
+/* ------------------------------------------------------------------ */
+
+static void test_generalized_fusion_negative_k(void) {
+    /* k = -1: classic radical fusion (Sqrt[6]/Sqrt[2] -> Sqrt[3]) is
+     * preserved; the regression that motivated the generalized version. */
+    assert_eval_eq("Sqrt[6]/Sqrt[2]",           "Sqrt[3]",      0);
+    assert_eval_eq("Sqrt[10]/Sqrt[5]",          "Sqrt[2]",      0);
+    /* k = -2: a^(1/3) * b^(-2/3) -> (a/b^2)^(1/3). After perfect-power
+     * unification 4^(-1/3) becomes 2^(-2/3), so this exact form arises
+     * from 12^(1/3) * 4^(-1/3) too. */
+    assert_eval_eq("12^(1/3) * 4^(-1/3)",       "3^(1/3)",      0);
+    assert_eval_eq("12^(1/3) * 2^(-2/3)",       "3^(1/3)",      0);
+    /* k = -3: a^(1/4) * b^(-3/4) -> (a/b^3)^(1/4). */
+    assert_eval_eq("16^(1/4) * 2^(-3/4)",       "2^(1/4)",      0);
+}
+
+static void test_generalized_fusion_positive_k(void) {
+    /* k = +2: a^(1/3) * b^(2/3) -> (a*b^2)^(1/3). */
+    assert_eval_eq("2^(1/3) 8^(2/3)",           "4 2^(1/3)",    0);
+    /* 2^(1/3) * (2^3)^(2/3) -> 2^(1/3) * 2^2 -> 4 * 2^(1/3) -- after
+     * unification of 8^(2/3) into 2^2 the same outcome falls out
+     * via simple integer multiplication. */
+    /* k = +3: a^(1/4) * b^(3/4) -> (a*b^3)^(1/4). */
+    assert_eval_eq("3^(1/4) 2^(3/4)",           "24^(1/4)",     0);
+}
+
+static void test_generalized_fusion_rational_ratio_skipped(void) {
+    /* When the exponents are NOT in integer ratio, fusion must NOT
+     * fire -- 2^(2/5) * 3^(3/5) shouldn't combine. (3/5 is not an
+     * integer multiple of 2/5.) */
+    assert_eval_eq("2^(2/5) 3^(3/5)",           "2^(2/5) 3^(3/5)", 0);
+    /* Different denominators don't fuse either. */
+    assert_eval_eq("2^(1/2) 3^(1/3)",           "Sqrt[2] 3^(1/3)", 0);
+}
+
+/* ------------------------------------------------------------------ */
+/* Perfect-power base unification (Power.c)                            */
+/* ------------------------------------------------------------------ */
+
+static void test_perfect_power_base_unification(void) {
+    /* The motivating case: 4^(2/3) -> 2^(4/3) -> 2 * 2^(1/3). */
+    assert_eval_eq("4^(2/3)",                   "2 2^(1/3)",    0);
+    /* 9 = 3^2, residual exponent 2/3 on a smaller base. */
+    assert_eval_eq("9^(1/3)",                   "3^(2/3)",      0);
+    assert_eval_eq("9^(2/3)",                   "3 3^(1/3)",    0);
+    /* 8 = 2^3 is already minimal-base in some forms; perfect-cube
+     * reduction collapses these to integers. */
+    assert_eval_eq("8^(2/3)",                   "4",            0);
+    assert_eval_eq("8^(5/3)",                   "32",           0);
+    /* 16 = 2^4. Different exponents trigger different combinations. */
+    assert_eval_eq("16^(1/4)",                  "2",            0);
+    assert_eval_eq("16^(3/4)",                  "8",            0);
+    assert_eval_eq("16^(2/3)",                  "4 2^(2/3)",    0);
+    /* 32 = 2^5: lattice of cases. */
+    assert_eval_eq("32^(1/5)",                  "2",            0);
+    assert_eval_eq("32^(2/5)",                  "4",            0);
+    /* 1024 = 2^10. */
+    assert_eval_eq("1024^(1/2)",                "32",           0);
+    assert_eval_eq("1024^(1/5)",                "4",            0);
+    /* 27 = 3^3. */
+    assert_eval_eq("27^(1/3)",                  "3",            0);
+    assert_eval_eq("27^(2/3)",                  "9",            0);
+    assert_eval_eq("27^(4/3)",                  "81",           0);
+}
+
+static void test_perfect_power_minimal_base(void) {
+    /* The unification picks the SMALLEST base. 64 = 2^6, NOT 4^3 or 8^2,
+     * so 64^(1/2) -> 8 (not 4 or 8 stays as 8) and 64^(1/3) -> 4. */
+    assert_eval_eq("64^(1/2)",                  "8",            0);
+    assert_eval_eq("64^(1/3)",                  "4",            0);
+    assert_eval_eq("64^(1/6)",                  "2",            0);
+    assert_eval_eq("64^(5/6)",                  "32",           0);
+    /* 729 = 3^6 = 27^2 = 9^3; smallest base is 3. */
+    assert_eval_eq("729^(1/3)",                 "9",            0);
+    assert_eval_eq("729^(1/6)",                 "3",            0);
+}
+
+static void test_perfect_power_non_perfect_unchanged(void) {
+    /* 6, 10, 12, 30, 100 (perfect square but caught by sqrt path),
+     * 2, 3, 5 (primes). These should NOT have their bases rewritten by
+     * the unification step. */
+    assert_eval_eq("6^(1/3)",                   "6^(1/3)",      0);
+    assert_eval_eq("6^(2/3)",                   "6^(2/3)",      0);
+    assert_eval_eq("6^(2/5)",                   "6^(2/5)",      0);
+    assert_eval_eq("10^(1/3)",                  "10^(1/3)",     0);
+    assert_eval_eq("12^(1/3)",                  "12^(1/3)",     0);
+    assert_eval_eq("30^(2/7)",                  "30^(2/7)",     0);
+    /* 100 = 10^2 IS a perfect power; should unify to 10^(2*p/q). */
+    assert_eval_eq("100^(1/3)",                 "10^(2/3)",     0);
+    assert_eval_eq("100^(1/4)",                 "Sqrt[10]",     0);
+}
+
+static void test_perfect_power_negative_exp(void) {
+    /* Negative-exponent unification: Power[4, -2/3] -> Power[2, -4/3].
+     * Then integer-part extraction kicks in: -4/3 = -1 + (-1)/3 in the
+     * sense p<0,a=-1 ... actually our existing block keeps a=0, b=-2
+     * and produces a rational coefficient. The end form is consistent
+     * with what Sqrt[2]/2 already produces. */
+    assert_eval_eq("4^(-1/3)",                  "1/2^(2/3)",    0);
+    assert_eval_eq("9^(-1/3)",                  "1/3^(2/3)",    0);
+    assert_eval_eq("8^(-1/3)",                  "1/2",          0);
+    assert_eval_eq("16^(-1/4)",                 "1/2",          0);
+    assert_eval_eq("16^(-3/4)",                 "1/8",          0);
+}
+
+/* ------------------------------------------------------------------ */
+/* Sign normalization for negative bases with odd q                    */
+/* ------------------------------------------------------------------ */
+
+static void test_sign_normalization_perfect_cube(void) {
+    /* Mathematica form for negative perfect-cube bases:
+     * (-8)^(p/q) -> coeff * (-1)^(b/q) when residue is 1. */
+    assert_eval_eq("(-8)^(1/3)",                "2 (-1)^(1/3)", 0);
+    assert_eval_eq("(-8)^(2/3)",                "4 (-1)^(2/3)", 0);
+    assert_eval_eq("(-27)^(1/3)",               "3 (-1)^(1/3)", 0);
+    assert_eval_eq("(-27)^(2/3)",               "9 (-1)^(2/3)", 0);
+    assert_eval_eq("(-64)^(1/3)",               "4 (-1)^(1/3)", 0);
+    assert_eval_eq("(-1000)^(1/3)",             "10 (-1)^(1/3)", 0);
+}
+
+static void test_sign_normalization_integer_part(void) {
+    /* Higher-power exponents pick up a sign from the integer part:
+     * (-8)^(5/3) = (-8)^1 * (-8)^(2/3) = -8 * 4 (-1)^(2/3) = -32 (-1)^(2/3).
+     * a_int = 1 (odd), so coefficient is negated. */
+    assert_eval_eq("(-8)^(5/3)",                "-32 (-1)^(2/3)", 0);
+    /* a_int = 2 (even), no sign flip. */
+    assert_eval_eq("(-8)^(7/3)",                "128 (-1)^(1/3)", 0);
+    /* (-27)^(7/3) = (-27)^2 * (-27)^(1/3) = 729 * 3 * (-1)^(1/3). */
+    assert_eval_eq("(-27)^(7/3)",               "2187 (-1)^(1/3)", 0);
+    /* a_int = 1 (odd) for (-27)^(4/3). */
+    assert_eval_eq("(-27)^(4/3)",               "-81 (-1)^(1/3)", 0);
+}
+
+static void test_sign_normalization_with_residue(void) {
+    /* (-r) stays under the radical when r > 1. For (-72)^(1/3),
+     * 72 = 2^3 * 9 so factor 2 out, residue (-9). */
+    assert_eval_eq("(-72)^(1/3)",               "2 (-9)^(1/3)", 0);
+    assert_eval_eq("(-72)^(2/3)",               "4 (-9)^(2/3)", 0);
+    /* (-200)^(1/3): 200 = 2^3 * 25, factor 2, residue (-25). */
+    assert_eval_eq("(-200)^(1/3)",              "2 (-25)^(1/3)", 0);
+    /* (-24)^(1/3): 24 = 2^3 * 3, factor 2, residue (-3). */
+    assert_eval_eq("(-24)^(1/3)",               "2 (-3)^(1/3)", 0);
+}
+
+static void test_sign_normalization_no_extraction(void) {
+    /* When |n| has no perfect q-th-power factor, the negative-base form
+     * stays as-is. (-2)^(1/3), (-3)^(1/3), (-6)^(1/3) — m = 1, no factor
+     * to pull out, leave unevaluated. */
+    assert_eval_eq("(-2)^(1/3)",                "(-2)^(1/3)", 0);
+    assert_eval_eq("(-3)^(1/3)",                "(-3)^(1/3)", 0);
+    assert_eval_eq("(-6)^(1/3)",                "(-6)^(1/3)", 0);
+    assert_eval_eq("(-12)^(1/3)",               "(-12)^(1/3)", 0);
+}
+
+static void test_sign_normalization_even_q_unchanged(void) {
+    /* Even q with negative base (other than q == 2) is intentionally
+     * left unevaluated; the principal-branch result has no clean
+     * canonical form yet. q == 2 still goes through the I-extraction
+     * path, q == 4 / 6 / ... stays. */
+    assert_eval_eq("(-4)^(1/2)",                "2*I",          0);
+    assert_eval_eq("(-9)^(1/2)",                "3*I",          0);
+    assert_eval_eq("(-2)^(1/4)",                "(-2)^(1/4)",   0);
+    assert_eval_eq("(-2)^(1/6)",                "(-2)^(1/6)",   0);
+    assert_eval_eq("(-16)^(1/4)",               "(-16)^(1/4)",  0);
+}
+
+/* ------------------------------------------------------------------ */
+/* Integration: combinations of all three new canonical forms          */
+/* ------------------------------------------------------------------ */
+
+static void test_combined_canonical_forms(void) {
+    /* Same-exponent product into a perfect-cube collapse. */
+    assert_eval_eq("2^(1/3) 32^(1/3)",          "4",            0);
+    /* Same-exponent product where unification then re-fuses. */
+    assert_eval_eq("4^(1/3) 2^(1/3)",           "2",            0);
+    /* Sign normalization combined with same-exponent collapse. */
+    assert_eval_eq("(-8)^(1/3) 27^(1/3)",       "6 (-1)^(1/3)", 0);
+    /* Perfect-power unification then radical fusion across coefficients.
+     * 4^(2/3) -> 2 * 2^(1/3); divided by 2 cancels the 2: result 2^(1/3). */
+    assert_eval_eq("4^(2/3)/2",                 "2^(1/3)",      0);
+    /* Idempotence check: re-evaluating the canonical form is a no-op. */
+    assert_eval_eq("FullForm[4^(2/3)]",
+        "Times[2, Power[2, Rational[1, 3]]]", 0);
+    assert_eval_eq("FullForm[(-8)^(1/3)]",
+        "Times[2, Power[-1, Rational[1, 3]]]", 0);
+    assert_eval_eq("FullForm[(-72)^(1/3)]",
+        "Times[2, Power[-9, Rational[1, 3]]]", 0);
+}
+
+/* ------------------------------------------------------------------ */
 /* Driver                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -534,6 +766,32 @@ int main(void) {
     TEST(test_real_coefficient_skips);
     TEST(test_chained_canonicalization);
     TEST(test_negative_coefficient);
+
+    /* Same-exponent product collapse (Times generalized fusion, k = +1). */
+    TEST(test_same_exponent_sqrt);
+    TEST(test_same_exponent_cube_root);
+    TEST(test_same_exponent_higher_q);
+
+    /* Generalized fusion for k = -2, +2, ... */
+    TEST(test_generalized_fusion_negative_k);
+    TEST(test_generalized_fusion_positive_k);
+    TEST(test_generalized_fusion_rational_ratio_skipped);
+
+    /* Perfect-power base unification. */
+    TEST(test_perfect_power_base_unification);
+    TEST(test_perfect_power_minimal_base);
+    TEST(test_perfect_power_non_perfect_unchanged);
+    TEST(test_perfect_power_negative_exp);
+
+    /* Sign normalization for negative base, odd q. */
+    TEST(test_sign_normalization_perfect_cube);
+    TEST(test_sign_normalization_integer_part);
+    TEST(test_sign_normalization_with_residue);
+    TEST(test_sign_normalization_no_extraction);
+    TEST(test_sign_normalization_even_q_unchanged);
+
+    /* Combinations of the three new canonical forms. */
+    TEST(test_combined_canonical_forms);
 
     printf("All radical_canonical tests passed.\n");
     return 0;

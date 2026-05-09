@@ -31,25 +31,6 @@ static bool is_positive_numeric_expr(Expr* e) {
     return false;
 }
 
-/* Sum of two rational exponents equals zero, exactly? */
-static bool exponents_sum_to_zero(Expr* p, Expr* q) {
-    int64_t pn, pd, qn, qd;
-    if (!is_rational(p, &pn, &pd) || !is_rational(q, &qn, &qd)) return false;
-    /* pn/pd + qn/qd = 0  iff  pn*qd + qn*pd = 0 */
-    __int128_t lhs = (__int128_t)pn * qd + (__int128_t)qn * pd;
-    return lhs == 0;
-}
-
-/* Sign of a rational Expr -- returns -1, 0, or +1, or 0 if not rational. */
-static int rational_sign(Expr* e) {
-    int64_t n, d;
-    if (!is_rational(e, &n, &d)) return 0;
-    /* Denominators are conventionally positive in PicoCAS Rational[n, d]. */
-    if (n > 0) return (d > 0) ? +1 : -1;
-    if (n < 0) return (d > 0) ? -1 : +1;
-    return 0;
-}
-
 static Expr* multiply_numbers(Expr* a, Expr* b) {
     if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
 #ifdef USE_MPFR
@@ -605,57 +586,93 @@ Expr* builtin_times(Expr* res) {
         }
     }
 
-    /* Radical fusion: collapse Power[a, q] * Power[b, -q] into Power[a/b, q]
-     * when a, b are both positive numeric (integer, bigint, rational, real)
-     * -- a > 0 and b > 0 ensures we stay on the principal branch. Applied
-     * after base-grouping so same-base factors have already merged; only
-     * heterogeneous pairs reach here. Examples:
-     *   Sqrt[6]/Sqrt[2]    -> Sqrt[3]         (ratio is a positive integer)
-     *   2^(1/3)/3^(1/3)    -> (2/3)^(1/3)     (ratio is a positive rational)
-     * The ratio is computed by delegating to the evaluator so integer,
-     * bigint, rational, and real bases all compose correctly. */
+    /* Generalized radical fusion: collapse Power[a, e_i] * Power[b, e_j]
+     * into a single Power when a, b are positive numerics and one
+     * exponent is an integer multiple (positive or negative) of the
+     * other. Reduce both exponents to lowest terms; if the denominators
+     * match (q_i == q_j) and one numerator divides the other, the
+     * integer ratio k is well defined. We then collapse to
+     *   Power[a_pri * a_sec^k, e_pri]
+     * where pri is whichever group has the smaller-magnitude numerator
+     * (so the residual Power displays the shortest exponent). Subsumes:
+     *   k = -1: Sqrt[6]/Sqrt[2]  -> Sqrt[3]            (basic fusion)
+     *           Sqrt[2]/Sqrt[3]  -> 1/Sqrt[3/2]
+     *   k = +1: Sqrt[2]*Sqrt[3]  -> Sqrt[6]            (same-exp collapse)
+     *           2^(1/3)*3^(1/3)  -> 6^(1/3)
+     *   k = -2: 12^(1/3) * 2^(-2/3)   -> 3^(1/3)
+     *   k = +2: 2^(1/3) * 8^(2/3)     -> 128^(1/3) -> 4 * 2^(1/3)
+     * Restricted to positive bases for principal-branch correctness;
+     * q > 1 so we don't compete with ordinary arithmetic on integer
+     * exponents (which the base-grouping pass has already merged). */
     for (size_t i = 0; i < group_count; i++) {
         if (!is_positive_numeric_expr(groups[i].base)) continue;
-        if (!is_rational(groups[i].exponent, NULL, NULL)) continue;
+        int64_t pi_n, pi_d;
+        if (!is_rational(groups[i].exponent, &pi_n, &pi_d)) continue;
+        if (pi_d == 1) continue;
+        if (pi_n == 0) continue;
+
         for (size_t j = i + 1; j < group_count; j++) {
             if (!is_positive_numeric_expr(groups[j].base)) continue;
-            if (!is_rational(groups[j].exponent, NULL, NULL)) continue;
-            if (!exponents_sum_to_zero(groups[i].exponent, groups[j].exponent)) continue;
+            int64_t pj_n, pj_d;
+            if (!is_rational(groups[j].exponent, &pj_n, &pj_d)) continue;
+            if (pj_d != pi_d) continue;
+            if (pj_n == 0) continue;
 
-            /* Pick the positive-exponent factor as numerator so the fused
-             * power has the positive exponent (otherwise we'd print the
-             * result as 1/(b/a)^q rather than (a/b)^q). */
-            size_t ni = i, nj = j;
-            if (rational_sign(groups[i].exponent) < 0) { ni = j; nj = i; }
+            /* Determine integer ratio. Default: i is primary (k = pj/pi). */
+            bool i_primary;
+            int64_t k;
+            if (pj_n % pi_n == 0) {
+                i_primary = true;
+                k = pj_n / pi_n;
+            } else if (pi_n % pj_n == 0) {
+                i_primary = false;
+                k = pi_n / pj_n;
+            } else {
+                continue;
+            }
 
-            Expr* ratio = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
-                expr_copy(groups[ni].base),
-                expr_new_function(expr_new_symbol("Power"), (Expr*[]){
-                    expr_copy(groups[nj].base), expr_new_integer(-1)
-                }, 2)
-            }, 2));
+            /* Tie-break when |numerators| are equal: prefer the
+             * positive-exponent primary so the printed Power has a
+             * positive exponent (matches existing fusion convention). */
+            if (llabs(pi_n) == llabs(pj_n)) {
+                if (pi_n > 0)        i_primary = true;
+                else if (pj_n > 0)   i_primary = false;
+                k = i_primary ? (pj_n / pi_n) : (pi_n / pj_n);
+            }
 
-            /* Guard: only keep the fusion if the ratio is a positive numeric
-             * we can wrap in a single Power. If evaluation produced anything
-             * else (it shouldn't with positive numeric bases, but be safe)
-             * discard and leave the original pair intact. */
-            if (!is_positive_numeric_expr(ratio)) { expr_free(ratio); continue; }
+            size_t pri = i_primary ? i : j;
+            size_t sec = i_primary ? j : i;
 
-            Expr* new_exp = expr_copy(groups[ni].exponent);
+            /* new_base = pri.base * sec.base^k. */
+            Expr* sec_pow_k = (k == 1)
+                ? expr_copy(groups[sec].base)
+                : eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(groups[sec].base), expr_new_integer(k) }, 2));
+            Expr* new_base = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(groups[pri].base), sec_pow_k }, 2));
 
-            size_t keep = (ni == i) ? i : j;
-            size_t drop = (ni == i) ? j : i;
-            expr_free(groups[keep].base);
-            expr_free(groups[keep].exponent);
-            expr_free(groups[drop].base);
-            expr_free(groups[drop].exponent);
-            groups[keep].base = ratio;
-            groups[keep].exponent = new_exp;
-            for (size_t k = drop; k + 1 < group_count; k++) groups[k] = groups[k + 1];
+            /* The fused base must remain a positive numeric we can wrap
+             * in one Power. If evaluation produced anything else
+             * (shouldn't on positive numerics, but be safe) abandon the
+             * fusion and leave the pair intact. */
+            if (!is_positive_numeric_expr(new_base)) {
+                expr_free(new_base);
+                continue;
+            }
+            Expr* new_exp = expr_copy(groups[pri].exponent);
+
+            /* Replace at index i (smaller of the two), drop j. */
+            expr_free(groups[i].base);
+            expr_free(groups[i].exponent);
+            expr_free(groups[j].base);
+            expr_free(groups[j].exponent);
+            groups[i].base = new_base;
+            groups[i].exponent = new_exp;
+            for (size_t s = j; s + 1 < group_count; s++) groups[s] = groups[s + 1];
             group_count--;
-            /* Restart from the beginning -- the fused base may pair with an
-             * earlier group. Each fusion strictly decreases group_count so
-             * the overall loop still terminates in O(group_count) restarts. */
+            /* Restart -- the fused base may pair with an earlier group.
+             * Each fusion strictly decreases group_count so the overall
+             * loop terminates in O(group_count) restarts. */
             i = (size_t)-1;
             break;
         }

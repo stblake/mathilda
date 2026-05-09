@@ -64,6 +64,68 @@ static void factor_out_kth_power(int64_t n, int64_t k, int64_t* out_m, int64_t* 
     *out_r = r;
 }
 
+/* Given positive n_in > 1, decide whether n_in = b^k for some integer
+ * b >= 2 and k >= 2. On true, fills b_out with the smallest such b
+ * (equivalently the largest such k) and *k_out with that k.
+ *
+ * Algorithm: mpz_perfect_power_p gives the fast yes/no, then we
+ * iteratively factor a prime out of the exponent by checking
+ * mpz_root for small primes. Each successful iteration shrinks
+ * mpz_sizeinbase(cur, 2) by a factor of >= p, so total work is
+ * O(log(n) * log^2(n)) bit operations -- well below the cost of
+ * the radical extraction below. Restricted to positive n: negative
+ * perfect powers (like -8 = (-2)^3) are NOT unified because
+ * (-n)^(p/q) ≠ ((-n)^(1/k))^(kp/q) in general on the principal branch
+ * (e.g., (-8)^(1/6) is not (-2)^(1/2)).
+ *
+ * The prime table covers k_total up to 127 in a single factor; for
+ * inputs requiring larger primes (mpz_perfect_power_p says yes but
+ * none of these primes works) the function returns whatever k_total
+ * was accumulated, which may be less than maximal. This is sound but
+ * occasionally suboptimal; in practice every k_total reachable from
+ * a 64-bit base is well below 64. */
+static bool find_min_perfect_base(const mpz_t n_in, mpz_t b_out, int64_t* k_out) {
+    if (mpz_sgn(n_in) <= 0) return false;
+    if (mpz_cmp_ui(n_in, 1) <= 0) return false;
+    if (!mpz_perfect_power_p(n_in)) return false;
+
+    static const unsigned long primes[] = {
+        2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97,
+        101,103,107,109,113,127
+    };
+    const size_t n_primes = sizeof(primes) / sizeof(primes[0]);
+
+    mpz_t cur, root;
+    mpz_init_set(cur, n_in);
+    mpz_init(root);
+    int64_t k_total = 1;
+
+    bool reduced = true;
+    while (reduced) {
+        reduced = false;
+        for (size_t i = 0; i < n_primes; i++) {
+            unsigned long p = primes[i];
+            /* If cur < 2^p then cur cannot be a p-th power of an int >= 2. */
+            if (mpz_sizeinbase(cur, 2) <= p) break;
+            if (mpz_root(root, cur, p)) {
+                /* Guard against k_total overflow (only triggered by absurdly
+                 * large exponents -- for safety, stop and return current). */
+                if (k_total > INT64_MAX / (int64_t)p) break;
+                mpz_set(cur, root);
+                k_total *= (int64_t)p;
+                reduced = true;
+                break;
+            }
+        }
+    }
+
+    bool found = (k_total >= 2);
+    if (found) { mpz_set(b_out, cur); *k_out = k_total; }
+    mpz_clear(cur);
+    mpz_clear(root);
+    return found;
+}
+
 static Expr* bigint_pow(const Expr* base, int64_t exp) {
     if (exp < 0) return NULL;
     mpz_t b, r;
@@ -539,6 +601,59 @@ Expr* builtin_power(Expr* res) {
         if (simp) return simp;
     }
 
+    /* Perfect-power base unification: Power[b^k, p/q] -> Power[b, k*p/q]
+     * with k maximal (b smallest). Run before integer-part extraction so
+     * the residue under the radical is always over the smallest possible
+     * base. Examples:
+     *   4^(2/3)   -> 2^(4/3) -> 2 * 2^(1/3)
+     *   9^(1/3)   -> 3^(2/3)
+     *   8^(5/3)   -> 2^5 = 32
+     *   1024^(1/2) -> 2^5 = 32
+     * Restricted to positive bases (negative perfect powers don't
+     * commute with arbitrary p/q on the principal branch -- see
+     * find_min_perfect_base for the full argument). */
+    {
+        int64_t pp_, qq_;
+        if (base->type == EXPR_INTEGER && base->data.integer >= 4 &&
+            is_rational(exp, &pp_, &qq_) && qq_ > 1) {
+            mpz_t n_z, b_z;
+            mpz_init_set_si(n_z, base->data.integer);
+            mpz_init(b_z);
+            int64_t k_total = 0;
+            if (find_min_perfect_base(n_z, b_z, &k_total)) {
+                /* New exponent = k_total * pp_ / qq_; check int64 overflow. */
+                __int128_t kp = (__int128_t)k_total * (__int128_t)pp_;
+                if (kp <= INT64_MAX && kp >= INT64_MIN) {
+                    int64_t new_p = (int64_t)kp;
+                    Expr* new_base_e;
+                    if (mpz_fits_slong_p(b_z)) {
+                        new_base_e = expr_new_integer((int64_t)mpz_get_si(b_z));
+                    } else {
+                        new_base_e = expr_bigint_normalize(expr_new_bigint_from_mpz(b_z));
+                    }
+                    /* make_rational reduces and collapses to integer when
+                     * the gcd makes the denominator 1. */
+                    Expr* new_exp_e = make_rational(new_p, qq_);
+                    Expr* new_pow = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ new_base_e, new_exp_e }, 2);
+                    mpz_clear(b_z);
+                    mpz_clear(n_z);
+                    /* Recurse via evaluate so the reduced expression flows
+                     * through the integer-part extraction below. The new
+                     * base is strictly smaller, so termination is guaranteed
+                     * (it will not be a perfect power again). evaluate()
+                     * copies its input; the caller must free new_pow.
+                     * Per the BuiltinFunc convention, we do NOT free res. */
+                    Expr* result = evaluate(new_pow);
+                    expr_free(new_pow);
+                    return result;
+                }
+            }
+            mpz_clear(b_z);
+            mpz_clear(n_z);
+        }
+    }
+
     /* Integer base, rational exponent p/q with q > 1.
      *
      * For positive base n, decompose n^(p/q) into an integer/rational
@@ -563,7 +678,11 @@ Expr* builtin_power(Expr* res) {
     int64_t p, q;
     if (base->type == EXPR_INTEGER && is_rational(exp, &p, &q) && q > 1) {
         int64_t n = base->data.integer;
-        if (n < 0) {
+        bool n_negative = (n < 0);
+        if (n_negative) {
+            /* q==2 is special: principal-branch sqrt of a negative pulls
+             * out an I and recurses on |n| with the same exponent. Only
+             * handles p==1 currently (e.g. Sqrt[-12] -> 2 I Sqrt[3]). */
             if (q == 2) {
                 Expr* i_val = expr_new_function(expr_new_symbol("Complex"), (Expr*[]){expr_new_integer(0), expr_new_integer(1)}, 2);
                 Expr* pos_base = expr_new_integer(-n);
@@ -580,8 +699,18 @@ Expr* builtin_power(Expr* res) {
                     return NULL;
                 }
             }
-            return NULL;
+            /* Even q (q >= 4) with negative base: principal-branch values
+             * are properly complex and we don't have a clean canonical form
+             * yet. Leave unevaluated. */
+            if (q % 2 == 0) return NULL;
+            /* Odd q: fall through. The transformation is
+             *   (-n)^(p/q) = (-n)^a * (-n)^(b/q)        [where p = a*q + b]
+             *              = (-1)^a * n^a * (-1)^(b/q) * n^(b/q)
+             *              = (-1)^a * (m^b * n^a) * (-r)^(b/q)
+             * which canonicalizes to a (signed) integer/rational coefficient
+             * times Power[-r, b/q]. The sign comes from (-1)^a. */
         }
+        int64_t abs_n = n_negative ? -n : n;
 
         int64_t a_int = 0;
         int64_t b_rem = p;
@@ -591,12 +720,12 @@ Expr* builtin_power(Expr* res) {
         }
 
         int64_t m, r;
-        factor_out_kth_power(n, q, &m, &r);
+        factor_out_kth_power(abs_n, q, &m, &r);
 
         if (a_int != 0 || m > 1) {
-            /* Build coeff = n^a_int * m^b_rem (signed b_rem) in GMP. */
+            /* Build coeff = abs_n^a_int * m^b_rem (signed b_rem) in GMP. */
             mpz_t na_z, mb_z;
-            mpz_init_set_si(na_z, n);
+            mpz_init_set_si(na_z, abs_n);
             if (a_int > 0) mpz_pow_ui(na_z, na_z, (unsigned long)a_int);
             else mpz_set_ui(na_z, 1);
             mpz_init_set_si(mb_z, m);
@@ -609,7 +738,7 @@ Expr* builtin_power(Expr* res) {
                 mpz_mul(na_z, na_z, mb_z);
                 coeff = expr_bigint_normalize(expr_new_bigint_from_mpz(na_z));
             } else {
-                /* coeff = n^a_int / m^|b_rem|, reduced. */
+                /* coeff = abs_n^a_int / m^|b_rem|, reduced. */
                 mpz_t g_z;
                 mpz_init(g_z);
                 mpz_gcd(g_z, na_z, mb_z);
@@ -629,16 +758,31 @@ Expr* builtin_power(Expr* res) {
             }
             mpz_clear(na_z); mpz_clear(mb_z);
 
-            /* residue = Power[r, b_rem/q] (or 1 when b_rem == 0 or r == 1). */
+            /* For negative n, integer-part a contributes (-1)^a to the
+             * coefficient. Even a -> +; odd a -> negate. */
+            if (n_negative && (a_int % 2 != 0)) {
+                coeff = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), coeff }, 2);
+                coeff = eval_and_free(coeff);
+            }
+
+            /* residue = Power[res_base, b_rem/q] where res_base is
+             * +r for positive n and -r for negative n (the (-1)^(b/q)
+             * factor merges with r^(b/q) into (-r)^(b/q)). When b_rem == 0
+             * (only reachable if q == 1, excluded here) or res_base == 1
+             * the residue is 1. For negative n with r == 1, res_base == -1
+             * and we keep Power[-1, b/q] as the residue (Mathematica form
+             * "(-1)^(b/q)"). */
+            int64_t res_base = n_negative ? -r : r;
             Expr* residue;
-            if (b_rem == 0 || r == 1) {
+            if (b_rem == 0 || res_base == 1) {
                 residue = expr_new_integer(1);
             } else {
                 /* p/q is in lowest terms by construction, so gcd(b_rem, q)
                  * divides gcd(p, q) = 1. make_rational still normalises. */
                 Expr* new_exp = make_rational(b_rem, q);
                 residue = expr_new_function(expr_new_symbol("Power"),
-                                            (Expr*[]){expr_new_integer(r), new_exp}, 2);
+                                            (Expr*[]){expr_new_integer(res_base), new_exp}, 2);
             }
 
             bool coeff_is_one = (coeff->type == EXPR_INTEGER && coeff->data.integer == 1);

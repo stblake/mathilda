@@ -11926,3 +11926,130 @@ edge cases:
   `test_poly.c::test_discriminant`, the IntegrateRational pipeline
   tests in `test_intrat*.c`, the qafactor tests) all pass
   unchanged.
+
+## Radical canonical forms (`power.c`, `times.c`, 2026-05-10)
+
+PicoCAS's automatic evaluator now produces Mathematica-compatible
+canonical forms for several radical patterns that previously survived
+unevaluated. The work is split between three cooperating rewrites,
+all implemented directly on GMP integers without round-tripping
+through the evaluator on the hot path.
+
+### 1. Integer-part extraction with rational coefficients
+
+`Power[n, p/q]` for a positive integer base `n`, `p ≥ q > 1`,
+decomposes the exponent as `p = a·q + b` with `0 ≤ b < q` and
+combines with the existing perfect-q-th-power reduction
+(`n = m^q · r`) to produce
+`n^(p/q) = (n^a · m^b) · r^(b/q)` in a single GMP pass. The Times
+canonicalizer additionally pulls factors of the base out of the
+rational coefficient (`num_prod` / `den_prod`) — always from the
+denominator, and from the numerator only enough to keep the
+exponent ≤ 0, avoiding a re-extraction loop with the Power-side
+rule. Together these turn:
+
+| Input              | Output            |
+|--------------------|-------------------|
+| `Sqrt[2]/2`        | `1/Sqrt[2]`       |
+| `2^(1/3)/2`        | `1/2^(2/3)`       |
+| `3^(3/2)`          | `3 Sqrt[3]`       |
+| `8/Sqrt[2]`        | `4 Sqrt[2]`       |
+| `3^(3/2)+3^(5/2)+3^(7/2)` | `39 Sqrt[3]` |
+
+### 2. Generalized radical fusion in Times (integer-ratio exponents)
+
+The Times canonicalizer now collapses `Power[a, e_i] * Power[b, e_j]`
+into a single Power whenever `a, b` are positive numerics and `e_j`
+is an integer multiple of `e_i` (or vice-versa). With both
+exponents reduced to lowest terms the integer ratio `k = p_j / p_i`
+is well defined when the denominators match; the result is
+`Power[a · b^k, e_pri]` where `pri` is whichever group has the
+smaller-magnitude numerator. This subsumes the basic radical
+fusion (k = -1) and same-exponent product collapse (k = +1) as
+special cases:
+
+| Input                      | k    | Output      |
+|----------------------------|------|-------------|
+| `Sqrt[2] Sqrt[3]`          | +1   | `Sqrt[6]`   |
+| `2^(1/3) 3^(1/3)`          | +1   | `6^(1/3)`   |
+| `Sqrt[6]/Sqrt[2]`          | -1   | `Sqrt[3]`   |
+| `12^(1/3) 4^(-1/3)`        | -1   | `3^(1/3)`   |
+| `12^(1/3) 2^(-2/3)`        | -2   | `3^(1/3)`   |
+| `2^(1/3) 8^(2/3)`          | +2   | `4 2^(1/3)` |
+
+The rewrite is restricted to positive numeric bases for principal-
+branch correctness and to non-trivial denominators (q > 1) so
+ordinary integer-exponent multiplication is left alone.
+
+### 3. Perfect-power base unification
+
+`Power[b^k, p/q]` with `b^k` a positive integer perfect power
+rewrites to `Power[b, k·p/q]`, choosing `b` minimal (equivalently
+`k` maximal). The detection uses `mpz_perfect_power_p` for the
+fast yes/no, then iteratively factors small primes (table of 31
+primes up to 127) out of the exponent via `mpz_root`. The
+reduced expression then flows through the existing integer-part
+extraction, so the residue under the radical is always over the
+smallest possible base. Closes a visible gap in our output:
+
+| Input         | Output       |
+|---------------|--------------|
+| `4^(2/3)`     | `2 2^(1/3)`  |
+| `9^(1/3)`     | `3^(2/3)`    |
+| `9^(2/3)`     | `3 3^(1/3)`  |
+| `16^(2/3)`    | `4 2^(2/3)`  |
+| `1024^(1/2)`  | `32`         |
+| `64^(1/3)`    | `4`          |
+| `100^(1/3)`   | `10^(2/3)`   |
+
+The unification is restricted to **positive** bases. Negative
+perfect powers (e.g. -8 = (-2)^3) are NOT unified because
+`(-n)^(p/q) ≠ ((-n)^(1/k))^(k·p/q)` on the principal complex branch
+(e.g. `(-8)^(1/6)` is not `(-2)^(1/2)`).
+
+### 4. Sign normalization in negative-base radicals
+
+For `(-n)^(p/q)` with positive `n` and **odd** `q`, the principal-
+branch identity `(-n)^(p/q) = (-1)^(p/q) · n^(p/q)` lets us pull
+the perfect-q-th-power factor out of `|n|` while leaving `(-1)^(b/q)`
+(or `(-r)^(b/q)` when there's a non-trivial residue base `r`) under
+the radical. Decomposing the exponent as `p = a·q + b` and noting
+that `(-1)^a · n^a = (-n)^a` gives the integer part its sign:
+
+| Input            | Output             |
+|------------------|--------------------|
+| `(-8)^(1/3)`     | `2 (-1)^(1/3)`     |
+| `(-8)^(2/3)`     | `4 (-1)^(2/3)`     |
+| `(-8)^(5/3)`     | `-32 (-1)^(2/3)`   |  (a_int = 1 odd → coeff negated)
+| `(-72)^(1/3)`    | `2 (-9)^(1/3)`     |
+| `(-200)^(1/3)`   | `2 (-25)^(1/3)`    |
+| `(-2)^(1/3)`     | `(-2)^(1/3)`       |  (m=1, no extraction)
+
+Even q with negative base remains intentionally unevaluated for
+q > 2 (q = 2 still goes through the existing I-extraction path).
+
+### Files
+
+- `src/power.c`:
+  - new static helper `find_min_perfect_base`: given a positive
+    `mpz_t`, finds the smallest base and largest exponent of any
+    perfect-power decomposition. Uses `mpz_perfect_power_p` for
+    the fast reject and a small-prime table for iterative
+    reduction.
+  - perfect-power unification block before the existing rational-
+    exponent extraction (recurses via `evaluate` with a strictly
+    smaller base, guaranteed termination).
+  - extended rational-exponent block: tracks `n_negative` /
+    `abs_n`, sign-flips the integer-part coefficient when
+    `(a_int % 2 == 1)`, builds `Power[-r, b/q]` residues for
+    negative bases with odd q.
+- `src/times.c`:
+  - replaced separate "radical fusion" and "same-exponent
+    collapse" loops with a single generalized-fusion loop that
+    handles arbitrary integer-ratio exponents (k ∈ ℤ, |k| ≥ 1).
+  - the existing coefficient-pulling pass (extracts factors of
+    the base from `num_prod`/`den_prod`) is unchanged.
+- `tests/test_radical_canonical.c`: extended to cover same-exponent
+  collapse, generalized fusion (negative and positive k),
+  perfect-power unification, sign normalization, and combinations
+  thereof. ~70 new assertions across 14 test functions.
