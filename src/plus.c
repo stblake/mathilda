@@ -207,7 +207,74 @@ static Expr* add_numbers(Expr* a, Expr* b) {
         }
         return make_rational((int64_t)num, (int64_t)den);
     }
-    
+
+    /* Generic GMP rational fallback: handle any combination of
+     * Integer / BigInt / Rational[Integer-or-BigInt, Integer-or-BigInt].
+     * Without this, a Rational with BigInt components (produced by the
+     * overflow branch above, or by intermediate polynomial arithmetic)
+     * cannot be added to an Integer or another such Rational, and we
+     * would return NULL — which the callers in builtin_plus dereference
+     * via is_overflow(). */
+    {
+        bool a_ok = false, b_ok = false;
+        mpz_t an, ad, bn, bd;
+        if (expr_is_integer_like(a)) {
+            expr_to_mpz(a, an);
+            mpz_init_set_si(ad, 1);
+            a_ok = true;
+        } else if (a->type == EXPR_FUNCTION &&
+                   a->data.function.head->type == EXPR_SYMBOL &&
+                   a->data.function.head->data.symbol == SYM_Rational &&
+                   a->data.function.arg_count == 2 &&
+                   expr_is_integer_like(a->data.function.args[0]) &&
+                   expr_is_integer_like(a->data.function.args[1])) {
+            expr_to_mpz(a->data.function.args[0], an);
+            expr_to_mpz(a->data.function.args[1], ad);
+            a_ok = true;
+        }
+        if (a_ok) {
+            if (expr_is_integer_like(b)) {
+                expr_to_mpz(b, bn);
+                mpz_init_set_si(bd, 1);
+                b_ok = true;
+            } else if (b->type == EXPR_FUNCTION &&
+                       b->data.function.head->type == EXPR_SYMBOL &&
+                       b->data.function.head->data.symbol == SYM_Rational &&
+                       b->data.function.arg_count == 2 &&
+                       expr_is_integer_like(b->data.function.args[0]) &&
+                       expr_is_integer_like(b->data.function.args[1])) {
+                expr_to_mpz(b->data.function.args[0], bn);
+                expr_to_mpz(b->data.function.args[1], bd);
+                b_ok = true;
+            }
+        }
+        if (a_ok && b_ok) {
+            mpz_t t1, t2, mnum, mden, g;
+            mpz_inits(t1, t2, mnum, mden, g, NULL);
+            mpz_mul(t1, an, bd);
+            mpz_mul(t2, bn, ad);
+            mpz_add(mnum, t1, t2);
+            mpz_mul(mden, ad, bd);
+            if (mpz_sgn(mden) < 0) { mpz_neg(mden, mden); mpz_neg(mnum, mnum); }
+            mpz_gcd(g, mnum, mden);
+            if (mpz_sgn(g) != 0) {
+                mpz_divexact(mnum, mnum, g);
+                mpz_divexact(mden, mden, g);
+            }
+            Expr* r_num = expr_bigint_normalize(expr_new_bigint_from_mpz(mnum));
+            Expr* r_den = expr_bigint_normalize(expr_new_bigint_from_mpz(mden));
+            mpz_clears(an, ad, bn, bd, t1, t2, mnum, mden, g, NULL);
+            if (r_den->type == EXPR_INTEGER && r_den->data.integer == 1) {
+                expr_free(r_den);
+                return r_num;
+            }
+            Expr* r_args[2] = { r_num, r_den };
+            return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+        }
+        if (a_ok) { mpz_clear(an); mpz_clear(ad); }
+        if (b_ok) { mpz_clear(bn); mpz_clear(bd); }
+    }
+
     return NULL;
 }
 
@@ -311,6 +378,18 @@ Expr* builtin_plus(Expr* res) {
 
         if (b == NULL) {
             Expr* next_sum = add_numbers(num_sum, c);
+            if (next_sum == NULL) {
+                /* Unrecognised coefficient form — leave the sum
+                 * symbolic by treating `c` as its own group with a
+                 * unit base, and keep `num_sum` unchanged. */
+                groups[group_count].base = expr_copy(c);
+                groups[group_count].coeff = expr_new_integer(1);
+                groups[group_count].temp_base = true;
+                group_count++;
+                expr_free(c);
+                if (is_temp_base && b != arg) expr_free(b);
+                continue;
+            }
             expr_free(num_sum);
             num_sum = next_sum;
             expr_free(c);
@@ -331,9 +410,20 @@ Expr* builtin_plus(Expr* res) {
                     break;
                 }
             }
-            
+
             if (found >= 0) {
                 Expr* next_c = add_numbers(groups[found].coeff, c);
+                if (next_c == NULL) {
+                    /* Unrecognised coefficient combination — keep the
+                     * existing group and add a fresh group for c*b,
+                     * preserving the input rather than crashing. */
+                    Expr* base_copy = is_temp_base ? b : expr_copy(b);
+                    groups[group_count].base = base_copy;
+                    groups[group_count].coeff = c;  /* take ownership */
+                    groups[group_count].temp_base = is_temp_base;
+                    group_count++;
+                    continue;
+                }
                 expr_free(groups[found].coeff);
                 groups[found].coeff = next_c;
                 expr_free(c);

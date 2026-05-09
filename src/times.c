@@ -173,6 +173,72 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
         }
         return make_rational((int64_t)num, (int64_t)den);
     }
+
+    /* Generic GMP rational fallback: handle any combination of
+     * Integer / BigInt / Rational[Integer-or-BigInt, Integer-or-BigInt].
+     * Without this, a Rational with BigInt components (which can arise
+     * during polynomial arithmetic, resultant computation, etc.) cannot
+     * be multiplied with another such value via the int64 fast paths
+     * above, and we would return NULL — which the caller in
+     * builtin_times then dereferences. */
+    {
+        bool a_ok = false, b_ok = false;
+        mpz_t an, ad, bn, bd;
+        if (expr_is_integer_like(a)) {
+            expr_to_mpz(a, an);
+            mpz_init_set_si(ad, 1);
+            a_ok = true;
+        } else if (a->type == EXPR_FUNCTION &&
+                   a->data.function.head->type == EXPR_SYMBOL &&
+                   a->data.function.head->data.symbol == SYM_Rational &&
+                   a->data.function.arg_count == 2 &&
+                   expr_is_integer_like(a->data.function.args[0]) &&
+                   expr_is_integer_like(a->data.function.args[1])) {
+            expr_to_mpz(a->data.function.args[0], an);
+            expr_to_mpz(a->data.function.args[1], ad);
+            a_ok = true;
+        }
+        if (a_ok) {
+            if (expr_is_integer_like(b)) {
+                expr_to_mpz(b, bn);
+                mpz_init_set_si(bd, 1);
+                b_ok = true;
+            } else if (b->type == EXPR_FUNCTION &&
+                       b->data.function.head->type == EXPR_SYMBOL &&
+                       b->data.function.head->data.symbol == SYM_Rational &&
+                       b->data.function.arg_count == 2 &&
+                       expr_is_integer_like(b->data.function.args[0]) &&
+                       expr_is_integer_like(b->data.function.args[1])) {
+                expr_to_mpz(b->data.function.args[0], bn);
+                expr_to_mpz(b->data.function.args[1], bd);
+                b_ok = true;
+            }
+        }
+        if (a_ok && b_ok) {
+            mpz_t mnum, mden, g;
+            mpz_inits(mnum, mden, g, NULL);
+            mpz_mul(mnum, an, bn);
+            mpz_mul(mden, ad, bd);
+            if (mpz_sgn(mden) < 0) { mpz_neg(mden, mden); mpz_neg(mnum, mnum); }
+            mpz_gcd(g, mnum, mden);
+            if (mpz_sgn(g) != 0) {
+                mpz_divexact(mnum, mnum, g);
+                mpz_divexact(mden, mden, g);
+            }
+            Expr* r_num = expr_bigint_normalize(expr_new_bigint_from_mpz(mnum));
+            Expr* r_den = expr_bigint_normalize(expr_new_bigint_from_mpz(mden));
+            mpz_clears(an, ad, bn, bd, mnum, mden, g, NULL);
+            if (r_den->type == EXPR_INTEGER && r_den->data.integer == 1) {
+                expr_free(r_den);
+                return r_num;
+            }
+            Expr* r_args[2] = { r_num, r_den };
+            return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+        }
+        if (a_ok) { mpz_clear(an); mpz_clear(ad); }
+        if (b_ok) { mpz_clear(bn); mpz_clear(bd); }
+    }
+
     return NULL;
 }
 
@@ -285,7 +351,18 @@ Expr* builtin_times(Expr* res) {
         }
 
         if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL)) {
-            Expr* next = multiply_numbers(num_prod, arg); expr_free(num_prod); num_prod = next;
+            Expr* next = multiply_numbers(num_prod, arg);
+            if (next == NULL) {
+                /* Could not fold this numeric factor into num_prod;
+                 * stash it as its own group so we don't lose it (and so
+                 * we don't propagate NULL to the type checks below). */
+                groups[group_count].base = expr_copy(arg);
+                groups[group_count].exponent = expr_new_integer(1);
+                group_count++;
+            } else {
+                expr_free(num_prod);
+                num_prod = next;
+            }
         } else if (is_complex(arg, NULL, NULL) || (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_I)) {
             Expr* c_arg;
             if (arg->type == EXPR_SYMBOL) {
