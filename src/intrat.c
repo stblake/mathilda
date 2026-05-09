@@ -971,14 +971,20 @@ static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** 
             if (deg <= 0) {
                 for (size_t kk = 0; kk < ccn; kk++) expr_free(ccoll[kk]);
                 free(ccoll);
-                if (a) expr_free(a); if (b) expr_free(b); expr_free(c); return false;
+                if (a) expr_free(a);
+                if (b) expr_free(b);
+                expr_free(c);
+                return false;
             }
             coeff = (ccn == 0) ? expr_new_integer(1)
                   : (ccn == 1) ? ccoll[0]
                   : eval_and_free(internal_times(ccoll, ccn));
             free(ccoll);
         } else {
-            if (a) expr_free(a); if (b) expr_free(b); expr_free(c); return false;
+            if (a) expr_free(a);
+            if (b) expr_free(b);
+            expr_free(c);
+            return false;
         }
         if (a) { expr_free(a); expr_free(b ? b : NULL); expr_free(c);
                  expr_free(coeff); return false; }
@@ -2102,7 +2108,8 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
         if (!Qi || !Si) {
             for (size_t k = 0; k < nterms; k++) expr_free(terms[k]);
             free(terms);
-            if (Qi) expr_free(Qi); if (Si) expr_free(Si);
+            if (Qi) expr_free(Qi);
+            if (Si) expr_free(Si);
             return NULL;
         }
 
