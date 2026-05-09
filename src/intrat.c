@@ -1047,6 +1047,33 @@ static Expr* nlp_sub_body(Expr* body, Expr* bvar, Expr* value) {
     return eval_and_free(sub);
 }
 
+/* True iff every variable in `poly` is structurally equal to `bvar`.
+ * Phase 8d-bonus only fires on non-parametric polynomials: when poly
+ * has parameters (e.g. b + a t^4), the radical-formula substitution
+ * produces forms whose D[..., x] - integrand reduces to 0 only under
+ * a stronger algebraic-extension simplifier than picocas currently
+ * has.  Bailing out for parametric cases preserves the held RootSum
+ * form, which the user can verify formally and which avoids
+ * apparent-regression noise on the corpus. */
+static bool poly_only_uses(Expr* poly, Expr* bvar) {
+    Expr* vars_call = expr_new_function(expr_new_symbol("Variables"),
+        (Expr*[]){ expr_copy(poly) }, 1);
+    Expr* vars = evaluate(vars_call);
+    expr_free(vars_call);
+    if (!vars || vars->type != EXPR_FUNCTION
+        || vars->data.function.head->type != EXPR_SYMBOL
+        || vars->data.function.head->data.symbol != SYM_List) {
+        if (vars) expr_free(vars);
+        return false;
+    }
+    bool ok = true;
+    for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+        if (!expr_eq(vars->data.function.args[i], bvar)) { ok = false; break; }
+    }
+    expr_free(vars);
+    return ok;
+}
+
 /* When `poly` (a univariate polynomial in `bvar`) is one of the
  * structural shapes whose roots have a closed-form radical formula,
  * expand `RootSum[Function[bvar, poly], Function[bvar, body]]` into
@@ -1058,10 +1085,15 @@ static Expr* nlp_sub_body(Expr* body, Expr* bvar, Expr* value) {
  *   degree 2                                         (2 roots)
  *   degree 4 with only constant / x^2 / x^4 terms    (4 roots)
  *
+ * Gated on poly being free of parameters other than bvar — see
+ * poly_only_uses above for the rationale.
+ *
  * Once Solve / ToRadicals lands, this routine is superseded by a
  * call to Solve[poly == 0, bvar, Reals] followed by the same body
  * substitution loop. */
 static Expr* expand_simple_rootsum(Expr* poly, Expr* bvar, Expr* body) {
+    if (!poly_only_uses(poly, bvar)) return NULL;
+
     Expr* cl_call = expr_new_function(expr_new_symbol("CoefficientList"),
         (Expr*[]){ expr_copy(poly), expr_copy(bvar) }, 2);
     Expr* cl = evaluate(cl_call);
