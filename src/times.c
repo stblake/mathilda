@@ -419,6 +419,192 @@ Expr* builtin_times(Expr* res) {
         free(groups); return num_prod;
     }
 
+    /* Radical canonicalization: for each Power[b, q] group with b a positive
+     * integer (>= 2) and q rational, fold factors of b appearing in the
+     * accumulated rational coefficient num_prod into the exponent. This is
+     * what turns
+     *      Sqrt[2] * 1/2   ->  Power[2, -1/2]            (Sqrt[2]/2)
+     *      2^(1/3) * 1/2   ->  Power[2, -2/3]            (2^(1/3)/2)
+     *      8/Sqrt[2]       ->  4 Sqrt[2]                  (Power[2, 1/2] * 8)
+     * Pull from den(num_prod) unconditionally — the canonical form has
+     * den(num_prod) coprime to b. Pull from num(num_prod) only enough to
+     * raise a still-negative exponent up toward 0; pulling more would push
+     * the exponent >= 1 and trigger Power's integer-part extraction, which
+     * would re-emit the factor and loop. The cap k_n_target is the minimum
+     * number of pulls needed to make the exponent non-negative.
+     *
+     * We work directly on GMP num/den rather than constructing intermediate
+     * Expr nodes per pull — divisibility tests and exact divisions on small
+     * mpz values are essentially free, and there is no evaluator round-trip.
+     * The whole pass is O(sum of factors-of-b in num_prod) per group with
+     * a positive integer base.
+     *
+     * Runs unconditionally even with complex_val present, so that
+     * Plus terms with mixed real/complex coefficients normalise their
+     * Power exponents consistently and collect like-radical terms. */
+    if (group_count > 0 &&
+        (expr_is_integer_like(num_prod) || is_rational(num_prod, NULL, NULL))) {
+        bool any_radical_group = false;
+        for (size_t gi = 0; gi < group_count; gi++) {
+            Expr* gb = groups[gi].base;
+            if (gb->type == EXPR_INTEGER && gb->data.integer >= 2 &&
+                is_rational(groups[gi].exponent, NULL, NULL)) {
+                any_radical_group = true;
+                break;
+            }
+        }
+        if (any_radical_group) {
+            mpz_t num_z, den_z;
+            bool num_extracted = false;
+            if (expr_is_integer_like(num_prod)) {
+                expr_to_mpz(num_prod, num_z);
+                mpz_init_set_ui(den_z, 1);
+                num_extracted = true;
+            } else if (num_prod->type == EXPR_FUNCTION &&
+                       num_prod->data.function.head->type == EXPR_SYMBOL &&
+                       num_prod->data.function.head->data.symbol == SYM_Rational &&
+                       num_prod->data.function.arg_count == 2 &&
+                       expr_is_integer_like(num_prod->data.function.args[0]) &&
+                       expr_is_integer_like(num_prod->data.function.args[1])) {
+                expr_to_mpz(num_prod->data.function.args[0], num_z);
+                expr_to_mpz(num_prod->data.function.args[1], den_z);
+                num_extracted = true;
+            }
+
+            if (num_extracted) {
+                bool num_changed = false;
+                for (size_t gi = 0; gi < group_count; gi++) {
+                    Expr* gb = groups[gi].base;
+                    Expr* ge = groups[gi].exponent;
+                    if (gb->type != EXPR_INTEGER || gb->data.integer < 2) continue;
+                    int64_t en, ed;
+                    if (!is_rational(ge, &en, &ed)) continue;  /* also accepts Integer with ed=1 */
+
+                    int64_t b = gb->data.integer;
+                    mpz_t b_z;
+                    mpz_init_set_si(b_z, b);
+
+                    /* Pull factors of b from den. */
+                    int64_t k_d = 0;
+                    while (mpz_divisible_p(den_z, b_z)) {
+                        mpz_divexact(den_z, den_z, b_z);
+                        k_d++;
+                    }
+
+                    /* en/ed - k_d. Compute new numerator over the same ed. */
+                    int64_t new_en;
+                    if (k_d > 0 && ed > 0 && k_d > (INT64_MAX / ed)) {
+                        /* Pathological denominator power; back out the den
+                         * pull rather than overflow the int64 exponent. */
+                        for (int64_t i = 0; i < k_d; i++) mpz_mul(den_z, den_z, b_z);
+                        mpz_clear(b_z);
+                        continue;
+                    }
+                    new_en = en - k_d * ed;
+
+                    /* If still negative, pull from num just enough to make
+                     * the new exponent >= 0. ceil((-new_en)/ed) bounds the
+                     * pull; we may pull fewer if num runs out of factors. */
+                    int64_t k_n = 0;
+                    if (new_en < 0) {
+                        int64_t target = (-new_en + ed - 1) / ed;
+                        for (int64_t i = 0; i < target; i++) {
+                            if (!mpz_divisible_p(num_z, b_z)) break;
+                            mpz_divexact(num_z, num_z, b_z);
+                            k_n++;
+                        }
+                        new_en += k_n * ed;
+                    }
+
+                    /* If still negative AND we have a complex coefficient
+                     * whose Re/Im are integer-like and *both* divisible by
+                     * b, pull factors of b out of the complex too -- this
+                     * keeps Complex[2k, 2m] * Sqrt[2]/2 from leaving a
+                     * stale factor of 2 in the complex (gives us the
+                     * canonical Complex[k, m] * Power[2, -1/2] rather than
+                     * Complex[2k, 2m] * Power[2, -3/2]). */
+                    int64_t k_c = 0;
+                    if (new_en < 0 && complex_val) {
+                        Expr *re = NULL, *im = NULL;
+                        is_complex(complex_val, &re, &im);
+                        if (re && im &&
+                            expr_is_integer_like(re) && expr_is_integer_like(im)) {
+                            mpz_t re_z, im_z;
+                            expr_to_mpz(re, re_z);
+                            expr_to_mpz(im, im_z);
+                            int64_t target = (-new_en + ed - 1) / ed;
+                            for (int64_t i = 0; i < target; i++) {
+                                /* Each component must be either zero or
+                                 * divisible by b -- 0/b = 0 leaves it
+                                 * unchanged, which is fine for purely-
+                                 * imaginary or purely-real complexes. */
+                                bool re_ok = (mpz_sgn(re_z) == 0) ||
+                                             mpz_divisible_p(re_z, b_z);
+                                bool im_ok = (mpz_sgn(im_z) == 0) ||
+                                             mpz_divisible_p(im_z, b_z);
+                                if (!re_ok || !im_ok) break;
+                                /* Stop if we'd reduce the whole complex to
+                                 * 0+0i (Re=0 AND Im=0). */
+                                if (mpz_sgn(re_z) == 0 && mpz_sgn(im_z) == 0) break;
+                                if (mpz_sgn(re_z) != 0) mpz_divexact(re_z, re_z, b_z);
+                                if (mpz_sgn(im_z) != 0) mpz_divexact(im_z, im_z, b_z);
+                                k_c++;
+                            }
+                            if (k_c > 0) {
+                                expr_free(complex_val);
+                                Expr* re_e = expr_bigint_normalize(expr_new_bigint_from_mpz(re_z));
+                                Expr* im_e = expr_bigint_normalize(expr_new_bigint_from_mpz(im_z));
+                                complex_val = make_complex(re_e, im_e);
+                                new_en += k_c * ed;
+                            }
+                            mpz_clear(re_z); mpz_clear(im_z);
+                        }
+                    }
+
+                    if (k_d == 0 && k_n == 0 && k_c == 0) { mpz_clear(b_z); continue; }
+                    num_changed = true;
+
+                    /* Reduce new_en/ed by their gcd. */
+                    int64_t abs_en = new_en >= 0 ? new_en : -new_en;
+                    int64_t g_e = gcd(abs_en, ed);
+                    if (g_e > 1) { new_en /= g_e; ed /= g_e; }
+
+                    expr_free(groups[gi].exponent);
+                    if (ed == 1) {
+                        groups[gi].exponent = expr_new_integer(new_en);
+                    } else {
+                        groups[gi].exponent = make_rational(new_en, ed);
+                    }
+                    mpz_clear(b_z);
+                }
+
+                if (num_changed) {
+                    /* Reduce num/den by gcd and rebuild num_prod. */
+                    if (mpz_sgn(den_z) < 0) { mpz_neg(num_z, num_z); mpz_neg(den_z, den_z); }
+                    mpz_t g_z;
+                    mpz_init(g_z);
+                    mpz_gcd(g_z, num_z, den_z);
+                    if (mpz_cmp_ui(g_z, 1) > 0) {
+                        mpz_divexact(num_z, num_z, g_z);
+                        mpz_divexact(den_z, den_z, g_z);
+                    }
+                    mpz_clear(g_z);
+                    expr_free(num_prod);
+                    if (mpz_cmp_ui(den_z, 1) == 0) {
+                        num_prod = expr_bigint_normalize(expr_new_bigint_from_mpz(num_z));
+                    } else {
+                        Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(num_z));
+                        Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(den_z));
+                        num_prod = expr_new_function(expr_new_symbol("Rational"),
+                                                     (Expr*[]){num_e, den_e}, 2);
+                    }
+                }
+                mpz_clear(num_z);
+                mpz_clear(den_z);
+            }
+        }
+    }
+
     /* Radical fusion: collapse Power[a, q] * Power[b, -q] into Power[a/b, q]
      * when a, b are both positive numeric (integer, bigint, rational, real)
      * -- a > 0 and b > 0 ensures we stay on the principal branch. Applied

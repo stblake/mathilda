@@ -539,6 +539,27 @@ Expr* builtin_power(Expr* res) {
         if (simp) return simp;
     }
 
+    /* Integer base, rational exponent p/q with q > 1.
+     *
+     * For positive base n, decompose n^(p/q) into an integer/rational
+     * coefficient and a residual radical:
+     *
+     *   1. Integer-part extraction (only for p >= q; p < q including all
+     *      negative p stays in the residual). Write p = a*q + b with
+     *      0 <= b < q so n^(p/q) = n^a * n^(b/q).
+     *   2. Perfect-q-th-power reduction. Write n = m^q * r with r free of
+     *      q-th-power factors, so n^(b/q) = m^b * r^(b/q).
+     *
+     * Combined: n^(p/q) = (n^a * m^b) * r^(b/q).
+     *
+     * Negative b (when 0 < -p < q, i.e., we kept a=0 and b=p<0) yields a
+     * rational coefficient n^a / m^|b| and a Power[r, b/q] residue with a
+     * negative exponent — the surrounding Times canonicalizer fuses
+     * those into a single Power if a same-base coefficient is present.
+     *
+     * We compute the coefficient in GMP to handle bigint promotion
+     * automatically; the residue is at most a single Power node. No
+     * recursive evaluator round-trips. */
     int64_t p, q;
     if (base->type == EXPR_INTEGER && is_rational(exp, &p, &q) && q > 1) {
         int64_t n = base->data.integer;
@@ -561,27 +582,71 @@ Expr* builtin_power(Expr* res) {
             }
             return NULL;
         }
+
+        int64_t a_int = 0;
+        int64_t b_rem = p;
+        if (p >= q) {
+            a_int = p / q;          /* p, q > 0 here */
+            b_rem = p - a_int * q;  /* 0 <= b_rem < q */
+        }
+
         int64_t m, r;
         factor_out_kth_power(n, q, &m, &r);
-        if (m > 1) {
+
+        if (a_int != 0 || m > 1) {
+            /* Build coeff = n^a_int * m^b_rem (signed b_rem) in GMP. */
+            mpz_t na_z, mb_z;
+            mpz_init_set_si(na_z, n);
+            if (a_int > 0) mpz_pow_ui(na_z, na_z, (unsigned long)a_int);
+            else mpz_set_ui(na_z, 1);
+            mpz_init_set_si(mb_z, m);
+            unsigned long abs_b = (unsigned long)(b_rem >= 0 ? b_rem : -b_rem);
+            if (abs_b > 0) mpz_pow_ui(mb_z, mb_z, abs_b);
+            else mpz_set_ui(mb_z, 1);
+
             Expr* coeff = NULL;
-            if (p == 1) {
-                coeff = expr_new_integer(m);
+            if (b_rem >= 0) {
+                mpz_mul(na_z, na_z, mb_z);
+                coeff = expr_bigint_normalize(expr_new_bigint_from_mpz(na_z));
             } else {
-                Expr* m_p_args[2] = { expr_new_integer(m), expr_new_integer(p) };
-                Expr* tmp_m_power = expr_new_function(expr_new_symbol("Power"), m_p_args, 2);
-                coeff = builtin_power(tmp_m_power);
-                if (!coeff) coeff = tmp_m_power; else expr_free(tmp_m_power);
+                /* coeff = n^a_int / m^|b_rem|, reduced. */
+                mpz_t g_z;
+                mpz_init(g_z);
+                mpz_gcd(g_z, na_z, mb_z);
+                if (mpz_cmp_ui(g_z, 1) > 0) {
+                    mpz_divexact(na_z, na_z, g_z);
+                    mpz_divexact(mb_z, mb_z, g_z);
+                }
+                mpz_clear(g_z);
+                if (mpz_cmp_ui(mb_z, 1) == 0) {
+                    coeff = expr_bigint_normalize(expr_new_bigint_from_mpz(na_z));
+                } else {
+                    Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(na_z));
+                    Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(mb_z));
+                    coeff = expr_new_function(expr_new_symbol("Rational"),
+                                              (Expr*[]){num_e, den_e}, 2);
+                }
             }
-            Expr* residue = NULL;
-            if (r == 1) {
+            mpz_clear(na_z); mpz_clear(mb_z);
+
+            /* residue = Power[r, b_rem/q] (or 1 when b_rem == 0 or r == 1). */
+            Expr* residue;
+            if (b_rem == 0 || r == 1) {
                 residue = expr_new_integer(1);
             } else {
-                Expr* r_p_args[2] = { expr_new_integer(r), expr_copy(exp) };
-                residue = expr_new_function(expr_new_symbol("Power"), r_p_args, 2);
+                /* p/q is in lowest terms by construction, so gcd(b_rem, q)
+                 * divides gcd(p, q) = 1. make_rational still normalises. */
+                Expr* new_exp = make_rational(b_rem, q);
+                residue = expr_new_function(expr_new_symbol("Power"),
+                                            (Expr*[]){expr_new_integer(r), new_exp}, 2);
             }
-            Expr* t_args[2] = { coeff, residue };
-            return expr_new_function(expr_new_symbol("Times"), t_args, 2);
+
+            bool coeff_is_one = (coeff->type == EXPR_INTEGER && coeff->data.integer == 1);
+            bool residue_is_one = (residue->type == EXPR_INTEGER && residue->data.integer == 1);
+            if (residue_is_one) { expr_free(residue); return coeff; }
+            if (coeff_is_one) { expr_free(coeff); return residue; }
+            return expr_new_function(expr_new_symbol("Times"),
+                                     (Expr*[]){coeff, residue}, 2);
         }
     }
 

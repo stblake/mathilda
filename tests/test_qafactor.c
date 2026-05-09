@@ -653,10 +653,15 @@ static void test_g6_order_independence(void) {
  * 4 linear factors involving (±1 ± I)/√2 = ±(1±I)/Sqrt[2].  Picocas
  * renders these as `(1/2 ± I/2) Sqrt[2]` (rationalised denominator). */
 static void test_g6_x4_plus_1_q_sqrt2_i(void) {
+    /* Roots of x^4 + 1 over Q(Sqrt[2], I) are (+/-1 +/- I)/Sqrt[2]. The
+     * radical canonicalization in builtin_times normalises these to
+     * Complex[+/-1, +/-1] * Power[2, -1/2]. (The old, pre-canonicalization
+     * form Complex[+/-1/2, +/-1/2] * Sqrt[2] was equivalent but kept a
+     * factor of 2 in both the rational coefficient and the radical's base.) */
     assert_factor_eq_str(
         "Factor[x^4 + 1, Extension -> {Sqrt[2], I}]",
-        "(x + (-1/2 - 1/2*I) Sqrt[2]) (x + (-1/2 + 1/2*I) Sqrt[2])"
-        " (x + (1/2 - 1/2*I) Sqrt[2])  (x + (1/2 + 1/2*I) Sqrt[2])");
+        "(x + (-1-I)/Sqrt[2]) (x + (-1+I)/Sqrt[2]) "
+        "(x + (1-I)/Sqrt[2]) (x + (1+I)/Sqrt[2])");
 }
 
 /* α-bearing input: x² − 2 √3 x + 3 = (x − √3)² over Q(√2, √3).

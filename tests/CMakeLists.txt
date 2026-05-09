@@ -430,6 +430,9 @@ target_include_directories(radical_fusion_tests PRIVATE ../src)
 add_executable(radical_polyops_tests test_radical_polyops.c ${COMMON_SRC})
 target_include_directories(radical_polyops_tests PRIVATE ../src)
 
+add_executable(radical_canonical_tests test_radical_canonical.c ${COMMON_SRC})
+target_include_directories(radical_canonical_tests PRIVATE ../src)
+
 add_executable(infinity_tests test_infinity.c ${COMMON_SRC})
 target_include_directories(infinity_tests PRIVATE ../src)
 
@@ -531,6 +534,7 @@ if(USE_ECM)
     add_dependencies(limit_tests build_ecm)
     add_dependencies(radical_fusion_tests build_ecm)
     add_dependencies(radical_polyops_tests build_ecm)
+    add_dependencies(radical_canonical_tests build_ecm)
     add_dependencies(infinity_tests build_ecm)
     add_dependencies(increment_tests build_ecm)
     add_dependencies(numeric_tests build_ecm)

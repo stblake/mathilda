@@ -174,9 +174,11 @@ void test_apart_extension(void) {
      * Picocas's canonical output for this is the partial-fraction
      * decomposition with Sqrt[2] coefficients.  Pin the exact form so
      * we catch any future regressions in the algebraic-extension Apart
-     * path. */
+     * path. With the radical canonicalization in builtin_times, the
+     * coefficient 1/2 * 1/Sqrt[2] (and Sqrt[2]/4) collapse to the unified
+     * 1/2^(3/2) form. */
     run_eq("Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]",
-           "-1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/4 Sqrt[2]/(-Sqrt[2] + x)");
+           "-1/(2^(3/2) (Sqrt[2] + x)) + 1/(2^(3/2) (-Sqrt[2] + x))");
 
     /* No-extension default: Apart[1/(x^2 - 2), x] returns the input
      * unchanged because the denominator is irreducible over Q. */
