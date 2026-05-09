@@ -3088,7 +3088,7 @@ In[3]:= D[f[x, y], y]
 Out[3]= Derivative[0, 1][f][x, y]
 ```
 
-#### Integrate (rational-function integration, Phase 1)
+#### Integrate (rational-function integration, Phase 1-8d)
 
 `Integrate[f, x]` is the public entry point for the rational-function
 integrator implemented in `src/integrate.c` (System dispatcher) and
