@@ -968,16 +968,25 @@ Expr* builtin_polynomialq(Expr* res) {
 /* True if `e` is structurally / arithmetically the zero polynomial.   */
 /* Cheap path covers literal 0; expanded path handles `(x-x)`-style    */
 /* cancellations; deep path falls back to coefficient-list inspection. */
-bool is_zero_poly(Expr* e) {
+/* Depth-bounded helper: stops the recursion before overflowing the    */
+/* C stack on inputs where CoefficientList does not strip a variable   */
+/* and the recursive call sees the same expression again (e.g. when    */
+/* `vars[0]` is an algebraic constant like Sqrt[5] and the polynomial  */
+/* involves several Sqrt[..] mixed with x). Each recursive descent     */
+/* genuinely strips one variable, so a small bound suffices for any    */
+/* polynomial; an exhausted bound conservatively reports non-zero. */
+#define IS_ZERO_POLY_MAX_DEPTH 32
+static bool is_zero_poly_depth(Expr* e, int depth) {
     if (!e) return true;
     if (e->type == EXPR_INTEGER && e->data.integer == 0) return true;
     if (e->type == EXPR_REAL && e->data.real == 0.0) return true;
-    
+    if (depth >= IS_ZERO_POLY_MAX_DEPTH) return false;
+
     Expr* expanded = expr_expand(e);
     bool res = false;
     if (expanded->type == EXPR_INTEGER && expanded->data.integer == 0) res = true;
     else if (expanded->type == EXPR_REAL && expanded->data.real == 0.0) res = true;
-    
+
     if (!res) {
         size_t v_count = 0, v_cap = 16;
         Expr** vars = malloc(sizeof(Expr*) * v_cap);
@@ -986,12 +995,12 @@ bool is_zero_poly(Expr* e) {
             if (is_polynomial(expanded, vars, v_count)) {
                 Expr* var = vars[0];
                 Expr* clist = internal_coefficientlist((Expr*[]){expr_copy(expanded), expr_copy(var)}, 2);
-                if (clist && clist->type == EXPR_FUNCTION && 
+                if (clist && clist->type == EXPR_FUNCTION &&
                     clist->data.function.head->type == EXPR_SYMBOL &&
                     clist->data.function.head->data.symbol == SYM_List) {
                     bool all_zero = true;
                     for (size_t i = 0; i < clist->data.function.arg_count; i++) {
-                        if (!is_zero_poly(clist->data.function.args[i])) {
+                        if (!is_zero_poly_depth(clist->data.function.args[i], depth + 1)) {
                             all_zero = false;
                             break;
                         }
@@ -1006,6 +1015,10 @@ bool is_zero_poly(Expr* e) {
     }
     expr_free(expanded);
     return res;
+}
+
+bool is_zero_poly(Expr* e) {
+    return is_zero_poly_depth(e, 0);
 }
 
 static bool is_negative(Expr* e) {
