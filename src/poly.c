@@ -692,12 +692,17 @@ static bool is_target_power(Expr* e, Expr* B, Expr* A, int64_t* c_n, int64_t* c_
 
 /* Walk e: at every (B, A)-matching Power site update *m_out with lcm of
  * c-denominators, increment *count_out, and set *nontrivial_out true if
- * the c coefficient there is anything other than 1.  Always returns
- * true (the walk never blocks — non-matching sub-expressions are simply
- * left for the substitution pass to copy verbatim). */
+ * the c coefficient there is anything other than 1.  Also track
+ * *varied_out: true if at least two matching sites have *different*
+ * (cn, cd) pairs.  When varied_out stays false the substitution would
+ * just rename one repeated power -> a single g^k and gain nothing,
+ * while regressing the GCD path from Q[B^(1/m)][x] (B^(1/m) opaque) to
+ * Q[g, x] bivariate (which can blow up via subresultant PRS). */
 static void walk_gather(Expr* e, Expr* B, Expr* A,
                         int64_t* m_out, size_t* count_out,
-                        bool* nontrivial_out) {
+                        bool* nontrivial_out,
+                        bool* seen_out, int64_t* first_cn, int64_t* first_cd,
+                        bool* varied_out) {
     if (!e) return;
     int64_t cn, cd;
     if (is_target_power(e, B, A, &cn, &cd)) {
@@ -705,12 +710,21 @@ static void walk_gather(Expr* e, Expr* B, Expr* A,
         *m_out = lcm(*m_out, qa);
         (*count_out)++;
         if (!(cn == 1 && cd == 1)) *nontrivial_out = true;
+        if (!*seen_out) {
+            *seen_out = true;
+            *first_cn = cn;
+            *first_cd = cd;
+        } else if (cn != *first_cn || cd != *first_cd) {
+            *varied_out = true;
+        }
         return;
     }
     if (e->type != EXPR_FUNCTION) return;
-    walk_gather(e->data.function.head, B, A, m_out, count_out, nontrivial_out);
+    walk_gather(e->data.function.head, B, A, m_out, count_out, nontrivial_out,
+                seen_out, first_cn, first_cd, varied_out);
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        walk_gather(e->data.function.args[i], B, A, m_out, count_out, nontrivial_out);
+        walk_gather(e->data.function.args[i], B, A, m_out, count_out,
+                    nontrivial_out, seen_out, first_cn, first_cd, varied_out);
     }
 }
 
@@ -721,16 +735,49 @@ bool poly_find_radical_gen(Expr* e, Expr** base_out, Expr** atom_out, int64_t* m
     int64_t m = 1;
     size_t count = 0;
     bool nontrivial_c = false;
-    walk_gather(e, base, atom, &m, &count, &nontrivial_c);
+    bool seen = false;
+    int64_t first_cn = 0, first_cd = 0;
+    bool varied = false;
+    walk_gather(e, base, atom, &m, &count, &nontrivial_c,
+                &seen, &first_cn, &first_cd, &varied);
     bool A_one = atom_is_one(atom);
+
+    /* Detect whether the substitution would create a *bivariate* (or
+     * higher) polynomial problem.  If `e` already has polynomial
+     * variables besides the radical's base, replacing B^(1/m) with a
+     * fresh symbol g introduces a second polynomial variable that
+     * appears alongside the existing one(s) in every coefficient.
+     * The downstream multivariate GCD can then enter the classical
+     * subresultant-PRS coefficient explosion (#hang).  When the
+     * substitution merely renames a single repeated power -> g^k
+     * (varied=false) we gain nothing from making g a real variable —
+     * better to leave B^(1/m) as an opaque coefficient so the GCD
+     * stays in K[x] with K = Q[B^(1/m)]. */
+    bool has_other_var = false;
+    {
+        size_t v_count = 0, v_cap = 8;
+        Expr** vars = malloc(sizeof(Expr*) * v_cap);
+        collect_variables(e, &vars, &v_count, &v_cap);
+        for (size_t i = 0; i < v_count; i++) {
+            if (!expr_eq(vars[i], base)) { has_other_var = true; break; }
+        }
+        for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
+        free(vars);
+    }
+
     /* Trigger conditions:
-     *   - Radical case (A == 1): m > 1 (at least one fractional exp).
+     *   - Radical case (A == 1): m > 1.  When the substitution would
+     *     create a bivariate problem (has_other_var) AND no two sites
+     *     actually combine (`varied` false), skip — substitution is a
+     *     pure rename and only hurts.  Otherwise (univariate, or genuine
+     *     combination) the substitution is beneficial.
      *   - Exponential case (A != 1): at least one Power[B, c*A] with
      *     c != 1, so g^c gives a non-trivial polynomial term.  When all
      *     matching sites have c = 1 the substitution g = Power[B, A]
      *     just renames Power[B, A] -> g and the operation gains nothing.
      */
-    bool trigger = A_one ? (m > 1) : (count >= 1 && nontrivial_c);
+    bool trigger = A_one ? (m > 1 && (!has_other_var || varied))
+                         : (count >= 1 && nontrivial_c);
     if (!trigger) {
         expr_free(base); expr_free(atom);
         return false;
@@ -752,8 +799,24 @@ Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, cons
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
     size_t count = e->data.function.arg_count;
     Expr** new_args = malloc(sizeof(Expr*) * count);
+
+    /* Power[base, exp]: substitute the base only.  Exponents are
+     * polynomial-degree literals (or symbolic) — never the place to
+     * inject an algebraic-extension generator.  Without this guard
+     * a polynomial like `-2 x^2 + 3 Sqrt[2] x` (radical-gen finds
+     * base=2, atom=1) would have its bare integer `2` inside
+     * Power[x, 2]'s exponent rewritten to gen^2, corrupting x^2 into
+     * x^(gen^2). */
+    bool is_power_node = (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && count == 2);
+
     for (size_t i = 0; i < count; i++) {
-        new_args[i] = poly_subst_radical_to_gen(e->data.function.args[i], base, atom, m, gen);
+        if (is_power_node && i == 1) {
+            new_args[i] = expr_copy(e->data.function.args[i]);
+        } else {
+            new_args[i] = poly_subst_radical_to_gen(e->data.function.args[i], base, atom, m, gen);
+        }
     }
     Expr* new_head = poly_subst_radical_to_gen(e->data.function.head, base, atom, m, gen);
     Expr* result = eval_and_free(expr_new_function(new_head, new_args, count));

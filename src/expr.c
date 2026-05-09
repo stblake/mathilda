@@ -212,8 +212,13 @@ bool expr_is_numeric_like(const Expr* e) {
 #endif
             return true;
         case EXPR_FUNCTION:
-            /* Rational[n,d] and Complex[re,im] with numeric components. */
-            if (is_rational((Expr*)e, NULL, NULL)) return true;
+            /* Rational[n,d] and Complex[re,im] with numeric components.
+             * Use the bigint-aware rational check so rationals whose
+             * components have overflowed int64 still fold via the GMP
+             * fallback in multiply_numbers / add_numbers (otherwise
+             * Times[BigInt, Rational[1, BigInt]] survives unsimplified
+             * and breaks exact polynomial division). */
+            if (is_rational_like((Expr*)e)) return true;
             {
                 Expr *re, *im;
                 if (is_complex((Expr*)e, &re, &im)) {

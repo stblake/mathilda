@@ -15,6 +15,12 @@ Expr* make_rational(int64_t n, int64_t d);
 // Check if expression is a Rational[...]
 bool is_rational(const Expr* e, int64_t* n, int64_t* d);
 
+// True for any integer-like (Integer or BigInt), or for Rational[X, Y]
+// where both X and Y are integer-like.  Unlike is_rational(), this also
+// recognises rationals whose components do not fit in int64 — important
+// once intermediate polynomial GCD coefficients overflow int64.
+bool is_rational_like(const Expr* e);
+
 // Check if expression is a Complex[re, im]
 bool is_complex(Expr* e, Expr** re, Expr** im);
 

@@ -74,15 +74,22 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
         
         return expr_new_real(va * vb);
     }
-    if (a->type == EXPR_BIGINT || b->type == EXPR_BIGINT) {
+    /* Mixed BigInt fast path: at least one side is BigInt, and *both*
+     * sides fit the (Integer | BigInt | Rational[int64, int64]) shape.
+     * Rationals whose components have overflowed int64 fail the
+     * is_rational check and would corrupt expr_to_mpz below — those
+     * fall through to the generic GMP block at the bottom. */
+    if ((a->type == EXPR_BIGINT || b->type == EXPR_BIGINT) &&
+        (expr_is_integer_like(a) || is_rational(a, NULL, NULL)) &&
+        (expr_is_integer_like(b) || is_rational(b, NULL, NULL))) {
         int64_t n1 = 1, d1 = 1, n2 = 1, d2 = 1;
         bool a_is_rat = is_rational(a, &n1, &d1);
         bool b_is_rat = is_rational(b, &n2, &d2);
-        
+
         mpz_t av, bv, r;
         if (a_is_rat) mpz_init_set_si(av, n1);
         else expr_to_mpz(a, av);
-        
+
         if (b_is_rat) mpz_init_set_si(bv, n2);
         else expr_to_mpz(b, bv);
         

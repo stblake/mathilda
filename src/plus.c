@@ -147,7 +147,12 @@ static Expr* add_numbers(Expr* a, Expr* b) {
         return expr_new_real(va + vb);
     }
 
-    if (a->type == EXPR_BIGINT || b->type == EXPR_BIGINT) {
+    /* Mixed BigInt fast path: both sides must be plain integer-like
+     * (Integer or BigInt) — Rational[BigInt, BigInt] would fail
+     * is_rational() above and then crash expr_to_mpz here, so it has
+     * to fall through to the generic GMP block at the bottom. */
+    if ((a->type == EXPR_BIGINT || b->type == EXPR_BIGINT) &&
+        expr_is_integer_like(a) && expr_is_integer_like(b)) {
         mpz_t av, bv, r;
         expr_to_mpz(a, av);
         expr_to_mpz(b, bv);

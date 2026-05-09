@@ -172,13 +172,33 @@ bool is_rational(const Expr* e, int64_t* n, int64_t* d) {
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol == SYM_Rational) {
-        if (e->data.function.arg_count == 2 && 
+        if (e->data.function.arg_count == 2 &&
             e->data.function.args[0]->type == EXPR_INTEGER &&
             e->data.function.args[1]->type == EXPR_INTEGER) {
             if (n) *n = e->data.function.args[0]->data.integer;
             if (d) *d = e->data.function.args[1]->data.integer;
             return true;
         }
+    }
+    return false;
+}
+
+/* Bigint-aware version: matches Integer, BigInt, or Rational[X, Y] where
+ * both components are integer-like (Integer or BigInt).  Used in numeric
+ * predicates so the Times/Plus folders recognise rationals whose
+ * components have overflowed int64 — without this, a BigInt times a
+ * Rational[1, BigInt] is left unsimplified and can defeat exact
+ * polynomial division. */
+bool is_rational_like(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.arg_count == 2 &&
+        expr_is_integer_like(e->data.function.args[0]) &&
+        expr_is_integer_like(e->data.function.args[1])) {
+        return true;
     }
     return false;
 }
