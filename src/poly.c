@@ -3264,7 +3264,9 @@ static Expr* poly_divide_by_scalar(Expr* poly, Expr* denom, Expr* var) {
         sum = internal_plus(terms, term_count);
     }
     free(terms);
-    return expr_expand(sum);
+    Expr* result = expr_expand(sum);
+    expr_free(sum);
+    return result;
 }
 
 /* Bronstein subresultant Resultant.  Returns NULL on hard failure so */

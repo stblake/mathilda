@@ -123,6 +123,36 @@ fall-through GMP path that recognises `Rational[BigInt, ...]` (and
 the matching defensive NULL handling at every call site that does
 `x = helper(...); is_overflow(x)`).
 
+## Subresultant PRS over Q(α): Power[α, k/m] vs Times[α^q, Sqrt[α]] don't combine via Plus (2026-05-09)
+
+When implementing Bronstein's subresultant PRS for Resultant, naive
+`pseudo_rem` over a Q(α)[t] coefficient ring (with α a radical, e.g.
+Sqrt[3]) blows up geometrically.  The chain element coefficients
+should stay bounded — Bronstein's β-scaling keeps the chain in
+D[x] — but our system's algebraic-number canonicalisation has a
+subtle issue: `Sqrt[3]^3` auto-simplifies to `Power[3, 3/2]`, NOT
+to `Times[3, Sqrt[3]]`, and `Plus` treats those as different terms
+because they're structurally distinct.  So the same algebraic
+value accumulates in many forms each chain step, doubling the
+expression size every iteration.
+
+`Together` recognizes the equivalence (it does its work in a
+canonical-fraction representation), but is too slow to call
+per-coefficient or even per-chain-step on big polynomial inputs.
+
+Lesson: when an algorithm's correctness depends on
+"algebraically-equal sub-expressions canonicalize identically,"
+verify that condition holds in the host CAS for the specific
+coefficient ring — and gate the algorithm out for rings where it
+fails.  A conservative `subres_has_algebraic` predicate (anything
+of shape `Power[X, Rational[a, b>1]]`) is enough to keep the new
+fast path correct in practice while routing alg-number cases
+through the existing matrix path.
+
+The fundamental fix would be a proper Q(α) substrate (qaupoly
+or similar) where coefficients are reduced modulo α's minimal
+polynomial after every operation, but that's a much larger change.
+
 ## Recursion on tree size, not on "variables stripped" (2026-05-09)
 
 `is_zero_poly` recurses by stripping one variable per descent
