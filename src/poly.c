@@ -3090,11 +3090,411 @@ Expr* builtin_hornerform(Expr* res) {
     return result;
 }
 
+/* ------------------------------------------------------------------ */
+/* Bronstein-style subresultant PRS for Resultant.                    */
+/*   See "SubResultant" in Bronstein, Symbolic Integration I, p.24.   */
+/*                                                                    */
+/* This computes Resultant(A, B, x) without ever forming the          */
+/* (n+m)x(n+m) Sylvester matrix.  The chain works in D[x] (D the      */
+/* coefficient ring), making only O(min(n, m)) calls to a pseudo-     */
+/* remainder, with a single *scalar* exact division per chain step    */
+/* (R / β_i, β_i ∈ D, not D[x]).  In contrast, the Sylvester+Det path */
+/* needs O(n^3) exact divisions of polynomial coefficients in Bareiss */
+/* elimination, which collapses to O(n!) Laplace expansion when any   */
+/* one of those divisions cannot be certified — most commonly over    */
+/* algebraic-number coefficient rings like Q(α).                       */
+/* ------------------------------------------------------------------ */
+
+/* Local leaf-count helper for size-based bailout in the chain.       */
+static int64_t subres_leaf_count(Expr* e) {
+    if (!e) return 0;
+    if (e->type != EXPR_FUNCTION) return 1;
+    int64_t c = 1;  /* count the head */
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        c += subres_leaf_count(e->data.function.args[i]);
+    }
+    return c;
+}
+
+/* True if `e` contains any subterm Power[X, Rational[a, b]] with b > 1, */
+/* i.e. an algebraic number (Sqrt[N], cube roots, etc.).  Pseudo-       */
+/* remainder over D = Q(α)[t] generates Power[base, k/2] forms (e.g.    */
+/* Sqrt[3]^3 → 3^(3/2)) that don't combine with Times[base, Sqrt[base]] */
+/* via Plus alone, so the chain bloats geometrically.  We detect this   */
+/* up front and let the Sylvester+Det path handle it instead.            */
+static bool subres_has_algebraic(Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        Expr* exp = e->data.function.args[1];
+        if (exp->type == EXPR_FUNCTION &&
+            exp->data.function.head->type == EXPR_SYMBOL &&
+            exp->data.function.head->data.symbol == SYM_Rational &&
+            exp->data.function.arg_count == 2) {
+            Expr* den = exp->data.function.args[1];
+            if (den->type == EXPR_INTEGER && den->data.integer != 1) {
+                return true;
+            }
+            if (den->type == EXPR_BIGINT) return true;
+        }
+    }
+    if (e->data.function.head &&
+        subres_has_algebraic(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (subres_has_algebraic(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Standard pseudo-remainder: returns lc(B)^(deg(A) - deg(B) + 1) * A */
+/* mod B in D[x], assuming deg(A) >= deg(B).  Distinguished from the  */
+/* looser pseudo_rem above (which multiplies by the minimum power of  */
+/* lc(B) needed to drive the remainder below deg(B)) — Bronstein's    */
+/* chain identities require the full d+1 power so that division by    */
+/* β_i is exact in D.                                                  */
+static Expr* pseudo_rem_standard(Expr* A, Expr* B, Expr* x) {
+    Expr* expandedB = expr_expand(B);
+    int dB = get_degree_poly(expandedB, x);
+    Expr* expandedA = expr_expand(A);
+    int dA = get_degree_poly(expandedA, x);
+
+    if (is_zero_poly(expandedB) || dA < dB) {
+        expr_free(expandedB);
+        return expandedA;
+    }
+
+    Expr* lcB = get_coeff_expanded(expandedB, x, dB);
+    int expected_iters = dA - dB + 1;
+    int iters = 0;
+    Expr* R = expandedA;
+
+    while (true) {
+        int degR = get_degree_poly(R, x);
+        if (degR < dB || is_zero_poly(R)) break;
+
+        Expr* lcR = get_coeff_expanded(R, x, degR);
+        int d = degR - dB;
+
+        Expr* t1 = internal_times((Expr*[]){expr_copy(lcB), R}, 2);
+        Expr* x_pow = internal_power(
+            (Expr*[]){expr_copy(x), expr_new_integer(d)}, 2);
+        Expr* t2 = internal_times(
+            (Expr*[]){lcR, x_pow, expr_copy(expandedB)}, 3);
+        Expr* neg_t2 = internal_times(
+            (Expr*[]){expr_new_integer(-1), t2}, 2);
+        Expr* diff = internal_plus((Expr*[]){t1, neg_t2}, 2);
+
+        R = expr_expand(diff);
+        expr_free(diff);
+        iters++;
+    }
+
+    /* Pad with extra lc(B) multiplications when an iteration step      */
+    /* dropped the remainder degree by more than 1 (so we exited early).*/
+    if (iters < expected_iters) {
+        Expr* pad_pow = internal_power(
+            (Expr*[]){expr_copy(lcB),
+                      expr_new_integer(expected_iters - iters)}, 2);
+        Expr* padded = internal_times((Expr*[]){R, pad_pow}, 2);
+        R = expr_expand(padded);
+        expr_free(padded);
+    }
+
+    expr_free(lcB);
+    expr_free(expandedB);
+    return R;
+}
+
+/* Coefficient-wise division of `poly` (a polynomial in `var`) by the */
+/* scalar `denom`.  Builds the result by extracting coefficients,      */
+/* dividing each by denom, and rebuilding.  Cancel handles rational   */
+/* simplification.  Returns a fresh expression; the caller frees it.  */
+static Expr* poly_divide_by_scalar(Expr* poly, Expr* denom, Expr* var) {
+    if (is_zero_poly(poly)) return expr_new_integer(0);
+
+    Expr* expanded = expr_expand(poly);
+    int d = get_degree_poly(expanded, var);
+    if (d < 0 || is_zero_poly(expanded)) {
+        expr_free(expanded);
+        return expr_new_integer(0);
+    }
+
+    Expr* inv_denom = internal_power(
+        (Expr*[]){expr_copy(denom), expr_new_integer(-1)}, 2);
+
+    Expr** coeffs = NULL;
+    bool bulk = get_all_coeffs_expanded(expanded, var, d, &coeffs);
+
+    Expr** terms = malloc(sizeof(Expr*) * (d + 1));
+    int term_count = 0;
+    for (int i = 0; i <= d; i++) {
+        Expr* c = bulk ? coeffs[i] : get_coeff_expanded(expanded, var, i);
+        if (is_zero_poly(c)) {
+            expr_free(c);
+            continue;
+        }
+        Expr* prod = internal_times((Expr*[]){c, expr_copy(inv_denom)}, 2);
+        Expr* simp = internal_cancel((Expr*[]){prod}, 1);
+        if (i == 0) {
+            terms[term_count++] = simp;
+        } else if (i == 1) {
+            terms[term_count++] = internal_times(
+                (Expr*[]){simp, expr_copy(var)}, 2);
+        } else {
+            Expr* xp = internal_power(
+                (Expr*[]){expr_copy(var), expr_new_integer(i)}, 2);
+            terms[term_count++] = internal_times(
+                (Expr*[]){simp, xp}, 2);
+        }
+    }
+    free(coeffs);
+    expr_free(inv_denom);
+    expr_free(expanded);
+
+    Expr* sum;
+    if (term_count == 0) {
+        free(terms);
+        return expr_new_integer(0);
+    }
+    if (term_count == 1) {
+        sum = terms[0];
+    } else {
+        sum = internal_plus(terms, term_count);
+    }
+    free(terms);
+    return expr_expand(sum);
+}
+
+/* Bronstein subresultant Resultant.  Returns NULL on hard failure so */
+/* the caller can fall back to the Sylvester+Det path.  Both inputs   */
+/* are required to have positive degree in `var` — degenerate cases   */
+/* (constant inputs) are handled by resultant_internal before calling */
+/* this.                                                               */
+static Expr* resultant_subresultant(Expr* P, Expr* Q, Expr* var) {
+    /* Skip Bronstein for inputs with algebraic numbers (Sqrt[N], cube     */
+    /* roots, etc.).  Pseudo-remainder over Q(α)[t][x] generates           */
+    /* Power[α, k/m] forms that our Plus doesn't combine with the          */
+    /* equivalent Times[α^q, Sqrt[α]] forms, leading to geometric chain    */
+    /* bloat.  Sylvester+Det is more reliable here even at O(n!) Laplace.  */
+    if (subres_has_algebraic(P) || subres_has_algebraic(Q)) {
+        return NULL;
+    }
+
+    int dP = get_degree_poly(P, var);
+    int dQ = get_degree_poly(Q, var);
+
+    /* Order chain so deg(R_0) >= deg(R_1).  Theorem 1.4.1: swapping  */
+    /* arguments multiplies the resultant by (-1)^(deg(P)*deg(Q)).    */
+    int swap_sign = 1;
+    Expr *A_init, *B_init;
+    int dA_init, dB_init;
+    if (dP >= dQ) {
+        A_init = expr_expand(P);
+        B_init = expr_expand(Q);
+        dA_init = dP; dB_init = dQ;
+    } else {
+        A_init = expr_expand(Q);
+        B_init = expr_expand(P);
+        dA_init = dQ; dB_init = dP;
+        if ((dP & 1) && (dQ & 1)) swap_sign = -1;
+    }
+
+    /* Chain storage. */
+    size_t cap = 8;
+    Expr** R_chain = (Expr**)malloc(sizeof(Expr*) * cap);
+    int*   degs    = (int*)  malloc(sizeof(int)   * cap);
+    Expr** lcs     = (Expr**)malloc(sizeof(Expr*) * cap);
+    Expr** betas   = (Expr**)malloc(sizeof(Expr*) * cap);
+    for (size_t t = 0; t < cap; t++) {
+        R_chain[t] = NULL; lcs[t] = NULL; betas[t] = NULL; degs[t] = -1;
+    }
+
+    R_chain[0] = A_init;
+    R_chain[1] = B_init;
+    degs[0] = dA_init;
+    degs[1] = dB_init;
+    lcs[0] = NULL;  /* never read */
+    lcs[1] = get_coeff_expanded(B_init, var, dB_init);
+
+    int delta = dA_init - dB_init;          /* δ_1 */
+    Expr* gamma = expr_new_integer(-1);     /* γ_1 */
+    /* β_1 = (-1)^(δ_1 + 1). */
+    betas[1] = ((delta + 1) & 1)
+                ? expr_new_integer(-1)
+                : expr_new_integer(1);
+
+    int prev_delta = delta;
+    int i = 1;
+    Expr* result = NULL;
+    bool failed = false;
+
+    /* Size budget: if a chain element exceeds this threshold relative to */
+    /* the inputs, the cancellation in poly_divide_by_scalar isn't       */
+    /* keeping pace (typically Q(α)[t] coefficient rings where           */
+    /* internal_cancel can't fully reduce algebraic-number denominators). */
+    /* Bail out so resultant_internal falls back to Sylvester+Det.        */
+    int64_t input_size = subres_leaf_count(A_init) + subres_leaf_count(B_init);
+    int64_t size_budget = input_size * 30;
+    if (size_budget < 5000) size_budget = 5000;
+
+    while (!is_zero_poly(R_chain[i])) {
+        /* Pre-check: bail before doing the next (potentially expensive) */
+        /* pseudo-remainder if the current chain head is already bloated. */
+        if (subres_leaf_count(R_chain[i]) > size_budget) {
+            failed = true;
+            break;
+        }
+
+        Expr* pprem_val = pseudo_rem_standard(R_chain[i-1], R_chain[i], var);
+        if (!pprem_val) { failed = true; break; }
+
+        Expr* R_next = poly_divide_by_scalar(pprem_val, betas[i], var);
+        expr_free(pprem_val);
+        if (!R_next) { failed = true; break; }
+
+        if (subres_leaf_count(R_next) > size_budget) {
+            expr_free(R_next);
+            failed = true;
+            break;
+        }
+
+        /* Grow arrays if needed (need slot i+2 reachable below). */
+        if ((size_t)(i + 2) >= cap) {
+            size_t new_cap = cap * 2;
+            R_chain = realloc(R_chain, sizeof(Expr*) * new_cap);
+            degs    = realloc(degs,    sizeof(int)   * new_cap);
+            lcs     = realloc(lcs,     sizeof(Expr*) * new_cap);
+            betas   = realloc(betas,   sizeof(Expr*) * new_cap);
+            for (size_t t = cap; t < new_cap; t++) {
+                R_chain[t] = NULL; lcs[t] = NULL;
+                betas[t] = NULL; degs[t] = -1;
+            }
+            cap = new_cap;
+        }
+
+        R_chain[i+1] = R_next;
+        if (is_zero_poly(R_next)) {
+            i = i + 1;
+            break;
+        }
+        degs[i+1] = get_degree_poly(R_next, var);
+        lcs[i+1] = get_coeff_expanded(R_next, var, degs[i+1]);
+
+        /* Advance index, then update γ_i, δ_i, β_i. */
+        i = i + 1;
+
+        /* γ_i = (-r_{i-1})^(δ_{i-1}) · γ_{i-1}^(1 - δ_{i-1}) */
+        Expr* neg_r = internal_times(
+            (Expr*[]){expr_new_integer(-1), expr_copy(lcs[i-1])}, 2);
+        Expr* term1 = internal_power(
+            (Expr*[]){neg_r, expr_new_integer(prev_delta)}, 2);
+        Expr* term2 = internal_power(
+            (Expr*[]){expr_copy(gamma), expr_new_integer(1 - prev_delta)}, 2);
+        Expr* gamma_new = internal_times((Expr*[]){term1, term2}, 2);
+        Expr* gamma_simp = internal_cancel((Expr*[]){gamma_new}, 1);
+        Expr* gamma_expanded = expr_expand(gamma_simp);
+        expr_free(gamma_simp);
+        expr_free(gamma);
+        gamma = gamma_expanded;
+
+        /* δ_i = deg(R_{i-1}) - deg(R_i). */
+        int new_delta = degs[i-1] - degs[i];
+        prev_delta = new_delta;
+
+        /* β_i = -r_{i-1} · γ_i^(δ_i). */
+        Expr* gamma_pow = internal_power(
+            (Expr*[]){expr_copy(gamma), expr_new_integer(new_delta)}, 2);
+        Expr* beta_new = internal_times(
+            (Expr*[]){expr_new_integer(-1),
+                      expr_copy(lcs[i-1]), gamma_pow}, 3);
+        Expr* beta_simp = internal_cancel((Expr*[]){beta_new}, 1);
+        betas[i] = expr_expand(beta_simp);
+        expr_free(beta_simp);
+    }
+
+    int k = i - 1;
+
+    if (!failed) {
+        if (k == 0) {
+            /* Should not occur for positive-degree inputs. */
+            failed = true;
+        } else if (degs[k] > 0) {
+            /* Common factor of positive degree -> resultant is 0. */
+            result = expr_new_integer(0);
+        } else if (degs[k-1] == 1) {
+            /* Fast path: resultant = R_k (a non-zero constant). */
+            result = expr_copy(R_chain[k]);
+        } else {
+            /* General case: result = s · c · R_k^deg(R_{k-1}). */
+            int s = 1;
+            Expr* c = expr_new_integer(1);
+            for (int j = 1; j <= k - 1; j++) {
+                if ((degs[j-1] & 1) && (degs[j] & 1)) s = -s;
+                int delta_j = degs[j-1] - degs[j];
+                int exp_ratio = degs[j];
+                int exp_rj = degs[j-1] - degs[j+1];
+
+                Expr* rj_1pdj = internal_power(
+                    (Expr*[]){expr_copy(lcs[j]),
+                              expr_new_integer(1 + delta_j)}, 2);
+                Expr* inv_rj_1pdj = internal_power(
+                    (Expr*[]){rj_1pdj, expr_new_integer(-1)}, 2);
+                Expr* ratio = internal_times(
+                    (Expr*[]){expr_copy(betas[j]), inv_rj_1pdj}, 2);
+                Expr* ratio_pow = internal_power(
+                    (Expr*[]){ratio, expr_new_integer(exp_ratio)}, 2);
+                Expr* rj_pow_2 = internal_power(
+                    (Expr*[]){expr_copy(lcs[j]),
+                              expr_new_integer(exp_rj)}, 2);
+                Expr* incr = internal_times(
+                    (Expr*[]){c, ratio_pow, rj_pow_2}, 3);
+                Expr* simp = internal_cancel((Expr*[]){incr}, 1);
+                c = expr_expand(simp);
+                expr_free(simp);
+            }
+
+            Expr* Rk_pow = internal_power(
+                (Expr*[]){expr_copy(R_chain[k]),
+                          expr_new_integer(degs[k-1])}, 2);
+            Expr* sc = (s == 1)
+                ? c
+                : internal_times((Expr*[]){expr_new_integer(-1), c}, 2);
+            Expr* unsigned_res = internal_times((Expr*[]){sc, Rk_pow}, 2);
+            result = expr_expand(unsigned_res);
+            expr_free(unsigned_res);
+        }
+        if (result && swap_sign == -1) {
+            Expr* neg = internal_times(
+                (Expr*[]){expr_new_integer(-1), result}, 2);
+            result = expr_expand(neg);
+            expr_free(neg);
+        }
+    }
+
+    /* Cleanup chain storage. */
+    for (size_t t = 0; t < cap; t++) {
+        if (R_chain[t]) expr_free(R_chain[t]);
+        if (lcs[t])     expr_free(lcs[t]);
+        if (betas[t])   expr_free(betas[t]);
+    }
+    free(R_chain);
+    free(degs);
+    free(lcs);
+    free(betas);
+    expr_free(gamma);
+
+    return result;
+}
+
 /* Resultant of P, Q in `var`. We exploit two algebraic identities for */
 /* a fast path before falling back to the Sylvester matrix:            */
 /*   Res(P1*P2, Q) = Res(P1,Q) * Res(P2,Q)                              */
 /*   Res(P^k, Q)   = Res(P,Q)^k                                         */
-/* The general case builds the (n+m)x(n+m) Sylvester matrix and        */
+/* The general case prefers Bronstein's subresultant PRS                */
+/* (resultant_subresultant) and falls back to constructing the          */
+/* (n+m)x(n+m) Sylvester matrix and                                     */
 /* takes its determinant (delegated to the linalg module).             */
 static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
     if (P->type == EXPR_FUNCTION && P->data.function.head->type == EXPR_SYMBOL) {
@@ -3148,7 +3548,19 @@ static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
         expr_free(exp_P); expr_free(exp_Q);
         return r;
     }
-    
+
+    /* Try Bronstein's subresultant PRS first.  Returns NULL for inputs  */
+    /* with algebraic-number coefficients (Sqrt[N], etc.) so Sylvester+  */
+    /* Det handles those, and on size-budget exhaustion in pathological  */
+    /* cases.                                                             */
+    {
+        Expr* sub = resultant_subresultant(exp_P, exp_Q, var);
+        if (sub) {
+            expr_free(exp_P); expr_free(exp_Q);
+            return sub;
+        }
+    }
+
     /* Both inputs are already expanded -- one bulk pass per polynomial   */
     /* gives us all coefficients in O(terms), instead of O(deg * terms)   */
     /* across (deg+1) separate get_coeff queries.                          */

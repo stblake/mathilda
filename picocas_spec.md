@@ -1039,7 +1039,9 @@ Computes the resultant of two polynomials.
 - `Protected`, `Listable`.
 - Computes the resultant of polynomials `poly1` and `poly2` with respect to the variable `var`.
 - The resultant is independent of common roots and vanishes exactly when the polynomials have roots in common.
-- Implemented fundamentally over symbolic systems using Sylvester matrix determinants, ensuring full generic expansion over arbitrary constants.
+- Default algorithm is Bronstein's subresultant PRS (Symbolic Integration I, p.24): a linear chain of pseudo-remainders with scalar exact divisions in the coefficient ring, avoiding the (n+m)x(n+m) Sylvester matrix construction and its O(n^3) Bareiss reduction.  For Z/Q coefficients this is materially faster than the matrix path, and on inputs with symbolic coefficients it sidesteps the O(n!) Laplace expansion that the matrix path falls back to when Bareiss exact-division certification fails.
+- Inputs containing algebraic-number coefficients (e.g. `Sqrt[N]`, cube roots — any `Power[X, Rational[a,b]]` with `b > 1`) are routed to the Sylvester+Det path instead, because the subresultant chain bloats geometrically when `Power[base, k/m]` forms can't be combined with their `Times[base^q, Sqrt[base]]` equivalents by `Plus` alone.
+- A size-budget guard inside the subresultant path falls back to Sylvester+Det for any pathological input where chain elements exceed ~30x the input leaf-count.
 - Automatically preserves multiplicativity (e.g., $Res(A \cdot B, Q) = Res(A, Q) Res(B, Q)$ and $Res(A^k, Q) = Res(A, Q)^k$).
 
 ```mathematica
@@ -3237,7 +3239,8 @@ check.  Two CTest entries are wired:
   in `IntegrateRational.m` via `tools/extract_inline_cases.py`
   (96 cases).
 
-Per-case 10 s timeout + 5 s parent grace.  The corpus runner is the
+Per-case strict 10 s wall-clock cap (child SIGALRMs at 10 s; the
+parent SIGKILLs at the same deadline).  The corpus runner is the
 public progress dashboard for the rational integrator: each phase
 that lands new closure machinery moves cases out of TIMEOUT /
 RootSum into `diff_zero` (closed in real elementary form, with
@@ -11828,3 +11831,98 @@ Worked example for α = `Sqrt[2 - Sqrt[2]]`:
   `x^8 + 1` over `Q(Sqrt[2 - Sqrt[2]])`, the min-poly-of-α splits
   case, Sqrt[2+Sqrt[3]], the denested Sqrt[5+2Sqrt[6]] case, and
   the `Sqrt[5] ∉ Q(α)` irreducible-stays-unfactored edge.
+
+## Resultant: Bronstein subresultant PRS as the default algorithm (2026-05-09)
+
+`Resultant[A, B, var]` previously built the (n+m)x(n+m) Sylvester
+matrix and called `Det`.  For matrices over Q, `bareiss_det` works
+in O(n^3) with exact integer divisions.  For matrices with
+symbolic-or-algebraic-number coefficients, however, `bd_exact_div`
+cannot certify exact division and the path silently falls back to
+`laplace_det` at O(n!), which on inputs from
+`IntegrateRational[...]`'s LRT-log-part call (typically an
+(n+m)x(n+m) matrix where n+m ≈ 11) effectively hangs.
+
+The new default is Bronstein's subresultant algorithm (Symbolic
+Integration I, p.24).  The chain runs entirely in D[x] for the
+coefficient ring D, making only:
+
+- `min(deg(A), deg(B))` calls to a **standard** pseudo-remainder
+  `lc(B)^(deg(A)-deg(B)+1) * A mod B`, and
+- one **scalar** exact division per chain step
+  (`R_{i+1} = pprem / β_i` with `β_i ∈ D`, not `D[x]`).
+
+That replaces ~n^3/3 polynomial-coefficient divisions in the matrix
+path with ~n scalar divisions in the chain, and the chain never
+needs the O(n!) Laplace fallback.
+
+### Algorithm
+
+Initial state: `R_0 = A`, `R_1 = B`, `δ_1 = deg(A) - deg(B)`,
+`γ_1 = -1`, `β_1 = (-1)^(δ_1+1)`.
+
+Loop while `R_i ≠ 0`:
+
+```
+pprem  = lc(R_i)^(deg(R_{i-1}) - deg(R_i) + 1) * R_{i-1} mod R_i
+R_{i+1} = pprem / β_i              ;; exact in D
+γ_{i+1} = (-r_i)^δ_i · γ_i^(1-δ_i)
+δ_{i+1} = deg(R_i) - deg(R_{i+1})
+β_{i+1} = -r_i · γ_{i+1}^δ_{i+1}
+```
+
+Termination: let `k = i - 1` (last non-zero R).
+- `deg(R_k) > 0`: common factor exists → return 0.
+- `deg(R_{k-1}) = 1`: return `R_k`.
+- otherwise: return `s · c · R_k^deg(R_{k-1})` where `s` and `c` are
+  the Bronstein τ_k accumulator running over `j = 1..k-1`.
+
+Argument-order swap (when `deg(P) < deg(Q)`) multiplies the result
+by `(-1)^(deg(P)·deg(Q))` per Theorem 1.4.1.
+
+### Guards and fallback to Sylvester
+
+Two early-exit guards keep the implementation from regressing
+edge cases:
+
+1. **Algebraic-content gate**.  Any input subterm of the form
+   `Power[X, Rational[a, b]]` with `b > 1` (i.e. `Sqrt[N]`, cube
+   roots, etc.) routes the call directly to the Sylvester+Det path.
+   Reason: pseudo-remainder over `Q(α)[t][x]` produces
+   `Power[α, k/m]` forms (e.g. `Sqrt[3]^3 → 3^(3/2)`) that don't
+   combine via `Plus` with the equivalent `Times[α^q, Sqrt[α]]`,
+   so chain elements bloat geometrically.  This is fundamentally a
+   limitation of our algebraic-number canonicalisation, not of the
+   subresultant scheme.
+
+2. **Size budget**.  If any chain element exceeds 30x the input
+   leaf-count (or 5000 leaves, whichever is larger), the path
+   returns `NULL` and the caller (`resultant_internal`) falls back
+   to `Sylvester+Det`.  This catches pathological symbolic inputs
+   without affecting the common case.
+
+### Performance impact
+
+- `Resultant[x^10 - 5 x^7 + 3, x^9 - 2 x^4 + 7, x]`: 5.8 ms
+  (formerly Sylvester+Det, comparable but no Laplace risk).
+- `Discriminant[x^7 - 5 x^3 + 11, x]`: 1.4 ms.
+- Q(√3) cases (LRT log-part calls in IntegrateRational): correctly
+  routed to Sylvester+Det via the algebraic-content gate; 5.5 ms
+  for a degree-3 chain, 40 ms for a degree-4 chain.  No regression.
+- The hang in `Integrate[(... + Sqrt[3] ...)/((4+x^2)(... + Sqrt[3] ...))]`
+  is **not** addressed by this change; that case requires
+  architectural Q(α) arithmetic improvements (qaupoly substrate or
+  modular-resultant) that are out of scope here.
+
+### Files
+
+- `src/poly.c`:
+  - new static helpers `subres_leaf_count`, `subres_has_algebraic`,
+    `pseudo_rem_standard`, `poly_divide_by_scalar`,
+    `resultant_subresultant`.
+  - `resultant_internal` calls `resultant_subresultant` first;
+    on `NULL` it falls back to the existing Sylvester+Det code.
+- Existing tests (`test_poly.c::test_resultant`,
+  `test_poly.c::test_discriminant`, the IntegrateRational pipeline
+  tests in `test_intrat*.c`, the qafactor tests) all pass
+  unchanged.
