@@ -3152,20 +3152,37 @@ following classes of integrand:
   `RootSum` is expanded in place to a `Plus` of `body` evaluated at
   each root via the quadratic formula and `Sqrt`.  Higher-degree
   factors stay in held `RootSum` form until `solve.c` is implemented.
-- **Plus/Times BigInt-Rational stability fix** — running the corpus
-  surfaced 9 child-process crashes (SIGSEGV) on inputs whose
-  resultant computations promoted intermediate coefficients into
-  `Rational[BigInt, ...]` territory.  `add_numbers` and
-  `multiply_numbers` had fast paths only for
-  `Rational[Integer, Integer]` and returned `NULL` on
-  `Rational[BigInt, ...]`; the callers in `builtin_plus` and
-  `builtin_times` then dereferenced the `NULL` via
-  `is_overflow()`.  Both helpers now fall through to a generic
-  GMP rational add/multiply that recognises any combination of
-  `Integer / BigInt / Rational[Integer-or-BigInt,
-  Integer-or-BigInt]`, and the callers defensively re-stash the
-  operand on a NULL return.  Locked in by
-  `tests/test_bigint.c::test_plus_rational_with_bigint_parts`.
+- **Stability fixes surfaced by the corpus runs** — the two corpora
+  exercised numeric and recursive paths the unit tests had never
+  reached, and ran into two distinct child-process crash classes:
+  - **Plus/Times BigInt-Rational** (`src/plus.c`, `src/times.c`):
+    `add_numbers` and `multiply_numbers` had fast paths only for
+    `Rational[Integer, Integer]` and returned `NULL` on
+    `Rational[BigInt, ...]` operands (which arose from the
+    intermediate resultant computations).  The callers in
+    `builtin_plus` / `builtin_times` then dereferenced the NULL
+    via `is_overflow()`.  Both helpers now fall through to a
+    generic GMP rational add/multiply that recognises any
+    combination of `Integer / BigInt / Rational[Integer-or-BigInt,
+    Integer-or-BigInt]`, and the callers defensively re-stash the
+    operand on a NULL return.  Locked in by
+    `tests/test_bigint.c::test_plus_rational_with_bigint_parts`.
+  - **`is_zero_poly` recursion bound** (`src/poly.c`):
+    `is_zero_poly`'s deep path recurses on each coefficient
+    returned by `CoefficientList(expanded, vars[0])`, which
+    normally strips one variable per descent.  When `vars[0]` is
+    an algebraic constant like `Sqrt[5]` and the polynomial mixes
+    several radicals (`Sqrt[5]`, `Sqrt[21]`, `Sqrt[105]`, …),
+    `CoefficientList` does not actually strip the variable and
+    the recursion sees the same expression again, overflowing the
+    C stack.  Threading a `depth` argument and bailing out
+    conservatively (returning `false`) at depth 32 keeps the
+    function correct on every genuine polynomial while preventing
+    SIGSEGV on opaque algebraic-coefficient inputs.
+
+Combined effect on the `IntegrateRationalTests.m` corpus: the
+remaining child crashes from earlier runs are eliminated, while
+`diff_nonzero` stays at the documented baseline of 1.
 - **Phase 6 LogToArcTanh post-processing** — pairs of
   `c Log[A] + c Log[B]` collapse to `c Log[A B]`; sign-paired
   `c Log[A] - c Log[B]` go to `c Log[A/B]` or
