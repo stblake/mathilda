@@ -102,3 +102,43 @@ where `funcname` allocates / mutates / writes via output-pointer.
 Pure predicate checks (`ASSERT(qa_eq(a, b))`, `ASSERT(p->deg == 1)`)
 are safe to elide in Release because they only weaken the test, not
 break setup.
+
+## Numeric helpers must accept BigInt-backed Rationals (2026-05-09)
+
+`add_numbers` (plus.c) and `multiply_numbers` (times.c) had a fast
+path for `Rational[Integer, Integer]` but no fallback when the
+numerator or denominator was already an `EXPR_BIGINT`.  The helpers
+would then hit `return NULL`, and the callers in `builtin_plus` /
+`builtin_times` blindly fed that into `is_overflow()` and crashed.
+
+This was latent for years and only surfaced when the rational-
+function integration corpus exercised resultant computations
+whose intermediate coefficients overflowed 64 bits.
+
+Lesson: every numeric helper that branches on operand type must
+treat `Rational[<Integer-or-BigInt>, <Integer-or-BigInt>]` as a
+single rational case.  The signature `is_rational(e, &n, &d)` with
+int64-out-pointers is too narrow on its own — pair it with a
+fall-through GMP path that recognises `Rational[BigInt, ...]` (and
+the matching defensive NULL handling at every call site that does
+`x = helper(...); is_overflow(x)`).
+
+## Recursion on tree size, not on "variables stripped" (2026-05-09)
+
+`is_zero_poly` recurses by stripping one variable per descent
+via `CoefficientList(expanded, vars[0])`.  The induction is
+"polynomials in fewer variables are simpler," which holds only
+when `vars[0]` is a real polynomial variable.  When
+`collect_variables` returns an algebraic constant like `Sqrt[5]`
+as `vars[0]` and the polynomial mixes several radicals,
+`CoefficientList` does not actually strip anything and the
+recursive call sees the same expression — unbounded recursion,
+EXC_BAD_ACCESS at the next deep call site.
+
+Lesson: any recursive simplification whose termination relies on
+"each call sees a smaller subproblem" needs an explicit depth
+bound when the smallness predicate (here: "fewer
+non-numeric leaves") can be defeated by the pre-processing.
+Pick a bound well above any genuine tree depth and bail out
+conservatively (return the safe answer for the caller) when it
+is exhausted.
