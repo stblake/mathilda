@@ -83,7 +83,33 @@ static Expr* call_eval(const char* head, Expr** args, size_t argc) {
 
 /* canonic[expr] = Cancel[Together[expr]].  Phase 1 keeps this
  * stripped down — the full Mathematica `canonic` adds a RootReduce /
- * ToRadicals tail that we'll bring online in later phases. */
+ * ToRadicals tail that we'll bring online in later phases.
+ *
+ * Switches to `Extension -> Automatic` only when the input contains
+ * a radical (Sqrt / generic Power[..., Rational[_,_]]) — cancelling
+ * algebraic-coefficient fractions otherwise.  For pure-rational
+ * inputs Extension -> Automatic adds no value but pulls in the full
+ * Q(α) factoring path inside Cancel/Together, which can blow up on
+ * dense polynomials. */
+static bool intrat_has_radical(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        Expr* exp = e->data.function.args[1];
+        if (exp->type == EXPR_FUNCTION
+            && exp->data.function.head->type == EXPR_SYMBOL
+            && exp->data.function.head->data.symbol == SYM_Rational) {
+            return true;
+        }
+    }
+    if (intrat_has_radical(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (intrat_has_radical(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
 static Expr* intrat_canonic(Expr* e) {
     Expr* tg = internal_together((Expr*[]){expr_copy(e)}, 1);
     Expr* result = internal_cancel((Expr*[]){tg}, 1);
@@ -1453,7 +1479,24 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
             expr_free(lc_s2);
             if (_unused) expr_free(_unused);
 
-            /* s := primitive[PolynomialRemainder[r * s, Qi, t], x]. */
+            /* s := primitive[PolynomialRemainder[r * s, Qi, t], x].
+             *
+             * Simplify r_eg first when it carries radicals.
+             * ExtendedEuclidean over algebraic-coefficient inputs
+             * emits results with unreduced products like
+             * Sqrt[2] Sqrt[3] Sqrt[30] (which equals 6 Sqrt[5]); left
+             * unsimplified, the downstream PolynomialRemainder step
+             * on r_eg * s sees a polynomial in t with mixed-radical
+             * "coefficients" that don't reduce to the underlying
+             * algebraic field, and the polynomial-division loop
+             * fails to terminate.  Simplify normalises the radicals
+             * to the minimal generating set (here Sqrt[2], Sqrt[5])
+             * before the division. */
+            if (intrat_has_radical(r_eg)) {
+                Expr* simp_call = expr_new_function(expr_new_symbol("Simplify"),
+                    (Expr*[]){ r_eg }, 1);
+                r_eg = evaluate(simp_call); expr_free(simp_call);
+            }
             Expr* rs_raw = internal_times(
                 (Expr*[]){r_eg, s}, 2);
             Expr* rs = expr_expand(rs_raw); expr_free(rs_raw);
@@ -1979,6 +2022,109 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
             contribution = logtoreal_quadratic(a, b, c, s, x, t);
             expr_free(a); expr_free(b); expr_free(c);
             if (!contribution) goto fail;
+        } else if (deg == 4) {
+            /* Sophie-Germain shortcut: a t^4 + b with a, b nonzero
+             * rationals of the same sign factors over Q(Sqrt[2 k^2])
+             * (with k^2 = Sqrt[b/a]) into two real quadratics
+             *   (t^2 + Sqrt[2 k^2] t + k^2)(t^2 - Sqrt[2 k^2] t + k^2)
+             * each of which has discriminant -2 k^2 < 0 and so lands
+             * in the negative-discriminant ArcTan branch of
+             * logtoreal_quadratic.  This catches the Q(t) families
+             *   1 + 256 t^4 (from 1/(x^4+1)),
+             *   1 + 65536 t^8 etc. once nested through this branch,
+             * which would otherwise fall through to NaiveLogPart and
+             * its complex-form radical expander. */
+            Expr* c0 = get_coeff(base, t, 0);
+            Expr* c1 = get_coeff(base, t, 1);
+            Expr* c2 = get_coeff(base, t, 2);
+            Expr* c3 = get_coeff(base, t, 3);
+            Expr* c4 = get_coeff(base, t, 4);
+
+            bool c1z = (c1->type == EXPR_INTEGER && c1->data.integer == 0);
+            bool c2z = (c2->type == EXPR_INTEGER && c2->data.integer == 0);
+            bool c3z = (c3->type == EXPR_INTEGER && c3->data.integer == 0);
+
+            if (c1z && c2z && c3z) {
+                /* ratio = c0/c4 must be a positive rational so Sqrt
+                 * comes out real.  We detect this by structural
+                 * inspection of the simplified ratio. */
+                Expr* ratio = eval_and_free(internal_divide(
+                    (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2));
+
+                bool ratio_pos = false;
+                if (ratio->type == EXPR_INTEGER && ratio->data.integer > 0) {
+                    ratio_pos = true;
+                } else if (ratio->type == EXPR_FUNCTION
+                    && ratio->data.function.head->type == EXPR_SYMBOL
+                    && ratio->data.function.head->data.symbol == SYM_Rational
+                    && ratio->data.function.arg_count == 2
+                    && ratio->data.function.args[0]->type == EXPR_INTEGER
+                    && ratio->data.function.args[0]->data.integer > 0) {
+                    ratio_pos = true;
+                }
+
+                if (ratio_pos) {
+                    /* k^2 = Sqrt[ratio]; b_inner = Sqrt[2 k^2]
+                     *      = Sqrt[2 * Sqrt[ratio]].
+                     * picocas does not auto-collapse Sqrt[1/256] -> 1/16
+                     * (only Simplify does), and logtoreal_quadratic's
+                     * disc-sign check requires a rational discriminant.
+                     * Run k_sq and sg_b through Simplify so the
+                     * downstream check sees rational values when the
+                     * input ratio is a perfect-square rational. */
+                    Expr* k_sq_raw = eval_and_free(expr_new_function(
+                        expr_new_symbol("Sqrt"),
+                        (Expr*[]){expr_copy(ratio)}, 1));
+                    Expr* k_sq = eval_and_free(expr_new_function(
+                        expr_new_symbol("Simplify"),
+                        (Expr*[]){k_sq_raw}, 1));
+
+                    Expr* two_ksq = eval_and_free(internal_times(
+                        (Expr*[]){expr_new_integer(2),
+                                  expr_copy(k_sq)}, 2));
+                    Expr* sg_b_raw = eval_and_free(expr_new_function(
+                        expr_new_symbol("Sqrt"),
+                        (Expr*[]){two_ksq}, 1));
+                    Expr* sg_b = eval_and_free(expr_new_function(
+                        expr_new_symbol("Simplify"),
+                        (Expr*[]){sg_b_raw}, 1));
+                    Expr* neg_sg_b = eval_and_free(internal_times(
+                        (Expr*[]){expr_new_integer(-1),
+                                  expr_copy(sg_b)}, 2));
+
+                    Expr* part1 = logtoreal_quadratic(
+                        expr_new_integer(1),
+                        sg_b,
+                        expr_copy(k_sq),
+                        s, x, t);
+                    Expr* part2 = logtoreal_quadratic(
+                        expr_new_integer(1),
+                        neg_sg_b,
+                        k_sq,
+                        s, x, t);
+                    expr_free(ratio);
+                    expr_free(c0); expr_free(c1); expr_free(c2);
+                    expr_free(c3); expr_free(c4);
+
+                    if (part1 && part2) {
+                        contribution = eval_and_free(internal_plus(
+                            (Expr*[]){part1, part2}, 2));
+                    } else {
+                        if (part1) expr_free(part1);
+                        if (part2) expr_free(part2);
+                        goto fail;
+                    }
+                } else {
+                    expr_free(ratio);
+                    expr_free(c0); expr_free(c1); expr_free(c2);
+                    expr_free(c3); expr_free(c4);
+                    goto fail;
+                }
+            } else {
+                expr_free(c0); expr_free(c1); expr_free(c2);
+                expr_free(c3); expr_free(c4);
+                goto fail;
+            }
         } else {
             /* Higher-degree factor: out of bounded-Solve scope. */
             goto fail;
