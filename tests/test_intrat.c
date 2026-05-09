@@ -280,11 +280,28 @@ static void test_logtoatan_recursive(void) {
 }
 
 static void test_integrate_lrt_naivelogpart_fallback(void) {
-    /* Quartic with no rational / quadratic factorisation: Phase 4's
-     * LogToReal cannot close it, so Phase 8c falls back to
-     * NaiveLogPart and the result is a held RootSum form rather than
-     * leaving the integrand unevaluated. */
+    /* Pure-numeric quartic with no rational / quadratic factorisation:
+     * Phase 4's LogToReal cannot close it, but Phase 8d-bonus's
+     * biquadratic detector does — `1+x^4` has c1=c3=0 so it expands
+     * to an explicit 4-term Plus[Log[α±x],...] form.  We assert the
+     * result is no longer the unevaluated Integrate[..] head and
+     * contains Log somewhere. */
     Expr* e = parse_expression("Integrate[1/(x^4 + 1), x]");
+    Expr* r = evaluate(e);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    /* Must NOT be the unevaluated Integrate head. */
+    ASSERT(strcmp(r->data.function.head->data.symbol, "Integrate") != 0);
+    expr_free(e);
+    expr_free(r);
+}
+
+static void test_integrate_parametric_falls_to_rootsum(void) {
+    /* Parametric biquadratic — Phase 8d-bonus's gate prevents the
+     * radical-formula expansion (the resulting Sqrt expressions over
+     * symbolic parameters do not reduce cleanly), so the result
+     * stays in held RootSum form. */
+    Expr* e = parse_expression("Integrate[1/(b + a x^4), x]");
     Expr* r = evaluate(e);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
@@ -350,12 +367,11 @@ static void test_integrate_quartic_factorable(void) {
 /* Phase 8b — NaiveLogPart RootSum fallback                            */
 /* ------------------------------------------------------------------ */
 
-/* Structural test: NaiveLogPart should always return a RootSum-headed
- * expression for a proper rational input.  We don't try to reduce
- * D[result, x] back to f because picocas can't expand RootSum without
- * Solve / radical closure — that's the whole point of the fallback. */
+/* NaiveLogPart on a parametric quadratic: Phase 8d-bonus's gate
+ * defers to held RootSum form whenever the polynomial has a
+ * variable other than the bound one. */
 static void test_naivelogpart_basic(void) {
-    Expr* e = parse_expression("Integrate`NaiveLogPart[1/(x^2 + 1), x]");
+    Expr* e = parse_expression("Integrate`NaiveLogPart[1/(x^2 + a), x]");
     Expr* r = evaluate(e);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
@@ -372,16 +388,17 @@ static void test_naivelogpart_basic(void) {
     expr_free(r);
 }
 
-/* The hard case the user reported: irreducible quartic over Q whose
- * roots require nested radicals.  Phase 4's LogToReal cannot close
- * this; NaiveLogPart must produce a clean RootSum form. */
+/* Numeric biquadratic — Phase 8d-bonus expands to an explicit
+ * 4-term Plus[Log[α±x],...]; the result must NOT be RootSum-headed. */
 static void test_naivelogpart_quartic_hard(void) {
     Expr* e = parse_expression(
         "Integrate`NaiveLogPart[(x^2 - 1)/(2 x^4 - 2 x^2 + 1), x]");
     Expr* r = evaluate(e);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") == 0);
+    /* Should NOT be the held RootSum form for this non-parametric
+     * biquadratic — the radical-formula expansion fires. */
+    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") != 0);
     expr_free(e);
     expr_free(r);
 }
@@ -392,11 +409,12 @@ static void test_naivelogpart_quartic_hard(void) {
  * be the expected ∂/∂x of the input body. */
 static void test_naivelogpart_derivative_threads(void) {
     /* Input body = a(t) Log[x - t] / d'(t).
-     * Expected dbody/dx = a(t) / ((x - t) d'(t)).  We just check
-     * structural identity: derivative is RootSum-headed and contains
-     * the (x - t) factor in a Times somewhere. */
+     * Expected dbody/dx = a(t) / ((x - t) d'(t)).  We use a parametric
+     * input so Phase 8d-bonus's gate keeps the result in held RootSum
+     * form — the goal here is to exercise the D[RootSum, x] threading
+     * rule from src/deriv.c, not the radical-formula expander. */
     Expr* e = parse_expression(
-        "D[Integrate`NaiveLogPart[1/(x^2 + 1), x], x]");
+        "D[Integrate`NaiveLogPart[1/(x^2 + a), x], x]");
     Expr* r = evaluate(e);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
@@ -474,6 +492,7 @@ int main(void) {
     TEST(test_intrationallogpart);
     TEST(test_integrate_lrt_linear_q);
     TEST(test_integrate_lrt_naivelogpart_fallback);
+    TEST(test_integrate_parametric_falls_to_rootsum);
 
     TEST(test_logtoatan_constant_b);
     TEST(test_logtoatan_recursive);

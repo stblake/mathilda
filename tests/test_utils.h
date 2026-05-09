@@ -49,8 +49,29 @@ static inline void assert_eval_startswith(const char* input, const char* prefix)
 }
 
 #define TEST(name) printf("Running test: %s\n", #name); name()
-#define ASSERT(cond) assert(cond)
-#define ASSERT_STR_EQ(a, b) assert(strcmp(a, b) == 0)
+
+/* IMPORTANT: do NOT use the libc <assert.h> assert() here.  CMake
+ * builds with CMAKE_BUILD_TYPE=Release pass -DNDEBUG, which silently
+ * compiles every assert() to (void)0.  We need test failures to abort
+ * the binary unconditionally so CTest sees the non-zero exit code. */
+#define ASSERT(cond) do { \
+    if (!(cond)) { \
+        fprintf(stderr, "FAIL: assertion failed: %s\n    at %s:%d\n", \
+                #cond, __FILE__, __LINE__); \
+        exit(1); \
+    } \
+} while(0)
+
+#define ASSERT_STR_EQ(a, b) do { \
+    const char* _a_ = (a); \
+    const char* _b_ = (b); \
+    if (strcmp(_a_, _b_) != 0) { \
+        fprintf(stderr, "FAIL: ASSERT_STR_EQ\n  expected: %s\n  actual:   %s\n" \
+                        "    at %s:%d\n", \
+                _b_, _a_, __FILE__, __LINE__); \
+        exit(1); \
+    } \
+} while(0)
 
 #define ASSERT_MSG(cond, fmt, ...) do { \
     if (!(cond)) { \
