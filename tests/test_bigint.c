@@ -118,6 +118,29 @@ void test_abs_bigint(void) {
     assert_eval_eq("Abs[-99999999999999999999]", "99999999999999999999", 0);
 }
 
+/* Regression: Plus/Times must handle Rational with BigInt
+ * components without crashing.  Pre-fix this segfaulted in
+ * builtin_plus -> is_overflow(NULL) because add_numbers /
+ * multiply_numbers fell through to `return NULL` when neither the
+ * int64-rational nor the BigInt-typed operand path matched, e.g.
+ * Rational[BigInt, Integer] + Rational[BigInt, Integer]. */
+void test_plus_rational_with_bigint_parts(void) {
+    /* Build huge rationals expressed with BigInt numerators above
+     * INT64_MAX, and sum them.  Pre-fix these segfaulted instead
+     * of returning a value. */
+    assert_eval_eq(
+        "(99999999999999999999 / 7) + (1 / 7)",
+        "100000000000000000000/7", 0);
+    /* Multiplication path: Integer * Rational[BigInt, Integer] */
+    assert_eval_eq(
+        "3 * (99999999999999999999 / 7)",
+        "299999999999999999997/7", 0);
+    /* Mixed Integer + Rational[BigInt, BigInt] */
+    assert_eval_eq(
+        "1 + (99999999999999999999 / 99999999999999999998)",
+        "199999999999999999997/99999999999999999998", 0);
+}
+
 void test_squfof(void) {
     // Standard test cases for ShanksSquareForms
     assert_eval_eq("FactorInteger[11111, Method -> \"ShanksSquareForms\"]", "{{41, 1}, {271, 1}}", 0);
@@ -141,6 +164,7 @@ int main(void) {
     TEST(test_bigint_printing);
     TEST(test_power_large_exponent);
     TEST(test_abs_bigint);
+    TEST(test_plus_rational_with_bigint_parts);
     TEST(test_squfof);
     
     // Additional GMP integration tests
