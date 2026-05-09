@@ -299,6 +299,15 @@ int main(int argc, char** argv) {
         close(pipefd[0]);
 
         if (r != 1 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+            /* SIGALRM-killed children are timeouts, not crashes — the
+             * child set its own per-case alarm and has been killed
+             * without managing to write the result code. */
+            if (WIFSIGNALED(status) && WTERMSIG(status) == SIGALRM) {
+                timed_out++;
+                fprintf(stderr, "      -> TIMEOUT (>%ds, child alarm)\n",
+                        CORPUS_PER_CASE_TIMEOUT_SEC);
+                continue;
+            }
             crashed++;
             fprintf(stderr,
                 "      -> CRASH (exit %d, sig %d)\n",
