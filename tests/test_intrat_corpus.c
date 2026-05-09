@@ -89,7 +89,20 @@ static bool is_zero_after_simplify(Expr* diff) {
     Expr* exp = evaluate(exp_call);
     expr_free(exp_call);
 
-    bool is_zero = (exp->type == EXPR_INTEGER && exp->data.integer == 0);
+    /* Accept either an exact integer 0 or a Real 0.0 (or any real
+     * within a tight tolerance, to absorb FP rounding noise that can
+     * arise when the integrand contained inexact numbers like 3.5
+     * — Integrate itself rationalises internally, but the diff
+     * check still feeds the original inexact integrand into Plus
+     * and the inexact contagion turns the algebraically-zero result
+     * into a numerical 0.0). */
+    bool is_zero = false;
+    if (exp->type == EXPR_INTEGER && exp->data.integer == 0) {
+        is_zero = true;
+    } else if (exp->type == EXPR_REAL) {
+        double v = exp->data.real;
+        if (v >= -1e-9 && v <= 1e-9) is_zero = true;
+    }
     expr_free(exp);
     return is_zero;
 }
