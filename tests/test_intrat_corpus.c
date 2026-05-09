@@ -72,8 +72,9 @@ static bool expr_contains_head_named(const Expr* e, const char* name) {
 }
 
 static bool is_zero_after_simplify(Expr* diff) {
-    /* Together[diff], then take Numerator and Expand.  An identically
-     * zero rational expression has a zero numerator after this. */
+    /* Cheap path: Together[diff], then take Numerator and Expand.
+     * An identically zero rational expression has a zero numerator
+     * after this. */
     Expr* tg_call = expr_new_function(expr_new_symbol("Together"),
         (Expr*[]){ expr_copy(diff) }, 1);
     Expr* tg = evaluate(tg_call);
@@ -89,13 +90,6 @@ static bool is_zero_after_simplify(Expr* diff) {
     Expr* exp = evaluate(exp_call);
     expr_free(exp_call);
 
-    /* Accept either an exact integer 0 or a Real 0.0 (or any real
-     * within a tight tolerance, to absorb FP rounding noise that can
-     * arise when the integrand contained inexact numbers like 3.5
-     * — Integrate itself rationalises internally, but the diff
-     * check still feeds the original inexact integrand into Plus
-     * and the inexact contagion turns the algebraically-zero result
-     * into a numerical 0.0). */
     bool is_zero = false;
     if (exp->type == EXPR_INTEGER && exp->data.integer == 0) {
         is_zero = true;
@@ -104,6 +98,25 @@ static bool is_zero_after_simplify(Expr* diff) {
         if (v >= -1e-9 && v <= 1e-9) is_zero = true;
     }
     expr_free(exp);
+    if (is_zero) return true;
+
+    /* Heavy fallback: full Simplify on the original diff.  The cheap
+     * path leaves residue like (-126 Sqrt[7] + 18 * 7^(3/2)) x^4
+     * unreduced (Expand does not collapse 7^(3/2) -> 7 Sqrt[7]),
+     * which arises when the integrand carried algebraic radicals
+     * through Integrate.  Simplify catches those at the cost of
+     * being more expensive, so it runs only when the cheap path
+     * fails to detect zero. */
+    Expr* s_call = expr_new_function(expr_new_symbol("Simplify"),
+        (Expr*[]){ expr_copy(diff) }, 1);
+    Expr* s = evaluate(s_call);
+    expr_free(s_call);
+    if (s->type == EXPR_INTEGER && s->data.integer == 0) is_zero = true;
+    else if (s->type == EXPR_REAL) {
+        double v = s->data.real;
+        if (v >= -1e-9 && v <= 1e-9) is_zero = true;
+    }
+    expr_free(s);
     return is_zero;
 }
 
