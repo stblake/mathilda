@@ -487,18 +487,31 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
             Expr* fn2 = args[1];
             if (fn2->type == EXPR_FUNCTION
                 && fn2->data.function.head->type == EXPR_SYMBOL
-                && fn2->data.function.head->data.symbol == SYM_Function
-                && fn2->data.function.arg_count == 2) {
-                Expr* bvar = fn2->data.function.args[0];
-                Expr* body = fn2->data.function.args[1];
-                Expr* dbody = deriv_of(body, x);
-                /* Function holds its body, so the outer evaluator's
-                 * fixed-point pass cannot reach inside it.  Evaluate
-                 * the new body explicitly so 1+0 / 0*Log[..] etc.
-                 * collapse before we re-wrap in Function. */
-                Expr* dbody_eval = evaluate(dbody);
-                Expr* new_fn2 = mk_fn2("Function", expr_copy(bvar), dbody_eval);
-                return mk_fn2("RootSum", expr_copy(fn1), new_fn2);
+                && fn2->data.function.head->data.symbol == SYM_Function) {
+                /* Two accepted body forms (the bound variable is
+                 * always independent of x, so D threads through):
+                 *   2-arg  Function[t, body]      — named bound var
+                 *   1-arg  Function[body]         — Slot[_]-bound
+                 *                                   ((... &) syntax)
+                 * Both are produced by root_make_rootsum at different
+                 * historical points; we accept either. */
+                size_t fa = fn2->data.function.arg_count;
+                if (fa == 2) {
+                    Expr* bvar = fn2->data.function.args[0];
+                    Expr* body = fn2->data.function.args[1];
+                    Expr* dbody = deriv_of(body, x);
+                    Expr* dbody_eval = evaluate(dbody);
+                    Expr* new_fn2 = mk_fn2("Function",
+                        expr_copy(bvar), dbody_eval);
+                    return mk_fn2("RootSum", expr_copy(fn1), new_fn2);
+                }
+                if (fa == 1) {
+                    Expr* body = fn2->data.function.args[0];
+                    Expr* dbody = deriv_of(body, x);
+                    Expr* dbody_eval = evaluate(dbody);
+                    Expr* new_fn2 = mk_fn1("Function", dbody_eval);
+                    return mk_fn2("RootSum", expr_copy(fn1), new_fn2);
+                }
             }
             /* Unrecognised body form: leave RootSum unevaluated. */
             return NULL;

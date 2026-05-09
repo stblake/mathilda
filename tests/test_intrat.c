@@ -403,31 +403,28 @@ static void test_naivelogpart_quartic_hard(void) {
     expr_free(r);
 }
 
-/* D[NaiveLogPart[...], x] threads through the body Function via the
- * D[RootSum] rule wired in src/deriv.c.  The result is still in
- * RootSum form (because we don't have ToRadicals), but its body must
- * be the expected ∂/∂x of the input body. */
+/* D[NaiveLogPart[1/(x^2+a), x], x] threads through the body Function
+ * via the D[RootSum] rule in src/deriv.c, then collapses via the
+ * Lagrange-interpolation identity in src/root.c — the body becomes
+ * `1 / (d'(t)(x - t))` after differentiation, which Σ-closes to
+ * `1 / d(x) = 1/(a + x^2)` (the original integrand). */
 static void test_naivelogpart_derivative_threads(void) {
-    /* Input body = a(t) Log[x - t] / d'(t).
-     * Expected dbody/dx = a(t) / ((x - t) d'(t)).  We use a parametric
-     * input so Phase 8d-bonus's gate keeps the result in held RootSum
-     * form — the goal here is to exercise the D[RootSum, x] threading
-     * rule from src/deriv.c, not the radical-formula expander. */
     Expr* e = parse_expression(
         "D[Integrate`NaiveLogPart[1/(x^2 + a), x], x]");
     Expr* r = evaluate(e);
-    ASSERT(r->type == EXPR_FUNCTION);
-    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") == 0);
-    /* Inner Function body must be Log-free (we differentiated it out). */
-    Expr* fn2 = r->data.function.args[1];
-    ASSERT(fn2->data.function.arg_count == 2);
-    Expr* body = fn2->data.function.args[1];
-    /* body should not contain Log as a head anywhere — quick walk. */
-    /* (a structural sanity check; full equivalence requires Solve.)  */
-    (void)body;
-    expr_free(e);
-    expr_free(r);
+    /* Verify equality with the original integrand modulo Together. */
+    Expr* check = parse_expression(
+        "Together[D[Integrate`NaiveLogPart[1/(x^2 + a), x], x] - 1/(x^2 + a)]");
+    Expr* check_e = evaluate(check);
+    char* got = expr_to_string(check_e);
+    if (strcmp(got, "0") != 0) {
+        printf("FAIL: D[NaiveLogPart[1/(x^2+a), x], x] != 1/(x^2+a)\n  diff: %s\n",
+               got);
+        ASSERT_STR_EQ(got, "0");
+    }
+    free(got);
+    expr_free(check); expr_free(check_e);
+    expr_free(e); expr_free(r);
 }
 
 /* ------------------------------------------------------------------ */
