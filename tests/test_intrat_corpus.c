@@ -233,6 +233,12 @@ int main(int argc, char** argv) {
             close(pipefd[0]);
             char code = CORPUS_UNEVALUATED;
 
+            /* Strict 10s wall-clock cap covering both the Integrate
+             * call and the differential check.  SIGALRM kills the
+             * child on overrun; the parent treats the missing pipe
+             * byte as a timeout. */
+            alarm(CORPUS_PER_CASE_TIMEOUT_SEC);
+
             Expr* int_call = expr_new_function(expr_new_symbol("Integrate"),
                 (Expr*[]){ expr_copy(integrand), expr_copy(var) }, 2);
             Expr* result = evaluate(int_call);
@@ -250,11 +256,8 @@ int main(int argc, char** argv) {
             } else if (expr_contains_head_named(result, "RootSum")) {
                 code = CORPUS_ROOTSUM;
             } else {
-                /* Differential check.  We give it a tighter SIGALRM
-                 * inside the child so the child itself bounds its
-                 * lifetime — the parent still kills on the outer
-                 * deadline if necessary. */
-                alarm(CORPUS_PER_CASE_TIMEOUT_SEC);
+                /* Differential check.  The child-entry alarm above
+                 * already bounds total lifetime; no re-arm needed. */
                 Expr* d_call = expr_new_function(expr_new_symbol("D"),
                     (Expr*[]){ expr_copy(result), expr_copy(var) }, 2);
                 Expr* d_res = evaluate(d_call);
@@ -285,8 +288,8 @@ int main(int argc, char** argv) {
                 code = is_zero_after_simplify(diff)
                     ? CORPUS_DIFF_ZERO : CORPUS_DIFF_NONZERO;
                 expr_free(diff);
-                alarm(0);
             }
+            alarm(0);
             if (result) expr_free(result);
 
             ssize_t w = write(pipefd[1], &code, 1);
@@ -298,9 +301,12 @@ int main(int argc, char** argv) {
         /* --- Parent --- */
         close(pipefd[1]);
 
-        /* Polling waitpid with deadline.  We sleep in 50 ms steps
-         * to keep the wall-clock overhead per case low. */
-        time_t deadline = time(NULL) + CORPUS_PER_CASE_TIMEOUT_SEC + 5;
+        /* Polling waitpid with deadline.  Strict 10s cap: the parent
+         * waits exactly CORPUS_PER_CASE_TIMEOUT_SEC seconds and then
+         * SIGKILLs.  The child's own SIGALRM fires at the same instant
+         * so a clean termination usually beats us to it.  We sleep in
+         * 50 ms steps to keep wall-clock overhead per case low. */
+        time_t deadline = time(NULL) + CORPUS_PER_CASE_TIMEOUT_SEC;
         int status = 0;
         bool reaped = false;
         while (time(NULL) < deadline) {
@@ -315,7 +321,7 @@ int main(int argc, char** argv) {
             close(pipefd[0]);
             timed_out++;
             fprintf(stderr, "      -> TIMEOUT (>%ds)\n",
-                    CORPUS_PER_CASE_TIMEOUT_SEC + 5);
+                    CORPUS_PER_CASE_TIMEOUT_SEC);
             continue;
         }
 
