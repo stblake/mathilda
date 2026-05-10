@@ -269,6 +269,18 @@ static Expr* intrat_content(Expr* p, Expr* x) {
     for (size_t i = 0; i < n; i++) args[i] = expr_copy(cl->data.function.args[i]);
     expr_free(cl);
     Expr* g = internal_polynomialgcd(args, n);
+    /* When coefficients carry parametric fractions (e.g. 1/b^3 factors
+     * after Apart on a parametric integrand), our PolynomialGCD bails
+     * and returns the call held.  Treat that as content == 1 — still
+     * a correct (non-strict) primitive, and crucially keeps held GCD
+     * calls from polluting downstream S polynomials. */
+    if (g && g->type == EXPR_FUNCTION
+        && g->data.function.head->type == EXPR_SYMBOL
+        && strcmp(g->data.function.head->data.symbol,
+                  "PolynomialGCD") == 0) {
+        expr_free(g);
+        g = expr_new_integer(1);
+    }
     return g;
 }
 
@@ -1347,11 +1359,22 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
                                           bool root_sum) {
     intrat_trace("IntRationalLogPart", "IN", f);
 
-    /* a = Numerator[f], d = Denominator[f]. */
-    Expr* a_raw = intrat_numerator(f);
+    /* Together-canonicalise f so the numerator and denominator are
+     * clean polynomials with no internal fractions in parametric
+     * coefficients.  Apart pieces like
+     *   (-b/(2 a^2) - x/(2 a)) / (a^2 + b^2 x^2)
+     * arrive with rational coefficients in (a, b); without this
+     * normalisation the resultant chain emits held PolynomialGCD
+     * calls that pollute the downstream (Q, S) pair. */
+    Expr* tg_call = internal_together((Expr*[]){expr_copy(f)}, 1);
+    Expr* fc = eval_and_free(tg_call);
+
+    /* a = Numerator[fc], d = Denominator[fc]. */
+    Expr* a_raw = intrat_numerator(fc);
     Expr* a = eval_and_free(a_raw);
-    Expr* d_raw = intrat_denominator(f);
+    Expr* d_raw = intrat_denominator(fc);
     Expr* d = expr_expand(d_raw); expr_free(d_raw);
+    expr_free(fc);
 
     /* prs = SubresultantPolynomialRemainders[d, a - t*D[d,x], x] */
     Expr* dprime = intrat_d(d, x);
@@ -1858,6 +1881,195 @@ static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr) {
     return result;
 }
 
+/* Returns +1 / -1 / 0 for the sign of `e` under the assumption that
+ * every free symbol denotes a positive real.  Used by the LogToReal
+ * dispatcher so a quadratic factor with a symbolic-but-provably-signed
+ * discriminant (e.g. -4 a^2 b^2 with a, b parametric) can take the
+ * appropriate real / complex branch instead of falling through to
+ * NaiveLogPart's held RootSum form. */
+static int intrat_sign_pos_assumption(Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_INTEGER) {
+        if (e->data.integer > 0) return 1;
+        if (e->data.integer < 0) return -1;
+        return 0;
+    }
+    if (e->type == EXPR_REAL) {
+        if (e->data.real > 0.0) return 1;
+        if (e->data.real < 0.0) return -1;
+        return 0;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_INTEGER
+        && e->data.function.args[1]->type == EXPR_INTEGER) {
+        int64_t n = e->data.function.args[0]->data.integer;
+        int64_t d = e->data.function.args[1]->data.integer;
+        int sign = 1;
+        if (n < 0) { n = -n; sign = -sign; }
+        if (d < 0) { d = -d; sign = -sign; }
+        if (n == 0) return 0;
+        return sign;
+    }
+    if (e->type == EXPR_SYMBOL) {
+        /* Free symbols treated as positive reals. */
+        return 1;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp = e->data.function.args[1];
+        int b_sign = intrat_sign_pos_assumption(base);
+        if (exp->type == EXPR_INTEGER) {
+            int64_t k = exp->data.integer;
+            if (k % 2 == 0 && b_sign != 0) return 1;
+            return b_sign;
+        }
+        if (b_sign > 0) return 1;
+        return 0;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Times) {
+        int sign = 1;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int s = intrat_sign_pos_assumption(e->data.function.args[i]);
+            if (s == 0) return 0;
+            sign *= s;
+        }
+        return sign;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Plus) {
+        int sign = 0;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int s = intrat_sign_pos_assumption(e->data.function.args[i]);
+            if (s == 0) return 0;
+            if (sign == 0) sign = s;
+            else if (sign != s) return 0;
+        }
+        return sign;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Sqrt
+        && e->data.function.arg_count == 1) {
+        int s = intrat_sign_pos_assumption(e->data.function.args[0]);
+        if (s > 0) return 1;
+        return 0;
+    }
+    return 0;
+}
+
+/* Returns the simplification of `Sqrt[e]` under the positive-symbol
+ * assumption, or a fresh `Sqrt[e]` if no factors can be extracted.
+ * The caller owns the returned tree.  Walks `e` factor-by-factor:
+ *   integer n           -> peel out the largest perfect-square divisor
+ *   Rational p/q        -> recurse on each part
+ *   Power[base, k]      -> base^(k/2) when k is even and base > 0,
+ *                          base^((k-1)/2) Sqrt[base] for odd positive k
+ *   Times[f1, f2, ...]  -> product of recursive results
+ *   anything else       -> Sqrt[anything] (irreducible) */
+static Expr* intrat_simp_pos_sqrt(Expr* e);
+
+static Expr* intrat_simp_pos_sqrt_factor(Expr* e) {
+    if (e->type == EXPR_INTEGER) {
+        int64_t v = e->data.integer;
+        if (v < 0) {
+            /* Sqrt of a negative integer: leave inside Sqrt. */
+            return expr_new_function(expr_new_symbol("Sqrt"),
+                (Expr*[]){expr_copy(e)}, 1);
+        }
+        if (v == 0) return expr_new_integer(0);
+        if (v == 1) return expr_new_integer(1);
+        int64_t s = 1, r = v;
+        for (int64_t p = 2; p * p <= r; p++) {
+            while (r % (p * p) == 0) {
+                s *= p;
+                r /= p * p;
+            }
+        }
+        if (s == 1) {
+            return expr_new_function(expr_new_symbol("Sqrt"),
+                (Expr*[]){expr_new_integer(r)}, 1);
+        }
+        if (r == 1) return expr_new_integer(s);
+        Expr* sqrt_part = expr_new_function(expr_new_symbol("Sqrt"),
+            (Expr*[]){expr_new_integer(r)}, 1);
+        return eval_and_free(internal_times(
+            (Expr*[]){expr_new_integer(s), sqrt_part}, 2));
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.arg_count == 2) {
+        Expr* num = e->data.function.args[0];
+        Expr* den = e->data.function.args[1];
+        Expr* sn = intrat_simp_pos_sqrt_factor(num);
+        Expr* sd = intrat_simp_pos_sqrt_factor(den);
+        return eval_and_free(internal_divide((Expr*[]){sn, sd}, 2));
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp_e = e->data.function.args[1];
+        if (exp_e->type == EXPR_INTEGER) {
+            int64_t k = exp_e->data.integer;
+            int b_sign = intrat_sign_pos_assumption(base);
+            if (k % 2 == 0 && b_sign > 0) {
+                return expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){expr_copy(base),
+                              expr_new_integer(k / 2)}, 2);
+            }
+            if (b_sign > 0) {
+                /* Odd k, positive base: base^((k-1)/2) * Sqrt[base]. */
+                int64_t kh = (k - 1) / 2;  /* may be negative for k < 0 */
+                Expr* p1;
+                if (kh == 0) p1 = expr_new_integer(1);
+                else p1 = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){expr_copy(base), expr_new_integer(kh)}, 2);
+                Expr* p2 = expr_new_function(expr_new_symbol("Sqrt"),
+                    (Expr*[]){expr_copy(base)}, 1);
+                return eval_and_free(internal_times(
+                    (Expr*[]){p1, p2}, 2));
+            }
+        }
+        return expr_new_function(expr_new_symbol("Sqrt"),
+            (Expr*[]){expr_copy(e)}, 1);
+    }
+    if (e->type == EXPR_SYMBOL) {
+        /* Sqrt[symbol] is irreducible — keep wrapped. */
+        return expr_new_function(expr_new_symbol("Sqrt"),
+            (Expr*[]){expr_copy(e)}, 1);
+    }
+    /* Fallback: no structural simplification. */
+    return expr_new_function(expr_new_symbol("Sqrt"),
+        (Expr*[]){expr_copy(e)}, 1);
+}
+
+static Expr* intrat_simp_pos_sqrt(Expr* e) {
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Times) {
+        size_t n = e->data.function.arg_count;
+        Expr** out = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            out[i] = intrat_simp_pos_sqrt_factor(e->data.function.args[i]);
+        }
+        Expr* prod = internal_times(out, n);
+        free(out);
+        return eval_and_free(prod);
+    }
+    return intrat_simp_pos_sqrt_factor(e);
+}
+
 /* Try to dispatch a single quadratic factor `Q(t) = a t^2 + b t + c`
  * to its real-form contribution.  Returns NULL on failure (caller
  * falls back to symbolic RootSum). */
@@ -1871,19 +2083,14 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
         (Expr*[]){expr_new_integer(-1), fourac}, 2);
     Expr* disc = eval_and_free(internal_plus((Expr*[]){b2, neg_fourac}, 2));
 
-    /* Decide the sign of disc.  We commit only when it's an integer or
-     * rational; otherwise we punt to the symbolic form. */
-    int disc_sign = 0;
-    if (disc->type == EXPR_INTEGER) {
-        disc_sign = (disc->data.integer > 0) ? 1 : (disc->data.integer < 0) ? -1 : 0;
-    } else if (disc->type == EXPR_FUNCTION
-        && disc->data.function.head->type == EXPR_SYMBOL
-        && disc->data.function.head->data.symbol == SYM_Rational
-        && disc->data.function.arg_count == 2
-        && disc->data.function.args[0]->type == EXPR_INTEGER) {
-        int64_t n = disc->data.function.args[0]->data.integer;
-        disc_sign = (n > 0) ? 1 : (n < 0) ? -1 : 0;
-    } else {
+    /* Decide the sign of disc.  Rational cases give a definitive
+     * sign; symbolic cases are decided under the positive-symbol
+     * assumption (matching IntegrateRational.m's `Refine[#>0]&` filter
+     * that gates the parametric path).  Anything we can't sign with
+     * confidence falls through to NULL so the caller can use the
+     * symbolic RootSum form. */
+    int disc_sign = intrat_sign_pos_assumption(disc);
+    if (disc_sign == 0) {
         expr_free(disc); return NULL;
     }
 
@@ -1927,11 +2134,13 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
         (Expr*[]){expr_new_integer(-1), expr_copy(b)}, 2));
     Expr* u_root = eval_and_free(internal_divide(
         (Expr*[]){neg_b2, expr_copy(two_a)}, 2));
-    Expr* neg_disc = eval_and_free(internal_times(
+    Expr* neg_disc_raw = eval_and_free(internal_times(
         (Expr*[]){expr_new_integer(-1), disc}, 2));
-    Expr* sqrt_neg_disc = expr_new_function(expr_new_symbol("Sqrt"),
-        (Expr*[]){neg_disc}, 1);
-    sqrt_neg_disc = eval_and_free(sqrt_neg_disc);
+    /* Try the positive-symbol Sqrt simplifier first (e.g.
+     * Sqrt[4 a^2 b^2] -> 2 a b); fall back to the held Sqrt[..] when
+     * it can't extract a clean radical form. */
+    Expr* sqrt_neg_disc = intrat_simp_pos_sqrt(neg_disc_raw);
+    expr_free(neg_disc_raw);
     Expr* v_root = eval_and_free(internal_divide(
         (Expr*[]){sqrt_neg_disc, two_a}, 2));
 
