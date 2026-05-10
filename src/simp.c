@@ -7275,21 +7275,44 @@ static Expr* simp_pipeline_rational(const Expr* input,
     Expr* ap = traced_call_unary("Apart", seed);
     if (ap) update_best(&best, &bs, ap, complexity_func);
 
-    /* Factor on the Cancel'd form (gated against non-integer powers, which
-     * shouldn't appear on a SHAPE_RATIONAL input but is defensive). */
-    if (cn && !has_non_integer_power(cn)) {
-        Expr* fc = traced_call_unary("Factor", cn);
-        if (fc) {
-            update_best(&best, &bs, fc, complexity_func);
-            expr_free(fc);
+    /* Factor on the most-canonical form available.  Prefer the Cancel'd
+     * form when it exists, but fall through to seed/input when Cancel
+     * returned NULL (no change to apply) -- otherwise Simplify would
+     * never try Factor on inputs like `x/(x^3 + a b + a x + b x^2)`
+     * which are already cancelled.  Gated against non-integer powers,
+     * which shouldn't appear on a SHAPE_RATIONAL input but is
+     * defensive.
+     *
+     * Push a NULL factor_memo around the Factor call so it uses its
+     * normal (separate num/den variable lists) behaviour rather than
+     * the inside-Simplify combined-scope path.  The combined-scope
+     * mode refuses to factor parametric denominators like
+     * `x^3 + a b + a x + b x^2` (which factors over Z[a, b][x] as
+     * (a + x^2)(b + x)); the separate-scope mode handles them
+     * correctly. */
+    {
+        const Expr* fc_src = cn ? cn : (tg ? tg : seed);
+        if (!has_non_integer_power(fc_src)) {
+            factor_memo_push(NULL);
+            Expr* fc = traced_call_unary("Factor", fc_src);
+            factor_memo_pop();
+            if (fc) {
+                update_best(&best, &bs, fc, complexity_func);
+                expr_free(fc);
+            }
         }
     }
 
-    /* Per-variable Collect on the Cancel'd form. */
-    if (cn && transform_can_fire("CollectPerVariable", cn, NULL)) {
-        CandSet next; cs_init(&next);
-        try_collect_per_variable(cn, bs, &next, &best, &bs, complexity_func);
-        cs_free(&next);
+    /* Per-variable Collect on the most-canonical form (Cancel'd if
+     * available, otherwise seed/input -- same fall-through reason as
+     * the Factor branch above). */
+    {
+        const Expr* col_src = cn ? cn : (tg ? tg : seed);
+        if (transform_can_fire("CollectPerVariable", col_src, NULL)) {
+            CandSet next; cs_init(&next);
+            try_collect_per_variable(col_src, bs, &next, &best, &bs, complexity_func);
+            cs_free(&next);
+        }
     }
 
     if (tg) expr_free(tg);
