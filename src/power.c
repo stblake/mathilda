@@ -5,6 +5,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "trig_canon.h"
+#include "internal.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -421,6 +422,66 @@ Expr* builtin_power(Expr* res) {
     Expr *re_b = NULL, *im_b = NULL, *re_e = NULL, *im_e = NULL;
     bool base_comp = is_complex(base, &re_b, &im_b);
     bool exp_comp = is_complex(exp, &re_e, &im_e);
+
+    /* Symbolic principal-value evaluation for Power[Complex[0, ±1], n/2]
+     * (n in {±1, ±3} after mod-4 reduction).  Without these, picocas
+     * leaves Sqrt[I], Sqrt[-I], (I)^(3/2), (-I)^(3/2) as opaque held
+     * Powers, which propagate through intrat output as
+     *   Log[Sqrt[I] + x] / (I)^(3/2)
+     * and downstream Simplify cannot canonicalise.  The principal
+     * values are
+     *   Sqrt[I]      = (1 + I) / Sqrt[2]
+     *   Sqrt[-I]     = (1 - I) / Sqrt[2]
+     *   (I)^(3/2)    = (-1 + I) / Sqrt[2]
+     *   (-I)^(3/2)   = (-1 - I) / Sqrt[2]
+     * (taking the standard principal branch arg = atan2(im, re)). */
+    if (base_comp && !exp_comp
+        && re_b->type == EXPR_INTEGER && re_b->data.integer == 0
+        && im_b->type == EXPR_INTEGER
+        && (im_b->data.integer == 1 || im_b->data.integer == -1)) {
+        int64_t en = 0, ed = 1;
+        bool exp_is_rational =
+            (exp->type == EXPR_INTEGER) ? (en = exp->data.integer, ed = 1, true)
+            : is_rational(exp, &en, &ed);
+        if (exp_is_rational && ed == 2 && im_b->data.integer == 1) {
+            /* I^(n/2):  reduce n mod 4. n=1: (1+I)/Sqrt[2]; n=3: (-1+I)/Sqrt[2];
+             * n=-1: (1-I)/Sqrt[2]; n=-3: (-1-I)/Sqrt[2].  Even n folds to
+             * I^(n/2) = (I^n)^(1/1) which the integer path already
+             * handles. */
+            int64_t r = ((en % 4) + 4) % 4;  /* normalise to {0, 1, 2, 3} */
+            if (r == 1 || r == 3) {
+                Expr* sgn_re = expr_new_integer((r == 1) ? 1 : -1);
+                Expr* sgn_im = expr_new_integer(1);
+                Expr* sqrt2_inv = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){expr_new_integer(2),
+                              expr_new_function(expr_new_symbol("Rational"),
+                                  (Expr*[]){expr_new_integer(-1),
+                                            expr_new_integer(2)}, 2)}, 2);
+                sqrt2_inv = eval_and_free(sqrt2_inv);
+                Expr* z = make_complex(sgn_re, sgn_im);
+                return eval_and_free(internal_times(
+                    (Expr*[]){z, sqrt2_inv}, 2));
+            }
+        }
+        if (exp_is_rational && ed == 2 && im_b->data.integer == -1) {
+            /* (-I)^(n/2) = conjugate(I^(n/2)) for real coefficients —
+             * mirrors the I case with imaginary sign flipped. */
+            int64_t r = ((en % 4) + 4) % 4;
+            if (r == 1 || r == 3) {
+                Expr* sgn_re = expr_new_integer((r == 1) ? 1 : -1);
+                Expr* sgn_im = expr_new_integer(-1);
+                Expr* sqrt2_inv = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){expr_new_integer(2),
+                              expr_new_function(expr_new_symbol("Rational"),
+                                  (Expr*[]){expr_new_integer(-1),
+                                            expr_new_integer(2)}, 2)}, 2);
+                sqrt2_inv = eval_and_free(sqrt2_inv);
+                Expr* z = make_complex(sgn_re, sgn_im);
+                return eval_and_free(internal_times(
+                    (Expr*[]){z, sqrt2_inv}, 2));
+            }
+        }
+    }
 
     if (base_comp || exp_comp ||
         base->type == EXPR_REAL || exp->type == EXPR_REAL ||
