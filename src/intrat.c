@@ -2817,76 +2817,95 @@ static Expr* normalize_inverse_trig_signs(Expr* e) {
  * back to the integrand).
  */
 
-/* Try to close `r/d` via the LRT-then-LogToReal pipeline.  Returns
- * NULL on failure. */
+/* LRT consumer: apply Rioboo's intrat_log_to_real to every {Q_i, S_i}
+ * pair and sum the results.  Returns the closed real-elementary form
+ * on success, or NULL if any pair's Q_i has an irreducible factor of
+ * degree >= 5 (intrat_log_to_real's failure mode) or any list entry
+ * is malformed.  Caller retains ownership of `pair_list`. */
+static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
+    if (!pair_list || pair_list->type != EXPR_FUNCTION
+        || pair_list->data.function.head->type != EXPR_SYMBOL
+        || pair_list->data.function.head->data.symbol != SYM_List) {
+        return NULL;
+    }
+    size_t npairs = pair_list->data.function.arg_count;
+    Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * (npairs ? npairs : 1));
+    size_t lr_count = 0;
+
+    for (size_t i = 0; i < npairs; i++) {
+        Expr* pair = pair_list->data.function.args[i];
+        Expr* Qi = list_get(pair, 1);
+        Expr* Si = list_get(pair, 2);
+        if (!Qi || !Si) {
+            if (Qi) expr_free(Qi);
+            if (Si) expr_free(Si);
+            for (size_t k = 0; k < lr_count; k++) expr_free(lr_terms[k]);
+            free(lr_terms);
+            return NULL;
+        }
+        Expr* term = intrat_log_to_real(Qi, Si, x, t);
+        expr_free(Qi); expr_free(Si);
+        if (!term) {
+            for (size_t k = 0; k < lr_count; k++) expr_free(lr_terms[k]);
+            free(lr_terms);
+            return NULL;
+        }
+        lr_terms[lr_count++] = term;
+    }
+
+    Expr* result;
+    if (lr_count == 0) {
+        result = expr_new_integer(0);
+    } else if (lr_count == 1) {
+        result = lr_terms[0];
+        lr_terms[0] = NULL;  /* prevent double-free */
+    } else {
+        Expr* sum = internal_plus(lr_terms, lr_count);
+        memset(lr_terms, 0, sizeof(Expr*) * lr_count);
+        result = eval_and_free(sum);
+    }
+    free(lr_terms);
+    return result;
+}
+
+/* Try to close `num/den` via the LRT-then-real-form pipeline.
+ *
+ * Architecture (mirrors AXIOM's INTRAT/IRRF separation in
+ * intrf.spad.pamphlet:776-778, plus irexpand):
+ *   - Producer:  intrat_int_rational_log_part -- single LRT call per
+ *                try_lrt_close, emits the {Q_i, S_i} pair list.
+ *   - LRT consumers (uniform `(pairs, x, t) -> Expr*|NULL` shape):
+ *       * intrat_log_to_real_pairs  -- Rioboo real-elementary form
+ *       * intrat_linear_q_closer    -- every Q_i splits over Q
+ *   - Non-LRT fallback:  intrat_naive_log_part(num/den) -- Lagrange
+ *     RootSum form, universal so try_lrt_close never returns NULL
+ *     for a well-formed proper rational integrand.
+ *
+ * Closure preference matches IntegrateRational.m:560-572. */
 static Expr* try_lrt_close(Expr* num, Expr* den, Expr* x) {
     if (is_zero_poly(num)) return expr_new_integer(0);
+
     Expr* h = internal_divide(
         (Expr*[]){expr_copy(num), expr_copy(den)}, 2);
     Expr* h_eval = eval_and_free(h);
-
-    /* Closure preference (matches IntegrateRational.m:560-572):
-     *   1.  IntRationalLogPart -> LogToReal on every pair  (real elementary)
-     *   2.  Linear-Q closer (every Q_i factors over Q)     (Log + ArcTanh)
-     *   3.  NaiveLogPart                                    (held RootSum)
-     *
-     * Only step 3 is universal — every proper rational integrand
-     * admits the Lagrange RootSum form regardless of the algebraic
-     * complexity of the roots of d.  We fall through to it whenever
-     * the higher-quality closures fail, so try_lrt_close never
-     * returns NULL for a well-formed integrand. */
-    Expr* result = NULL;
     Expr* t_sym = expr_new_symbol("Integrate`Private`tt$");
-    Expr* lrt_pairs = intrat_int_rational_log_part(h_eval, x, t_sym, false);
-    if (lrt_pairs) {
-        size_t npairs = lrt_pairs->data.function.arg_count;
-        Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * (npairs ? npairs : 1));
-        size_t lr_count = 0;
-        bool all_ok = true;
-        for (size_t i = 0; i < npairs; i++) {
-            Expr* pair = lrt_pairs->data.function.args[i];
-            Expr* Qi = list_get(pair, 1);
-            Expr* Si = list_get(pair, 2);
-            if (!Qi || !Si) {
-                all_ok = false;
-                if (Qi) expr_free(Qi);
-                if (Si) expr_free(Si);
-                break;
-            }
-            Expr* term = intrat_log_to_real(Qi, Si, x, t_sym);
-            expr_free(Qi); expr_free(Si);
-            if (!term) { all_ok = false; break; }
-            lr_terms[lr_count++] = term;
-        }
-        if (all_ok) {
-            if (lr_count == 0) {
-                result = expr_new_integer(0);
-            } else if (lr_count == 1) {
-                result = lr_terms[0];
-                lr_terms[0] = NULL;  /* prevent double-free */
-            } else {
-                Expr* sum = internal_plus(lr_terms, lr_count);
-                /* lr_terms ownership transferred to sum's args. */
-                memset(lr_terms, 0, sizeof(Expr*) * lr_count);
-                result = eval_and_free(sum);
-            }
-        } else {
-            /* LogToReal failed on at least one pair — drop partial
-             * results and try the linear-Q closer. */
-            for (size_t k = 0; k < lr_count; k++) {
-                if (lr_terms[k]) expr_free(lr_terms[k]);
-            }
-            result = intrat_linear_q_closer(lrt_pairs, x, t_sym);
-        }
-        free(lr_terms);
-        expr_free(lrt_pairs);
+
+    /* Single LRT producer call. */
+    Expr* pairs = intrat_int_rational_log_part(h_eval, x, t_sym, false);
+
+    Expr* result = NULL;
+    if (pairs) {
+        /* LRT consumer 1: Rioboo LogToReal on every pair. */
+        result = intrat_log_to_real_pairs(pairs, x, t_sym);
+        /* LRT consumer 2: linear-Q closer (factor each Q_i over Q). */
+        if (!result) result = intrat_linear_q_closer(pairs, x, t_sym);
+        expr_free(pairs);
     }
     expr_free(t_sym);
 
-    /* Universal fallback. */
-    if (!result) {
-        result = intrat_naive_log_part(h_eval, x);
-    }
+    /* Non-LRT universal fallback (Lagrange RootSum on full a/d). */
+    if (!result) result = intrat_naive_log_part(h_eval, x);
+
     expr_free(h_eval);
     return result;
 }
