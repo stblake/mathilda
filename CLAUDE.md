@@ -67,13 +67,13 @@ The goal of this project is to use Gemini cli to create a small (pico) computer 
 
 -- Internal symbols should be defined in sym_names.c 
 
--- Every time a builtin function is implemented or modified, we should update the picocas_spec.md file. 
+-- Every time a builtin function is implemented or modified, we should update `picocas_spec.md`. The spec is now an overview file that points into `docs/spec/`; edit the relevant per-category file under `docs/spec/builtins/` (and the matching `docs/spec/changelog/<YYYY-MM>.md` for a change summary), then update the overview only if a new top-level section or category was added.
 
 -- Every time a builtin function is implemented we should also assign the appropriate Attributes to that function. 
 
 -- Efficient and careful memory management is important. The system should track memory usage and leaks with valgrind. 
 
-After any change or improvement to the system is made, a summary of the features should be given in picocas_spec.md under an appropriate heading/section etc. 
+After any change or improvement to the system is made, a summary of the features should be given under an appropriate heading in the current month's `docs/spec/changelog/<YYYY-MM>.md` file. The top-level `picocas_spec.md` itself stays terse — it is the navigational entry point only.
 
 -- Every builtin function should have an Information string that gives a concise, but complete description of the function (via symtab_set_docstring)
 

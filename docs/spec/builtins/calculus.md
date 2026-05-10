@@ -1,0 +1,391 @@
+# Calculus
+
+Symbolic differentiation is implemented natively in C (`src/deriv.c`).
+Earlier versions of PicoCAS bootstrapped `D`, `Dt` and `Derivative`
+from a rule file (`src/internal/deriv.m`); that approach was fragile
+and slow -- every call walked a linear list of ~60 DownValues, re-ran
+pattern matching against each, and recursed through the full rule
+engine. The native implementation dispatches on the head symbol in a
+single strcmp, uses an allocation-free structural walk for the
+`FreeQ[f, x]` test, and builds the derivative tree directly, letting
+the ordinary evaluator simplify the arithmetic afterwards. Measured
+speedups range from roughly 2x on simple chain-rule calls to ~8x on
+mixed-partial and higher-order derivatives; see "Performance Notes"
+below.
+
+## D
+
+Partial derivative.
+- `D[f, x]` -- derivative of `f` with respect to `x` (treating all
+  other symbols as constants).
+- `D[f, {x, n}]` -- the `n`-th partial derivative; `n` must be a
+  non-negative integer.
+- `D[f, x, y, ...]` -- mixed partial derivative, equivalent to
+  `D[D[f, x], y, ...]`.
+
+**Features**:
+- `Protected`, `ReadProtected`.
+- Recognises the elementary heads `Plus`, `Times`, `Power`, `Sqrt`,
+  `Exp`, `Log`, `Log[b, f]`, all six trig heads and their inverses,
+  all six hyperbolic heads and their inverses, and threads
+  element-wise over `List`.
+- For a single-argument unknown head, applies the standard chain
+  rule `D[f[g], x] -> Derivative[1][f][g] * D[g, x]`.
+- For multi-argument unknown heads, emits the multi-index
+  Derivative form, e.g. `D[f[x, y], x] -> Derivative[1, 0][f][x, y]`.
+- Recognises existing `Derivative[n1, ..., nm][f][g1, ..., gn]`
+  expressions and advances the appropriate partial-index.
+- Short-circuits via an allocation-free FreeQ walk so constants and
+  sub-trees independent of the differentiation variable are dropped
+  without further work.
+
+**Examples**:
+```mathematica
+In[1]:= D[x^3, x]
+Out[1]= 3 x^2
+
+In[2]:= D[Sin[x^2], x]
+Out[2]= 2 x Cos[x^2]
+
+In[3]:= D[Sin[a x], {x, 3}]
+Out[3]= -a^3 Cos[a x]
+
+In[4]:= D[f[g[x]], x]
+Out[4]= Derivative[1][f][g[x]] Derivative[1][g][x]
+
+In[5]:= D[f[x, y], x]
+Out[5]= Derivative[1, 0][f][x, y]
+
+In[6]:= D[Derivative[2][f][x], x]
+Out[6]= Derivative[3][f][x]
+
+In[7]:= D[{x, x^2, Sin[x]}, x]
+Out[7]= {1, 2 x, Cos[x]}
+
+In[8]:= D[Log[b, x], x]
+Out[8]= 1 / (x Log[b])
+```
+
+## Dt
+
+Total derivative.
+- `Dt[f]` -- total derivative of `f`. Numeric literals and the
+  distinguished constants (`Pi`, `E`, `I`, `Infinity`,
+  `ComplexInfinity`, `EulerGamma`, `Catalan`, `GoldenRatio`,
+  `Degree`) vanish. Unknown symbols `y` appear as `Dt[y]` factors,
+  modelling implicit functional dependence.
+- `Dt[f, x]`, `Dt[f, {x, n}]`, `Dt[f, x, y, ...]` -- delegate to
+  `D[...]` for partial-derivative behaviour.
+
+**Features**:
+- `Protected`, `ReadProtected`.
+- Shares the elementary-function derivative table with `D`; the
+  only dispatch difference is the base-case handling of symbols.
+
+**Examples**:
+```mathematica
+In[1]:= Dt[y^2 + Sin[x]]
+Out[1]= 2 y Dt[y] + Cos[x] Dt[x]
+
+In[2]:= Dt[Pi + 3 + x y]
+Out[2]= x Dt[y] + y Dt[x]
+
+In[3]:= Dt[y^2, x]
+Out[3]= 0
+
+In[4]:= Dt[x^2, {x, 2}]
+Out[4]= 2
+```
+
+## Derivative
+
+Higher-order derivative operator; represents the symbolic object
+`Derivative[n1, ..., nk][f]` (the mixed `(n1, ..., nk)`-th partial
+of a `k`-argument function `f`).
+
+**Features**:
+- `Protected`, `ReadProtected`.
+- Acts primarily as a tag carried through the differentiation
+  pipeline: `D` and `Dt` produce `Derivative[...]` heads for
+  unknown functions and advance their indices when differentiating
+  an expression that already contains one.
+
+**Examples**:
+```mathematica
+In[1]:= Derivative[2][f][x]
+Out[1]= Derivative[2][f][x]
+
+In[2]:= D[%, x]
+Out[2]= Derivative[3][f][x]
+
+In[3]:= D[f[x, y], y]
+Out[3]= Derivative[0, 1][f][x, y]
+```
+
+## Integrate (rational-function integration, Phase 1-8d)
+
+`Integrate[f, x]` is the public entry point for the rational-function
+integrator implemented in `src/integrate.c` (System dispatcher) and
+`src/intrat.c` (algorithm package).  Phase 1 of the
+`IntegrateRational.m` port (see `INTEGRATE_PLAN.md`) closes the
+following classes of integrand:
+
+- **Polynomials in `x`** — term-by-term integration via
+  `Integrate`IntegratePolynomial`: `a x^n -> a x^(n+1)/(n+1)` for
+  `n != -1`, `a/x -> a Log[x]`.
+- **Improper rational functions** — split into polynomial part +
+  proper rational via `PolynomialQuotientRemainder`.
+- **Repeated roots** — Mack's linear Hermite reduction
+  (`Integrate`HermiteReduce`) extracts the rational part `g` such
+  that `f = D[g, x] + h` with `Denominator[h]` squarefree
+  (Bronstein, *Symbolic Integration I*, p. 44).
+- **Derivative-recognition fast path** — when the residual `h` has
+  the form `c * D'/D^k` with `c` free of `x` and `k >= 1`, emits the
+  closed form `c Log[D]` (k=1) or `-c/((k-1) D^(k-1))` (k>=2).
+- **Per-summand Apart loop** — Phase 5 splits the squarefree-
+  denominator residual via `Apart` and dispatches each summand
+  independently through the derivative-recognition / LRT /
+  LogToReal stack, after `ExtractConstants` factors out scalar
+  prefactors.  The integral closes only when every piece closes.
+- **Lazard-Rioboo-Trager log part with bounded-Solve closure** —
+  Phase 2 / 4 run `Integrate`IntRationalLogPart` on the squarefree-
+  denominator residual; every resulting `(Q_i, S_i)` pair is then
+  dispatched through `Integrate`LogToReal`.  Closure scope:
+  - Linear factor `t - α`: contributes `α Log[S_i(α, x)]`.
+  - Quadratic factor with positive discriminant: two real roots,
+    two `Log` terms.
+  - Quadratic factor with negative discriminant (the ArcTan family):
+    complex conjugate pair `u ± I v`, contributes
+    `u Log[A^2 + B^2] + v LogToAtan[A, B, x]` (Bronstein, *Symbolic
+    Integration I*, p. 63 — Rioboo's complex-to-real conversion).
+  - Higher-degree irreducible-over-Q factors fall through to
+    `Integrate`NaiveLogPart` (Phase 8b/c) — never to a
+    speculative-extension retry.  Algebraic-extension closure is
+    deferred to `solve.c` / `ToRadicals`.
+- **Phase 8b — NaiveLogPart RootSum fallback** —
+  `Integrate`NaiveLogPart[f, x]` returns the held-symbolic
+  `RootSum[Function[t, d(t)], Function[t, a(t) Log(x - t) / d'(t)]]`
+  representation of the log part, mirroring the Lagrange / Bronstein
+  closed form `int a/d dx = sum_α a(α) Log(x - α) / d'(α)`.  This is
+  universal — every proper rational integrand admits this form, with
+  derivatives flowing through the body via the `D[RootSum, x]` rule
+  in `src/deriv.c`.  See `src/root.c` for the held `Root` and
+  `RootSum` constructs (HoldAll + Protected).  Direct port of
+  `IntegrateRational.m:1116-1124`.
+- **Phase 8c — NaiveLogPart wired as universal LogToReal fallback** —
+  the closure preference becomes
+    1. `IntRationalLogPart -> LogToReal` (real elementary form),
+    2. linear-Q closer (`Log + ArcTanh` combination),
+    3. `NaiveLogPart` (held `RootSum` form),
+  with step 3 universal so `try_lrt_close` never returns NULL for a
+  well-formed proper rational input.
+- **Phase 8d-bonus — radical-form root expansion** —
+  the tail of `NaiveLogPart` runs `expand_simple_rootsum`: when
+  `d(t)` is one of the polynomial shapes whose roots have an explicit
+  radical-formula closed form (linear / quadratic / biquadratic), the
+  `RootSum` is expanded in place to a `Plus` of `body` evaluated at
+  each root via the quadratic formula and `Sqrt`.  Higher-degree
+  factors stay in held `RootSum` form until `solve.c` is implemented.
+- **Stability fixes surfaced by the corpus runs** — the two corpora
+  exercised numeric and recursive paths the unit tests had never
+  reached, and ran into two distinct child-process crash classes:
+  - **Plus/Times BigInt-Rational** (`src/plus.c`, `src/times.c`):
+    `add_numbers` and `multiply_numbers` had fast paths only for
+    `Rational[Integer, Integer]` and returned `NULL` on
+    `Rational[BigInt, ...]` operands (which arose from the
+    intermediate resultant computations).  The callers in
+    `builtin_plus` / `builtin_times` then dereferenced the NULL
+    via `is_overflow()`.  Both helpers now fall through to a
+    generic GMP rational add/multiply that recognises any
+    combination of `Integer / BigInt / Rational[Integer-or-BigInt,
+    Integer-or-BigInt]`, and the callers defensively re-stash the
+    operand on a NULL return.  Locked in by
+    `tests/test_bigint.c::test_plus_rational_with_bigint_parts`.
+  - **`is_zero_poly` recursion bound** (`src/poly.c`):
+    `is_zero_poly`'s deep path recurses on each coefficient
+    returned by `CoefficientList(expanded, vars[0])`, which
+    normally strips one variable per descent.  When `vars[0]` is
+    an algebraic constant like `Sqrt[5]` and the polynomial mixes
+    several radicals (`Sqrt[5]`, `Sqrt[21]`, `Sqrt[105]`, …),
+    `CoefficientList` does not actually strip the variable and
+    the recursion sees the same expression again, overflowing the
+    C stack.  Threading a `depth` argument and bailing out
+    conservatively (returning `false`) at depth 32 keeps the
+    function correct on every genuine polynomial while preventing
+    SIGSEGV on opaque algebraic-coefficient inputs.
+
+Combined effect on the `IntegrateRationalTests.m` corpus: the
+remaining child crashes from earlier runs are eliminated, while
+`diff_nonzero` stays at the documented baseline of 1.
+- **Phase 6 LogToArcTanh post-processing** — pairs of
+  `c Log[A] + c Log[B]` collapse to `c Log[A B]`; sign-paired
+  `c Log[A] - c Log[B]` go to `c Log[A/B]` or
+  `2 c ArcTanh[(A + B)/(B - A)]` when the simplified argument is
+  rational in x.  Beautifies the output without affecting
+  differentiation.
+- **Phase 7 ArcTan/ArcTanh sign normalisation and option parsing** —
+  the final pass strips a leading minus sign from `ArcTan` and
+  `ArcTanh` arguments (`ArcTan[-arg] -> -ArcTan[arg]`).  The package
+  entry `Integrate`IntegrateRational[f, x, opts...]` accepts trailing
+  `Rule` options:
+  - `"PFD" -> True | False` (default True) — toggles the per-summand
+    Apart loop;
+  - `"LogToArcTan" -> True | False` (default True) — toggles the
+    Phase 6 post-processing;
+  - `"Radicals" -> True | False` (default False) — reserved for
+    future `ToRadicals` integration;
+  - `Extension -> alpha` — reserved for future use; currently
+    advisory.
+  Options are stripped before dispatch — Phase 7 keeps them advisory
+  while the algorithmic path uses the Mathematica defaults.
+
+Inputs whose denominator is real-irreducible-over-Q with degree > 4
+or non-biquadratic degree 4 close in held `RootSum` form rather than
+unevaluated — see Phase 8b / 8c above.  Phase 8a-bonus emits
+`Integrate::inexact` and bubbles back unevaluated when the integrand
+contains a real-valued constant that cannot be coerced to an exact
+rational by `Rationalize` (e.g. `N[Pi]`); `4.5` and `3.125`-style
+exact-rational floats are silently coerced and processed.
+
+**Inexact integrand handling**:
+```mathematica
+In[?]:= Integrate[1/(4.5 x^4 - 3.125), x]
+        (* Rationalize coerces 4.5 -> 9/2, 3.125 -> 25/8, then
+           closes via the standard pipeline. *)
+
+In[?]:= Integrate[1/(4.5 x^4 - N[Pi]), x]
+        Integrate::inexact: Integrand contains inexact numbers...
+Out[?]= Integrate[1/(-3.14159 + 4.5 x^4), x]  (* unevaluated *)
+```
+
+**Comprehensive corpus runner** (Phase 8d/8e):
+`tests/test_intrat_corpus.c` loads any `IntegrateRational` test
+corpus file at runtime via picocas's own `Get[]`, runs every
+`{integrand, var, ...}` entry through the rational integrator using
+fork-per-case isolation, and classifies the result via differential
+check.  Two CTest entries are wired:
+- `intrat_corpus_tests` — RUBI corpus `IntegrateRationalTests.m`
+  (113 reference cases with optimal antiderivatives).
+- `intrat_inline_corpus_tests` — `IntegrateRationalInlineCases.m`
+  generated from the inline `(*IntegrateRational[...]*)` test cells
+  in `IntegrateRational.m` via `tools/extract_inline_cases.py`
+  (96 cases).
+
+Per-case strict 10 s wall-clock cap (child SIGALRMs at 10 s; the
+parent SIGKILLs at the same deadline).  The corpus runner is the
+public progress dashboard for the rational integrator: each phase
+that lands new closure machinery moves cases out of TIMEOUT /
+RootSum into `diff_zero` (closed in real elementary form, with
+`D[result, x] - integrand` reducing to 0).  The
+`CORPUS_DIFF_NONZERO_BASELINE` constant in the test source is the
+high-water mark of known-broken cases — improvements drive it
+monotonically down.
+
+**Features**:
+- `Protected`.
+- Validates input via `PolynomialQ[f, x] || rationalQ[f, x]` before
+  forwarding to the package; non-rational integrands return
+  unevaluated.
+- Universal correctness predicate: `Cancel[Together[D[Integrate[f,x],x] - f]] === 0`.
+
+**Examples**:
+```mathematica
+In[1]:= Integrate[3 + 5 x + 2 x^2, x]
+Out[1]= 3 x + 5/2 x^2 + 2/3 x^3
+
+In[2]:= Integrate[2 x/(x^2 + 1), x]
+Out[2]= Log[1 + x^2]
+
+In[3]:= Integrate[1/(x - a)^2, x]
+Out[3]= -1/(-a + x)
+
+In[4]:= Integrate[(2x+3)/(x^2+3x+5)^2, x]
+Out[4]= -1/(5 + 3 x + x^2)
+
+In[5]:= Integrate[1/((x-1)(x-2)(x-3)), x]          (* Phase 2 LRT closes this *)
+Out[5]= 1/2 Log[-3 + x] - Log[-2 + x] + 1/2 Log[-1 + x]
+
+In[6]:= Integrate[1/(x^2 + 1), x]                  (* Phase 4 LogToReal *)
+Out[6]= ArcTan[x]
+
+In[7]:= Integrate[1/(x^4 + x^2 + 1), x]            (* two quadratic factors *)
+Out[7]= 1/6 Sqrt[3] ArcTan[(-1 + 2 x)/Sqrt[3]] +
+        1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] +
+        1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2]
+```
+
+The `Integrate`` package also exposes the lower-level helpers
+`Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
+`Integrate`IntegrateRational` (the explicit form),
+`Integrate`IntRationalLogPart` (Phase 2's LRT computation), and
+the unit-test helpers `Integrate`Helpers`Content`, `...`Primitive`,
+`...`Monic`, `...`LeadingCoefficient`, `...`SquareFree`,
+`...`ExtractConstants`, `...`ApartList`.  All are `Protected,
+ReadProtected`.
+
+## Integrate`IntRationalLogPart
+
+The Lazard-Rioboo-Trager logarithmic-part computation
+(Bronstein, *Symbolic Integration I*, p. 51).
+
+- `Integrate`IntRationalLogPart[A/D, x, t]` returns a list of
+  `{Q_i(t), S_i(t, x)}` pairs encoding the integral as
+  `Σ_i RootSum[Q_i(t)==0, t Log[S_i(t, x)]]`.
+- `Integrate`IntRationalLogPart[A/D, x, t, RootSum -> True]` returns
+  the symbolic `Sum[RootSum[Function[t, Q_i], Function[t, t Log[S_i]]]]`
+  form directly.
+
+The denominator `D` is assumed squarefree; the typical caller is
+`Integrate`IntegrateRational` after Hermite reduction.
+
+```mathematica
+In[1]:= Integrate`IntRationalLogPart[1/(x^4+1), x, t]
+Out[1]= {{1 + 256 t^4, 4 t + x}}
+
+In[2]:= Integrate`IntRationalLogPart[1/((x-1)(x-2)), x, t]
+Out[2]= {{1 - t^2, -3/2 - 1/2 t + x}}
+
+In[3]:= Integrate`IntRationalLogPart[1/(x^2+1), x, t, RootSum -> True]
+Out[3]= RootSum[Function[t, 1 + 4 t^2], Function[t, t Log[2 t + x]]]
+```
+
+## PolynomialQuotientRemainder
+
+Single-pass companion to `PolynomialQuotient` / `PolynomialRemainder`.
+
+- `PolynomialQuotientRemainder[p, q, x]` returns `{Quotient,
+  Remainder}` such that `p == Quotient*q + Remainder` and
+  `deg(Remainder, x) < deg(q, x)`.
+- Accepts an optional `Extension -> alpha` rule (default `None`) for
+  division over `Q(alpha)[x]` rather than the rational coefficient
+  field.
+
+```mathematica
+In[1]:= PolynomialQuotientRemainder[x^3 + x + 1, x^2 + 1, x]
+Out[1]= {x, 1}
+
+In[2]:= PolynomialQuotientRemainder[x^2 - 2, x - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[2]= {Sqrt[2] + x, 0}
+```
+
+## SubresultantPolynomialRemainders
+
+Polynomial-remainder chain in `K(coeffs)[x]`, used by the
+Lazard-Rioboo-Trager log-part computation in the
+`Integrate`` package (Phase 2 of `INTEGRATE_PLAN.md`).
+
+- `SubresultantPolynomialRemainders[a, b, x]` gives the chain
+  `{a, b, R_2, R_3, ...}` obtained by iterating pseudo-remainder
+  until a constant or zero remainder is reached.
+
+The chain is correct modulo content scaling, which downstream
+consumers strip via the `primitive[]` operation; this is the
+property the LRT algorithm depends on (it consumes the degree of
+each chain element and the primitive part of each, both of which are
+content-invariant).
+
+```mathematica
+In[1]:= SubresultantPolynomialRemainders[x^4 + 1, 2 x^3, x]
+Out[1]= {1 + x^4, 2 x^3, 2}
+```
+

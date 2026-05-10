@@ -1,0 +1,469 @@
+# Arithmetic and Algebra
+
+## Plus (+)
+Symbolic sum.
+- `a + b + ...`
+
+**Features**:
+- `Flat`, `Orderless`, `Listable`.
+- Combines numeric constants and collects like terms (e.g., `x + 2x` becomes `3x`).
+- Returns `0` if no arguments are provided.
+- Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
+
+```mathematica
+In[1]:= 1 + 2 + x + 2*x
+Out[1]= 3 + 3*x
+```
+
+## Total
+Gives the total of elements in a list.
+- `Total[list]`
+- `Total[list, n]`
+- `Total[list, {n}]`
+- `Total[list, {n1, n2}]`
+
+**Features**:
+- `Protected`.
+- `Total[list]` is equivalent to `Apply[Plus, list]`.
+- `Total[list, n]` totals all elements down to level `n`.
+- `Total[list, {n}]` totals elements at level `n` only.
+- Supports negative levels to count from the bottom (`-1` is the last dimension).
+- Handles ragged arrays correctly by summing from the inside out when multiple levels are specified.
+- `Total[list, Infinity]` totals all atoms in the expression.
+
+```mathematica
+In[1]:= Total[{a, b, c, d}]
+Out[1]= a + b + c + d
+
+In[2]:= Total[{{1, 2}, {3, 4}}]
+Out[2]= {4, 6}
+
+In[3]:= Total[{{1, 2}, {3, 4}}, 2]
+Out[3]= 10
+
+In[4]:= Total[{{1, 2}, {3}}, 2]
+Out[4]= 6
+```
+
+## Accumulate
+Gives the running cumulative totals of the elements in a list.
+- `Accumulate[list]`
+- `Accumulate[list, Method -> "CompensatedSummation"]`
+
+**Features**:
+- `Protected`.
+- `Accumulate[list]` has the same length as `list`, and is effectively equivalent to `FoldList[Plus, list]`.
+- The head of the input is preserved, so `Accumulate[f[a, b, c]]` returns `f[a, a + b, a + b + c]`.
+- Threads naturally over rows via `Listable` `Plus`, so `Accumulate` of a matrix accumulates within columns.
+- Works on machine integers, GMP arbitrary-precision integers, machine-precision doubles, and symbolic expressions.
+- With `Method -> "CompensatedSummation"`, Kahan compensated summation is used in double precision when every element is a machine number, reducing floating-point round-off error. For symbolic or mixed input the option is silently ignored and the standard symbolic accumulation is returned.
+
+```mathematica
+In[1]:= Accumulate[{a, b, c, d}]
+Out[1]= {a, a + b, a + b + c, a + b + c + d}
+
+In[2]:= Accumulate[{{a, b}, {c, d}, {e, f}}]
+Out[2]= {{a, b}, {a + c, b + d}, {a + c + e, b + d + f}}
+
+In[3]:= Accumulate[f[a, b, c, d]]
+Out[3]= f[a, a + b, a + b + c, a + b + c + d]
+
+In[4]:= Accumulate[{1, 2, 3, 4, 5}]
+Out[4]= {1, 3, 6, 10, 15}
+
+In[5]:= Accumulate[{1.0, 2.0, 3.0}, Method -> "CompensatedSummation"]
+Out[5]= {1., 3., 6.}
+```
+
+## Times (*)
+Symbolic product.
+- `a * b * ...`
+
+**Features**:
+- `Flat`, `Orderless`, `Listable`.
+- Combines numeric constants and groups identical bases into `Power` expressions.
+- Handles `I` as `Complex[0, 1]`.
+- Returns `1` if no arguments are provided.
+- Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.
+
+```mathematica
+In[1]:= 2 * x * 3 * y
+Out[1]= 6*x*y
+
+In[2]:= I * I
+Out[2]= -1
+```
+
+## Power (^)
+Exponentiation.
+- `base ^ exp`
+
+**Features**:
+- `Listable`.
+- Simplifies integer powers of integers.
+- Returns `Overflow[]` if the result exceeds 64-bit integer limits.
+- Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
+- Supports complex results for negative bases (e.g., `(-1)^(1/2)` becomes `I`).
+- Distributes power over product if the exponent is an integer.
+
+```mathematica
+In[1]:= Sqrt[45]
+Out[1]= 3*Sqrt[5]
+
+In[2]:= (a * b)^2
+Out[2]= a^2 * b^2
+```
+
+## Sqrt
+Square root.
+- `Sqrt[z]`: Internally represented as `Power[z, 1/2]`.
+
+## Numerator
+Gives the numerator of an expression.
+- `Numerator[expr]`
+
+**Features**:
+- `Protected`, `Listable`.
+- Picks out terms which do not have superficially negative exponents.
+- Can be used on rational and complex numbers.
+
+```mathematica
+In[1]:= Numerator[(x-1)(x-2)/(x-3)^2]
+Out[1]= (-2 + x) (-1 + x)
+
+In[2]:= Numerator[3/7 + I/11]
+Out[2]= 33 + 7 I
+```
+
+## Denominator
+Gives the denominator of an expression.
+- `Denominator[expr]`
+
+**Features**:
+- `Protected`, `Listable`.
+- Picks out terms which have superficially negative exponents.
+- Can be used on rational and complex numbers.
+
+```mathematica
+In[1]:= Denominator[(x-1)(x-2)/(x-3)^2]
+Out[1]= (-3 + x)^2
+
+In[2]:= Denominator[3/7 + I/11]
+Out[2]= 77
+```
+
+## Cancel
+Cancels out common factors in the numerator and denominator of an expression.
+- `Cancel[expr]`
+- `Cancel[expr, Extension -> alpha]`
+
+**Features**:
+- `Protected`, `Listable`.
+- Threads over equations, inequalities, logic functions, and sums dynamically.
+- Evaluates greatest common divisors via polynomial GCD derivations avoiding extraneous expansions.
+- Handles a single symbolic base appearing with rational fractional exponents (e.g. `Sqrt[y]`, `y^(1/3)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial cancellation in `g`, then substitutes back.
+- The algebraic-generator pass runs `Together` on the substituted form (not just GCD-cancellation), so inputs whose `g`-substituted denominator is a Plus of terms with different `g`-denominators (e.g. `1/(g^2 - 1/g)` from `1/(y^(2/3) - 1/y^(1/3))`) are handled correctly.
+- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) cancels common factors over `Q(alpha)` instead of `Q`. Implementation: lifts numerator and denominator into `Q(alpha)[x]` via the QAUPoly machinery, runs `qaupoly_gcd`, divides both sides by `g`, and re-renders. Works for single-fraction inputs; `Plus` inputs (sums of fractions) currently fall back to the no-extension path because `PolynomialQuotient` does not yet accept `Extension` (Phase 0.5 follow-up).
+
+```mathematica
+In[1]:= Cancel[(x^2 - 1) / (x - 1)]
+Out[1]= 1 + x
+
+In[2]:= Cancel[(x - y)/(x^2 - y^2) + (x^3 - 27)/(x^2 - 9)]
+Out[2]= (9 + 3 x + x^2)/(3 + x) + 1/(x + y)
+
+In[3]:= Cancel[(y - 1)/(Sqrt[y] - 1)]
+Out[3]= 1 + Sqrt[y]
+
+In[4]:= Cancel[(y - 1)/(y^(1/3) - 1)]
+Out[4]= 1 + y^(1/3) + y^(2/3)
+
+In[5]:= Cancel[1/(y^(2/3) - 1/y^(1/3))]
+Out[5]= y^(1/3)/(-1 + y)
+
+In[6]:= Cancel[(x^2 - 2)/(x - Sqrt[2]), Extension -> Sqrt[2]]
+Out[6]= Sqrt[2] + x
+
+In[7]:= Cancel[(x^3 - 2)/(x - 2^(1/3)), Extension -> 2^(1/3)]
+Out[7]= 2^(2/3) + 2^(1/3) x + x^2
+```
+
+## Together
+Puts terms in a sum over a common denominator, and cancels factors in the result.
+- `Together[expr]`
+- `Together[expr, Extension -> alpha]`
+
+**Features**:
+- `Protected`, `Listable`.
+- Makes a sum of terms into a single rational function.
+- Computes lowest common multiples (LCM) of denominators securely without unconditionally destroying pre-factored bases unnecessarily.
+- Handles a single symbolic base appearing with rational fractional exponents (e.g. `y^(1/3)`, `y^(2/3)`, `y^(73/24)`) by treating it as an algebraic generator: substitutes `y -> g^m` where `m` is the LCM of denominators, runs the polynomial pipeline in `g`, then substitutes back.
+- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) combines into a single fraction with the standard combiner, then runs `Cancel[..., Extension -> alpha]` on the result so algebraic-coefficient cancellations fire. Effective on simple inputs like `1/(x - Sqrt[2]) + 1/(x + Sqrt[2])`, which collapses to `(2 x)/(x^2 - 2)`. Inputs whose summands themselves carry algebraic-coefficient denominators are deferred to Phase 0.5 (which will plumb `Extension` through `PolynomialLCM` / `PolynomialQuotient` / `together_recursive`).
+
+```mathematica
+In[1]:= Together[a/b + c/d]
+Out[1]= (b c + a d) / (b d)
+
+In[2]:= Together[x^2/(x^2 - 1) + x/(x^2 - 1)]
+Out[2]= x / (-1 + x)
+
+In[3]:= Together[1/x + 1/(x + 1) + 1/(x + 2) + 1/(x + 3)]
+Out[3]= (2 (3 + 11 x + 9 x^2 + 2 x^3)) / (x (1 + x) (2 + x) (3 + x))
+
+In[4]:= Together[x^2/(x - y) - x y/(x - y)]
+Out[4]= x
+
+In[5]:= Together[y^(5/8)*(y^(19/8) - y^(73/24)/(y^(2/3) - 1/y^(1/3)))]
+Out[5]= -y^3 / (-1 + y)
+
+In[6]:= Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]
+Out[6]= (2 x)/(-2 + x^2)
+```
+
+## Apart
+Gives the partial fraction decomposition of a rational expression.
+- `Apart[expr]`
+- `Apart[expr, var]`
+- `Apart[expr, var, Extension -> alpha]`
+
+**Features**:
+- `Protected`, `Listable`.
+- Writes `expr` as a polynomial in `var` together with a sum of ratios of polynomials with minimal denominators.
+- If `var` is not specified, intelligently selects the main polynomial variable natively.
+- Implements exact undetermined coefficients algebraically leveraging row-reduced identity expansions over algebraic inputs avoiding recursive fractional losses natively.
+- When `Together[expr]` produces a numerator or denominator that is not polynomial in the chosen variable (e.g. fractional-power inputs whose Together'd form is `y^(1/3)/(y - 1)`), the matrix-of-coefficients algorithm cannot apply; Apart returns the `Together` form unchanged rather than synthesising a spurious zero.
+- **Option `Extension -> alpha`** (Phase 0 of the Integrate plan) factors the denominator over `Q(alpha)` before partial-fraction decomposition runs, splitting reducible-over-extension factors (e.g. `x^2 - 2` into `(x - Sqrt[2])(x + Sqrt[2])` under `Extension -> Sqrt[2]`) and producing the corresponding linear-factor partial fractions. The pre-`Together` step is also extension-aware so any algebraic-number cancellations in numerator/denominator fire before splitting.
+
+```mathematica
+In[1]:= Apart[1/((1+x)(5+x))]
+Out[1]= 1/(4 (1 + x)) - 1/(4 (5 + x))
+
+In[2]:= Apart[(x^5-2)/((1+x+x^2)(2+x)(1-x))]
+Out[2]= 2 - x + (-1 - x/3)/(1 + x + x^2) + 1/(9 (-1 + x)) - 34/(9 (2 + x))
+
+In[3]:= Apart[(x+y)/((x+1)(y+1)(x-y)), x]
+Out[3]= 2 y/((1 + y)^2 (x - y)) - (-1 + y)/((1 + x) (1 + y)^2)
+
+In[4]:= Apart[1/(y^(2/3) - 1/y^(1/3))]
+Out[4]= y^(1/3)/(-1 + y)
+
+In[5]:= Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]
+Out[5]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/4 Sqrt[2]/(-Sqrt[2] + x)
+```
+
+## Mod, Quotient, QuotientRemainder
+- `Mod[n, m]`: Remainder of `n/m`.
+- `Quotient[n, m]`: Integer part of `n/m`.
+- `QuotientRemainder[n, m]`: Returns `{Quotient[n, m], Mod[n, m]}`.
+
+## GCD, LCM
+- `GCD[n1, n2, ...]`: Greatest common divisor.
+- `LCM[n1, n2, ...]`: Least common multiple.
+
+## PowerMod
+Gives modular exponentiations, inverses, and roots.
+- `PowerMod[a, b, m]`: Gives $a^b \pmod m$.
+- `PowerMod[a, -1, m]`: Finds the modular inverse of `a` modulo `m`.
+- `PowerMod[a, 1/r, m]`: Finds a modular `r`-th root of `a`.
+
+**Features**:
+- `Protected`, `Listable`.
+- Evaluates much more efficiently than `Mod[a^b, m]`.
+- Returns unevaluated if the corresponding inverse or root does not exist.
+- Allows threading over lists natively.
+
+```mathematica
+In[1]:= PowerMod[2, 10, 3]
+Out[1]= 1
+
+In[2]:= PowerMod[3, -2, 7]
+Out[2]= 4
+
+In[3]:= PowerMod[3, 1/2, 2]
+Out[3]= 1
+
+In[4]:= PowerMod[2, {10, 11, 12, 13, 14}, 5]
+Out[4]= {4, 3, 1, 2, 4}
+```
+
+## Factorial (!)
+Gives the factorial of an integer or half-integer.
+- `n!` or `Factorial[n]`
+
+**Features**:
+- `Protected`, `Listable`, `NumericFunction`.
+- Evaluates exactly for positive integers up to $20!$.
+- Yields `ComplexInfinity` for negative integers.
+- Supports half-integers utilizing factors of $\sqrt{\pi}$ recursively.
+- Supports trailing `!` parsed natively as a postfix operator.
+
+```mathematica
+In[1]:= 5!
+Out[1]= 120
+
+In[2]:= (1/2)!
+Out[2]= Sqrt[Pi]/2
+
+In[3]:= Factorial[0]
+Out[3]= 1
+```
+
+## Binomial
+Gives the binomial coefficient $\binom{n}{m}$.
+- `Binomial[n, m]`
+
+**Features**:
+- `Protected`, `Listable`, `NumericFunction`.
+- Evaluates exactly for integers, half-integers, and dynamically factors symbolic terms correctly (e.g. `Binomial[n, 4]`).
+- Reduces numerical boundaries logically utilizing continuous `Gamma` interpolations.
+
+```mathematica
+In[1]:= Binomial[10, 3]
+Out[1]= 120
+
+In[2]:= Binomial[8.5, -4.2]
+Out[2]= 0.0000604992
+
+In[3]:= Binomial[9/2, 7/2]
+Out[3]= 9/2
+
+In[4]:= Binomial[n, 4]
+Out[4]= 1/24 (-3 + n) (-2 + n) (-1 + n) n
+
+In[5]:= Binomial[0, 1]
+Out[5]= 0
+```
+
+## PrimeQ
+- `PrimeQ[n]`: Returns `True` if `n` is a prime number, `False` otherwise.
+- `PrimeQ[z]`: For a Gaussian integer `z = a + b I`, returns `True` if `z` is a Gaussian prime.
+
+**Features**:
+- `Listable`, `Protected`.
+- A Gaussian integer `a + b I` is a Gaussian prime if:
+  - Both `a` and `b` are nonzero and `a^2 + b^2` is an ordinary prime, or
+  - One of `a`, `b` is zero and the absolute value of the other is a prime congruent to 3 mod 4.
+- Returns `False` for non-integer complex numbers, rationals, reals, and strings.
+
+```mathematica
+In[1]:= PrimeQ[7]
+Out[1]= True
+
+In[2]:= PrimeQ[1 + I]
+Out[2]= True
+
+In[3]:= PrimeQ[1 + 2 I]
+Out[3]= True
+
+In[4]:= PrimeQ[3 I]
+Out[4]= True
+
+In[5]:= PrimeQ[5 I]
+Out[5]= False
+
+In[6]:= PrimeQ[2 + 2 I]
+Out[6]= False
+```
+
+## PrimePi
+- `PrimePi[x]`: Returns the number of primes less than or equal to `x`.
+
+**Features**:
+- `Listable`, `Protected`.
+- Uses Meissel-Lehmer algorithm for efficient counting.
+
+```mathematica
+In[1]:= PrimePi[10]
+Out[1]= 4
+
+In[2]:= PrimePi[100]
+Out[2]= 25
+
+In[3]:= PrimePi[{10, 100}]
+Out[3]= {4, 25}
+```
+
+## NextPrime
+- `NextPrime[x]`: Smallest prime above `x`.
+- `NextPrime[x, k]`: $k$-th next prime above `x` (or previous if $k$ is negative).
+
+**Features**:
+- `Protected`, `ReadProtected`.
+- Supports negative $k$ for finding previous primes.
+- Remains unevaluated if no such prime exists (e.g., `NextPrime[2, -1]`).
+
+## FactorInteger
+- `FactorInteger[n]`: Returns a list of prime factors and their exponents.
+- `FactorInteger[n, k]`: Partial factorization, at most `k` distinct factors.
+- `FactorInteger[n, Automatic]`: Pulls out easy factors using trial division.
+- `FactorInteger[n, Method -> method]`: Factors `n` using a specific algorithmic method.
+
+**Options for `Method`**:
+- `"Automatic"`: (Default) Attempts factorization by sequentially executing Trial Division, Pollard's Rho, and ECM.
+- `"TrialDivision"`: Extracts bounds matching the first 1000 computed primes and halts cleanly. Composite residues are preserved.
+- `"PollardRho"`: Executes the Brent cycle-finding variant of Pollard's Rho algorithm targeting GMP bignums.
+- `"BlakeRationalBaseDescent"`: Executes the Rational Base Descent algorithm against semiprimes `n = p q` where one factor is approximately `c (a/b)^k` for some unknown `c`, `k` and a small coprime integer pair `a > b`. With no explicit `"Base"`, auto-searches coprime partitions `a + b = j` for `j = 3, 4, ...` indefinitely until a factor is found (interruptible).
+- `{"BlakeRationalBaseDescent", "Base" -> a/b}`: Same algorithm but pinned to a specific rational base `a/b`. Skips the auto-search.
+- `"PollardP-1"`: Executes the Pollard $P-1$ algorithm, leveraging GMP and ECM natively.
+- `"WilliamsP+1"`: Executes the Williams $P+1$ algorithm via the ECM library natively.
+- `"Fermat"`: Explores factors symmetrically close to the square root boundary natively on large integers.
+- `"CFRAC"`: Implements the continued fraction integer factorization method natively on GMP bignums.
+- `"ShanksSquareForms"`: Implements Shanks's Square Forms Factorization (SQUFOF) natively on large integers. Halts explicitly if factors are not discovered within the loop constraints.
+- `"ECM"`: Explicitly triggers Elliptic-Curve Method discovery natively.
+
+**Features**:
+- `Listable`, `Protected`.
+- Supports negative integers (includes `{-1, 1}`).
+- Supports rational numbers (denominator factors have negative exponents).
+
+```mathematica
+In[1]:= FactorInteger[12]
+Out[1]= {{2, 2}, {3, 1}}
+
+In[2]:= FactorInteger[-12]
+Out[2]= {{-1, 1}, {2, 2}, {3, 1}}
+
+In[3]:= FactorInteger[3/4]
+Out[3]= {{2, -2}, {3, 1}}
+
+In[4]:= FactorInteger[100, 1]
+Out[4]= {{2, 2}, 25}
+```
+
+## EulerPhi
+Gives the Euler totient function $\phi(n)$.
+- `EulerPhi[n]`
+
+**Features**:
+- `Listable`, `Protected`.
+- Counts the number of positive integers less than or equal to $n$ that are relatively prime to $n$.
+- Returns 0 for $n = 0$, and handles negative integers via $\phi(-n) = \phi(n)$.
+
+```mathematica
+In[1]:= EulerPhi[10]
+Out[1]= 4
+```
+
+## Rational
+Represents a rational number.
+- `Rational[n, d]`
+
+**Features**:
+- Automatically simplifies to lowest terms (e.g. `Rational[15, 5]` evaluates to `3`, `Rational[2, 4]` evaluates to `Rational[1, 2]`).
+- Returns `Indeterminate` when `n` and `d` are both `0` (e.g. `Rational[0, 0]`).
+- Returns `ComplexInfinity` when `n` is non-zero and `d` is `0` (e.g. `Rational[1, 0]`).
+
+```mathematica
+In[1]:= Rational[15, 5]
+Out[1]= 3
+```
+
+## Re, Im, ReIm, Abs, Conjugate, Arg
+Complex number functions.
+- `Re[z]`: Real part.
+- `Im[z]`: Imaginary part.
+- `ReIm[z]`: Returns `{Re[z], Im[z]}`.
+- `Abs[z]`: Magnitude.
+- `Conjugate[z]`: Complex conjugate.
+- `Arg[z]`: Phase angle.
+

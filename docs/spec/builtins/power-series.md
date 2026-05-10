@@ -1,0 +1,129 @@
+# Power Series
+
+## SeriesData
+Represents an explicit truncated power series.
+- `SeriesData[x, x0, {a0, a1, ..., a_{k-1}}, nmin, nmax, den]`
+
+The `ai` are the coefficients of the series about the expansion point `x0`.
+The power of `(x - x0)` attached to `ai` is `(nmin + i)/den`, and a trailing
+`O[x - x0]^(nmax/den)` term indicates the order at which higher terms have
+been dropped.
+
+**Features**:
+- `Protected`.
+- `SeriesData` is a pure data head; it has no evaluator and is normally
+  produced by `Series`.
+- Standard printing renders the series as an ordinary mathematical sum:
+  `a0 + a1 (x - x0) + a2 (x - x0)^2 + ... + O[x - x0]^p`. Zero
+  coefficients are suppressed, and `x0 == 0` is displayed as simply `x`
+  without the subtraction.
+- `InputForm[...]` switches to the literal `SeriesData[x, x0, {...},
+  nmin, nmax, den]` form, which round-trips through the parser.
+- `FullForm[...]` shows the raw tree structure.
+
+```mathematica
+In[1]:= SeriesData[x, 0, {1, 1, 1/2, 1/6, 1/24, 1/120}, 0, 6, 1]
+Out[1]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5 + O[x]^6
+
+In[2]:= InputForm[%]
+Out[2]= SeriesData[x, 0, {1, 1, 1/2, 1/6, 1/24, 1/120}, 0, 6, 1]
+
+In[3]:= SeriesData[x, 0, Table[i^2, {i, 10}], 0, 10, 1]
+Out[3]= 1 + 4 x + 9 x^2 + 16 x^3 + 25 x^4 + 36 x^5 + 49 x^6 + 64 x^7 + 81 x^8 + 100 x^9 + O[x]^10
+
+In[4]:= SeriesData[x, 2, {a, b, c}, 0, 3, 1]
+Out[4]= a + b (x - 2) + c (x - 2)^2 + O[x - 2]^3
+
+In[5]:= SeriesData[x, 0, {1, 2, 3}, 1, 7, 2]
+Out[5]= Sqrt[x] + 2 x + 3 x^(3/2) + O[x]^(7/2)
+```
+
+## Series
+Produces the power-series expansion of an expression about a point.
+- `Series[f, {x, x0, n}]` — Taylor/Laurent/Puiseux expansion up to order `(x - x0)^n`.
+- `Series[f, x -> x0]` — leading-term form. The engine scans the internal expansion for the first non-zero coefficient at exponent `e1` and the next non-zero at `e2 > e1`; the reported `O`-term lands at exponent `e2` (or `e1 + 1` when no further non-zero term exists). So `Series[Sin[x] - x, x -> 0]` returns `-x^3/6 + O[x]^5`, `Series[f[x], x -> 0]` returns `f[0] + O[x]^1`, and analytic-at-x0 inputs collapse to their constant plus `O[x - x0]^1`.
+- `Series[f, {x, x0, nx}, {y, y0, ny}, ...]` — iterated multivariate expansion. Each inner coefficient is itself a `SeriesData` in the next variable.
+- `Series[f, {x, Infinity, n}]` — expansion at infinity, substituting `x -> 1/u` internally. The emitted `SeriesData` uses `Power[x, -1]` as its variable, so the series prints with `1/x` as the base and an `O[1/x]^(n+1)` term.
+
+**Features**:
+- `HoldAll` and `Protected` (so the expansion variable is not evaluated before `Series` has a chance to shield it).
+- Threaded over lists: `Series[{f1, f2, ...}, spec]` becomes `{Series[f1, spec], Series[f2, spec], ...}`.
+- Handles Taylor expansions for smooth functions, Laurent expansions where the function has a pole at `x0`, Puiseux expansions for fractional-power cases such as `Sqrt[Sin[x]]`, and logarithmic expansions for cases like `x^x` where `Log[x]` survives as a symbolic coefficient.
+- Symbolic parameters in exponents are supported: `Series[(1 + x)^n, {x, 0, 4}]` returns the binomial expansion with `n` kept unexpanded.
+- Approximate numeric coefficients flow through series arithmetic unchanged.
+- For unknown heads (e.g. `f[x]` where `f` has no rules), the engine falls back to naive Taylor via `D` at the expansion point; the coefficients appear as `Derivative[k][f][x0]`.
+
+**Coefficient arithmetic** automatically promotes to BigInt-backed `Rational` when 64-bit numerators or denominators would overflow, so previously-overflowing Laurent/Puiseux cases like `Series[1/Sin[x]^10, {x, 0, 2}]` and `Series[Sqrt[Log[1 + x]], {x, 0, 12}]` now produce exact coefficients (at the cost of slower evaluation for large orders).
+
+Inverse trigonometric and inverse hyperbolic heads (`ArcSin`, `ArcCos`, `ArcTan`, `ArcCot`, `ArcSinh`, `ArcCosh`, `ArcTanh`, `ArcCoth`) are handled by direct series kernels at `u = 0` rather than by naive repeated differentiation, which would blow up expression size exponentially for higher orders. `ArcCosh` uses the principal-branch identity `ArcCosh[u] = I*ArcCos[u]`, so its expansion at `x = 0` has the expected `I*Pi/2` constant term and imaginary coefficients.
+
+Forward reciprocal heads (`Sec`, `Csc`, `Cot`, `Sech`, `Csch`, `Coth`) are rewritten as `1/Cos[x]`, `1/Sin[x]`, `Cos[x]/Sin[x]`, etc., before expansion. Inverse reciprocal heads (`ArcSec`, `ArcCsc`, `ArcSech`, `ArcCsch`) are rewritten via the identities `ArcSec[z] = ArcCos[1/z]`, `ArcCsc[z] = ArcSin[1/z]`, `ArcSech[z] = ArcCosh[1/z]`, `ArcCsch[z] = ArcSinh[1/z]`, so that a blowing-up inner series (e.g. `z = 1/x`) collapses to a convergent kernel case rather than triggering spurious `Power::infy` warnings.
+
+Expansions where the inner series diverges at the expansion point (e.g. `Series[f[1/x], {x, 0, n}]`) are handled via dedicated at-infinity identities:
+- `ArcCoth[1/u] = ArcTanh[u]`, `ArcCot[1/u] = ArcTan[u]` (handled at the series level via inner-series inversion).
+- `ArcTanh[1/u] = I*Pi/2 + ArcTanh[u]` (principal branch).
+- `ArcSinh[1/v] = -Log[v] + Log[1 + Sqrt[1 + v^2]]` and `ArcCosh[1/v] = -Log[v] + Log[1 + Sqrt[1 - v^2]]` (handled by rewriting at the expression level; the symbolic `-Log[x]` term rides the existing `Log[x]` symbolic-coefficient path).
+
+**Internal padding for symbolic expansion points**: The engine computes series at a padded internal order (user order + 12 by default) so that intermediate Laurent/Puiseux operations don't lose accuracy. When the expansion point `x0` is not a literal number, padding is capped at 2 — at a symbolic point the series coefficients are themselves symbolic expressions (e.g. `Cosh[a]`, `Sinh[a]`), and the `O(N^2)` convolution inside `so_inv`/`so_div` would otherwise spin indefinitely on exponentially growing expression trees. This makes cases like `Series[Coth[x], {x, a, 1}]`, `Series[Tanh[x], {x, a, 1}]`, `Series[Sec[x], {x, a, 1}]`, and `Series[1/Cosh[x], {x, a, 1}]` terminate in milliseconds.
+
+**Constant inputs**: If `f` is free of the expansion variable (e.g. `Series[0, {x, 0, 4}]`, `Series[Sin[y], {x, 0, 4}]`, `Series[a + b^2, {x, 0, 3}]`), `Series` returns `f` verbatim instead of wrapping it in a trivial `SeriesData`.
+
+**Symbolic prefactors**: A factor of `x^alpha` with `alpha` symbolic (non-integer, non-rational) is pulled outside the expansion so the remaining body is expanded as an ordinary power series. For example, `Series[x^a Exp[x], {x, 0, 5}]` returns `x^a (1 + x + x^2/2 + x^3/6 + x^4/24 + x^5/120 + O[x]^6)` — a `Times[Power[x, a], SeriesData[...]]` at the expression level, so the `SeriesData` pretty-printer still renders the body and the outer `Times` decorates it with the symbolic prefactor.
+
+**Expansion at regular points of `Arc*` heads**: When `so_apply_kernel_at_zero` can't apply (because the inner series constant `c` is not `0`), the engine falls back to naive Taylor via `D`. This makes `Series[ArcSin[x], {x, 1/2, 3}]`, `Series[ArcTan[x], {x, 2, 2}]`, `Series[ArcSinh[x], {x, 1, 2}]`, etc. work without special-casing each non-zero expansion point.
+
+**Maxima-style algebraic fast paths**:
+- **Monomial binomial** `(a + b x^m)^alpha` with `alpha` non-integer. The generic path factors out `a`, forms `u = (b/a) x^m`, and feeds `(1+u)^alpha` through Horner composition. When `u` is a single-term series (exactly one non-zero coefficient in `SeriesObj` terms) we skip the `O(N^2)` convolution and emit `binomial(alpha, k) * (b/a)^k` directly at exponent `k*m`. This covers `Sqrt[1+x]`, `(1 - x^2)^(1/2)`, `(1+x)^(-1/2)`, `(2 + 3x)^(1/3)`, `(1+x)^n` with symbolic `n`, and Puiseux bases like `(1+x^(1/2))^(1/2)`.
+- **split-two-term probe** (`series_split_two_term` in `series.h`). Structural decomposition of `e` into `a + b*x^(p/q)` without running the full series-expansion pipeline. Feeds the Log fast path and the Apart gate; exposed for unit testing.
+- **Log fast path**: when `arg` matches `a + b x^(p/q)` with `a, b` both free of `x` and `a != 1`, rewrite `Log[a + b x^c]` as `Log[a] + Log[1 + (b/a) x^c]` and let the `Log1p` kernel compose with a pure monomial. Maxima's `sp2log` uses the same identity.
+- **Apart preprocessing**: if the input contains `Power[p(x), -n]` for `p` a polynomial in `x`, run `Apart[f, x]` to decompose into partial fractions before expanding. Composite denominators like `1/((1-x)(1-2x)(1-3x))` then break up into geometric-series pieces that hit the monomial fast path. Gated by a polynomial check so non-rational denominators (e.g. `1/(Exp[x] - 1 - x)`) bypass Apart and fall through to the generic `so_inv` path.
+
+**Puiseux branch points for `ArcSin` / `ArcCos` at `x = ±1`**: Dedicated handler emits a Puiseux series with `den = 2` using the identity `ArcCos[1 - s] = Sqrt[2s] sum_{k>=0} b_k s^k / (2k+1)` (with `b_k = (2k)! / (8^k (k!)^2)`) and the symmetries `ArcSin[x] = Pi/2 - ArcCos[x]`, `ArcCos[-x] = Pi - ArcCos[x]`. Supports the simple-linear inner case `ArcSin[c + q (x - x0)]` / `ArcCos[c + q (x - x0)]` with `c = ±1`. Example: `Series[ArcSin[x], {x, 1, 1}]` returns `Pi/2 - I Sqrt[2] Sqrt[x - 1] + O[x - 1]^(3/2)`; `Series[ArcCos[x], {x, -1, 2}]` returns `Pi - Sqrt[2] Sqrt[x + 1] - Sqrt[2] (x + 1)^(3/2) / 12 + O[x + 1]^(5/2)`.
+
+**Known limitation**: Puiseux branch points for the hyperbolic `Arc*` heads (`ArcCosh[x]` at `x = 1`, `ArcTanh[x]` at `x = ±1`, etc.) and for non-simple inner series at the circular branch points are still returned unevaluated rather than risking infinite-loop or incorrect output. The naive-Taylor fallback also caps iterations and bails out on `Infinity`/`Indeterminate` derivatives so unknown heads cannot spin the engine.
+
+```mathematica
+In[1]:= Series[Exp[x], {x, 0, 10}]
+Out[1]= 1 + x + x^2/2 + x^3/6 + x^4/24 + x^5/120 + x^6/720 + x^7/5040 + x^8/40320 + x^9/362880 + x^10/3628800 + O[x]^11
+
+In[2]:= Series[f[x], {x, a, 3}]
+Out[2]= f[a] + Derivative[1][f][a] (x - a) + 1/2 Derivative[2][f][a] (x - a)^2 + 1/6 Derivative[3][f][a] (x - a)^3 + O[x - a]^4
+
+In[3]:= Series[Cos[x]/x, {x, 0, 10}]
+Out[3]= 1/x - x/2 + x^3/24 - x^5/720 + x^7/40320 - x^9/3628800 + O[x]^11
+
+In[4]:= Series[Sqrt[Sin[x]], {x, 0, 10}]
+Out[4]= Sqrt[x] - x^(5/2)/12 + x^(9/2)/1440 - x^(13/2)/24192 - 67 x^(17/2)/29030400 + O[x]^(21/2)
+
+In[5]:= Series[x^x, {x, 0, 4}]
+Out[5]= 1 + Log[x] x + Log[x]^2/2 x^2 + Log[x]^3/6 x^3 + Log[x]^4/24 x^4 + O[x]^5
+
+In[6]:= Series[(1 + x)^n, {x, 0, 4}]
+Out[6]= 1 + n x + 1/2 n (-1 + n) x^2 + 1/6 n (-2 + n) (-1 + n) x^3 + 1/24 n (-3 + n) (-2 + n) (-1 + n) x^4 + O[x]^5
+
+In[7]:= Series[Sin[1/x], {x, Infinity, 10}]
+Out[7]= 1/x - 1/6 (1/x)^3 + 1/120 (1/x)^5 - 1/5040 (1/x)^7 + 1/362880 (1/x)^9 + O[1/x]^11
+
+In[8]:= Series[Sin[x + y], {x, 0, 3}, {y, 0, 3}]
+Out[8]= (y - y^3/6 + O[y]^4) + (1 - y^2/2 + O[y]^4) x + (-y/2 + y^3/12 + O[y]^4) x^2 + (-1/6 + y^2/12 + O[y]^4) x^3 + O[x]^4
+
+In[9]:= Series[{Sin[x], Cos[x], Tan[x]}, {x, 0, 5}]
+Out[9]= {x - x^3/6 + x^5/120 + O[x]^6, 1 - x^2/2 + x^4/24 + O[x]^6, x + x^3/3 + 2 x^5/15 + O[x]^6}
+```
+
+## Normal
+Converts a `SeriesData` back into an ordinary expression by dropping its O-term.
+- `Normal[expr]`
+
+**Features**:
+- `Protected`.
+- Returns the Plus of the coefficient-times-power terms (zero coefficients skipped). For non-`SeriesData` input, `Normal` is the identity.
+
+```mathematica
+In[1]:= Normal[Series[Exp[x], {x, 0, 5}]]
+Out[1]= 1 + x + x^2/2 + x^3/6 + x^4/24 + x^5/120
+
+In[2]:= Normal[a + b]
+Out[2]= a + b
+```
+
