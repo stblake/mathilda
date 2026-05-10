@@ -2506,6 +2506,12 @@ static int heuristic_factor_depth = 0;
 static Expr* heuristic_factor_impl(Expr* P);
 
 static Expr* heuristic_factor(Expr* P) {
+    /* Defensive: callers occasionally feed us NULL when an upstream
+     * helper (e.g. exact_poly_div over a non-field coefficient ring)
+     * has signalled "cannot proceed" via NULL.  Returning NULL here
+     * keeps the cascade well-defined; callers must be prepared for
+     * NULL just like the rest of the polynomial pipeline. */
+    if (!P) return NULL;
     if (P->type != EXPR_FUNCTION) return expr_copy(P);
     if (heuristic_factor_depth >= HEURISTIC_FACTOR_MAX_DEPTH) {
         return expr_copy(P);
@@ -2549,10 +2555,21 @@ static Expr* heuristic_factor_impl(Expr* P) {
     Expr* cont = poly_content(P, vars, v_count);
     if (!(cont->type == EXPR_INTEGER && cont->data.integer == 1)) {
         Expr* pp = exact_poly_div(P, cont, vars, v_count);
+        /* `exact_poly_div` returns NULL when the division is not
+         * actually exact in the coefficient ring chosen by `vars`
+         * (e.g. when P has radical coefficients like Sqrt[a] that
+         * land outside Q or Q[i]).  Treat that as "no content can
+         * be extracted at this level" and return P unchanged --
+         * passing NULL down to heuristic_factor would deref NULL. */
+        if (pp == NULL) {
+            { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
+            expr_free(cont);
+            return expr_copy(P);
+        }
         /* Guard against the no-progress case: if exact_poly_div left us
          * with pp == 1 (i.e. cont == P up to a constant), recursing on
          * cont = P loops indefinitely.  Bail and return the input. */
-        if (pp && pp->type == EXPR_INTEGER && pp->data.integer == 1) {
+        if (pp->type == EXPR_INTEGER && pp->data.integer == 1) {
             { for(size_t i=0; i<v_count; i++) expr_free(vars[i]); free(vars); }
             expr_free(cont); expr_free(pp);
             return expr_copy(P);

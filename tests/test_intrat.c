@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 /* ------------------------------------------------------------------ */
 /* Test helpers                                                        */
@@ -296,18 +297,27 @@ static void test_integrate_lrt_naivelogpart_fallback(void) {
     expr_free(r);
 }
 
-static void test_integrate_parametric_falls_to_rootsum(void) {
-    /* Parametric biquadratic — Phase 8d-bonus's gate prevents the
-     * radical-formula expansion (the resulting Sqrt expressions over
-     * symbolic parameters do not reduce cleanly), so the result
-     * stays in held RootSum form. */
+static void test_integrate_parametric_biquadratic_closes(void) {
+    /* Parametric biquadratic 1/(b + a x^4) closes via the Sophie-Germain
+     * factorisation under the positive-symbol assumption (b/a > 0).
+     * The result is a closed elementary expression (Plus of Logs and
+     * ArcTans with held Sqrt coefficients), not a held RootSum. */
     Expr* e = parse_expression("Integrate[1/(b + a x^4), x]");
     Expr* r = evaluate(e);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
-    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") == 0);
-    expr_free(e);
-    expr_free(r);
+    /* Must NOT be RootSum — that would mean the Sophie-Germain path
+     * silently regressed back to NaiveLogPart's fallback. */
+    ASSERT(strcmp(r->data.function.head->data.symbol, "RootSum") != 0);
+    /* Verify mathematical correctness at a concrete instantiation. */
+    Expr* check = parse_expression(
+        "N[(D[Integrate[1/(b + a x^4), x], x] - 1/(b + a x^4)) "
+        "/. {a -> 2, b -> 3, x -> 7/2}]");
+    Expr* check_r = evaluate(check);
+    ASSERT(check_r->type == EXPR_REAL);
+    ASSERT(fabs(check_r->data.real) < 1e-10);
+    expr_free(check); expr_free(check_r);
+    expr_free(e); expr_free(r);
 }
 
 /* ------------------------------------------------------------------ */
@@ -489,7 +499,7 @@ int main(void) {
     TEST(test_intrationallogpart);
     TEST(test_integrate_lrt_linear_q);
     TEST(test_integrate_lrt_naivelogpart_fallback);
-    TEST(test_integrate_parametric_falls_to_rootsum);
+    TEST(test_integrate_parametric_biquadratic_closes);
 
     TEST(test_logtoatan_constant_b);
     TEST(test_logtoatan_recursive);

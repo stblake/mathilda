@@ -209,3 +209,21 @@ literal `-1` coefficient — distributing arbitrary `c·Plus[…]` into
 the outer Plus would expand harmless products like `2 (a + b)`,
 diverging from MMA's behaviour. The `-1` case is the cancellation-
 enabling step; other coefficients stay as Times factors.
+
+## exact_poly_div NULL contract: callers must check (2026-05-11)
+
+`exact_poly_div` (`src/poly.c`) was tightened on 2026-05-10 to return
+NULL when its operands are not in a field (anything beyond `Q` /
+`Q[i]`, e.g. `Q[Sqrt[a]]`).  Several callers were not updated to
+check for NULL; one in `heuristic_factor_impl` (`src/facpoly.c`)
+fed the NULL straight into a recursive `heuristic_factor` call,
+which dereferenced `P->type` and crashed `Simplify` on inputs like
+`Simplify[(Sqrt[a] - Sqrt[a] x)/(2 Sqrt[a] + 2 Sqrt[a] x)]`.
+
+Lesson: when a helper's contract changes from "always returns a
+result" to "may return NULL on non-applicability", every existing
+call site needs an audit.  `grep -n exact_poly_div src/` should be a
+required step after that kind of soundness tightening.  Adding a
+defensive `if (!P) return NULL;` at the top of
+`heuristic_factor` is good belt-and-braces for any future callers
+that forget.

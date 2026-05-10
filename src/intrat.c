@@ -2095,18 +2095,19 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
     /* Decide the sign of disc.  Rational cases give a definitive
      * sign; symbolic cases are decided under the positive-symbol
      * assumption (matching IntegrateRational.m's `Refine[#>0]&` filter
-     * that gates the parametric path).  Anything we can't sign with
-     * confidence falls through to NULL so the caller can use the
-     * symbolic RootSum form. */
+     * that gates the parametric path).  When the sign cannot be
+     * determined (parametric quadratic with mixed-sign discriminant
+     * such as 1/(a x^2 + b x + c)), default to the negative-disc /
+     * ArcTan branch with a held Sqrt[-disc].  That formula is the
+     * principal antiderivative for both signs of the discriminant
+     * (ArcTan continues analytically through imaginary argument),
+     * matching Mathematica's parametric-quadratic output. */
     int disc_sign = intrat_sign_pos_assumption(disc);
-    if (disc_sign == 0) {
-        expr_free(disc); return NULL;
-    }
 
     Expr* two_a = eval_and_free(internal_times(
         (Expr*[]){expr_new_integer(2), expr_copy(a)}, 2));
 
-    if (disc_sign >= 0) {
+    if (disc_sign > 0) {
         /* Two real roots.  α± = (-b ± Sqrt[disc])/(2 a). */
         Expr* sqrt_d = expr_new_function(expr_new_symbol("Sqrt"),
             (Expr*[]){expr_copy(disc)}, 1);
@@ -2143,7 +2144,12 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
         (Expr*[]){expr_new_integer(-1), expr_copy(b)}, 2));
     Expr* u_root = eval_and_free(internal_divide(
         (Expr*[]){neg_b2, expr_copy(two_a)}, 2));
-    Expr* neg_disc_raw = eval_and_free(internal_times(
+    /* Distribute -1 across `disc` before passing to the Sqrt
+     * simplifier.  Without an Expand, picocas keeps `-1 * disc` as
+     * Times[-1, Plus[...]]; intrat_simp_pos_sqrt then walks the Times
+     * factors and pulls Sqrt[-1] = I out of the `-1`, ending in an
+     * imaginary v_root that collapses logtoreal_quadratic to 0. */
+    Expr* neg_disc_raw = expr_expand(internal_times(
         (Expr*[]){expr_new_integer(-1), disc}, 2));
     /* Try the positive-symbol Sqrt simplifier first (e.g.
      * Sqrt[4 a^2 b^2] -> 2 a b); fall back to the held Sqrt[..] when
@@ -2263,23 +2269,15 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
             bool c3z = (c3->type == EXPR_INTEGER && c3->data.integer == 0);
 
             if (c1z && c2z && c3z) {
-                /* ratio = c0/c4 must be a positive rational so Sqrt
-                 * comes out real.  We detect this by structural
-                 * inspection of the simplified ratio. */
+                /* ratio = c0/c4 must be positive so Sqrt comes out real.
+                 * Accept literal positive integers/rationals and any
+                 * expression provably positive under the positive-symbol
+                 * assumption (e.g. 1/(256 a^12) for the parametric
+                 * 1/(x^4 + a^4) family). */
                 Expr* ratio = eval_and_free(internal_divide(
                     (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2));
 
-                bool ratio_pos = false;
-                if (ratio->type == EXPR_INTEGER && ratio->data.integer > 0) {
-                    ratio_pos = true;
-                } else if (ratio->type == EXPR_FUNCTION
-                    && ratio->data.function.head->type == EXPR_SYMBOL
-                    && ratio->data.function.head->data.symbol == SYM_Rational
-                    && ratio->data.function.arg_count == 2
-                    && ratio->data.function.args[0]->type == EXPR_INTEGER
-                    && ratio->data.function.args[0]->data.integer > 0) {
-                    ratio_pos = true;
-                }
+                bool ratio_pos = (intrat_sign_pos_assumption(ratio) > 0);
 
                 if (ratio_pos) {
                     /* k^2 = Sqrt[ratio]; b_inner = Sqrt[2 k^2]
@@ -2336,6 +2334,90 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                     expr_free(ratio);
                     expr_free(c0); expr_free(c1); expr_free(c2);
                     expr_free(c3); expr_free(c4);
+                    goto fail;
+                }
+            } else if (c1z && c3z) {
+                /* Genuine biquadratic in t: c4 t^4 + c2 t^2 + c0
+                 * (c2 != 0).  Substitute u = t^2 to land in
+                 *   c4 u^2 + c2 u + c0 = 0
+                 * with roots u_± = (-c2 ± Sqrt[c2^2 - 4 c0 c4]) / (2 c4).
+                 * Q(t) factors as c4 (t^2 - u_+)(t^2 - u_-).
+                 *
+                 * Soundness gate: only fire when c2^2 - 4 c0 c4 is
+                 * provably positive under the positive-symbol
+                 * assumption.  Otherwise u_± would be a complex
+                 * conjugate pair, the (t^2 - u_±) factors would have
+                 * complex coefficients, and logtoreal_quadratic
+                 * (which expects a real-coefficient quadratic in t)
+                 * would silently miscompute -- typically collapsing
+                 * to 0 because the imaginary parts cancel between
+                 * the two sub-factor calls.  Catches the parametric
+                 * family 1/(a x^4 + b x^2 + c) under the
+                 * b^2 > 4 a c assumption (which is always true in
+                 * the positive-symbol model) while leaving cases
+                 * with negative or sign-unknown inner discriminant
+                 * to fall through to NaiveLogPart's held RootSum
+                 * (where they were before this branch existed). */
+                Expr* c2sq = expr_expand(internal_power(
+                    (Expr*[]){expr_copy(c2), expr_new_integer(2)}, 2));
+                Expr* fourc0c4 = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(4), expr_copy(c0), expr_copy(c4)}, 3));
+                Expr* neg_fourc0c4 = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(-1), fourc0c4}, 2));
+                Expr* discsq = eval_and_free(internal_plus(
+                    (Expr*[]){c2sq, neg_fourc0c4}, 2));
+                int inner_disc_sign = intrat_sign_pos_assumption(discsq);
+                if (inner_disc_sign <= 0) {
+                    /* Inner disc not provably positive — bail to
+                     * NaiveLogPart rather than risk silent
+                     * miscomputation via complex sub-factors. */
+                    expr_free(discsq);
+                    expr_free(c0); expr_free(c1); expr_free(c2);
+                    expr_free(c3); expr_free(c4);
+                    goto fail;
+                }
+                Expr* sqrt_disc = intrat_simp_pos_sqrt(discsq);
+                expr_free(discsq);
+
+                Expr* neg_c2 = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(-1), expr_copy(c2)}, 2));
+                Expr* two_c4 = eval_and_free(internal_times(
+                    (Expr*[]){expr_new_integer(2), expr_copy(c4)}, 2));
+
+                Expr* num_plus = eval_and_free(internal_plus(
+                    (Expr*[]){expr_copy(neg_c2), expr_copy(sqrt_disc)}, 2));
+                Expr* num_minus = eval_and_free(internal_subtract(
+                    (Expr*[]){neg_c2, sqrt_disc}, 2));
+                Expr* u_plus = eval_and_free(internal_divide(
+                    (Expr*[]){num_plus, expr_copy(two_c4)}, 2));
+                Expr* u_minus = eval_and_free(internal_divide(
+                    (Expr*[]){num_minus, two_c4}, 2));
+
+                Expr* neg_u_plus = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(-1), u_plus}, 2));
+                Expr* neg_u_minus = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(-1), u_minus}, 2));
+
+                Expr* part1 = logtoreal_quadratic(
+                    expr_new_integer(1),
+                    expr_new_integer(0),
+                    neg_u_plus,
+                    s, x, t);
+                Expr* part2 = logtoreal_quadratic(
+                    expr_new_integer(1),
+                    expr_new_integer(0),
+                    neg_u_minus,
+                    s, x, t);
+
+                expr_free(c0); expr_free(c1); expr_free(c2);
+                expr_free(c3); expr_free(c4);
+
+                if (part1 && part2) {
+                    contribution = eval_and_free(internal_plus(
+                        (Expr*[]){part1, part2}, 2));
+                } else {
+                    if (part1) expr_free(part1);
+                    if (part2) expr_free(part2);
                     goto fail;
                 }
             } else {
