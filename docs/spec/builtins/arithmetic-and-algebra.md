@@ -308,6 +308,32 @@ In[3]:= Factorial[0]
 Out[3]= 1
 ```
 
+## FactorialPower
+Falling factorial. `FactorialPower[n, k]` = $n (n-1) (n-2) \cdots (n - k + 1)$.
+- `FactorialPower[n, k]`
+
+**Features**:
+- `Protected`, `Listable`, `NumericFunction`.
+- For non-negative integer $n$ and non-negative integer $k$: exact GMP product.
+- For symbolic $n$ with concrete $k \le 32$: expands to an explicit product
+  `Times[n, n - 1, ..., n - k + 1]` so `Expand` and `D` can act on it.
+- Equivalent to $n! / (n - k)!$ when both arguments are non-negative integers.
+- Used as the symbolic-order derivative of a power: $D[x^n, \{x, k\}] = \mathrm{FactorialPower}[n, k]\, x^{n-k}$.
+
+```mathematica
+In[1]:= FactorialPower[5, 3]
+Out[1]= 60
+
+In[2]:= FactorialPower[n, 3]
+Out[2]= n (-2 + n) (-1 + n)
+
+In[3]:= FactorialPower[n, 0]
+Out[3]= 1
+
+In[4]:= D[x^n, {x, k}]
+Out[4]= x^(-k + n) FactorialPower[n, k]
+```
+
 ## Binomial
 Gives the binomial coefficient $\binom{n}{m}$.
 - `Binomial[n, m]`

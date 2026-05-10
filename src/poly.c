@@ -403,11 +403,30 @@ static int64_t get_k(BPList* term_bp, BPList* target_bp) {
                     if (ratio <= 0) return 0;
                     if (k_val == -1) k_val = ratio;
                     else if (k_val != ratio) return 0;
+                } else if (expr_eq(t_exp, trm_exp)) {
+                    if (k_val == -1) k_val = 1;
+                    else if (k_val != 1) return 0;
                 } else {
-                    if (expr_eq(t_exp, trm_exp)) {
-                        if (k_val == -1) k_val = 1;
-                        else if (k_val != 1) return 0;
-                    } else return 0;
+                    /* Symbolic-exponent ratio test (general algorithm):
+                     * compute Cancel[trm_exp / t_exp] and accept the term
+                     * iff the ratio is a positive integer >= 2. Handles
+                     * Collect[a x^(2c) + b x^(2c), x^c] (ratio 2) and
+                     * Collect[a x^(c+1) + b x^(2c+2), x^(c+1)] (ratio 2)
+                     * uniformly without touching the integer fast path. */
+                    Expr* div_args[2];
+                    div_args[0] = expr_copy(trm_exp);
+                    Expr* inv_args[2] = { expr_copy(t_exp), expr_new_integer(-1) };
+                    div_args[1] = expr_new_function(expr_new_symbol("Power"), inv_args, 2);
+                    Expr* div = expr_new_function(expr_new_symbol("Times"), div_args, 2);
+                    Expr* canc_args[1] = { div };
+                    Expr* ratio = internal_cancel(canc_args, 1);
+                    bool ok = (ratio && ratio->type == EXPR_INTEGER &&
+                               ratio->data.integer >= 2);
+                    int64_t r_val = ok ? ratio->data.integer : 0;
+                    if (ratio) expr_free(ratio);
+                    if (!ok) return 0;
+                    if (k_val == -1) k_val = r_val;
+                    else if (k_val != r_val) return 0;
                 }
                 break;
             }
@@ -2632,9 +2651,73 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
                     break;
                 }
             }
+            /* Power-of-power fallback: Collect target is `Power[B, e_t]`
+             * (an atomic Power decomposition because e_t is symbolic /
+             * Times) and a term factor is some other power of the same
+             * primitive base B. Compute k such that the term factor
+             * equals (target)^k by exponent ratio: e_term_eff / e_t.
+             *
+             * Examples handled here that the expr_eq match cannot:
+             *   target x^c, term factor x^(2c)              -> k = 2
+             *   target Power[x, c], term factor Power[x, 3c] -> k = 3
+             *   target x^(c+1), term factor x^(2c+2)         -> k = 2
+             *
+             * Only matches positive integer ratios (matches the integer-
+             * integer sb_exp branch's semantics). */
+            int pop_match_k_int = 0;
+            if (matched_idx == -1 &&
+                sb_base->type == EXPR_FUNCTION &&
+                sb_base->data.function.head->type == EXPR_SYMBOL &&
+                sb_base->data.function.head->data.symbol == SYM_Power &&
+                sb_base->data.function.arg_count == 2) {
+                Expr* B   = sb_base->data.function.args[0];
+                Expr* e_t = sb_base->data.function.args[1];
+                for (size_t j = 0; j < term_bp.count; j++) {
+                    Expr* tb = term_bp.data[j].base;
+                    Expr* tx = term_bp.data[j].exp;
+                    /* Effective B-exponent contributed by this entry. */
+                    Expr* e_term_eff = NULL;
+                    if (expr_eq(B, tb)) {
+                        e_term_eff = expr_copy(tx);
+                    } else if (tb->type == EXPR_FUNCTION &&
+                               tb->data.function.head->type == EXPR_SYMBOL &&
+                               tb->data.function.head->data.symbol == SYM_Power &&
+                               tb->data.function.arg_count == 2 &&
+                               expr_eq(B, tb->data.function.args[0])) {
+                        e_term_eff = internal_times((Expr*[]){
+                            expr_copy(tb->data.function.args[1]),
+                            expr_copy(tx) }, 2);
+                    }
+                    if (!e_term_eff) continue;
+
+                    Expr* inv_e_t = internal_power((Expr*[]){
+                        expr_copy(e_t), expr_new_integer(-1) }, 2);
+                    Expr* k_cand = internal_times((Expr*[]){
+                        e_term_eff, inv_e_t }, 2);
+                    if (k_cand->type == EXPR_INTEGER && k_cand->data.integer >= 1) {
+                        matched_idx = (int)j;
+                        pop_match_k_int = (int)k_cand->data.integer;
+                    }
+                    expr_free(k_cand);
+                    if (matched_idx != -1) break;
+                }
+            }
             if (matched_idx == -1) {
                 k_expr = expr_new_integer(0);
                 coeff = rebuild_from_bp(&term_bp);
+            } else if (pop_match_k_int > 0) {
+                /* Power-of-power match: k_expr is the positive integer k.
+                 * Coefficient drops the matched entry (the only B-bearing
+                 * entry; we matched against a single term factor). */
+                k_expr = expr_new_integer(pop_match_k_int);
+                BPList rest;
+                bp_init(&rest);
+                for (size_t j = 0; j < term_bp.count; j++) {
+                    if ((int)j == matched_idx) continue;
+                    bp_add(&rest, term_bp.data[j].base, term_bp.data[j].exp);
+                }
+                coeff = rebuild_from_bp(&rest);
+                bp_free(&rest);
             } else {
                 Expr* term_exp = term_bp.data[matched_idx].exp;
                 /* k = term_exp / var_exp. */
@@ -2755,7 +2838,13 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
                     /* var = base^var_exp; with k=1 this is just var. */
                     var_pow = expr_copy(var);
                 } else {
-                    var_pow = internal_power((Expr*[]){expr_copy(sb_base), expr_copy(groups[i].k_expr)}, 2);
+                    /* k_expr is the multiplicity of `var` in the term:
+                     * term contains var^k_expr. Build Power[var, k_expr]
+                     * (NOT Power[sb_base, k_expr]) so the exponent on
+                     * the actual collect target is faithful. The
+                     * evaluator then folds Power[Power[x, e], k] to
+                     * Power[x, e*k] automatically. */
+                    var_pow = internal_power((Expr*[]){expr_copy(var), expr_copy(groups[i].k_expr)}, 2);
                 }
             }
             term = internal_times((Expr*[]){collected_coeff, var_pow}, 2);

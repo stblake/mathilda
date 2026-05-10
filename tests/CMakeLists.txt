@@ -421,8 +421,20 @@ target_include_directories(series_twoterm_tests PRIVATE ../src)
 add_executable(deriv_tests test_deriv.c ${COMMON_SRC})
 target_include_directories(deriv_tests PRIVATE ../src)
 
+add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c ${COMMON_SRC})
+target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)
+
 add_executable(limit_tests test_limit.c ${COMMON_SRC})
 target_include_directories(limit_tests PRIVATE ../src)
+
+add_executable(limit_assumptions_tests test_limit_assumptions.c ${COMMON_SRC})
+target_include_directories(limit_assumptions_tests PRIVATE ../src)
+
+add_executable(collect_corpus_tests test_collect_corpus.c ${COMMON_SRC})
+target_include_directories(collect_corpus_tests PRIVATE ../src)
+
+add_executable(power_corpus_tests test_power_corpus.c ${COMMON_SRC})
+target_include_directories(power_corpus_tests PRIVATE ../src)
 
 add_executable(radical_fusion_tests test_radical_fusion.c ${COMMON_SRC})
 target_include_directories(radical_fusion_tests PRIVATE ../src)

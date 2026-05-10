@@ -13,6 +13,31 @@
 #include <stdint.h>
 #include <gmp.h>
 
+/* Strict-positive constant predicate. Returns true for positive integer/
+ * rational/real, Pi, E, and Power[B, integer] where B is one of those
+ * (covers Sqrt[2], Pi^2, etc. as factors). Used by the rational-exponent
+ * Times-base distribution to gate when the base may be cleanly split
+ * into "imaginary part" and "positive part" pieces. */
+static bool is_known_positive_pwr(Expr* e) {
+    if (e->type == EXPR_INTEGER) return e->data.integer > 0;
+    if (e->type == EXPR_BIGINT)  return mpz_sgn(e->data.bigint) > 0;
+    if (e->type == EXPR_REAL)    return e->data.real > 0.0;
+    int64_t n, d;
+    if (is_rational(e, &n, &d)) return n > 0;
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol;
+        if (s == SYM_E)  return true;
+        if (s == SYM_Pi) return true;
+    }
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        return is_known_positive_pwr(e->data.function.args[0]);
+    }
+    return false;
+}
+
 static int64_t ipow(int64_t base, int64_t exp, bool* overflow) {
     if (exp < 0) return 0;
     if (exp == 0) return 1;
@@ -340,6 +365,22 @@ Expr* builtin_power(Expr* res) {
         }
     }
 
+    /* 0^0 is indeterminate. Check before the generic Power[_,0] -> 1
+     * identity below so the special case wins. Catches integer 0, real 0.0,
+     * and Power[0, 0.0] / Power[0.0, 0] mixed forms. */
+    {
+        bool b_zero_lit = (base->type == EXPR_INTEGER && base->data.integer == 0)
+                       || (base->type == EXPR_REAL    && base->data.real == 0.0);
+        bool e_zero_lit = (exp->type == EXPR_INTEGER && exp->data.integer == 0)
+                       || (exp->type == EXPR_REAL    && exp->data.real == 0.0);
+        if (b_zero_lit && e_zero_lit) {
+            if (!arith_warnings_muted())
+                fprintf(stderr,
+                    "Power::indet: Indeterminate expression 0^0 encountered.\n");
+            return expr_new_symbol("Indeterminate");
+        }
+    }
+
     if (exp->type == EXPR_INTEGER && exp->data.integer == 0) return expr_new_integer(1);
     if (exp->type == EXPR_INTEGER && exp->data.integer == 1) return expr_copy(base);
     if (base->type == EXPR_INTEGER && base->data.integer == 1) return expr_new_integer(1);
@@ -585,6 +626,148 @@ Expr* builtin_power(Expr* res) {
         return result;
     }
 
+    /* Rational-exponent Times-base distribution for the pure-imaginary
+     * case: Power[Times[..., Complex[0, k_i], ..., positive_factors],
+     * p/q] -> Power[-1, k_sum * p / (2q)] * Power[positive_part, p/q].
+     *
+     * Triggers only when the base contains at least one factor of the
+     * form Complex[0, k] (a pure imaginary) and EVERY other factor is
+     * known strictly positive (positive integer/rational, Pi, E). Without
+     * the positivity guard we would silently cross a branch cut for
+     * Sqrt[I x] (x of unknown sign).
+     *
+     * Examples:
+     *   (I Pi)^(1/2)    -> (-1)^(1/4) Sqrt[Pi]
+     *   (-I Pi)^(1/2)   -> (-1)^(-1/4) Sqrt[Pi]   == (-1)^(7/4) Sqrt[Pi]
+     *   Sqrt[I 2 Pi]    -> (-1)^(1/4) Sqrt[2 Pi]
+     *   Sqrt[I x]       -> unevaluated (x sign unknown)
+     */
+    if (base->type == EXPR_FUNCTION &&
+        base->data.function.head->type == EXPR_SYMBOL &&
+        base->data.function.head->data.symbol == SYM_Times) {
+        int64_t pp_d, qq_d;
+        if (is_rational(exp, &pp_d, &qq_d) && qq_d > 1) {
+            size_t bc = base->data.function.arg_count;
+            int64_t imag_count = 0;       /* signed count of I units */
+            bool ok = true;
+            bool saw_imag = false;
+            Expr** pos_factors = malloc(sizeof(Expr*) * bc);
+            size_t pos_count = 0;
+            mpz_t coef_num, coef_den;
+            mpz_init_set_ui(coef_num, 1);
+            mpz_init_set_ui(coef_den, 1);
+            for (size_t i = 0; i < bc; i++) {
+                Expr* f = base->data.function.args[i];
+                Expr *re = NULL, *im = NULL;
+                if (is_complex(f, &re, &im)) {
+                    /* Pure imaginary requires re == 0. */
+                    bool re_zero = (re->type == EXPR_INTEGER && re->data.integer == 0)
+                                || (re->type == EXPR_REAL    && re->data.real == 0.0);
+                    if (!re_zero) { ok = false; break; }
+                    int64_t kn, kd;
+                    if (im->type == EXPR_INTEGER) { kn = im->data.integer; kd = 1; }
+                    else if (is_rational(im, &kn, &kd)) {}
+                    else { ok = false; break; }
+                    if (kn == 0) { ok = false; break; }
+                    if (kn > 0) imag_count += 1;
+                    else        { imag_count -= 1; kn = -kn; }
+                    /* accumulate |k| into coefficient */
+                    mpz_t tn, td;
+                    mpz_init_set_si(tn, kn);
+                    mpz_init_set_si(td, kd > 0 ? kd : -kd);
+                    mpz_mul(coef_num, coef_num, tn);
+                    mpz_mul(coef_den, coef_den, td);
+                    mpz_clear(tn); mpz_clear(td);
+                    saw_imag = true;
+                } else {
+                    bool pos = is_known_positive_pwr(f);
+                    if (!pos) { ok = false; break; }
+                    pos_factors[pos_count++] = expr_copy(f);
+                }
+            }
+            if (ok && saw_imag) {
+                /* coef_part = (coef_num / coef_den)^(p/q) */
+                Expr* coef_part = NULL;
+                if (mpz_cmp_ui(coef_num, 1) != 0 || mpz_cmp_ui(coef_den, 1) != 0) {
+                    Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(coef_num));
+                    Expr* coef_base;
+                    if (mpz_cmp_ui(coef_den, 1) == 0) {
+                        coef_base = num_e;
+                    } else {
+                        Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(coef_den));
+                        coef_base = expr_new_function(expr_new_symbol("Rational"),
+                                                     (Expr*[]){num_e, den_e}, 2);
+                    }
+                    coef_part = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ coef_base, expr_copy(exp) }, 2);
+                }
+                /* pos_part = Power[Times[pos_factors...], p/q]. The
+                 * recursive Power evaluator will further canonicalise
+                 * (Pi^(1/2) -> Sqrt[Pi], etc.). */
+                Expr* pos_part = NULL;
+                if (pos_count == 1) {
+                    pos_part = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ pos_factors[0], expr_copy(exp) }, 2);
+                } else if (pos_count > 1) {
+                    Expr* pos_times = expr_new_function(expr_new_symbol("Times"),
+                                                        pos_factors, pos_count);
+                    pos_part = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ pos_times, expr_copy(exp) }, 2);
+                } else {
+                    free(pos_factors);
+                    pos_factors = NULL;
+                }
+                /* sign_part = Power[-1, imag_count * p / (2 * q)]. The
+                 * exponent is built as Rational[imag_count*pp_d, 2*qq_d]
+                 * and reduced/normalised by make_rational. */
+                Expr* sign_exp;
+                {
+                    /* careful with int64 overflow: imag_count * pp_d. */
+                    __int128_t top = (__int128_t)imag_count * (__int128_t)pp_d;
+                    __int128_t bot = (__int128_t)2 * (__int128_t)qq_d;
+                    if (top >= INT64_MIN && top <= INT64_MAX &&
+                        bot >= INT64_MIN && bot <= INT64_MAX) {
+                        sign_exp = make_rational((int64_t)top, (int64_t)bot);
+                    } else {
+                        /* overflow guard: bail */
+                        if (pos_part) expr_free(pos_part);
+                        if (coef_part) expr_free(coef_part);
+                        if (pos_factors) {
+                            for (size_t i = 0; i < pos_count; i++) expr_free(pos_factors[i]);
+                            free(pos_factors);
+                        }
+                        mpz_clear(coef_num); mpz_clear(coef_den);
+                        goto rat_imag_fallthrough;
+                    }
+                }
+                Expr* sign_part = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_integer(-1), sign_exp }, 2);
+                /* assemble Times[sign_part, coef_part?, pos_part?] */
+                Expr* parts[3];
+                size_t pcount = 0;
+                parts[pcount++] = sign_part;
+                if (coef_part) parts[pcount++] = coef_part;
+                if (pos_part)  parts[pcount++] = pos_part;
+                mpz_clear(coef_num); mpz_clear(coef_den);
+                /* free pos_factors array (Expr* contents now owned by
+                 * pos_times -> pos_part). */
+                if (pos_factors) free(pos_factors);
+                if (pcount == 1) return parts[0];
+                Expr** result_args = malloc(sizeof(Expr*) * pcount);
+                for (size_t i = 0; i < pcount; i++) result_args[i] = parts[i];
+                Expr* result = expr_new_function(expr_new_symbol("Times"),
+                                                 result_args, pcount);
+                free(result_args);
+                return eval_and_free(result);
+            }
+            /* clean up the pos_factors copies if we bailed */
+            for (size_t i = 0; i < pos_count; i++) expr_free(pos_factors[i]);
+            free(pos_factors);
+            mpz_clear(coef_num); mpz_clear(coef_den);
+        }
+    }
+rat_imag_fallthrough: ;
+
     if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol == SYM_Power) {
         if (base->data.function.arg_count == 2) {
             Expr* inner_base = base->data.function.args[0];
@@ -714,49 +897,61 @@ Expr* builtin_power(Expr* res) {
 
         int64_t a_int = 0;
         int64_t b_rem = p;
-        if (p >= q) {
-            a_int = p / q;          /* p, q > 0 here */
-            b_rem = p - a_int * q;  /* 0 <= b_rem < q */
+        /* Integer-part extraction: write p = a_int*q + b_rem with |b_rem|<q
+         * and b_rem same-sign as p. C99 `/` truncates toward zero, which
+         * gives exactly the canonical Mathematica decomposition for both
+         * signs (e.g. -5/3 -> a_int=-1, b_rem=-2, so 2^(-5/3) = 2^-1 *
+         * 2^(-2/3)). Skip when |p|<q (no integer part to extract; the
+         * perfect-q-th-power reduction below still runs). */
+        if (p >= q || p <= -q) {
+            a_int = p / q;
+            b_rem = p - a_int * q;
         }
 
         int64_t m, r;
         factor_out_kth_power(abs_n, q, &m, &r);
 
         if (a_int != 0 || m > 1) {
-            /* Build coeff = abs_n^a_int * m^b_rem (signed b_rem) in GMP. */
-            mpz_t na_z, mb_z;
-            mpz_init_set_si(na_z, abs_n);
-            if (a_int > 0) mpz_pow_ui(na_z, na_z, (unsigned long)a_int);
-            else mpz_set_ui(na_z, 1);
-            mpz_init_set_si(mb_z, m);
-            unsigned long abs_b = (unsigned long)(b_rem >= 0 ? b_rem : -b_rem);
-            if (abs_b > 0) mpz_pow_ui(mb_z, mb_z, abs_b);
-            else mpz_set_ui(mb_z, 1);
-
-            Expr* coeff = NULL;
-            if (b_rem >= 0) {
-                mpz_mul(na_z, na_z, mb_z);
-                coeff = expr_bigint_normalize(expr_new_bigint_from_mpz(na_z));
-            } else {
-                /* coeff = abs_n^a_int / m^|b_rem|, reduced. */
-                mpz_t g_z;
-                mpz_init(g_z);
-                mpz_gcd(g_z, na_z, mb_z);
-                if (mpz_cmp_ui(g_z, 1) > 0) {
-                    mpz_divexact(na_z, na_z, g_z);
-                    mpz_divexact(mb_z, mb_z, g_z);
-                }
-                mpz_clear(g_z);
-                if (mpz_cmp_ui(mb_z, 1) == 0) {
-                    coeff = expr_bigint_normalize(expr_new_bigint_from_mpz(na_z));
-                } else {
-                    Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(na_z));
-                    Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(mb_z));
-                    coeff = expr_new_function(expr_new_symbol("Rational"),
-                                              (Expr*[]){num_e, den_e}, 2);
-                }
+            /* Build coeff = abs_n^a_int * m^b_rem in GMP, distributing each
+             * factor to either numerator or denominator by its sign. Both
+             * a_int and b_rem may be negative; the GCD reduction below
+             * normalises into a canonical Rational[num, den] (or plain
+             * integer when den==1). */
+            mpz_t num_z, den_z;
+            mpz_init_set_ui(num_z, 1);
+            mpz_init_set_ui(den_z, 1);
+            if (a_int != 0) {
+                mpz_t t; mpz_init_set_si(t, abs_n);
+                mpz_pow_ui(t, t, (unsigned long)(a_int > 0 ? a_int : -a_int));
+                if (a_int > 0) mpz_mul(num_z, num_z, t);
+                else            mpz_mul(den_z, den_z, t);
+                mpz_clear(t);
             }
-            mpz_clear(na_z); mpz_clear(mb_z);
+            if (b_rem != 0 && m > 1) {
+                mpz_t t; mpz_init_set_si(t, m);
+                mpz_pow_ui(t, t, (unsigned long)(b_rem > 0 ? b_rem : -b_rem));
+                if (b_rem > 0) mpz_mul(num_z, num_z, t);
+                else            mpz_mul(den_z, den_z, t);
+                mpz_clear(t);
+            }
+            mpz_t g_z; mpz_init(g_z);
+            mpz_gcd(g_z, num_z, den_z);
+            if (mpz_cmp_ui(g_z, 1) > 0) {
+                mpz_divexact(num_z, num_z, g_z);
+                mpz_divexact(den_z, den_z, g_z);
+            }
+            mpz_clear(g_z);
+
+            Expr* coeff;
+            if (mpz_cmp_ui(den_z, 1) == 0) {
+                coeff = expr_bigint_normalize(expr_new_bigint_from_mpz(num_z));
+            } else {
+                Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(num_z));
+                Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(den_z));
+                coeff = expr_new_function(expr_new_symbol("Rational"),
+                                          (Expr*[]){num_e, den_e}, 2);
+            }
+            mpz_clear(num_z); mpz_clear(den_z);
 
             /* For negative n, integer-part a contributes (-1)^a to the
              * coefficient. Even a -> +; odd a -> negate. */

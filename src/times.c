@@ -465,9 +465,22 @@ Expr* builtin_times(Expr* res) {
                     mpz_t b_z;
                     mpz_init_set_si(b_z, b);
 
-                    /* Pull factors of b from den. */
+                    /* Pull factors of b from den into the exponent, but
+                     * stop when the resulting exponent magnitude would
+                     * exceed 1: pulling further would push |new_en/ed| > 1
+                     * and Power's integer-part extraction would re-emit
+                     * the factor (oscillation). The cap is
+                     *    k_d_max = ceil(en/ed)  for en > 0
+                     *            = 0            for en <= 0
+                     * which keeps new_en > -ed (i.e., new exponent > -1).
+                     * Examples:
+                     *    Sqrt[2]/4 (en=1, ed=2):  k_d_max=1 -> 2^(-1/2)/2
+                     *    1/4 * 2^(2/3) (en=2,ed=3): k_d_max=1 -> 2^(-1/3)/2
+                     *    Power[2, -2/3] * 1 (en=-2, ed=3): k_d_max=0 (skip)
+                     */
+                    int64_t k_d_max = (en > 0) ? ((en + ed - 1) / ed) : 0;
                     int64_t k_d = 0;
-                    while (mpz_divisible_p(den_z, b_z)) {
+                    while (k_d < k_d_max && mpz_divisible_p(den_z, b_z)) {
                         mpz_divexact(den_z, den_z, b_z);
                         k_d++;
                     }

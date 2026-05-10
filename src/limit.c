@@ -2399,6 +2399,175 @@ static bool split_rule(Expr* rule, Expr** out_var, Expr** out_point) {
     return true;
 }
 
+/* Extract the `Assumptions -> ...` option (if any). Returns the raw
+ * option value (borrowed from opts) or NULL when not supplied. */
+static Expr* find_assumptions_opt(Expr** opts, size_t nopts) {
+    for (size_t i = 0; i < nopts; i++) {
+        Expr* o = opts[i];
+        if (has_head(o, "Rule") && o->data.function.arg_count == 2 &&
+            is_sym(o->data.function.args[0], "Assumptions")) {
+            return o->data.function.args[1];
+        }
+        if (has_head(o, "RuleDelayed") && o->data.function.arg_count == 2 &&
+            is_sym(o->data.function.args[0], "Assumptions")) {
+            return o->data.function.args[1];
+        }
+    }
+    return NULL;
+}
+
+/* Parse an Abs-comparison assumption clause:
+ *   Less[Abs[expr], c],     LessEqual[Abs[expr], c]
+ *   Greater[Abs[expr], c],  GreaterEqual[Abs[expr], c]
+ *   Equal[Abs[expr], c]
+ * (and the swapped variants where the constant appears on the left)
+ * On success: *out_expr -> NON-owned pointer to the Abs argument,
+ *             *out_op   -> -1 (<), -2 (<=), +1 (>), +2 (>=), 0 (==)
+ *             *out_const -> NON-owned pointer to the constant.
+ * Returns false otherwise. The constant is required to be numeric so a
+ * caller can compare it against 1 (the threshold separating contraction
+ * from blow-up for x^n at infinity). */
+static bool assumption_abs_compare(Expr* a, Expr** out_expr, int* out_op,
+                                   Expr** out_const) {
+    if (!a || a->type != EXPR_FUNCTION || a->data.function.arg_count != 2) return false;
+    const char* head_name = NULL;
+    if (a->data.function.head->type == EXPR_SYMBOL) {
+        head_name = a->data.function.head->data.symbol;
+    }
+    if (!head_name) return false;
+
+    int op;
+    bool can_swap = false;
+    if (!strcmp(head_name, "Less"))           { op = -1; can_swap = true; }
+    else if (!strcmp(head_name, "LessEqual")) { op = -2; can_swap = true; }
+    else if (!strcmp(head_name, "Greater"))   { op = +1; can_swap = true; }
+    else if (!strcmp(head_name, "GreaterEqual")) { op = +2; can_swap = true; }
+    else if (!strcmp(head_name, "Equal"))     { op = 0;  can_swap = true; }
+    else return false;
+
+    Expr* lhs = a->data.function.args[0];
+    Expr* rhs = a->data.function.args[1];
+
+    /* Try lhs = Abs[expr], rhs = constant. */
+    if (has_head(lhs, "Abs") && lhs->data.function.arg_count == 1 &&
+        expr_is_numeric_like(rhs)) {
+        *out_expr  = lhs->data.function.args[0];
+        *out_op    = op;
+        *out_const = rhs;
+        return true;
+    }
+    /* Try the swapped form: lhs = const, rhs = Abs[expr]. The op flips
+     * sense (Less <-> Greater, LessEqual <-> GreaterEqual). */
+    if (can_swap && has_head(rhs, "Abs") && rhs->data.function.arg_count == 1 &&
+        expr_is_numeric_like(lhs)) {
+        *out_expr  = rhs->data.function.args[0];
+        if (op == -1) *out_op = +1;
+        else if (op == -2) *out_op = +2;
+        else if (op == +1) *out_op = -1;
+        else if (op == +2) *out_op = -2;
+        else *out_op = 0;            /* Equal stays Equal */
+        *out_const = lhs;
+        return true;
+    }
+    return false;
+}
+
+/* Compare a numeric `c` against integer 1. Returns -1 (c < 1), 0 (c == 1),
+ * +1 (c > 1). Used to dispatch Limit[B^var, var->Infinity] under an
+ * assumption Abs[B] R c. */
+static int compare_numeric_to_one(Expr* c) {
+    if (c->type == EXPR_INTEGER) {
+        if (c->data.integer < 1) return -1;
+        if (c->data.integer > 1) return +1;
+        return 0;
+    }
+    if (c->type == EXPR_BIGINT) {
+        int s = mpz_cmp_ui(c->data.bigint, 1);
+        return (s < 0) ? -1 : (s > 0) ? +1 : 0;
+    }
+    if (c->type == EXPR_REAL) {
+        if (c->data.real < 1.0) return -1;
+        if (c->data.real > 1.0) return +1;
+        return 0;
+    }
+    int64_t n, d;
+    if (is_rational(c, &n, &d)) {
+        /* sign(n - d) when d > 0 (canonical Rational guarantees d > 0). */
+        if (n < d) return -1;
+        if (n > d) return +1;
+        return 0;
+    }
+    return 0;            /* unknown */
+}
+
+/* If f matches Power[base, lim_var] with base free of lim_var, set
+ * *out_base and return true. Otherwise return false. */
+static bool match_power_in_var(Expr* f, Expr* lim_var, Expr** out_base) {
+    if (f && f->type == EXPR_FUNCTION &&
+        is_sym(f->data.function.head, "Power") &&
+        f->data.function.arg_count == 2 &&
+        expr_eq(f->data.function.args[1], lim_var) &&
+        free_of(f->data.function.args[0], lim_var)) {
+        *out_base = f->data.function.args[0];
+        return true;
+    }
+    return false;
+}
+
+/* Dispatch Limit[Power[B, var], var -> ±Infinity] under an assumption
+ * that pins Abs[B] against 1. Returns a fresh result Expr* on a clean
+ * dispatch, or NULL when the assumption does not apply (caller falls
+ * back to the standard Limit machinery).
+ *
+ * Decision table (var -> +Infinity):
+ *   Abs[B] < 1    -> 0
+ *   Abs[B] <= 1   -> 0  if strict-comparison is sound; here we conservatively
+ *                       use Indeterminate at the |B| == 1 boundary, so we
+ *                       only reduce strict <.
+ *   Abs[B] > 1    -> ComplexInfinity
+ *   Abs[B] >= 1   -> ditto: only reduce strict >.
+ *   Abs[B] == 1   -> Indeterminate
+ *
+ * For var -> -Infinity, swap (< and > inversion).
+ */
+static Expr* limit_power_under_abs_assumption(Expr* f, Expr* lim_var,
+                                              Expr* point, Expr* assumption) {
+    Expr* base = NULL;
+    if (!match_power_in_var(f, lim_var, &base)) return NULL;
+
+    Expr* a_expr = NULL;
+    int op = 0;
+    Expr* a_const = NULL;
+    if (!assumption_abs_compare(assumption, &a_expr, &op, &a_const)) return NULL;
+
+    /* The assumption must constrain the limit's base. */
+    if (!expr_eq(a_expr, base)) return NULL;
+
+    int c_vs_one = compare_numeric_to_one(a_const);
+
+    bool to_pos_inf = is_infinity_sym(point);
+    bool to_neg_inf = is_neg_infinity(point);
+    if (!to_pos_inf && !to_neg_inf) return NULL;
+
+    /* Translate (op, c vs 1) into a verdict on |B| relative to 1 under
+     * the assumption:
+     *   verdict = -1 (|B| < 1),  +1 (|B| > 1),  0 (|B| == 1),
+     *             else 99 (no determinate verdict from this assumption). */
+    int verdict = 99;
+    if (op == 0 && c_vs_one == 0) verdict = 0;     /* Abs[B] == 1 */
+    else if (op == -1 && c_vs_one <= 0) verdict = -1;   /* Abs[B] < 1 */
+    else if (op == -2 && c_vs_one < 0)  verdict = -1;   /* Abs[B] <= c < 1 */
+    else if (op == +1 && c_vs_one >= 0) verdict = +1;   /* Abs[B] > c >= 1 */
+    else if (op == +2 && c_vs_one > 0)  verdict = +1;   /* Abs[B] >= c > 1 */
+    if (verdict == 99) return NULL;
+
+    if (to_neg_inf) verdict = -verdict;            /* invert for x^(-Infinity) */
+
+    if (verdict == -1) return mk_int(0);
+    if (verdict == +1) return mk_sym("ComplexInfinity");
+    return mk_sym("Indeterminate");                /* boundary |B|==1 */
+}
+
 /* Extract the `Direction -> ...` option (if any) from a list of option
  * arguments. Returns the raw option value (borrowed from opts) or NULL
  * when no Direction option was supplied. */
@@ -2881,6 +3050,21 @@ static Expr* builtin_limit_impl(Expr* res) {
     if (dir_opt && !parse_direction(dir_opt, &dir)) {
         /* Unknown direction -- keep unevaluated. */
         return NULL;
+    }
+
+    /* Targeted Assumptions support: Limit[Power[B, var], var -> ±Infinity,
+     * Assumptions -> Abs[B] R c]. The standard Limit machinery doesn't
+     * carry assumption context, so we dispatch this specific (but useful)
+     * shape here before the general pipeline. Falls through to the
+     * standard machinery on no-match. */
+    Expr* assumptions_opt = find_assumptions_opt(opts, nopts);
+    if (assumptions_opt && has_head(spec, "Rule") &&
+        spec->data.function.arg_count == 2) {
+        Expr* lvar  = spec->data.function.args[0];
+        Expr* lpoint = spec->data.function.args[1];
+        Expr* dispatched = limit_power_under_abs_assumption(f, lvar, lpoint,
+                                                            assumptions_opt);
+        if (dispatched) return dispatched;
     }
 
     /* --- Form A: Limit[f, x -> a]

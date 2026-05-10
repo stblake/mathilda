@@ -295,6 +295,7 @@ void core_init(void) {
     symtab_add_builtin("PowerMod", builtin_powermod);
     symtab_add_builtin("Factorial", builtin_factorial);
     symtab_add_builtin("Factorial2", builtin_factorial2);
+    symtab_add_builtin("FactorialPower", builtin_factorialpower);
     symtab_add_builtin("Binomial", builtin_binomial);
     symtab_add_builtin("Print", builtin_print);
     symtab_add_builtin("FullForm", builtin_fullform);
@@ -322,6 +323,9 @@ void core_init(void) {
     symtab_get_def("PowerMod")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_get_def("Factorial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Factorial2")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
+    symtab_get_def("FactorialPower")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
+    symtab_set_docstring("FactorialPower",
+        "FactorialPower[n, k]\n\tThe falling factorial n (n - 1) (n - 2) ... (n - k + 1).\n\tFor non-negative integer k, expands to a product of k linear factors.\n\tEquivalent to n! / (n - k)! when both n and k are non-negative integers.");
     symtab_get_def("Binomial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Print")->attributes |= ATTR_PROTECTED;
     symtab_get_def("FullForm")->attributes |= ATTR_PROTECTED;

@@ -599,20 +599,168 @@ static Expr* higher_order_partial(Expr* f, Expr* x, int64_t order) {
 /* Parse a second-argument spec which may be either
  *     x            -- a bare variable, order 1
  *     {x, n}       -- an integer-order spec
- * On success, *var is set to a NON-owned pointer into the spec and
- * *order is set. Returns false if the spec cannot be interpreted. */
-static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order) {
+ *     {x, k}       -- a symbolic-order spec (k an Expr, not an Integer)
+ * On success, *var is set to a NON-owned pointer into the spec.
+ *   - For an integer order, *order is set to the integer and *order_expr
+ *     is NULL.
+ *   - For a symbolic order, *order is set to the sentinel -1 and
+ *     *order_expr is a NON-owned pointer to the spec's symbolic order
+ *     argument.
+ * Returns false if the spec cannot be interpreted. */
+static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
+                           Expr** order_expr) {
+    if (order_expr) *order_expr = NULL;
     if (spec->type == EXPR_FUNCTION &&
         is_sym(spec->data.function.head, "List") &&
-        spec->data.function.arg_count == 2 &&
-        spec->data.function.args[1]->type == EXPR_INTEGER) {
+        spec->data.function.arg_count == 2) {
+        Expr* k = spec->data.function.args[1];
+        if (k->type == EXPR_INTEGER) {
+            *var = spec->data.function.args[0];
+            *order = k->data.integer;
+            return *order >= 0;
+        }
+        /* Symbolic order: any non-Integer spec argument. */
         *var = spec->data.function.args[0];
-        *order = spec->data.function.args[1]->data.integer;
-        return *order >= 0;
+        *order = -1;
+        if (order_expr) *order_expr = k;
+        return true;
     }
     *var = spec;
     *order = 1;
     return true;
+}
+
+/* Compute D[f, {var, k}] for a symbolic order k. The algorithm pattern-
+ * matches the small set of forms with closed-form symbolic-order
+ * derivatives, recurses through additive structure, pulls var-free
+ * factors out of products, and otherwise returns NULL (caller falls
+ * back to leaving D[f, {var, k}] unevaluated).
+ *
+ *   D[c, {x, k}]              = 0                          (c free of x)
+ *   D[c f, {x, k}]            = c D[f, {x, k}]              (c free of x)
+ *   D[a + b + ..., {x, k}]    = D[a, {x, k}] + ...
+ *   D[Power[x, n], {x, k}]    = FactorialPower[n, k] x^(n-k)  (n free of x)
+ *   D[Power[b, x], {x, k}]    = b^x Log[b]^k                  (b free of x)
+ *
+ * Sound for non-negative integer k (MMA's Piecewise conventions).
+ * Returns a fresh Expr* on success, NULL when no symbolic-k closed form
+ * applies. */
+static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k);
+
+static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
+    if (!f || !var || !k) return NULL;
+
+    /* Var-free constant: D[c, {x, k}] = 0 for k >= 1. MMA also gives 0;
+     * we match. (Strictly Piecewise[{{c, k==0}}, 0], but our convention
+     * matches the unsubscripted MMA result.) */
+    if (expr_free_of(f, var)) return mk_int(0);
+
+    /* The variable itself: D[x, {x, k}] = If[k == 1, 1, 0] but MMA
+     * returns Piecewise; for the symbolic-k path we leave unevaluated
+     * (no general single-Expr closed form). */
+    if (expr_eq(f, var)) return NULL;
+
+    /* Plus: distribute. */
+    if (f->type == EXPR_FUNCTION && is_sym(f->data.function.head, "Plus")) {
+        size_t n = f->data.function.arg_count;
+        Expr** parts = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            Expr* d = compute_deriv_symbolic_order(f->data.function.args[i], var, k);
+            if (!d) {
+                for (size_t j = 0; j < i; j++) expr_free(parts[j]);
+                free(parts);
+                return NULL;
+            }
+            parts[i] = d;
+        }
+        Expr* sum = expr_new_function(expr_new_symbol("Plus"), parts, n);
+        free(parts);
+        return eval_and_free(sum);
+    }
+
+    /* Times: pull out var-free factors. If all but one factor is var-
+     * free, the var-bearing factor's symbolic-k derivative scales by
+     * the product of the var-free factors. */
+    if (f->type == EXPR_FUNCTION && is_sym(f->data.function.head, "Times")) {
+        size_t n = f->data.function.arg_count;
+        Expr** free_factors = malloc(sizeof(Expr*) * n);
+        size_t free_count = 0;
+        Expr* var_factor = NULL;
+        size_t var_factor_count = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (expr_free_of(f->data.function.args[i], var)) {
+                free_factors[free_count++] = expr_copy(f->data.function.args[i]);
+            } else {
+                var_factor = f->data.function.args[i];
+                var_factor_count++;
+            }
+        }
+        if (var_factor_count == 0 || var_factor_count > 1) {
+            /* All var-free already handled above; >1 var-bearing factors
+             * have no general symbolic-k form (Leibniz produces a
+             * binomial sum that the user can request via Sum). */
+            for (size_t i = 0; i < free_count; i++) expr_free(free_factors[i]);
+            free(free_factors);
+            return NULL;
+        }
+        Expr* d_var = compute_deriv_symbolic_order(var_factor, var, k);
+        if (!d_var) {
+            for (size_t i = 0; i < free_count; i++) expr_free(free_factors[i]);
+            free(free_factors);
+            return NULL;
+        }
+        if (free_count == 0) { free(free_factors); return d_var; }
+        Expr** product_args = malloc(sizeof(Expr*) * (free_count + 1));
+        for (size_t i = 0; i < free_count; i++) product_args[i] = free_factors[i];
+        product_args[free_count] = d_var;
+        Expr* prod = expr_new_function(expr_new_symbol("Times"),
+                                       product_args, free_count + 1);
+        free(product_args);
+        free(free_factors);
+        return eval_and_free(prod);
+    }
+
+    /* Power forms with symbolic-k closed-form derivatives. */
+    if (f->type == EXPR_FUNCTION && is_sym(f->data.function.head, "Power") &&
+        f->data.function.arg_count == 2) {
+        Expr* base = f->data.function.args[0];
+        Expr* exp  = f->data.function.args[1];
+
+        /* Power[var, n] with n free of var:
+         *   D[x^n, {x, k}] = FactorialPower[n, k] * Power[x, n - k]. */
+        if (expr_eq(base, var) && expr_free_of(exp, var)) {
+            Expr* fp = mk_fn2("FactorialPower", expr_copy(exp), expr_copy(k));
+            Expr* new_exp = expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(exp), mk_neg(expr_copy(k)) }, 2);
+            Expr* new_pow = mk_fn2("Power", expr_copy(var), new_exp);
+            Expr* product = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ fp, new_pow }, 2);
+            return eval_and_free(product);
+        }
+
+        /* Power[b, var] with b free of var:
+         *   D[b^x, {x, k}] = b^x * Log[b]^k. */
+        if (expr_eq(exp, var) && expr_free_of(base, var)) {
+            Expr* same  = mk_fn2("Power", expr_copy(base), expr_copy(var));
+            Expr* logb  = mk_fn1("Log", expr_copy(base));
+            Expr* logbk = mk_fn2("Power", logb, expr_copy(k));
+            Expr* product = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ same, logbk }, 2);
+            return eval_and_free(product);
+        }
+    }
+
+    /* No symbolic-k closed form recognised for this shape. */
+    return NULL;
+}
+
+/* Build an unevaluated D[f, {var, k}] tree. Used as the fallback when
+ * compute_deriv_symbolic_order can't reduce the expression. */
+static Expr* build_unevaluated_d(Expr* f, Expr* var, Expr* k) {
+    Expr* spec = expr_new_function(expr_new_symbol("List"),
+        (Expr*[]){ expr_copy(var), expr_copy(k) }, 2);
+    return expr_new_function(expr_new_symbol("D"),
+        (Expr*[]){ expr_copy(f), spec }, 2);
 }
 
 Expr* builtin_d(Expr* res) {
@@ -629,11 +777,20 @@ Expr* builtin_d(Expr* res) {
     for (size_t i = 0; i < nspecs; i++) {
         Expr* var = NULL;
         int64_t order = 1;
-        if (!parse_var_spec(specs[i], &var, &order)) {
+        Expr* order_expr = NULL;
+        if (!parse_var_spec(specs[i], &var, &order, &order_expr)) {
             expr_free(current);
             return NULL;                       /* malformed spec */
         }
-        Expr* stepped = higher_order_partial(current, var, order);
+        Expr* stepped = NULL;
+        if (order >= 0) {
+            stepped = higher_order_partial(current, var, order);
+        } else {
+            /* Symbolic-order spec. */
+            Expr* sym = compute_deriv_symbolic_order(current, var, order_expr);
+            if (sym) stepped = sym;
+            else stepped = build_unevaluated_d(current, var, order_expr);
+        }
         expr_free(current);
         current = stepped;
     }
@@ -663,11 +820,18 @@ Expr* builtin_dt(Expr* res) {
     for (size_t i = 1; i < argc; i++) {
         Expr* var = NULL;
         int64_t order = 1;
-        if (!parse_var_spec(res->data.function.args[i], &var, &order)) {
+        Expr* order_expr = NULL;
+        if (!parse_var_spec(res->data.function.args[i], &var, &order, &order_expr)) {
             expr_free(current);
             return NULL;
         }
-        Expr* stepped = higher_order_partial(current, var, order);
+        Expr* stepped = NULL;
+        if (order >= 0) {
+            stepped = higher_order_partial(current, var, order);
+        } else {
+            Expr* sym = compute_deriv_symbolic_order(current, var, order_expr);
+            stepped = sym ? sym : build_unevaluated_d(current, var, order_expr);
+        }
         expr_free(current);
         current = stepped;
     }
