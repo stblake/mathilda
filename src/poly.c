@@ -1138,6 +1138,22 @@ static int64_t get_int_content(Expr* e) {
         }
         return c;
     }
+    /* Plus content: GCD of summand contents.  Without this, the numG
+     * accumulation in builtin_polynomialgcd treats the entire Plus as
+     * a single non-numeric base with content 1, so e.g.
+     *   PolynomialGCD[4, 4 + 4 x]
+     * returned 1 instead of 4 -- and Cancel[4/(4+4x)] failed to
+     * reduce. */
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Plus) {
+        int64_t g = 0;  /* gcd-identity */
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            int64_t ci = get_int_content(e->data.function.args[i]);
+            g = gcd(g, ci);
+            if (g == 1) return 1;  /* short-circuit: cannot grow */
+        }
+        return g == 0 ? 1 : g;
+    }
     return 1;
 }
 
@@ -2020,6 +2036,40 @@ Expr* builtin_polynomialgcd(Expr* res) {
                     num_i = next;
                     expr_free(bps[i].data[j].exp);
                     bps[i].data[j].exp = expr_new_integer(0);
+                } else if (bps[i].data[j].base->type == EXPR_FUNCTION
+                    && bps[i].data[j].base->data.function.head->type == EXPR_SYMBOL
+                    && bps[i].data[j].base->data.function.head->data.symbol == SYM_Plus) {
+                    /* Plus base has no Times-factor numeric coefficient
+                     * to peel off, but it can carry an integer content
+                     * (the GCD of its summand coefficients).  Extract
+                     * that content into num_i and replace the base with
+                     * its primitive part so the downstream
+                     * poly_gcd_internal does not also extract the same
+                     * content via its g_cont path -- otherwise the
+                     * combined result would multiply numG by the same
+                     * factor twice.  Without this branch,
+                     *   PolynomialGCD[4, 4 + 4 x]   returned 1
+                     * (and Cancel[4/(4 + 4 x)] failed to reduce). */
+                    int64_t c = get_int_content(bps[i].data[j].base);
+                    if (c > 1) {
+                        Expr* base = bps[i].data[j].base;
+                        size_t n = base->data.function.arg_count;
+                        Expr** new_args = malloc(sizeof(Expr*) * n);
+                        for (size_t k = 0; k < n; k++) {
+                            new_args[k] = eval_and_free(internal_divide(
+                                (Expr*[]){expr_copy(base->data.function.args[k]),
+                                          expr_new_integer(c)}, 2));
+                        }
+                        Expr* prim = eval_and_free(expr_new_function(
+                            expr_copy(base->data.function.head),
+                            new_args, n));
+                        free(new_args);
+                        Expr* next = internal_times(
+                            (Expr*[]){num_i, expr_new_integer(c)}, 2);
+                        num_i = next;
+                        expr_free(bps[i].data[j].base);
+                        bps[i].data[j].base = prim;
+                    }
                 }
             }
         }

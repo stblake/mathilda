@@ -2282,28 +2282,23 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                 if (ratio_pos) {
                     /* k^2 = Sqrt[ratio]; b_inner = Sqrt[2 k^2]
                      *      = Sqrt[2 * Sqrt[ratio]].
-                     * picocas does not auto-collapse Sqrt[1/256] -> 1/16
-                     * (only Simplify does), and logtoreal_quadratic's
-                     * disc-sign check requires a rational discriminant.
-                     * Run k_sq and sg_b through Simplify so the
-                     * downstream check sees rational values when the
-                     * input ratio is a perfect-square rational. */
-                    Expr* k_sq_raw = eval_and_free(expr_new_function(
-                        expr_new_symbol("Sqrt"),
-                        (Expr*[]){expr_copy(ratio)}, 1));
-                    Expr* k_sq = eval_and_free(expr_new_function(
-                        expr_new_symbol("Simplify"),
-                        (Expr*[]){k_sq_raw}, 1));
+                     * Use intrat_simp_pos_sqrt instead of Simplify --
+                     * it walks Times factors under the positive-symbol
+                     * assumption and collapses Sqrt[1/256/a^12] to
+                     * 1/(16 a^6), Sqrt[2/(8 a^6)] to 1/(2 a^3), etc.,
+                     * which Simplify alone leaves held.  Without this,
+                     * the result of Integrate[1/(x^4 + a^4), x] keeps
+                     * nested-Sqrt forms that subsequent Simplify of
+                     * the derivative cannot reduce, masking
+                     * mathematically-zero diffs. */
+                    Expr* k_sq = intrat_simp_pos_sqrt(ratio);
 
                     Expr* two_ksq = eval_and_free(internal_times(
                         (Expr*[]){expr_new_integer(2),
                                   expr_copy(k_sq)}, 2));
-                    Expr* sg_b_raw = eval_and_free(expr_new_function(
-                        expr_new_symbol("Sqrt"),
-                        (Expr*[]){two_ksq}, 1));
-                    Expr* sg_b = eval_and_free(expr_new_function(
-                        expr_new_symbol("Simplify"),
-                        (Expr*[]){sg_b_raw}, 1));
+                    Expr* two_ksq_expanded = expr_expand(two_ksq);
+                    Expr* sg_b = intrat_simp_pos_sqrt(two_ksq_expanded);
+                    expr_free(two_ksq_expanded);
                     Expr* neg_sg_b = eval_and_free(internal_times(
                         (Expr*[]){expr_new_integer(-1),
                                   expr_copy(sg_b)}, 2));
