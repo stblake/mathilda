@@ -1394,7 +1394,19 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
         expr_free(a); expr_free(d); expr_free(atdp); return NULL;
     }
 
-    /* resultant = primitive[Resultant[d, a - t*D[d,x], x], t] */
+    /* resultant = primitive[Resultant[d, a - t*D[d,x], x], t]
+     *
+     * NOTE: this Resultant[] call is NOT redundant with the PRS chain
+     * computed above, despite both being subresultant-PRS-flavoured
+     * computations.  picocas's SubresultantPolynomialRemainders is a
+     * pseudo-remainder chain (poly.c:1637-1642), not the Lazard-scaled
+     * subresultant chain.  The chain's primitive-part-in-t and
+     * degree-in-x are content-invariant and so are correct substrates
+     * for the S_i lookups below (i >= 1); but the chain's degree-0-in-x
+     * entry is NOT in general the resultant, even after primitive in
+     * t.  Concrete witness: x/(1 + x^8) has resultant (1 + 4096 t^4)^2
+     * but PRS-bottom primitive in t is t (1 + 4096 t^4), structurally
+     * different. */
     Expr* res_args[3] = { expr_copy(d), atdp, expr_copy(x) };
     Expr* res_call = expr_new_function(
         expr_new_symbol("Resultant"), res_args, 3);
