@@ -2537,7 +2537,10 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
         || pair_list->data.function.head->type != EXPR_SYMBOL
         || pair_list->data.function.head->data.symbol != SYM_List) return NULL;
     size_t n = pair_list->data.function.arg_count;
-    if (n == 0) return expr_new_integer(0);
+    /* Empty pair list = LRT producer couldn't decompose.  See the
+     * matching guard in intrat_log_to_real_pairs above for why returning
+     * Integer[0] would be a silent wrong-answer. */
+    if (n == 0) return NULL;
 
     size_t tcap = 8, nterms = 0;
     Expr** terms = (Expr**)malloc(sizeof(Expr*) * tcap);
@@ -2906,7 +2909,15 @@ static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
         return NULL;
     }
     size_t npairs = pair_list->data.function.arg_count;
-    Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * (npairs ? npairs : 1));
+    /* Empty pair list means the LRT producer couldn't decompose the
+     * input -- typically the denominator was irreducible over the
+     * working ring (e.g. x^16 - x^8 - 1, an irreducible biquadratic-
+     * in-x^8 with sqrt-5 roots).  Returning Integer[0] here would
+     * make the caller treat the integral as identically zero --
+     * silent wrong-answer.  Return NULL so try_lrt_close falls
+     * through to NaiveLogPart's universal RootSum form. */
+    if (npairs == 0) return NULL;
+    Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * npairs);
     size_t lr_count = 0;
 
     for (size_t i = 0; i < npairs; i++) {
