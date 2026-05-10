@@ -389,6 +389,53 @@ static bool intrat_extended_euclidean(Expr* a, Expr* b, Expr* c, Expr* x,
     return true;
 }
 
+/* AXIOM-style primitivePart(p, q) generalised for the LRT pipeline.
+ * Mirrors SUBRESP.primitivePart in intrf.spad.pamphlet:48-52:
+ *   r := extEuc(lc(p, var_p), q, 1, var_q).coef1     // cofactor mod q
+ *   if r carries unsimplified radicals, Simplify it (otherwise the
+ *     downstream PolynomialRemainder step on r*p over an algebraic
+ *     extension fails to terminate -- the radical-coefficient
+ *     coefficients don't reduce in the underlying algebraic field
+ *     and the pseudo-division loop diverges)
+ *   rem := PolynomialRemainder(r * p, q, var_q)
+ *   return PrimitivePart(rem, var_p)
+ *
+ * Returns owned Expr* on success, NULL on extEuc / division failure.
+ * Borrows p, q, var_p, var_q (caller retains ownership of all four).
+ *
+ * This consolidates two parallel patches in intrat_int_rational_log_part
+ * (the i = deg_d case and the general i case).  Applying the radical-
+ * Simplify guard uniformly is defensive -- costs nothing on rational-
+ * coefficient inputs because intrat_has_radical short-circuits. */
+static Expr* intrat_primitive_part_mod(Expr* p, Expr* q,
+                                       Expr* var_p, Expr* var_q) {
+    Expr* lc_p = intrat_lc(p, var_p);
+    Expr* one = expr_new_integer(1);
+    Expr *r = NULL, *_unused = NULL;
+    bool ok = intrat_extended_euclidean(lc_p, q, one, var_q, &r, &_unused);
+    expr_free(lc_p);
+    expr_free(one);
+    if (!ok) return NULL;
+    if (_unused) expr_free(_unused);
+
+    if (intrat_has_radical(r)) {
+        Expr* simp_call = expr_new_function(
+            expr_new_symbol("Simplify"), (Expr*[]){ r }, 1);
+        r = evaluate(simp_call);
+        expr_free(simp_call);
+    }
+
+    Expr* rp_raw = internal_times(
+        (Expr*[]){r, expr_copy(p)}, 2);
+    Expr* rp = expr_expand(rp_raw); expr_free(rp_raw);
+    Expr* rem = intrat_polyrem_t(rp, q, var_q);
+    expr_free(rp);
+    if (!rem) return NULL;
+    Expr* out = intrat_primitive(rem, var_p);
+    expr_free(rem);
+    return out;
+}
+
 /* ------------------------------------------------------------------ */
 /* HermiteReduce (Mack's linear version).                              */
 /*                                                                    */
@@ -1446,26 +1493,9 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
 
         if (i == deg_d) {
             /* Special case (Geddes-Czapor-Labahn correction
-             * IntegrateRational.m:765-768): use lc[d, x] in the
-             * Diophantine. */
-            Expr* lc_d = intrat_lc(d, x);
-            Expr *r_eg = NULL, *_unused = NULL;
-            if (!intrat_extended_euclidean(lc_d, Qi, expr_new_integer(1), t,
-                                          &r_eg, &_unused)) {
-                expr_free(lc_d); expr_free(Qi); continue;
-            }
-            expr_free(lc_d);
-            if (_unused) expr_free(_unused);
-
-            /* d := primitive[PolynomialRemainder[r_eg * d, Qi, t], x] */
-            Expr* rd_raw = internal_times(
-                (Expr*[]){r_eg, expr_copy(d)}, 2);
-            Expr* rd = expr_expand(rd_raw); expr_free(rd_raw);
-            Expr* rem = intrat_polyrem_t(rd, Qi, t);  /* defined just below */
-            expr_free(rd);
-            if (!rem) { expr_free(Qi); continue; }
-            S[i_idx] = intrat_primitive(rem, x);
-            expr_free(rem);
+             * IntegrateRational.m:765-768): use d itself with lc[d, x]
+             * as the leading-coefficient witness in the Diophantine. */
+            S[i_idx] = intrat_primitive_part_mod(d, Qi, x, t);
         } else {
             Expr* s_raw = find_prs_at_degree(prs, x, i);
             if (!s_raw) { expr_free(Qi); continue; }
@@ -1504,42 +1534,9 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
             }
             expr_free(A);
 
-            /* r = ExtendedEuclidean[lc[s, x], Qi, 1, t][[1]]. */
-            Expr* lc_s2 = intrat_lc(s, x);
-            Expr *r_eg = NULL, *_unused = NULL;
-            if (!intrat_extended_euclidean(lc_s2, Qi, expr_new_integer(1), t,
-                                          &r_eg, &_unused)) {
-                expr_free(lc_s2); expr_free(s); expr_free(Qi); continue;
-            }
-            expr_free(lc_s2);
-            if (_unused) expr_free(_unused);
-
-            /* s := primitive[PolynomialRemainder[r * s, Qi, t], x].
-             *
-             * Simplify r_eg first when it carries radicals.
-             * ExtendedEuclidean over algebraic-coefficient inputs
-             * emits results with unreduced products like
-             * Sqrt[2] Sqrt[3] Sqrt[30] (which equals 6 Sqrt[5]); left
-             * unsimplified, the downstream PolynomialRemainder step
-             * on r_eg * s sees a polynomial in t with mixed-radical
-             * "coefficients" that don't reduce to the underlying
-             * algebraic field, and the polynomial-division loop
-             * fails to terminate.  Simplify normalises the radicals
-             * to the minimal generating set (here Sqrt[2], Sqrt[5])
-             * before the division. */
-            if (intrat_has_radical(r_eg)) {
-                Expr* simp_call = expr_new_function(expr_new_symbol("Simplify"),
-                    (Expr*[]){ r_eg }, 1);
-                r_eg = evaluate(simp_call); expr_free(simp_call);
-            }
-            Expr* rs_raw = internal_times(
-                (Expr*[]){r_eg, s}, 2);
-            Expr* rs = expr_expand(rs_raw); expr_free(rs_raw);
-            Expr* rem = intrat_polyrem_t(rs, Qi, t);
-            expr_free(rs);
-            if (!rem) { expr_free(Qi); continue; }
-            S[i_idx] = intrat_primitive(rem, x);
-            expr_free(rem);
+            /* s := PrimitivePart_mod(s, Qi) -- see helper definition. */
+            S[i_idx] = intrat_primitive_part_mod(s, Qi, x, t);
+            expr_free(s);
         }
         expr_free(Qi);
     }
