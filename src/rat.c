@@ -184,6 +184,44 @@ Expr* builtin_denominator(Expr* res) {
     return d;
 }
 
+/* Strict variant of cancel_exact_div: returns NULL when exact_poly_div
+ * cannot perform the division in Q[vars] (i.e. the divisor doesn't
+ * actually divide the dividend in the working multivariate polynomial
+ * ring). Used by together_recursive's Plus combine to detect when the
+ * iterative PolynomialLCM produced a result that is only valid in some
+ * algebraic-extension ring -- in that case the would-be quotient is a
+ * symbolic Times[..., Power[dens[i], -1]] which, if propagated, leaves
+ * a Power[Plus[...], -1] inside the combined numerator. The downstream
+ * cancel_recursive -> PolynomialGCD path then re-enters multivariate
+ * Euclid on a rational expression and explodes (case-13 hang).
+ *
+ * Soundness: returning NULL is always safe -- the caller falls back to
+ * leaving the Plus uncombined, which is correctness-preserving. The
+ * later simp_algebraic seed in simp_search handles the algebraic
+ * extension properly when the multi-radical structure is amenable. */
+static Expr* cancel_exact_div_strict(Expr* num, Expr* den) {
+    if (is_zero_poly(num)) return expr_new_integer(0);
+    if (den->type == EXPR_INTEGER && den->data.integer == 1) return expr_expand(num);
+
+    Expr* exp_num = expr_expand(num);
+    Expr* exp_den = expr_expand(den);
+
+    size_t v_count = 0, v_cap = 16;
+    Expr** vars = malloc(sizeof(Expr*) * v_cap);
+    collect_variables(exp_num, &vars, &v_count, &v_cap);
+    collect_variables(exp_den, &vars, &v_count, &v_cap);
+    if (v_count > 0) qsort(vars, v_count, sizeof(Expr*), compare_expr_ptrs);
+
+    Expr* res = exact_poly_div(exp_num, exp_den, vars, v_count);
+
+    for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
+    free(vars);
+
+    expr_free(exp_num);
+    expr_free(exp_den);
+    return res;  /* NULL if not exactly divisible */
+}
+
 static Expr* cancel_exact_div_wrapper(Expr* num, Expr* den) {
     if (is_zero_poly(num)) return expr_new_integer(0);
     if (den->type == EXPR_INTEGER && den->data.integer == 1) return expr_expand(num);
@@ -213,9 +251,44 @@ static Expr* cancel_exact_div_wrapper(Expr* num, Expr* den) {
     }
 }
 
+/* Walk e looking for any Power[X, k] subterm where k is a negative
+ * integer (or rational) AND X is itself a compound expression (Plus,
+ * Times with non-numeric leaves, etc.) -- i.e. a non-trivial rational
+ * sub-expression embedded inside e. Returns true if any is found.
+ *
+ * Used as a soundness gate before PolynomialGCD: when num or den has
+ * such a sub-expression, the inputs aren't pure polynomials in the
+ * working ring, and the multivariate GCD can run away (case-13 hang).
+ * In that case the caller should leave the input uncancelled. */
+static bool has_embedded_rational_subterm(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        bool neg_exp = false;
+        if (exp->type == EXPR_INTEGER && exp->data.integer < 0) neg_exp = true;
+        else {
+            int64_t pn, qn;
+            if (is_rational(exp, &pn, &qn) && pn < 0) neg_exp = true;
+        }
+        if (neg_exp) {
+            /* Numeric base is fine -- represents a rational literal like
+             * 1/2 = Power[2,-1]. Compound base means embedded rational. */
+            if (base->type == EXPR_FUNCTION) return true;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (has_embedded_rational_subterm(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
 static Expr* cancel_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
-    
+
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* head = e->data.function.head->data.symbol;
         if (head == SYM_List || head == SYM_Plus ||
@@ -223,7 +296,7 @@ static Expr* cancel_recursive(Expr* e) {
             head == SYM_LessEqual || head == SYM_Greater ||
             head == SYM_GreaterEqual || head == SYM_And ||
             head == SYM_Or || head == SYM_Not) {
-            
+
             size_t count = e->data.function.arg_count;
             Expr** args = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
@@ -234,15 +307,27 @@ static Expr* cancel_recursive(Expr* e) {
             return ret;
         }
     }
-    
+
     Expr* num; Expr* den;
     extract_num_den(e, &num, &den);
-    
+
     if (den->type == EXPR_INTEGER && den->data.integer == 1) {
         expr_free(den);
         return num;
     }
-    
+
+    /* Soundness gate: if num or den still carries an embedded rational
+     * (a Power[Plus/Times, negative]), this isn't a clean polynomial
+     * fraction. PolynomialGCD on it would re-enter multivariate Euclid
+     * on a rational input and may explode (case-13/14/20 hang).
+     * Leave the input uncancelled -- subsequent Simplify passes
+     * (simp_algebraic, etc.) handle the algebraic structure soundly. */
+    if (has_embedded_rational_subterm(num) || has_embedded_rational_subterm(den)) {
+        expr_free(num);
+        expr_free(den);
+        return expr_copy(e);
+    }
+
     Expr* g = eval_and_free(expr_new_function(expr_new_symbol("PolynomialGCD"), (Expr*[]){expr_copy(num), expr_copy(den)}, 2));
     
     Expr* new_num = cancel_exact_div_wrapper(num, g);
@@ -659,30 +744,75 @@ static Expr* together_recursive(Expr* e) {
                 lcm_den = new_lcm;
             }
             
+            /* Strict-quotient combine: each lcm_den/dens[i] must divide
+             * exactly in Q[vars]. If any quotient is not exact, the
+             * iterative PolynomialLCM was unsound for the working
+             * multivariate ring (typically: dens[i] divides lcm_den only
+             * in some algebraic-extension ring, e.g. multi-radical sums
+             * over Q like Sqrt[2]a+Sqrt[3]+Sqrt[5]+Sqrt[7]). Propagating
+             * a symbolic Times[lcm_den, Power[dens[i], -1]] leaves a
+             * Power[Plus[...], -1] inside the combined numerator, which
+             * sends the downstream cancel_recursive -> PolynomialGCD
+             * path into multivariate Euclid on a rational input -- this
+             * is the case-13 hang. Bail cleanly: the Plus stays
+             * uncombined and Simplify's simp_algebraic seed handles the
+             * extension structure when applicable. */
             Expr** new_nums = malloc(sizeof(Expr*) * count);
+            bool exact = true;
             for (size_t i = 0; i < count; i++) {
-                Expr* q = cancel_exact_div_wrapper(lcm_den, dens[i]);
-                new_nums[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){nums[i], q}, 2));
+                Expr* q = cancel_exact_div_strict(lcm_den, dens[i]);
+                if (!q) {
+                    exact = false;
+                    /* Free the partial quotients we already wrapped. */
+                    for (size_t j = 0; j < i; j++) expr_free(new_nums[j]);
+                    new_nums[i] = NULL;
+                    break;
+                }
+                new_nums[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(nums[i]), q}, 2));
             }
-            
+
+            if (!exact) {
+                /* Cleanup and return the input Plus unchanged (the
+                 * already-together'd summands are owned in args[]). */
+                Expr* ret;
+                if (count == 1) {
+                    ret = expr_copy(args[0]);
+                } else {
+                    Expr** plus_args = malloc(sizeof(Expr*) * count);
+                    for (size_t i = 0; i < count; i++) plus_args[i] = expr_copy(args[i]);
+                    ret = eval_and_free(expr_new_function(expr_new_symbol("Plus"), plus_args, count));
+                    free(plus_args);
+                }
+                for (size_t i = 0; i < count; i++) {
+                    expr_free(args[i]);
+                    expr_free(nums[i]);
+                    expr_free(dens[i]);
+                }
+                free(args); free(nums); free(dens); free(new_nums);
+                expr_free(lcm_den);
+                return ret;
+            }
+
+            /* All quotients exact -- proceed with the standard combine. */
             Expr* combined_num = eval_and_free(expr_new_function(expr_new_symbol("Plus"), new_nums, count));
             Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(lcm_den), expr_new_integer(-1)}, 2));
             Expr* combined_expr = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){combined_num, inv_den}, 2));
-            
+
             Expr* res = cancel_recursive(combined_expr);
             expr_free(combined_expr);
-            
+
             for (size_t i = 0; i < count; i++) {
                 expr_free(args[i]);
-                expr_free(dens[i]); 
+                expr_free(nums[i]);
+                expr_free(dens[i]);
             }
             free(args);
             free(nums);
             free(dens);
             free(new_nums);
-            
+
             expr_free(lcm_den);
-            
+
             return res;
         }
         

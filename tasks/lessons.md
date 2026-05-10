@@ -172,3 +172,40 @@ non-numeric leaves") can be defeated by the pre-processing.
 Pick a bound well above any genuine tree depth and bail out
 conservatively (return the safe answer for the caller) when it
 is exhausted.
+
+## `exact_poly_div` field-vs-ring soundness (2026-05-10)
+
+The `var_count == 0` base case in `exact_poly_div` (poly.c) used
+to fall through to a symbolic `Times[A, Power[B, -1]]` for any
+non-bigint pair, on the assumption that the coefficient ring is a
+field. That assumption holds for Q and Q[i] but breaks the moment
+a non-rational atom appears (Sqrt[2], Sqrt[3], ...): in
+`Q[Sqrt[2], Sqrt[3], ...]` the divisor doesn't actually divide the
+dividend, and the symbolic Times propagates a `Power[Plus, -1]` up
+into intermediate polynomials. The downstream `PolynomialGCD` call
+then runs multivariate Euclid on a rational input — that's the
+case-13 Together hang.
+
+Lesson: if a function is named "exact" division it must return
+NULL on non-exactness. Returning a symbolic `Times[A, B^{-1}]` as
+a "fallback" hides correctness bugs from callers and only ever
+comes back as a hang or a wrong answer. Restrict the symbolic
+fallback to the strict cases where it's actually exact (operands
+in Q or Q[i]); for everything else, return NULL and let callers
+choose what to do.
+
+## Plus auto-distribute `Times[-1, Plus[…]]` (2026-05-10)
+
+picocas's Plus auto-eval groups by `(coeff, base)`. When a Plus
+arg is `Times[-1, Plus[A, B]]`, get_coeff_base returns
+`(-1, Plus[A, B])` — but the OTHER args have bases `A`, `B`
+(distinct from `Plus[A, B]`), so no cancellation fires. The
+canonical Mathematica behaviour is to distribute the leading -1
+into the inner Plus before grouping, so `a + b - (a + b)` reduces
+to 0.
+
+Lesson: when adding distribution rules to Plus, gate them on the
+literal `-1` coefficient — distributing arbitrary `c·Plus[…]` into
+the outer Plus would expand harmless products like `2 (a + b)`,
+diverging from MMA's behaviour. The `-1` case is the cancellation-
+enabling step; other coefficients stay as Times factors.

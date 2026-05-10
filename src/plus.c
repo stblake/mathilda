@@ -288,12 +288,93 @@ Expr* make_plus(Expr* a, Expr* b) {
     return expr_new_function(expr_new_symbol("Plus"), args, 2);
 }
 
+/* Detect Times[-1, Plus[...]] (canonical form for `-(a+b+...)`).
+ * Any other Times shape (more than 2 args, non-Plus second factor,
+ * or a coefficient other than -1) returns false. Limiting to -1
+ * matches Mathematica's Plus normalisation: `a - (b+c)` distributes
+ * to `a - b - c`, while `a + 2(b+c)` stays unexpanded. */
+static bool is_neg_of_plus(Expr* e, Expr** inner_plus_out) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Times)
+        return false;
+    if (e->data.function.arg_count != 2) return false;
+    Expr* c = e->data.function.args[0];
+    Expr* p = e->data.function.args[1];
+    if (!(c->type == EXPR_INTEGER && c->data.integer == -1)) return false;
+    if (p->type != EXPR_FUNCTION ||
+        !p->data.function.head ||
+        p->data.function.head->type != EXPR_SYMBOL ||
+        p->data.function.head->data.symbol != SYM_Plus)
+        return false;
+    *inner_plus_out = p;
+    return true;
+}
+
 Expr* builtin_plus(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
     size_t n = res->data.function.arg_count;
     if (n == 0) return expr_new_integer(0);
     if (n == 1) return expr_copy(res->data.function.args[0]);
+
+    /* Distribute Times[-1, Plus[...]] over the outer Plus. This is
+     * the cancellation-enabling step that lets `Plus[A, -A]` evaluate
+     * to 0 even when A is a Plus. Without it,
+     *
+     *     Plus[x, x^2, Times[-1, Plus[x, x^2]]]
+     *
+     * has bases {x, x^2, Plus[x,x^2]} -- three distinct -- and never
+     * collects, leaving the input unchanged. Distributing the -1
+     * gives `Plus[x, x^2, Times[-1, x], Times[-1, x^2]]`, whose
+     * grouping by (coeff, base) collapses to 0.
+     *
+     * Mathematica-equivalent: matches the user-visible behaviour of
+     * `a + b - (a+b) -> 0` without distributing arbitrary `c·Plus[..]`
+     * (those stay unexpanded, just like in Mathematica). */
+    bool any_neg_plus = false;
+    size_t expanded_count = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* inner = NULL;
+        if (is_neg_of_plus(res->data.function.args[i], &inner)) {
+            any_neg_plus = true;
+            expanded_count += inner->data.function.arg_count;
+        } else {
+            expanded_count++;
+        }
+    }
+    if (any_neg_plus) {
+        Expr** new_args = malloc(sizeof(Expr*) * expanded_count);
+        size_t k = 0;
+        for (size_t i = 0; i < n; i++) {
+            Expr* inner = NULL;
+            if (is_neg_of_plus(res->data.function.args[i], &inner)) {
+                /* Replace the Times[-1, Plus[t_1, ..., t_m]] arg with
+                 * m fresh Times[-1, t_i] args. */
+                for (size_t j = 0; j < inner->data.function.arg_count; j++) {
+                    Expr* tj = inner->data.function.args[j];
+                    new_args[k++] = eval_and_free(expr_new_function(
+                        expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_integer(-1), expr_copy(tj) }, 2));
+                }
+                expr_free(res->data.function.args[i]);
+                res->data.function.args[i] = NULL;
+            } else {
+                new_args[k++] = res->data.function.args[i];
+                res->data.function.args[i] = NULL;
+            }
+        }
+        free(res->data.function.args);
+        res->data.function.args = new_args;
+        res->data.function.arg_count = expanded_count;
+        n = expanded_count;
+        if (n == 0) return expr_new_integer(0);
+        if (n == 1) {
+            Expr* sole = expr_copy(res->data.function.args[0]);
+            return sole;
+        }
+    }
 
     /* Inexact contagion: if any summand is an inexact Real/MPFR,
      * numericalize exact numeric parts in-place so `1. + Pi` collapses to

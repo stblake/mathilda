@@ -63,7 +63,7 @@ void test_denominator() {
 
 void test_cancel() {
     run_test("Cancel[(x^2 - 1)/(x - 1)]", "Plus[1, x]");
-    run_test("Cancel[(x - y)/(x^2 - y^2) + (x^3 - 27)/(x^2 - 9) + (x^3 + 1)/(x^2 - x + 1)]", "Plus[1, x, Times[Power[Plus[3, x], -1], Plus[9, Times[3, x], Power[x, 2]]], Times[-1, Power[Plus[Times[-1, x], Times[-1, y]], -1]]]");
+    run_test("Cancel[(x - y)/(x^2 - y^2) + (x^3 - 27)/(x^2 - 9) + (x^3 + 1)/(x^2 - x + 1)]", "Plus[1, x, Times[Power[Plus[3, x], -1], Plus[9, Times[3, x], Power[x, 2]]], Power[Plus[x, y], -1]]");
     run_test("Cancel[(x - a)/(x^2 - a^2) == 0 && (x^2 - 2 x + 1)/(x - 1) >= 0]", "And[Equal[Power[Plus[a, x], -1], 0], GreaterEqual[Plus[-1, x], 0]]");
     run_test("Cancel[(x - 1)/(x^2 - 1) + (x - 2)/(x^2 - 4)]", "Plus[Power[Plus[1, x], -1], Power[Plus[2, x], -1]]");
 }

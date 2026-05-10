@@ -61,6 +61,11 @@
 
 bool contains_any_symbol_from(Expr* expr, Expr* var);
 
+/* Forward declaration for size-budget guards in poly_gcd_internal /
+ * exact_poly_div etc. Defined further down with the subresultant
+ * polynomial-remainder sequence helpers. */
+static int64_t subres_leaf_count(Expr* e);
+
 /* ------------------------------------------------------------------ */
 /* BasePower decomposition                                            */
 /*                                                                    */
@@ -1178,6 +1183,23 @@ Expr* get_coeff(Expr* e, Expr* var, int d) {
     return res;
 }
 
+/* True iff e is rational-like (Integer, BigInt, Rational[n,d]) or
+ * Complex[r, i] with both components rational-like. Field elements of
+ * Q or Q[i] qualify; algebraic non-field atoms like Sqrt[2] do not. */
+static bool is_rational_or_gaussian(const Expr* e) {
+    if (!e) return false;
+    if (is_rational_like((Expr*)e)) return true;
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Complex &&
+        e->data.function.arg_count == 2) {
+        return is_rational_like(e->data.function.args[0]) &&
+               is_rational_like(e->data.function.args[1]);
+    }
+    return false;
+}
+
 /* Returns Q such that A = B * Q exactly (in K[vars]); otherwise NULL. */
 /* Used by `poly_gcd_internal` to extract primitive parts and to stage */
 /* GCD candidate division. The base case (var_count == 0) reduces to   */
@@ -1187,7 +1209,17 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     if (expr_eq(A, B)) return expr_new_integer(1);
     if (var_count == 0) {
         if (is_zero_poly(B)) return NULL;
-        
+
+        /* B is the multiplicative identity: A/1 = A. Always exact for
+         * any A, including non-field atoms like Sqrt[2]. */
+        if (B->type == EXPR_INTEGER && B->data.integer == 1) {
+            return expr_copy(A);
+        }
+        /* A is zero: 0/B = 0 always (B != 0 already checked). */
+        if (A->type == EXPR_INTEGER && A->data.integer == 0) {
+            return expr_new_integer(0);
+        }
+
         if (A->type == EXPR_BIGINT && B->type == EXPR_BIGINT) {
             mpz_t a, b, r, rem;
             expr_to_mpz(A, a);
@@ -1203,10 +1235,24 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
                 return res;
             }
             mpz_clear(r);
-            // Fall through to Times[A, B^-1] if not exact integer division
+            // Fall through to rational quotient
         }
-        
-        return internal_times((Expr*[]){expr_copy(A), internal_power((Expr*[]){expr_copy(B), expr_new_integer(-1)}, 2)}, 2);
+
+        /* Rational/Gaussian fallback: only when BOTH operands lie in a
+         * field (Q or Q[i]). Then A/B is an exact field element and the
+         * symbolic Times[A, B^{-1}] auto-evaluates to a clean Rational
+         * or Complex[Rational, Rational]. For non-rational atoms
+         * (Sqrt[2], symbolic radicals, etc.) we are NOT in a field —
+         * Q[Sqrt[2], Sqrt[3], ...] is a polynomial ring, not a field —
+         * and a "fallback" symbolic Times[A, 1/B] is unsound: it claims
+         * an exact division that does not exist in the working ring,
+         * and propagating it through the GCD/LCM machinery triggers
+         * multivariate Euclidean coefficient explosion (case-13 Together
+         * hang). Return NULL to signal "no exact division". */
+        if (is_rational_or_gaussian(A) && is_rational_or_gaussian(B)) {
+            return internal_times((Expr*[]){expr_copy(A), internal_power((Expr*[]){expr_copy(B), expr_new_integer(-1)}, 2)}, 2);
+        }
+        return NULL;
     }
     
     Expr* x = vars[var_count - 1];
@@ -1673,32 +1719,81 @@ Expr* poly_content(Expr* A, Expr** vars, size_t var_count) {
 Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     if (is_zero_poly(A)) return expr_expand(B);
     if (is_zero_poly(B)) return expr_expand(A);
-    
+
     if (var_count == 0) {
         return my_number_gcd(A, B);
     }
-    
+
     Expr* x = vars[var_count - 1];
-    
+
     Expr* contA = poly_content(A, vars, var_count);
     Expr* ppA = exact_poly_div(A, contA, vars, var_count);
     if (!ppA) ppA = expr_expand(A);
-    
+
     Expr* contB = poly_content(B, vars, var_count);
     Expr* ppB = exact_poly_div(B, contB, vars, var_count);
     if (!ppB) ppB = expr_expand(B);
-    
+
     Expr* contGCD = poly_gcd_internal(contA, contB, vars, var_count - 1);
     expr_free(contA); expr_free(contB);
-    
+
     Expr* U = ppA;
     Expr* V = ppB;
-    
+
     if (get_degree_poly(U, x) < get_degree_poly(V, x)) {
         Expr* tmp = U; U = V; V = tmp;
     }
-    
+
+    /* Size budget: pseudo-remainder coefficients in the multivariate
+     * Euclidean step can grow exponentially when the coefficient ring
+     * has many algebraic generators (e.g. Q[a, Sqrt[3], Sqrt[5], ...]
+     * coming from a multi-radical denominator). Bail out when an
+     * intermediate U or V exceeds the budget — returning the trivial
+     * GCD `contGCD` (the content GCD of the inputs) is sound: the GCD
+     * is always a divisor of the true GCD, and missing a cancellation
+     * is a correctness-preserving pessimism. The subresultant PRS path
+     * uses the same shape — see `size_budget` at poly.c:3340. */
+    int64_t input_size = subres_leaf_count(A) + subres_leaf_count(B);
+    /* Size budget: pseudo-remainder coefficients in the multivariate
+     * Euclidean step can grow exponentially when the coefficient ring
+     * carries algebraic generators (Sqrt[2], Sqrt[3], ... pseudo-vars
+     * coming from multi-radical denominators). Bail out when an
+     * intermediate U or V exceeds the budget — returning the trivial
+     * GCD `contGCD` is sound: a smaller-than-true GCD is always a
+     * valid divisor, and missing a cancellation is correctness-
+     * preserving pessimism. The Plus combine in cancel_recursive
+     * detects an inexact quotient via cancel_exact_div_strict (added
+     * for the same case-13 hang) and falls back cleanly when the GCD
+     * was only the content rather than the full polynomial GCD.
+     *
+     * Budget shape: max(input_size, 2000). The 2000 floor keeps the
+     * common univariate cases (degree-100 polynomials with hundreds
+     * of leaves) well within budget. The 1× input_size cap on larger
+     * inputs catches multi-radical coefficient explosions early — the
+     * subres-PRS path has the same shape for the same reason
+     * (poly.c:3340). */
+    int64_t size_budget = input_size;
+    if (size_budget < 2000) size_budget = 2000;
+    bool budget_blown = false;
+    int iter_count = 0;
+
     while (!is_zero_poly(V)) {
+        int64_t lU = subres_leaf_count(U);
+        int64_t lV = subres_leaf_count(V);
+        if (lU > size_budget || lV > size_budget) {
+            budget_blown = true;
+            break;
+        }
+        /* Hard iteration cap: even when sizes look bounded, a degenerate
+         * pseudo-remainder sequence can spin for many iterations on
+         * multivariate inputs whose `is_zero_poly` check is itself O(n²)
+         * in coefficient-list extraction. 50 iterations is well above
+         * any well-formed univariate / bivariate Euclidean run. */
+        if (iter_count > 50) {
+            budget_blown = true;
+            break;
+        }
+        iter_count++;
         Expr* R = pseudo_rem(U, V, x);
         expr_free(U);
         U = V;
@@ -1713,6 +1808,14 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
         expr_free(R); expr_free(contR);
     }
     if (V) expr_free(V);
+
+    /* On budget exhaustion, return the content GCD alone — a valid
+     * (over-estimate-safe) divisor that lets the cancel pipeline
+     * proceed without coefficient explosion. */
+    if (budget_blown) {
+        expr_free(U);
+        return expr_expand(contGCD);
+    }
     
     // Normalize U to have positive leading coefficient
     Expr* lc = get_coeff(U, x, get_degree_poly(U, x));
@@ -2397,6 +2500,51 @@ typedef struct {
     size_t coeff_cap;
 } CollectGroup;
 
+/* Compute the residual BP list = `term_bp` minus k copies of every
+ * factor in `var_bp`. Caller pre-validated that get_k(term_bp,
+ * var_bp) == k, so each var_bp factor is present in term_bp with
+ * sufficient exponent. Returns a fresh BPList with the leftover
+ * factors. Uses integer-exp arithmetic; non-integer exponents are
+ * preserved unchanged when their structural copy matches (those would
+ * have produced k==1 from get_k anyway). */
+static void bp_compute_residual(BPList* term_bp, BPList* var_bp,
+                                int64_t k, BPList* out) {
+    bp_init(out);
+    /* Build a "consumed exponent per term_bp index" map. */
+    int64_t* consumed = calloc(term_bp->count, sizeof(int64_t));
+    for (size_t vi = 0; vi < var_bp->count; vi++) {
+        Expr* vb = var_bp->data[vi].base;
+        Expr* ve = var_bp->data[vi].exp;
+        for (size_t tj = 0; tj < term_bp->count; tj++) {
+            if (expr_eq(vb, term_bp->data[tj].base)) {
+                if (ve->type == EXPR_INTEGER) {
+                    consumed[tj] += k * ve->data.integer;
+                } else {
+                    /* Non-integer var exp: get_k returned 1, exponent
+                     * matches structurally — consume the whole. */
+                    consumed[tj] = -1; /* sentinel: drop entirely */
+                }
+                break;
+            }
+        }
+    }
+    for (size_t tj = 0; tj < term_bp->count; tj++) {
+        Expr* tb = term_bp->data[tj].base;
+        Expr* te = term_bp->data[tj].exp;
+        if (consumed[tj] == -1) continue;  /* dropped */
+        if (te->type == EXPR_INTEGER && consumed[tj] > 0) {
+            int64_t rem = te->data.integer - consumed[tj];
+            if (rem == 0) continue;
+            Expr* re = expr_new_integer(rem);
+            bp_add(out, tb, re);
+            expr_free(re);
+        } else {
+            bp_add(out, tb, te);
+        }
+    }
+    free(consumed);
+}
+
 static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t var_idx, Expr* h) {
     if (expr->type == EXPR_FUNCTION && is_threadable_head(expr->data.function.head)) {
         size_t count = expr->data.function.arg_count;
@@ -2415,7 +2563,21 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
     }
 
     Expr* var = vars[var_idx];
-    Expr* expanded = expr_expand_patt(expr, var);
+
+    /* Plus keys must be treated as opaque atoms: expanding the input
+     * with respect to a Plus pattern would distribute it across Times
+     * factors and destroy the Plus subterm we are trying to collect
+     * on. Skip expansion in that case. Times / atomic / Power keys
+     * still benefit from expansion to surface the var^k structure.
+     *
+     * MMA's `Collect[a (c+s) + b (c+s), c+s]` returns `(a+b)(c+s)`,
+     * not the distributed `a c + a s + b c + b s`. */
+    bool key_is_plus = (var->type == EXPR_FUNCTION
+                        && var->data.function.head
+                        && var->data.function.head->type == EXPR_SYMBOL
+                        && var->data.function.head->data.symbol == SYM_Plus);
+
+    Expr* expanded = key_is_plus ? expr_copy(expr) : expr_expand_patt(expr, var);
     if (!expanded) return expr_copy(expr);
 
     size_t term_count = 1;
@@ -2425,9 +2587,31 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
         terms = expanded->data.function.args;
     }
 
-    size_t group_cap = 16;
-    size_t group_count = 0;
-    CollectGroup* groups = malloc(sizeof(CollectGroup) * group_cap);
+    /* Decompose the key. Two paths:
+     *
+     * 1. Single-base key (var_bp.count == 1) -- atoms `x`, powers
+     *    `Power[x, e]`, Plus keys `Plus[c, s]`. Group each term by
+     *    `term_exp / var_exp`, the rational/symbolic exponent at which
+     *    the key's base appears in the term. This handles non-integer
+     *    exponents like `Sqrt[x] = x^(1/2)` correctly.
+     *
+     * 2. Multi-factor key (var_bp.count > 1) -- Times monomials
+     *    `x*y*z`, etc. Use `get_k` to find the integer multiplicity at
+     *    which `var` divides the term. For these keys, fractional
+     *    "k" doesn't have a coherent meaning (you can't have half a
+     *    `x*y`), so the integer-only ratio is what matches MMA's
+     *    behaviour. */
+    BPList var_bp;
+    bp_init(&var_bp);
+    decompose_to_bp(var, &var_bp);
+
+    typedef struct { Expr* k_expr; int64_t k_int; bool int_form; Expr** coeffs; size_t cc, ccap; } CGrp;
+    size_t gcap = 8, gcount = 0;
+    CGrp* groups = malloc(sizeof(CGrp) * gcap);
+
+    bool single_base = (var_bp.count == 1);
+    Expr* sb_base = single_base ? var_bp.data[0].base : NULL;
+    Expr* sb_exp  = single_base ? var_bp.data[0].exp  : NULL;
 
     for (size_t i = 0; i < term_count; i++) {
         Expr* term = terms[i];
@@ -2435,116 +2619,160 @@ static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t v
         bp_init(&term_bp);
         decompose_to_bp(term, &term_bp);
 
-        Expr* match_base = NULL;
-        Expr* match_exp = NULL;
-        int matched_idx = -1;
-
-        for (size_t j = 0; j < term_bp.count; j++) {
-            MatchEnv* env = env_new();
-            if (match(term_bp.data[j].base, var, env)) {
-                match_base = expr_copy(term_bp.data[j].base);
-                match_exp = expr_copy(term_bp.data[j].exp);
-                matched_idx = j;
-                env_free(env);
-                break;
-            }
-            env_free(env);
-        }
-
+        Expr* k_expr = NULL;       /* group key for single_base path */
+        int64_t k_int = 0;          /* group key for multi-factor path */
+        bool int_form = !single_base;
         Expr* coeff = NULL;
-        if (matched_idx == -1) {
-            coeff = rebuild_from_bp(&term_bp);
-        } else {
-            expr_free(term_bp.data[matched_idx].base);
-            expr_free(term_bp.data[matched_idx].exp);
-            for (size_t j = matched_idx; j < term_bp.count - 1; j++) {
-                term_bp.data[j] = term_bp.data[j + 1];
+
+        if (single_base) {
+            int matched_idx = -1;
+            for (size_t j = 0; j < term_bp.count; j++) {
+                if (expr_eq(sb_base, term_bp.data[j].base)) {
+                    matched_idx = (int)j;
+                    break;
+                }
             }
-            term_bp.count--;
-            coeff = rebuild_from_bp(&term_bp);
+            if (matched_idx == -1) {
+                k_expr = expr_new_integer(0);
+                coeff = rebuild_from_bp(&term_bp);
+            } else {
+                Expr* term_exp = term_bp.data[matched_idx].exp;
+                /* k = term_exp / var_exp. */
+                if (sb_exp->type == EXPR_INTEGER && sb_exp->data.integer == 1) {
+                    k_expr = expr_copy(term_exp);
+                } else if (sb_exp->type == EXPR_INTEGER && term_exp->type == EXPR_INTEGER) {
+                    int64_t a = term_exp->data.integer;
+                    int64_t b = sb_exp->data.integer;
+                    if (b != 0 && a % b == 0) {
+                        k_expr = expr_new_integer(a / b);
+                    } else {
+                        /* Non-integer ratio with Power key -> no clean
+                         * fit; treat as no-match. */
+                        k_expr = expr_new_integer(0);
+                    }
+                } else {
+                    /* Symbolic / rational exponents: build the literal
+                     * ratio so equal terms collect (group key compared
+                     * by expr_eq). */
+                    Expr* inv_var = internal_power((Expr*[]){expr_copy(sb_exp), expr_new_integer(-1)}, 2);
+                    k_expr = internal_times((Expr*[]){expr_copy(term_exp), inv_var}, 2);
+                }
+                /* Coefficient: term without the matched BP entry. */
+                bool zero_k = (k_expr->type == EXPR_INTEGER && k_expr->data.integer == 0);
+                if (zero_k) {
+                    coeff = rebuild_from_bp(&term_bp);
+                } else {
+                    /* Drop the matched entry. */
+                    BPList rest;
+                    bp_init(&rest);
+                    for (size_t j = 0; j < term_bp.count; j++) {
+                        if ((int)j == matched_idx) continue;
+                        bp_add(&rest, term_bp.data[j].base, term_bp.data[j].exp);
+                    }
+                    coeff = rebuild_from_bp(&rest);
+                    bp_free(&rest);
+                }
+            }
+        } else {
+            k_int = get_k(&term_bp, &var_bp);
+            if (k_int == 0) {
+                coeff = rebuild_from_bp(&term_bp);
+            } else {
+                BPList res_bp;
+                bp_compute_residual(&term_bp, &var_bp, k_int, &res_bp);
+                coeff = rebuild_from_bp(&res_bp);
+                bp_free(&res_bp);
+            }
         }
         bp_free(&term_bp);
 
-        if (!match_exp) match_exp = expr_new_integer(0);
-
+        /* Find or create group with matching k. */
         int found = -1;
-        for (size_t j = 0; j < group_count; j++) {
-            bool base_eq = (!match_base && !groups[j].base) || (match_base && groups[j].base && expr_eq(match_base, groups[j].base));
-            bool exp_eq = expr_eq(match_exp, groups[j].exp);
-            if (base_eq && exp_eq) {
-                found = j;
-                break;
+        for (size_t j = 0; j < gcount; j++) {
+            if (int_form != groups[j].int_form) continue;
+            if (int_form) {
+                if (groups[j].k_int == k_int) { found = (int)j; break; }
+            } else {
+                if (expr_eq(k_expr, groups[j].k_expr)) { found = (int)j; break; }
             }
         }
-
         if (found == -1) {
-            if (group_count == group_cap) {
-                group_cap *= 2;
-                groups = realloc(groups, sizeof(CollectGroup) * group_cap);
-            }
-            groups[group_count].base = match_base; 
-            groups[group_count].exp = match_exp;   
-            groups[group_count].coeff_cap = 4;
-            groups[group_count].coeff_count = 0;
-            groups[group_count].coeffs = malloc(sizeof(Expr*) * 4);
-            found = group_count;
-            group_count++;
+            if (gcount == gcap) { gcap *= 2; groups = realloc(groups, sizeof(CGrp) * gcap); }
+            groups[gcount].int_form = int_form;
+            groups[gcount].k_int = k_int;
+            groups[gcount].k_expr = single_base ? k_expr : NULL;
+            groups[gcount].cc = 0;
+            groups[gcount].ccap = 4;
+            groups[gcount].coeffs = malloc(sizeof(Expr*) * 4);
+            found = (int)gcount++;
         } else {
-            if (match_base) expr_free(match_base);
-            expr_free(match_exp);
+            if (single_base && k_expr) expr_free(k_expr);
         }
-
-        if (groups[found].coeff_count == groups[found].coeff_cap) {
-            groups[found].coeff_cap *= 2;
-            groups[found].coeffs = realloc(groups[found].coeffs, sizeof(Expr*) * groups[found].coeff_cap);
+        if (groups[found].cc == groups[found].ccap) {
+            groups[found].ccap *= 2;
+            groups[found].coeffs = realloc(groups[found].coeffs, sizeof(Expr*) * groups[found].ccap);
         }
-        groups[found].coeffs[groups[found].coeff_count++] = coeff;
+        groups[found].coeffs[groups[found].cc++] = coeff;
     }
 
-    Expr** final_terms = malloc(sizeof(Expr*) * group_count);
+    Expr** final_terms = malloc(sizeof(Expr*) * gcount);
     size_t final_count = 0;
-
-    for (size_t i = 0; i < group_count; i++) {
-        Expr* coeff_sum = NULL;
-        if (groups[i].coeff_count == 1) {
+    for (size_t i = 0; i < gcount; i++) {
+        Expr* coeff_sum;
+        if (groups[i].cc == 1) {
             coeff_sum = expr_copy(groups[i].coeffs[0]);
         } else {
-            Expr** c_args = malloc(sizeof(Expr*) * groups[i].coeff_count);
-            for (size_t j = 0; j < groups[i].coeff_count; j++) c_args[j] = expr_copy(groups[i].coeffs[j]);
-            coeff_sum = internal_plus(c_args, groups[i].coeff_count);
-            free(c_args);
+            Expr** ca = malloc(sizeof(Expr*) * groups[i].cc);
+            for (size_t j = 0; j < groups[i].cc; j++) ca[j] = expr_copy(groups[i].coeffs[j]);
+            coeff_sum = internal_plus(ca, groups[i].cc);
+            free(ca);
         }
 
         Expr* collected_coeff = collect_internal(coeff_sum, vars, num_vars, var_idx + 1, h);
         expr_free(coeff_sum);
 
-        Expr* term = NULL;
-        if (!groups[i].base || (groups[i].exp->type == EXPR_INTEGER && groups[i].exp->data.integer == 0)) {
+        Expr* term;
+        bool zero_group;
+        if (groups[i].int_form) {
+            zero_group = (groups[i].k_int == 0);
+        } else {
+            zero_group = (groups[i].k_expr->type == EXPR_INTEGER && groups[i].k_expr->data.integer == 0);
+        }
+        if (zero_group) {
             term = collected_coeff;
         } else {
-            Expr* power = internal_power((Expr*[]){expr_copy(groups[i].base), expr_copy(groups[i].exp)}, 2);
-            term = internal_times((Expr*[]){collected_coeff, power}, 2);
+            Expr* var_pow;
+            if (groups[i].int_form) {
+                var_pow = (groups[i].k_int == 1)
+                    ? expr_copy(var)
+                    : internal_power((Expr*[]){expr_copy(var), expr_new_integer(groups[i].k_int)}, 2);
+            } else {
+                /* Single-base key: rebuild Power[base, k_expr] (or
+                 * just `base` when k_expr = 1). */
+                bool k_is_one = (groups[i].k_expr->type == EXPR_INTEGER
+                                 && groups[i].k_expr->data.integer == 1);
+                if (k_is_one) {
+                    /* var = base^var_exp; with k=1 this is just var. */
+                    var_pow = expr_copy(var);
+                } else {
+                    var_pow = internal_power((Expr*[]){expr_copy(sb_base), expr_copy(groups[i].k_expr)}, 2);
+                }
+            }
+            term = internal_times((Expr*[]){collected_coeff, var_pow}, 2);
         }
-
         final_terms[final_count++] = term;
 
-        if (groups[i].base) expr_free(groups[i].base);
-        expr_free(groups[i].exp);
-        for (size_t j = 0; j < groups[i].coeff_count; j++) {
-            expr_free(groups[i].coeffs[j]);
-        }
+        if (!groups[i].int_form && groups[i].k_expr) expr_free(groups[i].k_expr);
+        for (size_t j = 0; j < groups[i].cc; j++) expr_free(groups[i].coeffs[j]);
         free(groups[i].coeffs);
     }
     free(groups);
+    bp_free(&var_bp);
 
-    Expr* result = NULL;
-    if (final_count == 0) {
-        result = expr_new_integer(0);
-    } else if (final_count == 1) {
-        result = final_terms[0];
-    } else {
-        result = internal_plus(final_terms, final_count);
-    }
+    Expr* result;
+    if (final_count == 0) result = expr_new_integer(0);
+    else if (final_count == 1) result = final_terms[0];
+    else result = internal_plus(final_terms, final_count);
 
     free(final_terms);
     expr_free(expanded);

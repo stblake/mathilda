@@ -2,6 +2,7 @@
 #include "arithmetic.h"
 #include "attr.h"
 #include "eval.h"
+#include "expand.h"
 #include "facpoly.h"
 #include "parse.h"
 #include "print.h"
@@ -428,16 +429,32 @@ static bool fact_directly_nonpos(const AssumeCtx* ctx, const Expr* x) {
 
 /* True iff `x` is provably an even integer under `ctx`. Recognises
  * Mod[x, 2] == 0 and Element[x, Evens]; integer literals are handled at
- * the leaf level so we don't need a separate fact for them. v1 does not
- * propagate evenness through Times/Plus -- those would need a stronger
- * "two of these are even" reasoner. */
+ * the leaf level so we don't need a separate fact for them.
+ *
+ * Times propagation: a product is even when at least one factor is even
+ * and every factor is integer-valued — covers `2*n` with `n` integer. */
 static bool prov_even(const AssumeCtx* ctx, const Expr* x) {
     if (!x) return false;
     if (x->type == EXPR_INTEGER) return (x->data.integer % 2) == 0;
     if (x->type == EXPR_BIGINT) return mpz_even_p(x->data.bigint) != 0;
-    if (!ctx) return false;
-    for (size_t i = 0; i < ctx->count; i++) {
-        if (fact_implies_even(ctx->facts[i], x)) return true;
+    if (ctx) {
+        for (size_t i = 0; i < ctx->count; i++) {
+            if (fact_implies_even(ctx->facts[i], x)) return true;
+        }
+    }
+    /* Times propagation: at least one factor even AND all factors int. */
+    if (x->type == EXPR_FUNCTION &&
+        x->data.function.head &&
+        x->data.function.head->type == EXPR_SYMBOL &&
+        x->data.function.head->data.symbol == SYM_Times) {
+        bool any_even = false;
+        bool all_int = true;
+        for (size_t i = 0; i < x->data.function.arg_count; i++) {
+            const Expr* f = x->data.function.args[i];
+            if (!prov_int(ctx, f)) { all_int = false; break; }
+            if (prov_even(ctx, f)) any_even = true;
+        }
+        if (all_int && any_even) return true;
     }
     return false;
 }
@@ -551,7 +568,11 @@ static bool prov_int(const AssumeCtx* ctx, const Expr* x) {
     if (x->type == EXPR_INTEGER || x->type == EXPR_BIGINT) return true;
     if (!ctx) return false;
     for (size_t i = 0; i < ctx->count; i++) {
-        if (fact_in_domain(ctx->facts[i], x, "Integers")) return true;
+        if (fact_in_domain(ctx->facts[i], x, "Integers") ||
+            fact_in_domain(ctx->facts[i], x, "PositiveIntegers") ||
+            fact_in_domain(ctx->facts[i], x, "NonnegativeIntegers") ||
+            fact_in_domain(ctx->facts[i], x, "NegativeIntegers") ||
+            fact_in_domain(ctx->facts[i], x, "NonpositiveIntegers")) return true;
     }
     if (x->type == EXPR_FUNCTION &&
         x->data.function.head &&
@@ -6301,11 +6322,58 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
         }
     }
 
-    /* Power[Times[u1,...,un], a]  -> Times[ui^a]  when every ui positive.
-     * Power[Power[x, p], q]       -> Power[x, p*q] when x positive, p real. */
+    /* Power[-1, k] reductions: even exponent -> 1, odd exponent -> -1.
+     * Catches `(-1)^(2 n)` with `n` provably integer, etc. The Times
+     * propagation in prov_even (a product of integers with at least one
+     * even factor is even) handles the canonical user input. */
     if (h == SYM_Power && n == 2) {
         Expr* base = a[0];
         Expr* exp_  = a[1];
+        if (base->type == EXPR_INTEGER && base->data.integer == -1) {
+            if (prov_even(ctx, exp_)) return expr_new_integer(1);
+        }
+    }
+
+    /* Exp distribute: Power[E, Plus[t1,...,tn]] -> Product Power[E, ti].
+     * Always sound (E^(x+y) = E^x · E^y for any x, y). When the exponent
+     * is a product like `Times[c, Plus[...]]`, expand it first so the
+     * Plus surfaces. After distribution, individual Power[E, c·Log u]
+     * subterms collapse to `u^c` via picocas's existing
+     * Power[E, c·Log[u]] -> u^c rule, completing identities like
+     *
+     *   Exp[3 (Log[a] + Log[b])]  ->  a^3 · b^3
+     *   Exp[y (Log[a] + Log[b])]  ->  a^y · b^y    (a > 0, b > 0)
+     */
+    if (h == SYM_Power && n == 2) {
+        Expr* base = a[0];
+        Expr* exp_  = a[1];
+
+        if (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E) {
+            /* Try to expand the exponent so Plus distributes through any
+             * outer Times. Cheap, idempotent, and only used to detect
+             * Plus structure. */
+            Expr* expanded_exp = expr_expand(exp_);
+            if (expanded_exp &&
+                expanded_exp->type == EXPR_FUNCTION &&
+                expanded_exp->data.function.head &&
+                expanded_exp->data.function.head->type == EXPR_SYMBOL &&
+                expanded_exp->data.function.head->data.symbol == SYM_Plus &&
+                expanded_exp->data.function.arg_count > 1) {
+                size_t en = expanded_exp->data.function.arg_count;
+                Expr** factors = (Expr**)calloc(en, sizeof(Expr*));
+                for (size_t i = 0; i < en; i++) {
+                    factors[i] = build_binary("Power", expr_new_symbol("E"),
+                                              expr_copy(expanded_exp->data.function.args[i]));
+                }
+                Expr* prod = expr_new_function(expr_new_symbol("Times"), factors, en);
+                free(factors);
+                Expr* canon = evaluate(prod);
+                expr_free(prod);
+                expr_free(expanded_exp);
+                return canon;
+            }
+            if (expanded_exp) expr_free(expanded_exp);
+        }
 
         if (base->type == EXPR_FUNCTION &&
             base->data.function.head &&
@@ -6354,7 +6422,10 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
  * Bounded iteration count protects against pathological alternations
  * with the evaluator's canonicalisation. */
 static Expr* apply_logexp_rules(const Expr* input, const AssumeCtx* ctx) {
-    if (!ctx) return NULL;
+    /* NULL ctx is treated as an empty context. The positivity-aware
+     * Log[a*b] -> Log[a]+Log[b] etc. rewrites simply won't fire
+     * (prov_pos returns false), but the unconditional
+     * Power[E, Plus[...]] distribute rule still does its job. */
     Expr* current = expr_copy((Expr*)input);
     bool changed = false;
     for (int iter = 0; iter < 8; iter++) {
@@ -6850,11 +6921,13 @@ static bool transform_can_fire(const char* name, const Expr* e,
     if (strcmp(name, "AbsRules") == 0) {
         if (!contains_abs(e)) return false;
     }
-    /* LogExp identity cascade: nothing fires unless Log or Power is present
-     * AND the assumption ctx has at least one fact (the cascade reads
-     * positivity/reality of operands from ctx). */
+    /* LogExp identity cascade: requires Log or Power somewhere (the
+     * positivity-aware rewrites — Log[a*b] -> Log[a]+Log[b] etc. — are
+     * gated on ctx facts internally; the unconditional Exp-distribute
+     * rewrite Power[E, Plus[...]] -> Product Power[E, ti] fires
+     * regardless and is needed for `Exp[k(Log a + Log b)] -> a^k b^k`
+     * with integer k where no positivity assumption is required). */
     if (strcmp(name, "LogExpRules") == 0) {
-        if (!ctx_has_facts(ctx)) return false;
         if (!contains_log(e) && !contains_power(e)) return false;
     }
     /* Assumption rewriter: nothing fires without facts. */
