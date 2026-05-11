@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include <math.h>
 #include <ctype.h>
+#include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 
 // Create/allocate a new integer expression.
@@ -431,26 +433,6 @@ bool expr_eq(const Expr* a, const Expr* b) {
     return false;
 }
 
-static bool is_numeric_coefficient_factor(const Expr* e); /* fwd decl */
-
-static int get_canonical_rank(const Expr* e) {
-    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL || is_rational((Expr*)e, NULL, NULL)) return 0;
-#ifdef USE_MPFR
-    if (e->type == EXPR_MPFR) return 0;
-#endif
-    if (is_complex((Expr*)e, NULL, NULL)) return 1;
-    if (e->type == EXPR_STRING) return 2;
-    if (e->type == EXPR_SYMBOL) return 3;
-    /* Treat constants built from arithmetic/radicals (Sqrt[2], Sqrt[2-Sqrt[2]],
-     * (1+Sqrt[3])/2, ...) as numeric for canonical-order purposes, so they
-     * sort before symbols inside Times and inside Plus's main-factor
-     * comparison. Without this, `Sqrt[2-Sqrt[2]] x` would be stored as
-     * Times[x, Sqrt[2-Sqrt[2]]] (rank 3 < rank 4), preventing the
-     * leading-numeric strip in get_main_factor from ever firing. */
-    if (is_numeric_coefficient_factor(e)) return 0;
-    return 4; // General function
-}
-
 static double get_numeric_value(const Expr* e) {
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
     if (e->type == EXPR_BIGINT) return mpz_get_d(e->data.bigint);
@@ -487,63 +469,6 @@ static int string_compare_canonical(const char* s1, const char* s2) {
     return 0;
 }
 
-/* True if `e` should be treated as a numeric coefficient when stripping
- * the leading factor of a Times for canonical-order comparison. Covers the
- * obvious atomic numerics (Integer/Real/BigInt/MPFR), Rational[n,d],
- * Complex[re,im] over numeric components, Power[numeric, numeric] (i.e.
- * radicals like Sqrt[2] = Power[2, 1/2] and 2^(1/3)), and arbitrarily
- * nested Plus/Times of numeric components (so `Sqrt[2 - Sqrt[2]]` and
- * `(1 + Sqrt[3])/2` are recognised as constants). Without this, monomials
- * like `Sqrt[2 - Sqrt[2]] x` would not have their main factor recognised
- * as `x`, so canonical sort placed them after `x^2` instead of before. */
-static bool is_numeric_coefficient_factor(const Expr* e) {
-    if (!e) return false;
-    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT
-#ifdef USE_MPFR
-        || e->type == EXPR_MPFR
-#endif
-        ) return true;
-    if (e->type != EXPR_FUNCTION) return false;
-    if (is_rational((Expr*)e, NULL, NULL)) return true;
-    if (e->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = e->data.function.head->data.symbol;
-        if (h == SYM_Power && e->data.function.arg_count == 2) {
-            return is_numeric_coefficient_factor(e->data.function.args[0])
-                && is_numeric_coefficient_factor(e->data.function.args[1]);
-        }
-        if ((h == SYM_Plus || h == SYM_Times) && e->data.function.arg_count > 0) {
-            for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                if (!is_numeric_coefficient_factor(e->data.function.args[i])) return false;
-            }
-            return true;
-        }
-        if (h == SYM_Complex) {
-            Expr *re, *im;
-            if (is_complex((Expr*)e, &re, &im)) {
-                return is_numeric_coefficient_factor(re) && is_numeric_coefficient_factor(im);
-            }
-        }
-    }
-    return false;
-}
-
-static Expr* get_main_factor(Expr* e) {
-    if (e->type != EXPR_FUNCTION) return e;
-    Expr* head = e->data.function.head;
-    if (head->type != EXPR_SYMBOL) return e;
-
-    if (head->data.symbol == SYM_Power && e->data.function.arg_count >= 1) {
-        return get_main_factor(e->data.function.args[0]);
-    }
-    if (head->data.symbol == SYM_Times && e->data.function.arg_count >= 1) {
-        Expr* first = e->data.function.args[0];
-        if (is_numeric_coefficient_factor(first)) {
-            if (e->data.function.arg_count == 2) return get_main_factor(e->data.function.args[1]);
-            return e->data.function.args[1];
-        }
-    }
-    return e;
-}
 
 /* True for the atomic numeric kinds that have an extractable double value:
  * Integer, BigInt, Real, Rational, MPFR. False for symbolic numeric
@@ -559,143 +484,219 @@ static bool is_atomic_numeric(const Expr* e) {
     return false;
 }
 
+/* Return true iff `e` contains a Symbol with the interned name `sym`
+ * anywhere in its tree (heads and args included). */
+static bool expr_contains_symbol(const Expr* e, const char* sym) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol == sym;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (expr_contains_symbol(e->data.function.head, sym)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (expr_contains_symbol(e->data.function.args[i], sym)) return true;
+    }
+    return false;
+}
+
+/* Polynomial degree of `e` in the variable `v`, as a double:
+ *   0.0          -- e does not contain v.
+ *   k > 0        -- e is v (k=1), Power[v, k] for positive integer or
+ *                   rational k, or a Times product whose direct factors
+ *                   sum to k.
+ *   +inf         -- e contains v in a non-polynomial position: inside a
+ *                   compound that isn't bare-v / Power[v, positive rational]
+ *                   (e.g. Sin[v], Plus[..., v, ...], Power[v, negative],
+ *                   Power[non-v-containing-v, _]).
+ *
+ * Only DIRECT factors of a Times contribute to the sum; a non-poly
+ * direct factor that itself contains v (e.g. Sin[v]) saturates the
+ * result at +inf.  This matches Mathematica's canonical order:
+ *   - `Sin[x] + x` displays as `x + Sin[x]` (poly-in-x before
+ *      non-poly-in-x).
+ *   - `Sqrt[x] + x^2` displays as `Sqrt[x] + x^2` (deg 1/2 < deg 2).
+ *   - `1/x + 1` displays as `1 + 1/x` (negative-exp x treated as +inf
+ *      so it sorts last).
+ *   - `(3 + 6 a + 3 a^2) x` sorts by deg_x = 1 regardless of the Plus
+ *      coefficient's internal a-degree. */
+static double expr_poly_degree(const Expr* e, const char* v) {
+    if (!e) return 0.0;
+    if (e->type == EXPR_SYMBOL) return (e->data.symbol == v) ? 1.0 : 0.0;
+    if (e->type != EXPR_FUNCTION) return 0.0;
+    if (e->data.function.head->type != EXPR_SYMBOL) {
+        return expr_contains_symbol(e, v) ? INFINITY : 0.0;
+    }
+    const char* h = e->data.function.head->data.symbol;
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp  = e->data.function.args[1];
+        if (base->type == EXPR_SYMBOL && base->data.symbol == v) {
+            if (exp->type == EXPR_INTEGER) {
+                int64_t k = exp->data.integer;
+                if (k < 0) return INFINITY;
+                return (double)k;
+            }
+            int64_t num, den;
+            if (is_rational((Expr*)exp, &num, &den) && den > 0) {
+                if (num < 0) return INFINITY;
+                return (double)num / (double)den;
+            }
+            return INFINITY;
+        }
+        return (expr_contains_symbol(base, v) || expr_contains_symbol(exp, v))
+               ? INFINITY : 0.0;
+    }
+    if (h == SYM_Times) {
+        double sum = 0.0;
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            double d = expr_poly_degree(e->data.function.args[i], v);
+            if (isinf(d)) return INFINITY;
+            sum += d;
+        }
+        return sum;
+    }
+    return expr_contains_symbol(e, v) ? INFINITY : 0.0;
+}
+
+/* Append every distinct Symbol-name pointer appearing in `e` to `out`
+ * (up to capacity `cap`), via a depth-first walk that visits heads and
+ * args.  Returns the new logical length of `out`.  Truncates silently
+ * if the buffer fills -- pathological inputs with hundreds of distinct
+ * symbols lose precision in the canonical order but won't crash. */
+static size_t collect_symbols_in(const Expr* e, const char** out,
+                                 size_t count, size_t cap) {
+    if (!e || count >= cap) return count;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < count; i++) {
+            if (out[i] == e->data.symbol) return count;
+        }
+        out[count++] = e->data.symbol;
+        return count;
+    }
+    if (e->type != EXPR_FUNCTION) return count;
+    count = collect_symbols_in(e->data.function.head, out, count, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        count = collect_symbols_in(e->data.function.args[i], out, count, cap);
+    }
+    return count;
+}
+
+/* qsort comparator that sorts char* pointers in REVERSE lexicographic
+ * order, so the lex-LAST variable name ends up first in the sorted
+ * array.  Used to drive the degree-vector comparison: in Mathematica's
+ * canonical order, the lex-last variable (e.g. `y` in {a, b, x, y}) is
+ * the most significant dimension. */
+static int symbol_reverse_cmp(const void* pa, const void* pb) {
+    const char* a = *(const char* const*)pa;
+    const char* b = *(const char* const*)pb;
+    return strcmp(b, a);
+}
+
+/* Canonical comparison of two expressions, modeled on Mathematica's
+ * `Order`.  Public entry point used by Sort, OrderedQ, and the
+ * Orderless-attribute argument-sorting pipeline in eval.c.
+ *
+ * Order of precedence:
+ *   1. Numeric atoms (Integer, Real, Rational, BigInt, MPFR) come first
+ *      and compare by value.  A numeric vs non-numeric pair places the
+ *      numeric first.
+ *   2. Strings come next, compared lexicographically.
+ *   3. Everything else (Symbols and Functions) is compared by polynomial
+ *      degree vector:
+ *        - Collect every Symbol name appearing in either expression.
+ *        - Sort those names in REVERSE alphabetical order.
+ *        - For each name v, compute the polynomial degree of each side
+ *          in v (see expr_poly_degree).
+ *        - Compare the degree vectors lexicographically ASCENDING.
+ *      This is what makes `Plus[a x^2, b x]` sort as `b x + a x^2`
+ *      (deg_x = 1 < deg_x = 2) and what gives the multivariate
+ *      grevlex-like display order on `Expand[(1 + x y^2 + y x^3)^3]`.
+ *   4. When the degree vectors are equal, fall back to a structural
+ *      tiebreak: bare Symbol before compound, then by head, arity, and
+ *      args (the args themselves are compared with this same canonical
+ *      comparator, so the tiebreak recursively re-enters polynomial
+ *      ordering for nested expressions). */
 int expr_compare(const Expr* a, const Expr* b) {
     if (a == b) return 0;
     if (!a) return -1;
     if (!b) return 1;
 
-    // char* sa = expr_to_string_fullform((Expr*)a);
-    // char* sb = expr_to_string_fullform((Expr*)b);
-    // printf("DEBUG: expr_compare(%s, %s)\n", sa, sb);
-    // free(sa); free(sb);
-
-    // Special polynomial order: compare main factors first
-    Expr* ma = get_main_factor((Expr*)a);
-    Expr* mb = get_main_factor((Expr*)b);
-    
-    if (ma != a || mb != b) {
-        int mcmp = expr_compare(ma, mb);
-        if (mcmp != 0) return mcmp;
-    }
-
-    int rank_a = get_canonical_rank(a);
-    int rank_b = get_canonical_rank(b);
-
-    if (rank_a != rank_b) return rank_a - rank_b;
-
-    switch (rank_a) {
-        case 0: { // Number
-            /* Atomic numerics (Integer/BigInt/Real/Rational/MPFR) have an
-             * extractable double; symbolic numeric constants reach rank 0
-             * via is_numeric_coefficient_factor but get_numeric_value
-             * returns 0 for them, so the value path would falsely report
-             * equality. Compare those structurally below. */
-            bool a_atomic = is_atomic_numeric(a);
-            bool b_atomic = is_atomic_numeric(b);
-            if (a_atomic && b_atomic) {
-                if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {
-                    if (a->data.integer < b->data.integer) return -1;
-                    if (a->data.integer > b->data.integer) return 1;
-                    return 0;
-                }
-                if (expr_is_integer_like(a) && expr_is_integer_like(b)) {
-                    mpz_t ma2, mb2;
-                    expr_to_mpz(a, ma2);
-                    expr_to_mpz(b, mb2);
-                    int cmp = mpz_cmp(ma2, mb2);
-                    mpz_clear(ma2);
-                    mpz_clear(mb2);
-                    return cmp;
-                }
-                double va = get_numeric_value(a);
-                double vb = get_numeric_value(b);
-                if (va < vb) return -1;
-                if (va > vb) return 1;
-                if (a->type != b->type) return (int)a->type - (int)b->type;
-                return 0;
-            }
-            /* Atomic numeric vs symbolic numeric constant: atomic first. */
-            if (a_atomic) return -1;
-            if (b_atomic) return 1;
-            /* Both symbolic. Fall through to general-function compare. */
-            goto general_function_compare;
-        }
-        case 1: { // Complex
-            Expr *re_a, *im_a, *re_b, *im_b;
-            is_complex((Expr*)a, &re_a, &im_a);
-            is_complex((Expr*)b, &re_b, &im_b);
-            int cmp = expr_compare(re_a, re_b);
-            if (cmp != 0) return cmp;
-            double abs_ima = fabs(get_numeric_value(im_a));
-            double abs_imb = fabs(get_numeric_value(im_b));
-            if (abs_ima < abs_imb) return -1;
-            if (abs_ima > abs_imb) return 1;
-            return expr_compare(im_a, im_b);
-        }
-        case 2: // String
-            return string_compare_canonical(a->data.string, b->data.string);
-        case 3: // Symbol
-            /* Interned: identical names share a pointer. Short-circuit
-             * the strcmp on identity; otherwise fall back to lexicographic
-             * order, which is what canonical sorting expects. */
-            if (a->data.symbol == b->data.symbol) return 0;
-            return strcmp(a->data.symbol, b->data.symbol);
-        case 4:
-        general_function_compare: { // General Function
-            Expr* ha = a->data.function.head;
-            Expr* hb = b->data.function.head;
-            
-            bool plus_a = (ha->type == EXPR_SYMBOL && ha->data.symbol == SYM_Plus);
-            bool plus_b = (hb->type == EXPR_SYMBOL && hb->data.symbol == SYM_Plus);
-            if (plus_a && !plus_b) return 1;
-            if (!plus_a && plus_b) return -1;
-
-            if (ha->type == EXPR_SYMBOL && hb->type == EXPR_SYMBOL) {
-                const char* na = ha->data.symbol;
-                const char* nb = hb->data.symbol;
-                if (na == SYM_Times && nb == SYM_Power) return -1;
-                if (na == SYM_Power && nb == SYM_Times) return 1;
-
-                if (na == SYM_Times && nb == SYM_Times) {
-                    size_t start_a = (a->data.function.arg_count > 0 && 
-                                      (a->data.function.args[0]->type == EXPR_INTEGER || 
-                                       a->data.function.args[0]->type == EXPR_REAL ||
-                                       is_rational(a->data.function.args[0], NULL, NULL))) ? 1 : 0;
-                    size_t start_b = (b->data.function.arg_count > 0 && 
-                                      (b->data.function.args[0]->type == EXPR_INTEGER || 
-                                       b->data.function.args[0]->type == EXPR_REAL ||
-                                       is_rational(b->data.function.args[0], NULL, NULL))) ? 1 : 0;
-                    
-                    size_t count_a = a->data.function.arg_count - start_a;
-                    size_t count_b = b->data.function.arg_count - start_b;
-                    size_t min_count = (count_a < count_b) ? count_a : count_b;
-                    
-                    for (size_t i = 0; i < min_count; i++) {
-                        int cmp = expr_compare(a->data.function.args[start_a + i], b->data.function.args[start_b + i]);
-                        if (cmp != 0) return cmp;
-                    }
-                    if (count_a < count_b) return -1;
-                    if (count_a > count_b) return 1;
-                    
-                    if (start_a > 0 && start_b > 0) return expr_compare(a->data.function.args[0], b->data.function.args[0]);
-                    if (start_a > 0) return -1;
-                    if (start_b > 0) return 1;
-                }
-            }
-
-            if (a->data.function.arg_count < b->data.function.arg_count) return -1;
-            if (a->data.function.arg_count > b->data.function.arg_count) return 1;
-            
-            int head_cmp = expr_compare(ha, hb);
-            if (head_cmp != 0) return head_cmp;
-            
-            for (size_t i = 0; i < a->data.function.arg_count; i++) {
-                int arg_cmp = expr_compare(a->data.function.args[i], b->data.function.args[i]);
-                if (arg_cmp != 0) return arg_cmp;
-            }
+    /* 1. Numeric atoms. */
+    bool a_atomic = is_atomic_numeric(a);
+    bool b_atomic = is_atomic_numeric(b);
+    if (a_atomic && b_atomic) {
+        if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {
+            if (a->data.integer < b->data.integer) return -1;
+            if (a->data.integer > b->data.integer) return 1;
             return 0;
         }
+        if (expr_is_integer_like(a) && expr_is_integer_like(b)) {
+            mpz_t ma2, mb2;
+            expr_to_mpz(a, ma2);
+            expr_to_mpz(b, mb2);
+            int cmp = mpz_cmp(ma2, mb2);
+            mpz_clear(ma2);
+            mpz_clear(mb2);
+            return cmp;
+        }
+        double va = get_numeric_value(a);
+        double vb = get_numeric_value(b);
+        if (va < vb) return -1;
+        if (va > vb) return 1;
+        if (a->type != b->type) return (int)a->type - (int)b->type;
+        return 0;
     }
+    if (a_atomic) return -1;
+    if (b_atomic) return 1;
+
+    /* 2. Strings. */
+    if (a->type == EXPR_STRING && b->type == EXPR_STRING) {
+        return string_compare_canonical(a->data.string, b->data.string);
+    }
+    if (a->type == EXPR_STRING) return -1;
+    if (b->type == EXPR_STRING) return 1;
+
+    /* 3. Polynomial degree vector comparison.  VAR_CAP=64 covers any
+     * realistic input; pathological inputs degrade gracefully (the
+     * comparator stays total because both sides see the same truncated
+     * variable set). */
+    enum { VAR_CAP = 64 };
+    const char* vars[VAR_CAP];
+    size_t count = 0;
+    count = collect_symbols_in(a, vars, count, VAR_CAP);
+    count = collect_symbols_in(b, vars, count, VAR_CAP);
+
+    qsort(vars, count, sizeof(const char*), symbol_reverse_cmp);
+
+    for (size_t i = 0; i < count; i++) {
+        double da = expr_poly_degree(a, vars[i]);
+        double db = expr_poly_degree(b, vars[i]);
+        if (da < db) return -1;
+        if (da > db) return 1;
+    }
+
+    /* 4. Structural tiebreak.  At this point both expressions share an
+     * identical polynomial signature; differences live in coefficients
+     * (atomic numerics) or non-poly factors (Plus/Sin/etc. that contain
+     * the same variables in the same non-poly way). */
+    if (a->type == EXPR_SYMBOL && b->type == EXPR_SYMBOL) {
+        if (a->data.symbol == b->data.symbol) return 0;
+        return strcmp(a->data.symbol, b->data.symbol);
+    }
+    if (a->type == EXPR_SYMBOL) return -1;
+    if (b->type == EXPR_SYMBOL) return 1;
+
+    if (a->type == EXPR_FUNCTION && b->type == EXPR_FUNCTION) {
+        int head_cmp = expr_compare(a->data.function.head, b->data.function.head);
+        if (head_cmp != 0) return head_cmp;
+        size_t ac = a->data.function.arg_count;
+        size_t bc = b->data.function.arg_count;
+        if (ac != bc) return (ac < bc) ? -1 : 1;
+        for (size_t i = 0; i < ac; i++) {
+            int c = expr_compare(a->data.function.args[i], b->data.function.args[i]);
+            if (c != 0) return c;
+        }
+        return 0;
+    }
+
     return 0;
 }
 
