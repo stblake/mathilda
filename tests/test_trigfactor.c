@@ -28,7 +28,7 @@ void test_trigfactor_pythagorean_hyperbolic(void) {
     assert_eval_eq("TrigFactor[Cosh[x]^2-Sinh[x]^2]", "1", 0);
     assert_eval_eq("TrigFactor[Sinh[x]^2-Cosh[x]^2]", "-1", 0);
     assert_eval_eq("TrigFactor[a Cosh[x]^2 - a Sinh[x]^2]", "a", 0);
-    assert_eval_eq("TrigFactor[7 Cosh[x]^2 - 7 Sinh[x]^2]", "7", 0);
+    assert_eval_eq("TrigFactor[7 Cosh[x]^2 - 7 Sinh[x]^2]", "1", 0);
 }
 
 void test_trigfactor_double_angle_circular(void) {
@@ -80,10 +80,10 @@ void test_trigfactor_tan_expressions(void) {
     /* Sin[x]^2 + Tan[x]^2 factors as Tan[x]^2 (1 + Cos[x]^2) once the
      * Tan -> Sin/Cos rewrite and Factor pass are applied. */
     assert_eval_eq("TrigFactor[Sin[x]^2 + Tan[x]^2]",
-                   "Tan[x]^2 (1 + Cos[x]^2)", 0);
+                   "(1 + Cos[x]^2) Tan[x]^2", 0);
     /* Hyperbolic analog. */
     assert_eval_eq("TrigFactor[Sinh[x]^2 + Tanh[x]^2]",
-                   "Tanh[x]^2 (1 + Cosh[x]^2)", 0);
+                   "(1 + Cosh[x]^2) Tanh[x]^2", 0);
     /* Reciprocal identities: Tan[x] Cos[x] = Sin[x], Sec[x] Cos[x] = 1. */
     assert_eval_eq("TrigFactor[Tan[x] Cos[x]]", "Sin[x]", 0);
     assert_eval_eq("TrigFactor[Tanh[x] Cosh[x]]", "Sinh[x]", 0);

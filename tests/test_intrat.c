@@ -179,7 +179,7 @@ static void test_hermite_reference(void) {
 static void test_integrate_polynomial_dispatch(void) {
     run_eq("Integrate[x^2, x]", "1/3 x^3");
     run_eq("Integrate[3 + 5 x + 2 x^2, x]", "3 x + 5/2 x^2 + 2/3 x^3");
-    run_eq("Integrate[a x^3 + b, x]", "1/4 a x^4 + b x");
+    run_eq("Integrate[a x^3 + b, x]", "b x + 1/4 a x^4");
     /* Pure constant. */
     run_eq("Integrate[5, x]", "5 x");
 }
@@ -231,7 +231,7 @@ static void test_helpers_extract_constants(void) {
 static void test_helpers_apartlist(void) {
     /* Three-pole partial-fraction expansion as a List. */
     run_eq("Integrate`Helpers`ApartList[1/((x-1)(x-2)(x-3)), x]",
-           "{1/2/(-3 + x), -1/(-2 + x), 1/2/(-1 + x)}");
+           "{-1/(-2 + x), 1/2/(-3 + x), 1/2/(-1 + x)}");
 }
 
 static void test_intrationallogpart(void) {

@@ -289,7 +289,7 @@ void test_exponential_moving_average() {
 
     /* Symbolic alpha — recurrence kept (no Distribute). */
     assert_eval_eq("ExponentialMovingAverage[{a, b}, x]",
-        "{a, a + x (-a + b)}", 0);
+        "{a, a + (-a + b) x}", 0);
     assert_eval_eq("ExponentialMovingAverage[{a, b}, 1/2]",
         "{a, a + 1/2 (-a + b)}", 0);
 

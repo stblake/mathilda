@@ -25,13 +25,13 @@ void test_integrals() {
     expr_free(load_cmd);
     
     printf("Formula 59\\n");
-    assert_eval_eq("Integrate[(1 + 2x)^3/(3 + 4x)^2, x]", "1/2 (-6 Integrate[(1 + 2 x)^3/(3 + 4 x), x] + (1 + 2 x)^4/(3 + 4 x))", 0);
+    assert_eval_eq("Integrate[(1 + 2x)^3/(3 + 4x)^2, x]", "1/4 x^2 + 1/(96 + 128 x) + 3/32 Log[3 + 4 x]", 0);
     
     printf("Formula 60\n");
-    assert_eval_eq("Integrate[1/(3 + 4x^2), x]", "(1/2 ArcTan[2/3 Sqrt[3] x])/Sqrt[3]", 0);
+    assert_eval_eq("Integrate[1/(3 + 4x^2), x]", "(1/2 ArcTan[(2 x)/Sqrt[3]])/Sqrt[3]", 0);
     
     printf("Formula 61\n");
-    assert_eval_eq("Integrate[1/(3 - 4x^2), x]", "(1/4 Log[(3 + 2 Sqrt[3] x)/(3 - 2 Sqrt[3] x)])/Sqrt[3]", 0);
+    assert_eval_eq("Integrate[1/(3 - 4x^2), x]", "-1/4 Log[-1/2 Sqrt[3] + x]/Sqrt[3] + 1/4 Log[1/2 Sqrt[3] + x]/Sqrt[3]", 0);
     
     printf("Formula 62\n");
     assert_eval_eq("Integrate[1/(9 + 16x^2), x]", "1/12 ArcTan[4/3 x]", 0);
@@ -40,7 +40,7 @@ void test_integrals() {
     assert_eval_eq("Integrate[x/(3 + 4x^2), x]", "1/8 Log[3 + 4 x^2]", 0);
     
     printf("Formula 64\n");
-    assert_eval_eq("Integrate[x^2/(3 + 4x^2), x]", "-3/8 ArcTan[2/3 Sqrt[3] x]/Sqrt[3] + 1/4 x", 0);
+    assert_eval_eq("Integrate[x^2/(3 + 4x^2), x]", "1/4 x - 1/8 Sqrt[3] ArcTan[(2 x)/Sqrt[3]]", 0);
     printf("Done!\n");
 }
 

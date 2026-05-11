@@ -770,9 +770,9 @@ static void test_series_symbolic_prefactor(void) {
      * factored Power around the expanded series. */
     assert_fullform(
         "Series[x^a Exp[x], {x, 0, 5}]",
-        "Times[Power[x, a], "
-        "SeriesData[x, 0, List[1, 1, Rational[1, 2], Rational[1, 6], "
-        "Rational[1, 24], Rational[1, 120]], 0, 6, 1]]");
+        "Times[SeriesData[x, 0, List[1, 1, Rational[1, 2], Rational[1, 6], "
+        "Rational[1, 24], Rational[1, 120]], 0, 6, 1], "
+        "Power[x, a]]");
 }
 
 /* Laurent/compound-series-input case: Exp of a (Log[1+u])/u-style expression
@@ -853,9 +853,9 @@ static void test_binomial_monomial_nonunit_a(void) {
     assert_fullform(
         "Series[(2 + 3 x)^(1/3), {x, 0, 3}]",
         "SeriesData[x, 0, List[Power[2, Rational[1, 3]], "
-        "Times[Rational[1, 2], Power[2, Rational[1, 3]]], "
-        "Times[Rational[-1, 4], Power[2, Rational[1, 3]]], "
-        "Times[Rational[5, 24], Power[2, Rational[1, 3]]]], 0, 4, 1]");
+        "Power[2, Rational[-2, 3]], "
+        "Times[Rational[-1, 2], Power[2, Rational[-2, 3]]], "
+        "Times[Rational[5, 12], Power[2, Rational[-2, 3]]]], 0, 4, 1]");
 }
 
 /* Symbolic alpha: (1 + x)^n kept in symbolic form. */

@@ -55,20 +55,20 @@ static void test_factorialpower_concrete(void) {
 static void test_bug8_dx_xn(void) {
     /* The Plus inside the exponent gets canonical "(-k+n)" ordering. */
     assert_eval_eq("D[x^n, {x, k}]",
-                   "x^(-k + n) FactorialPower[n, k]", 0);
+                   "FactorialPower[n, k] x^(-k + n)", 0);
     /* Concrete n: FactorialPower[3, k] stays unevaluated. */
     assert_eval_eq("D[x^3, {x, k}]",
-                   "x^(3 - k) FactorialPower[3, k]", 0);
+                   "FactorialPower[3, k] x^(3 - k)", 0);
     /* Constant pull-out: D[a x^n, {x, k}] = a x^(n-k) FactorialPower[n,k]. */
     assert_eval_eq("D[a*x^n, {x, k}]",
-                   "a x^(-k + n) FactorialPower[n, k]", 0);
+                   "a FactorialPower[n, k] x^(-k + n)", 0);
 }
 
 /* --- Bug 9: D[x^n, {n, k}] ------------------------------------------ */
 static void test_bug9_dn_xn(void) {
-    assert_eval_eq("D[x^n, {n, k}]", "x^n Log[x]^k", 0);
+    assert_eval_eq("D[x^n, {n, k}]", "Log[x]^k x^n", 0);
     /* Concrete base. */
-    assert_eval_eq("D[2^n, {n, k}]", "2^n Log[2]^k", 0);
+    assert_eval_eq("D[2^n, {n, k}]", "Log[2]^k 2^n", 0);
 }
 
 /* --- Algorithmic generality (Plus / Times pull-out) ----------------- */
@@ -78,11 +78,11 @@ static void test_symbolic_order_distributes(void) {
     assert_eval_eq("D[Pi, {x, k}]", "0", 0);
     /* Plus: distributes additively. */
     assert_eval_eq("D[a*x^n + b, {x, k}]",
-                   "a x^(-k + n) FactorialPower[n, k]", 0);
+                   "a FactorialPower[n, k] x^(-k + n)", 0);
     /* Multiple Power-in-x summands. */
     assert_eval_eq("D[x^n + x^m, {x, k}]",
-                   "x^(-k + m) FactorialPower[m, k]"
-                   " + x^(-k + n) FactorialPower[n, k]", 0);
+                   "FactorialPower[m, k] x^(-k + m)"
+                   " + FactorialPower[n, k] x^(-k + n)", 0);
 }
 
 int main(void) {

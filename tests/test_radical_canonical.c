@@ -184,7 +184,7 @@ static void test_power_negative_in_residue(void) {
     /* p < 0 with |p| < q: a = 0, b_rem = p (negative). Yields a rational
      * coefficient and a residual Power[r, b_rem/q] with negative exp. */
     /* 8^(-1/2) = 2^(-1) * 2^(-1/2) = 1/2 * 1/Sqrt[2] = 1/2^(3/2). */
-    assert_eval_eq("8^(-1/2)", "1/2^(3/2)", 0);
+    assert_eval_eq("8^(-1/2)", "1/2/Sqrt[2]", 0);
     /* 12^(-1/2) = 12 = 2^2 * 3, m=2, r=3. coeff = 1/2, residue = 1/Sqrt[3].
      * Times then has num_prod = 1/2, group (3, -1/2): no factors of 3 in
      * num_prod. Final: Times[1/2, Power[3, -1/2]]. The default printer
@@ -230,14 +230,14 @@ static void test_times_pulls_from_denominator(void) {
     /* The motivating cases: factors of the Power's base sitting in the
      * coefficient's denominator absorb into the exponent. */
     assert_eval_eq("Sqrt[2]/2",      "1/Sqrt[2]", 0);
-    assert_eval_eq("Sqrt[2]/4",      "1/2^(3/2)", 0);
-    assert_eval_eq("Sqrt[2]/8",      "1/2^(5/2)", 0);
+    assert_eval_eq("Sqrt[2]/4",      "1/2/Sqrt[2]", 0);
+    assert_eval_eq("Sqrt[2]/8",      "1/4/Sqrt[2]", 0);
     assert_eval_eq("Sqrt[3]/3",      "1/Sqrt[3]", 0);
-    assert_eval_eq("Sqrt[3]/9",      "1/3^(3/2)", 0);
-    assert_eval_eq("Sqrt[3]/27",     "1/3^(5/2)", 0);
+    assert_eval_eq("Sqrt[3]/9",      "1/3/Sqrt[3]", 0);
+    assert_eval_eq("Sqrt[3]/27",     "1/9/Sqrt[3]", 0);
     assert_eval_eq("Sqrt[5]/5",      "1/Sqrt[5]", 0);
     assert_eval_eq("2^(1/3)/2",      "1/2^(2/3)", 0);
-    assert_eval_eq("2^(1/3)/4",      "1/2^(5/3)", 0);
+    assert_eval_eq("2^(1/3)/4",      "1/2/2^(2/3)", 0);
     assert_eval_eq("3^(1/4)/3",      "1/3^(3/4)", 0);
 }
 
@@ -371,7 +371,7 @@ static void test_radical_with_symbolic(void) {
      * Power[b, q] interaction is rewritten. After Times canonicalization
      * x Sqrt[2]/2 becomes x * Power[2, -1/2] = x/Sqrt[2]. */
     assert_eval_eq("x Sqrt[2]/2",      "x/Sqrt[2]", 0);
-    assert_eval_eq("x / (2 Sqrt[2])",  "x/2^(3/2)", 0);
+    assert_eval_eq("x / (2 Sqrt[2])",  "(1/2 x)/Sqrt[2]", 0);
     /* Mathematical identity preservation through Simplify. */
     assert_eval_eq("Simplify[x Sqrt[2]/2 - x/Sqrt[2]]",     "0", 0);
     assert_eval_eq("Simplify[2^(1/3) x / 2 - x/2^(2/3)]",   "0", 0);
@@ -391,7 +391,7 @@ static void test_canonical_form_idempotent(void) {
      * second pass would diverge. */
     assert_eval_eq("1/Sqrt[2]",       "1/Sqrt[2]", 0);
     assert_eval_eq("1/2^(2/3)",       "1/2^(2/3)", 0);
-    assert_eval_eq("1/2^(3/2)",       "1/2^(3/2)", 0);
+    assert_eval_eq("1/2/Sqrt[2]",       "1/2/Sqrt[2]", 0);
     assert_eval_eq("3 Sqrt[3]",       "3 Sqrt[3]", 0);
     assert_eval_eq("39 Sqrt[3]",      "39 Sqrt[3]", 0);
     assert_eval_eq("4 Sqrt[2]",       "4 Sqrt[2]", 0);
@@ -402,13 +402,13 @@ static void test_canonical_form_negative_exponent(void) {
      * extract negative integer parts) so the Times canonicalizer
      * remains the only normaliser for these and the result is stable. */
     assert_eval_eq("Power[2, -1/2]",  "1/Sqrt[2]", 0);
-    assert_eval_eq("Power[2, -3/2]",  "1/2^(3/2)", 0);
-    assert_eval_eq("Power[2, -5/2]",  "1/2^(5/2)", 0);
+    assert_eval_eq("Power[2, -3/2]",  "1/2/Sqrt[2]", 0);
+    assert_eval_eq("Power[2, -5/2]",  "1/4/Sqrt[2]", 0);
     assert_eval_eq("Power[2, -2/3]",  "1/2^(2/3)", 0);
-    assert_eval_eq("Power[3, -3/2]",  "1/3^(3/2)", 0);
+    assert_eval_eq("Power[3, -3/2]",  "1/3/Sqrt[3]", 0);
     /* FullForm equivalents. */
     assert_eval_eq("Power[2, -1/2]",  "Power[2, Rational[-1, 2]]", 1);
-    assert_eval_eq("Power[2, -3/2]",  "Power[2, Rational[-3, 2]]", 1);
+    assert_eval_eq("Power[2, -3/2]",  "Times[Rational[1, 2], Power[2, Rational[-1, 2]]]", 1);
 }
 
 static void test_round_trip_arithmetic(void) {
@@ -424,7 +424,7 @@ static void test_round_trip_arithmetic(void) {
     /* (1/Sqrt[2])^2 = 1/2. */
     assert_eval_eq("(1/Sqrt[2])^2",         "1/2", 0);
     /* (1/Sqrt[2])^3 = 1/2^(3/2). */
-    assert_eval_eq("(1/Sqrt[2])^3",         "1/2^(3/2)", 0);
+    assert_eval_eq("(1/Sqrt[2])^3",         "1/2/Sqrt[2]", 0);
     /* Mixed: Sqrt[2] * (1/Sqrt[2]) = 1. */
     assert_eval_eq("Sqrt[2] * (1/Sqrt[2])", "1", 0);
     /* Sqrt[2]/Sqrt[2] = 1. */
@@ -440,7 +440,7 @@ static void test_zero_and_one_exponents_unchanged(void) {
      * radical-canonical paths; ensure they still do. */
     assert_eval_eq("2^0",      "1", 0);
     assert_eval_eq("2^1",      "2", 0);
-    assert_eval_eq("0^0",      "1", 0);
+    assert_eval_eq("0^0",      "Indeterminate", 0);
     assert_eval_eq("Power[2, 1]", "2", 0);
     assert_eval_eq("Power[3, 0]", "1", 0);
 }
@@ -464,7 +464,7 @@ static void test_chained_canonicalization(void) {
      * string. */
     assert_eval_eq("Simplify[(Sqrt[2]/2)(Sqrt[3]/3) Sqrt[6] - 1]", "0", 0);
     /* Nested:  (Sqrt[2]/2)^3 = 1/2^(3/2). */
-    assert_eval_eq("(Sqrt[2]/2)^3",         "1/2^(3/2)", 0);
+    assert_eval_eq("(Sqrt[2]/2)^3",         "1/2/Sqrt[2]", 0);
     /* Long sum of like radicals, all routed through canonicalization to
      * Power[2, -1/2] / Power[2, 1/2] forms.  Sqrt[8]/4 = 2 Sqrt[2]/4 =
      * 1/Sqrt[2]; total: Sqrt[2] + 2/Sqrt[2] = 2 Sqrt[2]. */

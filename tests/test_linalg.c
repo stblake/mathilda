@@ -46,14 +46,14 @@ void test_dot() {
 void test_det() {
     run_test("Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]", "0");
     run_test("Det[{{1.7, 7.1, -2.7}, {2.2, 8.7, 3.2}, {3.2, -9.2, 1.2}}]", "251.572");
-    run_test("Expand[Det[{{a, b, c}, {d, e, f}, {g, h, i}}]]", "Plus[Times[-1, Times[a, f, h]], Times[-1, Times[b, d, i]], Times[-1, Times[c, e, g]], Times[a, e, i], Times[b, f, g], Times[c, d, h]]");
+    run_test("Expand[Det[{{a, b, c}, {d, e, f}, {g, h, i}}]]", "Plus[Times[-1, Times[c, e, g]], Times[b, f, g], Times[c, d, h], Times[-1, Times[a, f, h]], Times[-1, Times[b, d, i]], Times[a, e, i]]");
 }
 
 void test_cross() {
     run_test("Cross[{1, 2, -1}, {-1, 1, 0}]", "List[1, 1, 3]");
     run_test("Cross[{1, Sqrt[3]}]", "List[Times[-1, Power[3, Rational[1, 2]]], 1]");
     run_test("Cross[{3.2, 4.2, 5.2}, {0.75, 0.09, 0.06}]", "List[-0.216, 3.708, -2.862]");
-    run_test("Cross[{1.3 + I, 2, 3 - 2 I}, {6. + I, 4, 5 - 7 I}]", "List[Complex[-2, -6], Complex[6.5, -4.9], Complex[-6.8, 2]]");
+    run_test("Cross[{1.3 + I, 2, 3 - 2 I}, {6. + I, 4, 5 - 7 I}]", "List[Complex[-2, -6], Complex[6.5, -4.9], Complex[-6.8, 2.0]]");
     run_test("Cross[{1, 2, 3}, {4, 5}]", "Cross[List[1, 2, 3], List[4, 5]]");
 }
 

@@ -74,19 +74,19 @@ void test_log_inverse_positive(void) {
 void test_log_power_real_exponent(void) {
     /* Log[a^p] -> p Log[a] when a positive and p real. */
     assert_eval_eq("Simplify[Log[a^p], a > 0 && Element[p, Reals]]",
-                   "p Log[a]", 0);
+                   "Log[a] p", 0);
 }
 
 void test_log_power_integer_exponent_through_real(void) {
     /* Integer exponent is real by lattice. */
     assert_eval_eq("Simplify[Log[a^n], a > 0 && Element[n, Integers]]",
-                   "n Log[a]", 0);
+                   "Log[a] n", 0);
 }
 
 void test_log_power_no_real_assumption(void) {
     /* Without proving the exponent real, the rewrite must NOT fire. */
     assert_eval_eq("Simplify[Log[a^p], a > 0]",
-                   "p Log[a]", 0);
+                   "Log[a] p", 0);
 }
 
 void test_log_power_negative_base(void) {

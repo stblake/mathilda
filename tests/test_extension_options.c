@@ -178,7 +178,7 @@ void test_apart_extension(void) {
      * coefficient 1/2 * 1/Sqrt[2] (and Sqrt[2]/4) collapse to the unified
      * 1/2^(3/2) form. */
     run_eq("Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]]",
-           "-1/(2^(3/2) (Sqrt[2] + x)) + 1/(2^(3/2) (-Sqrt[2] + x))");
+           "-1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/2 1/(Sqrt[2] (-Sqrt[2] + x))");
 
     /* No-extension default: Apart[1/(x^2 - 2), x] returns the input
      * unchanged because the denominator is irreducible over Q. */

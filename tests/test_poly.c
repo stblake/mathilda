@@ -83,13 +83,13 @@ void test_polynomialgcd() {
 }
 
 void test_polynomiallcm() {
-    run_test("PolynomialLCM[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]", "Times[Power[Plus[1, x], 2], Plus[2, x], Plus[3, x], Plus[4, x]]");
-    run_test("PolynomialLCM[(1+x)^2, (1+x)(2+x), (3+x)]", "Times[Power[Plus[1, x], 2], Plus[2, x], Plus[3, x]]");
+    run_test("PolynomialLCM[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]", "Times[Plus[2, x], Plus[3, x], Plus[4, x], Power[Plus[1, x], 2]]");
+    run_test("PolynomialLCM[(1+x)^2, (1+x)(2+x), (3+x)]", "Times[Plus[2, x], Plus[3, x], Power[Plus[1, x], 2]]");
     run_test("PolynomialLCM[(1+x)^2(2+y), (1+x)(2+y)(x+y)]", "Times[Power[Plus[1, x], 2], Plus[2, y], Plus[x, y]]");
     run_test("PolynomialLCM[x^4-4, x^4+4 x^2+4]", "Times[Plus[-2, Power[x, 2]], Plus[4, Times[4, Power[x, 2]], Power[x, 4]]]");
     run_test("PolynomialLCM[x^2+2 x y+y^2, x^3+y^3]", "Times[Plus[x, y], Plus[Power[x, 3], Power[y, 3]]]");
-    run_test("PolynomialLCM[x^2-1, x^3-1, x^4-1, x^5-1, x^6-1, x^7-1]", "Times[Plus[-1, Power[x, 3]], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, Times[-1, x], Power[x, 2]], Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4]], Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4], Power[x, 5], Power[x, 6]]]");
-    run_test("PolynomialLCM[(x-1)(x-2)/(x-4), (x-1)/((x-4)(x-6))]", "Times[Power[Plus[-4, x], -1], Plus[-2, x], Plus[-1, x]]");
+    run_test("PolynomialLCM[x^2-1, x^3-1, x^4-1, x^5-1, x^6-1, x^7-1]", "Times[Plus[1, x], Plus[-1, Power[x, 3]], Plus[1, Power[x, 2]], Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4]], Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4], Power[x, 5], Power[x, 6]], Plus[1, Times[-1, x], Power[x, 2]]]");
+    run_test("PolynomialLCM[(x-1)(x-2)/(x-4), (x-1)/((x-4)(x-6))]", "Times[Plus[-2, x], Plus[-1, x], Power[Plus[-4, x], -1]]");
 }
 
 void test_polynomial_div_rem() {
@@ -107,14 +107,14 @@ void test_polynomial_div_rem() {
 }
 
 void test_collect() {
-    run_test("Collect[b x^2+5x+7x^2+9a x+2, x]", "Plus[2, Times[x, Plus[5, Times[9, a]]], Times[Power[x, 2], Plus[7, b]]]");
-    run_test("Collect[a x+b y+c x+d y, x]", "Plus[Times[b, y], Times[d, y], Times[x, Plus[a, c]]]");
-    run_test("Collect[a x+b y+c x+d y, y]", "Plus[Times[a, x], Times[c, x], Times[y, Plus[b, d]]]");
-    run_test("Collect[(1+a+x)^3, x]", "Plus[1, Times[3, a], Times[3, Power[a, 2]], Power[a, 3], Power[x, 3], Times[x, Plus[3, Times[6, a], Times[3, Power[a, 2]]]], Times[Power[x, 2], Plus[3, Times[3, a]]]]");
-    run_test("Collect[a x^4+b x^4+2a^2 x-3b x+x-7, x]", "Plus[-7, Times[x, Plus[1, Times[2, Power[a, 2]], Times[-3, b]]], Times[Power[x, 4], Plus[a, b]]]");
-    run_test("Collect[a Sqrt[x]+Sqrt[x]+x^(2/3)-c x+3x-2b x^(2/3)+5, x]", "Plus[5, Times[x, Plus[3, Times[-1, c]]], Times[Power[x, Rational[1, 2]], Plus[1, a]], Times[Power[x, Rational[2, 3]], Plus[1, Times[-2, b]]]]");
-    run_test("Collect[(x y+x z+y z+x+y)^3, {x,y}]", "Plus[Times[x, Plus[Times[Power[y, 2], Plus[3, Times[9, z], Times[9, Power[z, 2]], Times[3, Power[z, 3]]]], Times[Power[y, 3], Plus[3, Times[6, z], Times[3, Power[z, 2]]]]]], Times[Power[x, 2], Plus[Times[y, Plus[3, Times[9, z], Times[9, Power[z, 2]], Times[3, Power[z, 3]]]], Times[Power[y, 2], Plus[6, Times[12, z], Times[6, Power[z, 2]]]], Times[Power[y, 3], Plus[3, Times[3, z]]]]], Times[Power[x, 3], Plus[1, Power[y, 3], Times[3, z], Times[3, Power[z, 2]], Power[z, 3], Times[y, Plus[3, Times[6, z], Times[3, Power[z, 2]]]], Times[Power[y, 2], Plus[3, Times[3, z]]]]], Times[Power[y, 3], Plus[1, Times[3, z], Times[3, Power[z, 2]], Power[z, 3]]]]");
-    run_test("Collect[(1-x-(1+a)^2 x^2)^2, x]", "Plus[1, Times[-2, x], Times[2, Times[Power[x, 3], Power[Plus[1, a], 2]]], Times[Power[x, 2], Plus[1, Times[-2, Power[Plus[1, a], 2]]]], Times[Power[x, 4], Power[Plus[1, a], 4]]]");
+    run_test("Collect[b x^2+5x+7x^2+9a x+2, x]", "Plus[2, Times[Plus[5, Times[9, a]], x], Times[Plus[7, b], Power[x, 2]]]");
+    run_test("Collect[a x+b y+c x+d y, x]", "Plus[Times[Plus[a, c], x], Times[b, y], Times[d, y]]");
+    run_test("Collect[a x+b y+c x+d y, y]", "Plus[Times[a, x], Times[c, x], Times[Plus[b, d], y]]");
+    run_test("Collect[(1+a+x)^3, x]", "Plus[1, Times[3, a], Times[3, Power[a, 2]], Power[a, 3], Times[Plus[3, Times[6, a], Times[3, Power[a, 2]]], x], Times[Plus[3, Times[3, a]], Power[x, 2]], Power[x, 3]]");
+    run_test("Collect[a x^4+b x^4+2a^2 x-3b x+x-7, x]", "Plus[-7, Times[Plus[1, Times[2, Power[a, 2]], Times[-3, b]], x], Times[Plus[a, b], Power[x, 4]]]");
+    run_test("Collect[a Sqrt[x]+Sqrt[x]+x^(2/3)-c x+3x-2b x^(2/3)+5, x]", "Plus[5, Times[Plus[1, a], Power[x, Rational[1, 2]]], Times[Plus[1, Times[-2, b]], Power[x, Rational[2, 3]]], Times[Plus[3, Times[-1, c]], x]]");
+    run_test("Collect[(x y+x z+y z+x+y)^3, {x,y}]", "Plus[Times[Power[y, 3], Plus[1, Times[3, z], Times[3, Power[z, 2]], Power[z, 3]]], Times[x, Plus[Times[Power[y, 2], Plus[3, Times[9, z], Times[9, Power[z, 2]], Times[3, Power[z, 3]]]], Times[Power[y, 3], Plus[3, Times[6, z], Times[3, Power[z, 2]]]]]], Times[Power[x, 2], Plus[Times[y, Plus[3, Times[9, z], Times[9, Power[z, 2]], Times[3, Power[z, 3]]]], Times[Power[y, 2], Plus[6, Times[12, z], Times[6, Power[z, 2]]]], Times[Power[y, 3], Plus[3, Times[3, z]]]]], Times[Power[x, 3], Plus[1, Power[y, 3], Times[3, z], Times[3, Power[z, 2]], Power[z, 3], Times[y, Plus[3, Times[6, z], Times[3, Power[z, 2]]]], Times[Power[y, 2], Plus[3, Times[3, z]]]]]]");
+    run_test("Collect[(1-x-(1+a)^2 x^2)^2, x]", "Plus[1, Times[-2, x], Times[Plus[1, Times[-2, Power[Plus[1, a], 2]]], Power[x, 2]], Times[2, Times[Power[Plus[1, a], 2], Power[x, 3]]], Times[Power[Plus[1, a], 4], Power[x, 4]]]");
 }
 
 void test_coefficientlist() {
@@ -134,14 +134,14 @@ void test_decompose() {
     run_test("Decompose[(x^2 + x)^4 + 1, x]", "List[Plus[1, x], Power[x, 4], Plus[x, Power[x, 2]]]");
     run_test("Decompose[(x^2 + 1)^4 + 3, x]", "List[Plus[4, Times[2, x], Power[x, 2]], Plus[Times[2, x], Power[x, 2]], Power[x, 2]]");
     run_test("Decompose[2 x + 1, x]", "List[Plus[1, Times[2, x]]]");
-    run_test("Decompose[(a x^3 + 1)^2 + b, x]", "List[Plus[1, Times[2, Times[a, x]], b, Times[Power[a, 2], Power[x, 2]]], Power[x, 3]]");
+    run_test("Decompose[(a x^3 + 1)^2 + b, x]", "List[Plus[1, b, Times[2, Times[a, x]], Times[Power[a, 2], Power[x, 2]]], Power[x, 3]]");
 }
 
 void test_hornerform() {
     run_test("HornerForm[11 x^3 - 4 x^2 + 7 x + 2]", "Plus[2, Times[x, Plus[7, Times[x, Plus[-4, Times[11, x]]]]]]");
     run_test("HornerForm[a + b x + c x^2, x]", "Plus[a, Times[x, Plus[b, Times[c, x]]]]");
-    run_test("HornerForm[(11 x^3 - 4 x^2 + 7 x + 2)/(x^2 - 3 x + 1)]", "Times[Power[Plus[1, Times[x, Plus[-3, x]]], -1], Plus[2, Times[x, Plus[7, Times[x, Plus[-4, Times[11, x]]]]]]]");
-    run_test("HornerForm[x y + 2 x^2 y + 2 x y^2 + 4 x^2 y^2, {x, y}]", "Times[x, Plus[Times[x, y, Plus[2, Times[4, y]]], Times[y, Plus[1, Times[2, y]]]]]");
+    run_test("HornerForm[(11 x^3 - 4 x^2 + 7 x + 2)/(x^2 - 3 x + 1)]", "Times[Plus[2, Times[x, Plus[7, Times[x, Plus[-4, Times[11, x]]]]]], Power[Plus[1, Times[x, Plus[-3, x]]], -1]]");
+    run_test("HornerForm[x y + 2 x^2 y + 2 x y^2 + 4 x^2 y^2, {x, y}]", "Times[x, Plus[Times[y, Plus[1, Times[2, y]]], Times[x, y, Plus[2, Times[4, y]]]]]");
     run_test("HornerForm[x y + 2 x^2 y + 2 x y^2 + 4 x^2 y^2, {y, x}]", "Times[y, Plus[Times[x, y, Plus[2, Times[4, x]]], Times[x, Plus[1, Times[2, x]]]]]");
 }
 

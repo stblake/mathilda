@@ -141,7 +141,7 @@ static void test_monomial_trig_atoms(void) {
 static void test_monomial_three_variables(void) {
     /* x y z + x y^2 z = x y z (1 + y).  Three-variable common factor. */
     expect_fullform("Factor[x y z + x y^2 z]",
-                    "Times[x, y, z, Plus[1, y]]");
+                    "Times[x, y, Plus[1, y], z]");
 }
 
 static void test_monomial_higher_powers(void) {
@@ -181,8 +181,8 @@ static void test_monomial_bigint_coefficient(void) {
      * post-fix path always produces the correct factorisation by
      * routing the BIGINT through the integer-content extractor. */
     expect_fullform("Factor[2^100 * a^2 * b + 2^100 * b]",
-                    "Times[1267650600228229401496703205376, b, "
-                    "Plus[1, Power[a, 2]]]");
+                    "Times[1267650600228229401496703205376, "
+                    "Plus[1, Power[a, 2]], b]");
 }
 
 static void test_monomial_bigint_mixed_coefficients(void) {
@@ -194,8 +194,8 @@ static void test_monomial_bigint_mixed_coefficients(void) {
      * is still int64-bound (a follow-up cleanup item).  The b
      * extraction is the F6 deliverable verified here. */
     expect_fullform("Factor[2^100 * a * b + 3 * 2^100 * b]",
-                    "Times[b, Plus[3802951800684688204490109616128, "
-                    "Times[1267650600228229401496703205376, a]]]");
+                    "Times[Plus[3802951800684688204490109616128, "
+                    "Times[1267650600228229401496703205376, a]], b]");
 }
 
 /* =====================================================================
@@ -258,7 +258,7 @@ static void test_regression_sum_of_cubes(void) {
     /* Canonical ordering of the second factor's terms is determined
      * by Plus' Orderless attribute; match the actual surface form. */
     expect_fullform("Factor[x^3 + y^3]",
-                    "Times[Plus[x, y], Plus[Times[-1, Times[x, y]], Power[x, 2], Power[y, 2]]]");
+                    "Times[Plus[x, y], Plus[Power[x, 2], Times[-1, Times[x, y]], Power[y, 2]]]");
 }
 
 static void test_regression_factor_roots_case(void) {
@@ -320,7 +320,7 @@ static void test_hensel_cubic_x(void) {
      * which handles the case.  Either way the final factorisation
      * must be correct. */
     expect_fullform("Factor[(x^2 + y - 1)(x + y + 2)]",
-                    "Times[Plus[-1, Power[x, 2], y], Plus[2, x, y]]");
+                    "Times[Plus[2, x, y], Plus[-1, Power[x, 2], y]]");
 }
 
 static void test_hensel_irreducible_bivariate(void) {

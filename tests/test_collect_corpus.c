@@ -41,16 +41,16 @@
 /* --- Bug 1: Symbolic-exponent ratio in target ----------------------- */
 static void test_bug1_symbolic_exp_ratio(void) {
     assert_eval_eq("Collect[a*x^(2*c) + b*x^(2*c), x^c]",
-                   "x^(2 c) (a + b)", 0);
+                   "(a + b) x^(2 c)", 0);
     /* Generalisation -- ratio 3 should also work. */
     assert_eval_eq("Collect[a*x^(3*c) + b*x^(3*c), x^c]",
-                   "x^(3 c) (a + b)", 0);
+                   "(a + b) x^(3 c)", 0);
     /* Mixed ratios (k=2 and k=1) should produce two groups. */
     assert_eval_eq("Collect[a*x^c + b*x^(2*c), x^c]",
                    "a x^c + b x^(2 c)", 0);
     /* Non-integer ratio (3/2) -> stays unevaluated against target x^c. */
     assert_eval_eq("Collect[a*x^(3 c/2), x^c]",
-                   "a x^(3 c/2)", 0);
+                   "a x^(3/2 c)", 0);
 }
 
 /* --- Bug 2: Pattern-target Collect (regression of current state) ---- */
@@ -62,11 +62,11 @@ static void test_bug2_pattern_target(void) {
      * deliberately. */
     assert_eval_eq(
         "e = D[f[Sqrt[x^2 + 1]], {x, 3}]; Collect[e, Derivative[_][f][_]]",
-        "-3 (x Derivative[1][f][Sqrt[1 + x^2]])/(1 + x^2)^(3/2)"
-        " + 3 (x Derivative[2][f][Sqrt[1 + x^2]])/(1 + x^2)"
-        " + 3 (x^3 Derivative[1][f][Sqrt[1 + x^2]])/(1 + x^2)^(5/2)"
+        "(x^3 Derivative[3][f][Sqrt[1 + x^2]])/(1 + x^2)^(3/2)"
+        " - 3 (x Derivative[1][f][Sqrt[1 + x^2]])/(1 + x^2)^(3/2)"
         " - 3 (x^3 Derivative[2][f][Sqrt[1 + x^2]])/(1 + x^2)^2"
-        " + (x^3 Derivative[3][f][Sqrt[1 + x^2]])/(1 + x^2)^(3/2)",
+        " + 3 (x Derivative[2][f][Sqrt[1 + x^2]])/(1 + x^2)"
+        " + 3 (x^3 Derivative[1][f][Sqrt[1 + x^2]])/(1 + x^2)^(5/2)",
         0);
 }
 
@@ -75,17 +75,17 @@ static void test_pass_corpus(void) {
     /* P1: Multi-target Times grouping. */
     assert_eval_eq(
         "Collect[x^2*y^4 + z*(x*y^2)^2 + z + a*z, {x*y^2, z}]",
-        "x^2 y^4 (1 + z) + z (1 + a)", 0);
+        "(1 + a) z + x^2 y^4 (1 + z)", 0);
     /* P2: Integer-power target. */
     assert_eval_eq("Collect[a^2*(a^2 + 1), a^2]",
                    "a^2 + a^4", 0);
     /* P3: Derivative as exact target. */
     assert_eval_eq("Collect[a*D[f[x], x] + b*D[f[x], x], D[f[x], x]]",
-                   "Derivative[1][f][x] (a + b)", 0);
+                   "(a + b) Derivative[1][f][x]", 0);
     /* P4: Derivative target with mixed terms. */
     assert_eval_eq(
         "Collect[f[x] + f[x]*D[f[x], x] + x*D[f[x], x]*f[x], D[f[x], x]]",
-        "f[x] + Derivative[1][f][x] (f[x] + x f[x])", 0);
+        "f[x] + Derivative[1][f][x] (x f[x] + f[x])", 0);
     /* P5: Negative-power target (1/f[x]) inside coefficients. */
     assert_eval_eq(
         "Collect[1/f[x] + 1/f[x]*D[f[x], x] + x*D[f[x], x]/f[x], D[f[x], x]]",
@@ -97,47 +97,47 @@ static void test_pass_corpus(void) {
         "1/f[x] + Derivative[1][f][x] (1/f[x] + x/f[x])", 0);
     /* P7: Polynomial expansion. */
     assert_eval_eq("Collect[(x + a + 1)^3, x]",
-                   "1 + 3 a + 3 a^2 + a^3 + x^3 + x (3 + 6 a + 3 a^2)"
-                   " + x^2 (3 + 3 a)", 0);
+                   "1 + 3 a + 3 a^2 + a^3 + (3 + 6 a + 3 a^2) x"
+                   " + (3 + 3 a) x^2 + x^3", 0);
     /* P8: Simple polynomial. */
     assert_eval_eq(
         "Collect[a*x^4 + b*x^4 + 2*a^2*x - 3*b*x + x - 7, x]",
-        "-7 + x (1 + 2 a^2 - 3 b) + x^4 (a + b)", 0);
+        "-7 + (1 + 2 a^2 - 3 b) x + (a + b) x^4", 0);
     /* P9: Mixed Sqrt[x] + x^(2/3) + x. */
     assert_eval_eq(
         "Collect[a*Sqrt[x] + Sqrt[x] + x^(2/3) - c*x + 3*x"
         " - 2*b*x^(2/3) + 5,  x]",
-        "5 + x (3 - c) + Sqrt[x] (1 + a) + x^(2/3) (1 - 2 b)", 0);
+        "5 + (1 + a) Sqrt[x] + (1 - 2 b) x^(2/3) + (3 - c) x", 0);
     /* P10: Multivariate cubic. */
     assert_eval_eq(
         "Collect[(x*y + x*z + y*z + x + y)^3, {x, y}]",
-        "x (y^2 (3 + 9 z + 9 z^2 + 3 z^3) + y^3 (3 + 6 z + 3 z^2))"
+        "y^3 (1 + 3 z + 3 z^2 + z^3)"
+        " + x (y^2 (3 + 9 z + 9 z^2 + 3 z^3) + y^3 (3 + 6 z + 3 z^2))"
         " + x^2 (y (3 + 9 z + 9 z^2 + 3 z^3) + y^2 (6 + 12 z + 6 z^2)"
         " + y^3 (3 + 3 z))"
         " + x^3 (1 + y^3 + 3 z + 3 z^2 + z^3 + y (3 + 6 z + 3 z^2)"
-        " + y^2 (3 + 3 z))"
-        " + y^3 (1 + 3 z + 3 z^2 + z^3)", 0);
+        " + y^2 (3 + 3 z))", 0);
     /* P11: Larger multivariate cubic. */
     assert_eval_eq(
         "Collect[Expand[(y + 2*x + 3*x*y + 4*x*z + 5*y*z)^3], {x, y}]",
-        "x (y^2 (6 + 72 z + 270 z^2 + 300 z^3)"
+        "y^3 (1 + 15 z + 75 z^2 + 125 z^3)"
+        " + x (y^2 (6 + 72 z + 270 z^2 + 300 z^3)"
         " + y^3 (9 + 90 z + 225 z^2))"
         " + x^2 (y (12 + 108 z + 288 z^2 + 240 z^3)"
         " + y^2 (36 + 252 z + 360 z^2)"
         " + y^3 (27 + 135 z))"
         " + x^3 (8 + 27 y^3 + 48 z + 96 z^2 + 64 z^3"
         " + y (36 + 144 z + 144 z^2)"
-        " + y^2 (54 + 108 z))"
-        " + y^3 (1 + 15 z + 75 z^2 + 125 z^3)", 0);
+        " + y^2 (54 + 108 z))", 0);
     /* P13: Higher-order derivative as target. */
     assert_eval_eq(
         "Collect[a*D[f[x],{x,2}] + b*D[f[x],{x,2}], D[f[x],{x,2}]]",
-        "Derivative[2][f][x] (a + b)", 0);
+        "(a + b) Derivative[2][f][x]", 0);
     /* P14: Nested radical pattern target. */
     assert_eval_eq(
         "Collect[(Sqrt[15 + 5*Sqrt[2]]*x + Sqrt[3 + Sqrt[2]]*y)*2, "
         "Sqrt[_]]",
-        "2 Sqrt[3 + Sqrt[2]] y + 2 Sqrt[15 + 5 Sqrt[2]] x", 0);
+        "2 Sqrt[15 + 5 Sqrt[2]] x + 2 Sqrt[3 + Sqrt[2]] y", 0);
 }
 
 /* P12 uses Series, which the parser/REPL accepts but the inputs in

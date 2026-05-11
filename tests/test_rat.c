@@ -40,7 +40,7 @@ void test_numerator() {
     run_test("Numerator[3/7]", "3");
     run_test("Numerator[3/7 + I/11]", "Complex[33, 7]");
     run_test("Numerator[(x-1)^2/((x-2)(x-3))]", "Power[Plus[-1, x], 2]");
-    run_test("Numerator[a x^n y^-m Exp[a - b - 2c + 3d]]", "Times[Power[E, Plus[a, Times[3, d]]], a, Power[x, n]]");
+    run_test("Numerator[a x^n y^-m Exp[a - b - 2c + 3d]]", "Times[a, Power[E, Plus[a, Times[3, d]]], Power[x, n]]");
     run_test("Numerator[a^-b/x]", "1");
     run_test("Numerator[2 x^y b^2]", "Times[2, Power[b, 2], Power[x, y]]");
     run_test("Numerator[{1,2,3,4,5,6}/3]", "List[1, 2, 1, 4, 5, 2]");
@@ -96,7 +96,7 @@ void test_cancel_algebraic_generator() {
     /* Sqrt[y] (y - 1) / (Sqrt[y] - 1)  =  y + Sqrt[y]
        (cancellation interleaved with a non-cancelling Sqrt[y] factor) */
     run_test("Cancel[Sqrt[y] (y - 1)/(Sqrt[y] - 1)]",
-             "Plus[y, Power[y, Rational[1, 2]]]");
+             "Plus[Power[y, Rational[1, 2]], y]");
 
     /* (y^(1/2) - y^(1/3)) / (y^(1/6) - 1)  =  y^(1/3)
        (mixed denominators 2,3,6 -> generator g = y^(1/6)) */
@@ -144,7 +144,7 @@ void test_together_algebraic_generator() {
 
     /* y^(2/3) - 1/y^(1/3)  =  (y - 1)/y^(1/3) */
     run_test("Together[y^(2/3) - 1/y^(1/3)]",
-             "Times[Power[y, Rational[-1, 3]], Plus[-1, y]]");
+             "Times[Plus[-1, y], Power[y, Rational[-1, 3]]]");
 
     /* 1/y^(1/2) + 1/y^(1/3)  =  (1 + y^(1/6))/y^(1/2) */
     run_test("Together[1/y^(1/2) + 1/y^(1/3)]",
@@ -156,11 +156,11 @@ void test_together_algebraic_generator() {
 }
 
 void test_together() {
-    run_test("Together[a/b + c/d]", "Times[Power[b, -1], Power[d, -1], Plus[Times[a, d], Times[b, c]]]");
+    run_test("Together[a/b + c/d]", "Times[Power[b, -1], Power[d, -1], Plus[Times[b, c], Times[a, d]]]");
     run_test("Together[x^2/(x^2 - 1) + x/(x^2 - 1)]", "Times[x, Power[Plus[-1, x], -1]]");
     run_test("Together[1/x + 1/(x + 1) + 1/(x + 2) + 1/(x + 3)]", "Times[Plus[6, Times[22, x], Times[18, Power[x, 2]], Times[4, Power[x, 3]]], Power[Plus[Times[6, x], Times[11, Power[x, 2]], Times[6, Power[x, 3]], Power[x, 4]], -1]]");
     run_test("Together[x^2/(x - y) - x y/(x - y)]", "x");
-    run_test("Together[{1/x + 1/(x + 1), 1/(x + 2) + 1/(x + 3)}]", "List[Times[Plus[1, Times[2, x]], Power[Plus[x, Power[x, 2]], -1]], Times[Plus[5, Times[2, x]], Power[Plus[6, Times[5, x], Power[x, 2]], -1]]]");
+    run_test("Together[{1/x + 1/(x + 1), 1/(x + 2) + 1/(x + 3)}]", "List[Times[Power[Plus[x, Power[x, 2]], -1], Plus[1, Times[2, x]]], Times[Plus[5, Times[2, x]], Power[Plus[6, Times[5, x], Power[x, 2]], -1]]]");
     run_test("Together[(x - 1)/(x^2 - 1) + (x - 2)/(x^2 - 4)]", "Times[Plus[3, Times[2, x]], Power[Plus[2, Times[3, x], Power[x, 2]], -1]]");
 }
 
