@@ -106,6 +106,7 @@ set(COMMON_SRC
     ../src/options.c
     ../src/integrate.c
     ../src/intrat.c
+    ../src/intsimp.c
     ../src/root.c
 )
 

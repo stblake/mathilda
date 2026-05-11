@@ -20,6 +20,8 @@
  */
 
 #include "intrat.h"
+#include "intrat_internal.h"
+#include "intsimp.h"
 #include "expr.h"
 #include "eval.h"
 #include "symtab.h"
@@ -85,32 +87,11 @@ static Expr* call_eval(const char* head, Expr** args, size_t argc) {
  * stripped down — the full Mathematica `canonic` adds a RootReduce /
  * ToRadicals tail that we'll bring online in later phases.
  *
- * Switches to `Extension -> Automatic` only when the input contains
- * a radical (Sqrt / generic Power[..., Rational[_,_]]) — cancelling
- * algebraic-coefficient fractions otherwise.  For pure-rational
- * inputs Extension -> Automatic adds no value but pulls in the full
- * Q(α) factoring path inside Cancel/Together, which can blow up on
- * dense polynomials. */
-static bool intrat_has_radical(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
-        && e->data.function.arg_count == 2) {
-        Expr* exp = e->data.function.args[1];
-        if (exp->type == EXPR_FUNCTION
-            && exp->data.function.head->type == EXPR_SYMBOL
-            && exp->data.function.head->data.symbol == SYM_Rational) {
-            return true;
-        }
-    }
-    if (intrat_has_radical(e->data.function.head)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        if (intrat_has_radical(e->data.function.args[i])) return true;
-    }
-    return false;
-}
-
-static Expr* intrat_canonic(Expr* e) {
+ * The full Mathematica canonic also switches to
+ * `Extension -> Automatic` only when the input contains a radical
+ * (intsimp_has_radical); the picocas port stays plain-rational for
+ * Phase 1 since our Cancel/Together don't yet honour Extension. */
+Expr* intrat_canonic(Expr* e) {
     Expr* tg = internal_together((Expr*[]){expr_copy(e)}, 1);
     Expr* result = internal_cancel((Expr*[]){tg}, 1);
     return result;
@@ -125,7 +106,7 @@ static Expr* intrat_numerator(Expr* e) {
     return internal_numerator((Expr*[]){expr_copy(e)}, 1);
 }
 
-static Expr* intrat_denominator(Expr* e) {
+Expr* intrat_denominator(Expr* e) {
     return internal_denominator((Expr*[]){expr_copy(e)}, 1);
 }
 
@@ -188,7 +169,7 @@ static bool intrat_polyq_test(Expr* expr, Expr* var) {
     return ok;
 }
 
-static bool intrat_freeq_test(Expr* expr, Expr* var) {
+bool intrat_freeq_test(Expr* expr, Expr* var) {
     Expr* args[2] = {expr_copy(expr), expr_copy(var)};
     Expr* call = internal_freeq(args, 2);
     Expr* val  = evaluate(call);
@@ -406,7 +387,7 @@ static bool intrat_extended_euclidean(Expr* a, Expr* b, Expr* c, Expr* x,
  * This consolidates two parallel patches in intrat_int_rational_log_part
  * (the i = deg_d case and the general i case).  Applying the radical-
  * Simplify guard uniformly is defensive -- costs nothing on rational-
- * coefficient inputs because intrat_has_radical short-circuits. */
+ * coefficient inputs because intsimp_has_radical short-circuits. */
 static Expr* intrat_primitive_part_mod(Expr* p, Expr* q,
                                        Expr* var_p, Expr* var_q) {
     Expr* lc_p = intrat_lc(p, var_p);
@@ -418,12 +399,7 @@ static Expr* intrat_primitive_part_mod(Expr* p, Expr* q,
     if (!ok) return NULL;
     if (_unused) expr_free(_unused);
 
-    if (intrat_has_radical(r)) {
-        Expr* simp_call = expr_new_function(
-            expr_new_symbol("Simplify"), (Expr*[]){ r }, 1);
-        r = evaluate(simp_call);
-        expr_free(simp_call);
-    }
+    r = intsimp_simplify_if_radical(r);
 
     Expr* rp_raw = internal_times(
         (Expr*[]){r, expr_copy(p)}, 2);
@@ -1132,10 +1108,6 @@ static Expr* nlp_sqrt(Expr* a) {
 }
 /* Forward declarations for helpers defined later in this file but
  * referenced by the palindromic-quartic expander immediately below. */
-static bool intrat_zero_q(Expr* e);
-static int intrat_sign_pos_assumption(Expr* e);
-static int intrat_numeric_sign(Expr* e);
-static Expr* intrat_simp_pos_sqrt(Expr* e);
 static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr);
 static void split_re_im(Expr* p, Expr** re_out, Expr** im_out);
 
@@ -1210,7 +1182,7 @@ static Expr* expand_palindromic_quartic_real(
         (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2);
     Expr* c1mc3 = internal_subtract(
         (Expr*[]){expr_copy(c1), expr_copy(c3)}, 2);
-    bool palindromic = intrat_zero_q(c0mc4) && intrat_zero_q(c1mc3);
+    bool palindromic = intsimp_zero_q(c0mc4) && intsimp_zero_q(c1mc3);
     expr_free(c0mc4); expr_free(c1mc3);
 
     bool c0_nonzero = !(c0->type == EXPR_INTEGER && c0->data.integer == 0);
@@ -1237,15 +1209,15 @@ static Expr* expand_palindromic_quartic_real(
     Expr* Du = eval_and_free(internal_plus(
         (Expr*[]){c1sq, neg_four_term}, 2));
     Expr* Du_exp = expr_expand(Du); expr_free(Du);
-    int Du_sign = intrat_sign_pos_assumption(Du_exp);
-    if (Du_sign == 0) Du_sign = intrat_numeric_sign(Du_exp);
+    int Du_sign = intsimp_sign_pos_assumption(Du_exp);
+    if (Du_sign == 0) Du_sign = intsimp_numeric_sign(Du_exp);
     if (Du_sign < 0) {
         expr_free(Du_exp);
         expr_free(c0); expr_free(c1); expr_free(c2);
         expr_free(c3); expr_free(c4);
         return NULL;
     }
-    Expr* sqrt_Du = intrat_simp_pos_sqrt(Du_exp);
+    Expr* sqrt_Du = intsimp_pos_sqrt(Du_exp);
     expr_free(Du_exp);
 
     Expr* neg_c1 = expr_expand(internal_times(
@@ -1284,14 +1256,14 @@ static Expr* expand_palindromic_quartic_real(
             (Expr*[]){four_m_usq, expr_new_integer(4)}, 2));
         Expr* v_sq_exp = expr_expand(v_sq); expr_free(v_sq);
 
-        int v_sq_sign = intrat_sign_pos_assumption(v_sq_exp);
-        if (v_sq_sign == 0) v_sq_sign = intrat_numeric_sign(v_sq_exp);
+        int v_sq_sign = intsimp_sign_pos_assumption(v_sq_exp);
+        if (v_sq_sign == 0) v_sq_sign = intsimp_numeric_sign(v_sq_exp);
         if (v_sq_sign <= 0) {
             expr_free(v_sq_exp);
             ok = false; break;
         }
 
-        Expr* v_im = intrat_simp_pos_sqrt(v_sq_exp);
+        Expr* v_im = intsimp_pos_sqrt(v_sq_exp);
 
         Expr* u_half = eval_and_free(internal_divide(
             (Expr*[]){expr_copy(u), expr_new_integer(2)}, 2));
@@ -2126,224 +2098,8 @@ static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr) {
     return result;
 }
 
-/* Returns +1 / -1 / 0 for the sign of `e` under the assumption that
- * every free symbol denotes a positive real.  Used by the LogToReal
- * dispatcher so a quadratic factor with a symbolic-but-provably-signed
- * discriminant (e.g. -4 a^2 b^2 with a, b parametric) can take the
- * appropriate real / complex branch instead of falling through to
- * NaiveLogPart's held RootSum form. */
-static int intrat_sign_pos_assumption(Expr* e) {
-    if (!e) return 0;
-    if (e->type == EXPR_INTEGER) {
-        if (e->data.integer > 0) return 1;
-        if (e->data.integer < 0) return -1;
-        return 0;
-    }
-    if (e->type == EXPR_REAL) {
-        if (e->data.real > 0.0) return 1;
-        if (e->data.real < 0.0) return -1;
-        return 0;
-    }
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
-        && e->data.function.arg_count == 2
-        && e->data.function.args[0]->type == EXPR_INTEGER
-        && e->data.function.args[1]->type == EXPR_INTEGER) {
-        int64_t n = e->data.function.args[0]->data.integer;
-        int64_t d = e->data.function.args[1]->data.integer;
-        int sign = 1;
-        if (n < 0) { n = -n; sign = -sign; }
-        if (d < 0) { d = -d; sign = -sign; }
-        if (n == 0) return 0;
-        return sign;
-    }
-    if (e->type == EXPR_SYMBOL) {
-        /* Free symbols treated as positive reals. */
-        return 1;
-    }
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
-        && e->data.function.arg_count == 2) {
-        Expr* base = e->data.function.args[0];
-        Expr* exp = e->data.function.args[1];
-        int b_sign = intrat_sign_pos_assumption(base);
-        if (exp->type == EXPR_INTEGER) {
-            int64_t k = exp->data.integer;
-            if (k % 2 == 0 && b_sign != 0) return 1;
-            return b_sign;
-        }
-        if (b_sign > 0) return 1;
-        return 0;
-    }
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
-        int sign = 1;
-        for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            int s = intrat_sign_pos_assumption(e->data.function.args[i]);
-            if (s == 0) return 0;
-            sign *= s;
-        }
-        return sign;
-    }
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus) {
-        int sign = 0;
-        for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            int s = intrat_sign_pos_assumption(e->data.function.args[i]);
-            if (s == 0) return 0;
-            if (sign == 0) sign = s;
-            else if (sign != s) return 0;
-        }
-        return sign;
-    }
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Sqrt
-        && e->data.function.arg_count == 1) {
-        int s = intrat_sign_pos_assumption(e->data.function.args[0]);
-        if (s > 0) return 1;
-        return 0;
-    }
-    return 0;
-}
-
-/* Returns the simplification of `Sqrt[e]` under the positive-symbol
- * assumption, or a fresh `Sqrt[e]` if no factors can be extracted.
- * The caller owns the returned tree.  Walks `e` factor-by-factor:
- *   integer n           -> peel out the largest perfect-square divisor
- *   Rational p/q        -> recurse on each part
- *   Power[base, k]      -> base^(k/2) when k is even and base > 0,
- *                          base^((k-1)/2) Sqrt[base] for odd positive k
- *   Times[f1, f2, ...]  -> product of recursive results
- *   anything else       -> Sqrt[anything] (irreducible) */
-static Expr* intrat_simp_pos_sqrt(Expr* e);
-static bool intrat_zero_q(Expr* e);
-
-/* Decide the sign of `e` by numerical evaluation through `N[e]`.
- * Returns +1 / -1 when N produces a definite-sign Real or Integer,
- * 0 otherwise (parametric input, or N could not fully numericalise).
- * Complement to intrat_sign_pos_assumption: handles `Sqrt[5] - 5`
- * and similar mixed-sign Plus aggregates that the symbolic walker
- * leaves at sign-unknown. */
-static int intrat_numeric_sign(Expr* e) {
-    if (!e) return 0;
-    Expr* call = expr_new_function(expr_new_symbol("N"),
-        (Expr*[]){expr_copy(e)}, 1);
-    Expr* r = evaluate(call);
-    expr_free(call);
-    int sign = 0;
-    if (r) {
-        if (r->type == EXPR_REAL) {
-            double v = r->data.real;
-            /* 1e-12 dead zone keeps Sqrt[2] - 1.4142... = 1.36e-13
-             * style round-off out of the wrong sign bin. */
-            if (v >  1e-12) sign =  1;
-            else if (v < -1e-12) sign = -1;
-        } else if (r->type == EXPR_INTEGER) {
-            if (r->data.integer >  0) sign =  1;
-            else if (r->data.integer <  0) sign = -1;
-        }
-        expr_free(r);
-    }
-    return sign;
-}
-
-static Expr* intrat_simp_pos_sqrt_factor(Expr* e) {
-    if (e->type == EXPR_INTEGER) {
-        int64_t v = e->data.integer;
-        if (v < 0) {
-            /* Sqrt of a negative integer: leave inside Sqrt. */
-            return expr_new_function(expr_new_symbol("Sqrt"),
-                (Expr*[]){expr_copy(e)}, 1);
-        }
-        if (v == 0) return expr_new_integer(0);
-        if (v == 1) return expr_new_integer(1);
-        int64_t s = 1, r = v;
-        for (int64_t p = 2; p * p <= r; p++) {
-            while (r % (p * p) == 0) {
-                s *= p;
-                r /= p * p;
-            }
-        }
-        if (s == 1) {
-            return expr_new_function(expr_new_symbol("Sqrt"),
-                (Expr*[]){expr_new_integer(r)}, 1);
-        }
-        if (r == 1) return expr_new_integer(s);
-        Expr* sqrt_part = expr_new_function(expr_new_symbol("Sqrt"),
-            (Expr*[]){expr_new_integer(r)}, 1);
-        return eval_and_free(internal_times(
-            (Expr*[]){expr_new_integer(s), sqrt_part}, 2));
-    }
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Rational
-        && e->data.function.arg_count == 2) {
-        Expr* num = e->data.function.args[0];
-        Expr* den = e->data.function.args[1];
-        Expr* sn = intrat_simp_pos_sqrt_factor(num);
-        Expr* sd = intrat_simp_pos_sqrt_factor(den);
-        return eval_and_free(internal_divide((Expr*[]){sn, sd}, 2));
-    }
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Power
-        && e->data.function.arg_count == 2) {
-        Expr* base = e->data.function.args[0];
-        Expr* exp_e = e->data.function.args[1];
-        if (exp_e->type == EXPR_INTEGER) {
-            int64_t k = exp_e->data.integer;
-            int b_sign = intrat_sign_pos_assumption(base);
-            if (k % 2 == 0 && b_sign > 0) {
-                return expr_new_function(expr_new_symbol("Power"),
-                    (Expr*[]){expr_copy(base),
-                              expr_new_integer(k / 2)}, 2);
-            }
-            if (b_sign > 0) {
-                /* Odd k, positive base: base^((k-1)/2) * Sqrt[base]. */
-                int64_t kh = (k - 1) / 2;  /* may be negative for k < 0 */
-                Expr* p1;
-                if (kh == 0) p1 = expr_new_integer(1);
-                else p1 = expr_new_function(expr_new_symbol("Power"),
-                    (Expr*[]){expr_copy(base), expr_new_integer(kh)}, 2);
-                Expr* p2 = expr_new_function(expr_new_symbol("Sqrt"),
-                    (Expr*[]){expr_copy(base)}, 1);
-                return eval_and_free(internal_times(
-                    (Expr*[]){p1, p2}, 2));
-            }
-        }
-        return expr_new_function(expr_new_symbol("Sqrt"),
-            (Expr*[]){expr_copy(e)}, 1);
-    }
-    if (e->type == EXPR_SYMBOL) {
-        /* Sqrt[symbol] is irreducible — keep wrapped. */
-        return expr_new_function(expr_new_symbol("Sqrt"),
-            (Expr*[]){expr_copy(e)}, 1);
-    }
-    /* Fallback: no structural simplification. */
-    return expr_new_function(expr_new_symbol("Sqrt"),
-        (Expr*[]){expr_copy(e)}, 1);
-}
-
-static Expr* intrat_simp_pos_sqrt(Expr* e) {
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Times) {
-        size_t n = e->data.function.arg_count;
-        Expr** out = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
-        for (size_t i = 0; i < n; i++) {
-            out[i] = intrat_simp_pos_sqrt_factor(e->data.function.args[i]);
-        }
-        Expr* prod = internal_times(out, n);
-        free(out);
-        return eval_and_free(prod);
-    }
-    return intrat_simp_pos_sqrt_factor(e);
-}
+/* Sign tests, canonic-zero, and the positive-symbol Sqrt simplifier
+ * used by logtoreal_dispatch live in intsimp.c — see intsimp.h. */
 
 /* Try to dispatch a single quadratic factor `Q(t) = a t^2 + b t + c`
  * to its real-form contribution.  Returns NULL on failure (caller
@@ -2368,7 +2124,7 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
      * principal antiderivative for both signs of the discriminant
      * (ArcTan continues analytically through imaginary argument),
      * matching Mathematica's parametric-quadratic output. */
-    int disc_sign = intrat_sign_pos_assumption(disc);
+    int disc_sign = intsimp_sign_pos_assumption(disc);
 
     Expr* two_a = eval_and_free(internal_times(
         (Expr*[]){expr_new_integer(2), expr_copy(a)}, 2));
@@ -2412,7 +2168,7 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
         (Expr*[]){neg_b2, expr_copy(two_a)}, 2));
     /* Distribute -1 across `disc` before passing to the Sqrt
      * simplifier.  Without an Expand, picocas keeps `-1 * disc` as
-     * Times[-1, Plus[...]]; intrat_simp_pos_sqrt then walks the Times
+     * Times[-1, Plus[...]]; intsimp_pos_sqrt then walks the Times
      * factors and pulls Sqrt[-1] = I out of the `-1`, ending in an
      * imaginary v_root that collapses logtoreal_quadratic to 0. */
     Expr* neg_disc_raw = expr_expand(internal_times(
@@ -2420,7 +2176,7 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
     /* Try the positive-symbol Sqrt simplifier first (e.g.
      * Sqrt[4 a^2 b^2] -> 2 a b); fall back to the held Sqrt[..] when
      * it can't extract a clean radical form. */
-    Expr* sqrt_neg_disc = intrat_simp_pos_sqrt(neg_disc_raw);
+    Expr* sqrt_neg_disc = intsimp_pos_sqrt(neg_disc_raw);
     expr_free(neg_disc_raw);
     Expr* v_root = eval_and_free(internal_divide(
         (Expr*[]){sqrt_neg_disc, two_a}, 2));
@@ -2514,8 +2270,8 @@ static Expr* logtoreal_nthroot_sparse(Expr* base, int deg,
         (Expr*[]){neg_c0, expr_copy(cn)}, 2));
     expr_free(c0); expr_free(cn);
 
-    int q_sign = intrat_sign_pos_assumption(q);
-    if (q_sign == 0) q_sign = intrat_numeric_sign(q);
+    int q_sign = intsimp_sign_pos_assumption(q);
+    if (q_sign == 0) q_sign = intsimp_numeric_sign(q);
     if (q_sign == 0) { expr_free(q); return NULL; }
 
     bool q_pos = (q_sign > 0);
@@ -2736,7 +2492,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                     (Expr*[]){expr_new_integer(-1), fourc0c4}, 2));
                 Expr* discsq = eval_and_free(internal_plus(
                     (Expr*[]){c2sq, neg_fourc0c4}, 2));
-                int inner_disc_sign = intrat_sign_pos_assumption(discsq);
+                int inner_disc_sign = intsimp_sign_pos_assumption(discsq);
                 if (inner_disc_sign <= 0) {
                     /* Inner disc not provably positive.  Before giving
                      * up, try the Sophie-Germain-with-c2 factorisation
@@ -2763,7 +2519,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
 
                     Expr* ratio = eval_and_free(internal_divide(
                         (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2));
-                    bool ratio_pos = (intrat_sign_pos_assumption(ratio) > 0);
+                    bool ratio_pos = (intsimp_sign_pos_assumption(ratio) > 0);
 
                     if (!ratio_pos) {
                         expr_free(ratio);
@@ -2772,7 +2528,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                         goto fail;
                     }
 
-                    Expr* beta = intrat_simp_pos_sqrt(ratio); /* Sqrt[c0/c4] */
+                    Expr* beta = intsimp_pos_sqrt(ratio); /* Sqrt[c0/c4] */
                     expr_free(ratio);
 
                     Expr* c2_over_c4 = eval_and_free(internal_divide(
@@ -2788,7 +2544,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                     Expr* alpha_sq_expanded = expr_expand(alpha_sq);
                     expr_free(alpha_sq);
 
-                    if (intrat_sign_pos_assumption(alpha_sq_expanded) <= 0) {
+                    if (intsimp_sign_pos_assumption(alpha_sq_expanded) <= 0) {
                         /* α^2 not provably positive — bail. */
                         expr_free(alpha_sq_expanded);
                         expr_free(beta);
@@ -2797,7 +2553,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                         goto fail;
                     }
 
-                    Expr* alpha = intrat_simp_pos_sqrt(alpha_sq_expanded);
+                    Expr* alpha = intsimp_pos_sqrt(alpha_sq_expanded);
                     expr_free(alpha_sq_expanded);
                     Expr* neg_alpha = eval_and_free(internal_times(
                         (Expr*[]){expr_new_integer(-1),
@@ -2829,7 +2585,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                     if (part2) expr_free(part2);
                     goto fail;
                 }
-                Expr* sqrt_disc = intrat_simp_pos_sqrt(discsq);
+                Expr* sqrt_disc = intsimp_pos_sqrt(discsq);
                 expr_free(discsq);
 
                 Expr* neg_c2 = expr_expand(internal_times(
@@ -2913,7 +2669,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                               expr_copy(c0)}, 2));
                 Expr* sym_diff = internal_subtract(
                     (Expr*[]){sym_lhs, sym_rhs}, 2);
-                bool symmetric = intrat_zero_q(sym_diff);
+                bool symmetric = intsimp_zero_q(sym_diff);
                 expr_free(sym_diff);
 
                 bool c0_nonzero = !(c0->type == EXPR_INTEGER && c0->data.integer == 0);
@@ -2932,7 +2688,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                     (Expr*[]){expr_copy(c1), expr_copy(c3)}, 2);
                 Expr* c0mc4 = internal_subtract(
                     (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2);
-                bool r_is_one = intrat_zero_q(c1mc3) && intrat_zero_q(c0mc4);
+                bool r_is_one = intsimp_zero_q(c1mc3) && intsimp_zero_q(c0mc4);
                 expr_free(c1mc3); expr_free(c0mc4);
                 if (!r_is_one) {
                     /* Scaled-palindromic with r != 1: bail (the
@@ -2966,8 +2722,8 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                 Expr* disc_v = eval_and_free(internal_plus(
                     (Expr*[]){c3r_sq, neg_four_c4}, 2));
                 Expr* disc_v_exp = expr_expand(disc_v); expr_free(disc_v);
-                int disc_v_sign = intrat_sign_pos_assumption(disc_v_exp);
-                if (disc_v_sign == 0) disc_v_sign = intrat_numeric_sign(disc_v_exp);
+                int disc_v_sign = intsimp_sign_pos_assumption(disc_v_exp);
+                if (disc_v_sign == 0) disc_v_sign = intsimp_numeric_sign(disc_v_exp);
 
                 if (disc_v_sign < 0) {
                     /* v complex — bail. */
@@ -2977,7 +2733,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                     expr_free(c3); expr_free(c4);
                     goto fail;
                 }
-                Expr* sqrt_disc_v = intrat_simp_pos_sqrt(disc_v_exp);
+                Expr* sqrt_disc_v = intsimp_pos_sqrt(disc_v_exp);
                 expr_free(disc_v_exp);
 
                 /* v_± = (−c3 r ± Sqrt[disc_v]) / (2 c4). */
@@ -3011,8 +2767,8 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                 Expr* v_plus_check_arg = expr_expand(internal_times(
                     (Expr*[]){expr_copy(r_sq), expr_copy(v_plus_sq_m4)}, 2));
                 expr_free(v_plus_sq_m4);
-                int v_plus_check = intrat_sign_pos_assumption(v_plus_check_arg);
-                if (v_plus_check == 0) v_plus_check = intrat_numeric_sign(v_plus_check_arg);
+                int v_plus_check = intsimp_sign_pos_assumption(v_plus_check_arg);
+                if (v_plus_check == 0) v_plus_check = intsimp_numeric_sign(v_plus_check_arg);
                 expr_free(v_plus_check_arg);
 
                 Expr* v_minus_sq = expr_expand(internal_power(
@@ -3022,8 +2778,8 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                 Expr* v_minus_check_arg = expr_expand(internal_times(
                     (Expr*[]){expr_copy(r_sq), expr_copy(v_minus_sq_m4)}, 2));
                 expr_free(v_minus_sq_m4);
-                int v_minus_check = intrat_sign_pos_assumption(v_minus_check_arg);
-                if (v_minus_check == 0) v_minus_check = intrat_numeric_sign(v_minus_check_arg);
+                int v_minus_check = intsimp_sign_pos_assumption(v_minus_check_arg);
+                if (v_minus_check == 0) v_minus_check = intsimp_numeric_sign(v_minus_check_arg);
                 expr_free(v_minus_check_arg);
 
                 if (v_plus_check >= 0 || v_minus_check >= 0) {
@@ -3224,392 +2980,15 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
 }
 
 /* ====================================================================
- * Phase 6 — LogToArcTan / LogToArcTanh post-processing.
+ * Phase 6 + 7 — output simplification of the resulting integral
  * ====================================================================
  *
- * Combines `c Log[A] + c Log[B] -> c Log[A B]` and
- * `c Log[A] - c Log[B] -> c Log[A/B]` into single logarithms, then
- * recognises the `c Log[A] - c Log[B] -> 2 c ArcTanh[(B-A)/(B+A)]`
- * pattern when the ArcTanh argument simplifies to a rational
- * function in x.  Direct port of IntegrateRational.m:1722-1761
- * (LogToArcTanh) and :1896-1958 (LogToArcTan).
- *
- * Implemented as direct C transformations on Plus[...] of Log[...]
- * terms (per the plan note) rather than pattern-rewriting at the
- * picocas rule-engine layer.  The transformations are
- * differentiation-equivalent — they only beautify the output — so
- * the universal correctness check stays green either way.
+ * Log pairing (c Log[A] ± c Log[B] -> Log[A·B] / Log[A/B] / ArcTanh),
+ * Log[c·p] -> Log[p] when c is free of x, Plus distribution, and
+ * ArcTan / ArcTanh sign normalisation all live in intsimp.c — see
+ * intsimp.h for the public surface.
  */
 
-/* Decompose a term of a Plus head into (coeff, log_arg) when it
- * matches `coeff * Log[log_arg]`.  Returns true on success. */
-static bool decompose_log_term(Expr* term, Expr** coeff_out, Expr** log_arg_out) {
-    /* Plain Log[x]. */
-    if (term->type == EXPR_FUNCTION
-        && term->data.function.head->type == EXPR_SYMBOL
-        && term->data.function.head->data.symbol == SYM_Log
-        && term->data.function.arg_count == 1) {
-        *coeff_out = expr_new_integer(1);
-        *log_arg_out = expr_copy(term->data.function.args[0]);
-        return true;
-    }
-    /* Times[..., Log[arg], ...].  Find the Log factor; the rest is
-     * the coefficient. */
-    if (term->type != EXPR_FUNCTION
-        || term->data.function.head->type != EXPR_SYMBOL
-        || term->data.function.head->data.symbol != SYM_Times) return false;
-
-    size_t n = term->data.function.arg_count;
-    Expr* log_arg = NULL;
-    size_t log_idx = 0;
-    for (size_t i = 0; i < n; i++) {
-        Expr* arg = term->data.function.args[i];
-        if (arg->type == EXPR_FUNCTION
-            && arg->data.function.head->type == EXPR_SYMBOL
-            && arg->data.function.head->data.symbol == SYM_Log
-            && arg->data.function.arg_count == 1) {
-            if (log_arg) return false;  /* Multiple Log factors. */
-            log_arg = arg->data.function.args[0];
-            log_idx = i;
-        }
-    }
-    if (!log_arg) return false;
-
-    /* Build coeff = product of all other factors. */
-    if (n == 1) {
-        *coeff_out = expr_new_integer(1);
-        *log_arg_out = expr_copy(log_arg);
-        return true;
-    }
-    Expr** rest = (Expr**)malloc(sizeof(Expr*) * (n - 1));
-    size_t k = 0;
-    for (size_t i = 0; i < n; i++) {
-        if (i != log_idx) rest[k++] = expr_copy(term->data.function.args[i]);
-    }
-    Expr* coeff;
-    if (k == 1) coeff = rest[0];
-    else coeff = eval_and_free(internal_times(rest, k));
-    free(rest);
-    *coeff_out = coeff;
-    *log_arg_out = expr_copy(log_arg);
-    return true;
-}
-
-/* zeroQ[e] = TrueQ[Cancel[Together[e]] === 0] for a single expression. */
-static bool intrat_zero_q(Expr* e) {
-    Expr* canon = intrat_canonic(e);
-    bool ok = is_zero_poly(canon);
-    expr_free(canon);
-    return ok;
-}
-
-/* Simplify a Plus of Log terms by:
- *  1) merging `c Log[A] + c Log[B] -> c Log[Expand[A B]]`,
- *  2) merging `c Log[A] - c Log[B] -> c Log[A/B]` when
- *     Denominator[Cancel[Together[A/B]]] is FreeQ[..., x],
- *  3) rewriting `c Log[A] - c Log[B] -> 2 c ArcTanh[(B-A)/(B+A)]`
- *     when Denominator[Cancel[Together[(B-A)/(B+A)]]] is FreeQ[..., x].
- *
- * Always preserves D[result, x] up to canonic-zero. */
-static Expr* intrat_log_to_arctanh(Expr* e, Expr* x) {
-    if (!e) return NULL;
-    if (!(e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol == SYM_Plus)) {
-        return expr_copy(e);
-    }
-
-    size_t n = e->data.function.arg_count;
-    Expr** terms = (Expr**)malloc(sizeof(Expr*) * n);
-    bool* used = (bool*)calloc(n, sizeof(bool));
-    Expr** coeffs = (Expr**)calloc(n, sizeof(Expr*));
-    Expr** logargs = (Expr**)calloc(n, sizeof(Expr*));
-    bool* is_log = (bool*)calloc(n, sizeof(bool));
-
-    for (size_t i = 0; i < n; i++) {
-        terms[i] = e->data.function.args[i];
-        is_log[i] = decompose_log_term(terms[i], &coeffs[i], &logargs[i]);
-    }
-
-    Expr** out = (Expr**)malloc(sizeof(Expr*) * (n * 2));
-    size_t out_n = 0;
-
-    for (size_t i = 0; i < n; i++) {
-        if (used[i]) continue;
-        if (!is_log[i]) {
-            out[out_n++] = expr_copy(terms[i]);
-            used[i] = true;
-            continue;
-        }
-        /* Try to pair with another Log term j > i. */
-        bool merged = false;
-        for (size_t j = i + 1; j < n; j++) {
-            if (used[j] || !is_log[j]) continue;
-            if (!intrat_freeq_test(coeffs[i], x) || !intrat_freeq_test(coeffs[j], x)) continue;
-
-            /* Same coefficient -> Log[A*B]. */
-            Expr* delta = internal_subtract(
-                (Expr*[]){expr_copy(coeffs[i]), expr_copy(coeffs[j])}, 2);
-            if (intrat_zero_q(delta)) {
-                expr_free(delta);
-                Expr* prod = expr_expand(internal_times(
-                    (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2));
-                Expr* logp = expr_new_function(expr_new_symbol("Log"),
-                    (Expr*[]){prod}, 1);
-                Expr* combined = internal_times(
-                    (Expr*[]){expr_copy(coeffs[i]), logp}, 2);
-                out[out_n++] = eval_and_free(combined);
-                used[i] = used[j] = true; merged = true; break;
-            }
-            expr_free(delta);
-
-            /* Opposite coefficient: try ArcTanh first, then Log[A/B]. */
-            Expr* sumcoef = internal_plus(
-                (Expr*[]){expr_copy(coeffs[i]), expr_copy(coeffs[j])}, 2);
-            if (intrat_zero_q(sumcoef)) {
-                expr_free(sumcoef);
-                /* Mathematica's log2ArcTanhRule emits
-                 *   (c2 - c1) ArcTanh[(A + B) / (B - A)]
-                 * for c1 Log[A] + c2 Log[B] with c1 + c2 == 0.
-                 * Equivalent to 2 c2 ArcTanh[…].  We require the
-                 * ArcTanh argument's Denominator to be free of x; if
-                 * not, fall back to the simpler Log[A/B] rewrite. */
-                Expr* sumAB_raw = internal_plus(
-                    (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2);
-                Expr* sumAB = expr_expand(sumAB_raw); expr_free(sumAB_raw);
-                Expr* diffBA_raw = internal_subtract(
-                    (Expr*[]){expr_copy(logargs[j]), expr_copy(logargs[i])}, 2);
-                Expr* diffBA = expr_expand(diffBA_raw); expr_free(diffBA_raw);
-
-                Expr* arg_raw = internal_divide(
-                    (Expr*[]){expr_copy(sumAB), expr_copy(diffBA)}, 2);
-                Expr* arg_can = intrat_canonic(arg_raw); expr_free(arg_raw);
-                Expr* arg_den = intrat_denominator(arg_can);
-                Expr* arg_den_eval = eval_and_free(arg_den);
-                bool atanh_ok = intrat_freeq_test(arg_den_eval, x)
-                              && !is_zero_poly(arg_can);
-                expr_free(arg_den_eval);
-                if (atanh_ok) {
-                    /* (c2 - c1) ArcTanh[(A + B) / (B - A)] */
-                    Expr* coef_diff = internal_subtract(
-                        (Expr*[]){expr_copy(coeffs[j]), expr_copy(coeffs[i])}, 2);
-                    coef_diff = eval_and_free(coef_diff);
-                    Expr* atanh = expr_new_function(expr_new_symbol("ArcTanh"),
-                        (Expr*[]){arg_can}, 1);
-                    Expr* term = internal_times(
-                        (Expr*[]){coef_diff, atanh}, 2);
-                    out[out_n++] = eval_and_free(term);
-                    expr_free(sumAB); expr_free(diffBA);
-                    used[i] = used[j] = true; merged = true; break;
-                }
-                expr_free(arg_can);
-
-                /* Log[A/B] with denominator free of x. */
-                Expr* AoverB_raw = internal_divide(
-                    (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2);
-                Expr* AoverB = intrat_canonic(AoverB_raw); expr_free(AoverB_raw);
-                Expr* AoverB_den = intrat_denominator(AoverB);
-                Expr* AoverB_den_eval = eval_and_free(AoverB_den);
-                bool divlog_ok = intrat_freeq_test(AoverB_den_eval, x);
-                expr_free(AoverB_den_eval);
-                if (divlog_ok) {
-                    Expr* logp = expr_new_function(expr_new_symbol("Log"),
-                        (Expr*[]){AoverB}, 1);
-                    Expr* term = internal_times(
-                        (Expr*[]){expr_copy(coeffs[i]), logp}, 2);
-                    out[out_n++] = eval_and_free(term);
-                    expr_free(sumAB); expr_free(diffBA);
-                    used[i] = used[j] = true; merged = true; break;
-                }
-                expr_free(AoverB);
-                expr_free(sumAB); expr_free(diffBA);
-                continue;
-            }
-            expr_free(sumcoef);
-        }
-        if (!merged) {
-            out[out_n++] = expr_copy(terms[i]);
-            used[i] = true;
-        }
-    }
-
-    for (size_t i = 0; i < n; i++) {
-        if (coeffs[i])  expr_free(coeffs[i]);
-        if (logargs[i]) expr_free(logargs[i]);
-    }
-    free(coeffs); free(logargs); free(is_log); free(used); free(terms);
-
-    Expr* result;
-    if (out_n == 0) { free(out); result = expr_new_integer(0); }
-    else if (out_n == 1) { result = out[0]; free(out); }
-    else { result = eval_and_free(internal_plus(out, out_n)); free(out); }
-    return result;
-}
-
-/* ====================================================================
- * Phase 7 — Top-level options and output cleanup.
- * ====================================================================
- *
- * Adds option parsing to `Integrate`IntegrateRational[f, x, ...]` and
- * the final output-canonicalisation pass described in the
- * "final-pass output cleanup" section of INTEGRATE_PLAN.md:
- *
- *   1. ArcTan / ArcTanh sign normalisation — `ArcTan[-arg] -> -ArcTan[arg]`
- *      (and similarly for ArcTanh) so the printed form is independent of
- *      sign conventions deep inside the resultant chain.
- *   2. Plus-head sort happens automatically via picocas's ATTR_ORDERLESS,
- *      which fires when we eval_and_free the assembled sum.
- *
- * Options:
- *   "PFD"        -> True    Apart-split per-summand loop
- *   "LogToArcTan" -> True   Phase 6 Log -> ArcTanh post-processing
- *   Extension    -> Automatic   forwarded to Apart / Factor when set
- *
- * The defaults reproduce Mathematica's IntegrateRational.m behaviour.
- */
-
-/* Log[c · p] -> Log[p] when c is free of x.  Walks the input top-down
- * and rewrites every Log subexpression whose argument is a Times-headed
- * product with at least one constant (FreeQ[…, x]) factor.  The
- * additive `Log[c]` term is harmless to the antiderivative — it is a
- * constant of integration — so dropping it merely beautifies the
- * result and keeps the downstream `intrat_log_to_arctanh` pairing rule
- * able to fire (it requires `Log[Cancel[A/B]]` denominator to be free
- * of x, which a stray `Log[1/2·…]` factor inside would block).
- *
- * Direct mirror of IntegrateRational.m:1746 / :1750. */
-static Expr* intrat_strip_log_constants(Expr* e, Expr* x) {
-    if (!e) return NULL;
-    if (e->type != EXPR_FUNCTION) return expr_copy(e);
-
-    /* Recurse first so nested Logs get cleaned bottom-up. */
-    size_t n = e->data.function.arg_count;
-    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
-    for (size_t i = 0; i < n; i++) {
-        new_args[i] = intrat_strip_log_constants(e->data.function.args[i], x);
-    }
-    Expr* head = expr_copy(e->data.function.head);
-    Expr* rebuilt = expr_new_function(head, new_args, n);
-    free(new_args);
-
-    /* Only Log heads need post-rewrite. */
-    if (rebuilt->type != EXPR_FUNCTION
-        || rebuilt->data.function.head->type != EXPR_SYMBOL
-        || rebuilt->data.function.head->data.symbol != SYM_Log
-        || rebuilt->data.function.arg_count != 1) {
-        return rebuilt;
-    }
-
-    Expr* arg = rebuilt->data.function.args[0];
-    if (arg->type != EXPR_FUNCTION
-        || arg->data.function.head->type != EXPR_SYMBOL
-        || arg->data.function.head->data.symbol != SYM_Times) {
-        return rebuilt;
-    }
-
-    /* Partition arg's Times factors into (const, x-dependent). */
-    size_t af = arg->data.function.arg_count;
-    Expr** keep = (Expr**)malloc(sizeof(Expr*) * af);
-    size_t nkeep = 0;
-    bool any_dropped = false;
-    for (size_t i = 0; i < af; i++) {
-        Expr* fac = arg->data.function.args[i];
-        if (intrat_freeq_test(fac, x)) {
-            any_dropped = true;
-        } else {
-            keep[nkeep++] = expr_copy(fac);
-        }
-    }
-    if (!any_dropped || nkeep == 0) {
-        for (size_t i = 0; i < nkeep; i++) expr_free(keep[i]);
-        free(keep);
-        return rebuilt;
-    }
-
-    Expr* new_inner;
-    if (nkeep == 1) { new_inner = keep[0]; }
-    else            { new_inner = eval_and_free(internal_times(keep, nkeep)); }
-    free(keep);
-
-    Expr* new_log = expr_new_function(expr_new_symbol("Log"),
-        (Expr*[]){new_inner}, 1);
-    expr_free(rebuilt);
-    return eval_and_free(new_log);
-}
-
-/* Distribute a top-level scalar across Plus terms in the integrate-
- * rational accumulator.  After per-summand `c_k * piece_int_k`
- * scaling, the result frequently shows up as
- *   Times[c_k, Plus[term1, term2, …]]
- * because Times has no auto-distribution attribute.  A single
- * `expr_expand` pass turns it into `c_k term1 + c_k term2`, which is
- * what the `Collect[expanded, _Log|_ArcTan|_ArcTanh, …]` step in
- * IntegrateRational.m:99 produces.  Mathematica's Distribute / Expand
- * has the same effect; we already have expr_expand which threads
- * Times-over-Plus polynomial-style, which is exactly what we want.
- * Calling this twice (before and after intrat_log_to_arctanh) is
- * cheap and lets the log-pairing rule see fully-distributed sums. */
-static Expr* intrat_distribute_plus(Expr* e) {
-    if (!e) return NULL;
-    return expr_expand(e);
-}
-
-/* ArcTan / ArcTanh sign normalisation: pull a leading minus out of
- * the argument so the printed form is canonical.  Walks the input
- * expression top-down, rewriting just the relevant heads. */
-static Expr* normalize_inverse_trig_signs(Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
-
-    /* ArcTan[-(...)] -> -ArcTan[...], same for ArcTanh.  We look for
-     * an argument that starts with a unary minus or a Times whose
-     * first factor is a literal -1. */
-    if (e->data.function.head->type == EXPR_SYMBOL
-        && (e->data.function.head->data.symbol == SYM_ArcTan
-            || e->data.function.head->data.symbol == SYM_ArcTanh)
-        && e->data.function.arg_count == 1) {
-        Expr* arg = e->data.function.args[0];
-        bool negative = false;
-        Expr* stripped = NULL;
-        if (arg->type == EXPR_INTEGER && arg->data.integer < 0) {
-            negative = true;
-            stripped = expr_new_integer(-arg->data.integer);
-        } else if (arg->type == EXPR_FUNCTION
-            && arg->data.function.head->type == EXPR_SYMBOL
-            && arg->data.function.head->data.symbol == SYM_Times
-            && arg->data.function.arg_count >= 1
-            && arg->data.function.args[0]->type == EXPR_INTEGER
-            && arg->data.function.args[0]->data.integer == -1) {
-            negative = true;
-            size_t n = arg->data.function.arg_count;
-            if (n == 2) stripped = expr_copy(arg->data.function.args[1]);
-            else {
-                Expr** rest = (Expr**)malloc(sizeof(Expr*) * (n - 1));
-                for (size_t i = 1; i < n; i++) rest[i - 1] = expr_copy(arg->data.function.args[i]);
-                stripped = eval_and_free(internal_times(rest, n - 1));
-                free(rest);
-            }
-        }
-        if (negative && stripped) {
-            Expr* inner = expr_new_function(
-                expr_copy(e->data.function.head),
-                (Expr*[]){stripped}, 1);
-            Expr* neg = internal_times(
-                (Expr*[]){expr_new_integer(-1), inner}, 2);
-            return eval_and_free(neg);
-        }
-    }
-
-    /* Recurse: rebuild the function with normalised children. */
-    size_t n = e->data.function.arg_count;
-    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
-    for (size_t i = 0; i < n; i++) {
-        new_args[i] = normalize_inverse_trig_signs(e->data.function.args[i]);
-    }
-    Expr* head = expr_copy(e->data.function.head);
-    Expr* result = expr_new_function(head, new_args, n);
-    /* Run a single evaluator pass so Plus / Times canonicalise. */
-    return eval_and_free(result);
-}
 
 /* ====================================================================
  * Phase 5 — IntegrateRealRationalFunction-style per-summand loop.
@@ -3906,26 +3285,26 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         /* Phase A-1: distribute scalar Times-over-Plus so per-summand
          * `c_k * piece_int_k` accumulators flatten into a single
          * Plus[...] of `c_k · term` summands.  Without this, the
-         * subsequent log-pairing rule (intrat_log_to_arctanh) cannot
+         * subsequent log-pairing rule (intsimp_log_to_arctanh) cannot
          * see across the Times boundary.
          * Phase A-2: strip Log[c · p] -> Log[p] when FreeQ[c, x] so
          * downstream Log[A] + Log[B] merging sees the cleaned
          * arguments. */
-        Expr* distributed = intrat_distribute_plus(sum_eval);
+        Expr* distributed = intsimp_distribute_plus(sum_eval);
         expr_free(sum_eval);
-        Expr* stripped = intrat_strip_log_constants(distributed, x);
+        Expr* stripped = intsimp_strip_log_constants(distributed, x);
         expr_free(distributed);
         /* Phase 6 final pass: combine c Log[A] ± c Log[B] terms.
          * Phase 7 final pass: normalise ArcTan/ArcTanh argument signs.*/
-        Expr* simplified = intrat_log_to_arctanh(stripped, x);
+        Expr* simplified = intsimp_log_to_arctanh(stripped, x);
         expr_free(stripped);
         /* Re-distribute and re-strip in case the pairing rule
          * introduces new Times[scalar, Plus[…]] or Log[c · p] shapes. */
-        Expr* simplified2 = intrat_distribute_plus(simplified);
+        Expr* simplified2 = intsimp_distribute_plus(simplified);
         expr_free(simplified);
-        Expr* simplified3 = intrat_strip_log_constants(simplified2, x);
+        Expr* simplified3 = intsimp_strip_log_constants(simplified2, x);
         expr_free(simplified2);
-        Expr* result = normalize_inverse_trig_signs(simplified3);
+        Expr* result = intsimp_normalize_inverse_trig_signs(simplified3);
         expr_free(simplified3);
         intrat_trace("IntegrateRational", "OUT", result);
         return result;
@@ -4137,7 +3516,7 @@ Expr* builtin_intrat_logtoarctanh(Expr* res) {
     Expr* e = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
     if (x->type != EXPR_SYMBOL) return NULL;
-    return intrat_log_to_arctanh(e, x);
+    return intsimp_log_to_arctanh(e, x);
 }
 
 Expr* builtin_intrat_naive_log_part(Expr* res) {
