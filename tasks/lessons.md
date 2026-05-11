@@ -227,3 +227,104 @@ required step after that kind of soundness tightening.  Adding a
 defensive `if (!P) return NULL;` at the top of
 `heuristic_factor` is good belt-and-braces for any future callers
 that forget.
+
+## intrat: per-summand `c · piece` accumulator needs explicit Expand (2026-05-11)
+
+After `intrat_integrate_summands` builds each Apart piece's integral
+as `c_k · piece_int_k` (with `c_k` the constant from
+`extractConstants`), the result accumulates as
+`Plus[Log[x], Times[2, Plus[1/4 ArcTan[…], -1/8 Log[…]]], …]`.
+Picocas's `Times` has `ATTR_FLAT | ATTR_ORDERLESS | …` but NO
+auto-distribution over `Plus`, so the literal `Times[2, Plus[…]]`
+survives all the way to print.  Mathematica's
+`IntegrateRational.m:99` calls `Collect[intlog // Expand, …, simproot]`
+exactly to flatten this — we need the analogous Expand pass.
+
+Lesson: when porting a Mathematica pipeline, every `// Expand` /
+`Collect` / `// Distribute` in the source is load-bearing.  Don't
+assume picocas's evaluator does the equivalent — it doesn't.  The
+two cheap post-passes (`expr_expand` to distribute Times-over-Plus,
+plus a Log-arg constant-stripper for `Log[c · p] -> Log[p]`) want to
+run both BEFORE and AFTER `intrat_log_to_arctanh` so the log-pairing
+rule sees fully-distributed sums.
+
+## intrat: sign-pos-assumption can't decide `Sqrt[5] − 5 < 0` (2026-05-11)
+
+`intrat_sign_pos_assumption` treats free symbols as positive reals
+and walks Plus arg-by-arg; for `Plus[−5, 2 Sqrt[5]]` (one negative
+constant, one positive radical) it bails to sign-unknown.  This
+is correct for parametric inputs but blocks the closed-form
+palindromic-quartic dispatch in `logtoreal_dispatch` and
+`expand_palindromic_quartic_real`, where we routinely need to
+decide inequalities like `((1 + Sqrt[5])/2)^2 − 4 < 0`.
+
+Fix: a thin `intrat_numeric_sign(e)` helper that evaluates `N[e]`
+and returns ±1 when the result is a definite-sign Real / Integer
+(`|v| > 1e-12` deadzone for round-off).  Use it as a fallback
+**only** when `intrat_sign_pos_assumption` returns 0; it preserves
+parametric correctness (`N[Plus[a, …]]` with a symbolic doesn't
+reduce to a number) while resolving radical-only inequalities.
+
+Lesson: numeric evaluation is a legitimate fallback for sign
+decisions when symbolic positive-walks bail.  The two-tier pattern
+(symbolic-then-numeric) is the right structure: symbolic for
+parametric soundness, numeric for closed-radical decidability.
+
+## intrat: scaled-palindromic LRT Q breaks LogToReal substitution chain (2026-05-11)
+
+For `1/(x^5 + 1)`, the LRT producer's Q-in-t is the *scaled*
+palindromic `625 t^4 + 125 t^3 + 25 t^2 + 5 t + 1` (palindromic
+under `u = 5 t`, not under `u = t`).  A first cut at the
+scaled-palindromic case added a detector + factor-via-`u = r t`
+substitution to `logtoreal_dispatch`; the math is right, but the
+resulting `logtoreal_quadratic` calls hand
+`subst_t(s, t, u_root + I v_root)` nested-radical complex values to
+`split_re_im` / `LogToAtan`, and LogToAtan's polynomial-GCD
+machinery wedges for 2+ minutes.
+
+Workaround taken: restrict the `logtoreal_dispatch` palindromic
+branch to the pure-palindromic case `r = 1` (cheap radicals after
+substitution), AND in parallel add an `expand_palindromic_quartic_real`
+hook inside `intrat_naive_log_part` that builds the real form
+directly from `(a(α) / d'(α)) · Log[x − α] + (conj …)` for each
+conjugate root pair — bypassing LogToReal / LogToAtan entirely.
+
+Lesson: when porting a Mathematica routine that delegates to
+`Solve` / `ToRadicals` / general factor-over-extension, the C port's
+hand-coded substitution chain (LogToReal → split_re_im → LogToAtan)
+has very different cost characteristics than Mathematica's.  Inputs
+where the LRT Q has clean radicals can route through LogToReal;
+inputs where the LRT Q's radicals get cubed / squared by the
+substitution should be routed around it — handle palindromic /
+cyclotomic structure at the NaiveLogPart layer (closer to the
+integrand's d(x)) where the radicals stay shallow.
+
+## intrat: narrow per-degree branches in logtoreal_dispatch leak RootSum at adjacent n (2026-05-11)
+
+The first nth-root fix only handled `c_3 t^3 + c_0` and (via the
+older Sophie-Germain shortcut) `c_4 t^4 + c_0` with `q < 0`.
+User immediately surfaced nearby failures: `1/(b ± a x^n)` for
+n ∈ {4-, 5-, 6±, 8+, 9+} all still leaked `RootSum`, because the
+LRT-Q polynomials for those inputs were also sparse nth-root
+forms with one degree-specific branch each that hadn't been
+written.
+
+**Why:** when a CAS-layer fix is required for a family
+`P(c_1, …, c_k, n)` (here: `1/(b ± a x^n)` for varying n), the
+fix must be parametric over the family member, not a single
+hand-coded case.  Adjacent family members will be the next thing
+the user tries.  Reinforces the existing "general algorithms"
+memory: heuristics keyed on the literal failing input are not
+fixes.
+
+**How to apply:** when implementing a degree-n branch in a
+dispatch, ask "what's special about this degree?".  If the answer
+is "I'm only doing this degree because that's where the user's
+report landed", that's the wrong unit of work — find the structure
+that lets the routine extend to all n in the same closure step.
+For the LRT nth-root case the structure is the standard
+cyclotomic decomposition over R: enumerate angles, pair conjugates,
+build quadratics with `Cos[k π / n]` coefficients.  One helper
+(`logtoreal_nthroot_sparse`) handles all n ≥ 3 in ~140 lines.
+Adjacent family members (different n, different sign of `−c_0/c_n`)
+fall out for free.

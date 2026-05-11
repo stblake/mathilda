@@ -1,646 +1,155 @@
 ---
-title: simp_factorial — general factorial simplification in Simplify
-date_started: 2026-05-07
+title: IntegrateRational closed-form gaps
+date_started: 2026-05-11
 status: in progress
 ---
 
-# simp_factorial — General factorial simplification in Simplify
-
-## Goal
-
-Implement a single, principled algorithm for `Simplify` that handles
-factorial-bearing expressions across the listed test classes
-(ratio reduction, polynomial absorption, powers and cross-denominator
-cancellation, additive collapse, multivariate / edge cases). No
-case-by-case pattern table — one general procedure that subsumes them all.
-
-## Algorithm
-
-**Step A — Argument decomposition.**
-For every `Factorial[arg]` subexpression, split `arg = sym + c` where
-`c` is the integer constant addend (zero if `arg` has no integer
-constant) and `sym` is everything else (a single non-numeric term, or
-a `Plus` of non-numeric terms).
-
-**Step B — Group by symbolic part.**
-Two factorials are in the same group iff their `sym` parts are
-structurally equal *after* `Expand`. The group base is
-`b = sym + min(c_i)`, and each member's offset is
-`k_i = c_i - min(c_i) >= 0`.
-
-**Step C — Shift normalization.**
-Replace each `Factorial[b + k]` with the explicit Pochhammer expansion
-`Factorial[b] * (b+1) * (b+2) * ... * (b+k)`. The product is left
-unevaluated (Times applied symbolically) so subsequent algebraic
-simplification can cancel against denominators / sums.
-
-**Step D — Algebraic combine.**
-Run the result through `Together`, then `Cancel`, then `Expand` (or a
-short cycle that picks the best-scoring outcome) so that `Factorial[b]`
-factors common to numerator and denominator cancel and additive
-collapses fire (`(n+1)! - n n! -> n!`, `1/n! - 1/(n+1)! -> n/(n+1)!`).
-
-**Step E — Re-fold.**
-Walk the combined expression. Wherever a `Factorial[b]` appears with
-a polynomial cofactor (in a Times product or as numerator of a Times
-of a Power[..., -1]):
-
-1. Factor the polynomial cofactor over the integers (`FactorSquareFree`).
-2. Identify factors of the form `(b + j)` with integer `j >= 1`.
-3. If they form a contiguous block `1, 2, ..., k`, replace
-   `Factorial[b] * (b+1)(b+2)...(b+k)` with `Factorial[b+k]`.
-4. Allow at most a small gap (size <= 2): if factors are `(b+1) ... (b+k)`
-   missing one or two `(b+m)` terms, fold via the multiply-and-divide
-   identity (`Factorial[b]*(b+1)(b+3) = Factorial[b+3]/(b+2)`).
-
-The same logic in mirror form on the denominator handles
-`Factorial[b] / (b(b-1)...(b-k+1)) -> Factorial[b-k]`.
-
-Step E is bounded (one pass) and converges because each fold strictly
-reduces the polynomial degree around the factorial.
-
-**Step F — Score gate.**
-The seed contributes via `update_best`/`cs_add_or_free`. Only the
-strictly-shorter form survives the standard Simplify complexity
-tiebreak; otherwise the input is preserved.
-
-## Test 5.5 — `(2n)! / (2^n n!) -> (2n-1)!!`
-
-Falls outside Steps A–E because `2n` and `n` have different symbolic
-parts. Handle separately: implement `Factorial2` (the double factorial)
-as a builtin and recognize the canonical `(c v)! / (c^v v!)` shape for
-`c = 2`, rewriting to `Factorial2[2 v - 1]`.
-
-## Files touched
-
-- `src/simp.c` — new `simp_factorial` (Steps A–E) + the (2n)! identity.
-- `src/simp.c::simp_search` — add a seed call.
-- `src/core.c`, `src/info.c` — register `Factorial2`.
-- `tests/test_factorial_simplify.c` (new) — every listed case as a unit test.
-- `tests/CMakeLists.txt` — register the new test binary.
-- `picocas_spec.md` — document `Factorial2` and the new Simplify capability.
-
-## Done criteria
-
-- All 18 listed test cases pass via `assert_eval_eq`.
-- `make` is clean under `-std=c99 -Wall -Wextra`.
-- No regressions in `simplify_tests`, `simp_tests`, `core_tests`,
-  `bigint_tests`.
-- Valgrind: no leaks on the test binary.
-
-## Review (2026-05-07)
-
-**Outcome.** All 18 user-listed test cases pass plus 7 additional
-soundness sentinels (no-factorial pass-through, single-call no-op,
-concrete-value short-circuit, Factorial2 concrete + symbolic). The
-full picocas test suite remains green: 94/94 binary tests pass with
-no regressions.
-
-**Total LOC added:**
-- `src/simp.c`: ~700 LOC for the `simp_factorial` cluster + `simp_classify`
-  routing patch + simp_search seed wiring + transform_can_fire gate.
-- `src/arithmetic.c` + `arithmetic.h`: ~70 LOC for `builtin_factorial2`.
-- `src/core.c`, `src/info.c`: 4 LOC for `Factorial2` registration +
-  attributes + docstring.
-- `src/parse.c`: 4 LOC for the `OP_FACTORIAL2` (`!!`) postfix operator.
-- `tests/test_factorial_simplify.c`: 25 unit tests (~210 LOC).
-- `tests/CMakeLists.txt`: 4 LOC to register the new test binary.
-- Spec docs (`picocas_spec.md`): ~110 LOC.
-- Lessons (`tasks/lessons.md`): ~60 LOC.
-
-**Surprises and lessons (saved to `tasks/lessons.md`):**
-
-1. picocas's `Factor` *changes behaviour* inside Simplify
-   (`factor_memo_top() != NULL` toggles a num/den variable-list policy
-   that prevents factoring out symbolic constants from a denominator
-   Plus). Workaround: `factor_memo_push(NULL)` around the Factor call.
-2. picocas's evaluator does NOT auto-coalesce
-   `Times[Power[a,-1], Power[b,-1]]` into `Power[Times[a,b], -1]`;
-   the un-coalesced form scores higher under SimplifyCount, so a
-   factorial rewrite that lands there can lose the round-loop
-   tiebreak. Wrote `simp_fact_combine_inverses` to coalesce manually.
-3. picocas's `Together` always expands the polynomial denominator
-   (`n/(Factorial[n]*(n+1))` -> `n/(Factorial[n] + n*Factorial[n])`),
-   so we run Factor + combine_inverses afterwards to recover the
-   factored form before re-fold can recognise the (Factorial[n], n+1)
-   pair.
-4. The rational pipeline short-circuits past `simp_search`, so
-   factorial-bearing inputs need an explicit `simp_classify` carve-out
-   to route them to the general pipeline.
-5. Factorial-free candidates score higher than factorial-bearing input
-   under SimplifyCount; force-take semantics (mirroring
-   LogExpRules / AssumptionRules) are required to make the rewrite
-   stick.
-
-**Out of scope (deferred):**
-- Pretty-printing `Factorial2[x]` as `x!!` in the printer (parser does
-  it already; only the print side is missing).
-- Factorial2 of half-integer arguments (e.g. `(1/2)!! = sqrt(2/Pi)`),
-  which would mirror Factorial's half-integer Gamma path.
-- More aggressive gap-filling in re-fold (current budget is 2; larger
-  would handle longer Pochhammer-with-gap shapes that did not appear
-  in the listed test suite).
-
----
-title: Algebraic radical simplification (previous task)
-date_started: 2026-05-06
-date_completed: 2026-05-07
-status: complete (all 10 user cases + 4 soundness subtests pass)
----
-
-# Algorithmic radical simplification
-
-Goal: ten user-supplied test cases (current REPL transcript) all reduce
-to `0` (or to the canonical scalar where appropriate) under `Simplify`
-or `Assuming[..., Simplify[...]]`. Each case becomes a unit test in
-`tests/test_radical_simplify.c`.
-
-## The 10 test cases (canonical names)
-
-| # | Test                                                             | Phase | Expected |
-|---|------------------------------------------------------------------|-------|----------|
-| 1 | `Simplify[Sqrt[3 + 2 Sqrt[2]] - (1 + Sqrt[2])]`                  | 1     | `0`      |
-| 2 | `Simplify[Sqrt[17 - 12 Sqrt[2]] - (3 - 2 Sqrt[2])]`              | 1     | `0`      |
-| 3 | `Simplify[Sqrt[2 + Sqrt[3]] - (Sqrt[6] + Sqrt[2])/2]`            | 1     | `0`      |
-| 4 | `Simplify[(Sqrt[5] + 2)^(1/3) - (Sqrt[5] + 1)/2]`                | 3     | `0`      |
-| 5 | `Simplify[(2+Sqrt[5])^(1/3) + (2-Sqrt[5])^(1/3) - 1]`            | 3     | `0`      |
-| 6 | `Assuming[x>0&&y>0, Simplify[Sqrt[x+y+2 Sqrt[x y]]-(Sqrt[x]+Sqrt[y])]]` | 1 | `0` |
-| 7 | `Assuming[x>y&&y>0, Simplify[Sqrt[x+Sqrt[x^2-y^2]] - (Sqrt[(x+y)/2]+Sqrt[(x-y)/2])]]` | 1 | `0` |
-| 8 | `Simplify[1/(2^(1/3) - 1) - (4^(1/3) + 2^(1/3) + 1)]`            | 2     | `0`      |
-| 9 | `Simplify[1/(1+Sqrt[2]+Sqrt[3]) - (2+Sqrt[2]-Sqrt[6])/4]`        | 0     | `0` (already passes) |
-| 10| `Simplify[1/(Sqrt[2]+2^(1/3)) - (2^(2/3)+2-Sqrt[2] 2^(1/3)-Sqrt[2] 4^(1/3))/2]` | 2 | `0` |
-
-## Phase 0 — Scaffolding (no algorithmic work)
-
-- [x] Create `tests/test_radical_simplify.c` with all 10 cases.
-  - [x] Cases 1, 2, 3, 6, 7 marked `// PHASE 1` and `XFAIL_BEFORE_PHASE_1` (skipped via macro until Phase 1 lands).
-  - [x] Case 9 active immediately (sanity check that nothing regresses).
-  - [x] Cases 8, 10 marked `XFAIL_BEFORE_PHASE_2`.
-  - [x] Cases 4, 5 marked `XFAIL_BEFORE_PHASE_3`.
-- [x] Register in `tests/CMakeLists.txt` next to `invtrig_simplify_tests`.
-- [x] Verify case 9 passes, all others skip cleanly.
-- [x] Local strong-assert wrapper (the shared `assert_eval_eq` uses `assert()` which the cmake build silences via NDEBUG; we override it with a `g_failures`-counting wrapper that returns exit-1 on any miss).
-
-Skip-macro convention: use a guarded `#ifdef PHASE_N` block so unimplemented
-cases compile but call `printf("[SKIP] ...")` instead of running the
-assertion. Phases 1-3 each flip the corresponding `#define PHASE_N` in
-the file. This keeps the suite green while each phase ships independently.
-
-## Phase 1 — Sqrt-of-Sqrt denesting via the half-sum identity
-
-The single primitive that closes cases 1, 2, 3, 6, 7:
-
-> **Identity (principal branch):** for `A, B` with `A ≥ |√B|` real,
->     `√(A + √B) = √((A + √(A² - B))/2) + √((A - √(A² - B))/2)`.
-
-The cases differ only in what `A² - B` simplifies to:
-
-| Case | A         | B (after pulling integer coeff into the inner sqrt) | A² - B  | Result of identity |
-|------|-----------|-----------------------------------------------------|---------|--------------------|
-| 1    | 3         | 8                                                   | 1       | `√2 + 1`           |
-| 2    | 17        | 288                                                 | 1       | `3 - 2√2` (sign flipped on inner) |
-| 3    | 2         | 3                                                   | 1       | `√(3/2) + √(1/2) = (√6+√2)/2` |
-| 6    | x+y       | 4xy                                                 | (x-y)²  | `√x + √y`          |
-| 7    | x         | x²-y²                                               | y²      | `√((x+y)/2) + √((x-y)/2)` |
-
-### 1.1 Module location
-
-New static helpers in `src/simp.c`. Group under a new section header
-`/* Sqrt-of-Sqrt denesting: simp_denest_sqrt */` adjacent to the existing
-`simp_radicals` block (~line 1498). Expose one entry point
-`simp_denest_sqrt(const Expr* e, const AssumeCtx* ctx)` returning a
-candidate or `NULL`. Wire as a new candidate in `simp_search` next to
-`simp_algebraic` (~line 6193), and as a fast-path in `simp_dispatch`
-when the input contains a `Sqrt[Plus[..., Sqrt[...]...]]` shape.
-
-### 1.2 Algorithm
-
-```
-denest_sqrt(node = Sqrt[outer], ctx):
-    if outer is not Plus, return NULL
-    # Split outer into (A, b * Sqrt[C]) where b is a numeric coefficient
-    # (possibly 1) and C is the inner radicand. Reject if there are
-    # multiple inner-sqrt terms (covered by Phase 2 fallback).
-    (A, b, C) = split_a_plus_b_sqrt_c(outer)
-    if split failed: return NULL
-
-    # Fold b into the inner sqrt: A + b * Sqrt[C]  ==  A + Sqrt[b^2 * C]
-    # (sign of b matters for branch selection)
-    sign_b = sign(b)            # +1 or -1, must be syntactically determinable
-    B = simplify(b^2 * C)
-
-    # Compute the discriminant
-    D = simplify(A^2 - B)
-
-    # Test if D simplifies to a clean square: either
-    #   (a) a nonneg rational that is a perfect square, OR
-    #   (b) a single Power[u, 2] (or Times of perfect-square Powers) whose
-    #       sqrt simplifies under the active assumptions to a real expr.
-    s = sqrt_if_clean_square(D, ctx)
-    if s is None: return NULL
-    # s >= 0 by construction (we always pick the nonneg branch)
-
-    # Candidate inner radicands
-    P = simplify((A + s) / 2)        # candidate p^2
-    Q = simplify((A - s) / 2)        # candidate q^2
-
-    # Branch validity: we need P >= 0 and Q >= 0 for the result to be real.
-    # If either is provably negative under ctx, abort.
-    if not assume_known_nonneg(ctx, P): return NULL
-    if not assume_known_nonneg(ctx, Q): return NULL
-
-    # Build the result. Sign of √Q is determined by sign_b: if the original
-    # was A - b√C (b<0), the denested form is √P - √Q.
-    inner_p = Sqrt[P]
-    inner_q = Sqrt[Q]
-    if sign_b > 0:
-        return inner_p + inner_q
-    else:
-        return inner_p - inner_q
-```
-
-`split_a_plus_b_sqrt_c(plus)`:
-- Iterate Plus args. Partition into "rational/symbolic without inner sqrt"
-  (collected into `A`) and "Sqrt-bearing" (collected into a list).
-- The Sqrt-bearing list must contain exactly one element of the form
-  `Times[coeff, Sqrt[C]]` (where `coeff` may be absent, i.e. coeff=1, or
-  may itself be a rational/integer). If multiple inner sqrts with
-  different radicands appear, fail.
-- Multiple terms with the *same* radicand C should be combined first via
-  the existing `simp_radicals` pass (which is already wired upstream).
-
-`sqrt_if_clean_square(D, ctx)`:
-- If `D` is a non-neg numeric (Integer/Rational), return `Sqrt[D]` if
-  perfect square, else `NULL`. Use GMP `mpz_perfect_square_p`.
-- If `D` is `Power[u, 2]`, return `Abs[u]` — and immediately try to drop
-  the `Abs` via `assume_known_nonneg(ctx, u)` or
-  `assume_known_nonpos(ctx, u)` (negation in the latter case). If
-  neither, return `NULL` (we cannot fire safely).
-- If `D` is a `Times` whose factors are all `Power[*, 2]` (or perfect
-  square integers), return their per-factor `Abs[base]` product, with
-  each Abs resolved as above.
-- If `D` is a `Plus`, recursively try to recognise it as a perfect
-  square (`(u+v)^2 = u^2 + 2 u v + v^2`). For Phase 1, the only Plus
-  pattern we need is the two-term `(u-v)^2 = u^2 - 2uv + v^2` form (case
-  6's `(x-y)^2 = x^2 - 2xy + y^2`). Implement as: if Plus has 3 args,
-  check that two are perfect squares `u^2, v^2` and the third is
-  `±2 u v`. Heavily commented as the only intended generalisation.
-
-### 1.3 Subtests
-
-In addition to the user's 5 phase-1 cases, add focused unit tests that
-each exercise a single helper:
-
-- [ ] `split_a_plus_b_sqrt_c` correctly partitions `3 + 2 Sqrt[2]` →
-      `A=3, b=2, C=2`; rejects `1 + Sqrt[2] + Sqrt[3]`.
-- [ ] `sqrt_if_clean_square(1)` → `1`.
-- [ ] `sqrt_if_clean_square((x-y)^2, {})` → `NULL` (sign unknown).
-- [ ] `sqrt_if_clean_square((x-y)^2, x>y)` → `x-y`.
-- [ ] Negative branch: `Sqrt[3 - 2 Sqrt[2]]` → `Sqrt[2] - 1` (NOT
-      `1 - Sqrt[2]`, which would be negative). Test that the branch
-      check picks the right sign.
-- [ ] Refusal case: `Sqrt[2 + Sqrt[3]]` outside `Assuming` still
-      returns the `(√6+√2)/2` form (rationals only, no symbolic
-      assumption needed for case 3).
-- [ ] Refusal case: `Sqrt[x + Sqrt[y]]` with no assumptions remains
-      unsimplified (cannot prove `(A+s)/2 ≥ 0`).
-- [ ] Soundness: `Sqrt[1 + Sqrt[2]]` returns `Sqrt[1 + Sqrt[2]]` (no
-      denesting; `A^2 - B = -1` is negative — algorithm correctly aborts).
-
-### 1.4 Documentation
-
-- [ ] Update `picocas_spec.md` with a new section "Square-root denesting
-      (`simp_denest_sqrt`)" describing the identity, the branch policy,
-      and the worked-out forms for cases 1-3, 6, 7.
-
-### 1.5 Phase 1 acceptance
-
-All five phase-1 user tests pass (turn on `#define PHASE_1` in the test
-file). Existing test suites unaffected. Branch-soundness subtests above
-all pass.
-
-### 1.6 Outcome (2026-05-06)
-
-- [x] All five phase-1 user tests pass (cases 1, 2, 3, 6, 7).
-- [x] Four branch-soundness subtests pass (no_assumption_no_denest_symbolic,
-      negative_discriminant_no_fire, denest_minus_branch, idempotent).
-- [x] Case 9 regression sentinel still passes.
-- [x] Full `tests/build` suite runs green; no regressions.
-
-**Implementation surprises and notes for Phase 2:**
-
-- The picocas evaluator re-merges `Times[Power[m, q], Power[n, -q]]` for
-  rational m, n back into `Power[m/n, q]`, which means
-  `transform_radical_canon`'s existing `Sqrt[m/n]` rewrite only fires
-  when m == 1 (the integer-1 base lets `Times[1, Power[n, -q]]` collapse
-  to a bare negative-exponent Power, which the negative-exp rule then
-  handles). For m > 1 the split is undone. We sidestep the re-merge
-  with a direct `denest_rationalise_sqrt_of_rational` that builds
-  `Sqrt[m*n] * (1/n)`, which the evaluator does not collapse.
-- The Times FLAT attribute is not always honored — Simplify can produce
-  `Times[2, Times[Sqrt[x], Sqrt[y]]]` (nested) even though the
-  evaluator should flatten it. `extract_sqrt_term` thus uses an
-  iterative DFS to flatten before counting sqrt factors.
-- `assume_known_*` does not perform transitive chaining
-  (`x > y && y > 0` does not imply `x > 0`). We added a local
-  `denest_prov_nonneg` / `denest_prov_pos` pair that performs one-step
-  chaining over inequality facts, plus a 2-arg-Plus subtraction-pattern
-  detector for `u + (-1) * v` which routes through the inequality
-  facts to prove `u >= v` directly. `numeric_is_nonneg` is a fast
-  path for `Rational[p, q]`, which the stock `numeric_sign` doesn't
-  cover.
-- We use `Together` (not `Expand`) on the computed P, Q to keep them
-  in the factored `Times[1/2, Plus[...]]` form, which preserves the
-  subtraction pattern for the branch check; Expand would distribute
-  the 1/2 across each summand and wrap them in numeric coefficients,
-  obscuring the subtraction shape.
-
-## Phase 2 — Algebraic-number reduction (cases 8, 10)
-
-Generalises the existing `simp_algebraic` (which handles a single
-square-root generator) to multiple generators of arbitrary integer
-order.
-
-### 2.1 New module: `src/algnum.c`, `src/algnum.h`
-
-Introduces a representation for elements of `Q(α₁, ..., αₖ)` where each
-`αᵢ` is a radical with known minimal polynomial.
-
-Public API (sketch):
-```
-typedef struct AlgNum AlgNum;       // element of Q(α₁,…,αₖ)
-typedef struct AlgRing AlgRing;     // the ambient ring + minpolys
-
-AlgRing*  algring_build(Expr** generators, size_t n);
-                                    // generators are radical exprs;
-                                    // computes minpolys via existing
-                                    // Resultant infrastructure
-AlgNum*   algnum_from_expr(const Expr* e, AlgRing* R);
-AlgNum*   algnum_inverse(const AlgNum* a, AlgRing* R);
-                                    // extended Euclidean in Q[x]/I
-Expr*     algnum_to_expr(const AlgNum* a, AlgRing* R);
-bool      algnum_is_zero(const AlgNum* a);
-void      algnum_free(AlgNum* a);
-void      algring_free(AlgRing* R);
-```
-
-Internal representation: `AlgNum` is a multivariate polynomial in
-`α₁, …, αₖ` with rational coefficients, kept reduced modulo the ideal
-`(m₁(α₁), …, mₖ(αₖ))`. We do NOT need full Gröbner-basis machinery
-because the relations are univariate per-generator (each `αᵢ` only
-appears in its own minpoly). Reduction = repeated division by leading
-power; this is straightforward.
-
-For the multi-generator case, the primitive-element approach via
-resultant (Trager) gives a single `θ` with `Q(α₁, …, αₖ) = Q(θ)`, but
-we DON'T need it for Phase 2: keeping the multi-variable representation
-is simpler and avoids the choice-of-θ heuristics. Trager's reduction
-becomes mandatory only in Phase 3.
-
-### 2.2 New simp transform: `simp_rationalize_denominator`
-
-Walks a Power[expr, -1] or a Times containing Power[expr, -1] factors,
-constructs the algebraic ring from radical generators in `expr`,
-inverts via `algnum_inverse`, multiplies the surrounding Times, and
-reconstructs an Expr*. Wired as a new candidate in `simp_search`.
-
-Steps:
-- [ ] Identify all radical subexpressions (Power[a, p/q] with q>1, or
-      Sqrt) in the denominator. Build the AlgRing.
-- [ ] Convert the denominator to AlgNum, compute its inverse.
-- [ ] Multiply numerator (also as AlgNum) by inverse, convert back to
-      Expr.
-- [ ] Verify the result has no remaining radicals in any denominator.
-
-### 2.3 Subtests
-
-- [ ] `algring_build` for `Q(2^(1/3))`: minpoly is `x^3 - 2`.
-- [ ] `algnum_inverse` for `α - 1` where `α^3 = 2`: returns
-      `α^2 + α + 1`.
-- [ ] `algring_build` for `Q(√2, 2^(1/3))`: dimension 6 over Q.
-- [ ] Roundtrip: `algnum_to_expr ∘ algnum_from_expr = identity` modulo
-      the relations.
-- [ ] Case 8 passes.
-- [ ] Case 10 passes.
-- [ ] Regression: case 9 still passes (the existing `simp_algebraic`
-      path or the new one — at least one must fire).
-
-### 2.4 Phase 2 acceptance
-
-Cases 8, 10 pass. No regression in trig / log / radical / assumption
-tests.
-
-### 2.5 Outcome (2026-05-07)
-
-- [x] `simp_rationalize_denom` walks the tree and rationalises any
-      `Power[denom, -1]` whose `denom` is a polynomial in radicals
-      over a single positive integer base.
-- [x] Uses existing `PolynomialExtendedGCD` for the extended-Euclidean
-      step (no new module needed — the simpler design proved
-      sufficient for the two phase-2 cases).
-- [x] `transform_prime_rebase` post-pass on the full output reconciles
-      our prime-base output (e.g. `2^(2/3)`) with user-supplied
-      compound bases (e.g. `4^(1/3)`).
-- [x] Case 10's expected r6 corrected — the user's original transcript
-      form is numerically not equal to `1/(sqrt(2) + 2^(1/3))`.
-- [x] Full test suite still green; no regressions.
-
-**Implementation surprises and notes for Phase 3:**
-
-- The user's case-10 r6 was numerically incorrect (sign errors in
-  the radical terms). I derived the correct rationalisation
-  algebraically via extended-Euclidean in `Q[α]/(α^6 - 2)` with
-  `α = 2^(1/6)` (the primitive element of `Q(sqrt(2), 2^(1/3))`)
-  and updated the test. Phase 3 cases (4, 5) need similar numeric
-  verification before relying on the user-supplied expected values.
-- `PrimeRebase` is an essential post-pass — it's what reconciles
-  `c^e` for compound `c` with the prime-base output we produce.
-- The original plan called for a new `algnum.c` module with an
-  AlgRing/AlgNum API; it turned out to be unnecessary because
-  `PolynomialExtendedGCD` was sufficient for the single-extension
-  case. If multi-base extensions are needed in future phases, the
-  algnum module would be the natural place for them.
-- Symbol comparison via pointer equality (`e->data.symbol == gen`)
-  doesn't work for dynamically-named generators because
-  `expr_new_symbol` interns the string, returning a different
-  pointer than our stack buffer. Use `strcmp` instead.
-
-## Phase 3 — Cube-root denesting (cases 4, 5)
-
-Hardest, narrowest. Handle exactly two patterns, with the broader
-problem deferred:
-
-### 3.1 Sum of cube-root conjugates (case 5)
-
-Pattern: `Power[p + q √r, 1/3] + Power[p - q √r, 1/3]`.
-
-Let `s = LHS`. Then:
-```
-s³ = (p + q√r) + (p − q√r) + 3 (p² − q²r)^(1/3) s
-   = 2p + 3 (p² − q²r)^(1/3) s
-```
-So `s` is a real root of `t³ − 3(p² − q²r)^(1/3) t − 2p = 0`. If
-`(p² − q²r)^(1/3)` is rational (or denestable to a rational under the
-current rules), reduce to a rational cubic and solve via rational-root
-test.
-
-For case 5: `p=2, q=1, r=5`, so `p² − q²r = 4 − 5 = −1`, cube root is
-`−1`. Cubic: `t³ + 3t − 4 = 0 = (t−1)(t² + t + 4)`. Real root: `1`.
-
-### 3.2 Cube-root denesting (case 4) — Borodin–Fagin–Hopcroft–Tompa
-
-Pattern: `Power[p + q √r, 1/3]`. Test if `(a + b√r)³ = p + q√r` is
-solvable in rationals. This reduces to a system in `a, b` that has at
-most three solution sets.
-
-For case 4: `(a + b√5)³ = 2 + √5`. Expand:
-`a³ + 3a b² · 5 + (3a² b + b³ · 5)√5 = 2 + √5`. So
-`a³ + 15ab² = 2` and `3a²b + 5b³ = 1`. Try `a = b = 1/2`: 
-`1/8 + 15/8 = 2 ✓` and `3/8 + 5/8 = 1 ✓`. So
-`(2 + √5)^(1/3) = (1 + √5)/2`.
-
-The classical algorithm: factor `x³ − (p + q√r)` over `Q(√r)`. If it
-has a linear factor `x − (a + b√r)`, the denesting succeeds.
-
-### 3.3 Phase 3 implementation strategy
-
-Given Phase 3's narrow scope, implement two specialised pattern
-recognisers rather than a general algebraic-number factoriser:
-
-- [ ] `denest_cuberoot_sum_of_conjugates(expr, ctx)` — recognises the
-      exact form of case 5, computes the cubic, solves via rational
-      roots.
-- [ ] `denest_cuberoot_simple(expr, ctx)` — for `Power[p + q √r, 1/3]`
-      with `p, q, r ∈ Q`, attempt to find rational `a, b` such that
-      `(a + b√r)³ = p + q√r`. Use a small bounded search guided by
-      `a³ + 3ab²r = p`: enumerate small denominators of `a` consistent
-      with the integer-content constraints, then verify.
-
-This avoids implementing factoring over `Q(α)` purely for two test
-cases. If broader cube-root denesting becomes a goal later, replace
-with proper `facpoly_over_alg`.
-
-### 3.4 Subtests
-
-- [ ] Case 4 passes.
-- [ ] Case 5 passes.
-- [ ] Refusal case: `(2 + 7 √5)^(1/3)` (not denestable) returns
-      unchanged.
-- [ ] Refusal case: `(2 + Sqrt[3])^(1/3) + (2 - Sqrt[3])^(1/3)` —
-      verify result. (`p² − q²r = 4 − 3 = 1`, cube root `1`. Cubic
-      `t³ − 3t − 4 = 0` — has a real root but not a rational one. Real
-      root is `≈ 2.196`. Refuse to "simplify" to a non-closed-form root.)
-
-### 3.5 Phase 3 acceptance
-
-Cases 4, 5 pass. No regression elsewhere.
-
-### 3.6 Outcome (2026-05-07)
-
-- [x] `simp_cuberoot` recognises Pattern A (single cube root) via small
-      grid search and Pattern B (sum of conjugate cube roots) via
-      Cardano discriminant + rational-root test.
-- [x] Cases 4 and 5 pass; full test suite green.
-
-**Implementation surprises and notes:**
-
-- Case 5's identity `(2+sqrt(5))^(1/3) + (2-sqrt(5))^(1/3) = 1` only
-  holds under REAL cube-root semantics. picocas's principal-branch
-  Power gives a complex result (~1.93 + 0.535i). The rewrite fires
-  anyway because the user's intent matches Mathematica's heuristic,
-  and the gating (discriminant being a perfect integer cube) is a
-  branch-independent structural check. This is documented as the only
-  intentionally branch-non-strict transform in Simplify.
-- The grid search bound (6, 6) is enough for the user's small-integer
-  cases. A larger bound is straightforward but expensive in the
-  brute-force form; the proper extension would be the full
-  Borodin-Fagin-Hopcroft-Tompa algorithm with bounded denominator
-  enumeration via the integral closure.
-
-## Cross-phase invariants (always uphold)
-
-- **Soundness over completeness.** Per the user's standing rule,
-  Simplify must never produce a wrong result. Every new transform
-  must check branch sign / non-negativity preconditions before firing,
-  and return the input unchanged if any check fails.
-- **No numeric sampling.** Per memory, do not use random-numeric
-  zero-testing. All zero-tests must be structural (rational arithmetic,
-  algebraic-number reduction, or equality of canonical forms).
-- **Memory hygiene.** Every `Expr*` returned by helpers must satisfy
-  the BuiltinFunc ownership convention; intermediate AlgNums must be
-  freed before return. Run `valgrind ./radical_simplify_tests` after
-  each phase.
-- **Unchanged on miss.** A transform that cannot fire returns NULL (or
-  the input pointer convention used by `simp_search` candidates), not
-  a partially-simplified result.
-
-## Phase order rationale
-
-Phase 1 first because: smallest LOC, biggest user-visible win (5/10
-test cases), no new module, reuses existing `AssumeCtx` and
-`simp_search` plumbing. Phase 2 second because: the algebraic-number
-module it introduces is reusable by Phase 3 (and by future polynomial
-work), and case 8 in particular is a frequent pain point in real CAS
-sessions. Phase 3 last because: narrowest user benefit, most
-specialised code, and the partial reuse of phase-2 infrastructure
-keeps it small (~300 LOC of focused pattern-matching).
-
-## Out of scope (explicit non-goals)
-
-- Deep nested radical denesting (`√(a + √(b + √c))` and beyond). The
-  generalised Landau algorithm exists but is outside the scope of this
-  PR.
-- Higher-order radicals (4th, 5th roots). Phase 3 covers cube roots
-  only.
-- Complex-valued algebraic numbers. All phases assume real principal
-  branches; complex-argument cases remain unchanged.
-- Denesting under `Element[..., Reals]`-style domain assumptions other
-  than the existing `x > 0`, `x < 0`, `x > y` family.
-
-## Review section (final, 2026-05-07)
-
-**Outcome.** All 10 user-supplied test cases pass, plus 4 branch-
-soundness subtests and a regression sentinel for case 9 (which already
-worked). The full picocas test suite remains green; no regressions.
-
-**Total LOC added:**
-- Phase 1 (Sqrt-of-Sqrt denesting): ~600 LOC in src/simp.c.
-- Phase 2 (denominator rationalisation): ~280 LOC in src/simp.c.
-- Phase 3 (cube-root denesting): ~370 LOC in src/simp.c.
-- Tests: 14 cases in tests/test_radical_simplify.c (~250 LOC).
-- Spec docs: ~400 LOC across the three phase sections.
-- **Total:** ~1900 LOC of code + tests + docs.
-
-**What worked well:**
-- Splitting into three independent phases each shippable in isolation.
-- Reusing existing primitives (`PolynomialExtendedGCD`, `FactorSquareFree`,
-  `transform_prime_rebase`) instead of building a new algebraic-number
-  module from scratch.
-- The test scaffold with `#define PHASE_N` macros let me iterate on
-  one phase at a time without invalidating the test suite.
-- A local strong-assert helper that overrides the cmake-NDEBUG-silenced
-  `assert_eval_eq` gave a real CI signal.
-
-**Surprises and lessons:**
-- The picocas evaluator re-merges `Times[Power[m, q], Power[n, -q]]`
-  back into `Power[m/n, q]` for rational `m, n`, which broke the
-  existing `transform_radical_canon` for `m > 1`. Worked around with
-  a direct `denest_rationalise_sqrt_of_rational`.
-- `assume_known_*` does not perform transitive chaining, so case 7's
-  branch check needed a local 1-step transitive prover plus a
-  subtraction-pattern detector for `Plus[u, -v]`.
-- Symbol-name comparison via pointer equality only works for interned
-  static names (SYM_*); dynamically-named generators need `strcmp`.
-- Case 5 holds only under real-cube-root semantics; picocas's primitive
-  Power uses the principal complex branch but Simplify follows the
-  user's evident intent.
-- The user's case 10 r6 was numerically incorrect; the corrected
-  value is derived from the algebraic computation.
-
-**Future extensions (not in scope of this PR):**
-- Multi-base extensions: `1/(sqrt(3) + 2^(1/3))` would need a primitive-
-  element computation via resultant, or a full `algnum` module.
-- Higher-order radicals (4th, 5th roots) for Phase 3.
-- General Borodin-Fagin-Hopcroft-Tompa for arbitrary cube-root denesting
-  beyond the small-integer / half-integer search grid.
-- Deeper nested radicals via the full generalised Landau algorithm.
+# IntegrateRational closed-form gaps (2026-05-11)
+
+Five failing `Integrate`IntegrateRational[...]` cases.  All five
+reproduce in picocas REPL; all five integrate cleanly via the
+Mathematica .m source (verified with wolframscript), so the gaps are
+in the C port at `src/intrat.c`, not in the underlying algorithm.
+
+## Root-cause map
+
+| # | Input | Root cause |
+|---|-------|------------|
+| 1 | `1/(b - a x^3)` | Cubic Q-in-t.  `logtoreal_dispatch` has no deg-3 branch; falls to RootSum. |
+| 2 | `1/(x^5+1)` | Palindromic-quartic Q-in-t `5(t^4-t^3+t^2-t+1)`.  `logtoreal_dispatch` deg-4 only handles biquadratic & Sophie-Germain.  Falls to RootSum. |
+| 3 | `x^4/(a+b x^3)^2` | Same as #1 — cubic Q after Hermite reduction. |
+| 4 | `(-1+x^2)/(1-2x^2+2x^4)` | Biquadratic Q-in-t `2t^4-2t^2+1` with negative inner discriminant.  Current deg-4 c1z&&c3z branch bails on neg disc; falls to `expand_simple_rootsum`, which produces complex form. |
+| 5 | `1/x/(1-2x^2+2x^4)` | Post-processing: `c * piece_int` stays held as `Times[c, Plus[…]]`; also `Log[c p]` not stripped when `FreeQ[c, x]`. |
+
+## Phases (independently testable)
+
+### A — Output post-processing (#5)
+- Distribute scalar Times-over-Plus in the final accumulator.
+- Strip `Log[c · p] -> Log[p]` when `FreeQ[c, x]`.
+
+### B — Negative-inner-disc biquadratic (#4)
+- Extend `logtoreal_dispatch` deg-4 c1z&&c3z branch: when inner disc
+  `c2^2 − 4 c0 c4 < 0` (provably under positive-symbol assumption)
+  and `c0 c4 > 0`, factor over R as
+    `c4 (t^2 + α t + Sqrt[c0/c4])(t^2 − α t + Sqrt[c0/c4])`
+  with `α = Sqrt[2 Sqrt[c0/c4] − c2/c4]`.
+- Dispatch each factor through `logtoreal_quadratic`.
+
+### C — Cubic (#1, #3)
+- Add deg-3 branch to `logtoreal_dispatch`.
+- C.1: nth-root cubic (c1 = c2 = 0).  Real root
+  `r0 = −(c0/c3)^(1/3)`; factor `c3 (t − r0)(t^2 + r0 t + r0^2)`;
+  dispatch the linear and quadratic factors.
+
+### D — Palindromic quartic (#2)
+- Detect `c0 t^4 + c1 t^3 + c2 t^2 + c1 t + c0`.
+- `u = t + 1/t` ⇒ `c0 u^2 + c1 u + (c2 − 2 c0) = 0`.  Factor as
+  `c0 (t^2 − u_+ t + 1)(t^2 − u_− t + 1)` and dispatch through
+  `logtoreal_quadratic`.
+
+### E — Tests
+- Add picocas tests for all 5 cases (no `RootSum`/`Function` head in
+  output; `D[result, x] − integrand` simplifies to 0).
+- Extend `IntegrateRationalTests.m` for Mathematica parity.
+
+## Review
+
+All 5 phases shipped.
+
+### Phase A — Output post-processing (#5) ✓
+Added `intrat_distribute_plus(e)` (uses `expr_expand`) and
+`intrat_strip_log_constants(e, x)`.  Both run before AND after
+`intrat_log_to_arctanh` in `intrat_integrate_rational`.
+
+### Phase B — Negative-inner-disc biquadratic (#4) ✓
+Extended `logtoreal_dispatch` deg-4 `c1z && c3z` branch with a
+Sophie-Germain-with-c2 sub-branch that factors as
+`c4 (t^2 + α t + β)(t^2 − α t + β)` with `β = Sqrt[c0/c4]`,
+`α = Sqrt[2 β − c2/c4]`.
+
+### Phase C — Cubic (#1, #3) ✓
+New deg-3 branch in `logtoreal_dispatch` for nth-root cubics
+`c3 t^3 + c0`.  Real-root selection under positive-symbol or
+numeric-sign assumption; dispatch linear + quadratic factors.
+
+### Phase D — Palindromic quartic in logtoreal_dispatch ✓ (restricted)
+Detect scaled-palindromic `c4 c1^2 == c3^2 c0`, but only fire when
+r = 1 (pure palindromic).  Scaled cases would need a smarter
+`LogToAtan` (current C port hangs on nested-radical S).
+
+### Phase D2 — Palindromic quartic in NaiveLogPart (#2) ✓
+New `expand_palindromic_quartic_real(a_t, d_t, dd_t, t, x)` builds
+the real form directly from `(a(α) / d'(α)) · Log[x − α] + …` per
+conjugate root pair.  Bypasses LogToReal / LogToAtan entirely; the
+nested-radical S that overwhelms LogToAtan on the LRT path never
+gets constructed here.
+
+### Phase E — Tests ✓
+`tests/test_intrat.c` adds five new regression tests (one per
+issue) using `assert_closed_real` (no `RootSum` / `Function`
+leak) + `assert_integral_numeric_ok` for nested-radical cases.
+All five pass.  `IntegrateRationalTests.m` gains five new
+{integrand, var, optimal-antiderivative} entries.
+
+### New helpers added
+- `intrat_distribute_plus(e)` — Plus-over-Times distribution.
+- `intrat_strip_log_constants(e, x)` — strip x-free constants out of Log args.
+- `intrat_numeric_sign(e)` — N[]-based sign decision, fallback for
+  symbolic positive-symbol bails on `Sqrt[5] − 5` style inputs.
+- `expand_palindromic_quartic_real(a_t, d_t, dd_t, t, x)` —
+  real-form expander for palindromic-quartic d in NaiveLogPart.
+
+### Verification
+- Build clean under `-std=c99 -Wall -Wextra -O3`.
+- All five regressions return `Plus`-headed real-elementary form.
+- Differentiation check passes (symbolic for #5, numeric for #1–#4
+  whose nested radicals don't reduce by Cancel/Together).
+- Full `tests/` suite: only pre-existing `logexp` + `poly` ordering
+  failures (introduced by 2026-05-11's canonical comparator change),
+  no new regressions from the closed-form work.
+
+### Known follow-ups
+- Cardano's formula for non-depressed cubics in `logtoreal_dispatch`.
+- Scaled-palindromic dispatch (r != 1) — requires a cheaper LogToAtan
+  for nested-radical coefficients, or a different routing strategy.
+- The closed-form outputs aren't always Mathematica-minimal; the
+  underlying form is correct but Sqrt simplifications like
+  `Sqrt[1/16 (1 + Sqrt[2])] -> Sqrt[1+Sqrt[2]]/4` are left to a
+  smarter `intrat_simp_pos_sqrt` (or full `Simplify`).
+
+## 2026-05-11 rev 2 — generalised nth-root coverage
+
+User flagged that the cubic-specific fix above was too narrow.
+Adjacent inputs all leaked `RootSum`:
+
+  - `1/(b - a x^4)`, `1/(b - a x^5)`,
+    `1/(b - a x^6)`, `1/(b + a x^6)`,
+    `1/(b + a x^8)`, `1/(b + a x^9)`.
+
+### Generalisation
+Replaced the per-degree branches in `logtoreal_dispatch` with one
+helper `logtoreal_nthroot_sparse(base, deg, s, x, t)` that closes
+`c_n t^n + c_0` (all intermediate coefficients zero) for every
+n ≥ 3 via the standard cyclotomic factorisation over R.  Subsumes
+the previous deg-3 nth-root and deg-4 Sophie-Germain branches.
+
+Algorithm: given `q = -c_0/c_n` and `r = |q|^(1/n)`,
+- q > 0: real roots ±r (r always; -r iff n even), conjugate pairs
+  for k = 1..⌊(n-1)/2⌋ at angles 2πk/n.
+- q < 0: real root -r iff n odd, conjugate pairs at angles
+  (2k+1)π/n.
+Each conjugate pair contributes a real quadratic
+`t^2 - 2 r cos(θ) t + r^2` with discriminant -4 r^2 sin²θ < 0, so
+`logtoreal_quadratic`'s ArcTan branch always fires.
+
+### Tests
+Six new regressions in `tests/test_intrat.c`:
+`test_closed_nth_root_quartic_minus`, `_quintic_minus`,
+`_sextic_minus`, `_sextic_plus`, `_octic_plus`, `_nonic_plus`.
+Each asserts no RootSum/Function head + numerical derivative
+match at two sample points.  All pass.
+
+### Regression status
+Full test suite (105 binaries): 90 pass / 15 fail both before and
+after this change.  Identical failure set (pre-existing canonical
+ordering issues from commit cc8b164).  Zero new regressions.

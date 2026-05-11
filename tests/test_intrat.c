@@ -468,6 +468,208 @@ static void test_subresultant_chain(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Closed-form regressions for the five RootSum-leak inputs reported   */
+/* on 2026-05-11.  Each integrand must (a) integrate to a closed real- */
+/* elementary form (no RootSum / Function head anywhere) and (b)       */
+/* satisfy D[result, x] − integrand → 0 under Cancel/Together.         */
+/* ------------------------------------------------------------------ */
+
+/* True if `e` contains a node with the given symbol head. */
+static bool contains_head(const Expr* e, const char* head) {
+    if (!e) return false;
+    if (e->type == EXPR_FUNCTION) {
+        if (e->data.function.head->type == EXPR_SYMBOL
+            && strcmp(e->data.function.head->data.symbol, head) == 0) {
+            return true;
+        }
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (contains_head(e->data.function.args[i], head)) return true;
+        }
+    }
+    return false;
+}
+
+/* Evaluate `Integrate`IntegrateRational[integrand, x]` and assert
+ * the result has no RootSum / Function leak, then assert the
+ * derivative-of-result matches the integrand. */
+static void assert_closed_real(const char* integrand) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+        "Integrate`IntegrateRational[%s, x]", integrand);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    if (contains_head(res, "RootSum")) {
+        char* got = expr_to_string(res);
+        printf("FAIL: result contains RootSum for %s\n  Got: %s\n",
+               integrand, got);
+        free(got);
+        ASSERT(false);
+    }
+    if (contains_head(res, "Function")) {
+        char* got = expr_to_string(res);
+        printf("FAIL: result contains Function for %s\n  Got: %s\n",
+               integrand, got);
+        free(got);
+        ASSERT(false);
+    }
+    expr_free(e); expr_free(res);
+}
+
+/* Numerical (N[]-based) differentiation check: for integrands whose
+ * result involves nested radicals that Cancel/Together can't reduce
+ * to zero symbolically, sample N[D[result, x] - integrand] at a few
+ * concrete x-values (and parameters when present) and assert it is
+ * below machine epsilon. */
+static void assert_integral_numeric_ok(const char* integrand,
+                                        const char* bindings,
+                                        const char* x_value) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "Abs[N[(D[Integrate`IntegrateRational[%s, x], x] - (%s)) /. %s /. x -> %s]]",
+        integrand, integrand, bindings, x_value);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    /* res should be a real number near zero. */
+    bool ok = false;
+    if (res && res->type == EXPR_REAL) {
+        ok = (res->data.real >= 0.0 && res->data.real < 1e-9);
+    } else if (res && res->type == EXPR_INTEGER) {
+        ok = (res->data.integer == 0);
+    }
+    if (!ok) {
+        char* got = expr_to_string(res);
+        printf("FAIL: |D[Integrate[%s,x],x] - (%s)| at %s with %s = %s (expected ~0)\n",
+               integrand, integrand, x_value, bindings, got);
+        free(got);
+        ASSERT(false);
+    }
+    expr_free(e); expr_free(res);
+}
+
+/* Issue 1: 1/(b - a x^3) — cubic with parameters, nth-root form.
+ * Symbolic Cancel can't close the (b/a)^(1/3) diff, so verify
+ * numerically at concrete a, b > 0 values. */
+static void test_closed_cubic_params(void) {
+    assert_closed_real("1/(b - a x^3)");
+    assert_integral_numeric_ok("1/(b - a x^3)",
+                                "{a -> 2.3, b -> 1.7}", "0.4");
+    assert_integral_numeric_ok("1/(b - a x^3)",
+                                "{a -> 0.5, b -> 3.1}", "1.7");
+}
+
+/* Issue 2: 1/(x^5 + 1) — palindromic-quartic after Apart. */
+static void test_closed_quintic_one(void) {
+    assert_closed_real("1/(x^5 + 1)");
+    assert_integral_numeric_ok("1/(x^5 + 1)", "{}", "0.7");
+    assert_integral_numeric_ok("1/(x^5 + 1)", "{}", "2.3");
+    assert_integral_numeric_ok("1/(x^5 + 1)", "{}", "-1.4");
+}
+
+/* Issue 3: x^4/(a + b x^3)^2 — Hermite-reduced cubic with params. */
+static void test_closed_x4_over_cubic_sq(void) {
+    assert_closed_real("x^4/(a + b x^3)^2");
+    assert_integral_numeric_ok("x^4/(a + b x^3)^2",
+                                "{a -> 1.1, b -> 0.7}", "0.4");
+    assert_integral_numeric_ok("x^4/(a + b x^3)^2",
+                                "{a -> 1.1, b -> 0.7}", "1.9");
+}
+
+/* Issue 4: (-1 + x^2)/(1 - 2 x^2 + 2 x^4) — biquadratic Q with
+ * negative inner discriminant (Sophie-Germain-with-c2 branch).
+ * Nested Sqrt[1+Sqrt[2]] forms aren't reducible by Cancel/Together,
+ * so verify numerically. */
+static void test_closed_biquadratic_neg_disc(void) {
+    assert_closed_real("(-1 + x^2)/(1 - 2 x^2 + 2 x^4)");
+    assert_integral_numeric_ok("(-1 + x^2)/(1 - 2 x^2 + 2 x^4)",
+                                "{}", "0.3");
+    assert_integral_numeric_ok("(-1 + x^2)/(1 - 2 x^2 + 2 x^4)",
+                                "{}", "1.7");
+    assert_integral_numeric_ok("(-1 + x^2)/(1 - 2 x^2 + 2 x^4)",
+                                "{}", "2.5");
+}
+
+/* Issue 5: 1/x/(1 - 2 x^2 + 2 x^4) — Times-over-Plus distribution
+ * + Log[c · p] stripping post-processing.  Result is rational and
+ * the printed form is exact. */
+static void test_closed_coefficient_distribution(void) {
+    /* Concrete printed form check: outer 2 must be distributed and
+     * Log[1/2 · q] reduced to Log[q]. */
+    run_eq("Integrate`IntegrateRational[1/x/(1 - 2 x^2 + 2 x^4), x]",
+           "Log[x] + 1/2 ArcTan[-1 + 2 x^2] - 1/4 Log[1 - 2 x^2 + 2 x^4]");
+    assert_integral_correct("1/x/(1 - 2 x^2 + 2 x^4)");
+}
+
+/* ------------------------------------------------------------------ */
+/* 2026-05-11 (rev 2) — generalised nth-root coverage for             */
+/* 1/(b ± a x^n) at all n ≥ 3.  The previous deg-3 fix only handled  */
+/* n = 3; n ∈ {4, 5, 6, 8, 9} (and beyond) now dispatch via the same */
+/* sparse cyclotomic factorisation path.                              */
+/* ------------------------------------------------------------------ */
+
+static void test_closed_nth_root_quartic_minus(void) {
+    /* 1/(b - a x^4) — q := -c_0/c_n positive, n=4 even: two real
+     * roots ±r plus a (t^2 + r^2) pair. */
+    assert_closed_real("1/(b - a x^4)");
+    assert_integral_numeric_ok("1/(b - a x^4)",
+                                "{a -> 2.3, b -> 1.7}", "0.4");
+    assert_integral_numeric_ok("1/(b - a x^4)",
+                                "{a -> 0.5, b -> 3.1}", "1.2");
+}
+
+static void test_closed_nth_root_quintic_minus(void) {
+    /* 1/(b - a x^5) — n=5 odd, q < 0: real root −r plus two
+     * conjugate pairs at angles π/5 and 3π/5. */
+    assert_closed_real("1/(b - a x^5)");
+    assert_integral_numeric_ok("1/(b - a x^5)",
+                                "{a -> 2.3, b -> 1.7}", "0.4");
+    assert_integral_numeric_ok("1/(b - a x^5)",
+                                "{a -> 1.1, b -> 0.8}", "-0.6");
+}
+
+static void test_closed_nth_root_sextic_minus(void) {
+    /* 1/(b - a x^6) — n=6 even, q > 0: two real roots ±r plus two
+     * conjugate pairs (cos = ±1/2). */
+    assert_closed_real("1/(b - a x^6)");
+    assert_integral_numeric_ok("1/(b - a x^6)",
+                                "{a -> 2.3, b -> 1.7}", "0.4");
+    assert_integral_numeric_ok("1/(b - a x^6)",
+                                "{a -> 0.5, b -> 3.1}", "1.2");
+}
+
+static void test_closed_nth_root_sextic_plus(void) {
+    /* 1/(b + a x^6) — n=6 even, q < 0: no real roots, three
+     * conjugate pairs (Sqrt[3]/2, 0, -Sqrt[3]/2). */
+    assert_closed_real("1/(b + a x^6)");
+    assert_integral_numeric_ok("1/(b + a x^6)",
+                                "{a -> 2.3, b -> 1.7}", "0.4");
+    assert_integral_numeric_ok("1/(b + a x^6)",
+                                "{a -> 0.5, b -> 3.1}", "-1.2");
+}
+
+static void test_closed_nth_root_octic_plus(void) {
+    /* 1/(b + a x^8) — n=8 even, q < 0: no real roots, four
+     * conjugate pairs.  Cos[Pi/8] doesn't auto-reduce in picocas
+     * (held), but the result is still real-elementary. */
+    assert_closed_real("1/(b + a x^8)");
+    assert_integral_numeric_ok("1/(b + a x^8)",
+                                "{a -> 2.3, b -> 1.7}", "0.4");
+    assert_integral_numeric_ok("1/(b + a x^8)",
+                                "{a -> 0.5, b -> 3.1}", "1.2");
+}
+
+static void test_closed_nth_root_nonic_plus(void) {
+    /* 1/(b + a x^9) — n=9 odd, q > 0: one real root r plus four
+     * conjugate pairs.  Cos[2π/9], Cos[4π/9], Cos[8π/9] don't
+     * reduce (they are roots of an irreducible cubic), but the
+     * result is still real-elementary (no RootSum / Function). */
+    assert_closed_real("1/(b + a x^9)");
+    assert_integral_numeric_ok("1/(b + a x^9)",
+                                "{a -> 2.3, b -> 1.7}", "0.4");
+    assert_integral_numeric_ok("1/(b + a x^9)",
+                                "{a -> 0.5, b -> 3.1}", "-1.2");
+}
+
+/* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -512,6 +714,22 @@ int main(void) {
     TEST(test_naivelogpart_basic);
     TEST(test_naivelogpart_quartic_hard);
     TEST(test_naivelogpart_derivative_threads);
+
+    /* 2026-05-11 — closed-form regressions for the five RootSum-leak
+     * inputs (Phases A-D2). */
+    TEST(test_closed_cubic_params);
+    TEST(test_closed_quintic_one);
+    TEST(test_closed_x4_over_cubic_sq);
+    TEST(test_closed_biquadratic_neg_disc);
+    TEST(test_closed_coefficient_distribution);
+
+    /* 2026-05-11 (rev 2) — generalised nth-root coverage. */
+    TEST(test_closed_nth_root_quartic_minus);
+    TEST(test_closed_nth_root_quintic_minus);
+    TEST(test_closed_nth_root_sextic_minus);
+    TEST(test_closed_nth_root_sextic_plus);
+    TEST(test_closed_nth_root_octic_plus);
+    TEST(test_closed_nth_root_nonic_plus);
 
     printf("All Phase 1-7 (full IntegrateRational pipeline) tests passed!\n");
     return 0;

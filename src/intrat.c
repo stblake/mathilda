@@ -1130,6 +1130,15 @@ static Expr* nlp_sqrt(Expr* a) {
                                   expr_new_integer(2) }, 2) },
         2);
 }
+/* Forward declarations for helpers defined later in this file but
+ * referenced by the palindromic-quartic expander immediately below. */
+static bool intrat_zero_q(Expr* e);
+static int intrat_sign_pos_assumption(Expr* e);
+static int intrat_numeric_sign(Expr* e);
+static Expr* intrat_simp_pos_sqrt(Expr* e);
+static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr);
+static void split_re_im(Expr* p, Expr** re_out, Expr** im_out);
+
 static Expr* nlp_sub_body(Expr* body, Expr* bvar, Expr* value) {
     Expr* rule = expr_new_function(expr_new_symbol("Rule"),
         (Expr*[]){ expr_copy(bvar), expr_copy(value) }, 2);
@@ -1163,6 +1172,216 @@ static bool poly_only_uses(Expr* poly, Expr* bvar) {
     }
     expr_free(vars);
     return ok;
+}
+
+/* Build the real form of
+ *   RootSum[ Function[t, d_t],
+ *            Function[t, a_t · Log[x − t] / dd_t] ]
+ * for a palindromic quartic d_t = c0 t^4 + c1 t^3 + c2 t^2 + c1 t + c0
+ * (c0 == c4, c1 == c3).
+ *
+ * Strategy: factor d_t over R via the u = t + 1/t substitution
+ *   c0 u^2 + c1 u + (c2 − 2 c0) = 0  ⇒  u = u_±,
+ * giving two complex-conjugate root pairs of d_t:
+ *   α_k = u_k/2 + i v_k,   v_k = Sqrt[(4 − u_k^2)/4].
+ * Each conjugate pair contributes
+ *   2 Re[ (a(α_k)/d'(α_k)) · Log[x − α_k] ]
+ *     = C_re · Log[(x − u_k/2)^2 + v_k^2]
+ *     + 2 C_im · ArcTan[v_k/(x − u_k/2)]
+ * where C = a(α_k)/d'(α_k) = C_re + i C_im.
+ *
+ * Avoids LogToReal/LogToAtan entirely (those bog down on the nested-
+ * radical S polynomials from the scaled-palindromic LRT path).
+ * Returns NULL when d_t isn't palindromic, when u_± aren't real, or
+ * when any sign-gate is undecidable. */
+static Expr* expand_palindromic_quartic_real(
+    Expr* a_t, Expr* d_t, Expr* dd_t, Expr* t, Expr* x)
+{
+    /* Detect palindromic quartic in t. */
+    int deg = get_degree_poly(d_t, t);
+    if (deg != 4) return NULL;
+    Expr* c0 = get_coeff(d_t, t, 0);
+    Expr* c1 = get_coeff(d_t, t, 1);
+    Expr* c2 = get_coeff(d_t, t, 2);
+    Expr* c3 = get_coeff(d_t, t, 3);
+    Expr* c4 = get_coeff(d_t, t, 4);
+
+    Expr* c0mc4 = internal_subtract(
+        (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2);
+    Expr* c1mc3 = internal_subtract(
+        (Expr*[]){expr_copy(c1), expr_copy(c3)}, 2);
+    bool palindromic = intrat_zero_q(c0mc4) && intrat_zero_q(c1mc3);
+    expr_free(c0mc4); expr_free(c1mc3);
+
+    bool c0_nonzero = !(c0->type == EXPR_INTEGER && c0->data.integer == 0);
+    if (!palindromic || !c0_nonzero) {
+        expr_free(c0); expr_free(c1); expr_free(c2);
+        expr_free(c3); expr_free(c4);
+        return NULL;
+    }
+
+    /* Outer disc Du = c1^2 − 4 c0 (c2 − 2 c0).  Soundness gate:
+     * Du >= 0 so u_± are real. */
+    Expr* c1sq = expr_expand(internal_power(
+        (Expr*[]){expr_copy(c1), expr_new_integer(2)}, 2));
+    Expr* two_c0 = expr_expand(internal_times(
+        (Expr*[]){expr_new_integer(2), expr_copy(c0)}, 2));
+    Expr* c2m2c0 = eval_and_free(internal_subtract(
+        (Expr*[]){expr_copy(c2), two_c0}, 2));
+    Expr* four_term = expr_expand(internal_times(
+        (Expr*[]){expr_new_integer(4),
+                  expr_copy(c0),
+                  c2m2c0}, 3));
+    Expr* neg_four_term = expr_expand(internal_times(
+        (Expr*[]){expr_new_integer(-1), four_term}, 2));
+    Expr* Du = eval_and_free(internal_plus(
+        (Expr*[]){c1sq, neg_four_term}, 2));
+    Expr* Du_exp = expr_expand(Du); expr_free(Du);
+    int Du_sign = intrat_sign_pos_assumption(Du_exp);
+    if (Du_sign == 0) Du_sign = intrat_numeric_sign(Du_exp);
+    if (Du_sign < 0) {
+        expr_free(Du_exp);
+        expr_free(c0); expr_free(c1); expr_free(c2);
+        expr_free(c3); expr_free(c4);
+        return NULL;
+    }
+    Expr* sqrt_Du = intrat_simp_pos_sqrt(Du_exp);
+    expr_free(Du_exp);
+
+    Expr* neg_c1 = expr_expand(internal_times(
+        (Expr*[]){expr_new_integer(-1), expr_copy(c1)}, 2));
+    Expr* two_c0_b = expr_expand(internal_times(
+        (Expr*[]){expr_new_integer(2), expr_copy(c0)}, 2));
+
+    Expr* u_num_p = eval_and_free(internal_plus(
+        (Expr*[]){expr_copy(neg_c1), expr_copy(sqrt_Du)}, 2));
+    Expr* u_num_m = eval_and_free(internal_subtract(
+        (Expr*[]){neg_c1, sqrt_Du}, 2));
+    Expr* u_plus = eval_and_free(internal_divide(
+        (Expr*[]){u_num_p, expr_copy(two_c0_b)}, 2));
+    Expr* u_minus = eval_and_free(internal_divide(
+        (Expr*[]){u_num_m, two_c0_b}, 2));
+
+    expr_free(c0); expr_free(c1); expr_free(c2);
+    expr_free(c3); expr_free(c4);
+
+    /* For each u, compute the conjugate-pair real contribution. */
+    Expr* us[2] = {u_plus, u_minus};
+    Expr* contributions[2] = {NULL, NULL};
+    bool ok = true;
+
+    for (int k = 0; k < 2 && ok; k++) {
+        Expr* u = us[k];
+
+        /* v_sq = (4 - u^2)/4.  Must be > 0 for v_im real. */
+        Expr* u_sq = expr_expand(internal_power(
+            (Expr*[]){expr_copy(u), expr_new_integer(2)}, 2));
+        Expr* neg_u_sq = expr_expand(internal_times(
+            (Expr*[]){expr_new_integer(-1), u_sq}, 2));
+        Expr* four_m_usq = eval_and_free(internal_plus(
+            (Expr*[]){expr_new_integer(4), neg_u_sq}, 2));
+        Expr* v_sq = eval_and_free(internal_divide(
+            (Expr*[]){four_m_usq, expr_new_integer(4)}, 2));
+        Expr* v_sq_exp = expr_expand(v_sq); expr_free(v_sq);
+
+        int v_sq_sign = intrat_sign_pos_assumption(v_sq_exp);
+        if (v_sq_sign == 0) v_sq_sign = intrat_numeric_sign(v_sq_exp);
+        if (v_sq_sign <= 0) {
+            expr_free(v_sq_exp);
+            ok = false; break;
+        }
+
+        Expr* v_im = intrat_simp_pos_sqrt(v_sq_exp);
+
+        Expr* u_half = eval_and_free(internal_divide(
+            (Expr*[]){expr_copy(u), expr_new_integer(2)}, 2));
+
+        /* α = u_half + I · v_im. */
+        Expr* I_unit = expr_new_function(expr_new_symbol("Complex"),
+            (Expr*[]){expr_new_integer(0), expr_new_integer(1)}, 2);
+        Expr* I_v = eval_and_free(internal_times(
+            (Expr*[]){I_unit, expr_copy(v_im)}, 2));
+        Expr* alpha = eval_and_free(internal_plus(
+            (Expr*[]){expr_copy(u_half), I_v}, 2));
+
+        /* a(α) and d'(α) — split each into real + imag. */
+        Expr* a_at_alpha = subst_t(a_t, t, alpha);
+        Expr* dp_at_alpha = subst_t(dd_t, t, alpha);
+        expr_free(alpha);
+
+        Expr *Aa = NULL, *Ba = NULL;
+        split_re_im(a_at_alpha, &Aa, &Ba);
+        expr_free(a_at_alpha);
+        Expr *Ad = NULL, *Bd = NULL;
+        split_re_im(dp_at_alpha, &Ad, &Bd);
+        expr_free(dp_at_alpha);
+
+        /* c = (Aa + i Ba) / (Ad + i Bd)
+         *   = (Aa Ad + Ba Bd + i(Ba Ad − Aa Bd)) / (Ad^2 + Bd^2). */
+        Expr* AaAd = expr_expand(internal_times(
+            (Expr*[]){expr_copy(Aa), expr_copy(Ad)}, 2));
+        Expr* BaBd = expr_expand(internal_times(
+            (Expr*[]){expr_copy(Ba), expr_copy(Bd)}, 2));
+        Expr* re_num = eval_and_free(internal_plus(
+            (Expr*[]){AaAd, BaBd}, 2));
+        Expr* BaAd = expr_expand(internal_times(
+            (Expr*[]){expr_copy(Ba), expr_copy(Ad)}, 2));
+        Expr* AaBd = expr_expand(internal_times(
+            (Expr*[]){expr_copy(Aa), expr_copy(Bd)}, 2));
+        Expr* im_num = eval_and_free(internal_subtract(
+            (Expr*[]){BaAd, AaBd}, 2));
+        Expr* Ad_sq = expr_expand(internal_power(
+            (Expr*[]){Ad, expr_new_integer(2)}, 2));
+        Expr* Bd_sq = expr_expand(internal_power(
+            (Expr*[]){Bd, expr_new_integer(2)}, 2));
+        Expr* denom = eval_and_free(internal_plus(
+            (Expr*[]){Ad_sq, Bd_sq}, 2));
+        Expr* C_re = eval_and_free(internal_divide(
+            (Expr*[]){re_num, expr_copy(denom)}, 2));
+        Expr* C_im = eval_and_free(internal_divide(
+            (Expr*[]){im_num, denom}, 2));
+        expr_free(Aa); expr_free(Ba);
+
+        /* L = (x − u_half)^2 + v_sq.
+         * T = v_im / (x − u_half). */
+        Expr* neg_uh = expr_expand(internal_times(
+            (Expr*[]){expr_new_integer(-1), expr_copy(u_half)}, 2));
+        Expr* x_m_uh = eval_and_free(internal_plus(
+            (Expr*[]){expr_copy(x), neg_uh}, 2));
+        Expr* x_m_uh_sq = expr_expand(internal_power(
+            (Expr*[]){expr_copy(x_m_uh), expr_new_integer(2)}, 2));
+        Expr* L = eval_and_free(internal_plus(
+            (Expr*[]){x_m_uh_sq, v_sq_exp}, 2));
+        Expr* T = eval_and_free(internal_divide(
+            (Expr*[]){expr_copy(v_im), expr_copy(x_m_uh)}, 2));
+        expr_free(x_m_uh); expr_free(v_im); expr_free(u_half);
+
+        Expr* log_L = expr_new_function(expr_new_symbol("Log"),
+            (Expr*[]){L}, 1);
+        Expr* atan_T = expr_new_function(expr_new_symbol("ArcTan"),
+            (Expr*[]){T}, 1);
+
+        Expr* term_log = eval_and_free(internal_times(
+            (Expr*[]){expr_copy(C_re), log_L}, 2));
+        Expr* term_atan = eval_and_free(internal_times(
+            (Expr*[]){expr_new_integer(2),
+                      expr_copy(C_im), atan_T}, 3));
+        expr_free(C_re); expr_free(C_im);
+
+        contributions[k] = eval_and_free(internal_plus(
+            (Expr*[]){term_log, term_atan}, 2));
+    }
+
+    expr_free(u_plus); expr_free(u_minus);
+
+    if (!ok) {
+        if (contributions[0]) expr_free(contributions[0]);
+        if (contributions[1]) expr_free(contributions[1]);
+        return NULL;
+    }
+
+    Expr* total = eval_and_free(internal_plus(contributions, 2));
+    return total;
 }
 
 /* When `poly` (a univariate polynomial in `bvar`) is one of the
@@ -1351,12 +1570,29 @@ static Expr* intrat_naive_log_part(Expr* f, Expr* x) {
         (Expr*[]){ expr_copy(x), expr_copy(t) }, 2);
 
     Expr* a_t = eval_and_free(internal_replace_all(
-        (Expr*[]){ a, expr_copy(rule) }, 2));
+        (Expr*[]){ expr_copy(a), expr_copy(rule) }, 2));
     Expr* d_t = eval_and_free(internal_replace_all(
-        (Expr*[]){ d, expr_copy(rule) }, 2));
+        (Expr*[]){ expr_copy(d), expr_copy(rule) }, 2));
     Expr* dd_t = eval_and_free(internal_replace_all(
-        (Expr*[]){ dd, expr_copy(rule) }, 2));
-    expr_free(rule);
+        (Expr*[]){ expr_copy(dd), expr_copy(rule) }, 2));
+    expr_free(rule); expr_free(a); expr_free(d); expr_free(dd);
+
+    /* Phase D2 — palindromic-quartic real-form expansion.  Builds the
+     * conjugate-pair contributions directly, sidestepping the LogToReal
+     * / LogToAtan chain that overwhelms on nested-radical S
+     * polynomials.  Try this before constructing the held RootSum body
+     * so we never produce a Function-headed RootSum for inputs whose
+     * denominator is a palindromic quartic. */
+    {
+        Expr* palindromic_real = expand_palindromic_quartic_real(
+            a_t, d_t, dd_t, t, x);
+        if (palindromic_real) {
+            expr_free(t); expr_free(a_t); expr_free(d_t); expr_free(dd_t);
+            intrat_trace("NaiveLogPart", "OUT (palindromic-real)",
+                         palindromic_real);
+            return palindromic_real;
+        }
+    }
 
     /* Build the body: a_t * Log[x - t] / dd_t. */
     Expr* neg_t = internal_times((Expr*[]){
@@ -1985,6 +2221,36 @@ static int intrat_sign_pos_assumption(Expr* e) {
  *   Times[f1, f2, ...]  -> product of recursive results
  *   anything else       -> Sqrt[anything] (irreducible) */
 static Expr* intrat_simp_pos_sqrt(Expr* e);
+static bool intrat_zero_q(Expr* e);
+
+/* Decide the sign of `e` by numerical evaluation through `N[e]`.
+ * Returns +1 / -1 when N produces a definite-sign Real or Integer,
+ * 0 otherwise (parametric input, or N could not fully numericalise).
+ * Complement to intrat_sign_pos_assumption: handles `Sqrt[5] - 5`
+ * and similar mixed-sign Plus aggregates that the symbolic walker
+ * leaves at sign-unknown. */
+static int intrat_numeric_sign(Expr* e) {
+    if (!e) return 0;
+    Expr* call = expr_new_function(expr_new_symbol("N"),
+        (Expr*[]){expr_copy(e)}, 1);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    int sign = 0;
+    if (r) {
+        if (r->type == EXPR_REAL) {
+            double v = r->data.real;
+            /* 1e-12 dead zone keeps Sqrt[2] - 1.4142... = 1.36e-13
+             * style round-off out of the wrong sign bin. */
+            if (v >  1e-12) sign =  1;
+            else if (v < -1e-12) sign = -1;
+        } else if (r->type == EXPR_INTEGER) {
+            if (r->data.integer >  0) sign =  1;
+            else if (r->data.integer <  0) sign = -1;
+        }
+        expr_free(r);
+    }
+    return sign;
+}
 
 static Expr* intrat_simp_pos_sqrt_factor(Expr* e) {
     if (e->type == EXPR_INTEGER) {
@@ -2199,6 +2465,164 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
     return eval_and_free(sum);
 }
 
+/* Handle a sparse nth-root depressed polynomial c_n t^n + c_0 (all
+ * intermediate coefficients zero) for n >= 3.  Factor over R via the
+ * standard cyclotomic decomposition:
+ *
+ *   roots are r e^{i θ_k} with r = |c_0 / c_n|^(1/n) and angles
+ *     q := -c_0/c_n > 0:  θ_k = 2 k π / n   (k = 0..n-1)
+ *     q < 0:              θ_k = (2 k + 1) π / n
+ *
+ * Real roots correspond to angles 0 and π.  Other roots come in
+ * complex-conjugate pairs (k, n−k) for q > 0 or (k, n−1−k) for q < 0.
+ * Each pair contributes a quadratic factor
+ *     t^2 − 2 r cos(θ_k) t + r^2
+ * whose discriminant −4 r^2 sin^2 θ_k is strictly negative, so
+ * logtoreal_quadratic always lands in its ArcTan branch.
+ *
+ * Generalises the deg-3 and deg-4-Sophie-Germain branches that used
+ * to live in logtoreal_dispatch.  Catches 1/(b ± a x^n) for all
+ * n ≥ 3 once the LRT pipeline reduces to its sparse Q-in-t form.
+ *
+ * Returns the accumulated real form, or NULL when:
+ *   • the polynomial isn't sparse (some intermediate c_k ≠ 0),
+ *   • c_0 = 0 (caller should have factored t out upstream), or
+ *   • the sign of −c_0/c_n cannot be decided symbolically or numerically.
+ */
+static Expr* logtoreal_nthroot_sparse(Expr* base, int deg,
+                                      Expr* s, Expr* x, Expr* t) {
+    if (deg < 3) return NULL;
+
+    for (int k = 1; k < deg; k++) {
+        Expr* ck = get_coeff(base, t, k);
+        bool zero = (ck->type == EXPR_INTEGER && ck->data.integer == 0);
+        expr_free(ck);
+        if (!zero) return NULL;
+    }
+
+    Expr* c0 = get_coeff(base, t, 0);
+    Expr* cn = get_coeff(base, t, deg);
+    if (c0->type == EXPR_INTEGER && c0->data.integer == 0) {
+        expr_free(c0); expr_free(cn);
+        return NULL;
+    }
+
+    /* q := −c_0 / c_n. */
+    Expr* neg_c0 = expr_expand(internal_times(
+        (Expr*[]){expr_new_integer(-1), expr_copy(c0)}, 2));
+    Expr* q = eval_and_free(internal_divide(
+        (Expr*[]){neg_c0, expr_copy(cn)}, 2));
+    expr_free(c0); expr_free(cn);
+
+    int q_sign = intrat_sign_pos_assumption(q);
+    if (q_sign == 0) q_sign = intrat_numeric_sign(q);
+    if (q_sign == 0) { expr_free(q); return NULL; }
+
+    bool q_pos = (q_sign > 0);
+
+    /* r = |q|^(1/n) using the principal real n-th root. */
+    Expr* abs_q = q_pos
+        ? q
+        : eval_and_free(internal_times(
+              (Expr*[]){expr_new_integer(-1), q}, 2));
+    Expr* inv_n = expr_new_function(
+        expr_new_symbol("Rational"),
+        (Expr*[]){expr_new_integer(1), expr_new_integer(deg)}, 2);
+    inv_n = eval_and_free(inv_n);
+    Expr* r = eval_and_free(internal_power(
+        (Expr*[]){abs_q, inv_n}, 2));
+
+    size_t cap = (size_t)deg / 2 + 4;
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * cap);
+    size_t nterms = 0;
+    bool fail = false;
+
+    /* --- Linear factors for real roots. -------------------------- */
+    if (q_pos) {
+        /* (t − r) — always present when q > 0. */
+        Expr* lin = build_log_term(r, s, t);
+        if (!lin) { fail = true; goto done; }
+        terms[nterms++] = lin;
+        if (deg % 2 == 0) {
+            /* (t + r) when n is even. */
+            Expr* neg_r = eval_and_free(internal_times(
+                (Expr*[]){expr_new_integer(-1), expr_copy(r)}, 2));
+            Expr* lin2 = build_log_term(neg_r, s, t);
+            expr_free(neg_r);
+            if (!lin2) { fail = true; goto done; }
+            terms[nterms++] = lin2;
+        }
+    } else {
+        /* q < 0: real root only when n is odd, at t = −r. */
+        if (deg % 2 == 1) {
+            Expr* neg_r = eval_and_free(internal_times(
+                (Expr*[]){expr_new_integer(-1), expr_copy(r)}, 2));
+            Expr* lin = build_log_term(neg_r, s, t);
+            expr_free(neg_r);
+            if (!lin) { fail = true; goto done; }
+            terms[nterms++] = lin;
+        }
+    }
+
+    /* --- Quadratic factors for complex-conjugate pairs. ---------- */
+    int k_start, k_end;
+    if (q_pos) {
+        k_start = 1;
+        k_end = (deg - 1) / 2;          /* floor((n-1)/2) */
+    } else {
+        k_start = 0;
+        k_end = (deg % 2 == 1)
+            ? (deg - 3) / 2              /* odd n: skip k=(n-1)/2 (θ=π real root) */
+            : (deg - 2) / 2;             /* even n: floor((n-2)/2) */
+    }
+
+    Expr* r_sq = expr_expand(internal_power(
+        (Expr*[]){expr_copy(r), expr_new_integer(2)}, 2));
+
+    for (int k = k_start; k <= k_end; k++) {
+        int angle_num_k = q_pos ? (2 * k) : (2 * k + 1);
+        Expr* angle_num = eval_and_free(internal_times(
+            (Expr*[]){expr_new_integer(angle_num_k),
+                      expr_new_symbol("Pi")}, 2));
+        Expr* angle = eval_and_free(internal_divide(
+            (Expr*[]){angle_num, expr_new_integer(deg)}, 2));
+        Expr* cos_v = expr_new_function(expr_new_symbol("Cos"),
+            (Expr*[]){angle}, 1);
+        cos_v = evaluate(cos_v);
+
+        Expr* b_quad = eval_and_free(internal_times(
+            (Expr*[]){expr_new_integer(-2),
+                      expr_copy(r),
+                      cos_v}, 3));
+
+        Expr* quad = logtoreal_quadratic(
+            expr_new_integer(1),
+            b_quad,
+            expr_copy(r_sq),
+            s, x, t);
+        if (!quad) { fail = true; break; }
+        terms[nterms++] = quad;
+    }
+
+    expr_free(r_sq);
+    expr_free(r);
+
+done:
+    if (fail || nterms == 0) {
+        for (size_t k = 0; k < nterms; k++) expr_free(terms[k]);
+        free(terms);
+        return NULL;
+    }
+    if (nterms == 1) {
+        Expr* result = terms[0];
+        free(terms);
+        return result;
+    }
+    Expr* sum = internal_plus(terms, nterms);
+    free(terms);
+    return eval_and_free(sum);
+}
+
 /* Walk a Factor[Q]'s output and dispatch every factor.  Returns the
  * accumulated real form, or NULL if any factor exceeds the bounded-
  * Solve scope (degree > 2 in t). */
@@ -2246,18 +2670,25 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
             contribution = logtoreal_quadratic(a, b, c, s, x, t);
             expr_free(a); expr_free(b); expr_free(c);
             if (!contribution) goto fail;
-        } else if (deg == 4) {
-            /* Sophie-Germain shortcut: a t^4 + b with a, b nonzero
-             * rationals of the same sign factors over Q(Sqrt[2 k^2])
-             * (with k^2 = Sqrt[b/a]) into two real quadratics
-             *   (t^2 + Sqrt[2 k^2] t + k^2)(t^2 - Sqrt[2 k^2] t + k^2)
-             * each of which has discriminant -2 k^2 < 0 and so lands
-             * in the negative-discriminant ArcTan branch of
-             * logtoreal_quadratic.  This catches the Q(t) families
-             *   1 + 256 t^4 (from 1/(x^4+1)),
-             *   1 + 65536 t^8 etc. once nested through this branch,
-             * which would otherwise fall through to NaiveLogPart and
-             * its complex-form radical expander. */
+        } else if (deg >= 3) {
+            /* General sparse nth-root path: c_n t^n + c_0 (all
+             * intermediate coefficients zero), dispatched via the
+             * cyclotomic factorisation of t^n − q.  Subsumes the
+             * previous deg-3 nth-root branch and the deg-4
+             * Sophie-Germain shortcut; catches 1/(b ± a x^n) for
+             * every n ≥ 3.  When sparse fails for deg == 4 we fall
+             * through to the deg-4 biquadratic / palindromic
+             * specialisations below. */
+            contribution = logtoreal_nthroot_sparse(base, deg, s, x, t);
+            if (!contribution && deg != 4) goto fail;
+        }
+        if (!contribution && deg == 4) {
+            /* Non-sparse quartic: try biquadratic (c1 = c3 = 0,
+             * c2 ≠ 0) or palindromic specialisations.  The fully
+             * sparse case (c1 = c2 = c3 = 0) was already handled by
+             * logtoreal_nthroot_sparse above; if it didn't fire, the
+             * sign of c0/c4 was undecidable and there's nothing more
+             * to do at this layer. */
             Expr* c0 = get_coeff(base, t, 0);
             Expr* c1 = get_coeff(base, t, 1);
             Expr* c2 = get_coeff(base, t, 2);
@@ -2269,68 +2700,12 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
             bool c3z = (c3->type == EXPR_INTEGER && c3->data.integer == 0);
 
             if (c1z && c2z && c3z) {
-                /* ratio = c0/c4 must be positive so Sqrt comes out real.
-                 * Accept literal positive integers/rationals and any
-                 * expression provably positive under the positive-symbol
-                 * assumption (e.g. 1/(256 a^12) for the parametric
-                 * 1/(x^4 + a^4) family). */
-                Expr* ratio = eval_and_free(internal_divide(
-                    (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2));
-
-                bool ratio_pos = (intrat_sign_pos_assumption(ratio) > 0);
-
-                if (ratio_pos) {
-                    /* k^2 = Sqrt[ratio]; b_inner = Sqrt[2 k^2]
-                     *      = Sqrt[2 * Sqrt[ratio]].
-                     * Use intrat_simp_pos_sqrt instead of Simplify --
-                     * it walks Times factors under the positive-symbol
-                     * assumption and collapses Sqrt[1/256/a^12] to
-                     * 1/(16 a^6), Sqrt[2/(8 a^6)] to 1/(2 a^3), etc.,
-                     * which Simplify alone leaves held.  Without this,
-                     * the result of Integrate[1/(x^4 + a^4), x] keeps
-                     * nested-Sqrt forms that subsequent Simplify of
-                     * the derivative cannot reduce, masking
-                     * mathematically-zero diffs. */
-                    Expr* k_sq = intrat_simp_pos_sqrt(ratio);
-
-                    Expr* two_ksq = eval_and_free(internal_times(
-                        (Expr*[]){expr_new_integer(2),
-                                  expr_copy(k_sq)}, 2));
-                    Expr* two_ksq_expanded = expr_expand(two_ksq);
-                    Expr* sg_b = intrat_simp_pos_sqrt(two_ksq_expanded);
-                    expr_free(two_ksq_expanded);
-                    Expr* neg_sg_b = eval_and_free(internal_times(
-                        (Expr*[]){expr_new_integer(-1),
-                                  expr_copy(sg_b)}, 2));
-
-                    Expr* part1 = logtoreal_quadratic(
-                        expr_new_integer(1),
-                        sg_b,
-                        expr_copy(k_sq),
-                        s, x, t);
-                    Expr* part2 = logtoreal_quadratic(
-                        expr_new_integer(1),
-                        neg_sg_b,
-                        k_sq,
-                        s, x, t);
-                    expr_free(ratio);
-                    expr_free(c0); expr_free(c1); expr_free(c2);
-                    expr_free(c3); expr_free(c4);
-
-                    if (part1 && part2) {
-                        contribution = eval_and_free(internal_plus(
-                            (Expr*[]){part1, part2}, 2));
-                    } else {
-                        if (part1) expr_free(part1);
-                        if (part2) expr_free(part2);
-                        goto fail;
-                    }
-                } else {
-                    expr_free(ratio);
-                    expr_free(c0); expr_free(c1); expr_free(c2);
-                    expr_free(c3); expr_free(c4);
-                    goto fail;
-                }
+                /* Fully sparse but sparse handler bailed (sign of
+                 * c0/c4 undecidable both symbolically and numerically).
+                 * No further branch can do better. */
+                expr_free(c0); expr_free(c1); expr_free(c2);
+                expr_free(c3); expr_free(c4);
+                goto fail;
             } else if (c1z && c3z) {
                 /* Genuine biquadratic in t: c4 t^4 + c2 t^2 + c0
                  * (c2 != 0).  Substitute u = t^2 to land in
@@ -2363,12 +2738,95 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                     (Expr*[]){c2sq, neg_fourc0c4}, 2));
                 int inner_disc_sign = intrat_sign_pos_assumption(discsq);
                 if (inner_disc_sign <= 0) {
-                    /* Inner disc not provably positive — bail to
-                     * NaiveLogPart rather than risk silent
-                     * miscomputation via complex sub-factors. */
+                    /* Inner disc not provably positive.  Before giving
+                     * up, try the Sophie-Germain-with-c2 factorisation
+                     * over R:
+                     *   c4 t^4 + c2 t^2 + c0
+                     *      = c4 (t^2 + α t + β)(t^2 − α t + β)
+                     * with β = Sqrt[c0/c4], α^2 = 2 β − c2/c4.
+                     * Real when (a) c0/c4 > 0 (so β is real) and
+                     * (b) 2 β − c2/c4 > 0 (so α is real).  Both gates
+                     * fire under the positive-symbol assumption, and
+                     * algebraically: c2^2 − 4 c0 c4 < 0 ⇒
+                     * |c2| < 2 Sqrt[c0 c4] ⇒ 2 Sqrt[c0/c4] − c2/c4 =
+                     * (2 Sqrt[c0 c4] − c2) / c4 > 0 when c4 > 0,
+                     * so the gate is automatic in the negative-inner-
+                     * disc regime we land in here.
+                     *
+                     * Each resulting real quadratic has its own
+                     * discriminant α^2 − 4 β < 0, which routes through
+                     * logtoreal_quadratic's ArcTan branch.  This is
+                     * the path Mathematica's IntegrateRational takes
+                     * for inputs like (-1+x^2)/(1-2x^2+2x^4) whose
+                     * Q-in-t is 2 t^4 − 2 t^2 + 1 (inner disc −4). */
                     expr_free(discsq);
+
+                    Expr* ratio = eval_and_free(internal_divide(
+                        (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2));
+                    bool ratio_pos = (intrat_sign_pos_assumption(ratio) > 0);
+
+                    if (!ratio_pos) {
+                        expr_free(ratio);
+                        expr_free(c0); expr_free(c1); expr_free(c2);
+                        expr_free(c3); expr_free(c4);
+                        goto fail;
+                    }
+
+                    Expr* beta = intrat_simp_pos_sqrt(ratio); /* Sqrt[c0/c4] */
+                    expr_free(ratio);
+
+                    Expr* c2_over_c4 = eval_and_free(internal_divide(
+                        (Expr*[]){expr_copy(c2), expr_copy(c4)}, 2));
+                    Expr* neg_c2_over_c4 = expr_expand(internal_times(
+                        (Expr*[]){expr_new_integer(-1), c2_over_c4}, 2));
+
+                    /* α^2 = 2 β − c2/c4. */
+                    Expr* two_beta = eval_and_free(internal_times(
+                        (Expr*[]){expr_new_integer(2), expr_copy(beta)}, 2));
+                    Expr* alpha_sq = eval_and_free(internal_plus(
+                        (Expr*[]){two_beta, neg_c2_over_c4}, 2));
+                    Expr* alpha_sq_expanded = expr_expand(alpha_sq);
+                    expr_free(alpha_sq);
+
+                    if (intrat_sign_pos_assumption(alpha_sq_expanded) <= 0) {
+                        /* α^2 not provably positive — bail. */
+                        expr_free(alpha_sq_expanded);
+                        expr_free(beta);
+                        expr_free(c0); expr_free(c1); expr_free(c2);
+                        expr_free(c3); expr_free(c4);
+                        goto fail;
+                    }
+
+                    Expr* alpha = intrat_simp_pos_sqrt(alpha_sq_expanded);
+                    expr_free(alpha_sq_expanded);
+                    Expr* neg_alpha = eval_and_free(internal_times(
+                        (Expr*[]){expr_new_integer(-1),
+                                  expr_copy(alpha)}, 2));
+
+                    Expr* part1 = logtoreal_quadratic(
+                        expr_new_integer(1),
+                        alpha,
+                        expr_copy(beta),
+                        s, x, t);
+                    Expr* part2 = logtoreal_quadratic(
+                        expr_new_integer(1),
+                        neg_alpha,
+                        beta,
+                        s, x, t);
+
                     expr_free(c0); expr_free(c1); expr_free(c2);
                     expr_free(c3); expr_free(c4);
+
+                    if (part1 && part2) {
+                        contribution = eval_and_free(internal_plus(
+                            (Expr*[]){part1, part2}, 2));
+                        for (int m = 0; m < multiplicity; m++) {
+                            acc[acc_n++] = (m == 0) ? contribution : expr_copy(contribution);
+                        }
+                        continue; /* next factor */
+                    }
+                    if (part1) expr_free(part1);
+                    if (part2) expr_free(part2);
                     goto fail;
                 }
                 Expr* sqrt_disc = intrat_simp_pos_sqrt(discsq);
@@ -2416,14 +2874,201 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                     goto fail;
                 }
             } else {
+                /* Scaled-palindromic quartic:
+                 *   Q(t) = c4 t^4 + c3 t^3 + c2 t^2 + c1 t + c0
+                 * with c4 c1^2 = c3^2 c0 (the symmetry condition that
+                 * generalises the c0=c4, c1=c3 palindromic family).
+                 * Under u = r t with r^2 = c3/c1 = Sqrt[c4/c0] the
+                 * polynomial r^n Q(u/r) is palindromic in u:
+                 *   c4 u^4 + (c3 r) u^3 + (c2 r^2) u^2 + (c1 r^3) u
+                 *   + (c0 r^4)   with c0 r^4 = c4 and c1 r^3 = c3 r.
+                 * Substitute v = u + 1/u (so u^2 + 1/u^2 = v^2 − 2):
+                 *   c4 v^2 + (c3 r) v + (c2 r^2 − 2 c4) = 0.
+                 * Solve for v_±; each (u^2 − v_± u + 1) translates to
+                 *   r^2 t^2 − r v_± t + 1
+                 * which is dispatched through logtoreal_quadratic.
+                 *
+                 * Catches Q-in-t for 1/(x^5+1) (Q = 625 t^4 + 125 t^3
+                 * + 25 t^2 + 5 t + 1 — palindromic in u = 5t) and the
+                 * scaled cyclotomic-quartic family.  When the symmetry
+                 * condition fails or any sign-gate is undecidable we
+                 * bail to RootSum. */
+
+                /* Symmetry check: c4 c1^2 == c3^2 c0  AND  c0 != 0.
+                 * General scaled-palindromic detection.  We further
+                 * restrict to r = 1 (pure palindromic) below, because
+                 * the scaled cases produce nested-radical S(t/r, x)
+                 * polynomials that overwhelm the downstream LogToAtan
+                 * GCD machinery.  Scaled-palindromic-with-clean-r is a
+                 * future extension. */
+                Expr* sym_lhs = expr_expand(internal_times(
+                    (Expr*[]){expr_copy(c4),
+                              expr_expand(internal_power(
+                                  (Expr*[]){expr_copy(c1),
+                                            expr_new_integer(2)}, 2))}, 2));
+                Expr* sym_rhs = expr_expand(internal_times(
+                    (Expr*[]){expr_expand(internal_power(
+                                  (Expr*[]){expr_copy(c3),
+                                            expr_new_integer(2)}, 2)),
+                              expr_copy(c0)}, 2));
+                Expr* sym_diff = internal_subtract(
+                    (Expr*[]){sym_lhs, sym_rhs}, 2);
+                bool symmetric = intrat_zero_q(sym_diff);
+                expr_free(sym_diff);
+
+                bool c0_nonzero = !(c0->type == EXPR_INTEGER && c0->data.integer == 0);
+                bool c1_nonzero = !(c1->type == EXPR_INTEGER && c1->data.integer == 0);
+
+                if (!symmetric || !c0_nonzero || !c1_nonzero) {
+                    expr_free(c0); expr_free(c1); expr_free(c2);
+                    expr_free(c3); expr_free(c4);
+                    goto fail;
+                }
+
+                /* r^2 = c3 / c1.  Restrict to r = 1 (c1 == c3 AND
+                 * c0 == c4) so the resulting LogToReal substitution
+                 * stays radical-clean. */
+                Expr* c1mc3 = internal_subtract(
+                    (Expr*[]){expr_copy(c1), expr_copy(c3)}, 2);
+                Expr* c0mc4 = internal_subtract(
+                    (Expr*[]){expr_copy(c0), expr_copy(c4)}, 2);
+                bool r_is_one = intrat_zero_q(c1mc3) && intrat_zero_q(c0mc4);
+                expr_free(c1mc3); expr_free(c0mc4);
+                if (!r_is_one) {
+                    /* Scaled-palindromic with r != 1: bail (the
+                     * substituted S(t/r, x) blows up downstream). */
+                    expr_free(c0); expr_free(c1); expr_free(c2);
+                    expr_free(c3); expr_free(c4);
+                    goto fail;
+                }
+                Expr* r_sq = expr_new_integer(1);
+                Expr* r    = expr_new_integer(1);
+
+                /* v-quadratic: c4 v^2 + (c3 r) v + (c2 r^2 − 2 c4) = 0.
+                 * disc_v = (c3 r)^2 − 4 c4 (c2 r^2 − 2 c4)
+                 *        = c3^2 r^2 − 4 c2 c4 r^2 + 8 c4^2.
+                 * Soundness gate: disc_v >= 0 so v_± are real. */
+                Expr* c3r = eval_and_free(internal_times(
+                    (Expr*[]){expr_copy(c3), expr_copy(r)}, 2));
+                Expr* c3r_sq = expr_expand(internal_power(
+                    (Expr*[]){expr_copy(c3r), expr_new_integer(2)}, 2));
+                Expr* two_c4 = eval_and_free(internal_times(
+                    (Expr*[]){expr_new_integer(2), expr_copy(c4)}, 2));
+                Expr* c2_rsq = expr_expand(internal_times(
+                    (Expr*[]){expr_copy(c2), expr_copy(r_sq)}, 2));
+                Expr* v_const = eval_and_free(internal_subtract(
+                    (Expr*[]){c2_rsq, two_c4}, 2));
+                Expr* four_c4 = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(4), expr_copy(c4),
+                              expr_copy(v_const)}, 3));
+                Expr* neg_four_c4 = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(-1), four_c4}, 2));
+                Expr* disc_v = eval_and_free(internal_plus(
+                    (Expr*[]){c3r_sq, neg_four_c4}, 2));
+                Expr* disc_v_exp = expr_expand(disc_v); expr_free(disc_v);
+                int disc_v_sign = intrat_sign_pos_assumption(disc_v_exp);
+                if (disc_v_sign == 0) disc_v_sign = intrat_numeric_sign(disc_v_exp);
+
+                if (disc_v_sign < 0) {
+                    /* v complex — bail. */
+                    expr_free(v_const); expr_free(disc_v_exp);
+                    expr_free(c3r); expr_free(r); expr_free(r_sq);
+                    expr_free(c0); expr_free(c1); expr_free(c2);
+                    expr_free(c3); expr_free(c4);
+                    goto fail;
+                }
+                Expr* sqrt_disc_v = intrat_simp_pos_sqrt(disc_v_exp);
+                expr_free(disc_v_exp);
+
+                /* v_± = (−c3 r ± Sqrt[disc_v]) / (2 c4). */
+                Expr* neg_c3r = eval_and_free(internal_times(
+                    (Expr*[]){expr_new_integer(-1), expr_copy(c3r)}, 2));
+                Expr* v_num_p = eval_and_free(internal_plus(
+                    (Expr*[]){expr_copy(neg_c3r), expr_copy(sqrt_disc_v)}, 2));
+                Expr* v_num_m = eval_and_free(internal_subtract(
+                    (Expr*[]){neg_c3r, sqrt_disc_v}, 2));
+                Expr* two_c4_b = eval_and_free(internal_times(
+                    (Expr*[]){expr_new_integer(2), expr_copy(c4)}, 2));
+                Expr* v_plus = eval_and_free(internal_divide(
+                    (Expr*[]){v_num_p, expr_copy(two_c4_b)}, 2));
+                Expr* v_minus = eval_and_free(internal_divide(
+                    (Expr*[]){v_num_m, two_c4_b}, 2));
+
+                expr_free(v_const); expr_free(c3r);
                 expr_free(c0); expr_free(c1); expr_free(c2);
                 expr_free(c3); expr_free(c4);
-                goto fail;
+
+                /* Each v_± yields the quadratic in t:
+                 *   r^2 t^2 − (r v_±) t + 1
+                 * Discriminant Δ_t = r^2 v^2 − 4 r^2 = r^2 (v^2 − 4).
+                 * Verify Δ_t < 0 so logtoreal_quadratic's ArcTan
+                 * branch fires.  When the symbolic walker is
+                 * inconclusive we fall back to numerical N[]. */
+                Expr* v_plus_sq = expr_expand(internal_power(
+                    (Expr*[]){expr_copy(v_plus), expr_new_integer(2)}, 2));
+                Expr* v_plus_sq_m4 = eval_and_free(internal_plus(
+                    (Expr*[]){v_plus_sq, expr_new_integer(-4)}, 2));
+                Expr* v_plus_check_arg = expr_expand(internal_times(
+                    (Expr*[]){expr_copy(r_sq), expr_copy(v_plus_sq_m4)}, 2));
+                expr_free(v_plus_sq_m4);
+                int v_plus_check = intrat_sign_pos_assumption(v_plus_check_arg);
+                if (v_plus_check == 0) v_plus_check = intrat_numeric_sign(v_plus_check_arg);
+                expr_free(v_plus_check_arg);
+
+                Expr* v_minus_sq = expr_expand(internal_power(
+                    (Expr*[]){expr_copy(v_minus), expr_new_integer(2)}, 2));
+                Expr* v_minus_sq_m4 = eval_and_free(internal_plus(
+                    (Expr*[]){v_minus_sq, expr_new_integer(-4)}, 2));
+                Expr* v_minus_check_arg = expr_expand(internal_times(
+                    (Expr*[]){expr_copy(r_sq), expr_copy(v_minus_sq_m4)}, 2));
+                expr_free(v_minus_sq_m4);
+                int v_minus_check = intrat_sign_pos_assumption(v_minus_check_arg);
+                if (v_minus_check == 0) v_minus_check = intrat_numeric_sign(v_minus_check_arg);
+                expr_free(v_minus_check_arg);
+
+                if (v_plus_check >= 0 || v_minus_check >= 0) {
+                    /* One of the quadratic factors would have a non-
+                     * negative discriminant.  Bail. */
+                    expr_free(v_plus); expr_free(v_minus);
+                    expr_free(r); expr_free(r_sq);
+                    goto fail;
+                }
+
+                /* Build (r^2) t^2 + (−r v) t + 1 for each v_±. */
+                Expr* rv_plus = expr_expand(internal_times(
+                    (Expr*[]){expr_copy(r), expr_copy(v_plus)}, 2));
+                Expr* neg_rv_plus = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(-1), rv_plus}, 2));
+                Expr* rv_minus = expr_expand(internal_times(
+                    (Expr*[]){expr_copy(r), expr_copy(v_minus)}, 2));
+                Expr* neg_rv_minus = expr_expand(internal_times(
+                    (Expr*[]){expr_new_integer(-1), rv_minus}, 2));
+
+                Expr* part1 = logtoreal_quadratic(
+                    expr_copy(r_sq),
+                    neg_rv_plus,
+                    expr_new_integer(1),
+                    s, x, t);
+                Expr* part2 = logtoreal_quadratic(
+                    expr_copy(r_sq),
+                    neg_rv_minus,
+                    expr_new_integer(1),
+                    s, x, t);
+
+                expr_free(v_plus); expr_free(v_minus);
+                expr_free(r); expr_free(r_sq);
+
+                if (part1 && part2) {
+                    contribution = eval_and_free(internal_plus(
+                        (Expr*[]){part1, part2}, 2));
+                } else {
+                    if (part1) expr_free(part1);
+                    if (part2) expr_free(part2);
+                    goto fail;
+                }
             }
-        } else {
-            /* Higher-degree factor: out of bounded-Solve scope. */
-            goto fail;
         }
+        if (!contribution) goto fail;
         for (int m = 0; m < multiplicity; m++) {
             acc[acc_n++] = (m == 0) ? contribution : expr_copy(contribution);
         }
@@ -2823,6 +3468,92 @@ static Expr* intrat_log_to_arctanh(Expr* e, Expr* x) {
  * The defaults reproduce Mathematica's IntegrateRational.m behaviour.
  */
 
+/* Log[c · p] -> Log[p] when c is free of x.  Walks the input top-down
+ * and rewrites every Log subexpression whose argument is a Times-headed
+ * product with at least one constant (FreeQ[…, x]) factor.  The
+ * additive `Log[c]` term is harmless to the antiderivative — it is a
+ * constant of integration — so dropping it merely beautifies the
+ * result and keeps the downstream `intrat_log_to_arctanh` pairing rule
+ * able to fire (it requires `Log[Cancel[A/B]]` denominator to be free
+ * of x, which a stray `Log[1/2·…]` factor inside would block).
+ *
+ * Direct mirror of IntegrateRational.m:1746 / :1750. */
+static Expr* intrat_strip_log_constants(Expr* e, Expr* x) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+
+    /* Recurse first so nested Logs get cleaned bottom-up. */
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = intrat_strip_log_constants(e->data.function.args[i], x);
+    }
+    Expr* head = expr_copy(e->data.function.head);
+    Expr* rebuilt = expr_new_function(head, new_args, n);
+    free(new_args);
+
+    /* Only Log heads need post-rewrite. */
+    if (rebuilt->type != EXPR_FUNCTION
+        || rebuilt->data.function.head->type != EXPR_SYMBOL
+        || rebuilt->data.function.head->data.symbol != SYM_Log
+        || rebuilt->data.function.arg_count != 1) {
+        return rebuilt;
+    }
+
+    Expr* arg = rebuilt->data.function.args[0];
+    if (arg->type != EXPR_FUNCTION
+        || arg->data.function.head->type != EXPR_SYMBOL
+        || arg->data.function.head->data.symbol != SYM_Times) {
+        return rebuilt;
+    }
+
+    /* Partition arg's Times factors into (const, x-dependent). */
+    size_t af = arg->data.function.arg_count;
+    Expr** keep = (Expr**)malloc(sizeof(Expr*) * af);
+    size_t nkeep = 0;
+    bool any_dropped = false;
+    for (size_t i = 0; i < af; i++) {
+        Expr* fac = arg->data.function.args[i];
+        if (intrat_freeq_test(fac, x)) {
+            any_dropped = true;
+        } else {
+            keep[nkeep++] = expr_copy(fac);
+        }
+    }
+    if (!any_dropped || nkeep == 0) {
+        for (size_t i = 0; i < nkeep; i++) expr_free(keep[i]);
+        free(keep);
+        return rebuilt;
+    }
+
+    Expr* new_inner;
+    if (nkeep == 1) { new_inner = keep[0]; }
+    else            { new_inner = eval_and_free(internal_times(keep, nkeep)); }
+    free(keep);
+
+    Expr* new_log = expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){new_inner}, 1);
+    expr_free(rebuilt);
+    return eval_and_free(new_log);
+}
+
+/* Distribute a top-level scalar across Plus terms in the integrate-
+ * rational accumulator.  After per-summand `c_k * piece_int_k`
+ * scaling, the result frequently shows up as
+ *   Times[c_k, Plus[term1, term2, …]]
+ * because Times has no auto-distribution attribute.  A single
+ * `expr_expand` pass turns it into `c_k term1 + c_k term2`, which is
+ * what the `Collect[expanded, _Log|_ArcTan|_ArcTanh, …]` step in
+ * IntegrateRational.m:99 produces.  Mathematica's Distribute / Expand
+ * has the same effect; we already have expr_expand which threads
+ * Times-over-Plus polynomial-style, which is exactly what we want.
+ * Calling this twice (before and after intrat_log_to_arctanh) is
+ * cheap and lets the log-pairing rule see fully-distributed sums. */
+static Expr* intrat_distribute_plus(Expr* e) {
+    if (!e) return NULL;
+    return expr_expand(e);
+}
+
 /* ArcTan / ArcTanh sign normalisation: pull a leading minus out of
  * the argument so the printed form is canonical.  Walks the input
  * expression top-down, rewriting just the relevant heads. */
@@ -3172,12 +3903,30 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         Expr* sum = internal_plus(
             (Expr*[]){poly_int, g, per_summand}, 3);
         Expr* sum_eval = eval_and_free(sum);
+        /* Phase A-1: distribute scalar Times-over-Plus so per-summand
+         * `c_k * piece_int_k` accumulators flatten into a single
+         * Plus[...] of `c_k · term` summands.  Without this, the
+         * subsequent log-pairing rule (intrat_log_to_arctanh) cannot
+         * see across the Times boundary.
+         * Phase A-2: strip Log[c · p] -> Log[p] when FreeQ[c, x] so
+         * downstream Log[A] + Log[B] merging sees the cleaned
+         * arguments. */
+        Expr* distributed = intrat_distribute_plus(sum_eval);
+        expr_free(sum_eval);
+        Expr* stripped = intrat_strip_log_constants(distributed, x);
+        expr_free(distributed);
         /* Phase 6 final pass: combine c Log[A] ± c Log[B] terms.
          * Phase 7 final pass: normalise ArcTan/ArcTanh argument signs.*/
-        Expr* simplified = intrat_log_to_arctanh(sum_eval, x);
-        expr_free(sum_eval);
-        Expr* result = normalize_inverse_trig_signs(simplified);
+        Expr* simplified = intrat_log_to_arctanh(stripped, x);
+        expr_free(stripped);
+        /* Re-distribute and re-strip in case the pairing rule
+         * introduces new Times[scalar, Plus[…]] or Log[c · p] shapes. */
+        Expr* simplified2 = intrat_distribute_plus(simplified);
         expr_free(simplified);
+        Expr* simplified3 = intrat_strip_log_constants(simplified2, x);
+        expr_free(simplified2);
+        Expr* result = normalize_inverse_trig_signs(simplified3);
+        expr_free(simplified3);
         intrat_trace("IntegrateRational", "OUT", result);
         return result;
     }
