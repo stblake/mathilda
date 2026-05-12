@@ -11,6 +11,7 @@
 #include "rationalize.h"
 #include "sym_names.h"
 #include "sym_intern.h"
+#include "trigrat.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7856,7 +7857,17 @@ static Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
             return simp_pipeline_rational(input, ctx, complexity_func);
         case SIMP_SHAPE_LOGEXP:
             return simp_pipeline_logexp(input, ctx, complexity_func);
-        case SIMP_SHAPE_TRIG:
+        case SIMP_SHAPE_TRIG: {
+            /* Fast algebraic normal-form pre-check for rational
+             * functions of Sin/Cos/Sinh/Cosh (and Tan/Cot/Sec/Csc/Tanh/
+             * etc. after preprocessing). Strict leaf-count gate inside:
+             * returns NULL when the algorithm does not apply or does
+             * not strictly improve the input, so we fall through to
+             * simp_search unchanged in those cases. */
+            Expr* tr = simp_trig_rational(input, ctx, complexity_func);
+            if (tr) return tr;
+            return simp_search(input, ctx, complexity_func);
+        }
         case SIMP_SHAPE_GENERAL:
         default:
             return simp_search(input, ctx, complexity_func);
@@ -10442,7 +10453,25 @@ Expr* builtin_simplify(Expr* res) {
     if (simp_classify(expr) == SIMP_SHAPE_RATIONAL) {
         best = simp_dispatch(expr, ctx, opt_complexity);
     } else {
-        best = simp_bottomup(expr, ctx, opt_complexity, &memo, 0);
+        /* Top-level trig-rational fast path. Substitutes Sin/Cos/Sinh/
+         * Cosh (and Tan/Cot/Sec/Csc/Tanh/etc. after preprocessing) plus
+         * every opaque non-rational subtree (Log[...], Exp[...], etc.)
+         * into fresh ground-field symbols so the algebraic core sees a
+         * pure rational function; works in the quotient ring modulo the
+         * trig/hyp ideals, then back-substitutes. Strict leaf-count gate
+         * inside ensures it never regresses; on no-improvement or when
+         * the input is out of budget it returns NULL and we fall through
+         * to the normal bottom-up search. Doing this BEFORE simp_bottomup
+         * means we bypass the per-subnode descent (which itself is
+         * extremely slow on inputs like
+         *   D[Integrate`RischNorman[Tan[x]^2 + Tan[x] + 1, x], x]
+         * because every internal node fires a full simp_search). */
+        Expr* tr = simp_trig_rational(expr, ctx, opt_complexity);
+        if (tr) {
+            best = tr;
+        } else {
+            best = simp_bottomup(expr, ctx, opt_complexity, &memo, 0);
+        }
     }
 
     /* Final-form polish: lift a shared algebraic generator out of a

@@ -60,6 +60,7 @@ set(COMMON_SRC
     ../src/patterns.c
     ../src/replace.c
     ${CMAKE_SOURCE_DIR}/../src/trigsimp.c
+    ${CMAKE_SOURCE_DIR}/../src/trigrat.c
     ${CMAKE_SOURCE_DIR}/../src/simp.c
     ../src/complex.c
     ../src/trig.c
@@ -458,6 +459,9 @@ target_include_directories(numeric_tests PRIVATE ../src)
 
 add_executable(simplify_tests test_simplify.c ${COMMON_SRC})
 target_include_directories(simplify_tests PRIVATE ../src)
+
+add_executable(trigrat_tests test_trigrat.c ${COMMON_SRC})
+target_include_directories(trigrat_tests PRIVATE ../src)
 
 add_executable(factorial_simplify_tests test_factorial_simplify.c ${COMMON_SRC})
 target_include_directories(factorial_simplify_tests PRIVATE ../src)
