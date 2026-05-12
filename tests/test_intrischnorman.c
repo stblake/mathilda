@@ -1,0 +1,528 @@
+/* test_intrischnorman.c — Risch-Norman heuristic integrator tests.
+ *
+ * The corpus grows phase-by-phase per RISCH_NORMAN_PLAN.md:
+ *   Phase 1: scaffolding / dispatcher integration.
+ *   Phase 2: convert_to_tan + indet collection unit tests.
+ *   Phase 3: vector field + splitFactor + deflation unit tests.
+ *   Phase 4: 10 Q-rational integrands (Exp[x], Log[x], x Exp[x], ...).
+ *   Phase 5: 15+ log-bearing integrands + K=I retry cases.
+ *   Phase 6: full ~60-integrand corpus.
+ *
+ * Universal correctness predicate (Phase 4+):
+ *   ASSERT_INTEGRAL_OK(f, x)  ≡  Cancel[Together[Expand[
+ *       D[Integrate`RischNorman[f, x], x] - f]]] === 0
+ * Mirrors the helper in tests/test_intrat.c:56-72.
+ */
+
+#include "expr.h"
+#include "parse.h"
+#include "eval.h"
+#include "symtab.h"
+#include "core.h"
+#include "print.h"
+#include "test_utils.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* ------------------------------------------------------------------ */
+/* Test helpers.                                                       */
+/* ------------------------------------------------------------------ */
+
+/* Compare evaluated output to a string. */
+static void run_eq(const char* input, const char* expected) {
+    Expr* e = parse_expression(input);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, expected) != 0) {
+        printf("FAIL: %s\n  expected: %s\n  got:      %s\n",
+               input, expected, got);
+        ASSERT_STR_EQ(got, expected);
+    }
+    free(got);
+    expr_free(e);
+    expr_free(res);
+}
+
+/* Check that Integrate`RischNorman[f, x] differentiates back to f.
+ *
+ * Pmint's result lives in Tan[x/2] / Tanh[x/2] form.  We reconcile by:
+ *   (1) Differentiating the result, giving an expression with
+ *       Tan[x/2] and possibly Sec[x/2]^2 from the chain rule.
+ *   (2) Applying Integrate`Helpers`PMSincosToTan to the integrand,
+ *       which rewrites Sin/Cos to the same Tan[x/2] form (and does
+ *       NOT recursively rewrite Tan[x/2] further).
+ *   (3) Subtracting and Cancel/Together'ing — this works because
+ *       Sec[x/2]^2 = 1 + Tan[x/2]^2 collapses under Cancel once
+ *       both sides are in the same generator. */
+__attribute__((unused))
+static void assert_rischnorman_correct(const char* integrand) {
+    /* Pmint's result is in Tan[x/2] form; the user's integrand may
+     * have Tan[x] / Cot[x] / Sin[x] / Cos[x].  Strategy:
+     *   1. Apply x-specific Weierstrass rules to BOTH integrand and
+     *      result.  Since the rules are keyed on Tan[x] / Sin[x] /
+     *      etc. (not Tan[x/2]), the result's Tan[x/2] stays intact
+     *      while the integrand's Tan[x] is rewritten.
+     *   2. Differentiate the result.
+     *   3. Apply PMPythagoreanRewrite (Sec^2 → 1+Tan^2 etc.).
+     *   4. Apply general pattern rules for Sec[u_]/Cos[u_] etc. that
+     *      picocas's D produces as algebraic equivalences.
+     *   5. Cancel + Together + Expand. */
+    char buf[4096];
+    snprintf(buf, sizeof(buf),
+        "Module[{specific, generic, f, r, lhs},"
+        "  specific = {Tan[x] -> 2 Tan[x/2]/(1 - Tan[x/2]^2),"
+        "              Cot[x] -> (1 - Tan[x/2]^2)/(2 Tan[x/2]),"
+        "              Sin[x] -> 2 Tan[x/2]/(1 + Tan[x/2]^2),"
+        "              Cos[x] -> (1 - Tan[x/2]^2)/(1 + Tan[x/2]^2),"
+        "              Sec[x] -> (1 + Tan[x/2]^2)/(1 - Tan[x/2]^2),"
+        "              Csc[x] -> (1 + Tan[x/2]^2)/(2 Tan[x/2]),"
+        "              Tanh[x] -> 2 Tanh[x/2]/(1 + Tanh[x/2]^2),"
+        "              Coth[x] -> (1 + Tanh[x/2]^2)/(2 Tanh[x/2]),"
+        "              Sinh[x] -> 2 Tanh[x/2]/(1 - Tanh[x/2]^2),"
+        "              Cosh[x] -> (1 + Tanh[x/2]^2)/(1 - Tanh[x/2]^2),"
+        "              Sech[x] -> (1 - Tanh[x/2]^2)/(1 + Tanh[x/2]^2),"
+        "              Csch[x] -> (1 - Tanh[x/2]^2)/(2 Tanh[x/2])};"
+        "  generic = {Sec[u_] Csc[u_] -> (1 + Tan[u]^2)/Tan[u],"
+        "             Sech[u_] Csch[u_] -> (1 - Tanh[u]^2)/Tanh[u],"
+        "             Cot[u_] -> 1/Tan[u],"
+        "             Coth[u_] -> 1/Tanh[u]};"
+        "  f = (%s) /. specific;"
+        "  r = (Integrate`RischNorman[%s, x]) /. specific;"
+        "  lhs = Integrate`Helpers`PMPythagoreanRewrite[D[r, x]] /. generic;"
+        "  Cancel[Together[Expand[lhs - f]]]]",
+        integrand, integrand);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "0") != 0) {
+        printf("FAIL: D[Integrate`RischNorman[%s, x], x] - %s != 0\n  Got: %s\n",
+               integrand, integrand, got);
+        ASSERT_STR_EQ(got, "0");
+    }
+    free(got);
+    expr_free(e);
+    expr_free(res);
+}
+
+/* Check that Integrate[f, x] (dispatcher path) differentiates back to f.
+ * Used in Phase 6 for the end-to-end dispatcher tests. */
+__attribute__((unused))
+static void assert_integrate_correct(const char* integrand) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "Cancel[Together[Expand[D[Integrate[%s, x], x] - (%s)]]]",
+        integrand, integrand);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "0") != 0) {
+        printf("FAIL: D[Integrate[%s, x], x] - %s != 0\n  Got: %s\n",
+               integrand, integrand, got);
+        ASSERT_STR_EQ(got, "0");
+    }
+    free(got);
+    expr_free(e);
+    expr_free(res);
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 1 — scaffolding tests.                                        */
+/* ------------------------------------------------------------------ */
+
+/* The Integrate`RischNorman symbol must be registered after
+ * integrate_init() runs (via core_init()). */
+static void test_phase1_symbol_registered(void) {
+    SymbolDef* def = symtab_lookup("Integrate`RischNorman");
+    ASSERT(def != NULL);
+    ASSERT(def->builtin_func != NULL);
+    /* Must be protected so the user can't redefine it accidentally. */
+    ASSERT((def->attributes & ATTR_PROTECTED) != 0);
+}
+
+/* Genuinely non-elementary integrands bubble back as the unevaluated
+ * package head. */
+static void test_phase1_unevaluated_returns_self(void) {
+    run_eq("Integrate`RischNorman[1/Log[x], x]",
+           "Integrate`RischNorman[1/Log[x], x]");
+    /* Exp[x^2] is non-elementary (related to the error function). */
+    run_eq("Integrate`RischNorman[Exp[x^2], x]",
+           "Integrate`RischNorman[E^x^2, x]");
+}
+
+/* Wrong arity must also bubble back unevaluated (the BuiltinFunc
+ * returns NULL early). */
+static void test_phase1_wrong_arity_unevaluated(void) {
+    run_eq("Integrate`RischNorman[x]",
+           "Integrate`RischNorman[x]");
+    run_eq("Integrate`RischNorman[x, y, z]",
+           "Integrate`RischNorman[x, y, z]");
+}
+
+/* Non-symbol second argument bubbles back unevaluated. */
+static void test_phase1_non_symbol_var(void) {
+    run_eq("Integrate`RischNorman[Sin[x], 5]",
+           "Integrate`RischNorman[Sin[x], 5]");
+}
+
+/* The Integrate dispatcher must still produce the same behaviour
+ * for rational integrands (Phase 1 only changes the non-rational
+ * fall-through). */
+static void test_phase1_rational_unchanged(void) {
+    run_eq("Integrate[x, x]", "1/2 x^2");
+    run_eq("Integrate[1/(x^2 + 1), x]", "ArcTan[x]");
+}
+
+/* Integrate now routes through RischNorman for non-rational
+ * integrands.  Genuinely non-elementary integrands (1/Log[x],
+ * Exp[x^2]) still bubble back unevaluated. */
+static void test_phase1_known_fail_unevaluated(void) {
+    run_eq("Integrate[1/Log[x], x]", "Integrate[1/Log[x], x]");
+    run_eq("Integrate[Exp[x^2], x]", "Integrate[E^x^2, x]");
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 2 — convert_to_tan / collect_indets / subst_map.              */
+/* ------------------------------------------------------------------ */
+
+/* PMConvertToTan rewrites Sin / Cos / Sec / Csc to half-angle Tan
+ * rationals; Sinh / Cosh / Sech / Csch via Tanh[u/2].  Tan, Cot,
+ * Tanh, Coth are reciprocally normalised but the Tan / Tanh atoms
+ * remain as field generators. */
+static void test_phase2_convert_sin(void) {
+    run_eq("Integrate`Helpers`PMConvertToTan[Sin[x], x]",
+           "(2 Tan[1/2 x])/(1 + Tan[1/2 x]^2)");
+}
+
+static void test_phase2_convert_cos(void) {
+    run_eq("Integrate`Helpers`PMConvertToTan[Cos[x], x]",
+           "(1 - Tan[1/2 x]^2)/(1 + Tan[1/2 x]^2)");
+}
+
+static void test_phase2_convert_sec(void) {
+    run_eq("Integrate`Helpers`PMConvertToTan[Sec[x], x]",
+           "(1 + Tan[1/2 x]^2)/(1 - Tan[1/2 x]^2)");
+}
+
+static void test_phase2_convert_csc(void) {
+    /* Csc[u] = (1+T^2)/(2T) — picocas's evaluator collapses 1/T to Cot,
+     * yielding the equivalent Cot form.  Algebraically the same; pmint
+     * uses the decot'd internal tree, so this REPL-visible form is OK. */
+    run_eq("Integrate`Helpers`PMConvertToTan[Csc[x], x]",
+           "1/2 Cot[1/2 x] (1 + Tan[1/2 x]^2)");
+}
+
+static void test_phase2_convert_cot(void) {
+    /* Cot[u] = (1 - T^2) / (2T),  T = Tan[u/2].  Picocas re-collapses
+     * the 1/T factor to Cot[u/2]; the externally visible form is the
+     * algebraically equivalent 1/2 Cot[1/2 x] (1 - Tan[1/2 x]^2). */
+    run_eq("Integrate`Helpers`PMConvertToTan[Cot[x], x]",
+           "1/2 Cot[1/2 x] (1 - Tan[1/2 x]^2)");
+}
+
+static void test_phase2_convert_tan_full_weierstrass(void) {
+    /* Tan[u] = 2T / (1 - T^2),  T = Tan[u/2].  Full Weierstrass keeps
+     * Tan[u/2] as the unique trig generator. */
+    run_eq("Integrate`Helpers`PMConvertToTan[Tan[x], x]",
+           "(2 Tan[1/2 x])/(1 - Tan[1/2 x]^2)");
+}
+
+static void test_phase2_convert_sinh(void) {
+    /* Sinh[u] = 2 T / (1 - T^2),  T = Tanh[u/2]. */
+    run_eq("Integrate`Helpers`PMConvertToTan[Sinh[x], x]",
+           "(2 Tanh[1/2 x])/(1 - Tanh[1/2 x]^2)");
+}
+
+static void test_phase2_convert_cosh(void) {
+    run_eq("Integrate`Helpers`PMConvertToTan[Cosh[x], x]",
+           "(1 + Tanh[1/2 x]^2)/(1 - Tanh[1/2 x]^2)");
+}
+
+static void test_phase2_convert_skips_free_of_x(void) {
+    /* Sin[y] doesn't mention x — should remain unchanged. */
+    run_eq("Integrate`Helpers`PMConvertToTan[Sin[y], x]", "Sin[y]");
+}
+
+static void test_phase2_convert_exp_unchanged(void) {
+    /* Exp / E^x is not in the trig family — left alone. */
+    run_eq("Integrate`Helpers`PMConvertToTan[Exp[x], x]", "E^x");
+}
+
+/* PMCollectIndets returns the list of transcendental atoms in f
+ * (assuming f has already been run through PMConvertToTan) with
+ * derivative wrt x non-zero, closed under one round of diff.  The
+ * first element is always x itself. */
+static void test_phase2_indets_x_and_exp(void) {
+    /* Exp[x] has D[E^x, x] = E^x — same atom, closure is a no-op. */
+    run_eq("Integrate`Helpers`PMCollectIndets[Exp[x], x]",
+           "{x, E^x}");
+}
+
+static void test_phase2_indets_x_and_log(void) {
+    /* Log[x] derivative is 1/x — no new atoms after closure. */
+    run_eq("Integrate`Helpers`PMCollectIndets[Log[x], x]",
+           "{x, Log[x]}");
+}
+
+static void test_phase2_indets_x_tan(void) {
+    /* Tan[x] survives convert_to_tan; D[Tan[x],x] = Sec[x]^2 but we
+     * don't recurse into the Sec head (Sec isn't a collected atom). */
+    run_eq("Integrate`Helpers`PMCollectIndets[Tan[x], x]",
+           "{x, Tan[x]}");
+}
+
+static void test_phase2_indets_mixed(void) {
+    run_eq("Integrate`Helpers`PMCollectIndets[Tan[x] + Log[x] + Exp[x], x]",
+           "{x, E^x, Log[x], Tan[x]}");
+}
+
+static void test_phase2_indets_skips_constant_atoms(void) {
+    /* Log[y] doesn't mention x — D[Log[y], x] = 0, not collected. */
+    run_eq("Integrate`Helpers`PMCollectIndets[Log[y] + Exp[x], x]",
+           "{x, E^x}");
+}
+
+/* PMSubstMap returns the forward substitution rules
+ * `term -> pmint$v_i`.  When an atom is Tan[u] or Tanh[u] the map
+ * also includes a companion `Cot[u] -> 1/v_k` / `Coth[u] -> 1/v_k`
+ * rule so the reciprocal generator collapses through the same
+ * fresh variable. */
+static void test_phase2_subst_map_basic(void) {
+    run_eq("Integrate`Helpers`PMSubstMap[Tan[x] + Exp[x], x]",
+           "{x -> pmint$v1, E^x -> pmint$v2, Tan[x] -> pmint$v3, Cot[x] -> 1/pmint$v3}");
+}
+
+/* Round-trip: subs[lout, subs[lin, ff]] == ff.  Approximate the
+ * round-trip by applying the forward substitution then a reverse
+ * built by inverting it manually with Cases. */
+static void test_phase2_subst_round_trip(void) {
+    /* The subst map maps Tan[x] -> pmint$v_k.  Replacing back via
+     * ReplaceAll should restore the original.  Build inv = Reverse
+     * each rule. */
+    run_eq("With[{m = Integrate`Helpers`PMSubstMap[Tan[x] + Log[x], x],"
+           "      f = Tan[x] + Log[x]},"
+           "  Module[{inv}, inv = (#[[2]] -> #[[1]]) & /@ m;"
+           "    Expand[((f /. m) /. inv) - f]]]",
+           "0");
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 3 — vector field / split_factor / deflation / monomials.      */
+/* ------------------------------------------------------------------ */
+
+/* PMVectorField returns {vars, l, q}.  For integrand Exp[x] the field
+ * has vars = {v1=x, v2=E^x}, l = {1, v2}, q = 1. */
+static void test_phase3_vector_field_exp(void) {
+    run_eq("Integrate`Helpers`PMVectorField[Exp[x], x]",
+           "{{pmint$v1, pmint$v2}, {1, pmint$v2}, 1}");
+}
+
+/* For Log[x] the field has D[Log[x], x] = 1/x.  q = lcm of denominators
+ * including the x denominator from Log's derivative. */
+static void test_phase3_vector_field_log(void) {
+    run_eq("Integrate`Helpers`PMVectorField[Log[x], x]",
+           "{{pmint$v1, pmint$v2}, {pmint$v1, 1}, pmint$v1}");
+}
+
+/* apply_d should give back D[f, x] (up to the q scaling) for any f in
+ * the integrand's differential field.  Since q = 1 for Exp[x], apply_d
+ * of Exp[x] returns Exp[x] itself. */
+static void test_phase3_apply_d_exp(void) {
+    run_eq("Integrate`Helpers`PMApplyD[Exp[x], x]", "E^x");
+}
+
+/* apply_d on x in Exp[x]'s field: D[x, x] = 1; q = 1; l[x] = 1.
+ * Result: 1. */
+static void test_phase3_apply_d_x_exp(void) {
+    run_eq("Integrate`Helpers`PMApplyD[x, x]", "1");
+}
+
+/* splitFactor[V (V+1)^2, dx] should return {V, (V+1)^2} where V = E^x
+ * has d(V) = V.  The print form distributes (V+1)^2 = 1 + 2V + V^2. */
+static void test_phase3_split_factor_v_times_vp1sq(void) {
+    run_eq("Integrate`Helpers`PMSplitFactor[Exp[x] (Exp[x]+1)^2, x]",
+           "{E^x, 1 + 2 E^x + E^(2 x)}");
+}
+
+/* deflation((V+1)^2 (V-1)) should give (V+1)(V-1)... actually pmint's
+ * deflation returns just the d-gcd of the primitive part, which for
+ * (V+1)^2 (V-1) is (V+1). */
+static void test_phase3_deflation_basic(void) {
+    run_eq("Integrate`Helpers`PMDeflation[(Exp[x]+1)^2 (Exp[x]-1), x]",
+           "1 + E^x");
+}
+
+/* enumerate_monomials({x, V}, 3) should produce C(5, 2) = 10 monomials. */
+static void test_phase3_enumerate_monoms_count(void) {
+    run_eq("Length[Integrate`Helpers`PMEnumerateMonoms[{x, V}, 3]]", "10");
+}
+
+/* enumerate_monomials with zero vars returns {1}. */
+static void test_phase3_enumerate_monoms_empty(void) {
+    run_eq("Integrate`Helpers`PMEnumerateMonoms[{}, 5]", "{1}");
+}
+
+/* enumerate_monomials with a single var and degree 0 returns {1}. */
+static void test_phase3_enumerate_monoms_deg_zero(void) {
+    run_eq("Integrate`Helpers`PMEnumerateMonoms[{x}, 0]", "{1}");
+}
+
+/* enumerate_monomials with a single var and degree d returns d+1 items
+ * {1, x, x^2, ..., x^d}. */
+static void test_phase3_enumerate_monoms_single_var(void) {
+    run_eq("Integrate`Helpers`PMEnumerateMonoms[{x}, 4]",
+           "{1, x, x^2, x^3, x^4}");
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 4 — Q-rational integrals.  Uses the universal correctness    */
+/* predicate (differentiate-and-cancel).                                */
+/* ------------------------------------------------------------------ */
+
+/* Phase 5 — log-bearing integrals. */
+static void test_phase5_inv_x(void)              { assert_rischnorman_correct("1/x"); }
+static void test_phase5_sin_x(void)              { assert_rischnorman_correct("Sin[x]"); }
+static void test_phase5_cos_x(void)              { assert_rischnorman_correct("Cos[x]"); }
+static void test_phase5_tan_x(void)              { assert_rischnorman_correct("Tan[x]"); }
+static void test_phase5_cot_x(void)              { assert_rischnorman_correct("Cot[x]"); }
+static void test_phase5_inv_1_plus_exp(void)     { assert_rischnorman_correct("1/(1 + Exp[x])"); }
+static void test_phase5_exp_over_1_plus_exp(void){ assert_rischnorman_correct("Exp[x]/(1 + Exp[x])"); }
+static void test_phase5_inv_x_log_x(void)        { assert_rischnorman_correct("1/(x Log[x])"); }
+static void test_phase5_log_x_squared(void)      { assert_rischnorman_correct("Log[x]^2"); }
+static void test_phase5_one_plus_log_over_x_log(void){ assert_rischnorman_correct("(1 + Log[x])/(x Log[x])"); }
+
+/* Phase 6 — extended corpus (Geddes Table II + Bronstein + Davenport). */
+static void test_phase6_exp_ax(void)             { assert_rischnorman_correct("Exp[a x]"); }
+static void test_phase6_x3_exp_x(void)           { assert_rischnorman_correct("x^3 Exp[x]"); }
+static void test_phase6_log_x_cubed(void)        { assert_rischnorman_correct("Log[x]^3"); }
+static void test_phase6_sinh_x(void)             { assert_rischnorman_correct("Sinh[x]"); }
+static void test_phase6_cosh_x(void)             { assert_rischnorman_correct("Cosh[x]"); }
+static void test_phase6_tanh_x(void)             { assert_rischnorman_correct("Tanh[x]"); }
+static void test_phase6_sin_squared(void)        { assert_rischnorman_correct("Sin[x]^2"); }
+static void test_phase6_cos_squared(void)        { assert_rischnorman_correct("Cos[x]^2"); }
+static void test_phase6_tan_squared(void)        { assert_rischnorman_correct("Tan[x]^2"); }
+static void test_phase6_one_over_x2_plus_one(void) { assert_rischnorman_correct("1/(1+x^2)"); }
+
+/* Known-fail integrals: pmint should bubble back unevaluated cleanly. */
+static void assert_rischnorman_unevaluated(const char* integrand) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "Integrate`RischNorman[%s, x]", integrand);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    /* Result must remain a function whose head is
+     * Integrate`RischNorman — i.e., the call did not produce a closed
+     * form. */
+    ASSERT(res->type == EXPR_FUNCTION);
+    ASSERT(res->data.function.head
+           && res->data.function.head->type == EXPR_SYMBOL
+           && strcmp(res->data.function.head->data.symbol,
+                     "Integrate`RischNorman") == 0);
+    expr_free(e);
+    expr_free(res);
+}
+
+static void test_phase6_fail_inv_log(void)       { assert_rischnorman_unevaluated("1/Log[x]"); }
+static void test_phase6_fail_exp_x2(void)        { assert_rischnorman_unevaluated("Exp[x^2]"); }
+static void test_phase6_fail_log_cos(void)       { assert_rischnorman_unevaluated("Log[x] Cos[x]"); }
+static void test_phase6_fail_exp_over_log(void)  { assert_rischnorman_unevaluated("Exp[x]/Log[x]"); }
+static void test_phase6_fail_exp_sin(void)       { assert_rischnorman_unevaluated("Exp[Sin[x]]"); }
+
+static void test_phase4_exp_x(void)    { assert_rischnorman_correct("Exp[x]"); }
+static void test_phase4_exp_2x(void)   { assert_rischnorman_correct("Exp[2 x]"); }
+static void test_phase4_x_exp_x(void)  { assert_rischnorman_correct("x Exp[x]"); }
+static void test_phase4_x2_exp_x(void) { assert_rischnorman_correct("x^2 Exp[x]"); }
+static void test_phase4_log_x(void)    { assert_rischnorman_correct("Log[x]"); }
+static void test_phase4_x_log_x(void)  { assert_rischnorman_correct("x Log[x]"); }
+static void test_phase4_sin_exp(void)  { assert_rischnorman_correct("Sin[x] Exp[x]"); }
+static void test_phase4_cos_exp(void)  { assert_rischnorman_correct("Cos[x] Exp[x]"); }
+
+/* ------------------------------------------------------------------ */
+/* main().                                                              */
+/* ------------------------------------------------------------------ */
+
+int main(void) {
+    symtab_init();
+    core_init();
+
+    /* Phase 1. */
+    TEST(test_phase1_symbol_registered);
+    TEST(test_phase1_unevaluated_returns_self);
+    TEST(test_phase1_wrong_arity_unevaluated);
+    TEST(test_phase1_non_symbol_var);
+    TEST(test_phase1_rational_unchanged);
+    TEST(test_phase1_known_fail_unevaluated);
+
+    /* Phase 2. */
+    TEST(test_phase2_convert_sin);
+    TEST(test_phase2_convert_cos);
+    TEST(test_phase2_convert_sec);
+    TEST(test_phase2_convert_csc);
+    TEST(test_phase2_convert_cot);
+    TEST(test_phase2_convert_tan_full_weierstrass);
+    TEST(test_phase2_convert_sinh);
+    TEST(test_phase2_convert_cosh);
+    TEST(test_phase2_convert_skips_free_of_x);
+    TEST(test_phase2_convert_exp_unchanged);
+    TEST(test_phase2_indets_x_and_exp);
+    TEST(test_phase2_indets_x_and_log);
+    TEST(test_phase2_indets_x_tan);
+    TEST(test_phase2_indets_mixed);
+    TEST(test_phase2_indets_skips_constant_atoms);
+    TEST(test_phase2_subst_map_basic);
+    TEST(test_phase2_subst_round_trip);
+
+    /* Phase 3. */
+    TEST(test_phase3_vector_field_exp);
+    TEST(test_phase3_vector_field_log);
+    TEST(test_phase3_apply_d_exp);
+    TEST(test_phase3_apply_d_x_exp);
+    TEST(test_phase3_split_factor_v_times_vp1sq);
+    TEST(test_phase3_deflation_basic);
+    TEST(test_phase3_enumerate_monoms_count);
+    TEST(test_phase3_enumerate_monoms_empty);
+    TEST(test_phase3_enumerate_monoms_deg_zero);
+    TEST(test_phase3_enumerate_monoms_single_var);
+
+    /* Phase 4 — Q-rational integrals via assert_rischnorman_correct. */
+    TEST(test_phase4_exp_x);
+    TEST(test_phase4_exp_2x);
+    TEST(test_phase4_x_exp_x);
+    TEST(test_phase4_x2_exp_x);
+    TEST(test_phase4_log_x);
+    TEST(test_phase4_x_log_x);
+    TEST(test_phase4_sin_exp);
+    TEST(test_phase4_cos_exp);
+
+    /* Phase 5 — log candidates + getSpecial. */
+    TEST(test_phase5_inv_x);
+    TEST(test_phase5_sin_x);
+    TEST(test_phase5_cos_x);
+    TEST(test_phase5_tan_x);
+    TEST(test_phase5_cot_x);
+    TEST(test_phase5_inv_1_plus_exp);
+    TEST(test_phase5_exp_over_1_plus_exp);
+    TEST(test_phase5_inv_x_log_x);
+    TEST(test_phase5_log_x_squared);
+    TEST(test_phase5_one_plus_log_over_x_log);
+
+    /* Phase 6 — extended corpus. */
+    TEST(test_phase6_exp_ax);
+    TEST(test_phase6_x3_exp_x);
+    TEST(test_phase6_log_x_cubed);
+    TEST(test_phase6_sinh_x);
+    TEST(test_phase6_cosh_x);
+    TEST(test_phase6_tanh_x);
+    TEST(test_phase6_sin_squared);
+    TEST(test_phase6_cos_squared);
+    TEST(test_phase6_tan_squared);
+    TEST(test_phase6_one_over_x2_plus_one);
+    TEST(test_phase6_fail_inv_log);
+    TEST(test_phase6_fail_exp_x2);
+    TEST(test_phase6_fail_log_cos);
+    TEST(test_phase6_fail_exp_over_log);
+    TEST(test_phase6_fail_exp_sin);
+
+    printf("All intrischnorman tests passed!\n");
+    return 0;
+}

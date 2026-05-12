@@ -12,6 +12,7 @@
 
 #include "integrate.h"
 #include "intrat.h"
+#include "intrischnorman.h"
 #include "expr.h"
 #include "eval.h"
 #include "symtab.h"
@@ -126,33 +127,58 @@ Expr* builtin_integrate(Expr* res) {
         effective_f = coerced;
     }
 
-    bool dispatch = is_polynomial_in(effective_f, x) || is_rational_in(effective_f, x);
-    if (!dispatch) {
+    bool dispatch_rational = is_polynomial_in(effective_f, x)
+                            || is_rational_in(effective_f, x);
+
+    /* Stage 1: try Integrate`IntegrateRational for polynomial / rational
+     * integrands.  Its output has either some resolved head (Plus, Log,
+     * ...) on success, or the unevaluated package head on failure. */
+    if (dispatch_rational) {
+        Expr* call = expr_new_function(
+            expr_new_symbol("Integrate`IntegrateRational"),
+            (Expr*[]){ expr_copy(effective_f), expr_copy(x) }, 2);
+        Expr* result = evaluate(call);
+        expr_free(call);
+        if (result) {
+            bool unresolved =
+                result->type == EXPR_FUNCTION
+                && result->data.function.head
+                && result->data.function.head->type == EXPR_SYMBOL
+                && strcmp(result->data.function.head->data.symbol,
+                          "Integrate`IntegrateRational") == 0;
+            if (!unresolved) {
+                if (coerced) expr_free(coerced);
+                return result;
+            }
+            expr_free(result);
+        }
+    }
+
+    /* Stage 2: parallel-Risch / Risch-Norman heuristic for transcendental
+     * integrands (Sin, Cos, Exp, Log, Tan, ...).  Bronstein's pmint
+     * algorithm; see `src/intrischnorman.c` and `RISCH_NORMAN_PLAN.md`.
+     * Returns NULL when pmint gives up — we bubble back unevaluated. */
+    {
+        Expr* call = expr_new_function(
+            expr_new_symbol("Integrate`RischNorman"),
+            (Expr*[]){ expr_copy(effective_f), expr_copy(x) }, 2);
         if (coerced) expr_free(coerced);
-        return NULL;
-    }
+        Expr* result = evaluate(call);
+        expr_free(call);
+        if (!result) return NULL;
 
-    /* Forward to the Integrate` package entry point. */
-    Expr* call = expr_new_function(
-        expr_new_symbol("Integrate`IntegrateRational"),
-        (Expr*[]){ expr_copy(effective_f), expr_copy(x) }, 2);
-    if (coerced) expr_free(coerced);
-    Expr* result = evaluate(call);
-    expr_free(call);
-    if (!result) return NULL;
-
-    /* Detect the unevaluated package call and bubble back as
-     * Integrate[f, x] so the user-facing form stays clean.  A
-     * resolved result has any other head (Plus, Log, ...). */
-    if (result->type == EXPR_FUNCTION
-        && result->data.function.head
-        && result->data.function.head->type == EXPR_SYMBOL
-        && strcmp(result->data.function.head->data.symbol,
-                  "Integrate`IntegrateRational") == 0) {
-        expr_free(result);
-        return NULL;
+        bool unresolved =
+            result->type == EXPR_FUNCTION
+            && result->data.function.head
+            && result->data.function.head->type == EXPR_SYMBOL
+            && strcmp(result->data.function.head->data.symbol,
+                      "Integrate`RischNorman") == 0;
+        if (unresolved) {
+            expr_free(result);
+            return NULL;
+        }
+        return result;
     }
-    return result;
 }
 
 void integrate_init(void) {
@@ -169,4 +195,9 @@ void integrate_init(void) {
     /* Initialise the Integrate` package: HermiteReduce, IntegratePolynomial,
      * helpers, and the explicit `Integrate`IntegrateRational` entry. */
     intrat_init();
+
+    /* Initialise the parallel-Risch / Risch-Norman heuristic
+     * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,
+     * the fall-through for transcendental integrands. */
+    intrischnorman_init();
 }

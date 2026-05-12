@@ -106,6 +106,7 @@ set(COMMON_SRC
     ../src/options.c
     ../src/integrate.c
     ../src/intrat.c
+    ../src/intrischnorman.c
     ../src/intsimp.c
     ../src/root.c
 )
@@ -659,6 +660,16 @@ else()
     target_link_libraries(intrat_tests gmp m)
 endif()
 add_test(NAME intrat_tests COMMAND intrat_tests)
+
+add_executable(intrischnorman_tests test_intrischnorman.c ${COMMON_SRC})
+target_include_directories(intrischnorman_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(intrischnorman_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(intrischnorman_tests build_ecm)
+else()
+    target_link_libraries(intrischnorman_tests gmp m)
+endif()
+add_test(NAME intrischnorman_tests COMMAND intrischnorman_tests)
 
 # Comprehensive corpus runner for IntegrateRationalTests.m and
 # IntegrateRationalInlineCases.m.  Loads the .m file at runtime and

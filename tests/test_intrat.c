@@ -205,8 +205,12 @@ static void test_integrate_rational_via_recognition(void) {
 }
 
 static void test_integrate_unevaluated(void) {
-    /* Non-rational integrand: stays as Integrate[...]. */
-    run_eq("Integrate[Sin[x], x]", "Integrate[Sin[x], x]");
+    /* Genuinely non-elementary integrand: stays as Integrate[...].
+     * (Sin[x] used to bubble back unevaluated; with the
+     * Integrate`RischNorman dispatcher hook it now closes to a
+     * Tan[x/2]-form antiderivative.  Replace with a known
+     * non-elementary case.) */
+    run_eq("Integrate[1/Log[x], x]", "Integrate[1/Log[x], x]");
 }
 
 /* ------------------------------------------------------------------ */
