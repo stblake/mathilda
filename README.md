@@ -32,11 +32,15 @@ To build and run PicoCAS, you need the following development libraries installed
 
 The `makefile` automatically handles the configuration and compilation of internal dependencies before linking the main executable.
 
-1. Clone the repository:
+1. Clone the repository (including the bundled GMP-ECM submodule):
    ```bash
-   git clone https://github.com/stblake/picocas.git
+   git clone --recurse-submodules https://github.com/stblake/picocas.git
    cd picocas
    ```
+   If you already cloned without `--recurse-submodules`, run
+   `git submodule update --init --recursive` from inside the repo
+   before building. (The build script will also attempt this
+   automatically if it detects an uninitialized submodule.)
 2. Build the project using `make`:
    ```bash
    make -j$(nproc)

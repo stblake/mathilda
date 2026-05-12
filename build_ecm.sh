@@ -1,6 +1,23 @@
 #!/bin/sh
 set -e
 
+# Auto-initialize the ECM git submodule if the user cloned without
+# --recurse-submodules.  Without this, src/external/ecm/ is an empty
+# directory and `autoreconf -i` below fails with
+# "'configure.ac' is required" (see GitHub issue #3).
+if [ ! -f src/external/ecm/configure.ac ]; then
+    if [ -d .git ] || [ -f .git ]; then
+        echo "build_ecm.sh: ECM submodule not initialized, fetching..."
+        git submodule update --init --recursive src/external/ecm
+    else
+        echo "build_ecm.sh: ERROR: src/external/ecm/configure.ac is missing" >&2
+        echo "  and this is not a git checkout, so the submodule cannot be" >&2
+        echo "  fetched automatically.  Re-clone with" >&2
+        echo "    git clone --recurse-submodules https://github.com/stblake/picocas.git" >&2
+        exit 1
+    fi
+fi
+
 cd src/external/ecm
 
 if [ ! -f configure ]; then
