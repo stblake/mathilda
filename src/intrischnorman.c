@@ -23,6 +23,16 @@
  *   PMINT_WALL_CLOCK_SEC — wall-clock budget per integrand.
  */
 
+/* Expose POSIX symbols (sigaction, sigsetjmp/siglongjmp, sigjmp_buf,
+ * setitimer) under -std=c99 on glibc; macOS exposes them implicitly,
+ * which masks the cross-platform bug.  Must precede every header. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "intrischnorman.h"
 
 #include "expr.h"
@@ -36,6 +46,7 @@
 #include "sym_intern.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1613,10 +1624,10 @@ static int solve_linear_undet(Expr* equation_numer,
             inconsistent = true;
             break;
         }
-        ssize_t pivot_col = -1;
+        int64_t pivot_col = -1;
         for (size_t j = 0; j < lb.ncols; j++) {
             if (!is_zero_poly(row_expr->data.function.args[j])) {
-                pivot_col = (ssize_t)j;
+                pivot_col = (int64_t)j;
                 break;
             }
         }
