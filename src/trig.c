@@ -783,7 +783,7 @@ Expr* builtin_tan(Expr* res) {
     }
 #endif
     if (get_approx(arg, &cplx, &inexact) && inexact) {
-        double complex s = catan(cplx);
+        double complex s = ctan(cplx);
         if (cimag(cplx) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }

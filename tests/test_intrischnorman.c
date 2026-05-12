@@ -48,27 +48,21 @@ static void run_eq(const char* input, const char* expected) {
 /* Check that Integrate`RischNorman[f, x] differentiates back to f.
  *
  * Pmint's result lives in Tan[x/2] / Tanh[x/2] form.  We reconcile by:
- *   (1) Differentiating the result, giving an expression with
- *       Tan[x/2] and possibly Sec[x/2]^2 from the chain rule.
- *   (2) Applying Integrate`Helpers`PMSincosToTan to the integrand,
- *       which rewrites Sin/Cos to the same Tan[x/2] form (and does
- *       NOT recursively rewrite Tan[x/2] further).
- *   (3) Subtracting and Cancel/Together'ing — this works because
- *       Sec[x/2]^2 = 1 + Tan[x/2]^2 collapses under Cancel once
- *       both sides are in the same generator. */
+ *   (1) Applying x-specific Weierstrass rules to BOTH integrand and
+ *       result.  The rules are keyed on Tan[x] / Sin[x] / etc. (not
+ *       Tan[x/2]) so the result's Tan[x/2] stays intact while the
+ *       integrand's Tan[x] is rewritten.
+ *   (2) Differentiating the result.
+ *   (3) Applying PMPythagoreanRewrite (Sec^2 → 1+Tan^2 etc.).
+ *   (4) Cancel + Together + Expand.
+ *
+ * NOTE: this helper deliberately does NOT call TrigExpand on the
+ * integrand — TrigExpand blows up products like Sin[x]^N and would
+ * regress the Phase 6 Sin[x]^2 / Cos[x]^2 / Tan[x]^2 tests.  For
+ * integrands with compound trig arguments (Sin[2 x], Cos[a x + b],
+ * Sin[x^2], etc.) use assert_rischnorman_correct_trigexpand. */
 __attribute__((unused))
 static void assert_rischnorman_correct(const char* integrand) {
-    /* Pmint's result is in Tan[x/2] form; the user's integrand may
-     * have Tan[x] / Cot[x] / Sin[x] / Cos[x].  Strategy:
-     *   1. Apply x-specific Weierstrass rules to BOTH integrand and
-     *      result.  Since the rules are keyed on Tan[x] / Sin[x] /
-     *      etc. (not Tan[x/2]), the result's Tan[x/2] stays intact
-     *      while the integrand's Tan[x] is rewritten.
-     *   2. Differentiate the result.
-     *   3. Apply PMPythagoreanRewrite (Sec^2 → 1+Tan^2 etc.).
-     *   4. Apply general pattern rules for Sec[u_]/Cos[u_] etc. that
-     *      picocas's D produces as algebraic equivalences.
-     *   5. Cancel + Together + Expand. */
     char buf[4096];
     snprintf(buf, sizeof(buf),
         "Module[{specific, generic, f, r, lhs},"
@@ -104,6 +98,94 @@ static void assert_rischnorman_correct(const char* integrand) {
     free(got);
     expr_free(e);
     expr_free(res);
+}
+
+/* Variant of assert_rischnorman_correct for integrands containing
+ * compound trig arguments (Sin[2 x], Cos[2 x], Tan[a x + b], ...).
+ * Pre-applies TrigExpand to break those down into Sin[x] / Cos[x]
+ * products that the literal Weierstrass rules below can rewrite.
+ *
+ * Kept separate from assert_rischnorman_correct because TrigExpand
+ * blows up powers like Sin[x]^N and would regress the simpler Phase 6
+ * tests on Sin[x]^2 / Cos[x]^2 / Tan[x]^2. */
+__attribute__((unused))
+static void assert_rischnorman_correct_trigexpand(const char* integrand) {
+    char buf[4096];
+    snprintf(buf, sizeof(buf),
+        "Module[{specific, generic, f, r, lhs},"
+        "  specific = {Tan[x] -> 2 Tan[x/2]/(1 - Tan[x/2]^2),"
+        "              Cot[x] -> (1 - Tan[x/2]^2)/(2 Tan[x/2]),"
+        "              Sin[x] -> 2 Tan[x/2]/(1 + Tan[x/2]^2),"
+        "              Cos[x] -> (1 - Tan[x/2]^2)/(1 + Tan[x/2]^2),"
+        "              Sec[x] -> (1 + Tan[x/2]^2)/(1 - Tan[x/2]^2),"
+        "              Csc[x] -> (1 + Tan[x/2]^2)/(2 Tan[x/2]),"
+        "              Tanh[x] -> 2 Tanh[x/2]/(1 + Tanh[x/2]^2),"
+        "              Coth[x] -> (1 + Tanh[x/2]^2)/(2 Tanh[x/2]),"
+        "              Sinh[x] -> 2 Tanh[x/2]/(1 - Tanh[x/2]^2),"
+        "              Cosh[x] -> (1 + Tanh[x/2]^2)/(1 - Tanh[x/2]^2),"
+        "              Sech[x] -> (1 - Tanh[x/2]^2)/(1 + Tanh[x/2]^2),"
+        "              Csch[x] -> (1 - Tanh[x/2]^2)/(2 Tanh[x/2])};"
+        "  generic = {Sec[u_] Csc[u_] -> (1 + Tan[u]^2)/Tan[u],"
+        "             Sech[u_] Csch[u_] -> (1 - Tanh[u]^2)/Tanh[u],"
+        "             Cot[u_] -> 1/Tan[u],"
+        "             Coth[u_] -> 1/Tanh[u]};"
+        "  f = TrigExpand[%s] /. specific;"
+        "  r = TrigExpand[Integrate`RischNorman[%s, x]] /. specific;"
+        "  lhs = TrigExpand[Integrate`Helpers`PMPythagoreanRewrite[D[r, x]]] /. generic;"
+        "  Cancel[Together[Expand[lhs - f]]]]",
+        integrand, integrand);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "0") != 0) {
+        printf("FAIL (trigexpand): D[Integrate`RischNorman[%s, x], x] - %s != 0\n  Got: %s\n",
+               integrand, integrand, got);
+        ASSERT_STR_EQ(got, "0");
+    }
+    free(got);
+    expr_free(e);
+    expr_free(res);
+}
+
+/* Numerical correctness check for integrands where the symbolic
+ * simplifier (Together / Cancel) can't collapse the residual — typically
+ * because picocas's Together doesn't factor through transcendental
+ * generators (e.g. it treats `x^2 Log[x] - x E^(1+x+x^2)` as opaque
+ * rather than `x*(x Log[x] - E^(1+x+x^2))`).
+ *
+ * We sample D[r, x] - f at four rational points (x = 5/2, 7/2, 11/4, 3)
+ * via N[] and require each to be effectively zero (|.| < 1e-9).  Four
+ * non-special-value samples make a false-pass on a non-trivial residual
+ * astronomically unlikely. */
+__attribute__((unused))
+static void assert_rischnorman_correct_numeric(const char* integrand) {
+    static const char* probes[] = {"5/2", "7/2", "11/4", "3"};
+    char buf[3072];
+    /* Compute the integral once, then evaluate the residual at each probe.
+     * Accept Real residuals with |.| < 1e-9 OR Complex residuals where both
+     * components are < 1e-9 — picocas's D often produces a Complex form
+     * with a tiny imaginary part when Sec/Csc are involved. */
+    for (size_t i = 0; i < sizeof(probes) / sizeof(probes[0]); ++i) {
+        snprintf(buf, sizeof(buf),
+            "Module[{r, diff, n}, r = Integrate`RischNorman[%s, x];"
+            "  diff = D[r, x] - (%s);"
+            "  n = N[diff /. x -> %s];"
+            "  If[Head[n] === Real && Abs[n] < 10^-9, 0,"
+            "    If[Head[n] === Complex && Abs[Re[n]] < 10^-9 && Abs[Im[n]] < 10^-9, 0, n]]]",
+            integrand, integrand, probes[i]);
+        Expr* e = parse_expression(buf);
+        Expr* res = evaluate(e);
+        char* got = expr_to_string(res);
+        if (strcmp(got, "0") != 0) {
+            printf("FAIL (numeric): D[Integrate`RischNorman[%s, x], x] - (%s) "
+                   "!= 0 at x=%s.\n  Residual: %s\n",
+                   integrand, integrand, probes[i], got);
+            ASSERT_STR_EQ(got, "0");
+        }
+        free(got);
+        expr_free(e);
+        expr_free(res);
+    }
 }
 
 /* Check that Integrate[f, x] (dispatcher path) differentiates back to f.
@@ -438,6 +520,135 @@ static void test_phase4_sin_exp(void)  { assert_rischnorman_correct("Sin[x] Exp[
 static void test_phase4_cos_exp(void)  { assert_rischnorman_correct("Cos[x] Exp[x]"); }
 
 /* ------------------------------------------------------------------ */
+/* Phase 7 — Bronstein / Geddes pmint reference corpus.                */
+/* Source: the canonical Pmint test list from Bronstein's Risch-Norman */
+/* paper plus the Davenport/Geddes textbook examples.  All integrals   */
+/* admit an elementary closed form; some residuals require the          */
+/* numerical-fallback predicate because picocas's Together can't       */
+/* factor through transcendental generators.                            */
+/* ------------------------------------------------------------------ */
+
+/* --- 7a: pure-rational integrands. ---------------------------------- */
+static void test_phase7_pmint_paper_1(void) {
+    assert_rischnorman_correct(
+        "(x^7 - 24 x^4 - 4 x^2 + 8 x - 8)/(x^8 + 6 x^6 + 12 x^4 + 8 x^2)");
+}
+static void test_phase7_pmint_paper_2(void) {
+    assert_rischnorman_correct(
+        "(-4 x^2 - 4 x^3 - x^4)/((-1 + x^2) (1 + x + x^2)^2)");
+}
+static void test_phase7_x3_over_xp1(void) {
+    assert_rischnorman_correct("x^3/(1 + x)");
+}
+static void test_phase7_rat_log_complex(void) {
+    assert_rischnorman_correct(
+        "(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4)");
+}
+
+/* --- 7b: log-bearing integrands. ------------------------------------ */
+static void test_phase7_log_cube(void) {
+    assert_rischnorman_correct("Log[x]^3");
+}
+static void test_phase7_log_neg2(void) {
+    assert_rischnorman_correct("(-1 + Log[x])/Log[x]^2");
+}
+static void test_phase7_exp_over_log_shifted(void) {
+    assert_rischnorman_correct(
+        "(E^x (-1 - Log[-1 + x] + x Log[-1 + x]))/((-1 + x) Log[-1 + x]^2)");
+}
+static void test_phase7_log_diff_sq(void) {
+    assert_rischnorman_correct("(1 - Log[x])/(x^2 - Log[x]^2)");
+}
+static void test_phase7_sin_over_x_plus_log_cos(void) {
+    assert_rischnorman_correct("Sin[x]/x + Log[x] Cos[x]");
+}
+
+/* --- 7c: exp-bearing integrands. ------------------------------------ */
+static void test_phase7_exp_inv_x(void) {
+    assert_rischnorman_correct("((x + 1)/x^4) Exp[1/x]");
+}
+static void test_phase7_inv_1_plus_exp(void) {
+    assert_rischnorman_correct("1/(1 + Exp[x])");
+}
+static void test_phase7_exp_x_plus_inv_log(void) {
+    assert_rischnorman_correct("(1 - 1/(x Log[x]^2)) Exp[1/Log[x] + x]");
+}
+static void test_phase7_exp_rat(void) {
+    assert_rischnorman_correct(
+        "((-1 - x - x^2 + x^3)/(1 - 2 x^2 + x^4)) Exp[x]");
+}
+static void test_phase7_exp_inv_log(void) {
+    assert_rischnorman_correct("(Exp[1/Log[x]] (Log[x]^2 - 1))/Log[x]^2");
+}
+static void test_phase7_exp_quad_denom(void) {
+    assert_rischnorman_correct(
+        "(E^x (-1 + 1289 x + 278 x^2 + 55 x^3 + 56 x^4))/(-392 + x - 56 x^2)^2");
+}
+static void test_phase7_exp_x2_diff(void) {
+    assert_rischnorman_correct(
+        "((4 x^2 + 4 x - 1) (Exp[x^2] + 1) (Exp[x^2] - 1))/(x + 1)^2");
+}
+static void test_phase7_x3_exp_x2(void) {
+    assert_rischnorman_correct("x^3 Exp[x^2]");
+}
+static void test_phase7_exp_inv_x_x3(void) {
+    assert_rischnorman_correct("Exp[1/x]/x^3");
+}
+static void test_phase7_x2_minus_x_exp3x(void) {
+    assert_rischnorman_correct("(x^2 - x) Exp[3 x]");
+}
+
+/* --- 7d: trig+polynomial integrands. -------------------------------- */
+static void test_phase7_trig_x2_polynomial(void) {
+    assert_rischnorman_correct("(x^3 + 2 x) Cos[x^2] + x Sin[x^2]");
+}
+static void test_phase7_x3_sin_x2_plus_1(void) {
+    assert_rischnorman_correct("x^3 Sin[x^2 + 1]");
+}
+static void test_phase7_arctan_over_x2(void) {
+    assert_rischnorman_correct("ArcTan[x]/x^2");
+}
+
+/* --- 7e: trig integrands.  Numerical verification keeps the test    */
+/* fast — the symbolic-Weierstrass route works (see                    */
+/* assert_rischnorman_correct_trigexpand) but TrigExpand applied to    */
+/* the full integral result blows up in expression size and is slow.   */
+static void test_phase7_tan_div(void) {
+    assert_rischnorman_correct_numeric(
+        "(x - Tan[x])/Tan[x]^2 + Tan[x]");
+}
+static void test_phase7_cot_half(void) {
+    assert_rischnorman_correct_numeric(
+        "(1 - Cos[x] + Sin[x])/(-1 + Cos[x])^2");
+}
+static void test_phase7_davenport_exp_sin2x(void) {
+    assert_rischnorman_correct_numeric("Exp[x] Sin[2 x]");
+}
+static void test_phase7_sin_sin_2x(void) {
+    assert_rischnorman_correct_numeric("Sin[x] Sin[2 x]");
+}
+
+/* --- 7f: integrals that pmint integrates correctly but whose         */
+/* residual picocas's Together can't collapse symbolically (because    */
+/* it doesn't factor through transcendental generators).  Verified    */
+/* numerically instead. ------------------------------------------------ */
+static void test_phase7_num_quadratic_exp(void) {
+    /* Result: -Log[x] + Log[-E^(1+x+x^2) + x Log[x]].
+     * The residual contains denominators x, (x L - E), and
+     * (x^2 L - x E) = x (x L - E), but picocas's Together treats the
+     * third denominator as opaque and fails to see the common factor. */
+    assert_rischnorman_correct_numeric(
+        "(x + Exp[x^2 + x + 1] (1 - x - 2 x^2))"
+        "/(x (x Log[x] - Exp[x^2 + x + 1]))");
+}
+static void test_phase7_num_two_exps(void) {
+    /* Result: E^(-1+x^2)/(-1+E^x).  Together fails to identify
+     * E^(x+x^2) with E^x * E^(x^2) under its current normalisation. */
+    assert_rischnorman_correct_numeric(
+        "(E^(-1 + x^2) (-2 x + E^x (-1 + 2 x)))/(-1 + E^x)^2");
+}
+
+/* ------------------------------------------------------------------ */
 /* main().                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -522,6 +733,36 @@ int main(void) {
     TEST(test_phase6_fail_log_cos);
     TEST(test_phase6_fail_exp_over_log);
     TEST(test_phase6_fail_exp_sin);
+
+    /* Phase 7 — Bronstein / Geddes pmint reference corpus. */
+    TEST(test_phase7_pmint_paper_1);
+    TEST(test_phase7_pmint_paper_2);
+    TEST(test_phase7_x3_over_xp1);
+    TEST(test_phase7_rat_log_complex);
+    TEST(test_phase7_log_cube);
+    TEST(test_phase7_log_neg2);
+    TEST(test_phase7_exp_over_log_shifted);
+    TEST(test_phase7_log_diff_sq);
+    TEST(test_phase7_sin_over_x_plus_log_cos);
+    TEST(test_phase7_exp_inv_x);
+    TEST(test_phase7_inv_1_plus_exp);
+    TEST(test_phase7_exp_x_plus_inv_log);
+    TEST(test_phase7_exp_rat);
+    TEST(test_phase7_exp_inv_log);
+    TEST(test_phase7_exp_quad_denom);
+    TEST(test_phase7_exp_x2_diff);
+    TEST(test_phase7_x3_exp_x2);
+    TEST(test_phase7_exp_inv_x_x3);
+    TEST(test_phase7_x2_minus_x_exp3x);
+    TEST(test_phase7_trig_x2_polynomial);
+    TEST(test_phase7_x3_sin_x2_plus_1);
+    TEST(test_phase7_arctan_over_x2);
+    TEST(test_phase7_tan_div);
+    TEST(test_phase7_cot_half);
+    TEST(test_phase7_davenport_exp_sin2x);
+    TEST(test_phase7_sin_sin_2x);
+    TEST(test_phase7_num_quadratic_exp);
+    TEST(test_phase7_num_two_exps);
 
     printf("All intrischnorman tests passed!\n");
     return 0;
