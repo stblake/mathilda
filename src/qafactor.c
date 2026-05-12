@@ -16,6 +16,8 @@
 #include "poly.h"
 #include "arithmetic.h"
 #include "sym_names.h"
+#include "sym_intern.h"
+#include "core.h"
 #include <gmp.h>
 #include <stdlib.h>
 #include <string.h>
@@ -645,9 +647,24 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
         }
     }
 
-    /* c^(1/n)  →  P_α(y) = yⁿ − c, render = c^(1/n).  Integer-base case
-     * only; non-integer bases (nested radicals) fall through to the
-     * Phase G8 branch below. */
+    /* Power[c, p/q]  →  natural generator β = c^(1/q_red) with minimal
+     * polynomial P_β(y) = y^q_red - c, where q_red = q / gcd(|p|, q).
+     *
+     * For integer c, |c| >= 2: we accept ANY integer p (not just p == 1)
+     * by reducing p/q to lowest terms and using the natural generator
+     * β = c^(1/q_red).  The user's α = c^(p/q) = β^p_red lives in Q(β).
+     *
+     * `*render_out` is set to the natural form Power[c, 1/q_red]
+     * (preserving the user's `Sqrt[c]` shape when q_red == 2 and the
+     * user typed Sqrt[]).  Substitution in qa_expr_to_qaupoly_with_alpha
+     * matches by structural equality on this natural form, with a
+     * preprocessing step (`expand_radicals_to_atomic_poly`) rewriting
+     * any non-natural `Power[c, p_user/q_user]` in the input into a
+     * polynomial in the alpha-symbol.
+     *
+     * Non-integer base falls through to G8 only when p == 1 — the G8
+     * `z^n - base` minpoly construction is correct only for
+     * α = base^(1/n).  General p with non-integer base is deferred. */
     if (alpha_expr->type == EXPR_FUNCTION
         && alpha_expr->data.function.head
         && alpha_expr->data.function.head->type == EXPR_SYMBOL
@@ -657,16 +674,44 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
         Expr* exp = alpha_expr->data.function.args[1];
         int64_t p, q;
         if (c->type == EXPR_INTEGER
-            && is_rational(exp, &p, &q)
-            && p == 1 && q >= 2) {
-            QAExt* ext = qaext_root_si((long)c->data.integer, (unsigned)q);
-            *render_out = expr_copy((Expr*)alpha_expr);
-            return ext;
+            && is_rational(exp, &p, &q) && q != 1) {
+            /* Reduce p/q to lowest terms and normalise sign. */
+            if (q < 0) { p = -p; q = -q; }
+            int64_t ap = p < 0 ? -p : p;
+            int64_t g  = 1;
+            {
+                int64_t a = ap, b = q;
+                while (b) { int64_t r = a % b; a = b; b = r; }
+                g = a;
+            }
+            int64_t p_red = (g > 1) ? (p / g) : p;
+            int64_t q_red = (g > 1) ? (q / g) : q;
+            (void)p_red;  /* used by lift preprocessing, not here */
+
+            int64_t cv = c->data.integer;
+            if (q_red >= 2 && cv != 0 && cv != 1 && cv != -1) {
+                QAExt* ext = qaext_root_si((long)cv, (unsigned)q_red);
+                /* Byte-for-byte compatible with the pre-change branch
+                 * when p == 1 && q_red == q: just copy alpha_expr. */
+                if (p == 1 && q_red == q) {
+                    *render_out = expr_copy((Expr*)alpha_expr);
+                } else {
+                    /* Synthesise the natural form Power[c, Rational[1, q_red]]. */
+                    Expr* rat_args[2] = { expr_new_integer(1),
+                                          expr_new_integer(q_red) };
+                    Expr* exp_natural = expr_new_function(
+                        expr_new_symbol("Rational"), rat_args, 2);
+                    Expr* pow_args[2] = { expr_new_integer(cv), exp_natural };
+                    *render_out = expr_new_function(
+                        expr_new_symbol("Power"), pow_args, 2);
+                }
+                return ext;
+            }
         }
         /* Phase G8: `base^(1/n)` with non-integer base — try to resolve
          * `base` as an element of a sub-tower built from the atomic
-         * radicals it contains.  Falls through if any sub-radical is
-         * itself non-atomic (depth-1 MVP). */
+         * radicals it contains.  Restricted to p == 1: the `z^n - base`
+         * minpoly construction in G8 is only correct for α = base^(1/n). */
         if (is_rational(exp, &p, &q) && p == 1 && q >= 2) {
             QAExt* ext = qa_resolve_nested_radical(alpha_expr, render_out);
             if (ext) return ext;
@@ -692,23 +737,186 @@ static QANum* qa_alpha_power(const QAExt* ext, int j) {
     return acc;
 }
 
+/* gcd64: positive int64 gcd via Euclid. */
+static int64_t gcd64(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b) { int64_t r = a % b; a = b; b = r; }
+    return a;
+}
+
+/* expand_radicals_to_atomic_poly: walk `poly` and rewrite every
+ * `Power[c_base, p_user/q_user]` whose reduced denominator divides
+ * `q_natural` into the polynomial-in-`alpha_sym_name` form
+ * representing α^k, where α = c_base^(1/q_natural) and
+ * k = p_red * (q_natural / q_red).  The polynomial form is reduced
+ * modulo `α^q_natural - c_base` via `qa_alpha_power_signed`, producing
+ * an Expr that contains `alpha_sym_name` only with integer exponents
+ * (e.g. `Power[α, 2]`) — safe for the downstream coefficient-peeling
+ * step in `qa_expr_to_qaupoly_with_alpha` which uses `Coefficient`.
+ *
+ * Raw structural rewrite: does NOT call `evaluate()` to avoid having
+ * picocas's Times canonicaliser route the result back through the
+ * radical-absorption logic that produces `Power[c, p/q]` forms in the
+ * first place.
+ *
+ * `ext` must be a `qaext_root_si(c_base, q_natural)` extension.
+ *
+ * Caller owns the returned Expr. */
+static Expr* expand_radicals_to_atomic_poly(const Expr* e,
+                                            int64_t c_base,
+                                            int64_t q_natural,
+                                            const char* alpha_sym_name,
+                                            const QAExt* ext) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    /* Match Power[c_base, p/q] with q != 1.  When the reduced
+     * denominator divides q_natural, rewrite. */
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base  = e->data.function.args[0];
+        const Expr* exp_e = e->data.function.args[1];
+        int64_t p, q;
+        if (base->type == EXPR_INTEGER
+            && base->data.integer == c_base
+            && is_rational((Expr*)exp_e, &p, &q) && q != 1) {
+            if (q < 0) { p = -p; q = -q; }
+            int64_t ap = p < 0 ? -p : p;
+            int64_t g  = gcd64(ap, q);
+            int64_t p_red = g > 1 ? p / g : p;
+            int64_t q_red = g > 1 ? q / g : q;
+
+            if (q_red >= 2 && (q_natural % q_red) == 0) {
+                int64_t scale = q_natural / q_red;
+                /* Overflow guard: p_red * scale must fit in long. */
+                if (scale != 0
+                    && (p_red > INT64_MAX / scale || p_red < INT64_MIN / scale)) {
+                    /* Skip rewrite; fall through to default recursion. */
+                } else {
+                    long k = (long)(p_red * scale);
+                    QANum* qn = qa_alpha_power_signed(ext, k);
+                    if (qn) {
+                        Expr* out = mpq_array_to_poly_expr(qn->coef,
+                                                           qn->ext->deg,
+                                                           alpha_sym_name);
+                        qa_free(qn);
+                        return out;
+                    }
+                    /* qa_alpha_power_signed failed (inversion on
+                     * reducible extension); fall through to default. */
+                }
+            }
+        }
+    }
+
+    /* Also handle `Sqrt[c_base]` shape when q_natural is even.
+     * picocas keeps Sqrt[c] as a special head (not Power[c, 1/2]) in
+     * some surface forms. */
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Sqrt
+        && e->data.function.arg_count == 1) {
+        const Expr* base = e->data.function.args[0];
+        if (base->type == EXPR_INTEGER && base->data.integer == c_base
+            && (q_natural % 2) == 0) {
+            long k = (long)(q_natural / 2);
+            QANum* qn = qa_alpha_power_signed(ext, k);
+            if (qn) {
+                Expr* out = mpq_array_to_poly_expr(qn->coef, qn->ext->deg,
+                                                   alpha_sym_name);
+                qa_free(qn);
+                return out;
+            }
+        }
+    }
+
+    /* Default: recurse into head + args, preserving structure. */
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (count ? count : 1));
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = expand_radicals_to_atomic_poly(
+            e->data.function.args[i], c_base, q_natural, alpha_sym_name, ext);
+    }
+    Expr* new_head = expand_radicals_to_atomic_poly(
+        e->data.function.head, c_base, q_natural, alpha_sym_name, ext);
+    Expr* out = expr_new_function(new_head, new_args, count);
+    free(new_args);
+    return out;
+}
+
 /* Lift an Expr polynomial in `var` (whose coefficients may be
  * polynomials in `alpha_render`) to a QAUPoly over `ext`.  Returns
  * NULL if any coefficient is not in Q(α) (e.g. contains a free symbol
  * other than `var` and `alpha_render`).
  *
  * Strategy: substitute alpha_render → an internal placeholder symbol,
- * then use Coefficient[..] to peel off (var^i)(α^j) terms. */
+ * then use Coefficient[..] to peel off (var^i)(α^j) terms.
+ *
+ * When `c_base > 0`, runs `expand_radicals_to_atomic_poly` first to
+ * rewrite any `Power[c_base, p/q]` in the input (including non-natural
+ * forms like `Power[2, -2/3]`) into a polynomial in `QA_ALPHA_INTERNAL`.
+ * Pass `c_base = 0` to skip this preprocessing (used when the
+ * extension isn't a `Power[c, 1/q]` form — e.g. towers, nested
+ * radicals). */
 static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
                                               const Expr* var,
                                               const Expr* alpha_render,
                                               const QAExt* ext) {
     Expr* alpha_sym = expr_new_symbol(QA_ALPHA_INTERNAL);
 
-    /* Stage 1 — substitute α's surface form with an opaque symbol. */
-    Expr* poly_sub = alpha_render
-        ? expr_subst(poly, alpha_render, alpha_sym)
+    /* Stage 0 — when the input contains `Power[c, p/q]` with `p != 1`
+     * but `q_red` divides our `ext`'s natural denominator, rewrite to
+     * an explicit polynomial in alpha_sym so the structural
+     * `expr_subst` and `get_degree_poly` steps below see the radical.
+     *
+     * Detect (c_base, q_natural) from `ext` when `ext` has the
+     * `y^q - c` shape: coef[0] = -c, coef[i] = 0 for 0 < i < deg,
+     * coef[deg] = 1, with c an integer (mpq denominator == 1). */
+    int64_t c_base_inferred = 0;
+    int64_t q_natural_inferred = 0;
+    if (ext && ext->deg >= 2) {
+        bool is_yn_minus_c = true;
+        /* coef[deg] must be 1. */
+        if (mpz_cmp_ui(mpq_numref(ext->coef[ext->deg]), 1) != 0
+            || mpz_cmp_ui(mpq_denref(ext->coef[ext->deg]), 1) != 0) {
+            is_yn_minus_c = false;
+        }
+        for (size_t i = 1; is_yn_minus_c && i < ext->deg; i++) {
+            if (mpq_sgn(ext->coef[i]) != 0) is_yn_minus_c = false;
+        }
+        if (is_yn_minus_c) {
+            /* coef[0] should be -c with c a non-zero integer. */
+            if (mpz_cmp_ui(mpq_denref(ext->coef[0]), 1) == 0
+                && mpq_sgn(ext->coef[0]) != 0
+                && mpz_fits_slong_p(mpq_numref(ext->coef[0]))) {
+                long neg_c = mpz_get_si(mpq_numref(ext->coef[0]));
+                c_base_inferred = -neg_c;
+                q_natural_inferred = (int64_t)ext->deg;
+            }
+        }
+    }
+
+    Expr* poly_expanded = (c_base_inferred != 0
+                           && c_base_inferred != 1 && c_base_inferred != -1)
+        ? expand_radicals_to_atomic_poly(poly,
+                                         c_base_inferred,
+                                         q_natural_inferred,
+                                         QA_ALPHA_INTERNAL, ext)
         : expr_copy((Expr*)poly);
+
+    /* Stage 1 — substitute α's surface form with an opaque symbol.
+     * After Stage 0, any natural-form `Power[c, 1/q_natural]` has
+     * already been rewritten to alpha_sym, so this is a no-op for
+     * radical generators.  It remains needed for non-radical
+     * extensions (Sqrt[I] / nested radicals) where `c_base_inferred`
+     * was 0. */
+    Expr* poly_sub = alpha_render
+        ? expr_subst(poly_expanded, alpha_render, alpha_sym)
+        : expr_copy(poly_expanded);
+    expr_free(poly_expanded);
 
     /* Stage 2 — Expand so that nested Power / Times terms collapse to
      * a canonical Plus-of-monomials form.  Without this,
@@ -1411,14 +1619,70 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
     if (!arg || !t || t->n < 1) return NULL;
 
     /* 1. Substitute each user-side α_i with its polynomial-in-γ form
-     * (a polynomial in QA_ALPHA_INTERNAL). */
+     * (a polynomial in QA_ALPHA_INTERNAL).
+     *
+     * For each `Power[c, 1/q]`-shape α_i: first rewrite every
+     * `Power[c, p/q]` form in the input to a polynomial in a per-α_i
+     * temp symbol via `expand_radicals_to_atomic_poly`, then substitute
+     * the temp symbol with the γ-poly form.  This catches the non-
+     * natural `Power[c, p/q]` shapes (e.g. `Power[2, -2/3]`) that
+     * picocas's Times canonicaliser produces, which a bare
+     * `expr_subst(input, t->alpha_renders[i], ...)` would miss. */
     Expr* arg_internal = expr_copy((Expr*)arg);
     for (int i = 0; i < t->n; i++) {
+        /* Parse alpha_renders[i] as `Power[c_i, 1/q_i]` or `Sqrt[c_i]`. */
+        int64_t c_i = 0, q_i = 0;
+        const Expr* a_r = t->alpha_renders[i];
+        if (a_r && a_r->type == EXPR_FUNCTION
+            && a_r->data.function.head
+            && a_r->data.function.head->type == EXPR_SYMBOL
+            && a_r->data.function.head->data.symbol == SYM_Power
+            && a_r->data.function.arg_count == 2
+            && a_r->data.function.args[0]->type == EXPR_INTEGER) {
+            int64_t pe, qe;
+            if (is_rational(a_r->data.function.args[1], &pe, &qe)
+                && pe == 1 && qe >= 2) {
+                c_i = a_r->data.function.args[0]->data.integer;
+                q_i = qe;
+            }
+        }
+        if (c_i == 0 && a_r && a_r->type == EXPR_FUNCTION
+            && a_r->data.function.head
+            && a_r->data.function.head->type == EXPR_SYMBOL
+            && a_r->data.function.head->data.symbol == SYM_Sqrt
+            && a_r->data.function.arg_count == 1
+            && a_r->data.function.args[0]->type == EXPR_INTEGER) {
+            c_i = a_r->data.function.args[0]->data.integer;
+            q_i = 2;
+        }
+
         Expr* alpha_in_gamma = qanum_to_expr_in_gamma_sym(
             t->alphas[i], QA_ALPHA_INTERNAL);
-        Expr* old = arg_internal;
-        arg_internal = expr_subst(old, t->alpha_renders[i], alpha_in_gamma);
-        expr_free(old);
+
+        if (c_i != 0 && c_i != 1 && c_i != -1 && q_i >= 2) {
+            char tmp_name[64];
+            snprintf(tmp_name, sizeof(tmp_name), "$qa$twrtmp$%d$", i);
+            const char* tmp_iname = intern_symbol(tmp_name);
+            QAExt* atom_ext = qaext_root_si((long)c_i, (unsigned)q_i);
+            Expr* expanded = expand_radicals_to_atomic_poly(
+                arg_internal, c_i, q_i, tmp_iname, atom_ext);
+            qaext_free(atom_ext);
+
+            Expr* tmp_sym_expr = expr_new_symbol(tmp_iname);
+            Expr* substituted = expr_subst(expanded, tmp_sym_expr,
+                                           alpha_in_gamma);
+            expr_free(tmp_sym_expr);
+            expr_free(expanded);
+            expr_free(arg_internal);
+            arg_internal = substituted;
+        } else {
+            /* Non-Power-shape α_i (e.g. Sqrt[non-integer], I): fall
+             * back to the original structural substitution. */
+            Expr* old = arg_internal;
+            arg_internal = expr_subst(old, t->alpha_renders[i],
+                                      alpha_in_gamma);
+            expr_free(old);
+        }
         expr_free(alpha_in_gamma);
     }
 
@@ -1468,18 +1732,88 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
     }
 
     if (!var) {
-        /* Constant in Q(γ): no polynomial variable to cancel against.
-         * Just substitute γ_internal → gamma_render in both num and
-         * den and return num/den. */
-        Expr* gamma_sym = expr_new_symbol(QA_ALPHA_INTERNAL);
-        Expr* num_back = expr_subst(num_expr, gamma_sym, t->gamma_render);
-        Expr* den_back = expr_subst(den_expr, gamma_sym, t->gamma_render);
-        expr_free(gamma_sym);
+        /* Constant in Q(γ): reduce num and den modulo γ's minimal
+         * polynomial (so both become polynomials in γ_internal of
+         * degree < ext->deg), lift to QANums, divide via qa_div, then
+         * render the resulting QANum's coefs in t->gamma_render.
+         *
+         * This is the proper Q(γ)-arithmetic path: it shrinks
+         * `(Sqrt[2]+Sqrt[3])(Sqrt[2]-Sqrt[3])` to its canonical QANum
+         * value `-1` instead of dropping the polynomial-in-γ form back
+         * verbatim (which after substitution renders as the unwieldy
+         * γ·(γ^3 - 10γ) surface form). */
+        Expr* gamma_minpoly = qaext_to_expr(t->ext, QA_ALPHA_INTERNAL);
+        Expr* gamma_sym_e   = expr_new_symbol(QA_ALPHA_INTERNAL);
+
+        Expr* num_reduced_call = expr_new_function(
+            expr_new_symbol("PolynomialRemainder"),
+            (Expr*[]){expr_copy(num_expr), expr_copy(gamma_minpoly),
+                      expr_copy(gamma_sym_e)}, 3);
+        Expr* num_reduced = evaluate(num_reduced_call);
+        expr_free(num_reduced_call);
+
+        Expr* den_reduced_call = expr_new_function(
+            expr_new_symbol("PolynomialRemainder"),
+            (Expr*[]){expr_copy(den_expr), expr_copy(gamma_minpoly),
+                      expr_copy(gamma_sym_e)}, 3);
+        Expr* den_reduced = evaluate(den_reduced_call);
+        expr_free(den_reduced_call);
+
+        expr_free(gamma_minpoly);
         expr_free(num_expr); expr_free(den_expr);
-        Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
-            (Expr*[]){den_back, expr_new_integer(-1)}, 2));
-        return eval_and_free(expr_new_function(expr_new_symbol("Times"),
-            (Expr*[]){num_back, den_inv}, 2));
+
+        /* Lift to QAUPoly with a dummy polynomial variable.  Both
+         * inputs are now polynomials in γ_internal of degree < ext->deg
+         * with no other free variables, so the lift produces a degree-0
+         * QAUPoly whose c[0] is the canonical QANum. */
+        const char* dummy_name = "$qa$twrdummy$";
+        Expr* dummy_var = expr_new_symbol(dummy_name);
+        QAUPoly* num_qp = qa_expr_to_qaupoly(num_reduced, dummy_var,
+                                             gamma_sym_e, t->ext);
+        QAUPoly* den_qp = qa_expr_to_qaupoly(den_reduced, dummy_var,
+                                             gamma_sym_e, t->ext);
+        expr_free(dummy_var);
+        expr_free(gamma_sym_e);
+        expr_free(num_reduced); expr_free(den_reduced);
+
+        Expr* candidate = NULL;
+        if (num_qp && den_qp && !qaupoly_is_zero(den_qp)
+            && num_qp->deg == 0 && den_qp->deg == 0) {
+            QANum* result_qn = qa_div(num_qp->c[0], den_qp->c[0]);
+            if (result_qn) {
+                /* Render: polynomial in γ_internal via mpq_array_to_poly_expr,
+                 * then substitute γ_internal → t->gamma_render. */
+                Expr* gamma_poly = mpq_array_to_poly_expr(
+                    result_qn->coef, t->ext->deg, QA_ALPHA_INTERNAL);
+                qa_free(result_qn);
+
+                Expr* gs = expr_new_symbol(QA_ALPHA_INTERNAL);
+                candidate = expr_subst(gamma_poly, gs, t->gamma_render);
+                expr_free(gs);
+                expr_free(gamma_poly);
+                /* Final canonicalisation through the evaluator. */
+                Expr* eval_call = expr_copy(candidate);
+                expr_free(candidate);
+                candidate = evaluate(eval_call);
+                expr_free(eval_call);
+            }
+        }
+        if (num_qp) qaupoly_free(num_qp);
+        if (den_qp) qaupoly_free(den_qp);
+
+        if (!candidate) return NULL;
+
+        /* Complexity gate: only return if the result is at most as
+         * complex as the input.  Q(γ)-canonical form is usually smaller,
+         * but pathological cases (huge primitive elements with simple
+         * input) can flip. */
+        int64_t in_size  = leaf_count_internal((Expr*)arg, true);
+        int64_t out_size = leaf_count_internal(candidate, true);
+        if (out_size > in_size) {
+            expr_free(candidate);
+            return NULL;
+        }
+        return candidate;
     }
 
     /* 5. Lift to QAUPoly over Q(γ).  alpha_render = NULL signals that
@@ -1526,6 +1860,23 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
     if (q_den) qaupoly_free(q_den);
     if (r_den) qaupoly_free(r_den);
     expr_free(var);
+
+    /* Complexity gate.  When the compositum's primitive element γ is a
+     * sum of generators (e.g. γ = 2^(1/3) + Sqrt[α/6]), the Q(γ)
+     * representation of the cancelled fraction expresses every term as
+     * a polynomial in γ of high degree — typically much larger than
+     * the user's input.  Return NULL to let the caller fall back to the
+     * no-tower path when the tower-cancelled form is bigger than the
+     * input by LeafCount.  Uses heads=true so Power/Times nodes count
+     * (the canonical picocas complexity proxy used by simp_search). */
+    if (result) {
+        int64_t in_size  = leaf_count_internal((Expr*)arg,    true);
+        int64_t out_size = leaf_count_internal((Expr*)result, true);
+        if (out_size > in_size) {
+            expr_free(result);
+            return NULL;
+        }
+    }
     return result;
 }
 
@@ -1567,8 +1918,12 @@ static bool expr_is_atomic_algebraic(const Expr* e) {
         }
     }
 
-    /* c^(1/n) with integer c, n ≥ 2.  Exclude the 1/2 case already
-     * matched by expr_is_sqrt_int. */
+    /* Power[c, p/q] with integer c, |c| >= 2, after gcd-reducing p/q to
+     * lowest terms p_red/q_red, q_red >= 2.  This includes the original
+     * c^(1/n) case (p == 1) and now also c^(p/q) for any integer p
+     * (e.g. Power[2, -2/3], Power[2, 2/3], Power[6, 5/3]).  Excludes
+     * |c| < 2 (trivial roots of unity / 0) and the Sqrt[c] form
+     * already matched above. */
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
@@ -1578,9 +1933,14 @@ static bool expr_is_atomic_algebraic(const Expr* e) {
         Expr* exp  = e->data.function.args[1];
         int64_t p, q;
         if (base->type == EXPR_INTEGER
-            && is_rational(exp, &p, &q)
-            && p == 1 && q >= 2) {
-            return true;
+            && is_rational(exp, &p, &q) && q != 1) {
+            if (q < 0) { p = -p; q = -q; }
+            int64_t ap = p < 0 ? -p : p;
+            int64_t a = ap, b = q;
+            while (b) { int64_t r = a % b; a = b; b = r; }
+            int64_t q_red = a > 1 ? q / a : q;
+            int64_t cv = base->data.integer;
+            if (q_red >= 2 && cv != 0 && cv != 1 && cv != -1) return true;
         }
     }
 
@@ -1837,15 +2197,80 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
     if (!sub) return NULL;
 
     /* 3) Substitute each atom in `base` with its Q(γ_sub) representation
-     * (a polynomial in QA_ALPHA_INTERNAL). */
+     * (a polynomial in QA_ALPHA_INTERNAL).
+     *
+     * For each natural-form atom `Power[c_i, 1/q_i]`, we first rewrite
+     * any `Power[c_i, p/q]` in `base` into a polynomial in a per-atom
+     * temp symbol via `expand_radicals_to_atomic_poly`, then substitute
+     * that temp symbol with the gamma-representation of the atom.  The
+     * two-step approach is needed because picocas's Times canonicaliser
+     * may have rewritten the user's `Power[c_i, 1/q_i]` to non-natural
+     * forms like `Power[c_i, -2/3]`, and structural substitution by
+     * `sub->alpha_renders[i]` would miss those. */
     Expr* base_internal = expr_copy((Expr*)base);
     for (int i = 0; i < sub->n; i++) {
+        /* Try to parse `sub->alpha_renders[i]` as `Power[c_i, 1/q_i]`.
+         * When it has this shape, run the expand-radicals-to-atomic
+         * preprocessing.  Otherwise (Sqrt, I, nested-of-nested), fall
+         * back to the original structural substitution. */
+        int64_t c_i = 0, q_i = 0;
+        const Expr* a_r = sub->alpha_renders[i];
+        if (a_r && a_r->type == EXPR_FUNCTION
+            && a_r->data.function.head
+            && a_r->data.function.head->type == EXPR_SYMBOL
+            && a_r->data.function.head->data.symbol == SYM_Power
+            && a_r->data.function.arg_count == 2
+            && a_r->data.function.args[0]->type == EXPR_INTEGER) {
+            int64_t pe, qe;
+            if (is_rational(a_r->data.function.args[1], &pe, &qe)
+                && pe == 1 && qe >= 2) {
+                c_i = a_r->data.function.args[0]->data.integer;
+                q_i = qe;
+            }
+        }
+        /* Also accept Sqrt[c] as Power[c, 1/2]. */
+        if (c_i == 0 && a_r && a_r->type == EXPR_FUNCTION
+            && a_r->data.function.head
+            && a_r->data.function.head->type == EXPR_SYMBOL
+            && a_r->data.function.head->data.symbol == SYM_Sqrt
+            && a_r->data.function.arg_count == 1
+            && a_r->data.function.args[0]->type == EXPR_INTEGER) {
+            c_i = a_r->data.function.args[0]->data.integer;
+            q_i = 2;
+        }
+
         Expr* atom_in_gamma_int = qanum_to_expr_in_gamma_sym(
             sub->alphas[i], QA_ALPHA_INTERNAL);
-        Expr* old = base_internal;
-        base_internal = expr_subst(old, sub->alpha_renders[i],
-                                   atom_in_gamma_int);
-        expr_free(old);
+
+        if (c_i != 0 && c_i != 1 && c_i != -1 && q_i >= 2) {
+            /* Per-atom temp symbol for the expansion result.  Then
+             * substitute temp_sym → atom_in_gamma_int.  We use a fixed
+             * sentinel per loop iteration; intern_symbol ensures
+             * pointer-equality matches. */
+            char tmp_name[64];
+            snprintf(tmp_name, sizeof(tmp_name), "$qa$g8tmp$%d$", i);
+            const char* tmp_iname = intern_symbol(tmp_name);
+
+            QAExt* atom_ext = qaext_root_si((long)c_i, (unsigned)q_i);
+            Expr* expanded = expand_radicals_to_atomic_poly(
+                base_internal, c_i, q_i, tmp_iname, atom_ext);
+            qaext_free(atom_ext);
+
+            Expr* tmp_sym_expr = expr_new_symbol(tmp_iname);
+            Expr* substituted = expr_subst(expanded, tmp_sym_expr,
+                                           atom_in_gamma_int);
+            expr_free(tmp_sym_expr);
+            expr_free(expanded);
+            expr_free(base_internal);
+            base_internal = substituted;
+        } else {
+            /* Non-Power-shape atom (e.g. Sqrt[non-integer], I): fall
+             * back to the original structural substitution. */
+            Expr* old = base_internal;
+            base_internal = expr_subst(old, sub->alpha_renders[i],
+                                       atom_in_gamma_int);
+            expr_free(old);
+        }
         expr_free(atom_in_gamma_int);
     }
     Expr* base_canon = evaluate(expr_expand(base_internal));

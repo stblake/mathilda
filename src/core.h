@@ -5,6 +5,11 @@
 
 // Core programming routines
 Expr* builtin_length(Expr* res);
+
+/* LeafCount-style recursive node count.  `heads = true` includes
+ * function heads in the count (matching the picocas LeafCount[expr,
+ * True] semantics); `heads = false` counts only argument leaves. */
+int64_t leaf_count_internal(Expr* e, bool heads);
 Expr* builtin_dimensions(Expr* res);
 Expr* builtin_clear(Expr* res);
 Expr* builtin_append(Expr* res);

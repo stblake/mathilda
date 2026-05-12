@@ -1226,7 +1226,7 @@ Expr* builtin_depth(Expr* res) {
     return expr_new_integer(get_expr_depth(e, heads));
 }
 
-static int64_t leaf_count_internal(Expr* e, bool heads) {
+int64_t leaf_count_internal(Expr* e, bool heads) {
     if (!e) return 0;
     if (e->type != EXPR_FUNCTION) return 1;
     

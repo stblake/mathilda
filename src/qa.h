@@ -73,6 +73,12 @@ QANum* qa_alpha(const QAExt* ext);                 /* α itself */
 QANum* qa_from_mpq(const QAExt* ext, const mpq_t v);
 QANum* qa_from_si(const QAExt* ext, long num, long den);
 
+/* α^p ∈ Q(α) for any integer p, reduced modulo P_α.  For p < 0 uses
+ * `qa_inverse` (returns NULL iff `qa_inverse` fails — i.e. P_α is
+ * reducible and α^|p| is a zero divisor).  Repeated-squaring; O(log |p|)
+ * multiplications. */
+QANum* qa_alpha_power_signed(const QAExt* ext, long p);
+
 /* Deep copy. Shares the extension by reference. */
 QANum* qa_copy(const QANum* a);
 

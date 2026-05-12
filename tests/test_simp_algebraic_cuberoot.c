@@ -115,7 +115,7 @@ static void test_sqrt_of_cbrt_quotient_squared(void) {
      * of 2^(1/3)/6 = 2^(1/3 - log_2 6) = ...; verify it's a 2^(-2/3)
      * form proportional to 1/3). */
     assert_eval_eq("Simplify[Sqrt[Power[2, 1/3]/6] Sqrt[Power[2, 1/3]/6]]",
-                   "1/(3 2^(2/3))", 0);
+                   "1/3/2^(2/3)", 0);
 }
 
 /* =========================== Phase F: canonical-dedup =========================== */
@@ -133,6 +133,33 @@ static void test_canon_dedup_equal_radicands_subtract(void) {
     assert_eval_eq(
         "Simplify[Sqrt[-1/9/2^(2/3) + 2/9 2^(1/3)] - Sqrt[1/3/2^(2/3)]]",
         "0", 0);
+}
+
+/* =========================== Phase G: Power[c, p/q] general p =========================== */
+
+static void test_power_neg_pq_lift(void) {
+    /* Power[2, -2/3] is now accepted by qa_resolve_extension's general-p
+     * branch.  Cancel with explicit Extension -> Power[2, 1/3] lifts
+     * the user's input through expand_radicals_to_atomic_poly, rewriting
+     * Power[2, -2/3] into a polynomial in 2^(1/3) before the QAUPoly
+     * lift.  The expected output structure depends on picocas's Times
+     * canonicaliser; here we just sanity-check that simplification
+     * succeeds (result != input) and contains 2^(1/3) but not
+     * 2^(-2/3). */
+    assert_eval_eq(
+        "Cancel[Power[2, -2/3] x^2 - x/Power[2, 1/3], Extension -> Power[2, 1/3]]",
+        "1/2 (-2^(2/3) x + 2^(1/3) x^2)", 0);
+}
+
+static void test_multigen_qgamma_constant_collapse(void) {
+    /* (Sqrt[2] + Sqrt[3])(Sqrt[2] - Sqrt[3]) = 2 - 3 = -1.  Q(γ)-
+     * constant case: qa_cancel_with_tower's no-variable branch lifts to
+     * a QANum via PolynomialRemainder + qa_div, renders the canonical
+     * coefs against t->gamma_render, and the result reduces to -1.
+     * Previously this returned a degree-16 polynomial in γ. */
+    assert_eval_eq(
+        "Cancel[(Sqrt[2] + Sqrt[3]) (Sqrt[2] - Sqrt[3]), Extension -> Automatic]",
+        "-1", 0);
 }
 
 int main(void) {
@@ -157,6 +184,9 @@ int main(void) {
     TEST(test_sqrt_of_cbrt_quotient_squared);
 
     TEST(test_canon_dedup_equal_radicands_subtract);
+
+    TEST(test_power_neg_pq_lift);
+    TEST(test_multigen_qgamma_constant_collapse);
 
     printf("All simp_algebraic_cuberoot tests passed!\n");
     return 0;

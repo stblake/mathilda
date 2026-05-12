@@ -109,6 +109,49 @@ QANum* qa_alpha(const QAExt* ext) {
     return a;
 }
 
+QANum* qa_alpha_power_signed(const QAExt* ext, long p) {
+    /* α^p ∈ Q(α) for any integer p:
+     *   p = 0           →  1
+     *   p > 0           →  α^p via repeated squaring, reduced mod P_α
+     *   p < 0           →  qa_inverse(α^|p|), valid iff P_α is
+     *                       irreducible (which is the contract for
+     *                       QAExt — caller is responsible).
+     * Returns NULL when p < 0 and qa_inverse fails. */
+    if (!ext) return NULL;
+    if (p == 0) return qa_one(ext);
+
+    long ap = p < 0 ? -p : p;
+
+    /* Repeated-squaring: α^ap = product of α^(2^k) for each set bit k. */
+    QANum* alpha = qa_alpha(ext);
+    QANum* result = qa_one(ext);
+    QANum* base = qa_copy(alpha);
+    qa_free(alpha);
+
+    long bits = ap;
+    while (bits > 0) {
+        if (bits & 1) {
+            QANum* next = qa_mul(result, base);
+            qa_free(result);
+            result = next;
+        }
+        bits >>= 1;
+        if (bits > 0) {
+            QANum* sq = qa_mul(base, base);
+            qa_free(base);
+            base = sq;
+        }
+    }
+    qa_free(base);
+
+    if (p < 0) {
+        QANum* inv = qa_inverse(result);
+        qa_free(result);
+        return inv;  /* may be NULL on inversion failure */
+    }
+    return result;
+}
+
 QANum* qa_from_mpq(const QAExt* ext, const mpq_t v) {
     QANum* a = qa_zero(ext);
     if (ext->deg > 0) mpq_set(a->coef[0], v);
