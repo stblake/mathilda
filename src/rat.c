@@ -8,6 +8,7 @@
 #include "rationalize.h"
 #include "sym_names.h"
 #include "options.h"
+#include "qafactor.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -650,15 +651,43 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
 Expr* builtin_cancel(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
-    /* Strip a trailing Extension -> α option, if any. */
+    /* Strip a trailing Extension -> α option, if any.  When the user
+     * passed `Extension -> Automatic`, run extension_autodetect on the
+     * polynomial argument and route through the existing α-path when a
+     * single-generator extension is found (tier-1 limitation; towers
+     * with n ≥ 2 fall back to the no-extension path). */
     size_t argc = res->data.function.arg_count;
-    const Expr* alpha = extract_extension_option(res, &argc);
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &argc, &auto_flag);
     if (argc != 1) {
         if (argc == 0) return NULL;
         /* Wrong arg count after stripping options. */
         if (argc != 1) return NULL;
     }
     Expr* arg = res->data.function.args[0];
+
+    Expr* alpha_auto = NULL;
+    QATower* auto_tower = NULL;
+    if (!alpha && auto_flag) {
+        auto_tower = extension_autodetect(arg);
+        if (auto_tower && auto_tower->n == 1) {
+            alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
+            alpha = alpha_auto;
+        } else if (auto_tower && auto_tower->n >= 2) {
+            /* Multi-generator tower: route through qa_cancel_with_tower
+             * which substitutes each α_i with its Q(γ) form, lifts to
+             * QAUPoly over Q(γ), and runs qaupoly_gcd-based cancellation
+             * end-to-end.  Returns NULL on lift failure; the caller
+             * falls back to the no-extension path. */
+            Expr* tower_result = qa_cancel_with_tower(arg, auto_tower);
+            if (tower_result) {
+                qa_tower_free(auto_tower);
+                return tower_result;
+            }
+            qa_tower_free(auto_tower);
+            auto_tower = NULL;
+        }
+    }
 
     if (alpha) {
         /* For Plus / sum-of-fractions inputs the user typically expects
@@ -673,12 +702,22 @@ Expr* builtin_cancel(Expr* res) {
                        && arg->data.function.head->data.symbol == SYM_Plus);
         if (is_sum) {
             Expr* result = together_recursive_ext(arg, alpha);
-            if (result) return result;
+            if (result) {
+                if (alpha_auto) expr_free(alpha_auto);
+                if (auto_tower) qa_tower_free(auto_tower);
+                return result;
+            }
         } else {
             Expr* result = cancel_with_extension(arg, alpha);
-            if (result) return result;
+            if (result) {
+                if (alpha_auto) expr_free(alpha_auto);
+                if (auto_tower) qa_tower_free(auto_tower);
+                return result;
+            }
         }
         /* Fall back to non-extension cancel on failure. */
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
     }
 
     /* Inexact coefficients block the rational-arithmetic cancellation
@@ -851,18 +890,51 @@ static Expr* together_recursive(Expr* e) {
 Expr* builtin_together(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
-    /* Strip a trailing Extension -> α option, if any. */
+    /* Strip a trailing Extension -> α option, if any.  `Extension ->
+     * Automatic` triggers extension_autodetect on the polynomial
+     * argument; a single-generator detection routes through the
+     * existing α path. */
     size_t argc = res->data.function.arg_count;
-    const Expr* alpha = extract_extension_option(res, &argc);
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &argc, &auto_flag);
     if (argc != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+
+    Expr* alpha_auto = NULL;
+    QATower* auto_tower = NULL;
+    if (!alpha && auto_flag) {
+        auto_tower = extension_autodetect(arg);
+        if (auto_tower && auto_tower->n == 1) {
+            alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
+            alpha = alpha_auto;
+        } else if (auto_tower && auto_tower->n >= 2
+                   && !internal_args_contain_inexact(res)) {
+            /* Multi-generator tower: route through qa_cancel_with_tower.
+             * For Together this gives "combine + cancel over Q(γ)" in
+             * one shot — the function combines fractions internally
+             * before lifting. */
+            Expr* tower_result = qa_cancel_with_tower(arg, auto_tower);
+            if (tower_result) {
+                qa_tower_free(auto_tower);
+                return tower_result;
+            }
+            qa_tower_free(auto_tower);
+            auto_tower = NULL;
+        }
+    }
 
     /* Extension-aware path: combine + cancel in Q(α)[x] directly, with
      * Extension -> α threaded through PolynomialLCM and PolynomialQuotient
      * so the inner arithmetic stays on the qaupoly substrate. */
     if (alpha && !internal_args_contain_inexact(res)) {
         Expr* result = together_recursive_ext(arg, alpha);
-        if (result) return result;
+        if (result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return result;
+        }
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
     }
 
     /* Inexact coefficients can't be combined by exact polynomial-LCM

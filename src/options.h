@@ -42,4 +42,27 @@
  */
 const Expr* extract_extension_option(const Expr* res, size_t* new_argc);
 
+/* Variant of `extract_extension_option` that distinguishes
+ * `Extension -> Automatic` (explicit auto-detect request) from
+ * `Extension -> None` and the absence of any `Extension` option.
+ *
+ * On return:
+ *   - the function's return value is the explicit α (borrowed) when
+ *     `Extension -> α` was given with α neither `None` nor `Automatic`,
+ *     and NULL otherwise.
+ *   - `*automatic_out` (if non-NULL) is set to `true` iff
+ *     `Extension -> Automatic` appeared in the trailing options.
+ *   - `*new_argc` is overwritten exactly as in `extract_extension_option`.
+ *
+ * Callers wishing to support `Extension -> Automatic` should call this
+ * variant and, when `*automatic_out == true && returned alpha == NULL`,
+ * run their own auto-detection (typically `extension_autodetect`).
+ *
+ * `Extension -> None` overrides any earlier `Extension -> Automatic`
+ * (rightmost-wins) so `Foo[poly, Extension -> Automatic, Extension -> None]`
+ * leaves `*automatic_out == false`.
+ */
+const Expr* extract_extension_option_full(const Expr* res, size_t* new_argc,
+                                          bool* automatic_out);
+
 #endif /* PICOCAS_OPTIONS_H */

@@ -2800,6 +2800,10 @@ Expr* builtin_factor(Expr* res) {
      * Rule[Extension, α] / RuleDelayed[Extension, α].  When present,
      * dispatch to the algebraic-factoring path in qafactor.c (Trager).
      *
+     * Phase G9: when α is the symbol `Automatic`, run extension_autodetect
+     * on the polynomial argument and use the resulting (tier-1) single
+     * generator's surface form as α.
+     *
      * The memo is bypassed for this branch: the cache key is the
      * polynomial alone, but the result depends on the extension too. */
     if (res->data.function.arg_count >= 2) {
@@ -2818,6 +2822,29 @@ Expr* builtin_factor(Expr* res) {
                     alpha_expr = rhs;
                 }
             }
+        }
+        /* Auto-detect when the user passed Extension -> Automatic. */
+        Expr* alpha_auto = NULL;
+        QATower* auto_tower = NULL;
+        if (alpha_expr && alpha_expr->type == EXPR_SYMBOL
+            && alpha_expr->data.symbol
+            && strcmp(alpha_expr->data.symbol, "Automatic") == 0) {
+            auto_tower = extension_autodetect(res->data.function.args[0]);
+            if (auto_tower && auto_tower->n == 1) {
+                alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
+                alpha_expr = alpha_auto;
+            } else {
+                /* No detectable generator, or multi-generator tower.
+                 * Tier-1: fall through to plain Factor. */
+                alpha_expr = NULL;
+            }
+        }
+        /* Skip the qa-factor path when alpha_expr resolves to a no-op
+         * sentinel (None or Automatic-with-no-detect). */
+        if (alpha_expr && alpha_expr->type == EXPR_SYMBOL
+            && alpha_expr->data.symbol
+            && strcmp(alpha_expr->data.symbol, "None") == 0) {
+            alpha_expr = NULL;
         }
         if (alpha_expr) {
             Expr* poly = res->data.function.args[0];
@@ -2875,13 +2902,20 @@ Expr* builtin_factor(Expr* res) {
                 }
                 for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
                 free(vars);
-                if (result) return result;
+                if (result) {
+                    if (alpha_auto) expr_free(alpha_auto);
+                    if (auto_tower) qa_tower_free(auto_tower);
+                    return result;
+                }
                 /* Fall through to plain Factor on failure. */
             } else {
                 for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
                 free(vars);
             }
         }
+        /* Cleanup auto-detect state before any fall-through to plain Factor. */
+        if (alpha_auto) expr_free(alpha_auto);
+        if (auto_tower) qa_tower_free(auto_tower);
     }
 
     /* Memo lookup: if a Simplify call has installed a Factor memo and

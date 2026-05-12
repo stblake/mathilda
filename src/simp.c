@@ -12,6 +12,8 @@
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "trigrat.h"
+#include "qa.h"
+#include "qafactor.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -3896,6 +3898,50 @@ static Expr* simp_algebraic_impl(const Expr* e) {
         if (dbg) simp_debug_log("Algebraic", e, out,
                                 simp_debug_elapsed_ms(t0));
         return out;
+    }
+
+    /* Phase G9 (cube-root and higher): when the input has exactly one
+     * rational-base radical generator, route through
+     * `Together[expr, Extension -> α]`.  Together's extension path uses
+     * the qaupoly substrate (qaupoly_gcd / qaupoly_divrem), which handles
+     * any q ≥ 2 natively — no Sqrt-only special case.  This is the
+     * shortcut that lets Simplify simplify expressions involving
+     * `Power[c, p/q]` for q > 2, which the older multi-Sqrt path
+     * (alg_sigma_negate sign-flip rationalisation) below cannot.
+     *
+     * Multi-generator cases (n ≥ 2) fall through to the Sqrt-only
+     * path because that path's general rationalisation by sign-flip
+     * conjugates handles n ≥ 2 over Q(Sqrt[u_i]) directly. */
+    if (!contains_explicit_complex(e)) {
+        QATower* qa_t = extension_autodetect(e);
+        if (qa_t && qa_t->n == 1) {
+            Expr* alpha = expr_copy(qa_t->alpha_renders[0]);
+            Expr* tog = expr_new_function(
+                expr_new_symbol("Together"),
+                (Expr*[]){
+                    expr_copy((Expr*)e),
+                    expr_new_function(expr_new_symbol("Rule"),
+                        (Expr*[]){expr_new_symbol("Extension"), alpha}, 2)
+                }, 2);
+            Expr* qa_out = evaluate(tog);
+            expr_free(tog);
+            qa_tower_free(qa_t);
+
+            /* Accept only when the qaupoly path produced something at
+             * least as compact as the input.  The Together-with-Extension
+             * path occasionally factors a denominator unnecessarily —
+             * letting simp_search's later round-loop pick the better
+             * form is the safe move. */
+            if (qa_out && simp_default_complexity(qa_out)
+                            <= simp_default_complexity(e)) {
+                if (dbg) simp_debug_log("Algebraic", e, qa_out,
+                                        simp_debug_elapsed_ms(t0));
+                return qa_out;
+            }
+            if (qa_out) expr_free(qa_out);
+        } else if (qa_t) {
+            qa_tower_free(qa_t);
+        }
     }
 
     const Expr* bases[ALG_MAX_SURDS];

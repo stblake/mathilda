@@ -287,6 +287,42 @@ else()
     target_link_libraries(qafactor_tests gmp m)
 endif()
 
+# Phase G9: extension_autodetect — walk an expression and build its
+# algebraic-extension compositum automatically.
+add_executable(extension_autodetect_tests test_extension_autodetect.c ${COMMON_SRC})
+target_include_directories(extension_autodetect_tests PRIVATE ../src /usr/local/include)
+target_link_directories(extension_autodetect_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(extension_autodetect_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(extension_autodetect_tests build_ecm)
+else()
+    target_link_libraries(extension_autodetect_tests gmp m)
+endif()
+
+# Phase G9: builtin integration tests for Extension -> Automatic on
+# Cancel, Together, Apart, Factor, PolynomialGCD/LCM/Quotient/Remainder.
+add_executable(extension_auto_builtins_tests test_extension_auto_builtins.c ${COMMON_SRC})
+target_include_directories(extension_auto_builtins_tests PRIVATE ../src /usr/local/include)
+target_link_directories(extension_auto_builtins_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(extension_auto_builtins_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(extension_auto_builtins_tests build_ecm)
+else()
+    target_link_libraries(extension_auto_builtins_tests gmp m)
+endif()
+
+# Phase G9 / Phase C: Simplify with cube-root and higher-order
+# algebraic generators (q > 2 inside simp_algebraic).
+add_executable(simp_algebraic_cuberoot_tests test_simp_algebraic_cuberoot.c ${COMMON_SRC})
+target_include_directories(simp_algebraic_cuberoot_tests PRIVATE ../src /usr/local/include)
+target_link_directories(simp_algebraic_cuberoot_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(simp_algebraic_cuberoot_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(simp_algebraic_cuberoot_tests build_ecm)
+else()
+    target_link_libraries(simp_algebraic_cuberoot_tests gmp m)
+endif()
+
 add_executable(bpoly_tests test_bpoly.c ${COMMON_SRC})
 target_include_directories(bpoly_tests PRIVATE ../src /usr/local/include)
 target_link_directories(bpoly_tests PRIVATE /usr/local/lib)

@@ -1407,6 +1407,128 @@ Expr* qa_factor_with_extension_tower(const Expr* poly,
     return result;
 }
 
+Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
+    if (!arg || !t || t->n < 1) return NULL;
+
+    /* 1. Substitute each user-side α_i with its polynomial-in-γ form
+     * (a polynomial in QA_ALPHA_INTERNAL). */
+    Expr* arg_internal = expr_copy((Expr*)arg);
+    for (int i = 0; i < t->n; i++) {
+        Expr* alpha_in_gamma = qanum_to_expr_in_gamma_sym(
+            t->alphas[i], QA_ALPHA_INTERNAL);
+        Expr* old = arg_internal;
+        arg_internal = expr_subst(old, t->alpha_renders[i], alpha_in_gamma);
+        expr_free(old);
+        expr_free(alpha_in_gamma);
+    }
+
+    /* 2. Combine into a single fraction via the standard (no-extension)
+     * Together.  After step 1 the only "algebraic symbol" in arg_internal
+     * is QA_ALPHA_INTERNAL — treated as a free polynomial symbol by the
+     * standard path, which is exactly what we want before lifting. */
+    Expr* together_call = expr_new_function(
+        expr_new_symbol("Together"),
+        (Expr*[]){arg_internal}, 1);
+    Expr* arg_combined = evaluate(together_call);
+    expr_free(together_call);
+
+    /* 3. Extract numerator and denominator. */
+    Expr* num_call = expr_new_function(expr_new_symbol("Numerator"),
+        (Expr*[]){expr_copy(arg_combined)}, 1);
+    Expr* num_expr = evaluate(num_call);
+    expr_free(num_call);
+    Expr* den_call = expr_new_function(expr_new_symbol("Denominator"),
+        (Expr*[]){expr_copy(arg_combined)}, 1);
+    Expr* den_expr = evaluate(den_call);
+    expr_free(den_call);
+    expr_free(arg_combined);
+
+    /* If denominator is 1, no cancellation needed; just rebuild the
+     * numerator with γ → user-surface substitution.  qaupoly_to_expr_alpha
+     * needs a poly path so we go through the standard lift just to
+     * substitute QA_ALPHA_INTERNAL back to gamma_render. */
+
+    /* 4. Pick the polynomial variable: the first free symbol that is
+     * NOT QA_ALPHA_INTERNAL.  If none, this is a constant in Q(γ); we
+     * still need to render back, but qaupoly arithmetic needs a
+     * polynomial variable so bail in that case. */
+    Expr* var = NULL;
+    {
+        size_t vc = 0, vcap = 8;
+        Expr** vars = (Expr**)malloc(sizeof(Expr*) * vcap);
+        collect_variables(num_expr, &vars, &vc, &vcap);
+        collect_variables(den_expr, &vars, &vc, &vcap);
+        for (size_t i = 0; i < vc; i++) {
+            if (vars[i]->type == EXPR_SYMBOL && vars[i]->data.symbol
+                && strcmp(vars[i]->data.symbol, QA_ALPHA_INTERNAL) == 0) continue;
+            if (!var) var = expr_copy(vars[i]);
+        }
+        for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+        free(vars);
+    }
+
+    if (!var) {
+        /* Constant in Q(γ): no polynomial variable to cancel against.
+         * Just substitute γ_internal → gamma_render in both num and
+         * den and return num/den. */
+        Expr* gamma_sym = expr_new_symbol(QA_ALPHA_INTERNAL);
+        Expr* num_back = expr_subst(num_expr, gamma_sym, t->gamma_render);
+        Expr* den_back = expr_subst(den_expr, gamma_sym, t->gamma_render);
+        expr_free(gamma_sym);
+        expr_free(num_expr); expr_free(den_expr);
+        Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){den_back, expr_new_integer(-1)}, 2));
+        return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){num_back, den_inv}, 2));
+    }
+
+    /* 5. Lift to QAUPoly over Q(γ).  alpha_render = NULL signals that
+     * the polynomial already uses QA_ALPHA_INTERNAL as the α symbol. */
+    QAUPoly* num = qa_expr_to_qaupoly(num_expr, var, NULL, t->ext);
+    QAUPoly* den = qa_expr_to_qaupoly(den_expr, var, NULL, t->ext);
+    expr_free(num_expr); expr_free(den_expr);
+
+    if (!num || !den || qaupoly_is_zero(den)) {
+        if (num) qaupoly_free(num);
+        if (den) qaupoly_free(den);
+        expr_free(var);
+        return NULL;
+    }
+
+    /* 6. g = gcd(num, den); num /= g, den /= g. */
+    QAUPoly* g = qaupoly_gcd(num, den);
+    if (!g || qaupoly_is_zero(g)) {
+        qaupoly_free(num); qaupoly_free(den);
+        if (g) qaupoly_free(g);
+        expr_free(var);
+        return NULL;
+    }
+    QAUPoly *q_num = NULL, *r_num = NULL;
+    QAUPoly *q_den = NULL, *r_den = NULL;
+    bool ok = qaupoly_divrem(num, g, &q_num, &r_num)
+           && qaupoly_divrem(den, g, &q_den, &r_den);
+    qaupoly_free(num); qaupoly_free(den); qaupoly_free(g);
+
+    Expr* result = NULL;
+    if (ok && q_num && q_den) {
+        Expr* num_out = qaupoly_to_expr_alpha(q_num, var->data.symbol,
+                                              t->gamma_render);
+        Expr* den_out = qaupoly_to_expr_alpha(q_den, var->data.symbol,
+                                              t->gamma_render);
+        Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){den_out, expr_new_integer(-1)}, 2));
+        result = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){num_out, den_inv}, 2));
+    }
+
+    if (q_num) qaupoly_free(q_num);
+    if (r_num) qaupoly_free(r_num);
+    if (q_den) qaupoly_free(q_den);
+    if (r_den) qaupoly_free(r_den);
+    expr_free(var);
+    return result;
+}
+
 /* ============================== Phase G8 ============================== */
 /* Nested radical generators: `Sqrt[base]` / `base^(1/n)` where `base`
  * is a polynomial expression in atomic radicals (Sqrt[c], c^(1/m), I).
@@ -1772,4 +1894,481 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
     if (!ext) return NULL;
     *render_out = expr_copy((Expr*)alpha_expr);
     return ext;
+}
+
+/* ============================== Phase G9 ============================== */
+/* Automatic algebraic-extension detection — extension_autodetect.        */
+
+typedef enum {
+    GEN_INT_BASE,    /* Power[integer, 1/q_lcm], represented compactly */
+    GEN_NESTED      /* Power[non-integer-base, 1/q]: stored by borrowed Expr */
+} AutodetectGenKind;
+
+typedef struct {
+    AutodetectGenKind kind;
+    /* GEN_INT_BASE: */
+    int64_t base;        /* integer base of the radical, |base| >= 2 */
+    int64_t q_lcm;       /* LCM of exponent denominators seen for `base` */
+    /* GEN_NESTED: */
+    const Expr* render;  /* surface form Power[base, 1/q] — borrowed pointer
+                          * into the input expression; owner of input owns. */
+} AutodetectGen;
+
+static int64_t autodetect_gcd_i64(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b) { int64_t r = a % b; a = b; b = r; }
+    return a;
+}
+
+static int64_t autodetect_lcm_i64(int64_t a, int64_t b) {
+    if (a == 0 || b == 0) return 0;
+    int64_t g = autodetect_gcd_i64(a, b);
+    return (a / g) * b;
+}
+
+/* Merge an integer-base (base, q) into the generator set.  Returns false
+ * (with *bail = true) if the set is full and `base` isn't already
+ * present.  q must satisfy q >= 2. */
+static bool autodetect_add_int(AutodetectGen* gens, size_t* n, size_t max,
+                               int64_t base, int64_t q, bool* bail) {
+    for (size_t i = 0; i < *n; i++) {
+        if (gens[i].kind == GEN_INT_BASE && gens[i].base == base) {
+            gens[i].q_lcm = autodetect_lcm_i64(gens[i].q_lcm, q);
+            return true;
+        }
+    }
+    if (*n >= max) { *bail = true; return false; }
+    gens[*n].kind = GEN_INT_BASE;
+    gens[*n].base  = base;
+    gens[*n].q_lcm = q;
+    gens[*n].render = NULL;
+    (*n)++;
+    return true;
+}
+
+/* Merge a nested-radical surface form into the generator set.  Dedup is
+ * by structural Expr equality on the full Power[base, 1/q] form. */
+static bool autodetect_add_nested(AutodetectGen* gens, size_t* n, size_t max,
+                                  const Expr* surface, bool* bail) {
+    for (size_t i = 0; i < *n; i++) {
+        if (gens[i].kind == GEN_NESTED && gens[i].render
+            && expr_eq((Expr*)gens[i].render, (Expr*)surface)) {
+            return true;
+        }
+    }
+    if (*n >= max) { *bail = true; return false; }
+    gens[*n].kind = GEN_NESTED;
+    gens[*n].base = 0;
+    gens[*n].q_lcm = 0;
+    gens[*n].render = surface;
+    (*n)++;
+    return true;
+}
+
+/* INT-only sub-walker: recurse into `e` collecting integer-base
+ * generators ONLY for `Power[c, p/q]` forms that G8's
+ * `expr_is_atomic_algebraic` would NOT accept — i.e., p != 1 (or
+ * negative p).  The atomic `c^(1/n)` and `Sqrt[c]` forms are handled
+ * by G8's own sub-tower construction on the parent GEN_NESTED, so
+ * surfacing them again at the top level creates a redundant compositum
+ * (e.g. Sqrt[1+Sqrt[2]] would become a degree-8 tower with both
+ * Sqrt[2] and Sqrt[1+Sqrt[2]] when the correct degree is 4).
+ *
+ * The point of this walker is to surface integer bases needed by
+ * `autodetect_canonicalise_radicand`, which would otherwise have
+ * nothing to match against. */
+static void autodetect_walk_intbase_only(const Expr* e, AutodetectGen* gens,
+                                         size_t* n, size_t max, bool* bail) {
+    if (!e || *bail) return;
+    if (e->type != EXPR_FUNCTION) return;
+    if (!e->data.function.head
+        || e->data.function.head->type != EXPR_SYMBOL) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            autodetect_walk_intbase_only(e->data.function.args[i],
+                                         gens, n, max, bail);
+            if (*bail) return;
+        }
+        return;
+    }
+    const char* head = e->data.function.head->data.symbol;
+    if (head == SYM_Sqrt && e->data.function.arg_count == 1) {
+        /* Sqrt[c] with integer c is atomic for G8 — skip. */
+        return;
+    }
+    if (head == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp_e = e->data.function.args[1];
+        int64_t p, q;
+        if (is_rational((Expr*)exp_e, &p, &q) && q != 1) {
+            if (q < 0) { p = -p; q = -q; }
+            int64_t ap = p < 0 ? -p : p;
+            int64_t g  = autodetect_gcd_i64(ap, q);
+            if (g > 1) { p /= g; q /= g; }
+            /* Only surface for non-atomic exponent form (p != 1).
+             * Atomic c^(1/q) is handled by G8 — surfacing would
+             * double-count. */
+            if (q >= 2 && p != 1 && base->type == EXPR_INTEGER) {
+                int64_t c = base->data.integer;
+                if (c != 0 && c != 1 && c != -1) {
+                    if (!autodetect_add_int(gens, n, max, c, q, bail)) return;
+                }
+            }
+            return;
+        }
+    }
+    /* Recurse into args (head walk is unusual). */
+    autodetect_walk_intbase_only(e->data.function.head, gens, n, max, bail);
+    for (size_t i = 0; i < e->data.function.arg_count && !*bail; i++) {
+        autodetect_walk_intbase_only(e->data.function.args[i],
+                                     gens, n, max, bail);
+    }
+}
+
+/* Walker: scan `e` for `Power[base, p/q]` / `Sqrt[base]` sub-expressions
+ * and accumulate generators into `gens[]`.
+ *
+ * Integer bases are merged by base under the LCM of exponent denominators
+ * (e.g. 2^(1/3) and 2^(1/2) -> one generator with q_lcm = 6).
+ *
+ * Non-integer bases (rational, polynomial, nested-radical) are surfaced
+ * as GEN_NESTED generators, dispatched at tower-build time to G8
+ * (`qa_resolve_nested_radical`).  The walker does NOT recurse into a
+ * nested-radical's base — the G8 machinery builds its own sub-tower from
+ * the base's atomic radicals.  However, integer-base generators inside
+ * the base are surfaced via `autodetect_walk_intbase_only` so the
+ * canonicalise_post pass can use them.
+ *
+ * Sets `*bail` on generator-array overflow. */
+static void autodetect_walk(const Expr* e, AutodetectGen* gens,
+                            size_t* n, size_t max, bool* bail) {
+    if (!e || *bail) return;
+    if (e->type != EXPR_FUNCTION) return;
+    if (!e->data.function.head
+        || e->data.function.head->type != EXPR_SYMBOL) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            autodetect_walk(e->data.function.args[i], gens, n, max, bail);
+            if (*bail) return;
+        }
+        return;
+    }
+
+    const char* head = e->data.function.head->data.symbol;
+    const Expr* base = NULL;
+    int64_t p = 0, q = 1;
+    bool is_radical = false;
+
+    if (head == SYM_Sqrt && e->data.function.arg_count == 1) {
+        base = e->data.function.args[0];
+        p = 1; q = 2;
+        is_radical = true;
+    } else if (head == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* exp_e = e->data.function.args[1];
+        if (is_rational((Expr*)exp_e, &p, &q) && q != 1) {
+            base = e->data.function.args[0];
+            is_radical = true;
+        }
+    }
+
+    if (is_radical) {
+        /* Normalise sign of denominator and reduce p/q to lowest terms. */
+        if (q < 0) { p = -p; q = -q; }
+        int64_t ap = p < 0 ? -p : p;
+        int64_t g  = autodetect_gcd_i64(ap, q);
+        if (g > 1) { p /= g; q /= g; }
+
+        if (q >= 2) {
+            if (base && base->type == EXPR_INTEGER) {
+                /* Integer base: merge into the (base, q_lcm) generator set. */
+                int64_t c = base->data.integer;
+                if (c != 0 && c != 1 && c != -1) {
+                    if (!autodetect_add_int(gens, n, max, c, q, bail)) return;
+                }
+                /* Integer base has no sub-radicals to chase. */
+                return;
+            } else {
+                /* Non-integer base: surface the whole `e` as a nested-
+                 * radical generator.  G8 handles polynomial-in-atomic-
+                 * radicals bases at tower-build time.
+                 *
+                 * Phase F canonicalise-dedup: ALSO scan the base for
+                 * integer-base generators (e.g. 2^(1/3) inside
+                 * Sqrt[2^(1/3)/6]) so the canonicalise_post pass can use
+                 * them to normalise radicands.  Inner nested radicals
+                 * (Sqrt[Sqrt[2]]-style) are NOT re-surfaced here — G8
+                 * builds its own sub-tower from them.  We use a
+                 * dedicated INT-only sub-walker to avoid the double-
+                 * count regression. */
+                if (!autodetect_add_nested(gens, n, max, e, bail)) return;
+                autodetect_walk_intbase_only(base, gens, n, max, bail);
+                return;
+            }
+        }
+        return;
+    }
+
+    /* Generic recursion: walk head (unusual) and every argument. */
+    autodetect_walk(e->data.function.head, gens, n, max, bail);
+    for (size_t i = 0; i < e->data.function.arg_count && !*bail; i++) {
+        autodetect_walk(e->data.function.args[i], gens, n, max, bail);
+    }
+}
+
+/* Floor-divide `p` by `q` (q > 0); result is the floor of p/q. */
+static int64_t autodetect_floor_div(int64_t p, int64_t q) {
+    int64_t a = p / q;
+    int64_t b = p - a * q;
+    if (b < 0) { a -= 1; b += q; }
+    return a;
+}
+
+/* Recursively rewrite every `Power[c, p/q]` (c integer with |c| >= 2,
+ * q >= 2) into `c^a · Power[c, b/q]` where p = a·q + b, 0 ≤ b < q.
+ * The transformation is needed before passing canonicalised radicands
+ * to G8 (`qa_resolve_nested_radical`), whose
+ * `expr_is_atomic_algebraic` recogniser only accepts the pure
+ * `Power[c, 1/n]` form, not `Power[c, p/q]` with p > 1 or p < 0. */
+static Expr* autodetect_rewrite_to_atomic(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp_e = e->data.function.args[1];
+        int64_t p, q;
+        if (base->type == EXPR_INTEGER
+            && is_rational((Expr*)exp_e, &p, &q) && q >= 2) {
+            int64_t c = base->data.integer;
+            if (c == 0 || c == 1 || c == -1) {
+                return expr_copy((Expr*)e);
+            }
+            int64_t a = autodetect_floor_div(p, q);
+            int64_t b = p - a * q;
+            if (b == 0) {
+                /* Power[c, a]: pure integer exponent. */
+                return eval_and_free(expr_new_function(
+                    expr_new_symbol("Power"),
+                    (Expr*[]){expr_new_integer(c), expr_new_integer(a)}, 2));
+            }
+            /* Power[c, a] * Power[c, b/q]  with 1 <= b < q. */
+            Expr* int_part = (a == 0)
+                ? expr_new_integer(1)
+                : eval_and_free(expr_new_function(
+                    expr_new_symbol("Power"),
+                    (Expr*[]){expr_new_integer(c), expr_new_integer(a)}, 2));
+            Expr* rat_args[2] = { expr_new_integer(b), expr_new_integer(q) };
+            Expr* exp_atomic = expr_new_function(expr_new_symbol("Rational"),
+                                                 rat_args, 2);
+            Expr* atomic_part = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){expr_new_integer(c), exp_atomic}, 2);
+            return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){int_part, atomic_part}, 2));
+        }
+    }
+
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (count ? count : 1));
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = autodetect_rewrite_to_atomic(e->data.function.args[i]);
+    }
+    Expr* new_head = autodetect_rewrite_to_atomic(e->data.function.head);
+    Expr* out = eval_and_free(expr_new_function(new_head, new_args, count));
+    free(new_args);
+    return out;
+}
+
+/* canonicalise_radicand: run `Together[u, Extension -> α]` against the
+ * given integer-base generator α (`Power[base, 1/q_lcm]`) so that u is
+ * rewritten to its canonical c0 + c1·α + c2·α² + ... form modulo the
+ * algebraic relation α^q = base.  Then apply `autodetect_rewrite_to_atomic`
+ * so any `Power[c, p/q]` with |p| > 1 is split into a pure `c^a · Power[c,
+ * b/q]` form acceptable to G8's atomic-radical recogniser.
+ *
+ * Used by the post-walker canonical-dedup pass on nested radicals:
+ * `Sqrt[-1/(9·2^(2/3)) + (2/9)·2^(1/3)]` and `Sqrt[1/(3·2^(2/3))]` both
+ * reduce to `Sqrt[2^(1/3)/6]` after canonicalisation against
+ * α = 2^(1/3).
+ *
+ * Returns a freshly-allocated Expr (caller frees via expr_free), or
+ * NULL on canonicalisation failure. */
+static Expr* autodetect_canonicalise_radicand(const Expr* u,
+                                              int64_t base, int64_t q_lcm) {
+    Expr* base_e = expr_new_integer(base);
+    Expr* rat_args[2] = { expr_new_integer(1), expr_new_integer(q_lcm) };
+    Expr* exp_e = expr_new_function(expr_new_symbol("Rational"), rat_args, 2);
+    Expr* pow_args[2] = { base_e, exp_e };
+    Expr* alpha = expr_new_function(expr_new_symbol("Power"), pow_args, 2);
+
+    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+        (Expr*[]){expr_new_symbol("Extension"), alpha}, 2);
+    Expr* tg_call = expr_new_function(expr_new_symbol("Together"),
+        (Expr*[]){expr_copy((Expr*)u), rule}, 2);
+    Expr* canon = evaluate(tg_call);
+    expr_free(tg_call);
+    if (!canon) return NULL;
+
+    Expr* atomic = autodetect_rewrite_to_atomic(canon);
+    expr_free(canon);
+    return atomic;
+}
+
+/* For each GEN_NESTED generator: try to canonicalise its radicand
+ * against each GEN_INT_BASE generator in the set, replacing the borrowed
+ * render with a freshly-allocated canonical surface form when the
+ * canonicalisation produces something structurally different.  Owned
+ * canonical renders are written to `owned[]` so callers can free them.
+ *
+ * After canonicalisation, re-deduplicate the GEN_NESTED entries:
+ * structurally-equal renders (now reflecting canonical forms) collapse
+ * to a single generator.  Re-dedup is in-place by sweeping the array
+ * and compacting. */
+static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
+                                         Expr** owned) {
+    /* Step 1: canonicalise each nested radical against every integer-base
+     * generator we have.  We canonicalise once against the FIRST matching
+     * integer base; this is sufficient for the motivating case where all
+     * radicands share a single integer base. */
+    for (size_t i = 0; i < *n; i++) {
+        if (gens[i].kind != GEN_NESTED) continue;
+        const Expr* surface = gens[i].render;
+        if (!surface || surface->type != EXPR_FUNCTION
+            || surface->data.function.arg_count != 2) continue;
+        const Expr* radicand = surface->data.function.args[0];
+        const Expr* exp_e    = surface->data.function.args[1];
+
+        /* Find an integer-base generator whose `base` actually occurs
+         * as a Power[base, _] sub-expression in the radicand.  Iterate
+         * the gens[] array and pick the first match.  Tier-1: single
+         * canonicalisation against one base. */
+        bool canonicalised = false;
+        for (size_t j = 0; j < *n && !canonicalised; j++) {
+            if (gens[j].kind != GEN_INT_BASE) continue;
+            Expr* canon_radicand = autodetect_canonicalise_radicand(
+                radicand, gens[j].base, gens[j].q_lcm);
+            if (!canon_radicand) continue;
+            /* If the canonical form is structurally identical to the
+             * original radicand, no change — skip. */
+            if (expr_eq(canon_radicand, (Expr*)radicand)) {
+                expr_free(canon_radicand);
+                continue;
+            }
+            /* Build new surface form Power[canon_radicand, exp]. */
+            Expr* new_surface = eval_and_free(expr_new_function(
+                expr_new_symbol("Power"),
+                (Expr*[]){canon_radicand, expr_copy((Expr*)exp_e)}, 2));
+            owned[i] = new_surface;
+            gens[i].render = new_surface;
+            canonicalised = true;
+        }
+    }
+
+    /* Step 2: re-dedup.  Sweep i from 0 upward; for each i, check
+     * whether any earlier j < i has the same render (structurally).
+     * If so, drop entry i. */
+    size_t out = 0;
+    for (size_t i = 0; i < *n; i++) {
+        bool dup = false;
+        if (gens[i].kind == GEN_NESTED) {
+            for (size_t j = 0; j < out; j++) {
+                if (gens[j].kind == GEN_NESTED && gens[j].render && gens[i].render
+                    && expr_eq((Expr*)gens[j].render, (Expr*)gens[i].render)) {
+                    dup = true; break;
+                }
+            }
+        }
+        if (dup) {
+            /* Free the owned canonical surface, if any, since we're
+             * dropping this entry. */
+            if (owned[i]) { expr_free(owned[i]); owned[i] = NULL; }
+        } else {
+            if (out != i) {
+                gens[out] = gens[i];
+                owned[out] = owned[i];
+                owned[i] = NULL;
+            }
+            out++;
+        }
+    }
+    *n = out;
+}
+
+/* Materialise an AutodetectGen[] into a tower by building a surface-form
+ * generator Expr for each entry and dispatching to
+ * qa_resolve_extension_tower.  Used by both the single-Expr and multi-Expr
+ * public entry points.  Returns NULL when n == 0 or the tower build fails. */
+static QATower* autodetect_build_tower(const AutodetectGen* gens, size_t n) {
+    if (n == 0) return NULL;
+
+    Expr** alpha_exprs = (Expr**)malloc(sizeof(Expr*) * n);
+    if (!alpha_exprs) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        if (gens[i].kind == GEN_INT_BASE) {
+            /* `Power[c, Rational[1, q]]` — qa_resolve_extension's
+             * `c^(1/n)` branch accepts this directly. */
+            Expr* base_e = expr_new_integer(gens[i].base);
+            Expr* rat_args[2] = { expr_new_integer(1),
+                                  expr_new_integer(gens[i].q_lcm) };
+            Expr* exp_e = expr_new_function(expr_new_symbol("Rational"),
+                                            rat_args, 2);
+            Expr* pow_args[2] = { base_e, exp_e };
+            alpha_exprs[i] = expr_new_function(expr_new_symbol("Power"),
+                                               pow_args, 2);
+        } else {
+            /* GEN_NESTED: surface form is borrowed from the input.  Deep-
+             * copy so qa_resolve_extension_tower can claim it (it borrows
+             * its arguments but the tower's stored render is a copy). */
+            alpha_exprs[i] = expr_copy((Expr*)gens[i].render);
+        }
+    }
+
+    QATower* t = qa_resolve_extension_tower(alpha_exprs, (int)n);
+
+    for (size_t i = 0; i < n; i++) expr_free(alpha_exprs[i]);
+    free(alpha_exprs);
+    return t;
+}
+
+QATower* extension_autodetect(const Expr* e) {
+    if (!e) return NULL;
+
+    AutodetectGen gens[QA_AUTODETECT_MAX_GENS];
+    Expr*         owned[QA_AUTODETECT_MAX_GENS] = {NULL};
+    size_t n = 0;
+    bool bail = false;
+    autodetect_walk(e, gens, &n, QA_AUTODETECT_MAX_GENS, &bail);
+    if (bail) {
+        for (size_t i = 0; i < QA_AUTODETECT_MAX_GENS; i++)
+            if (owned[i]) expr_free(owned[i]);
+        return NULL;
+    }
+    autodetect_canonicalise_post(gens, &n, owned);
+    QATower* t = autodetect_build_tower(gens, n);
+    for (size_t i = 0; i < QA_AUTODETECT_MAX_GENS; i++)
+        if (owned[i]) expr_free(owned[i]);
+    return t;
+}
+
+QATower* extension_autodetect_args(struct Expr* const* args, size_t argc) {
+    if (!args || argc == 0) return NULL;
+
+    AutodetectGen gens[QA_AUTODETECT_MAX_GENS];
+    Expr*         owned[QA_AUTODETECT_MAX_GENS] = {NULL};
+    size_t n = 0;
+    bool bail = false;
+    for (size_t i = 0; i < argc && !bail; i++) {
+        autodetect_walk(args[i], gens, &n, QA_AUTODETECT_MAX_GENS, &bail);
+    }
+    if (bail) {
+        for (size_t i = 0; i < QA_AUTODETECT_MAX_GENS; i++)
+            if (owned[i]) expr_free(owned[i]);
+        return NULL;
+    }
+    autodetect_canonicalise_post(gens, &n, owned);
+    QATower* t = autodetect_build_tower(gens, n);
+    for (size_t i = 0; i < QA_AUTODETECT_MAX_GENS; i++)
+        if (owned[i]) expr_free(owned[i]);
+    return t;
 }

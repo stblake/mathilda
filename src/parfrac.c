@@ -11,21 +11,52 @@
 #include "rationalize.h"
 #include "sym_names.h"
 #include "options.h"
+#include "qafactor.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdbool.h>
 
+/* Inner implementation of Apart.  Receives the option-stripped arg count
+ * `apart_argc` ∈ {1, 2} and a borrowed `apart_alpha` (possibly NULL, possibly
+ * coming from extension_autodetect).  Defined below `builtin_apart`. */
+static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha);
+
 Expr* builtin_apart(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
     /* Strip a trailing Extension -> α option, if any.  When present,
-     * the option is propagated to the Factor[D, ...] call below so the
-     * denominator is split over Q(α) before partial-fraction
-     * decomposition runs. */
+     * the option is propagated to the Factor[D, ...] call inside apart_impl
+     * so the denominator is split over Q(α) before partial-fraction
+     * decomposition runs.  Extension -> Automatic triggers
+     * extension_autodetect on the input. */
     size_t apart_argc = res->data.function.arg_count;
-    const Expr* apart_alpha = extract_extension_option(res, &apart_argc);
+    bool auto_flag = false;
+    const Expr* apart_alpha = extract_extension_option_full(res, &apart_argc, &auto_flag);
     if (apart_argc != 1 && apart_argc != 2) return NULL;
+
+    /* Auto-detect: when Extension -> Automatic was given but no explicit α,
+     * scan the input for a single algebraic generator.  Tier-1 routes only
+     * single-generator detections (n == 1); multi-generator towers fall
+     * back to no-extension. */
+    Expr* apart_alpha_auto = NULL;
+    QATower* apart_auto_tower = NULL;
+    if (!apart_alpha && auto_flag) {
+        apart_auto_tower = extension_autodetect(res->data.function.args[0]);
+        if (apart_auto_tower && apart_auto_tower->n == 1) {
+            apart_alpha_auto = expr_copy(apart_auto_tower->alpha_renders[0]);
+            apart_alpha = apart_alpha_auto;
+        }
+    }
+
+    Expr* result = apart_impl(res, apart_argc, apart_alpha);
+
+    if (apart_alpha_auto) expr_free(apart_alpha_auto);
+    if (apart_auto_tower) qa_tower_free(apart_auto_tower);
+    return result;
+}
+
+static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
 
     /* Apart relies on PolynomialQuotient/Remainder and partial-fraction
      * decomposition over rationals — inexact coefficients break both. */

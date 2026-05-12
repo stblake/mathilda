@@ -218,4 +218,71 @@ struct Expr* qa_factor_with_extension_tower(const struct Expr* poly,
                                             int n_alphas,
                                             const struct Expr* var);
 
+/* Tower-aware Cancel: combine `arg` into a single fraction over Q(γ),
+ * cancel num/den by their qaupoly GCD, and render with γ's surface
+ * form (`t->gamma_render`).
+ *
+ * Steps (mirrors `qa_factor_with_extension_tower`'s substitution pattern):
+ *   1. Substitute each α_i in `arg` with its Q(γ) representation
+ *      (a polynomial in QA_ALPHA_INTERNAL).
+ *   2. Run `Together` (no extension) to combine sum-of-fractions into a
+ *      single fraction.
+ *   3. Lift numerator and denominator to QAUPoly over Q(γ) and divide
+ *      by their `qaupoly_gcd`.
+ *   4. Render back through `qaupoly_to_expr_alpha` with γ's surface form.
+ *
+ * Returns NULL on any lift / GCD failure (caller falls back to the
+ * non-tower path).  Caller owns the returned Expr.  Use when
+ * `extension_autodetect` returns a tower with n ≥ 2 generators (the
+ * single-generator case is handled by the existing
+ * `cancel_with_extension` and `together_recursive_ext`). */
+struct Expr* qa_cancel_with_tower(const struct Expr* arg, const QATower* t);
+
+/* ============================ Phase G9 ============================ */
+/* Automatic algebraic-extension detection.                            */
+
+/* Maximum number of distinct rational-base algebraic generators that
+ * the auto-detector will collect from a single expression.  More than
+ * this and the auto-detector bails (returns NULL), because the tower
+ * construction has cost exponential in the generator count and the
+ * input is almost certainly outside the intended domain of use. */
+#ifndef QA_AUTODETECT_MAX_GENS
+#define QA_AUTODETECT_MAX_GENS 4
+#endif
+
+/* Walk `e` collecting every algebraic-number generator implicit in the
+ * expression and build the corresponding compositum.  Recognised
+ * generator shapes (tier 1):
+ *
+ *   Power[c, p/q]        c integer, |c| ≥ 2, gcd(p, q) = 1, q ≥ 2
+ *   Sqrt[c]              c integer, |c| ≥ 2
+ *
+ * Multiple occurrences sharing the same integer base `c` are merged
+ * into a single generator `Power[c, 1/lcm(q_i)]`, so e.g. an expression
+ * containing both `Power[2, 1/3]` and `Power[2, 1/2]` resolves to a
+ * single generator 2^(1/6) of degree 6.
+ *
+ * Returns NULL when:
+ *   - the expression contains no algebraic generators (caller stays
+ *     in Q[x]);
+ *   - the expression contains a `Power[u, p/q]` (q > 1) whose base u
+ *     is not an integer literal (e.g. a rational, a polynomial, or a
+ *     nested radical);
+ *   - more than QA_AUTODETECT_MAX_GENS distinct integer bases appear;
+ *   - the tower construction in `qa_resolve_extension_tower` fails.
+ *
+ * Caller owns the returned tower (free with `qa_tower_free`). */
+QATower* extension_autodetect(const struct Expr* e);
+
+/* Multi-expression variant of `extension_autodetect`: scan every entry
+ * of `args[0..argc-1]` and build the joint compositum.  Equivalent in
+ * effect to wrapping the inputs in a single `List[...]` and calling
+ * `extension_autodetect`, but skips the temporary Expr.  Used by
+ * polynomial builtins that take multiple polynomial arguments
+ * (PolynomialGCD, PolynomialLCM, PolynomialQuotient, PolynomialRemainder).
+ *
+ * Returns NULL on any of the conditions documented for
+ * `extension_autodetect`. */
+QATower* extension_autodetect_args(struct Expr* const* args, size_t argc);
+
 #endif

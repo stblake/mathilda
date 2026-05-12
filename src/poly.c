@@ -1552,20 +1552,40 @@ static Expr* polynomialdivrem_with_extension(Expr* p, Expr* q, Expr* x,
 Expr* builtin_polynomialquotient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
 
-    /* Strip a trailing Extension -> α option, if any. */
+    /* Strip a trailing Extension -> α option, if any.  When the user
+     * passed `Extension -> Automatic`, run extension_autodetect on the
+     * two polynomial arguments (single-generator only — tier-1). */
     size_t poly_argc = res->data.function.arg_count;
-    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &poly_argc, &auto_flag);
     if (poly_argc != 3) return NULL;
 
     Expr* p = res->data.function.args[0];
     Expr* q = res->data.function.args[1];
     Expr* x = res->data.function.args[2];
 
+    Expr* alpha_auto = NULL;
+    QATower* auto_tower = NULL;
+    if (!alpha && auto_flag) {
+        Expr* gen_args[2] = { p, q };
+        auto_tower = extension_autodetect_args(gen_args, 2);
+        if (auto_tower && auto_tower->n == 1) {
+            alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
+            alpha = alpha_auto;
+        }
+    }
+
     if (alpha) {
         Expr* ext_result = polynomialdivrem_with_extension(p, q, x, alpha, 0);
-        if (ext_result) return ext_result;
+        if (ext_result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return ext_result;
+        }
         /* Fall through to non-extension path on lift failure (e.g.
          * coefficients outside Q(α), unrecognised α, multivariate). */
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
     }
 
     Expr *Q, *R;
@@ -1582,16 +1602,34 @@ Expr* builtin_polynomialremainder(Expr* res) {
 
     /* Strip a trailing Extension -> α option, if any. */
     size_t poly_argc = res->data.function.arg_count;
-    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &poly_argc, &auto_flag);
     if (poly_argc != 3) return NULL;
 
     Expr* p = res->data.function.args[0];
     Expr* q = res->data.function.args[1];
     Expr* x = res->data.function.args[2];
 
+    Expr* alpha_auto = NULL;
+    QATower* auto_tower = NULL;
+    if (!alpha && auto_flag) {
+        Expr* gen_args[2] = { p, q };
+        auto_tower = extension_autodetect_args(gen_args, 2);
+        if (auto_tower && auto_tower->n == 1) {
+            alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
+            alpha = alpha_auto;
+        }
+    }
+
     if (alpha) {
         Expr* ext_result = polynomialdivrem_with_extension(p, q, x, alpha, 1);
-        if (ext_result) return ext_result;
+        if (ext_result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return ext_result;
+        }
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
     }
 
     Expr *Q, *R;
@@ -1609,12 +1647,24 @@ Expr* builtin_polynomialquotientremainder(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
 
     size_t poly_argc = res->data.function.arg_count;
-    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &poly_argc, &auto_flag);
     if (poly_argc != 3) return NULL;
 
     Expr* p = res->data.function.args[0];
     Expr* q = res->data.function.args[1];
     Expr* x = res->data.function.args[2];
+
+    Expr* alpha_auto = NULL;
+    QATower* auto_tower = NULL;
+    if (!alpha && auto_flag) {
+        Expr* gen_args[2] = { p, q };
+        auto_tower = extension_autodetect_args(gen_args, 2);
+        if (auto_tower && auto_tower->n == 1) {
+            alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
+            alpha = alpha_auto;
+        }
+    }
 
     if (alpha) {
         /* For the extension path we run the divrem twice -- the slow        */
@@ -1625,10 +1675,14 @@ Expr* builtin_polynomialquotientremainder(Expr* res) {
         if (qext && rext) {
             Expr* list = expr_new_function(expr_new_symbol("List"),
                                            (Expr*[]){qext, rext}, 2);
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
             return list;
         }
         if (qext) expr_free(qext);
         if (rext) expr_free(rext);
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
         /* Fall through to plain path on lift failure. */
     }
 
@@ -1982,24 +2036,46 @@ static Expr* expr_rebuild_call(const Expr* original, Expr** args,
 /*                                                                     */
 /* Option `Extension -> α`: factor over Q(α) using the QAUPoly         */
 /* machinery (see polynomialgcd_with_extension above).  `Extension ->   */
-/* None` and `Extension -> Automatic` are accepted and treated as the   */
-/* default (no extension; the option is consumed but otherwise          */
-/* ignored).                                                             */
+/* None` is accepted and treated as the default (no extension).         */
+/* `Extension -> Automatic` triggers `extension_autodetect_args` and    */
+/* routes through the single-generator α-path when one is found.        */
 Expr* builtin_polynomialgcd(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
-    /* Strip a trailing Extension -> α option, if any. */
+    /* Strip a trailing Extension -> α option, if any.  Extension ->
+     * Automatic triggers extension_autodetect_args and routes through
+     * the single-generator α-path when a single generator is found. */
     size_t poly_argc = res->data.function.arg_count;
-    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &poly_argc, &auto_flag);
+    Expr* alpha_auto = NULL;
+    QATower* auto_tower = NULL;
+    if (!alpha && auto_flag && poly_argc >= 1) {
+        auto_tower = extension_autodetect_args(res->data.function.args,
+                                               poly_argc);
+        if (auto_tower && auto_tower->n == 1) {
+            alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
+            alpha = alpha_auto;
+        }
+    }
     if (poly_argc != res->data.function.arg_count) {
-        if (poly_argc == 0) return NULL;
+        if (poly_argc == 0) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return NULL;
+        }
         if (alpha) {
             Expr* ext_result = polynomialgcd_with_extension(
                 res->data.function.args, poly_argc, alpha);
+            if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+            if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
             if (ext_result) return ext_result;
             /* Fall through to non-extension path on failure (multivariate,
              * unrecognised α, lift failure, etc.). */
         }
+        /* Cleanup any residual auto-detect state before recursion. */
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
         /* Rebuild the call with options removed and recurse so the rest
          * of this function works against the trimmed argument list. */
         Expr* trimmed = expr_rebuild_call(res, res->data.function.args,
@@ -2007,6 +2083,19 @@ Expr* builtin_polynomialgcd(Expr* res) {
         Expr* result = builtin_polynomialgcd(trimmed);
         expr_free(trimmed);
         return result;
+    }
+    /* No options were stripped, but auto-detect may still have produced
+     * an α to try.  When the standard path is about to run, give the
+     * extension path a chance first. */
+    if (alpha) {
+        Expr* ext_result = polynomialgcd_with_extension(
+            res->data.function.args, poly_argc, alpha);
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
+        if (ext_result) return ext_result;
+    } else {
+        if (alpha_auto) expr_free(alpha_auto);
+        if (auto_tower) qa_tower_free(auto_tower);
     }
 
     /* Inexact coefficients (e.g. PolynomialGCD[x^2 - 1.0, x - 1.0]) cannot
@@ -2299,21 +2388,52 @@ static Expr* polynomiallcm_with_extension(Expr** argv, size_t argc,
 Expr* builtin_polynomiallcm(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
-    /* Strip a trailing Extension -> α option, if any. */
+    /* Strip a trailing Extension -> α option.  Extension -> Automatic
+     * triggers extension_autodetect_args on the polynomial arguments. */
     size_t poly_argc = res->data.function.arg_count;
-    const Expr* alpha = extract_extension_option(res, &poly_argc);
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &poly_argc, &auto_flag);
+    Expr* alpha_auto = NULL;
+    QATower* auto_tower = NULL;
+    if (!alpha && auto_flag && poly_argc >= 1) {
+        auto_tower = extension_autodetect_args(res->data.function.args,
+                                               poly_argc);
+        if (auto_tower && auto_tower->n == 1) {
+            alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
+            alpha = alpha_auto;
+        }
+    }
     if (poly_argc != res->data.function.arg_count) {
-        if (poly_argc == 0) return NULL;
+        if (poly_argc == 0) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return NULL;
+        }
         if (alpha) {
             Expr* ext_result = polynomiallcm_with_extension(
                 res->data.function.args, poly_argc, alpha);
+            if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+            if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
             if (ext_result) return ext_result;
         }
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
         Expr* trimmed = expr_rebuild_call(res, res->data.function.args,
                                           poly_argc);
         Expr* result = builtin_polynomiallcm(trimmed);
         expr_free(trimmed);
         return result;
+    }
+    /* No options stripped but auto-detect may still have produced an α. */
+    if (alpha) {
+        Expr* ext_result = polynomiallcm_with_extension(
+            res->data.function.args, poly_argc, alpha);
+        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
+        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
+        if (ext_result) return ext_result;
+    } else {
+        if (alpha_auto) expr_free(alpha_auto);
+        if (auto_tower) qa_tower_free(auto_tower);
     }
 
     /* Force-rationalise inexact coefficients so the exact LCM algorithm
