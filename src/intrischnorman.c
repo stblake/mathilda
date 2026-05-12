@@ -1842,9 +1842,7 @@ static int get_special_all(Expr** si, Expr** vars, size_t n,
             if (count >= cap) {
                 cap = cap ? cap * 2 : 4;
                 Expr** np = (Expr**)realloc(acc_p, sizeof(Expr*) * cap);
-                bool* nf = (bool*)realloc(acc_f, sizeof(bool) * cap);
-                if (!np || !nf) {
-                    free(np); free(nf);
+                if (!np) {
                     for (size_t i = 0; i < count; i++) expr_free(acc_p[i]);
                     free(acc_p); free(acc_f);
                     expr_free(darboux1);
@@ -1852,6 +1850,14 @@ static int get_special_all(Expr** si, Expr** vars, size_t n,
                     return 1;
                 }
                 acc_p = np;
+                bool* nf = (bool*)realloc(acc_f, sizeof(bool) * cap);
+                if (!nf) {
+                    for (size_t i = 0; i < count; i++) expr_free(acc_p[i]);
+                    free(acc_p); free(acc_f);
+                    expr_free(darboux1);
+                    if (darboux2) expr_free(darboux2);
+                    return 1;
+                }
                 acc_f = nf;
             }
             acc_p[count] = tmp[j];
@@ -2087,16 +2093,19 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     PMSubMap lin, lout;
     Expr** vars = NULL;
     if (build_substitution_maps(si, n, &lin, &lout, &vars, 1) != 0) {
-        for (size_t i = 0; i < n; i++) expr_free(si[i]); free(si);
+        for (size_t i = 0; i < n; i++) expr_free(si[i]);
+        free(si);
         expr_free(ff_atoms);
         return NULL;
     }
 
     Expr** lvec = NULL; Expr* q = NULL;
     if (build_vector_field(si, n, &lin, x, &lvec, &q) != 0) {
-        for (size_t i = 0; i < n; i++) expr_free(si[i]); free(si);
+        for (size_t i = 0; i < n; i++) expr_free(si[i]);
+        free(si);
         pm_sub_map_free(&lin); pm_sub_map_free(&lout);
-        for (size_t i = 0; i < n; i++) expr_free(vars[i]); free(vars);
+        for (size_t i = 0; i < n; i++) expr_free(vars[i]);
+        free(vars);
         expr_free(ff_atoms);
         return NULL;
     }
