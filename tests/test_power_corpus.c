@@ -98,6 +98,69 @@ static void test_bug5_zero_to_zero(void) {
     assert_eval_eq("Power[0, -1]", "ComplexInfinity", 0);
 }
 
+/* Rational-base + rational-exponent canonicalisation (2026-05-12).
+ * Powers of Rational[n, d] with non-integer exponent now distribute
+ * to Power[n, p/q] * Power[d, -p/q] when at least one piece has a
+ * perfect q-th-power extraction (or |n| == 1). Cases without any
+ * extraction (Sqrt[2/3], (4/9)^(2/3)) stay unevaluated. */
+static void test_rational_base_rational_exp(void) {
+    /* Numerator-only trigger (|n| == 1). */
+    assert_eval_eq("Power[1/54, 2/3]", "1/9/2^(2/3)", 0);
+    assert_eval_eq("Power[1/8, 2/3]",  "1/4", 0);
+    assert_eval_eq("Power[1/4, 1/2]",  "1/2", 0);
+
+    /* Both numerator and denominator extract. */
+    assert_eval_eq("Power[8/27, 2/3]", "4/9", 0);
+    assert_eval_eq("Power[4/9, 1/2]",  "2/3", 0);
+
+    /* Numerator-only perfect extraction with non-perfect denominator. */
+    assert_eval_eq("Power[8/3, 1/2]", "2 Sqrt[2/3]", 0);
+
+    /* No extraction possible -- left unevaluated. */
+    assert_eval_eq("Power[2/3, 1/2]",  "Sqrt[2/3]", 0);
+    assert_eval_eq("Power[4/9, 2/3]",  "(4/9)^(2/3)", 0);
+
+    /* Negative numerator routes through the integer negative-base path. */
+    assert_eval_eq("Power[-1/8, 1/3]", "1/2 (-1)^(1/3)", 0);
+    assert_eval_eq("Power[-1/4, 1/2]", "1/2*I", 0);
+}
+
+/* Power[Times[positive_factors], p/q] distribution (2026-05-12).
+ * Distributes when every factor is known positive AND at least one
+ * factor cleanly reduces to a rational coefficient under Power[_, p/q]. */
+static void test_power_of_times_positives(void) {
+    /* Integer perfect-square factor extracts cleanly. */
+    assert_eval_eq("Sqrt[4 Pi]",   "2 Sqrt[Pi]", 0);
+    assert_eval_eq("(Pi/8)^(2/3)", "1/4 Pi^(2/3)", 0);
+
+    /* Conservative when no factor cleanly reduces. */
+    assert_eval_eq("Sqrt[2 Pi]",       "Sqrt[2 Pi]", 0);
+    assert_eval_eq("Power[4 Pi, 2/3]", "(4 Pi)^(2/3)", 0);
+    assert_eval_eq("Sqrt[2 Sqrt[3]]",  "Sqrt[2 Sqrt[3]]", 0);
+
+    /* Chains with rational-base distribution: Sqrt[(1/54)^(2/3)] cascades
+     * (1/54)^(2/3) -> 1/9 * 2^(-2/3), then Sqrt of that distributes. */
+    assert_eval_eq("Sqrt[Power[1/54, 2/3]]", "1/3/2^(1/3)", 0);
+
+    /* Nested clean extraction. */
+    assert_eval_eq("Sqrt[4 Sqrt[3]]", "2 3^(1/4)", 0);
+}
+
+/* Power-of-Power composition with positive base + rational outer (2026-05-12). */
+static void test_power_of_power_positive_base(void) {
+    /* Positive integer base -- exponent merges. */
+    assert_eval_eq("Sqrt[Power[2, a]]", "2^(1/2 a)", 0);
+
+    /* Pi positive -- Sqrt[Pi^2] reduces to Pi (not |Pi|). */
+    assert_eval_eq("Sqrt[Power[Pi, 2]]", "Pi", 0);
+
+    /* Unknown-sign symbol -- must NOT reduce (Sqrt[x^4] != x^2 for x<0). */
+    assert_eval_eq("Sqrt[Power[x, 4]]", "Sqrt[x^4]", 0);
+
+    /* Integer outer exponent on negative base still works (pre-existing rule). */
+    assert_eval_eq("Power[Power[-1, 2], 3]", "1", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -105,6 +168,9 @@ int main(void) {
     TEST(test_bug3_imag_times_positive);
     TEST(test_bug4_negative_integer_part);
     TEST(test_bug5_zero_to_zero);
+    TEST(test_rational_base_rational_exp);
+    TEST(test_power_of_times_positives);
+    TEST(test_power_of_power_positive_base);
 
     printf("All power_corpus tests passed!\n");
     return 0;

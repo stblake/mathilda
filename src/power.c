@@ -90,6 +90,39 @@ static void factor_out_kth_power(int64_t n, int64_t k, int64_t* out_m, int64_t* 
     *out_r = r;
 }
 
+/* Returns true when Power[f, p/q] is guaranteed to evaluate to a pure
+ * rational coefficient with no remaining q-th-power radical. Used to
+ * gate distribution of Power[Times[positives], p/q]: we distribute only
+ * when at least one factor cleanly extracts to a rational (the
+ * remaining radicals on other factors then rejoin canonically). This
+ * matches Mathematica's behaviour for Sqrt[4 Pi] -> 2 Sqrt[Pi] (4 is a
+ * perfect square) while leaving (4 Pi)^(2/3) alone (4 has no cube
+ * factor). The predicate intentionally rejects Power[B, E] factors --
+ * even though composition always works, distributing on Power-only
+ * factors with no clean rational extraction would split forms like
+ * Sqrt[2^a 3^a] into Sqrt[2^a] Sqrt[3^a], which is neither shorter nor
+ * more canonical. */
+static bool factor_fully_reduces_under_q(Expr* f, int64_t q) {
+    if (f->type == EXPR_INTEGER) {
+        int64_t n = f->data.integer;
+        if (n <= 0) return false;
+        if (n == 1) return true;
+        int64_t m, r;
+        factor_out_kth_power(n, q, &m, &r);
+        return (r == 1);
+    }
+    int64_t n, d;
+    if (is_rational(f, &n, &d)) {
+        if (n <= 0) return false;
+        int64_t m, r;
+        factor_out_kth_power(n, q, &m, &r);
+        if (r != 1) return false;
+        factor_out_kth_power(d, q, &m, &r);
+        return (r == 1);
+    }
+    return false;
+}
+
 /* Given positive n_in > 1, decide whether n_in = b^k for some integer
  * b >= 2 and k >= 2. On true, fills b_out with the smallest such b
  * (equivalently the largest such k) and *k_out with that k.
@@ -675,6 +708,67 @@ Expr* builtin_power(Expr* res) {
         }
     }
 
+    /* Rational-base, rational-exponent canonicalisation.
+     *
+     *   Power[Rational[n, d], p/q]   (q > 1, d > 1, gcd(p, q) = 1)
+     *      ->   Power[n, p/q] * Power[d, -p/q]
+     *
+     * The split routes each integer piece through the existing
+     * integer-base + rational-exponent path below, which extracts the
+     * q-th-power coefficient and leaves a residue Power[r, b/q] with
+     * r free of q-th-power factors. Triggering is gated on at least
+     * one piece simplifying:
+     *
+     *   (a) |n| == 1   -- numerator collapses, and the result is a
+     *       pure d^(-p/q) which routes cleanly through the integer
+     *       path (find_min_perfect_base can further reduce d there);
+     *   (b) m_n > 1    -- numerator has a perfect q-th-power factor;
+     *   (c) m_d > 1    -- denominator has a perfect q-th-power factor.
+     *
+     * Without any of these triggers we leave Power[Rational[n,d], p/q]
+     * alone, matching Mathematica's conservative behaviour for cases
+     * like Sqrt[2/3] and (4/9)^(2/3) where no rational coefficient can
+     * be extracted on either side.
+     *
+     * Soundness for negative numerator: (n/d)^(p/q) =
+     * Power[n, p/q] * Power[d, -p/q] holds on the principal branch
+     * because d is strictly positive (make_rational keeps d > 0). A
+     * negative n routes through the integer-base negative-base
+     * handling: q == 2 pulls out an I, odd q absorbs the sign, even
+     * q >= 4 leaves Power[n, p/q] unevaluated (still progress -- the
+     * Rational has been split into its integer components).
+     *
+     * Examples:
+     *   (1/54)^(2/3)  -> 1 * 54^(-2/3) -> 1/9 * 2^(-2/3)
+     *   (8/27)^(2/3)  -> 8^(2/3) * 27^(-2/3) -> 4 * 1/9 -> 4/9
+     *   Sqrt[4/9]     -> Sqrt[4] * 9^(-1/2) -> 2 * 1/3 -> 2/3
+     *   Sqrt[1/4]     -> 1 * 4^(-1/2) -> 1/2
+     *   (-1/8)^(1/3)  -> (-1)^(1/3) * 8^(-1/3) -> (-1)^(1/3) / 2
+     *   (1/4)^(2/3)   -> 4^(-2/3) -> 1/2 * 2^(-1/3) (via perfect-power)
+     */
+    {
+        int64_t pp_rb, qq_rb;
+        if (is_rational(base, &bn, &bd) && bd > 1 &&
+            is_rational(exp, &pp_rb, &qq_rb) && qq_rb > 1) {
+            int64_t abs_bn = (bn < 0) ? -bn : bn;
+            int64_t m_n_rb, r_n_rb, m_d_rb, r_d_rb;
+            factor_out_kth_power(abs_bn, qq_rb, &m_n_rb, &r_n_rb);
+            factor_out_kth_power(bd,     qq_rb, &m_d_rb, &r_d_rb);
+            (void)r_n_rb; (void)r_d_rb;
+            bool trigger = (abs_bn == 1) || (m_n_rb > 1) || (m_d_rb > 1);
+            if (trigger) {
+                Expr* num_pow = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_integer(bn), expr_copy(exp) }, 2);
+                Expr* neg_exp = make_rational(-pp_rb, qq_rb);
+                Expr* den_pow = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_new_integer(bd), neg_exp }, 2);
+                Expr* result = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ num_pow, den_pow }, 2);
+                return eval_and_free(result);
+            }
+        }
+    }
+
     if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol == SYM_Times) {
         size_t bc = base->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * bc);
@@ -829,10 +923,88 @@ Expr* builtin_power(Expr* res) {
     }
 rat_imag_fallthrough: ;
 
-    if (exp->type == EXPR_INTEGER && base->type == EXPR_FUNCTION && base->data.function.head->data.symbol == SYM_Power) {
-        if (base->data.function.arg_count == 2) {
-            Expr* inner_base = base->data.function.args[0];
-            Expr* inner_exp = base->data.function.args[1];
+    /* Power[Times[positive_factors], p/q] distribution.
+     *
+     * Distributes the outer Power over every Times factor when:
+     *   (a) every factor is known positive (is_known_positive_pwr), and
+     *   (b) at least one factor is an integer or rational that
+     *       PERFECTLY reduces to a rational coefficient under
+     *       Power[_, p/q] -- i.e., factor_out_kth_power leaves
+     *       residue 1 on both numerator and denominator.
+     *
+     * The gating in (b) keeps Mathematica-faithful behaviour:
+     *
+     *   Sqrt[4 Pi]              -> 2 Sqrt[Pi]      (4 = 2^2, r=1)
+     *   Sqrt[(1/9) 2^(-2/3)]    -> 1/3 * 2^(-1/3)  (9 = 3^2, r=1)
+     *   (Pi/8)^(2/3)            -> Pi^(2/3) / 4    (8 = 2^3, r=1)
+     *
+     * vs. leaving (4 Pi)^(2/3) and Sqrt[2 Pi] alone (no factor has a
+     * clean rational extraction). Pure-imaginary factors are handled
+     * by the earlier rat_imag block, which fires before this one and
+     * is gated on saw_imag; falling through here means no imaginary
+     * factor is present.
+     *
+     * After distribution, each resulting Power[factor, p/q] is
+     * re-evaluated. Power-typed factors hit the Power-of-Power
+     * composition rule below (positive base lets exponents merge
+     * without crossing a branch cut). Rational/integer factors hit
+     * their dedicated paths. This is the canonical-form companion of
+     * the rational-base distribution above: that one factors a single
+     * Rational base; this one factors a Times of positives that
+     * arises naturally as the output of a prior simplification (e.g.
+     * Sqrt[(1/54)^(2/3)] after (1/54)^(2/3) reduces to
+     * 1/9 * 2^(-2/3)).
+     */
+    if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
+        && base->data.function.head->data.symbol == SYM_Times) {
+        int64_t pp_pt, qq_pt;
+        if (is_rational(exp, &pp_pt, &qq_pt) && qq_pt > 1) {
+            size_t bc = base->data.function.arg_count;
+            bool all_pos = true;
+            bool has_full_reducer = false;
+            for (size_t i = 0; i < bc; i++) {
+                Expr* f = base->data.function.args[i];
+                if (!is_known_positive_pwr(f)) { all_pos = false; break; }
+                if (factor_fully_reduces_under_q(f, qq_pt)) has_full_reducer = true;
+            }
+            if (all_pos && has_full_reducer) {
+                Expr** new_args = malloc(sizeof(Expr*) * bc);
+                for (size_t i = 0; i < bc; i++) {
+                    new_args[i] = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(base->data.function.args[i]),
+                                   expr_copy(exp) }, 2);
+                }
+                Expr* result = expr_new_function(expr_new_symbol("Times"),
+                                                 new_args, bc);
+                free(new_args);
+                return eval_and_free(result);
+            }
+        }
+    }
+
+    /* Power-of-Power composition: Power[Power[B, E_inner], exp] ->
+     * Power[B, E_inner * exp].
+     *
+     * Sound when (a) exp is an integer (the identity holds for any B
+     * since integer powers don't cross branch cuts), or (b) B is known
+     * positive (the principal-branch identity (B^E_inner)^exp =
+     * B^(E_inner * exp) holds without crossing branch cuts). Without
+     * the positivity guard for non-integer exp we would silently break
+     * Sqrt[(-1)^2] = 1 vs (-1)^(2 * 1/2) = -1.
+     *
+     * The positive-base extension is what reduces Sqrt[Power[2, -2/3]]
+     * to Power[2, -1/3] -- needed for the inner radical that emerges
+     * from Sqrt[(1/54)^(2/3)] after the rational-base distribution
+     * splits it into 1/9 * Power[2, -2/3].
+     */
+    if (base->type == EXPR_FUNCTION && base->data.function.head->type == EXPR_SYMBOL
+        && base->data.function.head->data.symbol == SYM_Power
+        && base->data.function.arg_count == 2) {
+        Expr* inner_base = base->data.function.args[0];
+        Expr* inner_exp  = base->data.function.args[1];
+        bool can_compose = (exp->type == EXPR_INTEGER)
+                        || is_known_positive_pwr(inner_base);
+        if (can_compose) {
             Expr* t_args[2] = { expr_copy(inner_exp), expr_copy(exp) };
             Expr* new_exp = expr_new_function(expr_new_symbol("Times"), t_args, 2);
             Expr* p_args[2] = { expr_copy(inner_base), new_exp };
