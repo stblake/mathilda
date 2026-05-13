@@ -639,6 +639,25 @@ void info_init(void) {
     // Time and Date
     symtab_set_docstring("Timing", "Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.");
     symtab_set_docstring("RepeatedTiming", "RepeatedTiming[expr] evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.\nRepeatedTiming[expr, t] does repeated evaluation for at least t seconds.");
+    symtab_set_docstring("TimeConstrained",
+        "TimeConstrained[expr, t]\n"
+        "\tevaluates expr, stopping after t seconds.\n"
+        "TimeConstrained[expr, t, failexpr]\n"
+        "\treturns failexpr if the time constraint is not met.\n"
+        "\n"
+        "TimeConstrained generates an interrupt to abort the evaluation of\n"
+        "expr if the evaluation is not completed within the specified time.\n"
+        "TimeConstrained evaluates failexpr only if the evaluation is\n"
+        "aborted. TimeConstrained returns $Aborted if the evaluation is\n"
+        "aborted and no failexpr is specified.\n"
+        "\n"
+        "TimeConstrained[expr, Infinity] imposes no time constraint.\n"
+        "TimeConstrained may give different results on different occasions\n"
+        "within a single session, for example as a result of different\n"
+        "conditions of internal system caches.\n"
+        "TimeConstrained takes account only of CPU time spent inside the\n"
+        "main PicoCAS kernel process; it does not include additional\n"
+        "threads or processes.");
     symtab_set_docstring("AbsoluteTime",
         "AbsoluteTime[]\n"
         "\tgives the total number of seconds since the beginning of January 1, 1900, in your time zone.\n"

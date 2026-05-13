@@ -1,3 +1,14 @@
+/* TimeConstrained uses sigaction / sigsetjmp / siglongjmp / setitimer,
+ * none of which are in C99.  These feature-test macros expose them under
+ * glibc's -std=c99; Darwin exposes them implicitly.  Must come before
+ * the first #include. */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include "core.h"
 #include "symtab.h"
 #include "eval.h"
@@ -40,6 +51,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <signal.h>
+#include <setjmp.h>
+#include <sys/time.h>
 #include <gmp.h>
 #include "rat.h"
 #include "parfrac.h"
@@ -110,6 +124,8 @@ void core_init(void) {
     symtab_get_def("PreDecrement")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("AddTo")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("SubtractFrom")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
+    symtab_add_builtin("TimeConstrained", builtin_time_constrained);
+    symtab_get_def("TimeConstrained")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_add_builtin("Attributes", builtin_attributes);
     symtab_add_builtin("SetAttributes", builtin_set_attributes);
     symtab_add_builtin("OwnValues", builtin_own_values);
@@ -1684,5 +1700,213 @@ Expr* builtin_symbol(Expr* res) {
     Expr* out = expr_new_symbol(resolved ? resolved : name);
     free(resolved);
     return out;
+}
+
+/* --------------------------- TimeConstrained ----------------------------
+ *
+ * TimeConstrained[expr, t]            evaluates expr, aborting after t s
+ * TimeConstrained[expr, t, failexpr]  ... and returns failexpr on abort
+ * TimeConstrained[expr, Infinity]     imposes no time constraint
+ *
+ * Without failexpr, an aborted call returns the symbol `$Aborted`.
+ *
+ * Mechanism: install a one-shot SIGPROF handler and an ITIMER_PROF
+ * timer; run evaluate() inside sigsetjmp.  If the budget is exhausted,
+ * the handler siglongjmp's back here and we abort.  ITIMER_PROF counts
+ * only CPU time (user + kernel) of this process, matching the
+ * Mathematica semantic ("CPU time spent inside the main PicoCAS kernel
+ * process").  SIGPROF is used (not SIGALRM) so the intrischnorman
+ * pmint timeout — which is wall-clock based on SIGALRM/ITIMER_REAL —
+ * and the test-harness alarm(60) keep working.  Old handler / timer
+ * are saved and restored so the calls compose under nesting and don't
+ * clobber other timer users in the address space.
+ *
+ * Memory: the longjmp unwind cannot run destructors, so any Expr nodes
+ * the in-flight evaluator allocated leak.  This is the documented
+ * Mathematica behaviour ("may give different results on different
+ * occasions"); the leak is bounded by the size of the abandoned
+ * computation and the next session-level GC is `Quit[]`.
+ * ------------------------------------------------------------------- */
+
+static sigjmp_buf  tc_jmp_env;
+static volatile sig_atomic_t tc_timed_out = 0;
+
+static void tc_sigprof_handler(int sig) {
+    (void)sig;
+    tc_timed_out = 1;
+    siglongjmp(tc_jmp_env, 1);
+}
+
+/* Returns:
+ *   +1  success, *out_seconds is a finite, possibly zero, possibly
+ *       negative numeric time budget.
+ *    0  the argument is the symbol Infinity (or DirectedInfinity[1]):
+ *       caller should impose no timeout.
+ *   -1  the argument is not a recognisable time -- caller should leave
+ *       the call unevaluated. */
+static int tc_parse_time(Expr* arg, double* out_seconds) {
+    if (!arg) return -1;
+    if (arg->type == EXPR_INTEGER) {
+        *out_seconds = (double)arg->data.integer;
+        return 1;
+    }
+    if (arg->type == EXPR_REAL) {
+        *out_seconds = arg->data.real;
+        return 1;
+    }
+    if (arg->type == EXPR_BIGINT) {
+        *out_seconds = mpz_get_d(arg->data.bigint);
+        return 1;
+    }
+    if (arg->type == EXPR_SYMBOL && arg->data.symbol == SYM_Infinity) {
+        return 0;
+    }
+    if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = arg->data.function.head->data.symbol;
+        /* DirectedInfinity[1] is the canonical representation of +Infinity. */
+        if (h == SYM_DirectedInfinity && arg->data.function.arg_count == 1) {
+            Expr* sign = arg->data.function.args[0];
+            if (sign->type == EXPR_INTEGER && sign->data.integer > 0) return 0;
+        }
+        /* Rational[p, q] with integer numerator/denominator. */
+        if (h == SYM_Rational && arg->data.function.arg_count == 2) {
+            Expr* n = arg->data.function.args[0];
+            Expr* d = arg->data.function.args[1];
+            double dn = 0.0, dd = 0.0;
+            int ok = 1;
+            if      (n->type == EXPR_INTEGER) dn = (double)n->data.integer;
+            else if (n->type == EXPR_BIGINT)  dn = mpz_get_d(n->data.bigint);
+            else ok = 0;
+            if      (d->type == EXPR_INTEGER) dd = (double)d->data.integer;
+            else if (d->type == EXPR_BIGINT)  dd = mpz_get_d(d->data.bigint);
+            else ok = 0;
+            if (ok && dd != 0.0) {
+                *out_seconds = dn / dd;
+                return 1;
+            }
+        }
+    }
+    return -1;
+}
+
+Expr* builtin_time_constrained(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
+
+    Expr* expr_arg = res->data.function.args[0];
+    Expr* time_arg = res->data.function.args[1];
+    Expr* fail_arg = (argc == 3) ? res->data.function.args[2] : NULL;
+
+    /* HoldAll: every argument was kept literal.  Evaluate only the time
+     * budget here so the caller can write e.g. TimeConstrained[..., 2*x]
+     * with a globally-set x.  The body and failexpr stay unevaluated
+     * until they are actually needed -- failexpr in particular MUST NOT
+     * be evaluated unless the timeout fires (Mathematica semantic). */
+    Expr* time_eval = evaluate(expr_copy(time_arg));
+    double seconds = 0.0;
+    int kind = tc_parse_time(time_eval, &seconds);
+    expr_free(time_eval);
+
+    if (kind < 0) {
+        /* Unparseable time budget: leave the whole call unevaluated. */
+        return NULL;
+    }
+
+    /* Infinity -> evaluate the body with no constraint.  The caller in
+     * evaluate_step frees `res` once we return non-NULL; the builtin
+     * convention is "don't double-free." */
+    if (kind == 0) {
+        return evaluate(expr_copy(expr_arg));
+    }
+
+    /* Non-positive (zero, negative, NaN) budgets abort immediately. */
+    if (!(seconds > 0.0)) {
+        if (fail_arg) {
+            return evaluate(expr_copy(fail_arg));
+        }
+        return expr_new_symbol("$Aborted");
+    }
+
+    /* Translate seconds -> (it_value.tv_sec, it_value.tv_usec).  Round
+     * sub-microsecond positive budgets up to one microsecond so that
+     * setitimer doesn't see (0, 0), which would disarm rather than
+     * arm.  Cap the value below INT_MAX seconds (~68 years) to stay
+     * inside time_t / suseconds_t range on every platform we target. */
+    if (seconds > 2147483.0) seconds = 2147483.0;
+    long secs  = (long)seconds;
+    long usecs = (long)((seconds - (double)secs) * 1e6);
+    if (usecs < 0) usecs = 0;
+    if (usecs >= 1000000) { secs += usecs / 1000000; usecs %= 1000000; }
+    if (secs == 0 && usecs == 0) usecs = 1;
+
+    /* Save previous SIGPROF handler, ITIMER_PROF state, and tc_jmp_env so
+     * nested TimeConstrained calls compose and any external profiler is
+     * left exactly as we found it. */
+    struct sigaction sa, old_sa;
+    struct itimerval old_it;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = tc_sigprof_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGPROF, &sa, &old_sa);
+
+    struct itimerval new_it;
+    memset(&new_it, 0, sizeof(new_it));
+    new_it.it_value.tv_sec  = (time_t)secs;
+    new_it.it_value.tv_usec = (suseconds_t)usecs;
+    setitimer(ITIMER_PROF, &new_it, &old_it);
+
+    sigjmp_buf  saved_jmp_env;
+    memcpy(&saved_jmp_env, &tc_jmp_env, sizeof(saved_jmp_env));
+    int saved_depth = eval_get_recursion_depth();
+    volatile sig_atomic_t saved_timed_out = tc_timed_out;
+    tc_timed_out = 0;
+
+    Expr* result = NULL;
+    if (sigsetjmp(tc_jmp_env, 1) == 0) {
+        result = evaluate(expr_copy(expr_arg));
+    }
+
+    /* Disarm OUR timer first, then reinstall the prior timer and handler.
+     * Order matters: leaving our timer armed while we swap the handler
+     * back could deliver SIGPROF into someone else's handler. */
+    struct itimerval disarm;
+    memset(&disarm, 0, sizeof(disarm));
+    setitimer(ITIMER_PROF, &disarm, NULL);
+    setitimer(ITIMER_PROF, &old_it, NULL);
+    sigaction(SIGPROF, &old_sa, NULL);
+
+    /* Restore the outer-call jmp_buf so a parent TimeConstrained can
+     * still receive its own SIGPROF correctly. */
+    memcpy(&tc_jmp_env, &saved_jmp_env, sizeof(saved_jmp_env));
+
+    bool aborted_here = (tc_timed_out != 0);
+    tc_timed_out = saved_timed_out;
+
+    /* If we longjmp'd out of evaluate(), the matching depth decrements
+     * never ran -- restore the counter so the rest of the session is
+     * not falsely "$RecursionLimit exceeded". */
+    if (aborted_here) {
+        eval_reset_recursion_depth(saved_depth);
+    }
+
+    if (aborted_here) {
+        if (result) expr_free(result);   /* defensive; should be NULL */
+        if (fail_arg) {
+            /* failexpr is evaluated AFTER the timeout context is torn
+             * down, with a fresh CPU budget.  Mathematica's semantics
+             * say "TimeConstrained evaluates failexpr only if the
+             * evaluation is aborted." */
+            return evaluate(expr_copy(fail_arg));
+        }
+        return expr_new_symbol("$Aborted");
+    }
+
+    /* `res` is owned by the caller (evaluate_step) and will be freed
+     * after we return.  Returning the evaluated body directly does not
+     * double-free anything because `result` is a fresh tree built from
+     * expr_copy(expr_arg). */
+    return result;
 }
 

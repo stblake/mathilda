@@ -32,6 +32,13 @@ int  eval_get_recursion_limit(void);
 void eval_set_recursion_limit(int n);
 int  eval_get_recursion_depth(void);
 
+/* Force the internal recursion-depth counter back to `n`, clearing the
+ * sticky overflow flag.  Intended ONLY for siglongjmp-based unwinds
+ * (TimeConstrained, pmint timeout) where evaluate()'s normal
+ * "decrement on return" did not get a chance to run.  Calling this
+ * during normal evaluation will corrupt the recursion guard. */
+void eval_reset_recursion_depth(int n);
+
 // Seeds the user-visible $RecursionLimit symbol with its default value
 // and installs the docstring. Call after symtab_init().
 void eval_init(void);

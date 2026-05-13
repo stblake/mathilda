@@ -62,6 +62,17 @@ void eval_set_recursion_limit(int n) {
     eval_recursion_limit = (n >= MIN_RECURSION_LIMIT) ? n : DEFAULT_RECURSION_LIMIT;
 }
 
+/* See eval.h.  Used after a siglongjmp out of evaluate(): the matching
+ * decrements never ran, so we restore the depth counter to the value it
+ * had before the timed call entered the evaluator.  We also clear
+ * eval_overflow so a future evaluate() is not falsely poisoned by the
+ * aborted call. */
+void eval_reset_recursion_depth(int n) {
+    if (n < 0) n = 0;
+    eval_recursion_depth = n;
+    eval_overflow = false;
+}
+
 /* M3 phase-3 evaluation clock. Starts at 1 so a freshly-allocated Expr
  * (last_evaluated_at == 0) is never mistaken for "already evaluated".
  * Bumped by symtab.c (add_rule, symtab_clear_symbol) and attr.c

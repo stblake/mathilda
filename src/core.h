@@ -48,6 +48,7 @@ Expr* builtin_preincrement(Expr* res);
 Expr* builtin_predecrement(Expr* res);
 Expr* builtin_addto(Expr* res);
 Expr* builtin_subtractfrom(Expr* res);
+Expr* builtin_time_constrained(Expr* res);
 
 // Initialize core builtins
 void core_init(void);

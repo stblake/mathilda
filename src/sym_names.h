@@ -216,6 +216,7 @@ extern const char* SYM_Tanh;
 extern const char* SYM_TeXForm;
 extern const char* SYM_Temporary;
 extern const char* SYM_Throw;
+extern const char* SYM_TimeConstrained;
 extern const char* SYM_Times;
 extern const char* SYM_ToExpression;
 extern const char* SYM_ToString;

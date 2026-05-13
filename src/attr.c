@@ -120,6 +120,7 @@ static SymbolAttr builtin_attrs[] = {
     {"FractionalPart", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"Timing", ATTR_HOLDALL | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
     {"RepeatedTiming", ATTR_HOLDFIRST | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
+    {"TimeConstrained", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Dot", ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED},
     {"Det", ATTR_PROTECTED},
     {"Cross", ATTR_PROTECTED},
