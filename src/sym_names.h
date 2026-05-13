@@ -27,6 +27,7 @@ extern "C" {
 extern const char* SYM_Abort;
 extern const char* SYM_Abs;
 extern const char* SYM_AbsRules;
+extern const char* SYM_AbsoluteTime;
 extern const char* SYM_Algebraics;
 extern const char* SYM_All;
 extern const char* SYM_Alternatives;

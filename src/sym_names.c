@@ -12,6 +12,7 @@
 const char* SYM_Abort = NULL;
 const char* SYM_Abs = NULL;
 const char* SYM_AbsRules = NULL;
+const char* SYM_AbsoluteTime = NULL;
 const char* SYM_Algebraics = NULL;
 const char* SYM_All = NULL;
 const char* SYM_Alternatives = NULL;
@@ -223,6 +224,7 @@ void sym_names_init(void) {
     SYM_Abort                      = intern_symbol("Abort");
     SYM_Abs                        = intern_symbol("Abs");
     SYM_AbsRules                   = intern_symbol("AbsRules");
+    SYM_AbsoluteTime               = intern_symbol("AbsoluteTime");
     SYM_Algebraics                 = intern_symbol("Algebraics");
     SYM_All                        = intern_symbol("All");
     SYM_Alternatives               = intern_symbol("Alternatives");
