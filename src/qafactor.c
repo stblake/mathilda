@@ -1615,8 +1615,144 @@ Expr* qa_factor_with_extension_tower(const Expr* poly,
     return result;
 }
 
+/* Walk `e` and rewrite every `Sqrt[u]` / `Power[u, p/q]` whose base `u`
+ * is a non-integer expression mentioning the integer base `c_base` by
+ * canonicalising `u` via `Together[u, Extension -> Power[c_base, 1/q_natural]]`.
+ * The result is then used as the radicand.
+ *
+ * This is the *input-side* counterpart to the Phase F canonicalise-post
+ * step (which canonicalised the generator-set surface forms): it makes
+ * mathematically-equal but structurally-distinct nested radicals in the
+ * INPUT collapse to a single canonical form, so the downstream tower
+ * substitution (`expr_subst(input, t->alpha_renders[i], ...)`) finds
+ * all instances.
+ *
+ * Without this pass, `Together[Sqrt[A] - Sqrt[B], Extension -> Automatic]`
+ * with A = B mathematically (but A != B structurally) misses one of the
+ * Sqrts at substitution time. */
+static Expr* canonicalise_nested_radicands(const Expr* e,
+                                           int64_t c_base, int64_t q_natural) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    /* Detect Sqrt[u] / Power[u, p/q] with non-integer base `u`. */
+    bool is_radical = false;
+    const Expr* radicand = NULL;
+    const Expr* exp_e = NULL;
+    bool is_sqrt_head = false;
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Sqrt
+        && e->data.function.arg_count == 1) {
+        radicand = e->data.function.args[0];
+        is_radical = true;
+        is_sqrt_head = true;
+    } else if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp  = e->data.function.args[1];
+        int64_t p, q;
+        if (is_rational((Expr*)exp, &p, &q) && q != 1
+            && base->type != EXPR_INTEGER) {
+            radicand = base;
+            exp_e = exp;
+            is_radical = true;
+        }
+    }
+
+    if (is_radical && radicand) {
+        /* Canonicalise the radicand via Together-with-Extension. */
+        Expr* base_e = expr_new_integer(c_base);
+        Expr* rat_args[2] = { expr_new_integer(1),
+                              expr_new_integer(q_natural) };
+        Expr* exp_natural = expr_new_function(expr_new_symbol("Rational"),
+                                              rat_args, 2);
+        Expr* pow_args[2] = { base_e, exp_natural };
+        Expr* alpha = expr_new_function(expr_new_symbol("Power"),
+                                        pow_args, 2);
+        Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){expr_new_symbol("Extension"), alpha}, 2);
+        Expr* tg_call = expr_new_function(expr_new_symbol("Together"),
+            (Expr*[]){expr_copy((Expr*)radicand), rule}, 2);
+        Expr* canon = evaluate(tg_call);
+        expr_free(tg_call);
+
+        if (canon && !expr_eq(canon, (Expr*)radicand)) {
+            /* Rebuild the radical with the canonical radicand. */
+            Expr* new_radical;
+            if (is_sqrt_head) {
+                new_radical = expr_new_function(expr_new_symbol("Sqrt"),
+                                                (Expr*[]){canon}, 1);
+            } else {
+                new_radical = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){canon, expr_copy((Expr*)exp_e)}, 2);
+            }
+            /* Evaluate so the new radical is canonical. */
+            return evaluate(new_radical);
+        }
+        if (canon) expr_free(canon);
+        /* Fall through to recursive walk if no change. */
+    }
+
+    /* Default: recurse into head + args, preserving structure. */
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (count ? count : 1));
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = canonicalise_nested_radicands(
+            e->data.function.args[i], c_base, q_natural);
+    }
+    Expr* new_head = canonicalise_nested_radicands(
+        e->data.function.head, c_base, q_natural);
+    Expr* out = eval_and_free(expr_new_function(new_head, new_args, count));
+    free(new_args);
+    return out;
+}
+
 Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
     if (!arg || !t || t->n < 1) return NULL;
+
+    /* 0. Canonicalise nested radicands in the input against each
+     * integer-base generator.  This makes mathematically-equal but
+     * structurally-distinct `Sqrt[u]` / `Power[u, p/q]` sub-expressions
+     * collapse to a single canonical form, so the substitution loop in
+     * step 1 finds every instance. */
+    Expr* arg_internal = expr_copy((Expr*)arg);
+    for (int i = 0; i < t->n; i++) {
+        const Expr* a_r = t->alpha_renders[i];
+        int64_t c_i = 0, q_i = 0;
+        if (a_r && a_r->type == EXPR_FUNCTION
+            && a_r->data.function.head
+            && a_r->data.function.head->type == EXPR_SYMBOL
+            && a_r->data.function.head->data.symbol == SYM_Power
+            && a_r->data.function.arg_count == 2
+            && a_r->data.function.args[0]->type == EXPR_INTEGER) {
+            int64_t pe, qe;
+            if (is_rational(a_r->data.function.args[1], &pe, &qe)
+                && pe == 1 && qe >= 2) {
+                c_i = a_r->data.function.args[0]->data.integer;
+                q_i = qe;
+            }
+        }
+        if (c_i == 0 && a_r && a_r->type == EXPR_FUNCTION
+            && a_r->data.function.head
+            && a_r->data.function.head->type == EXPR_SYMBOL
+            && a_r->data.function.head->data.symbol == SYM_Sqrt
+            && a_r->data.function.arg_count == 1
+            && a_r->data.function.args[0]->type == EXPR_INTEGER) {
+            c_i = a_r->data.function.args[0]->data.integer;
+            q_i = 2;
+        }
+        if (c_i != 0 && c_i != 1 && c_i != -1 && q_i >= 2) {
+            Expr* canonicalised = canonicalise_nested_radicands(
+                arg_internal, c_i, q_i);
+            if (canonicalised) {
+                expr_free(arg_internal);
+                arg_internal = canonicalised;
+            }
+        }
+    }
 
     /* 1. Substitute each user-side α_i with its polynomial-in-γ form
      * (a polynomial in QA_ALPHA_INTERNAL).
@@ -1628,7 +1764,6 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
      * natural `Power[c, p/q]` shapes (e.g. `Power[2, -2/3]`) that
      * picocas's Times canonicaliser produces, which a bare
      * `expr_subst(input, t->alpha_renders[i], ...)` would miss. */
-    Expr* arg_internal = expr_copy((Expr*)arg);
     for (int i = 0; i < t->n; i++) {
         /* Parse alpha_renders[i] as `Power[c_i, 1/q_i]` or `Sqrt[c_i]`. */
         int64_t c_i = 0, q_i = 0;
@@ -1777,7 +1912,12 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         expr_free(num_reduced); expr_free(den_reduced);
 
         Expr* candidate = NULL;
-        if (num_qp && den_qp && !qaupoly_is_zero(den_qp)
+        /* Zero numerator: result is 0 directly. */
+        if (num_qp && qaupoly_is_zero(num_qp) && den_qp
+            && !qaupoly_is_zero(den_qp)) {
+            candidate = expr_new_integer(0);
+        }
+        if (!candidate && num_qp && den_qp && !qaupoly_is_zero(den_qp)
             && num_qp->deg == 0 && den_qp->deg == 0) {
             QANum* result_qn = qa_div(num_qp->c[0], den_qp->c[0]);
             if (result_qn) {
@@ -1803,10 +1943,6 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
 
         if (!candidate) return NULL;
 
-        /* Complexity gate: only return if the result is at most as
-         * complex as the input.  Q(γ)-canonical form is usually smaller,
-         * but pathological cases (huge primitive elements with simple
-         * input) can flip. */
         int64_t in_size  = leaf_count_internal((Expr*)arg, true);
         int64_t out_size = leaf_count_internal(candidate, true);
         if (out_size > in_size) {
@@ -2653,40 +2789,85 @@ static Expr* autodetect_canonicalise_radicand(const Expr* u,
 static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
                                          Expr** owned) {
     /* Step 1: canonicalise each nested radical against every integer-base
-     * generator we have.  We canonicalise once against the FIRST matching
-     * integer base; this is sufficient for the motivating case where all
-     * radicands share a single integer base. */
+     * generator we have, AND normalise the surface form to use a positive
+     * 1/q exponent.  Picocas's Power canonicaliser rewrites `1/Sqrt[X]`
+     * to `Power[X, -1/2]`, so the same algebraic generator can appear
+     * in the input with negative or positive exponent — both generate
+     * the same field Q(Sqrt[X]) and should dedup. */
     for (size_t i = 0; i < *n; i++) {
         if (gens[i].kind != GEN_NESTED) continue;
         const Expr* surface = gens[i].render;
         if (!surface || surface->type != EXPR_FUNCTION
-            || surface->data.function.arg_count != 2) continue;
-        const Expr* radicand = surface->data.function.args[0];
-        const Expr* exp_e    = surface->data.function.args[1];
+            || surface->data.function.arg_count == 0) continue;
 
-        /* Find an integer-base generator whose `base` actually occurs
-         * as a Power[base, _] sub-expression in the radicand.  Iterate
-         * the gens[] array and pick the first match.  Tier-1: single
-         * canonicalisation against one base. */
-        bool canonicalised = false;
-        for (size_t j = 0; j < *n && !canonicalised; j++) {
-            if (gens[j].kind != GEN_INT_BASE) continue;
-            Expr* canon_radicand = autodetect_canonicalise_radicand(
-                radicand, gens[j].base, gens[j].q_lcm);
-            if (!canon_radicand) continue;
-            /* If the canonical form is structurally identical to the
-             * original radicand, no change — skip. */
-            if (expr_eq(canon_radicand, (Expr*)radicand)) {
-                expr_free(canon_radicand);
-                continue;
+        /* Parse the surface form: either `Sqrt[radicand]` (1 arg) or
+         * `Power[radicand, p/q]` (2 args, rational exp). */
+        const Expr* radicand = NULL;
+        int64_t q_natural = 0;
+        if (surface->data.function.head
+            && surface->data.function.head->type == EXPR_SYMBOL
+            && surface->data.function.head->data.symbol == SYM_Sqrt
+            && surface->data.function.arg_count == 1) {
+            radicand = surface->data.function.args[0];
+            q_natural = 2;
+        } else if (surface->data.function.head
+            && surface->data.function.head->type == EXPR_SYMBOL
+            && surface->data.function.head->data.symbol == SYM_Power
+            && surface->data.function.arg_count == 2) {
+            const Expr* e_x = surface->data.function.args[1];
+            int64_t pe, qe;
+            if (is_rational((Expr*)e_x, &pe, &qe) && qe != 1) {
+                if (qe < 0) { pe = -pe; qe = -qe; }
+                int64_t ape = pe < 0 ? -pe : pe;
+                int64_t a = ape, b = qe;
+                while (b) { int64_t r = a % b; a = b; b = r; }
+                int64_t q_red = a > 1 ? qe / a : qe;
+                if (q_red >= 2) {
+                    radicand = surface->data.function.args[0];
+                    q_natural = q_red;
+                }
             }
-            /* Build new surface form Power[canon_radicand, exp]. */
-            Expr* new_surface = eval_and_free(expr_new_function(
+        }
+        if (!radicand) continue;
+
+        /* Try canonicalising the radicand against integer-base generators. */
+        Expr* canon_radicand = NULL;
+        for (size_t j = 0; j < *n; j++) {
+            if (gens[j].kind != GEN_INT_BASE) continue;
+            Expr* c = autodetect_canonicalise_radicand(
+                radicand, gens[j].base, gens[j].q_lcm);
+            if (c) { canon_radicand = c; break; }
+        }
+        /* If no canonicalisation happened, use a copy of the original
+         * radicand so the rebuilt surface form has consistent positive
+         * exponent. */
+        if (!canon_radicand) canon_radicand = expr_copy((Expr*)radicand);
+
+        /* Always rebuild surface form with positive 1/q_natural exponent.
+         * This collapses Power[X, -1/q] and Sqrt[X] (= Power[X, 1/q] for
+         * q=2) to the same canonical form when X is the same. */
+        Expr* new_surface;
+        if (q_natural == 2) {
+            new_surface = eval_and_free(expr_new_function(
+                expr_new_symbol("Sqrt"),
+                (Expr*[]){canon_radicand}, 1));
+        } else {
+            Expr* rat_args[2] = { expr_new_integer(1),
+                                  expr_new_integer(q_natural) };
+            Expr* exp_pos = expr_new_function(
+                expr_new_symbol("Rational"), rat_args, 2);
+            new_surface = eval_and_free(expr_new_function(
                 expr_new_symbol("Power"),
-                (Expr*[]){canon_radicand, expr_copy((Expr*)exp_e)}, 2));
+                (Expr*[]){canon_radicand, exp_pos}, 2));
+        }
+        /* Only adopt the new render if it actually differs from the
+         * old one — preserves the existing-test invariant when the
+         * walker already produced a positive-exponent natural form. */
+        if (!expr_eq(new_surface, (Expr*)surface)) {
             owned[i] = new_surface;
             gens[i].render = new_surface;
-            canonicalised = true;
+        } else {
+            expr_free(new_surface);
         }
     }
 

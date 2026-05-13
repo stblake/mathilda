@@ -162,6 +162,19 @@ static void test_multigen_qgamma_constant_collapse(void) {
         "-1", 0);
 }
 
+static void test_together_equal_nested_radicals(void) {
+    /* Two mathematically-equal nested Sqrts via Together with
+     * Extension -> Automatic: Sqrt[-1/9/2^(2/3) + 2/9·2^(1/3)] -
+     * Sqrt[1/3/2^(2/3)] -> 0.  The Together path canonicalises both
+     * radicands to 1/3/2^(2/3) (via Phase F's canonicalise_post +
+     * positive-exponent normalisation) and the resulting Sqrt[X] -
+     * Sqrt[X] collapses to 0 before any tower lift even runs.  Then
+     * the tower's no-variable Q(γ)-arithmetic path renders 0 as 0. */
+    assert_eval_eq(
+        "Together[Sqrt[-1/9/2^(2/3) + 2/9 2^(1/3)] - Sqrt[1/3/2^(2/3)], Extension -> Automatic]",
+        "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -187,6 +200,7 @@ int main(void) {
 
     TEST(test_power_neg_pq_lift);
     TEST(test_multigen_qgamma_constant_collapse);
+    TEST(test_together_equal_nested_radicals);
 
     printf("All simp_algebraic_cuberoot tests passed!\n");
     return 0;

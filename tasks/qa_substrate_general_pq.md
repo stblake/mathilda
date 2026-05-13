@@ -1,14 +1,15 @@
 ---
 title: qa substrate — accept Power[c, p/q] for general integer p
 date_started: 2026-05-13
-status: shipped 2026-05-13 (Phases A–D); input-canonicalisation gap deferred
+status: shipped 2026-05-13 (Phases A–E); deeper Together[D[Integrate[...]]] case deferred
 ---
 
 ## Status (2026-05-13)
 
 Phases A (recogniser broadening), B (lift inputs), C (complexity gate),
-and D (Q(γ)-arithmetic in the no-variable path) all shipped with zero
-regressions (94 pass / 16 fail — identical pre-existing failure set).
+D (Q(γ)-arithmetic in the no-variable path), and E (input-side radicand
+canonicalisation) all shipped with zero regressions
+(96 pass / 14 fail — identical pre-existing failure set).
 
 Key user-visible wins:
 - `Cancel[Power[2,-2/3] x^2 - x/Power[2,1/3], Extension -> Power[2,1/3]]`
@@ -16,15 +17,20 @@ Key user-visible wins:
 - `Cancel[(Sqrt[2]+Sqrt[3])(Sqrt[2]-Sqrt[3]), Extension -> Automatic]`
   → `-1` (Phase D Q(γ)-arithmetic, replaces the degree-16 γ-polynomial
   expansion that the previous code produced)
+- `Together[Sqrt[-1/9/2^(2/3) + 2/9·2^(1/3)] - Sqrt[1/3/2^(2/3)],
+  Extension -> Automatic]` → `0` (Phase E input-side canonicaliser
+  collapses mathematically-equal radicands before tower substitution).
+  Test: `tests/test_simp_algebraic_cuberoot.c::test_together_equal_nested_radicals`.
 
 Remaining work:
-- The motivating example `Together[Sqrt[A] - Sqrt[B], Extension ->
-  Automatic]` where A=B mathematically but structurally distinct still
-  doesn't collapse.  Reason: Phase F dedups the generator set but not
-  the input expression, so the tower substitution loop misses one of
-  the structurally-distinct radicals in the input.  Closing this would
-  require running Phase F's canonicalisation pass on the input
-  expression itself before the tower substitution.
+- The deeper motivating example
+  `Together[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]`
+  still produces a non-collapsed form containing `Sqrt[1/3/2^(2/3)]`
+  embedded in arithmetic.  Closing this requires recognising
+  `Sqrt[1/3/2^(2/3)] = Sqrt[3]/(3·2^(1/3))` (factoring the integer
+  power out of the radicand) so the autodetected generator set
+  contains both `Sqrt[3]` and `2^(1/3)` rather than the opaque
+  `Sqrt[1/3/2^(2/3)]`.
 
 
 
