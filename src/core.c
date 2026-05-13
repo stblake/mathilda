@@ -54,6 +54,7 @@
 #include <signal.h>
 #include <setjmp.h>
 #include <sys/time.h>
+#include <time.h>
 #include <gmp.h>
 #include "rat.h"
 #include "parfrac.h"
@@ -1710,16 +1711,37 @@ Expr* builtin_symbol(Expr* res) {
  *
  * Without failexpr, an aborted call returns the symbol `$Aborted`.
  *
- * Mechanism: install a one-shot SIGPROF handler and an ITIMER_PROF
- * timer; run evaluate() inside sigsetjmp.  If the budget is exhausted,
- * the handler siglongjmp's back here and we abort.  ITIMER_PROF counts
- * only CPU time (user + kernel) of this process, matching the
- * Mathematica semantic ("CPU time spent inside the main PicoCAS kernel
- * process").  SIGPROF is used (not SIGALRM) so the intrischnorman
- * pmint timeout — which is wall-clock based on SIGALRM/ITIMER_REAL —
- * and the test-harness alarm(60) keep working.  Old handler / timer
- * are saved and restored so the calls compose under nesting and don't
- * clobber other timer users in the address space.
+ * Mechanism (two cooperating layers):
+ *
+ *   1. SIGPROF + ITIMER_PROF: install a one-shot SIGPROF handler and
+ *      an ITIMER_PROF timer; run evaluate() inside sigsetjmp.  If the
+ *      CPU-time budget is exhausted, the handler siglongjmp's back
+ *      here and we abort.  ITIMER_PROF counts only CPU time of this
+ *      process, matching the Mathematica semantic ("CPU time spent
+ *      inside the main PicoCAS kernel process").  SIGPROF is used
+ *      (not SIGALRM) so the intrischnorman pmint timeout -- which is
+ *      wall-clock based on SIGALRM/ITIMER_REAL -- and the test-harness
+ *      alarm(60) keep working.
+ *
+ *   2. Wall-clock cooperative deadline: capture
+ *      clock_gettime(CLOCK_MONOTONIC) + budget on entry; the evaluator
+ *      calls tc_check_deadline() once per rewrite step in its
+ *      fixed-point loop.  If the wall-clock deadline has passed, the
+ *      check siglongjmp's exactly as the signal handler would.
+ *
+ * Why both: on real Linux and macOS, ITIMER_PROF is precise and the
+ * cooperative check is a cheap no-op.  On hosts that mishandle
+ * ITIMER_PROF -- notably WSL 1, whose syscall-translation layer
+ * under-counts CPU time and delivers SIGPROF ~15x late -- the
+ * cooperative wall-clock backstop catches the deadline at the next
+ * rewrite step.  The only case that escapes both layers is a single
+ * long-running C builtin (e.g. FactorInteger on a huge composite),
+ * which cannot be aborted cooperatively and must wait for the late
+ * SIGPROF on broken hosts.
+ *
+ * Old handler / timer state is saved and restored so calls compose
+ * under nesting and don't clobber other timer users in the address
+ * space.
  *
  * Memory: the longjmp unwind cannot run destructors, so any Expr nodes
  * the in-flight evaluator allocated leak.  This is the documented
@@ -1731,8 +1753,31 @@ Expr* builtin_symbol(Expr* res) {
 static sigjmp_buf  tc_jmp_env;
 static volatile sig_atomic_t tc_timed_out = 0;
 
+/* Cooperative-backstop state.  tc_deadline_active is read on every
+ * rewrite step by tc_check_deadline; when zero, the check returns
+ * immediately without even reading the clock.  Both fields are updated
+ * only on the main thread between sigsetjmp installs, so no
+ * sig_atomic_t / memory-barrier dance is required. */
+static struct timespec tc_deadline;
+static int             tc_deadline_active = 0;
+
 static void tc_sigprof_handler(int sig) {
     (void)sig;
+    tc_timed_out = 1;
+    siglongjmp(tc_jmp_env, 1);
+}
+
+void tc_check_deadline(void) {
+    if (!tc_deadline_active) return;
+    struct timespec now;
+    /* clock_gettime can in principle fail (EINVAL on unsupported clock);
+     * treat any failure as "no time elapsed" so we don't spuriously
+     * abort. CLOCK_MONOTONIC is mandatory in POSIX.1-2001 and supported
+     * on every host we target (Linux/glibc, macOS 10.12+, WSL 1+2). */
+    if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) return;
+    if (now.tv_sec < tc_deadline.tv_sec) return;
+    if (now.tv_sec == tc_deadline.tv_sec &&
+        now.tv_nsec < tc_deadline.tv_nsec) return;
     tc_timed_out = 1;
     siglongjmp(tc_jmp_env, 1);
 }
@@ -1863,10 +1908,41 @@ Expr* builtin_time_constrained(Expr* res) {
     volatile sig_atomic_t saved_timed_out = tc_timed_out;
     tc_timed_out = 0;
 
+    /* Arm the cooperative wall-clock deadline as a portability backstop.
+     * On hosts where ITIMER_PROF / SIGPROF are reliable, the signal
+     * fires first and this state is just read-and-discarded; on hosts
+     * where they aren't (WSL 1), tc_check_deadline catches the timeout
+     * at the next rewrite step.  Nested calls save/restore so the outer
+     * deadline resumes correctly when the inner one returns. */
+    struct timespec saved_deadline      = tc_deadline;
+    int             saved_deadline_active = tc_deadline_active;
+    if (clock_gettime(CLOCK_MONOTONIC, &tc_deadline) == 0) {
+        time_t add_secs  = (time_t)secs;
+        long   add_nsecs = usecs * 1000L;
+        tc_deadline.tv_sec  += add_secs;
+        tc_deadline.tv_nsec += add_nsecs;
+        if (tc_deadline.tv_nsec >= 1000000000L) {
+            tc_deadline.tv_sec  += tc_deadline.tv_nsec / 1000000000L;
+            tc_deadline.tv_nsec %= 1000000000L;
+        }
+        tc_deadline_active = 1;
+    } else {
+        /* If the monotonic clock is unavailable we silently fall back
+         * to signal-only enforcement; this is no worse than before
+         * this change. */
+        tc_deadline_active = 0;
+    }
+
     Expr* result = NULL;
     if (sigsetjmp(tc_jmp_env, 1) == 0) {
         result = evaluate(expr_copy(expr_arg));
     }
+
+    /* Restore the cooperative-deadline state first, so that any
+     * tc_check_deadline call racing during the teardown below sees the
+     * outer-call deadline (or no deadline if there was no outer call). */
+    tc_deadline        = saved_deadline;
+    tc_deadline_active = saved_deadline_active;
 
     /* Disarm OUR timer first, then reinstall the prior timer and handler.
      * Order matters: leaving our timer armed while we swap the handler

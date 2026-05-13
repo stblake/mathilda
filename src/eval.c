@@ -969,6 +969,17 @@ Expr* evaluate(Expr* e) {
     int iterations = 0;
 
     while (iterations < MAX_ITERATIONS) {
+        /* TimeConstrained's cooperative wall-clock backstop.  No-op
+         * unless we're inside an active TimeConstrained call; on
+         * hosts where ITIMER_PROF/SIGPROF are reliable the signal
+         * normally fires first and this check stays a cheap inactive
+         * read.  On hosts where they aren't (WSL 1), this is what
+         * actually enforces the deadline.  When tripped, the call
+         * siglongjmp's out of this loop straight to TimeConstrained's
+         * sigsetjmp; no further cleanup runs here, exactly matching
+         * the signal-handler path. */
+        tc_check_deadline();
+
         bool step_changed = false;
         next = evaluate_step(current, &step_changed);
 

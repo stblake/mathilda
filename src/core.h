@@ -50,6 +50,23 @@ Expr* builtin_addto(Expr* res);
 Expr* builtin_subtractfrom(Expr* res);
 Expr* builtin_time_constrained(Expr* res);
 
+/* Cooperative wall-clock deadline check used by TimeConstrained.
+ *
+ * Called by evaluate()'s fixed-point loop once per rewrite iteration.
+ * No-op outside any TimeConstrained call. When the innermost
+ * TimeConstrained's wall-clock deadline has passed, sets the timeout
+ * flag and siglongjmp's back to the matching sigsetjmp -- identical to
+ * the SIGPROF path. This is the portable backstop for hosts whose
+ * ITIMER_PROF is unreliable (notably WSL 1, which under-counts CPU time
+ * and delivers SIGPROF many times late). On real Linux / macOS the
+ * SIGPROF normally fires first and this check is a cheap no-op.
+ *
+ * Granularity: limited to between rewrite steps -- a single long-running
+ * C builtin (e.g. FactorInteger on a large composite) cannot be aborted
+ * cooperatively. On those hosts, SIGPROF is the only mechanism, with
+ * its usual portability caveats. */
+void tc_check_deadline(void);
+
 // Initialize core builtins
 void core_init(void);
 

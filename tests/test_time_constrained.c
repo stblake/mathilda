@@ -31,6 +31,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
 
 static char* eval_string(const char* input) {
     struct Expr* p = parse_expression(input);
@@ -274,6 +275,49 @@ void test_tc_failexpr_can_be_symbolic(void) {
     free(s);
 }
 
+void test_tc_cooperative_backstop_without_sigprof(void) {
+    /* Simulate hosts where ITIMER_PROF / SIGPROF are unreliable (notably
+     * WSL 1, whose syscall-translation layer under-counts CPU time and
+     * delivers SIGPROF many seconds late).  We block SIGPROF for the
+     * duration of the call, so the signal path is effectively dead and
+     * only the cooperative wall-clock backstop (tc_check_deadline,
+     * called once per evaluate() rewrite step) can enforce the budget.
+     *
+     * To keep the test self-contained we pre-install SIG_IGN as the
+     * default SIGPROF disposition: TimeConstrained's save-and-restore
+     * dance puts SIG_IGN back in place after it returns, so any pending
+     * timer signal that was generated while SIGPROF was blocked is
+     * harmlessly ignored when we later unblock it. */
+    struct sigaction ign, prev;
+    memset(&ign, 0, sizeof(ign));
+    ign.sa_handler = SIG_IGN;
+    sigemptyset(&ign.sa_mask);
+    sigaction(SIGPROF, &ign, &prev);
+
+    sigset_t block, oldset;
+    sigemptyset(&block);
+    sigaddset(&block, SIGPROF);
+    sigprocmask(SIG_BLOCK, &block, &oldset);
+
+    /* A tight Do over a trivial body: each iteration re-enters
+     * evaluate() and therefore hits the cooperative check.  The 0.2s
+     * budget is short enough that wall-clock progress dwarfs CPU
+     * accounting variance on every host. */
+    char* s = eval_string(
+        "TimeConstrained[Do[1 + 1, {i, 1, 10000000}], 0.2]");
+
+    sigprocmask(SIG_SETMASK, &oldset, NULL);
+    sigaction(SIGPROF, &prev, NULL);
+
+    /* With the signal path muted, "Null" (Do finished) would mean the
+     * cooperative backstop failed.  Reject that. */
+    if (strcmp(s, "$Aborted") != 0) {
+        fprintf(stderr, "Cooperative backstop did not fire: got %s\n", s);
+    }
+    ASSERT_STR_EQ(s, "$Aborted");
+    free(s);
+}
+
 void test_tc_holdall_blocks_premature_eval(void) {
     /* If TimeConstrained lacked HoldAll, the body Print[...] would be
      * evaluated by the caller before the builtin saw it.  With HoldAll,
@@ -323,6 +367,7 @@ int main(void) {
     TEST(test_tc_nested_inner_aborts_with_failexpr);
     TEST(test_tc_session_state_intact_after_abort);
     TEST(test_tc_failexpr_can_be_symbolic);
+    TEST(test_tc_cooperative_backstop_without_sigprof);
     TEST(test_tc_holdall_blocks_premature_eval);
 
     printf("All TimeConstrained tests passed!\n");
