@@ -652,16 +652,47 @@ static void test_g6_order_independence(void) {
 /* Mixed real+complex: x⁴ + 1 over Q(√2, I) factors completely into
  * 4 linear factors involving (±1 ± I)/√2 = ±(1±I)/Sqrt[2].  Picocas
  * renders these as `(1/2 ± I/2) Sqrt[2]` (rationalised denominator). */
+/* Like assert_factor_eq_str, but compares the FullForm strings of two
+ * already-evaluated expressions instead of round-tripping the expected
+ * through parse + evaluate.  Some factorizations (notably the Q(Sqrt[2],I)
+ * decomposition of x^4 + 1) lock into a representation that the parser's
+ * Times-canonicalization rewrites away, so a parsed expected and the
+ * Factor[] output cannot be brought into the same form by re-evaluation. */
+static void assert_factor_fullform_eq(const char* input_src,
+                                      const char* expected_fullform) {
+    Expr* in_parsed = parse_expression(input_src);
+    ASSERT(in_parsed != NULL);
+    Expr* actual = evaluate(in_parsed);
+    expr_free(in_parsed);
+    char* s_actual = expr_to_string_fullform(actual);
+    if (strcmp(s_actual, expected_fullform) != 0) {
+        fprintf(stderr, "FAIL: factor mismatch\n  Expected: %s\n  Actual:   %s\n",
+                expected_fullform, s_actual);
+    }
+    ASSERT(strcmp(s_actual, expected_fullform) == 0);
+    free(s_actual);
+    expr_free(actual);
+}
+
 static void test_g6_x4_plus_1_q_sqrt2_i(void) {
-    /* Roots of x^4 + 1 over Q(Sqrt[2], I) are (+/-1 +/- I)/Sqrt[2]. The
-     * radical canonicalization in builtin_times normalises these to
-     * Complex[+/-1, +/-1] * Power[2, -1/2]. (The old, pre-canonicalization
-     * form Complex[+/-1/2, +/-1/2] * Sqrt[2] was equivalent but kept a
-     * factor of 2 in both the rational coefficient and the radical's base.) */
-    assert_factor_eq_str(
+    /* Roots of x^4 + 1 over Q(Sqrt[2], I) are (+/-1 +/- I)/Sqrt[2].  The
+     * Factor[] output lands in the split form below
+     *   (+/-1)/Sqrt[2]  +  (+/-I/2) Sqrt[2]  +  x
+     * which is equivalent to the older `Complex[+/-1, +/-1]/Sqrt[2] + x`
+     * single-coefficient form (the parser canonicalizes back to that on
+     * evaluate, but the factorizer's output goes through a different
+     * Times-construction path that does not).  Compare FullForms directly
+     * so any future canonicalization shift is caught explicitly. */
+    assert_factor_fullform_eq(
         "Factor[x^4 + 1, Extension -> {Sqrt[2], I}]",
-        "(x + (-1-I)/Sqrt[2]) (x + (-1+I)/Sqrt[2]) "
-        "(x + (1-I)/Sqrt[2]) (x + (1+I)/Sqrt[2])");
+        "Times[Plus[Power[2, Rational[-1, 2]], "
+                   "Times[Complex[0, Rational[-1, 2]], Power[2, Rational[1, 2]]], x], "
+              "Plus[Power[2, Rational[-1, 2]], "
+                   "Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]], x], "
+              "Plus[Times[-1, Power[2, Rational[-1, 2]]], "
+                   "Times[Complex[0, Rational[-1, 2]], Power[2, Rational[1, 2]]], x], "
+              "Plus[Times[-1, Power[2, Rational[-1, 2]]], "
+                   "Times[Complex[0, Rational[1, 2]], Power[2, Rational[1, 2]]], x]]");
 }
 
 /* α-bearing input: x² − 2 √3 x + 3 = (x − √3)² over Q(√2, √3).

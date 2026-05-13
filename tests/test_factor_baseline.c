@@ -82,7 +82,7 @@ static void test_univariate_factors(void) {
     eval_check("Factor[x^10 - 1]",
                "Times[Plus[-1, x], Plus[1, x], "
                "Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4]], "
-               "Plus[1, Times[-1, x], Times[-1, Power[x, 3]], Power[x, 2], Power[x, 4]]]", 100.0);
+               "Plus[1, Times[-1, x], Power[x, 2], Times[-1, Power[x, 3]], Power[x, 4]]]", 100.0);
 }
 
 /* Bivariate via factor_binomial / monomial-content (Phase 0). */
@@ -90,7 +90,7 @@ static void test_bivariate_simple(void) {
     eval_check("Factor[x^2 - 4 y^2]",
                "Times[Plus[x, Times[-2, y]], Plus[x, Times[2, y]]]", 50.0);
     eval_check("Factor[x^3 + y^3]",
-               "Times[Plus[x, y], Plus[Times[-1, Times[x, y]], Power[x, 2], Power[y, 2]]]", 50.0);
+               "Times[Plus[x, y], Plus[Power[x, 2], Times[-1, Times[x, y]], Power[y, 2]]]", 50.0);
     eval_check("Factor[x^2 y + x y^2]",
                "Times[x, y, Plus[x, y]]", 50.0);
 }
@@ -100,7 +100,7 @@ static void test_bivariate_hensel(void) {
     eval_check("Factor[(x + y - 1)(x + y + 1)]",
                "Times[Plus[-1, x, y], Plus[1, x, y]]", 100.0);
     eval_check("Factor[(x^2 + y - 1)(x + y + 2)]",
-               "Times[Plus[-1, Power[x, 2], y], Plus[2, x, y]]", 100.0);
+               "Times[Plus[2, x, y], Plus[-1, Power[x, 2], y]]", 100.0);
     eval_check("Factor[(x - 1)(x + 1)(x + y)]",
                "Times[Plus[-1, x], Plus[1, x], Plus[x, y]]", 100.0);
 }
@@ -127,7 +127,7 @@ static void test_factor_threads_over_logic_heads(void) {
     /* Cubic inside Less: factor each comparison argument. */
     eval_check("Factor[1 < 1 + 2 x + x^2 + 1/(1+x) < 2]",
                "Less[Less[1, "
-                    "Times[Power[Plus[1, x], -1], Plus[2, x], Plus[1, x, Power[x, 2]]]], 2]",
+                    "Times[Plus[2, x], Power[Plus[1, x], -1], Plus[1, x, Power[x, 2]]]], 2]",
                150.0);
 }
 

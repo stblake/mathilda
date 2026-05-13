@@ -374,6 +374,36 @@ static const char* assignment_target_symbol(Expr* lhs) {
 }
 
 /*
+ * is_assignable_lhs:
+ * Validate that `lhs` shaped against `rhs` is a structurally legal target
+ * for a Set/SetDelayed, including all destructured sub-elements. Used as a
+ * pre-flight check on List destructuring so a malformed element (e.g. a
+ * literal integer on the LHS) cannot land partial assignments before being
+ * detected by the in-loop failure path.
+ */
+static bool is_assignable_lhs(Expr* lhs, Expr* rhs) {
+    if (!lhs) return false;
+    if (lhs->type == EXPR_SYMBOL) return true;
+    if (lhs->type != EXPR_FUNCTION) return false;
+    if (lhs->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = lhs->data.function.head->data.symbol;
+    if (h != SYM_List) return true; /* downvalue / part / etc. handled in apply_assignment */
+
+    if (rhs->type != EXPR_FUNCTION ||
+        rhs->data.function.head->type != EXPR_SYMBOL ||
+        rhs->data.function.head->data.symbol != SYM_List) {
+        return false;
+    }
+    if (lhs->data.function.arg_count != rhs->data.function.arg_count) return false;
+    for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+        if (!is_assignable_lhs(lhs->data.function.args[i], rhs->data.function.args[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
  * apply_assignment:
  * Helper to handle the 'Set' (=) and 'SetDelayed' (:=) primitives.
  * Supports recursive list destructuring.
@@ -425,11 +455,17 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             rhs->data.function.head->type == EXPR_SYMBOL &&
             rhs->data.function.head->data.symbol == SYM_List) {
             
-            /* List destructuring: match lengths and recurse. Any child that
-             * cannot be assigned (e.g. LHS element is a literal number) fails
-             * the whole destructuring so the caller does not misreport success. */
+            /* List destructuring: match lengths and recurse. Pre-flight every
+             * element so a malformed child (e.g. a literal integer on the LHS)
+             * fails the whole destructuring before any sibling is assigned --
+             * partial assignments would otherwise leak past the failure. */
             if (lhs->data.function.arg_count != rhs->data.function.arg_count) {
                 return false;
+            }
+            for (size_t i = 0; i < lhs->data.function.arg_count; i++) {
+                if (!is_assignable_lhs(lhs->data.function.args[i], rhs->data.function.args[i])) {
+                    return false;
+                }
             }
 
             bool all_ok = true;

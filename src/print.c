@@ -480,13 +480,37 @@ static void print_standard(Expr* e, int parent_prec) {
             }
             printf("}");
         }
+        else if (head == SYM_Blank && e->data.function.arg_count <= 1) {
+            printf("_");
+            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 1000);
+        }
+        else if (head == SYM_BlankSequence && e->data.function.arg_count <= 1) {
+            printf("__");
+            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 1000);
+        }
+        else if (head == SYM_BlankNullSequence && e->data.function.arg_count <= 1) {
+            printf("___");
+            if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 1000);
+        }
+        else if (head == SYM_Pattern && e->data.function.arg_count == 2 &&
+                 e->data.function.args[0]->type == EXPR_SYMBOL &&
+                 e->data.function.args[1]->type == EXPR_FUNCTION &&
+                 e->data.function.args[1]->data.function.head->type == EXPR_SYMBOL &&
+                 (e->data.function.args[1]->data.function.head->data.symbol == SYM_Blank ||
+                  e->data.function.args[1]->data.function.head->data.symbol == SYM_BlankSequence ||
+                  e->data.function.args[1]->data.function.head->data.symbol == SYM_BlankNullSequence) &&
+                 e->data.function.args[1]->data.function.arg_count <= 1) {
+            /* Pattern[name, Blank[...]] -> name_ / name_h / name__ / name___ */
+            printf("%s", e->data.function.args[0]->data.symbol);
+            print_standard(e->data.function.args[1], 1000);
+        }
         else {
             print_standard(e->data.function.head, 1000);
             printf("[");
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 if (i > 0) printf(", ");
                 print_standard(e->data.function.args[i], 0);
-            }    
+            }
             printf("]");
         }
     } else {

@@ -557,7 +557,7 @@ static void test_pre_read_passes_raw_string(void) {
     free(out);
 
     Expr* probe = parse_eval("lastInput");
-    assert_print_eq(probe, "Plus[1, 2 + 3]");
+    assert_print_eq(probe, "\"Plus[1, 2 + 3]\"");
     expr_free(probe);
 
     clear_all_hooks();

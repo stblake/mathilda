@@ -227,9 +227,11 @@ static void test_leftover_powers(void) {
 static void test_different_args_kept_separate(void) {
     Case cs[] = {
         /* Different symbol args. Cos with exponent -1 still rewrites solo
-         * to Sec[y]; Sin[x] just stays. Times then sorts canonically. */
-        {"Sin[x] Cos[y]",     "Cos[y] Sin[x]"},
-        {"Sin[x]/Cos[y]",     "Sec[y] Sin[x]"},
+         * to Sec[y]; Sin[x] just stays. Times then sorts canonically:
+         * under the polynomial-aware comparator Sin[x] (deg 0 in y) sorts
+         * before Cos[y]/Sec[y] (deg infinity in y). */
+        {"Sin[x] Cos[y]",     "Sin[x] Cos[y]"},
+        {"Sin[x]/Cos[y]",     "Sin[x] Sec[y]"},
         {"Sin[x] Sin[y]",     "Sin[x] Sin[y]"},
         /* Mixing trig and hyperbolic of the same symbol must NOT merge,
          * even though both have Sin/Cos building blocks. They live in
@@ -298,7 +300,7 @@ static void test_symbolic_exponent_skipped(void) {
     Case cs[] = {
         {"Cos[x]^n",     "Cos[x]^n"},
         {"1/Cos[x]^n",   "Cos[x]^(-n)"},
-        {"Sin[x]/Cos[x]^k", "Cos[x]^(-k) Sin[x]"},
+        {"Sin[x]/Cos[x]^k", "Sin[x] Cos[x]^(-k)"},
         {NULL, NULL}
     };
     run_cases("symbolic_exponent_skipped", cs);

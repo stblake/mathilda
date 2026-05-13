@@ -187,6 +187,7 @@ void test_match_patterntest() {
 }
 
 int main() {
+    symtab_init();
     TEST(test_match_basic);
     TEST(test_match_blank);
     TEST(test_match_pattern);

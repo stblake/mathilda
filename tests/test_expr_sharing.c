@@ -427,10 +427,15 @@ static void test_random_share_unshare_walk(void) {
             case 3: {
                 /* Round-trip through evaluate() (which will call
                  * expr_copy under the hood). The returned tree may
-                 * differ structurally; we only check it parses. */
+                 * differ structurally; we only check it parses.
+                 * evaluate() takes a borrowed reference -- the caller
+                 * still owns `c` and must release it independently of
+                 * the returned `ev` so the shared population's refcount
+                 * is unaffected at the end of the random walk. */
                 Expr* c = expr_copy(pop[idx]);
                 Expr* ev = evaluate(c);
                 ASSERT(ev != NULL);
+                expr_free(c);
                 expr_free(ev);
                 break;
             }

@@ -28,7 +28,7 @@ void test_logexp_forward() {
         {"Exp[0.0]", "1.0"},
         {"Log[-1.0]", "0.0 + 3.14159*I"},
         {"Log[-1]", "(I) Pi"},
-        {"Log[-5]", "(I) Pi + Log[5]"},
+        {"Log[-5]", "Log[5] + (I) Pi"},
         {"Exp[Log[x]]", "x"},
         {"Exp[b Log[a]]", "a^b"},
         {"Exp[2 Log[x]]", "x^2"},

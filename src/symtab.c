@@ -26,6 +26,12 @@ static unsigned int hash(const char* s) {
 
 void symtab_init(void) {
     memset(symtab, 0, sizeof(symtab));
+    /* Populate the SYM_* canonical-pointer cache so that any code path
+     * that compares e->data.symbol against SYM_* (match.c, eval.c, the
+     * arithmetic heads, etc.) works as soon as the symtab is live -- not
+     * only after core_init() has finished registering builtins. Tests
+     * that initialise just the symtab depend on this. */
+    sym_names_init();
 }
 
 /* Both lookup helpers below first intern the input name, then key on

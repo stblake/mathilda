@@ -142,7 +142,7 @@ void test_hornerform() {
     run_test("HornerForm[a + b x + c x^2, x]", "Plus[a, Times[x, Plus[b, Times[c, x]]]]");
     run_test("HornerForm[(11 x^3 - 4 x^2 + 7 x + 2)/(x^2 - 3 x + 1)]", "Times[Plus[2, Times[x, Plus[7, Times[x, Plus[-4, Times[11, x]]]]]], Power[Plus[1, Times[x, Plus[-3, x]]], -1]]");
     run_test("HornerForm[x y + 2 x^2 y + 2 x y^2 + 4 x^2 y^2, {x, y}]", "Times[x, Plus[Times[y, Plus[1, Times[2, y]]], Times[x, y, Plus[2, Times[4, y]]]]]");
-    run_test("HornerForm[x y + 2 x^2 y + 2 x y^2 + 4 x^2 y^2, {y, x}]", "Times[y, Plus[Times[x, y, Plus[2, Times[4, x]]], Times[x, Plus[1, Times[2, x]]]]]");
+    run_test("HornerForm[x y + 2 x^2 y + 2 x y^2 + 4 x^2 y^2, {y, x}]", "Times[y, Plus[Times[x, Plus[1, Times[2, x]]], Times[x, Plus[2, Times[4, x]], y]]]");
 }
 
 void test_resultant() {
@@ -161,7 +161,7 @@ void test_resultant() {
 }
 
 void test_discriminant() {
-    run_test("Discriminant[a x^2 + b x + c, x]", "Plus[Times[-4, Times[a, c]], Power[b, 2]]");
+    run_test("Discriminant[a x^2 + b x + c, x]", "Plus[Power[b, 2], Times[-4, Times[a, c]]]");
     run_test("Discriminant[5 x^4 - 3 x + 9, x]", "23273325");
     run_test("Discriminant[(x-1)(x-2)(x-3), x]", "4");
     run_test("Discriminant[(x-1)(x-2)(x-1), x]", "0");

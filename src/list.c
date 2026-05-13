@@ -1741,11 +1741,16 @@ Expr* builtin_min(Expr* res) {
             free(unique_args);
             return expr_new_symbol("Infinity");
         }
+        if (final_count == 1) {
+            Expr* single = min_num ? min_num : unique_args[0];
+            free(unique_args);
+            return single;
+        }
         Expr** final_args = malloc(sizeof(Expr*) * final_count);
         size_t k = 0;
         if (min_num) final_args[k++] = min_num;
         for (size_t i = 0; i < unique_count; i++) final_args[k++] = unique_args[i];
-        
+
         Expr* ret = expr_new_function(expr_copy(res->data.function.head), final_args, final_count);
         free(final_args);
         free(unique_args);
@@ -1852,11 +1857,16 @@ Expr* builtin_max(Expr* res) {
             free(unique_args);
             return make_minus_infinity();
         }
+        if (final_count == 1) {
+            Expr* single = max_num ? max_num : unique_args[0];
+            free(unique_args);
+            return single;
+        }
         Expr** final_args = malloc(sizeof(Expr*) * final_count);
         size_t k = 0;
         if (max_num) final_args[k++] = max_num;
         for (size_t i = 0; i < unique_count; i++) final_args[k++] = unique_args[i];
-        
+
         Expr* ret = expr_new_function(expr_copy(res->data.function.head), final_args, final_count);
         free(final_args);
         free(unique_args);
