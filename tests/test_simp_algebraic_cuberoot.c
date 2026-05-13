@@ -175,6 +175,25 @@ static void test_together_equal_nested_radicals(void) {
         "0", 0);
 }
 
+static void test_autodetect_absorbs_canonical_radical(void) {
+    /* extension_autodetect previously bailed (returned NULL) when
+     * Phase F's canonicalise_post simplified a GEN_NESTED's surface
+     * form into a Times of inverse-powers of existing integer-base
+     * generators (e.g. Sqrt[-1/9/2^(2/3) + 2/9·2^(1/3)] canonicalises
+     * to 1/(2^(1/3) Sqrt[3]) — no longer a single algebraic
+     * generator).  Now: the post-canon step harvests integer-base
+     * components from the simplified surface (via re-walking it with
+     * autodetect_walk) and marks the original entry as GEN_ABSORBED;
+     * dedup drops it.  The tower then builds successfully from the
+     * remaining integer-base generators.
+     *
+     * Smoke test: a Cancel input whose autodetected tower previously
+     * failed to build now succeeds and the cancellation runs. */
+    assert_eval_eq(
+        "Cancel[(Sqrt[-1/9/2^(2/3) + 2/9 2^(1/3)]) (Sqrt[3]) (2^(1/3)) - 1, Extension -> Automatic]",
+        "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -201,6 +220,7 @@ int main(void) {
     TEST(test_power_neg_pq_lift);
     TEST(test_multigen_qgamma_constant_collapse);
     TEST(test_together_equal_nested_radicals);
+    TEST(test_autodetect_absorbs_canonical_radical);
 
     printf("All simp_algebraic_cuberoot tests passed!\n");
     return 0;

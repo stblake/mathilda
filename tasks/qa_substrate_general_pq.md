@@ -25,12 +25,28 @@ Key user-visible wins:
 Remaining work:
 - The deeper motivating example
   `Together[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]`
-  still produces a non-collapsed form containing `Sqrt[1/3/2^(2/3)]`
-  embedded in arithmetic.  Closing this requires recognising
-  `Sqrt[1/3/2^(2/3)] = Sqrt[3]/(3·2^(1/3))` (factoring the integer
-  power out of the radicand) so the autodetected generator set
-  contains both `Sqrt[3]` and `2^(1/3)` rather than the opaque
-  `Sqrt[1/3/2^(2/3)]`.
+  still produces a non-collapsed form.  The Power canonicaliser
+  (2026-05-13) and autodetect-absorbed-radical fix (2026-05-13) close
+  the *first* gap: nested `Sqrt[1/3/2^(2/3)]` now simplifies to
+  `1/(2^(1/3) Sqrt[3])` and `extension_autodetect` correctly returns
+  a degree-6 tower with the integer-base generators `2^(1/3)` and
+  `Sqrt[3]`.  The *second* gap is `qa_cancel_with_tower`'s Step 1
+  substitution: it pre-expands each `Power[c, p/q]` occurrence into a
+  γ-polynomial, blowing the leaf count up to ~3× the input, and the
+  downstream Together (no-extension) then runs multivariate
+  polynomial GCD over `Q[γ_internal, x, a]` -- intractable.  A safety
+  gate (`lc_out > 100 && lc_out > 2·lc_in`) returns NULL so the
+  caller falls back to the non-tower path that produces the partial
+  combined-but-not-cancelled result.
+
+  Closing this second gap requires a multi-generator analogue of
+  `together_recursive_ext` that threads the tower's polynomial
+  relations through `PolynomialLCM` / `PolynomialQuotient` directly,
+  without pre-expanding to γ-polynomial form.  Substantial work --
+  the qaupoly substrate is univariate over Q(γ) and would need
+  multivariate-coefficient support, or a coefficient-by-coefficient
+  trick that keeps the user-α renders symbolic until the final
+  rendering step.
 
 
 

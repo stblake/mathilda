@@ -1821,6 +1821,28 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         expr_free(alpha_in_gamma);
     }
 
+    /* Step 1 substitution can blow up the leaf count by O(deg(γ)) on
+     * every Power[c, p/q] occurrence in the input.  The downstream
+     * Together (no-extension) call drops into multivariate polynomial
+     * GCD over Q[γ_internal, x, ...] which is intractable on the
+     * resulting expressions.  Gate: if the post-substitution leaf
+     * count exceeds an empirically-tuned threshold relative to the
+     * input, bail out so the caller falls back to the non-tower path.
+     * Closing this gap requires a multi-generator analogue of
+     * together_recursive_ext that threads the tower's polynomial
+     * relations through PolynomialLCM/PolynomialQuotient without
+     * pre-expanding to γ-polynomial form; deferred. */
+    {
+        int64_t lc_in  = leaf_count_internal((Expr*)arg, true);
+        int64_t lc_out = leaf_count_internal(arg_internal, true);
+        if (lc_in > 0
+            && ((lc_out > 100 && lc_out > 2 * lc_in)
+                || lc_out > 200)) {
+            expr_free(arg_internal);
+            return NULL;
+        }
+    }
+
     /* 2. Combine into a single fraction via the standard (no-extension)
      * Together.  After step 1 the only "algebraic symbol" in arg_internal
      * is QA_ALPHA_INTERNAL — treated as a free polynomial symbol by the
@@ -2462,7 +2484,11 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
 
 typedef enum {
     GEN_INT_BASE,    /* Power[integer, 1/q_lcm], represented compactly */
-    GEN_NESTED      /* Power[non-integer-base, 1/q]: stored by borrowed Expr */
+    GEN_NESTED,     /* Power[non-integer-base, 1/q]: stored by borrowed Expr */
+    GEN_ABSORBED    /* Nested generator whose canonical surface simplified
+                     * to a Times of existing-generator powers via the Power
+                     * canonicaliser (e.g. Sqrt[1/3/2^(2/3)] -> 1/(2^(1/3)
+                     * Sqrt[3])). Marker only; dropped by post-canon dedup. */
 } AutodetectGenKind;
 
 typedef struct {
@@ -2776,16 +2802,50 @@ static Expr* autodetect_canonicalise_radicand(const Expr* u,
     return atomic;
 }
 
+/* True when `e` is a single atomic algebraic surface, i.e. `Sqrt[X]` or
+ * `Power[X, p/q]` with reduced denominator q >= 2.  Used to detect
+ * generators that the Power canonicaliser absorbed into existing
+ * integer-base generators (e.g. `Sqrt[1/3/2^(2/3)]` -> `1/(2^(1/3)
+ * Sqrt[3])`, a Times of inverse powers — no longer a single
+ * algebraic generator). */
+static bool autodetect_is_atomic_radical_surface(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head
+        || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol;
+    if (h == SYM_Sqrt && e->data.function.arg_count == 1) return true;
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
+        int64_t p, q;
+        if (is_rational((Expr*)e->data.function.args[1], &p, &q)) {
+            if (q < 0) { p = -p; q = -q; }
+            int64_t ap = p < 0 ? -p : p;
+            int64_t a = ap, b = q;
+            while (b) { int64_t r = a % b; a = b; b = r; }
+            int64_t q_red = a > 1 ? q / a : q;
+            if (q_red >= 2) return true;
+        }
+    }
+    return false;
+}
+
 /* For each GEN_NESTED generator: try to canonicalise its radicand
  * against each GEN_INT_BASE generator in the set, replacing the borrowed
  * render with a freshly-allocated canonical surface form when the
  * canonicalisation produces something structurally different.  Owned
  * canonical renders are written to `owned[]` so callers can free them.
  *
+ * If the canonical surface is no longer a single atomic radical (e.g.
+ * the Power canonicaliser simplified it to a Times of existing-generator
+ * powers), the generator has been ABSORBED into the integer-base
+ * generators we already have.  In that case: harvest any newly-exposed
+ * components by re-walking the canonical surface (this can merge with or
+ * widen existing INT_BASE entries via autodetect_add_int), and mark the
+ * absorbed entry for removal in the dedup step.
+ *
  * After canonicalisation, re-deduplicate the GEN_NESTED entries:
  * structurally-equal renders (now reflecting canonical forms) collapse
- * to a single generator.  Re-dedup is in-place by sweeping the array
- * and compacting. */
+ * to a single generator.  Absorbed entries are also dropped.  Re-dedup
+ * is in-place by sweeping the array and compacting. */
 static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
                                          Expr** owned) {
     /* Step 1: canonicalise each nested radical against every integer-base
@@ -2866,26 +2926,48 @@ static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
         if (!expr_eq(new_surface, (Expr*)surface)) {
             owned[i] = new_surface;
             gens[i].render = new_surface;
+
+            /* If the canonical surface is no longer a single atomic
+             * radical, the generator was absorbed into the existing
+             * integer-base set.  Re-walk the simplified surface to
+             * harvest any newly-exposed integer-base components (the
+             * walk dedups against existing entries via
+             * autodetect_add_int), then mark this entry as absorbed
+             * so step 2's compaction drops it. */
+            if (!autodetect_is_atomic_radical_surface(new_surface)) {
+                bool harvest_bail = false;
+                autodetect_walk(new_surface, gens, n,
+                                QA_AUTODETECT_MAX_GENS, &harvest_bail);
+                gens[i].kind = GEN_ABSORBED;
+                /* harvest_bail (cap full) is non-fatal here: the
+                 * generator is still dropped, we just won't surface
+                 * any additional generators beyond the cap.  Future
+                 * iterations of the outer loop may pick up any newly-
+                 * appended GEN_NESTED entries. */
+            }
         } else {
             expr_free(new_surface);
         }
     }
 
-    /* Step 2: re-dedup.  Sweep i from 0 upward; for each i, check
-     * whether any earlier j < i has the same render (structurally).
-     * If so, drop entry i. */
+    /* Step 2: re-dedup + drop absorbed entries.  Sweep i from 0 upward;
+     * for each i, decide whether to drop or keep.  Drop conditions:
+     *   - kind == GEN_ABSORBED (canonical surface no longer atomic).
+     *   - GEN_NESTED with a duplicate render among earlier entries. */
     size_t out = 0;
     for (size_t i = 0; i < *n; i++) {
-        bool dup = false;
-        if (gens[i].kind == GEN_NESTED) {
+        bool drop = false;
+        if (gens[i].kind == GEN_ABSORBED) {
+            drop = true;
+        } else if (gens[i].kind == GEN_NESTED) {
             for (size_t j = 0; j < out; j++) {
                 if (gens[j].kind == GEN_NESTED && gens[j].render && gens[i].render
                     && expr_eq((Expr*)gens[j].render, (Expr*)gens[i].render)) {
-                    dup = true; break;
+                    drop = true; break;
                 }
             }
         }
-        if (dup) {
+        if (drop) {
             /* Free the owned canonical surface, if any, since we're
              * dropping this entry. */
             if (owned[i]) { expr_free(owned[i]); owned[i] = NULL; }
