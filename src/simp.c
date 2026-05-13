@@ -811,8 +811,77 @@ static void cs_add_or_free(CandSet* cs, Expr* e) {
 
 #define SIMP_SCORE_INF ((size_t)-1)
 
+/* True iff a `Power[X, Rational[p, q]]` subtree with q >= 2 (a non-trivial
+ * root) appears anywhere in e. Used by the nested-radical detector below. */
+static bool subtree_has_root(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* head = e->data.function.head;
+    size_t argc = e->data.function.arg_count;
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+        && argc == 2) {
+        const Expr* exp = e->data.function.args[1];
+        if (exp->type == EXPR_FUNCTION && exp->data.function.head
+            && exp->data.function.head->type == EXPR_SYMBOL
+            && exp->data.function.head->data.symbol == SYM_Rational
+            && exp->data.function.arg_count == 2) {
+            const Expr* qq = exp->data.function.args[1];
+            if (qq->type == EXPR_INTEGER && qq->data.integer >= 2) return true;
+        }
+    }
+    for (size_t i = 0; i < argc; i++) {
+        if (subtree_has_root(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Penalty for *truly* nested radicals: a `Power[Compound, Rational[_, q]]`
+ * (q >= 2) whose compound base itself contains another root. This lets
+ * Simplify prefer denested forms like (1+Sqrt[5])/2 over the original
+ * (2+Sqrt[5])^(1/3) -- their plain LeafCounts are tied or off by ~2,
+ * but the denested form has no nested-radical structure, which is the
+ * canonical preferred shape.
+ *
+ * Surcharge value (3) chosen as the smallest constant that lets the
+ * cube-root denester's output win the user's (2+Sqrt[5])^(1/3) case
+ * (LeafCount diff is 2) without dominating other transforms' choices.
+ * Flat radicals like Sqrt[5] or Sqrt[x+y] are NOT penalised -- only
+ * the truly-nested shape is. */
+static size_t nested_radical_penalty(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    size_t total = 0;
+    const Expr* head = e->data.function.head;
+    size_t argc = e->data.function.arg_count;
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+        && argc == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp  = e->data.function.args[1];
+        if (base->type == EXPR_FUNCTION && base->data.function.head
+            && base->data.function.head->type == EXPR_SYMBOL) {
+            const char* bsym = base->data.function.head->data.symbol;
+            if (bsym != SYM_Rational && bsym != SYM_Complex) {
+                if (exp->type == EXPR_FUNCTION && exp->data.function.head
+                    && exp->data.function.head->type == EXPR_SYMBOL
+                    && exp->data.function.head->data.symbol == SYM_Rational
+                    && exp->data.function.arg_count == 2) {
+                    const Expr* qq = exp->data.function.args[1];
+                    if (qq->type == EXPR_INTEGER && qq->data.integer >= 2
+                        && subtree_has_root(base)) {
+                        total += 3;
+                    }
+                }
+            }
+        }
+    }
+    for (size_t i = 0; i < argc; i++) {
+        total += nested_radical_penalty(e->data.function.args[i]);
+    }
+    return total;
+}
+
 static size_t score_with_func(const Expr* e, const Expr* complexity_func) {
-    if (!complexity_func) return simp_default_complexity(e);
+    if (!complexity_func) {
+        return simp_default_complexity(e) + nested_radical_penalty(e);
+    }
     Expr* a[1] = { expr_copy((Expr*)e) };
     Expr* call = expr_new_function(expr_copy((Expr*)complexity_func), a, 1);
     Expr* result = evaluate(call);
@@ -2436,14 +2505,31 @@ static bool denest_is_nonneg(const Expr* e, const AssumeCtx* ctx) {
     return denest_prov_nonneg(ctx, e, 4);
 }
 
-/* Try the half-sum identity on a Sqrt[plus] node. plus_node is the
- * inner Plus expression (the radicand). Returns the denested form, or
- * NULL when no clean denesting exists or when branch validity cannot
- * be verified. */
-static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
-                                      const AssumeCtx* ctx) {
+/* Shared compute step for the half-sum denesting identity. On success,
+ * *P_out, *Q_out, *s_out are caller-owned and satisfy
+ *
+ *     A + b * Sqrt[C] = (Sqrt[P] + sign * Sqrt[Q])^2
+ *
+ * where sign = -1 if *b_is_negative_out, else +1, and
+ *
+ *     s = P - Q = Sqrt[A^2 - b^2 C]   (always nonneg)
+ *
+ * is the rationalising denominator for the reciprocal form. Returns
+ * false when no clean denesting exists or branch validity cannot be
+ * verified; in that case *_out are left NULL.
+ *
+ * Both the forward path (`Sqrt[plus] -> Sqrt[P] +/- Sqrt[Q]`) and the
+ * reciprocal path (`1/Sqrt[plus] -> (Sqrt[P] -/+ Sqrt[Q])/s`) reuse
+ * this so the branch-validity prover, the polynomial-arithmetic
+ * scaffolding around D = A^2 - b^2 C, and the Sqrt[Rational] rationaliser
+ * all live in one place. */
+static bool denest_compute_pq_s(const Expr* plus_node,
+                                 const AssumeCtx* ctx,
+                                 Expr** P_out, Expr** Q_out, Expr** s_out,
+                                 bool* b_is_negative_out) {
+    *P_out = NULL; *Q_out = NULL; *s_out = NULL;
     Expr* A = NULL; Expr* b = NULL; Expr* C = NULL;
-    if (!split_plus_into_a_plus_b_sqrt_c(plus_node, ctx, &A, &b, &C)) return NULL;
+    if (!split_plus_into_a_plus_b_sqrt_c(plus_node, ctx, &A, &b, &C)) return false;
 
     /* Determine sign of b by inspection of its sign. We require b's
      * sign to be syntactically determinable -- a symbolic b with
@@ -2462,7 +2548,7 @@ static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
             b_is_negative = true;
         } else {
             expr_free(A); expr_free(b); expr_free(C);
-            return NULL;
+            return false;
         }
     }
 
@@ -2497,14 +2583,14 @@ static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
     Expr* D = call_unary_owned("Expand", D_unexp);
     if (!D) {
         expr_free(A); expr_free(b); expr_free(C);
-        return NULL;
+        return false;
     }
 
     Expr* s = sqrt_if_clean_square(D, ctx);
     expr_free(D);
     if (!s) {
         expr_free(A); expr_free(b); expr_free(C);
-        return NULL;
+        return false;
     }
 
     /* Compute P = (A + s)/2 and Q = (A - s)/2. picocas's evaluator
@@ -2533,11 +2619,14 @@ static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
         expr_free(b); expr_free(C);
         /* A was already freed below; we're early-returning, so
          * that hasn't happened yet — unwind. */
-        expr_free(A);
-        return NULL;
+        expr_free(A); expr_free(s);
+        return false;
     }
 
-    Expr* neg_s_args[2] = { expr_new_integer(-1), s };
+    /* Build (-1) * s without consuming `s`: the reciprocal denester needs
+     * to return s untouched, and the original code only worked because it
+     * never reached for s again. */
+    Expr* neg_s_args[2] = { expr_new_integer(-1), expr_copy(s) };
     Expr* neg_s = expr_new_function(expr_new_symbol("Times"), neg_s_args, 2);
     Expr* neg_s_e = evaluate(neg_s);
     expr_free(neg_s);
@@ -2552,8 +2641,8 @@ static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
     Expr* Q = call_unary_owned("Together", Q_raw);
     if (!Q) {
         expr_free(P);
-        expr_free(A); expr_free(b); expr_free(C);
-        return NULL;
+        expr_free(A); expr_free(b); expr_free(C); expr_free(s);
+        return false;
     }
 
     expr_free(A); expr_free(b); expr_free(C);
@@ -2567,11 +2656,73 @@ static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
      * are (x+y)/2 and (x-y)/2 which require chained reasoning under
      * the user's x > y && y > 0 assumptions. */
     if (!denest_is_nonneg(P, ctx) || !denest_is_nonneg(Q, ctx)) {
-        expr_free(P); expr_free(Q);
+        expr_free(P); expr_free(Q); expr_free(s);
+        return false;
+    }
+
+    *P_out = P;
+    *Q_out = Q;
+    *s_out = s;
+    *b_is_negative_out = b_is_negative;
+    return true;
+}
+
+/* True iff `e` is `Power[base, m/2]` for some odd integer `m`. On true,
+ * sets *m_out = m and *base_out to a non-owning alias of the base.
+ *
+ * This is the generalisation of is_sqrt (m == 1) and is_inv_sqrt
+ * (m == -1) that lets the walker handle Sqrt[X]^k forms which the
+ * evaluator canonicalises to Power[X, k/2] (e.g. 1/Sqrt[X]^3 ->
+ * Power[X, -3/2]). Even m would be an integer power, so we exclude
+ * it here -- denesting at the half-power layer wouldn't apply. */
+static bool match_half_int_power(const Expr* e, int64_t* m_out,
+                                  Expr** base_out) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Power) return false;
+    if (e->data.function.arg_count != 2) return false;
+    Expr* exp = e->data.function.args[1];
+    if (!is_rational_literal(exp)) return false;
+    Expr* num = exp->data.function.args[0];
+    Expr* den = exp->data.function.args[1];
+    if (num->type != EXPR_INTEGER || den->type != EXPR_INTEGER) return false;
+    if (den->data.integer != 2) return false;
+    int64_t m = num->data.integer;
+    if (m == 0 || (m % 2) == 0) return false;
+    *m_out = m;
+    *base_out = e->data.function.args[0];
+    return true;
+}
+
+/* Raise `base` (consumed) to integer exponent k and evaluate. */
+static Expr* power_int_eval(Expr* base, int64_t k) {
+    Expr* args[2] = { base, expr_new_integer(k) };
+    Expr* pow = expr_new_function(expr_new_symbol("Power"), args, 2);
+    Expr* result = evaluate(pow);
+    expr_free(pow);
+    return result;
+}
+
+/* Generalised denester for `Power[Plus[A + b Sqrt[C]], m/2]` with odd m.
+ *
+ *   m == +1: returns Sqrt[P] + sign*Sqrt[Q]                 (forward path)
+ *   m == -1: returns (Sqrt[P] - sign*Sqrt[Q]) / s           (reciprocal)
+ *   |m| > 1:
+ *     m > 0: (Sqrt[P] + sign*Sqrt[Q])^m
+ *     m < 0: (Sqrt[P] - sign*Sqrt[Q])^|m| / s^|m|
+ *
+ * For negative m we rationalise via the conjugate so the result lives
+ * in Q(Sqrt[P], Sqrt[Q]) and downstream Simplify can cancel against
+ * other terms in that linear basis. */
+static Expr* try_denest_pow_half_int(const Expr* plus_node, int64_t m,
+                                      const AssumeCtx* ctx) {
+    Expr* P = NULL; Expr* Q = NULL; Expr* s = NULL;
+    bool b_is_negative = false;
+    if (!denest_compute_pq_s(plus_node, ctx, &P, &Q, &s, &b_is_negative)) {
         return NULL;
     }
 
-    /* Build Sqrt[P] +/- Sqrt[Q]. */
     Expr* sP_args[2] = { P, make_rational(1, 2) };
     Expr* sP = expr_new_function(expr_new_symbol("Power"), sP_args, 2);
     Expr* sP_e = evaluate(sP);
@@ -2581,8 +2732,21 @@ static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
     Expr* sQ_e = evaluate(sQ);
     expr_free(sQ);
 
-    Expr* result;
-    if (b_is_negative) {
+    /* For m > 0 we use sign = b's sign (Sqrt[P] + sign*Sqrt[Q]). For
+     * m < 0 we use the conjugate sign and divide by s^|m| (rationalised
+     * reciprocal). */
+    bool use_conjugate = (m < 0);
+    bool plus_q = use_conjugate ? b_is_negative : !b_is_negative;
+    /* plus_q = true means numerator is Sqrt[P] + Sqrt[Q];
+     * plus_q = false means Sqrt[P] - Sqrt[Q]. */
+
+    Expr* R;
+    if (plus_q) {
+        Expr* sum_args[2] = { sP_e, sQ_e };
+        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+        R = evaluate(sum);
+        expr_free(sum);
+    } else {
         Expr* neg_sQ_args[2] = { expr_new_integer(-1), sQ_e };
         Expr* neg_sQ = expr_new_function(expr_new_symbol("Times"),
                                           neg_sQ_args, 2);
@@ -2590,26 +2754,33 @@ static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
         expr_free(neg_sQ);
         Expr* sum_args[2] = { sP_e, neg_sQ_e };
         Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
-        result = evaluate(sum);
-        expr_free(sum);
-    } else {
-        Expr* sum_args[2] = { sP_e, sQ_e };
-        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
-        result = evaluate(sum);
+        R = evaluate(sum);
         expr_free(sum);
     }
-    /* Rationalise any Sqrt[Rational[m, n]] subterms. This is needed
-     * because transform_radical_canon's existing logic only rationalises
-     * Sqrt[1/n] (where the integer-1 base lets Times[1, Power[n, -1/2]]
-     * collapse to a bare negative-exponent Power that the negative-exp
-     * rule then handles). For Sqrt[m/n] with m > 1, the evaluator
-     * re-merges Power[m, 1/2] * Power[n, -1/2] back into
-     * Power[m/n, 1/2], undoing the split. denest_rationalise_sqrt_of_rational
-     * sidesteps the re-merge by directly building Sqrt[m*n] * (1/n).
-     *
-     * Without this step the candidate Sqrt[3/2]+Sqrt[1/2] doesn't
-     * canonicalise to (Sqrt[6]+Sqrt[2])/2 and case 3 fails to cancel
-     * with the user's expected form. */
+
+    int64_t k = m < 0 ? -m : m;
+    Expr* R_pow = (k == 1) ? R : power_int_eval(R, k);
+
+    Expr* result;
+    if (m < 0) {
+        /* Divide by s^k. Build R_pow * Power[s, -k] and evaluate. */
+        Expr* inv_s_args[2] = { s, expr_new_integer(-k) };
+        Expr* inv_s = expr_new_function(expr_new_symbol("Power"),
+                                         inv_s_args, 2);
+        Expr* inv_s_e = evaluate(inv_s);
+        expr_free(inv_s);
+        Expr* prod_args[2] = { R_pow, inv_s_e };
+        Expr* prod = expr_new_function(expr_new_symbol("Times"),
+                                        prod_args, 2);
+        result = evaluate(prod);
+        expr_free(prod);
+    } else {
+        expr_free(s);
+        result = R_pow;
+    }
+
+    /* Canonicalise leftover Sqrt[Rational[m, n]] terms, same cleanup
+     * as in the m == +/- 1 paths. */
     Expr* rationalised = denest_rationalise_sqrt_of_rational(result);
     if (rationalised && !expr_eq(rationalised, result)) {
         expr_free(result);
@@ -2620,9 +2791,9 @@ static Expr* try_denest_sqrt_radicand(const Expr* plus_node,
     return result;
 }
 
-/* Bottom-up walker: find every Sqrt[Plus] subtree and try the half-sum
- * identity at each. Returns a fully-rewritten copy of e on any
- * successful denesting; NULL when no node fired. */
+/* Bottom-up walker: find every Sqrt[Plus] / 1/Sqrt[Plus] subtree and
+ * try the half-sum identity at each. Returns a fully-rewritten copy of
+ * e on any successful denesting; NULL when no node fired. */
 static Expr* simp_denest_sqrt_walk(const Expr* e, const AssumeCtx* ctx) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
 
@@ -2654,17 +2825,22 @@ static Expr* simp_denest_sqrt_walk(const Expr* e, const AssumeCtx* ctx) {
         expr_free(rebuilt);
     }
 
-    /* Now check whether this very node is a Sqrt[Plus[...]] we can
-     * denest. We use `current` (post-children-rewrite) when present so
-     * structural changes propagate. */
+    /* Now check whether this very node is a Power[Plus[...], m/2] for
+     * some odd integer m, i.e. Sqrt[X]^m. The forward (m=+1) and
+     * reciprocal (m=-1) paths used to be dispatched separately via
+     * is_sqrt / is_inv_sqrt; we now go through match_half_int_power so
+     * higher half-powers (e.g. m = +/-3 from 1/Sqrt[X]^3 -> X^(-3/2))
+     * also get denested. We use `current` (post-children-rewrite) when
+     * present so structural changes propagate. */
     const Expr* target = current ? current : e;
-    if (is_sqrt(target)) {
-        Expr* radicand = target->data.function.args[0];
-        if (radicand->type == EXPR_FUNCTION
-            && radicand->data.function.head
-            && radicand->data.function.head->type == EXPR_SYMBOL
-            && radicand->data.function.head->data.symbol == SYM_Plus) {
-            Expr* d = try_denest_sqrt_radicand(radicand, ctx);
+    int64_t m_num = 0;
+    Expr* base = NULL;
+    if (match_half_int_power(target, &m_num, &base)) {
+        if (base->type == EXPR_FUNCTION
+            && base->data.function.head
+            && base->data.function.head->type == EXPR_SYMBOL
+            && base->data.function.head->data.symbol == SYM_Plus) {
+            Expr* d = try_denest_pow_half_int(base, m_num, ctx);
             if (d) {
                 if (current) expr_free(current);
                 return d;
@@ -3898,6 +4074,27 @@ static Expr* simp_algebraic_impl(const Expr* e) {
         if (dbg) simp_debug_log("Algebraic", e, out,
                                 simp_debug_elapsed_ms(t0));
         return out;
+    }
+
+    /* Early denester short-circuit. For nested-radical inputs (e.g.
+     * Sqrt[A + b Sqrt[C]] or 1/Sqrt[...]^k), the half-sum denester is
+     * O(small) and the algebraic-tower Together-with-Extension below is
+     * O(big). When the denester strictly wins on complexity, taking that
+     * win here saves the 200+ ms it costs to compute and then reject
+     * the Together[expr, Extension -> α] form for the same input.
+     *
+     * The complexity gate is strict (<) so we don't churn on inputs the
+     * denester touches without reducing -- those still fall through to
+     * the extension path which may legitimately help. */
+    {
+        Expr* denested = simp_denest_sqrt(e, NULL);
+        if (denested && simp_default_complexity(denested)
+                          < simp_default_complexity(e)) {
+            if (dbg) simp_debug_log("Algebraic", e, denested,
+                                    simp_debug_elapsed_ms(t0));
+            return denested;
+        }
+        if (denested) expr_free(denested);
     }
 
     /* Phase G9 (cube-root and higher): when the input has exactly one

@@ -268,6 +268,66 @@ static void test_autodetect_absorbs_canonical_radical(void) {
         "0", 0);
 }
 
+/* =================== Cube-root denesting via simp_cuberoot =====================
+ *
+ * Before the nested-radical-penalty addition, simp_cuberoot's `(a+b Sqrt[c])^(1/3)
+ * -> p + q*Sqrt[c]` rewrite was rejected by the simp_search complexity gate
+ * whenever the denested form had a higher LeafCount than the input. The penalty
+ * (a +3 surcharge for Power[Compound, Rational[_, q]] when the compound base
+ * itself contains another root) makes the structurally-denested form preferred
+ * by score, matching Mathematica's behaviour.
+ *
+ * These cases all hit Pattern A: small (a, b, c) with rational (p, q).
+ */
+
+static void test_cuberoot_denest_rational_pq(void) {
+    /* (2 + Sqrt[5])^(1/3) = (1 + Sqrt[5])/2.  ((1+Sqrt[5])/2)^3 expands
+     * to 2 + Sqrt[5].  The denested LeafCount (13) is higher than the
+     * nested input's (11), so this case depends on the nested-radical
+     * penalty firing. */
+    assert_eval_eq(
+        "Simplify[(2 + Sqrt[5])^(1/3)]",
+        "1/2 (1 + Sqrt[5])", 0);
+}
+
+static void test_cuberoot_denest_integer_pq(void) {
+    /* (20 + 14 Sqrt[2])^(1/3) = 2 + Sqrt[2]. */
+    assert_eval_eq(
+        "Simplify[(20 + 14 Sqrt[2])^(1/3)]",
+        "2 + Sqrt[2]", 0);
+}
+
+static void test_cuberoot_denest_integer_pq_sqrt3(void) {
+    /* (10 + 6 Sqrt[3])^(1/3) = 1 + Sqrt[3]. */
+    assert_eval_eq(
+        "Simplify[(10 + 6 Sqrt[3])^(1/3)]",
+        "1 + Sqrt[3]", 0);
+}
+
+static void test_cuberoot_sum_of_conjugates(void) {
+    /* (2 + Sqrt[5])^(1/3) + (2 - Sqrt[5])^(1/3) = 1 under the real-
+     * cube-root convention (Cardano discriminant test). */
+    assert_eval_eq(
+        "Simplify[(2 + Sqrt[5])^(1/3) + (2 - Sqrt[5])^(1/3)]",
+        "1", 0);
+}
+
+static void test_cuberoot_recip_via_denest(void) {
+    /* 1/(2+Sqrt[5])^(1/3) - 2/(1+Sqrt[5]) == 0.  After denesting,
+     * 1/((1+Sqrt[5])/2) = 2/(1+Sqrt[5]). */
+    assert_eval_eq(
+        "Simplify[1/(2+Sqrt[5])^(1/3) - 2/(1+Sqrt[5])]",
+        "0", 0);
+}
+
+static void test_cuberoot_inert_when_no_denest(void) {
+    /* (3 + Sqrt[2])^(1/3) has no rational denesting (a^2 - b^2 c = 7
+     * is not a perfect cube), so the input is returned unchanged. */
+    assert_eval_eq(
+        "Simplify[(3 + Sqrt[2])^(1/3)]",
+        "(3 + Sqrt[2])^(1/3)", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -275,6 +335,13 @@ int main(void) {
     TEST(test_cuberoot_product_collapses);
     TEST(test_cuberoot_minpoly_identity);
     TEST(test_cuberoot_polynomial_factor);
+
+    TEST(test_cuberoot_denest_rational_pq);
+    TEST(test_cuberoot_denest_integer_pq);
+    TEST(test_cuberoot_denest_integer_pq_sqrt3);
+    TEST(test_cuberoot_sum_of_conjugates);
+    TEST(test_cuberoot_recip_via_denest);
+    TEST(test_cuberoot_inert_when_no_denest);
 
     TEST(test_quartic_root_product_collapses);
     TEST(test_quartic_root_squared);
