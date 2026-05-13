@@ -9,6 +9,7 @@
 #include "sym_names.h"
 #include "options.h"
 #include "qafactor.h"
+#include "core.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -684,8 +685,42 @@ Expr* builtin_cancel(Expr* res) {
                 qa_tower_free(auto_tower);
                 return tower_result;
             }
-            qa_tower_free(auto_tower);
-            auto_tower = NULL;
+            /* Tower path declined.  Try each tower generator in turn as
+             * a single-α extension and pick the smallest result that
+             * beats the input.  See builtin_together for rationale. */
+            {
+                bool is_sum = (arg->type == EXPR_FUNCTION
+                               && arg->data.function.head
+                               && arg->data.function.head->type == EXPR_SYMBOL
+                               && arg->data.function.head->data.symbol == SYM_Plus);
+                int64_t in_size = leaf_count_internal((Expr*)arg, true);
+                Expr* best = NULL;
+                int64_t best_size = -1;
+                for (int i = 0; i < auto_tower->n; i++) {
+                    const Expr* gen = auto_tower->alpha_renders[i];
+                    if (!gen) continue;
+                    Expr* cand = is_sum
+                        ? together_recursive_ext(arg, gen)
+                        : cancel_with_extension(arg, gen);
+                    if (!cand) continue;
+                    Expr* tg = expr_new_function(expr_new_symbol("Together"),
+                        (Expr*[]){cand}, 1);
+                    Expr* folded = evaluate(tg);
+                    expr_free(tg);
+                    if (!folded) continue;
+                    int64_t lc = leaf_count_internal(folded, true);
+                    if (lc < in_size && (best_size < 0 || lc < best_size)) {
+                        if (best) expr_free(best);
+                        best = folded;
+                        best_size = lc;
+                    } else {
+                        expr_free(folded);
+                    }
+                }
+                qa_tower_free(auto_tower);
+                auto_tower = NULL;
+                if (best) return best;
+            }
         }
     }
 
@@ -918,8 +953,49 @@ Expr* builtin_together(Expr* res) {
                 qa_tower_free(auto_tower);
                 return tower_result;
             }
-            qa_tower_free(auto_tower);
-            auto_tower = NULL;
+            /* Tower path declined (typically: Step 1 substitution into
+             * γ-polynomial form blew up the leaf count past the safety
+             * gate).  Before falling back to the generic no-extension
+             * path — which can't see the algebraic relations between
+             * generators and produces a combined-but-not-cancelled
+             * fraction — try each tower generator in turn as a single-α
+             * extension.  together_recursive_ext threads that one α
+             * through PolynomialLCM/Quotient; the remaining generators
+             * pass through as opaque coefficients, but the resulting
+             * single-α cancellation is often enough to collapse the
+             * fraction.  A final no-extension Together fold-up combines
+             * like-coefficient terms that the single-α path leaves
+             * separated. */
+            {
+                int64_t in_size = leaf_count_internal((Expr*)arg, true);
+                Expr* best = NULL;
+                int64_t best_size = -1;
+                for (int i = 0; i < auto_tower->n; i++) {
+                    const Expr* gen = auto_tower->alpha_renders[i];
+                    if (!gen) continue;
+                    Expr* cand = together_recursive_ext(arg, gen);
+                    if (!cand) continue;
+                    /* Final no-extension fold-up: combine like coefficient
+                     * terms that the single-α path treats as polynomial-
+                     * variable coefficients. */
+                    Expr* tg = expr_new_function(expr_new_symbol("Together"),
+                        (Expr*[]){cand}, 1);
+                    Expr* folded = evaluate(tg);
+                    expr_free(tg);
+                    if (!folded) continue;
+                    int64_t lc = leaf_count_internal(folded, true);
+                    if (lc < in_size && (best_size < 0 || lc < best_size)) {
+                        if (best) expr_free(best);
+                        best = folded;
+                        best_size = lc;
+                    } else {
+                        expr_free(folded);
+                    }
+                }
+                qa_tower_free(auto_tower);
+                auto_tower = NULL;
+                if (best) return best;
+            }
         }
     }
 

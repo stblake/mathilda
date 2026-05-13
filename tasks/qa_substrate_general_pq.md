@@ -1,14 +1,15 @@
 ---
 title: qa substrate — accept Power[c, p/q] for general integer p
 date_started: 2026-05-13
-status: shipped 2026-05-13 (Phases A–E); deeper Together[D[Integrate[...]]] case deferred
+status: shipped 2026-05-13 (Phases A–E + multi-gen fallback)
 ---
 
 ## Status (2026-05-13)
 
 Phases A (recogniser broadening), B (lift inputs), C (complexity gate),
-D (Q(γ)-arithmetic in the no-variable path), and E (input-side radicand
-canonicalisation) all shipped with zero regressions
+D (Q(γ)-arithmetic in the no-variable path), E (input-side radicand
+canonicalisation), and F (multi-gen tower fallback to single-α
+Together/Cancel) all shipped with zero regressions
 (96 pass / 14 fail — identical pre-existing failure set).
 
 Key user-visible wins:
@@ -21,32 +22,33 @@ Key user-visible wins:
   Extension -> Automatic]` → `0` (Phase E input-side canonicaliser
   collapses mathematically-equal radicands before tower substitution).
   Test: `tests/test_simp_algebraic_cuberoot.c::test_together_equal_nested_radicals`.
+- `Together[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]`
+  → `a x / (x^3 + 2)` (Phase F multi-gen fallback).  Test:
+  `tests/test_simp_algebraic_cuberoot.c::test_together_headline_d_integrate`.
 
-Remaining work:
-- The deeper motivating example
-  `Together[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]`
-  still produces a non-collapsed form.  The Power canonicaliser
-  (2026-05-13) and autodetect-absorbed-radical fix (2026-05-13) close
-  the *first* gap: nested `Sqrt[1/3/2^(2/3)]` now simplifies to
-  `1/(2^(1/3) Sqrt[3])` and `extension_autodetect` correctly returns
-  a degree-6 tower with the integer-base generators `2^(1/3)` and
-  `Sqrt[3]`.  The *second* gap is `qa_cancel_with_tower`'s Step 1
-  substitution: it pre-expands each `Power[c, p/q]` occurrence into a
-  γ-polynomial, blowing the leaf count up to ~3× the input, and the
-  downstream Together (no-extension) then runs multivariate
-  polynomial GCD over `Q[γ_internal, x, a]` -- intractable.  A safety
-  gate (`lc_out > 100 && lc_out > 2·lc_in`) returns NULL so the
-  caller falls back to the non-tower path that produces the partial
-  combined-but-not-cancelled result.
+### Phase F: multi-gen tower fallback (2026-05-13)
 
-  Closing this second gap requires a multi-generator analogue of
-  `together_recursive_ext` that threads the tower's polynomial
-  relations through `PolynomialLCM` / `PolynomialQuotient` directly,
-  without pre-expanding to γ-polynomial form.  Substantial work --
-  the qaupoly substrate is univariate over Q(γ) and would need
-  multivariate-coefficient support, or a coefficient-by-coefficient
-  trick that keeps the user-α renders symbolic until the final
-  rendering step.
+When `extension_autodetect` builds an n ≥ 2 tower and
+`qa_cancel_with_tower` declines (safety gate fires, lift fails, etc.),
+`builtin_together` / `builtin_cancel` no longer drop straight to the
+no-extension path.  Instead they iterate over the tower's
+`alpha_renders[i]`, calling `together_recursive_ext` (or
+`cancel_with_extension` for non-Plus inputs) with each as a single-α
+extension, running a final no-extension `Together` fold-up on each
+candidate, and picking the smallest result that strictly beats the
+input by `leaf_count_internal`.
+
+The single-α path treats the remaining generators as opaque polynomial-
+variable coefficients but still cancels correctly over Q(α)[x]; the
+final fold-up combines like-coefficient terms (e.g. pulling `1/a` out
+of `1/(144 a) + x^3/(288 a)` to give `(2 + x^3)/(288 a)`).
+
+This sidesteps the original deferred plan (a multi-generator analogue
+of `together_recursive_ext` threading tower relations through
+PolynomialLCM/Quotient directly, requiring multivariate-coefficient
+support in qaupoly) by exploiting the fact that any one tower generator
+is usually enough to drive the GCD-based cancellation, and the
+no-extension fold-up cleans up the rest.
 
 
 

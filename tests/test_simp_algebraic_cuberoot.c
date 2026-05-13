@@ -175,6 +175,31 @@ static void test_together_equal_nested_radicals(void) {
         "0", 0);
 }
 
+static void test_together_headline_d_integrate(void) {
+    /* The motivating multi-generator example:
+     *
+     *   Together[D[Integrate[a x/(x^3 + 2), x], x], Extension -> Automatic]
+     *
+     * D[Integrate[a x/(x^3 + 2), x], x] produces a 3-term sum involving
+     * 2^(1/3), 2^(2/3), Sqrt[3] and a nested radical
+     * Sqrt[-1/9/2^(2/3) + 2/9·2^(1/3)] (which equals 1/(2^(1/3) Sqrt[3])).
+     * The combined-but-not-cancelled form should collapse mathematically
+     * to the integrand a x / (x^3 + 2).
+     *
+     * Implementation path: extension_autodetect builds an n=2 tower over
+     * (2^(1/3), Sqrt[3]); qa_cancel_with_tower's Step 1 substitution
+     * blows up the leaf count past the safety gate and returns NULL.
+     * The builtin_together fallback then tries each tower generator as
+     * a single-α extension via together_recursive_ext, runs a final
+     * no-extension Together fold-up, and picks the smallest result. */
+    assert_eval_eq(
+        "Together[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]",
+        "(a x)/(2 + x^3)", 0);
+    assert_eval_eq(
+        "Cancel[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]",
+        "(a x)/(2 + x^3)", 0);
+}
+
 static void test_autodetect_absorbs_canonical_radical(void) {
     /* extension_autodetect previously bailed (returned NULL) when
      * Phase F's canonicalise_post simplified a GEN_NESTED's surface
@@ -220,6 +245,7 @@ int main(void) {
     TEST(test_power_neg_pq_lift);
     TEST(test_multigen_qgamma_constant_collapse);
     TEST(test_together_equal_nested_radicals);
+    TEST(test_together_headline_d_integrate);
     TEST(test_autodetect_absorbs_canonical_radical);
 
     printf("All simp_algebraic_cuberoot tests passed!\n");
