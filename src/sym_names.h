@@ -172,6 +172,8 @@ extern const char* SYM_PollardRho;
 extern const char* SYM_Power;
 extern const char* SYM_Primes;
 extern const char* SYM_Protected;
+extern const char* SYM_Put;
+extern const char* SYM_PutAppend;
 extern const char* SYM_Quit;
 extern const char* SYM_Quotient;
 extern const char* SYM_Rational;

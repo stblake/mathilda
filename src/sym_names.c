@@ -157,6 +157,8 @@ const char* SYM_PollardRho = NULL;
 const char* SYM_Power = NULL;
 const char* SYM_Primes = NULL;
 const char* SYM_Protected = NULL;
+const char* SYM_Put = NULL;
+const char* SYM_PutAppend = NULL;
 const char* SYM_Quit = NULL;
 const char* SYM_Quotient = NULL;
 const char* SYM_Rational = NULL;
@@ -371,6 +373,8 @@ void sym_names_init(void) {
     SYM_Power                      = intern_symbol("Power");
     SYM_Primes                     = intern_symbol("Primes");
     SYM_Protected                  = intern_symbol("Protected");
+    SYM_Put                        = intern_symbol("Put");
+    SYM_PutAppend                  = intern_symbol("PutAppend");
     SYM_Quit                       = intern_symbol("Quit");
     SYM_Quotient                   = intern_symbol("Quotient");
     SYM_Rational                   = intern_symbol("Rational");

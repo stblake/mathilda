@@ -397,6 +397,33 @@ void info_init(void) {
     symtab_set_docstring("ReplaceAll", "expr /. rules or ReplaceAll[expr, rules] applies rules to transform each subpart of expr.");
     symtab_set_docstring("ReplaceRepeated", "expr //. rules or ReplaceRepeated[expr, rules] repeatedly applies rules until the expression no longer changes.");
     symtab_set_docstring("Print", "Print[expr1, expr2, ...] prints the expressions to stdout and returns Null.");
+
+    // File I/O
+    symtab_set_docstring("Get",
+        "Get[\"filename\"]\n"
+        "\treads expressions from a file, evaluates them in order, and returns the last result.\n"
+        "Returns $Failed if the file cannot be opened.\n"
+        "It is conventional to use names ending in .m for files containing PicoCAS input.");
+    symtab_set_docstring("Put",
+        "Put[expr, \"filename\"] or expr >> \"filename\"\n"
+        "\twrites expr to the file, replacing any prior contents.\n"
+        "Put[expr1, expr2, ..., \"filename\"]\n"
+        "\twrites a sequence of expressions to the file, each followed by a newline.\n"
+        "Put[\"filename\"]\n"
+        "\tcreates an empty file with the specified name (or truncates an existing one).\n"
+        "expr >> \"filename\" is equivalent to Put[expr, \"filename\"]; the bare-word form\n"
+        "expr >> filename is equivalent to expr >> \"filename\".\n"
+        "Returns Null on success and $Failed if the file cannot be opened.");
+    symtab_set_docstring("PutAppend",
+        "PutAppend[expr, \"filename\"] or expr >>> \"filename\"\n"
+        "\tappends expr to the end of the file, creating the file if it does not exist.\n"
+        "PutAppend[expr1, expr2, ..., \"filename\"]\n"
+        "\tappends a sequence of expressions, one per line.\n"
+        "PutAppend works the same as Put, except that it preserves any existing\n"
+        "contents of the file rather than truncating them.\n"
+        "expr >>> filename is equivalent to expr >>> \"filename\".\n"
+        "Returns Null on success and $Failed if the file cannot be opened.");
+
     symtab_set_docstring("FullForm", "FullForm[expr] is a wrapper that causes expr to be printed in full form.");
     symtab_set_docstring("InputForm", "InputForm[expr] is a wrapper that causes expr to be printed in input form.");
     symtab_set_docstring("TeXForm",

@@ -28,7 +28,7 @@
 #include "facpoly.h"
 #include "datetime.h"
 #include "linalg.h"
-#include "load.h"
+#include "readwrite.h"
 #include "part.h"
 #include "plus.h"
 #include "times.h"
@@ -376,7 +376,7 @@ void core_init(void) {
     info_init();
     datetime_init();
     linalg_init();
-    load_init();
+    readwrite_init();
     random_init();
     strings_init();
     series_init();

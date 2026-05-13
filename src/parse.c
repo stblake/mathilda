@@ -488,7 +488,9 @@ typedef enum {
     OP_ADDTO,
     OP_SUBTRACTFROM,
     OP_DERIVATIVE,
-    OP_COMPOSITION
+    OP_COMPOSITION,
+    OP_PUT,
+    OP_PUTAPPEND
 } OperatorType;
 
 typedef struct {
@@ -502,7 +504,11 @@ typedef struct {
 static OperatorDef get_operator(const char* pos) {
     OperatorDef def = {OP_NONE, -1, 0, NULL, 0};
     
-    if (strncmp(pos, "===", 3) == 0) {
+    if (strncmp(pos, ">>>", 3) == 0) {
+        /* PutAppend (expr >>> file). Lower than Set (40) so `a = 5 >>> "f"`
+         * parses as Set[a, PutAppend[5, "f"]] — matches Mathematica. */
+        def.type = OP_PUTAPPEND; def.prec = 30; def.head_name = "PutAppend"; def.len = 3;
+    } else if (strncmp(pos, "===", 3) == 0) {
         def.type = OP_SAMEQ; def.prec = 290; def.head_name = "SameQ"; def.len = 3;
     } else if (strncmp(pos, "=!=", 3) == 0) {
         def.type = OP_UNSAMEQ; def.prec = 290; def.head_name = "UnsameQ"; def.len = 3;
@@ -550,6 +556,11 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_LESSEQUAL; def.prec = 290; def.head_name = "LessEqual"; def.len = 2;
     } else if (strncmp(pos, ">=", 2) == 0) {
         def.type = OP_GREATEREQUAL; def.prec = 290; def.head_name = "GreaterEqual"; def.len = 2;
+    } else if (strncmp(pos, ">>", 2) == 0) {
+        /* Put (expr >> file). Same precedence as PutAppend; right side is
+         * a filename token (bare identifier or quoted string), parsed
+         * specially in the operator loop below. */
+        def.type = OP_PUT; def.prec = 30; def.head_name = "Put"; def.len = 2;
     } else if (*pos == '<') {
         def.type = OP_LESS; def.prec = 290; def.head_name = "Less"; def.len = 1;
     } else if (*pos == '>') {
@@ -860,6 +871,43 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         } else if (op_def.type == OP_REPEATEDNULL) {
             Expr* args[1] = { left };
             left = expr_new_function(expr_new_symbol("RepeatedNull"), args, 1);
+            continue;
+        } else if (op_def.type == OP_PUT || op_def.type == OP_PUTAPPEND) {
+            /* Right side of `>>` / `>>>` is a filename — either a quoted
+             * string or a bare token. Mathematica treats the right side
+             * literally rather than as an expression. */
+            skip_whitespace(s);
+            Expr* filename = NULL;
+            if (*s->pos == '"') {
+                filename = parse_string(s);
+            } else {
+                /* Scan identifier-ish chars plus a few path-safe extras. */
+                char buf[1024];
+                size_t bi = 0;
+                while (*s->pos && bi + 1 < sizeof(buf) &&
+                       (isalnum((unsigned char)*s->pos) ||
+                        *s->pos == '_' || *s->pos == '.' ||
+                        *s->pos == '/' || *s->pos == '\\' ||
+                        *s->pos == '-' || *s->pos == '~' ||
+                        *s->pos == '$')) {
+                    buf[bi++] = *s->pos++;
+                }
+                buf[bi] = '\0';
+                if (bi == 0) {
+                    fprintf(stderr, "Expected filename after %s\n",
+                            op_def.head_name);
+                    expr_free(left);
+                    return NULL;
+                }
+                filename = expr_new_string(buf);
+            }
+            if (!filename) {
+                expr_free(left);
+                return NULL;
+            }
+            Expr* put_args[2] = { left, filename };
+            left = expr_new_function(expr_new_symbol(op_def.head_name),
+                                     put_args, 2);
             continue;
         } else if (op_def.type == OP_SPAN) {
             Expr* span_args[3];

@@ -80,7 +80,7 @@ set(COMMON_SRC
     ../src/parfrac.c
     ../src/datetime.c
     ../src/linalg.c
-    ../src/load.c
+    ../src/readwrite.c
     ../src/iter.c
     ../src/cond.c
     ../src/default_helper.c
@@ -737,3 +737,13 @@ add_test(NAME intrat_corpus_tests
          COMMAND intrat_corpus_tests ../../IntegrateRationalTests.m)
 add_test(NAME intrat_inline_corpus_tests
          COMMAND intrat_corpus_tests ../../IntegrateRationalInlineCases.m)
+
+add_executable(readwrite_tests test_readwrite.c ${COMMON_SRC})
+target_include_directories(readwrite_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(readwrite_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(readwrite_tests build_ecm)
+else()
+    target_link_libraries(readwrite_tests gmp m)
+endif()
+add_test(NAME readwrite_tests COMMAND readwrite_tests)
