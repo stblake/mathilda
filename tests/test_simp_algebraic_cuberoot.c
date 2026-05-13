@@ -175,6 +175,40 @@ static void test_together_equal_nested_radicals(void) {
         "0", 0);
 }
 
+static void test_together_qgamma_constant_canonical_linear_basis(void) {
+    /* Q(γ)-constants previously returned an unsimplified γ-polynomial
+     * surface form after the qa_cancel_with_tower no-variable branch
+     * substituted γ_internal → t->gamma_render and evaluated.  For
+     * γ = Sqrt[2] + Sqrt[3], `1/(Sqrt[2]+Sqrt[3]) + 1/(Sqrt[2]-Sqrt[3])`
+     * came back as `-(Sqrt[2]+Sqrt[3])^3 + 9(Sqrt[2]+Sqrt[3])`
+     * (mathematically equal to `-2 Sqrt[2]` but verbose).
+     *
+     * Fix: after substitution, run Expand to collapse the γ-polynomial
+     * powers, then run Together (no extension) to fold radical
+     * denominators via Sqrt-base polynomial GCD.  The Together pass
+     * also catches arithmetically-zero spurious nonzero forms (e.g.
+     * the (Sqrt[2]+Sqrt[3])^2 - 5 - 2 Sqrt[6] case that Expand alone
+     * leaves as `-210969/184/Sqrt[6] + 70323/368 Sqrt[6]`). */
+    assert_eval_eq(
+        "Together[1/(Sqrt[2] + Sqrt[3]) + 1/(Sqrt[2] - Sqrt[3]), Extension -> Automatic]",
+        "-2 Sqrt[2]", 0);
+    assert_eval_eq(
+        "Together[1/(Sqrt[2] + Sqrt[3]) - 1/(Sqrt[2] - Sqrt[3]), Extension -> Automatic]",
+        "2 Sqrt[3]", 0);
+    assert_eval_eq(
+        "Cancel[(Sqrt[2]+Sqrt[3])^2 - 5 - 2 Sqrt[6], Extension -> Automatic]",
+        "0", 0);
+    assert_eval_eq(
+        "Cancel[1/(Sqrt[2] + Sqrt[3]), Extension -> Automatic]",
+        "Sqrt[3] - Sqrt[2]", 0);
+    assert_eval_eq(
+        "Cancel[(Sqrt[2] + Sqrt[3])/(Sqrt[2] - Sqrt[3]), Extension -> Automatic]",
+        "-5 - 2 Sqrt[6]", 0);
+    assert_eval_eq(
+        "Together[(Sqrt[2] - Sqrt[3])^2 + (Sqrt[2] + Sqrt[3])^2, Extension -> Automatic]",
+        "10", 0);
+}
+
 static void test_together_headline_d_integrate(void) {
     /* The motivating multi-generator example:
      *
@@ -245,6 +279,7 @@ int main(void) {
     TEST(test_power_neg_pq_lift);
     TEST(test_multigen_qgamma_constant_collapse);
     TEST(test_together_equal_nested_radicals);
+    TEST(test_together_qgamma_constant_canonical_linear_basis);
     TEST(test_together_headline_d_integrate);
     TEST(test_autodetect_absorbs_canonical_radical);
 

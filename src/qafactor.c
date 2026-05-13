@@ -1953,11 +1953,37 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
                 candidate = expr_subst(gamma_poly, gs, t->gamma_render);
                 expr_free(gs);
                 expr_free(gamma_poly);
-                /* Final canonicalisation through the evaluator. */
-                Expr* eval_call = expr_copy(candidate);
-                expr_free(candidate);
-                candidate = evaluate(eval_call);
-                expr_free(eval_call);
+                /* Final canonicalisation: Expand then Together (no
+                 * extension) to reduce γ-polynomial form to canonical
+                 * linear-basis when γ is a sum of atomic radicals.
+                 *
+                 * Without Expand, `Together[1/(Sqrt[2]+Sqrt[3]) +
+                 * 1/(Sqrt[2]-Sqrt[3]), Extension -> Automatic]` returns
+                 * the unsimplified γ-polynomial form
+                 * `-(Sqrt[2]+Sqrt[3])^3 + 9(Sqrt[2]+Sqrt[3])` instead
+                 * of the canonical `-2 Sqrt[2]`.
+                 *
+                 * Without Together-no-extension, Expand of an
+                 * arithmetically-zero γ-polynomial like
+                 * `(Sqrt[2]+Sqrt[3])^2 - 5 - 2 Sqrt[6]` can produce a
+                 * spurious nonzero linear combination of `Sqrt[6]` and
+                 * `1/Sqrt[6]` terms (the qa_div lift doesn't fully kill
+                 * the algebraic relation between independent autodetect
+                 * generators).  Running `Together` over `Q` after
+                 * Expand collapses these to 0 via Sqrt-base polynomial
+                 * GCD.  The downstream leaf-count gate keeps the
+                 * candidate only if it beats the input. */
+                Expr* expand_call = expr_new_function(
+                    expr_new_symbol("Expand"),
+                    (Expr*[]){candidate}, 1);
+                Expr* expanded = evaluate(expand_call);
+                expr_free(expand_call);
+
+                Expr* tog_call = expr_new_function(
+                    expr_new_symbol("Together"),
+                    (Expr*[]){expanded}, 1);
+                candidate = evaluate(tog_call);
+                expr_free(tog_call);
             }
         }
         if (num_qp) qaupoly_free(num_qp);
