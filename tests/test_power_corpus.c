@@ -146,6 +146,29 @@ static void test_power_of_times_positives(void) {
     assert_eval_eq("Sqrt[4 Sqrt[3]]", "2 3^(1/4)", 0);
 }
 
+/* Power[Times[positives], p/q] distribution when the trigger is a
+ * Power[positive, p'/q'] factor that composes cleanly (composed
+ * reduced denominator <= q'), not a perfect-power rational factor
+ * (2026-05-13).  Closes Sqrt[k/2^(2/3)] -> Sqrt[k]/2^(1/3) for
+ * arbitrary positive k. */
+static void test_power_of_times_power_factor_composes(void) {
+    /* Power factor triggers distribution; rational coefficient need
+     * not factor cleanly under the outer p/q. */
+    assert_eval_eq("Sqrt[3/2^(2/3)]",      "Sqrt[3]/2^(1/3)",       0);
+    assert_eval_eq("Sqrt[1/3/2^(2/3)]",    "1/(2^(1/3) Sqrt[3])",   0);
+    assert_eval_eq("Sqrt[Pi/2^(2/3)]",     "Sqrt[Pi]/2^(1/3)",      0);
+
+    /* Pre-existing perfect-square cases still work. */
+    assert_eval_eq("Sqrt[1/2^(2/3)]",      "1/2^(1/3)",             0);
+    assert_eval_eq("Sqrt[9/2^(2/3)]",      "3/2^(1/3)",             0);
+
+    /* Adjacency cases must remain unchanged: composition would
+     * introduce a new (larger-denominator) radical. */
+    assert_eval_eq("Sqrt[2 Sqrt[3]]",      "Sqrt[2 Sqrt[3]]",       0);
+    assert_eval_eq("Sqrt[2 Pi]",           "Sqrt[2 Pi]",            0);
+    assert_eval_eq("Power[4 Pi, 2/3]",     "(4 Pi)^(2/3)",          0);
+}
+
 /* Power-of-Power composition with positive base + rational outer (2026-05-12). */
 static void test_power_of_power_positive_base(void) {
     /* Positive integer base -- exponent merges. */
@@ -171,6 +194,7 @@ int main(void) {
     TEST(test_rational_base_rational_exp);
     TEST(test_power_of_times_positives);
     TEST(test_power_of_power_positive_base);
+    TEST(test_power_of_times_power_factor_composes);
 
     printf("All power_corpus tests passed!\n");
     return 0;

@@ -123,6 +123,47 @@ static bool factor_fully_reduces_under_q(Expr* f, int64_t q) {
     return false;
 }
 
+/* Companion gate for Power[positive_base, p'/q'] factors inside
+ * Power[Times[positives], p_out/q_out].  Triggers distribution when
+ * composing the outer exponent with the inner exponent introduces no
+ * new radical complexity, i.e. the composed exponent's reduced
+ * denominator is at most q' (the inner radical's denominator).
+ *
+ * Composed exponent = (p' * p_out) / (q' * q_out).  After gcd
+ * reduction the denominator is (q' * q_out) / gcd(|p' * p_out|,
+ * q' * q_out).  Bounded above by q' iff q_out divides |p' * p_out|.
+ *
+ * Examples (assuming positive base):
+ *   Sqrt[Power[2, -2/3]]   -> q_out=2, p_out=1, p'=-2, q'=3
+ *     |p' * p_out| = 2, 2 mod 2 = 0 -> composes (-> Power[2, -1/3])
+ *   Sqrt[Power[3, 1/2]]    -> q_out=2, p_out=1, p'=1,  q'=2
+ *     |p' * p_out| = 1, 1 mod 2 = 1 -> rejects (would introduce 4th root)
+ *
+ * This lets `Sqrt[k/2^(2/3)]` distribute for any positive `k` (e.g.
+ * `k = 1/3` or `k = Pi`), via the clean composition of the Power
+ * factor, while preserving Mathematica-faithful behaviour of leaving
+ * `Sqrt[2 Sqrt[3]]` and `Sqrt[2 Pi]` alone. */
+static bool power_factor_composes_cleanly(Expr* f,
+                                          int64_t p_out, int64_t q_out) {
+    if (f->type != EXPR_FUNCTION) return false;
+    if (!f->data.function.head
+        || f->data.function.head->type != EXPR_SYMBOL
+        || f->data.function.head->data.symbol != SYM_Power
+        || f->data.function.arg_count != 2) return false;
+    Expr* b = f->data.function.args[0];
+    Expr* e = f->data.function.args[1];
+    if (!is_known_positive_pwr(b)) return false;
+    int64_t pi, qi;
+    if (!is_rational(e, &pi, &qi)) return false;
+    if (qi <= 1) return false;
+    int64_t abs_p  = pi < 0 ? -pi : pi;
+    int64_t abs_po = p_out < 0 ? -p_out : p_out;
+    /* Overflow-safe |p' * p_out|; bail to false on overflow. */
+    if (abs_p != 0 && abs_po != 0 && abs_po > INT64_MAX / abs_p) return false;
+    int64_t prod = abs_p * abs_po;
+    return q_out > 0 && (prod % q_out == 0);
+}
+
 /* Given positive n_in > 1, decide whether n_in = b^k for some integer
  * b >= 2 and k >= 2. On true, fills b_out with the smallest such b
  * (equivalently the largest such k) and *k_out with that k.
@@ -927,10 +968,14 @@ rat_imag_fallthrough: ;
      *
      * Distributes the outer Power over every Times factor when:
      *   (a) every factor is known positive (is_known_positive_pwr), and
-     *   (b) at least one factor is an integer or rational that
-     *       PERFECTLY reduces to a rational coefficient under
-     *       Power[_, p/q] -- i.e., factor_out_kth_power leaves
-     *       residue 1 on both numerator and denominator.
+     *   (b) at least one factor either:
+     *       (i) is an integer or rational that PERFECTLY reduces to a
+     *           rational coefficient under Power[_, p/q] (residue 1
+     *           on both numerator and denominator), OR
+     *       (ii) is a Power[positive, p'/q'] whose composition with
+     *            the outer p/q introduces no new radical complexity
+     *            (composed reduced denominator <= q'), per
+     *            power_factor_composes_cleanly.
      *
      * The gating in (b) keeps Mathematica-faithful behaviour:
      *
@@ -965,7 +1010,10 @@ rat_imag_fallthrough: ;
             for (size_t i = 0; i < bc; i++) {
                 Expr* f = base->data.function.args[i];
                 if (!is_known_positive_pwr(f)) { all_pos = false; break; }
-                if (factor_fully_reduces_under_q(f, qq_pt)) has_full_reducer = true;
+                if (factor_fully_reduces_under_q(f, qq_pt)
+                    || power_factor_composes_cleanly(f, pp_pt, qq_pt)) {
+                    has_full_reducer = true;
+                }
             }
             if (all_pos && has_full_reducer) {
                 Expr** new_args = malloc(sizeof(Expr*) * bc);
