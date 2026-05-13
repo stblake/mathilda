@@ -407,6 +407,50 @@ void info_init(void) {
         "TeXForm translates standard mathematical functions and operations.\n"
         "Following standard mathematical conventions, single-character symbol names are given in italic font, while multiple character names are given in roman font.");
     symtab_set_docstring("HoldForm", "HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.");
+    symtab_set_docstring("ToString",
+        "ToString[expr]\n"
+        "\tgives a string corresponding to the printed form of expr in InputForm.\n"
+        "ToString[expr, form]\n"
+        "\tgives the string corresponding to output in the specified form.\n"
+        "Supported forms: InputForm (default), FullForm, TeXForm.\n"
+        "Examples:\n"
+        "\tToString[x^2 + y^3]              -> \"x^2 + y^3\"\n"
+        "\tToString[x^2 + y^3, FullForm]    -> \"Plus[Power[x, 2], Power[y, 3]]\"\n"
+        "\tToString[x^2 + y^3, TeXForm]     -> \"x^2 + y^3\" (rendered in TeX)");
+    symtab_set_docstring("ToExpression",
+        "ToExpression[input]\n"
+        "\tparses the string input as PicoCAS input and returns the\n"
+        "\tresulting expression (after evaluation).\n"
+        "ToExpression[input, form]\n"
+        "\tuses interpretation rules corresponding to the specified form.\n"
+        "\tForm may be InputForm or FullForm (both currently use the same parser).\n"
+        "ToExpression[input, form, h]\n"
+        "\twraps the head h around the parsed expression before evaluation.\n"
+        "\tUse h = Hold to obtain the unevaluated parsed form.\n"
+        "Returns $Failed if a syntax error is encountered.\n"
+        "Examples:\n"
+        "\tToExpression[\"1+1\"]                  -> 2\n"
+        "\tToExpression[\"1+1\", InputForm, Hold] -> Hold[1 + 1]");
+    symtab_set_docstring("Symbol",
+        "Symbol[\"name\"]\n"
+        "\trefers to a symbol with the specified name.\n"
+        "\n"
+        "All symbols, whether explicitly entered using Symbol or not, have head Symbol.\n"
+        "x_Symbol can be used as a pattern to represent any symbol.\n"
+        "The string \"name\" in Symbol[\"name\"] must be an appropriate name for a symbol.\n"
+        "It can contain any letters, letter-like forms, or digits, but cannot start with\n"
+        "a digit. A backtick (`) separates context prefixes; a leading backtick makes the\n"
+        "name relative to the current context $Context.\n"
+        "Symbol[\"name\"] creates a new symbol if none exists with the specified name.\n"
+        "If Symbol[\"name\"] creates a new symbol, it does so in the context specified by\n"
+        "$Context.\n"
+        "Examples:\n"
+        "\tSymbol[\"x\"]                       -> x\n"
+        "\tHead[Symbol[\"x\"]]                 -> Symbol\n"
+        "\tSymbol[\"a`x\"]                     -> a`x\n"
+        "\t{f[x], f[\"x\"], f[2]} /. f[s_Symbol] :> g[s] -> {g[x], f[\"x\"], f[2]}\n"
+        "\n"
+        "Attributes: Protected.");
     symtab_set_docstring("ReplaceList", "ReplaceList[expr, rules] attempts to transform the entire expression expr by applying a rule or list of rules in all possible ways, and returns a list of the results obtained.\nReplaceList[expr, rules, n] gives a list of at most n results.");
     symtab_set_docstring("Cases", "Cases[{e1, e2, ...}, pattern] gives a list of the ei that match the pattern.\nCases[{e1, ...}, pattern -> rhs] gives a list of the values of rhs corresponding to the ei that match the pattern.\nCases[expr, pattern, levelspec] gives a list of all parts of expr on levels specified by levelspec that match the pattern.\nCases[expr, pattern -> rhs, levelspec] gives the values of rhs that match the pattern.\nCases[expr, pattern, levelspec, n] gives the first n parts in expr that match the pattern.\nCases[pattern] represents an operator form of Cases that can be applied to an expression.");
     symtab_set_docstring("Position", "Position[expr, pattern] gives a list of the positions at which objects matching pattern appear in expr.\nPosition[expr, pattern, levelspec] finds only objects that appear on levels specified by levelspec.\nPosition[expr, pattern, levelspec, n] gives the positions of the first n objects found.\nPosition[pattern] represents an operator form of Position that can be applied to an expression.");

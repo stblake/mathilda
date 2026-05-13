@@ -157,6 +157,12 @@ target_include_directories(replace_tests PRIVATE ../src)
 add_executable(core_tests test_core.c ${COMMON_SRC})
 target_include_directories(core_tests PRIVATE ../src)
 
+add_executable(symbol_tests test_symbol.c ${COMMON_SRC})
+target_include_directories(symbol_tests PRIVATE ../src)
+
+add_executable(tostring_toexpression_tests test_tostring_toexpression.c ${COMMON_SRC})
+target_include_directories(tostring_toexpression_tests PRIVATE ../src)
+
 add_executable(trig_tests test_trig.c ${COMMON_SRC})
 target_include_directories(trig_tests PRIVATE ../src)
 

@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <gmp.h>
 #include "rat.h"
 #include "parfrac.h"
@@ -306,6 +307,12 @@ void core_init(void) {
     symtab_get_def("Evaluate")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ReleaseHold", builtin_releasehold);
     symtab_get_def("ReleaseHold")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("ToString", builtin_tostring);
+    symtab_get_def("ToString")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("ToExpression", builtin_toexpression);
+    symtab_get_def("ToExpression")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    symtab_add_builtin("Symbol", builtin_symbol);
+    symtab_get_def("Symbol")->attributes |= ATTR_PROTECTED;
 
     symtab_get_def("AtomQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("NumberQ")->attributes |= ATTR_PROTECTED;
@@ -1507,7 +1514,7 @@ Expr* builtin_quotientremainder(Expr* res) {
     Expr* quotient = builtin_quotient(quot_expr);
     Expr* remainder = builtin_mod(mod_expr);
 
-    quot_expr->data.function.arg_count = 0; 
+    quot_expr->data.function.arg_count = 0;
     mod_expr->data.function.arg_count = 0;
     expr_free(quot_expr);
     expr_free(mod_expr);
@@ -1521,9 +1528,161 @@ Expr* builtin_quotientremainder(Expr* res) {
     Expr** results = malloc(sizeof(Expr*) * 2);
     results[0] = quotient;
     results[1] = remainder;
-    
+
     Expr* final_res = expr_new_function(expr_new_symbol("List"), results, 2);
     free(results);
     return final_res;
+}
+
+/* ToString[expr] and ToString[expr, form].
+ *
+ * Returns a String containing the printed representation of expr.  The
+ * optional second argument selects a form: InputForm (the default),
+ * FullForm, or TeXForm.  StandardForm and OutputForm are accepted as
+ * aliases for InputForm because PicoCAS does not distinguish them when
+ * rendering to a flat string.
+ *
+ * Returns NULL (leaving the call unevaluated) when the form is not one
+ * we recognise, so the user sees ToString[..., UnknownForm] in the
+ * output rather than a misleading silent fallback.
+ */
+Expr* builtin_tostring(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+
+    Expr* expr = res->data.function.args[0];
+    const char* form_name = SYM_InputForm;
+
+    if (argc == 2) {
+        Expr* form_arg = res->data.function.args[1];
+        if (form_arg->type != EXPR_SYMBOL) return NULL;
+        form_name = form_arg->data.symbol;
+    }
+
+    char* str = NULL;
+    if (form_name == SYM_FullForm) {
+        str = expr_to_string_fullform(expr);
+    } else if (form_name == SYM_TeXForm) {
+        Expr* inner[1];
+        inner[0] = expr_copy(expr);
+        Expr* wrapper = expr_new_function(expr_new_symbol("TeXForm"), inner, 1);
+        str = expr_to_string(wrapper);
+        expr_free(wrapper);
+    } else if (form_name == SYM_InputForm
+               || strcmp(form_name, "StandardForm") == 0
+               || strcmp(form_name, "OutputForm") == 0) {
+        str = expr_to_string(expr);
+    } else {
+        return NULL;
+    }
+
+    if (!str) return NULL;
+    Expr* out = expr_new_string(str);
+    free(str);
+    return out;
+}
+
+/* ToExpression[input], ToExpression[input, form], ToExpression[input, form, h].
+ *
+ * Parses input (a string) and returns the resulting expression for the
+ * evaluator to further reduce.  The optional `form` argument may be
+ * InputForm, FullForm, or StandardForm — all currently route through the
+ * same PicoCAS parser because the parser is form-agnostic.  When the
+ * three-argument form is used, the head h is wrapped around the parsed
+ * expression before it is handed back; common use cases include
+ * Hold (to delay evaluation) and HoldComplete.
+ *
+ * On a parse failure we return the symbol $Failed, matching Mathematica.
+ * A non-string input (or unrecognised form) leaves the call unevaluated
+ * by returning NULL so the user sees the call shape they wrote.
+ */
+Expr* builtin_toexpression(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+
+    Expr* input = res->data.function.args[0];
+    if (input->type != EXPR_STRING) return NULL;
+
+    if (argc >= 2) {
+        Expr* form_arg = res->data.function.args[1];
+        if (form_arg->type != EXPR_SYMBOL) return NULL;
+        const char* form_name = form_arg->data.symbol;
+        if (form_name != SYM_InputForm
+            && form_name != SYM_FullForm
+            && strcmp(form_name, "StandardForm") != 0) {
+            return NULL;
+        }
+    }
+
+    Expr* parsed = parse_expression(input->data.string);
+    if (!parsed) {
+        return expr_new_symbol("$Failed");
+    }
+
+    if (argc == 3) {
+        Expr* h = res->data.function.args[2];
+        Expr* wrap_args[1];
+        wrap_args[0] = parsed;
+        Expr* wrapped = expr_new_function(expr_copy(h), wrap_args, 1);
+        return wrapped;
+    }
+
+    return parsed;
+}
+
+/* A single Mathematica symbol-name segment (the part between two backticks,
+ * or the only part of an unqualified name) must start with a letter or '$'
+ * and continue with letters, digits, or '$'. Empty segments are invalid. */
+static bool symbol_segment_is_valid(const char* start, size_t len) {
+    if (len == 0) return false;
+    unsigned char c0 = (unsigned char)start[0];
+    if (!(isalpha(c0) || c0 == '$')) return false;
+    for (size_t i = 1; i < len; i++) {
+        unsigned char c = (unsigned char)start[i];
+        if (!(isalnum(c) || c == '$')) return false;
+    }
+    return true;
+}
+
+/* Validate a string for use as a Symbol[] name argument. Accepts:
+ *   - a bare segment  e.g. "x", "Foo$1"
+ *   - an absolutely-qualified name  e.g. "a`x", "MyPkg`Private`x"
+ *   - a relatively-qualified name with a leading backtick  e.g. "`x"
+ * Rejects empty input and any name with an empty or syntactically invalid
+ * segment (must start with letter or '$', then letters / digits / '$'). */
+static bool symbol_name_is_valid(const char* name) {
+    if (!name || !*name) return false;
+    const char* p = name;
+    if (*p == '`') p++;            /* leading backtick: relative-context form */
+    while (*p) {
+        const char* seg = p;
+        while (*p && *p != '`') p++;
+        if (!symbol_segment_is_valid(seg, (size_t)(p - seg))) return false;
+        if (*p == '`') p++;
+    }
+    return true;
+}
+
+Expr* builtin_symbol(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    if (arg->type != EXPR_STRING) return NULL;
+
+    const char* name = arg->data.string;
+    if (!symbol_name_is_valid(name)) {
+        fprintf(stderr,
+                "Symbol::symname: The string \"%s\" cannot be used for a symbol "
+                "name. A symbol name must start with a letter followed by "
+                "letters and numbers.\n",
+                name);
+        return NULL;
+    }
+
+    char* resolved = context_resolve_name(name);
+    Expr* out = expr_new_symbol(resolved ? resolved : name);
+    free(resolved);
+    return out;
 }
 

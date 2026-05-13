@@ -215,6 +215,8 @@ extern const char* SYM_TeXForm;
 extern const char* SYM_Temporary;
 extern const char* SYM_Throw;
 extern const char* SYM_Times;
+extern const char* SYM_ToExpression;
+extern const char* SYM_ToString;
 extern const char* SYM_TrialDivision;
 extern const char* SYM_TrigExpand;
 extern const char* SYM_TrigFactor;

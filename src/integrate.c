@@ -183,7 +183,7 @@ Expr* builtin_integrate(Expr* res) {
 
 void integrate_init(void) {
     symtab_add_builtin("Integrate", builtin_integrate);
-    symtab_get_def("Integrate")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Integrate")->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
     symtab_set_docstring("Integrate",
         "Integrate[f, x] gives the indefinite integral of f with respect to x.\n"
         "Currently dispatches to the rational-function pipeline implemented in\n"

@@ -200,6 +200,8 @@ const char* SYM_TeXForm = NULL;
 const char* SYM_Temporary = NULL;
 const char* SYM_Throw = NULL;
 const char* SYM_Times = NULL;
+const char* SYM_ToExpression = NULL;
+const char* SYM_ToString = NULL;
 const char* SYM_TrialDivision = NULL;
 const char* SYM_TrigExpand = NULL;
 const char* SYM_TrigFactor = NULL;
@@ -412,6 +414,8 @@ void sym_names_init(void) {
     SYM_Temporary                  = intern_symbol("Temporary");
     SYM_Throw                      = intern_symbol("Throw");
     SYM_Times                      = intern_symbol("Times");
+    SYM_ToExpression               = intern_symbol("ToExpression");
+    SYM_ToString                   = intern_symbol("ToString");
     SYM_TrialDivision              = intern_symbol("TrialDivision");
     SYM_TrigExpand                 = intern_symbol("TrigExpand");
     SYM_TrigFactor                 = intern_symbol("TrigFactor");

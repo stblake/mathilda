@@ -330,6 +330,75 @@ A function with `HoldAllComplete`:
 ## InputForm
 - `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in PicoCAS).
 
+## ToString
+- `ToString[expr]`: returns a `String` containing the printed form of `expr` in `InputForm`.
+- `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `InputForm` (default), `FullForm`, and `TeXForm`. `StandardForm` and `OutputForm` are accepted as aliases for `InputForm`.
+
+**Features**:
+- `Protected`.
+- An unsupported form leaves the call unevaluated (e.g. `ToString[x, FooForm]` returns `ToString[x, FooForm]`), so a typo is visible at the call site rather than silently downgraded.
+
+```mathematica
+In[1]:= ToString[x^2 + y^3]
+Out[1]= "x^2 + y^3"
+
+In[2]:= ToString[x^2 + y^3, FullForm]
+Out[2]= "Plus[Power[x, 2], Power[y, 3]]"
+
+In[3]:= ToString[x^2 + y^3, TeXForm]
+Out[3]= "x^{2}+y^{3}"
+```
+
+## ToExpression
+- `ToExpression[input]`: parses the string `input` as PicoCAS input (`InputForm`) and returns the resulting expression after evaluation.
+- `ToExpression[input, form]`: uses interpretation rules corresponding to the specified form. Currently `InputForm`, `FullForm`, and `StandardForm` are accepted (all route through the same parser, which is form-agnostic).
+- `ToExpression[input, form, h]`: wraps the head `h` around the parsed expression before it is returned to the evaluator. Using `h = Hold` produces an unevaluated `Hold[...]` wrapper.
+
+**Features**:
+- `Protected`, `Listable`. `ToExpression[{"1+1", "2+2"}]` evaluates to `{2, 4}`.
+- Returns the symbol `$Failed` if the parser cannot consume the input.
+- A non-string input or an unsupported `form` leaves the call unevaluated.
+
+```mathematica
+In[1]:= ToExpression["1+1"]
+Out[1]= 2
+
+In[2]:= ToExpression["1+1", InputForm, Hold]
+Out[2]= Hold[1 + 1]
+
+In[3]:= ToExpression["x+"]
+Out[3]= $Failed
+```
+
+## Symbol
+Refers to a symbol with the specified name, creating it if necessary.
+- `Symbol["name"]`: returns the symbol named `"name"`.
+
+**Features**:
+- `Protected`.
+- Every expression's `Head` matches `Symbol` for symbols; `x_Symbol` patterns therefore match any symbol.
+- The string must satisfy the standard symbol-name syntax: each segment (separated by backticks) starts with a letter or `$`, followed by letters, digits, or `$`.
+- A leading backtick (`Symbol["\`x"]`) makes the name relative to the current `$Context`. An embedded backtick (`Symbol["a\`x"]`) is treated as an absolutely-qualified name. A bare name is resolved through the standard `$Context` / `$ContextPath` rules.
+- Invalid names emit `Symbol::symname` to `stderr` and leave the call unevaluated; non-string arguments also leave the call unevaluated.
+
+```mathematica
+In[1]:= Symbol["x"]
+Out[1]= x
+
+In[2]:= Head[%]
+Out[2]= Symbol
+
+In[3]:= {f[x], f["x"], f[2]} /. f[s_Symbol] :> g[s]
+Out[3]= {g[x], f["x"], f[2]}
+
+In[4]:= Symbol["a`x"]
+Out[4]= a`x
+
+In[5]:= Symbol["1x"]
+Symbol::symname: The string "1x" cannot be used for a symbol name. A symbol name must start with a letter followed by letters and numbers.
+Out[5]= Symbol["1x"]
+```
+
 ## Information
 Returns a formatted string containing the syntax and description of a symbol.
 - `Information[symbol]`

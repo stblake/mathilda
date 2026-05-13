@@ -41,6 +41,9 @@ void test_integrals() {
     
     printf("Formula 64\n");
     assert_eval_eq("Integrate[x^2/(3 + 4x^2), x]", "1/4 x - 1/8 Sqrt[3] ArcTan[(2 x)/Sqrt[3]]", 0);
+
+    printf("Listable threading\n");
+    assert_eval_eq("Integrate[{1, x, x^5/5}, x]", "{x, 1/2 x^2, 1/30 x^6}", 0);
     printf("Done!\n");
 }
 
