@@ -1,15 +1,17 @@
 ---
 title: qa substrate — accept Power[c, p/q] for general integer p
 date_started: 2026-05-13
-status: shipped 2026-05-13 (Phases A–E + multi-gen fallback)
+status: shipped 2026-05-13 (Phases A–F + Q(γ)-constant canonical rendering)
 ---
 
 ## Status (2026-05-13)
 
 Phases A (recogniser broadening), B (lift inputs), C (complexity gate),
 D (Q(γ)-arithmetic in the no-variable path), E (input-side radicand
-canonicalisation), and F (multi-gen tower fallback to single-α
-Together/Cancel) all shipped with zero regressions
+canonicalisation), F (multi-gen tower fallback to single-α
+Together/Cancel), and G (Q(γ)-constant canonical linear-basis
+rendering via Expand + Together-no-extension post-processing) all
+shipped with zero regressions
 (96 pass / 14 fail — identical pre-existing failure set).
 
 Key user-visible wins:
@@ -25,6 +27,26 @@ Key user-visible wins:
 - `Together[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]`
   → `a x / (x^3 + 2)` (Phase F multi-gen fallback).  Test:
   `tests/test_simp_algebraic_cuberoot.c::test_together_headline_d_integrate`.
+- `Together[1/(Sqrt[2]+Sqrt[3]) + 1/(Sqrt[2]-Sqrt[3]), Extension -> Automatic]`
+  → `-2 Sqrt[2]` (Phase G Q(γ)-constant canonical linear-basis form).
+  Test:
+  `tests/test_simp_algebraic_cuberoot.c::test_together_qgamma_constant_canonical_linear_basis`.
+
+### Phase G: Q(γ)-constant canonical linear-basis rendering (2026-05-13)
+
+`qa_cancel_with_tower`'s no-variable branch (the path that lifts a
+Q(γ)-element to a QANum via `qa_div` and renders it back as
+`gamma_render` substituted into the γ-polynomial) previously stopped
+at plain `evaluate` of the substituted form.  For γ = sum of atomic
+radicals, that left the result in unsimplified γ-polynomial form (e.g.
+`-(Sqrt[2]+Sqrt[3])^3 + 9(Sqrt[2]+Sqrt[3])` instead of `-2 Sqrt[2]`).
+
+Fix: after substitution, run **Expand** (collapses Plus^k into the
+linear basis `c_0 + c_1 Sqrt[2] + c_2 Sqrt[3] + c_3 Sqrt[6]`) then
+**Together (no extension)** (folds radical denominators via Sqrt-base
+polynomial GCD and catches arithmetically-zero spurious nonzero forms).
+The existing leaf-count gate rejects the candidate if these passes
+make the form larger than the input.
 
 ### Phase F: multi-gen tower fallback (2026-05-13)
 
