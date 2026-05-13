@@ -184,9 +184,7 @@ Expr* builtin_absolute_time(Expr* res) {
                      + (double)h * 3600.0
                      + (double)mi * 60.0
                      + (double)s;
-        Expr* out = expr_new_real(total);
-        expr_free(res);
-        return out;
+        return expr_new_real(total);
     }
 
     if (argc != 1) return NULL;
@@ -194,9 +192,7 @@ Expr* builtin_absolute_time(Expr* res) {
 
     /* AbsoluteTime[t] for numeric t passes through as an existing spec. */
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT) {
-        Expr* copy = expr_copy(arg);
-        expr_free(res);
-        return copy;
+        return expr_copy(arg);
     }
 
     /* AbsoluteTime[{y, m, d, h, m, s}] -- list with possible elision. */
@@ -242,14 +238,10 @@ Expr* builtin_absolute_time(Expr* res) {
         if (all_int) {
             double rounded = floor(total + 0.5);
             if (rounded == total && rounded >= (double)INT64_MIN && rounded <= (double)INT64_MAX) {
-                Expr* out = expr_new_integer((int64_t)rounded);
-                expr_free(res);
-                return out;
+                return expr_new_integer((int64_t)rounded);
             }
         }
-        Expr* out = expr_new_real(total);
-        expr_free(res);
-        return out;
+        return expr_new_real(total);
     }
 
     return NULL;
