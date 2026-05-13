@@ -10499,24 +10499,81 @@ Expr* builtin_simplify(Expr* res) {
     if (simp_classify(expr) == SIMP_SHAPE_RATIONAL) {
         best = simp_dispatch(expr, ctx, opt_complexity);
     } else {
-        /* Top-level trig-rational fast path. Substitutes Sin/Cos/Sinh/
-         * Cosh (and Tan/Cot/Sec/Csc/Tanh/etc. after preprocessing) plus
-         * every opaque non-rational subtree (Log[...], Exp[...], etc.)
-         * into fresh ground-field symbols so the algebraic core sees a
-         * pure rational function; works in the quotient ring modulo the
-         * trig/hyp ideals, then back-substitutes. Strict leaf-count gate
-         * inside ensures it never regresses; on no-improvement or when
-         * the input is out of budget it returns NULL and we fall through
-         * to the normal bottom-up search. Doing this BEFORE simp_bottomup
-         * means we bypass the per-subnode descent (which itself is
-         * extremely slow on inputs like
-         *   D[Integrate`RischNorman[Tan[x]^2 + Tan[x] + 1, x], x]
-         * because every internal node fires a full simp_search). */
-        Expr* tr = simp_trig_rational(expr, ctx, opt_complexity);
-        if (tr) {
-            best = tr;
+        /* Top-level algebraic-rational fast path. When the input is a
+         * Plus over a multi-generator algebraic-number tower (e.g. the
+         * output of D[Integrate[a x/(x^3+2), x], x] which is a sum of 3
+         * fractions over {2^(1/3), Sqrt[3], Sqrt[radicand-with-α-inside]}),
+         * Together[expr, Extension -> Automatic] is the one transform
+         * that can collapse it back to (a x)/(x^3+2) in a single pass via
+         * builtin_together's multi-gen single-α fallback (rat.c, Phase F).
+         * simp_bottomup's per-subnode descent doesn't reach this combined-
+         * over-common-denominator form on its own.  Strict leaf-count gate
+         * ensures no regression on inputs where Together-with-Auto is a
+         * no-op or worse. */
+        Expr* alg_top = NULL;
+        if (expr->type == EXPR_FUNCTION
+            && expr->data.function.head
+            && expr->data.function.head->type == EXPR_SYMBOL
+            && expr->data.function.head->data.symbol == SYM_Plus
+            && has_non_integer_power(expr)
+            && !contains_explicit_complex(expr)) {
+            QATower* qa_t = extension_autodetect(expr);
+            if (qa_t && qa_t->n >= 2) {
+                qa_tower_free(qa_t);
+                Expr* tog = expr_new_function(
+                    expr_new_symbol("Together"),
+                    (Expr*[]){
+                        expr_copy(expr),
+                        expr_new_function(expr_new_symbol("Rule"),
+                            (Expr*[]){expr_new_symbol("Extension"),
+                                      expr_new_symbol("Automatic")}, 2)
+                    }, 2);
+                Expr* cand = evaluate(tog);
+                expr_free(tog);
+                if (cand && simp_default_complexity(cand)
+                                < simp_default_complexity(expr)) {
+                    alg_top = cand;
+                } else if (cand) {
+                    expr_free(cand);
+                }
+            } else if (qa_t) {
+                qa_tower_free(qa_t);
+            }
+        }
+
+        if (alg_top) {
+            /* Use the algebraic collapse as the starting point.  Run
+             * simp_bottomup on it to apply any further polish (rare for
+             * already-canonical rational forms but harmless). */
+            best = simp_bottomup(alg_top, ctx, opt_complexity, &memo, 0);
+            size_t s_alg = score_with_func(alg_top, opt_complexity);
+            size_t s_best = score_with_func(best, opt_complexity);
+            if (s_alg <= s_best) {
+                expr_free(best);
+                best = alg_top;
+            } else {
+                expr_free(alg_top);
+            }
         } else {
-            best = simp_bottomup(expr, ctx, opt_complexity, &memo, 0);
+            /* Top-level trig-rational fast path. Substitutes Sin/Cos/Sinh/
+             * Cosh (and Tan/Cot/Sec/Csc/Tanh/etc. after preprocessing) plus
+             * every opaque non-rational subtree (Log[...], Exp[...], etc.)
+             * into fresh ground-field symbols so the algebraic core sees a
+             * pure rational function; works in the quotient ring modulo the
+             * trig/hyp ideals, then back-substitutes. Strict leaf-count gate
+             * inside ensures it never regresses; on no-improvement or when
+             * the input is out of budget it returns NULL and we fall through
+             * to the normal bottom-up search. Doing this BEFORE simp_bottomup
+             * means we bypass the per-subnode descent (which itself is
+             * extremely slow on inputs like
+             *   D[Integrate`RischNorman[Tan[x]^2 + Tan[x] + 1, x], x]
+             * because every internal node fires a full simp_search). */
+            Expr* tr = simp_trig_rational(expr, ctx, opt_complexity);
+            if (tr) {
+                best = tr;
+            } else {
+                best = simp_bottomup(expr, ctx, opt_complexity, &memo, 0);
+            }
         }
     }
 

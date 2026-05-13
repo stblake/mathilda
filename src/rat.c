@@ -639,6 +639,24 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
     Expr* new_den = evaluate(new_den_call);
     expr_free(new_den_call);
 
+    /* Bail when the Q(α)[x] quotient collapses to literal 0.  This is
+     * the wrong-answer guard: it happens when the GCD over Q(α)[x] is
+     * not a true divisor of `den` in the user's full algebraic-number
+     * ring -- e.g. when `den` carries opaque non-α algebraic factors
+     * (Sqrt[3], a nested Sqrt[radicand-with-α-inside], ...) that have
+     * hidden relations to α the substrate doesn't see.  Building
+     * Power[0, -1] here would silently inject ComplexInfinity into the
+     * result (Simplify[D[Integrate[a x/(x^3+2), x], x]] reproduces this
+     * if the bail is removed).  Returning NULL signals the caller to
+     * fall back to the un-cancelled form -- correct-but-unsimplified,
+     * which is the contract for cancel_with_extension. */
+    if ((new_den->type == EXPR_INTEGER && new_den->data.integer == 0)
+        || (new_den->type == EXPR_REAL && new_den->data.real == 0.0)) {
+        expr_free(new_num);
+        expr_free(new_den);
+        return NULL;
+    }
+
     /* Result = new_num / new_den. */
     Expr* inv_den = eval_and_free(expr_new_function(
         expr_new_symbol("Power"),

@@ -234,6 +234,21 @@ static void test_together_headline_d_integrate(void) {
         "(a x)/(2 + x^3)", 0);
 }
 
+static void test_simplify_headline_d_integrate(void) {
+    /* The motivating Simplify case (no Extension option).  Simplify must
+     * reach (a x)/(x^3 + 2) on its own by detecting the multi-generator
+     * algebraic-number Plus and dispatching the input through
+     * Together[..., Extension -> Automatic] as a top-level fast path
+     * before simp_bottomup's per-subnode descent.  Without that fast
+     * path the search hangs (3-term sum over 2^(1/3), Sqrt[3] and a
+     * nested radical never collapses through any single transform that
+     * simp_bottomup tries).  Tests the failure mode that previously
+     * emitted spurious Power::infy: 1/0 and ComplexInfinity. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[a x/(x^3+2), x], x]]",
+        "(a x)/(2 + x^3)", 0);
+}
+
 static void test_autodetect_absorbs_canonical_radical(void) {
     /* extension_autodetect previously bailed (returned NULL) when
      * Phase F's canonicalise_post simplified a GEN_NESTED's surface
@@ -281,6 +296,7 @@ int main(void) {
     TEST(test_together_equal_nested_radicals);
     TEST(test_together_qgamma_constant_canonical_linear_basis);
     TEST(test_together_headline_d_integrate);
+    TEST(test_simplify_headline_d_integrate);
     TEST(test_autodetect_absorbs_canonical_radical);
 
     printf("All simp_algebraic_cuberoot tests passed!\n");
