@@ -165,14 +165,24 @@ Expr* builtin_rational(Expr* res) {
 }
 
 bool is_rational(const Expr* e, int64_t* n, int64_t* d) {
+    if (!e) return false;
     if (e->type == EXPR_INTEGER) {
         if (n) *n = e->data.integer;
         if (d) *d = 1;
         return true;
     }
-    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+    /* Function nodes built during evaluator transitions can transiently
+     * carry a NULL head pointer; guard before dereferencing.  Without
+     * this check, a Function with a NULL head reaching this fast-path
+     * crashes the dispatcher (observed on Linux under nested-radical
+     * Simplify; macOS heap layout makes the deref usually land in
+     * mapped memory). */
+    if (e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
         e->data.function.head->data.symbol == SYM_Rational) {
         if (e->data.function.arg_count == 2 &&
+            e->data.function.args[0] &&
+            e->data.function.args[1] &&
             e->data.function.args[0]->type == EXPR_INTEGER &&
             e->data.function.args[1]->type == EXPR_INTEGER) {
             if (n) *n = e->data.function.args[0]->data.integer;

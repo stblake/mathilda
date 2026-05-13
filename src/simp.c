@@ -2682,8 +2682,12 @@ static bool match_half_int_power(const Expr* e, int64_t* m_out,
         e->data.function.head->type != EXPR_SYMBOL ||
         e->data.function.head->data.symbol != SYM_Power) return false;
     if (e->data.function.arg_count != 2) return false;
+    if (!e->data.function.args[0] || !e->data.function.args[1]) return false;
     Expr* exp = e->data.function.args[1];
     if (!is_rational_literal(exp)) return false;
+    /* is_rational_literal only guarantees arg_count == 2; the two
+     * children may still be NULL during transient build states. */
+    if (!exp->data.function.args[0] || !exp->data.function.args[1]) return false;
     Expr* num = exp->data.function.args[0];
     Expr* den = exp->data.function.args[1];
     if (num->type != EXPR_INTEGER || den->type != EXPR_INTEGER) return false;
@@ -2805,6 +2809,14 @@ static Expr* simp_denest_sqrt_walk(const Expr* e, const AssumeCtx* ctx) {
         if (r) {
             if (!new_args) {
                 new_args = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
+                /* OOM: drop the in-flight rewrite and propagate failure
+                 * by treating this node as "no change". Returning NULL
+                 * (no fired denesting) is correct -- the caller will
+                 * fall back to the unmodified subtree. */
+                if (!new_args) {
+                    expr_free(r);
+                    return NULL;
+                }
                 for (size_t j = 0; j < i; j++) {
                     new_args[j] = expr_copy(e->data.function.args[j]);
                 }
