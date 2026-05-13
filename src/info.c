@@ -568,6 +568,23 @@ void info_init(void) {
     // Time and Date
     symtab_set_docstring("Timing", "Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.");
     symtab_set_docstring("RepeatedTiming", "RepeatedTiming[expr] evaluates expr repeatedly and returns a list of the average time in seconds used, together with the result obtained.\nRepeatedTiming[expr, t] does repeated evaluation for at least t seconds.");
+    symtab_set_docstring("AbsoluteTime",
+        "AbsoluteTime[]\n"
+        "\tgives the total number of seconds since the beginning of January 1, 1900, in your time zone.\n"
+        "AbsoluteTime[date]\n"
+        "\tgives the absolute time specification corresponding to the given date specification.\n"
+        "\n"
+        "The supported date specifications are:\n"
+        "\t{y, m, d, h, m, s}\tDateList specification\n"
+        "\ttime\t\t\tAbsoluteTime specification (a number, returned unchanged)\n"
+        "\n"
+        "DateList entries may be elided from the right: {y}, {y, m}, {y, m, d}, etc. fill the\n"
+        "missing fields with {_, 1, 1, 0, 0, 0}. Day, hour, minute, and second values may be\n"
+        "noninteger; the year and month must be integers. Date lists are converted to standard\n"
+        "normalized form, so e.g. AbsoluteTime[{2022, 2, 31}] = AbsoluteTime[{2022, 3, 3}].\n"
+        "\n"
+        "AbsoluteTime[] uses whatever date and time have been set on your computer system. It\n"
+        "performs no corrections for time zones, daylight saving time, or leap seconds.");
 
     // Comparisons
     symtab_set_docstring("SameQ", "lhs === rhs yields True if the expression lhs is identical to rhs, and yields False otherwise.");
