@@ -20,18 +20,7 @@
  * Performance caps (enforced once Phase 4 lands):
  *   PMINT_MAX_MONOMIALS  — hard cap on the size of the candidate
  *                          monomial set; exceeding this returns NULL.
- *   PMINT_WALL_CLOCK_SEC — wall-clock budget per integrand.
  */
-
-/* Expose POSIX symbols (sigaction, sigsetjmp/siglongjmp, sigjmp_buf,
- * setitimer) under -std=c99 on glibc; macOS exposes them implicitly,
- * which masks the cross-platform bug.  Must precede every header. */
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
-#endif
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 
 #include "intrischnorman.h"
 
@@ -50,16 +39,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <setjmp.h>
-#include <signal.h>
-#include <sys/time.h>
 
 /* ------------------------------------------------------------------ */
 /* Performance caps.                                                    */
 /* ------------------------------------------------------------------ */
 
 #define PMINT_MAX_MONOMIALS   5000
-#define PMINT_WALL_CLOCK_SEC  30
 #define PMINT_MAX_REWRITE_DEPTH 32      /* convert_to_tan giveup depth */
 #define PMINT_MAX_INDETS      32        /* hard cap on indet set size  */
 
@@ -2736,20 +2721,6 @@ static Expr* builtin_pm_subst_map(Expr* res) {
 /* Phase 4: wires the full pmint pipeline (no log candidates yet).     */
 /* ------------------------------------------------------------------ */
 
-/* Wall-clock timeout machinery.  pmint's candidate space can grow
- * fast; we cap each invocation at PMINT_WALL_CLOCK_SEC seconds and
- * bail with NULL if it overshoots.  Uses SIGALRM + sigsetjmp so the
- * deep recursion in apply_d / split_factor / etc. can be unwound
- * safely. */
-static sigjmp_buf pmint_timeout_env;
-static volatile sig_atomic_t pmint_timed_out = 0;
-
-static void pmint_timeout_handler(int sig) {
-    (void)sig;
-    pmint_timed_out = 1;
-    siglongjmp(pmint_timeout_env, 1);
-}
-
 Expr* builtin_rischnorman(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) {
         return NULL;
@@ -2758,42 +2729,13 @@ Expr* builtin_rischnorman(Expr* res) {
     Expr* x = res->data.function.args[1];
     if (x->type != EXPR_SYMBOL) return NULL;
 
-    /* Wall-clock budget.  Install a SIGALRM handler, arm a one-shot
-     * setitimer, and run rischnorman_integrate inside sigsetjmp.  On
-     * timeout we jump back and return NULL — the dispatcher then
-     * bubbles back unevaluated. */
-    struct sigaction sa, old_sa;
-    struct itimerval old_it;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_handler = pmint_timeout_handler;
-    sigemptyset(&sa.sa_mask);
-    sigaction(SIGALRM, &sa, &old_sa);
-
-    struct itimerval new_it;
-    memset(&new_it, 0, sizeof(new_it));
-    new_it.it_value.tv_sec = PMINT_WALL_CLOCK_SEC;
-    setitimer(ITIMER_REAL, &new_it, &old_it);
-
-    pmint_timed_out = 0;
-    Expr* result = NULL;
-    if (sigsetjmp(pmint_timeout_env, 1) == 0) {
-        result = rischnorman_integrate(f, x);
-    }
-
-    /* Disarm timer + restore handler. */
-    struct itimerval disarm;
-    memset(&disarm, 0, sizeof(disarm));
-    setitimer(ITIMER_REAL, &disarm, NULL);
-    setitimer(ITIMER_REAL, &old_it, NULL);
-    sigaction(SIGALRM, &old_sa, NULL);
-
-    if (pmint_timed_out) {
-        /* Result may be partially constructed inside Maple-callees —
-         * we don't have a safe way to clean up, but the next gc cycle
-         * will catch the unreachable allocations.  Bubble back NULL. */
-        return NULL;
-    }
-    return result;
+    /* No internal wall-clock timeout: callers that want a budget should
+     * wrap the call in TimeConstrained[...] at the user level.  An
+     * internal SIGALRM/setitimer + siglongjmp aborter caused
+     * "longjmp causes uninitialized stack frame" aborts under hosts
+     * with late signal delivery (notably WSL 1), where a delayed
+     * SIGALRM could fire after this frame had already returned. */
+    return rischnorman_integrate(f, x);
 }
 
 /* ------------------------------------------------------------------ */
