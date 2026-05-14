@@ -2109,25 +2109,188 @@ static bool extract_sqrt_term(const Expr* e, const AssumeCtx* ctx,
     return true;
 }
 
+/* ----------------------------------------------------------------------- */
+/* Phase-2 multi-extension denesting: budget, memo, structural helpers.    */
+/*                                                                         */
+/* Phase 1 (the original denester) handles Sqrt[A + b*Sqrt[C]] with A in Q */
+/* and a single sqrt-bearing term. Phase 2 generalises both directions:    */
+/*   (a) the splitter accepts radicands with multiple sqrt-bearing terms   */
+/*       and iterates over candidates for the "outer" sqrt;                */
+/*   (b) sqrt_if_clean_square recurses into the denester when its input    */
+/*       discriminant D is itself a Q(Sqrt[k]) element of the same shape.  */
+/* A small file-static depth budget bounds the recursion, and a memo keyed */
+/* on the radicand suppresses repeated work across the bottom-up walker.   */
+/* ----------------------------------------------------------------------- */
+
+#define DENEST_MAX_DEPTH 4
+
+typedef struct DenestMemoEntry {
+    Expr* key;   /* radicand (the input to Sqrt[...]); owned */
+    Expr* val;   /* denested Sqrt[key]; NULL = negative cache; owned */
+} DenestMemoEntry;
+
+typedef struct DenestMemo {
+    DenestMemoEntry* entries;
+    size_t count;
+    size_t capacity;
+} DenestMemo;
+
+/* Single-threaded REPL: file-static state is safe. The top-level
+ * simp_denest_sqrt entry seeds these and tears them down; re-entry from
+ * an evaluator-driven sub-Simplify just shares the existing slot so we
+ * never bypass the depth cap. */
+static int g_denest_budget = 0;
+static DenestMemo* g_denest_memo = NULL;
+
+static bool denest_memo_lookup(const Expr* radicand,
+                               Expr** out_val,
+                               bool* out_negative) {
+    *out_val = NULL;
+    *out_negative = false;
+    if (!g_denest_memo) return false;
+    for (size_t i = 0; i < g_denest_memo->count; i++) {
+        if (expr_eq(g_denest_memo->entries[i].key, (Expr*)radicand)) {
+            if (g_denest_memo->entries[i].val) {
+                *out_val = expr_copy(g_denest_memo->entries[i].val);
+            } else {
+                *out_negative = true;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+static void denest_memo_insert(const Expr* radicand, const Expr* val) {
+    if (!g_denest_memo) return;
+    if (g_denest_memo->count == g_denest_memo->capacity) {
+        size_t newcap = g_denest_memo->capacity ? g_denest_memo->capacity * 2 : 8;
+        DenestMemoEntry* na = (DenestMemoEntry*)realloc(
+            g_denest_memo->entries, sizeof(DenestMemoEntry) * newcap);
+        if (!na) return;  /* drop the insert on OOM */
+        g_denest_memo->entries = na;
+        g_denest_memo->capacity = newcap;
+    }
+    g_denest_memo->entries[g_denest_memo->count].key =
+        expr_copy((Expr*)radicand);
+    g_denest_memo->entries[g_denest_memo->count].val =
+        val ? expr_copy((Expr*)val) : NULL;
+    g_denest_memo->count++;
+}
+
+static void denest_memo_clear(DenestMemo* memo) {
+    if (!memo) return;
+    for (size_t i = 0; i < memo->count; i++) {
+        expr_free(memo->entries[i].key);
+        if (memo->entries[i].val) expr_free(memo->entries[i].val);
+    }
+    free(memo->entries);
+    memo->entries = NULL;
+    memo->count = 0;
+    memo->capacity = 0;
+}
+
+/* Maximum number of stacked Sqrt heads along any root-to-leaf path.
+ * Primary key in the outer-sqrt ranking heuristic: phase 2 wants the
+ * discriminant to live one extension up rather than at the same level. */
+static int sqrt_nesting_depth(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    int best = 0;
+    if (is_sqrt(e)) {
+        int inner = sqrt_nesting_depth(e->data.function.args[0]);
+        if (inner + 1 > best) best = inner + 1;
+    }
+    if (e->data.function.head) {
+        int d = sqrt_nesting_depth(e->data.function.head);
+        if (d > best) best = d;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        int d = sqrt_nesting_depth(e->data.function.args[i]);
+        if (d > best) best = d;
+    }
+    return best;
+}
+
+/* True when `plus_node` is a Plus[...] containing at least one
+ * sqrt-bearing term (in the extract_sqrt_term sense). Gates the
+ * phase-2 recursion in sqrt_if_clean_square. */
+static bool plus_has_sqrt_bearing_term(const Expr* plus_node,
+                                       const AssumeCtx* ctx) {
+    if (!plus_node || plus_node->type != EXPR_FUNCTION) return false;
+    if (!plus_node->data.function.head ||
+        plus_node->data.function.head->type != EXPR_SYMBOL ||
+        plus_node->data.function.head->data.symbol != SYM_Plus) return false;
+    for (size_t i = 0; i < plus_node->data.function.arg_count; i++) {
+        Expr* b = NULL; Expr* C = NULL;
+        if (extract_sqrt_term(plus_node->data.function.args[i], ctx, &b, &C)) {
+            expr_free(b); expr_free(C);
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Structural check: does `e` contain any Sqrt[Plus[...]] subtree? The
+ * phase-2 recursion accepts a candidate result only when this returns
+ * false -- i.e., every nested sqrt was unrolled, leaving at worst
+ * Sqrt[atom] leaves. */
+static bool contains_sqrt_of_plus(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_sqrt(e)) {
+        Expr* inner = e->data.function.args[0];
+        if (inner && inner->type == EXPR_FUNCTION &&
+            inner->data.function.head &&
+            inner->data.function.head->type == EXPR_SYMBOL &&
+            inner->data.function.head->data.symbol == SYM_Plus) {
+            return true;
+        }
+    }
+    if (e->data.function.head && contains_sqrt_of_plus(e->data.function.head))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (contains_sqrt_of_plus(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Forward declaration: the walker is defined further below near the
+ * top-level entry; the phase-2 recursive helper needs it. */
+static Expr* simp_denest_sqrt_walk(const Expr* e, const AssumeCtx* ctx);
+
+/* Recursive denester entry used by sqrt_if_clean_square during phase-2.
+ * Decrements the depth budget around a single walker call. Returns NULL
+ * when the budget is exhausted or the walker found nothing to denest --
+ * the caller specifically wants to know whether a rewrite fired, so
+ * this does NOT fall back to expr_copy(). */
+static Expr* simp_denest_sqrt_recursive(const Expr* e, const AssumeCtx* ctx) {
+    if (g_denest_budget <= 1) return NULL;
+    g_denest_budget--;
+    Expr* r = simp_denest_sqrt_walk(e, ctx);
+    g_denest_budget++;
+    return r;
+}
+
+/* ----------------------------------------------------------------------- */
+
 /* Given a clean square D, return a closed-form expression s with
- * s^2 = D (sign-agnostic; the caller is expected to validate the
- * downstream nonnegativity of (A+s)/2 and (A-s)/2 -- if both are
- * provably nonneg, the sign of s itself doesn't matter for the
- * identity).
+ * s^2 = D (sign-agnostic; the caller validates the downstream
+ * nonnegativity of (A+s)/2 and (A-s)/2 -- if both are provably nonneg,
+ * the sign of s itself doesn't matter for the identity).
  *
- * Returns NULL when no closed form is detected. The four cases handled
- * are:
+ * Returns NULL when no closed form is detected. The cases handled are:
  *   - integer/bigint nonneg perfect square                 -> integer sqrt
  *   - rational with perfect-square num and den             -> rational sqrt
  *   - Power[u, 2k]                                          -> Power[u, k]
  *   - polynomial Plus whose Expand+FactorSquareFree is a
  *     pure even-power Power[u, 2k]                          -> Power[u, k]
+ *   - phase-2: Plus carrying a sqrt-bearing term, where the
+ *     recursive denester succeeds on Sqrt[D] with no surviving
+ *     Sqrt[Plus] residue (memoised by D).
  *
  * The polynomial path covers the symbolic discriminants that case 6
  * ((x-y)^2) and case 7 (y^2) produce after expansion.
  */
 static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
-    (void)ctx;
 
     /* Numeric atoms. */
     if (D->type == EXPR_INTEGER) {
@@ -2202,62 +2365,128 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
 
     /* Polynomial Plus: try Expand + FactorSquareFree. The factoriser
      * stalls on inputs containing non-integer Power exponents (e.g. an
-     * inner Sqrt that survived expansion), so gate on that. */
+     * inner Sqrt that survived expansion), so gate on that. When the
+     * gate trips, fall through to the phase-2 branch below rather than
+     * returning -- a sqrt-bearing D is the phase-2 case by definition. */
     if (D->type == EXPR_FUNCTION
         && D->data.function.head
         && D->data.function.head->type == EXPR_SYMBOL
-        && D->data.function.head->data.symbol == SYM_Plus) {
-        if (has_non_integer_power(D)) return NULL;
+        && D->data.function.head->data.symbol == SYM_Plus
+        && !has_non_integer_power(D)) {
         Expr* expanded = call_unary_copy("Expand", D);
-        if (!expanded) return NULL;
-        if (has_non_integer_power(expanded)) {
-            expr_free(expanded);
-            return NULL;
-        }
-        Expr* fsf = call_unary_owned("FactorSquareFree", expanded);
-        if (!fsf) return NULL;
-        if (fsf->type == EXPR_FUNCTION
-            && fsf->data.function.head
-            && fsf->data.function.head->type == EXPR_SYMBOL
-            && fsf->data.function.head->data.symbol == SYM_Power
-            && fsf->data.function.arg_count == 2) {
-            Expr* fsf_exp = fsf->data.function.args[1];
-            if (fsf_exp->type == EXPR_INTEGER &&
-                fsf_exp->data.integer >= 2 &&
-                (fsf_exp->data.integer % 2) == 0) {
-                int64_t k = fsf_exp->data.integer / 2;
-                Expr* u = expr_copy(fsf->data.function.args[0]);
-                expr_free(fsf);
-                if (k == 1) return u;
-                Expr* pa[2] = { u, expr_new_integer(k) };
-                Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
-                Expr* out = evaluate(pc);
-                expr_free(pc);
-                return out;
+        if (expanded) {
+            if (has_non_integer_power(expanded)) {
+                expr_free(expanded);
+                /* fall through to phase 2 */
+            } else {
+                Expr* fsf = call_unary_owned("FactorSquareFree", expanded);
+                if (fsf) {
+                    if (fsf->type == EXPR_FUNCTION
+                        && fsf->data.function.head
+                        && fsf->data.function.head->type == EXPR_SYMBOL
+                        && fsf->data.function.head->data.symbol == SYM_Power
+                        && fsf->data.function.arg_count == 2) {
+                        Expr* fsf_exp = fsf->data.function.args[1];
+                        if (fsf_exp->type == EXPR_INTEGER &&
+                            fsf_exp->data.integer >= 2 &&
+                            (fsf_exp->data.integer % 2) == 0) {
+                            int64_t k = fsf_exp->data.integer / 2;
+                            Expr* u = expr_copy(fsf->data.function.args[0]);
+                            expr_free(fsf);
+                            if (k == 1) return u;
+                            Expr* pa[2] = { u, expr_new_integer(k) };
+                            Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                            Expr* out = evaluate(pc);
+                            expr_free(pc);
+                            return out;
+                        }
+                    }
+                    expr_free(fsf);
+                }
             }
         }
-        expr_free(fsf);
     }
+
+    /* Phase-2 multi-extension fallback: when D is itself a Plus carrying a
+     * sqrt-bearing term (a Q(Sqrt[k]) element), recursively denest Sqrt[D].
+     * Accept the result only if every nested Sqrt[Plus] was unrolled.
+     * Memoised by D so the bottom-up walker and the discriminant path
+     * don't re-denest the same radicand. */
+    if (D->type == EXPR_FUNCTION &&
+        D->data.function.head &&
+        D->data.function.head->type == EXPR_SYMBOL &&
+        D->data.function.head->data.symbol == SYM_Plus &&
+        plus_has_sqrt_bearing_term(D, ctx)) {
+        Expr* cached_val = NULL;
+        bool cached_neg = false;
+        if (denest_memo_lookup(D, &cached_val, &cached_neg)) {
+            return cached_val;  /* NULL on negative cache, else owned copy */
+        }
+
+        Expr* sqrtD_args[2] = { expr_copy((Expr*)D), make_rational(1, 2) };
+        Expr* sqrtD = expr_new_function(expr_new_symbol("Power"),
+                                         sqrtD_args, 2);
+        Expr* sqrtD_e = evaluate(sqrtD);
+        expr_free(sqrtD);
+
+        Expr* denested = simp_denest_sqrt_recursive(sqrtD_e, ctx);
+        expr_free(sqrtD_e);
+
+        if (!denested || contains_sqrt_of_plus(denested)) {
+            if (denested) expr_free(denested);
+            denest_memo_insert(D, NULL);
+            return NULL;
+        }
+        denest_memo_insert(D, denested);
+        return denested;
+    }
+
     return NULL;
 }
 
-/* Given a Plus expression, partition its arguments into
- *   (A, b, C)
- * such that the Plus equals  A + b * Sqrt[C]  with a single sqrt-bearing
- * term. Returns true on a successful partition. *out_A, *out_b, *out_C
- * are caller-owned allocations on success.
+/* Number of sqrt-bearing terms in a Plus expression. Phase-1 inputs
+ * have exactly 1 (single-extension); phase-2 inputs have 2 or more.
+ * Returns 0 for non-Plus inputs. */
+static size_t count_outer_sqrt_candidates(const Expr* plus_node,
+                                          const AssumeCtx* ctx) {
+    if (!plus_node || plus_node->type != EXPR_FUNCTION) return 0;
+    if (!plus_node->data.function.head ||
+        plus_node->data.function.head->type != EXPR_SYMBOL ||
+        plus_node->data.function.head->data.symbol != SYM_Plus) return 0;
+    size_t k = 0;
+    for (size_t i = 0; i < plus_node->data.function.arg_count; i++) {
+        Expr* b = NULL; Expr* C = NULL;
+        if (extract_sqrt_term(plus_node->data.function.args[i], ctx, &b, &C)) {
+            expr_free(b); expr_free(C);
+            k++;
+        }
+    }
+    return k;
+}
+
+/* Given a Plus expression, partition its arguments into (A, b, C) such
+ * that the Plus equals A + b * Sqrt[C]. `candidate_idx` selects which
+ * sqrt-bearing term to treat as the "outer" sqrt: phase-1 single-sqrt
+ * radicands have exactly one candidate (idx == 0), and phase-2
+ * multi-sqrt radicands expose all of them so the caller can iterate.
  *
- * Two failure modes are explicit: zero sqrt-bearing terms (nothing to
- * denest) and two-or-more sqrt-bearing terms (multi-extension, phase 2).
+ * Candidates are ranked outer-first by sqrt nesting depth (deeper wins)
+ * with leaf-complexity as the tie-break (smaller wins). For phase 2 this
+ * lifts the discriminant A^2 - b^2*C one extension up, which is exactly
+ * what the recursive sqrt_if_clean_square needs to fire. On single-sqrt
+ * inputs the ranking is a no-op (one candidate at idx 0) and behaviour
+ * is byte-identical to phase 1.
  *
- * The ctx is forwarded to extract_sqrt_term so that multi-sqrt Times
- * factors with provably-nonneg bases can be combined into a single
- * sqrt-bearing term. */
+ * Returns false when `candidate_idx` is out of range, the input isn't a
+ * Plus, or no sqrt-bearing terms exist. *out_A, *out_b, *out_C are
+ * caller-owned allocations on success. */
 static bool split_plus_into_a_plus_b_sqrt_c(const Expr* plus_node,
                                             const AssumeCtx* ctx,
+                                            size_t candidate_idx,
                                             Expr** out_A,
                                             Expr** out_b,
                                             Expr** out_C) {
+    *out_A = NULL; *out_b = NULL; *out_C = NULL;
     if (!plus_node || plus_node->type != EXPR_FUNCTION) return false;
     if (!plus_node->data.function.head ||
         plus_node->data.function.head->type != EXPR_SYMBOL ||
@@ -2266,36 +2495,63 @@ static bool split_plus_into_a_plus_b_sqrt_c(const Expr* plus_node,
     size_t n = plus_node->data.function.arg_count;
     if (n < 2) return false;
 
-    /* Find the unique sqrt-bearing term and bucket the rest into A. */
-    size_t sqrt_idx = SIZE_MAX;
-    Expr* b = NULL;
-    Expr* C = NULL;
-    for (size_t i = 0; i < n; i++) {
+    /* Collect every sqrt-bearing term's index, nesting depth, and
+     * complexity. Bound the candidate set; pathological multi-sqrt
+     * inputs (>16 sqrt terms) degrade to phase-1 single-candidate
+     * behaviour rather than blowing up the search. */
+    enum { MAX_OUTER_CANDIDATES = 16 };
+    struct OuterCand { size_t idx; int depth; size_t complexity; };
+    struct OuterCand cands[MAX_OUTER_CANDIDATES];
+    size_t k = 0;
+    for (size_t i = 0; i < n && k < MAX_OUTER_CANDIDATES; i++) {
         Expr* bi = NULL; Expr* Ci = NULL;
         if (extract_sqrt_term(plus_node->data.function.args[i], ctx,
                               &bi, &Ci)) {
-            if (sqrt_idx != SIZE_MAX) {
-                /* Second sqrt-bearing term — abort. */
-                expr_free(bi); expr_free(Ci);
-                if (b) expr_free(b);
-                if (C) expr_free(C);
-                return false;
-            }
-            sqrt_idx = i;
-            b = bi;
-            C = Ci;
+            cands[k].idx = i;
+            cands[k].depth = sqrt_nesting_depth(Ci);
+            cands[k].complexity = simp_default_complexity(Ci);
+            expr_free(bi); expr_free(Ci);
+            k++;
         }
     }
-    if (sqrt_idx == SIZE_MAX) return false;
+    if (k == 0) return false;
+    if (candidate_idx >= k) return false;
+
+    /* Selection sort: deeper first, then smaller complexity. k is
+     * bounded by MAX_OUTER_CANDIDATES so this is O(k^2) <= O(256). */
+    for (size_t i = 0; i + 1 < k; i++) {
+        size_t best_j = i;
+        for (size_t j = i + 1; j < k; j++) {
+            if (cands[j].depth > cands[best_j].depth ||
+                (cands[j].depth == cands[best_j].depth &&
+                 cands[j].complexity < cands[best_j].complexity)) {
+                best_j = j;
+            }
+        }
+        if (best_j != i) {
+            struct OuterCand tmp = cands[i];
+            cands[i] = cands[best_j];
+            cands[best_j] = tmp;
+        }
+    }
+
+    size_t chosen_idx = cands[candidate_idx].idx;
+
+    Expr* b = NULL; Expr* C = NULL;
+    if (!extract_sqrt_term(plus_node->data.function.args[chosen_idx],
+                           ctx, &b, &C)) {
+        return false;
+    }
 
     /* Build A as Plus of remaining args, evaluating to canonicalise. */
     if (n == 2) {
-        *out_A = expr_copy(plus_node->data.function.args[1 - sqrt_idx]);
+        *out_A = expr_copy(plus_node->data.function.args[1 - chosen_idx]);
     } else {
         Expr** a_args = (Expr**)malloc(sizeof(Expr*) * (n - 1));
+        if (!a_args) { expr_free(b); expr_free(C); return false; }
         size_t ai = 0;
         for (size_t i = 0; i < n; i++) {
-            if (i == sqrt_idx) continue;
+            if (i == chosen_idx) continue;
             a_args[ai++] = expr_copy(plus_node->data.function.args[i]);
         }
         Expr* pn = expr_new_function(expr_new_symbol("Plus"), a_args, ai);
@@ -2494,42 +2750,330 @@ static bool numeric_is_nonneg(const Expr* e) {
     return false;
 }
 
+/* True if `e` is a numeric rational literal (integer, bigint, or
+ * Rational[n, d]). */
+static bool is_numeric_rational(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    return is_rational_literal(e);
+}
+
+/* Sign of a numeric rational: -1, 0, or +1. Returns 0 for non-rationals
+ * (caller is expected to gate via is_numeric_rational). */
+static int rational_sign(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_INTEGER) {
+        return (e->data.integer > 0) - (e->data.integer < 0);
+    }
+    if (e->type == EXPR_BIGINT) {
+        return mpz_sgn(e->data.bigint);
+    }
+    if (is_rational_literal(e)) {
+        const Expr* num = e->data.function.args[0];
+        if (num->type == EXPR_INTEGER) {
+            return (num->data.integer > 0) - (num->data.integer < 0);
+        }
+        if (num->type == EXPR_BIGINT) {
+            return mpz_sgn(num->data.bigint);
+        }
+    }
+    return 0;
+}
+
+/* Classify one Plus term as a Q(Sqrt[gamma]) contribution.
+ *   - pure rational               => *alpha_inc_out (owned)
+ *   - rational * Sqrt[rational]   => *beta_inc_out (owned), *gamma_out (owned)
+ *   - anything else               => return false
+ * gamma must be a nonneg rational; the caller treats *gamma_out == NULL
+ * as "this term contributes only to alpha". */
+static bool classify_q_sqrt_term(const Expr* term,
+                                  Expr** alpha_inc_out,
+                                  Expr** beta_inc_out,
+                                  Expr** gamma_out) {
+    *alpha_inc_out = NULL; *beta_inc_out = NULL; *gamma_out = NULL;
+    if (!term) return false;
+    if (is_numeric_rational(term)) {
+        *alpha_inc_out = expr_copy((Expr*)term);
+        return true;
+    }
+    if (is_sqrt(term)) {
+        Expr* g = term->data.function.args[0];
+        if (!is_numeric_rational(g) || rational_sign(g) < 0) return false;
+        *beta_inc_out = expr_new_integer(1);
+        *gamma_out = expr_copy(g);
+        return true;
+    }
+    if (term->type == EXPR_FUNCTION && term->data.function.head &&
+        term->data.function.head->type == EXPR_SYMBOL &&
+        term->data.function.head->data.symbol == SYM_Times) {
+        size_t n = term->data.function.arg_count;
+        if (n == 0) return false;
+        Expr** coef_args = (Expr**)malloc(sizeof(Expr*) * n);
+        if (!coef_args) return false;
+        size_t ci = 0;
+        const Expr* sqrt_factor = NULL;
+        for (size_t i = 0; i < n; i++) {
+            const Expr* a = term->data.function.args[i];
+            if (is_numeric_rational(a)) {
+                coef_args[ci++] = expr_copy((Expr*)a);
+            } else if (!sqrt_factor && is_sqrt(a)) {
+                Expr* g = a->data.function.args[0];
+                if (!is_numeric_rational(g) || rational_sign(g) < 0) {
+                    for (size_t j = 0; j < ci; j++) expr_free(coef_args[j]);
+                    free(coef_args);
+                    return false;
+                }
+                sqrt_factor = a;
+            } else {
+                for (size_t j = 0; j < ci; j++) expr_free(coef_args[j]);
+                free(coef_args);
+                return false;
+            }
+        }
+        if (!sqrt_factor) {
+            /* Pure rational product. */
+            if (ci == 0) { free(coef_args); return false; }
+            if (ci == 1) {
+                *alpha_inc_out = coef_args[0];
+                free(coef_args);
+            } else {
+                Expr* tn = expr_new_function(expr_new_symbol("Times"),
+                                              coef_args, ci);
+                *alpha_inc_out = evaluate(tn);
+                expr_free(tn);
+            }
+            return true;
+        }
+        Expr* coef;
+        if (ci == 0) {
+            free(coef_args);
+            coef = expr_new_integer(1);
+        } else if (ci == 1) {
+            coef = coef_args[0];
+            free(coef_args);
+        } else {
+            Expr* tn = expr_new_function(expr_new_symbol("Times"),
+                                          coef_args, ci);
+            coef = evaluate(tn);
+            expr_free(tn);
+        }
+        *beta_inc_out = coef;
+        *gamma_out = expr_copy(sqrt_factor->data.function.args[0]);
+        return true;
+    }
+    return false;
+}
+
+/* Build a fresh rational expression representing a^2 - b^2 * g, with
+ * a, b, g consumed by the call. */
+static Expr* compute_discriminant_eval(Expr* a, Expr* b, Expr* g) {
+    Expr* a2_args[2] = { a, expr_new_integer(2) };
+    Expr* a2_p = expr_new_function(expr_new_symbol("Power"), a2_args, 2);
+    Expr* a2 = evaluate(a2_p);
+    expr_free(a2_p);
+
+    Expr* b2_args[2] = { b, expr_new_integer(2) };
+    Expr* b2_p = expr_new_function(expr_new_symbol("Power"), b2_args, 2);
+    Expr* b2 = evaluate(b2_p);
+    expr_free(b2_p);
+
+    Expr* bg_args[2] = { b2, g };
+    Expr* bg_t = expr_new_function(expr_new_symbol("Times"), bg_args, 2);
+    Expr* bg = evaluate(bg_t);
+    expr_free(bg_t);
+
+    Expr* neg_args[2] = { expr_new_integer(-1), bg };
+    Expr* neg_t = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+    Expr* neg_bg = evaluate(neg_t);
+    expr_free(neg_t);
+
+    Expr* D_args[2] = { a2, neg_bg };
+    Expr* D_p = expr_new_function(expr_new_symbol("Plus"), D_args, 2);
+    Expr* D = evaluate(D_p);
+    expr_free(D_p);
+    return D;
+}
+
+/* If `e` is a Q(Sqrt[gamma]) element with gamma a single nonneg rational
+ * and every Plus term consistent with the same gamma, decide
+ * nonnegativity by exact sign analysis on alpha vs beta and on the
+ * discriminant alpha^2 - beta^2 * gamma. Returns true iff e is
+ * provably >= 0. No numeric sampling -- all comparisons run on exact
+ * rationals via the evaluator.
+ *
+ * This is what unlocks the phase-2 branch check on Q values like
+ * 11 - 2*Sqrt[29], where 11^2 = 121 > 116 = (2)^2 * 29 proves Q > 0. */
+static bool q_sqrt_extension_is_nonneg(const Expr* e) {
+    if (!e) return false;
+
+    if (is_numeric_rational(e)) {
+        return numeric_is_nonneg(e);
+    }
+
+    /* Single-term forms (Sqrt[r] or r*Sqrt[r] or pure-rational Times). */
+    if (is_sqrt(e) ||
+        (e->type == EXPR_FUNCTION && e->data.function.head &&
+         e->data.function.head->type == EXPR_SYMBOL &&
+         e->data.function.head->data.symbol == SYM_Times)) {
+        Expr* a = NULL; Expr* b = NULL; Expr* g = NULL;
+        if (!classify_q_sqrt_term(e, &a, &b, &g)) return false;
+        bool ok;
+        if (a) {
+            ok = numeric_is_nonneg(a);
+            expr_free(a);
+        } else {
+            ok = numeric_is_nonneg(b);
+            expr_free(b); expr_free(g);
+        }
+        return ok;
+    }
+
+    if (e->type != EXPR_FUNCTION ||
+        !e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Plus) {
+        return false;
+    }
+
+    /* Plus form: collect alpha parts, beta parts, and a single shared
+     * gamma. Any term that doesn't classify cleanly aborts. */
+    size_t n = e->data.function.arg_count;
+    Expr** alpha_parts = (Expr**)malloc(sizeof(Expr*) * (n + 1));
+    Expr** beta_parts  = (Expr**)malloc(sizeof(Expr*) * (n + 1));
+    if (!alpha_parts || !beta_parts) {
+        free(alpha_parts); free(beta_parts);
+        return false;
+    }
+    size_t ai = 0, bi = 0;
+    Expr* common_gamma = NULL;
+    bool ok = true;
+    for (size_t i = 0; i < n; i++) {
+        Expr* a = NULL; Expr* b = NULL; Expr* g = NULL;
+        if (!classify_q_sqrt_term(e->data.function.args[i], &a, &b, &g)) {
+            ok = false; break;
+        }
+        if (a) alpha_parts[ai++] = a;
+        if (b) {
+            if (common_gamma) {
+                if (!expr_eq(common_gamma, g)) {
+                    ok = false;
+                    expr_free(b); expr_free(g);
+                    break;
+                }
+                expr_free(g);
+            } else {
+                common_gamma = g;
+            }
+            beta_parts[bi++] = b;
+        }
+    }
+    if (!ok) {
+        for (size_t j = 0; j < ai; j++) expr_free(alpha_parts[j]);
+        for (size_t j = 0; j < bi; j++) expr_free(beta_parts[j]);
+        free(alpha_parts); free(beta_parts);
+        if (common_gamma) expr_free(common_gamma);
+        return false;
+    }
+
+    Expr* alpha;
+    if (ai == 0) {
+        alpha = expr_new_integer(0);
+        free(alpha_parts);
+    } else if (ai == 1) {
+        alpha = alpha_parts[0];
+        free(alpha_parts);
+    } else {
+        Expr* pn = expr_new_function(expr_new_symbol("Plus"), alpha_parts, ai);
+        alpha = evaluate(pn);
+        expr_free(pn);
+    }
+    Expr* beta;
+    if (bi == 0) {
+        beta = expr_new_integer(0);
+        free(beta_parts);
+    } else if (bi == 1) {
+        beta = beta_parts[0];
+        free(beta_parts);
+    } else {
+        Expr* pn = expr_new_function(expr_new_symbol("Plus"), beta_parts, bi);
+        beta = evaluate(pn);
+        expr_free(pn);
+    }
+
+    if (!is_numeric_rational(alpha) || !is_numeric_rational(beta)) {
+        expr_free(alpha); expr_free(beta);
+        if (common_gamma) expr_free(common_gamma);
+        return false;
+    }
+
+    int sa = rational_sign(alpha);
+    int sb = rational_sign(beta);
+
+    if (bi == 0 || sb == 0) {
+        if (common_gamma) expr_free(common_gamma);
+        expr_free(beta);
+        bool r = (sa >= 0);
+        expr_free(alpha);
+        return r;
+    }
+
+    if (sa >= 0 && sb >= 0) {
+        expr_free(alpha); expr_free(beta); expr_free(common_gamma);
+        return true;
+    }
+    if (sa <= 0 && sb <= 0) {
+        bool r = (sa == 0 && sb == 0);
+        expr_free(alpha); expr_free(beta); expr_free(common_gamma);
+        return r;
+    }
+
+    /* Mixed signs: compare alpha^2 to beta^2 * gamma exactly. */
+    Expr* D = compute_discriminant_eval(expr_copy(alpha), expr_copy(beta),
+                                         expr_copy(common_gamma));
+    bool r;
+    if (sa > 0 && sb < 0) {
+        /* e = alpha - |beta|*Sqrt[gamma]; nonneg iff D = a^2 - b^2 g >= 0. */
+        r = is_numeric_rational(D) && numeric_is_nonneg(D);
+    } else { /* sa < 0 && sb > 0 */
+        /* e = -|alpha| + beta*Sqrt[gamma]; nonneg iff D <= 0. */
+        r = is_numeric_rational(D) && rational_sign(D) <= 0;
+    }
+    expr_free(alpha); expr_free(beta); expr_free(common_gamma); expr_free(D);
+    return r;
+}
+
 /* Decide whether `e` is provably nonneg under the active context.
- * Numeric literals get a free direct check; everything else routes
- * through assume_known_nonneg, augmented by a local transitive prover
- * (denest_prov_nonneg) that chains inequality facts. The transitive
- * step is required for case 7's branch check: x > y && y > 0 implies
- * (x+y)/2 >= 0, but assume_known_nonneg alone can't see it. */
+ * Numeric literals get a free direct check; Q(Sqrt[k]) elements get
+ * exact sign analysis; everything else routes through assume_known_nonneg
+ * augmented by a local transitive prover (denest_prov_nonneg) that
+ * chains inequality facts. The transitive step is required for case 7's
+ * branch check: x > y && y > 0 implies (x+y)/2 >= 0, but
+ * assume_known_nonneg alone can't see it. */
 static bool denest_is_nonneg(const Expr* e, const AssumeCtx* ctx) {
     if (numeric_is_nonneg(e)) return true;
+    if (q_sqrt_extension_is_nonneg(e)) return true;
     return denest_prov_nonneg(ctx, e, 4);
 }
 
-/* Shared compute step for the half-sum denesting identity. On success,
- * *P_out, *Q_out, *s_out are caller-owned and satisfy
+/* Compute (P, Q, s) for a specific choice of "outer" sqrt in `plus_node`.
+ * `candidate_idx` selects which sqrt-bearing term to use (see
+ * split_plus_into_a_plus_b_sqrt_c). Phase 1 single-sqrt radicands hit
+ * idx == 0 once. Phase 2 multi-sqrt radicands are explored by
+ * denest_compute_pq_s iterating over candidates until one succeeds.
  *
- *     A + b * Sqrt[C] = (Sqrt[P] + sign * Sqrt[Q])^2
- *
- * where sign = -1 if *b_is_negative_out, else +1, and
- *
- *     s = P - Q = Sqrt[A^2 - b^2 C]   (always nonneg)
- *
- * is the rationalising denominator for the reciprocal form. Returns
- * false when no clean denesting exists or branch validity cannot be
- * verified; in that case *_out are left NULL.
- *
- * Both the forward path (`Sqrt[plus] -> Sqrt[P] +/- Sqrt[Q]`) and the
- * reciprocal path (`1/Sqrt[plus] -> (Sqrt[P] -/+ Sqrt[Q])/s`) reuse
- * this so the branch-validity prover, the polynomial-arithmetic
- * scaffolding around D = A^2 - b^2 C, and the Sqrt[Rational] rationaliser
- * all live in one place. */
-static bool denest_compute_pq_s(const Expr* plus_node,
-                                 const AssumeCtx* ctx,
-                                 Expr** P_out, Expr** Q_out, Expr** s_out,
-                                 bool* b_is_negative_out) {
+ * Returns false when the chosen split doesn't yield a clean denesting
+ * (no closed-form sqrt(A^2 - b^2 C), or branch validity fails). The
+ * outer wrapper retries the next candidate on false. */
+static bool denest_compute_pq_s_at_candidate(const Expr* plus_node,
+                                              const AssumeCtx* ctx,
+                                              size_t candidate_idx,
+                                              Expr** P_out, Expr** Q_out,
+                                              Expr** s_out,
+                                              bool* b_is_negative_out) {
     *P_out = NULL; *Q_out = NULL; *s_out = NULL;
     Expr* A = NULL; Expr* b = NULL; Expr* C = NULL;
-    if (!split_plus_into_a_plus_b_sqrt_c(plus_node, ctx, &A, &b, &C)) return false;
+    if (!split_plus_into_a_plus_b_sqrt_c(plus_node, ctx, candidate_idx,
+                                          &A, &b, &C)) return false;
 
     /* Determine sign of b by inspection of its sign. We require b's
      * sign to be syntactically determinable -- a symbolic b with
@@ -2665,6 +3209,31 @@ static bool denest_compute_pq_s(const Expr* plus_node,
     *s_out = s;
     *b_is_negative_out = b_is_negative;
     return true;
+}
+
+/* Outer iterator for the half-sum denesting identity. Phase 1 inputs
+ * (single sqrt-bearing term) hit candidate 0 once with no overhead;
+ * phase 2 inputs explore every sqrt-bearing term ranked outer-first by
+ * sqrt_nesting_depth so the discriminant lives in Q(Sqrt[k]) for one
+ * k, letting sqrt_if_clean_square's recursive case fire. */
+static bool denest_compute_pq_s(const Expr* plus_node,
+                                 const AssumeCtx* ctx,
+                                 Expr** P_out, Expr** Q_out, Expr** s_out,
+                                 bool* b_is_negative_out) {
+    *P_out = NULL; *Q_out = NULL; *s_out = NULL;
+    size_t ncands = count_outer_sqrt_candidates(plus_node, ctx);
+    if (ncands == 0) return false;
+    for (size_t i = 0; i < ncands; i++) {
+        if (denest_compute_pq_s_at_candidate(plus_node, ctx, i,
+                                              P_out, Q_out, s_out,
+                                              b_is_negative_out)) {
+            return true;
+        }
+        /* On failure, *_out are already cleaned up by the inner
+         * function's failure paths -- reset before the next candidate. */
+        *P_out = NULL; *Q_out = NULL; *s_out = NULL;
+    }
+    return false;
 }
 
 /* True iff `e` is `Power[base, m/2]` for some odd integer `m`. On true,
@@ -2863,12 +3432,36 @@ static Expr* simp_denest_sqrt_walk(const Expr* e, const AssumeCtx* ctx) {
 }
 
 /* Top-level entry point. Returns a new Expr* (caller owns); never
- * NULL. When no denesting fires, returns expr_copy(e). */
+ * NULL. When no denesting fires, returns expr_copy(e).
+ *
+ * Manages the phase-2 depth budget and memoisation cache. Re-entry
+ * detection: if g_denest_budget > 0 we're being called from inside an
+ * in-flight denesting (e.g. evaluator-driven sub-Simplify) -- share
+ * the existing budget and memo rather than resetting them, so the
+ * recursion cap is enforced end-to-end. */
 static Expr* simp_denest_sqrt(const Expr* e, const AssumeCtx* ctx) {
     bool dbg = simp_debug_enabled();
     clock_t t0 = dbg ? clock() : 0;
+
+    bool top_level = (g_denest_budget == 0);
+    DenestMemo memo;
+    if (top_level) {
+        memo.entries = NULL;
+        memo.count = 0;
+        memo.capacity = 0;
+        g_denest_budget = DENEST_MAX_DEPTH;
+        g_denest_memo = &memo;
+    }
+
     Expr* r = simp_denest_sqrt_walk(e, ctx);
     Expr* out = r ? r : expr_copy((Expr*)e);
+
+    if (top_level) {
+        denest_memo_clear(&memo);
+        g_denest_memo = NULL;
+        g_denest_budget = 0;
+    }
+
     if (dbg) simp_debug_log("DenestSqrt", e, out,
                             simp_debug_elapsed_ms(t0));
     return out;

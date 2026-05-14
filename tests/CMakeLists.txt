@@ -526,6 +526,9 @@ target_include_directories(radical_simplify_tests PRIVATE ../src)
 add_executable(simp_denest_inv_sqrt_tests test_simp_denest_inv_sqrt.c ${COMMON_SRC})
 target_include_directories(simp_denest_inv_sqrt_tests PRIVATE ../src)
 
+add_executable(simp_denest_phase2_tests test_simp_denest_phase2.c ${COMMON_SRC})
+target_include_directories(simp_denest_phase2_tests PRIVATE ../src)
+
 add_executable(rationalize_tests test_rationalize.c ${COMMON_SRC})
 target_include_directories(rationalize_tests PRIVATE ../src)
 
