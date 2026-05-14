@@ -4713,8 +4713,15 @@ static Expr* simp_algebraic_impl(const Expr* e) {
      *
      * Multi-generator cases (n ≥ 2) fall through to the Sqrt-only
      * path because that path's general rationalisation by sign-flip
-     * conjugates handles n ≥ 2 over Q(Sqrt[u_i]) directly. */
-    if (!contains_explicit_complex(e)) {
+     * conjugates handles n ≥ 2 over Q(Sqrt[u_i]) directly.
+     *
+     * Same Layer-0 prefilter as builtin_simplify's alg_top branch:
+     * inputs with nested radicals and no free polynomial variable end
+     * up in the multi-generator (n ≥ 2) branch anyway because the
+     * nested generator counts as one — autodetect's primitive-element
+     * compositum work is ~tens-of-ms wasted before falling through. */
+    if (!contains_explicit_complex(e)
+        && !expr_has_nested_radical_radicand(e)) {
         QATower* qa_t = extension_autodetect(e);
         if (qa_t && qa_t->n == 1) {
             Expr* alpha = expr_copy(qa_t->alpha_renders[0]);
