@@ -235,6 +235,23 @@ static void test_nested_radical_skip_matches_no_ext(void) {
         "Extension -> Automatic]");
 }
 
+static void test_composite_sqrt_coalesces_to_primes(void) {
+    /* Layer-2 regression test.  The input contains Sqrt[3], Sqrt[5],
+     * and Sqrt[15]; Sqrt[15] is algebraically dependent on Sqrt[3] and
+     * Sqrt[5] (Sqrt[15] = Sqrt[3]·Sqrt[5]).  Without the coalesce,
+     * extension_autodetect builds a deg-8 tower over the three
+     * generators; with the coalesce it builds a deg-4 tower over
+     * {Sqrt[3], Sqrt[5]} and qa_cancel_with_tower's input
+     * pre-substitution rewrites Sqrt[15] to Sqrt[3]·Sqrt[5].
+     *
+     * The cancellation result must be 0: expand the square
+     * (2 Sqrt[3] + 3 Sqrt[5])^2 = 4·3 + 12 Sqrt[15] + 9·5 = 57 + 12 Sqrt[15]
+     * so the input collapses additively to 0. */
+    assert_eval_eq(
+        "Simplify[(2 Sqrt[3] + 3 Sqrt[5])^2 - 12 - 12 Sqrt[15] - 45]",
+        "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -267,6 +284,7 @@ int main(void) {
     TEST(test_multigen_sqrt2_sqrt3_collapse);
     TEST(test_multigen_together_no_op);
     TEST(test_nested_radical_skip_matches_no_ext);
+    TEST(test_composite_sqrt_coalesces_to_primes);
 
     printf("All extension_auto_builtins tests passed!\n");
     return 0;

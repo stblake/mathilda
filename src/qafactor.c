@@ -1710,6 +1710,150 @@ static Expr* canonicalise_nested_radicands(const Expr* e,
     return out;
 }
 
+/* Layer-2 input-side decomposition helper. Walks `e` and rewrites every
+ * Sqrt[c] / Power[c, 1/2] (c composite squarefree, all prime factors in
+ * `prime_set`) into a raw `Times[Sqrt[p_1], ..., Sqrt[p_k]]` constructed
+ * via expr_new_function — NOT through evaluate(), so picocas's Times
+ * canonicaliser does not immediately re-combine the product back to
+ * Sqrt[c]. After this pass, qa_cancel_with_tower's main substitution
+ * loop replaces each Sqrt[p_i] with its γ-poly form, after which the
+ * Times factors are γ-polynomials with no Sqrt nodes left to recombine
+ * — and the downstream Together / lift sees a clean polynomial in γ.
+ *
+ * Conservative: returns expr_copy(e) when no rewrite fires, so callers
+ * always get a freshly-allocated owned tree. */
+static Expr* decompose_redundant_sqrts_walk(const Expr* e,
+                                            const int64_t* prime_set,
+                                            size_t n_primes) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    /* Detect Sqrt[c] or Power[c, 1/2] with c a composite squarefree
+     * integer whose prime factors are all in prime_set. */
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        const Expr* base_e = NULL;
+        bool is_sqrt = false;
+        if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
+            base_e = e->data.function.args[0];
+            is_sqrt = true;
+        } else if (h == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q)
+                && p == 1 && q == 2) {
+                base_e = e->data.function.args[0];
+                is_sqrt = true;
+            }
+        }
+        if (is_sqrt && base_e && base_e->type == EXPR_INTEGER) {
+            int64_t c = base_e->data.integer;
+            if (c >= 2) {
+                /* Trial-divide c, checking squarefree AND all primes
+                 * are in prime_set. Accumulate factors. */
+                int64_t factors[64];
+                int n_factors = 0;
+                int64_t r = c;
+                bool ok = true;
+                for (int64_t p = 2; p * p <= r && ok; p++) {
+                    if (r % p == 0) {
+                        int cnt = 0;
+                        while (r % p == 0) { r /= p; cnt++; }
+                        if (cnt != 1) { ok = false; break; }
+                        bool found = false;
+                        for (size_t j = 0; j < n_primes; j++) {
+                            if (prime_set[j] == p) { found = true; break; }
+                        }
+                        if (!found) { ok = false; break; }
+                        if (n_factors < 64) factors[n_factors++] = p;
+                        else { ok = false; break; }
+                    }
+                }
+                if (ok && r > 1) {
+                    bool found = false;
+                    for (size_t j = 0; j < n_primes; j++) {
+                        if (prime_set[j] == r) { found = true; break; }
+                    }
+                    if (!found) ok = false;
+                    else if (n_factors < 64) factors[n_factors++] = r;
+                    else ok = false;
+                }
+                /* Only rewrite genuine composites (n_factors >= 2). */
+                if (ok && n_factors >= 2) {
+                    Expr** factor_exprs =
+                        (Expr**)malloc(sizeof(Expr*) * n_factors);
+                    for (int i = 0; i < n_factors; i++) {
+                        Expr* b = expr_new_integer(factors[i]);
+                        Expr* args_one[1] = {b};
+                        factor_exprs[i] = expr_new_function(
+                            expr_new_symbol("Sqrt"), args_one, 1);
+                    }
+                    Expr* out = expr_new_function(
+                        expr_new_symbol("Times"), factor_exprs, n_factors);
+                    free(factor_exprs);
+                    return out;
+                }
+            }
+        }
+    }
+
+    /* Generic recursion: rebuild with rewritten children. */
+    Expr* new_head = decompose_redundant_sqrts_walk(
+        e->data.function.head, prime_set, n_primes);
+    size_t nc = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (nc > 0 ? nc : 1));
+    for (size_t i = 0; i < nc; i++) {
+        new_args[i] = decompose_redundant_sqrts_walk(
+            e->data.function.args[i], prime_set, n_primes);
+    }
+    Expr* out = expr_new_function(new_head, new_args, nc);
+    free(new_args);
+    return out;
+}
+
+/* Public-to-module wrapper. Extracts the prime-Sqrt set from the tower
+ * and runs the walker. Returns expr_copy(e) when the tower has < 2
+ * prime-Sqrt generators (the precondition for any composite Sqrt to be
+ * coalescable). */
+static Expr* decompose_redundant_sqrts(const Expr* e, const QATower* t) {
+    if (!t || t->n < 2) return expr_copy((Expr*)e);
+    int64_t primes[QA_AUTODETECT_MAX_GENS];
+    size_t n_primes = 0;
+    for (int i = 0; i < t->n; i++) {
+        const Expr* a = t->alpha_renders[i];
+        if (!a || a->type != EXPR_FUNCTION) continue;
+        if (!a->data.function.head
+            || a->data.function.head->type != EXPR_SYMBOL) continue;
+        const char* h = a->data.function.head->data.symbol;
+        const Expr* base = NULL;
+        bool is_sqrt = false;
+        if (h == SYM_Sqrt && a->data.function.arg_count == 1) {
+            base = a->data.function.args[0];
+            is_sqrt = true;
+        } else if (h == SYM_Power && a->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(a->data.function.args[1], &p, &q)
+                && p == 1 && q == 2) {
+                base = a->data.function.args[0];
+                is_sqrt = true;
+            }
+        }
+        if (!is_sqrt || !base || base->type != EXPR_INTEGER) continue;
+        int64_t b = base->data.integer;
+        if (b < 2) continue;
+        /* Trial-divide b for primality. */
+        bool is_prime = true;
+        for (int64_t p = 2; p * p <= b; p++) {
+            if (b % p == 0) { is_prime = false; break; }
+        }
+        if (is_prime && n_primes < QA_AUTODETECT_MAX_GENS) {
+            primes[n_primes++] = b;
+        }
+    }
+    if (n_primes < 2) return expr_copy((Expr*)e);
+    return decompose_redundant_sqrts_walk(e, primes, n_primes);
+}
+
 /* Count Power[c, p/q] (q ≥ 2) occurrences in `e` — both atomic Sqrt[c]
  * and Power[c, p/q] forms. Used by the Layer-1 pre-substitution gate
  * in qa_cancel_with_tower to predict the post-sub leaf-count blow-up. */
@@ -1739,8 +1883,18 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
      * integer-base generator.  This makes mathematically-equal but
      * structurally-distinct `Sqrt[u]` / `Power[u, p/q]` sub-expressions
      * collapse to a single canonical form, so the substitution loop in
-     * step 1 finds every instance. */
-    Expr* arg_internal = expr_copy((Expr*)arg);
+     * step 1 finds every instance.
+     *
+     * Layer-2 step: rewrite composite Sqrt[c] occurrences (e.g. Sqrt[15]
+     * when the tower holds Sqrt[3] and Sqrt[5] as primes) into raw
+     * Times[Sqrt[p_1], ..., Sqrt[p_k]] before the substitution loop.
+     * This lets a smaller tower (degree 4 over Q(Sqrt[3], Sqrt[5]) vs
+     * degree 8 over Q(Sqrt[3], Sqrt[5], Sqrt[15])) handle the input
+     * correctly: the per-prime substitution replaces each Sqrt[p_i]
+     * with its γ-poly, so the Times factors become γ-polys (no Sqrt
+     * left for picocas's Times canonicaliser to re-combine into Sqrt[c]
+     * when Together is evaluated in Step 4). */
+    Expr* arg_internal = decompose_redundant_sqrts(arg, t);
     for (int i = 0; i < t->n; i++) {
         const Expr* a_r = t->alpha_renders[i];
         int64_t c_i = 0, q_i = 0;
@@ -3206,6 +3360,107 @@ static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
     *n = out;
 }
 
+/* Layer 2: redundant-Sqrt coalesce.
+ *
+ * extension_autodetect collects every integer-base Sqrt[c] it sees as a
+ * separate GEN_INT_BASE generator. For c = p·q (squarefree, p,q prime),
+ * `Sqrt[c]` is algebraically dependent on Sqrt[p] and Sqrt[q]:
+ * `Sqrt[p·q] = Sqrt[p]·Sqrt[q]`. If both Sqrt[p] and Sqrt[q] are already
+ * generators, including Sqrt[c] inflates the tower's primitive-element
+ * degree (it would be deg-4 over Q(Sqrt[p],Sqrt[q]) but the tower-builder
+ * doesn't know about the dependency and produces deg-8). The qa_cancel_
+ * with_tower work cost is super-linear in deg(γ), so the inflation hurts.
+ *
+ * This pass marks every GEN_INT_BASE Sqrt[c] (q_lcm == 2, c > 1) as
+ * GEN_ABSORBED when c factors into squarefree primes p_i, all already
+ * present as GEN_INT_BASE Sqrt[p_i]. The downstream dedup compaction
+ * drops the absorbed entries; qa_cancel_with_tower's caller-side
+ * decomposition (decompose_redundant_sqrts) rewrites input occurrences
+ * of Sqrt[c] as `Times[Sqrt[p_1], ..., Sqrt[p_k]]` so the substitution
+ * loop still handles them correctly.
+ *
+ * Conservative scope: only squarefree positive integer bases with q=2.
+ * Higher-q (cube roots etc.) and negative bases are left alone — their
+ * dependence patterns are more involved and rarer in practice. */
+static void autodetect_coalesce_int_sqrts(AutodetectGen* gens, size_t* n,
+                                          Expr** owned) {
+    /* Collect prime bases p where Sqrt[p] (q_lcm == 2) is a generator. */
+    int64_t primes_in_set[QA_AUTODETECT_MAX_GENS];
+    size_t  n_primes = 0;
+    for (size_t i = 0; i < *n; i++) {
+        if (gens[i].kind != GEN_INT_BASE) continue;
+        if (gens[i].q_lcm != 2) continue;
+        int64_t b = gens[i].base;
+        if (b < 2) continue;
+        /* Primality test by trial division. */
+        bool is_prime = true;
+        for (int64_t p = 2; p * p <= b; p++) {
+            if (b % p == 0) { is_prime = false; break; }
+        }
+        if (is_prime) primes_in_set[n_primes++] = b;
+    }
+    if (n_primes < 2) return;  /* Need at least two primes to coalesce. */
+
+    /* Mark non-prime GEN_INT_BASE Sqrt[c] absorbed when c factors into
+     * squarefree primes all in primes_in_set. */
+    for (size_t i = 0; i < *n; i++) {
+        if (gens[i].kind != GEN_INT_BASE) continue;
+        if (gens[i].q_lcm != 2) continue;
+        int64_t c = gens[i].base;
+        if (c < 2) continue;
+        /* Skip primes (they're the irreducible generators themselves). */
+        bool is_prime = true;
+        for (int64_t p = 2; p * p <= c; p++) {
+            if (c % p == 0) { is_prime = false; break; }
+        }
+        if (is_prime) continue;
+        /* Trial-divide c, requiring each prime factor to appear exactly
+         * once (squarefree) AND be in primes_in_set. */
+        int64_t r = c;
+        bool ok = true;
+        for (int64_t p = 2; p * p <= r && ok; p++) {
+            if (r % p == 0) {
+                int cnt = 0;
+                while (r % p == 0) { r /= p; cnt++; }
+                if (cnt != 1) { ok = false; break; }
+                bool found = false;
+                for (size_t j = 0; j < n_primes; j++) {
+                    if (primes_in_set[j] == p) { found = true; break; }
+                }
+                if (!found) { ok = false; break; }
+            }
+        }
+        if (ok && r > 1) {
+            bool found = false;
+            for (size_t j = 0; j < n_primes; j++) {
+                if (primes_in_set[j] == r) { found = true; break; }
+            }
+            if (!found) ok = false;
+        }
+        if (ok) {
+            gens[i].kind = GEN_ABSORBED;
+            /* No owned[] entry to free (GEN_INT_BASE doesn't allocate). */
+            (void)owned;
+        }
+    }
+
+    /* Compact: sweep + drop GEN_ABSORBED. */
+    size_t out = 0;
+    for (size_t i = 0; i < *n; i++) {
+        if (gens[i].kind == GEN_ABSORBED) {
+            if (owned[i]) { expr_free(owned[i]); owned[i] = NULL; }
+            continue;
+        }
+        if (out != i) {
+            gens[out] = gens[i];
+            owned[out] = owned[i];
+            owned[i] = NULL;
+        }
+        out++;
+    }
+    *n = out;
+}
+
 /* Materialise an AutodetectGen[] into a tower by building a surface-form
  * generator Expr for each entry and dispatching to
  * qa_resolve_extension_tower.  Used by both the single-Expr and multi-Expr
@@ -3256,6 +3511,7 @@ QATower* extension_autodetect(const Expr* e) {
         return NULL;
     }
     autodetect_canonicalise_post(gens, &n, owned);
+    autodetect_coalesce_int_sqrts(gens, &n, owned);
     QATower* t = autodetect_build_tower(gens, n);
     for (size_t i = 0; i < QA_AUTODETECT_MAX_GENS; i++)
         if (owned[i]) expr_free(owned[i]);
@@ -3278,6 +3534,7 @@ QATower* extension_autodetect_args(struct Expr* const* args, size_t argc) {
         return NULL;
     }
     autodetect_canonicalise_post(gens, &n, owned);
+    autodetect_coalesce_int_sqrts(gens, &n, owned);
     QATower* t = autodetect_build_tower(gens, n);
     for (size_t i = 0; i < QA_AUTODETECT_MAX_GENS; i++)
         if (owned[i]) expr_free(owned[i]);
