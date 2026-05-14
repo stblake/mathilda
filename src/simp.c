@@ -11318,7 +11318,15 @@ Expr* builtin_simplify(Expr* res) {
             && expr->data.function.head->type == EXPR_SYMBOL
             && expr->data.function.head->data.symbol == SYM_Plus
             && has_non_integer_power(expr)
-            && !contains_explicit_complex(expr)) {
+            && !contains_explicit_complex(expr)
+            && !expr_has_nested_radical_radicand(expr)) {
+            /* Layer-0 prefilter shared with builtin_together/cancel:
+             * skip extension_autodetect entirely when the input has a
+             * nested radical and no free polynomial variable.  Even
+             * with builtin_together's own gate, this saves a redundant
+             * autodetect call here (extension_autodetect on a nested-
+             * radical input runs the primitive-element compositum
+             * construction, which is the bulk of the cost). */
             QATower* qa_t = extension_autodetect(expr);
             if (qa_t && qa_t->n >= 2) {
                 qa_tower_free(qa_t);
