@@ -26,6 +26,8 @@
 #ifndef PICOCAS_QAFACTOR_H
 #define PICOCAS_QAFACTOR_H
 
+#include <stdbool.h>
+
 #include "qa.h"
 #include "qaupoly.h"
 
@@ -237,6 +239,44 @@ struct Expr* qa_factor_with_extension_tower(const struct Expr* poly,
  * single-generator case is handled by the existing
  * `cancel_with_extension` and `together_recursive_ext`). */
 struct Expr* qa_cancel_with_tower(const struct Expr* arg, const QATower* t);
+
+/* Predicate: true when any tower generator has a non-integer base, i.e.
+ * surfaces as `Sqrt[non_int]` or `Power[non_int, p/q]` (a nested radical
+ * like `Sqrt[5 + 2 Sqrt[6]]`).
+ *
+ * Why callers care: `qa_cancel_with_tower`'s Step 1 substitutes each
+ * α_i with its polynomial-in-γ form, but a nested-radical α_i was
+ * originally surfaced from a `Power[Plus[...], p/q]` (q ≥ 2) node in
+ * the input, and the substitution leaves that `Power` opaque — its
+ * base becomes a polynomial in γ but the `Power[base, p/q]` itself
+ * remains structurally a `Power` with a non-integer exponent that
+ * Step 4's no-extension `Together` cannot combine. The result inflates
+ * past the leaf-count gate and is rejected. Skipping the tower path
+ * (and the N×fallback) when this returns true avoids the wasted
+ * substitution + Together + qaupoly-lift + rejection cycle. */
+bool qa_tower_has_nested_radical(const QATower* t);
+
+/* Syntactic predicate on an EXPRESSION (not a tower): true when `e`
+ * contains a nested radical (`Sqrt[non_integer]` or
+ * `Power[non_integer, p/q]` with q ≥ 2 whose radicand itself contains
+ * a radical) AND `e` has no free polynomial variable.
+ *
+ * Callers use this as a fast O(input-size) prefilter so they can skip
+ * the much-more-expensive `extension_autodetect` + tower-build cascade.
+ * Two conditions must both hold:
+ *   1. Nested radical present — the γ-substitution can't reduce the
+ *      outer `Power[non_int, p/q]` form (Step 4 leaves it opaque, the
+ *      leaf-count gate rejects the result).
+ *   2. No free polynomial variable — qaupoly_gcd over Q(γ)[x] needs a
+ *      polynomial variable to find non-trivial common factors; without
+ *      one, the tower's cancellation work degenerates to constant
+ *      arithmetic in Q(γ) that the input's nested radicals prevent
+ *      from completing usefully.
+ *
+ * When only one of the two holds (e.g. nested radicals with free
+ * vars — the `D[Integrate[a x/(x^3+2), x], x]` headline case), the
+ * tower path IS needed and returns true would suppress it. */
+bool expr_has_nested_radical_radicand(const struct Expr* e);
 
 /* ============================ Phase G9 ============================ */
 /* Automatic algebraic-extension detection.                            */

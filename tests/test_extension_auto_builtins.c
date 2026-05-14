@@ -221,6 +221,20 @@ static void test_multigen_together_no_op(void) {
         "Together[Sqrt[2] + Sqrt[3], Extension -> Automatic]");
 }
 
+static void test_nested_radical_skip_matches_no_ext(void) {
+    /* Layer-0 prefilter regression test.  Input has a nested radical
+     * (Sqrt[5 + 2 Sqrt[6]] surfaced via Power[Plus[...], -3/2]) and
+     * no free polynomial variable, so the predicate skips the
+     * extension_autodetect + tower-build cascade.  Result must match
+     * what no-extension Together would produce — the structural
+     * combine is the same regardless of the Extension option, the
+     * difference is just throughput. */
+    assert_eval_same(
+        "Together[1/(5 + 2 Sqrt[6])^(3/2) + (Sqrt[2] - Sqrt[3])^3]",
+        "Together[1/(5 + 2 Sqrt[6])^(3/2) + (Sqrt[2] - Sqrt[3])^3, "
+        "Extension -> Automatic]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -252,6 +266,7 @@ int main(void) {
 
     TEST(test_multigen_sqrt2_sqrt3_collapse);
     TEST(test_multigen_together_no_op);
+    TEST(test_nested_radical_skip_matches_no_ext);
 
     printf("All extension_auto_builtins tests passed!\n");
     return 0;

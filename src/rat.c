@@ -9,6 +9,7 @@
 #include "sym_names.h"
 #include "options.h"
 #include "qafactor.h"
+#include "facpoly.h"
 #include "core.h"
 #include <string.h>
 #include <stdlib.h>
@@ -667,7 +668,49 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
     return result;
 }
 
-Expr* builtin_cancel(Expr* res) {
+/* Count subnodes of `e` that mention any of `target`'s leaves. Used by
+ * pick_best_tower_generator to rank tower generators by how much of
+ * the input they "touch". The metric is "subnodes where target appears
+ * as a structural sub-expression" — a conservative proxy for how much
+ * a single-α Cancel/Together over Q(target) can simplify. */
+static int subnode_mentions(const Expr* e, const Expr* target) {
+    if (!e) return 0;
+    if (expr_eq((Expr*)e, (Expr*)target)) return 1;
+    if (e->type != EXPR_FUNCTION) return 0;
+    int sum = 0;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        sum += subnode_mentions(e->data.function.args[i], target);
+    }
+    return sum;
+}
+
+/* Layer-3 guided fallback: instead of trying all N tower generators
+ * sequentially when qa_cancel_with_tower declines, pick the one that
+ * occurs most often in the input. Returns the index of the chosen
+ * generator, or -1 if none have any occurrences (in which case the
+ * fallback would have produced nothing useful anyway).
+ *
+ * Rationale: in a tower with n >= 2 generators, the single-α path can
+ * only collapse fractions whose denominators are polynomials in THAT
+ * α; generators that don't appear in any denominator give no
+ * cancellation. Ranking by occurrence count picks the generator most
+ * likely to be load-bearing. */
+static int pick_best_tower_generator(const Expr* arg, const QATower* t) {
+    int best_idx = -1;
+    int best_count = 0;
+    for (int i = 0; i < t->n; i++) {
+        const Expr* gen = t->alpha_renders[i];
+        if (!gen) continue;
+        int c = subnode_mentions(arg, gen);
+        if (c > best_count) {
+            best_count = c;
+            best_idx = i;
+        }
+    }
+    return best_idx;
+}
+
+static Expr* builtin_cancel_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
     /* Strip a trailing Extension -> α option, if any.  When the user
@@ -687,7 +730,16 @@ Expr* builtin_cancel(Expr* res) {
 
     Expr* alpha_auto = NULL;
     QATower* auto_tower = NULL;
-    if (!alpha && auto_flag) {
+    /* Layer-0 input-level prefilter: extension_autodetect itself is
+     * expensive on inputs containing nested radicals (the primitive-
+     * element compositum construction runs over the whole tower). When
+     * a nested radical sits inside a Power[Plus[...], p/q] (q ≥ 2) we
+     * can predict from the input alone that the tower path will be
+     * rejected — the γ-substitution leaves the outer Power opaque to
+     * the no-extension Together (see qa_tower_has_nested_radical doc).
+     * Skip the autodetect call entirely and fall straight through to
+     * the no-extension path. */
+    if (!alpha && auto_flag && !expr_has_nested_radical_radicand(arg)) {
         auto_tower = extension_autodetect(arg);
         if (auto_tower && auto_tower->n == 1) {
             alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
@@ -698,46 +750,70 @@ Expr* builtin_cancel(Expr* res) {
              * QAUPoly over Q(γ), and runs qaupoly_gcd-based cancellation
              * end-to-end.  Returns NULL on lift failure; the caller
              * falls back to the no-extension path. */
-            Expr* tower_result = qa_cancel_with_tower(arg, auto_tower);
-            if (tower_result) {
-                qa_tower_free(auto_tower);
-                return tower_result;
-            }
-            /* Tower path declined.  Try each tower generator in turn as
-             * a single-α extension and pick the smallest result that
-             * beats the input.  See builtin_together for rationale. */
-            {
-                bool is_sum = (arg->type == EXPR_FUNCTION
-                               && arg->data.function.head
-                               && arg->data.function.head->type == EXPR_SYMBOL
-                               && arg->data.function.head->data.symbol == SYM_Plus);
-                int64_t in_size = leaf_count_internal((Expr*)arg, true);
-                Expr* best = NULL;
-                int64_t best_size = -1;
-                for (int i = 0; i < auto_tower->n; i++) {
-                    const Expr* gen = auto_tower->alpha_renders[i];
-                    if (!gen) continue;
-                    Expr* cand = is_sum
-                        ? together_recursive_ext(arg, gen)
-                        : cancel_with_extension(arg, gen);
-                    if (!cand) continue;
-                    Expr* tg = expr_new_function(expr_new_symbol("Together"),
-                        (Expr*[]){cand}, 1);
-                    Expr* folded = evaluate(tg);
-                    expr_free(tg);
-                    if (!folded) continue;
-                    int64_t lc = leaf_count_internal(folded, true);
-                    if (lc < in_size && (best_size < 0 || lc < best_size)) {
-                        if (best) expr_free(best);
-                        best = folded;
-                        best_size = lc;
-                    } else {
-                        expr_free(folded);
-                    }
-                }
+            if (qa_tower_has_nested_radical(auto_tower)) {
+                /* Layer-0 prefilter: when the tower has a nested-radical
+                 * α_i (surfaced from a Power[Plus[...], p/q] node in the
+                 * input), Step 1's γ-substitution leaves the surrounding
+                 * Power[..., p/q] opaque to Step 4's no-extension
+                 * Together — the result inflates past the leaf-count
+                 * gate and gets rejected. Same gate also skips the
+                 * N×fallback loop because together_recursive_ext on a
+                 * nested-radical α_i hits the same opaque-Power wall.
+                 * Drop straight to the no-extension path; the
+                 * surrounding Simplify search picks up the denesting
+                 * via simp_denest_sqrt on individual subnodes. */
                 qa_tower_free(auto_tower);
                 auto_tower = NULL;
-                if (best) return best;
+            } else {
+                Expr* tower_result = qa_cancel_with_tower(arg, auto_tower);
+                if (tower_result) {
+                    qa_tower_free(auto_tower);
+                    return tower_result;
+                }
+                /* Layer-3 guided fallback. The previous linear N-try
+                 * loop tried every tower generator (up to 4) and kept
+                 * the smallest result, paying for each
+                 * together_recursive_ext call sequentially. The
+                 * single-α path's effectiveness is proportional to how
+                 * often the chosen α appears in the input — generators
+                 * that don't appear in any denominator can't collapse
+                 * anything. Picking the most-used α gives the same
+                 * result as the linear loop in most cases at
+                 * ~1/N the cost. If the top pick doesn't beat the
+                 * input, fall through (the linear loop's other tries
+                 * would have failed the leaf-count gate anyway). */
+                {
+                    bool is_sum = (arg->type == EXPR_FUNCTION
+                                   && arg->data.function.head
+                                   && arg->data.function.head->type == EXPR_SYMBOL
+                                   && arg->data.function.head->data.symbol == SYM_Plus);
+                    int idx = pick_best_tower_generator(arg, auto_tower);
+                    Expr* best = NULL;
+                    if (idx >= 0) {
+                        const Expr* gen = auto_tower->alpha_renders[idx];
+                        Expr* cand = is_sum
+                            ? together_recursive_ext(arg, gen)
+                            : cancel_with_extension(arg, gen);
+                        if (cand) {
+                            Expr* tg = expr_new_function(expr_new_symbol("Together"),
+                                (Expr*[]){cand}, 1);
+                            Expr* folded = evaluate(tg);
+                            expr_free(tg);
+                            if (folded) {
+                                int64_t in_size = leaf_count_internal((Expr*)arg, true);
+                                int64_t lc = leaf_count_internal(folded, true);
+                                if (lc < in_size) {
+                                    best = folded;
+                                } else {
+                                    expr_free(folded);
+                                }
+                            }
+                        }
+                    }
+                    qa_tower_free(auto_tower);
+                    auto_tower = NULL;
+                    if (best) return best;
+                }
             }
         }
     }
@@ -940,7 +1016,7 @@ static Expr* together_recursive(Expr* e) {
     return cancel_recursive(e);
 }
 
-Expr* builtin_together(Expr* res) {
+static Expr* builtin_together_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
     /* Strip a trailing Extension -> α option, if any.  `Extension ->
@@ -955,7 +1031,12 @@ Expr* builtin_together(Expr* res) {
 
     Expr* alpha_auto = NULL;
     QATower* auto_tower = NULL;
-    if (!alpha && auto_flag) {
+    /* Layer-0 input-level prefilter: see builtin_cancel for the
+     * rationale. extension_autodetect's primitive-element construction
+     * is the bulk of the cost for nested-radical inputs, and the tower
+     * path is going to be rejected by qa_tower_has_nested_radical
+     * downstream anyway. Skip both. */
+    if (!alpha && auto_flag && !expr_has_nested_radical_radicand(arg)) {
         auto_tower = extension_autodetect(arg);
         if (auto_tower && auto_tower->n == 1) {
             alpha_auto = expr_copy(auto_tower->alpha_renders[0]);
@@ -966,53 +1047,57 @@ Expr* builtin_together(Expr* res) {
              * For Together this gives "combine + cancel over Q(γ)" in
              * one shot — the function combines fractions internally
              * before lifting. */
-            Expr* tower_result = qa_cancel_with_tower(arg, auto_tower);
-            if (tower_result) {
-                qa_tower_free(auto_tower);
-                return tower_result;
-            }
-            /* Tower path declined (typically: Step 1 substitution into
-             * γ-polynomial form blew up the leaf count past the safety
-             * gate).  Before falling back to the generic no-extension
-             * path — which can't see the algebraic relations between
-             * generators and produces a combined-but-not-cancelled
-             * fraction — try each tower generator in turn as a single-α
-             * extension.  together_recursive_ext threads that one α
-             * through PolynomialLCM/Quotient; the remaining generators
-             * pass through as opaque coefficients, but the resulting
-             * single-α cancellation is often enough to collapse the
-             * fraction.  A final no-extension Together fold-up combines
-             * like-coefficient terms that the single-α path leaves
-             * separated. */
-            {
-                int64_t in_size = leaf_count_internal((Expr*)arg, true);
-                Expr* best = NULL;
-                int64_t best_size = -1;
-                for (int i = 0; i < auto_tower->n; i++) {
-                    const Expr* gen = auto_tower->alpha_renders[i];
-                    if (!gen) continue;
-                    Expr* cand = together_recursive_ext(arg, gen);
-                    if (!cand) continue;
-                    /* Final no-extension fold-up: combine like coefficient
-                     * terms that the single-α path treats as polynomial-
-                     * variable coefficients. */
-                    Expr* tg = expr_new_function(expr_new_symbol("Together"),
-                        (Expr*[]){cand}, 1);
-                    Expr* folded = evaluate(tg);
-                    expr_free(tg);
-                    if (!folded) continue;
-                    int64_t lc = leaf_count_internal(folded, true);
-                    if (lc < in_size && (best_size < 0 || lc < best_size)) {
-                        if (best) expr_free(best);
-                        best = folded;
-                        best_size = lc;
-                    } else {
-                        expr_free(folded);
-                    }
-                }
+            if (qa_tower_has_nested_radical(auto_tower)) {
+                /* Layer-0 prefilter: nested-radical α_i (originating from
+                 * Power[Plus[...], p/q] in the input) cannot be reduced
+                 * by the γ-substitution path — Step 1 leaves the
+                 * Power[non_int_base, p/q] structurally opaque to
+                 * Step 4's no-extension Together. Tower call would
+                 * inflate, hit the leaf-count gate, and return NULL.
+                 * The N×fallback hits the same wall. Drop to the
+                 * no-extension path; surrounding Simplify handles
+                 * denesting via simp_denest_sqrt. */
                 qa_tower_free(auto_tower);
                 auto_tower = NULL;
-                if (best) return best;
+            } else {
+                Expr* tower_result = qa_cancel_with_tower(arg, auto_tower);
+                if (tower_result) {
+                    qa_tower_free(auto_tower);
+                    return tower_result;
+                }
+                /* Layer-3 guided fallback (see builtin_cancel for full
+                 * rationale). Pick the generator that occurs most often
+                 * in the input — that's the α whose single-α Together
+                 * is most likely to collapse fractions. The remaining
+                 * generators pass through as opaque coefficients in
+                 * together_recursive_ext, and the final no-extension
+                 * Together fold-up combines like-coefficient terms. */
+                {
+                    int idx = pick_best_tower_generator(arg, auto_tower);
+                    Expr* best = NULL;
+                    if (idx >= 0) {
+                        const Expr* gen = auto_tower->alpha_renders[idx];
+                        Expr* cand = together_recursive_ext(arg, gen);
+                        if (cand) {
+                            Expr* tg = expr_new_function(expr_new_symbol("Together"),
+                                (Expr*[]){cand}, 1);
+                            Expr* folded = evaluate(tg);
+                            expr_free(tg);
+                            if (folded) {
+                                int64_t in_size = leaf_count_internal((Expr*)arg, true);
+                                int64_t lc = leaf_count_internal(folded, true);
+                                if (lc < in_size) {
+                                    best = folded;
+                                } else {
+                                    expr_free(folded);
+                                }
+                            }
+                        }
+                    }
+                    qa_tower_free(auto_tower);
+                    auto_tower = NULL;
+                    if (best) return best;
+                }
             }
         }
     }
@@ -1057,6 +1142,38 @@ Expr* builtin_together(Expr* res) {
     }
 
     return together_recursive(arg);
+}
+
+/* Layer-5 memoisation wrapper for Cancel.  builtin_simplify pushes a
+ * FactorMemo for the duration of one Simplify call (see
+ * simp.c:builtin_simplify), and the per-subnode descent in simp_search
+ * re-asks the same `Cancel[arg, options...]` repeatedly across rounds.
+ * Keying on the full `res` expression (which already encodes the args
+ * and any Extension -> α option) hits cleanly when the same call is
+ * issued from different code paths in the search.  Skip the cache
+ * when no Simplify is active (factor_memo_active() returns NULL) so
+ * standalone Cancel calls see no overhead. */
+Expr* builtin_cancel(Expr* res) {
+    FactorMemo* memo = factor_memo_active();
+    if (memo) {
+        const Expr* hit = factor_memo_lookup(memo, res);
+        if (hit) return expr_copy((Expr*)hit);
+    }
+    Expr* out = builtin_cancel_compute(res);
+    if (out && memo) factor_memo_store(memo, res, out);
+    return out;
+}
+
+/* Layer-5 memoisation wrapper for Together (see builtin_cancel above). */
+Expr* builtin_together(Expr* res) {
+    FactorMemo* memo = factor_memo_active();
+    if (memo) {
+        const Expr* hit = factor_memo_lookup(memo, res);
+        if (hit) return expr_copy((Expr*)hit);
+    }
+    Expr* out = builtin_together_compute(res);
+    if (out && memo) factor_memo_store(memo, res, out);
+    return out;
 }
 
 void rat_init(void) {

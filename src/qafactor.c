@@ -1710,6 +1710,28 @@ static Expr* canonicalise_nested_radicands(const Expr* e,
     return out;
 }
 
+/* Count Power[c, p/q] (q ≥ 2) occurrences in `e` — both atomic Sqrt[c]
+ * and Power[c, p/q] forms. Used by the Layer-1 pre-substitution gate
+ * in qa_cancel_with_tower to predict the post-sub leaf-count blow-up. */
+static void count_radical_power_occurrences(const Expr* e, int* count) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
+            (*count)++;
+        } else if (h == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q) && q >= 2) {
+                (*count)++;
+            }
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        count_radical_power_occurrences(e->data.function.args[i], count);
+    }
+}
+
 Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
     if (!arg || !t || t->n < 1) return NULL;
 
@@ -1750,6 +1772,38 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
             if (canonicalised) {
                 expr_free(arg_internal);
                 arg_internal = canonicalised;
+            }
+        }
+    }
+
+    /* Layer-1 pre-substitution gate: the substitution loop below replaces
+     * each `Power[c, p/q]` occurrence with a γ-polynomial of degree
+     * `deg(γ) - 1`. With k radical occurrences and γ of degree d, the
+     * blow-up is at minimum k·(d-1) extra leaves (each polynomial term
+     * is `coef · γ^j`, ≥ 2 leaves).  A strict lower bound on lc_out is
+     * `lc_in + k·(d-1)·2`.  When even that bound trips the post-sub
+     * gate, the substitution + Together + qaupoly-lift + rejection
+     * cycle is guaranteed wasted work (~30-100 ms for high-degree γ).
+     * Bail before paying for it.
+     *
+     * Conservative direction: predictor never returns false-positive
+     * (never bails when post-sub gate would have accepted).  Cases
+     * where the post-sub form happens to be smaller than the lower
+     * bound (rare cancellations during substitution) still get a
+     * chance through the existing post-sub gate. */
+    {
+        size_t deg_gamma = (t->ext && t->ext->deg > 0) ? t->ext->deg : 1;
+        if (deg_gamma >= 2) {
+            int radical_occ = 0;
+            count_radical_power_occurrences(arg_internal, &radical_occ);
+            int64_t lc_in_pred = leaf_count_internal((Expr*)arg, true);
+            int64_t lc_pred = lc_in_pred
+                            + (int64_t)radical_occ * (int64_t)(deg_gamma - 1) * 2;
+            if (lc_in_pred > 0
+                && ((lc_pred > 100 && lc_pred > 2 * lc_in_pred)
+                    || lc_pred > 200)) {
+                expr_free(arg_internal);
+                return NULL;
             }
         }
     }
@@ -2062,6 +2116,149 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         }
     }
     return result;
+}
+
+bool qa_tower_has_nested_radical(const QATower* t) {
+    if (!t) return false;
+    for (int i = 0; i < t->n; i++) {
+        const Expr* a = t->alpha_renders[i];
+        if (!a || a->type != EXPR_FUNCTION) continue;
+        if (!a->data.function.head ||
+            a->data.function.head->type != EXPR_SYMBOL) continue;
+        const char* h = a->data.function.head->data.symbol;
+        const Expr* base = NULL;
+        if (h == SYM_Sqrt && a->data.function.arg_count == 1) {
+            base = a->data.function.args[0];
+        } else if (h == SYM_Power && a->data.function.arg_count == 2) {
+            base = a->data.function.args[0];
+        }
+        if (base && base->type != EXPR_INTEGER
+                 && base->type != EXPR_BIGINT) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Lightweight free-polynomial-variable detector: returns true on first
+ * non-numeric, non-radical leaf. Mirrors collect_variables's traversal
+ * rules (Plus/Times/List/integer-Power recurse into args; everything
+ * else is a "variable" if it isn't a number or radical). Skips
+ * allocation by short-circuiting on first find. */
+static bool expr_has_free_var(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT ||
+        e->type == EXPR_REAL || e->type == EXPR_STRING) return false;
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol;
+        if (!s) return false;
+        /* Mathematical constants are not free variables. */
+        if (s == SYM_Pi || s == SYM_E || s == SYM_I ||
+            s == SYM_EulerGamma || s == SYM_Catalan ||
+            s == SYM_Degree || s == SYM_GoldenRatio ||
+            s == SYM_Infinity || s == SYM_True || s == SYM_False) return false;
+        return true;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        /* Sqrt[c] / Power[c, p/q] with integer-only base is a "radical
+         * constant", not a variable. Walk into the base to confirm. */
+        if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
+            return expr_has_free_var(e->data.function.args[0]);
+        }
+        if (h == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q) && q >= 2) {
+                return expr_has_free_var(e->data.function.args[0]);
+            }
+            /* Integer-exponent Power: recurse into base only (matches
+             * collect_variables). */
+            if (e->data.function.args[1]->type == EXPR_INTEGER) {
+                return expr_has_free_var(e->data.function.args[0]);
+            }
+        }
+        if (h == SYM_Plus || h == SYM_Times || h == SYM_List ||
+            h == SYM_Rational || h == SYM_Complex) {
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                if (expr_has_free_var(e->data.function.args[i])) return true;
+            }
+            return false;
+        }
+    }
+    /* Other function heads (Sin, Log, user-defined, ...): treat as
+     * opaque variable atoms — they participate in polynomial structure
+     * as opaque generators. */
+    return true;
+}
+
+/* Lightweight radical detector: any Sqrt[*] or Power[*, p/q] (q ≥ 2). */
+static bool expr_contains_any_radical(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        if (h == SYM_Sqrt && e->data.function.arg_count == 1) return true;
+        if (h == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q) && q >= 2)
+                return true;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (expr_contains_any_radical(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+static bool expr_has_nested_radical_radicand_walk(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        const Expr* base = NULL;
+        bool is_radical_node = false;
+        if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
+            base = e->data.function.args[0];
+            is_radical_node = true;
+        } else if (h == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q) && q >= 2) {
+                base = e->data.function.args[0];
+                is_radical_node = true;
+            }
+        }
+        if (is_radical_node && base
+            && base->type != EXPR_INTEGER
+            && base->type != EXPR_BIGINT
+            && expr_contains_any_radical(base)) {
+            return true;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (expr_has_nested_radical_radicand_walk(e->data.function.args[i]))
+            return true;
+    }
+    return false;
+}
+
+bool expr_has_nested_radical_radicand(const Expr* e) {
+    /* Only nested-radical inputs with NO free polynomial variable can be
+     * safely bailed.  With free vars present (the canonical case is
+     * `D[Integrate[a x/(x^3+2), x], x]` with `a`, `x`), the tower path
+     * runs qaupoly_gcd over Q(γ)[x] and is the only thing that recovers
+     * a closed form — even when the substituted form transiently
+     * inflates, the GCD-based cancellation collapses it back.
+     *
+     * For variable-free nested-radical inputs (the user's
+     * `1/(5+2 Sqrt[6])^(3/2) + (Sqrt[2]-Sqrt[3])^3` shape) qaupoly_gcd
+     * has nothing to bite on — both num and den are degree-0 in the
+     * dummy variable — so the tower path's substitution + Together
+     * + lift + GCD-on-constants pipeline does no useful work, just
+     * costs ~150 ms before the leaf-count gate rejects. */
+    if (!expr_has_nested_radical_radicand_walk(e)) return false;
+    return !expr_has_free_var(e);
 }
 
 /* ============================== Phase G8 ============================== */
