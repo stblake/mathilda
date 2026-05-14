@@ -37,12 +37,22 @@ sed -i.bak 's/le64toh/ /g' torsions.c
 
 MY_CFLAGS="-O2"
 
+# Force ECM's configure to skip its optional libprimesieve detection.
+# configure.ac runs an unconditional AC_CHECK_LIB(primesieve,primesieve_init);
+# on hosts where libprimesieve happens to be installed, libecm.a ends up
+# with unresolved primesieve_* references that the picocas top-level link
+# line doesn't satisfy (no -lprimesieve there), and the final link of
+# picocas fails inside getprime_r.o.  ECM has its own internal prime
+# iterator, so we pin the autoconf cache var to "no" to make the bundled
+# build deterministic across hosts regardless of what's installed.
+PRIMESIEVE_OFF="ac_cv_lib_primesieve_primesieve_init=no"
+
 if [ -d /opt/homebrew/include ]; then
-    ./configure --with-gmp=/opt/homebrew CFLAGS="$MY_CFLAGS -I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib"
+    env $PRIMESIEVE_OFF ./configure --with-gmp=/opt/homebrew CFLAGS="$MY_CFLAGS -I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib"
 elif [ -d /usr/local/include ]; then
-    ./configure --with-gmp=/usr/local CFLAGS="$MY_CFLAGS -I/usr/local/include" LDFLAGS="-L/usr/local/lib"
+    env $PRIMESIEVE_OFF ./configure --with-gmp=/usr/local CFLAGS="$MY_CFLAGS -I/usr/local/include" LDFLAGS="-L/usr/local/lib"
 else
-    ./configure CFLAGS="$MY_CFLAGS"
+    env $PRIMESIEVE_OFF ./configure CFLAGS="$MY_CFLAGS"
 fi
 
 make -j4
