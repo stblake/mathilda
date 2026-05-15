@@ -105,14 +105,35 @@ const char* symtab_get_docstring(const char* symbol_name) {
  * ============================================================ */
 
 /* Strip transparent pattern wrappers down to the inner pattern.
- * HoldPattern / Verbatim are transparent for matching, so the dispatch
- * key should look through them. */
+ *
+ * - HoldPattern / Verbatim are transparent for matching, so the
+ *   dispatch key should look through them.
+ * - Condition[p, c] and PatternTest[p, t] are guards that gate the
+ *   match without altering its STRUCTURAL shape — the dispatch
+ *   filter wants the arity and first-arg-head of the inner pattern
+ *   `p`, not of the Condition/PatternTest wrapper itself.  The
+ *   matcher (match.c:278-313 for Condition, 394-417 for PatternTest)
+ *   evaluates the guard post-match; we just need dispatch not to
+ *   pre-filter the rule away on a confused arity/head key.
+ *
+ * Stripping Condition here was the missing piece that prevented
+ * every `f[...] /; cond := rhs` DownValue from firing (pre-fix the
+ * rule's dispatch_arity was the Condition's arg count and its
+ * first_arg_head_canon was the inner pattern's HEAD symbol — the
+ * filter then routinely disagreed with an input's actual first-arg
+ * head and skipped the rule entirely).  See tests/test_condition_
+ * downvalue.c for the pinning suite. */
 static const Expr* strip_pattern_wrappers(const Expr* p) {
     while (p && p->type == EXPR_FUNCTION && p->data.function.head &&
            p->data.function.head->type == EXPR_SYMBOL &&
            p->data.function.arg_count >= 1) {
         const char* h = p->data.function.head->data.symbol;
         if (h == SYM_HoldPattern || h == SYM_Verbatim) {
+            p = p->data.function.args[0];
+            continue;
+        }
+        if ((h == SYM_Condition || h == SYM_PatternTest) &&
+            p->data.function.arg_count == 2) {
             p = p->data.function.args[0];
             continue;
         }

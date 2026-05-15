@@ -181,6 +181,47 @@ typedef struct ParentMatch {
 static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch* parent);
 static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_t n_pats, MatchEnv* env, Expr* condition, Expr* pat_head, size_t total_pats, ParentMatch* parent);
 
+/* Evaluate a Condition guard with the current bindings substituted.
+ *
+ * Mathematica parses nested `/;` right-associatively, so
+ *   f[a, b] /; c1 /; c2
+ * becomes
+ *   Condition[f[a, b], Condition[c1, c2]]
+ * with the guard being `Condition[c1, c2]`.  Picocas's `Condition`
+ * head has no evaluator rule that collapses `Condition[True, True]`
+ * to `True` (it's primarily a pattern wrapper), so a naive "evaluate
+ * and check `result == True`" gives False here.  We treat any chain
+ * of Condition[...] guards as conjunction: every leaf must evaluate
+ * to True.  Equivalent to substituting `And` for `Condition` at the
+ * guard level, without changing the global Condition semantics. */
+static bool eval_guard_true(Expr* guard, MatchEnv* env) {
+    Expr* expanded = replace_bindings(guard, env);
+    Expr* result = evaluate(expanded);
+    expr_free(expanded);
+    if (!result) return false;
+    /* Peel any number of nested Condition wrappers, ANDing the leaves. */
+    bool ok = true;
+    Expr* stack[64];
+    int top = 0;
+    stack[top++] = result;
+    while (top > 0 && ok) {
+        Expr* cur = stack[--top];
+        if (cur->type == EXPR_SYMBOL && cur->data.symbol == SYM_True) continue;
+        if (cur->type == EXPR_FUNCTION && cur->data.function.head
+            && cur->data.function.head->type == EXPR_SYMBOL
+            && cur->data.function.head->data.symbol == SYM_Condition
+            && cur->data.function.arg_count == 2
+            && top + 2 <= (int)(sizeof(stack)/sizeof(stack[0]))) {
+            stack[top++] = cur->data.function.args[0];
+            stack[top++] = cur->data.function.args[1];
+            continue;
+        }
+        ok = false;
+    }
+    expr_free(result);
+    return ok;
+}
+
 #include "part.h" // for expr_head
 
 /* Helper to get head without allocating */
@@ -279,11 +320,32 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
     if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
         pattern->data.function.head->data.symbol == SYM_Condition) {
         if (pattern->data.function.arg_count != 2) return false;
-        
+
         Expr* inner_pat = pattern->data.function.args[0];
         Expr* cond = pattern->data.function.args[1];
-        
-        if (inner_pat->type == EXPR_FUNCTION && expr->type == EXPR_FUNCTION) {
+
+        /* The "structured" branch threads cond through match_args_internal
+         * so the guard runs once all bindings are established. It only
+         * applies when inner_pat is a literal-headed function call (so we
+         * can route argument matching). When inner_pat is itself a
+         * pattern wrapper (nested Condition, PatternTest, HoldPattern,
+         * Verbatim) we MUST fall through to the simpler recursive path
+         * below, which re-enters this handler for the inner wrapper.
+         * Without this gate, e.g. `f[a_,b_] /; c1 /; c2` would try to
+         * structurally match input's head against `Condition`, which is
+         * the wrong dispatch. */
+        bool inner_is_wrapper = false;
+        if (inner_pat->type == EXPR_FUNCTION && inner_pat->data.function.head
+            && inner_pat->data.function.head->type == EXPR_SYMBOL) {
+            const char* ih = inner_pat->data.function.head->data.symbol;
+            if (ih == SYM_Condition || ih == SYM_PatternTest
+                || ih == SYM_HoldPattern || ih == SYM_Verbatim) {
+                inner_is_wrapper = true;
+            }
+        }
+
+        if (!inner_is_wrapper
+            && inner_pat->type == EXPR_FUNCTION && expr->type == EXPR_FUNCTION) {
             size_t saved_env_count = env->count;
             if (!match_internal(expr->data.function.head, inner_pat->data.function.head, env, NULL)) {
                 env_rollback(env, saved_env_count);
@@ -300,12 +362,7 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
             env_rollback(env, saved_env_count);
             return false;
         }
-        Expr* expanded_test = replace_bindings(cond, env);
-        Expr* result = evaluate(expanded_test);
-        expr_free(expanded_test);
-        bool success = (result->type == EXPR_SYMBOL && result->data.symbol == SYM_True);
-        expr_free(result);
-        if (!success) {
+        if (!eval_guard_true(cond, env)) {
             env_rollback(env, saved_env_count);
             return false;
         }
@@ -487,16 +544,9 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     
     if (n_pats == 0) {
         if (n_exprs != 0) return false;
-        
-        if (condition) {
-            Expr* expanded_test = replace_bindings(condition, env);
-            Expr* result = evaluate(expanded_test);
-            expr_free(expanded_test);
-            bool success = (result->type == EXPR_SYMBOL && result->data.symbol == SYM_True);
-            expr_free(result);
-            if (!success) return false;
-        }
-        
+
+        if (condition && !eval_guard_true(condition, env)) return false;
+
         return call_parent(env, parent);
     }
 

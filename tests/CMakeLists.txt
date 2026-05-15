@@ -441,6 +441,14 @@ else()
     target_link_libraries(integrate_dispatch_tests gmp m)
 endif()
 
+add_executable(condition_downvalue_tests test_condition_downvalue.c ${COMMON_SRC})
+target_include_directories(condition_downvalue_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(condition_downvalue_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(condition_downvalue_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c ${COMMON_SRC})
 target_include_directories(print_tests PRIVATE ../src)
 
