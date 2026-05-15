@@ -723,6 +723,18 @@ else()
 endif()
 add_test(NAME intrischnorman_tests COMMAND intrischnorman_tests)
 
+# Wall-clock benchmark harness for Integrate`RischNorman.  Not a test
+# (no correctness asserts); built alongside the test suite so it is
+# easy to rebuild and run for profiling.
+add_executable(bench_intrischnorman bench_intrischnorman.c ${COMMON_SRC})
+target_include_directories(bench_intrischnorman PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(bench_intrischnorman gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(bench_intrischnorman build_ecm)
+else()
+    target_link_libraries(bench_intrischnorman gmp m)
+endif()
+
 # Comprehensive corpus runner for IntegrateRationalTests.m and
 # IntegrateRationalInlineCases.m.  Loads the .m file at runtime and
 # runs every {integrand, var, ...} entry through the rational

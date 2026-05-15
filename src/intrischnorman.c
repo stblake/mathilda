@@ -31,6 +31,7 @@
 #include "attr.h"
 #include "internal.h"
 #include "poly.h"
+#include "arithmetic.h"
 #include "sym_names.h"
 #include "sym_intern.h"
 
@@ -52,6 +53,136 @@
 #define PMINT_TRACE 0
 #endif
 #define PMTRACE(...) do { if (PMINT_TRACE) fprintf(stderr, "[pmint] " __VA_ARGS__); } while (0)
+
+/* ------------------------------------------------------------------ */
+/* Phase-level wall-clock profiling.                                    */
+/*                                                                      */
+/* Always-on time accumulation around the major stages of              */
+/* rischnorman_integrate.  When PMINT_PROFILE is set in the            */
+/* environment, an atexit handler dumps the cumulative per-phase       */
+/* breakdown to stderr.  clock_gettime(CLOCK_MONOTONIC) is ~30 ns      */
+/* on macOS / Linux so even ~16 phases per call adds <1 µs overhead    */
+/* — negligible against the ms–s-scale work being measured.            */
+/* ------------------------------------------------------------------ */
+
+#include <time.h>
+
+typedef enum {
+    PM_PH_CONVERT_TO_TAN = 0,
+    PM_PH_COLLECT_INDETS,
+    PM_PH_SUB_MAPS,
+    PM_PH_VECTOR_FIELD,
+    PM_PH_FFFRESH_SUBST,
+    PM_PH_SPLITFACTOR_Q,
+    PM_PH_TOGETHER_FF,
+    PM_PH_SPLITFACTOR_FF,
+    PM_PH_DARBOUX,
+    PM_PH_CDEN,
+    PM_PH_ENUM_MONOMS,
+    PM_PH_BUILD_CAND,
+    PM_PH_FF_DECOMPOSE,
+    PM_PH_MY_FACTORS,
+    PM_PH_TRY_INTEGRAL,
+    PM_PH_OUTPUT_CLEANUP,
+    /* Sub-phases of try_integral.  Their sum ≈ PM_PH_TRY_INTEGRAL. */
+    PM_PH_TI_APPLY_D,
+    PM_PH_TI_TERM_BUILD,
+    PM_PH_TI_SOLVE_CLIST,
+    PM_PH_TI_SOLVE_WALK,
+    PM_PH_TI_SOLVE_QFAST,        /* direct mpq Gauss-Jordan path */
+    PM_PH_TI_SOLVE_ROWRED,       /* symbolic-RowReduce slow path */
+    PM_PH_TI_SOLVE_DECODE,
+    PM_PH_TI_SUBSTITUTE,
+    PM_PH__COUNT
+} pm_phase_t;
+
+static const char* const pm_phase_names[PM_PH__COUNT] = {
+    "convert_to_tan",  "collect_indets",  "sub_maps",        "vector_field",
+    "fffresh_subst",   "splitFactor(q)",  "Together(ff)",    "splitFactor(ff)",
+    "Darboux",         "cden+totdeg",     "enum_monoms",     "build_candidate",
+    "ff_decompose",    "my_factors",      "try_integral",    "output_cleanup",
+    "  ti.apply_d",    "  ti.term_build", "  ti.solve_clist","  ti.solve_walk",
+    "  ti.solve_qfast","  ti.solve_rowred","  ti.solve_decode","  ti.substitute",
+};
+
+static double pm_phase_accum[PM_PH__COUNT];
+static int    pm_phase_calls[PM_PH__COUNT];
+
+static double pm_now(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+}
+
+static void pm_phase_dump_atexit(void) {
+    const char* env = getenv("PMINT_PROFILE");
+    if (!env || !env[0] || env[0] == '0') return;
+    /* Top-level total = sum of phases 0..OUTPUT_CLEANUP inclusive; the
+     * sub-phases (TI_*) are accounted for separately as breakdown of
+     * the TRY_INTEGRAL bucket. */
+    double top_total = 0.0;
+    for (int i = 0; i <= PM_PH_OUTPUT_CLEANUP; i++) top_total += pm_phase_accum[i];
+    double ti_total = pm_phase_accum[PM_PH_TRY_INTEGRAL];
+    if (top_total <= 0.0) return;
+    fprintf(stderr,
+        "\n[pmint-profile] cumulative phase distribution (%.4f s total)\n",
+        top_total);
+    fprintf(stderr,
+        "  %-22s  %10s  %6s  %s\n",
+        "phase", "time", "calls", "share");
+    for (int i = 0; i <= PM_PH_OUTPUT_CLEANUP; i++) {
+        double t = pm_phase_accum[i];
+        if (t > 0.0 || pm_phase_calls[i] > 0) {
+            fprintf(stderr,
+                "  %-22s  %8.4f s  %6d  %5.1f%%\n",
+                pm_phase_names[i], t, pm_phase_calls[i],
+                100.0 * t / top_total);
+        }
+    }
+    /* Sub-phase breakdown of try_integral.  Shares are against ti_total
+     * so the reader sees what is hot *within* try_integral. */
+    if (ti_total > 0.0) {
+        fprintf(stderr,
+            "\n  try_integral breakdown (%.4f s total, %% within try_integral):\n",
+            ti_total);
+        double subsum = 0.0;
+        for (int i = PM_PH_TI_APPLY_D; i < PM_PH__COUNT; i++) {
+            subsum += pm_phase_accum[i];
+        }
+        for (int i = PM_PH_TI_APPLY_D; i < PM_PH__COUNT; i++) {
+            double t = pm_phase_accum[i];
+            if (t > 0.0 || pm_phase_calls[i] > 0) {
+                fprintf(stderr,
+                    "  %-22s  %8.4f s  %6d  %5.1f%%\n",
+                    pm_phase_names[i], t, pm_phase_calls[i],
+                    100.0 * t / ti_total);
+            }
+        }
+        double uninstrumented = ti_total - subsum;
+        if (uninstrumented > 0.005) {
+            fprintf(stderr,
+                "  %-22s  %8.4f s  %6s  %5.1f%%\n",
+                "  ti.uninstrumented", uninstrumented, "—",
+                100.0 * uninstrumented / ti_total);
+        }
+    }
+}
+
+static void pm_phase_arm(void) {
+    static int armed = 0;
+    if (armed) return;
+    armed = 1;
+    atexit(pm_phase_dump_atexit);
+}
+
+/* Per-call-site timer.  `slot` is a short token that names the local
+ * `double` variable created at PM_PHB; PM_PHE re-references it and
+ * adds the elapsed time to the named phase accumulator.  Different
+ * call sites in the same scope must use different slot tokens. */
+#define PM_PHB(slot)         double _pm_##slot = pm_now()
+#define PM_PHE(slot, phase) \
+    do { pm_phase_accum[(phase)] += pm_now() - _pm_##slot; \
+         pm_phase_calls[(phase)]++; } while (0)
 
 /* ------------------------------------------------------------------ */
 /* Small utilities.                                                     */
@@ -1501,9 +1632,260 @@ static void coeff_cb(const int64_t* exp_vec, size_t nv,
     linear_builder_add_row((LinearBuilder*)user, coeff);
 }
 
+/* ------------------------------------------------------------------ */
+/* Direct mpq Gauss-Jordan fast path for solve_linear_undet.            */
+/*                                                                      */
+/* pmint's augmented matrix is built from CoefficientList of an         */
+/* expanded polynomial whose coefficients are linear in the unknowns    */
+/* (A_i, B_j) with rational scalar coefficients.  In the typical case   */
+/* every matrix entry is an Integer / BigInt / Rational[int, int].      */
+/*                                                                      */
+/* The slow path packs each entry as an Expr*, builds a List[List[]],   */
+/* and routes the elimination through picocas's symbolic RowReduce.     */
+/* Each scalar op there walks evaluate_step → builtin_times →           */
+/* multiply_numbers → bigint_normalize → 2 mallocs + 1 free.  Profiling */
+/* (tasks/profile_rischnorman.md) shows that path consuming ~71 % of   */
+/* try_integral_full.                                                   */
+/*                                                                      */
+/* The fast path:                                                        */
+/*   1. Pre-scan all entries via is_rational_like.  If any entry is     */
+/*      not a Q-rational (i.e. it carries a symbol / Complex /          */
+/*      MPFR / non-integer Rational components), bail and let the      */
+/*      caller fall through to the symbolic path.                       */
+/*   2. Copy entries into an mpq_t[nrows*ncols] matrix.  BigInt         */
+/*      numerators / denominators flow through unchanged — mpq_t is    */
+/*      bignum-native via the underlying mpz_t pair, so no precision   */
+/*      loss is possible.                                               */
+/*   3. Gauss-Jordan reduce in-place.  Pivot search scans across ALL   */
+/*      columns; a pivot landing in the RHS column (ncols-1) signals   */
+/*      infeasibility, matching the slow-path decoder semantics.       */
+/*   4. Emit the solution as the standard List[Rule[u_j, v_j], ...]   */
+/*      Expr — free unknowns are pinned to 0, per pmint convention.   */
+/*                                                                      */
+/* Output values are emitted as Integer when they fit int64 and        */
+/* BigInt (or Rational with bignum components) otherwise — picocas's   */
+/* canonical numeric form.                                              */
+/* ------------------------------------------------------------------ */
+
+/* Predicate: e is Integer, BigInt, or Rational[int_like, int_like]. */
+static bool entry_is_qrational(const Expr* e) {
+    return is_rational_like(e);
+}
+
+/* Fill out (already mpq_init'd) from a Q-rational Expr.  Caller must
+ * have verified entry_is_qrational(e). */
+static void entry_to_mpq(const Expr* e, mpq_t out) {
+    if (e->type == EXPR_INTEGER) {
+        mpz_set_si(mpq_numref(out), (long)e->data.integer);
+        mpz_set_ui(mpq_denref(out), 1);
+        return;
+    }
+    if (e->type == EXPR_BIGINT) {
+        mpz_set(mpq_numref(out), e->data.bigint);
+        mpz_set_ui(mpq_denref(out), 1);
+        return;
+    }
+    /* Rational[n, d] with integer-like components. */
+    mpz_t n, d;
+    expr_to_mpz(e->data.function.args[0], n);   /* mpz_init_set inside */
+    expr_to_mpz(e->data.function.args[1], d);
+    mpz_set(mpq_numref(out), n);
+    mpz_set(mpq_denref(out), d);
+    mpz_clear(n);
+    mpz_clear(d);
+    /* The input Rational[] is normally already canonical (picocas
+     * canonicalises Rational on construction), but Coefficient /
+     * Expand can leave un-reduced denominators in pathological cases.
+     * Canonicalise to be safe — cheap when already canonical. */
+    mpq_canonicalize(out);
+}
+
+/* Convert mpz_t to Integer (when it fits int64) or BigInt otherwise.
+ * Returns an owned Expr*.  The input is NOT modified. */
+static Expr* mpz_to_expr_int_or_bigint(const mpz_t z) {
+    if (mpz_fits_slong_p(z)) {
+        long v = mpz_get_si(z);
+        return expr_new_integer((int64_t)v);
+    }
+    return expr_new_bigint_from_mpz(z);
+}
+
+/* Convert mpq_t to canonical picocas numeric Expr:
+ *   denominator==1            → Integer or BigInt
+ *   denominator!=1            → Rational[num, den] with each component
+ *                               normalised to Integer/BigInt.
+ * Caller assumes v is canonical (mpq_canonicalize'd). */
+static Expr* mpq_to_expr_q(const mpq_t v) {
+    if (mpz_cmp_ui(mpq_denref(v), 1) == 0) {
+        return mpz_to_expr_int_or_bigint(mpq_numref(v));
+    }
+    Expr* num = mpz_to_expr_int_or_bigint(mpq_numref(v));
+    Expr* den = mpz_to_expr_int_or_bigint(mpq_denref(v));
+    return mk_binary(SYM_Rational, num, den);
+}
+
+/* Attempt the direct mpq Gauss-Jordan solver.
+ *
+ * Returns:
+ *   true  — the system was Q-rational; *out_solution_rules and
+ *           *out_status are populated as in solve_linear_undet.  The
+ *           caller is responsible for freeing lb->rows[] entries (the
+ *           fast path consumes them via copy, not move — entries
+ *           remain owned by lb).
+ *   false — at least one matrix entry was non-Q-rational; the caller
+ *           must fall through to the symbolic slow path.
+ *
+ * On failure (memory exhaustion mid-elimination) returns true with
+ * *out_status = -1 and a NULL rules pointer.  We treat allocation
+ * failure as infeasibility rather than fatal because the caller will
+ * still see the system as "no solution" and bubble up. */
+static bool try_solve_qfast(LinearBuilder* lb,
+                             Expr** unknowns, size_t nunknowns,
+                             Expr** out_solution_rules,
+                             int* out_status) {
+    size_t nrows = lb->nrows;
+    size_t ncols = lb->ncols;          /* = nunknowns + 1 */
+
+    /* 1. Pre-scan: any non-Q-rational entry forces fall-through. */
+    for (size_t i = 0; i < nrows; i++) {
+        for (size_t j = 0; j < ncols; j++) {
+            if (!entry_is_qrational(lb->rows[i][j])) return false;
+        }
+    }
+
+    /* 2. Allocate & populate the mpq matrix.  Flat layout for
+     * cache-friendlier row swaps via index swap rather than data move. */
+    size_t total = nrows * ncols;
+    mpq_t* M = (mpq_t*)malloc(sizeof(mpq_t) * (total ? total : 1));
+    if (!M) { *out_solution_rules = NULL; *out_status = -1; return true; }
+    for (size_t k = 0; k < total; k++) mpq_init(M[k]);
+    for (size_t i = 0; i < nrows; i++) {
+        for (size_t j = 0; j < ncols; j++) {
+            entry_to_mpq(lb->rows[i][j], M[i * ncols + j]);
+        }
+    }
+
+    /* Row-index indirection so swaps are O(1). */
+    size_t* rowidx = (size_t*)malloc(sizeof(size_t) * (nrows ? nrows : 1));
+    if (!rowidx) {
+        for (size_t k = 0; k < total; k++) mpq_clear(M[k]);
+        free(M);
+        *out_solution_rules = NULL; *out_status = -1; return true;
+    }
+    for (size_t i = 0; i < nrows; i++) rowidx[i] = i;
+
+#   define MAT(r,c) M[ rowidx[(r)] * ncols + (c) ]
+
+    /* 3. Gauss-Jordan.  pivot_for_col[c] = row index (in the reduced
+     * 0..r_done range) that pivots column c, or -1.  Pivot search
+     * scans all columns including the RHS column; a pivot landing
+     * there means the system is inconsistent. */
+    int64_t* pivot_for_col = (int64_t*)malloc(sizeof(int64_t) * ncols);
+    if (!pivot_for_col) {
+        free(rowidx);
+        for (size_t k = 0; k < total; k++) mpq_clear(M[k]);
+        free(M);
+        *out_solution_rules = NULL; *out_status = -1; return true;
+    }
+    for (size_t c = 0; c < ncols; c++) pivot_for_col[c] = -1;
+
+    mpq_t scratch, factor, inv;
+    mpq_init(scratch); mpq_init(factor); mpq_init(inv);
+
+    size_t r = 0;   /* next free reduced-form row */
+    for (size_t c = 0; c < ncols && r < nrows; c++) {
+        /* Find a row at index >= r with non-zero entry in column c. */
+        size_t pr = nrows;
+        for (size_t rr = r; rr < nrows; rr++) {
+            if (mpq_sgn(MAT(rr, c)) != 0) { pr = rr; break; }
+        }
+        if (pr == nrows) continue;     /* no pivot in this column */
+
+        if (pr != r) {                  /* row swap */
+            size_t tmp = rowidx[r]; rowidx[r] = rowidx[pr]; rowidx[pr] = tmp;
+        }
+
+        /* Normalise pivot row: divide all entries by the pivot. */
+        mpq_inv(inv, MAT(r, c));
+        for (size_t k = 0; k < ncols; k++) {
+            if (k == c) {
+                mpq_set_si(MAT(r, k), 1, 1);    /* pivot ↦ 1 exactly */
+                continue;
+            }
+            if (mpq_sgn(MAT(r, k)) == 0) continue;
+            mpq_mul(MAT(r, k), MAT(r, k), inv);
+        }
+
+        /* Eliminate column c in every other row. */
+        for (size_t rr = 0; rr < nrows; rr++) {
+            if (rr == r) continue;
+            if (mpq_sgn(MAT(rr, c)) == 0) continue;
+            mpq_set(factor, MAT(rr, c));
+            /* Row_rr -= factor * Row_r */
+            for (size_t k = 0; k < ncols; k++) {
+                if (k == c) {
+                    mpq_set_si(MAT(rr, k), 0, 1);
+                    continue;
+                }
+                if (mpq_sgn(MAT(r, k)) == 0) continue;
+                mpq_mul(scratch, factor, MAT(r, k));
+                mpq_sub(MAT(rr, k), MAT(rr, k), scratch);
+            }
+        }
+
+        pivot_for_col[c] = (int64_t)r;
+        r++;
+    }
+
+    mpq_clear(scratch); mpq_clear(factor); mpq_clear(inv);
+
+    /* 4. Feasibility check + emit solution. */
+    bool inconsistent = (pivot_for_col[ncols - 1] >= 0);
+
+    if (inconsistent) {
+        free(pivot_for_col); free(rowidx);
+        for (size_t k = 0; k < total; k++) mpq_clear(M[k]);
+        free(M);
+        *out_solution_rules = NULL;
+        *out_status = -1;
+        return true;
+    }
+
+    Expr** items = (Expr**)malloc(sizeof(Expr*) * (nunknowns ? nunknowns : 1));
+    bool any_free = false;
+    for (size_t j = 0; j < nunknowns; j++) {
+        Expr* val;
+        if (pivot_for_col[j] >= 0) {
+            size_t pr = (size_t)pivot_for_col[j];
+            val = mpq_to_expr_q(MAT(pr, ncols - 1));
+        } else {
+            val = mk_int(0);
+            any_free = true;
+        }
+        items[j] = mk_binary(SYM_Rule, expr_copy(unknowns[j]), val);
+    }
+    *out_solution_rules = expr_new_function(expr_new_symbol(SYM_List),
+                                              items, nunknowns);
+    free(items);
+    *out_status = any_free ? 1 : 0;
+
+#   undef MAT
+
+    free(pivot_for_col); free(rowidx);
+    for (size_t k = 0; k < total; k++) mpq_clear(M[k]);
+    free(M);
+    return true;
+}
+
 /* solve_linear_undet — extract the per-monomial coefficient rows of
  * equation_numer (a polynomial in vars, linear in unknowns), assemble
  * an augmented matrix [M | -b], call RowReduce, decode the solution.
+ *
+ * Q-rational fast path: when every matrix entry is an Integer /
+ * BigInt / Rational[int, int], the elimination is performed directly
+ * on mpq_t — bypassing the symbolic evaluator and the
+ * per-cell-multiply allocator churn that dominates the profile.  See
+ * try_solve_qfast above.
  *
  * Outputs:
  *   *out_solution_rules  = List[Rule[unknown_j, value_j], ...]   owned
@@ -1527,9 +1909,11 @@ static int solve_linear_undet(Expr* equation_numer,
         vars_list = expr_new_function(expr_new_symbol(SYM_List), items, nvars);
         free(items);
     }
+    PM_PHB(cl);
     Expr* eq_exp = eval_expand(equation_numer);
     Expr* clist = eval_and_free(mk_binary("CoefficientList",
                                            eq_exp, vars_list));
+    PM_PHE(cl, PM_PH_TI_SOLVE_CLIST);
 
     /* Walk the table, building linear rows. */
     LinearBuilder lb = {0};
@@ -1542,7 +1926,9 @@ static int solve_linear_undet(Expr* equation_numer,
     lb.nunknowns = nunknowns;
     lb.ok = true;
     int64_t* exp_vec = (int64_t*)calloc(nvars, sizeof(int64_t));
+    PM_PHB(wk);
     walk_coefficient_table(clist, 0, nvars, exp_vec, coeff_cb, &lb);
+    PM_PHE(wk, PM_PH_TI_SOLVE_WALK);
     free(exp_vec);
     expr_free(clist);
 
@@ -1569,6 +1955,22 @@ static int solve_linear_undet(Expr* equation_numer,
         return 0;
     }
 
+    /* Q-rational fast path.  Reads from lb.rows[] without consuming;
+     * frees the Expr* entries here so the slow-path branch below can
+     * still take ownership in the fall-through case. */
+    PM_PHB(qf);
+    bool qfast_ok = try_solve_qfast(&lb, unknowns, nunknowns,
+                                     out_solution_rules, out_status);
+    PM_PHE(qf, PM_PH_TI_SOLVE_QFAST);
+    if (qfast_ok) {
+        for (size_t i = 0; i < lb.nrows; i++) {
+            for (size_t j = 0; j < lb.ncols; j++) expr_free(lb.rows[i][j]);
+            free(lb.rows[i]);
+        }
+        free(lb.rows);
+        return 0;
+    }
+
     /* Build augmented matrix as List[List[...]]. */
     Expr** mat_rows = (Expr**)malloc(sizeof(Expr*) * lb.nrows);
     for (size_t i = 0; i < lb.nrows; i++) {
@@ -1585,7 +1987,9 @@ static int solve_linear_undet(Expr* equation_numer,
     free(mat_rows);
 
     /* Call RowReduce.  Result is also a nested List. */
+    PM_PHB(rr_t);
     Expr* rr = eval_and_free(mk_unary("RowReduce", matrix));
+    PM_PHE(rr_t, PM_PH_TI_SOLVE_ROWRED);
     if (!rr || rr->type != EXPR_FUNCTION
         || rr->data.function.head->type != EXPR_SYMBOL
         || rr->data.function.head->data.symbol != SYM_List) {
@@ -1593,6 +1997,7 @@ static int solve_linear_undet(Expr* equation_numer,
         return 1;
     }
 
+    PM_PHB(dc);
     /* Decode RREF.  Each row: walk for first non-zero entry (the pivot
      * column).  If pivot column < nunknowns: that unknown == rhs
      * (assuming all other entries in row × free vars = 0; free vars
@@ -1639,6 +2044,7 @@ static int solve_linear_undet(Expr* equation_numer,
         free(sol_vals); free(pivoted);
         expr_free(rr);
         *out_status = -1;
+        PM_PHE(dc, PM_PH_TI_SOLVE_DECODE);
         return 0;
     }
 
@@ -1656,6 +2062,7 @@ static int solve_linear_undet(Expr* equation_numer,
     free(items); free(sol_vals); free(pivoted);
     expr_free(rr);
     *out_status = any_free ? 1 : 0;
+    PM_PHE(dc, PM_PH_TI_SOLVE_DECODE);
     return 0;
 }
 
@@ -1919,10 +2326,11 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
      *       - ff_denom * cden^2 * Σ_j B_j * apply_d(g_j) * Π_{k≠j}(g_k)
      *
      * setting E ≡ 0 gives the linear system in {A_i, B_j}. */
+    PM_PHB(ad);
     Expr* d_num  = apply_d(cand_num, vars, l, nv);
-    if (!d_num) { goto err; }
+    if (!d_num) { PM_PHE(ad, PM_PH_TI_APPLY_D); goto err; }
     Expr* d_cden = apply_d(cden, vars, l, nv);
-    if (!d_cden) { expr_free(d_num); goto err; }
+    if (!d_cden) { PM_PHE(ad, PM_PH_TI_APPLY_D); expr_free(d_num); goto err; }
 
     /* d_logs[j] = apply_d(g_j). */
     Expr** d_logs = (Expr**)calloc(nlog ? nlog : 1, sizeof(Expr*));
@@ -1932,10 +2340,13 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
             for (size_t k = 0; k < j; k++) expr_free(d_logs[k]);
             free(d_logs);
             expr_free(d_num); expr_free(d_cden);
+            PM_PHE(ad, PM_PH_TI_APPLY_D);
             goto err;
         }
     }
+    PM_PHE(ad, PM_PH_TI_APPLY_D);
 
+    PM_PHB(tb);
     /* prod_g = Π g_j. */
     Expr* prod_g = mk_int(1);
     for (size_t j = 0; j < nlog; j++) {
@@ -1985,6 +2396,7 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
     expr_free(prod_g); expr_free(cden_sq);
     for (size_t j = 0; j < nlog; j++) expr_free(d_logs[j]);
     free(d_logs);
+    PM_PHE(tb, PM_PH_TI_TERM_BUILD);
 
     Expr* sol = NULL;
     int status = -1;
@@ -2000,6 +2412,7 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
 
     /* Build cand = cand_num/cden + Σ B_j Log[g_j], substitute solution,
      * then substitute fresh vars back to atoms. */
+    PM_PHB(su);
     Expr* log_sum = mk_int(0);
     for (size_t j = 0; j < nlog; j++) {
         Expr* logterm = mk_times2(expr_copy(B_unknowns[j]),
@@ -2015,6 +2428,7 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
     Expr* lout_rules = pm_sub_map_to_rule_list(lout);
     Expr* result = eval_replace_all(cand_solved, lout_rules);
     expr_free(cand_solved);
+    PM_PHE(su, PM_PH_TI_SUBSTITUTE);
 
     *out_result = result;
     goto cleanup;
@@ -2051,6 +2465,7 @@ static int64_t total_degree(Expr* p, Expr** vars, size_t n) {
 
 static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     PMTRACE("entry\n");
+    pm_phase_arm();
     /* Phase 4 pipeline (no log candidates yet): */
     /*   1. convert_to_tan(f, x)                                     */
     /*   2. collect_indets_closed                                    */
@@ -2063,12 +2478,17 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     /*   8. build_candidate                                          */
     /*   9. try_integral                                             */
 
+    PM_PHB(ctt);
     Expr* ff_atoms = convert_to_tan(f, x);
+    PM_PHE(ctt, PM_PH_CONVERT_TO_TAN);
     if (!ff_atoms) return NULL;
     PMTRACE("after convert_to_tan, n_atoms=?\n");
 
     Expr** si = NULL; size_t n = 0;
-    if (collect_indets_closed(ff_atoms, x, &si, &n) != 0 || n == 0) {
+    PM_PHB(ci);
+    int ci_err = collect_indets_closed(ff_atoms, x, &si, &n);
+    PM_PHE(ci, PM_PH_COLLECT_INDETS);
+    if (ci_err != 0 || n == 0) {
         expr_free(ff_atoms);
         for (size_t i = 0; i < n; i++) expr_free(si[i]);
         free(si);
@@ -2077,7 +2497,10 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
 
     PMSubMap lin, lout;
     Expr** vars = NULL;
-    if (build_substitution_maps(si, n, &lin, &lout, &vars, 1) != 0) {
+    PM_PHB(sm);
+    int sm_err = build_substitution_maps(si, n, &lin, &lout, &vars, 1);
+    PM_PHE(sm, PM_PH_SUB_MAPS);
+    if (sm_err != 0) {
         for (size_t i = 0; i < n; i++) expr_free(si[i]);
         free(si);
         expr_free(ff_atoms);
@@ -2085,7 +2508,10 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     }
 
     Expr** lvec = NULL; Expr* q = NULL;
-    if (build_vector_field(si, n, &lin, x, &lvec, &q) != 0) {
+    PM_PHB(vf);
+    int vf_err = build_vector_field(si, n, &lin, x, &lvec, &q);
+    PM_PHE(vf, PM_PH_VECTOR_FIELD);
+    if (vf_err != 0) {
         for (size_t i = 0; i < n; i++) expr_free(si[i]);
         free(si);
         pm_sub_map_free(&lin); pm_sub_map_free(&lout);
@@ -2096,14 +2522,19 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     }
 
     /* Substitute ff_atoms to fresh-var form. */
+    PM_PHB(fs);
     Expr* lin_rules = pm_sub_map_to_rule_list(&lin);
     Expr* ff_fresh = eval_expand(eval_replace_all(ff_atoms, lin_rules));
     expr_free(ff_atoms);
+    PM_PHE(fs, PM_PH_FFFRESH_SUBST);
 
     PMTRACE("about to splitFactor(q)\n");
     /* splitFactor(q, dx). */
     Expr* splq_s = NULL, *splq_h = NULL;
-    if (split_factor(q, vars, lvec, n, &splq_s, &splq_h) != 0) {
+    PM_PHB(sfq);
+    int sfq_err = split_factor(q, vars, lvec, n, &splq_s, &splq_h);
+    PM_PHE(sfq, PM_PH_SPLITFACTOR_Q);
+    if (sfq_err != 0) {
         expr_free(ff_fresh); expr_free(q);
         for (size_t i = 0; i < n; i++) { expr_free(si[i]); expr_free(vars[i]); expr_free(lvec[i]); }
         free(si); free(vars); free(lvec);
@@ -2113,14 +2544,19 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
 
     PMTRACE("after splitFactor(q)\n");
     /* ff = Together[f_fresh], df = Denominator. */
+    PM_PHB(tg);
     Expr* ff_together = eval_together(ff_fresh);
     Expr* ff_numer = eval_numer(ff_together);
     Expr* ff_denom = eval_denom(ff_together);
     expr_free(ff_together);
+    PM_PHE(tg, PM_PH_TOGETHER_FF);
 
     /* splitFactor(df, dx). */
     Expr* spl_s = NULL, *spl_h = NULL;
-    if (split_factor(ff_denom, vars, lvec, n, &spl_s, &spl_h) != 0) {
+    PM_PHB(sff);
+    int sff_err = split_factor(ff_denom, vars, lvec, n, &spl_s, &spl_h);
+    PM_PHE(sff, PM_PH_SPLITFACTOR_FF);
+    if (sff_err != 0) {
         expr_free(ff_fresh); expr_free(ff_numer); expr_free(ff_denom);
         expr_free(splq_s); expr_free(splq_h);
         expr_free(q);
@@ -2135,9 +2571,12 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     Expr** darboux_polys = NULL;
     bool* darboux_flags = NULL;
     size_t n_darboux = 0;
+    PM_PHB(db);
     get_special_all(si, vars, n, &darboux_polys, &darboux_flags, &n_darboux);
+    PM_PHE(db, PM_PH_DARBOUX);
 
     /* s_part = splq_s * (product of integral-flagged Darboux). */
+    PM_PHB(cd);
     Expr* s_part = expr_copy(splq_s);
     for (size_t i = 0; i < n_darboux; i++) {
         if (!darboux_flags[i]) continue;
@@ -2163,6 +2602,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     int64_t dg = 1 + deg_splq_s + (deg_num > deg_den ? deg_num : deg_den);
     if (dg < 0) dg = 0;
     expr_free(ff_numer); expr_free(ff_denom);
+    PM_PHE(cd, PM_PH_CDEN);
 
     /* Keep splq_s, spl_s, spl_h around for the candlog factor lists in
      * the K=0/K=I retry loop below — they get factored over Q (then
@@ -2174,8 +2614,10 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
 
     /* Enumerate monomials. */
     Expr** monoms = NULL; size_t nmon = 0;
-    if (enumerate_monomials(vars, n, (int)dg, &monoms, &nmon) != 0
-        || nmon == 0) {
+    PM_PHB(em);
+    int em_err = enumerate_monomials(vars, n, (int)dg, &monoms, &nmon);
+    PM_PHE(em, PM_PH_ENUM_MONOMS);
+    if (em_err != 0 || nmon == 0) {
         expr_free(ff_fresh); expr_free(cden); expr_free(q);
         for (size_t i = 0; i < n; i++) { expr_free(si[i]); expr_free(vars[i]); expr_free(lvec[i]); }
         free(si); free(vars); free(lvec);
@@ -2190,7 +2632,10 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     Expr* cand_num = NULL;
     const char** A_names = NULL; size_t nA = 0;
     Expr** unknowns_A = NULL;
-    if (build_candidate(monoms, nmon, &cand_num, &A_names, &nA, &unknowns_A) != 0) {
+    PM_PHB(bc);
+    int bc_err = build_candidate(monoms, nmon, &cand_num, &A_names, &nA, &unknowns_A);
+    PM_PHE(bc, PM_PH_BUILD_CAND);
+    if (bc_err != 0) {
         for (size_t i = 0; i < nmon; i++) expr_free(monoms[i]);
         free(monoms);
         expr_free(ff_fresh); expr_free(cden); expr_free(q);
@@ -2206,11 +2651,13 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
 
     /* Decompose ff_fresh = ff_n / ff_d so the equation can stay
      * polynomial (no Together inside try_integral). */
+    PM_PHB(fd);
     Expr* ff_t = eval_together(ff_fresh);
     Expr* ff_n = eval_numer(ff_t);
     Expr* ff_d = eval_denom(ff_t);
     expr_free(ff_t);
     expr_free(ff_fresh);
+    PM_PHE(fd, PM_PH_FF_DECOMPOSE);
 
     PMTRACE("about to try_integral_full\n");
     Expr* result = NULL;
@@ -2227,9 +2674,11 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
         Expr** facs_splq_s = NULL; size_t nf_splq_s = 0;
         Expr** facs_spl_s  = NULL; size_t nf_spl_s = 0;
         Expr** facs_spl_h  = NULL; size_t nf_spl_h = 0;
+        PM_PHB(mf);
         my_factors(splq_s_keep, over_Qi, vars, n, &facs_splq_s, &nf_splq_s);
         my_factors(spl_s_keep, over_Qi, vars, n, &facs_spl_s, &nf_spl_s);
         my_factors(spl_h_keep, over_Qi, vars, n, &facs_spl_h, &nf_spl_h);
+        PM_PHE(mf, PM_PH_MY_FACTORS);
 
         size_t total_candidates = nf_splq_s + nf_spl_s + nf_spl_h + n_darboux;
         candlogs = (Expr**)calloc(total_candidates ? total_candidates : 1,
@@ -2270,10 +2719,12 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
 
         PMTRACE("K_iteration=%d ncandlogs=%zu\n", K_iteration, ncandlogs);
 
+        PM_PHB(ti);
         int err = try_integral_full(ff_n, ff_d, cand_num, cden,
                                      unknowns_A, nA,
                                      candlogs, ncandlogs,
                                      vars, lvec, n, q, &lout, &result);
+        PM_PHE(ti, PM_PH_TRY_INTEGRAL);
 
         for (size_t i = 0; i < ncandlogs; i++) expr_free(candlogs[i]);
         free(candlogs);
@@ -2314,6 +2765,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     /* the top-level head is Plus.  Avoids the expensive Simplify  */
     /* pass that would be needed for fuller trig reduction. */
     {
+        PM_PHB(oc);
         Expr* rules_list = parse_expression(
             "{Tan[u_/2]^2 -> (1 - Cos[u])/(1 + Cos[u]),"
             " Tan[u_/2] -> Sin[u]/(1 + Cos[u]),"
@@ -2418,6 +2870,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
                 expr_free(combined);
             }
         }
+        PM_PHE(oc, PM_PH_OUTPUT_CLEANUP);
     }
 
     return result;
