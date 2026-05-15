@@ -226,7 +226,7 @@ remaining child crashes from earlier runs are eliminated, while
 - **Phase 7 ArcTan/ArcTanh sign normalisation and option parsing** —
   the final pass strips a leading minus sign from `ArcTan` and
   `ArcTanh` arguments (`ArcTan[-arg] -> -ArcTan[arg]`).  The package
-  entry `Integrate`IntegrateRational[f, x, opts...]` accepts trailing
+  entry `Integrate`BronsteinRational[f, x, opts...]` accepts trailing
   `Rule` options:
   - `"PFD" -> True | False` (default True) — toggles the per-summand
     Apart loop;
@@ -286,7 +286,7 @@ monotonically down.
 - Three-stage dispatch cascade (2026-05): `Integrate[f, x]` (Method ->
   Automatic, default) tries each subroutine in order and returns the
   first non-`NULL` result:
-  1. `Integrate\`IntegrateRational[f, x]` — when `PolynomialQ[f, x] ||
+  1. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
      rationalQ[f, x]`.
   2. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
   3. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
@@ -295,7 +295,7 @@ monotonically down.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
   dispatches strictly to a single subroutine, with no fallback:
   - `"Automatic"` — default cascade above.
-  - `"Rational"` — `Integrate\`IntegrateRational[f, x]`.
+  - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   Unknown method names emit `Integrate::method` and bubble back.
@@ -329,19 +329,19 @@ Out[7]= 1/6 Sqrt[3] ArcTan[(-1 + 2 x)/Sqrt[3]] +
 In[8]:= Integrate[Sin[x], x, Method -> "RischNorman"]  (* strict, no fallback *)
 Out[8]= -Cos[x]
 
-In[9]:= Integrate[x^3, x, Method -> "Rational"]
+In[9]:= Integrate[x^3, x, Method -> "BronsteinRational"]
 Out[9]= 1/4 x^4
 ```
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
-`Integrate`IntegrateRational` (the explicit form),
+`Integrate`BronsteinRational` (the explicit form),
 `Integrate`IntRationalLogPart` (Phase 2's LRT computation),
 `Integrate`RischNorman` (Bronstein pmint), `Integrate`CRCTable`
 (table lookup), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
 `...`SquareFree`, `...`ExtractConstants`, `...`ApartList`.  All are
-`Protected`; the IntegrateRational helpers additionally have
+`Protected`; the BronsteinRational helpers additionally have
 `ReadProtected`.
 
 ### Integrate`CRCTable
@@ -381,7 +381,7 @@ The Lazard-Rioboo-Trager logarithmic-part computation
   form directly.
 
 The denominator `D` is assumed squarefree; the typical caller is
-`Integrate`IntegrateRational` after Hermite reduction.
+`Integrate`BronsteinRational` after Hermite reduction.
 
 ```mathematica
 In[1]:= Integrate`IntRationalLogPart[1/(x^4+1), x, t]

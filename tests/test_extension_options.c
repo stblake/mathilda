@@ -2,7 +2,7 @@
  *
  * Coverage: the `Extension -> α` option on PolynomialGCD, PolynomialLCM,
  * Cancel, Together, and Apart.  These tests pin the behavior the
- * IntegrateRational pipeline relies on: GCD / cancellation closed over
+ * BronsteinRational pipeline relies on: GCD / cancellation closed over
  * Q(α), with Extension -> None / no option preserving the existing
  * (pre-Phase-0) behavior bit-for-bit so unrelated test suites don't
  * regress.

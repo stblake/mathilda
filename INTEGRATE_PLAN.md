@@ -22,7 +22,7 @@ The picocas baseline has surprisingly strong infrastructure already (subresultan
 
 **Scope decisions confirmed by user:**
 - Cover the full pipeline including `LogToArcTan` / `LogToArcTanh`, recreating the missing pieces (Solve-quadratic, basic RootReduce, etc.) where needed.
-- User-visible names: `Integrate[f, x]` in `System\`` (auto-dispatch when input is a rational function in `x`); `Integrate\`IntegrateRational[f, x]` is the explicit form (matches the Mathematica file). `Integrate\`` becomes the umbrella context; `Integrate[f, x]` calls it internally.
+- User-visible names: `Integrate[f, x]` in `System\`` (auto-dispatch when input is a rational function in `x`); `Integrate\`BronsteinRational[f, x]` is the explicit form (matches the Mathematica file). `Integrate\`` becomes the umbrella context; `Integrate[f, x]` calls it internally.
 - Helpers (`HermiteReduce`, `IntRationalLogPart`, `LogToAtan`, `LogToReal`, `LogToArcTan`, `LogToArcTanh`, `IntegratePolynomial`) are exposed under the `Integrate\`` context so each stage can be unit-tested at the REPL.
 
 **Out of scope (explicitly deferred):**
@@ -40,7 +40,7 @@ The picocas baseline has surprisingly strong infrastructure already (subresultan
 |------|---------|-------------|
 | `src/intrat.c` | Full algorithm implementation | ~1500-1800 |
 | `src/intrat.h` | Public + helper-builtin entry points | ~80 |
-| `src/integrate.c` | Tiny dispatch shim (`Integrate[]` → `Integrate\`IntegrateRational`) | ~120 |
+| `src/integrate.c` | Tiny dispatch shim (`Integrate[]` → `Integrate\`BronsteinRational`) | ~120 |
 | `src/integrate.h` | Public entry point | ~20 |
 | `tests/test_intrat.c` | ~60 unit tests covering each phase | ~600 |
 
@@ -48,7 +48,7 @@ The picocas baseline has surprisingly strong infrastructure already (subresultan
 | File | Change |
 |------|--------|
 | `src/core.c` | Call `integrate_init()` (after `expand_init()`, before `deriv_init()`) |
-| `src/sym_names.c` / `src/sym_names.h` | Cache `SYM_Integrate`, `SYM_IntegrateRational`, `SYM_RootSum`, `SYM_HermiteReduce` and a few internals |
+| `src/sym_names.c` / `src/sym_names.h` | Cache `SYM_Integrate`, `SYM_BronsteinRational`, `SYM_RootSum`, `SYM_HermiteReduce` and a few internals |
 | `src/poly.c` / `src/poly.h` | Add `SubresultantPolynomialRemainders[a, b, x]` builtin (the algorithm needs the *full chain*, not just the resultant) and `PolynomialQuotientRemainder[a, b, x]` (returns `{q, r}` pair) |
 | `tests/CMakeLists.txt` | Register `test_intrat` |
 | `picocas_spec.md` | Document new builtins per CLAUDE.md instructions |
@@ -77,7 +77,7 @@ intrat.c
 Each phase ends with green tests in `tests/test_intrat.c`. Per CLAUDE.md ("If tests pass, move to the next phase immediately") we proceed continuously after each phase.
 
 ### Phase 0 — `Extension` option for core polynomial routines (prerequisite)
-**Goal:** `Together`, `Cancel`, `PolynomialGCD`, `PolynomialLCM`, and `Apart` all accept an `Extension -> α` option, defaulting to `Extension -> None` (current behavior). This is required because `IntegrateRational` calls `Cancel[Together[..., Extension -> α], Extension -> α]` as its `canonic` step on every iteration — without it, every algebraic-coefficient test case fails before the integrator even starts.
+**Goal:** `Together`, `Cancel`, `PolynomialGCD`, `PolynomialLCM`, and `Apart` all accept an `Extension -> α` option, defaulting to `Extension -> None` (current behavior). This is required because `BronsteinRational` calls `Cancel[Together[..., Extension -> α], Extension -> α]` as its `canonic` step on every iteration — without it, every algebraic-coefficient test case fails before the integrator even starts.
 
 **Why this comes first:** the integrator's correctness depends on these primitives being closed over `Q(α)`. We can't unit-test Phase 1's `HermiteReduce` on inputs with `Sqrt[2]` coefficients otherwise.
 
@@ -134,8 +134,8 @@ Each phase ends with green tests in `tests/test_intrat.c`. Per CLAUDE.md ("If te
 **Goal:** `Integrate[poly, x]` and `Integrate[A/D, x]` for any squarefree `D` (covers cases without repeated roots).
 
 **New builtins** (all in `Integrate\`` context except the System dispatcher):
-- `Integrate[f, x]` — System dispatcher. Validates `PolynomialQ[f,x] || rationalQ[f,x]`; calls `Integrate\`IntegrateRational[f, x]`; otherwise returns unevaluated.
-- `Integrate\`IntegrateRational[f, x]` — top-level. Calls the helpers below.
+- `Integrate[f, x]` — System dispatcher. Validates `PolynomialQ[f,x] || rationalQ[f,x]`; calls `Integrate\`BronsteinRational[f, x]`; otherwise returns unevaluated.
+- `Integrate\`BronsteinRational[f, x]` — top-level. Calls the helpers below.
 - `Integrate\`IntegratePolynomial[f, x]` — `Expand` then term-by-term: `a x^n -> a x^(n+1)/(n+1)`, `1/x -> Log[x]`, constant -> `c x`.
 - `Integrate\`HermiteReduce[f, x]` — Mack's linear version (Bronstein p. 44). Returns `{g, h}` such that `f = D[g,x] + h` and `Denominator[h]` is squarefree.
 
@@ -239,11 +239,11 @@ Port `IntegrateRational.m:534-587`. Composes Phase 1-4: Hermite-reduce, polynomi
 
 These are pure post-processing on the Phase 5 output; if disabled (option `LogToArcTan -> False`) the result is still correct.
 
-### Phase 7 — `IntegrateRational` top-level wrapper + Options + output cleanup
+### Phase 7 — `BronsteinRational` top-level wrapper + Options + output cleanup
 Port `IntegrateRational.m:67-121`. Implements:
-- `Options[IntegrateRational] = {"PFD" -> True, Extension -> Automatic, "LogToArcTan" -> True, "Radicals" -> False}`.
+- `Options[BronsteinRational] = {"PFD" -> True, Extension -> Automatic, "LogToArcTan" -> True, "Radicals" -> False}`.
 - Stitches Phase 1-6 together: canonicalize, integrate, optionally `LogToArcTan` + `LogToArcTanh`, optionally `ToRadicals` (we'll skip this — leave as identity until `ToRadicals` exists).
-- The bare `Integrate[f, x]` shim (in `integrate.c`) just calls `Integrate\`IntegrateRational[f, x]` and returns its result, falling through to unevaluated if the input is non-rational.
+- The bare `Integrate[f, x]` shim (in `integrate.c`) just calls `Integrate\`BronsteinRational[f, x]` and returns its result, falling through to unevaluated if the input is non-rational.
 
 **Final-pass output cleanup (applied as the last step before returning):**
 
@@ -273,7 +273,7 @@ Port `IntegrateRational.m:67-121`. Implements:
 | `src/poly.h` | **MODIFY** | Declare new builtins |
 | `src/parfrac.c` | **MODIFY (small)** | Plumb `Extension` option through to the Factor call (currently hardcoded) so `Apart[expr, x, Extension -> Sqrt[2]]` works. Required for the `apartList` step in Phase 5. |
 | `src/parfrac.h` | **MODIFY (small)** | Updated signature for option parsing |
-| `src/sym_names.c` / `.h` | **MODIFY** | Add cached pointers for `Integrate`, `IntegrateRational`, `RootSum`, `HermiteReduce`, `IntRationalLogPart`, `LogToAtan`, `LogToReal`, `LogToArcTan`, `LogToArcTanh` |
+| `src/sym_names.c` / `.h` | **MODIFY** | Add cached pointers for `Integrate`, `BronsteinRational`, `RootSum`, `HermiteReduce`, `IntRationalLogPart`, `LogToAtan`, `LogToReal`, `LogToArcTan`, `LogToArcTanh` |
 | `src/core.c` | **MODIFY** | One-line `integrate_init()` call right after `expand_init()` |
 | `tests/test_intrat.c` | **NEW** | ~60 cases (per phase + 20 end-to-end from `IntegrateRationalTests.m`) |
 | `tests/CMakeLists.txt` | **MODIFY** | Add `test_intrat` |

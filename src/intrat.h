@@ -7,7 +7,7 @@
  * end-to-end testing of the pipeline.
  *
  * Phase 1 of INTEGRATE_PLAN.md:
- *   * IntegrateRational    — top-level package entry (skeleton, expanded
+ *   * BronsteinRational    — top-level package entry (skeleton, expanded
  *                            in later phases).
  *   * IntegratePolynomial  — term-by-term integration of polynomials.
  *   * HermiteReduce        — Mack's linear Hermite reduction.
@@ -26,7 +26,8 @@
 #include "expr.h"
 
 /* Public package entry: corresponds to the Mathematica function
- * `IntegrateRational[f, x]`.  Phase 1 ships a thin implementation that
+ * `IntegrateRational[f, x]` (exposed in picocas as
+ * `Integrate`BronsteinRational[f, x]`).  Phase 1 ships a thin implementation that
  * (a) tries the derivative-recognition fast path (`c*D'/D^k`),
  * (b) splits into HermiteReduce + IntegratePolynomial when possible,
  * and (c) returns the call unevaluated otherwise (the

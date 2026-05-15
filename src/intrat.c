@@ -699,7 +699,7 @@ static Expr* intrat_derivative_recognition(Expr* num, Expr* den, Expr* x) {
  * along with the supporting helpers SquareFree, ExtractConstants,
  * ApartList, and a structural pre-detector for the cyclotomic /
  * n-th-root denominator family that appears repeatedly in Bronstein
- * and the IntegrateRational test suite.
+ * and the BronsteinRational test suite.
  *
  * Output form (RootSum -> False, the default for Phase 2's structural
  * tests):
@@ -718,7 +718,7 @@ static Expr* intrat_derivative_recognition(Expr* num, Expr* den, Expr* x) {
 /* Bucket FactorSquareFree[p]'s output into a list of (poly,
  * multiplicity) pairs, indexed densely by multiplicity from 1..max.
  * If the input has no factor of multiplicity i, the i-th entry is
- * {1, i}.  Mirrors the IntegrateRational baseline's `SquareFree[]`
+ * {1, i}.  Mirrors the BronsteinRational baseline's `SquareFree[]`
  * helper at IntegrateRational.m:1474-1487.
  *
  * Implementation note: picocas's FactorSquareFree returns the
@@ -2512,7 +2512,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                      * Each resulting real quadratic has its own
                      * discriminant α^2 − 4 β < 0, which routes through
                      * logtoreal_quadratic's ArcTan branch.  This is
-                     * the path Mathematica's IntegrateRational takes
+                     * the path Mathematica's BronsteinRational takes
                      * for inputs like (-1+x^2)/(1-2x^2+2x^4) whose
                      * Q-in-t is 2 t^4 − 2 t^2 + 1 (inner disc −4). */
                     expr_free(discsq);
@@ -3182,11 +3182,11 @@ fail:
 }
 
 /* ------------------------------------------------------------------ */
-/* IntegrateRational top-level (Phase 1 skeleton + Phase 2 hookup).    */
+/* BronsteinRational top-level (Phase 1 skeleton + Phase 2 hookup).    */
 /* ------------------------------------------------------------------ */
 
 static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
-    intrat_trace("IntegrateRational", "IN", f);
+    intrat_trace("BronsteinRational", "IN", f);
 
     /* Pure-polynomial fast path. */
     if (intrat_polyq_test(f, x)) {
@@ -3228,7 +3228,7 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
     if (is_zero_poly(R)) {
         expr_free(R); expr_free(den_eval);
         Expr* result = eval_and_free(poly_int);
-        intrat_trace("IntegrateRational", "OUT", result);
+        intrat_trace("BronsteinRational", "OUT", result);
         return result;
     }
 
@@ -3239,7 +3239,7 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
             (Expr*[]){poly_int, fast}, 2);
         Expr* result = eval_and_free(sum);
         expr_free(R); expr_free(den_eval);
-        intrat_trace("IntegrateRational", "OUT", result);
+        intrat_trace("BronsteinRational", "OUT", result);
         return result;
     }
 
@@ -3263,7 +3263,7 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         Expr* sum = internal_plus(
             (Expr*[]){poly_int, g}, 2);
         Expr* result = eval_and_free(sum);
-        intrat_trace("IntegrateRational", "OUT", result);
+        intrat_trace("BronsteinRational", "OUT", result);
         return result;
     }
 
@@ -3306,13 +3306,13 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         expr_free(simplified2);
         Expr* result = intsimp_normalize_inverse_trig_signs(simplified3);
         expr_free(simplified3);
-        intrat_trace("IntegrateRational", "OUT", result);
+        intrat_trace("BronsteinRational", "OUT", result);
         return result;
     }
 
     /* Beyond Phase 5's combined scope — leave unevaluated. */
     expr_free(h); expr_free(g); expr_free(poly_int);
-    intrat_trace("IntegrateRational", "OUT (unresolved)", f);
+    intrat_trace("BronsteinRational", "OUT (unresolved)", f);
     return NULL;
 }
 
@@ -3322,7 +3322,7 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
 /* ------------------------------------------------------------------ */
 
 /* Recognise a trailing option (Rule[lhs, rhs] / RuleDelayed[...]).
- * Returns true if `opt` is a Rule with one of the IntegrateRational
+ * Returns true if `opt` is a Rule with one of the BronsteinRational
  * option names on the lhs. */
 static bool is_intrat_option(Expr* opt) {
     if (!opt || opt->type != EXPR_FUNCTION
@@ -3541,9 +3541,9 @@ void intrat_init(void) {
     /* Package symbols live under `Integrate``. Names must be the fully
      * qualified strings — the symtab is keyed by interned name and the
      * parser routes `Integrate`Foo` directly to that key. */
-    install("Integrate`IntegrateRational",
+    install("Integrate`BronsteinRational",
             builtin_intrat_integraterational,
-            "Integrate`IntegrateRational[f, x] is the explicit form of the\n"
+            "Integrate`BronsteinRational[f, x] is the explicit form of the\n"
             "rational-function integrator. Equivalent to Integrate[f, x] when\n"
             "f is a polynomial or rational function in x. Phase 1 closes the\n"
             "polynomial / Hermite / derivative-recognition cases; non-rational\n"

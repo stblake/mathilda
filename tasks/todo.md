@@ -1,12 +1,12 @@
 ---
-title: IntegrateRational closed-form gaps
+title: BronsteinRational closed-form gaps
 date_started: 2026-05-11
 status: in progress
 ---
 
-# IntegrateRational closed-form gaps (2026-05-11)
+# BronsteinRational closed-form gaps (2026-05-11)
 
-Five failing `Integrate`IntegrateRational[...]` cases.  All five
+Five failing `Integrate`BronsteinRational[...]` cases.  All five
 reproduce in picocas REPL; all five integrate cleanly via the
 Mathematica .m source (verified with wolframscript), so the gaps are
 in the C port at `src/intrat.c`, not in the underlying algorithm.

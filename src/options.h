@@ -8,7 +8,7 @@
  *
  * Currently exposes:
  *   extract_extension_option — used by PolynomialGCD, PolynomialLCM,
- *     Together, Cancel, Apart, and the IntegrateRational pipeline.
+ *     Together, Cancel, Apart, and the BronsteinRational pipeline.
  */
 #ifndef PICOCAS_OPTIONS_H
 #define PICOCAS_OPTIONS_H

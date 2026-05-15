@@ -2,10 +2,10 @@
  *
  * Public entry points for the rational-function integrator.  The
  * top-level dispatcher `Integrate[f, x]` lives in the System` context
- * and routes to `Integrate`IntegrateRational[f, x]` (implemented in
+ * and routes to `Integrate`BronsteinRational[f, x]` (implemented in
  * intrat.c) when its input is a polynomial or a rational function in x.
  *
- * Phase 1 of the IntegrateRational port (see INTEGRATE_PLAN.md).  The
+ * Phase 1 of the BronsteinRational port (see INTEGRATE_PLAN.md).  The
  * non-rational fallback is the identity (returns the call unevaluated)
  * so this file remains a tiny shim — all real work is in intrat.c.
  */
@@ -17,7 +17,7 @@
 
 /* `Integrate[f, x]` — System` builtin.  Validates that `f` is a
  * polynomial or a rational function in `x`; on success forwards to
- * `Integrate`IntegrateRational[f, x]`.  Returns NULL (leaving the call
+ * `Integrate`BronsteinRational[f, x]`.  Returns NULL (leaving the call
  * unevaluated) for any other input. */
 Expr* builtin_integrate(Expr* res);
 

@@ -406,7 +406,7 @@ int main(int argc, char** argv) {
      * 2 s.  At 10 s the second case (algebraic-coefficient rational)
      * timed out before being classified; at 2 s it finishes fast
      * enough to be detected as DIFF NONZERO.  Both are pre-existing
-     * IntegrateRational bugs unrelated to the Risch-Norman
+     * BronsteinRational bugs unrelated to the Risch-Norman
      * dispatcher hook — confirmed by running the corpus with the
      * hook stashed. */
     const int CORPUS_DIFF_NONZERO_BASELINE = 2;

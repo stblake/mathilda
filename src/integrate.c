@@ -3,11 +3,11 @@
  * `Integrate[f, x]` System` dispatcher.  Cascades through three
  * stages and supports an explicit `Method -> "..."` option:
  *
- *   1. Integrate`IntegrateRational   — polynomial / rational integrands
+ *   1. Integrate`BronsteinRational   — polynomial / rational integrands
  *   2. Integrate`RischNorman         — parallel-Risch (Bronstein pmint)
  *   3. Integrate`CRCTable            — CRC integral table (lazy-loaded)
  *
- * Method values: "Automatic" (default, full cascade), "Rational",
+ * Method values: "Automatic" (default, full cascade), "BronsteinRational",
  * "RischNorman", "CRCTable" (strict passthrough, no fallback).
  *
  * The CRC table is large and most sessions never need it, so its
@@ -120,9 +120,9 @@ static Expr* call_stage(const char* head_name, Expr* f, Expr* x) {
  * success, NULL when the integrand is non-rational or pmint gives up. */
 static Expr* try_rational(Expr* f, Expr* x) {
     if (!is_polynomial_in(f, x) && !is_rational_in(f, x)) return NULL;
-    Expr* result = call_stage("Integrate`IntegrateRational", f, x);
+    Expr* result = call_stage("Integrate`BronsteinRational", f, x);
     if (!result) return NULL;
-    if (result_is_unresolved(result, "Integrate`IntegrateRational")) {
+    if (result_is_unresolved(result, "Integrate`BronsteinRational")) {
         expr_free(result);
         return NULL;
     }
@@ -228,7 +228,7 @@ static IntegrateMethod parse_method_option(Expr* opt) {
         return METHOD_AUTOMATIC;
     if (rhs->type != EXPR_STRING) return METHOD_INVALID;
     if (strcmp(rhs->data.string, "Automatic")   == 0) return METHOD_AUTOMATIC;
-    if (strcmp(rhs->data.string, "Rational")    == 0) return METHOD_RATIONAL;
+    if (strcmp(rhs->data.string, "BronsteinRational") == 0) return METHOD_RATIONAL;
     if (strcmp(rhs->data.string, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(rhs->data.string, "CRCTable")    == 0) return METHOD_CRCTABLE;
     return METHOD_INVALID;
@@ -256,7 +256,7 @@ Expr* builtin_integrate(Expr* res) {
             if (h != last_warned_hash) {
                 fprintf(stderr,
                     "Integrate::method: Method option value is not one of "
-                    "\"Automatic\", \"Rational\", \"RischNorman\", \"CRCTable\".\n");
+                    "\"Automatic\", \"BronsteinRational\", \"RischNorman\", \"CRCTable\".\n");
                 last_warned_hash = h;
             }
             return NULL;
@@ -318,15 +318,15 @@ void integrate_init(void) {
         "Integrate[f, x] gives the indefinite integral of f with respect to x.\n"
         "Integrate[f, x, Method -> \"<name>\"] dispatches directly to a single\n"
         "subroutine, bypassing the default cascade.  Accepted method names:\n"
-        "  \"Automatic\"    — try Rational, then RischNorman, then CRCTable (default)\n"
-        "  \"Rational\"     — Integrate`IntegrateRational (polynomial / rational)\n"
-        "  \"RischNorman\"  — Integrate`RischNorman (Bronstein pmint heuristic)\n"
-        "  \"CRCTable\"     — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
+        "  \"Automatic\"          — try BronsteinRational, then RischNorman, then CRCTable (default)\n"
+        "  \"BronsteinRational\"  — Integrate`BronsteinRational (polynomial / rational)\n"
+        "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
+        "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
         "The CRCTable rules are loaded from disk on first use only.");
 
     /* Initialise the Integrate` package: HermiteReduce, IntegratePolynomial,
-     * helpers, and the explicit `Integrate`IntegrateRational` entry. */
+     * helpers, and the explicit `Integrate`BronsteinRational` entry. */
     intrat_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic

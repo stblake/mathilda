@@ -3995,7 +3995,7 @@ void intrischnorman_init(void) {
             "2004) to find an elementary antiderivative of f in x.\n"
             "Returns the antiderivative on success or the call unevaluated\n"
             "on failure.  Called by the Integrate dispatcher as a\n"
-            "fall-through after Integrate`IntegrateRational declines a\n"
+            "fall-through after Integrate`BronsteinRational declines a\n"
             "non-rational integrand.");
 
     install("Integrate`Helpers`PMConvertToTan",

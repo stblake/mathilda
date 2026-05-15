@@ -1,4 +1,4 @@
-/* test_intrat.c — Phase 1 of the IntegrateRational port.
+/* test_intrat.c — Phase 1 of the BronsteinRational port.
  *
  * Coverage:
  *   * Helpers: Content / Primitive / Monic / LeadingCoefficient.
@@ -356,16 +356,16 @@ static void test_integrate_arctanh_simplification(void) {
 static void test_options_accepted(void) {
     /* Trailing options are stripped before dispatch — the result must
      * be the same as without them. */
-    run_eq("Integrate`IntegrateRational[1/(x^2 + 1), x]", "ArcTan[x]");
-    run_eq("Integrate`IntegrateRational[1/(x^2 + 1), x, \"PFD\" -> True]",
+    run_eq("Integrate`BronsteinRational[1/(x^2 + 1), x]", "ArcTan[x]");
+    run_eq("Integrate`BronsteinRational[1/(x^2 + 1), x, \"PFD\" -> True]",
            "ArcTan[x]");
-    run_eq("Integrate`IntegrateRational[1/(x^2 - 1), x, \"LogToArcTan\" -> True]",
+    run_eq("Integrate`BronsteinRational[1/(x^2 - 1), x, \"LogToArcTan\" -> True]",
            "-ArcTanh[x]");
-    run_eq("Integrate`IntegrateRational[1/(x^2 - 1), x, "
+    run_eq("Integrate`BronsteinRational[1/(x^2 - 1), x, "
            "\"PFD\" -> True, \"LogToArcTan\" -> True]",
            "-ArcTanh[x]");
     /* Extension option is recognised (advisory in Phase 7). */
-    run_eq("Integrate`IntegrateRational[1/(x^2 - 1), x, Extension -> Sqrt[2]]",
+    run_eq("Integrate`BronsteinRational[1/(x^2 - 1), x, Extension -> Sqrt[2]]",
            "-ArcTanh[x]");
 }
 
@@ -493,13 +493,13 @@ static bool contains_head(const Expr* e, const char* head) {
     return false;
 }
 
-/* Evaluate `Integrate`IntegrateRational[integrand, x]` and assert
+/* Evaluate `Integrate`BronsteinRational[integrand, x]` and assert
  * the result has no RootSum / Function leak, then assert the
  * derivative-of-result matches the integrand. */
 static void assert_closed_real(const char* integrand) {
     char buf[1024];
     snprintf(buf, sizeof(buf),
-        "Integrate`IntegrateRational[%s, x]", integrand);
+        "Integrate`BronsteinRational[%s, x]", integrand);
     Expr* e = parse_expression(buf);
     Expr* res = evaluate(e);
     if (contains_head(res, "RootSum")) {
@@ -529,7 +529,7 @@ static void assert_integral_numeric_ok(const char* integrand,
                                         const char* x_value) {
     char buf[2048];
     snprintf(buf, sizeof(buf),
-        "Abs[N[(D[Integrate`IntegrateRational[%s, x], x] - (%s)) /. %s /. x -> %s]]",
+        "Abs[N[(D[Integrate`BronsteinRational[%s, x], x] - (%s)) /. %s /. x -> %s]]",
         integrand, integrand, bindings, x_value);
     Expr* e = parse_expression(buf);
     Expr* res = evaluate(e);
@@ -598,7 +598,7 @@ static void test_closed_biquadratic_neg_disc(void) {
 static void test_closed_coefficient_distribution(void) {
     /* Concrete printed form check: outer 2 must be distributed and
      * Log[1/2 · q] reduced to Log[q]. */
-    run_eq("Integrate`IntegrateRational[1/x/(1 - 2 x^2 + 2 x^4), x]",
+    run_eq("Integrate`BronsteinRational[1/x/(1 - 2 x^2 + 2 x^4), x]",
            "Log[x] + 1/2 ArcTan[-1 + 2 x^2] - 1/4 Log[1 - 2 x^2 + 2 x^4]");
     assert_integral_correct("1/x/(1 - 2 x^2 + 2 x^4)");
 }
@@ -735,6 +735,6 @@ int main(void) {
     TEST(test_closed_nth_root_octic_plus);
     TEST(test_closed_nth_root_nonic_plus);
 
-    printf("All Phase 1-7 (full IntegrateRational pipeline) tests passed!\n");
+    printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;
 }

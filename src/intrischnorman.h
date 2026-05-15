@@ -10,7 +10,7 @@
  *
  * The entry `Integrate`RischNorman[f, x]` is called by the
  * `Integrate` dispatcher (src/integrate.c) as a fall-through after
- * `Integrate`IntegrateRational` declines a non-rational integrand.
+ * `Integrate`BronsteinRational` declines a non-rational integrand.
  * It returns either a fresh Expr* antiderivative on success or NULL
  * on failure (the caller bubbles the call symbolic).
  *

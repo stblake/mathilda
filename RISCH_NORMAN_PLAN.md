@@ -3,13 +3,13 @@
 ## Context
 
 picocas currently has a strong rational-function integrator in `src/intrat.c`
-(`Integrate\`IntegrateRational`), but anything containing a transcendental atom
+(`Integrate\`BronsteinRational`), but anything containing a transcendental atom
 (Sin, Cos, Exp, Log, Tan, ...) returns unevaluated. We will add the **parallel
 Risch / Risch–Norman heuristic**, faithfully porting Bronstein's *Poor Man's
 Integrator* (pmint) — the modern reformulation of Norman's 1976 heuristic — to
 C as a new module `src/intrischnorman.c`. The new entry `Integrate\`RischNorman[f, x]`
 will be wired in as a fall-through from `Integrate`, called after
-`Integrate\`IntegrateRational` declines a non-rational integrand.
+`Integrate\`BronsteinRational` declines a non-rational integrand.
 
 References (under `parallel_risch/`):
 
@@ -58,7 +58,7 @@ over Q(I); back-substitute and return.
   "Task Management" convention.
 
 No `sym_names.c` change needed: `Integrate\`RischNorman` is a string-keyed
-package name (same convention as `Integrate\`IntegrateRational` — see
+package name (same convention as `Integrate\`BronsteinRational` — see
 `intrat.c:3544`).
 
 ## Primitives reused (no new infrastructure)
@@ -236,7 +236,7 @@ static int   solve_linear_undet(Expr* equation_numer,
 **Phase 4 corpus** (all Q-rational, no log-candidates yet):
 `Exp[x]`, `Exp[a x]`, `x Exp[x]`, `x^2 Exp[x]`, `Exp[2x] Sin[x]`,
 `Sin[x] Exp[x]`, `Cos[x] Exp[x]`, `1/(1+x^2)` (cross-check with
-IntegrateRational), `Log[x]`, `x Log[x]`.
+BronsteinRational), `Log[x]`, `x Log[x]`.
 
 **Acceptance.** All ten integrands pass `assert_integral_correct`.
 
@@ -287,7 +287,7 @@ Extend `src/integrate.c`'s `builtin_integrate` (currently bails at lines
 129–133 when the integrand is neither polynomial nor rational): replace
 the bail with a fall-through call to `Integrate\`RischNorman[f, x]`.
 Detect the unevaluated package head exactly as the existing
-`IntegrateRational` detection at lines 147–154 and bubble back as
+`BronsteinRational` detection at lines 147–154 and bubble back as
 `Integrate[f, x]`.
 
 Post-hoc verifier (recommended, defensive):

@@ -2,7 +2,7 @@
  *
  * Smoke tests for the three-stage Integrate cascade and the Method
  * option added 2026-05-15.  Covers:
- *  - Cascade routing: rational integrand goes through Rational, an
+ *  - Cascade routing: rational integrand goes through BronsteinRational, an
  *    elementary one through RischNorman, an explicit CRCTable call
  *    survives without infinite-looping on the formerly-divergent
  *    inputs (Formula 49 family).
@@ -63,12 +63,12 @@ static void test_cascade_risch(void) {
 }
 
 static void test_method_strict_rational(void) {
-    /* Method -> "Rational" closes the polynomial case. */
-    assert_eval_eq("Integrate[x^3, x, Method -> \"Rational\"]", "1/4 x^4", 0);
+    /* Method -> "BronsteinRational" closes the polynomial case. */
+    assert_eval_eq("Integrate[x^3, x, Method -> \"BronsteinRational\"]", "1/4 x^4", 0);
 
-    /* Method -> "Rational" on a non-rational integrand bubbles back
+    /* Method -> "BronsteinRational" on a non-rational integrand bubbles back
      * with no Risch / CRC fallback. */
-    Expr* parsed = parse_expression("Integrate[Sin[x], x, Method -> \"Rational\"]");
+    Expr* parsed = parse_expression("Integrate[Sin[x], x, Method -> \"BronsteinRational\"]");
     Expr* result = evaluate(parsed);
     expr_free(parsed);
     ASSERT(result != NULL

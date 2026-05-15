@@ -1642,7 +1642,7 @@ Expr* builtin_polynomialremainder(Expr* res) {
 /* PolynomialQuotientRemainder[p, q, x] returns {Q, R} such that          */
 /* p == Q*q + R with deg(R) < deg(q).  Two-output companion to            */
 /* PolynomialQuotient / PolynomialRemainder; required by the              */
-/* IntegrateRational pipeline (ExtendedEuclidean).                         */
+/* BronsteinRational pipeline (ExtendedEuclidean).                         */
 Expr* builtin_polynomialquotientremainder(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
 
@@ -1705,7 +1705,7 @@ Expr* builtin_polynomialquotientremainder(Expr* res) {
 /* pseudo-remainder until a constant or zero remainder is reached.          */
 /*                                                                          */
 /* Note: this is *not* the Lazard-scaled subresultant chain.  For the      */
-/* IntegrateRational / Lazard-Rioboo-Trager use case the algorithm only     */
+/* BronsteinRational / Lazard-Rioboo-Trager use case the algorithm only     */
 /* consumes (i) the degree of each chain element in x and (ii) the         */
 /* primitive part (in the auxiliary variable t) of each element.  Both      */
 /* properties are invariant under content scaling, so the simpler          */
