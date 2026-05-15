@@ -87,9 +87,10 @@ typedef enum {
     /* Sub-phases of try_integral.  Their sum ≈ PM_PH_TRY_INTEGRAL. */
     PM_PH_TI_APPLY_D,
     PM_PH_TI_TERM_BUILD,
+    PM_PH_TI_SOLVE_DIRECTQ,      /* direct-from-expanded mpq path */
     PM_PH_TI_SOLVE_CLIST,
     PM_PH_TI_SOLVE_WALK,
-    PM_PH_TI_SOLVE_QFAST,        /* direct mpq Gauss-Jordan path */
+    PM_PH_TI_SOLVE_QFAST,        /* mpq Gauss-Jordan after CoeffList */
     PM_PH_TI_SOLVE_ROWRED,       /* symbolic-RowReduce slow path */
     PM_PH_TI_SOLVE_DECODE,
     PM_PH_TI_SUBSTITUTE,
@@ -101,8 +102,9 @@ static const char* const pm_phase_names[PM_PH__COUNT] = {
     "fffresh_subst",   "splitFactor(q)",  "Together(ff)",    "splitFactor(ff)",
     "Darboux",         "cden+totdeg",     "enum_monoms",     "build_candidate",
     "ff_decompose",    "my_factors",      "try_integral",    "output_cleanup",
-    "  ti.apply_d",    "  ti.term_build", "  ti.solve_clist","  ti.solve_walk",
-    "  ti.solve_qfast","  ti.solve_rowred","  ti.solve_decode","  ti.substitute",
+    "  ti.apply_d",    "  ti.term_build", "  ti.solve_directq",
+    "  ti.solve_clist","  ti.solve_walk", "  ti.solve_qfast",
+    "  ti.solve_rowred","  ti.solve_decode","  ti.substitute",
 };
 
 static double pm_phase_accum[PM_PH__COUNT];
@@ -1724,109 +1726,52 @@ static Expr* mpq_to_expr_q(const mpq_t v) {
     return mk_binary(SYM_Rational, num, den);
 }
 
-/* Attempt the direct mpq Gauss-Jordan solver.
+/* Reduce a flat mpq augmented matrix to RREF in-place.
  *
- * Returns:
- *   true  — the system was Q-rational; *out_solution_rules and
- *           *out_status are populated as in solve_linear_undet.  The
- *           caller is responsible for freeing lb->rows[] entries (the
- *           fast path consumes them via copy, not move — entries
- *           remain owned by lb).
- *   false — at least one matrix entry was non-Q-rational; the caller
- *           must fall through to the symbolic slow path.
+ * M is a flat nrows×ncols mpq_t array (row-major; every entry must
+ * already be mpq_init'd).  rowidx[] is a row permutation initialised
+ * to identity by the caller — Gauss-Jordan swaps are applied by
+ * permuting rowidx[] rather than copying mpq_t values.
  *
- * On failure (memory exhaustion mid-elimination) returns true with
- * *out_status = -1 and a NULL rules pointer.  We treat allocation
- * failure as infeasibility rather than fatal because the caller will
- * still see the system as "no solution" and bubble up. */
-static bool try_solve_qfast(LinearBuilder* lb,
-                             Expr** unknowns, size_t nunknowns,
-                             Expr** out_solution_rules,
-                             int* out_status) {
-    size_t nrows = lb->nrows;
-    size_t ncols = lb->ncols;          /* = nunknowns + 1 */
-
-    /* 1. Pre-scan: any non-Q-rational entry forces fall-through. */
-    for (size_t i = 0; i < nrows; i++) {
-        for (size_t j = 0; j < ncols; j++) {
-            if (!entry_is_qrational(lb->rows[i][j])) return false;
-        }
-    }
-
-    /* 2. Allocate & populate the mpq matrix.  Flat layout for
-     * cache-friendlier row swaps via index swap rather than data move. */
-    size_t total = nrows * ncols;
-    mpq_t* M = (mpq_t*)malloc(sizeof(mpq_t) * (total ? total : 1));
-    if (!M) { *out_solution_rules = NULL; *out_status = -1; return true; }
-    for (size_t k = 0; k < total; k++) mpq_init(M[k]);
-    for (size_t i = 0; i < nrows; i++) {
-        for (size_t j = 0; j < ncols; j++) {
-            entry_to_mpq(lb->rows[i][j], M[i * ncols + j]);
-        }
-    }
-
-    /* Row-index indirection so swaps are O(1). */
-    size_t* rowidx = (size_t*)malloc(sizeof(size_t) * (nrows ? nrows : 1));
-    if (!rowidx) {
-        for (size_t k = 0; k < total; k++) mpq_clear(M[k]);
-        free(M);
-        *out_solution_rules = NULL; *out_status = -1; return true;
-    }
-    for (size_t i = 0; i < nrows; i++) rowidx[i] = i;
+ * On return, pivot_for_col[c] holds the *permutation-rank* of the row
+ * that pivots column c, or -1 if c has no pivot.  Inconsistency is
+ * signalled to the caller by pivot_for_col[ncols-1] >= 0 (a pivot
+ * landing in the RHS column). */
+static void gauss_jordan_mpq(mpq_t* M, size_t* rowidx,
+                              size_t nrows, size_t ncols,
+                              int64_t* pivot_for_col) {
+    for (size_t c = 0; c < ncols; c++) pivot_for_col[c] = -1;
 
 #   define MAT(r,c) M[ rowidx[(r)] * ncols + (c) ]
-
-    /* 3. Gauss-Jordan.  pivot_for_col[c] = row index (in the reduced
-     * 0..r_done range) that pivots column c, or -1.  Pivot search
-     * scans all columns including the RHS column; a pivot landing
-     * there means the system is inconsistent. */
-    int64_t* pivot_for_col = (int64_t*)malloc(sizeof(int64_t) * ncols);
-    if (!pivot_for_col) {
-        free(rowidx);
-        for (size_t k = 0; k < total; k++) mpq_clear(M[k]);
-        free(M);
-        *out_solution_rules = NULL; *out_status = -1; return true;
-    }
-    for (size_t c = 0; c < ncols; c++) pivot_for_col[c] = -1;
 
     mpq_t scratch, factor, inv;
     mpq_init(scratch); mpq_init(factor); mpq_init(inv);
 
-    size_t r = 0;   /* next free reduced-form row */
+    size_t r = 0;
     for (size_t c = 0; c < ncols && r < nrows; c++) {
-        /* Find a row at index >= r with non-zero entry in column c. */
         size_t pr = nrows;
         for (size_t rr = r; rr < nrows; rr++) {
             if (mpq_sgn(MAT(rr, c)) != 0) { pr = rr; break; }
         }
-        if (pr == nrows) continue;     /* no pivot in this column */
+        if (pr == nrows) continue;
 
-        if (pr != r) {                  /* row swap */
+        if (pr != r) {
             size_t tmp = rowidx[r]; rowidx[r] = rowidx[pr]; rowidx[pr] = tmp;
         }
 
-        /* Normalise pivot row: divide all entries by the pivot. */
         mpq_inv(inv, MAT(r, c));
         for (size_t k = 0; k < ncols; k++) {
-            if (k == c) {
-                mpq_set_si(MAT(r, k), 1, 1);    /* pivot ↦ 1 exactly */
-                continue;
-            }
+            if (k == c) { mpq_set_si(MAT(r, k), 1, 1); continue; }
             if (mpq_sgn(MAT(r, k)) == 0) continue;
             mpq_mul(MAT(r, k), MAT(r, k), inv);
         }
 
-        /* Eliminate column c in every other row. */
         for (size_t rr = 0; rr < nrows; rr++) {
             if (rr == r) continue;
             if (mpq_sgn(MAT(rr, c)) == 0) continue;
             mpq_set(factor, MAT(rr, c));
-            /* Row_rr -= factor * Row_r */
             for (size_t k = 0; k < ncols; k++) {
-                if (k == c) {
-                    mpq_set_si(MAT(rr, k), 0, 1);
-                    continue;
-                }
+                if (k == c) { mpq_set_si(MAT(rr, k), 0, 1); continue; }
                 if (mpq_sgn(MAT(r, k)) == 0) continue;
                 mpq_mul(scratch, factor, MAT(r, k));
                 mpq_sub(MAT(rr, k), MAT(rr, k), scratch);
@@ -1838,17 +1783,21 @@ static bool try_solve_qfast(LinearBuilder* lb,
     }
 
     mpq_clear(scratch); mpq_clear(factor); mpq_clear(inv);
+#   undef MAT
+}
 
-    /* 4. Feasibility check + emit solution. */
-    bool inconsistent = (pivot_for_col[ncols - 1] >= 0);
-
-    if (inconsistent) {
-        free(pivot_for_col); free(rowidx);
-        for (size_t k = 0; k < total; k++) mpq_clear(M[k]);
-        free(M);
+/* Decode an RREF augmented matrix (already gauss_jordan_mpq'd) into a
+ * solution rule list.  Free variables — columns without pivots — are
+ * pinned to 0 per pmint convention.  Inconsistency (pivot in the RHS
+ * column) is signalled by *out_status = -1 and NULL rules. */
+static void emit_q_solution(mpq_t* M, const size_t* rowidx,
+                             const int64_t* pivot_for_col,
+                             size_t ncols, Expr** unknowns, size_t nunknowns,
+                             Expr** out_solution_rules, int* out_status) {
+    if (pivot_for_col[ncols - 1] >= 0) {
         *out_solution_rules = NULL;
         *out_status = -1;
-        return true;
+        return;
     }
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * (nunknowns ? nunknowns : 1));
@@ -1857,7 +1806,7 @@ static bool try_solve_qfast(LinearBuilder* lb,
         Expr* val;
         if (pivot_for_col[j] >= 0) {
             size_t pr = (size_t)pivot_for_col[j];
-            val = mpq_to_expr_q(MAT(pr, ncols - 1));
+            val = mpq_to_expr_q(M[ rowidx[pr] * ncols + (ncols - 1) ]);
         } else {
             val = mk_int(0);
             any_free = true;
@@ -1868,13 +1817,350 @@ static bool try_solve_qfast(LinearBuilder* lb,
                                               items, nunknowns);
     free(items);
     *out_status = any_free ? 1 : 0;
+}
 
-#   undef MAT
+/* Allocate and run Gauss-Jordan + emit solution on an already-filled
+ * mpq matrix M of size nrows × ncols.  Returns true with M / rowidx
+ * still owned by the caller (mpq_init'd and unfreed) — the caller
+ * frees.  On allocation failure, sets *out_status = -1 and NULL rules
+ * and still returns true. */
+static bool solve_and_emit_mpq(mpq_t* M,
+                                size_t nrows, size_t ncols,
+                                Expr** unknowns, size_t nunknowns,
+                                Expr** out_solution_rules,
+                                int* out_status) {
+    size_t* rowidx = (size_t*)malloc(sizeof(size_t) * (nrows ? nrows : 1));
+    int64_t* pivot_for_col = (int64_t*)malloc(sizeof(int64_t) * ncols);
+    if (!rowidx || !pivot_for_col) {
+        free(rowidx); free(pivot_for_col);
+        *out_solution_rules = NULL; *out_status = -1; return true;
+    }
+    for (size_t i = 0; i < nrows; i++) rowidx[i] = i;
 
-    free(pivot_for_col); free(rowidx);
+    gauss_jordan_mpq(M, rowidx, nrows, ncols, pivot_for_col);
+    emit_q_solution(M, rowidx, pivot_for_col, ncols, unknowns, nunknowns,
+                     out_solution_rules, out_status);
+
+    free(rowidx); free(pivot_for_col);
+    return true;
+}
+
+/* Attempt the direct mpq Gauss-Jordan solver on an LinearBuilder of
+ * Expr** rows (post CoefficientList + walk_coefficient_table).
+ *
+ * Returns:
+ *   true  — Q-rational; *out_solution_rules / *out_status populated.
+ *   false — at least one matrix entry was non-Q-rational; caller must
+ *           fall through to the symbolic slow path. */
+static bool try_solve_qfast(LinearBuilder* lb,
+                             Expr** unknowns, size_t nunknowns,
+                             Expr** out_solution_rules,
+                             int* out_status) {
+    size_t nrows = lb->nrows;
+    size_t ncols = lb->ncols;          /* = nunknowns + 1 */
+
+    for (size_t i = 0; i < nrows; i++) {
+        for (size_t j = 0; j < ncols; j++) {
+            if (!entry_is_qrational(lb->rows[i][j])) return false;
+        }
+    }
+
+    size_t total = nrows * ncols;
+    mpq_t* M = (mpq_t*)malloc(sizeof(mpq_t) * (total ? total : 1));
+    if (!M) { *out_solution_rules = NULL; *out_status = -1; return true; }
+    for (size_t k = 0; k < total; k++) mpq_init(M[k]);
+    for (size_t i = 0; i < nrows; i++) {
+        for (size_t j = 0; j < ncols; j++) {
+            entry_to_mpq(lb->rows[i][j], M[i * ncols + j]);
+        }
+    }
+
+    bool ok = solve_and_emit_mpq(M, nrows, ncols, unknowns, nunknowns,
+                                  out_solution_rules, out_status);
+
     for (size_t k = 0; k < total; k++) mpq_clear(M[k]);
     free(M);
-    return true;
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
+/* Direct-from-expanded fast path.                                      */
+/*                                                                      */
+/* Skip CoefficientList + walk_coefficient_table entirely.  The input  */
+/* equation_numer (already fully expanded by try_integral_full) is a   */
+/* polynomial in `vars` whose per-monomial coefficients are linear in  */
+/* `unknowns`.  After expansion every Plus term has the canonical      */
+/* shape  q * Π vars[i]^e_i * unknowns[k]?  (k optional), where q is a */
+/* Q-rational scalar.  We walk the Plus, decompose each term, group by */
+/* (e_1,..,e_nv) monomial key, and accumulate column entries directly  */
+/* into mpq_t — skipping both the symbolic CoefficientList tree and    */
+/* the per-coefficient eval_coefficient + eval_replace_all pair.       */
+/*                                                                      */
+/* Returns true on success.  Returns false (no state mutated) if any   */
+/* term is not in the recognised Q-rational shape — caller falls       */
+/* through to the existing CoefficientList path which still has its    */
+/* own Q-fast detector on Expr** rows.                                  */
+/* ------------------------------------------------------------------ */
+
+/* Locate `e` in `list` (n entries); -1 if not a symbol or not present.
+ * Interned symbol-pointer equality. */
+static int sym_index_in(const Expr* e, Expr** list, size_t n) {
+    if (e->type != EXPR_SYMBOL) return -1;
+    const char* s = e->data.symbol;
+    for (size_t i = 0; i < n; i++) {
+        if (list[i]->type == EXPR_SYMBOL && list[i]->data.symbol == s) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+/* Decompose one factor of an expanded monomial.  Recursive on Times.
+ * Multiplies the recognised contribution into the running accumulator
+ * (scalar, exp_vec, unknown_idx).  Returns false to bail (foreign
+ * symbol, non-integer Power exponent, Plus inside a term, two
+ * unknowns in one term, etc.). */
+static bool decompose_factor(const Expr* t,
+                              Expr** vars, size_t nv,
+                              Expr** unknowns, size_t nunk,
+                              mpq_t scalar, int64_t* exp_vec,
+                              int64_t* unknown_idx) {
+    if (!t) return false;
+
+    if (entry_is_qrational(t)) {
+        mpq_t v; mpq_init(v); entry_to_mpq(t, v);
+        mpq_mul(scalar, scalar, v);
+        mpq_clear(v);
+        return true;
+    }
+
+    if (t->type == EXPR_SYMBOL) {
+        int vi = sym_index_in(t, vars, nv);
+        if (vi >= 0) { exp_vec[vi] += 1; return true; }
+        int ui = sym_index_in(t, unknowns, nunk);
+        if (ui >= 0) {
+            if (*unknown_idx >= 0) return false;   /* quadratic in unknowns */
+            *unknown_idx = ui;
+            return true;
+        }
+        return false;
+    }
+
+    if (t->type == EXPR_FUNCTION
+        && t->data.function.head
+        && t->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = t->data.function.head->data.symbol;
+        size_t n = t->data.function.arg_count;
+
+        if (h == SYM_Times) {
+            for (size_t i = 0; i < n; i++) {
+                if (!decompose_factor(t->data.function.args[i],
+                                       vars, nv, unknowns, nunk,
+                                       scalar, exp_vec, unknown_idx))
+                    return false;
+            }
+            return true;
+        }
+
+        if (h == SYM_Power && n == 2) {
+            const Expr* base = t->data.function.args[0];
+            const Expr* expe = t->data.function.args[1];
+            if (expe->type != EXPR_INTEGER || expe->data.integer < 0) return false;
+            int64_t e = expe->data.integer;
+            /* Base must be a var (powers of unknowns mean the system
+             * isn't linear and we should bail). */
+            if (base->type != EXPR_SYMBOL) return false;
+            int vi = sym_index_in(base, vars, nv);
+            if (vi < 0) return false;
+            exp_vec[vi] += e;
+            return true;
+        }
+
+        /* Plus / transcendental head / anything else — bail. */
+        return false;
+    }
+
+    return false;
+}
+
+/* Sparse row keyed by monomial exponent vector. */
+typedef struct {
+    int64_t* exp_vec;     /* length nv */
+    mpq_t* col;           /* length nunk + 1 (RHS at col[nunk]) */
+} QRowEntry;
+
+typedef struct {
+    QRowEntry* rows;
+    size_t n;
+    size_t cap;
+    size_t nv;
+    size_t ncols;         /* nunk + 1 */
+} QMatBuild;
+
+static size_t qmb_find_or_add(QMatBuild* M, const int64_t* exp_vec) {
+    for (size_t i = 0; i < M->n; i++) {
+        if (memcmp(M->rows[i].exp_vec, exp_vec,
+                    sizeof(int64_t) * M->nv) == 0) {
+            return i;
+        }
+    }
+    if (M->n == M->cap) {
+        size_t nc = M->cap ? M->cap * 2 : 16;
+        QRowEntry* nrows = (QRowEntry*)realloc(M->rows,
+                                                sizeof(QRowEntry) * nc);
+        if (!nrows) return SIZE_MAX;
+        M->rows = nrows;
+        M->cap = nc;
+    }
+    QRowEntry* r = &M->rows[M->n];
+    r->exp_vec = (int64_t*)malloc(sizeof(int64_t) * (M->nv ? M->nv : 1));
+    if (!r->exp_vec) return SIZE_MAX;
+    memcpy(r->exp_vec, exp_vec, sizeof(int64_t) * M->nv);
+    r->col = (mpq_t*)malloc(sizeof(mpq_t) * M->ncols);
+    if (!r->col) { free(r->exp_vec); return SIZE_MAX; }
+    for (size_t j = 0; j < M->ncols; j++) mpq_init(r->col[j]);
+    return M->n++;
+}
+
+static void qmb_free(QMatBuild* M) {
+    for (size_t i = 0; i < M->n; i++) {
+        free(M->rows[i].exp_vec);
+        for (size_t j = 0; j < M->ncols; j++) mpq_clear(M->rows[i].col[j]);
+        free(M->rows[i].col);
+    }
+    free(M->rows);
+}
+
+/* Attempt direct-from-expanded build + solve.
+ * Returns false (no state mutated) if any term doesn't decompose. */
+static bool try_solve_direct_q(Expr* equation_numer,
+                                Expr** vars, size_t nv,
+                                Expr** unknowns, size_t nunk,
+                                Expr** out_solution_rules,
+                                int* out_status) {
+    /* Top-level Plus walker.  After expansion equation_numer is either
+     * a Plus of terms or a single term / atom. */
+    size_t num_terms;
+    Expr* const* terms_ptr;
+    Expr* solo = equation_numer;
+    if (equation_numer->type == EXPR_FUNCTION
+        && equation_numer->data.function.head
+        && equation_numer->data.function.head->type == EXPR_SYMBOL
+        && equation_numer->data.function.head->data.symbol == SYM_Plus) {
+        num_terms = equation_numer->data.function.arg_count;
+        terms_ptr = equation_numer->data.function.args;
+    } else {
+        num_terms = 1;
+        terms_ptr = &solo;
+    }
+
+    QMatBuild M;
+    M.rows = NULL; M.n = 0; M.cap = 0;
+    M.nv = nv; M.ncols = nunk + 1;
+
+    int64_t* exp_vec = (int64_t*)calloc(nv ? nv : 1, sizeof(int64_t));
+    if (!exp_vec) return false;
+
+    mpq_t scalar;
+    mpq_init(scalar);
+
+    for (size_t i = 0; i < num_terms; i++) {
+        const Expr* t = terms_ptr[i];
+        if (!t) continue;
+
+        /* Skip an explicit zero term (shouldn't happen after expand). */
+        if (t->type == EXPR_INTEGER && t->data.integer == 0) continue;
+
+        for (size_t k = 0; k < nv; k++) exp_vec[k] = 0;
+        mpq_set_si(scalar, 1, 1);
+        int64_t unknown_idx = -1;
+
+        if (!decompose_factor(t, vars, nv, unknowns, nunk,
+                               scalar, exp_vec, &unknown_idx)) {
+            /* Bail: at least one term doesn't fit the Q-linear shape. */
+            mpq_clear(scalar);
+            free(exp_vec);
+            qmb_free(&M);
+            return false;
+        }
+
+        size_t row_idx = qmb_find_or_add(&M, exp_vec);
+        if (row_idx == SIZE_MAX) {
+            mpq_clear(scalar); free(exp_vec); qmb_free(&M);
+            *out_solution_rules = NULL; *out_status = -1;
+            return true;       /* allocation failure: behave as infeasible */
+        }
+
+        QRowEntry* row = &M.rows[row_idx];
+        if (unknown_idx >= 0) {
+            /* Coefficient of unknown_idx in this monomial. */
+            mpq_add(row->col[unknown_idx], row->col[unknown_idx], scalar);
+        } else {
+            /* Constant part of this monomial → -RHS. */
+            mpq_sub(row->col[nunk], row->col[nunk], scalar);
+        }
+    }
+
+    mpq_clear(scalar);
+    free(exp_vec);
+
+    /* Prune zero-rows (every column 0). */
+    size_t live = 0;
+    for (size_t i = 0; i < M.n; i++) {
+        bool all_zero = true;
+        for (size_t j = 0; j < M.ncols; j++) {
+            if (mpq_sgn(M.rows[i].col[j]) != 0) { all_zero = false; break; }
+        }
+        if (all_zero) {
+            free(M.rows[i].exp_vec);
+            for (size_t j = 0; j < M.ncols; j++) mpq_clear(M.rows[i].col[j]);
+            free(M.rows[i].col);
+            continue;
+        }
+        M.rows[live++] = M.rows[i];
+    }
+    M.n = live;
+
+    /* No constraints → every unknown is free; pin to 0. */
+    if (M.n == 0) {
+        Expr** items = (Expr**)malloc(sizeof(Expr*) * (nunk ? nunk : 1));
+        for (size_t j = 0; j < nunk; j++) {
+            items[j] = mk_binary(SYM_Rule, expr_copy(unknowns[j]), mk_int(0));
+        }
+        *out_solution_rules = expr_new_function(expr_new_symbol(SYM_List),
+                                                  items, nunk);
+        free(items);
+        *out_status = 1;
+        free(M.rows);
+        return true;
+    }
+
+    /* Flatten to a dense mpq matrix.  In practice the system is dense
+     * enough (≤ tens of rows × ≤ tens of cols on the slow tail) that
+     * row-major dense Gauss-Jordan is fine. */
+    size_t nrows = M.n;
+    size_t ncols = M.ncols;
+    size_t total = nrows * ncols;
+    mpq_t* MM = (mpq_t*)malloc(sizeof(mpq_t) * (total ? total : 1));
+    if (!MM) {
+        qmb_free(&M);
+        *out_solution_rules = NULL; *out_status = -1;
+        return true;
+    }
+    for (size_t k = 0; k < total; k++) mpq_init(MM[k]);
+    for (size_t i = 0; i < nrows; i++) {
+        for (size_t j = 0; j < ncols; j++) {
+            mpq_set(MM[i * ncols + j], M.rows[i].col[j]);
+        }
+    }
+    qmb_free(&M);
+
+    bool ok = solve_and_emit_mpq(MM, nrows, ncols, unknowns, nunk,
+                                  out_solution_rules, out_status);
+
+    for (size_t k = 0; k < total; k++) mpq_clear(MM[k]);
+    free(MM);
+    return ok;
 }
 
 /* solve_linear_undet — extract the per-monomial coefficient rows of
@@ -1901,7 +2187,22 @@ static int solve_linear_undet(Expr* equation_numer,
     *out_status = -1;
     if (nunknowns == 0) return 1;
 
-    /* Get CoefficientList[equation_numer, {vars...}] as a nested list. */
+    /* Direct-from-expanded fast path.  pmint's `equation_numer` is
+     * Q-linear in the unknowns in the typical case; if so we can build
+     * the augmented matrix straight into mpq_t and skip CoefficientList
+     * + walk_coefficient_table + the linear_builder_add_row
+     * Coefficient / ReplaceAll round-trip entirely. */
+    PM_PHB(dq);
+    bool directq_ok = try_solve_direct_q(equation_numer,
+                                          vars, nvars,
+                                          unknowns, nunknowns,
+                                          out_solution_rules, out_status);
+    PM_PHE(dq, PM_PH_TI_SOLVE_DIRECTQ);
+    if (directq_ok) return 0;
+
+    /* Fall through: CoefficientList path.  equation_numer arrives
+     * already expanded by try_integral_full (line 2389), so the inner
+     * eval_expand inside CoefficientList sees a no-op. */
     Expr* vars_list = NULL;
     {
         Expr** items = (Expr**)malloc(sizeof(Expr*) * nvars);
@@ -1910,9 +2211,8 @@ static int solve_linear_undet(Expr* equation_numer,
         free(items);
     }
     PM_PHB(cl);
-    Expr* eq_exp = eval_expand(equation_numer);
     Expr* clist = eval_and_free(mk_binary("CoefficientList",
-                                           eq_exp, vars_list));
+                                           expr_copy(equation_numer), vars_list));
     PM_PHE(cl, PM_PH_TI_SOLVE_CLIST);
 
     /* Walk the table, building linear rows. */
