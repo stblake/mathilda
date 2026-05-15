@@ -156,28 +156,66 @@ static double expr_poly_degree(const Expr* e, const char* v) {
     return expr_contains_symbol(e, v) ? INFINITY : 0.0;
 }
 
-/* Append every distinct Symbol-name pointer appearing in `e` to `out`
- * (up to capacity `cap`), DFS-visiting heads and args.  Truncates
- * silently if the buffer fills -- pathological inputs with hundreds of
- * distinct symbols lose precision in the canonical order but won't
- * crash, and the comparator remains a total order because both sides
- * see the same truncated variable set. */
-static size_t collect_symbols_in(const Expr* e, const char** out,
-                                 size_t count, size_t cap) {
-    if (!e || count >= cap) return count;
+/* Growable buffer of distinct interned-symbol-name pointers.  We need
+ * collection to be ORDER-INDEPENDENT across a vs b: a silent truncation
+ * after `a` would leave `b`'s unique symbols unrepresented, making the
+ * resulting comparator asymmetric (compare(a,b) != -compare(b,a)) and
+ * causing qsort on Orderless heads with hundreds of unknowns to
+ * oscillate forever between two non-converging orderings. */
+typedef struct {
+    const char* stack_buf[64];  /* common-case avoid-malloc path */
+    const char** items;          /* points at stack_buf or heap     */
+    size_t count;
+    size_t cap;
+    bool ok;
+} SymSet;
+
+static void symset_init(SymSet* s) {
+    s->items = s->stack_buf;
+    s->count = 0;
+    s->cap = sizeof(s->stack_buf) / sizeof(s->stack_buf[0]);
+    s->ok = true;
+}
+
+static void symset_free(SymSet* s) {
+    if (s->items && s->items != s->stack_buf) free((void*)s->items);
+    s->items = NULL;
+}
+
+static bool symset_grow(SymSet* s) {
+    size_t new_cap = s->cap * 2;
+    const char** new_buf = (const char**)malloc(sizeof(const char*) * new_cap);
+    if (!new_buf) { s->ok = false; return false; }
+    memcpy(new_buf, s->items, sizeof(const char*) * s->count);
+    if (s->items != s->stack_buf) free((void*)s->items);
+    s->items = new_buf;
+    s->cap = new_cap;
+    return true;
+}
+
+static void symset_add(SymSet* s, const char* sym) {
+    if (!s->ok) return;
+    for (size_t i = 0; i < s->count; i++) {
+        if (s->items[i] == sym) return;
+    }
+    if (s->count >= s->cap && !symset_grow(s)) return;
+    s->items[s->count++] = sym;
+}
+
+/* Append every distinct Symbol-name pointer appearing in `e` into `s`,
+ * DFS-visiting heads and args.  Grows the buffer as needed; never
+ * truncates. */
+static void collect_symbols_in(const Expr* e, SymSet* s) {
+    if (!e || !s->ok) return;
     if (e->type == EXPR_SYMBOL) {
-        for (size_t i = 0; i < count; i++) {
-            if (out[i] == e->data.symbol) return count;
-        }
-        out[count++] = e->data.symbol;
-        return count;
+        symset_add(s, e->data.symbol);
+        return;
     }
-    if (e->type != EXPR_FUNCTION) return count;
-    count = collect_symbols_in(e->data.function.head, out, count, cap);
+    if (e->type != EXPR_FUNCTION) return;
+    collect_symbols_in(e->data.function.head, s);
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        count = collect_symbols_in(e->data.function.args[i], out, count, cap);
+        collect_symbols_in(e->data.function.args[i], s);
     }
-    return count;
 }
 
 /* qsort comparator that sorts char* pointers in REVERSE lex order, so
@@ -231,20 +269,22 @@ int expr_compare(const Expr* a, const Expr* b) {
     if (b->type == EXPR_STRING) return 1;
 
     /* 3. Polynomial degree vector comparison. */
-    enum { VAR_CAP = 64 };
-    const char* vars[VAR_CAP];
-    size_t count = 0;
-    count = collect_symbols_in(a, vars, count, VAR_CAP);
-    count = collect_symbols_in(b, vars, count, VAR_CAP);
+    SymSet vs;
+    symset_init(&vs);
+    collect_symbols_in(a, &vs);
+    collect_symbols_in(b, &vs);
 
-    qsort(vars, count, sizeof(const char*), symbol_reverse_cmp);
+    qsort((void*)vs.items, vs.count, sizeof(const char*), symbol_reverse_cmp);
 
-    for (size_t i = 0; i < count; i++) {
-        double da = expr_poly_degree(a, vars[i]);
-        double db = expr_poly_degree(b, vars[i]);
-        if (da < db) return -1;
-        if (da > db) return 1;
+    int deg_cmp = 0;
+    for (size_t i = 0; i < vs.count; i++) {
+        double da = expr_poly_degree(a, vs.items[i]);
+        double db = expr_poly_degree(b, vs.items[i]);
+        if (da < db) { deg_cmp = -1; break; }
+        if (da > db) { deg_cmp = 1; break; }
     }
+    symset_free(&vs);
+    if (deg_cmp != 0) return deg_cmp;
 
     /* 4. Structural tiebreak. */
     if (a->type == EXPR_SYMBOL && b->type == EXPR_SYMBOL) {
