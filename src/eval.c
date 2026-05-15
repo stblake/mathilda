@@ -351,6 +351,46 @@ static Expr* apply_listable(Expr* e) {
 }
 
 /*
+ * lhs_arg_contains_pattern:
+ * Walks an expression looking for any pattern construct (Blank,
+ * BlankSequence, BlankNullSequence, Pattern, Optional, Repeated,
+ * RepeatedNull, PatternTest, HoldPattern, Condition).  Returns true
+ * if any node is found.
+ *
+ * Used by the Set/SetDelayed dispatcher to decide whether the LHS arg
+ * should be evaluated.  Mathematica's rule semantics scope pattern
+ * variables inside the LHS — they must NOT be rewritten by existing
+ * DownValues during definition.  Evaluating a pattern-bearing LHS
+ * arg via the generic evaluator inadvertently fires earlier DownValues
+ * on the held pattern (e.g. a CRC table entry whose LHS reshapes to
+ * match an earlier rule's pattern, returning that rule's RHS shape),
+ * destroying the rule being installed.  Holding the arg whenever it
+ * contains a pattern construct sidesteps that.
+ *
+ * The `f[x] = 1` (x has an OwnValue c → defines f[c] = 1) case still
+ * works because non-pattern LHSes contain no Blank/Pattern node and
+ * continue down the evaluation path.
+ */
+static bool lhs_arg_contains_pattern(Expr* e) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        if (h == SYM_Blank || h == SYM_BlankSequence || h == SYM_BlankNullSequence
+            || h == SYM_Pattern || h == SYM_Optional || h == SYM_Repeated
+            || h == SYM_RepeatedNull || h == SYM_PatternTest
+            || h == SYM_HoldPattern || h == SYM_Condition) {
+            return true;
+        }
+        if (lhs_arg_contains_pattern(e->data.function.head)) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (lhs_arg_contains_pattern(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/*
  * assignment_target_symbol:
  * Returns the name of the symbol whose OwnValue/DownValue/Part would be
  * written if lhs were used as the LHS of a Set or SetDelayed, or NULL if
@@ -812,6 +852,16 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                             else if (i > 0 && (lhs_attrs & ATTR_HOLDREST)) hold = true;
 
                             if (is_part && i == 0) hold = true; // Hold the first argument of Part
+
+                            /* Hold args that contain pattern constructs.  Otherwise
+                             * the generic evaluator would apply existing DownValues
+                             * to the held pattern and rewrite the LHS of the rule
+                             * being installed — corrupting it.  See header comment
+                             * on lhs_arg_contains_pattern for the failure mode this
+                             * prevents. */
+                            if (!hold && lhs_arg_contains_pattern(lhs->data.function.args[i])) {
+                                hold = true;
+                            }
 
                             /* In a List-LHS, hold any element that is itself a symbol or
                              * a nested List (binding targets / nested destructuring). */

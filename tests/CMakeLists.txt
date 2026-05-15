@@ -433,6 +433,14 @@ else()
     target_link_libraries(integrals_tests gmp m)
 endif()
 
+add_executable(integrate_dispatch_tests test_integrate_dispatch.c ${COMMON_SRC})
+target_include_directories(integrate_dispatch_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_dispatch_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(integrate_dispatch_tests gmp m)
+endif()
+
 add_executable(print_tests test_print.c ${COMMON_SRC})
 target_include_directories(print_tests PRIVATE ../src)
 

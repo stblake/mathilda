@@ -1,13 +1,18 @@
 /* integrate.c
  *
- * Tiny `Integrate[f, x]` System` dispatcher.  Recognises polynomial /
- * rational integrands in `x` and forwards to the package entry
- * `Integrate`IntegrateRational[f, x]`.  Anything else returns NULL so
- * the evaluator leaves the call unevaluated (matching Mathematica's
- * unsimplified-form behaviour for non-rational integrands).
+ * `Integrate[f, x]` System` dispatcher.  Cascades through three
+ * stages and supports an explicit `Method -> "..."` option:
  *
- * All algorithmic content lives in intrat.c; this file is the System
- * surface area only.
+ *   1. Integrate`IntegrateRational   — polynomial / rational integrands
+ *   2. Integrate`RischNorman         — parallel-Risch (Bronstein pmint)
+ *   3. Integrate`CRCTable            — CRC integral table (lazy-loaded)
+ *
+ * Method values: "Automatic" (default, full cascade), "Rational",
+ * "RischNorman", "CRCTable" (strict passthrough, no fallback).
+ *
+ * The CRC table is large and most sessions never need it, so its
+ * .m file is Get-loaded on first invocation of try_crctable() rather
+ * than at startup.  See LAZY_LOAD_CRC below.
  */
 
 #include "integrate.h"
@@ -15,6 +20,7 @@
 #include "intrischnorman.h"
 #include "expr.h"
 #include "eval.h"
+#include "parse.h"
 #include "symtab.h"
 #include "attr.h"
 #include "internal.h"
@@ -82,8 +88,6 @@ static bool is_rational_in(Expr* f, Expr* x) {
     if (num_v && den_v) {
         bool num_is_poly = is_polynomial_in(num_v, x);
         bool den_is_poly = is_polynomial_in(den_v, x);
-        /* Reject the trivial Denominator==1 case here: a pure polynomial
-         * numerator already passed the PolynomialQ branch upstream. */
         bool den_is_unit = (den_v->type == EXPR_INTEGER && den_v->data.integer == 1);
         ok = num_is_poly && den_is_poly && !den_is_unit;
     }
@@ -92,8 +96,148 @@ static bool is_rational_in(Expr* f, Expr* x) {
     return ok;
 }
 
+/* True iff `result` is the unevaluated call `head_name[...]`. */
+static bool result_is_unresolved(const Expr* result, const char* head_name) {
+    return result
+        && result->type == EXPR_FUNCTION
+        && result->data.function.head
+        && result->data.function.head->type == EXPR_SYMBOL
+        && strcmp(result->data.function.head->data.symbol, head_name) == 0;
+}
+
+/* Helper: build and evaluate `head_name[f, x]`, freeing the call
+ * expression.  Returns whatever evaluate() produces. */
+static Expr* call_stage(const char* head_name, Expr* f, Expr* x) {
+    Expr* call = expr_new_function(
+        expr_new_symbol(head_name),
+        (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
+    Expr* result = evaluate(call);
+    expr_free(call);
+    return result;
+}
+
+/* Stage 1: rational-function integrator.  Returns the antiderivative on
+ * success, NULL when the integrand is non-rational or pmint gives up. */
+static Expr* try_rational(Expr* f, Expr* x) {
+    if (!is_polynomial_in(f, x) && !is_rational_in(f, x)) return NULL;
+    Expr* result = call_stage("Integrate`IntegrateRational", f, x);
+    if (!result) return NULL;
+    if (result_is_unresolved(result, "Integrate`IntegrateRational")) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
+/* Stage 2: Risch-Norman heuristic (Bronstein pmint). */
+static Expr* try_risch(Expr* f, Expr* x) {
+    Expr* result = call_stage("Integrate`RischNorman", f, x);
+    if (!result) return NULL;
+    if (result_is_unresolved(result, "Integrate`RischNorman")) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
+/* Stage 3: CRC integral table.  Loaded from disk on first invocation
+ * (lazy) so unaffected sessions pay nothing for it. */
+#define MAX_CRC_DEPTH 256
+static int crc_depth = 0;
+static bool crc_load_attempted = false;
+static bool crc_load_succeeded  = false;
+
+/* Try Get["src/internal/CRCMathTablesIntegrals.m"]; tolerate the same
+ * relative-then-fallback pattern test_integrals.c uses so it works
+ * from any CWD with a sane layout. */
+static void crc_lazy_load(void) {
+    if (crc_load_attempted) return;
+    crc_load_attempted = true;
+
+    const char* paths[] = {
+        "Get[\"src/internal/CRCMathTablesIntegrals.m\"]",
+        "Get[\"../src/internal/CRCMathTablesIntegrals.m\"]",
+        "Get[\"../../src/internal/CRCMathTablesIntegrals.m\"]",
+        NULL
+    };
+    for (const char** p = paths; *p; p++) {
+        Expr* parsed = parse_expression(*p);
+        if (!parsed) continue;
+        Expr* res = evaluate(parsed);
+        expr_free(parsed);
+        bool failed = res && res->type == EXPR_SYMBOL
+                          && strcmp(res->data.symbol, "$Failed") == 0;
+        if (res) expr_free(res);
+        if (!failed) { crc_load_succeeded = true; return; }
+    }
+    fprintf(stderr,
+        "Integrate`CRCTable::nofile: cannot locate "
+        "src/internal/CRCMathTablesIntegrals.m on disk.\n");
+}
+
+static Expr* try_crctable(Expr* f, Expr* x) {
+    crc_lazy_load();
+    if (!crc_load_succeeded) return NULL;
+
+    if (crc_depth >= MAX_CRC_DEPTH) {
+        fprintf(stderr,
+            "Integrate`CRCTable::depth: rule recursion exceeded %d levels; "
+            "the table has a divergent rule for this integrand.\n",
+            MAX_CRC_DEPTH);
+        return NULL;
+    }
+    crc_depth++;
+    Expr* result = call_stage("Integrate`CRCTable", f, x);
+    crc_depth--;
+    if (!result) return NULL;
+
+    /* "Failed" sentinels: either the public head is unresolved (no
+     * rule matched the CRCTable wrapper) or the internal IntegrateTable
+     * head leaked through (table lookup found no matching formula). */
+    if (result_is_unresolved(result, "Integrate`CRCTable") ||
+        result_is_unresolved(result, "IntegrateTable")) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
+/* Method-option parsing.  Mirrors the canonical SYM_Method / SYM_Rule
+ * idiom (see src/list.c:1480-1491 and src/facint.c:1276-1310). */
+typedef enum {
+    METHOD_AUTOMATIC = 0,
+    METHOD_RATIONAL,
+    METHOD_RISCH,
+    METHOD_CRCTABLE,
+    METHOD_INVALID
+} IntegrateMethod;
+
+static IntegrateMethod parse_method_option(Expr* opt) {
+    if (opt->type != EXPR_FUNCTION) return METHOD_INVALID;
+    if (opt->data.function.head->type != EXPR_SYMBOL) return METHOD_INVALID;
+    const char* hd = opt->data.function.head->data.symbol;
+    if ((hd != SYM_Rule && hd != SYM_RuleDelayed) ||
+        opt->data.function.arg_count != 2) return METHOD_INVALID;
+    Expr* lhs = opt->data.function.args[0];
+    Expr* rhs = opt->data.function.args[1];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_Method)
+        return METHOD_INVALID;
+
+    /* Accept either a string ("Automatic") or the symbol Automatic. */
+    if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)
+        return METHOD_AUTOMATIC;
+    if (rhs->type != EXPR_STRING) return METHOD_INVALID;
+    if (strcmp(rhs->data.string, "Automatic")   == 0) return METHOD_AUTOMATIC;
+    if (strcmp(rhs->data.string, "Rational")    == 0) return METHOD_RATIONAL;
+    if (strcmp(rhs->data.string, "RischNorman") == 0) return METHOD_RISCH;
+    if (strcmp(rhs->data.string, "CRCTable")    == 0) return METHOD_CRCTABLE;
+    return METHOD_INVALID;
+}
+
 Expr* builtin_integrate(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 2 || argc > 3) return NULL;
 
     Expr* f = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
@@ -102,12 +246,28 @@ Expr* builtin_integrate(Expr* res) {
      * compute derivatives, partial fractions, ... in it. */
     if (x->type != EXPR_SYMBOL) return NULL;
 
+    /* Parse the optional Method -> "..." option. */
+    IntegrateMethod method = METHOD_AUTOMATIC;
+    if (argc == 3) {
+        method = parse_method_option(res->data.function.args[2]);
+        if (method == METHOD_INVALID) {
+            static uint64_t last_warned_hash = 0;
+            uint64_t h = expr_hash(res);
+            if (h != last_warned_hash) {
+                fprintf(stderr,
+                    "Integrate::method: Method option value is not one of "
+                    "\"Automatic\", \"Rational\", \"RischNorman\", \"CRCTable\".\n");
+                last_warned_hash = h;
+            }
+            return NULL;
+        }
+    }
+
     /* Inexact integrands: try Rationalize[f] first.  Floats with an
      * exact rational equivalent within the default tolerance (4.5,
      * 3.125, ...) coerce cleanly; transcendental floats (N[Pi], ...)
      * survive Rationalize unchanged, in which case we emit
-     * Integrate::inexact and bubble back unevaluated.  Hash-dedupe
-     * so the eval-loop's repeated re-entry doesn't double-print. */
+     * Integrate::inexact and bubble back unevaluated. */
     Expr* coerced = NULL;
     Expr* effective_f = f;
     if (expr_contains_real(f)) {
@@ -127,58 +287,28 @@ Expr* builtin_integrate(Expr* res) {
         effective_f = coerced;
     }
 
-    bool dispatch_rational = is_polynomial_in(effective_f, x)
-                            || is_rational_in(effective_f, x);
-
-    /* Stage 1: try Integrate`IntegrateRational for polynomial / rational
-     * integrands.  Its output has either some resolved head (Plus, Log,
-     * ...) on success, or the unevaluated package head on failure. */
-    if (dispatch_rational) {
-        Expr* call = expr_new_function(
-            expr_new_symbol("Integrate`IntegrateRational"),
-            (Expr*[]){ expr_copy(effective_f), expr_copy(x) }, 2);
-        Expr* result = evaluate(call);
-        expr_free(call);
-        if (result) {
-            bool unresolved =
-                result->type == EXPR_FUNCTION
-                && result->data.function.head
-                && result->data.function.head->type == EXPR_SYMBOL
-                && strcmp(result->data.function.head->data.symbol,
-                          "Integrate`IntegrateRational") == 0;
-            if (!unresolved) {
-                if (coerced) expr_free(coerced);
-                return result;
-            }
-            expr_free(result);
-        }
+    Expr* result = NULL;
+    switch (method) {
+        case METHOD_AUTOMATIC:
+            result = try_rational(effective_f, x);
+            if (!result) result = try_risch(effective_f, x);
+            if (!result) result = try_crctable(effective_f, x);
+            break;
+        case METHOD_RATIONAL:
+            result = try_rational(effective_f, x);
+            break;
+        case METHOD_RISCH:
+            result = try_risch(effective_f, x);
+            break;
+        case METHOD_CRCTABLE:
+            result = try_crctable(effective_f, x);
+            break;
+        case METHOD_INVALID:
+            break;  /* unreachable: handled above */
     }
 
-    /* Stage 2: parallel-Risch / Risch-Norman heuristic for transcendental
-     * integrands (Sin, Cos, Exp, Log, Tan, ...).  Bronstein's pmint
-     * algorithm; see `src/intrischnorman.c` and `RISCH_NORMAN_PLAN.md`.
-     * Returns NULL when pmint gives up — we bubble back unevaluated. */
-    {
-        Expr* call = expr_new_function(
-            expr_new_symbol("Integrate`RischNorman"),
-            (Expr*[]){ expr_copy(effective_f), expr_copy(x) }, 2);
-        if (coerced) expr_free(coerced);
-        Expr* result = evaluate(call);
-        expr_free(call);
-        if (!result) return NULL;
-
-        bool unresolved =
-            result->type == EXPR_FUNCTION
-            && result->data.function.head
-            && result->data.function.head->type == EXPR_SYMBOL
-            && strcmp(result->data.function.head->data.symbol,
-                      "Integrate`RischNorman") == 0;
-        if (unresolved) {
-            expr_free(result);
-            return NULL;
-        }
-        return result;
-    }
+    if (coerced) expr_free(coerced);
+    return result;
 }
 
 void integrate_init(void) {
@@ -186,11 +316,14 @@ void integrate_init(void) {
     symtab_get_def("Integrate")->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
     symtab_set_docstring("Integrate",
         "Integrate[f, x] gives the indefinite integral of f with respect to x.\n"
-        "Currently dispatches to the rational-function pipeline implemented in\n"
-        "the Integrate` package: polynomial term-by-term integration, Hermite\n"
-        "reduction for repeated roots, derivative-recognition fast path for\n"
-        "c*D'/D and c*D'/D^k, and (in later phases) the Lazard-Rioboo-Trager\n"
-        "logarithmic part. Non-rational integrands return unevaluated.");
+        "Integrate[f, x, Method -> \"<name>\"] dispatches directly to a single\n"
+        "subroutine, bypassing the default cascade.  Accepted method names:\n"
+        "  \"Automatic\"    — try Rational, then RischNorman, then CRCTable (default)\n"
+        "  \"Rational\"     — Integrate`IntegrateRational (polynomial / rational)\n"
+        "  \"RischNorman\"  — Integrate`RischNorman (Bronstein pmint heuristic)\n"
+        "  \"CRCTable\"     — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
+        "Named methods are strict: failure returns unevaluated, with no fallback.\n"
+        "The CRCTable rules are loaded from disk on first use only.");
 
     /* Initialise the Integrate` package: HermiteReduce, IntegratePolynomial,
      * helpers, and the explicit `Integrate`IntegrateRational` entry. */
@@ -200,4 +333,19 @@ void integrate_init(void) {
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,
      * the fall-through for transcendental integrands. */
     intrischnorman_init();
+
+    /* Pre-register Integrate`CRCTable so ?Integrate`CRCTable shows a
+     * docstring even before the lazy load fires.  The actual rule
+     * definition is added when CRCMathTablesIntegrals.m is Get-loaded
+     * on first call — that DownValue install must NOT be blocked by
+     * Protected, so we deliberately leave attributes empty here.  The
+     * lazy load itself promotes Integrate`CRCTable to Protected via
+     * SetAttributes inside CRCMathTablesIntegrals.m. */
+    symtab_get_def("Integrate`CRCTable");
+    symtab_set_docstring("Integrate`CRCTable",
+        "Integrate`CRCTable[f, x] looks up f in the CRC Standard Mathematical\n"
+        "Tables (31st ed.) integral table. Returns the antiderivative on a hit,\n"
+        "or the unevaluated form if no rule applies. The table file\n"
+        "(src/internal/CRCMathTablesIntegrals.m) is loaded from disk on first\n"
+        "use only.");
 }

@@ -282,10 +282,23 @@ high-water mark of known-broken cases — improvements drive it
 monotonically down.
 
 **Features**:
-- `Protected`.
-- Validates input via `PolynomialQ[f, x] || rationalQ[f, x]` before
-  forwarding to the package; non-rational integrands return
-  unevaluated.
+- `Protected`, `Listable`.
+- Three-stage dispatch cascade (2026-05): `Integrate[f, x]` (Method ->
+  Automatic, default) tries each subroutine in order and returns the
+  first non-`NULL` result:
+  1. `Integrate\`IntegrateRational[f, x]` — when `PolynomialQ[f, x] ||
+     rationalQ[f, x]`.
+  2. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  3. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+     from `src/internal/CRCMathTablesIntegrals.m` on first call).
+  If every stage gives up the call bubbles back unevaluated.
+- `Method -> "<name>"` option (3rd argument) bypasses the cascade and
+  dispatches strictly to a single subroutine, with no fallback:
+  - `"Automatic"` — default cascade above.
+  - `"Rational"` — `Integrate\`IntegrateRational[f, x]`.
+  - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
+  - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
+  Unknown method names emit `Integrate::method` and bubble back.
 - Universal correctness predicate: `Cancel[Together[D[Integrate[f,x],x] - f]] === 0`.
 
 **Examples**:
@@ -312,16 +325,48 @@ In[7]:= Integrate[1/(x^4 + x^2 + 1), x]            (* two quadratic factors *)
 Out[7]= 1/6 Sqrt[3] ArcTan[(-1 + 2 x)/Sqrt[3]] +
         1/6 Sqrt[3] ArcTan[(1 + 2 x)/Sqrt[3]] +
         1/4 Log[1 + x + x^2] - 1/4 Log[1 - x + x^2]
+
+In[8]:= Integrate[Sin[x], x, Method -> "RischNorman"]  (* strict, no fallback *)
+Out[8]= -Cos[x]
+
+In[9]:= Integrate[x^3, x, Method -> "Rational"]
+Out[9]= 1/4 x^4
 ```
 
 The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
 `Integrate`IntegrateRational` (the explicit form),
-`Integrate`IntRationalLogPart` (Phase 2's LRT computation), and
-the unit-test helpers `Integrate`Helpers`Content`, `...`Primitive`,
-`...`Monic`, `...`LeadingCoefficient`, `...`SquareFree`,
-`...`ExtractConstants`, `...`ApartList`.  All are `Protected,
-ReadProtected`.
+`Integrate`IntRationalLogPart` (Phase 2's LRT computation),
+`Integrate`RischNorman` (Bronstein pmint), `Integrate`CRCTable`
+(table lookup), and the unit-test helpers `Integrate`Helpers`Content`,
+`...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
+`...`SquareFree`, `...`ExtractConstants`, `...`ApartList`.  All are
+`Protected`; the IntegrateRational helpers additionally have
+`ReadProtected`.
+
+### Integrate`CRCTable
+
+`Integrate`CRCTable[f, x]` looks `f` up in the CRC Standard Mathematical
+Tables (31st ed., 600+ formulas).  The rules live in
+`src/internal/CRCMathTablesIntegrals.m`, internally on the head
+`IntegrateTable`; `Integrate`CRCTable` is a thin wrapper around it.
+The .m file is `Get`-loaded on the first invocation of the CRCTable
+stage rather than at startup, so sessions that never call `Integrate`
+pay nothing for the table.
+
+Every recursive rule in the table carries an `IntegerQ[index] && index
+> base` (or `< base`) guard sufficient to guarantee termination via
+first-principles analysis of the reduction direction.  Without these
+guards rules such as Formula 49 (the `1/(x^2 - c^2)^n` reduction)
+would diverge on negative or non-integer `n`.  As defence-in-depth,
+the C dispatcher caps CRC-rule recursion depth at 256 levels and
+emits `Integrate`CRCTable::depth` rather than locking up on any rule
+that escapes the audit.
+
+The table currently fires on only a small subset of inputs because
+picocas's pattern matcher does not yet fully support `/;`-guarded
+multi-argument rules; this is a separate issue tracked under the
+matcher work.
 
 ## Integrate`IntRationalLogPart
 

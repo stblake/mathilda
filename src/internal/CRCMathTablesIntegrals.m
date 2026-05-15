@@ -1,5 +1,16 @@
 
 (* Source: CRC Standard Mathematical Tables, 31st Edition *)
+(*
+   Loaded lazily on first call to Integrate's CRCTable stage (see
+   src/integrate.c's try_crctable / crc_lazy_load).  The table is
+   addressable by users as Integrate`CRCTable[f, x]; the internal rules
+   are stored on the short name IntegrateTable for readability — the
+   public wrapper at the bottom of this file forwards to it.
+
+   picocas's BeginPackage/Begin parsing inside Get is incomplete (it
+   mishandles SetDelayed inside an explicit context), so we keep the
+   layout flat instead of using BeginPackage.
+*)
 
 (* Elementary forms *)
 IntegrateTable[a_, x_] /; FreeQ[a, x] := a x;
@@ -32,15 +43,15 @@ IntegrateTable[x_^2 (b_. x_ + a_.)^n_, x_] /; FreeQ[{a, b, n}, x] && n =!= -1 &&
 
 (* Formula 26: Three distinct reduction forms are provided. *)
 (* Form 1: Reduces the power of the binomial *)
-IntegrateTable[x_^m_ (b_. x_ + a_.)^n_, x_] /; FreeQ[{a, b, m, n}, x] && m + n + 1 =!= 0 := 
+IntegrateTable[x_^m_ (b_. x_ + a_.)^n_, x_] /; FreeQ[{a, b, m, n}, x] && m + n + 1 =!= 0 && IntegerQ[m] && IntegerQ[n] && n > 0 :=
   (x^(m + 1) (a + b x)^n)/(m + n + 1) + (a n)/(m + n + 1) IntegrateTable[x^m (a + b x)^(n - 1), x];
 
 (* Form 2: Increases the power of the binomial *)
-IntegrateTable[x_^m_ (b_. x_ + a_.)^n_, x_] /; FreeQ[{a, b, m, n}, x] && n =!= -1 := 
+IntegrateTable[x_^m_ (b_. x_ + a_.)^n_, x_] /; FreeQ[{a, b, m, n}, x] && n =!= -1 && IntegerQ[m] && IntegerQ[n] && n < -1 :=
   1/(a (n + 1)) (-x^(m + 1) (a + b x)^(n + 1) + (m + n + 2) IntegrateTable[x^m (a + b x)^(n + 1), x]);
 
 (* Form 3: Reduces the power of x *)
-IntegrateTable[x_^m_ (b_. x_ + a_.)^n_, x_] /; FreeQ[{a, b, m, n}, x] && m + n + 1 =!= 0 := 
+IntegrateTable[x_^m_ (b_. x_ + a_.)^n_, x_] /; FreeQ[{a, b, m, n}, x] && m + n + 1 =!= 0 && IntegerQ[m] && IntegerQ[n] && m > 0 :=
   1/(b (m + n + 1)) (x^m (a + b x)^(n + 1) - m a IntegrateTable[x^(m - 1) (a + b x)^n, x]);
 
 (* Formula 27 *)
@@ -112,11 +123,11 @@ IntegrateTable[x_/(c_^2 + x_^2)^m_, x_] /; FreeQ[{c, m}, x] && m =!= 1 := -1/(2 
 IntegrateTable[x_/(c_^2 - x_^2)^m_, x_] /; FreeQ[{c, m}, x] && m =!= 1 := 1/(2 (m - 1) (c^2 - x^2)^(m - 1));
 
 (* Formula 48: Split into + and - variations *)
-IntegrateTable[1/(c_^2 + x_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(2 c^2 (n - 1)) (x/(c^2 + x^2)^(n - 1) + (2 n - 3) IntegrateTable[1/(c^2 + x^2)^(n - 1), x]);
-IntegrateTable[1/(c_^2 - x_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(2 c^2 (n - 1)) (x/(c^2 - x^2)^(n - 1) + (2 n - 3) IntegrateTable[1/(c^2 - x^2)^(n - 1), x]);
+IntegrateTable[1/(c_^2 + x_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(2 c^2 (n - 1)) (x/(c^2 + x^2)^(n - 1) + (2 n - 3) IntegrateTable[1/(c^2 + x^2)^(n - 1), x]);
+IntegrateTable[1/(c_^2 - x_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(2 c^2 (n - 1)) (x/(c^2 - x^2)^(n - 1) + (2 n - 3) IntegrateTable[1/(c^2 - x^2)^(n - 1), x]);
 
 (* Formula 49 *)
-IntegrateTable[1/(x_^2 - c_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(2 c^2 (n - 1)) (-x/(x^2 - c^2)^(n - 1) - (2 n - 3) IntegrateTable[1/(x^2 - c^2)^(n - 1), x]);
+IntegrateTable[1/(x_^2 - c_^2)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(2 c^2 (n - 1)) (-x/(x^2 - c^2)^(n - 1) - (2 n - 3) IntegrateTable[1/(x^2 - c^2)^(n - 1), x]);
 
 (* Formula 50 *)
 IntegrateTable[x_/(x_^2 - c_^2), x_] /; FreeQ[c, x] := 1/2 Log[x^2 - c^2];
@@ -142,7 +153,7 @@ IntegrateTable[x_/((a_ + b_. x_)^2 (c_ + d_. x_)), x_] /; FreeQ[{a, b, c, d}, x]
 IntegrateTable[x_^2/((a_ + b_. x_)^2 (c_ + d_. x_)), x_] /; FreeQ[{a, b, c, d}, x] := With[{k = a d - b c, u = a + b x, v = c + d x}, a^2/(b^2 k u) + 1/k^2 (c^2/d Log[v] + (a (k - b c))/b^2 Log[u])];
 
 (* Formula 57 *)
-IntegrateTable[1/((a_ + b_. x_)^n_ (c_ + d_. x_)^m_), x_] /; FreeQ[{a, b, c, d, n, m}, x] && m =!= 1 := With[{k = a d - b c, u = a + b x, v = c + d x}, 1/(k (m - 1)) (-1/(u^(n - 1) v^(m - 1)) - b (m + n - 2) IntegrateTable[1/(u^n v^(m - 1)), x])];
+IntegrateTable[1/((a_ + b_. x_)^n_ (c_ + d_. x_)^m_), x_] /; FreeQ[{a, b, c, d, n, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 := With[{k = a d - b c, u = a + b x, v = c + d x}, 1/(k (m - 1)) (-1/(u^(n - 1) v^(m - 1)) - b (m + n - 2) IntegrateTable[1/(u^n v^(m - 1)), x])];
   
 (* Formula 58 *)
 IntegrateTable[(a_ + b_. x_)/(c_ + d_. x_), x_] /; FreeQ[{a, b, c, d}, x] := With[{k = a d - b c, u = a + b x, v = c + d x}, (b x)/d + k/d^2 Log[v]];
@@ -173,13 +184,13 @@ IntegrateTable[1/(a_ + b_. x_^2)^2, x_] /; FreeQ[{a, b}, x] := x/(2 a (a + b x^2
 IntegrateTable[1/(a_^2 - b_^2 x_^2), x_] /; FreeQ[{a, b}, x] := 1/(2 a b) Log[(a + b x)/(a - b x)];
 
 (* Formula 67: Mapped n+1 to m *)
-IntegrateTable[1/(a_ + b_. x_^2)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= 1 := x/(2 a (m - 1) (a + b x^2)^(m - 1)) + (2 m - 3)/(2 a (m - 1)) IntegrateTable[1/(a + b x^2)^(m - 1), x];
+IntegrateTable[1/(a_ + b_. x_^2)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 := x/(2 a (m - 1) (a + b x^2)^(m - 1)) + (2 m - 3)/(2 a (m - 1)) IntegrateTable[1/(a + b x^2)^(m - 1), x];
 
 (* Formula 68: Mapped m+1 to m *)
 IntegrateTable[x_/(a_ + b_. x_^2)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= 1 := -1/(2 b (m - 1) (a + b x^2)^(m - 1));
 
 (* Formula 69: Mapped m+1 to m *)
-IntegrateTable[x_^2/(a_ + b_. x_^2)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= 1 := -x/(2 b (m - 1) (a + b x^2)^(m - 1)) + 1/(2 b (m - 1)) IntegrateTable[1/(a + b x^2)^(m - 1), x];
+IntegrateTable[x_^2/(a_ + b_. x_^2)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 := -x/(2 b (m - 1) (a + b x^2)^(m - 1)) + 1/(2 b (m - 1)) IntegrateTable[1/(a + b x^2)^(m - 1), x];
 
 (* Formula 70 *)
 IntegrateTable[1/(x_ (a_ + b_. x_^2)), x_] /; FreeQ[{a, b}, x] := 1/(2 a) Log[x^2/(a + b x^2)];
@@ -188,10 +199,10 @@ IntegrateTable[1/(x_ (a_ + b_. x_^2)), x_] /; FreeQ[{a, b}, x] := 1/(2 a) Log[x^
 IntegrateTable[1/(x_^2 (a_ + b_. x_^2)), x_] /; FreeQ[{a, b}, x] := -1/(a x) - b/a IntegrateTable[1/(a + b x^2), x];
 
 (* Formula 72: Mapped n+1 to n *)
-IntegrateTable[1/(x_ (a_ + b_. x_^2)^n_), x_] /; FreeQ[{a, b, n}, x] && n =!= 1 := 1/(2 a (n - 1) (a + b x^2)^(n - 1)) + 1/a IntegrateTable[1/(x (a + b x^2)^(n - 1)), x];
+IntegrateTable[1/(x_ (a_ + b_. x_^2)^n_), x_] /; FreeQ[{a, b, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(2 a (n - 1) (a + b x^2)^(n - 1)) + 1/a IntegrateTable[1/(x (a + b x^2)^(n - 1)), x];
 
 (* Formula 73: Mapped m+1 to n *)
-IntegrateTable[1/(x_^2 (a_ + b_. x_^2)^n_), x_] /; FreeQ[{a, b, n}, x] && n =!= 1 := 1/a IntegrateTable[1/(x^2 (a + b x^2)^(n - 1)), x] - b/a IntegrateTable[1/(a + b x^2)^n, x];
+IntegrateTable[1/(x_^2 (a_ + b_. x_^2)^n_), x_] /; FreeQ[{a, b, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/a IntegrateTable[1/(x^2 (a + b x^2)^(n - 1)), x] - b/a IntegrateTable[1/(a + b x^2)^n, x];
 
 
 (* Formula 74 *)
@@ -231,16 +242,16 @@ IntegrateTable[x_^3/(a_ + b_. x_^4), x_] /; FreeQ[{a, b}, x] := 1/(4 b) Log[a + 
 IntegrateTable[1/(x_ (a_ + b_. x_^n_)), x_] /; FreeQ[{a, b, n}, x] && n =!= 0 := 1/(a n) Log[x^n/(a + b x^n)];
 
 (* Formula 84: Mapped m+1 to m *)
-IntegrateTable[1/(a_ + b_. x_^n_)^m_, x_] /; FreeQ[{a, b, n, m}, x] && m =!= 1 := 1/a IntegrateTable[1/(a + b x^n)^(m - 1), x] - b/a IntegrateTable[x^n/(a + b x^n)^m, x];
+IntegrateTable[1/(a_ + b_. x_^n_)^m_, x_] /; FreeQ[{a, b, n, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 := 1/a IntegrateTable[1/(a + b x^n)^(m - 1), x] - b/a IntegrateTable[x^n/(a + b x^n)^m, x];
 
 (* Formula 85: Mapped p+1 to p *)
-IntegrateTable[x_^m_/(a_ + b_. x_^n_)^p_, x_] /; FreeQ[{a, b, n, m, p}, x] && p =!= 1 := 1/b IntegrateTable[x^(m - n)/(a + b x^n)^(p - 1), x] - a/b IntegrateTable[x^(m - n)/(a + b x^n)^p, x];
+IntegrateTable[x_^m_/(a_ + b_. x_^n_)^p_, x_] /; FreeQ[{a, b, n, m, p}, x] && p =!= 1 && IntegerQ[p] && p > 1 := 1/b IntegrateTable[x^(m - n)/(a + b x^n)^(p - 1), x] - a/b IntegrateTable[x^(m - n)/(a + b x^n)^p, x];
 
 (* Formula 86: Mapped p+1 to p *)
-IntegrateTable[1/(x_^m_ (a_ + b_. x_^n_)^p_), x_] /; FreeQ[{a, b, n, m, p}, x] && p =!= 1 := 1/a IntegrateTable[1/(x^m (a + b x^n)^(p - 1)), x] - b/a IntegrateTable[1/(x^(m - n) (a + b x^n)^p), x];
+IntegrateTable[1/(x_^m_ (a_ + b_. x_^n_)^p_), x_] /; FreeQ[{a, b, n, m, p}, x] && p =!= 1 && IntegerQ[p] && p > 1 := 1/a IntegrateTable[1/(x^m (a + b x^n)^(p - 1)), x] - b/a IntegrateTable[1/(x^(m - n) (a + b x^n)^p), x];
 
 (* Formula 87: Form 1 *)
-IntegrateTable[x_^m_ (a_ + b_. x_^n_)^p_, x_] /; FreeQ[{a, b, n, m, p}, x] := 1/(b (n p + m + 1)) (x^(m - n + 1) (a + b x^n)^(p + 1) - a (m - n + 1) IntegrateTable[x^(m - n) (a + b x^n)^p, x]);
+IntegrateTable[x_^m_ (a_ + b_. x_^n_)^p_, x_] /; FreeQ[{a, b, n, m, p}, x] && IntegerQ[m] && IntegerQ[n] && n > 0 && m >= n && n p + m + 1 =!= 0 := 1/(b (n p + m + 1)) (x^(m - n + 1) (a + b x^n)^(p + 1) - a (m - n + 1) IntegrateTable[x^(m - n) (a + b x^n)^p, x]);
 
 (* Formula 88 *)
 IntegrateTable[1/(c_^3 + x_^3), x_] /; FreeQ[c, x] := 1/(6 c^2) Log[(c + x)^3/(c^3 + x^3)] + 1/(c^2 Sqrt[3]) ArcTan[(2 x - c)/(c Sqrt[3])];
@@ -253,9 +264,9 @@ IntegrateTable[1/(c_^3 + x_^3)^2, x_] /; FreeQ[c, x] := x/(3 c^3 (c^3 + x^3)) + 
 IntegrateTable[1/(c_^3 - x_^3)^2, x_] /; FreeQ[c, x] := x/(3 c^3 (c^3 - x^3)) + 2/(3 c^3) IntegrateTable[1/(c^3 - x^3), x];
 
 (* Formula 90: Mapped n+1 to n *)
-IntegrateTable[1/(c_^3 + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(3 (n - 1) c^3) (x/(c^3 + x^3)^(n - 1) + (3 n - 4) IntegrateTable[1/(c^3 + x^3)^(n - 1), x]);
+IntegrateTable[1/(c_^3 + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3) (x/(c^3 + x^3)^(n - 1) + (3 n - 4) IntegrateTable[1/(c^3 + x^3)^(n - 1), x]);
 
-IntegrateTable[1/(c_^3 - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(3 (n - 1) c^3) (x/(c^3 - x^3)^(n - 1) + (3 n - 4) IntegrateTable[1/(c^3 - x^3)^(n - 1), x]);
+IntegrateTable[1/(c_^3 - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3) (x/(c^3 - x^3)^(n - 1) + (3 n - 4) IntegrateTable[1/(c^3 - x^3)^(n - 1), x]);
 
 (* Formula 91 *)
 IntegrateTable[x_/(c_^3 + x_^3), x_] /; FreeQ[c, x] := 1/(6 c) Log[(c^3 + x^3)/(c + x)^3] + 1/(c Sqrt[3]) ArcTan[(2 x - c)/(c Sqrt[3])];
@@ -268,9 +279,9 @@ IntegrateTable[x_/(c_^3 + x_^3)^2, x_] /; FreeQ[c, x] := x^2/(3 c^3 (c^3 + x^3))
 IntegrateTable[x_/(c_^3 - x_^3)^2, x_] /; FreeQ[c, x] := x^2/(3 c^3 (c^3 - x^3)) + 1/(3 c^3) IntegrateTable[x/(c^3 - x^3), x];
 
 (* Formula 93: Mapped n+1 to n *)
-IntegrateTable[x_/(c_^3 + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(3 (n - 1) c^3) (x^2/(c^3 + x^3)^(n - 1) + (3 n - 5) IntegrateTable[x/(c^3 + x^3)^(n - 1), x]);
+IntegrateTable[x_/(c_^3 + x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3) (x^2/(c^3 + x^3)^(n - 1) + (3 n - 5) IntegrateTable[x/(c^3 + x^3)^(n - 1), x]);
 
-IntegrateTable[x_/(c_^3 - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(3 (n - 1) c^3) (x^2/(c^3 - x^3)^(n - 1) + (3 n - 5) IntegrateTable[x/(c^3 - x^3)^(n - 1), x]);
+IntegrateTable[x_/(c_^3 - x_^3)^n_, x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3) (x^2/(c^3 - x^3)^(n - 1) + (3 n - 5) IntegrateTable[x/(c^3 - x^3)^(n - 1), x]);
 
 (* Formula 94 *)
 IntegrateTable[x_^2/(c_^3 + x_^3), x_] /; FreeQ[c, x] := 1/3 Log[c^3 + x^3];
@@ -293,9 +304,9 @@ IntegrateTable[1/(x_ (c_^3 + x_^3)^2), x_] /; FreeQ[c, x] := 1/(3 c^3 (c^3 + x^3
 IntegrateTable[1/(x_ (c_^3 - x_^3)^2), x_] /; FreeQ[c, x] := 1/(3 c^3 (c^3 - x^3)) + 1/(3 c^6) Log[x^3/(c^3 - x^3)];
 
 (* Formula 98: Mapped n+1 to n *)
-IntegrateTable[1/(x_ (c_^3 + x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(3 (n - 1) c^3 (c^3 + x^3)^(n - 1)) + 1/c^3 IntegrateTable[1/(x (c^3 + x^3)^(n - 1)), x];
+IntegrateTable[1/(x_ (c_^3 + x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3 (c^3 + x^3)^(n - 1)) + 1/c^3 IntegrateTable[1/(x (c^3 + x^3)^(n - 1)), x];
 
-IntegrateTable[1/(x_ (c_^3 - x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/(3 (n - 1) c^3 (c^3 - x^3)^(n - 1)) + 1/c^3 IntegrateTable[1/(x (c^3 - x^3)^(n - 1)), x];
+IntegrateTable[1/(x_ (c_^3 - x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/(3 (n - 1) c^3 (c^3 - x^3)^(n - 1)) + 1/c^3 IntegrateTable[1/(x (c^3 - x^3)^(n - 1)), x];
 
 (* Formula 99 *)
 IntegrateTable[1/(x_^2 (c_^3 + x_^3)), x_] /; FreeQ[c, x] := -1/(c^3 x) - 1/c^3 IntegrateTable[x/(c^3 + x^3), x];
@@ -303,9 +314,9 @@ IntegrateTable[1/(x_^2 (c_^3 + x_^3)), x_] /; FreeQ[c, x] := -1/(c^3 x) - 1/c^3 
 IntegrateTable[1/(x_^2 (c_^3 - x_^3)), x_] /; FreeQ[c, x] := -1/(c^3 x) + 1/c^3 IntegrateTable[x/(c^3 - x^3), x];
 
 (* Formula 100: Mapped n+1 to n *)
-IntegrateTable[1/(x_^2 (c_^3 + x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/c^3 IntegrateTable[1/(x^2 (c^3 + x^3)^(n - 1)), x] - 1/c^3 IntegrateTable[x/(c^3 + x^3)^n, x];
+IntegrateTable[1/(x_^2 (c_^3 + x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/c^3 IntegrateTable[1/(x^2 (c^3 + x^3)^(n - 1)), x] - 1/c^3 IntegrateTable[x/(c^3 + x^3)^n, x];
 
-IntegrateTable[1/(x_^2 (c_^3 - x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 := 1/c^3 IntegrateTable[1/(x^2 (c^3 - x^3)^(n - 1)), x] + 1/c^3 IntegrateTable[x/(c^3 - x^3)^n, x];
+IntegrateTable[1/(x_^2 (c_^3 - x_^3)^n_), x_] /; FreeQ[{c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := 1/c^3 IntegrateTable[1/(x^2 (c^3 - x^3)^(n - 1)), x] + 1/c^3 IntegrateTable[x/(c^3 - x^3)^n, x];
 
 (* Formula 101 *)
 IntegrateTable[1/(c_^4 + x_^4), x_] /; FreeQ[c, x] := 1/(2 c^3 Sqrt[2]) (1/2 Log[(x^2 + c x Sqrt[2] + c^2)/(x^2 - c x Sqrt[2] + c^2)] + ArcTan[(c x Sqrt[2])/(c^2 - x^2)]);
@@ -344,7 +355,7 @@ IntegrateTable[1/(a_ + b_. x_ + c_. x_^2)^3, x_] /; FreeQ[{a, b, c}, x] := With[
     (2 c x + b)/q (1/(2 X^2) + (3 c)/(q X)) + (6 c^2)/q^2 IntegrateTable[1/X, x]];
 
 (* Formula 111: Mapped n+1 to n *)
-IntegrateTable[1/(a_ + b_. x_ + c_. x_^2)^n_, x_] /; FreeQ[{a, b, c, n}, x] && n =!= 1 := With[{X = a + b x + c x^2, q = 4 a c - b^2}, 
+IntegrateTable[1/(a_ + b_. x_ + c_. x_^2)^n_, x_] /; FreeQ[{a, b, c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := With[{X = a + b x + c x^2, q = 4 a c - b^2},
     (2 c x + b)/((n - 1) q X^(n - 1)) + (2 (2 n - 3) c)/(q (n - 1)) IntegrateTable[1/X^(n - 1), x]];
 
 (* Formula 112 *)
@@ -356,7 +367,7 @@ IntegrateTable[x_/(a_ + b_. x_ + c_. x_^2)^2, x_] /; FreeQ[{a, b, c}, x] := With
     -(b x + 2 a)/(q X) - b/q IntegrateTable[1/X, x]];
 
 (* Formula 114: Mapped n+1 to n *)
-IntegrateTable[x_/(a_ + b_. x_ + c_. x_^2)^n_, x_] /; FreeQ[{a, b, c, n}, x] && n =!= 1 := With[{X = a + b x + c x^2, q = 4 a c - b^2}, 
+IntegrateTable[x_/(a_ + b_. x_ + c_. x_^2)^n_, x_] /; FreeQ[{a, b, c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := With[{X = a + b x + c x^2, q = 4 a c - b^2},
     -(2 a + b x)/((n - 1) q X^(n - 1)) - (b (2 n - 3))/((n - 1) q) IntegrateTable[1/X^(n - 1), x]];
 
 (* Formula 115 *)
@@ -368,7 +379,7 @@ IntegrateTable[x_^2/(a_ + b_. x_ + c_. x_^2)^2, x_] /; FreeQ[{a, b, c}, x] := Wi
     ((b^2 - 2 a c) x + a b)/(c q X) + (2 a)/q IntegrateTable[1/X, x]];
 
 (* Formula 117: Mapped n+1 to n *)
-IntegrateTable[x_^m_/(a_ + b_. x_ + c_. x_^2)^n_, x_] /; FreeQ[{a, b, c, m, n}, x] && n =!= 1 := With[{X = a + b x + c x^2}, 
+IntegrateTable[x_^m_/(a_ + b_. x_ + c_. x_^2)^n_, x_] /; FreeQ[{a, b, c, m, n}, x] && n =!= 1 && IntegerQ[m] && m > 1 := With[{X = a + b x + c x^2},
     -x^(m - 1)/((2 n - m - 1) c X^(n - 1)) - (n - m)*b/((2 n - m - 1) c) IntegrateTable[x^(m - 1)/X^n, x] + (m - 1)*a/((2 n - m - 1) c) IntegrateTable[x^(m - 2)/X^n, x]];
 
 (* Formula 118 *)
@@ -379,11 +390,11 @@ IntegrateTable[1/(x_^2 (a_ + b_. x_ + c_. x_^2)), x_] /; FreeQ[{a, b, c}, x] := 
     b/(2 a^2) Log[X/x^2] - 1/(a x) + (b^2/(2 a^2) - c/a) IntegrateTable[1/X, x]];
 
 (* Formula 120: Mapped n to n-1 in denominators for smooth matching *)
-IntegrateTable[1/(x_ (a_ + b_. x_ + c_. x_^2)^n_), x_] /; FreeQ[{a, b, c, n}, x] && n =!= 1 := With[{X = a + b x + c x^2}, 
+IntegrateTable[1/(x_ (a_ + b_. x_ + c_. x_^2)^n_), x_] /; FreeQ[{a, b, c, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := With[{X = a + b x + c x^2},
     1/(2 a (n - 1) X^(n - 1)) - b/(2 a) IntegrateTable[1/X^n, x] + 1/a IntegrateTable[1/(x X^(n - 1)), x]];
 
 (* Formula 121: Mapped n+1 to n for smoother general matching *)
-IntegrateTable[1/(x_^m_ (a_ + b_. x_ + c_. x_^2)^n_), x_] /; FreeQ[{a, b, c, m, n}, x] && m =!= 1 := With[{X = a + b x + c x^2}, 
+IntegrateTable[1/(x_^m_ (a_ + b_. x_ + c_. x_^2)^n_), x_] /; FreeQ[{a, b, c, m, n}, x] && m =!= 1 && IntegerQ[m] && m > 1 := With[{X = a + b x + c x^2},
     -1/((m - 1) a x^(m - 1) X^(n - 1)) - ((n + m - 2) b)/((m - 1) a) IntegrateTable[1/(x^(m - 1) X^n), x] - ((2 n + m - 3) c)/((m - 1) a) IntegrateTable[1/(x^(m - 2) X^n), x]];
 
 (* Formula 122 *)
@@ -402,7 +413,7 @@ IntegrateTable[x_^m_ Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, m}, x] := 2/(b (2 m 
 IntegrateTable[Sqrt[a_ + b_. x_]/x_, x_] /; FreeQ[{a, b}, x] := 2 Sqrt[a + b x] + a IntegrateTable[1/(x Sqrt[a + b x]), x];
 
 (* Formula 127 *)
-IntegrateTable[Sqrt[a_ + b_. x_]/x_^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= 1 := -1/((m - 1) a) ((a + b x)^(3/2)/x^(m - 1) + ((2 m - 5) b)/2 IntegrateTable[Sqrt[a + b x]/x^(m - 1), x]);
+IntegrateTable[Sqrt[a_ + b_. x_]/x_^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 := -1/((m - 1) a) ((a + b x)^(3/2)/x^(m - 1) + ((2 m - 5) b)/2 IntegrateTable[Sqrt[a + b x]/x^(m - 1), x]);
 
 (* Formula 128 *)
 IntegrateTable[1/Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b}, x] := 2/b Sqrt[a + b x];
@@ -425,7 +436,7 @@ IntegrateTable[1/(x_ Sqrt[a_ + b_. x_]), x_] /; FreeQ[{a, b}, x] && a > 0 := 1/S
 IntegrateTable[1/(x_^2 Sqrt[a_ + b_. x_]), x_] /; FreeQ[{a, b}, x] := -Sqrt[a + b x]/(a x) - b/(2 a) IntegrateTable[1/(x Sqrt[a + b x]), x];
 
 (* Formula 134 *)
-IntegrateTable[1/(x_^n_ Sqrt[a_ + b_. x_]), x_] /; FreeQ[{a, b, n}, x] && n =!= 1 := -Sqrt[a + b x]/((n - 1) a x^(n - 1)) - ((2 n - 3) b)/(2 (n - 1) a) IntegrateTable[1/(x^(n - 1) Sqrt[a + b x]), x];
+IntegrateTable[1/(x_^n_ Sqrt[a_ + b_. x_]), x_] /; FreeQ[{a, b, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 := -Sqrt[a + b x]/((n - 1) a x^(n - 1)) - ((2 n - 3) b)/(2 (n - 1) a) IntegrateTable[1/(x^(n - 1) Sqrt[a + b x]), x];
 
 (* Formula 135 & 136: Converted textbook ±n/2 to general rational power m_ *)
 IntegrateTable[(a_ + b_. x_)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= -1 := (a + b x)^(m + 1)/(b (m + 1));
@@ -433,9 +444,9 @@ IntegrateTable[(a_ + b_. x_)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= -1 := (a + 
 IntegrateTable[x_ (a_ + b_. x_)^m_, x_] /; FreeQ[{a, b, m}, x] && m =!= -1 && m =!= -2 := 1/b^2 ((a + b x)^(m + 2)/(m + 2) - a (a + b x)^(m + 1)/(m + 1));
 
 (* Formula 137 & 138: Using general rational power m_ *)
-IntegrateTable[1/(x_ (a_ + b_. x_)^m_), x_] /; FreeQ[{a, b, m}, x] := 1/a IntegrateTable[1/(x (a + b x)^(m - 1)), x] - b/a IntegrateTable[1/(a + b x)^m, x];
+IntegrateTable[1/(x_ (a_ + b_. x_)^m_), x_] /; FreeQ[{a, b, m}, x] && IntegerQ[m] && m > 1 := 1/a IntegrateTable[1/(x (a + b x)^(m - 1)), x] - b/a IntegrateTable[1/(a + b x)^m, x];
 
-IntegrateTable[(a_ + b_. x_)^m_/x_, x_] /; FreeQ[{a, b, m}, x] := b IntegrateTable[(a + b x)^(m - 1), x] + a IntegrateTable[(a + b x)^(m - 1)/x, x];
+IntegrateTable[(a_ + b_. x_)^m_/x_, x_] /; FreeQ[{a, b, m}, x] && IntegerQ[m] && m > 0 := b IntegrateTable[(a + b x)^(m - 1), x] + a IntegrateTable[(a + b x)^(m - 1)/x, x];
 
 (* Formula 139 *)
 IntegrateTable[1/Sqrt[(a_ + b_. x_) (c_ + d_. x_)], x_] /; FreeQ[{a, b, c, d}, x] && b d > 0 := 2/Sqrt[b d] ArcTanh[Sqrt[b d (a + b x) (c + d x)]/(b (c + d x))];
@@ -471,11 +482,11 @@ IntegrateTable[(c_ + d_. x_)^m_ Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, c, d, m},
     1/((2 m + 3) d) (2 v^(m + 1) Sqrt[u] + k IntegrateTable[v^m/Sqrt[u], x])];
 
 (* Formula 147 *)
-IntegrateTable[1/((c_ + d_. x_)^m_ Sqrt[a_ + b_. x_]), x_] /; FreeQ[{a, b, c, d, m}, x] && m =!= 1 := With[{u = a + b x, v = c + d x, k = a d - b c}, 
+IntegrateTable[1/((c_ + d_. x_)^m_ Sqrt[a_ + b_. x_]), x_] /; FreeQ[{a, b, c, d, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 := With[{u = a + b x, v = c + d x, k = a d - b c},
     -1/((m - 1) k) (Sqrt[u]/v^(m - 1) + (m - 3/2) b IntegrateTable[1/(v^(m - 1) Sqrt[u]), x])];
 
 (* Formula 148 *)
-IntegrateTable[(c_ + d_. x_)^m_/Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, c, d, m}, x] := With[{u = a + b x, v = c + d x, k = a d - b c}, 
+IntegrateTable[(c_ + d_. x_)^m_/Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, c, d, m}, x] && IntegerQ[m] && m > 0 := With[{u = a + b x, v = c + d x, k = a d - b c},
     2/(b (2 m + 1)) (v^m Sqrt[u] - m k IntegrateTable[v^(m - 1)/Sqrt[u], x])];
 
 (* Formula 149 *)
@@ -604,14 +615,14 @@ IntegrateTable[1/(x_^3 (x_^2 - a_^2)^(3/2)), x_] /; FreeQ[a, x] :=
   Sqrt[x^2 - a^2]/(2 a^2 x^2) - 3/(2 a^4 Sqrt[x^2 - a^2]) - 3/(2 Abs[a]^5) ArcSec[x/a];
 
 (* Formula 182: Recursive reductions for positive powers *)
-IntegrateTable[x_^m_/Sqrt[x_^2 + a_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 := x^(m - 1)/m Sqrt[x^2 + a^2] - ((m - 1) a^2)/m IntegrateTable[x^(m - 2)/Sqrt[x^2 + a^2], x];
+IntegrateTable[x_^m_/Sqrt[x_^2 + a_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 && IntegerQ[m] && m > 1 := x^(m - 1)/m Sqrt[x^2 + a^2] - ((m - 1) a^2)/m IntegrateTable[x^(m - 2)/Sqrt[x^2 + a^2], x];
 
-IntegrateTable[x_^m_/Sqrt[x_^2 - a_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 := x^(m - 1)/m Sqrt[x^2 - a^2] + ((m - 1) a^2)/m IntegrateTable[x^(m - 2)/Sqrt[x^2 - a^2], x];
+IntegrateTable[x_^m_/Sqrt[x_^2 - a_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 && IntegerQ[m] && m > 1 := x^(m - 1)/m Sqrt[x^2 - a^2] + ((m - 1) a^2)/m IntegrateTable[x^(m - 2)/Sqrt[x^2 - a^2], x];
 
 (* Formula 185: Recursive reductions for negative powers *)
-IntegrateTable[1/(x_^m_ Sqrt[x_^2 + a_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 := -Sqrt[x^2 + a^2]/((m - 1) a^2 x^(m - 1)) - (m - 2)/((m - 1) a^2) IntegrateTable[1/(x^(m - 2) Sqrt[x^2 + a^2]), x];
+IntegrateTable[1/(x_^m_ Sqrt[x_^2 + a_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 := -Sqrt[x^2 + a^2]/((m - 1) a^2 x^(m - 1)) - (m - 2)/((m - 1) a^2) IntegrateTable[1/(x^(m - 2) Sqrt[x^2 + a^2]), x];
 
-IntegrateTable[1/(x_^m_ Sqrt[x_^2 - a_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 := Sqrt[x^2 - a^2]/((m - 1) a^2 x^(m - 1)) + (m - 2)/((m - 1) a^2) IntegrateTable[1/(x^(m - 2) Sqrt[x^2 - a^2]), x];
+IntegrateTable[1/(x_^m_ Sqrt[x_^2 - a_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 := Sqrt[x^2 - a^2]/((m - 1) a^2 x^(m - 1)) + (m - 2)/((m - 1) a^2) IntegrateTable[1/(x^(m - 2) Sqrt[x^2 - a^2]), x];
 
 (* Formula 189 & 190 *)
 IntegrateTable[1/((x_ - a_) Sqrt[x_^2 - a_^2]), x_] /; FreeQ[a, x] := -Sqrt[x^2 - a^2]/(a (x - a));
@@ -702,9 +713,9 @@ IntegrateTable[1/(x_^3 (a_^2 - x_^2)^(3/2)), x_] /; FreeQ[a, x] :=
   (3 x^2 - 2 a^2)/(2 a^4 Sqrt[a^2 - x^2]) - 3/(2 a^5) Log[(a + Sqrt[a^2 - x^2])/x];
 
 (* Formula 217 & 220: General Reduction Rules *)
-IntegrateTable[x_^m_/Sqrt[a_^2 - x_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 := 
+IntegrateTable[x_^m_/Sqrt[a_^2 - x_^2], x_] /; FreeQ[{a, m}, x] && m =!= 0 && IntegerQ[m] && m > 1 :=
   -x^(m - 1)/m Sqrt[a^2 - x^2] + ((m - 1) a^2)/m IntegrateTable[x^(m - 2)/Sqrt[a^2 - x^2], x];
-IntegrateTable[1/(x_^m_ Sqrt[a_^2 - x_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 := 
+IntegrateTable[1/(x_^m_ Sqrt[a_^2 - x_^2]), x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 :=
   -Sqrt[a^2 - x^2]/((m - 1) a^2 x^(m - 1)) + (m - 2)/((m - 1) a^2) IntegrateTable[1/(x^(m - 2) Sqrt[a^2 - x^2]), x];
 
 (* Formula 223 *)
@@ -736,9 +747,9 @@ IntegrateTable[1/(a_ + b_. x_ + c_. x_^2)^(5/2), x_] /; FreeQ[{a, b, c}, x] :=
   ];
 
 (* Formula 229: Generic reduction for n (mapped from texts n) *)
-IntegrateTable[1/((a_ + b_. x_ + c_. x_^2)^n_ Sqrt[a_ + b_. x_ + c_. x_^2]), x_] /; FreeQ[{a, b, c, n}, x] && n =!= 0 := 
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q}, 
-    (2 (2 c x + b) Sqrt[X])/((2 n + 1) q X^(n + 1)) + (2 k n)/(2 n + 1) IntegrateTable[1/(X^n Sqrt[X]), x]
+IntegrateTable[1/((a_ + b_. x_ + c_. x_^2)^n_ Sqrt[a_ + b_. x_ + c_. x_^2]), x_] /; FreeQ[{a, b, c, n}, x] && n =!= 0 && IntegerQ[n] && n > 0 :=
+  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q},
+    (2 (2 c x + b) Sqrt[X])/((2 n + 1) q X^(n + 1)) + (2 k n)/(2 n + 1) IntegrateTable[1/(X^(n - 1) Sqrt[X]), x]
   ];
 
 (* Formula 230 - 232 *)
@@ -756,8 +767,8 @@ IntegrateTable[(a_ + b_. x_ + c_. x_^2)^(5/2), x_] /; FreeQ[{a, b, c}, x] :=
   ];
 
 (* Formula 233: General reduction *)
-IntegrateTable[(a_ + b_. x_ + c_. x_^2)^n_ Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] := 
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q}, 
+IntegrateTable[(a_ + b_. x_ + c_. x_^2)^n_ Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] && IntegerQ[n] && n > 0 :=
+  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q},
     ((2 c x + b) X^n Sqrt[X])/(4 (n + 1) c) + (2 n + 1)/(2 (n + 1) k) IntegrateTable[X^(n - 1) Sqrt[X], x]
   ];
 
@@ -794,8 +805,8 @@ IntegrateTable[x_^3/Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c}, x] :=
   With[{X = a + b x + c x^2}, 
     (x^2/(3 c) - (5 b x)/(12 c^2) + (5 b^2)/(8 c^3) - (2 a)/(3 c^2)) Sqrt[X] + ((3 a b)/(4 c^2) - (5 b^3)/(16 c^3)) IntegrateTable[1/Sqrt[X], x]
   ];
-IntegrateTable[x_^n_/Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] && n =!= 0 := 
-  With[{X = a + b x + c x^2}, 
+IntegrateTable[x_^n_/Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] && n =!= 0 && IntegerQ[n] && n > 0 :=
+  With[{X = a + b x + c x^2},
     1/(n c) x^(n - 1) Sqrt[X] - ((2 n - 1) b)/(2 n c) IntegrateTable[x^(n - 1)/Sqrt[X], x] - ((n - 1) a)/(n c) IntegrateTable[x^(n - 2)/Sqrt[X], x]
   ];
 
@@ -804,8 +815,8 @@ IntegrateTable[x_ (a_ + b_. x_ + c_. x_^2)^(3/2), x_] /; FreeQ[{a, b, c}, x] :=
   With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q}, 
     (X Sqrt[X])/(3 c) - (b (2 c x + b))/(8 c^2) Sqrt[X] - b/(4 c k) IntegrateTable[1/Sqrt[X], x]
   ];
-IntegrateTable[x_ X_^n_ Sqrt[X_], x_] /; FreeQ[{a, b, c, n}, x] := 
-  With[{X = a + b x + c x^2}, 
+IntegrateTable[x_ X_^n_ Sqrt[X_], x_] /; FreeQ[{a, b, c, n}, x] && IntegerQ[n] && n > 0 :=
+  With[{X = a + b x + c x^2},
     (X^(n + 1) Sqrt[X])/((2 n + 3) c) - b/(2 c) IntegrateTable[X^n Sqrt[X], x]
   ];
 IntegrateTable[x_^2 Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c}, x] := 
@@ -836,19 +847,19 @@ IntegrateTable[1/Sqrt[2 a_ x_ - x_^2], x_] /; FreeQ[a, x] :=
   ArcSin[(x - a)/Abs[a]];
 
 (* Formula 252 *)
-IntegrateTable[x_^n_ Sqrt[2 a_ x_ - x_^2], x_] /; FreeQ[{a, n}, x] && n =!= -2 := 
+IntegrateTable[x_^n_ Sqrt[2 a_ x_ - x_^2], x_] /; FreeQ[{a, n}, x] && n =!= -2 && IntegerQ[n] && n > 0 :=
   -((x^(n - 1) (2 a x - x^2)^(3/2))/(n + 2)) + ((2 n + 1) a)/(n + 2) IntegrateTable[x^(n - 1) Sqrt[2 a x - x^2], x];
 
 (* Formula 253 *)
-IntegrateTable[Sqrt[2 a_ x_ - x_^2]/x_^n_, x_] /; FreeQ[{a, n}, x] && n =!= 3/2 := 
+IntegrateTable[Sqrt[2 a_ x_ - x_^2]/x_^n_, x_] /; FreeQ[{a, n}, x] && n =!= 3/2 && IntegerQ[n] && n > 0 :=
   (2 a x - x^2)^(3/2)/((3 - 2 n) a x^n) + (n - 3)/((2 n - 3) a) IntegrateTable[Sqrt[2 a x - x^2]/x^(n - 1), x];
 
 (* Formula 254 *)
-IntegrateTable[x_^n_/Sqrt[2 a_ x_ - x_^2], x_] /; FreeQ[{a, n}, x] && n =!= 0 := 
+IntegrateTable[x_^n_/Sqrt[2 a_ x_ - x_^2], x_] /; FreeQ[{a, n}, x] && n =!= 0 && IntegerQ[n] && n > 0 :=
   -(x^(n - 1) Sqrt[2 a x - x^2])/n + (a (2 n - 1))/n IntegrateTable[x^(n - 1)/Sqrt[2 a x - x^2], x];
 
 (* Formula 255 *)
-IntegrateTable[1/(x_^n_ Sqrt[2 a_ x_ - x_^2]), x_] /; FreeQ[{a, n}, x] && n =!= 1/2 := 
+IntegrateTable[1/(x_^n_ Sqrt[2 a_ x_ - x_^2]), x_] /; FreeQ[{a, n}, x] && n =!= 1/2 && IntegerQ[n] && n > 0 :=
   Sqrt[2 a x - x^2]/(a (1 - 2 n) x^n) + (n - 1)/((2 n - 1) a) IntegrateTable[1/(x^(n - 1) Sqrt[2 a x - x^2]), x];
 
 (* Formula 256 *)
@@ -886,7 +897,7 @@ IntegrateTable[1/Sqrt[a_. x_^2 + c_], x_] /; FreeQ[{a, c}, x] && a > 0 :=
   1/Sqrt[a] Log[x Sqrt[a] + Sqrt[a x^2 + c]];
 
 (* Formula 263: Generalized m+1/2 exponent to general m_ *)
-IntegrateTable[(a_. x_^2 + c_)^m_, x_] /; FreeQ[{a, c, m}, x] && m =!= -1/2 := 
+IntegrateTable[(a_. x_^2 + c_)^m_, x_] /; FreeQ[{a, c, m}, x] && m =!= -1/2 && IntegerQ[m] && m > 0 :=
   (x (a x^2 + c)^m)/(2 m + 1) + (2 m c)/(2 m + 1) IntegrateTable[(a x^2 + c)^(m - 1), x];
 
 (* Formula 264 *)
@@ -894,11 +905,11 @@ IntegrateTable[x_ (a_. x_^2 + c_)^m_, x_] /; FreeQ[{a, c, m}, x] && m =!= -1 :=
   (a x^2 + c)^(m + 1)/(2 a (m + 1));
 
 (* Formula 265 *)
-IntegrateTable[(a_. x_^2 + c_)^m_/x_, x_] /; FreeQ[{a, c, m}, x] && m =!= 0 := 
+IntegrateTable[(a_. x_^2 + c_)^m_/x_, x_] /; FreeQ[{a, c, m}, x] && m =!= 0 && IntegerQ[m] && m > 0 :=
   (a x^2 + c)^m/(2 m) + c IntegrateTable[(a x^2 + c)^(m - 1)/x, x];
 
 (* Formula 266 *)
-IntegrateTable[1/(a_. x_^2 + c_)^m_, x_] /; FreeQ[{a, c, m}, x] && m =!= 1 := 
+IntegrateTable[1/(a_. x_^2 + c_)^m_, x_] /; FreeQ[{a, c, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 :=
   x/((2 m - 2) c (a x^2 + c)^(m - 1)) + (2 m - 3)/((2 m - 2) c) IntegrateTable[1/(a x^2 + c)^(m - 1), x];
 
 (* Formula 267: Already covered structurally by 261 out of the box! *)
@@ -951,7 +962,7 @@ IntegrateTable[Sin[a_. x_]^3, x_] /; FreeQ[a, x] := -1/(3 a) Cos[a x] (Sin[a x]^
 IntegrateTable[Sin[a_. x_]^4, x_] /; FreeQ[a, x] := (3 x)/8 - Sin[2 a x]/(4 a) + Sin[4 a x]/(32 a);
 
 (* Formula 282 *)
-IntegrateTable[Sin[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 0 := 
+IntegrateTable[Sin[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 0 && IntegerQ[n] && n > 1 :=
   -(Sin[a x]^(n - 1) Cos[a x])/(n a) + (n - 1)/n IntegrateTable[Sin[a x]^(n - 2), x];
 
 (* Formula 285 *)
@@ -964,21 +975,21 @@ IntegrateTable[Cos[a_. x_]^3, x_] /; FreeQ[a, x] := 1/(3 a) Sin[a x] (Cos[a x]^2
 IntegrateTable[Cos[a_. x_]^4, x_] /; FreeQ[a, x] := (3 x)/8 + Sin[2 a x]/(4 a) + Sin[4 a x]/(32 a);
 
 (* Formula 288 *)
-IntegrateTable[Cos[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 0 := 
+IntegrateTable[Cos[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 0 && IntegerQ[n] && n > 1 :=
   (Cos[a x]^(n - 1) Sin[a x])/(n a) + (n - 1)/n IntegrateTable[Cos[a x]^(n - 2), x];
 
 (* Formula 291 *)
 IntegrateTable[1/Sin[a_. x_]^2, x_] /; FreeQ[a, x] := -Cot[a x]/a;
 
 (* Formula 292 *)
-IntegrateTable[1/Sin[a_. x_]^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 := 
+IntegrateTable[1/Sin[a_. x_]^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 :=
   -Cos[a x]/(a (m - 1) Sin[a x]^(m - 1)) + (m - 2)/(m - 1) IntegrateTable[1/Sin[a x]^(m - 2), x];
 
 (* Formula 295 *)
 IntegrateTable[1/Cos[a_. x_]^2, x_] /; FreeQ[a, x] := Tan[a x]/a;
 
 (* Formula 296 *)
-IntegrateTable[1/Cos[a_. x_]^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 := 
+IntegrateTable[1/Cos[a_. x_]^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 2 :=
   Sin[a x]/(a (m - 1) Cos[a x]^(m - 1)) + (m - 2)/(m - 1) IntegrateTable[1/Cos[a x]^(m - 2), x];
 
 (* Formula 299 *)
@@ -1008,15 +1019,15 @@ IntegrateTable[Sin[a_. x_]^m_ Cos[a_. x_], x_] /; FreeQ[{a, m}, x] && m =!= -1 :
   Sin[a x]^(m + 1)/((m + 1) a);
 
 (* Formula 306 *)
-IntegrateTable[Cos[a_. x_]^m_ Sin[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && m + n =!= 0 := 
+IntegrateTable[Cos[a_. x_]^m_ Sin[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && m + n =!= 0 && IntegerQ[m] && m > 1 :=
   -(Cos[a x]^(m - 1) Sin[a x]^(n + 1))/((m + n) a) + (m - 1)/(m + n) IntegrateTable[Cos[a x]^(m - 2) Sin[a x]^n, x];
 
 (* Formula 307 *)
-IntegrateTable[Cos[a_. x_]^m_/Sin[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && n =!= 1 := 
+IntegrateTable[Cos[a_. x_]^m_/Sin[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 :=
   -Cos[a x]^(m + 1)/(a (n - 1) Sin[a x]^(n - 1)) - (m - n + 2)/(n - 1) IntegrateTable[Cos[a x]^m/Sin[a x]^(n - 2), x];
 
 (* Formula 308 *)
-IntegrateTable[Sin[a_. x_]^m_/Cos[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && n =!= 1 := 
+IntegrateTable[Sin[a_. x_]^m_/Cos[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 :=
   Sin[a x]^(m - 1)/(a (n - 1) Cos[a x]^(n - 1)) - (m - n + 2)/(n - 1) IntegrateTable[Sin[a x]^m/Cos[a x]^(n - 2), x];
 
 (* Formula 309 *)
@@ -1037,7 +1048,7 @@ IntegrateTable[1/(Sin[a_. x_] Cos[a_. x_]^2), x_] /; FreeQ[a, x] :=
   1/a (Sec[a x] + Log[Tan[(a x)/2]]);
 
 (* Formula 314 *)
-IntegrateTable[1/(Sin[a_. x_] Cos[a_. x_]^n_), x_] /; FreeQ[{a, n}, x] && n =!= 1 := 
+IntegrateTable[1/(Sin[a_. x_] Cos[a_. x_]^n_), x_] /; FreeQ[{a, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 :=
   1/(a (n - 1) Cos[a x]^(n - 1)) + IntegrateTable[1/(Sin[a x] Cos[a x]^(n - 2)), x];
 
 (* Formula 315 *)
@@ -1048,7 +1059,7 @@ IntegrateTable[1/(Sin[a_. x_]^2 Cos[a_. x_]), x_] /; FreeQ[a, x] :=
 IntegrateTable[1/(Sin[a_. x_]^2 Cos[a_. x_]^2), x_] /; FreeQ[a, x] := -2/a Cot[2 a x];
 
 (* Formula 317 *)
-IntegrateTable[1/(Sin[a_. x_]^m_ Cos[a_. x_]^n_), x_] /; FreeQ[{a, m, n}, x] && m =!= 1 := 
+IntegrateTable[1/(Sin[a_. x_]^m_ Cos[a_. x_]^n_), x_] /; FreeQ[{a, m, n}, x] && m =!= 1 && IntegerQ[m] && m > 1 :=
   -(1/(a (m - 1) Sin[a x]^(m - 1) Cos[a x]^(n - 1))) + (m + n - 2)/(m - 1) IntegrateTable[1/(Sin[a x]^(m - 2) Cos[a x]^n), x];
 
 (* Formula 318 *)
@@ -1312,11 +1323,11 @@ IntegrateTable[x_ Cos[a_. x_]^3, x_] /; FreeQ[a, x] :=
   x/(12 a) Sin[3 a x] + 1/(36 a^2) Cos[3 a x] + (3 x)/(4 a) Sin[a x] + 3/(4 a^2) Cos[a x];
 
 (* Formula 387: Reduction for Negative Powers *)
-IntegrateTable[Sin[a_. x_]/x_^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 := 
+IntegrateTable[Sin[a_. x_]/x_^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 :=
   -Sin[a x]/((m - 1) x^(m - 1)) + a/(m - 1) IntegrateTable[Cos[a x]/x^(m - 1), x];
 
 (* Formula 388: Reduction for Negative Powers *)
-IntegrateTable[Cos[a_. x_]/x_^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 := 
+IntegrateTable[Cos[a_. x_]/x_^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 :=
   -Cos[a x]/((m - 1) x^(m - 1)) - a/(m - 1) IntegrateTable[Sin[a x]/x^(m - 1), x];
 
 (* Formula 389 *)
@@ -1377,7 +1388,7 @@ IntegrateTable[Tan[a_. x_]^4, x_] /; FreeQ[a, x] :=
   Tan[a x]^3/(3 a) - Tan[a x]/a + x;
 
 (* Formula 405 *)
-IntegrateTable[Tan[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 := 
+IntegrateTable[Tan[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 :=
   Tan[a x]^(n - 1)/(a (n - 1)) - IntegrateTable[Tan[a x]^(n - 2), x];
 
 (* Formula 406 *)
@@ -1393,7 +1404,7 @@ IntegrateTable[Cot[a_. x_]^4, x_] /; FreeQ[a, x] :=
   -Cot[a x]^3/(3 a) + Cot[a x]/a + x;
 
 (* Formula 409 *)
-IntegrateTable[Cot[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 := 
+IntegrateTable[Cot[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 :=
   -Cot[a x]^(n - 1)/(a (n - 1)) - IntegrateTable[Cot[a x]^(n - 2), x];
 
 (* Formula 410 *)
@@ -1401,7 +1412,7 @@ IntegrateTable[x_/Sin[a_. x_]^2, x_] /; FreeQ[a, x] :=
   -(x Cot[a x])/a + 1/a^2 Log[Sin[a x]];
 
 (* Formula 411 *)
-IntegrateTable[x_/Sin[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 && n =!= 2 := 
+IntegrateTable[x_/Sin[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 && n =!= 2 && IntegerQ[n] && n > 2 :=
   -(x Cos[a x])/(a (n - 1) Sin[a x]^(n - 1)) - 1/(a^2 (n - 1) (n - 2) Sin[a x]^(n - 2)) + (n - 2)/(n - 1) IntegrateTable[x/Sin[a x]^(n - 2), x];
 
 (* Formula 412 *)
@@ -1409,7 +1420,7 @@ IntegrateTable[x_/Cos[a_. x_]^2, x_] /; FreeQ[a, x] :=
   (x Tan[a x])/a + 1/a^2 Log[Cos[a x]];
 
 (* Formula 413 *)
-IntegrateTable[x_/Cos[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 && n =!= 2 := 
+IntegrateTable[x_/Cos[a_. x_]^n_, x_] /; FreeQ[{a, n}, x] && n =!= 1 && n =!= 2 && IntegerQ[n] && n > 2 :=
   (x Sin[a x])/(a (n - 1) Cos[a x]^(n - 1)) - 1/(a^2 (n - 1) (n - 2) Cos[a x]^(n - 2)) + (n - 2)/(n - 1) IntegrateTable[x/Cos[a x]^(n - 2), x];
 
 (* Formula 414 *)
@@ -1533,7 +1544,7 @@ IntegrateTable[ArcSin[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[a, x] :=
   ArcSin[a x]^2/(2 a);
 
 (* Formula 454: Mapped explicitly from the integral recurrence relation *)
-IntegrateTable[x_^n_ ArcSin[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[{a, n}, x] && n =!= 0 := 
+IntegrateTable[x_^n_ ArcSin[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[{a, n}, x] && n =!= 0 && IntegerQ[n] && n > 1 :=
   -(x^(n - 1)/(n a^2)) Sqrt[1 - a^2 x^2] ArcSin[a x] + x^n/(n^2 a) + (n - 1)/(n a^2) IntegrateTable[(x^(n - 2) ArcSin[a x])/Sqrt[1 - a^2 x^2], x];
 
 (* Formula 455 *)
@@ -1541,7 +1552,7 @@ IntegrateTable[ArcCos[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[a, x] :=
   -ArcCos[a x]^2/(2 a);
 
 (* Formula 456 *)
-IntegrateTable[x_^n_ ArcCos[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[{a, n}, x] && n =!= 0 := 
+IntegrateTable[x_^n_ ArcCos[a_. x_]/Sqrt[1 - a_^2 x_^2], x_] /; FreeQ[{a, n}, x] && n =!= 0 && IntegerQ[n] && n > 1 :=
   -(x^(n - 1)/(n a^2)) Sqrt[1 - a^2 x^2] ArcCos[a x] - x^n/(n^2 a) + (n - 1)/(n a^2) IntegrateTable[(x^(n - 2) ArcCos[a x])/Sqrt[1 - a^2 x^2], x];
 
 (* Formula 457 *)
@@ -1609,11 +1620,11 @@ IntegrateTable[1/(x_ Log[x_]^n_), x_] /; FreeQ[n, x] && n =!= 1 :=
   1/((1 - n) Log[x]^(n - 1));
 
 (* Formula 475 *)
-IntegrateTable[x_^m_/Log[x_]^n_, x_] /; FreeQ[{m, n}, x] && n =!= 1 := 
+IntegrateTable[x_^m_/Log[x_]^n_, x_] /; FreeQ[{m, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 :=
   x^(m + 1)/((1 - n) Log[x]^(n - 1)) + (m + 1)/(n - 1) IntegrateTable[x^m/Log[x]^(n - 1), x];
 
 (* Formula 476 *)
-IntegrateTable[x_^m_ Log[x_]^n_, x_] /; FreeQ[{m, n}, x] := 
+IntegrateTable[x_^m_ Log[x_]^n_, x_] /; FreeQ[{m, n}, x] && IntegerQ[n] && n > 0 :=
   (x^(m + 1) Log[x]^n)/(m + 1) - n/(m + 1) IntegrateTable[x^m Log[x]^(n - 1), x];
 
 (* Formula 477 *)
@@ -1711,7 +1722,7 @@ IntegrateTable[x_^m_ E^(a_. x_), x_] /; FreeQ[{a, m}, x] && m > 0 :=
   (x^m E^(a x))/a - m/a IntegrateTable[x^(m - 1) E^(a x), x];
 
 (* Formula 503 *)
-IntegrateTable[E^(a_. x_)/x_^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 := 
+IntegrateTable[E^(a_. x_)/x_^m_, x_] /; FreeQ[{a, m}, x] && m =!= 1 && IntegerQ[m] && m > 1 :=
   1/(1 - m) E^(a x)/x^(m - 1) + a/(m - 1) IntegrateTable[E^(a x)/x^(m - 1), x];
 
 (* Formula 504 *)
@@ -1790,11 +1801,11 @@ IntegrateTable[E^(a_. x_) Cos[b_. x_] Sin[b_. x_ + c_], x_] /; FreeQ[{a, b, c}, 
   (E^(a x) Sin[c])/(2 a) + (E^(a x) (a Sin[2 b x + c] - 2 b Cos[2 b x + c]))/(2 (a^2 + 4 b^2));
 
 (* Formula 522 *)
-IntegrateTable[E^(a_. x_) Sin[b_. x_]^n_, x_] /; FreeQ[{a, b, n}, x] && n =!= 0 := 
+IntegrateTable[E^(a_. x_) Sin[b_. x_]^n_, x_] /; FreeQ[{a, b, n}, x] && n =!= 0 && IntegerQ[n] && n > 1 :=
   1/(a^2 + n^2 b^2) (E^(a x) Sin[b x]^(n - 1) (a Sin[b x] - n b Cos[b x]) + n (n - 1) b^2 IntegrateTable[E^(a x) Sin[b x]^(n - 2), x]);
 
 (* Formula 523 *)
-IntegrateTable[E^(a_. x_) Cos[b_. x_]^n_, x_] /; FreeQ[{a, b, n}, x] && n =!= 0 := 
+IntegrateTable[E^(a_. x_) Cos[b_. x_]^n_, x_] /; FreeQ[{a, b, n}, x] && n =!= 0 && IntegerQ[n] && n > 1 :=
   1/(a^2 + n^2 b^2) (E^(a x) Cos[b x]^(n - 1) (a Cos[b x] + n b Sin[b x]) + n (n - 1) b^2 IntegrateTable[E^(a x) Cos[b x]^(n - 2), x]);
 
 (* Formula 524 *)
@@ -1847,11 +1858,11 @@ IntegrateTable[Coth[x_]^2, x_] := x - Coth[x];
 IntegrateTable[Csch[x_]^2, x_] := -Coth[x];
 
 (* Formula 547 *)
-IntegrateTable[Sinh[x_]^m_Integer Cosh[x_]^n_Integer, x_] /; FreeQ[{m, n}, x] && m + n =!= 0 := 
+IntegrateTable[Sinh[x_]^m_Integer Cosh[x_]^n_Integer, x_] /; FreeQ[{m, n}, x] && m + n =!= 0 && n > 1 :=
   (Sinh[x]^(m + 1) Cosh[x]^(n - 1))/(m + n) + (n - 1)/(m + n) IntegrateTable[Sinh[x]^m Cosh[x]^(n - 2), x];
 
 (* Formula 548 *)
-IntegrateTable[1/(Sinh[x_]^m_Integer Cosh[x_]^n_Integer), x_] /; FreeQ[{m, n}, x] && m =!= 1 := 
+IntegrateTable[1/(Sinh[x_]^m_Integer Cosh[x_]^n_Integer), x_] /; FreeQ[{m, n}, x] && m =!= 1 && m > 1 :=
   -1/((m - 1) Sinh[x]^(m - 1) Cosh[x]^(n - 1)) - (m + n - 2)/(m - 1) IntegrateTable[1/(Sinh[x]^(m - 2) Cosh[x]^n), x];
 
 (* Formula 550 *)
@@ -1898,4 +1909,10 @@ IntegrateTable[x_^(-p_ + 1) BesselY[p_, x_], x_] /; FreeQ[p, x] := -x^(-p + 1) B
 IntegrateTable[BesselJ[1, x_], x_] := -BesselJ[0, x];
 IntegrateTable[x_ BesselJ[0, x_], x_] := x BesselJ[1, x];
 
-SetAttributes[IntegrateTable, {Protected, ReadProtected}]
+SetAttributes[IntegrateTable, {Protected, ReadProtected}];
+
+(* Public wrapper.  The C dispatcher treats either head
+   (Integrate`CRCTable or IntegrateTable) as a "no rule matched" signal. *)
+Integrate`CRCTable[f_, x_] := IntegrateTable[f, x];
+SetAttributes[Integrate`CRCTable, {Protected, ReadProtected}];
+
