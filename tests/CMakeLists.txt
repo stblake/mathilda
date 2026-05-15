@@ -769,6 +769,21 @@ add_test(NAME intrat_corpus_tests
 add_test(NAME intrat_inline_corpus_tests
          COMMAND intrat_corpus_tests ../../IntegrateRationalInlineCases.m)
 
+# Comprehensive corpus runner for the CRC integral table.  Loads
+# CRCIntegralsCorpus.m (a flat List of {integrand, var} pairs, ~3 per
+# rule in src/internal/CRCMathTablesIntegrals.m) and validates each via
+# Integrate[..., Method -> "CRCTable"] + differential check.
+add_executable(crc_corpus_tests test_crc_corpus.c ${COMMON_SRC})
+target_include_directories(crc_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(crc_corpus_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(crc_corpus_tests build_ecm)
+else()
+    target_link_libraries(crc_corpus_tests gmp m)
+endif()
+add_test(NAME crc_corpus_tests
+         COMMAND crc_corpus_tests ../../CRCIntegralsCorpus.m)
+
 add_executable(readwrite_tests test_readwrite.c ${COMMON_SRC})
 target_include_directories(readwrite_tests PRIVATE ../src)
 if(USE_ECM)

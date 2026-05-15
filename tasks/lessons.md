@@ -328,3 +328,92 @@ build quadratics with `Cos[k π / n]` coefficients.  One helper
 (`logtoreal_nthroot_sparse`) handles all n ≥ 3 in ~140 lines.
 Adjacent family members (different n, different sign of `−c_0/c_n`)
 fall out for free.
+
+## CRC integral rules: branch-correct forms (2026-05-15)
+
+Trigger: 11 DIFF-NONZERO regressions in the CRC corpus, several of
+which were "correct on the principal real branch but wrong as
+expressions".  Classical CRC-table forms like
+`∫Sqrt[1 + Cos[a x]] dx = (2 Sqrt[2]/a) Sin[a x/2]` reduce the
+integrand's radical via `1 + Cos[a x] = 2 Cos²[a x/2]`, but the
+resulting closed form's derivative is `Sqrt[2] Cos[a x/2]`, which
+matches `|Cos[a x/2]|` (the actual `Sqrt[…]` value) only when
+`Cos[a x/2] ≥ 0`.
+
+**Why:** the `D[r, x] - integrand` corpus check evaluates the
+diff under ordinary `Simplify`/numeric eval, which respects branch
+choices — it does NOT do PowerExpand.  So a rule that
+"folds the radical out" silently picks one branch and fails outside
+it.  Symbolic-only verification hides this; numeric sampling
+across the natural domain exposes it.
+
+**How to apply:**
+
+1. When writing a CRC-style rule that handles `Sqrt[trig identity]`,
+   keep the integrand's radical literally in the antiderivative
+   (e.g. `(2/a) Tan[a x/2] Sqrt[1 + Cos[a x]]` instead of `Sqrt[2]
+   Sin[a x/2]`).  The two forms are equal on the principal branch,
+   but only the first has a derivative that the simplifier can
+   show equal to the integrand without PowerExpand.
+2. Same trick for algebraic integrands: for `∫ Sqrt[(a+x)/(a-x)] dx`,
+   the form `(x − a) Sqrt[(a+x)/(a-x)] + a ArcSin[x/a]` keeps the
+   integrand intact in the antiderivative.
+3. When a corpus runner uses numeric sampling, sample only inside
+   the integrand's natural real domain — evaluate `N[integrand]` at
+   each candidate point first, and skip the ones that come back
+   complex / infinite / indeterminate.  Otherwise you get false
+   positives at branch-cut sample points (e.g. `Sqrt[(1+x)/(1-x)]`
+   at `x = 1.7`) that are not regressions, just samples outside the
+   rule's natural domain.
+
+## Pattern guards: missing FreeQ is silent corruption (2026-05-15)
+
+Trigger: `1/x_ Power[b_. x_^2 + a_, -1/2]` was a top-of-file CRC
+rule with NO `FreeQ` guard.  It matched
+`1/(x Sqrt[a + b x + c x²])` with `b → c`, `a → (a + b x)`,
+producing `-ArcTanh[Sqrt[a + b x + c x²]/Sqrt[a + b x]]/Sqrt[a + b x]`
+— wrong on every quadratic-surd integrand, shadowing the correct
+Formula 246 below it.
+
+**Why:** unguarded `a_` matches *any* subexpression, including
+ones that contain `x_`.  The default-coefficient `b_.` makes the
+shadow even worse: it lets the pattern accept a Plus with the
+"wrong" number of terms.  Subsequent rules never see the input.
+
+**How to apply:** every `_.`/`_` pattern variable that names a
+"constant" (in the sense of the surrounding formula's preconditions)
+needs an explicit `FreeQ[{vars}, x]` guard — even rules at the very
+top of the table, especially those that match an aggressive
+super-pattern (Power with negative exponents, Plus with optional
+coefficients, etc.).  When a CRC corpus run shows a closed-form
+result with sub-expressions that *contain the integration variable*
+in positions meant to be "constants", look for an unguarded
+top-level pattern intercepting the dispatch.
+
+## Pattern matcher: trust the repro over the task note (2026-05-16)
+
+Trigger: `tasks/crc_corpus_2026-05-15.md` "Out-of-scope findings"
+described an "underlying matcher gap on a + b x + c x² Plus patterns"
+affecting ~80 CRC formulas.  When a user asked about the issue, I
+quoted the note as authoritative.  The user immediately
+disproved it with `MatchQ[2 + 3 x + 5 x^2, a_ + b_. x_ + c_. x_^2] ==
+True`.  The actual gap was in the §3.5 DownValue dispatch filter:
+held LHSs sit in parser-shape (`Power[Times[x_, Sqrt[...]], -1]`)
+while runtime inputs arrive in evaluated-shape (`Times[Power[x,-1],
+Power[Sqrt[...],-1]]`), and the filter's pointer-equal head compare
+rejects the rule before `match()` runs.  Fixed by canonicalizing the
+LHS at insertion time (`pattern_canonicalize` in `src/symtab.c`).
+
+**Why:** task notes capture what the author *thought* the cause was
+at the time, not necessarily the right cause.  "Out-of-scope" findings
+are by definition unverified — the author didn't trace them to ground.
+Quoting them carries that uncertainty forward, and a wrong root-cause
+attribution wastes time on the wrong fix.
+
+**How to apply:** when a task note names a root cause and the user
+asks about it, run the smallest possible repro first — `MatchQ`,
+`FullForm`, a one-line REPL test — and let the actual behaviour
+correct or confirm the note.  Then update the note (or the
+changelog) with the verified cause.  Especially for matcher /
+dispatch / evaluator bugs, where the surface symptom and the
+underlying mechanism often have nothing to do with each other.

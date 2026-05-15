@@ -6,6 +6,8 @@
 #include "print.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "eval.h"
+#include "arithmetic.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -340,6 +342,263 @@ static int32_t pattern_specificity(const Expr* p) {
     return score;
 }
 
+/* ============================================================
+ * §3.4 pattern canonicalization
+ *
+ * Stored DownValue / OwnValue patterns must share canonical form with
+ * the runtime expressions they will eventually be matched against;
+ * otherwise the §3.5 dispatch filter -- and in some cases the matcher
+ * itself -- can silently reject a rule that the abstract pattern would
+ * accept (i.e. one whose MatchQ form returns True against the input).
+ *
+ * The asymmetry exists because `Set` and `SetDelayed` deliberately hold
+ * the LHS: every runtime input flowing into `apply_down_values` has
+ * already been canonicalized by `evaluate_step` -- Flat heads flattened,
+ * Orderless heads sorted, `Power[Times[a,...,z], n_Integer]` distributed
+ * over the factors (src/power.c integer-exponent fast path), nested
+ * `Power[Power[base, e1], e2]` collapsed -- but the stored pattern was
+ * never put through that pass. The pre-2026-05 dispatch filter then
+ * compared the parsed-but-uncanonicalized first-arg head of the rule
+ * (e.g. `Power`) against the evaluated first-arg head of the input
+ * (e.g. `Times`), found them unequal, and skipped the rule before the
+ * matcher ran.
+ *
+ * The concrete bug that motivated this pass was the CRC integral table:
+ * rules like
+ *
+ *     IntegrateTable[1/(x_ Sqrt[a_ + b_. x_ + c_. x_^2]), x_] /; ...
+ *
+ * parse as `Power[Times[x_, Sqrt[...]], -1]` at the first-arg slot, but
+ * every runtime call arrives as `Times[Power[x,-1], Power[Sqrt[...],-1]]`
+ * because Power-over-Times-integer distribution runs during normal
+ * evaluation. The dispatch filter cached `Power` as the rule's first-arg
+ * head, the input presented `Times`, and ~80 CRC formulas with similar
+ * `1/(...)` LHSs went silently unmatched (see tasks/crc_corpus_2026-05-15.md
+ * "Out-of-scope findings" -- which misattributed the failure to a 3-term
+ * Plus matcher gap).
+ *
+ * What this pass structurally changes in the pattern matcher:
+ *
+ *   - Stored patterns now share canonical form with runtime inputs.
+ *     `Power[Times[t1,...,tn], k]` and `Times[Power[t1,k],...,Power[tn,k]]`
+ *     are no longer two distinguishable LHSs when `k` is an integer
+ *     literal; the second form is the only one that survives storage.
+ *   - Likewise, `Power[Power[b, e1], e2]` collapses to `Power[b, e1*e2]`
+ *     when both exponents are numeric literals, matching the evaluator's
+ *     nested-Power normalization.
+ *   - Flat-headed pattern children (Plus, Times, ...) are flattened, and
+ *     Orderless-headed pattern children are sorted with
+ *     `eval_compare_expr_ptrs` -- the same comparator that orders input
+ *     arguments -- so the §3.5 dispatch filter sees consistent shapes on
+ *     both sides.
+ *   - Pattern-marker wrappers (Pattern, Blank, BlankSequence,
+ *     BlankNullSequence, Optional, Condition, PatternTest, HoldPattern,
+ *     Verbatim, Alternatives, Repeated, RepeatedNull, OptionsPattern)
+ *     are NOT structurally rewritten; the canonicalizer recurses into the
+ *     inner pattern slot of each but never folds the wrapper itself. This
+ *     preserves match-time semantics in full (a `/; cond` guard still
+ *     evaluates with bindings in scope, an Optional default still binds
+ *     when the slot is absent, HoldPattern still forces literal matching,
+ *     etc.).
+ *
+ * The pass is idempotent: applying it twice to a pattern yields the same
+ * tree as applying it once, so re-storing an already-canonicalized rule
+ * is safe.
+ *
+ * Callers transfer ownership of `p` to `pattern_canonicalize`; the
+ * returned tree may share or replace `p`. ============================================================ */
+static Expr* pattern_canonicalize(Expr* p);
+
+/* True for an exponent we are willing to fold across nested Powers.
+ * Restricted to exact integer / rational literals so the collapse is
+ * always sound -- floating-point or symbolic exponents are left alone. */
+static bool is_foldable_numeric_exponent(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    int64_t n, d;
+    return is_rational(e, &n, &d);
+}
+
+/* Returns Times[copies-of-a-and-b] reduced through `evaluate` so the
+ * result is in canonical integer/rational form. Used to compose nested
+ * Power exponents; both inputs must satisfy `is_foldable_numeric_exponent`. */
+static Expr* compose_numeric_exponents(const Expr* a, const Expr* b) {
+    Expr* args[2] = { expr_copy((Expr*)a), expr_copy((Expr*)b) };
+    Expr* prod = expr_new_function(expr_new_symbol("Times"), args, 2);
+    return evaluate(prod);
+}
+
+static Expr* pattern_canonicalize(Expr* p) {
+    if (!p || p->type != EXPR_FUNCTION) return p;
+
+    Expr* head = p->data.function.head;
+    if (head && head->type == EXPR_SYMBOL) {
+        const char* h = head->data.symbol;
+
+        /* HoldPattern / Verbatim explicitly opt out of canonicalization;
+         * their whole purpose is to match a literal subtree without
+         * pattern-semantic interpretation. */
+        if (h == SYM_HoldPattern || h == SYM_Verbatim) return p;
+
+        /* Blank-family and OptionsPattern carry only type/head metadata
+         * in their children -- no nested pattern that wants canonicalization. */
+        if (h == SYM_Blank || h == SYM_BlankSequence ||
+            h == SYM_BlankNullSequence || h == SYM_OptionsPattern) {
+            return p;
+        }
+
+        /* Pattern[name, q]: name is held literally; canonicalize q only. */
+        if (h == SYM_Pattern) {
+            if (p->data.function.arg_count >= 2) {
+                p = expr_unshare(p);
+                p->data.function.args[1] =
+                    pattern_canonicalize(p->data.function.args[1]);
+            }
+            return p;
+        }
+
+        /* Optional[p] / Optional[p, default]: canonicalize the inner
+         * pattern. The default is a value, not a pattern; leave it alone
+         * to avoid firing evaluator side effects before bindings exist. */
+        if (h == SYM_Optional) {
+            if (p->data.function.arg_count >= 1) {
+                p = expr_unshare(p);
+                p->data.function.args[0] =
+                    pattern_canonicalize(p->data.function.args[0]);
+            }
+            return p;
+        }
+
+        /* Condition[p, guard] / PatternTest[p, test]: canonicalize the
+         * inner pattern. The guard / test runs at match time with the
+         * bindings substituted -- canonicalizing it here would force
+         * evaluation against still-unbound variables. */
+        if (h == SYM_Condition || h == SYM_PatternTest) {
+            if (p->data.function.arg_count >= 1) {
+                p = expr_unshare(p);
+                p->data.function.args[0] =
+                    pattern_canonicalize(p->data.function.args[0]);
+            }
+            return p;
+        }
+
+        /* Repeated[p] / RepeatedNull[p]: canonicalize the inner pattern. */
+        if (h == SYM_Repeated || h == SYM_RepeatedNull) {
+            if (p->data.function.arg_count >= 1) {
+                p = expr_unshare(p);
+                p->data.function.args[0] =
+                    pattern_canonicalize(p->data.function.args[0]);
+            }
+            return p;
+        }
+
+        /* Alternatives[a, b, ...]: each branch is itself a pattern. */
+        if (h == SYM_Alternatives) {
+            p = expr_unshare(p);
+            for (size_t i = 0; i < p->data.function.arg_count; i++) {
+                p->data.function.args[i] =
+                    pattern_canonicalize(p->data.function.args[i]);
+            }
+            return p;
+        }
+    }
+
+    /* Plain function call: canonicalize all children, then apply the
+     * structural rewrites that mirror evaluate_step. */
+    p = expr_unshare(p);
+    if (p->data.function.head) {
+        p->data.function.head = pattern_canonicalize(p->data.function.head);
+    }
+    for (size_t i = 0; i < p->data.function.arg_count; i++) {
+        p->data.function.args[i] =
+            pattern_canonicalize(p->data.function.args[i]);
+    }
+
+    /* Look up structural attributes by head symbol. */
+    head = p->data.function.head;
+    uint32_t attrs = 0;
+    if (head && head->type == EXPR_SYMBOL) {
+        SymbolDef* def = symtab_lookup(head->data.symbol);
+        if (def) attrs = def->attributes;
+    }
+
+    /* Flat: flatten nested same-head args (Plus[Plus[a,b],c] -> Plus[a,b,c]). */
+    if (head && head->type == EXPR_SYMBOL && (attrs & ATTR_FLAT)) {
+        eval_flatten_args(p, head->data.symbol);
+    }
+
+    /* Orderless: sort args using the same comparator the evaluator uses
+     * for input expressions, so the §3.5 first-arg-head dispatch key and
+     * the matcher both see identical orderings. */
+    if (head && head->type == EXPR_SYMBOL && (attrs & ATTR_ORDERLESS)) {
+        eval_sort_args(p);
+    }
+
+    /* Power[Times[t1,...,tn], k_Integer] -> Times[Power[t1,k],...,Power[tn,k]].
+     * Mirrors src/power.c's integer-exponent fast path that fires
+     * unconditionally during normal evaluation. */
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+        && p->data.function.arg_count == 2) {
+        Expr* base = p->data.function.args[0];
+        Expr* exp  = p->data.function.args[1];
+        if (exp && (exp->type == EXPR_INTEGER || exp->type == EXPR_BIGINT)
+            && base && base->type == EXPR_FUNCTION
+            && base->data.function.head
+            && base->data.function.head->type == EXPR_SYMBOL
+            && base->data.function.head->data.symbol == SYM_Times) {
+            size_t bc = base->data.function.arg_count;
+            Expr** new_args = malloc(sizeof(Expr*) * bc);
+            for (size_t i = 0; i < bc; i++) {
+                Expr* pow_args[2] = {
+                    expr_copy(base->data.function.args[i]),
+                    expr_copy(exp)
+                };
+                new_args[i] = expr_new_function(
+                    expr_new_symbol("Power"), pow_args, 2);
+            }
+            Expr* times = expr_new_function(
+                expr_new_symbol("Times"), new_args, bc);
+            free(new_args);
+            expr_free(p);
+            /* Recurse on the new Times so its children (each a Power
+             * we just synthesized) themselves get folded if applicable
+             * (e.g. Power[Power[plus, 1/2], -1] -> Power[plus, -1/2]). */
+            return pattern_canonicalize(times);
+        }
+    }
+
+    /* Power[Power[base, e1], e2] -> Power[base, e1*e2] when both
+     * exponents are numeric literals. Matches the evaluator's nested-
+     * Power collapse for sound bases. */
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Power
+        && p->data.function.arg_count == 2) {
+        Expr* base = p->data.function.args[0];
+        Expr* outer_exp = p->data.function.args[1];
+        if (base && base->type == EXPR_FUNCTION
+            && base->data.function.head
+            && base->data.function.head->type == EXPR_SYMBOL
+            && base->data.function.head->data.symbol == SYM_Power
+            && base->data.function.arg_count == 2) {
+            Expr* inner_base = base->data.function.args[0];
+            Expr* inner_exp  = base->data.function.args[1];
+            if (is_foldable_numeric_exponent(inner_exp)
+                && is_foldable_numeric_exponent(outer_exp)) {
+                Expr* new_exp = compose_numeric_exponents(inner_exp, outer_exp);
+                Expr* pow_args[2] = { expr_copy(inner_base), new_exp };
+                Expr* folded = expr_new_function(
+                    expr_new_symbol("Power"), pow_args, 2);
+                expr_free(p);
+                /* The collapsed Power may now expose a further Power-of-
+                 * Times opportunity if `inner_base` itself is a Times;
+                 * recurse to let the previous branch fire. */
+                return pattern_canonicalize(folded);
+            }
+        }
+    }
+
+    return p;
+}
+
 // Helper to add a rule to a list
 static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
     /* Any change to an OwnValue/DownValue list could change the meaning
@@ -348,23 +607,31 @@ static void add_rule(Rule** list, Expr* pattern, Expr* replacement) {
      * (conservative variant of EVAL_IMPROVEMENTS_PLAN §3.3). */
     eval_clock_bump();
 
+    /* §3.4 canonicalize the LHS before deriving any dispatch keys or
+     * doing duplicate-rule detection. Held LHSs would otherwise sit in
+     * parser-shape while every runtime input arrives in evaluated-shape;
+     * see the long comment above pattern_canonicalize for the full
+     * rationale. We retain ownership of `canon`. */
+    Expr* canon = pattern_canonicalize(expr_copy(pattern));
+
     // Check if rule with same pattern already exists
     for (Rule* curr = *list; curr; curr = curr->next) {
-        if (expr_eq(curr->pattern, pattern)) {
+        if (expr_eq(curr->pattern, canon)) {
             // Replace replacement in place; sort key is unchanged.
             expr_free(curr->replacement);
             curr->replacement = expr_copy(replacement);
+            expr_free(canon);
             return;
         }
     }
 
     Rule* new_rule = malloc(sizeof(Rule));
-    new_rule->pattern = expr_copy(pattern);
+    new_rule->pattern = canon;
     new_rule->replacement = expr_copy(replacement);
-    new_rule->dispatch_arity = pattern_dispatch_arity(pattern);
+    new_rule->dispatch_arity = pattern_dispatch_arity(canon);
     new_rule->first_arg_head_canon =
-        (new_rule->dispatch_arity == -1) ? NULL : pattern_first_arg_head(pattern);
-    new_rule->specificity = pattern_specificity(pattern);
+        (new_rule->dispatch_arity == -1) ? NULL : pattern_first_arg_head(canon);
+    new_rule->specificity = pattern_specificity(canon);
     new_rule->next = NULL;
 
     /* §3.6 stable insertion: walk until we find a rule with strictly

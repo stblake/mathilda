@@ -28,7 +28,7 @@ IntegrateTable[Power[a_ - x_^2, -1/2], x_] /; FreeQ[a, x] && a > 0 := ArcSin[x/S
 IntegrateTable[Power[x_^2 + a_, -1/2], x_] /; FreeQ[a, x] := Log[x + Sqrt[x^2 + a]];
 IntegrateTable[Power[x_^2 - a_, -1/2], x_] /; FreeQ[a, x] := Log[x + Sqrt[x^2 - a]];
 IntegrateTable[1/x_ Power[x_^2 - a_, -1/2], x_] /; FreeQ[a, x] := ArcTan[Sqrt[x^2 - a]/Sqrt[a]]/Sqrt[a];
-IntegrateTable[1/x_ Power[b_. x_^2 + a_, -1/2], x_] := -ArcTanh[Sqrt[b x^2 + a]/Sqrt[a]]/Sqrt[a];
+IntegrateTable[1/x_ Power[b_. x_^2 + a_, -1/2], x_] /; FreeQ[{a, b}, x] := -ArcTanh[Sqrt[b x^2 + a]/Sqrt[a]]/Sqrt[a];
 
 (* Forms containing a + b x *)
 (* Formula 23 *)
@@ -880,9 +880,14 @@ IntegrateTable[Sqrt[a_. x_^2 + c_], x_] /; FreeQ[{a, c}, x] && a < 0 :=
 IntegrateTable[Sqrt[a_. x_^2 + c_], x_] /; FreeQ[{a, c}, x] && a > 0 := 
   x/2 Sqrt[a x^2 + c] + c/(2 Sqrt[a]) Log[x Sqrt[a] + Sqrt[a x^2 + c]];
 
-(* Formula 260 *)
-IntegrateTable[Sqrt[(1 + x_)/(1 - x_)], x_] := 
-  ArcSin[x] - Sqrt[1 - x^2];
+(* Formula 260: branch-correct.  The classical form ArcSin[x] - Sqrt[1 - x^2]
+   is right on (-1, 1) but its derivative (1 + x)/Sqrt[1 - x^2] cannot be
+   shown equal to Sqrt[(1 + x)/(1 - x)] without PowerExpand (the radicals
+   live on different branches).  Keeping Sqrt[(1 + x)/(1 - x)] literally
+   in the antiderivative makes the diff D[F, x] - integrand collapse to 0
+   under ordinary Simplify. *)
+IntegrateTable[Sqrt[(1 + x_)/(1 - x_)], x_] :=
+  (x - 1) Sqrt[(1 + x)/(1 - x)] + ArcSin[x];
 
 (* Formula 261 *)
 IntegrateTable[1/(x_ Sqrt[a_. x_^n_ + c_]), x_] /; FreeQ[{a, c, n}, x] && c > 0 := 
@@ -1020,7 +1025,7 @@ IntegrateTable[Sin[a_. x_]^m_ Cos[a_. x_], x_] /; FreeQ[{a, m}, x] && m =!= -1 :
 
 (* Formula 306 *)
 IntegrateTable[Cos[a_. x_]^m_ Sin[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && m + n =!= 0 && IntegerQ[m] && m > 1 :=
-  -(Cos[a x]^(m - 1) Sin[a x]^(n + 1))/((m + n) a) + (m - 1)/(m + n) IntegrateTable[Cos[a x]^(m - 2) Sin[a x]^n, x];
+  (Cos[a x]^(m - 1) Sin[a x]^(n + 1))/((m + n) a) + (m - 1)/(m + n) IntegrateTable[Cos[a x]^(m - 2) Sin[a x]^n, x];
 
 (* Formula 307 *)
 IntegrateTable[Cos[a_. x_]^m_/Sin[a_. x_]^n_, x_] /; FreeQ[{a, m, n}, x] && n =!= 1 && IntegerQ[n] && n > 1 :=
@@ -1350,17 +1355,25 @@ IntegrateTable[(x_ + Sin[x_])/(1 + Cos[x_]), x_] := x Tan[x/2];
 (* Formula 393 *)
 IntegrateTable[(x_ - Sin[x_])/(1 - Cos[x_]), x_] := -x Cot[x/2];
 
-(* Formula 394 *)
-IntegrateTable[Sqrt[1 - Cos[a_. x_]], x_] /; FreeQ[a, x] := -(2 Sqrt[2])/a Cos[(a x)/2];
+(* Formula 394: branch-correct.  1 - Cos[a x] = 2 Sin[a x/2]^2, so the
+   classical form (-2 Sqrt[2]/a) Cos[a x/2] differentiates back to
+   Sqrt[2] |Sin[a x/2]|, matching the integrand only when Sin[a x/2] >= 0.
+   The form below keeps the integrand's Sqrt[1 - Cos[a x]] literally,
+   giving a derivative that equals the integrand on every branch. *)
+IntegrateTable[Sqrt[1 - Cos[a_. x_]], x_] /; FreeQ[a, x] := -(2/a) Cot[(a x)/2] Sqrt[1 - Cos[a x]];
 
-(* Formula 395 *)
-IntegrateTable[Sqrt[1 + Cos[a_. x_]], x_] /; FreeQ[a, x] := (2 Sqrt[2])/a Sin[(a x)/2];
+(* Formula 395: branch-correct counterpart.  See Formula 394. *)
+IntegrateTable[Sqrt[1 + Cos[a_. x_]], x_] /; FreeQ[a, x] := (2/a) Tan[(a x)/2] Sqrt[1 + Cos[a x]];
 
 (* Formula 396: Primary Branch *)
 IntegrateTable[Sqrt[1 + Sin[x_]], x_] := 2 (Sin[x/2] - Cos[x/2]);
 
-(* Formula 397: Primary Branch *)
-IntegrateTable[Sqrt[1 - Sin[x_]], x_] := 2 (Sin[x/2] + Cos[x/2]);
+(* Formula 397: branch-correct.  The classical form 2 (Sin[x/2] + Cos[x/2])
+   differentiates to Cos[x/2] - Sin[x/2], matching Sqrt[1 - Sin[x]] only
+   when Cos[x/2] - Sin[x/2] >= 0.  Using u = Pi/2 - x and the branch-correct
+   Formula 394 yields the form below, whose derivative equals
+   Sqrt[1 - Sin[x]] on every branch. *)
+IntegrateTable[Sqrt[1 - Sin[x_]], x_] := 2 Tan[Pi/4 + x/2] Sqrt[1 - Sin[x]];
 
 (* Formula 398 *)
 IntegrateTable[1/Sqrt[1 - Cos[x_]], x_] := Sqrt[2] Log[Tan[x/4]];

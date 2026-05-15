@@ -295,6 +295,75 @@ static void test_crc_table_formula_fires(void) {
         "Integrate[a x, x, Method -> \"CRCTable\"]", "Integrate"));
 }
 
+/* ----- 9b. §3.4 LHS pattern canonicalization ----------------------
+ *
+ * Pin the behaviour that DownValue LHSs are canonicalized at insertion
+ * time so the §3.5 dispatch filter and the matcher see the same shape
+ * that the evaluator produces for runtime inputs.  Specifically:
+ *
+ *   - `1/(x_ Sqrt[a_ + b_. x_ + c_. x_^2])` parses to
+ *     `Power[Times[x_, Sqrt[...]], -1]`, but every input of that
+ *     mathematical form is evaluated to `Times[Power[x,-1],
+ *     Power[Sqrt[...],-1]]`.  Without canonicalization the dispatch
+ *     filter cached `Power` and rejected `Times` before the matcher
+ *     even ran (~80 CRC integral formulas silently failed).
+ *   - `Power[Power[base, e1], e2]` with numeric exponents must collapse
+ *     to `Power[base, e1*e2]` (matches the evaluator's nested-Power
+ *     normalization).
+ */
+static void test_canon_power_times_lhs_dispatches(void) {
+    /* CRC formula 246 shape — the LHS that previously failed to
+     * dispatch.  Use a synthetic head `CTcn1` so we don't depend on
+     * the CRC table being loaded. */
+    eval_and_drop("ClearAll[CTcn1]");
+    eval_and_drop(
+        "CTcn1[1/(x_ Sqrt[a_ + b_. x_ + c_. x_^2]), x_] /; "
+        "FreeQ[{a,b,c}, x] && a > 0 := {a, b, c, \"FIRED\"}");
+    /* The rule MUST fire after canonicalization.  Pre-fix this returned
+     * the original CTcn1[...] unchanged. */
+    ASSERT(rule_did_fire(
+        "CTcn1[1/(x Sqrt[2 + 3 x + 5 x^2]), x]", "CTcn1"));
+}
+
+static void test_canon_power_of_power_lhs_dispatches(void) {
+    /* `Sqrt[Sqrt[x_]]` parses to Power[Power[x_, 1/2], 1/2]; the
+     * evaluator collapses this to Power[x_, 1/4] for any concrete
+     * input.  Without canonicalization the stored pattern would keep
+     * the nested form and never match. */
+    eval_and_drop("ClearAll[CTcn2]");
+    eval_and_drop(
+        "CTcn2[Sqrt[Sqrt[x_]]] := {x, \"FOLDED\"}");
+    ASSERT(rule_did_fire("CTcn2[Sqrt[Sqrt[5]]]", "CTcn2"));
+    /* And an input written directly as a quarter root must hit the
+     * same canonical form. */
+    ASSERT(rule_did_fire("CTcn2[5^(1/4)]", "CTcn2"));
+}
+
+static void test_canon_does_not_alter_pattern_semantics(void) {
+    /* Pattern wrappers must NOT be folded.  HoldPattern explicitly
+     * opts out of canonicalization, so a pattern wrapped in
+     * HoldPattern keeps its parser shape and still matches inputs of
+     * the same parser shape (this is exactly the role HoldPattern
+     * exists to play). */
+    eval_and_drop("ClearAll[CTcn3]");
+    eval_and_drop(
+        "CTcn3[HoldPattern[1/(x_ y_)]] := {x, y, \"HELD\"}");
+    /* The held LHS literally requires the input to arrive as
+     * Power[Times[x,y],-1].  Inputs that auto-distribute won't match;
+     * this is fine — HoldPattern explicitly preserves literal shape. */
+    ASSERT(!rule_did_fire("CTcn3[1/(p q)]", "CTcn3"));
+
+    /* /;-guards still evaluate at match time with bindings, not at
+     * rule-insertion time.  This rule's guard `x > 0` would error if
+     * canonicalization eagerly evaluated it (x would be unbound), but
+     * because we leave Condition guards alone it works correctly and
+     * fires for positive inputs only. */
+    eval_and_drop("ClearAll[CTcn4]");
+    eval_and_drop("CTcn4[x_] /; x > 0 := \"POS\"");
+    ASSERT(rule_did_fire("CTcn4[5]", "CTcn4"));
+    ASSERT(!rule_did_fire("CTcn4[-5]", "CTcn4"));
+}
+
 /* ----- 10. Negative cases for the fix ----------------------------- */
 
 static void test_cond_false_with_compound_first_arg(void) {
@@ -338,6 +407,9 @@ int main(void) {
     TEST(test_dispatch_first_arg_head_still_filters);
     TEST(test_dispatch_arity_still_filters);
     TEST(test_replace_with_condition_still_works);
+    TEST(test_canon_power_times_lhs_dispatches);
+    TEST(test_canon_power_of_power_lhs_dispatches);
+    TEST(test_canon_does_not_alter_pattern_semantics);
     TEST(test_cond_false_with_compound_first_arg);
     TEST(test_cond_freeq_false_blocks_compound);
     TEST(test_crc_table_formula_fires);
