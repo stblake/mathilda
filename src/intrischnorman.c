@@ -267,6 +267,39 @@ static bool expr_free_of_symbol(const Expr* expr, const char* sym_name) {
     return true;
 }
 
+/* Detect whether `e` contains an algebraic function of `xname`, i.e.,
+ * a subexpression of the form `Power[base, exp]` where `base` is not
+ * free of x and `exp` is a non-integer constant (free of x).  This
+ * covers Sqrt[g(x)], g(x)^(1/3), etc.  Algebraic *numbers* (Sqrt[2],
+ * 2^(1/3), ...) are fine because their base is free of x.
+ *
+ * The Risch-Norman algorithm (Bronstein/Manuel-Bronstein) assumes a
+ * purely transcendental extension tower.  Feeding it an algebraic
+ * generator leads to undefined behaviour: split_factor / build_vector_field
+ * end up dividing by zero, mis-decomposing the denominator, or building
+ * an ill-formed candidate ansatz.  Bail early so the integral remains
+ * unevaluated and downstream methods can try. */
+static bool contains_algebraic_function_of(const Expr* e, const char* xname) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power && n == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp  = e->data.function.args[1];
+        if (base && exp
+            && !expr_free_of_symbol(base, xname)
+            && expr_free_of_symbol(exp, xname)) {
+            bool exp_is_int = (exp->type == EXPR_INTEGER || exp->type == EXPR_BIGINT);
+            if (!exp_is_int) return true;
+        }
+    }
+    if (contains_algebraic_function_of(h, xname)) return true;
+    for (size_t i = 0; i < n; i++) {
+        if (contains_algebraic_function_of(e->data.function.args[i], xname)) return true;
+    }
+    return false;
+}
+
 /* Compute D[f, x] by building the Expr and evaluating.  Owned result. */
 static Expr* call_d(Expr* f, Expr* x) {
     Expr* call = mk_binary("D", expr_copy(f), expr_copy(x));
@@ -3967,6 +4000,14 @@ Expr* builtin_rischnorman(Expr* res) {
     Expr* f = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
     if (x->type != EXPR_SYMBOL) return NULL;
+
+    /* Risch-Norman assumes a purely transcendental extension.  If the
+     * integrand contains an algebraic function of x (e.g., Sqrt[g(x)],
+     * g(x)^(1/3)), bail out — the algorithm has no algebraic-case
+     * support and downstream pipeline stages segfault on such inputs. */
+    if (contains_algebraic_function_of(f, x->data.symbol)) {
+        return NULL;
+    }
 
     /* No internal wall-clock timeout: callers that want a budget should
      * wrap the call in TimeConstrained[...] at the user level.  An
