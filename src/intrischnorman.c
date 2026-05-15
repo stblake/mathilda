@@ -87,6 +87,17 @@ typedef enum {
     /* Sub-phases of try_integral.  Their sum ≈ PM_PH_TRY_INTEGRAL. */
     PM_PH_TI_APPLY_D,
     PM_PH_TI_TERM_BUILD,
+    /* Sub-phases of ti.term_build, for hot-spot localisation. */
+    PM_PH_TI_TB_PRODG,           /* prod_g = Π g_j */
+    PM_PH_TI_TB_CDEN_SQ,         /* cden_sq = cden^2 */
+    PM_PH_TI_TB_TERM1,           /* ff_numer · prod_g · cden^2 · q */
+    PM_PH_TI_TB_DPART,           /* d_num cden − cand_num d_cden (umbrella) */
+    PM_PH_TI_TB_DPART_A,         /*   d_num · cden */
+    PM_PH_TI_TB_DPART_B,         /*   cand_num · d_cden */
+    PM_PH_TI_TB_DPART_S,         /*   dpart_a − dpart_b */
+    PM_PH_TI_TB_TERM2,           /* ff_denom · prod_g · dpart */
+    PM_PH_TI_TB_TERM3,           /* ff_denom · cden^2 · Σ B_j d_g_j Π_{k≠j} g_k */
+    PM_PH_TI_TB_EQUATION,        /* term1 − term2 − term3 (final sum) */
     PM_PH_TI_SOLVE_DIRECTQ,      /* direct-from-expanded mpq path */
     PM_PH_TI_SOLVE_CLIST,
     PM_PH_TI_SOLVE_WALK,
@@ -102,7 +113,13 @@ static const char* const pm_phase_names[PM_PH__COUNT] = {
     "fffresh_subst",   "splitFactor(q)",  "Together(ff)",    "splitFactor(ff)",
     "Darboux",         "cden+totdeg",     "enum_monoms",     "build_candidate",
     "ff_decompose",    "my_factors",      "try_integral",    "output_cleanup",
-    "  ti.apply_d",    "  ti.term_build", "  ti.solve_directq",
+    "  ti.apply_d",    "  ti.term_build",
+    "    tb.prodg",    "    tb.cden_sq", "    tb.term1",
+    "    tb.dpart",
+    "      tb.dpart_a","      tb.dpart_b","      tb.dpart_s",
+    "    tb.term2",   "    tb.term3",
+    "    tb.equation",
+    "  ti.solve_directq",
     "  ti.solve_clist","  ti.solve_walk", "  ti.solve_qfast",
     "  ti.solve_rowred","  ti.solve_decode","  ti.substitute",
 };
@@ -142,13 +159,19 @@ static void pm_phase_dump_atexit(void) {
         }
     }
     /* Sub-phase breakdown of try_integral.  Shares are against ti_total
-     * so the reader sees what is hot *within* try_integral. */
+     * so the reader sees what is hot *within* try_integral.  The
+     * PM_PH_TI_TB_* slots are nested *inside* PM_PH_TI_TERM_BUILD and
+     * shown with extra indent in the names; they must NOT double-count
+     * toward the uninstrumented residual. */
     if (ti_total > 0.0) {
         fprintf(stderr,
             "\n  try_integral breakdown (%.4f s total, %% within try_integral):\n",
             ti_total);
         double subsum = 0.0;
         for (int i = PM_PH_TI_APPLY_D; i < PM_PH__COUNT; i++) {
+            /* Skip the tb.* nested slots when computing subsum. */
+            if (i >= PM_PH_TI_TB_PRODG && i <= PM_PH_TI_TB_EQUATION) continue;
+        if (i >= PM_PH_TI_TB_DPART_A && i <= PM_PH_TI_TB_DPART_S) continue;
             subsum += pm_phase_accum[i];
         }
         for (int i = PM_PH_TI_APPLY_D; i < PM_PH__COUNT; i++) {
@@ -1965,7 +1988,13 @@ static bool decompose_factor(const Expr* t,
         if (h == SYM_Power && n == 2) {
             const Expr* base = t->data.function.args[0];
             const Expr* expe = t->data.function.args[1];
-            if (expe->type != EXPR_INTEGER || expe->data.integer < 0) return false;
+            /* Integer exponent only; sign is allowed.  Same-base factors
+             * appearing in a single distributed Times term accumulate
+             * into exp_vec[vi]; the qmb keying tolerates negative entries.
+             * A genuinely-rational-function term (residual negative
+             * exponent) just lands in a distinct monomial bucket that the
+             * linear solver handles correctly. */
+            if (expe->type != EXPR_INTEGER) return false;
             int64_t e = expe->data.integer;
             /* Base must be a var (powers of unknowns mean the system
              * isn't linear and we should bail). */
@@ -1981,6 +2010,243 @@ static bool decompose_factor(const Expr* t,
     }
 
     return false;
+}
+
+/* ------------------------------------------------------------------ */
+/* Structural distributor.                                              */
+/* Expands an arbitrary Plus/Times/Power expression into a flat         */
+/* Plus-of-Times suitable for try_solve_direct_q, without going         */
+/* through the generic eval_expand pipeline.  Crucially we DO NOT       */
+/* canonicalise, sort, or merge like terms — the direct-Q solver        */
+/* accumulates per-monomial coefficients itself (qmb_find_or_add        */
+/* + the relaxed decompose_factor combines same-base exponents).        */
+/*                                                                      */
+/* Power[base, n] with non-symbol base and small non-negative integer   */
+/* n is unrolled to repeated multiplication; otherwise it is treated    */
+/* as an opaque atom (decompose_factor bails on it, and the caller      */
+/* falls through to the generic CoefficientList path).                  */
+/* ------------------------------------------------------------------ */
+
+static bool is_times_head(Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Times;
+}
+
+static bool is_plus_head(Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Plus;
+}
+
+static bool is_power_head(Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power;
+}
+
+typedef struct {
+    Expr** terms;
+    size_t n;
+    size_t cap;
+} TermVec;
+
+static void tv_init(TermVec* tv) {
+    tv->terms = NULL;
+    tv->n = 0;
+    tv->cap = 0;
+}
+
+static void tv_reserve(TermVec* tv, size_t want) {
+    if (tv->cap >= want) return;
+    size_t nc = tv->cap ? tv->cap : 8;
+    while (nc < want) nc *= 2;
+    Expr** nt = (Expr**)realloc(tv->terms, nc * sizeof(Expr*));
+    if (!nt) return;
+    tv->terms = nt;
+    tv->cap = nc;
+}
+
+static void tv_push(TermVec* tv, Expr* t) {
+    tv_reserve(tv, tv->n + 1);
+    tv->terms[tv->n++] = t;
+}
+
+static void tv_free_contents(TermVec* tv) {
+    for (size_t i = 0; i < tv->n; i++) expr_free(tv->terms[i]);
+    free(tv->terms);
+    tv->terms = NULL;
+    tv->n = 0;
+    tv->cap = 0;
+}
+
+/* Concatenate factors a and b into a single flat Times[*flat_factors_of_a,
+ * *flat_factors_of_b] node.  Both inputs are borrowed; deep copies are
+ * made of the contributing children.  Identity factors (integer 1) are
+ * skipped to keep the result tidy and to avoid per-term-1's cluttering
+ * decompose_factor's scalar accumulator. */
+static Expr* mk_times_concat(Expr* a, Expr* b) {
+    bool a_is_times = is_times_head(a);
+    bool b_is_times = is_times_head(b);
+    bool a_is_one   = (a->type == EXPR_INTEGER && a->data.integer == 1);
+    bool b_is_one   = (b->type == EXPR_INTEGER && b->data.integer == 1);
+
+    if (a_is_one) return expr_copy(b);
+    if (b_is_one) return expr_copy(a);
+
+    size_t na = a_is_times ? a->data.function.arg_count : 1;
+    size_t nb = b_is_times ? b->data.function.arg_count : 1;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (na + nb));
+    size_t k = 0;
+    if (a_is_times) {
+        for (size_t i = 0; i < a->data.function.arg_count; i++)
+            args[k++] = expr_copy(a->data.function.args[i]);
+    } else {
+        args[k++] = expr_copy(a);
+    }
+    if (b_is_times) {
+        for (size_t i = 0; i < b->data.function.arg_count; i++)
+            args[k++] = expr_copy(b->data.function.args[i]);
+    } else {
+        args[k++] = expr_copy(b);
+    }
+    Expr* res = expr_new_function(expr_new_symbol(SYM_Times), args, k);
+    free(args);
+    return res;
+}
+
+/* Forward declaration. */
+static void distribute_into(Expr* e, TermVec* tv);
+
+/* Distribute Power[base, n] where n is a small non-negative integer
+ * and base may itself be a Plus.  Pushes results into tv.  For n=0,
+ * pushes the integer 1.  For larger n we unroll to repeated
+ * multiplication via distribute_into on the n-fold Times. */
+static void distribute_power(Expr* base, int64_t n, TermVec* tv) {
+    if (n == 0) { tv_push(tv, mk_int(1)); return; }
+    /* Bound unrolling to keep cartesian-product blow-up manageable. */
+    if (n > 6) {
+        /* Treat as opaque: push the Power node as-is (decompose_factor
+         * will bail if base is non-atomic; otherwise it works fine). */
+        Expr* p = mk_pow(expr_copy(base), mk_int(n));
+        tv_push(tv, p);
+        return;
+    }
+    /* Distribute base once into a TermVec, then n-fold cartesian
+     * self-product. */
+    TermVec acc;
+    tv_init(&acc);
+    distribute_into(base, &acc);
+    if (acc.n == 0) {
+        tv_free_contents(&acc);
+        tv_push(tv, mk_int(0));
+        return;
+    }
+    for (int64_t r = 1; r < n; r++) {
+        TermVec fac;
+        tv_init(&fac);
+        distribute_into(base, &fac);
+
+        TermVec next;
+        tv_init(&next);
+        tv_reserve(&next, acc.n * fac.n);
+        for (size_t a = 0; a < acc.n; a++) {
+            for (size_t b = 0; b < fac.n; b++) {
+                tv_push(&next, mk_times_concat(acc.terms[a], fac.terms[b]));
+            }
+        }
+        tv_free_contents(&acc);
+        tv_free_contents(&fac);
+        acc = next;
+    }
+    for (size_t i = 0; i < acc.n; i++) tv_push(tv, acc.terms[i]);
+    free(acc.terms);
+}
+
+/* Recursive distributor.  Pushes one term per output summand into tv.
+ * Each emitted term is either an atom or a Times[...] of atoms; no
+ * Plus appears as a factor in any emitted term. */
+static void distribute_into(Expr* e, TermVec* tv) {
+    if (is_plus_head(e)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            distribute_into(e->data.function.args[i], tv);
+        }
+        return;
+    }
+    if (is_times_head(e)) {
+        size_t n = e->data.function.arg_count;
+        if (n == 0) { tv_push(tv, mk_int(1)); return; }
+        /* Start with multiplicative identity. */
+        TermVec acc;
+        tv_init(&acc);
+        tv_push(&acc, mk_int(1));
+        for (size_t i = 0; i < n; i++) {
+            TermVec fac;
+            tv_init(&fac);
+            distribute_into(e->data.function.args[i], &fac);
+            if (fac.n == 0) {
+                /* Empty distribution means 0 → whole product is 0. */
+                tv_free_contents(&acc);
+                tv_free_contents(&fac);
+                tv_push(tv, mk_int(0));
+                return;
+            }
+            TermVec next;
+            tv_init(&next);
+            tv_reserve(&next, acc.n * fac.n);
+            for (size_t a = 0; a < acc.n; a++) {
+                for (size_t b = 0; b < fac.n; b++) {
+                    tv_push(&next, mk_times_concat(acc.terms[a], fac.terms[b]));
+                }
+            }
+            tv_free_contents(&acc);
+            tv_free_contents(&fac);
+            acc = next;
+        }
+        for (size_t i = 0; i < acc.n; i++) tv_push(tv, acc.terms[i]);
+        free(acc.terms);
+        return;
+    }
+    if (is_power_head(e) && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* expn = e->data.function.args[1];
+        /* Only positive small integer exponents on Plus base need
+         * expansion.  Power[var, k] (any int k) stays as a single
+         * opaque factor: decompose_factor handles it directly. */
+        if (expn->type == EXPR_INTEGER && expn->data.integer >= 0
+            && is_plus_head(base)) {
+            distribute_power(base, expn->data.integer, tv);
+            return;
+        }
+        /* Otherwise opaque atom. */
+        tv_push(tv, expr_copy(e));
+        return;
+    }
+    /* Atom (symbol, integer, bigint, rational, etc.) or any other
+     * function head — push as-is, treated as an opaque single factor. */
+    tv_push(tv, expr_copy(e));
+}
+
+/* Top-level entry: distribute e and return a Plus[Times[...]...] Expr.
+ * Caller owns the result.  Returns NULL on internal failure.            */
+static Expr* distribute_to_plus(Expr* e) {
+    TermVec tv;
+    tv_init(&tv);
+    distribute_into(e, &tv);
+    if (tv.n == 0) { free(tv.terms); return mk_int(0); }
+    if (tv.n == 1) {
+        Expr* one = tv.terms[0];
+        free(tv.terms);
+        return one;
+    }
+    Expr** args = tv.terms;       /* steal ownership */
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Plus),
+                                       args, tv.n);
+    free(args);
+    return result;
 }
 
 /* Sparse row keyed by monomial exponent vector. */
@@ -2647,53 +2913,108 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
     PM_PHE(ad, PM_PH_TI_APPLY_D);
 
     PM_PHB(tb);
-    /* prod_g = Π g_j. */
-    Expr* prod_g = mk_int(1);
-    for (size_t j = 0; j < nlog; j++) {
-        prod_g = eval_expand(mk_times2(prod_g, expr_copy(candlogs[j])));
+    /* Fast path: build the equation E = term1 − term2 − term3 as a
+     * single unevaluated Plus/Times/Power tree and run the structural
+     * distributor.  The distributor never calls the evaluator — it
+     * just produces a flat Plus-of-Times suitable for
+     * try_solve_direct_q.  The relaxed decompose_factor accumulates
+     * same-base exponents (including negative ones from logarithmic
+     * derivatives) so canonicalisation isn't required.
+     *
+     *   E :=  ff_numer · Π_j g_j · cden² · q
+     *       − ff_denom · Π_j g_j · (d_num · cden − cand_num · d_cden)
+     *       − ff_denom · cden² · Σ_j B_j · d_logs[j] · Π_{k≠j} g_k
+     *
+     * Each factor is held by reference (expr_copy'd into the tree). */
+    Expr* equation_numer = NULL;
+
+    PM_PHB(tbpg);
+    /* Symbolic prod_g_expr = Times[candlogs[0], candlogs[1], ...]. */
+    Expr* prod_g_expr;
+    if (nlog == 0) {
+        prod_g_expr = mk_int(1);
+    } else {
+        prod_g_expr = expr_copy(candlogs[0]);
+        for (size_t j = 1; j < nlog; j++) {
+            prod_g_expr = mk_times2(prod_g_expr, expr_copy(candlogs[j]));
+        }
     }
+    PM_PHE(tbpg, PM_PH_TI_TB_PRODG);
 
-    Expr* cden_sq = eval_expand(mk_times2(expr_copy(cden), expr_copy(cden)));
+    PM_PHB(tbcs);
+    /* Symbolic cden_sq_expr = Times[cden, cden]. */
+    Expr* cden_sq_expr = mk_times2(expr_copy(cden), expr_copy(cden));
+    PM_PHE(tbcs, PM_PH_TI_TB_CDEN_SQ);
 
-    /* term1 = ff_numer * prod_g * cden^2 * q   (no unknowns) */
-    Expr* term1 = eval_expand(
-        mk_times2(mk_times2(mk_times2(expr_copy(ff_numer),
-                                        expr_copy(prod_g)),
-                              expr_copy(cden_sq)),
-                  expr_copy(q)));
+    /* +term1 = ff_numer · prod_g · cden² · q  (no unknowns) */
+    Expr* term1_expr = mk_times2(
+        mk_times2(mk_times2(expr_copy(ff_numer), expr_copy(prod_g_expr)),
+                  expr_copy(cden_sq_expr)),
+        expr_copy(q));
 
-    /* term2 = ff_denom * prod_g * (d_num cden − cand_num d_cden) */
-    Expr* dpart_a = eval_expand(mk_times2(expr_copy(d_num), expr_copy(cden)));
-    Expr* dpart_b = eval_expand(mk_times2(expr_copy(cand_num), expr_copy(d_cden)));
-    Expr* dpart   = eval_expand(
-        mk_plus2(dpart_a, mk_times2(mk_int(-1), dpart_b)));
-    Expr* term2 = eval_expand(
-        mk_times2(mk_times2(expr_copy(ff_denom), expr_copy(prod_g)), dpart));
+    /* −term2 expanded into two signed parts:
+     *   −ff_denom·prod_g·d_num·cden  +  ff_denom·prod_g·cand_num·d_cden  */
+    Expr* term2a_expr = mk_times2(
+        mk_int(-1),
+        mk_times2(mk_times2(mk_times2(expr_copy(ff_denom),
+                                       expr_copy(prod_g_expr)),
+                             expr_copy(d_num)),
+                  expr_copy(cden)));
+    Expr* term2b_expr = mk_times2(
+        mk_times2(mk_times2(expr_copy(ff_denom), expr_copy(prod_g_expr)),
+                  expr_copy(cand_num)),
+        expr_copy(d_cden));
 
-    /* term3 = ff_denom * cden^2 * Σ_j B_j apply_d(g_j) Π_{k≠j}(g_k) */
-    Expr* term3_sum = mk_int(0);
-    for (size_t j = 0; j < nlog; j++) {
-        /* g_others = Π_{k≠j}(g_k) — compute via prod_g / g_j (clean
-         * since prod_g is just the product). */
-        Expr* g_others = eval_cancel(mk_div(expr_copy(prod_g),
-                                             expr_copy(candlogs[j])));
-        Expr* contrib = mk_times2(
-            mk_times2(expr_copy(B_unknowns[j]), expr_copy(d_logs[j])),
-            g_others);
-        term3_sum = mk_plus2(term3_sum, contrib);
+    /* −term3 = − ff_denom · cden² · Σ_j B_j · d_logs[j] · Π_{k≠j} g_k.
+     * Build as a Plus of contributions; the outer Plus is wrapped in
+     * Times[-1, ff_denom, cden_sq, Plus[...]] which the distributor
+     * expands. */
+    Expr* term3_sum_expr;
+    if (nlog == 0) {
+        term3_sum_expr = mk_int(0);
+    } else {
+        Expr** contribs = (Expr**)malloc(sizeof(Expr*) * nlog);
+        for (size_t j = 0; j < nlog; j++) {
+            Expr* g_others = mk_int(1);
+            for (size_t k = 0; k < nlog; k++) {
+                if (k == j) continue;
+                g_others = mk_times2(g_others, expr_copy(candlogs[k]));
+            }
+            contribs[j] = mk_times2(
+                mk_times2(expr_copy(B_unknowns[j]), expr_copy(d_logs[j])),
+                g_others);
+        }
+        if (nlog == 1) {
+            term3_sum_expr = contribs[0];
+        } else {
+            term3_sum_expr = expr_new_function(expr_new_symbol(SYM_Plus),
+                                                 contribs, nlog);
+        }
+        free(contribs);
     }
-    Expr* term3 = eval_expand(
-        mk_times2(mk_times2(expr_copy(ff_denom), expr_copy(cden_sq)), term3_sum));
+    Expr* term3_expr = mk_times2(
+        mk_int(-1),
+        mk_times2(mk_times2(expr_copy(ff_denom), expr_copy(cden_sq_expr)),
+                  term3_sum_expr));
 
-    /* E = term1 − term2 − term3. */
-    Expr* equation_numer = eval_expand(
-        mk_plus2(term1,
-                  mk_plus2(mk_times2(mk_int(-1), term2),
-                            mk_times2(mk_int(-1), term3))));
-    PMTRACE("equation built nrows≈?\n");
+    /* big = Plus[term1, term2a, term2b, term3].  Order doesn't matter
+     * for the distributor or the solver. */
+    Expr** big_args = (Expr**)malloc(sizeof(Expr*) * 4);
+    big_args[0] = term1_expr;
+    big_args[1] = term2a_expr;
+    big_args[2] = term2b_expr;
+    big_args[3] = term3_expr;
+    Expr* big = expr_new_function(expr_new_symbol(SYM_Plus), big_args, 4);
+    free(big_args);
 
+    /* One-shot structural distribution. */
+    PM_PHB(tbeq);
+    equation_numer = distribute_to_plus(big);
+    expr_free(big);
+    PM_PHE(tbeq, PM_PH_TI_TB_EQUATION);
+
+    expr_free(prod_g_expr); expr_free(cden_sq_expr);
     expr_free(d_num); expr_free(d_cden);
-    expr_free(prod_g); expr_free(cden_sq);
     for (size_t j = 0; j < nlog; j++) expr_free(d_logs[j]);
     free(d_logs);
     PM_PHE(tb, PM_PH_TI_TERM_BUILD);

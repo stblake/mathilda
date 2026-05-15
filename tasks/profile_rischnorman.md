@@ -297,3 +297,122 @@ already-expanded polynomials.  Two avenues:
 After those, the leaf-time allocator share (~55 % of sample
 profile) suggests an arena allocator for short-lived Expr nodes
 inside `try_integral_full` would still be a meaningful win.
+
+---
+
+## Implementation #4 — Structural distributor replaces term_build's Expand chain
+
+### Drill-down
+
+A second profile pass added sub-sub-phase timers to `term_build`:
+
+```
+ti.term_build           4.32 s   71.5 %   (try_integral)
+  tb.dpart              2.69 s   44.5 %   ← d_num·cden − cand_num·d_cden
+    tb.dpart_a          2.36 s   39.1 %   ← eval_expand(d_num · cden)  *the* hotspot
+    tb.dpart_b          0.08 s    1.3 %
+    tb.dpart_s          0.25 s    4.1 %
+  tb.equation           0.97 s   16.0 %   ← eval_expand(term1 − term2 − term3)
+  tb.term2              0.61 s   10.0 %   ← eval_expand(ff_denom · prod_g · dpart)
+  tb.term3              0.045 s   0.7 %
+  tb.term1              0.008 s   0.1 %
+  tb.cden_sq            0.002 s   0.0 %
+  tb.prodg              0.001 s   0.0 %
+```
+
+A single `eval_expand(d_num · cden)` was 39 % of `try_integral`.  All
+the per-product Expand calls share the same root cause: the generic
+evaluator pipeline canonicalises (sort, like-term merge, attribute
+dispatch) that the downstream Q-linear solver does not need.
+
+### Change
+
+Replaced the entire term-build block in `try_integral_full` with a
+**single structural distribution pass**:
+
+1. Build the equation as one unevaluated Plus/Times tree
+   `Plus[+term1, −term2a, +term2b, −term3]`, where each `term*` is a
+   `Times[…]` of factors and `prod_g`, `cden_sq` are themselves Times
+   chains (not pre-expanded).
+2. A new `distribute_to_plus(e)` recursively distributes the tree:
+   - `Plus`: concatenate distributed children.
+   - `Times`: cartesian product of distributed factors via
+     `mk_times_concat` (flat Times-of-atoms, no nested Plus).
+   - `Power[Plus, k]` (small `k ≥ 0`): `k`-fold cartesian self-product.
+   - Anything else: opaque atom — emitted as-is.
+3. **No evaluator calls** — pure structural malloc/expr_copy.
+4. The result is a flat `Plus[Times[…]…]` fed straight to
+   `try_solve_direct_q`.  Same-base exponents (including negatives
+   from logarithmic-derivative `l_k = 1/x` factors) combine naturally
+   in `decompose_factor`'s `exp_vec[]` accumulator; the qmb keying
+   tolerates negative entries.
+5. Relaxed `decompose_factor` to accept negative integer `Power`
+   exponents (previously bailed) — required because the structural
+   path keeps `Power[x, -1] · Power[x, 2]` as two separate factors
+   that combine *during* decomposition.
+
+### Result (52-case corpus, best-of-3)
+
+| | baseline | after #1 | after #1+2+3 | after #1+2+3+4 | total speedup |
+|---|---:|---:|---:|---:|---:|
+| Total | 34.1 s | 10.2 s | 7.0 s | **2.73 s** | **12.5×** |
+| exp_x_plus_inv_log | 11.74 s | 2.27 s | 1.77 s | **0.67 s** | 17.5× |
+| sin_over_x_plus_log_cos | 5.9 s | … | 1.37 s | **0.52 s** | 11.4× |
+| exp_inv_log | 4.5 s | … | 1.25 s | **0.47 s** | 9.6× |
+| sin_sin_2x | 6.79 s | 1.93 s | 0.85 s | **0.073 s** | 93× |
+
+`term_build` collapsed from 4.32 s (71.5 % of try_integral) to **0.085 s
+(1.6 %)** — a **51× per-call speedup** on the hottest phase.
+
+### Updated phase breakdown (52 cases, reps=3, 8.33 s cumulative)
+
+```
+top-level                                                 share
+  try_integral          5.39 s    64.7 %
+  output_cleanup        1.31 s    15.7 %
+  Together(ff)          0.47 s     5.6 %
+  ff_decompose          0.47 s     5.7 %
+  splitFactor(ff)       0.13 s     1.5 %
+  my_factors            0.18 s     2.2 %
+  ... rest < 1 %
+
+try_integral breakdown (5.39 s)
+  ti.apply_d            4.65 s    86.3 %   ← NEW dominant phase
+  ti.solve_directq      0.27 s     5.1 %
+  ti.substitute         0.27 s     5.1 %
+  ti.term_build         0.085 s    1.6 %
+  ti.solve_clist        0.046 s    0.9 %    (9/162 fall-throughs)
+  ti.solve_walk         0.013 s    0.2 %    (9/162)
+  ti.solve_rowred       0.023 s    0.4 %    (9/162)
+  ti.solve_qfast        0      s   0.0 %
+```
+
+The fast path fires on **153/162** call sites; same 9 parameter-bearing
+fall-throughs as #2+#3.  No correctness regressions: full 116-suite
+test corpus (`intrischnorman_tests`, `intrat_tests`, plus the broader
+PicoCAS test suite) is green.
+
+### Next bottleneck
+
+`ti.apply_d` now dominates at 86 % of `try_integral`.  Its work is:
+
+```c
+sum = Σ_k l[k] · D[f, vars[k]];
+return eval_and_free(sum);
+```
+
+Per call: `nv` invocations of `call_d` (which goes through the full
+`evaluate` pipeline for `D[…]`), plus a final `eval_and_free`.  The
+heavy callers are `apply_d(cand_num, …)` where `cand_num` has tens of
+unknowns × tens of monomials.
+
+Avenues for #5:
+
+- **Targeted polynomial differentiator**: walk `cand_num` as a Plus
+  of monomials directly, applying the power rule per factor instead
+  of routing through `evaluate → builtin_d → DownValue lookup` for
+  every term.
+- **Skip the final `eval_and_free`**: `apply_d`'s consumers
+  (`term_build`'s structural distributor, the `dpart` builder) no
+  longer require canonical form — they can consume an unflattened
+  `Plus[Times[l_k, …]…]` directly.
