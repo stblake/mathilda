@@ -416,3 +416,65 @@ Avenues for #5:
   (`term_build`'s structural distributor, the `dpart` builder) no
   longer require canonical form — they can consume an unflattened
   `Plus[Times[l_k, …]…]` directly.
+
+---
+
+## Implementation #5 — Power-rule fast path + skip canonicalisation
+
+Both #5 avenues implemented together:
+
+1. **`diff_monomial_pow(m, var_k)`** / **`diff_poly_pow(f, var_k)`** —
+   direct polynomial differentiator.  For each monomial (Times of
+   integer/rational scalars, atoms, `Power[var, int]`):
+   - Find the unique factor containing `var_k` (must be `var_k`
+     itself or `Power[var_k, int]`).
+   - All other factors must be free of `var_k`; otherwise bail and
+     fall back to the generic `call_d` path.
+   - Emit `c · e · v_k^(e-1) · (other factors)` directly.
+   - Returns 0 when `var_k` is absent from `m`.
+
+2. **`apply_d_raw`** — same fast-path as `apply_d` but **skips the
+   final `eval_and_free`** canonicalisation pass.  Safe because
+   `try_integral_full`'s structural distributor walks Plus / Times
+   itself and does not require canonical input.
+
+The generic `apply_d` (still called from `split_factor`'s
+content / primitive-part recursion, where `eval_poly_gcd` needs
+canonical input) retains the canonicalisation pass.
+
+### Result (52-case corpus, best-of-3)
+
+| | after #4 | after #5 | total speedup |
+|---|---:|---:|---:|
+| Total | 2.73 s | **1.23 s** | **27.7× vs baseline 34.1 s** |
+| ti.apply_d | 4.65 s | **0.003 s** | >1000× |
+| try_integral | 5.39 s | **0.76 s** | 7.1× |
+| exp_x_plus_inv_log | 0.67 s | **0.081 s** | 8.3× |
+| exp_inv_log | 0.47 s | **0.040 s** | 11.6× |
+
+### Updated phase breakdown (52 cases, reps=3, 3.88 s cumulative)
+
+```
+top-level                                                 share
+  output_cleanup        1.44 s    37.1 %   ← NEW dominant
+  try_integral          0.76 s    19.6 %
+  Together(ff)          0.49 s    12.6 %
+  ff_decompose          0.48 s    12.4 %
+  build_candidate       0.20 s     5.2 %
+  my_factors            0.19 s     4.8 %
+
+try_integral breakdown (0.76 s)
+  ti.solve_directq      0.28 s    37.2 %
+  ti.substitute         0.28 s    37.3 %
+  ti.term_build         0.086 s   11.3 %
+  ti.solve_clist        0.045 s    6.0 %   (9 fall-throughs)
+  ti.solve_rowred       0.024 s    3.2 %
+  ti.solve_walk         0.012 s    1.6 %
+  ti.apply_d            0.003 s    0.3 %   ← essentially gone
+```
+
+After #5 the `try_integral` budget is well-balanced across solve /
+substitute / term_build, and the bottleneck shifts out to the
+top-level `output_cleanup` (per-summand `eval_cancel` + Sin/Cos
+fresh-substitution round-trip).  No correctness regressions; all 116
+test suites green.

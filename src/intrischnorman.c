@@ -1215,12 +1215,157 @@ static int build_vector_field(Expr** si, size_t n,
     return 0;
 }
 
-/* apply_d(f) — total derivation: Σ l[k] · D[f, vars[k]].
- *
- * Returns an unevaluated Plus[...] tree (no Together / Expand) so the
- * outer pipeline can decide when to normalise.  The caller is
- * responsible for any subsequent Together / Numerator. */
-static Expr* apply_d(Expr* f, Expr** vars, Expr** l, size_t n) {
+/* Forward declarations: head-test helpers defined later (near the
+ * structural distributor) — needed here for the fast-path
+ * differentiator. */
+static bool is_times_head(Expr* e);
+static bool is_plus_head(Expr* e);
+static bool is_power_head(Expr* e);
+
+/* Fast-path: differentiate a monomial m (Times-of-atoms or a single
+ * atom) w.r.t. var_k (a symbol).  Returns NULL on shapes we don't
+ * handle (forces caller to use the generic D[...] evaluator).
+ * Handles the polynomial-monomial case: m = c · v_k^e · (free of v_k);
+ * D[m, v_k] = c · e · v_k^(e-1) · (free of v_k).  If v_k is absent,
+ * returns mk_int(0).  Caller owns the result. */
+static Expr* diff_monomial_pow(Expr* m, Expr* var_k) {
+    if (!var_k || var_k->type != EXPR_SYMBOL) return NULL;
+    const char* vk = var_k->data.symbol;
+
+    /* Iterate factors of m (treat non-Times as a 1-factor list). */
+    size_t nf;
+    Expr** facs;
+    if (is_times_head(m)) {
+        nf = m->data.function.arg_count;
+        facs = m->data.function.args;
+    } else {
+        nf = 1;
+        facs = &m;
+    }
+
+    int hit_idx = -1;       /* factor that contains var_k */
+    int64_t hit_exp = 0;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* f = facs[i];
+        if (f->type == EXPR_SYMBOL) {
+            if (f->data.symbol == vk) {
+                if (hit_idx >= 0) return NULL;     /* same var twice */
+                hit_idx = (int)i;
+                hit_exp = 1;
+            }
+            /* Other symbols are foreign atoms — assumed free of vk. */
+        } else if (is_power_head(f) && f->data.function.arg_count == 2) {
+            Expr* base = f->data.function.args[0];
+            Expr* expn = f->data.function.args[1];
+            if (base->type == EXPR_SYMBOL && base->data.symbol == vk) {
+                if (hit_idx >= 0) return NULL;
+                if (expn->type != EXPR_INTEGER) return NULL;
+                hit_idx = (int)i;
+                hit_exp = expn->data.integer;
+            } else if (!expr_free_of_symbol(f, vk)) {
+                /* var_k buried inside a non-trivial Power — bail. */
+                return NULL;
+            }
+        } else if (f->type == EXPR_FUNCTION) {
+            /* Any other compound factor (Sin, Log, etc.): must be free
+             * of var_k for the simple power-rule treatment to apply. */
+            if (!expr_free_of_symbol(f, vk)) return NULL;
+        }
+        /* Else: integer / bigint / rational / etc. — no vk. */
+    }
+
+    if (hit_idx < 0) return mk_int(0);
+
+    /* Build the differentiated monomial.  Prepend hit_exp as a scalar
+     * factor, and replace facs[hit_idx] with v_k^(hit_exp - 1)
+     * (dropping it entirely if hit_exp - 1 == 0, or replacing with the
+     * bare symbol if hit_exp - 1 == 1). */
+    Expr** out = (Expr**)malloc(sizeof(Expr*) * (nf + 1));
+    size_t k = 0;
+    if (hit_exp != 1) out[k++] = mk_int(hit_exp);
+    for (size_t i = 0; i < nf; i++) {
+        if ((int)i == hit_idx) {
+            int64_t ne = hit_exp - 1;
+            if (ne == 0) continue;
+            if (ne == 1) out[k++] = expr_new_symbol(vk);
+            else out[k++] = mk_pow(expr_new_symbol(vk), mk_int(ne));
+        } else {
+            out[k++] = expr_copy(facs[i]);
+        }
+    }
+    if (k == 0) { free(out); return mk_int(1); }
+    if (k == 1) { Expr* one = out[0]; free(out); return one; }
+    Expr* res = expr_new_function(expr_new_symbol(SYM_Times), out, k);
+    free(out);
+    return res;
+}
+
+/* Fast-path: differentiate a polynomial f (Plus of monomials) w.r.t.
+ * var_k.  Returns NULL on bail-out (any monomial we can't handle);
+ * otherwise an owned Plus / atom in unevaluated structural form. */
+static Expr* diff_poly_pow(Expr* f, Expr* var_k) {
+    if (!is_plus_head(f)) return diff_monomial_pow(f, var_k);
+    size_t n = f->data.function.arg_count;
+    Expr** out = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* d = diff_monomial_pow(f->data.function.args[i], var_k);
+        if (!d) {
+            for (size_t j = 0; j < k; j++) expr_free(out[j]);
+            free(out);
+            return NULL;
+        }
+        if (d->type == EXPR_INTEGER && d->data.integer == 0) {
+            expr_free(d);
+            continue;
+        }
+        out[k++] = d;
+    }
+    if (k == 0) { free(out); return mk_int(0); }
+    if (k == 1) { Expr* one = out[0]; free(out); return one; }
+    Expr* res = expr_new_function(expr_new_symbol(SYM_Plus), out, k);
+    free(out);
+    return res;
+}
+
+/* apply_d_impl(f, ..., canonicalise) — shared body for apply_d and
+ * apply_d_raw.  When canonicalise is true, the sum is passed through
+ * eval_and_free for canonical Plus / Times shape (required by
+ * downstream consumers like eval_poly_gcd).  When false, the
+ * unevaluated structural tree is returned (suitable for consumers
+ * that themselves walk Plus / Times — e.g., try_integral_full's
+ * structural distributor). */
+static Expr* apply_d_impl(Expr* f, Expr** vars, Expr** l, size_t n,
+                            bool canonicalise) {
+    /* Fast path: walk vars[] applying diff_poly_pow. */
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nt = 0;
+    bool fast_ok = true;
+    for (size_t k = 0; k < n; k++) {
+        Expr* dfk = diff_poly_pow(f, vars[k]);
+        if (!dfk) { fast_ok = false; break; }
+        if (dfk->type == EXPR_INTEGER && dfk->data.integer == 0) {
+            expr_free(dfk);
+            continue;
+        }
+        terms[nt++] = mk_times2(expr_copy(l[k]), dfk);
+    }
+    if (fast_ok) {
+        Expr* sum;
+        if (nt == 0) { sum = mk_int(0); }
+        else if (nt == 1) {
+            sum = terms[0];
+        } else {
+            sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, nt);
+        }
+        free(terms);
+        return canonicalise ? eval_and_free(sum) : sum;
+    }
+    /* Fallback: discard any fast-path output and use the generic
+     * D[]-based path so we stay correct on transcendental f. */
+    for (size_t k = 0; k < nt; k++) expr_free(terms[k]);
+    free(terms);
+
     Expr* sum = mk_int(0);
     for (size_t k = 0; k < n; k++) {
         Expr* dfk = call_d(f, vars[k]);
@@ -1229,9 +1374,25 @@ static Expr* apply_d(Expr* f, Expr** vars, Expr** l, size_t n) {
         Expr* acc = mk_plus2(sum, term);
         sum = acc;
     }
-    /* Evaluate just once to canonicalise.  Avoids Together (which on a
-     * 15-unknown candidate with rational sub-terms is the bottleneck). */
+    /* The eval_and_free below also serves as the only canonicalisation
+     * step for call_d-based fallback output (which is heavily nested).
+     * Even in the "raw" case we still canonicalise on the fallback
+     * because uncanonical call_d output can hide transcendental cancels
+     * that downstream simplifiers rely on. */
     return eval_and_free(sum);
+}
+
+/* apply_d — canonicalised: output is Plus / Times in standard order. */
+static Expr* apply_d(Expr* f, Expr** vars, Expr** l, size_t n) {
+    return apply_d_impl(f, vars, l, n, /*canonicalise=*/true);
+}
+
+/* apply_d_raw — uncanonicalised: returns the unevaluated structural
+ * tree.  Only safe when the consumer walks Plus / Times itself
+ * (e.g., the structural distributor in try_integral_full's
+ * term_build). */
+static Expr* apply_d_raw(Expr* f, Expr** vars, Expr** l, size_t n) {
+    return apply_d_impl(f, vars, l, n, /*canonicalise=*/false);
 }
 
 /* `vars_in_poly(p, vars, n)` — returns the subset of vars[i] that
@@ -2893,15 +3054,19 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
      *
      * setting E ≡ 0 gives the linear system in {A_i, B_j}. */
     PM_PHB(ad);
-    Expr* d_num  = apply_d(cand_num, vars, l, nv);
+    /* Consumers (term_build's structural distributor) walk Plus /
+     * Times themselves, so the canonicalisation done by the generic
+     * apply_d is wasted here — use apply_d_raw to skip the
+     * eval_and_free pass. */
+    Expr* d_num  = apply_d_raw(cand_num, vars, l, nv);
     if (!d_num) { PM_PHE(ad, PM_PH_TI_APPLY_D); goto err; }
-    Expr* d_cden = apply_d(cden, vars, l, nv);
+    Expr* d_cden = apply_d_raw(cden, vars, l, nv);
     if (!d_cden) { PM_PHE(ad, PM_PH_TI_APPLY_D); expr_free(d_num); goto err; }
 
     /* d_logs[j] = apply_d(g_j). */
     Expr** d_logs = (Expr**)calloc(nlog ? nlog : 1, sizeof(Expr*));
     for (size_t j = 0; j < nlog; j++) {
-        d_logs[j] = apply_d(candlogs[j], vars, l, nv);
+        d_logs[j] = apply_d_raw(candlogs[j], vars, l, nv);
         if (!d_logs[j]) {
             for (size_t k = 0; k < j; k++) expr_free(d_logs[k]);
             free(d_logs);
