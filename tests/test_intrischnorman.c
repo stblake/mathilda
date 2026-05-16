@@ -458,6 +458,61 @@ static void test_phase3_enumerate_monoms_single_var(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* QMatBuild hash index unit tests.                                    */
+/*                                                                      */
+/* Exercises the open-addressed exp_vec → row hash that backs          */
+/* try_solve_direct_q.  Each test calls the testable surface           */
+/* Integrate`Helpers`PMQMBStress[nv, ncols, ntrials, mod, seed], which */
+/* runs an internal stress loop and returns True/False.                */
+/* ------------------------------------------------------------------ */
+
+/* nv = 0 — degenerate single-vector case.  All inserts collapse to    */
+/* one row regardless of ntrials.                                       */
+static void test_qmb_hash_nv_zero(void) {
+    run_eq("Integrate`Helpers`PMQMBStress[0, 1, 50, 1, 1]", "True");
+}
+
+/* nv = 1 — heavy collisions (mod = 5 so only 5 unique vectors but     */
+/* 1000 trials).  Tests idempotency under repeated re-insertion.       */
+static void test_qmb_hash_high_collision(void) {
+    run_eq("Integrate`Helpers`PMQMBStress[1, 1, 1000, 5, 999]", "True");
+}
+
+/* Typical pmint shape — small nv, modest unique count, plenty of       */
+/* trials to force at least 2-3 bucket grows (initial cap = 32, then   */
+/* doubling).                                                            */
+static void test_qmb_hash_typical(void) {
+    run_eq("Integrate`Helpers`PMQMBStress[3, 2, 200, 4, 17]", "True");
+}
+
+/* Larger working set — 5000 trials with mod = 3, nv = 8.  Unique       */
+/* vector count is bounded by 3^8 = 6561 so we exercise growth         */
+/* through several rehashes.                                            */
+static void test_qmb_hash_many_rehashes(void) {
+    run_eq("Integrate`Helpers`PMQMBStress[8, 4, 5000, 3, 42]", "True");
+}
+
+/* Maximum supported nv (PMINT_MAX_INDETS = 32).  Verifies the hash    */
+/* and memcmp handle the longest legal key.                             */
+static void test_qmb_hash_max_indets(void) {
+    run_eq("Integrate`Helpers`PMQMBStress[32, 1, 200, 2, 7]", "True");
+}
+
+/* ntrials = 0 — no inserts.  Verifies qmb_free copes with an empty    */
+/* table (both rows and buckets still NULL).                            */
+static void test_qmb_hash_empty(void) {
+    run_eq("Integrate`Helpers`PMQMBStress[3, 1, 0, 1, 0]", "True");
+}
+
+/* Determinism — same seed must reproduce the same result, twice in    */
+/* a row.  Guards against any iteration-order reliance.                 */
+static void test_qmb_hash_deterministic(void) {
+    run_eq("Integrate`Helpers`PMQMBStress[4, 2, 500, 3, 12345] && "
+           "Integrate`Helpers`PMQMBStress[4, 2, 500, 3, 12345]",
+           "True");
+}
+
+/* ------------------------------------------------------------------ */
 /* Phase 4 — Q-rational integrals.  Uses the universal correctness    */
 /* predicate (differentiate-and-cancel).                                */
 /* ------------------------------------------------------------------ */
@@ -694,6 +749,15 @@ int main(void) {
     TEST(test_phase3_enumerate_monoms_empty);
     TEST(test_phase3_enumerate_monoms_deg_zero);
     TEST(test_phase3_enumerate_monoms_single_var);
+
+    /* QMatBuild hash index (backs try_solve_direct_q). */
+    TEST(test_qmb_hash_nv_zero);
+    TEST(test_qmb_hash_high_collision);
+    TEST(test_qmb_hash_typical);
+    TEST(test_qmb_hash_many_rehashes);
+    TEST(test_qmb_hash_max_indets);
+    TEST(test_qmb_hash_empty);
+    TEST(test_qmb_hash_deterministic);
 
     /* Phase 4 — Q-rational integrals via assert_rischnorman_correct. */
     TEST(test_phase4_exp_x);

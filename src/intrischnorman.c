@@ -2094,17 +2094,23 @@ static bool try_solve_qfast(LinearBuilder* lb,
 /* Direct-from-expanded fast path.                                      */
 /*                                                                      */
 /* Skip CoefficientList + walk_coefficient_table entirely.  The input  */
-/* equation_numer (already fully expanded by try_integral_full) is a   */
-/* polynomial in `vars` whose per-monomial coefficients are linear in  */
-/* `unknowns`.  After expansion every Plus term has the canonical      */
-/* shape  q * Π vars[i]^e_i * unknowns[k]?  (k optional), where q is a */
-/* Q-rational scalar.  We walk the Plus, decompose each term, group by */
-/* (e_1,..,e_nv) monomial key, and accumulate column entries directly  */
-/* into mpq_t — skipping both the symbolic CoefficientList tree and    */
-/* the per-coefficient eval_coefficient + eval_replace_all pair.       */
+/* equation_numer holds the symbolic Risch-Norman equation:             */
+/*                                                                      */
+/*     E :=  ff_numer · Π_j g_j · cden² · q                             */
+/*         − ff_denom · Π_j g_j · (d_num · cden − cand_num · d_cden)    */
+/*         − ff_denom · cden² · Σ_j B_j · d_logs[j] · Π_{k≠j} g_k       */
+/*                                                                      */
+/* E is a polynomial in `vars` whose per-monomial coefficients are     */
+/* linear in `unknowns`.  Each distributed term has the shape           */
+/*   q · Π vars[i]^e_i · unknowns[k]?    (k optional, q ∈ ℚ)           */
+/* The fused walker below (pm_walk_*) descends E's still-nested         */
+/* Plus/Times tree and accumulates per-monomial coefficients directly  */
+/* into mpq_t cells — bypassing both the symbolic CoefficientList tree */
+/* and the up-front structural-distributor that earlier materialised   */
+/* hundreds of thousands of flat Plus terms only to be re-walked.       */
 /*                                                                      */
 /* Returns true on success.  Returns false (no state mutated) if any   */
-/* term is not in the recognised Q-rational shape — caller falls       */
+/* sub-factor is not in the recognised Q-rational shape — caller falls */
 /* through to the existing CoefficientList path which still has its    */
 /* own Q-fast detector on Expr** rows.                                  */
 /* ------------------------------------------------------------------ */
@@ -2121,95 +2127,6 @@ static int sym_index_in(const Expr* e, Expr** list, size_t n) {
     }
     return -1;
 }
-
-/* Decompose one factor of an expanded monomial.  Recursive on Times.
- * Multiplies the recognised contribution into the running accumulator
- * (scalar, exp_vec, unknown_idx).  Returns false to bail (foreign
- * symbol, non-integer Power exponent, Plus inside a term, two
- * unknowns in one term, etc.). */
-static bool decompose_factor(const Expr* t,
-                              Expr** vars, size_t nv,
-                              Expr** unknowns, size_t nunk,
-                              mpq_t scalar, int64_t* exp_vec,
-                              int64_t* unknown_idx) {
-    if (!t) return false;
-
-    if (entry_is_qrational(t)) {
-        mpq_t v; mpq_init(v); entry_to_mpq(t, v);
-        mpq_mul(scalar, scalar, v);
-        mpq_clear(v);
-        return true;
-    }
-
-    if (t->type == EXPR_SYMBOL) {
-        int vi = sym_index_in(t, vars, nv);
-        if (vi >= 0) { exp_vec[vi] += 1; return true; }
-        int ui = sym_index_in(t, unknowns, nunk);
-        if (ui >= 0) {
-            if (*unknown_idx >= 0) return false;   /* quadratic in unknowns */
-            *unknown_idx = ui;
-            return true;
-        }
-        return false;
-    }
-
-    if (t->type == EXPR_FUNCTION
-        && t->data.function.head
-        && t->data.function.head->type == EXPR_SYMBOL) {
-        const char* h = t->data.function.head->data.symbol;
-        size_t n = t->data.function.arg_count;
-
-        if (h == SYM_Times) {
-            for (size_t i = 0; i < n; i++) {
-                if (!decompose_factor(t->data.function.args[i],
-                                       vars, nv, unknowns, nunk,
-                                       scalar, exp_vec, unknown_idx))
-                    return false;
-            }
-            return true;
-        }
-
-        if (h == SYM_Power && n == 2) {
-            const Expr* base = t->data.function.args[0];
-            const Expr* expe = t->data.function.args[1];
-            /* Integer exponent only; sign is allowed.  Same-base factors
-             * appearing in a single distributed Times term accumulate
-             * into exp_vec[vi]; the qmb keying tolerates negative entries.
-             * A genuinely-rational-function term (residual negative
-             * exponent) just lands in a distinct monomial bucket that the
-             * linear solver handles correctly. */
-            if (expe->type != EXPR_INTEGER) return false;
-            int64_t e = expe->data.integer;
-            /* Base must be a var (powers of unknowns mean the system
-             * isn't linear and we should bail). */
-            if (base->type != EXPR_SYMBOL) return false;
-            int vi = sym_index_in(base, vars, nv);
-            if (vi < 0) return false;
-            exp_vec[vi] += e;
-            return true;
-        }
-
-        /* Plus / transcendental head / anything else — bail. */
-        return false;
-    }
-
-    return false;
-}
-
-/* ------------------------------------------------------------------ */
-/* Structural distributor.                                              */
-/* Expands an arbitrary Plus/Times/Power expression into a flat         */
-/* Plus-of-Times suitable for try_solve_direct_q, without going         */
-/* through the generic eval_expand pipeline.  Crucially we DO NOT       */
-/* canonicalise, sort, or merge like terms — the direct-Q solver        */
-/* accumulates per-monomial coefficients itself (qmb_find_or_add        */
-/* + the relaxed decompose_factor combines same-base exponents).        */
-/*                                                                      */
-/* Power[base, n] with non-symbol base and small non-negative integer   */
-/* n is unrolled to repeated multiplication; otherwise it is treated    */
-/* as an opaque atom (decompose_factor bails on it, and the caller      */
-/* falls through to the generic CoefficientList path).                  */
-/* ------------------------------------------------------------------ */
 
 static bool is_times_head(Expr* e) {
     return e && e->type == EXPR_FUNCTION
@@ -2232,244 +2149,141 @@ static bool is_power_head(Expr* e) {
         && e->data.function.head->data.symbol == SYM_Power;
 }
 
-typedef struct {
-    Expr** terms;
-    size_t n;
-    size_t cap;
-} TermVec;
-
-static void tv_init(TermVec* tv) {
-    tv->terms = NULL;
-    tv->n = 0;
-    tv->cap = 0;
-}
-
-static void tv_reserve(TermVec* tv, size_t want) {
-    if (tv->cap >= want) return;
-    size_t nc = tv->cap ? tv->cap : 8;
-    while (nc < want) nc *= 2;
-    Expr** nt = (Expr**)realloc(tv->terms, nc * sizeof(Expr*));
-    if (!nt) return;
-    tv->terms = nt;
-    tv->cap = nc;
-}
-
-static void tv_push(TermVec* tv, Expr* t) {
-    tv_reserve(tv, tv->n + 1);
-    tv->terms[tv->n++] = t;
-}
-
-static void tv_free_contents(TermVec* tv) {
-    for (size_t i = 0; i < tv->n; i++) expr_free(tv->terms[i]);
-    free(tv->terms);
-    tv->terms = NULL;
-    tv->n = 0;
-    tv->cap = 0;
-}
-
-/* Concatenate factors a and b into a single flat Times[*flat_factors_of_a,
- * *flat_factors_of_b] node.  Both inputs are borrowed; deep copies are
- * made of the contributing children.  Identity factors (integer 1) are
- * skipped to keep the result tidy and to avoid per-term-1's cluttering
- * decompose_factor's scalar accumulator. */
-static Expr* mk_times_concat(Expr* a, Expr* b) {
-    bool a_is_times = is_times_head(a);
-    bool b_is_times = is_times_head(b);
-    bool a_is_one   = (a->type == EXPR_INTEGER && a->data.integer == 1);
-    bool b_is_one   = (b->type == EXPR_INTEGER && b->data.integer == 1);
-
-    if (a_is_one) return expr_copy(b);
-    if (b_is_one) return expr_copy(a);
-
-    size_t na = a_is_times ? a->data.function.arg_count : 1;
-    size_t nb = b_is_times ? b->data.function.arg_count : 1;
-    Expr** args = (Expr**)malloc(sizeof(Expr*) * (na + nb));
-    size_t k = 0;
-    if (a_is_times) {
-        for (size_t i = 0; i < a->data.function.arg_count; i++)
-            args[k++] = expr_copy(a->data.function.args[i]);
-    } else {
-        args[k++] = expr_copy(a);
-    }
-    if (b_is_times) {
-        for (size_t i = 0; i < b->data.function.arg_count; i++)
-            args[k++] = expr_copy(b->data.function.args[i]);
-    } else {
-        args[k++] = expr_copy(b);
-    }
-    Expr* res = expr_new_function(expr_new_symbol(SYM_Times), args, k);
-    free(args);
-    return res;
-}
-
-/* Forward declaration. */
-static void distribute_into(Expr* e, TermVec* tv);
-
-/* Distribute Power[base, n] where n is a small non-negative integer
- * and base may itself be a Plus.  Pushes results into tv.  For n=0,
- * pushes the integer 1.  For larger n we unroll to repeated
- * multiplication via distribute_into on the n-fold Times. */
-static void distribute_power(Expr* base, int64_t n, TermVec* tv) {
-    if (n == 0) { tv_push(tv, mk_int(1)); return; }
-    /* Bound unrolling to keep cartesian-product blow-up manageable. */
-    if (n > 6) {
-        /* Treat as opaque: push the Power node as-is (decompose_factor
-         * will bail if base is non-atomic; otherwise it works fine). */
-        Expr* p = mk_pow(expr_copy(base), mk_int(n));
-        tv_push(tv, p);
-        return;
-    }
-    /* Distribute base once into a TermVec, then n-fold cartesian
-     * self-product. */
-    TermVec acc;
-    tv_init(&acc);
-    distribute_into(base, &acc);
-    if (acc.n == 0) {
-        tv_free_contents(&acc);
-        tv_push(tv, mk_int(0));
-        return;
-    }
-    for (int64_t r = 1; r < n; r++) {
-        TermVec fac;
-        tv_init(&fac);
-        distribute_into(base, &fac);
-
-        TermVec next;
-        tv_init(&next);
-        tv_reserve(&next, acc.n * fac.n);
-        for (size_t a = 0; a < acc.n; a++) {
-            for (size_t b = 0; b < fac.n; b++) {
-                tv_push(&next, mk_times_concat(acc.terms[a], fac.terms[b]));
-            }
-        }
-        tv_free_contents(&acc);
-        tv_free_contents(&fac);
-        acc = next;
-    }
-    for (size_t i = 0; i < acc.n; i++) tv_push(tv, acc.terms[i]);
-    free(acc.terms);
-}
-
-/* Recursive distributor.  Pushes one term per output summand into tv.
- * Each emitted term is either an atom or a Times[...] of atoms; no
- * Plus appears as a factor in any emitted term. */
-static void distribute_into(Expr* e, TermVec* tv) {
-    if (is_plus_head(e)) {
-        for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            distribute_into(e->data.function.args[i], tv);
-        }
-        return;
-    }
-    if (is_times_head(e)) {
-        size_t n = e->data.function.arg_count;
-        if (n == 0) { tv_push(tv, mk_int(1)); return; }
-        /* Start with multiplicative identity. */
-        TermVec acc;
-        tv_init(&acc);
-        tv_push(&acc, mk_int(1));
-        for (size_t i = 0; i < n; i++) {
-            TermVec fac;
-            tv_init(&fac);
-            distribute_into(e->data.function.args[i], &fac);
-            if (fac.n == 0) {
-                /* Empty distribution means 0 → whole product is 0. */
-                tv_free_contents(&acc);
-                tv_free_contents(&fac);
-                tv_push(tv, mk_int(0));
-                return;
-            }
-            TermVec next;
-            tv_init(&next);
-            tv_reserve(&next, acc.n * fac.n);
-            for (size_t a = 0; a < acc.n; a++) {
-                for (size_t b = 0; b < fac.n; b++) {
-                    tv_push(&next, mk_times_concat(acc.terms[a], fac.terms[b]));
-                }
-            }
-            tv_free_contents(&acc);
-            tv_free_contents(&fac);
-            acc = next;
-        }
-        for (size_t i = 0; i < acc.n; i++) tv_push(tv, acc.terms[i]);
-        free(acc.terms);
-        return;
-    }
-    if (is_power_head(e) && e->data.function.arg_count == 2) {
-        Expr* base = e->data.function.args[0];
-        Expr* expn = e->data.function.args[1];
-        /* Only positive small integer exponents on Plus base need
-         * expansion.  Power[var, k] (any int k) stays as a single
-         * opaque factor: decompose_factor handles it directly. */
-        if (expn->type == EXPR_INTEGER && expn->data.integer >= 0
-            && is_plus_head(base)) {
-            distribute_power(base, expn->data.integer, tv);
-            return;
-        }
-        /* Otherwise opaque atom. */
-        tv_push(tv, expr_copy(e));
-        return;
-    }
-    /* Atom (symbol, integer, bigint, rational, etc.) or any other
-     * function head — push as-is, treated as an opaque single factor. */
-    tv_push(tv, expr_copy(e));
-}
-
-/* Top-level entry: distribute e and return a Plus[Times[...]...] Expr.
- * Caller owns the result.  Returns NULL on internal failure.            */
-static Expr* distribute_to_plus(Expr* e) {
-    TermVec tv;
-    tv_init(&tv);
-    distribute_into(e, &tv);
-    if (tv.n == 0) { free(tv.terms); return mk_int(0); }
-    if (tv.n == 1) {
-        Expr* one = tv.terms[0];
-        free(tv.terms);
-        return one;
-    }
-    Expr** args = tv.terms;       /* steal ownership */
-    Expr* result = expr_new_function(expr_new_symbol(SYM_Plus),
-                                       args, tv.n);
-    free(args);
-    return result;
-}
-
 /* Sparse row keyed by monomial exponent vector. */
 typedef struct {
     int64_t* exp_vec;     /* length nv */
     mpq_t* col;           /* length nunk + 1 (RHS at col[nunk]) */
 } QRowEntry;
 
+/* QMatBuild — incremental builder for a per-monomial coefficient
+ * matrix.  Rows are appended in insertion order, but lookup by
+ * exp_vec must be O(1) so the term-walk in try_solve_direct_q stays
+ * linear in the number of expanded terms (which can be hundreds of
+ * thousands; see Sinh[x] Cosh[2x] worked example in the commit log).
+ *
+ * The lookup is provided by an open-addressed hash table keyed on
+ * exp_vec, sitting alongside the rows array:
+ *
+ *   buckets[i]  ∈ { row index, QMB_HASH_EMPTY }
+ *
+ * Linear probing with a power-of-two bucket count keeps the modulo
+ * a single mask.  We resize (doubling) whenever the next insert
+ * would push the load factor past 0.5 — that keeps the average
+ * probe length under 1.5 for our usage pattern, where the same
+ * exp_vec is hit hundreds of times in a row.
+ *
+ * Memory ownership:
+ *   - rows[i].exp_vec and rows[i].col are individually malloc'd.
+ *   - buckets is a single contiguous allocation, freed by qmb_free.
+ *   - The hash index is build-time only; we never shrink/reindex
+ *     after the matrix is finalised (the zero-row prune at the end
+ *     of try_solve_direct_q compacts rows in place, but the buckets
+ *     are no longer consulted at that point — they're just freed). */
 typedef struct {
     QRowEntry* rows;
     size_t n;
     size_t cap;
     size_t nv;
     size_t ncols;         /* nunk + 1 */
+    size_t* buckets;      /* bucket_cap entries; QMB_HASH_EMPTY = empty */
+    size_t bucket_cap;    /* power of two; 0 until first insert */
+    size_t bucket_mask;   /* bucket_cap - 1 */
 } QMatBuild;
 
-static size_t qmb_find_or_add(QMatBuild* M, const int64_t* exp_vec) {
-    for (size_t i = 0; i < M->n; i++) {
-        if (memcmp(M->rows[i].exp_vec, exp_vec,
-                    sizeof(int64_t) * M->nv) == 0) {
-            return i;
+#define QMB_HASH_EMPTY ((size_t)-1)
+#define QMB_HASH_INITIAL_CAP 32   /* first allocation, then doubling */
+
+/* FNV-1a 64-bit over the byte representation of exp_vec.  Fast,
+ * well-mixed for short integer keys, and dependency-free.  nv=0
+ * collapses to the FNV seed (every empty vector hashes the same
+ * — there's only one such vector, so collisions resolve trivially
+ * on the memcmp path). */
+static uint64_t qmb_hash_vec(const int64_t* v, size_t nv) {
+    uint64_t h = 0xcbf29ce484222325ULL;
+    const uint8_t* p = (const uint8_t*)v;
+    size_t bytes = nv * sizeof(int64_t);
+    for (size_t i = 0; i < bytes; i++) {
+        h ^= p[i];
+        h *= 0x100000001b3ULL;
+    }
+    return h;
+}
+
+/* Grow (or initially allocate) the bucket array and reinsert all
+ * existing rows.  On allocation failure leaves M->buckets untouched
+ * and returns -1; callers must propagate failure to the top-level
+ * try_solve_direct_q "infeasible" branch. */
+static int qmb_grow_buckets(QMatBuild* M) {
+    size_t new_cap = M->bucket_cap ? M->bucket_cap * 2
+                                    : QMB_HASH_INITIAL_CAP;
+    size_t* nb = (size_t*)malloc(sizeof(size_t) * new_cap);
+    if (!nb) return -1;
+    for (size_t i = 0; i < new_cap; i++) nb[i] = QMB_HASH_EMPTY;
+    size_t mask = new_cap - 1;
+    for (size_t r = 0; r < M->n; r++) {
+        uint64_t h = qmb_hash_vec(M->rows[r].exp_vec, M->nv);
+        size_t idx = (size_t)h & mask;
+        while (nb[idx] != QMB_HASH_EMPTY) {
+            idx = (idx + 1) & mask;
         }
+        nb[idx] = r;
     }
-    if (M->n == M->cap) {
-        size_t nc = M->cap ? M->cap * 2 : 16;
-        QRowEntry* nrows = (QRowEntry*)realloc(M->rows,
-                                                sizeof(QRowEntry) * nc);
-        if (!nrows) return SIZE_MAX;
-        M->rows = nrows;
-        M->cap = nc;
+    free(M->buckets);
+    M->buckets = nb;
+    M->bucket_cap = new_cap;
+    M->bucket_mask = mask;
+    return 0;
+}
+
+/* Locate an existing row matching exp_vec, or append a fresh row
+ * with that key (all columns mpq_init'd to 0).  O(1) amortized via
+ * the open-addressed hash index.  Returns SIZE_MAX on allocation
+ * failure. */
+static size_t qmb_find_or_add(QMatBuild* M, const int64_t* exp_vec) {
+    /* Grow proactively when the table would be > 50% full after
+     * one more insert.  The +1 covers the "first insert" case where
+     * M->n is 0 but bucket_cap is also 0. */
+    if ((M->n + 1) * 2 > M->bucket_cap) {
+        if (qmb_grow_buckets(M) != 0) return SIZE_MAX;
     }
-    QRowEntry* r = &M->rows[M->n];
-    r->exp_vec = (int64_t*)malloc(sizeof(int64_t) * (M->nv ? M->nv : 1));
-    if (!r->exp_vec) return SIZE_MAX;
-    memcpy(r->exp_vec, exp_vec, sizeof(int64_t) * M->nv);
-    r->col = (mpq_t*)malloc(sizeof(mpq_t) * M->ncols);
-    if (!r->col) { free(r->exp_vec); return SIZE_MAX; }
-    for (size_t j = 0; j < M->ncols; j++) mpq_init(r->col[j]);
-    return M->n++;
+
+    uint64_t h = qmb_hash_vec(exp_vec, M->nv);
+    size_t idx = (size_t)h & M->bucket_mask;
+    while (1) {
+        size_t row_idx = M->buckets[idx];
+        if (row_idx == QMB_HASH_EMPTY) {
+            /* Cache miss: allocate a new row and claim this slot. */
+            if (M->n == M->cap) {
+                size_t nc = M->cap ? M->cap * 2 : 16;
+                QRowEntry* nrows = (QRowEntry*)realloc(M->rows,
+                                                        sizeof(QRowEntry) * nc);
+                if (!nrows) return SIZE_MAX;
+                M->rows = nrows;
+                M->cap = nc;
+            }
+            QRowEntry* r = &M->rows[M->n];
+            r->exp_vec = (int64_t*)malloc(sizeof(int64_t)
+                                           * (M->nv ? M->nv : 1));
+            if (!r->exp_vec) return SIZE_MAX;
+            if (M->nv) memcpy(r->exp_vec, exp_vec,
+                               sizeof(int64_t) * M->nv);
+            r->col = (mpq_t*)malloc(sizeof(mpq_t) * M->ncols);
+            if (!r->col) { free(r->exp_vec); return SIZE_MAX; }
+            for (size_t j = 0; j < M->ncols; j++) mpq_init(r->col[j]);
+            size_t new_idx = M->n++;
+            M->buckets[idx] = new_idx;
+            return new_idx;
+        }
+        /* Bucket occupied: compare the stored key.  Exponent vectors
+         * are short (nv ≤ PMINT_MAX_INDETS = 32 → ≤ 256 bytes), so
+         * memcmp is well below the cost of computing the hash. */
+        if (M->nv == 0
+            || memcmp(M->rows[row_idx].exp_vec, exp_vec,
+                       sizeof(int64_t) * M->nv) == 0) {
+            return row_idx;
+        }
+        idx = (idx + 1) & M->bucket_mask;
+    }
 }
 
 static void qmb_free(QMatBuild* M) {
@@ -2479,6 +2293,361 @@ static void qmb_free(QMatBuild* M) {
         free(M->rows[i].col);
     }
     free(M->rows);
+    free(M->buckets);
+}
+
+/* ==================================================================
+ * Fused distribute + decompose + qmb-accumulate.
+ *
+ * Replaces the materialize-then-walk pipeline
+ *
+ *     equation_numer = distribute_to_plus(big);   // 320k flat terms
+ *     for each t in equation_numer.args:          // 320k decompose
+ *         decompose_factor(t, ...); qmb_find_or_add(...);
+ *
+ * with a single tree walk that never materialises the expanded Plus.
+ * Each distributed monomial contribution lands in the QMatBuild M
+ * directly while the walker is descending.
+ *
+ * Why this matters: on Sinh[x]·Cosh[2x] the distributor produces
+ * ~320k Times subtrees that decompose_factor then re-walks.  Both
+ * the allocation and the re-walk show up as the dominant cost in
+ * PMINT_PROFILE; this fusion eliminates them.
+ *
+ * Semantics — must agree with distribute_to_plus + decompose_factor:
+ *   Plus[a, b, ...]      fork accumulator: each child is one
+ *                         distributed term.
+ *   Times[a, b, ...]     sequence factors into the accumulator.
+ *   Power[Plus, k]       1 ≤ k ≤ 6: unroll to k copies of base.
+ *                         k = 0: identity.   k > 6 or k < 0: opaque.
+ *   Power[var, n]        (var ∈ vars, n integer): atomic — exp_vec[v] += n.
+ *   Q-rational atom      multiplies the running scalar.
+ *   Variable symbol      exp_vec[v] += 1.
+ *   Unknown symbol       unknown_idx = i  (bail if already set —
+ *                         the system isn't Q-linear in unknowns).
+ *   Anything else        bail; the caller falls back to the slow
+ *                         CoefficientList path.
+ *
+ * Memory: O(forking-depth × nv) for the cloned accumulators on the
+ * C stack during Plus splits.  No materialised intermediate terms.
+ * ================================================================== */
+
+typedef struct {
+    int64_t* exp_vec;      /* accumulated exponents (length max(nv, 1)) */
+    mpq_t scalar;          /* accumulated rational scalar */
+    int64_t unknown_idx;   /* -1 if no unknown yet seen in this term */
+    bool failed;           /* once true the walker unwinds */
+} TermAcc;
+
+static bool pm_acc_init(TermAcc* a, size_t nv) {
+    a->exp_vec = (int64_t*)calloc(nv ? nv : 1, sizeof(int64_t));
+    if (!a->exp_vec) return false;
+    mpq_init(a->scalar); mpq_set_si(a->scalar, 1, 1);
+    a->unknown_idx = -1;
+    a->failed = false;
+    return true;
+}
+
+static void pm_acc_clear(TermAcc* a) {
+    free(a->exp_vec); mpq_clear(a->scalar);
+}
+
+static bool pm_acc_clone(TermAcc* dst, const TermAcc* src, size_t nv) {
+    size_t n = nv ? nv : 1;
+    dst->exp_vec = (int64_t*)malloc(sizeof(int64_t) * n);
+    if (!dst->exp_vec) return false;
+    memcpy(dst->exp_vec, src->exp_vec, sizeof(int64_t) * n);
+    mpq_init(dst->scalar); mpq_set(dst->scalar, src->scalar);
+    dst->unknown_idx = src->unknown_idx;
+    dst->failed = src->failed;
+    return true;
+}
+
+/* Apply one atomic factor — Q-rational, variable symbol, unknown
+ * symbol, or Power[var, int].  Returns false to bail on anything
+ * else.  Plus / Times / Power[Plus,k] are routed through pm_walk_one;
+ * pm_acc_apply_atom is for actual leaves and opaque-shaped Powers. */
+static bool pm_acc_apply_atom(const Expr* t, TermAcc* a,
+                               Expr** vars, size_t nv,
+                               Expr** unknowns, size_t nunk) {
+    if (entry_is_qrational(t)) {
+        mpq_t v; mpq_init(v); entry_to_mpq(t, v);
+        mpq_mul(a->scalar, a->scalar, v);
+        mpq_clear(v);
+        return true;
+    }
+    if (t->type == EXPR_SYMBOL) {
+        int vi = sym_index_in(t, vars, nv);
+        if (vi >= 0) { a->exp_vec[vi] += 1; return true; }
+        int ui = sym_index_in(t, unknowns, nunk);
+        if (ui >= 0) {
+            if (a->unknown_idx >= 0) return false;     /* quadratic in unknowns */
+            a->unknown_idx = ui;
+            return true;
+        }
+        return false;
+    }
+    if (t->type == EXPR_FUNCTION
+        && t->data.function.head
+        && t->data.function.head->type == EXPR_SYMBOL
+        && t->data.function.head->data.symbol == SYM_Power
+        && t->data.function.arg_count == 2) {
+        const Expr* base = t->data.function.args[0];
+        const Expr* expe = t->data.function.args[1];
+        if (expe->type != EXPR_INTEGER) return false;
+        int64_t e = expe->data.integer;
+        if (base->type != EXPR_SYMBOL) return false;
+        int vi = sym_index_in(base, vars, nv);
+        if (vi < 0) return false;
+        a->exp_vec[vi] += e;
+        return true;
+    }
+    return false;
+}
+
+/* Commit the accumulator as a single contribution to M.
+ *   unknown_idx ≥ 0: scalar is the coefficient of unknowns[unknown_idx]
+ *                    on this monomial — add to that column.
+ *   unknown_idx < 0: scalar is the constant part of this monomial —
+ *                    subtract from the RHS column (column nunk).
+ * Returns false if qmb_find_or_add hits an allocation failure. */
+static bool pm_acc_commit(const TermAcc* a, QMatBuild* M, size_t nunk) {
+    size_t row_idx = qmb_find_or_add(M, a->exp_vec);
+    if (row_idx == SIZE_MAX) return false;
+    QRowEntry* row = &M->rows[row_idx];
+    if (a->unknown_idx >= 0) {
+        mpq_add(row->col[a->unknown_idx], row->col[a->unknown_idx], a->scalar);
+    } else {
+        mpq_sub(row->col[nunk], row->col[nunk], a->scalar);
+    }
+    return true;
+}
+
+/* CPS frame chain: the factors still pending to be multiplied into
+ * the accumulator after the current expr is fully consumed.  Frames
+ * live on the C stack and are non-owning; depth is bounded by the
+ * symbolic tree depth, which is small. */
+typedef struct PmWalkFrame {
+    const Expr* const* args;
+    size_t i;
+    size_t n;
+    const struct PmWalkFrame* next;
+} PmWalkFrame;
+
+static void pm_walk_one(const Expr* e, const PmWalkFrame* rest,
+                         TermAcc* a, QMatBuild* M,
+                         Expr** vars, size_t nv,
+                         Expr** unknowns, size_t nunk);
+
+/* Pull the next pending factor off the frame chain, walk it, then
+ * recurse.  When no factors remain, commit the accumulator. */
+static void pm_walk_continuation(const PmWalkFrame* rest,
+                                  TermAcc* a, QMatBuild* M,
+                                  Expr** vars, size_t nv,
+                                  Expr** unknowns, size_t nunk) {
+    if (a->failed) return;
+    /* Skip empty/exhausted frames at the head of the chain. */
+    while (rest && rest->i == rest->n) rest = rest->next;
+    if (!rest) {
+        if (!pm_acc_commit(a, M, nunk)) a->failed = true;
+        return;
+    }
+    /* Advance one slot in this frame; the remaining slots (i+1 .. n)
+     * become the new "next" continuation behind whatever the inner
+     * recursive call pushes on top. */
+    PmWalkFrame cont = { rest->args, rest->i + 1, rest->n, rest->next };
+    pm_walk_one(rest->args[rest->i], &cont, a,
+                 M, vars, nv, unknowns, nunk);
+}
+
+/* Walk one expression node.  `rest` holds factors still pending to
+ * multiply AFTER e is fully consumed.  Plus forks; Times sequences;
+ * Power may unroll. */
+static void pm_walk_one(const Expr* e, const PmWalkFrame* rest,
+                         TermAcc* a, QMatBuild* M,
+                         Expr** vars, size_t nv,
+                         Expr** unknowns, size_t nunk) {
+    if (a->failed) return;
+    if (!e) { a->failed = true; return; }
+
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        size_t n = e->data.function.arg_count;
+
+        if (h == SYM_Plus) {
+            /* Fork: each Plus child becomes one distributed term,
+             * cloning the accumulator and inheriting the same rest. */
+            for (size_t i = 0; i < n; i++) {
+                TermAcc cpy;
+                if (!pm_acc_clone(&cpy, a, nv)) { a->failed = true; return; }
+                pm_walk_one(e->data.function.args[i], rest, &cpy,
+                             M, vars, nv, unknowns, nunk);
+                if (cpy.failed) a->failed = true;
+                pm_acc_clear(&cpy);
+                if (a->failed) return;
+            }
+            return;
+        }
+
+        if (h == SYM_Times) {
+            /* Sequence: chain this Times's args as a new frame. */
+            PmWalkFrame frame = { (const Expr* const*)e->data.function.args,
+                                  0, n, rest };
+            pm_walk_continuation(&frame, a, M, vars, nv, unknowns, nunk);
+            return;
+        }
+
+        if (h == SYM_Power && n == 2) {
+            const Expr* base = e->data.function.args[0];
+            const Expr* expe = e->data.function.args[1];
+            /* Power[Plus[...], k] with small non-negative k → unroll. */
+            if (expe->type == EXPR_INTEGER
+                && expe->data.integer >= 0
+                && is_plus_head((Expr*)base)) {
+                int64_t k = expe->data.integer;
+                if (k == 0) {
+                    pm_walk_continuation(rest, a, M,
+                                          vars, nv, unknowns, nunk);
+                    return;
+                }
+                if (k <= 6) {
+                    const Expr* virt[6];
+                    for (int64_t j = 0; j < k; j++) virt[j] = base;
+                    PmWalkFrame frame = { virt, 0, (size_t)k, rest };
+                    pm_walk_continuation(&frame, a, M,
+                                          vars, nv, unknowns, nunk);
+                    return;
+                }
+                /* k > 6: fall through; pm_acc_apply_atom will bail. */
+            }
+            /* Power[var, int] is atomic; other Power shapes bail. */
+            if (!pm_acc_apply_atom(e, a, vars, nv, unknowns, nunk)) {
+                a->failed = true; return;
+            }
+            pm_walk_continuation(rest, a, M, vars, nv, unknowns, nunk);
+            return;
+        }
+
+        /* Any other function head: opaque atom.  pm_acc_apply_atom
+         * will bail on anything except the small set above. */
+        if (!pm_acc_apply_atom(e, a, vars, nv, unknowns, nunk)) {
+            a->failed = true; return;
+        }
+        pm_walk_continuation(rest, a, M, vars, nv, unknowns, nunk);
+        return;
+    }
+
+    /* Leaf: integer, big-int, rational, symbol, etc. */
+    if (!pm_acc_apply_atom(e, a, vars, nv, unknowns, nunk)) {
+        a->failed = true; return;
+    }
+    pm_walk_continuation(rest, a, M, vars, nv, unknowns, nunk);
+}
+
+/* Top-level entry.  Walks `big` against an empty accumulator and
+ * populates M with per-monomial coefficient contributions.  Returns
+ * true on full success, false on any bail (caller must qmb_free M
+ * and fall back to the CoefficientList path). */
+static bool pm_walk_into_qmb(const Expr* big, QMatBuild* M,
+                              Expr** vars, size_t nv,
+                              Expr** unknowns, size_t nunk) {
+    TermAcc a;
+    if (!pm_acc_init(&a, nv)) return false;
+    pm_walk_one(big, NULL, &a, M, vars, nv, unknowns, nunk);
+    bool ok = !a.failed;
+    pm_acc_clear(&a);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
+/* Testable surface for the QMatBuild hash index.                      */
+/* ------------------------------------------------------------------ */
+
+/* Integrate`Helpers`PMQMBStress[nv, ncols, ntrials, mod, seed] —
+ * stress-test wrapper around qmb_find_or_add.  Inserts `ntrials`
+ * deterministically-generated exp_vecs (each of length `nv`, entries
+ * drawn from [0, mod)) and checks:
+ *
+ *   (a) repeated qmb_find_or_add on the same exp_vec returns the
+ *       same row index (hash table is idempotent);
+ *   (b) the stored exp_vec exactly matches the requested one
+ *       (memcpy is correct, no aliasing);
+ *   (c) no two distinct rows share an exp_vec (no collision is
+ *       silently coalesced — verified via an independent O(n^2)
+ *       pairwise scan);
+ *   (d) for nv = 0 there is exactly one row (the unique empty
+ *       vector), regardless of ntrials.
+ *
+ * Generation uses an LCG seeded with the user `seed`, so failures
+ * reproduce with the same arguments.  Returns True on success,
+ * False on any check failure or allocation failure.  Hidden under
+ * ATTR_READPROTECTED, registered in intrischnorman_init for use by
+ * tests/test_intrischnorman.c. */
+static Expr* builtin_pm_qmb_stress(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION
+        || res->data.function.arg_count != 5) return NULL;
+    Expr** args = res->data.function.args;
+    for (size_t i = 0; i < 5; i++) {
+        if (args[i]->type != EXPR_INTEGER) return NULL;
+    }
+    int64_t nv      = args[0]->data.integer;
+    int64_t ncols   = args[1]->data.integer;
+    int64_t ntrials = args[2]->data.integer;
+    int64_t mod     = args[3]->data.integer;
+    uint64_t seed   = (uint64_t)args[4]->data.integer;
+
+    if (nv < 0 || nv > (int64_t)PMINT_MAX_INDETS) return expr_new_symbol("False");
+    if (ncols < 1 || ntrials < 0 || mod < 1) return expr_new_symbol("False");
+
+    QMatBuild M;
+    M.rows = NULL; M.n = 0; M.cap = 0;
+    M.nv = (size_t)nv; M.ncols = (size_t)ncols;
+    M.buckets = NULL; M.bucket_cap = 0; M.bucket_mask = 0;
+
+    int64_t* vec = (int64_t*)malloc(sizeof(int64_t) * (nv ? (size_t)nv : 1));
+    if (!vec) return expr_new_symbol("False");
+
+    /* Knuth-style LCG; gives well-spread int sequences for small mod. */
+    uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
+    bool ok = true;
+
+    for (int64_t i = 0; i < ntrials && ok; i++) {
+        for (int64_t k = 0; k < nv; k++) {
+            s = s * 6364136223846793005ULL + 1442695040888963407ULL;
+            vec[k] = (int64_t)((s >> 33) % (uint64_t)mod);
+        }
+        size_t r1 = qmb_find_or_add(&M, vec);
+        if (r1 == SIZE_MAX) { ok = false; break; }
+        size_t r2 = qmb_find_or_add(&M, vec);          /* (a) idempotent */
+        if (r2 != r1) { ok = false; break; }
+        if (nv > 0
+            && memcmp(M.rows[r1].exp_vec, vec,
+                       sizeof(int64_t) * (size_t)nv) != 0) {     /* (b) */
+            ok = false; break;
+        }
+    }
+
+    /* (c) Independent uniqueness check: pairwise compare every row.
+     *     Quadratic but fine for the test sizes (≤ a few hundred). */
+    if (ok && nv > 0) {
+        for (size_t i = 0; i < M.n && ok; i++) {
+            for (size_t j = i + 1; j < M.n && ok; j++) {
+                if (memcmp(M.rows[i].exp_vec, M.rows[j].exp_vec,
+                            sizeof(int64_t) * (size_t)nv) == 0) {
+                    ok = false;
+                }
+            }
+        }
+    }
+
+    /* (d) The nv=0 case: exactly one possible vector. */
+    if (ok && nv == 0 && ntrials > 0 && M.n != 1) ok = false;
+
+    free(vec);
+    qmb_free(&M);
+    return expr_new_symbol(ok ? "True" : "False");
 }
 
 /* Attempt direct-from-expanded build + solve.
@@ -2488,71 +2657,22 @@ static bool try_solve_direct_q(Expr* equation_numer,
                                 Expr** unknowns, size_t nunk,
                                 Expr** out_solution_rules,
                                 int* out_status) {
-    /* Top-level Plus walker.  After expansion equation_numer is either
-     * a Plus of terms or a single term / atom. */
-    size_t num_terms;
-    Expr* const* terms_ptr;
-    Expr* solo = equation_numer;
-    if (equation_numer->type == EXPR_FUNCTION
-        && equation_numer->data.function.head
-        && equation_numer->data.function.head->type == EXPR_SYMBOL
-        && equation_numer->data.function.head->data.symbol == SYM_Plus) {
-        num_terms = equation_numer->data.function.arg_count;
-        terms_ptr = equation_numer->data.function.args;
-    } else {
-        num_terms = 1;
-        terms_ptr = &solo;
-    }
-
     QMatBuild M;
     M.rows = NULL; M.n = 0; M.cap = 0;
     M.nv = nv; M.ncols = nunk + 1;
+    M.buckets = NULL; M.bucket_cap = 0; M.bucket_mask = 0;
 
-    int64_t* exp_vec = (int64_t*)calloc(nv ? nv : 1, sizeof(int64_t));
-    if (!exp_vec) return false;
-
-    mpq_t scalar;
-    mpq_init(scalar);
-
-    for (size_t i = 0; i < num_terms; i++) {
-        const Expr* t = terms_ptr[i];
-        if (!t) continue;
-
-        /* Skip an explicit zero term (shouldn't happen after expand). */
-        if (t->type == EXPR_INTEGER && t->data.integer == 0) continue;
-
-        for (size_t k = 0; k < nv; k++) exp_vec[k] = 0;
-        mpq_set_si(scalar, 1, 1);
-        int64_t unknown_idx = -1;
-
-        if (!decompose_factor(t, vars, nv, unknowns, nunk,
-                               scalar, exp_vec, &unknown_idx)) {
-            /* Bail: at least one term doesn't fit the Q-linear shape. */
-            mpq_clear(scalar);
-            free(exp_vec);
-            qmb_free(&M);
-            return false;
-        }
-
-        size_t row_idx = qmb_find_or_add(&M, exp_vec);
-        if (row_idx == SIZE_MAX) {
-            mpq_clear(scalar); free(exp_vec); qmb_free(&M);
-            *out_solution_rules = NULL; *out_status = -1;
-            return true;       /* allocation failure: behave as infeasible */
-        }
-
-        QRowEntry* row = &M.rows[row_idx];
-        if (unknown_idx >= 0) {
-            /* Coefficient of unknown_idx in this monomial. */
-            mpq_add(row->col[unknown_idx], row->col[unknown_idx], scalar);
-        } else {
-            /* Constant part of this monomial → -RHS. */
-            mpq_sub(row->col[nunk], row->col[nunk], scalar);
-        }
+    /* Fused walker: Plus forks the accumulator, Times sequences
+     * factors in, Power[Plus,k] unrolls.  Each distributed monomial
+     * contribution lands directly in M; no flat Plus is ever
+     * materialised.  `equation_numer` may arrive already expanded
+     * (slow path) or as a still-nested tree (fast path) — both are
+     * handled by the same walker. */
+    if (!pm_walk_into_qmb(equation_numer, &M,
+                           vars, nv, unknowns, nunk)) {
+        qmb_free(&M);
+        return false;
     }
-
-    mpq_clear(scalar);
-    free(exp_vec);
 
     /* Prune zero-rows (every column 0). */
     size_t live = 0;
@@ -3102,12 +3222,13 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
 
     PM_PHB(tb);
     /* Fast path: build the equation E = term1 − term2 − term3 as a
-     * single unevaluated Plus/Times/Power tree and run the structural
-     * distributor.  The distributor never calls the evaluator — it
-     * just produces a flat Plus-of-Times suitable for
-     * try_solve_direct_q.  The relaxed decompose_factor accumulates
-     * same-base exponents (including negative ones from logarithmic
-     * derivatives) so canonicalisation isn't required.
+     * single unevaluated Plus/Times/Power tree and pass it straight
+     * to solve_linear_undet.  The fused walker (pm_walk_*) descends
+     * the still-nested tree directly, accumulating per-monomial
+     * coefficients into the QMatBuild — no distribute_to_plus / flat
+     * Plus materialisation step.  Same-base var exponents (including
+     * negative ones from logarithmic derivatives) accumulate via
+     * pm_acc_apply_atom, so no canonicalisation pass is required.
      *
      *   E :=  ff_numer · Π_j g_j · cden² · q
      *       − ff_denom · Π_j g_j · (d_num · cden − cand_num · d_cden)
@@ -3195,10 +3316,15 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
     Expr* big = expr_new_function(expr_new_symbol(SYM_Plus), big_args, 4);
     free(big_args);
 
-    /* One-shot structural distribution. */
+    /* No up-front distribution: the fused walker in try_solve_direct_q
+     * descends the still-nested Plus/Times tree directly and lands
+     * per-monomial contributions in the coefficient matrix without
+     * materialising the expanded Plus.  We hand `big` straight to
+     * solve_linear_undet (which transfers ownership).  The
+     * PM_PH_TI_TB_EQUATION phase is retained as a near-zero marker
+     * so existing PMINT_PROFILE columns stay aligned. */
     PM_PHB(tbeq);
-    equation_numer = distribute_to_plus(big);
-    expr_free(big);
+    equation_numer = big;
     PM_PHE(tbeq, PM_PH_TI_TB_EQUATION);
 
     expr_free(prod_g_expr); expr_free(cden_sq_expr);
@@ -4087,4 +4213,15 @@ void intrischnorman_init(void) {
             "enumerates all monomials of total degree ≤ d in the given\n"
             "variables.  Capped at PMINT_MAX_MONOMIALS (= 5000).\n"
             "pmint.maple lines 69-78.");
+
+    install("Integrate`Helpers`PMQMBStress",
+            builtin_pm_qmb_stress,
+            "Integrate`Helpers`PMQMBStress[nv, ncols, ntrials, mod, seed]\n"
+            "stress-tests the QMatBuild hash index that backs the\n"
+            "try_solve_direct_q matrix builder.  Inserts `ntrials`\n"
+            "deterministic random exp_vecs of length `nv` (entries in\n"
+            "[0, mod)) and verifies idempotency, key preservation, and\n"
+            "uniqueness.  Returns True on success, False on any check\n"
+            "failure or allocation failure.  Used by\n"
+            "tests/test_intrischnorman.c.");
 }
