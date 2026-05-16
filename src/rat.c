@@ -289,6 +289,255 @@ static bool has_embedded_rational_subterm(Expr* e) {
     return false;
 }
 
+/* Build a flat list of the multiplicative factors of `e`. For Times[a, b, ...]
+ * the result is [a, b, ...]; for any other expression it is [e]. Each entry
+ * is an expr_copy() of the source factor; the caller owns the entries and
+ * the array.
+ *
+ * Used by the symbolic content extractor below to compute the structural
+ * factor multiset of each Plus summand.                                      */
+static void rat_factor_list_copy(const Expr* e, Expr*** out, size_t* n_out) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Times) {
+        size_t n = e->data.function.arg_count;
+        Expr** arr = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+        for (size_t i = 0; i < n; i++) arr[i] = expr_copy(e->data.function.args[i]);
+        *out = arr;
+        *n_out = n;
+    } else {
+        Expr** arr = malloc(sizeof(Expr*));
+        arr[0] = expr_copy((Expr*)e);
+        *out = arr;
+        *n_out = 1;
+    }
+}
+
+/* Filter a factor list down to *algebraic-constant atoms* — concretely,
+ * Power[integer_literal, rational_non_integer_exponent] such as Sqrt[2],
+ * Sqrt[3], CubeRoot[5], 2^(2/3).  These are exactly the factors that the
+ * existing my_number_gcd / poly_content path cannot detect (it treats
+ * Sqrt[2] as having integer content 1, blinding it to the structural
+ * match in the coefficient ring).
+ *
+ * Everything else is dropped:
+ *   - Integer / bigint / real literals → handled by the integer-content
+ *     recursion.
+ *   - Symbols and Power[symbol, integer] → polynomial-like, the standard
+ *     multivariate PolynomialGCD picks these up.
+ *   - Compound Power bases (Sqrt[1+x], etc.) → leaving these in would
+ *     cause Cancel to rearrange intermediates that the integration
+ *     dispatcher pattern-matches against (CRC-corpus DIFF NONZERO
+ *     regressions in the Sqrt[(1+x)(2+3x)] family).
+ *
+ * The narrowness is the point: this pass exists *only* to close the
+ * Cancel[Sqrt[2] / (Sqrt[2] + Sqrt[2] x^4)] gap, not to second-guess the
+ * downstream polynomial path.                                            */
+static void rat_strip_numeric_factors(Expr** arr, size_t* n_io) {
+    size_t w = 0;
+    for (size_t i = 0; i < *n_io; i++) {
+        bool keep = false;
+        Expr* f = arr[i];
+        if (f->type == EXPR_FUNCTION && f->data.function.head &&
+            f->data.function.head->type == EXPR_SYMBOL &&
+            f->data.function.head->data.symbol == SYM_Power &&
+            f->data.function.arg_count == 2) {
+            Expr* base = f->data.function.args[0];
+            Expr* exp  = f->data.function.args[1];
+            bool base_is_literal_int =
+                (base->type == EXPR_INTEGER || base->type == EXPR_BIGINT);
+            int64_t p, q;
+            bool exp_is_non_integer_rational =
+                is_rational(exp, &p, &q) && q != 1;
+            if (base_is_literal_int && exp_is_non_integer_rational) {
+                keep = true;
+            }
+        }
+        if (keep) {
+            arr[w++] = f;
+        } else {
+            expr_free(f);
+        }
+    }
+    *n_io = w;
+}
+
+/* Greedy multiset intersection of two factor lists, using expr_eq for
+ * structural equality.  Modifies *a_io* in place to hold the intersection
+ * (kept entries are the originals from a, unmatched a-entries are freed).
+ * Everything in b is freed and *b_io* is set to NULL/0.                   */
+static void rat_factor_intersect(Expr*** a_io, size_t* na_io,
+                                 Expr*** b_io, size_t* nb_io) {
+    Expr** a = *a_io;
+    size_t na = *na_io;
+    Expr** b = *b_io;
+    size_t nb = *nb_io;
+    bool* matched_b = nb ? calloc(nb, sizeof(bool)) : NULL;
+    size_t w = 0;
+    for (size_t i = 0; i < na; i++) {
+        bool found = false;
+        for (size_t j = 0; j < nb; j++) {
+            if (!matched_b[j] && expr_eq(a[i], b[j])) {
+                matched_b[j] = true;
+                found = true;
+                break;
+            }
+        }
+        if (found) {
+            a[w++] = a[i];
+        } else {
+            expr_free(a[i]);
+        }
+    }
+    *na_io = w;
+    for (size_t j = 0; j < nb; j++) expr_free(b[j]);
+    free(b);
+    free(matched_b);
+    *b_io = NULL;
+    *nb_io = 0;
+}
+
+/* Compute the symbolic multiplicative content of `e` — the product of
+ * non-numeric factors common to every summand when `e` is a Plus, or the
+ * non-numeric factor list of `e` itself when it is not.
+ *
+ * Examples
+ *   Sqrt[2] + Sqrt[2]*x^4          -> Sqrt[2]
+ *   Sqrt[2]                        -> Sqrt[2]
+ *   2 + 3 x                        -> 1                 (numeric content only)
+ *   Sqrt[2] x + Sqrt[2] y          -> Sqrt[2]
+ *   Sqrt[2] x + Sqrt[3] y          -> 1                 (no common atom)
+ *
+ * Numeric content (integer GCD across coefficients) is intentionally NOT
+ * extracted here; the existing my_number_gcd / poly_content path handles
+ * that branch.  The caller owns the returned expression.                  */
+static Expr* rat_symbolic_content(const Expr* e) {
+    bool is_plus = (e->type == EXPR_FUNCTION &&
+                    e->data.function.head &&
+                    e->data.function.head->type == EXPR_SYMBOL &&
+                    e->data.function.head->data.symbol == SYM_Plus);
+
+    Expr** running = NULL;
+    size_t n_running = 0;
+
+    if (!is_plus) {
+        rat_factor_list_copy(e, &running, &n_running);
+        rat_strip_numeric_factors(running, &n_running);
+    } else {
+        size_t ns = e->data.function.arg_count;
+        if (ns == 0) return expr_new_integer(1);
+
+        rat_factor_list_copy(e->data.function.args[0], &running, &n_running);
+        rat_strip_numeric_factors(running, &n_running);
+
+        for (size_t i = 1; i < ns && n_running > 0; i++) {
+            Expr** other = NULL;
+            size_t n_other = 0;
+            rat_factor_list_copy(e->data.function.args[i], &other, &n_other);
+            rat_strip_numeric_factors(other, &n_other);
+            rat_factor_intersect(&running, &n_running, &other, &n_other);
+        }
+    }
+
+    if (n_running == 0) {
+        free(running);
+        return expr_new_integer(1);
+    }
+    if (n_running == 1) {
+        Expr* r = running[0];
+        free(running);
+        return r;
+    }
+    Expr* r = expr_new_function(expr_new_symbol("Times"), running, n_running);
+    return r;
+}
+
+/* Distribute the divisor through a Plus so each summand is divided
+ * independently — this lets the Times-evaluator collapse common factors
+ * like Sqrt[2] * Power[Sqrt[2], -1] -> 1 *inside* every summand rather
+ * than wrapping the whole Plus in an opaque Power[..., -1] that the
+ * downstream PolynomialGCD step cannot see through.  Non-Plus inputs are
+ * just multiplied by the inverse.                                         */
+static Expr* rat_div_distribute(Expr* e, const Expr* divisor) {
+    if (divisor->type == EXPR_INTEGER && divisor->data.integer == 1) {
+        return expr_copy(e);
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Plus) {
+        size_t n = e->data.function.arg_count;
+        Expr** new_args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            Expr* inv = eval_and_free(expr_new_function(
+                expr_new_symbol("Power"),
+                (Expr*[]){expr_copy((Expr*)divisor), expr_new_integer(-1)}, 2));
+            new_args[i] = eval_and_free(expr_new_function(
+                expr_new_symbol("Times"),
+                (Expr*[]){expr_copy(e->data.function.args[i]), inv}, 2));
+        }
+        return eval_and_free(expr_new_function(expr_new_symbol("Plus"), new_args, n));
+    }
+    Expr* inv = eval_and_free(expr_new_function(
+        expr_new_symbol("Power"),
+        (Expr*[]){expr_copy((Expr*)divisor), expr_new_integer(-1)}, 2));
+    return eval_and_free(expr_new_function(
+        expr_new_symbol("Times"),
+        (Expr*[]){expr_copy(e), inv}, 2));
+}
+
+/* Pre-cancellation pass: factor out symbolic atoms (Sqrt[2], etc.) that
+ * appear in every summand of num *and* every summand of den, then divide
+ * them out.  Closes the gap left by my_number_gcd, which only sees
+ * integer coefficients — without this pass, Cancel[Sqrt[2] /
+ * (Sqrt[2] + Sqrt[2] x^4)] is rejected because PolynomialGCD([Sqrt[2]],
+ * [Sqrt[2], Sqrt[2] x^4]) returns 1 (the structural Sqrt[2] match in the
+ * coefficient ring is invisible to the integer-content recursion).
+ *
+ * On entry *num and *den are owned by the caller.  On exit, if a non-
+ * trivial common factor was extracted, the originals are freed and
+ * replaced with their divided forms (and downstream PolynomialGCD runs
+ * on the smaller, primitive expressions).                                */
+static void rat_strip_symbolic_common(Expr** num_io, Expr** den_io) {
+    Expr* num_sym = rat_symbolic_content(*num_io);
+    Expr* den_sym = rat_symbolic_content(*den_io);
+
+    Expr** num_factors = NULL;
+    size_t num_nf = 0;
+    rat_factor_list_copy(num_sym, &num_factors, &num_nf);
+    rat_strip_numeric_factors(num_factors, &num_nf);
+
+    Expr** den_factors = NULL;
+    size_t den_nf = 0;
+    rat_factor_list_copy(den_sym, &den_factors, &den_nf);
+    rat_strip_numeric_factors(den_factors, &den_nf);
+
+    rat_factor_intersect(&num_factors, &num_nf, &den_factors, &den_nf);
+
+    expr_free(num_sym);
+    expr_free(den_sym);
+
+    if (num_nf == 0) {
+        free(num_factors);
+        return;
+    }
+
+    Expr* common;
+    if (num_nf == 1) {
+        common = num_factors[0];
+        free(num_factors);
+    } else {
+        common = expr_new_function(expr_new_symbol("Times"), num_factors, num_nf);
+    }
+
+    Expr* new_num = rat_div_distribute(*num_io, common);
+    Expr* new_den = rat_div_distribute(*den_io, common);
+    expr_free(common);
+    expr_free(*num_io);
+    expr_free(*den_io);
+    *num_io = new_num;
+    *den_io = new_den;
+}
+
 static Expr* cancel_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
@@ -313,6 +562,13 @@ static Expr* cancel_recursive(Expr* e) {
 
     Expr* num; Expr* den;
     extract_num_den(e, &num, &den);
+
+    if (den->type == EXPR_INTEGER && den->data.integer == 1) {
+        expr_free(den);
+        return num;
+    }
+
+    rat_strip_symbolic_common(&num, &den);
 
     if (den->type == EXPR_INTEGER && den->data.integer == 1) {
         expr_free(den);
