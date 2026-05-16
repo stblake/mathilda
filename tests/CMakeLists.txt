@@ -81,6 +81,7 @@ set(COMMON_SRC
     ../src/datetime.c
     ../src/linalg.c
     ../src/readwrite.c
+    ../src/files.c
     ../src/iter.c
     ../src/cond.c
     ../src/default_helper.c
@@ -793,6 +794,16 @@ else()
     target_link_libraries(readwrite_tests gmp m)
 endif()
 add_test(NAME readwrite_tests COMMAND readwrite_tests)
+
+add_executable(files_tests test_files.c ${COMMON_SRC})
+target_include_directories(files_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(files_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(files_tests build_ecm)
+else()
+    target_link_libraries(files_tests gmp m)
+endif()
+add_test(NAME files_tests COMMAND files_tests)
 
 add_executable(time_constrained_tests test_time_constrained.c ${COMMON_SRC})
 target_include_directories(time_constrained_tests PRIVATE ../src)

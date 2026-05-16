@@ -40,6 +40,7 @@
 #include "datetime.h"
 #include "linalg.h"
 #include "readwrite.h"
+#include "files.h"
 #include "part.h"
 #include "plus.h"
 #include "times.h"
@@ -394,6 +395,7 @@ void core_init(void) {
     datetime_init();
     linalg_init();
     readwrite_init();
+    files_init();
     random_init();
     strings_init();
     series_init();

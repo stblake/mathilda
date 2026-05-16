@@ -423,6 +423,28 @@ void info_init(void) {
         "contents of the file rather than truncating them.\n"
         "expr >>> filename is equivalent to expr >>> \"filename\".\n"
         "Returns Null on success and $Failed if the file cannot be opened.");
+    symtab_set_docstring("FileExistsQ",
+        "FileExistsQ[\"name\"]\n"
+        "\tgives True if the file with the specified name exists, and gives False otherwise.\n"
+        "In FileExistsQ[\"name\"], name is interpreted relative to your current directory.\n"
+        "FileExistsQ does not search $Path.\n"
+        "FileExistsQ tests for files, directories, or any other filesystem objects.");
+    symtab_set_docstring("FileExtension",
+        "FileExtension[\"file\"]\n"
+        "\tgives the file extension for a file name.\n"
+        "FileExtension[\"name.ext\"] gives \"ext\".\n"
+        "FileExtension gives the extension that appears after the last . in a file name.\n"
+        "If there are multiple endings to a file name, separated by ., FileExtension gives only the last one.\n"
+        "FileExtension gives \"\" if there is no file extension, if the file name has the form of a directory name, or ends with a . character.\n"
+        "FileExtension ignores any directory specification.\n"
+        "FileExtension by default assumes pathname separators and other conventions suitable for your operating system.");
+    symtab_set_docstring("FileBaseName",
+        "FileBaseName[\"file\"]\n"
+        "\tgives the base name for a file without its extension.\n"
+        "FileBaseName[\"name.ext\"] gives \"name\".\n"
+        "FileBaseName drops all directory specifications.\n"
+        "FileBaseName[\"file.tar.gz\"] gives \"file.tar\" — only the final extension is split off.\n"
+        "FileBaseName by default assumes pathname separators and other conventions suitable for your operating system.");
 
     symtab_set_docstring("FullForm", "FullForm[expr] is a wrapper that causes expr to be printed in full form.");
     symtab_set_docstring("InputForm", "InputForm[expr] is a wrapper that causes expr to be printed in input form.");
