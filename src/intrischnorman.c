@@ -1090,54 +1090,54 @@ static Expr* builtin_pm_collect_indets(Expr* res) {
 /* monomial enumeration.                                                */
 /* ------------------------------------------------------------------ */
 
-/* Apply ReplaceAll[expr, rules] via evaluate.  rules is owned by us
- * and consumed; expr is borrowed.  Returns owned result. */
+/* Apply ReplaceAll[expr, rules] via evaluate.  Both expr and rules are
+ * owned by us and consumed.  Returns owned result. */
 static Expr* eval_replace_all(Expr* expr, Expr* rules) {
-    return eval_and_free(mk_binary("ReplaceAll", expr_copy(expr), rules));
+    return eval_and_free(mk_binary("ReplaceAll", expr, rules));
 }
 
-/* Evaluate Together[f]. */
+/* Evaluate Together[f].  Consumes f. */
 static Expr* eval_together(Expr* f) {
-    return eval_and_free(mk_unary("Together", expr_copy(f)));
+    return eval_and_free(mk_unary("Together", f));
 }
 
-/* Evaluate Expand[f]. */
+/* Evaluate Expand[f].  Consumes f. */
 static Expr* eval_expand(Expr* f) {
-    return eval_and_free(mk_unary("Expand", expr_copy(f)));
+    return eval_and_free(mk_unary("Expand", f));
 }
 
-/* Evaluate Numerator[f]. */
+/* Evaluate Numerator[f].  Consumes f. */
 static Expr* eval_numer(Expr* f) {
-    return eval_and_free(mk_unary("Numerator", expr_copy(f)));
+    return eval_and_free(mk_unary("Numerator", f));
 }
 
-/* Evaluate Denominator[f]. */
+/* Evaluate Denominator[f].  Consumes f. */
 static Expr* eval_denom(Expr* f) {
-    return eval_and_free(mk_unary("Denominator", expr_copy(f)));
+    return eval_and_free(mk_unary("Denominator", f));
 }
 
-/* Evaluate Cancel[f]. */
+/* Evaluate Cancel[f].  Consumes f. */
 static Expr* eval_cancel(Expr* f) {
-    return eval_and_free(mk_unary("Cancel", expr_copy(f)));
+    return eval_and_free(mk_unary("Cancel", f));
 }
 
-/* Evaluate PolynomialGCD[a, b]. */
+/* Evaluate PolynomialGCD[a, b].  Consumes both a and b. */
 static Expr* eval_poly_gcd(Expr* a, Expr* b) {
-    return eval_and_free(mk_binary("PolynomialGCD", expr_copy(a), expr_copy(b)));
+    return eval_and_free(mk_binary("PolynomialGCD", a, b));
 }
 
-/* Evaluate Coefficient[p, x, n]. */
+/* Evaluate Coefficient[p, x, n].  Consumes p and x. */
 static Expr* eval_coefficient(Expr* p, Expr* x, int64_t deg) {
-    Expr* args[3] = { expr_copy(p), expr_copy(x), mk_int(deg) };
+    Expr* args[3] = { p, x, mk_int(deg) };
     Expr* call = expr_new_function(expr_new_symbol("Coefficient"), args, 3);
     return eval_and_free(call);
 }
 
 /* Evaluate the degree of p in x.  picocas doesn't ship `Exponent`; we
  * compute it as Length[CoefficientList[p, x]] - 1.  Returns 0 when p
- * is free of x or constant. */
+ * is free of x or constant.  Consumes p and x. */
 static int64_t eval_degree(Expr* p, Expr* x) {
-    Expr* call = mk_binary("CoefficientList", expr_copy(p), expr_copy(x));
+    Expr* call = mk_binary("CoefficientList", p, x);
     Expr* clist = eval_and_free(call);
     int64_t d = 0;
     if (clist && clist->type == EXPR_FUNCTION
@@ -1151,10 +1151,10 @@ static int64_t eval_degree(Expr* p, Expr* x) {
     return d;
 }
 
-/* Evaluate Variables[p]. Returns the List Expr* (owned). */
+/* Evaluate Variables[p]. Consumes p. Returns the List Expr* (owned). */
 __attribute__((unused))
 static Expr* eval_variables(Expr* p) {
-    Expr* call = mk_unary("Variables", expr_copy(p));
+    Expr* call = mk_unary("Variables", p);
     return eval_and_free(call);
 }
 
@@ -1164,7 +1164,7 @@ __attribute__((unused))
 static bool is_zero_after_cancel(Expr* e) {
     if (!e) return true;
     if (e->type == EXPR_INTEGER && e->data.integer == 0) return true;
-    Expr* c = eval_cancel(e);
+    Expr* c = eval_cancel(expr_copy(e));
     bool z = c && c->type == EXPR_INTEGER && c->data.integer == 0;
     expr_free(c);
     return z;
@@ -1204,24 +1204,20 @@ static int build_vector_field(Expr** si, size_t n,
         Expr* rew = pythagorean_rewrite(d);
         expr_free(d);
         Expr* sub = eval_replace_all(rew, expr_copy(lin_rules));
-        expr_free(rew);
         Expr* tog = eval_together(sub);
-        expr_free(sub);
-        numers[k] = eval_numer(tog);
+        numers[k] = eval_numer(expr_copy(tog));
         denoms[k] = eval_denom(tog);
-        expr_free(tog);
     }
     expr_free(lin_rules);
 
     /* q = lcm of all denoms.  lcm(a, b) = a*b / gcd(a, b), via Cancel. */
     Expr* q = expr_copy(denoms[0]);
     for (size_t k = 1; k < n; k++) {
-        Expr* g = eval_poly_gcd(q, denoms[k]);
+        Expr* g = eval_poly_gcd(expr_copy(q), expr_copy(denoms[k]));
         Expr* prod = eval_expand(mk_times2(expr_copy(q), expr_copy(denoms[k])));
         Expr* div = mk_div(prod, g);
         expr_free(q);
         q = eval_cancel(div);
-        expr_free(div);
     }
 
     /* l[k] = (q * numers[k]) / denoms[k], Expanded after Cancel. */
@@ -1236,9 +1232,7 @@ static int build_vector_field(Expr** si, size_t n,
         Expr* prod = mk_times2(expr_copy(q), expr_copy(numers[k]));
         Expr* ratio = mk_div(prod, expr_copy(denoms[k]));
         Expr* canc = eval_cancel(ratio);
-        expr_free(ratio);
         lvec[k] = eval_expand(canc);
-        expr_free(canc);
     }
     for (size_t k = 0; k < n; k++) { expr_free(numers[k]); expr_free(denoms[k]); }
     free(numers); free(denoms);
@@ -1472,19 +1466,18 @@ static int split_factor(Expr* p,
     Expr* xv = vars[idx_buf[0]];
 
     /* Content (gcd of coefficient list in xv) and primitive part. */
-    Expr* p_exp = eval_expand(p);
-    int64_t deg_p = eval_degree(p_exp, xv);
+    Expr* p_exp = eval_expand(expr_copy(p));
+    int64_t deg_p = eval_degree(expr_copy(p_exp), expr_copy(xv));
 
     /* Build content via PolynomialGCD fold of CoefficientList. */
     Expr* content = NULL;
     for (int64_t k = 0; k <= deg_p; k++) {
-        Expr* ck = eval_coefficient(p_exp, xv, k);
+        Expr* ck = eval_coefficient(expr_copy(p_exp), expr_copy(xv), k);
         if (is_int_zero(ck)) { expr_free(ck); continue; }
         if (!content) {
             content = ck;
         } else {
             Expr* g = eval_poly_gcd(content, ck);
-            expr_free(content); expr_free(ck);
             content = g;
         }
     }
@@ -1511,15 +1504,12 @@ static int split_factor(Expr* p,
 
     /* s = PolynomialGCD(q, dq) / PolynomialGCD(q, dqrew), Cancel'd.
      * Special case: deg(s, xv) == 0 → take [spl_c_s, q * spl_c_h]. */
-    Expr* g1 = eval_poly_gcd(q, dq);
-    Expr* g2 = eval_poly_gcd(q, dqrew);
-    expr_free(dq); expr_free(dqrew);
-    Expr* s_raw = mk_div(expr_copy(g1), expr_copy(g2));
-    expr_free(g1); expr_free(g2);
+    Expr* g1 = eval_poly_gcd(expr_copy(q), dq);
+    Expr* g2 = eval_poly_gcd(expr_copy(q), dqrew);
+    Expr* s_raw = mk_div(g1, g2);
     Expr* s = eval_cancel(s_raw);
-    expr_free(s_raw);
 
-    if (eval_degree(s, xv) == 0) {
+    if (eval_degree(expr_copy(s), expr_copy(xv)) == 0) {
         /* s contributes nothing to the split at this var. */
         expr_free(s);
         Expr* h = eval_expand(mk_times2(expr_copy(q), expr_copy(spl_c_h)));
@@ -1567,17 +1557,16 @@ static Expr* deflation(Expr* p,
     if (idxn == 0) return expr_copy(p);
 
     Expr* xv = vars[idx_buf[0]];
-    Expr* p_exp = eval_expand(p);
-    int64_t deg_p = eval_degree(p_exp, xv);
+    Expr* p_exp = eval_expand(expr_copy(p));
+    int64_t deg_p = eval_degree(expr_copy(p_exp), expr_copy(xv));
 
     Expr* content = NULL;
     for (int64_t k = 0; k <= deg_p; k++) {
-        Expr* ck = eval_coefficient(p_exp, xv, k);
+        Expr* ck = eval_coefficient(expr_copy(p_exp), expr_copy(xv), k);
         if (is_int_zero(ck)) { expr_free(ck); continue; }
         if (!content) content = ck;
         else {
             Expr* g = eval_poly_gcd(content, ck);
-            expr_free(content); expr_free(ck);
             content = g;
         }
     }
@@ -1593,7 +1582,6 @@ static Expr* deflation(Expr* p,
     Expr* dq_rew = pythagorean_rewrite(dq_xv);
     expr_free(dq_xv);
     Expr* g = eval_poly_gcd(q, dq_rew);
-    expr_free(q); expr_free(dq_rew);
 
     Expr* result = eval_expand(mk_times2(defl_c, g));
     return result;
@@ -1696,7 +1684,6 @@ static int enumerate_monomials(Expr** vars, size_t nv, int total_degree,
             Expr* xi = mk_pow(expr_copy(x), mk_int(i));
             Expr* prod = mk_times2(xi, lower_i[k]);
             acc[accn++] = eval_expand(prod);
-            expr_free(prod);
         }
         free(lower_i);
     }
@@ -1744,7 +1731,6 @@ static int build_candidate(Expr** monomials, size_t nm,
         sum = mk_plus2(sum, term);
     }
     Expr* sum_eval = eval_expand(sum);
-    expr_free(sum);
 
     *out_num = sum_eval;
     *out_A_names = names;
@@ -1811,7 +1797,7 @@ static void linear_builder_add_row(LinearBuilder* lb, Expr* coeff_expr) {
     if (!entries) { lb->ok = false; return; }
 
     for (size_t j = 0; j < lb->nunknowns; j++) {
-        Expr* c = eval_coefficient(coeff_expr, lb->unknowns[j], 1);
+        Expr* c = eval_coefficient(expr_copy(coeff_expr), expr_copy(lb->unknowns[j]), 1);
         entries[j] = c;
     }
 
@@ -1823,7 +1809,7 @@ static void linear_builder_add_row(LinearBuilder* lb, Expr* coeff_expr) {
     Expr* zero_rules = expr_new_function(expr_new_symbol(SYM_List),
                                           zeros, lb->nunknowns);
     free(zeros);
-    Expr* const_part = eval_replace_all(coeff_expr, zero_rules);
+    Expr* const_part = eval_replace_all(expr_copy(coeff_expr), zero_rules);
     Expr* neg_const = eval_and_free(
         mk_times2(mk_int(-1), const_part));
     entries[lb->nunknowns] = neg_const;
@@ -3242,11 +3228,9 @@ static int try_integral_full(Expr* ff_numer, Expr* ff_denom,
         mk_div(expr_copy(cand_num), expr_copy(cden)),
         log_sum);
     Expr* cand_solved = eval_replace_all(cand_full, sol);
-    expr_free(cand_full);
 
     Expr* lout_rules = pm_sub_map_to_rule_list(lout);
     Expr* result = eval_replace_all(cand_solved, lout_rules);
-    expr_free(cand_solved);
     PM_PHE(su, PM_PH_TI_SUBSTITUTE);
 
     *out_result = result;
@@ -3277,7 +3261,7 @@ cleanup:
 static int64_t total_degree(Expr* p, Expr** vars, size_t n) {
     int64_t total = 0;
     for (size_t i = 0; i < n; i++) {
-        total += eval_degree(p, vars[i]);
+        total += eval_degree(expr_copy(p), expr_copy(vars[i]));
     }
     return total;
 }
@@ -3344,7 +3328,6 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     PM_PHB(fs);
     Expr* lin_rules = pm_sub_map_to_rule_list(&lin);
     Expr* ff_fresh = eval_expand(eval_replace_all(ff_atoms, lin_rules));
-    expr_free(ff_atoms);
     PM_PHE(fs, PM_PH_FFFRESH_SUBST);
 
     PMTRACE("about to splitFactor(q)\n");
@@ -3364,10 +3347,9 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
     PMTRACE("after splitFactor(q)\n");
     /* ff = Together[f_fresh], df = Denominator. */
     PM_PHB(tg);
-    Expr* ff_together = eval_together(ff_fresh);
-    Expr* ff_numer = eval_numer(ff_together);
+    Expr* ff_together = eval_together(expr_copy(ff_fresh));
+    Expr* ff_numer = eval_numer(expr_copy(ff_together));
     Expr* ff_denom = eval_denom(ff_together);
-    expr_free(ff_together);
     PM_PHE(tg, PM_PH_TOGETHER_FF);
 
     /* splitFactor(df, dx). */
@@ -3472,10 +3454,8 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
      * polynomial (no Together inside try_integral). */
     PM_PHB(fd);
     Expr* ff_t = eval_together(ff_fresh);
-    Expr* ff_n = eval_numer(ff_t);
+    Expr* ff_n = eval_numer(expr_copy(ff_t));
     Expr* ff_d = eval_denom(ff_t);
-    expr_free(ff_t);
-    expr_free(ff_fresh);
     PM_PHE(fd, PM_PH_FF_DECOMPOSE);
 
     PMTRACE("about to try_integral_full\n");
@@ -3603,7 +3583,6 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
             "{Log[a_/b_] :> Log[a] - Log[b]}");
         if (rules_list) {
             Expr* rewritten = eval_replace_all(result, rules_list);
-            expr_free(result);
             /* Together inside Log arguments: walk the tree, apply
              * Together to each Log's argument so Log[1 + (1-c)/(1+c)]
              * collapses to Log[2/(1+c)] before the Log[a/b] expansion
@@ -3612,16 +3591,13 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
                 "{Log[a_] :> Log[Together[a]]}");
             if (log_together_rule) {
                 Expr* tightened = eval_replace_all(rewritten, log_together_rule);
-                expr_free(rewritten);
                 rewritten = tightened;
             }
             if (log_rules) {
                 Expr* with_logs = eval_replace_all(rewritten, log_rules);
-                expr_free(rewritten);
                 rewritten = with_logs;
             }
             Expr* combined = eval_together(rewritten);
-            expr_free(rewritten);
 
             /* Fresh-symbol PolynomialGCD reduction.  picocas's Cancel
              * treats Cos[x] / Sin[x] / E^x as opaque transcendental
@@ -3652,11 +3628,9 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
                 Expr* sub_back = parse_expression(buf);
 
                 if (sub_fwd && sub_back) {
-                    Expr* with_fresh = eval_replace_all(combined, sub_fwd);
+                    Expr* with_fresh = eval_replace_all(expr_copy(combined), sub_fwd);
                     Expr* fresh_cancelled = eval_cancel(with_fresh);
-                    expr_free(with_fresh);
                     Expr* restored = eval_replace_all(fresh_cancelled, sub_back);
-                    expr_free(fresh_cancelled);
                     expr_free(combined);
                     combined = restored;
                 } else {
@@ -3676,7 +3650,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
                 size_t k = combined->data.function.arg_count;
                 Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (k ? k : 1));
                 for (size_t i = 0; i < k; i++) {
-                    new_args[i] = eval_cancel(combined->data.function.args[i]);
+                    new_args[i] = eval_cancel(expr_copy(combined->data.function.args[i]));
                 }
                 Expr* head_copy = expr_copy(combined->data.function.head);
                 expr_free(combined);
@@ -3686,7 +3660,6 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
                 result = eval_and_free(result);
             } else {
                 result = eval_cancel(combined);
-                expr_free(combined);
             }
         }
         PM_PHE(oc, PM_PH_OUTPUT_CLEANUP);
@@ -3827,7 +3800,6 @@ static Expr* builtin_pm_apply_d(Expr* res) {
     }
     Expr* lin_rules = pm_sub_map_to_rule_list(&lin);
     Expr* f_subbed = eval_replace_all(ff, lin_rules);
-    expr_free(ff);
 
     Expr* df = apply_d(f_subbed, vars, l, n);
     expr_free(f_subbed);
@@ -3835,7 +3807,6 @@ static Expr* builtin_pm_apply_d(Expr* res) {
     /* Substitute back. */
     Expr* lout_rules = pm_sub_map_to_rule_list(&lout);
     Expr* result = eval_replace_all(df, lout_rules);
-    expr_free(df);
 
     free_pipeline_state(si, n, &lin, &lout, vars, l, q);
     return result;
@@ -3866,7 +3837,6 @@ static Expr* builtin_pm_split_factor(Expr* res) {
     }
     Expr* lin_rules = pm_sub_map_to_rule_list(&lin);
     Expr* p_sub = eval_expand(eval_replace_all(p_conv, lin_rules));
-    expr_free(p_conv);
 
     Expr* s = NULL;
     Expr* h = NULL;
@@ -3882,7 +3852,6 @@ static Expr* builtin_pm_split_factor(Expr* res) {
     Expr* lout_rules = pm_sub_map_to_rule_list(&lout);
     Expr* s_back = eval_replace_all(s, expr_copy(lout_rules));
     Expr* h_back = eval_replace_all(h, lout_rules);
-    expr_free(s); expr_free(h);
 
     Expr* result_items[2] = { s_back, h_back };
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), result_items, 2);
@@ -3911,14 +3880,12 @@ static Expr* builtin_pm_deflation(Expr* res) {
     Expr* p_conv = convert_to_tan(p, x);
     Expr* lin_rules = pm_sub_map_to_rule_list(&lin);
     Expr* p_sub = eval_expand(eval_replace_all(p_conv, lin_rules));
-    expr_free(p_conv);
 
     Expr* defl = deflation(p_sub, vars, l, n);
     expr_free(p_sub);
 
     Expr* lout_rules = pm_sub_map_to_rule_list(&lout);
     Expr* result = eval_replace_all(defl, lout_rules);
-    expr_free(defl);
     free_pipeline_state(si, n, &lin, &lout, vars, l, q);
     return result;
 }

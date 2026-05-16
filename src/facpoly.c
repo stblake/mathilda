@@ -3672,8 +3672,13 @@ static UPolyList cz_ddf(UPoly* f, int64_t p) {
             f_star = next_f;
             
             UPoly* next_x_pow = upoly_copy(x_pow_p);
-            upoly_div_rem_mod(next_x_pow, f_star, p, NULL, &x_pow_p);
+            UPoly* new_x_pow_p;
+            upoly_div_rem_mod(next_x_pow, f_star, p, NULL, &new_x_pow_p);
             upoly_free(next_x_pow);
+            /* upoly_div_rem_mod overwrites *out_r unconditionally; release
+             * the previous reduction before adopting the new one. */
+            upoly_free(x_pow_p);
+            x_pow_p = new_x_pow_p;
         }
         upoly_free(t);
         upoly_free(g);

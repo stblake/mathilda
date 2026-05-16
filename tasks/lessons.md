@@ -417,3 +417,75 @@ correct or confirm the note.  Then update the note (or the
 changelog) with the verified cause.  Especially for matcher /
 dispatch / evaluator bugs, where the surface symptom and the
 underlying mechanism often have nothing to do with each other.
+
+## Memory ownership patterns (2026-05-16)
+
+### evaluate() and expr_expand() do NOT consume their input
+
+Both `evaluate(e)` and `expr_expand(e)` start with an internal
+`expr_copy(e)` (refcount++) and return a fresh result; the caller
+still owns `e` and must free it.  The leak-bait pattern is:
+
+```c
+Expr* x = evaluate(internal_times(...));      // temp leaks
+Expr* y = expr_expand(internal_power(...));   // temp leaks
+foo->slot = evaluate(expr_new_function(...)); // temp leaks
+```
+
+The fresh `internal_X(...)` / `expr_new_function(...)` result has
+nowhere to go — no variable, no free.  Fix either by introducing a
+local, calling, then freeing, or by using a wrapper that consumes:
+`eval_and_free(e)` from `src/eval.h` does this for `evaluate`; for
+`expr_expand`, `intrat.c` has a `expand_and_free` helper.
+
+**Why:** Found while fixing valgrind leaks in Integrate`RischNorman
+/ BronsteinRational unit tests (May 2026).  Multiple modules
+(`intrischnorman.c`, `intrat.c`, `symtab.c`, `deriv.c`) had this
+pattern in wrappers like `eval_expand`/`eval_cancel`/etc. that
+themselves called `expr_copy(f)` internally — meaning callers also
+had to free `f` separately, which they often forgot for fresh
+temps.  The eval_* wrappers in `intrischnorman.c` were converted to
+take ownership of their argument; that single contract change
+eliminated 70+ leak sites.
+
+**How to apply:** when reviewing a new helper that wraps
+`evaluate` or `expr_expand`, decide explicitly whether it consumes
+or borrows.  If it borrows, every call site passing a fresh temp is
+a latent leak.  Prefer the consuming contract (less code at call
+sites, no leak risk).  When a callee both copies internally AND the
+caller never references the input again, drop the redundant copy.
+
+### expr_new_function memcpys args but leaves the array to caller
+
+`expr_new_function(head, args, count)` allocates its own backing
+store and `memcpy`s the `args[]` slot pointers in.  The new
+function "owns" the referenced Expr*s (they're decremented when it
+frees), but the **`args` malloc itself** is still the caller's —
+must be `free`'d if heap-allocated.  Stack/compound literal `args`
+arrays are fine.
+
+**Why:** Found two leak sites with this exact bug:
+- `src/context.c:context_path_as_list` — `malloc`'d args, passed to
+  `expr_new_function`, never `free`'d.  Leaked once per process.
+- `src/intrat.c:intrat_apart_list` — same shape, leaked once per
+  call.
+
+**How to apply:** any `Expr** args = malloc(...); ... expr_new_function(h, args, n)`
+must have a matching `free(args)` after the call (NOT `expr_free` —
+that would double-decrement the slots).
+
+### upoly_div_rem_mod overwrites *out_r unconditionally
+
+`upoly_div_rem_mod(a, b, mod, &q, &r)` writes to `*r` without
+freeing whatever it pointed to.  Most call sites pass an
+uninitialized local or freshly-freed slot, so this works.  But one
+site in `cz_ddf` passed `&x_pow_p` while `x_pow_p` still held a
+live UPoly — leaking it.
+
+**Why:** Out-param contracts are easy to get wrong when the slot
+is shared across loop iterations.  Found via valgrind during the
+May 2026 leak hunt.
+
+**How to apply:** when a helper assigns through an out-param
+pointer, ensure the slot is empty (NULL or just-freed) before the
+call; or use a fresh local and assign after.

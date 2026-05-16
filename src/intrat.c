@@ -83,6 +83,17 @@ static Expr* call_eval(const char* head, Expr** args, size_t argc) {
     return r;
 }
 
+/* Expand then free the input.  expr_expand borrows its argument and
+ * returns a fresh tree, so any caller that owns a freshly-built temp
+ * (e.g. internal_times(...) on the spot) must free it after the
+ * expand or the temp leaks.  This wraps the common idiom. */
+static inline Expr* expand_and_free(Expr* e) {
+    if (!e) return NULL;
+    Expr* r = expr_expand(e);
+    expr_free(e);
+    return r;
+}
+
 /* canonic[expr] = Cancel[Together[expr]].  Phase 1 keeps this
  * stripped down — the full Mathematica `canonic` adds a RootReduce /
  * ToRadicals tail that we'll bring online in later phases.
@@ -207,6 +218,7 @@ static Expr* intrat_polygcd_monic(Expr* a, Expr* b, Expr* x) {
         /* Degree-0 gcd: normalise to 1 to keep the algorithm scale-
          * invariant (and so PolynomialQuotient[d, gcd] returns d/lc
          * faithfully). */
+        expr_free(g_e);
         return expr_new_integer(1);
     }
     Expr* lc = get_coeff(g_e, x, deg);
@@ -250,6 +262,10 @@ static Expr* intrat_content(Expr* p, Expr* x) {
     for (size_t i = 0; i < n; i++) args[i] = expr_copy(cl->data.function.args[i]);
     expr_free(cl);
     Expr* g = internal_polynomialgcd(args, n);
+    /* internal_polynomialgcd (via internal_call_impl/expr_new_function)
+     * memcpy's the slot pointers into its own backing store; the caller-
+     * owned `args` buffer is no longer needed and must be released. */
+    free(args);
     /* When coefficients carry parametric fractions (e.g. 1/b^3 factors
      * after Apart on a parametric integrand), our PolynomialGCD bails
      * and returns the call held.  Treat that as content == 1 — still
@@ -945,7 +961,11 @@ static Expr* intrat_apart_list(Expr* f, Expr* x, const Expr* alpha) {
         Expr** terms = (Expr**)malloc(sizeof(Expr*) * n);
         for (size_t i = 0; i < n; i++) terms[i] = expr_copy(ap->data.function.args[i]);
         expr_free(ap);
-        return expr_new_function(expr_new_symbol("List"), terms, n);
+        /* expr_new_function memcpy's the args buffer into its own
+         * backing store, so the caller's `terms` buffer must be freed. */
+        Expr* list = expr_new_function(expr_new_symbol("List"), terms, n);
+        free(terms);
+        return list;
     }
     return expr_new_function(expr_new_symbol("List"), (Expr*[]){ap}, 1);
 }
@@ -1194,17 +1214,17 @@ static Expr* expand_palindromic_quartic_real(
 
     /* Outer disc Du = c1^2 − 4 c0 (c2 − 2 c0).  Soundness gate:
      * Du >= 0 so u_± are real. */
-    Expr* c1sq = expr_expand(internal_power(
+    Expr* c1sq = expand_and_free(internal_power(
         (Expr*[]){expr_copy(c1), expr_new_integer(2)}, 2));
-    Expr* two_c0 = expr_expand(internal_times(
+    Expr* two_c0 = expand_and_free(internal_times(
         (Expr*[]){expr_new_integer(2), expr_copy(c0)}, 2));
     Expr* c2m2c0 = eval_and_free(internal_subtract(
         (Expr*[]){expr_copy(c2), two_c0}, 2));
-    Expr* four_term = expr_expand(internal_times(
+    Expr* four_term = expand_and_free(internal_times(
         (Expr*[]){expr_new_integer(4),
                   expr_copy(c0),
                   c2m2c0}, 3));
-    Expr* neg_four_term = expr_expand(internal_times(
+    Expr* neg_four_term = expand_and_free(internal_times(
         (Expr*[]){expr_new_integer(-1), four_term}, 2));
     Expr* Du = eval_and_free(internal_plus(
         (Expr*[]){c1sq, neg_four_term}, 2));
@@ -1220,9 +1240,9 @@ static Expr* expand_palindromic_quartic_real(
     Expr* sqrt_Du = intsimp_pos_sqrt(Du_exp);
     expr_free(Du_exp);
 
-    Expr* neg_c1 = expr_expand(internal_times(
+    Expr* neg_c1 = expand_and_free(internal_times(
         (Expr*[]){expr_new_integer(-1), expr_copy(c1)}, 2));
-    Expr* two_c0_b = expr_expand(internal_times(
+    Expr* two_c0_b = expand_and_free(internal_times(
         (Expr*[]){expr_new_integer(2), expr_copy(c0)}, 2));
 
     Expr* u_num_p = eval_and_free(internal_plus(
@@ -1246,9 +1266,9 @@ static Expr* expand_palindromic_quartic_real(
         Expr* u = us[k];
 
         /* v_sq = (4 - u^2)/4.  Must be > 0 for v_im real. */
-        Expr* u_sq = expr_expand(internal_power(
+        Expr* u_sq = expand_and_free(internal_power(
             (Expr*[]){expr_copy(u), expr_new_integer(2)}, 2));
-        Expr* neg_u_sq = expr_expand(internal_times(
+        Expr* neg_u_sq = expand_and_free(internal_times(
             (Expr*[]){expr_new_integer(-1), u_sq}, 2));
         Expr* four_m_usq = eval_and_free(internal_plus(
             (Expr*[]){expr_new_integer(4), neg_u_sq}, 2));
@@ -1290,21 +1310,21 @@ static Expr* expand_palindromic_quartic_real(
 
         /* c = (Aa + i Ba) / (Ad + i Bd)
          *   = (Aa Ad + Ba Bd + i(Ba Ad − Aa Bd)) / (Ad^2 + Bd^2). */
-        Expr* AaAd = expr_expand(internal_times(
+        Expr* AaAd = expand_and_free(internal_times(
             (Expr*[]){expr_copy(Aa), expr_copy(Ad)}, 2));
-        Expr* BaBd = expr_expand(internal_times(
+        Expr* BaBd = expand_and_free(internal_times(
             (Expr*[]){expr_copy(Ba), expr_copy(Bd)}, 2));
         Expr* re_num = eval_and_free(internal_plus(
             (Expr*[]){AaAd, BaBd}, 2));
-        Expr* BaAd = expr_expand(internal_times(
+        Expr* BaAd = expand_and_free(internal_times(
             (Expr*[]){expr_copy(Ba), expr_copy(Ad)}, 2));
-        Expr* AaBd = expr_expand(internal_times(
+        Expr* AaBd = expand_and_free(internal_times(
             (Expr*[]){expr_copy(Aa), expr_copy(Bd)}, 2));
         Expr* im_num = eval_and_free(internal_subtract(
             (Expr*[]){BaAd, AaBd}, 2));
-        Expr* Ad_sq = expr_expand(internal_power(
+        Expr* Ad_sq = expand_and_free(internal_power(
             (Expr*[]){Ad, expr_new_integer(2)}, 2));
-        Expr* Bd_sq = expr_expand(internal_power(
+        Expr* Bd_sq = expand_and_free(internal_power(
             (Expr*[]){Bd, expr_new_integer(2)}, 2));
         Expr* denom = eval_and_free(internal_plus(
             (Expr*[]){Ad_sq, Bd_sq}, 2));
@@ -1316,11 +1336,11 @@ static Expr* expand_palindromic_quartic_real(
 
         /* L = (x − u_half)^2 + v_sq.
          * T = v_im / (x − u_half). */
-        Expr* neg_uh = expr_expand(internal_times(
+        Expr* neg_uh = expand_and_free(internal_times(
             (Expr*[]){expr_new_integer(-1), expr_copy(u_half)}, 2));
         Expr* x_m_uh = eval_and_free(internal_plus(
             (Expr*[]){expr_copy(x), neg_uh}, 2));
-        Expr* x_m_uh_sq = expr_expand(internal_power(
+        Expr* x_m_uh_sq = expand_and_free(internal_power(
             (Expr*[]){expr_copy(x_m_uh), expr_new_integer(2)}, 2));
         Expr* L = eval_and_free(internal_plus(
             (Expr*[]){x_m_uh_sq, v_sq_exp}, 2));
@@ -1734,7 +1754,7 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
                 }
                 /* s := exquo[s, g^j, t] (j is 1-based index = j+1). */
                 int jpow = (int)(j + 1);
-                Expr* gj = expr_expand(internal_power(
+                Expr* gj = expand_and_free(internal_power(
                     (Expr*[]){g, expr_new_integer((int64_t)jpow)}, 2));
                 Expr* sn = intrat_exquo(s, gj, t);
                 expr_free(gj);
@@ -1870,7 +1890,7 @@ static Expr* intrat_log_to_atan(Expr* a, Expr* b, Expr* x) {
     int dA = get_degree_poly(A, x);
     int dB = get_degree_poly(B, x);
     if (dA < dB) {
-        Expr* negB = expr_expand(internal_times(
+        Expr* negB = expand_and_free(internal_times(
             (Expr*[]){expr_new_integer(-1), expr_copy(B)}, 2));
         Expr* recurse = intrat_log_to_atan(negB, A, x);
         expr_free(negB); expr_free(A); expr_free(B);
@@ -1878,7 +1898,7 @@ static Expr* intrat_log_to_atan(Expr* a, Expr* b, Expr* x) {
     }
 
     /* {g, {d, c}} = PolynomialExtendedGCD[B, -A, x]   so B*d - A*c = g. */
-    Expr* negA = expr_expand(internal_times(
+    Expr* negA = expand_and_free(internal_times(
         (Expr*[]){expr_new_integer(-1), expr_copy(A)}, 2));
     Expr* eg_args[3] = { expr_copy(B), negA, expr_copy(x) };
     Expr* eg = internal_polynomialextendedgcd(eg_args, 3);
@@ -2107,8 +2127,8 @@ static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr) {
 static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
                                  Expr* s, Expr* x, Expr* t) {
     /* discriminant = b^2 - 4 a c. */
-    Expr* b2 = expr_expand(internal_power((Expr*[]){expr_copy(b), expr_new_integer(2)}, 2));
-    Expr* fourac = expr_expand(
+    Expr* b2 = expand_and_free(internal_power((Expr*[]){expr_copy(b), expr_new_integer(2)}, 2));
+    Expr* fourac = expand_and_free(
         internal_times((Expr*[]){expr_new_integer(4), expr_copy(a), expr_copy(c)}, 3));
     Expr* neg_fourac = internal_times(
         (Expr*[]){expr_new_integer(-1), fourac}, 2);
@@ -2171,7 +2191,7 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
      * Times[-1, Plus[...]]; intsimp_pos_sqrt then walks the Times
      * factors and pulls Sqrt[-1] = I out of the `-1`, ending in an
      * imaginary v_root that collapses logtoreal_quadratic to 0. */
-    Expr* neg_disc_raw = expr_expand(internal_times(
+    Expr* neg_disc_raw = expand_and_free(internal_times(
         (Expr*[]){expr_new_integer(-1), disc}, 2));
     /* Try the positive-symbol Sqrt simplifier first (e.g.
      * Sqrt[4 a^2 b^2] -> 2 a b); fall back to the held Sqrt[..] when
@@ -2198,9 +2218,9 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
     expr_free(s_complex);
 
     /* Term 1: u_root * Log[A^2 + B^2]. */
-    Expr* A2 = expr_expand(internal_power(
+    Expr* A2 = expand_and_free(internal_power(
         (Expr*[]){expr_copy(A), expr_new_integer(2)}, 2));
-    Expr* B2 = expr_expand(internal_power(
+    Expr* B2 = expand_and_free(internal_power(
         (Expr*[]){expr_copy(B), expr_new_integer(2)}, 2));
     Expr* mod2 = eval_and_free(internal_plus((Expr*[]){A2, B2}, 2));
     Expr* mod2_can = intrat_canonic(mod2); expr_free(mod2);
@@ -2264,7 +2284,7 @@ static Expr* logtoreal_nthroot_sparse(Expr* base, int deg,
     }
 
     /* q := −c_0 / c_n. */
-    Expr* neg_c0 = expr_expand(internal_times(
+    Expr* neg_c0 = expand_and_free(internal_times(
         (Expr*[]){expr_new_integer(-1), expr_copy(c0)}, 2));
     Expr* q = eval_and_free(internal_divide(
         (Expr*[]){neg_c0, expr_copy(cn)}, 2));
@@ -2332,7 +2352,7 @@ static Expr* logtoreal_nthroot_sparse(Expr* base, int deg,
             : (deg - 2) / 2;             /* even n: floor((n-2)/2) */
     }
 
-    Expr* r_sq = expr_expand(internal_power(
+    Expr* r_sq = expand_and_free(internal_power(
         (Expr*[]){expr_copy(r), expr_new_integer(2)}, 2));
 
     for (int k = k_start; k <= k_end; k++) {
@@ -2344,18 +2364,23 @@ static Expr* logtoreal_nthroot_sparse(Expr* base, int deg,
             (Expr*[]){angle_num, expr_new_integer(deg)}, 2));
         Expr* cos_v = expr_new_function(expr_new_symbol("Cos"),
             (Expr*[]){angle}, 1);
-        cos_v = evaluate(cos_v);
+        cos_v = eval_and_free(cos_v);
 
         Expr* b_quad = eval_and_free(internal_times(
             (Expr*[]){expr_new_integer(-2),
                       expr_copy(r),
                       cos_v}, 3));
 
+        Expr* one_a = expr_new_integer(1);
+        Expr* r_sq_copy = expr_copy(r_sq);
         Expr* quad = logtoreal_quadratic(
-            expr_new_integer(1),
+            one_a,
             b_quad,
-            expr_copy(r_sq),
+            r_sq_copy,
             s, x, t);
+        expr_free(one_a);
+        expr_free(b_quad);
+        expr_free(r_sq_copy);
         if (!quad) { fail = true; break; }
         terms[nterms++] = quad;
     }
@@ -2484,11 +2509,11 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                  * with negative or sign-unknown inner discriminant
                  * to fall through to NaiveLogPart's held RootSum
                  * (where they were before this branch existed). */
-                Expr* c2sq = expr_expand(internal_power(
+                Expr* c2sq = expand_and_free(internal_power(
                     (Expr*[]){expr_copy(c2), expr_new_integer(2)}, 2));
-                Expr* fourc0c4 = expr_expand(internal_times(
+                Expr* fourc0c4 = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(4), expr_copy(c0), expr_copy(c4)}, 3));
-                Expr* neg_fourc0c4 = expr_expand(internal_times(
+                Expr* neg_fourc0c4 = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(-1), fourc0c4}, 2));
                 Expr* discsq = eval_and_free(internal_plus(
                     (Expr*[]){c2sq, neg_fourc0c4}, 2));
@@ -2533,7 +2558,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
 
                     Expr* c2_over_c4 = eval_and_free(internal_divide(
                         (Expr*[]){expr_copy(c2), expr_copy(c4)}, 2));
-                    Expr* neg_c2_over_c4 = expr_expand(internal_times(
+                    Expr* neg_c2_over_c4 = expand_and_free(internal_times(
                         (Expr*[]){expr_new_integer(-1), c2_over_c4}, 2));
 
                     /* α^2 = 2 β − c2/c4. */
@@ -2559,16 +2584,23 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                         (Expr*[]){expr_new_integer(-1),
                                   expr_copy(alpha)}, 2));
 
+                    Expr* one_p1 = expr_new_integer(1);
+                    Expr* beta_copy = expr_copy(beta);
                     Expr* part1 = logtoreal_quadratic(
-                        expr_new_integer(1),
+                        one_p1,
                         alpha,
-                        expr_copy(beta),
+                        beta_copy,
                         s, x, t);
+                    expr_free(one_p1); expr_free(beta_copy);
+
+                    Expr* one_p2 = expr_new_integer(1);
                     Expr* part2 = logtoreal_quadratic(
-                        expr_new_integer(1),
+                        one_p2,
                         neg_alpha,
                         beta,
                         s, x, t);
+                    expr_free(one_p2);
+                    expr_free(alpha); expr_free(neg_alpha); expr_free(beta);
 
                     expr_free(c0); expr_free(c1); expr_free(c2);
                     expr_free(c3); expr_free(c4);
@@ -2588,7 +2620,7 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                 Expr* sqrt_disc = intsimp_pos_sqrt(discsq);
                 expr_free(discsq);
 
-                Expr* neg_c2 = expr_expand(internal_times(
+                Expr* neg_c2 = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(-1), expr_copy(c2)}, 2));
                 Expr* two_c4 = eval_and_free(internal_times(
                     (Expr*[]){expr_new_integer(2), expr_copy(c4)}, 2));
@@ -2602,21 +2634,28 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                 Expr* u_minus = eval_and_free(internal_divide(
                     (Expr*[]){num_minus, two_c4}, 2));
 
-                Expr* neg_u_plus = expr_expand(internal_times(
+                Expr* neg_u_plus = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(-1), u_plus}, 2));
-                Expr* neg_u_minus = expr_expand(internal_times(
+                Expr* neg_u_minus = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(-1), u_minus}, 2));
 
+                Expr* one_a1 = expr_new_integer(1);
+                Expr* zero_b1 = expr_new_integer(0);
                 Expr* part1 = logtoreal_quadratic(
-                    expr_new_integer(1),
-                    expr_new_integer(0),
+                    one_a1,
+                    zero_b1,
                     neg_u_plus,
                     s, x, t);
+                expr_free(one_a1); expr_free(zero_b1); expr_free(neg_u_plus);
+
+                Expr* one_a2 = expr_new_integer(1);
+                Expr* zero_b2 = expr_new_integer(0);
                 Expr* part2 = logtoreal_quadratic(
-                    expr_new_integer(1),
-                    expr_new_integer(0),
+                    one_a2,
+                    zero_b2,
                     neg_u_minus,
                     s, x, t);
+                expr_free(one_a2); expr_free(zero_b2); expr_free(neg_u_minus);
 
                 expr_free(c0); expr_free(c1); expr_free(c2);
                 expr_free(c3); expr_free(c4);
@@ -2657,13 +2696,13 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                  * polynomials that overwhelm the downstream LogToAtan
                  * GCD machinery.  Scaled-palindromic-with-clean-r is a
                  * future extension. */
-                Expr* sym_lhs = expr_expand(internal_times(
+                Expr* sym_lhs = expand_and_free(internal_times(
                     (Expr*[]){expr_copy(c4),
-                              expr_expand(internal_power(
+                              expand_and_free(internal_power(
                                   (Expr*[]){expr_copy(c1),
                                             expr_new_integer(2)}, 2))}, 2));
-                Expr* sym_rhs = expr_expand(internal_times(
-                    (Expr*[]){expr_expand(internal_power(
+                Expr* sym_rhs = expand_and_free(internal_times(
+                    (Expr*[]){expand_and_free(internal_power(
                                   (Expr*[]){expr_copy(c3),
                                             expr_new_integer(2)}, 2)),
                               expr_copy(c0)}, 2));
@@ -2706,18 +2745,18 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                  * Soundness gate: disc_v >= 0 so v_± are real. */
                 Expr* c3r = eval_and_free(internal_times(
                     (Expr*[]){expr_copy(c3), expr_copy(r)}, 2));
-                Expr* c3r_sq = expr_expand(internal_power(
+                Expr* c3r_sq = expand_and_free(internal_power(
                     (Expr*[]){expr_copy(c3r), expr_new_integer(2)}, 2));
                 Expr* two_c4 = eval_and_free(internal_times(
                     (Expr*[]){expr_new_integer(2), expr_copy(c4)}, 2));
-                Expr* c2_rsq = expr_expand(internal_times(
+                Expr* c2_rsq = expand_and_free(internal_times(
                     (Expr*[]){expr_copy(c2), expr_copy(r_sq)}, 2));
                 Expr* v_const = eval_and_free(internal_subtract(
                     (Expr*[]){c2_rsq, two_c4}, 2));
-                Expr* four_c4 = expr_expand(internal_times(
+                Expr* four_c4 = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(4), expr_copy(c4),
                               expr_copy(v_const)}, 3));
-                Expr* neg_four_c4 = expr_expand(internal_times(
+                Expr* neg_four_c4 = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(-1), four_c4}, 2));
                 Expr* disc_v = eval_and_free(internal_plus(
                     (Expr*[]){c3r_sq, neg_four_c4}, 2));
@@ -2760,22 +2799,22 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                  * Verify Δ_t < 0 so logtoreal_quadratic's ArcTan
                  * branch fires.  When the symbolic walker is
                  * inconclusive we fall back to numerical N[]. */
-                Expr* v_plus_sq = expr_expand(internal_power(
+                Expr* v_plus_sq = expand_and_free(internal_power(
                     (Expr*[]){expr_copy(v_plus), expr_new_integer(2)}, 2));
                 Expr* v_plus_sq_m4 = eval_and_free(internal_plus(
                     (Expr*[]){v_plus_sq, expr_new_integer(-4)}, 2));
-                Expr* v_plus_check_arg = expr_expand(internal_times(
+                Expr* v_plus_check_arg = expand_and_free(internal_times(
                     (Expr*[]){expr_copy(r_sq), expr_copy(v_plus_sq_m4)}, 2));
                 expr_free(v_plus_sq_m4);
                 int v_plus_check = intsimp_sign_pos_assumption(v_plus_check_arg);
                 if (v_plus_check == 0) v_plus_check = intsimp_numeric_sign(v_plus_check_arg);
                 expr_free(v_plus_check_arg);
 
-                Expr* v_minus_sq = expr_expand(internal_power(
+                Expr* v_minus_sq = expand_and_free(internal_power(
                     (Expr*[]){expr_copy(v_minus), expr_new_integer(2)}, 2));
                 Expr* v_minus_sq_m4 = eval_and_free(internal_plus(
                     (Expr*[]){v_minus_sq, expr_new_integer(-4)}, 2));
-                Expr* v_minus_check_arg = expr_expand(internal_times(
+                Expr* v_minus_check_arg = expand_and_free(internal_times(
                     (Expr*[]){expr_copy(r_sq), expr_copy(v_minus_sq_m4)}, 2));
                 expr_free(v_minus_sq_m4);
                 int v_minus_check = intsimp_sign_pos_assumption(v_minus_check_arg);
@@ -2791,25 +2830,32 @@ static Expr* logtoreal_dispatch(Expr* factored, Expr* s, Expr* x, Expr* t) {
                 }
 
                 /* Build (r^2) t^2 + (−r v) t + 1 for each v_±. */
-                Expr* rv_plus = expr_expand(internal_times(
+                Expr* rv_plus = expand_and_free(internal_times(
                     (Expr*[]){expr_copy(r), expr_copy(v_plus)}, 2));
-                Expr* neg_rv_plus = expr_expand(internal_times(
+                Expr* neg_rv_plus = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(-1), rv_plus}, 2));
-                Expr* rv_minus = expr_expand(internal_times(
+                Expr* rv_minus = expand_and_free(internal_times(
                     (Expr*[]){expr_copy(r), expr_copy(v_minus)}, 2));
-                Expr* neg_rv_minus = expr_expand(internal_times(
+                Expr* neg_rv_minus = expand_and_free(internal_times(
                     (Expr*[]){expr_new_integer(-1), rv_minus}, 2));
 
+                Expr* r_sq_c1 = expr_copy(r_sq);
+                Expr* one_c1 = expr_new_integer(1);
                 Expr* part1 = logtoreal_quadratic(
-                    expr_copy(r_sq),
+                    r_sq_c1,
                     neg_rv_plus,
-                    expr_new_integer(1),
+                    one_c1,
                     s, x, t);
+                expr_free(r_sq_c1); expr_free(neg_rv_plus); expr_free(one_c1);
+
+                Expr* r_sq_c2 = expr_copy(r_sq);
+                Expr* one_c2 = expr_new_integer(1);
                 Expr* part2 = logtoreal_quadratic(
-                    expr_copy(r_sq),
+                    r_sq_c2,
                     neg_rv_minus,
-                    expr_new_integer(1),
+                    one_c2,
                     s, x, t);
+                expr_free(r_sq_c2); expr_free(neg_rv_minus); expr_free(one_c2);
 
                 expr_free(v_plus); expr_free(v_minus);
                 expr_free(r); expr_free(r_sq);

@@ -500,7 +500,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
                     Expr* bvar = fn2->data.function.args[0];
                     Expr* body = fn2->data.function.args[1];
                     Expr* dbody = deriv_of(body, x);
-                    Expr* dbody_eval = evaluate(dbody);
+                    Expr* dbody_eval = eval_and_free(dbody);
                     Expr* new_fn2 = mk_fn2("Function",
                         expr_copy(bvar), dbody_eval);
                     return mk_fn2("RootSum", expr_copy(fn1), new_fn2);
@@ -508,7 +508,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
                 if (fa == 1) {
                     Expr* body = fn2->data.function.args[0];
                     Expr* dbody = deriv_of(body, x);
-                    Expr* dbody_eval = evaluate(dbody);
+                    Expr* dbody_eval = eval_and_free(dbody);
                     Expr* new_fn2 = mk_fn1("Function", dbody_eval);
                     return mk_fn2("RootSum", expr_copy(fn1), new_fn2);
                 }
@@ -583,9 +583,11 @@ static Expr* higher_order_partial(Expr* f, Expr* x, int64_t order) {
         }
         /* The outer evaluator will also reduce the final expression,
          * but we need a simplified form between iterations so that
-         * expr_free_of short-circuits work on the next pass. evaluate()
-         * consumes `nxt` and returns a (possibly new) tree. */
+         * expr_free_of short-circuits work on the next pass.  Note that
+         * evaluate() returns a new tree without freeing its argument;
+         * we must explicitly free `nxt`. */
         Expr* reduced = evaluate(nxt);
+        expr_free(nxt);
         expr_free(current);
         current = reduced;
     }

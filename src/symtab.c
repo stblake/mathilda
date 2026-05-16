@@ -425,7 +425,10 @@ static bool is_foldable_numeric_exponent(const Expr* e) {
 static Expr* compose_numeric_exponents(const Expr* a, const Expr* b) {
     Expr* args[2] = { expr_copy((Expr*)a), expr_copy((Expr*)b) };
     Expr* prod = expr_new_function(expr_new_symbol("Times"), args, 2);
-    return evaluate(prod);
+    Expr* res = evaluate(prod);
+    /* evaluate() makes its own copy of the input — release ours. */
+    expr_free(prod);
+    return res;
 }
 
 static Expr* pattern_canonicalize(Expr* p) {

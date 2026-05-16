@@ -1464,6 +1464,7 @@ static void poly_div_rem(Expr* p, Expr* q, Expr* x, Expr** out_Q, Expr** out_R) 
             Expr* lcB_inv = internal_power((Expr*[]){expr_copy(lcB), expr_new_integer(-1)}, 2);
             q_coeff = internal_times((Expr*[]){expr_copy(lcR), lcB_inv}, 2);
         }
+        expr_free(lcR);
 
         Expr* x_pow = internal_power((Expr*[]){expr_copy(x), expr_new_integer(d)}, 2);
         Expr* term = internal_times((Expr*[]){q_coeff, x_pow}, 2);
@@ -2262,12 +2263,16 @@ Expr* builtin_polynomialgcd(Expr* res) {
     if (!(cur_gcd->type == EXPR_INTEGER && cur_gcd->data.integer == 1)) final_count++;
     
     if (final_count == 0) {
-        free(common_args); 
+        free(common_args);
         for(size_t i=0; i<v_count; i++) expr_free(vars[i]);
-        free(vars); 
+        free(vars);
         expr_free(numG);
         { for(size_t i=0; i<count; i++) expr_free(rems[i]); free(rems); }
-        return expr_new_integer(1);
+        /* cur_gcd is the Integer 1 (final_count == 0 implies it). Reuse
+         * it instead of allocating a fresh one — saves a malloc/free pair
+         * and, more importantly, drops the reference we would otherwise
+         * leak. */
+        return cur_gcd;
     }
     
     Expr** final_args = malloc(sizeof(Expr*) * final_count);
@@ -2643,12 +2648,14 @@ Expr* builtin_polynomiallcm(Expr* res) {
     if (!(cur_lcm->type == EXPR_INTEGER && cur_lcm->data.integer == 1)) final_count++;
     
     if (final_count == 0) {
-        free(common_args); 
+        free(common_args);
         for(size_t i=0; i<v_count; i++) expr_free(vars[i]);
-        free(vars); 
+        free(vars);
         expr_free(numL);
         { for(size_t i=0; i<count; i++) expr_free(rems[i]); free(rems); }
-        return expr_new_integer(1);
+        /* cur_lcm is the Integer 1 (final_count == 0 implies it). Reuse
+         * it instead of allocating a fresh one and leaking the existing. */
+        return cur_lcm;
     }
     
     Expr** final_args = malloc(sizeof(Expr*) * final_count);
@@ -4163,6 +4170,13 @@ static Expr* poly_derivative(Expr* exp_p, Expr* var) {
         } else {
             expr_free(c);
         }
+    }
+    if (bulk) {
+        /* coeffs[0] is the constant term — we never consumed it; free it.
+         * coeffs[1..n] were either consumed into `args` or freed above via
+         * `c` when zero. The container itself must also be freed. */
+        expr_free(coeffs[0]);
+        free(coeffs);
     }
     if (count == 0) {
         free(args);
