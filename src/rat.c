@@ -813,6 +813,20 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
         return num;
     }
 
+    /* Strip algebraic-constant atoms (Sqrt[2], Sqrt[3], ...) that appear
+     * in every summand of *both* num and den.  Mirrors the prepass in
+     * cancel_recursive; without it the Extension path also misses these
+     * cases, because PolynomialGCD[Sqrt[2], Sqrt[2] + Sqrt[2] x^4,
+     * Extension -> α] still routes through the integer-content recursion
+     * for its leading coefficient handling and returns 1.  The strip is
+     * an alpha-independent algebraic identity (a/a = 1 in any ring), so
+     * it is safe to run regardless of which extension the caller picked. */
+    rat_strip_symbolic_common(&num, &den);
+    if (den->type == EXPR_INTEGER && den->data.integer == 1) {
+        expr_free(den);
+        return num;
+    }
+
     /* Compute g = PolynomialGCD[num, den, Extension -> alpha]. */
     Expr* gcd_call = expr_new_function(
         expr_new_symbol("PolynomialGCD"),
