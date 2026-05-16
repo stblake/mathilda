@@ -1,5 +1,5 @@
 /*
- * random.c - Random number generation builtins for PicoCAS
+ * random.c - Random number generation builtins for Mathilda
  *
  * RandomInteger[{imin, imax}]  - pseudorandom integer in [imin, imax]
  * RandomInteger[imax]          - pseudorandom integer in [0, imax]

@@ -1,8 +1,8 @@
-# PicoCAS
+# Mathilda
 
-PicoCAS is a tiny, AI Agent-generated, symbolic computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica. Written entirely in C99, PicoCAS implements a recursive expression model, structural pattern matching, rewriting rules, and a surprisingly extensive library of built-in functions.
+Mathilda is a tiny, AI Agent-generated, symbolic computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica. Written entirely in C99, Mathilda implements a recursive expression model, structural pattern matching, rewriting rules, and a surprisingly extensive library of built-in functions.
 
-The name "PicoCAS" pays homage to David Stoutemyer's seminal PICOMATH-80 tiny computer algebra system. PicoCAS has the goal of implementing the core of the Mathematica programming language, and the algebraic and calculus capabilities of the Derive computer algebra system.
+The name "Mathilda" pays homage to David Stoutemyer's seminal PICOMATH-80 tiny computer algebra system. Mathilda has the goal of implementing the core of the Mathematica programming language, and the algebraic and calculus capabilities of the Derive computer algebra system.
 
 ## 🌟 Key Features
 
@@ -20,7 +20,7 @@ The name "PicoCAS" pays homage to David Stoutemyer's seminal PICOMATH-80 tiny co
 
 ### Prerequisites
 
-To build and run PicoCAS, you need the following development libraries installed on your system:
+To build and run Mathilda, you need the following development libraries installed on your system:
 * A C99-compliant compiler (`gcc` or `clang`)
 * **GMP** (`libgmp` / `gmp-dev`)
 * **Readline** (`libreadline` / `readline-dev`)
@@ -28,14 +28,14 @@ To build and run PicoCAS, you need the following development libraries installed
 
 *Note: The GMP-ECM library is utilized for factorization methods and is included as an external source dependency. It will be built automatically during the compilation process.*
 
-### Building PicoCAS
+### Building Mathilda
 
 The `makefile` automatically handles the configuration and compilation of internal dependencies before linking the main executable.
 
 1. Clone the repository (including the bundled GMP-ECM submodule):
    ```bash
-   git clone --recurse-submodules https://github.com/stblake/picocas.git
-   cd picocas
+   git clone --recurse-submodules https://github.com/stblake/Mathilda.git
+   cd Mathilda
    ```
    If you already cloned without `--recurse-submodules`, run
    `git submodule update --init --recursive` from inside the repo
@@ -47,12 +47,12 @@ The `makefile` automatically handles the configuration and compilation of intern
    ```
 3. Start the interactive REPL:
    ```bash
-   ./picocas
+   ./Mathilda
    ```
 
 ### Running the Test Suite
 
-PicoCAS boasts a comprehensive C-based unit test suite.
+Mathilda boasts a comprehensive C-based unit test suite.
 
 ```bash
 cd tests
@@ -68,7 +68,7 @@ for t in *_tests; do ./$t; done
 
 ## 🛠️ Developer Guide & Architecture
 
-Everything in PicoCAS is represented by an immutable-by-convention `Expr` AST node, implemented as a tagged union (`Integer`, `Real`, `BigInt`, `Rational`, `Complex`, `Symbol`, `String`, `Function`).
+Everything in Mathilda is represented by an immutable-by-convention `Expr` AST node, implemented as a tagged union (`Integer`, `Real`, `BigInt`, `Rational`, `Complex`, `Symbol`, `String`, `Function`).
 
 The system is modularized into several independent subsystems:
 1. **Parser (`parse.c`)**: A robust Pratt parser mirroring Mathematica's exact operator precedences.
@@ -76,9 +76,9 @@ The system is modularized into several independent subsystems:
 3. **Symbol Table (`symtab.c`)**: Stores global variable definitions, `DownValues` (user-defined rules), and native C built-in function pointers.
 4. **Pattern Matcher & Rule Engine (`match.c`, `replace.c`)**: Implements structural tree unification and sequence segmenting through backtracking.
 
-### Extending PicoCAS: Adding a New Built-in Function
+### Extending Mathilda: Adding a New Built-in Function
 
-Adding new functionality to PicoCAS is straightforward:
+Adding new functionality to Mathilda is straightforward:
 
 1. **Write the C Implementation:**
    Create your evaluation logic in the appropriate `.c` module (e.g., `core.c`). Your function signature must be `Expr* builtin_myfunc(Expr* res)`.
@@ -108,12 +108,12 @@ Adding new functionality to PicoCAS is straightforward:
 
 4. **Test and Document:**
    * Add test cases to the appropriate suite in the `tests/` directory using the `TEST(...)` macro.
-   * Update `picocas_spec.md` with your new function, describing its behavior and providing sample inputs/outputs.
+   * Update `Mathilda_spec.md` with your new function, describing its behavior and providing sample inputs/outputs.
 
 ---
 
 ## 📜 Open Source & License
 
-PicoCAS is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**. 
+Mathilda is open-source software licensed under the **GNU General Public License v3.0 (GPLv3)**. 
 
 You are heavily encouraged to explore the codebase, submit pull requests, report issues, and expand the CAS with new mathematical algorithms! Please see the `LICENSE` file for more details.

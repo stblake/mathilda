@@ -116,7 +116,7 @@ void process_input(const char* input, int line_number) {
 }
 
 void repl_loop() {
-    printf("\nPicoCAS - A tiny, LLM-generated, Mathematica-like computer algebra system.\n\n");
+    printf("\nMathilda - A tiny, LLM-generated, Mathematica-like computer algebra system.\n\n");
     printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
     printf("End a line with '\\' to enter a multiline expression. Press Return to evaluate.\n");
     printf("Exit by evaluating Quit[] or CONTROL-C.\n\n");

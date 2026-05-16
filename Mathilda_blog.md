@@ -1,9 +1,9 @@
 
-# PicoCAS — The first AI Agent Generated Computer Algebra System
+# Mathilda — The first AI Agent Generated Computer Algebra System
 
 Sam Blake, April 2026
 
-## Building PicoCAS
+## Building Mathilda
 
 Since I was an undergraduate I have loved the Mathematica computer algebra system. It’s a brilliant language and great system for doing both mathematics and general research by computer. 
 
@@ -19,9 +19,9 @@ Given the rapidly evolving landscape of LLM-based coding agents, I wondered if n
 I really wasn’t sure an AI Agent was up to it in March, 2026. I couldn’t have been more wrong. Within 3 days of starting this project with minimal oversight (I was away on a golf trip while the initial build took place) and without writing a single line of code, we could evaluate expressions like: 
 
 ```
-$ ./picocas 
+$ ./Mathilda 
 
-PicoCAS - A tiny, LLM-generated, Mathematica-like computer algebra system.
+Mathilda - A tiny, LLM-generated, Mathematica-like computer algebra system.
 
 This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.
 
@@ -52,7 +52,7 @@ Out[7]= p (a x + d y + g z) + q (b x + e y + h z) + r (c x + f y + i z)
 
 To me, this was a very impressive result. Gemini 3 pro CLI has built the basics of a complex programming language from scratch in a low level language, C. Thinking about it more, none of the individual parts of the build are especially challenging for a mid/senior dev (with a vast general knowledge of computer algebra design and a detailed knowledge of the Mathematica programming language.) All of the data structures and algorithms required are well known and the Mathematica language is well documented on the internet, but the ability to put all these pieces together so quickly was staggering! 
 
-I find myself wondering what PicoCAS would look like with several AI Agent years of development. (At present it has had significantly less than a week of continuous agentic development.) I highly doubt it will be implementing the algebraic case of the Risch-Trager algorithm anytime soon, but I would be happily surprised if it did. 
+I find myself wondering what Mathilda would look like with several AI Agent years of development. (At present it has had significantly less than a week of continuous agentic development.) I highly doubt it will be implementing the algebraic case of the Risch-Trager algorithm anytime soon, but I would be happily surprised if it did. 
 
 
 ## AI Agent Code Development Takeaways 
@@ -66,12 +66,12 @@ Strictly enforcing the creation and running of automated unit tests (via cmake) 
 Automating commits for discrete improvements via Gemini establishes reliable rollback points in the event of feature regressions.
 
 
-## PicoCAS v Mathematica
+## Mathilda v Mathematica
 
-PicoCAS does not remotely compare to Mathematica, neither in performance, functionality, documentation, battle-hardened code etc. At best PicoCAS could be jovially thought of as a gateway drug to Mathematica. Given its open source licence, PicoCAS is a good learning tool for students and researchers who want to look under the hood and learn how a bare-bones computer algebra system is put together in a low level language like C. 
+Mathilda does not remotely compare to Mathematica, neither in performance, functionality, documentation, battle-hardened code etc. At best Mathilda could be jovially thought of as a gateway drug to Mathematica. Given its open source licence, Mathilda is a good learning tool for students and researchers who want to look under the hood and learn how a bare-bones computer algebra system is put together in a low level language like C. 
 
 
-## The Name - PicoCAS
+## The Name - Mathilda
 
-A quick note on the name, PicoCAS. As PicoCAS is designed to be small (tiny by modern standards,) with a compiled binary of just a few hundred kB. I thought a name that conveyed its goal of being small (pico being the prefix for 1e-12) and easily extensible by both human and AI developers made sense. It’s also in homage to the tiny computer algebra systems of the 1980s by David Stoutemyer and Albert Rich PICOMATH, MuMath, and the brilliant, yet tiny CAS, Derive. 
+A quick note on the name, Mathilda. As Mathilda is designed to be small (tiny by modern standards,) with a compiled binary of just a few hundred kB. I thought a name that conveyed its goal of being small (pico being the prefix for 1e-12) and easily extensible by both human and AI developers made sense. It’s also in homage to the tiny computer algebra systems of the 1980s by David Stoutemyer and Albert Rich PICOMATH, MuMath, and the brilliant, yet tiny CAS, Derive. 
 

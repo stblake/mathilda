@@ -509,7 +509,7 @@ ZUPoly* zupoly_shift_si(const ZUPoly* p, int64_t alpha) {
 }
 
 /* ====================================================================== */
-/*  Conversion to / from picocas Expr                                     */
+/*  Conversion to / from Mathilda Expr                                     */
 /* ====================================================================== */
 
 ZUPoly* expr_to_zupoly(const struct Expr* e, const struct Expr* var) {

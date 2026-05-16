@@ -1,8 +1,8 @@
-# Plan: Implement `N[...]` in PicoCAS (machine + arbitrary precision)
+# Plan: Implement `N[...]` in Mathilda (machine + arbitrary precision)
 
 ## Context
 
-PicoCAS currently has no numeric-evaluation function. Users can write
+Mathilda currently has no numeric-evaluation function. Users can write
 `1/3`, `Pi`, `Sin[1.0]`, etc., but there is no way to ask "give me a
 numeric approximation of this expression." Mathematica's `N[expr]` and
 `N[expr, n]` are the standard vehicle for this and are heavily used.
@@ -158,7 +158,7 @@ Also add `?N` to `tests/test_information.c` if that pattern exists there.
   the cluster of `*_init()` calls around the file's tail)
 - `tests/test_numeric.c` — new
 - `tests/CMakeLists.txt` — register new test
-- `picocas_spec.md` — document `N[]`
+- `Mathilda_spec.md` — document `N[]`
 
 No makefile changes in Phase 1; `SRC = $(wildcard src/*.c)` picks up
 `numeric.c` automatically.
@@ -213,7 +213,7 @@ Payload (add to the union):
 ```
 
 MPFR's `mpfr_t` tracks precision per-value, so we don't need a separate
-precision field. Rounding mode is global-ish in PicoCAS; default to
+precision field. Rounding mode is global-ish in Mathilda; default to
 `MPFR_RNDN` (round to nearest, ties to even).
 
 ### Core helpers (`src/expr.c`)
@@ -297,7 +297,7 @@ modules can use it.
 Phase 2 v1 uses `max(prec)` of inputs for each operation's output
 precision — simple, predictable, and MPFR-native. True Mathematica-style
 significance arithmetic (where precision decreases through lossy ops)
-is deferred; documented in `picocas_spec.md` as a known deviation.
+is deferred; documented in `Mathilda_spec.md` as a known deviation.
 
 ### Precision literal syntax in the parser
 
@@ -425,7 +425,7 @@ warning and a machine-precision result.
 - `tests/test_numeric.c` — phase-2 cases including precision literals,
   `Precision`/`Accuracy`, `SetPrecision`/`SetAccuracy`
 - `tests/test_utils.h` — prefix-match helper
-- `picocas_spec.md` — document MPFR behaviour, precision literal syntax,
+- `Mathilda_spec.md` — document MPFR behaviour, precision literal syntax,
   Precision/Accuracy semantics, significance-arithmetic deviation
 - `README.md` — note the MPFR build dep (optional)
 
@@ -436,7 +436,7 @@ warning and a machine-precision result.
 Phase 1:
 
 1. `make clean && make -j$(nproc)` — clean build with no warnings.
-2. `./picocas` REPL smoke test:
+2. `./Mathilda` REPL smoke test:
    ```
    N[Pi]
    N[Sin[1]]
@@ -445,7 +445,7 @@ Phase 1:
    N[foo[Pi, x]]
    ```
 3. `cd tests/build && cmake .. && make && ./numeric_tests` — all pass.
-4. `valgrind --leak-check=full ./picocas <<< 'N[Sin[Pi/4] + Cos[Pi/3]]; Quit[]'`
+4. `valgrind --leak-check=full ./Mathilda <<< 'N[Sin[Pi/4] + Cos[Pi/3]]; Quit[]'`
    — zero leaks (the "definitely lost" and "indirectly lost" sections
    must both be zero).
 

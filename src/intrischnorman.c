@@ -15,7 +15,7 @@
  *   Phase 5: log-candidate sum + getSpecial + K=I retry.
  *   Phase 6: dispatcher polish + post-hoc verification.
  *
- * Memory contract: every public BuiltinFunc follows the picocas
+ * Memory contract: every public BuiltinFunc follows the Mathilda
  * convention — the caller (evaluator) owns `res`; the function
  * returns a freshly-allocated Expr* on success or NULL on failure.
  * Internal static helpers take borrowed input and return owned
@@ -537,7 +537,7 @@ static Expr* pythagorean_rewrite(Expr* f) {
 }
 
 /* Decot: post-eval walk that rewrites Cot[u] back to Tan[u]^(-1)
- * (and Coth[u] to Tanh[u]^(-1)).  Picocas's evaluator collapses
+ * (and Coth[u] to Tanh[u]^(-1)).  Mathilda's evaluator collapses
  * Power[Tan[u], -1] to Cot[u], which would break pmint's field-
  * generator invariant (the collected indet set should contain
  * Tan[u] as a single atom; Cot[u] is algebraically dependent and
@@ -790,7 +790,7 @@ static bool elist_add_unique(ExprList* el, Expr* e) {
  *
  * Sin, Cos, Sec, Csc and their hyperbolic siblings are nominally
  * eliminated by convert_to_tan (rewritten to half-angle Tan / Tanh
- * rationals), but picocas's evaluator may rationalise them back to
+ * rationals), but Mathilda's evaluator may rationalise them back to
  * Cot / Sec / Csc / ... forms when 1/Tan collapses.  We still
  * collect them so PMCollectIndets is robust to either form.  pmint's
  * downstream linear-system stage will fail gracefully (return NULL)
@@ -1137,7 +1137,7 @@ static Expr* eval_coefficient(Expr* p, Expr* x, int64_t deg) {
     return eval_and_free(call);
 }
 
-/* Evaluate the degree of p in x.  picocas doesn't ship `Exponent`; we
+/* Evaluate the degree of p in x.  Mathilda doesn't ship `Exponent`; we
  * compute it as Length[CoefficientList[p, x]] - 1.  Returns 0 when p
  * is free of x or constant.  Consumes p and x. */
 static int64_t eval_degree(Expr* p, Expr* x) {
@@ -1850,7 +1850,7 @@ static void coeff_cb(const int64_t* exp_vec, size_t nv,
 /* every matrix entry is an Integer / BigInt / Rational[int, int].      */
 /*                                                                      */
 /* The slow path packs each entry as an Expr*, builds a List[List[]],   */
-/* and routes the elimination through picocas's symbolic RowReduce.     */
+/* and routes the elimination through Mathilda's symbolic RowReduce.     */
 /* Each scalar op there walks evaluate_step → builtin_times →           */
 /* multiply_numbers → bigint_normalize → 2 mallocs + 1 free.  Profiling */
 /* (tasks/profile_rischnorman.md) shows that path consuming ~71 % of   */
@@ -1872,7 +1872,7 @@ static void coeff_cb(const int64_t* exp_vec, size_t nv,
 /*      Expr — free unknowns are pinned to 0, per pmint convention.   */
 /*                                                                      */
 /* Output values are emitted as Integer when they fit int64 and        */
-/* BigInt (or Rational with bignum components) otherwise — picocas's   */
+/* BigInt (or Rational with bignum components) otherwise — Mathilda's   */
 /* canonical numeric form.                                              */
 /* ------------------------------------------------------------------ */
 
@@ -1902,7 +1902,7 @@ static void entry_to_mpq(const Expr* e, mpq_t out) {
     mpz_set(mpq_denref(out), d);
     mpz_clear(n);
     mpz_clear(d);
-    /* The input Rational[] is normally already canonical (picocas
+    /* The input Rational[] is normally already canonical (Mathilda
      * canonicalises Rational on construction), but Coefficient /
      * Expand can leave un-reduced denominators in pathological cases.
      * Canonicalise to be safe — cheap when already canonical. */
@@ -1919,7 +1919,7 @@ static Expr* mpz_to_expr_int_or_bigint(const mpz_t z) {
     return expr_new_bigint_from_mpz(z);
 }
 
-/* Convert mpq_t to canonical picocas numeric Expr:
+/* Convert mpq_t to canonical Mathilda numeric Expr:
  *   denominator==1            → Integer or BigInt
  *   denominator!=1            → Rational[num, den] with each component
  *                               normalised to Integer/BigInt.
@@ -2821,7 +2821,7 @@ static int solve_linear_undet(Expr* equation_numer,
 /* ------------------------------------------------------------------ */
 
 /* Factor `p` into irreducible factors.  When `over_Qi` is non-zero,
- * use picocas's `Factor[p, Extension -> I]` (Trager algebraic
+ * use Mathilda's `Factor[p, Extension -> I]` (Trager algebraic
  * factoring); otherwise just `Factor[p]` over Z.
  *
  * Writes a newly-allocated array of owned Expr* factors into
@@ -3603,7 +3603,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
             }
             Expr* combined = eval_together(rewritten);
 
-            /* Fresh-symbol PolynomialGCD reduction.  picocas's Cancel
+            /* Fresh-symbol PolynomialGCD reduction.  Mathilda's Cancel
              * treats Cos[x] / Sin[x] / E^x as opaque transcendental
              * atoms, so common factors like (1 + Cos[x]) between
              * numerator and denominator don't simplify.  We substitute
@@ -3644,7 +3644,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
             }
 
             /* If the top-level head is Plus, Cancel each summand
-             * separately — picocas's Cancel is more effective on
+             * separately — Mathilda's Cancel is more effective on
              * simpler subexpressions than on a single Together'd
              * fraction with multiple variables. */
             if (combined && combined->type == EXPR_FUNCTION
@@ -3660,7 +3660,7 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
                 expr_free(combined);
                 result = expr_new_function(head_copy, new_args, k);
                 free(new_args);
-                /* Evaluate once more so picocas re-canonicalises the Plus. */
+                /* Evaluate once more so Mathilda re-canonicalises the Plus. */
                 result = eval_and_free(result);
             } else {
                 result = eval_cancel(combined);

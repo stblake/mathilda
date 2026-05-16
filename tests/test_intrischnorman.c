@@ -149,7 +149,7 @@ static void assert_rischnorman_correct_trigexpand(const char* integrand) {
 
 /* Numerical correctness check for integrands where the symbolic
  * simplifier (Together / Cancel) can't collapse the residual — typically
- * because picocas's Together doesn't factor through transcendental
+ * because Mathilda's Together doesn't factor through transcendental
  * generators (e.g. it treats `x^2 Log[x] - x E^(1+x+x^2)` as opaque
  * rather than `x*(x Log[x] - E^(1+x+x^2))`).
  *
@@ -163,7 +163,7 @@ static void assert_rischnorman_correct_numeric(const char* integrand) {
     char buf[3072];
     /* Compute the integral once, then evaluate the residual at each probe.
      * Accept Real residuals with |.| < 1e-9 OR Complex residuals where both
-     * components are < 1e-9 — picocas's D often produces a Complex form
+     * components are < 1e-9 — Mathilda's D often produces a Complex form
      * with a tiny imaginary part when Sec/Csc are involved. */
     for (size_t i = 0; i < sizeof(probes) / sizeof(probes[0]); ++i) {
         snprintf(buf, sizeof(buf),
@@ -288,7 +288,7 @@ static void test_phase2_convert_sec(void) {
 }
 
 static void test_phase2_convert_csc(void) {
-    /* Csc[u] = (1+T^2)/(2T) — picocas's evaluator collapses 1/T to Cot,
+    /* Csc[u] = (1+T^2)/(2T) — Mathilda's evaluator collapses 1/T to Cot,
      * yielding the equivalent Cot form.  Algebraically the same; pmint
      * uses the decot'd internal tree, so this REPL-visible form is OK. */
     run_eq("Integrate`Helpers`PMConvertToTan[Csc[x], x]",
@@ -296,7 +296,7 @@ static void test_phase2_convert_csc(void) {
 }
 
 static void test_phase2_convert_cot(void) {
-    /* Cot[u] = (1 - T^2) / (2T),  T = Tan[u/2].  Picocas re-collapses
+    /* Cot[u] = (1 - T^2) / (2T),  T = Tan[u/2].  Mathilda re-collapses
      * the 1/T factor to Cot[u/2]; the externally visible form is the
      * algebraically equivalent 1/2 Cot[1/2 x] (1 - Tan[1/2 x]^2). */
     run_eq("Integrate`Helpers`PMConvertToTan[Cot[x], x]",
@@ -524,7 +524,7 @@ static void test_phase4_cos_exp(void)  { assert_rischnorman_correct("Cos[x] Exp[
 /* Source: the canonical Pmint test list from Bronstein's Risch-Norman */
 /* paper plus the Davenport/Geddes textbook examples.  All integrals   */
 /* admit an elementary closed form; some residuals require the          */
-/* numerical-fallback predicate because picocas's Together can't       */
+/* numerical-fallback predicate because Mathilda's Together can't       */
 /* factor through transcendental generators.                            */
 /* ------------------------------------------------------------------ */
 
@@ -629,13 +629,13 @@ static void test_phase7_sin_sin_2x(void) {
 }
 
 /* --- 7f: integrals that pmint integrates correctly but whose         */
-/* residual picocas's Together can't collapse symbolically (because    */
+/* residual Mathilda's Together can't collapse symbolically (because    */
 /* it doesn't factor through transcendental generators).  Verified    */
 /* numerically instead. ------------------------------------------------ */
 static void test_phase7_num_quadratic_exp(void) {
     /* Result: -Log[x] + Log[-E^(1+x+x^2) + x Log[x]].
      * The residual contains denominators x, (x L - E), and
-     * (x^2 L - x E) = x (x L - E), but picocas's Together treats the
+     * (x^2 L - x E) = x (x L - E), but Mathilda's Together treats the
      * third denominator as opaque and fails to see the common factor. */
     assert_rischnorman_correct_numeric(
         "(x + Exp[x^2 + x + 1] (1 - x - 2 x^2))"

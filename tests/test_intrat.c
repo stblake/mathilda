@@ -652,7 +652,7 @@ static void test_closed_nth_root_sextic_plus(void) {
 
 static void test_closed_nth_root_octic_plus(void) {
     /* 1/(b + a x^8) — n=8 even, q < 0: no real roots, four
-     * conjugate pairs.  Cos[Pi/8] doesn't auto-reduce in picocas
+     * conjugate pairs.  Cos[Pi/8] doesn't auto-reduce in Mathilda
      * (held), but the result is still real-elementary. */
     assert_closed_real("1/(b + a x^8)");
     assert_integral_numeric_ok("1/(b + a x^8)",

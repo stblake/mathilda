@@ -187,7 +187,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
  *   f[a, b] /; c1 /; c2
  * becomes
  *   Condition[f[a, b], Condition[c1, c2]]
- * with the guard being `Condition[c1, c2]`.  Picocas's `Condition`
+ * with the guard being `Condition[c1, c2]`.  Mathilda's `Condition`
  * head has no evaluator rule that collapses `Condition[True, True]`
  * to `True` (it's primarily a pattern wrapper), so a naive "evaluate
  * and check `result == True`" gives False here.  We treat any chain

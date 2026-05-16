@@ -14,7 +14,7 @@
  * SubtractFrom and their parser aliases ++, --, +=, -=.
  *
  * Each REPL transcript from the feature request is translated into a test.
- * Because PicoCAS tests run in a shared symbol table, each test clears the
+ * Because Mathilda tests run in a shared symbol table, each test clears the
  * symbols it touches at entry to make the assertions independent.
  */
 

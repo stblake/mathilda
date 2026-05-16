@@ -19,8 +19,8 @@
  * (Phase G in FACTOR_PLAN.md §14). Phase G2 builds Q(α)[x] on top of
  * it; Phase G3 computes norms via Resultant_y(P_α, f). */
 
-#ifndef PICOCAS_QA_H
-#define PICOCAS_QA_H
+#ifndef MATHILDA_QA_H
+#define MATHILDA_QA_H
 
 #include <stddef.h>
 #include <stdbool.h>

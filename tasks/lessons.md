@@ -2,7 +2,7 @@
 
 ## simp_factorial (2026-05-07)
 
-### picocas's Factor changes behaviour inside Simplify
+### Mathilda's Factor changes behaviour inside Simplify
 
 `builtin_factor` at `src/facpoly.c:2896` checks
 `bool inside_simplify = (factor_memo_top() != NULL);` and uses a
@@ -19,10 +19,10 @@ memo is active.
 
 This is now documented in the `simp_factorial` source comments.
 
-### picocas does NOT auto-coalesce `Power[a,-1] * Power[b,-1]`
+### Mathilda does NOT auto-coalesce `Power[a,-1] * Power[b,-1]`
 
 Mathematica's evaluator combines `Times[Power[a, -1], Power[b, -1]]`
-into `Power[Times[a, b], -1]`; picocas's evaluator does not. The
+into `Power[Times[a, b], -1]`; Mathilda's evaluator does not. The
 un-coalesced form scores higher under SimplifyCount than the
 coalesced form (count 12 vs 9 on `1/(n*(n-1))`), so a factorial
 rewrite that lands at a Times-of-inverses can lose the round-loop
@@ -36,7 +36,7 @@ negative exponents.
 
 ### `Together` expands polynomial denominators
 
-picocas's `Together` returns `n/(Factorial[n] + n*Factorial[n])`, NOT
+Mathilda's `Together` returns `n/(Factorial[n] + n*Factorial[n])`, NOT
 `n/(Factorial[n]*(n+1))`. The factored form has to be recovered via
 a follow-up `Factor` (with the memo workaround above).
 
@@ -196,7 +196,7 @@ choose what to do.
 
 ## Plus auto-distribute `Times[-1, Plus[…]]` (2026-05-10)
 
-picocas's Plus auto-eval groups by `(coeff, base)`. When a Plus
+Mathilda's Plus auto-eval groups by `(coeff, base)`. When a Plus
 arg is `Times[-1, Plus[A, B]]`, get_coeff_base returns
 `(-1, Plus[A, B])` — but the OTHER args have bases `A`, `B`
 (distinct from `Plus[A, B]`), so no cancellation fires. The
@@ -234,7 +234,7 @@ After `intrat_integrate_summands` builds each Apart piece's integral
 as `c_k · piece_int_k` (with `c_k` the constant from
 `extractConstants`), the result accumulates as
 `Plus[Log[x], Times[2, Plus[1/4 ArcTan[…], -1/8 Log[…]]], …]`.
-Picocas's `Times` has `ATTR_FLAT | ATTR_ORDERLESS | …` but NO
+Mathilda's `Times` has `ATTR_FLAT | ATTR_ORDERLESS | …` but NO
 auto-distribution over `Plus`, so the literal `Times[2, Plus[…]]`
 survives all the way to print.  Mathematica's
 `IntegrateRational.m:99` calls `Collect[intlog // Expand, …, simproot]`
@@ -242,7 +242,7 @@ exactly to flatten this — we need the analogous Expand pass.
 
 Lesson: when porting a Mathematica pipeline, every `// Expand` /
 `Collect` / `// Distribute` in the source is load-bearing.  Don't
-assume picocas's evaluator does the equivalent — it doesn't.  The
+assume Mathilda's evaluator does the equivalent — it doesn't.  The
 two cheap post-passes (`expr_expand` to distribute Times-over-Plus,
 plus a Log-arg constant-stripper for `Log[c · p] -> Log[p]`) want to
 run both BEFORE and AFTER `intrat_log_to_arctanh` so the log-pairing

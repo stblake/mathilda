@@ -7,7 +7,7 @@
    are stored on the short name IntegrateTable for readability — the
    public wrapper at the bottom of this file forwards to it.
 
-   picocas's BeginPackage/Begin parsing inside Get is incomplete (it
+   Mathilda's BeginPackage/Begin parsing inside Get is incomplete (it
    mishandles SetDelayed inside an explicit context), so we keep the
    layout flat instead of using BeginPackage.
 *)

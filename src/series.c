@@ -2,7 +2,7 @@
  * series.c - Series and SeriesData
  * ============================================================================
  *
- * This module implements the power-series machinery for PicoCAS.
+ * This module implements the power-series machinery for Mathilda.
  *
  * SeriesData[x, x0, {a0, ..., a_{k-1}}, nmin, nmax, den] is the data head
  * that represents a truncated power series. The i-th coefficient multiplies
@@ -586,7 +586,7 @@ static SeriesObj* so_inv(SeriesObj* a_in) {
     /* Expression-growth guardrail for series inversion with purely symbolic
      * coefficients (e.g. polynomials in Log[2], Log[3] arising from
      * 1/(2^x - 3^x)). Each iteration of the b[k] recurrence multiplies
-     * growing expressions, and since PicoCAS's evaluator does not fully
+     * growing expressions, and since Mathilda's evaluator does not fully
      * canonicalise polynomials in independent symbolic constants, the
      * compute time per iteration can grow super-linearly. To keep Series
      * responsive, we cap N at a limit calibrated from the total input
@@ -653,7 +653,7 @@ static SeriesObj* so_inv(SeriesObj* a_in) {
          * of all non-zero product contributions and simp() it exactly once.
          * Reasons:
          *   1. Each term simp() call evaluates the partial sum plus a new
-         *      product; because PicoCAS's evaluator doesn't fully canonicalize
+         *      product; because Mathilda's evaluator doesn't fully canonicalize
          *      polynomials in symbolic constants (e.g. Log[2], Log[3]), the
          *      inner-loop simp() can blow up to O(k^2) or worse in time.
          *   2. A single end-of-loop simp() lets Plus/Times flattening and
@@ -2085,7 +2085,7 @@ static Expr* try_apart_preprocess(Expr* f, Expr* x) {
     if (!all_negative_powers_polynomial(f, x)) return NULL;
     /* Also refuse when any `Power[base, symbolic_exp]` with x in base has
      * a non-integer, non-rational exponent (e.g. x^a). Apart collapses
-     * such inputs to 0 in picocas; better to skip preprocessing. */
+     * such inputs to 0 in Mathilda; better to skip preprocessing. */
     if (has_non_rational_power_in(f, x)) return NULL;
     Expr* args[2] = { expr_copy(f), expr_copy(x) };
     Expr* call = expr_new_function(mk_symbol("Apart"), args, 2);

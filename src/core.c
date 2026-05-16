@@ -1556,7 +1556,7 @@ Expr* builtin_quotientremainder(Expr* res) {
  * Returns a String containing the printed representation of expr.  The
  * optional second argument selects a form: InputForm (the default),
  * FullForm, or TeXForm.  StandardForm and OutputForm are accepted as
- * aliases for InputForm because PicoCAS does not distinguish them when
+ * aliases for InputForm because Mathilda does not distinguish them when
  * rendering to a flat string.
  *
  * Returns NULL (leaving the call unevaluated) when the form is not one
@@ -1605,7 +1605,7 @@ Expr* builtin_tostring(Expr* res) {
  * Parses input (a string) and returns the resulting expression for the
  * evaluator to further reduce.  The optional `form` argument may be
  * InputForm, FullForm, or StandardForm — all currently route through the
- * same PicoCAS parser because the parser is form-agnostic.  When the
+ * same Mathilda parser because the parser is form-agnostic.  When the
  * three-argument form is used, the head h is wrapped around the parsed
  * expression before it is handed back; common use cases include
  * Hold (to delay evaluation) and HoldComplete.
@@ -1718,7 +1718,7 @@ Expr* builtin_symbol(Expr* res) {
  *      CPU-time budget is exhausted, the handler siglongjmp's back
  *      here and we abort.  ITIMER_PROF counts only CPU time of this
  *      process, matching the Mathematica semantic ("CPU time spent
- *      inside the main PicoCAS kernel process").  SIGPROF is used
+ *      inside the main Mathilda kernel process").  SIGPROF is used
  *      (not SIGALRM) so the intrischnorman pmint timeout -- which is
  *      wall-clock based on SIGALRM/ITIMER_REAL -- and the test-harness
  *      alarm(60) keep working.

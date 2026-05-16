@@ -43,7 +43,7 @@ static double now_seconds(void) {
 
 typedef struct {
     const char* label;        /* short tag, e.g. "p4-exp_x" */
-    const char* integrand;    /* picocas-syntax integrand   */
+    const char* integrand;    /* Mathilda-syntax integrand   */
 } BenchCase;
 
 static const BenchCase corpus[] = {

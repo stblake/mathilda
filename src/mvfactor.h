@@ -160,7 +160,7 @@ bool bpoly_hensel_lift_multi(const BPoly* P, const ZUPoly** us, int r,
  *      multifactor lift, then shift back.
  *
  * To keep the layering clean -- this module does not know about
- * picocas's facpoly.c::bz_factor_to_expr -- the caller passes a
+ * Mathilda's facpoly.c::bz_factor_to_expr -- the caller passes a
  * factoring callback that produces the univariate factors at a
  * given integer point.
  *

@@ -13,7 +13,7 @@ if [ ! -f src/external/ecm/configure.ac ]; then
         echo "build_ecm.sh: ERROR: src/external/ecm/configure.ac is missing" >&2
         echo "  and this is not a git checkout, so the submodule cannot be" >&2
         echo "  fetched automatically.  Re-clone with" >&2
-        echo "    git clone --recurse-submodules https://github.com/stblake/picocas.git" >&2
+        echo "    git clone --recurse-submodules https://github.com/stblake/Mathilda.git" >&2
         exit 1
     fi
 fi
@@ -40,9 +40,9 @@ MY_CFLAGS="-O2"
 # Force ECM's configure to skip its optional libprimesieve detection.
 # configure.ac runs an unconditional AC_CHECK_LIB(primesieve,primesieve_init);
 # on hosts where libprimesieve happens to be installed, libecm.a ends up
-# with unresolved primesieve_* references that the picocas top-level link
+# with unresolved primesieve_* references that the Mathilda top-level link
 # line doesn't satisfy (no -lprimesieve there), and the final link of
-# picocas fails inside getprime_r.o.  ECM has its own internal prime
+# Mathilda fails inside getprime_r.o.  ECM has its own internal prime
 # iterator, so we pin the autoconf cache var to "no" to make the bundled
 # build deterministic across hosts regardless of what's installed.
 PRIMESIEVE_OFF="ac_cv_lib_primesieve_primesieve_init=no"

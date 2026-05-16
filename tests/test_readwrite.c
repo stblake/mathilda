@@ -27,7 +27,7 @@
  * working directory varies, and tests may run concurrently, so we
  * compose pid + a per-test tag to avoid collisions. */
 static void scratch_path(char* out, size_t cap, const char* tag) {
-    snprintf(out, cap, "/tmp/picocas_rw_%d_%s.txt", (int)getpid(), tag);
+    snprintf(out, cap, "/tmp/Mathilda_rw_%d_%s.txt", (int)getpid(), tag);
     unlink(out);  /* ignore errors — file may not exist */
 }
 

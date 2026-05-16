@@ -1,11 +1,11 @@
-# Limits in PicoCAS
+# Limits in Mathilda
 
 ## 0. Scope and Goals
 
-PicoCAS needs a `Limit` built-in that matches Mathematica's user-facing
+Mathilda needs a `Limit` built-in that matches Mathematica's user-facing
 semantics while borrowing the proven algorithmic pipeline from MACSYMA's
 `DELIMITER` and Maxima's modern `limit.lisp`. The implementation must be
-a native C module consistent with PicoCAS's expression model, memory
+a native C module consistent with Mathilda's expression model, memory
 ownership rules, and evaluation pipeline (see `SPEC.md`).
 
 ### 0.1 User-facing Interface
@@ -77,7 +77,7 @@ mathematical concepts of infinity, boundedness, and directionality.
 
 ### 1.1 Existing Infrastructure to Leverage
 
-The following PicoCAS facilities already exist and should be used by
+The following Mathilda facilities already exist and should be used by
 the limit evaluator rather than reimplemented:
 
 * `D` / `Derivative` (native C, per recent commit `8081f55`) — L'Hospital.
@@ -97,7 +97,7 @@ The main entry point is a C function mirroring the signature
 Expr* builtin_limit(Expr* res);
 ```
 
-which conforms to PicoCAS's built-in contract (ownership of `res`, `NULL`
+which conforms to Mathilda's built-in contract (ownership of `res`, `NULL`
 to leave unevaluated, else a freshly allocated result). Internally it
 routes through the six layers below. Each layer either returns a result
 (short-circuiting the rest) or passes control down.
@@ -146,7 +146,7 @@ Cheap structural checks that resolve the majority of trivial cases.
 
 Most of the classical DELIMITER test cases — `(Cos[x]-1)/(Exp[x^2]-1)`,
 `(1+A x)^(1/x)`, `(Tan[x]-x)/x^3`, etc. — are solved most robustly by
-Taylor / Laurent / Puiseux series. PicoCAS already has `Series`, so we
+Taylor / Laurent / Puiseux series. Mathilda already has `Series`, so we
 elevate series expansion above L'Hospital in the dispatch order. This
 avoids the L'Hospital stack-blow guardrails entirely for most cases.
 
@@ -259,7 +259,7 @@ This layer justifies e.g. `Limit[Sin[1/x], x->0] = Interval[{-1, 1}]`.
 
 * **Module location:** `src/limit.c` / `src/limit.h`, initialized from
   `core.c` via a new `limit_init()` call, following the standard
-  PicoCAS module pattern.
+  Mathilda module pattern.
 * **Attributes:** `Limit` should be `ATTR_PROTECTED`. It should
   *probably not* be `ATTR_HOLDALL` — the first argument (the function
   expression) should be evaluated normally — but the rule `x -> a` must
@@ -386,4 +386,4 @@ A suggested ordering so that a useful `Limit` ships early and grows:
 6. **Milestone 6 — Layer 5a.** Multivariate and iterated forms.
 
 Each milestone ships with passing tests from the corresponding
-sections of §4 and updates to `picocas_spec.md`.
+sections of §4 and updates to `Mathilda_spec.md`.

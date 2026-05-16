@@ -46,7 +46,7 @@ static char* eval_to_fullform(const char* input) {
 
 /* Verify that Factor[input] EQUALS expected (FullForm).  Treats the
  * factor list as ordered; if your test fails on argument-ordering
- * differences, list the expected form in the order picocas's printer
+ * differences, list the expected form in the order Mathilda's printer
  * uses (Times sorts its arguments canonically). */
 static void check_factor(const char* input, const char* expected) {
     char* got = eval_to_fullform(input);
@@ -62,7 +62,7 @@ static void check_factor(const char* input, const char* expected) {
 }
 
 /* Verify that Factor[A] times Factor's product is mathematically equal
- * to A by expanding the product and comparing.  Useful when picocas's
+ * to A by expanding the product and comparing.  Useful when Mathilda's
  * canonical printout of the factored form differs from a hand-written
  * "expected" string but is still mathematically correct. */
 static void check_factor_expands_to(const char* input, const char* expected_expand) {

@@ -1,6 +1,6 @@
-# Evaluator Improvements: PicoCAS vs. Mathematica (Withoff 1992)
+# Evaluator Improvements: Mathilda vs. Mathematica (Withoff 1992)
 
-This document compares the PicoCAS evaluator against the description of
+This document compares the Mathilda evaluator against the description of
 Mathematica's internals in David Withoff's 1992 "Mathematica Internals: A
 Tutorial" (Mathematica Conference, Boston, June 1992) and proposes a
 prioritised plan of improvements.
@@ -67,7 +67,7 @@ References to Withoff use "[W §X.Y]". Source references use `file:line`.
     (`eval_init` seeds it; `apply_assignment` syncs the C-side limit on
     `$RecursionLimit = N`). Values below 20 are rejected with a
     `$RecursionLimit::limset` message.
-  - 4.4 Reclassified — picocas's existing strip-without-restore matches
+  - 4.4 Reclassified — Mathilda's existing strip-without-restore matches
     real Mathematica's observed behaviour (`h[Unevaluated[Plus[a,b]]] →
     h[a+b]`) and the existing `tests/test_unevaluated.c` already locks
     that in. Withoff §3.1's literal "restore Unevaluated" appears to be
@@ -80,7 +80,7 @@ References to Withoff use "[W §X.Y]". Source references use `file:line`.
 
 ### 1.1 Expression representation
 
-| Aspect | Withoff [§2.1] | PicoCAS (`src/expr.h`, `src/expr.c`) |
+| Aspect | Withoff [§2.1] | Mathilda (`src/expr.h`, `src/expr.c`) |
 |---|---|---|
 | Distinction raw vs. normal | Symbols, numbers, strings are *raw*; `f[x]`, `Plus[2,2]` are *normal* | Same conceptual split via `EXPR_INTEGER/REAL/STRING/SYMBOL/BIGINT` vs `EXPR_FUNCTION` |
 | Number representation | C `int`, C `double`; arbitrary-precision wraps separate types | `int64_t`, `double`, GMP `mpz_t`, optional MPFR. Consistent. |
@@ -90,7 +90,7 @@ References to Withoff use "[W §X.Y]". Source references use `file:line`.
 
 ### 1.2 Symbol table
 
-| Aspect | Withoff [§2.2] | PicoCAS (`src/symtab.h`) |
+| Aspect | Withoff [§2.2] | Mathilda (`src/symtab.h`) |
 |---|---|---|
 | Visible value classes | `OwnValues`, `DownValues`, **`SubValues`**, **`UpValues`**, **`NValues`**, **`FormatValues`**, `DefaultValues`, `Options`, `Messages`, `Attributes` | `own_values`, `down_values`, `attributes`, `docstring`. Everything else is missing. |
 | Internal "code" | Internal counterparts of each value class: `down code`, `up code`, `sub code`, `num code`, `format code` (built-ins) | Single `BuiltinFunc builtin_func` slot — equivalent to `down code` only. There is no `up code`, `sub code`, `num code`, or `format code` table. |
@@ -101,10 +101,10 @@ References to Withoff use "[W §X.Y]". Source references use `file:line`.
 
 ### 1.3 Evaluator
 
-Withoff's algorithm [§3.1] is reproduced here next to the PicoCAS step
+Withoff's algorithm [§3.1] is reproduced here next to the Mathilda step
 (`src/eval.c:331-582`):
 
-| # | Withoff step | PicoCAS implementation | Notes |
+| # | Withoff step | Mathilda implementation | Notes |
 |---|---|---|---|
 | 1 | If string/number, return self | ✅ `evaluate_step` switch on `EXPR_INTEGER/REAL/STRING/BIGINT/MPFR` | OK |
 | 2 | Symbol with no `OwnValues` returns self | ✅ `apply_own_values` returns NULL → fall through to `expr_copy(e)` | OK |
@@ -116,12 +116,12 @@ Withoff's algorithm [§3.1] is reproduced here next to the PicoCAS step
 | 8 | If `eᵢ` has head `Unevaluated`, replace with its arguments and **keep a record** of the original | ⚠ Strips `Unevaluated` only in *non-held* positions, no record kept. (`src/eval.c:419-434`) | Diverges from spec; restoration step (#16) cannot work without this record. |
 | 9 | `Flat`: flatten nested same-head | ✅ `eval_flatten_args` | But ordering is **after** Listable, not before — see #11. |
 | 10 | Flatten `Sequence` heads | ✅ `flatten_sequences`, with explicit skip-list for Set/SetDelayed/Rule/RuleDelayed | OK, but skip-list approach is fragile. |
-| 11 | `Listable`: thread over list args | ✅ `apply_listable` | **Order bug:** PicoCAS runs Listable *before* Flat (`src/eval.c:438-457`). Withoff's order is Flat → Sequence → Listable → Orderless. |
+| 11 | `Listable`: thread over list args | ✅ `apply_listable` | **Order bug:** Mathilda runs Listable *before* Flat (`src/eval.c:438-457`). Withoff's order is Flat → Sequence → Listable → Orderless. |
 | 12 | `Orderless`: sort `eᵢ` | ✅ `qsort` on `eval_compare_expr_ptrs` | OK |
 | 13 | Apply user-defined `UpValues` of symbolic heads of `eᵢ` | ❌ **Not implemented — intentional.** See §4. |
 | 14 | Apply internal `UpValues` (up code) | ❌ **Not implemented — intentional.** See §4. |
 | 15 | Apply user `DownValues` if head is symbol; else user `SubValues` of symbolic head | ⚠ Only `DownValues` for symbolic head. **No `SubValues` path** for `f[1][x]` — intentional, see §4. Pure-function application of a `Function[...]` head is special-cased separately (`src/eval.c:552-560`). |
-| 16 | Apply internal `DownValues` (down code), or sub code if head is not a symbol | ⚠ Built-ins are run *before* user `DownValues`, not after (`src/eval.c:460-467` vs. `:540-544`). Withoff's order is **user rules first**, then internal. PicoCAS inverts this. |
+| 16 | Apply internal `DownValues` (down code), or sub code if head is not a symbol | ⚠ Built-ins are run *before* user `DownValues`, not after (`src/eval.c:460-467` vs. `:540-544`). Withoff's order is **user rules first**, then internal. Mathilda inverts this. |
 | 17 | Restore the head `Unevaluated` if no rules found | ❌ **Missing.** | Required by spec; ties in with #8. |
 | 18 | Discard the head `Return` from results of user rules | ❌ **Missing.** No `Return[x]` semantics; `Return` is just an unknown symbol. | |
 
@@ -131,7 +131,7 @@ Withoff: *"If the expression changes at any point, the process usually
 starts again from the beginning with the new expression."* In other words,
 restart eagerly the moment a rule fires, and on the *changed sub-expression*.
 
-PicoCAS (`src/eval.c:590-614`):
+Mathilda (`src/eval.c:590-614`):
 
 ```c
 while (iterations < MAX_ITERATIONS) {
@@ -155,7 +155,7 @@ Two issues:
   user `DownValues` (`src/eval.c:365-373`). Mathematica only suppresses
   argument evaluation, `Sequence` flattening, and `Unevaluated` stripping
   for `HoldAllComplete`; rules attached to the head still apply. The
-  PicoCAS branch returns immediately and skips builtin/DownValue dispatch.
+  Mathilda branch returns immediately and skips builtin/DownValue dispatch.
 - **`OneIdentity` is applied universally** for one-arg calls
   (`src/eval.c:547-551`). In Mathematica `OneIdentity` only affects
   *pattern matching*, not evaluation. Applying it as an evaluation rewrite
@@ -564,7 +564,7 @@ budget.
   (added interned `SYM_Do`, `SYM_For`, `SYM_While` so the boundary
   classifier can do pointer-equality checks), `tests/test_return.c`
   (new 36-test binary; 88th test target overall), `tests/CMakeLists.txt`
-  (registered `return_tests`), `picocas_spec.md` (new Return entry under
+  (registered `return_tests`), `Mathilda_spec.md` (new Return entry under
   Control Flow with examples).
 - Mechanism: a single `eval_classify_return(e, boundary_head, &out)`
   helper inspects `e` once and returns `EVAL_RETURN_NONE` (not a Return
@@ -599,13 +599,13 @@ budget.
 - Out of scope (intentional): Return that aborts evaluation of an
   enclosing Plus/Times/etc. argument list mid-step. Mathematica's spec
   ("takes effect as soon as it is evaluated, even if it appears inside
-  other functions") would require a longjmp-style unwind that PicoCAS
+  other functions") would require a longjmp-style unwind that Mathilda
   doesn't implement; in practice the common usage patterns
   (`If[..., Return[x]]`, `Module[{...}, Return[x]]`, loop bodies) are
   all covered.
 
 **4.4 Track and restore `Unevaluated`** — Withoff [§3.1] ⚠️ NO-OP
-- On closer inspection, picocas's strip-without-restore behaviour matches
+- On closer inspection, Mathilda's strip-without-restore behaviour matches
   what real Mathematica does at the user-visible level
   (`h[Unevaluated[Plus[a,b]]] → h[a+b]`), and `tests/test_unevaluated.c`
   already locks this in. Withoff §3.1's literal "restore Unevaluated"
@@ -673,15 +673,15 @@ budget.
   multi-line input mode (the spec describes "typically applied"
   per-line; we apply it once to the assembled input). `$SyntaxHandler`
   integration (the spec mentions `$PreRead` is applied to strings
-  returned by `$SyntaxHandler` — picocas has no `$SyntaxHandler`
-  today). `InString[n]` storage of the post-`$PreRead` text — picocas
+  returned by `$SyntaxHandler` — Mathilda has no `$SyntaxHandler`
+  today). `InString[n]` storage of the post-`$PreRead` text — Mathilda
   has no `InString` mechanism. These can be added incrementally
   without disturbing the hook helpers.
 
 **4.6 Migrate diagnostic output to the streams model**
 - Files: `src/eval.c`, `src/repl.c`, every module that calls
   `fprintf(stderr, ...)`.
-- Introduce thin `picocas_message(stream, fmt, ...)` to land all
+- Introduce thin `Mathilda_message(stream, fmt, ...)` to land all
   diagnostics in `$Messages` (and later `$MessageList`).
 
 ---
@@ -722,11 +722,11 @@ These appear in Withoff but are deliberately not part of this plan:
 - **`UpValues` and `SubValues`** (Withoff §2.2, §3.1 steps 13–15) — the
   dispatch semantics they enable (`f /: g[f[x_]] := ...`, `f[x_][y_] :=
   ...`) are intentionally excluded. They make evaluation order harder
-  to reason about and are not a target for PicoCAS.
-- Notebook front-end and `MathLink` (Withoff §1, §4) — PicoCAS targets a
+  to reason about and are not a target for Mathilda.
+- Notebook front-end and `MathLink` (Withoff §1, §4) — Mathilda targets a
   text REPL.
 - `Dump` for snapshotting kernel state (Withoff §1.3) — a substantial
-  feature with limited value at PicoCAS's current size.
+  feature with limited value at Mathilda's current size.
 - Package autoloading via `AutoLoad` / `SystemStub` (Withoff §1.2) —
   premature; revisit if startup time becomes an issue.
 

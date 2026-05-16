@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(picocas_tests)
+project(Mathilda_tests)
 
 option(USE_ECM "Use ECM library for factorisation" ON)
 option(USE_MPFR "Use MPFR for arbitrary-precision reals (N[expr, prec])" ON)

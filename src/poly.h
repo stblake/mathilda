@@ -5,7 +5,7 @@
 
 /* ------------------------------------------------------------------ */
 /* Public built-in entry points (called by the evaluator).            */
-/* Each follows the picocas convention: caller owns `res` (input) and */
+/* Each follows the Mathilda convention: caller owns `res` (input) and */
 /* the builtin returns either NULL (could not evaluate -- res stays   */
 /* unchanged) or a freshly allocated Expr* that the caller must free. */
 /* ------------------------------------------------------------------ */

@@ -1,7 +1,7 @@
 /* qafactor.h — Trager algebraic-factoring helpers (Phase G).
  *
  * This module sits on top of qa.{c,h} (Q(α) elements) and qaupoly.{c,h}
- * (Q(α)[x] polynomials) and connects them to picocas's existing
+ * (Q(α)[x] polynomials) and connects them to Mathilda's existing
  * polynomial machinery (Resultant, Factor, ZUPoly).
  *
  * Phase G3 — Norm via resultant.
@@ -17,14 +17,14 @@
  *   foundation of Trager's algorithm.
  *
  * Implementation strategy.  Rather than reinvent multivariate
- * resultants we serialise the QAUPoly to a picocas Expr (a polynomial
+ * resultants we serialise the QAUPoly to a Mathilda Expr (a polynomial
  * in two free symbols, x_name and y_name) and call the existing
  * `internal_resultant`, which dispatches to the Sylvester-matrix
  * routine in poly.c.  The result comes back as a univariate Expr in
  * x_name, expanded into canonical form. */
 
-#ifndef PICOCAS_QAFACTOR_H
-#define PICOCAS_QAFACTOR_H
+#ifndef MATHILDA_QAFACTOR_H
+#define MATHILDA_QAFACTOR_H
 
 #include <stdbool.h>
 
@@ -33,11 +33,11 @@
 
 struct Expr;
 
-/* Build P_α(y) as a picocas Expr (a polynomial in `y_name`).
+/* Build P_α(y) as a Mathilda Expr (a polynomial in `y_name`).
  * Caller owns the returned Expr. */
 struct Expr* qaext_to_expr(const QAExt* ext, const char* y_name);
 
-/* Build f(x, α) → g(x, y) ∈ Q[x, y] as a picocas Expr by textual
+/* Build f(x, α) → g(x, y) ∈ Q[x, y] as a Mathilda Expr by textual
  * substitution α → y.  The result is a polynomial in two free
  * symbols `x_name` and `y_name`.  Caller owns the returned Expr. */
 struct Expr* qaupoly_to_expr(const QAUPoly* f,
@@ -48,8 +48,8 @@ struct Expr* qaupoly_to_expr(const QAUPoly* f,
  *
  *     N(f)(x) = Resultant_y(P_α(y), g(x, y))   ∈ Q[x]
  *
- * via picocas's own Resultant builtin.  The result is returned as a
- * picocas Expr (a univariate polynomial in `x_name`, post-Expand).
+ * via Mathilda's own Resultant builtin.  The result is returned as a
+ * Mathilda Expr (a univariate polynomial in `x_name`, post-Expand).
  * Returns NULL if f is the zero polynomial.  Caller owns the returned
  * Expr. */
 struct Expr* qaupoly_norm(const QAUPoly* f,
@@ -131,7 +131,7 @@ QAUPoly** qa_alg_factor(const QAUPoly* f,
 QAExt* qa_resolve_extension(const struct Expr* alpha_expr,
                             struct Expr** render_out);
 
-/* Render a QAUPoly over Q(α) as a picocas Expr in `x_name` and
+/* Render a QAUPoly over Q(α) as a Mathilda Expr in `x_name` and
  * `alpha_render` (the surface form for α, e.g. Sqrt[2]).  The result
  * is post-evaluated so that `Sqrt[c]^k` collapses to its canonical
  * form. */
@@ -153,7 +153,7 @@ QAUPoly* qa_expr_to_qaupoly(const struct Expr* poly,
                             const struct Expr* alpha_render,
                             const QAExt* ext);
 
-/* Public picocas-level wrapper: factor `poly` ∈ Q(α)[x] over Q(α),
+/* Public Mathilda-level wrapper: factor `poly` ∈ Q(α)[x] over Q(α),
  * where `alpha_expr` selects the extension (per qa_resolve_extension)
  * and `var` is the polynomial indeterminate.
  *
@@ -206,7 +206,7 @@ typedef struct QATower {
 QATower* qa_resolve_extension_tower(struct Expr* const* alpha_exprs, int n);
 void     qa_tower_free(QATower* t);
 
-/* Public picocas-level wrapper for towers.  Parallel to
+/* Public Mathilda-level wrapper for towers.  Parallel to
  * qa_factor_with_extension but accepts a list of α-generators
  * (`alpha_exprs[0..n_alphas-1]`).  For n_alphas == 1 this is exactly
  * qa_factor_with_extension; for n_alphas ≥ 2 it builds the compositum

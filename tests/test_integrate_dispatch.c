@@ -13,7 +13,7 @@
  *
  * What we deliberately DO NOT test here:
  *  - Numerical correctness of every CRC formula.  Most rules don't
- *    fire today because picocas's matcher does not fully support
+ *    fire today because Mathilda's matcher does not fully support
  *    /;-guarded multi-arg patterns (a separate work item); the
  *    cascade is in place for when that lands.
  *  - End-to-end Risch correctness (covered by intrischnorman_tests).

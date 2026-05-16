@@ -62,7 +62,7 @@ void test_simplify_integer_digit_penalty(void) {
 
 void test_simplify_complexity_function_leafcount(void) {
     /* With ComplexityFunction -> LeafCount, the integer-digit penalty is
-     * dropped, so picocas may collapse 100 Log[2] into Log[bignumber].
+     * dropped, so Mathilda may collapse 100 Log[2] into Log[bignumber].
      * Verify the default vs. override discrepancy by checking the option
      * actually reaches the heuristic search: under LeafCount the answer
      * must NOT contain a multi-digit literal Log argument coefficient. */
@@ -539,7 +539,7 @@ void test_simplify_user_real_contagion_factored(void) {
      *   1./((1. + Sqrt[x]) Sqrt[x] (1. + x))
      * which expands to the equivalent expanded denominator
      *   1/(x + Sqrt[x] + x^(3/2) + x^2)
-     * Both are mathematically equal. picocas currently picks the
+     * Both are mathematically equal. Mathilda currently picks the
      * expanded form because its SimplifyCount (18) beats the factored
      * form (23) under the default complexity measure -- factoring
      * polynomials in a rational-power generator (here Sqrt[x]) and
@@ -815,7 +815,7 @@ void test_simplify_double_angle_with_factors(void) {
 }
 
 /* ---- Power-arithmetic identities (currently failing; tests document
- * the gap between picocas and Mathematica). These are filed against the
+ * the gap between Mathilda and Mathematica). These are filed against the
  * `power-arithmetic Simplify cases' work item; the assertions below
  * pin the present output so any future fix immediately surfaces here as
  * a strict test win.  When the underlying transform is implemented,
@@ -865,7 +865,7 @@ void test_simplify_exp_combine(void) {
 void test_simplify_power_of_product_two_e(void) {
     /* Exp[x] Exp[y] 2^x 2^y - (2 E)^(x+y) = 0.
      * Requires distributing (2 E)^(x+y) -> 2^(x+y) E^(x+y), which
-     * picocas doesn't do today (PowerExpand is not implemented).
+     * Mathilda doesn't do today (PowerExpand is not implemented).
      * Pinned to current output. */
     assert_eval_eq(
         "Simplify[Exp[x]*Exp[y]*2^x*2^y - (2*Exp[1])^(x+y)]",
@@ -988,7 +988,7 @@ void test_simplify_minus_one_fifth_root_alternating_sum(void) {
     /* Roots-of-unity alternating sum: 1 - (-1)^(1/5) + (-1)^(2/5) -
      * (-1)^(3/5) + (-1)^(4/5) = 0 by the identity
      *     Sum[(-1)^(k/n), {k, 0, n-1}] = 0  for odd n.
-     * Already handled by picocas's RootsOfUnity / cyclotomic reduction
+     * Already handled by Mathilda's RootsOfUnity / cyclotomic reduction
      * in the simp pipeline. */
     assert_eval_eq(
         "Simplify[1 - (-1)^(1/5) + (-1)^(2/5) - (-1)^(3/5) + (-1)^(4/5)]",

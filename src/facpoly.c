@@ -665,7 +665,7 @@ static Expr* factor_degree_one(Expr* P, Expr** vars, size_t v_count) {
 /* Recursive monomial decomposer.  Walks `e` collecting variable factors
  * (symbols, function-headed atoms like Sin[x], and Power[base, intExp]
  * nodes), accumulating an integer coefficient.  Robust to nested Times
- * (which can occur in picocas's canonical form, e.g. the parser builds
+ * (which can occur in Mathilda's canonical form, e.g. the parser builds
  *   3 a^2 b   as   Times[3, Times[Power[a,2], b]]
  * rather than the flat Times[3, Power[a,2], b]).  Anything we cannot
  * classify as "integer scalar" or "variable atom raised to integer power"
@@ -970,7 +970,7 @@ static Expr* factor_monomial_content(Expr* P) {
 /*                                                                       */
 /*  Cost: O(IRRED_TRY_POINTS * v_count) calls to bz_factor_to_expr,      */
 /*  each operating on a univariate polynomial of degree deg(P).  Each    */
-/*  factor call is fast because picocas's univariate Berlekamp-          */
+/*  factor call is fast because Mathilda's univariate Berlekamp-          */
 /*  Zassenhaus runs in milliseconds for typical inputs.  In total this   */
 /*  is far cheaper than factor_roots' O(v_count^2 * 10) trial-divisions  */
 /*  on irreducible inputs (where every division is wasted work).         */
@@ -1230,7 +1230,7 @@ static Expr* factor_roots(Expr* P, Expr** vars, size_t v_count) {
 /* ===================================================================== */
 /*  Bivariate-Hensel wiring                                              */
 /*                                                                       */
-/*  Glue between picocas's existing univariate Berlekamp-Zassenhaus     */
+/*  Glue between Mathilda's existing univariate Berlekamp-Zassenhaus     */
 /*  (bz_factor_to_expr) and the new mvfactor multivariate pipeline.      */
 /*  This is the integration point that lets `heuristic_factor` route    */
 /*  monic bivariate inputs through the Hensel lift before falling       */
@@ -1830,7 +1830,7 @@ static Expr* factor_bivariate_via_polylc_hensel(Expr* P, Expr** vars) {
                 continue;
             }
 
-            /* Shift y -> y + alpha so the lift sees α = 0.  (The picocas
+            /* Shift y -> y + alpha so the lift sees α = 0.  (The Mathilda
              * convention: bpoly_shift_y_si(P, α) returns P(x, y + α).) */
             BPoly* P_shifted = bpoly_shift_y_si(bp, alpha);
             ZUPoly** a_factors_shifted = (ZUPoly**)malloc(
@@ -2061,7 +2061,7 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
          * Plus[-3, 3 a^2, -b^2]) rather than parked as a leading
          * Times[-1, ...].  Without this Expand, the result evaluates
          * to Times[-1, ..., Plus[...]] which prints as `-(...)` and
-         * does not match the canonical form picocas previously
+         * does not match the canonical form Mathilda previously
          * produced for inputs that fall through to the lift via
          * monomial-content recursion. */
         Expr* neg_times = expr_new_function(
@@ -2679,7 +2679,7 @@ static Expr* heuristic_factor_impl(Expr* P) {
 }
 
 // Factor leverages a structural Berlekamp-Zassenhaus algorithm approach.
-// For the scope of PicoCAS and performance bounds, the Zassenhaus recombination 
+// For the scope of Mathilda and performance bounds, the Zassenhaus recombination 
 // phase is aggressively optimized utilizing exact discrete root evaluations
 // and homogeneous Binomial descent, providing exact polynomial splittings
 // over Z without generating Mignotte bound overflows.

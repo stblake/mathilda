@@ -1,8 +1,8 @@
-# PicoCAS Technical Specifications & Developer Guide
+# Mathilda Technical Specifications & Developer Guide
 
 ## 1. Introduction
 
-**PicoCAS** is a tiny, symbolic computer algebra system (CAS) written in C, heavily inspired by the core architecture and evaluation semantics of Mathematica (the Wolfram Language). 
+**Mathilda** is a tiny, symbolic computer algebra system (CAS) written in C, heavily inspired by the core architecture and evaluation semantics of Mathematica (the Wolfram Language). 
 
 This document serves as a comprehensive technical overview for new developers (or AI assistants) joining the project. It outlines the core architecture, data structures, evaluation semantics, and conventions used throughout the codebase.
 
@@ -19,7 +19,7 @@ The system is composed of several interdependent subsystems:
 
 ### 2.1. Expression Representation (`Expr`)
 
-Everything in PicoCAS is an expression, represented by the `Expr` struct. It is implemented as a tagged union.
+Everything in Mathilda is an expression, represented by the `Expr` struct. It is implemented as a tagged union.
 
 *   **Types (`ExprType`)**:
     *   `EXPR_INTEGER`: A 64-bit signed integer (`int64_t`).
@@ -48,7 +48,7 @@ The parser translates raw string input into `Expr` trees.
 
 ### 2.4. Evaluator (`eval.c`)
 
-The `evaluate(Expr* e)` function is the heart of PicoCAS. It follows Mathematica's infinite evaluation semantics: expressions are repeatedly evaluated until a fixed point is reached (the expression no longer changes).
+The `evaluate(Expr* e)` function is the heart of Mathilda. It follows Mathematica's infinite evaluation semantics: expressions are repeatedly evaluated until a fixed point is reached (the expression no longer changes).
 
 **Evaluation Sequence for Functions (`f[arg1, arg2]`):**
 1.  **Evaluate Head**: The head `f` is evaluated first.
@@ -96,7 +96,7 @@ Built-in functionality is heavily modularized:
     *   Almost all built-ins should be `ATTR_PROTECTED`.
     *   Don't forget to also add it to `builtin_attrs` array in `eval.c` so the attributes apply dynamically during recursive evaluation.
 4.  **Testing**: Add test cases to the appropriate suite in `tests/` using the `TEST(test_my_feature)` macro block. Compile and run with `make -C tests && for t in tests/*_tests; do ./$t; done`.
-5.  **Documentation**: Update `picocas_spec.md` with the new function, describing its behavior and providing sample inputs/outputs.
+5.  **Documentation**: Update `Mathilda_spec.md` with the new function, describing its behavior and providing sample inputs/outputs.
 
 ### Testing Conventions
 All tests use a centralized macro suite defined in `tests/test_utils.h`. 
@@ -107,4 +107,4 @@ All tests use a centralized macro suite defined in `tests/test_utils.h`.
 ## 5. Coding Standards
 *   **C Standard**: C99.
 *   **Memory Safety**: Always be vigilant about memory ownership. Unfreed intermediate evaluations represent leaks. Avoid double-frees by carefully tracing `expr_copy()` usage.
-*   **Documentation**: Keep `picocas_spec.md` perfectly in sync with the current system capabilities.
+*   **Documentation**: Keep `Mathilda_spec.md` perfectly in sync with the current system capabilities.

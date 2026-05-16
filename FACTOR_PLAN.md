@@ -1,6 +1,6 @@
-# PicoCAS Factoring Pipeline — Status and Plan
+# Mathilda Factoring Pipeline — Status and Plan
 
-This document covers the polynomial factoring subsystem of picocas:
+This document covers the polynomial factoring subsystem of Mathilda:
 its current architecture, the recent improvements that landed, and
 the remaining work to bring multivariate factoring up to par with
 mainstream computer algebra systems.
@@ -13,7 +13,7 @@ decisions are still open.
 
 ## 1. What this subsystem does
 
-`Factor[poly]` and `FactorSquareFree[poly]` are picocas built-ins for
+`Factor[poly]` and `FactorSquareFree[poly]` are Mathilda built-ins for
 polynomial factorisation over the integers `Z`. They underpin a broad
 slice of the system:
 
@@ -103,7 +103,7 @@ progress:
    (O(n_terms * n_vars) with no polynomial arithmetic) and was the
    missing case that caused inputs like `3 a^2 b - 3 b - b^3` to
    return unfactored. It uses `monomial_collect` (line 569), a
-   recursive walker that handles picocas's nested-`Times` canonical
+   recursive walker that handles Mathilda's nested-`Times` canonical
    form (`Times[3, Times[Power[a,2], b]]`) which the older
    `extract_monomial` helper failed to descend into.
 
@@ -153,7 +153,7 @@ type:
 - `factor_zassenhaus` (line 1805): the full Berlekamp-Zassenhaus
   pipeline (DDF -> EDF -> Hensel lift -> Zassenhaus recombination).
 - `bz_factor_to_expr` (line 2057): public wrapper, converts
-  picocas `Expr*` <-> `UPoly`, runs `factor_zassenhaus`.
+  Mathilda `Expr*` <-> `UPoly`, runs `factor_zassenhaus`.
 
 Limitations of this layer worth noting:
 - `int64_t` coefficients limit lifted moduli to roughly `10^15`.
@@ -251,7 +251,7 @@ self-contained and exhaustively unit-tested.
     `(x + a)`. (The first version of this had a subtle in-place
     iteration-direction bug that the unit tests caught — see
     `test_shift` in `test_zupoly.c`.)
-  - `expr_to_zupoly`, `zupoly_to_expr` for picocas conversion.
+  - `expr_to_zupoly`, `zupoly_to_expr` for Mathilda conversion.
 - **Tests**: 32 in `tests/test_zupoly.c`, all passing.
 
 ### 5.2 `BPoly` — bivariate Z[x, y]
@@ -279,7 +279,7 @@ self-contained and exhaustively unit-tested.
   - Truncation: `bpoly_truncate_y(p, k)` returns `p mod y^k`.
   - Substitution: `bpoly_eval_y_si` (-> ZUPoly in x),
     `bpoly_shift_y_si` (returns BPoly with y -> y+α).
-  - `expr_to_bpoly`, `bpoly_to_expr` for picocas conversion.
+  - `expr_to_bpoly`, `bpoly_to_expr` for Mathilda conversion.
 - **Tests**: 23 in `tests/test_bpoly.c`, all passing.
 
 ---
@@ -851,11 +851,11 @@ User testing of `Factor[]` against Mathematica surfaced two classes of
 input where the structured pipeline fails (returns NULL or hangs) and
 falls through to `factor_roots` -- the legacy linear-trial-division
 heuristic that catches only `(var - c)` shapes.  Mathematica completes
-these in 0.1-1 ms; picocas takes 100 ms - 6 s.
+these in 0.1-1 ms; Mathilda takes 100 ms - 6 s.
 
 The reference user-failure cases (and the gap each exposes):
 
-| Case | Picocas current | Mathematica | Gap |
+| Case | Mathilda current | Mathematica | Gap |
 |---|---|---|---|
 | `Factor[3 - 3x² + 4xy - 4x³y - 4y² + x²y² - 4xy³ + y⁴]` | **5 ms** ✓ (after the v_count==2 fast-path commit on the previous turn) | 0.15 ms | 30× — algorithmic constant factor |
 | `Factor[(zx - x² - y²)(3z + 4xy - y²)]` (expanded) | **0.33 s** ✓ (after F2 MVP, 2026-05-02; previously ~6 s returning input unchanged) | < 1 ms | algorithmic constant factor only |
@@ -981,7 +981,7 @@ The standard recipe: track A's content factorisation through the
 lift; each factor "gets back" the right share via primitive-part
 extraction at each step.  The book's reference implementation is
 ~120 lines; with our existing BPoly / ZUPoly substrate the
-picocas version is ~300 LOC, plus ~150 LOC of tests.
+Mathilda version is ~300 LOC, plus ~150 LOC of tests.
 
 **Unblocks** (Stage 3): bivariate inputs with polynomial-in-y LC,
 e.g. `(zx - x² - y²)(3z + 4xy - y²)` (every variable's LC depends
@@ -1524,7 +1524,7 @@ collapses to "irreducible".
    The reason Mathematica handles Fateman in microseconds is that
    it does not go through `P(x, alpha)`-and-lift at all: it uses
    sparse Hensel iteration directly on the bivariate, never
-   instantiating the alpha-induced coefficient explosion. Picocas
+   instantiating the alpha-induced coefficient explosion. Mathilda
    would need a sparse Z[x, y] type that stores the polynomial as
    a list of `(monomial, coefficient)` pairs and a Hensel
    iteration that operates on it directly. The MPoly type
@@ -1534,7 +1534,7 @@ collapses to "irreducible".
    "0.33 s wrong" to "1 ms right".
 
 **Recommended sequencing.** Tier 1 alone is worth landing
-immediately as a correctness fix — picocas currently lies about
+immediately as a correctness fix — Mathilda currently lies about
 Fateman being irreducible, which is worse than failing to factor
 it. Tier 2 is the natural follow-up if there are other inputs
 whose evaluation-point coefficients exceed int64 but whose true
@@ -1852,12 +1852,12 @@ coefficients.
 - Compute `R(x) = Resultant_y(P_α(y), g(x, y))` via `internal_resultant`
   (which dispatches to the existing Sylvester-matrix routine in
   `src/poly.c::resultant_internal`).  The result lands in `Q[x]`
-  directly — denominator clearing is unnecessary because picocas's
+  directly — denominator clearing is unnecessary because Mathilda's
   Resultant builtin handles `Rational[]` coefficients natively, and
   the Sylvester determinant of a `Q[x, y]` system is already in `Q[x]`.
 - The result is post-Expanded for canonical sum-of-monomials form.
 - Two helpers (`qaext_to_expr`, `qaupoly_to_expr`) lift `QAExt` /
-  `QAUPoly` into picocas Expr trees — they're exposed publicly because
+  `QAUPoly` into Mathilda Expr trees — they're exposed publicly because
   G4's `sqfr_norm` will reuse them when computing norms of shifted
   inputs `f(x − sα, α)`.
 - Tests: `tests/test_qafactor.c` (11 cases) — covers `Norm(x − √2) = x²
@@ -1877,7 +1877,7 @@ coefficients.
   `g(x) = f(x − sα) ∈ Q(α)[x]` via `qaupoly_shift`, recomputes
   `R(x) = qaupoly_norm(g) ∈ Q[x]`, and returns the first iteration for
   which `gcd(R, R')` over `Q[x]` is constant (i.e. `R` is squarefree).
-  Squarefree-detection routes through picocas's existing `D` and
+  Squarefree-detection routes through Mathilda's existing `D` and
   `PolynomialGCD` builtins via `internal_call_impl` — no new gcd
   machinery is added.  Trager's theorem 2.3 / corollary 2.5 guarantees
   termination; we cap at `QA_SQFR_NORM_MAX_TRIES = 32` shifts as a
@@ -1912,7 +1912,7 @@ coefficients.
   module grew from 158 to 378 LOC) + 270 LOC test delta (test file
   grew from 200 to 470 LOC).  All 97 test binaries pass.
 
-#### Phase G5 — picocas-level API — **Done 2026-05-07**
+#### Phase G5 — Mathilda-level API — **Done 2026-05-07**
 
 User-facing entry point: `Factor[poly, Extension -> α]` now routes
 through Trager for any `α` whose minimal polynomial we can build.
@@ -1924,8 +1924,8 @@ through Trager for any `α` whose minimal polynomial we can build.
     - `c^(1/n)` (integer c, integer n ≥ 2) → `yⁿ − c`
     - `I` / `Complex[0, 1]` → `y² + 1`
     - `Times[I, Sqrt[c]]` (the canonical form of `Sqrt[-c]` after
-      picocas's auto-evaluation) → `y² + c`
-    Picocas canonicalises `Sqrt[c]` as `Power[c, Rational[1, 2]]`,
+      Mathilda's auto-evaluation) → `y² + c`
+    Mathilda canonicalises `Sqrt[c]` as `Power[c, Rational[1, 2]]`,
     so the recogniser accepts both spellings.
   - `qa_expr_to_qaupoly_with_alpha` (static): walks an Expr
     polynomial in `var` whose coefficients may contain `alpha_render`
@@ -2000,9 +2000,9 @@ For inputs like `Factor[..., Extension -> {Sqrt[2], Sqrt[3]}]` Trager
   routes to the tower path.  Single-element lists transparently reduce
   to G5's single-α path.
 - `qaupoly_to_expr_alpha`: now calls `expr_expand` after substituting
-  γ → surface render — required because picocas's evaluator does not
+  γ → surface render — required because Mathilda's evaluator does not
   auto-distribute `(a + b)^k`, so γ^k would otherwise leak through
-  unsimplified.  After expansion picocas auto-collapses `Sqrt[c]^2 → c`.
+  unsimplified.  After expansion Mathilda auto-collapses `Sqrt[c]^2 → c`.
 
 **Headlines** (REPL-tested, all in `tests/test_qafactor.c`):
 - `Factor[x^4 - 10 x^2 + 1, Extension -> {Sqrt[2], Sqrt[3]}]` → 4 linear
@@ -2087,7 +2087,7 @@ computed automatically.
    lift.  Fixable later by extending the lifter to substitute the full
    list of sub-radicals with their Q(α)-representations.
 3. Pretty-printing on the relative `Q(γ_sub)`-basis (Mathematica's
-   form: `Sqrt[2 − Sqrt[2]] + Sqrt[2(2 − Sqrt[2])]`).  Picocas will
+   form: `Sqrt[2 − Sqrt[2]] + Sqrt[2(2 − Sqrt[2])]`).  Mathilda will
    render on the absolute Q-basis, i.e. as a polynomial in α with
    integer powers `α⁰..α^{deg-1}`; auto-canonicalisation collapses
    `α^k` (e.g. `(2 − Sqrt[2])^(3/2)` for `k = 3` when `α =
@@ -2126,7 +2126,7 @@ same shape).  Steps:
 
 5. **Compute α's minimal polynomial over Q.** α^n = base = B(γ_sub).
    The polynomial `Q_α(z) := Res_w(P_sub(w), z^n − B(w))` ∈ Q[z]
-   vanishes at z = α.  Compute it via picocas's existing
+   vanishes at z = α.  Compute it via Mathilda's existing
    `internal_resultant` (already used by `expr_resultant_z` and
    `find_primitive_shift` in qafactor.c).
 
@@ -2145,13 +2145,13 @@ same shape).  Steps:
    results.  To stay safe under the project's "Simplify must never be
    wrong" doctrine: when `Q_α` is reducible we pick by *symbolic
    evaluation* — substitute α's user surface form for `z` in each
-   factor and check via picocas's `Simplify`/numeric-bigfloat probe
+   factor and check via Mathilda's `Simplify`/numeric-bigfloat probe
    that the value is identically zero.  If we cannot decide, return
    NULL (caller falls back to plain Q-factor).
 
 6. **Build the QAExt.** Convert the chosen min poly via
    `qaext_from_q_expr` (already implemented for G6).  Render-form is
-   `expr_copy(α_expr)` — picocas's auto-canonicalisation collapses
+   `expr_copy(α_expr)` — Mathilda's auto-canonicalisation collapses
    `α^k` correctly because for `α = Sqrt[base]`, `α^(2j) = base^j`
    collapses on the existing `Power[Plus[...], k/2]` rule path.
 
@@ -2179,7 +2179,7 @@ Each factor's coefficients are polynomials in α of degree ≤ 3:
 After substitution `(3α − α³)` evaluates to
 `3 Sqrt[2 − Sqrt[2]] − (2 − Sqrt[2])^(3/2)`, which equals
 `Sqrt[2 + Sqrt[2]] = 2 cos(π/8)` numerically.  Mathematica writes the
-same coefficient as `Sqrt[2 − Sqrt[2]] + Sqrt[2(2 − Sqrt[2])]`; picocas's
+same coefficient as `Sqrt[2 − Sqrt[2]] + Sqrt[2(2 − Sqrt[2])]`; Mathilda's
 form is correct but visually different.
 
 **Module layout.**
@@ -2240,7 +2240,7 @@ section.  Headline cases:
   α also satisfies the degree-2 `z² − 5 + 2√6` over Q(Sqrt[6]).  The
   Q[z] resultant gives the degree-4 absolute min poly; this is fine
   for our purposes.
-- *Numeric probe for irreducible-factor selection.*  Use picocas's
+- *Numeric probe for irreducible-factor selection.*  Use Mathilda's
   bigfloat evaluation at sufficient precision to distinguish factors;
   if two factors evaluate within 10^-30 of zero, escalate to a
   symbolic Simplify-based test.  Refuse on ambiguity.
@@ -2279,7 +2279,7 @@ section.  Headline cases:
    which Phase G2 supports directly.
 4. **Real vs. complex extensions.**  Trager's algorithm is field-
    agnostic — `Q(i) = Q[y]/(y²+1)` is handled identically to `Q(√2)`.
-   Picocas's `Sqrt[-c]` lifts to this directly.
+   Mathilda's `Sqrt[-c]` lifts to this directly.
 5. **Multivariate input `f(x_1, ..., x_n, α)` over `Q(α)`.**  Falls
    out of Phase G4 *if* the existing bivariate Hensel is taught to
    accept `Q(α)`-valued `cy[]` coefficients.  Significant additional
@@ -2298,7 +2298,7 @@ section.  Headline cases:
 | G2 — `Q(α)[x]` univariate | 300 | 250 |
 | G3 — Norm via resultant | 150 | 100 |
 | G4 — sqfr_norm + alg_factor | 250 | 200 |
-| G5 — picocas API | 200 | 100 |
+| G5 — Mathilda API | 200 | 100 |
 | G6 — tower of extensions | 250 | 150 |
 | G7 — splitting fields (deferred) | 300 | 200 |
 | **MVP total (G1-G5)** | **1150** | **850** |
@@ -2329,7 +2329,7 @@ Updated implementation order (extending §12's table):
 | 11b | **G2** (Q(α)[x] univariate) | Polynomial-in-x with QA coefficients. | **Done 2026-05-07** — `src/qaupoly.{c,h}` + 17 tests in `tests/test_qaupoly.c`, all passing.  Headline: `gcd(x²-2, x-√2) = x-√2` over Q(√2) (the Trager lift step). |
 | 11c | **G3** (norm via resultant) | Field-norm of `f ∈ Q(α)[x]` via `Resultant_y(P_α, f)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qaupoly_norm` + 11 tests in `tests/test_qafactor.c`, all passing.  Headlines: `Norm(x − √2) = x² − 2`, `Norm(x − ∛2) = x³ − 2`, `Norm(x² + √2 x + 1) = x⁴ + 1` (cyclotomic Φ_8). |
 | 12 | **G4** (sqfr_norm + alg_factor MVP) | First user-visible factoring over `Q(√c)`. | **Done 2026-05-07** — `src/qafactor.{c,h}::qa_sqfr_norm` + `qa_alg_factor` + 9 new tests (20 total in `test_qafactor.c`).  Headlines: `x²−2` over `Q(√2)` → `(x−√2)(x+√2)`; `x⁴+1` over `Q(√2)` → `(x²−√2 x+1)(x²+√2 x+1)`; `x⁴−5x²+6` over `Q(√2)` → `(x−√2)(x+√2)(x²−3)`; `x³−2` over `Q(∛2)` → `(x−∛2)(x²+∛2 x+∛4)`; `x²+1` over `Q(i)`, `x²+x+1` over `Q(√−3)`, plus the `x²−3` over `Q(√2)` irreducible-input edge case. |
-| 13 | **G5** (picocas API) | Wire `Extension -> ...` into `Factor`. | **Done 2026-05-07** — hook in `src/facpoly.c::builtin_factor` reads the `Rule[Extension, α]` option; `qa_factor_with_extension` in `src/qafactor.c` dispatches to Trager and renders results.  11 new tests (31 total in `test_qafactor.c`).  Headlines: `Factor[x^2-2, Extension->Sqrt[2]]` → `(x-Sqrt[2])(x+Sqrt[2])`; `Factor[x^4+1, Extension->Sqrt[2]]` → `(x^2-Sqrt[2] x+1)(x^2+Sqrt[2] x+1)`; `Factor[x^3-2, Extension->2^(1/3)]` → `(x-2^(1/3))(x^2+2^(1/3) x+2^(2/3))`; `Factor[x^2+1, Extension->I]` → `(x-I)(x+I)`; `Factor[x^2+x+1, Extension->Sqrt[-3]]` → `(x+1/2-I Sqrt[3]/2)(x+1/2+I Sqrt[3]/2)`; α-bearing inputs (`x^2 - 2 Sqrt[2] x + 2` → `(x-Sqrt[2])^2`); repeated factors with multiplicity ((x²-2)² → (x−√2)²(x+√2)²). |
+| 13 | **G5** (Mathilda API) | Wire `Extension -> ...` into `Factor`. | **Done 2026-05-07** — hook in `src/facpoly.c::builtin_factor` reads the `Rule[Extension, α]` option; `qa_factor_with_extension` in `src/qafactor.c` dispatches to Trager and renders results.  11 new tests (31 total in `test_qafactor.c`).  Headlines: `Factor[x^2-2, Extension->Sqrt[2]]` → `(x-Sqrt[2])(x+Sqrt[2])`; `Factor[x^4+1, Extension->Sqrt[2]]` → `(x^2-Sqrt[2] x+1)(x^2+Sqrt[2] x+1)`; `Factor[x^3-2, Extension->2^(1/3)]` → `(x-2^(1/3))(x^2+2^(1/3) x+2^(2/3))`; `Factor[x^2+1, Extension->I]` → `(x-I)(x+I)`; `Factor[x^2+x+1, Extension->Sqrt[-3]]` → `(x+1/2-I Sqrt[3]/2)(x+1/2+I Sqrt[3]/2)`; α-bearing inputs (`x^2 - 2 Sqrt[2] x + 2` → `(x-Sqrt[2])^2`); repeated factors with multiplicity ((x²-2)² → (x−√2)²(x+√2)²). |
 | 14 | **G6** (tower of extensions) | Multi-radical inputs. | **Done 2026-05-07** — `src/qafactor.{c,h}::qa_resolve_extension_tower` + `qa_factor_with_extension_tower` + 9 new tests (40 total in `test_qafactor.c`).  Headlines: `Factor[x^4 − 10 x^2 + 1, Extension → {Sqrt[2], Sqrt[3]}]` → 4 linear factors `(x ± √2 ± √3)`; `Factor[x^4 + 1, Extension → {Sqrt[2], I}]` → `(x + (±1/2 ± I/2) Sqrt[2])`; `Factor[x^2 − 2 Sqrt[3] x + 3, Extension → {Sqrt[2], Sqrt[3]}]` → `(x − Sqrt[3])^2` (α-bearing input); order-independence (`{Sqrt[3], Sqrt[2]}` → same as `{Sqrt[2], Sqrt[3]}`); irreducible-in-compositum (`x^2 − 5` over `Q(√2, √3)` stays unfactored). |
 | 15 | **G7** (splitting fields) | Foundation for symbolic integration over algebraic extensions (Trager §5). | Deferred |
 

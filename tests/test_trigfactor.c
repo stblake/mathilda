@@ -6,8 +6,8 @@
  * Tests for TrigFactor. TrigFactor runs a rule-driven pipeline -- rewriting
  * reciprocals, combining via Together, running Factor, applying Pythagorean
  * and angle-addition identities, and restoring reciprocals -- so the output
- * follows picocas's canonical Orderless/Flat sort. Each expected string here
- * reflects picocas's canonical form, which may differ cosmetically from
+ * follows Mathilda's canonical Orderless/Flat sort. Each expected string here
+ * reflects Mathilda's canonical form, which may differ cosmetically from
  * Mathematica's pretty-printed form but is mathematically equivalent.
  */
 

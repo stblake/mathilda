@@ -12,7 +12,7 @@
 
 /*
  * logexp_init:
- * Initializes the logarithmic and exponential built-in functions in PicoCAS.
+ * Initializes the logarithmic and exponential built-in functions in Mathilda.
  * Adds the 'Log' and 'Exp' C functions to the symbol table and protects the constant 'E'.
  */
 void logexp_init(void) {

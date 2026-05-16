@@ -1,4 +1,4 @@
-/* PicoCAS — Precision / Accuracy introspection and coercion.
+/* Mathilda — Precision / Accuracy introspection and coercion.
  *
  * See precision.h for the module overview.
  *

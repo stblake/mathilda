@@ -457,7 +457,7 @@ int main(int argc, char** argv) {
      * integrand.  This is always a real correctness bug.  Unevaluated
      * / timeout / crash counts are tracked but tolerated until the
      * supporting machinery (e.g. nested-radical simplifier coverage)
-     * is in place.  See tasks/lessons.md / picocas_spec.md for the
+     * is in place.  See tasks/lessons.md / Mathilda_spec.md for the
      * running baseline.
      *
      * Treat the test as passing when no DIFF NONZERO case is detected.

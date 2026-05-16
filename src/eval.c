@@ -1,7 +1,7 @@
 /*
  * eval.c
  *
- * This file implements the core evaluation engine of PicoCAS.
+ * This file implements the core evaluation engine of Mathilda.
  * It follows the "infinite evaluation" semantics of the Mathematica:
  * expressions are repeatedly transformed until they no longer change.
  *

@@ -155,7 +155,7 @@ void test_while_test_becomes_false() {
 }
 
 // Return exits only the innermost While (matching Do/For semantics in
-// PicoCAS): the inner While yields the Return's argument as its value,
+// Mathilda): the inner While yields the Return's argument as its value,
 // and the outer While continues normally.
 void test_while_return_escapes_innermost_loop() {
     assert_eval_eq(

@@ -2,7 +2,7 @@
  * test_series.c -- unit tests for Series[], SeriesData, and Normal.
  *
  * Each test case corresponds to one of the behaviours specified in the
- * user-facing series spec (see picocas_spec.md "Power Series"). The
+ * user-facing series spec (see Mathilda_spec.md "Power Series"). The
  * assertions compare against FullForm strings, which is the most stable
  * way to check symbolic output because it avoids differences in printer
  * formatting choices. Known limitations (e.g. int64 rational overflow in
@@ -155,7 +155,7 @@ static void test_series_binomial_symbolic(void) {
 }
 
 /* 9. Deep Laurent series: 1/Sin[x]^10. The engine matches Mathematica up to
- * the last visible coefficient; PicoCAS's int64-backed Rational arithmetic
+ * the last visible coefficient; Mathilda's int64-backed Rational arithmetic
  * overflows on the (6803477/127702575) coefficient. We assert on the first
  * six coefficients and the overall shape. */
 static void test_series_deep_laurent(void) {

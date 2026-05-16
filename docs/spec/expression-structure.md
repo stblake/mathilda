@@ -1,6 +1,6 @@
 # 1. Expression Structure
 
-Everything in PicoCAS is an `Expr`, which can be one of the following types:
+Everything in Mathilda is an `Expr`, which can be one of the following types:
 - **Integer**: 64-bit signed integers (e.g., `123`, `-45`).
 - **Real**: Double-precision floating-point numbers (e.g., `3.14`, `1.2E-3`).
 - **Rational**: Exact fractions of integers, represented as `Rational[n, d]`.

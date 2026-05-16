@@ -498,7 +498,7 @@ Expr* builtin_power(Expr* res) {
     bool exp_comp = is_complex(exp, &re_e, &im_e);
 
     /* Symbolic principal-value evaluation for Power[Complex[0, ±1], n/2]
-     * (n in {±1, ±3} after mod-4 reduction).  Without these, picocas
+     * (n in {±1, ±3} after mod-4 reduction).  Without these, Mathilda
      * leaves Sqrt[I], Sqrt[-I], (I)^(3/2), (-I)^(3/2) as opaque held
      * Powers, which propagate through intrat output as
      *   Log[Sqrt[I] + x] / (I)^(3/2)

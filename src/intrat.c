@@ -14,7 +14,7 @@
  * The Mathematica baseline being ported is `IntegrateRational.m` in
  * the repo root — line numbers in the comments below refer to it.
  *
- * Memory contract: every public BuiltinFunc follows the picocas
+ * Memory contract: every public BuiltinFunc follows the Mathilda
  * convention — caller (evaluator) owns `res`; the function returns a
  * freshly-allocated Expr* on success or NULL on failure.
  */
@@ -69,7 +69,7 @@ static void intrat_trace(const char* fn, const char* dir, Expr* e) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Small wrappers around picocas internal_* / evaluate idioms.        */
+/* Small wrappers around Mathilda internal_* / evaluate idioms.        */
 /*                                                                    */
 /* All of these hand the result back as a fresh Expr* (the caller     */
 /* owns it).  None of them free their input arguments — every helper  */
@@ -100,7 +100,7 @@ static inline Expr* expand_and_free(Expr* e) {
  *
  * The full Mathematica canonic also switches to
  * `Extension -> Automatic` only when the input contains a radical
- * (intsimp_has_radical); the picocas port stays plain-rational for
+ * (intsimp_has_radical); the Mathilda port stays plain-rational for
  * Phase 1 since our Cancel/Together don't yet honour Extension. */
 Expr* intrat_canonic(Expr* e) {
     Expr* tg = internal_together((Expr*[]){expr_copy(e)}, 1);
@@ -737,7 +737,7 @@ static Expr* intrat_derivative_recognition(Expr* num, Expr* den, Expr* x) {
  * {1, i}.  Mirrors the BronsteinRational baseline's `SquareFree[]`
  * helper at IntegrateRational.m:1474-1487.
  *
- * Implementation note: picocas's FactorSquareFree returns the
+ * Implementation note: Mathilda's FactorSquareFree returns the
  * factorisation as `Times[c, Power[p1, k1], Power[p2, k2], ...]`
  * (or a single Power[]/atomic factor).  We walk that structure,
  * grouping factors by multiplicity. */
@@ -1117,7 +1117,7 @@ static Expr* nlp_neg(Expr* a) {
     return internal_times((Expr*[]){ expr_new_integer(-1), a }, 2);
 }
 static Expr* nlp_sqrt(Expr* a) {
-    /* Power[a, 1/2] — picocas's Power evaluator turns this into the
+    /* Power[a, 1/2] — Mathilda's Power evaluator turns this into the
      * canonical Sqrt[..] surface form during printing. */
     return expr_new_function(expr_new_symbol("Power"),
         (Expr*[]){ a,
@@ -1143,7 +1143,7 @@ static Expr* nlp_sub_body(Expr* body, Expr* bvar, Expr* value) {
  * Phase 8d-bonus only fires on non-parametric polynomials: when poly
  * has parameters (e.g. b + a t^4), the radical-formula substitution
  * produces forms whose D[..., x] - integrand reduces to 0 only under
- * a stronger algebraic-extension simplifier than picocas currently
+ * a stronger algebraic-extension simplifier than Mathilda currently
  * has.  Bailing out for parametric cases preserves the held RootSum
  * form, which the user can verify formally and which avoids
  * apparent-regression noise on the corpus. */
@@ -1673,7 +1673,7 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
      *
      * NOTE: this Resultant[] call is NOT redundant with the PRS chain
      * computed above, despite both being subresultant-PRS-flavoured
-     * computations.  picocas's SubresultantPolynomialRemainders is a
+     * computations.  Mathilda's SubresultantPolynomialRemainders is a
      * pseudo-remainder chain (poly.c:1637-1642), not the Lazard-scaled
      * subresultant chain.  The chain's primitive-part-in-t and
      * degree-in-x are content-invariant and so are correct substrates
@@ -1858,7 +1858,7 @@ static Expr* intrat_log_to_atan(Expr* a, Expr* b, Expr* x) {
     }
 
     /* A := Collect[a, x] (we use intrat_canonic for the closest
-     * picocas equivalent — it folds rational coefficients to canonical
+     * Mathilda equivalent — it folds rational coefficients to canonical
      * form without RootReduce).  The .m baseline applies simproot to
      * each coefficient, but Phase 3 deliberately stays minimal so the
      * tests can still match against the un-simplified output. */
@@ -2187,7 +2187,7 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
     Expr* u_root = eval_and_free(internal_divide(
         (Expr*[]){neg_b2, expr_copy(two_a)}, 2));
     /* Distribute -1 across `disc` before passing to the Sqrt
-     * simplifier.  Without an Expand, picocas keeps `-1 * disc` as
+     * simplifier.  Without an Expand, Mathilda keeps `-1 * disc` as
      * Times[-1, Plus[...]]; intsimp_pos_sqrt then walks the Times
      * factors and pulls Sqrt[-1] = I out of the `-1`, ending in an
      * imaginary v_root that collapses logtoreal_quadratic to 0. */
@@ -3049,7 +3049,7 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
  *
  * Direct port of IntegrateRational.m:534-587, minus the `NaiveLogPart`
  * fallback (we prefer to surface the integral as unevaluated rather
- * than emit a symbolic RootSum that picocas can't yet differentiate
+ * than emit a symbolic RootSum that Mathilda can't yet differentiate
  * back to the integrand).
  */
 
@@ -3363,7 +3363,7 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
 }
 
 /* ------------------------------------------------------------------ */
-/* BuiltinFunc wrappers.  Each follows the picocas convention: caller  */
+/* BuiltinFunc wrappers.  Each follows the Mathilda convention: caller  */
 /* owns res; return NULL on failure.                                   */
 /* ------------------------------------------------------------------ */
 

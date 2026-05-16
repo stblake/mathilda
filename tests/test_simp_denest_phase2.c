@@ -24,7 +24,7 @@
  *   Sqrt[16 - 2 Sqrt[29] + 2 Sqrt[55 - 10 Sqrt[29]]]
  *     -> Sqrt[5] + Sqrt[11 - 2 Sqrt[29]]
  *
- * which Mathematica simplifies in ~100ms but earlier picocas left
+ * which Mathematica simplifies in ~100ms but earlier Mathilda left
  * untouched. This file exercises that case plus controls that confirm
  * (a) phase-1 inputs still denest with byte-identical output,
  * (b) non-denestable multi-sqrt inputs remain unchanged, and
@@ -131,7 +131,7 @@ void test_negative_discriminant_no_fire(void) {
 
 void test_idempotent_phase2_result(void) {
     /* The denested form Sqrt[5] + Sqrt[11 - 2 Sqrt[29]] is already
-     * minimal under picocas's complexity measure; Simplify on it
+     * minimal under Mathilda's complexity measure; Simplify on it
      * must not re-introduce the nested radicand. */
     check_eval_eq(
         "Simplify[Sqrt[5] + Sqrt[11 - 2 Sqrt[29]]]",

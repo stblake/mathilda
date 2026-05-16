@@ -21,7 +21,7 @@
  * does the actual work.  We don't wrap the threading-over-logic-
  * heads short-circuit because that recursively re-invokes the
  * builtin, which itself goes through the memo. */
-/* Compute a canonical form of `arg` for memo lookup.  picocas's
+/* Compute a canonical form of `arg` for memo lookup.  Mathilda's
  * evaluator handles Plus/Times orderless+flat normalisation but does
  * not auto-distribute scalars (`1/8 (-18 a + 6 b)` is structurally
  * different from `-9/4 a + 3/4 b`) or auto-combine fractions
@@ -450,7 +450,7 @@ static int64_t max_trig_atom_power(const Expr* e) {
 
 /*
  * Test whether an expression tree contains any Power[_, n] subterm with a
- * negative-integer exponent. This is how picocas represents reciprocals
+ * negative-integer exponent. This is how Mathilda represents reciprocals
  * (e.g. 1/x = Power[x, -1], a/b = Times[a, Power[b, -1]]). Expand does not
  * distribute across negative powers, so the Factor-based Pythagorean
  * collapse must not be applied to expressions that hide structure inside a
@@ -603,7 +603,7 @@ static Expr* trigfactor_run_pipeline(Expr* input) {
     Expr* togethered = evaluate(tog_expr);
     expr_free(tog_expr);
 
-    /* Factor -- picocas Factor treats trig atoms as polynomial variables.
+    /* Factor -- Mathilda Factor treats trig atoms as polynomial variables.
      * Skip Factor when the polynomial would be too expensive to factor:
      *
      *   1. More than two distinct squared trig atoms: the multivariate
@@ -1331,13 +1331,13 @@ void trigsimp_init(void) {
      *   - Product-to-sum: pairs of single-argument trig calls multiplied
      *     together collapse into single trig calls of compound arguments.
      *
-     * picocas's Times is Orderless, so the matcher commutes the factors
+     * Mathilda's Times is Orderless, so the matcher commutes the factors
      * in `Sin[a_] Cos[b_]` to align with whichever order the canonical
      * sort produced. Only one direction of each pair is needed -- the
      * commuted form is delivered by the matcher.
      */
     /* The Expand wrappers around the constructed arguments are needed
-     * because picocas does not auto-distribute Times across Plus
+     * because Mathilda does not auto-distribute Times across Plus
      * (e.g. 2 (x + y) does not flatten to 2 x + 2 y, and (a + b) - (a - b)
      * stays as Plus[a, b, Times[-1, Plus[a, -b]]] rather than reducing to
      * 2 b). Without the Expand, the rule body would leave canonical-but-
@@ -1368,7 +1368,7 @@ void trigsimp_init(void) {
      *   Sin[a] Cos[b] + Cos[a] Sin[b]
      * (often produced by Tan[a] + Tan[b] passing through the to-sin/cos
      * rewrite then Together) collapses to Sin[a + b]. Each rule has
-     * sign variants because the sort that picocas applies inside the
+     * sign variants because the sort that Mathilda applies inside the
      * Plus may surface either coefficient orientation.
      *
      * Trailing `r___` lets the rule fire inside a larger sum without
@@ -1377,7 +1377,7 @@ void trigsimp_init(void) {
     /*
      * The final four cancellation rules pull Sin[-X] = -Sin[X] (and the
      * Sinh analogue) and the even-function combinations Cos[-X] = Cos[X]
-     * (and Cosh) out of sum-of-trig terms. picocas canonicalises
+     * (and Cosh) out of sum-of-trig terms. Mathilda canonicalises
      * Sin[Times[-1, x]] but does NOT canonicalise Sin[Plus[Times[-1, a],
      * b]] (i.e. Sin[-a + b] is left as-is rather than simplifying to
      * -Sin[a - b]). After applying the product-to-sum rules to a Sin[a]

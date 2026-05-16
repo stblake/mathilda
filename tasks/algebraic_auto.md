@@ -64,7 +64,7 @@ cube-root generalisation), E (nested-radical walker), F
   docstring updates.
 - Extending G8 + `qa_resolve_extension` + `qa_expr_to_qaupoly_with_alpha`
   to accept `Power[c, p/q]` for general integer `p` (not just `p == 1`).
-  The blocker is picocas's Times canonicaliser at `src/times.c:481`,
+  The blocker is Mathilda's Times canonicaliser at `src/times.c:481`,
   which deliberately absorbs coefficient factors into Power exponents
   (`(1/6)·2^(1/3) → (1/3)·2^(-2/3)`).  Phase F's canonicalise-dedup
   produces the equalised radicand structurally, but the canonical
@@ -97,7 +97,7 @@ to the same generator, the tower has 2 distinct generators (2^(1/3)
 and Sqrt[2^(1/3)/6]) instead of 3, and the resulting compositum is
 small enough for the surface form to simplify.
 
-Picocas's `Simplify` on this input separately hits a pre-existing
+Mathilda's `Simplify` on this input separately hits a pre-existing
 `1/0` Power-error in a downstream transformation (not related to
 this work).
 
@@ -112,7 +112,7 @@ In[1]:= Integrate[a x / (x^3 + 2), x]
 
 In[2]:= D[%, x]                                (* ≈ 3-term sum, mixed radicals *)
 
-In[3]:= Simplify[%]    (* Mathematica: ~1 ms.  picocas: hangs / no-op. *)
+In[3]:= Simplify[%]    (* Mathematica: ~1 ms.  Mathilda: hangs / no-op. *)
 ```
 
 The reduced antiderivative lives in `Q(2^(1/6))(x)` (degree 6).  Once both
@@ -120,7 +120,7 @@ The reduced antiderivative lives in `Q(2^(1/6))(x)` (degree 6).  Once both
 reduces to 2 via the minimal polynomial `θ^6 − 2 = 0`, the entire
 expression simplifies to `a x² / (x³ + 2)` — the derivative of the input.
 
-Picocas already has the algebraic substrate (`qa.c`, `qaupoly.c`,
+Mathilda already has the algebraic substrate (`qa.c`, `qaupoly.c`,
 `qafactor.c`, `QATower`).  The single missing piece is **auto-detection**:
 when `Together`/`Cancel`/`Factor`/`Apart`/`PolynomialGCD`/`PolynomialLCM`/
 `PolynomialQuotient`/`PolynomialRemainder` are called without an explicit
@@ -455,7 +455,7 @@ surface for parity with Mathematica's Extension → Automatic family.
 
 ## Risks and open questions
 
-1. **Surface-form ambiguity.**  Picocas normalises `Power[2, 2/3]` and
+1. **Surface-form ambiguity.**  Mathilda normalises `Power[2, 2/3]` and
    `Power[2, 1/3] · Power[2, 1/3]` differently depending on which Times
    the canonicaliser sees first.  Auto-detect must collect generators
    from the *post-normalised* form to avoid duplicate enrollment.  Plan:
@@ -484,7 +484,7 @@ surface for parity with Mathematica's Extension → Automatic family.
    - `Extension → None` (default in some functions): treat radicals as
      opaque.
    - `Extension → Automatic`: detect.
-   Picocas's current "default" is no-extension.  After this work, the
+   Mathilda's current "default" is no-extension.  After this work, the
    semantics shift to "default == Automatic" because the auto-detect
    walk is cheap.  Document this clearly (it's a behaviour change for
    users who relied on the no-extension fallback).  Provide

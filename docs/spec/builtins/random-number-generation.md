@@ -12,7 +12,7 @@ Gives pseudorandom integers.
 - `Protected`.
 - RandomInteger[{imin, imax}] chooses integers in the range {imin, ..., imax} with equal probability.
 - RandomInteger[] gives 0 or 1 with probability 1/2.
-- RandomInteger gives a different sequence of pseudorandom integers whenever you run PicoCAS. You can start with a particular seed using SeedRandom.
+- RandomInteger gives a different sequence of pseudorandom integers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Returns bignums when the range exceeds 64-bit integer limits.
 
 ```mathematica
@@ -49,7 +49,7 @@ Gives pseudorandom real numbers.
 **Features**:
 - `Protected`.
 - RandomReal[{xmin, xmax}] chooses reals with a uniform probability distribution in the range xmin to xmax.
-- RandomReal gives a different sequence of pseudorandom reals whenever you run PicoCAS. You can start with a particular seed using SeedRandom.
+- RandomReal gives a different sequence of pseudorandom reals whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness for full double-precision mantissa coverage.
 - Accepts integer, real, rational, and bigint range arguments.
 
@@ -105,7 +105,7 @@ Gives pseudorandom complex numbers.
 **Features**:
 - `Protected`.
 - `RandomComplex[{zmin, zmax}]` chooses complex numbers uniformly in the rectangle with corners at `zmin` and `zmax`.
-- RandomComplex gives a different sequence of pseudorandom complex numbers whenever you run PicoCAS. You can start with a particular seed using SeedRandom.
+- RandomComplex gives a different sequence of pseudorandom complex numbers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness per component for full double-precision mantissa coverage.
 - Accepts integer, real, rational, and complex range arguments. When the range has no imaginary component, the result simplifies to a real.
 
@@ -138,7 +138,7 @@ Gives pseudorandom choices from a list of elements.
 **Features**:
 - `Protected`.
 - `RandomChoice[{e1, e2, ...}]` chooses with equal probability between all of the ei.
-- RandomChoice gives a different sequence of pseudorandom choices whenever you run PicoCAS. You can start with a particular seed using SeedRandom.
+- RandomChoice gives a different sequence of pseudorandom choices whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Weighted selection uses cumulative weight binary search for efficient O(log n) per choice.
 - Weights must be non-negative real numbers with a positive total.
 
@@ -174,7 +174,7 @@ Gives a pseudorandom sample of elements without replacement.
 - `RandomSample[{e1, e2, ...}, n]` never samples any of the ei more than once.
 - `RandomSample[{e1, e2, ...}, n]` samples each of the ei with equal probability.
 - `RandomSample[{e1, e2, ...}, UpTo[n]]` gives a sample of n of the ei, or as many as are available.
-- RandomSample gives a different sequence of pseudorandom choices whenever you run PicoCAS. You can start with a particular seed using SeedRandom.
+- RandomSample gives a different sequence of pseudorandom choices whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Requesting n greater than the list length (without UpTo) returns unevaluated.
 - Uses the Fisher-Yates shuffle for uniform sampling without replacement.
 - Weighted sampling removes selected elements and renormalizes weights.

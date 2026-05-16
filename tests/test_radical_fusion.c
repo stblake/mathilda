@@ -117,7 +117,7 @@ static void test_zero_power_symbolic(void) {
 }
 
 static void test_zero_power_zero_unchanged(void) {
-    /* Power[0, 0] is conventionally 1 in PicoCAS and that must not
+    /* Power[0, 0] is conventionally 1 in Mathilda and that must not
      * change: the new positive-exponent branch must only fire for
      * strictly positive exponents. */
     assert_eval_eq("Power[0, 0]", "Indeterminate", 0);

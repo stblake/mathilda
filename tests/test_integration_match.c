@@ -15,7 +15,7 @@ void test_integration_match() {
     
     // Define the rule: int[(b_. x_ + a_.)^n_, x] /; FreeQ[{a, b, n}, x] && n =!= -1 := ((a + b x)^(n + 1))/(b*(n + 1))
     
-    // In PicoCAS, we can use evaluate(parse_expression("... := ..."))
+    // In Mathilda, we can use evaluate(parse_expression("... := ..."))
     Expr* rule = parse_expression("int[(b_. x_ + a_.)^n_, x] /; FreeQ[{a, b, n}, x] && n =!= -1 := ((a + b x)^(n + 1))/(b*(n + 1))");
     ASSERT(rule != NULL);
     Expr* rule_res = evaluate(rule);
@@ -32,7 +32,7 @@ void test_integration_match() {
     printf("Result: %s\n", s);
     
     // Expected result: (1 + 5 x)^4 / 20
-    // PicoCAS prints it as "(1 + 5 x)^4/20"
+    // Mathilda prints it as "(1 + 5 x)^4/20"
     ASSERT_STR_EQ(s, "(1 + 5 x)^4/20");
 
     

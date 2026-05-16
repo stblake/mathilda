@@ -6,8 +6,8 @@
  * of them free their inputs — every helper makes its own copies.
  */
 
-#ifndef PICOCAS_INTRAT_INTERNAL_H
-#define PICOCAS_INTRAT_INTERNAL_H
+#ifndef MATHILDA_INTRAT_INTERNAL_H
+#define MATHILDA_INTRAT_INTERNAL_H
 
 #include <stdbool.h>
 #include "expr.h"
@@ -21,4 +21,4 @@ Expr* intrat_denominator(Expr* e);
 /* TrueQ[FreeQ[expr, var]]. */
 bool  intrat_freeq_test(Expr* expr, Expr* var);
 
-#endif /* PICOCAS_INTRAT_INTERNAL_H */
+#endif /* MATHILDA_INTRAT_INTERNAL_H */

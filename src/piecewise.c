@@ -1,7 +1,7 @@
 /*
  * piecewise.c
  * 
- * Implementation of PicoCAS piecewise mathematical functions:
+ * Implementation of Mathilda piecewise mathematical functions:
  * Floor, Ceiling, Round, IntegerPart, FractionalPart.
  * Suitable for numeric manipulation, automatically threading over lists.
  */

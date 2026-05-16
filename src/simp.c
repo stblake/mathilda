@@ -66,7 +66,7 @@ static size_t int_digit_count_int64(int64_t v) {
  *   Rational    -> SimplifyCount[num] + SimplifyCount[den] + 1
  *   Complex     -> SimplifyCount[re]  + SimplifyCount[im]  + 1
  *   Real / MPFR -> 2                              (NumberQ but not Integer/Rational)
- *   String      -> 1                              (treated as a leaf, picocas extension)
+ *   String      -> 1                              (treated as a leaf, Mathilda extension)
  *   Function    -> SimplifyCount[head] + sum SimplifyCount[args]
  *
  * The negative-integer adjustment matches Mathematica's behaviour where
@@ -1018,7 +1018,7 @@ static Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         /* Log[x^p] -> p Log[x]  for x > 0 (any real p; v1 accepts symbolic p too) */
         SEP(); EMIT("Log[Power[%s, p_]] :> p Log[%s]", x, x);
         /* Inverse-trig sum identity: ArcTan[x] + ArcTan[1/x] -> Pi/2  for x > 0.
-         * picocas's matcher does NOT perform orderless-Plus subset matching
+         * Mathilda's matcher does NOT perform orderless-Plus subset matching
          * out of the box (unlike Mathematica), so the rule must explicitly
          * absorb the trailing terms via `+ rest___` and re-emit them. The
          * BlankNullSequence pattern matches 0 or more remaining terms, so
@@ -1809,7 +1809,7 @@ static bool is_sqrt(const Expr* e);
  * tree (caller owns); the input is not mutated.
  *
  * `transform_radical_canon` already attempts this rewrite, but the
- * picocas evaluator re-merges Times[Power[m, 1/2], Power[n, -1/2]]
+ * Mathilda evaluator re-merges Times[Power[m, 1/2], Power[n, -1/2]]
  * back into Power[m/n, 1/2] for m > 1 (only m = 1 escapes because
  * Power[1, 1/2] evaluates to the integer 1 and drops out of the Times,
  * leaving Power[n, -1/2] for the negative-exponent rule). This helper
@@ -2715,7 +2715,7 @@ static bool denest_prov_nonneg(const AssumeCtx* ctx, const Expr* x, int depth) {
      *
      * Also: Times[c, Plus[...]] for positive c reduces to Plus's
      * nonnegativity check on the inner Plus. This catches the factored
-     * forms Times[1/2, Plus[x, -y]] that picocas's evaluator produces
+     * forms Times[1/2, Plus[x, -y]] that Mathilda's evaluator produces
      * before Expand distributes them. */
     if (x && x->type == EXPR_FUNCTION && x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL &&
@@ -3137,7 +3137,7 @@ static bool denest_compute_pq_s_at_candidate(const Expr* plus_node,
         return false;
     }
 
-    /* Compute P = (A + s)/2 and Q = (A - s)/2. picocas's evaluator
+    /* Compute P = (A + s)/2 and Q = (A - s)/2. Mathilda's evaluator
      * keeps Times[-1, Plus[...]] factored rather than distributing,
      * so a raw evaluate of Plus[A, -s] / 2 leaves Q in a factored form
      * the surrounding pipeline can't reason about (e.g. case 6 saw
@@ -3501,7 +3501,7 @@ static Expr* simp_denest_sqrt(const Expr* e, const AssumeCtx* ctx) {
  *
  * Soundness note (real vs. principal branch):
  *
- *   picocas's Power[neg_real, 1/3] uses the principal complex branch
+ *   Mathilda's Power[neg_real, 1/3] uses the principal complex branch
  *   (e.g. (-1)^(1/3) = (1 + i sqrt(3))/2). Pattern B's identity
  *   `(2+sqrt(5))^(1/3) + (2-sqrt(5))^(1/3) = 1` only holds under the
  *   REAL cube-root convention; principal-branch evaluation gives
@@ -4930,7 +4930,7 @@ static Expr* simp_algebraic(const Expr* e) {
  * integer, or a Power[base, n>=1] that splits into n copies of base),
  * factor the common piece outside the Plus.
  *
- * Why a dedicated transform? picocas's Factor / FactorTerms decompose
+ * Why a dedicated transform? Mathilda's Factor / FactorTerms decompose
  * polynomials over K[x_1, ..., x_n] using Variables[] to discover the
  * generator set, and Variables[] does not return non-integer Power
  * expressions (e.g. Sqrt[x], (1+x^2)^(3/2)). So a Plus that obviously
@@ -5019,7 +5019,7 @@ static Expr* lift_mpq_to_expr(const mpq_t v) {
  * split into n copies of base. Power[base, exp] with any other exp shape
  * (rational, negative, symbolic) is treated as one opaque token.
  *
- * Recurses into nested Times: in practice picocas's Plus does not always
+ * Recurses into nested Times: in practice Mathilda's Plus does not always
  * fully flatten Times children -- a literal-times-product subexpression
  * inside a Plus surfaces as Times[c, Times[a, b]] -- so we walk the
  * subtree rather than relying on a one-level-deep view. */
@@ -5307,7 +5307,7 @@ static bool plus_is_negative_leading(const Expr* p) {
 }
 
 /* Build a Plus equal to -p by negating every term and re-evaluating so
- * picocas re-canonicalises the argument order. */
+ * Mathilda re-canonicalises the argument order. */
 static Expr* plus_negate(const Expr* p) {
     size_t n = p->data.function.arg_count;
     Expr** args = (Expr**)malloc(sizeof(Expr*) * n);
@@ -5951,7 +5951,7 @@ static Expr* transform_pythag_canon(const Expr* e) {
  * holds for ALL complex e -- the (a^b)^c = a^(b*c) identity is sound
  * when a > 0, with no branch cut to worry about.
  *
- * Why this is needed:  picocas's canonical Power evaluator never rebases
+ * Why this is needed:  Mathilda's canonical Power evaluator never rebases
  * composite integer bases ((2^2)^x stays as (2^2)^x), so factors like
  * 4^x and 2^x sit in different Times "base buckets" and the same-base
  * exponent combine in `times.c` cannot cancel them.  After rebasing all
@@ -5974,7 +5974,7 @@ static Expr* transform_pythag_canon(const Expr* e) {
 /* If n is a perfect prime power p^k with k >= 2, set *p_out = p,
  * *k_out = k and return true.  Otherwise return false (n is < 4, prime,
  * or has at least two distinct prime factors).  Trial division up to
- * sqrt(n); since picocas's prime-base inputs are typically small literals
+ * sqrt(n); since Mathilda's prime-base inputs are typically small literals
  * (4, 8, 9, 16, 25, 27, 32, 49, ...), this is microseconds-cheap. */
 static bool prime_rebase_check(int64_t n, int64_t* p_out, int64_t* k_out) {
     if (n < 4) return false;
@@ -6101,7 +6101,7 @@ static Expr* transform_prime_rebase(const Expr* e) {
  *     A * Power[A, e] = Power[A, 1] * Power[A, e] = Power[A, e + 1]
  * is universally valid -- no branch cut, no positivity assumption.
  *
- * Why this is needed: picocas's Times-canonical-form same-base combine
+ * Why this is needed: Mathilda's Times-canonical-form same-base combine
  * groups factors by the base of any wrapping Power[base, exp].  A bare
  * factor A whose canonical form is itself a Power expression (e.g.
  * Power[x, -1] = 1/x) does NOT get re-bucketed as Power[A, 1] before
@@ -6210,7 +6210,7 @@ static Expr* transform_power_oneify(const Expr* e) {
 /*                                                                         */
 /*   (A) Power[neg_int, e]  ->  Power[-1, e] * Power[|neg_int|, e]         */
 /*       Soundness: principal-branch identity for any e (real or           */
-/*       symbolic).  Picocas uses principal branches everywhere.           */
+/*       symbolic).  Mathilda uses principal branches everywhere.           */
 /*       Why: lets prime_rebase + Times same-base merge cancel mixed-sign  */
 /*       products like (-4)^x * (-2)^(-x) * 2^(-x) -> 1.                   */
 /*                                                                         */
@@ -6473,7 +6473,7 @@ static Expr* transform_power_distribute(const Expr* e,
 /* RadicalCanon: split Power[Rational[a,b],q] and rationalise -p/q powers  */
 /* ----------------------------------------------------------------------- */
 
-/* Two related canonicalisations that picocas's standard Power evaluator
+/* Two related canonicalisations that Mathilda's standard Power evaluator
  * does NOT do, and which leave equivalent expressions in distinct shapes:
  *
  * (1)  Power[Rational[a, b], q]                       (a, b positive ints)
@@ -6697,7 +6697,7 @@ static Expr* transform_radical_canon(const Expr* e) {
  * are always sound (away from the isolated singularities where the
  * denominator vanishes -- inside Simplify those are ignored).
  *
- * picocas's TrigExpand fires only when the argument is *literally* a
+ * Mathilda's TrigExpand fires only when the argument is *literally* a
  * Plus, so it can rewrite Tan[x+y] but NOT Tan[5] -- even when the
  * surrounding expression also contains Tan[2] and Tan[3] making
  * Tan[5] = Tan[2 + 3] usable.  This transform performs that recognition:
@@ -7060,7 +7060,7 @@ static Expr* transform_tan_addition(const Expr* e) {
  *
  * The general-real and general-complex branches of the user's cascade
  * (with Boole / Floor / Ceiling phase corrections) are deliberately not
- * implemented in v1; see picocas_spec.md for v2 scope.
+ * implemented in v1; see Mathilda_spec.md for v2 scope.
  *
  * Implementation: a bottom-up structural walker that consults the
  * AssumeCtx for positivity/reality of operands. Each top-level rewrite
@@ -7194,7 +7194,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
      * Always sound (E^(x+y) = E^x · E^y for any x, y). When the exponent
      * is a product like `Times[c, Plus[...]]`, expand it first so the
      * Plus surfaces. After distribution, individual Power[E, c·Log u]
-     * subterms collapse to `u^c` via picocas's existing
+     * subterms collapse to `u^c` via Mathilda's existing
      * Power[E, c·Log[u]] -> u^c rule, completing identities like
      *
      *   Exp[3 (Log[a] + Log[b])]  ->  a^3 · b^3
@@ -7602,7 +7602,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
     /* The Abs[Sin[x]] -> Sign[Sin[x]] Sin[x] rule from the user-provided
      * cascade is omitted: the rewrite expands leaf count (3 -> 6) and only
      * pays off when a downstream Sign-folding pass narrows Sign[Sin[x]] on
-     * a known interval, which picocas does not currently perform. Adding
+     * a known interval, which Mathilda does not currently perform. Adding
      * it without that infrastructure produces a strictly larger expression
      * with no observable benefit. */
     return NULL;
@@ -7708,7 +7708,7 @@ static const size_t SIMP_TRANSFORM_COUNT =
 
 /* Returns true if the expression contains any Power with a non-integer
  * exponent (e.g. Sqrt forms, Rational exponents, symbolic exponents).
- * picocas's Factor / FactorSquareFree call its trial-division loop in
+ * Mathilda's Factor / FactorSquareFree call its trial-division loop in
  * factor_roots which can stall on multivariate inputs that include such
  * Power atoms, so we skip those transforms when this returns true. */
 static bool has_non_integer_power(const Expr* e) {
@@ -9975,9 +9975,9 @@ static bool simp_fact_refold_times(Expr** args, size_t n,
 }
 
 /* Combine Times children that all carry exponent -1 into a single
- * Power[Times[..., -1]]. Picocas's evaluator does NOT auto-coalesce
+ * Power[Times[..., -1]]. Mathilda's evaluator does NOT auto-coalesce
  * separate Power[a, -1] * Power[b, -1] into Power[Times[a, b], -1]
- * (Mathematica does, picocas doesn't), so the auto-cancelled output of
+ * (Mathematica does, Mathilda doesn't), so the auto-cancelled output of
  * a factorial rewrite sits at SimplifyCount 12 even when the same
  * expression printed as `1/(a*b)` would score 9. Lifting all negative-
  * exponent factors into a shared denominator gets us back to the lower
@@ -10304,7 +10304,7 @@ static Expr* simp_factorial(const Expr* e) {
          *                              fold to n/(n+1)!.
          * Both paths run Factor (to surface (b+j) linear factors in
          * the cofactor) and combine_inverses (to re-coalesce the
-         * Power[a,-1]*Power[b,-1] factors that picocas's evaluator
+         * Power[a,-1]*Power[b,-1] factors that Mathilda's evaluator
          * leaves separated, which is what makes the combined Times
          * denominator visible to the re-fold walker). The score
          * tiebreak below picks whichever path lands at the lowest
@@ -10407,7 +10407,7 @@ static Expr* simp_factorial(const Expr* e) {
     }
 
     /* Final canonicalization: coalesce all `Power[X, -1]` factors in
-     * Times nodes into a single `Power[Times[..., -1]]`. Picocas's
+     * Times nodes into a single `Power[Times[..., -1]]`. Mathilda's
      * evaluator does not auto-perform this combine, which leaves the
      * factored result at a higher SimplifyCount than it deserves
      * (count 12 vs count 9 on `1/(n*(n-1))`). Coalescing brings the
@@ -11224,7 +11224,7 @@ Expr* builtin_simplify(Expr* res) {
     /* If the input is a predicate that appears literally as one of our
      * assumed facts, it folds to True. This is a narrow win for simple
      * cases like Simplify[x > 0, x > 0]; it does not constitute a real
-     * inequality reasoner (see picocas_spec.md for v1 gaps). */
+     * inequality reasoner (see Mathilda_spec.md for v1 gaps). */
     if (ctx) {
         for (size_t i = 0; i < ctx->count; i++) {
             if (expr_eq(expr, ctx->facts[i])) {
@@ -11402,7 +11402,7 @@ Expr* builtin_simplify(Expr* res) {
      *     -> (1/105)(1+x^2)^(3/2)(8 - 12 x^2 + 15 x^4)
      *   (15 x^2 + 5 x^3)/(5+2x)^(3/2)
      *     -> (5 x^2 (3 + x))/(5+2x)^(3/2)
-     * which picocas's polynomial Factor cannot reach because Variables[]
+     * which Mathilda's polynomial Factor cannot reach because Variables[]
      * does not return non-integer-power generators. We apply it once at
      * the top level rather than as a seed in simp_search to avoid
      * destabilising the heuristic search on multi-variable trig inputs. */

@@ -33,7 +33,7 @@
  *
  * Thread safety: the `mpoly_normalize` and `mpoly_mul` paths use a
  * file-static sort context; not safe for concurrent use across
- * threads.  Picocas is single-threaded so this is acceptable.
+ * threads.  Mathilda is single-threaded so this is acceptable.
  */
 
 #ifndef MPOLY_H

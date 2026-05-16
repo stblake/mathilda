@@ -3,7 +3,7 @@
  * Comprehensive corpus runner for the Mathematica reference test
  * file IntegrateRationalTests.m.
  *
- * Approach: load the file at test runtime via picocas's own Get[]
+ * Approach: load the file at test runtime via Mathilda's own Get[]
  * builtin (the file is just a List literal of {integrand, var,
  * expected_antideriv} triples), iterate every entry, and run
  * Integrate[integrand, var] through the pipeline.  Each result is
@@ -14,7 +14,7 @@
  *                     to 0 under Together / Expand.
  *   rootsum_form    : closed via Phase 8c's NaiveLogPart fallback;
  *                     contains a held RootSum head.  Marked as a
- *                     soft pass — picocas can't expand RootSum
+ *                     soft pass — Mathilda can't expand RootSum
  *                     without Solve / ToRadicals.
  *   diff_nonzero    : the result simplifies cleanly but does NOT
  *                     differentiate back to the integrand — a real

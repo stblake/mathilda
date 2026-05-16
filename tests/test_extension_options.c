@@ -171,7 +171,7 @@ void test_together_extension(void) {
 
 void test_apart_extension(void) {
     /* Apart[1/(x^2 - 2), x, Extension -> Sqrt[2]] splits over Q[Sqrt[2]].
-     * Picocas's canonical output for this is the partial-fraction
+     * Mathilda's canonical output for this is the partial-fraction
      * decomposition with Sqrt[2] coefficients.  Pin the exact form so
      * we catch any future regressions in the algebraic-extension Apart
      * path. With the radical canonicalization in builtin_times, the
@@ -184,7 +184,7 @@ void test_apart_extension(void) {
      * unchanged because the denominator is irreducible over Q. */
     run_eq("Apart[1/(x^2 - 2), x]", "1/(-2 + x^2)");
 
-    /* Apart over Q[I] splits 1/(x^2 + 1).  Picocas auto-evaluates 1/I
+    /* Apart over Q[I] splits 1/(x^2 + 1).  Mathilda auto-evaluates 1/I
      * to -I, producing the I*… coefficient form rather than a 1/(I*…)
      * fraction. */
     run_eq("Apart[1/(x^2 + 1), x, Extension -> I]",

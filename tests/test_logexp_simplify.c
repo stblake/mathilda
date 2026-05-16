@@ -16,7 +16,7 @@
  *
  * The general-real and general-complex cascade branches (with the
  * Boole / Floor / Ceiling phase corrections) are not implemented in v1
- * -- see picocas_spec.md for v2 scope. These tests cover only the
+ * -- see Mathilda_spec.md for v2 scope. These tests cover only the
  * sound, strict-positive subset.
  *
  * The identities typically INCREASE leaf count (Log[a b] is 4 leaves,
@@ -137,7 +137,7 @@ void test_power_of_power_integer_inner(void) {
 
 void test_power_of_power_no_real_inner(void) {
     /* Inner exponent's signedness/realness unknown -- rule must not fire.
-     * picocas's printer emits Power[Power[a, p], q] without disambiguating
+     * Mathilda's printer emits Power[Power[a, p], q] without disambiguating
      * parentheses, so the result string reads "a^p^q". This is the
      * unchanged input, NOT a^(p^q). */
     assert_eval_eq("Simplify[(a^p)^q, a > 0]",

@@ -1,5 +1,5 @@
-#ifndef PICOCAS_TRIGRAT_H
-#define PICOCAS_TRIGRAT_H
+#ifndef MATHILDA_TRIGRAT_H
+#define MATHILDA_TRIGRAT_H
 
 #include "expr.h"
 #include "simp.h"
@@ -37,4 +37,4 @@ Expr* simp_trig_rational(const Expr* input,
                          const AssumeCtx* ctx,
                          const Expr* complexity_func);
 
-#endif /* PICOCAS_TRIGRAT_H */
+#endif /* MATHILDA_TRIGRAT_H */

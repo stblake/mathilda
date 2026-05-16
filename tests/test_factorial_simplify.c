@@ -10,7 +10,7 @@
  *
  * Each `assert_eval_eq` here exercises the user-facing string form of
  * the result. Equivalent forms (e.g. (n+2)(n+3) vs (2+n)(3+n) under
- * picocas's canonical Plus-arg ordering) are accepted in the expected
+ * Mathilda's canonical Plus-arg ordering) are accepted in the expected
  * column to avoid coupling tests to ordering decisions that live
  * outside of this module.
  */
@@ -27,20 +27,20 @@ void test_factorial_ratio_basic(void) {
 }
 
 void test_factorial_ratio_offset_pair(void) {
-    /* (n+3)! / (n+1)! -> (n+2)(n+3). Picocas prints the canonical
+    /* (n+3)! / (n+1)! -> (n+2)(n+3). Mathilda prints the canonical
      * form with constants first inside Plus: (2+n)(3+n). */
     assert_eval_eq("Simplify[(n+3)!/(n+1)!]", "(2 + n) (3 + n)", 0);
 }
 
 void test_factorial_ratio_smaller_over_larger(void) {
-    /* (n-2)! / n! -> 1/((n-1)*n). Picocas keeps the factored
+    /* (n-2)! / n! -> 1/((n-1)*n). Mathilda keeps the factored
      * Times[Power[n,-1], Power[Plus[-1,n],-1]] form, which prints
      * as 1/(n*(-1+n)). */
     assert_eval_eq("Simplify[(n-2)!/n!]", "1/(n (-1 + n))", 0);
 }
 
 void test_factorial_ratio_scaled_offset(void) {
-    /* (2n)! / (2n-2)! -> 2n*(2n-1). Picocas prints
+    /* (2n)! / (2n-2)! -> 2n*(2n-1). Mathilda prints
      * 2*n*(-1+2n). */
     assert_eval_eq("Simplify[(2*n)!/(2*n - 2)!]", "2 n (-1 + 2 n)", 0);
 }
@@ -125,7 +125,7 @@ void test_factorial_multivariate_offset(void) {
 
 void test_factorial_multivariate_negative_offset(void) {
     /* (n-k)! / (n-k-2)! -> (n-k)*(n-k-1).
-     * The canonical Plus-ordering of picocas prints the symbolic
+     * The canonical Plus-ordering of Mathilda prints the symbolic
      * group with k first (sign-flipped: (k-n)*(1+k-n)), which is
      * the same value. */
     assert_eval_eq("Simplify[(n-k)!/(n-k-2)!]", "(k - n) (1 + k - n)", 0);
@@ -154,7 +154,7 @@ void test_factorial_double_factorial_identity(void) {
      * factorials live in different symbolic groups: 2n and n) so
      * simp_factorial recognises this specific shape and rewrites
      * to Factorial2. The result prints with Factorial2's FullForm
-     * head because picocas does not yet pretty-print x!! infix. */
+     * head because Mathilda does not yet pretty-print x!! infix. */
     assert_eval_eq("Simplify[(2*n)!/(2^n * n!)]", "Factorial2[-1 + 2 n]", 0);
 }
 

@@ -2,7 +2,7 @@
 
 ## Context
 
-picocas currently has a strong rational-function integrator in `src/intrat.c`
+Mathilda currently has a strong rational-function integrator in `src/intrat.c`
 (`Integrate\`BronsteinRational`), but anything containing a transcendental atom
 (Sin, Cos, Exp, Log, Tan, ...) returns unevaluated. We will add the **parallel
 Risch / Risch–Norman heuristic**, faithfully porting Bronstein's *Poor Man's
@@ -63,7 +63,7 @@ package name (same convention as `Integrate\`BronsteinRational` — see
 
 ## Primitives reused (no new infrastructure)
 
-All from picocas; no library code needs to be added.
+All from Mathilda; no library code needs to be added.
 
 | Need | C entry | File |
 |---|---|---|
@@ -306,7 +306,7 @@ via `setitimer`. Document `PMINT_MAX_MONOMIALS = 5000` and
 
 Polish: docstrings via `symtab_set_docstring`, `ATTR_PROTECTED`,
 `docs/spec/builtins/calculus.md` entry, `docs/spec/changelog/2026-05.md`
-phase-by-phase summaries, `picocas_spec.md` overview untouched (no new
+phase-by-phase summaries, `Mathilda_spec.md` overview untouched (no new
 top-level category).
 
 **Phase 6 corpus** (combined: full Geddes Table II + Bronstein 2004 +

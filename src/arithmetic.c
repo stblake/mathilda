@@ -665,7 +665,7 @@ int expr_numeric_sign(Expr* e) {
     if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint);
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
-        // d is conventionally positive in PicoCAS Rational[n, d].
+        // d is conventionally positive in Mathilda Rational[n, d].
         if (n > 0) return (d > 0) ? 1 : -1;
         if (n < 0) return (d > 0) ? -1 : 1;
         return 0;

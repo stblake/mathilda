@@ -1,7 +1,7 @@
 /*
  * readwrite.c - File I/O builtins (Get, Put).
  *
- * Get reads picocas source from a file and evaluates each expression,
+ * Get reads Mathilda source from a file and evaluates each expression,
  * returning the last value (used by the REPL bootstrap to load
  * the internal .m initialization files).
  *

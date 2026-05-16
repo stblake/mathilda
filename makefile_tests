@@ -14,7 +14,7 @@ SRCS = $(SRC_DIR)/expr.c $(SRC_DIR)/part.c $(SRC_DIR)/print.c $(SRC_DIR)/parse.c
 OBJS = $(SRCS:.c=.o)
 
 # Targets
-all: expr_tests	parse_tests picocas
+all: expr_tests	parse_tests Mathilda
 
 # Pattern rule for object files
 $(SRC_DIR)/%.o: $(SRC_DIR)/%.c $(SRC_DIR)/%.h
@@ -29,7 +29,7 @@ parse_tests: tests/test_parse.c src/expr.o src/print.o src/parse.o
 
 LDFLAGS = -lreadline
 
-picocas: $(OBJ)
+Mathilda: $(OBJ)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 %.o: %.c

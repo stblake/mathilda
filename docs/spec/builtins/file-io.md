@@ -3,7 +3,7 @@
 Builtins implemented in `src/readwrite.c`.
 
 ## Get
-Reads a sequence of PicoCAS expressions from a file, evaluates each in order, and returns the value of the last one.
+Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
 - `Get["filename"]`
 
 **Features**:

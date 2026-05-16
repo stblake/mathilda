@@ -159,7 +159,7 @@ void zupoly_eval(const ZUPoly* p, const mpz_t alpha, mpz_t out);
 ZUPoly* zupoly_shift_si(const ZUPoly* p, int64_t alpha);
 
 /* ---------------------------------------------------------------------- */
-/*  Conversion to / from picocas Expr                                     */
+/*  Conversion to / from Mathilda Expr                                     */
 /* ---------------------------------------------------------------------- */
 
 struct Expr;

@@ -1,7 +1,7 @@
 # Calculus
 
 Symbolic differentiation is implemented natively in C (`src/deriv.c`).
-Earlier versions of PicoCAS bootstrapped `D`, `Dt` and `Derivative`
+Earlier versions of Mathilda bootstrapped `D`, `Dt` and `Derivative`
 from a rule file (`src/internal/deriv.m`); that approach was fragile
 and slow -- every call walked a linear list of ~60 DownValues, re-ran
 pattern matching against each, and recursed through the full rule
@@ -260,7 +260,7 @@ Out[?]= Integrate[1/(-3.14159 + 4.5 x^4), x]  (* unevaluated *)
 
 **Comprehensive corpus runner** (Phase 8d/8e):
 `tests/test_intrat_corpus.c` loads any `IntegrateRational` test
-corpus file at runtime via picocas's own `Get[]`, runs every
+corpus file at runtime via Mathilda's own `Get[]`, runs every
 `{integrand, var, ...}` entry through the rational integrator using
 fork-per-case isolation, and classifies the result via differential
 check.  Two CTest entries are wired:
@@ -364,7 +364,7 @@ emits `Integrate`CRCTable::depth` rather than locking up on any rule
 that escapes the audit.
 
 The table currently fires on only a small subset of inputs because
-picocas's pattern matcher does not yet fully support `/;`-guarded
+Mathilda's pattern matcher does not yet fully support `/;`-guarded
 multi-argument rules; this is a separate issue tracked under the
 matcher work.
 

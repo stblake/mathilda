@@ -7,7 +7,7 @@ status: in progress
 # BronsteinRational closed-form gaps (2026-05-11)
 
 Five failing `Integrate`BronsteinRational[...]` cases.  All five
-reproduce in picocas REPL; all five integrate cleanly via the
+reproduce in Mathilda REPL; all five integrate cleanly via the
 Mathematica .m source (verified with wolframscript), so the gaps are
 in the C port at `src/intrat.c`, not in the underlying algorithm.
 
@@ -48,7 +48,7 @@ in the C port at `src/intrat.c`, not in the underlying algorithm.
   `logtoreal_quadratic`.
 
 ### E — Tests
-- Add picocas tests for all 5 cases (no `RootSum`/`Function` head in
+- Add Mathilda tests for all 5 cases (no `RootSum`/`Function` head in
   output; `D[result, x] − integrand` simplifies to 0).
 - Extend `IntegrateRationalTests.m` for Mathematica parity.
 

@@ -1,5 +1,5 @@
 /*
- * iter.c -- Iteration built-ins for PicoCAS.
+ * iter.c -- Iteration built-ins for Mathilda.
  *
  * This module implements Mathematica-style imperative iteration primitives
  * that sit outside the rule/pattern-based evaluation model:

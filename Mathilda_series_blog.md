@@ -1,8 +1,8 @@
-# Series Expansions in PicoCAS
+# Series Expansions in Mathilda
 
-In [previous](./picocas_patterns_blog.md) [notes](./picocas_functional_blog.md) I toured pattern matching and functional programming in PicoCAS. This time I want to look at one of the more mathematically ambitious pieces of the system: the `Series` function, which computes Taylor, Laurent and Puiseux expansions of a wide class of symbolic inputs. As usual, every example below was typed straight into the REPL; the `Out[]` lines are the interpreter's actual output.
+In [previous](./Mathilda_patterns_blog.md) [notes](./Mathilda_functional_blog.md) I toured pattern matching and functional programming in Mathilda. This time I want to look at one of the more mathematically ambitious pieces of the system: the `Series` function, which computes Taylor, Laurent and Puiseux expansions of a wide class of symbolic inputs. As usual, every example below was typed straight into the REPL; the `Out[]` lines are the interpreter's actual output.
 
-PicoCAS aims to be a faithful recreation of Mathematica's core evaluator and pattern matcher in a small C99 codebase, with the calculus capabilities of a Derive-sized CAS [1]. `Series` is where several of its subsystems — arithmetic, pattern matching, rule rewriting, derivatives, `Apart`, partial fractions — come together.
+Mathilda aims to be a faithful recreation of Mathematica's core evaluator and pattern matcher in a small C99 codebase, with the calculus capabilities of a Derive-sized CAS [1]. `Series` is where several of its subsystems — arithmetic, pattern matching, rule rewriting, derivatives, `Apart`, partial fractions — come together.
 
 ## The basics
 
@@ -110,7 +110,7 @@ In[20]:= Series[Sin[x]^2 + Cos[x]^2, {x, 0, 10}]
 Out[20]= 1 + O[x]^11
 ```
 
-Another classical identity is the cancellation in $\tan(\sin x) - \sin(\tan x)$, whose first seven Taylor coefficients vanish. PicoCAS finds the leading $x^7/30$ and the next correction:
+Another classical identity is the cancellation in $\tan(\sin x) - \sin(\tan x)$, whose first seven Taylor coefficients vanish. Mathilda finds the leading $x^7/30$ and the next correction:
 
 ```mathematica
 In[21]:= Series[Tan[Sin[x]] - Sin[Tan[x]], {x, 0, 9}]
@@ -151,7 +151,7 @@ In[27]:= Series[(1+x)^(1/3), {x, 0, 4}]
 Out[27]= 1 + 1/3 x - 1/9 x^2 + 5/81 x^3 - 10/243 x^4 + O[x]^5
 ```
 
-When we expand `ArcSin[x]` *at a branch point* $x = 1$ the answer is genuinely a Puiseux series in $\sqrt{x - 1}$, and PicoCAS finds the correct $\pi/2$ constant term and the imaginary-unit prefactor from analytic continuation:
+When we expand `ArcSin[x]` *at a branch point* $x = 1$ the answer is genuinely a Puiseux series in $\sqrt{x - 1}$, and Mathilda finds the correct $\pi/2$ constant term and the imaginary-unit prefactor from analytic continuation:
 
 ```mathematica
 In[28]:= Series[ArcSin[x], {x, 1, 3}]
@@ -213,7 +213,7 @@ Out[35]= 1/2 - 1/24 x^2 + 1/720 x^4 - 1/40320 x^6 + O[x]^7
 
 ## Multivariate series
 
-You can expand in several variables at once. PicoCAS treats a two-spec call as an iterated expansion: expand in $x$ first, then expand each coefficient in $y$.
+You can expand in several variables at once. Mathilda treats a two-spec call as an iterated expansion: expand in $x$ first, then expand each coefficient in $y$.
 
 ```mathematica
 In[36]:= Series[Exp[x+y], {x, 0, 3}, {y, 0, 3}]
@@ -229,7 +229,7 @@ Out[37]= (1 + y + 1/2 y^2 + 1/6 y^3 + O[y]^4) x
 
 ## `Normal` and working with truncated series
 
-`Normal[s]` drops the `O[]` term and returns the honest polynomial approximation. That polynomial can then be used in any of PicoCAS's ordinary algebraic machinery:
+`Normal[s]` drops the `O[]` term and returns the honest polynomial approximation. That polynomial can then be used in any of Mathilda's ordinary algebraic machinery:
 
 ```mathematica
 In[38]:= Normal[Series[Cos[x], {x, 0, 8}]]
@@ -269,7 +269,7 @@ typedef struct {
 
 The object represents $\sum_i c_i\,(x-x_0)^{(n_{\min}+i)/d} + O\bigl((x-x_0)^{\text{order}/d}\bigr)$. A plain Taylor series has `nmin = 0` and `den = 1`; a Laurent series allows `nmin < 0`; a Puiseux series has `den > 1`. Everything else is the same code path.
 
-**2. Eager truncation with a padded working order.** Unlike FriCAS, which uses lazy infinite streams, PicoCAS commits to a finite working order. To protect against loss of precision when a series gets multiplied by a Laurent factor (e.g. `1/Sin[x]^10`) or inverted with a leading root, the working order is the requested order *plus* a small pad (12 when the expansion point is numeric, 2 when it is symbolic, which keeps symbolic coefficient expressions from blowing up).
+**2. Eager truncation with a padded working order.** Unlike FriCAS, which uses lazy infinite streams, Mathilda commits to a finite working order. To protect against loss of precision when a series gets multiplied by a Laurent factor (e.g. `1/Sin[x]^10`) or inverted with a leading root, the working order is the requested order *plus* a small pad (12 when the expansion point is numeric, 2 when it is symbolic, which keeps symbolic coefficient expressions from blowing up).
 
 **3. Dispatch on the head.** The driver `series_expand` recurses on the expression tree (`src/series.c:1417`):
 
@@ -299,11 +299,11 @@ Out[41]= x^a (1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + O[x]^5)
 
 **8. Branch-point Puiseux expansions.** At regular points of an inverse trig kernel, the at-zero composition works. At branch points (e.g. `ArcSin` at $x = 1$), the kernel returns `NULL` and `so_apply_arc_branch_point` takes over — it builds the Puiseux expansion directly in $\sqrt{x - x_0}$, respecting the correct sign and imaginary-unit prefactor for the chosen principal branch.
 
-**9. Fallback via `D[]`.** For heads that aren't tabulated — or for tabulated kernels whose expansion point isn't special enough to hit — PicoCAS falls back to the Taylor-via-derivatives definition, $f(x) = \sum_k f^{(k)}(x_0)\,(x-x_0)^k/k!$, relying on the system's own differentiator. This is why `Series[f[x], {x, a, 3}]` returns a symbolic Taylor polynomial with `Derivative[k][f][a]` coefficients.
+**9. Fallback via `D[]`.** For heads that aren't tabulated — or for tabulated kernels whose expansion point isn't special enough to hit — Mathilda falls back to the Taylor-via-derivatives definition, $f(x) = \sum_k f^{(k)}(x_0)\,(x-x_0)^k/k!$, relying on the system's own differentiator. This is why `Series[f[x], {x, a, 3}]` returns a symbolic Taylor polynomial with `Derivative[k][f][a]` coefficients.
 
 ## How it compares: FriCAS and Maxima
 
-The `Series` implementation in PicoCAS sits between two much larger designs — AXIOM/FriCAS at one end and Maxima at the other. Each made interesting, different choices.
+The `Series` implementation in Mathilda sits between two much larger designs — AXIOM/FriCAS at one end and Maxima at the other. Each made interesting, different choices.
 
 ### FriCAS: layered lazy streams
 
@@ -315,9 +315,9 @@ FriCAS is built as a tower of domains:
 
 Crucially, FriCAS's arithmetic and transcendental functions never truncate. Reciprocals, compositions, even `revert` (series reversion via Lagrange inversion) and Lambert sums are lazy recurrences on streams. If you later want more coefficients, you just ask.
 
-PicoCAS collapses the three layers into one `SeriesObj { nmin, order, den }` and commits up front to a finite order. That sacrifices laziness but keeps the C implementation small (2200 lines, one file), keeps memory layout simple, and lets every coefficient be an ordinary PicoCAS symbolic `Expr*` without dragging in an abstract ring tower. It also side-steps some classical pitfalls — an eager implementation doesn't have to worry about leading-zero removal or about whether a requested coefficient depends on something not yet computed; the contract is "expand to this order, now."
+Mathilda collapses the three layers into one `SeriesObj { nmin, order, den }` and commits up front to a finite order. That sacrifices laziness but keeps the C implementation small (2200 lines, one file), keeps memory layout simple, and lets every coefficient be an ordinary Mathilda symbolic `Expr*` without dragging in an abstract ring tower. It also side-steps some classical pitfalls — an eager implementation doesn't have to worry about leading-zero removal or about whether a requested coefficient depends on something not yet computed; the contract is "expand to this order, now."
 
-The two designs also differ on where transcendentals live. In FriCAS, `exp`, `log`, `sin`, … are implemented as lazy stream operations in `StreamTaylorSeriesOperations`, and they apply to any series over any supported ring. In PicoCAS, each transcendental has a hand-written Taylor-coefficient table (`kernel_coefs`) and is composed with the inner series via Faà di Bruno; unknown heads drop through to `D[]`-based Taylor. The result is a smaller library of transcendentals but one that integrates naturally with the rest of the system: a coefficient can be `Log[a]` or `Derivative[k][f][a]` or a piecewise-constant without any special machinery.
+The two designs also differ on where transcendentals live. In FriCAS, `exp`, `log`, `sin`, … are implemented as lazy stream operations in `StreamTaylorSeriesOperations`, and they apply to any series over any supported ring. In Mathilda, each transcendental has a hand-written Taylor-coefficient table (`kernel_coefs`) and is composed with the inner series via Faà di Bruno; unknown heads drop through to `D[]`-based Taylor. The result is a smaller library of transcendentals but one that integrates naturally with the rest of the system: a coefficient can be `Log[a]` or `Derivative[k][f][a]` or a piecewise-constant without any special machinery.
 
 ### Maxima: recursive series-of-series with algebraic fast paths
 
@@ -332,16 +332,16 @@ and applies rewriting passes until each piece is in closed form. The two passes 
 - `sp2expand` — the fast-path dispatch. `sp2log`, `sp2expt`, tabulated-by-`defprop` handlers for `%sin`, `%cos`, `%exp`, and so on.
 - `sratexpnd` — handles rational functions, and if the denominator factors with distinct non-zero roots it uses the distinct-roots theorem directly rather than going through full partial fractions.
 
-The single most influential piece of Maxima's design that shows up in PicoCAS is `split-two-term-poly`: the idea that you can probe an expression structurally for the shape $a + b\,x^{p/q}$ without doing a full series expansion, and then rewrite
+The single most influential piece of Maxima's design that shows up in Mathilda is `split-two-term-poly`: the idea that you can probe an expression structurally for the shape $a + b\,x^{p/q}$ without doing a full series expansion, and then rewrite
 
 $$\log(a + b\,x^{p/q}) \;=\; \log a + \log\!\bigl(1 + (b/a)\,x^{p/q}\bigr)$$
 
-so the generic log kernel sees a pure binomial. PicoCAS keeps that fast path more or less verbatim — `series_split_two_term` in `src/series.c` is the probe, and the `Log` branch of `series_expand` is the rewrite. The same idea is what makes `Series[Log[Cos[x]], ...]` or `Series[Log[1+Sin[x]], ...]` fall out cleanly.
+so the generic log kernel sees a pure binomial. Mathilda keeps that fast path more or less verbatim — `series_split_two_term` in `src/series.c` is the probe, and the `Log` branch of `series_expand` is the rewrite. The same idea is what makes `Series[Log[Cos[x]], ...]` or `Series[Log[1+Sin[x]], ...]` fall out cleanly.
 
-Where Maxima and PicoCAS diverge is in the answer's *shape*. Maxima's `series.lisp` is willing to return an infinite-summation form — symbolic coefficients parametrised by an index $k$. PicoCAS always returns a truncated `SeriesData` object with a concrete O-term; that is the price for matching Mathematica-style output.
+Where Maxima and Mathilda diverge is in the answer's *shape*. Maxima's `series.lisp` is willing to return an infinite-summation form — symbolic coefficients parametrised by an index $k$. Mathilda always returns a truncated `SeriesData` object with a concrete O-term; that is the price for matching Mathematica-style output.
 
 ### A one-paragraph summary of the trade-offs
 
-FriCAS chose generality and laziness: a tower of categories, streams everywhere, transcendentals expressed as lazy recurrences that work over any ring. Maxima chose algebraic rewriting: turn a series request into a symbolic sum and attack it with fast-path lemmas like `split-two-term-poly`. PicoCAS sits between them — one flat Puiseux struct, eager truncation, a Mathematica-style `SeriesData` output, but with Maxima's fast paths for `Log`, a Faà di Bruno kernel for each elementary head, and `Apart` + prefactor peeling gluing the whole thing together. It fits in a single C file and never leaves the PicoCAS expression tree, which is the design constraint the system cares about most.
+FriCAS chose generality and laziness: a tower of categories, streams everywhere, transcendentals expressed as lazy recurrences that work over any ring. Maxima chose algebraic rewriting: turn a series request into a symbolic sum and attack it with fast-path lemmas like `split-two-term-poly`. Mathilda sits between them — one flat Puiseux struct, eager truncation, a Mathematica-style `SeriesData` output, but with Maxima's fast paths for `Log`, a Faà di Bruno kernel for each elementary head, and `Apart` + prefactor peeling gluing the whole thing together. It fits in a single C file and never leaves the Mathilda expression tree, which is the design constraint the system cares about most.
 
 [1] https://en.wikipedia.org/wiki/Derive_(computer_algebra_system)

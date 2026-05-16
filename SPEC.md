@@ -1,10 +1,10 @@
-# PicoCAS System Architecture Specification
+# Mathilda System Architecture Specification
 
 ## 1. Overview
 
-PicoCAS is a symbolic computer algebra system (CAS) written in C99, closely modeled on the core architecture and evaluation semantics of Mathematica (the Wolfram Language). It implements a recursive expression model, structural pattern matching with backtracking, rewriting rules, and an extensive library of built-in mathematical functions.
+Mathilda is a symbolic computer algebra system (CAS) written in C99, closely modeled on the core architecture and evaluation semantics of Mathematica (the Wolfram Language). It implements a recursive expression model, structural pattern matching with backtracking, rewriting rules, and an extensive library of built-in mathematical functions.
 
-The name "PicoCAS" pays homage to David Stoutemyer's seminal PICOMATH-80 tiny computer algebra system.
+The name "Mathilda" pays homage to David Stoutemyer's seminal PICOMATH-80 tiny computer algebra system.
 
 **Key characteristics:**
 - Written in ~22,000 lines of C99 across 44 source modules
@@ -23,7 +23,7 @@ The name "PicoCAS" pays homage to David Stoutemyer's seminal PICOMATH-80 tiny co
 ## 2. Project Structure
 
 ```
-picocas/
+Mathilda/
 ├── src/                        # All source code (44 .c files, 44 .h files)
 │   ├── expr.c / expr.h         # Expression representation (tagged union AST)
 │   ├── parse.c / parse.h       # Pratt parser
@@ -78,7 +78,7 @@ picocas/
 │   ├── test_utils.h            # Shared test macros (TEST, ASSERT, ASSERT_STR_EQ)
 │   └── test_*.c                # ~30+ test source files
 ├── makefile                    # Primary build system
-├── picocas_spec.md             # Comprehensive function reference
+├── Mathilda_spec.md             # Comprehensive function reference
 ├── CLAUDE.md                   # AI development guidelines
 └── README.md                   # User guide
 ```
@@ -87,7 +87,7 @@ picocas/
 
 ## 3. Core Architecture
 
-PicoCAS is built from seven interdependent subsystems that together implement a Mathematica-like evaluation pipeline. The flow is:
+Mathilda is built from seven interdependent subsystems that together implement a Mathematica-like evaluation pipeline. The flow is:
 
 ```
 Input String
@@ -119,7 +119,7 @@ Input String
 
 ### 3.1 Expression Representation (`expr.c`, `expr.h`)
 
-Everything in PicoCAS is an `Expr`, implemented as a tagged union:
+Everything in Mathilda is an `Expr`, implemented as a tagged union:
 
 ```c
 typedef enum {
@@ -275,7 +275,7 @@ Attributes are bitflags on symbols that control how the evaluator processes expr
 
 ### 3.5 Evaluator (`eval.c`, `eval.h`)
 
-The evaluator is the heart of PicoCAS. It implements Mathematica's **infinite evaluation semantics**: expressions are repeatedly evaluated until a fixed point is reached (the expression no longer changes).
+The evaluator is the heart of Mathilda. It implements Mathematica's **infinite evaluation semantics**: expressions are repeatedly evaluated until a fixed point is reached (the expression no longer changes).
 
 **`evaluate(Expr* e)` -- the main evaluation loop:**
 
@@ -369,7 +369,7 @@ The rule engine applies transformation rules to expressions:
 
 ## 4. Memory Management
 
-PicoCAS uses **explicit manual memory management**. This is the most critical aspect of the codebase for contributors to understand.
+Mathilda uses **explicit manual memory management**. This is the most critical aspect of the codebase for contributors to understand.
 
 ### 4.1 Ownership Rules
 
@@ -419,7 +419,7 @@ Expr* copy = expr_copy(res->data.function.args[0]);
 - Never access an `Expr*` after calling `expr_free()` on it.
 - Never free the same `Expr*` twice. Use the NULL-out-before-free pattern above.
 - Always trace ownership: if you `expr_copy()` something, you must eventually `expr_free()` the copy.
-- Use `valgrind` to detect leaks: `valgrind --leak-check=full ./picocas`
+- Use `valgrind` to detect leaks: `valgrind --leak-check=full ./Mathilda`
 
 ---
 
@@ -475,7 +475,7 @@ After C initialization, `main()` loads `src/internal/init.m`, which bootstraps a
 The `src/internal/` directory contains Mathematica-syntax definition files that are loaded at startup:
 
 - **`init.m`** -- Bootstrap script, loads other `.m` files via `Get[]`.
-- **`deriv.m`** -- Derivative rules for `D[expr, x]`. This is a pure pattern-matching implementation: rules like `D[Sin[f_], x_] := Cos[f] * D[f, x]` are defined as DownValues using PicoCAS's own syntax, demonstrating the power of the rule system. Covers all elementary functions, chain rule, product rule, and higher-order derivatives.
+- **`deriv.m`** -- Derivative rules for `D[expr, x]`. This is a pure pattern-matching implementation: rules like `D[Sin[f_], x_] := Cos[f] * D[f, x]` are defined as DownValues using Mathilda's own syntax, demonstrating the power of the rule system. Covers all elementary functions, chain rule, product rule, and higher-order derivatives.
 - **`CRCMathTablesIntegrals.m`** -- Reference integral tables from the CRC Mathematical Tables.
 
 This architecture demonstrates a key design pattern: core operations are implemented in C for performance, while higher-level mathematical rules can be defined in the system's own language via DownValues.
@@ -528,7 +528,7 @@ Each module follows the same pattern: a `.c`/`.h` pair, with a `*_init()` functi
 
 ---
 
-## 8. How to Extend PicoCAS
+## 8. How to Extend Mathilda
 
 ### 8.1 Adding a New Built-in Function
 
@@ -672,7 +672,7 @@ If you created a new test file, add it to `tests/CMakeLists.txt`.
 
 #### Step 6: Update Documentation
 
-Update `picocas_spec.md` with the new function: describe its behavior, list its attributes, and provide sample inputs/outputs following the existing format.
+Update `Mathilda_spec.md` with the new function: describe its behavior, list its attributes, and provide sample inputs/outputs following the existing format.
 
 ### 8.2 Adding a New Module
 
@@ -723,11 +723,11 @@ To add a new syntactic operator:
 
 ## 9. Build System
 
-### Building PicoCAS
+### Building Mathilda
 
 ```bash
-make -j$(nproc)     # Build the picocas executable
-./picocas            # Run the REPL
+make -j$(nproc)     # Build the Mathilda executable
+./Mathilda            # Run the REPL
 ```
 
 The makefile uses:
@@ -751,7 +751,7 @@ for t in *_tests; do ./$t; done
 ### Checking for Memory Leaks
 
 ```bash
-valgrind --leak-check=full ./picocas
+valgrind --leak-check=full ./Mathilda
 ```
 
 ---
@@ -763,7 +763,7 @@ valgrind --leak-check=full ./picocas
 - **No modifications to `src/external/`:** The ECM library is a vendored dependency and must not be modified.
 - **Docstrings:** Every built-in function must have a docstring set via `symtab_set_docstring()` so it is accessible via `?FunctionName` in the REPL.
 - **Attributes:** Every built-in function must have appropriate attributes assigned in its module init function.
-- **Documentation:** Keep `picocas_spec.md` in sync with the current system capabilities. Every new or modified function must be documented there.
+- **Documentation:** Keep `Mathilda_spec.md` in sync with the current system capabilities. Every new or modified function must be documented there.
 
 ---
 

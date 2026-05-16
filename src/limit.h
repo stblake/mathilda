@@ -34,19 +34,19 @@
  *   the original Limit[...] expression          -- could not determine
  */
 
-#ifndef PICOCAS_LIMIT_H
-#define PICOCAS_LIMIT_H
+#ifndef MATHILDA_LIMIT_H
+#define MATHILDA_LIMIT_H
 
 #include "expr.h"
 
 /* Register Limit with the symbol table. Idempotent. */
 void limit_init(void);
 
-/* Built-in entry point. Follows the standard PicoCAS contract:
+/* Built-in entry point. Follows the standard Mathilda contract:
  *   - caller owns `res`;
  *   - return NULL to leave `res` unevaluated (caller retains ownership);
  *   - return a freshly allocated Expr* to replace `res` (caller frees `res`).
  */
 Expr* builtin_limit(Expr* res);
 
-#endif /* PICOCAS_LIMIT_H */
+#endif /* MATHILDA_LIMIT_H */

@@ -1,8 +1,8 @@
-# Functional Programming in PicoCAS
+# Functional Programming in Mathilda
 
-In an [earlier note](./picocas_patterns_blog.md) I walked through pattern matching in PicoCAS. This time I would like to tour the functional-programming side of the language: the handful of combinators that, together with pattern rules, do most of the heavy lifting in Mathematica-flavoured code.
+In an [earlier note](./Mathilda_patterns_blog.md) I walked through pattern matching in Mathilda. This time I would like to tour the functional-programming side of the language: the handful of combinators that, together with pattern rules, do most of the heavy lifting in Mathematica-flavoured code.
 
-PicoCAS aims to be a faithful recreation of Mathematica's core programming language in a very small C99 codebase [1]. Functional programming is part of that core: `Map`, `Apply`, `Fold`, `Nest`, `FixedPoint`, `Select`, and friends let you express computations declaratively, without explicit loops or mutable state. Every example below was run in PicoCAS; the output is the actual `Out[]` line the interpreter produced.
+Mathilda aims to be a faithful recreation of Mathematica's core programming language in a very small C99 codebase [1]. Functional programming is part of that core: `Map`, `Apply`, `Fold`, `Nest`, `FixedPoint`, `Select`, and friends let you express computations declaratively, without explicit loops or mutable state. Every example below was run in Mathilda; the output is the actual `Out[]` line the interpreter produced.
 
 ## Map and Apply — the two workhorses
 
@@ -33,7 +33,7 @@ In[5]:= Times @@ Range[1, 10]
 Out[5]= 3628800
 ```
 
-Because every PicoCAS expression is a tagged tree, `Apply` can convert between heads:
+Because every Mathilda expression is a tagged tree, `Apply` can convert between heads:
 
 ```mathematica
 In[6]:= Apply[List, a + b + c]
@@ -236,7 +236,7 @@ In[37]:= Max[collatz]
 Out[37]= 9232
 ```
 
-112 steps, reaching a maximum of 9232 before falling to 1 — the same trajectory we saw via pattern rules in the [earlier post](./picocas_patterns_blog.md).
+112 steps, reaching a maximum of 9232 before falling to 1 — the same trajectory we saw via pattern rules in the [earlier post](./Mathilda_patterns_blog.md).
 
 ## Combinatorial building blocks: Tuples, Permutations, Outer, Inner
 

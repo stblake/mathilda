@@ -10,7 +10,7 @@
  *     (Log pairing, Log[c·p] -> Log[p], Plus distribution,
  *      ArcTan / ArcTanh sign normalisation).
  *
- * Memory contract follows the standard picocas convention: every
+ * Memory contract follows the standard Mathilda convention: every
  * helper returns a freshly-allocated Expr* the caller owns; none of
  * them free their input arguments unless explicitly noted in
  * intsimp.h.
@@ -325,7 +325,7 @@ Expr* intsimp_pos_sqrt(Expr* e) {
  *
  * Implemented as direct C transformations on Plus[...] of Log[...]
  * terms (per the plan note) rather than pattern-rewriting at the
- * picocas rule-engine layer.  The transformations are
+ * Mathilda rule-engine layer.  The transformations are
  * differentiation-equivalent — they only beautify the output — so
  * the universal correctness check stays green either way.
  */

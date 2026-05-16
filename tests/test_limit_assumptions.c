@@ -3,7 +3,7 @@
  *
  * Bugs 6 & 7 -- Limit[x^n, n -> ±Infinity, Assumptions -> Abs[x] R c]
  *
- *   The standard Limit machinery has no assumption context, so picocas
+ *   The standard Limit machinery has no assumption context, so Mathilda
  *   used to return E^DirectedInfinity[Log[x]] (an unevaluated form) for
  *   Limit[x^n, n -> Infinity] regardless of any Abs[x] constraint.
  *

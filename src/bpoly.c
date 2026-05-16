@@ -369,7 +369,7 @@ BPoly* bpoly_shift_y_si(const BPoly* p, int64_t alpha) {
 }
 
 /* ====================================================================== */
-/*  Conversion to / from picocas Expr                                     */
+/*  Conversion to / from Mathilda Expr                                     */
 /* ====================================================================== */
 
 BPoly* expr_to_bpoly(const struct Expr* e,

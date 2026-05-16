@@ -9,8 +9,8 @@
  * depend on the pattern matcher for its core cases. See deriv.c for the
  * full implementation and a discussion of the evaluation strategy.
  */
-#ifndef PICOCAS_DERIV_H
-#define PICOCAS_DERIV_H
+#ifndef MATHILDA_DERIV_H
+#define MATHILDA_DERIV_H
 
 #include "expr.h"
 
@@ -55,4 +55,4 @@ Expr* builtin_derivative(Expr* res);
  * is not supported. The input expressions are NOT consumed. */
 Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn);
 
-#endif /* PICOCAS_DERIV_H */
+#endif /* MATHILDA_DERIV_H */

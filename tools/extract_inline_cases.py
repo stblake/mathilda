@@ -136,7 +136,7 @@ def main():
     out.append("(* Format: List of {integrand, integration_variable}.  *)")
     out.append("")
     out.append("{")
-    # picocas's parser does not accept trailing commas in List literals,
+    # Mathilda's parser does not accept trailing commas in List literals,
     # so the last entry must have no comma.
     for i, (integrand, variable) in enumerate(cases):
         sep = "," if i + 1 < len(cases) else ""

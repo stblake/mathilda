@@ -1,10 +1,10 @@
-# Patterns in PicoCAS
+# Patterns in Mathilda
 
-In this short note I would like to explore pattern matching in PicoCAS. One of the core features of the Mathematica programming language is its highly flexible and complex pattern matcher. 
+In this short note I would like to explore pattern matching in Mathilda. One of the core features of the Mathematica programming language is its highly flexible and complex pattern matcher. 
 
-PicoCAS has the goal of supporting the core programming language of Mathematica, with the algebraic and calculus capabilities of (a long defunct) computer algebra system, Derive, all while having a minimal footprint [1]. 
+Mathilda has the goal of supporting the core programming language of Mathematica, with the algebraic and calculus capabilities of (a long defunct) computer algebra system, Derive, all while having a minimal footprint [1]. 
 
-Here is an extremely simple pattern in PicoCAS, given $3 x^2$ we replace $x$ with $t$: 
+Here is an extremely simple pattern in Mathilda, given $3 x^2$ we replace $x$ with $t$: 
 
 ```mathematica
 In[1]:= 3 x^2 /. x -> t
@@ -35,7 +35,7 @@ Out[4]= {1, 1, 3, 2, 5, 3, 7, 4, 9, 5}
 And here we mix ReplaceRepeated (`//.`) and Conditions on patterns to implement a check for the Collatz Conjecture. This check requires implementing two rules based on the parity of the number: 
 
 ```mathematica
-(* In PicoCAS trailing slashes (\) are used used for repl line continuation, a la Python. *)
+(* In Mathilda trailing slashes (\) are used used for repl line continuation, a la Python. *)
 In[5]:= collatzRules = {\
   {pre___, n_Integer} /; EvenQ[n] && n > 1 :> {pre, n, n / 2},\
   {pre___, n_Integer} /; OddQ[n] && n > 1 :> {pre, n, 3 n + 1}\

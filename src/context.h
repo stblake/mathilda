@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-/* Context system for PicoCAS.
+/* Context system for Mathilda.
  *
  * A context is a namespace identified by a string ending in a backtick, e.g.
  * "Global`" or "MyPackage`Private`". Every symbol conceptually lives in a

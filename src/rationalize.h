@@ -1,4 +1,4 @@
-/* PicoCAS — Rationalize.
+/* Mathilda — Rationalize.
  *
  * Converts inexact (Real / MPFR) numbers to nearby rationals, mirroring
  * Mathematica's Rationalize:

@@ -82,7 +82,7 @@ relevant head exactly once per sub-expression.
 
 ## 6.3. Limits (`limit.c`)
 
-PicoCAS now has a native `Limit` built-in implemented in C in
+Mathilda now has a native `Limit` built-in implemented in C in
 `src/limit.c`, registered by `limit_init()` in the standard
 `core_init()` chain. The design follows the layered dispatch outlined
 in `limit_candidate_spec.md`, with each layer either resolving the
@@ -138,7 +138,7 @@ value.
 1. *Continuous substitution* (Layer 1) does not just evaluate
    `f /. x -> a`; it Together-normalizes first and checks that the
    denominator does not vanish, so `Sin[x]/x` at x = 0 correctly skips
-   the fast path instead of silently returning 0 (as PicoCAS's
+   the fast path instead of silently returning 0 (as Mathilda's
    arithmetic would fold `Sin[0] * 0^(-1)`). Expressions of the form
    `Power[_, expr_with_x]` are likewise refused here -- they are
    handled by Layer 5.3 instead.
@@ -222,7 +222,7 @@ below:
 
 A smaller tweak: continuous substitution now folds `Power[0, positive]`
 and `Sqrt[0]` to `0` locally, so `Limit[Sqrt[x-1]/x, x -> 1]` reports
-`0` instead of the un-folded `Sqrt[0]` that PicoCAS's Power evaluator
+`0` instead of the un-folded `Sqrt[0]` that Mathilda's Power evaluator
 leaves in place.
 
 **Regression-suite additions (2026-04-20, batch 2):** three further
@@ -383,7 +383,7 @@ regression in `tests/test_limit.c` (`test_wp8_*`, `test_wp2_*`,
    `Limit[Log[1 - (Log[Exp[z]/z - 1] + Log[z])/z]/z, z -> 100]` hang.
 2. **WP-2 (b^x series kernel).** `so_inv` caps its iteration count
    based on input-coefficient leaf size; previously 1/(2^x - 3^x) at
-   x = 0 spun in the O(N^2) simp-per-iteration loop because PicoCAS
+   x = 0 spun in the O(N^2) simp-per-iteration loop because Mathilda
    doesn't canonicalise polynomials in symbolic `Log[2], Log[3]`. The
    cap is sized so numeric/trivial inputs retain the full order and
    heavy symbolic inputs still produce a valid leading-term Laurent.
@@ -409,7 +409,7 @@ regression in `tests/test_limit.c` (`test_wp8_*`, `test_wp2_*`,
    Indeterminate, `x z/(x^2+y^2+z^2)` → Indeterminate,
    `ArcTan[y/x] at {Infinity, Infinity}` → Indeterminate). The
    origin-fast-path gains an inner-divide-by-zero scanner that catches
-   0/0 shapes buried inside ArcTan/Sin/etc. that PicoCAS's arithmetic
+   0/0 shapes buried inside ArcTan/Sin/etc. that Mathilda's arithmetic
    would silently fold to 0.
 5. **WP-3 (Series of x^a at nonzero point).** Two-part fix. First,
    `do_series_single`'s `try_factor_power_prefactor` is now gated to
@@ -418,7 +418,7 @@ regression in `tests/test_limit.c` (`test_wp8_*`, `test_wp2_*`,
    out as a symbolic prefactor (which would leave the other factors
    to be expanded in isolation, producing 0). Second,
    `try_apart_preprocess` refuses to Apart-preprocess expressions
-   containing `Power[base, non-rational]` because picocas's Apart
+   containing `Power[base, non-rational]` because Mathilda's Apart
    collapses such inputs to 0. Together these resolve
    `Limit[3 (x^a - a x + a - 1)/(x-1)^2, x -> 1]` to
    `(3/2) a (a - 1)`.

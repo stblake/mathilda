@@ -135,7 +135,7 @@ ZUPoly* bpoly_eval_y_si(const BPoly* p, int64_t alpha);
 BPoly* bpoly_shift_y_si(const BPoly* p, int64_t alpha);
 
 /* ---------------------------------------------------------------------- */
-/*  Conversion to / from picocas Expr                                     */
+/*  Conversion to / from Mathilda Expr                                     */
 /* ---------------------------------------------------------------------- */
 
 struct Expr;

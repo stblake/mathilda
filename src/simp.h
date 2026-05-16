@@ -1,5 +1,5 @@
-#ifndef PICOCAS_SIMP_H
-#define PICOCAS_SIMP_H
+#ifndef MATHILDA_SIMP_H
+#define MATHILDA_SIMP_H
 
 #include "expr.h"
 
@@ -74,4 +74,4 @@ bool assume_known_real    (const AssumeCtx* ctx, const Expr* x);
 bool assume_known_integer (const AssumeCtx* ctx, const Expr* x);
 bool assume_known_even    (const AssumeCtx* ctx, const Expr* x);
 
-#endif /* PICOCAS_SIMP_H */
+#endif /* MATHILDA_SIMP_H */

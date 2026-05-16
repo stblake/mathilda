@@ -62,7 +62,7 @@ Implementation per `RISCH_NORMAN_PLAN.md`.  Reference:
 
 - [ ] **Post-hoc verifier in production path** — currently relies on the algebra; a verifier that reduces trig-half-angle output against Sin/Cos integrands would catch any silent bugs.  Test corpus exercises this manually via explicit Weierstrass rule lists; production path skips it.
 - [ ] **Multivariate Q(I) factoring** — `Factor[_, Extension -> I]` is univariate-only via Trager.  Unlocks integrands like `1/(1 + Sin[x]^2)` (requires multivariate Q(I) factoring of the candlog denominator).
-- [ ] **BesselJ Darboux specials** — Bronstein 2004's worked example uses a Bessel-function differential field.  Requires `BesselJ` to be implemented in picocas first.
+- [ ] **BesselJ Darboux specials** — Bronstein 2004's worked example uses a Bessel-function differential field.  Requires `BesselJ` to be implemented in Mathilda first.
 - [ ] **LambertW integration** — Darboux poly is wired (`get_special_all`), but no test corpus yet.
 - [ ] **Trig-half-angle output cleanup** — pmint's results live in Tan[x/2] form, which is mathematically correct but less readable than the equivalent Sin/Cos form.  A post-process Tan-half-angle → Sin/Cos pass would improve user output.
 - [ ] **Algebraic-function integrands** (`Sqrt[1+x^3]`, etc.) — out of scope for pmint's heuristic; would require a separate algebraic-integration module (Trager's algorithm).

@@ -28,7 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Reentrant suppress counter. See trig_canon.h for the rationale. picocas's
+/* Reentrant suppress counter. See trig_canon.h for the rationale. Mathilda's
  * evaluator is single-threaded, so a plain global is fine. */
 static int g_suppress = 0;
 

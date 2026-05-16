@@ -24,7 +24,7 @@
 /* =========================== Cube roots =========================== */
 
 static void test_cuberoot_product_collapses(void) {
-    /* 2^(1/3) * 2^(2/3) = 2^(3/3) = 2.  The picocas evaluator already
+    /* 2^(1/3) * 2^(2/3) = 2^(3/3) = 2.  The Mathilda evaluator already
      * collapses this at multiplication time (Power[2, 1/3] * Power[2,
      * 2/3] folds via Times-canonicalisation), so this is a sanity
      * check that Simplify doesn't disturb the canonical answer. */
@@ -66,7 +66,7 @@ static void test_quartic_root_squared(void) {
 /* The Phase C shortcut must not break the existing q=2 path. */
 
 static void test_sqrt_product_unchanged(void) {
-    /* Sqrt[2] * Sqrt[2] = 2.  picocas's Power[2, 1/2]*Power[2, 1/2]
+    /* Sqrt[2] * Sqrt[2] = 2.  Mathilda's Power[2, 1/2]*Power[2, 1/2]
      * folds at the Times level, so this is a sanity check. */
     assert_eval_eq("Simplify[Sqrt[2] Sqrt[2]]", "2", 0);
 }
@@ -110,7 +110,7 @@ static void test_sqrt_of_cbrt_squared(void) {
 }
 
 static void test_sqrt_of_cbrt_quotient_squared(void) {
-    /* Sqrt[2^(1/3)/6]^2 = 2^(1/3)/6  (which picocas renders as
+    /* Sqrt[2^(1/3)/6]^2 = 2^(1/3)/6  (which Mathilda renders as
      * 1/3 · 2^(-2/3) thanks to its rational-exponent canonicalisation
      * of 2^(1/3)/6 = 2^(1/3 - log_2 6) = ...; verify it's a 2^(-2/3)
      * form proportional to 1/3). */
@@ -142,7 +142,7 @@ static void test_power_neg_pq_lift(void) {
      * branch.  Cancel with explicit Extension -> Power[2, 1/3] lifts
      * the user's input through expand_radicals_to_atomic_poly, rewriting
      * Power[2, -2/3] into a polynomial in 2^(1/3) before the QAUPoly
-     * lift.  The expected output structure depends on picocas's Times
+     * lift.  The expected output structure depends on Mathilda's Times
      * canonicaliser; here we just sanity-check that simplification
      * succeeds (result != input) and contains 2^(1/3) but not
      * 2^(-2/3). */

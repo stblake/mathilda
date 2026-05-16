@@ -1,7 +1,7 @@
 /* `strdup` is POSIX, not C99.  glibc hides it under `-std=c99` unless
  * one of the standard feature-test macros is defined.  Darwin exposes
  * it implicitly, which masks the cross-platform issue; the rest of
- * picocas matches this by setting `_GNU_SOURCE` before any include
+ * Mathilda matches this by setting `_GNU_SOURCE` before any include
  * (see src/expr.c, src/match.c, src/modular.c).  Must precede every
  * other directive. */
 #ifndef _GNU_SOURCE

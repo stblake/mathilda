@@ -14,19 +14,19 @@
  *   * Helpers              — Content / Primitive / Monic /
  *                            LeadingCoefficient unit-test handles.
  *
- * Memory contract follows the standard picocas BuiltinFunc rule: the
+ * Memory contract follows the standard Mathilda BuiltinFunc rule: the
  * caller (evaluator) owns `res`.  On success the builtin returns a new
  * Expr*; on failure it returns NULL and the evaluator preserves the
  * call unevaluated.
  */
 
-#ifndef PICOCAS_INTRAT_H
-#define PICOCAS_INTRAT_H
+#ifndef MATHILDA_INTRAT_H
+#define MATHILDA_INTRAT_H
 
 #include "expr.h"
 
 /* Public package entry: corresponds to the Mathematica function
- * `IntegrateRational[f, x]` (exposed in picocas as
+ * `IntegrateRational[f, x]` (exposed in Mathilda as
  * `Integrate`BronsteinRational[f, x]`).  Phase 1 ships a thin implementation that
  * (a) tries the derivative-recognition fast path (`c*D'/D^k`),
  * (b) splits into HermiteReduce + IntegratePolynomial when possible,
@@ -93,4 +93,4 @@ Expr* builtin_intrat_naive_log_part(Expr* res);
  * registration is a fresh symtab_add_builtin / attribute set). */
 void intrat_init(void);
 
-#endif /* PICOCAS_INTRAT_H */
+#endif /* MATHILDA_INTRAT_H */

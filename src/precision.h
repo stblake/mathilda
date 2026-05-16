@@ -1,4 +1,4 @@
-/* PicoCAS — Precision / Accuracy introspection and coercion.
+/* Mathilda — Precision / Accuracy introspection and coercion.
  *
  * Exposes four builtins:
  *   Precision[x]        — returns Infinity, MachinePrecision, or decimal digits.

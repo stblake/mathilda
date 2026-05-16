@@ -1,4 +1,4 @@
-/* PicoCAS — Rationalize implementation.
+/* Mathilda — Rationalize implementation.
  *
  * Algorithm sketch
  * ----------------

@@ -1,5 +1,5 @@
 /*
- * strings.c - String manipulation builtins for PicoCAS
+ * strings.c - String manipulation builtins for Mathilda
  *
  * StringLength["string"]        - gives the number of characters in a string
  * Characters["string"]          - gives a list of the individual characters in a string

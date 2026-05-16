@@ -1,5 +1,5 @@
 /*
- * PicoCAS Comparisons
+ * Mathilda Comparisons
  *
  * Implements structural comparison functions similar to the Wolfram Language.
  */

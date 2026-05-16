@@ -39,7 +39,7 @@ static bool is_true_symbol(const Expr* e) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
 }
 
-/* Recursively scan `e` for any EXPR_REAL leaf.  picocas's rational
+/* Recursively scan `e` for any EXPR_REAL leaf.  Mathilda's rational
  * integrator cannot reason about inexact numbers; we surface them at
  * dispatch with an Integrate::inexact message rather than letting the
  * pipeline produce ComplexInfinity / 1/0 partway through. */
@@ -57,7 +57,7 @@ static bool expr_contains_real(const Expr* e) {
 
 /* Test whether `f` is a polynomial in `x`.  Calls the existing
  * PolynomialQ builtin so we get the same definition the rest of
- * picocas uses. */
+ * Mathilda uses. */
 static bool is_polynomial_in(Expr* f, Expr* x) {
     Expr* args[2] = { expr_copy(f), expr_copy(x) };
     Expr* call = internal_polynomialq(args, 2);

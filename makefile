@@ -35,7 +35,7 @@ endif
 SRC_DIR = src
 SRC = $(wildcard $(SRC_DIR)/*.c)
 OBJ = $(SRC:.c=.o)
-TARGET = picocas
+TARGET = Mathilda
 
 TEST_BINARIES = eval_tests expr_tests parse_tests test_ld test_ops test_pattern list_tests stats_tests expand_tests
 TEST_DIR = tests

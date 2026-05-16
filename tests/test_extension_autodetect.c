@@ -7,7 +7,7 @@
  * involved.  Each test:
  *
  *   1. Parses + evaluates an input string (so the expression is in its
- *      canonical picocas form, the same shape Cancel / Together would
+ *      canonical Mathilda form, the same shape Cancel / Together would
  *      see at the entry to their extension-aware path).
  *   2. Calls `extension_autodetect`.
  *   3. Asserts the generator count and tower degree.
@@ -176,12 +176,12 @@ static void test_sqrt_of_cbrt(void) {
     assert_autodetect("Sqrt[Power[2, 1/3]]", 1, 6);
 }
 
-/* Rational base → tier-1 picocas should have split this into integer
+/* Rational base → tier-1 Mathilda should have split this into integer
  * components, but be defensive: if a Rational base sneaks through, bail
- * cleanly.  Picocas normalises Sqrt[1/2] to 1/Sqrt[2] so we test the
+ * cleanly.  Mathilda normalises Sqrt[1/2] to 1/Sqrt[2] so we test the
  * normalised form. */
 static void test_sqrt_half_normalised(void) {
-    /* Picocas evaluates Sqrt[1/2] → 1/Sqrt[2] = Power[2, -1/2], so the
+    /* Mathilda evaluates Sqrt[1/2] → 1/Sqrt[2] = Power[2, -1/2], so the
      * effective generator is Sqrt[2].  Confirms the canonicalisation
      * the auto-detector relies on. */
     assert_autodetect("Sqrt[1/2]", 1, 2);

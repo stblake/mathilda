@@ -4,9 +4,9 @@
 
 /*
  * Tests for TrigExpand. TrigExpand is a rule-based expansion, so the output
- * ordering follows picocas's canonical Orderless sort (which may differ from
+ * ordering follows Mathilda's canonical Orderless sort (which may differ from
  * Mathematica's pretty-printed form). Each expected string here reflects
- * picocas's canonical order.
+ * Mathilda's canonical order.
  */
 
 void test_trigexpand_double_angle(void) {

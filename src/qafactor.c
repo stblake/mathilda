@@ -2,7 +2,7 @@
  *
  * Phase G3 lives here: norm of f ∈ Q(α)[x] via Resultant_y(P_α, g(x, y)).
  *
- * Strategy: lift QAExt and QAUPoly to picocas Expr*'s in two free
+ * Strategy: lift QAExt and QAUPoly to Mathilda Expr*'s in two free
  * symbols (x_name, y_name), then call `internal_resultant` to drop into
  * the Sylvester-matrix routine in poly.c.  This keeps qafactor.c a
  * thin glue layer — all multivariate arithmetic is delegated. */
@@ -37,7 +37,7 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
 
 /* ============================== mpq → Expr ============================== */
 
-/* Convert an mpq_t to a picocas Expr.  Returns Integer when the
+/* Convert an mpq_t to a Mathilda Expr.  Returns Integer when the
  * denominator is 1, otherwise Rational[num, den] (num, den as
  * normalised Integer / BigInt nodes).  Handles arbitrary precision. */
 static Expr* mpq_to_expr(const mpq_t q) {
@@ -426,7 +426,7 @@ QAUPoly** qa_alg_factor(const QAUPoly* f,
     QASqfrNormResult sqn = qa_sqfr_norm(f, x_name, y_name);
     if (sqn.s < 0) return NULL;
 
-    /* Factor R(x) over Q via picocas's existing Factor builtin
+    /* Factor R(x) over Q via Mathilda's existing Factor builtin
      * (single-arg variadic — Factor[poly], not Factor[poly, var]). */
     Expr* fac_args[1] = { expr_copy(sqn.R) };
     Expr* factored = internal_factor(fac_args, 1);
@@ -523,7 +523,7 @@ QAUPoly** qa_alg_factor(const QAUPoly* f,
 /* ============================== Phase G5 ============================== */
 
 /* Internal symbol used as the α-placeholder when round-tripping through
- * picocas's polynomial machinery (Coefficient, Expand).  Picked to be
+ * Mathilda's polynomial machinery (Coefficient, Expand).  Picked to be
  * unlikely to collide with user input; in the rare case the user
  * actually defines this symbol the worst outcome is a NULL return from
  * qa_factor_with_extension, which the caller treats as "leave
@@ -553,7 +553,7 @@ static Expr* expr_subst(const Expr* e,
     return result;
 }
 
-/* Recognise the imaginary unit, in either of its picocas forms:
+/* Recognise the imaginary unit, in either of its Mathilda forms:
  * the bare symbol I or the canonical Complex[0, 1]. */
 static bool expr_is_imaginary_unit(const Expr* e) {
     if (!e) return false;
@@ -571,7 +571,7 @@ static bool expr_is_imaginary_unit(const Expr* e) {
     return false;
 }
 
-/* Recognise Sqrt[c] with integer c, returning c via *out_c.  picocas
+/* Recognise Sqrt[c] with integer c, returning c via *out_c.  Mathilda
  * canonicalises Sqrt[c] as Power[c, Rational[1, 2]] so we accept that
  * form too. */
 static bool expr_is_sqrt_int(const Expr* e, long* out_c) {
@@ -601,7 +601,7 @@ static bool expr_is_sqrt_int(const Expr* e, long* out_c) {
 QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
     if (!alpha_expr || !render_out) return NULL;
 
-    /* I  →  P_α(y) = y² + 1, render = I.  picocas auto-evaluates the
+    /* I  →  P_α(y) = y² + 1, render = I.  Mathilda auto-evaluates the
      * literal `I` into `Complex[0, 1]` and `Sqrt[-1]` likewise, so by
      * the time we see the option both forms have collapsed to the
      * canonical Complex[0, 1].  We accept the bare symbol I as a
@@ -625,7 +625,7 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
         }
     }
 
-    /* Times[I, Sqrt[c]]  =  Sqrt[-c]  →  P_α(y) = y² + c.  picocas
+    /* Times[I, Sqrt[c]]  =  Sqrt[-c]  →  P_α(y) = y² + c.  Mathilda
      * auto-evaluates Sqrt[-c] for negative argument into I·Sqrt[c],
      * so `Extension -> Sqrt[-3]` arrives here as Times[Complex[0,1],
      * Sqrt[3]].  We accept either ordering of the two factors. */
@@ -756,7 +756,7 @@ static int64_t gcd64(int64_t a, int64_t b) {
  * step in `qa_expr_to_qaupoly_with_alpha` which uses `Coefficient`.
  *
  * Raw structural rewrite: does NOT call `evaluate()` to avoid having
- * picocas's Times canonicaliser route the result back through the
+ * Mathilda's Times canonicaliser route the result back through the
  * radical-absorption logic that produces `Power[c, p/q]` forms in the
  * first place.
  *
@@ -813,7 +813,7 @@ static Expr* expand_radicals_to_atomic_poly(const Expr* e,
     }
 
     /* Also handle `Sqrt[c_base]` shape when q_natural is even.
-     * picocas keeps Sqrt[c] as a special head (not Power[c, 1/2]) in
+     * Mathilda keeps Sqrt[c] as a special head (not Power[c, 1/2]) in
      * some surface forms. */
     if (e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
@@ -947,7 +947,7 @@ static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
         }
         if ((size_t)adeg >= ext->deg) {
             /* α-degree exceeds the extension's; refuse.  In practice
-             * picocas auto-reduces e.g. Sqrt[2]^3 → 2 Sqrt[2] before
+             * Mathilda auto-reduces e.g. Sqrt[2]^3 → 2 Sqrt[2] before
              * we even see the input, so this branch only fires when
              * the input is genuinely outside Q(α). */
             expr_free(c_expanded);
@@ -1015,7 +1015,7 @@ Expr* qaupoly_to_expr_alpha(const QAUPoly* f,
      * collapses Sqrt[c]^k / c^(k/n) etc. into canonical form.
      *
      * Compound `alpha_render` (Phase G6 — γ = α_1 + s_2 α_2 + ... is a
-     * Plus expression) needs an extra Expand pass: picocas's evaluator
+     * Plus expression) needs an extra Expand pass: Mathilda's evaluator
      * does not auto-distribute (a + b)^k, so γ^k would otherwise leak
      * through unsimplified.  Expand turns it into a sum of products
      * of α_i powers, after which auto-evaluation collapses Sqrt[c]^2
@@ -1035,7 +1035,7 @@ Expr* qaupoly_to_expr_alpha(const QAUPoly* f,
 /* Trager core, factored out so both G5 (single α) and G6 (tower) can
  * share it.  Lifts `poly` → QAUPoly[x] over `ext`, runs the squarefree
  * pre-pass + qa_alg_factor + multiplicity trial-division, and renders
- * each factor back as a picocas Expr using `alpha_render_output` as the
+ * each factor back as a Mathilda Expr using `alpha_render_output` as the
  * surface form for the algebraic generator.
  *
  * `poly` may already contain `alpha_render_input` literally; that
@@ -1228,7 +1228,7 @@ Expr* qa_factor_with_extension(const Expr* poly,
 
 /* ===== Tower-construction helpers ===== */
 
-/* Reify a QAExt's minimal polynomial as a picocas Expr in `y_name`. */
+/* Reify a QAExt's minimal polynomial as a Mathilda Expr in `y_name`. */
 static Expr* qaext_min_poly_expr(const QAExt* ext, const char* y_name) {
     return mpq_array_to_poly_expr(ext->coef, ext->deg + 1, y_name);
 }
@@ -1258,7 +1258,7 @@ static Expr* expr_p_at_y_minus_sz(const Expr* P, const char* y_name,
     return expanded;
 }
 
-/* Compute Res_z(Q, P) ∈ Q[w] via picocas's internal_resultant. */
+/* Compute Res_z(Q, P) ∈ Q[w] via Mathilda's internal_resultant. */
 static Expr* expr_resultant_z(const Expr* P, const Expr* Q,
                               const char* z_name) {
     Expr* args[3] = { expr_copy((Expr*)P),
@@ -1713,7 +1713,7 @@ static Expr* canonicalise_nested_radicands(const Expr* e,
 /* Layer-2 input-side decomposition helper. Walks `e` and rewrites every
  * Sqrt[c] / Power[c, 1/2] (c composite squarefree, all prime factors in
  * `prime_set`) into a raw `Times[Sqrt[p_1], ..., Sqrt[p_k]]` constructed
- * via expr_new_function — NOT through evaluate(), so picocas's Times
+ * via expr_new_function — NOT through evaluate(), so Mathilda's Times
  * canonicaliser does not immediately re-combine the product back to
  * Sqrt[c]. After this pass, qa_cancel_with_tower's main substitution
  * loop replaces each Sqrt[p_i] with its γ-poly form, after which the
@@ -1892,7 +1892,7 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
      * degree 8 over Q(Sqrt[3], Sqrt[5], Sqrt[15])) handle the input
      * correctly: the per-prime substitution replaces each Sqrt[p_i]
      * with its γ-poly, so the Times factors become γ-polys (no Sqrt
-     * left for picocas's Times canonicaliser to re-combine into Sqrt[c]
+     * left for Mathilda's Times canonicaliser to re-combine into Sqrt[c]
      * when Together is evaluated in Step 4). */
     Expr* arg_internal = decompose_redundant_sqrts(arg, t);
     for (int i = 0; i < t->n; i++) {
@@ -1970,7 +1970,7 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
      * temp symbol via `expand_radicals_to_atomic_poly`, then substitute
      * the temp symbol with the γ-poly form.  This catches the non-
      * natural `Power[c, p/q]` shapes (e.g. `Power[2, -2/3]`) that
-     * picocas's Times canonicaliser produces, which a bare
+     * Mathilda's Times canonicaliser produces, which a bare
      * `expr_subst(input, t->alpha_renders[i], ...)` would miss. */
     for (int i = 0; i < t->n; i++) {
         /* Parse alpha_renders[i] as `Power[c_i, 1/q_i]` or `Sqrt[c_i]`. */
@@ -2260,7 +2260,7 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
      * the user's input.  Return NULL to let the caller fall back to the
      * no-tower path when the tower-cancelled form is bigger than the
      * input by LeafCount.  Uses heads=true so Power/Times nodes count
-     * (the canonical picocas complexity proxy used by simp_search). */
+     * (the canonical Mathilda complexity proxy used by simp_search). */
     if (result) {
         int64_t in_size  = leaf_count_internal((Expr*)arg,    true);
         int64_t out_size = leaf_count_internal((Expr*)result, true);
@@ -2438,7 +2438,7 @@ static bool expr_is_atomic_algebraic(const Expr* e) {
     long c;
     if (expr_is_sqrt_int(e, &c)) return true;
 
-    /* I·Sqrt[c]  =  Sqrt[-c]  (picocas auto-evaluation). */
+    /* I·Sqrt[c]  =  Sqrt[-c]  (Mathilda auto-evaluation). */
     if (e->type == EXPR_FUNCTION
         && e->data.function.head
         && e->data.function.head->type == EXPR_SYMBOL
@@ -2619,7 +2619,7 @@ static Expr* expr_qx_squarefree_part(const Expr* R, const char* z_name) {
 }
 
 /* True if R ∈ Q[z] is irreducible over Q.  Conservative: factors via
- * picocas's `Factor`; returns true iff the Q-factorisation contains a
+ * Mathilda's `Factor`; returns true iff the Q-factorisation contains a
  * single non-constant factor (with multiplicity 1).  Returns false
  * (out parameter unchanged) on any analysis failure — caller treats
  * that as "not provably irreducible". */
@@ -2738,7 +2738,7 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
      * any `Power[c_i, p/q]` in `base` into a polynomial in a per-atom
      * temp symbol via `expand_radicals_to_atomic_poly`, then substitute
      * that temp symbol with the gamma-representation of the atom.  The
-     * two-step approach is needed because picocas's Times canonicaliser
+     * two-step approach is needed because Mathilda's Times canonicaliser
      * may have rewritten the user's `Power[c_i, 1/q_i]` to non-natural
      * forms like `Power[c_i, -2/3]`, and structural substitution by
      * `sub->alpha_renders[i]` would miss those. */
@@ -3227,7 +3227,7 @@ static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
                                          Expr** owned) {
     /* Step 1: canonicalise each nested radical against every integer-base
      * generator we have, AND normalise the surface form to use a positive
-     * 1/q exponent.  Picocas's Power canonicaliser rewrites `1/Sqrt[X]`
+     * 1/q exponent.  Mathilda's Power canonicaliser rewrites `1/Sqrt[X]`
      * to `Power[X, -1/2]`, so the same algebraic generator can appear
      * in the input with negative or positive exponent — both generate
      * the same field Q(Sqrt[X]) and should dedup. */

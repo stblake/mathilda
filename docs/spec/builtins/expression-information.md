@@ -328,7 +328,7 @@ A function with `HoldAllComplete`:
 `HoldComplete` and `Unevaluated` are the two standard built-in heads that carry `HoldAllComplete`.
 
 ## InputForm
-- `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in PicoCAS).
+- `InputForm[expr]` causes `expr` to be printed in a form suitable for input (standard form in Mathilda).
 
 ## ToString
 - `ToString[expr]`: returns a `String` containing the printed form of `expr` in `InputForm`.
@@ -350,7 +350,7 @@ Out[3]= "x^{2}+y^{3}"
 ```
 
 ## ToExpression
-- `ToExpression[input]`: parses the string `input` as PicoCAS input (`InputForm`) and returns the resulting expression after evaluation.
+- `ToExpression[input]`: parses the string `input` as Mathilda input (`InputForm`) and returns the resulting expression after evaluation.
 - `ToExpression[input, form]`: uses interpretation rules corresponding to the specified form. Currently `InputForm`, `FullForm`, and `StandardForm` are accepted (all route through the same parser, which is form-agnostic).
 - `ToExpression[input, form, h]`: wraps the head `h` around the parsed expression before it is returned to the evaluator. Using `h = Hold` produces an unevaluated `Hold[...]` wrapper.
 
@@ -485,7 +485,7 @@ Out[3]= 7
 ```
 
 ## ByteCount
-Gives the number of bytes used internally by PicoCAS to store the expression.
+Gives the number of bytes used internally by Mathilda to store the expression.
 - `ByteCount[expr]`
 
 **Features**:

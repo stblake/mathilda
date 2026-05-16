@@ -2,11 +2,11 @@
  * test_factor_terms.c -- unit tests for FactorTerms / FactorTermsList.
  *
  * The reference outputs below are the documented Mathematica behaviour
- * adapted to picocas's printer (canonical Times/Plus ordering, flat
- * Times for small polynomials). Where picocas legitimately produces a
+ * adapted to Mathilda's printer (canonical Times/Plus ordering, flat
+ * Times for small polynomials). Where Mathilda legitimately produces a
  * mathematically-equivalent but textually-different result (e.g.
  * Gaussian-integer content, nested Times[c, Times[...]] leftovers from
- * Expand), the assertion uses the actual picocas form. Each FactorTerms
+ * Expand), the assertion uses the actual Mathilda form. Each FactorTerms
  * case is paired with a multiplicative round-trip so that the factor
  * decomposition and the residue together reproduce the input.
  */
@@ -197,7 +197,7 @@ static void test_factorterms_rational_complex(void) {
     /* original (after Together).                                       */
     run_roundtrip("7 x+(14 y+21)/z");
 
-    /* Complex coefficients. picocas extracts the real integer GCD (5)   */
+    /* Complex coefficients. Mathilda extracts the real integer GCD (5)   */
     /* rather than Mathematica's Gaussian-integer GCD (5 I); both are    */
     /* mathematically valid factorizations.                              */
     run_full("FactorTermsList[5 I x^2+20 x I+10]",

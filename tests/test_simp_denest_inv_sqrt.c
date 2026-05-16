@@ -196,7 +196,7 @@ void test_idempotent_sqrt3_plus_sqrt2(void) {
 }
 
 void test_idempotent_sqrt3_minus_sqrt2(void) {
-    /* The asymmetric (subtraction) form: P > Q.  picocas canonical
+    /* The asymmetric (subtraction) form: P > Q.  Mathilda canonical
      * Plus ordering keeps the positive Sqrt term first. */
     assert_eval_eq(
         "Simplify[Sqrt[3] - Sqrt[2]]",

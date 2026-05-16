@@ -6,7 +6,7 @@
 
 ## Context
 
-PicoCAS currently has no `Integrate` builtin. The user wants a faithful C99 port of `IntegrateRational.m` (1989 lines of Mathematica), which implements the modern textbook pipeline for rational function integration:
+Mathilda currently has no `Integrate` builtin. The user wants a faithful C99 port of `IntegrateRational.m` (1989 lines of Mathematica), which implements the modern textbook pipeline for rational function integration:
 
 1. **Mack's linear Hermite Reduction** — splits `f = A/D` into `D[g, x] + h` where `h` has a square-free denominator (Bronstein, *Symbolic Integration I*, p. 44).
 2. **Lazard–Rioboo–Trager log-part algorithm** — computes the logarithmic part of the integral using a subresultant pseudo-remainder sequence (PRS) over `K(x)[t]` (Bronstein p. 51, Trager 1976).
@@ -18,7 +18,7 @@ References (in order of importance to the implementation):
 - Trager, *Algebraic Factoring and Rational Function Integration*, ACM SYMSAC 1976. (PDF in repo root.)
 - Geddes et al., *Algorithms for Computer Algebra*, 1992 — Example 11.12 used for the `lc(d)·polymod` corrective shift inside `IntRationalLogPart`.
 
-The picocas baseline has surprisingly strong infrastructure already (subresultant-PRS-based multivariate `PolynomialGCD`, `PolynomialExtendedGCD`, `Resultant`, `FactorSquareFree`, `Apart`, `Together`, `Cancel`, `D`, and Trager-algorithm algebraic factoring via `Factor[poly, Extension -> α]`). The main gaps relative to Mathematica are: `Solve`, `RootSum`, `RootReduce`, `ToRadicals`, `Apart` does not accept `Extension`, and `PolynomialQuotientRemainder` is not exposed (only the separated pair).
+The Mathilda baseline has surprisingly strong infrastructure already (subresultant-PRS-based multivariate `PolynomialGCD`, `PolynomialExtendedGCD`, `Resultant`, `FactorSquareFree`, `Apart`, `Together`, `Cancel`, `D`, and Trager-algorithm algebraic factoring via `Factor[poly, Extension -> α]`). The main gaps relative to Mathematica are: `Solve`, `RootSum`, `RootReduce`, `ToRadicals`, `Apart` does not accept `Extension`, and `PolynomialQuotientRemainder` is not exposed (only the separated pair).
 
 **Scope decisions confirmed by user:**
 - Cover the full pipeline including `LogToArcTan` / `LogToArcTanh`, recreating the missing pieces (Solve-quadratic, basic RootReduce, etc.) where needed.
@@ -51,7 +51,7 @@ The picocas baseline has surprisingly strong infrastructure already (subresultan
 | `src/sym_names.c` / `src/sym_names.h` | Cache `SYM_Integrate`, `SYM_BronsteinRational`, `SYM_RootSum`, `SYM_HermiteReduce` and a few internals |
 | `src/poly.c` / `src/poly.h` | Add `SubresultantPolynomialRemainders[a, b, x]` builtin (the algorithm needs the *full chain*, not just the resultant) and `PolynomialQuotientRemainder[a, b, x]` (returns `{q, r}` pair) |
 | `tests/CMakeLists.txt` | Register `test_intrat` |
-| `picocas_spec.md` | Document new builtins per CLAUDE.md instructions |
+| `Mathilda_spec.md` | Document new builtins per CLAUDE.md instructions |
 
 ### Dependency graph for `intrat.c`
 ```
@@ -86,7 +86,7 @@ Each phase ends with green tests in `tests/test_intrat.c`. Per CLAUDE.md ("If te
 - `src/rat.c` / `src/rat.h` — `Together`, `Cancel` accept the option and propagate it to the internal GCD call.
 - `src/parfrac.c` / `src/parfrac.h` — `Apart` (option already mentioned in the original Phase 2 plumbing; bring it forward to Phase 0 for symmetry).
 - `src/sym_names.c` / `.h` — `SYM_Extension` and `SYM_None` already exist; reuse.
-- `picocas_spec.md` — extend the docstring for each builtin.
+- `Mathilda_spec.md` — extend the docstring for each builtin.
 - `tests/test_extension_options.c` (NEW) — option-parsing + correctness coverage.
 - `tests/CMakeLists.txt` — register the new test binary.
 
@@ -173,7 +173,7 @@ Before invoking `HermiteReduce`, check whether the integrand has the form `c · 
 
 **New builtins:**
 - `Integrate\`IntRationalLogPart[A/D, x, t]` — direct port of `IntegrateRational.m:751-801`. Returns either a list of `{Q_i[t], S_i[t,x]}` pairs (when `RootSum -> False`) or a sum of `RootSum[Function[t, Q_i[t]], Function[t, t Log[S_i[t,x]]]]` terms.
-- `Integrate\`Helpers\`SquareFree[p]` — picocas wrapper around `FactorSquareFree` that buckets factors of equal multiplicity (mirrors `IntegrateRational.m:1477`). Returns the list `{ {m_i, factor_of_multiplicity_i} ... }`.
+- `Integrate\`Helpers\`SquareFree[p]` — Mathilda wrapper around `FactorSquareFree` that buckets factors of equal multiplicity (mirrors `IntegrateRational.m:1477`). Returns the list `{ {m_i, factor_of_multiplicity_i} ... }`.
 - `Integrate\`Helpers\`ApartList[expr, x, Extension -> opt]` — returns `Apart`'s output already split into a list (mirrors `IntegrateRational.m:955`).
 - `Integrate\`Helpers\`ExtractConstants[f, x]` — pulls scalar prefactors out of numerator/denominator so the LRT subresultant chain doesn't blow up; mirrors `IntegrateRational.m:1013-1023`.
 - New System builtin: `SubresultantPolynomialRemainders[a, b, x]` — exposes the multivariate subresultant PRS already used internally by `PolynomialGCD` (see `src/poly.c:943-1411`). Returns the chain `{S_n, S_{n-1}, ..., S_0}` as a list. Without this, the algorithm cannot extract the degree-`i` element of the chain (see `Extract[prs, Position[degs, i] // First]` in the Mathematica source).
@@ -230,7 +230,7 @@ Port `IntegrateRational.m:534-587`. Composes Phase 1-4: Hermite-reduce, polynomi
 ### Phase 6 — `LogToArcTan` and `LogToArcTanh` post-processing
 **Goal:** Pattern-based simplification combining `c·Log[A] + c·Log[B] -> c·Log[A B]`, `c·Log[A] − c·Log[B] -> c·Log[A/B]`, and `c·Log[A] − c·Log[B] -> 2c·ArcTanh[(A−B)/(A+B)]` when the resulting argument is rational in `x`.
 
-**Implementation choice:** Rather than pattern-rewriting at the picocas-rule layer (slow and fragile), implement these as direct C transformations operating on `Plus[...]` of `Log[...]` terms.
+**Implementation choice:** Rather than pattern-rewriting at the Mathilda-rule layer (slow and fragile), implement these as direct C transformations operating on `Plus[...]` of `Log[...]` terms.
 
 **New builtins:**
 - `Integrate\`LogToArcTan[e, x]` — port of `IntegrateRational.m:1896-1958`.
@@ -257,7 +257,7 @@ Port `IntegrateRational.m:67-121`. Implements:
    - **`ArcTanh[arg]`**: same treatment as `ArcTan` (odd function).
    - The point of canonicalization is reproducible test output: structurally-equivalent results compare equal under string match. Without it, swapping the order of two roots of a quadratic gives a different-looking (but correct) answer, which makes test assertions brittle.
 
-3. **Sort the top-level `Plus`.** Apply picocas's existing `expr_compare`-based canonical ordering (already automatic for `ATTR_ORDERLESS`, but `Integrate`'s output goes through user-side `Expand` which can reorder terms). Ensure final form has terms grouped: rational-part first, then `Log` terms, then `ArcTan`, then `ArcTanh` — matches Mathematica's output convention and makes diffing test expectations easy.
+3. **Sort the top-level `Plus`.** Apply Mathilda's existing `expr_compare`-based canonical ordering (already automatic for `ATTR_ORDERLESS`, but `Integrate`'s output goes through user-side `Expand` which can reorder terms). Ensure final form has terms grouped: rational-part first, then `Log` terms, then `ArcTan`, then `ArcTanh` — matches Mathematica's output convention and makes diffing test expectations easy.
 
 ---
 
@@ -277,13 +277,13 @@ Port `IntegrateRational.m:67-121`. Implements:
 | `src/core.c` | **MODIFY** | One-line `integrate_init()` call right after `expand_init()` |
 | `tests/test_intrat.c` | **NEW** | ~60 cases (per phase + 20 end-to-end from `IntegrateRationalTests.m`) |
 | `tests/CMakeLists.txt` | **MODIFY** | Add `test_intrat` |
-| `picocas_spec.md` | **MODIFY** | Document each new builtin per CLAUDE.md |
+| `Mathilda_spec.md` | **MODIFY** | Document each new builtin per CLAUDE.md |
 
 ---
 
 ## Existing functions to reuse (no reimplementation)
 
-| Picocas builtin / C function | File:line | Used for |
+| Mathilda builtin / C function | File:line | Used for |
 |------------------------------|-----------|----------|
 | `PolynomialGCD` | `src/poly.c:3273` | `gcd[a,b,x]` in HermiteReduce, IntRationalLogPart |
 | `PolynomialExtendedGCD` | `src/poly.c:3142` | `ExtendedEuclidean`, `LogToAtan` |

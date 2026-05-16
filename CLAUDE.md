@@ -53,7 +53,7 @@
 
 ## Project Specifics
 
-The goal of this project is to use Gemini cli to create a small (pico) computer algebra system (CAS), called picocas. The CAS should be a faithful recreation of the core architecture (parser, pattern matcher, symbol table, evaluator) of Mathematica (or the Wolfram Language) and a recreation of the core simple mathematical functions of Mathematica (Plus, Times, Power, Divide, etc.)
+The goal of this project is to use Gemini cli to create a small (pico) computer algebra system (CAS), called Mathilda. The CAS should be a faithful recreation of the core architecture (parser, pattern matcher, symbol table, evaluator) of Mathematica (or the Wolfram Language) and a recreation of the core simple mathematical functions of Mathematica (Plus, Times, Power, Divide, etc.)
 
 -- When working on a task, do not pause to ask for feedback. Proceed through the plan continuously. If tests pass, move to the next phase immediately.
 
@@ -67,13 +67,13 @@ The goal of this project is to use Gemini cli to create a small (pico) computer 
 
 -- Internal symbols should be defined in sym_names.c 
 
--- Every time a builtin function is implemented or modified, we should update `picocas_spec.md`. The spec is now an overview file that points into `docs/spec/`; edit the relevant per-category file under `docs/spec/builtins/` (and the matching `docs/spec/changelog/<YYYY-MM>.md` for a change summary), then update the overview only if a new top-level section or category was added.
+-- Every time a builtin function is implemented or modified, we should update `Mathilda_spec.md`. The spec is now an overview file that points into `docs/spec/`; edit the relevant per-category file under `docs/spec/builtins/` (and the matching `docs/spec/changelog/<YYYY-MM>.md` for a change summary), then update the overview only if a new top-level section or category was added.
 
 -- Every time a builtin function is implemented we should also assign the appropriate Attributes to that function. 
 
 -- Efficient and careful memory management is important. The system should track memory usage and leaks with valgrind. 
 
-After any change or improvement to the system is made, a summary of the features should be given under an appropriate heading in the current month's `docs/spec/changelog/<YYYY-MM>.md` file. The top-level `picocas_spec.md` itself stays terse — it is the navigational entry point only.
+After any change or improvement to the system is made, a summary of the features should be given under an appropriate heading in the current month's `docs/spec/changelog/<YYYY-MM>.md` file. The top-level `Mathilda_spec.md` itself stays terse — it is the navigational entry point only.
 
 -- Every builtin function should have an Information string that gives a concise, but complete description of the function (via symtab_set_docstring)
 

@@ -39,8 +39,8 @@
  * explicitly noted (intsimp_simplify_if_radical takes ownership).
  */
 
-#ifndef PICOCAS_INTSIMP_H
-#define PICOCAS_INTSIMP_H
+#ifndef MATHILDA_INTSIMP_H
+#define MATHILDA_INTSIMP_H
 
 #include <stdbool.h>
 #include "expr.h"
@@ -68,4 +68,4 @@ Expr* intsimp_strip_log_constants(Expr* e, Expr* x);
 Expr* intsimp_distribute_plus(Expr* e);
 Expr* intsimp_normalize_inverse_trig_signs(Expr* e);
 
-#endif /* PICOCAS_INTSIMP_H */
+#endif /* MATHILDA_INTSIMP_H */

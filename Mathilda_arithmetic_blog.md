@@ -1,16 +1,16 @@
-# Arithmetic in PicoCAS
+# Arithmetic in Mathilda
 
-In the [pattern matching](./picocas_patterns_blog.md) and [functional programming](./picocas_functional_blog.md) notes I focused on the language layer. This time I would like to look one floor down — at how PicoCAS actually does arithmetic. PicoCAS supports three numeric regimes:
+In the [pattern matching](./Mathilda_patterns_blog.md) and [functional programming](./Mathilda_functional_blog.md) notes I focused on the language layer. This time I would like to look one floor down — at how Mathilda actually does arithmetic. Mathilda supports three numeric regimes:
 
 1. **Machine precision** — IEEE-754 double-precision floats, the same 64-bit numbers your C compiler gives you.
 2. **Arbitrary-precision integers** — exact integers of any size, backed by [GNU MP (GMP)](https://gmplib.org/).
 3. **Arbitrary-precision reals** — `N[expr, n]` evaluates `expr` to `n` decimal digits using [MPFR](https://www.mpfr.org/) for correctly-rounded floating-point.
 
-There is no other numeric tower. In particular, **PicoCAS does not implement Mathematica's significance arithmetic** — the precision of an MPFR number stays where you put it, even through cancellations and ill-conditioned operations. I will say more about this at the end. All of the examples below were run in PicoCAS; the `Out[]` lines are the actual REPL output.
+There is no other numeric tower. In particular, **Mathilda does not implement Mathematica's significance arithmetic** — the precision of an MPFR number stays where you put it, even through cancellations and ill-conditioned operations. I will say more about this at the end. All of the examples below were run in Mathilda; the `Out[]` lines are the actual REPL output.
 
 ## Machine integers and the slide into bignums
 
-Integers begin life as 64-bit signed values. Once an operation would overflow, PicoCAS quietly promotes the result to a GMP `mpz_t` and keeps going:
+Integers begin life as 64-bit signed values. Once an operation would overflow, Mathilda quietly promotes the result to a GMP `mpz_t` and keeps going:
 
 ```mathematica
 In[1]:= 2^62
@@ -40,7 +40,7 @@ Out[6]= 158
 
 ## Exact rationals
 
-When you mix integers with division, PicoCAS keeps the result as an exact rational. There is no silent conversion to float:
+When you mix integers with division, Mathilda keeps the result as an exact rational. There is no silent conversion to float:
 
 ```mathematica
 In[7]:= 1/3 + 1/4
@@ -93,7 +93,7 @@ The same expression rewritten to avoid the cancellation (`1/(b + Sqrt[b^2 + 1])`
 
 ## Newton's iteration
 
-Newton's iteration for $\sqrt{2}$ is a `NestList` over rational numbers. Because PicoCAS keeps rationals exact, the numerator and denominator double in length on each step:
+Newton's iteration for $\sqrt{2}$ is a `NestList` over rational numbers. Because Mathilda keeps rationals exact, the numerator and denominator double in length on each step:
 
 ```mathematica
 In[16]:= NestList[(# + 2/#)/2 &, 1, 5]
@@ -126,7 +126,7 @@ In[22]:= PrimeQ[2^257 - 1]
 Out[22]= False
 ```
 
-`2^257 - 1` is composite — Frank Cole's famous 1903 talk produced the factorisation `761838257287 × 193707721 × ...` for the 67-bit Mersenne, and the 257-bit one is also notoriously composite. PicoCAS uses GMP's Miller–Rabin for `PrimeQ`, with deterministic small-prime trial division as a precheck.
+`2^257 - 1` is composite — Frank Cole's famous 1903 talk produced the factorisation `761838257287 × 193707721 × ...` for the 67-bit Mersenne, and the 257-bit one is also notoriously composite. Mathilda uses GMP's Miller–Rabin for `PrimeQ`, with deterministic small-prime trial division as a precheck.
 
 Fermat numbers are another quick test. $F_5 = 2^{2^5} + 1$ was the first one Euler showed to be composite:
 
@@ -255,13 +255,13 @@ In[45]:= NestList[399/100 # (1 - #) &, 4/10, 3]
 Out[45]= {2/5, 1197/1250, 25312959/156250000, 1322447176215313281/2441406250000000000}
 ```
 
-The numerator's bit length roughly doubles per step. After a few dozen iterations the rationals become unwieldy and you have to make a choice — drop to machine precision and lose digits to chaos, or keep them exact and watch GMP grind through ever-larger integers. PicoCAS happily supports either choice.
+The numerator's bit length roughly doubles per step. After a few dozen iterations the rationals become unwieldy and you have to make a choice — drop to machine precision and lose digits to chaos, or keep them exact and watch GMP grind through ever-larger integers. Mathilda happily supports either choice.
 
-## What PicoCAS does *not* do — significance arithmetic
+## What Mathilda does *not* do — significance arithmetic
 
 This is the most important caveat. Mathematica's `N[expr, n]` does not just produce a number with `n` decimal digits — it produces a number that *carries* its precision through subsequent operations and *loses* precision when those operations are ill-conditioned. Subtracting two nearly-equal high-precision numbers in Mathematica gives back a low-precision number, automatically.
 
-PicoCAS does not do this. Once an MPFR number has been created at `n` digits, every arithmetic operation runs at `n` digits. The reported `Precision` of the result will read the same `n` whether the operation was harmless or catastrophic:
+Mathilda does not do this. Once an MPFR number has been created at `n` digits, every arithmetic operation runs at `n` digits. The reported `Precision` of the result will read the same `n` whether the operation was harmless or catastrophic:
 
 ```mathematica
 In[46]:= x = N[E, 50]
@@ -277,7 +277,7 @@ In[49]:= N[x - 27/10, 50]
 Out[49]= 0.0182818284590452353602874713526624977572470936999662
 ```
 
-In Mathematica, `Precision[x - 27/10]` would drop noticeably because the subtraction destroys leading digits. In PicoCAS the precision is the precision *of the representation*, not the precision *of the value*. The user is responsible for tracking error.
+In Mathematica, `Precision[x - 27/10]` would drop noticeably because the subtraction destroys leading digits. In Mathilda the precision is the precision *of the representation*, not the precision *of the value*. The user is responsible for tracking error.
 
 The deliberate choice here is simplicity. Significance arithmetic is delicate to implement correctly (Mathematica gets it subtly wrong in places too), it interacts awkwardly with symbolic evaluation, and its absence is rarely a problem if you write your computations in stable form to begin with. Where you need rigorous error bounds, computing with a generous extra precision and checking the answer at half is usually enough.
 
@@ -290,10 +290,10 @@ The numeric stack rests on three vendored or linked libraries:
 - **[MPFR](https://www.mpfr.org/)** — correctly-rounded multi-precision floating point, gated behind `USE_MPFR=1` in the makefile, used by `N[expr, n]` and the constants registry in `src/numeric.c`.
 - **[GMP-ECM](https://gitlab.inria.fr/zimmermann/ecm)** — bundled in `src/external/ecm/`, providing the elliptic-curve method as the deepest tier of `FactorInteger`.
 
-The interesting glue is in `src/arithmetic.c` (overflow detection and bigint promotion), `src/numeric.c` (MPFR fillers, the constants table, the digit-to-bit conversion factor `log2(10) ≈ 3.32193`), and the MPFR-aware paths in `plus.c`, `times.c`, `power.c`, the trig and hyperbolic modules, and `logexp.c`. A flag (`USE_MPFR`) at compile time toggles MPFR support entirely, so PicoCAS still builds and runs without it — `N[expr, n]` then prints a warning and falls back to machine precision.
+The interesting glue is in `src/arithmetic.c` (overflow detection and bigint promotion), `src/numeric.c` (MPFR fillers, the constants table, the digit-to-bit conversion factor `log2(10) ≈ 3.32193`), and the MPFR-aware paths in `plus.c`, `times.c`, `power.c`, the trig and hyperbolic modules, and `logexp.c`. A flag (`USE_MPFR`) at compile time toggles MPFR support entirely, so Mathilda still builds and runs without it — `N[expr, n]` then prints a warning and falls back to machine precision.
 
 ## In summary
 
-PicoCAS gives you three numeric regimes — fast machine doubles, exact integers and rationals via GMP, and arbitrary-precision reals via MPFR — joined by a single bridge, `N`. The boundaries are explicit: you opt in to floating-point by writing a literal with a decimal point or calling `N`, and you stay in the exact world as long as you don't. There is no significance arithmetic — what you ask for is what you get — and the underlying libraries (GMP, MPFR, GMP-ECM, the C math library) do the heavy lifting. For a system whose binary weighs in at a few hundred kilobytes, you can take it surprisingly far.
+Mathilda gives you three numeric regimes — fast machine doubles, exact integers and rationals via GMP, and arbitrary-precision reals via MPFR — joined by a single bridge, `N`. The boundaries are explicit: you opt in to floating-point by writing a literal with a decimal point or calling `N`, and you stay in the exact world as long as you don't. There is no significance arithmetic — what you ask for is what you get — and the underlying libraries (GMP, MPFR, GMP-ECM, the C math library) do the heavy lifting. For a system whose binary weighs in at a few hundred kilobytes, you can take it surprisingly far.
 
 

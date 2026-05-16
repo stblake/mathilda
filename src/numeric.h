@@ -1,4 +1,4 @@
-/* PicoCAS — numeric evaluation (N[], SetPrecision, …)
+/* Mathilda — numeric evaluation (N[], SetPrecision, …)
  *
  * This module implements numeric approximation of symbolic expressions.
  * The public entry point is `N[expr]` and `N[expr, prec]`. Phase 1 supports

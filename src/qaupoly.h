@@ -14,11 +14,11 @@
  * Q(α) is a field whenever P_α is irreducible, so QAUPoly admits
  * standard Euclidean division and gcd.  The implementation does not
  * verify P_α irreducibility — the caller is responsible for that
- * contract (and Phase G5's picocas-level API only builds extensions
+ * contract (and Phase G5's Mathilda-level API only builds extensions
  * where it holds, e.g. Sqrt[c] / c^(1/n)). */
 
-#ifndef PICOCAS_QAUPOLY_H
-#define PICOCAS_QAUPOLY_H
+#ifndef MATHILDA_QAUPOLY_H
+#define MATHILDA_QAUPOLY_H
 
 #include <stddef.h>
 #include <stdbool.h>

@@ -4,7 +4,7 @@ The system is composed of several interdependent subsystems: Expression Represen
 
 ## 5.1. Expression Representation (`Expr`)
 
-Everything in PicoCAS is an expression, represented by the `Expr` struct. It is implemented as a tagged union.
+Everything in Mathilda is an expression, represented by the `Expr` struct. It is implemented as a tagged union.
 
 *   **Types (`ExprType`)**:
     *   `EXPR_INTEGER`: A 64-bit signed integer (`int64_t`).
@@ -33,7 +33,7 @@ The parser translates raw string input into `Expr` trees.
 
 ## 5.4. Evaluator (`eval.c`)
 
-The `evaluate(Expr* e)` function is the heart of PicoCAS. It follows Mathematica's infinite evaluation semantics: expressions are repeatedly evaluated until a fixed point is reached (the expression no longer changes).
+The `evaluate(Expr* e)` function is the heart of Mathilda. It follows Mathematica's infinite evaluation semantics: expressions are repeatedly evaluated until a fixed point is reached (the expression no longer changes).
 
 **Evaluation Sequence for Functions (`f[arg1, arg2]`):**
 1.  **Evaluate Head**: The head `f` is evaluated first.

@@ -403,7 +403,7 @@ void info_init(void) {
         "Get[\"filename\"]\n"
         "\treads expressions from a file, evaluates them in order, and returns the last result.\n"
         "Returns $Failed if the file cannot be opened.\n"
-        "It is conventional to use names ending in .m for files containing PicoCAS input.");
+        "It is conventional to use names ending in .m for files containing Mathilda input.");
     symtab_set_docstring("Put",
         "Put[expr, \"filename\"] or expr >> \"filename\"\n"
         "\twrites expr to the file, replacing any prior contents.\n"
@@ -446,7 +446,7 @@ void info_init(void) {
         "\tToString[x^2 + y^3, TeXForm]     -> \"x^2 + y^3\" (rendered in TeX)");
     symtab_set_docstring("ToExpression",
         "ToExpression[input]\n"
-        "\tparses the string input as PicoCAS input and returns the\n"
+        "\tparses the string input as Mathilda input and returns the\n"
         "\tresulting expression (after evaluation).\n"
         "ToExpression[input, form]\n"
         "\tuses interpretation rules corresponding to the specified form.\n"
@@ -634,7 +634,7 @@ void info_init(void) {
         "Element consults $Assumptions for symbolic queries, so under Assuming[Element[x, Integers], ...] a query Element[x, Reals] returns True via the Integer => Real lattice.\n"
         "Element threads over lists in its first argument: Element[{x1, x2, ...}, dom] returns the list of per-element decisions.");
     symtab_set_docstring("LeafCount", "LeafCount[expr] gives the total number of indivisible subexpressions in expr.");
-    symtab_set_docstring("ByteCount", "ByteCount[expr] gives the number of bytes used internally by PicoCAS to store expr.");
+    symtab_set_docstring("ByteCount", "ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.");
 
     // Time and Date
     symtab_set_docstring("Timing", "Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.");
@@ -656,7 +656,7 @@ void info_init(void) {
         "within a single session, for example as a result of different\n"
         "conditions of internal system caches.\n"
         "TimeConstrained takes account only of CPU time spent inside the\n"
-        "main PicoCAS kernel process; it does not include additional\n"
+        "main Mathilda kernel process; it does not include additional\n"
         "threads or processes.");
     symtab_set_docstring("AbsoluteTime",
         "AbsoluteTime[]\n"

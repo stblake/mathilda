@@ -1,15 +1,15 @@
-# Computing Limits in PicoCAS
+# Computing Limits in Mathilda
 
 ## Introduction
 
-`Limit` is one of the few builtins in PicoCAS where correctness is not
+`Limit` is one of the few builtins in Mathilda where correctness is not
 local: you cannot decide the answer by looking at one node of the
 expression tree. `Sin[x]/x` at `x -> 0` is indeterminate by
 substitution, finite in value, and undetectable without some theory of
 growth rates. A computer algebra system that ships `Limit` ships an
 opinion about how all of calculus fits together.
 
-This post is a tour of that opinion in PicoCAS. We will:
+This post is a tour of that opinion in Mathilda. We will:
 
 1. set the scene with a couple of easy cases,
 2. walk through the dispatcher layer by layer, using actual entries
@@ -33,7 +33,7 @@ Out[2]= 1
 The first is continuous substitution: plug `x = 2` into `x^2`. The
 second is everything `Limit` is allowed to do that substitution is not.
 
-PicoCAS treats the two cases with different machinery. The first falls
+Mathilda treats the two cases with different machinery. The first falls
 out of a fast path that checks whether the expression is free of the
 variable at the target point. The second triggers a Taylor series
 expansion, reads off the leading term, and hands it back. Every other
@@ -85,7 +85,7 @@ Expr* rewritten = rewrite_reciprocal_trig(f_in);
 Expr* f = simp(rewritten);
 ```
 
-PicoCAS's evaluator aggressively folds `0 * ComplexInfinity -> 0`. That
+Mathilda's evaluator aggressively folds `0 * ComplexInfinity -> 0`. That
 is the correct algebraic identity when the `ComplexInfinity` is really
 a pole of fixed order, but it is a trap for symbolic limit computation:
 `Csc[x]` at `x = 0` evaluates to `ComplexInfinity`, so `x Csc[x]` would
@@ -128,7 +128,7 @@ Expr* den_at = subst_eval(den, ctx->x, ctx->point);
 bool den_bad = is_lit_zero(den_at) || is_divergent(den_at);
 ```
 
-The `is_lit_zero` check is enough because PicoCAS's `Power` evaluator
+The `is_lit_zero` check is enough because Mathilda's `Power` evaluator
 folds `Power[0, b] -> 0` for any positive `b` and
 `Power[0, b] -> ComplexInfinity` for negative `b`. `Sqrt[x-1]/x` at
 `x = 1` substitutes to `Sqrt[0]/1`, which collapses to `0/1 = 0`
@@ -390,24 +390,24 @@ of the two systems are worth putting side by side.
 
 - **Dispatcher on expression shape.** Maxima's `limit` entry point
   dispatches to per-head handlers (`simplim%sin`, `simplim%log`,
-  `simplim%atan`, ...) via the `SIMPLIM%` property on symbols; PicoCAS
+  `simplim%atan`, ...) via the `SIMPLIM%` property on symbols; Mathilda
   cascades through `layer_*` functions. Both amount to a dictionary
   keyed by the head of the expression.
 - **Series/Taylor as the primary tool for indeterminate forms.**
   Maxima has a dedicated `taylim` / `tlimit` mode that replaces the
   default limit algorithm with "take a Taylor series and read off the
-  leading term." PicoCAS's `layer2_series` is exactly this, hooked in
+  leading term." Mathilda's `layer2_series` is exactly this, hooked in
   as the main engine rather than an alternative mode.
 - **L'Hospital as a fallback with a growth guard.** Maxima uses
   `lhospitallim` (default 4) as the maximum number of L'Hospital
-  applications; PicoCAS uses an analogous iteration cap plus a leaf-
+  applications; Mathilda uses an analogous iteration cap plus a leaf-
   count growth detector.
 - **Special-case logarithmic reduction for `f^g`.** Both rewrite `f^g`
   as `Exp[g Log[f]]` when the form is indeterminate. Maxima calls this
-  in `exp-lim`; PicoCAS calls it `layer5_log_reduction`.
+  in `exp-lim`; Mathilda calls it `layer5_log_reduction`.
 - **Bounded-oscillation / squeeze handling for `Sin`, `Cos`.** Maxima
   returns `ind` (for "indeterminate but bounded") when it can only say
-  the limit is in an interval; PicoCAS returns `Interval[{-1, 1}]`.
+  the limit is in an interval; Mathilda returns `Interval[{-1, 1}]`.
 - **Finite-point 0/0 and infinity/infinity both use the same
   pipeline.** Neither system has a separate algorithm for limits at
   `Infinity`; we substitute the point into the series kernel.
@@ -422,33 +422,33 @@ of the two systems are worth putting side by side.
   gap.
 - **Sign/assumption machinery.** Maxima uses its global `asksign` and
   assumption database to resolve sign ambiguities during limit
-  computation ("Is `a` positive, negative, or zero?"). PicoCAS has no
+  computation ("Is `a` positive, negative, or zero?"). Mathilda has no
   assumption database; our sign decisions are all literal
   (`literal_sign` checks structural sign only), and we conservatively
   return `DirectedInfinity[c]` or leave the expression unevaluated
   when the sign of a leading coefficient is symbolic.
 - **Direction convention.** Maxima's third argument is a plus/minus
-  symbol; PicoCAS accepts both the Mathematica strings
+  symbol; Mathilda accepts both the Mathematica strings
   (`"FromAbove"`, `"FromBelow"`) and Mathematica integer direction
   codes (`-1` meaning "approaching from above", `+1` from below).
   Both are tested.
 - **Log-merge preprocessing.** Maxima does not have a direct analogue
-  of PicoCAS's `layer_log_merge`; it would typically handle
+  of Mathilda's `layer_log_merge`; it would typically handle
   `-x + Log[2 + E^x]` through the Gruntz layer's exp-log rewriting.
   Our merge pass is a simpler, targeted rewrite for the finite
   combinations of `Plus`, `Log`, and polynomial summands.
 - **Radical simplification.** Maxima has `radcan` as a user-callable
-  simplifier; PicoCAS runs a narrow version of radical fusion inside
+  simplifier; Mathilda runs a narrow version of radical fusion inside
   `builtin_times` itself, so that `Sqrt[6]/Sqrt[2]` becomes `Sqrt[3]`
   system-wide -- not only when it appears as `Limit` output.
 - **Scope.** Maxima's `limit.lisp` is a mature file with dozens of
   special-function handlers (`%bessel_j`, `%gamma`, `%zeta`, etc.).
-  PicoCAS currently implements only the elementary-function
+  Mathilda currently implements only the elementary-function
   subsection.
 
 ### Capability snapshot
 
-| Shape                              | PicoCAS        | Maxima |
+| Shape                              | Mathilda        | Maxima |
 |:-----------------------------------|:---------------|:-------|
 | `P(x)/Q(x)` at `+/- Infinity`      | yes (Layer 3)  | yes    |
 | Taylor-leading-term at a finite point | yes (Layer 2) | yes    |
@@ -501,7 +501,7 @@ and log-reduction paths where they belong.
 `Limit[(25^x - 5^x)/(4^x - 2^x), x -> 0]` used to hang inside
 `so_inv`. Each iteration of the Laurent-series inverse multiplied
 growing polynomials in `Log[a]`, `Log[b]`, `Log[2]`, `Log[5]`, and
-PicoCAS's evaluator does not canonicalise those into a unique form,
+Mathilda's evaluator does not canonicalise those into a unique form,
 so the iteration count is unbounded.
 
 The fix is a data-dependent iteration cap in `so_inv`, sized by the
@@ -564,7 +564,7 @@ cross-check along the axes and main diagonals. Three outcomes:
 
 The origin fast path also scans for any reciprocal subterm whose base
 vanishes at the joint point, which catches `0/0` buried inside
-`ArcTan`, `Sin`, etc., that PicoCAS's scalar evaluator would
+`ArcTan`, `Sin`, etc., that Mathilda's scalar evaluator would
 otherwise fold to `0`.
 
 ```text

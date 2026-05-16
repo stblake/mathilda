@@ -10,8 +10,8 @@
  *   extract_extension_option — used by PolynomialGCD, PolynomialLCM,
  *     Together, Cancel, Apart, and the BronsteinRational pipeline.
  */
-#ifndef PICOCAS_OPTIONS_H
-#define PICOCAS_OPTIONS_H
+#ifndef MATHILDA_OPTIONS_H
+#define MATHILDA_OPTIONS_H
 
 #include "expr.h"
 #include <stddef.h>
@@ -65,4 +65,4 @@ const Expr* extract_extension_option(const Expr* res, size_t* new_argc);
 const Expr* extract_extension_option_full(const Expr* res, size_t* new_argc,
                                           bool* automatic_out);
 
-#endif /* PICOCAS_OPTIONS_H */
+#endif /* MATHILDA_OPTIONS_H */

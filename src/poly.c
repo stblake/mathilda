@@ -1,7 +1,7 @@
 /* ====================================================================
  * poly.c -- Polynomial algebra primitives.
  *
- * This module implements PicoCAS's symbolic polynomial layer:
+ * This module implements Mathilda's symbolic polynomial layer:
  *
  *   PolynomialQ        -- structural polynomial test
  *   Variables          -- collect free variables of an expression
@@ -30,7 +30,7 @@
  *   6. Collect, CoefficientList, Decompose, HornerForm, Resultant,
  *      Discriminant, PolynomialMod, PolynomialExtendedGCD.
  *
- * Memory convention (matches the rest of PicoCAS):
+ * Memory convention (matches the rest of Mathilda):
  *   Every helper that returns Expr* hands fresh ownership to the
  *   caller. Built-in entry points (`builtin_*`) leave the input `res`
  *   alive -- the evaluator (or `internal_call_impl`) frees it after a
@@ -1506,7 +1506,7 @@ static void poly_div_rem(Expr* p, Expr* q, Expr* x, Expr** out_Q, Expr** out_R) 
 /*                                                                      */
 /* Lifts `a` and `b` into Q(α)[x] via qa_expr_to_qaupoly and runs       */
 /* qaupoly_divrem.  Returns the quotient (which==0) or remainder        */
-/* (which==1) rendered back as a picocas Expr, or NULL if the lift      */
+/* (which==1) rendered back as a Mathilda Expr, or NULL if the lift      */
 /* fails (caller falls back to the standard Q-treats-α-as-opaque path). */
 /*                                                                      */
 /* Without this path, PolynomialQuotient[(x - Sqrt[2])(x + Sqrt[2]), …] */

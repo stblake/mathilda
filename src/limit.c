@@ -1,5 +1,5 @@
 /* ============================================================================
- * limit.c -- Symbolic limits for PicoCAS.
+ * limit.c -- Symbolic limits for Mathilda.
  * ============================================================================
  *
  * Implements the Mathematica-style Limit built-in per the pipeline sketched
@@ -14,12 +14,12 @@
  *     Layer 5 -- L'Hospital + logarithmic reduction heuristics.
  *     Layer 6 -- Bound analysis (Interval[] returns).
  *
- * The series layer in PicoCAS is powerful enough that it subsumes most
+ * The series layer in Mathilda is powerful enough that it subsumes most
  * classical DELIMITER cases. L'Hospital is reserved for those shapes
  * where Series cannot compute a useful expansion (unknown heads, non-
  * analytic inputs, etc.).
  *
- * Memory conventions follow PicoCAS standards: every helper that returns
+ * Memory conventions follow Mathilda standards: every helper that returns
  * an Expr* returns a freshly-allocated tree owned by the caller. The
  * top-level built-in returns a newly-allocated result on success (the
  * evaluator frees the original `res` for us on a non-NULL return) or
@@ -191,7 +191,7 @@ static bool is_directed_infinity(Expr* e) {
 /* Returns true for any flavour of infinity or undefined value anywhere
  * inside `e`. The fast paths use this to refuse an answer that "looks"
  * finite but still has an un-simplified Infinity / Indeterminate buried
- * in a sub-expression (e.g. 3 + 6/(Infinity^2 - 2), which PicoCAS does
+ * in a sub-expression (e.g. 3 + 6/(Infinity^2 - 2), which Mathilda does
  * not fold). */
 static bool is_divergent(Expr* e) {
     if (!e) return true;
@@ -324,7 +324,7 @@ static int64_t growth_exponent_upper(Expr* e, Expr* x);
 /*                                                                         */
 /* Rewrite Csc/Sec/Cot (and hyperbolic twins) in terms of Sin/Cos/Sinh/    */
 /* Cosh. This must run before any layer that substitutes the limit point  */
-/* into f, because PicoCAS's evaluator aggressively folds                  */
+/* into f, because Mathilda's evaluator aggressively folds                  */
 /*     0 * Csc[0] = 0 * ComplexInfinity -> 0                               */
 /* whereas the equivalent `0 / Sin[0] = 0/0` survives as an indeterminate */
 /* 0/0 form that Series / L'Hospital can actually handle.                  */
@@ -688,7 +688,7 @@ static Expr* signed_infinity(int sign) {
  * limit variable appearing in `exp`. These shapes (x^x, (1+Ax)^(1/x),
  * etc.) are classic indeterminate 1^inf / 0^0 / inf^0 forms that the
  * continuous-substitution fast path cannot handle correctly because
- * PicoCAS's arithmetic happily folds 1^ComplexInfinity to 1. We refuse
+ * Mathilda's arithmetic happily folds 1^ComplexInfinity to 1. We refuse
  * the fast path and let the log-reduction layer deal with them. */
 static bool has_var_in_exponent(Expr* e, Expr* x) {
     if (!e) return false;
@@ -735,7 +735,7 @@ static bool is_numeric_literal_point(Expr* e) {
  * the evaluator even though the input is analytic at the point. */
 /* True iff `e` contains a `Power[base, exp]` subterm whose exponent
  * diverges when the limit point is substituted. Divergent exponents are
- * the classic 1^inf / 0^0 / inf^0 indeterminate seeds, and PicoCAS
+ * the classic 1^inf / 0^0 / inf^0 indeterminate seeds, and Mathilda
  * arithmetic folds them to "clean" (but wrong) values -- we must refuse
  * the direct-substitution fast path in that case. */
 static bool has_divergent_exponent_at(Expr* e, Expr* x, Expr* point) {
@@ -761,7 +761,7 @@ static Expr* try_numeric_point_substitution(Expr* f, LimitCtx* ctx) {
 
     /* Refuse when any Power[_, exp] has x in the exponent AND exp diverges
      * at the point. That's the 1^inf / 0^0 / inf^0 indeterminate family
-     * that PicoCAS's arithmetic silently folds to a plausible-looking but
+     * that Mathilda's arithmetic silently folds to a plausible-looking but
      * wrong answer (e.g. 1^ComplexInfinity -> 1). */
     if (has_divergent_exponent_at(f, ctx->x, ctx->point)) return NULL;
 
@@ -778,7 +778,7 @@ static Expr* try_numeric_point_substitution(Expr* f, LimitCtx* ctx) {
 
     /* Substitute into the *Together-normalised* form. This matters when
      * the cancel-first form has a non-zero denominator at the point while
-     * the original has a 0/0 shape that PicoCAS's arithmetic folds to 0.
+     * the original has a 0/0 shape that Mathilda's arithmetic folds to 0.
      * Example: (r Sin[t])/(r (Cos[t]+Sin[t])) at r = 0 -- Together
      * cancels the r and we get Sin[t]/(Cos[t]+Sin[t]) without the 0/0
      * trap. */
@@ -801,7 +801,7 @@ static Expr* try_continuous_substitution(Expr* f, LimitCtx* ctx) {
     /* Refuse exponential-indeterminate shapes; see has_var_in_exponent. */
     if (has_var_in_exponent(f, ctx->x)) return NULL;
 
-    /* Guard rails. PicoCAS's evaluator aggressively folds 0 * ComplexInfinity
+    /* Guard rails. Mathilda's evaluator aggressively folds 0 * ComplexInfinity
      * to 0 and 1/0 to ComplexInfinity, which would produce misleading
      * "clean" answers for shapes like Sin[x]/x at x=0. Rule out anything
      * that could be a division by zero, log of zero, or similar:
@@ -946,7 +946,7 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
     Expr* leading_coef = expr_copy(coefs->data.function.args[k]);
 
     /* A genuine power-series coefficient cannot depend on the expansion
-     * variable. PicoCAS's Series does not always enforce this -- for
+     * variable. Mathilda's Series does not always enforce this -- for
      * asymptotic shapes like Log[E^x - E^a] at x -> a it emits a Log[x-a]
      * term as the "constant coefficient" (the logarithmic part of an
      * asymptotic expansion). Treating that as the limit value gives a
@@ -1122,7 +1122,7 @@ static Expr* layer2_series(Expr* f, LimitCtx* ctx) {
 /* re-implementing polynomial arithmetic here.                             */
 /* ---------------------------------------------------------------------- */
 /* Degree of a univariate polynomial in `x`: use CoefficientList which
- * is a native builtin in PicoCAS. Returns -1 on failure. */
+ * is a native builtin in Mathilda. Returns -1 on failure. */
 static int poly_degree_in(Expr* p, Expr* x) {
     Expr* call = mk_fn2("CoefficientList", expr_copy(p), expr_copy(x));
     Expr* cl = simp(call);
@@ -1944,7 +1944,7 @@ static Expr* layer_atom_substitute(Expr* f, LimitCtx* ctx) {
     if (expr_contains(atom_lim, ctx->x)) { expr_free(atom_lim); expr_free(g); return NULL; }
 
     /* Substitute atom -> u. We want a symbol that cannot clash with any
-     * user variable in f; the `$` prefix convention in PicoCAS marks
+     * user variable in f; the `$` prefix convention in Mathilda marks
      * system-local symbols. */
     Expr* u_sym = mk_sym("$LimitAtomU$");
     Expr* f_sub = subst_eval(g, atom, u_sym);
@@ -2640,7 +2640,7 @@ static Expr* limit_r_fromabove(Expr* f_polar, Expr* r_sym, int kind) {
 }
 
 /* For every multi-argument angle substitution we make, check that the
- * substituted `f` is free of the original variables. PicoCAS's
+ * substituted `f` is free of the original variables. Mathilda's
  * ReplaceAll doesn't recurse through evaluation so we always simp().
  *
  * Order of substitution matters: we must replace all variables
@@ -2805,7 +2805,7 @@ static Expr* run_multivariate(Expr* f_in, Expr* vars, Expr* points) {
     Expr* f = simp(expr_copy(f_in));
 
     /* Simple substitution fast path: only trust it when no sub-expression
-     * risks a 0/0 fold. PicoCAS's arithmetic eagerly folds 0/0 to 0 at
+     * risks a 0/0 fold. Mathilda's arithmetic eagerly folds 0/0 to 0 at
      * Sin, ArcTan, and other non-rational heads; for those cases we MUST
      * go through the path-dependence analysis even if the top-level
      * Together denominator looks safe. Walking the tree for any
@@ -2877,7 +2877,7 @@ static Expr* run_multivariate(Expr* f_in, Expr* vars, Expr* points) {
         expr_free(probe);
     }
     /* The simple-substitution shortcut is only safe at finite points. At
-     * Infinity, PicoCAS's arithmetic folds Infinity/Infinity into path-
+     * Infinity, Mathilda's arithmetic folds Infinity/Infinity into path-
      * dependent shortcut values (e.g. ArcTan[y/x] /. x,y -> Infinity
      * yields Pi/4 via Infinity/Infinity -> 1 -> ArcTan[1]) that hide the
      * genuine path-dependence. Gate the fast path to the origin case. */
@@ -2992,7 +2992,7 @@ static bool contains_imaginary_unit(Expr* e) {
     return false;
 }
 
-/* Conjugate the imaginary part of a closed-form result. PicoCAS's
+/* Conjugate the imaginary part of a closed-form result. Mathilda's
  * `Conjugate` evaluator only folds for some forms (e.g. Complex[a, b]
  * literals) but leaves generic expressions like `I * Pi` unfolded, so
  * we implement this via ReplaceAll[I -> -I]. That substitution gives

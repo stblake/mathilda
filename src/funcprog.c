@@ -694,7 +694,7 @@ Expr* builtin_distribute(Expr* res) {
     
     // results array itself is consumed by expr_new_function, but only if we don't free it.
     // wait, expr_new_function usually COPIES the array if we pass it, OR it takes ownership?
-    // In picocas, expr_new_function takes Expr** args.
+    // In Mathilda, expr_new_function takes Expr** args.
     // Let's check expr_new_function implementation.
     
     free(current_tuple);

@@ -52,7 +52,7 @@ directly with no PowerExpand needed.
 ### Phase F — Bessel entries
 Skip per user direction (no special-function support). The 3
 DIFF-NONZERO Bessel entries in `CRCIntegralsCorpus.m` only "differentiate"
-because picocas accidentally evaluates them via partial Bessel rules in
+because Mathilda accidentally evaluates them via partial Bessel rules in
 `src/internal/deriv.m`. Strip the corresponding CRC rules' results from
 the table OR remove the entries from the corpus. Cleanest: remove the
 3 entries from the corpus and let the rest of the Bessel block stay as

@@ -1,8 +1,8 @@
-# PicoCAS Specification
+# Mathilda Specification
 
-PicoCAS is a tiny, AI Agent-generated, symbolic computer algebra system (CAS) inspired by the core architecture of Mathematica. PicoCAS is written in the C programming language. It supports a recursive expression model, pattern matching, rewriting rules, and a small library of built-in functions.
+Mathilda is a tiny, AI Agent-generated, symbolic computer algebra system (CAS) inspired by the core architecture of Mathematica. Mathilda is written in the C programming language. It supports a recursive expression model, pattern matching, rewriting rules, and a small library of built-in functions.
 
-The name, PicoCAS is inspired by David Stoutemyer's PICOMATH-80 tiny computer algebra system.
+The name, Mathilda is inspired by David Stoutemyer's PICOMATH-80 tiny computer algebra system.
 
 This file is the entry point. Detailed material lives under [`docs/spec/`](docs/spec/).
 

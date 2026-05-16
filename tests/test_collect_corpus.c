@@ -3,7 +3,7 @@
  *
  * Captures the user-supplied corpus from the 2026-05-10 audit
  * (14 cases the user marked as "passing" against MMA + Bug 1 fix +
- * Bug 2 current behaviour). Each case pins picocas's canonical
+ * Bug 2 current behaviour). Each case pins Mathilda's canonical
  * output string, so any future change in Collect / Power / Times
  * canonicalisation that perturbs these forms surfaces here as a
  * test failure.
@@ -20,7 +20,7 @@
  *
  * Bug 2 -- Collect[D[f[Sqrt[x^2+1]], {x,3}], Derivative[_][f][_]]
  *
- *   The target is a pattern. Picocas's Collect does NOT yet do
+ *   The target is a pattern. Mathilda's Collect does NOT yet do
  *   pattern-based grouping, so each Derivative[k][f][...] factor
  *   is treated as a literal opaque atom. Test pins the current
  *   un-grouped 5-term output so an actual pattern-based Collect
@@ -55,7 +55,7 @@ static void test_bug1_symbolic_exp_ratio(void) {
 
 /* --- Bug 2: Pattern-target Collect (regression of current state) ---- */
 static void test_bug2_pattern_target(void) {
-    /* Picocas does not currently pattern-match the Collect target;
+    /* Mathilda does not currently pattern-match the Collect target;
      * Derivative[_][f][_] is treated as a literal expression, leaving
      * the higher-order chain rule output un-grouped. Pin the actual
      * 5-term form so the eventual pattern-based Collect lands

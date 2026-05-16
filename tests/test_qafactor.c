@@ -517,7 +517,7 @@ static void _unused_keep_helpers(void) {
 }
 
 /* ============================ Phase G5 ============================ */
-/* End-to-end picocas-API tests: parse `Factor[poly, Extension -> α]`,
+/* End-to-end Mathilda-API tests: parse `Factor[poly, Extension -> α]`,
  * evaluate, and compare the result (as FullForm) to the expected
  * factored form parsed and evaluated through the same pipeline. */
 
@@ -577,7 +577,7 @@ static void test_g5_x4_plus_4_qi(void) {
 }
 
 /* x² + x + 1 over Q(√−3) → (x − ω)(x − ω̄) where ω = (−1 + I√3)/2.
- * Picocas renders this as (x + 1/2 + I√3/2)(x + 1/2 − I√3/2). */
+ * Mathilda renders this as (x + 1/2 + I√3/2)(x + 1/2 − I√3/2). */
 static void test_g5_x2_x_1_qsqrtm3(void) {
     assert_factor_eq_str(
         "Factor[x^2 + x + 1, Extension -> Sqrt[-3]]",
@@ -609,7 +609,7 @@ static void test_g5_irreducible_in_qsqrt2(void) {
 }
 
 /* ============================ Phase G6 ============================ */
-/* End-to-end picocas-API tests for `Factor[poly, Extension ->
+/* End-to-end Mathilda-API tests for `Factor[poly, Extension ->
  * {α_1, α_2, ...}]`.  The compositum Q(γ) is built via Trager's
  * primitive-element algorithm; γ = α_1 + s_2 α_2 + ... for shifts
  * s_i chosen by the squarefree-norm test. */
@@ -650,7 +650,7 @@ static void test_g6_order_independence(void) {
 }
 
 /* Mixed real+complex: x⁴ + 1 over Q(√2, I) factors completely into
- * 4 linear factors involving (±1 ± I)/√2 = ±(1±I)/Sqrt[2].  Picocas
+ * 4 linear factors involving (±1 ± I)/√2 = ±(1±I)/Sqrt[2].  Mathilda
  * renders these as `(1/2 ± I/2) Sqrt[2]` (rationalised denominator). */
 /* Like assert_factor_eq_str, but compares the FullForm strings of two
  * already-evaluated expressions instead of round-tripping the expected
@@ -748,7 +748,7 @@ static int count_top_level_factors(const Expr* fac) {
 
 /* Verify that Factor[input, Extension -> α] produces a result with the
  * expected number of top-level Times-factors.  Numeric round-trip
- * verification is too brittle here because picocas's auto-simplifier
+ * verification is too brittle here because Mathilda's auto-simplifier
  * does not always fully canonicalise `(c - Sqrt[d])^k` cross-products,
  * which leak residual `(c - Sqrt[d])^2` after Expand.  Counting top-
  * level factors is sufficient to validate the recogniser is firing
@@ -847,7 +847,7 @@ int main(void) {
     /* Phase G4 — irreducible-input edge case */
     TEST(test_alg_factor_irreducible_input);
 
-    /* Phase G5 — picocas-level Factor[..., Extension -> α] API */
+    /* Phase G5 — Mathilda-level Factor[..., Extension -> α] API */
     TEST(test_g5_x2_minus_2_qsqrt2);
     TEST(test_g5_x4_plus_1_qsqrt2);
     TEST(test_g5_x4_5x2_6_qsqrt2);

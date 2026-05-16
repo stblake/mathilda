@@ -8,8 +8,8 @@
  * are rewritten into single trig calls of compound arguments. The
  * pipeline is rule-based (product-to-sum + power reduction, with a
  * Together / collapse / from-sincos cleanup), so the printed result
- * follows picocas's canonical Orderless / Flat sort. Each expected
- * string here reflects picocas's canonical print form, which is
+ * follows Mathilda's canonical Orderless / Flat sort. Each expected
+ * string here reflects Mathilda's canonical print form, which is
  * mathematically equivalent to (but may be cosmetically different
  * from) Mathematica's pretty-printed form.
  */
@@ -217,7 +217,7 @@ void test_trigreduce_compound_product(void) {
 }
 
 /* Negative-argument cancellation: Sin[a-b] + Sin[b-a] is mathematically
- * zero. picocas does not auto-canonicalise Sin[Plus[Times[-1, a], b]]
+ * zero. Mathilda does not auto-canonicalise Sin[Plus[Times[-1, a], b]]
  * into -Sin[a - b], so the collapse pass needs explicit cancellation
  * rules. */
 void test_trigreduce_sin_pair_cancellation(void) {

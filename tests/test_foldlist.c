@@ -89,7 +89,7 @@ static void test_foldlist_cumulative_sum_numeric(void) {
 }
 
 static void test_foldlist_alternating_sums_numeric(void) {
-    /* Numeric variant of the alternating-sum example: picocas does not
+    /* Numeric variant of the alternating-sum example: Mathilda does not
        distribute unary minus through Plus, so symbolic simplification
        would not collapse to the Mathematica "a - b + c - ..." form. With
        explicit numbers the arithmetic fully evaluates: at each step we

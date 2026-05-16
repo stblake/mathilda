@@ -1,4 +1,4 @@
-/* PicoCAS — numeric evaluation implementation.
+/* Mathilda — numeric evaluation implementation.
  *
  * See numeric.h for the module-level overview and extensibility notes.
  *
@@ -668,7 +668,7 @@ Expr* builtin_n(Expr* res) {
         }
     }
 
-    /* Ownership: PicoCAS evaluator frees `res` after a non-NULL return
+    /* Ownership: Mathilda evaluator frees `res` after a non-NULL return
      * (see eval.c around the builtin dispatch site), so we must NOT free
      * it ourselves. Returning NULL means "keep `res` unevaluated" — the
      * evaluator retains ownership in that path. */

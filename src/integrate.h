@@ -10,8 +10,8 @@
  * so this file remains a tiny shim — all real work is in intrat.c.
  */
 
-#ifndef PICOCAS_INTEGRATE_H
-#define PICOCAS_INTEGRATE_H
+#ifndef MATHILDA_INTEGRATE_H
+#define MATHILDA_INTEGRATE_H
 
 #include "expr.h"
 
@@ -27,4 +27,4 @@ Expr* builtin_integrate(Expr* res);
  * REPL accepts user input. */
 void integrate_init(void);
 
-#endif /* PICOCAS_INTEGRATE_H */
+#endif /* MATHILDA_INTEGRATE_H */

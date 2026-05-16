@@ -79,7 +79,7 @@ void repl_hooks_init(void) {
     symtab_set_docstring("$PreRead",
         "$PreRead\n"
         "\tis a global variable whose value, if set, is applied to the\n"
-        "\ttext of every input expression before it is fed to PicoCAS.\n"
+        "\ttext of every input expression before it is fed to Mathilda.\n"
         "\n"
         "The value of $PreRead must be a function that takes one string\n"
         "argument and returns a string. If unset, the input is parsed\n"
@@ -111,7 +111,7 @@ void repl_hooks_init(void) {
     symtab_set_docstring("$Epilog",
         "$Epilog\n"
         "\tis a symbol whose value, if any, is evaluated once when the\n"
-        "\tPicoCAS session terminates (via Quit[] or EOF).");
+        "\tMathilda session terminates (via Quit[] or EOF).");
 }
 
 char* repl_apply_pre_read(const char* input) {

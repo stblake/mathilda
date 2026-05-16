@@ -76,7 +76,7 @@ no-extension fold-up cleans up the rest.
 
 # Plan
 
-Extends picocas's algebraic-number substrate to accept `Power[c, p/q]` with
+Extends Mathilda's algebraic-number substrate to accept `Power[c, p/q]` with
 general integer `p` (currently only `p == 1` is accepted by G8's
 `expr_is_atomic_algebraic`).  Closes the motivating example
 `Together[D[Integrate[a x/(x^3+2), x], x], Extension -> Automatic]` →

@@ -5,7 +5,7 @@
  *
  *   1. factor_monomial_content: extracts the largest monomial v_1^{e_1} *
  *      ... * v_k^{e_k} that divides every term of a Plus expression.
- *      Solves correctness gaps where picocas previously returned the
+ *      Solves correctness gaps where Mathilda previously returned the
  *      input unfactored.
  *
  *   2. is_likely_irreducible_multivariate: probabilistic Hilbert-
@@ -18,7 +18,7 @@
  *   (b) Performance on inputs that previously stalled in factor_roots.
  *   (c) Regression coverage of the existing multivariate factoring
  *       contract -- the new code must not break any case where
- *       picocas was already producing correct factorisations.
+ *       Mathilda was already producing correct factorisations.
  *
  * All correctness checks compare FullForm output against expected
  * canonical forms, exercising the public Factor builtin end-to-end.
@@ -157,7 +157,7 @@ static void test_monomial_no_common_factor(void) {
 }
 
 static void test_monomial_negative_coefficient(void) {
-    /* -x^2 y - x y^2.  Mathematically equals -x y (x + y).  picocas'
+    /* -x^2 y - x y^2.  Mathematically equals -x y (x + y).  Mathilda'
      * canonical printer prefers to push the negative inside the Plus
      * rather than emit a leading -1 factor; both forms are equivalent
      * factorisations.  We accept the actual surface form. */

@@ -34,7 +34,7 @@
  * Returned expressions
  * --------------------
  * Every builder below produces plain un-reduced expression trees (e.g.
- * Plus[0, x] or Times[1, x]). The outer PicoCAS evaluator runs a full
+ * Plus[0, x] or Times[1, x]). The outer Mathilda evaluator runs a full
  * fixed-point reduction on the value we return, so Plus[0, ...],
  * Times[1, ...], and all subsequent chain-rule simplifications fold
  * automatically. This keeps the code readable and avoids duplicating

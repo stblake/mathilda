@@ -390,7 +390,7 @@ try_integral breakdown (5.39 s)
 The fast path fires on **153/162** call sites; same 9 parameter-bearing
 fall-throughs as #2+#3.  No correctness regressions: full 116-suite
 test corpus (`intrischnorman_tests`, `intrat_tests`, plus the broader
-PicoCAS test suite) is green.
+Mathilda test suite) is green.
 
 ### Next bottleneck
 

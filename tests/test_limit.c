@@ -254,7 +254,7 @@ static void test_exp_indeterminate(void) {
 /* Continuous-substitution residuals                                  */
 /*                                                                    */
 /* Power[0, positive] appears naturally when substituting directly:   */
-/* Sqrt[x-1]/x at x=1 evaluates to Sqrt[0]/1 which PicoCAS's Power    */
+/* Sqrt[x-1]/x at x=1 evaluates to Sqrt[0]/1 which Mathilda's Power    */
 /* evaluator leaves un-folded. The limit module has a small folder   */
 /* so the answer printed is the plain 0.                              */
 /* ----------------------------------------------------------------- */
@@ -374,7 +374,7 @@ static void test_wp8_numeric_point_bypass(void) {
 /* WP-2 -- b^x kernel: series inversion with symbolic-Log coefs       */
 /*                                                                    */
 /* Previously hung inside so_inv because each iteration multiplied    */
-/* growing polynomials in Log[a], Log[b], ... and PicoCAS's evaluator */
+/* growing polynomials in Log[a], Log[b], ... and Mathilda's evaluator */
 /* did not collapse them to a canonical form. The fix caps the so_inv */
 /* iteration count based on total leaf count of input coefficients:   */
 /* large symbolic coefficients use a smaller N, so we still get the   */
@@ -466,7 +466,7 @@ static void test_wp4_pole_sign_disagreement(void) {
 /*                                                                    */
 /* The origin-case fast path also scans for any reciprocal subterm    */
 /* whose base vanishes at the joint point, which catches 0/0 inside   */
-/* ArcTan/Sin/etc. that PicoCAS would otherwise fold to 0.            */
+/* ArcTan/Sin/etc. that Mathilda would otherwise fold to 0.            */
 /* ----------------------------------------------------------------- */
 static void test_wp1_multivariate(void) {
     /* Single-direction collapse: u = x y, so Tan[u]/u -> 1 as u -> 0. */
@@ -479,7 +479,7 @@ static void test_wp1_multivariate(void) {
     check("Limit[(x^3 + y^3)/(x^2 + y^2), {x, y} -> {0, 0}]", "0");
 
     /* 0/0 inside ArcTan: without the inner-divide-by-zero scan,
-     * picocas's ArcTan[0/0] -> ArcTan[0] = 0 fold would produce a
+     * Mathilda's ArcTan[0/0] -> ArcTan[0] = 0 fold would produce a
      * spurious finite answer. Sampling gives disagreement. */
     check("Limit[ArcTan[y^2/(x^2 + x^3)], {x, y} -> {0, 0}]",
           "Indeterminate");
@@ -513,7 +513,7 @@ static void test_wp1_multivariate(void) {
 /* here:                                                              */
 /*   - The prefactor factoring is now gated to x0 = 0 or Infinity.    */
 /*   - Apart preprocessing is skipped when the expression has a       */
-/*     non-rational power (e.g. x^a), because picocas's Apart         */
+/*     non-rational power (e.g. x^a), because Mathilda's Apart         */
 /*     collapses such inputs to 0.                                    */
 /* ----------------------------------------------------------------- */
 static void test_wp3_xpow_a_at_nonzero(void) {

@@ -125,7 +125,7 @@ static void test_default_pi_unchanged(void) {
 
 static void test_default_thread_over_plus(void) {
     /* Mathematica: Rationalize[1.2 + 6.7 x] == 6/5 + (67 x)/10
-     * PicoCAS prints rational coefficients as `n/d x` rather than
+     * Mathilda prints rational coefficients as `n/d x` rather than
      * factoring x into the numerator — same value, different
      * presentation. */
     assert_eval_eq("Rationalize[1.2 + 6.7 x]", "6/5 + 67/10 x", 0);
@@ -175,7 +175,7 @@ static void test_tolerance_thread_over_polynomial(void) {
      *               + 148.4131591025766 x^5 + 403.4287934927351 x^6, 0.1]
      * = (8 x)/3 + (22 x^2)/3 + 20 x^3 + (109 x^4)/2 + (297 x^5)/2 + (807 x^6)/2
      */
-    /* PicoCAS prints rational coefficients of x as `(n/d) x`, so the
+    /* Mathilda prints rational coefficients of x as `(n/d) x`, so the
      * displayed form differs from Mathematica's preference for
      * `(n x)/d` — the values are identical. */
     assert_eval_eq(
@@ -218,7 +218,7 @@ static void test_zero_thread_over_complex(void) {
     /* Mathematica:
      *   Rationalize[N[Pi + 33/211 E I], 0]
      *   = 245850922/78256779 + (42051801 I)/98914198
-     * PicoCAS prints the imaginary coefficient inline as (n/d)*I rather
+     * Mathilda prints the imaginary coefficient inline as (n/d)*I rather
      * than absorbing I into the numerator — same value, different
      * presentation. */
     assert_eval_eq("Rationalize[N[Pi + 33/211 E I], 0]",

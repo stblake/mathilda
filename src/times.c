@@ -19,7 +19,7 @@ static bool is_overflow(Expr* e) {
 
 /* True for positive numeric expressions: positive int/bigint, positive real,
  * or Rational[n, d] with positive numerator (denominators are conventionally
- * positive in PicoCAS). Used to guard the radical-fusion rewrite
+ * positive in Mathilda). Used to guard the radical-fusion rewrite
  * a^q * b^(-q) -> (a/b)^q, which is only valid on the principal branch when
  * both bases are strictly positive. */
 static bool is_positive_numeric_expr(Expr* e) {
@@ -110,7 +110,7 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
         // Actually, if we return Times[BigInt, Power[final_den, -1]], it'll infinite loop.
         // Because multiply_numbers will be called again!
         // We MUST return something that won't trigger multiply_numbers.
-        // Wait! In PicoCAS, Rational CAN hold BigInts?! Let's allow it:
+        // Wait! In Mathilda, Rational CAN hold BigInts?! Let's allow it:
         Expr* r_num = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
         mpz_clear(r);
         Expr* r_den = expr_new_integer(final_den);
