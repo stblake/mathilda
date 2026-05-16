@@ -28,6 +28,7 @@
 #include "parse.h"
 #include "print.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -243,6 +244,285 @@ void test_filebasename_extension_round_trip(void) {
                    "\"c.d\"", 0);
 }
 
+/* ===== FilePrint =====
+ *
+ * FilePrint writes to stdout rather than returning the content, so each
+ * test redirects fd 1 to a scratch capture file, runs the Mathilda
+ * expression, restores stdout, and compares the captured bytes against
+ * an expected string.  The redirection has to live in a helper so the
+ * file descriptors get cleaned up even when an assertion fails (we
+ * keep that risk small by asserting only after restoration).
+ */
+
+/* Write `content` to a fresh path keyed by `tag`.  Returns a pointer
+ * into a static buffer holding the resulting path — fine for tests, not
+ * thread-safe (we don't run tests concurrently). */
+static const char* fileprint_make_input(const char* tag, const char* content) {
+    static char path[256];
+    scratch_path(path, sizeof(path), tag);
+    FILE* fp = fopen(path, "wb");
+    ASSERT(fp != NULL);
+    if (*content) {
+        size_t n = strlen(content);
+        ASSERT(fwrite(content, 1, n, fp) == n);
+    }
+    fclose(fp);
+    return path;
+}
+
+/* Run a Mathilda expression with stdout redirected to a scratch file,
+ * then return the captured bytes (caller frees).  Any non-NULL evaluator
+ * result is also freed so the leak checker stays happy. */
+static char* fileprint_eval_capture(const char* mathilda_expr) {
+    char capture[256];
+    scratch_path(capture, sizeof(capture), "stdout");
+
+    fflush(stdout);
+    int saved = dup(STDOUT_FILENO);
+    ASSERT(saved >= 0);
+    int fd = open(capture, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    ASSERT(fd >= 0);
+    ASSERT(dup2(fd, STDOUT_FILENO) >= 0);
+    close(fd);
+
+    Expr* parsed = parse_expression(mathilda_expr);
+    Expr* result = (parsed != NULL) ? evaluate(parsed) : NULL;
+
+    fflush(stdout);
+    ASSERT(dup2(saved, STDOUT_FILENO) >= 0);
+    close(saved);
+
+    if (parsed) expr_free(parsed);
+    if (result) expr_free(result);
+
+    FILE* fp = fopen(capture, "rb");
+    ASSERT(fp != NULL);
+    fseek(fp, 0, SEEK_END);
+    long sz = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    char* buf = (char*)malloc((size_t)sz + 1);
+    ASSERT(buf != NULL);
+    size_t got = fread(buf, 1, (size_t)sz, fp);
+    buf[got] = '\0';
+    fclose(fp);
+    unlink(capture);
+    return buf;
+}
+
+/* Five-line fixture used by most of the selector tests. */
+static const char* FP_FIVE = "alpha\nbeta\ngamma\ndelta\nepsilon\n";
+
+void test_fileprint_full_file(void) {
+    const char* path = fileprint_make_input("fp_full", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\"]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, FP_FIVE);
+    free(out);
+    unlink(path);
+}
+
+void test_fileprint_first_n(void) {
+    const char* path = fileprint_make_input("fp_first", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 2]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "alpha\nbeta\n");
+    free(out);
+    unlink(path);
+}
+
+/* n larger than the file size clamps to "print everything". */
+void test_fileprint_first_n_clamps(void) {
+    const char* path = fileprint_make_input("fp_first_big", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 100]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, FP_FIVE);
+    free(out);
+    unlink(path);
+}
+
+/* n == 0 is a valid call that simply emits nothing. */
+void test_fileprint_zero_is_empty(void) {
+    const char* path = fileprint_make_input("fp_zero", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 0]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "");
+    free(out);
+    unlink(path);
+}
+
+void test_fileprint_last_n(void) {
+    const char* path = fileprint_make_input("fp_last", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", -2]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "delta\nepsilon\n");
+    free(out);
+    unlink(path);
+}
+
+void test_fileprint_last_n_clamps(void) {
+    const char* path = fileprint_make_input("fp_last_big", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", -100]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, FP_FIVE);
+    free(out);
+    unlink(path);
+}
+
+void test_fileprint_span_basic(void) {
+    const char* path = fileprint_make_input("fp_span", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 2;;4]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "beta\ngamma\ndelta\n");
+    free(out);
+    unlink(path);
+}
+
+/* Negative endpoints inside the Span count from the end. */
+void test_fileprint_span_negative_end(void) {
+    const char* path = fileprint_make_input("fp_span_neg", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 2;;-2]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "beta\ngamma\ndelta\n");
+    free(out);
+    unlink(path);
+}
+
+/* Span[m, n] with m > n and an implicit +1 step yields no output. */
+void test_fileprint_span_empty(void) {
+    const char* path = fileprint_make_input("fp_span_empty", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 4;;2]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "");
+    free(out);
+    unlink(path);
+}
+
+void test_fileprint_span_step(void) {
+    const char* path = fileprint_make_input("fp_span_step", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 1;;5;;2]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "alpha\ngamma\nepsilon\n");
+    free(out);
+    unlink(path);
+}
+
+/* Negative step walks backwards.  Verifies output order matches the
+ * iteration order, not the source order. */
+void test_fileprint_span_negative_step(void) {
+    const char* path = fileprint_make_input("fp_span_revstep", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 5;;1;;-1]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "epsilon\ndelta\ngamma\nbeta\nalpha\n");
+    free(out);
+    unlink(path);
+}
+
+void test_fileprint_span_negative_step_partial(void) {
+    const char* path = fileprint_make_input("fp_span_revpart", FP_FIVE);
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 5;;1;;-2]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "epsilon\ngamma\nalpha\n");
+    free(out);
+    unlink(path);
+}
+
+/* Empty input file: every selector form is a no-op. */
+void test_fileprint_empty_file(void) {
+    const char* path = fileprint_make_input("fp_empty", "");
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\"]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "");
+    free(out);
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 3]", path);
+    out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "");
+    free(out);
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", -3]", path);
+    out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "");
+    free(out);
+    unlink(path);
+}
+
+/* Files without a trailing newline get one synthesised so the next
+ * REPL prompt isn't appended to the last line.  This applies only when
+ * we actually emit the unterminated tail. */
+void test_fileprint_no_trailing_newline(void) {
+    const char* path = fileprint_make_input("fp_unterm", "one\ntwo\nthree");
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\"]", path);
+    char* out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "one\ntwo\nthree\n");
+    free(out);
+    /* Print only the first two lines — both end with '\n' in the file,
+     * so we should NOT inject an extra newline. */
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\", 2]", path);
+    out = fileprint_eval_capture(expr);
+    ASSERT_STR_EQ(out, "one\ntwo\n");
+    free(out);
+    unlink(path);
+}
+
+/* A non-existent file should print the diagnostic and yield $Failed
+ * without leaving stdout corrupted (i.e. fflush/close work cleanly). */
+void test_fileprint_missing_file_returns_failed(void) {
+    char missing[256];
+    scratch_path(missing, sizeof(missing), "fp_missing");
+    /* scratch_path already unlinks it. */
+
+    /* The diagnostic line ends up in our capture; we don't pin its
+     * exact text but do verify that the evaluator returned the
+     * sentinel symbol. */
+    char expr[512];
+    snprintf(expr, sizeof(expr), "FilePrint[\"%s\"]", missing);
+    char* out = fileprint_eval_capture(expr);
+    free(out);
+    assert_eval_eq(expr, "$Failed", 0);
+}
+
+void test_fileprint_unevaluated_on_bad_args(void) {
+    /* Wrong arity. */
+    assert_eval_eq("FilePrint[]",                "FilePrint[]",                0);
+    assert_eval_eq("FilePrint[a, b, c]",         "FilePrint[a, b, c]",         0);
+    /* Non-string filename. */
+    assert_eval_eq("FilePrint[42]",              "FilePrint[42]",              0);
+    /* Bad selector type — neither integer nor Span. */
+    assert_eval_eq("FilePrint[\"/tmp/x\", x]",   "FilePrint[\"/tmp/x\", x]",   0);
+    /* Symbolic filename flows through (the caller might bind it later). */
+    assert_eval_eq("FilePrint[x]",               "FilePrint[x]",               0);
+}
+
+void test_fileprint_zero_step_is_unevaluated(void) {
+    /* Span with step 0 is mathematically ill-formed; leaving the call
+     * unevaluated is safer than infinite-looping.  The printer falls
+     * back to FullForm-ish Span[...] notation for the zero-step case,
+     * so we pin that exact rendering. */
+    const char* path = fileprint_make_input("fp_zero_step", FP_FIVE);
+    char expr[512];
+    char expected[512];
+    snprintf(expr,     sizeof(expr),     "FilePrint[\"%s\", 1;;5;;0]", path);
+    snprintf(expected, sizeof(expected), "FilePrint[\"%s\", Span[1, 5, 0]]", path);
+    assert_eval_eq(expr, expected, 0);
+    unlink(path);
+}
+
+void test_fileprint_protected(void) {
+    assert_eval_eq("MemberQ[Attributes[FilePrint], Protected]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -278,6 +558,26 @@ int main(void) {
     TEST(test_filebasename_unevaluated_on_bad_args);
     TEST(test_filebasename_protected);
     TEST(test_filebasename_extension_round_trip);
+
+    /* FilePrint */
+    TEST(test_fileprint_full_file);
+    TEST(test_fileprint_first_n);
+    TEST(test_fileprint_first_n_clamps);
+    TEST(test_fileprint_zero_is_empty);
+    TEST(test_fileprint_last_n);
+    TEST(test_fileprint_last_n_clamps);
+    TEST(test_fileprint_span_basic);
+    TEST(test_fileprint_span_negative_end);
+    TEST(test_fileprint_span_empty);
+    TEST(test_fileprint_span_step);
+    TEST(test_fileprint_span_negative_step);
+    TEST(test_fileprint_span_negative_step_partial);
+    TEST(test_fileprint_empty_file);
+    TEST(test_fileprint_no_trailing_newline);
+    TEST(test_fileprint_missing_file_returns_failed);
+    TEST(test_fileprint_unevaluated_on_bad_args);
+    TEST(test_fileprint_zero_step_is_unevaluated);
+    TEST(test_fileprint_protected);
 
     printf("All tests passed!\n");
     return 0;

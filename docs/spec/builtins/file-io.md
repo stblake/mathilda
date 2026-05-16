@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`) and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`) and `src/files.c` (`FileExistsQ`, `FileExtension`, `FileBaseName`, `FilePrint`).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -87,4 +87,32 @@ FileExtension["report.tar.gz"]   (* "gz" *)
 FileBaseName["report.tar.gz"]    (* "report.tar" *)
 FileExtension["/etc/.bashrc"]    (* "" *)
 FileBaseName["/etc/.bashrc"]     (* ".bashrc" *)
+```
+
+## FilePrint
+Prints the raw textual contents of a file to standard output.
+- `FilePrint["file"]` — print every line.
+- `FilePrint["file", n]` (n > 0) — print the first `n` lines.
+- `FilePrint["file", -n]` (n > 0) — print the last `n` lines.
+- `FilePrint["file", m;;n]` — print lines `m` through `n` inclusive.
+- `FilePrint["file", m;;n;;s]` — same, with step `s` (positive or negative).
+
+**Features**:
+- `Protected`.
+- Bytes pass through verbatim via `fwrite`, including embedded NULs and non-UTF-8 sequences.
+- Lines are 1-indexed; negative indices inside the `Span` count from the end (`-1` is the last line).
+- `All` may appear in any `Span` slot (`All;;-1`, `1;;All;;2`, ...) and resolves to that slot's natural endpoint.
+- A positive integer larger than the file's line count clamps to "print everything"; the same applies to `-n`.
+- When the file's final line lacks a trailing `\n` and the selection actually emits it, `FilePrint` adds one so the next REPL prompt isn't appended to the file content.
+- Bad selectors (zero step, wrong types, wrong arity) leave the call unevaluated rather than producing partial output.
+- Returns `Null` on success and `$Failed` (with a `FilePrint::noopen` diagnostic) when the file cannot be opened.
+
+**Example**:
+```
+FilePrint["/etc/hosts"]                  (* whole file *)
+FilePrint["/etc/hosts", 3]               (* first 3 lines *)
+FilePrint["/etc/hosts", -3]              (* last 3 lines  *)
+FilePrint["/etc/hosts", 2;;5]            (* lines 2..5    *)
+FilePrint["/etc/hosts", 5;;1;;-1]        (* lines 5..1 reversed *)
+FilePrint["/etc/hosts", 1;;-1;;2]        (* every other line *)
 ```

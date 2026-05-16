@@ -84,6 +84,7 @@ const char* SYM_False = NULL;
 const char* SYM_FileBaseName = NULL;
 const char* SYM_FileExistsQ = NULL;
 const char* SYM_FileExtension = NULL;
+const char* SYM_FilePrint = NULL;
 const char* SYM_Fermat = NULL;
 const char* SYM_Flat = NULL;
 const char* SYM_Floor = NULL;
@@ -305,6 +306,7 @@ void sym_names_init(void) {
     SYM_FileBaseName               = intern_symbol("FileBaseName");
     SYM_FileExistsQ                = intern_symbol("FileExistsQ");
     SYM_FileExtension              = intern_symbol("FileExtension");
+    SYM_FilePrint                  = intern_symbol("FilePrint");
     SYM_Fermat                     = intern_symbol("Fermat");
     SYM_Flat                       = intern_symbol("Flat");
     SYM_Floor                      = intern_symbol("Floor");

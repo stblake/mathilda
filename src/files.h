@@ -26,6 +26,15 @@
  *                          Mirrors FileExtension's notion of what
  *                          counts as an extension.  Pure string
  *                          manipulation; no filesystem access.
+ *
+ *   FilePrint["name"]      Prints the raw textual contents of "name"
+ *   FilePrint["name", n]   to stdout.  With a positive integer second
+ *   FilePrint["name", -n]  argument prints the first n lines; with a
+ *   FilePrint["name",      negative integer prints the last |n|.  A
+ *       m;;n]              Span argument selects a half-open line
+ *   FilePrint["name",      range (1-based, inclusive) with optional
+ *       m;;n;;s]           signed step `s`.  Returns Null on success
+ *                          and $Failed if the file cannot be opened.
  */
 
 void files_init(void);
@@ -33,5 +42,6 @@ void files_init(void);
 Expr* builtin_fileexistsq(Expr* res);
 Expr* builtin_fileextension(Expr* res);
 Expr* builtin_filebasename(Expr* res);
+Expr* builtin_fileprint(Expr* res);
 
 #endif /* FILES_H */

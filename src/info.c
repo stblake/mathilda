@@ -445,6 +445,20 @@ void info_init(void) {
         "FileBaseName drops all directory specifications.\n"
         "FileBaseName[\"file.tar.gz\"] gives \"file.tar\" — only the final extension is split off.\n"
         "FileBaseName by default assumes pathname separators and other conventions suitable for your operating system.");
+    symtab_set_docstring("FilePrint",
+        "FilePrint[\"file\"]\n"
+        "\tprints out the raw textual contents of file.\n"
+        "FilePrint[\"file\", n]\n"
+        "\tprints out the first n raw textual lines of file.\n"
+        "FilePrint[\"file\", -n]\n"
+        "\tprints out the last n raw textual lines of file.\n"
+        "FilePrint[\"file\", m;;n]\n"
+        "\tprints out lines m through n of file.\n"
+        "FilePrint[\"file\", m;;n;;s]\n"
+        "\tprints out lines m through n of file in steps of s; s may be negative\n"
+        "\tto walk the range backwards.\n"
+        "FilePrint returns Null on success and $Failed if the file cannot be opened.\n"
+        "Negative indices inside the Span count from the end of the file (-1 is the last line).");
 
     symtab_set_docstring("FullForm", "FullForm[expr] is a wrapper that causes expr to be printed in full form.");
     symtab_set_docstring("InputForm", "InputForm[expr] is a wrapper that causes expr to be printed in input form.");

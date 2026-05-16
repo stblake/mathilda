@@ -99,6 +99,7 @@ extern const char* SYM_False;
 extern const char* SYM_FileBaseName;
 extern const char* SYM_FileExistsQ;
 extern const char* SYM_FileExtension;
+extern const char* SYM_FilePrint;
 extern const char* SYM_Fermat;
 extern const char* SYM_Flat;
 extern const char* SYM_Floor;
