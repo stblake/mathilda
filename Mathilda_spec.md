@@ -40,7 +40,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Control flow (`If`, `Which`, `Switch`, `For`, `While`) | [`builtins/control-flow.md`](docs/spec/builtins/control-flow.md) |
 | Assignment and rules (`Set`, `SetDelayed`, `Rule`, `RuleDelayed`) | [`builtins/assignment-and-rules.md`](docs/spec/builtins/assignment-and-rules.md) |
 | Scoping constructs (`Module`, `Block`, `With`) | [`builtins/scoping-constructs.md`](docs/spec/builtins/scoping-constructs.md) |
-| Pattern matching (`MatchQ`, `Cases`, `Position`, `Count`, ...) | [`builtins/pattern-matching.md`](docs/spec/builtins/pattern-matching.md) |
+| Pattern matching (`MatchQ`, `Cases`, `DeleteCases`, `Position`, `Count`, ...) | [`builtins/pattern-matching.md`](docs/spec/builtins/pattern-matching.md) |
 | File I/O (`Get`, `Put`, `PutAppend`, `>>`, `>>>`) | [`builtins/file-io.md`](docs/spec/builtins/file-io.md) |
 
 ## Changelog

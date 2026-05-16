@@ -36,6 +36,72 @@ void test_count() {
     assert_eval_eq("Count[5,_?NumberQ,{0,-1}]", "0", 0);
 }
 
+void test_delete_cases() {
+    /* Documented examples from the spec. */
+    assert_eval_eq("DeleteCases[{1, 1, x, 2, 3, y, 9, y}, _Integer]", "{x, y, y}", 0);
+    assert_eval_eq("DeleteCases[_Integer][{1, 1, x, 2, 3, y, 9, y}]", "{x, y, y}", 0);
+    assert_eval_eq("DeleteCases[{1, f[2, 3], 4}, f, {2}, Heads -> True]", "{1, 2, 3, 4}", 0);
+
+    /* Default levelspec is {1}: only level-1 elements are tested. */
+    assert_eval_eq("DeleteCases[{a, b, b, a, b, c, b}, b]", "{a, a, c}", 0);
+    assert_eval_eq("DeleteCases[{1, 2, 3, x, y, z}, _Symbol]", "{1, 2, 3}", 0);
+    assert_eval_eq("DeleteCases[{1, 2, 3, x, y, z}, _Integer]", "{x, y, z}", 0);
+
+    /* Nothing matches -- unchanged copy. */
+    assert_eval_eq("DeleteCases[{1, 2, 3}, _Real]", "{1, 2, 3}", 0);
+    /* Empty list is preserved. */
+    assert_eval_eq("DeleteCases[{}, _Integer]", "{}", 0);
+
+    /* Pattern matches against compound elements at level 1. */
+    assert_eval_eq("DeleteCases[{f[1], g[2], f[3], h[4]}, f[_]]", "{g[2], h[4]}", 0);
+    assert_eval_eq("DeleteCases[{{1, 2}, {2, 3}, {3, 4}}, {_, 3}]", "{{1, 2}, {3, 4}}", 0);
+    assert_eval_eq("DeleteCases[{{1, 2}, {2}, {3, 4, 1}, {5, 4}, {3, 3}}, {_, _}]", "{{2}, {3, 4, 1}}", 0);
+
+    /* DeleteCases works on arbitrary heads, not just List. */
+    assert_eval_eq("DeleteCases[a + b + c, b]", "a + c", 0);
+    assert_eval_eq("DeleteCases[f[1, 2, 3, 4], 2]", "f[1, 3, 4]", 0);
+
+    /* levelspec: positive integer N = levels {1..N}. */
+    assert_eval_eq("DeleteCases[{{1, 4, a, 0}, {b, 3, 2, 2}, {c, c, 5, 5}}, _Integer, 2]",
+                   "{{a}, {b}, {c, c}}", 0);
+    /* levelspec: explicit {n}. */
+    assert_eval_eq("DeleteCases[{{a, a, b}, b, {a, b, a}}, b, {2}]", "{{a, a}, b, {a, a}}", 0);
+    /* levelspec: {2} -- only level 2, top-level b is preserved. */
+    assert_eval_eq("DeleteCases[{a, b, {a, b, c}}, b, {2}]", "{a, b, {a, c}}", 0);
+    /* levelspec: Infinity / All -- all levels from 1 down. */
+    assert_eval_eq("DeleteCases[{a, b, {a, b, {a, b}}}, b, Infinity]",
+                   "{a, {a, {a}}}", 0);
+
+    /* Count limit n. With levelspec {1}, only the first n level-1 matches are removed. */
+    assert_eval_eq("DeleteCases[{1, 2, 3, 4, 5}, _Integer, {1}, 2]", "{3, 4, 5}", 0);
+    assert_eval_eq("DeleteCases[{1, 2, 3, 4, 5}, _Integer, {1}, 0]", "{1, 2, 3, 4, 5}", 0);
+    /* Limit larger than the number of matches: deletes all matches, no error. */
+    assert_eval_eq("DeleteCases[{1, 2, x}, _Integer, {1}, 99]", "{x}", 0);
+
+    /* Heads -> True deletes heads, behaving like FlattenAt. */
+    assert_eval_eq("DeleteCases[{1, f[2, 3], 4}, f, {2}, Heads -> True]", "{1, 2, 3, 4}", 0);
+    /* Heads -> False (default) leaves head matches alone. */
+    assert_eval_eq("DeleteCases[{1, f[2, 3], 4}, f, {2}, Heads -> False]", "{1, f[2, 3], 4}", 0);
+    assert_eval_eq("DeleteCases[{1, f[2, 3], 4}, f, {2}]", "{1, f[2, 3], 4}", 0);
+
+    /* Test pattern semantics: matches based on the ORIGINAL expression
+     * (Mathematica behaviour). An outer node that matches the pattern is
+     * deleted even after its children have already been transformed. */
+    assert_eval_eq("DeleteCases[{f[1, 2], f[3, f[4]]}, f[__], Infinity]", "{}", 0);
+    assert_eval_eq("DeleteCases[{f[1, 2], f[3, f[4]]}, f[__], Infinity, 1]",
+                   "{f[3, f[4]]}", 0);
+
+    /* Operator form preserved across applications. */
+    assert_eval_eq("DeleteCases[_Symbol][{1, x, 2, y, 3}]", "{1, 2, 3}", 0);
+
+    /* PatternTest and Condition guards. */
+    assert_eval_eq("DeleteCases[{1, 2, 3, 4, 5, 6}, _?EvenQ]", "{1, 3, 5}", 0);
+    assert_eval_eq("DeleteCases[{1, 2, 3, 4, 5}, x_ /; x > 2]", "{1, 2}", 0);
+
+    /* Negative levelspec: level -1 = atomic leaves. */
+    assert_eval_eq("DeleteCases[{1, {2, 3}, 4}, _Integer, {-1}]", "{{}}", 0);
+}
+
 void test_memberq() {
     assert_eval_eq("MemberQ[{1,3,4,1,2},2]", "True", 0);
     assert_eval_eq("MemberQ[{1,3,4,1,5},2]", "False", 0);
@@ -53,6 +119,7 @@ int main() {
     core_init();
     
     TEST(test_cases);
+    TEST(test_delete_cases);
     TEST(test_position);
     TEST(test_count);
     TEST(test_memberq);

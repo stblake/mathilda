@@ -62,6 +62,7 @@ const char* SYM_Coth = NULL;
 const char* SYM_Csc = NULL;
 const char* SYM_Csch = NULL;
 const char* SYM_Degree = NULL;
+const char* SYM_DeleteCases = NULL;
 const char* SYM_Derivative = NULL;
 const char* SYM_DirectedInfinity = NULL;
 const char* SYM_DiscreteDelta = NULL;
@@ -279,6 +280,7 @@ void sym_names_init(void) {
     SYM_Csc                        = intern_symbol("Csc");
     SYM_Csch                       = intern_symbol("Csch");
     SYM_Degree                     = intern_symbol("Degree");
+    SYM_DeleteCases                = intern_symbol("DeleteCases");
     SYM_Derivative                 = intern_symbol("Derivative");
     SYM_DirectedInfinity           = intern_symbol("DirectedInfinity");
     SYM_DiscreteDelta              = intern_symbol("DiscreteDelta");

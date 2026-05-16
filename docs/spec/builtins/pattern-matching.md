@@ -23,6 +23,19 @@ Gives a list of elements that match a pattern.
 - Option `Heads -> True` includes heads of expressions.
 - Operates in depth-first post-order traversal.
 
+## DeleteCases
+Removes the elements of an expression that match a pattern.
+- `DeleteCases[expr, pattern]`
+- `DeleteCases[expr, pattern, levelspec]`
+- `DeleteCases[expr, pattern, levelspec, n]`
+- `DeleteCases[pattern]`
+
+**Features**:
+- Uses standard level specifications, defaulting to level `{1}`.
+- Option `Heads -> True` tests heads as well; deleting a head is equivalent to applying `FlattenAt` at that point, splicing the remaining arguments into the parent.
+- Traverses `expr` in depth-first post-order (leaves before roots) so that the `n` budget is spent on deeper matches before shallower ones.
+- The match test is applied to the original subexpression (not the version with children already deleted), matching Mathematica semantics.
+
 ## Position
 Gives a list of the positions at which objects matching a pattern appear.
 - `Position[expr, pattern]`

@@ -77,6 +77,7 @@ extern const char* SYM_Coth;
 extern const char* SYM_Csc;
 extern const char* SYM_Csch;
 extern const char* SYM_Degree;
+extern const char* SYM_DeleteCases;
 extern const char* SYM_Derivative;
 extern const char* SYM_DirectedInfinity;
 extern const char* SYM_DiscreteDelta;
