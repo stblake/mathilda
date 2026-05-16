@@ -500,3 +500,112 @@ Complex number functions.
 - `Conjugate[z]`: Complex conjugate.
 - `Arg[z]`: Phase angle.
 
+## Solve
+Attempts to solve an equation or system of equations for one or more variables.
+- `Solve[expr, vars]`: Solve `expr` for `vars` over the complex numbers (default).
+- `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`.
+
+**Features**:
+- `HoldAll`, `Protected`.
+- The initial implementation handles a single equality `lhs == rhs` that is
+  polynomial in one variable *after* clearing denominators.  Multi-equation
+  systems and inequalities are reserved for a future cut and currently leave
+  `Solve[...]` unevaluated.
+- Acts as a router that dispatches to `Solve`SolvePolynomialEquality` (see below).
+- Returns the solution set as a `List` of `List` of `Rule` pairs:
+  - `{}` -- no solutions.
+  - `{{}}` -- tautology (full-dimensional solution set).
+  - `{{x -> v1}, {x -> v2}, ...}` -- one inner list per solution.  Multiplicity
+    is preserved (repeated roots appear once per unit of multiplicity).
+- **Rational-equality canonicalisation**: both sides are run through `Together`
+  to combine into single fractions `N1/D1 == N2/D2`, then cross-multiplied to
+  `N1*D2 - N2*D1 == 0` and `Collect`-ed in the solving variable before
+  dispatch.  This routes equations like `a/x + b == 0` or `1/(x-1) == 2`
+  through the polynomial specialist.  Any candidate root that provably zeroes
+  one of the cleared denominators is dropped as extraneous (e.g.
+  `Solve[x/(x-1) == 2/(x-1), x]` returns `{{x -> 2}}`, not `{{x -> 1}, {x -> 2}}`).
+  Symbolic / undetermined denominator values are kept (parametric inputs like
+  `Solve[a/x + b == 0, x]` return `{{x -> -a/b}}`).
+- Per-degree handling for irreducible factors:
+  - Degree 1 / 2: closed-form rules.
+  - Quadratic in `Reals`: discriminant-aware (zero, one, or two real roots).
+  - Binomial `a*x^n + b == 0`: all n complex roots, or the real
+    radical(s) in `Reals` (n odd -> 1 root; n even with `−b/a > 0` -> ±r;
+    n even with `−b/a < 0` -> 0).
+  - n-quadratic `a*x^(2n) + b*x^n + c == 0`: substitution `u = x^n` followed by
+    two binomial sub-solves; 2n radical roots regardless of `Cubics` / `Quartics`.
+  - Degree 3: held `Root[Function[t, p[t]], k]` objects unless `Cubics -> True`.
+  - Degree 4: held `Root[]` objects unless `Quartics -> True` (Ferrari is
+    deferred -- with `Quartics -> True` the four roots are emitted as held
+    `Root[]` for now).
+  - Degree ≥ 5: held `Root[]` objects per irreducible factor.
+
+**Options**:
+- `Cubics -> False`: Emit cubic roots as held `Root[]` objects (default).
+  `Cubics -> True` switches to closed-form Cardano radicals.
+- `Quartics -> False`: Emit quartic roots as held `Root[]` objects (default).
+  Reserved: Ferrari closed form is deferred.
+- `GeneratedParameters -> C`: Reserved.  Reserved name for newly introduced
+  parameters in a future parametric-solution path.
+- `VerifySolutions -> Automatic`: Reserved.
+
+```mathematica
+In[1]:= Solve[2 x + 3 == 0, x]
+Out[1]= {{x -> -3/2}}
+
+In[2]:= Solve[x^2 - 5 x + 6 == 0, x]
+Out[2]= {{x -> 2}, {x -> 3}}
+
+In[3]:= Solve[x^2 + 1 == 0, x]
+Out[3]= {{x -> -I}, {x -> I}}
+
+In[4]:= Solve[x^2 + 1 == 0, x, Reals]
+Out[4]= {}
+
+In[5]:= Solve[(x-1)^2 == 0, x]
+Out[5]= {{x -> 1}, {x -> 1}}
+
+In[6]:= Solve[x^4 - 5 x^2 + 4 == 0, x]
+Out[6]= {{x -> 1}, {x -> -1}, {x -> 2}, {x -> -2}}
+
+In[7]:= Solve[x^3 + x + 1 == 0, x]
+Out[7]= {{x -> Root[Function[1 + #1 + #1^3], 1]}, ...}
+
+In[8]:= Solve[Sin[x] == 0, x]
+Out[8]= Solve[Sin[x] == 0, x]
+
+In[9]:= Solve[a/x + b == 0, x]
+Out[9]= {{x -> -a/b}}
+
+In[10]:= Solve[1/(x-1) == 2, x]
+Out[10]= {{x -> 3/2}}
+
+In[11]:= Solve[x/(x-1) == 2/(x-1), x]
+Out[11]= {{x -> 2}}             (* x = 1 dropped as extraneous *)
+```
+
+## Solve`SolvePolynomialEquality
+The polynomial-equality specialist invoked by `Solve`.  Reachable directly via
+its context-qualified name when the caller has already classified its input.
+- `Solve`SolvePolynomialEquality[lhs == rhs, var]`
+- `Solve`SolvePolynomialEquality[lhs == rhs, var, dom]`
+
+**Features**:
+- `Protected`.
+- Same algorithm and output shape as `Solve` for single polynomial equalities
+  in one variable.  Does not parse options; the caller supplies them through
+  the C-level entry point.
+
+## Cubics
+Option for `Solve` that controls whether cubic equations are solved via
+explicit radical formulas.
+- `Cubics -> False` (default): emit held `Root[]` objects.
+- `Cubics -> True`: emit closed-form Cardano radicals.
+
+## Quartics
+Option for `Solve` that controls whether quartic equations are solved via
+explicit radical formulas.
+- `Quartics -> False` (default): emit held `Root[]` objects.
+- `Quartics -> True`: reserved -- Ferrari is deferred; held `Root[]` objects
+  are still emitted in the current implementation.
+

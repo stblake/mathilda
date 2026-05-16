@@ -111,6 +111,8 @@ set(COMMON_SRC
     ../src/intrischnorman.c
     ../src/intsimp.c
     ../src/root.c
+    ../src/solve.c
+    ../src/solvepoly.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -244,6 +246,9 @@ target_include_directories(datetime_tests PRIVATE ../src)
 
 add_executable(facpoly_tests test_facpoly.c ${COMMON_SRC})
 target_include_directories(facpoly_tests PRIVATE ../src)
+
+add_executable(solve_tests test_solve.c ${COMMON_SRC})
+target_include_directories(solve_tests PRIVATE ../src)
 
 add_executable(factor_phase0_tests test_factor_phase0.c ${COMMON_SRC})
 target_include_directories(factor_phase0_tests PRIVATE ../src)
