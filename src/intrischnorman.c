@@ -1,3 +1,7 @@
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 /* intrischnorman.c — parallel Risch / Risch-Norman heuristic
  * integrator.  Implements Bronstein's "Poor Man's Integrator"
  * (pmint, 2004).  Reference: parallel_risch/pmint.maple (99 lines)
