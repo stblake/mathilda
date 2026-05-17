@@ -77,30 +77,30 @@ void test_invtrig_arctan_imag_bridge(void) {
 
 void test_invtrig_arccot_imag_bridge(void) {
     /* ArcCot[I y] -> -I ArcCoth[y]. */
-    assert_eval_eq("ArcCot[I*x]", "(-I) ArcCoth[x]", 0);
+    assert_eval_eq("ArcCot[I*x]", "-I ArcCoth[x]", 0);
 }
 
 void test_invtrig_arccsc_imag_bridge(void) {
     /* ArcCsc[I y] -> -I ArcCsch[y]. */
-    assert_eval_eq("ArcCsc[I*x]", "(-I) ArcCsch[x]", 0);
+    assert_eval_eq("ArcCsc[I*x]", "-I ArcCsch[x]", 0);
 }
 
 void test_invhyp_arcsinh_imag_bridge(void) {
     /* ArcSinh[I y] -> I ArcSin[y]. */
-    assert_eval_eq("ArcSinh[I*x]", "(I) ArcSin[x]", 0);
+    assert_eval_eq("ArcSinh[I*x]", "I ArcSin[x]", 0);
 }
 
 void test_invhyp_arctanh_imag_bridge(void) {
     /* ArcTanh[I y] -> I ArcTan[y]. */
-    assert_eval_eq("ArcTanh[I*x]", "(I) ArcTan[x]", 0);
+    assert_eval_eq("ArcTanh[I*x]", "I ArcTan[x]", 0);
 }
 
 void test_invhyp_arccoth_imag_bridge(void) {
-    assert_eval_eq("ArcCoth[I*x]", "(-I) ArcCot[x]", 0);
+    assert_eval_eq("ArcCoth[I*x]", "-I ArcCot[x]", 0);
 }
 
 void test_invhyp_arccsch_imag_bridge(void) {
-    assert_eval_eq("ArcCsch[I*x]", "(-I) ArcCsc[x]", 0);
+    assert_eval_eq("ArcCsch[I*x]", "-I ArcCsc[x]", 0);
 }
 
 /* ---- Forward-of-inverse trig ---- */
@@ -251,7 +251,7 @@ void test_invtrig_arccos_neg_half(void) {
 void test_invtrig_arcsin_imag_two(void) {
     /* ArcSin[2 I] -> I ArcSinh[2] (no further numeric collapse since
      * ArcSinh[2] has no exact-value entry). */
-    assert_eval_eq("ArcSin[2 I]", "(I) ArcSinh[2]", 0);
+    assert_eval_eq("ArcSin[2 I]", "I ArcSinh[2]", 0);
 }
 
 int main(void) {

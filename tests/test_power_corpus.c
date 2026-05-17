@@ -59,7 +59,7 @@ static void test_bug3_imag_times_positive(void) {
                    "(-1)^(1/6) Pi^(1/3)", 0);
     /* Negative branch: x of unknown sign -- must NOT distribute. */
     assert_eval_eq("Sqrt[I*x]",
-                   "Sqrt[(I) x]", 0);
+                   "Sqrt[I x]", 0);
     /* No imaginary factor: leave as-is. */
     assert_eval_eq("Sqrt[2*Pi]",
                    "Sqrt[2 Pi]", 0);

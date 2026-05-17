@@ -3,20 +3,20 @@
 #include "core.h"
 
 void test_trigtoexp() {
-    printf("testing %s\n", "TrigToExp[Cos[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[Cos[x]]", "1/2 E^((-I) x) + 1/2 E^((I) x)", 0);
+    printf("testing %s\n", "TrigToExp[Cos[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[Cos[x]]", "1/2 E^(-I x) + 1/2 E^(I x)", 0);
     printf("testing %s\n", "TrigToExp[Sinh[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[Sinh[x]]", "1/2 E^x - 1/2 E^(-x)", 0);
-    printf("testing %s\n", "TrigToExp[Cos[x]+I Sin[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[Cos[x]+I Sin[x]]", "E^((I) x)", 0);
+    printf("testing %s\n", "TrigToExp[Cos[x]+I Sin[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[Cos[x]+I Sin[x]]", "E^(I x)", 0);
     printf("testing %s\n", "TrigToExp[Tanh[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[Tanh[x]]", "E^x/(E^x + E^(-x)) - E^(-x)/(E^x + E^(-x))", 0);
-    printf("testing %s\n", "TrigToExp[ArcSin[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcSin[x]]", "(-I) Log[(I) x + Sqrt[1 - x^2]]", 0);
+    printf("testing %s\n", "TrigToExp[ArcSin[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcSin[x]]", "-I Log[I x + Sqrt[1 - x^2]]", 0);
     printf("testing %s\n", "TrigToExp[ArcCoth[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcCoth[x]]", "1/2 Log[1 + 1/x] - 1/2 Log[1 - 1/x]", 0);
-    printf("testing %s\n", "TrigToExp[{Sin[x],Cos[x],Tan[x]}]"); fflush(stdout); assert_eval_eq("TrigToExp[{Sin[x],Cos[x],Tan[x]}]", "{(-1/2*I) E^((I) x) + (1/2*I) E^((-I) x), 1/2 E^((-I) x) + 1/2 E^((I) x), (-I) E^((I) x)/(E^((-I) x) + E^((I) x)) + (I) E^((-I) x)/(E^((-I) x) + E^((I) x))}", 0);
-    printf("testing %s\n", "TrigToExp[Sinh[x]<=11&&ArcTan[x]==7]"); fflush(stdout); assert_eval_eq("TrigToExp[Sinh[x]<=11&&ArcTan[x]==7]", "1/2 E^x - 1/2 E^(-x) <= 11 && (-1/2*I) Log[1 + (I) x] + (1/2*I) Log[1 + (-I) x] == 7", 0);
+    printf("testing %s\n", "TrigToExp[{Sin[x],Cos[x],Tan[x]}]"); fflush(stdout); assert_eval_eq("TrigToExp[{Sin[x],Cos[x],Tan[x]}]", "{(-1/2*I) E^(I x) + (1/2*I) E^(-I x), 1/2 E^(-I x) + 1/2 E^(I x), -I E^(I x)/(E^(-I x) + E^(I x)) + I E^(-I x)/(E^(-I x) + E^(I x))}", 0);
+    printf("testing %s\n", "TrigToExp[Sinh[x]<=11&&ArcTan[x]==7]"); fflush(stdout); assert_eval_eq("TrigToExp[Sinh[x]<=11&&ArcTan[x]==7]", "1/2 E^x - 1/2 E^(-x) <= 11 && (-1/2*I) Log[1 + I x] + (1/2*I) Log[1 - I x] == 7", 0);
 
     // Other inverse trig
-    printf("testing %s\n", "TrigToExp[ArcCos[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcCos[x]]", "1/2 Pi + (I) Log[(I) x + Sqrt[1 - x^2]]", 0);
-    printf("testing %s\n", "TrigToExp[ArcCot[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcCot[x]]", "(-1/2*I) Log[1 + (I)/x] + (1/2*I) Log[1 + (-I)/x]", 0);
-    printf("testing %s\n", "TrigToExp[ArcSec[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcSec[x]]", "1/2 Pi + (I) Log[(I)/x + Sqrt[1 - 1/x^2]]", 0);
-    printf("testing %s\n", "TrigToExp[ArcCsc[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcCsc[x]]", "(-I) Log[(I)/x + Sqrt[1 - 1/x^2]]", 0);
+    printf("testing %s\n", "TrigToExp[ArcCos[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcCos[x]]", "1/2 Pi + I Log[I x + Sqrt[1 - x^2]]", 0);
+    printf("testing %s\n", "TrigToExp[ArcCot[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcCot[x]]", "(-1/2*I) Log[1 + I/x] + (1/2*I) Log[1 - I/x]", 0);
+    printf("testing %s\n", "TrigToExp[ArcSec[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcSec[x]]", "1/2 Pi + I Log[I/x + Sqrt[1 - 1/x^2]]", 0);
+    printf("testing %s\n", "TrigToExp[ArcCsc[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcCsc[x]]", "-I Log[I/x + Sqrt[1 - 1/x^2]]", 0);
     
     // Hyperbolics
     printf("testing %s\n", "TrigToExp[Cosh[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[Cosh[x]]", "1/2 E^x + 1/2 E^(-x)", 0);
@@ -32,16 +32,16 @@ void test_trigtoexp() {
     printf("testing %s\n", "TrigToExp[ArcCsch[x]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcCsch[x]]", "Log[1/x + Sqrt[1 + 1/x^2]]", 0);
     
     // Two-argument ArcTan
-    printf("testing %s\n", "TrigToExp[ArcTan[x, y]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcTan[x, y]]", "(-I) Log[(x + (I) y)/Sqrt[x^2 + y^2]]", 0);
+    printf("testing %s\n", "TrigToExp[ArcTan[x, y]]"); fflush(stdout); assert_eval_eq("TrigToExp[ArcTan[x, y]]", "-I Log[(x + I y)/Sqrt[x^2 + y^2]]", 0);
 }
 
 void test_exptotrig() {
-    printf("testing %s\n", "ExpToTrig[Exp[I x]]"); fflush(stdout); assert_eval_eq("ExpToTrig[Exp[I x]]", "Cos[x] + (I) Sin[x]", 0);
+    printf("testing %s\n", "ExpToTrig[Exp[I x]]"); fflush(stdout); assert_eval_eq("ExpToTrig[Exp[I x]]", "Cos[x] + I Sin[x]", 0);
     printf("testing %s\n", "ExpToTrig[Exp[x]]"); fflush(stdout); assert_eval_eq("ExpToTrig[Exp[x]]", "Cosh[x] + Sinh[x]", 0);
     printf("testing %s\n", "ExpToTrig[Log[1+I x]-Log[1-I x]]"); fflush(stdout); assert_eval_eq("ExpToTrig[Log[1+I x]-Log[1-I x]]", "(2*I) ArcTan[x]", 0);
     printf("testing %s\n", "ExpToTrig[Log[2+x]-Log[2-x]]"); fflush(stdout); assert_eval_eq("ExpToTrig[Log[2+x]-Log[2-x]]", "2 ArcTanh[1/2 x]", 0);
     printf("testing %s\n", "ExpToTrig[TrigToExp[Sin[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Sin[x]]]", "Sin[x]", 0);
-    printf("testing %s\n", "ExpToTrig[Exp[I*x]==-1]"); fflush(stdout); assert_eval_eq("ExpToTrig[Exp[I*x]==-1]", "Cos[x] + (I) Sin[x] == -1", 0);
+    printf("testing %s\n", "ExpToTrig[Exp[I*x]==-1]"); fflush(stdout); assert_eval_eq("ExpToTrig[Exp[I*x]==-1]", "Cos[x] + I Sin[x] == -1", 0);
     
     // Reverse trigonometric
     printf("testing %s\n", "ExpToTrig[TrigToExp[Cos[x]]]"); fflush(stdout); assert_eval_eq("ExpToTrig[TrigToExp[Cos[x]]]", "Cos[x]", 0);

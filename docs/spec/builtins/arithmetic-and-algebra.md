@@ -104,6 +104,15 @@ Exponentiation.
 - Returns `Overflow[]` if the result exceeds 64-bit integer limits.
 - Reduces radicals (e.g., `8^(1/2)` becomes `2*Sqrt[2]`).
 - Supports complex results for negative bases (e.g., `(-1)^(1/2)` becomes `I`).
+  Higher-power cases for `q == 2` now also reduce: `(-1)^(3/2) → -I`,
+  `(-1)^(5/2) → I`, `(-12)^(3/2) → -24 I Sqrt[3]` (the principal-branch
+  rule `(-n)^(p/2) = I^p · |n|^(p/2)`).
+- `Power[-1, p/q]` with even `q ≥ 4` and `|p| ≥ q` does integer-part
+  extraction, e.g. `(-1)^(5/4) → -(-1)^(1/4)`, `(-1)^(7/6) → -(-1)^(1/6)`.
+  `(-1)^(p/q)` with `|p| < q` (and odd-`q` negative-base cases for any
+  base) continue to canonicalise via the existing path.  Negative bases
+  other than `-1` with even `q ≥ 4` (e.g. `(-16)^(1/4)`) are still left
+  unevaluated.
 - Distributes power over product if the exponent is an integer.
 
 ```mathematica
@@ -112,6 +121,12 @@ Out[1]= 3*Sqrt[5]
 
 In[2]:= (a * b)^2
 Out[2]= a^2 * b^2
+
+In[3]:= (-1)^(3/2)
+Out[3]= -I
+
+In[4]:= (-1)^(7/4)
+Out[4]= -(-1)^(3/4)
 ```
 
 ## Sqrt
@@ -531,7 +546,13 @@ Attempts to solve an equation or system of equations for one or more variables.
   - Quadratic in `Reals`: discriminant-aware (zero, one, or two real roots).
   - Binomial `a*x^n + b == 0`: all n complex roots, or the real
     radical(s) in `Reals` (n odd -> 1 root; n even with `−b/a > 0` -> ±r;
-    n even with `−b/a < 0` -> 0).
+    n even with `−b/a < 0` -> 0).  Complex roots are emitted as
+    `r * (-1)^(2k/n)` for the principal radical `r = (-b/a)^(1/n)` and
+    `k = 0..n-1`, then folded by `Power`'s rational-exponent canonicaliser
+    so output matches Mathematica's standard form (e.g.
+    `Solve[x^5 + 1 == 0, x]` returns
+    `{{x -> (-1)^(1/5)}, {x -> (-1)^(3/5)}, {x -> -1},
+       {x -> -(-1)^(2/5)}, {x -> -(-1)^(4/5)}}`).
   - n-quadratic `a*x^(2n) + b*x^n + c == 0`: substitution `u = x^n` followed by
     two binomial sub-solves; 2n radical roots regardless of `Cubics` / `Quartics`.
   - Degree 3: held `Root[Function[t, p[t]], k]` objects unless `Cubics -> True`.

@@ -604,13 +604,13 @@ static void test_wp9_branch_cuts(void) {
     check("Limit[Sqrt[z], z -> -1, Direction -> Complexes]",  "Indeterminate");
 
     /* Log at z = -1. */
-    check("Limit[Log[z], z -> -1, Direction -> Reals]",      "(I) Pi");
-    check("Limit[Log[z], z -> -1, Direction -> I]",          "(-I) Pi");
+    check("Limit[Log[z], z -> -1, Direction -> Reals]",      "I Pi");
+    check("Limit[Log[z], z -> -1, Direction -> I]",          "-I Pi");
     check("Limit[Log[z], z -> -1, Direction -> Complexes]",  "Indeterminate");
 
     /* List threading in the first argument. */
     check("Limit[{Sqrt[z], Log[z]}, z -> -1, Direction -> I]",
-          "{-I, (-I) Pi}");
+          "{-I, -I Pi}");
     check("Limit[{Sqrt[z], Log[z]}, z -> -1, Direction -> Complexes]",
           "{Indeterminate, Indeterminate}");
 

@@ -216,8 +216,8 @@ static void test_power_negative_base_unchanged(void) {
      * handler. */
     /* (-1)^(1/2) = I */
     assert_eval_eq("(-1)^(1/2)", "I", 0);
-    /* (-3)^(1/2) = I Sqrt[3]. (printer parenthesises the I) */
-    assert_eval_eq("Power[-3, 1/2]", "(I) Sqrt[3]", 0);
+    /* (-3)^(1/2) = I Sqrt[3]. */
+    assert_eval_eq("Power[-3, 1/2]", "I Sqrt[3]", 0);
     /* (-2)^(1/3) is left to the parser/printer round-trip path. */
     assert_eval_eq("Power[-2, 1/3]", "(-2)^(1/3)", 0);
 }
@@ -695,6 +695,29 @@ static void test_sign_normalization_even_q_unchanged(void) {
     assert_eval_eq("(-16)^(1/4)",               "(-16)^(1/4)",  0);
 }
 
+static void test_minus_one_rational_exp_canonical(void) {
+    /* (-1)^(p/2) for odd p: result is I^p, i.e. I when p mod 4 == 1
+     * and -I when p mod 4 == 3.  Covers the higher-order-than-Sqrt cases
+     * the original q==2 branch left unhandled. */
+    assert_eval_eq("(-1)^(3/2)",                "-I",           0);
+    assert_eval_eq("(-1)^(5/2)",                "I",            0);
+    assert_eval_eq("(-1)^(7/2)",                "-I",           0);
+    /* (-n)^(p/2) for odd p > 1: I^p * |n|^(p/2).  The printer surfaces
+     * Complex[0, -24] * Sqrt[3] as "-(24*I) Sqrt[3]" (the negative is
+     * pulled outside the Complex parenthesisation). */
+    assert_eval_eq("(-12)^(3/2)",               "-(24*I) Sqrt[3]", 0);
+    /* Even q >= 4 with base == -1: integer-part extraction kicks in
+     * once |p| >= q, leaving a canonical Power[-1, r/q] residue.
+     * |p| < q stays untouched (no clean canonical form yet). */
+    assert_eval_eq("(-1)^(5/4)",                "-(-1)^(1/4)",  0);
+    assert_eval_eq("(-1)^(7/4)",                "-(-1)^(3/4)",  0);
+    assert_eval_eq("(-1)^(9/4)",                "(-1)^(1/4)",   0);
+    assert_eval_eq("(-1)^(7/6)",                "-(-1)^(1/6)",  0);
+    /* |p| < q with base == -1: leave canonical. */
+    assert_eval_eq("(-1)^(1/4)",                "(-1)^(1/4)",   0);
+    assert_eval_eq("(-1)^(3/4)",                "(-1)^(3/4)",   0);
+}
+
 /* ------------------------------------------------------------------ */
 /* Integration: combinations of all three new canonical forms          */
 /* ------------------------------------------------------------------ */
@@ -789,6 +812,7 @@ int main(void) {
     TEST(test_sign_normalization_with_residue);
     TEST(test_sign_normalization_no_extraction);
     TEST(test_sign_normalization_even_q_unchanged);
+    TEST(test_minus_one_rational_exp_canonical);
 
     /* Combinations of the three new canonical forms. */
     TEST(test_combined_canonical_forms);

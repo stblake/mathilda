@@ -58,7 +58,26 @@ static int get_expr_prec(Expr* e) {
         return 590;
     }
     if (head == SYM_Rational) return 470;
-    if (head == SYM_Complex) return 310;
+    if (head == SYM_Complex) {
+        /* Pure imaginary unit prints as a bare "I" (or "-I" which is unary-
+         * minus); treat it as an atom so callers like Times don't wrap it
+         * in parentheses ("(I) Pi" -> "I Pi"). General Complex[a, b] still
+         * prints "a + b I" and keeps Plus-level precedence. */
+        if (e->data.function.arg_count == 2) {
+            Expr* re = e->data.function.args[0];
+            Expr* im = e->data.function.args[1];
+            bool re_zero = (re->type == EXPR_INTEGER && re->data.integer == 0)
+                        || (re->type == EXPR_REAL && re->data.real == 0.0);
+            if (re_zero && im->type == EXPR_INTEGER
+                && (im->data.integer == 1 || im->data.integer == -1)) {
+                return 1000;
+            }
+        }
+        return 310;
+    }
+    /* Function[body] is the slot-based pure function rendered "body &".
+     * Mathematica gives "&" precedence 90 (just above Postfix). */
+    if (head == SYM_Function && e->data.function.arg_count == 1) return 90;
     return 1000;
 }
 
@@ -282,6 +301,28 @@ static void print_standard(Expr* e, int parent_prec) {
                     Expr* den = a0->data.function.args[1];
                     Expr* rargs[2] = { expr_new_integer(-num->data.integer), expr_copy(den) };
                     flipped_head = expr_new_function(expr_new_symbol("Rational"), rargs, 2);
+                } else if (a0->type == EXPR_FUNCTION &&
+                           a0->data.function.head->type == EXPR_SYMBOL &&
+                           a0->data.function.head->data.symbol == SYM_Complex &&
+                           a0->data.function.arg_count == 2 &&
+                           a0->data.function.args[0]->type == EXPR_INTEGER &&
+                           a0->data.function.args[0]->data.integer == 0 &&
+                           a0->data.function.args[1]->type == EXPR_INTEGER &&
+                           a0->data.function.args[1]->data.integer < 0) {
+                    /* Pure-imaginary-negative lead factor: Times[Complex[0, -n], ...]
+                     * pulls the sign out so it prints as "-n I ..." instead of
+                     * "(-n I) ..." or, for n == 1, "-I ..." instead of "(-I) ...". */
+                    flipped_sign = true;
+                    Expr* im = a0->data.function.args[1];
+                    if (im->data.integer == -1 && count > 1) {
+                        /* Drop the imaginary unit's -1; the loop will print
+                         * Complex[0, 1] = "I" as the new lead factor. */
+                        Expr* cargs[2] = { expr_new_integer(0), expr_new_integer(1) };
+                        flipped_head = expr_new_function(expr_new_symbol("Complex"), cargs, 2);
+                    } else {
+                        Expr* cargs[2] = { expr_new_integer(0), expr_new_integer(-im->data.integer) };
+                        flipped_head = expr_new_function(expr_new_symbol("Complex"), cargs, 2);
+                    }
                 }
             }
             if (flipped_sign) printf("-");
@@ -443,6 +484,26 @@ static void print_standard(Expr* e, int parent_prec) {
                                 rat->data.function.args[0] = expr_new_integer(-num->data.integer);
                                 to_print = t_copy;
                             }
+                        } else if (f_arg->type == EXPR_FUNCTION &&
+                                   f_arg->data.function.head->type == EXPR_SYMBOL &&
+                                   f_arg->data.function.head->data.symbol == SYM_Complex &&
+                                   f_arg->data.function.arg_count == 2 &&
+                                   f_arg->data.function.args[0]->type == EXPR_INTEGER &&
+                                   f_arg->data.function.args[0]->data.integer == 0 &&
+                                   f_arg->data.function.args[1]->type == EXPR_INTEGER &&
+                                   f_arg->data.function.args[1]->data.integer < 0) {
+                            /* Plus[..., Times[Complex[0, -n], rest...]]:
+                             * print "- Times[Complex[0, n], rest...]" so the
+                             * sign attaches to the operator instead of the
+                             * factor. */
+                            is_negative = true;
+                            t_copy = expr_unshare(expr_copy(arg));
+                            Expr* cplx = expr_unshare(t_copy->data.function.args[0]);
+                            t_copy->data.function.args[0] = cplx;
+                            int64_t im_val = cplx->data.function.args[1]->data.integer;
+                            expr_free(cplx->data.function.args[1]);
+                            cplx->data.function.args[1] = expr_new_integer(-im_val);
+                            to_print = t_copy;
                         }
                     } else if (h == SYM_Rational && arg->data.function.arg_count == 2) {
                         Expr* num = arg->data.function.args[0];
@@ -453,6 +514,18 @@ static void print_standard(Expr* e, int parent_prec) {
                             t_copy->data.function.args[0] = expr_new_integer(-num->data.integer);
                             to_print = t_copy;
                         }
+                    } else if (h == SYM_Complex && arg->data.function.arg_count == 2 &&
+                               arg->data.function.args[0]->type == EXPR_INTEGER &&
+                               arg->data.function.args[0]->data.integer == 0 &&
+                               arg->data.function.args[1]->type == EXPR_INTEGER &&
+                               arg->data.function.args[1]->data.integer < 0) {
+                        /* Plus[..., Complex[0, -n]] -> "- Complex[0, n]" so the
+                         * sign sits with the operator. */
+                        is_negative = true;
+                        int64_t im_val = arg->data.function.args[1]->data.integer;
+                        Expr* cargs[2] = { expr_new_integer(0), expr_new_integer(-im_val) };
+                        t_copy = expr_new_function(expr_new_symbol("Complex"), cargs, 2);
+                        to_print = t_copy;
                     }
                 }
 
@@ -491,6 +564,37 @@ static void print_standard(Expr* e, int parent_prec) {
         else if (head == SYM_BlankNullSequence && e->data.function.arg_count <= 1) {
             printf("___");
             if (e->data.function.arg_count == 1) print_standard(e->data.function.args[0], 1000);
+        }
+        else if (head == SYM_Slot && e->data.function.arg_count == 1) {
+            /* Slot[n] -> #n (e.g. #1). Atom-level precedence already returned
+             * by get_expr_prec via the fall-through, so no extra parens. */
+            Expr* idx = e->data.function.args[0];
+            printf("#");
+            if (idx->type == EXPR_INTEGER) {
+                printf("%" PRId64, idx->data.integer);
+            } else if (idx->type == EXPR_STRING) {
+                printf("\"%s\"", idx->data.string);
+            } else {
+                print_standard(idx, 1000);
+            }
+        }
+        else if (head == SYM_SlotSequence && e->data.function.arg_count == 1) {
+            /* SlotSequence[n] -> ##n; SlotSequence[1] is conventionally "##". */
+            Expr* idx = e->data.function.args[0];
+            printf("##");
+            if (idx->type == EXPR_INTEGER) {
+                if (idx->data.integer != 1) printf("%" PRId64, idx->data.integer);
+            } else {
+                print_standard(idx, 1000);
+            }
+        }
+        else if (head == SYM_Function && e->data.function.arg_count == 1) {
+            /* Function[body] -> body &. The body normally has high precedence
+             * (Plus/Times/Power etc.) so it prints without extra parens; if
+             * something genuinely lower-precedence shows up, print_standard
+             * inserts them at parent_prec=90. */
+            print_standard(e->data.function.args[0], 90);
+            printf(" &");
         }
         else if (head == SYM_Pattern && e->data.function.arg_count == 2 &&
                  e->data.function.args[0]->type == EXPR_SYMBOL &&

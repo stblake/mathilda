@@ -169,8 +169,8 @@ void test_trigexpand_numeric(void) {
 
 void test_trigtoexp_sanity(void) {
     /* Ensure TrigToExp / ExpToTrig still work after the module move. */
-    assert_eval_eq("TrigToExp[Cos[x]]", "1/2 E^((-I) x) + 1/2 E^((I) x)", 0);
-    assert_eval_eq("ExpToTrig[Exp[I x]]", "Cos[x] + (I) Sin[x]", 0);
+    assert_eval_eq("TrigToExp[Cos[x]]", "1/2 E^(-I x) + 1/2 E^(I x)", 0);
+    assert_eval_eq("ExpToTrig[Exp[I x]]", "Cos[x] + I Sin[x]", 0);
 }
 
 int main(void) {

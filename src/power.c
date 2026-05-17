@@ -1144,30 +1144,40 @@ rat_imag_fallthrough: ;
         int64_t n = base->data.integer;
         bool n_negative = (n < 0);
         if (n_negative) {
-            /* q==2 is special: principal-branch sqrt of a negative pulls
-             * out an I and recurses on |n| with the same exponent. Only
-             * handles p==1 currently (e.g. Sqrt[-12] -> 2 I Sqrt[3]). */
+            /* q==2: (-n)^(p/2) = I^p * |n|^(p/2) on the principal branch.
+             * p is odd in canonical form (gcd(p, 2) = 1), so I^p reduces to
+             *   p mod 4 == 1  ->  I
+             *   p mod 4 == 3  ->  -I
+             * (Negative p is normalised by ((p % 4) + 4) % 4.) Covers both
+             * Sqrt[-n] = I Sqrt[n] (p == 1) and the higher-power cases like
+             * (-1)^(3/2) = -I, (-12)^(3/2) = -24 I Sqrt[3]. */
             if (q == 2) {
-                Expr* i_val = expr_new_function(expr_new_symbol("Complex"), (Expr*[]){expr_new_integer(0), expr_new_integer(1)}, 2);
+                int64_t pmod = ((p % 4) + 4) % 4;
+                int i_sign = (pmod == 1) ? 1 : -1;     /* p odd => pmod in {1,3} */
+                Expr* i_val = expr_new_function(expr_new_symbol("Complex"),
+                    (Expr*[]){expr_new_integer(0), expr_new_integer(i_sign)}, 2);
                 Expr* pos_base = expr_new_integer(-n);
                 Expr* tmp_p_args[2] = { pos_base, expr_copy(exp) };
                 Expr* tmp_power = expr_new_function(expr_new_symbol("Power"), tmp_p_args, 2);
                 Expr* rest = builtin_power(tmp_power);
                 if (!rest) rest = tmp_power; else expr_free(tmp_power);
-                if (p == 1) {
-                    Expr* t_args[2] = { i_val, rest };
-                    return expr_new_function(expr_new_symbol("Times"), t_args, 2);
-                } else {
-                    expr_free(i_val);
+                bool rest_is_one = (rest->type == EXPR_INTEGER
+                                    && rest->data.integer == 1);
+                if (rest_is_one) {
                     expr_free(rest);
-                    return NULL;
+                    return i_val;
                 }
+                Expr* t_args[2] = { i_val, rest };
+                return expr_new_function(expr_new_symbol("Times"), t_args, 2);
             }
-            /* Even q (q >= 4) with negative base: principal-branch values
-             * are properly complex and we don't have a clean canonical form
-             * yet. Leave unevaluated. */
-            if (q % 2 == 0) return NULL;
-            /* Odd q: fall through. The transformation is
+            /* Even q >= 4: for base == -1 we can still do integer-part
+             * extraction -- (-1)^(p/q) = (-1)^a_int * (-1)^(b_rem/q) with
+             * |b_rem| < q -- so e.g. (-1)^(5/4) -> -(-1)^(1/4). For other
+             * negative bases the principal-branch form has no clean
+             * canonical representation here yet; leave it unevaluated. */
+            if (q % 2 == 0 && n != -1) return NULL;
+            /* Odd q (any negative base), or base == -1 with even q: fall
+             * through.  The transformation is
              *   (-n)^(p/q) = (-n)^a * (-n)^(b/q)        [where p = a*q + b]
              *              = (-1)^a * n^a * (-1)^(b/q) * n^(b/q)
              *              = (-1)^a * (m^b * n^a) * (-r)^(b/q)

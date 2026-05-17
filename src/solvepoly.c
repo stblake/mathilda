@@ -283,12 +283,19 @@ static Expr** solve_binomial(Expr* a, Expr* b, int64_t n,
             out[0] = expr_copy(r);
             continue;
         }
-        /* arg = (2 k / n) * Pi * I */
-        Expr* coef = (2 * k) % n == 0
+        /* The k-th n-th root of unity is Exp[2 k Pi I / n] = (-1)^(2k/n).
+         * Routing through Power[-1, 2k/n] rather than Exp[...] avoids
+         * Euler's-formula expansion into Cos + I Sin: Power's existing
+         * (-1)^(p/q) canonicalisation produces the clean form
+         * `sign * (-1)^(r/q)`, and Times merges those Power[-1, _] factors
+         * with the principal root r = (-b/a)^(1/n) when r itself is a
+         * Power[-1, 1/n].  Hence Solve[x^5 + 1 == 0, x] emits roots as
+         * (-1)^(1/5), (-1)^(3/5), -1, -(-1)^(2/5), -(-1)^(4/5) (modulo
+         * canonical ordering) instead of trigonometric sums. */
+        Expr* exp_arg = (2 * k) % n == 0
             ? mk_int((2 * k) / n)
             : eval_and_free(mk_rat(2 * k, n));
-        Expr* arg = mk_fn3("Times", coef, mk_sym("Pi"), mk_sym("I"));
-        Expr* expk = eval_and_free(mk_fn1("Exp", arg));
+        Expr* expk = eval_and_free(mk_pow(mk_int(-1), exp_arg));
         out[k] = eval_and_free(mk_fn2("Times", expr_copy(r), expk));
     }
     expr_free(r);

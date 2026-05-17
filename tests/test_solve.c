@@ -95,6 +95,43 @@ static void test_binomial(void) {
              "List[List[Rule[x, -1]], List[Rule[x, 1]]]");
 }
 
+/* Root-of-unity binomials x^n + 1 = 0.  The k-th root is (-1)^((2k+1)/n);
+ * the polynomial solver constructs each root as the principal n-th root
+ * times Power[-1, 2k/n] (rather than Exp[2 k Pi I / n], which would
+ * expand via Euler's formula into trigonometric sums for non-special
+ * angles).  Power then canonicalises each Power[-1, p/q] to the standard
+ * `sign * (-1)^(r/q)` form, matching Mathematica's output. */
+static void test_root_of_unity_odd(void) {
+    /* x^5 + 1 = 0  ->  (-1)^((2k+1)/5) for k = 0..4. */
+    run_test("Solve[x^5 + 1 == 0, x]",
+             "List[List[Rule[x, Power[-1, Rational[1, 5]]]], "
+                  "List[Rule[x, Power[-1, Rational[3, 5]]]], "
+                  "List[Rule[x, -1]], "
+                  "List[Rule[x, Times[-1, Power[-1, Rational[2, 5]]]]], "
+                  "List[Rule[x, Times[-1, Power[-1, Rational[4, 5]]]]]]");
+    /* x^3 + 1 = 0 -- the simplest odd-degree case. */
+    run_test("Solve[x^3 + 1 == 0, x]",
+             "List[List[Rule[x, Power[-1, Rational[1, 3]]]], "
+                  "List[Rule[x, -1]], "
+                  "List[Rule[x, Times[-1, Power[-1, Rational[2, 3]]]]]]");
+}
+
+/* x^5 - 2 = 0: positive constant.  Roots are 2^(1/5) (-1)^(2k/5) and
+ * Power's even-q/odd-q canonicalisation produces the Mathematica form
+ * (sign times (-1)^(p/5) times 2^(1/5)) for each k. */
+static void test_binomial_positive_constant(void) {
+    run_test("Solve[x^5 - 2 == 0, x]",
+             "List[List[Rule[x, Power[2, Rational[1, 5]]]], "
+                  "List[Rule[x, Times[Power[-1, Rational[2, 5]], "
+                                     "Power[2, Rational[1, 5]]]]], "
+                  "List[Rule[x, Times[Power[-1, Rational[4, 5]], "
+                                     "Power[2, Rational[1, 5]]]]], "
+                  "List[Rule[x, Times[-1, Power[-1, Rational[1, 5]], "
+                                     "Power[2, Rational[1, 5]]]]], "
+                  "List[Rule[x, Times[-1, Power[-1, Rational[3, 5]], "
+                                     "Power[2, Rational[1, 5]]]]]]");
+}
+
 /* Biquadratic x^4 - 5 x^2 + 4 = 0  --  four real radical roots, no
  * Quartics option required. */
 static void test_biquadratic(void) {
@@ -365,6 +402,8 @@ int main(void) {
     TEST(test_multiplicity);
     TEST(test_pre_factored_cubic);
     TEST(test_binomial);
+    TEST(test_root_of_unity_odd);
+    TEST(test_binomial_positive_constant);
     TEST(test_biquadratic);
     TEST(test_cubic_root_default);
     TEST(test_quintic);
