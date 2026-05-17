@@ -78,19 +78,24 @@ static void test_multiplicity(void) {
              "List[List[Rule[x, 1]], List[Rule[x, 1]]]");
 }
 
-/* Pre-factored cubic.  Mathilda's canonical Times order reverses the
- * factors, so roots emerge as 3, 2, 1. */
+/* Pre-factored cubic.  The canonical post-solve sort orders real roots
+ * by numerical value, so the result emerges as 1, 2, 3 regardless of
+ * the factor order in the input. */
 static void test_pre_factored_cubic(void) {
     run_test("Solve[(x-1)(x-2)(x-3) == 0, x]",
-             "List[List[Rule[x, 3]], List[Rule[x, 2]], "
-                  "List[Rule[x, 1]]]");
+             "List[List[Rule[x, 1]], List[Rule[x, 2]], "
+                  "List[Rule[x, 3]]]");
 }
 
-/* Binomial x^4 - 1 = 0 over Complexes vs Reals. */
+/* Binomial x^4 - 1 = 0 over Complexes vs Reals.  Real roots (-1, 1)
+ * come first sorted numerically; complex roots follow with
+ * Complex[0, -1] (= -I) before Complex[0, 1] (= I) by canonical
+ * argument order. */
 static void test_binomial(void) {
     run_test("Solve[x^4 - 1 == 0, x]",
-             "List[List[Rule[x, 1]], List[Rule[x, Complex[0, 1]]], "
-                  "List[Rule[x, -1]], List[Rule[x, Complex[0, -1]]]]");
+             "List[List[Rule[x, -1]], List[Rule[x, 1]], "
+                  "List[Rule[x, Complex[0, -1]]], "
+                  "List[Rule[x, Complex[0, 1]]]]");
     run_test("Solve[x^4 - 1 == 0, x, Reals]",
              "List[List[Rule[x, -1]], List[Rule[x, 1]]]");
 }
@@ -100,48 +105,53 @@ static void test_binomial(void) {
  * times Power[-1, 2k/n] (rather than Exp[2 k Pi I / n], which would
  * expand via Euler's formula into trigonometric sums for non-special
  * angles).  Power then canonicalises each Power[-1, p/q] to the standard
- * `sign * (-1)^(r/q)` form, matching Mathematica's output. */
+ * `sign * (-1)^(r/q)` form.  The canonical Solve sort then orders the
+ * results by (-1)-exponent mod 1, matching Mathematica's output (the
+ * real root -1 first, then the primitive 2n-th roots interleaved by
+ * canonical exponent 1/n, 2/n, ..., (n-1)/n). */
 static void test_root_of_unity_odd(void) {
-    /* x^5 + 1 = 0  ->  (-1)^((2k+1)/5) for k = 0..4. */
+    /* x^5 + 1 = 0  ->  {-1, (-1)^(1/5), -(-1)^(2/5),
+     *                   (-1)^(3/5), -(-1)^(4/5)}. */
     run_test("Solve[x^5 + 1 == 0, x]",
-             "List[List[Rule[x, Power[-1, Rational[1, 5]]]], "
-                  "List[Rule[x, Power[-1, Rational[3, 5]]]], "
-                  "List[Rule[x, -1]], "
+             "List[List[Rule[x, -1]], "
+                  "List[Rule[x, Power[-1, Rational[1, 5]]]], "
                   "List[Rule[x, Times[-1, Power[-1, Rational[2, 5]]]]], "
+                  "List[Rule[x, Power[-1, Rational[3, 5]]]], "
                   "List[Rule[x, Times[-1, Power[-1, Rational[4, 5]]]]]]");
     /* x^3 + 1 = 0 -- the simplest odd-degree case. */
     run_test("Solve[x^3 + 1 == 0, x]",
-             "List[List[Rule[x, Power[-1, Rational[1, 3]]]], "
-                  "List[Rule[x, -1]], "
+             "List[List[Rule[x, -1]], "
+                  "List[Rule[x, Power[-1, Rational[1, 3]]]], "
                   "List[Rule[x, Times[-1, Power[-1, Rational[2, 3]]]]]]");
 }
 
-/* x^5 - 2 = 0: positive constant.  Roots are 2^(1/5) (-1)^(2k/5) and
- * Power's even-q/odd-q canonicalisation produces the Mathematica form
- * (sign times (-1)^(p/5) times 2^(1/5)) for each k. */
+/* x^5 - 2 = 0: positive constant.  Roots share the magnitude 2^(1/5);
+ * the canonical Solve sort orders them by (-1)-exponent mod 1, i.e.
+ * 0, 1/5, 2/5, 3/5, 4/5.  Each non-principal root canonicalises via
+ * Power's even-q/odd-q normalisation to `sign * (-1)^(p/5) * 2^(1/5)`. */
 static void test_binomial_positive_constant(void) {
     run_test("Solve[x^5 - 2 == 0, x]",
              "List[List[Rule[x, Power[2, Rational[1, 5]]]], "
-                  "List[Rule[x, Times[Power[-1, Rational[2, 5]], "
-                                     "Power[2, Rational[1, 5]]]]], "
-                  "List[Rule[x, Times[Power[-1, Rational[4, 5]], "
-                                     "Power[2, Rational[1, 5]]]]], "
                   "List[Rule[x, Times[-1, Power[-1, Rational[1, 5]], "
                                      "Power[2, Rational[1, 5]]]]], "
+                  "List[Rule[x, Times[Power[-1, Rational[2, 5]], "
+                                     "Power[2, Rational[1, 5]]]]], "
                   "List[Rule[x, Times[-1, Power[-1, Rational[3, 5]], "
+                                     "Power[2, Rational[1, 5]]]]], "
+                  "List[Rule[x, Times[Power[-1, Rational[4, 5]], "
                                      "Power[2, Rational[1, 5]]]]]]");
 }
 
 /* Biquadratic x^4 - 5 x^2 + 4 = 0  --  four real radical roots, no
- * Quartics option required. */
+ * Quartics option required.  All concrete reals, sorted numerically. */
 static void test_biquadratic(void) {
     run_test("Solve[x^4 - 5 x^2 + 4 == 0, x]",
-             "List[List[Rule[x, 1]], List[Rule[x, -1]], "
-                  "List[Rule[x, 2]], List[Rule[x, -2]]]");
+             "List[List[Rule[x, -2]], List[Rule[x, -1]], "
+                  "List[Rule[x, 1]], List[Rule[x, 2]]]");
     /* Same result regardless of Quartics -> False. */
     run_test("Solve[x^4 - 5 x^2 + 4 == 0, x, Quartics -> False]",
-             "List[List[Rule[x, 1]], List[Rule[x, -1]], "
-                  "List[Rule[x, 2]], List[Rule[x, -2]]]");
+             "List[List[Rule[x, -2]], List[Rule[x, -1]], "
+                  "List[Rule[x, 1]], List[Rule[x, 2]]]");
 }
 
 /* Cubic default: held Root[] objects.  Cardano kicks in only when
@@ -358,11 +368,11 @@ static void test_rational_mixed_poly(void) {
 /* Pure-denominator equations: 1/x^2 == 4  →  x^2 = 1/4. */
 static void test_rational_denominator_only(void) {
     run_test("Solve[1/x^2 == 4, x]",
-             "List[List[Rule[x, Rational[1, 2]]], "
-                  "List[Rule[x, Rational[-1, 2]]]]");
+             "List[List[Rule[x, Rational[-1, 2]]], "
+                  "List[Rule[x, Rational[1, 2]]]]");
     run_test("Solve[1/x^2 == 4, x, Reals]",
-             "List[List[Rule[x, Rational[1, 2]]], "
-                  "List[Rule[x, Rational[-1, 2]]]]");
+             "List[List[Rule[x, Rational[-1, 2]]], "
+                  "List[Rule[x, Rational[1, 2]]]]");
     /* 1/x^2 == -4 has no real solution (Reals filter). */
     run_test("Solve[1/x^2 == -4, x, Reals]",
              "List[]");
@@ -389,6 +399,320 @@ static void test_rational_sum_of_fractions(void) {
     /* 1/x^2 - 1/(x+1)^2 == 0  →  (x+1)^2 - x^2 = 2x+1 = 0  →  x = -1/2. */
     run_test("Solve[1/x^2 - 1/(x+1)^2 == 0, x]",
              "List[List[Rule[x, Rational[-1, 2]]]]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  Reals domain: extended coverage.                                   *
+ *                                                                    *
+ *  Many cases below are regressions for the per-degree branches.      *
+ *  In particular the odd-degree-binomial test for negative bases      *
+ *  (x^3 + 1, x^5 + 32, x^7 + 128) exercises the sign-aware real-root  *
+ *  selector in solve_binomial -- without it, Mathilda would emit the  *
+ *  complex principal root `(-c)^(1/n)` instead of `-c^(1/n)`.         *
+ * ------------------------------------------------------------------ */
+
+/* Linear over Reals always has the unique solution -b/a, even when    *
+ * that value happens to be rational rather than integer. */
+static void test_reals_linear(void) {
+    run_test("Solve[2 x + 3 == 0, x, Reals]",
+             "List[List[Rule[x, Rational[-3, 2]]]]");
+    run_test("Solve[x - 7 == 0, x, Reals]",
+             "List[List[Rule[x, 7]]]");
+}
+
+/* Quadratic, discriminant-aware: Δ > 0 → 2 real, Δ = 0 → 1 real, Δ < 0
+ * → 0 real.  D = 0 case ensures the merged single root path works. */
+static void test_reals_quadratic_discriminant(void) {
+    /* Δ = 1 - 0 - 0... actually 25 - 24 = 1 > 0 → 2 real roots. */
+    run_test("Solve[x^2 - 5 x + 6 == 0, x, Reals]",
+             "List[List[Rule[x, 2]], List[Rule[x, 3]]]");
+    /* Δ = 0: x^2 + 2 x + 1 = (x+1)^2.  Multiplicity-2 root -1 is
+     * emitted twice -- the Reals path preserves multiplicity in step
+     * with the default Complexes path. */
+    run_test("Solve[x^2 + 2 x + 1 == 0, x, Reals]",
+             "List[List[Rule[x, -1]], List[Rule[x, -1]]]");
+    /* Δ < 0: no real solutions. */
+    run_test("Solve[x^2 + 2 x + 5 == 0, x, Reals]",
+             "List[]");
+    /* Δ < 0 binomial form. */
+    run_test("Solve[x^2 + 2 == 0, x, Reals]",
+             "List[]");
+    /* Irrational real roots:  x^2 - 2 == 0 → ±Sqrt[2].  Canonical
+     * order puts -Sqrt[2] first via concrete-vs-symbolic interleave. */
+    run_test("Solve[x^2 - 2 == 0, x, Reals]",
+             "List[List[Rule[x, Times[-1, Power[2, Rational[1, 2]]]]], "
+                  "List[Rule[x, Power[2, Rational[1, 2]]]]]");
+}
+
+/* Even-degree binomial: sign of -b/a decides 0 / 1 / 2 real roots. */
+static void test_reals_binomial_even(void) {
+    /* x^4 - 1 → ±1 over Reals; bare classifier hits the binomial fast
+     * path.  (The existing test_binomial covers this too -- duplicated
+     * here for the domain coverage matrix.) */
+    run_test("Solve[x^4 - 1 == 0, x, Reals]",
+             "List[List[Rule[x, -1]], List[Rule[x, 1]]]");
+    /* x^4 + 1 == 0 has no real roots. */
+    run_test("Solve[x^4 + 1 == 0, x, Reals]",
+             "List[]");
+    /* x^2 - 16 ==  0 → ±4. */
+    run_test("Solve[x^2 - 16 == 0, x, Reals]",
+             "List[List[Rule[x, -4]], List[Rule[x, 4]]]");
+}
+
+/* Odd-degree binomial: the unique real root.  The negative-base cases
+ * here are the regression for the solve_binomial sign-aware selector. */
+static void test_reals_binomial_odd(void) {
+    /* x^3 + 1 == 0  →  the real cube root of -1 is -1. */
+    run_test("Solve[x^3 + 1 == 0, x, Reals]",
+             "List[List[Rule[x, -1]]]");
+    /* x^3 - 8 == 0  →  real cube root of 8 is 2 (already worked
+     * pre-fix because sign is positive). */
+    run_test("Solve[x^3 - 8 == 0, x, Reals]",
+             "List[List[Rule[x, 2]]]");
+    /* x^5 + 32 == 0  →  real fifth root of -32 is -2. */
+    run_test("Solve[x^5 + 32 == 0, x, Reals]",
+             "List[List[Rule[x, -2]]]");
+    /* x^5 - 32 == 0  →  real fifth root of 32 is 2. */
+    run_test("Solve[x^5 - 32 == 0, x, Reals]",
+             "List[List[Rule[x, 2]]]");
+    /* x^7 + 128 == 0  →  real seventh root of -128 is -2. */
+    run_test("Solve[x^7 + 128 == 0, x, Reals]",
+             "List[List[Rule[x, -2]]]");
+    /* x^3 == 0  →  x = 0 (zero-base edge case). */
+    run_test("Solve[x^3 == 0, x, Reals]",
+             "List[List[Rule[x, 0]]]");
+    /* Rational real root: 8 x^3 - 1 == 0  →  x = 1/2. */
+    run_test("Solve[8 x^3 - 1 == 0, x, Reals]",
+             "List[List[Rule[x, Rational[1, 2]]]]");
+}
+
+/* n-quadratic (u = x^n).  All four sub-cases of inner-quadratic root
+ * sign × outer-binomial parity exercised. */
+static void test_reals_nquadratic(void) {
+    /* u^2 - 5 u + 4 == 0 with u = x^2: u ∈ {1, 4}, both ≥ 0 → x in
+     * {-2, -1, 1, 2}. */
+    run_test("Solve[x^4 - 5 x^2 + 4 == 0, x, Reals]",
+             "List[List[Rule[x, -2]], List[Rule[x, -1]], "
+                  "List[Rule[x, 1]], List[Rule[x, 2]]]");
+    /* u^2 + 5 u + 4 == 0 with u = x^2: u ∈ {-1, -4}, both < 0 →
+     * x has no real solution. */
+    run_test("Solve[x^4 + 5 x^2 + 4 == 0, x, Reals]",
+             "List[]");
+    /* u^2 - 3 u - 4 == 0 with u = x^2: u ∈ {-1, 4}.  u=-1 gives no
+     * real x; u=4 gives x ∈ {-2, 2}. */
+    run_test("Solve[x^4 - 3 x^2 - 4 == 0, x, Reals]",
+             "List[List[Rule[x, -2]], List[Rule[x, 2]]]");
+    /* n = 3: u^2 - 9 u + 8 == 0  →  u ∈ {1, 8}, cube roots give
+     * x ∈ {1, 2}. */
+    run_test("Solve[x^6 - 9 x^3 + 8 == 0, x, Reals]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]]]");
+}
+
+/* Slow-path factoring lets a polynomial with all-rational roots
+ * decompose into degree-1 factors, even at higher degrees -- so
+ * `Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Reals]` is fully closed-form. */
+static void test_reals_factored_cubic(void) {
+    run_test("Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Reals]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]], "
+                  "List[Rule[x, 3]]]");
+    /* Mixed factor list: dropping a x^2 + 1 leaves only the real roots. */
+    run_test("Solve[(x-1)(x-2)(x^2+1) == 0, x, Reals]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]]]");
+}
+
+/* Parametric / symbolic input over Reals: when neither side is
+ * concrete, we keep the symbolic answer (the solver cannot prove the
+ * candidate is complex). */
+static void test_reals_parametric(void) {
+    run_test("Solve[a x + b == 0, x, Reals]",
+             "List[List[Rule[x, Times[-1, Power[a, -1], b]]]]");
+    run_test("Solve[a/x + b == 0, x, Reals]",
+             "List[List[Rule[x, Times[-1, a, Power[b, -1]]]]]");
+}
+
+/* Tautology / contradiction / non-polynomial under Reals follow the
+ * same routing as the default-domain path. */
+static void test_reals_edge_cases(void) {
+    run_test("Solve[0 == 0, x, Reals]",  "List[List[]]");
+    run_test("Solve[1 == 0, x, Reals]",  "List[]");
+    /* Non-polynomial input: still unevaluated, including Reals. */
+    run_test("Solve[Sin[x] == 0, x, Reals]",
+             "Solve[Equal[Sin[x], 0], x, Reals]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  Integers domain.                                                   *
+ *                                                                    *
+ *  The Integers filter is applied as a post-pass on the Reals solver: *
+ *  every candidate value is checked to be a *provably* concrete       *
+ *  integer (EXPR_INTEGER or EXPR_BIGINT).  Rationals, irrationals     *
+ *  (Sqrt[2], etc.), held Root[]'s, and symbolic residues are dropped. *
+ * ------------------------------------------------------------------ */
+
+/* Linear: integer iff -b/a collapses to an integer literal. */
+static void test_integers_linear(void) {
+    run_test("Solve[x - 7 == 0, x, Integers]",
+             "List[List[Rule[x, 7]]]");
+    /* x = -3/2: not an integer → dropped. */
+    run_test("Solve[2 x + 3 == 0, x, Integers]",
+             "List[]");
+    /* Already integer-valued, but as a Rational the canonical form
+     * would still be `7`. */
+    run_test("Solve[3 x - 21 == 0, x, Integers]",
+             "List[List[Rule[x, 7]]]");
+}
+
+/* Quadratic: roots that happen to be integers are kept; rationals,
+ * irrationals, and complex roots are dropped. */
+static void test_integers_quadratic(void) {
+    /* Integer roots: 2 and 3. */
+    run_test("Solve[x^2 - 5 x + 6 == 0, x, Integers]",
+             "List[List[Rule[x, 2]], List[Rule[x, 3]]]");
+    /* x = 1/2 (drop) and x = 3 (keep). */
+    run_test("Solve[2 x^2 - 7 x + 3 == 0, x, Integers]",
+             "List[List[Rule[x, 3]]]");
+    /* Irrational roots ±Sqrt[2] dropped. */
+    run_test("Solve[x^2 - 2 == 0, x, Integers]",
+             "List[]");
+    /* Complex roots dropped (would already be empty under Reals). */
+    run_test("Solve[x^2 + 1 == 0, x, Integers]",
+             "List[]");
+    /* Δ = 0, integer double root: emitted twice (multiplicity
+     * preserved through the integer filter). */
+    run_test("Solve[x^2 + 2 x + 1 == 0, x, Integers]",
+             "List[List[Rule[x, -1]], List[Rule[x, -1]]]");
+}
+
+/* Binomial: integer iff -b/a is a perfect n-th power. */
+static void test_integers_binomial(void) {
+    /* x^2 - 4 = 0  →  ±2, both integers. */
+    run_test("Solve[x^2 - 4 == 0, x, Integers]",
+             "List[List[Rule[x, -2]], List[Rule[x, 2]]]");
+    /* x^2 - 5 = 0  →  ±Sqrt[5], dropped. */
+    run_test("Solve[x^2 - 5 == 0, x, Integers]",
+             "List[]");
+    /* x^4 - 1 = 0 over Reals gives ±1, both integers. */
+    run_test("Solve[x^4 - 1 == 0, x, Integers]",
+             "List[List[Rule[x, -1]], List[Rule[x, 1]]]");
+    /* Odd-degree binomial: integer real root. */
+    run_test("Solve[x^3 - 8 == 0, x, Integers]",
+             "List[List[Rule[x, 2]]]");
+    /* Odd-degree binomial with negative base: relies on the
+     * sign-aware real-root selector for the value to surface as
+     * `-1` rather than `(-1)^(1/3)` (which would not type-match). */
+    run_test("Solve[x^3 + 1 == 0, x, Integers]",
+             "List[List[Rule[x, -1]]]");
+    run_test("Solve[x^5 + 32 == 0, x, Integers]",
+             "List[List[Rule[x, -2]]]");
+    run_test("Solve[x^5 - 32 == 0, x, Integers]",
+             "List[List[Rule[x, 2]]]");
+    /* x^5 ± 1.  Integer roots: -1 and 1. */
+    run_test("Solve[x^5 + 1 == 0, x, Integers]",
+             "List[List[Rule[x, -1]]]");
+    run_test("Solve[x^5 - 1 == 0, x, Integers]",
+             "List[List[Rule[x, 1]]]");
+    /* 8 x^3 - 1 = 0  →  x = 1/2 (Rational, dropped). */
+    run_test("Solve[8 x^3 - 1 == 0, x, Integers]",
+             "List[]");
+}
+
+/* n-quadratic over Integers: same pipeline as Reals, then filter. */
+static void test_integers_nquadratic(void) {
+    /* u in {1, 4} gives x in {-2, -1, 1, 2}; all integers. */
+    run_test("Solve[x^4 - 5 x^2 + 4 == 0, x, Integers]",
+             "List[List[Rule[x, -2]], List[Rule[x, -1]], "
+                  "List[Rule[x, 1]], List[Rule[x, 2]]]");
+    /* All-complex (Reals → {}). */
+    run_test("Solve[x^4 + 5 x^2 + 4 == 0, x, Integers]",
+             "List[]");
+    /* Mixed: only u = 4 gives real x ∈ {-2, 2}; both integers. */
+    run_test("Solve[x^4 - 3 x^2 - 4 == 0, x, Integers]",
+             "List[List[Rule[x, -2]], List[Rule[x, 2]]]");
+    /* n = 3: u in {1, 8} → x in {1, 2}, both integers. */
+    run_test("Solve[x^6 - 9 x^3 + 8 == 0, x, Integers]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]]]");
+}
+
+/* Factored cubic with integer roots: slow path produces three linear
+ * factors and each linear root is integer-typed.  The default
+ * `Cubics -> False` does NOT obstruct the result because the cubic
+ * is reducible and never reaches the Root[] branch. */
+static void test_integers_factored_cubic(void) {
+    run_test("Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]], "
+                  "List[Rule[x, 3]]]");
+    /* Pre-factored form: same answer. */
+    run_test("Solve[(x-1)(x-2)(x-3) == 0, x, Integers]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]], "
+                  "List[Rule[x, 3]]]");
+    /* Mixed: irreducible x^2+1 → 0 real roots → filtered out; the
+     * two integer linear roots survive. */
+    run_test("Solve[(x-1)(x-2)(x^2+1) == 0, x, Integers]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]]]");
+}
+
+/* Irreducible cubic of degree 3 with no integer roots: the default
+ * Cubics -> False path emits 3 Root[] objects which all fail the
+ * integer test → result is {}.  An irreducible cubic that happens to
+ * have a rational root (impossible -- it would factor) does not arise
+ * here; the rational-root case routes via factoring. */
+static void test_integers_irreducible_cubic(void) {
+    run_test("Solve[x^3 + x + 1 == 0, x, Integers]",
+             "List[]");
+}
+
+/* Multiplicity is preserved by the integers filter: each integer copy
+ * is kept independently. */
+static void test_integers_multiplicity(void) {
+    run_test("Solve[(x-1)^2 == 0, x, Integers]",
+             "List[List[Rule[x, 1]], List[Rule[x, 1]]]");
+    run_test("Solve[(x-1)^2 (x-2) == 0, x, Integers]",
+             "List[List[Rule[x, 1]], List[Rule[x, 1]], "
+                  "List[Rule[x, 2]]]");
+}
+
+/* Parametric over Integers: the symbolic answer `Times[...]` is not
+ * EXPR_INTEGER → dropped.  This matches Mathematica's "cannot prove
+ * integer-valued" stance. */
+static void test_integers_parametric(void) {
+    run_test("Solve[a x + b == 0, x, Integers]",
+             "List[]");
+    run_test("Solve[a/x + b == 0, x, Integers]",
+             "List[]");
+}
+
+/* Rational equations under Integers: the cross-multiplication
+ * pipeline still runs, then both the extraneous-root filter and the
+ * integer filter apply. */
+static void test_integers_rational(void) {
+    /* 1/(x-1) == 2 → x = 3/2.  Not integer. */
+    run_test("Solve[1/(x-1) == 2, x, Integers]",
+             "List[]");
+    /* (x+1)/(x-1) == 3 → x = 2.  Integer. */
+    run_test("Solve[(x+1)/(x-1) == 3, x, Integers]",
+             "List[List[Rule[x, 2]]]");
+    /* 1/x^2 == 4 → x = ±1/2.  Rationals dropped. */
+    run_test("Solve[1/x^2 == 4, x, Integers]",
+             "List[]");
+}
+
+/* Tautology / contradiction / non-polynomial under Integers. */
+static void test_integers_edge_cases(void) {
+    run_test("Solve[0 == 0, x, Integers]",  "List[List[]]");
+    run_test("Solve[1 == 0, x, Integers]",  "List[]");
+    /* Non-polynomial: unevaluated. */
+    run_test("Solve[Sin[x] == 0, x, Integers]",
+             "Solve[Equal[Sin[x], 0], x, Integers]");
+}
+
+/* Unsupported domains (Rationals, Algebraics, Booleans, Primes) leave
+ * the call unevaluated -- the router declines to dispatch.  This
+ * guards against accidentally widening the recognised-domain set. */
+static void test_unsupported_domains_unevaluated(void) {
+    run_test("Solve[x + 1 == 0, x, Rationals]",
+             "Solve[Equal[Plus[x, 1], 0], x, Rationals]");
+    run_test("Solve[x + 1 == 0, x, Algebraics]",
+             "Solve[Equal[Plus[x, 1], 0], x, Algebraics]");
 }
 
 int main(void) {
@@ -421,6 +745,25 @@ int main(void) {
     TEST(test_rational_denominator_only);
     TEST(test_rational_quadratic_zero_const);
     TEST(test_rational_sum_of_fractions);
+    TEST(test_reals_linear);
+    TEST(test_reals_quadratic_discriminant);
+    TEST(test_reals_binomial_even);
+    TEST(test_reals_binomial_odd);
+    TEST(test_reals_nquadratic);
+    TEST(test_reals_factored_cubic);
+    TEST(test_reals_parametric);
+    TEST(test_reals_edge_cases);
+    TEST(test_integers_linear);
+    TEST(test_integers_quadratic);
+    TEST(test_integers_binomial);
+    TEST(test_integers_nquadratic);
+    TEST(test_integers_factored_cubic);
+    TEST(test_integers_irreducible_cubic);
+    TEST(test_integers_multiplicity);
+    TEST(test_integers_parametric);
+    TEST(test_integers_rational);
+    TEST(test_integers_edge_cases);
+    TEST(test_unsupported_domains_unevaluated);
     printf("All solve tests passed!\n");
     return 0;
 }

@@ -518,7 +518,7 @@ Complex number functions.
 ## Solve
 Attempts to solve an equation or system of equations for one or more variables.
 - `Solve[expr, vars]`: Solve `expr` for `vars` over the complex numbers (default).
-- `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`.
+- `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`, `Integers`.
 
 **Features**:
 - `HoldAll`, `Protected`.
@@ -543,10 +543,17 @@ Attempts to solve an equation or system of equations for one or more variables.
   `Solve[a/x + b == 0, x]` return `{{x -> -a/b}}`).
 - Per-degree handling for irreducible factors:
   - Degree 1 / 2: closed-form rules.
-  - Quadratic in `Reals`: discriminant-aware (zero, one, or two real roots).
+  - Quadratic in `Reals`: discriminant-aware.  Δ < 0 → no real roots;
+    Δ = 0 → the double root is emitted *twice* (multiplicity preserved
+    in step with the `Complexes` path); Δ > 0 → two distinct real
+    roots.
   - Binomial `a*x^n + b == 0`: all n complex roots, or the real
-    radical(s) in `Reals` (n odd -> 1 root; n even with `−b/a > 0` -> ±r;
-    n even with `−b/a < 0` -> 0).  Complex roots are emitted as
+    radical(s) in `Reals`.  Odd-`n` real branch: `(−b/a)^(1/n)` when
+    `−b/a > 0`, `0` when `−b/a == 0`, and `−((b/a)^(1/n))` when
+    `−b/a < 0` -- the last case is the *real* `n`-th root, not the
+    principal complex one that `Power[base, 1/n]` produces by default.
+    Even-`n`: ±r with `−b/a > 0`, `0` with `−b/a == 0`, `{}` with
+    `−b/a < 0`.  Complex roots (no Reals constraint) are emitted as
     `r * (-1)^(2k/n)` for the principal radical `r = (-b/a)^(1/n)` and
     `k = 0..n-1`, then folded by `Power`'s rational-exponent canonicaliser
     so output matches Mathematica's standard form (e.g.
@@ -560,6 +567,18 @@ Attempts to solve an equation or system of equations for one or more variables.
     deferred -- with `Quartics -> True` the four roots are emitted as held
     `Root[]` for now).
   - Degree ≥ 5: held `Root[]` objects per irreducible factor.
+- `Integers` domain is implemented as a post-pass over the `Reals` output:
+  every candidate value is type-checked against `EXPR_INTEGER` /
+  `EXPR_BIGINT` and dropped otherwise.  `Rational[p, q]`, irrational
+  radicals (`Sqrt[2]`, `Power[2, 1/3]`, ...), held `Root[]` objects, and
+  symbolic / parametric residues are *not* trusted to be integer-valued
+  and are silently removed.  This means polynomials with one or more
+  rational integer roots are returned correctly (`Solve[x^3 - 6 x^2 + 11
+  x - 6 == 0, x, Integers]` -> `{{x -> 1}, {x -> 2}, {x -> 3}}` via
+  factoring), but polynomials that only have irrational or symbolic
+  integer roots return `{}`.  Higher-degree irreducibles default to
+  `Root[]` form (`Cubics -> False`, `Quartics -> False`) and therefore
+  yield `{}` under `Integers` unless the user opts into radical output.
 
 **Options**:
 - `Cubics -> False`: Emit cubic roots as held `Root[]` objects (default).
@@ -603,6 +622,18 @@ Out[10]= {{x -> 3/2}}
 
 In[11]:= Solve[x/(x-1) == 2/(x-1), x]
 Out[11]= {{x -> 2}}             (* x = 1 dropped as extraneous *)
+
+In[12]:= Solve[x^2 - 5 x + 6 == 0, x, Integers]
+Out[12]= {{x -> 2}, {x -> 3}}
+
+In[13]:= Solve[x^2 - 2 == 0, x, Integers]
+Out[13]= {}                     (* Sqrt[2] is not an Integer *)
+
+In[14]:= Solve[x^3 + 1 == 0, x, Reals]
+Out[14]= {{x -> -1}}            (* real cube root, not (-1)^(1/3) *)
+
+In[15]:= Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]
+Out[15]= {{x -> 1}, {x -> 2}, {x -> 3}}
 ```
 
 ## Solve`SolvePolynomialEquality

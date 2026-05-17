@@ -24,6 +24,7 @@
 #include <string.h>
 #include <limits.h>
 
+#include "arithmetic.h"
 #include "attr.h"
 #include "eval.h"
 #include "expr.h"
@@ -220,14 +221,12 @@ static Expr** solve_quadratic(Expr* a, Expr* b, Expr* c,
     Expr* num_p = mk_fn2("Plus", neg_b, sqrtD);
     Expr* r_plus = eval_and_free(mk_fn2("Times", num_p, inv_2a));
 
-    if (reals_only && s == 0) {
-        expr_free(r_minus);
-        Expr** out = (Expr**)malloc(sizeof(Expr*) * 1);
-        out[0] = r_plus;
-        *out_n = 1;
-        return out;
-    }
-
+    /* When Δ = 0 we deliberately emit *both* r_minus and r_plus rather
+     * than collapsing to a single rule: Mathematica's convention is to
+     * preserve algebraic multiplicity in the solution list, so
+     * `Solve[(x-1)^2 == 0, x, Reals]` returns `{{x -> 1}, {x -> 1}}`
+     * just like the Complexes case.  r_minus and r_plus evaluate to
+     * the same value here, which is the intended duplication. */
     Expr** out = (Expr**)malloc(sizeof(Expr*) * 2);
     out[0] = r_minus;
     out[1] = r_plus;
@@ -245,14 +244,38 @@ static Expr** solve_binomial(Expr* a, Expr* b, int64_t n,
     Expr* r = eval_and_free(mk_pow(expr_copy(base), mk_rat(1, n)));
 
     if (reals_only) {
+        int s = try_sign(base);
         if (n % 2 == 1) {
+            /* Odd-degree binomial: the unique real root is
+             *   base^(1/n)         if base ≥ 0,
+             *   0                  if base == 0,
+             *   -((-base)^(1/n))   if base < 0.
+             * The third branch matters because Power's principal-root
+             * convention canonicalises `(-c)^(1/n)` (c > 0) to a
+             * complex value `c^(1/n) * (-1)^(1/n)`, not to the real
+             * `-c^(1/n)`.  For unresolved sign we keep `r` -- the
+             * caller is responsible for treating it as the symbolic
+             * positive branch in that case. */
+            Expr* root;
+            if (s == 0) {
+                expr_free(r);
+                root = mk_int(0);
+            } else if (s == 1) {
+                root = r;
+            } else if (s == -1) {
+                expr_free(r);
+                Expr* neg_base = eval_and_free(mk_neg(expr_copy(base)));
+                Expr* pos_root = eval_and_free(mk_pow(neg_base, mk_rat(1, n)));
+                root = eval_and_free(mk_neg(pos_root));
+            } else {
+                root = r;
+            }
             expr_free(base);
             Expr** out = (Expr**)malloc(sizeof(Expr*) * 1);
-            out[0] = r;
+            out[0] = root;
             *out_n = 1;
             return out;
         }
-        int s = try_sign(base);
         if (s == 0) {
             expr_free(base); expr_free(r);
             Expr** out = (Expr**)malloc(sizeof(Expr*) * 1);
@@ -689,6 +712,187 @@ static bool walk_product(Expr* prod, Expr* var, bool reals_only,
 }
 
 /* ------------------------------------------------------------------ *
+ *  Solution ordering.                                                 *
+ *                                                                    *
+ *  Mathematica's `Solve` orders its roots in a way that interleaves   *
+ *  Power[-1, p/q] and Times[-1, Power[-1, p/q]] forms by the value of *
+ *  the (-1)-exponent modulo 1.  For x^5 + 1 == 0 this yields          *
+ *      -1, (-1)^(1/5), -(-1)^(2/5), (-1)^(3/5), -(-1)^(4/5)           *
+ *  (canonical exponents 0/5, 1/5, 2/5, 3/5, 4/5).  Mathilda's         *
+ *  canonical Sort groups all Power[..] before all Times[-1, Power[..]] *
+ *  and therefore does not reproduce this ordering -- we apply a       *
+ *  domain-specific comparator here.                                   *
+ *                                                                    *
+ *  Rule:                                                              *
+ *    1. Concrete real numbers (Integer/Rational/Real/BigInt) sort     *
+ *       first, by numerical value.                                    *
+ *    2. Other expressions are decomposed as v = mag * (-1)^exp by     *
+ *       absorbing every Integer(-1) and Power[-1, e] factor into the  *
+ *       exponent.  The remaining factors form `mag`.  Comparison is   *
+ *       (mag, exp mod 1, exp descending), with `expr_compare` as the  *
+ *       final tiebreak.                                               *
+ * ------------------------------------------------------------------ */
+
+/* True for Integer/Rational/Real/BigInt.  Complex[_, _] and other     *
+ * compound numerics are deliberately excluded so they go through the  *
+ * (mag, exp)-decomposition path. */
+static bool is_concrete_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL
+        || e->type == EXPR_BIGINT) {
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.arg_count == 2) {
+        return true;
+    }
+    return false;
+}
+
+/* Decompose `v` as v = mag * (-1)^exp.  Walks v's factors:              *
+ *   Integer(-1)             contributes exp += 1.                       *
+ *   Power[-1, e]            contributes exp += e.                       *
+ *   Everything else         is multiplied into mag.                     *
+ *                                                                       *
+ * On return, *mag_out and *exp_out are freshly allocated and owned by   *
+ * the caller. */
+static void decompose_root(const Expr* v, Expr** mag_out, Expr** exp_out) {
+    Expr* const* factors;
+    size_t fc;
+    Expr* single_array[1] = { (Expr*)v };
+    if (v->type == EXPR_FUNCTION
+        && v->data.function.head->type == EXPR_SYMBOL
+        && v->data.function.head->data.symbol == SYM_Times) {
+        factors = v->data.function.args;
+        fc = v->data.function.arg_count;
+    } else {
+        factors = single_array;
+        fc = 1;
+    }
+
+    Expr* exp = mk_int(0);
+    Expr** mag_args = (Expr**)malloc(sizeof(Expr*) * (fc ? fc : 1));
+    size_t mag_count = 0;
+
+    for (size_t i = 0; i < fc; i++) {
+        const Expr* f = factors[i];
+        if (f->type == EXPR_INTEGER && f->data.integer == -1) {
+            exp = eval_and_free(mk_fn2("Plus", exp, mk_int(1)));
+            continue;
+        }
+        if (f->type == EXPR_FUNCTION
+            && f->data.function.head->type == EXPR_SYMBOL
+            && f->data.function.head->data.symbol == SYM_Power
+            && f->data.function.arg_count == 2
+            && f->data.function.args[0]->type == EXPR_INTEGER
+            && f->data.function.args[0]->data.integer == -1) {
+            exp = eval_and_free(mk_fn2("Plus", exp,
+                                       expr_copy(f->data.function.args[1])));
+            continue;
+        }
+        mag_args[mag_count++] = expr_copy((Expr*)f);
+    }
+
+    Expr* mag;
+    if (mag_count == 0) {
+        mag = mk_int(1);
+    } else if (mag_count == 1) {
+        mag = mag_args[0];
+    } else {
+        mag = expr_new_function(mk_sym("Times"), mag_args, mag_count);
+        mag = eval_and_free(mag);
+    }
+    free(mag_args);
+
+    *mag_out = mag;
+    *exp_out = exp;
+}
+
+/* Return `exp mod 1` as an Integer or Rational in [0, 1).  Falls back  *
+ * to evaluator-driven `exp - Floor[exp]` for shapes we don't recognise. */
+static Expr* exp_mod_one(const Expr* exp) {
+    if (exp->type == EXPR_INTEGER || exp->type == EXPR_BIGINT) {
+        return mk_int(0);
+    }
+    int64_t p, q;
+    if (is_rational((Expr*)exp, &p, &q)) {
+        int64_t r = p % q;
+        if (r < 0) r += q;
+        if (r == 0) return mk_int(0);
+        return eval_and_free(mk_rat(r, q));
+    }
+    Expr* floored = eval_and_free(mk_fn1("Floor", expr_copy((Expr*)exp)));
+    return eval_and_free(mk_fn2("Plus", expr_copy((Expr*)exp), mk_neg(floored)));
+}
+
+typedef struct {
+    Expr* val;        /* borrowed -- points into sl.vals[] */
+    Expr* mag;        /* owned */
+    Expr* exp;        /* owned, the raw exponent */
+    Expr* exp_mod;    /* owned, exp mod 1 */
+    bool  concrete;   /* true => sort by numeric value of val alone */
+} RootKey;
+
+static int root_key_qsort_cmp(const void* pa, const void* pb) {
+    const RootKey* ka = (const RootKey*)pa;
+    const RootKey* kb = (const RootKey*)pb;
+
+    if (ka->concrete && kb->concrete) {
+        int c = expr_compare(ka->val, kb->val);
+        if (c != 0) return c;
+        return 0;
+    }
+    if (ka->concrete) return -1;
+    if (kb->concrete) return 1;
+
+    int c = expr_compare(ka->mag, kb->mag);
+    if (c != 0) return c;
+    c = expr_compare(ka->exp_mod, kb->exp_mod);
+    if (c != 0) return c;
+    /* Raw exponent descending: (-1)^1 (== -1) before (-1)^0 (== 1)
+     * when both collapse to exp mod 1 == 0. */
+    c = expr_compare(kb->exp, ka->exp);
+    if (c != 0) return c;
+
+    return expr_compare(ka->val, kb->val);
+}
+
+/* Reorder sl->vals[] in place so that successive roots appear in the    *
+ * canonical Solve order described in the comment above.  Stable across  *
+ * equal keys: when two roots share every key, the `expr_compare` final  *
+ * tiebreak in `root_key_qsort_cmp` keeps duplicates adjacent so that    *
+ * multiplicity-pushed copies stay grouped. */
+static void sl_sort_canonical(SolList* sl) {
+    if (sl->count <= 1) return;
+
+    RootKey* keys = (RootKey*)malloc(sizeof(RootKey) * sl->count);
+    for (size_t i = 0; i < sl->count; i++) {
+        keys[i].val = sl->vals[i];
+        keys[i].concrete = is_concrete_real(sl->vals[i]);
+        if (keys[i].concrete) {
+            keys[i].mag = NULL;
+            keys[i].exp = NULL;
+            keys[i].exp_mod = NULL;
+        } else {
+            decompose_root(sl->vals[i], &keys[i].mag, &keys[i].exp);
+            keys[i].exp_mod = exp_mod_one(keys[i].exp);
+        }
+    }
+
+    qsort(keys, sl->count, sizeof(RootKey), root_key_qsort_cmp);
+
+    for (size_t i = 0; i < sl->count; i++) {
+        sl->vals[i] = keys[i].val;
+        expr_free(keys[i].mag);
+        expr_free(keys[i].exp);
+        expr_free(keys[i].exp_mod);
+    }
+    free(keys);
+}
+
+/* ------------------------------------------------------------------ *
  *  Public entry.                                                      *
  * ------------------------------------------------------------------ */
 
@@ -705,13 +909,34 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         return NULL;
     }
 
-    bool reals_only = (dom && dom->type == EXPR_SYMBOL
-                       && dom->data.symbol == SYM_Reals);
-    if (dom && dom->type == EXPR_SYMBOL
-        && dom->data.symbol != SYM_Reals
-        && dom->data.symbol != SYM_Complexes) {
-        /* Integers / Rationals etc. not supported in this initial cut. */
-        return NULL;
+    /* Domain handling.  `Integers` is implemented as "solve in Reals
+     * then drop every candidate that is not a concrete Integer / BigInt"
+     * -- a coarse but sound strategy: it never invents a non-integer
+     * solution, and the Reals filter (discriminant tests, real-branch
+     * binomial selection) already prunes everything that is provably
+     * complex.  The slow path (FactorSquareFree → Factor → linear
+     * roots) handles rational-root polynomials such as
+     * `x^3 - 6 x^2 + 11 x - 6` correctly because each irreducible
+     * factor is degree 1 and emits an integer rule.  Irreducible
+     * factors of degree ≥ 3 (default Cubics/Quartics → False) become
+     * held Root[] objects which never satisfy the integer test, so we
+     * silently drop them -- the user can opt into radical output via
+     * `Cubics -> True` to recover those integer solutions that
+     * collapse to an Integer after Cardano's substitution. */
+    bool reals_only = false;
+    bool integers_only = false;
+    if (dom && dom->type == EXPR_SYMBOL) {
+        const char* dsym = dom->data.symbol;
+        if (dsym == SYM_Reals) {
+            reals_only = true;
+        } else if (dsym == SYM_Integers) {
+            reals_only = true;
+            integers_only = true;
+        } else if (dsym != SYM_Complexes) {
+            /* Rationals / Algebraics / Primes / Booleans etc. are not
+             * yet wired up; leave the call unevaluated. */
+            return NULL;
+        }
     }
 
     Expr* lhs = equation->data.function.args[0];
@@ -927,6 +1152,33 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         expr_free(denom_prod);
     }
 
+    /* Integers-domain filter.  After the standard solve + extraneous-
+     * root pass, drop every candidate whose value is not a *provably*
+     * concrete integer (EXPR_INTEGER or EXPR_BIGINT).  We never trust
+     * a `Rational[p, q]`, `Power[_, Rational[_, _]]`, or symbolic
+     * residue here -- the only safe answers in `Integers` are values
+     * the system has already collapsed to integer form.  Mathematica's
+     * `Solve[..., Integers]` exhibits the same "drop everything that
+     * is not provably an integer" semantics. */
+    if (integers_only) {
+        size_t kept = 0;
+        for (size_t i = 0; i < sl.count; i++) {
+            Expr* v = sl.vals[i];
+            if (v->type == EXPR_INTEGER || v->type == EXPR_BIGINT) {
+                sl.vals[kept++] = v;
+            } else {
+                expr_free(v);
+            }
+        }
+        sl.count = kept;
+    }
+
+    /* Re-order solutions into Mathematica's canonical Solve order
+     * (concrete reals first by value, then by exponent-of-(-1) mod 1).
+     * Applied here, *after* the extraneous-root filter, so the surviving
+     * roots are exactly what the user sees. */
+    sl_sort_canonical(&sl);
+
     /* Wrap each solution value into List[Rule[var, val]]. */
     Expr** outer = sl.count ? (Expr**)malloc(sizeof(Expr*) * sl.count) : NULL;
     for (size_t i = 0; i < sl.count; i++) {
@@ -965,8 +1217,12 @@ void solvepoly_init(void) {
         "\tThe polynomial-equality specialist used by Solve.  Returns\n"
         "\tthe solutions of the given polynomial equation in `var` as a\n"
         "\tList of singleton-rule Lists, e.g. {{x -> 2}, {x -> 3}}.\n"
-        "\tWith dom = Reals returns only real roots (discriminant-aware).\n"
-        "\tWith dom omitted or Complexes returns every complex root.\n"
+        "\tdom = Complexes (default) returns every complex root.\n"
+        "\tdom = Reals returns only real roots (per-degree discriminant\n"
+        "\tand sign-aware branch selection).\n"
+        "\tdom = Integers solves over the reals and then keeps only the\n"
+        "\troots that are provably concrete integers; non-integer real,\n"
+        "\trational, irrational, and Root[] outputs are dropped.\n"
         "\tCubic and quartic factors are emitted as held Root[] objects\n"
         "\tby default; the Cubics and Quartics options on the parent\n"
         "\tSolve switch to closed-form radical output where supported.");
