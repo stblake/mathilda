@@ -191,8 +191,94 @@ static Expr* build_precision_literal(const char* mantissa_str, double digits,
 #endif
 }
 
+/* Scale `val` by 10^exp, consuming `val` and returning a new Expr. Used to
+ * implement Mathematica's `*^` scaled-scientific notation (e.g. `1.23*^4`
+ * → 12300., `123*^-4` → 123/10000). Preserves the mantissa's type when
+ * possible: Real stays Real, Integer with non-negative exp stays Integer
+ * (possibly promoting to BigInt), Integer with negative exp becomes a
+ * reduced Rational. MPFR mantissas multiply/divide by 10^|exp| at the
+ * mantissa's own precision. */
+static Expr* apply_pow10_scale(Expr* val, long exp) {
+    if (val == NULL) return NULL;
+
+    if (val->type == EXPR_REAL) {
+        double d = val->data.real * pow(10.0, (double)exp);
+        expr_free(val);
+        return expr_new_real(d);
+    }
+
+#ifdef USE_MPFR
+    if (val->type == EXPR_MPFR) {
+        mpfr_prec_t prec = mpfr_get_prec(val->data.mpfr);
+        Expr* out = expr_new_mpfr_bits(prec);
+        unsigned long abs_exp = (unsigned long)(exp >= 0 ? exp : -exp);
+        mpfr_t pow10;
+        mpfr_init2(pow10, prec);
+        mpfr_ui_pow_ui(pow10, 10, abs_exp, MPFR_RNDN);
+        if (exp >= 0) {
+            mpfr_mul(out->data.mpfr, val->data.mpfr, pow10, MPFR_RNDN);
+        } else {
+            mpfr_div(out->data.mpfr, val->data.mpfr, pow10, MPFR_RNDN);
+        }
+        mpfr_clear(pow10);
+        expr_free(val);
+        return out;
+    }
+#endif
+
+    if (val->type == EXPR_INTEGER || val->type == EXPR_BIGINT) {
+        mpz_t base;
+        mpz_init(base);
+        expr_to_mpz(val, base);
+        expr_free(val);
+
+        mpz_t pow10;
+        mpz_init(pow10);
+        mpz_ui_pow_ui(pow10, 10, (unsigned long)(exp >= 0 ? exp : -exp));
+
+        if (exp >= 0) {
+            mpz_mul(base, base, pow10);
+            Expr* r = expr_new_bigint_from_mpz(base);
+            mpz_clear(base);
+            mpz_clear(pow10);
+            return expr_bigint_normalize(r);
+        }
+
+        /* Negative exp: build a reduced Rational[num, den]. */
+        mpz_t g; mpz_init(g);
+        mpz_gcd(g, base, pow10);
+        if (mpz_cmp_ui(g, 1) > 0) {
+            mpz_divexact(base, base, g);
+            mpz_divexact(pow10, pow10, g);
+        }
+        mpz_clear(g);
+
+        if (mpz_cmp_ui(pow10, 1) == 0) {
+            Expr* r = expr_new_bigint_from_mpz(base);
+            mpz_clear(base);
+            mpz_clear(pow10);
+            return expr_bigint_normalize(r);
+        }
+
+        Expr* num = expr_bigint_normalize(expr_new_bigint_from_mpz(base));
+        Expr* den = expr_bigint_normalize(expr_new_bigint_from_mpz(pow10));
+        mpz_clear(base);
+        mpz_clear(pow10);
+
+        Expr* rargs[2] = { num, den };
+        return expr_new_function(expr_new_symbol("Rational"), rargs, 2);
+    }
+
+    /* Fallback for any other numeric atom: leave it to the evaluator. */
+    Expr* p_args[2] = { expr_new_integer(10), expr_new_integer((int64_t)exp) };
+    Expr* p = expr_new_function(expr_new_symbol("Power"), p_args, 2);
+    Expr* t_args[2] = { val, p };
+    return expr_new_function(expr_new_symbol("Times"), t_args, 2);
+}
+
 // Parses numbers (integers, reals, scientific notation), plus optional
-// Mathematica-style precision/accuracy suffix (`n, ``n).
+// Mathematica-style precision/accuracy suffix (`n, ``n) and optional
+// `*^exponent` scaled-scientific-notation suffix.
 static Expr* parse_number(ParserState* s) {
     char* end;
 
@@ -316,6 +402,35 @@ static Expr* parse_number(ParserState* s) {
                 result = replacement;
             }
         }
+    }
+
+    /* Optional Mathematica scaled-scientific notation suffix:
+     *   mantissa *^ signed-integer-exponent
+     * e.g. `1.23*^4` → 12300., `123*^-4` → 123/10000. Must immediately
+     * follow the mantissa (and any precision suffix), with no whitespace. */
+    if (s->pos[0] == '*' && s->pos[1] == '^') {
+        const char* save = s->pos;
+        s->pos += 2;
+        int exp_neg = 0;
+        if (*s->pos == '+') s->pos++;
+        else if (*s->pos == '-') { exp_neg = 1; s->pos++; }
+        const char* exp_start = s->pos;
+        while (isdigit((unsigned char)*s->pos)) s->pos++;
+        if (s->pos == exp_start) {
+            fprintf(stderr, "Expected exponent digits after '*^'\n");
+            s->pos = save;
+            expr_free(result);
+            return NULL;
+        }
+        errno = 0;
+        long exp_val = strtol(exp_start, NULL, 10);
+        if (errno == ERANGE) {
+            fprintf(stderr, "Exponent in '*^' suffix out of range\n");
+            expr_free(result);
+            return NULL;
+        }
+        if (exp_neg) exp_val = -exp_val;
+        result = apply_pow10_scale(result, exp_val);
     }
 
     return result;

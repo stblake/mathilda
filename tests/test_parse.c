@@ -333,6 +333,21 @@ static void assert_parse_eq(const char* input, const char* expected) {
     expr_free(p);
 }
 
+void test_parse_scaled_scientific() {
+    /* Mathematica's `*^` scaled-scientific-notation suffix on a number
+     * literal: mantissa *^ signed-integer-exponent. */
+    assert_parse_eq("1.23*^4", "12300.0");
+    assert_parse_eq("1.23E4", "12300.0");
+    assert_parse_eq("1.23e4", "12300.0");
+    assert_parse_eq("1.23*^-4", "0.000123");
+    assert_parse_eq("123*^4", "1230000");
+    assert_parse_eq("123*^-4", "Rational[123, 10000]");
+    assert_parse_eq("100*^-2", "1");           /* reduces to integer */
+    assert_parse_eq("5*^0", "5");              /* zero exponent */
+    assert_parse_eq("2*^3", "2000");           /* simple integer scale */
+    assert_parse_eq("-1.5*^2", "-150.0");      /* signed mantissa */
+}
+
 void test_parse_dots() {
     assert_parse_eq(".1", "0.1");
     assert_parse_eq("-.1", "-0.1");
@@ -368,6 +383,7 @@ int main() {
     TEST(test_parse_precedence);
     TEST(test_parse_comments);
     symtab_init(); core_init(); TEST(test_parse_dots);
+    TEST(test_parse_scaled_scientific);
 
     printf("\nAll parser tests passed!\n");
     return 0;
