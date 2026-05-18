@@ -464,6 +464,71 @@ In[7]:= LinearSolve[{{1, 5}, {2, 6}, {3, 7}, {4, 8}}, {9, 10, 11, 12}, Method ->
 Out[7]= {-1, 2}
 ```
 
+## LeastSquares
+Finds `x` that solves the linear least-squares problem for `m . x == b`,
+i.e. an `x` minimising `Norm[m . x - b]`.
+- `LeastSquares[m, b]`
+- `LeastSquares[m, b, Method -> "<name>"]`
+- `LeastSquares[m, b, Tolerance -> t]`
+
+**Features**:
+- `Protected`.
+- The matrix `m` may be square or rectangular and of any rank. When `m`
+  has full column rank the minimiser is unique; when `m` is
+  rank-deficient the result is the minimum-norm minimiser
+  (`PseudoInverse[m] . b`).
+- The right-hand side `b` may be a vector or a matrix. When `b` is a
+  matrix, the result has one column per RHS — column `j` is the
+  least-squares solution for `b[[All, j]]`, i.e. the `x` minimising
+  `Norm[m . x - b, "Frobenius"]` over the multi-RHS system.
+- Works on every input family supported by `PseudoInverse`:
+  integer / rational, symbolic, machine-precision real / MPFR,
+  exact and inexact complex.
+- Method and Tolerance options may appear in any order; each may
+  appear at most once. Duplicates or unknown option names leave the
+  call unevaluated.
+- Accepted Method names:
+  - `Method -> Automatic` or `Method -> "Automatic"` — alias for `"Direct"` (default).
+  - `Method -> "Direct"` — Moore-Penrose solve `PseudoInverse[m] . b`. Works on every input family (dense or sparse, exact or numeric, real or complex). The workhorse method.
+  - `Method -> "IterativeRefinement"` — one refinement pass over Direct: `x <- PseudoInverse[m] . b`, then `dx <- PseudoInverse[m] . (b - m . x)`, return `x + dx`. For exact inputs the correction is exactly zero and the answer equals Direct; for inexact inputs the second pass reduces residual round-off.
+  - `Method -> "LSQR"` — Paige-Saunders LSQR. The method name is accepted by the parser; current dispatch goes through `"Direct"` (dedicated implementation is a future extension).
+  - `Method -> "Krylov"` — iterative Krylov / CGNR method on the normal equations. Currently dispatched to `"Direct"` (likewise reserved for a future extension).
+- `Tolerance -> Automatic` (default), or a non-negative integer / real /
+  `Rational`. Forwarded verbatim as the Tolerance option of the
+  underlying `PseudoInverse` call so any future singular-value
+  truncation pass in `PseudoInverse` is picked up automatically.
+- When `m . x == b` is consistent, `LeastSquares[m, b]` coincides with
+  `LinearSolve[m, b]`.
+- Satisfies the identity `LeastSquares[m, b] == PseudoInverse[m] . b`.
+- Issues `LeastSquares::matrix` / `::lvec` / `::lvec1` and returns
+  unevaluated for shape errors.
+- Lives in `src/matlstsq.c`.
+
+```mathematica
+In[1]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}]
+Out[1]= {19/3, 1/2}
+
+In[2]:= LeastSquares[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {2, -4, 2}]
+Out[2]= {0, 0, 0}
+
+In[3]:= LeastSquares[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}}, {1, 2, 4, 8}]
+Out[3]= {157/180, 23/90, -13/36}
+
+In[4]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {{7, 1}, {7, 2}, {8, 3}}]
+Out[4]= {{19/3, 0}, {1/2, 1}}
+
+In[5]:= LeastSquares[IdentityMatrix[4], {1, 2, 3, 4}]
+Out[5]= {1, 2, 3, 4}
+
+In[6]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 7}] ==
+        LinearSolve[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 7}]
+Out[6]= True
+
+In[7]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8},
+                     Method -> "IterativeRefinement", Tolerance -> 1/100]
+Out[7]= {19/3, 1/2}
+```
+
 ## Eigenvalues
 Gives a list of the eigenvalues of a square matrix.
 - `Eigenvalues[m]`: eigenvalues of the n×n matrix `m`.

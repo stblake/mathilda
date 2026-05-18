@@ -82,6 +82,7 @@ set(COMMON_SRC
     ../src/linalg.c
     ../src/matsol.c
     ../src/matinv.c
+    ../src/matlstsq.c
     ../src/readwrite.c
     ../src/files.c
     ../src/iter.c
@@ -439,6 +440,16 @@ else()
     target_link_libraries(matinv_methods_tests gmp m)
 endif()
 add_test(NAME matinv_methods_tests COMMAND matinv_methods_tests)
+
+add_executable(matlstsq_tests test_matlstsq.c ${COMMON_SRC})
+target_include_directories(matlstsq_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(matlstsq_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(matlstsq_tests build_ecm)
+else()
+    target_link_libraries(matlstsq_tests gmp m)
+endif()
+add_test(NAME matlstsq_tests COMMAND matlstsq_tests)
 
 add_executable(parfrac_tests test_parfrac.c ${COMMON_SRC})
 target_include_directories(parfrac_tests PRIVATE ../src)

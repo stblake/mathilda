@@ -406,6 +406,8 @@ void core_init(void) {
     matsol_init();
     void matinv_init(void);
     matinv_init();
+    void matlstsq_init(void);
+    matlstsq_init();
     readwrite_init();
     files_init();
     random_init();

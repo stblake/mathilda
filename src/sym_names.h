@@ -150,6 +150,7 @@ extern const char* SYM_InverseFunctions;
 extern const char* SYM_Khinchin;
 extern const char* SYM_KroneckerDelta;
 extern const char* SYM_Less;
+extern const char* SYM_LeastSquares;
 extern const char* SYM_LessEqual;
 extern const char* SYM_LinearSolve;
 extern const char* SYM_List;
