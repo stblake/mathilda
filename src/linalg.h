@@ -13,6 +13,8 @@ Expr* builtin_identitymatrix(Expr* res);
 Expr* builtin_diagonalmatrix(Expr* res);
 Expr* builtin_inverse(Expr* res);
 Expr* builtin_matrixpower(Expr* res);
+Expr* builtin_eigenvalues(Expr* res);
+Expr* builtin_eigenvectors(Expr* res);
 void linalg_init(void);
 
 #endif // LINALG_H

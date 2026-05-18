@@ -331,3 +331,88 @@ In[3]:= DiagonalMatrix[{1, 2, 3}, 0, {3, 5}]
 Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
 ```
 
+## Eigenvalues
+Gives a list of the eigenvalues of a square matrix.
+- `Eigenvalues[m]`: eigenvalues of the n×n matrix `m`.
+- `Eigenvalues[{m, a}]`: generalised eigenvalues of `m` with respect to `a`
+  (the values `lambda` such that `m.v == lambda a.v` for some non-zero `v`).
+- `Eigenvalues[m, k]`: first `k` eigenvalues largest in absolute value.
+- `Eigenvalues[m, -k]`: `k` eigenvalues smallest in absolute value.
+- `Eigenvalues[m, UpTo[k]]`: up to `k` eigenvalues.
+
+**Features**:
+- `Protected`.
+- Implemented via the characteristic polynomial `Det[m - lambda I]`
+  (or `Det[m - lambda a]`) followed by `Solve`. The ordinary case uses a
+  Faddeev–Leverrier–Souriau fast path in `O(n^4)` matrix multiplications,
+  so eigenvalues of large rational / diagonal matrices return instantly.
+- Approximate (`Real` / MPFR) input flows through Solve's rationalise →
+  solve → numericalize pipeline; tiny imaginary noise introduced by the
+  Cardano formula on real cubics is chopped automatically.
+- Repeated eigenvalues appear with their algebraic multiplicity.
+- Numeric eigenvalues are sorted in order of decreasing absolute value;
+  symbolic eigenvalues retain Solve's natural order.
+- When `m, a` have a shared null space, `Eigenvalues[{m, a}]` returns
+  `Infinity` for each degree drop in the characteristic polynomial.
+- Options: `Cubics -> True` (use radicals for cubics; default true so the
+  closed-form pipeline can numericalize), `Quartics -> True`, `Method` —
+  reserved.
+
+```mathematica
+In[1]:= Eigenvalues[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[1]= {1/2 (15 + 3 Sqrt[33]), 1/2 (15 - 3 Sqrt[33]), 0}
+
+In[2]:= Eigenvalues[{{a, b}, {c, d}}]
+Out[2]= {1/2 (a + d + Sqrt[(-a - d)^2 - 4 (-b c + a d)]),
+         1/2 (a + d - Sqrt[(-a - d)^2 - 4 (-b c + a d)])}
+
+In[3]:= Eigenvalues[{{7/2, 0, 1/2, 0}, {0, 3, 0, 1},
+                     {1/2, 0, 7/2, 0}, {0, 1, 0, 3}}]
+Out[3]= {4, 4, 3, 2}
+
+In[4]:= Eigenvalues[{{{1, 1, 1}, {1, 0, 1}, {0, 0, 1}},
+                     {{0, 1, 1}, {0, 1, 1}, {1, 0, 0}}}]
+Out[4]= {Infinity, 1/2 (1 + Sqrt[5]), 1/2 (1 - Sqrt[5])}
+
+In[5]:= Eigenvalues[IdentityMatrix[12]]
+Out[5]= {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
+```
+
+## Eigenvectors
+Gives a list of the eigenvectors of a square matrix.
+- `Eigenvectors[m]`: eigenvectors of the n×n matrix `m`.
+- `Eigenvectors[{m, a}]`: generalised eigenvectors of `m` with respect to `a`.
+- `Eigenvectors[m, k]`: first `k` eigenvectors.
+- `Eigenvectors[m, UpTo[k]]`: up to `k` eigenvectors.
+
+**Features**:
+- `Protected`.
+- For each eigenvalue `lambda_i` (with multiplicity μ), Eigenvectors
+  computes the null space of `m - lambda_i I` via `RowReduce` and emits
+  up to `μ` basis vectors. When the matrix is defective for that
+  eigenvalue, the shortfall is padded in-line with zero vectors so the
+  `i`-th eigenvector still corresponds positionally to the `i`-th
+  eigenvalue.
+- The returned list always has length `n` for an `n×n` matrix.
+- For approximate matrices the result is computed in the rationalised
+  domain, then numericalized and normalised to unit `Norm`. Exact /
+  symbolic matrices return un-normalised eigenvectors.
+- Generalised case: vectors that fall in the shared null space of `m`
+  and `a` are returned as zero vectors (matching Mathematica's
+  `Eigenvectors::geinsl1` warning behaviour).
+- Options: same as Eigenvalues.
+
+```mathematica
+In[1]:= Eigenvectors[{{2, 1, 0}, {0, 2, 0}, {0, 0, 1}}]
+Out[1]= {{1, 0, 0}, {0, 0, 0}, {0, 0, 1}}
+
+In[2]:= Eigenvectors[{{1, 0, 1}, {0, 1, 0}, {0, 0, 1}}]
+Out[2]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 0}}
+
+In[3]:= Norm /@ Eigenvectors[{{1., 2.}, {2., 1.}}]
+Out[3]= {1.0, 1.0}
+
+In[4]:= Norm /@ Eigenvectors[{{1, 2}, {2, 1}}]
+Out[4]= {Sqrt[2], Sqrt[2]}
+```
+

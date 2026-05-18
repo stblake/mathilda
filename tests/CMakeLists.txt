@@ -382,6 +382,16 @@ target_include_directories(rat_tests PRIVATE ../src)
 add_executable(linalg_tests test_linalg.c ${COMMON_SRC})
 target_include_directories(linalg_tests PRIVATE ../src)
 
+add_executable(eigen_tests test_eigen.c ${COMMON_SRC})
+target_include_directories(eigen_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(eigen_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(eigen_tests build_ecm)
+else()
+    target_link_libraries(eigen_tests gmp m)
+endif()
+add_test(NAME eigen_tests COMMAND eigen_tests)
+
 add_executable(parfrac_tests test_parfrac.c ${COMMON_SRC})
 target_include_directories(parfrac_tests PRIVATE ../src)
 

@@ -27,7 +27,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Structural manipulation (`Part`, `Head`, `First`, `Insert`, `Span`, ...) | [`builtins/structural-manipulation.md`](docs/spec/builtins/structural-manipulation.md) |
 | Expression information (`AtomQ`, `Length`, `Depth`, `LeafCount`, ...) | [`builtins/expression-information.md`](docs/spec/builtins/expression-information.md) |
 | Time and date (`Timing`, `RepeatedTiming`, ...) | [`builtins/time-and-date.md`](docs/spec/builtins/time-and-date.md) |
-| Linear algebra (`Dot`, `Det`, `Inverse`, `Cross`, `Norm`, ...) | [`builtins/linear-algebra.md`](docs/spec/builtins/linear-algebra.md) |
+| Linear algebra (`Dot`, `Det`, `Inverse`, `Cross`, `Norm`, `Eigenvalues`, `Eigenvectors`, ...) | [`builtins/linear-algebra.md`](docs/spec/builtins/linear-algebra.md) |
 | Statistics (`Mean`, `Variance`, `Median`, ...) | [`builtins/statistics.md`](docs/spec/builtins/statistics.md) |
 | Random number generation | [`builtins/random-number-generation.md`](docs/spec/builtins/random-number-generation.md) |
 | String operations | [`builtins/string-operations.md`](docs/spec/builtins/string-operations.md) |

@@ -72,6 +72,8 @@ const char* SYM_Divide = NULL;
 const char* SYM_Dixon = NULL;
 const char* SYM_Do = NULL;
 const char* SYM_E = NULL;
+const char* SYM_Eigenvalues = NULL;
+const char* SYM_Eigenvectors = NULL;
 const char* SYM_ECM = NULL;
 const char* SYM_Equal = NULL;
 const char* SYM_EulerGamma = NULL;
@@ -302,6 +304,8 @@ void sym_names_init(void) {
     SYM_Dixon                      = intern_symbol("Dixon");
     SYM_Do                         = intern_symbol("Do");
     SYM_E                          = intern_symbol("E");
+    SYM_Eigenvalues                = intern_symbol("Eigenvalues");
+    SYM_Eigenvectors               = intern_symbol("Eigenvectors");
     SYM_ECM                        = intern_symbol("ECM");
     SYM_Equal                      = intern_symbol("Equal");
     SYM_EulerGamma                 = intern_symbol("EulerGamma");

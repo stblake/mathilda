@@ -87,6 +87,8 @@ extern const char* SYM_Divide;
 extern const char* SYM_Dixon;
 extern const char* SYM_Do;
 extern const char* SYM_E;
+extern const char* SYM_Eigenvalues;
+extern const char* SYM_Eigenvectors;
 extern const char* SYM_ECM;
 extern const char* SYM_Equal;
 extern const char* SYM_EulerGamma;

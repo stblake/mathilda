@@ -34,6 +34,49 @@ void info_init(void) {
     symtab_set_docstring("DiagonalMatrix", "DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.\nDiagonalMatrix[list, k] gives a matrix with the elements of list on the k-th diagonal.\nDiagonalMatrix[list, k, n] pads with zeros to create an n x n matrix.");
     symtab_set_docstring("Inverse", "Inverse[m]\n\tgives the inverse of a square matrix m.\n\tInverse works on both symbolic and numerical matrices.\n\tFor matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.\n\tA warning is given for singular matrices.");
     symtab_set_docstring("MatrixPower", "MatrixPower[m, n]\n\tgives the n-th matrix power of the square matrix m.\n\tMatrixPower[m, n, v] gives the n-th matrix power of the matrix m applied to the vector v.\n\tWhen n is negative, MatrixPower finds powers of the inverse of the matrix m.\n\tMatrixPower[m, 0] gives IdentityMatrix[Length[m]].\n\tFractional matrix powers are not currently supported.");
+    symtab_set_docstring("Eigenvalues",
+        "Eigenvalues[m]\n"
+        "\tgives a list of the eigenvalues of the square matrix m.\n"
+        "Eigenvalues[{m, a}]\n"
+        "\tgives the generalized eigenvalues of m with respect to a.\n"
+        "Eigenvalues[m, k]\n"
+        "\tgives the first k eigenvalues (largest by absolute value).\n"
+        "Eigenvalues[m, -k]\n"
+        "\tgives the k eigenvalues smallest in absolute value.\n"
+        "Eigenvalues[m, UpTo[k]]\n"
+        "\tgives k eigenvalues, or as many as are available.\n"
+        "\n"
+        "Eigenvalues are computed from the roots of the characteristic\n"
+        "polynomial Det[m - lambda I] (or Det[m - lambda a] for the\n"
+        "generalised case). Approximate (Real / MPFR) matrices flow through\n"
+        "the Solve rationalise -> solve -> numericalize pipeline and yield\n"
+        "numerical eigenvalues sorted in order of decreasing absolute value.\n"
+        "Repeated eigenvalues appear with their algebraic multiplicity.\n"
+        "\n"
+        "Options:\n"
+        "    Cubics    -> True  (use radicals to solve cubics)\n"
+        "    Quartics  -> True  (use radicals to solve quartics)\n"
+        "    Method    -> Automatic (reserved)");
+    symtab_set_docstring("Eigenvectors",
+        "Eigenvectors[m]\n"
+        "\tgives a list of the eigenvectors of the square matrix m.\n"
+        "Eigenvectors[{m, a}]\n"
+        "\tgives the generalized eigenvectors of m with respect to a.\n"
+        "Eigenvectors[m, k]\n"
+        "\tgives the first k eigenvectors.\n"
+        "Eigenvectors[m, UpTo[k]]\n"
+        "\tgives k eigenvectors, or as many as are available.\n"
+        "\n"
+        "For an n x n matrix Eigenvectors always returns a list of length n.\n"
+        "If a matrix is defective for some eigenvalue, the corresponding\n"
+        "shortfall is padded with zero vectors. For approximate numerical\n"
+        "matrices the eigenvectors are normalised to unit Norm; for exact\n"
+        "or symbolic matrices the eigenvectors are not normalised.\n"
+        "\n"
+        "Options:\n"
+        "    Cubics    -> True  (use radicals to solve cubics)\n"
+        "    Quartics  -> True  (use radicals to solve quartics)\n"
+        "    Method    -> Automatic (reserved)");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head", "Head[expr] gives the head of expr.");
     symtab_set_docstring("Length", "Length[expr] gives the number of elements in expr.");
