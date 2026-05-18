@@ -356,8 +356,22 @@ void info_init(void) {
     symtab_set_docstring("PrimeQ", "PrimeQ[n]\n\tgives True if n is a prime number.\nPrimeQ[z]\n\tfor a Gaussian integer z = a + b I, gives True if z is a Gaussian prime.");
     symtab_set_docstring("PolynomialQ", "PolynomialQ[expr, var] gives True if expr is a polynomial in var.");
     symtab_set_docstring("ListQ", "ListQ[expr] gives True if expr is a list.");
-    symtab_set_docstring("VectorQ", "VectorQ[expr] gives True if expr is a vector.");
-    symtab_set_docstring("MatrixQ", "MatrixQ[expr] gives True if expr is a matrix.");
+    symtab_set_docstring("VectorQ",
+        "VectorQ[expr]\n"
+        "\tgives True if expr is a list, none of whose elements are themselves lists, and gives False otherwise.\n"
+        "VectorQ[expr, test]\n"
+        "\tgives True only if test yields True when applied to each of the elements in expr.\n"
+        "\n"
+        "VectorQ[expr, NumberQ] tests whether expr is a vector of numbers.");
+    symtab_set_docstring("MatrixQ",
+        "MatrixQ[expr]\n"
+        "\tgives True if expr is a list of lists that can represent a matrix, and gives False otherwise.\n"
+        "MatrixQ[expr, test]\n"
+        "\tgives True only if test yields True when applied to each of the matrix elements in expr.\n"
+        "\n"
+        "MatrixQ[expr] gives True only if expr is a list and each of its elements is a list of the same length,\n"
+        "containing no elements that are themselves lists.\n"
+        "MatrixQ[expr, NumberQ] tests whether expr is a numerical matrix.");
     symtab_set_docstring("MatchQ", "MatchQ[expr, form] gives True if expr matches form.");
 
     // Trigonometric
