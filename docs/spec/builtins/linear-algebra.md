@@ -331,6 +331,46 @@ In[3]:= DiagonalMatrix[{1, 2, 3}, 0, {3, 5}]
 Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
 ```
 
+## LinearSolve
+Finds `x` that solves the matrix equation `m . x == b`.
+- `LinearSolve[m, b]`
+
+**Features**:
+- `Protected`.
+- The matrix `m` may be square or rectangular.
+- The argument `b` may be a vector (in which case the result is a
+  vector) or a matrix (in which case the result is a matrix whose
+  `k`-th column solves `m . x == b[[All, k]]`).
+- For under-determined systems LinearSolve returns one particular
+  solution, with every free (non-pivot) variable set to 0; `Solve`
+  returns the general solution.
+- Issues `LinearSolve::nosol` and returns unevaluated when no solution
+  exists.
+- Issues `LinearSolve::matrix` / `::lvec` / `::lvec1` and returns
+  unevaluated for shape errors.
+- Implemented via fraction-free Gauss-Jordan elimination on the
+  augmented matrix `[m | b]` (the same Bareiss-like routine used by
+  `RowReduce` and `Inverse`), so exact integer, rational, and
+  symbolic inputs flow through with no spurious denominator blow-up.
+
+```mathematica
+In[1]:= LinearSolve[{{r, s}, {t, u}}, {y, z}]
+Out[1]= {(u y - s z)/(r u - s t), (r z - t y)/(r u - s t)}
+
+In[2]:= LinearSolve[{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}]
+Out[2]= {{-3, -4}, {4, 5}}
+
+In[3]:= LinearSolve[{{1, 5}, {2, 6}, {3, 7}, {4, 8}}, {9, 10, 11, 12}]
+Out[3]= {-1, 2}
+
+In[4]:= LinearSolve[{{1, 2, 3}, {4, 5, 6}}, {6, 15}]
+Out[4]= {0, 3, 0}
+
+In[5]:= LinearSolve[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {1, 1, 2}]
+LinearSolve::nosol: Linear equation encountered that has no solution.
+Out[5]= LinearSolve[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {1, 1, 2}]
+```
+
 ## Eigenvalues
 Gives a list of the eigenvalues of a square matrix.
 - `Eigenvalues[m]`: eigenvalues of the n×n matrix `m`.

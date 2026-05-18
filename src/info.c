@@ -22,7 +22,7 @@ void info_init(void) {
     symtab_set_docstring("Part", "expr[[i]] or Part[expr, i] gives the i-th part of expr.");
     symtab_set_docstring("Extract", "Extract[expr, pos] extracts the part of expr at the position specified by pos.\nExtract[expr, {pos1, pos2, ...}] extracts a list of parts of expr.\nExtract[expr, pos, h] extracts parts of expr, wrapping each of them with head h before evaluation.\nExtract[pos] represents an operator form of Extract that can be applied to an expression.");
     symtab_set_docstring("Span", "i;;j represents a span of elements i through j. i;;j;;k represents a span in steps of k.");
-    
+
     // Linear Algebra
     symtab_set_docstring("Dot", "a.b.c or Dot[a, b, c] gives products of vectors, matrices, and tensors.");
     symtab_set_docstring("Det", "Det[m] gives the determinant of the square matrix m.");
@@ -57,6 +57,25 @@ void info_init(void) {
         "    Cubics    -> True  (use radicals to solve cubics)\n"
         "    Quartics  -> True  (use radicals to solve quartics)\n"
         "    Method    -> Automatic (reserved)");
+    symtab_set_docstring("LinearSolve",
+        "LinearSolve[m, b]\n"
+        "\tfinds an x that solves the matrix equation m . x == b.\n"
+        "\n"
+        "LinearSolve works on both numerical and symbolic matrices.\n"
+        "The matrix m may be square or rectangular.\n"
+        "The argument b may be a vector or a matrix; when b is a matrix\n"
+        "(one column per RHS) LinearSolve returns a matrix of solutions.\n"
+        "\n"
+        "For under-determined systems LinearSolve returns a particular\n"
+        "solution in which the free (non-pivot) variables are taken to be\n"
+        "0; Solve returns the general solution.  When the equation has no\n"
+        "solution LinearSolve emits LinearSolve::nosol and returns\n"
+        "unevaluated.\n"
+        "\n"
+        "Implementation: fraction-free Gauss-Jordan elimination on the\n"
+        "augmented matrix [m | b] (the Bareiss-like algorithm shared with\n"
+        "RowReduce and Inverse), so exact integer / rational / symbolic\n"
+        "inputs flow through without any spurious denominator blow-up.");
     symtab_set_docstring("Eigenvectors",
         "Eigenvectors[m]\n"
         "\tgives a list of the eigenvectors of the square matrix m.\n"

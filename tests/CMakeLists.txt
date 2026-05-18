@@ -392,6 +392,16 @@ else()
 endif()
 add_test(NAME eigen_tests COMMAND eigen_tests)
 
+add_executable(linearsolve_tests test_linearsolve.c ${COMMON_SRC})
+target_include_directories(linearsolve_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(linearsolve_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(linearsolve_tests build_ecm)
+else()
+    target_link_libraries(linearsolve_tests gmp m)
+endif()
+add_test(NAME linearsolve_tests COMMAND linearsolve_tests)
+
 add_executable(parfrac_tests test_parfrac.c ${COMMON_SRC})
 target_include_directories(parfrac_tests PRIVATE ../src)
 

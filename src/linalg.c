@@ -970,6 +970,298 @@ Expr* builtin_inverse(Expr* res) {
     return result;
 }
 
+/* LinearSolve[m, b] -- finds an x solving m.x == b.
+ *
+ * Strategy: fraction-free Gauss--Jordan elimination on the augmented
+ * matrix [m | b], identical in spirit to the algorithm used by Inverse
+ * and RowReduce.  After elimination, every pivot column has a single
+ * non-zero entry (the pivot value); other columns hold the contribution
+ * of free (non-pivot) variables.  For a particular solution we set the
+ * free variables to zero, so the answer for a pivot variable x_pc in
+ * pivot row i is just b'_i / pivot, where b'_i is the (already-row-
+ * reduced) RHS entry.  Non-pivot variables are simply 0.
+ *
+ * The matrix m may be rectangular and the system may be under- or
+ * over-determined; b may be a vector (LinearSolve returns a vector) or
+ * a matrix (LinearSolve returns a matrix, one column per RHS column).
+ *
+ * On an inconsistent system (a row reduces to 0 == nonzero on the b
+ * side) we emit LinearSolve::nosol and return NULL so the caller sees
+ * the original LinearSolve[...] unevaluated, matching Mathematica. */
+Expr* builtin_linearsolve(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* m = res->data.function.args[0];
+    Expr* b = res->data.function.args[1];
+
+    /* Validate m is a non-empty matrix. */
+    int64_t m_dims[64];
+    int m_rank = get_tensor_dims(m, m_dims);
+    if (m_rank != 2 || m_dims[0] == 0 || m_dims[1] == 0) {
+        char* m_str = expr_to_string(m);
+        fprintf(stderr,
+                "LinearSolve::matrix: Argument %s at position 1 is "
+                "not a non-empty rectangular matrix.\n",
+                m_str);
+        free(m_str);
+        return NULL;
+    }
+
+    int r = (int)m_dims[0];   /* rows of m / first dim of b */
+    int c = (int)m_dims[1];   /* cols of m / dim of x */
+
+    /* Validate b -- must be a rank-1 or rank-2 tensor whose first
+     * dimension matches the row count of m. */
+    int64_t b_dims[64];
+    int b_rank = get_tensor_dims(b, b_dims);
+    if (b_rank != 1 && b_rank != 2) {
+        char* b_str = expr_to_string(b);
+        fprintf(stderr,
+                "LinearSolve::lvec: %s is neither a vector nor a "
+                "matrix.\n",
+                b_str);
+        free(b_str);
+        return NULL;
+    }
+    if (b_dims[0] != r) {
+        char* m_str = expr_to_string(m);
+        char* b_str = expr_to_string(b);
+        fprintf(stderr,
+                "LinearSolve::lvec1: Coefficient matrix and target "
+                "vector %s . x == %s do not have the same dimensions.\n",
+                m_str, b_str);
+        free(m_str);
+        free(b_str);
+        return NULL;
+    }
+
+    int k = (b_rank == 1) ? 1 : (int)b_dims[1];
+    int cols = c + k;  /* augmented column count */
+
+    /* Build the augmented matrix [m | b]. */
+    Expr** matrix = malloc(sizeof(Expr*) * (size_t)r * (size_t)cols);
+    Expr** flat_m = malloc(sizeof(Expr*) * (size_t)r * (size_t)c);
+    {
+        size_t idx = 0;
+        flatten_tensor(m, flat_m, &idx);
+    }
+    Expr** flat_b = malloc(sizeof(Expr*) * (size_t)r * (size_t)k);
+    {
+        size_t idx = 0;
+        flatten_tensor(b, flat_b, &idx);
+    }
+
+    for (int i = 0; i < r; i++) {
+        for (int j = 0; j < c; j++) {
+            matrix[i * cols + j] = flat_m[i * c + j]; /* transfer ownership */
+        }
+        for (int j = 0; j < k; j++) {
+            matrix[i * cols + c + j] = flat_b[i * k + j]; /* transfer ownership */
+        }
+    }
+    free(flat_m);
+    free(flat_b);
+
+    /* Fraction-free Gauss--Jordan over the m columns only.  Pivots are
+     * only ever sought in the first c columns -- the b columns just
+     * ride along under the same row operations. */
+    int* pivot_col_for_row = malloc(sizeof(int) * (size_t)r);
+    for (int i = 0; i < r; i++) pivot_col_for_row[i] = -1;
+
+    Expr* P = expr_new_integer(1);
+    int row = 0;
+    for (int col = 0; col < c && row < r; col++) {
+        int pivot_row = -1;
+        for (int i = row; i < r; i++) {
+            if (!is_zero_poly(matrix[i * cols + col])) {
+                pivot_row = i;
+                break;
+            }
+        }
+        if (pivot_row == -1) continue;
+
+        if (pivot_row != row) {
+            for (int j = 0; j < cols; j++) {
+                Expr* tmp = matrix[row * cols + j];
+                matrix[row * cols + j] = matrix[pivot_row * cols + j];
+                matrix[pivot_row * cols + j] = tmp;
+            }
+        }
+
+        Expr* pivot = matrix[row * cols + col];
+
+        for (int i = 0; i < r; i++) {
+            if (i == row) continue;
+            Expr* M_ic = matrix[i * cols + col];
+            if (is_zero_poly(M_ic)) {
+                for (int j = 0; j < cols; j++) {
+                    if (j == col) continue;
+                    Expr* num_eval = eval_and_free(expr_new_function(
+                        expr_new_symbol("Times"),
+                        (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * cols + j])}, 2));
+                    Expr* new_val = exact_div_wrapper(num_eval, P);
+                    expr_free(num_eval);
+                    expr_free(matrix[i * cols + j]);
+                    matrix[i * cols + j] = new_val;
+                }
+            } else {
+                for (int j = 0; j < cols; j++) {
+                    if (j == col) continue;
+                    Expr* t1 = eval_and_free(expr_new_function(
+                        expr_new_symbol("Times"),
+                        (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * cols + j])}, 2));
+                    Expr* t2 = eval_and_free(expr_new_function(
+                        expr_new_symbol("Times"),
+                        (Expr*[]){expr_copy(M_ic), expr_copy(matrix[row * cols + j])}, 2));
+                    Expr* t2_neg = eval_and_free(expr_new_function(
+                        expr_new_symbol("Times"),
+                        (Expr*[]){expr_new_integer(-1), t2}, 2));
+                    Expr* num_eval = eval_and_free(expr_new_function(
+                        expr_new_symbol("Plus"),
+                        (Expr*[]){t1, t2_neg}, 2));
+                    Expr* new_val = exact_div_wrapper(num_eval, P);
+                    expr_free(num_eval);
+                    expr_free(matrix[i * cols + j]);
+                    matrix[i * cols + j] = new_val;
+                }
+            }
+            expr_free(matrix[i * cols + col]);
+            matrix[i * cols + col] = expr_new_integer(0);
+        }
+
+        expr_free(P);
+        P = expr_copy(pivot);
+        pivot_col_for_row[row] = col;
+        row++;
+    }
+    expr_free(P);
+
+    int pivots = row;
+
+    /* Consistency check: any row past the last pivot must have an
+     * all-zero RHS, otherwise the system has no solution. */
+    bool inconsistent = false;
+    for (int i = pivots; i < r && !inconsistent; i++) {
+        for (int j = 0; j < k; j++) {
+            if (!is_zero_poly(matrix[i * cols + c + j])) {
+                inconsistent = true;
+                break;
+            }
+        }
+    }
+    if (inconsistent) {
+        fprintf(stderr,
+                "LinearSolve::nosol: Linear equation encountered "
+                "that has no solution.\n");
+        for (int i = 0; i < r * cols; i++) expr_free(matrix[i]);
+        free(matrix);
+        free(pivot_col_for_row);
+        return NULL;
+    }
+
+    /* Normalise: divide each pivot row's RHS columns by the pivot
+     * value, cancelling any common polynomial factor as RowReduce
+     * and Inverse do, so the answer comes out canonical. */
+    for (int i = 0; i < pivots; i++) {
+        int pc = pivot_col_for_row[i];
+        Expr* pivot = matrix[i * cols + pc];
+        for (int j = c; j < cols; j++) {
+            if (is_zero_poly(matrix[i * cols + j])) continue;
+
+            Expr* num_val = matrix[i * cols + j];
+            Expr* den_val = expr_copy(pivot);
+
+            Expr* g = eval_and_free(expr_new_function(
+                expr_new_symbol("PolynomialGCD"),
+                (Expr*[]){expr_copy(num_val), expr_copy(den_val)}, 2));
+            Expr* new_num = exact_div_wrapper(num_val, g);
+            Expr* new_den = exact_div_wrapper(den_val, g);
+            expr_free(g);
+
+            if (new_den->type == EXPR_INTEGER && new_den->data.integer < 0) {
+                Expr* t = eval_and_free(expr_new_function(
+                    expr_new_symbol("Times"),
+                    (Expr*[]){new_num, expr_new_integer(-1)}, 2));
+                new_num = expr_expand(t);
+                expr_free(t);
+                int64_t v = -new_den->data.integer;
+                expr_free(new_den);
+                new_den = expr_new_integer(v);
+            }
+
+            if (new_den->type == EXPR_INTEGER && new_den->data.integer == 1) {
+                expr_free(new_den);
+                matrix[i * cols + j] = new_num;
+            } else {
+                Expr* inv_den = eval_and_free(expr_new_function(
+                    expr_new_symbol("Power"),
+                    (Expr*[]){new_den, expr_new_integer(-1)}, 2));
+                Expr* final_val = eval_and_free(expr_new_function(
+                    expr_new_symbol("Times"),
+                    (Expr*[]){new_num, inv_den}, 2));
+                matrix[i * cols + j] = expr_expand(final_val);
+                expr_free(final_val);
+            }
+            expr_free(num_val);
+            expr_free(den_val);
+        }
+    }
+
+    /* Assemble the result.  For a pivot variable x_pc we take the
+     * (now-normalised) RHS entry in its pivot row; for a free
+     * variable we use 0.  This is the particular solution with all
+     * free variables set to 0, matching Mathematica's convention for
+     * under-determined systems. */
+    int* pivot_for_col = malloc(sizeof(int) * (size_t)c);
+    for (int j = 0; j < c; j++) pivot_for_col[j] = -1;
+    for (int i = 0; i < pivots; i++) {
+        pivot_for_col[pivot_col_for_row[i]] = i;
+    }
+
+    Expr* result = NULL;
+    if (b_rank == 1) {
+        Expr** result_args = malloc(sizeof(Expr*) * (size_t)c);
+        for (int j = 0; j < c; j++) {
+            if (pivot_for_col[j] == -1) {
+                result_args[j] = expr_new_integer(0);
+            } else {
+                int pr = pivot_for_col[j];
+                /* Steal the b column value from the matrix. */
+                result_args[j] = matrix[pr * cols + c];
+                matrix[pr * cols + c] = NULL;
+            }
+        }
+        result = expr_new_function(expr_new_symbol("List"), result_args, c);
+        free(result_args);
+    } else {
+        Expr** rows_arr = malloc(sizeof(Expr*) * (size_t)c);
+        for (int j = 0; j < c; j++) {
+            Expr** row_elems = malloc(sizeof(Expr*) * (size_t)k);
+            for (int kk = 0; kk < k; kk++) {
+                if (pivot_for_col[j] == -1) {
+                    row_elems[kk] = expr_new_integer(0);
+                } else {
+                    int pr = pivot_for_col[j];
+                    row_elems[kk] = matrix[pr * cols + c + kk];
+                    matrix[pr * cols + c + kk] = NULL;
+                }
+            }
+            rows_arr[j] = expr_new_function(expr_new_symbol("List"), row_elems, k);
+            free(row_elems);
+        }
+        result = expr_new_function(expr_new_symbol("List"), rows_arr, c);
+        free(rows_arr);
+    }
+
+    for (int i = 0; i < r * cols; i++) {
+        if (matrix[i]) expr_free(matrix[i]);
+    }
+    free(matrix);
+    free(pivot_col_for_row);
+    free(pivot_for_col);
+
+    return result;
+}
+
 /* Matrix multiplication helper: computes A.B for two square n x n matrices
  * represented as List[List[...], ...] expressions. Returns a new Expr*. */
 static Expr* mat_dot(Expr* a, Expr* b) {
@@ -2057,4 +2349,6 @@ void linalg_init(void) {
     symtab_get_def("Eigenvalues")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Eigenvectors", builtin_eigenvectors);
     symtab_get_def("Eigenvectors")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("LinearSolve", builtin_linearsolve);
+    symtab_get_def("LinearSolve")->attributes |= ATTR_PROTECTED;
 }
