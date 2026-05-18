@@ -468,30 +468,41 @@ Expr* builtin_length(Expr* res) {
     return NULL;
 }
 
-static int get_dimensions(Expr* e, int64_t* dims, const char* head_name) {
+#define DIMENSIONS_MAX_DEPTH 64
+
+/*
+ * get_dimensions:
+ * Recursively determines the dimensions of a rectangular nested structure
+ * whose every level shares the head named by head_name. Stops as soon as
+ * the structure becomes ragged (sub-arrays differ in shape) or once
+ * max_depth levels have been recorded. Returns the number of dimensions
+ * written into dims (which must hold at least max_depth slots).
+ */
+static int get_dimensions(Expr* e, int64_t* dims, int max_depth, const char* head_name) {
+    if (max_depth <= 0) return 0;
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
         strcmp(e->data.function.head->data.symbol, head_name) != 0) {
         return 0;
     }
-    
+
     dims[0] = (int64_t)e->data.function.arg_count;
-    if (dims[0] == 0) return 1;
-    
-    int64_t sub_dims[64];
-    int sub_depth = get_dimensions(e->data.function.args[0], sub_dims, head_name);
-    
+    if (dims[0] == 0 || max_depth == 1) return 1;
+
+    int64_t sub_dims[DIMENSIONS_MAX_DEPTH];
+    int sub_depth = get_dimensions(e->data.function.args[0], sub_dims, max_depth - 1, head_name);
+
     if (sub_depth == 0) return 1;
-    
+
     for (size_t i = 1; i < e->data.function.arg_count; i++) {
-        int64_t cur_dims[64];
-        int cur_depth = get_dimensions(e->data.function.args[i], cur_dims, head_name);
-        
+        int64_t cur_dims[DIMENSIONS_MAX_DEPTH];
+        int cur_depth = get_dimensions(e->data.function.args[i], cur_dims, max_depth - 1, head_name);
+
         if (cur_depth != sub_depth) return 1;
         for (int j = 0; j < sub_depth; j++) {
             if (cur_dims[j] != sub_dims[j]) return 1;
         }
     }
-    
+
     for (int i = 0; i < sub_depth; i++) {
         dims[i + 1] = sub_dims[i];
     }
@@ -499,25 +510,49 @@ static int get_dimensions(Expr* e, int64_t* dims, const char* head_name) {
 }
 
 Expr* builtin_dimensions(Expr* res) {
-    if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
-        Expr* arg = res->data.function.args[0];
-        if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
-            int64_t dims[64];
-            int depth = get_dimensions(arg, dims, arg->data.function.head->data.symbol);
-            
-            Expr** dim_args = malloc(sizeof(Expr*) * depth);
-            for (int i = 0; i < depth; i++) {
-                dim_args[i] = expr_new_integer(dims[i]);
-            }
-            
-            Expr* ret = expr_new_function(expr_new_symbol("List"), dim_args, depth);
-            free(dim_args);
-            return ret;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+
+    /* Determine the level cap from the optional second argument. */
+    int max_depth = DIMENSIONS_MAX_DEPTH;
+    if (argc == 2) {
+        Expr* n = res->data.function.args[1];
+        int64_t nv;
+        if (n->type == EXPR_INTEGER) {
+            nv = n->data.integer;
+        } else if (n->type == EXPR_FUNCTION &&
+                   n->data.function.head->type == EXPR_SYMBOL &&
+                   strcmp(n->data.function.head->data.symbol, "DirectedInfinity") == 0 &&
+                   n->data.function.arg_count == 1 &&
+                   n->data.function.args[0]->type == EXPR_INTEGER &&
+                   n->data.function.args[0]->data.integer == 1) {
+            /* Dimensions[expr, Infinity] -> use the full depth cap. */
+            nv = DIMENSIONS_MAX_DEPTH;
         } else {
-            return expr_new_function(expr_new_symbol("List"), NULL, 0);
+            return NULL;
         }
+        if (nv < 0) return NULL;
+        if (nv > DIMENSIONS_MAX_DEPTH) nv = DIMENSIONS_MAX_DEPTH;
+        max_depth = (int)nv;
     }
-    return NULL;
+
+    Expr* arg = res->data.function.args[0];
+    int depth = 0;
+    int64_t dims[DIMENSIONS_MAX_DEPTH];
+    if (max_depth > 0 && arg->type == EXPR_FUNCTION &&
+        arg->data.function.head->type == EXPR_SYMBOL) {
+        depth = get_dimensions(arg, dims, max_depth, arg->data.function.head->data.symbol);
+    }
+
+    Expr** dim_args = (depth > 0) ? malloc(sizeof(Expr*) * (size_t)depth) : NULL;
+    for (int i = 0; i < depth; i++) {
+        dim_args[i] = expr_new_integer(dims[i]);
+    }
+
+    Expr* ret = expr_new_function(expr_new_symbol("List"), dim_args, (size_t)depth);
+    free(dim_args);
+    return ret;
 }
 
 /*

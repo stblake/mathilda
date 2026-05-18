@@ -224,9 +224,39 @@ void info_init(void) {
         "    Quartics  -> True  (use radicals to solve quartics)\n"
         "    Method    -> Automatic (reserved)");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
-    symtab_set_docstring("Head", "Head[expr] gives the head of expr.");
+    symtab_set_docstring("Head",
+        "Head[expr]\n"
+        "    Gives the head of expr.\n"
+        "Head[expr, h]\n"
+        "    Wraps the result with h, i.e. returns h[Head[expr]].\n"
+        "\n"
+        "For atoms, Head returns Integer, Real, Symbol, or String. For a\n"
+        "compound expression f[...], Head returns f.\n"
+        "\n"
+        "Examples:\n"
+        "    Head[a + b]      -> Plus\n"
+        "    Head[{a, b, c}]  -> List\n"
+        "    Head[3.14]       -> Real\n"
+        "    Head[x]          -> Symbol\n"
+        "    Head[a + b, f]   -> f[Plus]");
     symtab_set_docstring("Length", "Length[expr] gives the number of elements in expr.");
-    symtab_set_docstring("Dimensions", "Dimensions[expr] gives a list of the dimensions of expr.");
+    symtab_set_docstring("Dimensions",
+        "Dimensions[expr]\n"
+        "    Gives a list of the dimensions of expr.\n"
+        "Dimensions[expr, n]\n"
+        "    Gives a list of the dimensions of expr down to level n.\n"
+        "\n"
+        "expr is treated as a full array only at levels where every sub-piece\n"
+        "shares the same head and length; ragged levels are not counted.\n"
+        "Dimensions always returns a List, including the empty List {} for\n"
+        "atomic expressions.\n"
+        "\n"
+        "Examples:\n"
+        "    Dimensions[{{a, b, c}, {d, e, f}}]    -> {2, 3}\n"
+        "    Dimensions[{{a, b, c}, {d, e}, {f}}]  -> {3}      (ragged at level 2)\n"
+        "    Dimensions[{{{{a, b}}}}]              -> {1, 1, 1, 2}\n"
+        "    Dimensions[{{{{a, b}}}}, 2]           -> {1, 1}\n"
+        "    Dimensions[1]                         -> {}");
     symtab_set_docstring("First", "First[expr] gives the first element of expr.");
     symtab_set_docstring("Last", "Last[expr] gives the last element of expr.");
     symtab_set_docstring("Most", "Most[expr] gives all but the last element of expr.");

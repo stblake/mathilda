@@ -72,9 +72,10 @@ Out[5]= {3, 4, 5, 6, 7, 8, 9, 10}
 
 ## Head
 Returns the top-level wrapper of an expression.
-- `Head[expr]`
+- `Head[expr]`: gives the head of `expr`.
+- `Head[expr, h]`: wraps the result with `h`, i.e. returns `h[Head[expr]]`.
 
-**Features**: 
+**Features**:
 - For functions, returns the symbol or expression acting as the head.
 - For atoms, returns the symbolic type name: `Integer`, `Real`, `Rational`, `Complex`, `Symbol`, or `String`.
 
@@ -84,6 +85,9 @@ Out[1]= f
 
 In[2]:= Head[3/4]
 Out[2]= Rational
+
+In[3]:= Head[a + b, f]
+Out[3]= f[Plus]
 ```
 
 ## Length
@@ -101,11 +105,29 @@ Out[1]= 3
 
 ## Dimensions
 Returns the list of lengths of levels in a nested rectangular structure.
-- `Dimensions[expr]`
+- `Dimensions[expr]`: gives the dimensions of `expr` at every level where
+  it is not ragged.
+- `Dimensions[expr, n]`: limits the result to the first `n` levels.
+
+`expr` is treated as a full array only at levels where every sub-piece
+shares the same head and length; ragged levels are not counted.
+`Dimensions` always returns a `List` (the empty `List {}` for atoms).
 
 ```mathematica
 In[1]:= Dimensions[{{1, 2}, {3, 4}}]
 Out[1]= {2, 2}
+
+In[2]:= Dimensions[{{a, b, c}, {d, e}, {f}}]
+Out[2]= {3}
+
+In[3]:= Dimensions[{{{{a, b}}}}]
+Out[3]= {1, 1, 1, 2}
+
+In[4]:= Dimensions[{{{{a, b}}}}, 2]
+Out[4]= {1, 1}
+
+In[5]:= Dimensions[1]
+Out[5]= {}
 ```
 
 ## First, Last, Most, Rest

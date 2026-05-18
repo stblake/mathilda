@@ -169,6 +169,20 @@ void test_dimensions() {
     ASSERT(res2->data.function.arg_count == 1);
     ASSERT(res2->data.function.args[0]->data.integer == 2);
     expr_free(e2); expr_free(res2);
+
+    /* Two-argument form: limit the result to n levels. */
+    assert_eval_eq("Dimensions[{{{{a, b}}}}, 2]", "{1, 1}", 0);
+    assert_eval_eq("Dimensions[{{{{a, b}}}}, 4]", "{1, 1, 1, 2}", 0);
+    assert_eval_eq("Dimensions[{{1, 2}, {3, 4}}, 1]", "{2}", 0);
+    assert_eval_eq("Dimensions[{{1, 2}, {3, 4}}, 5]", "{2, 2}", 0);
+    assert_eval_eq("Dimensions[{1, 2, 3}, 0]", "{}", 0);
+    assert_eval_eq("Dimensions[5, 3]", "{}", 0);
+
+    /* Edge cases from the WL spec. */
+    assert_eval_eq("Dimensions[1]", "{}", 0);
+    assert_eval_eq("Dimensions[{1, 2}]", "{2}", 0);
+    assert_eval_eq("Dimensions[{{1, 2}}]", "{1, 2}", 0);
+    assert_eval_eq("Dimensions[{}]", "{0}", 0);
 }
 
 void test_part() {
@@ -198,6 +212,19 @@ void test_builtin_head() {
     Expr* res2 = evaluate(e2);
     ASSERT(res2 && res2->type == EXPR_SYMBOL && strcmp(res2->data.symbol, "Integer") == 0);
     expr_free(e2); expr_free(res2);
+
+    /* Atomic heads. Use fresh symbols since earlier tests bind x, y, etc. */
+    assert_eval_eq("Head[3.14]", "Real", 0);
+    assert_eval_eq("Head[headTestSym1]", "Symbol", 0);
+    assert_eval_eq("Head[\"foo\"]", "String", 0);
+    assert_eval_eq("Head[headTestSym1 + headTestSym2]", "Plus", 0);
+    assert_eval_eq("Head[{headTestSym1, headTestSym2, headTestSym3}]", "List", 0);
+
+    /* Two-argument form: Head[expr, h] -> h[Head[expr]]. */
+    assert_eval_eq("Head[headTestSym1 + headTestSym2, headWrap]", "headWrap[Plus]", 0);
+    assert_eval_eq("Head[{1, 2}, headWrap]", "headWrap[List]", 0);
+    /* The wrapper is itself evaluated: Identity[x] -> x. */
+    assert_eval_eq("Head[headTestSym1 + headTestSym2, Identity]", "Plus", 0);
 }
 
 void test_first_last_most_rest() {

@@ -167,10 +167,22 @@ Expr* expr_head(Expr* e) {
 }
 
 Expr* builtin_head(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
-        return NULL;
-    }
-    return expr_head(res->data.function.args[0]);
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+
+    Expr* head = expr_head(res->data.function.args[0]);
+    if (!head) return NULL;
+    if (argc == 1) return head;
+
+    /* Head[expr, h] -> h[Head[expr]]. The wrapper h itself is left to the
+     * evaluator to evaluate further (e.g. Head[{a,b}, f] -> f[List]). */
+    Expr** wargs = malloc(sizeof(Expr*));
+    wargs[0] = head;
+    Expr* wrapper = expr_copy(res->data.function.args[1]);
+    Expr* out = expr_new_function(wrapper, wargs, 1);
+    free(wargs);
+    return out;
 }
 
 Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
