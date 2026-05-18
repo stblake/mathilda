@@ -35,7 +35,22 @@ void info_init(void) {
         "Part is treated as atomic on Integer, Real, String, Symbol, Rational[n, d], and Complex[re, im]; "
         "Part[atom, i] for i != 0 stays unevaluated.\n"
         "Indices are 1-based and may be negative; out-of-range indices leave the expression unevaluated.");
-    symtab_set_docstring("Extract", "Extract[expr, pos] extracts the part of expr at the position specified by pos.\nExtract[expr, {pos1, pos2, ...}] extracts a list of parts of expr.\nExtract[expr, pos, h] extracts parts of expr, wrapping each of them with head h before evaluation.\nExtract[pos] represents an operator form of Extract that can be applied to an expression.");
+    symtab_set_docstring("Extract",
+        "Extract[expr, pos]\n"
+        "\textracts the part of expr at the position specified by pos.\n"
+        "Extract[expr, {pos1, pos2, ...}]\n"
+        "\textracts a list of parts of expr.\n"
+        "Extract[expr, pos, h]\n"
+        "\textracts parts of expr, wrapping each of them with head h before evaluation.\n"
+        "Extract[pos]\n"
+        "\trepresents an operator form of Extract that can be applied to an expression.\n\n"
+        "The position pos has the same form as a Position result: a list of indices "
+        "{i1, i2, ...} that descends i1 into expr, then i2, etc. A scalar index n is "
+        "treated as the path {n}, so Extract[expr, n] is equivalent to Extract[expr, {n}]; "
+        "in particular Extract[expr, 0] gives Head[expr].\n"
+        "Indices are 1-based and may be negative; index 0 selects the head. "
+        "Extract is treated as atomic on Integer, Real, String, Symbol, "
+        "Rational[n, d], and Complex[re, im].");
     symtab_set_docstring("Span", "i;;j represents a span of elements i through j. i;;j;;k represents a span in steps of k.");
     symtab_set_docstring("UpTo",
         "UpTo[n]\n"

@@ -531,6 +531,12 @@ void test_extract() {
     assert_eval_eq("Extract[{{1,2},{3,4,5}},{All,1;;2}]", "{{1, 2}, {3, 4}}", 0);
     assert_eval_eq("Extract[{{1,2},{3,4,5}},{All,{1,-1}}]", "{{1, 2}, {3, 5}}", 0);
     assert_eval_eq("Extract[{a:>1^2, b:>2^2,c:>3^3},{1;;2,2},Hold]", "Hold[{1^2, 2^2}]", 0);
+    /* Scalar position is shorthand for a length-1 path. */
+    assert_eval_eq("Extract[{1,2,3}, 0, f]", "f[List]", 0);
+    assert_eval_eq("Extract[{1,2,3}, 0]", "List", 0);
+    assert_eval_eq("Extract[{1,2,3}, 1]", "1", 0);
+    assert_eval_eq("Extract[{1,2,3}, -1]", "3", 0);
+    assert_eval_eq("Extract[{1,2,3}, 1, f]", "f[1]", 0);
 }
 
 // Part-specific test runner

@@ -385,9 +385,20 @@ Expr* builtin_part(Expr* res) {
 }
 
 static Expr* extract_single(Expr* expr, Expr* pos, Expr* h) {
-    if (pos->type != EXPR_FUNCTION || pos->data.function.head->data.symbol != SYM_List) return NULL;
-    size_t nindices = pos->data.function.arg_count;
-    Expr** indices = pos->data.function.args;
+    size_t nindices;
+    Expr** indices;
+    Expr* single_index_buf[1];
+    if (pos->type == EXPR_FUNCTION && pos->data.function.head->type == EXPR_SYMBOL &&
+        pos->data.function.head->data.symbol == SYM_List) {
+        nindices = pos->data.function.arg_count;
+        indices = pos->data.function.args;
+    } else {
+        /* Scalar position (e.g. integer) is treated as a one-element path,
+         * matching Mathematica: Extract[expr, n] == Extract[expr, {n}]. */
+        single_index_buf[0] = pos;
+        indices = single_index_buf;
+        nindices = 1;
+    }
     Expr* part = expr_part(expr, indices, nindices);
     if (!part) {
         return NULL;
@@ -416,15 +427,16 @@ Expr* builtin_extract(Expr* res) {
     Expr* h = (argc == 3) ? res->data.function.args[2] : NULL;
 
     bool is_list_of_pos = false;
-    if (pos->type == EXPR_FUNCTION && pos->data.function.head->data.symbol == SYM_List) {
-        if (pos->data.function.arg_count > 0 && pos->data.function.args[0]->type == EXPR_FUNCTION && pos->data.function.args[0]->data.function.head->data.symbol == SYM_List) {
+    if (pos->type == EXPR_FUNCTION && pos->data.function.head->type == EXPR_SYMBOL &&
+        pos->data.function.head->data.symbol == SYM_List) {
+        if (pos->data.function.arg_count > 0 && pos->data.function.args[0]->type == EXPR_FUNCTION &&
+            pos->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+            pos->data.function.args[0]->data.function.head->data.symbol == SYM_List) {
             is_list_of_pos = true;
-        } else if (pos->data.function.arg_count == 0) {
-            is_list_of_pos = false;
         }
-    } else {
-        return NULL; // pos must be a List
     }
+    /* Otherwise pos is treated as a single position (a scalar like an integer,
+     * or a single-position list); extract_single handles both forms. */
 
     if (is_list_of_pos) {
         size_t npos = pos->data.function.arg_count;
