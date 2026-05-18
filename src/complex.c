@@ -133,6 +133,9 @@ Expr* builtin_conjugate(Expr* res) {
         args_times[0] = expr_new_integer(-1);
         args_times[1] = expr_copy(im);
         Expr* minus_im = expr_new_function(expr_new_symbol("Times"), args_times, 2);
+        /* expr_new_function copies the pointers out of args_times into its
+         * own internal storage; the caller still owns the temporary array. */
+        free(args_times);
         return make_complex(expr_copy(re), minus_im);
     }
     int64_t n, d;

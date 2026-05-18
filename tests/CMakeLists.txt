@@ -81,6 +81,7 @@ set(COMMON_SRC
     ../src/datetime.c
     ../src/linalg.c
     ../src/matsol.c
+    ../src/matinv.c
     ../src/readwrite.c
     ../src/files.c
     ../src/iter.c
@@ -162,6 +163,12 @@ target_include_directories(replace_tests PRIVATE ../src)
 
 add_executable(core_tests test_core.c ${COMMON_SRC})
 target_include_directories(core_tests PRIVATE ../src)
+
+add_executable(chop_tests test_chop.c ${COMMON_SRC})
+target_include_directories(chop_tests PRIVATE ../src)
+
+add_executable(clip_tests test_clip.c ${COMMON_SRC})
+target_include_directories(clip_tests PRIVATE ../src)
 
 add_executable(symbol_tests test_symbol.c ${COMMON_SRC})
 target_include_directories(symbol_tests PRIVATE ../src)
@@ -412,6 +419,26 @@ else()
     target_link_libraries(matsol_methods_tests gmp m)
 endif()
 add_test(NAME matsol_methods_tests COMMAND matsol_methods_tests)
+
+add_executable(matinv_tests test_matinv.c ${COMMON_SRC})
+target_include_directories(matinv_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(matinv_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(matinv_tests build_ecm)
+else()
+    target_link_libraries(matinv_tests gmp m)
+endif()
+add_test(NAME matinv_tests COMMAND matinv_tests)
+
+add_executable(matinv_methods_tests test_matinv_methods.c ${COMMON_SRC})
+target_include_directories(matinv_methods_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(matinv_methods_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(matinv_methods_tests build_ecm)
+else()
+    target_link_libraries(matinv_methods_tests gmp m)
+endif()
+add_test(NAME matinv_methods_tests COMMAND matinv_methods_tests)
 
 add_executable(parfrac_tests test_parfrac.c ${COMMON_SRC})
 target_include_directories(parfrac_tests PRIVATE ../src)

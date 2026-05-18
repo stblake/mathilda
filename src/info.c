@@ -46,7 +46,53 @@ void info_init(void) {
         "\t                                 to \"DivisionFreeRowReduction\")");
     symtab_set_docstring("IdentityMatrix", "IdentityMatrix[n] gives the n x n identity matrix.\nIdentityMatrix[{m, n}] gives the m x n identity matrix.");
     symtab_set_docstring("DiagonalMatrix", "DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.\nDiagonalMatrix[list, k] gives a matrix with the elements of list on the k-th diagonal.\nDiagonalMatrix[list, k, n] pads with zeros to create an n x n matrix.");
-    symtab_set_docstring("Inverse", "Inverse[m]\n\tgives the inverse of a square matrix m.\n\tInverse works on both symbolic and numerical matrices.\n\tFor matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.\n\tA warning is given for singular matrices.");
+    symtab_set_docstring("Inverse",
+        "Inverse[m]\n"
+        "\tgives the inverse of a square matrix m.\n"
+        "Inverse[m, Method -> \"<name>\"]\n"
+        "\truns a specific inversion algorithm.\n"
+        "\n"
+        "Inverse works on both symbolic and numerical matrices.\n"
+        "For matrices with approximate real or complex numbers, the\n"
+        "inverse is generated to the maximum possible precision given the\n"
+        "input.  Inverse::sing is issued for singular matrices and\n"
+        "Inverse::matsq for non-square / empty input; in either case the\n"
+        "call is returned unevaluated.\n"
+        "\n"
+        "Accepted method names:\n"
+        "  \"Automatic\"                 — alias for \"DivisionFreeRowReduction\" (default)\n"
+        "  \"DivisionFreeRowReduction\"  — Bareiss-like fraction-free Gauss-Jordan on [m | I]\n"
+        "  \"OneStepRowReduction\"       — classical Gauss-Jordan with division per pivot\n"
+        "  \"CofactorExpansion\"         — adjugate / determinant formula via Laplace expansion\n"
+        "\n"
+        "An unknown method name emits Inverse::method and leaves the call\n"
+        "unevaluated.  Method -> Automatic (the symbol) is also accepted.");
+    symtab_set_docstring("PseudoInverse",
+        "PseudoInverse[m]\n"
+        "\tfinds the Moore-Penrose pseudoinverse of a rectangular matrix m.\n"
+        "PseudoInverse[m, Tolerance -> t]\n"
+        "\tspecifies that singular values smaller than t times the maximum\n"
+        "\tsingular value should be dropped.  With the default setting\n"
+        "\tTolerance -> Automatic, the rationalisation precision of the\n"
+        "\tinput is used (Real -> 53 bits, MPFR -> input precision).\n"
+        "\n"
+        "For non-singular square matrices m, the pseudoinverse coincides\n"
+        "with the standard inverse: PseudoInverse[m] == Inverse[m].\n"
+        "\n"
+        "PseudoInverse works on exact (Integer / Rational / Complex)\n"
+        "matrices and on approximate (Real / MPFR) matrices.  For exact\n"
+        "input the result is exact; for inexact input the input is\n"
+        "rationalised, the pseudoinverse is computed in exact arithmetic\n"
+        "via a full-rank decomposition, and the result is numericalised\n"
+        "back to the input precision.\n"
+        "\n"
+        "Algorithm: row-reduce m to identify rank r and a full-rank\n"
+        "decomposition m = B . C with B m x r and C r x n.  Then\n"
+        "    PseudoInverse[m] = ConjugateTranspose[C] . Inverse[C . ConjugateTranspose[C]]\n"
+        "                                            . Inverse[ConjugateTranspose[B] . B]\n"
+        "                                            . ConjugateTranspose[B].\n"
+        "When m is the zero matrix the pseudoinverse is the corresponding\n"
+        "zero matrix of transposed shape.");
     symtab_set_docstring("MatrixPower", "MatrixPower[m, n]\n\tgives the n-th matrix power of the square matrix m.\n\tMatrixPower[m, n, v] gives the n-th matrix power of the matrix m applied to the vector v.\n\tWhen n is negative, MatrixPower finds powers of the inverse of the matrix m.\n\tMatrixPower[m, 0] gives IdentityMatrix[Length[m]].\n\tFractional matrix powers are not currently supported.");
     symtab_set_docstring("Eigenvalues",
         "Eigenvalues[m]\n"
@@ -326,6 +372,43 @@ void info_init(void) {
     symtab_set_docstring("Floor", "Floor[x] gives the greatest integer less than or equal to x.");
     symtab_set_docstring("Ceiling", "Ceiling[x] gives the smallest integer greater than or equal to x.");
     symtab_set_docstring("Round", "Round[x] rounds x to the nearest integer.");
+    symtab_set_docstring("Chop",
+        "Chop[expr]\n"
+        "\treplaces approximate real numbers in expr that are close to zero\n"
+        "\tby the exact integer 0.\n"
+        "Chop[expr, delta]\n"
+        "\treplaces numbers smaller in absolute magnitude than delta by 0.\n"
+        "\n"
+        "The default tolerance is 10^-10. Chop walks the entire expression\n"
+        "tree, so small real-valued subterms inside arbitrary heads, lists,\n"
+        "and held forms are all chopped. Exact numbers -- integers, bigints,\n"
+        "rationals, and symbolic constants -- pass through untouched.\n"
+        "\n"
+        "For machine complex numbers Complex[re, im] whose real and imaginary\n"
+        "parts are both machine reals: if only the imaginary part is below\n"
+        "tolerance the whole Complex wrapper is dropped and the real part\n"
+        "is returned; if only the real part is below tolerance the result\n"
+        "is Complex[0., im], preserving the machine-complex shape with a\n"
+        "machine zero. If both parts are below tolerance the result is the\n"
+        "exact integer 0.");
+    symtab_set_docstring("Clip",
+        "Clip[x]\n"
+        "\tgives x clipped to be between -1 and +1.\n"
+        "Clip[x, {min, max}]\n"
+        "\tgives x for min <= x <= max, min for x < min, and max for x > max.\n"
+        "Clip[x, {min, max}, {vmin, vmax}]\n"
+        "\tgives vmin for x < min and vmax for x > max.\n"
+        "\n"
+        "Clip threads over lists in its first argument and works at machine\n"
+        "or arbitrary precision (via N). Symbolic constants such as Pi are\n"
+        "numericalized only to decide which side of the interval x lies on;\n"
+        "the original symbolic x is returned unchanged when min <= x <= max.\n"
+        "\n"
+        "Infinity and -Infinity are clipped to the upper and lower\n"
+        "replacement values respectively. Clip is not defined for non-real\n"
+        "complex values: Clip::ncompl is issued and the call is returned\n"
+        "unevaluated. Clip[a] for an otherwise undetermined a also stays\n"
+        "unevaluated so user-supplied rules can intercept it.");
 
     // Calculus
     symtab_set_docstring("D", "D[f, x] gives the partial derivative of f with respect to x.\nD[f, {x, n}] gives the nth partial derivative.\nD[f, x, y, ...] gives the mixed derivative.");

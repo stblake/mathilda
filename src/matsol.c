@@ -49,17 +49,10 @@
 
 /* ------------------------------------------------------------------
  * Method-option parsing.  Mirrors the canonical SYM_Method / SYM_Rule
- * idiom (see src/integrate.c:199 and src/list.c:1480-1491).
+ * idiom (see src/integrate.c:199 and src/list.c:1480-1491).  Exposed
+ * via matsol.h so src/matinv.c (Inverse) can reuse the same grammar.
  * ------------------------------------------------------------------ */
-typedef enum {
-    MATSOL_AUTOMATIC = 0,
-    MATSOL_DIVFREE,
-    MATSOL_ONESTEP,
-    MATSOL_COFACTOR,
-    MATSOL_INVALID
-} MatsolMethod;
-
-static MatsolMethod parse_method_option(Expr* opt) {
+MatsolMethod matsol_parse_method_option(Expr* opt) {
     if (opt->type != EXPR_FUNCTION) return MATSOL_INVALID;
     if (opt->data.function.head->type != EXPR_SYMBOL) return MATSOL_INVALID;
     const char* hd = opt->data.function.head->data.symbol;
@@ -82,7 +75,7 @@ static MatsolMethod parse_method_option(Expr* opt) {
 }
 
 /* Rate-limit a per-call warning so test loops don't spew. */
-static void warn_once(uint64_t* last_hash, Expr* key, const char* msg) {
+void matsol_warn_once(uint64_t* last_hash, Expr* key, const char* msg) {
     uint64_t h = expr_hash(key);
     if (h == *last_hash) return;
     *last_hash = h;
@@ -244,7 +237,7 @@ static Expr* rowreduce_divfree(Expr* arg) {
 /* ------------------------------------------------------------------
  * Shared helpers used by the OneStep workers.
  *
- * `canon_entry(e)` -- canonicalise a matrix entry so subsequent
+ * `matsol_canon_entry(e)` -- canonicalise a matrix entry so subsequent
  * is_zero_poly checks behave correctly even on symbolic rationals.
  * For numeric input (Integer / Real / Bignum / Rational) Together is
  * a no-op cheaply; for symbolic input it combines everything over a
@@ -253,15 +246,15 @@ static Expr* rowreduce_divfree(Expr* arg) {
  * structural zero-check would miss.  Without this, OneStep on a
  * singular *symbolic* matrix mis-pivots and yields a wrong RREF.
  *
- * `div_entry(num, den)` -- num / den, canonicalised.  Prefers exact
+ * `matsol_div_entry(num, den)` -- num / den, canonicalised.  Prefers exact
  * polynomial division via exact_div_wrapper when applicable.
  * ------------------------------------------------------------------ */
-static Expr* canon_entry(Expr* e) {
+Expr* matsol_canon_entry(Expr* e) {
     return eval_and_free(expr_new_function(
         expr_new_symbol("Together"), (Expr*[]){expr_copy(e)}, 1));
 }
 
-static Expr* div_entry(Expr* num, Expr* den) {
+Expr* matsol_div_entry(Expr* num, Expr* den) {
     Expr* q = exact_div_wrapper(num, den);
     if (!q) {
         Expr* inv = eval_and_free(expr_new_function(
@@ -271,7 +264,7 @@ static Expr* div_entry(Expr* num, Expr* den) {
             expr_new_symbol("Times"),
             (Expr*[]){expr_copy(num), inv}, 2));
     }
-    Expr* qc = canon_entry(q);
+    Expr* qc = matsol_canon_entry(q);
     expr_free(q);
     return qc;
 }
@@ -336,7 +329,7 @@ static Expr* rowreduce_onestep(Expr* arg) {
                 matrix[r * n + j] = expr_new_integer(1);
             } else if (!is_zero_poly(matrix[r * n + j])) {
                 Expr* old = matrix[r * n + j];
-                matrix[r * n + j] = div_entry(old, pivot);
+                matrix[r * n + j] = matsol_div_entry(old, pivot);
                 expr_free(old);
             }
         }
@@ -359,7 +352,7 @@ static Expr* rowreduce_onestep(Expr* arg) {
                 Expr* updated = eval_and_free(expr_new_function(
                     expr_new_symbol("Plus"),
                     (Expr*[]){expr_copy(matrix[i * n + j]), neg_term}, 2));
-                Expr* updated_c = canon_entry(updated);
+                Expr* updated_c = matsol_canon_entry(updated);
                 expr_free(updated);
                 expr_free(matrix[i * n + j]);
                 matrix[i * n + j] = updated_c;
@@ -408,7 +401,7 @@ static Expr* rowreduce_cofactor(Expr* arg) {
     }
     if (dims[0] != dims[1]) {
         static uint64_t last_hash = 0;
-        warn_once(&last_hash, arg,
+        matsol_warn_once(&last_hash, arg,
             "RowReduce::cofnsq: Method -> \"CofactorExpansion\" requires "
             "a non-singular square matrix; falling back to "
             "\"DivisionFreeRowReduction\".\n");
@@ -432,7 +425,7 @@ static Expr* rowreduce_cofactor(Expr* arg) {
 
     if (singular) {
         static uint64_t last_hash = 0;
-        warn_once(&last_hash, arg,
+        matsol_warn_once(&last_hash, arg,
             "RowReduce::cofnsq: Method -> \"CofactorExpansion\" requires "
             "a non-singular square matrix; falling back to "
             "\"DivisionFreeRowReduction\".\n");
@@ -740,7 +733,7 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b, int b_rank,
                 matrix[row * cols + j] = expr_new_integer(1);
             } else if (!is_zero_poly(matrix[row * cols + j])) {
                 Expr* old = matrix[row * cols + j];
-                matrix[row * cols + j] = div_entry(old, pivot);
+                matrix[row * cols + j] = matsol_div_entry(old, pivot);
                 expr_free(old);
             }
         }
@@ -761,7 +754,7 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b, int b_rank,
                 Expr* updated = eval_and_free(expr_new_function(
                     expr_new_symbol("Plus"),
                     (Expr*[]){expr_copy(matrix[i * cols + j]), neg_term}, 2));
-                Expr* updated_c = canon_entry(updated);
+                Expr* updated_c = matsol_canon_entry(updated);
                 expr_free(updated);
                 expr_free(matrix[i * cols + j]);
                 matrix[i * cols + j] = updated_c;
@@ -865,7 +858,7 @@ static Expr* linearsolve_cofactor(Expr* m, Expr* b, int b_rank,
                                    int r, int c, int k, Expr* call_key) {
     if (r != c) {
         static uint64_t last_hash = 0;
-        warn_once(&last_hash, call_key,
+        matsol_warn_once(&last_hash, call_key,
             "LinearSolve::cofnsq: Method -> \"CofactorExpansion\" requires "
             "a non-singular square matrix.\n");
         return NULL;
@@ -890,7 +883,7 @@ static Expr* linearsolve_cofactor(Expr* m, Expr* b, int b_rank,
     bool singular = is_zero_poly(det_m);
     if (singular) {
         static uint64_t last_hash = 0;
-        warn_once(&last_hash, call_key,
+        matsol_warn_once(&last_hash, call_key,
             "LinearSolve::cofsng: Method -> \"CofactorExpansion\" requires "
             "a non-singular matrix; det is structurally zero.\n");
         expr_free(det_m);
@@ -921,7 +914,7 @@ static Expr* linearsolve_cofactor(Expr* m, Expr* b, int b_rank,
             }
 
             Expr* dj = laplace_det(scratch, n, n, 0, cols);
-            Expr* xj = div_entry(dj, det_m);
+            Expr* xj = matsol_div_entry(dj, det_m);
             expr_free(dj);
             results[j * k + kk] = xj;
 
@@ -978,10 +971,10 @@ Expr* builtin_rowreduce(Expr* res) {
 
     MatsolMethod method = MATSOL_AUTOMATIC;
     if (argc == 2) {
-        method = parse_method_option(res->data.function.args[1]);
+        method = matsol_parse_method_option(res->data.function.args[1]);
         if (method == MATSOL_INVALID) {
             static uint64_t last_warned = 0;
-            warn_once(&last_warned, res,
+            matsol_warn_once(&last_warned, res,
                 "RowReduce::method: Method option value is not one of "
                 "\"Automatic\", \"DivisionFreeRowReduction\", "
                 "\"OneStepRowReduction\", \"CofactorExpansion\".\n");
@@ -1009,10 +1002,10 @@ Expr* builtin_linearsolve(Expr* res) {
 
     MatsolMethod method = MATSOL_AUTOMATIC;
     if (argc == 3) {
-        method = parse_method_option(res->data.function.args[2]);
+        method = matsol_parse_method_option(res->data.function.args[2]);
         if (method == MATSOL_INVALID) {
             static uint64_t last_warned = 0;
-            warn_once(&last_warned, res,
+            matsol_warn_once(&last_warned, res,
                 "LinearSolve::method: Method option value is not one of "
                 "\"Automatic\", \"DivisionFreeRowReduction\", "
                 "\"OneStepRowReduction\", \"CofactorExpansion\".\n");

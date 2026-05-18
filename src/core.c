@@ -69,6 +69,8 @@
 #include "numeric.h"
 #include "precision.h"
 #include "rationalize.h"
+#include "numeric.h"
+#include "matsol.h"
 #include "sym_names.h"
 #include "repl_hooks.h"
 
@@ -129,6 +131,10 @@ void core_init(void) {
     symtab_get_def("SubtractFrom")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_add_builtin("TimeConstrained", builtin_time_constrained);
     symtab_get_def("TimeConstrained")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_add_builtin("Chop", builtin_chop);
+    symtab_get_def("Chop")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Clip", builtin_clip);
+    symtab_get_def("Clip")->attributes |= ATTR_NUMERICFUNCTION | ATTR_PROTECTED;
     symtab_add_builtin("Attributes", builtin_attributes);
     symtab_add_builtin("SetAttributes", builtin_set_attributes);
     symtab_add_builtin("OwnValues", builtin_own_values);
@@ -398,6 +404,8 @@ void core_init(void) {
     linalg_init();
     void matsol_init(void);
     matsol_init();
+    void matinv_init(void);
+    matinv_init();
     readwrite_init();
     files_init();
     random_init();
@@ -577,6 +585,348 @@ static Expr* release_hold_recursive(Expr* e) {
 
     /* Atomic expression: return copy */
     return expr_copy(e);
+}
+
+/*
+ * Chop: replace approximate-real numbers smaller in magnitude than delta
+ * by the exact integer 0.
+ *
+ * Only EXPR_REAL (and EXPR_MPFR when USE_MPFR is enabled) values are
+ * candidates for chopping; integers, bigints, rationals, and symbolic
+ * subexpressions pass through untouched.
+ *
+ * "Machine complex" Complex[re, im] -- where both components are
+ * machine reals -- gets the Mathematica special case: chopping the
+ * real part yields the machine zero 0.0 (preserving the machine-complex
+ * shape) rather than the exact integer 0, but chopping the imaginary
+ * part drops the whole Complex wrapper so the result is just the
+ * machine real `re`. Non-machine Complex[re, im] (e.g. Complex[1, 1.e-12])
+ * is recursed into so the outer evaluator's Complex[r, 0]->r simplification
+ * still fires.
+ */
+static bool chop_is_machine_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    return false;
+}
+
+static double chop_to_double(const Expr* e) {
+    if (e->type == EXPR_REAL) return e->data.real;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+#endif
+    return 0.0;
+}
+
+static Expr* chop_recursive(Expr* e, double delta) {
+    if (!e) return NULL;
+
+    if (chop_is_machine_real(e)) {
+        if (fabs(chop_to_double(e)) < delta) {
+            return expr_new_integer(0);
+        }
+        return expr_copy(e);
+    }
+
+    Expr *re = NULL, *im = NULL;
+    if (is_complex(e, &re, &im)) {
+        if (chop_is_machine_real(re) && chop_is_machine_real(im)) {
+            double rv = chop_to_double(re);
+            double iv = chop_to_double(im);
+            bool re_small = fabs(rv) < delta;
+            bool im_small = fabs(iv) < delta;
+
+            if (re_small && im_small) {
+                return expr_new_integer(0);
+            }
+            if (im_small) {
+                /* Drop the small imaginary part: machine real survives. */
+                return expr_copy(re);
+            }
+            if (re_small) {
+                /* Preserve the machine-complex shape with a machine 0.0
+                 * for the real part. Constructing Complex[0., im]
+                 * directly avoids any re-evaluation that would collapse
+                 * the wrapper. */
+                Expr* zero = expr_new_real(0.0);
+                Expr* im_copy = expr_copy(im);
+                return make_complex(zero, im_copy);
+            }
+            /* Neither component chops: return the Complex unchanged. */
+            return expr_copy(e);
+        }
+        /* Non-machine Complex: recurse into each part and let
+         * builtin_complex auto-simplify Complex[r, 0] -> r on the next
+         * evaluator pass. */
+        Expr* new_re = chop_recursive(re, delta);
+        Expr* new_im = chop_recursive(im, delta);
+        return make_complex(new_re, new_im);
+    }
+
+    if (e->type == EXPR_FUNCTION) {
+        size_t n = e->data.function.arg_count;
+        Expr** new_args = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = chop_recursive(e->data.function.args[i], delta);
+        }
+        Expr* result = expr_new_function(expr_copy(e->data.function.head), new_args, n);
+        if (new_args) free(new_args);
+        return result;
+    }
+
+    /* Atom (Integer, BigInt, Symbol, String, Rational components): no change. */
+    return expr_copy(e);
+}
+
+/* Convert a delta argument to a positive double tolerance. Accepts
+ * Integer, BigInt, Real, MPFR (when enabled), and Rational[n, d].
+ * Returns -1.0 if the argument cannot be coerced. */
+static double chop_extract_delta(Expr* d) {
+    if (!d) return -1.0;
+    if (d->type == EXPR_REAL) return fabs(d->data.real);
+    if (d->type == EXPR_INTEGER) return fabs((double)d->data.integer);
+    if (d->type == EXPR_BIGINT) return fabs(mpz_get_d(d->data.bigint));
+#ifdef USE_MPFR
+    if (d->type == EXPR_MPFR) return fabs(mpfr_get_d(d->data.mpfr, MPFR_RNDN));
+#endif
+    int64_t n, den;
+    if (is_rational(d, &n, &den) && den != 0) {
+        return fabs((double)n / (double)den);
+    }
+    return -1.0;
+}
+
+/*
+ * builtin_chop:
+ * Chop[expr]        replaces approximate real numbers in expr that are
+ *                   close to zero by the exact integer 0 (default
+ *                   tolerance 10^-10).
+ * Chop[expr, delta] uses |delta| as the threshold.
+ */
+Expr* builtin_chop(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) return NULL;
+
+    double delta = 1.0e-10;
+    if (argc == 2) {
+        double d = chop_extract_delta(res->data.function.args[1]);
+        if (d < 0.0) return NULL;
+        delta = d;
+    }
+
+    return chop_recursive(res->data.function.args[0], delta);
+}
+
+/*
+ * Clip: clamp a numeric value to an interval, optionally substituting
+ * named replacement values when the input falls outside.
+ *
+ * Forms supported:
+ *   Clip[x]                              -- clamp to [-1, 1]
+ *   Clip[x, {min, max}]                  -- clamp to [min, max]
+ *   Clip[x, {min, max}, {v_min, v_max}]  -- return v_min when x < min,
+ *                                            v_max when x > max,
+ *                                            x otherwise
+ *
+ * The interval endpoints and replacements may be symbolic; Clip only
+ * needs to decide which side of `min` / `max` `x` is on, not the
+ * algebraic identity of the bounds themselves. The decision is made by
+ * numericalizing `x`, `min`, and `max` to machine doubles via the
+ * existing `numericalize` machinery. Symbolic constants such as `Pi`
+ * are therefore handled (Pi -> ~3.14 -> Clip[Pi] = 1), and the
+ * original symbolic `x` is returned when it lies inside the interval
+ * (rather than the numeric approximation).
+ *
+ * Special cases:
+ *   - Infinity / -Infinity are handled before numericalization.
+ *   - A complex (non-real) input emits Clip::ncompl and the call stays
+ *     unevaluated, matching Mathematica.
+ *   - When `x`, `min`, or `max` cannot be reduced to a number, the
+ *     call stays unevaluated so user-supplied DownValues / pattern
+ *     rules can still take over.
+ */
+static bool clip_to_double_value(Expr* e, double* out) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
+    if (e->type == EXPR_REAL)    { *out = e->data.real;            return true; }
+    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) {
+        *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+        return true;
+    }
+#endif
+    int64_t n, d;
+    if (is_rational(e, &n, &d) && d != 0) {
+        *out = (double)n / (double)d;
+        return true;
+    }
+    /* Symbolic forms (Pi, E, Sqrt[2], ...) -- ask numericalize. */
+    Expr* approx = numericalize(e, numeric_machine_spec());
+    if (!approx) return false;
+    bool ok = false;
+    if (approx->type == EXPR_INTEGER) {
+        *out = (double)approx->data.integer; ok = true;
+    } else if (approx->type == EXPR_REAL) {
+        *out = approx->data.real; ok = !isnan(*out) && !isinf(*out);
+    } else if (approx->type == EXPR_BIGINT) {
+        *out = mpz_get_d(approx->data.bigint); ok = true;
+#ifdef USE_MPFR
+    } else if (approx->type == EXPR_MPFR) {
+        *out = mpfr_get_d(approx->data.mpfr, MPFR_RNDN);
+        ok = !isnan(*out) && !isinf(*out);
+#endif
+    } else if (is_rational(approx, &n, &d) && d != 0) {
+        *out = (double)n / (double)d; ok = true;
+    }
+    expr_free(approx);
+    return ok;
+}
+
+/* True if `e` is a Complex[re, im] with an imaginary part that is
+ * provably non-zero. Returns false for plain real numbers and for the
+ * (rare) Complex shape whose imaginary part is structurally zero. */
+static bool clip_has_imaginary_part(Expr* e) {
+    Expr *re = NULL, *im = NULL;
+    if (!is_complex(e, &re, &im)) return false;
+    if (im->type == EXPR_INTEGER && im->data.integer == 0) return false;
+    if (im->type == EXPR_REAL && im->data.real == 0.0) return false;
+    return true;
+}
+
+/* +1 for Infinity, -1 for -Infinity, 0 otherwise. Recognises the
+ * bare symbol `Infinity` as well as the standard Times[c, Infinity]
+ * negative-infinity form. */
+static int clip_classify_infinity(Expr* e) {
+    if (is_infinity_sym(e)) return 1;
+    if (is_neg_infinity_form(e)) return -1;
+    return 0;
+}
+
+Expr* builtin_clip(Expr* res) {
+    static uint64_t clip_last_warn = 0;
+
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+
+    Expr* x = res->data.function.args[0];
+
+    /* Manual first-argument threading: Clip[{x1, x2, ...}, ...]
+     *   -> {Clip[x1, ...], Clip[x2, ...], ...}.
+     * This is the Listable-style behaviour the spec promises for the
+     * first argument, implemented in-builtin so the {min, max} and
+     * {vmin, vmax} configuration lists are NOT threaded over. */
+    if (x->type == EXPR_FUNCTION
+        && x->data.function.head->type == EXPR_SYMBOL
+        && x->data.function.head->data.symbol == SYM_List) {
+        size_t n = x->data.function.arg_count;
+        Expr** out = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+        for (size_t i = 0; i < n; i++) {
+            Expr** call_args = malloc(sizeof(Expr*) * argc);
+            call_args[0] = expr_copy(x->data.function.args[i]);
+            for (size_t k = 1; k < argc; k++) {
+                call_args[k] = expr_copy(res->data.function.args[k]);
+            }
+            Expr* call = expr_new_function(expr_new_symbol("Clip"), call_args, argc);
+            free(call_args);
+            out[i] = eval_and_free(call);
+        }
+        Expr* list = expr_new_function(expr_new_symbol("List"), out, n);
+        if (out) free(out);
+        return list;
+    }
+
+    /* Default interval [-1, 1] and identity replacements. */
+    Expr* min_expr = NULL;
+    Expr* max_expr = NULL;
+    Expr* vmin_expr = NULL;
+    Expr* vmax_expr = NULL;
+    bool min_owned = false, max_owned = false;
+
+    if (argc >= 2) {
+        Expr* iv = res->data.function.args[1];
+        if (iv->type != EXPR_FUNCTION
+            || iv->data.function.head->type != EXPR_SYMBOL
+            || iv->data.function.head->data.symbol != SYM_List
+            || iv->data.function.arg_count != 2) {
+            return NULL;
+        }
+        min_expr = iv->data.function.args[0];
+        max_expr = iv->data.function.args[1];
+    } else {
+        min_expr = expr_new_integer(-1); min_owned = true;
+        max_expr = expr_new_integer(1);  max_owned = true;
+    }
+
+    if (argc == 3) {
+        Expr* rv = res->data.function.args[2];
+        if (rv->type != EXPR_FUNCTION
+            || rv->data.function.head->type != EXPR_SYMBOL
+            || rv->data.function.head->data.symbol != SYM_List
+            || rv->data.function.arg_count != 2) {
+            if (min_owned) expr_free(min_expr);
+            if (max_owned) expr_free(max_expr);
+            return NULL;
+        }
+        vmin_expr = rv->data.function.args[0];
+        vmax_expr = rv->data.function.args[1];
+    } else {
+        vmin_expr = min_expr;
+        vmax_expr = max_expr;
+    }
+
+    Expr* result = NULL;
+
+    /* Reject complex-valued x. Matches Mathematica's Clip::ncompl. */
+    if (clip_has_imaginary_part(x)) {
+        matsol_warn_once(&clip_last_warn, res,
+                         "Clip::ncompl: Symbolic or noncomplex numerical "
+                         "arguments are expected.\n");
+        goto cleanup;
+    }
+
+    /* Infinity is handled before numericalize because Infinity itself
+     * is not a machine real. */
+    int inf = clip_classify_infinity(x);
+    if (inf > 0) {
+        result = expr_copy(vmax_expr);
+        goto cleanup;
+    }
+    if (inf < 0) {
+        result = expr_copy(vmin_expr);
+        goto cleanup;
+    }
+
+    /* Disallow degenerate complex bounds the same way. */
+    if (clip_has_imaginary_part(min_expr) || clip_has_imaginary_part(max_expr)) {
+        goto cleanup;
+    }
+
+    double dx, dmin, dmax;
+    if (!clip_to_double_value(x, &dx)
+        || !clip_to_double_value(min_expr, &dmin)
+        || !clip_to_double_value(max_expr, &dmax)) {
+        /* Can't decide -- leave unevaluated. */
+        goto cleanup;
+    }
+
+    if (dx < dmin) {
+        result = expr_copy(vmin_expr);
+    } else if (dx > dmax) {
+        result = expr_copy(vmax_expr);
+    } else {
+        result = expr_copy(x);
+    }
+
+cleanup:
+    if (min_owned) expr_free(min_expr);
+    if (max_owned) expr_free(max_expr);
+    return result;
 }
 
 /*

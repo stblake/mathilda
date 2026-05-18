@@ -446,3 +446,111 @@ In[4]:= Ceiling[Floor[Ceiling[x]]]
 Out[4]= Ceiling[x]
 ```
 
+## Chop
+
+`Chop[expr]` replaces approximate real numbers in `expr` whose absolute
+value is below `10^-10` by the exact integer `0`.
+
+`Chop[expr, delta]` uses `|delta|` as the threshold instead of the
+default.
+
+**Features**:
+- `Protected`.
+- Walks the entire expression tree, so small real-valued subterms inside
+  arbitrary heads, lists, and held forms are all chopped.
+- Exact numbers (`Integer`, BigInt, `Rational`, symbolic constants) and
+  symbolic input pass through untouched.
+- `delta` may be supplied as `Integer`, `Real`, `Rational[n, d]`,
+  BigInt, or (when `USE_MPFR=1`) `MPFR`; its absolute value is the
+  effective tolerance.
+
+**Complex handling**.  `Complex[re, im]` whose components are both
+machine reals is the "machine complex" case and gets Mathematica's
+special treatment:
+
+| `re` below tolerance | `im` below tolerance | result |
+|----------------------|----------------------|--------|
+| yes                  | yes                  | exact integer `0` |
+| no                   | yes                  | `re` (Complex wrapper dropped, machine real survives) |
+| yes                  | no                   | `Complex[0., im]` &mdash; the real part is the machine zero `0.0`, not an exact `0`, preserving the machine-complex shape |
+| no                   | no                   | unchanged |
+
+When `Complex[re, im]` has at least one exact component (e.g.
+`Complex[1, 1.*^-12]`), Chop recurses into each part normally: a tiny
+`Real` becomes the exact integer `0`, and `builtin_complex` then
+collapses `Complex[r, 0]` to `r` on the next evaluator pass.
+
+```mathematica
+In[1]:= Chop[Exp[N[Range[4] Pi I]]]
+Out[1]= {-1., 1., -1., 1.}
+
+In[2]:= Chop[N[Pi] - Rationalize[N[Pi], 10^-12]] === 0
+Out[2]= True
+
+In[3]:= Chop[N[Pi] - Rationalize[N[Pi], 10^-12], 10^-14] === 0
+Out[3]= False
+
+In[4]:= Chop[10.^-12 + 2. I]
+Out[4]= 0. + 2. I
+
+In[5]:= Chop[2. + 10.^-12 I]
+Out[5]= 2.
+```
+
+## Clip
+
+`Clip[x]` clamps a numeric value to the closed interval `[-1, 1]`.
+
+`Clip[x, {min, max}]` clamps to `[min, max]`.
+
+`Clip[x, {min, max}, {vmin, vmax}]` returns `vmin` when `x < min`,
+`vmax` when `x > max`, and `x` otherwise.  The replacement values
+need not be numeric.
+
+**Features**:
+- `NumericFunction`, `Protected`.
+- Threads over a `List` in the first argument: `Clip[{x1, x2, ...}, ...]`
+  maps Clip element-wise over the list.  The `{min, max}` and
+  `{vmin, vmax}` configuration lists are explicitly **not** threaded
+  over -- threading is implemented inside the builtin (not via the
+  `Listable` attribute) so the bounds and replacement lists stay intact.
+- Symbolic numeric constants (`Pi`, `E`, etc.) are numericalized via
+  `N` only to decide which side of the interval `x` lies on; the
+  original symbolic `x` is returned when `min <= x <= max`, never
+  the numeric approximation.
+- `Infinity` and `-Infinity` are handled directly: `Clip[Infinity]`
+  yields `vmax` (or the default `1`), `Clip[-Infinity]` yields `vmin`.
+- Complex (non-real) input emits a one-shot `Clip::ncompl` warning and
+  the call stays unevaluated.  Use `Re[z]`, `Im[z]` to clip the parts
+  separately.
+- Symbolic input for which the position cannot be decided
+  numerically (e.g. `Clip[a]`) stays unevaluated so user-supplied
+  rules can intercept it.
+
+```mathematica
+In[1]:= Clip[7.5]
+Out[1]= 1
+
+In[2]:= Clip[-5/2, {-2, 2}]
+Out[2]= -2
+
+In[3]:= Clip[Pi, {-9, 7}, {11, 28}]
+Out[3]= Pi
+
+In[4]:= Clip[{-2, 0, 2}]
+Out[4]= {-1, 0, 1}
+
+In[5]:= Clip[Infinity]
+Out[5]= 1
+
+In[6]:= Clip[2 - 3 I]
+Clip::ncompl: Symbolic or noncomplex numerical arguments are expected.
+Out[6]= Clip[2 - 3 I]
+
+In[7]:= Clip[Re[2 - 3 I]] + Clip[Im[2 - 3 I]] I
+Out[7]= 1 - I
+
+In[8]:= N[Clip[1/11, {1/7, 5}], 50]
+Out[8]= 0.14285714285714285714285714285714285714285714285714
+```
+

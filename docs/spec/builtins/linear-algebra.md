@@ -182,16 +182,22 @@ Out[4]= {12, 15, 18}
 ## Inverse
 Gives the inverse of a square matrix.
 - `Inverse[m]`
+- `Inverse[m, Method -> "<name>"]`
 
 **Features**:
 - `Protected`.
 - Works on both symbolic and numerical matrices.
 - For matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.
-- Uses fraction-free Gauss-Jordan elimination on the augmented matrix `[A | I]` to compute the inverse exactly for integer, rational, and symbolic matrices.
 - Issues `Inverse::sing` warning and returns unevaluated if the matrix is singular.
 - Issues `Inverse::matsq` warning and returns unevaluated if the argument is not a non-empty square matrix.
 - Satisfies the relation `a . Inverse[a] == Inverse[a] . a == IdentityMatrix[n]`.
 - Satisfies the relation `Inverse[a . b] == Inverse[b] . Inverse[a]`.
+- Accepts an optional `Method -> "<name>"` argument that selects the inversion algorithm. Shares the same method-name grammar as `RowReduce` and `LinearSolve`.
+  - `Method -> Automatic` or `Method -> "Automatic"` (default) — alias for `"DivisionFreeRowReduction"`.
+  - `Method -> "DivisionFreeRowReduction"` — Bareiss-like fraction-free Gauss-Jordan elimination on the augmented matrix `[A | I]`. Best choice for exact integer / rational / symbolic input — never produces a denominator larger than necessary.
+  - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan on `[A | I]` with one division per pivot per row entry. Each entry is canonicalised via `Together` so symbolic cancellations are still detected. Fast on numeric matrices.
+  - `Method -> "CofactorExpansion"` — adjugate / determinant formula `A^-1[i,j] = (-1)^(i+j) Det[M[j,i]] / Det[A]`, with `Det` computed via Laplace cofactor expansion. Time complexity is `O(n! n^2)`; intended for small `n` or closed-form symbolic inverses of small matrices. Emits `Inverse::sing` if `Det[A]` is structurally zero.
+- Unknown method names emit `Inverse::method` and the call remains unevaluated.
 
 ```mathematica
 In[1]:= Inverse[{{1.4,2},{3,-6.7}}]
@@ -225,6 +231,65 @@ Out[9]= True
 In[10]:= Inverse[{{1,2},{3,4},{5,6}}]
 Inverse::matsq: Argument {{1, 2}, {3, 4}, {5, 6}} at position 1 is not a non-empty square matrix.
 Out[10]= Inverse[{{1, 2}, {3, 4}, {5, 6}}]
+
+In[11]:= Inverse[{{1, 2}, {3, 4}}, Method -> "CofactorExpansion"]
+Out[11]= {{-2, 1}, {3/2, -1/2}}
+
+In[12]:= Inverse[{{a, b}, {c, d}}, Method -> "OneStepRowReduction"] // Together
+Out[12]= {{d/(a d - b c), -b/(a d - b c)}, {-c/(a d - b c), a/(a d - b c)}}
+```
+
+> Implementation lives in `src/matinv.c` (registered by `matinv_init`).
+> The previous home was `src/linalg.c`; the algorithm — fraction-free
+> Gauss-Jordan elimination on the augmented matrix `[A | I]` — is
+> unchanged.
+
+## PseudoInverse
+Gives the Moore-Penrose pseudoinverse of a rectangular (or
+rank-deficient) matrix.
+- `PseudoInverse[m]`
+- `PseudoInverse[m, Tolerance -> t]`
+
+**Features**:
+- `Protected`.
+- Works on rectangular and rank-deficient matrices over the integers,
+  rationals, machine-precision reals, MPFR reals, exact complex
+  (`Complex[a, b]` entries), and inexact complex.
+- For non-singular square matrices, `PseudoInverse[m] == Inverse[m]`.
+- Computes a full-rank decomposition `m = B . C` (with `B` `m x r` and
+  `C` `r x n`) by row-reducing `m` to identify the rank `r` and the
+  pivot columns, then returns
+  `PseudoInverse[m] = ConjugateTranspose[C] . Inverse[C . ConjugateTranspose[C]] . Inverse[ConjugateTranspose[B] . B] . ConjugateTranspose[B]`.
+- For the `m x n` zero matrix, returns the `n x m` zero matrix.
+- Inexact (`Real` / MPFR) matrices are rationalised at the input
+  precision, computed exactly to preserve rank, and numericalised back.
+- The `Tolerance` option accepts `Automatic` (default), a non-negative
+  number, or a non-negative `Rational`.
+- Issues `PseudoInverse::matrix` warning and returns unevaluated if the
+  argument is not a non-empty rank-2 tensor.
+- Returns unevaluated when an unknown option name is supplied or
+  `Tolerance` receives a negative value.
+- Satisfies the Moore-Penrose identities
+  `m . p . m == m` and `p . m . p == p` for `p = PseudoInverse[m]`.
+
+```mathematica
+In[1]:= PseudoInverse[{{1,2},{3,4}}]
+Out[1]= {{-2, 1}, {3/2, -1/2}}
+
+In[2]:= PseudoInverse[{{1,2},{3,4}}] == Inverse[{{1,2},{3,4}}]
+Out[2]= True
+
+In[3]:= PseudoInverse[{{1,2,3},{4,5,6},{7,8,9}}]
+Out[3]= {{-23/36, -1/6, 11/36}, {-1/18, 0, 1/18}, {19/36, 1/6, -7/36}}
+
+In[4]:= PseudoInverse[{{0,0,0},{0,0,0}}]
+Out[4]= {{0, 0}, {0, 0}, {0, 0}}
+
+In[5]:= PseudoInverse[{{2,3},{2,2},{3,1},{4,3}}]
+Out[5]= {{-29/134, -2/67, 22/67, 17/134}, {49/134, 8/67, -21/67, -1/134}}
+
+In[6]:= PseudoInverse[{{1.25, 3.2, 3.2}, {7.9, -1.4, 5.1}, {0, 0, 0}}]
+Out[6]= {{-0.0385185, 0.0966633, 0.}, {0.210183, -0.0659894, 0.}, {0.117363, 0.0282303, 0.}}
 ```
 
 ## MatrixPower
