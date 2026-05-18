@@ -99,9 +99,46 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     
     Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        // First argument of scoping constructs is the variable list, don't substitute there
+        // First argument of scoping constructs is the variable list:
+        // substitute into each binding's RHS (which sees the outer
+        // scope, i.e. the original env -- the rebound names propagate
+        // back into bindings under simultaneous-binding semantics) but
+        // NOT into the LHS name (which is a binding occurrence).
+        // Without this, `With[{q = 12}, With[{k = q}, k]]` would leave
+        // the inner `q` in `k = q` as a free symbol, and the CRC table
+        // pattern `With[{q = 4 a c - b^2, k = (4 c)/q}, ...]` (which
+        // relies on the outer-substituted k getting the value of q)
+        // would fall apart on every q-dependent recursion.
         if (i == 0 && is_scoping_construct(e)) {
-            new_args[i] = expr_copy(e->data.function.args[i]);
+            Expr* vars_list = e->data.function.args[i];
+            if (vars_list->type == EXPR_FUNCTION
+                && vars_list->data.function.head
+                && vars_list->data.function.head->type == EXPR_SYMBOL
+                && vars_list->data.function.head->data.symbol == SYM_List) {
+                size_t nb = vars_list->data.function.arg_count;
+                Expr** new_b = malloc(sizeof(Expr*) * (nb > 0 ? nb : 1));
+                for (size_t bi = 0; bi < nb; bi++) {
+                    Expr* b = vars_list->data.function.args[bi];
+                    if (b->type == EXPR_FUNCTION && b->data.function.head
+                        && b->data.function.head->type == EXPR_SYMBOL
+                        && (b->data.function.head->data.symbol == SYM_Set
+                            || b->data.function.head->data.symbol == SYM_SetDelayed)
+                        && b->data.function.arg_count == 2) {
+                        Expr* lhs = expr_copy(b->data.function.args[0]);
+                        Expr* rhs = substitute_scoping(b->data.function.args[1], env);
+                        Expr* head_copy = expr_copy(b->data.function.head);
+                        Expr* bargs[2] = { lhs, rhs };
+                        new_b[bi] = expr_new_function(head_copy, bargs, 2);
+                    } else {
+                        new_b[bi] = expr_copy(b);
+                    }
+                }
+                Expr* lhead_copy = expr_copy(vars_list->data.function.head);
+                new_args[i] = expr_new_function(lhead_copy, new_b, nb);
+                free(new_b);
+            } else {
+                new_args[i] = expr_copy(vars_list);
+            }
         } else {
             new_args[i] = substitute_scoping(e->data.function.args[i], filtered_env);
         }

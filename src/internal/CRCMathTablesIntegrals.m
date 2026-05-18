@@ -458,8 +458,14 @@ IntegrateTable[Sqrt[(a_ + b_. x_) (c_ + d_. x_)], x_] /; FreeQ[{a, b, c, d}, x] 
     (k + 2 b v)/(4 b d) Sqrt[u v] - k^2/(8 b d) IntegrateTable[1/Sqrt[u v], x]];
 
 (* Formula 141 *)
-IntegrateTable[1/((a_ + b_. x_) Sqrt[(a_ + b_. x_) (c_ + d_. x_)]), x_] /; FreeQ[{a, b, c, d}, x] && (a d - b c) d > 0 := With[{u = a + b x, v = c + d x, k = a d - b c}, 
-    2/(k Sqrt[k d]) ArcTanh[Sqrt[k d u v]/(d u)]];
+(* Integral[1/((a+b x) Sqrt[(a+b x)(c+d x)]), x] = (2/k) Sqrt[(c+d x)/(a+b x)],
+ * where k = a d - b c.  Verified by D[(2/k) Sqrt[v/u], x] = 1/(u Sqrt[u v]).
+ * The previous form `(2/(k Sqrt[k d])) ArcTanh[Sqrt[k d u v]/(d u)]` was
+ * off by a factor of (a+b x): differentiating it yields 1/Sqrt[u v] rather
+ * than 1/(u Sqrt[u v]).  Numerical and symbolic verification:
+ *     D[(2/k) Sqrt[v/u], x] - 1/(u Sqrt[u v])  ==  0  (Simplify) *)
+IntegrateTable[1/((a_ + b_. x_) Sqrt[(a_ + b_. x_) (c_ + d_. x_)]), x_] /; FreeQ[{a, b, c, d}, x] && (a d - b c) d > 0 := With[{u = a + b x, v = c + d x, k = a d - b c},
+    (2/k) Sqrt[v/u]];
 
 (* Formula 142 *)
 IntegrateTable[x_/Sqrt[(a_ + b_. x_) (c_ + d_. x_)], x_] /; FreeQ[{a, b, c, d}, x] := With[{u = a + b x, v = c + d x}, 
@@ -739,37 +745,53 @@ IntegrateTable[1/Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c}, x] && c <
   -1/Sqrt[-c] ArcSin[(2 c x + b)/Sqrt[b^2 - 4 a c]];
 
 (* Formula 227 & 228 *)
-IntegrateTable[1/(a_ + b_. x_ + c_. x_^2)^(3/2), x_] /; FreeQ[{a, b, c}, x] := 
+IntegrateTable[1/(a_ + b_. x_ + c_. x_^2)^(3/2), x_] /; FreeQ[{a, b, c}, x] :=
   With[{X = a + b x + c x^2, q = 4 a c - b^2}, (2 (2 c x + b))/(q Sqrt[X])];
-IntegrateTable[1/(a_ + b_. x_ + c_. x_^2)^(5/2), x_] /; FreeQ[{a, b, c}, x] := 
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q}, 
-    (2 (2 c x + b))/(3 q Sqrt[X]) (1/X + 2 k)
+IntegrateTable[1/(a_ + b_. x_ + c_. x_^2)^(5/2), x_] /; FreeQ[{a, b, c}, x] :=
+  With[{q = 4 a c - b^2},
+    With[{X = a + b x + c x^2, k = (4 c)/q},
+      (2 (2 c x + b))/(3 q Sqrt[X]) (1/X + 2 k)
+    ]
   ];
 
 (* Formula 229: Generic reduction for n (mapped from texts n) *)
 IntegrateTable[1/((a_ + b_. x_ + c_. x_^2)^n_ Sqrt[a_ + b_. x_ + c_. x_^2]), x_] /; FreeQ[{a, b, c, n}, x] && n =!= 0 && IntegerQ[n] && n > 0 :=
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q},
-    (2 (2 c x + b) Sqrt[X])/((2 n + 1) q X^(n + 1)) + (2 k n)/(2 n + 1) IntegrateTable[1/(X^(n - 1) Sqrt[X]), x]
+  With[{q = 4 a c - b^2},
+    With[{X = a + b x + c x^2, k = (4 c)/q},
+      (2 (2 c x + b) Sqrt[X])/((2 n + 1) q X^(n + 1)) + (2 k n)/(2 n + 1) IntegrateTable[1/(X^(n - 1) Sqrt[X]), x]
+    ]
   ];
 
-(* Formula 230 - 232 *)
-IntegrateTable[Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c}, x] := 
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q}, 
-    ((2 c x + b) Sqrt[X])/(4 c) + 1/(2 k) IntegrateTable[1/Sqrt[X], x]
+(* Formula 230 - 232.
+ * `k = (4 c)/q` references q, so it must be in an inner With over q --
+ * Mathilda/Mathematica's With is simultaneous-binding, so a single
+ * With[{q = 4 a c - b^2, k = (4 c)/q}, ...] would leave k bound to
+ * (4 c)/q with q as a free global symbol. *)
+IntegrateTable[Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c}, x] :=
+  With[{q = 4 a c - b^2},
+    With[{X = a + b x + c x^2, k = (4 c)/q},
+      ((2 c x + b) Sqrt[X])/(4 c) + 1/(2 k) IntegrateTable[1/Sqrt[X], x]
+    ]
   ];
-IntegrateTable[(a_ + b_. x_ + c_. x_^2)^(3/2), x_] /; FreeQ[{a, b, c}, x] := 
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q}, 
-    ((2 c x + b) Sqrt[X])/(8 c) (X + 3/(2 k)) + 3/(8 k^2) IntegrateTable[1/Sqrt[X], x]
+IntegrateTable[(a_ + b_. x_ + c_. x_^2)^(3/2), x_] /; FreeQ[{a, b, c}, x] :=
+  With[{q = 4 a c - b^2},
+    With[{X = a + b x + c x^2, k = (4 c)/q},
+      ((2 c x + b) Sqrt[X])/(8 c) (X + 3/(2 k)) + 3/(8 k^2) IntegrateTable[1/Sqrt[X], x]
+    ]
   ];
-IntegrateTable[(a_ + b_. x_ + c_. x_^2)^(5/2), x_] /; FreeQ[{a, b, c}, x] := 
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q}, 
-    ((2 c x + b) Sqrt[X])/(12 c) (X^2 + (5 X)/(4 k) + 15/(8 k^2)) + 5/(16 k^3) IntegrateTable[1/Sqrt[X], x]
+IntegrateTable[(a_ + b_. x_ + c_. x_^2)^(5/2), x_] /; FreeQ[{a, b, c}, x] :=
+  With[{q = 4 a c - b^2},
+    With[{X = a + b x + c x^2, k = (4 c)/q},
+      ((2 c x + b) Sqrt[X])/(12 c) (X^2 + (5 X)/(4 k) + 15/(8 k^2)) + 5/(16 k^3) IntegrateTable[1/Sqrt[X], x]
+    ]
   ];
 
 (* Formula 233: General reduction *)
 IntegrateTable[(a_ + b_. x_ + c_. x_^2)^n_ Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c, n}, x] && IntegerQ[n] && n > 0 :=
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q},
-    ((2 c x + b) X^n Sqrt[X])/(4 (n + 1) c) + (2 n + 1)/(2 (n + 1) k) IntegrateTable[X^(n - 1) Sqrt[X], x]
+  With[{q = 4 a c - b^2},
+    With[{X = a + b x + c x^2, k = (4 c)/q},
+      ((2 c x + b) X^n Sqrt[X])/(4 (n + 1) c) + (2 n + 1)/(2 (n + 1) k) IntegrateTable[X^(n - 1) Sqrt[X], x]
+    ]
   ];
 
 (* Formula 234 *)
@@ -810,10 +832,24 @@ IntegrateTable[x_^n_/Sqrt[a_ + b_. x_ + c_. x_^2], x_] /; FreeQ[{a, b, c, n}, x]
     1/(n c) x^(n - 1) Sqrt[X] - ((2 n - 1) b)/(2 n c) IntegrateTable[x^(n - 1)/Sqrt[X], x] - ((n - 1) a)/(n c) IntegrateTable[x^(n - 2)/Sqrt[X], x]
   ];
 
-(* Formula 242 - 245 *)
-IntegrateTable[x_ (a_ + b_. x_ + c_. x_^2)^(3/2), x_] /; FreeQ[{a, b, c}, x] := 
-  With[{X = a + b x + c x^2, q = 4 a c - b^2, k = (4 c)/q}, 
-    (X Sqrt[X])/(3 c) - (b (2 c x + b))/(8 c^2) Sqrt[X] - b/(4 c k) IntegrateTable[1/Sqrt[X], x]
+(* Formula 242 - 245.
+ * Integrate[x X^(3/2), x] = X^(5/2)/(5 c) - (b/(2 c)) Integrate[X^(3/2), x],
+ * derived from x = (X' - b)/(2 c) so x X^(3/2) = X^(3/2) X'/(2 c) - b X^(3/2)/(2 c),
+ * and the first term integrates to (2/5) X^(5/2)/(2 c).  Folding in Formula 231
+ * for Integrate[X^(3/2), x] gives the closed form below.  Verified by direct
+ * differentiation: D[F, x] - x X^(3/2) reduces to 0.
+ *
+ * The previous body
+ *   (X Sqrt[X])/(3 c) - (b (2 c x + b) Sqrt[X])/(8 c^2) - b/(4 c k) Int[1/Sqrt[X], x]
+ * is the closed form for Integrate[x Sqrt[X], x] (^(1/2), NOT ^(3/2)) -- the
+ * pattern's (3/2) exponent and the body had drifted out of sync. *)
+IntegrateTable[x_ (a_ + b_. x_ + c_. x_^2)^(3/2), x_] /; FreeQ[{a, b, c}, x] :=
+  With[{q = 4 a c - b^2},
+    With[{X = a + b x + c x^2, k = (4 c)/q},
+      X^(5/2)/(5 c)
+        - (b (2 c x + b) Sqrt[X])/(16 c^2) (X + 3/(2 k))
+        - (3 b)/(16 c k^2) IntegrateTable[1/Sqrt[X], x]
+    ]
   ];
 IntegrateTable[x_ X_^n_ Sqrt[X_], x_] /; FreeQ[{a, b, c, n}, x] && IntegerQ[n] && n > 0 :=
   With[{X = a + b x + c x^2},
