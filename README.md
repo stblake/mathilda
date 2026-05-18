@@ -2,8 +2,6 @@
 
 Mathilda is a tiny, AI Agent-generated, symbolic computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica. Written entirely in C99, Mathilda implements a recursive expression model, structural pattern matching, rewriting rules, and a surprisingly extensive library of built-in functions.
 
-The name "Mathilda" pays homage to David Stoutemyer's seminal PICOMATH-80 tiny computer algebra system. Mathilda has the goal of implementing the core of the Mathematica programming language, and the algebraic and calculus capabilities of the Derive computer algebra system.
-
 ## 🌟 Key Features
 
 * **Infinite Evaluation Semantics:** Expressions are repeatedly evaluated top-down until a fixed point is reached.
