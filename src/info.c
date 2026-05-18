@@ -19,7 +19,22 @@ void info_init(void) {
     symtab_set_docstring("Binomial", "Binomial[n, m] gives the binomial coefficient.");
 
     // Structural Manipulation
-    symtab_set_docstring("Part", "expr[[i]] or Part[expr, i] gives the i-th part of expr.");
+    symtab_set_docstring("Part",
+        "expr[[i]] or Part[expr, i]\n"
+        "\tgives the i-th part of expr.\n"
+        "expr[[-i]]\n"
+        "\tcounts from the end.\n"
+        "expr[[0]]\n"
+        "\tgives the head of expr.\n"
+        "expr[[i, j, ...]] or Part[expr, i, j, ...]\n"
+        "\tis equivalent to expr[[i]][[j]]..., descending into nested parts.\n"
+        "expr[[{i1, i2, ...}]]\n"
+        "\tgives a list of the parts i1, i2, ... of expr (wrapped in the head of expr).\n"
+        "expr[[m;;n]] / expr[[m;;n;;s]]\n"
+        "\tgives the span of parts m through n (with optional step s); ;; alone or All means all parts.\n\n"
+        "Part is treated as atomic on Integer, Real, String, Symbol, Rational[n, d], and Complex[re, im]; "
+        "Part[atom, i] for i != 0 stays unevaluated.\n"
+        "Indices are 1-based and may be negative; out-of-range indices leave the expression unevaluated.");
     symtab_set_docstring("Extract", "Extract[expr, pos] extracts the part of expr at the position specified by pos.\nExtract[expr, {pos1, pos2, ...}] extracts a list of parts of expr.\nExtract[expr, pos, h] extracts parts of expr, wrapping each of them with head h before evaluation.\nExtract[pos] represents an operator form of Extract that can be applied to an expression.");
     symtab_set_docstring("Span", "i;;j represents a span of elements i through j. i;;j;;k represents a span in steps of k.");
     symtab_set_docstring("UpTo",
