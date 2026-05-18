@@ -23,8 +23,10 @@
 #include <string.h>
 
 #include "attr.h"
+#include "common.h"
 #include "eval.h"
 #include "expr.h"
+#include "solvelinsys.h"
 #include "solvepoly.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -119,6 +121,36 @@ static bool classify_single_var(Expr* vars, Expr** var_out) {
     return false;
 }
 
+/* True iff `expr` is the kind of compound that the linear-system
+ * specialist accepts: an `And` of equations, a `List` of equations,
+ * or a single `Equal` that the caller has marked as multivariate.
+ * The detailed shape check (each conjunct is `Equal[_, _]`) is done
+ * inside solvelinsys_solve_linear_system itself. */
+static bool is_conjunction_of_equations(const Expr* expr) {
+    if (!expr || expr->type != EXPR_FUNCTION) return false;
+    if (expr->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = expr->data.function.head->data.symbol;
+    return h == SYM_And || h == SYM_List;
+}
+
+/* True iff `vars` is a List of at least two symbols.  Used to route
+ * single-Equal-but-multi-variable inputs through the linear-system
+ * specialist. */
+static bool is_multi_var_list(const Expr* vars) {
+    return vars
+        && vars->type == EXPR_FUNCTION
+        && vars->data.function.head->type == EXPR_SYMBOL
+        && vars->data.function.head->data.symbol == SYM_List
+        && vars->data.function.arg_count >= 2;
+}
+
+/* Wrap a single Expr* (borrowed) in a freshly allocated `List[expr]`.
+ * The caller takes ownership of the returned wrapper. */
+static Expr* wrap_in_list(Expr* expr) {
+    return expr_new_function(expr_new_symbol("List"),
+                             (Expr*[]){ expr_copy(expr) }, 1);
+}
+
 /* ------------------------------------------------------------------ *
  *  Builtin entry.                                                     *
  * ------------------------------------------------------------------ */
@@ -176,32 +208,98 @@ Expr* builtin_solve(Expr* res) {
     Expr* vars = res->data.function.args[1];   /* borrowed, unevaluated */
     Expr* dom  = (pos_end >= 3) ? res->data.function.args[2] : NULL;
 
-    Expr* var = NULL;
-    if (!classify_single_var(vars, &var)) {
+    /* Approximate-number preprocessing: if the equation system contains
+     * any inexact numeric leaf, force-rationalise it so the downstream
+     * specialists (polynomial / linear-system) -- which assume exact
+     * arithmetic -- can run.  The result is numericalised back at the
+     * tail so the user observes inexact-in / inexact-out semantics
+     * consistent with Integrate and the exact-symbolic builtins
+     * (Apart, Cancel, Together, Factor, ...).
+     *
+     * The scan also captures the *minimum* precision (in bits) across
+     * every inexact leaf: that precision is then used both as the
+     * rationalisation tolerance and as the precision of the final
+     * numericalised result, so a 100-bit MPFR input flows back out at
+     * 100 bits, a mixed Real + MPFR input drops to the lower 53 bits,
+     * etc.  The vars argument (always a symbol or a list of symbols)
+     * is never touched. */
+    CommonInexactInfo inexact = common_scan_inexact(expr);
+    if (inexact.has_inexact) {
+        Expr* rationalised = common_rationalize_input(expr, inexact.min_bits);
         expr_free(expr);
-        return NULL;
+        expr = rationalised;
     }
 
-    /* Equation may have been simplified all the way to True / False
-     * during the explicit evaluate() above (e.g. Equal[1, 0] → False).
-     * Mathematica's convention is:
-     *   True  → {{}}   (tautology: full-dimensional solution set)
-     *   False → {}     (contradiction: no solutions)            */
+    /* True/False short-circuits regardless of the var shape.
+     *   True  -> {{}}   (tautology: full-dimensional solution set)
+     *   False -> {}     (contradiction: no solutions)             */
     Expr* out = NULL;
     if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_True) {
         Expr* empty = expr_new_function(expr_new_symbol("List"), NULL, 0);
         out = expr_new_function(expr_new_symbol("List"),
                                 (Expr*[]){ empty }, 1);
-    } else if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_False) {
+        expr_free(expr);
+        return out;
+    }
+    if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_False) {
         out = expr_new_function(expr_new_symbol("List"), NULL, 0);
-    } else if (expr->type == EXPR_FUNCTION
-        && expr->data.function.head->type == EXPR_SYMBOL
-        && expr->data.function.head->data.symbol == SYM_Equal
-        && expr->data.function.arg_count == 2) {
-        out = solvepoly_solve_polynomial_equality(expr, var, dom, &opts.poly);
+        expr_free(expr);
+        return out;
     }
 
-    expr_free(expr);
+    /* Dispatch.
+     *
+     *   Multi-var single Equal  ->  linear-system specialist.
+     *   And/List of Equals      ->  linear-system specialist.
+     *   Single var single Equal ->  polynomial-equality specialist.
+     *
+     * The linear-system specialist canonicalises each equation to
+     * `lhs - rhs` itself and returns NULL when the input is non-affine
+     * in the vars, in which case we leave Solve unevaluated. */
+    bool conj = is_conjunction_of_equations(expr);
+    bool multi_var = is_multi_var_list(vars);
+
+    if (conj || multi_var) {
+        /* The linear-system specialist wants `vars` as a List of
+         * symbols.  When the caller passed a bare symbol, wrap it. */
+        Expr* vars_list = NULL;
+        if (vars->type == EXPR_SYMBOL) {
+            vars_list = wrap_in_list(vars);
+        } else {
+            vars_list = expr_copy(vars);
+        }
+        out = solvelinsys_solve_linear_system(expr, vars_list, dom);
+        expr_free(vars_list);
+        expr_free(expr);
+    } else {
+        /* Single-variable path. */
+        Expr* var = NULL;
+        if (!classify_single_var(vars, &var)) {
+            expr_free(expr);
+            return NULL;
+        }
+
+        if (expr->type == EXPR_FUNCTION
+            && expr->data.function.head->type == EXPR_SYMBOL
+            && expr->data.function.head->data.symbol == SYM_Equal
+            && expr->data.function.arg_count == 2) {
+            out = solvepoly_solve_polynomial_equality(expr, var, dom, &opts.poly);
+        }
+        expr_free(expr);
+    }
+
+    /* If we rationalised the input, round-trip the bindings back to
+     * floating-point at the original (minimum) precision.  The
+     * traversal recurses through List / Rule so {{x -> 1/2}} comes out
+     * as {{x -> 0.5}}; the unknown LHS symbols are left alone.  When
+     * the original inputs were MPFR at > 53 bits, the result also
+     * carries MPFR precision. */
+    if (inexact.has_inexact && out) {
+        Expr* numeric = common_numericalize_result(out, inexact.min_bits);
+        expr_free(out);
+        out = numeric;
+    }
+
     return out;  /* evaluator frees res on non-NULL return */
 }
 
@@ -254,4 +352,5 @@ void solve_init(void) {
         "\tDefault: Automatic.  Reserved.");
 
     solvepoly_init();
+    solvelinsys_init();
 }

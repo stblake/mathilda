@@ -522,11 +522,29 @@ Attempts to solve an equation or system of equations for one or more variables.
 
 **Features**:
 - `HoldAll`, `Protected`.
-- The initial implementation handles a single equality `lhs == rhs` that is
-  polynomial in one variable *after* clearing denominators.  Multi-equation
-  systems and inequalities are reserved for a future cut and currently leave
-  `Solve[...]` unevaluated.
-- Acts as a router that dispatches to `Solve`SolvePolynomialEquality` (see below).
+- Acts as a router that classifies its input and dispatches to a specialist:
+  - Single equality, single variable -> `Solve`SolvePolynomialEquality` (below).
+  - Multi-variable list, or `And`/`List` of equations -> `Solve`SolveLinearSystem`
+    (also below).  The linear-system specialist accepts the same input shapes
+    that the router uses to decide dispatch; it canonicalises each equation
+    `lhs_i == rhs_i` to `lhs_i - rhs_i` and refuses (returns `NULL`) when the
+    system is not affine in the variables, in which case the router leaves
+    `Solve` unevaluated.
+- Inequalities and transcendental systems are reserved for future work and
+  currently leave `Solve[...]` unevaluated.
+- **Approximate-number input**: if the equation contains any inexact numeric
+  leaf (`Real` / MPFR), it is force-rationalised via the shared preprocessor
+  in `src/common.c` before dispatch (so `1.5` becomes `3/2`, `N[Pi]` becomes
+  a bit-exact rational, etc.), then the exact bindings produced by the
+  specialist are numericalised on the way out -- same `inexact-in /
+  inexact-out` contract `Integrate` and the exact-symbolic builtins
+  (`Apart`, `Cancel`, `Together`, `Factor`, ...) follow.  The `vars`
+  argument is never rationalised.  The preprocessor also tracks the
+  *minimum* precision (in bits) across every inexact leaf and uses it
+  both as the rationalisation tolerance and as the output precision, so a
+  pure 30-digit-MPFR input flows back out at 30 digits, while a mixed
+  Real + MPFR input drops to machine precision (the lower of the two)
+  -- matching standard inexact-arithmetic semantics.
 - Returns the solution set as a `List` of `List` of `Rule` pairs:
   - `{}` -- no solutions.
   - `{{}}` -- tautology (full-dimensional solution set).
@@ -629,11 +647,88 @@ Out[12]= {{x -> 2}, {x -> 3}}
 In[13]:= Solve[x^2 - 2 == 0, x, Integers]
 Out[13]= {}                     (* Sqrt[2] is not an Integer *)
 
+In[14]:= Solve[1.5 x + 3 == 0, x]
+Out[14]= {{x -> -2.0}}          (* approximate-in / approximate-out *)
+
+In[15]:= Solve[{1.5 x + y == 4.5, x - y == 0.5}, {x, y}]
+Out[15]= {{x -> 2.0, y -> 1.5}}
+
+In[16]:= Solve[N[Pi, 50] x == 1, x]
+Out[16]= {{x -> 0.31830988618379067...}}   (* 50-digit MPFR result *)
+
 In[14]:= Solve[x^3 + 1 == 0, x, Reals]
 Out[14]= {{x -> -1}}            (* real cube root, not (-1)^(1/3) *)
 
 In[15]:= Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x, Integers]
 Out[15]= {{x -> 1}, {x -> 2}, {x -> 3}}
+
+In[16]:= Solve[3 x + 2 y == 11 && x + y == 12, {x, y}]
+Out[16]= {{x -> -13, y -> 25}}
+
+In[17]:= Solve[a x + c == 1 && b x - d y == 2, {x, y}]
+Out[17]= {{x -> (1 - c)/a, y -> (-2 a + b - b c)/(a d)}}
+
+In[18]:= Solve[3 x + 2 y == 11, {x, y}]
+Solve::svars: Equations may not give solutions for all "solve" variables.
+Out[18]= {{y -> 11/2 - 3 x/2}}     (* x is free; only y has a rule *)
+
+In[19]:= Solve[3 x + 2 y == 11 && x + y == 12 && 3 x + y == 32, {x, y}]
+Out[19]= {}                        (* over-determined, inconsistent *)
+```
+
+## Solve`SolveLinearSystem
+The linear-system specialist invoked by `Solve` for multi-variable inputs
+(`And` / `List` of equations, or a single equation paired with a multi-symbol
+variable list).  Reachable directly via its context-qualified name when the
+caller has already classified its input.
+- `Solve`SolveLinearSystem[eqns, vars]`
+- `Solve`SolveLinearSystem[eqns, vars, dom]`
+
+**Features**:
+- `Protected`.
+- `eqns` may be a single `Equal[lhs, rhs]`, `And[Equal[...], ...]`, or
+  `List[Equal[...], ...]`.  `vars` must be a `List` of distinct symbols.
+- Each equation is canonicalised to `lhs - rhs` and `Expand`-ed, then
+  asserted affine in `vars`: coefficient of each `var` must be free of the
+  variables, and the residual after subtracting `sum_j coeff_j * vars[j]`
+  must also be free of the variables.  Non-affine systems return `NULL`
+  (caller leaves `Solve` unevaluated).
+- The m x (n+1) augmented matrix is built with variable columns in
+  **reversed order** (M[i][0] is the coefficient of `vars[n-1]`).  This is
+  what produces Mathematica's `Solve::svars` convention for under-determined
+  systems: left-to-right Gauss--Jordan then naturally pivots on the
+  right-most variable first, leaving left-most variables free.
+- Gauss--Jordan elimination with symbolic-pivot selection: among non-zero
+  candidates in the current column, prefer a concretely-non-zero entry
+  (`Integer`, `Rational`, `Real`) over a symbolic one.  A column whose
+  entries all simplify to zero (via `Cancel[Together[.]]`) becomes a free
+  variable.  After reduction, any zero row whose augmented column is
+  non-zero is detected as an inconsistency.
+- Output shape:
+  - Unique solution: `{{v1 -> e1, v2 -> e2, ...}}` (rules in input order).
+  - Inconsistent system: `{}`.
+  - Under-determined system: `{{pivot_vars -> exprs in free vars}}`; emits
+    `Solve::svars`; free variables produce no rule.
+  - Empty equation list (`Solve[True, vars]`): `{{}}` (tautology).
+- Domain filtering (post-pass):
+  - `Integers`: every emitted rule's RHS must be a concrete `EXPR_INTEGER`;
+    otherwise the entire solution is dropped (`{}`).
+  - `Reals`: any RHS that syntactically contains a `Complex[_, _]` head is
+    treated as non-real and the whole solution is dropped.
+  - `Complexes` (default): no filter.
+
+```mathematica
+In[1]:= Solve`SolveLinearSystem[{x + y == 3, x - y == 1}, {x, y}]
+Out[1]= {{x -> 2, y -> 1}}
+
+In[2]:= Solve`SolveLinearSystem[{x + y == 0}, {x, y}]
+Solve::svars: Equations may not give solutions for all "solve" variables.
+Out[2]= {{y -> -x}}                (* x free *)
+
+In[3]:= Solve`SolveLinearSystem[
+            {x + y + z == 6, 2 x - y + z == 3, x + 2 y - z == 2},
+            {x, y, z}]
+Out[3]= {{x -> 1, y -> 2, z -> 3}}
 ```
 
 ## Solve`SolvePolynomialEquality

@@ -687,14 +687,40 @@ bool internal_args_contain_inexact(const Expr* res) {
     return false;
 }
 
-/* Force-rationalise a single inexact leaf. We try the relaxed
- * convergent-bound algorithm first — that's what recovers `1/9.` as `1/9`
- * rather than its bit-exact representation `562949953421312/5066549580791809`.
- * Only when no convergent satisfies the c/q² bound (e.g. for an actual
- * irrational like N[Pi]) do we fall back to the bit-exact ½-ulp algorithm,
- * which always succeeds for finite inputs. The fallback ensures the
- * downstream exact-arithmetic code never sees a stray Real / MPFR. */
-static Expr* force_rationalize_leaf(const Expr* e) {
+/* Force-rationalise a single inexact leaf.
+ *
+ * Common to all modes: we always try `RATIONALIZE_DEFAULT` first (the
+ * relaxed convergent-bound algorithm) so a clean rational like `1.5`
+ * recovers as `3/2` rather than its bit-exact double form, and `1/9.`
+ * recovers as `1/9`.  The mode parameter only affects the *fallback*
+ * for cases where no convergent meets the c/q² bound (typically honest
+ * transcendentals like N[Pi]):
+ *
+ *   bits == 0           -- legacy default.  Fall back to RATIONALIZE_ZERO
+ *                          (½-ulp at the input's double precision).  The
+ *                          resulting rational round-trips exactly through
+ *                          double.
+ *
+ *   1 ≤ bits < 52       -- sub-machine precision (only seen when the
+ *                          caller has an MPFR leaf with explicit low
+ *                          precision).  Fall back to RATIONALIZE_TOLERANCE
+ *                          with dx = 2^(-bits): the smallest-denominator
+ *                          rational in [x - 2^(-bits), x + 2^(-bits)].
+ *                          This is no tighter than the requested precision,
+ *                          giving short denominators when the caller
+ *                          accepts a coarse approximation.
+ *
+ *   bits ≥ 52           -- at or above machine precision.  TOLERANCE with
+ *                          dx ≤ ulp(x) loses precision in the interval
+ *                          arithmetic (the rationalize_default_double
+ *                          comment in this file explains why), so we use
+ *                          the same RATIONALIZE_ZERO fallback as the
+ *                          legacy path.  The output is bit-exact at
+ *                          double precision; if the caller wants more
+ *                          precision than that, they will recover it
+ *                          when numericalising the eventual result at
+ *                          MPFR. */
+static Expr* force_rationalize_leaf(const Expr* e, long bits) {
     if (!is_inexact_leaf(e)) return expr_copy((Expr*)e);
 
     double xv;
@@ -703,7 +729,12 @@ static Expr* force_rationalize_leaf(const Expr* e) {
     mpz_t n, d;
     bool ok = internal_rationalize_double(xv, 0.0, RATIONALIZE_DEFAULT, n, d);
     if (!ok) {
-        ok = internal_rationalize_double(xv, 0.0, RATIONALIZE_ZERO, n, d);
+        if (bits > 0 && bits < 52) {
+            double dx = ldexp(1.0, -bits);
+            ok = internal_rationalize_double(xv, dx, RATIONALIZE_TOLERANCE, n, d);
+        } else {
+            ok = internal_rationalize_double(xv, 0.0, RATIONALIZE_ZERO, n, d);
+        }
     }
     if (!ok) return expr_copy((Expr*)e);
 
@@ -712,12 +743,13 @@ static Expr* force_rationalize_leaf(const Expr* e) {
     return out;
 }
 
-Expr* internal_force_rationalize(const Expr* e) {
+Expr* internal_force_rationalize_bits(const Expr* e, long bits) {
     if (!e) return NULL;
 
-    /* Inexact numeric leaves get the "lenient → bit-exact" treatment. */
+    /* Inexact numeric leaves get the "lenient → bit-exact" treatment
+     * (bits == 0) or the precision-respecting interval search (bits > 0). */
     if (is_inexact_leaf(e)) {
-        return force_rationalize_leaf(e);
+        return force_rationalize_leaf(e, bits);
     }
 
     /* Exact atoms pass through. Notably, named constants (Pi, E, ...) are
@@ -736,8 +768,8 @@ Expr* internal_force_rationalize(const Expr* e) {
     /* Complex[re, im] — rationalise components, normalise via make_complex. */
     Expr *re_arg, *im_arg;
     if (is_complex((Expr*)e, &re_arg, &im_arg)) {
-        Expr* nre = internal_force_rationalize(re_arg);
-        Expr* nim = internal_force_rationalize(im_arg);
+        Expr* nre = internal_force_rationalize_bits(re_arg, bits);
+        Expr* nim = internal_force_rationalize_bits(im_arg, bits);
         Expr* c = make_complex(nre, nim);
         return eval_and_free(c);
     }
@@ -750,7 +782,7 @@ Expr* internal_force_rationalize(const Expr* e) {
     /* General compound: recurse into head and args, rebuild, re-evaluate
      * so Plus/Times/Power can re-canonicalise. */
     const size_t n = e->data.function.arg_count;
-    Expr* new_head = internal_force_rationalize(e->data.function.head);
+    Expr* new_head = internal_force_rationalize_bits(e->data.function.head, bits);
     Expr** new_args = NULL;
     if (n > 0) {
         new_args = (Expr**)malloc(sizeof(Expr*) * n);
@@ -759,12 +791,16 @@ Expr* internal_force_rationalize(const Expr* e) {
             return expr_copy((Expr*)e);
         }
         for (size_t i = 0; i < n; i++) {
-            new_args[i] = internal_force_rationalize(e->data.function.args[i]);
+            new_args[i] = internal_force_rationalize_bits(e->data.function.args[i], bits);
         }
     }
     Expr* rebuilt = expr_new_function(new_head, new_args, n);
     free(new_args);
     return eval_and_free(rebuilt);
+}
+
+Expr* internal_force_rationalize(const Expr* e) {
+    return internal_force_rationalize_bits(e, 0);
 }
 
 Expr* internal_rationalize_then_numericalize(Expr* res,

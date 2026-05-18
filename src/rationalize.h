@@ -113,6 +113,23 @@ bool internal_args_contain_inexact(const Expr* res);
  * consumed. */
 Expr* internal_force_rationalize(const Expr* e);
 
+/* Precision-aware variant of internal_force_rationalize.
+ *
+ * `bits` is the precision in bits at which each inexact leaf should be
+ * rationalised:
+ *   bits == 0  →  legacy behaviour (convergent-bound, then ½-ulp
+ *                 fallback per-leaf).  Identical to
+ *                 internal_force_rationalize.
+ *   bits >  0  →  use TOLERANCE mode with dx = 2^(-bits) for every
+ *                 inexact leaf.  Caller is expected to pass the
+ *                 *minimum* bit-precision observed across all inexact
+ *                 leaves of the input, so the rationalisation is no
+ *                 tighter than the least-precise leaf.  Used by the
+ *                 common.c preprocessor (Solve / Integrate / ...) to
+ *                 propagate input precision through to the numericalised
+ *                 result. */
+Expr* internal_force_rationalize_bits(const Expr* e, long bits);
+
 /* Wrapper used by exact-symbolic builtins. If any argument of `res`
  * contains an inexact leaf, build a clone with each argument
  * force-rationalised and dispatch to `core(clone)`; on success the

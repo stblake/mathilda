@@ -18,13 +18,13 @@
 #include "integrate.h"
 #include "intrat.h"
 #include "intrischnorman.h"
+#include "common.h"
 #include "expr.h"
 #include "eval.h"
 #include "parse.h"
 #include "symtab.h"
 #include "attr.h"
 #include "internal.h"
-#include "rationalize.h"
 #include "sym_names.h"
 
 #include <stdbool.h>
@@ -37,22 +37,6 @@
  * predicates we call below return either True or False. */
 static bool is_true_symbol(const Expr* e) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
-}
-
-/* Recursively scan `e` for any EXPR_REAL leaf.  Mathilda's rational
- * integrator cannot reason about inexact numbers; we surface them at
- * dispatch with an Integrate::inexact message rather than letting the
- * pipeline produce ComplexInfinity / 1/0 partway through. */
-static bool expr_contains_real(const Expr* e) {
-    if (!e) return false;
-    if (e->type == EXPR_REAL) return true;
-    if (e->type == EXPR_FUNCTION) {
-        if (expr_contains_real(e->data.function.head)) return true;
-        for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            if (expr_contains_real(e->data.function.args[i])) return true;
-        }
-    }
-    return false;
 }
 
 /* Test whether `f` is a polynomial in `x`.  Calls the existing
@@ -263,27 +247,22 @@ Expr* builtin_integrate(Expr* res) {
         }
     }
 
-    /* Inexact integrands: try Rationalize[f] first.  Floats with an
-     * exact rational equivalent within the default tolerance (4.5,
-     * 3.125, ...) coerce cleanly; transcendental floats (N[Pi], ...)
-     * survive Rationalize unchanged, in which case we emit
-     * Integrate::inexact and bubble back unevaluated. */
+    /* Inexact integrands: route through the shared preprocessor in
+     * common.c -- if `f` contains any inexact leaf, force-rationalise
+     * it (with bit-exact ½-ulp fallback so transcendental floats like
+     * N[Pi] still become rationals), integrate exactly, then
+     * numericalise the result so the user observes inexact-in /
+     * inexact-out semantics.  Same contract as Solve.
+     *
+     * The scan also captures the *minimum* precision (in bits) across
+     * every inexact leaf, which is then used both as the rationalisation
+     * tolerance and as the precision of the final numericalised result. */
+    CommonInexactInfo inexact = common_scan_inexact(f);
     Expr* coerced = NULL;
     Expr* effective_f = f;
-    if (expr_contains_real(f)) {
-        coerced = internal_rationalize_expr(f, 0.0, RATIONALIZE_DEFAULT);
-        if (!coerced || expr_contains_real(coerced)) {
-            static uint64_t last_warned_hash = 0;
-            uint64_t h = expr_hash(res);
-            if (h != last_warned_hash) {
-                fprintf(stderr,
-                    "Integrate::inexact: Integrand contains inexact numbers which "
-                    "cannot be coerced to exact numbers with Rationalize[number].\n");
-                last_warned_hash = h;
-            }
-            if (coerced) expr_free(coerced);
-            return NULL;
-        }
+    if (inexact.has_inexact) {
+        coerced = common_rationalize_input(f, inexact.min_bits);
+        if (!coerced) return NULL;
         effective_f = coerced;
     }
 
@@ -308,6 +287,13 @@ Expr* builtin_integrate(Expr* res) {
     }
 
     if (coerced) expr_free(coerced);
+
+    if (inexact.has_inexact && result) {
+        Expr* numeric = common_numericalize_result(result, inexact.min_bits);
+        expr_free(result);
+        result = numeric;
+    }
+
     return result;
 }
 

@@ -94,6 +94,7 @@ set(COMMON_SRC
     ../src/numeric.c
     ../src/precision.c
     ../src/rationalize.c
+    ../src/common.c
     ../src/zupoly.c
     ../src/bpoly.c
     ../src/mpoly.c
@@ -113,6 +114,7 @@ set(COMMON_SRC
     ../src/root.c
     ../src/solve.c
     ../src/solvepoly.c
+    ../src/solvelinsys.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})

@@ -214,11 +214,13 @@ static void test_non_polynomial(void) {
              "Solve[Equal[Sin[x], 0], x]");
 }
 
-/* Multivariate vars list (system in two variables) -- the initial cut
- * declines to dispatch and the call stays unevaluated. */
-static void test_multivariate_declined(void) {
+/* Single equation with multi-variable list -- the linear-system
+ * specialist solves for the rightmost variable (here `y` is absent
+ * from the equation, so `x` becomes the pivot and `y` stays free).
+ * Emits Solve::svars; only the pivot variable's rule appears. */
+static void test_multivariate_one_eq_one_pivot(void) {
     run_test("Solve[x + 1 == 0, {x, y}]",
-             "Solve[Equal[Plus[x, 1], 0], List[x, y]]");
+             "List[List[Rule[x, -1]]]");
 }
 
 /* Cardano via Cubics -> True for the binomial x^3 - 1 = 0 (the
@@ -715,6 +717,207 @@ static void test_unsupported_domains_unevaluated(void) {
              "Solve[Equal[Plus[x, 1], 0], x, Algebraics]");
 }
 
+/* ============================================================ */
+/* Linear-system specialist (Solve`SolveLinearSystem) tests.    */
+/* ============================================================ */
+
+/* Two integer-coefficient equations in two unknowns; unique solution. */
+static void test_linsys_two_eq_two_var_integers(void) {
+    run_test("Solve[3 x + 2 y == 11 && x + y == 12, {x, y}]",
+             "List[List[Rule[x, -13], Rule[y, 25]]]");
+}
+
+/* Symbolic-coefficient 2x2 system.  Mathilda's canonical form may
+ * differ from Mathematica's print form, but the values are
+ * mathematically identical:
+ *   x = (1 - c)/a              <=>  Mathematica: -((-1 + c)/a)
+ *   y = (-2 a + b - b c)/(a d) <=>  Mathematica: -((2 a - b + b c)/(a d))  */
+static void test_linsys_symbolic_coefficients(void) {
+    run_test("Solve[a x + c == 1 && b x - d y == 2, {x, y}]",
+             "List[List[Rule[x, Times[Power[a, -1], "
+                              "Plus[1, Times[-1, c]]]], "
+                       "Rule[y, Times[Power[a, -1], "
+                              "Plus[Times[-2, a], b, Times[-1, Times[b, c]]], "
+                              "Power[d, -1]]]]]");
+}
+
+/* Single equation, two-variable list -- underdetermined system.
+ * The rightmost variable (y) is the pivot; x is free.
+ * Solve::svars warning fires; only the rule for y appears. */
+static void test_linsys_underdetermined_emits_svars(void) {
+    /* y = 11/2 - 3x/2 = (11 - 3x)/2.  Mathilda's Times canonical:
+     *   Rational[1, 2] * Plus[11, -3 x]                                  */
+    run_test("Solve[3 x + 2 y == 11, {x, y}]",
+             "List[List[Rule[y, Times[Rational[1, 2], "
+                              "Plus[11, Times[-3, x]]]]]]");
+}
+
+/* Three equations in two unknowns; over-determined inconsistent. */
+static void test_linsys_overdetermined_inconsistent(void) {
+    run_test("Solve[3 x + 2 y == 11 && x + y == 12 && 3 x + y == 32, {x, y}]",
+             "List[]");
+}
+
+/* Three equations in two unknowns where the third is implied by the
+ * first two -- over-determined but *consistent*.  Result is the same
+ * as solving just the first two. */
+static void test_linsys_overdetermined_consistent(void) {
+    run_test("Solve[3 x + 2 y == 11 && x + y == 12 "
+             "      && 4 x + 3 y == 23, {x, y}]",
+             "List[List[Rule[x, -13], Rule[y, 25]]]");
+}
+
+/* List-form (rather than And-form) input is accepted equally. */
+static void test_linsys_list_form_input(void) {
+    run_test("Solve[{3 x + 2 y == 11, x + y == 12}, {x, y}]",
+             "List[List[Rule[x, -13], Rule[y, 25]]]");
+}
+
+/* Three-variable system.  Standard textbook example.
+ *    x + y + z = 6
+ *    2x - y + z = 3
+ *    x + 2y - z = 2     ->   {x, y, z} = {1, 2, 3}                    */
+static void test_linsys_three_var(void) {
+    run_test("Solve[x + y + z == 6 && 2 x - y + z == 3 "
+             "      && x + 2 y - z == 2, {x, y, z}]",
+             "List[List[Rule[x, 1], Rule[y, 2], Rule[z, 3]]]");
+}
+
+/* Rational-coefficient system. */
+static void test_linsys_rational_coefficients(void) {
+    /* x/2 + y/3 == 1 && x + y == 5/2
+     * From first: 3x + 2y == 6.  Combined with 2x + 2y == 5:
+     * x == 1, y == 3/2. */
+    run_test("Solve[x/2 + y/3 == 1 && x + y == 5/2, {x, y}]",
+             "List[List[Rule[x, 1], Rule[y, Rational[3, 2]]]]");
+}
+
+/* Reals domain: pure-real coefficients trivially yield real solutions. */
+static void test_linsys_reals_domain(void) {
+    run_test("Solve[3 x + 2 y == 11 && x + y == 12, {x, y}, Reals]",
+             "List[List[Rule[x, -13], Rule[y, 25]]]");
+}
+
+/* Integers domain: unique integer solution survives the filter. */
+static void test_linsys_integers_integer_solution(void) {
+    run_test("Solve[3 x + 2 y == 11 && x + y == 12, {x, y}, Integers]",
+             "List[List[Rule[x, -13], Rule[y, 25]]]");
+}
+
+/* Integers domain: rational solution is dropped. */
+static void test_linsys_integers_rational_dropped(void) {
+    /* 2x + y == 1, x + y == 0  ->  x = 1, y = -1.  Integer, kept. */
+    run_test("Solve[2 x + y == 1 && x + y == 0, {x, y}, Integers]",
+             "List[List[Rule[x, 1], Rule[y, -1]]]");
+    /* 2x + y == 0, 4x + y == 1  ->  x = 1/2, y = -1.  Rational x, dropped. */
+    run_test("Solve[2 x + y == 0 && 4 x + y == 1, {x, y}, Integers]",
+             "List[]");
+}
+
+/* Trivial single Equal expressed via And of one (or via List of one). */
+static void test_linsys_single_eq_and_one(void) {
+    run_test("Solve[{x + y == 3, x - y == 1}, {x, y}]",
+             "List[List[Rule[x, 2], Rule[y, 1]]]");
+}
+
+/* Tautological row (0 == 0) inside a conjunction is dropped silently;
+ * unique solution is recovered from the remaining equations. */
+static void test_linsys_zero_row_consistent(void) {
+    run_test("Solve[x + y == 3 && 0 == 0 && x - y == 1, {x, y}]",
+             "List[List[Rule[x, 2], Rule[y, 1]]]");
+}
+
+/* False conjunct collapses the And to False before the specialist
+ * sees the input -- Solve returns {} immediately. */
+static void test_linsys_false_conjunct(void) {
+    run_test("Solve[x + y == 3 && 1 == 0, {x, y}]",
+             "List[]");
+}
+
+/* Non-affine system declines to dispatch -- left unevaluated. */
+static void test_linsys_nonlinear_declined(void) {
+    run_test("Solve[x^2 + y == 1 && x - y == 0, {x, y}]",
+             "Solve[And[Equal[Plus[Power[x, 2], y], 1], "
+                       "Equal[Plus[x, Times[-1, y]], 0]], List[x, y]]");
+    /* Cross-term x*y -- non-affine. */
+    run_test("Solve[x y == 1 && x + y == 2, {x, y}]",
+             "Solve[And[Equal[Times[x, y], 1], Equal[Plus[x, y], 2]], "
+                  "List[x, y]]");
+}
+
+/* Direct invocation of the qualified builtin Solve`SolveLinearSystem. */
+static void test_linsys_qualified_builtin(void) {
+    run_test("Solve`SolveLinearSystem[{x + y == 3, x - y == 1}, {x, y}]",
+             "List[List[Rule[x, 2], Rule[y, 1]]]");
+    run_test("Solve`SolveLinearSystem[{x + y == 0}, {x, y}]",
+             "List[List[Rule[y, Times[-1, x]]]]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  Approximate-number preprocessing.                                  *
+ *                                                                    *
+ *  An equation containing inexact (Real) numbers is force-rationalised
+ *  through src/common.c, dispatched to the exact specialist, and the
+ *  bindings are numericalised on the way out so the caller observes
+ *  inexact-in / inexact-out semantics (same contract Integrate uses).
+ * ------------------------------------------------------------------ */
+
+/* Linear equation with float coefficients: 1.5 x + 3 == 0 -> x == -2.0.
+ * Coefficients are rationalised (3/2, 3), solved exactly to -2, then
+ * numericalised. */
+static void test_approx_linear(void) {
+    run_test("Solve[1.5 x + 3 == 0, x]",
+             "List[List[Rule[x, -2.0]]]");
+}
+
+/* Quadratic with float constant term: x^2 - 2.25 == 0 -> x == ±1.5. */
+static void test_approx_quadratic(void) {
+    run_test("Solve[x^2 - 2.25 == 0, x]",
+             "List[List[Rule[x, -1.5]], List[Rule[x, 1.5]]]");
+}
+
+/* Quadratic with all-float coefficients reducing to rational roots:
+ * 0.5 x^2 - x - 1.5 == 0  <=>  x^2 - 2 x - 3 == 0  <=>  x ∈ {-1, 3}. */
+static void test_approx_quadratic_rational_roots(void) {
+    run_test("Solve[0.5 x^2 - x - 1.5 == 0, x]",
+             "List[List[Rule[x, -1.0]], List[Rule[x, 3.0]]]");
+}
+
+/* Two-variable linear system with float coefficients.  Exercises the
+ * linear-system specialist path through the common preprocessor. */
+static void test_approx_linsys(void) {
+    run_test("Solve[{1.5 x + y == 4.5, x - y == 0.5}, {x, y}]",
+             "List[List[Rule[x, 2.0], Rule[y, 1.5]]]");
+}
+
+/* Exact integer input must pass straight through the preprocessor with
+ * no numericalisation -- common_scan_inexact reports has_inexact ==
+ * false, the post-process is skipped, the result stays exact-integer. */
+static void test_approx_pure_exact_untouched(void) {
+    run_test("Solve[x^2 - 4 == 0, x]",
+             "List[List[Rule[x, -2]], List[Rule[x, 2]]]");
+}
+
+#ifdef USE_MPFR
+/* Precision propagation: pure-MPFR input at 30 decimal digits flows
+ * back out at the same 30-digit (≈ 100-bit) precision.  We assert via
+ * `Precision[...]` rather than the FullForm of the binding, because
+ * the printer collapses trailing zeros on clean-integer-valued MPFR
+ * (e.g. `7.0`) so a string match would hide the precision. */
+static void test_approx_mpfr_precision_propagation(void) {
+    run_test("Precision[(Solve[N[1, 30] x == 7, x][[1]][[1]])[[2]]]",
+             "30.103");
+}
+
+/* Mixed Real (53 bits) + MPFR (100 bits): the minimum precision wins,
+ * so the output is machine precision -- the Real "infects" the answer
+ * with its lower precision, matching standard Mathematica semantics. */
+static void test_approx_mixed_real_mpfr_picks_min(void) {
+    run_test("Precision[(Solve[(0.5 + N[Pi, 30]) x == 1, x][[1]][[1]])[[2]]]",
+             "MachinePrecision");
+}
+#endif
+
 int main(void) {
     symtab_init();
     core_init();
@@ -734,7 +937,7 @@ int main(void) {
     TEST(test_mixed);
     TEST(test_trivial);
     TEST(test_non_polynomial);
-    TEST(test_multivariate_declined);
+    TEST(test_multivariate_one_eq_one_pivot);
     TEST(test_cubic_radical);
     TEST(test_nquadratic_n3);
     TEST(test_rational_parametric);
@@ -764,6 +967,36 @@ int main(void) {
     TEST(test_integers_rational);
     TEST(test_integers_edge_cases);
     TEST(test_unsupported_domains_unevaluated);
+
+    /* Linear-system specialist tests. */
+    TEST(test_linsys_two_eq_two_var_integers);
+    TEST(test_linsys_symbolic_coefficients);
+    TEST(test_linsys_underdetermined_emits_svars);
+    TEST(test_linsys_overdetermined_inconsistent);
+    TEST(test_linsys_overdetermined_consistent);
+    TEST(test_linsys_list_form_input);
+    TEST(test_linsys_three_var);
+    TEST(test_linsys_rational_coefficients);
+    TEST(test_linsys_reals_domain);
+    TEST(test_linsys_integers_integer_solution);
+    TEST(test_linsys_integers_rational_dropped);
+    TEST(test_linsys_single_eq_and_one);
+    TEST(test_linsys_zero_row_consistent);
+    TEST(test_linsys_false_conjunct);
+    TEST(test_linsys_nonlinear_declined);
+    TEST(test_linsys_qualified_builtin);
+
+    /* Approximate-number preprocessing (common.c). */
+    TEST(test_approx_linear);
+    TEST(test_approx_quadratic);
+    TEST(test_approx_quadratic_rational_roots);
+    TEST(test_approx_linsys);
+    TEST(test_approx_pure_exact_untouched);
+#ifdef USE_MPFR
+    TEST(test_approx_mpfr_precision_propagation);
+    TEST(test_approx_mixed_real_mpfr_picks_min);
+#endif
+
     printf("All solve tests passed!\n");
     return 0;
 }
