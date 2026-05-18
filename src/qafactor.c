@@ -1879,7 +1879,28 @@ static void count_radical_power_occurrences(const Expr* e, int* count) {
 Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
     if (!arg || !t || t->n < 1) return NULL;
 
-    /* 0. Canonicalise nested radicands in the input against each
+    /* 0a. Expand Power[Plus[..], integer] forms in the input so the
+     * algebraic atoms (Sqrt[c], c^(1/q)) become free at the surface
+     * level for the Step 1 substitution loop.  Without this an input
+     * like `(Sqrt[2]+Sqrt[3])^2 - 5 - 2 Sqrt[6]` keeps the Power[Plus,2]
+     * opaque all the way through Step 5 (PolynomialRemainder /
+     * qa_expr_to_qaupoly cannot lift Power[Plus[γ_poly], 2] when the
+     * Plus is not a polynomial in QA_ALPHA_INTERNAL after surface
+     * substitution).  Expand fully distributes the binomial, after
+     * which Step 0b (decompose_redundant_sqrts) sees the cross term
+     * `2 Sqrt[6]` and rewrites it to `2 Sqrt[2] Sqrt[3]` for the
+     * smaller tower.  Expand on rational expressions is monotone or a
+     * no-op in leaf count for the inputs we hit here; the downstream
+     * leaf-count gates still apply if a pathological Expand inflates
+     * the surface form. */
+    Expr* expanded_call = expr_new_function(
+        expr_new_symbol("Expand"),
+        (Expr*[]){expr_copy((Expr*)arg)}, 1);
+    Expr* arg_expanded = evaluate(expanded_call);
+    expr_free(expanded_call);
+    if (!arg_expanded) arg_expanded = expr_copy((Expr*)arg);
+
+    /* 0b. Canonicalise nested radicands in the input against each
      * integer-base generator.  This makes mathematically-equal but
      * structurally-distinct `Sqrt[u]` / `Power[u, p/q]` sub-expressions
      * collapse to a single canonical form, so the substitution loop in
@@ -1894,7 +1915,8 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
      * with its γ-poly, so the Times factors become γ-polys (no Sqrt
      * left for Mathilda's Times canonicaliser to re-combine into Sqrt[c]
      * when Together is evaluated in Step 4). */
-    Expr* arg_internal = decompose_redundant_sqrts(arg, t);
+    Expr* arg_internal = decompose_redundant_sqrts(arg_expanded, t);
+    expr_free(arg_expanded);
     for (int i = 0; i < t->n; i++) {
         const Expr* a_r = t->alpha_renders[i];
         int64_t c_i = 0, q_i = 0;

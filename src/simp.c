@@ -3805,7 +3805,14 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
 
     const Expr* target = current ? current : e;
 
-    /* Pattern A: target = Power[Plus[...], 1/3] */
+    /* Pattern A: target = Power[Plus[...], ±1/3].
+     *
+     * The +1/3 case denests directly to (p + q sqrt(c))/d.  The -1/3
+     * case denests the +1/3 form, then takes the reciprocal so that
+     *     Power[2+Sqrt[5], -1/3]  ->  1/((1+Sqrt[5])/2) = 2/(1+Sqrt[5]).
+     * The Power evaluator handles the 1/Rational rationalisation
+     * automatically, so we just emit Power[d, -1] and re-evaluate.
+     * Closes test_cuberoot_recip_via_denest. */
     if (target->type == EXPR_FUNCTION
         && target->data.function.head
         && target->data.function.head->type == EXPR_SYMBOL
@@ -3814,7 +3821,8 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
         Expr* exp = target->data.function.args[1];
         if (is_rational_literal(exp)) {
             int64_t pn, qn;
-            if (is_rational(exp, &pn, &qn) && pn == 1 && qn == 3) {
+            if (is_rational(exp, &pn, &qn) && qn == 3
+                && (pn == 1 || pn == -1)) {
                 int64_t a_n, a_d, b_n, b_d, c;
                 if (cuberoot_match_a_plus_b_sqrt_c(target->data.function.args[0],
                                                     &a_n, &a_d, &b_n, &b_d, &c)
@@ -3822,6 +3830,14 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
                     Expr* d = try_cuberoot_denest(a_n, a_d, b_n, b_d, c);
                     if (d) {
                         if (current) expr_free(current);
+                        if (pn == -1) {
+                            Expr* recip_args[2] = { d, expr_new_integer(-1) };
+                            Expr* recip_call = expr_new_function(
+                                expr_new_symbol("Power"), recip_args, 2);
+                            Expr* recip = evaluate(recip_call);
+                            expr_free(recip_call);
+                            return recip;
+                        }
                         return d;
                     }
                 }
