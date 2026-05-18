@@ -1715,7 +1715,16 @@ static void level_rec(Expr* e, int64_t current_level, int64_t min_l, int64_t max
 
     int64_t d = get_expr_depth(e, heads);
 
-    if (e->type == EXPR_FUNCTION) {
+    /* Rational[n,d] and Complex[re,im] are atomic per Mathematica's AtomQ
+     * semantics: Level must not descend into their parts and must not visit
+     * their head, regardless of the Heads option. */
+    bool atomic = false;
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        if (h == SYM_Rational || h == SYM_Complex) atomic = true;
+    }
+
+    if (e->type == EXPR_FUNCTION && !atomic) {
         if (heads) level_rec(e->data.function.head, current_level + 1, min_l, max_l, heads, results, count, cap);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             level_rec(e->data.function.args[i], current_level + 1, min_l, max_l, heads, results, count, cap);

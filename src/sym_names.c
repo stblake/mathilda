@@ -137,6 +137,7 @@ const char* SYM_KroneckerDelta = NULL;
 const char* SYM_Less = NULL;
 const char* SYM_LeastSquares = NULL;
 const char* SYM_LessEqual = NULL;
+const char* SYM_Level = NULL;
 const char* SYM_LinearSolve = NULL;
 const char* SYM_List = NULL;
 const char* SYM_Listable = NULL;
@@ -375,6 +376,7 @@ void sym_names_init(void) {
     SYM_Less                       = intern_symbol("Less");
     SYM_LeastSquares               = intern_symbol("LeastSquares");
     SYM_LessEqual                  = intern_symbol("LessEqual");
+    SYM_Level                      = intern_symbol("Level");
     SYM_LinearSolve                = intern_symbol("LinearSolve");
     SYM_List                       = intern_symbol("List");
     SYM_Listable                   = intern_symbol("Listable");

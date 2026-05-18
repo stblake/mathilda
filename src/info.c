@@ -942,6 +942,22 @@ void info_init(void) {
         "Element threads over lists in its first argument: Element[{x1, x2, ...}, dom] returns the list of per-element decisions.");
     symtab_set_docstring("LeafCount", "LeafCount[expr] gives the total number of indivisible subexpressions in expr.");
     symtab_set_docstring("ByteCount", "ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.");
+    symtab_set_docstring("Level",
+        "Level[expr, levelspec]\n"
+        "\tgives a list of all subexpressions of expr on levels specified by levelspec.\n"
+        "Level[expr, levelspec, f]\n"
+        "\tapplies f to the sequence of subexpressions.\n\n"
+        "Level uses standard level specifications:\n"
+        "  n            levels 1 through n\n"
+        "  Infinity     levels 1 through Infinity\n"
+        "  {n}          level n only\n"
+        "  {n1, n2}     levels n1 through n2\n\n"
+        "Level[expr, {-1}] gives a list of all \"atomic\" objects in expr.\n"
+        "A positive level n consists of all parts of expr specified by n indices.\n"
+        "A negative level -n consists of all parts of expr with depth n.\n"
+        "Level 0 corresponds to the whole expression.\n"
+        "With the option setting Heads->True, Level includes heads of expressions and their parts.\n"
+        "Level traverses expressions in depth-first order, so that the subexpressions in the final list are ordered lexicographically by their indices.");
 
     // Time and Date
     symtab_set_docstring("Timing", "Timing[expr] evaluates expr, and returns a list of the time in seconds used, together with the result obtained.");
