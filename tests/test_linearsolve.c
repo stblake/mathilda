@@ -240,6 +240,72 @@ static void test_linearsolve_no_solution(void) {
 }
 
 /* -----------------------------------------------------------------
+ * Higher-rank tensor inputs.
+ *
+ * Mathematica's LinearSolve interprets a rank-N matrix `m` with
+ * dimensions {d_1, ..., d_{N-1}, n} as a (d_1*...*d_{N-1}) x n
+ * linear system, and a rank-(N-1+p) `b` with dimensions
+ * {d_1, ..., d_{N-1}, e_1, ..., e_p} produces a result of shape
+ * {n, e_1, ..., e_p}.  The two natural cross-checks are:
+ *   - Dot[m, x] == b should hold when the system is consistent;
+ *   - Dimensions[x] should equal {n, e_1, ..., e_p}.
+ * ----------------------------------------------------------------- */
+static void test_linearsolve_array_inputs(void) {
+    /* Rank-2 m, rank-3 b.  m = {{1,0},{0,2}}, b is 2x2x3.
+     * Expected solution shape: {2, 2, 3}. */
+    run_check_true(
+        "CompoundExpression["
+        "Set[mm, {{1, 0}, {0, 2}}], "
+        "Set[bb, {{{1, 2, 3}, {4, 5, 6}}, {{2, 4, 6}, {8, 10, 12}}}], "
+        "Set[xx, LinearSolve[mm, bb]], "
+        "And[Equal[Dimensions[xx], {2, 2, 3}], "
+        "Equal[Dot[mm, xx], bb]]]");
+
+    /* Rank-3 m (square: leading 2x2 -> 4 equations, last dim 2 unknowns
+     * but here we use {{{1,0},{0,2}},{{2,1},{1,2}}}), rank-2 b matching
+     * leading dims exactly (so trail_rank == 0 -> flat vector result). */
+    run_test(
+        "LinearSolve["
+        "{{{1, 0}, {0, 2}}, {{2, 1}, {1, 2}}}, "
+        "{{3, 10}, {11, 13}}]",
+        "List[3, 5]");
+
+    /* Rank-3 m with rank-3 b: trail_rank == 1, result has shape
+     * {n, k}. */
+    run_test(
+        "LinearSolve["
+        "{{{1, 0}, {0, 2}}, {{2, 1}, {1, 2}}}, "
+        "{{{3, 6, 9}, {10, 20, 30}}, {{11, 22, 33}, {13, 26, 39}}}]",
+        "List[List[3, 6, 9], List[5, 10, 15]]");
+
+    /* The bug-report case: rank-3 square m and rank-4 b, verified by
+     * back-substitution.  m has dims {2, 3, 6}, b has dims
+     * {2, 3, 4, 5}, result must have dims {6, 4, 5}. */
+    run_check_true(
+        "CompoundExpression["
+        "Set[mm, {{{2, -1, 0, -3, 0, 2}, {1, 0, -2, 2, -1, 2}, "
+        "         {-3, 3, 0, -2, 2, -2}}, "
+        "        {{3, 1, 1, 1, 3, -3}, {-1, 0, 2, 3, 0, -1}, "
+        "         {1, 0, -1, 1, 3, 3}}}], "
+        "Set[bb, Table[i + j + k + l, "
+        "  {i, 2}, {j, 3}, {k, 4}, {l, 5}]], "
+        "Set[xx, LinearSolve[mm, bb]], "
+        "And[Equal[Dimensions[xx], {6, 4, 5}], "
+        "Equal[Dot[mm, xx], bb]]]");
+
+    /* Leading-dim mismatch must error: m's leading dims {2, 2} don't
+     * match b's first dim {2, 3}. */
+    silence_stderr();
+    run_test(
+        "LinearSolve["
+        "{{{1, 2}, {3, 4}}, {{5, 6}, {7, 8}}}, "
+        "{{1, 2, 3}, {4, 5, 6}}]",
+        "LinearSolve[List[List[List[1, 2], List[3, 4]], "
+        "List[List[5, 6], List[7, 8]]], "
+        "List[List[1, 2, 3], List[4, 5, 6]]]");
+}
+
+/* -----------------------------------------------------------------
  * Inverse via LinearSolve[m, IdentityMatrix[n]]
  * ----------------------------------------------------------------- */
 static void test_linearsolve_inverse_check(void) {
@@ -272,6 +338,7 @@ int main(void) {
     TEST(test_linearsolve_complex);
     TEST(test_linearsolve_float);
     TEST(test_linearsolve_no_solution);
+    TEST(test_linearsolve_array_inputs);
     TEST(test_linearsolve_inverse_check);
 
     printf("All LinearSolve tests passed!\n");

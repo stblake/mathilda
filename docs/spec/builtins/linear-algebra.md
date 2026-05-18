@@ -421,6 +421,13 @@ Finds `x` that solves the matrix equation `m . x == b`.
 - The argument `b` may be a vector (in which case the result is a
   vector) or a matrix (in which case the result is a matrix whose
   `k`-th column solves `m . x == b[[All, k]]`).
+- Higher-rank tensor inputs are supported. A rank-N `m` with
+  dimensions `{d_1, ..., d_{N-1}, n}` is interpreted as a
+  `(d_1 * ... * d_{N-1}) x n` linear system whose leading dimensions
+  combine into rows; `b` then has dimensions
+  `{d_1, ..., d_{N-1}, e_1, ..., e_p}` and the result has dimensions
+  `{n, e_1, ..., e_p}`. When `p == 0` the result is a flat vector of
+  length `n`.
 - For under-determined systems LinearSolve returns one particular
   solution, with every free (non-pivot) variable set to 0; `Solve`
   returns the general solution.
@@ -462,6 +469,14 @@ Out[6]= {-4, 9/2}
 
 In[7]:= LinearSolve[{{1, 5}, {2, 6}, {3, 7}, {4, 8}}, {9, 10, 11, 12}, Method -> "OneStepRowReduction"]
 Out[7]= {-1, 2}
+
+(* Rank-3 m and rank-4 b: the leading {2, 3} dimensions of m combine
+ * into 6 rows of a 6x6 system; the trailing {4, 5} dimensions of b
+ * pass through to the result. *)
+In[8]:= a = RandomInteger[{-3, 3}, {2, 3, 6}];
+        b = RandomInteger[{-3, 3}, {2, 3, 4, 5}];
+        Dimensions[LinearSolve[a, b]]
+Out[8]= {6, 4, 5}
 ```
 
 ## LeastSquares

@@ -448,14 +448,64 @@ static Expr* rowreduce_cofactor(Expr* arg) {
 }
 
 /* ------------------------------------------------------------------
+ * Build a nested List of shape {dims[0], ..., dims[rank-1]} from a
+ * row-major flat array.  Consumes one element of `flat` per leaf,
+ * advancing `*idx`; ownership of every consumed Expr* transfers into
+ * the returned tree.
+ * ------------------------------------------------------------------ */
+static Expr* build_nested_list(Expr** flat, int64_t* dims, int rank,
+                                size_t* idx) {
+    if (rank == 0) {
+        return flat[(*idx)++];
+    }
+    size_t n = (size_t)dims[0];
+    Expr** items = NULL;
+    if (n > 0) items = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        items[i] = build_nested_list(flat, dims + 1, rank - 1, idx);
+    }
+    Expr* result = expr_new_function(expr_new_symbol("List"), items, n);
+    if (items) free(items);
+    return result;
+}
+
+/* Assemble the final LinearSolve result from a flat answer array.
+ *
+ * `flat` has length `c * k` (k = product of trail_dims, or 1 when
+ * trail_rank == 0) and is indexed `flat[j * k + kk]` for unknown
+ * index j (0..c-1) and trailing flat index kk (0..k-1).  The
+ * resulting List has shape `{c, trail_dims[0], ..., trail_dims[trail_rank-1]}`
+ * when `trail_rank >= 1`, and is a flat List of length c when
+ * `trail_rank == 0` (legacy vector-RHS shape).  Takes ownership of
+ * every entry in `flat`.
+ * ------------------------------------------------------------------ */
+static Expr* build_solution_tensor(Expr** flat, int c,
+                                    int64_t* trail_dims, int trail_rank) {
+    int64_t full_dims[64];
+    full_dims[0] = (int64_t)c;
+    for (int i = 0; i < trail_rank; i++) full_dims[i + 1] = trail_dims[i];
+    size_t idx = 0;
+    return build_nested_list(flat, full_dims, trail_rank + 1, &idx);
+}
+
+/* ------------------------------------------------------------------
  * LinearSolve -- DivisionFreeRowReduction (Bareiss-like)
  *
  * Direct lift of the previous body of `builtin_linearsolve` from
  * src/linalg.c (see that file's commit history and comments for the
  * algorithmic rationale and the under-determined / inconsistent
  * handling).
+ *
+ * `trail_dims` / `trail_rank` describe the trailing (non-leading)
+ * dimensions of `b` after the leading dims that match `m`'s shape.
+ * For a legacy vector RHS (b is rank-1 against a rank-2 m) the trail
+ * is empty (trail_rank == 0, k == 1) and the answer is returned as a
+ * flat List of c entries.  For a matrix RHS (trail_rank == 1) the
+ * answer has shape {c, k}.  For higher-rank b the answer has shape
+ * {c, trail_dims[0], ..., trail_dims[trail_rank-1]}.
  * ------------------------------------------------------------------ */
-static Expr* linearsolve_divfree(Expr* m, Expr* b, int b_rank,
+static Expr* linearsolve_divfree(Expr* m, Expr* b,
+                                  int64_t* trail_dims, int trail_rank,
                                   int r, int c, int k) {
     int cols = c + k;
 
@@ -627,39 +677,20 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b, int b_rank,
         pivot_for_col[pivot_col_for_row[i]] = i;
     }
 
-    Expr* result = NULL;
-    if (b_rank == 1) {
-        Expr** result_args = malloc(sizeof(Expr*) * (size_t)c);
-        for (int j = 0; j < c; j++) {
+    Expr** flat_answers = malloc(sizeof(Expr*) * (size_t)c * (size_t)k);
+    for (int j = 0; j < c; j++) {
+        for (int kk = 0; kk < k; kk++) {
             if (pivot_for_col[j] == -1) {
-                result_args[j] = expr_new_integer(0);
+                flat_answers[j * k + kk] = expr_new_integer(0);
             } else {
                 int pr = pivot_for_col[j];
-                result_args[j] = matrix[pr * cols + c];
-                matrix[pr * cols + c] = NULL;
+                flat_answers[j * k + kk] = matrix[pr * cols + c + kk];
+                matrix[pr * cols + c + kk] = NULL;
             }
         }
-        result = expr_new_function(expr_new_symbol("List"), result_args, (size_t)c);
-        free(result_args);
-    } else {
-        Expr** rows_arr = malloc(sizeof(Expr*) * (size_t)c);
-        for (int j = 0; j < c; j++) {
-            Expr** row_elems = malloc(sizeof(Expr*) * (size_t)k);
-            for (int kk = 0; kk < k; kk++) {
-                if (pivot_for_col[j] == -1) {
-                    row_elems[kk] = expr_new_integer(0);
-                } else {
-                    int pr = pivot_for_col[j];
-                    row_elems[kk] = matrix[pr * cols + c + kk];
-                    matrix[pr * cols + c + kk] = NULL;
-                }
-            }
-            rows_arr[j] = expr_new_function(expr_new_symbol("List"), row_elems, (size_t)k);
-            free(row_elems);
-        }
-        result = expr_new_function(expr_new_symbol("List"), rows_arr, (size_t)c);
-        free(rows_arr);
     }
+    Expr* result = build_solution_tensor(flat_answers, c, trail_dims, trail_rank);
+    free(flat_answers);
 
     for (int i = 0; i < r * cols; i++) {
         if (matrix[i]) expr_free(matrix[i]);
@@ -680,7 +711,8 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b, int b_rank,
  * direct -- the i-th pivot column's variable is matrix[pivot_row, c+kk]
  * for rhs column kk.
  * ------------------------------------------------------------------ */
-static Expr* linearsolve_onestep(Expr* m, Expr* b, int b_rank,
+static Expr* linearsolve_onestep(Expr* m, Expr* b,
+                                  int64_t* trail_dims, int trail_rank,
                                   int r, int c, int k) {
     int cols = c + k;
 
@@ -796,39 +828,20 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b, int b_rank,
         pivot_for_col[pivot_col_for_row[i]] = i;
     }
 
-    Expr* result = NULL;
-    if (b_rank == 1) {
-        Expr** result_args = malloc(sizeof(Expr*) * (size_t)c);
-        for (int j = 0; j < c; j++) {
+    Expr** flat_answers = malloc(sizeof(Expr*) * (size_t)c * (size_t)k);
+    for (int j = 0; j < c; j++) {
+        for (int kk = 0; kk < k; kk++) {
             if (pivot_for_col[j] == -1) {
-                result_args[j] = expr_new_integer(0);
+                flat_answers[j * k + kk] = expr_new_integer(0);
             } else {
                 int pr = pivot_for_col[j];
-                result_args[j] = matrix[pr * cols + c];
-                matrix[pr * cols + c] = NULL;
+                flat_answers[j * k + kk] = matrix[pr * cols + c + kk];
+                matrix[pr * cols + c + kk] = NULL;
             }
         }
-        result = expr_new_function(expr_new_symbol("List"), result_args, (size_t)c);
-        free(result_args);
-    } else {
-        Expr** rows_arr = malloc(sizeof(Expr*) * (size_t)c);
-        for (int j = 0; j < c; j++) {
-            Expr** row_elems = malloc(sizeof(Expr*) * (size_t)k);
-            for (int kk = 0; kk < k; kk++) {
-                if (pivot_for_col[j] == -1) {
-                    row_elems[kk] = expr_new_integer(0);
-                } else {
-                    int pr = pivot_for_col[j];
-                    row_elems[kk] = matrix[pr * cols + c + kk];
-                    matrix[pr * cols + c + kk] = NULL;
-                }
-            }
-            rows_arr[j] = expr_new_function(expr_new_symbol("List"), row_elems, (size_t)k);
-            free(row_elems);
-        }
-        result = expr_new_function(expr_new_symbol("List"), rows_arr, (size_t)c);
-        free(rows_arr);
     }
+    Expr* result = build_solution_tensor(flat_answers, c, trail_dims, trail_rank);
+    free(flat_answers);
 
     for (int i = 0; i < r * cols; i++) {
         if (matrix[i]) expr_free(matrix[i]);
@@ -854,7 +867,8 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b, int b_rank,
  *
  * Time complexity: O(n! * (n columns of b + 1)).  Use only for small n.
  * ------------------------------------------------------------------ */
-static Expr* linearsolve_cofactor(Expr* m, Expr* b, int b_rank,
+static Expr* linearsolve_cofactor(Expr* m, Expr* b,
+                                   int64_t* trail_dims, int trail_rank,
                                    int r, int c, int k, Expr* call_key) {
     if (r != c) {
         static uint64_t last_hash = 0;
@@ -937,24 +951,9 @@ static Expr* linearsolve_cofactor(Expr* m, Expr* b, int b_rank,
     expr_free(det_m);
     free(cols);
 
-    /* Assemble result. */
-    Expr* result = NULL;
-    if (b_rank == 1) {
-        Expr** result_args = malloc(sizeof(Expr*) * (size_t)n);
-        for (int j = 0; j < n; j++) result_args[j] = results[j * k + 0];
-        result = expr_new_function(expr_new_symbol("List"), result_args, (size_t)n);
-        free(result_args);
-    } else {
-        Expr** rows_arr = malloc(sizeof(Expr*) * (size_t)n);
-        for (int j = 0; j < n; j++) {
-            Expr** row_elems = malloc(sizeof(Expr*) * (size_t)k);
-            for (int kk = 0; kk < k; kk++) row_elems[kk] = results[j * k + kk];
-            rows_arr[j] = expr_new_function(expr_new_symbol("List"), row_elems, (size_t)k);
-            free(row_elems);
-        }
-        result = expr_new_function(expr_new_symbol("List"), rows_arr, (size_t)n);
-        free(rows_arr);
-    }
+    /* Assemble result.  `results[j * k + kk]` is the flat answer array
+     * already in the layout expected by build_solution_tensor. */
+    Expr* result = build_solution_tensor(results, n, trail_dims, trail_rank);
     free(results);
     return result;
 }
@@ -1013,10 +1012,20 @@ Expr* builtin_linearsolve(Expr* res) {
         }
     }
 
-    /* Shape validation -- shared by every method. */
+    /* Shape validation -- shared by every method.
+     *
+     * Mathematica's LinearSolve interprets a rank-N matrix `m`
+     * (N >= 2) with dimensions {d_1, ..., d_{N-1}, n} as a
+     * (d_1*...*d_{N-1}) x n linear system: the last dim is the
+     * number of unknowns, the leading dims combine into rows.  The
+     * right-hand side `b` then has dimensions
+     * {d_1, ..., d_{N-1}, e_1, ..., e_p}: leading dims must match
+     * `m`'s leading dims; trailing dims become the trailing dims of
+     * the result, which has shape {n, e_1, ..., e_p}.  When `p == 0`
+     * (b is rank N-1) the answer is a flat vector of length n. */
     int64_t m_dims[64];
     int m_rank = get_tensor_dims(m, m_dims);
-    if (m_rank != 2 || m_dims[0] == 0 || m_dims[1] == 0) {
+    if (m_rank < 2) {
         char* m_str = expr_to_string(m);
         fprintf(stderr,
                 "LinearSolve::matrix: Argument %s at position 1 is "
@@ -1025,13 +1034,26 @@ Expr* builtin_linearsolve(Expr* res) {
         free(m_str);
         return NULL;
     }
+    for (int i = 0; i < m_rank; i++) {
+        if (m_dims[i] == 0) {
+            char* m_str = expr_to_string(m);
+            fprintf(stderr,
+                    "LinearSolve::matrix: Argument %s at position 1 is "
+                    "not a non-empty rectangular matrix.\n",
+                    m_str);
+            free(m_str);
+            return NULL;
+        }
+    }
 
-    int r = (int)m_dims[0];
-    int c = (int)m_dims[1];
+    int lead = m_rank - 1;                /* leading dims of m  */
+    int r = 1;
+    for (int i = 0; i < lead; i++) r *= (int)m_dims[i];
+    int c = (int)m_dims[lead];
 
     int64_t b_dims[64];
     int b_rank = get_tensor_dims(b, b_dims);
-    if (b_rank != 1 && b_rank != 2) {
+    if (b_rank < lead) {
         char* b_str = expr_to_string(b);
         fprintf(stderr,
                 "LinearSolve::lvec: %s is neither a vector nor a matrix.\n",
@@ -1039,28 +1061,33 @@ Expr* builtin_linearsolve(Expr* res) {
         free(b_str);
         return NULL;
     }
-    if (b_dims[0] != r) {
-        char* m_str = expr_to_string(m);
-        char* b_str = expr_to_string(b);
-        fprintf(stderr,
-                "LinearSolve::lvec1: Coefficient matrix and target "
-                "vector %s . x == %s do not have the same dimensions.\n",
-                m_str, b_str);
-        free(m_str);
-        free(b_str);
-        return NULL;
+    for (int i = 0; i < lead; i++) {
+        if (b_dims[i] != m_dims[i]) {
+            char* m_str = expr_to_string(m);
+            char* b_str = expr_to_string(b);
+            fprintf(stderr,
+                    "LinearSolve::lvec1: Coefficient matrix and target "
+                    "vector %s . x == %s do not have the same dimensions.\n",
+                    m_str, b_str);
+            free(m_str);
+            free(b_str);
+            return NULL;
+        }
     }
 
-    int k = (b_rank == 1) ? 1 : (int)b_dims[1];
+    int trail_rank = b_rank - lead;
+    int64_t* trail_dims = b_dims + lead;
+    int k = 1;
+    for (int i = 0; i < trail_rank; i++) k *= (int)trail_dims[i];
 
     switch (method) {
         case MATSOL_AUTOMATIC:
         case MATSOL_DIVFREE:
-            return linearsolve_divfree(m, b, b_rank, r, c, k);
+            return linearsolve_divfree(m, b, trail_dims, trail_rank, r, c, k);
         case MATSOL_ONESTEP:
-            return linearsolve_onestep(m, b, b_rank, r, c, k);
+            return linearsolve_onestep(m, b, trail_dims, trail_rank, r, c, k);
         case MATSOL_COFACTOR:
-            return linearsolve_cofactor(m, b, b_rank, r, c, k, res);
+            return linearsolve_cofactor(m, b, trail_dims, trail_rank, r, c, k, res);
         case MATSOL_INVALID:
             return NULL;  /* unreachable */
     }
