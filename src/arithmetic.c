@@ -29,11 +29,31 @@ int64_t lcm(int64_t a, int64_t b) {
     return (a / gcd(a, b)) * b;
 }
 
+/* Single-argument GCD/LCM: mathematically the GCD or LCM of one number
+ * is its absolute value (GCD[-5] == 5, GCD[-1/2] == 1/2).  Symbolic
+ * input is returned unchanged so user-supplied rules / OneIdentity
+ * pattern matching still apply (GCD[x] == x). */
+static Expr* single_arg_abs_or_copy(Expr* arg) {
+    int64_t n, d;
+    if (is_rational(arg, &n, &d)) {
+        return make_rational(llabs(n), llabs(d));
+    }
+    if (arg->type == EXPR_BIGINT) {
+        mpz_t a;
+        mpz_init(a);
+        mpz_abs(a, arg->data.bigint);
+        Expr* r = expr_bigint_normalize(expr_new_bigint_from_mpz(a));
+        mpz_clear(a);
+        return r;
+    }
+    return expr_copy(arg);
+}
+
 Expr* builtin_gcd(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
     if (count == 0) return expr_new_integer(0);
-    if (count == 1) return expr_copy(res->data.function.args[0]);
+    if (count == 1) return single_arg_abs_or_copy(res->data.function.args[0]);
 
     // Single pass: detect any bigint while confirming all args are integer-like
     bool any_bigint = false, all_integer_like = true;
@@ -81,7 +101,7 @@ Expr* builtin_lcm(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
     if (count == 0) return expr_new_integer(1);
-    if (count == 1) return expr_copy(res->data.function.args[0]);
+    if (count == 1) return single_arg_abs_or_copy(res->data.function.args[0]);
 
     int64_t running_n = 0;
     int64_t running_d = 0;

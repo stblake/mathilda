@@ -186,12 +186,16 @@ int main(void) {
     TEST(test_resolve_absolute);
     TEST(test_begin_end_roundtrip);
     TEST(test_begin_relative);
-    TEST(test_begin_package_path);
-    TEST(test_begin_package_with_needs);
-
+    /* test_dollar_context_and_path expects $ContextPath to be exactly
+     * {"Global`", "System`"}. It must run before test_begin_package_path
+     * and test_begin_package_with_needs, which permanently prepend their
+     * package context to $ContextPath via EndPackage (see the comment in
+     * test_begin_package_path about "other tests are tolerant"). */
     TEST(test_context_builtin_no_args);
     TEST(test_context_builtin_of_builtin);
     TEST(test_dollar_context_and_path);
+    TEST(test_begin_package_path);
+    TEST(test_begin_package_with_needs);
     TEST(test_begin_changes_context);
     TEST(test_package_symbol_qualification);
     TEST(test_nested_begin_private);
