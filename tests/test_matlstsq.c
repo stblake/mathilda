@@ -292,17 +292,214 @@ static void test_lstsq_method_iterativerefinement(void) {
         "Method -> \"IterativeRefinement\"]",
         "{19/3, 1/2}");
 }
+/* IterativeRefinement on an inexact 3x3 invertible system: the loop runs
+ * until the squared norm of the correction drops below the default
+ * tolerance, then returns the refined solution.  The Direct answer and
+ * the IterativeRefinement answer must match within a tight bound. */
+static void test_lstsq_iter_refine_real_3x3(void) {
+    check_true(
+        "(m = {{3.2, 2.2, 1.2}, {2.1, 7.1, 8.5}, {9.5, 6.7, 3.7}}; "
+        " b = {7., 8., 9.}; "
+        " xd  = LeastSquares[m, b, Method -> \"Direct\"]; "
+        " xir = LeastSquares[m, b, Method -> \"IterativeRefinement\"]; "
+        " Total[Abs[xd - xir]] < 0.000001)");
+}
+/* IterativeRefinement with Tolerance -> 0 on an exact rational system
+ * still converges -- the first correction is exactly Integer 0 so the
+ * loop exits after one pass without ever testing the threshold. */
+static void test_lstsq_iter_refine_zero_tolerance_exact(void) {
+    check_pretty(
+        "LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}, "
+        "Method -> \"IterativeRefinement\", Tolerance -> 0]",
+        "{19/3, 1/2}");
+}
+/* IterativeRefinement with a punishingly small Tolerance must still
+ * terminate -- the 50-iteration cap protects us when round-off keeps
+ * the residual above the threshold. */
+static void test_lstsq_iter_refine_tight_tolerance(void) {
+    check_true(
+        "(m = {{1.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}}; b = {7., 8., 9.}; "
+        " x = LeastSquares[m, b, Method -> \"IterativeRefinement\", "
+        "                  Tolerance -> 1.0e-50]; "
+        " expected = LeastSquares[m, b, Method -> \"Direct\"]; "
+        " Total[Abs[x - expected]] < 0.0001)");
+}
+/* IterativeRefinement on a singular (rank-deficient) system returns the
+ * same minimum-norm answer as Direct.  For this matrix the residual is
+ * already exact at the first pass so refinement adds nothing -- the test
+ * confirms that the loop does not introduce spurious noise. */
+static void test_lstsq_iter_refine_singular(void) {
+    check_pretty(
+        "LeastSquares[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {2, -4, 2}, "
+        "Method -> \"IterativeRefinement\"]",
+        "{0, 0, 0}");
+}
+/* IterativeRefinement on a matrix RHS -- the Frobenius squared-norm
+ * test is what makes the per-column convergence work in a single loop. */
+static void test_lstsq_iter_refine_matrix_rhs(void) {
+    check_pretty(
+        "LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, "
+        "{{7, 1}, {7, 2}, {8, 3}}, "
+        "Method -> \"IterativeRefinement\"]",
+        "{{19/3, 0}, {1/2, 1}}");
+}
 static void test_lstsq_method_lsqr(void) {
-    /* LSQR is currently dispatched to Direct (see file header). */
+    /* Exact rational input routes through CGLS (LSQR's square-root
+     * arithmetic is unsuitable for exact rationals).  Same answer. */
     check_pretty(
         "LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}, "
         "Method -> \"LSQR\"]",
         "{19/3, 1/2}");
 }
+/* LSQR on the spec 3x2 inexact-real system: the double-precision
+ * Paige-Saunders path must agree with Direct to a small tolerance. */
+static void test_lstsq_lsqr_real_3x2(void) {
+    check_true(
+        "(m = {{1.0, 1.0}, {1.0, 2.0}, {1.0, 3.0}}; b = {7., 7., 8.}; "
+        " xl = LeastSquares[m, b, Method -> \"LSQR\"]; "
+        " xd = LeastSquares[m, b, Method -> \"Direct\"]; "
+        " Total[Abs[xl - xd]] < 0.0001)");
+}
+/* LSQR on an ill-conditioned 3x3 (cond ~ 1e3): exercises the
+ * bidiagonalisation + Givens path enough that the v-update step is
+ * actually executed.  This is the case that exposed the "frozen v_1"
+ * bug during development -- without v <- q/alpha_new every iteration,
+ * LSQR converges to a one-dimensional projection of b instead of the LS
+ * solution.  Tolerance is generous because LSQR is iterative; Direct is
+ * the gold standard. */
+static void test_lstsq_lsqr_ill_conditioned_3x3(void) {
+    check_true(
+        "(m = {{3.2, 2.2, 1.2}, {2.1, 7.1, 8.5}, {9.5, 6.7, 3.7}}; "
+        " b = {7., 8., 9.}; "
+        " xl = LeastSquares[m, b, Method -> \"LSQR\"]; "
+        " xd = LeastSquares[m, b, Method -> \"Direct\"]; "
+        " Total[Abs[xl - xd]] < 0.001)");
+}
+/* LSQR on a 4x3 inexact over-determined system. */
+static void test_lstsq_lsqr_real_4x3(void) {
+    check_true(
+        "(m = {{1.0, 2.0, 3.0}, {4.0, 5.0, 6.0}, "
+        "      {7.0, 8.0, 9.0}, {10.0, 11.0, 12.0}}; "
+        " b = {1., 2., 4., 8.}; "
+        " xl = LeastSquares[m, b, Method -> \"LSQR\"]; "
+        " xd = LeastSquares[m, b, Method -> \"Direct\"]; "
+        " Total[Abs[xl - xd]] < 0.001)");
+}
+/* LSQR with matrix RHS: each column flows through lsqr_double
+ * independently, and the wrapper recombines via Transpose. */
+static void test_lstsq_lsqr_matrix_rhs(void) {
+    check_true(
+        "(m = {{1.0, 1.0}, {1.0, 2.0}, {1.0, 3.0}}; "
+        " b = {{7., 1.}, {7., 2.}, {8., 3.}}; "
+        " xl = LeastSquares[m, b, Method -> \"LSQR\"]; "
+        " xd = LeastSquares[m, b, Method -> \"Direct\"]; "
+        " Total[Flatten[Abs[xl - xd]]] < 0.0001)");
+}
+/* Complex input is pushed to CGLS by the LSQR dispatcher (real
+ * double-precision LSQR has no complex backend). */
+static void test_lstsq_lsqr_complex_fallback(void) {
+    check_true(
+        "(m = {{1, I}, {1, -I}, {1, 2 I}}; rhs = {1, 1, 1}; "
+        " xl = LeastSquares[m, rhs, Method -> \"LSQR\"]; "
+        " xd = LeastSquares[m, rhs, Method -> \"Direct\"]; "
+        " xl == xd)");
+}
+/* Symbolic input falls back to Direct. */
+static void test_lstsq_lsqr_symbolic_fallback(void) {
+    check_true(
+        "(mLsqr = {{aL, bL}, {cL, dL}}; rhsLsqr = {eL, fL}; "
+        " xl = LeastSquares[mLsqr, rhsLsqr, Method -> \"LSQR\"]; "
+        " xd = LeastSquares[mLsqr, rhsLsqr]; "
+        " xl === xd)");
+}
+/* LSQR on a Real singular (rank-deficient) 3x3.  CGLS is delegated to
+ * by the wrapper when all entries are exact rationals; but with Real
+ * entries we exercise lsqr_double directly.  The Paige-Saunders
+ * algorithm with x_0 = 0 lands in range(A^T), giving the minimum-norm
+ * Moore-Penrose solution. */
+static void test_lstsq_lsqr_real_singular(void) {
+    check_true(
+        "(m = {{1., 2., 3.}, {4., 5., 6.}, {7., 8., 9.}}; "
+        " b = {2., -4., 2.}; "
+        " xl = LeastSquares[m, b, Method -> \"LSQR\"]; "
+        " Total[Abs[xl]] < 0.0001)");
+}
 static void test_lstsq_method_krylov(void) {
     check_pretty(
         "LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}, "
         "Method -> \"Krylov\"]",
+        "{19/3, 1/2}");
+}
+/* Krylov on the spec 4x3 over-determined system -- exact rational
+ * answer matching the Direct method. */
+static void test_lstsq_krylov_overdetermined_4x3(void) {
+    check_pretty(
+        "LeastSquares[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}, {10, 11, 12}}, "
+        "{1, 2, 4, 8}, Method -> \"Krylov\"]",
+        "{157/180, 23/90, -13/36}");
+}
+/* Krylov on a singular (rank-deficient) 3x3.  CGLS starting from x_0 = 0
+ * lands in range(A^T), which gives the Moore-Penrose answer {0, 0, 0}
+ * for this nullspace-rich system. */
+static void test_lstsq_krylov_singular_3x3(void) {
+    check_pretty(
+        "LeastSquares[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {2, -4, 2}, "
+        "Method -> \"Krylov\"]",
+        "{0, 0, 0}");
+}
+/* Krylov with a matrix RHS: each column is solved independently and
+ * the results are recombined via the Transpose step in the wrapper. */
+static void test_lstsq_krylov_matrix_rhs(void) {
+    check_pretty(
+        "LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, "
+        "{{7, 1}, {7, 2}, {8, 3}}, Method -> \"Krylov\"]",
+        "{{19/3, 0}, {1/2, 1}}");
+}
+/* Krylov on inexact 3x2 input -- must agree with Direct to a small
+ * tolerance.  Exercises the floating-point path including the Real
+ * gamma comparison against the default 1e-20 squared threshold. */
+static void test_lstsq_krylov_real_3x2(void) {
+    check_true(
+        "(m = {{1.0, 2.0}, {3.0, 4.0}, {5.0, 6.0}}; b = {7., 8., 9.}; "
+        " xk = LeastSquares[m, b, Method -> \"Krylov\"]; "
+        " xd = LeastSquares[m, b, Method -> \"Direct\"]; "
+        " Total[Abs[xk - xd]] < 0.000001)");
+}
+/* Krylov on rational input agrees with Direct exactly. */
+static void test_lstsq_krylov_rational(void) {
+    check_true(
+        "(m = {{1/2, 1/3}, {1/4, 1/5}}; b = {1, 1}; "
+        " xk = LeastSquares[m, b, Method -> \"Krylov\"]; "
+        " xd = LeastSquares[m, b, Method -> \"Direct\"]; "
+        " xk == xd)");
+}
+/* Krylov with a free-symbol matrix falls back to Direct -- the CGLS
+ * convergence test is undecidable for symbolic residuals.  The answer
+ * must match LeastSquares with no Method given.  We use uppercase
+ * single-letter names that are not bound by earlier tests so the
+ * symbols stay free. */
+static void test_lstsq_krylov_symbolic_fallback(void) {
+    check_true(
+        "(mSym = {{aA, bB}, {cC, dD}}; rhsSym = {eE, fF}; "
+        " xkSym = LeastSquares[mSym, rhsSym, Method -> \"Krylov\"]; "
+        " xdSym = LeastSquares[mSym, rhsSym]; "
+        " xkSym === xdSym)");
+}
+/* Krylov on a complex-valued 3x2 system: the spec identity
+ * LeastSquares == PseudoInverse . b still holds. */
+static void test_lstsq_krylov_complex(void) {
+    check_true(
+        "(m = {{1, I}, {1, -I}, {1, 2 I}}; rhs = {1, 1, 1}; "
+        " xk = LeastSquares[m, rhs, Method -> \"Krylov\"]; "
+        " xd = LeastSquares[m, rhs, Method -> \"Direct\"]; "
+        " xk == xd)");
+}
+/* Krylov with Tolerance -> 0 on an exact system: the loop exits when
+ * |s|^2 hits Integer 0 exactly, before the iteration cap. */
+static void test_lstsq_krylov_zero_tolerance_exact(void) {
+    check_pretty(
+        "LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}, "
+        "Method -> \"Krylov\", Tolerance -> 0]",
         "{19/3, 1/2}");
 }
 static void test_lstsq_method_invalid_unevaluated(void) {
@@ -517,8 +714,28 @@ int main(void) {
     TEST(test_lstsq_method_automatic_string);
     TEST(test_lstsq_method_direct);
     TEST(test_lstsq_method_iterativerefinement);
+    TEST(test_lstsq_iter_refine_real_3x3);
+    TEST(test_lstsq_iter_refine_zero_tolerance_exact);
+    TEST(test_lstsq_iter_refine_tight_tolerance);
+    TEST(test_lstsq_iter_refine_singular);
+    TEST(test_lstsq_iter_refine_matrix_rhs);
     TEST(test_lstsq_method_lsqr);
+    TEST(test_lstsq_lsqr_real_3x2);
+    TEST(test_lstsq_lsqr_ill_conditioned_3x3);
+    TEST(test_lstsq_lsqr_real_4x3);
+    TEST(test_lstsq_lsqr_matrix_rhs);
+    TEST(test_lstsq_lsqr_complex_fallback);
+    TEST(test_lstsq_lsqr_symbolic_fallback);
+    TEST(test_lstsq_lsqr_real_singular);
     TEST(test_lstsq_method_krylov);
+    TEST(test_lstsq_krylov_overdetermined_4x3);
+    TEST(test_lstsq_krylov_singular_3x3);
+    TEST(test_lstsq_krylov_matrix_rhs);
+    TEST(test_lstsq_krylov_real_3x2);
+    TEST(test_lstsq_krylov_rational);
+    TEST(test_lstsq_krylov_symbolic_fallback);
+    TEST(test_lstsq_krylov_complex);
+    TEST(test_lstsq_krylov_zero_tolerance_exact);
     TEST(test_lstsq_method_invalid_unevaluated);
 
     /* Tolerance options */

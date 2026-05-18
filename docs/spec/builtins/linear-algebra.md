@@ -490,9 +490,9 @@ i.e. an `x` minimising `Norm[m . x - b]`.
 - Accepted Method names:
   - `Method -> Automatic` or `Method -> "Automatic"` — alias for `"Direct"` (default).
   - `Method -> "Direct"` — Moore-Penrose solve `PseudoInverse[m] . b`. Works on every input family (dense or sparse, exact or numeric, real or complex). The workhorse method.
-  - `Method -> "IterativeRefinement"` — one refinement pass over Direct: `x <- PseudoInverse[m] . b`, then `dx <- PseudoInverse[m] . (b - m . x)`, return `x + dx`. For exact inputs the correction is exactly zero and the answer equals Direct; for inexact inputs the second pass reduces residual round-off.
-  - `Method -> "LSQR"` — Paige-Saunders LSQR. The method name is accepted by the parser; current dispatch goes through `"Direct"` (dedicated implementation is a future extension).
-  - `Method -> "Krylov"` — iterative Krylov / CGNR method on the normal equations. Currently dispatched to `"Direct"` (likewise reserved for a future extension).
+  - `Method -> "IterativeRefinement"` — residual-correction loop on top of Direct: `x <- PseudoInverse[m] . b`, then repeatedly `r = b - m . x`, `dx = PseudoInverse[m] . r`, `x <- x + dx`, capped at 50 iterations and terminated when `Total[Flatten[dx]^2] <= Tolerance^2`. For exact inputs the first correction is exactly zero (Moore-Penrose identity) so the loop converges in one pass; for inexact inputs the loop drives round-off down to Tolerance.
+  - `Method -> "Krylov"` — Conjugate-Gradient-on-Least-Squares (Hestenes-Stiefel CG applied to the normal equations). Iterates `q = A p`, `alpha = |s|^2 / |q|^2`, `x <- x + alpha p`, `r <- r - alpha q`, `s = A^T r`, `beta = |s_new|^2 / |s|^2`, `p <- s_new + beta p` from `x_0 = 0` (so the iterate stays in `range(A^T)` and converges to the minimum-norm LS solution for rank-deficient `m`). Capped at `2 cols(m) + 10` iterations. Matrix RHS are solved column-by-column and recombined via `Transpose`. Symbolic inputs (the convergence test is undecidable for them) fall back to Direct.
+  - `Method -> "LSQR"` — Paige-Saunders LSQR (ACM TOMS 1982): Lanczos bidiagonalisation of `m` with a Givens-rotation update of the resulting upper triangular factor. Dispatches by input grammar: free-symbol inputs go to Direct; exact (Integer / Rational) and Complex inputs go to Krylov / CGLS (mathematically equivalent without the square-root growth in exact arithmetic); pure-real inputs with at least one Real entry run the canonical double-precision algorithm. Uses the Paige-Saunders estimate `|phi_bar * alpha_{k+1}|` of `||A^T r||` for the convergence test, scaled against the initial gradient `||A^T b||`. Cap is `2 cols(m) + 10` iterations. Detects rank deficiency by monitoring `alpha_new / max(|A_ij|)` and `beta_new / max(|A_ij|)`, avoiding the catastrophic blowup of dividing by a near-zero `alpha`.
 - `Tolerance -> Automatic` (default), or a non-negative integer / real /
   `Rational`. Forwarded verbatim as the Tolerance option of the
   underlying `PseudoInverse` call so any future singular-value
@@ -527,6 +527,17 @@ Out[6]= True
 In[7]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8},
                      Method -> "IterativeRefinement", Tolerance -> 1/100]
 Out[7]= {19/3, 1/2}
+
+In[8]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}, Method -> "Krylov"]
+Out[8]= {19/3, 1/2}
+
+In[9]:= LeastSquares[{{3.2, 2.2, 1.2}, {2.1, 7.1, 8.5}, {9.5, 6.7, 3.7}},
+                     {7., 8., 9.}, Method -> "LSQR"]
+Out[9]= {73.9499, -174.379, 128.329}
+
+In[10]:= LeastSquares[{{1., 2., 3.}, {4., 5., 6.}, {7., 8., 9.}},
+                      {2., -4., 2.}, Method -> "LSQR"]
+Out[10]= {0.0, 0.0, 0.0}
 ```
 
 ## Eigenvalues

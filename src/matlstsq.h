@@ -21,11 +21,12 @@
  *   "Direct"               -- Moore-Penrose solve via PseudoInverse.
  *                             Works on every input family (exact /
  *                             rational / symbolic / inexact / complex).
- *   "IterativeRefinement"  -- one refinement pass over Direct.  For
- *                             exact inputs the refinement is exactly
- *                             zero and the answer equals Direct; for
- *                             inexact inputs the second pass reduces
- *                             round-off in the residual.
+ *   "IterativeRefinement"  -- residual-correction loop on top of Direct
+ *                             until ||dx||^2 <= tol^2 or 50 iterations.
+ *                             For exact inputs the first correction is
+ *                             exactly zero and the answer equals Direct;
+ *                             for inexact inputs the iteration drives
+ *                             round-off down to the configured Tolerance.
  *   "LSQR"                 -- Paige-Saunders LSQR iterative method.
  *                             Currently dispatched to Direct so the
  *                             user-facing API matches Mathematica; a
