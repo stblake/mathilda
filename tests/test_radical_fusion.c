@@ -50,8 +50,10 @@ static void test_rational_ratio_fuses(void) {
      * over the rational ratio. */
     assert_eval_eq("Sqrt[10]/Sqrt[3]",       "Sqrt[10/3]",   0);
     assert_eval_eq("Power[2, 1/3] / Power[3, 1/3]", "(2/3)^(1/3)", 0);
-    /* Ratio <1: Sqrt[3]/Sqrt[6] = Sqrt[1/2]. */
-    assert_eval_eq("Sqrt[3]/Sqrt[6]", "Sqrt[1/2]", 0);
+    /* Ratio <1: Sqrt[3]/Sqrt[6] = Sqrt[1/2] = 1/Sqrt[2]. The canonical
+     * Power form for Rational^(1/2) folds the reciprocal back out, so
+     * the printed form is 1/Sqrt[2] (matches Mathematica). */
+    assert_eval_eq("Sqrt[3]/Sqrt[6]", "1/Sqrt[2]", 0);
 }
 
 static void test_fusion_with_symbolic_factor(void) {
