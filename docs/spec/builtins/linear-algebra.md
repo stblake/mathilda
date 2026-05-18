@@ -276,10 +276,18 @@ Out[10]= {{1/25}}
 ## RowReduce
 Gives the row-reduced form of the matrix `m`.
 - `RowReduce[m]`
+- `RowReduce[m, Method -> "<name>"]`
 
 **Features**:
 - `Protected`.
 - Uses fraction-free division logic to perform exact algorithmic reduction across numerical, rational, and symbolics expressions natively avoiding division errors.
+- Lives in `src/matsol.c`; the helper primitives (Laplace cofactor determinant, exact polynomial division, tensor flatten / dimensions) are exposed from `src/linalg.c`.
+- Accepts an optional `Method -> "<name>"` argument:
+  - `Method -> Automatic` or `Method -> "Automatic"` (default) — alias for `"DivisionFreeRowReduction"`.
+  - `Method -> "DivisionFreeRowReduction"` — Bareiss-like fraction-free Gauss-Jordan. Best for exact integer / rational / symbolic input — never produces a denominator larger than necessary.
+  - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan with one division per pivot per element. Each entry is canonicalised via `Together` so symbolic cancellations are still detected. Fast on numeric matrices.
+  - `Method -> "CofactorExpansion"` — for a non-singular square matrix, returns the identity (verified via `Det[m] != 0` computed by Laplace cofactor expansion). On singular or rectangular input, falls back to `"DivisionFreeRowReduction"` and emits `RowReduce::cofnsq`.
+- Unknown method names emit `RowReduce::method` and the call remains unevaluated.
 
 ```mathematica
 In[1]:= RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -287,6 +295,12 @@ Out[1]= {{1, 0, -1}, {0, 1, 2}, {0, 0, 0}}
 
 In[2]:= RowReduce[{{a, b, c}, {d, e, f}, {a+d, b+e, c+f}}]
 Out[2]= {{1, 0, (-b f + c e)/(a e - b d)}, {0, 1, (-a f + c d)/(-a e + b d)}, {0, 0, 0}}
+
+In[3]:= RowReduce[{{2, 1, 0}, {0, 3, 1}, {1, 0, 2}}, Method -> "CofactorExpansion"]
+Out[3]= {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}
+
+In[4]:= RowReduce[{{a, b}, {c, d}}, Method -> "OneStepRowReduction"]
+Out[4]= {{1, 0}, {0, 1}}
 ```
 
 ## IdentityMatrix
@@ -334,6 +348,7 @@ Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
 ## LinearSolve
 Finds `x` that solves the matrix equation `m . x == b`.
 - `LinearSolve[m, b]`
+- `LinearSolve[m, b, Method -> "<name>"]`
 
 **Features**:
 - `Protected`.
@@ -348,10 +363,17 @@ Finds `x` that solves the matrix equation `m . x == b`.
   exists.
 - Issues `LinearSolve::matrix` / `::lvec` / `::lvec1` and returns
   unevaluated for shape errors.
-- Implemented via fraction-free Gauss-Jordan elimination on the
+- Default method is fraction-free Gauss-Jordan elimination on the
   augmented matrix `[m | b]` (the same Bareiss-like routine used by
   `RowReduce` and `Inverse`), so exact integer, rational, and
   symbolic inputs flow through with no spurious denominator blow-up.
+- Lives in `src/matsol.c`.
+- Accepts an optional `Method -> "<name>"` argument:
+  - `Method -> Automatic` or `Method -> "Automatic"` — default (alias for `"DivisionFreeRowReduction"`).
+  - `Method -> "DivisionFreeRowReduction"` — Bareiss-like fraction-free Gauss-Jordan on `[m | b]`. Recommended for exact / symbolic inputs.
+  - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan with one division per pivot per element on `[m | b]`. Each per-cell update is canonicalised via `Together` so symbolic rationals reduce. Fast on numeric matrices.
+  - `Method -> "CofactorExpansion"` — Cramer's rule. Requires square non-singular `m`; emits `LinearSolve::cofnsq` on a non-square `m`, and `LinearSolve::cofsng` on a structurally singular `m`. For matrix `b` the rule is applied column-by-column.
+- Unknown method names emit `LinearSolve::method` and the call remains unevaluated.
 
 ```mathematica
 In[1]:= LinearSolve[{{r, s}, {t, u}}, {y, z}]
@@ -369,6 +391,12 @@ Out[4]= {0, 3, 0}
 In[5]:= LinearSolve[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {1, 1, 2}]
 LinearSolve::nosol: Linear equation encountered that has no solution.
 Out[5]= LinearSolve[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}, {1, 1, 2}]
+
+In[6]:= LinearSolve[{{1, 2}, {3, 4}}, {5, 6}, Method -> "CofactorExpansion"]
+Out[6]= {-4, 9/2}
+
+In[7]:= LinearSolve[{{1, 5}, {2, 6}, {3, 7}, {4, 8}}, {9, 10, 11, 12}, Method -> "OneStepRowReduction"]
+Out[7]= {-1, 2}
 ```
 
 ## Eigenvalues

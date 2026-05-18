@@ -396,6 +396,8 @@ void core_init(void) {
     info_init();
     datetime_init();
     linalg_init();
+    void matsol_init(void);
+    matsol_init();
     readwrite_init();
     files_init();
     random_init();

@@ -749,6 +749,89 @@ Expr* builtin_power(Expr* res) {
         }
     }
 
+    /* Bigint-aware Rational-base / integer-exponent path.  Triggers
+     * when the int64 is_rational above fails because either the
+     * Rational components or the exponent are BigInt -- without this,
+     * Power[Rational[bignum, bignum], -1] (a common shape produced by
+     * symbolic and bignum-driven linear-algebra routines) was leaked
+     * unsimplified as Times[..., Power[Rational[..,..],-1]], breaking
+     * downstream is_zero_poly / Together-based simplification. */
+    if (base->type == EXPR_FUNCTION &&
+        base->data.function.head->type == EXPR_SYMBOL &&
+        base->data.function.head->data.symbol == SYM_Rational &&
+        base->data.function.arg_count == 2 &&
+        expr_is_integer_like(base->data.function.args[0]) &&
+        expr_is_integer_like(base->data.function.args[1]) &&
+        (exp->type == EXPR_INTEGER || exp->type == EXPR_BIGINT)) {
+        Expr* num_expr = base->data.function.args[0];
+        Expr* den_expr = base->data.function.args[1];
+
+        /* Exponent must fit in a long for mpz_pow_ui.  Out-of-range
+         * |exponent| > 2^31 falls through to the symbolic path, which
+         * is fine -- nobody asks for Power[Rational, 10^10] in
+         * practice. */
+        long e_abs = 0;
+        bool e_neg = false;
+        if (exp->type == EXPR_INTEGER) {
+            int64_t ev = exp->data.integer;
+            if (ev == 0) return expr_new_integer(1);
+            e_neg = ev < 0;
+            int64_t magnitude = e_neg ? -ev : ev;
+            if (magnitude > 1000000000) goto rational_bigint_giveup;
+            e_abs = (long)magnitude;
+        } else { /* EXPR_BIGINT */
+            if (mpz_sgn(exp->data.bigint) == 0) return expr_new_integer(1);
+            if (!mpz_fits_slong_p(exp->data.bigint)) goto rational_bigint_giveup;
+            long ev = mpz_get_si(exp->data.bigint);
+            e_neg = ev < 0;
+            e_abs = e_neg ? -ev : ev;
+        }
+
+        mpz_t bnum, bden, rnum, rden;
+        mpz_init(bnum); mpz_init(bden);
+        expr_to_mpz(num_expr, bnum);
+        expr_to_mpz(den_expr, bden);
+        mpz_init(rnum); mpz_init(rden);
+        mpz_pow_ui(rnum, bnum, (unsigned long)e_abs);
+        mpz_pow_ui(rden, bden, (unsigned long)e_abs);
+        mpz_clear(bnum); mpz_clear(bden);
+
+        /* Negative exponent flips numerator and denominator.  Restore
+         * the canonical sign-on-numerator invariant make_rational
+         * enforces:  denominator must be positive. */
+        if (e_neg) {
+            mpz_swap(rnum, rden);
+        }
+        if (mpz_sgn(rden) < 0) {
+            mpz_neg(rnum, rnum);
+            mpz_neg(rden, rden);
+        }
+
+        /* Cancel common factor. */
+        mpz_t g; mpz_init(g);
+        mpz_gcd(g, rnum, rden);
+        if (mpz_cmp_ui(g, 1) != 0) {
+            mpz_divexact(rnum, rnum, g);
+            mpz_divexact(rden, rden, g);
+        }
+        mpz_clear(g);
+
+        /* If denominator is 1, return the plain (possibly demoted) integer. */
+        if (mpz_cmp_ui(rden, 1) == 0) {
+            Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(rnum));
+            mpz_clear(rnum); mpz_clear(rden);
+            return out;
+        }
+
+        Expr* num_out = expr_bigint_normalize(expr_new_bigint_from_mpz(rnum));
+        Expr* den_out = expr_bigint_normalize(expr_new_bigint_from_mpz(rden));
+        mpz_clear(rnum); mpz_clear(rden);
+        Expr* r_args[2] = { num_out, den_out };
+        return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+
+        rational_bigint_giveup:;
+    }
+
     /* Rational-base, rational-exponent canonicalisation.
      *
      *   Power[Rational[n, d], p/q]   (q > 1, d > 1, gcd(p, q) = 1)

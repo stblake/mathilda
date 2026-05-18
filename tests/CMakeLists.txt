@@ -80,6 +80,7 @@ set(COMMON_SRC
     ../src/parfrac.c
     ../src/datetime.c
     ../src/linalg.c
+    ../src/matsol.c
     ../src/readwrite.c
     ../src/files.c
     ../src/iter.c
@@ -401,6 +402,16 @@ else()
     target_link_libraries(linearsolve_tests gmp m)
 endif()
 add_test(NAME linearsolve_tests COMMAND linearsolve_tests)
+
+add_executable(matsol_methods_tests test_matsol_methods.c ${COMMON_SRC})
+target_include_directories(matsol_methods_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(matsol_methods_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(matsol_methods_tests build_ecm)
+else()
+    target_link_libraries(matsol_methods_tests gmp m)
+endif()
+add_test(NAME matsol_methods_tests COMMAND matsol_methods_tests)
 
 add_executable(parfrac_tests test_parfrac.c ${COMMON_SRC})
 target_include_directories(parfrac_tests PRIVATE ../src)

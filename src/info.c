@@ -22,6 +22,10 @@ void info_init(void) {
     symtab_set_docstring("Part", "expr[[i]] or Part[expr, i] gives the i-th part of expr.");
     symtab_set_docstring("Extract", "Extract[expr, pos] extracts the part of expr at the position specified by pos.\nExtract[expr, {pos1, pos2, ...}] extracts a list of parts of expr.\nExtract[expr, pos, h] extracts parts of expr, wrapping each of them with head h before evaluation.\nExtract[pos] represents an operator form of Extract that can be applied to an expression.");
     symtab_set_docstring("Span", "i;;j represents a span of elements i through j. i;;j;;k represents a span in steps of k.");
+    symtab_set_docstring("UpTo",
+        "UpTo[n]\n"
+        "\tis a symbolic specification that represents up to n objects or positions. If n objects or positions are available, all are used. If fewer are available, only those available are used.");
+
 
     // Linear Algebra
     symtab_set_docstring("Dot", "a.b.c or Dot[a, b, c] gives products of vectors, matrices, and tensors.");
@@ -29,7 +33,17 @@ void info_init(void) {
     symtab_set_docstring("Cross", "Cross[a, b, ...] gives the vector cross product of the arguments.");
     symtab_set_docstring("Norm", "Norm[expr] gives the norm of a number, vector, or matrix.\nNorm[expr, p] gives the p-norm.");
     symtab_set_docstring("Tr", "Tr[list] finds the trace of the matrix or tensor list.\nTr[list, f] finds a generalized trace, combining terms with f instead of Plus.\nTr[list, f, n] goes down to level n in list.");
-    symtab_set_docstring("RowReduce", "RowReduce[m] gives the row-reduced form of the matrix m.");
+    symtab_set_docstring("RowReduce",
+        "RowReduce[m]\n"
+        "\tgives the row-reduced form of the matrix m.\n"
+        "RowReduce[m, Method -> \"<name>\"]\n"
+        "\truns a specific elimination algorithm.  Accepted method names:\n"
+        "\t  \"Automatic\"                 — alias for \"DivisionFreeRowReduction\" (default)\n"
+        "\t  \"DivisionFreeRowReduction\"  — Bareiss-like fraction-free Gauss-Jordan\n"
+        "\t  \"OneStepRowReduction\"       — classical Gauss-Jordan with division per pivot\n"
+        "\t  \"CofactorExpansion\"         — identity-if-invertible via Laplace cofactor\n"
+        "\t                                 Det[m] (singular / rectangular m falls back\n"
+        "\t                                 to \"DivisionFreeRowReduction\")");
     symtab_set_docstring("IdentityMatrix", "IdentityMatrix[n] gives the n x n identity matrix.\nIdentityMatrix[{m, n}] gives the m x n identity matrix.");
     symtab_set_docstring("DiagonalMatrix", "DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.\nDiagonalMatrix[list, k] gives a matrix with the elements of list on the k-th diagonal.\nDiagonalMatrix[list, k, n] pads with zeros to create an n x n matrix.");
     symtab_set_docstring("Inverse", "Inverse[m]\n\tgives the inverse of a square matrix m.\n\tInverse works on both symbolic and numerical matrices.\n\tFor matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.\n\tA warning is given for singular matrices.");
@@ -60,6 +74,8 @@ void info_init(void) {
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
         "\tfinds an x that solves the matrix equation m . x == b.\n"
+        "LinearSolve[m, b, Method -> \"<name>\"]\n"
+        "\truns a specific elimination algorithm.\n"
         "\n"
         "LinearSolve works on both numerical and symbolic matrices.\n"
         "The matrix m may be square or rectangular.\n"
@@ -72,10 +88,19 @@ void info_init(void) {
         "solution LinearSolve emits LinearSolve::nosol and returns\n"
         "unevaluated.\n"
         "\n"
-        "Implementation: fraction-free Gauss-Jordan elimination on the\n"
-        "augmented matrix [m | b] (the Bareiss-like algorithm shared with\n"
-        "RowReduce and Inverse), so exact integer / rational / symbolic\n"
-        "inputs flow through without any spurious denominator blow-up.");
+        "Accepted method names:\n"
+        "  \"Automatic\"                 — alias for \"DivisionFreeRowReduction\" (default)\n"
+        "  \"DivisionFreeRowReduction\"  — Bareiss-like fraction-free Gauss-Jordan on [m | b]\n"
+        "  \"OneStepRowReduction\"       — classical Gauss-Jordan with division per pivot\n"
+        "  \"CofactorExpansion\"         — Cramer's rule via Laplace cofactor expansion\n"
+        "                                 (square non-singular m only; LinearSolve::cofnsq\n"
+        "                                 / ::cofsng on shape / singularity errors)\n"
+        "\n"
+        "Default implementation: fraction-free Gauss-Jordan elimination on\n"
+        "the augmented matrix [m | b] (the Bareiss-like algorithm shared\n"
+        "with RowReduce and Inverse), so exact integer / rational /\n"
+        "symbolic inputs flow through without any spurious denominator\n"
+        "blow-up.");
     symtab_set_docstring("Eigenvectors",
         "Eigenvectors[m]\n"
         "\tgives a list of the eigenvectors of the square matrix m.\n"
