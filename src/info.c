@@ -169,13 +169,12 @@ void info_init(void) {
         "tridiagonalisation + Wilkinson-shift symmetric QR kernel at\n"
         "machine precision for real symmetric matrices, and the\n"
         "Hessenberg + implicit double-shift Francis QR kernel at machine\n"
-        "precision for real non-symmetric matrices (eigenvalues only --\n"
-        "non-symmetric eigenvectors arrive in the next commit).  Automatic\n"
-        "also routes here.  Complex and arbitrary-precision MPFR inputs\n"
-        "plus \"Arnoldi\", \"Banded\", and \"FEAST\" arrive in subsequent\n"
-        "commits; an explicit but not-yet-implemented Method prints a\n"
-        "one-shot warning and falls back to the symbolic\n"
-        "characteristic-polynomial path.");
+        "precision for real non-symmetric matrices.  Automatic routes\n"
+        "here too.  Complex and arbitrary-precision MPFR inputs plus\n"
+        "\"Arnoldi\", \"Banded\", and \"FEAST\" arrive in subsequent commits;\n"
+        "an explicit but not-yet-implemented Method prints a one-shot\n"
+        "warning and falls back to the symbolic characteristic-polynomial\n"
+        "path.");
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
         "\tfinds an x that solves the matrix equation m . x == b.\n"
@@ -296,12 +295,14 @@ void info_init(void) {
         "\n"
         "Implementation status: \"Direct\" yields orthonormal eigenvectors\n"
         "for real symmetric matrices at machine precision (Householder +\n"
-        "symmetric QR with accumulated rotations).  Real non-symmetric\n"
-        "matrices currently fall back to the symbolic null-space pipeline\n"
-        "for Eigenvectors (the Hessenberg + back-substitution kernel\n"
-        "arrives in the next commit alongside complex-eigenvalue\n"
-        "back-substitution); Eigenvalues on the same matrix already\n"
-        "uses the numerical Direct path.");
+        "symmetric QR with accumulated rotations) and unit-norm\n"
+        "eigenvectors for real non-symmetric matrices via Hessenberg +\n"
+        "Francis double-shift QR with accumulated Q, followed by Schur-\n"
+        "form back-substitution (complex eigenvalues yield complex\n"
+        "eigenvectors emitted as Complex[re, im] entries).  Automatic\n"
+        "routes here.  Complex and arbitrary-precision MPFR matrices\n"
+        "plus the \"Arnoldi\", \"Banded\", and \"FEAST\" kernels arrive in\n"
+        "subsequent commits.");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head",
         "Head[expr]\n"

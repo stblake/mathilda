@@ -677,22 +677,199 @@ void test_direct_general_method_direct_routed(void) {
     expr_free(r1); expr_free(r2); expr_free(e1); expr_free(e2);
 }
 
-void test_direct_general_eigenvectors_fall_back(void) {
-    /* Step 2b not yet landed: eigenvectors of a non-symmetric numeric
-     * matrix should still produce a 3-element List (the symbolic
-     * fallback path's output), not error out. */
-    Expr* e = parse_expression(
-        "Eigenvectors[{{1.0, 2.0, 3.0}, {0.0, 4.0, 5.0}, "
-        "{0.0, 0.0, 6.0}}]");
+/* Read an entry of an eigenvector List into (re, im).  Handles Real,
+ * Integer, and Complex[re, im] entries. */
+static void read_vec_entry(Expr* e, double* re, double* im) {
+    read_eigenvalue_entry(e, re, im);
+}
+
+/* Read an Eigenvectors result into freshly-allocated row-major
+ * V_re / V_im arrays.  Returns the number of eigenvectors returned. */
+static size_t eval_eigenvectors_mixed(const double* A, size_t n,
+                                       double** V_re_out, double** V_im_out) {
+    char* in = corpus_matrix_to_eigenvectors_input(A, n);
+    Expr* e = parse_expression(in);
     ASSERT(e);
     Expr* r = evaluate(e);
+    expr_free(e); free(in);
     ASSERT(r != NULL);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.head->type == EXPR_SYMBOL);
     ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
-    ASSERT(r->data.function.arg_count == 3);
-    printf("PASS: non-symmetric Eigenvectors falls back to symbolic\n");
-    expr_free(r); expr_free(e);
+    size_t k = r->data.function.arg_count;
+    *V_re_out = (double*)malloc(sizeof(double) * (k ? k * n : 1));
+    *V_im_out = (double*)malloc(sizeof(double) * (k ? k * n : 1));
+    for (size_t i = 0; i < k; i++) {
+        Expr* row = r->data.function.args[i];
+        ASSERT(row->type == EXPR_FUNCTION);
+        ASSERT(strcmp(row->data.function.head->data.symbol, "List") == 0);
+        ASSERT(row->data.function.arg_count == n);
+        for (size_t j = 0; j < n; j++) {
+            read_vec_entry(row->data.function.args[j],
+                           &(*V_re_out)[i * n + j],
+                           &(*V_im_out)[i * n + j]);
+        }
+    }
+    expr_free(r);
+    return k;
+}
+
+/* Verify A v == lambda v for a real eigenvalue + real eigenvector. */
+static void check_residual_real(const double* A, size_t n,
+                                 double lam,
+                                 const double* v, double tol) {
+    double res = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double Avi = 0.0;
+        for (size_t j = 0; j < n; j++) Avi += A[i * n + j] * v[j];
+        double e = fabs(Avi - lam * v[i]);
+        if (e > res) res = e;
+    }
+    if (res > tol) {
+        printf("FAIL: real residual %g exceeds tol %g (lambda=%g)\n",
+               res, tol, lam);
+    }
+    ASSERT(res <= tol);
+}
+
+/* Verify A v == lambda v for a complex eigenvalue + complex eigenvector.
+ * lambda = a + b i, v = v_re + i v_im. */
+static void check_residual_complex(const double* A, size_t n,
+                                    double a, double b,
+                                    const double* v_re, const double* v_im,
+                                    double tol) {
+    double res = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double Av_re = 0.0, Av_im = 0.0;
+        for (size_t j = 0; j < n; j++) {
+            Av_re += A[i * n + j] * v_re[j];
+            Av_im += A[i * n + j] * v_im[j];
+        }
+        double lam_v_re = a * v_re[i] - b * v_im[i];
+        double lam_v_im = a * v_im[i] + b * v_re[i];
+        double e = hypot(Av_re - lam_v_re, Av_im - lam_v_im);
+        if (e > res) res = e;
+    }
+    if (res > tol) {
+        printf("FAIL: complex residual %g exceeds tol %g (lambda=%g+%gi)\n",
+               res, tol, a, b);
+    }
+    ASSERT(res <= tol);
+}
+
+/* Full-spectrum residual check for a real general matrix.  Verifies
+ * every (lambda_i, v_i) pair, real or complex. */
+static void verify_general_eigenvectors(const double* A, size_t n) {
+    double *evl_re = NULL, *evl_im = NULL;
+    size_t cnt_l = eval_eigenvalues_mixed(A, n, &evl_re, &evl_im);
+    ASSERT(cnt_l == n);
+
+    double *V_re = NULL, *V_im = NULL;
+    size_t cnt_v = eval_eigenvectors_mixed(A, n, &V_re, &V_im);
+    ASSERT(cnt_v == n);
+
+    double normA = corpus_norm_inf_real(A, n);
+    if (normA == 0.0) normA = 1.0;
+    double tol = 256.0 * (double)n * 2.220446049250313e-16 * normA;
+
+    for (size_t k = 0; k < n; k++) {
+        if (evl_im[k] == 0.0) {
+            check_residual_real(A, n, evl_re[k], &V_re[k * n], tol);
+        } else {
+            check_residual_complex(A, n,
+                                    evl_re[k], evl_im[k],
+                                    &V_re[k * n], &V_im[k * n], tol);
+        }
+    }
+    free(evl_re); free(evl_im); free(V_re); free(V_im);
+}
+
+void test_direct_general_eigenvectors_2x2(void) {
+    /* [[1, 2], [3, 4]]: real eigenvalues. */
+    double A[4] = { 1.0, 2.0, 3.0, 4.0 };
+    verify_general_eigenvectors(A, 2);
+    printf("PASS: [[1,2],[3,4]] non-symmetric eigenvectors residual\n");
+}
+
+void test_direct_general_eigenvectors_rotation(void) {
+    /* [[0, 1], [-1, 0]]: pure rotation, eigenvalues +/- i. */
+    double A[4] = { 0.0, 1.0, -1.0, 0.0 };
+    verify_general_eigenvectors(A, 2);
+    printf("PASS: rotation [[0,1],[-1,0]] eigenvectors residual\n");
+}
+
+void test_direct_general_eigenvectors_3x3_complex_block(void) {
+    /* Block-diagonal: 2x2 with complex pair (1 +/- i), real eigenvalue 2. */
+    double A[9] = {
+        1.0, -1.0, 0.0,
+        1.0,  1.0, 0.0,
+        0.0,  0.0, 2.0
+    };
+    verify_general_eigenvectors(A, 3);
+    printf("PASS: 3x3 block-diag complex-pair eigenvectors residual\n");
+}
+
+void test_direct_general_eigenvectors_upper_triangular(void) {
+    /* Upper triangular with distinct real eigenvalues. */
+    double A[9] = {
+        1.0, 2.0, 3.0,
+        0.0, 4.0, 5.0,
+        0.0, 0.0, 6.0
+    };
+    verify_general_eigenvectors(A, 3);
+    printf("PASS: upper-triangular 3x3 eigenvectors residual\n");
+}
+
+void test_direct_general_eigenvectors_generic_3x3(void) {
+    /* Generic 3x3 with three real eigenvalues; verifies the
+     * Hessenberg + Francis QR + back-substitution pipeline produces
+     * eigenvectors at full machine precision.  (Companion matrices are
+     * deliberately excluded -- they are a textbook ill-conditioned
+     * case for eigenvalue / eigenvector computation, and the
+     * eigenvalue-only companion test in step 2a already documents that
+     * the eigenvalues themselves come out to ~1e-10.) */
+    double A[9] = {
+        1.0, 2.0, 3.0,
+        4.0, 5.0, 6.0,
+        7.0, 8.0, 0.0
+    };
+    verify_general_eigenvectors(A, 3);
+    printf("PASS: generic 3x3 non-symmetric eigenvectors residual\n");
+}
+
+void test_direct_general_eigenvectors_5x5_random(void) {
+    /* Deterministic 5x5 random non-symmetric.  Spectrum may mix real
+     * and complex eigenvalues; verifier handles both. */
+    unsigned long s = 22222UL;
+    double A[25];
+    for (size_t i = 0; i < 25; i++) {
+        s = (s * 48271UL) & 0x7fffffffUL;
+        A[i] = ((double)s / 2147483647.0 - 0.5) * 10.0;
+    }
+    verify_general_eigenvectors(A, 5);
+    printf("PASS: random 5x5 non-symmetric eigenvectors residual\n");
+}
+
+void test_direct_general_eigenvectors_10x10_random(void) {
+    unsigned long s = 33333UL;
+    double A[100];
+    for (size_t i = 0; i < 100; i++) {
+        s = (s * 48271UL) & 0x7fffffffUL;
+        A[i] = ((double)s / 2147483647.0 - 0.5) * 10.0;
+    }
+    verify_general_eigenvectors(A, 10);
+    printf("PASS: random 10x10 non-symmetric eigenvectors residual\n");
+}
+
+void test_direct_general_eigenvectors_5_2plusi(void) {
+    /* {5, 2+i, 2-i} spectrum -- block-diag mixing real and complex. */
+    double A[9] = {
+        5.0, 0.0, 0.0,
+        0.0, 2.0, -1.0,
+        0.0, 1.0,  2.0
+    };
+    verify_general_eigenvectors(A, 3);
+    printf("PASS: {5, 2+/-i} eigenvectors residual\n");
 }
 
 void test_direct_eigenvectors_diag_4x4(void) {
@@ -779,7 +956,17 @@ int main(void) {
     TEST(test_direct_general_jordan_block_2x2);
     TEST(test_direct_general_complex_pair_sorted_after_real);
     TEST(test_direct_general_method_direct_routed);
-    TEST(test_direct_general_eigenvectors_fall_back);
+
+    /* Phase 2 step 2b: real non-symmetric eigenvectors (real and complex
+     * eigenvalues, residual-checked through the actual matrix A). */
+    TEST(test_direct_general_eigenvectors_2x2);
+    TEST(test_direct_general_eigenvectors_rotation);
+    TEST(test_direct_general_eigenvectors_3x3_complex_block);
+    TEST(test_direct_general_eigenvectors_upper_triangular);
+    TEST(test_direct_general_eigenvectors_generic_3x3);
+    TEST(test_direct_general_eigenvectors_5x5_random);
+    TEST(test_direct_general_eigenvectors_10x10_random);
+    TEST(test_direct_general_eigenvectors_5_2plusi);
     TEST(test_direct_eigenvectors_diag_4x4);
     TEST(test_direct_eigenvectors_tridiag_residual);
 

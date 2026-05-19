@@ -1105,13 +1105,15 @@ static Expr* direct_apply_k_spec_list(Expr* full_list, Expr* k_spec) {
  * --------------------------------------------------------------------- */
 
 /* Householder reduction of an n x n matrix `A` (row-major, modified in
- * place) to upper Hessenberg form.  Q is not accumulated in step 2a
- * (eigenvalues only).
+ * place) to upper Hessenberg form.  When `Q` is non-NULL the caller
+ * passes a pre-initialised n x n identity matrix that this routine
+ * post-multiplies by each Householder reflector, producing the
+ * orthogonal back-transformation Q with Q^T A_in Q = A_out + (Schur).
  *
  * Scratch buffer `u` (size n) is caller-provided.
  *
- * LAPACK-HOOK: dgehrd. */
-static void direct_hessenberg_real(double* A, size_t n, double* u) {
+ * LAPACK-HOOK: dgehrd (+ dorghr to materialise Q from the reflectors). */
+static void direct_hessenberg_real(double* A, size_t n, double* u, double* Q) {
     for (size_t k = 0; k + 2 < n; k++) {
         /* Householder vector for column k below the sub-diagonal. */
         double sigma = 0.0;
@@ -1146,6 +1148,16 @@ static void direct_hessenberg_real(double* A, size_t n, double* u) {
             for (size_t j = k + 1; j < n; j++) A[i * n + j] -= s * u[j];
         }
 
+        /* Q <- Q * H_k (right-multiply by reflector on cols k+1..n-1). */
+        if (Q) {
+            for (size_t i = 0; i < n; i++) {
+                double s = 0.0;
+                for (size_t j = k + 1; j < n; j++) s += Q[i * n + j] * u[j];
+                s *= 2.0;
+                for (size_t j = k + 1; j < n; j++) Q[i * n + j] -= s * u[j];
+            }
+        }
+
         /* Tidy up: explicit subdiag and zero below it. */
         A[(k + 1) * n + k] = alpha;
         for (size_t i = k + 2; i < n; i++) A[i * n + k] = 0.0;
@@ -1161,8 +1173,12 @@ static void direct_hessenberg_real(double* A, size_t n, double* u) {
  * Bulge chasing uses Householder reflectors of size 3 (size 2 at the
  * very end of the chase).  Sub-block size p - q must be >= 3.
  *
+ * When `Q` is non-NULL each bulge-chase reflector also right-multiplies
+ * Q so the caller can extract eigenvectors from the final Schur form.
+ *
  * LAPACK-HOOK: this is the inner loop body of dhseqr / dlahqr. */
-static void direct_francis_step(double* H, size_t n, size_t q, size_t p) {
+static void direct_francis_step(double* H, size_t n, size_t q, size_t p,
+                                 double* Q) {
     double h11 = H[(p - 2) * n + (p - 2)];
     double h12 = H[(p - 2) * n + (p - 1)];
     double h21 = H[(p - 1) * n + (p - 2)];
@@ -1219,6 +1235,17 @@ static void direct_francis_step(double* H, size_t n, size_t q, size_t p) {
             H[i * n + (k + 1)] -= s0 * u2;
             H[i * n + (k + 2)] -= s0 * u3;
         }
+        /* Q <- Q * P (right-multiply by reflector on cols k, k+1, k+2). */
+        if (Q) {
+            for (size_t i = 0; i < n; i++) {
+                double s0 = (Q[i * n + k]       * u1
+                           + Q[i * n + (k + 1)] * u2
+                           + Q[i * n + (k + 2)] * u3) * 2.0;
+                Q[i * n + k]       -= s0 * u1;
+                Q[i * n + (k + 1)] -= s0 * u2;
+                Q[i * n + (k + 2)] -= s0 * u3;
+            }
+        }
 
         x = H[(k + 1) * n + k];
         y = H[(k + 2) * n + k];
@@ -1249,19 +1276,87 @@ static void direct_francis_step(double* H, size_t n, size_t q, size_t p) {
             H[i * n + k]       -= s0 * u1;
             H[i * n + (k + 1)] -= s0 * u2;
         }
+        if (Q) {
+            for (size_t i = 0; i < n; i++) {
+                double s0 = (Q[i * n + k]       * u1
+                           + Q[i * n + (k + 1)] * u2) * 2.0;
+                Q[i * n + k]       -= s0 * u1;
+                Q[i * n + (k + 1)] -= s0 * u2;
+            }
+        }
     }
+}
+
+/* When a trailing 2x2 block has REAL eigenvalues we need to triangularise
+ * it (drive the sub-diagonal to zero) before deflating, otherwise the
+ * Schur form is non-triangular and back-substitution returns the wrong
+ * eigenvector.  Apply a Givens rotation whose first column is the
+ * eigenvector for one of the two real eigenvalues; after the similarity
+ * the (i+1, i) entry is zero and the two real eigenvalues sit on the
+ * diagonal.  Caller deflates them as two 1x1 blocks on the next QR
+ * iteration.
+ *
+ * The block is at rows / cols (p-2, p-1).  Q is right-multiplied when
+ * non-NULL so the caller can recover eigenvectors via back-transform. */
+static void direct_split_2x2_real(double* H, size_t n, size_t p, double* Q) {
+    size_t i = p - 2;
+    double a = H[i * n + i];
+    double b = H[i * n + (i + 1)];
+    double c = H[(i + 1) * n + i];
+    double d = H[(i + 1) * n + (i + 1)];
+    double tr = a + d;
+    double det = a * d - b * c;
+    double disc = tr * tr - 4.0 * det;
+    if (disc < 0.0) return;             /* complex; caller handles it */
+    double sq = sqrt(disc);
+    double lam = (tr + sq) * 0.5;       /* larger eigenvalue */
+    double v0 = lam - d;
+    double v1 = c;
+    double r = sqrt(v0 * v0 + v1 * v1);
+    if (r == 0.0) return;
+    double cs = v0 / r;
+    double sn = v1 / r;
+    /* Left-multiply rows (i, i+1) of H by G^T = [[cs, sn], [-sn, cs]]. */
+    for (size_t j = 0; j < n; j++) {
+        double r0 = H[i * n + j];
+        double r1 = H[(i + 1) * n + j];
+        H[i * n + j]       =  cs * r0 + sn * r1;
+        H[(i + 1) * n + j] = -sn * r0 + cs * r1;
+    }
+    /* Right-multiply cols (i, i+1) of H by G = [[cs, -sn], [sn, cs]]. */
+    for (size_t k = 0; k < n; k++) {
+        double c0 = H[k * n + i];
+        double c1 = H[k * n + (i + 1)];
+        H[k * n + i]       =  cs * c0 + sn * c1;
+        H[k * n + (i + 1)] = -sn * c0 + cs * c1;
+    }
+    if (Q) {
+        for (size_t k = 0; k < n; k++) {
+            double c0 = Q[k * n + i];
+            double c1 = Q[k * n + (i + 1)];
+            Q[k * n + i]       =  cs * c0 + sn * c1;
+            Q[k * n + (i + 1)] = -sn * c0 + cs * c1;
+        }
+    }
+    H[(i + 1) * n + i] = 0.0;
 }
 
 /* Drive Francis QR sweeps on an upper Hessenberg matrix `H` until it
  * reaches quasi-triangular (Schur) form.  Eigenvalues are written into
- * eval_re / eval_im in the order they deflate -- caller should sort.
+ * eval_re / eval_im in Schur position order (NOT in sort order -- the
+ * caller is responsible for sorting via direct_sort_perm_desc_abs_complex).
+ *
+ * When `Q` is non-NULL each bulge-chase reflector right-multiplies Q so
+ * the caller can extract eigenvectors from the final Schur form via
+ * back-substitution + back-transformation.
  *
  * Returns 0 on success, -1 if the maximum number of total Francis
  * sweeps (30 * n) is exceeded without convergence.
  *
  * LAPACK-HOOK: dhseqr. */
 static int direct_qr_real_general(double* H, size_t n,
-                                    double* eval_re, double* eval_im) {
+                                    double* eval_re, double* eval_im,
+                                    double* Q) {
     const double eps = 1e-14;
     const size_t max_iter = 30 * n;
     size_t iter = 0;
@@ -1298,7 +1393,7 @@ static int direct_qr_real_general(double* H, size_t n,
             continue;
         }
         if (q == p - 2) {
-            /* Trailing 2x2 block: extract eigenvalues. */
+            /* Trailing 2x2 block. */
             double a = H[(p - 2) * n + (p - 2)];
             double b = H[(p - 2) * n + (p - 1)];
             double c = H[(p - 1) * n + (p - 2)];
@@ -1306,25 +1401,40 @@ static int direct_qr_real_general(double* H, size_t n,
             double tr = a + d;
             double det = a * d - b * c;
             double disc = tr * tr - 4.0 * det;
-            if (disc >= 0.0) {
-                double sq = sqrt(disc);
-                eval_re[p - 2] = (tr + sq) * 0.5;
-                eval_im[p - 2] = 0.0;
-                eval_re[p - 1] = (tr - sq) * 0.5;
-                eval_im[p - 1] = 0.0;
-            } else {
+            if (disc < 0.0) {
+                /* Complex conjugate pair: deflate the entire 2x2 block. */
                 double sq = sqrt(-disc);
                 eval_re[p - 2] = tr * 0.5;
                 eval_im[p - 2] =  sq * 0.5;
                 eval_re[p - 1] = tr * 0.5;
                 eval_im[p - 1] = -sq * 0.5;
+                p -= 2;
+                iter = 0;
+                continue;
             }
+            /* Real eigenvalues.  Store the analytic values (more
+             * accurate than re-reading after the Givens roundoff),
+             * then triangularise the block via a Givens similarity
+             * so the Schur form is properly upper triangular and
+             * back-substitution can recover eigenvectors. */
+            double sq2 = sqrt(disc);
+            eval_re[p - 2] = (tr + sq2) * 0.5;
+            eval_im[p - 2] = 0.0;
+            eval_re[p - 1] = (tr - sq2) * 0.5;
+            eval_im[p - 1] = 0.0;
+            direct_split_2x2_real(H, n, p, Q);
+            /* After the split H[p-2, p-2] = larger eigenvalue and
+             * H[p-1, p-1] = smaller, with H[p-1, p-2] = 0.  Overwrite
+             * the diagonal entries with the analytic eigenvalues so
+             * back-substitution uses values matching eval_re. */
+            H[(p - 2) * n + (p - 2)] = eval_re[p - 2];
+            H[(p - 1) * n + (p - 1)] = eval_re[p - 1];
             p -= 2;
             iter = 0;
             continue;
         }
 
-        direct_francis_step(H, n, q, p);
+        direct_francis_step(H, n, q, p, Q);
     }
     return 0;
 }
@@ -1376,43 +1486,324 @@ static Expr* direct_build_complex_eigenvalue_list(const double* re,
     return out;
 }
 
+/* ---- Eigenvectors from Schur form ----------------------------------- *
+ *                                                                       *
+ *  After Hessenberg + Francis QR we have H = Q^T A Q in quasi-          *
+ *  triangular Schur form (1x1 blocks for real eigenvalues, 2x2 blocks   *
+ *  for complex conjugate pairs).  Eigenvectors of A are obtained by:    *
+ *    1. Solving (H - lambda I) v_schur = 0 by back-substitution in the  *
+ *       Schur basis (real and complex variants below).                  *
+ *    2. Back-transforming: v_A = Q v_schur.                             *
+ *    3. Normalising to unit 2-norm.                                     *
+ *                                                                       *
+ *  LAPACK-HOOK: dtrevc3 handles steps 1-2 in one call when USE_LAPACK   *
+ *  is wired (dorghr materialises Q from the Hessenberg reflectors).     *
+ * --------------------------------------------------------------------- */
+
+/* Back-substitute for the eigenvector of a Schur quasi-triangular matrix
+ * H corresponding to a real eigenvalue at Schur position k.  Writes the
+ * Schur-basis eigenvector into v (length n; v[i] = 0 for i > k). */
+static void schur_eigvec_real(const double* H, size_t n, size_t k,
+                                double lambda, double* v) {
+    for (size_t i = 0; i < n; i++) v[i] = 0.0;
+    v[k] = 1.0;
+    if (k == 0) return;
+
+    size_t i = k;
+    while (i > 0) {
+        i--;
+        bool is_2x2 = (i > 0) && (H[i * n + (i - 1)] != 0.0);
+        if (is_2x2) {
+            /* Solve 2x2 system coupling v[i-1] and v[i] (the rows of the
+             * 2x2 block).  Right-hand side = -sum of already-known
+             * components weighted by the off-diagonal entries. */
+            double rhs1 = 0.0, rhs2 = 0.0;
+            for (size_t j = i + 1; j <= k; j++) {
+                rhs1 += H[(i - 1) * n + j] * v[j];
+                rhs2 += H[i * n + j] * v[j];
+            }
+            rhs1 = -rhs1; rhs2 = -rhs2;
+            double a = H[(i - 1) * n + (i - 1)] - lambda;
+            double b = H[(i - 1) * n + i];
+            double c = H[i * n + (i - 1)];
+            double d = H[i * n + i] - lambda;
+            double det = a * d - b * c;
+            if (fabs(det) < 1e-300) {
+                v[i - 1] = 0.0; v[i] = 0.0;
+            } else {
+                v[i - 1] = (d * rhs1 - b * rhs2) / det;
+                v[i]     = (a * rhs2 - c * rhs1) / det;
+            }
+            i--;                            /* skip the row we just used */
+        } else {
+            double rhs = 0.0;
+            for (size_t j = i + 1; j <= k; j++) rhs += H[i * n + j] * v[j];
+            double diag = H[i * n + i] - lambda;
+            if (fabs(diag) < 1e-300) {
+                v[i] = 0.0;                 /* defective: leave zero */
+            } else {
+                v[i] = -rhs / diag;
+            }
+        }
+    }
+}
+
+/* Back-substitute for the complex eigenvector of a Schur quasi-triangular
+ * H corresponding to the complex eigenvalue lambda = a + i b (b > 0) at
+ * Schur positions (k, k+1).  Writes real / imaginary parts of the Schur-
+ * basis eigenvector into v_re / v_im (length n; both 0 above k+1). */
+static void schur_eigvec_complex(const double* H, size_t n, size_t k,
+                                   double a, double b,
+                                   double* v_re, double* v_im) {
+    for (size_t i = 0; i < n; i++) { v_re[i] = 0.0; v_im[i] = 0.0; }
+    /* Initial values from the 2x2 block at (k, k+1):
+     *   2x2 = [[alpha, beta], [gamma, delta]], eigenvalues lambda, conj(lambda)
+     *   eigenvector for lambda: x_1 = 1, x_0 = (lambda - delta) / gamma.
+     *   lambda - delta = (a - delta) + i b. */
+    double delta = H[(k + 1) * n + (k + 1)];
+    double gamma = H[(k + 1) * n + k];
+    if (gamma == 0.0) {
+        /* Shouldn't happen for an unreduced 2x2 block; bail. */
+        v_re[k] = 1.0;
+        v_re[k + 1] = 0.0;
+        return;
+    }
+    v_re[k]     = (a - delta) / gamma;
+    v_im[k]     = b / gamma;
+    v_re[k + 1] = 1.0;
+    v_im[k + 1] = 0.0;
+
+    if (k == 0) return;
+    size_t i = k;
+    while (i > 0) {
+        i--;
+        bool is_2x2 = (i > 0) && (H[i * n + (i - 1)] != 0.0);
+        if (is_2x2) {
+            /* Two complex equations -> 2x2 complex system in
+             *   (v[i-1], v[i]).  Solve via complex 2x2 inverse. */
+            double rhs_u_top = 0.0, rhs_v_top = 0.0;
+            double rhs_u_bot = 0.0, rhs_v_bot = 0.0;
+            for (size_t j = i + 1; j <= k + 1; j++) {
+                rhs_u_top += H[(i - 1) * n + j] * v_re[j];
+                rhs_v_top += H[(i - 1) * n + j] * v_im[j];
+                rhs_u_bot += H[i * n + j] * v_re[j];
+                rhs_v_bot += H[i * n + j] * v_im[j];
+            }
+            /* Coeff matrix (complex):
+             *   [(a11 - lambda)  a12 ]
+             *   [   a21         (a22 - lambda)]
+             * = [[A_re + i A_im, B_re + i B_im],
+             *    [C_re + i C_im, D_re + i D_im]] */
+            double A_re = H[(i - 1) * n + (i - 1)] - a, A_im = -b;
+            double B_re = H[(i - 1) * n + i],            B_im = 0.0;
+            double C_re = H[i * n + (i - 1)],            C_im = 0.0;
+            double D_re = H[i * n + i] - a,              D_im = -b;
+            /* det = A D - B C  (complex) */
+            double det_re = (A_re * D_re - A_im * D_im)
+                          - (B_re * C_re - B_im * C_im);
+            double det_im = (A_re * D_im + A_im * D_re)
+                          - (B_re * C_im + B_im * C_re);
+            double det_mag2 = det_re * det_re + det_im * det_im;
+            if (det_mag2 < 1e-300) {
+                v_re[i - 1] = 0.0; v_im[i - 1] = 0.0;
+                v_re[i] = 0.0; v_im[i] = 0.0;
+            } else {
+                /* RHS (negated). */
+                double r1_re = -rhs_u_top, r1_im = -rhs_v_top;
+                double r2_re = -rhs_u_bot, r2_im = -rhs_v_bot;
+                /* v[i-1] = (D r1 - B r2) / det */
+                double num1_re = (D_re * r1_re - D_im * r1_im)
+                               - (B_re * r2_re - B_im * r2_im);
+                double num1_im = (D_re * r1_im + D_im * r1_re)
+                               - (B_re * r2_im + B_im * r2_re);
+                /* v[i]   = (A r2 - C r1) / det */
+                double num2_re = (A_re * r2_re - A_im * r2_im)
+                               - (C_re * r1_re - C_im * r1_im);
+                double num2_im = (A_re * r2_im + A_im * r2_re)
+                               - (C_re * r1_im + C_im * r1_re);
+                /* (p + iq) / (det_re + i det_im) = (p det_re + q det_im
+                 *   + i (q det_re - p det_im)) / det_mag2 */
+                v_re[i - 1] = (num1_re * det_re + num1_im * det_im) / det_mag2;
+                v_im[i - 1] = (num1_im * det_re - num1_re * det_im) / det_mag2;
+                v_re[i]     = (num2_re * det_re + num2_im * det_im) / det_mag2;
+                v_im[i]     = (num2_im * det_re - num2_re * det_im) / det_mag2;
+            }
+            i--;
+        } else {
+            /* Single complex equation: (H[i,i] - lambda) v[i] = -rhs. */
+            double rhs_u = 0.0, rhs_v = 0.0;
+            for (size_t j = i + 1; j <= k + 1; j++) {
+                rhs_u += H[i * n + j] * v_re[j];
+                rhs_v += H[i * n + j] * v_im[j];
+            }
+            double diag_re = H[i * n + i] - a;
+            double diag_im = -b;
+            double denom = diag_re * diag_re + diag_im * diag_im;
+            if (denom < 1e-300) {
+                v_re[i] = 0.0; v_im[i] = 0.0;
+            } else {
+                double num_re = -rhs_u, num_im = -rhs_v;
+                v_re[i] = (num_re * diag_re + num_im * diag_im) / denom;
+                v_im[i] = (num_im * diag_re - num_re * diag_im) / denom;
+            }
+        }
+    }
+}
+
+/* Compute eigenvectors of A from the Schur form H and back-transformation
+ * Q, in sorted (descending |lambda|) order.  V_re / V_im are n x n
+ * row-major arrays where row k = sorted-k-th eigenvector. */
+static void schur_compute_eigvecs(const double* H, const double* Q,
+                                    size_t n,
+                                    const double* eval_re, const double* eval_im,
+                                    const size_t* perm,
+                                    double* V_re, double* V_im) {
+    double* v_schur_re = (double*)malloc(sizeof(double) * n);
+    double* v_schur_im = (double*)malloc(sizeof(double) * n);
+    double* w_re       = (double*)malloc(sizeof(double) * n);
+    double* w_im       = (double*)malloc(sizeof(double) * n);
+
+    size_t* inv_perm = (size_t*)malloc(sizeof(size_t) * n);
+    for (size_t i = 0; i < n; i++) inv_perm[perm[i]] = i;
+
+    size_t k = 0;
+    while (k < n) {
+        if (eval_im[k] == 0.0) {
+            /* Real eigenvalue at Schur position k. */
+            schur_eigvec_real(H, n, k, eval_re[k], v_schur_re);
+            /* w = Q . v_schur. */
+            for (size_t i = 0; i < n; i++) {
+                double s = 0.0;
+                for (size_t j = 0; j <= k; j++) s += Q[i * n + j] * v_schur_re[j];
+                w_re[i] = s;
+            }
+            double norm2 = 0.0;
+            for (size_t i = 0; i < n; i++) norm2 += w_re[i] * w_re[i];
+            double inv = (norm2 > 0.0) ? 1.0 / sqrt(norm2) : 1.0;
+            size_t sp = inv_perm[k];
+            for (size_t i = 0; i < n; i++) {
+                V_re[sp * n + i] = w_re[i] * inv;
+                V_im[sp * n + i] = 0.0;
+            }
+            k++;
+        } else {
+            /* Complex pair at Schur positions k, k+1.  eval_im[k] is the
+             * "+imag" root (the QR loop writes them in this order). */
+            double a = eval_re[k];
+            double b = fabs(eval_im[k]);
+            schur_eigvec_complex(H, n, k, a, b, v_schur_re, v_schur_im);
+            for (size_t i = 0; i < n; i++) {
+                double s_re = 0.0, s_im = 0.0;
+                for (size_t j = 0; j <= k + 1; j++) {
+                    s_re += Q[i * n + j] * v_schur_re[j];
+                    s_im += Q[i * n + j] * v_schur_im[j];
+                }
+                w_re[i] = s_re;
+                w_im[i] = s_im;
+            }
+            double norm2 = 0.0;
+            for (size_t i = 0; i < n; i++) {
+                norm2 += w_re[i] * w_re[i] + w_im[i] * w_im[i];
+            }
+            double inv = (norm2 > 0.0) ? 1.0 / sqrt(norm2) : 1.0;
+            size_t sp1 = inv_perm[k];       /* +imag eigenvalue */
+            size_t sp2 = inv_perm[k + 1];   /* -imag eigenvalue */
+            for (size_t i = 0; i < n; i++) {
+                double r = w_re[i] * inv;
+                double m = w_im[i] * inv;
+                V_re[sp1 * n + i] = r;  V_im[sp1 * n + i] =  m;
+                V_re[sp2 * n + i] = r;  V_im[sp2 * n + i] = -m;
+            }
+            k += 2;
+        }
+    }
+
+    free(v_schur_re); free(v_schur_im);
+    free(w_re); free(w_im);
+    free(inv_perm);
+}
+
+/* Emit a List of List of (Real or Complex[re, im]) for the eigenvector
+ * matrix V (rows = eigenvectors).  Entries with V_im[i,j] == 0 become
+ * Real; others become Complex[re, im]. */
+static Expr* direct_build_complex_eigenvector_list(const double* V_re,
+                                                     const double* V_im,
+                                                     size_t n) {
+    Expr** rows = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t k = 0; k < n; k++) {
+        Expr** comps = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            double r = V_re[k * n + i];
+            double m = V_im[k * n + i];
+            if (m == 0.0) {
+                comps[i] = expr_new_real(r);
+            } else {
+                Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
+                args[0] = expr_new_real(r);
+                args[1] = expr_new_real(m);
+                comps[i] = expr_new_function(expr_new_symbol("Complex"), args, 2);
+                free(args);
+            }
+        }
+        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n);
+        free(comps);
+    }
+    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    free(rows);
+    return out;
+}
+
 /* Top-level "Direct" kernel for real non-symmetric machine-precision
- * eigenvalues.  Returns a freshly-allocated List of eigenvalues (mix of
- * Real and Complex[re, im], sorted by descending |lambda|), or NULL on
- * convergence failure or when eigenvectors are requested (step 2b
- * territory).  Caller owns the result. */
+ * input.  When WANT_VALUES, returns a List of eigenvalues sorted by
+ * descending |lambda| (Real or Complex[re, im]).  When WANT_VECTORS,
+ * returns a List of List of eigenvector components in the same sorted
+ * order.  Returns NULL on convergence failure -- caller falls back to
+ * the symbolic path. */
 static Expr* direct_real_general_machine(const MatD* A, MateigenWant want,
                                           Expr* k_spec) {
     size_t n = A->n;
     if (n == 0) return NULL;
-    if (want & MATEIGEN_WANT_VECTORS) {
-        /* Eigenvectors arrive in Phase 2 step 2b -- fall back to
-         * the symbolic path for now. */
-        return NULL;
-    }
+
+    bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
 
     double* H = (double*)malloc(sizeof(double) * n * n);
     memcpy(H, A->re, sizeof(double) * n * n);
+    double* Q = NULL;
+    if (want_Q) {
+        Q = (double*)malloc(sizeof(double) * n * n);
+        for (size_t i = 0; i < n; i++)
+            for (size_t j = 0; j < n; j++) Q[i * n + j] = (i == j) ? 1.0 : 0.0;
+    }
     double* u_buf = (double*)malloc(sizeof(double) * n);
-    direct_hessenberg_real(H, n, u_buf);
+    direct_hessenberg_real(H, n, u_buf, Q);
     free(u_buf);
 
     double* eval_re = (double*)calloc(n, sizeof(double));
     double* eval_im = (double*)calloc(n, sizeof(double));
-    int qr_status = direct_qr_real_general(H, n, eval_re, eval_im);
-    free(H);
+    int qr_status = direct_qr_real_general(H, n, eval_re, eval_im, Q);
 
     if (qr_status != 0) {
-        free(eval_re); free(eval_im);
+        free(H); free(eval_re); free(eval_im);
+        if (Q) free(Q);
         return NULL;
     }
 
     size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
     direct_sort_perm_desc_abs_complex(eval_re, eval_im, n, perm);
 
-    Expr* out = direct_build_complex_eigenvalue_list(eval_re, eval_im, n, perm);
+    Expr* out;
+    if (want_Q) {
+        double* V_re = (double*)malloc(sizeof(double) * n * n);
+        double* V_im = (double*)malloc(sizeof(double) * n * n);
+        schur_compute_eigvecs(H, Q, n, eval_re, eval_im, perm, V_re, V_im);
+        out = direct_build_complex_eigenvector_list(V_re, V_im, n);
+        free(V_re); free(V_im);
+    } else {
+        out = direct_build_complex_eigenvalue_list(eval_re, eval_im, n, perm);
+    }
 
-    free(eval_re); free(eval_im); free(perm);
+    free(H); free(eval_re); free(eval_im); free(perm);
+    if (Q) free(Q);
 
     return direct_apply_k_spec_list(out, k_spec);
 }
