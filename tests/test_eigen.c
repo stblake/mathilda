@@ -586,12 +586,17 @@ void test_eigenvalues_method_value_list_with_suboptions(void) {
 }
 
 void test_eigenvectors_method_fallback(void) {
-    /* Eigenvectors mirrors Eigenvalues' Method behaviour. */
+    /* Eigenvectors mirrors Eigenvalues' Method behaviour.
+     *
+     * Note: "Direct" and the no-Method (Automatic) path return string-
+     * identical results on this diagonal input.  "Arnoldi" now uses a
+     * real numerical kernel (Phase 3) whose output is mathematically
+     * equivalent but not string-equal (CGS roundoff noise + sign
+     * convention on the second eigenvector), so we limit the strict
+     * string comparison to Direct; Arnoldi's eigenvector residuals are
+     * verified by tests/test_mateigen_arnoldi.c. */
     run_pair_same(
         "Eigenvectors[{{2.0, 0.0}, {0.0, 3.0}}, Method -> \"Direct\"]",
-        "Eigenvectors[{{2.0, 0.0}, {0.0, 3.0}}]");
-    run_pair_same(
-        "Eigenvectors[{{2.0, 0.0}, {0.0, 3.0}}, Method -> \"Arnoldi\"]",
         "Eigenvectors[{{2.0, 0.0}, {0.0, 3.0}}]");
 }
 

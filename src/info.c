@@ -182,10 +182,24 @@ void info_init(void) {
         "(step 2d-A), real non-symmetric (step 2d-B), complex Hermitian\n"
         "(step 2d-C), and complex non-Hermitian (step 2d-D) -- return\n"
         "eigenvalues / eigenvectors carrying full input precision.\n"
-        "\"Arnoldi\", \"Banded\", and \"FEAST\" arrive in subsequent phases;\n"
-        "an explicit but not-yet-implemented Method prints a one-shot\n"
-        "warning and falls back to the symbolic characteristic-polynomial\n"
-        "path.");
+        "\"Arnoldi\" is implemented in Phase 3 at both machine and MPFR\n"
+        "precision: m-step classical Gram-Schmidt with one re-orthog-\n"
+        "onalisation pass builds the Krylov basis V_m and the m x m\n"
+        "upper Hessenberg H_m; H_m is diagonalised by reusing the\n"
+        "\"Direct\" Francis QR pipeline (real machine, real MPFR, or via\n"
+        "a 2mu x 2mu real-block embedding for complex H_m), and Ritz\n"
+        "vectors V_m y_i lift back to A-eigenvectors.  Complex inputs\n"
+        "use paired re/im storage for V_m and H_m.  Automatic routes to\n"
+        "Arnoldi when n > 32 and k_spec is given with k <= max(20, n/10);\n"
+        "small matrices always go through Direct (faster + exact).\n"
+        "Default BasisSize is max(2k, 20) capped at n; on lucky breakdown\n"
+        "(||w|| below tolerance at some step j) Arnoldi terminates early\n"
+        "with j+1 exact eigenpairs.  MPFR Arnoldi carries through the\n"
+        "input's combined precision via the same scratch-pool discipline\n"
+        "as the Direct MPFR kernels.\n"
+        "\"Banded\" and \"FEAST\" arrive in subsequent phases; an explicit\n"
+        "but not-yet-implemented Method prints a one-shot warning and\n"
+        "falls back to the symbolic characteristic-polynomial path.");
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
         "\tfinds an x that solves the matrix equation m . x == b.\n"
@@ -322,8 +336,15 @@ void info_init(void) {
         "real non-symmetric (step 2d-B), complex Hermitian (step 2d-C),\n"
         "and complex non-Hermitian (step 2d-D) MPFR all yield eigenvectors\n"
         "carrying full input precision -- orthonormal for the Hermitian /\n"
-        "symmetric paths, unit 2-norm for the general paths.  \"Arnoldi\",\n"
-        "\"Banded\", and \"FEAST\" kernels arrive in subsequent phases.");
+        "symmetric paths, unit 2-norm for the general paths.\n"
+        "\"Arnoldi\" (Phase 3, machine + MPFR) returns Ritz vectors\n"
+        "V_m y_i where V_m is the orthonormal Arnoldi basis and y_i\n"
+        "diagonalises the small m x m Hessenberg H_m.  Ritz vectors are\n"
+        "unit 2-norm; for ill-conditioned matrices or m close to the\n"
+        "spectral diameter they may need refinement (single inverse\n"
+        "iteration is sufficient in practice).  MPFR Arnoldi carries\n"
+        "input precision through to all output components.\n"
+        "\"Banded\" and \"FEAST\" kernels arrive in subsequent phases.");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head",
         "Head[expr]\n"
@@ -617,8 +638,25 @@ void info_init(void) {
     symtab_set_docstring("Derivative", "Derivative[n][f][x] represents the nth derivative of a function f evaluated at x.");
 
     // Control Flow
-    symtab_set_docstring("Do", "Do[expr, n] evaluates expr n times.\nDo[expr, {i, imax}] evaluates expr with i successively taking on values 1 through imax.\nDo[expr, {i, imin, imax, di}] uses steps di.");
-    symtab_set_docstring("For", "For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.");
+    symtab_set_docstring("Do",
+        "Do[expr, n] evaluates expr n times.\n"
+        "Do[expr, {i, imax}] evaluates expr with i successively taking on values 1 through imax.\n"
+        "Do[expr, {i, imin, imax}] starts with i = imin.\n"
+        "Do[expr, {i, imin, imax, di}] uses steps di.\n"
+        "Do[expr, {i, {i1, i2, ...}}] uses the successive values i1, i2, ....\n"
+        "Do[expr, {n}] evaluates expr n times with no iteration variable.\n"
+        "Do[expr, iter1, iter2, ...] iterates over multiple variables, with the rightmost varying fastest.\n"
+        "Do has attribute HoldAll: expr and the iterator specifications are held unevaluated until each iteration.\n"
+        "Break[] inside expr exits the innermost Do loop.\n"
+        "Continue[] inside expr skips the rest of expr and proceeds to the next iteration.\n"
+        "Return[v] inside expr causes the enclosing function to yield v; Do itself returns Null.");
+    symtab_set_docstring("For",
+        "For[start, test, incr, body] executes start, then repeatedly evaluates body and incr until test fails to give True.\n"
+        "For[start, test, incr] runs with an empty body, useful when incr or test carries the side-effect.\n"
+        "For has attribute HoldAll: start, test, incr, and body are all held unevaluated until For drives them.\n"
+        "Break[] inside body exits the loop.\n"
+        "Continue[] inside body skips the rest of body and re-evaluates incr then test.\n"
+        "Return[v] inside body causes the enclosing function to yield v; For itself returns Null.");
     symtab_set_docstring("While",
         "While[test, body] evaluates test, then body, repeatedly, until test first fails to give True.\n"
         "While[test] does the loop with a Null body, which is useful when test has side-effects.\n"
