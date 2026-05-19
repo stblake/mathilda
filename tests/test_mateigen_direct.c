@@ -333,11 +333,8 @@ void test_direct_method_direct_equiv_automatic(void) {
     free(L1); free(L2);
 }
 
-void test_direct_non_symmetric_falls_back(void) {
-    /* Non-symmetric numeric matrix: step 2.1 dispatcher returns NULL
-     * and the call falls back to the symbolic char-poly + Solve path.
-     * Result should still be a List of three numeric values for this
-     * upper-triangular case (eigenvalues are the diagonal). */
+void test_direct_upper_triangular_real_eigenvalues(void) {
+    /* Upper triangular: eigenvalues are the diagonal, sorted by |.|. */
     Expr* e = parse_expression(
         "Eigenvalues[{{1.0, 2.0, 3.0}, {0.0, 4.0, 5.0}, {0.0, 0.0, 6.0}}]");
     ASSERT(e);
@@ -345,18 +342,16 @@ void test_direct_non_symmetric_falls_back(void) {
     ASSERT(r);
     ASSERT(r->type == EXPR_FUNCTION);
     ASSERT(r->data.function.arg_count == 3);
-    /* Sorted descending |lambda|: 6, 4, 1.  Allow integer or real leaves. */
     double got[3];
     for (size_t i = 0; i < 3; i++) {
         Expr* v = r->data.function.args[i];
-        if (v->type == EXPR_REAL) got[i] = v->data.real;
-        else if (v->type == EXPR_INTEGER) got[i] = (double)v->data.integer;
-        else { ASSERT(0); }
+        ASSERT(v->type == EXPR_REAL);
+        got[i] = v->data.real;
     }
     ASSERT(fabs(got[0] - 6.0) < 1e-10);
     ASSERT(fabs(got[1] - 4.0) < 1e-10);
     ASSERT(fabs(got[2] - 1.0) < 1e-10);
-    printf("PASS: non-symmetric matrix falls back to symbolic path\n");
+    printf("PASS: upper triangular non-symmetric eigenvalues (Hessenberg + Francis QR)\n");
     expr_free(r); expr_free(e);
 }
 
@@ -382,6 +377,323 @@ void test_direct_symbolic_ignores_dispatch(void) {
 }
 
 /* --- Eigenvectors via the new dispatcher ---------------------------- */
+
+/* ============================================================ *
+ *  Phase 2 step 2a: real non-symmetric eigenvalues               *
+ *                                                                 *
+ *  Hessenberg + implicit double-shift Francis QR.  All real      *
+ *  matrices return eigenvalues; complex eigenvalues are emitted   *
+ *  as Complex[re, im].                                            *
+ * ============================================================ */
+
+/* Read an eigenvalue entry — Real or Complex[re, im] — into (re, im). */
+static void read_eigenvalue_entry(Expr* e, double* re, double* im) {
+    if (e->type == EXPR_REAL)    { *re = e->data.real;            *im = 0.0; return; }
+    if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer; *im = 0.0; return; }
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && e->data.function.arg_count == 2) {
+        Expr* r = e->data.function.args[0];
+        Expr* m = e->data.function.args[1];
+        *re = (r->type == EXPR_REAL) ? r->data.real
+            : (r->type == EXPR_INTEGER) ? (double)r->data.integer : NAN;
+        *im = (m->type == EXPR_REAL) ? m->data.real
+            : (m->type == EXPR_INTEGER) ? (double)m->data.integer : NAN;
+        return;
+    }
+    *re = NAN; *im = NAN;
+}
+
+/* Eval `Eigenvalues[<matrix>]` and read into freshly-allocated re / im
+ * arrays.  Returns the count of eigenvalues returned. */
+static size_t eval_eigenvalues_mixed(const double* A, size_t n,
+                                      double** re_out, double** im_out) {
+    char* in = corpus_matrix_to_eigenvalues_input(A, n);
+    Expr* e = parse_expression(in);
+    ASSERT(e);
+    Expr* r = evaluate(e);
+    expr_free(e); free(in);
+    ASSERT(r != NULL);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    size_t cnt = r->data.function.arg_count;
+    *re_out = (double*)malloc(sizeof(double) * (cnt ? cnt : 1));
+    *im_out = (double*)malloc(sizeof(double) * (cnt ? cnt : 1));
+    for (size_t i = 0; i < cnt; i++) {
+        read_eigenvalue_entry(r->data.function.args[i],
+                              &(*re_out)[i], &(*im_out)[i]);
+    }
+    expr_free(r);
+    return cnt;
+}
+
+/* For a real n x n matrix, verify:
+ *   - count of eigenvalues returned == n
+ *   - sum of eigenvalues == trace(A)            (similarity invariant)
+ *   - sum of lambda_i^2 == trace(A^2)           (similarity invariant,
+ *                                                 holds for any matrix)
+ *   - imaginary parts cancel in conjugate pairs (real-valued input)
+ *   - sort order is descending |lambda| (stable)
+ *
+ * Note: sum |lambda_i|^2 == Frobenius^2(A) is a NORMAL-matrix invariant
+ * (Schur's inequality: sum |lambda|^2 <= Frobenius^2 with equality iff
+ * normal).  General non-normal real matrices need trace(A^2) instead. */
+static void verify_general_invariants(const double* A, size_t n) {
+    double* re = NULL;
+    double* im = NULL;
+    size_t cnt = eval_eigenvalues_mixed(A, n, &re, &im);
+    ASSERT(cnt == n);
+
+    double trace = 0.0;
+    for (size_t i = 0; i < n; i++) trace += A[i * n + i];
+    double trace_A2 = 0.0;
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++)
+            trace_A2 += A[i * n + j] * A[j * n + i];
+
+    double sum_re = 0.0, sum_im = 0.0;
+    double sum_lam2_re = 0.0, sum_lam2_im = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        sum_re += re[i];
+        sum_im += im[i];
+        /* lambda^2 = (re^2 - im^2) + 2 re im i. */
+        sum_lam2_re += re[i] * re[i] - im[i] * im[i];
+        sum_lam2_im += 2.0 * re[i] * im[i];
+    }
+    double normA = corpus_norm_inf_real(A, n);
+    if (normA == 0.0) normA = 1.0;
+    double tol_trace = 256.0 * (double)n * 2.220446049250313e-16 * normA;
+    double tol_A2 = 256.0 * (double)n * 2.220446049250313e-16
+                    * (fabs(trace_A2) + normA * normA);
+    if (fabs(sum_re - trace) > tol_trace || fabs(sum_im) > tol_trace) {
+        printf("FAIL: sum(lambda) = %g + %gi vs trace %g (tol %g)\n",
+               sum_re, sum_im, trace, tol_trace);
+        ASSERT(0);
+    }
+    if (fabs(sum_lam2_re - trace_A2) > tol_A2
+        || fabs(sum_lam2_im) > tol_A2) {
+        printf("FAIL: sum(lambda^2) = %g + %gi vs trace(A^2) %g (tol %g)\n",
+               sum_lam2_re, sum_lam2_im, trace_A2, tol_A2);
+        ASSERT(0);
+    }
+    for (size_t i = 1; i < n; i++) {
+        double a1 = hypot(re[i - 1], im[i - 1]);
+        double a2 = hypot(re[i], im[i]);
+        ASSERT(a1 >= a2 - 1e-9);
+    }
+    free(re); free(im);
+}
+
+void test_direct_general_2x2_real(void) {
+    /* [[1, 2], [3, 4]]: eigenvalues (5 +/- sqrt(33))/2. */
+    double A[4] = { 1.0, 2.0, 3.0, 4.0 };
+    double* re = NULL;
+    double* im = NULL;
+    size_t cnt = eval_eigenvalues_mixed(A, 2, &re, &im);
+    ASSERT(cnt == 2);
+    double e0 = (5.0 + sqrt(33.0)) * 0.5;
+    double e1 = (5.0 - sqrt(33.0)) * 0.5;
+    ASSERT(fabs(re[0] - e0) < 1e-12);
+    ASSERT(fabs(re[1] - e1) < 1e-12);
+    ASSERT(fabs(im[0]) < 1e-14);
+    ASSERT(fabs(im[1]) < 1e-14);
+    printf("PASS: [[1,2],[3,4]] non-symmetric eigenvalues\n");
+    free(re); free(im);
+}
+
+void test_direct_general_2x2_complex_rotation(void) {
+    /* [[0, 1], [-1, 0]]: pure rotation, eigenvalues +/- i. */
+    double A[4] = { 0.0, 1.0, -1.0, 0.0 };
+    double *re = NULL, *im = NULL;
+    size_t cnt = eval_eigenvalues_mixed(A, 2, &re, &im);
+    ASSERT(cnt == 2);
+    /* Both eigenvalues have |lambda| = 1; sort order by index. */
+    for (size_t i = 0; i < 2; i++) {
+        ASSERT(fabs(re[i]) < 1e-14);
+        ASSERT(fabs(fabs(im[i]) - 1.0) < 1e-14);
+    }
+    ASSERT(im[0] * im[1] < 0);  /* conjugate pair */
+    printf("PASS: rotation [[0,1],[-1,0]] -> +/- i\n");
+    free(re); free(im);
+}
+
+void test_direct_general_2x2_complex_general(void) {
+    /* [[1, -1], [1, 1]]: eigenvalues 1 +/- i. */
+    double A[4] = { 1.0, -1.0, 1.0, 1.0 };
+    double *re = NULL, *im = NULL;
+    size_t cnt = eval_eigenvalues_mixed(A, 2, &re, &im);
+    ASSERT(cnt == 2);
+    for (size_t i = 0; i < 2; i++) {
+        ASSERT(fabs(re[i] - 1.0) < 1e-13);
+        ASSERT(fabs(fabs(im[i]) - 1.0) < 1e-13);
+    }
+    ASSERT(im[0] * im[1] < 0);
+    printf("PASS: [[1,-1],[1,1]] -> 1 +/- i\n");
+    free(re); free(im);
+}
+
+void test_direct_general_3x3_block_diagonal(void) {
+    /* Block-diagonal: 2x2 with complex pair (1 +/- i) at top-left,
+     * plus a real eigenvalue 2 at bottom-right. */
+    double A[9] = {
+        1.0, -1.0, 0.0,
+        1.0,  1.0, 0.0,
+        0.0,  0.0, 2.0
+    };
+    double *re = NULL, *im = NULL;
+    size_t cnt = eval_eigenvalues_mixed(A, 3, &re, &im);
+    ASSERT(cnt == 3);
+    /* |2| = 2, |1 +/- i| = sqrt(2) ~= 1.414.  Sort: 2, 1+i, 1-i (stable). */
+    ASSERT(fabs(re[0] - 2.0) < 1e-12);
+    ASSERT(fabs(im[0]) < 1e-13);
+    ASSERT(fabs(re[1] - 1.0) < 1e-13);
+    ASSERT(fabs(re[2] - 1.0) < 1e-13);
+    ASSERT(fabs(fabs(im[1]) - 1.0) < 1e-13);
+    ASSERT(fabs(fabs(im[2]) - 1.0) < 1e-13);
+    ASSERT(im[1] * im[2] < 0);
+    printf("PASS: 3x3 block diag with complex pair\n");
+    verify_general_invariants(A, 3);
+    free(re); free(im);
+}
+
+void test_direct_general_3x3_random(void) {
+    /* Deterministic Lehmer random 3x3, not symmetrised. */
+    unsigned long s = 11111UL;
+    double A[9];
+    for (size_t i = 0; i < 9; i++) {
+        s = (s * 48271UL) & 0x7fffffffUL;
+        A[i] = ((double)s / 2147483647.0 - 0.5) * 10.0;
+    }
+    verify_general_invariants(A, 3);
+    printf("PASS: random non-symmetric 3x3 trace + trace(A^2) preserved\n");
+}
+
+void test_direct_general_5x5_random(void) {
+    unsigned long s = 22222UL;
+    double A[25];
+    for (size_t i = 0; i < 25; i++) {
+        s = (s * 48271UL) & 0x7fffffffUL;
+        A[i] = ((double)s / 2147483647.0 - 0.5) * 10.0;
+    }
+    verify_general_invariants(A, 5);
+    printf("PASS: random non-symmetric 5x5 trace + trace(A^2) preserved\n");
+}
+
+void test_direct_general_10x10_random(void) {
+    unsigned long s = 33333UL;
+    double A[100];
+    for (size_t i = 0; i < 100; i++) {
+        s = (s * 48271UL) & 0x7fffffffUL;
+        A[i] = ((double)s / 2147483647.0 - 0.5) * 10.0;
+    }
+    verify_general_invariants(A, 10);
+    printf("PASS: random non-symmetric 10x10 trace + trace(A^2) preserved\n");
+}
+
+void test_direct_general_companion_matrix(void) {
+    /* Companion of x^3 - 6 x^2 + 11 x - 6 (eigenvalues 1, 2, 3):
+     *   [[0, 0, 6], [1, 0, -11], [0, 1, 6]] (Frobenius form). */
+    double A[9] = {
+        0.0, 0.0,   6.0,
+        1.0, 0.0, -11.0,
+        0.0, 1.0,   6.0
+    };
+    double *re = NULL, *im = NULL;
+    size_t cnt = eval_eigenvalues_mixed(A, 3, &re, &im);
+    ASSERT(cnt == 3);
+    /* Expect {3, 2, 1} (descending |.|, all real). */
+    ASSERT(fabs(re[0] - 3.0) < 1e-10);
+    ASSERT(fabs(re[1] - 2.0) < 1e-10);
+    ASSERT(fabs(re[2] - 1.0) < 1e-10);
+    for (size_t i = 0; i < 3; i++) ASSERT(fabs(im[i]) < 1e-12);
+    printf("PASS: companion of (x-1)(x-2)(x-3) -> {3, 2, 1}\n");
+    free(re); free(im);
+}
+
+void test_direct_general_jordan_block_2x2(void) {
+    /* Jordan block [[2, 1], [0, 2]]: defective eigenvalue 2 with
+     * algebraic multiplicity 2, geometric multiplicity 1.  The
+     * Eigenvalues call should still return {2, 2}. */
+    double A[4] = { 2.0, 1.0, 0.0, 2.0 };
+    double *re = NULL, *im = NULL;
+    size_t cnt = eval_eigenvalues_mixed(A, 2, &re, &im);
+    ASSERT(cnt == 2);
+    ASSERT(fabs(re[0] - 2.0) < 1e-12);
+    ASSERT(fabs(re[1] - 2.0) < 1e-12);
+    ASSERT(fabs(im[0]) < 1e-13);
+    ASSERT(fabs(im[1]) < 1e-13);
+    printf("PASS: Jordan block 2x2 -> {2, 2}\n");
+    free(re); free(im);
+}
+
+void test_direct_general_complex_pair_sorted_after_real(void) {
+    /* Construct a matrix whose spectrum is {5, 2+i, 2-i}.  |5|=5, |2 +/- i| =
+     * sqrt(5) ~= 2.236.  Sorted descending: 5, then conjugate pair. */
+    double A[9] = {
+        5.0, 0.0, 0.0,
+        0.0, 2.0, -1.0,
+        0.0, 1.0,  2.0
+    };
+    double *re = NULL, *im = NULL;
+    size_t cnt = eval_eigenvalues_mixed(A, 3, &re, &im);
+    ASSERT(cnt == 3);
+    ASSERT(fabs(re[0] - 5.0) < 1e-12);
+    ASSERT(fabs(im[0]) < 1e-13);
+    ASSERT(fabs(re[1] - 2.0) < 1e-12);
+    ASSERT(fabs(re[2] - 2.0) < 1e-12);
+    ASSERT(fabs(fabs(im[1]) - 1.0) < 1e-12);
+    ASSERT(fabs(fabs(im[2]) - 1.0) < 1e-12);
+    printf("PASS: {5, 2+/-i} sort order respects |lambda|\n");
+    free(re); free(im);
+}
+
+void test_direct_general_method_direct_routed(void) {
+    /* Method -> "Direct" on a real non-symmetric numeric matrix must
+     * use the new kernel (not the symbolic fallback) and produce the
+     * same result as Automatic. */
+    Expr* e1 = parse_expression(
+        "Eigenvalues[{{1.0, 2.0, 3.0}, {0.0, 4.0, 5.0}, "
+        "{0.0, 0.0, 6.0}}, Method -> \"Direct\"]");
+    Expr* e2 = parse_expression(
+        "Eigenvalues[{{1.0, 2.0, 3.0}, {0.0, 4.0, 5.0}, "
+        "{0.0, 0.0, 6.0}}]");
+    ASSERT(e1 && e2);
+    Expr* r1 = evaluate(e1);
+    Expr* r2 = evaluate(e2);
+    ASSERT(r1 && r2);
+    ASSERT(r1->type == EXPR_FUNCTION && r2->type == EXPR_FUNCTION);
+    ASSERT(r1->data.function.arg_count == 3);
+    ASSERT(r2->data.function.arg_count == 3);
+    for (size_t i = 0; i < 3; i++) {
+        double a1, b1, a2, b2;
+        read_eigenvalue_entry(r1->data.function.args[i], &a1, &b1);
+        read_eigenvalue_entry(r2->data.function.args[i], &a2, &b2);
+        ASSERT(fabs(a1 - a2) < 1e-12);
+        ASSERT(fabs(b1 - b2) < 1e-12);
+    }
+    printf("PASS: Direct == Automatic for non-symmetric 3x3\n");
+    expr_free(r1); expr_free(r2); expr_free(e1); expr_free(e2);
+}
+
+void test_direct_general_eigenvectors_fall_back(void) {
+    /* Step 2b not yet landed: eigenvectors of a non-symmetric numeric
+     * matrix should still produce a 3-element List (the symbolic
+     * fallback path's output), not error out. */
+    Expr* e = parse_expression(
+        "Eigenvectors[{{1.0, 2.0, 3.0}, {0.0, 4.0, 5.0}, "
+        "{0.0, 0.0, 6.0}}]");
+    ASSERT(e);
+    Expr* r = evaluate(e);
+    ASSERT(r != NULL);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(r->data.function.arg_count == 3);
+    printf("PASS: non-symmetric Eigenvectors falls back to symbolic\n");
+    expr_free(r); expr_free(e);
+}
 
 void test_direct_eigenvectors_diag_4x4(void) {
     /* Diagonal: eigenvectors are the canonical basis (descending |lambda|
@@ -435,7 +747,7 @@ void test_direct_eigenvectors_tridiag_residual(void) {
 int main(void) {
     symtab_init();
     core_init();
-    printf("Running mateigen Direct (Phase 2.1: real symmetric machine) tests...\n");
+    printf("Running mateigen Direct (Phase 2: machine-precision) tests...\n");
 
     TEST(test_direct_diag_3x3);
     TEST(test_direct_identity_4x4);
@@ -452,11 +764,25 @@ int main(void) {
     TEST(test_direct_k_negative);
     TEST(test_direct_upto_oversized);
     TEST(test_direct_method_direct_equiv_automatic);
-    TEST(test_direct_non_symmetric_falls_back);
+    TEST(test_direct_upper_triangular_real_eigenvalues);
     TEST(test_direct_symbolic_ignores_dispatch);
+
+    /* Phase 2 step 2a: real non-symmetric eigenvalues. */
+    TEST(test_direct_general_2x2_real);
+    TEST(test_direct_general_2x2_complex_rotation);
+    TEST(test_direct_general_2x2_complex_general);
+    TEST(test_direct_general_3x3_block_diagonal);
+    TEST(test_direct_general_3x3_random);
+    TEST(test_direct_general_5x5_random);
+    TEST(test_direct_general_10x10_random);
+    TEST(test_direct_general_companion_matrix);
+    TEST(test_direct_general_jordan_block_2x2);
+    TEST(test_direct_general_complex_pair_sorted_after_real);
+    TEST(test_direct_general_method_direct_routed);
+    TEST(test_direct_general_eigenvectors_fall_back);
     TEST(test_direct_eigenvectors_diag_4x4);
     TEST(test_direct_eigenvectors_tridiag_residual);
 
-    printf("All mateigen Direct (step 2.1) tests passed!\n");
+    printf("All mateigen Direct (machine-precision) tests passed!\n");
     return 0;
 }

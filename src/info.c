@@ -167,11 +167,14 @@ void info_init(void) {
         "\n"
         "Implementation status: \"Direct\" runs the hand-rolled Householder\n"
         "tridiagonalisation + Wilkinson-shift symmetric QR kernel at\n"
-        "machine precision for real symmetric matrices (Automatic also\n"
-        "routes here).  Non-symmetric, complex, and arbitrary-precision\n"
-        "MPFR cases plus \"Arnoldi\", \"Banded\", and \"FEAST\" arrive in\n"
-        "subsequent commits; an explicit but not-yet-implemented Method\n"
-        "prints a one-shot warning and falls back to the symbolic\n"
+        "machine precision for real symmetric matrices, and the\n"
+        "Hessenberg + implicit double-shift Francis QR kernel at machine\n"
+        "precision for real non-symmetric matrices (eigenvalues only --\n"
+        "non-symmetric eigenvectors arrive in the next commit).  Automatic\n"
+        "also routes here.  Complex and arbitrary-precision MPFR inputs\n"
+        "plus \"Arnoldi\", \"Banded\", and \"FEAST\" arrive in subsequent\n"
+        "commits; an explicit but not-yet-implemented Method prints a\n"
+        "one-shot warning and falls back to the symbolic\n"
         "characteristic-polynomial path.");
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
@@ -291,11 +294,14 @@ void info_init(void) {
         "and sub-option grammar.  Non-numeric matrices ignore Method and\n"
         "use the symbolic null-space pipeline.\n"
         "\n"
-        "Implementation status mirrors Eigenvalues: \"Direct\" yields\n"
-        "orthonormal eigenvectors for real symmetric matrices at machine\n"
-        "precision (Householder + symmetric QR with accumulated rotations).\n"
-        "Other cases fall back to the symbolic null-space pipeline with a\n"
-        "one-shot warning for unimplemented Methods.");
+        "Implementation status: \"Direct\" yields orthonormal eigenvectors\n"
+        "for real symmetric matrices at machine precision (Householder +\n"
+        "symmetric QR with accumulated rotations).  Real non-symmetric\n"
+        "matrices currently fall back to the symbolic null-space pipeline\n"
+        "for Eigenvectors (the Hessenberg + back-substitution kernel\n"
+        "arrives in the next commit alongside complex-eigenvalue\n"
+        "back-substitution); Eigenvalues on the same matrix already\n"
+        "uses the numerical Direct path.");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head",
         "Head[expr]\n"

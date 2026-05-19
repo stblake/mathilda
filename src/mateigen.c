@@ -1087,6 +1087,336 @@ static Expr* direct_apply_k_spec_list(Expr* full_list, Expr* k_spec) {
     return full_list;
 }
 
+/* ---------- Real non-symmetric Direct: Hessenberg + Francis QR ------ *
+ *                                                                       *
+ *  For a general real n x n matrix, eigenvalues are extracted by:       *
+ *    1. Householder reduction to upper Hessenberg form.                 *
+ *    2. Implicit double-shift QR (Francis) sweeps over the Hessenberg,  *
+ *       deflating off-diagonal entries until the matrix is quasi-       *
+ *       triangular (Schur form: 1x1 diagonal blocks for real            *
+ *       eigenvalues, 2x2 blocks for complex conjugate pairs).           *
+ *    3. Read eigenvalues off the Schur form.                            *
+ *                                                                       *
+ *  Eigenvectors require Q accumulation through both reduction and QR    *
+ *  sweeps and arrive in step 2b (this commit covers eigenvalues only).  *
+ *                                                                       *
+ *  LAPACK-HOOK: dgehrd for step 1, dhseqr for step 2, dtrevc3 +         *
+ *  dorghr for the eigenvector back-transform in step 2b.                *
+ * --------------------------------------------------------------------- */
+
+/* Householder reduction of an n x n matrix `A` (row-major, modified in
+ * place) to upper Hessenberg form.  Q is not accumulated in step 2a
+ * (eigenvalues only).
+ *
+ * Scratch buffer `u` (size n) is caller-provided.
+ *
+ * LAPACK-HOOK: dgehrd. */
+static void direct_hessenberg_real(double* A, size_t n, double* u) {
+    for (size_t k = 0; k + 2 < n; k++) {
+        /* Householder vector for column k below the sub-diagonal. */
+        double sigma = 0.0;
+        for (size_t i = k + 1; i < n; i++) {
+            double v = A[i * n + k];
+            sigma += v * v;
+        }
+        if (sigma == 0.0) continue;
+        double xk1 = A[(k + 1) * n + k];
+        double norm_x = sqrt(sigma);
+        double alpha = (xk1 >= 0.0) ? -norm_x : norm_x;
+        u[k + 1] = xk1 - alpha;
+        for (size_t i = k + 2; i < n; i++) u[i] = A[i * n + k];
+        double unorm2 = u[k + 1] * u[k + 1];
+        for (size_t i = k + 2; i < n; i++) unorm2 += u[i] * u[i];
+        if (unorm2 == 0.0) continue;
+        double unorm = sqrt(unorm2);
+        for (size_t i = k + 1; i < n; i++) u[i] /= unorm;
+
+        /* Left multiply: A[k+1..n-1, :] <- H * A[k+1..n-1, :] */
+        for (size_t j = 0; j < n; j++) {
+            double s = 0.0;
+            for (size_t i = k + 1; i < n; i++) s += u[i] * A[i * n + j];
+            s *= 2.0;
+            for (size_t i = k + 1; i < n; i++) A[i * n + j] -= s * u[i];
+        }
+        /* Right multiply: A[:, k+1..n-1] <- A[:, k+1..n-1] * H */
+        for (size_t i = 0; i < n; i++) {
+            double s = 0.0;
+            for (size_t j = k + 1; j < n; j++) s += A[i * n + j] * u[j];
+            s *= 2.0;
+            for (size_t j = k + 1; j < n; j++) A[i * n + j] -= s * u[j];
+        }
+
+        /* Tidy up: explicit subdiag and zero below it. */
+        A[(k + 1) * n + k] = alpha;
+        for (size_t i = k + 2; i < n; i++) A[i * n + k] = 0.0;
+    }
+}
+
+/* One Francis double-shift QR step applied to the active sub-block
+ * H[q..p-1, q..p-1] of an upper Hessenberg matrix.  The shift pair is
+ * derived from the eigenvalues of the trailing 2x2 block H[p-2:p-1,
+ * p-2:p-1] (real or complex; real arithmetic throughout since the
+ * shift pair is a conjugate pair when complex).
+ *
+ * Bulge chasing uses Householder reflectors of size 3 (size 2 at the
+ * very end of the chase).  Sub-block size p - q must be >= 3.
+ *
+ * LAPACK-HOOK: this is the inner loop body of dhseqr / dlahqr. */
+static void direct_francis_step(double* H, size_t n, size_t q, size_t p) {
+    double h11 = H[(p - 2) * n + (p - 2)];
+    double h12 = H[(p - 2) * n + (p - 1)];
+    double h21 = H[(p - 1) * n + (p - 2)];
+    double h22 = H[(p - 1) * n + (p - 1)];
+    double s = h11 + h22;                       /* trace of trailing 2x2 */
+    double t = h11 * h22 - h12 * h21;           /* det of trailing 2x2   */
+
+    /* First three entries of M's first column for the active block. */
+    double g11 = H[q * n + q];
+    double g12 = H[q * n + (q + 1)];
+    double g21 = H[(q + 1) * n + q];
+    double g22 = H[(q + 1) * n + (q + 1)];
+    double g32 = H[(q + 2) * n + (q + 1)];
+    double x = g11 * g11 + g12 * g21 - s * g11 + t;
+    double y = g21 * (g11 + g22 - s);
+    double z = g21 * g32;
+
+    for (size_t k = q; k + 2 < p; k++) {
+        /* 3-element Householder for (x, y, z). */
+        double sig = x * x + y * y + z * z;
+        if (sig == 0.0) {
+            /* Skip degenerate step; advance and continue. */
+            x = H[(k + 1) * n + k];
+            y = H[(k + 2) * n + k];
+            z = (k + 3 < p) ? H[(k + 3) * n + k] : 0.0;
+            continue;
+        }
+        double norm_v = sqrt(sig);
+        double a = (x >= 0.0) ? -norm_v : norm_v;
+        double u1 = x - a;
+        double u2 = y;
+        double u3 = z;
+        double un2 = u1 * u1 + u2 * u2 + u3 * u3;
+        double un = sqrt(un2);
+        u1 /= un; u2 /= un; u3 /= un;
+
+        /* Apply P from the left to rows (k, k+1, k+2). */
+        size_t col_start = (k > q) ? k - 1 : q;
+        for (size_t j = col_start; j < n; j++) {
+            double s0 = (u1 * H[k * n + j]
+                       + u2 * H[(k + 1) * n + j]
+                       + u3 * H[(k + 2) * n + j]) * 2.0;
+            H[k * n + j]       -= s0 * u1;
+            H[(k + 1) * n + j] -= s0 * u2;
+            H[(k + 2) * n + j] -= s0 * u3;
+        }
+        /* Apply P from the right to cols (k, k+1, k+2). */
+        size_t row_end = (k + 3 < p) ? (k + 3) : (p - 1);
+        for (size_t i = 0; i <= row_end; i++) {
+            double s0 = (H[i * n + k]       * u1
+                       + H[i * n + (k + 1)] * u2
+                       + H[i * n + (k + 2)] * u3) * 2.0;
+            H[i * n + k]       -= s0 * u1;
+            H[i * n + (k + 1)] -= s0 * u2;
+            H[i * n + (k + 2)] -= s0 * u3;
+        }
+
+        x = H[(k + 1) * n + k];
+        y = H[(k + 2) * n + k];
+        z = (k + 3 < p) ? H[(k + 3) * n + k] : 0.0;
+    }
+
+    /* Final 2-element Householder on (x, y) at rows (p-2, p-1). */
+    {
+        size_t k = p - 2;
+        double norm_v = sqrt(x * x + y * y);
+        if (norm_v == 0.0) return;
+        double a = (x >= 0.0) ? -norm_v : norm_v;
+        double u1 = x - a;
+        double u2 = y;
+        double un2 = u1 * u1 + u2 * u2;
+        double un = sqrt(un2);
+        u1 /= un; u2 /= un;
+        size_t col_start = k - 1;
+        for (size_t j = col_start; j < n; j++) {
+            double s0 = (u1 * H[k * n + j]
+                       + u2 * H[(k + 1) * n + j]) * 2.0;
+            H[k * n + j]       -= s0 * u1;
+            H[(k + 1) * n + j] -= s0 * u2;
+        }
+        for (size_t i = 0; i < p; i++) {
+            double s0 = (H[i * n + k] * u1
+                       + H[i * n + (k + 1)] * u2) * 2.0;
+            H[i * n + k]       -= s0 * u1;
+            H[i * n + (k + 1)] -= s0 * u2;
+        }
+    }
+}
+
+/* Drive Francis QR sweeps on an upper Hessenberg matrix `H` until it
+ * reaches quasi-triangular (Schur) form.  Eigenvalues are written into
+ * eval_re / eval_im in the order they deflate -- caller should sort.
+ *
+ * Returns 0 on success, -1 if the maximum number of total Francis
+ * sweeps (30 * n) is exceeded without convergence.
+ *
+ * LAPACK-HOOK: dhseqr. */
+static int direct_qr_real_general(double* H, size_t n,
+                                    double* eval_re, double* eval_im) {
+    const double eps = 1e-14;
+    const size_t max_iter = 30 * n;
+    size_t iter = 0;
+    size_t p = n;
+
+    while (p > 0) {
+        if (p == 1) {
+            eval_re[0] = H[0];
+            eval_im[0] = 0.0;
+            break;
+        }
+        if (iter++ > max_iter) return -1;
+
+        /* Find largest q in [1..p-1] such that H[q, q-1] is negligible
+         * (deflation point).  q = 0 means the whole [0..p-1] block is
+         * unreduced. */
+        size_t q = p - 1;
+        while (q > 0) {
+            double tol = eps * (fabs(H[(q - 1) * n + (q - 1)])
+                              + fabs(H[q * n + q]));
+            if (fabs(H[q * n + (q - 1)]) <= tol) {
+                H[q * n + (q - 1)] = 0.0;
+                break;
+            }
+            q -= 1;
+        }
+
+        if (q == p - 1) {
+            /* Trailing 1x1 block deflated -- real eigenvalue. */
+            eval_re[p - 1] = H[(p - 1) * n + (p - 1)];
+            eval_im[p - 1] = 0.0;
+            p -= 1;
+            iter = 0;
+            continue;
+        }
+        if (q == p - 2) {
+            /* Trailing 2x2 block: extract eigenvalues. */
+            double a = H[(p - 2) * n + (p - 2)];
+            double b = H[(p - 2) * n + (p - 1)];
+            double c = H[(p - 1) * n + (p - 2)];
+            double d = H[(p - 1) * n + (p - 1)];
+            double tr = a + d;
+            double det = a * d - b * c;
+            double disc = tr * tr - 4.0 * det;
+            if (disc >= 0.0) {
+                double sq = sqrt(disc);
+                eval_re[p - 2] = (tr + sq) * 0.5;
+                eval_im[p - 2] = 0.0;
+                eval_re[p - 1] = (tr - sq) * 0.5;
+                eval_im[p - 1] = 0.0;
+            } else {
+                double sq = sqrt(-disc);
+                eval_re[p - 2] = tr * 0.5;
+                eval_im[p - 2] =  sq * 0.5;
+                eval_re[p - 1] = tr * 0.5;
+                eval_im[p - 1] = -sq * 0.5;
+            }
+            p -= 2;
+            iter = 0;
+            continue;
+        }
+
+        direct_francis_step(H, n, q, p);
+    }
+    return 0;
+}
+
+/* Sort permutation by descending |lambda| (stable) where each lambda
+ * is given by its real and imaginary parts. */
+static void direct_sort_perm_desc_abs_complex(const double* re,
+                                                const double* im,
+                                                size_t n, size_t* perm) {
+    for (size_t i = 0; i < n; i++) perm[i] = i;
+    for (size_t i = 1; i < n; i++) {
+        size_t cur = perm[i];
+        double ac = hypot(re[cur], im[cur]);
+        size_t j = i;
+        while (j > 0) {
+            size_t prev = perm[j - 1];
+            double ap = hypot(re[prev], im[prev]);
+            if (ap > ac || (ap == ac && prev < cur)) break;
+            perm[j] = perm[j - 1];
+            j--;
+        }
+        perm[j] = cur;
+    }
+}
+
+/* Build a List of eigenvalues from real / imaginary parts in the order
+ * given by `perm`.  Real eigenvalues become EXPR_REAL; complex pairs
+ * become Complex[re, im]. */
+static Expr* direct_build_complex_eigenvalue_list(const double* re,
+                                                    const double* im,
+                                                    size_t n,
+                                                    const size_t* perm) {
+    Expr** items = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        size_t idx = perm[i];
+        if (im[idx] == 0.0) {
+            items[i] = expr_new_real(re[idx]);
+        } else {
+            Expr** comp_args = (Expr**)malloc(sizeof(Expr*) * 2);
+            comp_args[0] = expr_new_real(re[idx]);
+            comp_args[1] = expr_new_real(im[idx]);
+            items[i] = expr_new_function(expr_new_symbol("Complex"),
+                                          comp_args, 2);
+            free(comp_args);
+        }
+    }
+    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    free(items);
+    return out;
+}
+
+/* Top-level "Direct" kernel for real non-symmetric machine-precision
+ * eigenvalues.  Returns a freshly-allocated List of eigenvalues (mix of
+ * Real and Complex[re, im], sorted by descending |lambda|), or NULL on
+ * convergence failure or when eigenvectors are requested (step 2b
+ * territory).  Caller owns the result. */
+static Expr* direct_real_general_machine(const MatD* A, MateigenWant want,
+                                          Expr* k_spec) {
+    size_t n = A->n;
+    if (n == 0) return NULL;
+    if (want & MATEIGEN_WANT_VECTORS) {
+        /* Eigenvectors arrive in Phase 2 step 2b -- fall back to
+         * the symbolic path for now. */
+        return NULL;
+    }
+
+    double* H = (double*)malloc(sizeof(double) * n * n);
+    memcpy(H, A->re, sizeof(double) * n * n);
+    double* u_buf = (double*)malloc(sizeof(double) * n);
+    direct_hessenberg_real(H, n, u_buf);
+    free(u_buf);
+
+    double* eval_re = (double*)calloc(n, sizeof(double));
+    double* eval_im = (double*)calloc(n, sizeof(double));
+    int qr_status = direct_qr_real_general(H, n, eval_re, eval_im);
+    free(H);
+
+    if (qr_status != 0) {
+        free(eval_re); free(eval_im);
+        return NULL;
+    }
+
+    size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+    direct_sort_perm_desc_abs_complex(eval_re, eval_im, n, perm);
+
+    Expr* out = direct_build_complex_eigenvalue_list(eval_re, eval_im, n, perm);
+
+    free(eval_re); free(eval_im); free(perm);
+
+    return direct_apply_k_spec_list(out, k_spec);
+}
+
 /* Top-level "Direct" kernel for real symmetric machine-precision input.
  * Returns a freshly-allocated List[Real,...] (eigenvalues) or
  * List[List[Real,...],...] (eigenvectors), or NULL when the input is
@@ -1137,13 +1467,20 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
 
 /* Dispatcher entry point: route a numeric matrix through the
  * appropriate "Direct" kernel.  Returns NULL when the matrix shape
- * isn't yet supported by a numerical kernel (e.g. non-symmetric or
- * complex in step 2.1) so the caller can fall back to the symbolic
- * path.  This NULL return is also used for Eigenvalues / Eigenvectors
- * combined with a generalised pencil ({m, a}) -- generalised numeric
- * eigenvalues are not part of the current numerical scope.
+ * isn't yet supported by a numerical kernel so the caller can fall
+ * back to the symbolic path.  This NULL return is also used for
+ * Eigenvalues / Eigenvectors combined with a generalised pencil
+ * ({m, a}) -- generalised numeric eigenvalues are not part of the
+ * current numerical scope.
  *
- * Step 2.1: implemented kernels = real symmetric only.
+ * Implemented kernels:
+ *   - Real symmetric (machine precision):  eigenvalues + eigenvectors.
+ *   - Real non-symmetric (machine precision): eigenvalues only.
+ *     Eigenvectors fall back to the symbolic path until step 2b.
+ *
+ * Falls back to symbolic for:
+ *   - Complex matrices (step 2c).
+ *   - MPFR matrices (step 2d).
  */
 static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,
                                        MateigenWant want, Expr* k_spec) {
@@ -1152,16 +1489,16 @@ static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,
 
     MatD A;
     if (!matD_load(m, (size_t)n, &A)) return NULL;
-    if (A.is_complex) { matD_free(&A); return NULL; }  /* 2.3 territory */
+    if (A.is_complex) { matD_free(&A); return NULL; }  /* step 2c */
 
     double norm = matD_norm_inf_real(A.re, A.n);
     double sym_tol = 1e-12 * (norm == 0.0 ? 1.0 : norm) * (double)A.n;
-    if (!matD_is_real_symmetric(&A, sym_tol)) {
-        matD_free(&A);
-        return NULL;                     /* 2.2 territory */
+    Expr* out;
+    if (matD_is_real_symmetric(&A, sym_tol)) {
+        out = direct_real_sym_machine(&A, want, k_spec);
+    } else {
+        out = direct_real_general_machine(&A, want, k_spec);
     }
-
-    Expr* out = direct_real_sym_machine(&A, want, k_spec);
     matD_free(&A);
     return out;
 }
