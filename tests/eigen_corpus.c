@@ -1,0 +1,198 @@
+#include "eigen_corpus.h"
+
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "expr.h"
+#include "parse.h"
+#include "eval.h"
+#include "print.h"
+#include "test_utils.h"
+
+/* --- helpers --------------------------------------------------------- */
+
+/* Read a real / integer leaf into a double.  Used for parsing the
+ * scalar entries of an Eigenvalues result List. */
+static int leaf_to_double(Expr* e, double* out) {
+    if (!e) return 0;
+    if (e->type == EXPR_REAL)    { *out = e->data.real;             return 1; }
+    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer;  return 1; }
+    /* Negative-int wrapped under Times[-1, n]. */
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol, "Times") == 0
+        && e->data.function.arg_count == 2) {
+        double a, b;
+        if (leaf_to_double(e->data.function.args[0], &a)
+            && leaf_to_double(e->data.function.args[1], &b)) {
+            *out = a * b;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* --- public API ------------------------------------------------------ */
+
+double corpus_norm_inf_real(const double* A, size_t n) {
+    double m = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double s = 0.0;
+        for (size_t j = 0; j < n; j++) s += fabs(A[i * n + j]);
+        if (s > m) m = s;
+    }
+    return m;
+}
+
+static char* matrix_to_input(const char* head, const double* A, size_t n) {
+    /* Generous upper bound per entry: "-1.23456789012345e+123, " ≈ 28 chars. */
+    size_t cap = strlen(head) + 16 + n * n * 32;
+    char* buf = (char*)malloc(cap);
+    size_t pos = 0;
+    pos += snprintf(buf + pos, cap - pos, "%s[{", head);
+    for (size_t i = 0; i < n; i++) {
+        if (i) pos += snprintf(buf + pos, cap - pos, ", ");
+        pos += snprintf(buf + pos, cap - pos, "{");
+        for (size_t j = 0; j < n; j++) {
+            if (j) pos += snprintf(buf + pos, cap - pos, ", ");
+            /* %.17e guarantees a decimal point so integer-valued entries
+             * still parse as Real and route through the numerical path. */
+            pos += snprintf(buf + pos, cap - pos, "%.17e", A[i * n + j]);
+        }
+        pos += snprintf(buf + pos, cap - pos, "}");
+    }
+    snprintf(buf + pos, cap - pos, "}]");
+    return buf;
+}
+
+char* corpus_matrix_to_eigenvalues_input(const double* A, size_t n) {
+    return matrix_to_input("Eigenvalues", A, n);
+}
+
+char* corpus_matrix_to_eigenvectors_input(const double* A, size_t n) {
+    return matrix_to_input("Eigenvectors", A, n);
+}
+
+size_t corpus_eval_eigenvalues_real(const double* A, size_t n,
+                                     double** lambdas) {
+    char* input = corpus_matrix_to_eigenvalues_input(A, n);
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    free(input);
+
+    ASSERT(r != NULL);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+
+    size_t out_count = r->data.function.arg_count;
+    *lambdas = (double*)malloc(sizeof(double) * (out_count ? out_count : 1));
+    for (size_t i = 0; i < out_count; i++) {
+        ASSERT(leaf_to_double(r->data.function.args[i], &(*lambdas)[i]));
+    }
+    expr_free(r);
+    return out_count;
+}
+
+size_t corpus_eval_eigenvectors_real(const double* A, size_t n,
+                                      double** V) {
+    char* input = corpus_matrix_to_eigenvectors_input(A, n);
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    free(input);
+
+    ASSERT(r != NULL);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+
+    size_t out_count = r->data.function.arg_count;
+    *V = (double*)malloc(sizeof(double) * (out_count ? out_count * n : 1));
+    for (size_t i = 0; i < out_count; i++) {
+        Expr* row = r->data.function.args[i];
+        ASSERT(row->type == EXPR_FUNCTION);
+        ASSERT(row->data.function.head->type == EXPR_SYMBOL);
+        ASSERT(strcmp(row->data.function.head->data.symbol, "List") == 0);
+        ASSERT(row->data.function.arg_count == n);
+        for (size_t j = 0; j < n; j++) {
+            ASSERT(leaf_to_double(row->data.function.args[j],
+                                  &(*V)[i * n + j]));
+        }
+    }
+    expr_free(r);
+    return out_count;
+}
+
+void corpus_check_real_eigenvalues(const char* label,
+                                    const char* input,
+                                    const double* expected, size_t n,
+                                    double tol) {
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    ASSERT(r != NULL);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+    ASSERT(r->data.function.arg_count == n);
+    int ok = 1;
+    for (size_t i = 0; i < n; i++) {
+        double got;
+        if (!leaf_to_double(r->data.function.args[i], &got)) {
+            ok = 0; break;
+        }
+        if (fabs(got - expected[i]) > tol) {
+            printf("FAIL: %s\n  index %zu: expected %.17g, got %.17g (tol %g)\n",
+                   label, i, expected[i], got, tol);
+            ok = 0;
+        }
+    }
+    if (ok) printf("PASS: %s\n", label);
+    expr_free(r); expr_free(e);
+    ASSERT(ok);
+}
+
+double corpus_assert_residual_real(const double* A, size_t n,
+                                    double lambda, const double* v,
+                                    double tol) {
+    double res = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double Avi = 0.0;
+        for (size_t j = 0; j < n; j++) Avi += A[i * n + j] * v[j];
+        double e = fabs(Avi - lambda * v[i]);
+        if (e > res) res = e;
+    }
+    if (res > tol) {
+        printf("FAIL: residual %g exceeds tol %g (lambda=%g)\n",
+               res, tol, lambda);
+    }
+    ASSERT(res <= tol);
+    return res;
+}
+
+void corpus_assert_orthonormal_real(const double* V, size_t n, double tol) {
+    /* V is row-major n x n, row i = i-th eigenvector.  V V^T should
+     * be the identity for an orthonormal basis. */
+    double worst = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = 0; j < n; j++) {
+            double dot = 0.0;
+            for (size_t k = 0; k < n; k++) dot += V[i * n + k] * V[j * n + k];
+            double target = (i == j) ? 1.0 : 0.0;
+            double e = fabs(dot - target);
+            if (e > worst) worst = e;
+        }
+    }
+    if (worst > tol) {
+        printf("FAIL: orthonormality residual %g exceeds tol %g\n",
+               worst, tol);
+    }
+    ASSERT(worst <= tol);
+}

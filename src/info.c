@@ -165,10 +165,14 @@ void info_init(void) {
         "Non-numeric matrices ignore Method and use the symbolic\n"
         "characteristic-polynomial pipeline.\n"
         "\n"
-        "Phase 1 status: the numerical Direct/Arnoldi/Banded/FEAST kernels\n"
-        "are scheduled to land in subsequent commits; any explicit Method\n"
-        "other than Automatic currently prints a one-shot warning and the\n"
-        "call falls back to the symbolic path.");
+        "Implementation status: \"Direct\" runs the hand-rolled Householder\n"
+        "tridiagonalisation + Wilkinson-shift symmetric QR kernel at\n"
+        "machine precision for real symmetric matrices (Automatic also\n"
+        "routes here).  Non-symmetric, complex, and arbitrary-precision\n"
+        "MPFR cases plus \"Arnoldi\", \"Banded\", and \"FEAST\" arrive in\n"
+        "subsequent commits; an explicit but not-yet-implemented Method\n"
+        "prints a one-shot warning and falls back to the symbolic\n"
+        "characteristic-polynomial path.");
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
         "\tfinds an x that solves the matrix equation m . x == b.\n"
@@ -287,9 +291,11 @@ void info_init(void) {
         "and sub-option grammar.  Non-numeric matrices ignore Method and\n"
         "use the symbolic null-space pipeline.\n"
         "\n"
-        "Phase 1 status: the numerical kernels (Direct/Arnoldi/Banded/FEAST)\n"
-        "are not yet wired; any explicit Method other than Automatic prints\n"
-        "a one-shot warning and the call falls back to the symbolic path.");
+        "Implementation status mirrors Eigenvalues: \"Direct\" yields\n"
+        "orthonormal eigenvectors for real symmetric matrices at machine\n"
+        "precision (Householder + symmetric QR with accumulated rotations).\n"
+        "Other cases fall back to the symbolic null-space pipeline with a\n"
+        "one-shot warning for unimplemented Methods.");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head",
         "Head[expr]\n"

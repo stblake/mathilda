@@ -52,4 +52,15 @@ typedef enum {
  * the right-hand side of the Rule (NOT the whole Rule expression). */
 MateigenMethod mateigen_parse_method_value(Expr* method_value);
 
+/* Flag telling a per-method kernel which outputs to populate.  Both
+ * Eigenvalues and Eigenvectors route through the same kernel; the WANT
+ * flag tells the kernel whether to skip the (potentially expensive)
+ * eigenvector accumulation work.  This is the abstraction that LAPACK
+ * exposes via its JOBV / JOBVL / JOBVR flags. */
+typedef enum {
+    MATEIGEN_WANT_VALUES  = 1u << 0,
+    MATEIGEN_WANT_VECTORS = 1u << 1,
+    MATEIGEN_WANT_BOTH    = MATEIGEN_WANT_VALUES | MATEIGEN_WANT_VECTORS
+} MateigenWant;
+
 #endif /* MATEIGEN_H */

@@ -639,6 +639,533 @@ static bool eigen_parse_args(Expr* res, EigenOpts* opts) {
     return true;
 }
 
+/* ============================================================ *
+ *  Phase 2: numerical "Direct" method                            *
+ *                                                                 *
+ *  Hand-rolled hot-path kernels that operate on flat dense        *
+ *  numerical arrays so the inner loops never touch Expr nodes.    *
+ *                                                                 *
+ *  Each kernel has exactly one entry point and is annotated with  *
+ *  a LAPACK-HOOK comment for future drop-in replacement under a   *
+ *  USE_LAPACK build flag (see lovely-roaming-diffie.md).          *
+ *                                                                 *
+ *  Step 2.1 implementation (this file):                            *
+ *    - Real symmetric matrices at machine precision (double).      *
+ *    - Tridiagonalisation via Householder reflectors.              *
+ *    - Symmetric tridiagonal QR with Wilkinson shift.              *
+ *    - Both eigenvalues and orthonormal eigenvectors.              *
+ *                                                                 *
+ *  Subsequent commits add:                                         *
+ *    - 2.2 real non-symmetric (Hessenberg + Francis QR)            *
+ *    - 2.3 complex matrices                                        *
+ *    - 2.4 MPFR (arbitrary-precision) kernels                      *
+ * ============================================================ */
+
+/* Machine-precision dense matrix workspace.  Row-major.  Always
+ * heap-allocated; matD_free must be called regardless of how the
+ * matrix was populated. */
+typedef struct {
+    size_t  n;
+    int     is_complex;   /* 0: real only, 1: complex (im[] non-NULL) */
+    double* re;           /* length n*n */
+    double* im;           /* length n*n, NULL when !is_complex */
+} MatD;
+
+static void matD_free(MatD* M) {
+    if (!M) return;
+    free(M->re); free(M->im);
+    M->re = M->im = NULL;
+    M->n = 0; M->is_complex = 0;
+}
+
+/* Coerce an Expr leaf to a double.  Handles Integer, Real, BigInt,
+ * MPFR, Rational[p, q], and Complex[re, im] (returning real part; the
+ * imaginary part is returned via *out_im when non-NULL).  Returns
+ * false if the leaf isn't a recognisable numeric value. */
+static bool eigen_leaf_to_double(Expr* e, double* out_re, double* out_im) {
+    if (out_im) *out_im = 0.0;
+    if (!e) return false;
+    if (e->type == EXPR_REAL)    { *out_re = e->data.real;                return true; }
+    if (e->type == EXPR_INTEGER) { *out_re = (double)e->data.integer;     return true; }
+    if (e->type == EXPR_BIGINT)  { *out_re = mpz_get_d(e->data.bigint);   return true; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR)    { *out_re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
+#endif
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+        if (h == SYM_Rational && e->data.function.arg_count == 2) {
+            double p, q;
+            if (eigen_leaf_to_double(e->data.function.args[0], &p, NULL)
+                && eigen_leaf_to_double(e->data.function.args[1], &q, NULL)
+                && q != 0.0) {
+                *out_re = p / q;
+                return true;
+            }
+        }
+        if (h == SYM_Complex && e->data.function.arg_count == 2) {
+            double r, i;
+            if (eigen_leaf_to_double(e->data.function.args[0], &r, NULL)
+                && eigen_leaf_to_double(e->data.function.args[1], &i, NULL)) {
+                *out_re = r;
+                if (out_im) *out_im = i;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* True iff `e` is a numeric leaf that the dispatcher can convert to a
+ * double (possibly with a non-zero imaginary part). */
+static bool eigen_leaf_is_complex(Expr* e) {
+    double r, i;
+    return eigen_leaf_to_double(e, &r, &i) && i != 0.0;
+}
+
+/* Walk an n x n list-of-lists matrix expression and copy its numeric
+ * entries into a freshly-allocated MatD.  Returns false (with *out
+ * zeroed) if any entry isn't a numeric leaf -- the symbolic path
+ * should handle that case. */
+static bool matD_load(Expr* m, size_t n, MatD* out) {
+    out->n = n;
+    out->is_complex = 0;
+    out->re = (double*)malloc(sizeof(double) * n * n);
+    out->im = NULL;
+    /* First pass: detect any complex entries so we can allocate im[]. */
+    for (size_t i = 0; i < n; i++) {
+        Expr* row = m->data.function.args[i];
+        for (size_t j = 0; j < n; j++) {
+            if (eigen_leaf_is_complex(row->data.function.args[j])) {
+                out->is_complex = 1;
+                break;
+            }
+        }
+        if (out->is_complex) break;
+    }
+    if (out->is_complex) {
+        out->im = (double*)calloc(n * n, sizeof(double));
+    }
+    /* Second pass: copy values. */
+    for (size_t i = 0; i < n; i++) {
+        Expr* row = m->data.function.args[i];
+        for (size_t j = 0; j < n; j++) {
+            double r, im_v = 0.0;
+            if (!eigen_leaf_to_double(row->data.function.args[j],
+                                      &r, &im_v)) {
+                matD_free(out);
+                return false;
+            }
+            out->re[i * n + j] = r;
+            if (out->is_complex) out->im[i * n + j] = im_v;
+        }
+    }
+    return true;
+}
+
+/* Infinity-norm of an n x n real matrix. */
+static double matD_norm_inf_real(const double* A, size_t n) {
+    double m = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double row_sum = 0.0;
+        for (size_t j = 0; j < n; j++) row_sum += fabs(A[i * n + j]);
+        if (row_sum > m) m = row_sum;
+    }
+    return m;
+}
+
+/* True iff a real n x n matrix is symmetric to within `tol` (absolute
+ * threshold; the caller multiplies by ||A||_inf and a small fudge). */
+static bool matD_is_real_symmetric(const MatD* A, double tol) {
+    if (A->is_complex) return false;
+    size_t n = A->n;
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = i + 1; j < n; j++) {
+            if (fabs(A->re[i * n + j] - A->re[j * n + i]) > tol) return false;
+        }
+    }
+    return true;
+}
+
+/* LAPACK-HOOK: replace with dsytrd when USE_LAPACK is set.
+ *
+ * Householder tridiagonalisation of a real symmetric n x n matrix `A`
+ * (row-major, modified in place).  On return:
+ *   diag[i]     = T_ii      for 0 <= i < n
+ *   subdiag[i]  = T_{i+1,i} for 0 <= i < n-1
+ *   Q (n*n)     = orthogonal accumulated reflectors, when `want_Q`.
+ *
+ * Algorithm: classic Householder reflectors applied symmetrically
+ * via the rank-2 update A <- A - u q^T - q u^T where p = A u, K = u^T p / 2,
+ * q = p - K u.  O(2 n^3 / 3) flops.  See Golub & Van Loan, Alg 8.3.1.
+ *
+ * Scratch buffers `u`, `p`, `q` (size n each) are caller-provided so
+ * the inner loops never touch malloc/free.
+ */
+static void direct_tridiag_real_sym(double* A, size_t n,
+                                     double* diag, double* subdiag,
+                                     double* Q, bool want_Q,
+                                     double* u, double* p, double* q) {
+    if (want_Q) {
+        /* Q starts at identity; reflectors are applied from the right
+         * so the columns of Q become the orthogonal eigenvectors of A
+         * once symmetric QR finishes. */
+        for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) Q[i * n + j] = (i == j) ? 1.0 : 0.0;
+        }
+    }
+
+    for (size_t k = 0; k + 2 < n; k++) {
+        /* Compute Householder vector u for A[k+1:n, k]. */
+        double sigma = 0.0;
+        for (size_t i = k + 1; i < n; i++) {
+            double v = A[i * n + k];
+            sigma += v * v;
+        }
+        double xk1 = A[(k + 1) * n + k];
+        if (sigma == 0.0) {
+            subdiag[k] = xk1;
+            continue;
+        }
+        /* sigma already contains xk1*xk1 (the loop runs i = k+1..n-1, and
+         * xk1 = A[k+1, k] is the first such entry).  The cancellation-safe
+         * form: alpha = -sign(xk1) * ||x||. */
+        double norm_x = sqrt(sigma);
+        double alpha = (xk1 >= 0.0) ? -norm_x : norm_x;
+
+        /* u[k+1] = xk1 - alpha; u[i>k+1] = A[i, k];  then normalise. */
+        u[k + 1] = xk1 - alpha;
+        for (size_t i = k + 2; i < n; i++) u[i] = A[i * n + k];
+        double unorm2 = u[k + 1] * u[k + 1];
+        for (size_t i = k + 2; i < n; i++) unorm2 += u[i] * u[i];
+        if (unorm2 == 0.0) {
+            subdiag[k] = xk1;
+            continue;
+        }
+        double unorm = sqrt(unorm2);
+        for (size_t i = k + 1; i < n; i++) u[i] /= unorm;
+
+        /* p = A_22 u   (only on the trailing sub-block) */
+        for (size_t i = k + 1; i < n; i++) {
+            double s = 0.0;
+            for (size_t j = k + 1; j < n; j++) s += A[i * n + j] * u[j];
+            p[i] = 2.0 * s;
+        }
+        /* K = u^T A u = (u^T p) / 2 (since p = 2 A u). */
+        double K = 0.0;
+        for (size_t i = k + 1; i < n; i++) K += u[i] * p[i];
+        K *= 0.5;
+        /* q = p - 2 K u.  The rank-2 update A <- A - u q^T - q u^T then
+         * equals H A H for H = I - 2 u u^T (Golub & Van Loan Alg 8.3.1). */
+        for (size_t i = k + 1; i < n; i++) q[i] = p[i] - 2.0 * K * u[i];
+
+        /* A_22 -= u q^T + q u^T */
+        for (size_t i = k + 1; i < n; i++) {
+            for (size_t j = k + 1; j < n; j++) {
+                A[i * n + j] -= u[i] * q[j] + q[i] * u[j];
+            }
+        }
+
+        /* Set the new subdiagonal element and clear the eliminated
+         * column / row entries explicitly (drift control). */
+        subdiag[k] = alpha;
+        A[(k + 1) * n + k] = alpha;
+        A[k * n + (k + 1)] = alpha;
+        for (size_t i = k + 2; i < n; i++) {
+            A[i * n + k] = 0.0;
+            A[k * n + i] = 0.0;
+        }
+
+        /* Q <- Q * H_k   (right multiplication; column i replaced by
+         * Q_i - 2 (Q row . u) u_i).  Apply only to Q[*, k+1..n-1]. */
+        if (want_Q) {
+            for (size_t i = 0; i < n; i++) {
+                double s = 0.0;
+                for (size_t j = k + 1; j < n; j++) s += Q[i * n + j] * u[j];
+                s *= 2.0;
+                for (size_t j = k + 1; j < n; j++) Q[i * n + j] -= s * u[j];
+            }
+        }
+    }
+
+    /* Extract diagonal. */
+    for (size_t i = 0; i < n; i++) diag[i] = A[i * n + i];
+    /* The n-2 -> n-1 subdiagonal is already in A. */
+    if (n >= 2) subdiag[n - 2] = A[(n - 1) * n + (n - 2)];
+}
+
+/* Implicit-shift symmetric tridiagonal QR with Wilkinson shift.
+ *
+ * LAPACK-HOOK: replace with dsteqr (or dstedc) when USE_LAPACK is set.
+ *
+ *   diag[0..n-1]    : in-place diagonal of the tridiagonal matrix
+ *   sub [0..n-2]    : in-place sub/super-diagonal
+ *   Q   (n*n)       : in-place orthogonal eigenvector accumulator,
+ *                     when `want_Q`.  Caller initialises Q (typically
+ *                     to the orthogonal matrix from the tridiag step).
+ *
+ * Iterates over the active sub-block, deflating when |sub[i]| falls
+ * below |diag[i]|+|diag[i+1]| * relative_tol.  Returns 0 on success,
+ * -1 if the maximum number of sweeps (30*n) is exceeded.  Stagnation
+ * is exceptionally rare for symmetric tridiagonal inputs but we cap
+ * to avoid theoretical hangs.
+ */
+static int direct_symtridiag_qr(double* diag, double* sub, size_t n,
+                                 double* Q, bool want_Q) {
+    if (n == 0) return 0;
+    const double rel_tol = 1e-14;   /* much tighter than chop threshold */
+    const size_t max_sweeps = 30 * n;
+    size_t sweeps = 0;
+
+    size_t end = n;  /* active sub-block is [0..end-1]. */
+    while (end > 1) {
+        /* Find the largest m such that sub[m..end-2] are all "significant". */
+        size_t m = end - 1;
+        while (m > 0) {
+            double tol = rel_tol * (fabs(diag[m - 1]) + fabs(diag[m]));
+            if (fabs(sub[m - 1]) <= tol) { sub[m - 1] = 0.0; break; }
+            m--;
+        }
+        if (m == end - 1) { end--; continue; }  /* deflated bottom */
+
+        if (++sweeps > max_sweeps) return -1;
+
+        /* Wilkinson shift on the trailing 2x2 block. */
+        double d = (diag[end - 2] - diag[end - 1]) * 0.5;
+        double e = sub[end - 2];
+        double t = (d == 0.0) ? fabs(e)
+                              : fabs(d) + sqrt(d * d + e * e);
+        double sign_d = (d >= 0.0) ? 1.0 : -1.0;
+        double mu = diag[end - 1] - sign_d * (e * e) / t;
+
+        /* Implicit QR sweep on [m..end-1] using Givens rotations. */
+        double x = diag[m] - mu;
+        double z = sub[m];
+        for (size_t k = m; k < end - 1; k++) {
+            double c, s;
+            double r = hypot(x, z);
+            if (r == 0.0) { c = 1.0; s = 0.0; }
+            else { c = x / r; s = z / r; }
+
+            if (k > m) sub[k - 1] = r;
+
+            double d_k    = diag[k];
+            double d_k1   = diag[k + 1];
+            double e_k    = sub[k];
+
+            /* Two-sided Givens rotation Q^T A Q with Q = [c -s; s c]
+             * (the rotation whose transpose annihilates z in [x; z]):
+             *   d_k'   = c^2 d_k + 2 c s e_k + s^2 d_k1
+             *   d_k1'  = s^2 d_k - 2 c s e_k + c^2 d_k1
+             *   e_k'   = c s (d_k1 - d_k) + (c^2 - s^2) e_k
+             */
+            diag[k]     = c * c * d_k + 2.0 * c * s * e_k + s * s * d_k1;
+            diag[k + 1] = s * s * d_k - 2.0 * c * s * e_k + c * c * d_k1;
+            sub[k]      = c * s * (d_k1 - d_k) + (c * c - s * s) * e_k;
+
+            /* Chase the bulge: rotation also affects sub[k+1] for k < end-2. */
+            if (k + 1 < end - 1) {
+                double t_next = sub[k + 1];
+                x = sub[k];
+                z = s * t_next;
+                sub[k + 1] = c * t_next;
+            }
+
+            /* Update Q: post-multiply by the Givens rotation in columns
+             * k and k+1.   Q_col_k  <- c Q_col_k + s Q_col_{k+1}
+             *               Q_col_k1 <- -s Q_col_k + c Q_col_{k+1}    */
+            if (want_Q) {
+                for (size_t i = 0; i < n; i++) {
+                    double qk  = Q[i * n + k];
+                    double qk1 = Q[i * n + (k + 1)];
+                    Q[i * n + k]       =  c * qk + s * qk1;
+                    Q[i * n + (k + 1)] = -s * qk + c * qk1;
+                }
+            }
+        }
+    }
+    return 0;
+}
+
+/* Sort eigenvalue indices into descending |lambda|, stable on ties.
+ * Writes the permutation into `perm[0..n-1]`. */
+static void direct_sort_perm_desc_abs(const double* vals, size_t n,
+                                       size_t* perm) {
+    for (size_t i = 0; i < n; i++) perm[i] = i;
+    /* Insertion sort: n is small for the matrix sizes we care about
+     * and the comparison is cheap. */
+    for (size_t i = 1; i < n; i++) {
+        size_t cur = perm[i];
+        double ac = fabs(vals[cur]);
+        size_t j = i;
+        while (j > 0) {
+            double ap = fabs(vals[perm[j - 1]]);
+            if (ap > ac || (ap == ac && perm[j - 1] < cur)) break;
+            perm[j] = perm[j - 1];
+            j--;
+        }
+        perm[j] = cur;
+    }
+}
+
+/* Build the final List[Real,...] of eigenvalues from a sorted permutation. */
+static Expr* direct_build_real_eigenvalue_list(const double* vals, size_t n,
+                                                const size_t* perm) {
+    Expr** items = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        items[i] = expr_new_real(vals[perm[i]]);
+    }
+    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    free(items);
+    return out;
+}
+
+/* Build the final List[List[Real,...], ...] of eigenvectors from a sorted
+ * permutation.  Q is the n x n column-major-of-eigenvectors matrix in
+ * row-major storage: Q[i, p] is the i-th component of the p-th
+ * eigenvector. */
+static Expr* direct_build_real_eigenvector_list(const double* Q, size_t n,
+                                                 const size_t* perm) {
+    Expr** rows = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t k = 0; k < n; k++) {
+        size_t col = perm[k];
+        Expr** comps = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            comps[i] = expr_new_real(Q[i * n + col]);
+        }
+        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n);
+        free(comps);
+    }
+    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    free(rows);
+    return out;
+}
+
+/* Apply k-spec selection to an already-sorted (descending |lambda|)
+ * result.  Returns a fresh List with the trimmed entries.  Mirrors
+ * eigen_apply_k_spec but for Expr trees we already own. */
+static Expr* direct_apply_k_spec_list(Expr* full_list, Expr* k_spec) {
+    if (!k_spec) return full_list;
+    size_t count = full_list->data.function.arg_count;
+    size_t result_count = count;
+    bool from_end = false;
+    if (k_spec->type == EXPR_INTEGER) {
+        int64_t k = k_spec->data.integer;
+        if (k >= 0) {
+            result_count = ((size_t)k < count) ? (size_t)k : count;
+        } else {
+            int64_t abs_k = -k;
+            result_count = ((size_t)abs_k < count) ? (size_t)abs_k : count;
+            from_end = true;
+        }
+    } else if (k_spec->type == EXPR_FUNCTION
+        && k_spec->data.function.head->type == EXPR_SYMBOL
+        && k_spec->data.function.head->data.symbol == SYM_UpTo
+        && k_spec->data.function.arg_count == 1
+        && k_spec->data.function.args[0]->type == EXPR_INTEGER) {
+        int64_t k = k_spec->data.function.args[0]->data.integer;
+        result_count = ((size_t)k < count) ? (size_t)k : count;
+    }
+
+    Expr** items = result_count
+        ? (Expr**)malloc(sizeof(Expr*) * result_count) : NULL;
+    if (from_end) {
+        size_t start = count - result_count;
+        for (size_t i = 0; i < start; i++)
+            expr_free(full_list->data.function.args[i]);
+        for (size_t i = 0; i < result_count; i++)
+            items[i] = full_list->data.function.args[start + i];
+    } else {
+        for (size_t i = 0; i < result_count; i++)
+            items[i] = full_list->data.function.args[i];
+        for (size_t i = result_count; i < count; i++)
+            expr_free(full_list->data.function.args[i]);
+    }
+    free(full_list->data.function.args);
+    full_list->data.function.args = items;
+    full_list->data.function.arg_count = result_count;
+    return full_list;
+}
+
+/* Top-level "Direct" kernel for real symmetric machine-precision input.
+ * Returns a freshly-allocated List[Real,...] (eigenvalues) or
+ * List[List[Real,...],...] (eigenvectors), or NULL when the input is
+ * outside this kernel's supported domain so the dispatcher can fall
+ * back to a different kernel / the symbolic path.  Caller owns the
+ * result. */
+static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
+                                       Expr* k_spec) {
+    size_t n = A->n;
+    if (n == 0) return NULL;
+
+    /* Working copy of A (tridiag step modifies in place). */
+    double* W = (double*)malloc(sizeof(double) * n * n);
+    memcpy(W, A->re, sizeof(double) * n * n);
+
+    double* diag    = (double*)malloc(sizeof(double) * n);
+    double* sub     = (double*)calloc(n, sizeof(double));  /* length n-1, +1 slack */
+    double* u       = (double*)malloc(sizeof(double) * n);
+    double* p_buf   = (double*)malloc(sizeof(double) * n);
+    double* q_buf   = (double*)malloc(sizeof(double) * n);
+    bool want_Q     = (want & MATEIGEN_WANT_VECTORS) != 0;
+    double* Q       = want_Q ? (double*)malloc(sizeof(double) * n * n) : NULL;
+
+    direct_tridiag_real_sym(W, n, diag, sub, Q, want_Q, u, p_buf, q_buf);
+
+    int qr_status = direct_symtridiag_qr(diag, sub, n, Q, want_Q);
+
+    free(u); free(p_buf); free(q_buf); free(W);
+
+    if (qr_status != 0) {
+        free(diag); free(sub);
+        if (Q) free(Q);
+        return NULL;
+    }
+
+    size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+    direct_sort_perm_desc_abs(diag, n, perm);
+
+    Expr* out = (want_Q)
+        ? direct_build_real_eigenvector_list(Q, n, perm)
+        : direct_build_real_eigenvalue_list(diag, n, perm);
+
+    free(diag); free(sub); free(perm);
+    if (Q) free(Q);
+
+    return direct_apply_k_spec_list(out, k_spec);
+}
+
+/* Dispatcher entry point: route a numeric matrix through the
+ * appropriate "Direct" kernel.  Returns NULL when the matrix shape
+ * isn't yet supported by a numerical kernel (e.g. non-symmetric or
+ * complex in step 2.1) so the caller can fall back to the symbolic
+ * path.  This NULL return is also used for Eigenvalues / Eigenvectors
+ * combined with a generalised pencil ({m, a}) -- generalised numeric
+ * eigenvalues are not part of the current numerical scope.
+ *
+ * Step 2.1: implemented kernels = real symmetric only.
+ */
+static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,
+                                       MateigenWant want, Expr* k_spec) {
+    if (a != NULL) return NULL;          /* generalised: symbolic only */
+    if (n <= 0)    return NULL;
+
+    MatD A;
+    if (!matD_load(m, (size_t)n, &A)) return NULL;
+    if (A.is_complex) { matD_free(&A); return NULL; }  /* 2.3 territory */
+
+    double norm = matD_norm_inf_real(A.re, A.n);
+    double sym_tol = 1e-12 * (norm == 0.0 ? 1.0 : norm) * (double)A.n;
+    if (!matD_is_real_symmetric(&A, sym_tol)) {
+        matD_free(&A);
+        return NULL;                     /* 2.2 territory */
+    }
+
+    Expr* out = direct_real_sym_machine(&A, want, k_spec);
+    matD_free(&A);
+    return out;
+}
+
 /* Emit a once-per-method stderr warning that the requested Method is
  * not yet implemented and the symbolic path will be used instead.  The
  * full numerical kernels arrive in Phases 2-5.  Returning the message
@@ -767,14 +1294,26 @@ Expr* builtin_eigenvalues(Expr* res) {
     bool inexact = eigen_matrix_is_inexact(m)
                 || (a && eigen_matrix_is_inexact(a));
 
-    /* Phase 1: Method dispatch is parsed but the dedicated numerical
-     * kernels (Direct / Arnoldi / Banded / FEAST) arrive in later
-     * phases.  Any explicit Method other than Automatic on a numeric
-     * matrix triggers a one-shot warning and falls through to the
-     * symbolic characteristic-polynomial path so the call still
+    /* Numerical Direct dispatch: Automatic and "Direct" route through
+     * the hand-rolled hot-path kernels in this file when the input is
+     * an inexact ordinary eigenproblem with a supported shape.  The
+     * dispatcher returns NULL for shapes that aren't yet wired (step
+     * 2.1 covers real symmetric only), in which case we fall through
+     * to the symbolic characteristic-polynomial pipeline below. */
+    if (inexact && (opts.method == MATEIGEN_AUTOMATIC
+                    || opts.method == MATEIGEN_DIRECT)) {
+        Expr* out = direct_dispatch_machine(m, a, n,
+                                             MATEIGEN_WANT_VALUES,
+                                             opts.k_spec);
+        if (out) return out;
+    }
+
+    /* Method warnings for the not-yet-implemented kernels.  These
+     * always fall back to the symbolic path so the call still
      * produces a result. */
     if (inexact && opts.method_given
-        && opts.method != MATEIGEN_AUTOMATIC) {
+        && opts.method != MATEIGEN_AUTOMATIC
+        && opts.method != MATEIGEN_DIRECT) {
         eigen_warn_unimplemented_method(opts.method);
     }
 
@@ -873,9 +1412,18 @@ Expr* builtin_eigenvectors(Expr* res) {
     bool inexact = eigen_matrix_is_inexact(m)
                 || (a && eigen_matrix_is_inexact(a));
 
-    /* Phase 1: same Method-warning behaviour as builtin_eigenvalues. */
+    /* Numerical Direct dispatch (mirrors builtin_eigenvalues). */
+    if (inexact && (opts.method == MATEIGEN_AUTOMATIC
+                    || opts.method == MATEIGEN_DIRECT)) {
+        Expr* out = direct_dispatch_machine(m, a, n,
+                                             MATEIGEN_WANT_VECTORS,
+                                             opts.k_spec);
+        if (out) return out;
+    }
+
     if (inexact && opts.method_given
-        && opts.method != MATEIGEN_AUTOMATIC) {
+        && opts.method != MATEIGEN_AUTOMATIC
+        && opts.method != MATEIGEN_DIRECT) {
         eigen_warn_unimplemented_method(opts.method);
     }
 
