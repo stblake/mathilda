@@ -177,9 +177,14 @@ void info_init(void) {
         "routed through real Hessenberg + Francis QR with grouped\n"
         "complex Gram-Schmidt disambiguation of M's spec to recover\n"
         "spec(A)).  Automatic routes here too.  Arbitrary-precision\n"
-        "MPFR inputs plus \"Arnoldi\", \"Banded\", and \"FEAST\" arrive in\n"
-        "subsequent commits; an explicit but not-yet-implemented Method\n"
-        "prints a one-shot warning and falls back to the symbolic\n"
+        "(MPFR) inputs go through a parallel \"Direct\" kernel at the\n"
+        "input's combined precision: real symmetric MPFR is wired (step\n"
+        "2d-A) and returns eigenvalues / eigenvectors carrying full\n"
+        "input precision; MPFR real non-symmetric / complex matrices\n"
+        "currently fall back to the machine kernel (precision loss)\n"
+        "until 2d-{B,C,D} land.  \"Arnoldi\", \"Banded\", and \"FEAST\"\n"
+        "arrive in subsequent phases; an explicit but not-yet-implemented\n"
+        "Method prints a one-shot warning and falls back to the symbolic\n"
         "characteristic-polynomial path.");
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
@@ -312,8 +317,13 @@ void info_init(void) {
         "eigenvectors for complex non-Hermitian matrices via real block\n"
         "embedding into a 2n x 2n general matrix followed by grouped\n"
         "complex Gram-Schmidt extraction.  Automatic routes here.\n"
-        "Arbitrary-precision MPFR inputs plus the \"Arnoldi\", \"Banded\",\n"
-        "and \"FEAST\" kernels arrive in subsequent commits.");
+        "Arbitrary-precision (MPFR) inputs run a parallel \"Direct\" kernel\n"
+        "at the input's combined precision: real symmetric MPFR is wired\n"
+        "(step 2d-A) and yields orthonormal eigenvectors carrying full\n"
+        "input precision; MPFR real non-symmetric / complex matrices\n"
+        "currently fall back to the machine kernel (precision loss)\n"
+        "until 2d-{B,C,D} land.  \"Arnoldi\", \"Banded\", and \"FEAST\"\n"
+        "kernels arrive in subsequent phases.");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head",
         "Head[expr]\n"

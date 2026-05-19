@@ -1347,6 +1347,268 @@ void test_direct_complex_general_eigenvalues_only(void) {
     printf("PASS: complex 2x2 eigenvalues-only path\n");
 }
 
+#ifdef USE_MPFR
+/* Helper: parse + evaluate `src`, assert the result prints as "True".
+ *
+ * Side note on Mathilda comparison semantics: `Less[mpfr_a, mpfr_b]`
+ * will *not* always evaluate to True/False if either side is an exact
+ * zero (machine or MPFR).  The tests below sidestep this by scaling
+ * tiny MPFR residuals into the machine-precision range via `N[...]`
+ * before comparing -- the scaled value is well clear of zero and Less
+ * is happy. */
+static void mpfr_assert_true(const char* label, const char* src) {
+    Expr* e = parse_expression(src);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    char* s = expr_to_string(r);
+    if (strcmp(s, "True") != 0) {
+        printf("FAIL: %s\n  src: %s\n  got: %s\n", label, src, s);
+        ASSERT(0);
+    } else {
+        printf("PASS: %s\n", label);
+    }
+    free(s);
+    expr_free(r);
+    expr_free(e);
+}
+
+/* Helper: assert that the head of the evaluated `src` is `head_name`. */
+static void mpfr_assert_head(const char* label, const char* src,
+                              const char* head_name) {
+    Expr* e = parse_expression(src);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    bool ok = (r->type == EXPR_FUNCTION
+               && r->data.function.head->type == EXPR_SYMBOL
+               && strcmp(r->data.function.head->data.symbol, head_name) == 0);
+    if (!ok) {
+        char* s = expr_to_string(r);
+        printf("FAIL: %s (head)\n  src: %s\n  got: %s\n", label, src, s);
+        free(s);
+        ASSERT(0);
+    }
+    printf("PASS: %s (head=%s)\n", label, head_name);
+    expr_free(r); expr_free(e);
+}
+
+/* Verify residual ||A v - lambda v|| is accurate to at least `digits`
+ * decimal places.  Strategy: scale the residual by 10^digits and then
+ * compare its machine-precision norm to 1.0 -- a true MPFR residual of
+ * 1e-{digits+1} becomes ~0.1 after scaling, exposing any drift.
+ *
+ * NOTE: identifiers passed to Mathilda's parser MUST NOT contain
+ * underscores; in Mathematica syntax `max_norm` parses as
+ * `Pattern[max, Blank[norm]]`, which silently breaks Module
+ * declarations.  Use mixedCase / camelCase identifiers throughout. */
+static void mpfr_assert_eigenpair_residuals(const char* label,
+                                              const char* matrix_src,
+                                              int digits) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "Module[{m, vals, vecs, n, k, scaled, mxN, normK},\n"
+        "  m = %s;\n"
+        "  vals = Eigenvalues[m];\n"
+        "  vecs = Eigenvectors[m];\n"
+        "  n = Length[vals];\n"
+        "  mxN = 0.0;\n"
+        "  k = 1;\n"
+        "  While[k <= n,\n"
+        "    scaled = (Dot[m, vecs[[k]]] - vals[[k]] vecs[[k]]) * 10^%d;\n"
+        "    normK = N[Norm[scaled]];\n"
+        "    If[normK > mxN, mxN = normK];\n"
+        "    k = k + 1];\n"
+        "  TrueQ[mxN < 1.0]]",
+        matrix_src, digits);
+    mpfr_assert_true(label, buf);
+}
+
+/* Verify orthonormality: scale ||V V^T - I||_inf by 10^digits and
+ * confirm it's below 1.0 at machine precision. */
+static void mpfr_assert_orthonormal(const char* label,
+                                      const char* matrix_src,
+                                      int digits) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+        "Module[{m, vecs, n, prod, mxErr, scaled, k, jj, entry},\n"
+        "  m = %s;\n"
+        "  vecs = Eigenvectors[m];\n"
+        "  n = Length[vecs];\n"
+        "  prod = Dot[vecs, Transpose[vecs]];\n"
+        "  mxErr = 0.0;\n"
+        "  k = 1;\n"
+        "  While[k <= n,\n"
+        "    jj = 1;\n"
+        "    While[jj <= n,\n"
+        "      scaled = (prod[[k]][[jj]] - If[k == jj, 1, 0]) * 10^%d;\n"
+        "      entry = N[Abs[scaled]];\n"
+        "      If[entry > mxErr, mxErr = entry];\n"
+        "      jj = jj + 1];\n"
+        "    k = k + 1];\n"
+        "  TrueQ[mxErr < 1.0]]",
+        matrix_src, digits);
+    mpfr_assert_true(label, buf);
+}
+
+/* Verify Precision[lambda_i] > min_decimal_prec for every eigenvalue,
+ * i.e. MPFR routing happened (a slip to machine would yield
+ * Precision == MachinePrecision ~ 15.95 digits).  Mathilda's NumberQ /
+ * Head don't fire on MPFR values, so we lean on Precision alone -- it
+ * returns a Real and Less is well-behaved there. */
+static void mpfr_assert_eigenvalues_have_precision(const char* label,
+                                                     const char* matrix_src,
+                                                     int n,
+                                                     int min_decimal_prec) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+        "Module[{m, vs, ok, k},\n"
+        "  m = %s;\n"
+        "  vs = Eigenvalues[m];\n"
+        "  ok = TrueQ[Length[vs] == %d];\n"
+        "  k = 1;\n"
+        "  While[k <= Length[vs] && ok,\n"
+        "    ok = ok && TrueQ[Precision[vs[[k]]] > %d];\n"
+        "    k = k + 1];\n"
+        "  ok]",
+        matrix_src, n, min_decimal_prec);
+    mpfr_assert_true(label, buf);
+}
+
+/* --- MPFR real symmetric tests (step 2d-A) -----------------------------
+ *
+ * All "small residual" tests use the scale-by-10^k + N[]-to-machine
+ * pattern: multiply the (MPFR) residual by 10^k so its magnitude moves
+ * into the comfortable machine-precision range, convert via N[] to a
+ * plain double, then compare to 1.0.  This sidesteps Mathilda's
+ * Less[machine_zero, mpfr_value] non-evaluation quirk and gives us a
+ * sharp digit count: passing scale=40 with threshold 1.0 means the
+ * residual is bounded by 10^-40. */
+
+void test_mpfr_sym_2x2_golden_ratio(void) {
+    /* {{1,1},{1,2}} -- eigenvalues are phi and 1/phi == (3 +/- Sqrt[5])/2.
+     * At 50 decimal digits we expect ~10^-49 residual. */
+    const char* src =
+        "Module[{m, vs, e1, e2, d1, d2},\n"
+        "  m = SetPrecision[{{1, 1}, {1, 2}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  e1 = SetPrecision[(3 + Sqrt[5])/2, 50];\n"
+        "  e2 = SetPrecision[(3 - Sqrt[5])/2, 50];\n"
+        "  d1 = N[(vs[[1]] - e1) * 10^45];\n"
+        "  d2 = N[(vs[[2]] - e2) * 10^45];\n"
+        "  TrueQ[N[Abs[d1]] < 1.0] && TrueQ[N[Abs[d2]] < 1.0]]";
+    mpfr_assert_true("MPFR sym 2x2 golden ratio (50 digits, scale=45)", src);
+}
+
+void test_mpfr_sym_3x3_tridiag_known(void) {
+    /* Tridiag(2,3,2) with off-diag 1 -- analytic eigenvalues 4, 2, 1. */
+    const char* src =
+        "Module[{m, vs, d1, d2, d3},\n"
+        "  m = SetPrecision[{{2, 1, 0}, {1, 3, 1}, {0, 1, 2}}, 80];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  d1 = N[(vs[[1]] - 4) * 10^70];\n"
+        "  d2 = N[(vs[[2]] - 2) * 10^70];\n"
+        "  d3 = N[(vs[[3]] - 1) * 10^70];\n"
+        "  TrueQ[N[Abs[d1]] < 1.0]\n"
+        " && TrueQ[N[Abs[d2]] < 1.0]\n"
+        " && TrueQ[N[Abs[d3]] < 1.0]]";
+    mpfr_assert_true("MPFR sym 3x3 tridiag(2,3,2) -> {4,2,1} at 80 digits", src);
+}
+
+void test_mpfr_sym_diagonal_identity(void) {
+    /* Identity at high precision -- degenerate spectrum; eigenvalues all 1. */
+    const char* src =
+        "Module[{m, vs, d},\n"
+        "  m = SetPrecision[{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  Length[vs] == 3\n"
+        " && TrueQ[N[Abs[(vs[[1]] - 1) * 10^45]] < 1.0]\n"
+        " && TrueQ[N[Abs[(vs[[2]] - 1) * 10^45]] < 1.0]\n"
+        " && TrueQ[N[Abs[(vs[[3]] - 1) * 10^45]] < 1.0]]";
+    mpfr_assert_true("MPFR sym 3x3 identity -> {1,1,1}", src);
+}
+
+void test_mpfr_sym_5x5_residual(void) {
+    /* Symmetric 5x5 at 60 digits via (B + B^T)/2; verify per-eigenpair
+     * residual and orthonormality at the 45-digit level. */
+    const char* matrix_src =
+        "Module[{b, sym},\n"
+        "  b = SetPrecision[{{2, 1, 3, 0, 1},\n"
+        "                     {1, 5, 2, 1, 0},\n"
+        "                     {3, 2, 7, 1, 2},\n"
+        "                     {0, 1, 1, 4, 1},\n"
+        "                     {1, 0, 2, 1, 6}}, 60];\n"
+        "  sym = (b + Transpose[b])/2;\n"
+        "  sym]";
+    mpfr_assert_eigenpair_residuals(
+        "MPFR sym 5x5 eigenpair residual at 45 digits (input 60)",
+        matrix_src, 45);
+    mpfr_assert_orthonormal(
+        "MPFR sym 5x5 orthonormality at 45 digits (input 60)",
+        matrix_src, 45);
+}
+
+void test_mpfr_sym_eigenvalues_carry_precision(void) {
+    /* Confirms MPFR routing fired -- a slip to the machine kernel would
+     * yield Precision[lambda] == MachinePrecision (~15.95). */
+    mpfr_assert_eigenvalues_have_precision(
+        "MPFR sym 2x2 eigenvalues carry > 49 digits",
+        "SetPrecision[{{1, 1}, {1, 2}}, 50]", 2, 49);
+}
+
+void test_mpfr_sym_eigenvectors_are_lists(void) {
+    mpfr_assert_head("MPFR sym Eigenvectors returns a List",
+        "Eigenvectors[SetPrecision[{{1, 1}, {1, 2}}, 40]]", "List");
+}
+
+void test_mpfr_sym_high_precision_200(void) {
+    /* Stress: 200 decimal digits.  Verify residual at 180 digits. */
+    const char* matrix_src = "SetPrecision[{{4, 1, 0}, {1, 4, 1}, {0, 1, 4}}, 200]";
+    mpfr_assert_eigenpair_residuals(
+        "MPFR sym 3x3 at 200 digits, residual < 10^-180",
+        matrix_src, 180);
+}
+
+void test_mpfr_sym_k_spec(void) {
+    /* k-spec interacts with the MPFR kernel: top 2 of diag(5,3,1). */
+    const char* src =
+        "Module[{m, vs},\n"
+        "  m = SetPrecision[{{5, 0, 0}, {0, 3, 0}, {0, 0, 1}}, 50];\n"
+        "  vs = Eigenvalues[m, 2];\n"
+        "  Length[vs] == 2\n"
+        " && TrueQ[N[Abs[(vs[[1]] - 5) * 10^45]] < 1.0]\n"
+        " && TrueQ[N[Abs[(vs[[2]] - 3) * 10^45]] < 1.0]]";
+    mpfr_assert_true("MPFR sym k-spec: top 2 of diag(5,3,1)", src);
+}
+
+void test_mpfr_sym_repeated_eigvals(void) {
+    /* Near-degenerate 2I + small symmetric perturbation: three real
+     * eigenvalues all close to 2. */
+    const char* src =
+        "Module[{m, vs, ok, i, ds},\n"
+        "  m = SetPrecision[{{2, 1/100, 0}, {1/100, 2, 1/100}, {0, 1/100, 2}}, 60];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  ok = TrueQ[Length[vs] == 3];\n"
+        "  For[i = 1, i <= 3, i++,\n"
+        "    ds = N[Abs[vs[[i]] - 2]];\n"
+        "    ok = ok && TrueQ[ds < 0.05]];\n"
+        "  ok]";
+    mpfr_assert_true("MPFR sym near-degenerate {2,2,2}+epsilon", src);
+}
+
+void test_mpfr_sym_1x1(void) {
+    /* Edge case: 1x1 -- bypasses tridiag entirely. */
+    const char* src =
+        "Module[{m, vs, vc},\n"
+        "  m = SetPrecision[{{3}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  vc = Eigenvectors[m];\n"
+        "  Length[vs] == 1\n"
+        " && TrueQ[N[Abs[(vs[[1]] - 3) * 10^45]] < 1.0]\n"
+        " && Length[vc] == 1 && Length[vc[[1]]] == 1\n"
+        " && TrueQ[N[Abs[(Abs[vc[[1]][[1]]] - 1) * 10^45]] < 1.0]]";
+    mpfr_assert_true("MPFR sym 1x1 edge case", src);
+}
+#endif  /* USE_MPFR */
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1417,6 +1679,20 @@ int main(void) {
     TEST(test_direct_complex_general_5x5_random);
     TEST(test_direct_complex_general_real_rotation_promoted);
     TEST(test_direct_complex_general_eigenvalues_only);
+
+#ifdef USE_MPFR
+    /* Phase 2 step 2d-A: real symmetric MPFR. */
+    TEST(test_mpfr_sym_2x2_golden_ratio);
+    TEST(test_mpfr_sym_3x3_tridiag_known);
+    TEST(test_mpfr_sym_diagonal_identity);
+    TEST(test_mpfr_sym_5x5_residual);
+    TEST(test_mpfr_sym_eigenvalues_carry_precision);
+    TEST(test_mpfr_sym_eigenvectors_are_lists);
+    TEST(test_mpfr_sym_high_precision_200);
+    TEST(test_mpfr_sym_k_spec);
+    TEST(test_mpfr_sym_repeated_eigvals);
+    TEST(test_mpfr_sym_1x1);
+#endif
 
     printf("All mateigen Direct (machine-precision) tests passed!\n");
     return 0;
