@@ -9,6 +9,7 @@
 #include "expr.h"
 #include "arithmetic.h"
 #include "eval.h"
+#include "numeric.h"
 #include <stdbool.h>
 #include <string.h>
 
@@ -28,7 +29,33 @@ static bool get_numeric_value(Expr* e, double* val, int64_t* num, int64_t* den, 
         *is_exact = true;
         return true;
     }
-    return false;
+
+    /* Fallback: drive the expression through N[] (machine precision).
+     * Captures NumericQ-style values like Sqrt[3], Pi, or 1 + Sqrt[2]/3
+     * that aren't raw numeric literals but have a definite real value.
+     * If numericalize can't reduce the expression to a real number, we
+     * leave it as unevaluated for the caller. The result is treated as
+     * inexact so comparisons use the floating-point tolerance branch. */
+    Expr* approx = numericalize(e, numeric_machine_spec());
+    if (!approx) return false;
+    bool ok = false;
+    if (approx->type == EXPR_INTEGER) {
+        *val = (double)approx->data.integer;
+        *num = approx->data.integer;
+        *den = 1;
+        *is_exact = false;
+        ok = true;
+    } else if (approx->type == EXPR_REAL) {
+        *val = approx->data.real;
+        *is_exact = false;
+        ok = true;
+    } else if (is_rational(approx, num, den)) {
+        *val = (double)(*num) / (*den);
+        *is_exact = false;
+        ok = true;
+    }
+    expr_free(approx);
+    return ok;
 }
 
 static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
@@ -139,32 +166,33 @@ Expr* builtin_equal(Expr* res) {
     for (size_t i = 0; i < res->data.function.arg_count - 1; i++) {
         Expr* a = res->data.function.args[i];
         Expr* b = res->data.function.args[i+1];
-        
+
         bool equal = false;
-        
-        // Structural identity
+        bool definitely_unequal = false;
+
         if (expr_eq(a, b)) {
             equal = true;
         } else {
-            bool can_compare;
+            bool can_compare = false;
             int cmp = compare_numeric(a, b, &can_compare);
-            if (can_compare && cmp == 0) {
-                equal = true;
+            if (can_compare) {
+                if (cmp == 0) equal = true;
+                else definitely_unequal = true;
             }
         }
-        
+
         if (!equal) {
-            if (is_raw_data(a) && is_raw_data(b)) {
+            if (definitely_unequal || (is_raw_data(a) && is_raw_data(b))) {
                 return expr_new_symbol("False");
             }
             all_equal = false;
         }
     }
-    
+
     if (all_equal) {
         return expr_new_symbol("True");
     }
-    
+
     return NULL;
 }
 
