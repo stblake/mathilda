@@ -494,6 +494,116 @@ void test_eigenvalues_upper_triangular_5x5(void) {
              "List[5, 4, 3, 2, 1]");
 }
 
+/* -------- Phase 1: Method option parsing (no kernel dispatch yet) --------
+ *
+ * Method -> Automatic and the new Direct/Arnoldi/Banded/FEAST values must
+ * all parse cleanly.  Until Phases 2-5 land, every numeric-matrix call
+ * with an explicit Method falls back to the symbolic char-poly path; the
+ * result must equal the no-Method result so Phase 1 introduces no
+ * behavioural regression.
+ *
+ * Unknown Method values are tolerated (one warning, same fallback).
+ * Symbolic matrices ignore Method entirely. */
+static void run_pair_same(const char* a, const char* b) {
+    Expr* ea = parse_expression(a);
+    Expr* eb = parse_expression(b);
+    ASSERT(ea && eb);
+    Expr* ra = evaluate(ea);
+    Expr* rb = evaluate(eb);
+    char* sa = expr_to_string_fullform(ra);
+    char* sb = expr_to_string_fullform(rb);
+    if (strcmp(sa, sb) != 0) {
+        printf("FAIL: %s\n   not equal to: %s\n   got:    %s\n   vs:     %s\n",
+               a, b, sa, sb);
+        ASSERT(0);
+    } else {
+        printf("PASS: %s == %s\n", a, b);
+    }
+    free(sa); free(sb);
+    expr_free(ra); expr_free(rb);
+    expr_free(ea); expr_free(eb);
+}
+
+void test_eigenvalues_method_automatic_numeric(void) {
+    run_pair_same(
+        "Eigenvalues[{{1.0, 2.0}, {3.0, 4.0}}, Method -> Automatic]",
+        "Eigenvalues[{{1.0, 2.0}, {3.0, 4.0}}]");
+}
+
+void test_eigenvalues_method_direct_numeric_fallback(void) {
+    run_pair_same(
+        "Eigenvalues[{{1.0, 2.0}, {3.0, 4.0}}, Method -> \"Direct\"]",
+        "Eigenvalues[{{1.0, 2.0}, {3.0, 4.0}}]");
+}
+
+void test_eigenvalues_method_arnoldi_numeric_fallback(void) {
+    run_pair_same(
+        "Eigenvalues[{{1.0, 2.0}, {3.0, 4.0}}, Method -> \"Arnoldi\"]",
+        "Eigenvalues[{{1.0, 2.0}, {3.0, 4.0}}]");
+}
+
+void test_eigenvalues_method_banded_numeric_fallback(void) {
+    run_pair_same(
+        "Eigenvalues[{{2.0, -1.0, 0.0}, {-1.0, 2.0, -1.0}, "
+        "{0.0, -1.0, 2.0}}, Method -> \"Banded\"]",
+        "Eigenvalues[{{2.0, -1.0, 0.0}, {-1.0, 2.0, -1.0}, "
+        "{0.0, -1.0, 2.0}}]");
+}
+
+void test_eigenvalues_method_feast_numeric_fallback(void) {
+    run_pair_same(
+        "Eigenvalues[{{2.0, -1.0}, {-1.0, 2.0}}, "
+        "Method -> {\"FEAST\", Interval -> {0.0, 5.0}}]",
+        "Eigenvalues[{{2.0, -1.0}, {-1.0, 2.0}}]");
+}
+
+void test_eigenvalues_method_unknown_string_numeric_fallback(void) {
+    /* An unknown Method string falls back to the symbolic path with a
+     * warning -- it must not leave the call unevaluated. */
+    run_pair_same(
+        "Eigenvalues[{{1.0, 0.0}, {0.0, 2.0}}, Method -> \"NoSuchMethod\"]",
+        "Eigenvalues[{{1.0, 0.0}, {0.0, 2.0}}]");
+}
+
+void test_eigenvalues_method_ignored_for_symbolic(void) {
+    /* Symbolic matrices ignore Method and emit no warning. */
+    run_pair_same(
+        "Eigenvalues[{{1, 2}, {3, 4}}, Method -> \"Direct\"]",
+        "Eigenvalues[{{1, 2}, {3, 4}}]");
+    run_pair_same(
+        "Eigenvalues[{{a, b}, {c, d}}, Method -> \"Arnoldi\"]",
+        "Eigenvalues[{{a, b}, {c, d}}]");
+}
+
+void test_eigenvalues_method_value_list_with_suboptions(void) {
+    /* {Method -> {"Arnoldi", MaxIterations -> 20}} must parse: the head
+     * element classifies the method, sub-options are accepted (and
+     * ignored in Phase 1).  Result equals the no-Method baseline. */
+    run_pair_same(
+        "Eigenvalues[{{1.0, 2.0}, {3.0, 4.0}}, "
+        "Method -> {\"Arnoldi\", MaxIterations -> 20, Tolerance -> 1.0*^-8}]",
+        "Eigenvalues[{{1.0, 2.0}, {3.0, 4.0}}]");
+}
+
+void test_eigenvectors_method_fallback(void) {
+    /* Eigenvectors mirrors Eigenvalues' Method behaviour. */
+    run_pair_same(
+        "Eigenvectors[{{2.0, 0.0}, {0.0, 3.0}}, Method -> \"Direct\"]",
+        "Eigenvectors[{{2.0, 0.0}, {0.0, 3.0}}]");
+    run_pair_same(
+        "Eigenvectors[{{2.0, 0.0}, {0.0, 3.0}}, Method -> \"Arnoldi\"]",
+        "Eigenvectors[{{2.0, 0.0}, {0.0, 3.0}}]");
+}
+
+void test_eigenvalues_method_combines_with_k_and_cubics(void) {
+    /* Method must coexist with the other options and the k-spec. */
+    run_pair_same(
+        "Eigenvalues[{{1.0, 2.0, 3.0}, {0.0, 4.0, 5.0}, {0.0, 0.0, 6.0}}, "
+        "2, Method -> \"Direct\", Cubics -> True]",
+        "Eigenvalues[{{1.0, 2.0, 3.0}, {0.0, 4.0, 5.0}, {0.0, 0.0, 6.0}}, "
+        "2, Cubics -> True]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -549,6 +659,18 @@ int main(void) {
     TEST(test_eigenvalues_bigint_diagonal);
     TEST(test_eigenvalues_rational_2x2);
     TEST(test_eigenvalues_upper_triangular_5x5);
+
+    /* Phase 1: Method option parsing + warning fallback. */
+    TEST(test_eigenvalues_method_automatic_numeric);
+    TEST(test_eigenvalues_method_direct_numeric_fallback);
+    TEST(test_eigenvalues_method_arnoldi_numeric_fallback);
+    TEST(test_eigenvalues_method_banded_numeric_fallback);
+    TEST(test_eigenvalues_method_feast_numeric_fallback);
+    TEST(test_eigenvalues_method_unknown_string_numeric_fallback);
+    TEST(test_eigenvalues_method_ignored_for_symbolic);
+    TEST(test_eigenvalues_method_value_list_with_suboptions);
+    TEST(test_eigenvectors_method_fallback);
+    TEST(test_eigenvalues_method_combines_with_k_and_cubics);
 
     printf("All eigen tests passed!\n");
     return 0;

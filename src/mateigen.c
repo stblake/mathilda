@@ -531,15 +531,60 @@ static bool eigen_matrix_is_inexact(Expr* m) {
 
 /* Common option/positional argument parsing for Eigenvalues / Eigenvectors. */
 typedef struct {
-    Expr* arg0;        /* m or {m, a}                          */
-    Expr* k_spec;      /* Integer k, or UpTo[k], or NULL       */
+    Expr* arg0;             /* m or {m, a}                          */
+    Expr* k_spec;           /* Integer k, or UpTo[k], or NULL       */
     bool  cubics_radical;
     bool  quartics_radical;
+    bool  method_given;     /* user supplied Method -> ...           */
+    MateigenMethod method;  /* parsed Method, or AUTOMATIC if unset  */
+    Expr* method_value;     /* original Method RHS (for sub-options) */
 } EigenOpts;
 
 /* True iff `e` is the symbol True. */
 static bool eigen_is_true(Expr* e) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
+}
+
+/* Compare an EXPR_STRING value to a literal; returns true when they match. */
+static bool eigen_string_eq(Expr* e, const char* lit) {
+    return e && e->type == EXPR_STRING && strcmp(e->data.string, lit) == 0;
+}
+
+/* Public: parse the right-hand side of a Method -> <value> rule.
+ * See mateigen.h for the accepted forms. */
+MateigenMethod mateigen_parse_method_value(Expr* v) {
+    if (!v) return MATEIGEN_AUTOMATIC;
+    /* Bare Automatic symbol. */
+    if (v->type == EXPR_SYMBOL && v->data.symbol == SYM_Automatic)
+        return MATEIGEN_AUTOMATIC;
+    /* Bare method-name symbol (Mathematica usually wraps in a string, but
+     * tolerate the symbol form too). */
+    if (v->type == EXPR_SYMBOL) {
+        if (v->data.symbol == SYM_Direct)  return MATEIGEN_DIRECT;
+        if (v->data.symbol == SYM_Arnoldi) return MATEIGEN_ARNOLDI;
+        if (v->data.symbol == SYM_Banded)  return MATEIGEN_BANDED;
+        if (v->data.symbol == SYM_FEAST)   return MATEIGEN_FEAST;
+        return MATEIGEN_METHOD_UNKNOWN;
+    }
+    /* String form: "Direct", "Arnoldi", "Banded", "FEAST". */
+    if (v->type == EXPR_STRING) {
+        if (eigen_string_eq(v, "Direct"))  return MATEIGEN_DIRECT;
+        if (eigen_string_eq(v, "Arnoldi")) return MATEIGEN_ARNOLDI;
+        if (eigen_string_eq(v, "Banded"))  return MATEIGEN_BANDED;
+        if (eigen_string_eq(v, "FEAST"))   return MATEIGEN_FEAST;
+        return MATEIGEN_METHOD_UNKNOWN;
+    }
+    /* List form whose head element is the method name string, e.g.
+     *   Method -> {"Arnoldi", "MaxIterations" -> 100}
+     * Only the head element classifies the method here; sub-options are
+     * interpreted later (Phase 3+). */
+    if (v->type == EXPR_FUNCTION
+        && v->data.function.head->type == EXPR_SYMBOL
+        && v->data.function.head->data.symbol == SYM_List
+        && v->data.function.arg_count >= 1) {
+        return mateigen_parse_method_value(v->data.function.args[0]);
+    }
+    return MATEIGEN_METHOD_UNKNOWN;
 }
 
 /* Parse Eigenvalues/Eigenvectors arguments.  Returns false on shape error. */
@@ -556,6 +601,9 @@ static bool eigen_parse_args(Expr* res, EigenOpts* opts) {
      * Eigenvalues overrides to keep the closed-form pipeline functional. */
     opts->cubics_radical = true;
     opts->quartics_radical = true;
+    opts->method_given = false;
+    opts->method = MATEIGEN_AUTOMATIC;
+    opts->method_value = NULL;
 
     /* Peel trailing options. */
     size_t pos_end = argc;
@@ -578,7 +626,9 @@ static bool eigen_parse_args(Expr* res, EigenOpts* opts) {
                 pos_end--; continue;
             }
             if (name == SYM_Method) {
-                /* Reserved.  Currently no Method dispatch -- ignore. */
+                opts->method_given = true;
+                opts->method_value = rhs;
+                opts->method = mateigen_parse_method_value(rhs);
                 pos_end--; continue;
             }
         }
@@ -587,6 +637,30 @@ static bool eigen_parse_args(Expr* res, EigenOpts* opts) {
     if (pos_end > 2) return false;
     if (pos_end == 2) opts->k_spec = res->data.function.args[1];
     return true;
+}
+
+/* Emit a once-per-method stderr warning that the requested Method is
+ * not yet implemented and the symbolic path will be used instead.  The
+ * full numerical kernels arrive in Phases 2-5.  Returning the message
+ * suppresses repeats within a single process to avoid log spam in
+ * tight loops. */
+static void eigen_warn_unimplemented_method(MateigenMethod m) {
+    static bool warned[MATEIGEN_METHOD_UNKNOWN + 1] = { false };
+    if ((int)m < 0 || (int)m > (int)MATEIGEN_METHOD_UNKNOWN) return;
+    if (warned[m]) return;
+    warned[m] = true;
+    const char* name = "?";
+    switch (m) {
+        case MATEIGEN_DIRECT:          name = "Direct";  break;
+        case MATEIGEN_ARNOLDI:         name = "Arnoldi"; break;
+        case MATEIGEN_BANDED:          name = "Banded";  break;
+        case MATEIGEN_FEAST:           name = "FEAST";   break;
+        case MATEIGEN_METHOD_UNKNOWN:  name = "<unknown>"; break;
+        default:                       return;
+    }
+    fprintf(stderr,
+        "Eigenvalues::method: Method -> \"%s\" is not yet implemented; "
+        "using the symbolic characteristic-polynomial pipeline.\n", name);
 }
 
 /* Apply k-spec (Integer k, -k, or UpTo[k]) to vals[0..count].  Returns a
@@ -693,6 +767,17 @@ Expr* builtin_eigenvalues(Expr* res) {
     bool inexact = eigen_matrix_is_inexact(m)
                 || (a && eigen_matrix_is_inexact(a));
 
+    /* Phase 1: Method dispatch is parsed but the dedicated numerical
+     * kernels (Direct / Arnoldi / Banded / FEAST) arrive in later
+     * phases.  Any explicit Method other than Automatic on a numeric
+     * matrix triggers a one-shot warning and falls through to the
+     * symbolic characteristic-polynomial path so the call still
+     * produces a result. */
+    if (inexact && opts.method_given
+        && opts.method != MATEIGEN_AUTOMATIC) {
+        eigen_warn_unimplemented_method(opts.method);
+    }
+
     size_t val_count = 0;
     Expr** vals = eigen_compute_eigenvalues_full(m, a, n,
         opts.cubics_radical, opts.quartics_radical, &val_count);
@@ -787,6 +872,12 @@ Expr* builtin_eigenvectors(Expr* res) {
 
     bool inexact = eigen_matrix_is_inexact(m)
                 || (a && eigen_matrix_is_inexact(a));
+
+    /* Phase 1: same Method-warning behaviour as builtin_eigenvalues. */
+    if (inexact && opts.method_given
+        && opts.method != MATEIGEN_AUTOMATIC) {
+        eigen_warn_unimplemented_method(opts.method);
+    }
 
     /* Inexact input: rationalise once up front so we can perform the
      * eigenvalue / null-space arithmetic in exact form -- numerical
