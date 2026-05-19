@@ -178,14 +178,14 @@ void info_init(void) {
         "complex Gram-Schmidt disambiguation of M's spec to recover\n"
         "spec(A)).  Automatic routes here too.  Arbitrary-precision\n"
         "(MPFR) inputs go through a parallel \"Direct\" kernel at the\n"
-        "input's combined precision: real symmetric (step 2d-A) and\n"
-        "real non-symmetric (step 2d-B) are wired and return eigenvalues\n"
-        "/ eigenvectors carrying full input precision; MPFR complex\n"
-        "matrices currently fall back to the machine kernel (precision\n"
-        "loss) until 2d-{C,D} land.  \"Arnoldi\", \"Banded\", and \"FEAST\"\n"
-        "arrive in subsequent phases; an explicit but not-yet-implemented\n"
-        "Method prints a one-shot warning and falls back to the symbolic\n"
-        "characteristic-polynomial path.");
+        "input's combined precision: all four shapes -- real symmetric\n"
+        "(step 2d-A), real non-symmetric (step 2d-B), complex Hermitian\n"
+        "(step 2d-C), and complex non-Hermitian (step 2d-D) -- return\n"
+        "eigenvalues / eigenvectors carrying full input precision.\n"
+        "\"Arnoldi\", \"Banded\", and \"FEAST\" arrive in subsequent phases;\n"
+        "an explicit but not-yet-implemented Method prints a one-shot\n"
+        "warning and falls back to the symbolic characteristic-polynomial\n"
+        "path.");
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
         "\tfinds an x that solves the matrix equation m . x == b.\n"
@@ -318,13 +318,12 @@ void info_init(void) {
         "embedding into a 2n x 2n general matrix followed by grouped\n"
         "complex Gram-Schmidt extraction.  Automatic routes here.\n"
         "Arbitrary-precision (MPFR) inputs run a parallel \"Direct\" kernel\n"
-        "at the input's combined precision: real symmetric (step 2d-A) and\n"
-        "real non-symmetric (step 2d-B) MPFR are wired and yield\n"
-        "eigenvectors carrying full input precision (orthonormal for the\n"
-        "symmetric path, unit 2-norm for the general path).  MPFR complex\n"
-        "matrices currently fall back to the machine kernel (precision\n"
-        "loss) until 2d-{C,D} land.  \"Arnoldi\", \"Banded\", and \"FEAST\"\n"
-        "kernels arrive in subsequent phases.");
+        "at the input's combined precision: real symmetric (step 2d-A),\n"
+        "real non-symmetric (step 2d-B), complex Hermitian (step 2d-C),\n"
+        "and complex non-Hermitian (step 2d-D) MPFR all yield eigenvectors\n"
+        "carrying full input precision -- orthonormal for the Hermitian /\n"
+        "symmetric paths, unit 2-norm for the general paths.  \"Arnoldi\",\n"
+        "\"Banded\", and \"FEAST\" kernels arrive in subsequent phases.");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head",
         "Head[expr]\n"

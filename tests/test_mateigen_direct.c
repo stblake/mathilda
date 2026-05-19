@@ -1718,6 +1718,144 @@ void test_mpfr_general_high_precision_120(void) {
     mpfr_assert_true("MPFR general 3x3 at 120 digits", src);
 }
 
+/* ----- 2d-C: complex Hermitian MPFR tests -------------------------- */
+
+void test_mpfr_hermitian_2x2_golden(void) {
+    /* {{2, I}, {-I, 3}} has eigenvalues (5 +/- Sqrt[5])/2 (real). */
+    const char* src =
+        "Module[{m, vs, e1, e2, d1, d2},\n"
+        "  m = SetPrecision[{{2, I}, {-I, 3}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  e1 = SetPrecision[(5 + Sqrt[5])/2, 50];\n"
+        "  e2 = SetPrecision[(5 - Sqrt[5])/2, 50];\n"
+        "  d1 = N[(vs[[1]] - e1) * 10^45];\n"
+        "  d2 = N[(vs[[2]] - e2) * 10^45];\n"
+        "  TrueQ[N[Abs[d1]] < 1.0] && TrueQ[N[Abs[d2]] < 1.0]]";
+    mpfr_assert_true("MPFR Hermitian 2x2 -> (5 +/- Sqrt[5])/2", src);
+}
+
+void test_mpfr_hermitian_pauli_x(void) {
+    /* Pauli X = {{0,1},{1,0}}.  Real symmetric, eigenvalues +/-1.
+     * Routes through Hermitian path because matM_load detects no
+     * imaginary component -> matM_is_real_symmetric -> sym kernel.
+     * (Sanity check that the dispatcher doesn't accidentally take the
+     * Hermitian branch for a purely real matrix.) */
+    const char* src =
+        "Module[{m, vs},\n"
+        "  m = SetPrecision[{{0, 1}, {1, 0}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  Length[vs] == 2\n"
+        " && TrueQ[N[(vs[[1]] - 1) * 10^45 // Abs] < 1.0]\n"
+        " && TrueQ[N[(vs[[2]] + 1) * 10^45 // Abs] < 1.0]]";
+    mpfr_assert_true("MPFR sym 2x2 Pauli X spectrum", src);
+}
+
+void test_mpfr_hermitian_pauli_y(void) {
+    /* Pauli Y = {{0,-I},{I,0}}.  Hermitian, eigenvalues +/-1. */
+    const char* src =
+        "Module[{m, vs},\n"
+        "  m = SetPrecision[{{0, -I}, {I, 0}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  Length[vs] == 2\n"
+        " && TrueQ[N[(vs[[1]] - 1) * 10^45 // Abs] < 1.0]\n"
+        " && TrueQ[N[(vs[[2]] + 1) * 10^45 // Abs] < 1.0]]";
+    mpfr_assert_true("MPFR Hermitian 2x2 Pauli Y spectrum", src);
+}
+
+void test_mpfr_hermitian_3x3(void) {
+    /* {{2, 1+I, 0}, {1-I, 3, I}, {0, -I, 4}} -- Hermitian 3x3.
+     * Trace = 9, so sum of eigenvalues = 9. */
+    const char* src =
+        "Module[{m, vs, tr, sumV, dSum},\n"
+        "  m = SetPrecision[{{2, 1+I, 0}, {1-I, 3, I}, {0, -I, 4}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  tr = Tr[m];\n"
+        "  sumV = vs[[1]] + vs[[2]] + vs[[3]];\n"
+        "  dSum = N[(sumV - tr) * 10^45];\n"
+        "  Length[vs] == 3 && TrueQ[N[Abs[dSum]] < 1.0]]";
+    mpfr_assert_true("MPFR Hermitian 3x3 trace invariant", src);
+}
+
+void test_mpfr_hermitian_eigenvalues_real(void) {
+    /* Hermitian eigenvalues must be real -- check that the imag parts
+     * (after FullForm extraction) are below tolerance for each. */
+    const char* src =
+        "Module[{m, vs, n3, k, ok},\n"
+        "  m = SetPrecision[{{2, 1+I, 0}, {1-I, 3, I}, {0, -I, 4}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  n3 = 3; ok = True; k = 1;\n"
+        "  While[k <= n3,\n"
+        "    ok = ok && TrueQ[N[Abs[Im[vs[[k]]]] * 10^45] < 1.0];\n"
+        "    k = k + 1];\n"
+        "  ok]";
+    mpfr_assert_true("MPFR Hermitian 3x3 eigenvalues are real", src);
+}
+
+void test_mpfr_hermitian_eigenvalues_carry_precision(void) {
+    mpfr_assert_eigenvalues_have_precision(
+        "MPFR Hermitian 2x2 carries precision",
+        "SetPrecision[{{2, I}, {-I, 3}}, 50]", 2, 49);
+}
+
+void test_mpfr_hermitian_eigenvectors_are_lists(void) {
+    mpfr_assert_head("MPFR Hermitian Eigenvectors returns a List",
+        "Eigenvectors[SetPrecision[{{2, I}, {-I, 3}}, 40]]", "List");
+}
+
+/* ----- 2d-D: complex general (non-Hermitian) MPFR tests ------------ */
+
+void test_mpfr_complex_general_2x2_real_offdiag(void) {
+    /* {{2, 1+I}, {0, 3}} -- upper triangular, eigenvalues {3, 2}. */
+    const char* src =
+        "Module[{m, vs, d1, d2},\n"
+        "  m = SetPrecision[{{2, 1+I}, {0, 3}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  d1 = N[(vs[[1]] - 3) * 10^40];\n"
+        "  d2 = N[(vs[[2]] - 2) * 10^40];\n"
+        "  TrueQ[N[Abs[d1]] < 1.0] && TrueQ[N[Abs[d2]] < 1.0]]";
+    mpfr_assert_true("MPFR complex general 2x2 triangular -> {3, 2}", src);
+}
+
+void test_mpfr_complex_general_2x2_pseudo_hermitian(void) {
+    /* {{1+I, 2}, {3, 1-I}} -- non-Hermitian but real eigenvalues:
+     * trace=2, det=(1+I)(1-I)-6=-4 -> lambdas = 1 +/- Sqrt[5]. */
+    const char* src =
+        "Module[{m, vs, e1, e2, d1, d2},\n"
+        "  m = SetPrecision[{{1+I, 2}, {3, 1-I}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  e1 = SetPrecision[1 + Sqrt[5], 50];\n"
+        "  e2 = SetPrecision[1 - Sqrt[5], 50];\n"
+        "  d1 = N[(vs[[1]] - e1) * 10^40];\n"
+        "  d2 = N[(vs[[2]] - e2) * 10^40];\n"
+        "  TrueQ[N[Abs[d1]] < 1.0] && TrueQ[N[Abs[d2]] < 1.0]]";
+    mpfr_assert_true("MPFR complex general 2x2 -> 1 +/- Sqrt[5]", src);
+}
+
+void test_mpfr_complex_general_eigenvalues_carry_precision(void) {
+    mpfr_assert_eigenvalues_have_precision(
+        "MPFR complex general 2x2 carries precision",
+        "SetPrecision[{{2, 1+I}, {0, 3}}, 50]", 2, 49);
+}
+
+void test_mpfr_complex_general_eigenvectors_are_lists(void) {
+    mpfr_assert_head("MPFR complex general Eigenvectors returns a List",
+        "Eigenvectors[SetPrecision[{{2, 1+I}, {0, 3}}, 40]]", "List");
+}
+
+void test_mpfr_complex_general_diagonal(void) {
+    /* Diagonal complex matrix: eigenvalues are the diagonal entries. */
+    const char* src =
+        "Module[{m, vs, e1, e2, d1, d2},\n"
+        "  m = SetPrecision[{{2+I, 0}, {0, 3-I}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  e1 = SetPrecision[3 - I, 50];\n"
+        "  e2 = SetPrecision[2 + I, 50];\n"
+        "  d1 = N[(Re[vs[[1]]] - Re[e1]) * 10^40];\n"
+        "  d2 = N[(Im[vs[[1]]] - Im[e1]) * 10^40];\n"
+        "  TrueQ[N[Abs[d1]] < 1.0] && TrueQ[N[Abs[d2]] < 1.0]]";
+    mpfr_assert_true("MPFR complex general 2x2 diagonal", src);
+}
+
 void test_mpfr_sym_1x1(void) {
     /* Edge case: 1x1 -- bypasses tridiag entirely. */
     const char* src =
@@ -1825,6 +1963,20 @@ int main(void) {
     TEST(test_mpfr_general_trace_det_invariants);
     TEST(test_mpfr_general_residual_real_spectrum);
     TEST(test_mpfr_general_high_precision_120);
+    /* Phase 2 step 2d-C: complex Hermitian MPFR. */
+    TEST(test_mpfr_hermitian_2x2_golden);
+    TEST(test_mpfr_hermitian_pauli_x);
+    TEST(test_mpfr_hermitian_pauli_y);
+    TEST(test_mpfr_hermitian_3x3);
+    TEST(test_mpfr_hermitian_eigenvalues_real);
+    TEST(test_mpfr_hermitian_eigenvalues_carry_precision);
+    TEST(test_mpfr_hermitian_eigenvectors_are_lists);
+    /* Phase 2 step 2d-D: complex general MPFR. */
+    TEST(test_mpfr_complex_general_2x2_real_offdiag);
+    TEST(test_mpfr_complex_general_2x2_pseudo_hermitian);
+    TEST(test_mpfr_complex_general_eigenvalues_carry_precision);
+    TEST(test_mpfr_complex_general_eigenvectors_are_lists);
+    TEST(test_mpfr_complex_general_diagonal);
 #endif
 
     printf("All mateigen Direct (machine-precision) tests passed!\n");
