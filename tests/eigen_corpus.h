@@ -64,4 +64,54 @@ void corpus_assert_orthonormal_real(const double* V, size_t n, double tol);
 /* Infinity-norm of an n x n real matrix. */
 double corpus_norm_inf_real(const double* A, size_t n);
 
+/* === Complex corpus helpers ===========================================
+ * Complex matrices are represented as parallel n*n re / im arrays, the
+ * same layout the internal MatD struct uses.  All builders / loaders
+ * follow the same ownership convention as the real variants: caller
+ * frees the returned heap buffers. */
+
+/* Infinity-norm of a complex n x n matrix (re / im are length n*n). */
+double corpus_norm_inf_complex(const double* A_re, const double* A_im,
+                                size_t n);
+
+/* Build "Eigenvalues[ {{Complex[r,i], ...}, ...} ]" / "Eigenvectors[...]"
+ * input strings from paired real / imag arrays.  Real-only entries
+ * (im == 0) are emitted as plain Real to keep the parser path simple. */
+char* corpus_matrix_to_eigenvalues_input_complex(const double* A_re,
+                                                  const double* A_im,
+                                                  size_t n);
+char* corpus_matrix_to_eigenvectors_input_complex(const double* A_re,
+                                                   const double* A_im,
+                                                   size_t n);
+
+/* Evaluate `Eigenvalues[A]` for a complex Hermitian matrix.  Stores the
+ * (real) eigenvalues into a freshly-allocated `*lambdas` array of length
+ * n.  Imaginary parts of returned entries must be zero (asserts). */
+size_t corpus_eval_hermitian_eigenvalues(const double* A_re,
+                                          const double* A_im,
+                                          size_t n, double** lambdas);
+
+/* Evaluate `Eigenvectors[A]` for a complex matrix.  Stores the complex
+ * eigenvector matrix into freshly-allocated row-major `*V_re` / `*V_im`
+ * of length n*n.  Row i is the i-th eigenvector. */
+size_t corpus_eval_eigenvectors_complex(const double* A_re,
+                                         const double* A_im,
+                                         size_t n,
+                                         double** V_re, double** V_im);
+
+/* Complex residual:  ||A v - lambda v||_inf  vs  tol * ||A||_inf,
+ * where lambda is real (Hermitian case).  Asserts on failure. */
+double corpus_assert_residual_complex_real_lambda(const double* A_re,
+                                                    const double* A_im,
+                                                    size_t n,
+                                                    double lambda,
+                                                    const double* v_re,
+                                                    const double* v_im,
+                                                    double tol);
+
+/* Unitary orthonormality:  ||V^H V - I||_inf  <=  tol.  V is row-major
+ * n x n with row i = i-th eigenvector. */
+void corpus_assert_unitary(const double* V_re, const double* V_im,
+                            size_t n, double tol);
+
 #endif /* MATHILDA_TESTS_EIGEN_CORPUS_H */

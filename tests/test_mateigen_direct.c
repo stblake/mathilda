@@ -15,6 +15,7 @@
 
 #include <assert.h>
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -921,6 +922,245 @@ void test_direct_eigenvectors_tridiag_residual(void) {
     printf("PASS: 6x6 tridiagonal residual + orthonormality\n");
 }
 
+/* --- Phase 2 step 2c-A: complex Hermitian -------------------------- */
+
+/* Eigenvalue tolerance for a complex Hermitian matrix.  Same Householder
+ * + Wilkinson-QR constants as the real path, plus a small fudge for the
+ * extra phase-correction step. */
+static double machine_tol_complex(const double* A_re, const double* A_im,
+                                    size_t n) {
+    double normA = corpus_norm_inf_complex(A_re, A_im, n);
+    if (normA == 0.0) normA = 1.0;
+    return 128.0 * (double)n * 2.220446049250313e-16 * normA;
+}
+
+/* Verify every (lambda_i, v_i) pair for a complex Hermitian matrix A.
+ * Checks: eigenvalues real, sum == real(trace), per-pair residual,
+ * descending |lambda| sort order, unitary orthonormality of V. */
+static void verify_hermitian_spectrum(const double* A_re, const double* A_im,
+                                        size_t n) {
+    double tol = machine_tol_complex(A_re, A_im, n);
+    double* lambdas = NULL;
+    double *V_re = NULL, *V_im = NULL;
+    size_t kL = corpus_eval_hermitian_eigenvalues(A_re, A_im, n, &lambdas);
+    size_t kV = corpus_eval_eigenvectors_complex(A_re, A_im, n, &V_re, &V_im);
+    ASSERT(kL == n && kV == n);
+
+    /* Sum of eigenvalues == Re(trace A).  Imag(trace A) is exactly zero
+     * for Hermitian A, but we recover it from the matrix data anyway. */
+    double trace = 0.0;
+    for (size_t i = 0; i < n; i++) trace += A_re[i * n + i];
+    double sum = 0.0;
+    for (size_t i = 0; i < n; i++) sum += lambdas[i];
+    if (fabs(sum - trace) > tol) {
+        printf("FAIL: sum(lambda)=%g != trace=%g (tol %g)\n", sum, trace, tol);
+        ASSERT(0);
+    }
+
+    /* Residual.  Hermitian eigenvalues are real; vectors complex. */
+    for (size_t i = 0; i < n; i++) {
+        corpus_assert_residual_complex_real_lambda(A_re, A_im, n,
+                                                     lambdas[i],
+                                                     &V_re[i * n],
+                                                     &V_im[i * n],
+                                                     tol);
+    }
+
+    /* Descending |lambda| sort. */
+    for (size_t i = 1; i < n; i++) {
+        ASSERT(fabs(lambdas[i - 1]) >= fabs(lambdas[i]) - tol);
+    }
+
+    /* Unitary orthonormality. */
+    corpus_assert_unitary(V_re, V_im, n,
+                            128.0 * (double)n * 2.220446049250313e-16);
+
+    free(lambdas); free(V_re); free(V_im);
+}
+
+void test_direct_hermitian_2x2_diag_imag(void) {
+    /* [[2, i], [-i, 3]] -- Hermitian, eigenvalues (5 +/- sqrt(5))/2. */
+    double Re[4] = { 2.0, 0.0,   0.0, 3.0 };
+    double Im[4] = { 0.0, 1.0,  -1.0, 0.0 };
+    verify_hermitian_spectrum(Re, Im, 2);
+    printf("PASS: 2x2 Hermitian [[2,i],[-i,3]] residual + unitary\n");
+}
+
+void test_direct_hermitian_pauli_x(void) {
+    /* Pauli-X: [[0,1],[1,0]] -- real, eigenvalues +/-1. */
+    double Re[4] = { 0.0, 1.0,  1.0, 0.0 };
+    double Im[4] = { 0.0, 0.0,  0.0, 0.0 };
+    verify_hermitian_spectrum(Re, Im, 2);
+    printf("PASS: Pauli-X 2x2 residual + unitary\n");
+}
+
+void test_direct_hermitian_pauli_y(void) {
+    /* Pauli-Y: [[0, -i], [i, 0]] -- Hermitian, eigenvalues +/-1.
+     * Forces the phase-correction path through a 2x2 Hermitian step. */
+    double Re[4] = { 0.0,  0.0,  0.0, 0.0 };
+    double Im[4] = { 0.0, -1.0,  1.0, 0.0 };
+    verify_hermitian_spectrum(Re, Im, 2);
+    printf("PASS: Pauli-Y 2x2 residual + unitary\n");
+}
+
+void test_direct_hermitian_pauli_z(void) {
+    /* Pauli-Z: [[1,0],[0,-1]] -- real, eigenvalues +/-1. */
+    double Re[4] = { 1.0, 0.0,  0.0, -1.0 };
+    double Im[4] = { 0.0, 0.0,  0.0,  0.0 };
+    verify_hermitian_spectrum(Re, Im, 2);
+    printf("PASS: Pauli-Z 2x2 residual + unitary\n");
+}
+
+void test_direct_hermitian_3x3_known(void) {
+    /* A canonical 3x3 Hermitian.
+     *   A = [[1, 1+i, 0],
+     *        [1-i,  3,   i],
+     *        [ 0,  -i,   2]]
+     * trace = 6.  Verified Hermitian by inspection. */
+    double Re[9] = {
+        1.0, 1.0,  0.0,
+        1.0, 3.0,  0.0,
+        0.0, 0.0,  2.0
+    };
+    double Im[9] = {
+        0.0,  1.0, 0.0,
+       -1.0,  0.0, 1.0,
+        0.0, -1.0, 0.0
+    };
+    verify_hermitian_spectrum(Re, Im, 3);
+    printf("PASS: 3x3 Hermitian (sum==trace==6) residual + unitary\n");
+}
+
+void test_direct_hermitian_diagonal_4x4(void) {
+    /* Diagonal real, but loaded into the complex path via a zero im[] --
+     * exercises the Hermitian dispatch + early-exit path (sigma == 0
+     * at every step). */
+    double Re[16] = {
+        4.0, 0.0, 0.0, 0.0,
+        0.0, 1.0, 0.0, 0.0,
+        0.0, 0.0, 3.0, 0.0,
+        0.0, 0.0, 0.0, 2.0
+    };
+    double Im[16] = {0};
+    /* This routes through the real-symmetric path (no complex entries).
+     * We assert directly that the eigenvalues come out in descending |lambda|
+     * order: {4, 3, 2, 1}. */
+    double* lambdas = NULL;
+    size_t k = corpus_eval_hermitian_eigenvalues(Re, Im, 4, &lambdas);
+    ASSERT(k == 4);
+    const double expected[4] = { 4.0, 3.0, 2.0, 1.0 };
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT(fabs(lambdas[i] - expected[i]) < 1e-12);
+    }
+    free(lambdas);
+    printf("PASS: diag(4,1,3,2) Hermitian dispatch returns sorted real eigenvalues\n");
+}
+
+void test_direct_hermitian_5x5_random(void) {
+    /* Build a 5x5 Hermitian matrix M = R + R^T  + i(S - S^T)/2.
+     * Uses a small reproducible "random" seed via a linear congruential
+     * generator so the test is independent of test order. */
+    uint32_t s = 0xC0FFEE01u;
+    #define LCG() (s = s * 1103515245u + 12345u, (double)(s >> 16) / 32768.0 - 1.0)
+    double Re[25], Im[25];
+    for (size_t i = 0; i < 5; i++) {
+        for (size_t j = 0; j < 5; j++) {
+            double a = LCG();
+            double b = LCG();
+            if (i == j) {
+                Re[i * 5 + j] = 2.0 * a;
+                Im[i * 5 + j] = 0.0;
+            } else if (i < j) {
+                Re[i * 5 + j] = a;
+                Im[i * 5 + j] = b;
+            } else {
+                /* Conjugate of (i,j) is (j,i). */
+                Re[i * 5 + j] = Re[j * 5 + i];
+                Im[i * 5 + j] = -Im[j * 5 + i];
+            }
+        }
+    }
+    #undef LCG
+    verify_hermitian_spectrum(Re, Im, 5);
+    printf("PASS: random 5x5 Hermitian residual + unitary\n");
+}
+
+void test_direct_hermitian_repeated_eigvals(void) {
+    /* I_4 + i * 0 = identity.  Eigenvalues all 1; eigenvectors should
+     * form an orthonormal basis (any one will do since they live in a
+     * 4-D degenerate eigenspace).  Exercises the kernel on a maximally
+     * degenerate input. */
+    double Re[16] = {0}; double Im[16] = {0};
+    for (size_t i = 0; i < 4; i++) Re[i * 4 + i] = 1.0;
+    double* lambdas = NULL;
+    double *V_re = NULL, *V_im = NULL;
+    size_t kL = corpus_eval_hermitian_eigenvalues(Re, Im, 4, &lambdas);
+    size_t kV = corpus_eval_eigenvectors_complex(Re, Im, 4, &V_re, &V_im);
+    ASSERT(kL == 4 && kV == 4);
+    for (size_t i = 0; i < 4; i++) ASSERT(fabs(lambdas[i] - 1.0) < 1e-12);
+    /* Per-eigenpair residual -- A v_i = v_i for any v_i. */
+    for (size_t i = 0; i < 4; i++) {
+        corpus_assert_residual_complex_real_lambda(Re, Im, 4, lambdas[i],
+                                                     &V_re[i * 4], &V_im[i * 4],
+                                                     1e-12);
+    }
+    corpus_assert_unitary(V_re, V_im, 4, 1e-12);
+    free(lambdas); free(V_re); free(V_im);
+    printf("PASS: 4x4 identity Hermitian residual + unitary (degenerate)\n");
+}
+
+void test_direct_hermitian_complex_offdiag_only(void) {
+    /* [[0, 2i], [-2i, 0]] -- pure imag off-diagonal.  Eigenvalues +/-2,
+     * eigenvectors must come out complex. */
+    double Re[4] = { 0.0, 0.0,  0.0, 0.0 };
+    double Im[4] = { 0.0, 2.0, -2.0, 0.0 };
+    double* lambdas = NULL;
+    double *V_re = NULL, *V_im = NULL;
+    size_t kL = corpus_eval_hermitian_eigenvalues(Re, Im, 2, &lambdas);
+    size_t kV = corpus_eval_eigenvectors_complex(Re, Im, 2, &V_re, &V_im);
+    ASSERT(kL == 2 && kV == 2);
+    /* Eigenvalues +/-2 sorted by abs desc: {2, -2} or {-2, 2}; the +2
+     * is the first by stable tiebreak in our sort. */
+    ASSERT(fabs(fabs(lambdas[0]) - 2.0) < 1e-12);
+    ASSERT(fabs(fabs(lambdas[1]) - 2.0) < 1e-12);
+    /* Verify each eigenvector via residual A v = lambda v. */
+    for (size_t i = 0; i < 2; i++) {
+        corpus_assert_residual_complex_real_lambda(Re, Im, 2, lambdas[i],
+                                                     &V_re[i * 2], &V_im[i * 2],
+                                                     1e-12);
+    }
+    /* Eigenvectors should be orthogonal in C^2. */
+    corpus_assert_unitary(V_re, V_im, 2, 1e-12);
+    free(lambdas); free(V_re); free(V_im);
+    printf("PASS: 2x2 Hermitian [[0,2i],[-2i,0]] residual + unitary\n");
+}
+
+void test_direct_hermitian_eigenvalues_only(void) {
+    /* Exercise the WANT_VALUES (no Q) path to make sure the kernel
+     * doesn't crash when eigenvectors aren't requested.  Same matrix
+     * as 3x3_known so we get the same trace = 6. */
+    double Re[9] = {
+        1.0, 1.0,  0.0,
+        1.0, 3.0,  0.0,
+        0.0, 0.0,  2.0
+    };
+    double Im[9] = {
+        0.0,  1.0, 0.0,
+       -1.0,  0.0, 1.0,
+        0.0, -1.0, 0.0
+    };
+    double* lambdas = NULL;
+    size_t k = corpus_eval_hermitian_eigenvalues(Re, Im, 3, &lambdas);
+    ASSERT(k == 3);
+    double sum = lambdas[0] + lambdas[1] + lambdas[2];
+    ASSERT(fabs(sum - 6.0) < 1e-12);
+    /* Eigenvalues should be sorted in descending |lambda|. */
+    ASSERT(fabs(lambdas[0]) >= fabs(lambdas[1]) - 1e-12);
+    ASSERT(fabs(lambdas[1]) >= fabs(lambdas[2]) - 1e-12);
+    free(lambdas);
+    printf("PASS: 3x3 Hermitian eigenvalues-only path\n");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -969,6 +1209,18 @@ int main(void) {
     TEST(test_direct_general_eigenvectors_5_2plusi);
     TEST(test_direct_eigenvectors_diag_4x4);
     TEST(test_direct_eigenvectors_tridiag_residual);
+
+    /* Phase 2 step 2c-A: complex Hermitian. */
+    TEST(test_direct_hermitian_2x2_diag_imag);
+    TEST(test_direct_hermitian_pauli_x);
+    TEST(test_direct_hermitian_pauli_y);
+    TEST(test_direct_hermitian_pauli_z);
+    TEST(test_direct_hermitian_3x3_known);
+    TEST(test_direct_hermitian_diagonal_4x4);
+    TEST(test_direct_hermitian_5x5_random);
+    TEST(test_direct_hermitian_repeated_eigvals);
+    TEST(test_direct_hermitian_complex_offdiag_only);
+    TEST(test_direct_hermitian_eigenvalues_only);
 
     printf("All mateigen Direct (machine-precision) tests passed!\n");
     return 0;

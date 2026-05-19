@@ -787,6 +787,44 @@ static bool matD_is_real_symmetric(const MatD* A, double tol) {
     return true;
 }
 
+/* Infinity-norm of an n x n complex matrix: max over rows of the row
+ * sum of the per-entry complex magnitudes |a_re + i a_im|. */
+static double matD_norm_inf_complex(const MatD* A) {
+    size_t n = A->n;
+    double m = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double row_sum = 0.0;
+        for (size_t j = 0; j < n; j++) {
+            row_sum += hypot(A->re[i * n + j],
+                              A->is_complex ? A->im[i * n + j] : 0.0);
+        }
+        if (row_sum > m) m = row_sum;
+    }
+    return m;
+}
+
+/* True iff a complex n x n matrix is Hermitian to within `tol` (absolute
+ * threshold on each entry; the caller multiplies by ||A||_inf and a
+ * small fudge).  Hermitian = self-conjugate: A_ij = conj(A_ji), which
+ * implies A_ii is purely real.  A purely real symmetric matrix passes
+ * this test too. */
+static bool matD_is_hermitian(const MatD* A, double tol) {
+    size_t n = A->n;
+    if (!A->is_complex) return matD_is_real_symmetric(A, tol);
+    /* Diagonal must be real. */
+    for (size_t i = 0; i < n; i++) {
+        if (fabs(A->im[i * n + i]) > tol) return false;
+    }
+    /* A_ij = conj(A_ji) for i != j. */
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = i + 1; j < n; j++) {
+            if (fabs(A->re[i * n + j] - A->re[j * n + i]) > tol) return false;
+            if (fabs(A->im[i * n + j] + A->im[j * n + i]) > tol) return false;
+        }
+    }
+    return true;
+}
+
 /* LAPACK-HOOK: replace with dsytrd when USE_LAPACK is set.
  *
  * Householder tridiagonalisation of a real symmetric n x n matrix `A`
@@ -1856,6 +1894,390 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
     return direct_apply_k_spec_list(out, k_spec);
 }
 
+/* ---------- Complex Hermitian Direct: Householder + phase + sym QR -- *
+ *                                                                       *
+ *  For a complex Hermitian n x n matrix A all eigenvalues are real and  *
+ *  the eigenvectors form a complex unitary basis.  We reduce as:        *
+ *                                                                       *
+ *    1. Complex Householder reflectors zero the sub-column below the    *
+ *       sub-diagonal at each step.  The result is a Hermitian tri-      *
+ *       diagonal T with real diagonal but generally COMPLEX             *
+ *       sub-diagonal.  Q (n x n complex) accumulates the reflectors.    *
+ *    2. Diagonal phase correction D = diag(d_0, ..., d_{n-1}), |d_k|=1, *
+ *       chosen so D^H T D has real-positive sub-diagonal.  T becomes a  *
+ *       real symmetric tridiagonal.  Q is updated to Q D.               *
+ *    3. The existing real symmetric tridiag QR (direct_symtridiag_qr)   *
+ *       finds eigenvalues and the real orthogonal accumulator Z so that *
+ *       Z^T T_real Z = Lambda.                                          *
+ *    4. Final eigenvectors V = Q Z (complex Q times real Z).            *
+ *                                                                       *
+ *  This avoids needing a separate complex tridiagonal QR while costing  *
+ *  only an O(n^2) diagonal-phase application step.  See Wilkinson 1965, *
+ *  "The Algebraic Eigenvalue Problem", section 5.45.                    *
+ *                                                                       *
+ *  LAPACK-HOOK: this whole block maps to zhetrd (step 1) + the implicit *
+ *  phase reduction (handled internally by LAPACK's zhetrd via the tau   *
+ *  scalar) + dstedc/dsteqr (step 3), or simply zheevd as a one-call     *
+ *  wrapper when USE_LAPACK is wired.                                    *
+ * --------------------------------------------------------------------- */
+
+/* Hermitian Householder tridiagonalisation.
+ *
+ * Input:  A (row-major n*n; A_re holds real parts, A_im holds imag parts).
+ * Output: diag[i]     = real diagonal of T  (0 <= i < n)
+ *         sub_re[k], sub_im[k] = complex sub-diagonal T_{k+1,k}, 0 <= k < n-1
+ *         Q (complex, n*n via Q_re/Q_im) when want_Q: unitary accumulator
+ *
+ * Scratch buffers u, v, q (each length n complex via paired arrays) are
+ * caller-provided so the inner loops never touch malloc/free. */
+static void direct_tridiag_complex_hermitian(double* A_re, double* A_im,
+                                              size_t n,
+                                              double* diag,
+                                              double* sub_re, double* sub_im,
+                                              double* Q_re, double* Q_im,
+                                              bool want_Q,
+                                              double* u_re, double* u_im,
+                                              double* v_re, double* v_im,
+                                              double* q_re, double* q_im) {
+    if (want_Q) {
+        for (size_t i = 0; i < n; i++) {
+            for (size_t j = 0; j < n; j++) {
+                Q_re[i * n + j] = (i == j) ? 1.0 : 0.0;
+                Q_im[i * n + j] = 0.0;
+            }
+        }
+    }
+
+    for (size_t k = 0; k + 2 < n; k++) {
+        /* Norm of column-k tail x = A[k+1:n, k] (complex). */
+        double sigma = 0.0;
+        for (size_t i = k + 1; i < n; i++) {
+            double r = A_re[i * n + k];
+            double m = A_im[i * n + k];
+            sigma += r * r + m * m;
+        }
+        double xk1_re = A_re[(k + 1) * n + k];
+        double xk1_im = A_im[(k + 1) * n + k];
+        double xk1_abs = hypot(xk1_re, xk1_im);
+
+        if (sigma == 0.0) {
+            sub_re[k] = xk1_re;
+            sub_im[k] = xk1_im;
+            continue;
+        }
+        double norm_x = sqrt(sigma);
+
+        /* alpha = -phase(x_{k+1}) * norm_x.  Phase = x/|x| (or 1 if x=0).
+         * Choosing alpha "opposite" the leading entry maximises |u_0|^2 so
+         * the reflector is numerically well-conditioned. */
+        double alpha_re, alpha_im;
+        if (xk1_abs == 0.0) {
+            alpha_re = -norm_x;
+            alpha_im = 0.0;
+        } else {
+            alpha_re = -xk1_re / xk1_abs * norm_x;
+            alpha_im = -xk1_im / xk1_abs * norm_x;
+        }
+
+        /* u = x with u_{k+1} -= alpha.  Householder reflector
+         * H = I - 2 u u^H / ||u||^2; we normalise u so that tau = 2. */
+        u_re[k + 1] = xk1_re - alpha_re;
+        u_im[k + 1] = xk1_im - alpha_im;
+        for (size_t i = k + 2; i < n; i++) {
+            u_re[i] = A_re[i * n + k];
+            u_im[i] = A_im[i * n + k];
+        }
+        double unorm2 = 0.0;
+        for (size_t i = k + 1; i < n; i++) {
+            unorm2 += u_re[i] * u_re[i] + u_im[i] * u_im[i];
+        }
+        if (unorm2 == 0.0) {
+            sub_re[k] = xk1_re;
+            sub_im[k] = xk1_im;
+            continue;
+        }
+        double inv_unorm = 1.0 / sqrt(unorm2);
+        for (size_t i = k + 1; i < n; i++) {
+            u_re[i] *= inv_unorm;
+            u_im[i] *= inv_unorm;
+        }
+
+        /* v = A u   on the trailing sub-block (A is Hermitian; we read
+         * the full sub-block to be agnostic to whether the upper triangle
+         * has been kept in sync). */
+        for (size_t i = k + 1; i < n; i++) {
+            double s_re = 0.0, s_im = 0.0;
+            for (size_t j = k + 1; j < n; j++) {
+                double ar = A_re[i * n + j];
+                double ai = A_im[i * n + j];
+                double ur = u_re[j];
+                double ui = u_im[j];
+                /* s += A_ij * u_j */
+                s_re += ar * ur - ai * ui;
+                s_im += ar * ui + ai * ur;
+            }
+            v_re[i] = s_re;
+            v_im[i] = s_im;
+        }
+
+        /* alpha_v = u^H v = sum conj(u_i) v_i.  Real for Hermitian A. */
+        double alpha_v = 0.0;
+        for (size_t i = k + 1; i < n; i++) {
+            alpha_v += u_re[i] * v_re[i] + u_im[i] * v_im[i];
+        }
+
+        /* q = 2 v - 2 alpha_v u   so that  A <- A - u q^H - q u^H = H A H. */
+        for (size_t i = k + 1; i < n; i++) {
+            q_re[i] = 2.0 * v_re[i] - 2.0 * alpha_v * u_re[i];
+            q_im[i] = 2.0 * v_im[i] - 2.0 * alpha_v * u_im[i];
+        }
+
+        /* Rank-2 update: A_ij -= u_i conj(q_j) + q_i conj(u_j). */
+        for (size_t i = k + 1; i < n; i++) {
+            for (size_t j = k + 1; j < n; j++) {
+                double ur = u_re[i], ui = u_im[i];
+                double qr = q_re[i], qi = q_im[i];
+                double uj_r = u_re[j], uj_i = u_im[j];
+                double qj_r = q_re[j], qj_i = q_im[j];
+                /* u_i * conj(q_j) = (ur + i ui)(qj_r - i qj_i) */
+                double t1_re = ur * qj_r + ui * qj_i;
+                double t1_im = ui * qj_r - ur * qj_i;
+                /* q_i * conj(u_j) = (qr + i qi)(uj_r - i uj_i) */
+                double t2_re = qr * uj_r + qi * uj_i;
+                double t2_im = qi * uj_r - qr * uj_i;
+                A_re[i * n + j] -= t1_re + t2_re;
+                A_im[i * n + j] -= t1_im + t2_im;
+            }
+        }
+
+        /* Force the new sub-column / sub-row to their analytic values
+         * to suppress drift.  Sub-column has only one non-zero entry
+         * after H is applied: A[k+1, k] = alpha (complex).  All A[i, k]
+         * for i > k+1 are exactly zero; conjugate row equally. */
+        sub_re[k] = alpha_re;
+        sub_im[k] = alpha_im;
+        A_re[(k + 1) * n + k] = alpha_re;
+        A_im[(k + 1) * n + k] = alpha_im;
+        A_re[k * n + (k + 1)] = alpha_re;   /* T_{k,k+1} = conj(T_{k+1,k}) */
+        A_im[k * n + (k + 1)] = -alpha_im;
+        for (size_t i = k + 2; i < n; i++) {
+            A_re[i * n + k] = 0.0;
+            A_im[i * n + k] = 0.0;
+            A_re[k * n + i] = 0.0;
+            A_im[k * n + i] = 0.0;
+        }
+
+        /* Q <- Q H (right-multiply).  Column j -> col j - 2 (Q row * u) u_j.
+         * In complex: Q_ij -= 2 (Q row . u)_i * conj(u_j) -- wait, this
+         * isn't right.  H = I - 2 u u^H, so Q H = Q - 2 (Q u) u^H, which
+         * in scalar form is Q_ij <- Q_ij - 2 (Q u)_i conj(u_j). */
+        if (want_Q) {
+            for (size_t i = 0; i < n; i++) {
+                /* (Q u)_i = sum_j Q_ij u_j, restricted to j >= k+1. */
+                double s_re = 0.0, s_im = 0.0;
+                for (size_t j = k + 1; j < n; j++) {
+                    double qr2 = Q_re[i * n + j];
+                    double qi2 = Q_im[i * n + j];
+                    double ur2 = u_re[j];
+                    double ui2 = u_im[j];
+                    s_re += qr2 * ur2 - qi2 * ui2;
+                    s_im += qr2 * ui2 + qi2 * ur2;
+                }
+                s_re *= 2.0;
+                s_im *= 2.0;
+                /* Q_ij -= s * conj(u_j) = s * (u_re[j] - i u_im[j]) */
+                for (size_t j = k + 1; j < n; j++) {
+                    double ur2 = u_re[j];
+                    double ui2 = u_im[j];
+                    /* (s_re + i s_im)(ur2 - i ui2) */
+                    double pr = s_re * ur2 + s_im * ui2;
+                    double pi = s_im * ur2 - s_re * ui2;
+                    Q_re[i * n + j] -= pr;
+                    Q_im[i * n + j] -= pi;
+                }
+            }
+        }
+    }
+
+    /* Extract diagonal (real for Hermitian, but defensively take the
+     * real part). */
+    for (size_t i = 0; i < n; i++) diag[i] = A_re[i * n + i];
+    /* The (n-2 -> n-1) sub-diagonal entry hasn't been overwritten yet. */
+    if (n >= 2) {
+        sub_re[n - 2] = A_re[(n - 1) * n + (n - 2)];
+        sub_im[n - 2] = A_im[(n - 1) * n + (n - 2)];
+    }
+}
+
+/* Diagonal phase correction.  Multiplies the complex Hermitian tri-
+ * diagonal T by a diagonal unitary D = diag(d_0, ..., d_{n-1}), |d_k|=1,
+ * chosen so D^H T D has real-positive sub-diagonal.  Updates Q (the
+ * Householder accumulator) by post-multiplication: Q <- Q D. */
+static void direct_phase_correct_tridiag(double* sub_re, double* sub_im,
+                                           size_t n,
+                                           double* Q_re, double* Q_im,
+                                           bool want_Q) {
+    /* d_0 = 1; d_{k+1} = d_k * sub[k] / |sub[k]|. */
+    double d_re = 1.0, d_im = 0.0;
+    /* k = 0 -> column 1 of Q gets multiplied by d_1, column 0 stays. */
+    for (size_t k = 0; k + 1 < n; k++) {
+        double sr = sub_re[k], si = sub_im[k];
+        double mag = hypot(sr, si);
+        double phase_re, phase_im;
+        if (mag == 0.0) { phase_re = 1.0; phase_im = 0.0; }
+        else            { phase_re = sr / mag; phase_im = si / mag; }
+        /* d_{k+1} = d_k * phase */
+        double new_d_re = d_re * phase_re - d_im * phase_im;
+        double new_d_im = d_re * phase_im + d_im * phase_re;
+        d_re = new_d_re;
+        d_im = new_d_im;
+        sub_re[k] = mag;
+        sub_im[k] = 0.0;
+        if (want_Q) {
+            for (size_t i = 0; i < n; i++) {
+                double qr = Q_re[i * n + (k + 1)];
+                double qi = Q_im[i * n + (k + 1)];
+                Q_re[i * n + (k + 1)] = qr * d_re - qi * d_im;
+                Q_im[i * n + (k + 1)] = qr * d_im + qi * d_re;
+            }
+        }
+    }
+}
+
+/* Compose complex Q (n*n) with real Z (n*n) into complex V (n*n) via
+ * V = Q Z.  V_re/V_im are caller-allocated. */
+static void direct_compose_complex_Q_real_Z(const double* Q_re,
+                                              const double* Q_im,
+                                              const double* Z, size_t n,
+                                              double* V_re, double* V_im) {
+    for (size_t i = 0; i < n; i++) {
+        for (size_t k = 0; k < n; k++) {
+            double sr = 0.0, si = 0.0;
+            for (size_t j = 0; j < n; j++) {
+                double z = Z[j * n + k];
+                sr += Q_re[i * n + j] * z;
+                si += Q_im[i * n + j] * z;
+            }
+            V_re[i * n + k] = sr;
+            V_im[i * n + k] = si;
+        }
+    }
+}
+
+/* Build a List of List of (Real or Complex[re, im]) from a complex
+ * eigenvector matrix V (n*n; V[i,k] is the i-th component of the k-th
+ * eigenvector) in the order given by `perm` (perm[r] -> column of V). */
+static Expr* direct_build_complex_hermitian_eigvec_list(const double* V_re,
+                                                          const double* V_im,
+                                                          size_t n,
+                                                          const size_t* perm) {
+    Expr** rows = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t r = 0; r < n; r++) {
+        size_t col = perm[r];
+        Expr** comps = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            double rv = V_re[i * n + col];
+            double iv = V_im[i * n + col];
+            if (iv == 0.0) {
+                comps[i] = expr_new_real(rv);
+            } else {
+                Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
+                args[0] = expr_new_real(rv);
+                args[1] = expr_new_real(iv);
+                comps[i] = expr_new_function(expr_new_symbol("Complex"), args, 2);
+                free(args);
+            }
+        }
+        rows[r] = expr_new_function(expr_new_symbol("List"), comps, n);
+        free(comps);
+    }
+    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    free(rows);
+    return out;
+}
+
+/* Top-level "Direct" kernel for complex Hermitian machine-precision
+ * input.  Eigenvalues are real (sorted by descending |lambda|);
+ * eigenvectors are complex unitary.  Returns NULL on convergence
+ * failure so the caller falls back to the symbolic path. */
+static Expr* direct_complex_hermitian_machine(const MatD* A, MateigenWant want,
+                                                Expr* k_spec) {
+    size_t n = A->n;
+    if (n == 0) return NULL;
+
+    /* Working complex copy of A (tridiag step modifies in place). */
+    double* W_re = (double*)malloc(sizeof(double) * n * n);
+    double* W_im = (double*)malloc(sizeof(double) * n * n);
+    memcpy(W_re, A->re, sizeof(double) * n * n);
+    memcpy(W_im, A->im, sizeof(double) * n * n);
+
+    double* diag   = (double*)malloc(sizeof(double) * n);
+    double* sub_re = (double*)calloc(n, sizeof(double));   /* len n-1 + slack */
+    double* sub_im = (double*)calloc(n, sizeof(double));
+
+    double* u_re = (double*)malloc(sizeof(double) * n);
+    double* u_im = (double*)malloc(sizeof(double) * n);
+    double* v_re = (double*)malloc(sizeof(double) * n);
+    double* v_im = (double*)malloc(sizeof(double) * n);
+    double* q_re = (double*)malloc(sizeof(double) * n);
+    double* q_im = (double*)malloc(sizeof(double) * n);
+
+    bool want_Q   = (want & MATEIGEN_WANT_VECTORS) != 0;
+    double* Q_re  = want_Q ? (double*)malloc(sizeof(double) * n * n) : NULL;
+    double* Q_im  = want_Q ? (double*)malloc(sizeof(double) * n * n) : NULL;
+
+    direct_tridiag_complex_hermitian(W_re, W_im, n,
+                                      diag, sub_re, sub_im,
+                                      Q_re, Q_im, want_Q,
+                                      u_re, u_im, v_re, v_im, q_re, q_im);
+
+    free(W_re); free(W_im);
+    free(u_re); free(u_im); free(v_re); free(v_im); free(q_re); free(q_im);
+
+    /* Phase-correct so sub-diagonal becomes real positive. */
+    direct_phase_correct_tridiag(sub_re, sub_im, n, Q_re, Q_im, want_Q);
+
+    /* Real symmetric tridiagonal QR.  We accumulate the real orthogonal
+     * Z separately when eigenvectors are wanted -- it composes with the
+     * complex Q from the Hermitian Householder step. */
+    double* Z = want_Q ? (double*)malloc(sizeof(double) * n * n) : NULL;
+    if (want_Q) {
+        for (size_t i = 0; i < n; i++)
+            for (size_t j = 0; j < n; j++) Z[i * n + j] = (i == j) ? 1.0 : 0.0;
+    }
+    int qr_status = direct_symtridiag_qr(diag, sub_re, n, Z, want_Q);
+
+    free(sub_re); free(sub_im);
+
+    if (qr_status != 0) {
+        free(diag);
+        if (Q_re) { free(Q_re); free(Q_im); }
+        if (Z) free(Z);
+        return NULL;
+    }
+
+    size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+    direct_sort_perm_desc_abs(diag, n, perm);
+
+    Expr* out;
+    if (want_Q) {
+        /* V = Q Z (complex). */
+        double* V_re = (double*)malloc(sizeof(double) * n * n);
+        double* V_im = (double*)malloc(sizeof(double) * n * n);
+        direct_compose_complex_Q_real_Z(Q_re, Q_im, Z, n, V_re, V_im);
+        out = direct_build_complex_hermitian_eigvec_list(V_re, V_im, n, perm);
+        free(V_re); free(V_im);
+    } else {
+        out = direct_build_real_eigenvalue_list(diag, n, perm);
+    }
+
+    free(diag); free(perm);
+    if (Q_re) { free(Q_re); free(Q_im); }
+    if (Z) free(Z);
+
+    return direct_apply_k_spec_list(out, k_spec);
+}
+
 /* Dispatcher entry point: route a numeric matrix through the
  * appropriate "Direct" kernel.  Returns NULL when the matrix shape
  * isn't yet supported by a numerical kernel so the caller can fall
@@ -1865,13 +2287,13 @@ static Expr* direct_real_sym_machine(const MatD* A, MateigenWant want,
  * current numerical scope.
  *
  * Implemented kernels:
- *   - Real symmetric (machine precision):  eigenvalues + eigenvectors.
- *   - Real non-symmetric (machine precision): eigenvalues only.
- *     Eigenvectors fall back to the symbolic path until step 2b.
+ *   - Real symmetric (machine precision):           values + vectors.
+ *   - Real non-symmetric (machine precision):       values + vectors.
+ *   - Complex Hermitian (machine precision):        values + vectors.
  *
  * Falls back to symbolic for:
- *   - Complex matrices (step 2c).
- *   - MPFR matrices (step 2d).
+ *   - Complex non-Hermitian matrices (step 2c-B).
+ *   - MPFR matrices                  (step 2d).
  */
 static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,
                                        MateigenWant want, Expr* k_spec) {
@@ -1880,15 +2302,23 @@ static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,
 
     MatD A;
     if (!matD_load(m, (size_t)n, &A)) return NULL;
-    if (A.is_complex) { matD_free(&A); return NULL; }  /* step 2c */
 
-    double norm = matD_norm_inf_real(A.re, A.n);
-    double sym_tol = 1e-12 * (norm == 0.0 ? 1.0 : norm) * (double)A.n;
-    Expr* out;
-    if (matD_is_real_symmetric(&A, sym_tol)) {
-        out = direct_real_sym_machine(&A, want, k_spec);
+    Expr* out = NULL;
+    if (A.is_complex) {
+        double norm = matD_norm_inf_complex(&A);
+        double herm_tol = 1e-12 * (norm == 0.0 ? 1.0 : norm) * (double)A.n;
+        if (matD_is_hermitian(&A, herm_tol)) {
+            out = direct_complex_hermitian_machine(&A, want, k_spec);
+        }
+        /* Non-Hermitian complex falls through (step 2c-B). */
     } else {
-        out = direct_real_general_machine(&A, want, k_spec);
+        double norm = matD_norm_inf_real(A.re, A.n);
+        double sym_tol = 1e-12 * (norm == 0.0 ? 1.0 : norm) * (double)A.n;
+        if (matD_is_real_symmetric(&A, sym_tol)) {
+            out = direct_real_sym_machine(&A, want, k_spec);
+        } else {
+            out = direct_real_general_machine(&A, want, k_spec);
+        }
     }
     matD_free(&A);
     return out;

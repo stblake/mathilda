@@ -196,3 +196,211 @@ void corpus_assert_orthonormal_real(const double* V, size_t n, double tol) {
     }
     ASSERT(worst <= tol);
 }
+
+/* === Complex corpus helpers ===========================================
+ *
+ * Complex matrices are stored as parallel re / im arrays, mirroring the
+ * MatD layout in src/mateigen.c so the corpus helpers double as a
+ * loose contract test against that internal representation. */
+
+double corpus_norm_inf_complex(const double* A_re, const double* A_im,
+                                size_t n) {
+    double m = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double s = 0.0;
+        for (size_t j = 0; j < n; j++) {
+            s += hypot(A_re[i * n + j], A_im[i * n + j]);
+        }
+        if (s > m) m = s;
+    }
+    return m;
+}
+
+/* Render a complex scalar.  Imaginary == 0 -> Real; otherwise Complex[r,i].
+ * `%.17e` ensures the parser treats integer-valued reals as Real, not
+ * Integer, so the dispatcher routes through the numerical path. */
+static int append_complex_entry(char* buf, size_t cap, size_t pos,
+                                  double r, double im) {
+    if (im == 0.0) {
+        return pos + snprintf(buf + pos, cap - pos, "%.17e", r);
+    }
+    return pos + snprintf(buf + pos, cap - pos, "Complex[%.17e, %.17e]",
+                          r, im);
+}
+
+static char* matrix_to_input_complex(const char* head,
+                                       const double* A_re,
+                                       const double* A_im, size_t n) {
+    size_t cap = strlen(head) + 16 + n * n * 64;
+    char* buf = (char*)malloc(cap);
+    size_t pos = 0;
+    pos += snprintf(buf + pos, cap - pos, "%s[{", head);
+    for (size_t i = 0; i < n; i++) {
+        if (i) pos += snprintf(buf + pos, cap - pos, ", ");
+        pos += snprintf(buf + pos, cap - pos, "{");
+        for (size_t j = 0; j < n; j++) {
+            if (j) pos += snprintf(buf + pos, cap - pos, ", ");
+            pos = append_complex_entry(buf, cap, pos,
+                                         A_re[i * n + j], A_im[i * n + j]);
+        }
+        pos += snprintf(buf + pos, cap - pos, "}");
+    }
+    snprintf(buf + pos, cap - pos, "}]");
+    return buf;
+}
+
+char* corpus_matrix_to_eigenvalues_input_complex(const double* A_re,
+                                                  const double* A_im,
+                                                  size_t n) {
+    return matrix_to_input_complex("Eigenvalues", A_re, A_im, n);
+}
+
+char* corpus_matrix_to_eigenvectors_input_complex(const double* A_re,
+                                                   const double* A_im,
+                                                   size_t n) {
+    return matrix_to_input_complex("Eigenvectors", A_re, A_im, n);
+}
+
+/* Extract real + imag parts from a leaf Expr that may be Integer, Real,
+ * or Complex[re, im].  Returns 1 on success, 0 if unrecognised. */
+static int leaf_to_complex(Expr* e, double* out_re, double* out_im) {
+    *out_im = 0.0;
+    double v;
+    if (leaf_to_double(e, &v)) { *out_re = v; return 1; }
+    if (e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && strcmp(e->data.function.head->data.symbol, "Complex") == 0
+        && e->data.function.arg_count == 2) {
+        double r, m;
+        if (leaf_to_double(e->data.function.args[0], &r)
+            && leaf_to_double(e->data.function.args[1], &m)) {
+            *out_re = r; *out_im = m;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+size_t corpus_eval_hermitian_eigenvalues(const double* A_re,
+                                          const double* A_im,
+                                          size_t n, double** lambdas) {
+    char* input = corpus_matrix_to_eigenvalues_input_complex(A_re, A_im, n);
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    free(input);
+
+    ASSERT(r != NULL);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+
+    size_t out_count = r->data.function.arg_count;
+    *lambdas = (double*)malloc(sizeof(double) * (out_count ? out_count : 1));
+    for (size_t i = 0; i < out_count; i++) {
+        double rr, ii;
+        ASSERT(leaf_to_complex(r->data.function.args[i], &rr, &ii));
+        if (fabs(ii) > 1e-10) {
+            printf("FAIL: Hermitian eigenvalue %zu has non-zero imag part %g\n",
+                   i, ii);
+            ASSERT(0);
+        }
+        (*lambdas)[i] = rr;
+    }
+    expr_free(r);
+    return out_count;
+}
+
+size_t corpus_eval_eigenvectors_complex(const double* A_re,
+                                         const double* A_im,
+                                         size_t n,
+                                         double** V_re, double** V_im) {
+    char* input = corpus_matrix_to_eigenvectors_input_complex(A_re, A_im, n);
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    free(input);
+
+    ASSERT(r != NULL);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+
+    size_t out_count = r->data.function.arg_count;
+    size_t cap = out_count ? out_count * n : 1;
+    *V_re = (double*)malloc(sizeof(double) * cap);
+    *V_im = (double*)malloc(sizeof(double) * cap);
+    for (size_t i = 0; i < out_count; i++) {
+        Expr* row = r->data.function.args[i];
+        ASSERT(row->type == EXPR_FUNCTION);
+        ASSERT(row->data.function.head->type == EXPR_SYMBOL);
+        ASSERT(strcmp(row->data.function.head->data.symbol, "List") == 0);
+        ASSERT(row->data.function.arg_count == n);
+        for (size_t j = 0; j < n; j++) {
+            double rr, ii;
+            ASSERT(leaf_to_complex(row->data.function.args[j], &rr, &ii));
+            (*V_re)[i * n + j] = rr;
+            (*V_im)[i * n + j] = ii;
+        }
+    }
+    expr_free(r);
+    return out_count;
+}
+
+double corpus_assert_residual_complex_real_lambda(const double* A_re,
+                                                    const double* A_im,
+                                                    size_t n,
+                                                    double lambda,
+                                                    const double* v_re,
+                                                    const double* v_im,
+                                                    double tol) {
+    double res = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double Avi_re = 0.0, Avi_im = 0.0;
+        for (size_t j = 0; j < n; j++) {
+            double ar = A_re[i * n + j];
+            double ai = A_im[i * n + j];
+            double vr = v_re[j];
+            double vi = v_im[j];
+            Avi_re += ar * vr - ai * vi;
+            Avi_im += ar * vi + ai * vr;
+        }
+        double dr = Avi_re - lambda * v_re[i];
+        double di = Avi_im - lambda * v_im[i];
+        double e = hypot(dr, di);
+        if (e > res) res = e;
+    }
+    if (res > tol) {
+        printf("FAIL: complex residual %g exceeds tol %g (lambda=%g)\n",
+               res, tol, lambda);
+    }
+    ASSERT(res <= tol);
+    return res;
+}
+
+void corpus_assert_unitary(const double* V_re, const double* V_im,
+                            size_t n, double tol) {
+    double worst = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = 0; j < n; j++) {
+            /* <V_i, V_j> = sum_k conj(V_ik) V_jk */
+            double dr = 0.0, di = 0.0;
+            for (size_t k = 0; k < n; k++) {
+                double vi_r = V_re[i * n + k], vi_i = V_im[i * n + k];
+                double vj_r = V_re[j * n + k], vj_i = V_im[j * n + k];
+                /* conj(V_ik) * V_jk = (vi_r - i vi_i)(vj_r + i vj_i) */
+                dr += vi_r * vj_r + vi_i * vj_i;
+                di += vi_r * vj_i - vi_i * vj_r;
+            }
+            double target_re = (i == j) ? 1.0 : 0.0;
+            double e = hypot(dr - target_re, di);
+            if (e > worst) worst = e;
+        }
+    }
+    if (worst > tol) {
+        printf("FAIL: unitarity residual %g exceeds tol %g\n", worst, tol);
+    }
+    ASSERT(worst <= tol);
+}
