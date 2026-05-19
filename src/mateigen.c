@@ -3057,11 +3057,1079 @@ static Expr* direct_real_sym_mpfr(const MatM* A, MateigenWant want,
     return direct_apply_k_spec_list(result, k_spec);
 }
 
+/* ===================================================================
+ * 2d-B: Real general (non-symmetric) MPFR Direct kernel
+ *
+ * MPFR translation of direct_hessenberg_real / direct_francis_step /
+ * direct_split_2x2_real / direct_qr_real_general / schur_eigvec_real /
+ * schur_eigvec_complex / schur_compute_eigvecs.  See those routines for
+ * algorithmic commentary -- this block is a one-to-one transcription,
+ * with each double operation replaced by the corresponding mpfr_*
+ * call rounded MPFR_RNDN, and inner-loop scratch lifted to caller-
+ * supplied workspace cells where possible.
+ * =================================================================== */
+
+/* Householder reduction of A to upper Hessenberg form at MPFR precision.
+ *
+ * Workspace: `u` (length n), optional `Q` (n*n) for back-transformation,
+ * `tmp` provides >= 8 scratch cells re-used inside the function. */
+static void direct_hessenberg_real_M(mpfr_t* A, size_t n, mpfr_prec_t bits,
+                                       mpfr_t* u, mpfr_t* Q,
+                                       mpfr_t* tmp /* >= 8 cells */) {
+    (void)bits;
+    mpfr_t* sigma  = &tmp[0];
+    mpfr_t* xk1    = &tmp[1];
+    mpfr_t* norm_x = &tmp[2];
+    mpfr_t* alpha  = &tmp[3];
+    mpfr_t* unorm2 = &tmp[4];
+    mpfr_t* unorm  = &tmp[5];
+    mpfr_t* s      = &tmp[6];
+    mpfr_t* prod   = &tmp[7];
+
+    for (size_t k = 0; k + 2 < n; k++) {
+        /* sigma = sum_{i=k+1..n-1} A[i,k]^2 */
+        mpfr_set_zero(*sigma, 1);
+        for (size_t i = k + 1; i < n; i++) {
+            mpfr_mul(*prod, A[i * n + k], A[i * n + k], MPFR_RNDN);
+            mpfr_add(*sigma, *sigma, *prod, MPFR_RNDN);
+        }
+        if (mpfr_zero_p(*sigma)) continue;
+        mpfr_set(*xk1, A[(k + 1) * n + k], MPFR_RNDN);
+        mpfr_sqrt(*norm_x, *sigma, MPFR_RNDN);
+        /* alpha = -sign(xk1) * ||x|| */
+        if (mpfr_sgn(*xk1) >= 0) mpfr_neg(*alpha, *norm_x, MPFR_RNDN);
+        else                     mpfr_set(*alpha, *norm_x, MPFR_RNDN);
+
+        mpfr_sub(u[k + 1], *xk1, *alpha, MPFR_RNDN);
+        for (size_t i = k + 2; i < n; i++) mpfr_set(u[i], A[i * n + k], MPFR_RNDN);
+        mpfr_mul(*unorm2, u[k + 1], u[k + 1], MPFR_RNDN);
+        for (size_t i = k + 2; i < n; i++) {
+            mpfr_mul(*prod, u[i], u[i], MPFR_RNDN);
+            mpfr_add(*unorm2, *unorm2, *prod, MPFR_RNDN);
+        }
+        if (mpfr_zero_p(*unorm2)) continue;
+        mpfr_sqrt(*unorm, *unorm2, MPFR_RNDN);
+        for (size_t i = k + 1; i < n; i++)
+            mpfr_div(u[i], u[i], *unorm, MPFR_RNDN);
+
+        /* Left: A[k+1..n-1, :] <- H * A[k+1..n-1, :] */
+        for (size_t j = 0; j < n; j++) {
+            mpfr_set_zero(*s, 1);
+            for (size_t i = k + 1; i < n; i++) {
+                mpfr_mul(*prod, u[i], A[i * n + j], MPFR_RNDN);
+                mpfr_add(*s, *s, *prod, MPFR_RNDN);
+            }
+            mpfr_mul_2si(*s, *s, 1, MPFR_RNDN);
+            for (size_t i = k + 1; i < n; i++) {
+                mpfr_mul(*prod, *s, u[i], MPFR_RNDN);
+                mpfr_sub(A[i * n + j], A[i * n + j], *prod, MPFR_RNDN);
+            }
+        }
+        /* Right: A[:, k+1..n-1] <- A[:, k+1..n-1] * H */
+        for (size_t i = 0; i < n; i++) {
+            mpfr_set_zero(*s, 1);
+            for (size_t j = k + 1; j < n; j++) {
+                mpfr_mul(*prod, A[i * n + j], u[j], MPFR_RNDN);
+                mpfr_add(*s, *s, *prod, MPFR_RNDN);
+            }
+            mpfr_mul_2si(*s, *s, 1, MPFR_RNDN);
+            for (size_t j = k + 1; j < n; j++) {
+                mpfr_mul(*prod, *s, u[j], MPFR_RNDN);
+                mpfr_sub(A[i * n + j], A[i * n + j], *prod, MPFR_RNDN);
+            }
+        }
+        /* Q <- Q * H_k */
+        if (Q) {
+            for (size_t i = 0; i < n; i++) {
+                mpfr_set_zero(*s, 1);
+                for (size_t j = k + 1; j < n; j++) {
+                    mpfr_mul(*prod, Q[i * n + j], u[j], MPFR_RNDN);
+                    mpfr_add(*s, *s, *prod, MPFR_RNDN);
+                }
+                mpfr_mul_2si(*s, *s, 1, MPFR_RNDN);
+                for (size_t j = k + 1; j < n; j++) {
+                    mpfr_mul(*prod, *s, u[j], MPFR_RNDN);
+                    mpfr_sub(Q[i * n + j], Q[i * n + j], *prod, MPFR_RNDN);
+                }
+            }
+        }
+
+        mpfr_set(A[(k + 1) * n + k], *alpha, MPFR_RNDN);
+        for (size_t i = k + 2; i < n; i++) mpfr_set_zero(A[i * n + k], 1);
+    }
+}
+
+/* One Francis double-shift QR step on the active block H[q..p-1].
+ * MPFR translation of direct_francis_step; `tmp` provides >= 14 cells.
+ *
+ * `exceptional`: when true, override the trailing-2x2 shift with an ad-
+ * hoc shift derived from subdiagonal magnitudes.  This breaks QR
+ * stalling cycles that arise at high precision when the standard shift
+ * leaves the same active block unchanged after a sweep.  (See Stewart
+ * "Matrix Algorithms II" 2.5.1; LAPACK dlahqr uses the same trick.) */
+static void direct_francis_step_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
+                                    size_t q, size_t p, mpfr_t* Q,
+                                    bool exceptional,
+                                    mpfr_t* tmp /* >= 14 cells */) {
+    mpfr_t* s_tr   = &tmp[0];   /* trace of trailing 2x2 */
+    mpfr_t* t_det  = &tmp[1];   /* det of trailing 2x2   */
+    mpfr_t* x      = &tmp[2];
+    mpfr_t* y      = &tmp[3];
+    mpfr_t* z      = &tmp[4];
+    mpfr_t* sig    = &tmp[5];
+    mpfr_t* nv     = &tmp[6];   /* norm_v */
+    mpfr_t* u1     = &tmp[7];
+    mpfr_t* u2     = &tmp[8];
+    mpfr_t* u3     = &tmp[9];
+    mpfr_t* un2    = &tmp[10];
+    mpfr_t* un     = &tmp[11];
+    mpfr_t* s0     = &tmp[12];
+    mpfr_t* prod   = &tmp[13];
+
+    /* Shift derived from trailing 2x2 block (or ad-hoc for exceptional). */
+    if (!exceptional) {
+        mpfr_t h11, h12, h21, h22;
+        mpfr_init2(h11, bits); mpfr_set(h11, H[(p - 2) * n + (p - 2)], MPFR_RNDN);
+        mpfr_init2(h12, bits); mpfr_set(h12, H[(p - 2) * n + (p - 1)], MPFR_RNDN);
+        mpfr_init2(h21, bits); mpfr_set(h21, H[(p - 1) * n + (p - 2)], MPFR_RNDN);
+        mpfr_init2(h22, bits); mpfr_set(h22, H[(p - 1) * n + (p - 1)], MPFR_RNDN);
+        mpfr_add(*s_tr, h11, h22, MPFR_RNDN);
+        mpfr_mul(*t_det, h11, h22, MPFR_RNDN);
+        mpfr_mul(*prod,  h12, h21, MPFR_RNDN);
+        mpfr_sub(*t_det, *t_det, *prod, MPFR_RNDN);
+        mpfr_clear(h11); mpfr_clear(h12); mpfr_clear(h21); mpfr_clear(h22);
+    } else {
+        /* Exceptional shift: s_tr = 1.5 * (|H[p-1, p-2]| + |H[p-2, p-3]|),
+         * t_det = s_tr^2 / 4 (so disc = 0, a real double shift centred
+         * at s_tr/2).  Matches LAPACK dlahqr's "exceptional shift" path. */
+        mpfr_t a1, a2;
+        mpfr_init2(a1, bits); mpfr_init2(a2, bits);
+        mpfr_abs(a1, H[(p - 1) * n + (p - 2)], MPFR_RNDN);
+        if (p >= 3) mpfr_abs(a2, H[(p - 2) * n + (p - 3)], MPFR_RNDN);
+        else        mpfr_set_zero(a2, 1);
+        mpfr_add(*s_tr, a1, a2, MPFR_RNDN);
+        mpfr_mul_d(*s_tr, *s_tr, 1.5, MPFR_RNDN);
+        mpfr_mul(*t_det, *s_tr, *s_tr, MPFR_RNDN);
+        mpfr_div_2si(*t_det, *t_det, 2, MPFR_RNDN);
+        mpfr_clear(a1); mpfr_clear(a2);
+    }
+
+    /* First three entries of M's first column for the active block. */
+    {
+        mpfr_t g11, g12, g21, g22, g32;
+        mpfr_init2(g11, bits); mpfr_set(g11, H[q * n + q],             MPFR_RNDN);
+        mpfr_init2(g12, bits); mpfr_set(g12, H[q * n + (q + 1)],       MPFR_RNDN);
+        mpfr_init2(g21, bits); mpfr_set(g21, H[(q + 1) * n + q],       MPFR_RNDN);
+        mpfr_init2(g22, bits); mpfr_set(g22, H[(q + 1) * n + (q + 1)], MPFR_RNDN);
+        mpfr_init2(g32, bits); mpfr_set(g32, H[(q + 2) * n + (q + 1)], MPFR_RNDN);
+
+        /* x = g11^2 + g12 g21 - s_tr g11 + t_det */
+        mpfr_mul(*x, g11, g11, MPFR_RNDN);
+        mpfr_mul(*prod, g12, g21, MPFR_RNDN);
+        mpfr_add(*x, *x, *prod, MPFR_RNDN);
+        mpfr_mul(*prod, *s_tr, g11, MPFR_RNDN);
+        mpfr_sub(*x, *x, *prod, MPFR_RNDN);
+        mpfr_add(*x, *x, *t_det, MPFR_RNDN);
+        /* y = g21 (g11 + g22 - s_tr) */
+        mpfr_add(*prod, g11, g22, MPFR_RNDN);
+        mpfr_sub(*prod, *prod, *s_tr, MPFR_RNDN);
+        mpfr_mul(*y, g21, *prod, MPFR_RNDN);
+        /* z = g21 g32 */
+        mpfr_mul(*z, g21, g32, MPFR_RNDN);
+
+        mpfr_clear(g11); mpfr_clear(g12); mpfr_clear(g21);
+        mpfr_clear(g22); mpfr_clear(g32);
+    }
+
+    for (size_t k = q; k + 2 < p; k++) {
+        /* sig = x^2 + y^2 + z^2 */
+        mpfr_mul(*sig, *x, *x, MPFR_RNDN);
+        mpfr_mul(*prod, *y, *y, MPFR_RNDN);
+        mpfr_add(*sig, *sig, *prod, MPFR_RNDN);
+        mpfr_mul(*prod, *z, *z, MPFR_RNDN);
+        mpfr_add(*sig, *sig, *prod, MPFR_RNDN);
+        if (mpfr_zero_p(*sig)) {
+            mpfr_set(*x, H[(k + 1) * n + k], MPFR_RNDN);
+            mpfr_set(*y, H[(k + 2) * n + k], MPFR_RNDN);
+            if (k + 3 < p) mpfr_set(*z, H[(k + 3) * n + k], MPFR_RNDN);
+            else mpfr_set_zero(*z, 1);
+            continue;
+        }
+        mpfr_sqrt(*nv, *sig, MPFR_RNDN);
+        /* a = -sign(x) * nv */
+        mpfr_t a;
+        mpfr_init2(a, bits);
+        if (mpfr_sgn(*x) >= 0) mpfr_neg(a, *nv, MPFR_RNDN);
+        else                   mpfr_set(a, *nv, MPFR_RNDN);
+        mpfr_sub(*u1, *x, a, MPFR_RNDN);
+        mpfr_set(*u2, *y, MPFR_RNDN);
+        mpfr_set(*u3, *z, MPFR_RNDN);
+        mpfr_clear(a);
+
+        mpfr_mul(*un2, *u1, *u1, MPFR_RNDN);
+        mpfr_mul(*prod, *u2, *u2, MPFR_RNDN);
+        mpfr_add(*un2, *un2, *prod, MPFR_RNDN);
+        mpfr_mul(*prod, *u3, *u3, MPFR_RNDN);
+        mpfr_add(*un2, *un2, *prod, MPFR_RNDN);
+        mpfr_sqrt(*un, *un2, MPFR_RNDN);
+        mpfr_div(*u1, *u1, *un, MPFR_RNDN);
+        mpfr_div(*u2, *u2, *un, MPFR_RNDN);
+        mpfr_div(*u3, *u3, *un, MPFR_RNDN);
+
+        /* Left: rows (k, k+1, k+2). */
+        size_t col_start = (k > q) ? k - 1 : q;
+        for (size_t j = col_start; j < n; j++) {
+            mpfr_mul(*s0, *u1, H[k * n + j], MPFR_RNDN);
+            mpfr_mul(*prod, *u2, H[(k + 1) * n + j], MPFR_RNDN);
+            mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+            mpfr_mul(*prod, *u3, H[(k + 2) * n + j], MPFR_RNDN);
+            mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+            mpfr_mul_2si(*s0, *s0, 1, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u1, MPFR_RNDN);
+            mpfr_sub(H[k * n + j], H[k * n + j], *prod, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u2, MPFR_RNDN);
+            mpfr_sub(H[(k + 1) * n + j], H[(k + 1) * n + j], *prod, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u3, MPFR_RNDN);
+            mpfr_sub(H[(k + 2) * n + j], H[(k + 2) * n + j], *prod, MPFR_RNDN);
+        }
+        /* Right: cols (k, k+1, k+2). */
+        size_t row_end = (k + 3 < p) ? (k + 3) : (p - 1);
+        for (size_t i = 0; i <= row_end; i++) {
+            mpfr_mul(*s0, H[i * n + k], *u1, MPFR_RNDN);
+            mpfr_mul(*prod, H[i * n + (k + 1)], *u2, MPFR_RNDN);
+            mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+            mpfr_mul(*prod, H[i * n + (k + 2)], *u3, MPFR_RNDN);
+            mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+            mpfr_mul_2si(*s0, *s0, 1, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u1, MPFR_RNDN);
+            mpfr_sub(H[i * n + k], H[i * n + k], *prod, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u2, MPFR_RNDN);
+            mpfr_sub(H[i * n + (k + 1)], H[i * n + (k + 1)], *prod, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u3, MPFR_RNDN);
+            mpfr_sub(H[i * n + (k + 2)], H[i * n + (k + 2)], *prod, MPFR_RNDN);
+        }
+        if (Q) {
+            for (size_t i = 0; i < n; i++) {
+                mpfr_mul(*s0, Q[i * n + k], *u1, MPFR_RNDN);
+                mpfr_mul(*prod, Q[i * n + (k + 1)], *u2, MPFR_RNDN);
+                mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+                mpfr_mul(*prod, Q[i * n + (k + 2)], *u3, MPFR_RNDN);
+                mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+                mpfr_mul_2si(*s0, *s0, 1, MPFR_RNDN);
+                mpfr_mul(*prod, *s0, *u1, MPFR_RNDN);
+                mpfr_sub(Q[i * n + k], Q[i * n + k], *prod, MPFR_RNDN);
+                mpfr_mul(*prod, *s0, *u2, MPFR_RNDN);
+                mpfr_sub(Q[i * n + (k + 1)], Q[i * n + (k + 1)], *prod, MPFR_RNDN);
+                mpfr_mul(*prod, *s0, *u3, MPFR_RNDN);
+                mpfr_sub(Q[i * n + (k + 2)], Q[i * n + (k + 2)], *prod, MPFR_RNDN);
+            }
+        }
+
+        mpfr_set(*x, H[(k + 1) * n + k], MPFR_RNDN);
+        mpfr_set(*y, H[(k + 2) * n + k], MPFR_RNDN);
+        if (k + 3 < p) mpfr_set(*z, H[(k + 3) * n + k], MPFR_RNDN);
+        else mpfr_set_zero(*z, 1);
+    }
+
+    /* Final 2-element Householder on (x, y) at rows (p-2, p-1). */
+    {
+        size_t k = p - 2;
+        mpfr_mul(*sig, *x, *x, MPFR_RNDN);
+        mpfr_mul(*prod, *y, *y, MPFR_RNDN);
+        mpfr_add(*sig, *sig, *prod, MPFR_RNDN);
+        if (mpfr_zero_p(*sig)) return;
+        mpfr_sqrt(*nv, *sig, MPFR_RNDN);
+        mpfr_t a;
+        mpfr_init2(a, bits);
+        if (mpfr_sgn(*x) >= 0) mpfr_neg(a, *nv, MPFR_RNDN);
+        else                   mpfr_set(a, *nv, MPFR_RNDN);
+        mpfr_sub(*u1, *x, a, MPFR_RNDN);
+        mpfr_set(*u2, *y, MPFR_RNDN);
+        mpfr_clear(a);
+        mpfr_mul(*un2, *u1, *u1, MPFR_RNDN);
+        mpfr_mul(*prod, *u2, *u2, MPFR_RNDN);
+        mpfr_add(*un2, *un2, *prod, MPFR_RNDN);
+        mpfr_sqrt(*un, *un2, MPFR_RNDN);
+        mpfr_div(*u1, *u1, *un, MPFR_RNDN);
+        mpfr_div(*u2, *u2, *un, MPFR_RNDN);
+
+        size_t col_start = k - 1;
+        for (size_t j = col_start; j < n; j++) {
+            mpfr_mul(*s0, *u1, H[k * n + j], MPFR_RNDN);
+            mpfr_mul(*prod, *u2, H[(k + 1) * n + j], MPFR_RNDN);
+            mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+            mpfr_mul_2si(*s0, *s0, 1, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u1, MPFR_RNDN);
+            mpfr_sub(H[k * n + j], H[k * n + j], *prod, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u2, MPFR_RNDN);
+            mpfr_sub(H[(k + 1) * n + j], H[(k + 1) * n + j], *prod, MPFR_RNDN);
+        }
+        for (size_t i = 0; i < p; i++) {
+            mpfr_mul(*s0, H[i * n + k], *u1, MPFR_RNDN);
+            mpfr_mul(*prod, H[i * n + (k + 1)], *u2, MPFR_RNDN);
+            mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+            mpfr_mul_2si(*s0, *s0, 1, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u1, MPFR_RNDN);
+            mpfr_sub(H[i * n + k], H[i * n + k], *prod, MPFR_RNDN);
+            mpfr_mul(*prod, *s0, *u2, MPFR_RNDN);
+            mpfr_sub(H[i * n + (k + 1)], H[i * n + (k + 1)], *prod, MPFR_RNDN);
+        }
+        if (Q) {
+            for (size_t i = 0; i < n; i++) {
+                mpfr_mul(*s0, Q[i * n + k], *u1, MPFR_RNDN);
+                mpfr_mul(*prod, Q[i * n + (k + 1)], *u2, MPFR_RNDN);
+                mpfr_add(*s0, *s0, *prod, MPFR_RNDN);
+                mpfr_mul_2si(*s0, *s0, 1, MPFR_RNDN);
+                mpfr_mul(*prod, *s0, *u1, MPFR_RNDN);
+                mpfr_sub(Q[i * n + k], Q[i * n + k], *prod, MPFR_RNDN);
+                mpfr_mul(*prod, *s0, *u2, MPFR_RNDN);
+                mpfr_sub(Q[i * n + (k + 1)], Q[i * n + (k + 1)], *prod, MPFR_RNDN);
+            }
+        }
+    }
+}
+
+/* MPFR variant of direct_split_2x2_real.  `tmp` provides >= 10 cells. */
+static void direct_split_2x2_real_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
+                                      size_t p, mpfr_t* Q,
+                                      mpfr_t* tmp /* >= 10 cells */) {
+    (void)bits;
+    mpfr_t* a    = &tmp[0];
+    mpfr_t* b    = &tmp[1];
+    mpfr_t* c    = &tmp[2];
+    mpfr_t* d    = &tmp[3];
+    mpfr_t* tr   = &tmp[4];
+    mpfr_t* det  = &tmp[5];
+    mpfr_t* disc = &tmp[6];
+    mpfr_t* cs   = &tmp[7];
+    mpfr_t* sn   = &tmp[8];
+    mpfr_t* prod = &tmp[9];
+
+    size_t i = p - 2;
+    mpfr_set(*a, H[i * n + i],           MPFR_RNDN);
+    mpfr_set(*b, H[i * n + (i + 1)],     MPFR_RNDN);
+    mpfr_set(*c, H[(i + 1) * n + i],     MPFR_RNDN);
+    mpfr_set(*d, H[(i + 1) * n + (i + 1)], MPFR_RNDN);
+    mpfr_add(*tr,  *a, *d, MPFR_RNDN);
+    mpfr_mul(*det, *a, *d, MPFR_RNDN);
+    mpfr_mul(*prod, *b, *c, MPFR_RNDN);
+    mpfr_sub(*det, *det, *prod, MPFR_RNDN);
+    mpfr_mul(*disc, *tr, *tr, MPFR_RNDN);
+    mpfr_mul_2si(*prod, *det, 2, MPFR_RNDN);    /* 4 * det */
+    mpfr_sub(*disc, *disc, *prod, MPFR_RNDN);
+    if (mpfr_sgn(*disc) < 0) return;
+
+    mpfr_t sq, lam, v0, v1, r;
+    mpfr_init2(sq,  bits);
+    mpfr_init2(lam, bits);
+    mpfr_init2(v0,  bits);
+    mpfr_init2(v1,  bits);
+    mpfr_init2(r,   bits);
+
+    mpfr_sqrt(sq, *disc, MPFR_RNDN);
+    mpfr_add(lam, *tr, sq, MPFR_RNDN);
+    mpfr_div_2si(lam, lam, 1, MPFR_RNDN);
+    mpfr_sub(v0, lam, *d, MPFR_RNDN);
+    mpfr_set(v1, *c, MPFR_RNDN);
+    mpfr_hypot(r, v0, v1, MPFR_RNDN);
+    if (mpfr_zero_p(r)) {
+        mpfr_clear(sq); mpfr_clear(lam); mpfr_clear(v0); mpfr_clear(v1); mpfr_clear(r);
+        return;
+    }
+    mpfr_div(*cs, v0, r, MPFR_RNDN);
+    mpfr_div(*sn, v1, r, MPFR_RNDN);
+    mpfr_clear(sq); mpfr_clear(lam); mpfr_clear(v0); mpfr_clear(v1); mpfr_clear(r);
+
+    /* Left: rows (i, i+1) <- G^T * rows. */
+    for (size_t j = 0; j < n; j++) {
+        mpfr_t r0, r1;
+        mpfr_init2(r0, bits); mpfr_set(r0, H[i * n + j],       MPFR_RNDN);
+        mpfr_init2(r1, bits); mpfr_set(r1, H[(i + 1) * n + j], MPFR_RNDN);
+        mpfr_mul(*prod, *cs, r0, MPFR_RNDN);
+        mpfr_mul(*a, *sn, r1, MPFR_RNDN);
+        mpfr_add(H[i * n + j], *prod, *a, MPFR_RNDN);
+        mpfr_mul(*prod, *sn, r0, MPFR_RNDN);
+        mpfr_mul(*a, *cs, r1, MPFR_RNDN);
+        mpfr_sub(H[(i + 1) * n + j], *a, *prod, MPFR_RNDN);
+        mpfr_clear(r0); mpfr_clear(r1);
+    }
+    /* Right: cols (i, i+1) <- cols * G. */
+    for (size_t k = 0; k < n; k++) {
+        mpfr_t c0, c1;
+        mpfr_init2(c0, bits); mpfr_set(c0, H[k * n + i],       MPFR_RNDN);
+        mpfr_init2(c1, bits); mpfr_set(c1, H[k * n + (i + 1)], MPFR_RNDN);
+        mpfr_mul(*prod, *cs, c0, MPFR_RNDN);
+        mpfr_mul(*a, *sn, c1, MPFR_RNDN);
+        mpfr_add(H[k * n + i], *prod, *a, MPFR_RNDN);
+        mpfr_mul(*prod, *sn, c0, MPFR_RNDN);
+        mpfr_mul(*a, *cs, c1, MPFR_RNDN);
+        mpfr_sub(H[k * n + (i + 1)], *a, *prod, MPFR_RNDN);
+        mpfr_clear(c0); mpfr_clear(c1);
+    }
+    if (Q) {
+        for (size_t k = 0; k < n; k++) {
+            mpfr_t c0, c1;
+            mpfr_init2(c0, bits); mpfr_set(c0, Q[k * n + i],       MPFR_RNDN);
+            mpfr_init2(c1, bits); mpfr_set(c1, Q[k * n + (i + 1)], MPFR_RNDN);
+            mpfr_mul(*prod, *cs, c0, MPFR_RNDN);
+            mpfr_mul(*a, *sn, c1, MPFR_RNDN);
+            mpfr_add(Q[k * n + i], *prod, *a, MPFR_RNDN);
+            mpfr_mul(*prod, *sn, c0, MPFR_RNDN);
+            mpfr_mul(*a, *cs, c1, MPFR_RNDN);
+            mpfr_sub(Q[k * n + (i + 1)], *a, *prod, MPFR_RNDN);
+            mpfr_clear(c0); mpfr_clear(c1);
+        }
+    }
+    mpfr_set_zero(H[(i + 1) * n + i], 1);
+}
+
+/* MPFR Francis QR sweep driver -- analogous to direct_qr_real_general.
+ * Returns 0 on success, -1 if max sweeps exceeded.
+ * Caller-supplied `tmp` workspace must have >= 14 cells (Francis step). */
+static int direct_qr_real_general_M(mpfr_t* H, size_t n, mpfr_prec_t bits,
+                                      mpfr_t* eval_re, mpfr_t* eval_im,
+                                      mpfr_t* Q, mpfr_t* tmp /* >= 14 cells */) {
+    const size_t max_iter = 60 * n + 30;
+    size_t iter = 0;
+    size_t p = n;
+
+    /* Relative tolerance: ~ 2^{-bits+10} == 1024 ULPs.  Non-symmetric
+     * implicit-shift QR accumulates more per-sweep roundoff than the
+     * symmetric tridiagonal QR (factor ~ n^2 from bulge chase + back-
+     * transformation), so we deflate at a more conservative threshold
+     * than the 2^{-bits+3} used in `direct_symtridiag_qr_M`. */
+    mpfr_t rel_tol, tol_val, abs_a, abs_b;
+    mpfr_init2(rel_tol, bits);
+    mpfr_init2(tol_val, bits);
+    mpfr_init2(abs_a,   bits);
+    mpfr_init2(abs_b,   bits);
+    mpfr_set_ui(rel_tol, 1, MPFR_RNDN);
+    mpfr_div_2si(rel_tol, rel_tol, (long)bits - 10, MPFR_RNDN);
+
+    while (p > 0) {
+        if (p == 1) {
+            mpfr_set(eval_re[0], H[0], MPFR_RNDN);
+            mpfr_set_zero(eval_im[0], 1);
+            break;
+        }
+        if (iter++ > max_iter) {
+            mpfr_clear(rel_tol); mpfr_clear(tol_val);
+            mpfr_clear(abs_a); mpfr_clear(abs_b);
+            return -1;
+        }
+
+        size_t q = p - 1;
+        while (q > 0) {
+            mpfr_abs(abs_a, H[(q - 1) * n + (q - 1)], MPFR_RNDN);
+            mpfr_abs(abs_b, H[q * n + q], MPFR_RNDN);
+            mpfr_add(tol_val, abs_a, abs_b, MPFR_RNDN);
+            mpfr_mul(tol_val, tol_val, rel_tol, MPFR_RNDN);
+            mpfr_abs(abs_a, H[q * n + (q - 1)], MPFR_RNDN);
+            if (mpfr_cmp(abs_a, tol_val) <= 0) {
+                mpfr_set_zero(H[q * n + (q - 1)], 1);
+                break;
+            }
+            q -= 1;
+        }
+
+        if (q == p - 1) {
+            mpfr_set(eval_re[p - 1], H[(p - 1) * n + (p - 1)], MPFR_RNDN);
+            mpfr_set_zero(eval_im[p - 1], 1);
+            p -= 1;
+            iter = 0;
+            continue;
+        }
+        if (q == p - 2) {
+            mpfr_t a, b, c, d, tr, det, disc, sq, half_tr;
+            mpfr_init2(a, bits); mpfr_set(a, H[(p - 2) * n + (p - 2)], MPFR_RNDN);
+            mpfr_init2(b, bits); mpfr_set(b, H[(p - 2) * n + (p - 1)], MPFR_RNDN);
+            mpfr_init2(c, bits); mpfr_set(c, H[(p - 1) * n + (p - 2)], MPFR_RNDN);
+            mpfr_init2(d, bits); mpfr_set(d, H[(p - 1) * n + (p - 1)], MPFR_RNDN);
+            mpfr_init2(tr, bits);  mpfr_add(tr, a, d, MPFR_RNDN);
+            mpfr_init2(det, bits); mpfr_mul(det, a, d, MPFR_RNDN);
+            mpfr_t tmp1; mpfr_init2(tmp1, bits);
+            mpfr_mul(tmp1, b, c, MPFR_RNDN);
+            mpfr_sub(det, det, tmp1, MPFR_RNDN);
+            mpfr_init2(disc, bits);
+            mpfr_mul(disc, tr, tr, MPFR_RNDN);
+            mpfr_mul_2si(tmp1, det, 2, MPFR_RNDN);
+            mpfr_sub(disc, disc, tmp1, MPFR_RNDN);
+            mpfr_init2(half_tr, bits);
+            mpfr_div_2si(half_tr, tr, 1, MPFR_RNDN);
+            mpfr_init2(sq, bits);
+            if (mpfr_sgn(disc) < 0) {
+                mpfr_neg(tmp1, disc, MPFR_RNDN);
+                mpfr_sqrt(sq, tmp1, MPFR_RNDN);
+                mpfr_div_2si(sq, sq, 1, MPFR_RNDN);
+                mpfr_set(eval_re[p - 2], half_tr, MPFR_RNDN);
+                mpfr_set(eval_im[p - 2], sq, MPFR_RNDN);
+                mpfr_set(eval_re[p - 1], half_tr, MPFR_RNDN);
+                mpfr_neg(eval_im[p - 1], sq, MPFR_RNDN);
+                p -= 2;
+                iter = 0;
+            } else {
+                mpfr_sqrt(sq, disc, MPFR_RNDN);
+                mpfr_div_2si(sq, sq, 1, MPFR_RNDN);
+                mpfr_add(eval_re[p - 2], half_tr, sq, MPFR_RNDN);
+                mpfr_set_zero(eval_im[p - 2], 1);
+                mpfr_sub(eval_re[p - 1], half_tr, sq, MPFR_RNDN);
+                mpfr_set_zero(eval_im[p - 1], 1);
+                direct_split_2x2_real_M(H, n, bits, p, Q, tmp);
+                mpfr_set(H[(p - 2) * n + (p - 2)], eval_re[p - 2], MPFR_RNDN);
+                mpfr_set(H[(p - 1) * n + (p - 1)], eval_re[p - 1], MPFR_RNDN);
+                p -= 2;
+                iter = 0;
+            }
+            mpfr_clear(a); mpfr_clear(b); mpfr_clear(c); mpfr_clear(d);
+            mpfr_clear(tr); mpfr_clear(det); mpfr_clear(disc); mpfr_clear(sq);
+            mpfr_clear(half_tr); mpfr_clear(tmp1);
+            continue;
+        }
+        /* Inject an exceptional shift every 10th iter to break stalls. */
+        bool exceptional = (iter > 0 && iter % 10 == 0);
+        direct_francis_step_M(H, n, bits, q, p, Q, exceptional, tmp);
+    }
+
+    mpfr_clear(rel_tol); mpfr_clear(tol_val);
+    mpfr_clear(abs_a); mpfr_clear(abs_b);
+    return 0;
+}
+
+/* Sort permutation by descending |re + i*im| at MPFR precision. */
+static void direct_sort_perm_desc_abs_complex_M(const mpfr_t* re,
+                                                  const mpfr_t* im,
+                                                  size_t n, size_t* perm) {
+    if (n == 0) return;
+    mpfr_prec_t bits = mpfr_get_prec(re[0]);
+    for (size_t i = 0; i < n; i++) perm[i] = i;
+    for (size_t i = 1; i < n; i++) {
+        size_t cur = perm[i];
+        mpfr_t ac;
+        mpfr_init2(ac, bits);
+        mpfr_hypot(ac, re[cur], im[cur], MPFR_RNDN);
+        size_t j = i;
+        while (j > 0) {
+            mpfr_t ap;
+            mpfr_init2(ap, bits);
+            mpfr_hypot(ap, re[perm[j - 1]], im[perm[j - 1]], MPFR_RNDN);
+            int cmp = mpfr_cmp(ap, ac);
+            mpfr_clear(ap);
+            if (cmp > 0 || (cmp == 0 && perm[j - 1] < cur)) break;
+            perm[j] = perm[j - 1];
+            j--;
+        }
+        perm[j] = cur;
+        mpfr_clear(ac);
+    }
+}
+
+/* Build the eigenvalue list at MPFR precision, mixing MPFR reals and
+ * Complex[mpfr, mpfr] entries. */
+static Expr* direct_build_complex_eigenvalue_list_M(const mpfr_t* re,
+                                                      const mpfr_t* im,
+                                                      size_t n,
+                                                      const size_t* perm) {
+    Expr** items = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) {
+        size_t idx = perm[i];
+        if (mpfr_zero_p(im[idx])) {
+            items[i] = expr_new_mpfr_copy(re[idx]);
+        } else {
+            Expr** comp_args = (Expr**)malloc(sizeof(Expr*) * 2);
+            comp_args[0] = expr_new_mpfr_copy(re[idx]);
+            comp_args[1] = expr_new_mpfr_copy(im[idx]);
+            items[i] = expr_new_function(expr_new_symbol("Complex"),
+                                          comp_args, 2);
+            free(comp_args);
+        }
+    }
+    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    free(items);
+    return out;
+}
+
+/* MPFR back-substitution for a real eigenvector of the Schur form. */
+static void schur_eigvec_real_M(const mpfr_t* H, size_t n, mpfr_prec_t bits,
+                                  size_t k, const mpfr_t lambda, mpfr_t* v) {
+    for (size_t i = 0; i < n; i++) mpfr_set_zero(v[i], 1);
+    mpfr_set_ui(v[k], 1, MPFR_RNDN);
+    if (k == 0) return;
+
+    mpfr_t rhs, rhs1, rhs2, a, b, c, d, det, prod, abs_det, tiny;
+    mpfr_init2(rhs,  bits); mpfr_init2(rhs1, bits); mpfr_init2(rhs2, bits);
+    mpfr_init2(a, bits); mpfr_init2(b, bits); mpfr_init2(c, bits); mpfr_init2(d, bits);
+    mpfr_init2(det, bits); mpfr_init2(prod, bits);
+    mpfr_init2(abs_det, bits); mpfr_init2(tiny, bits);
+    /* tiny = 2^{-bits-32} -- treat smaller dets as defective. */
+    mpfr_set_ui(tiny, 1, MPFR_RNDN);
+    mpfr_div_2si(tiny, tiny, (long)bits + 32, MPFR_RNDN);
+
+    size_t i = k;
+    while (i > 0) {
+        i--;
+        bool is_2x2 = (i > 0) && !mpfr_zero_p(H[i * n + (i - 1)]);
+        if (is_2x2) {
+            mpfr_set_zero(rhs1, 1); mpfr_set_zero(rhs2, 1);
+            for (size_t j = i + 1; j <= k; j++) {
+                mpfr_mul(prod, H[(i - 1) * n + j], v[j], MPFR_RNDN);
+                mpfr_add(rhs1, rhs1, prod, MPFR_RNDN);
+                mpfr_mul(prod, H[i * n + j], v[j], MPFR_RNDN);
+                mpfr_add(rhs2, rhs2, prod, MPFR_RNDN);
+            }
+            mpfr_neg(rhs1, rhs1, MPFR_RNDN);
+            mpfr_neg(rhs2, rhs2, MPFR_RNDN);
+            mpfr_sub(a, H[(i - 1) * n + (i - 1)], lambda, MPFR_RNDN);
+            mpfr_set(b, H[(i - 1) * n + i], MPFR_RNDN);
+            mpfr_set(c, H[i * n + (i - 1)], MPFR_RNDN);
+            mpfr_sub(d, H[i * n + i], lambda, MPFR_RNDN);
+            mpfr_mul(det, a, d, MPFR_RNDN);
+            mpfr_mul(prod, b, c, MPFR_RNDN);
+            mpfr_sub(det, det, prod, MPFR_RNDN);
+            mpfr_abs(abs_det, det, MPFR_RNDN);
+            if (mpfr_cmp(abs_det, tiny) < 0) {
+                mpfr_set_zero(v[i - 1], 1); mpfr_set_zero(v[i], 1);
+            } else {
+                mpfr_mul(prod, d, rhs1, MPFR_RNDN);
+                mpfr_mul(abs_det, b, rhs2, MPFR_RNDN);
+                mpfr_sub(prod, prod, abs_det, MPFR_RNDN);
+                mpfr_div(v[i - 1], prod, det, MPFR_RNDN);
+                mpfr_mul(prod, a, rhs2, MPFR_RNDN);
+                mpfr_mul(abs_det, c, rhs1, MPFR_RNDN);
+                mpfr_sub(prod, prod, abs_det, MPFR_RNDN);
+                mpfr_div(v[i], prod, det, MPFR_RNDN);
+            }
+            i--;
+        } else {
+            mpfr_set_zero(rhs, 1);
+            for (size_t j = i + 1; j <= k; j++) {
+                mpfr_mul(prod, H[i * n + j], v[j], MPFR_RNDN);
+                mpfr_add(rhs, rhs, prod, MPFR_RNDN);
+            }
+            mpfr_sub(a, H[i * n + i], lambda, MPFR_RNDN);
+            mpfr_abs(abs_det, a, MPFR_RNDN);
+            if (mpfr_cmp(abs_det, tiny) < 0) {
+                mpfr_set_zero(v[i], 1);
+            } else {
+                mpfr_neg(rhs, rhs, MPFR_RNDN);
+                mpfr_div(v[i], rhs, a, MPFR_RNDN);
+            }
+        }
+    }
+
+    mpfr_clear(rhs); mpfr_clear(rhs1); mpfr_clear(rhs2);
+    mpfr_clear(a); mpfr_clear(b); mpfr_clear(c); mpfr_clear(d);
+    mpfr_clear(det); mpfr_clear(prod);
+    mpfr_clear(abs_det); mpfr_clear(tiny);
+}
+
+/* MPFR back-substitution for a complex eigenvector of the Schur form.
+ * lambda = aval + i bval, bval > 0; writes v_re / v_im. */
+static void schur_eigvec_complex_M(const mpfr_t* H, size_t n, mpfr_prec_t bits,
+                                     size_t k,
+                                     const mpfr_t aval, const mpfr_t bval,
+                                     mpfr_t* v_re, mpfr_t* v_im) {
+    for (size_t i = 0; i < n; i++) {
+        mpfr_set_zero(v_re[i], 1);
+        mpfr_set_zero(v_im[i], 1);
+    }
+
+    mpfr_t delta, gamma, tmp1, tmp2;
+    mpfr_init2(delta, bits); mpfr_init2(gamma, bits);
+    mpfr_init2(tmp1,  bits); mpfr_init2(tmp2,  bits);
+    mpfr_set(delta, H[(k + 1) * n + (k + 1)], MPFR_RNDN);
+    mpfr_set(gamma, H[(k + 1) * n + k],       MPFR_RNDN);
+    if (mpfr_zero_p(gamma)) {
+        mpfr_set_ui(v_re[k], 1, MPFR_RNDN);
+        mpfr_clear(delta); mpfr_clear(gamma); mpfr_clear(tmp1); mpfr_clear(tmp2);
+        return;
+    }
+    mpfr_sub(tmp1, aval, delta, MPFR_RNDN);
+    mpfr_div(v_re[k], tmp1, gamma, MPFR_RNDN);
+    mpfr_div(v_im[k], bval, gamma, MPFR_RNDN);
+    mpfr_set_ui(v_re[k + 1], 1, MPFR_RNDN);
+    mpfr_set_zero(v_im[k + 1], 1);
+    if (k == 0) {
+        mpfr_clear(delta); mpfr_clear(gamma); mpfr_clear(tmp1); mpfr_clear(tmp2);
+        return;
+    }
+
+    mpfr_t rhs_u_top, rhs_v_top, rhs_u_bot, rhs_v_bot;
+    mpfr_init2(rhs_u_top, bits); mpfr_init2(rhs_v_top, bits);
+    mpfr_init2(rhs_u_bot, bits); mpfr_init2(rhs_v_bot, bits);
+    mpfr_t A_re, A_im, B_re, B_im, C_re, C_im, D_re, D_im;
+    mpfr_init2(A_re, bits); mpfr_init2(A_im, bits);
+    mpfr_init2(B_re, bits); mpfr_init2(B_im, bits);
+    mpfr_init2(C_re, bits); mpfr_init2(C_im, bits);
+    mpfr_init2(D_re, bits); mpfr_init2(D_im, bits);
+    mpfr_t det_re, det_im, det_mag2, num_re, num_im, r1_re, r1_im, r2_re, r2_im;
+    mpfr_init2(det_re, bits); mpfr_init2(det_im, bits); mpfr_init2(det_mag2, bits);
+    mpfr_init2(num_re, bits); mpfr_init2(num_im, bits);
+    mpfr_init2(r1_re, bits); mpfr_init2(r1_im, bits);
+    mpfr_init2(r2_re, bits); mpfr_init2(r2_im, bits);
+    mpfr_t tiny;
+    mpfr_init2(tiny, bits);
+    mpfr_set_ui(tiny, 1, MPFR_RNDN);
+    mpfr_div_2si(tiny, tiny, (long)bits + 32, MPFR_RNDN);
+
+    size_t i = k;
+    while (i > 0) {
+        i--;
+        bool is_2x2 = (i > 0) && !mpfr_zero_p(H[i * n + (i - 1)]);
+        if (is_2x2) {
+            mpfr_set_zero(rhs_u_top, 1); mpfr_set_zero(rhs_v_top, 1);
+            mpfr_set_zero(rhs_u_bot, 1); mpfr_set_zero(rhs_v_bot, 1);
+            for (size_t j = i + 1; j <= k + 1; j++) {
+                mpfr_mul(tmp1, H[(i - 1) * n + j], v_re[j], MPFR_RNDN);
+                mpfr_add(rhs_u_top, rhs_u_top, tmp1, MPFR_RNDN);
+                mpfr_mul(tmp1, H[(i - 1) * n + j], v_im[j], MPFR_RNDN);
+                mpfr_add(rhs_v_top, rhs_v_top, tmp1, MPFR_RNDN);
+                mpfr_mul(tmp1, H[i * n + j], v_re[j], MPFR_RNDN);
+                mpfr_add(rhs_u_bot, rhs_u_bot, tmp1, MPFR_RNDN);
+                mpfr_mul(tmp1, H[i * n + j], v_im[j], MPFR_RNDN);
+                mpfr_add(rhs_v_bot, rhs_v_bot, tmp1, MPFR_RNDN);
+            }
+            mpfr_sub(A_re, H[(i - 1) * n + (i - 1)], aval, MPFR_RNDN);
+            mpfr_neg(A_im, bval, MPFR_RNDN);
+            mpfr_set(B_re, H[(i - 1) * n + i], MPFR_RNDN);
+            mpfr_set_zero(B_im, 1);
+            mpfr_set(C_re, H[i * n + (i - 1)], MPFR_RNDN);
+            mpfr_set_zero(C_im, 1);
+            mpfr_sub(D_re, H[i * n + i], aval, MPFR_RNDN);
+            mpfr_neg(D_im, bval, MPFR_RNDN);
+
+            /* det = A D - B C  (complex) */
+            mpfr_mul(tmp1, A_re, D_re, MPFR_RNDN);
+            mpfr_mul(tmp2, A_im, D_im, MPFR_RNDN);
+            mpfr_sub(det_re, tmp1, tmp2, MPFR_RNDN);
+            mpfr_mul(tmp1, B_re, C_re, MPFR_RNDN);
+            mpfr_mul(tmp2, B_im, C_im, MPFR_RNDN);
+            mpfr_sub(tmp1, tmp1, tmp2, MPFR_RNDN);
+            mpfr_sub(det_re, det_re, tmp1, MPFR_RNDN);
+            mpfr_mul(tmp1, A_re, D_im, MPFR_RNDN);
+            mpfr_mul(tmp2, A_im, D_re, MPFR_RNDN);
+            mpfr_add(det_im, tmp1, tmp2, MPFR_RNDN);
+            mpfr_mul(tmp1, B_re, C_im, MPFR_RNDN);
+            mpfr_mul(tmp2, B_im, C_re, MPFR_RNDN);
+            mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
+            mpfr_sub(det_im, det_im, tmp1, MPFR_RNDN);
+            mpfr_mul(det_mag2, det_re, det_re, MPFR_RNDN);
+            mpfr_mul(tmp1, det_im, det_im, MPFR_RNDN);
+            mpfr_add(det_mag2, det_mag2, tmp1, MPFR_RNDN);
+
+            if (mpfr_cmp(det_mag2, tiny) < 0) {
+                mpfr_set_zero(v_re[i - 1], 1); mpfr_set_zero(v_im[i - 1], 1);
+                mpfr_set_zero(v_re[i], 1);     mpfr_set_zero(v_im[i], 1);
+            } else {
+                mpfr_neg(r1_re, rhs_u_top, MPFR_RNDN);
+                mpfr_neg(r1_im, rhs_v_top, MPFR_RNDN);
+                mpfr_neg(r2_re, rhs_u_bot, MPFR_RNDN);
+                mpfr_neg(r2_im, rhs_v_bot, MPFR_RNDN);
+                /* num1 = D r1 - B r2 (complex) */
+                mpfr_mul(tmp1, D_re, r1_re, MPFR_RNDN);
+                mpfr_mul(tmp2, D_im, r1_im, MPFR_RNDN);
+                mpfr_sub(num_re, tmp1, tmp2, MPFR_RNDN);
+                mpfr_mul(tmp1, B_re, r2_re, MPFR_RNDN);
+                mpfr_mul(tmp2, B_im, r2_im, MPFR_RNDN);
+                mpfr_sub(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_sub(num_re, num_re, tmp1, MPFR_RNDN);
+                mpfr_mul(tmp1, D_re, r1_im, MPFR_RNDN);
+                mpfr_mul(tmp2, D_im, r1_re, MPFR_RNDN);
+                mpfr_add(num_im, tmp1, tmp2, MPFR_RNDN);
+                mpfr_mul(tmp1, B_re, r2_im, MPFR_RNDN);
+                mpfr_mul(tmp2, B_im, r2_re, MPFR_RNDN);
+                mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_sub(num_im, num_im, tmp1, MPFR_RNDN);
+                /* v[i-1] = num1 / det */
+                mpfr_mul(tmp1, num_re, det_re, MPFR_RNDN);
+                mpfr_mul(tmp2, num_im, det_im, MPFR_RNDN);
+                mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_div(v_re[i - 1], tmp1, det_mag2, MPFR_RNDN);
+                mpfr_mul(tmp1, num_im, det_re, MPFR_RNDN);
+                mpfr_mul(tmp2, num_re, det_im, MPFR_RNDN);
+                mpfr_sub(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_div(v_im[i - 1], tmp1, det_mag2, MPFR_RNDN);
+
+                /* num2 = A r2 - C r1 (complex) */
+                mpfr_mul(tmp1, A_re, r2_re, MPFR_RNDN);
+                mpfr_mul(tmp2, A_im, r2_im, MPFR_RNDN);
+                mpfr_sub(num_re, tmp1, tmp2, MPFR_RNDN);
+                mpfr_mul(tmp1, C_re, r1_re, MPFR_RNDN);
+                mpfr_mul(tmp2, C_im, r1_im, MPFR_RNDN);
+                mpfr_sub(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_sub(num_re, num_re, tmp1, MPFR_RNDN);
+                mpfr_mul(tmp1, A_re, r2_im, MPFR_RNDN);
+                mpfr_mul(tmp2, A_im, r2_re, MPFR_RNDN);
+                mpfr_add(num_im, tmp1, tmp2, MPFR_RNDN);
+                mpfr_mul(tmp1, C_re, r1_im, MPFR_RNDN);
+                mpfr_mul(tmp2, C_im, r1_re, MPFR_RNDN);
+                mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_sub(num_im, num_im, tmp1, MPFR_RNDN);
+                /* v[i] = num2 / det */
+                mpfr_mul(tmp1, num_re, det_re, MPFR_RNDN);
+                mpfr_mul(tmp2, num_im, det_im, MPFR_RNDN);
+                mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_div(v_re[i], tmp1, det_mag2, MPFR_RNDN);
+                mpfr_mul(tmp1, num_im, det_re, MPFR_RNDN);
+                mpfr_mul(tmp2, num_re, det_im, MPFR_RNDN);
+                mpfr_sub(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_div(v_im[i], tmp1, det_mag2, MPFR_RNDN);
+            }
+            i--;
+        } else {
+            mpfr_t rhs_u, rhs_v, diag_re, diag_im, denom;
+            mpfr_init2(rhs_u, bits); mpfr_init2(rhs_v, bits);
+            mpfr_init2(diag_re, bits); mpfr_init2(diag_im, bits);
+            mpfr_init2(denom, bits);
+            mpfr_set_zero(rhs_u, 1); mpfr_set_zero(rhs_v, 1);
+            for (size_t j = i + 1; j <= k + 1; j++) {
+                mpfr_mul(tmp1, H[i * n + j], v_re[j], MPFR_RNDN);
+                mpfr_add(rhs_u, rhs_u, tmp1, MPFR_RNDN);
+                mpfr_mul(tmp1, H[i * n + j], v_im[j], MPFR_RNDN);
+                mpfr_add(rhs_v, rhs_v, tmp1, MPFR_RNDN);
+            }
+            mpfr_sub(diag_re, H[i * n + i], aval, MPFR_RNDN);
+            mpfr_neg(diag_im, bval, MPFR_RNDN);
+            mpfr_mul(denom, diag_re, diag_re, MPFR_RNDN);
+            mpfr_mul(tmp1, diag_im, diag_im, MPFR_RNDN);
+            mpfr_add(denom, denom, tmp1, MPFR_RNDN);
+            if (mpfr_cmp(denom, tiny) < 0) {
+                mpfr_set_zero(v_re[i], 1); mpfr_set_zero(v_im[i], 1);
+            } else {
+                mpfr_neg(num_re, rhs_u, MPFR_RNDN);
+                mpfr_neg(num_im, rhs_v, MPFR_RNDN);
+                mpfr_mul(tmp1, num_re, diag_re, MPFR_RNDN);
+                mpfr_mul(tmp2, num_im, diag_im, MPFR_RNDN);
+                mpfr_add(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_div(v_re[i], tmp1, denom, MPFR_RNDN);
+                mpfr_mul(tmp1, num_im, diag_re, MPFR_RNDN);
+                mpfr_mul(tmp2, num_re, diag_im, MPFR_RNDN);
+                mpfr_sub(tmp1, tmp1, tmp2, MPFR_RNDN);
+                mpfr_div(v_im[i], tmp1, denom, MPFR_RNDN);
+            }
+            mpfr_clear(rhs_u); mpfr_clear(rhs_v);
+            mpfr_clear(diag_re); mpfr_clear(diag_im); mpfr_clear(denom);
+        }
+    }
+
+    mpfr_clear(delta); mpfr_clear(gamma); mpfr_clear(tmp1); mpfr_clear(tmp2);
+    mpfr_clear(rhs_u_top); mpfr_clear(rhs_v_top);
+    mpfr_clear(rhs_u_bot); mpfr_clear(rhs_v_bot);
+    mpfr_clear(A_re); mpfr_clear(A_im);
+    mpfr_clear(B_re); mpfr_clear(B_im);
+    mpfr_clear(C_re); mpfr_clear(C_im);
+    mpfr_clear(D_re); mpfr_clear(D_im);
+    mpfr_clear(det_re); mpfr_clear(det_im); mpfr_clear(det_mag2);
+    mpfr_clear(num_re); mpfr_clear(num_im);
+    mpfr_clear(r1_re); mpfr_clear(r1_im);
+    mpfr_clear(r2_re); mpfr_clear(r2_im);
+    mpfr_clear(tiny);
+}
+
+/* Build eigenvector matrix V from Schur form H and back-transformation Q
+ * at MPFR precision.  Result is row-major n*n in V_re, V_im (rows indexed
+ * by sorted permutation). */
+static void schur_compute_eigvecs_M(const mpfr_t* H, const mpfr_t* Q, size_t n,
+                                      mpfr_prec_t bits,
+                                      const mpfr_t* eval_re, const mpfr_t* eval_im,
+                                      const size_t* perm,
+                                      mpfr_t* V_re, mpfr_t* V_im) {
+    mpfr_t* v_schur_re = mpfr_array_alloc(n, bits);
+    mpfr_t* v_schur_im = mpfr_array_alloc(n, bits);
+    mpfr_t* w_re       = mpfr_array_alloc(n, bits);
+    mpfr_t* w_im       = mpfr_array_alloc(n, bits);
+
+    size_t* inv_perm = (size_t*)malloc(sizeof(size_t) * n);
+    for (size_t i = 0; i < n; i++) inv_perm[perm[i]] = i;
+
+    mpfr_t norm2, inv, s_re, s_im, prod, abs_b;
+    mpfr_init2(norm2, bits); mpfr_init2(inv,   bits);
+    mpfr_init2(s_re,  bits); mpfr_init2(s_im,  bits);
+    mpfr_init2(prod,  bits); mpfr_init2(abs_b, bits);
+
+    size_t k = 0;
+    while (k < n) {
+        if (mpfr_zero_p(eval_im[k])) {
+            schur_eigvec_real_M(H, n, bits, k, eval_re[k], v_schur_re);
+            for (size_t i = 0; i < n; i++) {
+                mpfr_set_zero(s_re, 1);
+                for (size_t j = 0; j <= k; j++) {
+                    mpfr_mul(prod, Q[i * n + j], v_schur_re[j], MPFR_RNDN);
+                    mpfr_add(s_re, s_re, prod, MPFR_RNDN);
+                }
+                mpfr_set(w_re[i], s_re, MPFR_RNDN);
+            }
+            mpfr_set_zero(norm2, 1);
+            for (size_t i = 0; i < n; i++) {
+                mpfr_mul(prod, w_re[i], w_re[i], MPFR_RNDN);
+                mpfr_add(norm2, norm2, prod, MPFR_RNDN);
+            }
+            if (mpfr_zero_p(norm2)) {
+                mpfr_set_ui(inv, 1, MPFR_RNDN);
+            } else {
+                mpfr_sqrt(inv, norm2, MPFR_RNDN);
+                mpfr_ui_div(inv, 1, inv, MPFR_RNDN);
+            }
+            size_t sp = inv_perm[k];
+            for (size_t i = 0; i < n; i++) {
+                mpfr_mul(V_re[sp * n + i], w_re[i], inv, MPFR_RNDN);
+                mpfr_set_zero(V_im[sp * n + i], 1);
+            }
+            k++;
+        } else {
+            mpfr_abs(abs_b, eval_im[k], MPFR_RNDN);
+            schur_eigvec_complex_M(H, n, bits, k, eval_re[k], abs_b,
+                                     v_schur_re, v_schur_im);
+            for (size_t i = 0; i < n; i++) {
+                mpfr_set_zero(s_re, 1);
+                mpfr_set_zero(s_im, 1);
+                for (size_t j = 0; j <= k + 1; j++) {
+                    mpfr_mul(prod, Q[i * n + j], v_schur_re[j], MPFR_RNDN);
+                    mpfr_add(s_re, s_re, prod, MPFR_RNDN);
+                    mpfr_mul(prod, Q[i * n + j], v_schur_im[j], MPFR_RNDN);
+                    mpfr_add(s_im, s_im, prod, MPFR_RNDN);
+                }
+                mpfr_set(w_re[i], s_re, MPFR_RNDN);
+                mpfr_set(w_im[i], s_im, MPFR_RNDN);
+            }
+            mpfr_set_zero(norm2, 1);
+            for (size_t i = 0; i < n; i++) {
+                mpfr_mul(prod, w_re[i], w_re[i], MPFR_RNDN);
+                mpfr_add(norm2, norm2, prod, MPFR_RNDN);
+                mpfr_mul(prod, w_im[i], w_im[i], MPFR_RNDN);
+                mpfr_add(norm2, norm2, prod, MPFR_RNDN);
+            }
+            if (mpfr_zero_p(norm2)) {
+                mpfr_set_ui(inv, 1, MPFR_RNDN);
+            } else {
+                mpfr_sqrt(inv, norm2, MPFR_RNDN);
+                mpfr_ui_div(inv, 1, inv, MPFR_RNDN);
+            }
+            size_t sp1 = inv_perm[k];
+            size_t sp2 = inv_perm[k + 1];
+            for (size_t i = 0; i < n; i++) {
+                mpfr_t rr, mm;
+                mpfr_init2(rr, bits); mpfr_init2(mm, bits);
+                mpfr_mul(rr, w_re[i], inv, MPFR_RNDN);
+                mpfr_mul(mm, w_im[i], inv, MPFR_RNDN);
+                mpfr_set(V_re[sp1 * n + i], rr, MPFR_RNDN);
+                mpfr_set(V_im[sp1 * n + i], mm, MPFR_RNDN);
+                mpfr_set(V_re[sp2 * n + i], rr, MPFR_RNDN);
+                mpfr_neg(V_im[sp2 * n + i], mm, MPFR_RNDN);
+                mpfr_clear(rr); mpfr_clear(mm);
+            }
+            k += 2;
+        }
+    }
+
+    mpfr_array_free(v_schur_re, n); mpfr_array_free(v_schur_im, n);
+    mpfr_array_free(w_re, n);       mpfr_array_free(w_im, n);
+    free(inv_perm);
+    mpfr_clear(norm2); mpfr_clear(inv);
+    mpfr_clear(s_re); mpfr_clear(s_im);
+    mpfr_clear(prod); mpfr_clear(abs_b);
+}
+
+/* Emit the eigenvector matrix V_re + i V_im as a List of List of MPFR
+ * (or Complex[mpfr, mpfr]). */
+static Expr* direct_build_complex_eigenvector_list_M(const mpfr_t* V_re,
+                                                       const mpfr_t* V_im,
+                                                       size_t n) {
+    Expr** rows = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t k = 0; k < n; k++) {
+        Expr** comps = (Expr**)malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            if (mpfr_zero_p(V_im[k * n + i])) {
+                comps[i] = expr_new_mpfr_copy(V_re[k * n + i]);
+            } else {
+                Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
+                args[0] = expr_new_mpfr_copy(V_re[k * n + i]);
+                args[1] = expr_new_mpfr_copy(V_im[k * n + i]);
+                comps[i] = expr_new_function(expr_new_symbol("Complex"),
+                                              args, 2);
+                free(args);
+            }
+        }
+        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n);
+        free(comps);
+    }
+    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    free(rows);
+    return out;
+}
+
+/* Top-level Direct kernel for real non-symmetric MPFR input. */
+static Expr* direct_real_general_mpfr(const MatM* A, MateigenWant want,
+                                        Expr* k_spec) {
+    size_t n = A->n;
+    mpfr_prec_t bits = A->bits;
+    if (n == 0) return NULL;
+
+    bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
+
+    mpfr_t* H = mpfr_array_alloc(n * n, bits);
+    for (size_t i = 0; i < n * n; i++) mpfr_set(H[i], A->re[i], MPFR_RNDN);
+    mpfr_t* Q = NULL;
+    if (want_Q) {
+        Q = mpfr_array_alloc(n * n, bits);
+        for (size_t i = 0; i < n; i++)
+            for (size_t j = 0; j < n; j++)
+                mpfr_set_si(Q[i * n + j], (i == j) ? 1 : 0, MPFR_RNDN);
+    }
+
+    mpfr_t* u   = mpfr_array_alloc(n, bits);
+    mpfr_t* tmp = mpfr_array_alloc(14, bits);
+
+    if (n >= 3) direct_hessenberg_real_M(H, n, bits, u, Q, tmp);
+
+    mpfr_t* eval_re = mpfr_array_alloc(n, bits);
+    mpfr_t* eval_im = mpfr_array_alloc(n, bits);
+    for (size_t i = 0; i < n; i++) {
+        mpfr_set_zero(eval_re[i], 1);
+        mpfr_set_zero(eval_im[i], 1);
+    }
+    int qr_status = direct_qr_real_general_M(H, n, bits, eval_re, eval_im, Q, tmp);
+
+    if (qr_status != 0) {
+        mpfr_array_free(H, n * n);
+        if (Q) mpfr_array_free(Q, n * n);
+        mpfr_array_free(u, n);
+        mpfr_array_free(tmp, 14);
+        mpfr_array_free(eval_re, n);
+        mpfr_array_free(eval_im, n);
+        return NULL;
+    }
+
+    size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+    direct_sort_perm_desc_abs_complex_M(eval_re, eval_im, n, perm);
+
+    Expr* out;
+    if (want_Q) {
+        mpfr_t* V_re = mpfr_array_alloc(n * n, bits);
+        mpfr_t* V_im = mpfr_array_alloc(n * n, bits);
+        schur_compute_eigvecs_M(H, Q, n, bits, eval_re, eval_im, perm, V_re, V_im);
+        out = direct_build_complex_eigenvector_list_M(V_re, V_im, n);
+        mpfr_array_free(V_re, n * n);
+        mpfr_array_free(V_im, n * n);
+    } else {
+        out = direct_build_complex_eigenvalue_list_M(eval_re, eval_im, n, perm);
+    }
+
+    free(perm);
+    mpfr_array_free(H, n * n);
+    if (Q) mpfr_array_free(Q, n * n);
+    mpfr_array_free(u, n);
+    mpfr_array_free(tmp, 14);
+    mpfr_array_free(eval_re, n);
+    mpfr_array_free(eval_im, n);
+
+    return direct_apply_k_spec_list(out, k_spec);
+}
+
 /* Dispatcher: route an MPFR-precision matrix through the appropriate
  * Direct kernel.  Returns NULL when the matrix shape isn't yet wired
- * (in 2d-A: only real symmetric); the outer dispatcher falls through
- * to the machine kernel (downgraded precision) and ultimately the
- * symbolic path. */
+ * (complex paths arrive in 2d-{C,D}); the outer dispatcher falls
+ * through to the machine kernel (downgraded precision) and ultimately
+ * the symbolic path. */
 static Expr* direct_dispatch_mpfr(Expr* m, Expr* a, int64_t n,
                                     mpfr_prec_t bits,
                                     MateigenWant want, Expr* k_spec) {
@@ -3088,8 +4156,9 @@ static Expr* direct_dispatch_mpfr(Expr* m, Expr* a, int64_t n,
         mpfr_clear(norm); mpfr_clear(tol); mpfr_clear(factor);
 
         if (sym) out = direct_real_sym_mpfr(&A, want, k_spec);
+        else     out = direct_real_general_mpfr(&A, want, k_spec);
     }
-    /* Complex / real-general MPFR paths arrive in 2d-{B,C,D}. */
+    /* Complex MPFR paths arrive in 2d-{C,D}. */
 
     matM_free(&A);
     return out;
@@ -3111,9 +4180,9 @@ static Expr* direct_dispatch_mpfr(Expr* m, Expr* a, int64_t n,
  *   - Complex Hermitian (machine precision):        values + vectors.
  *   - Complex non-Hermitian (machine precision):    values + vectors.
  *   - Real symmetric MPFR (step 2d-A):              values + vectors.
+ *   - Real non-symmetric MPFR (step 2d-B):          values + vectors.
  *
  * Falls back to symbolic for:
- *   - MPFR real non-symmetric (step 2d-B).
  *   - MPFR complex (step 2d-{C,D}).
  */
 static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,

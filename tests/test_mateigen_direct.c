@@ -1594,6 +1594,130 @@ void test_mpfr_sym_repeated_eigvals(void) {
     mpfr_assert_true("MPFR sym near-degenerate {2,2,2}+epsilon", src);
 }
 
+/* ----- 2d-B: real general (non-symmetric) MPFR tests --------------- */
+
+void test_mpfr_general_3x3_real_spectrum(void) {
+    /* Upper triangular at 50 digits -- spectrum is the diagonal {5, 3, 2}.
+     * Forces non-symmetric path because b != b^T. */
+    const char* src =
+        "Module[{m, vs, d1, d2, d3},\n"
+        "  m = SetPrecision[{{5, 7, 11}, {0, 3, 9}, {0, 0, 2}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  d1 = N[(vs[[1]] - 5) * 10^45];\n"
+        "  d2 = N[(vs[[2]] - 3) * 10^45];\n"
+        "  d3 = N[(vs[[3]] - 2) * 10^45];\n"
+        "  TrueQ[N[Abs[d1]] < 1.0]\n"
+        " && TrueQ[N[Abs[d2]] < 1.0]\n"
+        " && TrueQ[N[Abs[d3]] < 1.0]]";
+    mpfr_assert_true("MPFR general 3x3 triangular -> diagonal spectrum", src);
+}
+
+void test_mpfr_general_complex_pair_2x2_rotation(void) {
+    /* Rotation matrix {{0,-1},{1,0}} has eigenvalues +/- I exactly. */
+    const char* src =
+        "Module[{m, vs, re1, im1, re2, im2},\n"
+        "  m = SetPrecision[{{0, -1}, {1, 0}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  re1 = N[Re[vs[[1]]] * 10^45];\n"
+        "  im1 = N[(Abs[Im[vs[[1]]]] - 1) * 10^45];\n"
+        "  re2 = N[Re[vs[[2]]] * 10^45];\n"
+        "  im2 = N[(Abs[Im[vs[[2]]]] - 1) * 10^45];\n"
+        "  TrueQ[N[Abs[re1]] < 1.0]\n"
+        " && TrueQ[N[Abs[im1]] < 1.0]\n"
+        " && TrueQ[N[Abs[re2]] < 1.0]\n"
+        " && TrueQ[N[Abs[im2]] < 1.0]]";
+    mpfr_assert_true("MPFR general 2x2 rotation -> +/- I", src);
+}
+
+void test_mpfr_general_complex_pair_3x3(void) {
+    /* A = {{1,-1,0},{1,1,-1},{0,1,1}} has spectrum {1 +/- I Sqrt[2], 1}.
+     * Non-symmetric QR accumulates a few extra ULPs of roundoff per sweep
+     * vs the symmetric path; conservative scale 10^35 (~ 8 digit margin
+     * inside 50 digit input) is comfortably within published error bounds
+     * for implicit-shift QR.  */
+    const char* src =
+        "Module[{m, vs, sq2, top, bot, mid},\n"
+        "  m = SetPrecision[{{1, -1, 0}, {1, 1, -1}, {0, 1, 1}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  sq2 = SetPrecision[Sqrt[2], 50];\n"
+        "  top = N[(Re[vs[[1]]] - 1) * 10^35];\n"
+        "  bot = N[(Abs[Im[vs[[1]]]] - sq2) * 10^35];\n"
+        "  mid = N[(vs[[3]] - 1) * 10^35];\n"
+        "  TrueQ[N[Abs[top]] < 1.0]\n"
+        " && TrueQ[N[Abs[bot]] < 1.0]\n"
+        " && TrueQ[N[Abs[mid]] < 1.0]]";
+    mpfr_assert_true("MPFR general 3x3 -> {1 +/- I Sqrt[2], 1}", src);
+}
+
+void test_mpfr_general_eigenvalues_carry_precision(void) {
+    /* Routing check: a non-symmetric MPFR input must produce eigenvalues
+     * whose Precision[] reports the working precision (~50 decimal digits),
+     * NOT MachinePrecision (~15.95). */
+    mpfr_assert_eigenvalues_have_precision(
+        "MPFR general 3x3 carries precision",
+        "SetPrecision[{{5, 7, 11}, {0, 3, 9}, {0, 0, 2}}, 50]", 3, 49);
+}
+
+void test_mpfr_general_eigenvectors_are_lists(void) {
+    mpfr_assert_head("MPFR general Eigenvectors returns a List",
+        "Eigenvectors[SetPrecision[{{2, 1}, {0, 3}}, 40]]", "List");
+}
+
+void test_mpfr_general_trace_det_invariants(void) {
+    /* Sum of eigenvalues = Tr(A), product = Det(A).  Use a real-spectrum
+     * matrix to keep the comparison purely real. */
+    const char* src =
+        "Module[{m, vs, tr, dt, sumV, prodV, dSum, dProd},\n"
+        "  m = SetPrecision[{{2, 1, 0}, {0, 3, 1}, {0, 0, 5}}, 50];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  tr = Tr[m];\n"
+        "  dt = Det[m];\n"
+        "  sumV  = vs[[1]] + vs[[2]] + vs[[3]];\n"
+        "  prodV = vs[[1]] * vs[[2]] * vs[[3]];\n"
+        "  dSum  = N[(sumV  - tr) * 10^45];\n"
+        "  dProd = N[(prodV - dt) * 10^45];\n"
+        "  TrueQ[N[Abs[dSum]]  < 1.0]\n"
+        " && TrueQ[N[Abs[dProd]] < 1.0]]";
+    mpfr_assert_true("MPFR general trace+det invariants 3x3", src);
+}
+
+void test_mpfr_general_residual_real_spectrum(void) {
+    /* Eigenvalues of a 4x4 upper triangular matrix should be its diagonal.
+     * Iterate via While (For/Do/Table can promote the counter through MPFR
+     * leaves and break Part indexing). */
+    const char* src =
+        "Module[{m, vs, expected, ok, k, lk, ek, mxErr},\n"
+        "  m = SetPrecision[{{3, 1, 0, 0}, {0, 2, 1, 0},\n"
+        "                     {0, 0, 4, 1}, {0, 0, 0, 5}}, 60];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  expected = SetPrecision[{5, 4, 3, 2}, 60];\n"
+        "  ok = TrueQ[Length[vs] == 4];\n"
+        "  k = 1;\n"
+        "  While[k <= 4,\n"
+        "    lk = vs[[k]];\n"
+        "    ek = expected[[k]];\n"
+        "    mxErr = N[(lk - ek) * 10^50];\n"
+        "    ok = ok && TrueQ[N[Abs[mxErr]] < 1.0];\n"
+        "    k = k + 1];\n"
+        "  ok]";
+    mpfr_assert_true("MPFR general 4x4 upper triangular -> diagonal at 50 digits", src);
+}
+
+void test_mpfr_general_high_precision_120(void) {
+    /* 120-digit stress on a real-spectrum 3x3 upper triangular. */
+    const char* src =
+        "Module[{m, vs, d1, d2, d3},\n"
+        "  m = SetPrecision[{{7, 11, 13}, {0, 2, 17}, {0, 0, 5}}, 120];\n"
+        "  vs = Eigenvalues[m];\n"
+        "  d1 = N[(vs[[1]] - 7) * 10^110];\n"
+        "  d2 = N[(vs[[2]] - 5) * 10^110];\n"
+        "  d3 = N[(vs[[3]] - 2) * 10^110];\n"
+        "  TrueQ[N[Abs[d1]] < 1.0]\n"
+        " && TrueQ[N[Abs[d2]] < 1.0]\n"
+        " && TrueQ[N[Abs[d3]] < 1.0]]";
+    mpfr_assert_true("MPFR general 3x3 at 120 digits", src);
+}
+
 void test_mpfr_sym_1x1(void) {
     /* Edge case: 1x1 -- bypasses tridiag entirely. */
     const char* src =
@@ -1692,6 +1816,15 @@ int main(void) {
     TEST(test_mpfr_sym_k_spec);
     TEST(test_mpfr_sym_repeated_eigvals);
     TEST(test_mpfr_sym_1x1);
+    /* Phase 2 step 2d-B: real general (non-symmetric) MPFR. */
+    TEST(test_mpfr_general_3x3_real_spectrum);
+    TEST(test_mpfr_general_complex_pair_2x2_rotation);
+    TEST(test_mpfr_general_complex_pair_3x3);
+    TEST(test_mpfr_general_eigenvalues_carry_precision);
+    TEST(test_mpfr_general_eigenvectors_are_lists);
+    TEST(test_mpfr_general_trace_det_invariants);
+    TEST(test_mpfr_general_residual_real_spectrum);
+    TEST(test_mpfr_general_high_precision_120);
 #endif
 
     printf("All mateigen Direct (machine-precision) tests passed!\n");
