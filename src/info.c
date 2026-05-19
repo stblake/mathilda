@@ -197,9 +197,24 @@ void info_init(void) {
         "with j+1 exact eigenpairs.  MPFR Arnoldi carries through the\n"
         "input's combined precision via the same scratch-pool discipline\n"
         "as the Direct MPFR kernels.\n"
-        "\"Banded\" and \"FEAST\" arrive in subsequent phases; an explicit\n"
-        "but not-yet-implemented Method prints a one-shot warning and\n"
-        "falls back to the symbolic characteristic-polynomial path.");
+        "\"Banded\" (Phase 4, machine + MPFR) handles real symmetric and\n"
+        "complex Hermitian matrices.  It auto-detects the half-bandwidth\n"
+        "and reduces to symmetric tridiagonal form via Schwarz-style\n"
+        "two-sided Givens rotations with bulge chasing (one off-band\n"
+        "entry zeroed per Givens; the introduced bulge is chased b\n"
+        "columns at a time until it falls past the matrix edge); the\n"
+        "resulting tridiagonal eigenproblem reuses the Phase 2 symmetric\n"
+        "QR.  Complex Hermitian banded uses paired re/im Givens with a\n"
+        "real-c / complex-s parameterisation and the same phase-\n"
+        "correction step as the Direct Hermitian kernel.  Banded refuses\n"
+        "(returns NULL, falls back to Direct) when the matrix isn't\n"
+        "Hermitian or when it's fully dense (b == n - 1).  Automatic\n"
+        "routes here when the matrix is Hermitian, n > 8, and the half-\n"
+        "bandwidth is at most max(8, n/4); narrower bands save more flops\n"
+        "than wider ones.\n"
+        "\"FEAST\" arrives in a subsequent phase; an explicit but not-\n"
+        "yet-implemented Method prints a one-shot warning and falls back\n"
+        "to the symbolic characteristic-polynomial path.");
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
         "\tfinds an x that solves the matrix equation m . x == b.\n"
@@ -344,7 +359,15 @@ void info_init(void) {
         "spectral diameter they may need refinement (single inverse\n"
         "iteration is sufficient in practice).  MPFR Arnoldi carries\n"
         "input precision through to all output components.\n"
-        "\"Banded\" and \"FEAST\" kernels arrive in subsequent phases.");
+        "\"Banded\" (Phase 4, machine + MPFR) returns orthonormal real\n"
+        "eigenvectors for real symmetric banded inputs and unitary\n"
+        "complex eigenvectors for complex Hermitian banded inputs.  The\n"
+        "band-Givens reduction accumulates an orthogonal (resp. unitary)\n"
+        "Q during the chase; the final Z from the symmetric tridiag QR\n"
+        "is composed against Q exactly as in the Direct Hermitian path.\n"
+        "Banded refuses (falls back to Direct) on non-Hermitian or fully\n"
+        "dense matrices.\n"
+        "\"FEAST\" kernels arrive in a subsequent phase.");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head",
         "Head[expr]\n"
