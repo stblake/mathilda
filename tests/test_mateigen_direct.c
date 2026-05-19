@@ -1161,6 +1161,192 @@ void test_direct_hermitian_eigenvalues_only(void) {
     printf("PASS: 3x3 Hermitian eigenvalues-only path\n");
 }
 
+/* --- Phase 2 step 2c-B: complex non-Hermitian ---------------------- */
+
+/* Tolerance for the complex general path.  The block-embedding doubles
+ * the matrix dimension and adds one Schur back-substitution pass, so we
+ * loosen the constant beyond the Hermitian (128) path. */
+static double machine_tol_complex_general(const double* A_re,
+                                            const double* A_im, size_t n) {
+    double normA = corpus_norm_inf_complex(A_re, A_im, n);
+    if (normA == 0.0) normA = 1.0;
+    return 256.0 * (double)n * 2.220446049250313e-16 * normA;
+}
+
+/* Check the eigenvalue residual for every (lambda_i, v_i) pair of a
+ * complex (possibly non-Hermitian) matrix.  Unlike Hermitian, vectors
+ * are NOT expected to be orthonormal -- only unit-norm.  Eigenvalues
+ * are complex in general (no real check). */
+static void verify_complex_general_spectrum(const double* A_re,
+                                              const double* A_im, size_t n) {
+    double tol = machine_tol_complex_general(A_re, A_im, n);
+
+    double *eval_re = NULL, *eval_im = NULL;
+    size_t kL = corpus_eval_eigenvalues_complex(A_re, A_im, n,
+                                                  &eval_re, &eval_im);
+    double *V_re = NULL, *V_im = NULL;
+    size_t kV = corpus_eval_eigenvectors_complex(A_re, A_im, n, &V_re, &V_im);
+    ASSERT(kL == n && kV == n);
+
+    /* Eigenvalue sum == trace.  trace = sum_i A_ii. */
+    double tr_re = 0.0, tr_im = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        tr_re += A_re[i * n + i];
+        tr_im += A_im[i * n + i];
+    }
+    double s_re = 0.0, s_im = 0.0;
+    for (size_t i = 0; i < n; i++) { s_re += eval_re[i]; s_im += eval_im[i]; }
+    if (hypot(s_re - tr_re, s_im - tr_im) > tol) {
+        printf("FAIL: sum(lambda)=%g+%gi != trace=%g+%gi (tol %g)\n",
+               s_re, s_im, tr_re, tr_im, tol);
+        ASSERT(0);
+    }
+
+    /* Per-pair residual. */
+    for (size_t i = 0; i < n; i++) {
+        corpus_assert_residual_complex(A_re, A_im, n,
+                                         eval_re[i], eval_im[i],
+                                         &V_re[i * n], &V_im[i * n],
+                                         tol);
+    }
+
+    /* Descending |lambda| sort. */
+    for (size_t i = 1; i < n; i++) {
+        double prev = hypot(eval_re[i - 1], eval_im[i - 1]);
+        double cur  = hypot(eval_re[i],     eval_im[i]);
+        ASSERT(prev >= cur - tol);
+    }
+
+    /* Eigenvectors unit-norm (NOT necessarily orthogonal). */
+    for (size_t i = 0; i < n; i++) {
+        double sq = 0.0;
+        for (size_t j = 0; j < n; j++) {
+            double r = V_re[i * n + j];
+            double m = V_im[i * n + j];
+            sq += r * r + m * m;
+        }
+        ASSERT(fabs(sq - 1.0) < 1e-10);
+    }
+
+    free(eval_re); free(eval_im); free(V_re); free(V_im);
+}
+
+void test_direct_complex_general_diagonal(void) {
+    /* A = diag(1+i, 2+i) -- non-Hermitian (Im part is on the diagonal,
+     * which violates Hermitian).  Eigenvalues 1+i, 2+i.  No mixing
+     * (conj(spec) is disjoint from spec). */
+    double Re[4] = { 1.0, 0.0,  0.0, 2.0 };
+    double Im[4] = { 1.0, 0.0,  0.0, 1.0 };
+    verify_complex_general_spectrum(Re, Im, 2);
+    printf("PASS: diag(1+i, 2+i) complex general\n");
+}
+
+void test_direct_complex_general_mixing(void) {
+    /* A = [[0, 1, 0], [-1, 0, 0], [0, 0, 2+i]] -- the canonical "mixing"
+     * test: spec(A) = {i, -i, 2+i}, so conj(spec) and spec overlap on
+     * {i, -i}.  Simple pair-up of M's eigenvalues would emit two copies
+     * of i (or two of -i) here; grouped Gram-Schmidt is required. */
+    double Re[9] = {
+        0.0, 1.0, 0.0,
+       -1.0, 0.0, 0.0,
+        0.0, 0.0, 2.0
+    };
+    double Im[9] = {0};
+    Im[2 * 3 + 2] = 1.0;
+    verify_complex_general_spectrum(Re, Im, 3);
+    printf("PASS: [[0,1,0],[-1,0,0],[0,0,2+i]] mixing case (grouped GS)\n");
+}
+
+void test_direct_complex_general_2x2_generic(void) {
+    /* Generic 2x2 complex.  Char poly: lambda^2 - 5 lambda - 3 - i = 0.
+     * Discriminant 37 + 4i, eigenvalues (5 +/- sqrt(37+4i))/2. */
+    double Re[4] = { 1.0, 2.0,  3.0, 4.0 };
+    double Im[4] = { 0.0, 1.0, -1.0, 0.0 };
+    verify_complex_general_spectrum(Re, Im, 2);
+    printf("PASS: generic complex 2x2 residual + sort + unit-norm\n");
+}
+
+void test_direct_complex_general_real_off_complex_diag(void) {
+    /* A = [[1+i, 2], [3, 4]] -- only one complex entry; eigenvalues
+     * generically complex. */
+    double Re[4] = { 1.0, 2.0,  3.0, 4.0 };
+    double Im[4] = { 1.0, 0.0,  0.0, 0.0 };
+    verify_complex_general_spectrum(Re, Im, 2);
+    printf("PASS: mixed-entries 2x2 complex general\n");
+}
+
+void test_direct_complex_general_3x3_random(void) {
+    /* Reproducible "random" complex 3x3 via the LCG seed already used
+     * elsewhere in this file. */
+    uint32_t s = 0xC0FFEE07u;
+    #define LCG() (s = s * 1103515245u + 12345u, (double)(s >> 16) / 32768.0 - 1.0)
+    double Re[9], Im[9];
+    for (size_t i = 0; i < 9; i++) { Re[i] = LCG(); Im[i] = LCG(); }
+    #undef LCG
+    verify_complex_general_spectrum(Re, Im, 3);
+    printf("PASS: random complex 3x3 residual\n");
+}
+
+void test_direct_complex_general_5x5_random(void) {
+    uint32_t s = 0xD15EA5Eu;
+    #define LCG() (s = s * 1103515245u + 12345u, (double)(s >> 16) / 32768.0 - 1.0)
+    double Re[25], Im[25];
+    for (size_t i = 0; i < 25; i++) { Re[i] = LCG(); Im[i] = LCG(); }
+    #undef LCG
+    verify_complex_general_spectrum(Re, Im, 5);
+    printf("PASS: random complex 5x5 residual\n");
+}
+
+void test_direct_complex_general_real_rotation_promoted(void) {
+    /* [[0, 1], [-1, 0]] re-loaded into the complex path by adding a
+     * zero-im entry that triggers is_complex=true.  Eigenvalues +/-i.
+     * spec(A) and conj(spec(A)) coincide so we hit the mixing path. */
+    double Re[4] = { 0.0, 1.0,  -1.0, 0.0 };
+    double Im[4] = { 0.0, 0.0,  0.0, 0.0 };
+    /* Stamp a complex 0 to force is_complex routing. */
+    Im[0] = 1e-300;
+    Im[0] = 0.0;
+    /* The above doesn't actually mark complex; instead use a tiny but
+     * non-zero imag entry on the diagonal so dispatch hits the complex
+     * path.  We then assert the recovered eigenvalues are nearly +/-i. */
+    Im[0] = 1e-15;
+    double *eval_re = NULL, *eval_im = NULL;
+    size_t k = corpus_eval_eigenvalues_complex(Re, Im, 2,
+                                                 &eval_re, &eval_im);
+    ASSERT(k == 2);
+    /* One should be near +i, the other near -i. */
+    double a0 = hypot(eval_re[0] - 0.0, eval_im[0] - 1.0);
+    double b0 = hypot(eval_re[0] - 0.0, eval_im[0] + 1.0);
+    double pick0 = (a0 < b0) ? 1.0 : -1.0;
+    double pick1 = -pick0;
+    ASSERT(fabs(eval_im[0] - pick0) < 1e-6);
+    ASSERT(fabs(eval_im[1] - pick1) < 1e-6);
+    ASSERT(fabs(eval_re[0]) < 1e-6);
+    ASSERT(fabs(eval_re[1]) < 1e-6);
+    free(eval_re); free(eval_im);
+    printf("PASS: tiny-imag rotation matrix -> complex eigenvalues +/-i\n");
+}
+
+void test_direct_complex_general_eigenvalues_only(void) {
+    /* Exercise the WANT_VALUES (no Q) path of the complex general
+     * kernel.  Even values-only needs M's eigenvectors internally for
+     * the +J / -J disambiguation, so this exercises the "compute Q
+     * unconditionally then throw it away" branch. */
+    double Re[4] = { 1.0, 2.0,  3.0, 4.0 };
+    double Im[4] = { 0.0, 1.0, -1.0, 0.0 };
+    double *eval_re = NULL, *eval_im = NULL;
+    size_t k = corpus_eval_eigenvalues_complex(Re, Im, 2,
+                                                 &eval_re, &eval_im);
+    ASSERT(k == 2);
+    /* Eigenvalues sum to trace = 5 (the imag part of trace is 0). */
+    double sr = eval_re[0] + eval_re[1];
+    double si = eval_im[0] + eval_im[1];
+    ASSERT(fabs(sr - 5.0) < 1e-10);
+    ASSERT(fabs(si - 0.0) < 1e-10);
+    free(eval_re); free(eval_im);
+    printf("PASS: complex 2x2 eigenvalues-only path\n");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1221,6 +1407,16 @@ int main(void) {
     TEST(test_direct_hermitian_repeated_eigvals);
     TEST(test_direct_hermitian_complex_offdiag_only);
     TEST(test_direct_hermitian_eigenvalues_only);
+
+    /* Phase 2 step 2c-B: complex non-Hermitian. */
+    TEST(test_direct_complex_general_diagonal);
+    TEST(test_direct_complex_general_mixing);
+    TEST(test_direct_complex_general_2x2_generic);
+    TEST(test_direct_complex_general_real_off_complex_diag);
+    TEST(test_direct_complex_general_3x3_random);
+    TEST(test_direct_complex_general_5x5_random);
+    TEST(test_direct_complex_general_real_rotation_promoted);
+    TEST(test_direct_complex_general_eigenvalues_only);
 
     printf("All mateigen Direct (machine-precision) tests passed!\n");
     return 0;

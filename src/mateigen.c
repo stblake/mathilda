@@ -2278,6 +2278,245 @@ static Expr* direct_complex_hermitian_machine(const MatD* A, MateigenWant want,
     return direct_apply_k_spec_list(out, k_spec);
 }
 
+/* ---------- Complex general Direct: real block-embedding ------------- *
+ *                                                                       *
+ *  A complex n x n matrix A = R + i S is reduced to a real 2n x 2n      *
+ *  block matrix                                                         *
+ *                                                                       *
+ *      M = [[ R, -S ],                                                  *
+ *           [ S,  R ]]                                                  *
+ *                                                                       *
+ *  whose spectrum is spec(A) ∪ conj(spec(A)) as a multiset, with each   *
+ *  pair (λ, conj λ) sharing a 2-dim real invariant subspace of M.       *
+ *                                                                       *
+ *  We dispatch M through the existing real Hessenberg + Francis QR      *
+ *  pipeline (direct_hessenberg_real + direct_qr_real_general +          *
+ *  schur_compute_eigvecs) and then unpair:                              *
+ *                                                                       *
+ *    - For each complex M-eigenvalue with positive imaginary part:      *
+ *      find its conjugate partner among the M-eigenvalues, mark both    *
+ *      as used, and emit the positive-imag one as A's eigenvalue.       *
+ *    - For each real M-eigenvalue: pair it with the closest unused      *
+ *      real M-eigenvalue, mark both as used, emit one copy.             *
+ *                                                                       *
+ *  The complex A-eigenvector is recovered from M's complex eigenvector  *
+ *  w = w_re + i w_im (length 2n) via                                    *
+ *                                                                       *
+ *      x = (a - d) + i (b + c)                                          *
+ *                                                                       *
+ *  where a, b, c, d are the n-vector top/bottom splits of w_re / w_im   *
+ *  respectively.  For real M-eigenvalues w_im = 0 and the formula       *
+ *  collapses to x = top(w_re) + i * bot(w_re).  See test                *
+ *  test_direct_general_complex_machine_2x2_diagonal_imag for a worked   *
+ *  example.                                                             *
+ *                                                                       *
+ *  Cost: O((2n)^3) = 8 O(n^3) -- nominally 8x more flops than a native  *
+ *  complex Hessenberg + complex QR at the same n.  In return the entire *
+ *  numerical machinery is reused (real LAPACK-mappable kernels) and     *
+ *  there are no separate complex tridiagonal / Givens implementations   *
+ *  to maintain.  When USE_LAPACK is wired, the obvious replacement is   *
+ *  a native zgehrd + zhseqr + ztrevc3 path that won't pay the 8x.       *
+ *                                                                       *
+ *  LAPACK-HOOK: zgehrd + zhseqr + ztrevc3 (or zgeev as a one-call       *
+ *  wrapper) can replace this whole block when USE_LAPACK is set.        *
+ * --------------------------------------------------------------------- */
+
+static Expr* direct_complex_general_machine(const MatD* A, MateigenWant want,
+                                              Expr* k_spec) {
+    size_t n = A->n;
+    if (n == 0) return NULL;
+    size_t N = 2 * n;
+
+    bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
+
+    /* Build real 2n x 2n block embedding. */
+    double* H = (double*)malloc(sizeof(double) * N * N);
+    for (size_t i = 0; i < n; i++) {
+        for (size_t j = 0; j < n; j++) {
+            double r = A->re[i * n + j];
+            double s = A->im[i * n + j];
+            H[i * N + j]                   =  r;
+            H[i * N + (j + n)]             = -s;
+            H[(i + n) * N + j]             =  s;
+            H[(i + n) * N + (j + n)]       =  r;
+        }
+    }
+
+    /* Hessenberg reduction.  We ALWAYS accumulate Q -- M's eigenvectors
+     * are needed for the values-only path too, to disambiguate which of
+     * the conjugate pair (mu, conj mu) is in spec(A) vs spec(conj A). */
+    double* Q = (double*)malloc(sizeof(double) * N * N);
+    for (size_t i = 0; i < N; i++)
+        for (size_t j = 0; j < N; j++) Q[i * N + j] = (i == j) ? 1.0 : 0.0;
+    double* u_buf = (double*)malloc(sizeof(double) * N);
+    direct_hessenberg_real(H, N, u_buf, Q);
+    free(u_buf);
+
+    /* Francis QR -> Schur form + complex-conjugate eigenvalue pairs. */
+    double* M_eval_re = (double*)calloc(N, sizeof(double));
+    double* M_eval_im = (double*)calloc(N, sizeof(double));
+    int qr_status = direct_qr_real_general(H, N, M_eval_re, M_eval_im, Q);
+    if (qr_status != 0) {
+        free(H); free(Q); free(M_eval_re); free(M_eval_im);
+        return NULL;
+    }
+
+    /* Eigenvectors of M (in the original basis), one row per eigenvalue. */
+    double* M_evec_re = (double*)malloc(sizeof(double) * N * N);
+    double* M_evec_im = (double*)malloc(sizeof(double) * N * N);
+    size_t* identity_perm = (size_t*)malloc(sizeof(size_t) * N);
+    for (size_t i = 0; i < N; i++) identity_perm[i] = i;
+    schur_compute_eigvecs(H, Q, N, M_eval_re, M_eval_im, identity_perm,
+                            M_evec_re, M_evec_im);
+    free(identity_perm);
+    free(H); free(Q);
+
+    /* Recover A's eigenvalues from M's spectrum:
+     *
+     * For each M-eigenvector w of eigenvalue mu, the vector
+     *
+     *     x = (a - d) + i (b + c)
+     *
+     * with w_re = [a; b] and w_im = [c; d] satisfies A x = mu x.  When mu
+     * is in spec(A) the candidate x is non-zero; when mu is only in
+     * spec(conj A) (i.e., conj mu in spec(A) but mu itself is not)
+     * the candidate x is zero.  This disambiguates the conjugate-pair
+     * doubling of spec(M) = spec(A) U conj(spec(A)).
+     *
+     * Grouped Gram-Schmidt handles algebraic multiplicity:
+     *   1. Walk M-eigenvalues; group adjacent (after stable Schur order)
+     *      values that fall within `group_tol`.
+     *   2. Within each group, project each candidate x against the
+     *      already-emitted vectors of the group and emit it iff the
+     *      remaining norm stays above `extract_threshold`.
+     *
+     * This produces m_A(mu) ortho-normal eigenvectors per distinct mu --
+     * the rank of the +J subspace in M's mu-eigenspace -- which sums to
+     * exactly n. */
+    double spec_norm = 0.0;
+    for (size_t i = 0; i < N; i++) {
+        double a = hypot(M_eval_re[i], M_eval_im[i]);
+        if (a > spec_norm) spec_norm = a;
+    }
+    double group_tol = 1e-8 * (spec_norm == 0.0 ? 1.0 : spec_norm) * (double)N;
+    /* Norm threshold: a "valid" candidate (in +J subspace) has |x| in
+     * the range [eps, sqrt(2)]; a "wrong" candidate (in -J subspace) has
+     * |x| ~ machine_eps.  1e-8 is safely between these. */
+    double extract_threshold = sqrt((double)n) * 1e-9;
+
+    int* used = (int*)calloc(N, sizeof(int));
+    double* A_eval_re = (double*)malloc(sizeof(double) * n);
+    double* A_eval_im = (double*)malloc(sizeof(double) * n);
+    double* A_evec_re = (double*)calloc(n * n, sizeof(double));
+    double* A_evec_im = (double*)calloc(n * n, sizeof(double));
+    double* cand_re = (double*)malloc(sizeof(double) * n);
+    double* cand_im = (double*)malloc(sizeof(double) * n);
+    size_t out = 0;
+
+    for (size_t i = 0; i < N && out < n; i++) {
+        if (used[i]) continue;
+        used[i] = 1;
+        size_t group_start = out;
+
+        /* Process group member j; iteration includes i itself. */
+        for (size_t j = i; j < N && out < n; j++) {
+            if (j != i) {
+                if (used[j]) continue;
+                double dr = M_eval_re[j] - M_eval_re[i];
+                double di = M_eval_im[j] - M_eval_im[i];
+                if (hypot(dr, di) > group_tol) continue;
+                used[j] = 1;
+            }
+            /* Candidate x = (a - d) + i (b + c). */
+            for (size_t l = 0; l < n; l++) {
+                double a = M_evec_re[j * N + l];
+                double b = M_evec_re[j * N + (l + n)];
+                double c = M_evec_im[j * N + l];
+                double d_im = M_evec_im[j * N + (l + n)];
+                cand_re[l] = a - d_im;
+                cand_im[l] = b + c;
+            }
+            /* Orthogonalise against already-emitted vectors in this
+             * group (complex modified Gram-Schmidt).  Twice for numerical
+             * stability per the "twice is enough" rule. */
+            for (int pass = 0; pass < 2; pass++) {
+                for (size_t f = group_start; f < out; f++) {
+                    double pr = 0.0, pi = 0.0;
+                    for (size_t l = 0; l < n; l++) {
+                        double vr = A_evec_re[f * n + l];
+                        double vi = A_evec_im[f * n + l];
+                        /* conj(V_f) . cand = (vr - i vi)(cand_re + i cand_im) */
+                        pr += vr * cand_re[l] + vi * cand_im[l];
+                        pi += vr * cand_im[l] - vi * cand_re[l];
+                    }
+                    for (size_t l = 0; l < n; l++) {
+                        double vr = A_evec_re[f * n + l];
+                        double vi = A_evec_im[f * n + l];
+                        /* (pr + i pi)(vr + i vi) */
+                        double pvr = pr * vr - pi * vi;
+                        double pvi = pr * vi + pi * vr;
+                        cand_re[l] -= pvr;
+                        cand_im[l] -= pvi;
+                    }
+                }
+            }
+            double norm2 = 0.0;
+            for (size_t l = 0; l < n; l++) {
+                norm2 += cand_re[l] * cand_re[l] + cand_im[l] * cand_im[l];
+            }
+            if (norm2 < extract_threshold * extract_threshold) continue;
+            double inv = 1.0 / sqrt(norm2);
+            for (size_t l = 0; l < n; l++) {
+                A_evec_re[out * n + l] = cand_re[l] * inv;
+                A_evec_im[out * n + l] = cand_im[l] * inv;
+            }
+            A_eval_re[out] = M_eval_re[i];
+            A_eval_im[out] = M_eval_im[i];
+            out++;
+        }
+    }
+    free(used); free(M_eval_re); free(M_eval_im);
+    free(M_evec_re); free(M_evec_im);
+    free(cand_re); free(cand_im);
+
+    if (out != n) {
+        /* Extraction under-produced -- bail out so the symbolic path
+         * can take over.  Most commonly hit when extract_threshold is
+         * too tight or the matrix is wildly ill-conditioned. */
+        free(A_eval_re); free(A_eval_im);
+        free(A_evec_re); free(A_evec_im);
+        return NULL;
+    }
+
+    /* Sort by descending |lambda| and emit. */
+    size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+    direct_sort_perm_desc_abs_complex(A_eval_re, A_eval_im, n, perm);
+
+    Expr* result;
+    if (want_Q) {
+        /* Permute eigenvector rows into sort order. */
+        double* V_re = (double*)malloc(sizeof(double) * n * n);
+        double* V_im = (double*)malloc(sizeof(double) * n * n);
+        for (size_t k = 0; k < n; k++) {
+            size_t src = perm[k];
+            for (size_t l = 0; l < n; l++) {
+                V_re[k * n + l] = A_evec_re[src * n + l];
+                V_im[k * n + l] = A_evec_im[src * n + l];
+            }
+        }
+        result = direct_build_complex_eigenvector_list(V_re, V_im, n);
+        free(V_re); free(V_im);
+    } else {
+        result = direct_build_complex_eigenvalue_list(A_eval_re, A_eval_im,
+                                                        n, perm);
+    }
+
+    free(A_eval_re); free(A_eval_im); free(perm);
+    free(A_evec_re); free(A_evec_im);
+
+    return direct_apply_k_spec_list(result, k_spec);
+}
+
 /* Dispatcher entry point: route a numeric matrix through the
  * appropriate "Direct" kernel.  Returns NULL when the matrix shape
  * isn't yet supported by a numerical kernel so the caller can fall
@@ -2290,10 +2529,10 @@ static Expr* direct_complex_hermitian_machine(const MatD* A, MateigenWant want,
  *   - Real symmetric (machine precision):           values + vectors.
  *   - Real non-symmetric (machine precision):       values + vectors.
  *   - Complex Hermitian (machine precision):        values + vectors.
+ *   - Complex non-Hermitian (machine precision):    values + vectors.
  *
  * Falls back to symbolic for:
- *   - Complex non-Hermitian matrices (step 2c-B).
- *   - MPFR matrices                  (step 2d).
+ *   - MPFR matrices (step 2d).
  */
 static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,
                                        MateigenWant want, Expr* k_spec) {
@@ -2309,8 +2548,9 @@ static Expr* direct_dispatch_machine(Expr* m, Expr* a, int64_t n,
         double herm_tol = 1e-12 * (norm == 0.0 ? 1.0 : norm) * (double)A.n;
         if (matD_is_hermitian(&A, herm_tol)) {
             out = direct_complex_hermitian_machine(&A, want, k_spec);
+        } else {
+            out = direct_complex_general_machine(&A, want, k_spec);
         }
-        /* Non-Hermitian complex falls through (step 2c-B). */
     } else {
         double norm = matD_norm_inf_real(A.re, A.n);
         double sym_tol = 1e-12 * (norm == 0.0 ? 1.0 : norm) * (double)A.n;

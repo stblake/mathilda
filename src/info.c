@@ -169,14 +169,18 @@ void info_init(void) {
         "tridiagonalisation + Wilkinson-shift symmetric QR kernel at\n"
         "machine precision for real symmetric matrices, the Hessenberg\n"
         "+ implicit double-shift Francis QR kernel for real non-symmetric\n"
-        "matrices, and a complex Householder tridiagonalisation +\n"
-        "diagonal-phase correction + symmetric QR kernel for complex\n"
-        "Hermitian matrices (returns real eigenvalues sorted by |lambda|\n"
-        "descending).  Automatic routes here too.  Complex non-Hermitian\n"
-        "and arbitrary-precision MPFR inputs plus \"Arnoldi\", \"Banded\",\n"
-        "and \"FEAST\" arrive in subsequent commits; an explicit but\n"
-        "not-yet-implemented Method prints a one-shot warning and falls\n"
-        "back to the symbolic characteristic-polynomial path.");
+        "matrices, a complex Householder tridiagonalisation + diagonal-\n"
+        "phase correction + symmetric QR kernel for complex Hermitian\n"
+        "matrices (returns real eigenvalues sorted by |lambda|\n"
+        "descending), and a real-block-embedding kernel for complex\n"
+        "non-Hermitian matrices (M = [[Re A, -Im A], [Im A, Re A]]\n"
+        "routed through real Hessenberg + Francis QR with grouped\n"
+        "complex Gram-Schmidt disambiguation of M's spec to recover\n"
+        "spec(A)).  Automatic routes here too.  Arbitrary-precision\n"
+        "MPFR inputs plus \"Arnoldi\", \"Banded\", and \"FEAST\" arrive in\n"
+        "subsequent commits; an explicit but not-yet-implemented Method\n"
+        "prints a one-shot warning and falls back to the symbolic\n"
+        "characteristic-polynomial path.");
     symtab_set_docstring("LinearSolve",
         "LinearSolve[m, b]\n"
         "\tfinds an x that solves the matrix equation m . x == b.\n"
@@ -301,13 +305,15 @@ void info_init(void) {
         "for real non-symmetric matrices via Hessenberg + Francis double-\n"
         "shift QR with accumulated Q followed by Schur-form back-\n"
         "substitution (complex eigenvalues yield complex eigenvectors\n"
-        "emitted as Complex[re, im] entries), and unitary orthonormal\n"
-        "complex eigenvectors for complex Hermitian matrices via complex\n"
+        "emitted as Complex[re, im] entries), unitary orthonormal complex\n"
+        "eigenvectors for complex Hermitian matrices via complex\n"
         "Householder tridiagonalisation + diagonal-phase correction +\n"
-        "symmetric QR with composed complex Q.  Automatic routes here.\n"
-        "Complex non-Hermitian matrices and arbitrary-precision MPFR\n"
-        "inputs plus the \"Arnoldi\", \"Banded\", and \"FEAST\" kernels arrive\n"
-        "in subsequent commits.");
+        "symmetric QR with composed complex Q, and unit-norm complex\n"
+        "eigenvectors for complex non-Hermitian matrices via real block\n"
+        "embedding into a 2n x 2n general matrix followed by grouped\n"
+        "complex Gram-Schmidt extraction.  Automatic routes here.\n"
+        "Arbitrary-precision MPFR inputs plus the \"Arnoldi\", \"Banded\",\n"
+        "and \"FEAST\" kernels arrive in subsequent commits.");
     symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
     symtab_set_docstring("Head",
         "Head[expr]\n"

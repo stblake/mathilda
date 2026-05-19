@@ -109,6 +109,22 @@ double corpus_assert_residual_complex_real_lambda(const double* A_re,
                                                     const double* v_im,
                                                     double tol);
 
+/* Complex residual with a complex lambda (general non-Hermitian case). */
+double corpus_assert_residual_complex(const double* A_re,
+                                       const double* A_im,
+                                       size_t n,
+                                       double lambda_re, double lambda_im,
+                                       const double* v_re,
+                                       const double* v_im,
+                                       double tol);
+
+/* Evaluate `Eigenvalues[A]` for a complex matrix; return parallel
+ * (re, im) arrays. */
+size_t corpus_eval_eigenvalues_complex(const double* A_re,
+                                        const double* A_im,
+                                        size_t n,
+                                        double** eval_re, double** eval_im);
+
 /* Unitary orthonormality:  ||V^H V - I||_inf  <=  tol.  V is row-major
  * n x n with row i = i-th eigenvector. */
 void corpus_assert_unitary(const double* V_re, const double* V_im,

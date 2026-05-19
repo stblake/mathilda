@@ -380,6 +380,70 @@ double corpus_assert_residual_complex_real_lambda(const double* A_re,
     return res;
 }
 
+double corpus_assert_residual_complex(const double* A_re,
+                                       const double* A_im,
+                                       size_t n,
+                                       double lambda_re, double lambda_im,
+                                       const double* v_re,
+                                       const double* v_im,
+                                       double tol) {
+    double res = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double Avi_re = 0.0, Avi_im = 0.0;
+        for (size_t j = 0; j < n; j++) {
+            double ar = A_re[i * n + j];
+            double ai = A_im[i * n + j];
+            double vr = v_re[j];
+            double vi = v_im[j];
+            Avi_re += ar * vr - ai * vi;
+            Avi_im += ar * vi + ai * vr;
+        }
+        /* lambda * v[i] */
+        double lvr = lambda_re * v_re[i] - lambda_im * v_im[i];
+        double lvi = lambda_re * v_im[i] + lambda_im * v_re[i];
+        double dr = Avi_re - lvr;
+        double di = Avi_im - lvi;
+        double e = hypot(dr, di);
+        if (e > res) res = e;
+    }
+    if (res > tol) {
+        printf("FAIL: complex residual %g exceeds tol %g (lambda=%g+%gi)\n",
+               res, tol, lambda_re, lambda_im);
+    }
+    ASSERT(res <= tol);
+    return res;
+}
+
+size_t corpus_eval_eigenvalues_complex(const double* A_re,
+                                        const double* A_im,
+                                        size_t n,
+                                        double** eval_re,
+                                        double** eval_im) {
+    char* input = corpus_matrix_to_eigenvalues_input_complex(A_re, A_im, n);
+    Expr* e = parse_expression(input);
+    ASSERT(e != NULL);
+    Expr* r = evaluate(e);
+    expr_free(e);
+    free(input);
+
+    ASSERT(r != NULL);
+    ASSERT(r->type == EXPR_FUNCTION);
+    ASSERT(r->data.function.head->type == EXPR_SYMBOL);
+    ASSERT(strcmp(r->data.function.head->data.symbol, "List") == 0);
+
+    size_t out_count = r->data.function.arg_count;
+    *eval_re = (double*)malloc(sizeof(double) * (out_count ? out_count : 1));
+    *eval_im = (double*)malloc(sizeof(double) * (out_count ? out_count : 1));
+    for (size_t i = 0; i < out_count; i++) {
+        double rr, ii;
+        ASSERT(leaf_to_complex(r->data.function.args[i], &rr, &ii));
+        (*eval_re)[i] = rr;
+        (*eval_im)[i] = ii;
+    }
+    expr_free(r);
+    return out_count;
+}
+
 void corpus_assert_unitary(const double* V_re, const double* V_im,
                             size_t n, double tol) {
     double worst = 0.0;
