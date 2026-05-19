@@ -408,6 +408,8 @@ void core_init(void) {
     matinv_init();
     void matlstsq_init(void);
     matlstsq_init();
+    void mateigen_init(void);
+    mateigen_init();
     readwrite_init();
     files_init();
     random_init();

@@ -83,6 +83,7 @@ set(COMMON_SRC
     ../src/matsol.c
     ../src/matinv.c
     ../src/matlstsq.c
+    ../src/mateigen.c
     ../src/readwrite.c
     ../src/files.c
     ../src/iter.c
