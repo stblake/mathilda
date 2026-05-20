@@ -250,6 +250,7 @@ const char* SYM_UnsameQ = NULL;
 const char* SYM_UpTo = NULL;
 const char* SYM_Verbatim = NULL;
 const char* SYM_VerifySolutions = NULL;
+const char* SYM_Which = NULL;
 const char* SYM_While = NULL;
 const char* SYM_With = NULL;
 const char* SYM_Xor = NULL;
@@ -498,6 +499,7 @@ void sym_names_init(void) {
     SYM_UpTo                       = intern_symbol("UpTo");
     SYM_Verbatim                   = intern_symbol("Verbatim");
     SYM_VerifySolutions            = intern_symbol("VerifySolutions");
+    SYM_Which                      = intern_symbol("Which");
     SYM_While                      = intern_symbol("While");
     SYM_With                       = intern_symbol("With");
     SYM_Xor                        = intern_symbol("Xor");

@@ -717,6 +717,18 @@ void info_init(void) {
         "Continue[] inside body skips the rest of body and re-evaluates test.\n"
         "Return[v] inside body causes While to yield v; otherwise While returns Null.");
     symtab_set_docstring("If", "If[condition, t, f] gives t if condition evaluates to True, and f if it evaluates to False.\nIf[condition, t, f, u] gives u if condition evaluates to neither True nor False.");
+    symtab_set_docstring("Which",
+        "Which[test1, value1, test2, value2, ...]\n"
+        "\tevaluates each test_i in turn, returning the corresponding value_i\n"
+        "\tfor the first test that yields True.\n"
+        "Which has attribute HoldAll, so the tests and values are not\n"
+        "evaluated until Which examines them.\n"
+        "If a test evaluates to neither True nor False, a Which object\n"
+        "containing that test (in evaluated form) and the remaining\n"
+        "elements is returned unevaluated.\n"
+        "If all tests evaluate to False (or no tests are supplied), Which\n"
+        "returns Null.\n"
+        "Use True as the final test to supply a default value.");
     symtab_set_docstring("TrueQ", "TrueQ[expr] yields True if expr is True, and False otherwise.");
     symtab_set_docstring("Evaluate", "Evaluate[expr]\n\tcauses expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.\nEvaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held.\nEvaluate does not override HoldAllComplete.");
     symtab_set_docstring("ReleaseHold", "ReleaseHold[expr]\n\tremoves Hold, HoldForm, HoldPattern, and HoldComplete in expr.\nReleaseHold removes only one layer of Hold etc.; it does not remove inner occurrences in nested Hold etc. functions.");

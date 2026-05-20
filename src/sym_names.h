@@ -265,6 +265,7 @@ extern const char* SYM_UnsameQ;
 extern const char* SYM_UpTo;
 extern const char* SYM_Verbatim;
 extern const char* SYM_VerifySolutions;
+extern const char* SYM_Which;
 extern const char* SYM_While;
 extern const char* SYM_With;
 extern const char* SYM_Xor;
