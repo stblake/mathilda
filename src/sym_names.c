@@ -156,6 +156,7 @@ const char* SYM_Longest = NULL;
 const char* SYM_MachineEpsilon = NULL;
 const char* SYM_MachinePrecision = NULL;
 const char* SYM_MaxIterations = NULL;
+const char* SYM_MatrixRank = NULL;
 const char* SYM_Method = NULL;
 const char* SYM_Mod = NULL;
 const char* SYM_Module = NULL;
@@ -407,6 +408,7 @@ void sym_names_init(void) {
     SYM_MachineEpsilon             = intern_symbol("MachineEpsilon");
     SYM_MachinePrecision           = intern_symbol("MachinePrecision");
     SYM_MaxIterations              = intern_symbol("MaxIterations");
+    SYM_MatrixRank                 = intern_symbol("MatrixRank");
     SYM_Method                     = intern_symbol("Method");
     SYM_Mod                        = intern_symbol("Mod");
     SYM_Module                     = intern_symbol("Module");

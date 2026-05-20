@@ -171,6 +171,7 @@ extern const char* SYM_Longest;
 extern const char* SYM_MachineEpsilon;
 extern const char* SYM_MachinePrecision;
 extern const char* SYM_MaxIterations;
+extern const char* SYM_MatrixRank;
 extern const char* SYM_Method;
 extern const char* SYM_Mod;
 extern const char* SYM_Module;

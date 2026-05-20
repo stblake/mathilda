@@ -96,6 +96,7 @@ set(COMMON_SRC
     ../src/linalg/inv.c
     ../src/linalg/lstsq.c
     ../src/linalg/nullspace.c
+    ../src/linalg/matrank.c
     ../src/linalg/eigen.c
     ../src/linalg/eigen_common.c
     ../src/linalg/eigen_direct.c
@@ -423,6 +424,16 @@ else()
     target_link_libraries(nullspace_tests gmp m)
 endif()
 add_test(NAME nullspace_tests COMMAND nullspace_tests)
+
+add_executable(matrank_tests test_matrank.c ${COMMON_SRC})
+target_include_directories(matrank_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(matrank_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(matrank_tests build_ecm)
+else()
+    target_link_libraries(matrank_tests gmp m)
+endif()
+add_test(NAME matrank_tests COMMAND matrank_tests)
 
 add_executable(eigen_tests test_eigen.c ${COMMON_SRC})
 target_include_directories(eigen_tests PRIVATE ../src)

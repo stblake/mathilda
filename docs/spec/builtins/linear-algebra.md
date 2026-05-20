@@ -432,6 +432,84 @@ Out[7]= {0, 0, 0}
 > the evaluator, so any future improvement to RowReduce automatically
 > propagates to NullSpace.
 
+## MatrixRank
+Gives the rank of a matrix.
+- `MatrixRank[m]`
+- `MatrixRank[m, Method -> "<name>"]`
+- `MatrixRank[m, Tolerance -> t]`
+- `MatrixRank[m, Method -> "<name>", Tolerance -> t]`
+
+**Features**:
+- `Protected`.
+- Returns a non-negative `Integer` equal to the number of linearly
+  independent rows of `m` (equivalently, of linearly independent
+  columns).
+- Works on numerical (Integer / Rational / Real / MPFR / Complex),
+  big-integer, and symbolic matrices, square or rectangular.
+- **Two execution paths**:
+  - *Exact path* (every leaf is exact, no `Tolerance`): routes
+    through `RowReduce[m, Method -> "<name>"]` and counts the
+    non-zero rows of the RREF, using `is_zero_poly` for structural
+    zero. Honors the same `Method` grammar as NullSpace / RowReduce /
+    LinearSolve / Inverse (`Automatic` / `"DivisionFreeRowReduction"`
+    / `"OneStepRowReduction"` / `"CofactorExpansion"`).
+  - *Numerical path* (any inexact leaf, or any explicit `Tolerance`):
+    runs partial-pivot Gaussian forward-elimination over a portable
+    `double`-complex kernel with tolerance-aware pivot selection: a
+    column is skipped when its largest sub-pivot `|entry|` is `<= t`.
+    `Method` does not affect this path.
+- **Tolerance** accepted forms:
+  - `Tolerance -> Automatic` (default) — `max(rows, cols) *
+    MachineEpsilon * Max[|entries|]` for inexact matrices; `0`
+    otherwise (so integer / rational input agrees with the exact
+    path).
+  - `Tolerance -> 0` — no tolerance; even arbitrarily small entries
+    count.
+  - `Tolerance -> <non-negative number>` — Integer, Real, Rational,
+    or a `Power[10, k]`-style expression resolved via `N[...]`.
+- Issues `MatrixRank::matrix` and returns unevaluated if the
+  argument is not a non-empty rank-2 tensor.
+- Issues `MatrixRank::opt` and returns unevaluated for an unknown
+  `Method` value, an unknown option key, or a negative / symbolic
+  `Tolerance`.
+
+```mathematica
+In[1]:= MatrixRank[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[1]= 2
+
+In[2]:= MatrixRank[{{a, b, c}, {d, e, f}, {g, h, i}}]
+Out[2]= 3
+
+In[3]:= MatrixRank[{{0, 5, 2, 4, 4}, {2, 5, 0, 4, 0}, {5, 1, 5, 4, 5}}]
+Out[3]= 3
+
+In[4]:= MatrixRank[{{1.25, 3.2, 3.2}, {7.9, -1.4, 5.1}, {1.1, 2.5, -1.5}}]
+Out[4]= 3
+
+In[5]:= MatrixRank[{{a, b}, {2 a, 2 b}}]
+Out[5]= 1
+
+In[6]:= m = {{1, 1, 1}, {0, 10^-10, 0}, {0, 0, 10^-20}};
+        MatrixRank[m]
+Out[6]= 3
+
+In[7]:= MatrixRank[N[m]]
+Out[7]= 2
+
+In[8]:= MatrixRank[N[m], Tolerance -> 0]
+Out[8]= 3
+
+In[9]:= MatrixRank[N[m], Tolerance -> 10^-8]
+Out[9]= 1
+```
+
+> Implementation lives in `src/linalg/matrank.c` (registered by
+> `matrank_init`). The exact path delegates to RowReduce, so any
+> improvement to RowReduce / its `Method` kernels propagates to
+> MatrixRank.  The numerical path is self-contained: a portable
+> `cplx_t = {re, im}` struct stands in for `double _Complex` to keep
+> the build strictly C99.
+
 ## IdentityMatrix
 Generates an identity matrix.
 - `IdentityMatrix[n]`: Gives the `n x n` identity matrix.
