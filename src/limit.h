@@ -2,7 +2,7 @@
  * limit.h -- Symbolic limit evaluation (Limit[f, x -> a], Direction, ...).
  *
  * This module provides a native C implementation of Mathematica's Limit
- * built-in, following the pipeline laid out in limit_candidate_spec.md.
+ * built-in, following the pipeline laid out in plans/limit_candidate_spec.md.
  * The public surface is deliberately small -- a single registration hook
  * (limit_init) plus the evaluator entry point (builtin_limit). Everything
  * else is internal; the full dispatch chain is documented in limit.c.

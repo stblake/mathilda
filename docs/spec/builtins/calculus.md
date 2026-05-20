@@ -127,7 +127,7 @@ Out[3]= Derivative[0, 1][f][x, y]
 `Integrate[f, x]` is the public entry point for the rational-function
 integrator implemented in `src/integrate.c` (System dispatcher) and
 `src/intrat.c` (algorithm package).  Phase 1 of the
-`IntegrateRational.m` port (see `INTEGRATE_PLAN.md`) closes the
+`IntegrateRational.m` port (see `plans/INTEGRATE_PLAN.md`) closes the
 following classes of integrand:
 
 - **Polynomials in `x`** — term-by-term integration via
@@ -417,7 +417,7 @@ Out[2]= {Sqrt[2] + x, 0}
 
 Polynomial-remainder chain in `K(coeffs)[x]`, used by the
 Lazard-Rioboo-Trager log-part computation in the
-`Integrate`` package (Phase 2 of `INTEGRATE_PLAN.md`).
+`Integrate`` package (Phase 2 of `plans/INTEGRATE_PLAN.md`).
 
 - `SubresultantPolynomialRemainders[a, b, x]` gives the chain
   `{a, b, R_2, R_3, ...}` obtained by iterating pseudo-remainder

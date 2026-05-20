@@ -4,7 +4,7 @@
  * Multivariate factoring orchestration.  Currently implements the
  * bivariate two-factor Hensel lift; additional phases (multifactor
  * lift, recombination, n-variate dispatch) will live here as they
- * land.  See FACTOR_PLAN.md for the broader picture.
+ * land.  See plans/FACTOR_PLAN.md for the broader picture.
  */
 
 #include <stdio.h>

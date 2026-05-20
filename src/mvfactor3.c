@@ -12,7 +12,7 @@
  *           -> zupoly_diophantine  (existing, src/zupoly.c)
  *           +  Hensel iteration in var_y
  *
- * See FACTOR_PLAN.md §F2 and SPEC.md for the broader picture.
+ * See plans/FACTOR_PLAN.md §F2 and SPEC.md for the broader picture.
  */
 
 #include <stdio.h>

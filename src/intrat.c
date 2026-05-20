@@ -1,6 +1,6 @@
 /* intrat.c — rational-function integration package (`Integrate``).
  *
- * Phase 1 of INTEGRATE_PLAN.md.  Implements the scaffolding,
+ * Phase 1 of plans/INTEGRATE_PLAN.md.  Implements the scaffolding,
  * polynomial integration, Mack's linear Hermite reduction, the
  * derivative-recognition fast path (`c*D'/D^k`), and the four
  * one-line helpers (Content / Primitive / Monic / LeadingCoefficient)

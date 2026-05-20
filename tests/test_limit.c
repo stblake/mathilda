@@ -2,7 +2,7 @@
  * test_limit.c -- Correctness tests for the native Limit builtin.
  *
  * Exercises the public surface of src/limit.c across all four return
- * categories called out in limit_candidate_spec.md:
+ * categories called out in plans/limit_candidate_spec.md:
  *   - definite numeric / symbolic limits,
  *   - directional limits (including the Mathematica sign flip),
  *   - bounded-oscillation Interval returns,

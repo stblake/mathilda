@@ -9,7 +9,7 @@
  * Currently exposes:
  *   - bpoly_hensel_lift_2: bivariate two-factor Hensel iteration.
  *
- * Future additions (see FACTOR_PLAN.md):
+ * Future additions (see plans/FACTOR_PLAN.md):
  *   - Multifactor Hensel lift.
  *   - Wang's leading-coefficient correction for non-monic inputs.
  *   - Zassenhaus recombination at the bivariate level.

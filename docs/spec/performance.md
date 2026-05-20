@@ -85,7 +85,7 @@ relevant head exactly once per sub-expression.
 Mathilda now has a native `Limit` built-in implemented in C in
 `src/limit.c`, registered by `limit_init()` in the standard
 `core_init()` chain. The design follows the layered dispatch outlined
-in `limit_candidate_spec.md`, with each layer either resolving the
+in `plans/limit_candidate_spec.md`, with each layer either resolving the
 limit and short-circuiting or passing the problem down:
 
 ```

@@ -5,7 +5,7 @@
  * and routes to `Integrate`BronsteinRational[f, x]` (implemented in
  * intrat.c) when its input is a polynomial or a rational function in x.
  *
- * Phase 1 of the BronsteinRational port (see INTEGRATE_PLAN.md).  The
+ * Phase 1 of the BronsteinRational port (see plans/INTEGRATE_PLAN.md).  The
  * non-rational fallback is the identity (returns the call unevaluated)
  * so this file remains a tiny shim — all real work is in intrat.c.
  */

@@ -13,7 +13,7 @@
  * All polynomial work is done with plain mpq_t arrays; we deliberately
  * do NOT depend on the private QUPoly substrate in zupoly.c so that
  * Phase G1 stays a self-contained module. (zupoly.c's QUPoly is also
- * a candidate for promotion to a public substrate — see FACTOR_PLAN.md
+ * a candidate for promotion to a public substrate — see plans/FACTOR_PLAN.md
  * §14 — but that refactor is orthogonal and deferred.) */
 
 #include "qa.h"

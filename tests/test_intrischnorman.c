@@ -1,6 +1,6 @@
 /* test_intrischnorman.c — Risch-Norman heuristic integrator tests.
  *
- * The corpus grows phase-by-phase per RISCH_NORMAN_PLAN.md:
+ * The corpus grows phase-by-phase per plans/RISCH_NORMAN_PLAN.md:
  *   Phase 1: scaffolding / dispatcher integration.
  *   Phase 2: convert_to_tan + indet collection unit tests.
  *   Phase 3: vector field + splitFactor + deflation unit tests.

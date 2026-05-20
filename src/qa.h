@@ -16,7 +16,7 @@
  * the caller owns the extension throughout the QANum's lifetime.
  *
  * Phase G1 is the substrate for Trager's algebraic-factoring algorithm
- * (Phase G in FACTOR_PLAN.md §14). Phase G2 builds Q(α)[x] on top of
+ * (Phase G in plans/FACTOR_PLAN.md §14). Phase G2 builds Q(α)[x] on top of
  * it; Phase G3 computes norms via Resultant_y(P_α, f). */
 
 #ifndef MATHILDA_QA_H

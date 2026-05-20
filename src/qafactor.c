@@ -2440,7 +2440,7 @@ bool expr_has_nested_radical_radicand(const Expr* e) {
 /* ============================== Phase G8 ============================== */
 /* Nested radical generators: `Sqrt[base]` / `base^(1/n)` where `base`
  * is a polynomial expression in atomic radicals (Sqrt[c], c^(1/m), I).
- * See FACTOR_PLAN.md §14 / Phase G8 for the design. */
+ * See plans/FACTOR_PLAN.md §14 / Phase G8 for the design. */
 
 /* Atomic-algebraic recogniser: returns true iff `e` is one of the four
  * surface forms the original `qa_resolve_extension` accepts:

@@ -5,7 +5,7 @@
  * `Solve` router (src/solve.c) and is itself exposed as the
  * context-qualified builtin `Solve`SolvePolynomialEquality`.
  *
- * The solver follows the algorithm laid out in SOLVE_PLAN.md:
+ * The solver follows the algorithm laid out in plans/SOLVE_PLAN.md:
  *   1. Move the equation to one side: poly = lhs − rhs.
  *   2. Recognise fast-path shapes (linear, quadratic, binomial,
  *      n-quadratic) and return closed-form rules.

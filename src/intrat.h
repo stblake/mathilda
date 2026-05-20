@@ -6,7 +6,7 @@
  * package consumers can call them directly from the REPL for
  * end-to-end testing of the pipeline.
  *
- * Phase 1 of INTEGRATE_PLAN.md:
+ * Phase 1 of plans/INTEGRATE_PLAN.md:
  *   * BronsteinRational    — top-level package entry (skeleton, expanded
  *                            in later phases).
  *   * IntegratePolynomial  — term-by-term integration of polynomials.

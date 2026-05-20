@@ -5,7 +5,7 @@
  * precision (GMP `mpz_t`) coefficients.
  *
  * Used as the substrate for the n-variate Hensel factoring pipeline
- * (Phase F2 of FACTOR_PLAN.md).  Where ZUPoly is "univariate Z[x]"
+ * (Phase F2 of plans/FACTOR_PLAN.md).  Where ZUPoly is "univariate Z[x]"
  * and BPoly is "bivariate Z[x, y]", MPoly is "Z[x_1, ..., x_n]" for
  * arbitrary n.
  *

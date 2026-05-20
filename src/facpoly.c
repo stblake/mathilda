@@ -1129,7 +1129,7 @@ static bool is_likely_irreducible_multivariate(Expr* P, Expr** vars,
              * int64 UPoly substrate would silently return the input
              * unchanged), and `count_nontrivial_factors` would then
              * miscount the bare Plus as a single irreducible factor --
-             * a false "irreducible" confirmation.  See FACTOR_PLAN.md
+             * a false "irreducible" confirmation.  See plans/FACTOR_PLAN.md
              * §12.F6 for the trace. */
             bool image_has_bigint = false;
             for (int i = 0; i <= deg_main; i++) {
@@ -1253,7 +1253,7 @@ static bool factor_via_bz_callback(const ZUPoly* image,
      * inputs and would silently return them unchanged, which the
      * orchestrator above misreads as "image is irreducible" (a single
      * Plus factor).  Returning false instead lets the orchestrator try
-     * the next alpha. See FACTOR_PLAN.md §12.F6 for the Fateman trace. */
+     * the next alpha. See plans/FACTOR_PLAN.md §12.F6 for the Fateman trace. */
     for (int i = 0; i <= image->deg; i++) {
         const mpz_t* ci = zupoly_getcoef(image, i);
         if (ci && !mpz_fits_slong_p(*ci)) return false;
@@ -3044,7 +3044,7 @@ Expr* builtin_factor(Expr* res) {
      * may end up unfactored.  But it preserves the historical
      * Simplify behavior, which has the property that some downstream
      * TrigRoundtrip paths only converge when intermediate factors
-     * remain in their non-fully-factored form.  See FACTOR_PLAN.md
+     * remain in their non-fully-factored form.  See plans/FACTOR_PLAN.md
      * cleanup C4.
      *
      * For direct user Factor calls (no memo active), use the SEPARATE-

@@ -499,7 +499,7 @@ static void test_f2_trivariate_z_plus_x_z_plus_y(void) {
 }
 
 static void test_f2_trivariate_user_reported(void) {
-    /* The user-reported case from FACTOR_PLAN.md §12: every factor
+    /* The user-reported case from plans/FACTOR_PLAN.md §12: every factor
      * depends on every variable.  Pre-F2 took ~6s and returned input
      * unchanged; F2 factors it correctly in ~300 ms.
      *

@@ -2,7 +2,7 @@
  * test_qa.c
  * ---------
  * Unit tests for the QA (Q(α) algebraic-number) substrate, Phase G1 of
- * Trager's algebraic factoring (FACTOR_PLAN.md §14).
+ * Trager's algebraic factoring (plans/FACTOR_PLAN.md §14).
  *
  * Coverage:
  *   - QAExt construction (raw + Sqrt[c] convenience).

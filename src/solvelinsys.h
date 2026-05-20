@@ -18,7 +18,7 @@
  * Reversed-column ordering is what gives Mathematica's convention for
  * the under-determined case: with `vars = {x, y}` and one equation,
  * the rightmost listed variable (y) becomes the pivot and is solved
- * in terms of the leftmost (x).  See SOLVE_PLAN.md for the algorithm
+ * in terms of the leftmost (x).  See plans/SOLVE_PLAN.md for the algorithm
  * write-up.
  *
  * Memory contract is the same as solvepoly.c: every helper returns a

@@ -19,7 +19,7 @@
  * a freshly-allocated Expr*; on failure it returns NULL and the
  * evaluator preserves the call unevaluated.
  *
- * Implementation phases (see RISCH_NORMAN_PLAN.md):
+ * Implementation phases (see plans/RISCH_NORMAN_PLAN.md):
  *   Phase 1: skeleton + dispatcher hook (always returns NULL).
  *   Phase 2: convert_to_tan + collect_indets + substitution maps.
  *   Phase 3: vector field + splitFactor + deflation + monomials.

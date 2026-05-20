@@ -7,7 +7,7 @@
  * (pmint, 2004).  Reference: parallel_risch/pmint.maple (99 lines)
  * and parallel_risch/bronstein 2004 - parallel integration.pdf.
  *
- * Phases of RISCH_NORMAN_PLAN.md:
+ * Phases of plans/RISCH_NORMAN_PLAN.md:
  *   Phase 1: skeleton + dispatcher hook (always returns NULL).
  *   Phase 2: convert_to_tan + indet collection + substitution maps.
  *   Phase 3: vector field + splitFactor + deflation + monomials.

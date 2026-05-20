@@ -59,7 +59,7 @@ void eval_init(void);
  * loop and the body of `evaluate_step`.
  *
  * This is the conservative single-counter variant from §3.3 of
- * EVAL_IMPROVEMENTS_PLAN.md: any user definition change invalidates
+ * plans/EVAL_IMPROVEMENTS_PLAN.md: any user definition change invalidates
  * every cached evaluation in one shot, which is correct in all cases
  * but coarser than a per-symbol dependency graph would be. The clock
  * starts at 1 so that fresh nodes (whose `last_evaluated_at` is 0)

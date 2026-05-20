@@ -2,7 +2,7 @@
  * mvfactor3.h
  * -----------
  * Trivariate (and higher) Hensel factoring on top of the MPoly
- * substrate.  Phase F2 of FACTOR_PLAN.md.
+ * substrate.  Phase F2 of plans/FACTOR_PLAN.md.
  *
  * Contracts and invariants follow the same pattern as mvfactor.h:
  *   - Functions returning new MPoly* / ZUPoly* always allocate fresh.

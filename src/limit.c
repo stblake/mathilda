@@ -3,7 +3,7 @@
  * ============================================================================
  *
  * Implements the Mathematica-style Limit built-in per the pipeline sketched
- * in limit_candidate_spec.md. The architecture is a layered dispatcher;
+ * in plans/limit_candidate_spec.md. The architecture is a layered dispatcher;
  * each layer either resolves the limit and short-circuits or passes the
  * problem down to the next layer:
  *

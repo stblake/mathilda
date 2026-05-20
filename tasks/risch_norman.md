@@ -1,6 +1,6 @@
 # Risch-Norman Implementation Tracker
 
-Implementation per `RISCH_NORMAN_PLAN.md`.  Reference:
+Implementation per `plans/RISCH_NORMAN_PLAN.md`.  Reference:
 `parallel_risch/pmint.maple`.
 
 ## Phase 1 — Plumbing & skeleton ✅
