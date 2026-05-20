@@ -12,6 +12,7 @@ endif()
 include_directories(/usr/local/include)
 include_directories(../src/linalg)
 include_directories(../src/poly)
+include_directories(../src/simp)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -61,9 +62,9 @@ set(COMMON_SRC
     ../src/patterns.c
     ../src/patterns.c
     ../src/replace.c
-    ${CMAKE_SOURCE_DIR}/../src/trigsimp.c
-    ${CMAKE_SOURCE_DIR}/../src/trigrat.c
-    ${CMAKE_SOURCE_DIR}/../src/simp.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/trigsimp.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/trigrat.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp.c
     ../src/complex.c
     ../src/trig.c
     ../src/trig_canon.c

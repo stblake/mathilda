@@ -85,7 +85,10 @@ Mathilda/
 │   ├── rat.c                   # Rational function operations
 │   ├── parfrac.c               # Partial fractions (Apart)
 │   ├── expand.c                # Expand, Collect
-│   ├── simp.c                  # Simplification, TrigToExp, ExpToTrig
+│   ├── simp/                   # Simplification (see "Simplification" in §7)
+│   │   ├── simp.{c,h}          # Simplify, SimplifyCount, Assuming, Element
+│   │   ├── trigsimp.{c,h}      # TrigToExp, ExpToTrig, TrigExpand, TrigFactor, TrigReduce
+│   │   └── trigrat.{c,h}       # Trig rationalisation helpers
 │   ├── modular.c               # PowerMod, modular arithmetic
 │   ├── piecewise.c             # Piecewise conditional expressions
 │   ├── load.c                  # File I/O (Get)
@@ -533,7 +536,7 @@ Each module follows the same pattern: a `.c`/`.h` pair, with a `*_init()` functi
 | **Trig** | `trig.c` | `Sin`, `Cos`, `Tan`, `Cot`, `Sec`, `Csc`, `ArcSin`, `ArcCos`, `ArcTan` (including 2-arg form), etc. Exact values for rational multiples of Pi |
 | **Hyperbolic** | `hyperbolic.c` | `Sinh`, `Cosh`, `Tanh`, `Coth`, `Sech`, `Csch` and inverses |
 | **Log/Exp** | `logexp.c` | `Log`, `Log[b, z]`, `Exp`. Euler's formula for `Exp[I*q*Pi]` |
-| **Simplification** | `simp.c` | `TrigToExp`, `ExpToTrig` |
+| **Simplification** | `simp/` | `Simplify`, `SimplifyCount`, `Assuming`, `Element`, `TrigToExp`, `ExpToTrig`, `TrigExpand`, `TrigFactor`, `TrigReduce`. Simplify pipeline (`simp/simp.c`) drives candidate-set search over a transform table; trig-specific rewrites live in `simp/trigsimp.c` and `simp/trigrat.c`. |
 | **Expansion** | `expand.c` | `Expand`, `Collect` |
 | **Polynomials** | `poly/` | `Coefficient`, `CoefficientList`, `PolynomialGCD`, `PolynomialExtendedGCD`, `PolynomialLCM`, `PolynomialQuotient`, `PolynomialRemainder`, `PolynomialQ`, `PolynomialMod`, `Resultant`, `Discriminant`, `Variables`, `HornerForm`, `Collect`, `Decompose`, `SubresultantPolynomialRemainders`. See `src/poly/poly.{c,h}` for the public surface; helper substrates (`zupoly`, `bpoly`, `mpoly`, `qa`, `qaupoly`) live alongside. |
 | **Poly Factoring** | `poly/facpoly.c` | `Factor` (over the integers), `FactorSquareFree`, `FactorTerms`, `FactorTermsList`. Bivariate / multivariate Hensel pipeline in `poly/{bpoly,mvfactor,mvfactor3}.c`; algebraic-number Trager pipeline in `poly/qafactor.c`. |
