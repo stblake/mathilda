@@ -502,6 +502,84 @@ In[2]:= Through[(f + g)[x, y]]
 Out[2]= f[x, y] + g[x, y]
 ```
 
+## Thread
+Threads a function over the arguments that are lists (or have a given head).
+- `Thread[f[args]]`: Threads `f` over any lists that appear in `args`.
+- `Thread[f[args], h]`: Threads `f` over any objects with head `h` that appear in `args`.
+- `Thread[f[args], h, n]`: Threads `f` over objects with head `h` that appear in the positions specified by `n`.
+
+**Features**:
+- `Protected`.
+- Functions with attribute `Listable` are automatically threaded over lists.
+- All the elements in the specified args whose heads are `h` must be of the same length; otherwise the expression is returned unchanged.
+- Arguments that do not have head `h` are copied as many times as there are elements in the arguments that do have head `h`.
+- The position specifier `n` uses the standard sequence specification:
+
+  | Spec | Meaning |
+  |------|---------|
+  | `All` | all elements |
+  | `None` | no elements |
+  | `n` | elements 1 through `n` |
+  | `-n` | last `n` elements |
+  | `{n}` | element `n` only |
+  | `{m, n}` | elements `m` through `n` inclusive |
+  | `{m, n, s}` | elements `m` through `n` in steps of `s` |
+
+```mathematica
+In[1]:= Thread[f[{a, b, c}]]
+Out[1]= {f[a], f[b], f[c]}
+
+In[2]:= Thread[f[{a, b, c}, x]]
+Out[2]= {f[a, x], f[b, x], f[c, x]}
+
+In[3]:= Thread[f[{a, b, c}, {x, y, z}]]
+Out[3]= {f[a, x], f[b, y], f[c, z]}
+
+(* Convert equations for lists to lists of equations *)
+In[4]:= Thread[{a, b, c} == {x, y, z}]
+Out[4]= {a == x, b == y, c == z}
+
+(* Apply a function to both sides of an equation *)
+In[5]:= Thread[Log[x == y], Equal]
+Out[5]= Log[x] == Log[y]
+
+(* Thread over all arguments (the default) *)
+In[6]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List]
+Out[6]= {f[a, r, u, x], f[b, s, v, y]}
+
+(* Do not thread at all *)
+In[7]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, None]
+Out[7]= f[{a, b}, {r, s}, {u, v}, {x, y}]
+
+(* Thread over the first two arguments only *)
+In[8]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, 2]
+Out[8]= {f[a, r, {u, v}, {x, y}], f[b, s, {u, v}, {x, y}]}
+
+(* Thread over the last two arguments only *)
+In[9]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, -2]
+Out[9]= {f[{a, b}, {r, s}, u, x], f[{a, b}, {r, s}, v, y]}
+
+(* Thread over arguments 2 through 4 *)
+In[10]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, {2, 4}]
+Out[10]= {f[{a, b}, r, u, x], f[{a, b}, s, v, y]}
+
+(* Thread over every other argument *)
+In[11]:= Thread[f[{a, b}, {r, s}, {u, v}, {x, y}], List, {1, -1, 2}]
+Out[11]= {f[a, {r, s}, u, {x, y}], f[b, {r, s}, v, {x, y}]}
+
+(* By default, does not thread over heads other than List *)
+In[12]:= Thread[f[a + b, c + d]]
+Out[12]= f[a + b, c + d]
+
+(* Thread with respect to Plus *)
+In[13]:= Thread[f[a + b, c + d], Plus]
+Out[13]= f[a, c] + f[b, d]
+
+(* Elements that are not lists are repeated *)
+In[14]:= Thread[f[{a, b, c}, h, {x, y, z}]]
+Out[14]= {f[a, h, x], f[b, h, y], f[c, h, z]}
+```
+
 ## Select
 Filters elements from an expression matching a criterion.
 - `Select[list, crit]`: Returns an expression with the same head as `list`, containing only those elements `e` for which `crit[e]` evaluates to `True`.

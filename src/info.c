@@ -559,6 +559,36 @@ void info_init(void) {
     symtab_set_docstring("Apply", "f @@ expr or Apply[f, expr] replaces the head of expr with f.");
     symtab_set_docstring("MapAll", "f //@ expr or MapAll[f, expr] applies f to every subexpression in expr.");
     symtab_set_docstring("Through", "Through[p[f, g][x]] gives p[f[x], g[x]].");
+    symtab_set_docstring("Thread",
+        "Thread[f[args]]\n"
+        "\t\"threads\" f over any lists that appear in args.\n"
+        "Thread[f[args], h]\n"
+        "\tthreads f over any objects with head h that appear in args.\n"
+        "Thread[f[args], h, n]\n"
+        "\tthreads f over objects with head h that appear in the first n args.\n"
+        "\n"
+        "Functions with attribute Listable are automatically threaded over\n"
+        "lists. All the elements in the specified args whose heads are h must\n"
+        "be of the same length. Arguments that do not have head h are copied\n"
+        "as many times as there are elements in the arguments that do have\n"
+        "head h.\n"
+        "\n"
+        "Thread specifies argument positions using the standard sequence\n"
+        "specification:\n"
+        "\tAll       all elements\n"
+        "\tNone      no elements\n"
+        "\tn         elements 1 through n\n"
+        "\t-n        last n elements\n"
+        "\t{n}       element n only\n"
+        "\t{m, n}    elements m through n inclusive\n"
+        "\t{m, n, s} elements m through n in steps of s\n"
+        "\n"
+        "Examples:\n"
+        "\tThread[f[{a, b, c}]]              -> {f[a], f[b], f[c]}\n"
+        "\tThread[f[{a, b, c}, x]]           -> {f[a, x], f[b, x], f[c, x]}\n"
+        "\tThread[f[{a, b, c}, {x, y, z}]]   -> {f[a, x], f[b, y], f[c, z]}\n"
+        "\tThread[{a, b, c} == {x, y, z}]    -> {a == x, b == y, c == z}\n"
+        "\tThread[Log[x == y], Equal]        -> Log[x] == Log[y]");
     symtab_set_docstring("Select", "Select[list, crit] selects elements of list that satisfy crit.");
     symtab_set_docstring("FreeQ", "FreeQ[expr, form] yields True if no subexpression in expr matches form, and yields False otherwise.");
     symtab_set_docstring("Function",

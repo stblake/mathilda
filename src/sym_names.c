@@ -233,6 +233,7 @@ const char* SYM_Tan = NULL;
 const char* SYM_Tanh = NULL;
 const char* SYM_TeXForm = NULL;
 const char* SYM_Temporary = NULL;
+const char* SYM_Thread = NULL;
 const char* SYM_Throw = NULL;
 const char* SYM_TimeConstrained = NULL;
 const char* SYM_Times = NULL;
@@ -487,6 +488,7 @@ void sym_names_init(void) {
     SYM_Tanh                       = intern_symbol("Tanh");
     SYM_TeXForm                    = intern_symbol("TeXForm");
     SYM_Temporary                  = intern_symbol("Temporary");
+    SYM_Thread                     = intern_symbol("Thread");
     SYM_Throw                      = intern_symbol("Throw");
     SYM_TimeConstrained            = intern_symbol("TimeConstrained");
     SYM_Times                      = intern_symbol("Times");

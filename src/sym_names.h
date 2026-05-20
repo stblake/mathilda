@@ -248,6 +248,7 @@ extern const char* SYM_Tan;
 extern const char* SYM_Tanh;
 extern const char* SYM_TeXForm;
 extern const char* SYM_Temporary;
+extern const char* SYM_Thread;
 extern const char* SYM_Throw;
 extern const char* SYM_TimeConstrained;
 extern const char* SYM_Times;

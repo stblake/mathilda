@@ -283,6 +283,8 @@ void core_init(void) {
         "pure function; each intermediate application is evaluated before the\n"
         "next one.");
     symtab_add_builtin("Through", builtin_through);
+    symtab_add_builtin("Thread", builtin_thread);
+    symtab_get_def("Thread")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Distribute", builtin_distribute);
     symtab_get_def("Distribute")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Inner", builtin_inner);

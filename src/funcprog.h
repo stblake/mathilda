@@ -18,6 +18,7 @@ Expr* builtin_fold(Expr* res);
 Expr* builtin_foldlist(Expr* res);
 Expr* builtin_select(Expr* res);
 Expr* builtin_through(Expr* res);
+Expr* builtin_thread(Expr* res);
 Expr* builtin_freeq(Expr* res);
 Expr* builtin_distribute(Expr* res);
 

@@ -1826,3 +1826,198 @@ static Expr* fixedpoint_impl(Expr* res, bool as_list) {
 
 Expr* builtin_fixedpoint(Expr* res)     { return fixedpoint_impl(res, false); }
 Expr* builtin_fixedpointlist(Expr* res) { return fixedpoint_impl(res, true); }
+
+/* ------------------- Thread ------------------- */
+
+/*
+ * Parse a Thread position specification into a boolean mask of length K.
+ *
+ *   spec    | meaning
+ *   --------+--------------------------------------------------------------
+ *   NULL    | All (default when omitted)
+ *   All     | all elements
+ *   None    | no elements
+ *   n>=0    | first n elements                       (n>K is clamped to K)
+ *   n<0     | last -n elements                       (-n>K is clamped to K)
+ *   {n}     | only element n   (1-based, n<0 counts from the end)
+ *   {m,n}   | elements m..n inclusive
+ *   {m,n,s} | elements m..n in steps of s            (s != 0)
+ *
+ * Returns true on success and fills mask[0..K-1]. Returns false on a
+ * malformed spec; mask contents are undefined in that case.
+ */
+static bool thread_parse_spec(Expr* spec, size_t K, bool* mask) {
+    /* Default: All. */
+    if (!spec) {
+        for (size_t i = 0; i < K; i++) mask[i] = true;
+        return true;
+    }
+
+    if (spec->type == EXPR_SYMBOL) {
+        if (spec->data.symbol == SYM_All) {
+            for (size_t i = 0; i < K; i++) mask[i] = true;
+            return true;
+        }
+        if (spec->data.symbol == SYM_None) {
+            for (size_t i = 0; i < K; i++) mask[i] = false;
+            return true;
+        }
+        return false;
+    }
+
+    if (spec->type == EXPR_INTEGER) {
+        int64_t n = spec->data.integer;
+        for (size_t i = 0; i < K; i++) mask[i] = false;
+        if (n >= 0) {
+            size_t lim = ((size_t)n > K) ? K : (size_t)n;
+            for (size_t i = 0; i < lim; i++) mask[i] = true;
+        } else {
+            int64_t cnt = -n;
+            size_t lim = ((size_t)cnt > K) ? K : (size_t)cnt;
+            for (size_t i = K - lim; i < K; i++) mask[i] = true;
+        }
+        return true;
+    }
+
+    if (spec->type == EXPR_FUNCTION &&
+        spec->data.function.head->type == EXPR_SYMBOL &&
+        spec->data.function.head->data.symbol == SYM_List) {
+        size_t na = spec->data.function.arg_count;
+        int64_t m_idx, n_idx, s_step;
+        if (na == 1) {
+            Expr* a0 = spec->data.function.args[0];
+            if (a0->type != EXPR_INTEGER) return false;
+            m_idx = n_idx = a0->data.integer;
+            s_step = 1;
+        } else if (na == 2) {
+            Expr* a0 = spec->data.function.args[0];
+            Expr* a1 = spec->data.function.args[1];
+            if (a0->type != EXPR_INTEGER || a1->type != EXPR_INTEGER) return false;
+            m_idx = a0->data.integer;
+            n_idx = a1->data.integer;
+            s_step = 1;
+        } else if (na == 3) {
+            Expr* a0 = spec->data.function.args[0];
+            Expr* a1 = spec->data.function.args[1];
+            Expr* a2 = spec->data.function.args[2];
+            if (a0->type != EXPR_INTEGER || a1->type != EXPR_INTEGER || a2->type != EXPR_INTEGER) return false;
+            m_idx = a0->data.integer;
+            n_idx = a1->data.integer;
+            s_step = a2->data.integer;
+        } else {
+            return false;
+        }
+        if (s_step == 0) return false;
+
+        /* Negative indices count from the end: -1 -> K, -2 -> K-1, ... */
+        if (m_idx < 0) m_idx = (int64_t)K + 1 + m_idx;
+        if (n_idx < 0) n_idx = (int64_t)K + 1 + n_idx;
+
+        for (size_t i = 0; i < K; i++) mask[i] = false;
+
+        if (s_step > 0) {
+            for (int64_t i = m_idx; i <= n_idx; i += s_step) {
+                if (i >= 1 && i <= (int64_t)K) mask[i - 1] = true;
+            }
+        } else {
+            for (int64_t i = m_idx; i >= n_idx; i += s_step) {
+                if (i >= 1 && i <= (int64_t)K) mask[i - 1] = true;
+            }
+        }
+        return true;
+    }
+
+    return false;
+}
+
+Expr* builtin_thread(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+
+    Expr* expr = res->data.function.args[0];
+
+    /* Thread on an atom -- nothing to thread, return the atom. */
+    if (expr->type != EXPR_FUNCTION) return expr_copy(expr);
+
+    Expr* h_spec = (argc >= 2) ? res->data.function.args[1] : NULL;
+    Expr* n_spec = (argc >= 3) ? res->data.function.args[2] : NULL;
+
+    /* Default threading head is List. We use the interned symbol so
+     * pointer comparisons in expr_eq work. */
+    Expr* h = h_spec ? expr_ref(h_spec) : expr_new_symbol("List");
+
+    size_t K = expr->data.function.arg_count;
+    bool* mask = (K > 0) ? (bool*)malloc(sizeof(bool) * K) : NULL;
+    if (K > 0 && !mask) { expr_free(h); return NULL; }
+
+    if (!thread_parse_spec(n_spec, K, mask)) {
+        if (mask) free(mask);
+        expr_free(h);
+        return NULL;
+    }
+
+    /* Determine threading length L from threadable args whose head is h.
+     * All such args must have the same length, otherwise we leave the
+     * expression unchanged (matches Mathematica's "unequal length" path
+     * after issuing the message; we simply skip the message). */
+    int64_t L = -1;
+    bool has_threadable_h = false;
+    for (size_t i = 0; i < K; i++) {
+        if (!mask[i]) continue;
+        Expr* a = expr->data.function.args[i];
+        if (a->type == EXPR_FUNCTION && expr_eq(a->data.function.head, h)) {
+            has_threadable_h = true;
+            int64_t len = (int64_t)a->data.function.arg_count;
+            if (L == -1) {
+                L = len;
+            } else if (len != L) {
+                if (mask) free(mask);
+                expr_free(h);
+                return expr_copy(expr);
+            }
+        }
+    }
+
+    if (!has_threadable_h) {
+        /* Nothing in the selected positions matches h; return expr unchanged. */
+        if (mask) free(mask);
+        expr_free(h);
+        return expr_copy(expr);
+    }
+
+    Expr* f = expr->data.function.head;
+
+    /* Build h[ f[...], f[...], ..., f[...] ] with L copies. */
+    Expr** wrap_args = (L > 0) ? (Expr**)malloc(sizeof(Expr*) * (size_t)L) : NULL;
+    if (L > 0 && !wrap_args) {
+        if (mask) free(mask);
+        expr_free(h);
+        return NULL;
+    }
+
+    for (int64_t k = 0; k < L; k++) {
+        Expr** new_args = (K > 0) ? (Expr**)malloc(sizeof(Expr*) * K) : NULL;
+        for (size_t j = 0; j < K; j++) {
+            Expr* aj = expr->data.function.args[j];
+            if (mask[j] && aj->type == EXPR_FUNCTION &&
+                expr_eq(aj->data.function.head, h)) {
+                new_args[j] = expr_copy(aj->data.function.args[(size_t)k]);
+            } else {
+                new_args[j] = expr_copy(aj);
+            }
+        }
+        wrap_args[k] = expr_new_function(expr_copy(f), new_args, K);
+        if (new_args) free(new_args);
+    }
+
+    Expr* wrapped = expr_new_function(expr_copy(h), wrap_args, (size_t)L);
+    if (wrap_args) free(wrap_args);
+    if (mask) free(mask);
+    expr_free(h);
+
+    /* Evaluate so f attributes (Listable, OneIdentity, ...) take effect. */
+    Expr* eval_res = evaluate(wrapped);
+    expr_free(wrapped);
+    return eval_res;
+}
