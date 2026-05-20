@@ -410,6 +410,8 @@ void core_init(void) {
     matlstsq_init();
     void mateigen_init(void);
     mateigen_init();
+    void matnull_init(void);
+    matnull_init();
     readwrite_init();
     files_init();
     random_init();

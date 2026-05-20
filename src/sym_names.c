@@ -164,6 +164,7 @@ const char* SYM_NHoldRest = NULL;
 const char* SYM_None = NULL;
 const char* SYM_Not = NULL;
 const char* SYM_Null = NULL;
+const char* SYM_NullSpace = NULL;
 const char* SYM_NumericFunction = NULL;
 const char* SYM_OneIdentity = NULL;
 const char* SYM_Optional = NULL;
@@ -414,6 +415,7 @@ void sym_names_init(void) {
     SYM_None                       = intern_symbol("None");
     SYM_Not                        = intern_symbol("Not");
     SYM_Null                       = intern_symbol("Null");
+    SYM_NullSpace                  = intern_symbol("NullSpace");
     SYM_NumericFunction            = intern_symbol("NumericFunction");
     SYM_OneIdentity                = intern_symbol("OneIdentity");
     SYM_Optional                   = intern_symbol("Optional");

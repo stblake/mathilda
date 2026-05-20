@@ -367,6 +367,71 @@ In[4]:= RowReduce[{{a, b}, {c, d}}, Method -> "OneStepRowReduction"]
 Out[4]= {{1, 0}, {0, 1}}
 ```
 
+## NullSpace
+Gives a basis for the null space of a matrix.
+- `NullSpace[m]`
+- `NullSpace[m, Method -> "<name>"]`
+
+**Features**:
+- `Protected`.
+- Returns a list of linearly-independent vectors whose span equals
+  `{v : m . v == 0}`. If `m` has full column rank the result is the
+  empty list `{}`.
+- Works on numerical (Integer / Rational / Real / MPFR / Complex),
+  big-integer, and symbolic matrices.
+- The matrix `m` may be square or rectangular.
+- Basis vectors are returned with the **rightmost free column first**,
+  matching Mathematica's ordering.
+- For exact integer / rational input each basis vector is scaled to
+  clear integer denominators, so the result is integer-valued whenever
+  the input is integer-valued. For symbolic input the basis vectors
+  are left in their natural rational form.
+- Internally calls `RowReduce[m, Method -> "<name>"]` and extracts the
+  basis from the resulting RREF. The `Method` option therefore shares
+  the same grammar as `RowReduce` / `LinearSolve` / `Inverse`:
+  - `Method -> Automatic` (default) — alias for
+    `"DivisionFreeRowReduction"`.
+  - `Method -> "DivisionFreeRowReduction"` — Bareiss-like fraction-free
+    Gauss-Jordan; best for exact integer / rational / symbolic input.
+  - `Method -> "OneStepRowReduction"` — classical Gauss-Jordan with one
+    division per pivot per element. Each entry is canonicalised via
+    `Together`.
+  - `Method -> "CofactorExpansion"` — identity-if-invertible path
+    inside RowReduce; falls back to `"DivisionFreeRowReduction"` on
+    singular / rectangular input.
+- Issues `NullSpace::matrix` and returns unevaluated if the argument
+  is not a non-empty rank-2 tensor.
+- Issues `NullSpace::method` and returns unevaluated for unknown
+  method names.
+
+```mathematica
+In[1]:= NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[1]= {{1, -2, 1}}
+
+In[2]:= NullSpace[{{a, b}, {2 a, 2 b}}]
+Out[2]= {{-(b/a), 1}}
+
+In[3]:= NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]
+Out[3]= {}
+
+In[4]:= NullSpace[{{a, b, c}, {c, b, a}, {0, 0, 0}}]
+Out[4]= {{1, -((a + c)/b), 1}}
+
+In[5]:= NullSpace[{{3, 2, 2, 4}, {2, 3, -2, 7}, {3, 2, 5, 7}}]
+Out[5]= {{12, -23, -5, 5}}
+
+In[6]:= NullSpace[IdentityMatrix[5]]
+Out[6]= {}
+
+In[7]:= m = {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}; m . First[NullSpace[m]]
+Out[7]= {0, 0, 0}
+```
+
+> Implementation lives in `src/linalg/nullspace.c` (registered by
+> `matnull_init`).  The basis extraction calls back into RowReduce via
+> the evaluator, so any future improvement to RowReduce automatically
+> propagates to NullSpace.
+
 ## IdentityMatrix
 Generates an identity matrix.
 - `IdentityMatrix[n]`: Gives the `n x n` identity matrix.
