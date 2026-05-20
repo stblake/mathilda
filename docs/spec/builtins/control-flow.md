@@ -108,6 +108,61 @@ In[4]:= sign[x_] := Which[x < 0, -1, x > 0, 1, True, Indeterminate]; sign /@ {-2
 Out[4]= {-1, Indeterminate, 1}
 ```
 
+## Switch
+Selects a value by matching an expression against a sequence of patterns.
+- `Switch[expr, form_1, value_1, form_2, value_2, ...]`: Evaluates `expr`, then pattern-matches it against each `form_i` in turn, returning the `value_i` for the first match.
+
+**Features**:
+- Attribute `HoldRest`; the form/value pairs are held until `Switch` examines them.
+- Each `form_i` is evaluated immediately before its match is tried; only the chosen `value_i` is evaluated.
+- A trailing form of `_` (Blank) acts as a catch-all default clause.
+- If no `form_i` matches `expr`, the call is returned unevaluated.
+- Wrong arity (no form/value pair, or an odd number of arguments after `expr`) is a usage error; the expression is returned unevaluated.
+- Pattern variables bound by `form_i` (e.g. `{x_, y_}`) are *not* substituted into `value_i`; the form acts purely as a discriminator.
+- `Break`, `Return`, and `Throw` inside the chosen value propagate as they do in any other held context.
+
+```mathematica
+In[1]:= Switch[42, _Integer, "int", _Real, "real", _, "other"]
+Out[1]= "int"
+
+In[2]:= t[e_] := Switch[e, _Plus, Together, _Times, Apart, _, Identity]; t[(1+x)/(1-x) + x/(1+x)]
+Out[2]= Together
+
+In[3]:= Switch[#, 1, one, 2, two, _, other] & /@ {1, 2, 3}
+Out[3]= {one, two, other}
+```
+
+## Piecewise
+Represents a piecewise function defined by a list of `{value, condition}` clauses.
+- `Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]`: Returns the `val_i` paired with the first `cond_i` that yields `True`.
+- `Piecewise[{{val_1, cond_1}, ...}, default]`: Uses `default` if none of the `cond_i` apply.
+- `Piecewise[conds]` automatically rewrites to `Piecewise[conds, 0]`.
+- Attribute `HoldAll` — only the surviving `val_i` is evaluated (by the outer evaluator).
+
+**Simplification semantics**:
+- Conditions are evaluated left-to-right.
+- `{val_i, False}` clauses are dropped.
+- At the first `{val_i, True}` all later clauses (and the default) are dropped; the `True` clause becomes the unconditional final case.
+- If all preceding conditions are literally `False`, the value at the first `True` is returned directly.
+- Consecutive clauses with structurally equal values are merged: their conditions are combined with `Or`.
+
+```mathematica
+In[1]:= Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, -x^2/100 + 1]
+Out[1]= Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, (-x^2)/100 + 1]
+
+In[2]:= Piecewise[{{e1, True}, {e2, d2}, {e3, d3}}]
+Out[2]= e1
+
+In[3]:= Piecewise[{{a, d1}, {b, d2}, {c, False}, {d, d4}}, ef]
+Out[3]= Piecewise[{{a, d1}, {b, d2}, {d, d4}}, ef]
+
+In[4]:= Piecewise[{{a, d1}, {b, d2}, {b, d3}, {c, d4}}, ef]
+Out[4]= Piecewise[{{a, d1}, {b, d2 || d3}, {c, d4}}, ef]
+
+In[5]:= Piecewise[{{Sin[x]/x, x < 0}, {1, x == 0}}, -x^2/100 + 1] /. x -> 5
+Out[5]= 3/4
+```
+
 ## TrueQ
 Tests whether an expression evaluates explicitly to `True`.
 - `TrueQ[expr]`: Yields `True` if `expr` is `True`, and `False` otherwise.

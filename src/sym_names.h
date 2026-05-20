@@ -238,6 +238,7 @@ extern const char* SYM_Span;
 extern const char* SYM_Sqrt;
 extern const char* SYM_String;
 extern const char* SYM_SubspaceSize;
+extern const char* SYM_Switch;
 extern const char* SYM_Symbol;
 extern const char* SYM_Table;
 extern const char* SYM_Tan;

@@ -223,6 +223,7 @@ const char* SYM_Span = NULL;
 const char* SYM_Sqrt = NULL;
 const char* SYM_String = NULL;
 const char* SYM_SubspaceSize = NULL;
+const char* SYM_Switch = NULL;
 const char* SYM_Symbol = NULL;
 const char* SYM_Table = NULL;
 const char* SYM_Tan = NULL;
@@ -472,6 +473,7 @@ void sym_names_init(void) {
     SYM_Sqrt                       = intern_symbol("Sqrt");
     SYM_String                     = intern_symbol("String");
     SYM_SubspaceSize               = intern_symbol("SubspaceSize");
+    SYM_Switch                     = intern_symbol("Switch");
     SYM_Symbol                     = intern_symbol("Symbol");
     SYM_Table                      = intern_symbol("Table");
     SYM_Tan                        = intern_symbol("Tan");

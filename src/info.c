@@ -729,6 +729,45 @@ void info_init(void) {
         "If all tests evaluate to False (or no tests are supplied), Which\n"
         "returns Null.\n"
         "Use True as the final test to supply a default value.");
+    symtab_set_docstring("Switch",
+        "Switch[expr, form_1, value_1, form_2, value_2, ...]\n"
+        "\tevaluates expr, then compares it with each of the form_i in turn,\n"
+        "\tevaluating and returning the value_i corresponding to the first\n"
+        "\tmatch found.\n"
+        "Only the value_i corresponding to the first form_i that matches\n"
+        "expr is evaluated. Each form_i is itself evaluated only when the\n"
+        "match is tried.\n"
+        "If the last form_i is the pattern _, then the corresponding\n"
+        "value_i is always returned if this case is reached -- it acts as\n"
+        "a default branch.\n"
+        "If none of the form_i match expr, the Switch is returned\n"
+        "unevaluated.\n"
+        "Switch has attribute HoldRest, so the form/value pairs are not\n"
+        "evaluated until Switch examines them.\n"
+        "Break, Return, and Throw inside the chosen value behave as they\n"
+        "do in any other held context.");
+    symtab_set_docstring("Piecewise",
+        "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]\n"
+        "\trepresents a piecewise function with values val_i in the regions\n"
+        "\tdefined by the conditions cond_i.\n"
+        "Piecewise[{{val_1, cond_1}, ...}, val]\n"
+        "\tuses the default value val if none of the cond_i apply. The\n"
+        "\tdefault for val is 0.\n"
+        "\n"
+        "The cond_i are evaluated in turn until one yields True. If all\n"
+        "preceding cond_i yield False, the corresponding val_i of the\n"
+        "first True cond_i is returned. If any preceding cond_i does not\n"
+        "literally yield False, the Piecewise expression is returned in\n"
+        "symbolic form.\n"
+        "\n"
+        "Only those val_i explicitly included in the returned form are\n"
+        "evaluated (Piecewise has attribute HoldAll). Pairs of the form\n"
+        "{val_i, False} are dropped, and all clauses after the first\n"
+        "{val_i, True} are dropped together with the default value.\n"
+        "Consecutive clauses with structurally identical values are\n"
+        "merged: their conditions are combined with Or.\n"
+        "\n"
+        "Piecewise[conds] automatically evaluates to Piecewise[conds, 0].");
     symtab_set_docstring("TrueQ", "TrueQ[expr] yields True if expr is True, and False otherwise.");
     symtab_set_docstring("Evaluate", "Evaluate[expr]\n\tcauses expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.\nEvaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held.\nEvaluate does not override HoldAllComplete.");
     symtab_set_docstring("ReleaseHold", "ReleaseHold[expr]\n\tremoves Hold, HoldForm, HoldPattern, and HoldComplete in expr.\nReleaseHold removes only one layer of Hold etc.; it does not remove inner occurrences in nested Hold etc. functions.");
