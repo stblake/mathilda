@@ -1,6 +1,6 @@
 # Calculus
 
-Symbolic differentiation is implemented natively in C (`src/deriv.c`).
+Symbolic differentiation is implemented natively in C (`src/calculus/deriv.c`).
 Earlier versions of Mathilda bootstrapped `D`, `Dt` and `Derivative`
 from a rule file (`src/internal/deriv.m`); that approach was fragile
 and slow -- every call walked a linear list of ~60 DownValues, re-ran
@@ -125,8 +125,8 @@ Out[3]= Derivative[0, 1][f][x, y]
 ## Integrate (rational-function integration, Phase 1-8d)
 
 `Integrate[f, x]` is the public entry point for the rational-function
-integrator implemented in `src/integrate.c` (System dispatcher) and
-`src/intrat.c` (algorithm package).  Phase 1 of the
+integrator implemented in `src/calculus/integrate.c` (System dispatcher) and
+`src/calculus/intrat.c` (algorithm package).  Phase 1 of the
 `IntegrateRational.m` port (see `plans/INTEGRATE_PLAN.md`) closes the
 following classes of integrand:
 
@@ -169,7 +169,7 @@ following classes of integrand:
   closed form `int a/d dx = sum_α a(α) Log(x - α) / d'(α)`.  This is
   universal — every proper rational integrand admits this form, with
   derivatives flowing through the body via the `D[RootSum, x]` rule
-  in `src/deriv.c`.  See `src/root.c` for the held `Root` and
+  in `src/calculus/deriv.c`.  See `src/root.c` for the held `Root` and
   `RootSum` constructs (HoldAll + Protected).  Direct port of
   `IntegrateRational.m:1116-1124`.
 - **Phase 8c — NaiveLogPart wired as universal LogToReal fallback** —

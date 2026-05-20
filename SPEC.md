@@ -89,6 +89,15 @@ Mathilda/
 │   │   ├── simp.{c,h}          # Simplify, SimplifyCount, Assuming, Element
 │   │   ├── trigsimp.{c,h}      # TrigToExp, ExpToTrig, TrigExpand, TrigFactor, TrigReduce
 │   │   └── trigrat.{c,h}       # Trig rationalisation helpers
+│   ├── calculus/               # Calculus (see "Calculus" in §7)
+│   │   ├── deriv.{c,h}         # D, Dt, Derivative
+│   │   ├── series.{c,h}        # Series, Normal
+│   │   ├── limit.{c,h}         # Limit
+│   │   ├── integrate.{c,h}     # Integrate (dispatcher)
+│   │   ├── intrat.{c,h}        # Rational integration (Bronstein pipeline)
+│   │   ├── intrat_internal.h   # Shared private surface between intrat and intsimp
+│   │   ├── intrischnorman.{c,h}# Risch-Norman algorithm
+│   │   └── intsimp.{c,h}       # Integration simplification helpers
 │   ├── modular.c               # PowerMod, modular arithmetic
 │   ├── piecewise.c             # Piecewise conditional expressions
 │   ├── load.c                  # File I/O (Get)
@@ -545,6 +554,7 @@ Each module follows the same pattern: a `.c`/`.h` pair, with a `*_init()` functi
 | **Rational Funcs** | `rat.c` | `Cancel`, `Together` |
 | **Partial Fractions** | `parfrac.c` | `Apart` |
 | **Modular** | `modular.c` | `PowerMod` (exponentiation, inverse, roots) |
+| **Calculus** | `calculus/` | `D`, `Dt`, `Derivative` (in `calculus/deriv.c`); `Series`, `Normal` (in `calculus/series.c`); `Limit` (in `calculus/limit.c`); `Integrate` dispatcher (in `calculus/integrate.c`) routing to the rational-integration Bronstein pipeline (`calculus/intrat.c`) and the Risch-Norman algorithm (`calculus/intrischnorman.c`); integration simplification helpers in `calculus/intsimp.c`. |
 | **Linear Algebra** | `linalg/` | `Dot`, `Inner`, `Outer`, `Det`, `Inverse`, `PseudoInverse`, `MatrixPower`, `Cross`, `Norm`, `Tr`, `RowReduce`, `LinearSolve`, `LeastSquares`, `IdentityMatrix`, `DiagonalMatrix`, `Transpose`, `Eigenvalues`, `Eigenvectors`. Split into per-builtin files; `eigen.c` dispatches the Direct / Arnoldi / Banded / FEAST kernels (machine + MPFR) in `eigen_*.c`. |
 | **Statistics** | `stats.c` | `Mean`, `Median`, `Variance`, `StandardDeviation`, `RootMeanSquare`, `Quartiles` |
 | **Sorting** | `sort.c` | `Sort`, `OrderedQ` |

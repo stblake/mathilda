@@ -13,6 +13,7 @@ include_directories(/usr/local/include)
 include_directories(../src/linalg)
 include_directories(../src/poly)
 include_directories(../src/simp)
+include_directories(../src/calculus)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -107,9 +108,9 @@ set(COMMON_SRC
     ../src/default_helper.c
     ../src/random.c
     ../src/picostrings.c
-    ../src/series.c
-    ../src/deriv.c
-    ../src/limit.c
+    ../src/calculus/series.c
+    ../src/calculus/deriv.c
+    ../src/calculus/limit.c
     ../src/context.c
     ../src/numeric.c
     ../src/precision.c
@@ -127,10 +128,10 @@ set(COMMON_SRC
     ../src/sym_names.c
     ../src/repl_hooks.c
     ../src/options.c
-    ../src/integrate.c
-    ../src/intrat.c
-    ../src/intrischnorman.c
-    ../src/intsimp.c
+    ../src/calculus/integrate.c
+    ../src/calculus/intrat.c
+    ../src/calculus/intrischnorman.c
+    ../src/calculus/intsimp.c
     ../src/root.c
     ../src/solve.c
     ../src/poly/solvepoly.c
