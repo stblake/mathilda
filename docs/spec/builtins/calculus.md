@@ -201,7 +201,7 @@ following classes of integrand:
     Integer-or-BigInt]`, and the callers defensively re-stash the
     operand on a NULL return.  Locked in by
     `tests/test_bigint.c::test_plus_rational_with_bigint_parts`.
-  - **`is_zero_poly` recursion bound** (`src/poly.c`):
+  - **`is_zero_poly` recursion bound** (`src/poly/poly.c`):
     `is_zero_poly`'s deep path recurses on each coefficient
     returned by `CoefficientList(expanded, vars[0])`, which
     normally strips one variable per descent.  When `vars[0]` is

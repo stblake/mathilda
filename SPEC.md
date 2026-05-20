@@ -39,8 +39,20 @@ Mathilda/
 │   ├── arithmetic.c            # Basic numeric operations
 │   ├── list.c                  # List generation and manipulation
 │   ├── part.c                  # Part, Head, First, Insert, Delete
-│   ├── poly.c                  # Polynomial manipulation, GCD, division
-│   ├── facpoly.c               # Polynomial factorization
+│   ├── poly/                   # Polynomials (see "Polynomials" in §7)
+│   │   ├── poly.{c,h}          # PolynomialQ, GCD/LCM, Quotient/Remainder,
+│   │   │                       #   Coefficient(List), Collect, Decompose,
+│   │   │                       #   HornerForm, Resultant, Discriminant
+│   │   ├── facpoly.{c,h}       # Factor, FactorSquareFree, FactorTerms[List]
+│   │   ├── qafactor.{c,h}      # Trager algebraic-number factorisation
+│   │   ├── qa.{c,h}            # Q(α) field elements
+│   │   ├── qaupoly.{c,h}       # Q(α)[x] univariate polynomials
+│   │   ├── mvfactor.{c,h}      # Multivariate factor orchestration
+│   │   ├── mvfactor3.{c,h}     # Multifactor Hensel lift (3+ factors)
+│   │   ├── bpoly.{c,h}         # Bivariate Z[x, y] polynomials
+│   │   ├── mpoly.{c,h}         # Multivariate Z[x1,...,xn] polynomials
+│   │   ├── zupoly.{c,h}        # Univariate Z[x] with GMP coefficients
+│   │   └── solvepoly.{c,h}     # Solve`SolvePolynomialEquality
 │   ├── facint.c                # Integer factorization (multiple algorithms)
 │   ├── trig.c                  # Trigonometric functions
 │   ├── hyperbolic.c            # Hyperbolic functions
@@ -523,8 +535,9 @@ Each module follows the same pattern: a `.c`/`.h` pair, with a `*_init()` functi
 | **Log/Exp** | `logexp.c` | `Log`, `Log[b, z]`, `Exp`. Euler's formula for `Exp[I*q*Pi]` |
 | **Simplification** | `simp.c` | `TrigToExp`, `ExpToTrig` |
 | **Expansion** | `expand.c` | `Expand`, `Collect` |
-| **Polynomials** | `poly.c` | `Coefficient`, `CoefficientList`, `PolynomialGCD`, `PolynomialExtendedGCD`, `PolynomialLCM`, `PolynomialQuotient`, `PolynomialRemainder`, `PolynomialQ`, `PolynomialMod`, `Resultant`, `Discriminant`, `Variables`, `HornerForm`, `FactorSquareFree` |
-| **Poly Factoring** | `facpoly.c` | `Factor` (over the integers) |
+| **Polynomials** | `poly/` | `Coefficient`, `CoefficientList`, `PolynomialGCD`, `PolynomialExtendedGCD`, `PolynomialLCM`, `PolynomialQuotient`, `PolynomialRemainder`, `PolynomialQ`, `PolynomialMod`, `Resultant`, `Discriminant`, `Variables`, `HornerForm`, `Collect`, `Decompose`, `SubresultantPolynomialRemainders`. See `src/poly/poly.{c,h}` for the public surface; helper substrates (`zupoly`, `bpoly`, `mpoly`, `qa`, `qaupoly`) live alongside. |
+| **Poly Factoring** | `poly/facpoly.c` | `Factor` (over the integers), `FactorSquareFree`, `FactorTerms`, `FactorTermsList`. Bivariate / multivariate Hensel pipeline in `poly/{bpoly,mvfactor,mvfactor3}.c`; algebraic-number Trager pipeline in `poly/qafactor.c`. |
+| **Poly Solving** | `poly/solvepoly.c` | `` Solve`SolvePolynomialEquality `` (single-variable polynomial-equality solver backing the public `Solve` router). |
 | **Int Factoring** | `facint.c` | `FactorInteger` with methods: Trial Division, Pollard's Rho, Pollard P-1, Williams P+1, Fermat, CFRAC, SQUFOF, ECM |
 | **Rational Funcs** | `rat.c` | `Cancel`, `Together` |
 | **Partial Fractions** | `parfrac.c` | `Apart` |

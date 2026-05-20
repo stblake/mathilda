@@ -11,6 +11,7 @@ endif()
 
 include_directories(/usr/local/include)
 include_directories(../src/linalg)
+include_directories(../src/poly)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -75,9 +76,9 @@ set(COMMON_SRC
     ../src/stats.c
     ../src/info.c
     ../src/expand.c
-    ../src/poly.c
+    ../src/poly/poly.c
     ../src/rat.c
-    ../src/facpoly.c
+    ../src/poly/facpoly.c
     ../src/parfrac.c
     ../src/datetime.c
     ../src/linalg/linalg.c
@@ -113,14 +114,14 @@ set(COMMON_SRC
     ../src/precision.c
     ../src/rationalize.c
     ../src/common.c
-    ../src/zupoly.c
-    ../src/bpoly.c
-    ../src/mpoly.c
-    ../src/mvfactor.c
-    ../src/mvfactor3.c
-    ../src/qa.c
-    ../src/qaupoly.c
-    ../src/qafactor.c
+    ../src/poly/zupoly.c
+    ../src/poly/bpoly.c
+    ../src/poly/mpoly.c
+    ../src/poly/mvfactor.c
+    ../src/poly/mvfactor3.c
+    ../src/poly/qa.c
+    ../src/poly/qaupoly.c
+    ../src/poly/qafactor.c
     ../src/sym_intern.c
     ../src/sym_names.c
     ../src/repl_hooks.c
@@ -131,7 +132,7 @@ set(COMMON_SRC
     ../src/intsimp.c
     ../src/root.c
     ../src/solve.c
-    ../src/solvepoly.c
+    ../src/poly/solvepoly.c
     ../src/solvelinsys.c
 )
 
