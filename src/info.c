@@ -1349,7 +1349,10 @@ void info_init(void) {
         "RandomReal[{xmin, xmax}]\n\tgives a pseudorandom real number in the range xmin to xmax.\n"
         "RandomReal[xmax]\n\tgives a pseudorandom real number in the range 0 to xmax.\n"
         "RandomReal[range, n]\n\tgives a list of n pseudorandom reals.\n"
-        "RandomReal[range, {n1, n2, ...}]\n\tgives an n1 x n2 x ... array of pseudorandom reals.");
+        "RandomReal[range, {n1, n2, ...}]\n\tgives an n1 x n2 x ... array of pseudorandom reals.\n"
+        "RandomReal[spec, WorkingPrecision -> n]\n\tyields reals with n digits of precision.\n"
+        "\tLeading or trailing digits of the generated number can be 0.\n"
+        "\tn may be MachinePrecision (the default) or a positive number of decimal digits.");
     symtab_set_docstring("SeedRandom",
         "SeedRandom[n]\n\tseeds the pseudorandom generator with the integer n.\n"
         "SeedRandom[]\n\treseeds the pseudorandom generator from system entropy.");
@@ -1358,7 +1361,10 @@ void info_init(void) {
         "RandomComplex[{zmin, zmax}]\n\tgives a pseudorandom complex number in the rectangle with corners given by the complex numbers zmin and zmax.\n"
         "RandomComplex[zmax]\n\tgives a pseudorandom complex number in the rectangle whose corners are the origin and zmax.\n"
         "RandomComplex[range, n]\n\tgives a list of n pseudorandom complex numbers.\n"
-        "RandomComplex[range, {n1, n2, ...}]\n\tgives an n1 x n2 x ... array of pseudorandom complex numbers.");
+        "RandomComplex[range, {n1, n2, ...}]\n\tgives an n1 x n2 x ... array of pseudorandom complex numbers.\n"
+        "RandomComplex[spec, WorkingPrecision -> n]\n\tyields complex numbers whose real and imaginary parts have n digits of precision.\n"
+        "\tLeading or trailing digits of the generated parts can be 0.\n"
+        "\tn may be MachinePrecision (the default) or a positive number of decimal digits.");
     symtab_set_docstring("RandomChoice",
         "RandomChoice[{e1, e2, ...}]\n\tgives a pseudorandom choice of one of the ei.\n"
         "RandomChoice[list, n]\n\tgives a list of n pseudorandom choices.\n"

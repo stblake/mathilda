@@ -45,6 +45,7 @@ Gives pseudorandom real numbers.
 - `RandomReal[xmax]`: gives a pseudorandom real number in the range 0 to xmax.
 - `RandomReal[range, n]`: gives a list of n pseudorandom reals.
 - `RandomReal[range, {n1, n2, ...}]`: gives an n1 x n2 x ... array of pseudorandom reals.
+- `RandomReal[spec, WorkingPrecision -> n]`: yields reals with n digits of precision. Leading or trailing digits of the generated number can be 0.
 
 **Features**:
 - `Protected`.
@@ -52,6 +53,7 @@ Gives pseudorandom real numbers.
 - RandomReal gives a different sequence of pseudorandom reals whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness for full double-precision mantissa coverage.
 - Accepts integer, real, rational, and bigint range arguments.
+- `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so range bounds keep their full working precision and the result is an MPFR atom.
 
 ```mathematica
 In[1]:= SeedRandom[42]; RandomReal[]
@@ -74,6 +76,9 @@ Out[6]= {}
 
 In[7]:= RandomReal[x]
 Out[7]= RandomReal[x]
+
+In[8]:= SeedRandom[42]; Precision[RandomReal[1, WorkingPrecision -> 40]]
+Out[8]= 40.1242
 ```
 
 ## SeedRandom
@@ -101,6 +106,7 @@ Gives pseudorandom complex numbers.
 - `RandomComplex[zmax]`: gives a pseudorandom complex number in the rectangle whose corners are the origin and zmax.
 - `RandomComplex[range, n]`: gives a list of n pseudorandom complex numbers.
 - `RandomComplex[range, {n1, n2, ...}]`: gives an n1 x n2 x ... array of pseudorandom complex numbers.
+- `RandomComplex[spec, WorkingPrecision -> n]`: yields complex numbers whose real and imaginary parts have n digits of precision. Leading or trailing digits of the generated parts can be 0.
 
 **Features**:
 - `Protected`.
@@ -108,6 +114,7 @@ Gives pseudorandom complex numbers.
 - RandomComplex gives a different sequence of pseudorandom complex numbers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
 - Uses 53 bits of randomness per component for full double-precision mantissa coverage.
 - Accepts integer, real, rational, and complex range arguments. When the range has no imaginary component, the result simplifies to a real.
+- `WorkingPrecision -> n` accepts `MachinePrecision` (the default) or a positive number of decimal digits. Digit counts above MachinePrecision route generation through MPFR, so the real and imaginary parts are MPFR atoms at the requested precision.
 
 ```mathematica
 In[1]:= SeedRandom[42]; Head[RandomComplex[]]
@@ -124,6 +131,9 @@ Out[4]= {3, 4}
 
 In[5]:= RandomComplex[x]
 Out[5]= RandomComplex[x]
+
+In[6]:= SeedRandom[42]; z = RandomComplex[1 + I, WorkingPrecision -> 30]; {Precision[Re[z]], Precision[Im[z]]}
+Out[6]= {30.0103, 30.0103}
 ```
 
 ## RandomChoice

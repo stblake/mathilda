@@ -38,11 +38,15 @@
 #include "eval.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "numeric.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <math.h>
 #include <gmp.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* Global GMP random state */
 static gmp_randstate_t g_rand_state;
@@ -399,26 +403,229 @@ static Expr* random_real_array(double xmin, double xmax,
 }
 
 /*
- * builtin_randomreal - implements RandomReal[...]
+ * Detect a trailing option of the form Rule[WorkingPrecision, n].
  *
- * Forms:
- *   RandomReal[]                   -> random real in [0, 1)
- *   RandomReal[xmax]              -> random real in [0, xmax)
- *   RandomReal[{xmin, xmax}]     -> random real in [xmin, xmax)
- *   RandomReal[range, n]          -> flat list of n values
- *   RandomReal[range, {n1, n2, ...}] -> nested array
+ * If arg is `WorkingPrecision -> MachinePrecision` (or omitted), *is_machine
+ * is set to true and *bits to 0. If arg is `WorkingPrecision -> digits`
+ * where `digits` is a positive numeric literal, *is_machine is set to false
+ * and *bits is set to the corresponding MPFR precision (in binary bits).
+ * Returns true on a successful match (machine or MPFR), false otherwise.
+ *
+ * Without USE_MPFR support, a numeric digit count still parses but degrades
+ * to machine precision so existing programs keep working — a one-shot
+ * stderr warning communicates the loss.
  */
-Expr* builtin_randomreal(Expr* res) {
-    if (res->type != EXPR_FUNCTION) return NULL;
-    size_t argc = res->data.function.arg_count;
+static bool parse_working_precision_opt(Expr* arg, long* bits, bool* is_machine) {
+    if (!arg || arg->type != EXPR_FUNCTION) return false;
+    Expr* head = arg->data.function.head;
+    if (head->type != EXPR_SYMBOL || head->data.symbol != SYM_Rule) return false;
+    if (arg->data.function.arg_count != 2) return false;
+    Expr* key = arg->data.function.args[0];
+    if (key->type != EXPR_SYMBOL || key->data.symbol != SYM_WorkingPrecision) return false;
 
+    Expr* val = arg->data.function.args[1];
+    if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_MachinePrecision) {
+        *bits = 0;
+        *is_machine = true;
+        return true;
+    }
+
+    double digits = 0.0;
+    int64_t rn, rd;
+    if (val->type == EXPR_INTEGER) digits = (double)val->data.integer;
+    else if (val->type == EXPR_REAL) digits = val->data.real;
+    else if (is_rational(val, &rn, &rd)) digits = (double)rn / (double)rd;
+    else return false;
+    if (digits <= 0.0) return false;
+
+#ifdef USE_MPFR
+    if (digits <= NUMERIC_MACHINE_PRECISION_DIGITS) {
+        /* Mathematica treats requests at or below machine precision as
+         * machine: the doubles path is exact enough. */
+        *bits = 0;
+        *is_machine = true;
+    } else {
+        *bits = numeric_digits_to_bits(digits);
+        *is_machine = false;
+    }
+    return true;
+#else
+    static bool warned = false;
+    if (!warned) {
+        fprintf(stderr,
+                "WorkingPrecision: arbitrary precision unavailable "
+                "(USE_MPFR=0); using machine precision.\n");
+        warned = true;
+    }
+    *bits = 0;
+    *is_machine = true;
+    return true;
+#endif
+}
+
+#ifdef USE_MPFR
+/*
+ * Generate a single MPFR random real in [xmin, xmax) at the given precision.
+ * xmin and xmax must already be initialized MPFR values.
+ */
+static Expr* random_real_range_mpfr(const mpfr_t xmin, const mpfr_t xmax, long bits) {
+    ensure_rand_init();
+    mpfr_t u, out;
+    mpfr_init2(u, bits);
+    mpfr_init2(out, bits);
+    mpfr_urandomb(u, g_rand_state);          /* uniform in [0, 1) */
+    mpfr_sub(out, xmax, xmin, MPFR_RNDN);
+    mpfr_mul(out, out, u, MPFR_RNDN);
+    mpfr_add(out, out, xmin, MPFR_RNDN);
+    mpfr_clear(u);
+    return expr_new_mpfr_move(out);
+}
+
+/*
+ * Parse a real-valued range argument into mpfr_t xmin, xmax. The output
+ * MPFR values must already be initialized to the desired precision.
+ *
+ * Supports the same forms as parse_real_range, but bound coercion goes
+ * through get_approx_mpfr so exact rationals are preserved at full
+ * working precision.
+ */
+static bool parse_real_range_mpfr(Expr* arg, mpfr_t xmin, mpfr_t xmax) {
+    long bits = mpfr_get_prec(xmin);
+    mpfr_t scratch_im;
+    mpfr_init2(scratch_im, bits);
+
+    bool ok;
+    if (arg->type == EXPR_FUNCTION &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol == SYM_List &&
+        arg->data.function.arg_count == 2) {
+        ok = get_approx_mpfr(arg->data.function.args[0], xmin, scratch_im, NULL)
+             && mpfr_zero_p(scratch_im);
+        if (ok) {
+            ok = get_approx_mpfr(arg->data.function.args[1], xmax, scratch_im, NULL)
+                 && mpfr_zero_p(scratch_im);
+        }
+    } else {
+        /* Single value: range is [0, val]. */
+        mpfr_set_zero(xmin, +1);
+        ok = get_approx_mpfr(arg, xmax, scratch_im, NULL)
+             && mpfr_zero_p(scratch_im);
+    }
+
+    mpfr_clear(scratch_im);
+    return ok;
+}
+
+/*
+ * Build a multi-dimensional MPFR array of random reals.
+ */
+static Expr* random_real_array_mpfr(const mpfr_t xmin, const mpfr_t xmax,
+                                    long bits, Expr* dims, size_t dim_idx) {
+    if (dim_idx >= dims->data.function.arg_count) return NULL;
+    Expr* dim_expr = dims->data.function.args[dim_idx];
+    if (dim_expr->type != EXPR_INTEGER || dim_expr->data.integer < 0) return NULL;
+
+    size_t n = (size_t)dim_expr->data.integer;
+    Expr** elems = malloc(sizeof(Expr*) * n);
+    if (!elems) return NULL;
+
+    bool is_last = (dim_idx == dims->data.function.arg_count - 1);
+    for (size_t i = 0; i < n; i++) {
+        if (is_last) {
+            elems[i] = random_real_range_mpfr(xmin, xmax, bits);
+        } else {
+            elems[i] = random_real_array_mpfr(xmin, xmax, bits, dims, dim_idx + 1);
+        }
+        if (!elems[i]) {
+            for (size_t j = 0; j < i; j++) expr_free(elems[j]);
+            free(elems);
+            return NULL;
+        }
+    }
+
+    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    free(elems);
+    return list;
+}
+
+/*
+ * MPFR-precision RandomReal[...] body. effective_argc excludes the trailing
+ * WorkingPrecision option.
+ */
+static Expr* randomreal_mpfr(Expr* res, size_t effective_argc, long bits) {
+    mpfr_t xmin, xmax;
+    mpfr_init2(xmin, bits);
+    mpfr_init2(xmax, bits);
+
+    if (effective_argc == 0) {
+        mpfr_set_zero(xmin, +1);
+        mpfr_set_si(xmax, 1, MPFR_RNDN);
+        Expr* r = random_real_range_mpfr(xmin, xmax, bits);
+        mpfr_clear(xmin); mpfr_clear(xmax);
+        return r;
+    }
+
+    if (effective_argc == 1 || effective_argc == 2) {
+        Expr* range_arg = res->data.function.args[0];
+        if (!parse_real_range_mpfr(range_arg, xmin, xmax)) {
+            mpfr_clear(xmin); mpfr_clear(xmax);
+            return NULL;
+        }
+
+        if (effective_argc == 1) {
+            Expr* r = random_real_range_mpfr(xmin, xmax, bits);
+            mpfr_clear(xmin); mpfr_clear(xmax);
+            return r;
+        }
+
+        Expr* dim_arg = res->data.function.args[1];
+        if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
+            size_t n = (size_t)dim_arg->data.integer;
+            Expr** elems = malloc(sizeof(Expr*) * n);
+            if (!elems) { mpfr_clear(xmin); mpfr_clear(xmax); return NULL; }
+            for (size_t i = 0; i < n; i++) {
+                elems[i] = random_real_range_mpfr(xmin, xmax, bits);
+            }
+            Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+            free(elems);
+            mpfr_clear(xmin); mpfr_clear(xmax);
+            return list;
+        }
+
+        if (dim_arg->type == EXPR_FUNCTION &&
+            dim_arg->data.function.head->type == EXPR_SYMBOL &&
+            dim_arg->data.function.head->data.symbol == SYM_List) {
+            for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
+                Expr* d = dim_arg->data.function.args[i];
+                if (d->type != EXPR_INTEGER || d->data.integer < 0) {
+                    mpfr_clear(xmin); mpfr_clear(xmax);
+                    return NULL;
+                }
+            }
+            Expr* result = random_real_array_mpfr(xmin, xmax, bits, dim_arg, 0);
+            mpfr_clear(xmin); mpfr_clear(xmax);
+            return result;
+        }
+
+        mpfr_clear(xmin); mpfr_clear(xmax);
+        return NULL;
+    }
+
+    mpfr_clear(xmin); mpfr_clear(xmax);
+    return NULL;
+}
+#endif /* USE_MPFR */
+
+/* Machine-precision RandomReal[...] body. effective_argc excludes any trailing
+ * WorkingPrecision option. */
+static Expr* randomreal_machine(Expr* res, size_t effective_argc) {
     /* RandomReal[] -> random real in [0, 1) */
-    if (argc == 0) {
+    if (effective_argc == 0) {
         return random_real_range(0.0, 1.0);
     }
 
     /* RandomReal[range] or RandomReal[range, dims] */
-    if (argc == 1 || argc == 2) {
+    if (effective_argc == 1 || effective_argc == 2) {
         Expr* range_arg = res->data.function.args[0];
 
         double xmin, xmax;
@@ -426,11 +633,11 @@ Expr* builtin_randomreal(Expr* res) {
             return NULL; /* Can't evaluate: symbolic args etc. */
         }
 
-        if (argc == 1) {
+        if (effective_argc == 1) {
             return random_real_range(xmin, xmax);
         }
 
-        /* argc == 2: RandomReal[range, n] or RandomReal[range, {n1, n2, ...}] */
+        /* effective_argc == 2: RandomReal[range, n] or RandomReal[range, {n1, n2, ...}] */
         Expr* dim_arg = res->data.function.args[1];
 
         if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
@@ -465,6 +672,42 @@ Expr* builtin_randomreal(Expr* res) {
     }
 
     return NULL; /* Too many arguments */
+}
+
+/*
+ * builtin_randomreal - implements RandomReal[...]
+ *
+ * Forms:
+ *   RandomReal[]                                     -> random real in [0, 1)
+ *   RandomReal[xmax]                                 -> random real in [0, xmax)
+ *   RandomReal[{xmin, xmax}]                         -> random real in [xmin, xmax)
+ *   RandomReal[range, n]                             -> flat list of n values
+ *   RandomReal[range, {n1, n2, ...}]                 -> nested array
+ *   RandomReal[spec, WorkingPrecision -> n]          -> n-digit MPFR result(s)
+ *
+ * WorkingPrecision may be passed as the last argument of any of the
+ * positional forms. A digit count > MachinePrecision triggers MPFR-backed
+ * generation; MachinePrecision (or no option) takes the doubles path.
+ */
+Expr* builtin_randomreal(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    long bits = 0;
+    bool is_machine = true;
+    if (argc > 0) {
+        Expr* last = res->data.function.args[argc - 1];
+        if (parse_working_precision_opt(last, &bits, &is_machine)) {
+            argc--; /* Peel off the option from the positional count. */
+        }
+    }
+
+#ifdef USE_MPFR
+    if (!is_machine) return randomreal_mpfr(res, argc, bits);
+#else
+    (void)bits;
+#endif
+    return randomreal_machine(res, argc);
 }
 
 /*
@@ -621,27 +864,195 @@ static Expr* random_complex_array(double re_min, double re_max,
     return list;
 }
 
+#ifdef USE_MPFR
 /*
- * builtin_randomcomplex - implements RandomComplex[...]
- *
- * Forms:
- *   RandomComplex[]                       -> random complex in [0,1]+[0,1]i
- *   RandomComplex[zmax]                   -> random complex in rectangle [0, zmax]
- *   RandomComplex[{zmin, zmax}]           -> random complex in rectangle [zmin, zmax]
- *   RandomComplex[range, n]               -> flat list of n values
- *   RandomComplex[range, {n1, n2, ...}]   -> nested array
+ * Generate a single MPFR random complex number whose real part is uniform
+ * in [re_min, re_max) and whose imaginary part is uniform in [im_min, im_max),
+ * each at the given working precision. All bound mpfr_t inputs must be
+ * initialized.
  */
-Expr* builtin_randomcomplex(Expr* res) {
-    if (res->type != EXPR_FUNCTION) return NULL;
-    size_t argc = res->data.function.arg_count;
+static Expr* random_complex_range_mpfr(const mpfr_t re_min, const mpfr_t re_max,
+                                       const mpfr_t im_min, const mpfr_t im_max,
+                                       long bits) {
+    ensure_rand_init();
+    mpfr_t u1, u2, re, im;
+    mpfr_init2(u1, bits);
+    mpfr_init2(u2, bits);
+    mpfr_init2(re, bits);
+    mpfr_init2(im, bits);
+    mpfr_urandomb(u1, g_rand_state);
+    mpfr_urandomb(u2, g_rand_state);
 
+    mpfr_sub(re, re_max, re_min, MPFR_RNDN);
+    mpfr_mul(re, re, u1, MPFR_RNDN);
+    mpfr_add(re, re, re_min, MPFR_RNDN);
+
+    mpfr_sub(im, im_max, im_min, MPFR_RNDN);
+    mpfr_mul(im, im, u2, MPFR_RNDN);
+    mpfr_add(im, im, im_min, MPFR_RNDN);
+
+    mpfr_clear(u1);
+    mpfr_clear(u2);
+    return make_complex(expr_new_mpfr_move(re), expr_new_mpfr_move(im));
+}
+
+/*
+ * Parse a complex-valued range argument into MPFR-precision rectangle
+ * corners. The corner mpfr_t values must already be initialized at the
+ * desired working precision; this routine does not change their precision.
+ *
+ * Supports the same forms as parse_complex_range but uses get_approx_mpfr
+ * so that integer / rational / Complex bounds keep full working precision.
+ */
+static bool parse_complex_range_mpfr(Expr* arg,
+                                     mpfr_t re_min, mpfr_t re_max,
+                                     mpfr_t im_min, mpfr_t im_max) {
+    if (arg->type == EXPR_FUNCTION &&
+        arg->data.function.head->type == EXPR_SYMBOL &&
+        arg->data.function.head->data.symbol == SYM_List &&
+        arg->data.function.arg_count == 2) {
+        if (!get_approx_mpfr(arg->data.function.args[0], re_min, im_min, NULL))
+            return false;
+        if (!get_approx_mpfr(arg->data.function.args[1], re_max, im_max, NULL))
+            return false;
+        return true;
+    }
+
+    /* Single value: rectangle is from origin to arg. */
+    mpfr_set_zero(re_min, +1);
+    mpfr_set_zero(im_min, +1);
+    return get_approx_mpfr(arg, re_max, im_max, NULL);
+}
+
+/*
+ * Build a multi-dimensional MPFR array of random complex numbers.
+ */
+static Expr* random_complex_array_mpfr(const mpfr_t re_min, const mpfr_t re_max,
+                                       const mpfr_t im_min, const mpfr_t im_max,
+                                       long bits, Expr* dims, size_t dim_idx) {
+    if (dim_idx >= dims->data.function.arg_count) return NULL;
+    Expr* dim_expr = dims->data.function.args[dim_idx];
+    if (dim_expr->type != EXPR_INTEGER || dim_expr->data.integer < 0) return NULL;
+
+    size_t n = (size_t)dim_expr->data.integer;
+    Expr** elems = malloc(sizeof(Expr*) * n);
+    if (!elems) return NULL;
+
+    bool is_last = (dim_idx == dims->data.function.arg_count - 1);
+    for (size_t i = 0; i < n; i++) {
+        if (is_last) {
+            elems[i] = random_complex_range_mpfr(re_min, re_max, im_min, im_max, bits);
+        } else {
+            elems[i] = random_complex_array_mpfr(re_min, re_max, im_min, im_max,
+                                                  bits, dims, dim_idx + 1);
+        }
+        if (!elems[i]) {
+            for (size_t j = 0; j < i; j++) expr_free(elems[j]);
+            free(elems);
+            return NULL;
+        }
+    }
+
+    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    free(elems);
+    return list;
+}
+
+/*
+ * MPFR-precision RandomComplex[...] body. effective_argc excludes any trailing
+ * WorkingPrecision option.
+ */
+static Expr* randomcomplex_mpfr(Expr* res, size_t effective_argc, long bits) {
+    mpfr_t re_min, re_max, im_min, im_max;
+    mpfr_init2(re_min, bits);
+    mpfr_init2(re_max, bits);
+    mpfr_init2(im_min, bits);
+    mpfr_init2(im_max, bits);
+
+    if (effective_argc == 0) {
+        mpfr_set_zero(re_min, +1);
+        mpfr_set_zero(im_min, +1);
+        mpfr_set_si(re_max, 1, MPFR_RNDN);
+        mpfr_set_si(im_max, 1, MPFR_RNDN);
+        Expr* r = random_complex_range_mpfr(re_min, re_max, im_min, im_max, bits);
+        mpfr_clear(re_min); mpfr_clear(re_max);
+        mpfr_clear(im_min); mpfr_clear(im_max);
+        return r;
+    }
+
+    if (effective_argc == 1 || effective_argc == 2) {
+        Expr* range_arg = res->data.function.args[0];
+        if (!parse_complex_range_mpfr(range_arg, re_min, re_max, im_min, im_max)) {
+            mpfr_clear(re_min); mpfr_clear(re_max);
+            mpfr_clear(im_min); mpfr_clear(im_max);
+            return NULL;
+        }
+
+        if (effective_argc == 1) {
+            Expr* r = random_complex_range_mpfr(re_min, re_max, im_min, im_max, bits);
+            mpfr_clear(re_min); mpfr_clear(re_max);
+            mpfr_clear(im_min); mpfr_clear(im_max);
+            return r;
+        }
+
+        Expr* dim_arg = res->data.function.args[1];
+        if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
+            size_t n = (size_t)dim_arg->data.integer;
+            Expr** elems = malloc(sizeof(Expr*) * n);
+            if (!elems) {
+                mpfr_clear(re_min); mpfr_clear(re_max);
+                mpfr_clear(im_min); mpfr_clear(im_max);
+                return NULL;
+            }
+            for (size_t i = 0; i < n; i++) {
+                elems[i] = random_complex_range_mpfr(re_min, re_max, im_min, im_max, bits);
+            }
+            Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+            free(elems);
+            mpfr_clear(re_min); mpfr_clear(re_max);
+            mpfr_clear(im_min); mpfr_clear(im_max);
+            return list;
+        }
+
+        if (dim_arg->type == EXPR_FUNCTION &&
+            dim_arg->data.function.head->type == EXPR_SYMBOL &&
+            dim_arg->data.function.head->data.symbol == SYM_List) {
+            for (size_t i = 0; i < dim_arg->data.function.arg_count; i++) {
+                Expr* d = dim_arg->data.function.args[i];
+                if (d->type != EXPR_INTEGER || d->data.integer < 0) {
+                    mpfr_clear(re_min); mpfr_clear(re_max);
+                    mpfr_clear(im_min); mpfr_clear(im_max);
+                    return NULL;
+                }
+            }
+            Expr* result = random_complex_array_mpfr(re_min, re_max, im_min, im_max,
+                                                      bits, dim_arg, 0);
+            mpfr_clear(re_min); mpfr_clear(re_max);
+            mpfr_clear(im_min); mpfr_clear(im_max);
+            return result;
+        }
+
+        mpfr_clear(re_min); mpfr_clear(re_max);
+        mpfr_clear(im_min); mpfr_clear(im_max);
+        return NULL;
+    }
+
+    mpfr_clear(re_min); mpfr_clear(re_max);
+    mpfr_clear(im_min); mpfr_clear(im_max);
+    return NULL;
+}
+#endif /* USE_MPFR */
+
+/* Machine-precision RandomComplex[...] body. effective_argc excludes any
+ * trailing WorkingPrecision option. */
+static Expr* randomcomplex_machine(Expr* res, size_t effective_argc) {
     /* RandomComplex[] -> random complex in [0,1]+[0,1]i */
-    if (argc == 0) {
+    if (effective_argc == 0) {
         return random_complex_range(0.0, 1.0, 0.0, 1.0);
     }
 
     /* RandomComplex[range] or RandomComplex[range, dims] */
-    if (argc == 1 || argc == 2) {
+    if (effective_argc == 1 || effective_argc == 2) {
         Expr* range_arg = res->data.function.args[0];
 
         double re_min, re_max, im_min, im_max;
@@ -649,11 +1060,11 @@ Expr* builtin_randomcomplex(Expr* res) {
             return NULL; /* Can't evaluate: symbolic args etc. */
         }
 
-        if (argc == 1) {
+        if (effective_argc == 1) {
             return random_complex_range(re_min, re_max, im_min, im_max);
         }
 
-        /* argc == 2 */
+        /* effective_argc == 2 */
         Expr* dim_arg = res->data.function.args[1];
 
         if (dim_arg->type == EXPR_INTEGER && dim_arg->data.integer >= 0) {
@@ -689,6 +1100,42 @@ Expr* builtin_randomcomplex(Expr* res) {
     }
 
     return NULL; /* Too many arguments */
+}
+
+/*
+ * builtin_randomcomplex - implements RandomComplex[...]
+ *
+ * Forms:
+ *   RandomComplex[]                                  -> random complex in [0,1]+[0,1]i
+ *   RandomComplex[zmax]                              -> random complex in rectangle [0, zmax]
+ *   RandomComplex[{zmin, zmax}]                      -> random complex in rectangle [zmin, zmax]
+ *   RandomComplex[range, n]                          -> flat list of n values
+ *   RandomComplex[range, {n1, n2, ...}]              -> nested array
+ *   RandomComplex[spec, WorkingPrecision -> n]       -> n-digit MPFR result(s)
+ *
+ * WorkingPrecision may be passed as the last argument of any of the
+ * positional forms. A digit count > MachinePrecision triggers MPFR-backed
+ * generation; MachinePrecision (or no option) takes the doubles path.
+ */
+Expr* builtin_randomcomplex(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+
+    long bits = 0;
+    bool is_machine = true;
+    if (argc > 0) {
+        Expr* last = res->data.function.args[argc - 1];
+        if (parse_working_precision_opt(last, &bits, &is_machine)) {
+            argc--;
+        }
+    }
+
+#ifdef USE_MPFR
+    if (!is_machine) return randomcomplex_mpfr(res, argc, bits);
+#else
+    (void)bits;
+#endif
+    return randomcomplex_machine(res, argc);
 }
 
 /*

@@ -256,6 +256,7 @@ const char* SYM_VerifySolutions = NULL;
 const char* SYM_Which = NULL;
 const char* SYM_While = NULL;
 const char* SYM_With = NULL;
+const char* SYM_WorkingPrecision = NULL;
 const char* SYM_Xor = NULL;
 
 void sym_names_init(void) {
@@ -508,5 +509,6 @@ void sym_names_init(void) {
     SYM_Which                      = intern_symbol("Which");
     SYM_While                      = intern_symbol("While");
     SYM_With                       = intern_symbol("With");
+    SYM_WorkingPrecision           = intern_symbol("WorkingPrecision");
     SYM_Xor                        = intern_symbol("Xor");
 }

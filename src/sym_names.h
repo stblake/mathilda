@@ -271,6 +271,7 @@ extern const char* SYM_VerifySolutions;
 extern const char* SYM_Which;
 extern const char* SYM_While;
 extern const char* SYM_With;
+extern const char* SYM_WorkingPrecision;
 extern const char* SYM_Xor;
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe

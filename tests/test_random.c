@@ -638,6 +638,99 @@ void test_randomcomplex_single_dim_list(void) {
     free(s);
 }
 
+/* ==== WorkingPrecision tests ==== */
+
+#ifdef USE_MPFR
+#include "expr.h"
+
+/* Evaluate an expression and return the result's ExprType, so callers can
+ * verify that WorkingPrecision -> n produced an EXPR_MPFR atom. The
+ * input expression must reduce to an atom (not a function). */
+static int eval_to_type(const char* input) {
+    Expr* e = parse_expression(input);
+    Expr* r = evaluate(e);
+    int t = (int)r->type;
+    expr_free(e);
+    expr_free(r);
+    return t;
+}
+
+/* RandomReal[1, WorkingPrecision -> n] returns an MPFR atom whose
+ * Precision is within 1 digit of n (Precision returns digits computed
+ * from the MPFR bit count, which rounds up). */
+void test_randomreal_workingprecision_basic(void) {
+    /* Atom is MPFR-typed */
+    ASSERT(eval_to_type("RandomReal[1, WorkingPrecision -> 30]") == (int)EXPR_MPFR);
+    ASSERT(eval_to_type("RandomReal[WorkingPrecision -> 50]") == (int)EXPR_MPFR);
+
+    /* Precision is at least the requested digit count. */
+    char* s = eval_to_str("Precision[RandomReal[1, WorkingPrecision -> 30]] >= 30");
+    ASSERT_STR_EQ(s, "True"); free(s);
+    s = eval_to_str("Precision[RandomReal[1, WorkingPrecision -> 100]] >= 100");
+    ASSERT_STR_EQ(s, "True"); free(s);
+
+    /* Value remains in range. */
+    for (int i = 0; i < 20; i++) {
+        char* t = eval_to_str(
+            "Module[{x = RandomReal[WorkingPrecision -> 40]},\n"
+            "  And[x >= 0, x < 1]]");
+        ASSERT_STR_EQ(t, "True"); free(t);
+    }
+}
+
+void test_randomreal_workingprecision_range(void) {
+    /* Bounds from a rational range should be honored exactly. */
+    for (int i = 0; i < 20; i++) {
+        char* t = eval_to_str(
+            "Module[{x = RandomReal[{1/3, 2/3}, WorkingPrecision -> 40]},\n"
+            "  And[x >= 1/3, x < 2/3]]");
+        ASSERT_STR_EQ(t, "True"); free(t);
+    }
+}
+
+void test_randomreal_workingprecision_list(void) {
+    /* Returns a list of MPFR atoms at the requested precision. */
+    char* s = eval_to_str("Length[RandomReal[1, 5, WorkingPrecision -> 40]]");
+    ASSERT_STR_EQ(s, "5"); free(s);
+
+    s = eval_to_str(
+        "Module[{xs = RandomReal[1, 4, WorkingPrecision -> 50]},\n"
+        "  And @@ ((# >= 50)& /@ (Precision /@ xs))]");
+    ASSERT_STR_EQ(s, "True"); free(s);
+}
+
+void test_randomreal_workingprecision_array(void) {
+    char* s = eval_to_str(
+        "Dimensions[RandomReal[1, {2, 3}, WorkingPrecision -> 40]]");
+    ASSERT_STR_EQ(s, "{2, 3}"); free(s);
+}
+
+void test_randomreal_machineprecision_option(void) {
+    /* WorkingPrecision -> MachinePrecision (or a value at/below machine
+     * precision) returns a plain EXPR_REAL. */
+    ASSERT(eval_to_type("RandomReal[1, WorkingPrecision -> MachinePrecision]") == (int)EXPR_REAL);
+    ASSERT(eval_to_type("RandomReal[1, WorkingPrecision -> 10]") == (int)EXPR_REAL);
+}
+
+void test_randomcomplex_workingprecision_basic(void) {
+    /* Complex with MPFR real and imaginary components. */
+    char* s = eval_to_str(
+        "Module[{z = RandomComplex[1 + I, WorkingPrecision -> 40]},\n"
+        "  {Head[z], Precision[Re[z]] >= 40, Precision[Im[z]] >= 40}]");
+    ASSERT_STR_EQ(s, "{Complex, True, True}"); free(s);
+}
+
+void test_randomcomplex_workingprecision_list(void) {
+    char* s = eval_to_str(
+        "Length[RandomComplex[1 + I, 4, WorkingPrecision -> 30]]");
+    ASSERT_STR_EQ(s, "4"); free(s);
+
+    s = eval_to_str(
+        "Dimensions[RandomComplex[1 + I, {2, 3}, WorkingPrecision -> 30]]");
+    ASSERT_STR_EQ(s, "{2, 3}"); free(s);
+}
+#endif /* USE_MPFR */
+
 /* ==== RandomChoice tests ==== */
 
 void test_randomchoice_basic(void) {
@@ -1056,6 +1149,17 @@ int main(void) {
     TEST(test_randomcomplex_coverage);
     TEST(test_randomcomplex_real_range);
     TEST(test_randomcomplex_single_dim_list);
+
+#ifdef USE_MPFR
+    /* WorkingPrecision option (MPFR build only) */
+    TEST(test_randomreal_workingprecision_basic);
+    TEST(test_randomreal_workingprecision_range);
+    TEST(test_randomreal_workingprecision_list);
+    TEST(test_randomreal_workingprecision_array);
+    TEST(test_randomreal_machineprecision_option);
+    TEST(test_randomcomplex_workingprecision_basic);
+    TEST(test_randomcomplex_workingprecision_list);
+#endif
 
     /* RandomChoice tests */
     TEST(test_randomchoice_basic);
