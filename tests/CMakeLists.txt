@@ -10,6 +10,7 @@ if(USE_MPFR)
 endif()
 
 include_directories(/usr/local/include)
+include_directories(../src/linalg)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -79,11 +80,24 @@ set(COMMON_SRC
     ../src/facpoly.c
     ../src/parfrac.c
     ../src/datetime.c
-    ../src/linalg.c
-    ../src/matsol.c
-    ../src/matinv.c
-    ../src/matlstsq.c
-    ../src/mateigen.c
+    ../src/linalg/linalg.c
+    ../src/linalg/util.c
+    ../src/linalg/dot.c
+    ../src/linalg/det.c
+    ../src/linalg/cross.c
+    ../src/linalg/norm.c
+    ../src/linalg/tr.c
+    ../src/linalg/construct.c
+    ../src/linalg/matpow.c
+    ../src/linalg/linsolve.c
+    ../src/linalg/inv.c
+    ../src/linalg/lstsq.c
+    ../src/linalg/eigen.c
+    ../src/linalg/eigen_common.c
+    ../src/linalg/eigen_direct.c
+    ../src/linalg/eigen_arnoldi.c
+    ../src/linalg/eigen_banded.c
+    ../src/linalg/eigen_feast.c
     ../src/readwrite.c
     ../src/files.c
     ../src/iter.c
@@ -431,6 +445,16 @@ else()
     target_link_libraries(mateigen_banded_tests gmp m)
 endif()
 add_test(NAME mateigen_banded_tests COMMAND mateigen_banded_tests)
+
+add_executable(mateigen_feast_tests test_mateigen_feast.c eigen_corpus.c ${COMMON_SRC})
+target_include_directories(mateigen_feast_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(mateigen_feast_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(mateigen_feast_tests build_ecm)
+else()
+    target_link_libraries(mateigen_feast_tests gmp m)
+endif()
+add_test(NAME mateigen_feast_tests COMMAND mateigen_feast_tests)
 
 add_executable(linearsolve_tests test_linearsolve.c ${COMMON_SRC})
 target_include_directories(linearsolve_tests PRIVATE ../src)

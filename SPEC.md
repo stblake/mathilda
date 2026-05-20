@@ -46,7 +46,21 @@ Mathilda/
 │   ├── hyperbolic.c            # Hyperbolic functions
 │   ├── logexp.c                # Log, Exp
 │   ├── complex.c               # Complex number arithmetic
-│   ├── linalg.c                # Linear algebra (Dot, Det, Cross, Norm, etc.)
+│   ├── linalg/                 # Linear algebra (see "Linear Algebra" in §7)
+│   │   ├── linalg.{c,h}        # Module init (registers all builtins)
+│   │   ├── util.c              # Shared tensor helpers (dims, flatten, exact div)
+│   │   ├── dot.c, det.c, cross.c, norm.c, tr.c   # Per-builtin
+│   │   ├── construct.c, matpow.c                 # IdentityMatrix/DiagonalMatrix, MatrixPower
+│   │   ├── inv.{c,h}           # Inverse, PseudoInverse
+│   │   ├── linsolve.{c,h}      # LinearSolve, RowReduce
+│   │   ├── lstsq.{c,h}         # LeastSquares
+│   │   ├── eigen.{c,h}         # Eigenvalues/Eigenvectors entry + dispatch
+│   │   ├── eigen_internal.h    # Shared MatD/MatM/EigenOpts + dispatcher decls
+│   │   ├── eigen_common.c      # Shared eigen helpers, MPFR array ops
+│   │   ├── eigen_direct.c      # Direct kernel (Hessenberg+QR), machine + MPFR
+│   │   ├── eigen_arnoldi.c     # Arnoldi (Krylov) kernel, machine + MPFR
+│   │   ├── eigen_banded.c      # Banded kernel, machine + MPFR
+│   │   └── eigen_feast.c       # FEAST (contour integral) kernel, machine + MPFR
 │   ├── funcprog.c              # Functional programming (Map, Apply, Select, etc.)
 │   ├── purefunc.c              # Pure functions (Function, Slot, SlotSequence)
 │   ├── boolean.c               # And, Or, Not
@@ -515,7 +529,7 @@ Each module follows the same pattern: a `.c`/`.h` pair, with a `*_init()` functi
 | **Rational Funcs** | `rat.c` | `Cancel`, `Together` |
 | **Partial Fractions** | `parfrac.c` | `Apart` |
 | **Modular** | `modular.c` | `PowerMod` (exponentiation, inverse, roots) |
-| **Linear Algebra** | `linalg.c` | `Dot`, `Inner`, `Outer`, `Det`, `Inverse`, `MatrixPower`, `Cross`, `Norm`, `Tr`, `RowReduce`, `IdentityMatrix`, `DiagonalMatrix`, `Transpose` |
+| **Linear Algebra** | `linalg/` | `Dot`, `Inner`, `Outer`, `Det`, `Inverse`, `PseudoInverse`, `MatrixPower`, `Cross`, `Norm`, `Tr`, `RowReduce`, `LinearSolve`, `LeastSquares`, `IdentityMatrix`, `DiagonalMatrix`, `Transpose`, `Eigenvalues`, `Eigenvectors`. Split into per-builtin files; `eigen.c` dispatches the Direct / Arnoldi / Banded / FEAST kernels (machine + MPFR) in `eigen_*.c`. |
 | **Statistics** | `stats.c` | `Mean`, `Median`, `Variance`, `StandardDeviation`, `RootMeanSquare`, `Quartiles` |
 | **Sorting** | `sort.c` | `Sort`, `OrderedQ` |
 | **Rules/Replace** | `replace.c` | `Replace`, `ReplaceAll`, `ReplaceRepeated`, `ReplacePart`, `ReplaceList` |

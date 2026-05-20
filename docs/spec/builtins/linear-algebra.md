@@ -239,10 +239,9 @@ In[12]:= Inverse[{{a, b}, {c, d}}, Method -> "OneStepRowReduction"] // Together
 Out[12]= {{d/(a d - b c), -b/(a d - b c)}, {-c/(a d - b c), a/(a d - b c)}}
 ```
 
-> Implementation lives in `src/matinv.c` (registered by `matinv_init`).
-> The previous home was `src/linalg.c`; the algorithm — fraction-free
-> Gauss-Jordan elimination on the augmented matrix `[A | I]` — is
-> unchanged.
+> Implementation lives in `src/linalg/inv.c` (registered by
+> `matinv_init`).  The algorithm — fraction-free Gauss-Jordan
+> elimination on the augmented matrix `[A | I]` — is unchanged.
 
 ## PseudoInverse
 Gives the Moore-Penrose pseudoinverse of a rectangular (or
@@ -346,7 +345,7 @@ Gives the row-reduced form of the matrix `m`.
 **Features**:
 - `Protected`.
 - Uses fraction-free division logic to perform exact algorithmic reduction across numerical, rational, and symbolics expressions natively avoiding division errors.
-- Lives in `src/matsol.c`; the helper primitives (Laplace cofactor determinant, exact polynomial division, tensor flatten / dimensions) are exposed from `src/linalg.c`.
+- Lives in `src/linalg/linsolve.c`; the helper primitives (Laplace cofactor determinant, exact polynomial division, tensor flatten / dimensions) are exposed from `src/linalg/util.c` and `src/linalg/det.c`.
 - Accepts an optional `Method -> "<name>"` argument:
   - `Method -> Automatic` or `Method -> "Automatic"` (default) — alias for `"DivisionFreeRowReduction"`.
   - `Method -> "DivisionFreeRowReduction"` — Bareiss-like fraction-free Gauss-Jordan. Best for exact integer / rational / symbolic input — never produces a denominator larger than necessary.
@@ -439,7 +438,7 @@ Finds `x` that solves the matrix equation `m . x == b`.
   augmented matrix `[m | b]` (the same Bareiss-like routine used by
   `RowReduce` and `Inverse`), so exact integer, rational, and
   symbolic inputs flow through with no spurious denominator blow-up.
-- Lives in `src/matsol.c`.
+- Lives in `src/linalg/linsolve.c`.
 - Accepts an optional `Method -> "<name>"` argument:
   - `Method -> Automatic` or `Method -> "Automatic"` — default (alias for `"DivisionFreeRowReduction"`).
   - `Method -> "DivisionFreeRowReduction"` — Bareiss-like fraction-free Gauss-Jordan on `[m | b]`. Recommended for exact / symbolic inputs.
@@ -517,7 +516,7 @@ i.e. an `x` minimising `Norm[m . x - b]`.
 - Satisfies the identity `LeastSquares[m, b] == PseudoInverse[m] . b`.
 - Issues `LeastSquares::matrix` / `::lvec` / `::lvec1` and returns
   unevaluated for shape errors.
-- Lives in `src/matlstsq.c`.
+- Lives in `src/linalg/lstsq.c`.
 
 ```mathematica
 In[1]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {7, 7, 8}]
@@ -579,8 +578,70 @@ Gives a list of the eigenvalues of a square matrix.
 - When `m, a` have a shared null space, `Eigenvalues[{m, a}]` returns
   `Infinity` for each degree drop in the characteristic polynomial.
 - Options: `Cubics -> True` (use radicals for cubics; default true so the
-  closed-form pipeline can numericalize), `Quartics -> True`, `Method` —
-  reserved.
+  closed-form pipeline can numericalize), `Quartics -> True`, `Method`.
+- For approximate-numeric (`Real` / MPFR) matrices `Method` selects the
+  numerical kernel.  Accepted values: `Automatic` (default; routes
+  among Direct / Arnoldi / Banded based on shape and `k`), `"Direct"`,
+  `"Arnoldi"`, `"Banded"`, and `"FEAST"`.  Each accepts a sub-option
+  list form (`Method -> {"Name", "Key" -> value, ...}`); see the
+  per-method sections in the `?Eigenvalues` REPL docstring and the
+  monthly changelog entries under `docs/spec/changelog/`.
+
+### `Method -> "FEAST"` (interval slice)
+
+For Hermitian (real symmetric or complex Hermitian) inexact numeric
+input, `Method -> "FEAST"` returns only the eigenpairs whose
+eigenvalues lie in a user-supplied real interval `[a, b]` — a
+spectral-slice query rather than a full decomposition.  Implements
+the contour-integral spectral-projector algorithm of Polizzi (2009):
+`Ne`-point Gauss-Legendre quadrature on the upper half of the
+elliptic contour through `(a, 0)` and `(b, 0)` approximates
+`P_[a, b](A) Y` (Schwarz symmetry halves the number of complex
+linear solves), then a Rayleigh–Ritz reduction with Cholesky
+`B_q = L L^*` extracts the in-interval eigenpairs.
+
+Sub-options:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `"Interval" -> {a, b}` | required | Real interval to slice.  Auto-swapped if `a > b`. |
+| `"ContourPoints" -> Ne` | `8` | Gauss-Legendre order.  Supported: `2`, `4`, `8`, `16`. |
+| `"SubspaceSize" -> m0` | `Max[20, n/4]` (capped at `n`) | Working subspace dimension; must be `>=` spectral count in `[a, b]`. |
+| `"MaxIterations" -> k` | `20` | Outer iteration cap. |
+| `"Tolerance" -> t` | precision-aware | Residual stopping criterion. |
+
+Automatic never routes to FEAST; explicit `Method -> "FEAST"` is the
+only way in.  The output is sorted by `|lambda|` descending so the
+optional `k_spec` (`Eigenvalues[m, k]`, `Eigenvalues[m, -k]`,
+`Eigenvalues[m, UpTo[k]]`) composes naturally with the in-interval
+filter.  MPFR inputs run a parallel kernel at the input's combined
+precision.
+
+**Fail-soft cascade**: FEAST returns `NULL` (and the call falls
+through to Direct) on any of: non-Hermitian input, missing
+`"Interval"`, `interval_high <= interval_low` (catches degenerate
+`{c, c}` and NaN coercion failures), generalised eigenproblem
+(`Eigenvalues[{m, a}]`), Cholesky failure on `B_q` (subspace too
+small for the spectral count in the interval), LU singular at any
+quadrature node, or non-convergence within `MaxIterations`.  The
+first such fall-back per process emits a single
+`Eigenvalues::feast: ... falling back to the Direct method.` stderr
+line tagged with the reason, so an explicit FEAST call always
+returns *some* sensible answer — at worst the full Direct spectrum.
+
+```mathematica
+In[6]:= Eigenvalues[N[{{2, -1, 0, 0, 0}, {-1, 2, -1, 0, 0},
+                       {0, -1, 2, -1, 0}, {0, 0, -1, 2, -1},
+                       {0, 0, 0, -1, 2}}],
+                    Method -> {"FEAST", "Interval" -> {2.5, 4}}]
+Out[6]= {3.7320508075688776, 3.0}
+
+In[7]:= Eigenvalues[N[{{2, -1, 0, 0, 0}, {-1, 2, -1, 0, 0},
+                       {0, -1, 2, -1, 0}, {0, 0, -1, 2, -1},
+                       {0, 0, 0, -1, 2}}], 1,
+                    Method -> {"FEAST", "Interval" -> {0, 4}}]
+Out[7]= {3.7320508075688776}
+```
 
 ```mathematica
 In[1]:= Eigenvalues[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -624,7 +685,12 @@ Gives a list of the eigenvectors of a square matrix.
 - Generalised case: vectors that fall in the shared null space of `m`
   and `a` are returned as zero vectors (matching Mathematica's
   `Eigenvectors::geinsl1` warning behaviour).
-- Options: same as Eigenvalues.
+- Options: same as Eigenvalues, including the numerical `Method`
+  dispatch (`Automatic`, `"Direct"`, `"Arnoldi"`, `"Banded"`,
+  `"FEAST"`).  `Method -> "FEAST"` returns the eigenvectors whose
+  eigenvalues lie in the supplied `"Interval"` — orthonormal for
+  real symmetric input, unitary for complex Hermitian input — and
+  shares the same fail-soft cascade as `Eigenvalues`.
 
 ```mathematica
 In[1]:= Eigenvectors[{{2, 1, 0}, {0, 2, 0}, {0, 0, 1}}]

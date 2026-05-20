@@ -88,7 +88,7 @@
  * its return value is owned by this function.
  */
 
-#include "matlstsq.h"
+#include "lstsq.h"
 #include "linalg.h"
 #include "eval.h"
 #include "symtab.h"

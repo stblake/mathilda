@@ -31,7 +31,7 @@
  *                                            textbook Cramer form for small n.
  */
 
-#include "matsol.h"
+#include "linsolve.h"
 #include "linalg.h"
 #include "eval.h"
 #include "symtab.h"

@@ -70,7 +70,7 @@
 #include "precision.h"
 #include "rationalize.h"
 #include "numeric.h"
-#include "matsol.h"
+#include "linsolve.h"
 #include "sym_names.h"
 #include "repl_hooks.h"
 

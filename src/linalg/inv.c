@@ -39,9 +39,9 @@
  * explicitly released.
  */
 
-#include "matinv.h"
+#include "inv.h"
 #include "linalg.h"
-#include "matsol.h"
+#include "linsolve.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"

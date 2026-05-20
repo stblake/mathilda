@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include "expr.h"
 
+/* Built-in entry points registered by linalg_init().  Per-builtin
+ * implementations live in their own translation units inside
+ * src/linalg/ (dot.c, det.c, cross.c, ...). */
 Expr* builtin_dot(Expr* res);
 Expr* builtin_det(Expr* res);
 Expr* builtin_cross(Expr* res);
