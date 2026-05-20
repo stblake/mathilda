@@ -60,6 +60,7 @@ const char* SYM_Composition = NULL;
 const char* SYM_CompoundExpression = NULL;
 const char* SYM_Condition = NULL;
 const char* SYM_Conjugate = NULL;
+const char* SYM_ConjugateTranspose = NULL;
 const char* SYM_Continue = NULL;
 const char* SYM_ContourPoints = NULL;
 const char* SYM_Cos = NULL;
@@ -313,6 +314,7 @@ void sym_names_init(void) {
     SYM_CompoundExpression         = intern_symbol("CompoundExpression");
     SYM_Condition                  = intern_symbol("Condition");
     SYM_Conjugate                  = intern_symbol("Conjugate");
+    SYM_ConjugateTranspose         = intern_symbol("ConjugateTranspose");
     SYM_Continue                   = intern_symbol("Continue");
     SYM_ContourPoints              = intern_symbol("ContourPoints");
     SYM_Cos                        = intern_symbol("Cos");

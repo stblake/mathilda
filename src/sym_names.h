@@ -75,6 +75,7 @@ extern const char* SYM_Composition;
 extern const char* SYM_CompoundExpression;
 extern const char* SYM_Condition;
 extern const char* SYM_Conjugate;
+extern const char* SYM_ConjugateTranspose;
 extern const char* SYM_Continue;
 extern const char* SYM_ContourPoints;
 extern const char* SYM_Cos;

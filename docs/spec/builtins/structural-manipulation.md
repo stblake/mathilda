@@ -154,6 +154,9 @@ Cycles elements.
 Transposes levels in a rectangular array.
 - `Transpose[list]`: Transposes the first two levels.
 - `Transpose[list, {n1, n2, ...}]`: Level `k` becomes level `nk` in result.
+  The spec must be a permutation of `{1, ..., r}` where `r` is the depth of
+  `list`. A repeated index (e.g. `{1, 1}`) extracts the corresponding
+  diagonal.
 
 **Features**:
 - `Protected`.
@@ -166,6 +169,30 @@ Out[1]= {{a, c}, {b, d}}
 
 In[2]:= Transpose[{{a, b}, {c, d}}, {1, 1}]
 Out[2]= {a, d}
+```
+
+## ConjugateTranspose
+Conjugate transpose (Hermitian transpose) of an array.
+- `ConjugateTranspose[m]`: equivalent to `Conjugate[Transpose[m]]`.
+- `ConjugateTranspose[m, spec]`: equivalent to `Conjugate[Transpose[m, spec]]`.
+
+**Features**:
+- `Protected`.
+- On a 1-D vector, `ConjugateTranspose[vec]` conjugates the entries but
+  does not change the shape of `vec` (matches the Mathematica convention).
+- For symbolic entries, `Conjugate[x]` is left wrapped around `x`.
+- Works on higher-rank tensors with the same `spec` semantics as
+  `Transpose`.
+
+```mathematica
+In[1]:= ConjugateTranspose[{{1, 2 I, 3}, {3 + 4 I, 5, I}}]
+Out[1]= {{1, 3 - 4 I}, {-2 I, 5}, {3, -I}}
+
+In[2]:= ConjugateTranspose[{{a + b I, c + d I}}]
+Out[2]= {{Conjugate[a] - I Conjugate[b]}, {Conjugate[c] - I Conjugate[d]}}
+
+In[3]:= ConjugateTranspose[{1, 2 I, 3 + 4 I}]
+Out[3]= {1, -2 I, 3 - 4 I}
 ```
 
 ## Take, Drop

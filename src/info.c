@@ -503,7 +503,22 @@ void info_init(void) {
     symtab_set_docstring("Reverse", "Reverse[expr] reverses the order of elements in expr.");
     symtab_set_docstring("RotateLeft", "RotateLeft[expr, n] rotates the elements of expr n positions to the left.");
     symtab_set_docstring("RotateRight", "RotateRight[expr, n] rotates the elements of expr n positions to the right.");
-    symtab_set_docstring("Transpose", "Transpose[list] transposes the first two levels of list.");
+    symtab_set_docstring("Transpose",
+        "Transpose[list]\n"
+        "\tTransposes the first two levels of list (swaps rows and columns of a matrix).\n"
+        "Transpose[list, {n1, n2, ...}]\n"
+        "\tGives the transpose of list so that level k in list is level nk in the result.\n"
+        "\tThe spec must be a permutation of {1, ..., r} where r is the depth of list.\n"
+        "\tA repeated index (e.g. {1, 1}) selects the corresponding diagonal.\n"
+        "\tlist must be a rectangular array.");
+    symtab_set_docstring("ConjugateTranspose",
+        "ConjugateTranspose[m]\n"
+        "\tGives the conjugate transpose of m, equivalent to Conjugate[Transpose[m]].\n"
+        "ConjugateTranspose[m, spec]\n"
+        "\tGives Conjugate[Transpose[m, spec]], permuting the levels of m according to\n"
+        "\tthe spec list and then conjugating every entry.\n"
+        "\tOn a 1-D vector, ConjugateTranspose[vec] conjugates the entries without\n"
+        "\tchanging the shape of vec.");
     symtab_set_docstring("Flatten", "Flatten[list] flattens all levels of list.");
     symtab_set_docstring("Partition", "Partition[list, n] partitions list into sublists of length n.");
 

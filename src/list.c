@@ -817,6 +817,67 @@ Expr* builtin_transpose(Expr* res) {
     return result;
 }
 
+/* ConjugateTranspose[m] is equivalent to Conjugate[Transpose[m]];
+ * ConjugateTranspose[m, spec] is equivalent to Conjugate[Transpose[m, spec]].
+ * For a 1-D vector input (1-arg form) the result keeps the vector shape and
+ * the entries are conjugated, matching Mathematica's behaviour. Conjugate is
+ * Listable, so wrapping the (possibly nested) transposed array in Conjugate
+ * lets the evaluator thread conjugation down to every leaf at fixed point. */
+Expr* builtin_conjugate_transpose(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+    Expr* m = res->data.function.args[0];
+
+    int64_t dims[64];
+    int depth = 0;
+    if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL &&
+        m->data.function.head->data.symbol == SYM_List) {
+        depth = get_array_dimensions(m, dims, "List");
+    }
+
+    /* Not a (rectangular) List: leave the call unevaluated so that symbolic
+     * matrices like ConjugateTranspose[A] stay intact. */
+    if (depth == 0) return NULL;
+
+    /* 1-arg form on a 1-D vector: conjugate elementwise, keep the shape. */
+    if (argc == 1 && depth == 1) {
+        Expr** conj_args = malloc(sizeof(Expr*) * 1);
+        conj_args[0] = expr_copy(m);
+        Expr* conj = expr_new_function(expr_new_symbol("Conjugate"), conj_args, 1);
+        free(conj_args);
+        return eval_and_free(conj);
+    }
+
+    /* 1-arg form on lower depth (depth < 2) we cannot transpose: leave it. */
+    if (argc == 1 && depth < 2) return NULL;
+
+    /* Build Transpose[m] or Transpose[m, spec]. */
+    Expr** tr_args = malloc(sizeof(Expr*) * argc);
+    tr_args[0] = expr_copy(m);
+    if (argc == 2) tr_args[1] = expr_copy(res->data.function.args[1]);
+    Expr* transposed_call = expr_new_function(expr_new_symbol("Transpose"), tr_args, argc);
+    free(tr_args);
+
+    Expr* transposed = eval_and_free(transposed_call);
+
+    /* If Transpose could not reduce (e.g. invalid spec), surface the
+     * unevaluated ConjugateTranspose rather than a spurious
+     * Conjugate[Transpose[...]] wrapper. */
+    if (transposed && transposed->type == EXPR_FUNCTION &&
+        transposed->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(transposed->data.function.head->data.symbol, "Transpose") == 0) {
+        expr_free(transposed);
+        return NULL;
+    }
+
+    Expr** conj_args = malloc(sizeof(Expr*) * 1);
+    conj_args[0] = transposed;
+    Expr* conj = expr_new_function(expr_new_symbol("Conjugate"), conj_args, 1);
+    free(conj_args);
+    return eval_and_free(conj);
+}
+
 static int compare_expr_ptrs(const void* a, const void* b) {
     Expr* ea = *(Expr**)a;
     Expr* eb = *(Expr**)b;
@@ -1287,6 +1348,7 @@ void list_init(void) {
         "\tJoins the objects at level n in each of the lists.\n"
         "\tHandles ragged arrays by concatenating successive elements at level n.");
     symtab_add_builtin("Transpose", builtin_transpose);
+    symtab_add_builtin("ConjugateTranspose", builtin_conjugate_transpose);
     symtab_add_builtin("Tally", builtin_tally);
     symtab_add_builtin("Union", builtin_union);
     symtab_add_builtin("DeleteDuplicates", builtin_deleteduplicates);
@@ -1311,6 +1373,7 @@ void list_init(void) {
     symtab_get_def("RotateRight")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Reverse")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Transpose")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("ConjugateTranspose")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Tally")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Union")->attributes |= ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED | ATTR_READPROTECTED;
     symtab_get_def("DeleteDuplicates")->attributes |= ATTR_PROTECTED;
