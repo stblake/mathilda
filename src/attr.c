@@ -66,6 +66,7 @@ static SymbolAttr builtin_attrs[] = {
     {"And", ATTR_FLAT | ATTR_HOLDALL | ATTR_ONEIDENTITY | ATTR_PROTECTED},
     {"Or", ATTR_FLAT | ATTR_HOLDALL | ATTR_ONEIDENTITY | ATTR_PROTECTED},
     {"Not", ATTR_PROTECTED},
+    {"Boole", ATTR_LISTABLE | ATTR_PROTECTED},
     {"CompoundExpression", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Table", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Module", ATTR_HOLDALL | ATTR_PROTECTED},

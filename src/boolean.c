@@ -108,8 +108,27 @@ Expr* builtin_or(Expr* res) {
     return ret;
 }
 
+/* Boole[expr]
+ *   True  -> 1
+ *   False -> 0
+ *   anything else -> stays unevaluated
+ *
+ * With ATTR_LISTABLE assigned in attr.c, the evaluator threads Boole
+ * over lists automatically, so this implementation only handles the
+ * scalar 1-argument case. */
+Expr* builtin_boole(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+    if (arg->type == EXPR_SYMBOL) {
+        if (arg->data.symbol == SYM_True)  return expr_new_integer(1);
+        if (arg->data.symbol == SYM_False) return expr_new_integer(0);
+    }
+    return NULL;
+}
+
 void boolean_init(void) {
     symtab_add_builtin("And", builtin_and);
     symtab_add_builtin("Or", builtin_or);
     symtab_add_builtin("Not", builtin_not);
+    symtab_add_builtin("Boole", builtin_boole);
 }

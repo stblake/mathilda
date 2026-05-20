@@ -769,6 +769,14 @@ void info_init(void) {
         "\n"
         "Piecewise[conds] automatically evaluates to Piecewise[conds, 0].");
     symtab_set_docstring("TrueQ", "TrueQ[expr] yields True if expr is True, and False otherwise.");
+    symtab_set_docstring("Boole",
+        "Boole[expr]\n"
+        "\tyields 1 if expr is True and 0 if it is False.\n"
+        "Boole is also known as the Iverson bracket, indicator function, and characteristic function.\n"
+        "Boole is typically used to express integrals and sums over regions given by logical combinations of predicates, and as a dummy-variable encoding for categorical variables in statistics.\n"
+        "Boole[expr] remains unchanged if expr is neither True nor False.\n"
+        "Boole[expr] is effectively equivalent to If[expr, 1, 0].\n"
+        "Boole has attributes {Listable, Protected}, so Boole[{e1, e2, ...}] automatically threads to {Boole[e1], Boole[e2], ...}.");
     symtab_set_docstring("Evaluate", "Evaluate[expr]\n\tcauses expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.\nEvaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held.\nEvaluate does not override HoldAllComplete.");
     symtab_set_docstring("ReleaseHold", "ReleaseHold[expr]\n\tremoves Hold, HoldForm, HoldPattern, and HoldComplete in expr.\nReleaseHold removes only one layer of Hold etc.; it does not remove inner occurrences in nested Hold etc. functions.");
     symtab_set_docstring("HoldPattern",

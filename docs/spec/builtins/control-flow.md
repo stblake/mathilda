@@ -167,6 +167,28 @@ Out[5]= 3/4
 Tests whether an expression evaluates explicitly to `True`.
 - `TrueQ[expr]`: Yields `True` if `expr` is `True`, and `False` otherwise.
 
+## Boole
+Indicator function (Iverson bracket) — converts logical values to 0/1.
+- `Boole[expr]`: Yields `1` if `expr` is `True` and `0` if it is `False`. Stays unevaluated otherwise.
+
+**Attributes**: `Listable`, `Protected`. Boole automatically threads over `List` arguments, so a vector of predicates becomes a vector of 0/1 indicators.
+
+Useful for expressing integrals and sums over predicate regions, and for one-hot / dummy encoding of categorical variables in statistics. `Boole[expr]` is semantically equivalent to `If[expr, 1, 0]` but is `Listable` and so vectorises naturally.
+
+```mathematica
+In[1]:= {Boole[False], Boole[True]}
+Out[1]= {0, 1}
+
+In[2]:= Boole[{True, False, True, True, False}]
+Out[2]= {1, 0, 1, 1, 0}
+
+In[3]:= Boole[x]
+Out[3]= Boole[x]
+
+In[4]:= Total[Boole[# > 0 & /@ {-1, 2, -3, 4, 5}]]
+Out[4]= 3
+```
+
 ## Return
 Exits the nearest enclosing scope or loop, yielding a value.
 - `Return[expr]`: Yields `expr` from the innermost enclosing scope boundary.
