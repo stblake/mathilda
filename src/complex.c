@@ -325,6 +325,12 @@ Expr* builtin_conjugate(Expr* res) {
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
         return expr_copy(arg);
     }
+    /* Symbolic expressions that numericalize to a machine real are
+     * Conjugate-fixed (e.g. Sqrt[11], 3/Sqrt[11], Pi, Sqrt[2]*Log[3]).
+     * Matches the same reality test used inside complex_decompose. */
+    if (is_numeric_real(arg)) {
+        return expr_copy(arg);
+    }
     Expr *cre, *cim;
     if (complex_decompose(arg, &cre, &cim)) {
         if (is_numeric_real(cre) && is_numeric_real(cim)) {

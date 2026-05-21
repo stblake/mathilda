@@ -837,15 +837,22 @@ Expr* builtin_times(Expr* res) {
                     }
                     mpz_clears(pr_p, pr_psq, NULL);
 
-                    /* Skip when no perfect square was extracted from the
-                     * merged numerator or denominator. Without an extracted
-                     * square the rewrite only reshapes an already-canonical
-                     * radical (e.g. 2/Sqrt[30] -> Sqrt[2/15]) -- a structural
-                     * shuffle that costs us Plus's like-term collection over
-                     * sibling c_i / Sqrt[r] terms during Gram-Schmidt-style
-                     * pipelines, and produces no user-visible benefit. */
+                    /* The rewrite is "useful" if it either extracts a perfect
+                     * square from numerator/denominator (p_sq/q_sq > 1) or
+                     * collapses the residual radical to an integer base
+                     * (p_rest == 1 or q_rest == 1, giving Sqrt[N] or
+                     * 1/Sqrt[N]). Without either, the rewrite is a structural
+                     * shuffle that produces Sqrt[Rational] outputs (e.g.
+                     * 2/Sqrt[30] -> Sqrt[2/15]) -- those cost Plus's
+                     * like-term collection over sibling c_i / Sqrt[r] terms
+                     * during Gram-Schmidt-style pipelines for no user-visible
+                     * benefit. The integer-base case is the one that lets
+                     * -1/5/Sqrt[2/5] fold to -1/Sqrt[10]. */
+                    bool integer_radical = (mpz_cmp_ui(p, 1) == 0) ||
+                                           (mpz_cmp_ui(q, 1) == 0);
                     bool useful_extraction = (mpz_cmp_ui(p_sq, 1) > 0) ||
-                                             (mpz_cmp_ui(q_sq, 1) > 0);
+                                             (mpz_cmp_ui(q_sq, 1) > 0) ||
+                                             integer_radical;
 
                     /* Unchanged-form check: the rewrite is a no-op exactly
                      * when p_rest == 1 (so the final exponent stays -1/2),

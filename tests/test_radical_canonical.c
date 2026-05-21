@@ -741,6 +741,11 @@ static void test_sqrt_absorb_rational_base(void) {
     assert_eval_eq("3/5/Sqrt[2/5]",    "3/Sqrt[10]",     0);
     /* Same expression written as a Times divide. */
     assert_eval_eq("(3/5) / Sqrt[2/5]","3/Sqrt[10]",     0);
+    /* Integer-radical absorption without perfect-square extraction:
+     * (-1/5)^2 / (2/5) = 1/10, q_rest = 10 with p_rest = 1 -> -1/Sqrt[10]. */
+    assert_eval_eq("-1/5/Sqrt[2/5]",   "-1/Sqrt[10]",    0);
+    /* (1/3)^2 / (2/3) = 1/6, q_rest = 6 with p_rest = 1 -> 1/Sqrt[6]. */
+    assert_eval_eq("1/3/Sqrt[2/3]",    "1/Sqrt[6]",      0);
 }
 
 static void test_sqrt_absorb_collapses_to_integer(void) {

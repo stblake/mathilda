@@ -350,6 +350,20 @@ void test_abs_conjugate(void) {
     char* s5 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[5]")));
     assert(strcmp(s5, "5") == 0);
     free(s5);
+
+    /* Symbolic real numerics (anything that numericalizes to a machine real)
+     * are Conjugate-fixed: 3/Sqrt[11], Sqrt[2], Pi, etc. */
+    char* s6 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[3/Sqrt[11]]")));
+    assert(strcmp(s6, "Times[3, Power[11, Rational[-1, 2]]]") == 0);
+    free(s6);
+
+    char* s7 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Sqrt[11]]")));
+    assert(strcmp(s7, "Power[11, Rational[1, 2]]") == 0);
+    free(s7);
+
+    char* s8 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Pi]")));
+    assert(strcmp(s8, "Pi") == 0);
+    free(s8);
 }
 
 void test_arg(void) {
