@@ -3,10 +3,42 @@ project(Mathilda_tests)
 
 option(USE_ECM "Use ECM library for factorisation" ON)
 option(USE_MPFR "Use MPFR for arbitrary-precision reals (N[expr, prec])" ON)
+option(USE_LAPACK "Use BLAS/LAPACK for fast machine-precision linear algebra" ON)
 
 if(USE_MPFR)
     add_compile_definitions(USE_MPFR)
     link_libraries(mpfr)
+endif()
+
+# BLAS/LAPACK autodetection — mirror the four-tier ladder used by the
+# top-level makefile.  Auto-degrades to USE_LAPACK=OFF when not found
+# so the test build never fails purely on a missing system library.
+if(USE_LAPACK)
+    if(APPLE)
+        find_library(MATHILDA_ACCELERATE Accelerate)
+        if(MATHILDA_ACCELERATE)
+            add_compile_definitions(USE_LAPACK MATHILDA_USE_ACCELERATE)
+            link_libraries(${MATHILDA_ACCELERATE})
+        else()
+            message(WARNING "Accelerate framework not found; building tests with USE_LAPACK=OFF")
+            set(USE_LAPACK OFF)
+        endif()
+    else()
+        find_package(LAPACK)
+        find_path(MATHILDA_LAPACKE_INCLUDE_DIR lapacke.h)
+        find_library(MATHILDA_LAPACKE_LIB lapacke)
+        if(LAPACK_FOUND AND MATHILDA_LAPACKE_INCLUDE_DIR AND MATHILDA_LAPACKE_LIB)
+            add_compile_definitions(USE_LAPACK)
+            include_directories(${MATHILDA_LAPACKE_INCLUDE_DIR})
+            link_libraries(${MATHILDA_LAPACKE_LIB} ${LAPACK_LIBRARIES})
+        else()
+            message(WARNING "LAPACK/LAPACKE not detected; building tests with USE_LAPACK=OFF")
+            message(WARNING "  Ubuntu/Debian:  sudo apt install liblapacke-dev libopenblas-dev")
+            message(WARNING "  Fedora/RHEL:    sudo dnf install lapack-devel lapacke-devel openblas-devel")
+            message(WARNING "  Arch:           sudo pacman -S openblas lapacke")
+            set(USE_LAPACK OFF)
+        endif()
+    endif()
 endif()
 
 include_directories(/usr/local/include)
@@ -97,6 +129,10 @@ set(COMMON_SRC
     ../src/linalg/lstsq.c
     ../src/linalg/nullspace.c
     ../src/linalg/matrank.c
+    ../src/linalg/qrdecomp.c
+    ../src/linalg/qrdecomp_machine.c
+    ../src/linalg/qrdecomp_mpfr.c
+    ../src/linalg/lapack.c
     ../src/linalg/eigen.c
     ../src/linalg/eigen_common.c
     ../src/linalg/eigen_direct.c
@@ -434,6 +470,69 @@ else()
     target_link_libraries(matrank_tests gmp m)
 endif()
 add_test(NAME matrank_tests COMMAND matrank_tests)
+
+add_executable(qrdecomposition_tests test_qrdecomposition.c ${COMMON_SRC})
+target_include_directories(qrdecomposition_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(qrdecomposition_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(qrdecomposition_tests build_ecm)
+else()
+    target_link_libraries(qrdecomposition_tests gmp m)
+endif()
+add_test(NAME qrdecomposition_tests COMMAND qrdecomposition_tests)
+
+# Phase-3 LAPACK machine-precision QR kernel coverage.  The shape /
+# aspect-ratio / pivoting / fuzz matrix from tasks/qr_perf_plan.md §5.2.
+# Same source set as qrdecomposition_tests; routed through qr_dispatch
+# which picks the LAPACK kernel when USE_LAPACK is on.
+add_executable(qrdecomposition_machine_tests test_qrdecomposition_machine.c ${COMMON_SRC})
+target_include_directories(qrdecomposition_machine_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(qrdecomposition_machine_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(qrdecomposition_machine_tests build_ecm)
+else()
+    target_link_libraries(qrdecomposition_machine_tests gmp m)
+endif()
+add_test(NAME qrdecomposition_machine_tests COMMAND qrdecomposition_machine_tests)
+
+# Phase-4 MPFR Householder kernel tests.  Cover the > 53-bit precision
+# axis from tasks/qr_perf_plan.md §5.3.  Skip-cleanly under USE_MPFR=OFF.
+add_executable(qrdecomposition_mpfr_tests test_qrdecomposition_mpfr.c ${COMMON_SRC})
+target_include_directories(qrdecomposition_mpfr_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(qrdecomposition_mpfr_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(qrdecomposition_mpfr_tests build_ecm)
+else()
+    target_link_libraries(qrdecomposition_mpfr_tests gmp m)
+endif()
+add_test(NAME qrdecomposition_mpfr_tests COMMAND qrdecomposition_mpfr_tests)
+
+# Phase-5 QR microbench.  NOT wired into add_test -- this is a spot-check
+# tool that prints per-shape x precision wall time, not a CI gate.  Build
+# it with `make bench_qr` then run `./bench_qr` after a perf-relevant
+# change.
+add_executable(bench_qr EXCLUDE_FROM_ALL bench_qr.c ${COMMON_SRC})
+target_include_directories(bench_qr PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(bench_qr gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(bench_qr build_ecm)
+else()
+    target_link_libraries(bench_qr gmp m)
+endif()
+
+# LAPACK linkage smoke test (Phase 1 of QR perf plan).  Confirms that
+# the configured BLAS/LAPACK distribution is callable from C and that
+# mathilda_lapack_probe() returns the expected value under both
+# USE_LAPACK=ON and OFF.
+add_executable(lapack_tests test_lapack.c ${COMMON_SRC})
+target_include_directories(lapack_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(lapack_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(lapack_tests build_ecm)
+else()
+    target_link_libraries(lapack_tests gmp m)
+endif()
+add_test(NAME lapack_tests COMMAND lapack_tests)
 
 add_executable(conjugate_transpose_tests test_conjugate_transpose.c ${COMMON_SRC})
 target_include_directories(conjugate_transpose_tests PRIVATE ../src)

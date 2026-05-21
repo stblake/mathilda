@@ -1,5 +1,6 @@
 USE_ECM ?= 1
 USE_MPFR ?= 1
+USE_LAPACK ?= 1
 
 CC = gcc
 CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/linalg -I./src/poly -I./src/simp -I./src/calculus -I/usr/local/include
@@ -30,6 +31,38 @@ endif
 
 ifneq ($(wildcard /opt/homebrew/lib),)
 LDFLAGS += -L/opt/homebrew/lib
+endif
+
+# BLAS/LAPACK for fast machine-precision linear-algebra kernels
+# (machine-precision QRDecomposition; later: Inverse, LinearSolve, Det,
+# Eigenvalues, LeastSquares, SVD).  Four-tier autodetection:
+#   1. Darwin              -> Apple Accelerate framework (zero install).
+#   2. pkg-config lapacke  -> use pkg-config flags (OpenBLAS / MKL / etc).
+#   3. /usr/include/lapacke.h or /usr/local/include/lapacke.h
+#                          -> link -llapacke -llapack -lblas.
+#   4. nothing found       -> warn and override USE_LAPACK := 0.
+# When USE_LAPACK is off, machine-precision linalg falls back to the
+# MPFR / symbolic path with a one-time runtime warning.  This matches
+# the existing USE_MPFR=0 / USE_ECM=0 graceful-degrade policy so that
+# `git clone && make` always succeeds, no matter the host environment.
+ifeq ($(USE_LAPACK), 1)
+  UNAME_S := $(shell uname -s)
+  ifeq ($(UNAME_S),Darwin)
+    CFLAGS  += -DUSE_LAPACK -DMATHILDA_USE_ACCELERATE
+    LDFLAGS += -framework Accelerate
+  else ifneq ($(shell pkg-config --exists lapacke 2>/dev/null && echo y),)
+    CFLAGS  += -DUSE_LAPACK $(shell pkg-config --cflags lapacke)
+    LDFLAGS += $(shell pkg-config --libs lapacke)
+  else ifneq ($(wildcard /usr/include/lapacke.h)$(wildcard /usr/local/include/lapacke.h),)
+    CFLAGS  += -DUSE_LAPACK
+    LDFLAGS += -llapacke -llapack -lblas
+  else
+    $(warning LAPACK/LAPACKE not detected; building with USE_LAPACK=0)
+    $(warning   Ubuntu/Debian:  sudo apt install liblapacke-dev libopenblas-dev)
+    $(warning   Fedora/RHEL:    sudo dnf install lapack-devel lapacke-devel openblas-devel)
+    $(warning   Arch:           sudo pacman -S openblas lapacke)
+    override USE_LAPACK := 0
+  endif
 endif
 
 SRC_DIR = src

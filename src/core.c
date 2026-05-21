@@ -416,6 +416,8 @@ void core_init(void) {
     matnull_init();
     void matrank_init(void);
     matrank_init();
+    void qrdecomp_init(void);
+    qrdecomp_init();
     readwrite_init();
     files_init();
     random_init();

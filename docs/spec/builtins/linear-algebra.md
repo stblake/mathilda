@@ -510,6 +510,120 @@ Out[9]= 1
 > `cplx_t = {re, im}` struct stands in for `double _Complex` to keep
 > the build strictly C99.
 
+## QRDecomposition
+Gives the QR decomposition of a matrix.
+- `QRDecomposition[m]` — returns `{q, r}` such that
+  `m == ConjugateTranspose[q] . r`, with `q` row-orthonormal
+  (row-unitary for complex `m`) and `r` upper triangular.
+- `QRDecomposition[m, Pivoting -> True]` — returns `{q, r, p}` where
+  `p` is a permutation matrix such that `m . p == ConjugateTranspose[q] . r`.
+  Pivoting orders the diagonal of `r` by decreasing magnitude.
+
+**Features**:
+- `Protected`.
+- Computes the "thin" QR factorisation: when `m` has rank `r`, both
+  `q` and `r` have `r` rows. For an `n x p` input, `q` has dimensions
+  `r x n` and `r` has dimensions `r x p`.
+- Works on every input family:
+  - exact integer / rational matrices (output stays exact with
+    `Sqrt[...]` in the column norms);
+  - complex matrices (rows of `q` are unitary in the Hermitian
+    inner product);
+  - machine-precision Real matrices (output Real at machine
+    precision);
+  - arbitrary-precision MPFR matrices (output at the input
+    precision via the shared rationalise → exact → numericalise
+    pipeline);
+  - free-symbolic matrices (closed-form symbolic output).
+- Algorithm: dispatched on leaf precision.
+  - **MachinePrecision inputs (`min_bits <= 53`)** use a LAPACK
+    Householder kernel (`dgeqrf` / `dgeqp3` for real, `zgeqrf` /
+    `zgeqp3` for complex, plus `dorgqr` / `zungqr` to form `q`).
+    Wired through the four-tier autodetection ladder described in
+    `src/linalg/lapack.h` (Apple Accelerate → pkg-config lapacke →
+    system lapacke → graceful fall-back).
+  - **MPFR inputs (`min_bits > 53`)** use a hand-rolled Householder
+    kernel over column-major MPFR arrays (paired re/im planes for
+    complex; no MPC dependency, same convention as the eigen
+    kernels).  Column pivoting follows Businger-Golub; numerical
+    rank uses the cutoff `|R[i,i]| < 2^(-bits/2) * |R[0,0]|`.
+    Reconstruction error scales as `2^(-bits)`, matching the
+    requested working precision.
+  - **Exact / symbolic inputs** stay on the Modified Gram-Schmidt
+    kernel, driven through the evaluator so symbolic-real, exact
+    rational, and free-variable inputs share one code path.
+  - Rank-deficient inputs produce a shorter `q` / `r` without error.
+    With `Pivoting -> False` on a rank-deficient input the MPFR
+    kernel bails to symbolic (which handles mid-stream rank
+    deficiency cleanly); with `Pivoting -> True` the MPFR kernel
+    truncates the output at the numerical rank.
+  - When BLAS/LAPACK is unavailable at build time (`USE_LAPACK=0`),
+    machine-precision inputs transparently route to the symbolic
+    kernel; similarly `USE_MPFR=0` routes MPFR inputs to symbolic.
+    Correctness is preserved across every combination; only
+    performance changes.
+- Issues `QRDecomposition::matrix` and returns unevaluated if the
+  argument is not a non-empty rank-2 tensor.
+- Issues `QRDecomposition::opts` and returns unevaluated for an
+  unknown option key or value. `TargetStructure -> "Structured"` is
+  reserved for a future release and currently leaves the call
+  unevaluated.
+
+```mathematica
+In[1]:= QRDecomposition[{{1, 2}, {3, 4}}]
+Out[1]= {{{1/Sqrt[10], 3/Sqrt[10]}, {3/Sqrt[10], -(1/Sqrt[10])}},
+         {{Sqrt[10], 7 Sqrt[2/5]}, {0, Sqrt[2/5]}}}
+
+In[2]:= {q, r} = QRDecomposition[{{1, 2}, {3, 4}, {5, 6}}];
+        Transpose[q] . r
+Out[2]= {{1, 2}, {3, 4}, {5, 6}}
+
+In[3]:= {q, r} = QRDecomposition[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}];
+        {Length[q], Length[r]}
+Out[3]= {2, 2}      (* rank-deficient -- "thin" QR *)
+
+In[4]:= {q, r} = QRDecomposition[{{1.2, 2.3, 3.4},
+                                    {2.3, 4.5, 5.6},
+                                    {3.2, 7.6, 6.5}}];
+        Chop[Transpose[q] . r - {{1.2, 2.3, 3.4},
+                                  {2.3, 4.5, 5.6},
+                                  {3.2, 7.6, 6.5}}]
+Out[4]= {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}}
+
+In[5]:= QRDecomposition[{{1, 2}, {3, 4}}, Pivoting -> True]
+Out[5]= {q, r, {{0, 1}, {1, 0}}}    (* column 1 (larger norm) pivoted first *)
+```
+
+> Implementation is split across:
+> - `src/linalg/qrdecomp.c` -- builtin entry, option parsing, and
+>   `qr_dispatch` which routes to the precision-matched kernel.
+>   Hosts the symbolic / fallback MGS pipeline.
+> - `src/linalg/qrdecomp_machine.c` -- LAPACK fast path
+>   (`qr_machine_dispatch`).  Loads the matrix into a column-major
+>   double buffer (interleaved re/im pairs for complex), calls the
+>   wrappers in `lapack.c` (`mat_lapack_dgeqp3`, etc.), then
+>   reconstructs `q` / `r` / `p` as Mathilda lists.  Numerical rank
+>   uses LAPACK's standard cutoff `max(m, n) * eps * |R[0,0]|`.
+> - `src/linalg/qrdecomp_mpfr.c` -- MPFR Householder fast path
+>   (`qr_mpfr_dispatch`).  Loads the matrix into column-major MPFR
+>   arrays at `min_bits` precision (paired re/im planes for complex),
+>   runs Householder reflections in place with Businger-Golub
+>   pivoting, then reconstructs `q` / `r` / `p` as MPFR-precision
+>   Mathilda lists.  Updates already-stored R rows in-step with
+>   column swaps so R's column ordering stays consistent with the
+>   pivoted A.  Reconstruction residuals scale as `2^(-bits)`.
+> - `src/linalg/lapack.h` / `lapack.c` -- platform-papering Fortran
+>   ABI wrappers shared across machine-precision linalg kernels.
+>
+> The MGS loop allocates a column-major Q buffer and a row-major R
+> buffer of size `min(n,p) x max(n,p)`, frees the unused tail when
+> the rank turns out to be smaller, and steals the in-use cells
+> into the final `List[List[...]]` result.  For complex inputs the
+> `q` entries are conjugated at construction time; real inputs (no
+> Complex head, no `I` leaf) skip the conjugation to keep the
+> printed form free of `Conjugate[Sqrt[...]]` residues that
+> Mathilda's simplifier does not reduce.
+
 ## IdentityMatrix
 Generates an identity matrix.
 - `IdentityMatrix[n]`: Gives the `n x n` identity matrix.
