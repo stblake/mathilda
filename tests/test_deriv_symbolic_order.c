@@ -71,6 +71,31 @@ static void test_bug9_dn_xn(void) {
     assert_eval_eq("D[2^n, {n, k}]", "Log[2]^k 2^n", 0);
 }
 
+/* --- Sin / Cos / Sinh / Cosh of a linear argument ------------------- */
+static void test_trig_symbolic_order(void) {
+    /* Basic D[Cos[x], {x, n}] = Cos[n Pi/2 + x] (canonical Plus order). */
+    assert_eval_eq("D[Cos[x], {x, n}]",
+                   "Cos[1/2 Pi n + x]", 0);
+    assert_eval_eq("D[Sin[x], {x, n}]",
+                   "Sin[1/2 Pi n + x]", 0);
+
+    /* Linear chain rule: D[F[a x + b], {x, n}] = a^n F[n Pi/2 + a x + b]. */
+    assert_eval_eq("D[Cos[3*x + 5], {x, n}]",
+                   "3^n Cos[5 + 1/2 Pi n + 3 x]", 0);
+    assert_eval_eq("D[Sin[a*x + b], {x, n}]",
+                   "a^n Sin[b + 1/2 Pi n + a x]", 0);
+
+    /* Hyperbolic: structurally (-I)^n Cos[n Pi/2 - I x]; printed -I^n. */
+    assert_eval_eq("D[Cosh[x], {x, n}]",
+                   "-I^n Cos[1/2 Pi n - I x]", 0);
+    assert_eval_eq("D[Sinh[x], {x, n}]",
+                   "I -I^n Sin[1/2 Pi n - I x]", 0);
+
+    /* Non-linear argument -> stays unevaluated. */
+    assert_eval_eq("D[Cos[x^2], {x, n}]", "D[Cos[x^2], {x, n}]", 0);
+    assert_eval_eq("D[Sin[Log[x]], {x, n}]", "D[Sin[Log[x]], {x, n}]", 0);
+}
+
 /* --- Algorithmic generality (Plus / Times pull-out) ----------------- */
 static void test_symbolic_order_distributes(void) {
     /* Constant: 0 for any k >= 1. */
@@ -92,6 +117,7 @@ int main(void) {
     TEST(test_factorialpower_concrete);
     TEST(test_bug8_dx_xn);
     TEST(test_bug9_dn_xn);
+    TEST(test_trig_symbolic_order);
     TEST(test_symbolic_order_distributes);
 
     printf("All deriv_symbolic_order tests passed!\n");

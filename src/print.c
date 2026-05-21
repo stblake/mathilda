@@ -59,17 +59,17 @@ static int get_expr_prec(Expr* e) {
     }
     if (head == SYM_Rational) return 470;
     if (head == SYM_Complex) {
-        /* Pure imaginary unit prints as a bare "I" (or "-I" which is unary-
-         * minus); treat it as an atom so callers like Times don't wrap it
-         * in parentheses ("(I) Pi" -> "I Pi"). General Complex[a, b] still
-         * prints "a + b I" and keeps Plus-level precedence. */
+        /* Only the bare imaginary unit `I` (Complex[0, 1]) is an atom.
+         * `-I` (Complex[0, -1]) prints as a unary-minus form and so
+         * takes Plus-level precedence — otherwise Power[-I, n] would
+         * print as "-I^n" (i.e. -(I^n)) instead of "(-I)^n". General
+         * Complex[a, b] also prints at Plus level. */
         if (e->data.function.arg_count == 2) {
             Expr* re = e->data.function.args[0];
             Expr* im = e->data.function.args[1];
             bool re_zero = (re->type == EXPR_INTEGER && re->data.integer == 0)
                         || (re->type == EXPR_REAL && re->data.real == 0.0);
-            if (re_zero && im->type == EXPR_INTEGER
-                && (im->data.integer == 1 || im->data.integer == -1)) {
+            if (re_zero && im->type == EXPR_INTEGER && im->data.integer == 1) {
                 return 1000;
             }
         }

@@ -52,9 +52,11 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
+#include "print.h"
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -613,15 +615,30 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
                            Expr** order_expr) {
     if (order_expr) *order_expr = NULL;
     if (spec->type == EXPR_FUNCTION &&
-        is_sym(spec->data.function.head, "List") &&
-        spec->data.function.arg_count == 2) {
+        is_sym(spec->data.function.head, "List")) {
+        /* A List spec must have the {var, n} form. Any other shape
+         * (e.g., {x}, {x, y, z}) is a malformed multiple-derivative
+         * specifier; reject so the caller can emit D::dvar and leave
+         * the call unevaluated (matching Mathematica). */
+        if (spec->data.function.arg_count != 2) {
+            return false;
+        }
         Expr* k = spec->data.function.args[1];
         if (k->type == EXPR_INTEGER) {
             *var = spec->data.function.args[0];
             *order = k->data.integer;
             return *order >= 0;
         }
-        /* Symbolic order: any non-Integer spec argument. */
+        /* Reject non-integer numeric orders (Real, Rational, Complex);
+         * MMA's D::dvar requires n to be symbolic or non-negative integer. */
+        if (k->type == EXPR_REAL || k->type == EXPR_BIGINT ||
+            (k->type == EXPR_FUNCTION &&
+             k->data.function.head->type == EXPR_SYMBOL &&
+             (k->data.function.head->data.symbol == SYM_Rational ||
+              k->data.function.head->data.symbol == SYM_Complex))) {
+            return false;
+        }
+        /* Symbolic order. */
         *var = spec->data.function.args[0];
         *order = -1;
         if (order_expr) *order_expr = k;
@@ -630,6 +647,20 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
     *var = spec;
     *order = 1;
     return true;
+}
+
+/* Emit MMA-style D::dvar message for malformed multiple-derivative
+ * specifiers. Only called when parse_var_spec rejects a List spec. */
+static void emit_dvar_message(Expr* spec) {
+    if (spec->type != EXPR_FUNCTION ||
+        !is_sym(spec->data.function.head, "List")) {
+        return;
+    }
+    char* s = expr_to_string(spec);
+    printf("D::dvar: Multiple derivative specifier %s does not have "
+           "the form {variable, n}, where n is symbolic or a "
+           "non-negative integer.\n", s ? s : "?");
+    free(s);
 }
 
 /* Compute D[f, {var, k}] for a symbolic order k. The algorithm pattern-
@@ -752,6 +783,71 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
         }
     }
 
+    /* Sin/Cos/Sinh/Cosh of a linear-in-var argument.
+     *
+     * For u(var) = a*var + b with a, b free of var, the chain rule gives
+     *   D^k/dvar^k F[u] = a^k * F^(k)[u]
+     * with closed-form k-th derivatives matching Mathematica:
+     *   Sin^(k)[t]  = Sin[k Pi/2 + t]
+     *   Cos^(k)[t]  = Cos[k Pi/2 + t]
+     *   Cosh^(k)[t] = (-I)^k Cos[k Pi/2 - I t]
+     *   Sinh^(k)[t] = I (-I)^k Sin[k Pi/2 - I t]
+     *
+     * Linearity is detected by computing du/dvar; if that derivative is
+     * free of var then u is linear in var and the residual is exactly a.
+     * Non-linear arguments fall through (caller leaves D unevaluated). */
+    if (f->type == EXPR_FUNCTION && f->data.function.arg_count == 1 &&
+        f->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = f->data.function.head->data.symbol;
+        bool is_trig  = (h == SYM_Sin) || (h == SYM_Cos);
+        bool is_hyper = (h == SYM_Sinh) || (h == SYM_Cosh);
+        if (is_trig || is_hyper) {
+            Expr* u = f->data.function.args[0];
+            Expr* du_raw = compute_deriv(u, var);
+            if (du_raw) {
+                Expr* a = evaluate(du_raw);
+                expr_free(du_raw);
+                if (expr_free_of(a, var)) {
+                    /* half_pi_k = k * Pi / 2 */
+                    Expr* half_pi_k = expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_copy(k),
+                                   expr_new_symbol("Pi"),
+                                   mk_fn2("Power", mk_int(2), mk_int(-1)) }, 3);
+                    Expr* ak = mk_fn2("Power", a, expr_copy(k));
+                    Expr* result;
+                    if (is_trig) {
+                        /* a^k * F[k*Pi/2 + u] */
+                        Expr* shifted = mk_fn2("Plus", half_pi_k, expr_copy(u));
+                        Expr* trig    = mk_fn1(h, shifted);
+                        result = mk_fn2("Times", ak, trig);
+                    } else {
+                        /* a^k * (-I)^k * Cos[k*Pi/2 - I u]      (Cosh)
+                         * a^k * I * (-I)^k * Sin[k*Pi/2 - I u]  (Sinh) */
+                        Expr* minus_I_u = mk_fn2("Times",
+                            mk_fn2("Times", mk_int(-1), expr_new_symbol("I")),
+                            expr_copy(u));
+                        Expr* arg     = mk_fn2("Plus", half_pi_k, minus_I_u);
+                        const char* trig_name = (h == SYM_Cosh) ? "Cos" : "Sin";
+                        Expr* trig    = mk_fn1(trig_name, arg);
+                        Expr* neg_I   = mk_fn2("Times", mk_int(-1),
+                                               expr_new_symbol("I"));
+                        Expr* neg_I_k = mk_fn2("Power", neg_I, expr_copy(k));
+                        if (h == SYM_Cosh) {
+                            result = expr_new_function(expr_new_symbol("Times"),
+                                (Expr*[]){ ak, neg_I_k, trig }, 3);
+                        } else {
+                            result = expr_new_function(expr_new_symbol("Times"),
+                                (Expr*[]){ ak, expr_new_symbol("I"),
+                                           neg_I_k, trig }, 4);
+                        }
+                    }
+                    return eval_and_free(result);
+                }
+                expr_free(a);
+            }
+        }
+    }
+
     /* No symbolic-k closed form recognised for this shape. */
     return NULL;
 }
@@ -781,6 +877,7 @@ Expr* builtin_d(Expr* res) {
         int64_t order = 1;
         Expr* order_expr = NULL;
         if (!parse_var_spec(specs[i], &var, &order, &order_expr)) {
+            emit_dvar_message(specs[i]);       /* MMA-style D::dvar */
             expr_free(current);
             return NULL;                       /* malformed spec */
         }
@@ -824,6 +921,7 @@ Expr* builtin_dt(Expr* res) {
         int64_t order = 1;
         Expr* order_expr = NULL;
         if (!parse_var_spec(res->data.function.args[i], &var, &order, &order_expr)) {
+            emit_dvar_message(res->data.function.args[i]);
             expr_free(current);
             return NULL;
         }
