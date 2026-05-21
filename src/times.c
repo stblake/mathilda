@@ -698,21 +698,21 @@ Expr* builtin_times(Expr* res) {
      *   Sin[x]*Csc[x] -> 1,        Cos[x]*Tan[x] -> Sin[x], etc. */
     trig_canon_groups(groups, &group_count);
 
-    /* Sqrt-coefficient absorption: c * Power[r, -1/2] folds into
-     * sign(c) * Sqrt[c^2/r] followed by perfect-square extraction. The
-     * result is the canonical Mathematica form sign * (p_sq / q_sq) *
+    /* Sqrt-coefficient absorption: c * Power[r, +/-1/2] folds into
+     * sign(c) * Sqrt[c^2 * r^eps] followed by perfect-square extraction.
+     * The result is the canonical Mathematica form sign * (p_sq / q_sq) *
      * Sqrt[p_rest / q_rest]. Examples:
-     *   14 / Sqrt[10]       -> 7 Sqrt[2/5]    (98/5 after merge,  49 extracted)
-     *   78 / Sqrt[66]       -> 13 Sqrt[6/11]  (1014/11 after,    169 extracted)
-     *   (3/5) / Sqrt[2/5]   -> 3 / Sqrt[10]   (9/10 after,         9 extracted)
+     *   14 / Sqrt[10]        -> 7 Sqrt[2/5]    (98/5 after merge,  49 extracted)
+     *   78 / Sqrt[66]        -> 13 Sqrt[6/11]  (1014/11 after,    169 extracted)
+     *   (3/5) / Sqrt[2/5]    -> 3 / Sqrt[10]   (9/10 after,         9 extracted)
+     *   21/5 Sqrt[2/213]     -> 7/5 Sqrt[6/71] (294/1775 after, 7 and 5 extracted)
      *
-     * Restricted to exp = -1/2 (the "Sqrt in denominator" case Mathematica
-     * rationalizes). Extending to exp = +1/2 was tried but produces
-     * Sqrt[Rational[a, b]] outputs that diverge from the integer-base
-     * Power[b, -1/2] forms used elsewhere in QR / GS pipelines, breaking
-     * Plus's like-term collection and causing Together to recurse into
-     * very-slow PolynomialGCD work. The eps = -1 case is the one the
-     * user-supplied examples exercise.
+     * The eps = -1 path covers the original "Sqrt in denominator" case
+     * Mathematica rationalises. The eps = +1 path covers the symmetric
+     * case `c * Sqrt[r]` for rational coefficients on Rational radicands
+     * (e.g. 21/5 Sqrt[2/213] above) -- the tight `p_sq > 1 AND q_sq > 1`
+     * gate keeps integer-coefficient siblings like 2 Sqrt[2/15] and
+     * 30 Sqrt[2/15] (which dominate Gram-Schmidt residuals) unchanged.
      *
      * The unchanged-form pre-check keeps inputs already in canonical form
      * literally identical -- e.g. 2/Sqrt[3] stays as is because 4/3 has
@@ -724,8 +724,55 @@ Expr* builtin_times(Expr* res) {
            num_prod->data.integer == 1 ||
            num_prod->data.integer == -1))) {
         int64_t en_sa, ed_sa;
-        if (is_rational(groups[0].exponent, &en_sa, &ed_sa) &&
-            en_sa == -1 && ed_sa == 2) {
+        bool eps_ok = is_rational(groups[0].exponent, &en_sa, &ed_sa) &&
+                       (en_sa == -1 || en_sa == 1) && ed_sa == 2;
+        /* eps=+1 gating for c * Sqrt[Rational[a, b]]:
+         *   - cd >= 2 (rational coefficient): integer coefficients can't
+         *     produce q_sq > 1 from a squarefree rd, so the rewrite is
+         *     a no-op for them.
+         *   - |cn|, cd, rn, rd all small (<= 1024): Simplify's internal
+         *     polynomial Euclidean iteration produces sums of products
+         *     of Sqrt[Rational] coefficients whose numerators grow
+         *     without bound; canonicalising those gives PolynomialGCD
+         *     a moving target and the test_qr_rank_deficient_3x3
+         *     Simplify call doesn't terminate.  User-visible inputs
+         *     (21/5 Sqrt[2/213], -1/7 Sqrt[21/2]) sit well below the
+         *     threshold. */
+        int64_t cd_chk = 1, cn_chk = 0;
+        bool num_prod_rational = is_rational(num_prod, &cn_chk, &cd_chk);
+        int64_t cn_abs = cn_chk < 0 ? -cn_chk : cn_chk;
+        const int64_t CANON_CAP = 1024;
+        bool plus_eps_rational_base_and_coeff =
+            (en_sa == 1) &&
+            (groups[0].base->type == EXPR_FUNCTION) &&
+            (groups[0].base->data.function.head->type == EXPR_SYMBOL) &&
+            (groups[0].base->data.function.head->data.symbol == SYM_Rational) &&
+            num_prod_rational && (cd_chk >= 2) &&
+            (cn_abs <= CANON_CAP) && (cd_chk <= CANON_CAP);
+        /* Also bound the radicand magnitudes. */
+        if (plus_eps_rational_base_and_coeff) {
+            Expr* base = groups[0].base;
+            int64_t rn_chk, rd_chk;
+            if (!(is_rational(base, &rn_chk, &rd_chk) &&
+                  (rn_chk >= 0 ? rn_chk : -rn_chk) <= CANON_CAP &&
+                  rd_chk <= CANON_CAP)) {
+                plus_eps_rational_base_and_coeff = false;
+            }
+        }
+        /* Disable the eps=+1 rewrite while inside cancel_recursive's
+         * PolynomialGCD pass.  Together / PolynomialGCD iterates over
+         * polynomials whose coefficients carry Sqrt[Rational] terms;
+         * each multiplication produces fresh `c * Sqrt[a/b]` factors
+         * that my rewrite canonicalises to `c' * Sqrt[a'/b']` --
+         * different shape, so PolynomialGCD's coefficient explosion
+         * cannot terminate.  Leaving the form alone inside that pass
+         * keeps the polynomial Euclidean stable, while still applying
+         * the canonical form at user-facing evaluation. */
+        extern int cancel_recursive_inside_gcd;
+        if (cancel_recursive_inside_gcd > 0 && en_sa == 1) {
+            plus_eps_rational_base_and_coeff = false;
+        }
+        if (eps_ok && (en_sa == -1 || plus_eps_rational_base_and_coeff)) {
             int eps_sa = (int)en_sa;
             Expr* gb = groups[0].base;
             mpz_t rn, rd;
@@ -837,36 +884,50 @@ Expr* builtin_times(Expr* res) {
                     }
                     mpz_clears(pr_p, pr_psq, NULL);
 
-                    /* The rewrite is "useful" if it either extracts a perfect
-                     * square from numerator/denominator (p_sq/q_sq > 1) or
-                     * collapses the residual radical to an integer base
-                     * (p_rest == 1 or q_rest == 1, giving Sqrt[N] or
-                     * 1/Sqrt[N]). Without either, the rewrite is a structural
-                     * shuffle that produces Sqrt[Rational] outputs (e.g.
-                     * 2/Sqrt[30] -> Sqrt[2/15]) -- those cost Plus's
-                     * like-term collection over sibling c_i / Sqrt[r] terms
-                     * during Gram-Schmidt-style pipelines for no user-visible
-                     * benefit. The integer-base case is the one that lets
-                     * -1/5/Sqrt[2/5] fold to -1/Sqrt[10]. */
+                    /* Usefulness criteria differ by eps:
+                     *   eps=-1: original criterion -- extract a perfect
+                     *           square (p_sq or q_sq > 1) or collapse
+                     *           to integer base (p_rest=1 or q_rest=1).
+                     *           A pure shuffle (e.g. 2/Sqrt[30] -> Sqrt[2/15])
+                     *           costs Plus's like-term collection in QR.
+                     *   eps=+1: tight gate -- BOTH p_sq > 1 AND q_sq > 1.
+                     *           This is the user-visible Mathematica
+                     *           canonicalisation 21/5 Sqrt[2/213] ->
+                     *           7/5 Sqrt[6/71].  Looser criteria here
+                     *           rewrite QR intermediates like
+                     *           30 Sqrt[2/15] -> Sqrt[60] in ways that
+                     *           PolynomialGCD / Together can't reduce. */
                     bool integer_radical = (mpz_cmp_ui(p, 1) == 0) ||
                                            (mpz_cmp_ui(q, 1) == 0);
-                    bool useful_extraction = (mpz_cmp_ui(p_sq, 1) > 0) ||
-                                             (mpz_cmp_ui(q_sq, 1) > 0) ||
-                                             integer_radical;
+                    bool useful_extraction;
+                    if (eps_sa < 0) {
+                        useful_extraction = (mpz_cmp_ui(p_sq, 1) > 0) ||
+                                            (mpz_cmp_ui(q_sq, 1) > 0) ||
+                                            integer_radical;
+                    } else {
+                        useful_extraction = (mpz_cmp_ui(p_sq, 1) > 0) &&
+                                            (mpz_cmp_ui(q_sq, 1) > 0);
+                    }
 
                     /* Unchanged-form check: the rewrite is a no-op exactly
-                     * when p_rest == 1 (so the final exponent stays -1/2),
-                     * the extracted square coefficient equals |c|, and the
-                     * residual denominator under the radical matches the
-                     * input r. */
+                     * when the extracted coefficient equals |c| and the
+                     * residual radical matches the input radical:
+                     *   eps=-1, integer base: output 1/Sqrt[q_rest]
+                     *                          need p=1, rd=1, q=rn.
+                     *   eps=+1, Rational base: output Sqrt[Rational[p,q]]
+                     *                          need p=rn, q=rd, both >=2. */
                     bool unchanged =
-                        (mpz_cmp_ui(p, 1) == 0) &&
                         (mpz_cmp(p_sq, cn) == 0) &&
                         (mpz_cmp(q_sq, cd) == 0) &&
-                        (mpz_cmp_ui(rd, 1) == 0) &&
-                        (mpz_cmp(q, rn) == 0);
+                        ((eps_sa < 0 && mpz_cmp_ui(p, 1) == 0 &&
+                                         mpz_cmp_ui(rd, 1) == 0 &&
+                                         mpz_cmp(q, rn) == 0) ||
+                         (eps_sa > 0 && mpz_cmp_ui(rd, 1) > 0 &&
+                                         mpz_cmp(p, rn) == 0 &&
+                                         mpz_cmp(q, rd) == 0 &&
+                                         mpz_cmp_ui(p, 1) > 0 &&
+                                         mpz_cmp_ui(q, 1) > 0));
                     if (!useful_extraction) unchanged = true;
-                    (void)eps_sa;
 
                     if (!unchanged) {
                         /* New coefficient (sign * p_sq / q_sq). */

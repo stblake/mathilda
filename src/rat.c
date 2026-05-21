@@ -538,6 +538,19 @@ static void rat_strip_symbolic_common(Expr** num_io, Expr** den_io) {
     *den_io = new_den;
 }
 
+/* Counter incremented around cancel_recursive's PolynomialGCD call.
+ * Consumed by builtin_times to disable the eps=+1 Sqrt-coefficient
+ * canonicalisation while we're inside a PolynomialGCD pass: that pass
+ * multiplies polynomial coefficients many times, and canonicalising
+ * c * Sqrt[a/b] -> c' * Sqrt[a'/b'] at each multiplication creates
+ * moving-target coefficients that PolynomialGCD's Euclidean iteration
+ * cannot drive to zero -- producing the QR symbolic hang on the
+ * rank-deficient matrices once the Mathematica-style canonicalisation
+ * is enabled.  Leaving the form alone inside PolynomialGCD keeps the
+ * Euclidean run stable while still applying the canonical form at
+ * user-facing evaluation. */
+int cancel_recursive_inside_gcd = 0;
+
 static Expr* cancel_recursive(Expr* e) {
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
@@ -587,7 +600,9 @@ static Expr* cancel_recursive(Expr* e) {
         return expr_copy(e);
     }
 
+    cancel_recursive_inside_gcd++;
     Expr* g = eval_and_free(expr_new_function(expr_new_symbol("PolynomialGCD"), (Expr*[]){expr_copy(num), expr_copy(den)}, 2));
+    cancel_recursive_inside_gcd--;
     
     Expr* new_num = cancel_exact_div_wrapper(num, g);
     Expr* new_den = cancel_exact_div_wrapper(den, g);
