@@ -604,23 +604,56 @@ static Expr* higher_order_partial(Expr* f, Expr* x, int64_t order) {
  *     x            -- a bare variable, order 1
  *     {x, n}       -- an integer-order spec
  *     {x, k}       -- a symbolic-order spec (k an Expr, not an Integer)
+ *     {{x1,...,xN}}      -- an array (vector) spec, order 1 (gradient)
+ *     {{x1,...,xN}, n}   -- an array spec, integer order n
  * On success, *var is set to a NON-owned pointer into the spec.
  *   - For an integer order, *order is set to the integer and *order_expr
  *     is NULL.
  *   - For a symbolic order, *order is set to the sentinel -1 and
  *     *order_expr is a NON-owned pointer to the spec's symbolic order
  *     argument.
+ *   - For an array spec, *is_array is set to true and *var points at the
+ *     inner array List expression (so its args are the variables).
  * Returns false if the spec cannot be interpreted. */
 static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
-                           Expr** order_expr) {
+                           Expr** order_expr, bool* is_array) {
     if (order_expr) *order_expr = NULL;
+    if (is_array) *is_array = false;
     if (spec->type == EXPR_FUNCTION &&
         is_sym(spec->data.function.head, "List")) {
-        /* A List spec must have the {var, n} form. Any other shape
+        size_t ac = spec->data.function.arg_count;
+        Expr* first = (ac >= 1) ? spec->data.function.args[0] : NULL;
+        bool first_is_list = (first && first->type == EXPR_FUNCTION &&
+                              is_sym(first->data.function.head, "List"));
+
+        /* Array specs: {{x1,...,xN}} or {{x1,...,xN}, n}. */
+        if (first_is_list) {
+            if (ac == 1) {
+                if (is_array) *is_array = true;
+                *var = first;
+                *order = 1;
+                return true;
+            }
+            if (ac == 2) {
+                Expr* k = spec->data.function.args[1];
+                if (k->type == EXPR_INTEGER) {
+                    if (k->data.integer < 0) return false;
+                    if (is_array) *is_array = true;
+                    *var = first;
+                    *order = k->data.integer;
+                    return true;
+                }
+                /* Symbolic / non-integer order with array spec: not handled. */
+                return false;
+            }
+            return false;
+        }
+
+        /* Scalar specs: {var, n} or {var, k}. Any other shape
          * (e.g., {x}, {x, y, z}) is a malformed multiple-derivative
          * specifier; reject so the caller can emit D::dvar and leave
          * the call unevaluated (matching Mathematica). */
-        if (spec->data.function.arg_count != 2) {
+        if (ac != 2) {
             return false;
         }
         Expr* k = spec->data.function.args[1];
@@ -647,6 +680,76 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
     *var = spec;
     *order = 1;
     return true;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Array (Outer-style) derivatives                                         */
+/* ---------------------------------------------------------------------- */
+
+/* Forward declaration. */
+static Expr* outer_d_step(Expr* f, Expr* array);
+
+/* For a scalar (non-List) ``leaf_of_f`` and an ``array`` that may itself
+ * be a nested List, build the tensor whose leaves are D[leaf_of_f, v]
+ * for each leaf v of ``array``. Preserves ``array``'s nested structure.
+ * When the inner D cannot be reduced, we leave a literal D[leaf, v]
+ * wrapper so the outer evaluator can re-attempt later. */
+static Expr* d_at_array_leaves(Expr* leaf_of_f, Expr* array) {
+    if (array->type == EXPR_FUNCTION &&
+        is_sym(array->data.function.head, "List")) {
+        size_t n = array->data.function.arg_count;
+        Expr** items = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            items[i] = d_at_array_leaves(leaf_of_f,
+                                         array->data.function.args[i]);
+        }
+        return mk_fnN_adopt("List", items, n);
+    }
+    Expr* d = compute_deriv(leaf_of_f, array);
+    if (!d) {
+        /* Fallback: emit an unevaluated D[leaf, var] so the outer
+         * evaluator can take another pass. Matches MMA's behaviour for
+         * heads with no known derivative rule. */
+        return mk_fn2("D", expr_copy(leaf_of_f), expr_copy(array));
+    }
+    return d;
+}
+
+/* Compute one array-derivative step: First[Outer[D, {f}, array]].
+ *
+ * This is equivalent to Outer[D, f, array] (the {f} wrapper plus First
+ * cancel cleanly), so we recurse into f at each List level, and at every
+ * non-List leaf we lay down a copy of ``array``'s skeleton populated
+ * with D[leaf, v_i] entries. The result therefore has shape
+ *     shape(f) ++ shape(array)
+ * matching Mathematica's definition. */
+static Expr* outer_d_step(Expr* f, Expr* array) {
+    if (f->type == EXPR_FUNCTION &&
+        is_sym(f->data.function.head, "List")) {
+        size_t n = f->data.function.arg_count;
+        Expr** items = malloc(sizeof(Expr*) * n);
+        for (size_t i = 0; i < n; i++) {
+            items[i] = outer_d_step(f->data.function.args[i], array);
+        }
+        return mk_fnN_adopt("List", items, n);
+    }
+    return d_at_array_leaves(f, array);
+}
+
+/* Repeated array derivative: D[f, {array, n}] == apply outer_d_step n
+ * times. Between iterations we evaluate so that the next pass sees a
+ * simplified expression (mirrors higher_order_partial). */
+static Expr* array_higher_order(Expr* f, Expr* array, int64_t order) {
+    if (order <= 0) return expr_copy(f);
+    Expr* current = expr_copy(f);
+    for (int64_t i = 0; i < order; i++) {
+        Expr* nxt = outer_d_step(current, array);
+        Expr* reduced = evaluate(nxt);
+        expr_free(nxt);
+        expr_free(current);
+        current = reduced;
+    }
+    return current;
 }
 
 /* Emit MMA-style D::dvar message for malformed multiple-derivative
@@ -876,13 +979,17 @@ Expr* builtin_d(Expr* res) {
         Expr* var = NULL;
         int64_t order = 1;
         Expr* order_expr = NULL;
-        if (!parse_var_spec(specs[i], &var, &order, &order_expr)) {
+        bool is_array = false;
+        if (!parse_var_spec(specs[i], &var, &order, &order_expr, &is_array)) {
             emit_dvar_message(specs[i]);       /* MMA-style D::dvar */
             expr_free(current);
             return NULL;                       /* malformed spec */
         }
         Expr* stepped = NULL;
-        if (order >= 0) {
+        if (is_array) {
+            /* {{x1,...,xN}} or {{x1,...,xN}, n}: array (Outer) derivative. */
+            stepped = array_higher_order(current, var, order);
+        } else if (order >= 0) {
             stepped = higher_order_partial(current, var, order);
         } else {
             /* Symbolic-order spec. */
@@ -920,13 +1027,17 @@ Expr* builtin_dt(Expr* res) {
         Expr* var = NULL;
         int64_t order = 1;
         Expr* order_expr = NULL;
-        if (!parse_var_spec(res->data.function.args[i], &var, &order, &order_expr)) {
+        bool is_array = false;
+        if (!parse_var_spec(res->data.function.args[i], &var, &order, &order_expr,
+                            &is_array)) {
             emit_dvar_message(res->data.function.args[i]);
             expr_free(current);
             return NULL;
         }
         Expr* stepped = NULL;
-        if (order >= 0) {
+        if (is_array) {
+            stepped = array_higher_order(current, var, order);
+        } else if (order >= 0) {
             stepped = higher_order_partial(current, var, order);
         } else {
             Expr* sym = compute_deriv_symbolic_order(current, var, order_expr);

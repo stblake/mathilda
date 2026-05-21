@@ -755,6 +755,9 @@ target_include_directories(deriv_tests PRIVATE ../src)
 add_executable(deriv_symbolic_order_tests test_deriv_symbolic_order.c ${COMMON_SRC})
 target_include_directories(deriv_symbolic_order_tests PRIVATE ../src)
 
+add_executable(deriv_array_tests test_deriv_array.c ${COMMON_SRC})
+target_include_directories(deriv_array_tests PRIVATE ../src)
+
 add_executable(limit_tests test_limit.c ${COMMON_SRC})
 target_include_directories(limit_tests PRIVATE ../src)
 

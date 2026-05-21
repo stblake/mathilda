@@ -22,6 +22,16 @@ Partial derivative.
   non-negative integer.
 - `D[f, x, y, ...]` -- mixed partial derivative, equivalent to
   `D[D[f, x], y, ...]`.
+- `D[f, {x, n}, {y, m}, ...]` -- mixed multiple partial derivative.
+- `D[f, {{x1, ..., xN}}]` -- gradient: the vector
+  `{D[f, x1], ..., D[f, xN]}` for scalar `f`. For a list `f`, gives
+  the Jacobian (one gradient row per component of `f`).
+- `D[f, {{x1, ..., xN}, n}]` -- the `n`-th array derivative, equal to
+  applying `D[f, {{x1, ..., xN}}]` `n` times. `n == 2` yields the
+  Hessian (for scalar `f`).
+- `D[f, {array1}, {array2}, ...]` -- chained array derivatives;
+  semantically `First[Outer[D, {f}, array1, array2, ...]]`. Mixes
+  freely with scalar specs.
 
 **Features**:
 - `Protected`, `ReadProtected`.
@@ -64,6 +74,15 @@ Out[7]= {1, 2 x, Cos[x]}
 
 In[8]:= D[Log[b, x], x]
 Out[8]= 1 / (x Log[b])
+
+In[9]:= D[x^2 + 5 y^3, {{x, y}}]            (* gradient *)
+Out[9]= {2 x, 15 y^2}
+
+In[10]:= D[x^2 + 5 y^3, {{x, y}, 2}]        (* Hessian *)
+Out[10]= {{2, 0}, {0, 30 y}}
+
+In[11]:= D[{x^2 + y, x y}, {{x, y}}]        (* Jacobian *)
+Out[11]= {{2 x, 1}, {y, x}}
 ```
 
 ## Dt
