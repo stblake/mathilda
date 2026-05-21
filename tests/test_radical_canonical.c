@@ -719,6 +719,49 @@ static void test_minus_one_rational_exp_canonical(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Sqrt-coefficient absorption: c / Sqrt[r] -> sign(c) * Sqrt[c^2 / r] */
+/* ------------------------------------------------------------------ */
+
+static void test_sqrt_absorb_integer_base(void) {
+    /* c^2/r exposes a perfect square that integer-base canonicalization
+     * cannot catch (b does not divide num). 14^2/10 = 196/10 = 98/5,
+     * and 98 = 49 * 2 -> 7 Sqrt[2/5]. */
+    assert_eval_eq("14/Sqrt[10]",      "7 Sqrt[2/5]",    0);
+    assert_eval_eq("78/Sqrt[66]",      "13 Sqrt[6/11]",  0);
+    /* 6^2/10 = 36/10 = 18/5; 18 = 9 * 2 -> 3 Sqrt[2/5]. */
+    assert_eval_eq("6/Sqrt[10]",       "3 Sqrt[2/5]",    0);
+    /* 20^2/6 = 400/6 = 200/3; 200 = 100 * 2 -> 10 Sqrt[2/3]. */
+    assert_eval_eq("20/Sqrt[6]",       "10 Sqrt[2/3]",   0);
+    /* Negative coefficient preserved through absorption. */
+    assert_eval_eq("-14/Sqrt[10]",     "-7 Sqrt[2/5]",   0);
+}
+
+static void test_sqrt_absorb_rational_base(void) {
+    /* (3/5)^2 / (2/5) = 9/25 * 5/2 = 9/10; 9 = 3^2 -> 3 Sqrt[1/10] = 3/Sqrt[10]. */
+    assert_eval_eq("3/5/Sqrt[2/5]",    "3/Sqrt[10]",     0);
+    /* Same expression written as a Times divide. */
+    assert_eval_eq("(3/5) / Sqrt[2/5]","3/Sqrt[10]",     0);
+}
+
+static void test_sqrt_absorb_collapses_to_integer(void) {
+    /* c^2 == r so c^2/r = 1, Sqrt[1] = 1 -> bare sign(c). */
+    assert_eval_eq("4/Sqrt[16]",       "1",              0);
+    assert_eval_eq("-3/Sqrt[9]",       "-1",             0);
+}
+
+static void test_sqrt_absorb_unchanged_when_canonical(void) {
+    /* Inputs already in canonical form must NOT be rewritten. */
+    assert_eval_eq("2/Sqrt[3]",        "2/Sqrt[3]",      0);
+    assert_eval_eq("4/Sqrt[5]",        "4/Sqrt[5]",      0);
+    assert_eval_eq("6/Sqrt[5]",        "6/Sqrt[5]",      0);
+    assert_eval_eq("1/Sqrt[2]",        "1/Sqrt[2]",      0);
+    /* Symbolic-equality cross-check. */
+    assert_eval_eq("14/Sqrt[10] - 7 Sqrt[2/5]",   "0",   0);
+    assert_eval_eq("78/Sqrt[66] - 13 Sqrt[6/11]", "0",   0);
+    assert_eval_eq("3/5/Sqrt[2/5] - 3/Sqrt[10]",  "0",   0);
+}
+
+/* ------------------------------------------------------------------ */
 /* Integration: combinations of all three new canonical forms          */
 /* ------------------------------------------------------------------ */
 
@@ -813,6 +856,12 @@ int main(void) {
     TEST(test_sign_normalization_no_extraction);
     TEST(test_sign_normalization_even_q_unchanged);
     TEST(test_minus_one_rational_exp_canonical);
+
+    /* Sqrt-coefficient absorption (c / Sqrt[r] -> Sqrt[c^2 / r] form). */
+    TEST(test_sqrt_absorb_integer_base);
+    TEST(test_sqrt_absorb_rational_base);
+    TEST(test_sqrt_absorb_collapses_to_integer);
+    TEST(test_sqrt_absorb_unchanged_when_canonical);
 
     /* Combinations of the three new canonical forms. */
     TEST(test_combined_canonical_forms);

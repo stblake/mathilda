@@ -698,6 +698,229 @@ Expr* builtin_times(Expr* res) {
      *   Sin[x]*Csc[x] -> 1,        Cos[x]*Tan[x] -> Sin[x], etc. */
     trig_canon_groups(groups, &group_count);
 
+    /* Sqrt-coefficient absorption: c * Power[r, -1/2] folds into
+     * sign(c) * Sqrt[c^2/r] followed by perfect-square extraction. The
+     * result is the canonical Mathematica form sign * (p_sq / q_sq) *
+     * Sqrt[p_rest / q_rest]. Examples:
+     *   14 / Sqrt[10]       -> 7 Sqrt[2/5]    (98/5 after merge,  49 extracted)
+     *   78 / Sqrt[66]       -> 13 Sqrt[6/11]  (1014/11 after,    169 extracted)
+     *   (3/5) / Sqrt[2/5]   -> 3 / Sqrt[10]   (9/10 after,         9 extracted)
+     *
+     * Restricted to exp = -1/2 (the "Sqrt in denominator" case Mathematica
+     * rationalizes). Extending to exp = +1/2 was tried but produces
+     * Sqrt[Rational[a, b]] outputs that diverge from the integer-base
+     * Power[b, -1/2] forms used elsewhere in QR / GS pipelines, breaking
+     * Plus's like-term collection and causing Together to recurse into
+     * very-slow PolynomialGCD work. The eps = -1 case is the one the
+     * user-supplied examples exercise.
+     *
+     * The unchanged-form pre-check keeps inputs already in canonical form
+     * literally identical -- e.g. 2/Sqrt[3] stays as is because 4/3 has
+     * no extractable square beyond the trivial 2/Sqrt[3]. */
+    if (complex_val == NULL && group_count == 1 &&
+        (expr_is_integer_like(num_prod) || is_rational(num_prod, NULL, NULL)) &&
+        !(num_prod->type == EXPR_INTEGER &&
+          (num_prod->data.integer == 0 ||
+           num_prod->data.integer == 1 ||
+           num_prod->data.integer == -1))) {
+        int64_t en_sa, ed_sa;
+        if (is_rational(groups[0].exponent, &en_sa, &ed_sa) &&
+            en_sa == -1 && ed_sa == 2) {
+            int eps_sa = (int)en_sa;
+            Expr* gb = groups[0].base;
+            mpz_t rn, rd;
+            bool base_ok = false;
+            if (gb->type == EXPR_INTEGER && gb->data.integer >= 2) {
+                mpz_init_set_si(rn, gb->data.integer);
+                mpz_init_set_ui(rd, 1);
+                base_ok = true;
+            } else if (gb->type == EXPR_BIGINT &&
+                       mpz_sgn(gb->data.bigint) > 0 &&
+                       mpz_cmp_ui(gb->data.bigint, 1) > 0) {
+                mpz_init_set(rn, gb->data.bigint);
+                mpz_init_set_ui(rd, 1);
+                base_ok = true;
+            } else if (gb->type == EXPR_FUNCTION &&
+                       gb->data.function.head->type == EXPR_SYMBOL &&
+                       gb->data.function.head->data.symbol == SYM_Rational &&
+                       gb->data.function.arg_count == 2 &&
+                       expr_is_integer_like(gb->data.function.args[0]) &&
+                       expr_is_integer_like(gb->data.function.args[1])) {
+                expr_to_mpz(gb->data.function.args[0], rn);
+                expr_to_mpz(gb->data.function.args[1], rd);
+                if (mpz_sgn(rn) > 0 && mpz_sgn(rd) > 0 &&
+                    !(mpz_cmp_ui(rn, 1) == 0 && mpz_cmp_ui(rd, 1) == 0)) {
+                    base_ok = true;
+                } else {
+                    mpz_clear(rn); mpz_clear(rd);
+                }
+            }
+            if (base_ok) {
+                mpz_t cn, cd;
+                int sign = 1;
+                if (expr_is_integer_like(num_prod)) {
+                    expr_to_mpz(num_prod, cn);
+                    sign = mpz_sgn(cn);
+                    mpz_abs(cn, cn);
+                    mpz_init_set_ui(cd, 1);
+                } else {
+                    int64_t cn_i, cd_i;
+                    is_rational(num_prod, &cn_i, &cd_i);
+                    sign = (cn_i < 0) ? -1 : 1;
+                    mpz_init_set_si(cn, cn_i < 0 ? -cn_i : cn_i);
+                    mpz_init_set_si(cd, cd_i);
+                }
+                if (sign != 0) {
+                    /* p/q = |c|^2 * r^eps:
+                     *   eps = +1: (cn^2 * rn) / (cd^2 * rd)
+                     *   eps = -1: (cn^2 * rd) / (cd^2 * rn) */
+                    mpz_t p, q, g;
+                    mpz_inits(p, q, g, NULL);
+                    mpz_mul(p, cn, cn);
+                    mpz_mul(p, p, eps_sa > 0 ? rn : rd);
+                    mpz_mul(q, cd, cd);
+                    mpz_mul(q, q, eps_sa > 0 ? rd : rn);
+                    mpz_gcd(g, p, q);
+                    if (mpz_cmp_ui(g, 1) > 0) {
+                        mpz_divexact(p, p, g);
+                        mpz_divexact(q, q, g);
+                    }
+                    /* Extract square parts in-place from p and q. After the
+                     * call, p holds p_rest and p_sq holds the extracted root
+                     * (similarly for q). Trial-division by primes is O(sqrt)
+                     * which is acceptable here; large bases would be unusual
+                     * in symbolic input. */
+                    mpz_t p_sq, q_sq;
+                    mpz_init_set_ui(p_sq, 1);
+                    mpz_init_set_ui(q_sq, 1);
+                    mpz_t pr_p, pr_psq;
+                    mpz_inits(pr_p, pr_psq, NULL);
+                    /* p */
+                    if (mpz_cmp_ui(p, 1) > 0) {
+                        mpz_set_ui(pr_p, 2);
+                        mpz_set_ui(pr_psq, 4);
+                        while (mpz_divisible_p(p, pr_psq)) {
+                            mpz_divexact(p, p, pr_psq);
+                            mpz_mul(p_sq, p_sq, pr_p);
+                        }
+                        mpz_set_ui(pr_p, 3);
+                        mpz_set_ui(pr_psq, 9);
+                        while (mpz_cmp(pr_psq, p) <= 0) {
+                            if (mpz_divisible_p(p, pr_psq)) {
+                                mpz_divexact(p, p, pr_psq);
+                                mpz_mul(p_sq, p_sq, pr_p);
+                            } else {
+                                mpz_add_ui(pr_p, pr_p, 2);
+                                mpz_mul(pr_psq, pr_p, pr_p);
+                            }
+                        }
+                    }
+                    /* q */
+                    if (mpz_cmp_ui(q, 1) > 0) {
+                        mpz_set_ui(pr_p, 2);
+                        mpz_set_ui(pr_psq, 4);
+                        while (mpz_divisible_p(q, pr_psq)) {
+                            mpz_divexact(q, q, pr_psq);
+                            mpz_mul(q_sq, q_sq, pr_p);
+                        }
+                        mpz_set_ui(pr_p, 3);
+                        mpz_set_ui(pr_psq, 9);
+                        while (mpz_cmp(pr_psq, q) <= 0) {
+                            if (mpz_divisible_p(q, pr_psq)) {
+                                mpz_divexact(q, q, pr_psq);
+                                mpz_mul(q_sq, q_sq, pr_p);
+                            } else {
+                                mpz_add_ui(pr_p, pr_p, 2);
+                                mpz_mul(pr_psq, pr_p, pr_p);
+                            }
+                        }
+                    }
+                    mpz_clears(pr_p, pr_psq, NULL);
+
+                    /* Skip when no perfect square was extracted from the
+                     * merged numerator or denominator. Without an extracted
+                     * square the rewrite only reshapes an already-canonical
+                     * radical (e.g. 2/Sqrt[30] -> Sqrt[2/15]) -- a structural
+                     * shuffle that costs us Plus's like-term collection over
+                     * sibling c_i / Sqrt[r] terms during Gram-Schmidt-style
+                     * pipelines, and produces no user-visible benefit. */
+                    bool useful_extraction = (mpz_cmp_ui(p_sq, 1) > 0) ||
+                                             (mpz_cmp_ui(q_sq, 1) > 0);
+
+                    /* Unchanged-form check: the rewrite is a no-op exactly
+                     * when p_rest == 1 (so the final exponent stays -1/2),
+                     * the extracted square coefficient equals |c|, and the
+                     * residual denominator under the radical matches the
+                     * input r. */
+                    bool unchanged =
+                        (mpz_cmp_ui(p, 1) == 0) &&
+                        (mpz_cmp(p_sq, cn) == 0) &&
+                        (mpz_cmp(q_sq, cd) == 0) &&
+                        (mpz_cmp_ui(rd, 1) == 0) &&
+                        (mpz_cmp(q, rn) == 0);
+                    if (!useful_extraction) unchanged = true;
+                    (void)eps_sa;
+
+                    if (!unchanged) {
+                        /* New coefficient (sign * p_sq / q_sq). */
+                        mpz_t coef_num;
+                        mpz_init_set(coef_num, p_sq);
+                        if (sign < 0) mpz_neg(coef_num, coef_num);
+                        expr_free(num_prod);
+                        if (mpz_cmp_ui(q_sq, 1) == 0) {
+                            num_prod = expr_bigint_normalize(
+                                expr_new_bigint_from_mpz(coef_num));
+                        } else {
+                            Expr* num_e = expr_bigint_normalize(
+                                expr_new_bigint_from_mpz(coef_num));
+                            Expr* den_e = expr_bigint_normalize(
+                                expr_new_bigint_from_mpz(q_sq));
+                            num_prod = expr_new_function(
+                                expr_new_symbol("Rational"),
+                                (Expr*[]){ num_e, den_e }, 2);
+                        }
+                        mpz_clear(coef_num);
+
+                        /* Residual radical. Three shapes by (p_rest, q_rest):
+                         *   (1, 1)    radical is 1 -> drop the group (exp=0)
+                         *   (>=2, 1)  Sqrt[p_rest]      (exp = +1/2)
+                         *   (1, >=2)  1/Sqrt[q_rest]    (exp = -1/2)
+                         *   else      Sqrt[p_rest/q_rest] (exp = +1/2) */
+                        bool p_is_one = (mpz_cmp_ui(p, 1) == 0);
+                        bool q_is_one = (mpz_cmp_ui(q, 1) == 0);
+                        expr_free(groups[0].base);
+                        expr_free(groups[0].exponent);
+                        if (p_is_one && q_is_one) {
+                            groups[0].base = expr_new_integer(1);
+                            groups[0].exponent = expr_new_integer(0);
+                        } else if (p_is_one) {
+                            groups[0].base = expr_bigint_normalize(
+                                expr_new_bigint_from_mpz(q));
+                            groups[0].exponent = make_rational(-1, 2);
+                        } else if (q_is_one) {
+                            groups[0].base = expr_bigint_normalize(
+                                expr_new_bigint_from_mpz(p));
+                            groups[0].exponent = make_rational(1, 2);
+                        } else {
+                            Expr* num_e = expr_bigint_normalize(
+                                expr_new_bigint_from_mpz(p));
+                            Expr* den_e = expr_bigint_normalize(
+                                expr_new_bigint_from_mpz(q));
+                            groups[0].base = expr_new_function(
+                                expr_new_symbol("Rational"),
+                                (Expr*[]){ num_e, den_e }, 2);
+                            groups[0].exponent = make_rational(1, 2);
+                        }
+                    }
+
+                    mpz_clears(p, q, g, p_sq, q_sq, NULL);
+                }
+                mpz_clear(cn); mpz_clear(cd);
+                mpz_clear(rn); mpz_clear(rd);
+            }
+        }
+    }
+
     if (complex_val && !(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) {
         Expr *re, *im; is_complex(complex_val, &re, &im);
         Expr* nr = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(num_prod), expr_copy(re)}, 2));

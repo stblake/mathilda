@@ -85,6 +85,14 @@ Symbolic product.
 - Handles `I` as `Complex[0, 1]`.
 - Returns `1` if no arguments are provided.
 - Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.
+- **Sqrt-coefficient absorption**: a non-trivial rational/integer coefficient
+  combined with a single `Power[r, -1/2]` group folds into the canonical
+  Mathematica form `sign(c) * Sqrt[c^2 / r]`, then Power's existing
+  rational-base extraction pulls out any newly-exposed perfect square:
+  `14/Sqrt[10] → 7 Sqrt[2/5]`, `78/Sqrt[66] → 13 Sqrt[6/11]`,
+  `(3/5)/Sqrt[2/5] → 3/Sqrt[10]`. Skipped when no square is actually
+  extracted (e.g. `2/Sqrt[30]` stays as-is to preserve like-term
+  collection in `Plus`).
 
 ```mathematica
 In[1]:= 2 * x * 3 * y
@@ -92,6 +100,9 @@ Out[1]= 6*x*y
 
 In[2]:= I * I
 Out[2]= -1
+
+In[3]:= 14/Sqrt[10]
+Out[3]= 7 Sqrt[2/5]
 ```
 
 ## Power (^)
