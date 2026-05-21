@@ -145,6 +145,57 @@ static bool expr_free_of(const Expr* f, const Expr* x) {
     return true;
 }
 
+/* True if ``sym`` (an EXPR_SYMBOL) is listed in ``nonconsts`` (a
+ * List[...] of symbols, or NULL). Used to recognise variables that the
+ * caller has declared implicitly dependent on the differentiation
+ * variable via the NonConstants option. */
+static bool nonconsts_contains(const Expr* nonconsts, const Expr* sym) {
+    if (!nonconsts || !sym) return false;
+    if (sym->type != EXPR_SYMBOL) return false;
+    if (nonconsts->type != EXPR_FUNCTION) return false;
+    if (!is_sym(nonconsts->data.function.head, "List")) return false;
+    size_t n = nonconsts->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* v = nonconsts->data.function.args[i];
+        if (v && v->type == EXPR_SYMBOL && v->data.symbol == sym->data.symbol) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* True if ``f`` contains any symbol listed in ``nonconsts``. With
+ * NonConstants set we must NOT short-circuit constant subtrees that
+ * happen to mention an implicitly-dependent symbol -- otherwise
+ * D[2 y, x, NonConstants -> {y}] would wrongly fold to 0. */
+static bool expr_contains_nonconst(const Expr* f, const Expr* nonconsts) {
+    if (!nonconsts || nonconsts->type != EXPR_FUNCTION) return false;
+    if (!is_sym(nonconsts->data.function.head, "List")) return false;
+    size_t n = nonconsts->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        if (!expr_free_of(f, nonconsts->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Build the canonical unevaluated form D[sym, x, NonConstants -> {...}].
+ * ``nonconsts`` is the already-canonicalised List of implicit-dependence
+ * symbols; we deep-copy it into the result so the caller retains
+ * ownership of the original. */
+static Expr* build_unevaluated_d_nonconsts(const Expr* sym, const Expr* x,
+                                           const Expr* nonconsts) {
+    Expr* opt = mk_fn2("Rule",
+                       mk_sym("NonConstants"),
+                       expr_copy((Expr*)nonconsts));
+    Expr** args = malloc(sizeof(Expr*) * 3);
+    args[0] = expr_copy((Expr*)sym);
+    args[1] = expr_copy((Expr*)x);
+    args[2] = opt;
+    Expr* r = expr_new_function(mk_sym("D"), args, 3);
+    free(args);
+    return r;
+}
+
 /* Recognise the symbols that Dt treats as absolute constants. These
  * mirror the rule set in the original deriv.m plus a few additional
  * Mathematica-compatible constants. */
@@ -268,15 +319,17 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
 /* Core recursive derivative                                               */
 /* ---------------------------------------------------------------------- */
 
-/* Forward declarations. */
-static Expr* compute_deriv(Expr* f, Expr* x);
+/* Forward declarations. ``nonconsts`` may be NULL (no NonConstants
+ * option in effect) or a fully canonicalised List[sym1, ...] of
+ * symbols treated as implicit functions of x. */
+static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts);
 
 /* Shortcut: return D[g, x] as a fresh tree. When x is NULL, return
  * Dt[g] instead. For symbols and numeric atoms the answer is folded
  * immediately; for compound expressions we recurse through
  * compute_deriv so constants short-circuit there too. */
-static Expr* deriv_of(Expr* g, Expr* x) {
-    return compute_deriv(g, x);
+static Expr* deriv_of(Expr* g, Expr* x, Expr* nonconsts) {
+    return compute_deriv(g, x, nonconsts);
 }
 
 /* The chain rule applied to an ``f[g1, g2, ..., gn]`` expression whose
@@ -286,7 +339,7 @@ static Expr* deriv_of(Expr* g, Expr* x) {
  *
  * If all partials vanish the result is 0. If exactly one contributes,
  * the outer Plus is elided. */
-static Expr* chain_rule_unknown(Expr* f, Expr* x) {
+static Expr* chain_rule_unknown(Expr* f, Expr* x, Expr* nonconsts) {
     Expr* head = f->data.function.head;
     size_t n = f->data.function.arg_count;
     Expr** args = f->data.function.args;
@@ -295,7 +348,7 @@ static Expr* chain_rule_unknown(Expr* f, Expr* x) {
     Expr** terms = malloc(sizeof(Expr*) * n);
     size_t nterms = 0;
     for (size_t k = 0; k < n; k++) {
-        Expr* dk = deriv_of(args[k], x);
+        Expr* dk = deriv_of(args[k], x, nonconsts);
         if (is_lit_zero(dk)) { expr_free(dk); continue; }
 
         /* Build the indicator Derivative[0,..,1,..,0]. */
@@ -324,7 +377,7 @@ static Expr* chain_rule_unknown(Expr* f, Expr* x) {
  * Each nonzero partial derivative advances the corresponding index in
  * the Derivative head. Returns NULL if the expression doesn't match
  * this shape (so the caller can try other dispatch rules). */
-static Expr* deriv_of_derivative_form(Expr* f, Expr* x) {
+static Expr* deriv_of_derivative_form(Expr* f, Expr* x, Expr* nonconsts) {
     Expr* head = f->data.function.head;
     if (head->type != EXPR_FUNCTION) return NULL;
     if (head->data.function.arg_count != 1) return NULL;   /* need exactly one f */
@@ -343,7 +396,7 @@ static Expr* deriv_of_derivative_form(Expr* f, Expr* x) {
     Expr** terms = malloc(sizeof(Expr*) * n);
     size_t nterms = 0;
     for (size_t k = 0; k < n; k++) {
-        Expr* dk = deriv_of(args[k], x);
+        Expr* dk = deriv_of(args[k], x, nonconsts);
         if (is_lit_zero(dk)) { expr_free(dk); continue; }
 
         /* Advance the k-th order index. If it's a plain integer, bump it;
@@ -378,12 +431,30 @@ static Expr* deriv_of_derivative_form(Expr* f, Expr* x) {
 
 /* Core dispatch. If `x` is non-NULL we are computing D[f, x]; otherwise
  * we are computing Dt[f]. The two paths share 95% of their logic --
- * only constant-handling and the "unknown symbol" base-case differ. */
-static Expr* compute_deriv(Expr* f, Expr* x) {
+ * only constant-handling and the "unknown symbol" base-case differ.
+ * ``nonconsts`` (may be NULL) names symbols that should be treated as
+ * implicit functions of x; these short-circuit neither expr_free_of
+ * nor the symbol-base-case. */
+static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
     /* --- Partial-derivative base cases. --- */
     if (x) {
-        if (expr_free_of(f, x)) return mk_int(0);
         if (expr_eq(f, x)) return mk_int(1);
+        /* A symbol declared as NonConstant produces the canonical
+         * unevaluated implicit-derivative form. */
+        if (f->type == EXPR_SYMBOL && nonconsts_contains(nonconsts, f)) {
+            return build_unevaluated_d_nonconsts(f, x, nonconsts);
+        }
+        /* Don't short-circuit `Equal[...]` even when it has no x: the
+         * dispatch below distributes D over each side and lets the
+         * outer evaluator fold Equal[0, 0, ...] to True, matching
+         * Mathematica's semantics for D[a == b, x]. */
+        bool f_is_equal = (f->type == EXPR_FUNCTION &&
+                           f->data.function.head->type == EXPR_SYMBOL &&
+                           f->data.function.head->data.symbol == SYM_Equal);
+        if (!f_is_equal &&
+            expr_free_of(f, x) && !expr_contains_nonconst(f, nonconsts)) {
+            return mk_int(0);
+        }
     } else {
         /* Dt mode: numeric atoms and distinguished constants vanish. */
         if (f->type == EXPR_INTEGER || f->type == EXPR_REAL || f->type == EXPR_BIGINT) {
@@ -416,8 +487,19 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
         /* --- Plus: sum of derivatives. --- */
         if (h == SYM_Plus) {
             Expr** ts = malloc(sizeof(Expr*) * n);
-            for (size_t i = 0; i < n; i++) ts[i] = deriv_of(args[i], x);
+            for (size_t i = 0; i < n; i++) ts[i] = deriv_of(args[i], x, nonconsts);
             return mk_fnN_adopt("Plus", ts, n);
+        }
+
+        /* --- Equal (a == b [== c ...]): distribute the derivative
+         *     through each side. Mathematica returns Equal[D[a,x],
+         *     D[b,x], ...], collapsing arms whose derivative is 0
+         *     via the outer evaluator. The same convention applies
+         *     for partial, total, and NonConstants-tagged derivatives. */
+        if (h == SYM_Equal) {
+            Expr** ts = malloc(sizeof(Expr*) * n);
+            for (size_t i = 0; i < n; i++) ts[i] = deriv_of(args[i], x, nonconsts);
+            return mk_fnN_adopt("Equal", ts, n);
         }
 
         /* --- Times: general product rule. For n factors this is
@@ -429,7 +511,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
             for (size_t i = 0; i < n; i++) {
                 Expr** factors = malloc(sizeof(Expr*) * n);
                 for (size_t j = 0; j < n; j++) {
-                    factors[j] = (i == j) ? deriv_of(args[j], x)
+                    factors[j] = (i == j) ? deriv_of(args[j], x, nonconsts)
                                           : expr_copy(args[j]);
                 }
                 ts[i] = mk_fnN_adopt("Times", factors, n);
@@ -448,8 +530,8 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
         if (h == SYM_Power && n == 2) {
             Expr* a = args[0];
             Expr* b = args[1];
-            Expr* da = deriv_of(a, x);
-            Expr* db = deriv_of(b, x);
+            Expr* da = deriv_of(a, x, nonconsts);
+            Expr* db = deriv_of(b, x, nonconsts);
 
             if (is_lit_zero(db)) {
                 expr_free(db);
@@ -474,7 +556,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
         /* --- List: thread element-wise. --- */
         if (h == SYM_List) {
             Expr** ts = malloc(sizeof(Expr*) * n);
-            for (size_t i = 0; i < n; i++) ts[i] = deriv_of(args[i], x);
+            for (size_t i = 0; i < n; i++) ts[i] = deriv_of(args[i], x, nonconsts);
             return mk_fnN_adopt("List", ts, n);
         }
 
@@ -501,7 +583,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
                 if (fa == 2) {
                     Expr* bvar = fn2->data.function.args[0];
                     Expr* body = fn2->data.function.args[1];
-                    Expr* dbody = deriv_of(body, x);
+                    Expr* dbody = deriv_of(body, x, nonconsts);
                     Expr* dbody_eval = eval_and_free(dbody);
                     Expr* new_fn2 = mk_fn2("Function",
                         expr_copy(bvar), dbody_eval);
@@ -509,7 +591,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
                 }
                 if (fa == 1) {
                     Expr* body = fn2->data.function.args[0];
-                    Expr* dbody = deriv_of(body, x);
+                    Expr* dbody = deriv_of(body, x, nonconsts);
                     Expr* dbody_eval = eval_and_free(dbody);
                     Expr* new_fn2 = mk_fn1("Function", dbody_eval);
                     return mk_fn2("RootSum", expr_copy(fn1), new_fn2);
@@ -524,7 +606,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
             Expr* lb = mk_fn1("Log", expr_copy(args[0]));
             Expr* lf = mk_fn1("Log", expr_copy(args[1]));
             Expr* quot = mk_fn2("Times", lf, mk_fn2("Power", lb, mk_int(-1)));
-            Expr* r = compute_deriv(quot, x);
+            Expr* r = compute_deriv(quot, x, nonconsts);
             expr_free(quot);
             return r;
         }
@@ -533,7 +615,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
         if (n == 1) {
             Expr* fp = elementary_fprime(h, args[0]);
             if (fp) {
-                Expr* dg = deriv_of(args[0], x);
+                Expr* dg = deriv_of(args[0], x, nonconsts);
                 return mk_fn2("Times", fp, dg);
             }
             /* Unknown single-argument function -- standard chain rule:
@@ -541,12 +623,12 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
             Expr* op = mk_fn1("Derivative", mk_int(1));         /* Derivative[1]      */
             Expr* op_f = mk_fn_head1(op, expr_copy(head));      /* Derivative[1][f]   */
             Expr* applied = mk_fn_head1(op_f, expr_copy(args[0])); /* Derivative[1][f][g] */
-            Expr* dg = deriv_of(args[0], x);
+            Expr* dg = deriv_of(args[0], x, nonconsts);
             return mk_fn2("Times", applied, dg);
         }
 
         /* --- Unknown multi-argument function: full chain rule. --- */
-        return chain_rule_unknown(f, x);
+        return chain_rule_unknown(f, x, nonconsts);
     }
 
     /* ------------------------------------------------------------------ */
@@ -554,7 +636,7 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
     /* Derivative[...][f][args...].                                       */
     /* ------------------------------------------------------------------ */
     if (head->type == EXPR_FUNCTION) {
-        Expr* r = deriv_of_derivative_form(f, x);
+        Expr* r = deriv_of_derivative_form(f, x, nonconsts);
         if (r) return r;
     }
 
@@ -568,11 +650,12 @@ static Expr* compute_deriv(Expr* f, Expr* x) {
 
 /* Returns a new expression representing the n-th partial derivative of
  * f with respect to x. For n == 0 the input is deep-copied. */
-static Expr* higher_order_partial(Expr* f, Expr* x, int64_t order) {
+static Expr* higher_order_partial(Expr* f, Expr* x, int64_t order,
+                                  Expr* nonconsts) {
     if (order <= 0) return expr_copy(f);
     Expr* current = expr_copy(f);
     for (int64_t i = 0; i < order; i++) {
-        Expr* nxt = compute_deriv(current, x);
+        Expr* nxt = compute_deriv(current, x, nonconsts);
         if (!nxt) {
             /* Cannot differentiate further -- leave as D[current, x]
              * and wrap any remaining orders as nested D calls. In
@@ -687,25 +770,26 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
 /* ---------------------------------------------------------------------- */
 
 /* Forward declaration. */
-static Expr* outer_d_step(Expr* f, Expr* array);
+static Expr* outer_d_step(Expr* f, Expr* array, Expr* nonconsts);
 
 /* For a scalar (non-List) ``leaf_of_f`` and an ``array`` that may itself
  * be a nested List, build the tensor whose leaves are D[leaf_of_f, v]
  * for each leaf v of ``array``. Preserves ``array``'s nested structure.
  * When the inner D cannot be reduced, we leave a literal D[leaf, v]
  * wrapper so the outer evaluator can re-attempt later. */
-static Expr* d_at_array_leaves(Expr* leaf_of_f, Expr* array) {
+static Expr* d_at_array_leaves(Expr* leaf_of_f, Expr* array, Expr* nonconsts) {
     if (array->type == EXPR_FUNCTION &&
         is_sym(array->data.function.head, "List")) {
         size_t n = array->data.function.arg_count;
         Expr** items = malloc(sizeof(Expr*) * n);
         for (size_t i = 0; i < n; i++) {
             items[i] = d_at_array_leaves(leaf_of_f,
-                                         array->data.function.args[i]);
+                                         array->data.function.args[i],
+                                         nonconsts);
         }
         return mk_fnN_adopt("List", items, n);
     }
-    Expr* d = compute_deriv(leaf_of_f, array);
+    Expr* d = compute_deriv(leaf_of_f, array, nonconsts);
     if (!d) {
         /* Fallback: emit an unevaluated D[leaf, var] so the outer
          * evaluator can take another pass. Matches MMA's behaviour for
@@ -723,27 +807,28 @@ static Expr* d_at_array_leaves(Expr* leaf_of_f, Expr* array) {
  * with D[leaf, v_i] entries. The result therefore has shape
  *     shape(f) ++ shape(array)
  * matching Mathematica's definition. */
-static Expr* outer_d_step(Expr* f, Expr* array) {
+static Expr* outer_d_step(Expr* f, Expr* array, Expr* nonconsts) {
     if (f->type == EXPR_FUNCTION &&
         is_sym(f->data.function.head, "List")) {
         size_t n = f->data.function.arg_count;
         Expr** items = malloc(sizeof(Expr*) * n);
         for (size_t i = 0; i < n; i++) {
-            items[i] = outer_d_step(f->data.function.args[i], array);
+            items[i] = outer_d_step(f->data.function.args[i], array, nonconsts);
         }
         return mk_fnN_adopt("List", items, n);
     }
-    return d_at_array_leaves(f, array);
+    return d_at_array_leaves(f, array, nonconsts);
 }
 
 /* Repeated array derivative: D[f, {array, n}] == apply outer_d_step n
  * times. Between iterations we evaluate so that the next pass sees a
  * simplified expression (mirrors higher_order_partial). */
-static Expr* array_higher_order(Expr* f, Expr* array, int64_t order) {
+static Expr* array_higher_order(Expr* f, Expr* array, int64_t order,
+                                Expr* nonconsts) {
     if (order <= 0) return expr_copy(f);
     Expr* current = expr_copy(f);
     for (int64_t i = 0; i < order; i++) {
-        Expr* nxt = outer_d_step(current, array);
+        Expr* nxt = outer_d_step(current, array, nonconsts);
         Expr* reduced = evaluate(nxt);
         expr_free(nxt);
         expr_free(current);
@@ -906,7 +991,7 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
         bool is_hyper = (h == SYM_Sinh) || (h == SYM_Cosh);
         if (is_trig || is_hyper) {
             Expr* u = f->data.function.args[0];
-            Expr* du_raw = compute_deriv(u, var);
+            Expr* du_raw = compute_deriv(u, var, NULL);
             if (du_raw) {
                 Expr* a = evaluate(du_raw);
                 expr_free(du_raw);
@@ -964,14 +1049,77 @@ static Expr* build_unevaluated_d(Expr* f, Expr* var, Expr* k) {
         (Expr*[]){ expr_copy(f), spec }, 2);
 }
 
+/* Detect Rule[NonConstants, val] / RuleDelayed[NonConstants, val].
+ * Returns true when ``a`` is such an option, and writes a fresh
+ * canonical List[sym1, ...] to ``*out`` (caller owns; we wrap a bare
+ * single symbol into a singleton List to match Mathematica's output
+ * canonicalisation). */
+static bool parse_nonconsts_option(Expr* a, Expr** out) {
+    if (!a || a->type != EXPR_FUNCTION) return false;
+    if (a->data.function.arg_count != 2) return false;
+    Expr* head = a->data.function.head;
+    if (head->type != EXPR_SYMBOL) return false;
+    if (head->data.symbol != SYM_Rule && head->data.symbol != SYM_RuleDelayed) {
+        return false;
+    }
+    Expr* lhs = a->data.function.args[0];
+    Expr* rhs = a->data.function.args[1];
+    if (lhs->type != EXPR_SYMBOL || lhs->data.symbol != SYM_NonConstants) {
+        return false;
+    }
+    if (rhs->type == EXPR_FUNCTION && is_sym(rhs->data.function.head, "List")) {
+        *out = expr_copy(rhs);
+    } else {
+        *out = mk_fn1("List", expr_copy(rhs));
+    }
+    return true;
+}
+
 Expr* builtin_d(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;                 /* D[f] stays unevaluated */
 
     Expr* f = res->data.function.args[0];
-    Expr** specs = &res->data.function.args[1];
-    size_t nspecs = argc - 1;
+
+    /* Split trailing arguments into option Rules and var-specs. Options
+     * may appear interleaved (Mathematica conventionally places them at
+     * the end, but we accept either order to match how users write
+     * D[expr, x, NonConstants -> y]). */
+    Expr** specs = malloc(sizeof(Expr*) * (argc - 1));
+    size_t nspecs = 0;
+    Expr* nonconsts = NULL;
+    for (size_t i = 1; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        Expr* parsed = NULL;
+        if (parse_nonconsts_option(a, &parsed)) {
+            if (nonconsts) expr_free(nonconsts);
+            nonconsts = parsed;             /* later wins, mirroring MMA */
+            continue;
+        }
+        specs[nspecs++] = a;
+    }
+    if (nspecs == 0) {
+        if (nonconsts) expr_free(nonconsts);
+        free(specs);
+        return NULL;                        /* D[f, opts...] stays unevaluated */
+    }
+
+    /* Fixed-point form D[sym, var, NonConstants -> {... sym ...}].
+     * The internal compute_deriv emits exactly this shape when it hits
+     * an implicit-dependence symbol; we return the canonical
+     * List-wrapped form so that NonConstants -> y normalises to
+     * NonConstants -> {y}. If the input is already canonical,
+     * returning a structurally-equal result lets the outer fixed-point
+     * detector stop without further work. */
+    if (nonconsts && nspecs == 1 && f->type == EXPR_SYMBOL &&
+        nonconsts_contains(nonconsts, f) &&
+        specs[0]->type == EXPR_SYMBOL && !expr_eq(f, specs[0])) {
+        Expr* r = build_unevaluated_d_nonconsts(f, specs[0], nonconsts);
+        expr_free(nonconsts);
+        free(specs);
+        return r;
+    }
 
     /* Sequentially apply each spec (handling mixed partials D[f, x, y, ...]). */
     Expr* current = expr_copy(f);
@@ -982,17 +1130,21 @@ Expr* builtin_d(Expr* res) {
         bool is_array = false;
         if (!parse_var_spec(specs[i], &var, &order, &order_expr, &is_array)) {
             emit_dvar_message(specs[i]);       /* MMA-style D::dvar */
+            if (nonconsts) expr_free(nonconsts);
+            free(specs);
             expr_free(current);
             return NULL;                       /* malformed spec */
         }
         Expr* stepped = NULL;
         if (is_array) {
             /* {{x1,...,xN}} or {{x1,...,xN}, n}: array (Outer) derivative. */
-            stepped = array_higher_order(current, var, order);
+            stepped = array_higher_order(current, var, order, nonconsts);
         } else if (order >= 0) {
-            stepped = higher_order_partial(current, var, order);
+            stepped = higher_order_partial(current, var, order, nonconsts);
         } else {
-            /* Symbolic-order spec. */
+            /* Symbolic-order spec. NonConstants is not threaded through
+             * the closed-form symbolic-k path; it falls through to the
+             * unevaluated form for any mixed case. */
             Expr* sym = compute_deriv_symbolic_order(current, var, order_expr);
             if (sym) stepped = sym;
             else stepped = build_unevaluated_d(current, var, order_expr);
@@ -1001,6 +1153,8 @@ Expr* builtin_d(Expr* res) {
         current = stepped;
     }
 
+    if (nonconsts) expr_free(nonconsts);
+    free(specs);
     return current;
 }
 
@@ -1017,7 +1171,7 @@ Expr* builtin_dt(Expr* res) {
 
     /* Dt[f]: total derivative. */
     if (argc == 1) {
-        return compute_deriv(f, NULL);        /* may be NULL to stay unevaluated */
+        return compute_deriv(f, NULL, NULL);  /* may be NULL to stay unevaluated */
     }
 
     /* Dt[f, var_specs...] is identical to D[f, var_specs...]: it gives
@@ -1036,9 +1190,9 @@ Expr* builtin_dt(Expr* res) {
         }
         Expr* stepped = NULL;
         if (is_array) {
-            stepped = array_higher_order(current, var, order);
+            stepped = array_higher_order(current, var, order, NULL);
         } else if (order >= 0) {
-            stepped = higher_order_partial(current, var, order);
+            stepped = higher_order_partial(current, var, order, NULL);
         } else {
             Expr* sym = compute_deriv_symbolic_order(current, var, order_expr);
             stepped = sym ? sym : build_unevaluated_d(current, var, order_expr);
@@ -1135,7 +1289,7 @@ Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn) {
     Expr* current = expr_copy(body);
     for (size_t i = 0; i < m; i++) {
         for (int64_t k = 0; k < orders[i]; k++) {
-            Expr* d = compute_deriv(current, vars[i]);
+            Expr* d = compute_deriv(current, vars[i], NULL);
             expr_free(current);
             if (!d) {
                 for (size_t j = 0; j < m; j++) expr_free(vars[j]);

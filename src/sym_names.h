@@ -179,6 +179,7 @@ extern const char* SYM_Mod;
 extern const char* SYM_Module;
 extern const char* SYM_Modulus;
 extern const char* SYM_NHoldRest;
+extern const char* SYM_NonConstants;
 extern const char* SYM_None;
 extern const char* SYM_Not;
 extern const char* SYM_Null;

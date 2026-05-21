@@ -164,6 +164,7 @@ const char* SYM_Mod = NULL;
 const char* SYM_Module = NULL;
 const char* SYM_Modulus = NULL;
 const char* SYM_NHoldRest = NULL;
+const char* SYM_NonConstants = NULL;
 const char* SYM_None = NULL;
 const char* SYM_Not = NULL;
 const char* SYM_Null = NULL;
@@ -423,6 +424,7 @@ void sym_names_init(void) {
     SYM_Module                     = intern_symbol("Module");
     SYM_Modulus                    = intern_symbol("Modulus");
     SYM_NHoldRest                  = intern_symbol("NHoldRest");
+    SYM_NonConstants               = intern_symbol("NonConstants");
     SYM_None                       = intern_symbol("None");
     SYM_Not                        = intern_symbol("Not");
     SYM_Null                       = intern_symbol("Null");

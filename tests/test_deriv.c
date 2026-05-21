@@ -148,6 +148,48 @@ static void test_dt(void) {
     check("Dt[x^2, {x, 2}]", "2");
 }
 
+/* --- Distribution over Equal -------------------------------------------- */
+static void test_equal_distribution(void) {
+    /* MMA: D[a == b, x] -> 0 == 0 -> True (both sides x-free).
+     * (a == a evaluates to True *before* reaching D, so the canonical
+     * test uses two distinct symbols.) */
+    check("D[a == b, x]", "True");
+    /* Plus inside Equal -- the classic implicit-circle setup. */
+    check("D[x^2 + y^2 == 1, x]", "Equal[Times[2, x], 0]");
+    /* Both sides depend on x. */
+    check("D[Sin[x] == Cos[x], x]",
+          "Equal[Cos[x], Times[-1, Sin[x]]]");
+    /* Nested Equal distributes through both layers. (Mathilda parses
+     * a == b == c left-associatively as Equal[Equal[a, b], c].) */
+    check("D[Sin[x] == Cos[x] == Tan[x], x]",
+          "Equal[Equal[Cos[x], Times[-1, Sin[x]]], Power[Sec[x], 2]]");
+}
+
+/* --- NonConstants option ------------------------------------------------ */
+static void test_nonconstants(void) {
+    /* The implicit-derivative base case: a symbol declared NonConstant
+     * produces a literally-unevaluated D[sym, var, NonConstants -> {...}]. */
+    check("D[y, x, NonConstants -> {y}]",
+          "D[y, x, Rule[NonConstants, List[y]]]");
+    /* Single-symbol shorthand canonicalises to a List. */
+    check("D[y, x, NonConstants -> y]",
+          "D[y, x, Rule[NonConstants, List[y]]]");
+    /* Constant short-circuit must NOT fire on symbols that mention a
+     * declared-non-constant symbol. */
+    check_zero("D[2 y, x, NonConstants -> {y}] - 2 D[y, x, NonConstants -> {y}]");
+    /* Symbols not in the list still vanish. */
+    check("D[z, x, NonConstants -> {y}]", "0");
+    /* x itself differentiates to 1, regardless of NonConstants. */
+    check("D[x, x, NonConstants -> {y}]", "1");
+    /* The full implicit-circle worked example from the MMA docs. */
+    check_zero("D[x^2 + y^2 == 1, x, NonConstants -> y] - "
+               "(2 x + 2 y D[y, x, NonConstants -> {y}] == 0)");
+    /* Multiple non-constant symbols. */
+    check_zero("D[x + y + z, x, NonConstants -> {y, z}] - "
+               "(1 + D[y, x, NonConstants -> {y, z}] + "
+               "D[z, x, NonConstants -> {y, z}])");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -160,6 +202,8 @@ int main(void) {
     TEST(test_higher_order);
     TEST(test_list_threading);
     TEST(test_dt);
+    TEST(test_equal_distribution);
+    TEST(test_nonconstants);
 
     printf("All derivative tests passed.\n");
     return 0;

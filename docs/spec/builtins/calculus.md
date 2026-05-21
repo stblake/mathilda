@@ -32,6 +32,15 @@ Partial derivative.
 - `D[f, {array1}, {array2}, ...]` -- chained array derivatives;
   semantically `First[Outer[D, {f}, array1, array2, ...]]`. Mixes
   freely with scalar specs.
+- `D[f, x, NonConstants -> {y, ...}]` -- treat each listed symbol as
+  an implicit function of `x`. Differentiating such a symbol produces
+  the canonical unevaluated form `D[y, x, NonConstants -> {y, ...}]`
+  rather than `0`, so chain-rule terms surface for implicit
+  differentiation. The single-symbol shorthand
+  `NonConstants -> y` canonicalises to a singleton List, and the
+  option may be combined with multiple scalar/array specs (it applies
+  to the same `D` call only; nested `D` expressions in the result
+  preserve their own NonConstants list).
 
 **Features**:
 - `Protected`, `ReadProtected`.
@@ -47,7 +56,13 @@ Partial derivative.
   expressions and advances the appropriate partial-index.
 - Short-circuits via an allocation-free FreeQ walk so constants and
   sub-trees independent of the differentiation variable are dropped
-  without further work.
+  without further work. The short-circuit is suppressed for `Equal[...]`
+  expressions and for sub-trees that mention a declared `NonConstants`
+  symbol, so both implicit derivatives and relational arguments
+  retain their structure.
+- Distributes over `Equal`: `D[a == b, x]` becomes
+  `Equal[D[a, x], D[b, x]]`. The evaluator folds `Equal[0, 0]` to
+  `True`, matching Mathematica.
 
 **Examples**:
 ```mathematica
@@ -83,6 +98,12 @@ Out[10]= {{2, 0}, {0, 30 y}}
 
 In[11]:= D[{x^2 + y, x y}, {{x, y}}]        (* Jacobian *)
 Out[11]= {{2 x, 1}, {y, x}}
+
+In[12]:= D[x^2 + y^2 == 1, x]               (* Equal distribution *)
+Out[12]= 2 x == 0
+
+In[13]:= D[x^2 + y^2 == 1, x, NonConstants -> y]   (* implicit diff *)
+Out[13]= 2 x + 2 y D[y, x, NonConstants -> {y}] == 0
 ```
 
 ## Dt

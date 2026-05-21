@@ -832,7 +832,7 @@ void info_init(void) {
         "unevaluated so user-supplied rules can intercept it.");
 
     // Calculus
-    symtab_set_docstring("D", "D[f, x] gives the partial derivative of f with respect to x.\nD[f, {x, n}] gives the nth partial derivative.\nD[f, x, y, ...] gives the mixed derivative.");
+    symtab_set_docstring("D", "D[f, x] gives the partial derivative of f with respect to x.\nD[f, {x, n}] gives the nth partial derivative.\nD[f, x, y, ...] gives the mixed derivative.\nD[f, x, NonConstants -> {y, ...}] treats the listed symbols as implicit functions of x.\nDistributes over Equal: D[a == b, x] gives D[a, x] == D[b, x].");
     symtab_set_docstring("Dt", "Dt[f] gives the total derivative of f.\nDt[f, x] gives the total derivative of f with respect to x.\nDt[f, {x, n}] gives the nth total derivative.");
     symtab_set_docstring("Derivative",
         "f' represents the derivative of a function f of one argument.\n"
