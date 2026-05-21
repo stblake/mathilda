@@ -995,6 +995,27 @@ void test_simplify_minus_one_fifth_root_alternating_sum(void) {
         "0", 0);
 }
 
+void test_simplify_sqrt_of_square_numeric_real(void) {
+    /* Sqrt[e^2] - e == 0 when e is a closed-form real expression whose
+     * sign isn't decidable structurally (some term locally negative)
+     * but is decidable numerically. Driven by the numeric_sign_fallback
+     * inside prov_pos / prov_neg combined with the SqrtSquareRules
+     * walker that converts Sqrt[e^2] -> Abs[e]. */
+    assert_eval_eq(
+        "Simplify[Sqrt[(1 + Cos[2] + Cos[3] + Sqrt[1 + Sqrt[3]])^2]"
+        " - (1 + Cos[2] + Cos[3] + Sqrt[1 + Sqrt[3]])]",
+        "0", 0);
+    /* Cos[2] < 0 numerically; Sqrt[Cos[2]^2] = -Cos[2]. */
+    assert_eval_eq("Simplify[Sqrt[Cos[2]^2]]", "-Cos[2]", 0);
+    /* 1 + Cos[2] > 0 numerically; Sqrt[(1+Cos[2])^2] = 1 + Cos[2]. */
+    assert_eval_eq("Simplify[Sqrt[(1 + Cos[2])^2]]", "1 + Cos[2]", 0);
+    /* Already-passing nested radical sum (regression guard). */
+    assert_eval_eq(
+        "Simplify[Sqrt[(1 + Sqrt[5] + Sqrt[1 + Sqrt[3]])^2]"
+        " - (1 + Sqrt[5] + Sqrt[1 + Sqrt[3]])]",
+        "0", 0);
+}
+
 void test_simplify_algebraic_sqrt_x_squared_plus_one(void) {
     /* (x/Sqrt[x^2+1] + 1)/((Sqrt[x^2+1]+x)^2 + 1) - 1/(2 + 2x^2) = 0.
      * Already handled by simp_algebraic which substitutes each Sqrt[u_i]
@@ -1205,6 +1226,7 @@ int main(void) {
     TEST(test_simplify_tan_addition_mixed_sec_tan);
     TEST(test_simplify_cos_four_pi_ninth_minus_sin_pi_eighteenth);
     TEST(test_simplify_minus_one_fifth_root_alternating_sum);
+    TEST(test_simplify_sqrt_of_square_numeric_real);
     TEST(test_simplify_algebraic_sqrt_x_squared_plus_one);
     TEST(test_simplify_one_plus_x_squared_three_halves_polynomial);
     TEST(test_simplify_sqrt_30_factorisation);

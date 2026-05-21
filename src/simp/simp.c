@@ -4,6 +4,7 @@
 #include "eval.h"
 #include "expand.h"
 #include "facpoly.h"
+#include "numeric.h"
 #include "parse.h"
 #include "print.h"
 #include "symtab.h"
@@ -15,11 +16,15 @@
 #include "qa.h"
 #include "qafactor.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <gmp.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /*
  * simp.c -- Simplify, Assuming, $Assumptions, and AssumeCtx.
@@ -389,6 +394,99 @@ static bool prov_np (const AssumeCtx* ctx, const Expr* x);
 static bool prov_int(const AssumeCtx* ctx, const Expr* x);
 static bool prov_re (const AssumeCtx* ctx, const Expr* x);
 
+/* Local helper: true iff `e` contains a free (unknown) symbol leaf as
+ * an argument position — i.e. a symbol other than the named numeric
+ * constants Pi / E / EulerGamma / GoldenRatio / Catalan / Degree /
+ * Glaisher / Khinchin appearing somewhere a numeric value would be
+ * required. Function heads (Cos, Sin, Log, ...) do NOT count even
+ * though they are non-constant symbol leaves: `Cos[2]` is fully
+ * numeric. This is the cheap gate before paying for `numericalize`. */
+static bool nsf_has_free_symbol(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        return !is_real_constant_symbol(e->data.symbol);
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    /* Skip the head — Cos/Sin/Log/etc. are not "free variables" even
+     * though they aren't recognised numeric constants. */
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (nsf_has_free_symbol(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Numerical sign fallback used by prov_pos / prov_neg when structural
+ * analysis can't decide. Returns +1 / -1 if N[x] is a finite real number
+ * whose magnitude is far enough from zero to rule out accumulated MPFR
+ * roundoff (we use ~1e-20 with ~100 bits of working precision, leaving
+ * a ~5-decade safety margin). Returns 0 ("undecided") when:
+ *   - x contains a free symbol (no numeric value to compute),
+ *   - numericalize couldn't produce a numeric result,
+ *   - the magnitude is within the safety margin (the expression may
+ *     algebraically be exactly zero — caller must NOT assume a sign),
+ *   - the numeric result isn't a real number (e.g. Complex[2.0, 3.0]).
+ *
+ * This is critical for Simplify[Sqrt[e^2] - e] when e contains numeric
+ * sub-expressions like Cos[2] whose negativity defeats the structural
+ * Plus-of-nonneg rule but whose contribution to e is small enough that
+ * e is still numerically positive. The reason this is sound: if e is
+ * numerically e.g. ~1.24 with 100-bit precision, no rearrangement of
+ * the algebraic identity can make it secretly zero. */
+static int numeric_sign_fallback(const Expr* x) {
+    if (!x) return 0;
+    /* Integer / bigint / real / mpfr literals already handled by the
+     * inline numeric_sign() in prov_pos / prov_neg; skip to avoid
+     * pointless allocation. */
+    if (x->type == EXPR_INTEGER || x->type == EXPR_BIGINT ||
+        x->type == EXPR_REAL) return 0;
+    /* Performance gate: skip if x has any free symbol — numericalize
+     * would just rebuild the same tree without producing a numeric
+     * result, but the recursive walk is expensive for deep inputs. */
+    if (nsf_has_free_symbol(x)) return 0;
+#ifdef USE_MPFR
+    if (x->type == EXPR_MPFR) return 0;
+    NumericSpec spec;
+    spec.mode = NUMERIC_MODE_MPFR;
+    spec.bits = 100;  /* ~30 decimal digits */
+#else
+    NumericSpec spec = numeric_machine_spec();
+#endif
+    Expr* num = numericalize(x, spec);
+    if (!num) return 0;
+    int sign = 0;
+#ifdef USE_MPFR
+    if (num->type == EXPR_MPFR) {
+        if (mpfr_number_p(num->data.mpfr)) {
+            int s = mpfr_sgn(num->data.mpfr);
+            if (s != 0) {
+                /* |num| > 1e-20 ? */
+                mpfr_t thresh;
+                mpfr_init2(thresh, 64);
+                mpfr_set_str(thresh, "1e-20", 10, MPFR_RNDN);
+                if (mpfr_cmpabs(num->data.mpfr, thresh) > 0) {
+                    sign = s;
+                }
+                mpfr_clear(thresh);
+            }
+        }
+    } else
+#endif
+    if (num->type == EXPR_REAL) {
+        double v = num->data.real;
+        if (isfinite(v) && fabs(v) > 1e-10) {
+            sign = (v > 0) ? 1 : -1;
+        }
+    } else if (num->type == EXPR_INTEGER) {
+        if (num->data.integer > 0) sign = 1;
+        else if (num->data.integer < 0) sign = -1;
+    } else if (num->type == EXPR_BIGINT) {
+        sign = mpz_sgn(num->data.bigint);
+    }
+    /* Any other shape (symbol, function, Complex, ...) leaves sign at 0. */
+    expr_free(num);
+    return sign;
+}
+
 /* True iff every argument of `e` is provably real-valued. */
 static bool all_real(const AssumeCtx* ctx, const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
@@ -477,22 +575,31 @@ static bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
         const char* h = x->data.function.head->data.symbol;
         size_t n = x->data.function.arg_count;
         Expr** a = x->data.function.args;
-        /* Times: positive iff every factor positive. */
+        /* Times: positive iff every factor positive. We DON'T early-return
+         * `false` on a structural mismatch — falling through gives the
+         * numerical-sign fallback below a chance to catch expressions that
+         * are positive in spite of a locally-unprovable factor (e.g.
+         * a product whose net sign is decidable numerically). */
         if (h == SYM_Times && n > 0) {
+            bool all_pos = true;
             for (size_t i = 0; i < n; i++) {
-                if (!prov_pos(ctx, a[i])) return false;
+                if (!prov_pos(ctx, a[i])) { all_pos = false; break; }
             }
-            return true;
+            if (all_pos) return true;
         }
-        /* Plus: at least one strictly positive, all others non-negative. */
+        /* Plus: at least one strictly positive, all others non-negative.
+         * Same fall-through-on-failure as Times so the numeric fallback
+         * gets a shot — needed for sums like 1 + Cos[2] + ... where one
+         * term is locally negative but the total is unambiguously positive. */
         if (h == SYM_Plus && n > 0) {
+            bool plus_ok = true;
             bool any = false;
             for (size_t i = 0; i < n; i++) {
                 if (prov_pos(ctx, a[i])) { any = true; continue; }
                 if (prov_nn(ctx, a[i])) continue;
-                return false;
+                plus_ok = false; break;
             }
-            return any;
+            if (plus_ok && any) return true;
         }
         /* Power: positive base raised to anything is positive. */
         if (h == SYM_Power && n == 2) {
@@ -509,6 +616,11 @@ static bool prov_pos(const AssumeCtx* ctx, const Expr* x) {
         /* Sqrt[positive] is positive (and Sqrt is Power[_, 1/2]; that path
          * handled above already). */
     }
+    /* Last resort: numerical sign check. Handles the case where the
+     * structural Plus-of-nonneg rule fails because some term (e.g. Cos[2])
+     * is locally negative, but the overall expression is still positive
+     * — see numeric_sign_fallback for the safety analysis. */
+    if (numeric_sign_fallback(x) == 1) return true;
     return false;
 }
 
@@ -554,6 +666,10 @@ static bool prov_neg(const AssumeCtx* ctx, const Expr* x) {
     /* Times: even number of negatives among factors, with the rest positive,
      * gives positive (not negative). For "negative" we need an odd number of
      * negative factors and the rest positive. v1 keeps this simple. */
+    /* Last resort: numerical sign check — mirrors the fallback in
+     * prov_pos. Catches expressions like 1 + Cos[2] + Cos[3] - 3 whose
+     * negativity isn't visible structurally. */
+    if (numeric_sign_fallback(x) == -1) return true;
     return false;
 }
 
@@ -7678,6 +7794,125 @@ static Expr* apply_abs_rules(const Expr* input, const AssumeCtx* ctx) {
 }
 
 /* ----------------------------------------------------------------------- */
+/* Sqrt[e^2] simplification                                                */
+/*                                                                          */
+/* Companion walker for Sqrt[_^2] (i.e. Power[Power[base, 2], Rational[1,2]])
+ * subexpressions. The per-symbol rule cluster in apply_assumption_rules
+ * only handles bare symbols; this walker covers general subexpressions and
+ * relies on the prov_pos / prov_neg numeric-sign fallback to decide the
+ * sign of `base` for closed-form numeric expressions like
+ * `1 + Cos[2] + Cos[3] + Sqrt[1 + Sqrt[3]]`.                              */
+/* ----------------------------------------------------------------------- */
+
+/* True iff e is the literal `Rational[1, 2]`. */
+static bool is_rational_half(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_INTEGER
+        && e->data.function.args[0]->data.integer == 1
+        && e->data.function.args[1]->type == EXPR_INTEGER
+        && e->data.function.args[1]->data.integer == 2;
+}
+
+/* True iff e has the shape Power[Power[_, 2], Rational[1, 2]] = Sqrt[X^2]. */
+static bool is_sqrt_of_square(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head ||
+        e->data.function.head->type != EXPR_SYMBOL ||
+        e->data.function.head->data.symbol != SYM_Power ||
+        e->data.function.arg_count != 2) return false;
+    Expr* outer_base = e->data.function.args[0];
+    Expr* outer_exp = e->data.function.args[1];
+    if (!is_rational_half(outer_exp)) return false;
+    if (outer_base->type != EXPR_FUNCTION ||
+        !outer_base->data.function.head ||
+        outer_base->data.function.head->type != EXPR_SYMBOL ||
+        outer_base->data.function.head->data.symbol != SYM_Power ||
+        outer_base->data.function.arg_count != 2) return false;
+    Expr* inner_exp = outer_base->data.function.args[1];
+    return inner_exp->type == EXPR_INTEGER && inner_exp->data.integer == 2;
+}
+
+static bool contains_sqrt_of_square(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_sqrt_of_square(e)) return true;
+    if (contains_sqrt_of_square(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (contains_sqrt_of_square(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* Rewrite Power[Power[base, 2], Rational[1, 2]] (= Sqrt[base^2]) when the
+ * sign of `base` is determinable. Returns a fresh Expr on success, NULL
+ * if nothing fires (so the outer caller can keep the unsimplified form). */
+static Expr* try_simp_sqrt_of_square(const Expr* sqrt_node, const AssumeCtx* ctx) {
+    if (!is_sqrt_of_square(sqrt_node)) return NULL;
+    const Expr* base = sqrt_node->data.function.args[0]->data.function.args[0];
+    if (prov_nn(ctx, base)) {
+        /* base >= 0 → Sqrt[base^2] = base. */
+        return expr_copy((Expr*)base);
+    }
+    if (prov_np(ctx, base)) {
+        /* base <= 0 → Sqrt[base^2] = -base. */
+        Expr* na[2] = { expr_new_integer(-1), expr_copy((Expr*)base) };
+        return expr_new_function(expr_new_symbol("Times"), na, 2);
+    }
+    if (prov_re(ctx, base)) {
+        /* base real but sign undetermined → Sqrt[base^2] = Abs[base].
+         * Downstream Abs simplification may reduce further (or stop here
+         * — Abs[real] is at least as canonical as Sqrt[real^2]). */
+        Expr* a[1] = { expr_copy((Expr*)base) };
+        return expr_new_function(expr_new_symbol("Abs"), a, 1);
+    }
+    return NULL;
+}
+
+static Expr* sqrt_of_square_walk(const Expr* e, const AssumeCtx* ctx) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    size_t argc = e->data.function.arg_count;
+    Expr** new_args = (Expr**)calloc(argc ? argc : 1, sizeof(Expr*));
+    bool any = false;
+    for (size_t i = 0; i < argc; i++) {
+        Expr* sub = sqrt_of_square_walk(e->data.function.args[i], ctx);
+        if (sub) {
+            new_args[i] = sub;
+            any = true;
+        } else {
+            new_args[i] = expr_copy(e->data.function.args[i]);
+        }
+    }
+    Expr* this_form;
+    if (any) {
+        this_form = expr_new_function(expr_copy(e->data.function.head),
+                                       new_args, argc);
+    } else {
+        for (size_t i = 0; i < argc; i++) expr_free(new_args[i]);
+        this_form = NULL;
+    }
+    free(new_args);
+    const Expr* candidate = this_form ? this_form : e;
+    if (is_sqrt_of_square(candidate)) {
+        Expr* simp = try_simp_sqrt_of_square(candidate, ctx);
+        if (simp) {
+            if (this_form) expr_free(this_form);
+            return simp;
+        }
+    }
+    return this_form;
+}
+
+/* Returns a rewritten copy of `input` if any Sqrt[_^2] rewrite fired,
+ * NULL otherwise. */
+static Expr* apply_sqrt_of_square_rules(const Expr* input, const AssumeCtx* ctx) {
+    if (!contains_sqrt_of_square(input)) return NULL;
+    return sqrt_of_square_walk(input, ctx);
+}
+
+/* ----------------------------------------------------------------------- */
 /* Heuristic search                                                        */
 /* ----------------------------------------------------------------------- */
 
@@ -7792,6 +8027,10 @@ static bool transform_can_fire(const char* name, const Expr* e,
     /* Abs rules. */
     if (strcmp(name, "AbsRules") == 0) {
         if (!contains_abs(e)) return false;
+    }
+    /* Sqrt[_^2] rules. */
+    if (strcmp(name, "SqrtSquareRules") == 0) {
+        if (!contains_sqrt_of_square(e)) return false;
     }
     /* LogExp identity cascade: requires Log or Power somewhere (the
      * positivity-aware rewrites — Log[a*b] -> Log[a]+Log[b] etc. — are
@@ -8768,6 +9007,23 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         input = original_input;
     }
 
+    /* Phase 0b: pre-apply Sqrt[_^2] rewrites. Same rationale as the Abs
+     * pre-apply above: turn Sqrt[e^2] into e / -e / Abs[e] before the
+     * candidate search starts, so the rewritten form anchors the leaf-
+     * count tiebreak. Built on top of the (already canonicalised) `input`
+     * so the two phases compose. */
+    Expr* sqsq_pre = transform_can_fire("SqrtSquareRules", input, ctx)
+                         ? apply_sqrt_of_square_rules(input, ctx)
+                         : NULL;
+    if (sqsq_pre && !expr_eq(sqsq_pre, input)) {
+        if (simp_debug_enabled()) {
+            simp_debug_log("SqrtSquareRules", input, sqsq_pre, 0.0);
+        }
+        input = sqsq_pre;
+    } else {
+        if (sqsq_pre) { expr_free(sqsq_pre); sqsq_pre = NULL; }
+    }
+
     Expr* best = expr_copy((Expr*)input);
     size_t best_score = score_with_func(best, complexity_func);
 
@@ -9396,6 +9652,33 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
                     }
                 }
             }
+            /* Sqrt[_^2] rewrites on each candidate. Same force-take. New
+             * Sqrt[X^2] subexpressions can surface mid-search via Expand
+             * or Together, so re-running per candidate (not just at seed
+             * time) catches the late-arriving ones. */
+            if (transform_can_fire("SqrtSquareRules", seed, ctx)) {
+                bool dbg = simp_debug_enabled();
+                clock_t t0 = dbg ? clock() : 0;
+                Expr* sqr = apply_sqrt_of_square_rules(seed, ctx);
+                if (dbg) simp_debug_log("SqrtSquareRules", seed, sqr, simp_debug_elapsed_ms(t0));
+                if (sqr) {
+                    if (!expr_eq(sqr, seed)) {
+                        size_t s = score_with_func(sqr, complexity_func);
+                        if (s < best_score) {
+                            expr_free(best);
+                            best = expr_copy(sqr);
+                            best_score = s;
+                        }
+                        if (s <= parent_score) {
+                            cs_add_or_free(&next, sqr);
+                        } else {
+                            expr_free(sqr);
+                        }
+                    } else {
+                        expr_free(sqr);
+                    }
+                }
+            }
             /* And per-variable Collect on each candidate. */
             if (transform_can_fire("CollectPerVariable", seed, NULL)) {
                 try_collect_per_variable(seed, parent_score, &next, &best, &best_score,
@@ -9460,6 +9743,7 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
 search_done:
     cs_free(&seeds);
     if (abs_pre) expr_free(abs_pre);
+    if (sqsq_pre) expr_free(sqsq_pre);
     return best;
 }
 
