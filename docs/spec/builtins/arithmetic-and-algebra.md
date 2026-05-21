@@ -396,13 +396,19 @@ Out[5]= 0
 ## PrimeQ
 - `PrimeQ[n]`: Returns `True` if `n` is a prime number, `False` otherwise.
 - `PrimeQ[z]`: For a Gaussian integer `z = a + b I`, returns `True` if `z` is a Gaussian prime.
+- `PrimeQ[n, GaussianIntegers -> True]`: Tests primality of `n` in the
+  Gaussian integers `Z[i]`. A rational integer `n` is a Gaussian prime
+  iff `|n|` is prime in `Z` AND `n ≡ 3 (mod 4)` (primes `≡ 1 (mod 4)`
+  split as `(a+bi)(a-bi)`, and `2 = -i(1+i)^2` is reducible).
 
 **Features**:
 - `Listable`, `Protected`.
+- Always returns `True` or `False`. For non-integer / non-Gaussian
+  inputs (symbols, `Sqrt[2]`, `Exp[2 Pi I/3]`, strings, etc.) returns
+  `False` — `*Q` predicates never remain symbolic.
 - A Gaussian integer `a + b I` is a Gaussian prime if:
   - Both `a` and `b` are nonzero and `a^2 + b^2` is an ordinary prime, or
   - One of `a`, `b` is zero and the absolute value of the other is a prime congruent to 3 mod 4.
-- Returns `False` for non-integer complex numbers, rationals, reals, and strings.
 
 ```mathematica
 In[1]:= PrimeQ[7]
@@ -422,6 +428,15 @@ Out[5]= False
 
 In[6]:= PrimeQ[2 + 2 I]
 Out[6]= False
+
+In[7]:= PrimeQ[5, GaussianIntegers -> True]
+Out[7]= False
+
+In[8]:= PrimeQ[3, GaussianIntegers -> True]
+Out[8]= True
+
+In[9]:= PrimeQ[Exp[2 Pi I/3]]
+Out[9]= False
 ```
 
 ## PrimePi

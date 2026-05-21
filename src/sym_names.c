@@ -109,6 +109,7 @@ const char* SYM_FromBelow = NULL;
 const char* SYM_FullForm = NULL;
 const char* SYM_Function = NULL;
 const char* SYM_Gamma = NULL;
+const char* SYM_GaussianIntegers = NULL;
 const char* SYM_GeneratedParameters = NULL;
 const char* SYM_Glaisher = NULL;
 const char* SYM_GoldenRatio = NULL;
@@ -367,6 +368,7 @@ void sym_names_init(void) {
     SYM_FullForm                   = intern_symbol("FullForm");
     SYM_Function                   = intern_symbol("Function");
     SYM_Gamma                      = intern_symbol("Gamma");
+    SYM_GaussianIntegers           = intern_symbol("GaussianIntegers");
     SYM_GeneratedParameters        = intern_symbol("GeneratedParameters");
     SYM_Glaisher                   = intern_symbol("Glaisher");
     SYM_GoldenRatio                = intern_symbol("GoldenRatio");

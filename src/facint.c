@@ -187,36 +187,115 @@ Expr* builtin_primepi(Expr* res) {
     return expr_new_integer((int64_t)result);
 }
 
+/* Gaussian-integer primality test for a complex number a + b*I with
+ * integer parts. Sets *out_is_gprime to 1/0. Inputs `a` and `b` may carry
+ * any sign; they are taken in absolute value internally. */
+static void gaussian_prime_test(const mpz_t a_in, const mpz_t b_in, int* out_is_gprime) {
+    mpz_t a, b;
+    mpz_init(a);
+    mpz_init(b);
+    mpz_abs(a, a_in);
+    mpz_abs(b, b_in);
+    int is_gprime = 0;
+    if (mpz_sgn(a) == 0 && mpz_sgn(b) == 0) {
+        is_gprime = 0;  /* 0 + 0i is not prime */
+    } else if (mpz_sgn(b) == 0) {
+        /* Pure real: Gaussian prime iff |a| is prime and |a| ≡ 3 (mod 4). */
+        if (mpz_probab_prime_p(a, 25) && mpz_fdiv_ui(a, 4) == 3) {
+            is_gprime = 1;
+        }
+    } else if (mpz_sgn(a) == 0) {
+        /* Pure imaginary: Gaussian prime iff |b| is prime and |b| ≡ 3 (mod 4). */
+        if (mpz_probab_prime_p(b, 25) && mpz_fdiv_ui(b, 4) == 3) {
+            is_gprime = 1;
+        }
+    } else {
+        /* Both nonzero: Gaussian prime iff a^2 + b^2 is prime. */
+        mpz_t norm;
+        mpz_init(norm);
+        mpz_mul(norm, a, a);
+        mpz_addmul(norm, b, b);
+        is_gprime = mpz_probab_prime_p(norm, 25);
+        mpz_clear(norm);
+    }
+    mpz_clear(a);
+    mpz_clear(b);
+    *out_is_gprime = is_gprime;
+}
+
+/* Parse PrimeQ option arguments after the first. Returns true on success,
+ * filling *out_gaussian. Returns false if any option is unrecognized or
+ * malformed (caller should return False from the predicate in that case
+ * to honour the *Q always-boolean contract). */
+static bool primeq_parse_options(const Expr* res, size_t first_opt,
+                                 bool* out_gaussian) {
+    *out_gaussian = false;
+    size_t argc = res->data.function.arg_count;
+    for (size_t i = first_opt; i < argc; i++) {
+        Expr* a = res->data.function.args[i];
+        if (a->type != EXPR_FUNCTION ||
+            a->data.function.head->type != EXPR_SYMBOL ||
+            a->data.function.head->data.symbol != SYM_Rule ||
+            a->data.function.arg_count != 2) {
+            return false;
+        }
+        Expr* key = a->data.function.args[0];
+        Expr* val = a->data.function.args[1];
+        if (key->type != EXPR_SYMBOL) return false;
+        if (key->data.symbol == SYM_GaussianIntegers) {
+            if (val->type != EXPR_SYMBOL) return false;
+            if (strcmp(val->data.symbol, "True") == 0) *out_gaussian = true;
+            else if (strcmp(val->data.symbol, "False") == 0) *out_gaussian = false;
+            else return false;
+        } else {
+            return false;  /* unknown option */
+        }
+    }
+    return true;
+}
+
 Expr* builtin_primeq(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) {
+        return NULL;
+    }
     Expr* arg = res->data.function.args[0];
+
+    /* Parse optional GaussianIntegers->True/False. A malformed option list
+     * makes the call evaluate to False (per *Q always-boolean contract). */
+    bool gaussian = false;
+    if (res->data.function.arg_count > 1) {
+        if (!primeq_parse_options(res, 1, &gaussian)) {
+            return expr_new_symbol("False");
+        }
+    }
 
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_BIGINT) {
         mpz_t n;
         expr_to_mpz(arg, n);
-        mpz_abs(n, n);
         int is_prime = 0;
-        if (mpz_sgn(n) > 0) {
-            is_prime = mpz_probab_prime_p(n, 25);
+        if (gaussian) {
+            /* A rational integer n is a Gaussian prime iff |n| is a prime
+             * in Z AND |n| ≡ 3 (mod 4). (n=2 = -i(1+i)^2, and primes ≡ 1
+             * mod 4 split as (a+bi)(a-bi).) */
+            mpz_t zero;
+            mpz_init_set_ui(zero, 0);
+            gaussian_prime_test(n, zero, &is_prime);
+            mpz_clear(zero);
+        } else {
+            mpz_abs(n, n);
+            if (mpz_sgn(n) > 0) {
+                is_prime = mpz_probab_prime_p(n, 25);
+            }
         }
         mpz_clear(n);
-        
-        if (is_prime) {
-            return expr_new_symbol("True");
-        } else {
-            return expr_new_symbol("False");
-        }
+        return expr_new_symbol(is_prime ? "True" : "False");
     }
 
-    if (arg->type == EXPR_REAL || arg->type == EXPR_STRING) {
-        return expr_new_symbol("False");
-    }
     if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL) {
         const char* head = arg->data.function.head->data.symbol;
-        if (head == SYM_Rational) {
-            return expr_new_symbol("False");
-        }
-        // Gaussian prime test for Complex[a, b] with integer parts
+        /* Gaussian prime test for Complex[a, b] with integer parts. Works
+         * in both option-on and option-off modes since membership in Z[i]
+         * is the relevant universe in either case. */
         if (head == SYM_Complex && arg->data.function.arg_count == 2) {
             Expr* re_expr = arg->data.function.args[0];
             Expr* im_expr = arg->data.function.args[1];
@@ -228,38 +307,18 @@ Expr* builtin_primeq(Expr* res) {
             mpz_t a, b;
             expr_to_mpz(re_expr, a);
             expr_to_mpz(im_expr, b);
-            mpz_abs(a, a);
-            mpz_abs(b, b);
             int is_gprime = 0;
-            if (mpz_sgn(a) == 0 && mpz_sgn(b) == 0) {
-                // 0 + 0i is not prime
-                is_gprime = 0;
-            } else if (mpz_sgn(b) == 0) {
-                // Pure real: Gaussian prime iff |a| is prime and |a| ≡ 3 (mod 4)
-                if (mpz_probab_prime_p(a, 25) && mpz_fdiv_ui(a, 4) == 3) {
-                    is_gprime = 1;
-                }
-            } else if (mpz_sgn(a) == 0) {
-                // Pure imaginary: Gaussian prime iff |b| is prime and |b| ≡ 3 (mod 4)
-                if (mpz_probab_prime_p(b, 25) && mpz_fdiv_ui(b, 4) == 3) {
-                    is_gprime = 1;
-                }
-            } else {
-                // Both nonzero: Gaussian prime iff a^2 + b^2 is prime
-                mpz_t norm;
-                mpz_init(norm);
-                mpz_mul(norm, a, a);
-                mpz_addmul(norm, b, b);  // norm = a^2 + b^2
-                is_gprime = mpz_probab_prime_p(norm, 25);
-                mpz_clear(norm);
-            }
+            gaussian_prime_test(a, b, &is_gprime);
             mpz_clear(a);
             mpz_clear(b);
             return expr_new_symbol(is_gprime ? "True" : "False");
         }
     }
 
-    return NULL;
+    /* Everything else (symbols, reals, rationals, strings, symbolic
+     * functions, etc.) is not a (Gaussian) prime. *Q predicates must
+     * always return True or False — never remain unevaluated. */
+    return expr_new_symbol("False");
 }
 
 Expr* builtin_nextprime(Expr* res) {

@@ -124,6 +124,7 @@ extern const char* SYM_FromBelow;
 extern const char* SYM_FullForm;
 extern const char* SYM_Function;
 extern const char* SYM_Gamma;
+extern const char* SYM_GaussianIntegers;
 extern const char* SYM_GeneratedParameters;
 extern const char* SYM_Glaisher;
 extern const char* SYM_GoldenRatio;
