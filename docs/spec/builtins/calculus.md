@@ -109,6 +109,14 @@ of a `k`-argument function `f`).
   pipeline: `D` and `Dt` produce `Derivative[...]` heads for
   unknown functions and advance their indices when differentiating
   an expression that already contains one.
+- **Operator-form reduction**: `Derivative[n1, ..., nm][f]` is reduced
+  at evaluation time when `f` has DownValues that match. The evaluator
+  synthesises `Function[{t1, ..., tm}, f[t1, ..., tm]]` (with the
+  DownValue rule expanded into the body) and differentiates that pure
+  function via the existing pure-function pipeline. This makes
+  `f'[x]` (i.e. `Derivative[1][f][x]`) compute the derivative of a
+  user-defined `f`. When `f` has no matching DownValue the form is
+  left unevaluated, matching Mathematica.
 
 **Examples**:
 ```mathematica
@@ -120,6 +128,17 @@ Out[2]= Derivative[3][f][x]
 
 In[3]:= D[f[x, y], y]
 Out[3]= Derivative[0, 1][f][x, y]
+
+In[4]:= f[x_] := x^5 + 6 x^3
+In[5]:= f'[x]
+Out[5]= 18 x^2 + 5 x^4
+
+In[6]:= f'[5]
+Out[6]= 3575
+
+In[7]:= g[x_, y_] := x^2 y^3
+In[8]:= Derivative[1, 1][g][a, b]
+Out[8]= 6 a b^2
 ```
 
 ## Integrate (rational-function integration, Phase 1-8d)

@@ -1061,6 +1061,108 @@ Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Reduce Derivative[n1,...,nm][f] for a symbol f with DownValues          */
+/* ---------------------------------------------------------------------- */
+
+/* Counter used to mint unique temporary symbol names when synthesising
+ * the Function[{t1,...,tm}, f[t1,...,tm]] wrapper. The temporaries never
+ * have OwnValues installed and are not registered with the symbol table,
+ * so they cannot collide with anything in the body produced by the
+ * DownValue rewrite (which would have to literally contain the same
+ * unique name to clash, and the names are generated fresh per call). */
+static int64_t deriv_temp_counter = 0;
+
+/* See deriv.h for the contract. */
+Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym) {
+    if (!deriv_head || !fsym) return NULL;
+    if (deriv_head->type != EXPR_FUNCTION) return NULL;
+    if (!is_sym(deriv_head->data.function.head, "Derivative")) return NULL;
+    if (fsym->type != EXPR_SYMBOL) return NULL;
+
+    size_t m = deriv_head->data.function.arg_count;
+    if (m == 0) return NULL;
+
+    /* All derivative orders must be nonnegative integers; otherwise the
+     * downstream derivative_of_pure_function would reject them and we
+     * would have done substantial work for nothing. */
+    for (size_t i = 0; i < m; i++) {
+        Expr* oi = deriv_head->data.function.args[i];
+        if (oi->type != EXPR_INTEGER || oi->data.integer < 0) return NULL;
+    }
+
+    /* Only proceed when the symbol carries at least one DownValue. For a
+     * bare symbol with no rules, attempting to substitute would just give
+     * us back f[t1,...,tm] and we would correctly fall through; the
+     * early exit here is purely a fast path that avoids the call/eval
+     * roundtrip in the common no-definition case. */
+    if (!symtab_get_down_values(fsym->data.symbol)) return NULL;
+
+    /* Mint fresh temporary variable symbols. We use a static counter so
+     * names are globally unique per process invocation; this avoids the
+     * need to register temporaries (and clean them up) in the symbol
+     * table just to guarantee freshness. */
+    int64_t my_id = ++deriv_temp_counter;
+
+    Expr** vars = malloc(sizeof(Expr*) * m);
+    for (size_t i = 0; i < m; i++) {
+        char namebuf[64];
+        snprintf(namebuf, sizeof(namebuf),
+                 "Derivative$%lld$%zu", (long long)my_id, i + 1);
+        vars[i] = mk_sym(namebuf);
+    }
+
+    /* Build f[t1,...,tm] and evaluate it. The DownValue lookup happens
+     * during evaluation, so we get back the substituted body when a
+     * single-symbol-argument rule like f[x_] := body matches. */
+    Expr** call_args = malloc(sizeof(Expr*) * m);
+    for (size_t i = 0; i < m; i++) call_args[i] = expr_copy(vars[i]);
+    Expr* call = expr_new_function(expr_copy(fsym), call_args, m);
+    free(call_args);
+
+    Expr* body = evaluate(call);
+    expr_free(call);
+
+    /* If the call did not rewrite (no matching DownValue), abort. We
+     * detect this by checking that the result is still structurally
+     * f[t1,...,tm]. */
+    bool unchanged = (body->type == EXPR_FUNCTION
+                      && body->data.function.head->type == EXPR_SYMBOL
+                      && body->data.function.head->data.symbol == fsym->data.symbol
+                      && body->data.function.arg_count == m);
+    if (unchanged) {
+        for (size_t i = 0; i < m; i++) {
+            if (!expr_eq(body->data.function.args[i], vars[i])) {
+                unchanged = false;
+                break;
+            }
+        }
+    }
+    if (unchanged) {
+        expr_free(body);
+        for (size_t i = 0; i < m; i++) expr_free(vars[i]);
+        free(vars);
+        return NULL;
+    }
+
+    /* Wrap the substituted body in Function[{t1,...,tm}, body] so we can
+     * reuse the existing pure-function differentiation pipeline. */
+    Expr** list_args = malloc(sizeof(Expr*) * m);
+    for (size_t i = 0; i < m; i++) list_args[i] = expr_copy(vars[i]);
+    Expr* var_list = mk_fnN_adopt("List", list_args, m);
+
+    Expr* fn_args[2] = { var_list, body };
+    Expr* pure_fn = expr_new_function(mk_sym("Function"), fn_args, 2);
+
+    Expr* result = derivative_of_pure_function(deriv_head, pure_fn);
+    expr_free(pure_fn);
+
+    for (size_t i = 0; i < m; i++) expr_free(vars[i]);
+    free(vars);
+
+    return result;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Builtin: Derivative                                                     */
 /* ---------------------------------------------------------------------- */
 

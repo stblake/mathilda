@@ -935,6 +935,22 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     return reduced;
                 }
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       head->data.function.head->data.symbol == SYM_Derivative &&
+                       res->data.function.arg_count == 1 &&
+                       res->data.function.args[0]->type == EXPR_SYMBOL) {
+                /* 7b'. Derivative[n1,...,nm][f] where f is a symbol with
+                 * DownValues. Reduce by synthesising
+                 *     Function[{t1,...,tm}, f[t1,...,tm]]
+                 * after the DownValue rewrite, then differentiate via the
+                 * pure-function pipeline. This is what makes f'[x] work
+                 * for user-defined f[x_] := body. */
+                Expr* reduced = derivative_of_symbol(head, res->data.function.args[0]);
+                if (reduced) {
+                    expr_free(res);
+                    *changed = true; /* Derivative-of-symbol reduced */
+                    return reduced;
+                }
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
                        head->data.function.head->data.symbol == SYM_Composition &&
                        head->data.function.arg_count >= 1) {
                 /* 7c. Composition[f1, ..., fn][args...] -> f1[f2[...[fn[args...]]]].

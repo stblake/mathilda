@@ -834,7 +834,24 @@ void info_init(void) {
     // Calculus
     symtab_set_docstring("D", "D[f, x] gives the partial derivative of f with respect to x.\nD[f, {x, n}] gives the nth partial derivative.\nD[f, x, y, ...] gives the mixed derivative.");
     symtab_set_docstring("Dt", "Dt[f] gives the total derivative of f.\nDt[f, x] gives the total derivative of f with respect to x.\nDt[f, {x, n}] gives the nth total derivative.");
-    symtab_set_docstring("Derivative", "Derivative[n][f][x] represents the nth derivative of a function f evaluated at x.");
+    symtab_set_docstring("Derivative",
+        "f' represents the derivative of a function f of one argument.\n"
+        "Derivative[n1, n2, ...][f] is the general form, representing a function\n"
+        "obtained from f by differentiating n1 times with respect to the first\n"
+        "argument, n2 times with respect to the second argument, and so on.\n"
+        "\n"
+        "f' is equivalent to Derivative[1][f]; f'' evaluates to Derivative[2][f].\n"
+        "Derivative is a functional operator acting on functions to give derivative\n"
+        "functions. Derivative is generated when D is applied to functions whose\n"
+        "derivatives the system does not know.\n"
+        "\n"
+        "Mathilda attempts to convert Derivative[n1,...,nm][f] to a pure function.\n"
+        "When f is a symbol carrying DownValues, the evaluator rewrites the head\n"
+        "as Function[{t1,...,tm}, f[t1,...,tm]] with the rule expanded into the\n"
+        "body, then differentiates that pure function. If no DownValue matches,\n"
+        "the original Derivative form is returned.\n"
+        "\n"
+        "Attributes: Protected, ReadProtected.");
 
     // Control Flow
     symtab_set_docstring("Do",

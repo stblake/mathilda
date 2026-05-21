@@ -55,4 +55,22 @@ Expr* builtin_derivative(Expr* res);
  * is not supported. The input expressions are NOT consumed. */
 Expr* derivative_of_pure_function(Expr* deriv_head, Expr* pure_fn);
 
+/* Reduce Derivative[n1,...,nm][f] where ``f`` is a plain symbol with one
+ * or more DownValues, by constructing a Function[{t1,...,tm}, f[t1,...,tm]]
+ * whose body is the DownValue-expanded result and then differentiating
+ * that body via derivative_of_pure_function.
+ *
+ *   deriv_head -- the Derivative[n1,...,nm] head (must have arity >= 1,
+ *                 all arguments must be nonnegative integers)
+ *   fsym       -- the wrapped target; must be EXPR_SYMBOL
+ *
+ * Returns a fresh Function[...] expression on success. Returns NULL when
+ *   - fsym is not a symbol,
+ *   - fsym has no DownValues,
+ *   - the constructed call f[t1,...,tm] does not rewrite (e.g. arity or
+ *     pattern mismatch), or
+ *   - any orders in deriv_head are non-integer or negative.
+ * The input expressions are NOT consumed. */
+Expr* derivative_of_symbol(Expr* deriv_head, Expr* fsym);
+
 #endif /* MATHILDA_DERIV_H */
