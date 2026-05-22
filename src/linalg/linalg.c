@@ -23,6 +23,8 @@ void linalg_init(void) {
     symtab_get_def("Cross")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Norm", builtin_norm);
     symtab_get_def("Norm")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("Normalize", builtin_normalize);
+    symtab_get_def("Normalize")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Tr", builtin_tr);
     symtab_get_def("Tr")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("IdentityMatrix", builtin_identitymatrix);

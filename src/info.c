@@ -62,6 +62,14 @@ void info_init(void) {
     symtab_set_docstring("Det", "Det[m] gives the determinant of the square matrix m.");
     symtab_set_docstring("Cross", "Cross[a, b, ...] gives the vector cross product of the arguments.");
     symtab_set_docstring("Norm", "Norm[expr] gives the norm of a number, vector, or matrix.\nNorm[expr, p] gives the p-norm.");
+    symtab_set_docstring("Normalize",
+        "Normalize[v]\n"
+        "\tgives the normalized form of a vector v (effectively v / Norm[v]).\n"
+        "Normalize[z]\n"
+        "\tgives the normalized form of a scalar (incl. complex) z, namely z / Abs[z].\n"
+        "Normalize[expr, f]\n"
+        "\tnormalizes with respect to the norm function f, i.e. expr / f[expr].\n"
+        "Zero input is returned unchanged.");
     symtab_set_docstring("Tr", "Tr[list] finds the trace of the matrix or tensor list.\nTr[list, f] finds a generalized trace, combining terms with f instead of Plus.\nTr[list, f, n] goes down to level n in list.");
     symtab_set_docstring("RowReduce",
         "RowReduce[m]\n"

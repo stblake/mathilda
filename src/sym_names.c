@@ -171,6 +171,7 @@ const char* SYM_NHoldRest = NULL;
 const char* SYM_NegativeDefiniteMatrixQ = NULL;
 const char* SYM_NonConstants = NULL;
 const char* SYM_None = NULL;
+const char* SYM_Normalize = NULL;
 const char* SYM_Not = NULL;
 const char* SYM_Null = NULL;
 const char* SYM_NullSpace = NULL;
@@ -442,6 +443,7 @@ void sym_names_init(void) {
     SYM_NegativeDefiniteMatrixQ    = intern_symbol("NegativeDefiniteMatrixQ");
     SYM_NonConstants               = intern_symbol("NonConstants");
     SYM_None                       = intern_symbol("None");
+    SYM_Normalize                  = intern_symbol("Normalize");
     SYM_Not                        = intern_symbol("Not");
     SYM_Null                       = intern_symbol("Null");
     SYM_NullSpace                  = intern_symbol("NullSpace");

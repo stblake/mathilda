@@ -121,6 +121,7 @@ set(COMMON_SRC
     ../src/linalg/det.c
     ../src/linalg/cross.c
     ../src/linalg/norm.c
+    ../src/linalg/normalize.c
     ../src/linalg/tr.c
     ../src/linalg/construct.c
     ../src/linalg/matpow.c
@@ -653,6 +654,16 @@ else()
     target_link_libraries(negative_definite_matrix_q_tests gmp m)
 endif()
 add_test(NAME negative_definite_matrix_q_tests COMMAND negative_definite_matrix_q_tests)
+
+add_executable(normalize_tests test_normalize.c ${COMMON_SRC})
+target_include_directories(normalize_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(normalize_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(normalize_tests build_ecm)
+else()
+    target_link_libraries(normalize_tests gmp m)
+endif()
+add_test(NAME normalize_tests COMMAND normalize_tests)
 
 add_executable(eigen_tests test_eigen.c ${COMMON_SRC})
 target_include_directories(eigen_tests PRIVATE ../src)
