@@ -1,6 +1,8 @@
 #include "parse.h"
+#include "common.h"
 #include "expr.h"
 #include "context.h"
+#include "sym_intern.h"
 #include "sym_names.h"
 #include <ctype.h>
 #include <stdlib.h>
@@ -27,9 +29,7 @@ static void skip_whitespace(ParserState* s);
  * This matters for held expressions: without this, Length[Hold[a+b+c]] would
  * misleadingly report 2. */
 static bool extend_flat_head(Expr* left, const char* head_name, Expr* right) {
-    if (left == NULL || left->type != EXPR_FUNCTION) return false;
-    if (left->data.function.head->type != EXPR_SYMBOL) return false;
-    if (strcmp(left->data.function.head->data.symbol, head_name) != 0) return false;
+    if (!head_is(left, intern_symbol(head_name))) return false;
 
     size_t old_count = left->data.function.arg_count;
     Expr** new_args = realloc(left->data.function.args, sizeof(Expr*) * (old_count + 1));

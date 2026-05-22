@@ -22,6 +22,7 @@
 #include "intrat.h"
 #include "intrat_internal.h"
 #include "intsimp.h"
+#include "common.h"
 #include "expr.h"
 #include "eval.h"
 #include "symtab.h"
@@ -271,10 +272,7 @@ static Expr* intrat_content(Expr* p, Expr* x) {
      * and returns the call held.  Treat that as content == 1 — still
      * a correct (non-strict) primitive, and crucially keeps held GCD
      * calls from polluting downstream S polynomials. */
-    if (g && g->type == EXPR_FUNCTION
-        && g->data.function.head->type == EXPR_SYMBOL
-        && strcmp(g->data.function.head->data.symbol,
-                  "PolynomialGCD") == 0) {
+    if (head_is(g, SYM_PolynomialGCD)) {
         expr_free(g);
         g = expr_new_integer(1);
     }

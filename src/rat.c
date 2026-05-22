@@ -1,4 +1,5 @@
 #include "rat.h"
+#include "common.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -862,11 +863,7 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
      * preserve current behavior. */
     bool trivial = false;
     if (g->type == EXPR_INTEGER && g->data.integer == 1) trivial = true;
-    if (g->type == EXPR_FUNCTION
-        && g->data.function.head
-        && g->data.function.head->type == EXPR_SYMBOL
-        && g->data.function.head->data.symbol
-        && strcmp(g->data.function.head->data.symbol, "PolynomialGCD") == 0) {
+    if (head_is(g, SYM_PolynomialGCD)) {
         trivial = true;
     }
     if (trivial) {

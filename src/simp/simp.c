@@ -1,6 +1,7 @@
 #include "simp.h"
 #include "arithmetic.h"
 #include "attr.h"
+#include "common.h"
 #include "eval.h"
 #include "expand.h"
 #include "facpoly.h"
@@ -212,10 +213,7 @@ static int numeric_sign(const Expr* e) {
 }
 
 static bool fact_is_function(const Expr* f, const char* head, size_t arity) {
-    return f && f->type == EXPR_FUNCTION
-        && f->data.function.head
-        && f->data.function.head->type == EXPR_SYMBOL
-        && strcmp(f->data.function.head->data.symbol, head) == 0
+    return head_is(f, intern_symbol(head))
         && f->data.function.arg_count == arity;
 }
 
@@ -11163,10 +11161,7 @@ static Expr* combine_with_and(Expr* a, Expr* b) {
 /* ----------------------------------------------------------------------- */
 
 static bool simp_eq_head_sym(const Expr* e, const char* name) {
-    return e && e->type == EXPR_FUNCTION &&
-           e->data.function.head &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
+    return head_is(e, intern_symbol(name));
 }
 
 /* Decompose a Plus term into integer-coefficient * rest. Returns false

@@ -9,6 +9,14 @@
 #include <mpfr.h>
 #endif
 
+bool head_is(const Expr* e, const char* sym) {
+    return e && sym &&
+           e->type == EXPR_FUNCTION &&
+           e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol == sym;
+}
+
 /* Bit precision of a single inexact leaf.  Real → 53 (IEEE 754 double).
  * MPFR → mpfr_get_prec().  Caller is expected to only invoke this on
  * leaves where is_inexact_leaf would have returned true. */

@@ -36,6 +36,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
+#include "common.h"
 #include "rationalize.h"
 #include "arithmetic.h"  /* arith_warnings_mute_push/pop -- silences the
                           * Power::infy / Infinity::indet messages that our
@@ -145,12 +146,6 @@ static bool is_sym(Expr* e, const char* name) {
     return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
 }
 
-static bool has_head(Expr* e, const char* name) {
-    return e && e->type == EXPR_FUNCTION &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
-}
-
 static int literal_sign(Expr* e);  /* forward */
 
 static bool is_lit_zero(Expr* e) {
@@ -165,7 +160,7 @@ static bool is_lit_zero(Expr* e) {
 
 static bool is_neg_infinity(Expr* e) {
     /* Canonical form of -Infinity is Times[-1, Infinity]. */
-    if (!has_head(e, "Times") || e->data.function.arg_count != 2) return false;
+    if (!head_is(e, SYM_Times) || e->data.function.arg_count != 2) return false;
     Expr* a = e->data.function.args[0];
     Expr* b = e->data.function.args[1];
     bool has_inf = is_infinity_sym(a) || is_infinity_sym(b);
@@ -185,7 +180,7 @@ static bool is_indeterminate(Expr* e) {
 }
 
 static bool is_directed_infinity(Expr* e) {
-    return has_head(e, "DirectedInfinity");
+    return head_is(e, SYM_DirectedInfinity);
 }
 
 /* Returns true for any flavour of infinity or undefined value anywhere
@@ -469,9 +464,9 @@ static Expr* rewrite_reciprocal_trig(Expr* e) {
 /* ---------------------------------------------------------------------- */
 static bool contains_bounded_head(Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
-    if (has_head(e, "Sin") || has_head(e, "Cos") ||
-        has_head(e, "Tanh") || has_head(e, "ArcTan") ||
-        has_head(e, "ArcCot")) return true;
+    if (head_is(e, SYM_Sin) || head_is(e, SYM_Cos) ||
+        head_is(e, SYM_Tanh) || head_is(e, SYM_ArcTan) ||
+        head_is(e, SYM_ArcCot)) return true;
     if (contains_bounded_head(e->data.function.head)) return true;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         if (contains_bounded_head(e->data.function.args[i])) return true;
@@ -491,15 +486,15 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         return expr_copy(e);
     }
 
-    if (has_head(e, "Sin") || has_head(e, "Cos") || has_head(e, "Tanh")) {
+    if (head_is(e, SYM_Sin) || head_is(e, SYM_Cos) || head_is(e, SYM_Tanh)) {
         return mk_int(1);
     }
-    if (has_head(e, "ArcTan") || has_head(e, "ArcCot")) {
+    if (head_is(e, SYM_ArcTan) || head_is(e, SYM_ArcCot)) {
         return mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)),
                                mk_sym("Pi"));
     }
 
-    if (has_head(e, "Plus")) {
+    if (head_is(e, SYM_Plus)) {
         Expr* sum = mk_int(0);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             sum = mk_fn2("Plus", sum, magnitude_upper_bound(
@@ -508,7 +503,7 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         return simp(sum);
     }
 
-    if (has_head(e, "Times")) {
+    if (head_is(e, SYM_Times)) {
         Expr* prod = mk_int(1);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             prod = mk_times(prod, magnitude_upper_bound(
@@ -517,7 +512,7 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         return simp(prod);
     }
 
-    if (has_head(e, "Power") && e->data.function.arg_count == 2) {
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
         Expr* base = e->data.function.args[0];
         Expr* exp  = e->data.function.args[1];
         if (exp->type == EXPR_INTEGER) {
@@ -532,7 +527,7 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
         }
         /* Exp[bounded]: bound by E. */
         if (is_sym(base, "E") && contains_bounded_head(exp) &&
-            has_head(exp, "Sin")) {
+            head_is(exp, SYM_Sin)) {
             return mk_sym("E");
         }
         return mk_fn1("Abs", expr_copy(e));
@@ -557,12 +552,12 @@ static Expr* magnitude_upper_bound(Expr* e, Expr* x) {
  * through LIMIT_DIR_COMPLEX. */
 static bool is_imaginary_direction(Expr* e) {
     if (is_sym(e, "I")) return true;
-    if (has_head(e, "Complex") && e->data.function.arg_count == 2) {
+    if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
         Expr* re = e->data.function.args[0];
         return (re->type == EXPR_INTEGER && re->data.integer == 0) ||
                (re->type == EXPR_REAL && re->data.real == 0.0);
     }
-    if (has_head(e, "Times")) {
+    if (head_is(e, SYM_Times)) {
         /* k * I, -I, etc. */
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (is_imaginary_direction(e->data.function.args[i])) return true;
@@ -627,11 +622,11 @@ static int literal_sign(Expr* e) {
         return 0;
     }
     /* Rational[n, d]: sign follows numerator's. */
-    if (has_head(e, "Rational") && e->data.function.arg_count == 2) {
+    if (head_is(e, SYM_Rational) && e->data.function.arg_count == 2) {
         return literal_sign(e->data.function.args[0]);
     }
     /* Pattern Times[c, ...] with a leading negative numeric factor. */
-    if (has_head(e, "Times") && e->data.function.arg_count > 0) {
+    if (head_is(e, SYM_Times) && e->data.function.arg_count > 0) {
         int s = literal_sign(e->data.function.args[0]);
         /* we don't try to be clever about symbolic factors; return sign
          * only if unambiguous from the leading literal. */
@@ -643,7 +638,7 @@ static int literal_sign(Expr* e) {
      * +Infinity or -Infinity depends on Sign[Log[b]], which the series
      * sign test would otherwise miss (Log[3] is symbolic to literal_sign
      * without this arm). */
-    if (has_head(e, "Log") && e->data.function.arg_count == 1) {
+    if (head_is(e, SYM_Log) && e->data.function.arg_count == 1) {
         Expr* a = e->data.function.args[0];
         if (a->type == EXPR_INTEGER) {
             if (a->data.integer >  1) return +1;
@@ -656,7 +651,7 @@ static int literal_sign(Expr* e) {
         } else if (a->type == EXPR_BIGINT) {
             if (mpz_cmp_ui(a->data.bigint, 1) > 0) return +1;
             if (mpz_cmp_ui(a->data.bigint, 1) == 0) return 0;
-        } else if (has_head(a, "Rational") && a->data.function.arg_count == 2) {
+        } else if (head_is(a, SYM_Rational) && a->data.function.arg_count == 2) {
             /* Positive rational: compare numerator and denominator. */
             Expr* rn = a->data.function.args[0];
             Expr* rd = a->data.function.args[1];
@@ -692,7 +687,7 @@ static Expr* signed_infinity(int sign) {
  * the fast path and let the log-reduction layer deal with them. */
 static bool has_var_in_exponent(Expr* e, Expr* x) {
     if (!e) return false;
-    if (has_head(e, "Power") && e->data.function.arg_count == 2) {
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         if (expr_contains(exp, x)) return true;
     }
@@ -715,11 +710,11 @@ static bool is_numeric_literal_point(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL ||
         e->type == EXPR_BIGINT) return true;
-    if (has_head(e, "Rational") && e->data.function.arg_count == 2) return true;
+    if (head_is(e, SYM_Rational) && e->data.function.arg_count == 2) return true;
     /* A symbolic `Times[-1, <numeric>]` (e.g. user wrote `-5`) is also a
      * numeric literal once evaluated; the caller has already evaluated
      * the point, so we only need to recognise the canonical forms. */
-    if (has_head(e, "Times") && e->data.function.arg_count == 2 &&
+    if (head_is(e, SYM_Times) && e->data.function.arg_count == 2 &&
         e->data.function.args[0]->type == EXPR_INTEGER &&
         e->data.function.args[0]->data.integer == -1) {
         return is_numeric_literal_point(e->data.function.args[1]);
@@ -740,7 +735,7 @@ static bool is_numeric_literal_point(Expr* e) {
  * the direct-substitution fast path in that case. */
 static bool has_divergent_exponent_at(Expr* e, Expr* x, Expr* point) {
     if (!e || e->type != EXPR_FUNCTION) return false;
-    if (has_head(e, "Power") && e->data.function.arg_count == 2) {
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         if (expr_contains(exp, x)) {
             Expr* exp_at = subst_eval(exp, x, point);
@@ -886,13 +881,13 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
     /* Unwrap the Series may be wrapped in Times[prefactor, SeriesData[...]]. */
     Expr* prefactor = NULL;
     Expr* sd = s;
-    if (has_head(s, "Times")) {
+    if (head_is(s, SYM_Times)) {
         /* find the SeriesData factor (at most one) */
         Expr* found = NULL;
         Expr* pf = mk_int(1);
         for (size_t i = 0; i < s->data.function.arg_count; i++) {
             Expr* a = s->data.function.args[i];
-            if (has_head(a, "SeriesData") && !found) {
+            if (head_is(a, SYM_SeriesData) && !found) {
                 found = a;
             } else {
                 pf = simp(mk_times(pf, expr_copy(a)));
@@ -906,7 +901,7 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
         }
     }
 
-    if (!has_head(sd, "SeriesData") || sd->data.function.arg_count != 6) {
+    if (!head_is(sd, SYM_SeriesData) || sd->data.function.arg_count != 6) {
         /* Not a recognised series shape; if the expression is still in a
          * closed form free of x we already handled that above. */
         if (prefactor) expr_free(prefactor);
@@ -920,7 +915,7 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
     Expr* nmin_e= sd->data.function.args[3];
     Expr* den_e = sd->data.function.args[5];
 
-    if (!has_head(coefs, "List") || nmin_e->type != EXPR_INTEGER ||
+    if (!head_is(coefs, SYM_List) || nmin_e->type != EXPR_INTEGER ||
         den_e->type != EXPR_INTEGER) {
         if (prefactor) expr_free(prefactor);
         return NULL;
@@ -1127,7 +1122,7 @@ static int poly_degree_in(Expr* p, Expr* x) {
     Expr* call = mk_fn2("CoefficientList", expr_copy(p), expr_copy(x));
     Expr* cl = simp(call);
     int deg = -1;
-    if (has_head(cl, "List") && cl->data.function.arg_count > 0) {
+    if (head_is(cl, SYM_List) && cl->data.function.arg_count > 0) {
         /* Walk from the tail back to the first non-zero coefficient.
          * CoefficientList returns {c0, c1, ..., cn}, i.e. ordered by
          * ascending power. */
@@ -1145,7 +1140,7 @@ static Expr* poly_leading_coeff(Expr* p, Expr* x) {
     Expr* call = mk_fn2("CoefficientList", expr_copy(p), expr_copy(x));
     Expr* cl = simp(call);
     Expr* out = NULL;
-    if (has_head(cl, "List") && (int)cl->data.function.arg_count > deg) {
+    if (head_is(cl, SYM_List) && (int)cl->data.function.arg_count > deg) {
         out = expr_copy(cl->data.function.args[deg]);
     }
     expr_free(cl);
@@ -1327,7 +1322,7 @@ static Expr* layer5_lhospital(Expr* f, LimitCtx* ctx) {
  * evaluator usually simplifies these to closed form when they are free
  * of x.                                                                  */
 static Expr* log_contribution(Expr* factor) {
-    if (has_head(factor, "Power") && factor->data.function.arg_count == 2) {
+    if (head_is(factor, SYM_Power) && factor->data.function.arg_count == 2) {
         /* Log[a^b] = b Log[a]. */
         return mk_times(expr_copy(factor->data.function.args[1]),
                         mk_fn1("Log", expr_copy(factor->data.function.args[0])));
@@ -1355,13 +1350,13 @@ static Expr* layer5_log_reduction(Expr* f, LimitCtx* ctx) {
      * 0/0 into two divergent Log terms and trigger infinite Series
      * escalation. */
     bool top_ok = false;
-    if (has_head(f, "Power") && f->data.function.arg_count == 2) {
+    if (head_is(f, SYM_Power) && f->data.function.arg_count == 2) {
         top_ok = true;
-    } else if (has_head(f, "Times")) {
+    } else if (head_is(f, SYM_Times)) {
         top_ok = true;
         for (size_t i = 0; i < f->data.function.arg_count; i++) {
             Expr* a = f->data.function.args[i];
-            bool is_factor_power = has_head(a, "Power") &&
+            bool is_factor_power = head_is(a, SYM_Power) &&
                                    a->data.function.arg_count == 2;
             if (!is_factor_power && !free_of(a, ctx->x)) { top_ok = false; break; }
         }
@@ -1371,7 +1366,7 @@ static Expr* layer5_log_reduction(Expr* f, LimitCtx* ctx) {
     /* Build log_expr = Sum[log_contribution(factor)]. If f itself is a
      * Power head we treat it as a single-factor product. */
     Expr* log_expr = NULL;
-    if (has_head(f, "Times")) {
+    if (head_is(f, SYM_Times)) {
         log_expr = mk_int(0);
         for (size_t i = 0; i < f->data.function.arg_count; i++) {
             log_expr = mk_fn2("Plus", log_expr,
@@ -1402,7 +1397,7 @@ static Expr* layer5_log_reduction(Expr* f, LimitCtx* ctx) {
 /* is the main shape exercised by the test suite.                          */
 /* ---------------------------------------------------------------------- */
 static Expr* layer6_bounded(Expr* f, LimitCtx* ctx) {
-    if (!has_head(f, "Sin") && !has_head(f, "Cos")) return NULL;
+    if (!head_is(f, SYM_Sin) && !head_is(f, SYM_Cos)) return NULL;
     if (f->data.function.arg_count != 1) return NULL;
 
     /* Check that the inner argument has no limit at this point (diverges).
@@ -1431,7 +1426,7 @@ static Expr* layer6_bounded(Expr* f, LimitCtx* ctx) {
 /* intercept this shape early.                                             */
 /* ---------------------------------------------------------------------- */
 static Expr* layer_arctan_infinity(Expr* f, LimitCtx* ctx) {
-    if ((!has_head(f, "ArcTan") && !has_head(f, "ArcCot")) ||
+    if ((!head_is(f, SYM_ArcTan) && !head_is(f, SYM_ArcCot)) ||
         f->data.function.arg_count != 1) {
         return NULL;
     }
@@ -1450,7 +1445,7 @@ static Expr* layer_arctan_infinity(Expr* f, LimitCtx* ctx) {
     if (!pos && !neg) { expr_free(lim_inner); return NULL; }
     expr_free(lim_inner);
 
-    if (has_head(f, "ArcTan")) {
+    if (head_is(f, SYM_ArcTan)) {
         Expr* halfpi = mk_fn2("Times", mk_fn2("Power", mk_int(2), mk_int(-1)),
                                        mk_sym("Pi"));
         return pos ? halfpi : simp(mk_neg(halfpi));
@@ -1504,13 +1499,13 @@ static Expr* layer_bounded_envelope(Expr* f, LimitCtx* ctx) {
 /* ---------------------------------------------------------------------- */
 static Expr* layer_log_merge(Expr* f, LimitCtx* ctx) {
     if (!is_infinity_sym(ctx->point) && !is_neg_infinity(ctx->point)) return NULL;
-    if (!has_head(f, "Plus")) return NULL;
+    if (!head_is(f, SYM_Plus)) return NULL;
     size_t n = f->data.function.arg_count;
 
     bool has_x_log = false;
     for (size_t i = 0; i < n; i++) {
         Expr* t = f->data.function.args[i];
-        if (has_head(t, "Log") && t->data.function.arg_count == 1 &&
+        if (head_is(t, SYM_Log) && t->data.function.arg_count == 1 &&
             !free_of(t, ctx->x)) { has_x_log = true; break; }
     }
     if (!has_x_log) return NULL;
@@ -1518,7 +1513,7 @@ static Expr* layer_log_merge(Expr* f, LimitCtx* ctx) {
     Expr** factors = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* t = f->data.function.args[i];
-        if (has_head(t, "Log") && t->data.function.arg_count == 1) {
+        if (head_is(t, SYM_Log) && t->data.function.arg_count == 1) {
             factors[i] = expr_copy(t->data.function.args[0]);
         } else {
             factors[i] = mk_fn1("Exp", expr_copy(t));
@@ -1551,9 +1546,9 @@ static Expr* layer_log_merge(Expr* f, LimitCtx* ctx) {
 /* ---------------------------------------------------------------------- */
 static Expr* layer_log_sum_gruntz(Expr* f, LimitCtx* ctx) {
     if (!is_infinity_sym(ctx->point)) return NULL;
-    if (!has_head(f, "Log") || f->data.function.arg_count != 1) return NULL;
+    if (!head_is(f, SYM_Log) || f->data.function.arg_count != 1) return NULL;
     Expr* inner = f->data.function.args[0];
-    if (!has_head(inner, "Plus")) return NULL;
+    if (!head_is(inner, SYM_Plus)) return NULL;
     size_t n = inner->data.function.arg_count;
     if (n < 2) return NULL;
 
@@ -1606,7 +1601,7 @@ static Expr* layer_log_sum_gruntz(Expr* f, LimitCtx* ctx) {
  * the generic Series layer. */
 static Expr* layer_gruntz_iterated_log(Expr* f, LimitCtx* ctx) {
     if (!is_infinity_sym(ctx->point)) return NULL;
-    if (!has_head(f, "Times") && !has_head(f, "Log")) return NULL;
+    if (!head_is(f, SYM_Times) && !head_is(f, SYM_Log)) return NULL;
 
     /* Walk f and apply the Log[sum] rewrite to every eligible Log[sum]
      * subexpression. ReplaceAll-style traversal driven by
@@ -1616,7 +1611,7 @@ static Expr* layer_gruntz_iterated_log(Expr* f, LimitCtx* ctx) {
      * we win; otherwise we bail. */
     /* Simpler: only attempt when f has the specific shape Log[sum]
      * multiplied by something free-of-x, or Log[sum] directly. */
-    if (has_head(f, "Log")) {
+    if (head_is(f, SYM_Log)) {
         Expr* r = layer_log_sum_gruntz(f, ctx);
         if (r) return r;
     }
@@ -1632,7 +1627,7 @@ static Expr* layer_gruntz_iterated_log(Expr* f, LimitCtx* ctx) {
 /* up elsewhere.                                                           */
 /* ---------------------------------------------------------------------- */
 static Expr* layer_log_of_finite(Expr* f, LimitCtx* ctx) {
-    if (!has_head(f, "Log") || f->data.function.arg_count != 1) return NULL;
+    if (!head_is(f, SYM_Log) || f->data.function.arg_count != 1) return NULL;
     Expr* g = f->data.function.args[0];
     if (free_of(g, ctx->x)) return NULL;
 
@@ -1659,12 +1654,12 @@ static int64_t growth_exponent_upper(Expr* e, Expr* x) {
     if (e->type != EXPR_FUNCTION) return LIMIT_UNKNOWN_GROWTH;
 
     /* Bounded heads. */
-    if (has_head(e, "Sin") || has_head(e, "Cos") || has_head(e, "Tanh") ||
-        has_head(e, "ArcTan") || has_head(e, "ArcCot")) {
+    if (head_is(e, SYM_Sin) || head_is(e, SYM_Cos) || head_is(e, SYM_Tanh) ||
+        head_is(e, SYM_ArcTan) || head_is(e, SYM_ArcCot)) {
         return 0;
     }
 
-    if (has_head(e, "Plus")) {
+    if (head_is(e, SYM_Plus)) {
         int64_t m = 0;
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             int64_t g = growth_exponent_upper(e->data.function.args[i], x);
@@ -1673,7 +1668,7 @@ static int64_t growth_exponent_upper(Expr* e, Expr* x) {
         }
         return m;
     }
-    if (has_head(e, "Times")) {
+    if (head_is(e, SYM_Times)) {
         int64_t total = 0;
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             int64_t g = growth_exponent_upper(e->data.function.args[i], x);
@@ -1682,7 +1677,7 @@ static int64_t growth_exponent_upper(Expr* e, Expr* x) {
         }
         return total;
     }
-    if (has_head(e, "Power") && e->data.function.arg_count == 2) {
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
         Expr* b = e->data.function.args[0];
         Expr* p = e->data.function.args[1];
         if (p->type == EXPR_INTEGER && p->data.integer >= 0) {
@@ -1704,7 +1699,7 @@ static int64_t growth_exponent_upper(Expr* e, Expr* x) {
      * we don't know if it ever wins against a positive polynomial
      * degree. Conservative: return 0 so Log[x] alongside x is clearly
      * dominated by x. */
-    if (has_head(e, "Log") && e->data.function.arg_count == 1) {
+    if (head_is(e, SYM_Log) && e->data.function.arg_count == 1) {
         int64_t g = growth_exponent_upper(e->data.function.args[0], x);
         if (g > 0 && g != LIMIT_UNKNOWN_GROWTH) return 0;
     }
@@ -1728,20 +1723,20 @@ static bool is_structurally_bounded(Expr* e, Expr* x) {
     if (e->type != EXPR_FUNCTION) return false;
 
     /* Heads that are bounded regardless of argument. */
-    if (has_head(e, "Sin") || has_head(e, "Cos") || has_head(e, "Tanh") ||
-        has_head(e, "ArcTan") || has_head(e, "ArcCot")) {
+    if (head_is(e, SYM_Sin) || head_is(e, SYM_Cos) || head_is(e, SYM_Tanh) ||
+        head_is(e, SYM_ArcTan) || head_is(e, SYM_ArcCot)) {
         return true;
     }
 
     /* Plus / Times of bounded things is bounded. */
-    if (has_head(e, "Plus") || has_head(e, "Times")) {
+    if (head_is(e, SYM_Plus) || head_is(e, SYM_Times)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             if (!is_structurally_bounded(e->data.function.args[i], x)) return false;
         }
         return true;
     }
     /* Power[bounded, constant_non_negative_int]. */
-    if (has_head(e, "Power") && e->data.function.arg_count == 2) {
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
         Expr* b = e->data.function.args[0];
         Expr* p = e->data.function.args[1];
         if (p->type == EXPR_INTEGER && p->data.integer >= 0) {
@@ -1764,7 +1759,7 @@ static bool is_structurally_bounded(Expr* e, Expr* x) {
 /*   - Otherwise refuse (NULL).                                            */
 /* ---------------------------------------------------------------------- */
 static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
-    if (!has_head(f, "Plus")) return NULL;
+    if (!head_is(f, SYM_Plus)) return NULL;
     if (!is_infinity_sym(ctx->point) && !is_neg_infinity(ctx->point)) return NULL;
     size_t n = f->data.function.arg_count;
     if (n == 0) return NULL;
@@ -1892,7 +1887,7 @@ static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
 /* ---------------------------------------------------------------------- */
 static Expr* find_mrv_power(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return NULL;
-    if (has_head(e, "Power") && e->data.function.arg_count == 2) {
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
         Expr* exp = e->data.function.args[1];
         /* Require the exponent to depend on x AND the base to NOT depend
          * on x; otherwise the "atom" is actually a moving target and the
@@ -2145,7 +2140,7 @@ static Expr* layer_abs_rewrite(Expr* f, LimitCtx* ctx) {
      * Pi/2, Abs[1/x] near 0, Abs[Log[x]] near 0+, etc., where the inner
      * limit diverges and the structural rewrite path would produce an
      * intermediate -g that the rest of the pipeline cannot simplify. */
-    if (has_head(f, "Abs") && f->data.function.arg_count == 1 &&
+    if (head_is(f, SYM_Abs) && f->data.function.arg_count == 1 &&
         expr_contains(f->data.function.args[0], ctx->x)) {
         LimitCtx sub = { ctx->x, ctx->point, ctx->dir, ctx->depth };
         Expr* g_lim = compute_limit(f->data.function.args[0], &sub);
@@ -2393,7 +2388,7 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
  * The caller retains ownership of rule; the out-pointers are borrowed
  * into rule's children (callers must not free them separately). */
 static bool split_rule(Expr* rule, Expr** out_var, Expr** out_point) {
-    if (!has_head(rule, "Rule") || rule->data.function.arg_count != 2) return false;
+    if (!head_is(rule, SYM_Rule) || rule->data.function.arg_count != 2) return false;
     *out_var   = rule->data.function.args[0];
     *out_point = rule->data.function.args[1];
     return true;
@@ -2404,11 +2399,11 @@ static bool split_rule(Expr* rule, Expr** out_var, Expr** out_point) {
 static Expr* find_assumptions_opt(Expr** opts, size_t nopts) {
     for (size_t i = 0; i < nopts; i++) {
         Expr* o = opts[i];
-        if (has_head(o, "Rule") && o->data.function.arg_count == 2 &&
+        if (head_is(o, SYM_Rule) && o->data.function.arg_count == 2 &&
             is_sym(o->data.function.args[0], "Assumptions")) {
             return o->data.function.args[1];
         }
-        if (has_head(o, "RuleDelayed") && o->data.function.arg_count == 2 &&
+        if (head_is(o, SYM_RuleDelayed) && o->data.function.arg_count == 2 &&
             is_sym(o->data.function.args[0], "Assumptions")) {
             return o->data.function.args[1];
         }
@@ -2449,7 +2444,7 @@ static bool assumption_abs_compare(Expr* a, Expr** out_expr, int* out_op,
     Expr* rhs = a->data.function.args[1];
 
     /* Try lhs = Abs[expr], rhs = constant. */
-    if (has_head(lhs, "Abs") && lhs->data.function.arg_count == 1 &&
+    if (head_is(lhs, SYM_Abs) && lhs->data.function.arg_count == 1 &&
         expr_is_numeric_like(rhs)) {
         *out_expr  = lhs->data.function.args[0];
         *out_op    = op;
@@ -2458,7 +2453,7 @@ static bool assumption_abs_compare(Expr* a, Expr** out_expr, int* out_op,
     }
     /* Try the swapped form: lhs = const, rhs = Abs[expr]. The op flips
      * sense (Less <-> Greater, LessEqual <-> GreaterEqual). */
-    if (can_swap && has_head(rhs, "Abs") && rhs->data.function.arg_count == 1 &&
+    if (can_swap && head_is(rhs, SYM_Abs) && rhs->data.function.arg_count == 1 &&
         expr_is_numeric_like(lhs)) {
         *out_expr  = rhs->data.function.args[0];
         if (op == -1) *out_op = +1;
@@ -2574,11 +2569,11 @@ static Expr* limit_power_under_abs_assumption(Expr* f, Expr* lim_var,
 static Expr* find_direction_opt(Expr** opts, size_t nopts) {
     for (size_t i = 0; i < nopts; i++) {
         Expr* o = opts[i];
-        if (has_head(o, "Rule") && o->data.function.arg_count == 2 &&
+        if (head_is(o, SYM_Rule) && o->data.function.arg_count == 2 &&
             is_sym(o->data.function.args[0], "Direction")) {
             return o->data.function.args[1];
         }
-        if (has_head(o, "RuleDelayed") && o->data.function.arg_count == 2 &&
+        if (head_is(o, SYM_RuleDelayed) && o->data.function.arg_count == 2 &&
             is_sym(o->data.function.args[0], "Direction")) {
             return o->data.function.args[1];
         }
@@ -2793,7 +2788,7 @@ static Expr* sample_joint_limit(Expr* f, Expr** vars, size_t n, int kind) {
 
 /* Handle Limit[f, {x1,...,xn} -> {a1,...,an}] as a joint limit. */
 static Expr* run_multivariate(Expr* f_in, Expr* vars, Expr* points) {
-    if (!has_head(vars, "List") || !has_head(points, "List")) return NULL;
+    if (!head_is(vars, SYM_List) || !head_is(points, SYM_List)) return NULL;
     size_t n = vars->data.function.arg_count;
     if (n != points->data.function.arg_count) return NULL;
     if (n < 2) return NULL;
@@ -2848,11 +2843,11 @@ static Expr* run_multivariate(Expr* f_in, Expr* vars, Expr* points) {
             while (top > 0 && !inner_div_by_zero) {
                 Expr* e = stack[--top];
                 if (e->type == EXPR_FUNCTION) {
-                    if (has_head(e, "Power") && e->data.function.arg_count == 2) {
+                    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
                         Expr* exp = e->data.function.args[1];
                         bool is_neg = false;
                         if (exp->type == EXPR_INTEGER && exp->data.integer < 0) is_neg = true;
-                        else if (has_head(exp, "Times") && exp->data.function.arg_count > 0 &&
+                        else if (head_is(exp, SYM_Times) && exp->data.function.arg_count > 0 &&
                                  exp->data.function.args[0]->type == EXPR_INTEGER &&
                                  exp->data.function.args[0]->data.integer < 0) is_neg = true;
                         if (is_neg) {
@@ -2978,7 +2973,7 @@ static bool contains_imaginary_unit(Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_SYMBOL) return e->data.symbol == SYM_I;
     if (e->type == EXPR_FUNCTION) {
-        if (has_head(e, "Complex") && e->data.function.arg_count == 2) {
+        if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2) {
             Expr* im = e->data.function.args[1];
             if (im->type == EXPR_INTEGER) return im->data.integer != 0;
             if (im->type == EXPR_REAL)    return im->data.real != 0.0;
@@ -3021,7 +3016,7 @@ static Expr* builtin_limit_impl(Expr* res) {
      * Limit is effectively listable on its first argument (with
      * HoldAll), so Limit[{a, b}, x -> c] maps to {Limit[a, x -> c],
      * Limit[b, x -> c]} with the options forwarded unchanged. */
-    if (has_head(f, "List")) {
+    if (head_is(f, SYM_List)) {
         size_t k = f->data.function.arg_count;
         Expr** results = calloc(k, sizeof(Expr*));
         for (size_t i = 0; i < k; i++) {
@@ -3058,7 +3053,7 @@ static Expr* builtin_limit_impl(Expr* res) {
      * shape here before the general pipeline. Falls through to the
      * standard machinery on no-match. */
     Expr* assumptions_opt = find_assumptions_opt(opts, nopts);
-    if (assumptions_opt && has_head(spec, "Rule") &&
+    if (assumptions_opt && head_is(spec, SYM_Rule) &&
         spec->data.function.arg_count == 2) {
         Expr* lvar  = spec->data.function.args[0];
         Expr* lpoint = spec->data.function.args[1];
@@ -3069,9 +3064,9 @@ static Expr* builtin_limit_impl(Expr* res) {
 
     /* --- Form A: Limit[f, x -> a]
      * --- Form C: Limit[f, {x1,...,xn} -> {a1,...,an}]   (multivariate) */
-    if (has_head(spec, "Rule") && spec->data.function.arg_count == 2) {
-        if (has_head(spec->data.function.args[0], "List") &&
-            has_head(spec->data.function.args[1], "List")) {
+    if (head_is(spec, SYM_Rule) && spec->data.function.arg_count == 2) {
+        if (head_is(spec->data.function.args[0], SYM_List) &&
+            head_is(spec->data.function.args[1], SYM_List)) {
             return run_multivariate(f, spec->data.function.args[0],
                                        spec->data.function.args[1]);
         }
@@ -3123,11 +3118,11 @@ static Expr* builtin_limit_impl(Expr* res) {
     }
 
     /* --- Form B: Limit[f, {x1 -> a1, ..., xn -> an}] iterated --- */
-    if (has_head(spec, "List")) {
+    if (head_is(spec, SYM_List)) {
         size_t n = spec->data.function.arg_count;
         if (n == 0) return NULL;
         for (size_t i = 0; i < n; i++) {
-            if (!has_head(spec->data.function.args[i], "Rule")) return NULL;
+            if (!head_is(spec->data.function.args[i], SYM_Rule)) return NULL;
         }
         return run_iterated(f, spec, dir, 0);
     }

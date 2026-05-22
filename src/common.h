@@ -34,6 +34,22 @@
 #include "expr.h"
 #include <stdbool.h>
 
+/* True iff `e` is a function call whose head symbol equals `sym`.
+ *
+ * NULL-safe: returns false if `e` or `sym` is NULL or if `e` is not a
+ * function with a symbol head.
+ *
+ * The comparison is *pointer equality* against the global symbol-name
+ * intern table.  Every `EXPR_SYMBOL` carries a name pointer produced by
+ * `intern_symbol`, so two heads are equal iff their pointers match.
+ * Callers should pass one of the cached `SYM_*` constants from
+ * `sym_names.h`; for runtime-supplied names, intern once with
+ * `intern_symbol(name)` and pass the result.
+ *
+ * This is the single canonical head-check used throughout the system --
+ * do not reintroduce strcmp-based head comparisons. */
+bool head_is(const Expr* e, const char* sym);
+
 /* Result of common_scan_inexact.
  *
  *   has_inexact: true iff `e` contains any inexact numeric leaf

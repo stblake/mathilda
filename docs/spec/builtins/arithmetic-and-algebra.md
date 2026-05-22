@@ -534,9 +534,10 @@ Out[1]= 3
 
 ## Re, Im, ReIm, Abs, Conjugate, Arg
 Complex number functions.
-- `Re[z]`: Real part.
-- `Im[z]`: Imaginary part.
-- `ReIm[z]`: Returns `{Re[z], Im[z]}`.
+- `Re[z]`: Real part. Folds `Re[f[z]] -> f[z]` when `f` is one of `Re`,
+  `Im`, `Abs`, `Arg` (all real-valued by construction).
+- `Im[z]`: Imaginary part. Folds `Im[f[z]] -> 0` for the same set of `f`.
+- `ReIm[z]`: Returns `{Re[z], Im[z]}`; inherits the same folding.
 - `Abs[z]`: Magnitude.
 - `Conjugate[z]`: Complex conjugate.  Folds `Conjugate[Conjugate[z]] -> z`
   (involution) and `Conjugate[f[..]] -> f[..]` when `f` is one of `Re`,

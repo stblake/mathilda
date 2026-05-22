@@ -1,7 +1,9 @@
 #include "datetime.h"
+#include "common.h"
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
+#include "sym_names.h"
 #include <time.h>
 #include <stdlib.h>
 #include <string.h>
@@ -196,9 +198,7 @@ Expr* builtin_absolute_time(Expr* res) {
     }
 
     /* AbsoluteTime[{y, m, d, h, m, s}] -- list with possible elision. */
-    if (arg->type == EXPR_FUNCTION
-        && arg->data.function.head->type == EXPR_SYMBOL
-        && strcmp(arg->data.function.head->data.symbol, "List") == 0) {
+    if (head_is(arg, SYM_List)) {
 
         size_t n = arg->data.function.arg_count;
         if (n < 1 || n > 6) return NULL;

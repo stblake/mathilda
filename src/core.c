@@ -71,6 +71,8 @@
 #include "rationalize.h"
 #include "numeric.h"
 #include "linsolve.h"
+#include "common.h"
+#include "sym_intern.h"
 #include "sym_names.h"
 #include "repl_hooks.h"
 
@@ -492,8 +494,7 @@ Expr* builtin_length(Expr* res) {
  */
 static int get_dimensions(Expr* e, int64_t* dims, int max_depth, const char* head_name) {
     if (max_depth <= 0) return 0;
-    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(e->data.function.head->data.symbol, head_name) != 0) {
+    if (!head_is(e, intern_symbol(head_name))) {
         return 0;
     }
 
@@ -533,9 +534,7 @@ Expr* builtin_dimensions(Expr* res) {
         int64_t nv;
         if (n->type == EXPR_INTEGER) {
             nv = n->data.integer;
-        } else if (n->type == EXPR_FUNCTION &&
-                   n->data.function.head->type == EXPR_SYMBOL &&
-                   strcmp(n->data.function.head->data.symbol, "DirectedInfinity") == 0 &&
+        } else if (head_is(n, SYM_DirectedInfinity) &&
                    n->data.function.arg_count == 1 &&
                    n->data.function.args[0]->type == EXPR_INTEGER &&
                    n->data.function.args[0]->data.integer == 1) {

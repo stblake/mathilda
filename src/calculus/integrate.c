@@ -25,6 +25,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "internal.h"
+#include "sym_intern.h"
 #include "sym_names.h"
 
 #include <stdbool.h>
@@ -82,11 +83,7 @@ static bool is_rational_in(Expr* f, Expr* x) {
 
 /* True iff `result` is the unevaluated call `head_name[...]`. */
 static bool result_is_unresolved(const Expr* result, const char* head_name) {
-    return result
-        && result->type == EXPR_FUNCTION
-        && result->data.function.head
-        && result->data.function.head->type == EXPR_SYMBOL
-        && strcmp(result->data.function.head->data.symbol, head_name) == 0;
+    return head_is(result, intern_symbol(head_name));
 }
 
 /* Helper: build and evaluate `head_name[f, x]`, freeing the call

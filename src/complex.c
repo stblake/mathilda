@@ -3,18 +3,13 @@
 #include "eval.h"
 #include "arithmetic.h"
 #include "numeric.h"
+#include "common.h"
+#include "sym_names.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
-
-static bool head_is(Expr* e, const char* name) {
-    return e && e->type == EXPR_FUNCTION &&
-           e->data.function.head &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0;
-}
 
 /* True iff `e` reduces to a real machine number under N[]. Used to gate
  * complex decomposition so the structural Re/Im split is only applied
@@ -62,7 +57,7 @@ static bool complex_decompose(Expr* e, Expr** re_out, Expr** im_out) {
         return true;
     }
 
-    if (head_is(e, "Plus")) {
+    if (head_is(e, SYM_Plus)) {
         size_t n = e->data.function.arg_count;
         Expr** re_terms = malloc(sizeof(Expr*) * n);
         Expr** im_terms = malloc(sizeof(Expr*) * n);
@@ -99,7 +94,7 @@ static bool complex_decompose(Expr* e, Expr** re_out, Expr** im_out) {
         return true;
     }
 
-    if (head_is(e, "Times")) {
+    if (head_is(e, SYM_Times)) {
         /* Walk factors left-to-right, maintaining a running complex product
          * (acc_re + acc_im*I). A factor that itself decomposes into a
          * non-trivial complex form contributes via complex multiplication
@@ -174,9 +169,23 @@ void complex_init(void) {
     symtab_get_def("Arg")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
 }
 
+/* True when `e` is `f[x]` for one of the real-valued-by-construction heads
+ * Re, Im, Abs, Arg. Used by Re/Im to fold Re[Re[z]] -> Re[z], Im[Abs[z]] -> 0,
+ * etc. Mirrors the same set Conjugate treats as fixed points. */
+static bool is_real_valued_head_call(Expr* e) {
+    return (head_is(e, SYM_Re) || head_is(e, SYM_Im) ||
+            head_is(e, SYM_Abs) || head_is(e, SYM_Arg)) &&
+           e->data.function.arg_count == 1;
+}
+
 Expr* builtin_re(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    /* Re[f[z]] -> f[z] when f is real-valued by construction (Re, Im, Abs, Arg). */
+    if (is_real_valued_head_call(arg)) {
+        res->data.function.args[0] = NULL;
+        return arg;
+    }
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
         return expr_copy(re);
@@ -199,6 +208,10 @@ Expr* builtin_re(Expr* res) {
 Expr* builtin_im(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    /* Im[f[z]] -> 0 when f is real-valued by construction (Re, Im, Abs, Arg). */
+    if (is_real_valued_head_call(arg)) {
+        return expr_new_integer(0);
+    }
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
         return expr_copy(im);
@@ -221,6 +234,16 @@ Expr* builtin_im(Expr* res) {
 Expr* builtin_reim(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+    /* ReIm[f[z]] -> {f[z], 0} when f is real-valued by construction. */
+    if (is_real_valued_head_call(arg)) {
+        Expr** results = malloc(sizeof(Expr*) * 2);
+        res->data.function.args[0] = NULL;
+        results[0] = arg;
+        results[1] = expr_new_integer(0);
+        Expr* list = expr_new_function(expr_new_symbol("List"), results, 2);
+        free(results);
+        return list;
+    }
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
         Expr** results = malloc(sizeof(Expr*) * 2);
@@ -321,15 +344,15 @@ Expr* builtin_conjugate(Expr* res) {
     }
     Expr* arg = res->data.function.args[0];
     /* Conjugate is an involution: Conjugate[Conjugate[z]] -> z. */
-    if (head_is(arg, "Conjugate") && arg->data.function.arg_count == 1) {
+    if (head_is(arg, SYM_Conjugate) && arg->data.function.arg_count == 1) {
         Expr* inner = arg->data.function.args[0];
         arg->data.function.args[0] = NULL;
         return inner;
     }
     /* Re, Im, Abs, and Arg are real-valued by construction, so they are
      * Conjugate-fixed regardless of whether their argument numericalizes. */
-    if ((head_is(arg, "Re") || head_is(arg, "Im") ||
-         head_is(arg, "Abs") || head_is(arg, "Arg")) &&
+    if ((head_is(arg, SYM_Re) || head_is(arg, SYM_Im) ||
+         head_is(arg, SYM_Abs) || head_is(arg, SYM_Arg)) &&
         arg->data.function.arg_count == 1) {
         return expr_copy(arg);
     }

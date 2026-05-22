@@ -3,6 +3,7 @@
 #include "arithmetic.h"
 #include "times.h"
 #include "numeric.h"
+#include "common.h"
 #include "sym_names.h"
 #include "trig_canon.h"
 #include "internal.h"
@@ -243,11 +244,8 @@ Expr* make_power(Expr* base, Expr* exp) {
     return expr_new_function(expr_new_symbol("Power"), args, 2);
 }
 
-static bool is_head_call(Expr* e, const char* name, size_t argc) {
-    return e->type == EXPR_FUNCTION &&
-           e->data.function.head->type == EXPR_SYMBOL &&
-           strcmp(e->data.function.head->data.symbol, name) == 0 &&
-           e->data.function.arg_count == argc;
+static bool is_head_call(Expr* e, const char* sym, size_t argc) {
+    return head_is(e, sym) && e->data.function.arg_count == argc;
 }
 
 /* Cancel Log inside a Power exponent:
@@ -271,7 +269,7 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
     int log_idx = -1;
     Expr* a = NULL;
     for (size_t i = 0; i < nf; i++) {
-        if (!is_head_call(factors[i], "Log", 1)) continue;
+        if (!is_head_call(factors[i], SYM_Log, 1)) continue;
         log_idx = (int)i;
         a = factors[i]->data.function.args[0];
         break;
@@ -283,11 +281,11 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
         for (size_t i = 0; i < nf; i++) {
             if ((int)i == log_idx) continue;
             Expr* f = factors[i];
-            if (!is_head_call(f, "Power", 2)) continue;
+            if (!is_head_call(f, SYM_Power, 2)) continue;
             Expr* ib = f->data.function.args[0];
             Expr* ie = f->data.function.args[1];
             if (!(ie->type == EXPR_INTEGER && ie->data.integer == -1)) continue;
-            if (!is_head_call(ib, "Log", 1)) continue;
+            if (!is_head_call(ib, SYM_Log, 1)) continue;
             if (!expr_eq(ib->data.function.args[0], base)) continue;
             inv_log_idx = (int)i;
             break;

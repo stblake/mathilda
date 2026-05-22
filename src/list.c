@@ -1,10 +1,12 @@
 #include "list.h"
 #include <inttypes.h>
+#include "common.h"
 #include "symtab.h"
 #include "eval.h"
 #include "core.h"
 #include "arithmetic.h"
 #include "print.h"
+#include "sym_intern.h"
 #include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
@@ -486,8 +488,7 @@ Expr* builtin_drop(Expr* res) {
 }
 
 static void flatten_rec(Expr* e, const char* h, int64_t level, Expr*** results, size_t* count, size_t* cap) {
-    if (level != 0 && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(e->data.function.head->data.symbol, h) == 0) {
+    if (level != 0 && head_is(e, intern_symbol(h))) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             flatten_rec(e->data.function.args[i], h, level == -1 ? -1 : level - 1, results, count, cap);
         }
@@ -722,8 +723,7 @@ Expr* builtin_reverse(Expr* res) {
 }
 
 static int get_array_dimensions(Expr* e, int64_t* dims, const char* head_name) {
-    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL ||
-        strcmp(e->data.function.head->data.symbol, head_name) != 0) {
+    if (!head_is(e, intern_symbol(head_name))) {
         return 0;
     }
     dims[0] = (int64_t)e->data.function.arg_count;
@@ -865,9 +865,7 @@ Expr* builtin_conjugate_transpose(Expr* res) {
     /* If Transpose could not reduce (e.g. invalid spec), surface the
      * unevaluated ConjugateTranspose rather than a spurious
      * Conjugate[Transpose[...]] wrapper. */
-    if (transposed && transposed->type == EXPR_FUNCTION &&
-        transposed->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(transposed->data.function.head->data.symbol, "Transpose") == 0) {
+    if (head_is(transposed, SYM_Transpose)) {
         expr_free(transposed);
         return NULL;
     }

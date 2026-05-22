@@ -328,6 +328,44 @@ void test_re_im(void) {
     char* s6 = expr_to_string_fullform(eval_and_free(parse_expression("ReIm[5]")));
     assert(strcmp(s6, "List[5, 0]") == 0);
     free(s6);
+
+    /* Re, Im, Abs, Arg are real-valued by construction, so Re/Im fold even
+     * for symbolic arguments: Re[f[z]] -> f[z], Im[f[z]] -> 0. */
+    char* s7 = expr_to_string_fullform(eval_and_free(parse_expression("Re[Re[z]]")));
+    assert(strcmp(s7, "Re[z]") == 0);
+    free(s7);
+
+    char* s8 = expr_to_string_fullform(eval_and_free(parse_expression("Im[Re[z]]")));
+    assert(strcmp(s8, "0") == 0);
+    free(s8);
+
+    char* s9 = expr_to_string_fullform(eval_and_free(parse_expression("Re[Im[z]]")));
+    assert(strcmp(s9, "Im[z]") == 0);
+    free(s9);
+
+    char* s10 = expr_to_string_fullform(eval_and_free(parse_expression("Im[Im[z]]")));
+    assert(strcmp(s10, "0") == 0);
+    free(s10);
+
+    char* s11 = expr_to_string_fullform(eval_and_free(parse_expression("Re[Abs[z]]")));
+    assert(strcmp(s11, "Abs[z]") == 0);
+    free(s11);
+
+    char* s12 = expr_to_string_fullform(eval_and_free(parse_expression("Im[Abs[z]]")));
+    assert(strcmp(s12, "0") == 0);
+    free(s12);
+
+    char* s13 = expr_to_string_fullform(eval_and_free(parse_expression("Re[Arg[z]]")));
+    assert(strcmp(s13, "Arg[z]") == 0);
+    free(s13);
+
+    char* s14 = expr_to_string_fullform(eval_and_free(parse_expression("Im[Arg[z]]")));
+    assert(strcmp(s14, "0") == 0);
+    free(s14);
+
+    char* s15 = expr_to_string_fullform(eval_and_free(parse_expression("ReIm[Re[z]]")));
+    assert(strcmp(s15, "List[Re[z], 0]") == 0);
+    free(s15);
 }
 
 void test_abs_conjugate(void) {

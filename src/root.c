@@ -17,6 +17,7 @@
  */
 
 #include "root.h"
+#include "common.h"
 #include "expr.h"
 #include "symtab.h"
 #include "attr.h"
@@ -69,9 +70,7 @@ static bool expr_free_of(const Expr* e, const Expr* target) {
 /* Substitute every Slot[1] in `e` with a deep copy of `replacement`. */
 static Expr* subst_slot1(const Expr* e, const Expr* replacement) {
     if (!e) return NULL;
-    if (e->type == EXPR_FUNCTION
-        && e->data.function.head->type == EXPR_SYMBOL
-        && strcmp(e->data.function.head->data.symbol, "Slot") == 0
+    if (head_is(e, SYM_Slot)
         && e->data.function.arg_count == 1
         && e->data.function.args[0]->type == EXPR_INTEGER
         && e->data.function.args[0]->data.integer == 1) {

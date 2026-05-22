@@ -9,7 +9,9 @@
 #include "arithmetic.h"
 #include "complex.h"
 #include "times.h"
+#include "common.h"
 #include "numeric.h"
+#include "sym_intern.h"
 #include "sym_names.h"
 
 #ifdef USE_MPFR
@@ -280,10 +282,8 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
  * holds over the complex numbers. The opposite direction is NOT folded
  * because those only reduce on each function's principal domain. */
 static Expr* strip_inverse_call(Expr* arg, const char* inverse_name) {
-    if (arg->type == EXPR_FUNCTION &&
-        arg->data.function.arg_count == 1 &&
-        arg->data.function.head->type == EXPR_SYMBOL &&
-        strcmp(arg->data.function.head->data.symbol, inverse_name) == 0) {
+    if (head_is(arg, intern_symbol(inverse_name)) &&
+        arg->data.function.arg_count == 1) {
         return expr_copy(arg->data.function.args[0]);
     }
     return NULL;
