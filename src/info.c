@@ -842,6 +842,19 @@ void info_init(void) {
         "BLAS/LAPACK's dpotrf (real) or zpotrf (complex) when available.\n"
         "Returns False on non-numeric, non-square, ragged, empty, or\n"
         "higher-rank tensor inputs.");
+    symtab_set_docstring("NegativeDefiniteMatrixQ",
+        "NegativeDefiniteMatrixQ[m]\n"
+        "\tgives True if m is explicitly negative definite, and False\n"
+        "\totherwise.\n"
+        "\n"
+        "A matrix m is negative definite if Re[Conjugate[x] . m . x] < 0\n"
+        "for every nonzero vector x.  Equivalently, -m is positive\n"
+        "definite, i.e. the negated Hermitian part has only positive\n"
+        "eigenvalues.  The test is performed by attempting a Cholesky\n"
+        "factorisation of -(m + ConjugateTranspose[m]) / 2; on numeric\n"
+        "matrices this is dispatched to BLAS/LAPACK's dpotrf (real) or\n"
+        "zpotrf (complex) when available.  Returns False on non-numeric,\n"
+        "non-square, ragged, empty, or higher-rank tensor inputs.");
 
     // Trigonometric
     symtab_set_docstring("Sin", "Sin[z] gives the sine of z.");

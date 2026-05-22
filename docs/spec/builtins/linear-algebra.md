@@ -308,6 +308,59 @@ Out[6]= True
 ```
 
 
+## NegativeDefiniteMatrixQ
+Tests whether a matrix is explicitly negative definite.
+- `NegativeDefiniteMatrixQ[m]`: `True` if `Re[Conjugate[x] . m . x] < 0`
+  for every nonzero vector `x`, `False` otherwise.
+
+**Features**:
+- `Protected`.
+- Equivalent to: `-m` is positive definite, i.e. the negated Hermitian
+  part `-(m + ConjugateTranspose[m]) / 2` has only positive eigenvalues
+  and admits a Cholesky factorisation with a real positive diagonal.
+- On numeric matrices the test is performed by attempting Cholesky on
+  the negated Hermitian part.  When `USE_LAPACK` is available the
+  routine dispatches to BLAS/LAPACK's `dpotrf` (real) or `zpotrf`
+  (complex); otherwise an in-house Cholesky is used.  Either returns
+  `info == 0` iff the matrix is negative definite.
+- Builds the Hermitian part regardless of whether the input is
+  Hermitian, so e.g. a real matrix with non-symmetric entries is
+  tested via `-(m + m^T) / 2`.
+- For symbolic or otherwise non-coercible entries the predicate
+  conservatively returns `False`; "explicitly negative definite" is
+  not proved symbolically.
+- Returns `False` (rather than leaving unevaluated) on non-matrix,
+  non-square, ragged, empty, or higher-rank tensor inputs.
+- Exactly one argument is accepted; any other count emits a
+  Mathematica-compatible
+
+  ```
+  NegativeDefiniteMatrixQ::argx: NegativeDefiniteMatrixQ called with N arguments; 1 argument is expected.
+  ```
+
+  to `stderr` and leaves the call unevaluated.
+
+```mathematica
+In[1]:= NegativeDefiniteMatrixQ[{{-5, 1}, {1, -4}}]
+Out[1]= True
+
+In[2]:= NegativeDefiniteMatrixQ[{{-2.3, -1.2}, {0.6, -3.7}}]
+Out[2]= True
+
+In[3]:= NegativeDefiniteMatrixQ[{{-1, 2 I}, {-I, -4}}]
+Out[3]= True
+
+In[4]:= NegativeDefiniteMatrixQ[{{Pi, -5, 2}, {E, -3, -3}, {5, Sqrt[2], 5}}]
+Out[4]= False
+
+In[5]:= NegativeDefiniteMatrixQ[{{-1, a}, {b, -2}}]
+Out[5]= False
+
+In[6]:= NegativeDefiniteMatrixQ[Table[-1/(i + j - 1), {i, 8}, {j, 8}]]
+Out[6]= True
+```
+
+
 ## Dot (.)
 Gives products of vectors, matrices, and tensors.
 - `a . b` or `Dot[a, b]`
