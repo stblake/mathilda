@@ -856,7 +856,13 @@ static bool can_start_primary(char c) {
 static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     skip_whitespace(s);
     if (!*s->pos) return NULL;
-    
+    /* No expression token follows a closing delimiter or a comma.
+     * Return NULL silently so callers (notably the OP_COMPOUND branch
+     * that turns a trailing `expr;` into CompoundExpression[expr, Null])
+     * can decide what to do, without parse_primary printing a spurious
+     * "Unexpected character" message. */
+    if (*s->pos == ']' || *s->pos == '}' || *s->pos == ')' || *s->pos == ',') return NULL;
+
     Expr* left = NULL;
     
     if (*s->pos == '?') {
