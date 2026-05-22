@@ -165,6 +165,7 @@ extern const char* SYM_Level;
 extern const char* SYM_LinearSolve;
 extern const char* SYM_List;
 extern const char* SYM_Listable;
+extern const char* SYM_LUDecomposition;
 extern const char* SYM_Locked;
 extern const char* SYM_Log;
 extern const char* SYM_Log1p;

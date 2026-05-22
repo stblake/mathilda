@@ -209,6 +209,97 @@ int mat_lapack_zungqr(int m, int n, int k, double* A, int lda,
     return info;
 }
 
+int mat_lapack_dgetrf(int m, int n, double* A, int lda, int* ipiv)
+{
+    int info = 0;
+    dgetrf_(&m, &n, A, &lda, ipiv, &info);
+    return info;
+}
+
+int mat_lapack_zgetrf(int m, int n, double* A, int lda, int* ipiv)
+{
+    int info = 0;
+    zgetrf_(&m, &n, lapack_zptr(A), &lda, ipiv, &info);
+    return info;
+}
+
+double mat_lapack_dlange(char norm_kind, int m, int n,
+                         const double* A, int lda)
+{
+    /* dlange's workspace requirement is m doubles for the 'I' norm,
+     * zero otherwise.  Allocate unconditionally to keep the call site
+     * simple. */
+    double* work = NULL;
+    if (norm_kind == 'I' || norm_kind == 'i') {
+        work = (double*)malloc((size_t)(m > 0 ? m : 1) * sizeof(double));
+        if (!work) return -1.0;
+    }
+    char nk[2] = { norm_kind, 0 };
+    /* dlange reads A but the Fortran prototype isn't const-qualified.
+     * The cast is the documented LAPACK calling pattern. */
+    double r = dlange_(nk, &m, &n, (double*)A, &lda, work);
+    if (work) free(work);
+    return r;
+}
+
+double mat_lapack_zlange(char norm_kind, int m, int n,
+                         const double* A, int lda)
+{
+    double* work = NULL;
+    if (norm_kind == 'I' || norm_kind == 'i') {
+        work = (double*)malloc((size_t)(m > 0 ? m : 1) * sizeof(double));
+        if (!work) return -1.0;
+    }
+    char nk[2] = { norm_kind, 0 };
+    double r = zlange_(nk, &m, &n, lapack_zptr((double*)A), &lda, work);
+    if (work) free(work);
+    return r;
+}
+
+int mat_lapack_dgecon(char norm_kind, int n, const double* A_LU,
+                      int lda, double anorm, double* rcond)
+{
+    int info = 0;
+    char nk[2] = { norm_kind, 0 };
+    /* dgecon workspace: 4n doubles, n ints. */
+    double* work = (double*)malloc((size_t)(4 * n > 1 ? 4 * n : 1)
+                                    * sizeof(double));
+    int* iwork = (int*)malloc((size_t)(n > 1 ? n : 1) * sizeof(int));
+    if (!work || !iwork) {
+        if (work) free(work);
+        if (iwork) free(iwork);
+        return -999;
+    }
+    dgecon_(nk, &n, (double*)A_LU, &lda, &anorm, rcond,
+            work, iwork, &info);
+    free(work);
+    free(iwork);
+    return info;
+}
+
+int mat_lapack_zgecon(char norm_kind, int n, const double* A_LU,
+                      int lda, double anorm, double* rcond)
+{
+    int info = 0;
+    char nk[2] = { norm_kind, 0 };
+    /* zgecon workspace: 2n complex doubles (= 4n doubles), 2n real
+     * doubles for rwork. */
+    double* work  = (double*)malloc((size_t)(2 * n > 1 ? 2 * n : 1)
+                                     * 2 * sizeof(double));
+    double* rwork = (double*)malloc((size_t)(2 * n > 1 ? 2 * n : 1)
+                                     * sizeof(double));
+    if (!work || !rwork) {
+        if (work) free(work);
+        if (rwork) free(rwork);
+        return -999;
+    }
+    zgecon_(nk, &n, lapack_zptr((double*)A_LU), &lda, &anorm, rcond,
+            lapack_zptr(work), rwork, &info);
+    free(work);
+    free(rwork);
+    return info;
+}
+
 #else  /* !USE_LAPACK */
 
 /* Stubs so call sites link cleanly when LAPACK isn't available.  Each
@@ -230,5 +321,22 @@ int mat_lapack_zgeqp3(int m, int n, double* A, int lda,
 int mat_lapack_zungqr(int m, int n, int k, double* A, int lda,
                       const double* tau)
 { (void)m; (void)n; (void)k; (void)A; (void)lda; (void)tau; return -1; }
+
+int mat_lapack_dgetrf(int m, int n, double* A, int lda, int* ipiv)
+{ (void)m; (void)n; (void)A; (void)lda; (void)ipiv; return -1; }
+int mat_lapack_zgetrf(int m, int n, double* A, int lda, int* ipiv)
+{ (void)m; (void)n; (void)A; (void)lda; (void)ipiv; return -1; }
+double mat_lapack_dlange(char norm_kind, int m, int n,
+                         const double* A, int lda)
+{ (void)norm_kind; (void)m; (void)n; (void)A; (void)lda; return -1.0; }
+double mat_lapack_zlange(char norm_kind, int m, int n,
+                         const double* A, int lda)
+{ (void)norm_kind; (void)m; (void)n; (void)A; (void)lda; return -1.0; }
+int mat_lapack_dgecon(char norm_kind, int n, const double* A_LU,
+                      int lda, double anorm, double* rcond)
+{ (void)norm_kind; (void)n; (void)A_LU; (void)lda; (void)anorm; (void)rcond; return -1; }
+int mat_lapack_zgecon(char norm_kind, int n, const double* A_LU,
+                      int lda, double anorm, double* rcond)
+{ (void)norm_kind; (void)n; (void)A_LU; (void)lda; (void)anorm; (void)rcond; return -1; }
 
 #endif /* USE_LAPACK */

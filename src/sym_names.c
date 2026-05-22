@@ -150,6 +150,7 @@ const char* SYM_Level = NULL;
 const char* SYM_LinearSolve = NULL;
 const char* SYM_List = NULL;
 const char* SYM_Listable = NULL;
+const char* SYM_LUDecomposition = NULL;
 const char* SYM_Locked = NULL;
 const char* SYM_Log = NULL;
 const char* SYM_Log1p = NULL;
@@ -411,6 +412,7 @@ void sym_names_init(void) {
     SYM_List                       = intern_symbol("List");
     SYM_Listable                   = intern_symbol("Listable");
     SYM_Locked                     = intern_symbol("Locked");
+    SYM_LUDecomposition            = intern_symbol("LUDecomposition");
     SYM_Log                        = intern_symbol("Log");
     SYM_Log1p                      = intern_symbol("Log1p");
     SYM_LogExpRules                = intern_symbol("LogExpRules");

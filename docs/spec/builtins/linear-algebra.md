@@ -624,6 +624,70 @@ Out[5]= {q, r, {{0, 1}, {1, 0}}}    (* column 1 (larger norm) pivoted first *)
 > printed form free of `Conjugate[Sqrt[...]]` residues that
 > Mathilda's simplifier does not reduce.
 
+## LUDecomposition
+Gives the LU decomposition of a square matrix.
+- `LUDecomposition[m]` — returns `{lu, p, c}` where:
+  - `lu` is the combined Doolittle factor matrix (strictly-lower
+    triangle is L with an implicit unit diagonal; upper triangle is U).
+  - `p` is the 1-indexed row-permutation vector with
+    `m[[p]] == l . u`, where
+    `l = LowerTriangularize[lu, -1] + IdentityMatrix[n]` and
+    `u = UpperTriangularize[lu]`.
+  - `c` is an L∞-condition-number estimate for approximate numerical
+    inputs, or `0` for exact / symbolic `m`.
+
+**Features**:
+- `Protected`.
+- Square inputs only; a non-square or empty matrix emits
+  `LUDecomposition::matsq` and the call is left unevaluated.
+- Algorithm: Doolittle's elimination with partial row pivoting.
+  - **MachinePrecision inputs (`min_bits <= 53`)** use the LAPACK
+    fast path: `dgetrf` / `zgetrf` for the factorisation, plus
+    `dgecon` / `zgecon` (with `dlange` / `zlange` for ‖A‖∞) for the
+    condition estimate.
+  - **MPFR inputs (`min_bits > 53`)** use a hand-rolled Doolittle
+    kernel over row-major MPFR arrays (paired re/im for complex);
+    the condition number is computed from the explicit inverse via
+    two back-substitutions per column.
+  - **Exact / symbolic inputs** run Doolittle through the Mathilda
+    evaluator, so integer / rational / Complex / Sqrt-bearing /
+    free-symbolic entries all share one code path.  Pivoting is
+    "first non-zero" (skip the natural pivot only when it is
+    provably zero) — matching the Mathematica example
+    `LUDecomposition[{{a, b}, {c, d}}]` returning `p = {1, 2}`.
+  - When BLAS/LAPACK is unavailable at build time (`USE_LAPACK=0`)
+    or MPFR is unavailable (`USE_MPFR=0`) the corresponding fast
+    path transparently routes to the symbolic kernel, which itself
+    understands inexact input via the standard rationalise → exact
+    → numericalise round-trip.
+- Singular inputs emit `LUDecomposition::sing` and the factorisation
+  completes with a zero on U's diagonal at the singular step
+  (matching Mathematica's behaviour).
+
+```mathematica
+In[1]:= LUDecomposition[{{1, 1, 1}, {2, 4, 8}, {3, 9, 27}}]
+Out[1]= {{{1, 1, 1}, {2, 2, 6}, {3, 3, 6}}, {1, 2, 3}, 0}
+
+In[2]:= LUDecomposition[{{a, b}, {c, d}}]
+Out[2]= {{{a, b}, {c/a, -((b c)/a) + d}}, {1, 2}, 0}
+
+In[3]:= {lu, p, c} = LUDecomposition[{{1.6, 2.7, 3.6},
+                                       {1.2, 3.2, 5.2},
+                                       {3.3, 3.4, 6.5}}];
+        c
+Out[3]= <real condition estimate, ~20-30 for the example matrix>
+```
+
+> Implementation is split across:
+> - `src/linalg/ludecomp.c` -- builtin entry, top-level dispatcher,
+>   and the symbolic Doolittle core driven through the evaluator.
+> - `src/linalg/ludecomp_machine.c` -- LAPACK fast path; loads to a
+>   column-major double buffer, runs `dgetrf` / `zgetrf` then
+>   `dgecon` / `zgecon`, builds `{lu, p, c}` as Mathilda lists.
+> - `src/linalg/ludecomp_mpfr.c` -- MPFR Doolittle kernel; row-major
+>   MPFR arrays (paired re/im for complex), largest-magnitude pivot
+>   selection, ‖A‖∞ * ‖A⁻¹‖∞ condition estimate.
+
 ## IdentityMatrix
 Generates an identity matrix.
 - `IdentityMatrix[n]`: Gives the `n x n` identity matrix.

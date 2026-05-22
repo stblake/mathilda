@@ -132,6 +132,9 @@ set(COMMON_SRC
     ../src/linalg/qrdecomp.c
     ../src/linalg/qrdecomp_machine.c
     ../src/linalg/qrdecomp_mpfr.c
+    ../src/linalg/ludecomp.c
+    ../src/linalg/ludecomp_machine.c
+    ../src/linalg/ludecomp_mpfr.c
     ../src/linalg/lapack.c
     ../src/linalg/eigen.c
     ../src/linalg/eigen_common.c
@@ -506,6 +509,41 @@ else()
     target_link_libraries(qrdecomposition_mpfr_tests gmp m)
 endif()
 add_test(NAME qrdecomposition_mpfr_tests COMMAND qrdecomposition_mpfr_tests)
+
+# LUDecomposition unit tests -- symbolic core + the public {lu, p, c}
+# contract.  Covers integer / rational / complex / symbolic / singular
+# inputs through the symbolic Doolittle kernel.
+add_executable(ludecomposition_tests test_ludecomposition.c ${COMMON_SRC})
+target_include_directories(ludecomposition_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(ludecomposition_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(ludecomposition_tests build_ecm)
+else()
+    target_link_libraries(ludecomposition_tests gmp m)
+endif()
+add_test(NAME ludecomposition_tests COMMAND ludecomposition_tests)
+
+# LUDecomposition LAPACK machine-precision kernel coverage.
+add_executable(ludecomposition_machine_tests test_ludecomposition_machine.c ${COMMON_SRC})
+target_include_directories(ludecomposition_machine_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(ludecomposition_machine_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(ludecomposition_machine_tests build_ecm)
+else()
+    target_link_libraries(ludecomposition_machine_tests gmp m)
+endif()
+add_test(NAME ludecomposition_machine_tests COMMAND ludecomposition_machine_tests)
+
+# LUDecomposition MPFR kernel tests.  Skip-cleanly under USE_MPFR=OFF.
+add_executable(ludecomposition_mpfr_tests test_ludecomposition_mpfr.c ${COMMON_SRC})
+target_include_directories(ludecomposition_mpfr_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(ludecomposition_mpfr_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(ludecomposition_mpfr_tests build_ecm)
+else()
+    target_link_libraries(ludecomposition_mpfr_tests gmp m)
+endif()
+add_test(NAME ludecomposition_mpfr_tests COMMAND ludecomposition_mpfr_tests)
 
 # Phase-5 QR microbench.  NOT wired into add_test -- this is a spot-check
 # tool that prints per-shape x precision wall time, not a CI gate.  Build

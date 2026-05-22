@@ -489,3 +489,39 @@ May 2026 leak hunt.
 **How to apply:** when a helper assigns through an out-param
 pointer, ensure the slot is empty (NULL or just-freed) before the
 call; or use a fresh local and assign after.
+
+### Module does not substitute locals into HoldAll bodies (Table, etc.)
+
+`Module[{lu = ...}, Table[lu[[i, j]], {i, n}, {j, n}]]` leaves the
+inner `lu` references as the literal symbol `lu` — Mathilda's
+`Module` does not propagate its renaming into Hold-* arguments of
+nested calls.  `Block[{lu = ...}, Table[lu[[i, j]], ...]]` works
+correctly because `Block` uses dynamic scoping (the symbol's
+existing value is temporarily replaced).
+
+**Why:** Found writing the LUDecomposition unit tests
+(2026-05-22); `Module`'s scoping rule did not reach into
+`Table[..., {i, n}]`, so the `lu` in the body printed as a free
+symbol.
+
+**How to apply:** for tests / scripts that want to bind local
+matrix data and then iterate over it with `Table`, `Sum`, `Map`,
+etc., use `Block` rather than `Module`.
+
+### Iteration variables in Table can collide with symbolic matrix entries
+
+`Table[If[i > j, lu[[i, j]], 0], {i, n}, {j, n}]` applied to a
+matrix `{{a, b, c}, {d, e, f}, {g, h, i}}` silently corrupts the
+result: the `i` from the matrix takes precedence in the `If`
+condition (or in the indexing expression), giving wrong output
+without any error.
+
+**Why:** Found writing the LUDecomposition symbolic test for
+`{{a, b, c}, {d, e, f}, {g, h, i}}` — the iteration variable `i`
+clashed with the matrix entry `i`, and the residual identity
+check failed with `{0, 0, -3 + i}` instead of all zeros.
+
+**How to apply:** when a `Table` (or any iterator) is going to
+operate over general symbolic data, use iteration variables that
+are unlikely to appear in the data — `ii`, `jj`, `kk`, or
+`Module[{i}, Table[..., {i, n}]]`.

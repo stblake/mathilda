@@ -418,6 +418,8 @@ void core_init(void) {
     matrank_init();
     void qrdecomp_init(void);
     qrdecomp_init();
+    void ludecomp_init(void);
+    ludecomp_init();
     readwrite_init();
     files_init();
     random_init();
