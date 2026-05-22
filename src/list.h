@@ -31,6 +31,7 @@ Expr* builtin_hermitian_matrix_q(Expr* res);
 Expr* builtin_symmetric_matrix_q(Expr* res);
 Expr* builtin_square_matrix_q(Expr* res);
 Expr* builtin_diagonal_matrix_q(Expr* res);
+Expr* builtin_upper_triangular_matrix_q(Expr* res);
 
 void list_init(void);
 

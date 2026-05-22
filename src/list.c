@@ -1366,6 +1366,7 @@ void list_init(void) {
     symtab_add_builtin("SymmetricMatrixQ", builtin_symmetric_matrix_q);
     symtab_add_builtin("SquareMatrixQ", builtin_square_matrix_q);
     symtab_add_builtin("DiagonalMatrixQ", builtin_diagonal_matrix_q);
+    symtab_add_builtin("UpperTriangularMatrixQ", builtin_upper_triangular_matrix_q);
 
     symtab_get_def("Table")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Range")->attributes |= ATTR_PROTECTED;
@@ -1395,6 +1396,7 @@ void list_init(void) {
     symtab_get_def("SymmetricMatrixQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("SquareMatrixQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("DiagonalMatrixQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("UpperTriangularMatrixQ")->attributes |= ATTR_PROTECTED;
 
     symtab_set_docstring("Total", "Total[list]\n\tgives the total of the elements in list.\nTotal[list, n]\n\ttotals all elements down to level n.\nTotal[list, {n}]\n\ttotals elements at level n.\nTotal[list, {n1, n2}]\n\ttotals elements at levels n1 through n2.");
 }
@@ -2257,6 +2259,163 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
         for (size_t j = 0; j < ncols; j++) {
             int64_t off = (int64_t)j - (int64_t)i;
             if (off == k) continue;  /* on the k-th diagonal -- ignore */
+            Expr* entry = row_i[j];
+            bool zero;
+            if (tolerance != NULL) {
+                zero = diag_entry_under_tolerance(entry, tolerance);
+            } else {
+                zero = diag_entry_is_exact_zero(entry);
+            }
+            if (!zero) return expr_new_symbol("False");
+        }
+    }
+
+    return expr_new_symbol("True");
+}
+
+/* --- UpperTriangularMatrixQ --------------------------------------------
+ *
+ * `UpperTriangularMatrixQ[m]` returns True iff every entry of `m` strictly
+ * below the main diagonal is zero; False otherwise.
+ *
+ * `UpperTriangularMatrixQ[m, k]` shifts the cut-off to the k-th diagonal:
+ * every entry m[i,j] with `j - i < k` must be zero.  Equivalently, all
+ * nonzero entries are confined to the region on or above the k-th
+ * diagonal.  Positive k selects a superdiagonal above the main diagonal
+ * (so the test becomes stricter); negative k selects a subdiagonal below
+ * it (the test becomes more permissive).  Rectangular matrices are
+ * supported.
+ *
+ * `UpperTriangularMatrixQ[m, ..., Tolerance -> t]` relaxes the zero test
+ * so that an entry e is considered zero iff `Abs[e] <= t` evaluates to
+ * True.  Mirrors the surface API of DiagonalMatrixQ / HermitianMatrixQ /
+ * SymmetricMatrixQ.
+ *
+ * Diagnostics (Mathematica-compatible, to stderr):
+ *   - 0 args -> `UpperTriangularMatrixQ::argt`, call left unevaluated.
+ *   - >= 3 positional args (or a non-Rule arg where an option is
+ *     expected) -> `UpperTriangularMatrixQ::nonopt`, call left
+ *     unevaluated.
+ *
+ * Shape rejections that return False (rather than unevaluated): non-list
+ * input, the empty list `{}`, ragged rows, and any matrix whose entries
+ * are themselves Lists (rank >= 3 tensor).  `{{}, {}, ...}` (n x 0) is
+ * vacuously upper-triangular and returns True.
+ *
+ * For symbolic entries the structural zero test is exact: only literal
+ * numeric zeros (Integer 0, Real 0.0, BigInt 0) count as zero.  Symbolic
+ * sub-diagonal entries cause the matrix to be rejected, so the predicate
+ * is conservative.
+ */
+
+static Expr* utri_emit_argt(size_t argc) {
+    fprintf(stderr,
+            "UpperTriangularMatrixQ::argt: UpperTriangularMatrixQ called "
+            "with %zu argument%s; 1 or 2 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+static Expr* utri_emit_nonopt(Expr* bad, Expr* res) {
+    char* bad_str = expr_to_string(bad);
+    char* call_str = expr_to_string(res);
+    fprintf(stderr,
+            "UpperTriangularMatrixQ::nonopt: Options expected (instead of "
+            "%s) beyond position 2 in %s. An option must be a rule or a "
+            "list of rules.\n",
+            bad_str ? bad_str : "?", call_str ? call_str : "?");
+    free(bad_str);
+    free(call_str);
+    return NULL;
+}
+
+Expr* builtin_upper_triangular_matrix_q(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return utri_emit_argt(0);
+
+    Expr* m = res->data.function.args[0];
+
+    /* Argument layout, mirroring DiagonalMatrixQ:
+     *   args[0]    = matrix m
+     *   args[1]    = optional integer k (default 0) OR first option Rule.
+     *   args[2..]  = options.
+     */
+    int64_t k = 0;
+    size_t opt_start = 1;
+    if (argc >= 2) {
+        Expr* a1 = res->data.function.args[1];
+        bool is_rule = (a1->type == EXPR_FUNCTION &&
+                        a1->data.function.head->type == EXPR_SYMBOL &&
+                        a1->data.function.head->data.symbol == SYM_Rule);
+        if (is_rule) {
+            opt_start = 1;
+        } else {
+            if (a1->type != EXPR_INTEGER) {
+                return utri_emit_nonopt(a1, res);
+            }
+            k = a1->data.integer;
+            opt_start = 2;
+        }
+    }
+
+    /* Parse options.  Only Tolerance is recognised. */
+    Expr* tolerance = NULL;
+    Expr* last_bad = NULL;
+    for (size_t i = opt_start; i < argc; i++) {
+        Expr* opt = res->data.function.args[i];
+        bool is_rule = (opt->type == EXPR_FUNCTION &&
+                        opt->data.function.head->type == EXPR_SYMBOL &&
+                        opt->data.function.head->data.symbol == SYM_Rule &&
+                        opt->data.function.arg_count == 2 &&
+                        opt->data.function.args[0]->type == EXPR_SYMBOL);
+        if (!is_rule) {
+            last_bad = opt;
+            continue;
+        }
+        const char* name = opt->data.function.args[0]->data.symbol;
+        Expr* val = opt->data.function.args[1];
+        if (name == SYM_Tolerance) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+                tolerance = val;
+            }
+        } else {
+            last_bad = opt;
+        }
+    }
+    if (last_bad != NULL) {
+        return utri_emit_nonopt(last_bad, res);
+    }
+
+    /* Validate matrix shape -- same gate as DiagonalMatrixQ. */
+    if (!is_listq(m)) return expr_new_symbol("False");
+    size_t nrows = m->data.function.arg_count;
+    if (nrows == 0) return expr_new_symbol("False");
+    size_t ncols = 0;
+    for (size_t i = 0; i < nrows; i++) {
+        Expr* row = m->data.function.args[i];
+        if (!is_listq(row)) return expr_new_symbol("False");
+        size_t this_ncols = row->data.function.arg_count;
+        if (i == 0) {
+            ncols = this_ncols;
+        } else if (this_ncols != ncols) {
+            return expr_new_symbol("False");
+        }
+        for (size_t j = 0; j < this_ncols; j++) {
+            if (is_listq(row->data.function.args[j])) {
+                return expr_new_symbol("False");
+            }
+        }
+    }
+
+    /* Every entry strictly below the k-th diagonal (j - i < k) must be
+     * zero under the chosen predicate.  Entries on or above the k-th
+     * diagonal are unconstrained. */
+    for (size_t i = 0; i < nrows; i++) {
+        Expr** row_i = m->data.function.args[i]->data.function.args;
+        for (size_t j = 0; j < ncols; j++) {
+            int64_t off = (int64_t)j - (int64_t)i;
+            if (off >= k) continue;  /* on or above k-th diagonal -- ignore */
             Expr* entry = row_i[j];
             bool zero;
             if (tolerance != NULL) {

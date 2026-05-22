@@ -810,6 +810,25 @@ void info_init(void) {
         "BigInt 0) count as zero.  Returns False on non-matrix, ragged,\n"
         "empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix\n"
         "(e.g. {{}, {}}) is vacuously diagonal.");
+    symtab_set_docstring("UpperTriangularMatrixQ",
+        "UpperTriangularMatrixQ[m]\n"
+        "\tgives True if m is upper triangular, and False otherwise.\n"
+        "UpperTriangularMatrixQ[m, k]\n"
+        "\tgives True if m is upper triangular starting from the k-th\n"
+        "\tdiagonal (every entry m[i,j] with j - i < k is zero), and\n"
+        "\tFalse otherwise.  Positive k refers to superdiagonals above\n"
+        "\tthe main diagonal; negative k refers to subdiagonals below it.\n"
+        "\tWorks for rectangular as well as square matrices.\n"
+        "\n"
+        "Option:\n"
+        "\tTolerance -> Automatic   numeric tolerance for approximate matrices.\n"
+        "\n"
+        "With Tolerance -> t, sub-diagonal entries e are taken to be zero\n"
+        "when Abs[e] <= t evaluates to True.  Without a tolerance the test\n"
+        "is structural: only literal numeric zeros (Integer 0, Real 0.0,\n"
+        "BigInt 0) count as zero.  Returns False on non-matrix, ragged,\n"
+        "empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix\n"
+        "(e.g. {{}, {}}) is vacuously upper triangular.");
 
     // Trigonometric
     symtab_set_docstring("Sin", "Sin[z] gives the sine of z.");

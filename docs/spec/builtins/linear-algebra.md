@@ -106,6 +106,76 @@ Out[8]= True
 ```
 
 
+## UpperTriangularMatrixQ
+Tests whether a matrix is upper triangular relative to a chosen diagonal.
+- `UpperTriangularMatrixQ[m]`: `True` if every entry strictly below the
+  main diagonal of `m` is zero, `False` otherwise.
+- `UpperTriangularMatrixQ[m, k]`: `True` if every entry `m[[i, j]]` with
+  `j - i < k` is zero.  Positive `k` selects a superdiagonal above the
+  main diagonal (the test becomes stricter -- the main diagonal must be
+  zero too); negative `k` selects a subdiagonal below it (the test
+  becomes more permissive -- the first `|k|` subdiagonals are allowed to
+  be nonzero).
+- `UpperTriangularMatrixQ[m, Tolerance -> t]` (and
+  `UpperTriangularMatrixQ[m, k, Tolerance -> t]`): sub-diagonal entries
+  `e` are taken to be zero when `Abs[e] <= t` evaluates to `True`.
+
+**Features**:
+- `Protected`.
+- Works for rectangular matrices, not only square -- only the entry-zero
+  predicate and the shape constraints matter.
+- Default test is structural: only literal numeric zeros (`Integer 0`,
+  `Real 0.0`, `BigInt 0`) count as zero.  Symbolic sub-diagonal entries
+  fail the test, so the predicate is conservative.
+- Returns `False` (rather than leaving unevaluated) on non-list, scalar,
+  vector, ragged, or higher-rank tensor inputs.  `{}` is rejected; an
+  `n`-by-`0` matrix (e.g. `{{}, {}}`) is vacuously upper triangular and
+  returns `True`.
+- Zero positional arguments emits a Mathematica-compatible
+
+  ```
+  UpperTriangularMatrixQ::argt: UpperTriangularMatrixQ called with 0 arguments; 1 or 2 arguments are expected.
+  ```
+
+  to `stderr` and leaves the call unevaluated.
+
+- More than two positional arguments (or any non-`Rule` junk in the
+  option region) emits
+
+  ```
+  UpperTriangularMatrixQ::nonopt: Options expected (instead of <expr>) beyond position 2 in UpperTriangularMatrixQ[...]. An option must be a rule or a list of rules.
+  ```
+
+  to `stderr` and leaves the call unevaluated.
+
+```mathematica
+In[1]:= UpperTriangularMatrixQ[{{a, b, c}, {0, e, f}, {0, 0, g}}]
+Out[1]= True
+
+In[2]:= UpperTriangularMatrixQ[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
+Out[2]= False
+
+In[3]:= UpperTriangularMatrixQ[{{0, 1, 2}, {0, 0, 3}, {0, 0, 0}}, 1]
+Out[3]= True
+
+In[4]:= UpperTriangularMatrixQ[{{1, 2, 3}, {4, 5, 6}, {0, 7, 9}}, -1]
+Out[4]= True
+
+In[5]:= UpperTriangularMatrixQ[{{1, 2, 3}, {0, 4, 5}}]
+Out[5]= True
+
+In[6]:= UpperTriangularMatrixQ[{{1, 2}, {0, 4}, {0, 0}}]
+Out[6]= True
+
+In[7]:= UpperTriangularMatrixQ[{{1., 2., 3.}, {10^-12, 4., 5.}, {0, 10^-13, 6.}},
+            Tolerance -> 10^-12]
+Out[7]= True
+
+In[8]:= UpperTriangularMatrixQ[IdentityMatrix[5]]
+Out[8]= True
+```
+
+
 ## SquareMatrixQ
 Tests whether a matrix has the same number of rows and columns.
 - `SquareMatrixQ[m]`: `True` if `Dimensions[m] == {n, n}` for some `n >= 1`,
