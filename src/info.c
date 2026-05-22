@@ -792,6 +792,24 @@ void info_init(void) {
         "\n"
         "Works for symbolic as well as numerical matrices.  Returns False on\n"
         "non-list, ragged, rectangular, empty, or higher-rank tensor inputs.");
+    symtab_set_docstring("DiagonalMatrixQ",
+        "DiagonalMatrixQ[m]\n"
+        "\tgives True if m is diagonal, and False otherwise.\n"
+        "DiagonalMatrixQ[m, k]\n"
+        "\tgives True if m has nonzero elements only on the k-th diagonal,\n"
+        "\tand False otherwise.  Positive k refers to superdiagonals above\n"
+        "\tthe main diagonal; negative k refers to subdiagonals below it.\n"
+        "\tWorks for rectangular as well as square matrices.\n"
+        "\n"
+        "Option:\n"
+        "\tTolerance -> Automatic   numeric tolerance for approximate matrices.\n"
+        "\n"
+        "With Tolerance -> t, off-diagonal entries e are taken to be zero\n"
+        "when Abs[e] <= t evaluates to True.  Without a tolerance the test\n"
+        "is structural: only literal numeric zeros (Integer 0, Real 0.0,\n"
+        "BigInt 0) count as zero.  Returns False on non-matrix, ragged,\n"
+        "empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix\n"
+        "(e.g. {{}, {}}) is vacuously diagonal.");
 
     // Trigonometric
     symtab_set_docstring("Sin", "Sin[z] gives the sine of z.");

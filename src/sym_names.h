@@ -88,6 +88,7 @@ extern const char* SYM_Cubics;
 extern const char* SYM_Degree;
 extern const char* SYM_DeleteCases;
 extern const char* SYM_Derivative;
+extern const char* SYM_DiagonalMatrixQ;
 extern const char* SYM_Direct;
 extern const char* SYM_DirectedInfinity;
 extern const char* SYM_DiscreteDelta;

@@ -4,6 +4,7 @@
 #include "eval.h"
 #include "core.h"
 #include "arithmetic.h"
+#include "print.h"
 #include "sym_names.h"
 #include <string.h>
 #include <stdlib.h>
@@ -1364,6 +1365,7 @@ void list_init(void) {
     symtab_add_builtin("HermitianMatrixQ", builtin_hermitian_matrix_q);
     symtab_add_builtin("SymmetricMatrixQ", builtin_symmetric_matrix_q);
     symtab_add_builtin("SquareMatrixQ", builtin_square_matrix_q);
+    symtab_add_builtin("DiagonalMatrixQ", builtin_diagonal_matrix_q);
 
     symtab_get_def("Table")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Range")->attributes |= ATTR_PROTECTED;
@@ -1392,6 +1394,7 @@ void list_init(void) {
     symtab_get_def("HermitianMatrixQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("SymmetricMatrixQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("SquareMatrixQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("DiagonalMatrixQ")->attributes |= ATTR_PROTECTED;
 
     symtab_set_docstring("Total", "Total[list]\n\tgives the total of the elements in list.\nTotal[list, n]\n\ttotals all elements down to level n.\nTotal[list, {n}]\n\ttotals elements at level n.\nTotal[list, {n1, n2}]\n\ttotals elements at levels n1 through n2.");
 }
@@ -2068,6 +2071,203 @@ Expr* builtin_square_matrix_q(Expr* res) {
             }
         }
     }
+    return expr_new_symbol("True");
+}
+
+/* --- DiagonalMatrixQ -----------------------------------------------------
+ *
+ * `DiagonalMatrixQ[m]` returns True iff every off-(main-diagonal) entry of
+ * the matrix `m` is structurally zero; False otherwise.
+ *
+ * `DiagonalMatrixQ[m, k]` checks the k-th diagonal: positive k selects a
+ * superdiagonal above the main diagonal, negative k selects a subdiagonal
+ * below it. The matrix is "k-diagonal" iff every entry m[i,j] with
+ * j - i != k is zero. Rectangular matrices are supported -- only shape and
+ * the entry-zero predicate matter.
+ *
+ * `DiagonalMatrixQ[m, ..., Tolerance -> t]` relaxes the zero test so that
+ * an entry e is considered zero iff `Abs[e] <= t` evaluates to True. This
+ * mirrors the behaviour of HermitianMatrixQ / SymmetricMatrixQ.
+ *
+ * Diagnostics:
+ *   - 0 args -> `DiagonalMatrixQ::argt` to stderr, call unevaluated.
+ *   - >= 3 positional args (or a non-Rule arg where an option is expected)
+ *     -> `DiagonalMatrixQ::nonopt` to stderr, call unevaluated.
+ *
+ * Shape rejections that return False (rather than unevaluated): non-list
+ * input, the empty list `{}`, ragged rows, and any matrix whose entries
+ * are themselves Lists (rank >= 3 tensor). `{{}, {}, ...}` (n x 0) is
+ * vacuously diagonal and returns True.
+ *
+ * For symbolic entries the structural zero test is exact: only the
+ * literal numeric zeros (Integer 0, Real 0.0, BigInt 0) count as zero.
+ * Pure symbols, function calls, and nonzero literals are non-zero, so the
+ * predicate is conservative -- it never proves a matrix is diagonal that
+ * is not provably so under structural reasoning alone.
+ */
+
+static bool diag_entry_is_exact_zero(Expr* e) {
+    if (e == NULL) return false;
+    if (e->type == EXPR_INTEGER) return e->data.integer == 0;
+    if (e->type == EXPR_REAL) return e->data.real == 0.0;
+    if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint) == 0;
+    return false;
+}
+
+static bool diag_entry_under_tolerance(Expr* e, Expr* tol) {
+    /* Build LessEqual[Abs[e], tol] and require evaluation to True. */
+    Expr** abs_args = malloc(sizeof(Expr*) * 1);
+    abs_args[0] = expr_copy(e);
+    Expr* abs_call = expr_new_function(expr_new_symbol("Abs"), abs_args, 1);
+    free(abs_args);
+    Expr* abs_e = eval_and_free(abs_call);
+
+    Expr** le_args = malloc(sizeof(Expr*) * 2);
+    le_args[0] = abs_e;
+    le_args[1] = expr_copy(tol);
+    Expr* le_call = expr_new_function(expr_new_symbol("LessEqual"), le_args, 2);
+    free(le_args);
+    Expr* le_e = eval_and_free(le_call);
+    bool ok = (le_e->type == EXPR_SYMBOL && le_e->data.symbol == SYM_True);
+    expr_free(le_e);
+    return ok;
+}
+
+/* Print a Mathematica-compatible argt diagnostic and return NULL so the
+ * evaluator leaves the call unevaluated, matching builtin_square_matrix_q
+ * / builtin_conjugate's surface behaviour. */
+static Expr* diag_emit_argt(size_t argc) {
+    fprintf(stderr,
+            "DiagonalMatrixQ::argt: DiagonalMatrixQ called with %zu "
+            "argument%s; 1 or 2 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* Print a Mathematica-compatible nonopt diagnostic.  We mirror Wolfram's
+ * surface text: "Options expected (instead of <expr>) beyond position 2".
+ * `bad` is the offending non-Rule expression that broke option parsing. */
+static Expr* diag_emit_nonopt(Expr* bad, Expr* res) {
+    char* bad_str = expr_to_string(bad);
+    char* call_str = expr_to_string(res);
+    fprintf(stderr,
+            "DiagonalMatrixQ::nonopt: Options expected (instead of %s) "
+            "beyond position 2 in %s. An option must be a rule or a list "
+            "of rules.\n",
+            bad_str ? bad_str : "?", call_str ? call_str : "?");
+    free(bad_str);
+    free(call_str);
+    return NULL;
+}
+
+Expr* builtin_diagonal_matrix_q(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc == 0) return diag_emit_argt(0);
+
+    Expr* m = res->data.function.args[0];
+
+    /* Argument layout:
+     *   args[0] = matrix m
+     *   args[1] = optional integer k (default 0) OR first option Rule.
+     *   args[2..] = options.
+     */
+    int64_t k = 0;
+    size_t opt_start = 1;
+    if (argc >= 2) {
+        Expr* a1 = res->data.function.args[1];
+        bool is_rule = (a1->type == EXPR_FUNCTION &&
+                        a1->data.function.head->type == EXPR_SYMBOL &&
+                        a1->data.function.head->data.symbol == SYM_Rule);
+        if (is_rule) {
+            /* k defaults to 0; options start at position 1. */
+            opt_start = 1;
+        } else {
+            /* Position 1 must be an integer k. */
+            if (a1->type != EXPR_INTEGER) {
+                /* Non-integer, non-Rule -> treat as a bad option starting
+                 * at position 2 (1-indexed). */
+                return diag_emit_nonopt(a1, res);
+            }
+            k = a1->data.integer;
+            opt_start = 2;
+        }
+    }
+
+    /* Parse options. Only Tolerance is recognised; anything else is a
+     * nonopt diagnostic (unknown-option rules left over would otherwise
+     * silently no-op). */
+    Expr* tolerance = NULL;
+    Expr* last_bad = NULL;  /* report the LAST non-option encountered */
+    for (size_t i = opt_start; i < argc; i++) {
+        Expr* opt = res->data.function.args[i];
+        bool is_rule = (opt->type == EXPR_FUNCTION &&
+                        opt->data.function.head->type == EXPR_SYMBOL &&
+                        opt->data.function.head->data.symbol == SYM_Rule &&
+                        opt->data.function.arg_count == 2 &&
+                        opt->data.function.args[0]->type == EXPR_SYMBOL);
+        if (!is_rule) {
+            last_bad = opt;
+            continue;
+        }
+        const char* name = opt->data.function.args[0]->data.symbol;
+        Expr* val = opt->data.function.args[1];
+        if (name == SYM_Tolerance) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+                tolerance = val;
+            }
+        } else {
+            /* Unknown option name -> treat as a bad option. */
+            last_bad = opt;
+        }
+    }
+    if (last_bad != NULL) {
+        return diag_emit_nonopt(last_bad, res);
+    }
+
+    /* Validate matrix shape: must be a List of Lists, all rows the same
+     * length, no entries that are themselves Lists.  The empty list `{}`
+     * (a vector with zero entries) is not a matrix and returns False;
+     * `{{}, {}, ...}` (n x 0) is accepted as a vacuous matrix. */
+    if (!is_listq(m)) return expr_new_symbol("False");
+    size_t nrows = m->data.function.arg_count;
+    if (nrows == 0) return expr_new_symbol("False");
+    size_t ncols = 0;
+    for (size_t i = 0; i < nrows; i++) {
+        Expr* row = m->data.function.args[i];
+        if (!is_listq(row)) return expr_new_symbol("False");
+        size_t this_ncols = row->data.function.arg_count;
+        if (i == 0) {
+            ncols = this_ncols;
+        } else if (this_ncols != ncols) {
+            return expr_new_symbol("False");
+        }
+        for (size_t j = 0; j < this_ncols; j++) {
+            if (is_listq(row->data.function.args[j])) {
+                return expr_new_symbol("False");
+            }
+        }
+    }
+
+    /* Walk every cell; an entry off the k-th diagonal (j - i != k) must
+     * be zero under the chosen predicate.  Entries on the diagonal are
+     * unconstrained -- they may be any value, including symbolic. */
+    for (size_t i = 0; i < nrows; i++) {
+        Expr** row_i = m->data.function.args[i]->data.function.args;
+        for (size_t j = 0; j < ncols; j++) {
+            int64_t off = (int64_t)j - (int64_t)i;
+            if (off == k) continue;  /* on the k-th diagonal -- ignore */
+            Expr* entry = row_i[j];
+            bool zero;
+            if (tolerance != NULL) {
+                zero = diag_entry_under_tolerance(entry, tolerance);
+            } else {
+                zero = diag_entry_is_exact_zero(entry);
+            }
+            if (!zero) return expr_new_symbol("False");
+        }
+    }
+
     return expr_new_symbol("True");
 }
 
