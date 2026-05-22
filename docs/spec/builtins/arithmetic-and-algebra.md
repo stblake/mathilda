@@ -289,6 +289,39 @@ Out[5]= -1/2 1/(Sqrt[2] (Sqrt[2] + x)) + 1/4 Sqrt[2]/(-Sqrt[2] + x)
 - `Quotient[n, m]`: Integer part of `n/m`.
 - `QuotientRemainder[n, m]`: Returns `{Quotient[n, m], Mod[n, m]}`.
 
+## IntegerDigits
+- `IntegerDigits[n]`: List of the decimal digits of the integer `n`, most
+  significant first. The sign of `n` is discarded.
+- `IntegerDigits[n, b]`: Base-`b` digits of `n` (requires `b >= 2`).
+- `IntegerDigits[n, b, len]`: Pads on the left with leading zeros to length
+  `len`. If `n` has more than `len` base-`b` digits, the `len` least-
+  significant digits are returned.
+
+**Features**:
+- `Protected`, `Listable`. Threading distributes element-wise over a list
+  of integers in any argument position, e.g. `IntegerDigits[{6, 7, 2}, 2]`
+  and `IntegerDigits[7, {2, 3, 4}]`.
+- `IntegerDigits[0]` returns `{0}` (single zero digit). With an explicit
+  length, `IntegerDigits[0, b, len]` returns a list of `len` zeros.
+- Bases > 10 are allowed; digit values range over `{0, ..., b-1}`.
+- Works seamlessly for both machine integers and arbitrary-precision
+  bignums (digits are computed in GMP and demoted to machine ints
+  whenever they fit).
+
+```mathematica
+In[1]:= IntegerDigits[58127]
+Out[1]= {5, 8, 1, 2, 7}
+
+In[2]:= IntegerDigits[58127, 16]
+Out[2]= {14, 3, 0, 15}
+
+In[3]:= IntegerDigits[Range[0, 7], 2, 3]
+Out[3]= {{0, 0, 0}, {0, 0, 1}, {0, 1, 0}, {0, 1, 1}, {1, 0, 0}, {1, 0, 1}, {1, 1, 0}, {1, 1, 1}}
+
+In[4]:= IntegerDigits[6345354, 10, 4]
+Out[4]= {5, 3, 5, 4}
+```
+
 ## GCD, LCM
 - `GCD[n1, n2, ...]`: Greatest common divisor.
 - `LCM[n1, n2, ...]`: Least common multiple.

@@ -26,6 +26,7 @@
 #include "hyperbolic.h"
 #include "logexp.h"
 #include "piecewise.h"
+#include "int.h"
 #include "attr.h"
 #include "purefunc.h"
 #include "modular.h"
@@ -395,6 +396,7 @@ void core_init(void) {
     simp_init();
     logexp_init();
     piecewise_init();
+    int_init();
     attr_init();
     purefunc_init();
     stats_init();

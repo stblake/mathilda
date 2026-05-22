@@ -79,6 +79,7 @@ set(COMMON_SRC
     ../src/internal.c
     ../src/attr.c
     ../src/core.c
+    ../src/int.c
     ../src/comparisons.c
     ../src/symtab.c
     ../src/match.c
@@ -664,6 +665,16 @@ else()
     target_link_libraries(normalize_tests gmp m)
 endif()
 add_test(NAME normalize_tests COMMAND normalize_tests)
+
+add_executable(integer_digits_tests test_integer_digits.c ${COMMON_SRC})
+target_include_directories(integer_digits_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integer_digits_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(integer_digits_tests build_ecm)
+else()
+    target_link_libraries(integer_digits_tests gmp m)
+endif()
+add_test(NAME integer_digits_tests COMMAND integer_digits_tests)
 
 add_executable(eigen_tests test_eigen.c ${COMMON_SRC})
 target_include_directories(eigen_tests PRIVATE ../src)

@@ -1562,6 +1562,11 @@ void info_init(void) {
     symtab_set_docstring("LessEqual", "x <= y yields True if x is less than or equal to y.");
     symtab_set_docstring("GreaterEqual", "x >= y yields True if x is greater than or equal to y.");
 
+    symtab_set_docstring("IntegerDigits",
+        "IntegerDigits[n] gives a list of the decimal digits in the integer n.\n"
+        "IntegerDigits[n, b] gives a list of the base b digits in the integer n.\n"
+        "IntegerDigits[n, b, len] pads the list on the left with zeros to give a list of length len; if n has more than len base-b digits, the last len least-significant digits are returned.");
+
     // Primes
     symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
     symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");
