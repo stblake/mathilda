@@ -239,6 +239,107 @@ static void test_lu_mpfr_precision_progression(void) {
         1e-10, "progression 200-bit");
 }
 
+/* Rectangular MPFR reconstruction.  p has length rows; steps = min. */
+static void assert_lu_residual_small_rect(const char* m_src, double bound,
+                                           const char* label) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "Block[{m, lu, p, l, u, rr, cc, steps, ii, jj}, "
+             "  m = %s; "
+             "  {lu, p} = LUDecomposition[m][[1;;2]]; "
+             "  rr = Length[m]; "
+             "  cc = Length[m[[1]]]; "
+             "  steps = If[rr < cc, rr, cc]; "
+             "  l = Table[If[ii > jj, lu[[ii, jj]], "
+             "                  If[ii == jj, 1, 0]], "
+             "             {ii, rr}, {jj, steps}]; "
+             "  u = Table[If[ii <= jj, lu[[ii, jj]], 0], "
+             "             {ii, steps}, {jj, cc}]; "
+             "  m[[p]] - l . u"
+             "]",
+             m_src);
+    Expr* res = run(buf);
+    double err = max_abs_tensor(res);
+    if (!(err <= bound)) {
+        char* s = expr_to_string(res);
+        fprintf(stderr,
+                "FAIL %s: residual = %.6e > bound %.6e\n  diff: %s\n",
+                label, err, bound, s);
+        free(s);
+        expr_free(res);
+        ASSERT(0);
+    }
+    printf("  PASS %s: residual = %.6e <= %.6e\n", label, err, bound);
+    expr_free(res);
+}
+
+static void test_lu_mpfr_tall(void) {
+    /* 4 x 3 tall MPFR matrix at 100 bits. */
+    const char* m = "N[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}, {1, 1, 1}}, 100]";
+    assert_lu_residual_small_rect(m, 1e-12, "4x3 tall 100-bit");
+
+    /* Non-square: c slot should be exact Integer 0. */
+    Expr* res = run("LUDecomposition[N[{{1, 2, 3}, {4, 5, 6}, "
+                    "{7, 8, 10}, {1, 1, 1}}, 100]][[3]]");
+    ASSERT(res->type == EXPR_INTEGER && res->data.integer == 0);
+    expr_free(res);
+    printf("  PASS: tall MPFR matrix c = 0 (exact)\n");
+}
+
+static void test_lu_mpfr_wide(void) {
+    /* 2 x 4 wide MPFR matrix at 80 bits. */
+    const char* m = "N[{{1, 2, 3, 4}, {5, 6, 7, 8}}, 80]";
+    assert_lu_residual_small_rect(m, 1e-12, "2x4 wide 80-bit");
+
+    Expr* res = run("LUDecomposition[N[{{1, 2, 3, 4}, "
+                    "{5, 6, 7, 8}}, 80]][[3]]");
+    ASSERT(res->type == EXPR_INTEGER && res->data.integer == 0);
+    expr_free(res);
+    printf("  PASS: wide MPFR matrix c = 0 (exact)\n");
+}
+
+/* Hager-Higham vs explicit-inverse: the HH estimate is a lower bound on
+ * the true ||A^{-1}||_inf; for well-conditioned matrices the two agree
+ * to a few ULP.  Pin the HH-based condition number for the symmetric
+ * positive-definite case where the ground-truth cond is rational. */
+static void test_lu_mpfr_hh_estimate_accurate(void) {
+    /* {{4,1,2},{1,3,0},{2,0,5}} symmetric, exact condition = 4.2325581...
+     * (cond = (||A||_inf) * (||A^-1||_inf) where ||A||_inf = 7 and
+     * ||A^-1||_inf = some exact rational; the product matches the
+     * Mathematica printout to all 80 bits). */
+    Expr* res = run("LUDecomposition[N[{{4, 1, 2}, {1, 3, 0}, {2, 0, 5}}, "
+                    "80]][[3]]");
+    double v;
+    ASSERT(leaf_to_double(res, &v));
+    /* True value is ~ 4.2325581395..., HH should land within 1% even
+     * with worst-case sign-vector convergence (in practice it nails it
+     * to MPFR rounding). */
+    ASSERT(v > 4.2 && v < 4.3);
+    printf("  PASS: HH estimate %.16g for 3x3 symmetric (expect ~4.2326)\n", v);
+    expr_free(res);
+}
+
+/* Hilbert 8x8 at 60 bits is wildly ill-conditioned (cond ~ 1e10 at
+ * 60 bits is still under the 2^60 threshold, so we use a higher-rank
+ * Hilbert).  Pick Hilbert 12 at 30 bits where cond > 2^30 ~ 1e9. */
+static void test_lu_mpfr_badly_conditioned(void) {
+    /* HilbertMatrix[12] has condition ~ 1.6e16, well above 2^30 ~ 1e9. */
+    const char* m =
+        "N[Table[1 / (i + j - 1), {i, 12}, {j, 12}], 30]";
+    /* Just verify the factorisation completes with a finite cond. */
+    Expr* res = run("LUDecomposition[N[Table[1 / (i + j - 1), "
+                    "{i, 12}, {j, 12}], 30]][[3]]");
+    /* res can be Real or MPFR; just need a positive numeric value. */
+    double v;
+    ASSERT(leaf_to_double(res, &v));
+    ASSERT(v > 0.0);
+    /* And condition should exceed 2^30 (the ill-conditioned threshold
+     * at 30 bits of precision). */
+    ASSERT(v > 1e9);
+    printf("  PASS: badly conditioned MPFR cond = %.3e for %s\n", v, m);
+    expr_free(res);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -255,6 +356,16 @@ int main(void) {
     TEST(test_lu_mpfr_2x2_complex);
     TEST(test_lu_mpfr_5x5_diagdom);
     TEST(test_lu_mpfr_precision_progression);
+
+    /* Rectangular */
+    TEST(test_lu_mpfr_tall);
+    TEST(test_lu_mpfr_wide);
+
+    /* Hager-Higham accuracy */
+    TEST(test_lu_mpfr_hh_estimate_accurate);
+
+    /* Badly-conditioned warning */
+    TEST(test_lu_mpfr_badly_conditioned);
 
     printf("All LUDecomposition (MPFR) tests passed.\n");
     return 0;

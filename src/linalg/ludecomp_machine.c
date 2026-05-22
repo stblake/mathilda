@@ -123,19 +123,20 @@ static bool lu_mach_leaf_is_complex(Expr* e)
     return lu_mach_leaf_to_double(e, &r, &i) && i != 0.0;
 }
 
-/* Load the n x n matrix into a column-major double buffer.  Same
- * shape as mach_load_matrix in qrdecomp_machine.c -- duplicated
- * locally to keep the modules independent. */
-static bool lu_mach_load_matrix(Expr* m, int n,
+/* Load the rows x cols matrix into a column-major double buffer.
+ * Column-major layout: A[i + j * rows] is m[i, j].  Same shape as
+ * mach_load_matrix in qrdecomp_machine.c -- duplicated locally to
+ * keep the modules independent. */
+static bool lu_mach_load_matrix(Expr* m, int rows, int cols,
                                  double** out_A, bool* out_is_complex)
 {
     if (m->type != EXPR_FUNCTION) return false;
 
     bool is_complex = false;
-    for (int i = 0; i < n && !is_complex; i++) {
+    for (int i = 0; i < rows && !is_complex; i++) {
         Expr* row = m->data.function.args[i];
         if (row->type != EXPR_FUNCTION) return false;
-        for (int j = 0; j < n && !is_complex; j++) {
+        for (int j = 0; j < cols && !is_complex; j++) {
             if (lu_mach_leaf_is_complex(row->data.function.args[j])) {
                 is_complex = true;
             }
@@ -143,18 +144,19 @@ static bool lu_mach_load_matrix(Expr* m, int n,
     }
 
     size_t stride = is_complex ? 2 : 1;
-    double* A = (double*)malloc(stride * (size_t)n * (size_t)n * sizeof(double));
+    size_t total  = stride * (size_t)rows * (size_t)cols;
+    double* A = (double*)malloc(total * sizeof(double));
     if (!A) return false;
 
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < rows; i++) {
         Expr* row = m->data.function.args[i];
-        for (int j = 0; j < n; j++) {
+        for (int j = 0; j < cols; j++) {
             double re, im;
             if (!lu_mach_leaf_to_double(row->data.function.args[j], &re, &im)) {
                 free(A);
                 return false;
             }
-            size_t off = stride * ((size_t)i + (size_t)j * (size_t)n);
+            size_t off = stride * ((size_t)i + (size_t)j * (size_t)rows);
             A[off] = re;
             if (is_complex) A[off + 1] = im;
         }
@@ -179,54 +181,57 @@ static Expr* lu_mach_make_scalar(double re, double im, bool is_complex)
     return z;
 }
 
-/* Build the row-major LU output (n x n) from the column-major LAPACK
- * buffer.  Entries strictly above and below the unit diagonal of L
- * (resp. zero diagonal of U) are read verbatim -- LAPACK already
+/* Build the row-major LU output (rows x cols) from the column-major
+ * LAPACK buffer.  Entries strictly above and below the unit diagonal
+ * of L (resp. zero diagonal of U) are read verbatim -- LAPACK already
  * superimposed L and U into the same dense block, with L's unit
  * diagonal implicit. */
-static Expr* lu_mach_build_lu(const double* A_cm, int n, bool is_complex)
+static Expr* lu_mach_build_lu(const double* A_cm, int rows, int cols,
+                               bool is_complex)
 {
     size_t stride = is_complex ? 2 : 1;
-    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
-    for (int i = 0; i < n; i++) {
-        Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
-        for (int j = 0; j < n; j++) {
-            size_t off = stride * ((size_t)i + (size_t)j * (size_t)n);
+    Expr** row_exprs = (Expr**)malloc(sizeof(Expr*) * (size_t)rows);
+    for (int i = 0; i < rows; i++) {
+        Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)cols);
+        for (int j = 0; j < cols; j++) {
+            size_t off = stride * ((size_t)i + (size_t)j * (size_t)rows);
             double re = A_cm[off];
             double im = is_complex ? A_cm[off + 1] : 0.0;
             elems[j] = lu_mach_make_scalar(re, im, is_complex);
         }
-        rows[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)n);
+        row_exprs[i] = expr_new_function(
+            expr_new_symbol("List"), elems, (size_t)cols);
         free(elems);
     }
     Expr* lu = expr_new_function(
-        expr_new_symbol("List"), rows, (size_t)n);
-    free(rows);
+        expr_new_symbol("List"), row_exprs, (size_t)rows);
+    free(row_exprs);
     return lu;
 }
 
-/* Convert LAPACK's `ipiv` (a series of pairwise swaps) into the
- * 1-indexed permutation vector p satisfying m[[p]] == l . u.
+/* Convert LAPACK's `ipiv` (a series of pairwise swaps, length
+ * min(rows, cols)) into the 1-indexed permutation vector p of length
+ * `rows` satisfying m[[p]] == l . u.
  *
  * The LAPACK convention is: at step k (1-indexed), row k of the
- * working matrix was swapped with row ipiv[k - 1].  Applying those
- * swaps in order to the identity vector [1..n] yields the permutation
+ * working matrix was swapped with row ipiv[k - 1] (also 1-indexed,
+ * referring to a position in [k, rows]).  Applying those swaps in
+ * order to the identity vector [1..rows] yields the permutation
  * Mathematica calls `p`. */
-static Expr* lu_mach_build_perm(const int* ipiv, int n)
+static Expr* lu_mach_build_perm(const int* ipiv, int rows, int ipiv_len)
 {
-    int* perm = (int*)malloc((size_t)n * sizeof(int));
-    for (int i = 0; i < n; i++) perm[i] = i + 1;
-    for (int k = 0; k < n; k++) {
+    int* perm = (int*)malloc((size_t)rows * sizeof(int));
+    for (int i = 0; i < rows; i++) perm[i] = i + 1;
+    for (int k = 0; k < ipiv_len; k++) {
         int target = ipiv[k] - 1;
-        if (target != k && target >= 0 && target < n) {
+        if (target != k && target >= 0 && target < rows) {
             int tmp = perm[k]; perm[k] = perm[target]; perm[target] = tmp;
         }
     }
-    Expr** elems = (Expr**)malloc((size_t)n * sizeof(Expr*));
-    for (int k = 0; k < n; k++) elems[k] = expr_new_integer(perm[k]);
+    Expr** elems = (Expr**)malloc((size_t)rows * sizeof(Expr*));
+    for (int i = 0; i < rows; i++) elems[i] = expr_new_integer(perm[i]);
     Expr* p = expr_new_function(
-        expr_new_symbol("List"), elems, (size_t)n);
+        expr_new_symbol("List"), elems, (size_t)rows);
     free(elems);
     free(perm);
     return p;
@@ -235,38 +240,51 @@ static Expr* lu_mach_build_perm(const int* ipiv, int n)
 /* ---------------------------------------------------------------------
  * Kernel.  Returns NULL on any failure path; the caller (lu_dispatch)
  * treats NULL as "fall back to symbolic" and never frees the input.
+ *
+ * Supports rectangular input: dgetrf / zgetrf accept separate m, n.
+ * The condition estimate (dgecon / zgecon) requires a square matrix
+ * and is only computed when rows == cols; for non-square input we
+ * return c = exact Integer 0 (the estimate is mathematically
+ * undefined for non-square A).
  * ------------------------------------------------------------------ */
-Expr* lu_machine_dispatch(Expr* m, int n)
+Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
 {
     static uint64_t lapack_warn_counter = 0;
     static uint64_t sing_warn_counter   = 0;
 
 #ifndef USE_LAPACK
-    (void)m; (void)n;
+    (void)m; (void)rows; (void)cols;
     return NULL;
 #else
+    int steps = (rows < cols) ? rows : cols;
+    bool square = (rows == cols);
+
     double* A_cm = NULL;
     bool is_complex = false;
-    if (!lu_mach_load_matrix(m, n, &A_cm, &is_complex)) return NULL;
+    if (!lu_mach_load_matrix(m, rows, cols, &A_cm, &is_complex)) return NULL;
 
     /* Snapshot the original-matrix L-infinity norm before dgetrf
-     * overwrites A_cm with the factorisation. */
-    double anorm = is_complex
-        ? mat_lapack_zlange('I', n, n, A_cm, n)
-        : mat_lapack_dlange('I', n, n, A_cm, n);
-    if (anorm < 0.0) {
-        /* LAPACK stub fired -- USE_LAPACK was off at compile time for
-         * this translation unit, even though the macro is set.  Bail. */
-        free(A_cm);
-        return NULL;
+     * overwrites A_cm with the factorisation.  Only needed for square
+     * input (it feeds dgecon). */
+    double anorm = 0.0;
+    if (square) {
+        anorm = is_complex
+            ? mat_lapack_zlange('I', rows, cols, A_cm, rows)
+            : mat_lapack_dlange('I', rows, cols, A_cm, rows);
+        if (anorm < 0.0) {
+            /* LAPACK stub fired -- USE_LAPACK was off at compile time
+             * for this translation unit. */
+            free(A_cm);
+            return NULL;
+        }
     }
 
-    int* ipiv = (int*)malloc((size_t)n * sizeof(int));
+    int* ipiv = (int*)malloc((size_t)steps * sizeof(int));
     if (!ipiv) { free(A_cm); return NULL; }
 
     int info = is_complex
-        ? mat_lapack_zgetrf(n, n, A_cm, n, ipiv)
-        : mat_lapack_dgetrf(n, n, A_cm, n, ipiv);
+        ? mat_lapack_zgetrf(rows, cols, A_cm, rows, ipiv)
+        : mat_lapack_dgetrf(rows, cols, A_cm, rows, ipiv);
     if (info < 0) {
         lu_mach_warn_once(&lapack_warn_counter,
             "LUDecomposition: LAPACK fast path unavailable; "
@@ -288,27 +306,52 @@ Expr* lu_machine_dispatch(Expr* m, int n)
         }
     }
 
-    /* Condition-number estimate.  When the matrix is singular dgecon
-     * returns rcond = 0 (or very small); we still emit a Real so the
-     * output shape is uniform. */
-    double rcond = 0.0;
-    double cond_est;
-    if (info == 0) {
-        int cinfo = is_complex
-            ? mat_lapack_zgecon('I', n, A_cm, n, anorm, &rcond)
-            : mat_lapack_dgecon('I', n, A_cm, n, anorm, &rcond);
-        if (cinfo != 0 || rcond <= 0.0) {
-            cond_est = HUGE_VAL;
-        } else {
-            cond_est = 1.0 / rcond;
-        }
+    /* Condition-number estimate (square only).  When the matrix is
+     * singular dgecon returns rcond = 0 (or very small); we still emit
+     * a Real so the output shape is uniform.  For non-square input
+     * the condition number is mathematically undefined, so we return
+     * exact Integer 0 in the c slot.
+     *
+     * Badly-conditioned warning (::luc):  if cond_est > 1 / DBL_EPSILON
+     * the matrix is so ill-conditioned that LAPACK's factorisation
+     * may have lost most of its significant digits.  Mathematica
+     * emits an LUDecomposition::luc warning in this case; we mirror
+     * it.  The warning is suppressed for matrices that already
+     * tripped ::sing (info > 0) to avoid double-warning. */
+    static uint64_t luc_warn_counter = 0;
+    Expr* c;
+    if (!square) {
+        c = expr_new_integer(0);
     } else {
-        cond_est = HUGE_VAL;
+        double rcond = 0.0;
+        double cond_est;
+        if (info == 0) {
+            int cinfo = is_complex
+                ? mat_lapack_zgecon('I', rows, A_cm, rows, anorm, &rcond)
+                : mat_lapack_dgecon('I', rows, A_cm, rows, anorm, &rcond);
+            if (cinfo != 0 || rcond <= 0.0) {
+                cond_est = HUGE_VAL;
+            } else {
+                cond_est = 1.0 / rcond;
+            }
+        } else {
+            cond_est = HUGE_VAL;
+        }
+        if (info == 0 && cond_est > 1.0 / DBL_EPSILON
+                      && !luc_warn_counter) {
+            luc_warn_counter = 1;
+            char* s = expr_to_string(m);
+            fprintf(stderr,
+                "LUDecomposition::luc: Result for LUDecomposition of "
+                "badly conditioned matrix %s may contain significant "
+                "numerical errors.\n", s);
+            free(s);
+        }
+        c = expr_new_real(cond_est);
     }
 
-    Expr* lu = lu_mach_build_lu(A_cm, n, is_complex);
-    Expr* p  = lu_mach_build_perm(ipiv, n);
-    Expr* c  = expr_new_real(cond_est);
+    Expr* lu = lu_mach_build_lu(A_cm, rows, cols, is_complex);
+    Expr* p  = lu_mach_build_perm(ipiv, rows, steps);
 
     free(A_cm);
     free(ipiv);

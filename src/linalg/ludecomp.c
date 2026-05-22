@@ -90,46 +90,190 @@ static bool is_definitely_zero(Expr* e) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Magnitude-squared as an exact non-negative rational.               *
+ *                                                                       *
+ *  Recognised numeric forms:                                            *
+ *    Integer / BigInt n        -> |n|^2 = n^2                          *
+ *    Rational[p, q]            -> p^2 / q^2                            *
+ *    Complex[re, im]           -> |re|^2 + |im|^2 if re, im numeric    *
+ *                                                                       *
+ *  Returns true and writes |e|^2 into out_sq (which the caller must    *
+ *  have mpq_init'd already); false for anything we can't handle        *
+ *  exactly (symbols, Sqrt, transcendentals, etc.).                     *
+ * ------------------------------------------------------------------ */
+static bool numeric_abs_sq_as_mpq(Expr* e, mpq_t out_sq) {
+    if (!e) return false;
+
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
+        mpz_t n;
+        mpz_init(n);
+        expr_to_mpz(e, n);
+        mpz_t n_sq;
+        mpz_init(n_sq);
+        mpz_mul(n_sq, n, n);
+        mpq_set_z(out_sq, n_sq);
+        mpz_clear(n);
+        mpz_clear(n_sq);
+        return true;
+    }
+
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol;
+
+        if (h == SYM_Rational && e->data.function.arg_count == 2) {
+            Expr* num = e->data.function.args[0];
+            Expr* den = e->data.function.args[1];
+            if (!expr_is_integer_like(num) || !expr_is_integer_like(den)) {
+                return false;
+            }
+            mpz_t p, q;
+            mpz_init(p); mpz_init(q);
+            expr_to_mpz(num, p);
+            expr_to_mpz(den, q);
+            mpz_t p_sq, q_sq;
+            mpz_init(p_sq); mpz_init(q_sq);
+            mpz_mul(p_sq, p, p);
+            mpz_mul(q_sq, q, q);
+            mpq_set_num(out_sq, p_sq);
+            mpq_set_den(out_sq, q_sq);
+            mpq_canonicalize(out_sq);
+            mpz_clear(p); mpz_clear(q);
+            mpz_clear(p_sq); mpz_clear(q_sq);
+            return true;
+        }
+
+        if (h == SYM_Complex && e->data.function.arg_count == 2) {
+            mpq_t re_sq, im_sq;
+            mpq_init(re_sq); mpq_init(im_sq);
+            bool ok = numeric_abs_sq_as_mpq(e->data.function.args[0], re_sq)
+                   && numeric_abs_sq_as_mpq(e->data.function.args[1], im_sq);
+            if (ok) {
+                mpq_add(out_sq, re_sq, im_sq);
+            }
+            mpq_clear(re_sq); mpq_clear(im_sq);
+            return ok;
+        }
+    }
+
+    return false;
+}
+
+/* True iff every entry in column k of LU, rows [k, rows), is either
+ * provably zero or recognised as an exact numeric (Integer / BigInt /
+ * Rational / Complex of those).  When true, the pivot rule below
+ * upgrades from "first non-zero" to "smallest absolute value" --
+ * matching Mathematica's behaviour for exact numeric input. */
+static bool lu_column_all_numeric(Expr** LU, int rows, int cols, int k) {
+    mpq_t scratch;
+    mpq_init(scratch);
+    for (int i = k; i < rows; i++) {
+        Expr* e = LU[i * cols + k];
+        if (is_definitely_zero(e)) continue;
+        if (!numeric_abs_sq_as_mpq(e, scratch)) {
+            mpq_clear(scratch);
+            return false;
+        }
+    }
+    mpq_clear(scratch);
+    return true;
+}
+
+/* ------------------------------------------------------------------ *
  *  Doolittle core (symbolic).                                          *
  *                                                                       *
- *  Pivoting rule: at step k, scan rows k..n-1 of column k for the      *
+ *  Pivoting rule: at step k, scan rows k..rows-1 of column k for the   *
  *  first row whose entry is NOT provably zero.  If none exists, leave  *
  *  the zero in place, mark singular, and continue (the matrix is        *
  *  singular but the factorisation still completes -- matching          *
  *  Mathematica's LUDecomposition::sing behaviour).                      *
  *                                                                       *
  *  Update step (after pivot is in place at LU[k, k]):                  *
- *     for i in [k+1, n):                                                *
+ *     for i in [k+1, rows):                                             *
  *         LU[i, k] = LU[i, k] / pivot               (L entry)           *
- *         for j in [k+1, n):                                            *
+ *         for j in [k+1, cols):                                         *
  *             LU[i, j] = LU[i, j] - LU[i, k] * LU[k, j]                *
  *                                                                       *
  *  Each arithmetic primitive goes through the Mathilda evaluator so    *
  *  symbolic / rational / Sqrt entries all just work.                    *
+ *                                                                       *
+ *  Rectangular shape note: the elimination terminates at step          *
+ *  min(rows, cols) - 1, after which any remaining rows or columns are  *
+ *  already in their final form (extra rows of U are zero by            *
+ *  construction; extra columns of U are filled by the Schur update     *
+ *  during earlier steps and left alone afterwards).                    *
  * ------------------------------------------------------------------ */
-bool lu_symbolic_core(Expr** A_flat, int n,
+bool lu_symbolic_core(Expr** A_flat, int rows, int cols,
                       Expr*** out_LU_flat, int** out_perm,
                       bool* out_singular)
 {
+    int steps = (rows < cols) ? rows : cols;
+
     /* Working LU: deep copy of A so we never alias the caller's
      * entries; we mutate freely in place. */
-    Expr** LU = (Expr**)malloc(sizeof(Expr*) * (size_t)n * (size_t)n);
-    for (int t = 0; t < n * n; t++) LU[t] = expr_copy(A_flat[t]);
+    size_t total = (size_t)rows * (size_t)cols;
+    Expr** LU = (Expr**)malloc(sizeof(Expr*) * total);
+    for (size_t t = 0; t < total; t++) LU[t] = expr_copy(A_flat[t]);
 
-    int* perm = (int*)malloc(sizeof(int) * (size_t)n);
-    for (int k = 0; k < n; k++) perm[k] = k + 1;   /* 1-indexed identity */
+    /* perm is the full row permutation -- length `rows`.  Rows past
+     * `steps - 1` are never touched by elimination and keep their
+     * identity values, matching Mathematica's contract for tall input
+     * (e.g. LUDecomposition[{{1,2},{3,4},{5,6}}] returns p = {1,2,3},
+     * not {1,2}). */
+    int* perm = (int*)malloc(sizeof(int) * (size_t)rows);
+    for (int i = 0; i < rows; i++) perm[i] = i + 1;
 
     bool singular = false;
 
-    for (int k = 0; k < n; k++) {
-        /* Pivot selection: first non-zero entry in column k from row k
-         * down.  For symbolic / exact inputs this is the conservative
-         * choice -- a magnitude-based rule isn't meaningful when
-         * entries contain free variables.  Matches the spec example
-         *     LUDecomposition[{{a, b}, {c, d}}] -> perm = {1, 2}. */
+    for (int k = 0; k < steps; k++) {
+        /* Pivot selection.  Two regimes:
+         *
+         *   (a) Column k of the working LU is entirely exact-numeric
+         *       (Integer / BigInt / Rational / Complex of those).
+         *       Pick the row with the smallest |entry|^2 among the
+         *       non-zeros -- matching Mathematica's exact-numeric
+         *       behaviour (probed empirically, e.g.
+         *       LUDecomposition[{{1/2, 1/3}, {1/5, 1/7}}] picks the
+         *       1/5 pivot, not the 1/2).  Smallest |pivot| tends to
+         *       keep intermediate L entries integer for integer
+         *       input and avoids unnecessary fraction expansion for
+         *       rational input.
+         *
+         *   (b) Otherwise (any free symbol, Sqrt, transcendental,
+         *       or other non-exact-numeric entry in the column):
+         *       fall back to "first non-zero" -- matching the spec
+         *       example LUDecomposition[{{a, b}, {c, d}}] -> p =
+         *       {1, 2}.  A magnitude rule isn't meaningful when
+         *       entries can contain free variables.
+         *
+         *   In both regimes, columns whose entries are all provably
+         *   zero from row k down leave LU[k, k] = 0 and flag the
+         *   matrix singular. */
         int pivot_row = -1;
-        for (int i = k; i < n; i++) {
-            if (!is_definitely_zero(LU[i * n + k])) { pivot_row = i; break; }
+        if (lu_column_all_numeric(LU, rows, cols, k)) {
+            mpq_t best_sq, mag_sq;
+            mpq_init(best_sq);
+            mpq_init(mag_sq);
+            bool have_best = false;
+            for (int i = k; i < rows; i++) {
+                if (is_definitely_zero(LU[i * cols + k])) continue;
+                bool ok = numeric_abs_sq_as_mpq(LU[i * cols + k], mag_sq);
+                (void)ok; /* guaranteed by lu_column_all_numeric */
+                if (!have_best || mpq_cmp(mag_sq, best_sq) < 0) {
+                    pivot_row = i;
+                    mpq_set(best_sq, mag_sq);
+                    have_best = true;
+                }
+            }
+            mpq_clear(best_sq);
+            mpq_clear(mag_sq);
+        } else {
+            for (int i = k; i < rows; i++) {
+                if (!is_definitely_zero(LU[i * cols + k])) {
+                    pivot_row = i;
+                    break;
+                }
+            }
         }
         if (pivot_row < 0) {
             /* Whole column from row k is zero -- singular at this stage.
@@ -139,30 +283,30 @@ bool lu_symbolic_core(Expr** A_flat, int n,
         }
         if (pivot_row != k) {
             /* Swap rows pivot_row and k in LU. */
-            for (int j = 0; j < n; j++) {
-                Expr* tmp = LU[k * n + j];
-                LU[k * n + j] = LU[pivot_row * n + j];
-                LU[pivot_row * n + j] = tmp;
+            for (int j = 0; j < cols; j++) {
+                Expr* tmp = LU[k * cols + j];
+                LU[k * cols + j] = LU[pivot_row * cols + j];
+                LU[pivot_row * cols + j] = tmp;
             }
             int tp = perm[k]; perm[k] = perm[pivot_row]; perm[pivot_row] = tp;
         }
 
         /* Eliminate.  pivot is the upper-triangle diagonal entry; the
          * L entries below it are stored as ratios. */
-        Expr* pivot = LU[k * n + k];        /* borrowed */
-        for (int i = k + 1; i < n; i++) {
-            Expr* l_ik = eval_times(expr_copy(LU[i * n + k]),
+        Expr* pivot = LU[k * cols + k];        /* borrowed */
+        for (int i = k + 1; i < rows; i++) {
+            Expr* l_ik = eval_times(expr_copy(LU[i * cols + k]),
                                     eval_power(expr_copy(pivot),
                                                expr_new_integer(-1)));
-            expr_free(LU[i * n + k]);
-            LU[i * n + k] = l_ik;          /* now owns the L entry */
+            expr_free(LU[i * cols + k]);
+            LU[i * cols + k] = l_ik;          /* now owns the L entry */
 
-            for (int j = k + 1; j < n; j++) {
-                Expr* prod = eval_times(expr_copy(LU[i * n + k]),
-                                        expr_copy(LU[k * n + j]));
+            for (int j = k + 1; j < cols; j++) {
+                Expr* prod = eval_times(expr_copy(LU[i * cols + k]),
+                                        expr_copy(LU[k * cols + j]));
                 Expr* neg  = eval_times(expr_new_integer(-1), prod);
-                Expr* new_v = eval_plus(LU[i * n + j], neg); /* consumes LHS */
-                LU[i * n + j] = new_v;
+                Expr* new_v = eval_plus(LU[i * cols + j], neg); /* consumes LHS */
+                LU[i * cols + j] = new_v;
             }
         }
     }
@@ -174,23 +318,23 @@ bool lu_symbolic_core(Expr** A_flat, int n,
 }
 
 /* ------------------------------------------------------------------ *
- *  Wrap a flat n*n row-major buffer into a List[List[...]].  Steals    *
- *  each entry: the caller must not free buf's entries (only the buf    *
- *  array itself).                                                       *
+ *  Wrap a flat rows*cols row-major buffer into a List[List[...]].     *
+ *  Steals each entry: the caller must not free buf's entries (only    *
+ *  the buf array itself).                                              *
  * ------------------------------------------------------------------ */
-static Expr* wrap_matrix(Expr** buf, int n) {
-    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
-    for (int i = 0; i < n; i++) {
+static Expr* wrap_matrix(Expr** buf, int rows, int cols) {
+    Expr** row_exprs = (Expr**)malloc(sizeof(Expr*) * (size_t)rows);
+    for (int i = 0; i < rows; i++) {
         Expr** elems = NULL;
-        if (n > 0) elems = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
-        for (int j = 0; j < n; j++) elems[j] = buf[i * n + j];   /* steal */
-        rows[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)n);
+        if (cols > 0) elems = (Expr**)malloc(sizeof(Expr*) * (size_t)cols);
+        for (int j = 0; j < cols; j++) elems[j] = buf[i * cols + j]; /* steal */
+        row_exprs[i] = expr_new_function(
+            expr_new_symbol("List"), elems, (size_t)cols);
         if (elems) free(elems);
     }
     Expr* out = expr_new_function(
-        expr_new_symbol("List"), rows, (size_t)n);
-    free(rows);
+        expr_new_symbol("List"), row_exprs, (size_t)rows);
+    free(row_exprs);
     return out;
 }
 
@@ -226,9 +370,11 @@ static void lu_warn_singular_once(uint64_t* counter, Expr* m)
 /* ------------------------------------------------------------------ *
  *  Symbolic kernel dispatcher.                                          *
  * ------------------------------------------------------------------ */
-Expr* lu_symbolic_dispatch(Expr* m, int n)
+Expr* lu_symbolic_dispatch(Expr* m, int rows, int cols)
 {
     static uint64_t sing_warn_counter = 0;
+
+    size_t total = (size_t)rows * (size_t)cols;
 
     /* Inexact-preprocessing pipeline (same shape as PseudoInverse /
      * QRDecomposition). */
@@ -243,7 +389,7 @@ Expr* lu_symbolic_dispatch(Expr* m, int n)
     }
 
     /* Flatten m (row-major) into Expr** for the Doolittle worker. */
-    Expr** A_flat = (Expr**)malloc(sizeof(Expr*) * (size_t)n * (size_t)n);
+    Expr** A_flat = (Expr**)malloc(sizeof(Expr*) * total);
     {
         size_t idx = 0;
         flatten_tensor(matrix_to_use, A_flat, &idx);
@@ -252,15 +398,16 @@ Expr* lu_symbolic_dispatch(Expr* m, int n)
     Expr** LU_flat = NULL;
     int*   perm    = NULL;
     bool   singular = false;
-    bool ok = lu_symbolic_core(A_flat, n, &LU_flat, &perm, &singular);
+    bool ok = lu_symbolic_core(A_flat, rows, cols,
+                               &LU_flat, &perm, &singular);
 
-    for (int t = 0; t < n * n; t++) expr_free(A_flat[t]);
+    for (size_t t = 0; t < total; t++) expr_free(A_flat[t]);
     free(A_flat);
     if (m_rat) expr_free(m_rat);
 
     if (!ok) {
         if (LU_flat) {
-            for (int t = 0; t < n * n; t++) expr_free(LU_flat[t]);
+            for (size_t t = 0; t < total; t++) expr_free(LU_flat[t]);
             free(LU_flat);
         }
         if (perm) free(perm);
@@ -269,9 +416,9 @@ Expr* lu_symbolic_dispatch(Expr* m, int n)
 
     if (singular) lu_warn_singular_once(&sing_warn_counter, m);
 
-    Expr* lu = wrap_matrix(LU_flat, n);
+    Expr* lu = wrap_matrix(LU_flat, rows, cols);
     free(LU_flat);
-    Expr* p  = wrap_perm(perm, n);
+    Expr* p  = wrap_perm(perm, rows);
     free(perm);
 
     Expr* lu_t = tidy_matrix(lu); expr_free(lu); lu = lu_t;
@@ -310,23 +457,29 @@ Expr* lu_symbolic_dispatch(Expr* m, int n)
  *  through to the symbolic dispatcher -- which understands the inexact  *
  *  input via the rationalise / numericalise round-trip.                 *
  * ------------------------------------------------------------------ */
-Expr* lu_dispatch(Expr* m, int n)
+Expr* lu_dispatch(Expr* m, int rows, int cols)
 {
     CommonInexactInfo info = common_scan_inexact(m);
     if (info.has_inexact) {
         if (info.min_bits <= 53) {
-            Expr* fast = lu_machine_dispatch(m, n);
+            Expr* fast = lu_machine_dispatch(m, rows, cols);
             if (fast) return fast;
         } else {
-            Expr* fast = lu_mpfr_dispatch(m, n);
+            Expr* fast = lu_mpfr_dispatch(m, rows, cols);
             if (fast) return fast;
         }
     }
-    return lu_symbolic_dispatch(m, n);
+    return lu_symbolic_dispatch(m, rows, cols);
 }
 
 /* ------------------------------------------------------------------ *
  *  Public entry.                                                        *
+ *                                                                       *
+ *  Accepts any non-empty rectangular matrix (rows >= 1, cols >= 1).    *
+ *  Emits LUDecomposition::matsq and returns NULL only for non-list,    *
+ *  empty, or higher-rank input -- matching Mathematica's behaviour     *
+ *  on rectangular m x n input where it returns a partial Doolittle     *
+ *  factorisation with perm of length min(m, n).                         *
  * ------------------------------------------------------------------ */
 Expr* builtin_ludecomposition(Expr* res)
 {
@@ -338,17 +491,18 @@ Expr* builtin_ludecomposition(Expr* res)
 
     int64_t dims[64];
     int trank = get_tensor_dims(m, dims);
-    if (trank != 2 || dims[0] == 0 || dims[1] == 0 || dims[0] != dims[1]) {
+    if (trank != 2 || dims[0] == 0 || dims[1] == 0) {
         char* s = expr_to_string(m);
         fprintf(stderr,
                 "LUDecomposition::matsq: Argument %s at position 1 is "
-                "not a non-empty square matrix.\n", s);
+                "not a non-empty rectangular matrix.\n", s);
         free(s);
         return NULL;
     }
-    int n = (int)dims[0];
+    int rows = (int)dims[0];
+    int cols = (int)dims[1];
 
-    return lu_dispatch(m, n);
+    return lu_dispatch(m, rows, cols);
 }
 
 void ludecomp_init(void)

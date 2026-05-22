@@ -51,9 +51,9 @@
 
 #ifndef USE_MPFR
 
-Expr* lu_mpfr_dispatch(Expr* m, int n)
+Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
 {
-    (void)m; (void)n;
+    (void)m; (void)rows; (void)cols;
     return NULL;
 }
 
@@ -92,37 +92,37 @@ static bool lum_leaf_is_complex(Expr* e)
     return result;
 }
 
-/* Load the n x n input matrix into freshly-allocated row-major MPFR
- * arrays.  Row-major (rather than column-major) is convenient because
- * the Doolittle kernel always accesses whole rows for both pivoting
- * swaps and the elimination's outer loop. */
-static bool lum_load_matrix(Expr* m, int n, mpfr_prec_t bits,
+/* Load the rows x cols input matrix into freshly-allocated row-major
+ * MPFR arrays.  Row-major (rather than column-major) is convenient
+ * because the Doolittle kernel always accesses whole rows for both
+ * pivoting swaps and the elimination's outer loop. */
+static bool lum_load_matrix(Expr* m, int rows, int cols, mpfr_prec_t bits,
                             mpfr_t** out_re, mpfr_t** out_im,
                             bool* out_is_complex)
 {
     if (m->type != EXPR_FUNCTION) return false;
 
     bool is_complex = false;
-    for (int i = 0; i < n && !is_complex; i++) {
+    for (int i = 0; i < rows && !is_complex; i++) {
         Expr* row = m->data.function.args[i];
         if (!row || row->type != EXPR_FUNCTION) return false;
-        for (int j = 0; j < n && !is_complex; j++) {
+        for (int j = 0; j < cols && !is_complex; j++) {
             if (lum_leaf_is_complex(row->data.function.args[j])) {
                 is_complex = true;
             }
         }
     }
 
-    size_t total = (size_t)n * (size_t)n;
+    size_t total = (size_t)rows * (size_t)cols;
     mpfr_t* A_re = lum_array_alloc(total, bits);
     mpfr_t* A_im = is_complex ? lum_array_alloc(total, bits) : NULL;
 
     mpfr_t tmp_im;
     mpfr_init2(tmp_im, bits);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < rows; i++) {
         Expr* row = m->data.function.args[i];
-        for (int j = 0; j < n; j++) {
-            size_t off = (size_t)i * (size_t)n + (size_t)j;
+        for (int j = 0; j < cols; j++) {
+            size_t off = (size_t)i * (size_t)cols + (size_t)j;
             bool is_inexact = false;
             if (!get_approx_mpfr(row->data.function.args[j],
                                  A_re[off], tmp_im, &is_inexact)) {
@@ -150,15 +150,16 @@ static void lum_abs(const mpfr_t* re, const mpfr_t* im, size_t off,
     else            mpfr_abs(out,   re[off], MPFR_RNDN);
 }
 
-/* Swap whole rows in a row-major n x n matrix. */
-static void lum_swap_rows(mpfr_t* A_re, mpfr_t* A_im, int n,
+/* Swap whole rows in a row-major matrix of width `cols`. */
+static void lum_swap_rows(mpfr_t* A_re, mpfr_t* A_im, int cols,
                           int a, int b, bool is_complex)
 {
     if (a == b) return;
-    for (int j = 0; j < n; j++) {
-        mpfr_swap(A_re[(size_t)a * n + j], A_re[(size_t)b * n + j]);
-        if (is_complex) mpfr_swap(A_im[(size_t)a * n + j],
-                                   A_im[(size_t)b * n + j]);
+    for (int j = 0; j < cols; j++) {
+        mpfr_swap(A_re[(size_t)a * cols + j],
+                  A_re[(size_t)b * cols + j]);
+        if (is_complex) mpfr_swap(A_im[(size_t)a * cols + j],
+                                   A_im[(size_t)b * cols + j]);
     }
 }
 
@@ -220,27 +221,28 @@ static void lum_csub_mul(mpfr_t* ar, mpfr_t* ai,
 }
 
 /* ------------------------------------------------------------------ *
- *  Doolittle elimination.  Overwrites A with the combined LU; perm    *
- *  starts as [1..n] and is updated to the pivoting permutation.       *
- *  Returns true on success.  *out_singular is set to true iff a zero  *
- *  pivot was encountered (factorisation continues; matches            *
- *  Mathematica behaviour).                                             *
+ *  Doolittle elimination.  Overwrites A (rows x cols, row-major) with *
+ *  the combined LU; perm starts as [1..min(rows, cols)] and is        *
+ *  updated to the pivoting permutation.  Returns true on success.     *
+ *  *out_singular is set to true iff a zero pivot was encountered      *
+ *  (factorisation continues; matches Mathematica behaviour).          *
  * ------------------------------------------------------------------ */
-static bool lum_factor(mpfr_t* A_re, mpfr_t* A_im, int n,
+static bool lum_factor(mpfr_t* A_re, mpfr_t* A_im, int rows, int cols,
                         mpfr_prec_t bits, bool is_complex,
                         int* perm, bool* out_singular)
 {
+    int steps = (rows < cols) ? rows : cols;
     mpfr_t mag, best;
     mpfr_init2(mag,  bits);
     mpfr_init2(best, bits);
     *out_singular = false;
 
-    for (int k = 0; k < n; k++) {
-        /* Pivot: largest |A[i, k]| over i in [k, n). */
+    for (int k = 0; k < steps; k++) {
+        /* Pivot: largest |A[i, k]| over i in [k, rows). */
         int pivot_row = k;
-        lum_abs(A_re, A_im, (size_t)k * n + k, is_complex, best);
-        for (int i = k + 1; i < n; i++) {
-            lum_abs(A_re, A_im, (size_t)i * n + k, is_complex, mag);
+        lum_abs(A_re, A_im, (size_t)k * cols + k, is_complex, best);
+        for (int i = k + 1; i < rows; i++) {
+            lum_abs(A_re, A_im, (size_t)i * cols + k, is_complex, mag);
             if (mpfr_cmp(mag, best) > 0) {
                 pivot_row = i;
                 mpfr_set(best, mag, MPFR_RNDN);
@@ -252,22 +254,22 @@ static bool lum_factor(mpfr_t* A_re, mpfr_t* A_im, int n,
             continue;
         }
         if (pivot_row != k) {
-            lum_swap_rows(A_re, A_im, n, k, pivot_row, is_complex);
+            lum_swap_rows(A_re, A_im, cols, k, pivot_row, is_complex);
             int tp = perm[k]; perm[k] = perm[pivot_row]; perm[pivot_row] = tp;
         }
 
         /* Eliminate. */
-        for (int i = k + 1; i < n; i++) {
-            size_t ik = (size_t)i * n + k;
-            size_t kk = (size_t)k * n + k;
+        for (int i = k + 1; i < rows; i++) {
+            size_t ik = (size_t)i * cols + k;
+            size_t kk = (size_t)k * cols + k;
             if (is_complex) {
                 lum_cdiv(&A_re[ik], &A_im[ik], A_re[kk], A_im[kk], bits);
             } else {
                 mpfr_div(A_re[ik], A_re[ik], A_re[kk], MPFR_RNDN);
             }
-            for (int j = k + 1; j < n; j++) {
-                size_t ij = (size_t)i * n + j;
-                size_t kj = (size_t)k * n + j;
+            for (int j = k + 1; j < cols; j++) {
+                size_t ij = (size_t)i * cols + j;
+                size_t kj = (size_t)k * cols + j;
                 if (is_complex) {
                     lum_csub_mul(&A_re[ij], &A_im[ij],
                                   A_re[ik], A_im[ik],
@@ -288,20 +290,21 @@ static bool lum_factor(mpfr_t* A_re, mpfr_t* A_im, int n,
 }
 
 /* ------------------------------------------------------------------ *
- *  L-infinity norm of a row-major n x n matrix.                         *
+ *  L-infinity norm of a row-major rows x cols matrix.                  *
  *      max_i sum_j |A[i, j]|                                            *
  * ------------------------------------------------------------------ */
-static void lum_norm_inf(const mpfr_t* A_re, const mpfr_t* A_im, int n,
+static void lum_norm_inf(const mpfr_t* A_re, const mpfr_t* A_im,
+                          int rows, int cols,
                           bool is_complex, mpfr_prec_t bits, mpfr_t out)
 {
     mpfr_t row_sum, mag;
     mpfr_init2(row_sum, bits);
     mpfr_init2(mag,     bits);
     mpfr_set_zero(out, 1);
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < rows; i++) {
         mpfr_set_zero(row_sum, 1);
-        for (int j = 0; j < n; j++) {
-            lum_abs(A_re, A_im, (size_t)i * n + j, is_complex, mag);
+        for (int j = 0; j < cols; j++) {
+            lum_abs(A_re, A_im, (size_t)i * cols + j, is_complex, mag);
             mpfr_add(row_sum, row_sum, mag, MPFR_RNDN);
         }
         if (mpfr_cmp(row_sum, out) > 0) mpfr_set(out, row_sum, MPFR_RNDN);
@@ -310,63 +313,306 @@ static void lum_norm_inf(const mpfr_t* A_re, const mpfr_t* A_im, int n,
     mpfr_clear(mag);
 }
 
-/* Solve L y = e_col where L is the strictly-lower triangle of LU (with
- * unit diagonal implicit), then U x = y in place.  Writes the
- * solution vector into out_re / out_im (length n).  Used during the
- * condition-number computation. */
-static void lum_solve_LU_canonical(const mpfr_t* LU_re, const mpfr_t* LU_im,
-                                    int n, bool is_complex, int col,
-                                    mpfr_t* out_re, mpfr_t* out_im,
-                                    mpfr_prec_t bits)
+/* In-place solve of LU * x = rhs, where LU packs the Doolittle L
+ * (strict-lower, unit diag implicit) and U (upper).  rhs is read,
+ * then overwritten with the solution x.  Used by both the explicit
+ * inverse and the Hager-Higham one-norm estimator. */
+static void lum_solve_LU_inplace(const mpfr_t* LU_re, const mpfr_t* LU_im,
+                                  int n, bool is_complex,
+                                  mpfr_t* rhs_re, mpfr_t* rhs_im,
+                                  mpfr_prec_t bits)
 {
-    /* Right-hand side e_col, length n. */
-    for (int i = 0; i < n; i++) {
-        mpfr_set_zero(out_re[i], 1);
-        if (is_complex) mpfr_set_zero(out_im[i], 1);
-    }
-    mpfr_set_si(out_re[col], 1, MPFR_RNDN);
-
-    /* Forward substitution: L y = b.  L[i, j] = LU[i, j] for j < i;
-     * L[i, i] = 1. */
+    /* Forward substitution: L y = b. */
     for (int i = 0; i < n; i++) {
         for (int j = 0; j < i; j++) {
             size_t ij = (size_t)i * n + j;
             if (is_complex) {
-                lum_csub_mul(&out_re[i], &out_im[i],
+                lum_csub_mul(&rhs_re[i], &rhs_im[i],
                               LU_re[ij], LU_im[ij],
-                              out_re[j], out_im[j], bits);
+                              rhs_re[j], rhs_im[j], bits);
             } else {
                 mpfr_t prod;
                 mpfr_init2(prod, bits);
-                mpfr_mul(prod, LU_re[ij], out_re[j], MPFR_RNDN);
-                mpfr_sub(out_re[i], out_re[i], prod, MPFR_RNDN);
+                mpfr_mul(prod, LU_re[ij], rhs_re[j], MPFR_RNDN);
+                mpfr_sub(rhs_re[i], rhs_re[i], prod, MPFR_RNDN);
                 mpfr_clear(prod);
             }
         }
     }
-    /* Back substitution: U x = y.  U[i, j] = LU[i, j] for j >= i. */
+    /* Back substitution: U x = y. */
     for (int i = n - 1; i >= 0; i--) {
         for (int j = i + 1; j < n; j++) {
             size_t ij = (size_t)i * n + j;
             if (is_complex) {
-                lum_csub_mul(&out_re[i], &out_im[i],
+                lum_csub_mul(&rhs_re[i], &rhs_im[i],
                               LU_re[ij], LU_im[ij],
-                              out_re[j], out_im[j], bits);
+                              rhs_re[j], rhs_im[j], bits);
             } else {
                 mpfr_t prod;
                 mpfr_init2(prod, bits);
-                mpfr_mul(prod, LU_re[ij], out_re[j], MPFR_RNDN);
-                mpfr_sub(out_re[i], out_re[i], prod, MPFR_RNDN);
+                mpfr_mul(prod, LU_re[ij], rhs_re[j], MPFR_RNDN);
+                mpfr_sub(rhs_re[i], rhs_re[i], prod, MPFR_RNDN);
                 mpfr_clear(prod);
             }
         }
         size_t ii = (size_t)i * n + i;
         if (is_complex) {
-            lum_cdiv(&out_re[i], &out_im[i], LU_re[ii], LU_im[ii], bits);
+            lum_cdiv(&rhs_re[i], &rhs_im[i], LU_re[ii], LU_im[ii], bits);
         } else {
-            mpfr_div(out_re[i], out_re[i], LU_re[ii], MPFR_RNDN);
+            mpfr_div(rhs_re[i], rhs_re[i], LU_re[ii], MPFR_RNDN);
         }
     }
+}
+
+/* In-place solve of (LU)^T * x = rhs.  (LU)^T = U^T * L^T, so we
+ * forward-substitute through U^T (lower triangular when transposed)
+ * then back-substitute through L^T (upper triangular when transposed,
+ * with unit diagonal).  Used by Hager-Higham to apply A^{-T}. */
+static void lum_solve_LU_T_inplace(const mpfr_t* LU_re, const mpfr_t* LU_im,
+                                    int n, bool is_complex,
+                                    mpfr_t* rhs_re, mpfr_t* rhs_im,
+                                    mpfr_prec_t bits)
+{
+    /* Forward sub on U^T: U^T[i, j] = LU[j, i] for j <= i; diagonal
+     * is U[i, i] = LU[i, i] (NOT unit). */
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < i; j++) {
+            /* U^T[i, j] = U[j, i] = LU[j, i]. */
+            size_t ji = (size_t)j * n + i;
+            if (is_complex) {
+                lum_csub_mul(&rhs_re[i], &rhs_im[i],
+                              LU_re[ji], LU_im[ji],
+                              rhs_re[j], rhs_im[j], bits);
+            } else {
+                mpfr_t prod;
+                mpfr_init2(prod, bits);
+                mpfr_mul(prod, LU_re[ji], rhs_re[j], MPFR_RNDN);
+                mpfr_sub(rhs_re[i], rhs_re[i], prod, MPFR_RNDN);
+                mpfr_clear(prod);
+            }
+        }
+        size_t ii = (size_t)i * n + i;
+        if (is_complex) {
+            lum_cdiv(&rhs_re[i], &rhs_im[i], LU_re[ii], LU_im[ii], bits);
+        } else {
+            mpfr_div(rhs_re[i], rhs_re[i], LU_re[ii], MPFR_RNDN);
+        }
+    }
+    /* Back sub on L^T: L^T[i, j] = L[j, i] = LU[j, i] for j > i;
+     * diagonal is L[i, i] = 1 (unit). */
+    for (int i = n - 1; i >= 0; i--) {
+        for (int j = i + 1; j < n; j++) {
+            /* L^T[i, j] = L[j, i] = LU[j, i]. */
+            size_t ji = (size_t)j * n + i;
+            if (is_complex) {
+                lum_csub_mul(&rhs_re[i], &rhs_im[i],
+                              LU_re[ji], LU_im[ji],
+                              rhs_re[j], rhs_im[j], bits);
+            } else {
+                mpfr_t prod;
+                mpfr_init2(prod, bits);
+                mpfr_mul(prod, LU_re[ji], rhs_re[j], MPFR_RNDN);
+                mpfr_sub(rhs_re[i], rhs_re[i], prod, MPFR_RNDN);
+                mpfr_clear(prod);
+            }
+        }
+        /* L diagonal is 1; no division. */
+    }
+}
+
+/* Convenience wrapper: solve LU * x = e_col.  Used by the legacy
+ * explicit-inverse condition estimator (kept for the singular check). */
+static void lum_solve_LU_canonical(const mpfr_t* LU_re, const mpfr_t* LU_im,
+                                    int n, bool is_complex, int col,
+                                    mpfr_t* out_re, mpfr_t* out_im,
+                                    mpfr_prec_t bits)
+{
+    for (int i = 0; i < n; i++) {
+        mpfr_set_zero(out_re[i], 1);
+        if (is_complex) mpfr_set_zero(out_im[i], 1);
+    }
+    mpfr_set_si(out_re[col], 1, MPFR_RNDN);
+    lum_solve_LU_inplace(LU_re, LU_im, n, is_complex,
+                          out_re, out_im, bits);
+}
+
+/* Apply the row permutation P to a vector in place:
+ *    v'[i] := v[perm[i] - 1]
+ * Used between LU-solve stages in the Hager-Higham estimator. */
+static void lum_apply_perm(const int* perm, int n, mpfr_t* v_re,
+                            mpfr_t* v_im, bool is_complex)
+{
+    mpfr_t* tmp_re = lum_array_alloc((size_t)n, mpfr_get_prec(v_re[0]));
+    mpfr_t* tmp_im = is_complex
+                   ? lum_array_alloc((size_t)n, mpfr_get_prec(v_re[0]))
+                   : NULL;
+    for (int i = 0; i < n; i++) {
+        int src = perm[i] - 1;
+        mpfr_set(tmp_re[i], v_re[src], MPFR_RNDN);
+        if (is_complex) mpfr_set(tmp_im[i], v_im[src], MPFR_RNDN);
+    }
+    for (int i = 0; i < n; i++) {
+        mpfr_set(v_re[i], tmp_re[i], MPFR_RNDN);
+        if (is_complex) mpfr_set(v_im[i], tmp_im[i], MPFR_RNDN);
+    }
+    lum_array_free(tmp_re, (size_t)n);
+    if (is_complex) lum_array_free(tmp_im, (size_t)n);
+}
+
+/* Apply the inverse row permutation P^T:
+ *    v'[perm[i] - 1] := v[i]
+ * Used to finish A^{-T} v after the L^T / U^T solves. */
+static void lum_apply_perm_T(const int* perm, int n, mpfr_t* v_re,
+                              mpfr_t* v_im, bool is_complex)
+{
+    mpfr_t* tmp_re = lum_array_alloc((size_t)n, mpfr_get_prec(v_re[0]));
+    mpfr_t* tmp_im = is_complex
+                   ? lum_array_alloc((size_t)n, mpfr_get_prec(v_re[0]))
+                   : NULL;
+    for (int i = 0; i < n; i++) {
+        int dst = perm[i] - 1;
+        mpfr_set(tmp_re[dst], v_re[i], MPFR_RNDN);
+        if (is_complex) mpfr_set(tmp_im[dst], v_im[i], MPFR_RNDN);
+    }
+    for (int i = 0; i < n; i++) {
+        mpfr_set(v_re[i], tmp_re[i], MPFR_RNDN);
+        if (is_complex) mpfr_set(v_im[i], tmp_im[i], MPFR_RNDN);
+    }
+    lum_array_free(tmp_re, (size_t)n);
+    if (is_complex) lum_array_free(tmp_im, (size_t)n);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Hager-Higham one-norm estimator (real case).                        *
+ *                                                                       *
+ *  Estimates ||A^{-1}||_inf by computing ||A^{-T}||_1 via the           *
+ *  Hager-Higham iteration (Higham, "FORTRAN codes for estimating the   *
+ *  one-norm of a real or complex matrix...", 1988).  This is the       *
+ *  algorithm LAPACK's `dlacn2` uses inside `dgecon`.                    *
+ *                                                                       *
+ *  Cost: each iteration is two triangular solves (each O(n^2)).         *
+ *  Convergence typically in 2-5 iterations.  Total work O(n^2) vs the  *
+ *  O(n^3) of the explicit-inverse estimator.                            *
+ *                                                                       *
+ *  Algorithm (for B = A^{-T}, estimating ||B||_1):                      *
+ *    1. x = (1/n) * e                                                   *
+ *    2. for iter = 1..max_iter:                                         *
+ *         y = B * x        (= A^{-T} x: solve A^T y = x)                *
+ *         gamma = ||y||_1                                               *
+ *         xi[k] = sign(y[k])                                            *
+ *         z = B^T * xi     (= A^{-1} xi: solve A z = xi)                *
+ *         j = argmax_k |z[k]|                                           *
+ *         if iter >= 2 and |z[j]| <= dot(z, x): return gamma            *
+ *         x = e_j                                                       *
+ *    3. return gamma                                                    *
+ *                                                                       *
+ *  Returns false on singular U.  Output written to *out.                 *
+ * ------------------------------------------------------------------ */
+static bool lum_inv_norm_hager(const mpfr_t* LU_re, const mpfr_t* LU_im,
+                                const int* perm, int n,
+                                mpfr_prec_t bits, mpfr_t out)
+{
+    /* Check for zero U diagonals -- singular if any. */
+    for (int i = 0; i < n; i++) {
+        size_t ii = (size_t)i * n + i;
+        if (mpfr_zero_p(LU_re[ii])) return false;
+    }
+
+    enum { MAX_ITER = 5 };
+    mpfr_t* x  = lum_array_alloc((size_t)n, bits);
+    mpfr_t* xi = lum_array_alloc((size_t)n, bits);
+    mpfr_t gamma_cur, gamma_best, dot_zx, abs_zj, t;
+    mpfr_init2(gamma_cur,  bits);
+    mpfr_init2(gamma_best, bits);
+    mpfr_init2(dot_zx,     bits);
+    mpfr_init2(abs_zj,     bits);
+    mpfr_init2(t,          bits);
+    mpfr_set_zero(gamma_best, 1);
+
+    /* x = (1/n) * e. */
+    for (int i = 0; i < n; i++) {
+        mpfr_set_ui(x[i], 1, MPFR_RNDN);
+        mpfr_div_ui(x[i], x[i], (unsigned long)n, MPFR_RNDN);
+    }
+
+    int prev_j = -1;
+    bool ok_estimate = false;
+
+    for (int iter = 0; iter < MAX_ITER; iter++) {
+        /* y = A^{-T} x: solve A^T y = x.  A^T = U^T L^T P^{-T}.
+         *    -> w = (U^T)^{-1} x          [solve U^T w = x]
+         *    -> z = (L^T)^{-1} w          [solve L^T z = w]
+         *    -> y = P^T z                 [unpermute] */
+        for (int i = 0; i < n; i++) mpfr_set(xi[i], x[i], MPFR_RNDN);
+        lum_solve_LU_T_inplace(LU_re, LU_im, n, false, xi, NULL, bits);
+        lum_apply_perm_T(perm, n, xi, NULL, false);
+        /* xi now holds y = A^{-T} x. */
+
+        /* gamma = ||y||_1. */
+        mpfr_set_zero(gamma_cur, 1);
+        for (int i = 0; i < n; i++) {
+            mpfr_abs(t, xi[i], MPFR_RNDN);
+            mpfr_add(gamma_cur, gamma_cur, t, MPFR_RNDN);
+        }
+        if (mpfr_cmp(gamma_cur, gamma_best) > 0) {
+            mpfr_set(gamma_best, gamma_cur, MPFR_RNDN);
+            ok_estimate = true;
+        }
+
+        /* xi := sign(y) (sign(0) = 1). */
+        for (int i = 0; i < n; i++) {
+            if (mpfr_sgn(xi[i]) < 0) mpfr_set_si(xi[i], -1, MPFR_RNDN);
+            else                     mpfr_set_si(xi[i],  1, MPFR_RNDN);
+        }
+
+        /* z = A^{-1} xi: solve A z = xi.  A = P^{-1} L U.
+         *    -> v = P xi             [permute]
+         *    -> z = U^{-1} L^{-1} v  [LU solve] */
+        lum_apply_perm(perm, n, xi, NULL, false);
+        lum_solve_LU_inplace(LU_re, LU_im, n, false, xi, NULL, bits);
+        /* xi now holds z = A^{-1} sign(y). */
+
+        /* j = argmax_i |z[i]|. */
+        int j = 0;
+        mpfr_abs(abs_zj, xi[0], MPFR_RNDN);
+        for (int i = 1; i < n; i++) {
+            mpfr_abs(t, xi[i], MPFR_RNDN);
+            if (mpfr_cmp(t, abs_zj) > 0) {
+                j = i;
+                mpfr_set(abs_zj, t, MPFR_RNDN);
+            }
+        }
+
+        /* Convergence: after at least one update, if |z[j]| <= z^T x,
+         * iteration cannot improve gamma -- stop. */
+        if (iter >= 1) {
+            mpfr_set_zero(dot_zx, 1);
+            for (int i = 0; i < n; i++) {
+                mpfr_mul(t, xi[i], x[i], MPFR_RNDN);
+                mpfr_add(dot_zx, dot_zx, t, MPFR_RNDN);
+            }
+            if (mpfr_cmp(abs_zj, dot_zx) <= 0) break;
+        }
+
+        /* Defensive guard: if we cycle on the same basis index, stop. */
+        if (j == prev_j) break;
+        prev_j = j;
+
+        /* x = e_j. */
+        for (int i = 0; i < n; i++) mpfr_set_zero(x[i], 1);
+        mpfr_set_ui(x[j], 1, MPFR_RNDN);
+    }
+
+    mpfr_set(out, gamma_best, MPFR_RNDN);
+
+    lum_array_free(x,  (size_t)n);
+    lum_array_free(xi, (size_t)n);
+    mpfr_clear(gamma_cur);
+    mpfr_clear(gamma_best);
+    mpfr_clear(dot_zx);
+    mpfr_clear(abs_zj);
+    mpfr_clear(t);
+    return ok_estimate;
 }
 
 /* Compute ||A^{-1}||_inf via explicit inverse.  A^{-1}'s column k is
@@ -448,30 +694,31 @@ static Expr* lum_make_scalar(const mpfr_t re, const mpfr_t im,
 }
 
 static Expr* lum_build_lu(const mpfr_t* LU_re, const mpfr_t* LU_im,
-                           int n, bool is_complex, mpfr_prec_t bits)
+                           int rows, int cols, bool is_complex,
+                           mpfr_prec_t bits)
 {
-    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
+    Expr** row_exprs = (Expr**)malloc(sizeof(Expr*) * (size_t)rows);
     mpfr_t zero_im;
     mpfr_init2(zero_im, bits);
     mpfr_set_zero(zero_im, 1);
-    for (int i = 0; i < n; i++) {
-        Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
-        for (int j = 0; j < n; j++) {
-            size_t off = (size_t)i * n + j;
+    for (int i = 0; i < rows; i++) {
+        Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)cols);
+        for (int j = 0; j < cols; j++) {
+            size_t off = (size_t)i * cols + j;
             if (is_complex) {
                 elems[j] = lum_make_scalar(LU_re[off], LU_im[off], true);
             } else {
                 elems[j] = lum_make_scalar(LU_re[off], zero_im, false);
             }
         }
-        rows[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)n);
+        row_exprs[i] = expr_new_function(
+            expr_new_symbol("List"), elems, (size_t)cols);
         free(elems);
     }
     mpfr_clear(zero_im);
     Expr* lu = expr_new_function(
-        expr_new_symbol("List"), rows, (size_t)n);
-    free(rows);
+        expr_new_symbol("List"), row_exprs, (size_t)rows);
+    free(row_exprs);
     return lu;
 }
 
@@ -487,8 +734,13 @@ static Expr* lum_build_perm(const int* perm, int n)
 
 /* ------------------------------------------------------------------ *
  *  Kernel.                                                              *
+ *                                                                       *
+ *  Supports rectangular input.  The explicit-inverse condition         *
+ *  estimator (lum_inv_norm_inf) requires a square matrix; for          *
+ *  non-square input we set the c slot to exact Integer 0 (the          *
+ *  condition number is undefined for non-square A).                     *
  * ------------------------------------------------------------------ */
-Expr* lu_mpfr_dispatch(Expr* m, int n)
+Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
 {
     static uint64_t sing_warn_counter = 0;
 
@@ -497,27 +749,39 @@ Expr* lu_mpfr_dispatch(Expr* m, int n)
     mpfr_prec_t bits = (mpfr_prec_t)info.min_bits;
     if (bits < 53) bits = 53;
 
+    bool square = (rows == cols);
+    size_t total = (size_t)rows * (size_t)cols;
+
     mpfr_t* A_re = NULL;
     mpfr_t* A_im = NULL;
     bool is_complex = false;
-    if (!lum_load_matrix(m, n, bits, &A_re, &A_im, &is_complex)) {
+    if (!lum_load_matrix(m, rows, cols, bits, &A_re, &A_im, &is_complex)) {
         return NULL;
     }
 
-    /* Snapshot ||A||_inf before the factorisation overwrites A. */
+    /* Snapshot ||A||_inf before the factorisation overwrites A.  Only
+     * needed for the condition number, which is square-only. */
     mpfr_t anorm;
     mpfr_init2(anorm, bits);
-    lum_norm_inf(A_re, A_im, n, is_complex, bits, anorm);
+    if (square) {
+        lum_norm_inf(A_re, A_im, rows, cols, is_complex, bits, anorm);
+    } else {
+        mpfr_set_zero(anorm, 1);
+    }
 
-    int* perm = (int*)malloc((size_t)n * sizeof(int));
-    for (int j = 0; j < n; j++) perm[j] = j + 1;
+    /* perm: full row permutation, length `rows`.  Doolittle only
+     * swaps the first `steps` entries; rows past steps stay at
+     * identity.  Matches Mathematica's convention. */
+    int* perm = (int*)malloc((size_t)rows * sizeof(int));
+    for (int i = 0; i < rows; i++) perm[i] = i + 1;
 
     bool singular = false;
-    bool ok = lum_factor(A_re, A_im, n, bits, is_complex, perm, &singular);
+    bool ok = lum_factor(A_re, A_im, rows, cols, bits, is_complex,
+                          perm, &singular);
     if (!ok) {
         mpfr_clear(anorm);
-        lum_array_free(A_re, (size_t)n * n);
-        lum_array_free(A_im, is_complex ? (size_t)n * n : 0);
+        lum_array_free(A_re, total);
+        lum_array_free(A_im, is_complex ? total : 0);
         free(perm);
         return NULL;
     }
@@ -532,25 +796,71 @@ Expr* lu_mpfr_dispatch(Expr* m, int n)
         }
     }
 
-    /* Condition number = ||A||_inf * ||A^{-1}||_inf. */
-    mpfr_t inv_norm, cond;
-    mpfr_init2(inv_norm, bits);
-    mpfr_init2(cond,     bits);
-    bool nonsing = lum_inv_norm_inf(A_re, A_im, perm, n, is_complex,
-                                     bits, inv_norm);
-    if (nonsing) mpfr_mul(cond, anorm, inv_norm, MPFR_RNDN);
-    else         mpfr_set_inf(cond, 1);
+    /* Condition number = ||A||_inf * ||A^{-1}||_inf.  Square only;
+     * non-square gets exact Integer 0.
+     *
+     * Real matrices: Hager-Higham one-norm estimator on A^{-T}.  Cost
+     * O(n^2) per iteration with 2-5 iterations typical -- matches
+     * LAPACK's dgecon strategy.  Returns an estimate that is a lower
+     * bound but typically within 10% of the true value.
+     *
+     * Complex matrices: keep the explicit-inverse approach (the HH
+     * sign-vector iteration in the complex case requires a separate
+     * implementation).  Cost O(n^3) but exact.
+     *
+     * Badly-conditioned warning (::luc): if cond > 2^(bits) the
+     * matrix is too ill-conditioned for the working precision to
+     * yield a meaningful factorisation.  Mirrors Mathematica's
+     * LUDecomposition::luc behaviour; suppressed if ::sing already
+     * fired (the kernel only computes condition for nonsing, so the
+     * branch ordering naturally handles this). */
+    static uint64_t luc_warn_counter = 0;
+    Expr* c;
+    if (!square) {
+        c = expr_new_integer(0);
+    } else {
+        mpfr_t inv_norm, cond;
+        mpfr_init2(inv_norm, bits);
+        mpfr_init2(cond,     bits);
+        bool nonsing;
+        if (is_complex) {
+            nonsing = lum_inv_norm_inf(A_re, A_im, perm, rows, is_complex,
+                                        bits, inv_norm);
+        } else {
+            nonsing = lum_inv_norm_hager(A_re, A_im, perm, rows,
+                                          bits, inv_norm);
+        }
+        if (nonsing) mpfr_mul(cond, anorm, inv_norm, MPFR_RNDN);
+        else         mpfr_set_inf(cond, 1);
 
-    Expr* lu = lum_build_lu(A_re, A_im, n, is_complex, bits);
-    Expr* p  = lum_build_perm(perm, n);
-    Expr* c  = expr_new_mpfr_copy(cond);
+        if (nonsing && !luc_warn_counter) {
+            /* threshold = 2^(bits).  Compare cond > threshold. */
+            mpfr_t threshold;
+            mpfr_init2(threshold, bits);
+            mpfr_set_ui_2exp(threshold, 1, (mpfr_exp_t)bits, MPFR_RNDN);
+            if (mpfr_cmp(cond, threshold) > 0) {
+                luc_warn_counter = 1;
+                char* s = expr_to_string(m);
+                fprintf(stderr,
+                    "LUDecomposition::luc: Result for LUDecomposition of "
+                    "badly conditioned matrix %s may contain significant "
+                    "numerical errors.\n", s);
+                free(s);
+            }
+            mpfr_clear(threshold);
+        }
+        c = expr_new_mpfr_copy(cond);
+        mpfr_clear(inv_norm);
+        mpfr_clear(cond);
+    }
 
-    lum_array_free(A_re, (size_t)n * n);
-    lum_array_free(A_im, is_complex ? (size_t)n * n : 0);
+    Expr* lu = lum_build_lu(A_re, A_im, rows, cols, is_complex, bits);
+    Expr* p  = lum_build_perm(perm, rows);
+
+    lum_array_free(A_re, total);
+    lum_array_free(A_im, is_complex ? total : 0);
     free(perm);
     mpfr_clear(anorm);
-    mpfr_clear(inv_norm);
-    mpfr_clear(cond);
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = lu; items[1] = p; items[2] = c;

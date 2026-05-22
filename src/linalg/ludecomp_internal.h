@@ -34,11 +34,14 @@
  * Top-level dispatcher.
  *
  * Classifies `m` by leaf precision via common_scan_inexact and routes
- * to the appropriate kernel.  Returns a freshly-allocated Expr* on
- * success or NULL on cannot-evaluate (caller leaves the call
- * unevaluated; never frees `m`).
+ * to the appropriate kernel.  Accepts any `rows x cols` shape with
+ * `rows > 0` and `cols > 0`; the factorisation has `perm` length
+ * `min(rows, cols)` (matching Mathematica's contract for rectangular
+ * input).  Returns a freshly-allocated Expr* on success or NULL on
+ * cannot-evaluate (caller leaves the call unevaluated; never frees
+ * `m`).
  * ------------------------------------------------------------------ */
-Expr* lu_dispatch(Expr* m, int n);
+Expr* lu_dispatch(Expr* m, int rows, int cols);
 
 /* ---------------------------------------------------------------------
  * Symbolic kernel dispatcher.
@@ -50,7 +53,7 @@ Expr* lu_dispatch(Expr* m, int n);
  *   - numericalisation back to input precision when rationalisation ran
  *   - assembly of {lu, p, c}
  * ------------------------------------------------------------------ */
-Expr* lu_symbolic_dispatch(Expr* m, int n);
+Expr* lu_symbolic_dispatch(Expr* m, int rows, int cols);
 
 /* ---------------------------------------------------------------------
  * Symbolic Doolittle core.
@@ -60,21 +63,24 @@ Expr* lu_symbolic_dispatch(Expr* m, int n);
  * Sqrt-bearing / free-symbolic entries with no special casing.
  *
  * Inputs:
- *   A_flat[i*n + k]  =  m[i, k],   i in [0, n),  k in [0, n)
+ *   A_flat[i*cols + k]  =  m[i, k],   i in [0, rows), k in [0, cols)
  *
  * Outputs (all caller-owned, freshly allocated):
- *   *out_LU_flat   n * n entries row-major   (LU_flat[i*n + k])
- *                  combined Doolittle L (strict-lower, unit diag) and
- *                  U (upper).
- *   *out_perm      length n, 1-indexed row permutation
- *                  (perm[k] = original-row used at step k)
+ *   *out_LU_flat   rows * cols entries row-major
+ *                  (LU_flat[i*cols + k]).  Combined Doolittle L
+ *                  (strict-lower, unit diag) and U (upper).
+ *   *out_perm      length rows, 1-indexed row permutation
+ *                  (perm[i] = original-row that ended up at row i).
+ *                  Rows past min(rows, cols) - 1 are never swapped
+ *                  during elimination, so for tall input the trailing
+ *                  entries remain at their identity values.
  *   *out_singular  true if a zero pivot was encountered at any step
  *                  (factorisation completes regardless, matching
  *                  Mathematica's LUDecomposition::sing behaviour).
  *
  * Returns true on success.  A_flat is NOT consumed.
  * ------------------------------------------------------------------ */
-bool lu_symbolic_core(Expr** A_flat, int n,
+bool lu_symbolic_core(Expr** A_flat, int rows, int cols,
                       Expr*** out_LU_flat, int** out_perm,
                       bool* out_singular);
 
@@ -84,27 +90,30 @@ bool lu_symbolic_core(Expr** A_flat, int n,
  * Invoked by lu_dispatch when common_scan_inexact reports an inexact
  * input at min_bits <= 53.  Loads `m` into a column-major double
  * buffer, calls dgetrf (or zgetrf for complex), then dgecon (zgecon)
- * for the L-infinity condition number.
+ * for the L-infinity condition number.  Non-square input is accepted;
+ * the condition slot is set to exact Integer 0 in that case (the
+ * estimate is only meaningful for square A).
  *
  * Returns NULL (without consuming `m`) when:
  *   - USE_LAPACK is undefined.
  *   - A matrix leaf isn't a recognised numeric value.
  *   - LAPACK reports a fatal info code.
  * ------------------------------------------------------------------ */
-Expr* lu_machine_dispatch(Expr* m, int n);
+Expr* lu_machine_dispatch(Expr* m, int rows, int cols);
 
 /* ---------------------------------------------------------------------
  * Arbitrary-precision MPFR kernel dispatcher.
  *
  * Invoked by lu_dispatch when min_bits > 53.  Runs Doolittle with
- * partial pivoting over column-major MPFR arrays at the input's
- * working precision; computes the L-infinity condition number from the
- * explicit inverse (back-substitution via L then U).
+ * partial pivoting over row-major MPFR arrays at the input's working
+ * precision; for square input also computes the L-infinity condition
+ * number from the explicit inverse (back-substitution via L then U).
+ * For non-square input the condition slot is set to exact Integer 0.
  *
  * Returns NULL (without consuming `m`) when:
  *   - USE_MPFR is undefined.
  *   - A matrix cell can't be reduced to an MPFR value.
  * ------------------------------------------------------------------ */
-Expr* lu_mpfr_dispatch(Expr* m, int n);
+Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols);
 
 #endif /* LUDECOMP_INTERNAL_H */

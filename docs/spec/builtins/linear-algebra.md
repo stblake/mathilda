@@ -625,35 +625,51 @@ Out[5]= {q, r, {{0, 1}, {1, 0}}}    (* column 1 (larger norm) pivoted first *)
 > Mathilda's simplifier does not reduce.
 
 ## LUDecomposition
-Gives the LU decomposition of a square matrix.
+Gives the LU decomposition of a matrix.
 - `LUDecomposition[m]` — returns `{lu, p, c}` where:
-  - `lu` is the combined Doolittle factor matrix (strictly-lower
-    triangle is L with an implicit unit diagonal; upper triangle is U).
-  - `p` is the 1-indexed row-permutation vector with
-    `m[[p]] == l . u`, where
-    `l = LowerTriangularize[lu, -1] + IdentityMatrix[n]` and
-    `u = UpperTriangularize[lu]`.
+  - `lu` is the combined Doolittle factor matrix (same shape as `m`).
+    The strictly-lower triangle is L with an implicit unit diagonal;
+    the upper triangle is U.
+  - `p` is the 1-indexed row-permutation vector of length
+    `Length[m]` (rows) with `m[[p]] == l . u`.  For square `n x n`
+    input, `l = LowerTriangularize[lu, -1] + IdentityMatrix[n]` and
+    `u = UpperTriangularize[lu]`.  For rectangular `rows x cols`
+    input with `steps = Min[rows, cols]`, `l` is `rows x steps` (unit
+    lower diagonal on the leading `steps x steps` block) and `u` is
+    `steps x cols` (upper).
   - `c` is an L∞-condition-number estimate for approximate numerical
-    inputs, or `0` for exact / symbolic `m`.
+    square inputs, or the exact Integer `0` for exact / symbolic /
+    rectangular `m` (the condition number is mathematically undefined
+    for non-square matrices).
 
 **Features**:
 - `Protected`.
-- Square inputs only; a non-square or empty matrix emits
-  `LUDecomposition::matsq` and the call is left unevaluated.
+- Any non-empty rectangular `rows x cols` matrix is accepted.  Empty
+  matrices and non-matrix arguments emit `LUDecomposition::matsq` and
+  the call is left unevaluated.
 - Algorithm: Doolittle's elimination with partial row pivoting.
   - **MachinePrecision inputs (`min_bits <= 53`)** use the LAPACK
     fast path: `dgetrf` / `zgetrf` for the factorisation, plus
     `dgecon` / `zgecon` (with `dlange` / `zlange` for ‖A‖∞) for the
     condition estimate.
   - **MPFR inputs (`min_bits > 53`)** use a hand-rolled Doolittle
-    kernel over row-major MPFR arrays (paired re/im for complex);
-    the condition number is computed from the explicit inverse via
-    two back-substitutions per column.
+    kernel over row-major MPFR arrays (paired re/im for complex).
+    For real matrices the condition number is estimated by the
+    Hager-Higham one-norm iteration on `A^{-T}` (LAPACK's `*lacn2`
+    strategy; typically 2-5 triangular-solve pairs, each `O(n^2)`).
+    For complex matrices the kernel falls back to the explicit
+    inverse via `n` back-substitution pairs (`O(n^3)`).
   - **Exact / symbolic inputs** run Doolittle through the Mathilda
     evaluator, so integer / rational / Complex / Sqrt-bearing /
-    free-symbolic entries all share one code path.  Pivoting is
-    "first non-zero" (skip the natural pivot only when it is
-    provably zero) — matching the Mathematica example
+    free-symbolic entries all share one code path.  Pivot selection:
+    when every entry of the active column is an exact numeric
+    (`Integer` / `BigInt` / `Rational` / `Complex` of those) the pivot
+    with the **smallest absolute value** is chosen — matching
+    Mathematica (e.g. `LUDecomposition[{{1/2, 1/3}, {1/5, 1/7}}]`
+    picks the `1/5` pivot, keeping intermediate `L` entries small).
+    For any column containing a free symbol, `Sqrt`, or other
+    non-exact-numeric leaf, the rule falls back to "first non-zero"
+    — matching the Mathematica example
     `LUDecomposition[{{a, b}, {c, d}}]` returning `p = {1, 2}`.
   - When BLAS/LAPACK is unavailable at build time (`USE_LAPACK=0`)
     or MPFR is unavailable (`USE_MPFR=0`) the corresponding fast
@@ -663,6 +679,12 @@ Gives the LU decomposition of a square matrix.
 - Singular inputs emit `LUDecomposition::sing` and the factorisation
   completes with a zero on U's diagonal at the singular step
   (matching Mathematica's behaviour).
+- Ill-conditioned numerical inputs emit `LUDecomposition::luc`: the
+  factorisation completes but the reported `c` exceeds the
+  precision-loss threshold (`1 / $MachineEpsilon` for machine input,
+  `2^bits` for MPFR input), matching Mathematica's
+  `LUDecomposition::luc` behaviour.  Both warnings are one-shot per
+  process; subsequent calls are silent.
 
 ```mathematica
 In[1]:= LUDecomposition[{{1, 1, 1}, {2, 4, 8}, {3, 9, 27}}]
