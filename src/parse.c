@@ -856,12 +856,21 @@ static bool can_start_primary(char c) {
 static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     skip_whitespace(s);
     if (!*s->pos) return NULL;
-    /* No expression token follows a closing delimiter or a comma.
-     * Return NULL silently so callers (notably the OP_COMPOUND branch
-     * that turns a trailing `expr;` into CompoundExpression[expr, Null])
-     * can decide what to do, without parse_primary printing a spurious
-     * "Unexpected character" message. */
-    if (*s->pos == ']' || *s->pos == '}' || *s->pos == ')' || *s->pos == ',') return NULL;
+    /* No expression token follows a closing delimiter, a comma, or a
+     * binary-only operator character. Return NULL silently so callers
+     * (notably the OP_COMPOUND branch that turns `expr; // f` or a trailing
+     * `expr;` into CompoundExpression[expr, Null]) can decide what to do,
+     * without parse_primary printing a spurious "Unexpected character"
+     * message. The chars below never start a primary or a prefix operator;
+     * `+`, `-`, `.`, `!`, `?`, `'` are intentionally excluded because they
+     * either begin numbers (`+5`, `-5`, `.5`) or prefix forms (`!x`, `-x`,
+     * `?sym`, `++x`, `--x`); a leading `;;` is the implicit-LHS Span
+     * prefix and is also left alone. */
+    if (*s->pos == ']' || *s->pos == '}' || *s->pos == ')' || *s->pos == ',' ||
+        *s->pos == '*' || *s->pos == '/' || *s->pos == '^' || *s->pos == '=' ||
+        *s->pos == '<' || *s->pos == '>' || *s->pos == '|' || *s->pos == '&' ||
+        *s->pos == ':' || *s->pos == '@' ||
+        (*s->pos == ';' && s->pos[1] != ';')) return NULL;
 
     Expr* left = NULL;
     
