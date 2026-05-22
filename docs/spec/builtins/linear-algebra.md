@@ -38,6 +38,85 @@ Out[4]= True
 ```
 
 
+## SquareMatrixQ
+Tests whether a matrix has the same number of rows and columns.
+- `SquareMatrixQ[m]`: `True` if `Dimensions[m] == {n, n}` for some `n >= 1`,
+  `False` otherwise.
+
+**Features**:
+- `Protected`.
+- Pure shape test: no element predicate or option is consulted.
+- Works for symbolic as well as numerical matrices (`{{a,b},{c,d}}` is
+  square; entries are not evaluated).
+- Returns `False` (rather than leaving unevaluated) on non-list, scalar,
+  vector, empty (`{}`, `{{}}`), ragged, rectangular, or higher-rank
+  tensor inputs.
+- Exactly one argument is accepted; any other count emits a
+  Mathematica-compatible
+
+  ```
+  SquareMatrixQ::argx: SquareMatrixQ called with N arguments; 1 argument is expected.
+  ```
+
+  to `stderr` and leaves the call unevaluated.
+
+```mathematica
+In[1]:= SquareMatrixQ[{{1, 2}, {3, 4}}]
+Out[1]= True
+
+In[2]:= SquareMatrixQ[{{1, 2, 3}, {4, 5, 6}}]
+Out[2]= False
+
+In[3]:= SquareMatrixQ[{1, 2, 3}]
+Out[3]= False
+
+In[4]:= SquareMatrixQ[{{1}, {2, 3}}]
+Out[4]= False
+
+In[5]:= SquareMatrixQ[{{a, b, c}, {d, e, f}, {g, h, i}}]
+Out[5]= True
+```
+
+
+## SymmetricMatrixQ
+Tests whether a matrix is explicitly symmetric (`m == Transpose[m]`).
+- `SymmetricMatrixQ[m]`: `True` if every off-diagonal pair satisfies
+  `m[[i,j]] == m[[j,i]]` under structural equality, `False` otherwise.
+- `SymmetricMatrixQ[m, SameTest -> f]`: entries `m[i,j]` and `m[j,i]`
+  are treated as equal iff `f[m[i,j], m[j,i]]` evaluates to `True`.
+- `SymmetricMatrixQ[m, Tolerance -> t]`: entries are accepted when
+  `Abs[m[i,j] - m[j,i]] <= t`.
+
+**Features**:
+- `Protected`.
+- Default test is structural via `expr_eq`; the diagonal is exempt
+  (trivially symmetric).
+- Uses `m^T == m` for both real- and complex-valued matrices, so a
+  complex symmetric matrix need not be Hermitian (and vice versa).
+- Returns `False` (rather than leaving unevaluated) on non-matrix,
+  non-square, ragged, empty, or higher-rank tensor inputs.
+- Unknown options and non-`Rule` trailing arguments leave the call
+  unevaluated.
+
+```mathematica
+In[1]:= SymmetricMatrixQ[{{1, 2}, {2, 3}}]
+Out[1]= True
+
+In[2]:= SymmetricMatrixQ[{{a, b, c}, {b, d, e}, {c, e, f}}]
+Out[2]= True
+
+In[3]:= SymmetricMatrixQ[{{1 + I, 2 - 3 I}, {2 - 3 I, 2 - 3 I}}]
+Out[3]= True
+
+In[4]:= SymmetricMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]   (* Hermitian, not symmetric *)
+Out[4]= False
+
+In[5]:= SymmetricMatrixQ[{{1, Log[x^2]}, {2 Log[x], 2}},
+            SameTest -> (Simplify[#1 - #2, x > 0] == 0 &)]
+Out[5]= True
+```
+
+
 ## Dot (.)
 Gives products of vectors, matrices, and tensors.
 - `a . b` or `Dot[a, b]`

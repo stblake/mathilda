@@ -771,6 +771,27 @@ void info_init(void) {
         "entries are accepted when Abs[m[i,j] - Conjugate[m[j,i]]] <= t.\n"
         "Diagonal entries must satisfy the same test (i.e. be purely real for\n"
         "numeric matrices).");
+    symtab_set_docstring("SymmetricMatrixQ",
+        "SymmetricMatrixQ[m]\n"
+        "\tgives True if m is explicitly symmetric (m == Transpose[m]),\n"
+        "\tand False otherwise.\n"
+        "\n"
+        "Options:\n"
+        "\tSameTest  -> Automatic   function used to test equality of entries.\n"
+        "\tTolerance -> Automatic   numeric tolerance for approximate matrices.\n"
+        "\n"
+        "With SameTest -> f, entries m[i,j] and m[j,i] are taken to be equal\n"
+        "when f[m[i,j], m[j,i]] gives True.  With Tolerance -> t, entries are\n"
+        "accepted when Abs[m[i,j] - m[j,i]] <= t.  SymmetricMatrixQ uses the\n"
+        "definition m^T == m for both real- and complex-valued matrices, so a\n"
+        "complex symmetric matrix need not be Hermitian.");
+    symtab_set_docstring("SquareMatrixQ",
+        "SquareMatrixQ[m]\n"
+        "\tgives True if m is a square matrix (Dimensions[m] == {n, n}),\n"
+        "\tand False otherwise.\n"
+        "\n"
+        "Works for symbolic as well as numerical matrices.  Returns False on\n"
+        "non-list, ragged, rectangular, empty, or higher-rank tensor inputs.");
 
     // Trigonometric
     symtab_set_docstring("Sin", "Sin[z] gives the sine of z.");
