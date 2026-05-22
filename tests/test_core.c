@@ -364,6 +364,34 @@ void test_abs_conjugate(void) {
     char* s8 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Pi]")));
     assert(strcmp(s8, "Pi") == 0);
     free(s8);
+
+    /* Involution: Conjugate[Conjugate[z]] -> z. */
+    char* s9 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Conjugate[z]]")));
+    assert(strcmp(s9, "z") == 0);
+    free(s9);
+
+    /* Three nested Conjugates collapse to one (odd parity). */
+    char* s10 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Conjugate[Conjugate[z]]]")));
+    assert(strcmp(s10, "Conjugate[z]") == 0);
+    free(s10);
+
+    /* Re, Im, Abs, Arg are real-valued and therefore Conjugate-fixed,
+     * even for symbolic arguments that don't numericalize. */
+    char* s11 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Re[z]]")));
+    assert(strcmp(s11, "Re[z]") == 0);
+    free(s11);
+
+    char* s12 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Im[z]]")));
+    assert(strcmp(s12, "Im[z]") == 0);
+    free(s12);
+
+    char* s13 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Abs[z]]")));
+    assert(strcmp(s13, "Abs[z]") == 0);
+    free(s13);
+
+    char* s14 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Arg[z]]")));
+    assert(strcmp(s14, "Arg[z]") == 0);
+    free(s14);
 }
 
 void test_arg(void) {

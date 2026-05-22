@@ -757,6 +757,20 @@ void info_init(void) {
         "containing no elements that are themselves lists.\n"
         "MatrixQ[expr, NumberQ] tests whether expr is a numerical matrix.");
     symtab_set_docstring("MatchQ", "MatchQ[expr, form] gives True if expr matches form.");
+    symtab_set_docstring("HermitianMatrixQ",
+        "HermitianMatrixQ[m]\n"
+        "\tgives True if m is explicitly Hermitian (m == ConjugateTranspose[m]),\n"
+        "\tand False otherwise.\n"
+        "\n"
+        "Options:\n"
+        "\tSameTest  -> Automatic   function used to test equality of entries.\n"
+        "\tTolerance -> Automatic   numeric tolerance for approximate matrices.\n"
+        "\n"
+        "With SameTest -> f, entries m[i,j] and Conjugate[m[j,i]] are taken to be\n"
+        "equal when f[m[i,j], Conjugate[m[j,i]]] gives True.  With Tolerance -> t,\n"
+        "entries are accepted when Abs[m[i,j] - Conjugate[m[j,i]]] <= t.\n"
+        "Diagonal entries must satisfy the same test (i.e. be purely real for\n"
+        "numeric matrices).");
 
     // Trigonometric
     symtab_set_docstring("Sin", "Sin[z] gives the sine of z.");

@@ -1361,6 +1361,7 @@ void list_init(void) {
     symtab_add_builtin("ListQ", builtin_listq);
     symtab_add_builtin("VectorQ", builtin_vectorq);
     symtab_add_builtin("MatrixQ", builtin_matrixq);
+    symtab_add_builtin("HermitianMatrixQ", builtin_hermitian_matrix_q);
 
     symtab_get_def("Table")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Range")->attributes |= ATTR_PROTECTED;
@@ -1386,6 +1387,7 @@ void list_init(void) {
     symtab_get_def("ListQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("VectorQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("MatrixQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("HermitianMatrixQ")->attributes |= ATTR_PROTECTED;
 
     symtab_set_docstring("Total", "Total[list]\n\tgives the total of the elements in list.\nTotal[list, n]\n\ttotals all elements down to level n.\nTotal[list, {n}]\n\ttotals elements at level n.\nTotal[list, {n1, n2}]\n\ttotals elements at levels n1 through n2.");
 }
@@ -1704,6 +1706,185 @@ Expr* builtin_matrixq(Expr* res) {
                 expr_free(call);
                 if (!is_true) return expr_new_symbol("False");
             }
+        }
+    }
+
+    return expr_new_symbol("True");
+}
+
+/* --- HermitianMatrixQ ----------------------------------------------------
+ *
+ * A matrix m is Hermitian iff m == ConjugateTranspose[m], equivalently
+ * m[i,j] == Conjugate[m[j,i]] for every pair (i,j).  Diagonal entries
+ * must satisfy m[i,i] == Conjugate[m[i,i]], i.e. be self-conjugate
+ * (purely real for numeric inputs).
+ *
+ * The default test is "explicit" (structural) matching: we accept a pair
+ * (a, b) as conjugate-mirrored when any of the following holds --
+ *
+ *   (1) a is Conjugate[c] with c structurally equal to b;
+ *   (2) b is Conjugate[c] with c structurally equal to a;
+ *   (3) evaluating Conjugate[b] yields a structurally.
+ *
+ * Branches (1) and (2) catch the symbolic patterns (Conjugate[a], a) and
+ * (a, Conjugate[a]) because our Conjugate builtin does NOT fold
+ * Conjugate[Conjugate[x]] back to x for symbolic x.  Branch (3) covers
+ * the fully numeric case where Conjugate evaluates to a concrete value.
+ *
+ * Options:
+ *   - SameTest -> f : pairs (a, b) are accepted iff f[a, Conjugate[b]]
+ *     evaluates to True.  Conjugate[b] is computed once per pair so the
+ *     user-supplied predicate sees the actual conjugated entry, mirroring
+ *     Mathematica's documented behaviour.
+ *   - Tolerance -> t : pairs (a, b) are accepted iff
+ *     Abs[a - Conjugate[b]] <= t evaluates to True.
+ *
+ * SameTest and Tolerance defaults of Automatic fall through to the
+ * structural test, which is correct for both symbolic and exact-numeric
+ * matrices and degrades to bit-identical comparison for machine reals.
+ */
+
+/* True when `n` is an evaluated Conjugate[x] node. */
+static bool is_conjugate_node(Expr* n) {
+    return n->type == EXPR_FUNCTION &&
+           n->data.function.head->type == EXPR_SYMBOL &&
+           n->data.function.head->data.symbol == SYM_Conjugate &&
+           n->data.function.arg_count == 1;
+}
+
+static Expr* eval_conjugate_of(Expr* e) {
+    Expr** args = malloc(sizeof(Expr*) * 1);
+    args[0] = expr_copy(e);
+    Expr* call = expr_new_function(expr_new_symbol("Conjugate"), args, 1);
+    free(args);
+    return eval_and_free(call);
+}
+
+static bool hermitian_pair_structural(Expr* a, Expr* b) {
+    /* (1) a == Conjugate[c] structurally and c == b. */
+    if (is_conjugate_node(a) && expr_eq(a->data.function.args[0], b)) return true;
+    /* (2) b == Conjugate[c] structurally and c == a. */
+    if (is_conjugate_node(b) && expr_eq(b->data.function.args[0], a)) return true;
+    /* (3) Evaluate Conjugate[b] and compare structurally. */
+    Expr* cb = eval_conjugate_of(b);
+    bool eq = expr_eq(a, cb);
+    expr_free(cb);
+    return eq;
+}
+
+static bool hermitian_pair_sametest(Expr* a, Expr* b, Expr* test) {
+    /* Build test[a, Conjugate[b]] and check for True. */
+    Expr* cb = eval_conjugate_of(b);
+    Expr** args = malloc(sizeof(Expr*) * 2);
+    args[0] = expr_copy(a);
+    args[1] = cb;  /* ownership transferred into the call below */
+    Expr* call = expr_new_function(expr_copy(test), args, 2);
+    free(args);
+    Expr* result = eval_and_free(call);
+    bool ok = (result->type == EXPR_SYMBOL &&
+               result->data.symbol == SYM_True);
+    expr_free(result);
+    return ok;
+}
+
+static bool hermitian_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
+    /* Build LessEqual[Abs[a - Conjugate[b]], tol] and check for True. */
+    Expr* cb = eval_conjugate_of(b);
+    Expr** sub_args = malloc(sizeof(Expr*) * 2);
+    sub_args[0] = expr_copy(a);
+    sub_args[1] = cb;
+    Expr* diff = expr_new_function(expr_new_symbol("Subtract"), sub_args, 2);
+    free(sub_args);
+    Expr* diff_e = eval_and_free(diff);
+
+    Expr** abs_args = malloc(sizeof(Expr*) * 1);
+    abs_args[0] = diff_e;
+    Expr* abs_call = expr_new_function(expr_new_symbol("Abs"), abs_args, 1);
+    free(abs_args);
+    Expr* abs_e = eval_and_free(abs_call);
+
+    Expr** le_args = malloc(sizeof(Expr*) * 2);
+    le_args[0] = abs_e;
+    le_args[1] = expr_copy(tol);
+    Expr* le_call = expr_new_function(expr_new_symbol("LessEqual"), le_args, 2);
+    free(le_args);
+    Expr* le_e = eval_and_free(le_call);
+    bool ok = (le_e->type == EXPR_SYMBOL &&
+               le_e->data.symbol == SYM_True);
+    expr_free(le_e);
+    return ok;
+}
+
+Expr* builtin_hermitian_matrix_q(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1) return NULL;
+
+    Expr* m = res->data.function.args[0];
+
+    /* Parse options.  Each trailing arg must be a Rule with one of the
+     * recognised option names; any unrecognised option causes us to
+     * leave the call unevaluated so user-typed errors surface. */
+    Expr* same_test = NULL;
+    Expr* tolerance = NULL;
+    for (size_t i = 1; i < argc; i++) {
+        Expr* opt = res->data.function.args[i];
+        if (!(opt->type == EXPR_FUNCTION &&
+              opt->data.function.head->type == EXPR_SYMBOL &&
+              opt->data.function.head->data.symbol == SYM_Rule &&
+              opt->data.function.arg_count == 2 &&
+              opt->data.function.args[0]->type == EXPR_SYMBOL)) {
+            return NULL;
+        }
+        const char* name = opt->data.function.args[0]->data.symbol;
+        Expr* val = opt->data.function.args[1];
+        if (name == SYM_SameTest) {
+            /* Automatic falls through to the structural test. */
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+                same_test = val;
+            }
+        } else if (name == SYM_Tolerance) {
+            if (!(val->type == EXPR_SYMBOL && val->data.symbol == SYM_Automatic)) {
+                tolerance = val;
+            }
+        } else {
+            return NULL;
+        }
+    }
+
+    /* Must be a non-empty square List of Lists with no deeper nesting. */
+    if (!is_listq(m)) return expr_new_symbol("False");
+    size_t n = m->data.function.arg_count;
+    if (n == 0) return expr_new_symbol("False");
+    for (size_t i = 0; i < n; i++) {
+        Expr* row = m->data.function.args[i];
+        if (!is_listq(row)) return expr_new_symbol("False");
+        if (row->data.function.arg_count != n) return expr_new_symbol("False");
+        for (size_t j = 0; j < n; j++) {
+            if (is_listq(row->data.function.args[j])) {
+                return expr_new_symbol("False");
+            }
+        }
+    }
+
+    /* Walk the upper triangle (including diagonal) and check each pair
+     * against the chosen predicate.  Walking i <= j is sufficient since
+     * the pair test is symmetric under (i,j) <-> (j,i): a == Conj[b]
+     * iff b == Conj[a]. */
+    for (size_t i = 0; i < n; i++) {
+        Expr** row_i = m->data.function.args[i]->data.function.args;
+        for (size_t j = i; j < n; j++) {
+            Expr* a = row_i[j];                                /* m[i,j] */
+            Expr* b = m->data.function.args[j]->data.function.args[i]; /* m[j,i] */
+            bool ok;
+            if (same_test != NULL) {
+                ok = hermitian_pair_sametest(a, b, same_test);
+            } else if (tolerance != NULL) {
+                ok = hermitian_pair_tolerance(a, b, tolerance);
+            } else {
+                ok = hermitian_pair_structural(a, b);
+            }
+            if (!ok) return expr_new_symbol("False");
         }
     }
 

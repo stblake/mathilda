@@ -117,6 +117,7 @@ const char* SYM_Greater = NULL;
 const char* SYM_GreaterEqual = NULL;
 const char* SYM_Heads = NULL;
 const char* SYM_HeavisideTheta = NULL;
+const char* SYM_HermitianMatrixQ = NULL;
 const char* SYM_Hold = NULL;
 const char* SYM_HoldAll = NULL;
 const char* SYM_HoldAllComplete = NULL;
@@ -378,6 +379,7 @@ void sym_names_init(void) {
     SYM_GreaterEqual               = intern_symbol("GreaterEqual");
     SYM_Heads                      = intern_symbol("Heads");
     SYM_HeavisideTheta             = intern_symbol("HeavisideTheta");
+    SYM_HermitianMatrixQ           = intern_symbol("HermitianMatrixQ");
     SYM_Hold                       = intern_symbol("Hold");
     SYM_HoldAll                    = intern_symbol("HoldAll");
     SYM_HoldAllComplete            = intern_symbol("HoldAllComplete");

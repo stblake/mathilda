@@ -60,6 +60,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef USE_LAPACK
 static void lu_mach_warn_once(uint64_t* counter, const char* msg)
 {
     if (*counter) return;
@@ -236,6 +237,7 @@ static Expr* lu_mach_build_perm(const int* ipiv, int rows, int ipiv_len)
     free(perm);
     return p;
 }
+#endif /* USE_LAPACK */
 
 /* ---------------------------------------------------------------------
  * Kernel.  Returns NULL on any failure path; the caller (lu_dispatch)
@@ -249,13 +251,13 @@ static Expr* lu_mach_build_perm(const int* ipiv, int rows, int ipiv_len)
  * ------------------------------------------------------------------ */
 Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
 {
-    static uint64_t lapack_warn_counter = 0;
-    static uint64_t sing_warn_counter   = 0;
-
 #ifndef USE_LAPACK
     (void)m; (void)rows; (void)cols;
     return NULL;
 #else
+    static uint64_t lapack_warn_counter = 0;
+    static uint64_t sing_warn_counter   = 0;
+
     int steps = (rows < cols) ? rows : cols;
     bool square = (rows == cols);
 

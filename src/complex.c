@@ -3,6 +3,7 @@
 #include "eval.h"
 #include "arithmetic.h"
 #include "numeric.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -308,8 +309,30 @@ Expr* builtin_abs(Expr* res) {
 }
 
 Expr* builtin_conjugate(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1) {
+        /* Mathematica-compatible argx message; the call is left unevaluated. */
+        size_t n = res->data.function.arg_count;
+        fprintf(stderr,
+                "Conjugate::argx: Conjugate called with %zu argument%s; "
+                "1 argument is expected.\n",
+                n, n == 1 ? "" : "s");
+        return NULL;
+    }
     Expr* arg = res->data.function.args[0];
+    /* Conjugate is an involution: Conjugate[Conjugate[z]] -> z. */
+    if (head_is(arg, "Conjugate") && arg->data.function.arg_count == 1) {
+        Expr* inner = arg->data.function.args[0];
+        arg->data.function.args[0] = NULL;
+        return inner;
+    }
+    /* Re, Im, Abs, and Arg are real-valued by construction, so they are
+     * Conjugate-fixed regardless of whether their argument numericalizes. */
+    if ((head_is(arg, "Re") || head_is(arg, "Im") ||
+         head_is(arg, "Abs") || head_is(arg, "Arg")) &&
+        arg->data.function.arg_count == 1) {
+        return expr_copy(arg);
+    }
     Expr *re, *im;
     if (is_complex(arg, &re, &im)) {
         Expr** args_times = malloc(sizeof(Expr*) * 2);

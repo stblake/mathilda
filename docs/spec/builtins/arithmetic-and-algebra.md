@@ -538,7 +538,9 @@ Complex number functions.
 - `Im[z]`: Imaginary part.
 - `ReIm[z]`: Returns `{Re[z], Im[z]}`.
 - `Abs[z]`: Magnitude.
-- `Conjugate[z]`: Complex conjugate.
+- `Conjugate[z]`: Complex conjugate.  Folds `Conjugate[Conjugate[z]] -> z`
+  (involution) and `Conjugate[f[..]] -> f[..]` when `f` is one of `Re`,
+  `Im`, `Abs`, `Arg` (all real-valued by construction).
 - `Arg[z]`: Phase angle.
 
 ## Solve

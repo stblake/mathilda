@@ -132,6 +132,7 @@ extern const char* SYM_Greater;
 extern const char* SYM_GreaterEqual;
 extern const char* SYM_Heads;
 extern const char* SYM_HeavisideTheta;
+extern const char* SYM_HermitianMatrixQ;
 extern const char* SYM_Hold;
 extern const char* SYM_HoldAll;
 extern const char* SYM_HoldAllComplete;

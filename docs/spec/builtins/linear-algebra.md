@@ -1,5 +1,43 @@
 # Linear Algebra
 
+## HermitianMatrixQ
+Tests whether a matrix is explicitly Hermitian (self-adjoint).
+- `HermitianMatrixQ[m]`: `True` if `m == ConjugateTranspose[m]` under
+  structural equality, `False` otherwise.
+- `HermitianMatrixQ[m, SameTest -> f]`: entries `m[i,j]` and
+  `Conjugate[m[j,i]]` are treated as equal iff
+  `f[m[i,j], Conjugate[m[j,i]]]` evaluates to `True`.
+- `HermitianMatrixQ[m, Tolerance -> t]`: entries are accepted when
+  `Abs[m[i,j] - Conjugate[m[j,i]]] <= t`.
+- Diagonal entries must satisfy the same test, i.e. be self-conjugate
+  (purely real for numeric matrices).
+
+**Features**:
+- `Protected`.
+- Default test is structural: it accepts (Conjugate[a], a) / (a, Conjugate[a])
+  symbolic pairs without requiring our `Conjugate` builtin to fold
+  `Conjugate[Conjugate[x]] -> x`.
+- Returns `False` (rather than leaving unevaluated) on non-matrix, non-square,
+  ragged, empty, or higher-rank tensor inputs.
+- Unknown options and non-Rule trailing arguments leave the call unevaluated.
+
+```mathematica
+In[1]:= HermitianMatrixQ[{{1, 3 + 4 I}, {3 - 4 I, 2}}]
+Out[1]= True
+
+In[2]:= HermitianMatrixQ[{{0, a, b}, {Conjugate[a], 1, c},
+            {Conjugate[b], Conjugate[c], -1}}]
+Out[2]= True
+
+In[3]:= HermitianMatrixQ[{{1, 2 I}, {2 I, 3}}]
+Out[3]= False
+
+In[4]:= HermitianMatrixQ[{{1.0, 2.0 + 0.01 I}, {2.0 - 0.02 I, 1.5}},
+            Tolerance -> 0.1]
+Out[4]= True
+```
+
+
 ## Dot (.)
 Gives products of vectors, matrices, and tensors.
 - `a . b` or `Dot[a, b]`

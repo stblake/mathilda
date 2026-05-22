@@ -27,6 +27,7 @@ Expr* builtin_max(Expr* res);
 Expr* builtin_listq(Expr* res);
 Expr* builtin_vectorq(Expr* res);
 Expr* builtin_matrixq(Expr* res);
+Expr* builtin_hermitian_matrix_q(Expr* res);
 
 void list_init(void);
 
