@@ -18,6 +18,7 @@ Expr* builtin_diagonalmatrix(Expr* res);
 /* Inverse and PseudoInverse live in src/matinv.h. */
 Expr* builtin_matrixpower(Expr* res);
 /* Eigenvalues / Eigenvectors live in src/mateigen.h. */
+Expr* builtin_positive_definite_matrix_q(Expr* res);
 void linalg_init(void);
 
 /* Helpers exposed for use by matsol.c (RowReduce / LinearSolve) and

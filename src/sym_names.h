@@ -204,6 +204,7 @@ extern const char* SYM_Pivoting;
 extern const char* SYM_Plus;
 extern const char* SYM_PollardRho;
 extern const char* SYM_PolynomialGCD;
+extern const char* SYM_PositiveDefiniteMatrixQ;
 extern const char* SYM_Power;
 extern const char* SYM_Primes;
 extern const char* SYM_Protected;

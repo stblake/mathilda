@@ -136,6 +136,7 @@ set(COMMON_SRC
     ../src/linalg/ludecomp_machine.c
     ../src/linalg/ludecomp_mpfr.c
     ../src/linalg/lapack.c
+    ../src/linalg/posdef_q.c
     ../src/linalg/eigen.c
     ../src/linalg/eigen_common.c
     ../src/linalg/eigen_direct.c
@@ -631,6 +632,16 @@ else()
     target_link_libraries(upper_triangular_matrix_q_tests gmp m)
 endif()
 add_test(NAME upper_triangular_matrix_q_tests COMMAND upper_triangular_matrix_q_tests)
+
+add_executable(positive_definite_matrix_q_tests test_positive_definite_matrix_q.c ${COMMON_SRC})
+target_include_directories(positive_definite_matrix_q_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(positive_definite_matrix_q_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(positive_definite_matrix_q_tests build_ecm)
+else()
+    target_link_libraries(positive_definite_matrix_q_tests gmp m)
+endif()
+add_test(NAME positive_definite_matrix_q_tests COMMAND positive_definite_matrix_q_tests)
 
 add_executable(eigen_tests test_eigen.c ${COMMON_SRC})
 target_include_directories(eigen_tests PRIVATE ../src)

@@ -223,6 +223,22 @@ int mat_lapack_zgetrf(int m, int n, double* A, int lda, int* ipiv)
     return info;
 }
 
+int mat_lapack_dpotrf(char uplo, int n, double* A, int lda)
+{
+    int info = 0;
+    char up[2] = { uplo, 0 };
+    dpotrf_(up, &n, A, &lda, &info);
+    return info;
+}
+
+int mat_lapack_zpotrf(char uplo, int n, double* A, int lda)
+{
+    int info = 0;
+    char up[2] = { uplo, 0 };
+    zpotrf_(up, &n, lapack_zptr(A), &lda, &info);
+    return info;
+}
+
 double mat_lapack_dlange(char norm_kind, int m, int n,
                          const double* A, int lda)
 {
@@ -326,6 +342,10 @@ int mat_lapack_dgetrf(int m, int n, double* A, int lda, int* ipiv)
 { (void)m; (void)n; (void)A; (void)lda; (void)ipiv; return -1; }
 int mat_lapack_zgetrf(int m, int n, double* A, int lda, int* ipiv)
 { (void)m; (void)n; (void)A; (void)lda; (void)ipiv; return -1; }
+int mat_lapack_dpotrf(char uplo, int n, double* A, int lda)
+{ (void)uplo; (void)n; (void)A; (void)lda; return -1; }
+int mat_lapack_zpotrf(char uplo, int n, double* A, int lda)
+{ (void)uplo; (void)n; (void)A; (void)lda; return -1; }
 double mat_lapack_dlange(char norm_kind, int m, int n,
                          const double* A, int lda)
 { (void)norm_kind; (void)m; (void)n; (void)A; (void)lda; return -1.0; }

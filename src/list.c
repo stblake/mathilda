@@ -2427,7 +2427,6 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
 
     return expr_new_symbol("True");
 }
-
 Expr* builtin_min(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;

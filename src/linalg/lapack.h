@@ -113,6 +113,13 @@ void zungqr_(const int* m, const int* n, const int* k, double* a,
 void dgetrf_(const int* m, const int* n, double* a, const int* lda,
              int* ipiv, int* info);
 
+/* dpotrf -- Cholesky factorisation of a real symmetric positive-definite
+ * matrix A = U^T U (UPLO='U') or A = L L^T (UPLO='L').  Reads / writes
+ * only the selected triangle; the opposite triangle is untouched.
+ *   info: 0 success, <0 bad arg, >0 leading minor not positive definite. */
+void dpotrf_(const char* uplo, const int* n, double* a, const int* lda,
+             int* info);
+
 /* dlange -- 1/inf/Frobenius norm of a real matrix.  `norm` is one of
  * '1', 'O' (1-norm), 'I' (inf-norm), 'F', 'E' (Frobenius), 'M' (max abs). */
 double dlange_(const char* norm, const int* m, const int* n,
@@ -126,6 +133,11 @@ void dgecon_(const char* norm, const int* n, const double* a,
 /* Complex variants. */
 void zgetrf_(const int* m, const int* n, double* a, const int* lda,
              int* ipiv, int* info);
+
+/* zpotrf -- Cholesky factorisation of a complex Hermitian positive-definite
+ * matrix A = U^H U (UPLO='U') or A = L L^H (UPLO='L'). */
+void zpotrf_(const char* uplo, const int* n, double* a, const int* lda,
+             int* info);
 
 double zlange_(const char* norm, const int* m, const int* n,
                const double* a, const int* lda, double* work);
@@ -192,6 +204,17 @@ int mat_lapack_zungqr(int m, int n, int k, double* A, int lda,
  * superimposed; ipiv[i] is the 1-indexed row that was swapped to row i. */
 int mat_lapack_dgetrf(int m, int n, double* A, int lda, int* ipiv);
 int mat_lapack_zgetrf(int m, int n, double* A, int lda, int* ipiv);
+
+/* Cholesky factorisation.  `uplo` is 'U' or 'L' selecting which triangle
+ * of A is referenced.  On success A's selected triangle holds the Cholesky
+ * factor; the opposite triangle is untouched.  Returns LAPACK info:
+ *   0    success (A is positive definite),
+ *   <0   bad argument,
+ *   >0   k means the k-th leading minor is not positive definite.
+ * When USE_LAPACK is undefined the stubs return -1 so call sites can
+ * route to an in-house Cholesky fallback. */
+int mat_lapack_dpotrf(char uplo, int n, double* A, int lda);
+int mat_lapack_zpotrf(char uplo, int n, double* A, int lda);
 
 /* L-infinity norm of an m x n matrix.  `norm_kind` selects '1', 'I',
  * 'F', 'M'.  Returns the norm value (always >= 0).  When USE_LAPACK

@@ -829,6 +829,19 @@ void info_init(void) {
         "BigInt 0) count as zero.  Returns False on non-matrix, ragged,\n"
         "empty (i.e. {}), or higher-rank tensor inputs; an n-by-0 matrix\n"
         "(e.g. {{}, {}}) is vacuously upper triangular.");
+    symtab_set_docstring("PositiveDefiniteMatrixQ",
+        "PositiveDefiniteMatrixQ[m]\n"
+        "\tgives True if m is explicitly positive definite, and False\n"
+        "\totherwise.\n"
+        "\n"
+        "A matrix m is positive definite if Re[Conjugate[x] . m . x] > 0\n"
+        "for every nonzero vector x.  Equivalently, the Hermitian part\n"
+        "(m + ConjugateTranspose[m]) / 2 has only positive eigenvalues.\n"
+        "The test is performed by attempting a Cholesky factorisation of\n"
+        "the Hermitian part; on numeric matrices this is dispatched to\n"
+        "BLAS/LAPACK's dpotrf (real) or zpotrf (complex) when available.\n"
+        "Returns False on non-numeric, non-square, ragged, empty, or\n"
+        "higher-rank tensor inputs.");
 
     // Trigonometric
     symtab_set_docstring("Sin", "Sin[z] gives the sine of z.");

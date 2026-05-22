@@ -31,4 +31,7 @@ void linalg_init(void) {
     symtab_get_def("DiagonalMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("MatrixPower", builtin_matrixpower);
     symtab_get_def("MatrixPower")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("PositiveDefiniteMatrixQ",
+                       builtin_positive_definite_matrix_q);
+    symtab_get_def("PositiveDefiniteMatrixQ")->attributes |= ATTR_PROTECTED;
 }
