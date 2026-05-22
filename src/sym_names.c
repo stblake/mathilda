@@ -139,6 +139,7 @@ const char* SYM_InputForm = NULL;
 const char* SYM_Integer = NULL;
 const char* SYM_IntegerDigits = NULL;
 const char* SYM_IntegerLength = NULL;
+const char* SYM_DigitCount = NULL;
 const char* SYM_IntegerPart = NULL;
 const char* SYM_Integers = NULL;
 const char* SYM_Interval = NULL;
@@ -413,6 +414,7 @@ void sym_names_init(void) {
     SYM_Integer                    = intern_symbol("Integer");
     SYM_IntegerDigits              = intern_symbol("IntegerDigits");
     SYM_IntegerLength              = intern_symbol("IntegerLength");
+    SYM_DigitCount                 = intern_symbol("DigitCount");
     SYM_IntegerPart                = intern_symbol("IntegerPart");
     SYM_Integers                   = intern_symbol("Integers");
     SYM_Integrate                  = intern_symbol("Integrate");

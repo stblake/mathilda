@@ -351,6 +351,39 @@ In[3]:= Table[IntegerLength[100!, n], {n, 2, 20}]
 Out[3]= {525, 332, 263, 227, 204, 187, 175, 166, 158, 152, 147, 142, 138, 135, 132, 129, 126, 124, 122}
 ```
 
+## DigitCount
+- `DigitCount[n]`: List of counts of digits `1, 2, ..., 9, 0` in the base-10
+  representation of `n`. Sign of `n` is discarded.
+- `DigitCount[n, b]`: List of counts of digits `1, 2, ..., b-1, 0` in the
+  base-`b` representation of `n` (requires `b >= 2`). Note the ordering:
+  digit `0` is **last**, matching Mathematica's convention.
+- `DigitCount[n, b, d]`: Scalar count of digit `d` (an integer with
+  `0 <= d < b`) in the base-`b` representation of `n`.
+
+**Features**:
+- `Protected` (intentionally not `Listable`). `DigitCount[{1,2,3}]` is left
+  unevaluated rather than threading, because the natural result of
+  `DigitCount[n]` is itself a list.
+- `DigitCount[0]` is a list of zeros of length `b` (zero has no significant
+  digits). In the 3-argument form, `DigitCount[0, b, d] == 0`.
+- Defining property: `Total[DigitCount[n, b]] == IntegerLength[n, b]` for
+  any `n != 0`, and `DigitCount[n, b, d] == Count[IntegerDigits[n, b], d]`.
+- The 3-argument form supports arbitrary-precision base `b` and digit `d`
+  (bignum); the 1/2-argument form caps `b` at `2^20` for the list-returning
+  path -- beyond that, `DigitCount::ovfl` fires and the call is left
+  unevaluated. Use the 3-argument form for very large bases.
+
+```mathematica
+In[1]:= DigitCount[2147, 2, 1]
+Out[1]= 5
+
+In[2]:= DigitCount[2147, 2]
+Out[2]= {5, 7}
+
+In[3]:= DigitCount[100!]
+Out[3]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
+```
+
 ## GCD, LCM
 - `GCD[n1, n2, ...]`: Greatest common divisor.
 - `LCM[n1, n2, ...]`: Least common multiple.
