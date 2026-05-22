@@ -322,6 +322,35 @@ In[4]:= IntegerDigits[6345354, 10, 4]
 Out[4]= {5, 3, 5, 4}
 ```
 
+## IntegerLength
+- `IntegerLength[n]`: Number of decimal digits in the integer `n`. The sign
+  of `n` is discarded.
+- `IntegerLength[n, b]`: Number of base-`b` digits in `n` (requires `b >= 2`).
+
+**Features**:
+- `Protected`, `Listable`. Threads element-wise over a list of integers in
+  either argument position, e.g. `IntegerLength[{1, 10, 100}]` or
+  `IntegerLength[8, {2, 3, 4}]`.
+- `IntegerLength[0]` is `0` in any base (zero has no significant digits).
+- `IntegerLength[n, b]` is effectively an efficient version of
+  `Floor[Log[b, |n|]] + 1` -- it never converts through floating-point and
+  is exact for arbitrarily large `n`.
+- Works for both machine integers and bignums. The fast path uses GMP's
+  `mpz_sizeinbase` for bases `2..62` (with an exact verification step for
+  non-power-of-2 bases); arbitrary-precision bases fall back to repeated
+  division.
+
+```mathematica
+In[1]:= IntegerLength[123456789]
+Out[1]= 9
+
+In[2]:= IntegerLength[100!, 2]
+Out[2]= 525
+
+In[3]:= Table[IntegerLength[100!, n], {n, 2, 20}]
+Out[3]= {525, 332, 263, 227, 204, 187, 175, 166, 158, 152, 147, 142, 138, 135, 132, 129, 126, 124, 122}
+```
+
 ## GCD, LCM
 - `GCD[n1, n2, ...]`: Greatest common divisor.
 - `LCM[n1, n2, ...]`: Least common multiple.

@@ -1567,6 +1567,11 @@ void info_init(void) {
         "IntegerDigits[n, b] gives a list of the base b digits in the integer n.\n"
         "IntegerDigits[n, b, len] pads the list on the left with zeros to give a list of length len; if n has more than len base-b digits, the last len least-significant digits are returned.");
 
+    symtab_set_docstring("IntegerLength",
+        "IntegerLength[n] gives the number of decimal digits in the integer n.\n"
+        "IntegerLength[n, b] gives the number of base b digits in n.\n"
+        "IntegerLength ignores the sign of n; IntegerLength[0] is 0.");
+
     // Primes
     symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
     symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");

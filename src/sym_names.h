@@ -153,6 +153,7 @@ extern const char* SYM_Infinity;
 extern const char* SYM_InputForm;
 extern const char* SYM_Integer;
 extern const char* SYM_IntegerDigits;
+extern const char* SYM_IntegerLength;
 extern const char* SYM_IntegerPart;
 extern const char* SYM_Integers;
 extern const char* SYM_Integrate;
