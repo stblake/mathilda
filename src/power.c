@@ -568,10 +568,7 @@ Expr* builtin_power(Expr* res) {
         if (base_num && exp_num) {
 #ifdef USE_MPFR
             /* MPFR real-valued power: fast path when both sides are real
-             * and at least one carries MPFR precision. The complex case
-             * (negative base with fractional exponent, or Complex operands)
-             * still falls through to the cpow path below — true MPC
-             * complex arithmetic is out of scope for Phase 2. */
+             * and at least one carries MPFR precision. */
             if (!base_comp && !exp_comp && numeric_any_mpfr(base, exp)) {
                 /* Only take the real MPFR path when the result is real:
                  * base > 0 OR exponent is an integer. */
@@ -587,6 +584,15 @@ Expr* builtin_power(Expr* res) {
                     Expr* r = numeric_mpfr_pow(base, exp, 0);
                     if (r) return r;
                 }
+            }
+            /* MPFR complex-valued power: handles the cases that the real
+             * MPFR path skipped — negative base with fractional exponent
+             * (e.g. (-1)^(1/4)), complex base, or complex exponent
+             * (e.g. E^(I Pi/4)). Without this the cpow fallback below
+             * would coerce MPFR operands to zero and yield NaN. */
+            if (numeric_any_mpfr(base, exp)) {
+                Expr* r = numeric_mpfr_complex_pow(base, exp, 0);
+                if (r) return r;
             }
 #endif
             bool has_real = (base->type == EXPR_REAL || exp->type == EXPR_REAL ||

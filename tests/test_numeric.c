@@ -275,6 +275,23 @@ static void test_listable_prec(void) {
                            "{3.141592653589793238");
 }
 
+static void test_n_prec_complex_pow(void) {
+    /* Regression: at MPFR precision the cpow fallback in power.c used to
+     * coerce MPFR operands to zero, producing nan.0 + nan.0*I for any
+     * complex-valued power. The polar-form helper in numeric.c now handles
+     * these cases. The two forms below evaluate to the same primitive 8th
+     * root of unity, so their difference must round to zero. */
+    assert_eval_startswith("N[(-1)^(1/4), 32]",
+                           "0.70710678118654752440084436210484");
+    assert_eval_startswith("N[E^(I Pi/4), 32]",
+                           "0.70710678118654752440084436210484");
+    assert_eval_eq("N[E^(I Pi/4) - (-1)^(1/4), 32]",
+                   "0.0 + 0.0*I", 0);
+    /* Negative real base with complex exponent: i^i = exp(-pi/2). */
+    assert_eval_startswith("N[I^I, 32]",
+                           "0.20787957635076190854695561983");
+}
+
 #endif /* USE_MPFR */
 
 int main(void) {
@@ -308,6 +325,7 @@ int main(void) {
     TEST(test_set_precision);
     TEST(test_set_accuracy);
     TEST(test_listable_prec);
+    TEST(test_n_prec_complex_pow);
 #endif
 
     printf("All numeric_tests passed.\n");

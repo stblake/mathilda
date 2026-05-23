@@ -120,6 +120,14 @@ Expr* numeric_mpfr_mul (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_div (const Expr* a, const Expr* b, long default_bits);
 Expr* numeric_mpfr_pow (const Expr* a, const Expr* b, long default_bits);
 
+/* Complex power at MPFR precision via polar form, used by `Power` when
+ * `numeric_mpfr_pow` can't apply (negative real base with fractional
+ * exponent, complex base, or complex exponent). Returns Complex[MPFR, MPFR],
+ * a pure MPFR when the imaginary part rounds to zero, or NULL if either
+ * operand isn't MPFR-promotable or `base` is zero. */
+Expr* numeric_mpfr_complex_pow(const Expr* base, const Expr* exp,
+                               long default_bits);
+
 /* Apply an MPFR unary real function to `e`. Returns a fresh EXPR_MPFR,
  * or NULL if `e` isn't a real-valued MPFR-promotable number (e.g. it's
  * complex or symbolic). Used by Sin/Cos/Tan/Sinh/Cosh/Log/Exp/…

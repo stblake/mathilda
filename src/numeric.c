@@ -216,6 +216,89 @@ Expr* numeric_mpfr_apply_unary(const Expr* e, long default_bits, MpfrUnaryOp op)
     return expr_new_mpfr_move(out);
 }
 
+/* Complex power at MPFR precision via polar form.
+ *
+ * Writing base = a + b*I and exp = c + d*I, set r = |base| and theta = arg(base):
+ *     base^exp = r^c * exp(-d*theta) * (cos(c*theta + d*ln(r))
+ *                                       + I*sin(c*theta + d*ln(r)))
+ *
+ * This is the analytic continuation MPFR needs because there's no MPC linkage
+ * in the build — without it, the cpow fallback in power.c silently coerces
+ * MPFR operands to zero and produces NaN. See power.c (negative-base/complex-
+ * exponent path) for the caller.
+ *
+ * Returns Complex[MPFR, MPFR], a pure MPFR when the imaginary part rounds to
+ * zero, or NULL if either operand isn't an MPFR-promotable numeric value or
+ * the base is zero (handled by the dedicated 0^x path elsewhere). */
+Expr* numeric_mpfr_complex_pow(const Expr* base, const Expr* exp,
+                               long default_bits) {
+    long bits = numeric_combined_bits(base, exp, default_bits);
+    if (bits <= 0) bits = 53;
+
+    mpfr_t a, b, c, d;
+    mpfr_init2(a, bits); mpfr_init2(b, bits);
+    mpfr_init2(c, bits); mpfr_init2(d, bits);
+    bool ok = get_approx_mpfr(base, a, b, NULL)
+           && get_approx_mpfr(exp,  c, d, NULL);
+    if (!ok) {
+        mpfr_clear(a); mpfr_clear(b);
+        mpfr_clear(c); mpfr_clear(d);
+        return NULL;
+    }
+
+    mpfr_t r, theta;
+    mpfr_init2(r, bits);
+    mpfr_init2(theta, bits);
+    mpfr_hypot(r, a, b, MPFR_RNDN);
+
+    if (mpfr_zero_p(r)) {
+        mpfr_clear(a); mpfr_clear(b); mpfr_clear(c); mpfr_clear(d);
+        mpfr_clear(r); mpfr_clear(theta);
+        return NULL;
+    }
+
+    mpfr_atan2(theta, b, a, MPFR_RNDN);  /* (-pi, pi] */
+
+    mpfr_t ln_r, mag, angle, t1, t2;
+    mpfr_init2(ln_r, bits); mpfr_init2(mag, bits); mpfr_init2(angle, bits);
+    mpfr_init2(t1, bits);   mpfr_init2(t2, bits);
+
+    mpfr_log(ln_r, r, MPFR_RNDN);
+
+    /* mag = r^c * exp(-d*theta). For d == 0 the exp factor is exactly 1; we
+     * still compute it generically — MPFR returns 1 with no precision loss. */
+    mpfr_pow(t1, r, c, MPFR_RNDN);
+    mpfr_mul(t2, d, theta, MPFR_RNDN);
+    mpfr_neg(t2, t2, MPFR_RNDN);
+    mpfr_exp(t2, t2, MPFR_RNDN);
+    mpfr_mul(mag, t1, t2, MPFR_RNDN);
+
+    /* angle = c*theta + d*ln(r). */
+    mpfr_mul(t1, c, theta, MPFR_RNDN);
+    mpfr_mul(t2, d, ln_r, MPFR_RNDN);
+    mpfr_add(angle, t1, t2, MPFR_RNDN);
+
+    Expr* re_expr = expr_new_mpfr_bits(bits);
+    Expr* im_expr = expr_new_mpfr_bits(bits);
+    mpfr_cos(t1, angle, MPFR_RNDN);
+    mpfr_sin(t2, angle, MPFR_RNDN);
+    mpfr_mul(re_expr->data.mpfr, mag, t1, MPFR_RNDN);
+    mpfr_mul(im_expr->data.mpfr, mag, t2, MPFR_RNDN);
+
+    bool im_is_zero = mpfr_zero_p(im_expr->data.mpfr);
+
+    mpfr_clear(a); mpfr_clear(b); mpfr_clear(c); mpfr_clear(d);
+    mpfr_clear(r); mpfr_clear(theta);
+    mpfr_clear(ln_r); mpfr_clear(mag); mpfr_clear(angle);
+    mpfr_clear(t1); mpfr_clear(t2);
+
+    if (im_is_zero) {
+        expr_free(im_expr);
+        return re_expr;
+    }
+    return make_complex(re_expr, im_expr);
+}
+
 bool numeric_constant_mpfr_value(const char* name, mpfr_t out, long bits) {
     const NumericConstant* c = find_constant(name);
     if (!c || !c->mpfr_fill) return false;
