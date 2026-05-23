@@ -351,6 +351,30 @@ In[3]:= Table[IntegerLength[100!, n], {n, 2, 20}]
 Out[3]= {525, 332, 263, 227, 204, 187, 175, 166, 158, 152, 147, 142, 138, 135, 132, 129, 126, 124, 122}
 ```
 
+**Arity diagnostics** (`IntegerLength::argt`). Wrong-arity calls emit the
+diagnostic and echo the call back unevaluated, matching Mathematica:
+
+```mathematica
+In[4]:= IntegerLength[]
+        IntegerLength::argt: IntegerLength called with 0 arguments; 1 or 2 arguments are expected.
+Out[4]= IntegerLength[]
+
+In[5]:= IntegerLength[1, 2, 3, 4]
+        IntegerLength::argt: IntegerLength called with 4 arguments; 1 or 2 arguments are expected.
+Out[5]= IntegerLength[1, 2, 3, 4]
+```
+
+**Non-integer-argument diagnostic** (`IntegerLength::int`). A concrete
+non-integer numeric (Real, Rational, Complex) at position 1 or 2 emits the
+diagnostic and echoes the call back unevaluated; pure symbolic arguments
+flow through silently:
+
+```mathematica
+In[6]:= IntegerLength[1.1234]
+        IntegerLength::int: Integer expected at position 1 in IntegerLength[1.1234].
+Out[6]= IntegerLength[1.1234]
+```
+
 ## DigitCount
 - `DigitCount[n]`: List of counts of digits `1, 2, ..., 9, 0` in the base-10
   representation of `n`. Sign of `n` is discarded.

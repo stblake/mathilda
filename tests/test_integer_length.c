@@ -340,37 +340,60 @@ static void test_three_args_argt(void) {
     char* result = NULL;
     char* err = eval_capturing_stderr("IntegerLength[1, 2, 3]", &result);
     ASSERT(result != NULL);
-    ASSERT(strstr(result, "IntegerLength") != NULL);
+    ASSERT_STR_EQ(result, "IntegerLength[1, 2, 3]");
     ASSERT(err != NULL);
     ASSERT_MSG(strstr(err, "IntegerLength::argt") != NULL,
                "expected argt diagnostic, got: %s", err);
     ASSERT(strstr(err, "called with 3 arguments") != NULL);
+    ASSERT(strstr(err, "1 or 2 arguments are expected") != NULL);
+    free(result);
+    free(err);
+}
+
+static void test_four_args_argt(void) {
+    /* Documented Mathematica session (spec):
+     *   In[242]:= IntegerLength[1, 2, 3, 4]
+     *   IntegerLength::argt: IntegerLength called with 4 arguments;
+     *   1 or 2 arguments are expected.
+     *   Out[242]= IntegerLength[1, 2, 3, 4] */
+    char* result = NULL;
+    char* err = eval_capturing_stderr("IntegerLength[1, 2, 3, 4]", &result);
+    ASSERT(result != NULL);
+    ASSERT_STR_EQ(result, "IntegerLength[1, 2, 3, 4]");
+    ASSERT(err != NULL);
+    ASSERT_MSG(strstr(err, "IntegerLength::argt") != NULL,
+               "expected argt diagnostic, got: %s", err);
+    ASSERT(strstr(err, "called with 4 arguments") != NULL);
+    ASSERT(strstr(err, "1 or 2 arguments are expected") != NULL);
     free(result);
     free(err);
 }
 
 static void test_five_args_argt(void) {
-    /* Documented Mathematica example: 5-arg call. */
+    /* 5-arg call: same argt path as 3- and 4-arg, pluralisation unchanged. */
     char* result = NULL;
     char* err = eval_capturing_stderr("IntegerLength[1, 2, 3, 4, 5]", &result);
     ASSERT(result != NULL);
-    ASSERT(strstr(result, "IntegerLength[1, 2, 3, 4, 5]") != NULL);
+    ASSERT_STR_EQ(result, "IntegerLength[1, 2, 3, 4, 5]");
     ASSERT(err != NULL);
     ASSERT_MSG(strstr(err, "IntegerLength::argt") != NULL,
                "expected argt diagnostic, got: %s", err);
     ASSERT(strstr(err, "called with 5 arguments") != NULL);
+    ASSERT(strstr(err, "1 or 2 arguments are expected") != NULL);
     free(result);
     free(err);
 }
 
 static void test_real_n_int_diagnostic(void) {
-    /* Documented Mathematica diagnostic:
+    /* Documented Mathematica session (spec):
+     *   In[245]:= IntegerLength[1.1234]
      *   IntegerLength::int: Integer expected at position 1 in
-     *   IntegerLength[1.1234]. */
+     *                       IntegerLength[1.1234].
+     *   Out[245]= IntegerLength[1.1234] */
     char* result = NULL;
     char* err = eval_capturing_stderr("IntegerLength[1.1234]", &result);
     ASSERT(result != NULL);
-    ASSERT(strstr(result, "IntegerLength[1.1234]") != NULL);
+    ASSERT_STR_EQ(result, "IntegerLength[1.1234]");
     ASSERT(err != NULL);
     ASSERT_MSG(strstr(err, "IntegerLength::int") != NULL,
                "expected int diagnostic, got: %s", err);
@@ -566,6 +589,7 @@ int main(void) {
 
     TEST(test_zero_args_argt);
     TEST(test_three_args_argt);
+    TEST(test_four_args_argt);
     TEST(test_five_args_argt);
     TEST(test_real_n_int_diagnostic);
     TEST(test_complex_n_int_diagnostic);
