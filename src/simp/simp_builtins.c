@@ -180,23 +180,47 @@ Expr* builtin_element(Expr* res) {
     Expr* x   = res->data.function.args[0];
     Expr* dom = res->data.function.args[1];
 
-    /* Threading: Element[{x1, x2, ...}, dom] -> {Element[x1, dom], ...}.
-     * Mathematica returns this only when ALL elements decide; if any are
-     * undetermined we leave them as Element[xi, dom]. */
+    /* Element[{x1, x2, ...}, dom] is shorthand for the conjunction
+     * Element[x1, dom] && ... && Element[xN, dom]. We collapse it to a
+     * single True/False only when every component decides; otherwise we
+     * leave the original Element[{...}, dom] in place so downstream
+     * consumers (Simplify's AssumeCtx; see ctx_walk in simp_assume.c)
+     * can still treat it as a multi-variable real/integer/... assumption.
+     *
+     * Threading to a `List` of Element calls (the old behaviour) was
+     * incorrect: Simplify carries ATTR_LISTABLE on the assumption
+     * argument, so a list of partial Element facts would cause Simplify
+     * to thread itself, splitting the joint assumption into per-variable
+     * runs that each only see one of the facts. */
     if (x->type == EXPR_FUNCTION && x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL &&
         x->data.function.head->data.symbol == SYM_List) {
         size_t n = x->data.function.arg_count;
-        Expr** out = (Expr**)calloc(n, sizeof(Expr*));
+        bool all_true = (n > 0);
+        bool any_false = false;
         for (size_t i = 0; i < n; i++) {
             Expr* sub_args[2] = { expr_copy(x->data.function.args[i]), expr_copy(dom) };
             Expr* call = expr_new_function(expr_new_symbol("Element"), sub_args, 2);
-            out[i] = evaluate(call);
+            Expr* sub = evaluate(call);
             expr_free(call);
+            if (sub && sub->type == EXPR_SYMBOL) {
+                if (sub->data.symbol == SYM_True) {
+                    /* keep all_true */
+                } else if (sub->data.symbol == SYM_False) {
+                    any_false = true;
+                    all_true = false;
+                } else {
+                    all_true = false;
+                }
+            } else {
+                all_true = false;
+            }
+            if (sub) expr_free(sub);
+            if (any_false) break;
         }
-        Expr* list = expr_new_function(expr_new_symbol("List"), out, n);
-        free(out);
-        return list;
+        if (any_false) return expr_new_symbol("False");
+        if (all_true)  return expr_new_symbol("True");
+        return NULL;
     }
 
     if (dom->type != EXPR_SYMBOL) return NULL;

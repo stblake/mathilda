@@ -106,6 +106,7 @@ extern const char* SYM_E;
 extern const char* SYM_Eigenvalues;
 extern const char* SYM_Eigenvectors;
 extern const char* SYM_ECM;
+extern const char* SYM_Element;
 extern const char* SYM_Equal;
 extern const char* SYM_EulerGamma;
 extern const char* SYM_Evaluate;

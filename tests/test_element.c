@@ -84,15 +84,24 @@ void test_element_dollar_assumptions_restored(void) {
     assert_eval_eq("Element[x, Reals]", "Element[x, Reals]", 0);
 }
 
-/* ---- Threading over a list ---- */
+/* ---- List shorthand: Element[{x1,...,xN}, dom] is a conjunction ---- */
 
 void test_element_threads_over_list(void) {
-    assert_eval_eq("Element[{1, 5/2, 1 + I}, Integers]",
-                   "{True, False, False}", 0);
-    assert_eval_eq("Element[{1, 5/2, 1 + I}, Reals]",
-                   "{True, True, False}", 0);
-    assert_eval_eq("Element[{1, 5/2, 1 + I}, Complexes]",
-                   "{True, True, True}", 0);
+    /* Element[{x1,...,xN}, dom] is shorthand for the conjunction of
+     * Element[xi, dom]; reduces to a single True/False only when every
+     * component decides, otherwise stays unchanged so downstream
+     * consumers (e.g. Simplify's AssumeCtx) can treat it as a joint
+     * assumption on x1..xN. */
+    assert_eval_eq("Element[{1, 5/2, 1 + I}, Integers]", "False", 0);
+    assert_eval_eq("Element[{1, 5/2, 1 + I}, Reals]",    "False", 0);
+    assert_eval_eq("Element[{1, 5/2, 1 + I}, Complexes]", "True", 0);
+    /* Undecided components: leave the expression in place. */
+    assert_eval_eq("Element[{x, y}, Reals]",
+                   "Element[{x, y}, Reals]", 0);
+    /* Simplify treats Element[{x,y}, Reals] as Element[x,Reals] &&
+     * Element[y,Reals], so Log[E^(x+y)] collapses to x+y. */
+    assert_eval_eq("Simplify[Log[E^(x+y)], Element[{x,y}, Reals]]",
+                   "x + y", 0);
 }
 
 /* ---- Direct fact lookup, even for compound expressions ---- */
