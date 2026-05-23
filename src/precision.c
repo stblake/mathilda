@@ -57,11 +57,11 @@ static Expr* precision_min(Expr* a, Expr* b) {
      * MachinePrecision as the constant ≈15.95 for the purpose of this
      * comparison, but keep the symbolic form in the return. */
     double da = (a->type == EXPR_SYMBOL && a->data.symbol == SYM_MachinePrecision)
-                ? 15.9545897701910033
+                ? NUMERIC_MACHINE_PRECISION_DIGITS
                 : (a->type == EXPR_REAL ? a->data.real
                                         : (a->type == EXPR_INTEGER ? (double)a->data.integer : 0.0));
     double db = (b->type == EXPR_SYMBOL && b->data.symbol == SYM_MachinePrecision)
-                ? 15.9545897701910033
+                ? NUMERIC_MACHINE_PRECISION_DIGITS
                 : (b->type == EXPR_REAL ? b->data.real
                                         : (b->type == EXPR_INTEGER ? (double)b->data.integer : 0.0));
     if (da <= db) { expr_free(b); return a; }
@@ -168,7 +168,7 @@ static Expr* accuracy_of(const Expr* e) {
         case EXPR_SYMBOL:
             return make_infinity();
         case EXPR_REAL:
-            return expr_new_real(15.9545897701910033 - expr_log10_abs(e));
+            return expr_new_real(NUMERIC_MACHINE_PRECISION_DIGITS - expr_log10_abs(e));
 #ifdef USE_MPFR
         case EXPR_MPFR: {
             double prec_digits = (double)mpfr_get_prec(e->data.mpfr) / LOG2_10;

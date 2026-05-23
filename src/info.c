@@ -1707,4 +1707,48 @@ void info_init(void) {
         "RandomSample[list, UpTo[n]]\n\tgives a sample of n of the ei, or as many as are available.\n"
         "RandomSample never samples any element more than once.\n"
         "Use SeedRandom to seed the pseudorandom generator for reproducible results.");
+
+    // System floating-point constants (registered in core.c).
+    symtab_set_docstring("$MachinePrecision",
+        "$MachinePrecision\n"
+        "\tgives the number of decimal digits of precision used for\n"
+        "\tmachine-precision numbers.\n"
+        "\n"
+        "Derived from the platform's DBL_MANT_DIG -- typically 53*Log[10,2]\n"
+        "(~ 15.9546) on IEEE 754 systems.");
+    symtab_set_docstring("$MachineEpsilon",
+        "$MachineEpsilon\n"
+        "\tgives the difference between 1.0 and the next-nearest number\n"
+        "\trepresentable as a machine-precision number.\n"
+        "\n"
+        "Equals the platform's DBL_EPSILON; measures the granularity of\n"
+        "machine-precision numbers.");
+    symtab_set_docstring("$MinMachineNumber",
+        "$MinMachineNumber\n"
+        "\tgives the smallest positive machine-precision number that can\n"
+        "\tbe represented in normalized form on this computer system.\n"
+        "\n"
+        "Equals the platform's DBL_MIN.");
+    symtab_set_docstring("$MaxMachineNumber",
+        "$MaxMachineNumber\n"
+        "\tgives the largest machine-precision number that can be used on\n"
+        "\tthis computer system.\n"
+        "\n"
+        "Equals the platform's DBL_MAX.");
+    symtab_set_docstring("$MaxNumber",
+        "$MaxNumber\n"
+        "\tgives the maximum arbitrary-precision number that can be\n"
+        "\trepresented on this computer system.\n"
+        "\n"
+        "With USE_MPFR builds, this is the largest finite value at machine\n"
+        "precision under MPFR's current exponent range; otherwise it equals\n"
+        "$MaxMachineNumber.");
+    symtab_set_docstring("$MinNumber",
+        "$MinNumber\n"
+        "\tgives the minimum positive arbitrary-precision number that can\n"
+        "\tbe represented on this computer system.\n"
+        "\n"
+        "With USE_MPFR builds, this is the smallest positive value at\n"
+        "machine precision under MPFR's current exponent range; otherwise\n"
+        "it equals $MinMachineNumber.");
 }

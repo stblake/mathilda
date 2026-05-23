@@ -34,6 +34,7 @@
 #define NUMERIC_H
 
 #include "expr.h"
+#include <float.h>
 #include <stdbool.h>
 
 /* Evaluation backends. MACHINE uses IEEE 754 doubles; MPFR uses
@@ -54,9 +55,12 @@ typedef struct {
     long bits;
 } NumericSpec;
 
-/* Machine precision in decimal digits. Matches Mathematica's
- * `$MachinePrecision` (= Log10[2^53]). */
-#define NUMERIC_MACHINE_PRECISION_DIGITS 15.954589770191003
+/* Decimal-digit equivalent of one full machine double's mantissa,
+ * derived from the platform's DBL_MANT_DIG so it tracks the local float
+ * representation (53 for IEEE 754, giving the familiar ~15.955). This is
+ * the C-side value backing the $MachinePrecision system variable. */
+#define NUMERIC_LOG10_2 0.30102999566398119521
+#define NUMERIC_MACHINE_PRECISION_DIGITS ((double)DBL_MANT_DIG * NUMERIC_LOG10_2)
 
 /* Digit / bit conversions for MPFR precision. Both round up so the target
  * carries at least the requested amount of information. */

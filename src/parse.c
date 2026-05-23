@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <gmp.h>
+#include "numeric.h"
 
 // Private parser state
 typedef struct {
@@ -375,9 +376,10 @@ static Expr* parse_number(ParserState* s) {
             if (mheap) free(mheap);
             if (isfinite(mval) && mval != 0.0) {
                 double implied = (double)frac_digits + log10(fabs(mval));
-                /* MachinePrecision threshold; matches the constant used in
-                 * precision.c (≈ 53 * log10(2)). */
-                if (implied > 15.9545897701910033) {
+                /* MachinePrecision threshold; derived from DBL_MANT_DIG
+                 * via numeric.h so the parser tracks the platform's float
+                 * representation. */
+                if (implied > NUMERIC_MACHINE_PRECISION_DIGITS) {
                     mpfr_bits = (long)ceil(implied * 3.3219280948873626);
                     if (mpfr_bits < 2) mpfr_bits = 2;
                 }

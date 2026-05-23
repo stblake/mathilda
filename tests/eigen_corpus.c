@@ -48,8 +48,12 @@ double corpus_norm_inf_real(const double* A, size_t n) {
 }
 
 static char* matrix_to_input(const char* head, const double* A, size_t n) {
-    /* Generous upper bound per entry: "-1.23456789012345e+123, " ≈ 28 chars. */
-    size_t cap = strlen(head) + 16 + n * n * 32;
+    /* Each entry expands to SetPrecision[X.XXX...e+XX, MachinePrecision]
+     * (≈ 60 chars).  %.17e is the round-trip-safe format for a double,
+     * but Mathilda's parser promotes 17-digit literals to MPFR; the
+     * SetPrecision wrap forces the value back to machine precision so
+     * the LAPACK fast path is exercised as the test name implies. */
+    size_t cap = strlen(head) + 16 + n * n * 72;
     char* buf = (char*)malloc(cap);
     size_t pos = 0;
     pos += snprintf(buf + pos, cap - pos, "%s[{", head);
@@ -58,9 +62,9 @@ static char* matrix_to_input(const char* head, const double* A, size_t n) {
         pos += snprintf(buf + pos, cap - pos, "{");
         for (size_t j = 0; j < n; j++) {
             if (j) pos += snprintf(buf + pos, cap - pos, ", ");
-            /* %.17e guarantees a decimal point so integer-valued entries
-             * still parse as Real and route through the numerical path. */
-            pos += snprintf(buf + pos, cap - pos, "%.17e", A[i * n + j]);
+            pos += snprintf(buf + pos, cap - pos,
+                            "SetPrecision[%.17e, MachinePrecision]",
+                            A[i * n + j]);
         }
         pos += snprintf(buf + pos, cap - pos, "}");
     }
@@ -217,21 +221,25 @@ double corpus_norm_inf_complex(const double* A_re, const double* A_im,
 }
 
 /* Render a complex scalar.  Imaginary == 0 -> Real; otherwise Complex[r,i].
- * `%.17e` ensures the parser treats integer-valued reals as Real, not
- * Integer, so the dispatcher routes through the numerical path. */
+ * `%.17e` is round-trip-safe for a double but trips Mathilda's MPFR
+ * auto-promotion; the SetPrecision wrap forces the value back to
+ * machine precision so the LAPACK numerical path is exercised. */
 static int append_complex_entry(char* buf, size_t cap, size_t pos,
                                   double r, double im) {
     if (im == 0.0) {
-        return pos + snprintf(buf + pos, cap - pos, "%.17e", r);
+        return pos + snprintf(buf + pos, cap - pos,
+                              "SetPrecision[%.17e, MachinePrecision]", r);
     }
-    return pos + snprintf(buf + pos, cap - pos, "Complex[%.17e, %.17e]",
+    return pos + snprintf(buf + pos, cap - pos,
+                          "Complex[SetPrecision[%.17e, MachinePrecision], "
+                          "SetPrecision[%.17e, MachinePrecision]]",
                           r, im);
 }
 
 static char* matrix_to_input_complex(const char* head,
                                        const double* A_re,
                                        const double* A_im, size_t n) {
-    size_t cap = strlen(head) + 16 + n * n * 64;
+    size_t cap = strlen(head) + 16 + n * n * 144;
     char* buf = (char*)malloc(cap);
     size_t pos = 0;
     pos += snprintf(buf + pos, cap - pos, "%s[{", head);

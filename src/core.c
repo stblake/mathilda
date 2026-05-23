@@ -59,7 +59,11 @@
 #include <setjmp.h>
 #include <sys/time.h>
 #include <time.h>
+#include <float.h>
 #include <gmp.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 #include "rat.h"
 #include "parfrac.h"
 #include "random.h"
@@ -78,6 +82,62 @@
 #include "sym_names.h"
 #include "repl_hooks.h"
 
+/*
+ * register_system_constant:
+ * Helper for system_constants_init below — bind `name` to `value` as an
+ * OwnValue, mark the symbol Protected, and free both helper Exprs. The
+ * value is now owned by the symbol table.
+ */
+static void register_system_constant(const char* name, Expr* value) {
+    Expr* sym = expr_new_symbol(name);
+    symtab_add_own_value(name, sym, value);
+    expr_free(sym);
+    expr_free(value);
+    symtab_get_def(name)->attributes |= ATTR_PROTECTED;
+}
+
+/*
+ * system_constants_init:
+ * Registers the read-only floating-point system constants:
+ *   $MachinePrecision, $MachineEpsilon, $MinMachineNumber, $MaxMachineNumber,
+ *   $MaxNumber, $MinNumber
+ *
+ * Values are derived from the platform's <float.h> macros (and MPFR's
+ * current exponent range, when USE_MPFR is enabled) rather than hard-coded,
+ * so they reflect the actual representation Mathilda was compiled against.
+ */
+static void system_constants_init(void) {
+    /* Machine-precision quantities — exact IEEE 754 limits of the local
+     * double type. */
+    register_system_constant("$MachinePrecision", expr_new_real(NUMERIC_MACHINE_PRECISION_DIGITS));
+    register_system_constant("$MachineEpsilon",   expr_new_real(DBL_EPSILON));
+    register_system_constant("$MinMachineNumber", expr_new_real(DBL_MIN));
+    register_system_constant("$MaxMachineNumber", expr_new_real(DBL_MAX));
+
+    /* $MaxNumber / $MinNumber describe the arbitrary-precision range. With
+     * MPFR available we walk one step in from the current emax/emin bounds
+     * at machine precision (~53 bits). Without MPFR there is no arb-prec
+     * representation, so the values collapse onto the machine extrema. */
+#ifdef USE_MPFR
+    {
+        mpfr_prec_t bits = (mpfr_prec_t)DBL_MANT_DIG;
+        mpfr_t maxv, minv;
+        mpfr_init2(maxv, bits);
+        mpfr_set_inf(maxv, +1);
+        mpfr_nextbelow(maxv);  /* largest finite value at this precision */
+        register_system_constant("$MaxNumber", expr_new_mpfr_move(maxv));
+
+        mpfr_init2(minv, bits);
+        mpfr_set_zero(minv, +1);
+        mpfr_nextabove(minv);  /* smallest positive finite value */
+        register_system_constant("$MinNumber", expr_new_mpfr_move(minv));
+    }
+#else
+    register_system_constant("$MaxNumber", expr_new_real(DBL_MAX));
+    register_system_constant("$MinNumber", expr_new_real(DBL_MIN));
+#endif
+}
+
 void core_init(void) {
     /* Cache canonical pointers for well-known symbol names. Doing this
      * before any other init step guarantees every later expr_new_symbol
@@ -91,6 +151,7 @@ void core_init(void) {
      * any subsequent init step that triggers evaluation can already see
      * them. */
     eval_init();
+    system_constants_init();
     repl_hooks_init();
     parfrac_init();
     modular_init();

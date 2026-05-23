@@ -80,6 +80,41 @@ In[6]:= MachineNumberQ[1 + 2 I]         (* exact Gaussian integer *)
 Out[6]= False
 ```
 
+## $MachinePrecision, $MachineEpsilon, $MinMachineNumber, $MaxMachineNumber, $MaxNumber, $MinNumber
+Read-only system constants describing the floating-point range and
+granularity Mathilda was compiled against. Each is a `Protected` symbol
+holding an `OwnValue`; attempts to redefine them emit
+`Set::wrsym`.
+
+- `$MachinePrecision`: number of decimal digits of precision in a
+  machine-precision number. Derived from the platform's `DBL_MANT_DIG`
+  (typically `53 Log[10, 2] ~ 15.9546` on IEEE 754).
+- `$MachineEpsilon`: the gap between `1.0` and the next-larger
+  machine-precision number. Equals `DBL_EPSILON`.
+- `$MinMachineNumber`: the smallest normalized positive machine-precision
+  number. Equals `DBL_MIN`.
+- `$MaxMachineNumber`: the largest finite machine-precision number.
+  Equals `DBL_MAX`.
+- `$MaxNumber` / `$MinNumber`: the largest / smallest positive value
+  representable at machine precision in the arbitrary-precision backend.
+  In `USE_MPFR` builds these reflect MPFR's current emax/emin one step
+  in from infinity / zero; without MPFR they collapse onto
+  `$MaxMachineNumber` / `$MinMachineNumber`.
+
+```mathematica
+In[1]:= $MachinePrecision
+Out[1]= 15.9546
+
+In[2]:= $MachineEpsilon
+Out[2]= 2.22045*10^-16
+
+In[3]:= {$MinMachineNumber, $MaxMachineNumber}
+Out[3]= {2.22507*10^-308, 1.79769*10^308}
+
+In[4]:= MachineNumberQ[$MaxNumber]   (* MPFR, not machine *)
+Out[4]= False
+```
+
 ## ListQ, VectorQ, MatrixQ
 Predicates for testing lists and their structures.
 - `ListQ[expr]`: `True` if the head of `expr` is `List`.
