@@ -67,6 +67,10 @@ void int_init(void) {
     symtab_get_def("IntegerLength")->attributes |=
         (ATTR_PROTECTED | ATTR_LISTABLE);
 
+    symtab_add_builtin("IntegerExponent", builtin_integerexponent);
+    symtab_get_def("IntegerExponent")->attributes |=
+        (ATTR_PROTECTED | ATTR_LISTABLE);
+
     symtab_add_builtin("DigitCount", builtin_digitcount);
     symtab_get_def("DigitCount")->attributes |= ATTR_PROTECTED;
 
@@ -381,6 +385,113 @@ Expr* builtin_integerlength(Expr* res) {
      * targets the cast is lossless and the value lands well within
      * EXPR_INTEGER range. */
     return expr_new_integer((int64_t)len);
+}
+
+/* =====================================================================
+ * IntegerExponent
+ *
+ *   IntegerExponent[n]     == IntegerExponent[n, 10]
+ *   IntegerExponent[n, b]  highest k such that b^k divides n.
+ *
+ * Equivalent to the number of trailing zero digits of |n| in base b.
+ * Sign of n is discarded.  IntegerExponent[0, b] == Infinity (every
+ * power of b divides 0, matching Mathematica's convention).
+ * ===================================================================*/
+
+/* `IntegerExponent::argt: IntegerExponent called with N argument(s);
+ * 1 or 2 arguments are expected.` */
+static Expr* intexp_emit_argt(size_t argc) {
+    fprintf(stderr,
+            "IntegerExponent::argt: IntegerExponent called with %zu argument%s; "
+            "1 or 2 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* `IntegerExponent::int: Integer expected at position <pos> in <call>.` */
+static Expr* intexp_emit_int(size_t pos, Expr* res) {
+    char* call_str = expr_to_string(res);
+    fprintf(stderr,
+            "IntegerExponent::int: Integer expected at position %zu in %s.\n",
+            pos, call_str ? call_str : "?");
+    free(call_str);
+    return NULL;
+}
+
+/* Return the largest k such that base^k divides |n|.  Pre: n != 0,
+ * base >= 2.  Both `n` and `base` are read-only and not cleared.
+ *
+ * Fast path for base == 2: `mpz_scan1(n, 0)` returns the position of
+ * the lowest 1-bit, which equals the 2-adic valuation of |n|.  GMP's
+ * scan1 acts on the twos-complement representation but treats trailing
+ * zeros identically for ±n, so we can pass `n` directly without taking
+ * the absolute value.
+ *
+ * General path: GMP's `mpz_remove(q, |n|, base)` divides |n| by base
+ * as many times as possible into q and returns that count -- one
+ * library call, O((log n) * M(d log b)) bit-ops. */
+static size_t intexp_count(const mpz_t n, const mpz_t base) {
+    if (mpz_cmp_ui(base, 2) == 0) {
+        return (size_t)mpz_scan1(n, 0);
+    }
+    mpz_t abs_n, q;
+    mpz_init(q);
+    mpz_init(abs_n);
+    mpz_abs(abs_n, n);
+    mp_bitcnt_t cnt = mpz_remove(q, abs_n, base);
+    mpz_clear(q);
+    mpz_clear(abs_n);
+    return (size_t)cnt;
+}
+
+Expr* builtin_integerexponent(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return intexp_emit_argt(argc);
+
+    Expr* n_expr = res->data.function.args[0];
+    if (!expr_is_integer_like(n_expr)) {
+        /* Symbolic n flows through silently; concrete-but-non-integer
+         * (Real, Rational, Complex) gets the ::int diagnostic. */
+        if (expr_is_numeric_like(n_expr)) return intexp_emit_int(1, res);
+        return NULL;
+    }
+
+    mpz_t base;
+    if (argc == 2) {
+        Expr* b_expr = res->data.function.args[1];
+        if (!expr_is_integer_like(b_expr)) {
+            if (expr_is_numeric_like(b_expr)) return intexp_emit_int(2, res);
+            return NULL;
+        }
+        expr_to_mpz(b_expr, base);
+        if (mpz_cmp_ui(base, 2) < 0) {
+            fprintf(stderr,
+                "IntegerExponent::ibase: Base argument must be an integer >= 2.\n");
+            mpz_clear(base);
+            return NULL;
+        }
+    } else {
+        mpz_init_set_ui(base, 10);
+    }
+
+    mpz_t n;
+    expr_to_mpz(n_expr, n);
+
+    /* IntegerExponent[0, b] -> Infinity (every power of b divides 0). */
+    if (mpz_sgn(n) == 0) {
+        mpz_clear(n);
+        mpz_clear(base);
+        return expr_new_symbol("Infinity");
+    }
+
+    size_t k = intexp_count(n, base);
+    mpz_clear(n);
+    mpz_clear(base);
+
+    /* `k` is bounded by IntegerLength[n, base], which fits in size_t
+     * and -- for any plausible bignum -- comfortably within int64. */
+    return expr_new_integer((int64_t)k);
 }
 
 /* =====================================================================

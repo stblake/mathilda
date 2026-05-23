@@ -80,6 +80,7 @@ set(COMMON_SRC
     ../src/attr.c
     ../src/core.c
     ../src/int.c
+    ../src/real.c
     ../src/comparisons.c
     ../src/symtab.c
     ../src/match.c
@@ -676,6 +677,16 @@ else()
 endif()
 add_test(NAME integer_digits_tests COMMAND integer_digits_tests)
 
+add_executable(real_digits_tests test_real_digits.c ${COMMON_SRC})
+target_include_directories(real_digits_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(real_digits_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(real_digits_tests build_ecm)
+else()
+    target_link_libraries(real_digits_tests gmp m)
+endif()
+add_test(NAME real_digits_tests COMMAND real_digits_tests)
+
 add_executable(integer_length_tests test_integer_length.c ${COMMON_SRC})
 target_include_directories(integer_length_tests PRIVATE ../src)
 if(USE_ECM)
@@ -705,6 +716,16 @@ else()
     target_link_libraries(from_digits_tests gmp m)
 endif()
 add_test(NAME from_digits_tests COMMAND from_digits_tests)
+
+add_executable(integer_exponent_tests test_integer_exponent.c ${COMMON_SRC})
+target_include_directories(integer_exponent_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integer_exponent_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(integer_exponent_tests build_ecm)
+else()
+    target_link_libraries(integer_exponent_tests gmp m)
+endif()
+add_test(NAME integer_exponent_tests COMMAND integer_exponent_tests)
 
 add_executable(eigen_tests test_eigen.c ${COMMON_SRC})
 target_include_directories(eigen_tests PRIVATE ../src)

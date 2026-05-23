@@ -375,6 +375,66 @@ In[6]:= IntegerLength[1.1234]
 Out[6]= IntegerLength[1.1234]
 ```
 
+## IntegerExponent
+- `IntegerExponent[n]`: Highest power of `10` that divides `n`; equivalently,
+  the number of trailing zeros in the decimal digits of `n`. Equivalent to
+  `IntegerExponent[n, 10]`.
+- `IntegerExponent[n, b]`: Highest power of `b` that divides `n` (requires
+  `b >= 2`). Equivalently, the number of trailing zeros in the base-`b`
+  digits of `n`.
+
+**Features**:
+- `Protected`, `Listable`. Threads element-wise over a list of integers in
+  either argument position, e.g. `IntegerExponent[{10, 100, 1000}]` or
+  `IntegerExponent[24, {2, 3, 4, 6}]`.
+- Sign of `n` is discarded.
+- `IntegerExponent[0, b]` is `Infinity` for any base `b` (every power of `b`
+  divides 0).
+- Works for both machine integers and bignums. Base 2 uses GMP's
+  `mpz_scan1` (lowest-set-bit lookup, O(log n / wordsize)); other bases use
+  `mpz_remove` (a single library call that strips all factors of `b`).
+
+```mathematica
+In[1]:= IntegerExponent[1230000]
+Out[1]= 4
+
+In[2]:= IntegerExponent[2^10 + 2^7, 2]
+Out[2]= 7
+
+In[3]:= IntegerExponent[144, 2]
+Out[3]= 4
+
+In[4]:= IntegerExponent[100!, 2]
+Out[4]= 97
+
+In[5]:= IntegerExponent[0]
+Out[5]= Infinity
+```
+
+**Arity diagnostics** (`IntegerExponent::argt`). Wrong-arity calls emit the
+diagnostic and echo the call back unevaluated, matching Mathematica:
+
+```mathematica
+In[6]:= IntegerExponent[]
+        IntegerExponent::argt: IntegerExponent called with 0 arguments; 1 or 2 arguments are expected.
+Out[6]= IntegerExponent[]
+
+In[7]:= IntegerExponent[1, 2, 3, 4]
+        IntegerExponent::argt: IntegerExponent called with 4 arguments; 1 or 2 arguments are expected.
+Out[7]= IntegerExponent[1, 2, 3, 4]
+```
+
+**Non-integer-argument diagnostic** (`IntegerExponent::int`). A concrete
+non-integer numeric (Real, Rational, Complex) at position 1 or 2 emits the
+diagnostic and echoes the call back unevaluated; pure symbolic arguments
+flow through silently:
+
+```mathematica
+In[8]:= IntegerExponent[1.123]
+        IntegerExponent::int: Integer expected at position 1 in IntegerExponent[1.123].
+Out[8]= IntegerExponent[1.123]
+```
+
 ## DigitCount
 - `DigitCount[n]`: List of counts of digits `1, 2, ..., 9, 0` in the base-10
   representation of `n`. Sign of `n` is discarded.
@@ -451,6 +511,63 @@ Out[4]= 1267650600228229401496703205376
 
 In[5]:= FromDigits[{a, b, c, d, e}, x]
 Out[5]= e + d x + c x^2 + b x^3 + a x^4
+```
+
+## RealDigits
+- `RealDigits[x]`: List of the base-10 digits of the approximate real
+  number `x`, together with the integer exponent: the result is
+  `{digits, exp}` where the first element of `digits` is the coefficient
+  of `10^(exp - 1)`.
+- `RealDigits[x, b]`: Same in base `b` (requires integer `b >= 2`).
+- `RealDigits[x, b, len]`: Exactly `len` digits.
+- `RealDigits[x, b, len, n]`: `len` digits, first one the coefficient of
+  `b^n`; the returned exponent is `n + 1`.
+
+**Features**:
+- `Protected`, `Listable`. Threads over lists in any argument position.
+- Works for `Integer`, `BigInt`, `Rational`, machine `Real`, and (under
+  `USE_MPFR`) arbitrary-precision `MPFR` numbers. The sign of `x` is
+  discarded.
+- For integers and rationals with terminating base-`b` expansions, the
+  digit list is flat. For rationals with non-terminating expansions, the
+  list ends in a nested list giving the recurring block:
+  `RealDigits[19/7]` returns `{{2, {7, 1, 4, 2, 8, 5}}, 1}`.
+- For inexact (machine or MPFR) reals, the default `len` is
+  `Round[Precision[x] / Log10[b]]`. Requesting more digits than the
+  precision allows produces `Indeterminate` at the LSB end. The digits
+  themselves use the canonical round-to-nearest representation supplied
+  by MPFR -- so `RealDigits[123.55555]` returns the literal decimal
+  digits, not the binary IEEE tail.
+- Symbolic numeric constants such as `Pi`, `E`, and `GoldenRatio` are
+  numericalized to MPFR at the matching precision when an explicit `len`
+  is given. `RealDigits[Pi]` (no `len`) is left unevaluated.
+- `RealDigits[0]` returns `{{0}, 0}`. `RealDigits[0.]` returns
+  `{{0}, -Floor[Accuracy[0.]]}` (typically `{{0}, -15}` for machine
+  precision).
+- Bases must be integers `>= 2`. Non-integer (Real / Rational) bases
+  trigger `RealDigits::ibase` and leave the call unevaluated.
+  Non-integer-base expansions (e.g. `GoldenRatio`) are not yet supported.
+- `FromDigits` can be used as the inverse of `RealDigits` for the
+  integer / terminating-rational case.
+
+```mathematica
+In[1]:= RealDigits[123.55555]
+Out[1]= {{1, 2, 3, 5, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0}, 3}
+
+In[2]:= RealDigits[Pi, 10, 25]
+Out[2]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3}, 1}
+
+In[3]:= RealDigits[19/7]
+Out[3]= {{2, {7, 1, 4, 2, 8, 5}}, 1}
+
+In[4]:= RealDigits[5.635, 10, 20]
+Out[4]= {{5, 6, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Indeterminate, Indeterminate, Indeterminate, Indeterminate}, 1}
+
+In[5]:= RealDigits[Pi, 10, 20, -5]
+Out[5]= {{9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3}, -4}
+
+In[6]:= RealDigits[1.234, 2, 15]
+Out[6]= {{1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1}, 1}
 ```
 
 ## GCD, LCM

@@ -1572,6 +1572,13 @@ void info_init(void) {
         "IntegerLength[n, b] gives the number of base b digits in n.\n"
         "IntegerLength ignores the sign of n; IntegerLength[0] is 0.");
 
+    symtab_set_docstring("IntegerExponent",
+        "IntegerExponent[n, b] gives the highest power of b that divides n.\n"
+        "IntegerExponent[n] is equivalent to IntegerExponent[n, 10] and "
+        "gives the number of trailing zeros in the decimal digits of n.\n"
+        "IntegerExponent ignores the sign of n; IntegerExponent[0, b] is "
+        "Infinity.");
+
     symtab_set_docstring("DigitCount",
         "DigitCount[n] gives a list of the counts of digits 1, 2, ..., 9, 0 "
         "in the base-10 representation of n.\n"
@@ -1580,6 +1587,19 @@ void info_init(void) {
         "DigitCount[n, b, d] gives the number of d digits in the base-b "
         "representation of n.\n"
         "The sign of n is discarded; DigitCount[0] is a list of zeros.");
+
+    symtab_set_docstring("RealDigits",
+        "RealDigits[x] gives a list {digits, exp} of the digits in the "
+        "approximate real number x together with the exponent such that "
+        "the first digit is the coefficient of 10^(exp - 1).\n"
+        "RealDigits[x, b] gives base-b digits.\n"
+        "RealDigits[x, b, len] gives len digits.\n"
+        "RealDigits[x, b, len, n] gives len digits starting from the "
+        "coefficient of b^n.\n"
+        "For rationals with non-terminating expansions the digit list "
+        "ends in a nested list of the recurring block.  For inexact "
+        "(machine or MPFR) reals, digits beyond the available precision "
+        "are returned as Indeterminate.  The sign of x is discarded.");
 
     symtab_set_docstring("FromDigits",
         "FromDigits[list] constructs an integer from a list of decimal "

@@ -27,6 +27,7 @@
 #include "logexp.h"
 #include "piecewise.h"
 #include "int.h"
+#include "real.h"
 #include "attr.h"
 #include "purefunc.h"
 #include "modular.h"
@@ -397,6 +398,7 @@ void core_init(void) {
     logexp_init();
     piecewise_init();
     int_init();
+    real_init();
     attr_init();
     purefunc_init();
     stats_init();
