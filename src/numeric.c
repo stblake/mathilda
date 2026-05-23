@@ -20,6 +20,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 
 /* M_PI and M_E are POSIX/GNU extensions, not part of C99. glibc hides them
  * under -std=c99, so provide portable fallbacks here. */
@@ -720,6 +721,55 @@ static void fill_mpfr_degree(mpfr_t out, mpfr_prec_t bits) {
 #endif /* USE_MPFR */
 
 /* ------------------------------------------------------------------------
+ *  Builtin: MachineNumberQ
+ *
+ *  MachineNumberQ[expr] returns True iff expr is a machine-precision real
+ *  or complex number. The definition mirrors Mathematica:
+ *
+ *   - A finite EXPR_REAL is a machine number; +/-inf and NaN are not, even
+ *     though they share the C `double` representation. This matches WL,
+ *     where MachineNumberQ[Exp[1000.]] is False because Exp[1000.] overflows
+ *     IEEE range (Mathilda's cexp returns +inf, hence the isfinite check).
+ *   - EXPR_INTEGER, EXPR_BIGINT, Rational[_,_] are *exact* numbers — not
+ *     machine numbers — so they return False.
+ *   - EXPR_MPFR is arbitrary-precision (any precision other than machine),
+ *     so it returns False even when the precision happens to be 53 bits.
+ *   - Complex[re, im] is a machine number iff BOTH re and im are finite
+ *     machine reals. Complex with one or both exact integer parts (e.g.
+ *     Complex[1, 2], a Gaussian integer) is False — consistent with WL.
+ *
+ *  Any non-numeric input (symbol, head other than Complex, etc.) → False.
+ *  Arity != 1 keeps the call unevaluated.
+ * ---------------------------------------------------------------------- */
+
+static bool is_machine_real_leaf(const Expr* e) {
+    return e
+        && e->type == EXPR_REAL
+        && isfinite(e->data.real);
+}
+
+Expr* builtin_machinenumberq(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION
+        || res->data.function.arg_count != 1) {
+        return NULL;
+    }
+    Expr* arg = res->data.function.args[0];
+
+    bool is_machine = false;
+    if (is_machine_real_leaf(arg)) {
+        is_machine = true;
+    } else {
+        Expr *re = NULL, *im = NULL;
+        if (is_complex(arg, &re, &im)
+            && is_machine_real_leaf(re)
+            && is_machine_real_leaf(im)) {
+            is_machine = true;
+        }
+    }
+    return expr_new_symbol(is_machine ? "True" : "False");
+}
+
+/* ------------------------------------------------------------------------
  *  Registration
  * ---------------------------------------------------------------------- */
 void numeric_init(void) {
@@ -732,6 +782,9 @@ void numeric_init(void) {
         "\tGives a numerical approximation to n decimal digits. Requires\n"
         "\ta USE_MPFR build; without it, a warning is emitted and machine\n"
         "\tprecision is used.\n");
+
+    symtab_add_builtin("MachineNumberQ", builtin_machinenumberq);
+    symtab_get_def("MachineNumberQ")->attributes |= ATTR_PROTECTED;
 
     /* MachinePrecision is a reserved name — mark it protected so users
      * can't accidentally overwrite it. */

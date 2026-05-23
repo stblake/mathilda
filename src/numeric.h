@@ -175,6 +175,12 @@ Expr** numeric_contagion_args(Expr* const* args, size_t n);
 /* Builtin entry points */
 Expr* builtin_n(Expr* res);
 
+/* MachineNumberQ[expr] -> True/False. True iff expr is a finite machine
+ * (IEEE double) real, or a Complex of two finite machine reals. Always
+ * returns a True/False symbol when arity is 1; returns NULL only on a
+ * structurally invalid call (arity != 1). */
+Expr* builtin_machinenumberq(Expr* res);
+
 /* Registers N (and, in Phase 2, Precision/Accuracy/SetPrecision/SetAccuracy
  * and MachinePrecision) with the symbol table. */
 void numeric_init(void);

@@ -48,11 +48,37 @@ In[12]:= Attributes[g]
 Out[12]= {}
 ```
 
-## AtomQ, NumberQ, IntegerQ
+## AtomQ, NumberQ, IntegerQ, MachineNumberQ
 Predicates for testing expression types.
 - `AtomQ[expr]`: `True` if the expression has no parts.
 - `NumberQ[expr]`: `True` if the expression is a numeric type (Integer, Real, Rational, Complex).
 - `IntegerQ[expr]`: `True` if the expression is an Integer.
+- `MachineNumberQ[expr]`: `True` if `expr` is a machine-precision (IEEE
+  double) real, or a `Complex` of two finite machine-precision reals.
+  Returns `False` for exact numbers (Integer, BigInt, Rational), for
+  arbitrary-precision reals (`MPFR` / `1.0`50`), and for non-finite
+  doubles (`Infinity`, `Indeterminate`, or an `EXPR_REAL` carrying
+  `inf`/`NaN`). Attributes: `Protected`.
+
+```mathematica
+In[1]:= MachineNumberQ[Sin[1000.]]
+Out[1]= True
+
+In[2]:= MachineNumberQ[Exp[1000.]]      (* overflows to +inf *)
+Out[2]= False
+
+In[3]:= MachineNumberQ[-29037945.290347]
+Out[3]= True
+
+In[4]:= MachineNumberQ[N[Pi, 30]]       (* MPFR, not machine *)
+Out[4]= False
+
+In[5]:= MachineNumberQ[1.0 + 2.0 I]
+Out[5]= True
+
+In[6]:= MachineNumberQ[1 + 2 I]         (* exact Gaussian integer *)
+Out[6]= False
+```
 
 ## ListQ, VectorQ, MatrixQ
 Predicates for testing lists and their structures.

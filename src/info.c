@@ -741,6 +741,8 @@ void info_init(void) {
         "\n"
         "Accumulate has the attribute Protected.");
     symtab_set_docstring("NumberQ", "NumberQ[expr] gives True if expr is a number.");
+    symtab_set_docstring("MachineNumberQ",
+        "MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.");
     symtab_set_docstring("NumericQ", "NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.\nAn expression is considered a numeric quantity if it is either an explicit number or a mathematical constant such as Pi, or is a function that has attribute NumericFunction and all of whose arguments are numeric quantities.");
     symtab_set_docstring("IntegerQ", "IntegerQ[expr] gives True if expr is an integer.");
     symtab_set_docstring("EvenQ", "EvenQ[n] gives True if n is an even integer.");
