@@ -101,6 +101,24 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/trigrat.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_log.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_complexity.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_assume.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_util.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_assume_rewrite.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_trig_roundtrip.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_denest.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_cuberoot.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_rationalize.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_algebraic.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_canon.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_trig_pi.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_power.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_tan_add.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_logexp_abs.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_search.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_factorial.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_bottomup.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_builtins.c
     ../src/complex.c
     ../src/trig.c
     ../src/trig_canon.c
