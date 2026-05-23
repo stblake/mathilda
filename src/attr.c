@@ -121,6 +121,7 @@ static SymbolAttr builtin_attrs[] = {
     {"IntegerDigits", ATTR_PROTECTED | ATTR_LISTABLE},
     {"IntegerLength", ATTR_PROTECTED | ATTR_LISTABLE},
     {"DigitCount", ATTR_PROTECTED},
+    {"FromDigits", ATTR_PROTECTED},
     {"FractionalPart", ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE},
     {"Timing", ATTR_HOLDALL | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
     {"RepeatedTiming", ATTR_HOLDFIRST | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},

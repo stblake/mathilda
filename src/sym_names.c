@@ -108,6 +108,7 @@ const char* SYM_FractionalPart = NULL;
 const char* SYM_Frobenius = NULL;
 const char* SYM_FromAbove = NULL;
 const char* SYM_FromBelow = NULL;
+const char* SYM_FromDigits = NULL;
 const char* SYM_FullForm = NULL;
 const char* SYM_Function = NULL;
 const char* SYM_Gamma = NULL;
@@ -383,6 +384,7 @@ void sym_names_init(void) {
     SYM_Frobenius                  = intern_symbol("Frobenius");
     SYM_FromAbove                  = intern_symbol("FromAbove");
     SYM_FromBelow                  = intern_symbol("FromBelow");
+    SYM_FromDigits                 = intern_symbol("FromDigits");
     SYM_FullForm                   = intern_symbol("FullForm");
     SYM_Function                   = intern_symbol("Function");
     SYM_Gamma                      = intern_symbol("Gamma");

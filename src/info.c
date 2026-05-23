@@ -1581,6 +1581,19 @@ void info_init(void) {
         "representation of n.\n"
         "The sign of n is discarded; DigitCount[0] is a list of zeros.");
 
+    symtab_set_docstring("FromDigits",
+        "FromDigits[list] constructs an integer from a list of decimal "
+        "digits, most-significant first.\n"
+        "FromDigits[list, b] takes the digits to be given in base b.\n"
+        "FromDigits[\"string\"] constructs an integer from a string of "
+        "digits, where letters a-z and A-Z denote digit values 10-35.\n"
+        "FromDigits[\"string\", b] takes the digits in the string to be "
+        "given in base b.\n"
+        "Digits in list and characters in the string need not be less than "
+        "the base; they are carried through Horner's method.  Symbolic "
+        "digits or base expand to the polynomial sum d[0] b^(n-1) + ... + "
+        "d[n-1].");
+
     // Primes
     symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
     symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");

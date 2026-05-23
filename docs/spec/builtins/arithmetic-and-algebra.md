@@ -384,6 +384,51 @@ In[3]:= DigitCount[100!]
 Out[3]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
 ```
 
+## FromDigits
+- `FromDigits[list]`: Reconstructs an integer from a list of decimal digits,
+  most-significant first.
+- `FromDigits[list, b]`: Same but in base `b`.
+- `FromDigits["string"]`: Constructs an integer from a string of digits.
+  Characters `0`-`9`, `a`-`z`, `A`-`Z` represent digit values `0`-`35`.
+- `FromDigits["string", b]`: String form in base `b`.
+
+**Features**:
+- `Protected` (intentionally not `Listable`: the first argument *is* a list).
+- Inverse of `IntegerDigits` / `IntegerString`. Since `IntegerDigits` discards
+  the sign of `n`, `FromDigits[IntegerDigits[n]]` is `Abs[n]`, not `n`.
+- Digits in the list (and characters in the string) need *not* be smaller
+  than the base; they are carried via Horner's evaluation, matching
+  Mathematica (e.g. `FromDigits[{7, 11, 0, 0, 0, 122}] == 810122`,
+  `FromDigits["1A3C"] == 2042`).
+- The all-integer (digits + base) case is computed exactly in GMP and
+  demoted to a machine integer when it fits in `int64`; arbitrarily large
+  bignums are returned otherwise.
+- Symbolic, Real, or Rational digits or base trigger the polynomial Horner
+  expansion `d[0] b^(n-1) + d[1] b^(n-2) + ... + d[n-1]`, which the
+  evaluator simplifies normally. This single code path handles symbolic
+  bases, symbolic digits, and inexact bases uniformly. For a string input,
+  the base is required to be an integer; symbolic bases over strings leave
+  the call unevaluated (silently).
+- Edge cases: `FromDigits[{}] == 0`, `FromDigits[""] == 0`,
+  `FromDigits[{0, 0, 1, 2, 3}] == 123` (leading zeros are inert).
+
+```mathematica
+In[1]:= FromDigits[{5, 1, 2, 8}]
+Out[1]= 5128
+
+In[2]:= FromDigits[{1, 0, 1, 1, 0, 1, 1}, 2]
+Out[2]= 91
+
+In[3]:= FromDigits["1A3C"]
+Out[3]= 2042
+
+In[4]:= FromDigits[IntegerDigits[2^100]]
+Out[4]= 1267650600228229401496703205376
+
+In[5]:= FromDigits[{a, b, c, d, e}, x]
+Out[5]= e + d x + c x^2 + b x^3 + a x^4
+```
+
 ## GCD, LCM
 - `GCD[n1, n2, ...]`: Greatest common divisor.
 - `LCM[n1, n2, ...]`: Least common multiple.

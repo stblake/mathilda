@@ -1,7 +1,7 @@
 /*
  * int.c
  *
- * Integer-digit / integer-length / digit-count builtins.
+ * Integer-digit / integer-length / digit-count / digit-assembly builtins.
  *
  *   IntegerDigits[n]            decimal digits of |n|, most significant first.
  *   IntegerDigits[n, b]         base-b digits of |n|.
@@ -19,12 +19,29 @@
  *   DigitCount[n, b, d]         number of times digit d appears in the
  *                               base-b expansion of |n|.  Scalar result.
  *
+ *   FromDigits[list]            reconstructs a base-10 integer from a list
+ *                               of digits, most-significant first.
+ *   FromDigits[list, b]         base-b digit assembly.  Digits and base may
+ *                               be arbitrary expressions (symbolic, Real,
+ *                               negative, larger than b); the all-integer
+ *                               case is computed via GMP, otherwise the
+ *                               call expands to the Horner polynomial
+ *                               d[0]*b^(n-1) + ... + d[n-1] for the
+ *                               evaluator to simplify.
+ *   FromDigits["string"]        decodes characters in base 10, where the
+ *                               characters '0'-'9', 'a'-'z'/'A'-'Z'
+ *                               represent digit values 0-9, 10-35.  As with
+ *                               the list form, character "digits" can
+ *                               exceed the base and are "carried" through
+ *                               Horner.
+ *   FromDigits["string", b]     decode characters in base b.
+ *
  * Sign of n is discarded.  IntegerDigits[0] -> {0}; IntegerLength[0] -> 0;
  * DigitCount[0] -> {0,0,...,0} of length b -- zero has no significant
  * digits (matching Mathematica).  IntegerDigits / IntegerLength thread
- * automatically via the Listable attribute; DigitCount is intentionally
- * NOT Listable (only Protected), so DigitCount[{1,2,3}] is left
- * unevaluated rather than threading.
+ * automatically via the Listable attribute; DigitCount and FromDigits are
+ * intentionally NOT Listable (only Protected): the natural first argument
+ * of each is itself a list, so threading would be wrong.
  *
  * All arithmetic is done in GMP, so both machine integers and arbitrary-
  * precision bignums are supported uniformly.
@@ -34,6 +51,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include "print.h"
+#include "sym_names.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -51,6 +69,9 @@ void int_init(void) {
 
     symtab_add_builtin("DigitCount", builtin_digitcount);
     symtab_get_def("DigitCount")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("FromDigits", builtin_fromdigits);
+    symtab_get_def("FromDigits")->attributes |= ATTR_PROTECTED;
 }
 
 /* Build an Expr from an mpz_t digit, demoting to EXPR_INTEGER if it fits. */
@@ -616,4 +637,318 @@ Expr* builtin_digitcount(Expr* res) {
     Expr* result = expr_new_function(list_head, out_args, (size_t)b_val);
     free(out_args);
     return result;
+}
+
+/* =====================================================================
+ * FromDigits
+ *
+ * The inverse of IntegerDigits / IntegerString.  Reconstructs a number
+ * from a list (or string) of digits in MSD-first order:
+ *
+ *   FromDigits[{d0, d1, ..., d_{n-1}}, b]
+ *     == d0 * b^(n-1) + d1 * b^(n-2) + ... + d_{n-1}
+ *
+ * Default base is 10.  When every digit AND the base are integer-like,
+ * the result is computed via Horner in GMP and demoted to EXPR_INTEGER
+ * when it fits in int64.  When any input is symbolic / Real / Rational /
+ * Complex, the call expands to the same Horner sum as an Expr tree and
+ * is handed back to the evaluator -- one code path handles symbolic
+ * bases, symbolic digits, mixed digits, and inexact bases uniformly.
+ *
+ * Digits in the list (or characters in the string) need not be in
+ * [0, b); they are "carried" through the Horner accumulation, matching
+ * Mathematica's behaviour (e.g. FromDigits[{7,11,0,0,0,122}] == 810122
+ * and FromDigits["1A3C"] == 2042).
+ * ===================================================================*/
+
+/* `FromDigits::argb: FromDigits called with N argument(s); 1 or 2
+ * arguments are expected.`  Print to stderr and return NULL so the
+ * call is left unevaluated, matching Mathematica's surface behaviour. */
+static Expr* fd_emit_argb(size_t argc) {
+    fprintf(stderr,
+            "FromDigits::argb: FromDigits called with %zu argument%s; "
+            "1 or 2 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* `FromDigits::nlst: Argument <arg> at position 1 in <call> should be a
+ * list or a string.`  Fired when the first argument is not a List and
+ * not a String AND is concrete enough that leaving it unevaluated would
+ * surprise the user (numbers).  Pure symbolic first args (e.g.
+ * FromDigits[x]) flow through silently. */
+static Expr* fd_emit_nlst(Expr* arg, Expr* res) {
+    char* arg_str = expr_to_string(arg);
+    char* call_str = expr_to_string(res);
+    fprintf(stderr,
+            "FromDigits::nlst: Argument %s at position 1 in %s should "
+            "be a list or a string.\n",
+            arg_str ? arg_str : "?",
+            call_str ? call_str : "?");
+    free(arg_str);
+    free(call_str);
+    return NULL;
+}
+
+/* `FromDigits::char: Invalid digit character '<c>' in string at
+ * position <pos> in <call>.`  Fired for the string form when a
+ * character outside [0-9a-zA-Z] is encountered. */
+static Expr* fd_emit_char(int c, size_t pos, Expr* res) {
+    char* call_str = expr_to_string(res);
+    /* Render the offending byte readably regardless of its value. */
+    char buf[8];
+    if (c >= 0x20 && c < 0x7F) {
+        snprintf(buf, sizeof(buf), "'%c'", (char)c);
+    } else {
+        snprintf(buf, sizeof(buf), "\\x%02X", (unsigned)c & 0xFFu);
+    }
+    fprintf(stderr,
+            "FromDigits::char: Invalid digit character %s in string at "
+            "position %zu in %s.\n",
+            buf, pos, call_str ? call_str : "?");
+    free(call_str);
+    return NULL;
+}
+
+/* Map a single character to its digit value (0..35).  Returns -1 for
+ * any character outside [0-9a-zA-Z].  Uses explicit ranges instead of
+ * isdigit / isalpha so the result is locale-independent and matches
+ * Mathematica's surface convention exactly. */
+static int fd_char_to_digit(int c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'z') return 10 + (c - 'a');
+    if (c >= 'A' && c <= 'Z') return 10 + (c - 'A');
+    return -1;
+}
+
+/* True iff every element of `list` is integer-like (EXPR_INTEGER or
+ * EXPR_BIGINT).  `list` must be a List[]-headed function. */
+static bool fd_all_integer_digits(Expr* list) {
+    size_t n = list->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        if (!expr_is_integer_like(list->data.function.args[i])) return false;
+    }
+    return true;
+}
+
+/* Compute the integer FromDigits result via Horner in GMP, given an
+ * already-validated all-integer digit list and an mpz base.  Returns a
+ * fresh Expr (demoted to EXPR_INTEGER when it fits in int64, else
+ * EXPR_BIGINT).  Empty list -> 0.
+ *
+ * Note `expr_to_mpz` does an mpz_init_set_* into its output, so the
+ * per-iteration `digit` is paired with a matching `mpz_clear` at the
+ * bottom of the loop -- skipping that clear leaks an mp_limb_t per
+ * digit. */
+static Expr* fd_compute_integer_list(Expr* list, const mpz_t base) {
+    size_t n = list->data.function.arg_count;
+    mpz_t acc, tmp;
+    mpz_init_set_ui(acc, 0);
+    mpz_init(tmp);
+    for (size_t i = 0; i < n; i++) {
+        mpz_t digit;
+        expr_to_mpz(list->data.function.args[i], digit);
+        mpz_mul(tmp, acc, base);
+        mpz_add(acc, tmp, digit);
+        mpz_clear(digit);
+    }
+    mpz_clear(tmp);
+
+    Expr* out;
+    if (mpz_fits_slong_p(acc)) {
+        out = expr_new_integer((int64_t)mpz_get_si(acc));
+    } else {
+        out = expr_new_bigint_from_mpz(acc);
+    }
+    mpz_clear(acc);
+    return out;
+}
+
+/* Compute the integer FromDigits result for a string of characters in
+ * an integer base.  Returns a fresh Expr on success; on invalid char
+ * emits the `::char` diagnostic and returns NULL with `res` left
+ * unevaluated.  Empty string -> 0. */
+static Expr* fd_compute_integer_string(const char* s, const mpz_t base,
+                                        Expr* res) {
+    mpz_t acc, tmp;
+    mpz_init_set_ui(acc, 0);
+    mpz_init(tmp);
+    size_t pos = 0;
+    for (const char* p = s; *p; p++, pos++) {
+        int d = fd_char_to_digit((unsigned char)*p);
+        if (d < 0) {
+            mpz_clear(acc);
+            mpz_clear(tmp);
+            return fd_emit_char((unsigned char)*p, pos + 1, res);
+        }
+        mpz_mul(tmp, acc, base);
+        mpz_add_ui(acc, tmp, (unsigned long)d);
+    }
+    mpz_clear(tmp);
+
+    Expr* out;
+    if (mpz_fits_slong_p(acc)) {
+        out = expr_new_integer((int64_t)mpz_get_si(acc));
+    } else {
+        out = expr_new_bigint_from_mpz(acc);
+    }
+    mpz_clear(acc);
+    return out;
+}
+
+/* Build the symbolic Horner expansion
+ *   Plus[ Times[d[0], Power[base, n-1]],
+ *         Times[d[1], Power[base, n-2]],
+ *         ...,
+ *         Times[d[n-2], base],
+ *         d[n-1] ]
+ *
+ * The result is left for the evaluator to simplify on the next pass,
+ * so digits-larger-than-base, negative digits, Real or symbolic bases,
+ * etc. all collapse onto a single code path.  Caller owns `list` and
+ * `base_expr`; we deep-copy what we need into the new tree. */
+static Expr* fd_build_symbolic(Expr* list, Expr* base_expr) {
+    size_t n = list->data.function.arg_count;
+    if (n == 0) return expr_new_integer(0);
+
+    Expr** plus_args = malloc(sizeof(Expr*) * n);
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* digit = expr_copy(list->data.function.args[i]);
+        size_t exponent = n - 1 - i;
+
+        if (exponent == 0) {
+            /* Units term: just the digit itself. */
+            plus_args[i] = digit;
+            continue;
+        }
+
+        /* Power[base, exponent].  `exponent` is at most n-1 where n is
+         * an arg_count, comfortably within int64 range. */
+        Expr** power_args = malloc(sizeof(Expr*) * 2);
+        power_args[0] = expr_copy(base_expr);
+        power_args[1] = expr_new_integer((int64_t)exponent);
+        Expr* power_node = expr_new_function(expr_new_symbol("Power"),
+                                              power_args, 2);
+        free(power_args);
+
+        /* Times[digit, Power[base, exponent]]. */
+        Expr** times_args = malloc(sizeof(Expr*) * 2);
+        times_args[0] = digit;
+        times_args[1] = power_node;
+        Expr* times_node = expr_new_function(expr_new_symbol("Times"),
+                                              times_args, 2);
+        free(times_args);
+        plus_args[i] = times_node;
+    }
+
+    /* Single-element list collapses to Plus[x] which the evaluator
+     * simplifies to x via the OneIdentity attribute -- still correct
+     * even though we could short-circuit it here. */
+    Expr* plus_node = expr_new_function(expr_new_symbol("Plus"),
+                                         plus_args, n);
+    free(plus_args);
+    return plus_node;
+}
+
+Expr* builtin_fromdigits(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return fd_emit_argb(argc);
+
+    Expr* first = res->data.function.args[0];
+
+    /* --- base argument --------------------------------------------- */
+    /* If no explicit base, default to the integer 10.  We don't allocate
+     * a fresh Expr for the default -- only the mpz fast path needs the
+     * value, and the symbolic path uses the original argument expression
+     * (or a fresh expr_new_integer(10) when it falls back). */
+    Expr* base_expr = NULL;
+    if (argc == 2) base_expr = res->data.function.args[1];
+
+    /* --- Case 1: first argument is a string ------------------------ */
+    if (first->type == EXPR_STRING) {
+        /* String form: every "digit" is a character with value in
+         * [0, 36).  We currently require an integer base.  Symbolic /
+         * non-integer base over a string would expand to a polynomial
+         * in characters, which is not a meaningful Mathematica form
+         * (FromDigits["abc", x] is left unevaluated). */
+        mpz_t base;
+        bool base_owned = false;
+        if (base_expr == NULL) {
+            mpz_init_set_ui(base, 10);
+            base_owned = true;
+        } else if (expr_is_integer_like(base_expr)) {
+            expr_to_mpz(base_expr, base);
+            base_owned = true;
+            if (mpz_cmp_ui(base, 2) < 0) {
+                fprintf(stderr,
+                    "FromDigits::ibase: Base argument must be an integer >= 2.\n");
+                mpz_clear(base);
+                return NULL;
+            }
+        } else {
+            /* Symbolic / non-integer base over a string: leave
+             * unevaluated.  No diagnostic -- the user is likely
+             * deliberately holding the base for later substitution. */
+            return NULL;
+        }
+
+        Expr* out = fd_compute_integer_string(first->data.string, base, res);
+        if (base_owned) mpz_clear(base);
+        return out;
+    }
+
+    /* --- Case 2: first argument is a List -------------------------- */
+    if (first->type == EXPR_FUNCTION
+        && first->data.function.head
+        && first->data.function.head->type == EXPR_SYMBOL
+        && first->data.function.head->data.symbol == SYM_List) {
+
+        /* Decide between integer fast path and symbolic Horner. */
+        bool all_int_digits = fd_all_integer_digits(first);
+        bool int_base = (base_expr == NULL) || expr_is_integer_like(base_expr);
+
+        if (all_int_digits && int_base) {
+            /* Pure-integer path: GMP Horner.  Reject base < 2 with a
+             * Mathematica-style diagnostic. */
+            mpz_t base;
+            if (base_expr == NULL) {
+                mpz_init_set_ui(base, 10);
+            } else {
+                expr_to_mpz(base_expr, base);
+                if (mpz_cmp_ui(base, 2) < 0) {
+                    fprintf(stderr,
+                        "FromDigits::ibase: Base argument must be an "
+                        "integer >= 2.\n");
+                    mpz_clear(base);
+                    return NULL;
+                }
+            }
+            Expr* out = fd_compute_integer_list(first, base);
+            mpz_clear(base);
+            return out;
+        }
+
+        /* Symbolic / non-integer path: build the Horner polynomial and
+         * hand it back to the evaluator. */
+        Expr* base_for_poly;
+        bool base_for_poly_owned = false;
+        if (base_expr == NULL) {
+            base_for_poly = expr_new_integer(10);
+            base_for_poly_owned = true;
+        } else {
+            base_for_poly = base_expr;  /* aliased; fd_build_symbolic deep-copies */
+        }
+        Expr* out = fd_build_symbolic(first, base_for_poly);
+        if (base_for_poly_owned) expr_free(base_for_poly);
+        return out;
+    }
+
+    /* --- Case 3: anything else ------------------------------------- */
+    /* Concrete-but-not-list-or-string (Real, Rational, Complex, plain
+     * Integer) fires the ::nlst diagnostic.  Symbolic first args flow
+     * through silently so downstream rewrites can still reach the call. */
+    if (expr_is_numeric_like(first)) return fd_emit_nlst(first, res);
+    return NULL;
 }

@@ -123,6 +123,7 @@ extern const char* SYM_FractionalPart;
 extern const char* SYM_Frobenius;
 extern const char* SYM_FromAbove;
 extern const char* SYM_FromBelow;
+extern const char* SYM_FromDigits;
 extern const char* SYM_FullForm;
 extern const char* SYM_Function;
 extern const char* SYM_Gamma;
