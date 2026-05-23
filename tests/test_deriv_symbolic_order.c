@@ -85,11 +85,13 @@ static void test_trig_symbolic_order(void) {
     assert_eval_eq("D[Sin[a*x + b], {x, n}]",
                    "a^n Sin[b + 1/2 Pi n + a x]", 0);
 
-    /* Hyperbolic: structurally (-I)^n Cos[n Pi/2 - I x]; printed -I^n. */
+    /* Hyperbolic: (-I)^n Cos[n Pi/2 - I x] and I (-I)^n Sin[n Pi/2 - I x].
+     * The printer keeps the parentheses around -I to preserve the
+     * (-I)^n vs -(I^n) distinction. */
     assert_eval_eq("D[Cosh[x], {x, n}]",
-                   "-I^n Cos[1/2 Pi n - I x]", 0);
+                   "(-I)^n Cos[1/2 Pi n - I x]", 0);
     assert_eval_eq("D[Sinh[x], {x, n}]",
-                   "I -I^n Sin[1/2 Pi n - I x]", 0);
+                   "I (-I)^n Sin[1/2 Pi n - I x]", 0);
 
     /* Non-linear argument -> stays unevaluated. */
     assert_eval_eq("D[Cos[x^2], {x, n}]", "D[Cos[x^2], {x, n}]", 0);
