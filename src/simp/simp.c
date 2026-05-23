@@ -16,6 +16,7 @@
 #include "trigrat.h"
 #include "qa.h"
 #include "qafactor.h"
+#include "simp_log.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -8039,6 +8040,10 @@ static bool transform_can_fire(const char* name, const Expr* e,
     if (strcmp(name, "LogExpRules") == 0) {
         if (!contains_log(e) && !contains_power(e)) return false;
     }
+    /* simp_log rewriter: nothing fires without a Log somewhere. */
+    if (strcmp(name, "SimpLogRules") == 0) {
+        if (!contains_log(e)) return false;
+    }
     /* Assumption rewriter: nothing fires without facts. */
     if (strcmp(name, "AssumptionRules") == 0) {
         if (!ctx_has_facts(ctx)) return false;
@@ -8454,15 +8459,41 @@ static Expr* simp_pipeline_logexp(const Expr* input,
     Expr* best = expr_copy((Expr*)input);
     size_t bs = score_with_func(best, complexity_func);
 
-    /* Cascade force-take. */
-    if (transform_can_fire("LogExpRules", input, ctx)) {
-        Expr* lr = apply_logexp_rules(input, ctx);
-        if (lr && !expr_eq(lr, input)) {
-            expr_free(best);
-            best = expr_copy(lr);
-            bs = score_with_func(best, complexity_func);
+    /* SimpLogRules + LogExpRules + AssumptionRules iterated to fixed
+     * point.  Order matters: SimpLogRules can produce a fused Log whose
+     * argument is then collapsible by LogExpRules (e.g. fusion yields
+     * Log[E^(-x)] which LogExpRules turns into -x under realness), and
+     * the AssumptionRules pass can in turn expose a fresh
+     * Log[positive_rational] for SimpLogRules. Two rounds suffice for
+     * all observed test cases; cap at 3 to keep the cost bounded. */
+    for (int rd = 0; rd < 3; rd++) {
+        bool changed = false;
+        if (transform_can_fire("SimpLogRules", best, ctx)) {
+            clock_t t0 = simp_debug_enabled() ? clock() : 0;
+            Expr* sl = simp_log_apply(best, ctx);
+            if (simp_debug_enabled()) {
+                simp_debug_log("SimpLogRules", best, sl,
+                               simp_debug_elapsed_ms(t0));
+            }
+            if (sl && !expr_eq(sl, best)) {
+                expr_free(best);
+                best = expr_copy(sl);
+                bs = score_with_func(best, complexity_func);
+                changed = true;
+            }
+            if (sl) expr_free(sl);
         }
-        if (lr) expr_free(lr);
+        if (transform_can_fire("LogExpRules", best, ctx)) {
+            Expr* lr = apply_logexp_rules(best, ctx);
+            if (lr && !expr_eq(lr, best)) {
+                expr_free(best);
+                best = expr_copy(lr);
+                bs = score_with_func(best, complexity_func);
+                changed = true;
+            }
+            if (lr) expr_free(lr);
+        }
+        if (!changed) break;
     }
 
     /* Assumption-driven rewrites on the (possibly rewritten) best.
@@ -9067,6 +9098,28 @@ static Expr* simp_search(const Expr* original_input, const AssumeCtx* ctx,
         clock_t t0 = dbg ? clock() : 0;
         Expr* alt = apply_logexp_rules(input, ctx);
         if (dbg) simp_debug_log("LogExpRules", input, alt, simp_debug_elapsed_ms(t0));
+        if (alt && !expr_eq(alt, input)) {
+            expr_free(best);
+            best = expr_copy(alt);
+            best_score = score_with_func(best, complexity_func);
+            cs_add_or_free(&seeds, alt);
+        } else if (alt) {
+            expr_free(alt);
+        }
+    }
+
+    /* SimpLogRules seed. Force-take when it changes the form: Pass A
+     * (prime decomposition of Log[rational]) and Pass B (linear
+     * combination fuser) are correctness-preserving under positivity
+     * and frequently expose dramatic cancellations on inputs with both
+     * trig and log heads (e.g. Log[Sin] - Log[Tan] - Log[Cos] in
+     * SIMP_SHAPE_TRIG inputs that bypass simp_pipeline_logexp). */
+    if (contains_log(input)) {
+        bool dbg = simp_debug_enabled();
+        clock_t t0 = dbg ? clock() : 0;
+        Expr* alt = simp_log_apply(input, ctx);
+        if (dbg) simp_debug_log("SimpLogRules", input, alt,
+                                simp_debug_elapsed_ms(t0));
         if (alt && !expr_eq(alt, input)) {
             expr_free(best);
             best = expr_copy(alt);

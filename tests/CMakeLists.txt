@@ -100,6 +100,7 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/trigsimp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/trigrat.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_log.c
     ../src/complex.c
     ../src/trig.c
     ../src/trig_canon.c
@@ -1039,6 +1040,9 @@ target_include_directories(element_tests PRIVATE ../src)
 add_executable(logexp_simplify_tests test_logexp_simplify.c ${COMMON_SRC})
 target_include_directories(logexp_simplify_tests PRIVATE ../src)
 
+add_executable(simp_log_tests test_simp_log.c ${COMMON_SRC})
+target_include_directories(simp_log_tests PRIVATE ../src)
+
 add_executable(invtrig_simplify_tests test_invtrig_simplify.c ${COMMON_SRC})
 target_include_directories(invtrig_simplify_tests PRIVATE ../src)
 
@@ -1132,6 +1136,7 @@ if(USE_ECM)
     add_dependencies(assuming_tests build_ecm)
     add_dependencies(element_tests build_ecm)
     add_dependencies(logexp_simplify_tests build_ecm)
+    add_dependencies(simp_log_tests build_ecm)
     add_dependencies(invtrig_simplify_tests build_ecm)
     add_dependencies(radical_simplify_tests build_ecm)
     add_dependencies(rationalize_tests build_ecm)
