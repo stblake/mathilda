@@ -639,6 +639,49 @@ In[6]:= RealDigits[1.234, 2, 15]
 Out[6]= {{1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1}, 1}
 ```
 
+## MantissaExponent
+- `MantissaExponent[x]`: Returns `{m, e}` such that `x == m * 10^e` and
+  `1/10 <= |m| < 1` (or `{0, 0}` when `x` is zero).
+- `MantissaExponent[x, b]`: Same in base `b`; the mantissa then lies in
+  `1/b <= |m| < 1`.
+
+**Features**:
+- `Protected`, `Listable`. Threads over lists in any argument position.
+- Works for `Integer`, `BigInt`, `Rational`, machine `Real`, and (under
+  `USE_MPFR`) arbitrary-precision `MPFR` numbers. The sign of `x` carries
+  through to the mantissa.
+- For exact inputs the mantissa is an exact `Rational` of the form
+  `x / b^e`; for inexact inputs the mantissa is returned with the same
+  precision as `x`.
+- Bases must be integers `>= 2`. Non-integer bases leave the call
+  unevaluated (general `Real` / symbolic bases are not yet supported).
+- Complex arguments emit `MantissaExponent::realx` and leave the call
+  unevaluated. Symbolic (non-numeric) arguments are left unevaluated
+  silently.
+
+```mathematica
+In[1]:= MantissaExponent[3.4 10^30]
+Out[1]= {0.34, 31}
+
+In[2]:= MantissaExponent[456.1414]
+Out[2]= {0.456141, 3}
+
+In[3]:= MantissaExponent[123451]
+Out[3]= {123451/1000000, 6}
+
+In[4]:= MantissaExponent[1027, 2]
+Out[4]= {1027/2048, 11}
+
+In[5]:= MantissaExponent[2^100, 2]
+Out[5]= {1/2, 101}
+
+In[6]:= MantissaExponent[N[Pi, 30]]
+Out[6]= {0.3141592653589793238462643383278, 1}
+
+In[7]:= MantissaExponent[-3/2]
+Out[7]= {-3/20, 1}
+```
+
 ## GCD, LCM
 - `GCD[n1, n2, ...]`: Greatest common divisor.
 - `LCM[n1, n2, ...]`: Least common multiple.

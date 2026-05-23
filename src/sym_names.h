@@ -182,6 +182,7 @@ extern const char* SYM_LogExpRules;
 extern const char* SYM_Longest;
 extern const char* SYM_MachineEpsilon;
 extern const char* SYM_MachinePrecision;
+extern const char* SYM_MantissaExponent;
 extern const char* SYM_MaxIterations;
 extern const char* SYM_MatrixRank;
 extern const char* SYM_Method;

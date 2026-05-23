@@ -1612,6 +1612,17 @@ void info_init(void) {
         "(machine or MPFR) reals, digits beyond the available precision "
         "are returned as Indeterminate.  The sign of x is discarded.");
 
+    symtab_set_docstring("MantissaExponent",
+        "MantissaExponent[x] gives a list {m, e} containing the mantissa "
+        "and exponent of the real number x, such that x = m * 10^e and "
+        "1/10 <= |m| < 1 (or m = 0 when x = 0).\n"
+        "MantissaExponent[x, b] gives the base-b mantissa and exponent; "
+        "the mantissa then lies in 1/b <= |m| < 1.\n"
+        "Works for exact (Integer, Rational) and approximate (Real, MPFR) "
+        "numeric inputs.  For exact inputs the mantissa is an exact "
+        "Rational; for inexact inputs the mantissa carries the same "
+        "precision as x.  Currently only integer bases >= 2 are supported.");
+
     symtab_set_docstring("FromDigits",
         "FromDigits[list] constructs an integer from a list of decimal "
         "digits, most-significant first.\n"

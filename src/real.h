@@ -23,6 +23,17 @@
 
 Expr* builtin_realdigits(Expr* res);
 
+/*
+ * MantissaExponent[x]       -> {m, e} such that x = m * 10^e, 1/10 <= |m| < 1.
+ * MantissaExponent[x, b]    -> base-b mantissa/exponent.
+ *
+ * Accepts Integer, BigInt, Rational, Real (machine), and (with USE_MPFR)
+ * MPFR-precision real arguments.  Complex arguments emit `::realx`; non-
+ * integer bases leave the call unevaluated (we currently only handle
+ * integer bases >= 2).
+ */
+Expr* builtin_mantissa_exponent(Expr* res);
+
 void real_init(void);
 
 #endif /* MATHILDA_REAL_H */

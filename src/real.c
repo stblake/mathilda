@@ -1185,11 +1185,331 @@ Expr* builtin_realdigits(Expr* res) {
 }
 
 /* -------------------------------------------------------------------------
+ *  MantissaExponent
+ *
+ *  MantissaExponent[x]      -> {m, e} such that x = m * 10^e and
+ *                              1/10 <= |m| < 1  (or m == 0).
+ *  MantissaExponent[x, b]   -> base-b mantissa / exponent.
+ *
+ *  Numeric kinds accepted: Integer, BigInt, Rational, Real, MPFR.  Complex
+ *  values emit `MantissaExponent::realx`; non-integer bases leave the call
+ *  unevaluated (current implementation supports integer bases >= 2 only).
+ *
+ *  For exact inputs the mantissa is built as an exact Rational with the
+ *  GMP-canonical form sign(x) * |x_num| / (x_den * b^e).  For inexact
+ *  inputs (machine Real or MPFR) the mantissa is computed in the same
+ *  numeric type and at the same precision as the input.
+ * ----------------------------------------------------------------------- */
+
+static Expr* me_emit_argt(size_t argc) {
+    fprintf(stderr,
+            "MantissaExponent::argt: MantissaExponent called with %zu "
+            "argument%s; 1 or 2 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+static Expr* me_emit_realx(Expr* x_expr) {
+    char* s = expr_to_string(x_expr);
+    fprintf(stderr,
+            "MantissaExponent::realx: The value %s is not a real number.\n",
+            s ? s : "?");
+    free(s);
+    return NULL;
+}
+
+static Expr* me_emit_ibase(Expr* b_expr) {
+    char* bs = expr_to_string(b_expr);
+    fprintf(stderr,
+            "MantissaExponent::ibase: Base %s is not an integer greater "
+            "than 1.\n",
+            bs ? bs : "?");
+    free(bs);
+    return NULL;
+}
+
+/* Build a List[m, e] result; takes ownership of `m_expr`. */
+static Expr* me_make_pair(Expr* m_expr, long e_val) {
+    Expr** pair = malloc(sizeof(Expr*) * 2);
+    pair[0] = m_expr;
+    pair[1] = expr_new_integer((int64_t)e_val);
+    Expr* result = expr_new_function(expr_new_symbol("List"), pair, 2);
+    free(pair);
+    return result;
+}
+
+/* Convert a canonical mpq to an Expr.  Returns an Integer / BigInt when the
+ * denominator is 1, otherwise a `Rational[n, d]` function node with
+ * appropriately-typed integer leaves. */
+static Expr* me_mpq_to_expr(const mpq_t q) {
+    if (mpz_cmp_ui(mpq_denref(q), 1) == 0) {
+        if (mpz_fits_slong_p(mpq_numref(q))) {
+            return expr_new_integer((int64_t)mpz_get_si(mpq_numref(q)));
+        }
+        return expr_new_bigint_from_mpz(mpq_numref(q));
+    }
+    Expr** args = malloc(sizeof(Expr*) * 2);
+    if (mpz_fits_slong_p(mpq_numref(q))) {
+        args[0] = expr_new_integer((int64_t)mpz_get_si(mpq_numref(q)));
+    } else {
+        args[0] = expr_new_bigint_from_mpz(mpq_numref(q));
+    }
+    if (mpz_fits_slong_p(mpq_denref(q))) {
+        args[1] = expr_new_integer((int64_t)mpz_get_si(mpq_denref(q)));
+    } else {
+        args[1] = expr_new_bigint_from_mpz(mpq_denref(q));
+    }
+    Expr* r = expr_new_function(expr_new_symbol("Rational"), args, 2);
+    free(args);
+    return r;
+}
+
+/* Load |x|'s absolute value (sign discarded) into `out_q` and write the
+ * original sign into `*sign_out` (+1, -1, or 0 for zero).  Caller must
+ * mpq_init `out_q` first.  Pre: classified RD_KIND_INT or RD_KIND_RAT. */
+static void me_to_signed_mpq(const Expr* x, mpq_t out_q, int* sign_out) {
+    if (x->type == EXPR_INTEGER) {
+        int64_t v = x->data.integer;
+        if (v == 0)      { *sign_out = 0;  mpq_set_ui(out_q, 0, 1); return; }
+        if (v < 0)       { *sign_out = -1; v = -v; }
+        else             { *sign_out = +1; }
+        mpq_set_ui(out_q, (unsigned long)v, 1);
+        return;
+    }
+    if (x->type == EXPR_BIGINT) {
+        int s = mpz_sgn(x->data.bigint);
+        *sign_out = s;
+        if (s == 0) { mpq_set_ui(out_q, 0, 1); return; }
+        mpq_set_z(out_q, x->data.bigint);
+        mpq_abs(out_q, out_q);
+        return;
+    }
+    /* Rational[n, d] */
+    mpz_t n, d;
+    mpz_init(n);
+    mpz_init(d);
+    expr_to_mpz(x->data.function.args[0], n);
+    expr_to_mpz(x->data.function.args[1], d);
+    int sn = mpz_sgn(n);
+    int sd = mpz_sgn(d);
+    *sign_out = sn * sd;
+    mpz_abs(n, n);
+    mpz_abs(d, d);
+    mpq_set_num(out_q, n);
+    mpq_set_den(out_q, d);
+    mpq_canonicalize(out_q);
+    mpz_clear(n);
+    mpz_clear(d);
+}
+
+Expr* builtin_mantissa_exponent(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return me_emit_argt(argc);
+
+    Expr* x_expr = res->data.function.args[0];
+
+    /* --- Reject true complex inputs ------------------------------------ */
+    {
+        Expr *re_p, *im_p;
+        if (x_expr->type == EXPR_FUNCTION
+            && x_expr->data.function.head
+            && x_expr->data.function.head->type == EXPR_SYMBOL
+            && x_expr->data.function.head->data.symbol == SYM_Complex
+            && is_complex(x_expr, &re_p, &im_p)) {
+            return me_emit_realx(x_expr);
+        }
+    }
+
+    /* --- Base argument ------------------------------------------------- */
+    mpz_t base;
+    if (argc == 2) {
+        Expr* b_expr = res->data.function.args[1];
+        if (!expr_is_integer_like(b_expr)) {
+            /* Non-integer bases (Real, Rational, symbolic E, …) are not
+             * yet implemented.  Leave the call unevaluated rather than
+             * raising a misleading diagnostic. */
+            return NULL;
+        }
+        expr_to_mpz(b_expr, base);
+        if (mpz_cmp_ui(base, 2) < 0) {
+            me_emit_ibase(b_expr);
+            mpz_clear(base);
+            return NULL;
+        }
+        if (!mpz_fits_ulong_p(base)) {
+            fprintf(stderr,
+                "MantissaExponent::ibase: Base too large; use a base "
+                "<= ULONG_MAX.\n");
+            mpz_clear(base);
+            return NULL;
+        }
+    } else {
+        mpz_init_set_ui(base, 10);
+    }
+    unsigned long b_ulong = mpz_get_ui(base);
+
+    /* --- Classify the input ------------------------------------------- */
+    RdKind kind = rd_classify(x_expr);
+    if (kind == RD_KIND_OTHER) {
+        /* Symbolic, named constant, or unhandled numeric form -- leave
+         * the call unevaluated, no diagnostic.  This mirrors the
+         * Mathematica behaviour for `MantissaExponent[x]`. */
+        mpz_clear(base);
+        return NULL;
+    }
+
+    /* ====================================================================
+     *  EXACT path (Integer / BigInt / Rational)
+     * ================================================================== */
+    if (kind == RD_KIND_INT || kind == RD_KIND_RAT) {
+        mpq_t q;
+        mpq_init(q);
+        int sign = 0;
+        me_to_signed_mpq(x_expr, q, &sign);
+
+        if (sign == 0) {
+            /* MantissaExponent[0] = {0, 0}. */
+            mpq_clear(q);
+            mpz_clear(base);
+            return me_make_pair(expr_new_integer(0), 0);
+        }
+
+        long e_val = rd_rational_natural_exp(q, base);
+
+        /* mantissa = sign * |q| / b^e_val.  Express as a single mpq by
+         * multiplying the denominator by base^e_val.  All arithmetic on
+         * non-negative |q|, sign re-applied at the end. */
+        mpz_t scale;
+        mpz_init(scale);
+        if (e_val >= 0) {
+            mpz_ui_pow_ui(scale, b_ulong, (unsigned long)e_val);
+            mpz_mul(mpq_denref(q), mpq_denref(q), scale);
+        } else {
+            /* For exact rationals with |x| < 1 the natural exponent is
+             * non-positive, so we multiply the numerator by b^(-e). */
+            mpz_ui_pow_ui(scale, b_ulong, (unsigned long)(-e_val));
+            mpz_mul(mpq_numref(q), mpq_numref(q), scale);
+        }
+        mpq_canonicalize(q);
+        if (sign < 0) mpz_neg(mpq_numref(q), mpq_numref(q));
+
+        Expr* m_expr = me_mpq_to_expr(q);
+
+        mpz_clear(scale);
+        mpq_clear(q);
+        mpz_clear(base);
+        return me_make_pair(m_expr, e_val);
+    }
+
+    /* ====================================================================
+     *  INEXACT path -- machine double
+     * ================================================================== */
+    if (kind == RD_KIND_REAL) {
+        double v = x_expr->data.real;
+        if (v == 0.0) {
+            mpz_clear(base);
+            return me_make_pair(expr_new_real(0.0), 0);
+        }
+        double absv = fabs(v);
+        double log_b = log((double)b_ulong);
+        long e_val = (long)floor(log(absv) / log_b) + 1;
+
+        /* Compute scale = b^e_val.  Off-by-one corrections cover the rare
+         * case where floor(log / log) rounds across a power-of-b boundary
+         * because of double-rounding in the log itself. */
+        double scale = pow((double)b_ulong, (double)e_val);
+        double m = v / scale;
+        if (fabs(m) >= 1.0) {
+            m /= (double)b_ulong;
+            e_val++;
+        } else if (fabs(m) * (double)b_ulong < 1.0) {
+            m *= (double)b_ulong;
+            e_val--;
+        }
+        mpz_clear(base);
+        return me_make_pair(expr_new_real(m), e_val);
+    }
+
+#ifdef USE_MPFR
+    /* ====================================================================
+     *  INEXACT path -- MPFR
+     * ================================================================== */
+    if (kind == RD_KIND_MPFR) {
+        mpfr_srcptr xv = x_expr->data.mpfr;
+        mpfr_prec_t prec = mpfr_get_prec(xv);
+        if (mpfr_zero_p(xv)) {
+            mpz_clear(base);
+            return me_make_pair(expr_new_mpfr_bits(prec), 0);
+        }
+
+        /* Determine the natural exponent with a comfortable margin so
+         * floor() can never land on the wrong side of a power-of-b
+         * boundary. */
+        mpfr_prec_t work = prec + 64;
+        mpfr_t lx, lb;
+        mpfr_init2(lx, work);
+        mpfr_init2(lb, work);
+        mpfr_abs(lx, xv, MPFR_RNDN);
+        mpfr_log(lx, lx, MPFR_RNDN);
+        mpfr_set_ui(lb, b_ulong, MPFR_RNDN);
+        mpfr_log(lb, lb, MPFR_RNDN);
+        mpfr_div(lx, lx, lb, MPFR_RNDN);
+        mpfr_floor(lx, lx);
+        long e_val = mpfr_get_si(lx, MPFR_RNDD) + 1;
+        mpfr_clear(lx);
+        mpfr_clear(lb);
+
+        /* mantissa = x * b^(-e_val), kept at the input precision. */
+        mpfr_t m, bp;
+        mpfr_init2(m, prec);
+        mpfr_init2(bp, prec + 32);
+        mpfr_set_ui(bp, b_ulong, MPFR_RNDN);
+        mpfr_pow_si(bp, bp, e_val, MPFR_RNDN);
+        mpfr_div(m, xv, bp, MPFR_RNDN);
+        mpfr_clear(bp);
+
+        /* Off-by-one correction: |m| should be in [1/b, 1). */
+        mpfr_t am;
+        mpfr_init2(am, prec);
+        mpfr_abs(am, m, MPFR_RNDN);
+        if (mpfr_cmp_ui(am, 1) >= 0) {
+            mpfr_div_ui(m, m, b_ulong, MPFR_RNDN);
+            e_val++;
+        } else {
+            mpfr_t one_over_b;
+            mpfr_init2(one_over_b, work);
+            mpfr_set_ui(one_over_b, b_ulong, MPFR_RNDN);
+            mpfr_ui_div(one_over_b, 1, one_over_b, MPFR_RNDN);
+            if (mpfr_cmp(am, one_over_b) < 0) {
+                mpfr_mul_ui(m, m, b_ulong, MPFR_RNDN);
+                e_val--;
+            }
+            mpfr_clear(one_over_b);
+        }
+        mpfr_clear(am);
+
+        Expr* m_expr = expr_new_mpfr_copy(m);
+        mpfr_clear(m);
+        mpz_clear(base);
+        return me_make_pair(m_expr, e_val);
+    }
+#endif
+
+    mpz_clear(base);
+    return NULL;
+}
+
+/* -------------------------------------------------------------------------
  *  Module init
  * ----------------------------------------------------------------------- */
 
 void real_init(void) {
     symtab_add_builtin("RealDigits", builtin_realdigits);
     symtab_get_def("RealDigits")->attributes |=
+        (ATTR_PROTECTED | ATTR_LISTABLE);
+
+    symtab_add_builtin("MantissaExponent", builtin_mantissa_exponent);
+    symtab_get_def("MantissaExponent")->attributes |=
         (ATTR_PROTECTED | ATTR_LISTABLE);
 }

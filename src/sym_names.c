@@ -167,6 +167,7 @@ const char* SYM_LogExpRules = NULL;
 const char* SYM_Longest = NULL;
 const char* SYM_MachineEpsilon = NULL;
 const char* SYM_MachinePrecision = NULL;
+const char* SYM_MantissaExponent = NULL;
 const char* SYM_MaxIterations = NULL;
 const char* SYM_MatrixRank = NULL;
 const char* SYM_Method = NULL;
@@ -446,6 +447,7 @@ void sym_names_init(void) {
     SYM_Longest                    = intern_symbol("Longest");
     SYM_MachineEpsilon             = intern_symbol("MachineEpsilon");
     SYM_MachinePrecision           = intern_symbol("MachinePrecision");
+    SYM_MantissaExponent           = intern_symbol("MantissaExponent");
     SYM_MaxIterations              = intern_symbol("MaxIterations");
     SYM_MatrixRank                 = intern_symbol("MatrixRank");
     SYM_Method                     = intern_symbol("Method");
