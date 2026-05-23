@@ -34,6 +34,27 @@ Expr* builtin_realdigits(Expr* res);
  */
 Expr* builtin_mantissa_exponent(Expr* res);
 
+/*
+ * RealExponent[x]           -> Log[10, |x|]   (as an inexact number).
+ * RealExponent[x, b]        -> Log[b,  |x|].
+ *
+ * Accepts Integer, BigInt, Rational, Real (machine), MPFR, and any
+ * symbolic argument that numericalizes to a real value (Pi, E, ...).
+ * The base may be any positive numeric > 1 (Integer, Rational, Real,
+ * MPFR, or symbolic like E).  Returns a machine Real unless one of the
+ * inputs carries MPFR precision, in which case the result is MPFR at
+ * the higher of the input precisions.
+ *
+ * For zero inputs we follow Mathilda's Accuracy convention -- every
+ * zero has Accuracy = Infinity -- so RealExponent[0] = -Infinity.
+ *
+ * Diagnostics:
+ *   - argc not in [1, 2] -> ::argt
+ *   - Complex x          -> ::realx
+ *   - base <= 1          -> ::ibase
+ */
+Expr* builtin_real_exponent(Expr* res);
+
 void real_init(void);
 
 #endif /* MATHILDA_REAL_H */

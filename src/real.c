@@ -1501,6 +1501,383 @@ Expr* builtin_mantissa_exponent(Expr* res) {
 }
 
 /* -------------------------------------------------------------------------
+ *  RealExponent
+ *
+ *  RealExponent[x]     -> Log[10, |x|]    (always inexact).
+ *  RealExponent[x, b]  -> Log[b,  |x|].
+ *
+ *  Numeric kinds accepted for x and b: Integer, BigInt, Rational, Real,
+ *  and (USE_MPFR) MPFR.  Symbolic numeric inputs -- bare constants like
+ *  `Pi`, `E`, `EulerGamma`, `Catalan`, `GoldenRatio`, `Degree`, and any
+ *  numeric-valued composite such as `Pi^Pi` or `1/Pi` -- are routed
+ *  through `numericalize` at the combined working precision and then
+ *  treated as their numeric equivalents.  Plain symbols (no numeric
+ *  value) leave the call unevaluated with no diagnostic.
+ *
+ *  Output kind:
+ *    - x is MPFR: result is MPFR at the higher of x's and b's bit
+ *      precisions (b is promoted from machine / exact to that precision).
+ *    - b is MPFR but x is not: result is MPFR at b's precision.
+ *    - x is Real or b is Real (but neither is MPFR): result is a machine
+ *      Real.
+ *    - both exact: result is a machine Real.
+ *
+ *  Zero handling (Mathilda convention -- Accuracy[0] = Accuracy[0.] =
+ *  Accuracy[0``p] = Infinity, so -Accuracy[0] = -Infinity):
+ *    - RealExponent[0]      = -Infinity (symbol).
+ *    - RealExponent[0.]     = -Infinity.
+ *    - RealExponent[0``p]   = -Infinity.
+ *
+ *  This differs from Mathematica where machine zero gives a finite
+ *  result of ~-307.65 and an MPFR zero with p digits gives -p.  The
+ *  divergence is documented and follows from Mathilda's existing
+ *  `Accuracy` semantics (`src/precision.c`).  Switching to the
+ *  Mathematica convention is a follow-up that should be coordinated
+ *  with a similar change to `Accuracy`.
+ *
+ *  Diagnostics:
+ *    - argc not in [1, 2]                  -> ::argt
+ *    - Complex x with non-zero imaginary   -> ::realx
+ *    - Base is Complex, or base <= 1       -> ::ibase
+ * ----------------------------------------------------------------------- */
+
+static Expr* re_emit_argt(size_t argc) {
+    fprintf(stderr,
+            "RealExponent::argt: RealExponent called with %zu argument%s; "
+            "1 or 2 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+static Expr* re_emit_realx(Expr* x_expr) {
+    char* s = expr_to_string(x_expr);
+    fprintf(stderr,
+            "RealExponent::realx: The value %s is not a real number.\n",
+            s ? s : "?");
+    free(s);
+    return NULL;
+}
+
+static Expr* re_emit_ibase(Expr* b_expr) {
+    char* bs = expr_to_string(b_expr);
+    fprintf(stderr,
+            "RealExponent::ibase: Base %s is not a real number greater "
+            "than 1.\n",
+            bs ? bs : "?");
+    free(bs);
+    return NULL;
+}
+
+/* -Infinity = Times[-1, Infinity].  The evaluator's Times canonicalisation
+ * does not collapse this further; the printer renders it as `-Infinity`. */
+static Expr* re_make_minus_infinity(void) {
+    Expr** args = malloc(sizeof(Expr*) * 2);
+    args[0] = expr_new_integer(-1);
+    args[1] = expr_new_symbol("Infinity");
+    Expr* r = expr_new_function(expr_new_symbol("Times"), args, 2);
+    free(args);
+    return r;
+}
+
+/* True if a recognized numeric expression represents zero. */
+static bool re_is_zero(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) return e->data.integer == 0;
+    if (e->type == EXPR_BIGINT)  return mpz_sgn(e->data.bigint) == 0;
+    if (e->type == EXPR_REAL)    return e->data.real == 0.0;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR)    return mpfr_zero_p(e->data.mpfr);
+#endif
+    if (rd_is_rational_bigint(e)) {
+        Expr* n = e->data.function.args[0];
+        if (n->type == EXPR_INTEGER) return n->data.integer == 0;
+        if (n->type == EXPR_BIGINT)  return mpz_sgn(n->data.bigint) == 0;
+    }
+    return false;
+}
+
+/* Sign of a recognized numeric expression: 1, 0, or -1. */
+static int re_sign(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_INTEGER) {
+        if (e->data.integer > 0) return 1;
+        if (e->data.integer < 0) return -1;
+        return 0;
+    }
+    if (e->type == EXPR_BIGINT) return mpz_sgn(e->data.bigint);
+    if (e->type == EXPR_REAL) {
+        if (e->data.real > 0.0) return 1;
+        if (e->data.real < 0.0) return -1;
+        return 0;
+    }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_sgn(e->data.mpfr);
+#endif
+    if (rd_is_rational_bigint(e)) {
+        mpz_t n, d;
+        expr_to_mpz(e->data.function.args[0], n);
+        expr_to_mpz(e->data.function.args[1], d);
+        int s = mpz_sgn(n) * mpz_sgn(d);
+        mpz_clear(n); mpz_clear(d);
+        return s;
+    }
+    return 0;
+}
+
+#ifdef USE_MPFR
+/* Set `out` (already mpfr_init2'd) to |e| where e is a recognized numeric
+ * kind.  Returns true on success. */
+static bool re_mpfr_set_abs(mpfr_t out, const Expr* e) {
+    if (e->type == EXPR_INTEGER) {
+        long v = (long)e->data.integer;
+        if (v < 0) v = -v;
+        mpfr_set_si(out, v, MPFR_RNDN);
+        return true;
+    }
+    if (e->type == EXPR_BIGINT) {
+        mpz_t tmp;
+        mpz_init(tmp);
+        mpz_abs(tmp, e->data.bigint);
+        mpfr_set_z(out, tmp, MPFR_RNDN);
+        mpz_clear(tmp);
+        return true;
+    }
+    if (e->type == EXPR_REAL) {
+        mpfr_set_d(out, fabs(e->data.real), MPFR_RNDN);
+        return true;
+    }
+    if (e->type == EXPR_MPFR) {
+        mpfr_abs(out, e->data.mpfr, MPFR_RNDN);
+        return true;
+    }
+    if (rd_is_rational_bigint(e)) {
+        mpz_t n, d;
+        expr_to_mpz(e->data.function.args[0], n);
+        expr_to_mpz(e->data.function.args[1], d);
+        mpz_abs(n, n);
+        mpz_abs(d, d);
+        mpq_t q;
+        mpq_init(q);
+        mpq_set_num(q, n);
+        mpq_set_den(q, d);
+        mpq_canonicalize(q);
+        mpfr_set_q(out, q, MPFR_RNDN);
+        mpq_clear(q);
+        mpz_clear(n); mpz_clear(d);
+        return true;
+    }
+    return false;
+}
+#else
+/* Best-effort plain-double absolute value for the no-MPFR build path. */
+static double re_to_double_abs(const Expr* e) {
+    if (e->type == EXPR_INTEGER) {
+        int64_t v = e->data.integer;
+        if (v < 0) v = -v;
+        return (double)v;
+    }
+    if (e->type == EXPR_BIGINT) return fabs(mpz_get_d(e->data.bigint));
+    if (e->type == EXPR_REAL)   return fabs(e->data.real);
+    if (rd_is_rational_bigint(e)) {
+        mpz_t n, d;
+        expr_to_mpz(e->data.function.args[0], n);
+        expr_to_mpz(e->data.function.args[1], d);
+        double v = fabs(mpz_get_d(n) / mpz_get_d(d));
+        mpz_clear(n); mpz_clear(d);
+        return v;
+    }
+    return 0.0;
+}
+#endif
+
+Expr* builtin_real_exponent(Expr* res) {
+    if (!res || res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return re_emit_argt(argc);
+
+    Expr* x_in = res->data.function.args[0];
+    Expr* b_in = (argc == 2) ? res->data.function.args[1] : NULL;
+
+    /* --- Reject true complex inputs ----------------------------------- */
+    {
+        Expr *re_p, *im_p;
+        if (x_in->type == EXPR_FUNCTION
+            && x_in->data.function.head
+            && x_in->data.function.head->type == EXPR_SYMBOL
+            && x_in->data.function.head->data.symbol == SYM_Complex
+            && is_complex(x_in, &re_p, &im_p)) {
+            return re_emit_realx(x_in);
+        }
+        if (b_in && b_in->type == EXPR_FUNCTION
+            && b_in->data.function.head
+            && b_in->data.function.head->type == EXPR_SYMBOL
+            && b_in->data.function.head->data.symbol == SYM_Complex
+            && is_complex(b_in, &re_p, &im_p)) {
+            return re_emit_ibase(b_in);
+        }
+    }
+
+    /* --- Working precision selection --------------------------------- *
+     * Numericalize uses these bits when promoting symbolic constants
+     * (Pi, E, ...) into MPFR values.  When either x or b is already MPFR
+     * we lift the working precision so that downstream Log preserves it. */
+#ifdef USE_MPFR
+    long working_bits = 64;
+    if (x_in->type == EXPR_MPFR) {
+        long bp = (long)mpfr_get_prec(x_in->data.mpfr) + 32;
+        if (bp > working_bits) working_bits = bp;
+    }
+    if (b_in && b_in->type == EXPR_MPFR) {
+        long bp = (long)mpfr_get_prec(b_in->data.mpfr) + 32;
+        if (bp > working_bits) working_bits = bp;
+    }
+#endif
+
+    /* --- Numericalize symbolic x / b to recognized numeric kinds ----- */
+    Expr* x_owned = NULL;
+    Expr* b_owned = NULL;
+    const Expr* x_use = x_in;
+    const Expr* b_use = b_in;
+
+    NumericSpec spec;
+#ifdef USE_MPFR
+    spec.mode = NUMERIC_MODE_MPFR;
+    spec.bits = working_bits;
+#else
+    spec = numeric_machine_spec();
+#endif
+
+    RdKind kind_x = rd_classify(x_in);
+    if (kind_x == RD_KIND_OTHER) {
+        x_owned = numericalize(x_in, spec);
+        if (!x_owned) return NULL;
+        kind_x = rd_classify(x_owned);
+        if (kind_x == RD_KIND_OTHER) {
+            expr_free(x_owned);
+            return NULL;
+        }
+        x_use = x_owned;
+    }
+
+    RdKind kind_b = b_in ? rd_classify(b_in) : RD_KIND_INT;
+    if (b_in && kind_b == RD_KIND_OTHER) {
+        b_owned = numericalize(b_in, spec);
+        if (!b_owned) {
+            if (x_owned) expr_free(x_owned);
+            return NULL;
+        }
+        kind_b = rd_classify(b_owned);
+        if (kind_b == RD_KIND_OTHER) {
+            expr_free(b_owned);
+            if (x_owned) expr_free(x_owned);
+            return NULL;
+        }
+        b_use = b_owned;
+    }
+
+    /* --- Base must be a real value strictly greater than 1 ----------- */
+    if (b_in) {
+        if (re_sign(b_use) <= 0) {
+            if (x_owned) expr_free(x_owned);
+            if (b_owned) expr_free(b_owned);
+            return re_emit_ibase(b_in);
+        }
+        bool too_small = false;
+        if (b_use->type == EXPR_INTEGER) {
+            if (b_use->data.integer <= 1) too_small = true;
+        } else if (b_use->type == EXPR_BIGINT) {
+            if (mpz_cmp_ui(b_use->data.bigint, 1) <= 0) too_small = true;
+        } else if (b_use->type == EXPR_REAL) {
+            if (b_use->data.real <= 1.0) too_small = true;
+#ifdef USE_MPFR
+        } else if (b_use->type == EXPR_MPFR) {
+            if (mpfr_cmp_ui(b_use->data.mpfr, 1) <= 0) too_small = true;
+#endif
+        } else if (rd_is_rational_bigint(b_use)) {
+            /* |b| > 1  iff  |num| > |den|. */
+            mpz_t n, d;
+            expr_to_mpz(b_use->data.function.args[0], n);
+            expr_to_mpz(b_use->data.function.args[1], d);
+            mpz_abs(n, n); mpz_abs(d, d);
+            if (mpz_cmp(n, d) <= 0) too_small = true;
+            mpz_clear(n); mpz_clear(d);
+        }
+        if (too_small) {
+            if (x_owned) expr_free(x_owned);
+            if (b_owned) expr_free(b_owned);
+            return re_emit_ibase(b_in);
+        }
+    }
+
+    /* --- Zero case ---------------------------------------------------- */
+    if (re_is_zero(x_use)) {
+        if (x_owned) expr_free(x_owned);
+        if (b_owned) expr_free(b_owned);
+        return re_make_minus_infinity();
+    }
+
+    /* --- Output kind selection ---------------------------------------
+     * Only the *original* input matters here.  Numericalize may have
+     * promoted a symbolic Pi or E to a 64-bit MPFR purely for computation,
+     * but if the user never asked for arbitrary precision the result
+     * should come back at MachinePrecision -- matching Mathematica's
+     * `RealExponent[Pi^Pi]` giving a machine-precision answer. */
+#ifdef USE_MPFR
+    long out_bits = 53;
+    bool out_is_mpfr = false;
+    if (x_in->type == EXPR_MPFR) {
+        out_bits = (long)mpfr_get_prec(x_in->data.mpfr);
+        out_is_mpfr = true;
+    }
+    if (b_in && b_in->type == EXPR_MPFR) {
+        long bp = (long)mpfr_get_prec(b_in->data.mpfr);
+        if (!out_is_mpfr || bp > out_bits) out_bits = bp;
+        out_is_mpfr = true;
+    }
+
+    long work_bits = (out_is_mpfr ? out_bits : 53) + 32;
+    if (work_bits < 64) work_bits = 64;
+
+    mpfr_t mx, mb_v, lx, lb;
+    mpfr_init2(mx,   work_bits);
+    mpfr_init2(mb_v, work_bits);
+    mpfr_init2(lx,   work_bits);
+    mpfr_init2(lb,   work_bits);
+
+    re_mpfr_set_abs(mx, x_use);
+    if (b_use) re_mpfr_set_abs(mb_v, b_use);
+    else       mpfr_set_ui(mb_v, 10, MPFR_RNDN);
+
+    mpfr_log(lx, mx, MPFR_RNDN);
+    mpfr_log(lb, mb_v, MPFR_RNDN);
+    mpfr_div(lx, lx, lb, MPFR_RNDN);
+
+    Expr* result;
+    if (out_is_mpfr) {
+        mpfr_t out;
+        mpfr_init2(out, out_bits);
+        mpfr_set(out, lx, MPFR_RNDN);
+        result = expr_new_mpfr_move(out);
+    } else {
+        result = expr_new_real(mpfr_get_d(lx, MPFR_RNDN));
+    }
+
+    mpfr_clear(mx); mpfr_clear(mb_v); mpfr_clear(lx); mpfr_clear(lb);
+#else
+    /* No MPFR build: machine doubles only.  This loses accuracy on huge
+     * bigints whose magnitude exceeds DBL_MAX, but matches the Mathilda
+     * machine-precision baseline. */
+    double xv = re_to_double_abs(x_use);
+    double bv = b_use ? re_to_double_abs(b_use) : 10.0;
+    Expr* result = expr_new_real(log(xv) / log(bv));
+#endif
+
+    if (x_owned) expr_free(x_owned);
+    if (b_owned) expr_free(b_owned);
+    return result;
+}
+
+/* -------------------------------------------------------------------------
  *  Module init
  * ----------------------------------------------------------------------- */
 
@@ -1511,5 +1888,9 @@ void real_init(void) {
 
     symtab_add_builtin("MantissaExponent", builtin_mantissa_exponent);
     symtab_get_def("MantissaExponent")->attributes |=
+        (ATTR_PROTECTED | ATTR_LISTABLE);
+
+    symtab_add_builtin("RealExponent", builtin_real_exponent);
+    symtab_get_def("RealExponent")->attributes |=
         (ATTR_PROTECTED | ATTR_LISTABLE);
 }

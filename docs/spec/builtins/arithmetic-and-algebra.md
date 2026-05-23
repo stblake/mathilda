@@ -682,6 +682,61 @@ In[7]:= MantissaExponent[-3/2]
 Out[7]= {-3/20, 1}
 ```
 
+## RealExponent
+- `RealExponent[x]`: Returns `Log[10, |x|]` -- the base-10 real exponent
+  of `x`.
+- `RealExponent[x, b]`: Returns `Log[b, |x|]` in the specified base `b`.
+
+**Features**:
+- `Protected`, `Listable`. Threads over lists in any argument position.
+- Accepts `Integer`, `BigInt`, `Rational`, machine `Real`, and (under
+  `USE_MPFR`) arbitrary-precision `MPFR` inputs.  Symbolic numeric
+  arguments (`Pi`, `E`, `EulerGamma`, `Catalan`, `GoldenRatio`, `Degree`,
+  or any numeric-valued composite such as `Pi^Pi` or `1/Pi`) are
+  numericalized at the combined working precision before computation.
+  Plain symbols with no numeric value are left unevaluated.
+- Output is a machine `Real` unless one of the inputs already carries
+  MPFR precision, in which case the result is `MPFR` at the higher of
+  the input precisions.  This matches Mathematica's contagion: an
+  explicit `N[..., p]` lifts the exponent to the same precision.
+- The base must be a real number `> 1`; non-positive, `<= 1`, or complex
+  bases emit `RealExponent::ibase` and leave the call unevaluated.
+- Complex arguments with non-zero imaginary part emit
+  `RealExponent::realx` and leave the call unevaluated.
+- Sign of `x` is discarded.
+- Zero handling follows Mathilda's `Accuracy` convention: every zero
+  (exact `0`, machine `0.`, MPFR `0``p`) has `Accuracy = Infinity`, so
+  `RealExponent[0] = -Infinity` uniformly.  This is a documented
+  divergence from Mathematica's `RealExponent[0.] = -307.65...`; matching
+  the Mathematica behaviour requires a similar adjustment to
+  `Accuracy[0.]` in `src/precision.c` and is deferred.
+
+```mathematica
+In[1]:= RealExponent[123.456]
+Out[1]= 2.09151
+
+In[2]:= RealExponent[123.456, 2]
+Out[2]= 6.94785
+
+In[3]:= RealExponent[N[Pi, 32]]
+Out[3]= 0.497149872694133854351268288290899
+
+In[4]:= RealExponent[Pi, E]
+Out[4]= 1.14473
+
+In[5]:= RealExponent[987654321/123456789]
+Out[5]= 0.90309
+
+In[6]:= RealExponent[{1, 2, 3, 4, 5}]
+Out[6]= {0.0, 0.30103, 0.477121, 0.60206, 0.69897}
+
+In[7]:= Table[RealExponent[Pi, b], {b, {2, 3, 5, 7, 10}}]
+Out[7]= {1.6515, 1.04198, 0.711261, 0.588275, 0.49715}
+
+In[8]:= RealExponent[0]
+Out[8]= -Infinity
+```
+
 ## GCD, LCM
 - `GCD[n1, n2, ...]`: Greatest common divisor.
 - `LCM[n1, n2, ...]`: Least common multiple.

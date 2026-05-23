@@ -1623,6 +1623,16 @@ void info_init(void) {
         "Rational; for inexact inputs the mantissa carries the same "
         "precision as x.  Currently only integer bases >= 2 are supported.");
 
+    symtab_set_docstring("RealExponent",
+        "RealExponent[x] gives Log[10, |x|] -- the base-10 real exponent "
+        "of x.\n"
+        "RealExponent[x, b] gives Log[b, |x|] in the specified base b.\n"
+        "Accepts Integer, BigInt, Rational, Real, and (with USE_MPFR) MPFR "
+        "inputs, plus symbolic numeric values such as Pi, E, or Pi^Pi.  "
+        "Result is a machine Real unless an MPFR input lifts it to MPFR "
+        "at that precision.  RealExponent[0] = -Infinity; the same is "
+        "returned for any approximate zero.  Threads over lists.");
+
     symtab_set_docstring("FromDigits",
         "FromDigits[list] constructs an integer from a list of decimal "
         "digits, most-significant first.\n"
