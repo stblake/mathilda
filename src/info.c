@@ -1588,6 +1588,17 @@ void info_init(void) {
         "representation of n.\n"
         "The sign of n is discarded; DigitCount[0] is a list of zeros.");
 
+    symtab_set_docstring("IntegerString",
+        "IntegerString[n] gives a string consisting of the decimal digits "
+        "in the integer n.\n"
+        "IntegerString[n, b] gives a string consisting of the base-b digits "
+        "in n; digit values 10 to 35 use the letters a-z.\n"
+        "IntegerString[n, b, len] pads the string on the left with zero "
+        "digits to give a string of length len; if len is less than the "
+        "number of digits in n, the len least-significant digits are "
+        "returned.\n"
+        "The maximum allowed base is 36; the sign of n is discarded.");
+
     symtab_set_docstring("RealDigits",
         "RealDigits[x] gives a list {digits, exp} of the digits in the "
         "approximate real number x together with the exponent such that "

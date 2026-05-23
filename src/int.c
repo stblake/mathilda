@@ -76,6 +76,10 @@ void int_init(void) {
 
     symtab_add_builtin("FromDigits", builtin_fromdigits);
     symtab_get_def("FromDigits")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("IntegerString", builtin_integerstring);
+    symtab_get_def("IntegerString")->attributes |=
+        (ATTR_PROTECTED | ATTR_LISTABLE);
 }
 
 /* Build an Expr from an mpz_t digit, demoting to EXPR_INTEGER if it fits. */
@@ -1062,4 +1066,183 @@ Expr* builtin_fromdigits(Expr* res) {
      * through silently so downstream rewrites can still reach the call. */
     if (expr_is_numeric_like(first)) return fd_emit_nlst(first, res);
     return NULL;
+}
+
+/* =====================================================================
+ * IntegerString
+ *
+ *   IntegerString[n]            decimal-digit string of |n|.
+ *   IntegerString[n, b]         base-b digit string, 2 <= b <= 36.
+ *                               Digits 10..35 use lowercase 'a'..'z'.
+ *   IntegerString[n, b, len]    pads on the left with '0' to length len.
+ *                               If |n| has more than len base-b digits the
+ *                               result is the len least-significant digits.
+ *
+ * Sign of n is discarded; IntegerString[0] -> "0".  Attributes are
+ * Listable | Protected so the function threads over List args in any
+ * position element-wise.  Built on GMP's `mpz_get_str`, which renders
+ * arbitrary-precision integers in any base 2..62 in one library call;
+ * we cap the base at 36 to match Mathematica's surface contract.
+ * ===================================================================*/
+
+/* `IntegerString::argb: IntegerString called with N argument(s); between
+ * 1 and 3 arguments are expected.` */
+static Expr* is_emit_argb(size_t argc) {
+    fprintf(stderr,
+            "IntegerString::argb: IntegerString called with %zu argument%s; "
+            "between 1 and 3 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* `IntegerString::int: Integer expected at position <pos> in <call>.` */
+static Expr* is_emit_int(size_t pos, Expr* res) {
+    char* call_str = expr_to_string(res);
+    fprintf(stderr,
+            "IntegerString::int: Integer expected at position %zu in %s.\n",
+            pos, call_str ? call_str : "?");
+    free(call_str);
+    return NULL;
+}
+
+/* `IntegerString::basf: <b> is not a valid base for IntegerString;
+ * the base must be an integer between 2 and 36.` */
+static Expr* is_emit_basf(Expr* b_expr, Expr* res) {
+    char* b_str = expr_to_string(b_expr);
+    char* call_str = expr_to_string(res);
+    fprintf(stderr,
+            "IntegerString::basf: %s is not a valid base for IntegerString "
+            "in %s; the base must be an integer between 2 and 36.\n",
+            b_str ? b_str : "?",
+            call_str ? call_str : "?");
+    free(b_str);
+    free(call_str);
+    return NULL;
+}
+
+/* `IntegerString::intnn: Non-negative machine-sized integer expected at
+ * position 3.` */
+static Expr* is_emit_intnn(void) {
+    fprintf(stderr,
+            "IntegerString::intnn: Non-negative machine-sized integer "
+            "expected at position 3.\n");
+    return NULL;
+}
+
+/* Maximum allowed base for IntegerString.  Mathematica caps this at 36
+ * because the surface convention only defines digit characters up to
+ * 'z' (10 numerals + 26 lowercase letters).  Higher bases are
+ * representable via GMP (up to 62) but produce strings users cannot
+ * decode without consulting our own conventions. */
+#define IS_MAX_BASE 36
+
+Expr* builtin_integerstring(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return is_emit_argb(argc);
+
+    Expr* n_expr = res->data.function.args[0];
+    if (!expr_is_integer_like(n_expr)) {
+        /* Symbolic n flows through silently so downstream rewrites can
+         * still reach the call; concrete-but-non-integer (Real, Rational,
+         * Complex, ...) gets the ::int diagnostic before the call is left
+         * unevaluated. */
+        if (expr_is_numeric_like(n_expr)) return is_emit_int(1, res);
+        return NULL;
+    }
+
+    /* --- base argument --------------------------------------------- */
+    unsigned long base = 10;
+    if (argc >= 2) {
+        Expr* b_expr = res->data.function.args[1];
+        if (!expr_is_integer_like(b_expr)) {
+            /* Mathematica collapses fractional / real / complex bases
+             * into ::basf.  Symbolic bases stay silent. */
+            if (expr_is_numeric_like(b_expr)) return is_emit_basf(b_expr, res);
+            return NULL;
+        }
+        mpz_t b;
+        expr_to_mpz(b_expr, b);
+        if (mpz_cmp_ui(b, 2) < 0 || mpz_cmp_ui(b, IS_MAX_BASE) > 0) {
+            is_emit_basf(b_expr, res);
+            mpz_clear(b);
+            return NULL;
+        }
+        base = mpz_get_ui(b);
+        mpz_clear(b);
+    }
+
+    /* --- length argument ------------------------------------------- */
+    bool has_len = false;
+    size_t target_len = 0;
+    if (argc == 3) {
+        Expr* l_expr = res->data.function.args[2];
+        if (!expr_is_integer_like(l_expr)) {
+            if (expr_is_numeric_like(l_expr)) return is_emit_int(3, res);
+            return NULL;
+        }
+        mpz_t l;
+        expr_to_mpz(l_expr, l);
+        if (mpz_sgn(l) < 0 || !mpz_fits_ulong_p(l)) {
+            mpz_clear(l);
+            return is_emit_intnn();
+        }
+        target_len = (size_t)mpz_get_ui(l);
+        mpz_clear(l);
+        has_len = true;
+    }
+
+    /* --- render |n| via mpz_get_str -------------------------------- */
+    /* GMP's mpz_get_str renders arbitrary-precision integers in any
+     * base 2..62 in one library call.  For positive bases in [2, 36] it
+     * emits '0'..'9','a'..'z' (lowercase), exactly matching Mathematica's
+     * IntegerString convention.  The required buffer is bounded by
+     * `mpz_sizeinbase(n, base) + 2` (one byte for an optional sign,
+     * one for the nul terminator); since we take |n| before rendering
+     * the sign byte is unused but kept in the allocation for safety. */
+    mpz_t n;
+    expr_to_mpz(n_expr, n);
+    mpz_abs(n, n);
+
+    size_t need = mpz_sizeinbase(n, (int)base) + 2;
+    char* digits = malloc(need);
+    if (!digits) {
+        mpz_clear(n);
+        return NULL;
+    }
+    mpz_get_str(digits, (int)base, n);
+    mpz_clear(n);
+
+    size_t dlen = strlen(digits);
+
+    /* --- pad / truncate to target_len ------------------------------- */
+    char* out;
+    if (has_len) {
+        out = malloc(target_len + 1);
+        if (!out) {
+            free(digits);
+            return NULL;
+        }
+        if (dlen >= target_len) {
+            /* Keep len least-significant digits = the last target_len
+             * characters.  When target_len == 0 this is the empty string,
+             * matching Mathematica's IntegerString[n, b, 0] -> "". */
+            if (target_len > 0) {
+                memcpy(out, digits + (dlen - target_len), target_len);
+            }
+            out[target_len] = '\0';
+        } else {
+            size_t pad = target_len - dlen;
+            memset(out, '0', pad);
+            memcpy(out + pad, digits, dlen);
+            out[target_len] = '\0';
+        }
+        free(digits);
+    } else {
+        out = digits;
+    }
+
+    Expr* result = expr_new_string(out);
+    free(out);
+    return result;
 }

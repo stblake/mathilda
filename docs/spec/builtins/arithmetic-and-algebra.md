@@ -513,6 +513,75 @@ In[5]:= FromDigits[{a, b, c, d, e}, x]
 Out[5]= e + d x + c x^2 + b x^3 + a x^4
 ```
 
+## IntegerString
+- `IntegerString[n]`: String of the decimal digits in the integer `n`. The
+  sign of `n` is discarded.
+- `IntegerString[n, b]`: Base-`b` digit string (requires `2 <= b <= 36`).
+  Digit values `10`-`35` use the lowercase letters `a`-`z`.
+- `IntegerString[n, b, len]`: Pads the string on the left with `'0'` to give
+  a string of length `len`. If `n` has more than `len` base-`b` digits, the
+  `len` least-significant digits are returned (matching Mathematica).
+
+**Features**:
+- `Protected`, `Listable`. Threads element-wise over a list of integers in
+  any argument position, e.g. `IntegerString[Range[0, 7], 2, 3]` returns
+  a length-8 list of zero-padded binary strings.
+- Inverse of `FromDigits` for the integer case:
+  `FromDigits[IntegerString[n, b], b] == n` for any non-negative `n`.
+- Defining property: `StringLength[IntegerString[n, b]] == IntegerLength[n, b]`
+  for `n != 0`.
+- `IntegerString[0]` returns `"0"`; `IntegerString[n, b, 0]` returns `""`.
+- Works seamlessly for machine integers and arbitrary-precision bignums --
+  the digit rendering goes through GMP's `mpz_get_str` in a single call,
+  so even `IntegerString[100!, 36]` is essentially free.
+
+```mathematica
+In[1]:= IntegerString[17651, 2]
+Out[1]= "100010011110011"
+
+In[2]:= IntegerString[50!, 16]
+Out[2]= "49eebc961ed279b02b1ef4f28d19a84f5973a1d2c7800000000000"
+
+In[3]:= IntegerString[50!, 36]
+Out[3]= "4q7eyp9zizmtqt0648txt4fm720cc1s00000000000"
+
+In[4]:= IntegerString[Range[0, 7], 2, 3]
+Out[4]= {"000", "001", "010", "011", "100", "101", "110", "111"}
+
+In[5]:= IntegerString[12345, 10, 3]
+Out[5]= "345"
+```
+
+**Arity diagnostics** (`IntegerString::argb`). Wrong-arity calls emit the
+diagnostic and echo the call back unevaluated, matching Mathematica:
+
+```mathematica
+In[6]:= IntegerString[]
+        IntegerString::argb: IntegerString called with 0 arguments; between 1 and 3 arguments are expected.
+Out[6]= IntegerString[]
+```
+
+**Non-integer-argument diagnostic** (`IntegerString::int`). A concrete
+non-integer numeric (Real, Rational, Complex) at position 1 or 3 emits the
+diagnostic and echoes the call back unevaluated; pure symbolic arguments
+flow through silently:
+
+```mathematica
+In[7]:= IntegerString[11.3423]
+        IntegerString::int: Integer expected at position 1 in IntegerString[11.3423].
+Out[7]= IntegerString[11.3423]
+```
+
+**Invalid-base diagnostic** (`IntegerString::basf`). Bases outside the
+`[2, 36]` range (integer or otherwise) trigger the diagnostic and the call
+is left unevaluated:
+
+```mathematica
+In[8]:= IntegerString[10, 50]
+        IntegerString::basf: 50 is not a valid base for IntegerString in IntegerString[10, 50]; the base must be an integer between 2 and 36.
+Out[8]= IntegerString[10, 50]
+```
+
 ## RealDigits
 - `RealDigits[x]`: List of the base-10 digits of the approximate real
   number `x`, together with the integer exponent: the result is

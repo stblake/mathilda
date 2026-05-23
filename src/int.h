@@ -8,6 +8,7 @@
  *   - DigitCount[n], DigitCount[n, b], DigitCount[n, b, d]
  *   - FromDigits[list], FromDigits[list, b],
  *     FromDigits["string"], FromDigits["string", b]
+ *   - IntegerString[n], IntegerString[n, b], IntegerString[n, b, len]
  */
 
 #ifndef MATHILDA_INT_H
@@ -20,6 +21,7 @@ Expr* builtin_integerlength(Expr* res);
 Expr* builtin_integerexponent(Expr* res);
 Expr* builtin_digitcount(Expr* res);
 Expr* builtin_fromdigits(Expr* res);
+Expr* builtin_integerstring(Expr* res);
 
 void int_init(void);
 
