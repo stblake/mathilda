@@ -1,5 +1,56 @@
 # Arithmetic and Algebra
 
+## Numeric literals (parser-level)
+
+Numeric literals are classified by the parser based on the precision
+the user typed.
+
+- **Integer / BigInt** — literals with no `.`, `e`, `E`, or `*^`.
+  Digit-count drives the choice between `EXPR_INTEGER` (`int64_t`) and
+  `EXPR_BIGINT` (GMP).
+- **`EXPR_REAL`** — real literals whose **implied precision** is at
+  most `MachinePrecision` (≈ 15.95 decimal digits).
+- **`EXPR_MPFR`** (arbitrary precision) — real literals whose implied
+  precision exceeds `MachinePrecision`. The MPFR bit count is
+  `ceil(implied_precision × log2(10))` and the literal text is fed
+  directly to `mpfr_set_str`, so no precision is lost via a double
+  round-trip.
+
+Implied precision is measured from the **mantissa only**, ignoring any
+`e` / `E` / `*^` exponent suffix:
+
+    implied_precision = digits_after_decimal + log10(|mantissa_value|)
+
+Consequences:
+
+- `1.0e22` keeps `MachinePrecision` — the mantissa `1.0` has implied
+  precision 1, regardless of the large exponent.
+- `1.123456789012345678e22` is `EXPR_MPFR` — the mantissa has implied
+  precision ≈ 18.
+- Pure integer-shaped reals (`1e10`, no `.`) always stay machine
+  precision.
+- Zero literals (`0.0`, `0.000`, `0.0e10`) always stay machine
+  precision regardless of the typed digits.
+
+Examples (verified against Mathematica):
+
+```mathematica
+In[1]:= Precision[-29037945.290347]
+Out[1]= MachinePrecision      (* implied ≈ 13.46, below threshold *)
+
+In[2]:= Precision[
+            -29037852093587905730945.29034875093457832094573984537498]
+Out[2]= 54.4864               (* MPFR @ 181 bits *)
+
+In[3]:= Accuracy[
+            -29037852093587905730945.29034875093457832094573984537498]
+Out[3]= 32.0235
+```
+
+Mathematica-style backtick suffixes (`` ` ``, `` `` ``) still override
+the implicit decision: `3.14`50` is 50-digit MPFR, `3.14``49` is
+49-digit accuracy, and `3``50` is `EXPR_REAL`.
+
 ## Plus (+)
 Symbolic sum.
 - `a + b + ...`

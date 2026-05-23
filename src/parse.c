@@ -298,10 +298,110 @@ static Expr* parse_number(ParserState* s) {
     Expr* result;
 
     if (is_real) {
-        double dval = strtod(s->pos, &end);
-        if (end == s->pos) return NULL;
-        s->pos = end;
-        result = expr_new_real(dval);
+        /* Scan the literal once, identifying:
+         *   - the *mantissa* span (sign + integer digits + '.' + fraction);
+         *   - the *full* span (mantissa + optional 'e[+-]?digits' exponent);
+         *   - frac_digits = digits after the decimal point in the mantissa.
+         *
+         * The mantissa portion (without the exponent) drives the implied-
+         * precision decision: a literal like `1.0e22` has mantissa "1.0"
+         * with one fractional digit and magnitude 1, so implied precision
+         * is just 1 — well below MachinePrecision — and the result stays
+         * a machine double. A literal like `1.234567890123456789012345`
+         * has implied precision ≈ 24 and is promoted to MPFR. */
+        const char* lp = mantissa_start;
+        if (*lp == '+' || *lp == '-') lp++;
+        int int_digits = 0;
+        while (isdigit((unsigned char)*lp)) { lp++; int_digits++; }
+        bool has_dot = false;
+        int frac_digits = 0;
+        if (*lp == '.') {
+            has_dot = true;
+            lp++;
+            while (isdigit((unsigned char)*lp)) { lp++; frac_digits++; }
+        }
+        const char* mantissa_end = lp;
+        /* Optional exponent — only consume it if at least one digit follows.
+         * `1.5e` (trailing bare 'e') must not eat the 'e'. */
+        if (*lp == 'e' || *lp == 'E') {
+            const char* save = lp;
+            lp++;
+            if (*lp == '+' || *lp == '-') lp++;
+            if (isdigit((unsigned char)*lp)) {
+                while (isdigit((unsigned char)*lp)) lp++;
+            } else {
+                lp = save;
+            }
+        }
+        const char* full_end = lp;
+
+        /* No digits at all (e.g. bare ".") → not a valid number. */
+        if (int_digits == 0 && frac_digits == 0) return NULL;
+
+        s->pos = full_end;
+
+        /* Build a NUL-terminated copy of the full literal text. */
+        size_t flen = (size_t)(full_end - mantissa_start);
+        char fbuf[128];
+        char* fheap = NULL;
+        char* fstr = fbuf;
+        if (flen + 1 > sizeof(fbuf)) {
+            fheap = malloc(flen + 1);
+            fstr = fheap;
+        }
+        memcpy(fstr, mantissa_start, flen);
+        fstr[flen] = '\0';
+
+        /* Compute implied precision in decimal digits from the mantissa:
+         *     implied = frac_digits + log10(|mantissa_value|)
+         * If implied ≤ MachinePrecision, keep a machine double; otherwise
+         * build an MPFR at ceil(implied * log2(10)) bits, fed directly
+         * from the literal text so we don't lose precision via a double
+         * round-trip. Pure dot-less reals (no fractional part typed) and
+         * zero mantissas always stay machine precision. */
+        long mpfr_bits = 0;
+        if (has_dot) {
+            size_t mlen = (size_t)(mantissa_end - mantissa_start);
+            char mbuf[128];
+            char* mheap = NULL;
+            char* mstr = mbuf;
+            if (mlen + 1 > sizeof(mbuf)) {
+                mheap = malloc(mlen + 1);
+                mstr = mheap;
+            }
+            memcpy(mstr, mantissa_start, mlen);
+            mstr[mlen] = '\0';
+            double mval = strtod(mstr, NULL);
+            if (mheap) free(mheap);
+            if (isfinite(mval) && mval != 0.0) {
+                double implied = (double)frac_digits + log10(fabs(mval));
+                /* MachinePrecision threshold; matches the constant used in
+                 * precision.c (≈ 53 * log10(2)). */
+                if (implied > 15.9545897701910033) {
+                    mpfr_bits = (long)ceil(implied * 3.3219280948873626);
+                    if (mpfr_bits < 2) mpfr_bits = 2;
+                }
+            }
+        }
+
+#ifdef USE_MPFR
+        if (mpfr_bits > 0) {
+            result = expr_new_mpfr_from_str(fstr, (mpfr_prec_t)mpfr_bits);
+            if (!result) {
+                /* mpfr_set_str rejected the text — should not happen for a
+                 * well-formed decimal literal. Fall back to a machine
+                 * double so the parse still succeeds. */
+                result = expr_new_real(strtod(fstr, NULL));
+            }
+        } else {
+            result = expr_new_real(strtod(fstr, NULL));
+        }
+#else
+        (void)mpfr_bits;
+        result = expr_new_real(strtod(fstr, NULL));
+#endif
+        if (fheap) free(fheap);
+        (void)end;
     } else {
         const char* start = s->pos;
         int negative = 0;
