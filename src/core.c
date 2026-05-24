@@ -501,6 +501,8 @@ void core_init(void) {
     root_init();
     void integrate_init(void);
     integrate_init();
+    void zero_test_init(void);
+    zero_test_init();
 }
 
 Expr* builtin_compoundexpression(Expr* res) {

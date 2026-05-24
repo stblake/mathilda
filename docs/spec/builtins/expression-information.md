@@ -80,6 +80,52 @@ In[6]:= MachineNumberQ[1 + 2 I]         (* exact Gaussian integer *)
 Out[6]= False
 ```
 
+## PossibleZeroQ
+Hybrid symbolic-numeric test for whether `expr` is identically zero.
+The general problem is undecidable (Richardson 1968); `PossibleZeroQ`
+is fast but not always exact — it may produce a small number of
+one-sided false positives on identities that hold only on a measure-
+zero subset of the complex plane.
+
+Pipeline (each stage exits early on a definite verdict):
+
+1. **Structural** — literal `0`, `Complex[0, 0]`, named non-zero
+   constants like `Pi` are decided in O(1).
+2. **Rational normalisation** — `Together`, `Cancel`, `Expand` plus
+   `is_zero_poly` decides every identity in `Q(x_1, …, x_n)` exactly.
+3. **Numeric precision ladder** — for closed-form numeric inputs,
+   numericalize at machine precision and compare against a
+   cancellation-aware threshold. Bump to MPFR (200/500/1000 bits) and
+   re-evaluate when the residual lies near the rounding-noise floor.
+4. **Schwartz–Zippel** — for inputs with free symbols, substitute
+   random real/complex samples and recurse into the numeric stage.
+   Requires four independent confirmations.
+
+Attributes: `Listable`, `Protected`.
+
+```mathematica
+In[1]:= PossibleZeroQ[E^(I Pi/4) - (-1)^(1/4)]
+Out[1]= True
+
+In[2]:= PossibleZeroQ[(x + 1)(x - 1) - x^2 + 1]
+Out[2]= True
+
+In[3]:= PossibleZeroQ[(E + Pi)^2 - E^2 - Pi^2 - 2 E Pi]
+Out[3]= True
+
+In[4]:= PossibleZeroQ[E^Pi - Pi^E]
+Out[4]= False
+
+In[5]:= PossibleZeroQ[2^(2 I) - 2^(-2 I) - 2 I Sin[Log[4]]]
+Out[5]= True
+
+In[6]:= PossibleZeroQ[Sqrt[x^2] - x]
+Out[6]= False    (* fails for negative x or complex x off the cut *)
+
+In[7]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
+Out[7]= True
+```
+
 ## $MachinePrecision, $MachineEpsilon, $MinMachineNumber, $MaxMachineNumber, $MaxNumber, $MinNumber
 Read-only system constants describing the floating-point range and
 granularity Mathilda was compiled against. Each is a `Protected` symbol

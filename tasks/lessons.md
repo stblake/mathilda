@@ -1,5 +1,41 @@
 # Lessons learned
 
+## zero_test / PossibleZeroQ (2026-05-24)
+
+### Mathilda's `numericalize` keeps `Rational[Real, Real]` un-collapsed
+
+`N[1/10^30]` returns `Rational[1.0, 1.0e+30]` (a function with two Real
+args) rather than a single `EXPR_REAL`. Helpers that assume "if it's
+numeric, `is_rational(e, &n, &d)` extracts int64 components" silently
+fail and treat the value as non-numeric. Always also accept the
+`Rational[any-numeric, any-numeric]` shape and divide manually.
+
+### Stage-3 sampling: `evaluate(sub)` collapses cancellation context
+
+For Schwartz–Zippel substitution, *don't* call `evaluate` on the
+substituted expression — the evaluator eagerly numericalizes (e.g.
+`Sin[Complex[19, -16]]^2 + Cos[...]^2 - 1` → `Complex[0.078, -0.24]`),
+discarding the `Plus` structure that the cancellation-aware threshold
+needs. Pass the substituted-but-unevaluated form straight to
+`decide_numeric`; its first numericalize rung will do the evaluation
+while `magnitude_scale_at` still sees the original operand magnitudes.
+
+### MPFR doesn't propagate through every numeric path
+
+Mathilda's `Sin` / `Cos` of `Complex[Real, Real]` evaluates at machine
+precision regardless of the requested MPFR precision — the result is a
+double-precision number padded out to the printed digit count. A
+naive ladder that tightens its threshold by 2^(-p/2) per rung will
+spuriously declare "non-zero" because the residual never shrinks.
+Detect this by checking whether the magnitude actually drops between
+rungs (`m < prev_mag * 0.5`); if not, accept the prior verdict.
+
+### `add_test(...)` in `tests/CMakeLists.txt` is a no-op
+
+`tests/CMakeLists.txt` never calls `enable_testing()`, so `add_test`
+lines are silently ignored. The project's test convention is to invoke
+each `*_tests` binary directly, not via `ctest`.
+
 ## simp_factorial (2026-05-07)
 
 ### Mathilda's Factor changes behaviour inside Simplify

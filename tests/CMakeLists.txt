@@ -201,6 +201,7 @@ set(COMMON_SRC
     ../src/solve.c
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
+    ../src/zero_test.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -226,6 +227,11 @@ target_include_directories(regression_tests PRIVATE ../src)
 
 add_executable(comparisons_tests test_comparisons.c ${COMMON_SRC})
 target_include_directories(comparisons_tests PRIVATE ../src)
+
+add_executable(zero_test_tests test_zero_test.c ${COMMON_SRC})
+target_link_libraries(zero_test_tests m)
+target_include_directories(zero_test_tests PRIVATE ../src)
+add_test(NAME zero_test_tests COMMAND zero_test_tests)
 
 add_executable(list_tests test_list.c ${COMMON_SRC})
 target_include_directories(list_tests PRIVATE ../src)
