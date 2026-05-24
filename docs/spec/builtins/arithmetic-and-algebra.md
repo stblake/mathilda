@@ -176,6 +176,12 @@ Exponentiation.
   other than `-1` with even `q ≥ 4` (e.g. `(-16)^(1/4)`) are still left
   unevaluated.
 - Distributes power over product if the exponent is an integer.
+- For `Power[Integer, Rational]` with positive base and positive
+  `p/q` exponent, splits the base's prime factorisation into a
+  product of distinct-prime powers grouped by reduced effective
+  exponent (Mathematica canonical form). Triggers only when the
+  resulting form is strictly more informative -- uniform-exponent
+  inputs like `6^(1/3)` and `30^(1/3)` keep the compact form.
 
 ```mathematica
 In[1]:= Sqrt[45]
@@ -189,6 +195,18 @@ Out[3]= -I
 
 In[4]:= (-1)^(7/4)
 Out[4]= -(-1)^(3/4)
+
+In[5]:= 18^(1/3)
+Out[5]= 2^(1/3) 3^(2/3)
+
+In[6]:= 12^(1/3)
+Out[6]= 2^(2/3) 3^(1/3)
+
+In[7]:= 60^(1/3)            (* 3 and 5 share eff 1/3 -> grouped *)
+Out[7]= 2^(2/3) 15^(1/3)
+
+In[8]:= 6^(1/3)             (* uniform exps -> stays *)
+Out[8]= 6^(1/3)
 ```
 
 ## Sqrt

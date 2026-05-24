@@ -1,5 +1,30 @@
 # Lessons learned
 
+## Power / Times radical canonicalisation are coupled (2026-05-24)
+
+### `Power[N, p/q]` splitting and Times "generalised radical fusion" are inverses
+
+Adding a `Power[Integer, Rational]` split that produces
+`2^(1/3) * 3^(2/3)` from `18^(1/3)` triggered immediate infinite
+recursion: the Times canonicalizer in `src/times.c` has a
+"Generalized radical fusion" rule that re-combines
+`Power[a, e_i] * Power[b, e_j]` into a single `Power` whenever one
+exponent is an integer multiple of the other (k = ±1, ±2, ...). My
+split's `Times[Power[2, 1/3], Power[3, 2/3]]` matched `k = 2` and
+fused back to `Power[18, 1/3]`, which re-entered my split.
+
+Lesson: when changing the canonical form on the Power side, you must
+*also* relax the symmetric simplification on the Times side, or the
+two rules pump against each other and recursion limit hits within a
+handful of evaluator passes.
+
+The fix in `times.c` was to gate the `|k| > 1` branch on
+`gcd(base_i, base_j) > 1`. Same-prime cancellations
+(`2^(1/3) * 8^(2/3) -> 4 * 2^(1/3)`,
+`12^(1/3) * 2^(-2/3) -> 3^(1/3)`) still fuse because the GCD is
+non-trivial; coprime-prime pairs with `|k| > 1` stay split (the new
+canonical form).
+
 ## zero_test / PossibleZeroQ (2026-05-24)
 
 ### Mathilda's `numericalize` keeps `Rational[Real, Real]` un-collapsed

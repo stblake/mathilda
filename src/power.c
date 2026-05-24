@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <gmp.h>
 
@@ -89,6 +90,150 @@ static void factor_out_kth_power(int64_t n, int64_t k, int64_t* out_m, int64_t* 
     }
     *out_m = m;
     *out_r = r;
+}
+
+/* Trial-divide |n| into ascending distinct prime factors. Parallel
+ * arrays primes[] / exps[] get the factorisation; *count is the number
+ * of distinct primes. Returns false (with partial fill discarded) when
+ * more than max_primes distinct factors appear -- caller treats this
+ * as "give up, leave the input alone". Cost is O(sqrt(n)) trial
+ * divisions, matching factor_out_kth_power's loop bound and intended
+ * for the int64-bounded residues that path produces. */
+static bool power_factor_int64(int64_t n,
+                               int64_t* primes, int64_t* exps,
+                               int max_primes, int* count) {
+    *count = 0;
+    if (n < 0) n = -n;
+    if (n <= 1) return true;
+    int64_t d = 2;
+    while (d <= n / d) {
+        if (n % d == 0) {
+            if (*count >= max_primes) return false;
+            primes[*count] = d;
+            int64_t e = 0;
+            while (n % d == 0) { n /= d; e++; }
+            exps[*count] = e;
+            (*count)++;
+        }
+        d++;
+    }
+    if (n > 1) {
+        if (*count >= max_primes) return false;
+        primes[*count] = n;
+        exps[*count] = 1;
+        (*count)++;
+    }
+    return true;
+}
+
+/* Canonicalise Power[r, b_rem/q] for positive integer r, integer
+ * b_rem > 0 and integer q > 1 by splitting r into its prime
+ * factorisation and grouping primes by effective exponent.
+ *
+ * Algorithm: factor r = ∏ p_i^a_i. For each prime, compute
+ *   num_i = a_i * b_rem,   int_i = num_i / q,   d_i = num_i mod q
+ * (0 <= d_i < q). The coefficient absorbs ∏ p_i^int_i; the radical
+ * part groups primes by their reduced (d_i/q) fraction and emits one
+ * Power[base_group, d_i/q] per group, where base_group is the product
+ * of primes in that group.
+ *
+ * Triggers only when splitting strictly adds information --
+ * i.e. some int_i != 0 (a perfect q-th power inside r contributes a
+ * rational coefficient) or the reduced (d_i, q) fractions are not all
+ * identical (the input r^(b_rem/q) compactly hides differing per-prime
+ * exponents). For uniform exponents with no integer part (e.g.
+ * 6^(1/3), 30^(1/3)), returns NULL so the caller keeps the unsplit
+ * Power[r, b_rem/q] form -- matching Mathematica's preference for
+ * the shorter representation when no information is gained.
+ *
+ * Examples:
+ *   r=18, b_rem=1, q=3 -> 2^(1/3) * 3^(2/3)
+ *   r=12, b_rem=1, q=3 -> 2^(2/3) * 3^(1/3)
+ *   r=60, b_rem=1, q=3 -> 2^(2/3) * 15^(1/3)   (3,5 share eff 1/3)
+ *   r=50, b_rem=2, q=3 -> 5 * 2^(2/3) * 5^(1/3) (5^(4/3) splits int*)
+ *   r=6,  b_rem=1, q=3 -> NULL                  (all effs equal)
+ *   r=30, b_rem=1, q=3 -> NULL                  (all effs equal)
+ *
+ * Restricted to b_rem > 0; the negative-numerator case stays in the
+ * existing Power[res_base, b_rem/q] form (see the integer-rat block
+ * below) to avoid having to reason about (-1)^(int_i) sign aggregation
+ * for negative base contexts. */
+static Expr* power_split_residue(int64_t r, int64_t b_rem, int64_t q) {
+    if (r <= 1 || b_rem <= 0 || q <= 1) return NULL;
+    enum { MAX_P = 20 };
+    int64_t primes[MAX_P], exps[MAX_P];
+    int npr = 0;
+    if (!power_factor_int64(r, primes, exps, MAX_P, &npr)) return NULL;
+    if (npr <= 1) return NULL;
+
+    int64_t int_part[MAX_P], eff_num[MAX_P], eff_den[MAX_P];
+    for (int i = 0; i < npr; i++) {
+        __int128_t prod = (__int128_t)exps[i] * (__int128_t)b_rem;
+        if (prod > INT64_MAX) return NULL;
+        int64_t num = (int64_t)prod;
+        int_part[i] = num / q;
+        int64_t rem = num - int_part[i] * q;
+        if (rem == 0) {
+            eff_num[i] = 0;
+            eff_den[i] = 1;
+        } else {
+            int64_t g = gcd(rem, q);
+            eff_num[i] = rem / g;
+            eff_den[i] = q / g;
+        }
+    }
+
+    bool any_int = false, uniform_eff = true;
+    for (int i = 0; i < npr; i++) {
+        if (int_part[i] != 0) any_int = true;
+        if (eff_num[i] != eff_num[0] || eff_den[i] != eff_den[0]) uniform_eff = false;
+    }
+    if (!any_int && uniform_eff) return NULL;
+
+    /* Coefficient = ∏ p_i^int_part[i] in GMP for bigint promotion. */
+    mpz_t coeff_z;
+    mpz_init_set_ui(coeff_z, 1);
+    for (int i = 0; i < npr; i++) {
+        if (int_part[i] > 0) {
+            mpz_t t; mpz_init_set_si(t, primes[i]);
+            mpz_pow_ui(t, t, (unsigned long)int_part[i]);
+            mpz_mul(coeff_z, coeff_z, t);
+            mpz_clear(t);
+        }
+    }
+
+    Expr** out = malloc(sizeof(Expr*) * (npr + 1));
+    int out_count = 0;
+    if (mpz_cmp_ui(coeff_z, 1) != 0) {
+        out[out_count++] = expr_bigint_normalize(expr_new_bigint_from_mpz(coeff_z));
+    }
+    mpz_clear(coeff_z);
+
+    bool used[MAX_P] = {false};
+    for (int i = 0; i < npr; i++) {
+        if (used[i]) continue;
+        used[i] = true;
+        if (eff_num[i] == 0) continue;
+        mpz_t base_z;
+        mpz_init_set_si(base_z, primes[i]);
+        for (int j = i + 1; j < npr; j++) {
+            if (!used[j] && eff_num[j] == eff_num[i] && eff_den[j] == eff_den[i]) {
+                mpz_mul_si(base_z, base_z, primes[j]);
+                used[j] = true;
+            }
+        }
+        Expr* base_e = expr_bigint_normalize(expr_new_bigint_from_mpz(base_z));
+        mpz_clear(base_z);
+        Expr* exp_e = make_rational(eff_num[i], eff_den[i]);
+        out[out_count++] = expr_new_function(expr_new_symbol("Power"),
+                                             (Expr*[]){base_e, exp_e}, 2);
+    }
+
+    if (out_count == 0) { free(out); return expr_new_integer(1); }
+    if (out_count == 1) { Expr* r_ = out[0]; free(out); return r_; }
+    Expr* result = expr_new_function(expr_new_symbol("Times"), out, out_count);
+    free(out);
+    return result;
 }
 
 /* Returns true when Power[f, p/q] is guaranteed to evaluate to a pure
@@ -1364,6 +1509,29 @@ rat_imag_fallthrough: ;
             if (coeff_is_one) { expr_free(coeff); return residue; }
             return expr_new_function(expr_new_symbol("Times"),
                                      (Expr*[]){coeff, residue}, 2);
+        }
+
+        /* Heterogeneous-prime residue split. Reached when a_int == 0
+         * AND m == 1, i.e. abs_n has no perfect q-th-power factor and
+         * the exponent's |numerator| < q so no integer part to extract
+         * -- the existing block above bails. If abs_n still factors
+         * into multiple distinct primes with non-uniform per-prime
+         * effective exponents (a_i * b_rem mod q), split into a
+         * canonical product of distinct-prime powers. This is what
+         * upgrades 18^(1/3) from unevaluated to 2^(1/3) * 3^(2/3),
+         * 12^(1/3) to 2^(2/3) * 3^(1/3), etc. For uniform-exponent
+         * residues like 6^(1/3) and 30^(1/3), power_split_residue
+         * returns NULL and the input form survives.
+         *
+         * Restricted to positive base and positive b_rem; mixed-sign
+         * cases keep the existing residue shape. The b_rem > 0
+         * variants of integer-extracted residues (e.g. inside the
+         * 18^(5/3) = 18 * 18^(2/3) construction above) are picked up
+         * on the recursive evaluator pass: Power[18, 2/3] re-enters
+         * builtin_power and hits this same path. */
+        if (!n_negative && b_rem > 0 && r > 1) {
+            Expr* split = power_split_residue(r, b_rem, q);
+            if (split) return split;
         }
     }
 

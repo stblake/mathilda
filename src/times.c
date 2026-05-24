@@ -653,6 +653,29 @@ Expr* builtin_times(Expr* res) {
                 k = i_primary ? (pj_n / pi_n) : (pi_n / pj_n);
             }
 
+            /* Don't fuse coprime positive-integer bases when |k| > 1.
+             * Fusion in that case produces a strictly larger combined
+             * base (a * b^|k| with no shared prime factor to cancel),
+             * inverting the canonical split form. For example
+             * Power[2, 1/3] * Power[3, 2/3] (k=2, gcd(2,3)=1) should
+             * stay split as Mathematica's canonical 2^(1/3) 3^(2/3),
+             * not collapse to 18^(1/3). The k = ±1 case is exempt --
+             * that's the basic "same exponent" combination
+             * (Sqrt[2]*Sqrt[3] -> Sqrt[6], 2^(1/3)*3^(1/3) -> 6^(1/3))
+             * which adds information by sharing the exponent. Cases
+             * with gcd > 1 (e.g. 12^(1/3) * 2^(-2/3) -> 3^(1/3)) still
+             * fuse because the combined base reduces via the common
+             * prime factor. */
+            if (k != 1 && k != -1
+                && groups[i].base->type == EXPR_INTEGER
+                && groups[j].base->type == EXPR_INTEGER
+                && groups[i].base->data.integer > 0
+                && groups[j].base->data.integer > 0
+                && gcd(groups[i].base->data.integer,
+                       groups[j].base->data.integer) == 1) {
+                continue;
+            }
+
             size_t pri = i_primary ? i : j;
             size_t sec = i_primary ? j : i;
 

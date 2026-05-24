@@ -514,12 +514,17 @@ static void test_same_exponent_cube_root(void) {
 }
 
 static void test_same_exponent_higher_q(void) {
-    /* Quartic and quintic radicals collapse the same way. */
+    /* Quartic and quintic radicals collapse the same way -- k = ±1
+     * (same exponent) still fuses across coprime bases because the
+     * combined form is the canonical "common q-th root". */
     assert_eval_eq("2^(1/4) 3^(1/4)",           "6^(1/4)",      0);
     assert_eval_eq("2^(1/5) 3^(1/5)",           "6^(1/5)",      0);
-    /* k = +2 with q = 3: a^(1/3) * b^(2/3) -> (a*b^2)^(1/3) */
-    assert_eval_eq("2^(1/3) 3^(2/3)",           "18^(1/3)",     0);
-    assert_eval_eq("2^(2/3) 3^(1/3)",           "12^(1/3)",     0);
+    /* k = +2 with q = 3 on coprime prime bases: stays split as
+     * Mathematica's canonical 2^(1/3) 3^(2/3) (formerly fused to
+     * 18^(1/3); the new Power split logic and Times-fusion gating now
+     * agree to keep the distinct-prime form). */
+    assert_eval_eq("2^(1/3) 3^(2/3)",           "2^(1/3) 3^(2/3)", 0);
+    assert_eval_eq("2^(2/3) 3^(1/3)",           "2^(2/3) 3^(1/3)", 0);
     /* Same exponent with rational coefficient. The (1/2) gets absorbed
      * into Sqrt[2]'s exponent before fusion, then the generalized
      * fusion sees Power[2, -1/2] * Power[3, 1/2] and produces the
@@ -546,13 +551,16 @@ static void test_generalized_fusion_negative_k(void) {
 }
 
 static void test_generalized_fusion_positive_k(void) {
-    /* k = +2: a^(1/3) * b^(2/3) -> (a*b^2)^(1/3). */
+    /* k = +2: a^(1/3) * b^(2/3) -> (a*b^2)^(1/3) — fires when bases
+     * share a common prime factor so the combined base reduces. Here
+     * gcd(2, 8) = 2 and 2^(1/3) * (2^3)^(2/3) -> 2^(1/3) * 2^2 ->
+     * 4 * 2^(1/3) via the same-base merge pass. */
     assert_eval_eq("2^(1/3) 8^(2/3)",           "4 2^(1/3)",    0);
-    /* 2^(1/3) * (2^3)^(2/3) -> 2^(1/3) * 2^2 -> 4 * 2^(1/3) -- after
-     * unification of 8^(2/3) into 2^2 the same outcome falls out
-     * via simple integer multiplication. */
-    /* k = +3: a^(1/4) * b^(3/4) -> (a*b^3)^(1/4). */
-    assert_eval_eq("3^(1/4) 2^(3/4)",           "24^(1/4)",     0);
+    /* k = +3 with coprime prime bases: stays split as the canonical
+     * 3^(1/4) 2^(3/4) form (the |k| > 1, gcd = 1 gate keeps the
+     * distinct-prime representation rather than collapsing to
+     * 24^(1/4)). */
+    assert_eval_eq("3^(1/4) 2^(3/4)",           "2^(3/4) 3^(1/4)", 0);
 }
 
 static void test_generalized_fusion_rational_ratio_skipped(void) {
@@ -607,14 +615,20 @@ static void test_perfect_power_minimal_base(void) {
 }
 
 static void test_perfect_power_non_perfect_unchanged(void) {
-    /* 6, 10, 12, 30, 100 (perfect square but caught by sqrt path),
-     * 2, 3, 5 (primes). These should NOT have their bases rewritten by
-     * the unification step. */
+    /* 6, 10, 30 (uniform-exponent prime products): the per-prime
+     * effective q-th-root exponent is identical across primes so the
+     * canonical compact `r^(b/q)` form is kept (Mathematica
+     * convention).  The perfect-power base unification step likewise
+     * leaves them alone because none of these is itself an integer
+     * power b^k with k >= 2. */
     assert_eval_eq("6^(1/3)",                   "6^(1/3)",      0);
     assert_eval_eq("6^(2/3)",                   "6^(2/3)",      0);
     assert_eval_eq("6^(2/5)",                   "6^(2/5)",      0);
     assert_eval_eq("10^(1/3)",                  "10^(1/3)",     0);
-    assert_eval_eq("12^(1/3)",                  "12^(1/3)",     0);
+    /* 12 = 2^2 * 3 has *non-uniform* per-prime exponents (2 vs 1) so
+     * the integer-rat path splits into distinct-prime radicals as
+     * Mathematica does. */
+    assert_eval_eq("12^(1/3)",                  "2^(2/3) 3^(1/3)", 0);
     assert_eval_eq("30^(2/7)",                  "30^(2/7)",     0);
     /* 100 = 10^2 IS a perfect power; should unify to 10^(2*p/q). */
     assert_eval_eq("100^(1/3)",                 "10^(2/3)",     0);
