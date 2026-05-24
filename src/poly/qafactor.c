@@ -3907,3 +3907,498 @@ QATower* extension_autodetect_args(struct Expr* const* args, size_t argc) {
         if (owned[i]) expr_free(owned[i]);
     return t;
 }
+
+/* ============================== Phase E ============================== */
+/* Single-generator polynomial-radicand Cancel/Together path.
+ *
+ * Handles inputs containing exactly one distinct radical of the form
+ * `Sqrt[poly]` / `Power[poly, 1/q]` (q >= 2), where `poly` is a polynomial
+ * expression with free symbols (e.g. `Sqrt[p+q]`, `Power[1+x^2, 1/3]`).
+ *
+ * These inputs are rejected by extension_autodetect because
+ * qa_resolve_nested_radical's expr_collect_atomic_algebraics rejects free
+ * symbols in the radicand.  Rather than enlarge the QAExt machinery to
+ * support function-field coefficients, this path implements the simpler
+ * substitute-then-reduce identity for the one-radical case:
+ *
+ *   1. Substitute every occurrence of α with a fresh symbol S.
+ *   2. Run Together (no extension) on the substituted input — combines
+ *      sum-of-fractions over Q[params, vars, S].
+ *   3. Extract Numerator and Denominator.
+ *   4. For each, run PolynomialRemainder[..., S^q - radicand, S]:
+ *      reduces every S^k with k >= q via S^q = radicand.
+ *   5. Compute PolynomialGCD[num_reduced, den_reduced] (over Q[params,
+ *      vars, S]) and divide both sides by it to cancel any common
+ *      factor surfaced by the reduction.
+ *   6. Substitute S -> α back and emit num / den.
+ *
+ * Limitations (documented in changelog):
+ *   - Single distinct radical only.  Multi-radical inputs like the
+ *     Cardano identity (which involves three radicals whose product
+ *     simplification requires conjugate-pair reasoning) need a Groebner-
+ *     basis treatment that this path does not attempt.
+ *   - No denominator rationalisation: the output may still carry α in
+ *     the denominator.  `simp_rationalize_denom` (in src/simp/) does that
+ *     for the integer-base analogue via PolynomialExtendedGCD; this path
+ *     stops at the substitute + reduce step.
+ *   - `Power[poly, p/q]` with reduced p != 1 is rejected (only the
+ *     natural-form generator base^(1/q) is recognised).
+ *
+ * Returns NULL when detection fails, no actual simplification occurs,
+ * or any intermediate evaluation step fails — caller falls back to the
+ * non-extension path. */
+
+/* Test if `e` is purely an integer / bigint / rational literal (no
+ * symbols, no functions).  Used to filter integer-base radicals from the
+ * polynomial-radicand detection — integer bases are handled by the main
+ * extension_autodetect path. */
+static bool polyrad_radicand_is_const(const Expr* e) {
+    if (!e) return true;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    int64_t p, q;
+    if (is_rational((Expr*)e, &p, &q)) return true;
+    return false;
+}
+
+/* Test if `e` contains a free polynomial variable.  Returns true iff a
+ * symbol other than the mathematical constants (Pi, E, I, ...) appears
+ * somewhere in the tree.  Sqrt[c] / Power[c, p/q] with integer-only `c`
+ * is treated as a "radical constant" (not a variable) — matching the
+ * `expr_has_free_var` predicate defined above.  Used by Phase E to
+ * reject radicals whose radicand is purely algebraic-over-Q (which
+ * should flow through the standard `extension_autodetect` / G8 nested-
+ * radical path, not Phase E). */
+static bool polyrad_radicand_has_free_var(const Expr* e) {
+    return expr_has_free_var(e);
+}
+
+/* Extract the radicand and the (reduced) exponent denominator q from a
+ * radical surface form `e`.  Accepted: `Sqrt[base]` -> (base, 2),
+ * `Power[base, Rational[1, q]]` -> (base, q), more generally
+ * `Power[base, p/q]` -> (base, q_red) iff p/q reduces to 1/q_red.
+ *
+ * Returns false (with *out_base / *out_q untouched) for other shapes. */
+static bool polyrad_parse_radical(const Expr* e,
+                                  const Expr** out_base,
+                                  int64_t* out_q) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (!e->data.function.head
+        || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol;
+    if (h == SYM_Sqrt && e->data.function.arg_count == 1) {
+        *out_base = e->data.function.args[0];
+        *out_q = 2;
+        return true;
+    }
+    if (h == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* exp = e->data.function.args[1];
+        int64_t p, q;
+        if (!is_rational((Expr*)exp, &p, &q) || q == 1) return false;
+        if (q < 0) { p = -p; q = -q; }
+        int64_t ap = p < 0 ? -p : p;
+        int64_t a = ap, b = q;
+        while (b) { int64_t r = a % b; a = b; b = r; }
+        int64_t g = a;
+        int64_t p_red = g > 1 ? p / g : p;
+        int64_t q_red = g > 1 ? q / g : q;
+        /* Only natural-form 1/q is recognised — Power[poly, p/q] with
+         * reduced p != 1 would need additional expand-radicals-to-atomic
+         * machinery on the substitution side. */
+        if (p_red != 1 || q_red < 2) return false;
+        *out_base = e->data.function.args[0];
+        *out_q = q_red;
+        return true;
+    }
+    return false;
+}
+
+/* Walk `e` collecting distinct radical surface forms (by structural
+ * equality).  Each entry is a borrowed pointer into the input tree.
+ * Sets *overflow = true when more than `cap` distinct entries appear
+ * (caller treats as detection-failed). */
+static void polyrad_collect_distinct(const Expr* e,
+                                     const Expr*** list,
+                                     int* n, int* cap,
+                                     bool* overflow) {
+    if (!e || *overflow) return;
+    if (e->type != EXPR_FUNCTION) return;
+    const Expr* radicand = NULL;
+    int64_t q = 0;
+    if (polyrad_parse_radical(e, &radicand, &q)
+        && !polyrad_radicand_is_const(radicand)
+        && polyrad_radicand_has_free_var(radicand)) {
+        /* Dedup by structural equality on the whole radical surface. */
+        for (int i = 0; i < *n; i++) {
+            if (expr_eq((Expr*)(*list)[i], (Expr*)e)) goto recurse;
+        }
+        if (*n + 1 > *cap) {
+            int new_cap = (*cap == 0) ? 4 : (*cap) * 2;
+            const Expr** new_list = (const Expr**)realloc(
+                *list, sizeof(Expr*) * (size_t)new_cap);
+            if (!new_list) { *overflow = true; return; }
+            *list = new_list;
+            *cap = new_cap;
+        }
+        (*list)[(*n)++] = e;
+        /* Threshold: more than 1 distinct radical -> bail. We could
+         * extend this with a triangular-ideal reduction later. */
+        if (*n > 1) { *overflow = true; return; }
+    }
+recurse:
+    if (e->data.function.head)
+        polyrad_collect_distinct(e->data.function.head, list, n, cap, overflow);
+    for (size_t i = 0; i < e->data.function.arg_count && !*overflow; i++) {
+        polyrad_collect_distinct(e->data.function.args[i], list, n, cap, overflow);
+    }
+}
+
+/* Leaf-count helper for the post-substitution change detector.  Local
+ * minimal version that matches `leaf_count_internal`'s definition
+ * sufficiently for the "did this simplify?" check: every integer,
+ * symbol, and float counts as 1; function nodes count their head + each
+ * arg leaf. */
+static int64_t polyrad_leaf_count(const Expr* e) {
+    if (!e) return 0;
+    if (e->type != EXPR_FUNCTION) return 1;
+    int64_t c = polyrad_leaf_count(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        c += polyrad_leaf_count(e->data.function.args[i]);
+    }
+    return c;
+}
+
+/* Public entry point.  Returns the simplified Expr (caller owns) or
+ * NULL when this path can't be applied / doesn't help.  See the comment
+ * block above for algorithm details. */
+static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
+    if (!arg) return NULL;
+
+    /* Step 1: detect. */
+    const Expr** rads = NULL;
+    int n = 0, cap = 0;
+    bool overflow = false;
+    polyrad_collect_distinct(arg, &rads, &n, &cap, &overflow);
+    if (overflow || n != 1 || !rads) {
+        free(rads);
+        return NULL;
+    }
+    const Expr* alpha_render = rads[0];
+    const Expr* radicand = NULL;
+    int64_t q = 0;
+    if (!polyrad_parse_radical(alpha_render, &radicand, &q) || q < 2) {
+        free(rads);
+        return NULL;
+    }
+
+    /* Step 2: substitute alpha -> fresh symbol S. */
+    const char* gen_name = intern_symbol("$qa$polyrad$");
+    Expr* gen_sym = expr_new_symbol(gen_name);
+    Expr* substituted = expr_subst(arg, alpha_render, gen_sym);
+
+    /* Step 3: Together (no extension). */
+    Expr* together_call = expr_new_function(
+        expr_new_symbol("Together"),
+        (Expr*[]){substituted}, 1);
+    Expr* combined = evaluate(together_call);
+    expr_free(together_call);
+    if (!combined) {
+        expr_free(gen_sym);
+        free(rads);
+        return NULL;
+    }
+
+    /* Step 4: extract num and den. */
+    Expr* num_call = expr_new_function(expr_new_symbol("Numerator"),
+        (Expr*[]){expr_copy(combined)}, 1);
+    Expr* num_expr = evaluate(num_call);
+    expr_free(num_call);
+    Expr* den_call = expr_new_function(expr_new_symbol("Denominator"),
+        (Expr*[]){expr_copy(combined)}, 1);
+    Expr* den_expr = evaluate(den_call);
+    expr_free(den_call);
+    expr_free(combined);
+
+    if (!num_expr || !den_expr) {
+        if (num_expr) expr_free(num_expr);
+        if (den_expr) expr_free(den_expr);
+        expr_free(gen_sym);
+        free(rads);
+        return NULL;
+    }
+
+    /* Step 5: build the relation polynomial S^q - radicand and reduce
+     * num and den modulo it w.r.t. S. */
+    Expr* gen_pow_args[2] = { expr_new_symbol(gen_name),
+                               expr_new_integer(q) };
+    Expr* gen_pow = expr_new_function(expr_new_symbol("Power"),
+                                      gen_pow_args, 2);
+    Expr* gen_pow_e = evaluate(gen_pow);
+    expr_free(gen_pow);
+    Expr* neg_radicand_args[2] = { expr_new_integer(-1),
+                                    expr_copy((Expr*)radicand) };
+    Expr* neg_radicand = expr_new_function(expr_new_symbol("Times"),
+                                            neg_radicand_args, 2);
+    Expr* relation_args[2] = { gen_pow_e, neg_radicand };
+    Expr* relation_call = expr_new_function(expr_new_symbol("Plus"),
+                                             relation_args, 2);
+    Expr* relation = evaluate(relation_call);
+    expr_free(relation_call);
+
+    Expr* num_rem_args[3] = { num_expr,
+                               expr_copy(relation),
+                               expr_new_symbol(gen_name) };
+    Expr* num_rem_call = expr_new_function(
+        expr_new_symbol("PolynomialRemainder"), num_rem_args, 3);
+    Expr* num_reduced = evaluate(num_rem_call);
+    expr_free(num_rem_call);
+
+    Expr* den_rem_args[3] = { den_expr,
+                               expr_copy(relation),
+                               expr_new_symbol(gen_name) };
+    Expr* den_rem_call = expr_new_function(
+        expr_new_symbol("PolynomialRemainder"), den_rem_args, 3);
+    Expr* den_reduced = evaluate(den_rem_call);
+    expr_free(den_rem_call);
+
+    if (!num_reduced || !den_reduced) {
+        if (num_reduced) expr_free(num_reduced);
+        if (den_reduced) expr_free(den_reduced);
+        expr_free(relation);
+        expr_free(gen_sym);
+        free(rads);
+        return NULL;
+    }
+
+    /* Step 5.5 (rationalisation): if the post-reduction denominator
+     * still contains S (i.e. its S-degree is > 0), invert it modulo
+     * (S^q - radicand) via PolynomialExtendedGCD.  When the gcd comes
+     * out S-free, the substitution N/D -> N*u (mod relation) clears S
+     * from the denominator, producing the canonical
+     * `(N reduced)/gcd_e` form.  When the gcd has S (meaning D shares
+     * a factor with S^q - radicand — the expression is undefined at
+     * the corresponding root), skip rationalisation and keep the un-
+     * rationalised result. */
+    {
+        Expr* sym_e = expr_new_symbol(gen_name);
+        int den_deg_in_s = get_degree_poly(den_reduced, sym_e);
+        expr_free(sym_e);
+        if (den_deg_in_s > 0) {
+            Expr* xgcd_args[3] = { expr_copy(den_reduced),
+                                    expr_copy(relation),
+                                    expr_new_symbol(gen_name) };
+            Expr* xgcd_call = expr_new_function(
+                expr_new_symbol("PolynomialExtendedGCD"), xgcd_args, 3);
+            Expr* xgcd_result = evaluate(xgcd_call);
+            expr_free(xgcd_call);
+
+            if (xgcd_result
+                && xgcd_result->type == EXPR_FUNCTION
+                && xgcd_result->data.function.head
+                && xgcd_result->data.function.head->type == EXPR_SYMBOL
+                && xgcd_result->data.function.head->data.symbol == SYM_List
+                && xgcd_result->data.function.arg_count == 2) {
+                Expr* gcd_e = xgcd_result->data.function.args[0];
+                Expr* coeffs = xgcd_result->data.function.args[1];
+                if (coeffs && coeffs->type == EXPR_FUNCTION
+                    && coeffs->data.function.head
+                    && coeffs->data.function.head->type == EXPR_SYMBOL
+                    && coeffs->data.function.head->data.symbol == SYM_List
+                    && coeffs->data.function.arg_count >= 1) {
+                    Expr* u_in_s = coeffs->data.function.args[0];
+
+                    /* gcd must be S-free for the rationalisation to
+                     * actually clear S from the denominator. */
+                    Expr* sym_c = expr_new_symbol(gen_name);
+                    int gcd_deg_in_s = get_degree_poly(gcd_e, sym_c);
+                    expr_free(sym_c);
+                    if (gcd_deg_in_s == 0) {
+                        /* prod = num * u; Together; then PolynomialRemainder
+                         * the numerator mod relation. */
+                        Expr* prod_args[2] = { expr_copy(num_reduced),
+                                                expr_copy(u_in_s) };
+                        Expr* prod_call = expr_new_function(
+                            expr_new_symbol("Times"), prod_args, 2);
+                        Expr* prod = evaluate(prod_call);
+                        expr_free(prod_call);
+
+                        Expr* prod_tg_call = expr_new_function(
+                            expr_new_symbol("Together"),
+                            (Expr*[]){prod}, 1);
+                        Expr* prod_combined = evaluate(prod_tg_call);
+                        expr_free(prod_tg_call);
+
+                        Expr* prod_num_call = expr_new_function(
+                            expr_new_symbol("Numerator"),
+                            (Expr*[]){expr_copy(prod_combined)}, 1);
+                        Expr* prod_num = evaluate(prod_num_call);
+                        expr_free(prod_num_call);
+                        Expr* prod_den_call = expr_new_function(
+                            expr_new_symbol("Denominator"),
+                            (Expr*[]){expr_copy(prod_combined)}, 1);
+                        Expr* prod_den = evaluate(prod_den_call);
+                        expr_free(prod_den_call);
+                        expr_free(prod_combined);
+
+                        Expr* nrem_args[3] = { prod_num,
+                                                expr_copy(relation),
+                                                expr_new_symbol(gen_name) };
+                        Expr* nrem_call = expr_new_function(
+                            expr_new_symbol("PolynomialRemainder"),
+                            nrem_args, 3);
+                        Expr* num_new = evaluate(nrem_call);
+                        expr_free(nrem_call);
+
+                        /* new_den = gcd_e * prod_den, simplified via
+                         * Together so any rational parts canonicalise. */
+                        Expr* dprod_args[2] = { expr_copy(gcd_e),
+                                                 prod_den };
+                        Expr* dprod_call = expr_new_function(
+                            expr_new_symbol("Times"), dprod_args, 2);
+                        Expr* new_den_raw = evaluate(dprod_call);
+                        expr_free(dprod_call);
+                        Expr* den_tg_call = expr_new_function(
+                            expr_new_symbol("Together"),
+                            (Expr*[]){new_den_raw}, 1);
+                        Expr* den_new = evaluate(den_tg_call);
+                        expr_free(den_tg_call);
+
+                        if (num_new && den_new) {
+                            /* Only accept the rationalised candidate if
+                             * it didn't inflate the combined size.  For
+                             * q=2 the conjugate trick reliably shrinks
+                             * the structure; for q >= 3 the norm-style
+                             * cofactor can produce a result that is
+                             * larger in total leaf count than the
+                             * un-rationalised form (q=2: a + b S -> a^2 -
+                             * b^2 r drops S without bloating; q=3:
+                             * a + b S + c S^2 -> norm with up to 4
+                             * monomials in (a, b, c, r)).  Keep whichever
+                             * is smaller. */
+                            int64_t lc_unrat = polyrad_leaf_count(num_reduced)
+                                             + polyrad_leaf_count(den_reduced);
+                            int64_t lc_rat = polyrad_leaf_count(num_new)
+                                           + polyrad_leaf_count(den_new);
+                            if (lc_rat <= lc_unrat) {
+                                expr_free(num_reduced);
+                                expr_free(den_reduced);
+                                num_reduced = num_new;
+                                den_reduced = den_new;
+                            } else {
+                                expr_free(num_new);
+                                expr_free(den_new);
+                            }
+                        } else {
+                            if (num_new) expr_free(num_new);
+                            if (den_new) expr_free(den_new);
+                        }
+                    }
+                }
+            }
+            if (xgcd_result) expr_free(xgcd_result);
+        }
+    }
+
+    expr_free(relation);
+
+    /* Step 6: cancel common factor in Q[params, vars, S]. */
+    {
+        Expr* gcd_args[3] = { expr_copy(num_reduced),
+                               expr_copy(den_reduced),
+                               expr_new_symbol(gen_name) };
+        Expr* gcd_call = expr_new_function(
+            expr_new_symbol("PolynomialGCD"), gcd_args, 3);
+        Expr* gcd_e = evaluate(gcd_call);
+        expr_free(gcd_call);
+        /* If gcd is a non-trivial polynomial in S (or params/vars),
+         * divide both sides by it.  When gcd is a unit (Integer or
+         * Rational != 0), skip — division by a constant would just
+         * scale num and den identically. */
+        bool is_unit = false;
+        if (gcd_e) {
+            int64_t gp, gq;
+            if (gcd_e->type == EXPR_INTEGER
+                || gcd_e->type == EXPR_BIGINT) is_unit = true;
+            else if (is_rational(gcd_e, &gp, &gq)) is_unit = true;
+        }
+        if (gcd_e && !is_unit) {
+            Expr* nq_args[3] = { expr_copy(num_reduced),
+                                  expr_copy(gcd_e),
+                                  expr_new_symbol(gen_name) };
+            Expr* nq_call = expr_new_function(
+                expr_new_symbol("PolynomialQuotient"), nq_args, 3);
+            Expr* num_div = evaluate(nq_call);
+            expr_free(nq_call);
+
+            Expr* dq_args[3] = { expr_copy(den_reduced),
+                                  expr_copy(gcd_e),
+                                  expr_new_symbol(gen_name) };
+            Expr* dq_call = expr_new_function(
+                expr_new_symbol("PolynomialQuotient"), dq_args, 3);
+            Expr* den_div = evaluate(dq_call);
+            expr_free(dq_call);
+
+            if (num_div && den_div) {
+                expr_free(num_reduced);
+                expr_free(den_reduced);
+                num_reduced = num_div;
+                den_reduced = den_div;
+            } else {
+                if (num_div) expr_free(num_div);
+                if (den_div) expr_free(den_div);
+            }
+        }
+        if (gcd_e) expr_free(gcd_e);
+    }
+
+    /* Step 7: substitute S -> alpha_render back. */
+    Expr* num_back = expr_subst(num_reduced, gen_sym, alpha_render);
+    Expr* den_back = expr_subst(den_reduced, gen_sym, alpha_render);
+    expr_free(num_reduced);
+    expr_free(den_reduced);
+    expr_free(gen_sym);
+
+    /* Build num / den (with den==1 shortcut). */
+    Expr* result;
+    bool den_is_one = (den_back->type == EXPR_INTEGER
+                      && den_back->data.integer == 1);
+    if (den_is_one) {
+        expr_free(den_back);
+        result = evaluate(num_back);
+        expr_free(num_back);
+    } else {
+        Expr* inv_args[2] = { den_back, expr_new_integer(-1) };
+        Expr* inv = evaluate(expr_new_function(
+            expr_new_symbol("Power"), inv_args, 2));
+        Expr* times_args[2] = { num_back, inv };
+        result = evaluate(expr_new_function(
+            expr_new_symbol("Times"), times_args, 2));
+    }
+
+    free(rads);
+
+    /* Step 8: change-detector.  If the result is structurally identical
+     * to the input (no reduction fired), return NULL so the caller
+     * falls back to the no-extension path — avoids wrapping the input
+     * in a meaningless Times/Power layer. */
+    if (result && expr_eq(result, (Expr*)arg)) {
+        expr_free(result);
+        return NULL;
+    }
+    /* Cheap "did not shrink" guard: bail if the result's leaf count is
+     * larger than the input's by more than the typical Together
+     * combine-then-reduce slack.  This keeps non-helpful expansions
+     * from being returned. */
+    if (result) {
+        int64_t lc_in  = polyrad_leaf_count(arg);
+        int64_t lc_out = polyrad_leaf_count(result);
+        if (lc_in > 0 && lc_out > 2 * lc_in && lc_out > 40) {
+            expr_free(result);
+            return NULL;
+        }
+    }
+    return result;
+}
+
+struct Expr* qa_cancel_with_poly_radical(const struct Expr* arg) {
+    return qa_cancel_with_poly_radical_impl((const Expr*)arg);
+}

@@ -562,6 +562,173 @@ static void test_composite_sqrt_coalesces_to_primes(void) {
         "0", 0);
 }
 
+/* =========================== Phase E =========================== */
+/* Single-generator polynomial-radicand Cancel/Together path.  See
+ * src/poly/qafactor.c (qa_cancel_with_poly_radical) for the algorithm. */
+
+static void test_phasee_together_sum_sqrt_poly(void) {
+    /* 1/(x - Sqrt[p+q]) + 1/(x + Sqrt[p+q]) -> 2x / (x^2 - (p+q)).
+     * Cross-cancellation requires the relation Sqrt[p+q]^2 = p+q. */
+    assert_eval_eq(
+        "Together[1/(x - Sqrt[p+q]) + 1/(x + Sqrt[p+q]), Extension -> Automatic]",
+        "(2 x)/(-p - q + x^2)", 0);
+}
+
+static void test_phasee_cancel_difference_of_squares(void) {
+    /* (x^2 - (p+q))/(x - Sqrt[p+q]) -> Sqrt[p+q] + x.  Requires
+     * rationalisation via PolynomialExtendedGCD. */
+    assert_eval_eq(
+        "Cancel[(x^2 - (p+q))/(x - Sqrt[p+q]), Extension -> Automatic]",
+        "Sqrt[p + q] + x", 0);
+}
+
+static void test_phasee_single_fraction_passthrough(void) {
+    /* 1/(x + Sqrt[p+q]).  The rationalised form
+     * (x - Sqrt[p+q])/(x^2 - (p+q)) has more leaves than the input;
+     * the size gate keeps the input form. */
+    assert_eval_same(
+        "Together[1/(x + Sqrt[p+q]), Extension -> Automatic]",
+        "1/(x + Sqrt[p+q])");
+}
+
+static void test_phasee_sqrt_squared_reduction(void) {
+    /* (Sqrt[p+q])^2 + 1 -> p + q + 1.  PolynomialRemainder reduces
+     * S^2 to p+q in the numerator. */
+    assert_eval_eq(
+        "Together[(Sqrt[p+q])^2 + 1, Extension -> Automatic]",
+        "1 + p + q", 0);
+}
+
+static void test_phasee_sqrt_over_sqrt_collapses(void) {
+    /* Sqrt[p+q]/Sqrt[p+q] -> 1.  Trivially after Together. */
+    assert_eval_eq(
+        "Together[Sqrt[p+q]/Sqrt[p+q], Extension -> Automatic]",
+        "1", 0);
+}
+
+static void test_phasee_cbrt_sum_combine(void) {
+    /* 1/(x - (p+q)^(1/3)) + 1/(x + (p+q)^(1/3)) ->
+     *   2x / (x^2 - (p+q)^(2/3)).  The numerator (x+S)+(x-S) = 2x is
+     *   S-free; the denominator (x-S)(x+S) = x^2 - S^2 has S-degree 2,
+     *   below S^3 = (p+q), so PolynomialRemainder leaves it. */
+    assert_eval_eq(
+        "Together[1/(x - Power[p+q, 1/3]) + 1/(x + Power[p+q, 1/3]), Extension -> Automatic]",
+        "(2 x)/(-(p + q)^(2/3) + x^2)", 0);
+}
+
+static void test_phasee_cbrt_cubed_reduction(void) {
+    /* (Power[1+x, 1/3])^3 -> 1 + x.  PolynomialRemainder reduces
+     * S^3 to (1+x). */
+    assert_eval_eq(
+        "Together[(Power[1+x, 1/3])^3, Extension -> Automatic]",
+        "1 + x", 0);
+}
+
+static void test_phasee_no_extension_unchanged(void) {
+    /* Without Extension -> Automatic, Phase E does not trigger and the
+     * input passes through the standard Together (which keeps the
+     * Sqrt[p+q] opaque, leaving the two fractions uncombined). */
+    assert_eval_same(
+        "Together[1/(x - Sqrt[p+q]) + 1/(x + Sqrt[p+q])]",
+        "1/(x - Sqrt[p+q]) + 1/(x + Sqrt[p+q])");
+}
+
+static void test_phasee_integer_base_skipped(void) {
+    /* Sqrt[2] is integer-base — handled by the standard extension_auto
+     * path, not Phase E.  Confirm behaviour matches explicit Extension
+     * -> Sqrt[2]. */
+    assert_eval_same(
+        "Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Automatic]",
+        "Together[1/(x - Sqrt[2]) + 1/(x + Sqrt[2]), Extension -> Sqrt[2]]");
+}
+
+static void test_phasee_multi_radical_no_collapse(void) {
+    /* Multi-radical Cardano-style input.  Phase E rejects (more than
+     * one distinct polynomial radical), and the rest of the pipeline
+     * lacks the conjugate-pair / Groebner reasoning to collapse it.
+     * Documented gap.  Confirm that Together with Extension -> Automatic
+     * leaves the multi-radical sum unchanged relative to the no-extension
+     * Together (i.e. Phase E does not crash, does not inflate, and does
+     * not produce a different result than the standard path). */
+    assert_eval_same(
+        "Together[(-q/2 + Sqrt[(q/2)^2 + (p/3)^3])^(1/3) "
+        "+ (-q/2 - Sqrt[(q/2)^2 + (p/3)^3])^(1/3), Extension -> Automatic]",
+        "Together[(-q/2 + Sqrt[(q/2)^2 + (p/3)^3])^(1/3) "
+        "+ (-q/2 - Sqrt[(q/2)^2 + (p/3)^3])^(1/3)]");
+}
+
+static void test_phasee_one_radical_two_params(void) {
+    /* Radicand involving a single param: Sqrt[1 + p^2].  Should be
+     * detected, substituted, reduced. */
+    assert_eval_eq(
+        "Together[1/(x - Sqrt[1 + p^2]) + 1/(x + Sqrt[1 + p^2]), Extension -> Automatic]",
+        "(2 x)/(-1 - p^2 + x^2)", 0);
+}
+
+static void test_phasee_cancel_with_extra_factor(void) {
+    /* (x^2 - r)·(1+a) / ((x - Sqrt[r])·(1+a)) with r = p+q.
+     * After Cancel: (x + Sqrt[r]).  Tests that the gcd-cancellation
+     * step also handles factors outside the radical. */
+    assert_eval_eq(
+        "Cancel[((x^2 - (p+q))*(1+a))/((x - Sqrt[p+q])*(1+a)), Extension -> Automatic]",
+        "Sqrt[p + q] + x", 0);
+}
+
+static void test_phasee_repeated_radical(void) {
+    /* Several occurrences of the same radical: same generator counted
+     * once. */
+    assert_eval_eq(
+        "Together[Sqrt[p+q] + Sqrt[p+q] + 1, Extension -> Automatic]",
+        "1 + 2 Sqrt[p + q]", 0);
+}
+
+static void test_phasee_no_radical_input_passthrough(void) {
+    /* No radical present — Phase E returns NULL, fall through to the
+     * no-extension Together. */
+    assert_eval_eq(
+        "Together[1/(x - p) + 1/(x + p), Extension -> Automatic]",
+        "(2 x)/(-p^2 + x^2)", 0);
+}
+
+static void test_phasee_inexact_not_intercepted(void) {
+    /* Inexact coefficient in input: the rationalize-then-numericalize
+     * pipeline forces the input to exact, runs Phase E, then
+     * numericalises back.  Confirm the result is the same numerical
+     * answer as the all-inexact case (i.e. Phase E does not interfere
+     * with the inexact handling path). */
+    assert_eval_eq(
+        "Together[1/(x - Sqrt[3/2]) + 1/(x + Sqrt[3/2]), Extension -> Automatic]",
+        "(2 x)/(-3/2 + x^2)", 0);
+}
+
+static void test_phasee_power_pq_nonunit_rejected(void) {
+    /* Power[poly, 2/3] has reduced exponent (p, q) = (2, 3), p != 1.
+     * Phase E only handles 1/q.  This case is rejected; the standard
+     * pipeline either passes it through or hits the existing
+     * algebraic-generator pass — either way no Phase E intervention. */
+    assert_eval_same(
+        "Together[Power[1+x, 2/3] + 1, Extension -> Automatic]",
+        "Together[Power[1+x, 2/3] + 1]");
+}
+
+static void test_phasee_quartic_radical(void) {
+    /* Higher-q (q=4): 1/(x - Power[r, 1/4]) + 1/(x + Power[r, 1/4]) ->
+     * 2x / (x^2 - Power[r, 1/2]).  PolynomialRemainder reduces S^2
+     * only when S-degree >= 4; S^2 stays. */
+    assert_eval_eq(
+        "Together[1/(x - Power[p+q, 1/4]) + 1/(x + Power[p+q, 1/4]), Extension -> Automatic]",
+        "(2 x)/(-Sqrt[p + q] + x^2)", 0);
+}
+
+static void test_phasee_sqrt_sum_collapse_zero(void) {
+    /* Sum that algebraically equals zero: (1 + Sqrt[p+q]) - 1 - Sqrt[p+q]
+     * -> 0.  Tests that Phase E's substitute -> Together pass collapses
+     * cleanly when reductions produce zero. */
+    assert_eval_eq(
+        "Together[(1 + Sqrt[p+q]) - 1 - Sqrt[p+q], Extension -> Automatic]",
+        "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -626,6 +793,26 @@ int main(void) {
     TEST(test_pgcd_multivar_high_gamma_power_collapse);
     TEST(test_pgcd_multivar_inexact_unchanged);
     TEST(test_pgcd_multivar_explicit_none_unchanged);
+
+    /* Phase E: single-generator polynomial-radicand Cancel/Together */
+    TEST(test_phasee_together_sum_sqrt_poly);
+    TEST(test_phasee_cancel_difference_of_squares);
+    TEST(test_phasee_single_fraction_passthrough);
+    TEST(test_phasee_sqrt_squared_reduction);
+    TEST(test_phasee_sqrt_over_sqrt_collapses);
+    TEST(test_phasee_cbrt_sum_combine);
+    TEST(test_phasee_cbrt_cubed_reduction);
+    TEST(test_phasee_no_extension_unchanged);
+    TEST(test_phasee_integer_base_skipped);
+    TEST(test_phasee_multi_radical_no_collapse);
+    TEST(test_phasee_one_radical_two_params);
+    TEST(test_phasee_cancel_with_extra_factor);
+    TEST(test_phasee_repeated_radical);
+    TEST(test_phasee_no_radical_input_passthrough);
+    TEST(test_phasee_inexact_not_intercepted);
+    TEST(test_phasee_power_pq_nonunit_rejected);
+    TEST(test_phasee_quartic_radical);
+    TEST(test_phasee_sqrt_sum_collapse_zero);
 
     printf("All extension_auto_builtins tests passed!\n");
     return 0;

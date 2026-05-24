@@ -379,4 +379,31 @@ QATower* extension_autodetect(const struct Expr* e);
  * `extension_autodetect`. */
 QATower* extension_autodetect_args(struct Expr* const* args, size_t argc);
 
+/* Phase E: single-generator polynomial-radicand Cancel/Together path.
+ *
+ * Handles inputs containing exactly one distinct radical of the form
+ * `Sqrt[poly]` or `Power[poly, 1/q]` where `poly` is a polynomial
+ * expression with free symbols.  Substitutes the radical with a fresh
+ * symbol, runs `Together`, reduces numerator and denominator modulo
+ * `S^q - radicand` via `PolynomialRemainder`, and substitutes back.
+ *
+ * Used as a fallback by `builtin_cancel` / `builtin_together` when the
+ * standard `extension_autodetect` path returns NULL (which it does for
+ * polynomial-radicand radicals — the QAExt machinery has Q-coefficient
+ * minimal polynomials and cannot represent the resulting Q(params)-
+ * coefficient case).
+ *
+ * Returns NULL when:
+ *   - No polynomial-radicand radical is present.
+ *   - More than one distinct polynomial-radicand radical is present
+ *     (multi-radical inputs need Groebner-basis reasoning that this
+ *     path does not attempt — see the Cardano gap documented in the
+ *     2026-05 changelog).
+ *   - `Power[poly, p/q]` with reduced p != 1.
+ *   - The post-reduction result is identical to the input (no
+ *     simplification fired) or has inflated past a sanity gate.
+ *
+ * Caller owns the returned Expr (free with `expr_free`). */
+struct Expr* qa_cancel_with_poly_radical(const struct Expr* arg);
+
 #endif

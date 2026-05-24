@@ -1131,6 +1131,23 @@ static Expr* builtin_cancel_compute(Expr* res) {
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
     }
 
+    /* Phase E: single-generator polynomial-radicand path.  Triggered
+     * when Extension -> Automatic is requested and the standard
+     * autodetect path didn't produce a tower (typically: the input
+     * contains a Sqrt[poly] / Power[poly, 1/q] whose radicand has free
+     * symbols, which qa_resolve_nested_radical's expr_collect_
+     * atomic_algebraics rejects).  See qa_cancel_with_poly_radical
+     * for the full algorithm + the documented Cardano-style multi-
+     * radical limitation. */
+    if (auto_flag && !alpha) {
+        Expr* result = qa_cancel_with_poly_radical(arg);
+        if (result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return result;
+        }
+    }
+
     /* Inexact coefficients block the rational-arithmetic cancellation
      * machinery (e.g. (x^2/9 - y^2/25.) — the 25. defeats Polynomial GCD).
      * Force-rationalise on the way in, numericalise on the way out. */
@@ -1396,6 +1413,18 @@ static Expr* builtin_together_compute(Expr* res) {
         }
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
+    }
+
+    /* Phase E: single-generator polynomial-radicand path.  Same wiring
+     * as builtin_cancel_compute; see qa_cancel_with_poly_radical for
+     * the algorithm. */
+    if (auto_flag && !alpha) {
+        Expr* result = qa_cancel_with_poly_radical(arg);
+        if (result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return result;
+        }
     }
 
     /* Inexact coefficients can't be combined by exact polynomial-LCM
