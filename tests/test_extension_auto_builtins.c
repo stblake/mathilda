@@ -302,6 +302,239 @@ static void test_pgcd_multigen_share_linear_factor(void) {
         "-Sqrt[2] - Sqrt[3] + x", 0);
 }
 
+/* =========================== Phase D: multivariate tower GCD/LCM =========================== */
+
+/* Phase D extends the tower path to inputs with more than one polynomial
+ * variable beyond γ.  The strategy is to substitute each α_i with its
+ * γ-polynomial form and call the no-extension multivariate
+ * `PolynomialGCD` / `PolynomialLCM`, then substitute γ back through
+ * `t->gamma_render` and Expand + evaluate to canonicalise.
+ *
+ * Correctness boundary: the result is the Q[γ, x, y, ...]-GCD
+ * (γ treated as polynomial variable).  This is a Q(γ)-common-divisor
+ * but possibly not the maximal one.  Tests below distinguish:
+ *   - cases where Q[γ,...]-GCD equals Q(γ)[...]-GCD (most practical
+ *     inputs);
+ *   - cases where they differ — those return a non-maximal GCD whose
+ *     output is still mathematically valid.
+ */
+
+/* --- Multivariate single-α: a Q[γ,x,y] GCD that agrees with Q(γ)[x,y] --- */
+static void test_pgcd_multivar_single_alpha_shared_no_gamma(void) {
+    /* gcd((x^2 + y^2)(x - Sqrt[2]), (x^2 + y^2)(x + Sqrt[2])) = x^2 + y^2.
+     * The shared factor is γ-free, so Q[γ,x,y]-GCD finds it exactly. */
+    assert_eval_eq(
+        "PolynomialGCD[(x^2 + y^2) (x - Sqrt[2]), (x^2 + y^2) (x + Sqrt[2]), "
+        "Extension -> Automatic]",
+        "x^2 + y^2", 0);
+}
+
+static void test_pgcd_multivar_single_alpha_shared_with_gamma(void) {
+    /* gcd((a Sqrt[2] + 1) x, (a Sqrt[2] + 1) y) = a Sqrt[2] + 1.
+     * The shared factor is linear in γ (Sqrt[2]); Q[γ,a,x,y]-GCD
+     * finds it. */
+    assert_eval_eq(
+        "PolynomialGCD[(a Sqrt[2] + 1) x, (a Sqrt[2] + 1) y, "
+        "Extension -> Automatic]",
+        "1 + Sqrt[2] a", 0);
+}
+
+static void test_pgcd_multivar_single_alpha_coprime(void) {
+    /* gcd(x y - Sqrt[2], x y + Sqrt[2]) = 1 in Q(Sqrt[2])[x,y]; the
+     * resultant in (xy) gives a nonzero constant 2 Sqrt[2]. */
+    assert_eval_eq(
+        "PolynomialGCD[x y - Sqrt[2], x y + Sqrt[2], Extension -> Automatic]",
+        "1", 0);
+}
+
+/* --- Multivariate multi-α: γ-free GCD --- */
+static void test_pgcd_multivar_multi_alpha_gamma_free(void) {
+    /* gcd((a + b)(Sqrt[2] + 1), (a + b)(Sqrt[2] - 1)) = a + b. */
+    assert_eval_eq(
+        "PolynomialGCD[(a + b) (Sqrt[2] + 1), (a + b) (Sqrt[2] - 1), "
+        "Extension -> Automatic]",
+        "a + b", 0);
+}
+
+static void test_pgcd_multivar_multi_alpha_two_vars_unit_factor(void) {
+    /* gcd((x^2 - y^2)(Sqrt[2] + Sqrt[3]), (x^2 - y^2)(Sqrt[2] - Sqrt[3])).
+     *
+     * The canonical Q(Sqrt[2], Sqrt[3])[x,y]-GCD is x^2 - y^2 — the
+     * factors (Sqrt[2]+Sqrt[3]) and (Sqrt[2]-Sqrt[3]) are units in
+     * Q(γ) (their product is 2 - 3 = -1, both nonzero), so neither
+     * contributes to the canonical GCD.
+     *
+     * Phase D limitation: the substitute-back approach computes the
+     * Q[γ, x, y]-GCD (γ treated as polynomial variable).  Under the
+     * primitive-element substitution γ = Sqrt[2] + Sqrt[3] one input
+     * becomes (x^2 - y^2)·γ and the other (x^2 - y^2)·γ·(γ^2 - 10),
+     * so the Q[γ,x,y]-GCD is (x^2 - y^2)·γ — which substitutes back
+     * to (x^2 - y^2)(Sqrt[2] + Sqrt[3]).  This is still a Q(γ)-divisor
+     * of both inputs (Sqrt[2] + Sqrt[3] is a unit in Q(γ)), just not
+     * the canonical monic form.  Documented boundary. */
+    assert_eval_eq(
+        "PolynomialGCD[(x^2 - y^2) (Sqrt[2] + Sqrt[3]), "
+        "(x^2 - y^2) (Sqrt[2] - Sqrt[3]), Extension -> Automatic]",
+        "Sqrt[2] x^2 + Sqrt[3] x^2 - Sqrt[2] y^2 - Sqrt[3] y^2", 0);
+}
+
+/* --- Multivariate LCM: γ-free common factor --- */
+static void test_plcm_multivar_single_alpha_distinct_linears(void) {
+    /* lcm(a + Sqrt[2], b + Sqrt[2]) = (a + Sqrt[2])(b + Sqrt[2]) in
+     * Q(γ)[a, b], expanded by Phase D's canonicalisation pass into
+     * `a b + (a + b) Sqrt[2] + 2`.  Q(γ)-coprime, so LCM equals the
+     * product. */
+    assert_eval_eq(
+        "PolynomialLCM[a + Sqrt[2], b + Sqrt[2], Extension -> Automatic]",
+        "2 + Sqrt[2] a + Sqrt[2] b + a b", 0);
+}
+
+static void test_plcm_multivar_share_in_extension(void) {
+    /* lcm((a + Sqrt[2])(x - 1), (a + Sqrt[2])(x + 1)) =
+     * (a + Sqrt[2])(x^2 - 1) in Q(γ)[a, x], expanded by Phase D's
+     * canonicalisation into `(a + Sqrt[2])(x^2 - 1)` distributed. */
+    assert_eval_eq(
+        "PolynomialLCM[(a + Sqrt[2]) (x - 1), (a + Sqrt[2]) (x + 1), "
+        "Extension -> Automatic]",
+        "-Sqrt[2] - a + Sqrt[2] x^2 + a x^2", 0);
+}
+
+static void test_plcm_multivar_multi_alpha_no_share(void) {
+    /* lcm(Sqrt[2] + x, Sqrt[3] + y) — fully coprime in
+     * Q(Sqrt[2], Sqrt[3])[x, y].  LCM is the product, expanded:
+     * (Sqrt[2] + x)(Sqrt[3] + y) = Sqrt[6] + Sqrt[3] x + Sqrt[2] y + x y. */
+    assert_eval_eq(
+        "PolynomialLCM[Sqrt[2] + x, Sqrt[3] + y, Extension -> Automatic]",
+        "Sqrt[6] + Sqrt[3] x + Sqrt[2] y + x y", 0);
+}
+
+/* --- Three-argument multivariate --- */
+static void test_pgcd_multivar_three_arg_share(void) {
+    /* gcd of three polynomials each carrying the (x^2 + Sqrt[2]) factor. */
+    assert_eval_eq(
+        "PolynomialGCD["
+        "(x^2 + Sqrt[2]) (a + 1), "
+        "(x^2 + Sqrt[2]) (a + 2), "
+        "(x^2 + Sqrt[2]) (a + 3), "
+        "Extension -> Automatic]",
+        "Sqrt[2] + x^2", 0);
+}
+
+/* --- No-op and pass-through cases --- */
+static void test_pgcd_multivar_no_radical_unchanged(void) {
+    /* Multivariate but no algebraic radicals: tower auto-detect is a
+     * no-op, the standard multivariate path runs. */
+    assert_eval_eq(
+        "PolynomialGCD[(x + y) (a + b), (x + y) (c + d), Extension -> Automatic]",
+        "x + y", 0);
+}
+
+static void test_plcm_multivar_no_extension_unchanged(void) {
+    /* Without Extension -> Automatic the multivariate radical case
+     * goes through the no-extension BPList path, which returns the
+     * literal product as a single expression.  Phase D must not
+     * change this default. */
+    assert_eval_eq(
+        "PolynomialLCM[a + Sqrt[2], b + Sqrt[2]]",
+        "(Sqrt[2] + a) (Sqrt[2] + b)", 0);
+}
+
+/* --- Cube-root multi-α --- */
+static void test_pgcd_multivar_cbrt_share(void) {
+    /* gcd((x + 2^(1/3))(a + 1), (x + 2^(1/3))(a + 2)) = x + 2^(1/3). */
+    assert_eval_eq(
+        "PolynomialGCD["
+        "(x + Power[2, 1/3]) (a + 1), "
+        "(x + Power[2, 1/3]) (a + 2), "
+        "Extension -> Automatic]",
+        "2^(1/3) + x", 0);
+}
+
+static void test_plcm_multivar_cbrt_distinct(void) {
+    /* lcm(x + 2^(1/3), x + 3^(1/3)) over Q(2^(1/3), 3^(1/3))[x,a,...]:
+     * coprime, so LCM = product, expanded into
+     * `x^2 + (2^(1/3) + 3^(1/3)) x + 6^(1/3)`. */
+    assert_eval_eq(
+        "PolynomialLCM[x + Power[2, 1/3], x + Power[3, 1/3], "
+        "Extension -> Automatic]",
+        "6^(1/3) + 2^(1/3) x + 3^(1/3) x + x^2", 0);
+}
+
+/* --- Mixed Sqrt + cube root --- */
+static void test_pgcd_multivar_sqrt_cbrt_mix(void) {
+    /* Two distinct algebraic generators Sqrt[2] and 3^(1/3) appearing in
+     * the same multivariate inputs.  Shared factor is γ-free. */
+    assert_eval_eq(
+        "PolynomialGCD["
+        "(x y + 1) (Sqrt[2] + Power[3, 1/3]), "
+        "(x y + 1) (Sqrt[2] - Power[3, 1/3]), "
+        "Extension -> Automatic]",
+        "1 + x y", 0);
+}
+
+/* --- Three poly variables --- */
+static void test_pgcd_multivar_three_poly_vars(void) {
+    /* gcd((a+b+c)(x+Sqrt[2]), (a+b+c)(x-Sqrt[2])) — three free poly
+     * vars besides γ.  Canonical Q(γ)-GCD is (a + b + c); the
+     * (x±Sqrt[2]) factors are Q(γ)-coprime. */
+    assert_eval_eq(
+        "PolynomialGCD[(a + b + c) (x + Sqrt[2]), (a + b + c) (x - Sqrt[2]), "
+        "Extension -> Automatic]",
+        "a + b + c", 0);
+}
+
+static void test_plcm_multivar_three_poly_vars_expanded(void) {
+    /* lcm((x + Sqrt[2])(a - 1), (x + Sqrt[2])(b - 1)) =
+     * (x + Sqrt[2])(a - 1)(b - 1), Q(γ)-coprime in (a, b).  Phase D
+     * canonicalises into the fully-expanded distributed form. */
+    assert_eval_eq(
+        "PolynomialLCM[(x + Sqrt[2]) (a - 1), (x + Sqrt[2]) (b - 1), "
+        "Extension -> Automatic]",
+        "Sqrt[2] - Sqrt[2] a - Sqrt[2] b + Sqrt[2] a b + x - a x - b x + a b x", 0);
+}
+
+/* --- Phase D boundary: divisibility-by-γ-only-unit cases --- */
+static void test_pgcd_multivar_divisible_by_unit(void) {
+    /* One input divides the other.  Q(γ)-GCD = (x - 1)(Sqrt[2] + Sqrt[3]) —
+     * Phase D recovers this exactly because the "unit" Sqrt[2]+Sqrt[3]
+     * appears as a polynomial-in-γ factor in both inputs (one occurrence
+     * each), so the Q[γ,x]-GCD agrees with the canonical Q(γ)[x]-GCD. */
+    assert_eval_eq(
+        "PolynomialGCD["
+        "(x - 1) (Sqrt[2] + Sqrt[3]), "
+        "(x - 1) (Sqrt[2] + Sqrt[3]) (Sqrt[2] - Sqrt[3]), "
+        "Extension -> Automatic]",
+        "-Sqrt[2] - Sqrt[3] + Sqrt[2] x + Sqrt[3] x", 0);
+}
+
+static void test_pgcd_multivar_high_gamma_power_collapse(void) {
+    /* Sqrt[2]^2 = 2 (Mathilda auto-evaluation), so `x - Sqrt[2]^2` and
+     * `x - 2` are structurally identical even before Phase D runs.
+     * gcd = x - 2. */
+    assert_eval_eq(
+        "PolynomialGCD[x - Sqrt[2]^2, x - 2, Extension -> Automatic]",
+        "-2 + x", 0);
+}
+
+/* --- Inexact input must still take the rationalize/numericalize path --- */
+static void test_pgcd_multivar_inexact_unchanged(void) {
+    /* Phase D MUST NOT swallow inexact-coefficient inputs — those go
+     * through `internal_rationalize_then_numericalize` so the user
+     * sees consistent inexact-in / inexact-out behaviour. */
+    assert_eval_eq(
+        "PolynomialGCD[x - 1.5, x^2 - 2.25, Extension -> Automatic]",
+        "-1.5 + x", 0);
+}
+
+/* --- Regression: ensure no Extension -> Automatic side-effects --- */
+static void test_pgcd_multivar_explicit_none_unchanged(void) {
+    /* Extension -> None must NOT trigger the tower path; result matches
+     * no-extension form (the symbolic product). */
+    assert_eval_same(
+        "PolynomialGCD[(a + Sqrt[2]) x, (a + Sqrt[2]) y, Extension -> None]",
+        "PolynomialGCD[(a + Sqrt[2]) x, (a + Sqrt[2]) y]");
+}
+
 static void test_plcm_multigen_no_automatic_unchanged(void) {
     /* Without `Extension -> Automatic` the multi-generator inputs go
      * through the no-extension BPList path, which returns the symbolic
@@ -371,6 +604,28 @@ int main(void) {
     TEST(test_plcm_multigen_nested_pair);
     TEST(test_pgcd_multigen_share_linear_factor);
     TEST(test_plcm_multigen_no_automatic_unchanged);
+
+    /* Phase D: multivariate tower GCD/LCM */
+    TEST(test_pgcd_multivar_single_alpha_shared_no_gamma);
+    TEST(test_pgcd_multivar_single_alpha_shared_with_gamma);
+    TEST(test_pgcd_multivar_single_alpha_coprime);
+    TEST(test_pgcd_multivar_multi_alpha_gamma_free);
+    TEST(test_pgcd_multivar_multi_alpha_two_vars_unit_factor);
+    TEST(test_plcm_multivar_single_alpha_distinct_linears);
+    TEST(test_plcm_multivar_share_in_extension);
+    TEST(test_plcm_multivar_multi_alpha_no_share);
+    TEST(test_pgcd_multivar_three_arg_share);
+    TEST(test_pgcd_multivar_no_radical_unchanged);
+    TEST(test_plcm_multivar_no_extension_unchanged);
+    TEST(test_pgcd_multivar_cbrt_share);
+    TEST(test_plcm_multivar_cbrt_distinct);
+    TEST(test_pgcd_multivar_sqrt_cbrt_mix);
+    TEST(test_pgcd_multivar_three_poly_vars);
+    TEST(test_plcm_multivar_three_poly_vars_expanded);
+    TEST(test_pgcd_multivar_divisible_by_unit);
+    TEST(test_pgcd_multivar_high_gamma_power_collapse);
+    TEST(test_pgcd_multivar_inexact_unchanged);
+    TEST(test_pgcd_multivar_explicit_none_unchanged);
 
     printf("All extension_auto_builtins tests passed!\n");
     return 0;

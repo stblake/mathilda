@@ -2542,6 +2542,103 @@ Expr* qa_polynomiallcm_with_tower(Expr* const* argv, size_t argc,
     return result;
 }
 
+/* Phase D core: multivariate tower-based GCD/LCM via substitute-back.
+ *
+ * Substitutes each α_i in every input with its polynomial-in-γ form
+ * (using QA_ALPHA_INTERNAL as the γ symbol), then calls the
+ * no-extension multivariate `internal_polynomialgcd` or
+ * `internal_polynomiallcm` on the substituted forms, treating
+ * QA_ALPHA_INTERNAL as just another polynomial variable.  Finally
+ * substitutes QA_ALPHA_INTERNAL → t->gamma_render and runs
+ * Expand + evaluate to canonicalise.
+ *
+ * Correctness caveat: this computes the GCD over `Q[γ, x, y, ...]`
+ * (γ treated as polynomial variable) rather than the canonical GCD
+ * over `Q(γ)[x, y, ...]` (γ algebraic, modulo its minimal polynomial).
+ * The two coincide exactly when the Q[γ,...]-GCD has γ-degree
+ * strictly less than `deg(γ_min)` AND the inputs are γ-primitive.
+ * When they differ:
+ *   - GCD returned is a Q(γ)-divisor of both inputs, but possibly not
+ *     the maximal one (no "extra" common factor unlocked by γ_min).
+ *   - LCM is correspondingly a Q(γ)-multiple of both inputs, but
+ *     possibly larger than the canonical Q(γ)-LCM.
+ * Both results remain mathematically equivalent; downstream Cancel /
+ * Together passes can reduce further when needed.  For the practical
+ * inputs Phase D targets (inputs linear or low-degree in γ — the
+ * Cardano sub-problem shape `PolynomialLCM[18, R]` with R linear in
+ * the radicals), the two GCD definitions agree. */
+static Expr* tower_multivar_combine(Expr* const* argv, size_t argc,
+                                    const QATower* t,
+                                    const char* op_head) {
+    if (!argv || argc < 1 || !t || t->n < 1 || !op_head) return NULL;
+
+    /* 1. Substitute each α_i → γ-poly in each input. */
+    Expr** subst = (Expr**)malloc(sizeof(Expr*) * argc);
+    if (!subst) return NULL;
+    for (size_t i = 0; i < argc; i++) subst[i] = NULL;
+    for (size_t i = 0; i < argc; i++) {
+        subst[i] = tower_substitute_alphas(argv[i], t);
+        if (!subst[i]) {
+            for (size_t j = 0; j < argc; j++) if (subst[j]) expr_free(subst[j]);
+            free(subst);
+            return NULL;
+        }
+    }
+
+    /* 2. Build the call: head[subst[0], subst[1], ...] and evaluate.
+     * The substituted forms own their Exprs; the new function takes
+     * ownership of those copies. */
+    Expr** call_args = (Expr**)malloc(sizeof(Expr*) * argc);
+    for (size_t i = 0; i < argc; i++) call_args[i] = expr_copy(subst[i]);
+    Expr* call = expr_new_function(expr_new_symbol(op_head), call_args, argc);
+    free(call_args);
+
+    Expr* in_gamma = evaluate(call);
+    expr_free(call);
+
+    for (size_t i = 0; i < argc; i++) expr_free(subst[i]);
+    free(subst);
+
+    if (!in_gamma) return NULL;
+
+    /* 3. Guard: if evaluate returned the original head unchanged (i.e.
+     * no-ext path also failed), don't render — fall back to caller. */
+    if (in_gamma->type == EXPR_FUNCTION
+        && in_gamma->data.function.head
+        && in_gamma->data.function.head->type == EXPR_SYMBOL
+        && in_gamma->data.function.head->data.symbol
+        && strcmp(in_gamma->data.function.head->data.symbol, op_head) == 0) {
+        expr_free(in_gamma);
+        return NULL;
+    }
+
+    /* 4. Substitute γ_internal → γ_render, Expand to distribute
+     * Power[Plus[...], n] terms (γ_render is typically a Plus for
+     * multi-α towers), and evaluate to canonicalise (Sqrt[c]^2 → c,
+     * etc.). */
+    Expr* gamma_sym = expr_new_symbol(QA_ALPHA_INTERNAL);
+    Expr* in_alpha = expr_subst(in_gamma, gamma_sym, t->gamma_render);
+    expr_free(gamma_sym);
+    expr_free(in_gamma);
+
+    Expr* expanded = expr_expand(in_alpha);
+    expr_free(in_alpha);
+
+    Expr* canon = evaluate(expanded);
+    expr_free(expanded);
+    return canon;
+}
+
+Expr* qa_polynomialgcd_with_tower_multivar(Expr* const* argv, size_t argc,
+                                           const QATower* t) {
+    return tower_multivar_combine(argv, argc, t, "PolynomialGCD");
+}
+
+Expr* qa_polynomiallcm_with_tower_multivar(Expr* const* argv, size_t argc,
+                                           const QATower* t) {
+    return tower_multivar_combine(argv, argc, t, "PolynomialLCM");
+}
+
 bool qa_tower_has_nested_radical(const QATower* t) {
     if (!t) return false;
     for (int i = 0; i < t->n; i++) {

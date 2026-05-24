@@ -2068,28 +2068,37 @@ Expr* builtin_polynomialgcd(Expr* res) {
         if (alpha) {
             Expr* ext_result = polynomialgcd_with_extension(
                 res->data.function.args, poly_argc, alpha);
-            if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
-            if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
-            if (ext_result) return ext_result;
-            /* Fall through to non-extension path on failure (multivariate,
-             * unrecognised α, lift failure, etc.). */
-        } else if (auto_tower && auto_tower->n >= 2
-                   && !internal_args_contain_inexact(res)) {
-            /* Phase C: multi-α PolynomialGCD over Q(γ).  The single-α
-             * branch above already consumed n==1 towers; here we use
-             * the compositum to handle multi-generator inputs (e.g.
-             * `PolynomialGCD[..., ..., Extension -> Automatic]` where
-             * the inputs share both Sqrt[2] and Sqrt[3]). */
+            if (ext_result) {
+                if (alpha_auto) expr_free(alpha_auto);
+                if (auto_tower) qa_tower_free(auto_tower);
+                return ext_result;
+            }
+            /* Fall through on failure (multivariate, etc.). */
+        }
+        if (auto_tower && auto_tower->n >= 2
+            && !internal_args_contain_inexact(res)) {
+            /* Phase C univariate. */
             Expr* tower_result = qa_polynomialgcd_with_tower(
                 res->data.function.args, poly_argc, auto_tower);
-            qa_tower_free(auto_tower); auto_tower = NULL;
-            if (tower_result) return tower_result;
+            if (tower_result) {
+                if (alpha_auto) expr_free(alpha_auto);
+                qa_tower_free(auto_tower);
+                return tower_result;
+            }
         }
-        /* Cleanup any residual auto-detect state before recursion. */
+        if (auto_tower && !internal_args_contain_inexact(res)) {
+            /* Phase D multivariate fallback (covers both n=1
+             * multivariate single-α and n>=2 multivariate multi-α). */
+            Expr* tower_result = qa_polynomialgcd_with_tower_multivar(
+                res->data.function.args, poly_argc, auto_tower);
+            if (tower_result) {
+                if (alpha_auto) expr_free(alpha_auto);
+                qa_tower_free(auto_tower);
+                return tower_result;
+            }
+        }
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
-        /* Rebuild the call with options removed and recurse so the rest
-         * of this function works against the trimmed argument list. */
         Expr* trimmed = expr_rebuild_call(res, res->data.function.args,
                                           poly_argc);
         Expr* result = builtin_polynomialgcd(trimmed);
@@ -2102,18 +2111,34 @@ Expr* builtin_polynomialgcd(Expr* res) {
     if (alpha) {
         Expr* ext_result = polynomialgcd_with_extension(
             res->data.function.args, poly_argc, alpha);
-        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
-        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
-        if (ext_result) return ext_result;
-    } else if (auto_tower && auto_tower->n >= 2
-               && !internal_args_contain_inexact(res)) {
-        /* Phase C: multi-α tower fast path before the no-extension
-         * decomposition runs (see options-stripped branch above). */
+        if (ext_result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return ext_result;
+        }
+    }
+    if (auto_tower && auto_tower->n >= 2
+        && !internal_args_contain_inexact(res)) {
+        /* Phase C univariate. */
         Expr* tower_result = qa_polynomialgcd_with_tower(
             res->data.function.args, poly_argc, auto_tower);
-        qa_tower_free(auto_tower); auto_tower = NULL;
-        if (tower_result) return tower_result;
-    } else {
+        if (tower_result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            qa_tower_free(auto_tower);
+            return tower_result;
+        }
+    }
+    if (auto_tower && !internal_args_contain_inexact(res)) {
+        /* Phase D multivariate fallback. */
+        Expr* tower_result = qa_polynomialgcd_with_tower_multivar(
+            res->data.function.args, poly_argc, auto_tower);
+        if (tower_result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            qa_tower_free(auto_tower);
+            return tower_result;
+        }
+    }
+    {
         if (alpha_auto) expr_free(alpha_auto);
         if (auto_tower) qa_tower_free(auto_tower);
     }
@@ -2436,17 +2461,33 @@ Expr* builtin_polynomiallcm(Expr* res) {
         if (alpha) {
             Expr* ext_result = polynomiallcm_with_extension(
                 res->data.function.args, poly_argc, alpha);
-            if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
-            if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
-            if (ext_result) return ext_result;
-        } else if (auto_tower && auto_tower->n >= 2
-                   && !internal_args_contain_inexact(res)) {
-            /* Phase C: multi-α PolynomialLCM over Q(γ).  Mirrors the
-             * GCD wiring above. */
+            if (ext_result) {
+                if (alpha_auto) expr_free(alpha_auto);
+                if (auto_tower) qa_tower_free(auto_tower);
+                return ext_result;
+            }
+        }
+        if (auto_tower && auto_tower->n >= 2
+            && !internal_args_contain_inexact(res)) {
+            /* Phase C: multi-α univariate. */
             Expr* tower_result = qa_polynomiallcm_with_tower(
                 res->data.function.args, poly_argc, auto_tower);
-            qa_tower_free(auto_tower); auto_tower = NULL;
-            if (tower_result) return tower_result;
+            if (tower_result) {
+                if (alpha_auto) expr_free(alpha_auto);
+                qa_tower_free(auto_tower);
+                return tower_result;
+            }
+        }
+        if (auto_tower && !internal_args_contain_inexact(res)) {
+            /* Phase D: multivariate tower fallback (covers both n=1
+             * multivariate single-α and n>=2 multivariate multi-α). */
+            Expr* tower_result = qa_polynomiallcm_with_tower_multivar(
+                res->data.function.args, poly_argc, auto_tower);
+            if (tower_result) {
+                if (alpha_auto) expr_free(alpha_auto);
+                qa_tower_free(auto_tower);
+                return tower_result;
+            }
         }
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
@@ -2460,17 +2501,34 @@ Expr* builtin_polynomiallcm(Expr* res) {
     if (alpha) {
         Expr* ext_result = polynomiallcm_with_extension(
             res->data.function.args, poly_argc, alpha);
-        if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
-        if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
-        if (ext_result) return ext_result;
-    } else if (auto_tower && auto_tower->n >= 2
-               && !internal_args_contain_inexact(res)) {
-        /* Phase C: multi-α tower fast path. */
+        if (ext_result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return ext_result;
+        }
+    }
+    if (auto_tower && auto_tower->n >= 2
+        && !internal_args_contain_inexact(res)) {
+        /* Phase C univariate. */
         Expr* tower_result = qa_polynomiallcm_with_tower(
             res->data.function.args, poly_argc, auto_tower);
-        qa_tower_free(auto_tower); auto_tower = NULL;
-        if (tower_result) return tower_result;
-    } else {
+        if (tower_result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            qa_tower_free(auto_tower);
+            return tower_result;
+        }
+    }
+    if (auto_tower && !internal_args_contain_inexact(res)) {
+        /* Phase D multivariate fallback. */
+        Expr* tower_result = qa_polynomiallcm_with_tower_multivar(
+            res->data.function.args, poly_argc, auto_tower);
+        if (tower_result) {
+            if (alpha_auto) expr_free(alpha_auto);
+            qa_tower_free(auto_tower);
+            return tower_result;
+        }
+    }
+    {
         if (alpha_auto) expr_free(alpha_auto);
         if (auto_tower) qa_tower_free(auto_tower);
     }

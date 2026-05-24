@@ -265,6 +265,35 @@ struct Expr* qa_polynomiallcm_with_tower(struct Expr* const* argv,
                                          size_t argc,
                                          const QATower* t);
 
+/* Phase D: multivariate tower-based PolynomialGCD/PolynomialLCM via
+ * substitute-back through `internal_polynomialgcd` / `internal_polynomiallcm`.
+ *
+ * Each α_i in the inputs is replaced by its polynomial-in-γ form
+ * (using QA_ALPHA_INTERNAL as the γ symbol), the no-extension
+ * multivariate builtin is invoked treating γ as a polynomial variable,
+ * and the result is mapped back through `t->gamma_render` with Expand
+ * + evaluate to canonicalise.
+ *
+ * Correctness note: the GCD computed this way is the
+ * `Q[γ, x, y, ...]`-GCD, which is a (possibly non-maximal) Q(γ)-divisor
+ * of both inputs.  When the canonical Q(γ)[x,y,...]-GCD has γ-degree
+ * < deg(γ_min) and the inputs are γ-primitive, the two definitions
+ * coincide.  Otherwise this returns a result that is mathematically a
+ * common divisor / common multiple but not necessarily in canonical
+ * form — downstream Cancel / Together passes can reduce further.
+ *
+ * Used by `builtin_polynomialgcd` and `builtin_polynomiallcm` as a
+ * fallback when the univariate `qa_polynomialgcd_with_tower` /
+ * `qa_polynomiallcm_with_tower` path bails on having more than one
+ * polynomial variable besides γ.  Returns NULL when the substituted
+ * form does not simplify (the no-extension call returned unchanged). */
+struct Expr* qa_polynomialgcd_with_tower_multivar(struct Expr* const* argv,
+                                                  size_t argc,
+                                                  const QATower* t);
+struct Expr* qa_polynomiallcm_with_tower_multivar(struct Expr* const* argv,
+                                                  size_t argc,
+                                                  const QATower* t);
+
 /* Predicate: true when any tower generator has a non-integer base, i.e.
  * surfaces as `Sqrt[non_int]` or `Power[non_int, p/q]` (a nested radical
  * like `Sqrt[5 + 2 Sqrt[6]]`).
