@@ -240,6 +240,31 @@ struct Expr* qa_factor_with_extension_tower(const struct Expr* poly,
  * `cancel_with_extension` and `together_recursive_ext`). */
 struct Expr* qa_cancel_with_tower(const struct Expr* arg, const QATower* t);
 
+/* Multi-α PolynomialGCD over the compositum Q(γ).
+ *
+ * Substitutes each α_i in every input with its polynomial-in-γ form,
+ * lifts each input to QAUPoly[x] over t->ext, computes the iterated
+ * `qaupoly_gcd`, and renders the result with γ's surface form
+ * (`t->gamma_render`).  Requires the substituted inputs to share
+ * exactly one polynomial variable besides γ (the multivariate case is
+ * outside the tier-1 scope).  Returns NULL on substitution / lift /
+ * GCD failures so the caller can fall back to the no-extension
+ * builtin_polynomialgcd path.
+ *
+ * Used by `builtin_polynomialgcd` when `extension_autodetect_args`
+ * returns a tower with n ≥ 2.  The single-generator case is handled
+ * by the existing `polynomialgcd_with_extension`. */
+struct Expr* qa_polynomialgcd_with_tower(struct Expr* const* argv,
+                                         size_t argc,
+                                         const QATower* t);
+
+/* Multi-α PolynomialLCM over the compositum Q(γ).  Folds left-to-right
+ * via `lcm(a, b) = a * b / gcd(a, b)`, using `qa_polynomialgcd_with_tower`
+ * internally.  Returns NULL on the same failure modes. */
+struct Expr* qa_polynomiallcm_with_tower(struct Expr* const* argv,
+                                         size_t argc,
+                                         const QATower* t);
+
 /* Predicate: true when any tower generator has a non-integer base, i.e.
  * surfaces as `Sqrt[non_int]` or `Power[non_int, p/q]` (a nested radical
  * like `Sqrt[5 + 2 Sqrt[6]]`).

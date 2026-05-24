@@ -235,6 +235,83 @@ static void test_nested_radical_skip_matches_no_ext(void) {
         "Extension -> Automatic]");
 }
 
+/* =========================== Phase C: multi-radical GCD/LCM =========================== */
+
+static void test_pgcd_multigen_sqrt2_sqrt3(void) {
+    /* (x^2 - 2)(x - 1) shares (x^2 - 2) with itself; auto-detect finds
+     * the Sqrt[2] generator (only one) and routes through the single-α
+     * path.  Sanity test that the existing path still works. */
+    assert_eval_eq(
+        "PolynomialGCD[(x^2 - 2) (x - 1), (x^2 - 2) (x + 1), Extension -> Automatic]",
+        "-2 + x^2", 0);
+}
+
+static void test_pgcd_multigen_x_minus_sqrt2(void) {
+    /* `PolynomialGCD[x^2 - 2, x - Sqrt[2], Extension -> Automatic]`
+     * routes through the single-α path (Sqrt[2] is the only generator).
+     * Confirms baseline. */
+    assert_eval_eq(
+        "PolynomialGCD[x^2 - 2, x - Sqrt[2], Extension -> Automatic]",
+        "-Sqrt[2] + x", 0);
+}
+
+static void test_plcm_multigen_sqrt2_collapse(void) {
+    /* (x - Sqrt[2])(x + Sqrt[2]) = x^2 - 2.  Single generator → single-α
+     * path.  Sanity. */
+    assert_eval_eq(
+        "PolynomialLCM[x - Sqrt[2], x + Sqrt[2], Extension -> Automatic]",
+        "-2 + x^2", 0);
+}
+
+static void test_plcm_multigen_sqrt2_sqrt3(void) {
+    /* Phase C headline: PolynomialLCM with two independent algebraic
+     * generators Sqrt[2] and Sqrt[3].  Auto-detect builds a deg-4 tower
+     * over Q(Sqrt[2], Sqrt[3]); the LCM is (x - Sqrt[2])(x - Sqrt[3]) =
+     * x^2 - (Sqrt[2] + Sqrt[3]) x + Sqrt[6].
+     *
+     * Without Phase C the multi-gen branch of `builtin_polynomiallcm`
+     * dropped the tower on the floor and the no-extension BPList path
+     * returned the literal (x - Sqrt[2])(x - Sqrt[3]) product without
+     * canonicalising it. */
+    assert_eval_eq(
+        "PolynomialLCM[x - Sqrt[2], x - Sqrt[3], Extension -> Automatic]",
+        "Sqrt[6] - Sqrt[2] x - Sqrt[3] x + x^2", 0);
+}
+
+static void test_plcm_multigen_nested_pair(void) {
+    /* (x - Sqrt[2] - Sqrt[3])(x - Sqrt[2] + Sqrt[3]) = (x - Sqrt[2])^2 - 3
+     * = x^2 - 2 Sqrt[2] x + 2 - 3 = x^2 - 2 Sqrt[2] x - 1.
+     *
+     * The two inputs share Sqrt[2] and Sqrt[3] as generators (linear in
+     * each, no nesting).  Phase C's tower lift handles the multi-α case
+     * and the qaupoly_gcd-driven LCM returns the canonical form. */
+    assert_eval_eq(
+        "PolynomialLCM[x - Sqrt[2] - Sqrt[3], x - Sqrt[2] + Sqrt[3], "
+        "Extension -> Automatic]",
+        "-1 - 2 Sqrt[2] x + x^2", 0);
+}
+
+static void test_pgcd_multigen_share_linear_factor(void) {
+    /* p1 = (x - Sqrt[3] - Sqrt[2])(x - Sqrt[3] + Sqrt[2])
+     *    = x^2 - 2 Sqrt[3] x + 1
+     * p2 = x - Sqrt[2] - Sqrt[3]
+     * gcd(p1, p2) = x - Sqrt[2] - Sqrt[3] over Q(Sqrt[2], Sqrt[3]). */
+    assert_eval_eq(
+        "PolynomialGCD[x^2 - 2 Sqrt[3] x + 1, x - Sqrt[3] - Sqrt[2], "
+        "Extension -> Automatic]",
+        "-Sqrt[2] - Sqrt[3] + x", 0);
+}
+
+static void test_plcm_multigen_no_automatic_unchanged(void) {
+    /* Without `Extension -> Automatic` the multi-generator inputs go
+     * through the no-extension BPList path, which returns the symbolic
+     * factored product unevaluated as a single expression.  Confirm
+     * Phase C did not change this default behaviour. */
+    assert_eval_eq(
+        "PolynomialLCM[x - Sqrt[2], x - Sqrt[3]]",
+        "(-Sqrt[2] + x) (-Sqrt[3] + x)", 0);
+}
+
 static void test_composite_sqrt_coalesces_to_primes(void) {
     /* Layer-2 regression test.  The input contains Sqrt[3], Sqrt[5],
      * and Sqrt[15]; Sqrt[15] is algebraically dependent on Sqrt[3] and
@@ -285,6 +362,15 @@ int main(void) {
     TEST(test_multigen_together_no_op);
     TEST(test_nested_radical_skip_matches_no_ext);
     TEST(test_composite_sqrt_coalesces_to_primes);
+
+    /* Phase C: multi-radical PolynomialGCD / PolynomialLCM */
+    TEST(test_pgcd_multigen_sqrt2_sqrt3);
+    TEST(test_pgcd_multigen_x_minus_sqrt2);
+    TEST(test_plcm_multigen_sqrt2_collapse);
+    TEST(test_plcm_multigen_sqrt2_sqrt3);
+    TEST(test_plcm_multigen_nested_pair);
+    TEST(test_pgcd_multigen_share_linear_factor);
+    TEST(test_plcm_multigen_no_automatic_unchanged);
 
     printf("All extension_auto_builtins tests passed!\n");
     return 0;

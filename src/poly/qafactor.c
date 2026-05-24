@@ -2294,6 +2294,254 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
     return result;
 }
 
+/* Phase C helper: substitute every tower generator α_i in `e` with its
+ * polynomial-in-γ form (a polynomial in QA_ALPHA_INTERNAL).  Mirrors
+ * the substitution loop in `qa_cancel_with_tower` Step 1, including the
+ * `expand_radicals_to_atomic_poly` preprocessing for integer-base
+ * generators so non-natural `Power[c, -2/3]`-shape radicals are caught
+ * alongside the canonical `Power[c, 1/q]` form.
+ *
+ * Returns a fresh Expr; caller owns. */
+static Expr* tower_substitute_alphas(const Expr* e, const QATower* t) {
+    if (!e || !t) return NULL;
+    Expr* arg_internal = expr_copy((Expr*)e);
+    for (int i = 0; i < t->n; i++) {
+        int64_t c_i = 0, q_i = 0;
+        const Expr* a_r = t->alpha_renders[i];
+        if (a_r && a_r->type == EXPR_FUNCTION
+            && a_r->data.function.head
+            && a_r->data.function.head->type == EXPR_SYMBOL
+            && a_r->data.function.head->data.symbol == SYM_Power
+            && a_r->data.function.arg_count == 2
+            && a_r->data.function.args[0]->type == EXPR_INTEGER) {
+            int64_t pe, qe;
+            if (is_rational(a_r->data.function.args[1], &pe, &qe)
+                && pe == 1 && qe >= 2) {
+                c_i = a_r->data.function.args[0]->data.integer;
+                q_i = qe;
+            }
+        }
+        if (c_i == 0 && a_r && a_r->type == EXPR_FUNCTION
+            && a_r->data.function.head
+            && a_r->data.function.head->type == EXPR_SYMBOL
+            && a_r->data.function.head->data.symbol == SYM_Sqrt
+            && a_r->data.function.arg_count == 1
+            && a_r->data.function.args[0]->type == EXPR_INTEGER) {
+            c_i = a_r->data.function.args[0]->data.integer;
+            q_i = 2;
+        }
+
+        Expr* alpha_in_gamma = qanum_to_expr_in_gamma_sym(
+            t->alphas[i], QA_ALPHA_INTERNAL);
+
+        if (c_i != 0 && c_i != 1 && c_i != -1 && q_i >= 2) {
+            char tmp_name[64];
+            snprintf(tmp_name, sizeof(tmp_name), "$qa$twrtmp$%d$", i);
+            const char* tmp_iname = intern_symbol(tmp_name);
+            QAExt* atom_ext = qaext_root_si((long)c_i, (unsigned)q_i);
+            Expr* expanded = expand_radicals_to_atomic_poly(
+                arg_internal, c_i, q_i, tmp_iname, atom_ext);
+            qaext_free(atom_ext);
+
+            Expr* tmp_sym_expr = expr_new_symbol(tmp_iname);
+            Expr* substituted = expr_subst(expanded, tmp_sym_expr,
+                                           alpha_in_gamma);
+            expr_free(tmp_sym_expr);
+            expr_free(expanded);
+            expr_free(arg_internal);
+            arg_internal = substituted;
+        } else {
+            /* Non-Power-shape α_i (Sqrt[non-integer], I, nested radical):
+             * fall back to the bare structural substitution. */
+            Expr* old = arg_internal;
+            arg_internal = expr_subst(old, t->alpha_renders[i],
+                                      alpha_in_gamma);
+            expr_free(old);
+        }
+        expr_free(alpha_in_gamma);
+    }
+    return arg_internal;
+}
+
+/* Common preamble for the tower-based GCD/LCM helpers below: substitute
+ * each α_i in every input, collect the free polynomial variable, and
+ * lift the substituted inputs to QAUPoly[x] over the compositum.
+ *
+ * On success populates *poly_var_out (borrowed pointer into vars_out[]),
+ * vars_out[] / *vc_out (owned by caller), and ps_out[] (owned by caller).
+ * On failure frees everything it allocated and returns false.  The
+ * subst_inputs array itself is always returned to the caller — caller
+ * must free its contents.  Designed for the common scaffolding both
+ * GCD and LCM need before they diverge on the per-poly arithmetic. */
+static bool tower_lift_inputs(Expr* const* argv, size_t argc,
+                              const QATower* t,
+                              Expr*** subst_out, size_t* subst_n_out,
+                              Expr*** vars_out, size_t* vc_out,
+                              const Expr** poly_var_out,
+                              QAUPoly*** ps_out) {
+    *subst_out = NULL; *subst_n_out = 0;
+    *vars_out = NULL;  *vc_out = 0;
+    *poly_var_out = NULL;
+    *ps_out = NULL;
+
+    /* 1. Substitute each α_i in each input. */
+    Expr** subst = (Expr**)malloc(sizeof(Expr*) * argc);
+    if (!subst) return false;
+    for (size_t i = 0; i < argc; i++) subst[i] = NULL;
+    for (size_t i = 0; i < argc; i++) {
+        subst[i] = tower_substitute_alphas(argv[i], t);
+        if (!subst[i]) {
+            for (size_t j = 0; j < argc; j++) if (subst[j]) expr_free(subst[j]);
+            free(subst);
+            return false;
+        }
+    }
+
+    /* 2. Collect free vars; require exactly one besides QA_ALPHA_INTERNAL. */
+    Expr* alpha_internal = expr_new_symbol(QA_ALPHA_INTERNAL);
+    size_t vc = 0, vcap = 8;
+    Expr** vars = (Expr**)malloc(sizeof(Expr*) * vcap);
+    for (size_t i = 0; i < argc; i++) {
+        collect_variables(subst[i], &vars, &vc, &vcap);
+    }
+    Expr* poly_var = NULL;
+    size_t live = 0;
+    for (size_t i = 0; i < vc; i++) {
+        if (expr_eq(vars[i], alpha_internal)) continue;
+        poly_var = vars[i];
+        live++;
+    }
+    expr_free(alpha_internal);
+    if (live != 1 || !poly_var || poly_var->type != EXPR_SYMBOL) {
+        for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+        free(vars);
+        for (size_t i = 0; i < argc; i++) expr_free(subst[i]);
+        free(subst);
+        return false;
+    }
+
+    /* 3. Lift each substituted input to QAUPoly[x] over the compositum. */
+    QAUPoly** ps = (QAUPoly**)malloc(sizeof(QAUPoly*) * argc);
+    for (size_t i = 0; i < argc; i++) ps[i] = NULL;
+    for (size_t i = 0; i < argc; i++) {
+        ps[i] = qa_expr_to_qaupoly(subst[i], poly_var, NULL, t->ext);
+        if (!ps[i]) {
+            for (size_t j = 0; j < argc; j++) if (ps[j]) qaupoly_free(ps[j]);
+            free(ps);
+            for (size_t j = 0; j < vc; j++) expr_free(vars[j]);
+            free(vars);
+            for (size_t j = 0; j < argc; j++) expr_free(subst[j]);
+            free(subst);
+            return false;
+        }
+    }
+
+    *subst_out = subst;     *subst_n_out = argc;
+    *vars_out = vars;       *vc_out = vc;
+    *poly_var_out = poly_var;
+    *ps_out = ps;
+    return true;
+}
+
+static void tower_lift_cleanup(Expr** subst, size_t subst_n,
+                               Expr** vars, size_t vc,
+                               QAUPoly** ps, size_t ps_n) {
+    if (ps) {
+        for (size_t i = 0; i < ps_n; i++) if (ps[i]) qaupoly_free(ps[i]);
+        free(ps);
+    }
+    if (vars) {
+        for (size_t i = 0; i < vc; i++) expr_free(vars[i]);
+        free(vars);
+    }
+    if (subst) {
+        for (size_t i = 0; i < subst_n; i++) if (subst[i]) expr_free(subst[i]);
+        free(subst);
+    }
+}
+
+Expr* qa_polynomialgcd_with_tower(Expr* const* argv, size_t argc,
+                                  const QATower* t) {
+    if (argc < 1 || !t || t->n < 1) return NULL;
+    /* Single-generator case: callers should route through
+     * polynomialgcd_with_extension; signal NULL so the wrapper falls
+     * through to the single-α path. */
+    if (t->n == 1) return NULL;
+
+    Expr** subst = NULL; size_t subst_n = 0;
+    Expr** vars  = NULL; size_t vc = 0;
+    const Expr* poly_var = NULL;
+    QAUPoly** ps = NULL;
+    if (!tower_lift_inputs(argv, argc, t,
+                           &subst, &subst_n, &vars, &vc, &poly_var, &ps)) {
+        return NULL;
+    }
+
+    Expr* result = NULL;
+    QAUPoly* g = qaupoly_copy(ps[0]);
+    for (size_t i = 1; i < argc && g; i++) {
+        QAUPoly* next = qaupoly_gcd(g, ps[i]);
+        qaupoly_free(g);
+        g = next;
+    }
+    if (g && !qaupoly_is_zero(g)) {
+        result = qaupoly_to_expr_alpha(g, poly_var->data.symbol,
+                                       t->gamma_render);
+    }
+    if (g) qaupoly_free(g);
+
+    tower_lift_cleanup(subst, subst_n, vars, vc, ps, argc);
+    return result;
+}
+
+Expr* qa_polynomiallcm_with_tower(Expr* const* argv, size_t argc,
+                                  const QATower* t) {
+    if (argc < 1 || !t || t->n < 1) return NULL;
+    if (t->n == 1) return NULL;
+
+    Expr** subst = NULL; size_t subst_n = 0;
+    Expr** vars  = NULL; size_t vc = 0;
+    const Expr* poly_var = NULL;
+    QAUPoly** ps = NULL;
+    if (!tower_lift_inputs(argv, argc, t,
+                           &subst, &subst_n, &vars, &vc, &poly_var, &ps)) {
+        return NULL;
+    }
+
+    Expr* result = NULL;
+    /* lcm(a, b) = a * b / gcd(a, b); fold left-to-right. */
+    QAUPoly* L = qaupoly_copy(ps[0]);
+    for (size_t i = 1; i < argc && L; i++) {
+        QAUPoly* gp = qaupoly_gcd(L, ps[i]);
+        QAUPoly* prod = qaupoly_mul(L, ps[i]);
+        QAUPoly *quot = NULL, *rem = NULL;
+        if (gp && qaupoly_divrem(prod, gp, &quot, &rem)) {
+            qaupoly_free(L);
+            L = quot;
+            qaupoly_free(rem);
+        } else {
+            if (quot) qaupoly_free(quot);
+            if (rem)  qaupoly_free(rem);
+            qaupoly_free(L);
+            L = NULL;
+        }
+        if (gp) qaupoly_free(gp);
+        qaupoly_free(prod);
+    }
+    if (L && !qaupoly_is_zero(L)) {
+        QAUPoly* monic = qaupoly_make_monic(L);
+        if (monic) {
+            result = qaupoly_to_expr_alpha(monic, poly_var->data.symbol,
+                                           t->gamma_render);
+            qaupoly_free(monic);
+        }
+    }
+    if (L) qaupoly_free(L);
+
+    tower_lift_cleanup(subst, subst_n, vars, vc, ps, argc);
+    return result;
+}
+
 bool qa_tower_has_nested_radical(const QATower* t) {
     if (!t) return false;
     for (int i = 0; i < t->n; i++) {

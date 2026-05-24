@@ -2073,6 +2073,17 @@ Expr* builtin_polynomialgcd(Expr* res) {
             if (ext_result) return ext_result;
             /* Fall through to non-extension path on failure (multivariate,
              * unrecognised α, lift failure, etc.). */
+        } else if (auto_tower && auto_tower->n >= 2
+                   && !internal_args_contain_inexact(res)) {
+            /* Phase C: multi-α PolynomialGCD over Q(γ).  The single-α
+             * branch above already consumed n==1 towers; here we use
+             * the compositum to handle multi-generator inputs (e.g.
+             * `PolynomialGCD[..., ..., Extension -> Automatic]` where
+             * the inputs share both Sqrt[2] and Sqrt[3]). */
+            Expr* tower_result = qa_polynomialgcd_with_tower(
+                res->data.function.args, poly_argc, auto_tower);
+            qa_tower_free(auto_tower); auto_tower = NULL;
+            if (tower_result) return tower_result;
         }
         /* Cleanup any residual auto-detect state before recursion. */
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
@@ -2094,6 +2105,14 @@ Expr* builtin_polynomialgcd(Expr* res) {
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
         if (ext_result) return ext_result;
+    } else if (auto_tower && auto_tower->n >= 2
+               && !internal_args_contain_inexact(res)) {
+        /* Phase C: multi-α tower fast path before the no-extension
+         * decomposition runs (see options-stripped branch above). */
+        Expr* tower_result = qa_polynomialgcd_with_tower(
+            res->data.function.args, poly_argc, auto_tower);
+        qa_tower_free(auto_tower); auto_tower = NULL;
+        if (tower_result) return tower_result;
     } else {
         if (alpha_auto) expr_free(alpha_auto);
         if (auto_tower) qa_tower_free(auto_tower);
@@ -2420,6 +2439,14 @@ Expr* builtin_polynomiallcm(Expr* res) {
             if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
             if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
             if (ext_result) return ext_result;
+        } else if (auto_tower && auto_tower->n >= 2
+                   && !internal_args_contain_inexact(res)) {
+            /* Phase C: multi-α PolynomialLCM over Q(γ).  Mirrors the
+             * GCD wiring above. */
+            Expr* tower_result = qa_polynomiallcm_with_tower(
+                res->data.function.args, poly_argc, auto_tower);
+            qa_tower_free(auto_tower); auto_tower = NULL;
+            if (tower_result) return tower_result;
         }
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
@@ -2436,6 +2463,13 @@ Expr* builtin_polynomiallcm(Expr* res) {
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
         if (ext_result) return ext_result;
+    } else if (auto_tower && auto_tower->n >= 2
+               && !internal_args_contain_inexact(res)) {
+        /* Phase C: multi-α tower fast path. */
+        Expr* tower_result = qa_polynomiallcm_with_tower(
+            res->data.function.args, poly_argc, auto_tower);
+        qa_tower_free(auto_tower); auto_tower = NULL;
+        if (tower_result) return tower_result;
     } else {
         if (alpha_auto) expr_free(alpha_auto);
         if (auto_tower) qa_tower_free(auto_tower);
