@@ -192,6 +192,8 @@ set(COMMON_SRC
     ../src/poly/qa.c
     ../src/poly/qaupoly.c
     ../src/poly/qafactor.c
+    ../src/poly/squarefreeq.c
+    ../src/poly/irrpolyq.c
     ../src/sym_intern.c
     ../src/sym_names.c
     ../src/repl_hooks.c
@@ -353,6 +355,12 @@ target_include_directories(datetime_tests PRIVATE ../src)
 
 add_executable(facpoly_tests test_facpoly.c ${COMMON_SRC})
 target_include_directories(facpoly_tests PRIVATE ../src)
+
+add_executable(squarefreeq_tests test_squarefreeq.c ${COMMON_SRC})
+target_include_directories(squarefreeq_tests PRIVATE ../src)
+
+add_executable(irreduciblepolynomialq_tests test_irreduciblepolynomialq.c ${COMMON_SRC})
+target_include_directories(irreduciblepolynomialq_tests PRIVATE ../src)
 
 add_executable(solve_tests test_solve.c ${COMMON_SRC})
 target_include_directories(solve_tests PRIVATE ../src)

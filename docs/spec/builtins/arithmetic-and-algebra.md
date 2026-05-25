@@ -956,6 +956,189 @@ In[9]:= PrimeQ[Exp[2 Pi I/3]]
 Out[9]= False
 ```
 
+## SquareFreeQ
+- `SquareFreeQ[expr]`: Returns `True` if `expr` is a square-free polynomial or
+  number, and `False` otherwise.
+- `SquareFreeQ[expr, vars]`: Returns `True` if `expr` is square-free with
+  respect to the variables `vars` (a `Symbol` or a `List` of `Symbol`s).
+- `SquareFreeQ[..., GaussianIntegers -> True | False | Automatic]`: Tests
+  square-freeness in `Z[i]` when `True`, in `Z` when `False`. `Automatic`
+  (the default) enables Gaussian mode iff the input is a `Complex` literal
+  with integer real and imaginary parts.
+
+**Features**:
+- `Protected`. Not `Listable` -- passing a list of inputs treats the list as
+  the expression (`SquareFreeQ[{1, 2, 3}]` returns `False`).
+- Always returns `True` or `False` on a structurally valid call. For inputs
+  that are neither a recognised number nor a manifest polynomial -- reals,
+  `Sqrt[2]`, `Sin[x]`, `Pi`, strings -- the result is `False`, never
+  symbolic.
+- An integer `n` is square-free iff `|n|` has no rational prime factor of
+  multiplicity `>= 2`. `0` is not square-free; `+/-1` and `+/-p` (for any
+  prime `p`) are.
+- A rational `p/q` is square-free iff both `p` and `q` are square-free
+  integers.
+- A polynomial in `vars` is square-free iff for every variable `x_i` in
+  `vars` that the polynomial actually depends on, `PolynomialGCD(p, dp/dx_i)`
+  has degree `0` in `x_i`. Implementation routes the derivative through
+  the `D` builtin and the gcd through `PolynomialGCD`.
+- For `GaussianIntegers -> True` (or `Automatic` on a `Complex[Integer,
+  Integer]` input), the test factors `N(z) = a^2 + b^2` over `Z` and
+  classifies each rational prime by residue `mod 4`:
+  - `p == 2`: the Gaussian prime above `2` is `1 + I`; its multiplicity in
+    `z` equals the multiplicity of `2` in `N(z)`.
+  - `p ≡ 3 (mod 4)`: `p` itself is a Gaussian prime with `N(p) = p^2`;
+    its multiplicity in `z` is half the multiplicity of `p` in `N(z)`.
+  - `p ≡ 1 (mod 4)`: `p` splits as `pi * conj(pi)`; ambiguous cases (the
+    `e_in_norm == 2` slice) are resolved by computing `pi` via a
+    Cornacchia search and stripping the multiplicity directly.
+- The `Modulus -> p` option is parsed but only `Modulus -> 0` (the default
+  no-modulus path) is wired in; non-zero values silently fall back to the
+  integer ring until a polynomial sqfree-mod-`p` test is added.
+
+Diagnostics:
+- `SquareFreeQ[]` emits `SquareFreeQ::argb` and stays unevaluated.
+- A non-`Rule` past the optional vars slot (e.g. `SquareFreeQ[1, 2, 3]`)
+  emits `SquareFreeQ::nonopt` and stays unevaluated.
+
+```mathematica
+In[1]:= SquareFreeQ[10]
+Out[1]= True
+
+In[2]:= SquareFreeQ[4]
+Out[2]= False
+
+In[3]:= SquareFreeQ[20]
+Out[3]= False
+
+In[4]:= SquareFreeQ[3 + 2 I]
+Out[4]= True
+
+In[5]:= SquareFreeQ[2, GaussianIntegers -> True]
+Out[5]= False
+
+In[6]:= SquareFreeQ[2/3]
+Out[6]= True
+
+In[7]:= SquareFreeQ[6 + 6 x + x^2]
+Out[7]= True
+
+In[8]:= SquareFreeQ[x^3 - x^2 y]
+Out[8]= False
+
+In[9]:= SquareFreeQ[x y^2, x]
+Out[9]= True
+
+In[10]:= SquareFreeQ[x y^2, y]
+Out[10]= False
+
+In[11]:= SquareFreeQ[10^70 + 3]
+Out[11]= True
+```
+
+## IrreduciblePolynomialQ
+- `IrreduciblePolynomialQ[poly]`: Returns `True` if `poly` is an irreducible
+  polynomial over the rationals (treating any algebraic-number coefficient
+  as an independent variable, per Mathematica's `Extension -> None` default).
+- `IrreduciblePolynomialQ[poly, Extension -> alpha | {alpha_1, ...}]`: Tests
+  irreducibility over the field extension `Q(alpha_1, alpha_2, ...)`.
+- `IrreduciblePolynomialQ[poly, Extension -> Automatic]`: Extends `Q` by every
+  algebraic-number coefficient appearing in `poly` (via `extension_autodetect`)
+  and tests irreducibility over that compositum.
+- `IrreduciblePolynomialQ[poly, Extension -> All]`: Tests absolute
+  irreducibility over `C`.
+- `IrreduciblePolynomialQ[poly, GaussianIntegers -> True]`: Tests irreducibility
+  over `Q(i)`. If any coefficient of `poly` is a `Complex` literal, Gaussian
+  mode is auto-enabled even without the option.
+
+**Features**:
+- `Listable`, `Protected`. The evaluator threads any `List` first argument
+  element-wise; the builtin itself sees only scalar polynomial inputs.
+- Always returns `True` or `False` on a structurally valid call. Constant
+  numeric inputs (`0`, `1`, `5`, `2/3`), non-polynomial expressions (`Sin[x]`,
+  `Pi`, `Sqrt[x]`), and the empty polynomial return `False`; constants are
+  not irreducible polynomials.
+- Algorithm: factor `poly` over the resolved field, then count non-constant
+  factors with multiplicity. The polynomial is irreducible iff exactly one
+  non-constant factor (mult `1`) appears in the factorisation. Numeric
+  units (`Integer`, `Rational`, `Complex` leaves) and any sub-expression
+  whose leaves are all free of the polynomial variables are treated as
+  constants.
+- Extension dispatch:
+  - `Extension -> None` (default): `Factor[poly]` over `Q`. Atomic
+    algebraic constants in `poly` (`Sqrt[int]`, `Power[int, p/q]`) are
+    *frozen* to fresh placeholder symbols before factoring so Mathilda's
+    multivariate Factor doesn't silently re-apply `Extension -> Automatic`
+    -- matching Mathematica's "treat algebraic-number coefficients like
+    independent variables" semantics.
+  - `Extension -> alpha`: dispatches to the public `Factor[poly, Extension -> alpha]`.
+  - `Extension -> {alpha_1, ...}`: list-of-generators tower, same routing.
+  - `Extension -> Automatic`: `Factor[poly, Extension -> Automatic]` --
+    Mathilda's own auto-detect.
+  - `Extension -> All` (absolute irreducibility):
+    * Univariate degree `1` -> `True`; degree `>= 2` -> `False` (splits
+      over `C`).
+    * Multivariate -- best-effort -- factors over `Q(i)` to catch
+      conjugate-pair factorisations like `x^2 + y^2 = (x + i y)(x - i y)`.
+- Gaussian mode (`GaussianIntegers -> True`, or auto-on for `Complex`-bearing
+  input) calls `qa_factor_with_extension` directly on a `Complex[a, b] ->
+  a + b I` lifted form of `poly` so the qa-factoring path sees the imaginary
+  unit as a free symbol rather than an opaque `Complex` literal. The lifted
+  form is intentionally un-evaluated to avoid Mathilda's
+  `Times[b, I] -> Complex[0, b]` canonicalisation undoing the lift.
+
+Known limitations:
+- Multivariate algebraic-extension factoring is not currently supported by
+  Mathilda's underlying `Factor` (the qa-factoring path is univariate-only),
+  so cases like `IrreduciblePolynomialQ[x^4 - 3 y^2, Extension -> Sqrt[3]]`
+  (correctly `(x^2 - Sqrt[3] y)(x^2 + Sqrt[3] y)`, so `False`) and
+  `IrreduciblePolynomialQ[x^2 + y^2, GaussianIntegers -> True]`
+  (correctly `(x + i y)(x - i y)`, so `False`) silently fall back to the
+  no-extension path and may report `True` instead of `False`.
+- `Modulus -> p` is not yet supported and is silently ignored.
+
+Diagnostics:
+- `IrreduciblePolynomialQ[]` emits `IrreduciblePolynomialQ::argx` and stays
+  unevaluated.
+- A trailing non-`Rule` past position `1` (e.g. `IrreduciblePolynomialQ[1, 2, 3]`,
+  or an unknown option name like `IrreduciblePolynomialQ[x, Foo -> Bar]`)
+  emits `IrreduciblePolynomialQ::nonopt` and stays unevaluated.
+
+```mathematica
+In[1]:= IrreduciblePolynomialQ[{x^2 - 1, x^2 - 2}]
+Out[1]= {False, True}
+
+In[2]:= IrreduciblePolynomialQ[{x^2 + 1, x^3 - 8}]
+Out[2]= {True, False}
+
+In[3]:= IrreduciblePolynomialQ[{x^4 - 4 y^2, x^4 - 2 y^2}]
+Out[3]= {False, True}
+
+In[4]:= IrreduciblePolynomialQ[x^2 + 2 I x - 1]
+Out[4]= False
+
+In[5]:= IrreduciblePolynomialQ[x^2 + 1, GaussianIntegers -> True]
+Out[5]= False
+
+In[6]:= IrreduciblePolynomialQ[x^2 + 2 Sqrt[2] x + 2]
+Out[6]= True
+
+In[7]:= IrreduciblePolynomialQ[x^2 + 2 Sqrt[2] x + 2, Extension -> Automatic]
+Out[7]= False
+
+In[8]:= IrreduciblePolynomialQ[{x^3 - 2, x^3 - 3}, Extension -> 2^(1/3)]
+Out[8]= {False, True}
+
+In[9]:= IrreduciblePolynomialQ[x^2 + 2, Extension -> {I, Sqrt[2]}]
+Out[9]= False
+
+In[10]:= IrreduciblePolynomialQ[{x^3 - 3, x^2 + 2 x y - 7}, Extension -> All]
+Out[10]= {False, True}
+
+In[11]:= IrreduciblePolynomialQ[x^7 + 12 x y - 11, Extension -> All]
+Out[11]= True
+```
+
 ## PrimePi
 - `PrimePi[x]`: Returns the number of primes less than or equal to `x`.
 

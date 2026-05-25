@@ -465,6 +465,10 @@ void core_init(void) {
     stats_init();
     poly_init();
     facpoly_init();
+    void squarefreeq_init(void);
+    squarefreeq_init();
+    void irrpolyq_init(void);
+    irrpolyq_init();
     rat_init();
     expand_init();
     solve_init();
