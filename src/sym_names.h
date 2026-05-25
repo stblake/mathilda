@@ -262,6 +262,7 @@ extern const char* SYM_ShanksSquareForms;
 extern const char* SYM_Shortest;
 extern const char* SYM_Sign;
 extern const char* SYM_Sin;
+extern const char* SYM_SingularValueDecomposition;
 extern const char* SYM_Sinh;
 extern const char* SYM_Slot;
 extern const char* SYM_SlotSequence;

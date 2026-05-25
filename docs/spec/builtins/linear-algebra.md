@@ -1105,6 +1105,145 @@ Out[3]= <real condition estimate, ~20-30 for the example matrix>
 >   MPFR arrays (paired re/im for complex), largest-magnitude pivot
 >   selection, ‖A‖∞ * ‖A⁻¹‖∞ condition estimate.
 
+## SingularValueDecomposition
+Gives the singular value decomposition of a matrix.
+- `SingularValueDecomposition[m]` — returns `{u, sigma, v}` such that
+  `m == u . sigma . ConjugateTranspose[v]`, with `u` (`n x n`) and `v`
+  (`p x p`) orthonormal-columns matrices and `sigma` an `n x p`
+  rectangular matrix carrying the singular values on its leading
+  diagonal in non-increasing order.
+- `SingularValueDecomposition[m, k]` — returns the truncated SVD using
+  the `k` largest singular values (or `|k|` smallest if `k < 0`).
+  Shape: `u` is `n x k`, `sigma` is `k x k` square, `v` is `p x k`.
+- `SingularValueDecomposition[m, UpTo[k]]` — returns the truncated SVD
+  using up to `k` of the largest singular values, clamping `k` to
+  `MatrixRank[m]`.
+- `SingularValueDecomposition[{m, a}]` — generalized SVD; returns
+  `{{u, ua}, {sigma, sigma_a}, v}` such that
+  `m == u . sigma . ConjugateTranspose[v]` and
+  `a == ua . sigma_a . ConjugateTranspose[v]`.  Both matrices must
+  share the same number of columns; truncation `k` is not supported in
+  this form.
+
+**Features**:
+- `Protected`.
+- Options: `Tolerance -> t` zeroes out singular values with
+  `|sigma_i| < t`; `TargetStructure -> "Dense" | "Structured"`
+  (`"Structured"` wraps `sigma` as `DiagonalMatrix[{...}]` -- which
+  currently evaluates back to a dense matrix because Mathilda has no
+  unevaluated structured-matrix head yet).
+- Works on every input family:
+  - exact integer / rational matrices (output stays exact, with
+    `Sqrt[lambda]` forms for the singular values when the
+    characteristic polynomial of `m^H . m` doesn't simplify further);
+  - complex matrices (`u` and `v` are unitary in the Hermitian inner
+    product);
+  - machine-precision Real matrices (output Real at machine precision
+    via LAPACK `dgesdd` / `zgesdd`);
+  - arbitrary-precision MPFR matrices (output at the input precision
+    via a one-sided Jacobi SVD).
+- Algorithm: dispatched on leaf precision.
+  - **MachinePrecision inputs (`min_bits <= 53`)** use LAPACK
+    divide-and-conquer SVD (`dgesdd` for real, `zgesdd` for complex)
+    with `jobz = 'A'` so the full square `u` and `V^H` are returned.
+    `V^H` is conjugate-transposed in place to produce `v`.
+  - **MPFR inputs (`min_bits > 53`)** use a one-sided Jacobi SVD: sweep
+    over column pairs of `A`, apply the rotation that diagonalises
+    `[<a_i,a_i>, <a_i,a_j>; <a_i,a_j>, <a_j,a_j>]` to columns `i` and
+    `j` of both `A` and the accumulating `V`.  After convergence (off-
+    diagonal norm below `2^(-bits/2)`), column norms of `A` are the
+    singular values and `A[:, i] / sigma_i` are the left singular
+    vectors.  Orthonormal completion of the `n - rank` remaining
+    columns of `u` uses Gram-Schmidt at the working precision.  Real
+    and complex MPFR inputs are both supported: the complex path uses
+    paired (re, im) MPFR buffers throughout and factors each 2x2
+    rotation as a phase rotation (that makes the column inner product
+    real-positive) followed by a real Jacobi rotation.
+  - **Exact / symbolic inputs** compute the eigendecomposition of
+    `m^H . m` (or `m . m^H`, whichever is larger so the null-space
+    eigenvectors come back automatically), normalise the eigenvectors
+    individually, derive the secondary singular vectors via
+    `secondary = m . v_i / sigma_i`, and orthonormal-complete the
+    smaller side via the existing `qr_symbolic_core` Gram-Schmidt
+    pipeline.
+  - When BLAS/LAPACK is unavailable at build time (`USE_LAPACK=0`),
+    machine-precision inputs transparently route to the symbolic
+    kernel; similarly `USE_MPFR=0` routes MPFR inputs to symbolic.
+    Correctness is preserved across every combination; only
+    performance changes.
+- Issues `SingularValueDecomposition::matrix` and returns unevaluated
+  if the argument is not a non-empty rank-2 tensor.
+- Issues `SingularValueDecomposition::sval` and returns unevaluated
+  for an out-of-range `k` or `UpTo[k]`.
+- Issues `SingularValueDecomposition::opts` and returns unevaluated
+  for an unknown option key or value.
+- Issues `SingularValueDecomposition::matdims` and returns unevaluated
+  when the generalized form `{m, a}` is called with mismatched column
+  counts.
+- Issues `SingularValueDecomposition::nogsymb` and returns unevaluated
+  when the generalized form is called with free symbolic content (no
+  closed-form symbolic kernel exists for the generalized GSVD).
+- Issues `SingularValueDecomposition::gmpdwn` (one-shot) when the
+  generalized form is called on high-precision MPFR input: the result
+  is computed at machine precision via LAPACK because Mathilda does
+  not yet have a native MPFR Paige/Van Loan kernel.
+
+**Generalized SVD (`{m, a}`) algorithm**:
+- Real or complex machine-precision input is forwarded to LAPACK
+  `dggsvd3` (real) or `zggsvd3` (complex).  The output of LAPACK,
+  `A = U . D1 . (0 R) . Q^H` and `B = V . D2 . (0 R) . Q^H`, maps to
+  Mathematica's form with `u = U`, `ua = V`, `v = Q`, and
+  `sigma = D1 . (0 R)` and `sigma_a = D2 . (0 R)` materialised as
+  dense rectangular matrices.  Mathilda handles both LAPACK
+  layouts (`M >= K+L` and `M < K+L`, the latter splits `R` across
+  the destroyed `A` and `B` buffers).
+- Exact-numeric symbolic input (Integer / Rational / Complex of
+  numeric) is numericalised to 53-bit Reals and re-dispatched
+  through the LAPACK path.  Inputs with free symbolic content emit
+  `::nogsymb` and leave the call unevaluated.
+- High-precision MPFR input is also routed through the LAPACK path
+  (with the `::gmpdwn` one-shot precision-downgrade warning) until a
+  native MPFR generalized kernel lands.
+
+```mathematica
+In[1]:= SingularValueDecomposition[{{1, 2}, {1, 2}}]
+Out[1]= {{{1/Sqrt[2], 1/Sqrt[2]}, {1/Sqrt[2], -1/Sqrt[2]}},
+         {{Sqrt[10], 0}, {0, 0}},
+         {{1/Sqrt[5], -2/Sqrt[5]}, {2/Sqrt[5], 1/Sqrt[5]}}}
+
+In[2]:= sv = SingularValueDecomposition[{{1.2, 3.4}, {5.6, 7.8}, {9.0, 1.2}}];
+        sv[[2]]
+Out[2]= {{12.4778, 0.0}, {0.0, 5.65202}, {0.0, 0.0}}
+
+In[3]:= SingularValueDecomposition[{{1.1, 2, 5}, {3, -11, 4.2}}, 1]
+        (* "thin" SVD with only the top singular value *)
+Out[3]= shape: {2 x 1, 1 x 1, 3 x 1}
+
+In[4]:= SingularValueDecomposition[N[{{1, 2}, {3, 4}}, 30]]
+        (* MPFR Jacobi -- output at the input precision *)
+
+In[5]:= SingularValueDecomposition[{{1.0, 0}, {1.0, 10^-14}}, Tolerance -> 10^-15]
+        (* explicit Tolerance preserves the tiny singular value *)
+Out[5]= {..., {{1.41421, 0.}, {0., 7.07107e-15}}, ...}
+```
+
+> Implementation is split across:
+> - `src/linalg/svdecomp.c` -- builtin entry, positional + option
+>   parser (`svd_parse_args`), top-level dispatcher (`svd_dispatch`),
+>   symbolic dispatcher + core (`svd_symbolic_core`), and the shared
+>   post-processing helper `svd_apply_postprocess` (truncation /
+>   tolerance / TargetStructure).
+> - `src/linalg/svdecomp_machine.c` -- LAPACK fast path
+>   (`svd_machine_dispatch`).  Loads to a column-major double buffer,
+>   calls `mat_lapack_dgesdd` / `mat_lapack_zgesdd`, builds `u`,
+>   rectangular `sigma`, and `v = ConjugateTranspose[V^H]` as Mathilda
+>   lists.
+> - `src/linalg/svdecomp_mpfr.c` -- MPFR one-sided Jacobi kernel
+>   (`svd_mpfr_dispatch`).  Column-major MPFR arrays at the input
+>   precision; orthonormal completion of `u` via Gram-Schmidt; emits
+>   MPFR zeros (not Real 0.0) for off-diagonal sigma entries so
+>   downstream Dot products preserve the working precision.
+
 ## IdentityMatrix
 Generates an identity matrix.
 - `IdentityMatrix[n]`: Gives the `n x n` identity matrix.

@@ -146,6 +146,61 @@ void zgecon_(const char* norm, const int* n, const double* a,
              const int* lda, const double* anorm, double* rcond,
              double* work, double* rwork, int* info);
 
+/* dgesdd -- divide-and-conquer SVD of a real m x n matrix.
+ *   jobz     'A' = all m cols of U and all n rows of V^T (square U, V^T)
+ *            'S' = "thin": first min(m,n) cols of U / rows of V^T
+ *            'O' = overwrite A with U or V^T
+ *            'N' = no singular vectors
+ *   A (m*n, column-major)         destroyed on exit
+ *   s (min(m,n))                  singular values, descending
+ *   U (m*m or m*min(m,n))         left singular vectors, column-major
+ *   VT (n*n or min(m,n)*n)        V^H rows, column-major
+ *   work / lwork / iwork          workspace */
+void dgesdd_(const char* jobz, const int* m, const int* n,
+             double* A, const int* lda,
+             double* s,
+             double* U, const int* ldu,
+             double* VT, const int* ldvt,
+             double* work, const int* lwork, int* iwork, int* info);
+
+/* zgesdd -- divide-and-conquer SVD of a complex m x n matrix.
+ * A, U, VT carry (re, im) pairs.  rwork is real, length depends on
+ * (jobz, min(m,n)); LAPACK documents the formula. */
+void zgesdd_(const char* jobz, const int* m, const int* n,
+             double* A, const int* lda,
+             double* s,
+             double* U, const int* ldu,
+             double* VT, const int* ldvt,
+             double* work, const int* lwork,
+             double* rwork, int* iwork, int* info);
+
+/* dggsvd3 -- generalized SVD of two real matrices A (m x n) and B (p x n).
+ * Returns matrices U (m x m), V (p x p), Q (n x n), and integer
+ * partition (k, l) of the singular values into alpha (length n) and
+ * beta (length n).  See LAPACK documentation for the precise output
+ * structure. */
+void dggsvd3_(const char* jobu, const char* jobv, const char* jobq,
+              const int* m, const int* n, const int* p,
+              int* k_out, int* l_out,
+              double* A, const int* lda, double* B, const int* ldb,
+              double* alpha, double* beta,
+              double* U, const int* ldu,
+              double* V, const int* ldv,
+              double* Q, const int* ldq,
+              double* work, const int* lwork, int* iwork, int* info);
+
+/* zggsvd3 -- complex variant of dggsvd3. */
+void zggsvd3_(const char* jobu, const char* jobv, const char* jobq,
+              const int* m, const int* n, const int* p,
+              int* k_out, int* l_out,
+              double* A, const int* lda, double* B, const int* ldb,
+              double* alpha, double* beta,
+              double* U, const int* ldu,
+              double* V, const int* ldv,
+              double* Q, const int* ldq,
+              double* work, const int* lwork,
+              double* rwork, int* iwork, int* info);
+
 #endif /* !MATHILDA_USE_ACCELERATE */
 
 #endif /* USE_LAPACK */
@@ -234,6 +289,51 @@ int mat_lapack_dgecon(char norm_kind, int n, const double* A_LU,
                       int lda, double anorm, double* rcond);
 int mat_lapack_zgecon(char norm_kind, int n, const double* A_LU,
                       int lda, double anorm, double* rcond);
+
+/* Divide-and-conquer SVD wrappers.  `jobz` is 'A' (full square U/V^T),
+ * 'S' (thin), 'N' (no vectors), or 'O' (overwrite A).  A is destroyed
+ * on exit (callers must keep a copy if they need m later).  S has
+ * length min(m, n); U has dimensions m x m ('A') or m x min(m,n) ('S');
+ * VT has dimensions n x n ('A') or min(m,n) x n ('S').
+ *
+ * Complex (z) variants use interleaved (re, im) doubles in A, U, VT
+ * and emit U / V^T entries in the same layout.
+ *
+ * Returns LAPACK info (0 success, <0 bad arg, >0 dbdsdc didn't converge).
+ * Stubs return -1 when USE_LAPACK is undefined. */
+int mat_lapack_dgesdd(char jobz, int m, int n, double* A, int lda,
+                      double* S, double* U, int ldu,
+                      double* VT, int ldvt);
+int mat_lapack_zgesdd(char jobz, int m, int n, double* A, int lda,
+                      double* S, double* U, int ldu,
+                      double* VT, int ldvt);
+
+/* Generalized SVD wrappers.  See LAPACK dggsvd3 / zggsvd3 for the
+ * precise output layout (we forward k, l, alpha, beta, U, V, Q
+ * unchanged).  A and B are destroyed on exit.  alpha and beta have
+ * length n; together they encode the generalized singular values
+ * (alpha[i] / beta[i] for those indices where beta > 0).
+ *
+ * `jobu`, `jobv`, `jobq` select which orthogonal/unitary factors are
+ * computed (typically 'U', 'V', 'Q' for "yes" or 'N' for "no").
+ *
+ * Returns LAPACK info; stubs return -1 when USE_LAPACK is undefined. */
+int mat_lapack_dggsvd3(char jobu, char jobv, char jobq,
+                       int m, int n, int p,
+                       int* k_out, int* l_out,
+                       double* A, int lda, double* B, int ldb,
+                       double* alpha, double* beta,
+                       double* U, int ldu,
+                       double* V, int ldv,
+                       double* Q, int ldq);
+int mat_lapack_zggsvd3(char jobu, char jobv, char jobq,
+                       int m, int n, int p,
+                       int* k_out, int* l_out,
+                       double* A, int lda, double* B, int ldb,
+                       double* alpha, double* beta,
+                       double* U, int ldu,
+                       double* V, int ldv,
+                       double* Q, int ldq);
 
 #ifdef __cplusplus
 }

@@ -247,6 +247,7 @@ const char* SYM_ShanksSquareForms = NULL;
 const char* SYM_Shortest = NULL;
 const char* SYM_Sign = NULL;
 const char* SYM_Sin = NULL;
+const char* SYM_SingularValueDecomposition = NULL;
 const char* SYM_Sinh = NULL;
 const char* SYM_Slot = NULL;
 const char* SYM_SlotSequence = NULL;
@@ -537,6 +538,7 @@ void sym_names_init(void) {
     SYM_Shortest                   = intern_symbol("Shortest");
     SYM_Sign                       = intern_symbol("Sign");
     SYM_Sin                        = intern_symbol("Sin");
+    SYM_SingularValueDecomposition = intern_symbol("SingularValueDecomposition");
     SYM_Sinh                       = intern_symbol("Sinh");
     SYM_Slot                       = intern_symbol("Slot");
     SYM_SlotSequence               = intern_symbol("SlotSequence");

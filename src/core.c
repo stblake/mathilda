@@ -487,6 +487,8 @@ void core_init(void) {
     qrdecomp_init();
     void ludecomp_init(void);
     ludecomp_init();
+    void svdecomp_init(void);
+    svdecomp_init();
     readwrite_init();
     files_init();
     random_init();

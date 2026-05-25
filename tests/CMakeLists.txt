@@ -157,6 +157,9 @@ set(COMMON_SRC
     ../src/linalg/ludecomp.c
     ../src/linalg/ludecomp_machine.c
     ../src/linalg/ludecomp_mpfr.c
+    ../src/linalg/svdecomp.c
+    ../src/linalg/svdecomp_machine.c
+    ../src/linalg/svdecomp_mpfr.c
     ../src/linalg/lapack.c
     ../src/linalg/posdef_q.c
     ../src/linalg/negdef_q.c
@@ -574,6 +577,39 @@ else()
     target_link_libraries(ludecomposition_mpfr_tests gmp m)
 endif()
 add_test(NAME ludecomposition_mpfr_tests COMMAND ludecomposition_mpfr_tests)
+
+# SingularValueDecomposition symbolic-path tests.
+add_executable(singularvaluedecomposition_tests test_singularvaluedecomposition.c ${COMMON_SRC})
+target_include_directories(singularvaluedecomposition_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(singularvaluedecomposition_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(singularvaluedecomposition_tests build_ecm)
+else()
+    target_link_libraries(singularvaluedecomposition_tests gmp m)
+endif()
+add_test(NAME singularvaluedecomposition_tests COMMAND singularvaluedecomposition_tests)
+
+# SingularValueDecomposition LAPACK (machine-precision) tests.
+add_executable(singularvaluedecomposition_machine_tests test_singularvaluedecomposition_machine.c ${COMMON_SRC})
+target_include_directories(singularvaluedecomposition_machine_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(singularvaluedecomposition_machine_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(singularvaluedecomposition_machine_tests build_ecm)
+else()
+    target_link_libraries(singularvaluedecomposition_machine_tests gmp m)
+endif()
+add_test(NAME singularvaluedecomposition_machine_tests COMMAND singularvaluedecomposition_machine_tests)
+
+# SingularValueDecomposition MPFR Jacobi tests.  Skip-cleanly under USE_MPFR=OFF.
+add_executable(singularvaluedecomposition_mpfr_tests test_singularvaluedecomposition_mpfr.c ${COMMON_SRC})
+target_include_directories(singularvaluedecomposition_mpfr_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(singularvaluedecomposition_mpfr_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(singularvaluedecomposition_mpfr_tests build_ecm)
+else()
+    target_link_libraries(singularvaluedecomposition_mpfr_tests gmp m)
+endif()
+add_test(NAME singularvaluedecomposition_mpfr_tests COMMAND singularvaluedecomposition_mpfr_tests)
 
 # Phase-5 QR microbench.  NOT wired into add_test -- this is a spot-check
 # tool that prints per-shape x precision wall time, not a CI gate.  Build
