@@ -113,7 +113,8 @@ bool is_rule_with_lhs(const Expr* e, const char* lhs_symbol) {
 }
 
 bool head_threads_over(const char* h) {
-    return strcmp(h, "Equal") == 0 ||
+    return strcmp(h, "List") == 0 ||
+           strcmp(h, "Equal") == 0 ||
            strcmp(h, "Unequal") == 0 ||
            strcmp(h, "Less") == 0 ||
            strcmp(h, "LessEqual") == 0 ||

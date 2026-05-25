@@ -180,21 +180,22 @@ Expr* builtin_element(Expr* res) {
     Expr* x   = res->data.function.args[0];
     Expr* dom = res->data.function.args[1];
 
-    /* Element[{x1, x2, ...}, dom] is shorthand for the conjunction
-     * Element[x1, dom] && ... && Element[xN, dom]. We collapse it to a
-     * single True/False only when every component decides; otherwise we
-     * leave the original Element[{...}, dom] in place so downstream
-     * consumers (Simplify's AssumeCtx; see ctx_walk in simp_assume.c)
-     * can still treat it as a multi-variable real/integer/... assumption.
+    /* Element[{x1, x2, ...}, dom] and Element[x1|x2|..., dom] are both
+     * shorthand for the conjunction Element[x1, dom] && ... && Element[xN, dom].
+     * We collapse to a single True/False only when every component decides;
+     * otherwise we leave the original Element[{...}, dom] / Element[x|y, dom]
+     * in place so downstream consumers (Simplify's AssumeCtx; see ctx_walk in
+     * simp_assume.c) can still treat it as a multi-variable real/integer/...
+     * assumption.
      *
      * Threading to a `List` of Element calls (the old behaviour) was
-     * incorrect: Simplify carries ATTR_LISTABLE on the assumption
-     * argument, so a list of partial Element facts would cause Simplify
-     * to thread itself, splitting the joint assumption into per-variable
-     * runs that each only see one of the facts. */
+     * incorrect: a list of partial Element facts in the assumption position
+     * would cause threading to split the joint assumption into per-variable
+     * Simplify runs that each only see one of the facts. */
     if (x->type == EXPR_FUNCTION && x->data.function.head &&
         x->data.function.head->type == EXPR_SYMBOL &&
-        x->data.function.head->data.symbol == SYM_List) {
+        (x->data.function.head->data.symbol == SYM_List ||
+         x->data.function.head->data.symbol == SYM_Alternatives)) {
         size_t n = x->data.function.arg_count;
         bool all_true = (n > 0);
         bool any_false = false;

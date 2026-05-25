@@ -95,7 +95,13 @@ void simp_init(void) {
         "\tDefaults to False. Useful for diagnosing slow Simplify calls.");
 
     symtab_add_builtin("Simplify", builtin_simplify);
-    symtab_get_def("Simplify")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
+    /* Simplify is NOT Listable: a List in the second (assumption) argument
+     * must be treated as a conjunction of facts, not split into one Simplify
+     * call per fact. Threading over a List in the first (expression)
+     * argument is delivered manually inside builtin_simplify via the
+     * head_threads_over branch (which carries the assumption args through
+     * unchanged into each sub-call). */
+    symtab_get_def("Simplify")->attributes |= ATTR_PROTECTED;
 
     symtab_add_builtin("SimplifyCount", builtin_simplify_count);
     symtab_get_def("SimplifyCount")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);

@@ -1499,7 +1499,7 @@ void info_init(void) {
         "Supported domains: Integers, Rationals, Reals, Algebraics, Complexes, Booleans, Primes, Composites.\n"
         "Numeric and structural literals decide directly: Element[5, Integers] -> True, Element[5/2, Integers] -> False, Element[1+I, Reals] -> False, Element[2.5, Integers] -> False.\n"
         "Element consults $Assumptions for symbolic queries, so under Assuming[Element[x, Integers], ...] a query Element[x, Reals] returns True via the Integer => Real lattice.\n"
-        "Element threads over lists in its first argument: Element[{x1, x2, ...}, dom] returns the list of per-element decisions.");
+        "Element[{x1, ..., xN}, dom] and Element[x1 | ... | xN, dom] are shorthand for the conjunction Element[x1, dom] && ... && Element[xN, dom]: True/False if every component decides, otherwise unevaluated and treated as a joint per-variable fact by Simplify.");
     symtab_set_docstring("LeafCount", "LeafCount[expr] gives the total number of indivisible subexpressions in expr.");
     symtab_set_docstring("ByteCount", "ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.");
     symtab_set_docstring("Level",

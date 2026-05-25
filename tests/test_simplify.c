@@ -93,6 +93,40 @@ void test_simplify_threads_over_equation(void) {
     assert_eval_eq("Simplify[Sin[x]^2+Cos[x]^2 == 1]", "True", 0);
 }
 
+/* Regression: a `List` in the assumption position must be treated as a
+ * conjunction of facts, NOT threaded element-wise into one Simplify call
+ * per fact. Before the fix this returned `{Log[E^(x+y)], Log[E^(x+y)]}`
+ * because Simplify was Listable on every argument position. */
+void test_simplify_list_of_assumptions_is_conjunction(void) {
+    assert_eval_eq(
+        "Simplify[Log[E^(x+y)], {Element[x, Reals], Element[y, Reals]}]",
+        "x + y", 0);
+}
+
+/* Regression: Element[x|y, dom] is shorthand for the conjunction
+ * Element[x, dom] && Element[y, dom], matching the existing
+ * Element[{x,y}, dom] behaviour. */
+void test_simplify_alternatives_in_element_assumption(void) {
+    assert_eval_eq(
+        "Simplify[Log[E^(x+y)], Element[x|y, Reals]]", "x + y", 0);
+}
+
+/* Same fact threading must also fire from a multi-variable Element[List, ...]
+ * (this was the only form that worked before; keep it green). */
+void test_simplify_element_list_assumption(void) {
+    assert_eval_eq(
+        "Simplify[Log[E^(x+y)], Element[{x, y}, Reals]]", "x + y", 0);
+}
+
+/* List threading on the *expression* argument must still combine with a
+ * List of assumptions in the second position: each element simplifies
+ * under the joint conjunction of all facts. */
+void test_simplify_list_expr_with_list_assumptions(void) {
+    assert_eval_eq(
+        "Simplify[{Sqrt[a^2], Sqrt[b^2]}, {a > 0, b < 0}]",
+        "{a, -b}", 0);
+}
+
 /* ---- Assumption-aware ---- */
 
 void test_simplify_sqrt_square_positive(void) {
@@ -1109,6 +1143,10 @@ int main(void) {
     TEST(test_simplify_complexity_function_leafcount);
     TEST(test_simplify_threads_over_list);
     TEST(test_simplify_threads_over_equation);
+    TEST(test_simplify_list_of_assumptions_is_conjunction);
+    TEST(test_simplify_alternatives_in_element_assumption);
+    TEST(test_simplify_element_list_assumption);
+    TEST(test_simplify_list_expr_with_list_assumptions);
     TEST(test_simplify_sqrt_square_positive);
     TEST(test_simplify_sqrt_square_real);
     TEST(test_simplify_sqrt_square_no_assumption);

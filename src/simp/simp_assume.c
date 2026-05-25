@@ -66,15 +66,17 @@ static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
             }
             return;
         }
-        /* Element[{x1, ..., xN}, dom] is shorthand for the conjunction of
-         * Element[xi, dom]. Split into per-variable facts so prov_re /
-         * fact_in_domain see each variable individually. */
+        /* Element[{x1, ..., xN}, dom] and Element[x1|x2|...|xN, dom] are
+         * both shorthand for the conjunction of Element[xi, dom]. Split
+         * into per-variable facts so prov_re / fact_in_domain see each
+         * variable individually. */
         if (h == SYM_Element &&
             a->data.function.arg_count == 2 &&
             a->data.function.args[0]->type == EXPR_FUNCTION &&
             a->data.function.args[0]->data.function.head &&
             a->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
-            a->data.function.args[0]->data.function.head->data.symbol == SYM_List) {
+            (a->data.function.args[0]->data.function.head->data.symbol == SYM_List ||
+             a->data.function.args[0]->data.function.head->data.symbol == SYM_Alternatives)) {
             const Expr* xs  = a->data.function.args[0];
             const Expr* dom = a->data.function.args[1];
             for (size_t i = 0; i < xs->data.function.arg_count; i++) {
