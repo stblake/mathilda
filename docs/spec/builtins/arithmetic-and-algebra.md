@@ -1506,12 +1506,18 @@ context-qualified name when the caller has already classified its input.
      end-result is a polynomial in `var` alone.
   4. Hand the eliminated polynomial to `Solve`SolvePolynomialEquality`.
   5. Verify every candidate by back-substitution into the *original*
-     equation.  `Simplify` on the residual catches symbolic zeros;
-     for closed-form candidates the residual is then numerically
-     evaluated with `N[]` and rejected when its magnitude exceeds
-     `1e-9`.  Candidates whose residual still depends on free parameters
-     (and so cannot be decided either way) are kept and trigger
-     `Solve::nongen`, matching Mathematica's convention.
+     equation.  The residual is first evaluated numerically with `N[]`
+     and rejected when its magnitude exceeds `1e-9`; only when the
+     numerical pass cannot decide -- free parameters, removable-
+     singularity `Indeterminate`, etc. -- does the verifier fall back
+     to a symbolic `Simplify` pass to catch structural zeros.  This
+     ordering matters for candidates with algebraic coefficients
+     (e.g. `Sqrt[2]` in the elimination): `Simplify` on the back-
+     substituted residual can run for seconds per candidate, while
+     `N[]` evaluates the same residual in microseconds.  Candidates
+     whose residual still depends on free parameters (and so cannot
+     be decided either way) are kept and trigger `Solve::nongen`,
+     matching Mathematica's convention.
 - Output shape matches `Solve`SolvePolynomialEquality`: a `List` of
   singleton-rule `List`s, plus the empty `List[]` when no candidate
   survives verification.  The `dom` argument flows through to the

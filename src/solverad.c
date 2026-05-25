@@ -261,20 +261,6 @@ static bool walk_contains_name(const Expr* e, const char* name) {
  *  Verification.                                                      *
  * ------------------------------------------------------------------ */
 
-/* Substitute `var -> cand` in `e_orig` and return the simplified
- * residual (lhs - rhs evaluated at the candidate).  Caller owns the
- * result. */
-static Expr* eval_residual(Expr* e_orig, Expr* var, Expr* cand) {
-    Expr* rule = mk_rule(expr_copy(var), expr_copy(cand));
-    Expr* sub  = eval_and_free(internal_replace_all(
-        (Expr*[]){ expr_copy(e_orig), rule }, 2));
-    /* A symbolic Simplify pass collapses cancellations like
-     *   Sqrt[(sqrt(3) - 1)^2] -> sqrt(3) - 1
-     * that the bare evaluator leaves alone. */
-    Expr* simp = eval_and_free(mk_fn1("Simplify", sub));
-    return simp;
-}
-
 /* Verification result. */
 typedef enum {
     VERIFY_ACCEPT,    /* candidate provably satisfies the equation */
@@ -282,7 +268,15 @@ typedef enum {
     VERIFY_UNKNOWN    /* indeterminate (symbolic parameters) */
 } VerifyResult;
 
-/* Decide whether `cand` is a valid root of the *original* equation. */
+/* Decide whether `cand` is a valid root of the *original* equation.
+ *
+ * Verification order is N[]-first, Simplify-fallback.  Simplify on an
+ * algebraic-coefficient substitution (e.g. cand involving Sqrt[2] or
+ * the imaginary part of a non-real quadratic root) can run for seconds
+ * per candidate, while N[] on the same residual evaluates in
+ * microseconds.  We only pay the Simplify cost when the numerical
+ * pass cannot decide -- typically because the candidate carries free
+ * parameters that survive substitution. */
 static VerifyResult verify_candidate(Expr* e_orig, Expr* var, Expr* cand) {
     /* Root[] objects came out of the polynomial specialist with their
      * own verification semantics.  Accept them without further checks
@@ -290,31 +284,56 @@ static VerifyResult verify_candidate(Expr* e_orig, Expr* var, Expr* cand) {
      * polynomial factor and are not amenable to back-substitution. */
     if (head_eq(cand, SYM_Root)) return VERIFY_ACCEPT;
 
-    Expr* res = eval_residual(e_orig, var, cand);
-    if (is_definite_zero(res)) {
-        expr_free(res);
+    /* Substitute var -> cand without Simplify; the bare evaluator
+     * collapses anything obvious already, and N[] handles structural
+     * cancellations (Sqrt[(Sqrt[3]-1)^2] etc.) numerically. */
+    Expr* rule = mk_rule(expr_copy(var), expr_copy(cand));
+    Expr* sub  = eval_and_free(internal_replace_all(
+        (Expr*[]){ expr_copy(e_orig), rule }, 2));
+
+    if (is_definite_zero(sub)) {
+        expr_free(sub);
         return VERIFY_ACCEPT;
     }
 
-    /* Numerical fallback.  N[res] yields a concrete numeric leaf when
+    /* Numerical check.  N[sub] yields a concrete numeric leaf when
      * the candidate is closed-form (no free parameters).  Compare
      * magnitude against a generous absolute threshold -- the residual
      * is dimensionless in the equation's units so 1e-9 catches the
      * roundoff floor of double precision while comfortably rejecting
      * spurious roots, which typically miss by O(1). */
-    Expr* nval = eval_and_free(mk_fn1("N", expr_copy(res)));
+    Expr* nval = eval_and_free(mk_fn1("N", expr_copy(sub)));
     double mag;
-    bool concrete = numeric_magnitude(nval, &mag);
+    if (numeric_magnitude(nval, &mag)) {
+        expr_free(nval);
+        expr_free(sub);
+        return (mag < 1.0e-9) ? VERIFY_ACCEPT : VERIFY_REJECT;
+    }
     expr_free(nval);
 
+    /* Slow path: numerical evaluation could not decide (free parameters,
+     * Indeterminate from a removable singularity, etc.).  A symbolic
+     * Simplify pass catches structural cancellations like
+     * Sqrt[(Sqrt[3]-1)^2] -> Sqrt[3]-1 that the bare evaluator leaves
+     * alone, then a final N[] retry handles parameter-free residuals
+     * that only Simplify could unwrap. */
+    Expr* simp = eval_and_free(mk_fn1("Simplify", sub));
+    if (is_definite_zero(simp)) {
+        expr_free(simp);
+        return VERIFY_ACCEPT;
+    }
+    Expr* nval2 = eval_and_free(mk_fn1("N", expr_copy(simp)));
+    bool concrete = numeric_magnitude(nval2, &mag);
+    expr_free(nval2);
+    expr_free(simp);
+
     if (concrete) {
-        expr_free(res);
         return (mag < 1.0e-9) ? VERIFY_ACCEPT : VERIFY_REJECT;
     }
 
-    /* Residual still symbolic -- candidate carries free parameters, or
-     * Simplify could not decide.  Keep, with nongen flagging. */
-    expr_free(res);
+    /* Residual still symbolic -- candidate carries free parameters
+     * neither N[] nor Simplify could discharge.  Keep, with nongen
+     * flagging. */
     return VERIFY_UNKNOWN;
 }
 
