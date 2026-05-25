@@ -28,6 +28,23 @@ Out[1]= 1/4*Pi
 - `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch).
 - `Log[b, z]`: Logarithm to base `b`.
 
+**Zero arguments.** `Log` distinguishes exact zero (a directed limit) from
+inexact zero (ambiguous direction in floating point), matching Mathematica:
+
+- `Log[0]` -> `-Infinity`; `Log[b, 0]` -> `-Infinity` when `b` is a
+  real-positive numeric with `b > 1` (or one of the known-positive
+  symbols `E`, `Pi`), `+Infinity` when `0 < b < 1` (since `Log[b] < 0`).
+- `Log[0.]` -> `Indeterminate`; `Log[b, 0.]` -> `Indeterminate` (both
+  `+0.0` and `-0.0`).
+
+**Wrong arity.** `Log` with 0, 3, or more arguments emits the standard
+Mathematica diagnostic and leaves the call unevaluated:
+
+```
+Log[]            -> Log::argt: Log called with 0 arguments; 1 or 2 arguments are expected.
+Log[2, 3, 4, 5]  -> Log::argt: Log called with 4 arguments; 1 or 2 arguments are expected.
+```
+
 ```mathematica
 In[1]:= Log[2, 8]
 Out[1]= 3

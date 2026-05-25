@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 #include <string.h>
@@ -141,14 +142,31 @@ static bool is_power_call(Expr* e) {
 Expr* builtin_log(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
+    // Wrong arity: emit Mathematica's `Log::argt` diagnostic and leave
+    // the call unevaluated. Log accepts 1 (natural log) or 2 (base-b log).
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1 && argc != 2) {
+        fprintf(stderr,
+                "Log::argt: Log called with %zu argument%s; "
+                "1 or 2 arguments are expected.\n",
+                argc, argc == 1 ? "" : "s");
+        return NULL;
+    }
+
     // Log[z] - Natural logarithm
-    if (res->data.function.arg_count == 1) {
+    if (argc == 1) {
         Expr* z = res->data.function.args[0];
 
         // Exact evaluations for special constants
         if (z->type == EXPR_INTEGER && z->data.integer == 0) {
             Expr* ret = make_minus_infinity(); // Log[0] = -Infinity
             return ret;
+        }
+        // Inexact zero: direction is ambiguous in floating point, so the
+        // limit is Indeterminate (matches Mathematica's Log[0.] behaviour).
+        // Catches both +0.0 and -0.0 by IEEE 754 equality.
+        if (z->type == EXPR_REAL && z->data.real == 0.0) {
+            return expr_new_symbol("Indeterminate");
         }
         if (z->type == EXPR_INTEGER && z->data.integer == 1) {
             Expr* ret = expr_new_integer(0); // Log[1] = 0
@@ -238,9 +256,45 @@ Expr* builtin_log(Expr* res) {
         }
     } 
     // Log[b, z] - Logarithm to base b
-    else if (res->data.function.arg_count == 2) {
+    else if (argc == 2) {
         Expr* b = res->data.function.args[0];
         Expr* z = res->data.function.args[1];
+
+        // Inexact zero argument: Log[b, 0.] = Indeterminate, matching the
+        // 1-arg float-zero case. Direction is ambiguous in floating point.
+        if (z->type == EXPR_REAL && z->data.real == 0.0) {
+            return expr_new_symbol("Indeterminate");
+        }
+        // Exact integer zero argument with a real-positive base b != 1:
+        //   Log[b, 0] = Log[0] / Log[b] = -Infinity / Log[b].
+        // For b > 1 (Log[b] > 0) the directed limit is -Infinity;
+        // for 0 < b < 1 (Log[b] < 0) it is +Infinity. Other bases
+        // (b <= 0, b == 1, symbolic) fall through to the default rewrite.
+        if (z->type == EXPR_INTEGER && z->data.integer == 0) {
+            int sgn = 0;   /* -1: 0<b<1, 0: unknown/skip, +1: b>1 */
+            if (b->type == EXPR_INTEGER) {
+                if (b->data.integer > 1) sgn = +1;
+            } else if (b->type == EXPR_BIGINT) {
+                /* Bigints are always |n| > INT64_MAX, so positive means > 1. */
+                if (mpz_sgn(b->data.bigint) > 0) sgn = +1;
+            } else if (b->type == EXPR_REAL) {
+                if (b->data.real > 1.0) sgn = +1;
+                else if (b->data.real > 0.0 && b->data.real < 1.0) sgn = -1;
+            } else if (b->type == EXPR_SYMBOL) {
+                /* E (~2.718) and Pi (~3.14) are both > 1. */
+                if (b->data.symbol == SYM_E || b->data.symbol == SYM_Pi) sgn = +1;
+            } else {
+                int64_t n, d;
+                if (is_rational(b, &n, &d)) {
+                    /* Denominator d is always positive in canonical form. */
+                    if (n > d) sgn = +1;
+                    else if (n > 0 && n < d) sgn = -1;
+                }
+            }
+            if (sgn == +1) return make_minus_infinity();
+            if (sgn == -1) return expr_new_symbol("Infinity");
+            /* else fall through to the default rewrite */
+        }
 
         // Log[b, b] = 1
         if (expr_eq(b, z)) {
