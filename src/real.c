@@ -921,15 +921,12 @@ Expr* builtin_realdigits(Expr* res) {
                 free(za2);
             }
         } else {
-            /* Inexact zero: digits are all 0 within accuracy and
-             * Indeterminate (effectively the whole list is 0 with
-             * accuracy floor placed conventionally).  We follow the
-             * documented form: {{0}, -Floor[Accuracy[0.]]}.  For
-             * machine zero Accuracy[0.] is conventionally MachinePrecision
-             * (i.e. ~15.95), so -Floor[Accuracy[0.]] = -15.  For an
-             * MPFR zero of precision p_bits, Accuracy is in decimal
-             * digits (p_bits/log2(10)).  We follow Mathematica's
-             * computation: -Floor[Accuracy[0.]]. */
+            /* Inexact zero: digits are all 0 within accuracy.  We follow
+             * Mathematica's form {{0}, -Floor[Accuracy[0.]]}.  Accuracy of
+             * machine 0. is MachinePrecision + (-log10($MinMachineNumber))
+             * ≈ 323.607, giving -323.  Accuracy of MPFR 0 with p_bits is
+             * p_bits / log2(10).  Keep this in sync with accuracy_of() in
+             * src/precision.c. */
             double acc_digits;
 #ifdef USE_MPFR
             if (x_expr->type == EXPR_MPFR) {
@@ -937,7 +934,7 @@ Expr* builtin_realdigits(Expr* res) {
             } else
 #endif
             {
-                acc_digits = (double)REAL_MACHINE_BITS / log2(10.0);
+                acc_digits = (double)REAL_MACHINE_BITS / log2(10.0) - log10(DBL_MIN);
             }
             long acc_floor = (long)floor(acc_digits);
             Expr** za = malloc(sizeof(Expr*));
@@ -1522,18 +1519,13 @@ Expr* builtin_mantissa_exponent(Expr* res) {
  *      Real.
  *    - both exact: result is a machine Real.
  *
- *  Zero handling (Mathilda convention -- Accuracy[0] = Accuracy[0.] =
- *  Accuracy[0``p] = Infinity, so -Accuracy[0] = -Infinity):
- *    - RealExponent[0]      = -Infinity (symbol).
- *    - RealExponent[0.]     = -Infinity.
- *    - RealExponent[0``p]   = -Infinity.
- *
- *  This differs from Mathematica where machine zero gives a finite
- *  result of ~-307.65 and an MPFR zero with p digits gives -p.  The
- *  divergence is documented and follows from Mathilda's existing
- *  `Accuracy` semantics (`src/precision.c`).  Switching to the
- *  Mathematica convention is a follow-up that should be coordinated
- *  with a similar change to `Accuracy`.
+ *  Zero handling (Mathematica-compatible):
+ *    - Exact zero (Integer 0, BigInt 0, Rational 0/n): RealExponent[0]
+ *      = -Infinity.
+ *    - Machine zero (0.):  log_b($MinMachineNumber).  Unbased call
+ *      (b = 10) returns log10(DBL_MIN) ≈ -307.65.
+ *    - MPFR zero @ p bits: -(p / log2(10)) / log10(b).  Unbased call
+ *      returns -(p / log2(10)) digits, matching MMA's RealExponent[0``p] = -p.
  *
  *  Diagnostics:
  *    - argc not in [1, 2]                  -> ::argt
@@ -1809,11 +1801,19 @@ Expr* builtin_real_exponent(Expr* res) {
         }
     }
 
-    /* --- Zero case ---------------------------------------------------- */
+    /* --- Zero case (exact only) --------------------------------------
+     * Exact zero -> -Infinity.  Inexact zero (machine 0., MPFR 0) falls
+     * through and is handled after output-kind selection so we can match
+     * the result's representation to the input precision. */
+    bool x_inexact_zero = false;
     if (re_is_zero(x_use)) {
-        if (x_owned) expr_free(x_owned);
-        if (b_owned) expr_free(b_owned);
-        return re_make_minus_infinity();
+        bool x_is_exact = (kind_x == RD_KIND_INT || kind_x == RD_KIND_RAT);
+        if (x_is_exact) {
+            if (x_owned) expr_free(x_owned);
+            if (b_owned) expr_free(b_owned);
+            return re_make_minus_infinity();
+        }
+        x_inexact_zero = true;
     }
 
     /* --- Output kind selection ---------------------------------------
@@ -1833,6 +1833,43 @@ Expr* builtin_real_exponent(Expr* res) {
         long bp = (long)mpfr_get_prec(b_in->data.mpfr);
         if (!out_is_mpfr || bp > out_bits) out_bits = bp;
         out_is_mpfr = true;
+    }
+
+    /* --- Inexact zero case ------------------------------------------- *
+     * Mathematica's convention is RealExponent[0_inexact] = log_b(MinPositive)
+     * where MinPositive is the smallest representable nonzero magnitude at
+     * the input's precision.  For machine 0. that is DBL_MIN (≈ 2.225e-308),
+     * giving log10 ≈ -307.65.  For MPFR 0 @ p bits the analog is 10^(-p_d)
+     * where p_d = p/log2(10), giving -p_d.  Division by log10(b) converts
+     * to base b. */
+    if (x_inexact_zero) {
+        double log10_min;
+        if (x_use->type == EXPR_MPFR) {
+            log10_min = -(double)mpfr_get_prec(x_use->data.mpfr) / log2(10.0);
+        } else {
+            log10_min = log10(DBL_MIN);
+        }
+        double log10_b = 1.0;
+        if (b_use) {
+            mpfr_t bt;
+            mpfr_init2(bt, 64);
+            re_mpfr_set_abs(bt, b_use);
+            log10_b = log10(mpfr_get_d(bt, MPFR_RNDN));
+            mpfr_clear(bt);
+        }
+        double result_val = log10_min / log10_b;
+        Expr* result;
+        if (out_is_mpfr) {
+            mpfr_t out;
+            mpfr_init2(out, out_bits);
+            mpfr_set_d(out, result_val, MPFR_RNDN);
+            result = expr_new_mpfr_move(out);
+        } else {
+            result = expr_new_real(result_val);
+        }
+        if (x_owned) expr_free(x_owned);
+        if (b_owned) expr_free(b_owned);
+        return result;
     }
 
     long work_bits = (out_is_mpfr ? out_bits : 53) + 32;
@@ -1864,9 +1901,16 @@ Expr* builtin_real_exponent(Expr* res) {
 
     mpfr_clear(mx); mpfr_clear(mb_v); mpfr_clear(lx); mpfr_clear(lb);
 #else
-    /* No MPFR build: machine doubles only.  This loses accuracy on huge
-     * bigints whose magnitude exceeds DBL_MAX, but matches the Mathilda
-     * machine-precision baseline. */
+    /* No MPFR build: machine doubles only.  Inexact zero handled
+     * via the same MinPositive convention as the MPFR path. */
+    if (x_inexact_zero) {
+        double bv = b_use ? re_to_double_abs(b_use) : 10.0;
+        double result_val = log10(DBL_MIN) / log10(bv);
+        Expr* result = expr_new_real(result_val);
+        if (x_owned) expr_free(x_owned);
+        if (b_owned) expr_free(b_owned);
+        return result;
+    }
     double xv = re_to_double_abs(x_use);
     double bv = b_use ? re_to_double_abs(b_use) : 10.0;
     Expr* result = expr_new_real(log(xv) / log(bv));

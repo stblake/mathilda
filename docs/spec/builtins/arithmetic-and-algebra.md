@@ -681,8 +681,9 @@ Out[8]= IntegerString[10, 50]
   numericalized to MPFR at the matching precision when an explicit `len`
   is given. `RealDigits[Pi]` (no `len`) is left unevaluated.
 - `RealDigits[0]` returns `{{0}, 0}`. `RealDigits[0.]` returns
-  `{{0}, -Floor[Accuracy[0.]]}` (typically `{{0}, -15}` for machine
-  precision).
+  `{{0}, -Floor[Accuracy[0.]]}` — `{{0}, -323}` for machine precision
+  (`Accuracy[0.] ≈ 323.607`), and `{{0}, -p}` for an MPFR zero
+  `0``p` of precision `p` digits.
 - Bases must be integers `>= 2`. Non-integer (Real / Rational) bases
   trigger `RealDigits::ibase` and leave the call unevaluated.
   Non-integer-base expansions (e.g. `GoldenRatio`) are not yet supported.
@@ -774,12 +775,10 @@ Out[7]= {-3/20, 1}
 - Complex arguments with non-zero imaginary part emit
   `RealExponent::realx` and leave the call unevaluated.
 - Sign of `x` is discarded.
-- Zero handling follows Mathilda's `Accuracy` convention: every zero
-  (exact `0`, machine `0.`, MPFR `0``p`) has `Accuracy = Infinity`, so
-  `RealExponent[0] = -Infinity` uniformly.  This is a documented
-  divergence from Mathematica's `RealExponent[0.] = -307.65...`; matching
-  the Mathematica behaviour requires a similar adjustment to
-  `Accuracy[0.]` in `src/precision.c` and is deferred.
+- Zero handling (Mathematica-compatible):
+  - Exact zero (Integer 0, BigInt 0, Rational 0/n) → `-Infinity`.
+  - Machine `0.` → `Log[b, $MinMachineNumber]` (`≈ -307.65` for base 10).
+  - MPFR `0``p` of `p` digits → `-p / Log10[b]` (`-p` for base 10).
 
 ```mathematica
 In[1]:= RealExponent[123.456]

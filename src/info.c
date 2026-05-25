@@ -1637,8 +1637,9 @@ void info_init(void) {
         "Accepts Integer, BigInt, Rational, Real, and (with USE_MPFR) MPFR "
         "inputs, plus symbolic numeric values such as Pi, E, or Pi^Pi.  "
         "Result is a machine Real unless an MPFR input lifts it to MPFR "
-        "at that precision.  RealExponent[0] = -Infinity; the same is "
-        "returned for any approximate zero.  Threads over lists.");
+        "at that precision.  Exact zero gives -Infinity; machine 0. gives "
+        "Log[b, $MinMachineNumber] (~ -307.65 in base 10); MPFR 0 with "
+        "precision p digits gives -p / Log10[b].  Threads over lists.");
 
     symtab_set_docstring("FromDigits",
         "FromDigits[list] constructs an integer from a list of decimal "

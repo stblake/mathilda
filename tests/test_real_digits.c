@@ -330,8 +330,9 @@ static void test_zero_exact(void) {
 }
 
 static void test_zero_machine_real(void) {
-    /* {{0}, -Floor[Accuracy[0.]]} ~ {{0}, -15} for IEEE double. */
-    assert_eval_eq("RealDigits[0.]", "{{0}, -15}", 0);
+    /* {{0}, -Floor[Accuracy[0.]]}: with Mathematica-compatible
+     * Accuracy[0.] ≈ 323.607, the exponent is -323. */
+    assert_eval_eq("RealDigits[0.]", "{{0}, -323}", 0);
 }
 
 /* --- Listable ------------------------------------------------------ */
@@ -491,7 +492,7 @@ static void test_stress(void) {
             "{{1, 2, 3, 5, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0}, 3}",
             0);
         assert_eval_eq("RealDigits[0]", "{{0}, 0}", 0);
-        assert_eval_eq("RealDigits[0.]", "{{0}, -15}", 0);
+        assert_eval_eq("RealDigits[0.]", "{{0}, -323}", 0);
         assert_eval_eq("RealDigits[1/8, 2]", "{{1}, -2}", 0);
         Expr* p = parse_expression("RealDigits[Pi, 10, 25]");
         Expr* e = evaluate(p);

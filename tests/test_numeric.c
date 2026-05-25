@@ -242,12 +242,17 @@ static void test_precision_builtin(void) {
 
 static void test_accuracy_builtin(void) {
     assert_eval_eq("Accuracy[0]",     "Infinity", 0);
-    assert_eval_eq("Accuracy[0.0]",   "Infinity", 0);
     assert_eval_eq("Accuracy[1/2]",   "Infinity", 0);
+    /* Inexact zero is finite (matches Mathematica):
+     *   Accuracy[0.0] = MachinePrecision - Log10[$MinMachineNumber]
+     *                 ~ 15.9546 + 307.6526 ~ 323.607. */
+    assert_eval_startswith("Accuracy[0.0]", "323.");
     /* Accuracy of 0.001 ≈ 15.95 + 3 = 18.95. */
     assert_eval_startswith("Accuracy[0.001]", "18.");
     /* Accuracy of 3.14`50 ≈ 50 − log10(3.14) ≈ 49.5. */
     assert_eval_startswith("Accuracy[3.14`50]", "49.");
+    /* MPFR zero @ p digits: Accuracy[0``p] = p. */
+    assert_eval_startswith("Accuracy[N[0, 50]]", "50.");
 }
 
 static void test_set_precision(void) {

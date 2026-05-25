@@ -12,7 +12,11 @@
  *
  * Accuracy semantics (Mathematica-compatible):
  *     accuracy = precision − log10(|x|)          (for x ≠ 0)
- *   Exact values → Infinity. Zero with MPFR/machine precision also → Infinity.
+ *   Exact values (Integer, BigInt, Rational, symbolic constants) → Infinity.
+ *   Inexact zeros are finite:
+ *     - Machine 0.0 → MachinePrecision − log10(DBL_MIN) ≈ 323.607.
+ *     - MPFR 0 with bit-precision p → p / log2(10) digits (matches MMA's
+ *       Accuracy[0``p] = p).
  */
 
 #include "precision.h"
@@ -148,18 +152,23 @@ static double expr_log10_abs(const Expr* e) {
     return 0.0;
 }
 
+/* Accuracy of an inexact zero. Mathematica treats approximate zeros as
+ * having the largest accuracy that the representation can resolve:
+ *   - Machine 0.0     → MachinePrecision + (-log10($MinMachineNumber))
+ *                       = 53/log2(10) + (-log10(DBL_MIN)) ≈ 323.607.
+ *   - MPFR 0 @ p bits → p / log2(10) digits, matching Accuracy[0``p] = p. */
+static double accuracy_of_machine_zero(void) {
+    return NUMERIC_MACHINE_PRECISION_DIGITS - log10(DBL_MIN);
+}
+
 static Expr* accuracy_of(const Expr* e) {
     if (!e) return make_infinity();
 
-    /* Zero: accuracy is Infinity (as in Mathematica). */
-    if ((e->type == EXPR_INTEGER && e->data.integer == 0)
-        || (e->type == EXPR_REAL && e->data.real == 0.0)
-#ifdef USE_MPFR
-        || (e->type == EXPR_MPFR && mpfr_zero_p(e->data.mpfr))
-#endif
-        ) {
-        return make_infinity();
-    }
+    /* Exact zero (Integer / BigInt 0, Rational 0/n) → Infinity.
+     * Inexact zero (machine 0.0, MPFR 0) falls through to the per-type
+     * finite-accuracy formulas below. */
+    if (e->type == EXPR_INTEGER && e->data.integer == 0) return make_infinity();
+    if (e->type == EXPR_BIGINT  && mpz_sgn(e->data.bigint) == 0) return make_infinity();
 
     switch (e->type) {
         case EXPR_INTEGER:
@@ -168,14 +177,18 @@ static Expr* accuracy_of(const Expr* e) {
         case EXPR_SYMBOL:
             return make_infinity();
         case EXPR_REAL:
+            if (e->data.real == 0.0) return expr_new_real(accuracy_of_machine_zero());
             return expr_new_real(NUMERIC_MACHINE_PRECISION_DIGITS - expr_log10_abs(e));
 #ifdef USE_MPFR
         case EXPR_MPFR: {
             double prec_digits = (double)mpfr_get_prec(e->data.mpfr) / LOG2_10;
+            if (mpfr_zero_p(e->data.mpfr)) return expr_new_real(prec_digits);
             return expr_new_real(prec_digits - expr_log10_abs(e));
         }
 #endif
         case EXPR_FUNCTION: {
+            /* Exact rationals with numerator 0 are exact zero → Infinity;
+             * otherwise rationals are exact and also → Infinity. */
             if (is_rational((Expr*)e, NULL, NULL)) return make_infinity();
             Expr *re, *im;
             if (is_complex((Expr*)e, &re, &im)) {
@@ -312,8 +325,9 @@ void precision_init(void) {
     symtab_set_docstring("Accuracy",
         "Accuracy[x]\n"
         "\tReturns the number of digits of accuracy in x — equal to\n"
-        "\tPrecision[x] − Log10[Abs[x]]. Zero and exact numbers return\n"
-        "\tInfinity.");
+        "\tPrecision[x] − Log10[Abs[x]]. Exact numbers (including exact 0)\n"
+        "\treturn Infinity. Inexact zeros are finite: machine 0. returns\n"
+        "\t≈ 323.607; MPFR 0 of precision p returns p digits.");
     symtab_set_docstring("SetPrecision",
         "SetPrecision[x, n]\n"
         "\tReturns an expression equivalent to x with numeric values\n"

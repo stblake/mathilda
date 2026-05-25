@@ -34,6 +34,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+#include <float.h>
 
 /* Capture stderr while `input` is parsed + evaluated.  Returns the
  * collected stderr text as a heap string (caller frees) and writes the
@@ -303,27 +304,40 @@ static void test_listable_base(void) {
 /* --- Zero cases ----------------------------------------------------- */
 
 static void test_zero_integer(void) {
-    /* RealExponent[0] = -Infinity (per documentation). */
+    /* Exact zero -> -Infinity. */
     assert_eval_eq("RealExponent[0]", "-Infinity", 0);
 }
 
 static void test_zero_machine_real(void) {
-    /* Mathilda convention: Accuracy[0.] = Infinity, so RealExponent[0.] =
-     * -Infinity.  This intentionally differs from Mathematica which
-     * returns the finite ~-307.65. */
-    assert_eval_eq("RealExponent[0.]", "-Infinity", 0);
+    /* Inexact machine zero (Mathematica-compatible): log10(DBL_MIN) ~ -307.65. */
+    assert_eval_real_close("RealExponent[0.]", log10(DBL_MIN), 1e-9);
+}
+
+static void test_zero_machine_real_base(void) {
+    /* Base-b version: log_b(DBL_MIN) = log10(DBL_MIN)/log10(b). */
+    assert_eval_real_close("RealExponent[0., 2]", log10(DBL_MIN) / log10(2.0), 1e-9);
 }
 
 static void test_zero_rational(void) {
-    /* 0/5 normalizes to 0, but let's also check the explicit zero through
-     * exact arithmetic. */
+    /* 0/5 normalizes to exact 0 -> -Infinity. */
     assert_eval_eq("RealExponent[0/5]", "-Infinity", 0);
 }
 
 #ifdef USE_MPFR
 static void test_zero_mpfr(void) {
-    /* MPFR zero via N[0, 50] -- Mathilda Accuracy convention: -Infinity. */
-    assert_eval_eq("RealExponent[N[0, 50]]", "-Infinity", 0);
+    /* MPFR zero via N[0, 50]: result is an MPFR holding -(p_bits/log2(10)).
+     * N[0, 50] requests 50 decimal digits = ceil(50*log2(10)) = 167 bits, so
+     * the value is approximately -167/log2(10) ≈ -50.27. */
+    Expr* p = parse_expression("RealExponent[N[0, 50]]");
+    Expr* e = evaluate(p);
+    expr_free(p);
+    double v;
+    if (e->type == EXPR_MPFR) v = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+    else if (e->type == EXPR_REAL) v = e->data.real;
+    else { ASSERT_MSG(0, "expected numeric, got type %d", e->type); v = 0.0; }
+    ASSERT_MSG(v > -52.0 && v < -49.0,
+               "expected ~-50.3 (167-bit MPFR zero), got %.15g", v);
+    expr_free(e);
 }
 #endif
 
@@ -466,7 +480,7 @@ static void test_stress(void) {
                                log10(3.141592653589793), 1e-12);
         assert_eval_real_close("RealExponent[2^100, 2]", 100.0, 1e-9);
         assert_eval_eq("RealExponent[0]",  "-Infinity", 0);
-        assert_eval_eq("RealExponent[0.]", "-Infinity", 0);
+        assert_eval_real_close("RealExponent[0.]", log10(DBL_MIN), 1e-9);
 #ifdef USE_MPFR
         Expr* p = parse_expression("RealExponent[N[Pi, 30]]");
         Expr* e = evaluate(p);
@@ -514,6 +528,7 @@ int main(void) {
 
     TEST(test_zero_integer);
     TEST(test_zero_machine_real);
+    TEST(test_zero_machine_real_base);
     TEST(test_zero_rational);
 #ifdef USE_MPFR
     TEST(test_zero_mpfr);
