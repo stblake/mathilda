@@ -28,6 +28,7 @@
 #include "expr.h"
 #include "solvelinsys.h"
 #include "solvepoly.h"
+#include "solverad.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -284,6 +285,13 @@ Expr* builtin_solve(Expr* res) {
             && expr->data.function.head->data.symbol == SYM_Equal
             && expr->data.function.arg_count == 2) {
             out = solvepoly_solve_polynomial_equality(expr, var, dom, &opts.poly);
+            /* Polynomial specialist returns NULL when the equation is
+             * not a polynomial in `var` -- typically because it carries
+             * radical subterms (Sqrt, x^(p/q), nested radicals).  Hand
+             * off to the radicals specialist before giving up. */
+            if (!out) {
+                out = solverad_solve_radicals_equality(expr, var, dom);
+            }
         }
         expr_free(expr);
     }
@@ -353,4 +361,5 @@ void solve_init(void) {
 
     solvepoly_init();
     solvelinsys_init();
+    solverad_init();
 }

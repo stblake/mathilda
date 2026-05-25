@@ -206,6 +206,7 @@ set(COMMON_SRC
     ../src/solve.c
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
+    ../src/solverad.c
     ../src/zero_test.c
 )
 
@@ -364,6 +365,9 @@ target_include_directories(irreduciblepolynomialq_tests PRIVATE ../src)
 
 add_executable(solve_tests test_solve.c ${COMMON_SRC})
 target_include_directories(solve_tests PRIVATE ../src)
+
+add_executable(solveradicals_tests test_solveradicals.c ${COMMON_SRC})
+target_include_directories(solveradicals_tests PRIVATE ../src)
 
 add_executable(factor_phase0_tests test_factor_phase0.c ${COMMON_SRC})
 target_include_directories(factor_phase0_tests PRIVATE ../src)

@@ -1253,6 +1253,9 @@ Attempts to solve an equation or system of equations for one or more variables.
 - `HoldAll`, `Protected`.
 - Acts as a router that classifies its input and dispatches to a specialist:
   - Single equality, single variable -> `Solve`SolvePolynomialEquality` (below).
+  - Single equality, single variable, polynomial specialist declines (because
+    the equation carries `Sqrt[...]` / `x^(p/q)` / nested radicals) ->
+    `Solve`SolveRadicalsEquality` (also below).
   - Multi-variable list, or `And`/`List` of equations -> `Solve`SolveLinearSystem`
     (also below).  The linear-system specialist accepts the same input shapes
     that the router uses to decide dispatch; it canonicalises each equation
@@ -1471,6 +1474,95 @@ its context-qualified name when the caller has already classified its input.
 - Same algorithm and output shape as `Solve` for single polynomial equalities
   in one variable.  Does not parse options; the caller supplies them through
   the C-level entry point.
+
+## Solve`SolveRadicalsEquality
+The radicals-equation specialist invoked by `Solve` when the polynomial
+specialist declines (because the equation contains `Sqrt[...]`, fractional
+powers `x^(p/q)`, or nested radicals).  Reachable directly via its
+context-qualified name when the caller has already classified its input.
+- `Solve`SolveRadicalsEquality[lhs == rhs, var]`
+- `Solve`SolveRadicalsEquality[lhs == rhs, var, dom]`
+
+**Features**:
+- `Protected`.
+- Algorithm:
+  1. Canonicalise the equation: compute `e = Numerator[Together[lhs - rhs]]`.
+     This combines rational-radical inputs (e.g.
+     `(x + Sqrt[x])/Sqrt[x] + Sqrt[x]/(x + Sqrt[x]) == 4`) into a single
+     polynomial-style residual in `var` and the radicals it contains.
+  2. Iteratively locate radical atoms `Power[base, p/q]` (q > 1) anywhere in
+     the working system (main equation + accumulated side equations).  For
+     each distinct base `g_i`, introduce a fresh generator `u_i` so that
+     `u_i = g_i^(1/L_i)`, where `L_i` is the LCM of denominators of *all*
+     exponents of `g_i` (so `Sqrt[x]` and `x^(1/4)` share a single
+     generator `u = x^(1/4)` with `L = 4`).  Replace every `g_i^(p/q)`
+     by `u_i^(p*L_i/q)` in every equation, and append the side equation
+     `u_i^L_i - g_i == 0`.  Nested radicals are picked up automatically
+     -- a fresh atom inside a previously substituted base becomes its
+     own generator on the next iteration.
+  3. Eliminate `u_1, u_2, ...` from the main equation by chained
+     `Resultant_{u_i}(main, side_eq_i, u_i)` in introduction order, so
+     each side equation contributes exactly one fresh generator and the
+     end-result is a polynomial in `var` alone.
+  4. Hand the eliminated polynomial to `Solve`SolvePolynomialEquality`.
+  5. Verify every candidate by back-substitution into the *original*
+     equation.  `Simplify` on the residual catches symbolic zeros;
+     for closed-form candidates the residual is then numerically
+     evaluated with `N[]` and rejected when its magnitude exceeds
+     `1e-9`.  Candidates whose residual still depends on free parameters
+     (and so cannot be decided either way) are kept and trigger
+     `Solve::nongen`, matching Mathematica's convention.
+- Output shape matches `Solve`SolvePolynomialEquality`: a `List` of
+  singleton-rule `List`s, plus the empty `List[]` when no candidate
+  survives verification.  The `dom` argument flows through to the
+  polynomial specialist (so `Reals` filters the candidate polynomial
+  via the same per-degree discriminant tests as the polynomial path).
+- The substitution introduces fresh generator symbols whose names follow
+  the template `$radu<n>$`.  They are local to the call -- they never
+  appear in the returned solution list (the resultant elimination
+  removes every generator).
+- The verifier accepts `Root[poly, k]` candidates without further
+  checks: the polynomial elimination is exact, and `Root[]` objects
+  describe the unique algebraic root of an irreducible factor that
+  is not amenable to back-substitution.  Reflects Mathematica's
+  policy of keeping `Root[]`-form solutions when they cannot be
+  further simplified.
+- The substitution-then-elimination strategy is "complete up to
+  verification": every actual solution survives if it is closed-form,
+  while extraneous roots from cross-multiplication (Together) or
+  L-th-root branching are filtered out at the verifier.
+
+```mathematica
+In[1]:= Solve[Sqrt[x] + 3 x == 5, x]
+Out[1]= {{x -> 1/18 (31 - Sqrt[61])}}
+
+In[2]:= Solve[Sqrt[x] + 3 == 5, x]
+Out[2]= {{x -> 4}}
+
+In[3]:= Solve[x - 8 Sqrt[x] + 15 == 0, x]
+Out[3]= {{x -> 9}, {x -> 25}}
+
+In[4]:= Solve[Sqrt[x] + 3 x^(1/4) == 5, x]
+Out[4]= {{x -> 1/2 (311 - 57 Sqrt[29])}}
+
+In[5]:= Solve[(x + Sqrt[x])/Sqrt[x] + Sqrt[x]/(x + Sqrt[x]) == 4, x]
+Out[5]= {{x -> 2 (2 + Sqrt[3])}}
+
+In[6]:= Solve[Sqrt[x + 1] + Sqrt[x - 1] == 3, x]
+Out[6]= {{x -> 85/36}}
+
+In[7]:= Solve[Sqrt[x + 5] + Sqrt[x] == -1, x]
+Out[7]= {}
+
+In[8]:= Solve[x + Sqrt[x - 1] == 1, x]
+Out[8]= {{x -> 1}}
+
+In[9]:= Solve[Sqrt[a x + c] + 3 x == 5, x]
+Solve::nongen: There may be values of the parameters for which some or
+              all solutions are not valid.
+Out[9]= {{x -> 1/18 (30 + a - Sqrt[60 a + a^2 + 36 c])},
+         {x -> 1/18 (30 + a + Sqrt[60 a + a^2 + 36 c])}}
+```
 
 ## Cubics
 Option for `Solve` that controls whether cubic equations are solved via
