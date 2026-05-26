@@ -760,6 +760,18 @@ void test_factorial(void) {
 
     e = parse_expression("21!"); res = evaluate(e); s = expr_to_string_fullform(res);
     assert(strcmp(s, "51090942171709440000") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Real input: Factorial via Gamma[x+1] via tgamma. */
+    e = parse_expression("Factorial[5.0]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strncmp(s, "120", 3) == 0); free(s); expr_free(res); expr_free(e);
+
+    /* MPFR input: Factorial via mpfr_gamma at full input precision. */
+    e = parse_expression("Factorial[N[10, 35]]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strncmp(s, "3628800", 7) == 0); free(s); expr_free(res); expr_free(e);
+
+    e = parse_expression("Factorial[N[1/2, 35]]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    /* Expected ~ 0.886226925452758013649083741670572591... */
+    assert(strncmp(s, "0.8862269254", 12) == 0); free(s); expr_free(res); expr_free(e);
 }
 
 void test_binomial(void) {

@@ -762,6 +762,28 @@ Expr* builtin_factorial(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
 
+    /* Machine Real: Factorial[x] = Gamma[x + 1] via libm tgamma. */
+    if (arg->type == EXPR_REAL) {
+        double v = arg->data.real;
+        return expr_new_real(tgamma(v + 1.0));
+    }
+#ifdef USE_MPFR
+    /* MPFR Real: same identity at full input precision. */
+    if (arg->type == EXPR_MPFR) {
+        mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
+        mpfr_t shifted;
+        mpfr_init2(shifted, prec);
+        mpfr_add_ui(shifted, arg->data.mpfr, 1, MPFR_RNDN);
+        Expr* result = expr_new_mpfr_bits(prec);
+        mpfr_gamma(result->data.mpfr, shifted, MPFR_RNDN);
+        mpfr_clear(shifted);
+        return result;
+    }
+#endif
+    /* BigInt: factorial of a value that exceeds int64 is astronomical
+     * (1e20! has ~10^21 digits) and would exhaust memory. Mathematica
+     * leaves it symbolic for the same reason. */
+
     int64_t n, d;
     if (is_rational(arg, &n, &d)) {
         if (d == 1) {
