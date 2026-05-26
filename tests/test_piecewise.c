@@ -51,6 +51,12 @@ void test_piecewise() {
         {"IntegerPart[N[3.7, 50]]", "3"},
         {"IntegerPart[N[-3.7, 50]]", "-3"},
         {"IntegerPart[N[5, 50]]", "5"},
+        // FractionalPart on MPFR preserves precision, so the exact bit pattern
+        // is implementation-specific. Verify the value via a tolerance check
+        // (and an exact integer-result case).
+        {"Abs[FractionalPart[N[37/10, 50]] - 7/10] < 0.0001", "True"},
+        {"Abs[FractionalPart[N[-37/10, 50]] + 7/10] < 0.0001", "True"},
+        {"FractionalPart[N[5, 50]] == 0", "True"},
 
         // Rational inputs
         {"Floor[5/2]", "2"},
