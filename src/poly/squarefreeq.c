@@ -19,8 +19,8 @@
  *     manifestly square free" semantics.
  *
  * The Modulus option is parsed but only Modulus -> 0 is honoured; non-zero
- * values silently fall back to the no-modulus path until a real mod-p test
- * is wired in.
+ * values emit `SquareFreeQ::modnotimpl` and return the call unevaluated until
+ * a real mod-p polynomial sqfree test is wired in.
  */
 
 #include "squarefreeq.h"
@@ -125,6 +125,20 @@ static Expr* sqfree_emit_nonopt(Expr* bad, size_t pos, Expr* res) {
             bad_str ? bad_str : "?", pos, call_str ? call_str : "?");
     free(bad_str);
     free(call_str);
+    return NULL;
+}
+
+/* `Modulus -> n` with n other than 0 is parsed but not yet implemented.
+ * Emit a Mathematica-style diagnostic and signal "leave unevaluated" by
+ * returning NULL so the surface call stays visible to the user. */
+static Expr* sqfree_emit_modnotimpl(Expr* val) {
+    char* val_str = expr_to_string(val);
+    fprintf(stderr,
+            "SquareFreeQ::modnotimpl: Modulus -> %s is not yet supported; "
+            "only Modulus -> 0 (the default integer ring) is currently "
+            "implemented.\n",
+            val_str ? val_str : "?");
+    free(val_str);
     return NULL;
 }
 
@@ -645,10 +659,20 @@ Expr* builtin_squarefreeq(Expr* res) {
             else if (is_sym_eq(val, "Automatic")) gaussian_setting = 0;
             else last_bad = opt;
         } else if (name == SYM_Modulus || strcmp(name, "Modulus") == 0) {
-            /* Only Modulus -> 0 is fully supported; other values silently
-             * fall back to the default integer ring.  Mathematica accepts
-             * arbitrary integer moduli; that is a deferred extension. */
-            (void)val;
+            /* Only Modulus -> 0 is implemented; any other value (non-zero
+             * integer, non-integer, or symbolic) emits modnotimpl and the
+             * call returns unevaluated.  Mathematica accepts arbitrary
+             * integer moduli; that is a deferred extension. */
+            bool is_zero_modulus = false;
+            if (val->type == EXPR_INTEGER && val->data.integer == 0) {
+                is_zero_modulus = true;
+            } else if (val->type == EXPR_BIGINT && mpz_sgn(val->data.bigint) == 0) {
+                is_zero_modulus = true;
+            }
+            if (!is_zero_modulus) {
+                if (free_vars) free(vars);
+                return sqfree_emit_modnotimpl(val);
+            }
         } else {
             last_bad = opt;
         }

@@ -993,13 +993,16 @@ Out[9]= False
     `e_in_norm == 2` slice) are resolved by computing `pi` via a
     Cornacchia search and stripping the multiplicity directly.
 - The `Modulus -> p` option is parsed but only `Modulus -> 0` (the default
-  no-modulus path) is wired in; non-zero values silently fall back to the
-  integer ring until a polynomial sqfree-mod-`p` test is added.
+  no-modulus path) is wired in; any other value -- non-zero integer,
+  non-integer, or symbolic -- emits `SquareFreeQ::modnotimpl` and leaves
+  the call unevaluated until a polynomial sqfree-mod-`p` test is added.
 
 Diagnostics:
 - `SquareFreeQ[]` emits `SquareFreeQ::argb` and stays unevaluated.
 - A non-`Rule` past the optional vars slot (e.g. `SquareFreeQ[1, 2, 3]`)
   emits `SquareFreeQ::nonopt` and stays unevaluated.
+- `Modulus -> n` with `n != 0` emits `SquareFreeQ::modnotimpl` and stays
+  unevaluated (e.g. `SquareFreeQ[x^2 + 1, Modulus -> 2]`).
 
 ```mathematica
 In[1]:= SquareFreeQ[10]

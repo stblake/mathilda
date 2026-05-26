@@ -203,13 +203,18 @@ static void test_squarefreeq_nonopt(void) {
              "SquareFreeQ[4, Rule[GaussianIntegers, Foo]]");
 }
 
-/* The Modulus option is accepted (currently a no-op for non-zero values);
- * passing it must not break the call. */
+/* The Modulus option is accepted only for Modulus -> 0 (the default integer
+ * ring).  Any other value -- non-zero integer, non-integer, or symbolic --
+ * is not yet implemented and must emit SquareFreeQ::modnotimpl while leaving
+ * the call unevaluated. */
 static void test_squarefreeq_modulus_option(void) {
     run_test("SquareFreeQ[10, Modulus -> 0]", "True");
-    /* Modulus -> non-zero: silently falls back to default ring (deferred);
-     * the result mirrors the no-modulus case. */
-    run_test("SquareFreeQ[10, Modulus -> 7]", "True");
+    fprintf(stderr, "--- next line(s) are an EXPECTED SquareFreeQ::modnotimpl diagnostic ---\n");
+    run_test("SquareFreeQ[10, Modulus -> 7]",
+             "SquareFreeQ[10, Rule[Modulus, 7]]");
+    fprintf(stderr, "--- next line(s) are an EXPECTED SquareFreeQ::modnotimpl diagnostic ---\n");
+    run_test("SquareFreeQ[x^2 + 1, Modulus -> 2]",
+             "SquareFreeQ[Plus[1, Power[x, 2]], Rule[Modulus, 2]]");
 }
 
 /* Regression: the dispatcher must not double-free vars on an early
