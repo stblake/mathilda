@@ -1294,7 +1294,9 @@ Complex number functions.
   `Im`, `Abs`, `Arg` (all real-valued by construction).
 - `Im[z]`: Imaginary part. Folds `Im[f[z]] -> 0` for the same set of `f`.
 - `ReIm[z]`: Returns `{Re[z], Im[z]}`; inherits the same folding.
-- `Abs[z]`: Magnitude.
+- `Abs[z]`: Magnitude. Numeric arguments (`Integer`, `BigInt`, `Real`,
+  arbitrary-precision `MPFR`, `Rational`) reduce to a concrete value at the
+  input precision; complex arguments use `Sqrt[Re^2 + Im^2]`.
 - `Conjugate[z]`: Complex conjugate.  Folds `Conjugate[Conjugate[z]] -> z`
   (involution) and `Conjugate[f[..]] -> f[..]` when `f` is one of `Re`,
   `Im`, `Abs`, `Arg` (all real-valued by construction).

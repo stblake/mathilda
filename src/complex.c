@@ -325,6 +325,14 @@ Expr* builtin_abs(Expr* res) {
         double val = arg->data.real;
         return expr_new_real(val < 0.0 ? -val : val);
     }
+#ifdef USE_MPFR
+    if (arg->type == EXPR_MPFR) {
+        mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
+        Expr* result = expr_new_mpfr_bits(prec);
+        mpfr_abs(result->data.mpfr, arg->data.mpfr, MPFR_RNDN);
+        return result;
+    }
+#endif
     if (is_rational(arg, &n, &d)) {
         return make_rational(n < 0 ? -n : n, d);
     }

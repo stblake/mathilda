@@ -381,6 +381,22 @@ void test_abs_conjugate(void) {
     assert(strcmp(s3, "5") == 0);
     free(s3);
 
+    /* MPFR (high-precision Real): Abs must reduce, not stay symbolic.
+     * Regression test for `Abs[N[1, 35]]` returning `Abs[1.0]`, which
+     * cascaded into `Norm[N[v, 35]]` failing to evaluate the radicand. */
+    char* s_mpfr_pos = expr_to_string_fullform(eval_and_free(parse_expression("Abs[N[1, 35]]")));
+    assert(strncmp(s_mpfr_pos, "1.0", 3) == 0);
+    free(s_mpfr_pos);
+
+    char* s_mpfr_neg = expr_to_string_fullform(eval_and_free(parse_expression("Abs[N[-3, 35]]")));
+    assert(strncmp(s_mpfr_neg, "3.0", 3) == 0);
+    free(s_mpfr_neg);
+
+    char* s_mpfr_norm = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Norm[N[{1, 0, 1, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1}, 35]]")));
+    assert(strncmp(s_mpfr_norm, "2.2360679774997896", 18) == 0);
+    free(s_mpfr_norm);
+
     char* s4 = expr_to_string_fullform(eval_and_free(parse_expression("Conjugate[Complex[2, 3]]")));
     assert(strcmp(s4, "Complex[2, -3]") == 0);
     free(s4);
