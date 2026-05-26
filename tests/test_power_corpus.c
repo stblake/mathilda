@@ -184,6 +184,23 @@ static void test_power_of_power_positive_base(void) {
     assert_eval_eq("Power[Power[-1, 2], 3]", "1", 0);
 }
 
+/* Perfect-power extraction on BigInt bases: previously skipped because
+ * the gate insisted on EXPR_INTEGER. */
+static void test_bigint_perfect_root(void) {
+    assert_eval_eq("Sqrt[10^20]",  "10000000000", 0);
+    assert_eval_eq("Sqrt[10^100]", "100000000000000000000000000000000000000000000000000", 0);
+    assert_eval_eq("Sqrt[2^64]",   "4294967296", 0);
+    assert_eval_eq("Sqrt[2^100]",  "1125899906842624", 0);
+    assert_eval_eq("Power[10^60, 1/3]",  "100000000000000000000", 0);
+    assert_eval_eq("Power[10^100, 1/2]", "100000000000000000000000000000000000000000000000000", 0);
+    assert_eval_eq("Power[2^100, 1/4]",  "33554432", 0);
+    assert_eval_eq("Power[10^100, 1/5]", "100000000000000000000", 0);
+    assert_eval_eq("Power[10^21, 1/3]",  "10000000", 0);
+    /* Mixed exponent: 10^20 = 10^(20), so (10^20)^(2/3) = 10^(40/3) which
+     * factors as 10^13 * 10^(1/3). */
+    assert_eval_eq("Power[10^20, 2/3]",  "10000000000000 10^(1/3)", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -195,6 +212,7 @@ int main(void) {
     TEST(test_power_of_times_positives);
     TEST(test_power_of_power_positive_base);
     TEST(test_power_of_times_power_factor_composes);
+    TEST(test_bigint_perfect_root);
 
     printf("All power_corpus tests passed!\n");
     return 0;

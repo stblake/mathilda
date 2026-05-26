@@ -1310,10 +1310,18 @@ rat_imag_fallthrough: ;
      * find_min_perfect_base for the full argument). */
     {
         int64_t pp_, qq_;
-        if (base->type == EXPR_INTEGER && base->data.integer >= 4 &&
-            is_rational(exp, &pp_, &qq_) && qq_ > 1) {
+        /* Accept both EXPR_INTEGER (>= 4, the threshold below which
+         * find_min_perfect_base cannot make progress: 0,1 are degenerate
+         * and 2,3 are primes) and EXPR_BIGINT (always >= 4 here since any
+         * BigInt that survived normalisation does not fit in int64). The
+         * downstream find_min_perfect_base wants the full mpz_t, so the
+         * conversion goes through expr_to_mpz uniformly. */
+        bool base_is_pp_candidate =
+            (base->type == EXPR_INTEGER && base->data.integer >= 4)
+            || (base->type == EXPR_BIGINT && mpz_sgn(base->data.bigint) > 0);
+        if (base_is_pp_candidate && is_rational(exp, &pp_, &qq_) && qq_ > 1) {
             mpz_t n_z, b_z;
-            mpz_init_set_si(n_z, base->data.integer);
+            expr_to_mpz(base, n_z);
             mpz_init(b_z);
             int64_t k_total = 0;
             if (find_min_perfect_base(n_z, b_z, &k_total)) {
