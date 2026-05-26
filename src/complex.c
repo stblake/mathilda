@@ -194,6 +194,11 @@ Expr* builtin_re(Expr* res) {
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
         return expr_copy(arg);
     }
+#ifdef USE_MPFR
+    if (arg->type == EXPR_MPFR) {
+        return expr_copy(arg);
+    }
+#endif
     if (complex_decompose(arg, &re, &im)) {
         if (is_numeric_real(re) && is_numeric_real(im)) {
             expr_free(im);
