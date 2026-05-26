@@ -326,6 +326,10 @@ void test_re_im(void) {
     assert(strncmp(s_re_mpfr, "3.0", 3) == 0);
     free(s_re_mpfr);
 
+    char* s_im_mpfr = expr_to_string_fullform(eval_and_free(parse_expression("Im[N[3, 35]]")));
+    assert(strcmp(s_im_mpfr, "0") == 0);
+    free(s_im_mpfr);
+
     char* s5 = expr_to_string_fullform(eval_and_free(parse_expression("ReIm[Complex[2, 3]]")));
     assert(strcmp(s5, "List[2, 3]") == 0);
     free(s5);
