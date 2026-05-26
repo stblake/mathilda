@@ -44,6 +44,10 @@ void test_piecewise() {
         {"Ceiling[N[3.2, 50]]", "4"},
         {"Ceiling[N[-3.2, 50]]", "-3"},
         {"Ceiling[N[5, 50]]", "5"},
+        {"Round[N[3.5, 50]]", "4"},
+        {"Round[N[2.5, 50]]", "2"},
+        {"Round[N[-3.5, 50]]", "-4"},
+        {"Round[N[3.4, 50]]", "3"},
 
         // Rational inputs
         {"Floor[5/2]", "2"},
