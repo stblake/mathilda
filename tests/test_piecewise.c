@@ -37,10 +37,13 @@ void test_piecewise() {
         {"Round[-3.5]", "-4"},
         
         // Arbitrary-precision (MPFR) Real inputs — must reduce to exact integers
-        // for Floor (the sibling MPFR coverage is added in its own commit).
+        // for Floor/Ceiling (the sibling MPFR coverage follows in later commits).
         {"Floor[N[3.7, 50]]", "3"},
         {"Floor[N[-3.7, 50]]", "-4"},
         {"Floor[N[5, 50]]", "5"},
+        {"Ceiling[N[3.2, 50]]", "4"},
+        {"Ceiling[N[-3.2, 50]]", "-3"},
+        {"Ceiling[N[5, 50]]", "5"},
 
         // Rational inputs
         {"Floor[5/2]", "2"},
