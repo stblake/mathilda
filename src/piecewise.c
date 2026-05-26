@@ -107,9 +107,41 @@ static Expr* do_piecewise_1(Expr* x, int op) {
         else if (op == OP_ROUND) res = round_half_even(v);
         else if (op == OP_INTPART) res = trunc(v);
         else if (op == OP_FRACPART) return expr_new_real(v - trunc(v));
-        
+
         return expr_new_integer((int64_t)res);
     }
+
+#ifdef USE_MPFR
+    if (x->type == EXPR_MPFR) {
+        mpfr_prec_t prec = mpfr_get_prec(x->data.mpfr);
+        if (op == OP_FRACPART) {
+            /* FractionalPart preserves precision. Result = x - trunc(x). */
+            mpfr_t tmp;
+            mpfr_init2(tmp, prec);
+            mpfr_trunc(tmp, x->data.mpfr);
+            Expr* result = expr_new_mpfr_bits(prec);
+            mpfr_sub(result->data.mpfr, x->data.mpfr, tmp, MPFR_RNDN);
+            mpfr_clear(tmp);
+            return result;
+        }
+        /* Floor/Ceiling/Round/IntegerPart all produce an exact integer.
+         * Route through mpz_t so arbitrarily large MPFR values do not
+         * silently truncate when they overflow int64_t. */
+        mpfr_t r;
+        mpfr_init2(r, prec);
+        if (op == OP_FLOOR)        mpfr_floor(r, x->data.mpfr);
+        else if (op == OP_CEILING) mpfr_ceil(r, x->data.mpfr);
+        else if (op == OP_ROUND)   mpfr_rint(r, x->data.mpfr, MPFR_RNDN);
+        else /* OP_INTPART */      mpfr_trunc(r, x->data.mpfr);
+        mpz_t z;
+        mpz_init(z);
+        mpfr_get_z(z, r, MPFR_RNDN);
+        Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(z));
+        mpz_clear(z);
+        mpfr_clear(r);
+        return result;
+    }
+#endif
     
     int64_t n, d;
     if (is_rational(x, &n, &d)) {
