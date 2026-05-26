@@ -10,6 +10,7 @@ Expr* builtin_re(Expr* res);
 Expr* builtin_im(Expr* res);
 Expr* builtin_reim(Expr* res);
 Expr* builtin_abs(Expr* res);
+Expr* builtin_sign(Expr* res);
 Expr* builtin_conjugate(Expr* res);
 Expr* builtin_arg(Expr* res);
 

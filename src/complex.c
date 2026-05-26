@@ -158,6 +158,7 @@ void complex_init(void) {
     symtab_add_builtin("Im", builtin_im);
     symtab_add_builtin("ReIm", builtin_reim);
     symtab_add_builtin("Abs", builtin_abs);
+    symtab_add_builtin("Sign", builtin_sign);
     symtab_add_builtin("Conjugate", builtin_conjugate);
     symtab_add_builtin("Arg", builtin_arg);
 
@@ -165,8 +166,13 @@ void complex_init(void) {
     symtab_get_def("Im")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("ReIm")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Abs")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
+    symtab_get_def("Sign")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Conjugate")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Arg")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
+
+    symtab_set_docstring("Sign",
+        "Sign[x] gives -1, 0, or 1 for real numeric x according to its sign, "
+        "and z/Abs[z] for a nonzero numeric complex z.");
 }
 
 /* True when `e` is `f[x]` for one of the real-valued-by-construction heads
@@ -346,6 +352,69 @@ Expr* builtin_abs(Expr* res) {
     if (is_rational(arg, &n, &d)) {
         return make_rational(n < 0 ? -n : n, d);
     }
+    return NULL;
+}
+
+/* Sign[x] returns -1, 0, or 1 for a real numeric x and z/Abs[z] for a
+ * nonzero numeric complex z. Symbolic or partially-numeric inputs leave
+ * the call unevaluated so the symbolic head flows through the evaluator.
+ *
+ * Real numeric inputs reduce to an exact Integer regardless of the input
+ * type (Integer/BigInt/Real/MPFR/Rational), matching Mathematica: the
+ * sign is an exact quantity even when the magnitude is inexact. */
+Expr* builtin_sign(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+
+    if (arg->type == EXPR_INTEGER) {
+        int64_t v = arg->data.integer;
+        return expr_new_integer(v < 0 ? -1 : v > 0 ? 1 : 0);
+    }
+    if (arg->type == EXPR_BIGINT) {
+        return expr_new_integer(mpz_sgn(arg->data.bigint));
+    }
+    if (arg->type == EXPR_REAL) {
+        double v = arg->data.real;
+        return expr_new_integer(v < 0.0 ? -1 : v > 0.0 ? 1 : 0);
+    }
+#ifdef USE_MPFR
+    if (arg->type == EXPR_MPFR) {
+        if (mpfr_zero_p(arg->data.mpfr)) return expr_new_integer(0);
+        return expr_new_integer(mpfr_sgn(arg->data.mpfr));
+    }
+#endif
+    int64_t n, d;
+    if (is_rational(arg, &n, &d)) {
+        /* Canonical Rational has d > 0, but be defensive against an
+         * un-canonicalised structural Rational[n, d] reaching here. */
+        int s = (n < 0) ^ (d < 0) ? -1 : (n == 0 ? 0 : 1);
+        return expr_new_integer(s);
+    }
+
+    /* Numeric Complex with real & imag parts: return z / Abs[z]. The
+     * evaluator folds the resulting Times[..., Power[Plus[..], -1/2]] to a
+     * Complex literal when both parts are concretely numeric. */
+    Expr *re, *im;
+    if (is_complex(arg, &re, &im) && is_numeric_real(re) && is_numeric_real(im)) {
+        /* Zero short-circuit: Sign[0 + 0 I] = 0. */
+        bool re_zero = (re->type == EXPR_INTEGER && re->data.integer == 0)
+                    || (re->type == EXPR_REAL && re->data.real == 0.0);
+        bool im_zero = (im->type == EXPR_INTEGER && im->data.integer == 0)
+                    || (im->type == EXPR_REAL && im->data.real == 0.0);
+#ifdef USE_MPFR
+        if (re->type == EXPR_MPFR) re_zero = mpfr_zero_p(re->data.mpfr) != 0;
+        if (im->type == EXPR_MPFR) im_zero = mpfr_zero_p(im->data.mpfr) != 0;
+#endif
+        if (re_zero && im_zero) return expr_new_integer(0);
+
+        Expr* abs_args[1] = { expr_copy(arg) };
+        Expr* abs_call = eval_and_free(expr_new_function(expr_new_symbol("Abs"), abs_args, 1));
+        Expr* inv_args[2] = { abs_call, expr_new_integer(-1) };
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"), inv_args, 2));
+        Expr* times_args[2] = { expr_copy(arg), inv };
+        return eval_and_free(expr_new_function(expr_new_symbol("Times"), times_args, 2));
+    }
+
     return NULL;
 }
 

@@ -457,6 +457,56 @@ void test_abs_conjugate(void) {
     free(s14);
 }
 
+void test_sign(void) {
+    /* Integer */
+    char* s1 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[5]")));
+    assert(strcmp(s1, "1") == 0); free(s1);
+    char* s2 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[-3]")));
+    assert(strcmp(s2, "-1") == 0); free(s2);
+    char* s3 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[0]")));
+    assert(strcmp(s3, "0") == 0); free(s3);
+
+    /* Real */
+    char* s4 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[3.5]")));
+    assert(strcmp(s4, "1") == 0); free(s4);
+    char* s5 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[-3.5]")));
+    assert(strcmp(s5, "-1") == 0); free(s5);
+
+    /* Rational */
+    char* s6 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[2/3]")));
+    assert(strcmp(s6, "1") == 0); free(s6);
+    char* s7 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[-7/4]")));
+    assert(strcmp(s7, "-1") == 0); free(s7);
+
+    /* BigInt — exceeds int64_t */
+    char* s8 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[10^100]")));
+    assert(strcmp(s8, "1") == 0); free(s8);
+    char* s9 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[-10^100]")));
+    assert(strcmp(s9, "-1") == 0); free(s9);
+
+    /* MPFR */
+    char* s10 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[N[5, 35]]")));
+    assert(strcmp(s10, "1") == 0); free(s10);
+    char* s11 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[N[-7, 35]]")));
+    assert(strcmp(s11, "-1") == 0); free(s11);
+    char* s12 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[N[0, 35]]")));
+    assert(strcmp(s12, "0") == 0); free(s12);
+
+    /* Complex */
+    char* s13 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[Complex[3, 4]]")));
+    assert(strcmp(s13, "Complex[Rational[3, 5], Rational[4, 5]]") == 0); free(s13);
+    char* s14 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[Complex[0, 0]]")));
+    assert(strcmp(s14, "0") == 0); free(s14);
+
+    /* Symbolic */
+    char* s15 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[x]")));
+    assert(strcmp(s15, "Sign[x]") == 0); free(s15);
+
+    /* Listable */
+    char* s16 = expr_to_string_fullform(eval_and_free(parse_expression("Sign[{1, -2, 0, 3}]")));
+    assert(strcmp(s16, "List[1, -1, 0, 1]") == 0); free(s16);
+}
+
 void test_arg(void) {
     char* s1 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[0]")));
     assert(strcmp(s1, "0") == 0);
@@ -914,6 +964,7 @@ int main(void) {
     TEST(test_quotientremainder);
     TEST(test_re_im);
     TEST(test_abs_conjugate);
+    TEST(test_sign);
     TEST(test_arg);
     TEST(test_trig);
     TEST(test_gcd_lcm);

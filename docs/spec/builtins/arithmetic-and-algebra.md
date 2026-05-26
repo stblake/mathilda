@@ -1288,7 +1288,7 @@ In[1]:= Rational[15, 5]
 Out[1]= 3
 ```
 
-## Re, Im, ReIm, Abs, Conjugate, Arg
+## Re, Im, ReIm, Abs, Sign, Conjugate, Arg
 Complex number functions.
 - `Re[z]`: Real part. Folds `Re[f[z]] -> f[z]` when `f` is one of `Re`,
   `Im`, `Abs`, `Arg` (all real-valued by construction).
@@ -1297,6 +1297,10 @@ Complex number functions.
 - `Abs[z]`: Magnitude. Numeric arguments (`Integer`, `BigInt`, `Real`,
   arbitrary-precision `MPFR`, `Rational`) reduce to a concrete value at the
   input precision; complex arguments use `Sqrt[Re^2 + Im^2]`.
+- `Sign[z]`: For real numeric `z`, returns the exact integer `-1`, `0`, or
+  `1` (regardless of whether the input is `Integer`, `BigInt`, `Real`,
+  `MPFR`, or `Rational`). For nonzero numeric complex `z`, returns
+  `z / Abs[z]`. `Listable`.
 - `Conjugate[z]`: Complex conjugate.  Folds `Conjugate[Conjugate[z]] -> z`
   (involution) and `Conjugate[f[..]] -> f[..]` when `f` is one of `Re`,
   `Im`, `Abs`, `Arg` (all real-valued by construction).
