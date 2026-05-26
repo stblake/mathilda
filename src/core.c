@@ -1408,6 +1408,9 @@ Expr* builtin_numberq(Expr* res) {
 
 static bool is_numeric_quantity(Expr* e) {
     if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
     if (e->type == EXPR_SYMBOL) {
         const char* name = e->data.symbol;
         if (name == SYM_Pi || name == SYM_E || name == SYM_I ||

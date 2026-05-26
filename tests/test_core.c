@@ -23,6 +23,14 @@ void test_numericq(void) {
     assert_eval_eq("NumericQ[f[Pi, Sin[1+I]]]", "True", 0);
     assert_eval_eq("NumericQ[f[Pi, x]]", "False", 0);
     assert_eval_eq("Clear[f]", "Null", 0);
+
+    /* MPFR values are numeric quantities. Previously returned False,
+     * which cascaded into Median / Mean / Variance / etc. all rejecting
+     * MPFR inputs as "not real numeric." */
+    assert_eval_eq("NumericQ[N[1, 35]]", "True", 0);
+    assert_eval_eq("NumericQ[N[3.14, 50]]", "True", 0);
+    assert_eval_eq("NumericQ[N[1, 35] + N[2, 35]]", "True", 0);
+    assert_eval_eq("NumericQ[Sin[N[1, 35]]]", "True", 0);
 }
 
 void test_numberq(void) {
