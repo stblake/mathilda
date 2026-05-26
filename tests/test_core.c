@@ -285,6 +285,16 @@ void test_quotient(void) {
     assert_eval_eq("Quotient[11, 3, 1]", "3", 0);
     assert_eval_eq("Quotient[10, 3, 1]", "3", 0);
     assert_eval_eq("Quotient[12, 3, 1]", "3", 0);
+
+    /* BigInt: do not collapse through a lossy double. Previously
+     * Quotient[10^50, 7] returned INT64_MIN (signed overflow), and
+     * Quotient[10^18, 7] was off by ~7 due to double-precision loss. */
+    assert_eval_eq("Quotient[10^50, 7]", "14285714285714285714285714285714285714285714285714", 0);
+    assert_eval_eq("Quotient[10^20, 3]", "33333333333333333333", 0);
+    assert_eval_eq("Quotient[10^18, 7]", "142857142857142857", 0);
+    assert_eval_eq("Quotient[10^50, 10^20]", "1000000000000000000000000000000", 0);
+    assert_eval_eq("Quotient[-(10^50), 7]", "-14285714285714285714285714285714285714285714285715", 0);
+    assert_eval_eq("Quotient[10^50, 7, 1]", "14285714285714285714285714285714285714285714285714", 0);
 }
 
 void test_quotientremainder(void) {

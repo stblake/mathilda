@@ -1672,23 +1672,50 @@ Expr* builtin_quotient(Expr* res) {
             Expr* result = make_complex(re_part, im_part);
             return result;
         }
-    } else { 
-        double m_val, n_val, d_val = 0.0;
-        Cplx temp;
-        if (!get_numeric_as_complex(m_expr, &temp)) return NULL;
-        m_val = temp.re;
-        if (!get_numeric_as_complex(n_expr, &temp)) return NULL;
-        n_val = temp.re;
-        if (d_expr) {
-            if (!get_numeric_as_complex(d_expr, &temp)) return NULL;
-            d_val = temp.re;
-        }
-
-        if (n_val == 0.0) return NULL;
-
-        int64_t result = (int64_t)floor((m_val - d_val) / n_val);
-        return expr_new_integer(result);
     }
+
+    /* Exact-integer fast path. Covers Integer and BigInt without ever
+     * collapsing through a lossy double, which previously silently
+     * corrupted Quotient[10^50, 7] to INT64_MIN (and any large-int64
+     * input where the double quotient overflowed int64). */
+    bool m_int = (m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_BIGINT);
+    bool n_int = (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_BIGINT);
+    bool d_int = d_expr ? (d_expr->type == EXPR_INTEGER || d_expr->type == EXPR_BIGINT) : true;
+    if (m_int && n_int && d_int) {
+        mpz_t m, n, d, q;
+        expr_to_mpz(m_expr, m);
+        expr_to_mpz(n_expr, n);
+        mpz_init(d);
+        if (d_expr) expr_to_mpz(d_expr, d);
+        if (mpz_sgn(n) == 0) {
+            mpz_clears(m, n, d, NULL);
+            return NULL;
+        }
+        mpz_init(q);
+        mpz_sub(q, m, d);     /* q = m - d */
+        mpz_fdiv_q(q, q, n);  /* q = floor((m-d)/n) */
+        Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(q));
+        mpz_clears(m, n, d, q, NULL);
+        return out;
+    }
+
+    /* Fallback for any input that contains a Real / Rational / etc. The
+     * previous double-only path is retained here. */
+    double m_val, n_val, d_val = 0.0;
+    Cplx temp;
+    if (!get_numeric_as_complex(m_expr, &temp)) return NULL;
+    m_val = temp.re;
+    if (!get_numeric_as_complex(n_expr, &temp)) return NULL;
+    n_val = temp.re;
+    if (d_expr) {
+        if (!get_numeric_as_complex(d_expr, &temp)) return NULL;
+        d_val = temp.re;
+    }
+
+    if (n_val == 0.0) return NULL;
+
+    int64_t result = (int64_t)floor((m_val - d_val) / n_val);
+    return expr_new_integer(result);
 }
 
 static int64_t get_expr_depth(Expr* e, bool heads) {
