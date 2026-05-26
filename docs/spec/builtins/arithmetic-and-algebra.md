@@ -810,6 +810,8 @@ Out[8]= -Infinity
 - `GCD[n1, n2, ...]`: Greatest common divisor.
 - `LCM[n1, n2, ...]`: Least common multiple.
 
+Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
+
 ## PowerMod
 Gives modular exponentiations, inverses, and roots.
 - `PowerMod[a, b, m]`: Gives $a^b \pmod m$.

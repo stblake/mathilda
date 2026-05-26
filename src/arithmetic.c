@@ -103,6 +103,31 @@ Expr* builtin_lcm(Expr* res) {
     if (count == 0) return expr_new_integer(1);
     if (count == 1) return single_arg_abs_or_copy(res->data.function.args[0]);
 
+    /* Mirror builtin_gcd: when every arg is integer-like and any one is a
+     * bigint, fold over GMP so results past int64 don't overflow. */
+    bool any_bigint = false, all_integer_like = true;
+    for (size_t i = 0; i < count; i++) {
+        Expr* arg = res->data.function.args[i];
+        if (!expr_is_integer_like(arg)) { all_integer_like = false; break; }
+        if (arg->type == EXPR_BIGINT) any_bigint = true;
+    }
+
+    if (all_integer_like && any_bigint) {
+        mpz_t running, tmp;
+        mpz_init_set_ui(running, 1);
+        for (size_t i = 0; i < count; i++) {
+            expr_to_mpz(res->data.function.args[i], tmp);
+            mpz_abs(tmp, tmp);
+            mpz_lcm(running, running, tmp);
+            mpz_clear(tmp);
+            /* mpz_lcm(_, _, 0) yields 0; any further LCMs stay 0. */
+            if (mpz_sgn(running) == 0) break;
+        }
+        Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(running));
+        mpz_clear(running);
+        return result;
+    }
+
     int64_t running_n = 0;
     int64_t running_d = 0;
 
