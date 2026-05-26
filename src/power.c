@@ -1380,6 +1380,38 @@ rat_imag_fallthrough: ;
      * automatically; the residue is at most a single Power node. No
      * recursive evaluator round-trips. */
     int64_t p, q;
+    /* Negative BigInt base with even q == 2: route through the existing
+     * Sqrt[-n] = I^p * Sqrt[|n|] identity by recursing on the positive
+     * BigInt. The int64-only path below cannot fit |n| when it overflows;
+     * this specialised branch is the BigInt equivalent of the q == 2
+     * arm at the head of the EXPR_INTEGER block. */
+    if (base->type == EXPR_BIGINT
+        && mpz_sgn(base->data.bigint) < 0
+        && is_rational(exp, &p, &q) && q == 2) {
+        mpz_t pos;
+        mpz_init(pos);
+        mpz_neg(pos, base->data.bigint);
+        Expr* pos_base = expr_bigint_normalize(expr_new_bigint_from_mpz(pos));
+        mpz_clear(pos);
+
+        int64_t pmod = ((p % 4) + 4) % 4;
+        int i_sign = (pmod == 1) ? 1 : -1;
+        Expr* i_val = expr_new_function(expr_new_symbol("Complex"),
+            (Expr*[]){expr_new_integer(0), expr_new_integer(i_sign)}, 2);
+        Expr* pos_power_args[2] = { pos_base, expr_copy(exp) };
+        Expr* pos_power = expr_new_function(expr_new_symbol("Power"), pos_power_args, 2);
+        Expr* rest = evaluate(pos_power);
+        expr_free(pos_power);
+
+        bool rest_is_one = (rest->type == EXPR_INTEGER && rest->data.integer == 1);
+        if (rest_is_one) {
+            expr_free(rest);
+            return i_val;
+        }
+        Expr* t_args[2] = { i_val, rest };
+        return expr_new_function(expr_new_symbol("Times"), t_args, 2);
+    }
+
     if (base->type == EXPR_INTEGER && is_rational(exp, &p, &q) && q > 1) {
         int64_t n = base->data.integer;
         bool n_negative = (n < 0);

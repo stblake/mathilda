@@ -199,6 +199,16 @@ static void test_bigint_perfect_root(void) {
     /* Mixed exponent: 10^20 = 10^(20), so (10^20)^(2/3) = 10^(40/3) which
      * factors as 10^13 * 10^(1/3). */
     assert_eval_eq("Power[10^20, 2/3]",  "10000000000000 10^(1/3)", 0);
+
+    /* Negative BigInt base with q == 2: Sqrt[-bigint] = I * Sqrt[|bigint|]
+     * via the I^p * |n|^(p/2) identity. Previously left unreduced because
+     * the negative-base path gated on EXPR_INTEGER only. */
+    assert_eval_eq("Sqrt[-(10^100)]", "100000000000000000000000000000000000000000000000000*I", 0);
+    assert_eval_eq("Sqrt[-(10^50)]",  "10000000000000000000000000*I", 0);
+    assert_eval_eq("Sqrt[-(2^64)]",   "4294967296*I", 0);
+    /* (-bigint)^(3/2): I^3 = -I. */
+    assert_eval_eq("Power[-(10^100), 3/2]",
+        "-1000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000*I", 0);
 }
 
 int main(void) {
