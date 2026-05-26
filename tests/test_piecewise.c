@@ -48,6 +48,9 @@ void test_piecewise() {
         {"Round[N[2.5, 50]]", "2"},
         {"Round[N[-3.5, 50]]", "-4"},
         {"Round[N[3.4, 50]]", "3"},
+        {"IntegerPart[N[3.7, 50]]", "3"},
+        {"IntegerPart[N[-3.7, 50]]", "-3"},
+        {"IntegerPart[N[5, 50]]", "5"},
 
         // Rational inputs
         {"Floor[5/2]", "2"},
