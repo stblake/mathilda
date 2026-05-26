@@ -501,6 +501,20 @@ void test_arg(void) {
     char* s11 = expr_to_string_fullform(eval_and_free(parse_expression("Arg[Complex[1, 2]]")));
     assert(strcmp(s11, "ArcTan[1, 2]") == 0);
     free(s11);
+
+    /* MPFR (high-precision Real): Arg is symbolic 0 / Pi by sign, not the
+     * lossy machine-double atan2 result. */
+    char* s_arg_pos_mpfr = expr_to_string_fullform(eval_and_free(parse_expression("Arg[N[5, 35]]")));
+    assert(strcmp(s_arg_pos_mpfr, "0") == 0);
+    free(s_arg_pos_mpfr);
+
+    char* s_arg_neg_mpfr = expr_to_string_fullform(eval_and_free(parse_expression("Arg[N[-3, 35]]")));
+    assert(strcmp(s_arg_neg_mpfr, "Pi") == 0);
+    free(s_arg_neg_mpfr);
+
+    char* s_arg_zero_mpfr = expr_to_string_fullform(eval_and_free(parse_expression("Arg[N[0, 35]]")));
+    assert(strcmp(s_arg_zero_mpfr, "0") == 0);
+    free(s_arg_zero_mpfr);
 }
 
 void test_trig(void) {

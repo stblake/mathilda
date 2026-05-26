@@ -419,6 +419,16 @@ Expr* builtin_arg(Expr* res) {
     Expr* im = NULL;
     int64_t n, d;
     
+#ifdef USE_MPFR
+    /* Pure MPFR real: return symbolic 0 or Pi based on sign, preserving
+     * exactness rather than coercing to a lossy double. */
+    if (arg->type == EXPR_MPFR) {
+        int sgn = mpfr_sgn(arg->data.mpfr);
+        if (sgn > 0 || mpfr_zero_p(arg->data.mpfr)) return expr_new_integer(0);
+        return expr_new_symbol("Pi");
+    }
+#endif
+
     if (is_complex(arg, &re, &im)) {
         // re and im are assigned
     } else if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
@@ -426,11 +436,11 @@ Expr* builtin_arg(Expr* res) {
     } else {
         return NULL;
     }
-    
+
     double re_val = 0.0;
     double im_val = 0.0;
     bool inexact = false;
-    
+
     if (re) {
         if (re->type == EXPR_INTEGER) re_val = (double)re->data.integer;
         else if (re->type == EXPR_REAL) { re_val = re->data.real; inexact = true; }
