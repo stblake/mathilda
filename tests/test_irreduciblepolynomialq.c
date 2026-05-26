@@ -110,6 +110,45 @@ static void test_irrpoly_extension_explicit(void) {
     run_test("IrreduciblePolynomialQ[x^3 - 3, Extension -> 2^(1/3)]", "True");
 }
 
+/* Multivariate inputs with an explicit algebraic extension.  Mathilda's
+ * underlying Factor[poly, Extension -> alpha] only applies the extension
+ * to single-variable polynomials, so the multivariate path here goes
+ * through the Hilbert-irreducibility specialisation probe inside
+ * irrpolyq.c.  Each `False` here is a regression for a case that
+ * previously returned True (factorisation invisible to the cheap path). */
+static void test_irrpoly_extension_multivariate(void) {
+    /* x^4 - 3 y^2 = (x^2 - Sqrt[3] y)(x^2 + Sqrt[3] y). */
+    run_test("IrreduciblePolynomialQ[x^4 - 3 y^2, Extension -> Sqrt[3]]",
+             "False");
+    /* x^2 - 3 y^2 = (x - Sqrt[3] y)(x + Sqrt[3] y). */
+    run_test("IrreduciblePolynomialQ[x^2 - 3 y^2, Extension -> Sqrt[3]]",
+             "False");
+    /* x^4 - 3 y^4 = (x^2 - Sqrt[3] y^2)(x^2 + Sqrt[3] y^2). */
+    run_test("IrreduciblePolynomialQ[x^4 - 3 y^4, Extension -> Sqrt[3]]",
+             "False");
+    /* x^2 - 2 y^4 stays irreducible over Q(Sqrt[3]) -- Sqrt[2] is not
+     * adjoined. */
+    run_test("IrreduciblePolynomialQ[x^2 - 2 y^4, Extension -> Sqrt[3]]",
+             "True");
+    /* Combined Listable + multivariate-extension: the headline bug
+     * report (`{x^2 - 2 y^4, x^4 - 3 y^2}, Extension -> Sqrt[3]`). */
+    run_test("IrreduciblePolynomialQ[{x^2 - 2 y^4, x^4 - 3 y^2}, "
+             "Extension -> Sqrt[3]]",
+             "List[True, False]");
+    /* x * y stays reducible via the existing factor path (independent
+     * of the extension); the probe must not regress this. */
+    run_test("IrreduciblePolynomialQ[x*y, Extension -> Sqrt[3]]", "False");
+}
+
+/* Multivariate Q(i) factoring: the EXT_MODE_ALL multivariate fallback and
+ * the GaussianIntegers -> True multivariate path both probe with alpha = I,
+ * so x^2 + y^2 = (x + I y)(x - I y) now resolves to False in both modes. */
+static void test_irrpoly_multivariate_gaussian(void) {
+    run_test("IrreduciblePolynomialQ[x^2 + y^2, Extension -> All]", "False");
+    run_test("IrreduciblePolynomialQ[x^2 + y^2, GaussianIntegers -> True]",
+             "False");
+}
+
 /* Extension as a list: same effect as a tower of generators. */
 static void test_irrpoly_extension_list(void) {
     /* x^2 + 2 over Q is irreducible; over Q(I, Sqrt[2]) it factors as
@@ -178,6 +217,8 @@ int main(void) {
     TEST(test_irrpoly_alg_default);
     TEST(test_irrpoly_extension_automatic);
     TEST(test_irrpoly_extension_explicit);
+    TEST(test_irrpoly_extension_multivariate);
+    TEST(test_irrpoly_multivariate_gaussian);
     TEST(test_irrpoly_extension_list);
     TEST(test_irrpoly_extension_all);
     TEST(test_irrpoly_nonpolynomial);

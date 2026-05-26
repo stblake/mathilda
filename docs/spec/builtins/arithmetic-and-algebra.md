@@ -1090,14 +1090,26 @@ Out[11]= True
   form is intentionally un-evaluated to avoid Mathilda's
   `Times[b, I] -> Complex[0, b]` canonicalisation undoing the lift.
 
+Multivariate inputs paired with an algebraic extension (`Extension -> α`,
+`Extension -> All`, or `GaussianIntegers -> True`) take a separate path:
+because the underlying `Factor[poly, Extension -> α]` only applies the
+extension to single-variable polynomials, a multivariate poly that reaches
+the no-extension fallback would otherwise look irreducible. To close that
+gap, `IrreduciblePolynomialQ` runs a Hilbert-irreducibility specialisation
+probe: pick the variable of maximum degree as the surviving univariate
+indeterminate, substitute every other variable with each `c` in
+`{2, 3, 5}`, factor the resulting univariate over the extension, and
+flip the verdict to `False` only when *every* valid specialisation
+produces `>= 2` non-constant factors. Hilbert's theorem says an
+irreducible multivariate `p` stays irreducible under almost every integer
+specialisation, so unanimous "reducible" probes are strong evidence; the
+probe never downgrades a `False` from the cheap factor path (e.g. `x*y`).
+
 Known limitations:
-- Multivariate algebraic-extension factoring is not currently supported by
-  Mathilda's underlying `Factor` (the qa-factoring path is univariate-only),
-  so cases like `IrreduciblePolynomialQ[x^4 - 3 y^2, Extension -> Sqrt[3]]`
-  (correctly `(x^2 - Sqrt[3] y)(x^2 + Sqrt[3] y)`, so `False`) and
-  `IrreduciblePolynomialQ[x^2 + y^2, GaussianIntegers -> True]`
-  (correctly `(x + i y)(x - i y)`, so `False`) silently fall back to the
-  no-extension path and may report `True` instead of `False`.
+- The specialisation probe is necessary but not sufficient: a reducible
+  multivariate polynomial whose factors degenerate at every probed `c`
+  can slip through and report `True`. This is rare in practice and only
+  affects polynomials with a small set of "bad" specialisations.
 - `Modulus -> p` is not yet supported and is silently ignored.
 
 Diagnostics:
@@ -1137,6 +1149,12 @@ Out[9]= False
 
 In[10]:= IrreduciblePolynomialQ[{x^3 - 3, x^2 + 2 x y - 7}, Extension -> All]
 Out[10]= {False, True}
+
+In[11]:= IrreduciblePolynomialQ[{x^2 - 2 y^4, x^4 - 3 y^2}, Extension -> Sqrt[3]]
+Out[11]= {True, False}
+
+In[12]:= IrreduciblePolynomialQ[x^2 + y^2, GaussianIntegers -> True]
+Out[12]= False
 
 In[11]:= IrreduciblePolynomialQ[x^7 + 12 x y - 11, Extension -> All]
 Out[11]= True

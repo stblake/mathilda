@@ -402,6 +402,112 @@ static Expr** auto_collect_vars(const Expr* e, size_t* out_count,
 }
 
 /* ===================================================================== */
+/* Multivariate Hilbert-irreducibility specialisation probe              */
+/*                                                                       */
+/* Mathilda's Factor[poly, Extension -> α] currently routes only the     */
+/* single-polynomial-variable case through the qa-factoring path         */
+/* (facpoly_factor_builtin.inc:100); multivariate inputs silently fall   */
+/* back to plain Q-factoring, so factorisations that *require* the       */
+/* extension to surface are missed.  Canonical example:                  */
+/*                                                                       */
+/*   x^4 - 3 y^2 = (x^2 - Sqrt[3] y) (x^2 + Sqrt[3] y)                   */
+/*                                                                       */
+/* stays unfactored, and a naive count of non-constant factors reports   */
+/* the polynomial as irreducible.                                        */
+/*                                                                       */
+/* The probe fixes a "primary" indeterminate, specialises every other    */
+/* variable to each integer c in a small probe set, factors the          */
+/* resulting univariate over the extension (which the existing path     */
+/* handles correctly), and counts non-constant factors.  By Hilbert's    */
+/* irreducibility theorem, an irreducible multivariate p stays           */
+/* irreducible under almost every integer specialisation; conversely, a  */
+/* reducible p factors under almost every specialisation.  Requiring     */
+/* unanimous "reducible" verdicts across the probe set minimises the     */
+/* false-False risk (where an irreducible p coincidentally factors at    */
+/* every probed c) at the cost of missing reducible polynomials whose    */
+/* factors degenerate at every probed c.                                 */
+/* ===================================================================== */
+
+/* Recursive structural substitution: replace every sub-expression
+ * structurally equal to `target` with a fresh copy of `repl`.  Returns
+ * a freshly-allocated tree; caller owns. */
+static Expr* irrpolyq_subst(const Expr* e, const Expr* target, const Expr* repl) {
+    if (!e) return NULL;
+    if (expr_eq((Expr*)e, (Expr*)target)) return expr_copy((Expr*)repl);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    Expr* new_head = irrpolyq_subst(e->data.function.head, target, repl);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = irrpolyq_subst(e->data.function.args[i], target, repl);
+    }
+    Expr* out = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return out;
+}
+
+/* Returns 1 iff every valid specialisation factors into >= 2 non-constant
+ * factors over Q(α); 0 otherwise (including no valid specialisation).
+ * `alpha_expr` is borrowed.  Picks the variable of maximum degree as the
+ * surviving univariate indeterminate so the probed polynomial carries the
+ * most signal. */
+static int irr_multivariate_specialize_probe(const Expr* poly,
+                                             Expr** vars, size_t v_count,
+                                             const Expr* alpha_expr) {
+    if (v_count < 2 || !alpha_expr) return 0;
+
+    int best_deg = -1;
+    size_t primary = 0;
+    for (size_t i = 0; i < v_count; i++) {
+        int d = get_degree_poly((Expr*)poly, vars[i]);
+        if (d > best_deg) { best_deg = d; primary = i; }
+    }
+    if (best_deg < 2) return 0;
+
+    static const int64_t cs[] = {2, 3, 5};
+    const size_t n_specs = sizeof(cs) / sizeof(cs[0]);
+
+    int agree_reducible = 0;
+    int valid = 0;
+    Expr* one_var[1] = { vars[primary] };
+
+    for (size_t k = 0; k < n_specs; k++) {
+        int64_t c = cs[k];
+
+        Expr* cur = expr_copy((Expr*)poly);
+        for (size_t i = 0; i < v_count; i++) {
+            if (i == primary) continue;
+            Expr* val = expr_new_integer(c);
+            Expr* next = irrpolyq_subst(cur, vars[i], val);
+            expr_free(val);
+            expr_free(cur);
+            cur = next;
+        }
+        Expr* spec_poly = evaluate(cur);
+        expr_free(cur);
+
+        /* A specialisation that drops the degree in the primary variable
+         * doesn't reflect the original polynomial; skip it. */
+        if (get_degree_poly(spec_poly, vars[primary]) != best_deg) {
+            expr_free(spec_poly);
+            continue;
+        }
+
+        Expr* factored = factor_over_extension(spec_poly, alpha_expr);
+        expr_free(spec_poly);
+        if (!factored) continue;
+        int nonconst = count_nonconstant_factors(factored, one_var, 1);
+        expr_free(factored);
+
+        valid++;
+        if (nonconst >= 2) agree_reducible++;
+    }
+
+    return (valid > 0 && agree_reducible == valid) ? 1 : 0;
+}
+
+/* ===================================================================== */
 /* Top-level dispatcher                                                  */
 /* ===================================================================== */
 
@@ -494,6 +600,34 @@ static bool irr_dispatch(Expr* poly, ExtMode mode, Expr* alpha_expr,
     bool result = (nonconst == 1);
 
     if (factored) expr_free(factored);
+
+    /* Multivariate gap: Factor[poly, Extension -> α] only applies the
+     * extension to univariate inputs, so multivariate cases that need
+     * the extension to expose a factorisation slip through the cheap
+     * path.  When the cheap path returned "irreducible" on a multivariate
+     * input that names an algebraic extension, run a Hilbert-style
+     * specialisation probe: it can only flip the verdict from True to
+     * False, never the other way (the existing factor result is
+     * authoritative for direct decompositions like x*y). */
+    if (result && v_count > 1) {
+        const Expr* probe_alpha = NULL;
+        Expr* probe_alpha_owned = NULL;
+        if (mode == EXT_MODE_EXPLICIT && alpha_expr) {
+            probe_alpha = alpha_expr;
+        } else if (mode == EXT_MODE_ALL) {
+            probe_alpha_owned = expr_new_symbol("I");
+            probe_alpha = probe_alpha_owned;
+        } else if (gaussian && mode == EXT_MODE_NONE) {
+            probe_alpha_owned = expr_new_symbol("I");
+            probe_alpha = probe_alpha_owned;
+        }
+        if (probe_alpha &&
+            irr_multivariate_specialize_probe(poly, vars, v_count, probe_alpha)) {
+            result = false;
+        }
+        if (probe_alpha_owned) expr_free(probe_alpha_owned);
+    }
+
     for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
     free(vars);
     return result;
