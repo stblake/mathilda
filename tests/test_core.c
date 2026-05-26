@@ -655,19 +655,36 @@ void test_binomial(void) {
     e = parse_expression("Binomial[8, 4]"); res = evaluate(e); s = expr_to_string_fullform(res);
     assert(strcmp(s, "70") == 0); free(s); expr_free(res); expr_free(e);
 
+    /* Half-integer args reduce via Subtract[9/2, 7/2] = 1 (symmetric
+     * identity) to Binomial[9/2, 1] = 9/2. */
     e = parse_expression("Binomial[9/2, 7/2]"); res = evaluate(e); s = expr_to_string_fullform(res);
-    assert(strcmp(s, "Rational[9, 2]") == 0 || strcmp(s, "5") == 0); free(s); expr_free(res); expr_free(e);
+    assert(strcmp(s, "Rational[9, 2]") == 0); free(s); expr_free(res); expr_free(e);
 
+    /* Symbolic n with concrete small m: falling-factorial polynomial. */
     e = parse_expression("Binomial[n, 4]"); res = evaluate(e); s = expr_to_string_fullform(res);
-    assert(strcmp(s, "Binomial[n, 4]") == 0 || strcmp(s, "Times[Rational[1, 24], n, Plus[-3, n], Plus[-2, n], Plus[-1, n]]") == 0);
+    assert(strcmp(s, "Times[Rational[1, 24], n, Plus[-3, n], Plus[-2, n], Plus[-1, n]]") == 0);
+    free(s); expr_free(res); expr_free(e);
+
+    /* Symmetric identity for symbolic n: Subtract[n, n-1] = 1. */
+    e = parse_expression("Binomial[n, n - 1]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strcmp(s, "n") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Binomial[n, n] -> 1 via Subtract[n, n] = 0. */
+    e = parse_expression("Binomial[n, n]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strcmp(s, "1") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Complex n folds through Times/Plus: (1+I) I (-1+I) (-2+I) (-3+I) / 120
+     *   = (-10 - 10 I) / 120 = -1/12 - I/12. */
+    e = parse_expression("Binomial[1 + I, 5]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strcmp(s, "Complex[Rational[-1, 12], Rational[-1, 12]]") == 0);
     free(s); expr_free(res); expr_free(e);
 
     e = parse_expression("Binomial[0, 1]"); res = evaluate(e); s = expr_to_string_fullform(res);
     assert(strcmp(s, "0") == 0); free(s); expr_free(res); expr_free(e);
-    
+
     e = parse_expression("Binomial[-1, 1]"); res = evaluate(e); s = expr_to_string_fullform(res);
     assert(strcmp(s, "-1") == 0); free(s); expr_free(res); expr_free(e);
-    
+
     e = parse_expression("Binomial[-1, 0]"); res = evaluate(e); s = expr_to_string_fullform(res);
     assert(strcmp(s, "1") == 0); free(s); expr_free(res); expr_free(e);
 }

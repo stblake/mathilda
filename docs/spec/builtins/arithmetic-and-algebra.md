@@ -901,13 +901,26 @@ Out[4]= x^(-k + n) FactorialPower[n, k]
 ```
 
 ## Binomial
-Gives the binomial coefficient $\binom{n}{m}$.
+Gives the binomial coefficient $\binom{n}{m}$, generalised via
+$\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
+
 - `Binomial[n, m]`
 
 **Features**:
 - `Protected`, `Listable`, `NumericFunction`.
-- Evaluates exactly for integers, half-integers, and dynamically factors symbolic terms correctly (e.g. `Binomial[n, 4]`).
-- Reduces numerical boundaries logically utilizing continuous `Gamma` interpolations.
+- Exact integer/integer path uses GMP (`mpz_bin_ui`), including the
+  Pascal extension `Binomial[n, m] = (-1)^m Binomial[m-n-1, m]` for
+  negative `n`.
+- Machine-precision real branch via `tgamma`.
+- Symmetric identity: when `n - m` simplifies to a non-negative
+  integer `k ≤ 32`, reduces to `Binomial[n, k]` and expands as a
+  falling-factorial polynomial. This catches `Binomial[n, n - 1] → n`,
+  `Binomial[9/2, 7/2] → 9/2`, `Binomial[n + 1, n - 1] → n (n + 1)/2`,
+  etc.
+- Concrete non-negative integer `m ≤ 32` with any other `n` (symbolic,
+  rational, complex, …) expands to the falling-factorial polynomial
+  `n (n-1) (n-2) ... (n-m+1) / m!`, which the `Times`/`Plus` folders
+  then simplify.
 
 ```mathematica
 In[1]:= Binomial[10, 3]
@@ -920,10 +933,16 @@ In[3]:= Binomial[9/2, 7/2]
 Out[3]= 9/2
 
 In[4]:= Binomial[n, 4]
-Out[4]= 1/24 (-3 + n) (-2 + n) (-1 + n) n
+Out[4]= 1/24 n (-3 + n) (-2 + n) (-1 + n)
 
-In[5]:= Binomial[0, 1]
-Out[5]= 0
+In[5]:= Binomial[n, n - 1]
+Out[5]= n
+
+In[6]:= Binomial[1 + I, 5]
+Out[6]= -1/12 - I/12
+
+In[7]:= Binomial[0, 1]
+Out[7]= 0
 ```
 
 ## PrimeQ
