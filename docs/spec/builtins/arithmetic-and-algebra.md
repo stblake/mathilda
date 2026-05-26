@@ -821,7 +821,15 @@ Gives modular exponentiations, inverses, and roots.
 **Features**:
 - `Protected`, `Listable`.
 - Evaluates much more efficiently than `Mod[a^b, m]`.
-- Returns unevaluated if the corresponding inverse or root does not exist.
+- Integer-exponent path uses GMP `mpz_powm` / `mpz_invert`; `a`, `b`, `m`
+  may all be arbitrary-precision bignums.
+- Rational-exponent path `PowerMod[a, p/q, m]` solves the modular `q`-th
+  root of `a^p` via Tonelli–Shanks, the coprime closed form, Hensel
+  lifting, and CRT over the factorisation of `m`. The
+  Adleman–Manders–Miller branch (`gcd(q, p-1) > 1` for `q > 2` over a
+  large prime) is not yet supported.
+- Returns unevaluated if the corresponding inverse or root does not exist
+  (or cannot be computed by the implemented algorithms).
 - Allows threading over lists natively.
 
 ```mathematica
@@ -836,6 +844,12 @@ Out[3]= 1
 
 In[4]:= PowerMod[2, {10, 11, 12, 13, 14}, 5]
 Out[4]= {4, 3, 1, 2, 4}
+
+In[5]:= PowerMod[100, 1/2, 17 * 19 * 23]
+Out[5]= 10
+
+In[6]:= PowerMod[2, 1/2, 10^18 + 9]
+Out[6]= 742174169206529574
 ```
 
 ## Factorial (!)
