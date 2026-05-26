@@ -21,7 +21,11 @@ void test_min() {
         {"Min[{a, b}, {c, d}]", "Min[a, b, c, d]"},
         {"Min[]", "Infinity"},
         {"Min[x, 3, 5]", "Min[3, x]"},
-        {"Min[x, x]", "x"}
+        {"Min[x, x]", "x"},
+        /* BigInt and MPFR must compare alongside Integer / Real. */
+        {"Min[10^50, 3]", "3"},
+        {"Min[10^50, 10^60, 10^40, 5]", "5"},
+        {"Min[10^50, 10^60, 10^40]", "10000000000000000000000000000000000000000"},
     };
 
     for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
@@ -49,7 +53,10 @@ void test_max() {
         {"Max[-1 * Infinity, 5]", "5"},
         {"Max[]", "-Infinity"},
         {"Max[x, 3, 5]", "Max[5, x]"},
-        {"Max[x, x]", "x"}
+        {"Max[x, x]", "x"},
+        /* BigInt and MPFR must compare alongside Integer / Real. */
+        {"Max[10^50, 1.5]", "100000000000000000000000000000000000000000000000000"},
+        {"Max[10^50, 10^60, 10^40, 5]", "1000000000000000000000000000000000000000000000000000000000000"},
     };
 
     for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {

@@ -1431,11 +1431,19 @@ static Expr* make_minus_infinity(void) {
 }
 
 static bool is_real_numeric(Expr* e) {
-    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || is_rational(e, NULL, NULL)) return true;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT) return true;
+    if (is_rational(e, NULL, NULL)) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
     Expr* re, *im;
     if (is_complex(e, &re, &im)) {
         if (im->type == EXPR_INTEGER && im->data.integer == 0) return true;
         if (im->type == EXPR_REAL && im->data.real == 0.0) return true;
+        if (im->type == EXPR_BIGINT && mpz_sgn(im->data.bigint) == 0) return true;
+#ifdef USE_MPFR
+        if (im->type == EXPR_MPFR && mpfr_zero_p(im->data.mpfr)) return true;
+#endif
     }
     return false;
 }
