@@ -263,6 +263,18 @@ void test_mod(void) {
     assert_eval_eq("Mod[7, 5, 2]", "2", 0);
     assert_eval_eq("Mod[11.5, 5, 2]", "6.5", 0);
     assert_eval_eq("Mod[11, 5, -1]", "1", 0);
+
+    /* MPFR inputs: Mod computes at the maximum input precision rather
+     * than collapsing to a machine double. */
+    char* s_mod_mpfr1 = expr_to_string(eval_and_free(parse_expression("Mod[N[10.5, 35], 3]")));
+    assert(strncmp(s_mod_mpfr1, "1.5", 3) == 0);
+    free(s_mod_mpfr1);
+    char* s_mod_mpfr2 = expr_to_string(eval_and_free(parse_expression("Mod[10, N[3, 35]]")));
+    assert(strncmp(s_mod_mpfr2, "1.0", 3) == 0);
+    free(s_mod_mpfr2);
+    char* s_mod_mpfr3 = expr_to_string(eval_and_free(parse_expression("Mod[N[10.5, 35], N[3, 35]]")));
+    assert(strncmp(s_mod_mpfr3, "1.5", 3) == 0);
+    free(s_mod_mpfr3);
 }
 
 void test_quotient(void) {
@@ -295,6 +307,11 @@ void test_quotient(void) {
     assert_eval_eq("Quotient[10^50, 10^20]", "1000000000000000000000000000000", 0);
     assert_eval_eq("Quotient[-(10^50), 7]", "-14285714285714285714285714285714285714285714285715", 0);
     assert_eval_eq("Quotient[10^50, 7, 1]", "14285714285714285714285714285714285714285714285714", 0);
+
+    /* MPFR inputs: Quotient returns an integer derived from the
+     * floor of the MPFR ratio. */
+    assert_eval_eq("Quotient[N[10.5, 35], 3]", "3", 0);
+    assert_eval_eq("Quotient[N[10.7, 35], 3]", "3", 0);
 }
 
 void test_quotientremainder(void) {

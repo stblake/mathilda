@@ -1532,11 +1532,56 @@ Expr* builtin_mod(Expr* res) {
     Expr* n_expr = res->data.function.args[1];
 
     if (res->data.function.arg_count == 2) {
-        bool m_is_num = (m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || m_expr->type == EXPR_BIGINT);
-        bool n_is_num = (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_REAL || n_expr->type == EXPR_BIGINT);
+#ifdef USE_MPFR
+        bool m_is_mpfr = (m_expr->type == EXPR_MPFR);
+        bool n_is_mpfr = (n_expr->type == EXPR_MPFR);
+#else
+        bool m_is_mpfr = false;
+        bool n_is_mpfr = false;
+#endif
+        bool m_is_num = (m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || m_expr->type == EXPR_BIGINT || m_is_mpfr);
+        bool n_is_num = (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_REAL || n_expr->type == EXPR_BIGINT || n_is_mpfr);
         if (!m_is_num || !n_is_num) return NULL;
 
-        if ((m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_BIGINT) && 
+#ifdef USE_MPFR
+        /* MPFR-precision Mod: m - n * floor(m / n), computed at the
+         * maximum of the input precisions. */
+        if (m_is_mpfr || n_is_mpfr) {
+            mpfr_prec_t prec = 53;
+            if (m_is_mpfr) prec = mpfr_get_prec(m_expr->data.mpfr);
+            if (n_is_mpfr) {
+                mpfr_prec_t np = mpfr_get_prec(n_expr->data.mpfr);
+                if (np > prec) prec = np;
+            }
+            mpfr_t m, n, q, r;
+            mpfr_init2(m, prec);
+            mpfr_init2(n, prec);
+            mpfr_init2(q, prec);
+            mpfr_init2(r, prec);
+            if (m_is_mpfr) mpfr_set(m, m_expr->data.mpfr, MPFR_RNDN);
+            else if (m_expr->type == EXPR_INTEGER) mpfr_set_si(m, (long)m_expr->data.integer, MPFR_RNDN);
+            else if (m_expr->type == EXPR_BIGINT) mpfr_set_z(m, m_expr->data.bigint, MPFR_RNDN);
+            else /* EXPR_REAL */ mpfr_set_d(m, m_expr->data.real, MPFR_RNDN);
+            if (n_is_mpfr) mpfr_set(n, n_expr->data.mpfr, MPFR_RNDN);
+            else if (n_expr->type == EXPR_INTEGER) mpfr_set_si(n, (long)n_expr->data.integer, MPFR_RNDN);
+            else if (n_expr->type == EXPR_BIGINT) mpfr_set_z(n, n_expr->data.bigint, MPFR_RNDN);
+            else /* EXPR_REAL */ mpfr_set_d(n, n_expr->data.real, MPFR_RNDN);
+            if (mpfr_zero_p(n)) {
+                mpfr_clears(m, n, q, r, (mpfr_ptr)0);
+                return NULL;
+            }
+            mpfr_div(q, m, n, MPFR_RNDN);
+            mpfr_floor(q, q);
+            mpfr_mul(r, q, n, MPFR_RNDN);
+            mpfr_sub(r, m, r, MPFR_RNDN);
+            Expr* out = expr_new_mpfr_bits(prec);
+            mpfr_set(out->data.mpfr, r, MPFR_RNDN);
+            mpfr_clears(m, n, q, r, (mpfr_ptr)0);
+            return out;
+        }
+#endif
+
+        if ((m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_BIGINT) &&
             (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_BIGINT)) {
             
             mpz_t m, n, r;
@@ -1618,6 +1663,12 @@ static bool get_numeric_as_complex(Expr* e, Cplx* out) {
         *out = (Cplx){ .re = e->data.real, .im = 0.0 };
         return true;
     }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) {
+        *out = (Cplx){ .re = mpfr_get_d(e->data.mpfr, MPFR_RNDN), .im = 0.0 };
+        return true;
+    }
+#endif
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
         *out = (Cplx){ .re = (double)n / d, .im = 0.0 };
