@@ -98,6 +98,12 @@ static Expr* do_piecewise_1(Expr* x, int op) {
         if (op == OP_FRACPART) return expr_new_integer(0);
         return expr_copy(x);
     }
+
+    /* GMP BigInt: integer-valued for all five ops. */
+    if (x->type == EXPR_BIGINT) {
+        if (op == OP_FRACPART) return expr_new_integer(0);
+        return expr_copy(x);
+    }
     
     if (x->type == EXPR_REAL) {
         double v = x->data.real;
@@ -156,6 +162,71 @@ static Expr* do_piecewise_1(Expr* x, int op) {
             return make_rational(n - int_part * d, d);
         }
         return expr_new_integer((int64_t)res);
+    }
+
+    /* Rational[BigInt, _] / Rational[_, BigInt] / Rational[BigInt, BigInt] —
+     * the int64-only is_rational() refuses to extract these, so do exact
+     * mpz arithmetic. */
+    if (x->type == EXPR_FUNCTION
+        && x->data.function.head->type == EXPR_SYMBOL
+        && x->data.function.head->data.symbol == SYM_Rational
+        && x->data.function.arg_count == 2
+        && expr_is_integer_like(x->data.function.args[0])
+        && expr_is_integer_like(x->data.function.args[1])) {
+        mpz_t num, den;
+        expr_to_mpz(x->data.function.args[0], num);
+        expr_to_mpz(x->data.function.args[1], den);
+        if (mpz_sgn(den) == 0) {
+            mpz_clears(num, den, NULL);
+            return NULL;
+        }
+        /* Canonical Rationals carry a positive denominator, but tolerate
+         * a structural Rational[*, -k] reaching here from a builder. */
+        if (mpz_sgn(den) < 0) {
+            mpz_neg(num, num);
+            mpz_neg(den, den);
+        }
+        if (op == OP_FRACPART) {
+            mpz_t int_num, frac_num;
+            mpz_inits(int_num, frac_num, NULL);
+            mpz_tdiv_q(int_num, num, den);      /* int_num = trunc(num/den) */
+            mpz_mul(int_num, int_num, den);
+            mpz_sub(frac_num, num, int_num);    /* frac_num = num - trunc*den */
+            Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(frac_num));
+            Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(den));
+            Expr* args[2] = { num_e, den_e };
+            mpz_clears(num, den, int_num, frac_num, NULL);
+            return eval_and_free(expr_new_function(expr_new_symbol("Rational"), args, 2));
+        }
+        mpz_t q;
+        mpz_init(q);
+        if (op == OP_FLOOR)        mpz_fdiv_q(q, num, den);
+        else if (op == OP_CEILING) mpz_cdiv_q(q, num, den);
+        else if (op == OP_INTPART) mpz_tdiv_q(q, num, den);
+        else /* OP_ROUND, banker's */ {
+            /* Round half to even. floor((2*num + den) / (2*den)) gives
+             * round-half-up; correct it when the residue is exactly half. */
+            mpz_t two_num, two_den, two_num_plus_den, rem, half_den;
+            mpz_inits(two_num, two_den, two_num_plus_den, rem, half_den, NULL);
+            mpz_mul_ui(two_num, num, 2);
+            mpz_mul_ui(two_den, den, 2);
+            mpz_add(two_num_plus_den, two_num, den);
+            mpz_fdiv_qr(q, rem, two_num_plus_den, two_den);
+            /* Tie case: rem == 0 means the input was exactly q + 1/2; force
+             * q to even. */
+            if (mpz_sgn(rem) == 0 && mpz_odd_p(q)) {
+                /* Round toward the nearest even by subtracting 1 when q is odd
+                 * and positive (or adding 1 when q is odd and negative). The
+                 * floor-based formula systematically biases away from zero on
+                 * the half-step, so the adjustment is -1 for even-but-odd-q
+                 * always: this brings q toward the even neighbour. */
+                mpz_sub_ui(q, q, 1);
+            }
+            mpz_clears(two_num, two_den, two_num_plus_den, rem, half_den, NULL);
+        }
+        Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(q));
+        mpz_clears(num, den, q, NULL);
+        return out;
     }
     
     Expr *re, *im;
