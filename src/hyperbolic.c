@@ -11,6 +11,7 @@
 #include "times.h"
 #include "common.h"
 #include "numeric.h"
+#include "numeric_complex.h"
 #include "sym_intern.h"
 #include "sym_names.h"
 
@@ -326,6 +327,8 @@ Expr* builtin_sinh(Expr* res) {
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_sinh);
         if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_sinh);
+        if (r) return r;
     }
 #endif
     double complex c;
@@ -361,6 +364,8 @@ Expr* builtin_cosh(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_cosh);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_cosh);
         if (r) return r;
     }
 #endif
@@ -398,6 +403,8 @@ Expr* builtin_tanh(Expr* res) {
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_tanh);
         if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_tanh);
+        if (r) return r;
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
@@ -433,6 +440,8 @@ Expr* builtin_coth(Expr* res) {
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_coth);
         if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_coth);
+        if (r) return r;
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
@@ -464,6 +473,8 @@ Expr* builtin_sech(Expr* res) {
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_sech);
         if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_sech);
+        if (r) return r;
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
@@ -494,6 +505,8 @@ Expr* builtin_csch(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_csch);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_csch);
         if (r) return r;
     }
 #endif
