@@ -27,6 +27,15 @@ void info_init(void) {
         "\tgives the sorted list of all primitive roots of n in the canonical residues {1, ..., n-1}.\n\n"
         "Returns an empty list unless n is 2, 4, an odd prime power p^k, or twice an odd prime "
         "power 2 p^k.");
+    symtab_set_docstring("MultiplicativeOrder",
+        "MultiplicativeOrder[k, n]\n"
+        "\tgives the multiplicative order of k modulo n, the smallest positive integer m "
+        "such that k^m is congruent to 1 modulo n.\n"
+        "MultiplicativeOrder[k, n, {r1, r2, ...}]\n"
+        "\tgives the smallest positive integer m such that k^m is congruent to one of the ri modulo n.\n\n"
+        "Returns unevaluated when gcd(k, n) is not 1, when no power of k lands in the residue set, "
+        "or when n is zero.  All arithmetic is exact via GMP, so k and n may be arbitrary-precision "
+        "integers.");
     symtab_set_docstring("Factorial", "n! gives the factorial of n.\nFor integers and half integers, Factorial automatically evaluates to exact values.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Binomial", "Binomial[n, m] gives the binomial coefficient.");

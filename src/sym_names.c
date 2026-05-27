@@ -183,6 +183,7 @@ const char* SYM_Method = NULL;
 const char* SYM_Mod = NULL;
 const char* SYM_Module = NULL;
 const char* SYM_Modulus = NULL;
+const char* SYM_MultiplicativeOrder = NULL;
 const char* SYM_NHoldRest = NULL;
 const char* SYM_RealExponent = NULL;
 const char* SYM_NegativeDefiniteMatrixQ = NULL;
@@ -478,6 +479,7 @@ void sym_names_init(void) {
     SYM_Mod                        = intern_symbol("Mod");
     SYM_Module                     = intern_symbol("Module");
     SYM_Modulus                    = intern_symbol("Modulus");
+    SYM_MultiplicativeOrder        = intern_symbol("MultiplicativeOrder");
     SYM_NHoldRest                  = intern_symbol("NHoldRest");
     SYM_RealExponent               = intern_symbol("RealExponent");
     SYM_NegativeDefiniteMatrixQ    = intern_symbol("NegativeDefiniteMatrixQ");

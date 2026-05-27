@@ -934,6 +934,56 @@ In[4]:= Union[Table[PowerMod[2, i, 9], {i, 6}]]
 Out[4]= {1, 2, 4, 5, 7, 8}
 ```
 
+## MultiplicativeOrder
+Gives the multiplicative order of `k` modulo `n` — the smallest positive
+integer `m` such that $k^m \equiv 1 \pmod{n}$.
+- `MultiplicativeOrder[k, n]`: order of `k` modulo `n`.
+- `MultiplicativeOrder[k, n, {r1, r2, ...}]`: smallest positive `m` with
+  $k^m \equiv r_i \pmod{n}$ for some `i` (a multi-target discrete log).
+
+**Features**:
+- `Protected`.
+- All arithmetic uses GMP `mpz_t`, so `k`, `n`, and any `r_i` may be
+  arbitrary-precision bignums.
+- Negative `n` is treated as `|n|`; `k` (and each `r_i`) is reduced modulo
+  `n` before the search, so negative or out-of-range inputs work
+  transparently.
+- Returns unevaluated when `gcd(k, n) != 1`, when `n` is zero, or when
+  no power of `k` lands in the residue set (3-arg form).
+- The 2-arg form factors `phi(n)` and successively strips prime factors
+  from `phi(n)` whose corresponding exponent still maps `k` to 1 — so
+  the work is dominated by factoring `phi(n)`, not by walking the orbit.
+- The 3-arg form walks `k^m mod n` for `m = 1, ..., order(k, n)`. To
+  guard against pathological group sizes, the call returns unevaluated
+  if the order exceeds `10^8` or does not fit in an unsigned long.
+- Non-integer numeric inputs (`Real`, `Complex`, `Rational`) and symbolic
+  arguments flow through unevaluated with no diagnostic.
+- Diagnostic: `MultiplicativeOrder::argt` when called with anything other
+  than 2 or 3 arguments.
+
+```mathematica
+In[1]:= MultiplicativeOrder[5, 8]
+Out[1]= 2
+
+In[2]:= MultiplicativeOrder[5, 7]
+Out[2]= 6
+
+In[3]:= MultiplicativeOrder[-5, 7]
+Out[3]= 3
+
+In[4]:= MultiplicativeOrder[5, 7, {3, 11}]
+Out[4]= 2
+
+In[5]:= MultiplicativeOrder[10^10000, 7919]
+Out[5]= 3959
+
+In[6]:= Select[Range[43], MultiplicativeOrder[#, 43] == EulerPhi[43] &]
+Out[6]= {3, 5, 12, 18, 19, 20, 26, 28, 29, 30, 33, 34}
+
+In[7]:= MultiplicativeOrder[10, 22]
+Out[7]= MultiplicativeOrder[10, 22]
+```
+
 ## Factorial (!)
 Gives the factorial of an integer or half-integer.
 - `n!` or `Factorial[n]`

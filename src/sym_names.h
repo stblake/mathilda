@@ -198,6 +198,7 @@ extern const char* SYM_Method;
 extern const char* SYM_Mod;
 extern const char* SYM_Module;
 extern const char* SYM_Modulus;
+extern const char* SYM_MultiplicativeOrder;
 extern const char* SYM_NHoldRest;
 extern const char* SYM_RealExponent;
 extern const char* SYM_NegativeDefiniteMatrixQ;
