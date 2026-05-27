@@ -208,6 +208,7 @@ set(COMMON_SRC
     ../src/solvelinsys.c
     ../src/solverad.c
     ../src/zero_test.c
+    ../src/numeric_complex.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -1133,6 +1134,9 @@ target_include_directories(rationalize_tests PRIVATE ../src)
 add_executable(inexact_dispatch_tests test_inexact_dispatch.c ${COMMON_SRC})
 target_include_directories(inexact_dispatch_tests PRIVATE ../src)
 
+add_executable(numeric_complex_tests test_numeric_complex.c ${COMMON_SRC})
+target_include_directories(numeric_complex_tests PRIVATE ../src)
+
 if(USE_ECM)
     add_dependencies(expr_tests build_ecm)
     add_dependencies(parse_tests build_ecm)
@@ -1213,6 +1217,7 @@ if(USE_ECM)
     add_dependencies(radical_simplify_tests build_ecm)
     add_dependencies(rationalize_tests build_ecm)
     add_dependencies(inexact_dispatch_tests build_ecm)
+    add_dependencies(numeric_complex_tests build_ecm)
 endif()
 
 add_executable(simp_tests test_simp.c ${COMMON_SRC})
