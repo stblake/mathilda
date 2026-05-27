@@ -1350,10 +1350,19 @@ Gives the Euler totient function $\phi(n)$.
 - `Listable`, `Protected`.
 - Counts the number of positive integers less than or equal to $n$ that are relatively prime to $n$.
 - Returns 0 for $n = 0$, and handles negative integers via $\phi(-n) = \phi(n)$.
+- Accepts arbitrary-precision integers (`BigInt`). Factorization runs in GMP
+  through the same trial-division / Pollard-rho / ECM cascade used by
+  `FactorInteger`, so inputs of cryptographic size are tractable.
+- For a prime decomposition $n = \prod p_i^{k_i}$, computes
+  $\phi(n) = n \prod (1 - 1/p_i)$ as $(n / \prod p_i) \prod (p_i - 1)$
+  with exact integer arithmetic.
 
 ```mathematica
 In[1]:= EulerPhi[10]
 Out[1]= 4
+
+In[2]:= EulerPhi[2^89 - 1]
+Out[2]= 618970019642690137449562110
 ```
 
 ## Rational

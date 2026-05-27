@@ -876,6 +876,26 @@ void test_eulerphi(void) {
 
     e = parse_expression("EulerPhi[100]"); res = evaluate(e); s = expr_to_string_fullform(res);
     assert(strcmp(s, "40") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Bigint: 2^64. phi(2^64) = 2^63. */
+    e = parse_expression("EulerPhi[2^64]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strcmp(s, "9223372036854775808") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Bigint prime power: 3^40 (> 2^63). phi(3^40) = 3^40 - 3^39 = 8105110306037952534. */
+    e = parse_expression("EulerPhi[3^40]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strcmp(s, "8105110306037952534") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Mixed exponents: 2^70 * 3. phi = phi(2^70) * phi(3) = 2^69 * 2 = 2^70. */
+    e = parse_expression("EulerPhi[2^70 * 3]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strcmp(s, "1180591620717411303424") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Mersenne prime M89 = 2^89 - 1 (well-known prime). phi = M89 - 1 = 2^89 - 2. */
+    e = parse_expression("EulerPhi[2^89 - 1]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strcmp(s, "618970019642690137449562110") == 0); free(s); expr_free(res); expr_free(e);
+
+    /* Negative bigint: phi(-n) = phi(n). */
+    e = parse_expression("EulerPhi[-(2^70)]"); res = evaluate(e); s = expr_to_string_fullform(res);
+    assert(strcmp(s, "590295810358705651712") == 0); free(s); expr_free(res); expr_free(e);
 }
 
 void test_factorial(void) {

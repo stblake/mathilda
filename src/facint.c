@@ -22,59 +22,6 @@
 #define METHOD_ECM 3
 
 
-// Modular multiplication: (a * b) % m
-static uint64_t mul_mod(uint64_t a, uint64_t b, uint64_t m) {
-    return (uint64_t)((__uint128_t)a * b % m);
-}
-
-// Modular exponentiation: (base^exp) % mod
-static uint64_t power_mod(uint64_t base, uint64_t exp, uint64_t mod) {
-    uint64_t res = 1;
-    base %= mod;
-    while (exp > 0) {
-        if (exp % 2 == 1) res = mul_mod(res, base, mod);
-        base = mul_mod(base, base, mod);
-        exp /= 2;
-    }
-    return res;
-}
-
-// Miller-Rabin check for a single base
-static bool miller_rabin_check(uint64_t n, uint64_t d, int s, uint64_t a) {
-    uint64_t x = power_mod(a, d, n);
-    if (x == 1 || x == n - 1) return true;
-
-    for (int r = 1; r < s; r++) {
-        x = mul_mod(x, x, n);
-        if (x == n - 1) return true;
-    }
-    return false;
-}
-
-// Deterministic Miller-Rabin primality test for n < 2^64
-static bool is_prime_internal(uint64_t n) {
-    if (n < 2) return false;
-    if (n == 2 || n == 3) return true;
-    if (n % 2 == 0) return false;
-
-    uint64_t d = n - 1;
-    int s = 0;
-    while (d % 2 == 0) {
-        d /= 2;
-        s++;
-    }
-
-    // Bases for deterministic test up to 2^64
-    static const uint64_t bases[] = {2, 325, 9375, 28178, 450775, 9780504, 1795265022};
-    
-    for (int i = 0; i < 7; i++) {
-        uint64_t a = bases[i] % n;
-        if (a == 0) continue;
-        if (!miller_rabin_check(n, d, s, a)) return false;
-    }
-    return true;
-}
-
 #define MAX_PRIME_LIMIT 1000000 
 #define CACHE_A 100
 #define CACHE_X 20000
@@ -372,58 +319,6 @@ Expr* builtin_nextprime(Expr* res) {
     mpz_clear(current);
     return result;
 }
-
-static uint64_t abs_diff(uint64_t a, uint64_t b) {
-    return a > b ? a - b : b - a;
-}
-
-static uint64_t pollard_rho_brent(uint64_t n) {
-    if (n % 2 == 0) return 2;
-    if (is_prime_internal(n)) return n;
-
-    uint64_t y_start = 2; 
-    uint64_t c = 1;       
-    uint64_t m = 128;     
-
-    while (1) {
-        uint64_t x, y, g, r, q, ys;
-        x = y = y_start;
-        g = r = q = 1;
-
-        while (g == 1) {
-            x = y;
-            for (uint64_t i = 0; i < r; i++) {
-                y = (mul_mod(y, y, n) + c) % n;
-            }
-
-            uint64_t k = 0;
-            while (k < r && g == 1) {
-                ys = y;
-                uint64_t limit = (m < r - k) ? m : r - k;
-                for (uint64_t i = 0; i < limit; i++) {
-                    y = (mul_mod(y, y, n) + c) % n;
-                    q = mul_mod(q, abs_diff(x, y), n);
-                }
-                g = gcd(q, n);
-                k += limit;
-            }
-            r *= 2;
-        }
-
-        if (g == n) {
-            do {
-                ys = (mul_mod(ys, ys, n) + c) % n;
-                g = gcd(abs_diff(x, ys), n);
-            } while (g == 1);
-        }
-
-        if (g != n) return g;
-
-        y_start++;
-        c++;
-    }
-}
-
 
 #include <gmp.h>
 #ifndef NO_ECM
@@ -1428,40 +1323,44 @@ Expr* builtin_factorinteger(Expr* res) {
 Expr* builtin_eulerphi(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (arg->type != EXPR_INTEGER) return NULL;
+    if (!expr_is_integer_like(arg)) return NULL;
 
-    int64_t val = arg->data.integer;
-    if (val == 0) return expr_new_integer(0);
-    if (val < 0) val = -val;
-    if (val == 1) return expr_new_integer(1);
+    mpz_t n;
+    mpz_init(n);
+    expr_to_mpz(arg, n);
 
-    uint64_t n = (uint64_t)val;
-    uint64_t result = n;
+    if (mpz_sgn(n) == 0) { mpz_clear(n); return expr_new_integer(0); }
+    mpz_abs(n, n);                                          /* phi(-n) = phi(n) */
+    if (mpz_cmp_ui(n, 1) == 0) { mpz_clear(n); return expr_new_integer(1); }
 
-    uint64_t d_primes[] = {2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37};
-    for (int i = 0; i < 12; i++) {
-        uint64_t p = d_primes[i];
-        if (n % p == 0) {
-            while (n % p == 0) n /= p;
-            result -= result / p;
-        }
+    /* Factor a working copy: factorize_mpz mutates its first argument. */
+    mpz_t work;
+    mpz_init_set(work, n);
+
+    FactorMpz factors[1024];
+    int num_factors = 0;
+    int k_limit = -1;
+    factorize_mpz(work, factors, &num_factors, &k_limit, METHOD_AUTOMATIC, NULL);
+    mpz_clear(work);
+
+    /* phi(n) = n * prod (1 - 1/p_i) = (n / prod p_i) * prod (p_i - 1).
+     * Apply per-prime as (phi / p) * (p - 1) to keep intermediates exact
+     * and avoid materializing prod p_i. */
+    mpz_t phi, pm1;
+    mpz_init_set(phi, n);
+    mpz_init(pm1);
+    for (int i = 0; i < num_factors; i++) {
+        mpz_divexact(phi, phi, factors[i].p);
+        mpz_sub_ui(pm1, factors[i].p, 1);
+        mpz_mul(phi, phi, pm1);
+        mpz_clear(factors[i].p);
     }
+    mpz_clear(pm1);
+    mpz_clear(n);
 
-    while (n > 1) {
-        uint64_t d;
-        if (is_prime_internal(n)) {
-            d = n;
-        } else {
-            d = pollard_rho_brent(n);
-            while (!is_prime_internal(d)) {
-                d = pollard_rho_brent(d);
-            }
-        }
-        while (n % d == 0) n /= d;
-        result -= result / d;
-    }
-
-    return expr_new_integer((int64_t)result);
+    Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(phi));
+    mpz_clear(phi);
+    return out;
 }
 
 void facint_init(void) {
