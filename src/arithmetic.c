@@ -50,6 +50,64 @@ static Expr* single_arg_abs_or_copy(Expr* arg) {
     return expr_copy(arg);
 }
 
+/* Extract an integer-like or rational-like expression into two
+ * initialized mpz_t variables (num, den). Caller owns both; this helper
+ * does NOT call mpz_init on its arguments — they must already be init'd.
+ * Used by GCD/LCM to support Rational[BigInt, _] without overflowing the
+ * int64 rational fold. */
+static void rational_like_to_mpz_pair(const Expr* e, mpz_t num, mpz_t den) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
+        expr_to_mpz(e, num);
+        mpz_set_ui(den, 1);
+        return;
+    }
+    /* is_rational_like guaranteed: Rational[Integer|BigInt, Integer|BigInt]. */
+    expr_to_mpz(e->data.function.args[0], num);
+    expr_to_mpz(e->data.function.args[1], den);
+}
+
+/* Returns true when at least one component of a rational-like arg is a
+ * BigInt (the bare BigInt case, or either part of a Rational). The int64
+ * rational fold below cannot handle these; the mpz fold must. */
+static bool rational_like_needs_bigint(const Expr* e) {
+    if (e->type == EXPR_BIGINT) return true;
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.arg_count == 2) {
+        return e->data.function.args[0]->type == EXPR_BIGINT ||
+               e->data.function.args[1]->type == EXPR_BIGINT;
+    }
+    return false;
+}
+
+/* Build a normalised Integer or Rational expression from a num/den pair
+ * supplied as mpz_t. Reduces the pair by their GCD first; if the
+ * resulting denominator is 1, returns Integer/BigInt; otherwise builds
+ * Rational[num, den]. Inputs are read-only and not freed. */
+static Expr* mpz_pair_to_rational_expr(const mpz_t num_in, const mpz_t den_in) {
+    mpz_t n, d, g;
+    mpz_init_set(n, num_in);
+    mpz_init_set(d, den_in);
+    mpz_init(g);
+    mpz_gcd(g, n, d);
+    if (mpz_cmp_ui(g, 1) > 0) {
+        mpz_divexact(n, n, g);
+        mpz_divexact(d, d, g);
+    }
+    Expr* out;
+    if (mpz_cmp_ui(d, 1) == 0) {
+        out = expr_bigint_normalize(expr_new_bigint_from_mpz(n));
+    } else {
+        Expr* en = expr_bigint_normalize(expr_new_bigint_from_mpz(n));
+        Expr* ed = expr_bigint_normalize(expr_new_bigint_from_mpz(d));
+        Expr* args[2] = { en, ed };
+        out = expr_new_function(expr_new_symbol("Rational"), args, 2);
+    }
+    mpz_clears(n, d, g, NULL);
+    return out;
+}
+
 Expr* builtin_gcd(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
@@ -58,10 +116,13 @@ Expr* builtin_gcd(Expr* res) {
 
     // Single pass: detect any bigint while confirming all args are integer-like
     bool any_bigint = false, all_integer_like = true;
+    bool all_rational_like = true, any_rational_needs_bigint = false;
     for (size_t i = 0; i < count; i++) {
         Expr* arg = res->data.function.args[i];
-        if (!expr_is_integer_like(arg)) { all_integer_like = false; break; }
-        if (arg->type == EXPR_BIGINT) any_bigint = true;
+        if (!expr_is_integer_like(arg)) all_integer_like = false;
+        else if (arg->type == EXPR_BIGINT) any_bigint = true;
+        if (!is_rational_like(arg)) all_rational_like = false;
+        else if (rational_like_needs_bigint(arg)) any_rational_needs_bigint = true;
     }
 
     if (all_integer_like && any_bigint) {
@@ -75,6 +136,32 @@ Expr* builtin_gcd(Expr* res) {
         }
         Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(running));
         mpz_clear(running);
+        return result;
+    }
+
+    /* Rational-bigint fold. Triggers when every arg is rational-like and
+     * at least one carries a BigInt component (bare BigInt or BigInt
+     * inside Rational). gcd(a/b, c/d) = gcd(a, c) / lcm(b, d) folded
+     * pairwise. */
+    if (all_rational_like && any_rational_needs_bigint) {
+        mpz_t running_n, running_d, n, d;
+        mpz_init_set_ui(running_n, 0);
+        mpz_init_set_ui(running_d, 1);
+        mpz_inits(n, d, NULL);
+        for (size_t i = 0; i < count; i++) {
+            rational_like_to_mpz_pair(res->data.function.args[i], n, d);
+            mpz_abs(n, n);
+            mpz_abs(d, d);
+            if (i == 0) {
+                mpz_set(running_n, n);
+                mpz_set(running_d, d);
+            } else {
+                mpz_gcd(running_n, running_n, n);
+                mpz_lcm(running_d, running_d, d);
+            }
+        }
+        Expr* result = mpz_pair_to_rational_expr(running_n, running_d);
+        mpz_clears(running_n, running_d, n, d, NULL);
         return result;
     }
 
@@ -107,10 +194,13 @@ Expr* builtin_lcm(Expr* res) {
     /* Mirror builtin_gcd: when every arg is integer-like and any one is a
      * bigint, fold over GMP so results past int64 don't overflow. */
     bool any_bigint = false, all_integer_like = true;
+    bool all_rational_like = true, any_rational_needs_bigint = false;
     for (size_t i = 0; i < count; i++) {
         Expr* arg = res->data.function.args[i];
-        if (!expr_is_integer_like(arg)) { all_integer_like = false; break; }
-        if (arg->type == EXPR_BIGINT) any_bigint = true;
+        if (!expr_is_integer_like(arg)) all_integer_like = false;
+        else if (arg->type == EXPR_BIGINT) any_bigint = true;
+        if (!is_rational_like(arg)) all_rational_like = false;
+        else if (rational_like_needs_bigint(arg)) any_rational_needs_bigint = true;
     }
 
     if (all_integer_like && any_bigint) {
@@ -126,6 +216,33 @@ Expr* builtin_lcm(Expr* res) {
         }
         Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(running));
         mpz_clear(running);
+        return result;
+    }
+
+    /* Rational-bigint fold. lcm(a/b, c/d) = lcm(a, c) / gcd(b, d) folded
+     * pairwise. A zero numerator in any term zeroes the running lcm. */
+    if (all_rational_like && any_rational_needs_bigint) {
+        mpz_t running_n, running_d, n, d;
+        mpz_init_set_ui(running_n, 0);
+        mpz_init_set_ui(running_d, 0);
+        mpz_inits(n, d, NULL);
+        for (size_t i = 0; i < count; i++) {
+            rational_like_to_mpz_pair(res->data.function.args[i], n, d);
+            mpz_abs(n, n);
+            mpz_abs(d, d);
+            if (i == 0) {
+                mpz_set(running_n, n);
+                mpz_set(running_d, d);
+            } else if (mpz_sgn(running_n) == 0 || mpz_sgn(n) == 0) {
+                mpz_set_ui(running_n, 0);
+                mpz_set_ui(running_d, 1);
+            } else {
+                mpz_lcm(running_n, running_n, n);
+                mpz_gcd(running_d, running_d, d);
+            }
+        }
+        Expr* result = mpz_pair_to_rational_expr(running_n, running_d);
+        mpz_clears(running_n, running_d, n, d, NULL);
         return result;
     }
 
