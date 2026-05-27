@@ -202,8 +202,11 @@ static bool primeq_parse_options(const Expr* res, size_t first_opt,
 }
 
 Expr* builtin_primeq(Expr* res) {
+    /* *Q predicates must always evaluate to True or False — never remain
+     * unevaluated. Zero-arg or non-function res (the latter unreachable
+     * via the evaluator, kept defensive) is therefore not prime. */
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) {
-        return NULL;
+        return expr_new_symbol("False");
     }
     Expr* arg = res->data.function.args[0];
 

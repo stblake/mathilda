@@ -801,10 +801,11 @@ void test_primeq(void) {
     assert_eval_eq("PrimeQ[-2]", "True", 1);
     assert_eval_eq("PrimeQ[-17]", "True", 1);
     assert_eval_eq("PrimeQ[11.5]", "False", 1);
-    /* *Q predicates must always return True/False — never symbolic. */
+    /* *Q predicates must always return True/False — never symbolic, never NULL. */
     assert_eval_eq("PrimeQ[x]", "False", 1);
     assert_eval_eq("PrimeQ[Sqrt[2]]", "False", 1);
     assert_eval_eq("PrimeQ[Exp[2 Pi I / 3]]", "False", 1);
+    assert_eval_eq("PrimeQ[]", "False", 1);
 
     // Large prime (from user request)
     assert_eval_eq("PrimeQ[-59]", "True", 1);

@@ -811,7 +811,16 @@ void info_init(void) {
     symtab_set_docstring("IntegerQ", "IntegerQ[expr] gives True if expr is an integer.");
     symtab_set_docstring("EvenQ", "EvenQ[n] gives True if n is an even integer.");
     symtab_set_docstring("OddQ", "OddQ[n] gives True if n is an odd integer.");
-    symtab_set_docstring("PrimeQ", "PrimeQ[n]\n\tgives True if n is a prime number.\nPrimeQ[z]\n\tfor a Gaussian integer z = a + b I, gives True if z is a Gaussian prime.");
+    symtab_set_docstring("PrimeQ",
+        "PrimeQ[n]\n"
+        "\tgives True if n is a prime integer, False otherwise.\n"
+        "PrimeQ[z]\n"
+        "\tfor a Gaussian integer z = a + b I, gives True if z is a Gaussian prime.\n"
+        "PrimeQ[n, GaussianIntegers -> True]\n"
+        "\ttests primality of n in Z[i] rather than in Z.\n"
+        "Primality is tested with GMP's mpz_probab_prime_p using 25 Miller-Rabin "
+        "rounds on top of a Baillie-PSW pre-screen, so composite false positives "
+        "have probability below 4^-25 (definite for n < 2^64).");
     symtab_set_docstring("SquareFreeQ",
         "SquareFreeQ[expr]\n"
         "\tgives True if expr is a square-free polynomial or number, and False otherwise.\n"
