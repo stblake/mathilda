@@ -114,6 +114,76 @@ void test_trig_forward_of_inverse() {
     }
 }
 
+/* Phase 4: Sin / Cos / Tan / Cot / Sec / Csc on Complex[MPFR, MPFR] must
+ * preserve MPFR precision rather than coerce to double via csin/ccos/etc.
+ *
+ * The asserted prefixes are the first ~40 digits of the closed-form
+ * value computed at 50-digit precision; precision is verified via a
+ * Precision[...] round-trip (which itself produces an MPFR with the
+ * expected magnitude, ~50.27 decimal digits for a 50-digit-input
+ * result). */
+void test_trig_mpfr_complex(void) {
+    struct {
+        const char* input;
+        const char* expected_prefix;
+        size_t prefix_len;
+    } cases[] = {
+        /* sin(1+i) = sin(1)cosh(1) + i cos(1)sinh(1)
+         *          ~ 1.29846 + 0.63496 i */
+        {"Sin[Complex[N[1, 50], N[1, 50]]]",
+         "1.29845758141597729482604236580781562031343656163522", 40},
+        /* cos(1+i) = cos(1)cosh(1) - i sin(1)sinh(1) */
+        {"Cos[Complex[N[1, 50], N[1, 50]]]",
+         "0.83373002513114904888388539433509447980987478520962", 40},
+        /* tan(1+i) ~ 0.27175 + 1.08392 i */
+        {"Tan[Complex[N[1, 50], N[1, 50]]]",
+         "0.27175258531951171652884372249858892070946411146178", 40},
+        /* cot(1+i) = 1/tan(1+i) ~ 0.21762 - 0.86801 i */
+        {"Cot[Complex[N[1, 50], N[1, 50]]]",
+         "0.21762156185440268136513424360523807352075436916785", 40},
+        /* sec(1+i) = 1/cos(1+i) ~ 0.49834 + 0.59108 i */
+        {"Sec[Complex[N[1, 50], N[1, 50]]]",
+         "0.49833703055518678521380589177216953443287793247109", 40},
+        /* csc(1+i) = 1/sin(1+i) ~ 0.62152 - 0.30393 i */
+        {"Csc[Complex[N[1, 50], N[1, 50]]]",
+         "0.62151801717042842123490780585592014816751214181073", 40},
+        {NULL, NULL, 0}
+    };
+
+    for (int i = 0; cases[i].input != NULL; i++) {
+        Expr* e = parse_expression(cases[i].input);
+        Expr* r = evaluate(e);
+        char* s = expr_to_string(r);
+        ASSERT_MSG(strncmp(s, cases[i].expected_prefix, cases[i].prefix_len) == 0,
+                   "%s: expected leading %s, got %s",
+                   cases[i].input, cases[i].expected_prefix, s);
+        free(s);
+        expr_free(e);
+        expr_free(r);
+    }
+
+    /* Spot-check precision is preserved for Sin (representative). */
+    Expr* ep = parse_expression(
+        "Precision[Sin[Complex[N[1, 50], N[1, 50]]]]");
+    Expr* rp = evaluate(ep);
+    char* sp = expr_to_string(rp);
+    ASSERT_MSG(strncmp(sp, "50.", 3) == 0,
+               "Precision[Sin[1+i]] (50 digits): expected 50.*, got %s", sp);
+    free(sp); expr_free(ep); expr_free(rp);
+
+    /* Real MPFR input still takes the real path (no I in result). */
+    Expr* eR = parse_expression("Sin[N[1, 50]]");
+    Expr* rR = evaluate(eR);
+    char* sR = expr_to_string(rR);
+    ASSERT_MSG(strchr(sR, 'I') == NULL,
+               "Sin[N[1, 50]]: expected pure real, got %s", sR);
+    ASSERT_MSG(strncmp(sR, "0.8414709848078965066525023216302989996225",
+                       42) == 0,
+               "Sin[N[1, 50]] (50 digits): expected leading 0.84147..., got %s",
+               sR);
+    free(sR); expr_free(eR); expr_free(rR);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -121,6 +191,7 @@ int main() {
     TEST(test_trig_forward);
     TEST(test_trig_inverse);
     TEST(test_trig_forward_of_inverse);
+    TEST(test_trig_mpfr_complex);
 
     return 0;
 }
