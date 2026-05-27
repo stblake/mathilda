@@ -537,6 +537,8 @@ Expr* builtin_arcsinh(Expr* res) {
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_asinh);
         if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_asinh);
+        if (r) return r;
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
@@ -559,6 +561,8 @@ Expr* builtin_arccosh(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_acosh);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_acosh);
         if (r) return r;
     }
 #endif
@@ -587,6 +591,8 @@ Expr* builtin_arctanh(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_atanh);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_atanh);
         if (r) return r;
     }
 #endif
@@ -620,6 +626,8 @@ Expr* builtin_arccoth(Expr* res) {
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_atanh_recip_op);
         if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_acoth);
+        if (r) return r;
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
@@ -641,6 +649,8 @@ Expr* builtin_arcsech(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_acosh_recip_op);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_asech);
         if (r) return r;
     }
 #endif
@@ -669,6 +679,8 @@ Expr* builtin_arccsch(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_asinh_recip_op);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_acsch);
         if (r) return r;
     }
 #endif
