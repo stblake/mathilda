@@ -227,6 +227,8 @@ extern const char* SYM_PositiveDefiniteMatrixQ;
 extern const char* SYM_PossibleZeroQ;
 extern const char* SYM_Power;
 extern const char* SYM_Primes;
+extern const char* SYM_PrimitiveRoot;
+extern const char* SYM_PrimitiveRootList;
 extern const char* SYM_Protected;
 extern const char* SYM_PseudoInverse;
 extern const char* SYM_Put;

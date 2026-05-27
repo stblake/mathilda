@@ -298,6 +298,9 @@ target_include_directories(purefunc_tests PRIVATE ../src)
 add_executable(modular_tests test_modular.c ${COMMON_SRC})
 target_include_directories(modular_tests PRIVATE ../src)
 
+add_executable(primitive_root_tests test_primitive_root.c ${COMMON_SRC})
+target_include_directories(primitive_root_tests PRIVATE ../src)
+
 add_executable(funcprog_through_tests test_funcprog_through.c ${COMMON_SRC})
 target_include_directories(funcprog_through_tests PRIVATE ../src)
 

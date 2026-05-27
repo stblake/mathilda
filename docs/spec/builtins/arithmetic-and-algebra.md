@@ -852,6 +852,88 @@ In[6]:= PowerMod[2, 1/2, 10^18 + 9]
 Out[6]= 742174169206529574
 ```
 
+## PrimitiveRoot
+Gives a primitive root of `n`, i.e. a generator of the multiplicative group
+of integers modulo `n` that are coprime to `n`.
+- `PrimitiveRoot[n]`: a primitive root of `n`.
+- `PrimitiveRoot[n, k]`: the smallest primitive root of `n` greater than or
+  equal to `k`.
+
+**Features**:
+- `Protected`, `Listable`.
+- Returns unevaluated unless `n` is 2, 4, an odd prime power $p^k$, or
+  twice an odd prime power $2 p^k$ (the moduli for which $(\mathbb{Z}/n\mathbb{Z})^*$
+  is cyclic). For all other `n`, the call is left unevaluated.
+- The 1-argument form returns a canonical primitive root: smallest for
+  $n \in \{2, 4\}$ and odd prime powers; for $n = 2 p^k$ the formula
+  $g$ if $g$ is odd else $g + p^k$ is applied, where $g$ is the smallest
+  primitive root of $p^k$. This matches Mathematica's convention so that,
+  e.g. `PrimitiveRoot[10] == 7` while `PrimitiveRoot[10, 1] == 3`.
+- The 2-argument form walks forward from `k`; if `k > n - 1` the call is
+  left unevaluated.
+- All arithmetic uses GMP `mpz_t`, so machine integers, bignums, and
+  symbolic bignum products like `Prime[1000000]^1000000` are handled
+  uniformly. The prime-power detection iteratively strips prime exponents
+  via `mpz_root`, which runs in $O(\omega(k))$ root extractions.
+- Diagnostics:
+  - `PrimitiveRoot::argt` if not called with 1 or 2 arguments.
+  - `PrimitiveRoot::intg` if `n` (or the 2nd-arg `k` when numeric) is not
+    an integer greater than 1.
+
+```mathematica
+In[1]:= PrimitiveRoot[9]
+Out[1]= 2
+
+In[2]:= PrimitiveRoot[10]
+Out[2]= 7
+
+In[3]:= PrimitiveRoot[10, 1]
+Out[3]= 3
+
+In[4]:= PrimitiveRoot[10, 4]
+Out[4]= 7
+
+In[5]:= PrimitiveRoot[{9, 7, 19}]
+Out[5]= {2, 3, 2}
+
+In[6]:= PrimitiveRoot[12]
+Out[6]= PrimitiveRoot[12]
+```
+
+## PrimitiveRootList
+Gives the sorted list of all primitive roots of `n` in the canonical
+residues $\{1, \ldots, n-1\}$.
+- `PrimitiveRootList[n]`
+
+**Features**:
+- `Protected`, `Listable`.
+- Returns `{}` if `n` is not 2, 4, an odd prime power, or twice an odd
+  prime power.
+- Enumerates the $\varphi(\varphi(n))$ primitive roots as $g^i \bmod n$
+  for $i \in \{1, \ldots, \varphi(n)\}$ with $\gcd(i, \varphi(n)) = 1$,
+  where $g$ is the smallest primitive root of `n`. The list is sorted
+  ascending.
+- Falls back to unevaluated when $\varphi(n)$ exceeds `unsigned long`,
+  since the enumeration cannot be represented.
+- Non-integer numeric inputs (e.g. `11.0`, `11 + I`) flow through
+  unevaluated with no diagnostic, matching Mathematica.
+- Diagnostic: `PrimitiveRootList::argx` if not called with exactly 1
+  argument.
+
+```mathematica
+In[1]:= PrimitiveRootList[9]
+Out[1]= {2, 5}
+
+In[2]:= PrimitiveRootList[19]
+Out[2]= {2, 3, 10, 13, 14, 15}
+
+In[3]:= PrimitiveRootList[12]
+Out[3]= {}
+
+In[4]:= Union[Table[PowerMod[2, i, 9], {i, 6}]]
+Out[4]= {1, 2, 4, 5, 7, 8}
+```
+
 ## Factorial (!)
 Gives the factorial of an integer or half-integer.
 - `n!` or `Factorial[n]`

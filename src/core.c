@@ -386,6 +386,8 @@ void core_init(void) {
     symtab_add_builtin("GCD", builtin_gcd);
     symtab_add_builtin("LCM", builtin_lcm);
     symtab_add_builtin("PowerMod", builtin_powermod);
+    symtab_add_builtin("PrimitiveRoot", builtin_primitiveroot);
+    symtab_add_builtin("PrimitiveRootList", builtin_primitiverootlist);
     symtab_add_builtin("Factorial", builtin_factorial);
     symtab_add_builtin("Factorial2", builtin_factorial2);
     symtab_add_builtin("FactorialPower", builtin_factorialpower);
@@ -420,6 +422,8 @@ void core_init(void) {
     symtab_get_def("GCD")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
     symtab_get_def("LCM")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
     symtab_get_def("PowerMod")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    symtab_get_def("PrimitiveRoot")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
+    symtab_get_def("PrimitiveRootList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_get_def("Factorial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Factorial2")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("FactorialPower")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);

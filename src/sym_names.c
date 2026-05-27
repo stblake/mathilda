@@ -212,6 +212,8 @@ const char* SYM_PositiveDefiniteMatrixQ = NULL;
 const char* SYM_PossibleZeroQ = NULL;
 const char* SYM_Power = NULL;
 const char* SYM_Primes = NULL;
+const char* SYM_PrimitiveRoot = NULL;
+const char* SYM_PrimitiveRootList = NULL;
 const char* SYM_Protected = NULL;
 const char* SYM_PseudoInverse = NULL;
 const char* SYM_Put = NULL;
@@ -505,6 +507,8 @@ void sym_names_init(void) {
     SYM_PossibleZeroQ              = intern_symbol("PossibleZeroQ");
     SYM_Power                      = intern_symbol("Power");
     SYM_Primes                     = intern_symbol("Primes");
+    SYM_PrimitiveRoot              = intern_symbol("PrimitiveRoot");
+    SYM_PrimitiveRootList          = intern_symbol("PrimitiveRootList");
     SYM_Protected                  = intern_symbol("Protected");
     SYM_PseudoInverse              = intern_symbol("PseudoInverse");
     SYM_Put                        = intern_symbol("Put");
