@@ -10,6 +10,7 @@
 #include "arithmetic.h"
 #include "eval.h"
 #include "numeric.h"
+#include <gmp.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -62,11 +63,30 @@ static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
     double va, vb;
     int64_t na, da, nb, db;
     bool exact_a, exact_b;
-    
+
     *can_compare = false;
+
+    /* Exact integer-like comparison via GMP. Avoids precision loss when
+     * either operand is a BigInt whose magnitude exceeds 2^53 (the limit
+     * for distinguishing adjacent values through double). Without this,
+     * Less[10^30, 10^30 + 1] coerces both sides to the same double and
+     * answers False. */
+    if (expr_is_integer_like(a) && expr_is_integer_like(b)) {
+        mpz_t ma, mb;
+        mpz_init(ma); mpz_init(mb);
+        expr_to_mpz(a, ma);
+        expr_to_mpz(b, mb);
+        int cmp = mpz_cmp(ma, mb);
+        mpz_clear(ma); mpz_clear(mb);
+        *can_compare = true;
+        if (cmp < 0) return -1;
+        if (cmp > 0) return 1;
+        return 0;
+    }
+
     if (!get_numeric_value(a, &va, &na, &da, &exact_a)) return 0;
     if (!get_numeric_value(b, &vb, &nb, &db, &exact_b)) return 0;
-    
+
     *can_compare = true;
     if (exact_a && exact_b) {
         long double val_a = (long double)na / da;

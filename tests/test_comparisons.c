@@ -4,6 +4,7 @@
 #include "symtab.h"
 #include "test_utils.h"
 #include "arithmetic.h"
+#include "parse.h"
 #include <string.h>
 
 void test_sameq_basic() {
@@ -314,6 +315,40 @@ void test_greater_unevaluated() {
     expr_free(gt); expr_free(res);
 }
 
+/* Regression: BigInt-vs-BigInt comparisons used to coerce both sides to
+ * double, which collapsed neighbouring values above 2^53 to a single
+ * representation and returned False for Less[10^20, 10^20 + 1]. */
+static void check_compare_yields(const char* expr_text, const char* expected) {
+    Expr* in = parse_expression(expr_text);
+    ASSERT(in != NULL);
+    Expr* res = evaluate(in);
+    ASSERT(res != NULL);
+    ASSERT(res->type == EXPR_SYMBOL);
+    ASSERT_STR_EQ(res->data.symbol, expected);
+    expr_free(in);
+    expr_free(res);
+}
+
+void test_compare_bigint_adjacent() {
+    check_compare_yields("Less[10^20, 10^20 + 1]",          "True");
+    check_compare_yields("Less[10^30, 10^30 + 1]",          "True");
+    check_compare_yields("Less[10^50 - 1, 10^50]",          "True");
+    check_compare_yields("Greater[10^30, 10^30 - 1]",       "True");
+    check_compare_yields("LessEqual[10^20 + 1, 10^20]",     "False");
+    check_compare_yields("GreaterEqual[10^30 - 1, 10^30]",  "False");
+    check_compare_yields("Equal[10^30, 10^30]",             "True");
+    check_compare_yields("Equal[10^30, 10^30 + 1]",         "False");
+    check_compare_yields("Unequal[10^30, 10^30 + 1]",       "True");
+    /* Mixed Integer/BigInt: 5 < 10^30 must hold exactly. */
+    check_compare_yields("Less[5, 10^30]",                  "True");
+    check_compare_yields("Greater[10^30, 5]",               "True");
+    /* Sanity: small-integer path still works. */
+    check_compare_yields("Less[1, 2]",                      "True");
+    check_compare_yields("Less[2, 1]",                      "False");
+    check_compare_yields("LessEqual[1.5, 2.5]",             "True");
+    check_compare_yields("Less[3/4, 4/5]",                  "True");
+}
+
 void test_unequal_basic() {
     Expr* one = expr_new_integer(1);
     Expr* two = expr_new_integer(2);
@@ -460,6 +495,7 @@ int main() {
     TEST(test_less_exact_rational);
     TEST(test_lessequal_mixed);
     TEST(test_greater_unevaluated);
+    TEST(test_compare_bigint_adjacent);
     TEST(test_not_basic);
     TEST(test_and_basic);
     TEST(test_or_basic);
