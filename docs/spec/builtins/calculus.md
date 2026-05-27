@@ -493,3 +493,112 @@ In[1]:= SubresultantPolynomialRemainders[x^4 + 1, 2 x^3, x]
 Out[1]= {1 + x^4, 2 x^3, 2}
 ```
 
+
+## FindRoot
+
+Iterative numerical root finder.  Implemented natively in C in
+`src/findroot.c`.  Has `HoldAll, Protected` attributes and uses
+`Block`-style local binding of the search variables so the user's
+global symbol table is not perturbed during iteration.
+
+### Forms
+
+- `FindRoot[f, {x, x0}]` -- Newton from a single start.
+- `FindRoot[lhs == rhs, {x, x0}]` -- equation form (normalised to
+  `lhs - rhs`).
+- `FindRoot[f, {x, x0, x1}]` -- secant from two starts (no derivative
+  needed).
+- `FindRoot[f, {x, xstart, xmin, xmax}]` -- Brent's method on the
+  bracket `[xmin, xmax]`.
+- `FindRoot[{f1, ..., fn}, {{x, x0}, {y, y0}, ...}]` -- multivariate
+  Newton with a symbolically computed Jacobian, solved per step via
+  in-place Gaussian elimination with partial pivoting.
+
+Each `f_i` may be either an expression (treated as `f_i == 0`) or an
+explicit equation `lhs_i == rhs_i`.
+
+### Output
+
+`{ var -> value }` for the scalar case, or
+`{ var1 -> v1, ..., varN -> vN }` for a system -- the same `Rule`-list
+form that `Solve` returns.
+
+### Method dispatch
+
+| Spec form                                  | Default method |
+|--------------------------------------------|----------------|
+| `{x, x0, xmin, xmax}` (4-element bracket)  | Brent          |
+| `{x, x0, x1}` (two start points)           | Secant         |
+| `{x, x0}` (single start), scalar           | Newton         |
+| `{{x,x0},{y,y0},...}` (system)             | Newton         |
+
+The `Method` option overrides this when explicit (`"Newton"`,
+`"Secant"`, or `"Brent"`).  `Method -> "Brent"` accepts either a
+4-element bracket spec or a 2-start spec used as `[a, b]`.
+
+### Complex roots
+
+`FindRoot` automatically engages a complex Newton inner loop when the
+starting value evaluates to a `Complex` with non-zero imaginary part.
+At machine precision this uses `double complex` arithmetic; at
+arbitrary precision the iteration runs on an `(mpfr_t re, mpfr_t im)`
+pair and the codebase's existing MPFR-complex transcendental paths
+(in `numeric.c`, `trig.c`, `logexp.c`) supply `Sin`, `Exp`, `Zeta`,
+etc.
+
+### Options
+
+| Option              | Default        | Effect |
+|---------------------|----------------|--------|
+| `Method`            | `Automatic`    | `"Newton"`, `"Secant"`, `"Brent"`, or `Automatic`. |
+| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR). |
+| `MaxIterations`     | `100`          | Iteration limit. |
+| `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `|f| < 10^{-n}`. `Infinity` disables this criterion. `Automatic` resolves to `WorkingPrecision/2`. |
+| `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `|step| < |x| * 10^{-n}`.  Same defaults / specials as `AccuracyGoal`. |
+| `DampingFactor`     | `1`            | Multiplier on the Newton step.  Useful for repeated roots (set to the multiplicity for quadratic convergence). |
+| `Jacobian`          | `Automatic`    | A symbolic expression (scalar form) or `n*n` nested list (system form) that overrides the call to `D[]`. |
+| `StepMonitor`       | `None`         | A held expression evaluated after each step. |
+| `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any of its derivatives) is evaluated. |
+
+### Diagnostics (stderr)
+
+| Tag         | Triggered when |
+|-------------|----------------|
+| `FindRoot::argt`    | Wrong arg count. |
+| `FindRoot::ivar`    | Malformed variable spec. |
+| `FindRoot::nlnum`   | `f` or its derivative did not evaluate to a number. |
+| `FindRoot::cvmit`   | `MaxIterations` exhausted (the last iterate is still returned). |
+| `FindRoot::noconv`  | Divergence (non-finite step). |
+| `FindRoot::brnoth`  | Brent given non-bracketing endpoints. |
+| `FindRoot::badopt`  | Unknown option name or invalid value. |
+| `FindRoot::badmeth` | Unknown `Method` value. |
+| `FindRoot::vecvar`  | Vector-valued variable spec (deferred to a follow-up). |
+| `FindRoot::dsing`   | Derivative vanished and `|f|` was not already below tolerance. |
+
+### Examples
+
+```mathematica
+In[1]:= FindRoot[Sin[x] + Exp[x], {x, 0}]
+Out[1]= {x -> -0.588533}
+
+In[2]:= FindRoot[Cos[x] == x, {x, 0}]
+Out[2]= {x -> 0.739085}
+
+In[3]:= FindRoot[{y == Exp[x], x + y == 2}, {{x, 1}, {y, 1}}]
+Out[3]= {x -> 0.442854, y -> 1.55715}
+
+In[4]:= FindRoot[Sin[x], {x, 3}, WorkingPrecision -> 50]
+Out[4]= {x -> 3.1415926535897932384626433832795028841971693993751}
+
+In[5]:= FindRoot[(Cos[z + I] - 2) (z + 2), {z, 1.0 + 0.1 I}]
+Out[5]= {z -> -3.1302*10^-27 + 0.316958 I}
+
+In[6]:= FindRoot[Cos[x] - x, {x, 0, 1}, Method -> "Brent"]
+Out[6]= {x -> 0.739085}
+
+In[7]:= FindRoot[x^2 - 2, {x, 1.0, 2.0}, Method -> "Secant"]
+Out[7]= {x -> 1.41421}
+
+In[8]:= FindRoot[(x - 1)^3, {x, 0.5}, DampingFactor -> 3]
+Out[8]= {x -> 1.0}
+```

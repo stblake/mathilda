@@ -40,6 +40,7 @@
 #include "facint.h"
 #include "facpoly.h"
 #include "solve.h"
+#include "findroot.h"
 #include "datetime.h"
 #include "linalg.h"
 #include "readwrite.h"
@@ -478,6 +479,7 @@ void core_init(void) {
     rat_init();
     expand_init();
     solve_init();
+    findroot_init();
     info_init();
     datetime_init();
     linalg_init();

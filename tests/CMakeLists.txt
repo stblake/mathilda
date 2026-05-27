@@ -204,6 +204,7 @@ set(COMMON_SRC
     ../src/calculus/intsimp.c
     ../src/root.c
     ../src/solve.c
+    ../src/findroot.c
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
     ../src/solverad.c
@@ -303,6 +304,9 @@ target_include_directories(primitive_root_tests PRIVATE ../src)
 
 add_executable(multiplicative_order_tests test_multiplicative_order.c ${COMMON_SRC})
 target_include_directories(multiplicative_order_tests PRIVATE ../src)
+
+add_executable(findroot_tests test_findroot.c ${COMMON_SRC})
+target_include_directories(findroot_tests PRIVATE ../src)
 
 add_executable(funcprog_through_tests test_funcprog_through.c ${COMMON_SRC})
 target_include_directories(funcprog_through_tests PRIVATE ../src)

@@ -36,6 +36,20 @@ void info_init(void) {
         "Returns unevaluated when gcd(k, n) is not 1, when no power of k lands in the residue set, "
         "or when n is zero.  All arithmetic is exact via GMP, so k and n may be arbitrary-precision "
         "integers.");
+    symtab_set_docstring("FindRoot",
+        "FindRoot[f, {x, x0}]\n"
+        "\tsearches for a numerical root of f starting from x = x0.\n"
+        "FindRoot[lhs == rhs, {x, x0}]\n"
+        "\tsearches for a numerical solution to the equation.\n"
+        "FindRoot[f, {x, x0, x1}]\n"
+        "\tuses a variant of the secant method with x0 and x1 as the first two approximations.\n"
+        "FindRoot[f, {x, xstart, xmin, xmax}]\n"
+        "\tuses Brent's method on the bracket [xmin, xmax].\n"
+        "FindRoot[{f1, f2, ...}, {{x, x0}, {y, y0}, ...}]\n"
+        "\tsearches for a simultaneous numerical root of the system.\n\n"
+        "Options: Method ('Newton' | 'Secant' | 'Brent' | Automatic), WorkingPrecision, "
+        "MaxIterations, AccuracyGoal, PrecisionGoal, DampingFactor, Jacobian, StepMonitor, "
+        "EvaluationMonitor.  FindRoot has HoldAll and effectively uses Block to localize variables.");
     symtab_set_docstring("Factorial", "n! gives the factorial of n.\nFor integers and half integers, Factorial automatically evaluates to exact values.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Binomial", "Binomial[n, m] gives the binomial coefficient.");
