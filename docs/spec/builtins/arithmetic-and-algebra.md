@@ -1296,15 +1296,20 @@ Complex number functions.
 - `ReIm[z]`: Returns `{Re[z], Im[z]}`; inherits the same folding.
 - `Abs[z]`: Magnitude. Numeric arguments (`Integer`, `BigInt`, `Real`,
   arbitrary-precision `MPFR`, `Rational`) reduce to a concrete value at the
-  input precision; complex arguments use `Sqrt[Re^2 + Im^2]`.
+  input precision; complex arguments use `Sqrt[Re^2 + Im^2]`. When `z` is
+  `Complex[MPFR, MPFR]` (or `Complex` with any MPFR component), `Abs`
+  takes a direct `mpfr_hypot` fast path at the working precision.
 - `Sign[z]`: For real numeric `z`, returns the exact integer `-1`, `0`, or
   `1` (regardless of whether the input is `Integer`, `BigInt`, `Real`,
   `MPFR`, or `Rational`). For nonzero numeric complex `z`, returns
-  `z / Abs[z]`. `Listable`.
+  `z / Abs[z]`. `Complex[MPFR, MPFR]` goes through a direct
+  `mpfr_div`-on-components path at MPFR precision. `Listable`.
 - `Conjugate[z]`: Complex conjugate.  Folds `Conjugate[Conjugate[z]] -> z`
   (involution) and `Conjugate[f[..]] -> f[..]` when `f` is one of `Re`,
   `Im`, `Abs`, `Arg` (all real-valued by construction).
-- `Arg[z]`: Phase angle.
+- `Arg[z]`: Phase angle. Pure-real MPFR returns symbolic `0` or `Pi`;
+  `Complex[MPFR, MPFR]` evaluates via `mpfr_atan2` at the working
+  precision.
 
 ## Solve
 Attempts to solve an equation or system of equations for one or more variables.

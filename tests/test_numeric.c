@@ -297,6 +297,39 @@ static void test_n_prec_complex_pow(void) {
                            "0.20787957635076190854695561983");
 }
 
+/* Phase 8: end-to-end MPFR-complex corner cases. The infrastructure
+ * landed in earlier phases (per-builtin wirings + numeric_mpfr_complex_pow);
+ * this test fixes the behaviour at the REPL level so future regressions
+ * surface here rather than in scattered builtin tests. */
+static void test_mpfr_complex_corner_cases(void) {
+    /* Sqrt of a negative MPFR real → Complex[0, MPFR Sqrt[|x|]].
+     * The Power-with-half-exponent path routes through
+     * numeric_mpfr_complex_pow's polar form. */
+    assert_eval_startswith("Im[Sqrt[N[-2, 50]]]",
+                           "1.41421356237309504880168872420969807856967187537");
+    assert_eval_startswith("Precision[Sqrt[N[-2, 50]]]", "50.");
+
+    /* Complex base raised to an MPFR exponent: (1+i)^3 = -2 + 2i at
+     * MPFR precision. */
+    assert_eval_startswith("Re[(1 + I)^N[3, 50]]",
+                           "-2.0000000000000000000000000000000000000000000000");
+    assert_eval_startswith("Im[(1 + I)^N[3, 50]]",
+                           "2.0000000000000000000000000000000000000000000000");
+    assert_eval_startswith("Precision[(1 + I)^N[3, 50]]", "50.");
+
+    /* Sin at very high precision (100 digits) stays at full precision
+     * end-to-end via Phase 4 + the helper module. */
+    assert_eval_startswith("Re[Sin[Complex[N[1, 100], N[1, 100]]]]",
+                           "1.298457581415977294826042365807815620313436561635");
+    assert_eval_startswith("Precision[Sin[Complex[N[1, 100], N[1, 100]]]]",
+                           "100.");
+
+    /* Round-trip: Log[Exp[z]] = z at MPFR precision for principal-branch z. */
+    assert_eval_startswith(
+        "Re[Log[Exp[Complex[N[0.5, 50], N[0.25, 50]]]]]",
+        "0.5000000000000000000000000000000000000000000000000");
+}
+
 #endif /* USE_MPFR */
 
 int main(void) {
@@ -331,6 +364,7 @@ int main(void) {
     TEST(test_set_accuracy);
     TEST(test_listable_prec);
     TEST(test_n_prec_complex_pow);
+    TEST(test_mpfr_complex_corner_cases);
 #endif
 
     printf("All numeric_tests passed.\n");

@@ -7,6 +7,11 @@
 - `Listable`, `NumericFunction`.
 - Exact values for rational multiples of `Pi` with denominators `1, 2, 3, 4, 5, 6, 10, 12`.
 - `ArcTan[x, y]` computes the quadrant-aware inverse tangent.
+- Numeric evaluation on `Complex[MPFR, MPFR]` (and out-of-real-domain
+  MPFR arguments like `ArcSin[N[2, 50]]`) is carried at MPFR precision
+  via the `numeric_mpfr_apply_complex_unary` helper rather than coerced
+  to `double` through libc's `csin / ccos / ...` (see
+  `src/numeric_complex.c`).
 
 ```mathematica
 In[1]:= Sin[Pi/6]
@@ -22,10 +27,14 @@ Out[1]= 1/4*Pi
 **Features**:
 - `Listable`, `NumericFunction`.
 - Special values for `0` and `Infinity`.
+- `Complex[MPFR, MPFR]` and out-of-real-domain MPFR inputs (e.g.
+  `ArcCosh[N[0.5, 50]]`, `ArcTanh[N[2, 50]]`) preserve the working
+  precision via the shared MPFR-complex helpers in
+  `src/numeric_complex.c`.
 
 ## Exponential and Logarithmic Functions
 - `Exp[z]`: Natural exponential. Reduces `Exp[I*q*Pi]` using Euler's formula.
-- `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch).
+- `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
 - `Log[b, z]`: Logarithm to base `b`.
 
 **Zero arguments.** `Log` distinguishes exact zero (a directed limit) from
