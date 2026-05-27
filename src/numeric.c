@@ -213,6 +213,13 @@ Expr* numeric_mpfr_apply_unary(const Expr* e, long default_bits, MpfrUnaryOp op)
     mpfr_init2(out, bits);
     op(out, r, MPFR_RNDN);
     mpfr_clear(r); mpfr_clear(i);
+    /* Domain failure (e.g. asin(2), acosh(0.5), log(-1)) — return NULL so
+     * the caller can route through a complex-aware fallback rather than
+     * propagating NaN into the symbolic result. */
+    if (mpfr_nan_p(out)) {
+        mpfr_clear(out);
+        return NULL;
+    }
     return expr_new_mpfr_move(out);
 }
 

@@ -1074,6 +1074,8 @@ Expr* builtin_arcsin(Expr* res) {
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_asin);
         if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_asin);
+        if (r) return r;
     }
 #endif
     // Approximate numerical evaluation - only if input is already inexact
@@ -1115,6 +1117,8 @@ Expr* builtin_arccos(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_acos);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_acos);
         if (r) return r;
     }
 #endif
@@ -1160,6 +1164,8 @@ Expr* builtin_arctan(Expr* res) {
 #ifdef USE_MPFR
         if (numeric_expr_is_mpfr(arg)) {
             Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_atan);
+            if (r) return r;
+            r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_atan);
             if (r) return r;
         }
 #endif
@@ -1256,6 +1262,8 @@ Expr* builtin_arccot(Expr* res) {
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_atan_recip_op);
         if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_acot);
+        if (r) return r;
     }
 #endif
     // Approximate numerical evaluation
@@ -1290,6 +1298,8 @@ Expr* builtin_arcsec(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_acos_recip_op);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_asec);
         if (r) return r;
     }
 #endif
@@ -1328,6 +1338,8 @@ Expr* builtin_arccsc(Expr* res) {
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(arg)) {
         Expr* r = numeric_mpfr_apply_unary(arg, 0, mpfr_asin_recip_op);
+        if (r) return r;
+        r = numeric_mpfr_apply_complex_unary(arg, 0, mpfr_complex_acsc);
         if (r) return r;
     }
 #endif

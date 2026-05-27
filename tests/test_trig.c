@@ -184,6 +184,70 @@ void test_trig_mpfr_complex(void) {
     free(sR); expr_free(eR); expr_free(rR);
 }
 
+/* Phase 6: inverse-trig builtins on Complex[MPFR, MPFR] and on MPFR
+ * reals outside the real domain must produce MPFR-precision results
+ * via the log-form complex identities. Pre-Phase-6 these silently
+ * returned NaN (real path) or were stuck in the symbolic form. */
+void test_arc_trig_mpfr_complex(void) {
+    struct {
+        const char* input;
+        const char* expected_prefix;
+        size_t prefix_len;
+    } cases[] = {
+        /* ArcSin[2] = Pi/2 - i acosh(2) ~ 1.57080 - 1.31696 i — real
+         * input outside [-1, 1], complex result at MPFR precision. */
+        {"ArcSin[N[2, 50]]",
+         "1.57079632679489661923132169163975144209858469968755", 40},
+        /* ArcCos[2] = i acosh(2) ~ 0 + 1.31696 i — domain failure on
+         * the real path falls through to the complex path. */
+        {"ArcCos[N[2, 50]]",
+         "0.0 + 1.31695789692481670862504634730796844402698197146751*I", 30},
+        /* ArcTan[Complex[1, 1]] ~ 1.01722 + 0.40236 i */
+        {"ArcTan[Complex[N[1, 50], N[1, 50]]]",
+         "1.01722196789785136772278896155048292206356087698684", 40},
+        /* ArcCot[Complex[1, 1]] = ArcTan[1/(1+i)] ~ 0.55357 - 0.40236 i */
+        {"ArcCot[Complex[N[1, 50], N[1, 50]]]",
+         "0.55357435889704525150853273008926852003502382270071", 40},
+        /* ArcSec[Complex[1, 1]] ~ 1.11852 + 0.53064 i */
+        {"ArcSec[Complex[N[1, 50], N[1, 50]]]",
+         "1.11851787964370593716766329380877208138303741920675", 40},
+        /* ArcCsc[Complex[1, 1]] ~ 0.45228 - 0.53064 i */
+        {"ArcCsc[Complex[N[1, 50], N[1, 50]]]",
+         "0.45227844715119068206365839783097936071554728048080", 40},
+        {NULL, NULL, 0}
+    };
+
+    for (int i = 0; cases[i].input != NULL; i++) {
+        Expr* e = parse_expression(cases[i].input);
+        Expr* r = evaluate(e);
+        char* s = expr_to_string(r);
+        ASSERT_MSG(strncmp(s, cases[i].expected_prefix, cases[i].prefix_len) == 0,
+                   "%s: expected leading %s, got %s",
+                   cases[i].input, cases[i].expected_prefix, s);
+        free(s);
+        expr_free(e);
+        expr_free(r);
+    }
+
+    /* Precision[] round-trip on a representative complex case. */
+    Expr* ep = parse_expression(
+        "Precision[ArcSin[Complex[N[1, 50], N[1, 50]]]]");
+    Expr* rp = evaluate(ep);
+    char* sp = expr_to_string(rp);
+    ASSERT_MSG(strncmp(sp, "50.", 3) == 0,
+               "Precision[ArcSin[1+i]] (50 digits): expected 50.*, got %s",
+               sp);
+    free(sp); expr_free(ep); expr_free(rp);
+
+    /* In-domain ArcSin still takes the real path. */
+    Expr* eR = parse_expression("ArcSin[N[0.5, 50]]");
+    Expr* rR = evaluate(eR);
+    char* sR = expr_to_string(rR);
+    ASSERT_MSG(strchr(sR, 'I') == NULL,
+               "ArcSin[N[0.5, 50]]: expected pure real, got %s", sR);
+    free(sR); expr_free(eR); expr_free(rR);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -192,6 +256,7 @@ int main() {
     TEST(test_trig_inverse);
     TEST(test_trig_forward_of_inverse);
     TEST(test_trig_mpfr_complex);
+    TEST(test_arc_trig_mpfr_complex);
 
     return 0;
 }
