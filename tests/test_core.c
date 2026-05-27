@@ -645,6 +645,80 @@ void test_arg(void) {
     free(s_arg_zero_mpfr);
 }
 
+/* Phase 2: Abs/Arg/Sign on Complex[MPFR, MPFR] must produce results at
+ * the input's MPFR precision rather than coercing to a machine double.
+ *
+ * The asserted printed forms are the FullForm strings; precision is
+ * verified via a Precision[...] round-trip which itself produces an
+ * MPFR with the right magnitude (e.g. ~50.27 decimal digits for a
+ * 50-digit-bit MPFR result, since the result floor is set to the
+ * input's MPFR prec and Precision converts bits back to digits). */
+void test_mpfr_complex_abs_arg_sign(void) {
+    /* Abs[Complex[N[3, 50], N[4, 50]]] = MPFR 5.0 — direct hypot fold
+     * rather than the symbolic Sqrt[Plus[Power[re,2], Power[im,2]]]
+     * tree that would otherwise reach the evaluator. */
+    char* s1 = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Abs[Complex[N[3, 50], N[4, 50]]]")));
+    assert(strncmp(s1, "5.0", 3) == 0);
+    free(s1);
+    char* s1p = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Precision[Abs[Complex[N[3, 50], N[4, 50]]]]")));
+    assert(strncmp(s1p, "50.", 3) == 0);
+    free(s1p);
+
+    /* Abs[Complex[N[1, 80], N[1, 80]]] = MPFR Sqrt[2] at 80 digits. */
+    char* s2 = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Abs[Complex[N[1, 80], N[1, 80]]]")));
+    assert(strncmp(s2, "1.41421356237309504880168872420969807856967187537694",
+                   50) == 0);
+    free(s2);
+    char* s2p = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Precision[Abs[Complex[N[1, 80], N[1, 80]]]]")));
+    assert(strncmp(s2p, "80.", 3) == 0);
+    free(s2p);
+
+    /* Arg[Complex[N[1, 80], N[1, 80]]] = MPFR Pi/4 at 80 digits. The
+     * pre-Phase-2 behaviour was to drop to machine atan2 (~15 digits). */
+    char* s3 = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Arg[Complex[N[1, 80], N[1, 80]]]")));
+    assert(strncmp(s3, "0.78539816339744830961566084581987572104929234984377",
+                   50) == 0);
+    free(s3);
+    char* s3p = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Precision[Arg[Complex[N[1, 80], N[1, 80]]]]")));
+    assert(strncmp(s3p, "80.", 3) == 0);
+    free(s3p);
+
+    /* Sign[Complex[N[3, 50], N[4, 50]]] = MPFR(0.6) + MPFR(0.8) I, the
+     * unit-modulus direction at the input's MPFR precision. */
+    char* s4 = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Sign[Complex[N[3, 50], N[4, 50]]]")));
+    /* FullForm prints Complex[Re, Im] for nonzero imag. */
+    assert(strncmp(s4, "Complex[0.6", 11) == 0);
+    free(s4);
+    char* s4p = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Precision[Sign[Complex[N[3, 50], N[4, 50]]]]")));
+    assert(strncmp(s4p, "50.", 3) == 0);
+    free(s4p);
+
+    /* Mixed-type Complex (one MPFR, one Integer) still goes MPFR via
+     * get_approx_mpfr widening the exact integer. */
+    char* s5 = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Abs[Complex[N[3, 35], 4]]")));
+    assert(strncmp(s5, "5.0", 3) == 0);
+    free(s5);
+    char* s5p = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Precision[Abs[Complex[N[3, 35], 4]]]")));
+    assert(strncmp(s5p, "35.", 3) == 0);
+    free(s5p);
+
+    /* Exact-integer Complex remains exact (no MPFR machinery fires). */
+    char* s6 = expr_to_string_fullform(eval_and_free(parse_expression(
+        "Abs[Complex[3, 4]]")));
+    assert(strcmp(s6, "5") == 0);
+    free(s6);
+}
+
 void test_trig(void) {
     char* s1 = expr_to_string_fullform(eval_and_free(parse_expression("Sin[0]")));
     assert(strcmp(s1, "0") == 0); free(s1);
@@ -1072,6 +1146,7 @@ int main(void) {
     TEST(test_abs_conjugate);
     TEST(test_sign);
     TEST(test_arg);
+    TEST(test_mpfr_complex_abs_arg_sign);
     TEST(test_trig);
     TEST(test_gcd_lcm);
     TEST(test_primeq);

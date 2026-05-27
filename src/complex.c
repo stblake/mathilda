@@ -10,6 +10,9 @@
 #include <string.h>
 #include <math.h>
 #include <stdint.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* True iff `e` reduces to a real machine number under N[]. Used to gate
  * complex decomposition so the structural Re/Im split is only applied
@@ -310,6 +313,34 @@ Expr* builtin_abs(Expr* res) {
         }
     }
     if (from_complex) {
+#ifdef USE_MPFR
+        /* MPFR fast path: when at least one component carries MPFR, fold
+         * directly through mpfr_hypot rather than constructing the
+         * symbolic Sqrt[Plus[Power[re,2], Power[im,2]]] tree. The
+         * symbolic form would otherwise re-enter the MPFR Power /
+         * Plus chain, allocating two squarings and a sum at each
+         * intermediate step. mpfr_hypot is also stable when |re| and
+         * |im| span very different magnitudes. */
+        if (numeric_any_mpfr(re_owned, im_owned)) {
+            long bits = numeric_combined_bits(re_owned, im_owned, 0);
+            mpfr_t a_re, a_im, b_re, b_im;
+            mpfr_init2(a_re, bits); mpfr_init2(a_im, bits);
+            mpfr_init2(b_re, bits); mpfr_init2(b_im, bits);
+            bool ok_r = get_approx_mpfr(re_owned, a_re, a_im, NULL);
+            bool ok_i = get_approx_mpfr(im_owned, b_re, b_im, NULL);
+            if (ok_r && ok_i && mpfr_zero_p(a_im) && mpfr_zero_p(b_im)) {
+                Expr* result = expr_new_mpfr_bits(bits);
+                mpfr_hypot(result->data.mpfr, a_re, b_re, MPFR_RNDN);
+                mpfr_clear(a_re); mpfr_clear(a_im);
+                mpfr_clear(b_re); mpfr_clear(b_im);
+                expr_free(re_owned);
+                expr_free(im_owned);
+                return result;
+            }
+            mpfr_clear(a_re); mpfr_clear(a_im);
+            mpfr_clear(b_re); mpfr_clear(b_im);
+        }
+#endif
         Expr* pow_re_args[2] = { re_owned, expr_new_integer(2) };
         Expr* pow_re = expr_new_function(expr_new_symbol("Power"), pow_re_args, 2);
 
@@ -407,6 +438,42 @@ Expr* builtin_sign(Expr* res) {
 #endif
         if (re_zero && im_zero) return expr_new_integer(0);
 
+#ifdef USE_MPFR
+        /* MPFR fast path: avoid the symbolic z * Power[Abs[z], -1] tree
+         * (which re-evaluates Abs and Power) and compute the unit-modulus
+         * direction directly. */
+        if (numeric_any_mpfr(re, im)) {
+            long bits = numeric_combined_bits(re, im, 0);
+            mpfr_t a_re, a_im, b_re, b_im, abs_v;
+            mpfr_init2(a_re, bits); mpfr_init2(a_im, bits);
+            mpfr_init2(b_re, bits); mpfr_init2(b_im, bits);
+            mpfr_init2(abs_v, bits);
+            bool ok_r = get_approx_mpfr(re, a_re, a_im, NULL);
+            bool ok_i = get_approx_mpfr(im, b_re, b_im, NULL);
+            if (ok_r && ok_i && mpfr_zero_p(a_im) && mpfr_zero_p(b_im)) {
+                mpfr_hypot(abs_v, a_re, b_re, MPFR_RNDN);
+                /* Above zero short-circuit already handled exact-zero
+                 * inputs; abs_v here is strictly positive. */
+                Expr* re_out = expr_new_mpfr_bits(bits);
+                Expr* im_out = expr_new_mpfr_bits(bits);
+                mpfr_div(re_out->data.mpfr, a_re, abs_v, MPFR_RNDN);
+                mpfr_div(im_out->data.mpfr, b_re, abs_v, MPFR_RNDN);
+                bool im_out_zero = mpfr_zero_p(im_out->data.mpfr);
+                mpfr_clear(a_re); mpfr_clear(a_im);
+                mpfr_clear(b_re); mpfr_clear(b_im);
+                mpfr_clear(abs_v);
+                if (im_out_zero) {
+                    expr_free(im_out);
+                    return re_out;
+                }
+                return make_complex(re_out, im_out);
+            }
+            mpfr_clear(a_re); mpfr_clear(a_im);
+            mpfr_clear(b_re); mpfr_clear(b_im);
+            mpfr_clear(abs_v);
+        }
+#endif
+
         Expr* abs_args[1] = { expr_copy(arg) };
         Expr* abs_call = eval_and_free(expr_new_function(expr_new_symbol("Abs"), abs_args, 1));
         Expr* inv_args[2] = { abs_call, expr_new_integer(-1) };
@@ -499,6 +566,28 @@ Expr* builtin_arg(Expr* res) {
 #endif
 
     if (is_complex(arg, &re, &im)) {
+#ifdef USE_MPFR
+        /* MPFR-aware Arg: when either component carries MPFR, evaluate
+         * via mpfr_atan2 at the working precision rather than the double
+         * atan2 fallback below. */
+        if (numeric_any_mpfr(re, im)) {
+            long bits = numeric_combined_bits(re, im, 0);
+            mpfr_t a_re, a_im, b_re, b_im;
+            mpfr_init2(a_re, bits); mpfr_init2(a_im, bits);
+            mpfr_init2(b_re, bits); mpfr_init2(b_im, bits);
+            bool ok_r = get_approx_mpfr(re, a_re, a_im, NULL);
+            bool ok_i = get_approx_mpfr(im, b_re, b_im, NULL);
+            if (ok_r && ok_i && mpfr_zero_p(a_im) && mpfr_zero_p(b_im)) {
+                Expr* result = expr_new_mpfr_bits(bits);
+                mpfr_atan2(result->data.mpfr, b_re, a_re, MPFR_RNDN);
+                mpfr_clear(a_re); mpfr_clear(a_im);
+                mpfr_clear(b_re); mpfr_clear(b_im);
+                return result;
+            }
+            mpfr_clear(a_re); mpfr_clear(a_im);
+            mpfr_clear(b_re); mpfr_clear(b_im);
+        }
+#endif
         // re and im are assigned
     } else if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
         re = arg;
