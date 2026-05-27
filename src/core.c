@@ -1531,6 +1531,60 @@ Expr* builtin_oddq(Expr* res) {
     return expr_new_symbol("False");
 }
 
+/* Lift Integer, BigInt, or Rational[Integer|BigInt, Integer|BigInt] into an
+ * initialized + canonicalized mpq_t. Returns false (and leaves out cleared)
+ * for any other shape, or if the rational has a zero denominator. Used by
+ * the BigInt-aware Mod and Quotient paths so Rational[10^50, 3] no longer
+ * falls through to a lossy double. */
+static bool mod_quot_expr_to_mpq(const Expr* e, mpq_t out) {
+    mpq_init(out);
+    if (e->type == EXPR_INTEGER) {
+        mpq_set_si(out, (long)e->data.integer, 1UL);
+        return true;
+    }
+    if (e->type == EXPR_BIGINT) {
+        mpq_set_z(out, e->data.bigint);
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.arg_count == 2 &&
+        expr_is_integer_like(e->data.function.args[0]) &&
+        expr_is_integer_like(e->data.function.args[1])) {
+        mpz_t num, den;
+        mpz_init(num);
+        mpz_init(den);
+        expr_to_mpz(e->data.function.args[0], num);
+        expr_to_mpz(e->data.function.args[1], den);
+        if (mpz_sgn(den) == 0) {
+            mpz_clears(num, den, NULL);
+            mpq_clear(out);
+            return false;
+        }
+        mpq_set_num(out, num);
+        mpq_set_den(out, den);
+        mpq_canonicalize(out);
+        mpz_clears(num, den, NULL);
+        return true;
+    }
+    mpq_clear(out);
+    return false;
+}
+
+/* Build an Expr from a canonical mpq_t: returns a normalized Integer (or
+ * BigInt) when the denominator is 1, else Rational[num, den] with both
+ * components normalized. */
+static Expr* mod_quot_mpq_to_expr(const mpq_t q) {
+    if (mpz_cmp_ui(mpq_denref(q), 1) == 0) {
+        return expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_numref(q)));
+    }
+    Expr* num = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_numref(q)));
+    Expr* den = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_denref(q)));
+    Expr* args[2] = { num, den };
+    return expr_new_function(expr_new_symbol("Rational"), args, 2);
+}
+
 Expr* builtin_mod(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 2 && res->data.function.arg_count != 3)) {
         return NULL;
@@ -1547,8 +1601,8 @@ Expr* builtin_mod(Expr* res) {
         bool m_is_mpfr = false;
         bool n_is_mpfr = false;
 #endif
-        bool m_is_num = (m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || m_expr->type == EXPR_BIGINT || m_is_mpfr);
-        bool n_is_num = (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_REAL || n_expr->type == EXPR_BIGINT || n_is_mpfr);
+        bool m_is_num = (m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || m_expr->type == EXPR_BIGINT || m_is_mpfr || is_rational_like(m_expr));
+        bool n_is_num = (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_REAL || n_expr->type == EXPR_BIGINT || n_is_mpfr || is_rational_like(n_expr));
         if (!m_is_num || !n_is_num) return NULL;
 
 #ifdef USE_MPFR
@@ -1591,7 +1645,7 @@ Expr* builtin_mod(Expr* res) {
 
         if ((m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_BIGINT) &&
             (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_BIGINT)) {
-            
+
             mpz_t m, n, r;
             expr_to_mpz(m_expr, m);
             expr_to_mpz(n_expr, n);
@@ -1599,12 +1653,37 @@ Expr* builtin_mod(Expr* res) {
                 mpz_clears(m, n, NULL);
                 return NULL;
             }
-            
+
             mpz_init(r);
             mpz_fdiv_r(r, m, n);
-            
+
             Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
             mpz_clears(m, n, r, NULL);
+            return out;
+        } else if (is_rational_like(m_expr) && is_rational_like(n_expr)) {
+            /* Rational-aware Mod: at least one of m, n is a Rational (with
+             * BigInt-capable components). Computes m - n * Floor[m/n] in
+             * mpq. Catches Mod[Rational[10^50, 3], 7] and Mod[100/3, 7],
+             * which the integer-only path skipped and the double fallback
+             * either rejected or answered with garbage. */
+            mpq_t m, n;
+            if (!mod_quot_expr_to_mpq(m_expr, m)) return NULL;
+            if (!mod_quot_expr_to_mpq(n_expr, n)) { mpq_clear(m); return NULL; }
+            if (mpq_sgn(n) == 0) { mpq_clear(m); mpq_clear(n); return NULL; }
+
+            mpq_t qmpq, prod, rmpq;
+            mpz_t qint;
+            mpq_inits(qmpq, prod, rmpq, NULL);
+            mpz_init(qint);
+            mpq_div(qmpq, m, n);
+            mpz_fdiv_q(qint, mpq_numref(qmpq), mpq_denref(qmpq));
+            mpq_set_z(prod, qint);
+            mpq_mul(prod, prod, n);
+            mpq_sub(rmpq, m, prod);
+            mpq_canonicalize(rmpq);
+            Expr* out = mod_quot_mpq_to_expr(rmpq);
+            mpz_clear(qint);
+            mpq_clears(m, n, qmpq, prod, rmpq, NULL);
             return out;
         } else if (m_expr->type == EXPR_BIGINT || n_expr->type == EXPR_BIGINT || m_expr->type == EXPR_INTEGER || n_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || n_expr->type == EXPR_REAL) {
             double m_val = (m_expr->type == EXPR_REAL) ? m_expr->data.real : (m_expr->type == EXPR_INTEGER) ? (double)m_expr->data.integer : (m_expr->type == EXPR_BIGINT) ? mpz_get_d(m_expr->data.bigint) : 0.0;
@@ -1613,11 +1692,11 @@ Expr* builtin_mod(Expr* res) {
             double result = m_val - n_val * floor(m_val / n_val);
             return expr_new_real(result);
         }
-    } else { 
+    } else {
         Expr* d_expr = res->data.function.args[2];
-        bool m_is_num = (m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || m_expr->type == EXPR_BIGINT);
-        bool n_is_num = (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_REAL || n_expr->type == EXPR_BIGINT);
-        bool d_is_num = (d_expr->type == EXPR_INTEGER || d_expr->type == EXPR_REAL || d_expr->type == EXPR_BIGINT);
+        bool m_is_num = (m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || m_expr->type == EXPR_BIGINT || is_rational_like(m_expr));
+        bool n_is_num = (n_expr->type == EXPR_INTEGER || n_expr->type == EXPR_REAL || n_expr->type == EXPR_BIGINT || is_rational_like(n_expr));
+        bool d_is_num = (d_expr->type == EXPR_INTEGER || d_expr->type == EXPR_REAL || d_expr->type == EXPR_BIGINT || is_rational_like(d_expr));
         if (!m_is_num || !n_is_num || !d_is_num) return NULL;
 
         if ((m_expr->type == EXPR_INTEGER || m_expr->type == EXPR_BIGINT) && 
@@ -1638,9 +1717,33 @@ Expr* builtin_mod(Expr* res) {
             mpz_sub(m_minus_d, m, d);
             mpz_fdiv_r(r, m_minus_d, n);
             mpz_add(r, r, d);
-            
+
             Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
             mpz_clears(m, n, d, m_minus_d, r, NULL);
+            return out;
+        } else if (is_rational_like(m_expr) && is_rational_like(n_expr) && is_rational_like(d_expr)) {
+            /* Rational-aware 3-arg Mod: result = d + ((m-d) mod n). */
+            mpq_t m, n, d;
+            if (!mod_quot_expr_to_mpq(m_expr, m)) return NULL;
+            if (!mod_quot_expr_to_mpq(n_expr, n)) { mpq_clear(m); return NULL; }
+            if (!mod_quot_expr_to_mpq(d_expr, d)) { mpq_clear(m); mpq_clear(n); return NULL; }
+            if (mpq_sgn(n) == 0) { mpq_clears(m, n, d, NULL); return NULL; }
+
+            mpq_t diff, qmpq, prod, rmpq;
+            mpz_t qint;
+            mpq_inits(diff, qmpq, prod, rmpq, NULL);
+            mpz_init(qint);
+            mpq_sub(diff, m, d);
+            mpq_div(qmpq, diff, n);
+            mpz_fdiv_q(qint, mpq_numref(qmpq), mpq_denref(qmpq));
+            mpq_set_z(prod, qint);
+            mpq_mul(prod, prod, n);
+            mpq_sub(rmpq, diff, prod);
+            mpq_add(rmpq, rmpq, d);
+            mpq_canonicalize(rmpq);
+            Expr* out = mod_quot_mpq_to_expr(rmpq);
+            mpz_clear(qint);
+            mpq_clears(m, n, d, diff, qmpq, prod, rmpq, NULL);
             return out;
         } else if (m_expr->type == EXPR_BIGINT || n_expr->type == EXPR_BIGINT || d_expr->type == EXPR_BIGINT || m_expr->type == EXPR_INTEGER || n_expr->type == EXPR_INTEGER || d_expr->type == EXPR_INTEGER || m_expr->type == EXPR_REAL || n_expr->type == EXPR_REAL || d_expr->type == EXPR_REAL) {
             double m_val = (m_expr->type == EXPR_REAL) ? m_expr->data.real : (m_expr->type == EXPR_INTEGER) ? (double)m_expr->data.integer : (m_expr->type == EXPR_BIGINT) ? mpz_get_d(m_expr->data.bigint) : 0.0;
@@ -1755,6 +1858,36 @@ Expr* builtin_quotient(Expr* res) {
         mpz_fdiv_q(q, q, n);  /* q = floor((m-d)/n) */
         Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(q));
         mpz_clears(m, n, d, q, NULL);
+        return out;
+    }
+
+    /* Rational-aware quotient: any of m, n, d is a Rational with BigInt-
+     * capable components. Computes Floor[(m-d)/n] in mpq; result is an
+     * integer (denominator drops via floor). Catches
+     * Quotient[Rational[10^50, 3], 7] which the integer-only path
+     * skipped and the double fallback corrupted via mpz_get_d. */
+    if (is_rational_like(m_expr) && is_rational_like(n_expr) &&
+        (!d_expr || is_rational_like(d_expr))) {
+        mpq_t m, n, d;
+        if (!mod_quot_expr_to_mpq(m_expr, m)) return NULL;
+        if (!mod_quot_expr_to_mpq(n_expr, n)) { mpq_clear(m); return NULL; }
+        if (d_expr) {
+            if (!mod_quot_expr_to_mpq(d_expr, d)) { mpq_clear(m); mpq_clear(n); return NULL; }
+        } else {
+            mpq_init(d);  /* d defaults to 0 */
+        }
+        if (mpq_sgn(n) == 0) { mpq_clears(m, n, d, NULL); return NULL; }
+
+        mpq_t diff, qmpq;
+        mpq_inits(diff, qmpq, NULL);
+        mpq_sub(diff, m, d);
+        mpq_div(qmpq, diff, n);
+        mpz_t qint;
+        mpz_init(qint);
+        mpz_fdiv_q(qint, mpq_numref(qmpq), mpq_denref(qmpq));
+        Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(qint));
+        mpz_clear(qint);
+        mpq_clears(m, n, d, diff, qmpq, NULL);
         return out;
     }
 

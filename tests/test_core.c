@@ -303,6 +303,19 @@ void test_mod(void) {
     char* s_mod_mpfr3 = expr_to_string(eval_and_free(parse_expression("Mod[N[10.5, 35], N[3, 35]]")));
     assert(strncmp(s_mod_mpfr3, "1.5", 3) == 0);
     free(s_mod_mpfr3);
+
+    /* Regression: Mod on Rational[BigInt, _]. The numeric-admission
+     * gate accepted only Integer/Real/BigInt/MPFR and short-circuited
+     * any Rational input to NULL. Adding is_rational_like to the gate
+     * (and an mpq-based computation path) makes Mod[100/3, 7] reduce
+     * to 16/3 instead of staying unevaluated, and lets Mod handle
+     * Rational components that overflow int64. */
+    assert_eval_eq("Mod[100/3, 7]",                  "16/3", 0);
+    assert_eval_eq("Mod[8/3, 1/2]",                  "1/6", 0);
+    assert_eval_eq("Mod[Rational[10^50, 3], 7]",     "16/3", 0);
+    assert_eval_eq("Mod[Rational[10^30, 11], 5]",    "45/11", 0);
+    assert_eval_eq("Mod[8/3, 7, 1]",                 "8/3", 0);
+    assert_eval_eq("Mod[Rational[10^50, 3], 7, 1]",  "16/3", 0);
 }
 
 void test_quotient(void) {
@@ -340,6 +353,16 @@ void test_quotient(void) {
      * floor of the MPFR ratio. */
     assert_eval_eq("Quotient[N[10.5, 35], 3]", "3", 0);
     assert_eval_eq("Quotient[N[10.7, 35], 3]", "3", 0);
+
+    /* Regression: Quotient on Rational[BigInt, _]. Previously fell
+     * through to the double fallback which collapsed the BigInt
+     * numerator via mpz_get_d and returned a corrupted int64. */
+    assert_eval_eq("Quotient[100/3, 7]",                                              "4", 0);
+    assert_eval_eq("Quotient[8/3, 1/2]",                                              "5", 0);
+    assert_eval_eq("Quotient[Rational[10^50, 3], 7]",
+                   "4761904761904761904761904761904761904761904761904", 0);
+    assert_eval_eq("Quotient[Rational[10^50, 3], 7, 1]",
+                   "4761904761904761904761904761904761904761904761904", 0);
 }
 
 void test_quotientremainder(void) {
