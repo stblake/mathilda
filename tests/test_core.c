@@ -105,6 +105,26 @@ void test_numberq(void) {
     free(s8);
     expr_free(e8);
     expr_free(res8);
+
+    /* Regression: NumberQ on EXPR_MPFR. The builtin enumerated
+     * EXPR_INTEGER, EXPR_REAL, EXPR_BIGINT but omitted EXPR_MPFR,
+     * so NumberQ[N[Pi, 35]] returned False even though MPFR is a
+     * concrete numeric representation just like a machine double. */
+    const char* mpfr_cases[] = {
+        "NumberQ[N[Pi, 35]]",
+        "NumberQ[N[1, 35]]",
+        "NumberQ[N[3.5, 50]]",
+        "NumberQ[N[10^30, 40]]",
+    };
+    for (size_t i = 0; i < sizeof(mpfr_cases) / sizeof(mpfr_cases[0]); i++) {
+        Expr* in = parse_expression(mpfr_cases[i]);
+        Expr* out = evaluate(in);
+        char* s = expr_to_string(out);
+        assert(strcmp(s, "True") == 0);
+        free(s);
+        expr_free(in);
+        expr_free(out);
+    }
 }
 
 void test_atomq(void) {

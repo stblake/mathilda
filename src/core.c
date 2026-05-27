@@ -1385,7 +1385,7 @@ Expr* builtin_atomq(Expr* res) {
 
 Expr* builtin_numberq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
-        return NULL; 
+        return NULL;
     }
 
     Expr* arg = res->data.function.args[0];
@@ -1393,6 +1393,11 @@ Expr* builtin_numberq(Expr* res) {
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT) {
         return expr_new_symbol("True");
     }
+#ifdef USE_MPFR
+    if (arg->type == EXPR_MPFR) {
+        return expr_new_symbol("True");
+    }
+#endif
 
     if (arg->type == EXPR_FUNCTION) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
