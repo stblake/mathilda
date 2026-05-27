@@ -9,6 +9,7 @@
 #include "arithmetic.h"
 #include "complex.h"
 #include "numeric.h"
+#include "numeric_complex.h"
 #include "sym_names.h"
 
 /*
@@ -228,8 +229,8 @@ Expr* builtin_log(Expr* res) {
 
 #ifdef USE_MPFR
         if (numeric_expr_is_mpfr(z)) {
-            /* Log is real only for z > 0; for z <= 0 we must fall through
-             * to the double-complex path (no complex MPFR yet). */
+            /* Real MPFR path: positive real input goes through mpfr_log
+             * directly for an EXPR_MPFR result. */
             long bits = numeric_combined_bits(z, NULL, 0);
             mpfr_t rr, ii;
             mpfr_init2(rr, bits); mpfr_init2(ii, bits);
@@ -241,6 +242,14 @@ Expr* builtin_log(Expr* res) {
                 return expr_new_mpfr_move(out);
             }
             mpfr_clear(rr); mpfr_clear(ii);
+            /* Complex MPFR path: negative real MPFR, or Complex with an
+             * MPFR component. Goes through log(|z|) + I arg(z) at the
+             * working precision via the helper. The helper handles the
+             * zero-input case by producing -Infinity-style MPFR output
+             * — but the symbolic Log[0] = ComplexInfinity path above
+             * has already filtered exact-zero inputs. */
+            Expr* r = numeric_mpfr_apply_complex_unary(z, 0, mpfr_complex_log);
+            if (r) return r;
         }
 #endif
         // Approximate numerical evaluation
@@ -427,7 +436,15 @@ Expr* builtin_exp(Expr* res) {
 
 #ifdef USE_MPFR
     if (numeric_expr_is_mpfr(z)) {
+        /* Real MPFR path first: pure real input takes mpfr_exp directly
+         * and returns EXPR_MPFR. */
         Expr* r = numeric_mpfr_apply_unary(z, 0, mpfr_exp);
+        if (r) return r;
+        /* Otherwise complex MPFR: Complex[MPFR, MPFR] (or a real with
+         * inexact imag component) goes through the complex helper,
+         * which uses exp(a)(cos(b) + i sin(b)) at the working
+         * precision and collapses on zero-imag-out. */
+        r = numeric_mpfr_apply_complex_unary(z, 0, mpfr_complex_exp);
         if (r) return r;
     }
 #endif
