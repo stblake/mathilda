@@ -126,8 +126,9 @@ static void test_irreducibility_short_circuit(void) {
 static void test_factor_threads_over_logic_heads(void) {
     /* Cubic inside Less: factor each comparison argument. */
     eval_check("Factor[1 < 1 + 2 x + x^2 + 1/(1+x) < 2]",
-               "Less[Less[1, "
-                    "Times[Plus[2, x], Power[Plus[1, x], -1], Plus[1, x, Power[x, 2]]]], 2]",
+               "Inequality[1, Less, "
+                    "Times[Plus[2, x], Power[Plus[1, x], -1], Plus[1, x, Power[x, 2]]], "
+                    "Less, 2]",
                150.0);
 }
 

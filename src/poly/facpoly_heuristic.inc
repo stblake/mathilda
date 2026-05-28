@@ -30,9 +30,16 @@ static Expr* heuristic_factor_impl(Expr* P) {
     }
     if (P->data.function.head->data.symbol == SYM_List || P->data.function.head->data.symbol == SYM_Equal || P->data.function.head->data.symbol == SYM_Less ||
         P->data.function.head->data.symbol == SYM_LessEqual || P->data.function.head->data.symbol == SYM_Greater || P->data.function.head->data.symbol == SYM_GreaterEqual ||
+        P->data.function.head->data.symbol == SYM_Inequality ||
         P->data.function.head->data.symbol == SYM_And || P->data.function.head->data.symbol == SYM_Or || P->data.function.head->data.symbol == SYM_Not) {
+        bool is_ineq = (P->data.function.head->data.symbol == SYM_Inequality);
         Expr** args = malloc(sizeof(Expr*) * P->data.function.arg_count);
-        for(size_t i=0; i<P->data.function.arg_count; i++) args[i] = heuristic_factor(P->data.function.args[i]);
+        for (size_t i = 0; i < P->data.function.arg_count; i++) {
+            if (is_ineq && (i & 1u) == 1)
+                args[i] = expr_copy(P->data.function.args[i]);   /* operator symbol */
+            else
+                args[i] = heuristic_factor(P->data.function.args[i]);
+        }
         Expr* res = eval_and_free(expr_new_function(expr_copy(P->data.function.head), args, P->data.function.arg_count));
         free(args);
         return res;

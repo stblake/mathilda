@@ -100,7 +100,7 @@ void test_factor() {
     run_test("Factor[2x^3 y - 2a^2 x y - 3a^2 x^2 + 3a^4]", "Times[Plus[a, x], Plus[Times[-1, a], x], Plus[Times[-3, Power[a, 2]], Times[2, Times[x, y]]]]");
     run_test("Factor[(x^3+2x^2)/(x^2-4y^2)-(x+2)/(x^2-4y^2)]", "Times[Plus[-1, x], Plus[1, x], Plus[2, x], Power[Plus[x, Times[-2, y]], -1], Power[Plus[x, Times[2, y]], -1]]");
     run_test("Factor[{x^2-1, x^4-1, x^8-1}]", "List[Times[Plus[-1, x], Plus[1, x]], Times[Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]]], Times[Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, Power[x, 4]]]]");
-    run_test("Factor[1 < 1 + 2 x + x^2 + 1/(1+x) < 2]", "Less[Less[1, Times[Plus[2, x], Power[Plus[1, x], -1], Plus[1, x, Power[x, 2]]]], 2]");
+    run_test("Factor[1 < 1 + 2 x + x^2 + 1/(1+x) < 2]", "Inequality[1, Less, Times[Plus[2, x], Power[Plus[1, x], -1], Plus[1, x, Power[x, 2]]], Less, 2]");
 }
 
 int main() {

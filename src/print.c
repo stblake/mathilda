@@ -42,7 +42,7 @@ static int get_expr_prec(Expr* e) {
     if (head == SYM_Repeated || head == SYM_RepeatedNull) return 170;
     if (head == SYM_And) return 215;
     if (head == SYM_Or) return 215;
-    if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ) return 290;
+    if (head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Inequality) return 290;
     if (head == SYM_Plus) return 310;
 
     if (head == SYM_Times) return 400;
@@ -405,6 +405,30 @@ static void print_standard(Expr* e, int parent_prec) {
             if (flipped_head) expr_free(flipped_head);
         }
 
+        else if (head == SYM_Inequality
+                 && e->data.function.arg_count >= 3
+                 && (e->data.function.arg_count & 1u) == 1) {
+            /* Inequality[v0, op0, v1, op1, v2, ...]. Walk the alternating
+             * (value, op-symbol) sequence, printing each binary operator
+             * using the same glyphs as the corresponding binary heads. */
+            for (size_t i = 0; i < e->data.function.arg_count; i++) {
+                Expr* a = e->data.function.args[i];
+                if ((i & 1u) == 0) {
+                    print_standard(a, my_prec);
+                } else {
+                    const char* op = " ?? ";
+                    if (a->type == EXPR_SYMBOL) {
+                        const char* s = a->data.symbol;
+                        if      (s == SYM_Equal)        op = " == ";
+                        else if (s == SYM_Less)         op = " < ";
+                        else if (s == SYM_Greater)      op = " > ";
+                        else if (s == SYM_LessEqual)    op = " <= ";
+                        else if (s == SYM_GreaterEqual) op = " >= ";
+                    }
+                    printf("%s", op);
+                }
+            }
+        }
         else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives) && e->data.function.arg_count >= 2) {
             const char* op = "";
             if (head == SYM_Equal) op = " == ";
@@ -1281,6 +1305,25 @@ static void print_tex(Expr* e, int parent_prec) {
                 print_tex(e->data.function.args[i], 0);
             }
             printf("\\}");
+        }
+        else if (head == SYM_Inequality && argc >= 3 && (argc & 1u) == 1) {
+            for (size_t i = 0; i < argc; i++) {
+                Expr* a = e->data.function.args[i];
+                if ((i & 1u) == 0) {
+                    print_tex(a, my_prec);
+                } else {
+                    const char* op = "";
+                    if (a->type == EXPR_SYMBOL) {
+                        const char* s = a->data.symbol;
+                        if      (s == SYM_Equal)        op = "=";
+                        else if (s == SYM_Less)         op = "<";
+                        else if (s == SYM_Greater)      op = ">";
+                        else if (s == SYM_LessEqual)    op = "\\leq ";
+                        else if (s == SYM_GreaterEqual) op = "\\geq ";
+                    }
+                    printf("%s", op);
+                }
+            }
         }
         else if ((head == SYM_Equal || head == SYM_Unequal
                   || head == SYM_Less || head == SYM_Greater

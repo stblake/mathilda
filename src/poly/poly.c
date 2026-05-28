@@ -2776,7 +2776,8 @@ static bool is_threadable_head(Expr* head) {
     const char* s = head->data.symbol;
     return s == SYM_List || s == SYM_Equal || s == SYM_Unequal ||
            s == SYM_Less || s == SYM_LessEqual || s == SYM_Greater ||
-           s == SYM_GreaterEqual || s == SYM_And || s == SYM_Or ||
+           s == SYM_GreaterEqual || s == SYM_Inequality ||
+           s == SYM_And || s == SYM_Or ||
            s == SYM_Not || s == SYM_SameQ || s == SYM_UnsameQ;
 }
 
@@ -2835,10 +2836,15 @@ static void bp_compute_residual(BPList* term_bp, BPList* var_bp,
 
 static Expr* collect_internal(Expr* expr, Expr** vars, size_t num_vars, size_t var_idx, Expr* h) {
     if (expr->type == EXPR_FUNCTION && is_threadable_head(expr->data.function.head)) {
+        bool is_ineq = (expr->data.function.head->type == EXPR_SYMBOL
+                        && expr->data.function.head->data.symbol == SYM_Inequality);
         size_t count = expr->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) {
-            new_args[i] = collect_internal(expr->data.function.args[i], vars, num_vars, var_idx, h);
+            if (is_ineq && (i & 1u) == 1)
+                new_args[i] = expr_copy(expr->data.function.args[i]);
+            else
+                new_args[i] = collect_internal(expr->data.function.args[i], vars, num_vars, var_idx, h);
         }
         return eval_and_free(expr_new_function(expr_copy(expr->data.function.head), new_args, count));
     }

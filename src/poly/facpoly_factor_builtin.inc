@@ -148,20 +148,16 @@ Expr* builtin_factor(Expr* res) {
     }
 
     /* Thread over logic / comparison heads (Less, Greater, Equal,
-     * LessEqual, GreaterEqual, And, Or).  Mathematica applies Factor
-     * elementwise inside these structures, e.g.,
+     * LessEqual, GreaterEqual, Inequality, And, Or). Mathematica applies
+     * Factor elementwise inside these structures, e.g.,
      *   Factor[1 < 1+2x+x^2+1/(1+x) < 2]
-     * yields Less[Less[1, factored], 2].  Without explicit threading
-     * here, builtin_factor sees the whole Less[...] as a "polynomial"
-     * (with the comparison head treated as opaque), collect_variables
-     * returns just [x], and bz_factor_to_expr returns the input
-     * unchanged (deg <= 0 for non-polynomial heads).
-     *
-     * We thread by recursively invoking Factor on each comparison
-     * argument, then rebuilding the same head with the factored
-     * subterms.  ATTR_LISTABLE on Factor handles the List case
-     * automatically; this hand-threading covers the comparison /
-     * logic heads it doesn't reach. */
+     * yields Inequality[1, Less, factored, Less, 2].  We thread by
+     * recursively invoking Factor on each comparison argument, then
+     * rebuilding the same head with the factored subterms.
+     * ATTR_LISTABLE on Factor handles the List case automatically;
+     * this hand-threading covers the comparison / logic heads it
+     * doesn't reach.  For Inequality specifically, operator-symbol
+     * slots (odd indices) are passed through verbatim. */
     {
         Expr* arg0 = res->data.function.args[0];
         if (arg0->type == EXPR_FUNCTION
@@ -174,11 +170,18 @@ Expr* builtin_factor(Expr* res) {
                 h == SYM_Unequal ||
                 h == SYM_LessEqual ||
                 h == SYM_GreaterEqual ||
+                h == SYM_Inequality ||
                 h == SYM_And ||
                 h == SYM_Or) {
+                bool is_ineq = (h == SYM_Inequality);
                 size_t n = arg0->data.function.arg_count;
                 Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
                 for (size_t i = 0; i < n; i++) {
+                    if (is_ineq && (i & 1u) == 1) {
+                        /* Operator-symbol slot: copy through unchanged. */
+                        new_args[i] = expr_copy(arg0->data.function.args[i]);
+                        continue;
+                    }
                     Expr* sub_call = expr_new_function(
                         expr_new_symbol("Factor"),
                         (Expr*[]){expr_copy(arg0->data.function.args[i])}, 1);

@@ -444,14 +444,16 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
         if (f->type == EXPR_SYMBOL && nonconsts_contains(nonconsts, f)) {
             return build_unevaluated_d_nonconsts(f, x, nonconsts);
         }
-        /* Don't short-circuit `Equal[...]` even when it has no x: the
-         * dispatch below distributes D over each side and lets the
-         * outer evaluator fold Equal[0, 0, ...] to True, matching
-         * Mathematica's semantics for D[a == b, x]. */
-        bool f_is_equal = (f->type == EXPR_FUNCTION &&
-                           f->data.function.head->type == EXPR_SYMBOL &&
-                           f->data.function.head->data.symbol == SYM_Equal);
-        if (!f_is_equal &&
+        /* Don't short-circuit `Equal[...]` or `Inequality[...]` even when
+         * they have no x: the dispatch below distributes D over each
+         * value slot and lets the outer evaluator simplify the residue,
+         * matching Mathematica's semantics for D[a == b, x] and
+         * D[a < b < c, x]. */
+        bool f_is_equal_or_ineq = (f->type == EXPR_FUNCTION &&
+                                   f->data.function.head->type == EXPR_SYMBOL &&
+                                   (f->data.function.head->data.symbol == SYM_Equal
+                                    || f->data.function.head->data.symbol == SYM_Inequality));
+        if (!f_is_equal_or_ineq &&
             expr_free_of(f, x) && !expr_contains_nonconst(f, nonconsts)) {
             return mk_int(0);
         }
@@ -500,6 +502,20 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             Expr** ts = malloc(sizeof(Expr*) * n);
             for (size_t i = 0; i < n; i++) ts[i] = deriv_of(args[i], x, nonconsts);
             return mk_fnN_adopt("Equal", ts, n);
+        }
+
+        /* --- Inequality[v0, op0, v1, op1, ...]: differentiate each value
+         *     slot, keep the operator symbols verbatim. The outer
+         *     evaluator may then collapse the residual (e.g. if all
+         *     derivatives are 0, it becomes Inequality[0, op, 0, op, 0]
+         *     and reduces in builtin_inequality). */
+        if (h == SYM_Inequality && (n & 1u) == 1) {
+            Expr** ts = malloc(sizeof(Expr*) * n);
+            for (size_t i = 0; i < n; i++) {
+                if ((i & 1u) == 1) ts[i] = expr_copy(args[i]);    /* op symbol */
+                else               ts[i] = deriv_of(args[i], x, nonconsts);
+            }
+            return mk_fnN_adopt("Inequality", ts, n);
         }
 
         /* --- Times: general product rule. For n factors this is

@@ -112,13 +112,20 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
 
     const char* head = e->data.function.head->type == EXPR_SYMBOL ? e->data.function.head->data.symbol : "";
 
-    // Thread over lists, equations, inequalities, logic
-    if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Less") == 0 || 
+    // Thread over lists, equations, inequalities, logic. Inequality has
+    // operator-symbol slots at odd indices that must be passed through.
+    if (strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 || strcmp(head, "Less") == 0 ||
         strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 || strcmp(head, "GreaterEqual") == 0 ||
+        strcmp(head, "Inequality") == 0 ||
         strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 || strcmp(head, "Not") == 0) {
+        bool is_ineq = (strcmp(head, "Inequality") == 0);
         Expr** args = malloc(sizeof(Expr*) * e->data.function.arg_count);
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
-            args[i] = expr_expand_patt(e->data.function.args[i], patt);
+            if (is_ineq && (i & 1u) == 1) {
+                args[i] = expr_copy(e->data.function.args[i]);
+            } else {
+                args[i] = expr_expand_patt(e->data.function.args[i], patt);
+            }
         }
         Expr* res = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, e->data.function.arg_count));
         free(args);
@@ -188,13 +195,15 @@ static bool is_negative_int_power(Expr* e) {
 }
 
 /* Threading head test: ExpandNumerator/ExpandDenominator descend into List,
- * Equal, Unequal, Less, LessEqual, Greater, GreaterEqual, And, Or, Not, and
- * Plus. (Plus is handled because the operations apply per-summand.) */
+ * Equal, Unequal, Less, LessEqual, Greater, GreaterEqual, Inequality, And,
+ * Or, Not, and Plus. (Plus is handled because the operations apply
+ * per-summand.) */
 static bool is_thread_head(const char* head) {
     return strcmp(head, "List") == 0 || strcmp(head, "Equal") == 0 ||
            strcmp(head, "Unequal") == 0 || strcmp(head, "Less") == 0 ||
            strcmp(head, "LessEqual") == 0 || strcmp(head, "Greater") == 0 ||
-           strcmp(head, "GreaterEqual") == 0 || strcmp(head, "And") == 0 ||
+           strcmp(head, "GreaterEqual") == 0 || strcmp(head, "Inequality") == 0 ||
+           strcmp(head, "And") == 0 ||
            strcmp(head, "Or") == 0 || strcmp(head, "Not") == 0 ||
            strcmp(head, "Plus") == 0;
 }
@@ -207,9 +216,15 @@ Expr* expr_expand_numerator(Expr* e) {
         ? e->data.function.head->data.symbol : "";
 
     if (is_thread_head(head)) {
+        bool is_ineq = (strcmp(head, "Inequality") == 0);
         size_t n = e->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
-        for (size_t i = 0; i < n; i++) args[i] = expr_expand_numerator(e->data.function.args[i]);
+        for (size_t i = 0; i < n; i++) {
+            if (is_ineq && (i & 1u) == 1)
+                args[i] = expr_copy(e->data.function.args[i]);
+            else
+                args[i] = expr_expand_numerator(e->data.function.args[i]);
+        }
         Expr* ret = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, n));
         free(args);
         return ret;
@@ -277,9 +292,15 @@ Expr* expr_expand_denominator(Expr* e) {
         ? e->data.function.head->data.symbol : "";
 
     if (is_thread_head(head)) {
+        bool is_ineq = (strcmp(head, "Inequality") == 0);
         size_t n = e->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
-        for (size_t i = 0; i < n; i++) args[i] = expr_expand_denominator(e->data.function.args[i]);
+        for (size_t i = 0; i < n; i++) {
+            if (is_ineq && (i & 1u) == 1)
+                args[i] = expr_copy(e->data.function.args[i]);
+            else
+                args[i] = expr_expand_denominator(e->data.function.args[i]);
+        }
         Expr* ret = eval_and_free(expr_new_function(expr_copy(e->data.function.head), args, n));
         free(args);
         return ret;

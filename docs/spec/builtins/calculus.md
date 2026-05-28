@@ -602,3 +602,127 @@ Out[7]= {x -> 1.41421}
 In[8]:= FindRoot[(x - 1)^3, {x, 0.5}, DampingFactor -> 3]
 Out[8]= {x -> 1.0}
 ```
+
+
+## FindMinimum / FindMaximum
+
+Iterative local optimisation.  Implemented natively in C in
+`src/findmin.c`.  Both have `HoldAll, Protected` attributes and use
+`Block`-style local binding of the search variables.  `FindMaximum[f, ...]`
+is a thin wrapper around `FindMinimum[-f, ...]` that negates the
+objective value before returning.
+
+### Forms
+
+- `FindMinimum[f, {x, x0}]` -- 1D from a single start (default Brent).
+- `FindMinimum[f, {x, x0, x1}]` -- bracket Brent on `[x0, x1]`.
+- `FindMinimum[f, {x, xstart, xmin, xmax}]` -- bracket Brent on `[xmin, xmax]`.
+- `FindMinimum[f, {{x, x0}, {y, y0}, ...}]` -- n-D from a user start.
+- `FindMinimum[f, {x, y, ...}]` -- n-D auto-start at zero.
+- `FindMinimum[{f, cons}, vars]` -- constrained minimisation.
+- `FindMaximum[...]` -- same forms; maximises `f` (equivalent to negating
+  the objective and the f-value of the result).
+
+### Output
+
+`{f_min, {var1 -> v1, ..., varN -> vN}}` -- a 2-element list whose first
+element is the function value and whose second is the rule list for the
+optimising variable assignments.
+
+### Method dispatch
+
+| Spec                  | Default method |
+|-----------------------|----------------|
+| n = 1                 | Brent          |
+| n >= 2                | QuasiNewton (BFGS) |
+| `{x, x0, x1}` (1D)    | Brent (bracket) |
+
+Methods overridable via `Method -> "Brent" | "Newton" | "QuasiNewton"
+| "ConjugateGradient"`.  Brent is golden-section search with parabolic
+interpolation (derivative-free), QuasiNewton is BFGS with Armijo
+backtracking line search, ConjugateGradient is Polak-Ribière+ with
+restart, Newton uses the symbolic Hessian (via repeated `D[]`) with
+modified-Cholesky safeguarding.  Gradients default to a symbolic
+gradient (`D[f, x_i]` per variable) with a central-difference fallback;
+override via `Gradient -> {dfdx1, dfdx2, ...}`.
+
+### Constraints
+
+Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
+
+- `Less / LessEqual / Greater / GreaterEqual` between a bare iteration
+  variable and a numeric constant become **box constraints** (enforced
+  by per-step projection).
+- Other inequalities (`g(x) <= 0`) and equalities (`h(x) == 0`) feed a
+  **quadratic-penalty** wrapper around the inner solver.  The outer μ
+  schedule starts at 1 and multiplies by 10 each round until feasible
+  (max 8 rounds).
+- `Or[...]`, `Element[...]`, `x ∈ Integers` and the rest of the
+  Mathematica constraint surface are not yet implemented -- they emit
+  `FindMinimum::nimpl`.
+
+The penalty wrapper works best from a feasible starting point; for
+deeply infeasible starts it may stop at the boundary rather than the
+true interior minimum.
+
+### Options
+
+| Option              | Default        | Effect |
+|---------------------|----------------|--------|
+| `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, or `Automatic`. |
+| `WorkingPrecision`  | `MachinePrecision` | Accepted; the current iteration arithmetic is always machine-precision.  Symbolic constants (`Pi`, `E`) still numericalize at the requested precision before being consumed. |
+| `MaxIterations`     | `500`          | Iteration limit on the inner loop. |
+| `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |
+| `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `\|step\| < \|x\| * 10^{-n}`. |
+| `Gradient`          | `Automatic`    | Explicit `{dfdx1, ..., dfdxN}` overrides the symbolic gradient. |
+| `StepMonitor`       | `None`         | A held expression evaluated after each step. |
+| `EvaluationMonitor` | `None`         | A held expression evaluated each time `f` (or any partial) is evaluated. |
+
+### Diagnostics (stderr)
+
+| Tag                  | Triggered when |
+|----------------------|----------------|
+| `FindMinimum::argt`    | Wrong arg count. |
+| `FindMinimum::ivar`    | Malformed variable spec. |
+| `FindMinimum::vecvar`  | Vector-valued variable (deferred). |
+| `FindMinimum::badmeth` | Unknown `Method` value. |
+| `FindMinimum::badopt`  | Unknown option name or invalid value. |
+| `FindMinimum::nimpl`   | Method, constraint shape, or domain restriction not yet supported. |
+| `FindMinimum::nlnum`   | `f`, gradient, or constraint did not evaluate to a number. |
+| `FindMinimum::cvmit`   | Inner-loop `MaxIterations` exhausted. |
+| `FindMinimum::lstol`   | Line search could not find a sufficient decrease. |
+| `FindMinimum::dsing`   | Hessian non-positive-definite (Newton). |
+| `FindMinimum::infeas`  | Penalty outer loop could not satisfy all constraints. |
+
+### Examples
+
+```mathematica
+In[1]:= FindMinimum[(x - 3)^2 + 1, {x, 0}]
+Out[1]= {1.0, {x -> 3.0}}
+
+In[2]:= FindMinimum[x Cos[x], {x, 2}]
+Out[2]= {-3.28837, {x -> 3.42562}}
+
+In[3]:= FindMinimum[x Cos[x], {x, 7, 1, 15}]
+Out[3]= {-9.47729, {x -> 9.52933}}
+
+In[4]:= FindMinimum[Sin[x] Sin[2 y], {{x, 2}, {y, 2}}]
+Out[4]= {-1.0, {x -> 1.5708, y -> 2.35619}}
+
+In[5]:= FindMinimum[{x Cos[x], 1 <= x && x <= 15}, {x, 7}]
+Out[5]= {-9.47729, {x -> 9.52933}}
+
+(* Chained `lo <= x <= hi` parses as an Inequality[...] node; FindMinimum
+   walks its (value, op, value) triples and registers each as a box bound. *)
+In[5b]:= FindMaximum[{x Cos[x], 1 <= x <= 15}, {x, 7}]
+Out[5b]= {6.36096, {x -> 6.4373}}
+
+In[6]:= FindMinimum[(1-x)^2 + 100 (y-x^2)^2, {{x, 0}, {y, 0}}]
+Out[6]= {0.0, {x -> 1.0, y -> 1.0}}
+
+In[7]:= FindMaximum[Cos[x], {x, 0}]
+Out[7]= {1.0, {x -> 0.0}}
+
+In[8]:= FindMinimum[(x - 3)^2, {x, 0}, Method -> "ConjugateGradient"]
+Out[8]= {0.0, {x -> 3.0}}
+```

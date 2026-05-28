@@ -36,6 +36,26 @@ void info_init(void) {
         "Returns unevaluated when gcd(k, n) is not 1, when no power of k lands in the residue set, "
         "or when n is zero.  All arithmetic is exact via GMP, so k and n may be arbitrary-precision "
         "integers.");
+    symtab_set_docstring("FindMinimum",
+        "FindMinimum[f, {x, x0}]\n"
+        "\tsearches for a local minimum of f starting from x = x0.\n"
+        "FindMinimum[f, {x, x0, x1}]\n"
+        "\tbrackets a 1D minimum between x0 and x1 (derivative-free Brent).\n"
+        "FindMinimum[f, {x, xstart, xmin, xmax}]\n"
+        "\tbracketed 1D search on [xmin, xmax].\n"
+        "FindMinimum[f, {{x, x0}, {y, y0}, ...}]\n"
+        "\tn-D local minimum from a user-supplied start.\n"
+        "FindMinimum[{f, cons}, vars]\n"
+        "\tlocal minimum subject to box and inequality constraints.\n\n"
+        "Methods: Brent (1D default), QuasiNewton/BFGS (n-D default), "
+        "ConjugateGradient, Newton.  Options: Method, WorkingPrecision, "
+        "MaxIterations, AccuracyGoal, PrecisionGoal, Gradient, StepMonitor, "
+        "EvaluationMonitor.  FindMinimum has HoldAll and effectively uses "
+        "Block to localize variables.  Returns {fmin, {x -> xmin, ...}}.");
+    symtab_set_docstring("FindMaximum",
+        "FindMaximum[f, vars]\n"
+        "\tsearches for a local maximum of f.  Equivalent to FindMinimum[-f, vars] "
+        "with the f-value of the returned pair negated.  Same options and forms.");
     symtab_set_docstring("FindRoot",
         "FindRoot[f, {x, x0}]\n"
         "\tsearches for a numerical root of f starting from x = x0.\n"
@@ -1678,6 +1698,11 @@ void info_init(void) {
     symtab_set_docstring("Greater", "x > y yields True if x is strictly greater than y.");
     symtab_set_docstring("LessEqual", "x <= y yields True if x is less than or equal to y.");
     symtab_set_docstring("GreaterEqual", "x >= y yields True if x is greater than or equal to y.");
+    symtab_set_docstring("Inequality",
+        "Inequality[v0, op0, v1, op1, v2, ...] is the canonical form for a "
+        "chained comparison such as a < b <= c. It returns True if every "
+        "adjacent pair holds, False if any pair fails, and otherwise the "
+        "residual chain with decidable pairs dropped.");
 
     symtab_set_docstring("IntegerDigits",
         "IntegerDigits[n] gives a list of the decimal digits in the integer n.\n"

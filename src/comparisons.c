@@ -6,6 +6,8 @@
 
 #include "comparisons.h"
 #include "symtab.h"
+#include "sym_names.h"
+#include "attr.h"
 #include "expr.h"
 #include "arithmetic.h"
 #include "eval.h"
@@ -313,6 +315,127 @@ Expr* builtin_greaterequal(Expr* res) {
     return evaluate_inequality(res, 1, 0);
 }
 
+/* Map an operator-symbol head (Less/LessEqual/Greater/GreaterEqual/Equal)
+ * to a pairwise decision. Returns:
+ *    1  if `a OP b` is definitely True,
+ *    0  if it is definitely False,
+ *   -1  if the comparison is not decidable (operand non-numeric or the
+ *       op is not a recognised chain head).
+ * Equal/Unequal share a small fast path so that, e.g., x == x is True
+ * even when x has no numeric value. */
+static int decide_pair(const char* op, Expr* a, Expr* b) {
+    if (op == SYM_Equal) {
+        if (expr_eq(a, b)) return 1;
+        bool can; int cmp = compare_numeric(a, b, &can);
+        if (!can) return -1;
+        return cmp == 0 ? 1 : 0;
+    }
+    if (op == SYM_Less || op == SYM_LessEqual
+     || op == SYM_Greater || op == SYM_GreaterEqual) {
+        bool can; int cmp = compare_numeric(a, b, &can);
+        if (!can) return -1;
+        if (op == SYM_Less)         return cmp <  0 ? 1 : 0;
+        if (op == SYM_LessEqual)    return cmp <= 0 ? 1 : 0;
+        if (op == SYM_Greater)      return cmp >  0 ? 1 : 0;
+        /* GreaterEqual */          return cmp >= 0 ? 1 : 0;
+    }
+    return -1;
+}
+
+/* Inequality[v0, op0, v1, op1, v2, ...]: Mathematica's variadic chained
+ * comparison head, produced by the parser for `a < b <= c == d > e` and
+ * similar chains. Semantics:
+ *   - True iff every adjacent pair `v_i op_i v_{i+1}` is True.
+ *   - False if any adjacent pair is decidably False.
+ *   - Otherwise, drop pairs that we can prove True, and either collapse
+ *     to a single binary head (when one pair remains) or rebuild a
+ *     smaller Inequality with the surviving pairs.
+ *
+ * The argument layout is strict: 2n+1 args, even slots are values, odd
+ * slots are bare operator symbols. Anything else returns NULL so the
+ * caller's input is preserved unevaluated. */
+Expr* builtin_inequality(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    if (n == 0) return expr_new_symbol("True");
+    if (n == 1) return expr_new_symbol("True");  /* one value, no pair */
+    if ((n & 1u) == 0) return NULL;              /* must be 2k+1 */
+
+    /* Validate operator slots upfront — every odd index must be one of the
+     * five chain heads. */
+    for (size_t i = 1; i < n; i += 2) {
+        Expr* op = res->data.function.args[i];
+        if (op->type != EXPR_SYMBOL) return NULL;
+        const char* s = op->data.symbol;
+        if (s != SYM_Less && s != SYM_LessEqual
+         && s != SYM_Greater && s != SYM_GreaterEqual
+         && s != SYM_Equal) return NULL;
+    }
+
+    /* Decide each pair; any False short-circuits the whole chain. We also
+     * remember which pairs were "undecided" so we can rebuild a residual
+     * Inequality if needed. */
+    size_t npairs = (n - 1) / 2;
+    bool* undecided = (bool*)calloc(npairs, sizeof(bool));
+    if (!undecided) return NULL;
+    bool any_undecided = false;
+    for (size_t k = 0; k < npairs; k++) {
+        Expr* a  = res->data.function.args[2*k];
+        Expr* op = res->data.function.args[2*k + 1];
+        Expr* b  = res->data.function.args[2*k + 2];
+        int d = decide_pair(op->data.symbol, a, b);
+        if (d == 0) {                    /* definitely False */
+            free(undecided);
+            return expr_new_symbol("False");
+        }
+        if (d < 0) {
+            undecided[k] = true;
+            any_undecided = true;
+        }
+    }
+    if (!any_undecided) {
+        free(undecided);
+        return expr_new_symbol("True");
+    }
+
+    /* Build a residual Inequality from the undecided pairs. Each surviving
+     * pair contributes (lhs, op, rhs). When the previous emitted RHS is
+     * structurally equal to the next pair's LHS (the common case when
+     * undecided pairs are adjacent, but also when a dropped pair was
+     * `b == b`), we omit the duplicate value so the chain stays well-
+     * formed (2n+1 args). */
+    size_t cap = 2 * npairs + 1;
+    Expr** out_args = (Expr**)malloc(sizeof(Expr*) * cap);
+    if (!out_args) { free(undecided); return NULL; }
+    size_t out_n = 0;
+    Expr* last_emitted_val = NULL;
+    for (size_t k = 0; k < npairs; k++) {
+        if (!undecided[k]) continue;
+        Expr* a  = res->data.function.args[2*k];
+        Expr* op = res->data.function.args[2*k + 1];
+        Expr* b  = res->data.function.args[2*k + 2];
+        if (!last_emitted_val || !expr_eq(last_emitted_val, a)) {
+            out_args[out_n++] = expr_copy(a);
+        }
+        out_args[out_n++] = expr_copy(op);
+        out_args[out_n++] = expr_copy(b);
+        last_emitted_val = b;
+    }
+    free(undecided);
+
+    if (out_n == 3) {
+        /* Exactly one undecided pair survived — return it as the binary
+         * comparison so downstream consumers see the familiar shape. */
+        Expr* binary_args[2] = { out_args[0], out_args[2] };
+        const char* head_sym = out_args[1]->data.symbol;
+        expr_free(out_args[1]);
+        Expr* result = expr_new_function(expr_new_symbol(head_sym), binary_args, 2);
+        free(out_args);
+        return result;
+    }
+    return expr_new_function(expr_new_symbol("Inequality"), out_args, out_n);
+}
+
 /*
  * comparisons_init: Registers comparison-related builtins in the symbol table.
  */
@@ -325,4 +448,6 @@ void comparisons_init(void) {
     symtab_add_builtin("Greater", builtin_greater);
     symtab_add_builtin("LessEqual", builtin_lessequal);
     symtab_add_builtin("GreaterEqual", builtin_greaterequal);
+    symtab_add_builtin("Inequality", builtin_inequality);
+    set_attributes("Inequality", ATTR_PROTECTED);
 }

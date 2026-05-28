@@ -480,6 +480,8 @@ void core_init(void) {
     expand_init();
     solve_init();
     findroot_init();
+    void findmin_init(void);
+    findmin_init();
     info_init();
     datetime_init();
     linalg_init();

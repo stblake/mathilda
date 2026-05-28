@@ -159,10 +159,11 @@ static void test_equal_distribution(void) {
     /* Both sides depend on x. */
     check("D[Sin[x] == Cos[x], x]",
           "Equal[Cos[x], Times[-1, Sin[x]]]");
-    /* Nested Equal distributes through both layers. (Mathilda parses
-     * a == b == c left-associatively as Equal[Equal[a, b], c].) */
+    /* Chained Equal: parser produces a single Inequality node, and D
+     * distributes through each value slot, leaving the Equal operator
+     * symbols verbatim. */
     check("D[Sin[x] == Cos[x] == Tan[x], x]",
-          "Equal[Equal[Cos[x], Times[-1, Sin[x]]], Power[Sec[x], 2]]");
+          "Inequality[Cos[x], Equal, Times[-1, Sin[x]], Equal, Power[Sec[x], 2]]");
 }
 
 /* --- NonConstants option ------------------------------------------------ */

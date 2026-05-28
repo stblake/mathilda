@@ -41,6 +41,34 @@ static bool extend_flat_head(Expr* left, const char* head_name, Expr* right) {
     return true;
 }
 
+/* Heads that participate in Mathematica-style chained comparisons. WL
+ * collapses `a < b <= c == d > e` into one Inequality[...] node; Unequal
+ * (`!=`) is intentionally excluded — its WL semantics ("all distinct")
+ * differ from a pairwise chain. */
+static bool is_chain_compare_head(const char* head_name) {
+    return strcmp(head_name, "Less") == 0
+        || strcmp(head_name, "LessEqual") == 0
+        || strcmp(head_name, "Greater") == 0
+        || strcmp(head_name, "GreaterEqual") == 0
+        || strcmp(head_name, "Equal") == 0;
+}
+
+/* Extend an existing Inequality[v0, op0, v1, op1, ..., vk] in place by
+ * appending the operator symbol new_op_name and the new value new_val.
+ * Mirrors the structure of extend_flat_head but for Inequality. */
+static bool extend_inequality(Expr* ineq, const char* new_op_name, Expr* new_val) {
+    if (!head_is(ineq, intern_symbol("Inequality"))) return false;
+    size_t old_count = ineq->data.function.arg_count;
+    Expr** new_args = realloc(ineq->data.function.args,
+                              sizeof(Expr*) * (old_count + 2));
+    if (!new_args) return false;
+    new_args[old_count]     = expr_new_symbol(new_op_name);
+    new_args[old_count + 1] = new_val;
+    ineq->data.function.args = new_args;
+    ineq->data.function.arg_count = old_count + 2;
+    return true;
+}
+
 /* ------------------- Basic Token Parsers ------------------- */
 
 // Skips whitespace and comments
@@ -1254,9 +1282,49 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 left = expr_new_function(expr_new_symbol("Optional"), args, 2);
             }
         } else {
+            /* Chained comparisons. `a < b <= c == d > e` is left-associated
+             * by the parser, but Mathematica's intended shape is a single
+             * variadic Inequality[a, Less, b, LessEqual, c, Equal, d,
+             * Greater, e]. We rewrite at construction time:
+             *
+             *   - If `left` is already an Inequality node and op is a
+             *     chainable comparison, append (op, right).
+             *   - If `left` is a binary chainable comparison OP_inner[a, b]
+             *     and op is also chainable, fold both into a fresh
+             *     Inequality[a, OP_inner, b, op, right] and discard the
+             *     intermediate node.
+             *
+             * Unequal is left out — `a != b != c` means "all distinct" in
+             * WL, not a pairwise chain. */
+            if (op_def.head_name
+                && is_chain_compare_head(op_def.head_name)
+                && extend_inequality(left, op_def.head_name, right)) {
+                /* left was extended in place */
+            } else if (op_def.head_name
+                       && is_chain_compare_head(op_def.head_name)
+                       && left->type == EXPR_FUNCTION
+                       && left->data.function.head->type == EXPR_SYMBOL
+                       && left->data.function.arg_count == 2
+                       && is_chain_compare_head(left->data.function.head->data.symbol)) {
+                const char* inner_head = left->data.function.head->data.symbol;
+                Expr* a = left->data.function.args[0];
+                Expr* b = left->data.function.args[1];
+                /* Steal a and b out of `left`, then free the now-empty shell. */
+                left->data.function.args[0] = NULL;
+                left->data.function.args[1] = NULL;
+                expr_free(left);
+                Expr* args[5] = {
+                    a,
+                    expr_new_symbol(inner_head),
+                    b,
+                    expr_new_symbol(op_def.head_name),
+                    right
+                };
+                left = expr_new_function(expr_new_symbol("Inequality"), args, 5);
+            }
             /* Flatten repeated Plus/Times at parse time so that held
              * expressions reflect the n-ary form (a+b+c -> Plus[a,b,c]). */
-            if (op_def.head_name &&
+            else if (op_def.head_name &&
                 (strcmp(op_def.head_name, "Plus") == 0 ||
                  strcmp(op_def.head_name, "Times") == 0) &&
                 extend_flat_head(left, op_def.head_name, right)) {

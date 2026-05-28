@@ -103,6 +103,7 @@ static bool ft_is_threading_head(const char* head) {
            strcmp(head, "Equal") == 0 || strcmp(head, "Unequal") == 0 ||
            strcmp(head, "Less") == 0 || strcmp(head, "LessEqual") == 0 ||
            strcmp(head, "Greater") == 0 || strcmp(head, "GreaterEqual") == 0 ||
+           strcmp(head, "Inequality") == 0 ||
            strcmp(head, "And") == 0 || strcmp(head, "Or") == 0 ||
            strcmp(head, "Not") == 0 || strcmp(head, "Xor") == 0;
 }
@@ -219,9 +220,15 @@ static void ft_extract_vars(Expr* var_arg, Expr*** S_out, size_t* S_count_out) {
 /* logic heads (List, Equal, Less, And, ...). `fname` chooses which of  */
 /* the two functions to recurse with.                                   */
 static Expr* ft_thread(Expr* compound, Expr* var_arg, const char* fname) {
+    bool is_ineq = (compound->data.function.head->type == EXPR_SYMBOL
+                    && strcmp(compound->data.function.head->data.symbol, "Inequality") == 0);
     size_t n = compound->data.function.arg_count;
     Expr** new_args = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
+        if (is_ineq && (i & 1u) == 1) {
+            new_args[i] = expr_copy(compound->data.function.args[i]);
+            continue;
+        }
         size_t call_argc = (var_arg ? 2 : 1);
         Expr** call_args = malloc(sizeof(Expr*) * call_argc);
         call_args[0] = expr_copy(compound->data.function.args[i]);
