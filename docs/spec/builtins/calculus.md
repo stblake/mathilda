@@ -618,7 +618,10 @@ objective value before returning.
 - `FindMinimum[f, {x, x0, x1}]` -- bracket Brent on `[x0, x1]`.
 - `FindMinimum[f, {x, xstart, xmin, xmax}]` -- bracket Brent on `[xmin, xmax]`.
 - `FindMinimum[f, {{x, x0}, {y, y0}, ...}]` -- n-D from a user start.
-- `FindMinimum[f, {x, y, ...}]` -- n-D auto-start at zero.
+- `FindMinimum[f, {x, y, ...}]` -- n-D auto-start at 1 for each variable
+  (matches Mathematica; avoids the common saddle-at-origin trap for
+  oscillatory objectives like `Sin[x] Sin[2 y]` whose gradient vanishes
+  at the origin).
 - `FindMinimum[{f, cons}, vars]` -- constrained minimisation.
 - `FindMaximum[...]` -- same forms; maximises `f` (equivalent to negating
   the objective and the f-value of the result).

@@ -13,7 +13,7 @@
  *   FindMinimum[f,           {x, x0, x1}]              1D, two-start bracket
  *   FindMinimum[f,           {x, xstart, xmin, xmax}]  1D, bracket
  *   FindMinimum[f,           {{x, x0}, {y, y0}, ...}]  n-D, QuasiNewton default
- *   FindMinimum[f,           {x, y, ...}]              n-D, auto start = 0
+ *   FindMinimum[f,           {x, y, ...}]              n-D, auto start = 1
  *   FindMinimum[{f, cons},   vars]                     constrained
  *
  * Options (Rule[...] in trailing position, any order):
@@ -86,10 +86,10 @@ typedef enum {
 
 typedef enum {
     FM_SPEC_BAD = 0,
-    FM_SPEC_VAR_ONLY,   /* {x}                       -> x0 = 0           */
-    FM_SPEC_SINGLE,     /* {x, x0}                                       */
-    FM_SPEC_TWO_START,  /* {x, x0, x1}               -> derivative free  */
-    FM_SPEC_BRACKET     /* {x, xstart, xmin, xmax}                       */
+    FM_SPEC_VAR_ONLY,   /* {x}                       -> x0 = 1 (MMA-default) */
+    FM_SPEC_SINGLE,     /* {x, x0}                                           */
+    FM_SPEC_TWO_START,  /* {x, x0, x1}               -> derivative free      */
+    FM_SPEC_BRACKET     /* {x, xstart, xmin, xmax}                           */
 } FmSpecKind;
 
 typedef struct {
@@ -1058,9 +1058,14 @@ static FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
     *x0_out = *x1_out = *xmin_out = *xmax_out = NULL;
     if (!spec) return FM_SPEC_BAD;
     if (spec->type == EXPR_SYMBOL) {
-        /* Bare variable, e.g. FindMinimum[f, {x, y, ...}] entry. */
+        /* Bare variable, e.g. FindMinimum[f, {x, y, ...}] entry.
+         * Default x0 = 1.0 to match Mathematica and to avoid the common
+         * pitfall of starting at the saddle/critical point of oscillatory
+         * functions (Sin[x] Sin[2y], Cos[...]+Sin[...] etc. all have a
+         * vanishing gradient at the origin, which trivially "converges"
+         * the inner solver). */
         *var_out = spec;
-        *x0_out = expr_new_real(0.0);
+        *x0_out = expr_new_real(1.0);
         return FM_SPEC_VAR_ONLY;
     }
     if (spec->type != EXPR_FUNCTION) return FM_SPEC_BAD;
@@ -1075,7 +1080,8 @@ static FmSpecKind fm_parse_var_spec(Expr* spec, Expr** var_out,
     *var_out = var;
 
     if (n == 1) {
-        *x0_out = expr_new_real(0.0);
+        /* {x} with no initial value: same default as bare-symbol form. */
+        *x0_out = expr_new_real(1.0);
         return FM_SPEC_VAR_ONLY;
     }
     Expr* x0_raw = spec->data.function.args[1];
@@ -2254,13 +2260,32 @@ static bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
                            const FmBox* boxes,
                            const FmOpts* opts,
                            double* fx_out) {
-    /* Outer μ schedule: 1 → 10 → ... up to 10^8 or until feasible.
-     * Starting small keeps the augmented-objective gradient manageable
-     * for infeasible starts. */
+    /* Outer μ schedule: 1 → 10 → ... up to 10^8.
+     *
+     * The classical penalty-method convergence theorem requires μ → ∞:
+     * for problems with an active constraint at the optimum, the unaugmented
+     * gradient is non-zero on the constraint surface, so the augmented
+     * minimizer sits a 1/μ-sized step inside the infeasible region. Stopping
+     * as soon as the iterate becomes feasible (the previous behaviour) can
+     * therefore terminate well before the constrained optimum — e.g. with
+     *
+     *   FindMinimum[{x + y, 3 x + 2 y >= 7 && x >= 0 && y >= 0}, {x, y}]
+     *
+     * the BFGS inner solver lands at (x ≈ 2.45, 0) once it becomes feasible,
+     * while the true minimum is (7/3, 0). Continuing to ramp μ pulls the
+     * iterate down the active boundary to the corner.
+     *
+     * Termination: stop once both (a) the iterate is feasible and (b)
+     * inter-round movement is small (i.e. the augmented minimum has
+     * stabilised), or the schedule is exhausted. */
     double mu = 1.0;
     double fx = 0.0;
     bool feas = false;
+    double* x_prev = (double*)malloc(sizeof(double) * n);
+    if (!x_prev) return false;
+    const double rel_tol = pow(10.0, -opts->prec_goal_digits);
     for (int round = 0; round < 9; round++) {
+        for (size_t i = 0; i < n; i++) x_prev[i] = x[i];
         bool ok;
         switch (method) {
             case FM_METHOD_QUASINEWTON:
@@ -2275,12 +2300,26 @@ static bool fm_run_penalty(Expr* f, Expr** vars, size_t n,
             default:
                 ok = fm_run_bfgs(f, vars, n, binds, g_exprs, x, gens, ngens, mu, boxes, opts, &fx);
         }
-        if (!ok) return false;
+        if (!ok) { free(x_prev); return false; }
         double pen;
-        if (!fm_eval_penalty(gens, ngens, binds, x, n, opts, &pen)) return false;
-        if (pen < 1e-12) { feas = true; break; }
+        if (!fm_eval_penalty(gens, ngens, binds, x, n, opts, &pen)) {
+            free(x_prev); return false;
+        }
+        if (pen < 1e-12) feas = true;
+        if (feas) {
+            /* Stop only if the iterate has stabilised between rounds. */
+            double max_step = 0.0, max_x = 0.0;
+            for (size_t i = 0; i < n; i++) {
+                double ds = fabs(x[i] - x_prev[i]);
+                if (ds > max_step) max_step = ds;
+                double xa = fabs(x[i]);
+                if (xa > max_x) max_x = xa;
+            }
+            if (max_step < rel_tol * (max_x + 1.0)) break;
+        }
         mu *= 10.0;
     }
+    free(x_prev);
     if (!feas) {
         fm_warn(g_fm_name, "infeas", "could not satisfy constraints to tolerance");
     }

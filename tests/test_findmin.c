@@ -141,8 +141,33 @@ static void test_min_3d(void) {
 }
 
 static void test_min_auto_start_multivar(void) {
-    /* {x, y} auto-start at 0. */
+    /* {x, y} auto-start at 1 (MMA-compatible default). x^2 + y^2 has
+     * unique minimum at the origin regardless of start; verify the
+     * solver lands there. */
     check_true("First[FindMinimum[x^2 + y^2, {x, y}]] < 1.*^-6");
+}
+
+static void test_min_auto_start_avoids_origin_saddle(void) {
+    /* Sin[x] Sin[2 y] has a saddle at the origin where ∇f = 0, so the
+     * old auto-start of {0, 0} declared trivial convergence at f = 0.
+     * The MMA-compatible default of {1, 1} keeps the gradient non-zero
+     * and lets the solver descend to a local minimum with f = -1. */
+    check_true("Abs[First[FindMinimum[Sin[x] Sin[2 y], {x, y}]] - (-1.0)] < 1.*^-4");
+    check_true("Abs[First[FindMinimum[Cos[x^2 - 3 y] + Sin[x^2 + y^2], "
+               "{x, y}, Method -> \"Newton\"]] - (-2.0)] < 1.*^-4");
+}
+
+static void test_penalty_schedule_active_constraint(void) {
+    /* Linear program: min x + y s.t. 3x + 2y >= 7, x >= 0, y >= 0.
+     * Optimum at the corner (7/3, 0) with f = 7/3 ≈ 2.3333.
+     *
+     * The previous penalty driver bailed out of the μ-schedule on the
+     * first feasible iterate, which for this problem could be ~2.45.
+     * Continuing the ramp until the iterate stabilises drives the
+     * solution onto the active boundary. */
+    check_true("With[{r = FindMinimum[{x + y, "
+               "3 x + 2 y >= 7 && x >= 0 && y >= 0}, {x, y}]}, "
+               "Abs[First[r] - 7/3] < 1.*^-3]");
 }
 
 /* ------------------------------------------------------------------ */
@@ -477,6 +502,7 @@ int main(void) {
     TEST(test_min_2d_sin_sin);
     TEST(test_min_3d);
     TEST(test_min_auto_start_multivar);
+    TEST(test_min_auto_start_avoids_origin_saddle);
 
     /* 4. Methods */
     TEST(test_method_brent_explicit);
@@ -498,6 +524,7 @@ int main(void) {
     TEST(test_penalty_equality_constraint);
     TEST(test_penalty_projection_to_disk);
     TEST(test_penalty_constrained_max_xy);
+    TEST(test_penalty_schedule_active_constraint);
 
     /* 7. FindMaximum */
     TEST(test_max_cos);
