@@ -1461,7 +1461,15 @@ Attempts to solve an equation or system of equations for one or more variables.
 - `HoldAll`, `Protected`.
 - Acts as a router that classifies its input and dispatches to a specialist:
   - Single equality, single variable -> `Solve`SolvePolynomialEquality` (below).
-  - Single equality, single variable, polynomial specialist declines (because
+  - Single equality, single variable, polynomial specialist declines because
+    the outermost dependence on `var` is an elementary invertible head ->
+    inverse-function specialist (`src/solveinv.c`): peels `Log`, `Exp`,
+    `Sin`/`Cos`/`Tan`/`Cot`/`Sec`/`Csc`, the hyperbolic counterparts, the
+    inverse trig/hyperbolic forms, and `Power[g, n]` for integer `n >= 2`.
+    Multi-branch heads introduce a fresh integer parameter `C[k]` and wrap
+    each solution in `ConditionalExpression[..., Element[C[k], Integers]]`.
+    Emits `Solve::ifun` on first use per call.
+  - Single equality, single variable, both specialists above decline (because
     the equation carries `Sqrt[...]` / `x^(p/q)` / nested radicals) ->
     `Solve`SolveRadicalsEquality` (also below).
   - Multi-variable list, or `And`/`List` of equations -> `Solve`SolveLinearSystem`
@@ -1470,8 +1478,11 @@ Attempts to solve an equation or system of equations for one or more variables.
     `lhs_i == rhs_i` to `lhs_i - rhs_i` and refuses (returns `NULL`) when the
     system is not affine in the variables, in which case the router leaves
     `Solve` unevaluated.
-- Inequalities and transcendental systems are reserved for future work and
-  currently leave `Solve[...]` unevaluated.
+- Inequalities and multi-equation transcendental systems are reserved for
+  future work and currently leave `Solve[...]` unevaluated.  When the
+  inverse-function specialist's outermost peel succeeds but the inner
+  equation is unsolvable and the peel was over `var` itself, Solve returns
+  `{{var -> InverseFunction[head][rhs]}}` under `Solve::ifun`.
 - **Approximate-number input**: if the equation contains any inexact numeric
   leaf (`Real` / MPFR), it is force-rationalised via the shared preprocessor
   in `src/common.c` before dispatch (so `1.5` becomes `3/2`, `N[Pi]` becomes
@@ -1543,8 +1554,12 @@ Attempts to solve an equation or system of equations for one or more variables.
   `Cubics -> True` switches to closed-form Cardano radicals.
 - `Quartics -> False`: Emit quartic roots as held `Root[]` objects (default).
   Reserved: Ferrari closed form is deferred.
-- `GeneratedParameters -> C`: Reserved.  Reserved name for newly introduced
-  parameters in a future parametric-solution path.
+- `InverseFunctions -> Automatic`: Enables the inverse-function specialist
+  (default).  Set to `False` to disable the specialist; equations that can
+  only be solved through inversion then return unevaluated.
+- `GeneratedParameters -> C`: Head used by the inverse-function specialist
+  when minting fresh integer-parameter symbols `C[1], C[2], ...`.  Only the
+  bare-symbol form is honoured; the `Function` form is reserved.
 - `VerifySolutions -> Automatic`: Reserved.
 
 ```mathematica
@@ -1682,6 +1697,53 @@ its context-qualified name when the caller has already classified its input.
 - Same algorithm and output shape as `Solve` for single polynomial equalities
   in one variable.  Does not parse options; the caller supplies them through
   the C-level entry point.
+
+## Solve`SolveInverseFunctions
+The inverse-function specialist invoked by `Solve` when the outermost
+dependence on `var` is an elementary invertible head.  Reachable directly
+via its context-qualified name when the caller has already classified its
+input.
+- `Solve`SolveInverseFunctions[lhs == rhs, var]`
+- `Solve`SolveInverseFunctions[lhs == rhs, var, dom]`
+
+**Features**:
+- `Protected`.
+- Recognised heads: `Log`, `Exp`, `Sin`, `Cos`, `Tan`, `Cot`, `Sec`, `Csc`,
+  the hyperbolic counterparts (`Sinh`, `Cosh`, `Tanh`, `Coth`, `Sech`,
+  `Csch`), their inverses (`ArcSin`, `ArcCos`, ..., `ArcCsch`), and
+  `Power[g, n]` for integer `n >= 2`.  Also recognises `Power[E, g(x)]`
+  as the canonical form of `Exp[g(x)]`.
+- Additive-shift isolation pre-pass: equations of the form
+  `c * head[g(x)] + free_of_var == 0` are reduced to
+  `head[g(x)] == new_rhs` before head dispatch.
+- Multi-branch heads introduce a fresh integer parameter `C[k]` (head
+  controlled by the parent `Solve`'s `GeneratedParameters` option) and
+  wrap each branch in `ConditionalExpression[..., Element[C[k], Integers]]`.
+- Inverse heads (`ArcSin`, `ArcCos`, `ArcTan`) use a vertical-strip
+  predicate on `Re[a]`/`Im[a]` matching Mathematica's principal-branch
+  domain.
+- Inner equations are solved by hand-off to
+  `Solve`SolvePolynomialEquality` -> `Solve`SolveInverseFunctions`
+  (depth-capped at 8) -> `Solve`SolveRadicalsEquality`.  The recursion
+  bypasses `Solve` itself, so the parent's inexact-rationalisation pre-
+  pass runs only once.
+- Emits `Solve::ifun` to stderr on first multi-branch peel per call and
+  on the `InverseFunction[head][rhs]` fallback.
+- Does not parse options; the caller supplies them through the C-level
+  entry point `solveinv_solve_inverse_equality`.  When called via the
+  qualified builtin, defaults `InverseFunctions -> True` and
+  `GeneratedParameters -> C` are used.
+
+```mathematica
+In[1]:= Solve`SolveInverseFunctions[Sin[x] == a, x]
+Out[1]= {{x -> ConditionalExpression[Pi - ArcSin[a] + 2 Pi C[1],
+                                     Element[C[1], Integers]]},
+         {x -> ConditionalExpression[ArcSin[a] + 2 Pi C[1],
+                                     Element[C[1], Integers]]}}
+
+In[2]:= Solve`SolveInverseFunctions[Log[x^2 + 1] + 1 == 0, x]
+Out[2]= {{x -> -I Sqrt[1 - 1/E]}, {x -> I Sqrt[1 - 1/E]}}
+```
 
 ## Solve`SolveRadicalsEquality
 The radicals-equation specialist invoked by `Solve` when the polynomial

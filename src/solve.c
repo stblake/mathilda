@@ -26,9 +26,11 @@
 #include "common.h"
 #include "eval.h"
 #include "expr.h"
+#include "solveinv.h"
 #include "solvelinsys.h"
 #include "solvepoly.h"
 #include "solverad.h"
+#include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -38,6 +40,7 @@
 
 typedef struct {
     SolvePolyOpts poly;
+    SolveInvOpts  inv;
     Expr* dom;             /* borrowed; default = NULL ( = Complexes) */
 } SolveOpts;
 
@@ -71,6 +74,11 @@ static bool is_true(const Expr* e) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_True;
 }
 
+/* True iff `e` is the symbol False. */
+static bool is_false(const Expr* e) {
+    return e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_False;
+}
+
 /* Apply a single option rule to `opts`.  Unknown values do not abort
  * (they are silently ignored for now) -- only unknown option *names*
  * are rejected, by is_known_option_name. */
@@ -80,9 +88,22 @@ static void apply_option(const Expr* rule, SolveOpts* opts) {
     const char* name = lhs->data.symbol;
     if (name == SYM_Cubics)   { opts->poly.cubics_radical = is_true(rhs); return; }
     if (name == SYM_Quartics) { opts->poly.quartics_radical = is_true(rhs); return; }
-    /* GeneratedParameters / VerifySolutions / Assumptions /
-     * InverseFunctions / Method / Modulus: parsed but not yet wired
-     * into the polynomial specialist. */
+    if (name == SYM_InverseFunctions) {
+        /* InverseFunctions -> False disables the specialist; any other
+         * value (True / Automatic / unrecognised) leaves the default
+         * `enabled = true` in place. */
+        if (is_false(rhs)) opts->inv.enabled = false;
+        return;
+    }
+    if (name == SYM_GeneratedParameters) {
+        /* Bare symbol form only -- the Function form is reserved. */
+        if (rhs && rhs->type == EXPR_SYMBOL) {
+            opts->inv.param_head = rhs->data.symbol;
+        }
+        return;
+    }
+    /* VerifySolutions / Assumptions / Method / Modulus: parsed but
+     * not yet wired into the polynomial specialist. */
 }
 
 /* Warn once per distinct unevaluated form about an unrecognised
@@ -196,7 +217,11 @@ Expr* builtin_solve(Expr* res) {
     }
 
     /* Parse options. */
-    SolveOpts opts = {{ false, false }, NULL};
+    SolveOpts opts = {
+        { false, false },                /* poly: cubics, quartics */
+        { true, intern_symbol("C") },    /* inv: enabled, param_head */
+        NULL
+    };
     for (size_t i = pos_end; i < argc; i++) {
         Expr* a = res->data.function.args[i];
         if (is_option_arg(a)) apply_option(a, &opts);
@@ -287,8 +312,15 @@ Expr* builtin_solve(Expr* res) {
             out = solvepoly_solve_polynomial_equality(expr, var, dom, &opts.poly);
             /* Polynomial specialist returns NULL when the equation is
              * not a polynomial in `var` -- typically because it carries
-             * radical subterms (Sqrt, x^(p/q), nested radicals).  Hand
-             * off to the radicals specialist before giving up. */
+             * a transcendental head over var (Sin, Log, ...) or radical
+             * subterms (Sqrt, x^(p/q), nested radicals).  Try the
+             * inverse-function specialist first (cheap if no peelable
+             * head is present), then the radicals specialist. */
+            if (!out && opts.inv.enabled
+                && solveinv_looks_invertible(expr, var)) {
+                out = solveinv_solve_inverse_equality(
+                    expr, var, dom, &opts.inv);
+            }
             if (!out) {
                 out = solverad_solve_radicals_equality(expr, var, dom);
             }
@@ -331,14 +363,21 @@ void solve_init(void) {
         "\tand held Root[] objects are dropped).\n"
         "\n"
         "Options:\n"
-        "    Cubics              -> False  (radical form for cubics)\n"
-        "    Quartics            -> False  (radical form for quartics)\n"
-        "    GeneratedParameters -> C       (reserved)\n"
+        "    Cubics              -> False     (radical form for cubics)\n"
+        "    Quartics            -> False     (radical form for quartics)\n"
+        "    InverseFunctions    -> Automatic (use inverse-function peel)\n"
+        "    GeneratedParameters -> C         (head for parameters C[k])\n"
         "    VerifySolutions     -> Automatic (reserved)\n"
         "\n"
-        "Initial implementation handles single polynomial equalities in\n"
-        "one variable; the polynomial specialist is also directly\n"
-        "callable as Solve`SolvePolynomialEquality.");
+        "Solves single polynomial equalities, radical equations, linear\n"
+        "systems, and -- via the inverse-function specialist -- single-\n"
+        "variable equations whose outermost dependence is an elementary\n"
+        "invertible head (Log, Exp, Sin/Cos/Tan/Cot/Sec/Csc, their\n"
+        "hyperbolic counterparts, the inverse trig/hyperbolic forms,\n"
+        "and Power[g, n] for integer n >= 2).  Multi-branch heads\n"
+        "introduce an integer parameter C[k] wrapped in\n"
+        "ConditionalExpression[..., Element[C[k], Integers]].  Emits\n"
+        "Solve::ifun the first time inverse functions are used.");
 
     symtab_set_docstring("Cubics",
         "Cubics is an option for Solve that controls whether cubic\n"
@@ -351,9 +390,18 @@ void solve_init(void) {
         "\t(Quartics -> True) or returned as held Root[] objects\n"
         "\t(default Quartics -> False).");
     symtab_set_docstring("GeneratedParameters",
-        "GeneratedParameters is an option for Solve specifying how\n"
-        "\tnewly introduced parameters should be named.  Default: C.\n"
-        "\tReserved -- not yet wired into the polynomial specialist.");
+        "GeneratedParameters is an option for Solve specifying the\n"
+        "\thead used for fresh integer-parameter symbols introduced by\n"
+        "\tthe inverse-function specialist.  Default: C, giving\n"
+        "\tC[1], C[2], ...  Only the bare-symbol form is honoured;\n"
+        "\tthe Function form is reserved.");
+    symtab_set_docstring("InverseFunctions",
+        "InverseFunctions is an option for Solve that enables the\n"
+        "\tinverse-function specialist for elementary invertible heads\n"
+        "\t(Log, Exp, Sin, Cos, Tan, ArcSin, ArcCos, Sinh, ..., and\n"
+        "\tinteger Power).  Default: Automatic (enabled).  Setting it\n"
+        "\tto False disables the specialist; equations that can only\n"
+        "\tbe solved through inversion then return unevaluated.");
     symtab_set_docstring("VerifySolutions",
         "VerifySolutions is an option for Solve that decides whether to\n"
         "\tverify each returned solution by back-substitution.\n"
@@ -362,4 +410,5 @@ void solve_init(void) {
     solvepoly_init();
     solvelinsys_init();
     solverad_init();
+    solveinv_init();
 }

@@ -209,6 +209,7 @@ set(COMMON_SRC
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
     ../src/solverad.c
+    ../src/solveinv.c
     ../src/zero_test.c
     ../src/numeric_complex.c
 )

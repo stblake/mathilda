@@ -208,10 +208,144 @@ static void test_trivial(void) {
     run_test("Solve[y == 0, x]",  "List[]");
 }
 
-/* Non-polynomial input: Solve should leave the call unevaluated. */
+/* Non-polynomial input with no peelable head over var: Solve leaves
+ * the call unevaluated.  (Sin[x] == 0 used to land here; it is now
+ * handled by the inverse-function specialist -- see test_inverse_*.) */
 static void test_non_polynomial(void) {
+    /* Sum of two var-carrying terms with no shared peelable head -- the
+     * isolation pre-pass declines and we fall through unevaluated. */
+    run_test("Solve[Sin[x] + x == 0, x]",
+             "Solve[Equal[Plus[Sin[x], x], 0], x]");
+}
+
+/* ------------------------------------------------------------------ *
+ *  Inverse-function specialist (src/solveinv.c) tests.                *
+ * ------------------------------------------------------------------ */
+
+/* Log[x] == a -- single-branch peel with strip predicate.  When a is
+ * symbolic, ConditionalExpression stays wrapped; when a is concrete
+ * (Im[1] = 0) the predicate evaluates to True and the wrapper
+ * collapses to the bare value. */
+static void test_inverse_log(void) {
+    run_test("Solve[Log[x] == a, x]",
+             "List[List[Rule[x, "
+               "ConditionalExpression[Power[E, a], "
+                 "Inequality[Times[-1, Pi], Less, Im[a], LessEqual, Pi]]]]]");
+    run_test("Solve[Log[x] == 1, x]",
+             "List[List[Rule[x, E]]]");
+}
+
+/* Exp[x] == a -- single branch with C[1] integer-parameter family.
+ * Exp[x] canonicalises to Power[E, x], so this also exercises the
+ * Power[E, g(x)] branch in the isolation pass. */
+static void test_inverse_exp(void) {
+    run_test("Solve[Exp[x] == a, x]",
+             "List[List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Times[Complex[0, 2], Times[C[1], Pi]], Log[a]], "
+                 "Element[C[1], Integers]]]]]");
+}
+
+/* Sin[x] == a -- two-branch fan-out with shared C[1]. */
+static void test_inverse_sin(void) {
+    run_test("Solve[Sin[x] == a, x]",
+             "List[List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Pi, Times[2, Times[C[1], Pi]], Times[-1, ArcSin[a]]], "
+                 "Element[C[1], Integers]]]], "
+                  "List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Times[2, Times[C[1], Pi]], ArcSin[a]], "
+                 "Element[C[1], Integers]]]]]");
+}
+
+/* Sin[x] == 1/2 -- concrete a: ArcSin[1/2] = Pi/6 substitutes in. */
+static void test_inverse_sin_concrete(void) {
+    run_test("Solve[Sin[x] == 1/2, x]",
+             "List[List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Times[2, Times[C[1], Pi]], Times[Rational[5, 6], Pi]], "
+                 "Element[C[1], Integers]]]], "
+                  "List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Times[2, Times[C[1], Pi]], Times[Rational[1, 6], Pi]], "
+                 "Element[C[1], Integers]]]]]");
+}
+
+/* Tan[x] == a -- single-branch family with Pi-period. */
+static void test_inverse_tan(void) {
+    run_test("Solve[Tan[x] == a, x]",
+             "List[List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Times[C[1], Pi], ArcTan[a]], "
+                 "Element[C[1], Integers]]]]]");
+}
+
+/* Additive isolation: 2 Sin[x] - 1 == 0  ->  Sin[x] == 1/2.
+ * Both factors of the Times and the additive shift are stripped
+ * cleanly before the head dispatch. */
+static void test_inverse_isolation(void) {
+    run_test("Solve[2 Sin[x] - 1 == 0, x]",
+             "List[List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Times[2, Times[C[1], Pi]], Times[Rational[5, 6], Pi]], "
+                 "Element[C[1], Integers]]]], "
+                  "List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Times[2, Times[C[1], Pi]], Times[Rational[1, 6], Pi]], "
+                 "Element[C[1], Integers]]]]]");
+}
+
+/* The headline composite case from the user's prompt:
+ *   Solve[Log[x^2 + 1] + 1 == 0, x]
+ * Peel Log -> 1 + x^2 == E^-1, the inner is a binomial that
+ * solvepoly handles.  Expected ±I Sqrt[1 - 1/E]; Mathilda's
+ * canonical form factors out 1/(2E) and groups the Sqrt
+ * (mathematically equivalent). */
+static void test_inverse_log_composite(void) {
+    run_test("Solve[Log[x^2 + 1] + 1 == 0, x]",
+             "List[List[Rule[x, "
+               "Times[Rational[-1, 2], Power[E, -1], "
+                     "Power[Times[-4, E, Plus[-1, E]], Rational[1, 2]]]]], "
+                  "List[Rule[x, "
+               "Times[Rational[1, 2], Power[E, -1], "
+                     "Power[Times[-4, E, Plus[-1, E]], Rational[1, 2]]]]]]");
+}
+
+/* ArcSin[x] == a -- inverse-of-inverse with the principal-strip
+ * vertical-strip predicate on Re[a], Im[a]. */
+static void test_inverse_arcsin(void) {
+    run_test("Solve[ArcSin[x] == a, x]",
+             "List[List[Rule[x, "
+               "ConditionalExpression[Sin[a], "
+                 "Or["
+                   "And[Equal[Re[a], Times[Rational[-1, 2], Pi]], "
+                       "GreaterEqual[Im[a], 0]], "
+                   "Inequality[Times[Rational[-1, 2], Pi], Less, Re[a], "
+                              "Less, Times[Rational[1, 2], Pi]], "
+                   "And[Equal[Re[a], Times[Rational[1, 2], Pi]], "
+                       "LessEqual[Im[a], 0]]]]]]]");
+}
+
+/* Sin[x] == 0 -- old test_non_polynomial case, now handled. */
+static void test_inverse_sin_zero(void) {
     run_test("Solve[Sin[x] == 0, x]",
-             "Solve[Equal[Sin[x], 0], x]");
+             "List[List[Rule[x, "
+               "ConditionalExpression["
+                 "Plus[Pi, Times[2, Times[C[1], Pi]]], "
+                 "Element[C[1], Integers]]]], "
+                  "List[Rule[x, "
+               "ConditionalExpression["
+                 "Times[2, C[1], Pi], "
+                 "Element[C[1], Integers]]]]]");
+}
+
+/* InverseFunctions -> False disables the specialist entirely; Solve
+ * falls through to solverad which also declines, returning
+ * unevaluated. */
+static void test_inverse_disabled(void) {
+    run_test("Solve[Sin[x] == a, x, InverseFunctions -> False]",
+             "Solve[Equal[Sin[x], a], x, Rule[InverseFunctions, False]]");
 }
 
 /* Single equation with multi-variable list -- the linear-system
@@ -537,9 +671,11 @@ static void test_reals_parametric(void) {
 static void test_reals_edge_cases(void) {
     run_test("Solve[0 == 0, x, Reals]",  "List[List[]]");
     run_test("Solve[1 == 0, x, Reals]",  "List[]");
-    /* Non-polynomial input: still unevaluated, including Reals. */
-    run_test("Solve[Sin[x] == 0, x, Reals]",
-             "Solve[Equal[Sin[x], 0], x, Reals]");
+    /* Non-polynomial input that the inverse specialist also cannot
+     * handle (mixed transcendental + polynomial term): still
+     * unevaluated, including Reals. */
+    run_test("Solve[Sin[x] + x == 0, x, Reals]",
+             "Solve[Equal[Plus[Sin[x], x], 0], x, Reals]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -702,9 +838,10 @@ static void test_integers_rational(void) {
 static void test_integers_edge_cases(void) {
     run_test("Solve[0 == 0, x, Integers]",  "List[List[]]");
     run_test("Solve[1 == 0, x, Integers]",  "List[]");
-    /* Non-polynomial: unevaluated. */
-    run_test("Solve[Sin[x] == 0, x, Integers]",
-             "Solve[Equal[Sin[x], 0], x, Integers]");
+    /* Non-polynomial input that the inverse specialist also cannot
+     * handle: unevaluated. */
+    run_test("Solve[Sin[x] + x == 0, x, Integers]",
+             "Solve[Equal[Plus[Sin[x], x], 0], x, Integers]");
 }
 
 /* Unsupported domains (Rationals, Algebraics, Booleans, Primes) leave
@@ -937,6 +1074,16 @@ int main(void) {
     TEST(test_mixed);
     TEST(test_trivial);
     TEST(test_non_polynomial);
+    TEST(test_inverse_log);
+    TEST(test_inverse_exp);
+    TEST(test_inverse_sin);
+    TEST(test_inverse_sin_concrete);
+    TEST(test_inverse_tan);
+    TEST(test_inverse_isolation);
+    TEST(test_inverse_log_composite);
+    TEST(test_inverse_arcsin);
+    TEST(test_inverse_sin_zero);
+    TEST(test_inverse_disabled);
     TEST(test_multivariate_one_eq_one_pivot);
     TEST(test_cubic_radical);
     TEST(test_nquadratic_n3);
