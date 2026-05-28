@@ -225,6 +225,45 @@ static void test_penalty_inequality_feasible_start(void) {
                "{{x, 0.5}, {y, 1.5}}]] < 0");
 }
 
+static void test_penalty_linear_inequality(void) {
+    /* min (x-3)^2 + (y-4)^2 s.t. x + y <= 1.
+     * Analytical KKT: x=0, y=1, f=18. Start from infeasible (0, 0). */
+    check_true("Abs[First[FindMinimum[{(x-3)^2 + (y-4)^2, x + y <= 1}, "
+               "{{x, 0}, {y, 0}}]] - 18.0] < 1.*^-3");
+    check_true("Abs[(y /. Last[FindMinimum[{(x-3)^2 + (y-4)^2, x + y <= 1}, "
+               "{{x, 0}, {y, 0}}]]) - 1.0] < 1.*^-3");
+}
+
+static void test_penalty_quadratic_inequality(void) {
+    /* min x^2 + y^2 s.t. x^2 + y^2 >= 1. Boundary, f = 1.
+     * Symmetric start: BFGS picks (1/sqrt(2), 1/sqrt(2)). */
+    check_true("Abs[First[FindMinimum[{x^2 + y^2, x^2 + y^2 >= 1}, "
+               "{{x, 2.0}, {y, 2.0}}]] - 1.0] < 1.*^-3");
+}
+
+static void test_penalty_equality_constraint(void) {
+    /* min x^2 + y^2 + z^2 s.t. x + y + z == 3 → (1, 1, 1), f = 3. */
+    check_true("Abs[First[FindMinimum[{x^2 + y^2 + z^2, x + y + z == 3}, "
+               "{{x, 0}, {y, 0}, {z, 0}}]] - 3.0] < 1.*^-3");
+    check_true("Abs[(x /. Last[FindMinimum[{x^2 + y^2 + z^2, x + y + z == 3}, "
+               "{{x, 0}, {y, 0}, {z, 0}}]]) - 1.0] < 1.*^-3");
+}
+
+static void test_penalty_projection_to_disk(void) {
+    /* Closest point in the closed unit disk to (1, 2). Analytical:
+     * project onto unit circle → (1, 2) / sqrt(5). f = (sqrt(5) - 1)^2. */
+    check_true("Abs[First[FindMinimum[{(x-1)^2 + (y-2)^2, x^2 + y^2 <= 1}, "
+               "{{x, 0.5}, {y, 0.5}}]] - (Sqrt[5] - 1)^2] < 1.*^-3");
+}
+
+static void test_penalty_constrained_max_xy(void) {
+    /* Equivalent of max x*y s.t. x + y <= 4, x >= 0, y >= 0.
+     * KKT: x = y = 2, x*y = 4. We minimise -x*y, so first[result] = -4. */
+    check_true("Abs[First[FindMinimum[{-(x*y), "
+               "x + y <= 4 && x >= 0 && y >= 0}, "
+               "{{x, 0.1}, {y, 0.1}}]] + 4.0] < 1.*^-3");
+}
+
 /* ------------------------------------------------------------------ */
 /* 7. FindMaximum                                                      */
 /* ------------------------------------------------------------------ */
@@ -428,6 +467,11 @@ int main(void) {
     TEST(test_box_from_chained_le);
     TEST(test_box_from_chained_strict);
     TEST(test_penalty_inequality_feasible_start);
+    TEST(test_penalty_linear_inequality);
+    TEST(test_penalty_quadratic_inequality);
+    TEST(test_penalty_equality_constraint);
+    TEST(test_penalty_projection_to_disk);
+    TEST(test_penalty_constrained_max_xy);
 
     /* 7. FindMaximum */
     TEST(test_max_cos);

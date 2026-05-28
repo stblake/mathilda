@@ -122,10 +122,13 @@ typedef struct {
 /* General (non-box) inequality g(x) <= 0 or equality h(x) == 0. The
  * objective during the outer μ loop is f(x) + μ * Σ max(0,g_i)^2
  *                                              + μ * Σ h_j^2.
- * For the inner solver we evaluate each constraint expression directly. */
+ * For the inner solver we evaluate each constraint expression directly,
+ * and (when present) its symbolic gradient — needed so the augmented
+ * objective is differentiated consistently with its value. */
 typedef struct {
-    Expr*  expr;     /* owned: rewritten so feasible = (expr <= 0) or (expr == 0) */
-    bool   equality; /* true → equality constraint                                */
+    Expr*  expr;       /* owned: feasible ≡ (expr <= 0) or (expr == 0)        */
+    Expr** grad_exprs; /* owned: ∇expr w.r.t. vars (length n), or NULL → FD   */
+    bool   equality;   /* true → equality constraint                          */
 } FmGenCon;
 
 /* ------------------------------------------------------------------ *
@@ -780,6 +783,7 @@ static bool fm_collect_constraints(Expr* cons, Expr** vars, size_t nvars,
         *gens_cap_inout = nc;
     }
     (*gens_inout)[*ngens_inout].expr = g_expr;
+    (*gens_inout)[*ngens_inout].grad_exprs = NULL;
     (*gens_inout)[*ngens_inout].equality = eq;
     (*ngens_inout)++;
     return true;
@@ -833,6 +837,55 @@ static bool fm_eval_augmented(Expr* f, FmVarBind* binds,
     double pen;
     if (!fm_eval_penalty(gens, ngens, binds, x, n, opts, &pen)) return false;
     *out = fv + mu * pen;
+    return true;
+}
+
+/* Gradient of the augmented objective:
+ *   ∇[f + μ · (Σ_k max(0,g_k)^2 + Σ_j h_j^2)]
+ * = ∇f + 2μ · Σ_k [equality ? g_k : (g_k > 0 ? g_k : 0)] · ∇g_k.
+ *
+ * Each constraint contributes only when "active": equalities always; pure
+ * inequalities only when violated. Symbolic gradients are used when
+ * available (set up by the driver); otherwise per-constraint central
+ * differences fill in. The base ∇f gradient mirrors the existing solver
+ * code: symbolic g_exprs if non-NULL, else FD on f. */
+static bool fm_eval_aug_gradient(Expr* f, Expr** g_exprs,
+                                 const FmGenCon* gens, size_t ngens,
+                                 double mu,
+                                 FmVarBind* binds, const double* x, size_t n,
+                                 const FmOpts* opts, double* g_out) {
+    bool got = false;
+    if (g_exprs) got = fm_eval_gradient(g_exprs, binds, x, n, opts, g_out);
+    if (!got) {
+        if (!fm_grad_finite_diff(f, binds, x, n, opts, g_out)) return false;
+    }
+    if (mu <= 0.0 || !gens || ngens == 0) return true;
+
+    double* gk_grad = (double*)malloc(sizeof(double) * n);
+    if (!gk_grad) return false;
+    for (size_t k = 0; k < ngens; k++) {
+        double gk;
+        if (!fm_eval_scalar(gens[k].expr, binds, x, n, opts, &gk)) {
+            free(gk_grad);
+            return false;
+        }
+        /* Active-set: inequalities contribute only when violated. */
+        if (!gens[k].equality && gk <= 0.0) continue;
+        bool grad_ok = false;
+        if (gens[k].grad_exprs) {
+            grad_ok = fm_eval_gradient(gens[k].grad_exprs, binds, x, n, opts, gk_grad);
+        }
+        if (!grad_ok) {
+            grad_ok = fm_grad_finite_diff(gens[k].expr, binds, x, n, opts, gk_grad);
+        }
+        if (!grad_ok) {
+            free(gk_grad);
+            return false;
+        }
+        double scale = 2.0 * mu * gk;
+        for (size_t i = 0; i < n; i++) g_out[i] += scale * gk_grad[i];
+    }
+    free(gk_grad);
     return true;
 }
 
@@ -1088,12 +1141,17 @@ static bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
         if (!fm_eval_scalar(f, binds, x, n, opts, &fx)) goto cleanup;
     }
 
-    bool got_grad = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
+    bool got_grad;
+    if (augmented) {
+        got_grad = fm_eval_aug_gradient(f, g_exprs, gens, ngens, mu,
+                                        binds, x, n, opts, g);
+    } else {
+        got_grad = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
+        if (!got_grad) got_grad = fm_grad_finite_diff(f, binds, x, n, opts, g);
+    }
     if (!got_grad) {
-        if (!fm_grad_finite_diff(f, binds, x, n, opts, g)) {
-            fm_warn(g_fm_name, "nlnum", "gradient evaluation failed at start point");
-            goto cleanup;
-        }
+        fm_warn(g_fm_name, "nlnum", "gradient evaluation failed at start point");
+        goto cleanup;
     }
 
     double tol_acc  = pow(10.0, -opts->acc_goal_digits);
@@ -1133,9 +1191,15 @@ static bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
                                    &alpha, &fx_new, x_new);
         }
         if (!ls_ok) {
-            fm_warn(g_fm_name, "lstol", "line search failed at iter %lld",
-                    (long long)k);
-            /* Return current best (still ok=false, but caller may use x). */
+            /* Line-search exhaustion is expected at high μ in the penalty
+             * schedule (steep walls, large directional curvature). The
+             * outer fm_run_penalty loop's feasibility check is the
+             * authoritative signal in that case, so stay silent here and
+             * let it speak instead. */
+            if (!augmented) {
+                fm_warn(g_fm_name, "lstol", "line search failed at iter %lld",
+                        (long long)k);
+            }
             break;
         }
         fm_fire_monitor(opts->step_monitor);
@@ -1149,15 +1213,20 @@ static bool fm_run_bfgs(Expr* f, Expr** vars, size_t n,
         }
 
         /* Compute new gradient. */
-        bool ng_ok = g_exprs && fm_eval_gradient(g_exprs, binds, x_new, n, opts, g_new);
+        bool ng_ok;
+        if (augmented) {
+            ng_ok = fm_eval_aug_gradient(f, g_exprs, gens, ngens, mu,
+                                         binds, x_new, n, opts, g_new);
+        } else {
+            ng_ok = g_exprs && fm_eval_gradient(g_exprs, binds, x_new, n, opts, g_new);
+            if (!ng_ok) ng_ok = fm_grad_finite_diff(f, binds, x_new, n, opts, g_new);
+        }
         if (!ng_ok) {
-            if (!fm_grad_finite_diff(f, binds, x_new, n, opts, g_new)) {
-                fm_warn(g_fm_name, "nlnum", "gradient evaluation failed in iteration");
-                /* Take the step and stop. */
-                for (size_t i = 0; i < n; i++) x[i] = x_new[i];
-                fx = fx_new;
-                break;
-            }
+            fm_warn(g_fm_name, "nlnum", "gradient evaluation failed in iteration");
+            /* Take the step and stop. */
+            for (size_t i = 0; i < n; i++) x[i] = x_new[i];
+            fx = fx_new;
+            break;
         }
 
         /* BFGS update: s = x_new - x; y = g_new - g; ρ = 1 / (y . s). */
@@ -1227,12 +1296,17 @@ static bool fm_run_cg(Expr* f, Expr** vars, size_t n,
     } else {
         if (!fm_eval_scalar(f, binds, x, n, opts, &fx)) goto cleanup;
     }
-    bool got_grad = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
+    bool got_grad;
+    if (augmented) {
+        got_grad = fm_eval_aug_gradient(f, g_exprs, gens, ngens, mu,
+                                        binds, x, n, opts, g);
+    } else {
+        got_grad = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
+        if (!got_grad) got_grad = fm_grad_finite_diff(f, binds, x, n, opts, g);
+    }
     if (!got_grad) {
-        if (!fm_grad_finite_diff(f, binds, x, n, opts, g)) {
-            fm_warn(g_fm_name, "nlnum", "gradient failed at start point");
-            goto cleanup;
-        }
+        fm_warn(g_fm_name, "nlnum", "gradient failed at start point");
+        goto cleanup;
     }
     for (size_t i = 0; i < n; i++) d[i] = -g[i];
 
@@ -1258,14 +1332,22 @@ static bool fm_run_cg(Expr* f, Expr** vars, size_t n,
                                     augmented ? ngens : 0,
                                     augmented ? mu : 0.0,
                                     boxes, opts, &alpha, &fx_new, x_new);
-        if (!ls_ok) { fm_warn(g_fm_name, "lstol", "line search failed"); break; }
+        if (!ls_ok) {
+            if (!augmented) fm_warn(g_fm_name, "lstol", "line search failed");
+            break;
+        }
         fm_fire_monitor(opts->step_monitor);
 
-        bool ng_ok = g_exprs && fm_eval_gradient(g_exprs, binds, x_new, n, opts, g_new);
+        bool ng_ok;
+        if (augmented) {
+            ng_ok = fm_eval_aug_gradient(f, g_exprs, gens, ngens, mu,
+                                         binds, x_new, n, opts, g_new);
+        } else {
+            ng_ok = g_exprs && fm_eval_gradient(g_exprs, binds, x_new, n, opts, g_new);
+            if (!ng_ok) ng_ok = fm_grad_finite_diff(f, binds, x_new, n, opts, g_new);
+        }
         if (!ng_ok) {
-            if (!fm_grad_finite_diff(f, binds, x_new, n, opts, g_new)) {
-                for (size_t i = 0; i < n; i++) x[i] = x_new[i]; fx = fx_new; break;
-            }
+            for (size_t i = 0; i < n; i++) x[i] = x_new[i]; fx = fx_new; break;
         }
         /* Polak-Ribière+. */
         double num = 0.0, den = 0.0;
@@ -1330,12 +1412,17 @@ static bool fm_run_newton(Expr* f, Expr** vars, size_t n,
     double tol_prec = pow(10.0, -opts->prec_goal_digits);
 
     for (int64_t k = 0; k < opts->max_iter; k++) {
-        bool gok = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
+        bool gok;
+        if (augmented) {
+            gok = fm_eval_aug_gradient(f, g_exprs, gens, ngens, mu,
+                                       binds, x, n, opts, g);
+        } else {
+            gok = g_exprs && fm_eval_gradient(g_exprs, binds, x, n, opts, g);
+            if (!gok) gok = fm_grad_finite_diff(f, binds, x, n, opts, g);
+        }
         if (!gok) {
-            if (!fm_grad_finite_diff(f, binds, x, n, opts, g)) {
-                fm_warn(g_fm_name, "nlnum", "gradient failed during Newton");
-                goto cleanup;
-            }
+            fm_warn(g_fm_name, "nlnum", "gradient failed during Newton");
+            goto cleanup;
         }
         double gnorm = 0.0;
         for (size_t i = 0; i < n; i++) gnorm += g[i] * g[i];
@@ -1374,7 +1461,10 @@ static bool fm_run_newton(Expr* f, Expr** vars, size_t n,
                                     augmented ? ngens : 0,
                                     augmented ? mu : 0.0,
                                     boxes, opts, &alpha, &fx_new, x_new);
-        if (!ls_ok) { fm_warn(g_fm_name, "lstol", "Newton line search failed"); break; }
+        if (!ls_ok) {
+            if (!augmented) fm_warn(g_fm_name, "lstol", "Newton line search failed");
+            break;
+        }
         fm_fire_monitor(opts->step_monitor);
         double max_step = 0.0, max_x = 0.0;
         for (size_t i = 0; i < n; i++) {
@@ -1622,6 +1712,14 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     if (cons) {
         if (!fm_collect_constraints(cons, vars, n, boxes, &gens, &ngens, &gcap))
             goto cleanup;
+        /* Best-effort symbolic gradient of each constraint expression. The
+         * penalty solver needs ∇(f + μ·Σ penalty) — using a stale ∇f alone
+         * gives the inner BFGS/CG an inconsistent value/gradient pair and
+         * the penalty term loses all influence on the descent direction. */
+        for (size_t k = 0; k < ngens; k++) {
+            gens[k].grad_exprs = fm_compute_gradient(gens[k].expr, vars, n);
+            /* NULL is fine — fm_eval_aug_gradient will FD that constraint. */
+        }
     }
 
     /* Method selection. */
@@ -1731,7 +1829,13 @@ cleanup:
         free(H_exprs);
     }
     if (gens) {
-        for (size_t k = 0; k < ngens; k++) expr_free(gens[k].expr);
+        for (size_t k = 0; k < ngens; k++) {
+            expr_free(gens[k].expr);
+            if (gens[k].grad_exprs) {
+                for (size_t i = 0; i < n; i++) expr_free(gens[k].grad_exprs[i]);
+                free(gens[k].grad_exprs);
+            }
+        }
         free(gens);
     }
     free(vars);

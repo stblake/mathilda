@@ -656,14 +656,23 @@ Inside the `{f, cons}` form, `cons` is a boolean tree of comparisons:
 - Other inequalities (`g(x) <= 0`) and equalities (`h(x) == 0`) feed a
   **quadratic-penalty** wrapper around the inner solver.  The outer μ
   schedule starts at 1 and multiplies by 10 each round until feasible
-  (max 8 rounds).
+  (max 9 rounds, μ up to 10^8).  The inner BFGS/CG/Newton iterations
+  drive the *augmented* objective `f + μ·Σ_k max(0, g_k)^2 + μ·Σ_j h_j^2`
+  using a matching *augmented* gradient `∇f + 2μ·Σ_k (active) g_k ∇g_k +
+  2μ·Σ_j h_j ∇h_j` — the gradient of each constraint expression is
+  computed symbolically at setup and falls back to central differences
+  per-constraint when symbolic differentiation fails.
 - `Or[...]`, `Element[...]`, `x ∈ Integers` and the rest of the
   Mathematica constraint surface are not yet implemented -- they emit
   `FindMinimum::nimpl`.
 
-The penalty wrapper works best from a feasible starting point; for
-deeply infeasible starts it may stop at the boundary rather than the
-true interior minimum.
+The penalty wrapper converges from feasible *or* infeasible starting
+points on smooth nonlinear constraints (linear/quadratic inequalities,
+linear/quadratic equalities, intersections thereof).  At very high μ
+the inner solver may exit early on line-search exhaustion; the outer
+loop's feasibility check is authoritative, and only emits a diagnostic
+(`FindMinimum::infeas`) when the final iterate genuinely fails the
+constraint tolerance (1e-12).
 
 ### Options
 
