@@ -210,6 +210,7 @@ set(COMMON_SRC
     ../src/solvelinsys.c
     ../src/solverad.c
     ../src/solveinv.c
+    ../src/solvetrig.c
     ../src/zero_test.c
     ../src/numeric_complex.c
 )

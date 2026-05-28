@@ -1010,12 +1010,26 @@ static bool isolate_residual(Expr* residual, Expr* var, Isolation* out) {
                 return true;
             }
         }
-        /* Power[E, g(x)] -- canonical form of Exp[g(x)].  Promote to
-         * the Exp peel by reporting head = "Exp" and stashing g. */
-        if (!contains_var(base, var) && contains_var(exp_, var)
-            && base->type == EXPR_SYMBOL
-            && base->data.symbol == SYM_E) {
-            out->g = expr_copy(exp_);
+        /* Power[b, g(x)] with var-free base b -- promote to the Exp
+         * peel.  When b == E we report g(x) directly (canonical
+         * Exp[g(x)] form); for any other constant base we reduce
+         *   b^g(x) == new_rhs    <=>    Exp[g(x) * Log[b]] == new_rhs
+         * by multiplying the inner argument by Log[b], so the existing
+         * peel_exp + solvepoly machinery (which produces the periodic
+         *   inner == 2 Pi I C[k] + Log[new_rhs]
+         * family) yields the principal + branch solutions for free.
+         * Mirrors Maxima's usolve `mexpt` constant-base branch,
+         * generalised to the multi-branch complex log family. */
+        if (!contains_var(base, var) && contains_var(exp_, var)) {
+            Expr* new_g;
+            if (base->type == EXPR_SYMBOL && base->data.symbol == SYM_E) {
+                new_g = expr_copy(exp_);
+            } else {
+                new_g = eval_and_free(mk_fn2("Times",
+                    expr_copy(exp_),
+                    mk_fn1("Log", expr_copy(base))));
+            }
+            out->g = new_g;
             out->new_rhs = new_rhs;
             out->head = intern_symbol("Exp");
             out->pow_n = 0;
@@ -1075,10 +1089,9 @@ bool solveinv_looks_invertible(const Expr* expr, const Expr* var) {
                 if (contains_var(base, var) && !contains_var(exp_, var)) {
                     return true;
                 }
-                /* E^g(x) -- canonical form of Exp[g(x)]. */
-                if (!contains_var(base, var) && contains_var(exp_, var)
-                    && base->type == EXPR_SYMBOL
-                    && base->data.symbol == SYM_E) {
+                /* b^g(x) with var-free base b -- promoted to the Exp
+                 * peel by try_isolate_payload. */
+                if (!contains_var(base, var) && contains_var(exp_, var)) {
                     return true;
                 }
             }

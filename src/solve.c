@@ -30,6 +30,7 @@
 #include "solvelinsys.h"
 #include "solvepoly.h"
 #include "solverad.h"
+#include "solvetrig.h"
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -173,6 +174,38 @@ static Expr* wrap_in_list(Expr* expr) {
                              (Expr*[]){ expr_copy(expr) }, 1);
 }
 
+/* Recognise Equal[Abs[u], 0] / Equal[0, Abs[u]] and rewrite as
+ * Equal[u, 0] so the polynomial dispatch can solve u directly.
+ * Mirrors Maxima's easy-cases `mabs` shortcut.  Returns a freshly
+ * owned Expr* on rewrite, NULL otherwise. */
+static Expr* try_abs_zero_rewrite(const Expr* expr) {
+    if (!expr || expr->type != EXPR_FUNCTION) return NULL;
+    if (expr->data.function.head->type != EXPR_SYMBOL) return NULL;
+    if (expr->data.function.head->data.symbol != SYM_Equal) return NULL;
+    if (expr->data.function.arg_count != 2) return NULL;
+    const Expr* lhs = expr->data.function.args[0];
+    const Expr* rhs = expr->data.function.args[1];
+    const Expr* abs_side = NULL;
+    const Expr* zero_side = NULL;
+    if (lhs->type == EXPR_FUNCTION
+        && lhs->data.function.head->type == EXPR_SYMBOL
+        && lhs->data.function.head->data.symbol == SYM_Abs
+        && lhs->data.function.arg_count == 1) {
+        abs_side = lhs; zero_side = rhs;
+    } else if (rhs->type == EXPR_FUNCTION
+        && rhs->data.function.head->type == EXPR_SYMBOL
+        && rhs->data.function.head->data.symbol == SYM_Abs
+        && rhs->data.function.arg_count == 1) {
+        abs_side = rhs; zero_side = lhs;
+    }
+    if (!abs_side) return NULL;
+    if (zero_side->type != EXPR_INTEGER || zero_side->data.integer != 0)
+        return NULL;
+    Expr* u = abs_side->data.function.args[0];
+    return expr_new_function(expr_new_symbol("Equal"),
+        (Expr*[]){ expr_copy(u), expr_new_integer(0) }, 2);
+}
+
 /* ------------------------------------------------------------------ *
  *  Builtin entry.                                                     *
  * ------------------------------------------------------------------ */
@@ -273,6 +306,19 @@ Expr* builtin_solve(Expr* res) {
         return out;
     }
 
+    /* Easy-case: Abs[u] == 0  -->  u == 0.  Lets the polynomial
+     * dispatch solve u directly without seeing the non-polynomial Abs
+     * head.  Mirrors Maxima's easy-cases `mabs` branch.  Only the bare
+     * `Abs[u] == 0` shape is rewritten -- products and powers of Abs
+     * are intentionally left to the standard dispatch. */
+    {
+        Expr* rewritten = try_abs_zero_rewrite(expr);
+        if (rewritten) {
+            expr_free(expr);
+            expr = rewritten;
+        }
+    }
+
     /* Dispatch.
      *
      *   Multi-var single Equal  ->  linear-system specialist.
@@ -319,6 +365,14 @@ Expr* builtin_solve(Expr* res) {
             if (!out && opts.inv.enabled
                 && solveinv_looks_invertible(expr, var)) {
                 out = solveinv_solve_inverse_equality(
+                    expr, var, dom, &opts.inv);
+            }
+            /* Trig canonicalisation pre-pass: handles multi-trig
+             * equations that the inverse-function isolator can't peel
+             * because more than one trig head over var is present. */
+            if (!out && opts.inv.enabled
+                && solvetrig_has_trig(expr, var)) {
+                out = solvetrig_solve_trig_equality(
                     expr, var, dom, &opts.inv);
             }
             if (!out) {
@@ -411,4 +465,5 @@ void solve_init(void) {
     solvelinsys_init();
     solverad_init();
     solveinv_init();
+    solvetrig_init();
 }

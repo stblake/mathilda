@@ -231,6 +231,140 @@ static void test_hidden_zero_constant(void) {
         "List[List[]]");
 }
 
+/* Polynomial decomposition (Maxima `polydecomp`), m=2 inner case.
+ * The input polynomial is irreducible over Q, so Factor leaves it as
+ * one piece and the slow path would emit six monolithic Root[f, k]
+ * rules.  The polydecomp pass recognises that
+ *   x^6 + 3x^5 + 3x^4 + x^3 + 2x^2 + 2x - 5
+ *     = (x^2 + x)^3 + 2 (x^2 + x) - 5
+ * with h(x) = x^2 + x and g(y) = y^3 + 2 y - 5, then solves each
+ * piece -- giving 6 explicit solutions of the form
+ *   (-1 +- Sqrt[1 + 4 Root[y^3 + 2 y - 5, k]]) / 2. */
+static void test_polydecomp_canonical(void) {
+    /* The full expansion is unwieldy; verify the structural
+     * invariants instead: the result has 6 entries and the first
+     * value is no longer a bare Root[f, 1] but a Times/Plus
+     * expression carrying the inner cubic's Root[g, k] object. */
+    run_test(
+        "Length[Solve[x^6 + 3 x^5 + 3 x^4 + x^3 + 2 x^2 + 2 x - 5 == 0, x]]",
+        "6");
+    run_test(
+        "Head[Solve[x^6 + 3 x^5 + 3 x^4 + x^3 + 2 x^2 + 2 x - 5 == 0, x]"
+        "[[1, 1, 2]]]",
+        "Times");
+    /* And the inner Root holds the decomposed cubic g(y) = y^3+2y-5. */
+    run_test(
+        "MemberQ["
+        "Solve[x^6 + 3 x^5 + 3 x^4 + x^3 + 2 x^2 + 2 x - 5 == 0, x],"
+        "Root[Function[Plus[-5, Power[Slot[1], 3], Times[2, Slot[1]]]], 1],"
+        "Infinity]",
+        "True");
+}
+
+/* Trig canonicalisation pre-pass (Maxima trig-cannon / trig-subst-p).
+ * The inverse-function isolator cannot peel `Sin[x] + Cos[x] == 1`
+ * because two trig heads over var appear; TrigToExp + the
+ * `u = Exp[I var]` substitution turns it into a polynomial in u,
+ * which the polynomial specialist solves, and each u-root is then
+ * unwound through peel_exp into the periodic var-family.  The two
+ * resulting branches are x = 2 k Pi (textbook root from Sin = 0,
+ * Cos = 1) and x = -I Log[I] + 2 k Pi (= Pi/2 + 2 k Pi). */
+static void test_trig_pre_pass_sin_plus_cos(void) {
+    run_test("Solve[Sin[x] + Cos[x] == 1, x]",
+             "List[List[Rule[x, ConditionalExpression["
+                 "Times[2, C[1], Pi], "
+                 "Element[C[1], Integers]]]], "
+                  "List[Rule[x, ConditionalExpression["
+                 "Plus[Times[Complex[0, -1], Log[Complex[0, 1]]], "
+                       "Times[2, Times[C[1], Pi]]], "
+                 "Element[C[1], Integers]]]]]");
+}
+
+/* Single-head Tan also routes through the pre-pass (the inverse-
+ * function isolator does peel bare Tan == c, but Tan - 1/2 == 0 with
+ * the additive shift goes through the polynomial-then-trig fallback);
+ * TrigToExp reduces Tan to E^(I var), giving a Laurent polynomial in
+ * u with a single root unwinding to `C[1] Pi + ArcTan[1/2]`. */
+static void test_trig_pre_pass_tan(void) {
+    run_test("Solve[Tan[x] - 1/2 == 0, x]",
+             "List[List[Rule[x, ConditionalExpression["
+                 "Plus[Times[C[1], Pi], ArcTan[Rational[1, 2]]], "
+                 "Element[C[1], Integers]]]]]");
+}
+
+/* Mixed polynomial / trig terms abort the pre-pass: the bare `x`
+ * outside any Power[E, m I x] makes the substitution invalid, so
+ * solvetrig declines and the call returns unevaluated. */
+static void test_trig_pre_pass_aborts_on_mixed(void) {
+    run_test("Solve[Sin[x] + x == 0, x]",
+             "Solve[Equal[Plus[Sin[x], x], 0], x]");
+}
+
+/* Exponent-GCD substitution (Maxima solventh): polynomials whose
+ * nonzero coefficients all sit at exponents that share a common
+ * factor g >= 2 are solved by substituting u = x^g, recursing on the
+ * smaller u-polynomial, then expanding x^g - u_i = 0 for each
+ * u-root.  Subsumes the existing two-term biquadratic fast path. */
+static void test_gcd_exponents_three_term(void) {
+    /* x^6 - 5 x^3 + 6 == 0 -- u^2 - 5 u + 6 = (u-2)(u-3); each u-root
+     * spawns three cube roots, six in total. */
+    run_test("Solve[x^6 - 5 x^3 + 6 == 0, x]",
+             "List[List[Rule[x, Power[2, Rational[1, 3]]]], "
+                  "List[Rule[x, Times[-1, "
+                           "Power[-1, Rational[1, 3]], "
+                           "Power[2, Rational[1, 3]]]]], "
+                  "List[Rule[x, Times[Power[-1, Rational[2, 3]], "
+                                       "Power[2, Rational[1, 3]]]]], "
+                  "List[Rule[x, Power[3, Rational[1, 3]]]], "
+                  "List[Rule[x, Times[-1, "
+                           "Power[-1, Rational[1, 3]], "
+                           "Power[3, Rational[1, 3]]]]], "
+                  "List[Rule[x, Times[Power[-1, Rational[2, 3]], "
+                                       "Power[3, Rational[1, 3]]]]]]");
+}
+
+static void test_gcd_exponents_zero_term(void) {
+    /* x^6 + x^3 == 0 -- u^2 + u = u(u+1).  u = 0 contributes a triple
+     * root at x = 0; u = -1 contributes the three cube roots of -1. */
+    run_test("Solve[x^6 + x^3 == 0, x]",
+             "List[List[Rule[x, -1]], "
+                  "List[Rule[x, 0]], "
+                  "List[Rule[x, 0]], "
+                  "List[Rule[x, 0]], "
+                  "List[Rule[x, Power[-1, Rational[1, 3]]]], "
+                  "List[Rule[x, Times[-1, Power[-1, Rational[2, 3]]]]]]");
+}
+
+static void test_gcd_exponents_reals(void) {
+    /* Reals domain: only the two real cube roots survive. */
+    run_test("Solve[x^6 - 5 x^3 + 6 == 0, x, Reals]",
+             "List[List[Rule[x, Power[2, Rational[1, 3]]]], "
+                  "List[Rule[x, Power[3, Rational[1, 3]]]]]");
+}
+
+static void test_gcd_exponents_integers_empty(void) {
+    /* Integers domain: u-roots 2 and 3 are integers but their cube
+     * roots are irrational, so the integer filter empties the list. */
+    run_test("Solve[x^6 - 5 x^3 + 6 == 0, x, Integers]",
+             "List[]");
+}
+
+/* Abs[u] == 0 reduces to u == 0 before dispatch (Maxima `easy-cases`
+ * mabs).  The polynomial path then solves u directly. */
+static void test_abs_zero_shortcut(void) {
+    run_test("Solve[Abs[x] == 0, x]",
+             "List[List[Rule[x, 0]]]");
+    run_test("Solve[Abs[x - 1] == 0, x]",
+             "List[List[Rule[x, 1]]]");
+    /* Reversed orientation: 0 == Abs[u] is the same shortcut. */
+    run_test("Solve[0 == Abs[x^2 - 3 x + 2], x]",
+             "List[List[Rule[x, 1]], List[Rule[x, 2]]]");
+    /* Abs[u] == c for c != 0 is NOT rewritten (Mathilda would need
+     * Reals-specific case-split); leave unevaluated. */
+    run_test("Solve[Abs[x] == 1, x]",
+             "Solve[Equal[Abs[x], 1], x]");
+}
+
 /* Non-polynomial input with no peelable head over var: Solve leaves
  * the call unevaluated.  (Sin[x] == 0 used to land here; it is now
  * handled by the inverse-function specialist -- see test_inverse_*.) */
@@ -267,6 +401,31 @@ static void test_inverse_exp(void) {
                "ConditionalExpression["
                  "Plus[Times[Complex[0, 2], Times[C[1], Pi]], Log[a]], "
                  "Element[C[1], Integers]]]]]");
+}
+
+/* b^x == a for a var-free constant base b != E -- reduced through
+ * Power[b, g] -> Exp[g * Log[b]] inside try_isolate_payload so we
+ * reuse peel_exp's principal + 2 Pi I C[k] family.  Mirrors
+ * Maxima's usolve `mexpt` constant-base branch but with the full
+ * multi-branch complex log. */
+static void test_inverse_power_const_base(void) {
+    run_test("Solve[2^x == 5, x]",
+             "List[List[Rule[x, ConditionalExpression["
+                 "Plus[Times[Log[5], Power[Log[2], -1]], "
+                       "Times[Complex[0, 2], "
+                              "Times[C[1], Power[Log[2], -1], Pi]]], "
+                 "Element[C[1], Integers]]]]]");
+    /* b^x == 1 -> x == 2 Pi I C[k] / Log[b] (constant Log[1] drops). */
+    run_test("Solve[3^x == 1, x]",
+             "List[List[Rule[x, ConditionalExpression["
+                 "Times[Complex[0, 2], C[1], Power[Log[3], -1], Pi], "
+                 "Element[C[1], Integers]]]]]");
+    /* Quadratic exponent: 2^(x^2) == 16 -- linear in u = x^2 via
+     * peel_exp, then solvepoly's binomial root yields x = +-Sqrt[..].
+     * Verified on the principal branch (C[1] -> 0): both roots
+     * simplify back to the expected real pair {-2, 2}. */
+    run_test("Simplify[Solve[2^(x^2) == 16, x] /. C[1] -> 0]",
+             "List[List[Rule[x, -2]], List[Rule[x, 2]]]");
 }
 
 /* Sin[x] == a -- two-branch fan-out with shared C[1]. */
@@ -1098,9 +1257,19 @@ int main(void) {
     TEST(test_trivial);
     TEST(test_hidden_zero_leading_coeff);
     TEST(test_hidden_zero_constant);
+    TEST(test_polydecomp_canonical);
+    TEST(test_trig_pre_pass_sin_plus_cos);
+    TEST(test_trig_pre_pass_tan);
+    TEST(test_trig_pre_pass_aborts_on_mixed);
+    TEST(test_gcd_exponents_three_term);
+    TEST(test_gcd_exponents_zero_term);
+    TEST(test_gcd_exponents_reals);
+    TEST(test_gcd_exponents_integers_empty);
+    TEST(test_abs_zero_shortcut);
     TEST(test_non_polynomial);
     TEST(test_inverse_log);
     TEST(test_inverse_exp);
+    TEST(test_inverse_power_const_base);
     TEST(test_inverse_sin);
     TEST(test_inverse_sin_concrete);
     TEST(test_inverse_tan);

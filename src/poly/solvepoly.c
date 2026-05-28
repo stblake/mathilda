@@ -533,6 +533,329 @@ static Expr* root_object(Expr* poly_in_var, Expr* var, int k) {
  *  Polynomial-shape detectors.                                        *
  * ------------------------------------------------------------------ */
 
+/* gcd helper for the exponent-GCD substitution (mirrors Maxima's
+ * solventhp).  Inputs may be negative; result is non-negative. */
+static int64_t gcd_i64(int64_t a, int64_t b) {
+    if (a < 0) a = -a;
+    if (b < 0) b = -b;
+    while (b != 0) { int64_t t = a % b; a = b; b = t; }
+    return a;
+}
+
+/* Compute g = gcd of every var-exponent k > 0 at which `poly` has a
+ * nonzero coefficient.  Returns true iff g >= 2 *and* the substituted
+ * polynomial would still have degree d/g >= 2 (so this isn't the
+ * binomial special case that solve_binomial already handles directly)
+ * *and* at least two distinct nonzero exponents > 0 exist (otherwise
+ * the polynomial is one term + maybe a constant, again a binomial).
+ * Mirrors Maxima's solventhp. */
+static bool find_exponent_gcd(Expr* poly, Expr* var, int d,
+                              int64_t* g_out) {
+    int64_t g = 0;
+    int n_nonzero_pos = 0;
+    for (int k = 1; k <= d; k++) {
+        Expr* ck = get_coeff(poly, var, k);
+        if (!ck) continue;
+        bool zero = is_int_zero(ck);
+        expr_free(ck);
+        if (zero) continue;
+        n_nonzero_pos++;
+        g = (g == 0) ? (int64_t)k : gcd_i64(g, (int64_t)k);
+        if (g == 1) return false;
+    }
+    if (g < 2) return false;
+    if (n_nonzero_pos < 2) return false;
+    if ((int64_t)d / g < 2) return false;
+    *g_out = g;
+    return true;
+}
+
+/* Forward declaration -- referenced by solve_gcd_substituted. */
+Expr* solvepoly_solve_polynomial_equality(Expr* equation, Expr* var,
+                                          Expr* dom,
+                                          const SolvePolyOpts* opts);
+
+/* For an inner-poly root `u_val`, push the g binomial roots of
+ * x^g - u_val into `sl`.  When u_val == 0 the only root is x = 0,
+ * pushed g times (the original poly had a factor of x^g at that root). */
+static void push_binomial_x_roots(Expr* u_val, int64_t g, bool reals_only,
+                                  int64_t mult, SolList* sl) {
+    if (is_int_zero(u_val)) {
+        for (int64_t i = 0; i < g; i++) {
+            sl_push_with_mult(sl, mk_int(0), mult);
+        }
+        return;
+    }
+    Expr* one = mk_int(1);
+    Expr* neg_u = mk_neg(expr_copy(u_val));
+    size_t outc = 0;
+    Expr** rs = solve_binomial(one, neg_u, g, reals_only, &outc);
+    expr_free(one); expr_free(neg_u);
+    sl_extend_with_mult(sl, rs, outc, mult);
+    free(rs);
+}
+
+/* GCD-of-exponents substitution.  Builds u_poly = sum_j c_{j g} u^j
+ * (reusing `var` as the dummy u-symbol), solves it via solvepoly
+ * recursively, then for each u-root u_i pushes the binomial roots of
+ * x^g - u_i into `sl`.  Multiplicity is carried both through duplicate
+ * u-root entries (collated by solvepoly's multiplicity machinery) and
+ * through the outer `mult` parameter from handle_factor.  Mirrors
+ * Maxima's solventh. */
+static bool solve_gcd_substituted(Expr* poly, Expr* var, int d, int64_t g,
+                                  bool reals_only,
+                                  const SolvePolyOpts* opts, Expr* dom,
+                                  int64_t mult, SolList* sl) {
+    int u_deg = d / (int)g;
+    Expr** u_terms = (Expr**)malloc(sizeof(Expr*) * (u_deg + 1));
+    size_t cnt = 0;
+    for (int j = 0; j <= u_deg; j++) {
+        Expr* cj = get_coeff(poly, var, j * (int)g);
+        if (!cj) {
+            for (size_t i = 0; i < cnt; i++) expr_free(u_terms[i]);
+            free(u_terms);
+            return false;
+        }
+        if (is_int_zero(cj)) { expr_free(cj); continue; }
+        Expr* term;
+        if (j == 0) {
+            term = cj;
+        } else if (j == 1) {
+            term = mk_fn2("Times", cj, expr_copy(var));
+        } else {
+            term = mk_fn2("Times", cj,
+                          mk_pow(expr_copy(var), mk_int(j)));
+        }
+        u_terms[cnt++] = term;
+    }
+    Expr* u_poly;
+    if (cnt == 0) {
+        u_poly = mk_int(0);
+        free(u_terms);
+    } else if (cnt == 1) {
+        u_poly = u_terms[0];
+        free(u_terms);
+    } else {
+        u_poly = expr_new_function(mk_sym("Plus"), u_terms, cnt);
+    }
+    u_poly = eval_and_free(u_poly);
+
+    Expr* u_eq = eval_and_free(mk_fn2("Equal", u_poly, mk_int(0)));
+    Expr* u_solutions = solvepoly_solve_polynomial_equality(
+        u_eq, var, dom, opts);
+    expr_free(u_eq);
+    if (!u_solutions) return false;
+
+    if (u_solutions->type != EXPR_FUNCTION
+        || u_solutions->data.function.head->type != EXPR_SYMBOL
+        || u_solutions->data.function.head->data.symbol != SYM_List) {
+        expr_free(u_solutions);
+        return false;
+    }
+    for (size_t i = 0; i < u_solutions->data.function.arg_count; i++) {
+        Expr* sol = u_solutions->data.function.args[i];
+        if (sol->type != EXPR_FUNCTION
+            || sol->data.function.head->type != EXPR_SYMBOL
+            || sol->data.function.head->data.symbol != SYM_List
+            || sol->data.function.arg_count != 1) continue;
+        Expr* rule = sol->data.function.args[0];
+        if (rule->type != EXPR_FUNCTION
+            || rule->data.function.head->type != EXPR_SYMBOL
+            || rule->data.function.head->data.symbol != SYM_Rule
+            || rule->data.function.arg_count != 2) continue;
+        Expr* u_val = rule->data.function.args[1];
+        push_binomial_x_roots(u_val, g, reals_only, mult, sl);
+    }
+    expr_free(u_solutions);
+    return true;
+}
+
+/* True iff `e` contains the var symbol anywhere in its tree.  Used
+ * by the polydecomp remainder check (every g_i must be free of var). */
+static bool expr_contains_var(const Expr* e, const Expr* var) {
+    if (!e || !var) return false;
+    if (e->type == EXPR_SYMBOL && var->type == EXPR_SYMBOL
+        && e->data.symbol == var->data.symbol) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (expr_contains_var(e->data.function.head, var)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (expr_contains_var(e->data.function.args[i], var)) return true;
+    }
+    return false;
+}
+
+/* Polynomial decomposition (Maxima `polydecomp` / `solve-by-
+ * decomposition`), m = 2 inner-degree case.  When a monic polynomial
+ * of even degree n >= 4 admits a decomposition f(x) = g(h(x)) with
+ * h(x) = x^2 + h_1 x (h_0 absorbed into g), this routine recovers
+ * h_1 directly from the second-highest coefficient (h^k binomial
+ * expansion: [x^{n-1}] h^k = k h_1) and then uses repeated
+ * polynomial division by h to read off the outer coefficients of
+ * g(y) = sum g_i y^i.  Decomposition succeeds iff every remainder is
+ * free of var and the top-degree coefficient of g is exactly 1
+ * (matching the monic input).  On success g(y) and h(x) - y_i are
+ * solved recursively through the polynomial specialist.
+ *
+ * This is the smallest decomposition class that *isn't* already
+ * caught by Factor or the GCD-of-exponents substitution: it cracks
+ * irreducible polynomials whose decomposition's inner shape has both
+ * x^2 and x terms, e.g. the canonical example
+ *   f(x) = (x^2 + x)^3 + 2 (x^2 + x) - 5
+ *        = x^6 + 3 x^5 + 3 x^4 + x^3 + 2 x^2 + 2 x - 5
+ * which factors as 6 monolithic Root[] objects without this pass and
+ * as `(g of y = x^2 + x)(then quadratic per y_i)` with it. */
+static bool solve_polydecomp_m2(Expr* poly, Expr* var, int d,
+                                const SolvePolyOpts* opts, Expr* dom,
+                                int64_t mult, SolList* sl) {
+    if (d < 4 || (d % 2) != 0) return false;
+    int k = d / 2;
+    if (k < 2) return false;
+
+    /* Require monic lead coefficient (extending to non-monic is just
+     * a uniform scaling we don't need for the common cases). */
+    Expr* a_lead = get_coeff(poly, var, d);
+    bool monic = a_lead && a_lead->type == EXPR_INTEGER
+                 && a_lead->data.integer == 1;
+    if (a_lead) expr_free(a_lead);
+    if (!monic) return false;
+
+    /* h_1 = coeff_{n-1}(f) / k.  (Binomial expansion of h^k.) */
+    Expr* c_nm1 = get_coeff(poly, var, d - 1);
+    if (!c_nm1) return false;
+    Expr* h1 = eval_and_free(mk_fn2("Times", c_nm1,
+                                    mk_inv(mk_int(k))));
+    Expr* h = eval_and_free(mk_fn2("Plus",
+        mk_pow(expr_copy(var), mk_int(2)),
+        mk_fn2("Times", h1, expr_copy(var))));
+
+    /* Iteratively divide by h to read off g_0, g_1, ..., g_k. */
+    Expr** g_coeffs = (Expr**)malloc(sizeof(Expr*) * (size_t)(k + 1));
+    for (int i = 0; i <= k; i++) g_coeffs[i] = NULL;
+    Expr* current = expr_copy(poly);
+    bool ok = true;
+    for (int i = 0; i <= k && ok; i++) {
+        Expr* r = eval_and_free(internal_polynomialremainder(
+            (Expr*[]){ expr_copy(current), expr_copy(h),
+                       expr_copy(var) }, 3));
+        if (!r || expr_contains_var(r, var)) {
+            if (r) expr_free(r);
+            ok = false;
+            break;
+        }
+        g_coeffs[i] = r;
+        if (i == k) break;
+        Expr* q = eval_and_free(internal_polynomialquotient(
+            (Expr*[]){ expr_copy(current), expr_copy(h),
+                       expr_copy(var) }, 3));
+        expr_free(current);
+        current = q;
+    }
+    expr_free(current);
+    if (!ok) {
+        for (int i = 0; i <= k; i++) if (g_coeffs[i]) expr_free(g_coeffs[i]);
+        free(g_coeffs);
+        expr_free(h);
+        return false;
+    }
+
+    /* Outer must be monic too (g_k == 1) for our normalisation. */
+    if (!g_coeffs[k]
+        || g_coeffs[k]->type != EXPR_INTEGER
+        || g_coeffs[k]->data.integer != 1) {
+        for (int i = 0; i <= k; i++) expr_free(g_coeffs[i]);
+        free(g_coeffs);
+        expr_free(h);
+        return false;
+    }
+
+    /* Build g(y) using var as a temporary y-symbol. */
+    Expr** g_terms = (Expr**)malloc(sizeof(Expr*) * (size_t)(k + 1));
+    size_t cnt = 0;
+    for (int i = 0; i <= k; i++) {
+        if (is_int_zero(g_coeffs[i])) continue;
+        Expr* term;
+        if (i == 0) {
+            term = expr_copy(g_coeffs[i]);
+        } else if (i == 1) {
+            term = mk_fn2("Times", expr_copy(g_coeffs[i]),
+                          expr_copy(var));
+        } else {
+            term = mk_fn2("Times", expr_copy(g_coeffs[i]),
+                          mk_pow(expr_copy(var), mk_int(i)));
+        }
+        g_terms[cnt++] = term;
+    }
+    for (int i = 0; i <= k; i++) expr_free(g_coeffs[i]);
+    free(g_coeffs);
+    Expr* g_poly;
+    if (cnt == 1) {
+        g_poly = g_terms[0];
+        free(g_terms);
+    } else {
+        g_poly = expr_new_function(mk_sym("Plus"), g_terms, cnt);
+    }
+    g_poly = eval_and_free(g_poly);
+
+    /* Solve g(y) == 0. */
+    Expr* g_eq = eval_and_free(mk_fn2("Equal", g_poly, mk_int(0)));
+    Expr* y_solutions = solvepoly_solve_polynomial_equality(
+        g_eq, var, dom, opts);
+    expr_free(g_eq);
+    if (!y_solutions
+        || y_solutions->type != EXPR_FUNCTION
+        || y_solutions->data.function.head->type != EXPR_SYMBOL
+        || y_solutions->data.function.head->data.symbol != SYM_List) {
+        if (y_solutions) expr_free(y_solutions);
+        expr_free(h);
+        return false;
+    }
+
+    /* For each y_i, solve h(x) - y_i == 0 and push roots. */
+    for (size_t i = 0; i < y_solutions->data.function.arg_count; i++) {
+        Expr* sol = y_solutions->data.function.args[i];
+        if (sol->type != EXPR_FUNCTION
+            || sol->data.function.head->type != EXPR_SYMBOL
+            || sol->data.function.head->data.symbol != SYM_List
+            || sol->data.function.arg_count != 1) continue;
+        Expr* rule = sol->data.function.args[0];
+        if (rule->type != EXPR_FUNCTION
+            || rule->data.function.head->type != EXPR_SYMBOL
+            || rule->data.function.head->data.symbol != SYM_Rule
+            || rule->data.function.arg_count != 2) continue;
+        Expr* y_val = rule->data.function.args[1];
+        Expr* h_eq = eval_and_free(mk_fn2("Equal",
+            mk_fn2("Plus", expr_copy(h),
+                   mk_neg(expr_copy(y_val))),
+            mk_int(0)));
+        Expr* x_solutions = solvepoly_solve_polynomial_equality(
+            h_eq, var, dom, opts);
+        expr_free(h_eq);
+        if (!x_solutions) continue;
+        if (x_solutions->type == EXPR_FUNCTION
+            && x_solutions->data.function.head->type == EXPR_SYMBOL
+            && x_solutions->data.function.head->data.symbol == SYM_List) {
+            for (size_t j = 0; j < x_solutions->data.function.arg_count; j++) {
+                Expr* xsol = x_solutions->data.function.args[j];
+                if (xsol->type != EXPR_FUNCTION
+                    || xsol->data.function.head->type != EXPR_SYMBOL
+                    || xsol->data.function.head->data.symbol != SYM_List
+                    || xsol->data.function.arg_count != 1) continue;
+                Expr* xrule = xsol->data.function.args[0];
+                if (xrule->type != EXPR_FUNCTION
+                    || xrule->data.function.head->type != EXPR_SYMBOL
+                    || xrule->data.function.head->data.symbol != SYM_Rule
+                    || xrule->data.function.arg_count != 2) continue;
+                Expr* x_val = xrule->data.function.args[1];
+                sl_push_with_mult(sl, expr_copy(x_val), mult);
+            }
+        }
+        expr_free(x_solutions);
+    }
+    expr_free(y_solutions);
+    expr_free(h);
+    return true;
+}
+
 /* Detect a*var^d + b == 0 (only the top and constant coefficients
  * nonzero).  On true, returns freshly-owned a, b and the degree n=d. */
 static bool is_binomial(Expr* poly, Expr* var, int d,
@@ -580,7 +903,7 @@ static bool is_nquadratic(Expr* poly, Expr* var, int d,
  * ------------------------------------------------------------------ */
 
 static bool handle_factor(Expr* g, Expr* var, bool reals_only,
-                          const SolvePolyOpts* opts,
+                          const SolvePolyOpts* opts, Expr* dom,
                           int64_t mult, SolList* sl) {
     int dg = get_degree_poly(g, var);
     if (dg <= 0) return true;
@@ -640,6 +963,20 @@ static bool handle_factor(Expr* g, Expr* var, bool reals_only,
           return true;
       } }
 
+    /* GCD-of-exponents substitution (Maxima solventh).  Activates
+     * when every nonzero coefficient lies at an exponent that is a
+     * multiple of some g >= 2, generalising the binomial / nquadratic
+     * fast paths to any sparsely-supported polynomial. */
+    { int64_t gc = 0;
+      if (find_exponent_gcd(g, var, dg, &gc)) {
+          if (solve_gcd_substituted(g, var, dg, gc, reals_only, opts,
+                                    dom, mult, sl)) {
+              return true;
+          }
+          /* If the inner recursive solve failed we fall through to the
+           * cubic/Root[] paths below rather than aborting. */
+      } }
+
     if (dg == 3 && opts->cubics_radical) {
         Expr* a = get_coeff(g, var, 3);
         Expr* b = get_coeff(g, var, 2);
@@ -657,6 +994,15 @@ static bool handle_factor(Expr* g, Expr* var, bool reals_only,
         return true;
     }
 
+    /* Polynomial decomposition last-ditch (Maxima solve-by-
+     * decomposition, m=2 inner-degree case).  Only fires on degree
+     * >= 6 -- smaller polynomials are either already cracked by the
+     * fast paths above or are not interesting to decompose. */
+    if (dg >= 6
+        && solve_polydecomp_m2(g, var, dg, opts, dom, mult, sl)) {
+        return true;
+    }
+
     /* Default: dg Root[] objects per unit of multiplicity. */
     for (int64_t m = 0; m < mult; m++) {
         for (int k = 1; k <= dg; k++) {
@@ -671,11 +1017,11 @@ static bool handle_factor(Expr* g, Expr* var, bool reals_only,
  * ------------------------------------------------------------------ */
 
 static bool walk_product(Expr* prod, Expr* var, bool reals_only,
-                         const SolvePolyOpts* opts,
+                         const SolvePolyOpts* opts, Expr* dom,
                          int64_t outer_mult, SolList* sl);
 
 static bool walk_one_factor(Expr* f, Expr* var, bool reals_only,
-                            const SolvePolyOpts* opts,
+                            const SolvePolyOpts* opts, Expr* dom,
                             int64_t outer_mult, SolList* sl) {
     if (f->type == EXPR_FUNCTION
         && f->data.function.head->type == EXPR_SYMBOL
@@ -685,27 +1031,28 @@ static bool walk_one_factor(Expr* f, Expr* var, bool reals_only,
         && f->data.function.args[1]->data.integer > 0) {
         int64_t e = f->data.function.args[1]->data.integer;
         return walk_one_factor(f->data.function.args[0], var, reals_only,
-                               opts, outer_mult * e, sl);
+                               opts, dom, outer_mult * e, sl);
     }
     if (f->type == EXPR_FUNCTION
         && f->data.function.head->type == EXPR_SYMBOL
         && f->data.function.head->data.symbol == SYM_Times) {
-        return walk_product(f, var, reals_only, opts, outer_mult, sl);
+        return walk_product(f, var, reals_only, opts, dom, outer_mult, sl);
     }
-    return handle_factor(f, var, reals_only, opts, outer_mult, sl);
+    return handle_factor(f, var, reals_only, opts, dom, outer_mult, sl);
 }
 
 static bool walk_product(Expr* prod, Expr* var, bool reals_only,
-                         const SolvePolyOpts* opts,
+                         const SolvePolyOpts* opts, Expr* dom,
                          int64_t outer_mult, SolList* sl) {
     if (prod->type != EXPR_FUNCTION
         || prod->data.function.head->type != EXPR_SYMBOL
         || prod->data.function.head->data.symbol != SYM_Times) {
-        return walk_one_factor(prod, var, reals_only, opts, outer_mult, sl);
+        return walk_one_factor(prod, var, reals_only, opts, dom,
+                               outer_mult, sl);
     }
     for (size_t i = 0; i < prod->data.function.arg_count; i++) {
         if (!walk_one_factor(prod->data.function.args[i], var,
-                             reals_only, opts, outer_mult, sl)) {
+                             reals_only, opts, dom, outer_mult, sl)) {
             return false;
         }
     }
@@ -1104,7 +1451,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
 
     bool used_fast = false;
     if (d == 1 || d == 2) {
-        if (!handle_factor(poly, var, reals_only, opts, 1, &sl)) {
+        if (!handle_factor(poly, var, reals_only, opts, dom, 1, &sl)) {
             sl_free(&sl); expr_free(poly); return NULL;
         }
         used_fast = true;
@@ -1112,7 +1459,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         Expr *a, *b; int64_t n;
         if (is_binomial(poly, var, d, &a, &b, &n)) {
             expr_free(a); expr_free(b);
-            if (!handle_factor(poly, var, reals_only, opts, 1, &sl)) {
+            if (!handle_factor(poly, var, reals_only, opts, dom, 1, &sl)) {
                 sl_free(&sl); expr_free(poly); return NULL;
             }
             used_fast = true;
@@ -1120,10 +1467,24 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
             Expr *na, *nb, *nc; int64_t nn;
             if (is_nquadratic(poly, var, d, &na, &nb, &nc, &nn)) {
                 expr_free(na); expr_free(nb); expr_free(nc);
-                if (!handle_factor(poly, var, reals_only, opts, 1, &sl)) {
+                if (!handle_factor(poly, var, reals_only, opts, dom,
+                                   1, &sl)) {
                     sl_free(&sl); expr_free(poly); return NULL;
                 }
                 used_fast = true;
+            } else {
+                /* Exponent-GCD fast path -- catches polynomials like
+                 *   x^9 + x^6 + x^3 + 1  (gcd 3)
+                 * that aren't binomial / nquadratic but still collapse
+                 * cleanly under u = x^g. */
+                int64_t gc = 0;
+                if (find_exponent_gcd(poly, var, d, &gc)) {
+                    if (!handle_factor(poly, var, reals_only, opts, dom,
+                                       1, &sl)) {
+                        sl_free(&sl); expr_free(poly); return NULL;
+                    }
+                    used_fast = true;
+                }
             }
         }
     }
@@ -1185,7 +1546,7 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
             if (get_degree_poly(sf_factors[i], var) <= 0) continue;
             Expr* factored = internal_factor(
                 (Expr*[]){ expr_copy(sf_factors[i]) }, 1);
-            ok = walk_product(factored, var, reals_only, opts,
+            ok = walk_product(factored, var, reals_only, opts, dom,
                               sf_mults[i], &sl);
             expr_free(factored);
         }
