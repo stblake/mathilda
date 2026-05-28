@@ -180,4 +180,5 @@ Expr* internal_log(Expr** args, size_t count);
 Expr* internal_exp(Expr** args, size_t count);
 Expr* internal_timing(Expr** args, size_t count);
 Expr* internal_repeated_timing(Expr** args, size_t count);
+Expr* internal_possible_zero_q(Expr** args, size_t count);
 #endif

@@ -182,6 +182,7 @@ extern Expr* builtin_log(Expr* res);
 extern Expr* builtin_exp(Expr* res);
 extern Expr* builtin_timing(Expr* res);
 extern Expr* builtin_repeated_timing(Expr* res);
+extern Expr* builtin_possible_zero_q(Expr* res);
 
 Expr* internal_call_impl(const char* name, Expr* (*builtin_func)(Expr*), Expr** args, size_t count) {
     Expr* res = expr_new_function(expr_new_symbol(name), args, count);
@@ -375,3 +376,4 @@ Expr* internal_log(Expr** args, size_t count) { return internal_call_impl("Log",
 Expr* internal_exp(Expr** args, size_t count) { return internal_call_impl("Exp", builtin_exp, args, count); }
 Expr* internal_timing(Expr** args, size_t count) { return internal_call_impl("Timing", builtin_timing, args, count); }
 Expr* internal_repeated_timing(Expr** args, size_t count) { return internal_call_impl("RepeatedTiming", builtin_repeated_timing, args, count); }
+Expr* internal_possible_zero_q(Expr** args, size_t count) { return internal_call_impl("PossibleZeroQ", builtin_possible_zero_q, args, count); }

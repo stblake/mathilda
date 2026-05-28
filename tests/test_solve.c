@@ -208,6 +208,29 @@ static void test_trivial(void) {
     run_test("Solve[y == 0, x]",  "List[]");
 }
 
+/* Hidden-zero leading coefficient.  The collected x^2 coefficient
+ * Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2] does not collapse under
+ * rational normalisation, but PossibleZeroQ recognises it as zero via
+ * the Stage-2 numeric ladder.  The solvepoly pre-pass strips it and the
+ * equation reduces to the linear -x - 1 == 0  ->  x = -1.  Without the
+ * pre-pass the quadratic formula divides by the hidden-zero `a` and
+ * yields ComplexInfinity / Indeterminate after numericalisation. */
+static void test_hidden_zero_leading_coeff(void) {
+    run_test(
+        "Solve[Sqrt[5 + 2 Sqrt[6]] x^2 - Sqrt[3] x^2 - Sqrt[2] x^2 - x "
+        "- 1 == 0, x]",
+        "List[List[Rule[x, -1]]]");
+}
+
+/* Hidden-zero constant.  The equation Sqrt[5 + 2 Sqrt[6]] - Sqrt[3]
+ * - Sqrt[2] == 0 is a tautology (LHS is provably zero); the
+ * coefficient-zero pre-pass collapses it to { {} }. */
+static void test_hidden_zero_constant(void) {
+    run_test(
+        "Solve[Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2] == 0, x]",
+        "List[List[]]");
+}
+
 /* Non-polynomial input with no peelable head over var: Solve leaves
  * the call unevaluated.  (Sin[x] == 0 used to land here; it is now
  * handled by the inverse-function specialist -- see test_inverse_*.) */
@@ -1073,6 +1096,8 @@ int main(void) {
     TEST(test_quintic);
     TEST(test_mixed);
     TEST(test_trivial);
+    TEST(test_hidden_zero_leading_coeff);
+    TEST(test_hidden_zero_constant);
     TEST(test_non_polynomial);
     TEST(test_inverse_log);
     TEST(test_inverse_exp);

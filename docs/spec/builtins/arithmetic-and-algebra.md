@@ -1510,6 +1510,17 @@ Attempts to solve an equation or system of equations for one or more variables.
   `Solve[x/(x-1) == 2/(x-1), x]` returns `{{x -> 2}}`, not `{{x -> 1}, {x -> 2}}`).
   Symbolic / undetermined denominator values are kept (parametric inputs like
   `Solve[a/x + b == 0, x]` return `{{x -> -a/b}}`).
+- **Hidden-zero coefficient stripping**: after `Collect[Expand[...], var]` the
+  per-degree coefficients are tested in turn with `PossibleZeroQ` (top down).
+  Coefficients that test as zero but are not structurally zero -- e.g.
+  `Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2]`, recognised through the Stage-2
+  numeric ladder -- are folded out and the polynomial is rebuilt at its true
+  degree before the fast-path classifier sees it.  Without this pass the
+  quadratic formula would divide by such a hidden-zero leading coefficient
+  (`Solve[Sqrt[5 + 2 Sqrt[6]] x^2 - Sqrt[3] x^2 - Sqrt[2] x^2 - x - 1 == 0, x]`
+  reduces to the linear `-x - 1 == 0` and returns `{{x -> -1}}`).  A
+  hidden-zero constant is treated as a tautology
+  (`Solve[Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2] == 0, x]` returns `{{}}`).
 - Per-degree handling for irreducible factors:
   - Degree 1 / 2: closed-form rules.
   - Quadratic in `Reals`: discriminant-aware.  Δ < 0 → no real roots;

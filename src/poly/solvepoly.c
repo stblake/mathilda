@@ -32,6 +32,7 @@
 #include "poly.h"
 #include "sym_names.h"
 #include "symtab.h"
+#include "zero_test.h"
 
 /* ------------------------------------------------------------------ *
  *  Expression-building shorthand.                                     *
@@ -1015,6 +1016,77 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
     poly = expanded;
 
     int d = get_degree_poly(poly, var);
+
+    /* Hidden-zero coefficient pass.  After Collect+Expand the structural
+     * degree can overstate the true degree when a leading coefficient is
+     * a non-trivial zero -- e.g. Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2],
+     * which standard rational normalisation cannot collapse but
+     * PossibleZeroQ recognises through Stage-2 numeric verification.
+     * Walk from k = d downward, testing each coefficient with
+     * `zero_test_decide` until we hit one we cannot prove zero -- that
+     * index is the true polynomial degree.  When every coefficient
+     * (including the constant) collapses to zero, the equation is a
+     * tautology.  Otherwise rebuild the polynomial from the surviving
+     * coefficients so the downstream fast-path classifier sees the
+     * correct shape. */
+    int true_d = -1;
+    for (int k = d; k >= 0; k--) {
+        Expr* ck = get_coeff(poly, var, k);
+        if (!ck) { true_d = k; break; }
+        if (is_int_zero(ck)) { expr_free(ck); continue; }
+        bool zero = (zero_test_decide(ck) == ZERO_TEST_TRUE);
+        expr_free(ck);
+        if (!zero) { true_d = k; break; }
+    }
+
+    if (true_d < 0) {
+        /* Every coefficient -- including the constant -- collapses to
+         * zero: the equation is a tautology. */
+        expr_free(poly);
+        Expr** outer = (Expr**)malloc(sizeof(Expr*) * 1);
+        outer[0] = mk_list(NULL, 0);
+        return mk_list(outer, 1);
+    }
+
+    if (true_d < d) {
+        /* Rebuild the polynomial from c_0 ... c_{true_d}.  Any hidden-
+         * zero coefficient at or below true_d is forced to a structural
+         * 0 so the polynomial-shape detectors below operate on a clean
+         * canonical form. */
+        Expr** terms = (Expr**)malloc(sizeof(Expr*) * (size_t)(true_d + 2));
+        size_t cnt = 0;
+        for (int k = 0; k <= true_d; k++) {
+            Expr* ck = get_coeff(poly, var, k);
+            if (!ck) continue;
+            bool drop = is_int_zero(ck)
+                || (k < true_d && zero_test_decide(ck) == ZERO_TEST_TRUE);
+            if (drop) { expr_free(ck); continue; }
+            Expr* term;
+            if (k == 0) {
+                term = ck;
+            } else if (k == 1) {
+                term = eval_and_free(mk_fn2("Times", ck, expr_copy(var)));
+            } else {
+                term = eval_and_free(mk_fn2("Times", ck,
+                    eval_and_free(mk_pow(expr_copy(var), mk_int(k)))));
+            }
+            terms[cnt++] = term;
+        }
+        Expr* new_poly;
+        if (cnt == 0) {
+            new_poly = mk_int(0);
+        } else if (cnt == 1) {
+            new_poly = terms[0];
+        } else {
+            new_poly = eval_and_free(
+                expr_new_function(mk_sym("Plus"), terms, cnt));
+            terms = NULL;
+        }
+        free(terms);
+        expr_free(poly);
+        poly = new_poly;
+        d = true_d;
+    }
 
     if (d == 0) {
         bool zero = is_int_zero(poly);
