@@ -47,6 +47,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef USE_LAPACK
+/* The static helpers below are only reachable from the USE_LAPACK branch
+ * of svd_machine_dispatch.  Wrapping them removes -Wunused-function noise
+ * on builds compiled without LAPACK. */
+
 /* ---------------------------------------------------------------------
  * One-shot warning helper for the LAPACK fast path.  Same pattern as
  * qr_machine_warn_once in qrdecomp_machine.c. */
@@ -253,6 +258,7 @@ static void svdm_default_tolerance(double* S, int mn, int n, int p)
         if (S[i] < tol) S[i] = 0.0;
     }
 }
+#endif /* USE_LAPACK */
 
 /* ------------------------------------------------------------------ *
  *  Generalized SVD (LAPACK dggsvd3 / zggsvd3).                        *
@@ -552,12 +558,11 @@ static Expr* svdm_dispatch_generalized(const SvdArgs* args,
  * ------------------------------------------------------------------ */
 Expr* svd_machine_dispatch(const SvdArgs* args, int n, int p, int n_a)
 {
-    static uint64_t lapack_warn_counter = 0;
-
 #ifndef USE_LAPACK
     (void)args; (void)n; (void)p; (void)n_a;
     return NULL;
 #else
+    static uint64_t lapack_warn_counter = 0;
     if (args->generalized) {
         return svdm_dispatch_generalized(args, n, p, n_a);
     }

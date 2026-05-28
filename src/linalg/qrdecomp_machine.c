@@ -71,6 +71,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef USE_LAPACK
+/* The static helpers below are only reachable from the USE_LAPACK branch
+ * of qr_machine_dispatch.  Wrapping them removes -Wunused-function noise
+ * on builds compiled without LAPACK. */
+
 /* ---------------------------------------------------------------------
  * One-shot warning helper.  Mirrors the matsol_warn_once / chop_warn_once
  * convention used elsewhere in linalg: a 64-bit counter passed by
@@ -357,6 +362,7 @@ static Expr* mach_build_perm(const int* jpvt, int p)
     free(rows);
     return P;
 }
+#endif /* USE_LAPACK */
 
 /* ---------------------------------------------------------------------
  * The kernel.
@@ -368,12 +374,11 @@ static Expr* mach_build_perm(const int* jpvt, int p)
  * ------------------------------------------------------------------ */
 Expr* qr_machine_dispatch(Expr* m, int n, int p, const QrOpts* opts)
 {
-    static uint64_t lapack_warn_counter = 0;
-
 #ifndef USE_LAPACK
     (void)m; (void)n; (void)p; (void)opts;
     return NULL;
 #else
+    static uint64_t lapack_warn_counter = 0;
     /* Load the matrix into a column-major double buffer.  On a non-
      * numeric leaf we return NULL; qr_dispatch then re-runs the input
      * through the symbolic pipeline. */

@@ -3070,8 +3070,8 @@ static Expr* builtin_limit_impl(Expr* res) {
             return run_multivariate(f, spec->data.function.args[0],
                                        spec->data.function.args[1]);
         }
-        Expr *var, *point;
-        split_rule(spec, &var, &point);
+        Expr *var = NULL, *point = NULL;
+        if (!split_rule(spec, &var, &point)) return NULL;
         /* Compute the base (principal-branch) limit first. The complex
          * directions (LIMIT_DIR_IMAGINARY, LIMIT_DIR_COMPLEX) are
          * routed through LIMIT_DIR_TWOSIDED for the analytic layers --

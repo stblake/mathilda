@@ -507,7 +507,7 @@ static void fm_tol_from_digits(mpfr_t out, double digits) {
 static bool fm_eval_scalar(Expr* f, FmVarBind* binds,
                            const double* x, size_t n,
                            const FmOpts* opts, double* out) {
-    Expr** xv = (Expr**)malloc(sizeof(Expr*) * n);
+    Expr** xv = (Expr**)calloc(n ? n : 1, sizeof(Expr*));
     for (size_t i = 0; i < n; i++) xv[i] = expr_new_real(x[i]);
     Expr* res = fm_eval_with_bindings(f, binds, xv, n,
                                       opts->eval_monitor,
@@ -2112,7 +2112,9 @@ static bool fm_run_cg(Expr* f, Expr** vars, size_t n,
             if (!ng_ok) ng_ok = fm_grad_finite_diff(f, binds, x_new, n, opts, g_new);
         }
         if (!ng_ok) {
-            for (size_t i = 0; i < n; i++) x[i] = x_new[i]; fx = fx_new; break;
+            for (size_t i = 0; i < n; i++) x[i] = x_new[i];
+            fx = fx_new;
+            break;
         }
         /* Polak-Ribière+. */
         double num = 0.0, den = 0.0;
