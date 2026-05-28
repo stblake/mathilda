@@ -679,7 +679,7 @@ constraint tolerance (1e-12).
 | Option              | Default        | Effect |
 |---------------------|----------------|--------|
 | `Method`            | `Automatic`    | `"Brent"`, `"QuasiNewton"`, `"ConjugateGradient"`, `"Newton"`, or `Automatic`. |
-| `WorkingPrecision`  | `MachinePrecision` | Accepted; the current iteration arithmetic is always machine-precision.  Symbolic constants (`Pi`, `E`) still numericalize at the requested precision before being consumed. |
+| `WorkingPrecision`  | `MachinePrecision` | `MachinePrecision`, or a digit count (>= ~16 routes through MPFR).  Lifts the 1D `Brent` and n-D `QuasiNewton` iterations into MPFR at the requested precision so the result `{f_min, {x -> ...}}` carries MPFR leaves with that many digits.  Explicit `Method -> "Newton"` or `"ConjugateGradient"` at MPFR currently falls back to `QuasiNewton` with a `FindMinimum::nimpl` diagnostic; general (non-box) constraints at MPFR fall back to machine precision similarly. |
 | `MaxIterations`     | `500`          | Iteration limit on the inner loop. |
 | `AccuracyGoal`      | `Automatic`    | Digit count `n` ⇒ stop when `\|grad\| < 10^{-n}`. `Infinity` disables. `Automatic` resolves to `WorkingPrecision/2`. |
 | `PrecisionGoal`     | `Automatic`    | Digit count `n` ⇒ stop when `\|step\| < \|x\| * 10^{-n}`. |
@@ -734,4 +734,15 @@ Out[7]= {1.0, {x -> 0.0}}
 
 In[8]:= FindMinimum[(x - 3)^2, {x, 0}, Method -> "ConjugateGradient"]
 Out[8]= {0.0, {x -> 3.0}}
+
+(* Arbitrary precision via WorkingPrecision: the 1D Brent and n-D BFGS
+   iterations both run in MPFR at the requested precision and the
+   returned `{f_min, {x -> ...}}` carries MPFR leaves with that many
+   digits. *)
+In[9]:= FindMinimum[(x - Pi)^2, {x, 0}, WorkingPrecision -> 50]
+Out[9]= {0.0, {x -> 3.1415926535897932384626433832795028841971693993751}}
+
+In[10]:= FindMinimum[x Cos[x], {x, 2}, WorkingPrecision -> 80]
+Out[10]= {-3.2883713955908964865125964571235283975158511553846230554230811211040811736596049,
+         {x -> 3.42561845948172814647771386218545617769640923939753965919739613085112431446169}}
 ```

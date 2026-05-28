@@ -322,9 +322,35 @@ static void test_max_iterations_returns_iterate(void) {
 }
 
 static void test_working_precision_accepted(void) {
-    /* WorkingPrecision -> 30 must be accepted (machine internal arithmetic
-     * is the current limitation, but the call should succeed). */
+    /* WorkingPrecision -> 30 must be accepted (the iteration runs in MPFR
+     * at the requested precision; see test_working_precision_brent_mpfr
+     * and test_working_precision_bfgs_mpfr below for the digit-level checks). */
     check_eq("Head[FindMinimum[(x-Pi)^2, {x, 0}, WorkingPrecision -> 30]]", "List");
+}
+
+static void test_working_precision_brent_mpfr(void) {
+    /* 1D Brent at WP=50: the minimum of (x-Pi)^2 is x=Pi, so the result
+     * must be Pi to ~50 digits — well below the machine-precision
+     * 16-digit horizon, proving the iteration ran in MPFR. */
+    check_true("Abs[(x /. Last[FindMinimum[(x - Pi)^2, {x, 0}, "
+               "WorkingPrecision -> 50]]) - Pi] < 1.*^-30");
+}
+
+static void test_working_precision_bfgs_mpfr(void) {
+    /* n-D BFGS at WP=30: solve a quadratic and require ~25-digit accuracy
+     * on each component. The double-precision optimizer can't beat ~1e-15. */
+    check_true("Abs[(x /. (Last[FindMinimum[(x - 3)^2 + (y - 4)^2, "
+               "{{x, 0}, {y, 0}}, WorkingPrecision -> 30]][[1]])) - 3] < 1.*^-20");
+    check_true("Abs[(y /. (Last[FindMinimum[(x - 3)^2 + (y - 4)^2, "
+               "{{x, 0}, {y, 0}}, WorkingPrecision -> 30]][[2]])) - 4] < 1.*^-20");
+}
+
+static void test_working_precision_findmax_mpfr(void) {
+    /* FindMaximum delegates to FindMinimum after negation; the MPFR head
+     * must survive the negation step (regression for an early version
+     * that collapsed back to EXPR_REAL on the result-list head). */
+    check_true("Abs[First[FindMaximum[-(x - Pi)^2, {x, 0}, "
+               "WorkingPrecision -> 50]]] < 1.*^-30");
 }
 
 static void test_symbolic_pi(void) {
@@ -485,6 +511,9 @@ int main(void) {
     /* 9. Options */
     TEST(test_max_iterations_returns_iterate);
     TEST(test_working_precision_accepted);
+    TEST(test_working_precision_brent_mpfr);
+    TEST(test_working_precision_bfgs_mpfr);
+    TEST(test_working_precision_findmax_mpfr);
     TEST(test_symbolic_pi);
 
     /* 10. Locality */

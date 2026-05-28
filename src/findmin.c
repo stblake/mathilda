@@ -408,6 +408,101 @@ static Expr* fm_eval_with_bindings(Expr* f, FmVarBind* binds,
     return num;
 }
 
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------ *
+ *  MPFR scalar-evaluation core                                        *
+ * ------------------------------------------------------------------ *
+ * The MPFR optimizer paths reuse `fm_eval_with_bindings` — which already
+ * accepts any Expr* as a substitution — by handing it `expr_new_mpfr_copy(x)`
+ * instead of `expr_new_real(x)`. The numericalize call inside that helper
+ * then keeps the entire arithmetic chain at the requested precision. */
+
+/* Extract a real-valued result from an evaluated MPFR expression into
+ * `out`. Tolerates a tiny imaginary residue (within ~4 digits of the
+ * working precision) to mirror the double-path's behaviour around
+ * subtraction cancellation in Complex[] evaluations. */
+static bool fm_mpfr_extract_real(Expr* res, long bits, mpfr_t out) {
+    if (!res) return false;
+    mpfr_t im;
+    mpfr_init2(im, bits);
+    bool inexact = false;
+    bool ok = get_approx_mpfr(res, out, im, &inexact);
+    if (ok && !mpfr_zero_p(im)) {
+        mpfr_t abs_im, abs_re, thresh;
+        mpfr_init2(abs_im, bits);
+        mpfr_init2(abs_re, bits);
+        mpfr_init2(thresh, bits);
+        mpfr_abs(abs_im, im, MPFR_RNDN);
+        mpfr_abs(abs_re, out, MPFR_RNDN);
+        mpfr_add_ui(abs_re, abs_re, 1, MPFR_RNDN);
+        long sub = (long)numeric_bits_to_digits(bits) - 4;
+        if (sub < 1) sub = 1;
+        mpfr_set_ui(thresh, 10, MPFR_RNDN);
+        mpfr_pow_si(thresh, thresh, -sub, MPFR_RNDN);
+        mpfr_mul(thresh, thresh, abs_re, MPFR_RNDN);
+        if (mpfr_cmp(abs_im, thresh) > 0) ok = false;
+        mpfr_clears(abs_im, abs_re, thresh, (mpfr_ptr)0);
+    }
+    mpfr_clear(im);
+    return ok;
+}
+
+/* Evaluate the bound objective at MPFR precision using a caller-built
+ * array of MPFR-leaf Expr substitutions. Routing through `Expr*`
+ * avoids the `mpfr_t*`/parameter-decay hazards: in C, `mpfr_t` is a
+ * 1-element array, so taking `&local` of a parameter typed `mpfr_t a`
+ * yields a pointer-to-pointer, not an "array of mpfr_t" — passing such
+ * a pointer to a function expecting `mpfr_t const*` segfaults the
+ * moment the callee dereferences it. */
+static bool fm_eval_scalar_mpfr_exprs(Expr* f, FmVarBind* binds,
+                                      Expr* const* xv, size_t n,
+                                      const FmOpts* opts, mpfr_t out) {
+    long bits = opts->wp_bits;
+    Expr* res = fm_eval_with_bindings(f, binds, xv, n,
+                                      opts->eval_monitor,
+                                      fm_numeric_spec(opts));
+    if (!res) return false;
+    bool ok = fm_mpfr_extract_real(res, bits, out);
+    expr_free(res);
+    return ok;
+}
+
+/* 1D convenience: build one MPFR leaf from `x`, evaluate, extract. */
+static bool fm_eval_scalar_mpfr_1d(Expr* f, FmVarBind* binds,
+                                   const mpfr_t x, const FmOpts* opts,
+                                   mpfr_t out) {
+    Expr* xv = expr_new_mpfr_copy(x);
+    Expr* arr[1] = { xv };
+    bool ok = fm_eval_scalar_mpfr_exprs(f, binds, arr, 1, opts, out);
+    expr_free(xv);
+    return ok;
+}
+
+/* n-D convenience: build a fresh MPFR-leaf array from the iterate, then
+ * evaluate/extract. Accepts the iterate as `mpfr_t* x_vec` (an
+ * `__mpfr_struct (*)[1]`) and indexes it with `x_vec[i]`, which decays
+ * to `__mpfr_struct *` (= `mpfr_t` argument) cleanly. */
+static bool fm_eval_scalar_mpfr(Expr* f, FmVarBind* binds,
+                                mpfr_t* x_vec, size_t n,
+                                const FmOpts* opts, mpfr_t out) {
+    Expr** xv = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) xv[i] = expr_new_mpfr_copy(x_vec[i]);
+    bool ok = fm_eval_scalar_mpfr_exprs(f, binds, xv, n, opts, out);
+    for (size_t i = 0; i < n; i++) expr_free(xv[i]);
+    free(xv);
+    return ok;
+}
+
+/* Set `out = 10^-digits` at the current MPFR precision. Treats Infinity
+ * (digits == +inf) and large finite values uniformly: anything past the
+ * representable exponent becomes +0. */
+static void fm_tol_from_digits(mpfr_t out, double digits) {
+    if (isinf(digits) || digits > 1e9) { mpfr_set_zero(out, +1); return; }
+    mpfr_set_ui(out, 10, MPFR_RNDN);
+    mpfr_pow_si(out, out, -(long)digits, MPFR_RNDN);
+}
+#endif /* USE_MPFR */
+
 /* Evaluate the bound objective and return a double; NULL on failure. */
 static bool fm_eval_scalar(Expr* f, FmVarBind* binds,
                            const double* x, size_t n,
@@ -550,6 +645,407 @@ static Expr* fm_build_result(double fmin, Expr** vars, const double* vals,
     Expr* top_args[2] = { expr_new_real(fmin), rule_list };
     return expr_new_function(expr_new_symbol("List"), top_args, 2);
 }
+
+#ifdef USE_MPFR
+/* MPFR analogue: the result components are stored as EXPR_MPFR leaves at
+ * the working precision rather than EXPR_REAL. */
+static Expr* fm_build_result_mpfr(const mpfr_t fmin, Expr** vars,
+                                  mpfr_t const* vals, size_t n) {
+    Expr** rules = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        Expr* r_args[2] = { expr_copy(vars[i]), expr_new_mpfr_copy(vals[i]) };
+        rules[i] = expr_new_function(expr_new_symbol("Rule"), r_args, 2);
+    }
+    Expr* rule_list = expr_new_function(expr_new_symbol("List"), rules, n);
+    free(rules);
+    Expr* top_args[2] = { expr_new_mpfr_copy(fmin), rule_list };
+    return expr_new_function(expr_new_symbol("List"), top_args, 2);
+}
+
+/* Allocate `count` MPFR scalars at precision `bits`. */
+static mpfr_t* fm_mpfr_array(size_t count, long bits) {
+    mpfr_t* arr = (mpfr_t*)malloc(sizeof(mpfr_t) * count);
+    for (size_t i = 0; i < count; i++) mpfr_init2(arr[i], bits);
+    return arr;
+}
+
+static void fm_mpfr_array_free(mpfr_t* arr, size_t count) {
+    if (!arr) return;
+    for (size_t i = 0; i < count; i++) mpfr_clear(arr[i]);
+    free(arr);
+}
+
+/* MPFR central-difference gradient. h_rel ~ 10^-(digits/2). */
+static bool fm_grad_finite_diff_mpfr(Expr* f, FmVarBind* binds,
+                                     mpfr_t const* x, size_t n,
+                                     const FmOpts* opts, mpfr_t* g_out) {
+    long bits = opts->wp_bits;
+    mpfr_t* xp = fm_mpfr_array(n, bits);
+    for (size_t i = 0; i < n; i++) mpfr_set(xp[i], x[i], MPFR_RNDN);
+    mpfr_t step, scale, f0, f1, denom, h_rel;
+    mpfr_init2(step, bits); mpfr_init2(scale, bits);
+    mpfr_init2(f0, bits); mpfr_init2(f1, bits);
+    mpfr_init2(denom, bits); mpfr_init2(h_rel, bits);
+    /* h_rel = 10^-(digits/2), capped at 1e-7 to keep the difference
+     * informative even at moderate precision. */
+    double hd = numeric_bits_to_digits(bits) / 2.0;
+    if (hd < 7.0) hd = 7.0;
+    mpfr_set_ui(h_rel, 10, MPFR_RNDN);
+    mpfr_pow_si(h_rel, h_rel, -(long)hd, MPFR_RNDN);
+    bool ok = true;
+    for (size_t i = 0; i < n && ok; i++) {
+        mpfr_abs(scale, x[i], MPFR_RNDN);
+        mpfr_t one; mpfr_init2(one, bits); mpfr_set_ui(one, 1, MPFR_RNDN);
+        if (mpfr_cmp(scale, one) < 0) mpfr_set(scale, one, MPFR_RNDN);
+        mpfr_clear(one);
+        mpfr_mul(step, scale, h_rel, MPFR_RNDN);
+        mpfr_add(xp[i], x[i], step, MPFR_RNDN);
+        if (!fm_eval_scalar_mpfr(f, binds, xp, n, opts, f1)) { ok = false; break; }
+        mpfr_sub(xp[i], x[i], step, MPFR_RNDN);
+        if (!fm_eval_scalar_mpfr(f, binds, xp, n, opts, f0)) { ok = false; break; }
+        mpfr_sub(g_out[i], f1, f0, MPFR_RNDN);
+        mpfr_mul_ui(denom, step, 2, MPFR_RNDN);
+        mpfr_div(g_out[i], g_out[i], denom, MPFR_RNDN);
+        mpfr_set(xp[i], x[i], MPFR_RNDN);
+    }
+    fm_mpfr_array_free(xp, n);
+    mpfr_clears(step, scale, f0, f1, denom, h_rel, (mpfr_ptr)0);
+    return ok;
+}
+
+/* MPFR symbolic gradient evaluator. */
+static bool fm_eval_gradient_mpfr(Expr** g_exprs, FmVarBind* binds,
+                                  mpfr_t const* x, size_t n,
+                                  const FmOpts* opts, mpfr_t* g_out) {
+    long bits = opts->wp_bits;
+    Expr** xv = (Expr**)malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) xv[i] = expr_new_mpfr_copy(x[i]);
+    bool ok = true;
+    mpfr_t im;
+    mpfr_init2(im, bits);
+    for (size_t i = 0; i < n; i++) {
+        Expr* gi = fm_eval_with_bindings(g_exprs[i], binds, xv, n,
+                                         opts->eval_monitor,
+                                         fm_numeric_spec(opts));
+        if (!gi) { ok = false; break; }
+        bool inexact = false;
+        bool got = get_approx_mpfr(gi, g_out[i], im, &inexact);
+        if (!got || !mpfr_zero_p(im)) {
+            /* Tolerate tiny imaginary residue (matches scalar path). */
+            if (got) {
+                mpfr_t abs_im, abs_re, thresh;
+                mpfr_init2(abs_im, bits);
+                mpfr_init2(abs_re, bits);
+                mpfr_init2(thresh, bits);
+                mpfr_abs(abs_im, im, MPFR_RNDN);
+                mpfr_abs(abs_re, g_out[i], MPFR_RNDN);
+                mpfr_add_ui(abs_re, abs_re, 1, MPFR_RNDN);
+                long sub = (long)numeric_bits_to_digits(bits) - 4;
+                if (sub < 1) sub = 1;
+                mpfr_set_ui(thresh, 10, MPFR_RNDN);
+                mpfr_pow_si(thresh, thresh, -sub, MPFR_RNDN);
+                mpfr_mul(thresh, thresh, abs_re, MPFR_RNDN);
+                if (mpfr_cmp(abs_im, thresh) > 0) got = false;
+                mpfr_clears(abs_im, abs_re, thresh, (mpfr_ptr)0);
+            }
+            if (!got) { ok = false; expr_free(gi); break; }
+        }
+        expr_free(gi);
+    }
+    mpfr_clear(im);
+    for (size_t i = 0; i < n; i++) expr_free(xv[i]);
+    free(xv);
+    return ok;
+}
+
+/* MPFR project x into box. */
+static void fm_project_box_mpfr(mpfr_t* x, size_t n, const FmBox* boxes) {
+    long bits = mpfr_get_prec(x[0]);
+    mpfr_t bnd; mpfr_init2(bnd, bits);
+    for (size_t i = 0; i < n; i++) {
+        if (boxes[i].has_lo) {
+            mpfr_set_d(bnd, boxes[i].lo, MPFR_RNDN);
+            if (mpfr_cmp(x[i], bnd) < 0) mpfr_set(x[i], bnd, MPFR_RNDN);
+        }
+        if (boxes[i].has_hi) {
+            mpfr_set_d(bnd, boxes[i].hi, MPFR_RNDN);
+            if (mpfr_cmp(x[i], bnd) > 0) mpfr_set(x[i], bnd, MPFR_RNDN);
+        }
+    }
+    mpfr_clear(bnd);
+}
+
+/* MPFR Armijo line search. mu == 0 → plain f; otherwise augmented (not
+ * supported yet — penalty/MPFR is deferred). */
+static bool fm_line_search_mpfr(Expr* f, FmVarBind* binds, size_t n,
+                                mpfr_t const* x, mpfr_t const* d,
+                                const mpfr_t f0, const mpfr_t g_dot_d,
+                                const FmBox* boxes,
+                                const FmOpts* opts,
+                                mpfr_t alpha_out, mpfr_t f_out, mpfr_t* x_out) {
+    long bits = opts->wp_bits;
+    mpfr_t dnorm, alpha, fnew, accept, c1, alpha_d, candidate;
+    mpfr_init2(dnorm, bits); mpfr_init2(alpha, bits);
+    mpfr_init2(fnew, bits); mpfr_init2(accept, bits);
+    mpfr_init2(c1, bits); mpfr_init2(alpha_d, bits);
+    mpfr_init2(candidate, bits);
+    mpfr_set_d(c1, 1e-4, MPFR_RNDN);
+    mpfr_set_zero(dnorm, +1);
+    for (size_t i = 0; i < n; i++) {
+        mpfr_mul(candidate, d[i], d[i], MPFR_RNDN);
+        mpfr_add(dnorm, dnorm, candidate, MPFR_RNDN);
+    }
+    mpfr_sqrt(dnorm, dnorm, MPFR_RNDN);
+    mpfr_t one; mpfr_init2(one, bits); mpfr_set_ui(one, 1, MPFR_RNDN);
+    if (mpfr_cmp(dnorm, one) > 0) mpfr_ui_div(alpha, 1, dnorm, MPFR_RNDN);
+    else                            mpfr_set(alpha, one, MPFR_RNDN);
+    mpfr_clear(one);
+    bool found = false;
+    for (int k = 0; k < 60; k++) {
+        for (size_t i = 0; i < n; i++) {
+            mpfr_mul(candidate, alpha, d[i], MPFR_RNDN);
+            mpfr_add(x_out[i], x[i], candidate, MPFR_RNDN);
+        }
+        if (boxes) fm_project_box_mpfr(x_out, n, boxes);
+        if (!fm_eval_scalar_mpfr(f, binds, x_out, n, opts, fnew)) {
+            mpfr_div_ui(alpha, alpha, 2, MPFR_RNDN);
+            continue;
+        }
+        if (boxes) {
+            /* Projected-step acceptance: just need f decrease. */
+            mpfr_abs(accept, f0, MPFR_RNDN);
+            mpfr_t rhs; mpfr_init2(rhs, bits);
+            mpfr_set_d(rhs, 1e-12, MPFR_RNDN);
+            mpfr_mul(accept, accept, rhs, MPFR_RNDN);
+            mpfr_sub(rhs, f0, accept, MPFR_RNDN);
+            mpfr_clear(accept); mpfr_init2(accept, bits);
+            mpfr_set(accept, rhs, MPFR_RNDN);
+            mpfr_clear(rhs);
+            if (mpfr_cmp(fnew, accept) <= 0) {
+                mpfr_set(alpha_out, alpha, MPFR_RNDN);
+                mpfr_set(f_out, fnew, MPFR_RNDN);
+                found = true; break;
+            }
+        } else {
+            /* Standard Armijo: f(x + α d) ≤ f0 + c1·α·(g·d). */
+            mpfr_mul(alpha_d, c1, alpha, MPFR_RNDN);
+            mpfr_mul(alpha_d, alpha_d, g_dot_d, MPFR_RNDN);
+            mpfr_add(accept, f0, alpha_d, MPFR_RNDN);
+            if (mpfr_cmp(fnew, accept) <= 0) {
+                mpfr_set(alpha_out, alpha, MPFR_RNDN);
+                mpfr_set(f_out, fnew, MPFR_RNDN);
+                found = true; break;
+            }
+        }
+        mpfr_div_ui(alpha, alpha, 2, MPFR_RNDN);
+        /* Stop if alpha < 10^-(digits) — anything finer is below the
+         * representable resolution at the working precision. */
+        mpfr_t floor_alpha; mpfr_init2(floor_alpha, bits);
+        long edig = (long)numeric_bits_to_digits(bits);
+        mpfr_set_ui(floor_alpha, 10, MPFR_RNDN);
+        mpfr_pow_si(floor_alpha, floor_alpha, -edig - 5, MPFR_RNDN);
+        bool tiny = (mpfr_cmpabs(alpha, floor_alpha) < 0);
+        mpfr_clear(floor_alpha);
+        if (tiny) break;
+    }
+    mpfr_clears(dnorm, alpha, fnew, accept, c1, alpha_d, candidate, (mpfr_ptr)0);
+    return found;
+}
+
+/* BFGS at MPFR precision. Constraints / penalty paths are NOT supported
+ * yet at MPFR (a follow-up will lift the existing penalty machinery
+ * to mpfr_t when there's user demand); callers must route through the
+ * machine-precision path when general constraints are present. */
+static bool fm_run_bfgs_mpfr(Expr* f, Expr** vars, size_t n,
+                             FmVarBind* binds, Expr** g_exprs,
+                             mpfr_t* x, /* in/out */
+                             const FmBox* boxes,
+                             const FmOpts* opts,
+                             mpfr_t fx_out) {
+    (void)vars;
+    long bits = opts->wp_bits;
+    mpfr_t* H = fm_mpfr_array(n * n, bits);
+    mpfr_t* g = fm_mpfr_array(n, bits);
+    mpfr_t* g_new = fm_mpfr_array(n, bits);
+    mpfr_t* d = fm_mpfr_array(n, bits);
+    mpfr_t* x_new = fm_mpfr_array(n, bits);
+    mpfr_t* s_v = fm_mpfr_array(n, bits);
+    mpfr_t* y_v = fm_mpfr_array(n, bits);
+    mpfr_t* Hy = fm_mpfr_array(n, bits);
+    mpfr_t fx, fx_new, alpha, g_dot_d, gnorm, tol_acc, tol_prec;
+    mpfr_t tmp, sy, rho, yHy, coef, max_step, max_x;
+    mpfr_init2(fx, bits); mpfr_init2(fx_new, bits);
+    mpfr_init2(alpha, bits); mpfr_init2(g_dot_d, bits);
+    mpfr_init2(gnorm, bits); mpfr_init2(tol_acc, bits); mpfr_init2(tol_prec, bits);
+    mpfr_init2(tmp, bits); mpfr_init2(sy, bits); mpfr_init2(rho, bits);
+    mpfr_init2(yHy, bits); mpfr_init2(coef, bits);
+    mpfr_init2(max_step, bits); mpfr_init2(max_x, bits);
+
+    fm_tol_from_digits(tol_acc, opts->acc_goal_digits);
+    fm_tol_from_digits(tol_prec, opts->prec_goal_digits);
+
+    /* H ← I. */
+    for (size_t i = 0; i < n * n; i++) mpfr_set_zero(H[i], +1);
+    for (size_t i = 0; i < n; i++) mpfr_set_ui(H[i * n + i], 1, MPFR_RNDN);
+    if (boxes) fm_project_box_mpfr(x, n, boxes);
+
+    bool ok = false;
+    if (!fm_eval_scalar_mpfr(f, binds, x, n, opts, fx)) goto cleanup;
+
+    bool got_grad = g_exprs
+        && fm_eval_gradient_mpfr(g_exprs, binds, (mpfr_t const*)x, n, opts, g);
+    if (!got_grad) got_grad = fm_grad_finite_diff_mpfr(f, binds, (mpfr_t const*)x, n, opts, g);
+    if (!got_grad) {
+        fm_warn(g_fm_name, "nlnum", "MPFR gradient evaluation failed at start point");
+        goto cleanup;
+    }
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        /* ‖g‖₂ < tol_acc. */
+        mpfr_set_zero(gnorm, +1);
+        for (size_t i = 0; i < n; i++) {
+            mpfr_mul(tmp, g[i], g[i], MPFR_RNDN);
+            mpfr_add(gnorm, gnorm, tmp, MPFR_RNDN);
+        }
+        mpfr_sqrt(gnorm, gnorm, MPFR_RNDN);
+        if (mpfr_cmp(gnorm, tol_acc) < 0) { ok = true; break; }
+
+        /* d = -H g. */
+        for (size_t i = 0; i < n; i++) {
+            mpfr_set_zero(d[i], +1);
+            for (size_t j = 0; j < n; j++) {
+                mpfr_mul(tmp, H[i * n + j], g[j], MPFR_RNDN);
+                mpfr_add(d[i], d[i], tmp, MPFR_RNDN);
+            }
+            mpfr_neg(d[i], d[i], MPFR_RNDN);
+        }
+        mpfr_set_zero(g_dot_d, +1);
+        for (size_t i = 0; i < n; i++) {
+            mpfr_mul(tmp, g[i], d[i], MPFR_RNDN);
+            mpfr_add(g_dot_d, g_dot_d, tmp, MPFR_RNDN);
+        }
+        if (mpfr_sgn(g_dot_d) >= 0) {
+            /* Reset H to I, fall back to steepest descent. */
+            for (size_t i = 0; i < n * n; i++) mpfr_set_zero(H[i], +1);
+            for (size_t i = 0; i < n; i++) mpfr_set_ui(H[i * n + i], 1, MPFR_RNDN);
+            for (size_t i = 0; i < n; i++) mpfr_neg(d[i], g[i], MPFR_RNDN);
+            mpfr_set_zero(g_dot_d, +1);
+            for (size_t i = 0; i < n; i++) {
+                mpfr_mul(tmp, g[i], d[i], MPFR_RNDN);
+                mpfr_add(g_dot_d, g_dot_d, tmp, MPFR_RNDN);
+            }
+        }
+
+        bool ls_ok = fm_line_search_mpfr(f, binds, n,
+                                         (mpfr_t const*)x, (mpfr_t const*)d,
+                                         fx, g_dot_d, boxes, opts,
+                                         alpha, fx_new, x_new);
+        if (!ls_ok) {
+            fm_warn(g_fm_name, "lstol",
+                    "line search (MPFR) failed at iter %lld", (long long)k);
+            break;
+        }
+        fm_fire_monitor(opts->step_monitor);
+
+        /* max step + max |x|. */
+        mpfr_set_zero(max_step, +1);
+        mpfr_set_zero(max_x, +1);
+        for (size_t i = 0; i < n; i++) {
+            mpfr_sub(tmp, x_new[i], x[i], MPFR_RNDN); mpfr_abs(tmp, tmp, MPFR_RNDN);
+            if (mpfr_cmp(tmp, max_step) > 0) mpfr_set(max_step, tmp, MPFR_RNDN);
+            mpfr_abs(tmp, x_new[i], MPFR_RNDN);
+            if (mpfr_cmp(tmp, max_x) > 0) mpfr_set(max_x, tmp, MPFR_RNDN);
+        }
+
+        bool got_ng = g_exprs
+            && fm_eval_gradient_mpfr(g_exprs, binds, (mpfr_t const*)x_new, n, opts, g_new);
+        if (!got_ng) got_ng = fm_grad_finite_diff_mpfr(f, binds, (mpfr_t const*)x_new, n, opts, g_new);
+        if (!got_ng) {
+            fm_warn(g_fm_name, "nlnum", "MPFR gradient failed in iteration");
+            for (size_t i = 0; i < n; i++) mpfr_set(x[i], x_new[i], MPFR_RNDN);
+            mpfr_set(fx, fx_new, MPFR_RNDN);
+            break;
+        }
+
+        /* s = x_new - x; y = g_new - g; sy = s·y. */
+        for (size_t i = 0; i < n; i++) {
+            mpfr_sub(s_v[i], x_new[i], x[i], MPFR_RNDN);
+            mpfr_sub(y_v[i], g_new[i], g[i], MPFR_RNDN);
+        }
+        mpfr_set_zero(sy, +1);
+        for (size_t i = 0; i < n; i++) {
+            mpfr_mul(tmp, s_v[i], y_v[i], MPFR_RNDN);
+            mpfr_add(sy, sy, tmp, MPFR_RNDN);
+        }
+        mpfr_t sy_thresh; mpfr_init2(sy_thresh, bits);
+        mpfr_set_d(sy_thresh, 1e-12, MPFR_RNDN);
+        if (mpfr_cmp(sy, sy_thresh) > 0) {
+            mpfr_ui_div(rho, 1, sy, MPFR_RNDN);
+            /* Hy = H y. */
+            for (size_t i = 0; i < n; i++) {
+                mpfr_set_zero(Hy[i], +1);
+                for (size_t j = 0; j < n; j++) {
+                    mpfr_mul(tmp, H[i * n + j], y_v[j], MPFR_RNDN);
+                    mpfr_add(Hy[i], Hy[i], tmp, MPFR_RNDN);
+                }
+            }
+            mpfr_set_zero(yHy, +1);
+            for (size_t i = 0; i < n; i++) {
+                mpfr_mul(tmp, y_v[i], Hy[i], MPFR_RNDN);
+                mpfr_add(yHy, yHy, tmp, MPFR_RNDN);
+            }
+            /* coef = (sy + yHy) * rho^2. */
+            mpfr_add(coef, sy, yHy, MPFR_RNDN);
+            mpfr_mul(coef, coef, rho, MPFR_RNDN);
+            mpfr_mul(coef, coef, rho, MPFR_RNDN);
+            /* H ← H + coef * s s^T - rho * (Hy s^T + s Hy^T). */
+            mpfr_t a_, b_, c_;
+            mpfr_init2(a_, bits); mpfr_init2(b_, bits); mpfr_init2(c_, bits);
+            for (size_t i = 0; i < n; i++) {
+                for (size_t j = 0; j < n; j++) {
+                    mpfr_mul(a_, coef, s_v[i], MPFR_RNDN);
+                    mpfr_mul(a_, a_, s_v[j], MPFR_RNDN);
+                    mpfr_mul(b_, Hy[i], s_v[j], MPFR_RNDN);
+                    mpfr_mul(c_, s_v[i], Hy[j], MPFR_RNDN);
+                    mpfr_add(b_, b_, c_, MPFR_RNDN);
+                    mpfr_mul(b_, b_, rho, MPFR_RNDN);
+                    mpfr_add(H[i * n + j], H[i * n + j], a_, MPFR_RNDN);
+                    mpfr_sub(H[i * n + j], H[i * n + j], b_, MPFR_RNDN);
+                }
+            }
+            mpfr_clears(a_, b_, c_, (mpfr_ptr)0);
+        }
+        mpfr_clear(sy_thresh);
+
+        for (size_t i = 0; i < n; i++) {
+            mpfr_set(x[i], x_new[i], MPFR_RNDN);
+            mpfr_set(g[i], g_new[i], MPFR_RNDN);
+        }
+        mpfr_set(fx, fx_new, MPFR_RNDN);
+
+        /* PrecisionGoal: |step| < tol_prec * |x|. */
+        mpfr_t scale; mpfr_init2(scale, bits);
+        mpfr_mul(scale, tol_prec, max_x, MPFR_RNDN);
+        bool small = (mpfr_cmp(max_step, scale) < 0);
+        mpfr_clear(scale);
+        if (small) { ok = true; break; }
+    }
+    mpfr_set(fx_out, fx, MPFR_RNDN);
+    ok = true;
+cleanup:
+    fm_mpfr_array_free(H, n * n);
+    fm_mpfr_array_free(g, n);
+    fm_mpfr_array_free(g_new, n);
+    fm_mpfr_array_free(d, n);
+    fm_mpfr_array_free(x_new, n);
+    fm_mpfr_array_free(s_v, n);
+    fm_mpfr_array_free(y_v, n);
+    fm_mpfr_array_free(Hy, n);
+    mpfr_clears(fx, fx_new, alpha, g_dot_d, gnorm, tol_acc, tol_prec,
+                tmp, sy, rho, yHy, coef, max_step, max_x, (mpfr_ptr)0);
+    return ok;
+}
+#endif /* USE_MPFR */
 
 /* ------------------------------------------------------------------ *
  *  Variable spec parsing                                              *
@@ -993,6 +1489,269 @@ static bool fm_bracket(Expr* f, FmVarBind* binds, const FmOpts* opts,
 
 #define FM_CGOLD 0.3819660112501051
 #define FM_ZEPS  1.0e-12
+
+#ifdef USE_MPFR
+/* ------------------------------------------------------------------ *
+ *  Brent's minimisation (1D, MPFR)                                    *
+ * ------------------------------------------------------------------ *
+ * One-for-one transliteration of fm_brent_min — same parabolic-fit
+ * acceptance test, same golden-section fallback, same convergence
+ * predicates — with every double replaced by mpfr_t and every constant
+ * built fresh from base-10 powers at the requested precision. Box
+ * constraints clamp candidate iterates via box->lo / box->hi (those are
+ * machine-precision doubles, which is fine: the user's input box
+ * already lives at that resolution). */
+static bool fm_bracket_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
+                            const mpfr_t x0, const FmBox* box1,
+                            mpfr_t a, mpfr_t b, mpfr_t c,
+                            mpfr_t fa, mpfr_t fb, mpfr_t fc) {
+    long bits = opts->wp_bits;
+    mpfr_set(a, x0, MPFR_RNDN);
+    if (!fm_eval_scalar_mpfr_1d(f, bind, a, opts, fa)) return false;
+    /* h = max(|a|, 1) * 1e-2 */
+    mpfr_t h;
+    mpfr_init2(h, bits);
+    mpfr_abs(h, a, MPFR_RNDN);
+    {
+        mpfr_t one; mpfr_init2(one, bits); mpfr_set_ui(one, 1, MPFR_RNDN);
+        if (mpfr_cmp(h, one) < 0) mpfr_set(h, one, MPFR_RNDN);
+        mpfr_clear(one);
+    }
+    mpfr_mul_d(h, h, 1e-2, MPFR_RNDN);
+    mpfr_add(b, a, h, MPFR_RNDN);
+    mpfr_clear(h);
+    if (box1 && box1->has_hi) {
+        mpfr_t bhi; mpfr_init2(bhi, bits); mpfr_set_d(bhi, box1->hi, MPFR_RNDN);
+        if (mpfr_cmp(b, bhi) > 0) {
+            mpfr_add(b, a, bhi, MPFR_RNDN);
+            mpfr_div_ui(b, b, 2, MPFR_RNDN);
+        }
+        mpfr_clear(bhi);
+    }
+    if (box1 && box1->has_lo) {
+        mpfr_t blo; mpfr_init2(blo, bits); mpfr_set_d(blo, box1->lo, MPFR_RNDN);
+        if (mpfr_cmp(b, blo) < 0) {
+            mpfr_add(b, a, blo, MPFR_RNDN);
+            mpfr_div_ui(b, b, 2, MPFR_RNDN);
+        }
+        mpfr_clear(blo);
+    }
+    if (!fm_eval_scalar_mpfr_1d(f, bind, b, opts, fb)) return false;
+    if (mpfr_cmp(fb, fa) > 0) { mpfr_swap(a, b); mpfr_swap(fa, fb); }
+    /* c = b + 1.618 * (b - a) */
+    mpfr_t diff; mpfr_init2(diff, bits);
+    mpfr_sub(diff, b, a, MPFR_RNDN);
+    mpfr_mul_d(diff, diff, 1.618, MPFR_RNDN);
+    mpfr_add(c, b, diff, MPFR_RNDN);
+    mpfr_clear(diff);
+    if (box1 && box1->has_hi) {
+        mpfr_t bhi; mpfr_init2(bhi, bits); mpfr_set_d(bhi, box1->hi, MPFR_RNDN);
+        if (mpfr_cmp(c, bhi) > 0) mpfr_set(c, bhi, MPFR_RNDN);
+        mpfr_clear(bhi);
+    }
+    if (box1 && box1->has_lo) {
+        mpfr_t blo; mpfr_init2(blo, bits); mpfr_set_d(blo, box1->lo, MPFR_RNDN);
+        if (mpfr_cmp(c, blo) < 0) mpfr_set(c, blo, MPFR_RNDN);
+        mpfr_clear(blo);
+    }
+    if (!fm_eval_scalar_mpfr_1d(f, bind, c, opts, fc)) return false;
+    for (int k = 0; k < 100 && mpfr_cmp(fc, fb) <= 0; k++) {
+        mpfr_swap(a, b); mpfr_swap(fa, fb);
+        mpfr_swap(b, c); mpfr_swap(fb, fc);
+        mpfr_init2(diff, bits);
+        mpfr_sub(diff, b, a, MPFR_RNDN);
+        mpfr_mul_d(diff, diff, 1.618, MPFR_RNDN);
+        mpfr_add(c, b, diff, MPFR_RNDN);
+        mpfr_clear(diff);
+        bool hit_bound = false;
+        if (box1 && box1->has_hi) {
+            mpfr_t bhi; mpfr_init2(bhi, bits); mpfr_set_d(bhi, box1->hi, MPFR_RNDN);
+            if (mpfr_cmp(c, bhi) >= 0) { mpfr_set(c, bhi, MPFR_RNDN); hit_bound = true; }
+            mpfr_clear(bhi);
+        }
+        if (box1 && box1->has_lo) {
+            mpfr_t blo; mpfr_init2(blo, bits); mpfr_set_d(blo, box1->lo, MPFR_RNDN);
+            if (mpfr_cmp(c, blo) <= 0) { mpfr_set(c, blo, MPFR_RNDN); hit_bound = true; }
+            mpfr_clear(blo);
+        }
+        if (!fm_eval_scalar_mpfr_1d(f, bind, c, opts, fc)) return false;
+        if (hit_bound) break;
+    }
+    if (mpfr_cmp(a, c) > 0) { mpfr_swap(a, c); mpfr_swap(fa, fc); }
+    return true;
+}
+
+static bool fm_brent_min_mpfr(Expr* f, FmVarBind* bind, const FmOpts* opts,
+                              const mpfr_t a_in, const mpfr_t b_in, const mpfr_t c_in,
+                              const FmBox* box1,
+                              mpfr_t x_out, mpfr_t fx_out) {
+    long bits = opts->wp_bits;
+    mpfr_t a, c; mpfr_init2(a, bits); mpfr_init2(c, bits);
+    if (mpfr_cmp(a_in, c_in) <= 0) { mpfr_set(a, a_in, MPFR_RNDN); mpfr_set(c, c_in, MPFR_RNDN); }
+    else                            { mpfr_set(a, c_in, MPFR_RNDN); mpfr_set(c, a_in, MPFR_RNDN); }
+    mpfr_t tol, tol_acc, zeps;
+    mpfr_init2(tol, bits); mpfr_init2(tol_acc, bits); mpfr_init2(zeps, bits);
+    fm_tol_from_digits(tol, opts->prec_goal_digits);
+    fm_tol_from_digits(tol_acc, opts->acc_goal_digits);
+    /* zeps tracks the MPFR working precision rather than a fixed 1e-12,
+     * so x's last few representable bits are still allowed to settle. */
+    long zdig = (long)numeric_bits_to_digits(bits) - 1;
+    if (zdig < 1) zdig = 1;
+    mpfr_set_ui(zeps, 10, MPFR_RNDN);
+    mpfr_pow_si(zeps, zeps, -zdig, MPFR_RNDN);
+
+    mpfr_t e_step, d, x, w, v, fx, fw, fv;
+    mpfr_t xm, tol1, tol2, u, fu, p, q, r, etemp;
+    mpfr_init2(e_step, bits); mpfr_init2(d, bits);
+    mpfr_init2(x, bits); mpfr_init2(w, bits); mpfr_init2(v, bits);
+    mpfr_init2(fx, bits); mpfr_init2(fw, bits); mpfr_init2(fv, bits);
+    mpfr_init2(xm, bits); mpfr_init2(tol1, bits); mpfr_init2(tol2, bits);
+    mpfr_init2(u, bits); mpfr_init2(fu, bits);
+    mpfr_init2(p, bits); mpfr_init2(q, bits); mpfr_init2(r, bits);
+    mpfr_init2(etemp, bits);
+
+    mpfr_set_zero(e_step, +1);
+    mpfr_set_zero(d, +1);
+    mpfr_set(x, b_in, MPFR_RNDN);
+    mpfr_set(w, x, MPFR_RNDN);
+    mpfr_set(v, x, MPFR_RNDN);
+    if (mpfr_cmp(x, a) < 0 || mpfr_cmp(x, c) > 0) {
+        mpfr_add(x, a, c, MPFR_RNDN); mpfr_div_ui(x, x, 2, MPFR_RNDN);
+        mpfr_set(w, x, MPFR_RNDN); mpfr_set(v, x, MPFR_RNDN);
+    }
+
+    bool ok = false;
+    bool converged = false;
+    if (!fm_eval_scalar_mpfr_1d(f, bind, x, opts, fx)) goto cleanup;
+    mpfr_set(fw, fx, MPFR_RNDN);
+    mpfr_set(fv, fx, MPFR_RNDN);
+
+    mpfr_t diff_xm, half_ca, crit, abs_fx, thresh;
+    mpfr_init2(diff_xm, bits); mpfr_init2(half_ca, bits); mpfr_init2(crit, bits);
+    mpfr_init2(abs_fx, bits); mpfr_init2(thresh, bits);
+
+    for (int64_t k = 0; k < opts->max_iter; k++) {
+        mpfr_add(xm, a, c, MPFR_RNDN); mpfr_div_ui(xm, xm, 2, MPFR_RNDN);
+        mpfr_abs(tol1, x, MPFR_RNDN); mpfr_mul(tol1, tol1, tol, MPFR_RNDN);
+        mpfr_add(tol1, tol1, zeps, MPFR_RNDN);
+        mpfr_mul_ui(tol2, tol1, 2, MPFR_RNDN);
+        /* convergence: |x - xm| <= tol2 - (c - a) / 2 */
+        mpfr_sub(diff_xm, x, xm, MPFR_RNDN); mpfr_abs(diff_xm, diff_xm, MPFR_RNDN);
+        mpfr_sub(half_ca, c, a, MPFR_RNDN);  mpfr_div_ui(half_ca, half_ca, 2, MPFR_RNDN);
+        mpfr_sub(crit, tol2, half_ca, MPFR_RNDN);
+        bool cvg1 = (mpfr_cmp(diff_xm, crit) <= 0);
+        mpfr_abs(abs_fx, fx, MPFR_RNDN);
+        mpfr_add_ui(thresh, abs_fx, 1, MPFR_RNDN);
+        mpfr_mul(thresh, thresh, tol_acc, MPFR_RNDN);
+        bool cvg2 = (mpfr_cmp(abs_fx, thresh) < 0);
+        if (cvg1 || cvg2) { converged = true; break; }
+
+        bool used_parabolic = false;
+        if (mpfr_cmpabs(e_step, tol1) > 0) {
+            mpfr_t xw, xv_d, fxfv, fxfw, t1, t2;
+            mpfr_init2(xw, bits); mpfr_init2(xv_d, bits);
+            mpfr_init2(fxfv, bits); mpfr_init2(fxfw, bits);
+            mpfr_init2(t1, bits); mpfr_init2(t2, bits);
+            mpfr_sub(xw, x, w, MPFR_RNDN);
+            mpfr_sub(xv_d, x, v, MPFR_RNDN);
+            mpfr_sub(fxfv, fx, fv, MPFR_RNDN);
+            mpfr_sub(fxfw, fx, fw, MPFR_RNDN);
+            mpfr_mul(r, xw, fxfv, MPFR_RNDN);
+            mpfr_mul(q, xv_d, fxfw, MPFR_RNDN);
+            mpfr_mul(t1, xv_d, q, MPFR_RNDN);
+            mpfr_mul(t2, xw, r, MPFR_RNDN);
+            mpfr_sub(p, t1, t2, MPFR_RNDN);
+            mpfr_sub(q, q, r, MPFR_RNDN);
+            mpfr_mul_ui(q, q, 2, MPFR_RNDN);
+            if (mpfr_sgn(q) > 0) mpfr_neg(p, p, MPFR_RNDN);
+            mpfr_abs(q, q, MPFR_RNDN);
+            mpfr_set(etemp, e_step, MPFR_RNDN);
+            mpfr_set(e_step, d, MPFR_RNDN);
+            mpfr_t lower, upper, abs_p, halfq_e;
+            mpfr_init2(lower, bits); mpfr_init2(upper, bits);
+            mpfr_init2(abs_p, bits); mpfr_init2(halfq_e, bits);
+            mpfr_sub(lower, a, x, MPFR_RNDN); mpfr_mul(lower, lower, q, MPFR_RNDN);
+            mpfr_sub(upper, c, x, MPFR_RNDN); mpfr_mul(upper, upper, q, MPFR_RNDN);
+            mpfr_abs(abs_p, p, MPFR_RNDN);
+            mpfr_mul(halfq_e, q, etemp, MPFR_RNDN); mpfr_abs(halfq_e, halfq_e, MPFR_RNDN);
+            mpfr_div_ui(halfq_e, halfq_e, 2, MPFR_RNDN);
+            bool reject = (mpfr_cmp(abs_p, halfq_e) >= 0
+                        || mpfr_cmp(p, lower) <= 0
+                        || mpfr_cmp(p, upper) >= 0);
+            if (!reject) {
+                mpfr_div(d, p, q, MPFR_RNDN);
+                mpfr_add(u, x, d, MPFR_RNDN);
+                mpfr_t ua, cu;
+                mpfr_init2(ua, bits); mpfr_init2(cu, bits);
+                mpfr_sub(ua, u, a, MPFR_RNDN);
+                mpfr_sub(cu, c, u, MPFR_RNDN);
+                if (mpfr_cmp(ua, tol2) < 0 || mpfr_cmp(cu, tol2) < 0) {
+                    int s = (mpfr_cmp(xm, x) >= 0) ? 1 : -1;
+                    if (s > 0) mpfr_set(d, tol1, MPFR_RNDN);
+                    else       mpfr_neg(d, tol1, MPFR_RNDN);
+                }
+                mpfr_clears(ua, cu, (mpfr_ptr)0);
+                used_parabolic = true;
+            }
+            mpfr_clears(xw, xv_d, fxfv, fxfw, t1, t2,
+                        lower, upper, abs_p, halfq_e, (mpfr_ptr)0);
+        }
+        if (!used_parabolic) {
+            if (mpfr_cmp(x, xm) >= 0) mpfr_sub(e_step, a, x, MPFR_RNDN);
+            else                       mpfr_sub(e_step, c, x, MPFR_RNDN);
+            mpfr_mul_d(d, e_step, FM_CGOLD, MPFR_RNDN);
+        }
+        if (mpfr_cmpabs(d, tol1) >= 0) { mpfr_add(u, x, d, MPFR_RNDN); }
+        else if (mpfr_sgn(d) >= 0)     { mpfr_add(u, x, tol1, MPFR_RNDN); }
+        else                            { mpfr_sub(u, x, tol1, MPFR_RNDN); }
+        if (box1) {
+            if (box1->has_lo) {
+                mpfr_t blo; mpfr_init2(blo, bits); mpfr_set_d(blo, box1->lo, MPFR_RNDN);
+                if (mpfr_cmp(u, blo) < 0) mpfr_set(u, blo, MPFR_RNDN);
+                mpfr_clear(blo);
+            }
+            if (box1->has_hi) {
+                mpfr_t bhi; mpfr_init2(bhi, bits); mpfr_set_d(bhi, box1->hi, MPFR_RNDN);
+                if (mpfr_cmp(u, bhi) > 0) mpfr_set(u, bhi, MPFR_RNDN);
+                mpfr_clear(bhi);
+            }
+        }
+        if (!fm_eval_scalar_mpfr_1d(f, bind, u, opts, fu)) goto cleanup_inner;
+        fm_fire_monitor(opts->step_monitor);
+        if (mpfr_cmp(fu, fx) <= 0) {
+            if (mpfr_cmp(u, x) >= 0) mpfr_set(a, x, MPFR_RNDN);
+            else                      mpfr_set(c, x, MPFR_RNDN);
+            mpfr_set(v, w, MPFR_RNDN); mpfr_set(w, x, MPFR_RNDN); mpfr_set(x, u, MPFR_RNDN);
+            mpfr_set(fv, fw, MPFR_RNDN); mpfr_set(fw, fx, MPFR_RNDN); mpfr_set(fx, fu, MPFR_RNDN);
+        } else {
+            if (mpfr_cmp(u, x) < 0) mpfr_set(a, u, MPFR_RNDN);
+            else                     mpfr_set(c, u, MPFR_RNDN);
+            if (mpfr_cmp(fu, fw) <= 0 || mpfr_equal_p(w, x)) {
+                mpfr_set(v, w, MPFR_RNDN); mpfr_set(w, u, MPFR_RNDN);
+                mpfr_set(fv, fw, MPFR_RNDN); mpfr_set(fw, fu, MPFR_RNDN);
+            } else if (mpfr_cmp(fu, fv) <= 0 || mpfr_equal_p(v, x) || mpfr_equal_p(v, w)) {
+                mpfr_set(v, u, MPFR_RNDN); mpfr_set(fv, fu, MPFR_RNDN);
+            }
+        }
+    }
+    if (!converged) {
+        fm_warn(g_fm_name, "cvmit",
+                "Brent (MPFR) failed to converge within %lld iterations",
+                (long long)opts->max_iter);
+    }
+    mpfr_set(x_out, x, MPFR_RNDN);
+    mpfr_set(fx_out, fx, MPFR_RNDN);
+    ok = true;
+cleanup_inner:
+    mpfr_clears(diff_xm, half_ca, crit, abs_fx, thresh, (mpfr_ptr)0);
+cleanup:
+    mpfr_clears(a, c, tol, tol_acc, zeps,
+                e_step, d, x, w, v, fx, fw, fv,
+                xm, tol1, tol2, u, fu,
+                p, q, r, etemp, (mpfr_ptr)0);
+    return ok;
+}
+#endif /* USE_MPFR */
 
 static bool fm_brent_min(Expr* f, FmVarBind* bind, const FmOpts* opts,
                          double a, double b, double c,
@@ -1757,6 +2516,76 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
     double fx_min = 0.0;
     bool ok = true;
     bool has_general_cons = (ngens > 0);
+#ifdef USE_MPFR
+    bool mpfr_result = false;
+    mpfr_t* x_vec_mpfr = NULL;
+    mpfr_t fx_min_mpfr;
+    bool use_mpfr = (opts.prec_mode == FM_PREC_MPFR);
+    /* Penalty path is not lifted to MPFR yet — fall back to machine
+     * precision in that case rather than silently dropping the constraint. */
+    if (use_mpfr && has_general_cons) {
+        fm_warn(fn_name, "nimpl",
+                "general (non-box) constraints at WorkingPrecision > MachinePrecision "
+                "are not yet supported; falling back to machine precision");
+        use_mpfr = false;
+    }
+    if (use_mpfr) {
+        mpfr_init2(fx_min_mpfr, opts.wp_bits);
+        x_vec_mpfr = fm_mpfr_array(n, opts.wp_bits);
+        for (size_t i = 0; i < n; i++) mpfr_set_d(x_vec_mpfr[i], x_vec[i], MPFR_RNDN);
+        if (method == FM_METHOD_BRENT) {
+            if (n != 1) {
+                fm_warn(fn_name, "badmeth", "Method \"Brent\" requires a single variable");
+                ok = false; goto run_done;
+            }
+            mpfr_t a_m, b_m, c_m, fa_m, fb_m, fc_m;
+            mpfr_init2(a_m, opts.wp_bits); mpfr_init2(b_m, opts.wp_bits);
+            mpfr_init2(c_m, opts.wp_bits);
+            mpfr_init2(fa_m, opts.wp_bits); mpfr_init2(fb_m, opts.wp_bits);
+            mpfr_init2(fc_m, opts.wp_bits);
+            bool bracketed = false;
+            if (boxes[0].has_lo && boxes[0].has_hi) {
+                mpfr_set_d(a_m, boxes[0].lo, MPFR_RNDN);
+                mpfr_set_d(c_m, boxes[0].hi, MPFR_RNDN);
+                mpfr_add(b_m, a_m, c_m, MPFR_RNDN); mpfr_div_ui(b_m, b_m, 2, MPFR_RNDN);
+                /* If user gave a start inside, use it. */
+                if (x_vec[0] > boxes[0].lo && x_vec[0] < boxes[0].hi)
+                    mpfr_set(b_m, x_vec_mpfr[0], MPFR_RNDN);
+                bracketed = true;
+            } else {
+                bracketed = fm_bracket_mpfr(f_raw, binds, &opts, x_vec_mpfr[0],
+                                            &boxes[0], a_m, b_m, c_m, fa_m, fb_m, fc_m);
+                if (!bracketed) fm_warn(fn_name, "nlnum", "MPFR bracket-finding failed");
+            }
+            if (bracketed) {
+                mpfr_t xm_m, fmin_m;
+                mpfr_init2(xm_m, opts.wp_bits); mpfr_init2(fmin_m, opts.wp_bits);
+                ok = fm_brent_min_mpfr(f_raw, binds, &opts, a_m, b_m, c_m,
+                                       &boxes[0], xm_m, fmin_m);
+                if (ok) {
+                    mpfr_set(x_vec_mpfr[0], xm_m, MPFR_RNDN);
+                    mpfr_set(fx_min_mpfr, fmin_m, MPFR_RNDN);
+                }
+                mpfr_clears(xm_m, fmin_m, (mpfr_ptr)0);
+            } else {
+                ok = false;
+            }
+            mpfr_clears(a_m, b_m, c_m, fa_m, fb_m, fc_m, (mpfr_ptr)0);
+        } else {
+            /* n-D path: BFGS handles QuasiNewton; Newton/CG fall back to
+             * BFGS at MPFR with a one-shot diagnostic. */
+            if (method == FM_METHOD_NEWTON || method == FM_METHOD_CONJGRAD) {
+                fm_warn(fn_name, "nimpl",
+                        "Method \"%s\" at WorkingPrecision > MachinePrecision is not yet "
+                        "supported; falling back to QuasiNewton",
+                        method == FM_METHOD_NEWTON ? "Newton" : "ConjugateGradient");
+            }
+            ok = fm_run_bfgs_mpfr(f_raw, vars, n, binds, g_exprs,
+                                  x_vec_mpfr, boxes, &opts, fx_min_mpfr);
+        }
+        mpfr_result = ok;
+    } else {
+#endif
     if (method == FM_METHOD_BRENT) {
         if (n != 1) {
             fm_warn(fn_name, "badmeth", "Method \"Brent\" requires a single variable");
@@ -1806,6 +2635,9 @@ static Expr* findmin_driver(Expr* res, const char* fn_name) {
         fm_warn(fn_name, "nimpl", "method not implemented");
         ok = false;
     }
+#ifdef USE_MPFR
+    }
+#endif
 run_done:
     /* Clear temp bindings first so the variable symbol stays free during
      * Rule construction (otherwise `Rule[x, v]` would re-evaluate x to its
@@ -1813,7 +2645,22 @@ run_done:
     if (binds) {
         for (size_t i = 0; i < n; i++) fm_bind_clear_temp(&binds[i]);
     }
-    if (ok) result_out = fm_build_result(fx_min, vars, x_vec, n);
+    if (ok) {
+#ifdef USE_MPFR
+        if (mpfr_result) {
+            result_out = fm_build_result_mpfr(fx_min_mpfr, vars,
+                                              (mpfr_t const*)x_vec_mpfr, n);
+        } else {
+            result_out = fm_build_result(fx_min, vars, x_vec, n);
+        }
+#else
+        result_out = fm_build_result(fx_min, vars, x_vec, n);
+#endif
+    }
+#ifdef USE_MPFR
+    if (x_vec_mpfr) fm_mpfr_array_free(x_vec_mpfr, n);
+    if (use_mpfr)   mpfr_clear(fx_min_mpfr);
+#endif
 
 cleanup:
     if (binds) {
@@ -1886,14 +2733,28 @@ Expr* builtin_findmaximum(Expr* res) {
     Expr* min_result = findmin_driver(synthetic, "FindMaximum");
     expr_free(synthetic);
     if (!min_result) return NULL;
-    /* min_result is {fmin, {rules}}; negate fmin. */
+    /* min_result is {fmin, {rules}}; negate fmin while preserving its
+     * numeric type so a WorkingPrecision -> N run keeps the N-digit MPFR
+     * head instead of collapsing back to machine precision. */
     if (min_result->type == EXPR_FUNCTION
         && min_result->data.function.arg_count == 2) {
         Expr* fmin_e = min_result->data.function.args[0];
-        double fmin;
-        if (fm_expr_to_double_real(fmin_e, &fmin)) {
+#ifdef USE_MPFR
+        if (fmin_e && fmin_e->type == EXPR_MPFR) {
+            long bits = mpfr_get_prec(fmin_e->data.mpfr);
+            mpfr_t neg; mpfr_init2(neg, bits);
+            mpfr_neg(neg, fmin_e->data.mpfr, MPFR_RNDN);
             expr_free(fmin_e);
-            min_result->data.function.args[0] = expr_new_real(-fmin);
+            min_result->data.function.args[0] = expr_new_mpfr_copy(neg);
+            mpfr_clear(neg);
+        } else
+#endif
+        {
+            double fmin;
+            if (fm_expr_to_double_real(fmin_e, &fmin)) {
+                expr_free(fmin_e);
+                min_result->data.function.args[0] = expr_new_real(-fmin);
+            }
         }
     }
     return min_result;
