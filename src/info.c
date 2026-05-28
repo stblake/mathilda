@@ -1285,6 +1285,13 @@ void info_init(void) {
         "Boole[expr] remains unchanged if expr is neither True nor False.\n"
         "Boole[expr] is effectively equivalent to If[expr, 1, 0].\n"
         "Boole has attributes {Listable, Protected}, so Boole[{e1, e2, ...}] automatically threads to {Boole[e1], Boole[e2], ...}.");
+    symtab_set_docstring("ConditionalExpression",
+        "ConditionalExpression[expr, cond]\n"
+        "\tis a symbolic construct that represents expr when cond is True.\n"
+        "ConditionalExpression[expr, True] evaluates to expr.\n"
+        "ConditionalExpression[expr, False] evaluates to Undefined.\n"
+        "Nested forms collapse: ConditionalExpression[ConditionalExpression[e, c1], c2] evaluates to ConditionalExpression[e, c1 && c2].\n"
+        "ConditionalExpression has attribute Protected.");
     symtab_set_docstring("Evaluate", "Evaluate[expr]\n\tcauses expr to be evaluated even if it appears as the argument of a function whose attributes specify that it should be held unevaluated.\nEvaluate only overrides HoldFirst, HoldRest, and HoldAll attributes when it appears directly as the head of the function argument that would otherwise be held.\nEvaluate does not override HoldAllComplete.");
     symtab_set_docstring("ReleaseHold", "ReleaseHold[expr]\n\tremoves Hold, HoldForm, HoldPattern, and HoldComplete in expr.\nReleaseHold removes only one layer of Hold etc.; it does not remove inner occurrences in nested Hold etc. functions.");
     symtab_set_docstring("HoldPattern",

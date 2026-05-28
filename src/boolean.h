@@ -7,6 +7,7 @@ Expr* builtin_not(Expr* res);
 Expr* builtin_and(Expr* res);
 Expr* builtin_or(Expr* res);
 Expr* builtin_boole(Expr* res);
+Expr* builtin_conditional_expression(Expr* res);
 
 // Initialize boolean builtins
 void boolean_init(void);

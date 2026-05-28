@@ -120,6 +120,88 @@ void test_boole_compose_trueq() {
     assert_eval_eq("Boole[TrueQ[a < b]]", "0", 0);
 }
 
+/* ----- ConditionalExpression ----- */
+
+/* Defining cases from the docstring. */
+void test_conditional_expression_true_false() {
+    assert_eval_eq("ConditionalExpression[a, True]", "a", 0);
+    assert_eval_eq("ConditionalExpression[a, False]", "Undefined", 0);
+}
+
+/* Literal numerics on the True branch. */
+void test_conditional_expression_numeric_value() {
+    assert_eval_eq("ConditionalExpression[5, True]", "5", 0);
+    assert_eval_eq("ConditionalExpression[1/2, True]", "1/2", 0);
+    assert_eval_eq("ConditionalExpression[Sin[x], True]", "Sin[x]", 0);
+}
+
+/* A symbolic condition (neither True nor False) keeps the head intact. */
+void test_conditional_expression_symbolic_cond() {
+    assert_eval_eq("ConditionalExpression[a, c]", "ConditionalExpression[a, c]", 0);
+    assert_eval_eq("ConditionalExpression[x^2, x > 0]",
+                   "ConditionalExpression[x^2, x > 0]", 0);
+}
+
+/* Comparison conditions are evaluated before ConditionalExpression sees them. */
+void test_conditional_expression_evaluates_condition() {
+    assert_eval_eq("ConditionalExpression[a, 1 < 2]", "a", 0);
+    assert_eval_eq("ConditionalExpression[a, 2 < 1]", "Undefined", 0);
+    assert_eval_eq("ConditionalExpression[a, 1 == 1]", "a", 0);
+    assert_eval_eq("ConditionalExpression[a, 1 == 2]", "Undefined", 0);
+}
+
+/* And/Or in the condition reduce before the dispatch. */
+void test_conditional_expression_boolean_condition() {
+    assert_eval_eq("ConditionalExpression[a, True && True]", "a", 0);
+    assert_eval_eq("ConditionalExpression[a, True && False]", "Undefined", 0);
+    assert_eval_eq("ConditionalExpression[a, False || False]", "Undefined", 0);
+    assert_eval_eq("ConditionalExpression[a, !False]", "a", 0);
+}
+
+/* Nested CE flattens: CE[CE[e, c1], c2] -> CE[e, c1 && c2]. */
+void test_conditional_expression_nested_flattens() {
+    assert_eval_eq(
+        "ConditionalExpression[ConditionalExpression[e, c1], c2]",
+        "ConditionalExpression[e, c1 && c2]", 0);
+}
+
+/* Nested with a True outer condition collapses to the inner CE. */
+void test_conditional_expression_nested_outer_true() {
+    assert_eval_eq(
+        "ConditionalExpression[ConditionalExpression[e, c1], True]",
+        "ConditionalExpression[e, c1]", 0);
+}
+
+/* Nested with a False inner condition: outer True step exposes inner CE,
+ * which then resolves to Undefined. */
+void test_conditional_expression_nested_inner_false() {
+    assert_eval_eq(
+        "ConditionalExpression[ConditionalExpression[e, False], True]",
+        "Undefined", 0);
+}
+
+/* Arity errors remain unevaluated (no exception, no crash). */
+void test_conditional_expression_arity_unevaluated() {
+    assert_eval_eq("ConditionalExpression[]", "ConditionalExpression[]", 0);
+    assert_eval_eq("ConditionalExpression[a]", "ConditionalExpression[a]", 0);
+    assert_eval_eq("ConditionalExpression[a, b, c]",
+                   "ConditionalExpression[a, b, c]", 0);
+}
+
+/* Resolution under ReplaceAll: a symbolic condition that becomes True
+ * triggers the reduction. */
+void test_conditional_expression_replace_all() {
+    assert_eval_eq("ConditionalExpression[a, c] /. c -> True", "a", 0);
+    assert_eval_eq("ConditionalExpression[a, c] /. c -> False", "Undefined", 0);
+}
+
+/* Idempotence: evaluating the result of CE again is a fixed point. */
+void test_conditional_expression_idempotent() {
+    assert_eval_eq("ConditionalExpression[ConditionalExpression[a, True], True]",
+                   "a", 0);
+    assert_eval_eq("ConditionalExpression[a, True] + 1", "1 + a", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -141,6 +223,18 @@ int main() {
     TEST(test_boole_protected_semantics);
     TEST(test_boole_indicator_count);
     TEST(test_boole_compose_trueq);
+
+    TEST(test_conditional_expression_true_false);
+    TEST(test_conditional_expression_numeric_value);
+    TEST(test_conditional_expression_symbolic_cond);
+    TEST(test_conditional_expression_evaluates_condition);
+    TEST(test_conditional_expression_boolean_condition);
+    TEST(test_conditional_expression_nested_flattens);
+    TEST(test_conditional_expression_nested_outer_true);
+    TEST(test_conditional_expression_nested_inner_false);
+    TEST(test_conditional_expression_arity_unevaluated);
+    TEST(test_conditional_expression_replace_all);
+    TEST(test_conditional_expression_idempotent);
 
     printf("All Boole tests passed.\n");
     return 0;

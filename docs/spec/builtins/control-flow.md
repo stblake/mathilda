@@ -189,6 +189,29 @@ In[4]:= Total[Boole[# > 0 & /@ {-1, 2, -3, 4, 5}]]
 Out[4]= 3
 ```
 
+## ConditionalExpression
+Symbolic construct representing a value that is defined only when a condition holds.
+- `ConditionalExpression[expr, cond]`: Represents `expr` when `cond` is `True`.
+- `ConditionalExpression[expr, True]`: Evaluates to `expr`.
+- `ConditionalExpression[expr, False]`: Evaluates to `Undefined`.
+- Nested forms collapse: `ConditionalExpression[ConditionalExpression[e, c1], c2]` reduces to `ConditionalExpression[e, c1 && c2]`.
+
+**Attributes**: `Protected`.
+
+```mathematica
+In[1]:= ConditionalExpression[a, True]
+Out[1]= a
+
+In[2]:= ConditionalExpression[a, False]
+Out[2]= Undefined
+
+In[3]:= ConditionalExpression[x^2, x > 0]
+Out[3]= ConditionalExpression[x^2, x > 0]
+
+In[4]:= ConditionalExpression[ConditionalExpression[e, c1], c2]
+Out[4]= ConditionalExpression[e, c1 && c2]
+```
+
 ## Return
 Exits the nearest enclosing scope or loop, yielding a value.
 - `Return[expr]`: Yields `expr` from the innermost enclosing scope boundary.

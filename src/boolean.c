@@ -126,9 +126,59 @@ Expr* builtin_boole(Expr* res) {
     return NULL;
 }
 
+/* ConditionalExpression[expr, cond]
+ *   cond == True   -> expr
+ *   cond == False  -> Undefined
+ *   nested: ConditionalExpression[ConditionalExpression[e, c1], c2]
+ *           -> ConditionalExpression[e, c1 && c2]
+ *   otherwise stays unevaluated. */
+Expr* builtin_conditional_expression(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    Expr* expr = res->data.function.args[0];
+    Expr* cond = res->data.function.args[1];
+
+    if (cond->type == EXPR_SYMBOL) {
+        if (cond->data.symbol == SYM_True) {
+            /* Steal the expr slot so the evaluator's free of res does not
+             * double-free what we just returned. */
+            res->data.function.args[0] = NULL;
+            return expr;
+        }
+        if (cond->data.symbol == SYM_False) {
+            return expr_new_symbol("Undefined");
+        }
+    }
+
+    /* Nested flattening: ConditionalExpression[ConditionalExpression[e, c1], c2]
+     * collapses to ConditionalExpression[e, And[c1, c2]]. */
+    if (expr->type == EXPR_FUNCTION &&
+        expr->data.function.head->type == EXPR_SYMBOL &&
+        expr->data.function.head->data.symbol == SYM_ConditionalExpression &&
+        expr->data.function.arg_count == 2) {
+        Expr* inner_expr = expr_copy(expr->data.function.args[0]);
+        Expr** and_args = malloc(sizeof(Expr*) * 2);
+        and_args[0] = expr_copy(expr->data.function.args[1]);
+        and_args[1] = expr_copy(cond);
+        Expr* combined = expr_new_function(expr_new_symbol("And"), and_args, 2);
+        free(and_args);
+        Expr* combined_eval = evaluate(combined);
+        expr_free(combined);
+        Expr** new_args = malloc(sizeof(Expr*) * 2);
+        new_args[0] = inner_expr;
+        new_args[1] = combined_eval;
+        Expr* out = expr_new_function(expr_new_symbol("ConditionalExpression"),
+                                      new_args, 2);
+        free(new_args);
+        return out;
+    }
+
+    return NULL;
+}
+
 void boolean_init(void) {
     symtab_add_builtin("And", builtin_and);
     symtab_add_builtin("Or", builtin_or);
     symtab_add_builtin("Not", builtin_not);
     symtab_add_builtin("Boole", builtin_boole);
+    symtab_add_builtin("ConditionalExpression", builtin_conditional_expression);
 }
