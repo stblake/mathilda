@@ -78,9 +78,43 @@ Expansions where the inner series diverges at the expansion point (e.g. `Series[
 - **Log fast path**: when `arg` matches `a + b x^(p/q)` with `a, b` both free of `x` and `a != 1`, rewrite `Log[a + b x^c]` as `Log[a] + Log[1 + (b/a) x^c]` and let the `Log1p` kernel compose with a pure monomial. Maxima's `sp2log` uses the same identity.
 - **Apart preprocessing**: if the input contains `Power[p(x), -n]` for `p` a polynomial in `x`, run `Apart[f, x]` to decompose into partial fractions before expanding. Composite denominators like `1/((1-x)(1-2x)(1-3x))` then break up into geometric-series pieces that hit the monomial fast path. Gated by a polynomial check so non-rational denominators (e.g. `1/(Exp[x] - 1 - x)`) bypass Apart and fall through to the generic `so_inv` path.
 
-**Puiseux branch points for `ArcSin` / `ArcCos` at `x = ±1`**: Dedicated handler emits a Puiseux series with `den = 2` using the identity `ArcCos[1 - s] = Sqrt[2s] sum_{k>=0} b_k s^k / (2k+1)` (with `b_k = (2k)! / (8^k (k!)^2)`) and the symmetries `ArcSin[x] = Pi/2 - ArcCos[x]`, `ArcCos[-x] = Pi - ArcCos[x]`. Supports the simple-linear inner case `ArcSin[c + q (x - x0)]` / `ArcCos[c + q (x - x0)]` with `c = ±1`. Example: `Series[ArcSin[x], {x, 1, 1}]` returns `Pi/2 - I Sqrt[2] Sqrt[x - 1] + O[x - 1]^(3/2)`; `Series[ArcCos[x], {x, -1, 2}]` returns `Pi - Sqrt[2] Sqrt[x + 1] - Sqrt[2] (x + 1)^(3/2) / 12 + O[x + 1]^(5/2)`.
+**Branch-point expansion for inverse trig / hyperbolic heads** (MMA-faithful). All eight `Arc*` heads expand at their branch points with the same wrapped output shape:
 
-**Known limitation**: Puiseux branch points for the hyperbolic `Arc*` heads (`ArcCosh[x]` at `x = 1`, `ArcTanh[x]` at `x = ±1`, etc.) and for non-simple inner series at the circular branch points are still returned unevaluated rather than risking infinite-loop or incorrect output. The naive-Taylor fallback also caps iterations and bails out on `Infinity`/`Indeterminate` derivatives so unknown heads cannot spin the engine.
+```
+Plus[ f(x0),
+      Times[ log_coef, Log[x - x0] ],         (Family B only)
+      Times[ (-1)^Floor[(Pi/2 - Arg[x - x0])/(2 Pi)],
+             SeriesData[...] ] ]
+```
+
+The `(-1)^Floor[...]` factor is the MMA branch discriminator — it is `1` on the principal sheet near `x0` and flips sign across the branch cut. Two mathematical families:
+
+- **Family A — square-root branches** (derivative ~ `1/Sqrt[(x - x0) * linear]`): `ArcSin` / `ArcCos` at `x = ±1`; `ArcSinh` at `x = ±I`; `ArcCosh` at `x = ±1`. Output is a Puiseux series with `den = 2` and no `Log` term. Derived from the identities `ArcCos[1 - s] = Sqrt[2s] · Σ b_k s^k / (2k+1)`, `b_k = (2k)! / (8^k (k!)^2)`, `ArcSinh[σI + u] = σ·I·π/2 + 2 ArcSinh[Sqrt[u / (2σI)]]`, and the principal-branch `ArcCosh[1 + u] = 2 ArcSinh[Sqrt[u/2]]`.
+- **Family B — logarithmic branches** (derivative has a simple pole at `x0`): `ArcTan` / `ArcCot` at `x = ±I`; `ArcTanh` / `ArcCoth` at `x = ±1`. Output contains an explicit `Log[x - x0]` term with its own coefficient (e.g. `-1/2` for `ArcTanh@1`, `-I/2` for `ArcTan@I`) plus a regular power series with `den = 1`. Derived from the identities `ArcTanh[x] = (1/2) Log[(1 + x)/(1 - x)]` and `ArcTan[z] = (1/(2 I)) Log[(1 + I z)/(1 - I z)]`.
+
+The handler fires when the inner series at `x0` is exactly `c + q (x - x0)` (constant plus linear, with `q ≠ 0`) and `c` matches the branch-point value. For nested cases (e.g. `Sin[ArcSinh[x]]` near `x = I`), composition is preserved by emitting a constant-inside `SeriesObj` instead of the wrapper.
+
+Examples:
+
+```mathematica
+In[]:= Series[ArcSinh[x], {x, I, 3}]
+Out[]= I Pi/2 + (-1)^Floor[(Pi/2 - Arg[x - I])/(2 Pi)] (
+         (1 - I) Sqrt[x - I] + (1 + I)/12 (x - I)^(3/2)
+         + (-3 + 3 I)/160 (x - I)^(5/2) + O[x - I]^(7/2) )
+
+In[]:= Series[ArcTanh[x], {x, 1, 3}]
+Out[]= Log[2]/2 + I Pi/2 - Log[x - 1]/2 + (-1)^Floor[(Pi/2 - Arg[x-1])/(2 Pi)] (
+         (x - 1)/4 - (x - 1)^2/16 + (x - 1)^3/48 + O[x - 1]^4 )
+
+In[]:= Series[ArcCosh[x + 1], {x, 0, 5}]
+Out[]= (-1)^Floor[(Pi/2 - Arg[x])/(2 Pi)] (
+         Sqrt[2] Sqrt[x] - Sqrt[2]/12 x^(3/2) + 3 Sqrt[2]/160 x^(5/2)
+         - 5 Sqrt[2]/896 x^(7/2) + 35 Sqrt[2]/18432 x^(9/2) + O[x]^(11/2) )
+```
+
+`Normal[Series[ArcTanh[x], {x, 1, 3}]]` preserves the `Log[x - 1]` term and the branch discriminator — `Normal` collapses the inner `SeriesData` but the surrounding `Plus`/`Times` pass through unchanged (matching MMA).
+
+**Naive-Taylor fallback**: For expansion points that are not branch points (e.g. `Series[ArcSinh[x], {x, 1 + I, 3}]`, `Series[ArcSin[x], {x, 1/2, 3}]`), `series_expand` falls back to naive Taylor via repeated `D`. The fallback caps iterations and bails out on `Infinity` / `Indeterminate` derivatives so unknown heads cannot spin the engine.
 
 ```mathematica
 In[1]:= Series[Exp[x], {x, 0, 10}]

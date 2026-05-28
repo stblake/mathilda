@@ -548,17 +548,233 @@ static void test_series_csch(void) {
     expr_free(r);
 }
 
-/* ArcCosh[x+1] has a square-root branch point at x = 0 (derivative
- * blows up). Naive Taylor would spin emitting 1/0 errors; our guard
- * returns NULL and leaves the expression unevaluated. The test asserts
- * that the engine does not spin and that Series[...] passes through. */
+/* ArcCosh[x+1] has a square-root branch point at x = 0. Mathilda now
+ * emits the MMA-faithful Puiseux expansion wrapped in the
+ *   (-1)^Floor[(Pi/2 - Arg[x-x0])/(2*Pi)] * SeriesData[..., nmin=1, den=2]
+ * branch discriminator. The Family A branch handler (so_apply_arccosh_branch_point)
+ * fires because the inner series x+1 has constant 1 at x=0. */
 static void test_series_arccosh_branch_point(void) {
     setup_full();
-    Expr* e = parse_expression("Series[ArcCosh[x+1], {x, 0, 5}]");
+    assert_fullform(
+        "Series[ArcCosh[x+1], {x, 0, 5}]",
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[x]]]]]], "
+        "SeriesData[x, 0, List[0, Power[2, Rational[1, 2]], 0, "
+        "Times[Rational[-1, 6], Power[2, Rational[-1, 2]]], 0, "
+        "Times[Rational[3, 80], Power[2, Rational[-1, 2]]], 0, "
+        "Times[Rational[-5, 448], Power[2, Rational[-1, 2]]], 0, "
+        "Times[Rational[35, 9216], Power[2, Rational[-1, 2]]], 0], 0, 11, 2]]");
+}
+
+/* ====================================================================
+ * Branch-point expansions (MMA-faithful wrapper) for the eight
+ * inverse-trig / inverse-hyperbolic functions at their branch points.
+ *
+ * The output shape is uniform:
+ *   Plus[ f(x0),
+ *         Times[log_coef, Log[x - x0]],   (Family B only)
+ *         Times[ (-1)^Floor[(Pi/2 - Arg[x-x0])/(2*Pi)],
+ *                SeriesData[...] ] ]
+ * Family A (square-root branches): den = 2, no Log term.
+ * Family B (logarithmic branches): den = 1, with Log term.
+ * Composition cases (nested under another head) silently bake the
+ * constant/log inside SeriesData instead of emitting the wrapper.
+ * ==================================================================== */
+
+/* Family A — ArcSinh at +I (the originally reported failing case). */
+static void test_series_arcsinh_branch_point_pos_i(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcSinh[x], {x, I, 3}]",
+        "Plus[Times[Complex[0, Rational[1, 2]], Pi], "
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, -1], x]]]]]]], "
+        "SeriesData[x, Complex[0, 1], "
+        "List[0, Times[2, Power[Complex[0, Rational[-1, 2]], Rational[1, 2]]], 0, "
+        "Times[Complex[0, Rational[1, 6]], Power[Complex[0, Rational[-1, 2]], Rational[1, 2]]], 0, "
+        "Times[Rational[-3, 80], Power[Complex[0, Rational[-1, 2]], Rational[1, 2]]], 0], "
+        "0, 7, 2]]]");
+}
+
+/* Family A — ArcSinh at -I (sign flip on the constant). */
+static void test_series_arcsinh_branch_point_neg_i(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcSinh[x], {x, -I, 3}]",
+        "Plus[Times[Complex[0, Rational[-1, 2]], Pi], "
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, 1], x]]]]]]], "
+        "SeriesData[x, Complex[0, -1], "
+        "List[0, Times[2, Power[Complex[0, Rational[1, 2]], Rational[1, 2]]], 0, "
+        "Times[Complex[0, Rational[-1, 6]], Power[Complex[0, Rational[1, 2]], Rational[1, 2]]], 0, "
+        "Times[Rational[-3, 80], Power[Complex[0, Rational[1, 2]], Rational[1, 2]]], 0], "
+        "0, 7, 2]]]");
+}
+
+/* Family A — ArcCosh at +1 (additive constant = 0, hence no Plus wrapper). */
+static void test_series_arccosh_branch_point_pos(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcCosh[x], {x, 1, 3}]",
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[-1, x]]]]]]], "
+        "SeriesData[x, 1, "
+        "List[0, Power[2, Rational[1, 2]], 0, "
+        "Times[Rational[-1, 6], Power[2, Rational[-1, 2]]], 0, "
+        "Times[Rational[3, 80], Power[2, Rational[-1, 2]]], 0], 0, 7, 2]]");
+}
+
+/* Family A — ArcCosh at -1 (additive constant = I*Pi from principal-branch
+ * ArcCosh[-1]). */
+static void test_series_arccosh_branch_point_neg(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcCosh[x], {x, -1, 3}]",
+        "Plus[Times[Complex[0, 1], Pi], "
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[1, x]]]]]]], "
+        "SeriesData[x, -1, "
+        "List[0, Times[Complex[0, -1], Power[2, Rational[1, 2]]], 0, "
+        "Times[Complex[0, Rational[-1, 6]], Power[2, Rational[-1, 2]]], 0, "
+        "Times[Complex[0, Rational[-3, 80]], Power[2, Rational[-1, 2]]], 0], 0, 7, 2]]]");
+}
+
+/* Family B — ArcTanh at +1. Log[x-1] singularity with coefficient -1/2. */
+static void test_series_arctanh_branch_point_pos(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcTanh[x], {x, 1, 3}]",
+        "Plus[Times[Rational[1, 2], Log[2]], "
+        "Times[Complex[0, Rational[1, 2]], Pi], "
+        "Times[Rational[-1, 2], Log[Plus[-1, x]]], "
+        "Times[SeriesData[x, 1, List[0, Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 0, 4, 1], "
+        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[-1, x]]]]]]]]]");
+}
+
+/* Family B — ArcTanh at -1. Log[x+1] singularity with coefficient +1/2. */
+static void test_series_arctanh_branch_point_neg(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcTanh[x], {x, -1, 3}]",
+        "Plus[Times[Rational[-1, 2], Log[2]], "
+        "Times[Rational[1, 2], Log[Plus[1, x]]], "
+        "Times[SeriesData[x, -1, List[0, Rational[1, 4], Rational[1, 16], Rational[1, 48]], 0, 4, 1], "
+        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[1, x]]]]]]]]]");
+}
+
+/* Family B — ArcTan at +I. Log[x-I] singularity with coefficient -I/2. */
+static void test_series_arctan_branch_point_pos_i(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcTan[x], {x, I, 3}]",
+        "Plus[Times[Complex[0, Rational[1, 2]], Log[2]], "
+        "Times[Rational[1, 4], Pi], "
+        "Times[Complex[0, Rational[-1, 2]], Log[Plus[Complex[0, -1], x]]], "
+        "Times[SeriesData[x, Complex[0, 1], "
+        "List[0, Rational[1, 4], Complex[0, Rational[1, 16]], Rational[-1, 48]], 0, 4, 1], "
+        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, -1], x]]]]]]]]]");
+}
+
+/* Family B — ArcTan at -I. */
+static void test_series_arctan_branch_point_neg_i(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcTan[x], {x, -I, 3}]",
+        "Plus[Times[Complex[0, Rational[-1, 2]], Log[2]], "
+        "Times[Rational[-3, 4], Pi], "
+        "Times[Complex[0, Rational[1, 2]], Log[Plus[Complex[0, 1], x]]], "
+        "Times[SeriesData[x, Complex[0, -1], "
+        "List[0, Rational[1, 4], Complex[0, Rational[-1, 16]], Rational[-1, 48]], 0, 4, 1], "
+        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, 1], x]]]]]]]]]");
+}
+
+/* Family B derived — ArcCot at +I (via Pi/2 - ArcTan identity). */
+static void test_series_arccot_branch_point_pos_i(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcCot[x], {x, I, 3}]",
+        "Plus[Times[Complex[0, Rational[-1, 2]], Log[2]], "
+        "Times[Rational[1, 4], Pi], "
+        "Times[Complex[0, Rational[1, 2]], Log[Plus[Complex[0, -1], x]]], "
+        "Times[SeriesData[x, Complex[0, 1], "
+        "List[0, Rational[-1, 4], Complex[0, Rational[-1, 16]], Rational[1, 48]], 0, 4, 1], "
+        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[Complex[0, -1], x]]]]]]]]]");
+}
+
+/* Family B derived — ArcCoth at +1. */
+static void test_series_arccoth_branch_point_pos(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcCoth[x], {x, 1, 3}]",
+        "Plus[Times[Rational[1, 2], Log[2]], "
+        "Times[Rational[-1, 2], Log[Plus[-1, x]]], "
+        "Times[SeriesData[x, 1, List[0, Rational[1, 4], Rational[-1, 16], Rational[1, 48]], 0, 4, 1], "
+        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[-1, x]]]]]]]]]");
+}
+
+/* Family A retrofit — ArcSin at +1 (existing handler now routed through
+ * the same wrapper machinery). MMA emits this with the same Floor
+ * discriminator outside SeriesData; pre-refactor Mathilda baked Pi/2
+ * inside SeriesData. */
+static void test_series_arcsin_branch_point_pos(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ArcSin[x], {x, 1, 3}]",
+        "Plus[Times[Rational[1, 2], Pi], "
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[-1, x]]]]]]], "
+        "SeriesData[x, 1, "
+        "List[0, Times[Complex[0, -1], Power[2, Rational[1, 2]]], 0, "
+        "Times[Complex[0, Rational[1, 6]], Power[2, Rational[-1, 2]]], 0, "
+        "Times[Complex[0, Rational[-3, 80]], Power[2, Rational[-1, 2]]], 0], 0, 7, 2]]]");
+}
+
+/* Composition: Sin[Series[ArcSinh[x], {x, I, 3}]] must evaluate without
+ * the branch handler firing in wrap mode (composed cases produce a plain
+ * SeriesObj with the constant baked inside). The result is some SeriesData
+ * — we just assert it's not unevaluated / not an error. */
+static void test_series_branch_composition(void) {
+    setup_full();
+    Expr* e = parse_expression("Sin[Series[ArcSinh[x], {x, I, 3}]]");
     Expr* r = evaluate(e); expr_free(e);
     ASSERT(r->type == EXPR_FUNCTION);
-    /* Should return unevaluated Series[...] rather than hang or SeriesData. */
-    ASSERT(strcmp(r->data.function.head->data.symbol, "Series") == 0);
+    /* Composed branch points produce something — not bare Series or error. */
+    const char* head = r->data.function.head->data.symbol;
+    ASSERT(strcmp(head, "Series") != 0);
+    expr_free(r);
+}
+
+/* Regression: ArcSinh at a non-branch complex point (1+I) should still
+ * fall through to naive Taylor (no branch handler fires), producing a
+ * regular Taylor series with no Floor discriminator. */
+static void test_series_arcsinh_non_branch_complex(void) {
+    setup_full();
+    Expr* e = parse_expression("Series[ArcSinh[x], {x, 1+I, 3}]");
+    Expr* r = evaluate(e); expr_free(e);
+    ASSERT(r->type == EXPR_FUNCTION);
+    /* Should be a regular SeriesData (no branch wrap, no error). */
+    const char* head = r->data.function.head->data.symbol;
+    ASSERT(strcmp(head, "Series") != 0);
+    expr_free(r);
+}
+
+/* Normal[Series[ArcTanh[x], {x, 1, 3}]] must preserve the Log[x-1] term
+ * and the branch discriminator (Normal[] only collapses bare SeriesData;
+ * the surrounding Plus/Times pass through). */
+static void test_normal_branch_passthrough(void) {
+    setup_full();
+    Expr* e = parse_expression("Normal[Series[ArcTanh[x], {x, 1, 3}]]");
+    Expr* r = evaluate(e); expr_free(e);
+    ASSERT(r->type == EXPR_FUNCTION);
+    /* The result should be a Plus containing a Log[Plus[-1, x]] subterm. */
+    const char* head = r->data.function.head->data.symbol;
+    ASSERT(strcmp(head, "Plus") == 0);
     expr_free(r);
 }
 
@@ -1138,24 +1354,36 @@ static void test_series_infinity_no_inv_var_leak(void) {
 }
 
 /* Puiseux expansion at branch points for ArcSin / ArcCos at x = ±1.
- * ArcSin[x] at x=1: Pi/2 - I*Sqrt[2]*Sqrt[x-1] + O[x-1]^(3/2). The trailing
- * zero coefficient at exp 1 is retained in SeriesData; it drops from the
- * pretty-printed form because the coefficient is literally zero. */
+ * ArcSin[x] at x=1: Pi/2 - I*Sqrt[2]*Sqrt[x-1] + O[x-1]^(3/2). The
+ * additive constant Pi/2 and the (-1)^Floor[(Pi/2 - Arg[x-x0])/(2 Pi)]
+ * branch discriminator are emitted outside SeriesData (MMA-faithful),
+ * matching the wrapper format used for ArcSinh/ArcCosh/ArcTan/ArcTanh
+ * at their branch points. */
 static void test_series_arcsin_branch_point(void) {
     setup_full();
     assert_fullform(
         "Series[ArcSin[x], {x, 1, 1}]",
-        "SeriesData[x, 1, List[Times[Rational[1, 2], Pi], "
-        "Times[Complex[0, -1], Power[2, Rational[1, 2]]], 0], 0, 3, 2]");
+        "Plus[Times[Rational[1, 2], Pi], "
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[-1, x]]]]]]], "
+        "SeriesData[x, 1, List[0, "
+        "Times[Complex[0, -1], Power[2, Rational[1, 2]]], 0], 0, 3, 2]]]");
     /* ArcSin at x = -1 is the real branch. */
     assert_fullform(
         "Series[ArcSin[x], {x, -1, 1}]",
-        "SeriesData[x, -1, List[Times[Rational[-1, 2], Pi], "
-        "Power[2, Rational[1, 2]], 0], 0, 3, 2]");
+        "Plus[Times[Rational[-1, 2], Pi], "
+        "Times[SeriesData[x, -1, "
+        "List[0, Power[2, Rational[1, 2]], 0], 0, 3, 2], "
+        "Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[1, x]]]]]]]]]");
     /* ArcCos at x = -1: constant Pi, real coefficient. */
     assert_fullform(
         "Series[ArcCos[x], {x, -1, 1}]",
-        "SeriesData[x, -1, List[Pi, Times[-1, Power[2, Rational[1, 2]]], 0], 0, 3, 2]");
+        "Plus[Pi, "
+        "Times[Power[-1, Floor[Times[Rational[1, 2], Power[Pi, -1], "
+        "Plus[Times[Rational[1, 2], Pi], Times[-1, Arg[Plus[1, x]]]]]]], "
+        "SeriesData[x, -1, "
+        "List[0, Times[-1, Power[2, Rational[1, 2]]], 0], 0, 3, 2]]]");
 }
 
 int main(void) {
@@ -1189,6 +1417,20 @@ int main(void) {
     TEST(test_series_coth);
     TEST(test_series_csch);
     TEST(test_series_arccosh_branch_point);
+    TEST(test_series_arcsinh_branch_point_pos_i);
+    TEST(test_series_arcsinh_branch_point_neg_i);
+    TEST(test_series_arccosh_branch_point_pos);
+    TEST(test_series_arccosh_branch_point_neg);
+    TEST(test_series_arctanh_branch_point_pos);
+    TEST(test_series_arctanh_branch_point_neg);
+    TEST(test_series_arctan_branch_point_pos_i);
+    TEST(test_series_arctan_branch_point_neg_i);
+    TEST(test_series_arccot_branch_point_pos_i);
+    TEST(test_series_arccoth_branch_point_pos);
+    TEST(test_series_arcsin_branch_point_pos);
+    TEST(test_series_branch_composition);
+    TEST(test_series_arcsinh_non_branch_complex);
+    TEST(test_normal_branch_passthrough);
     TEST(test_series_arccsch_of_inverse);
     TEST(test_series_arccsc_of_inverse);
     TEST(test_series_arcsec_of_inverse);

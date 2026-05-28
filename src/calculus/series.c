@@ -272,6 +272,23 @@ typedef struct {
     int64_t den;        /* common denominator for exponents (>= 1) */
 } SeriesObj;
 
+/* Context threaded through the recursive series_expand. Defined here so the
+ * branch-point handlers (which sit above series_expand in the file) can
+ * inspect/mutate it directly. See full field documentation at the (former)
+ * declaration site just above series_expand. */
+typedef struct {
+    Expr*   x;
+    Expr*   x0;
+    int64_t order;
+    int64_t target_order;
+    bool    allow_branch_wrap;
+    Expr*   pending_add_const;
+    Expr*   pending_log_coef;
+    Expr*   pending_discriminator;
+} SeriesCtx;
+
+static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx);
+
 static SeriesObj* so_alloc(Expr* x, Expr* x0, int64_t nmin, int64_t order, int64_t den) {
     SeriesObj* s = calloc(1, sizeof(SeriesObj));
     s->x = expr_copy(x);
@@ -1220,6 +1237,16 @@ static int so_branch_point_sign(SeriesObj* inner) {
     return result;
 }
 
+/* Forward declarations for the shared branch-point helpers defined below
+ * (after the so_apply_arccos block). so_apply_arc_branch_point — refactored
+ * to share the same finalisation path as the new Family A / Family B
+ * handlers — calls into them. */
+static bool branch_check_linear_inner(SeriesObj* inner, int sign_c,
+                                      bool at_imag, Expr** q_out);
+static SeriesObj* family_a_alloc(SeriesCtx* ctx, int64_t user_order);
+static SeriesObj* family_a_finalize(SeriesObj* puiseux, Expr* add_const,
+                                    SeriesCtx* ctx);
+
 /* Puiseux branch-point expansion for ArcSin[c + q*w] or ArcCos[c + q*w],
  * where c = ±1, q is any non-zero Expr free of w, and the inner series is
  * exactly c + q*w (i.e. a constant + a single linear term; higher-order
@@ -1242,33 +1269,12 @@ static int so_branch_point_sign(SeriesObj* inner) {
  * at exponent 0 and the k-th Puiseux coefficient at exponent (2k+1)/2.
  */
 static SeriesObj* so_apply_arc_branch_point(SeriesObj* inner, int sign_c,
-                                            bool is_arcsin, int64_t user_order) {
-    SeriesObj* t = so_copy_trimmed(inner);
-    if (t->nmin != 0 || t->coef_count < 2) { so_free(t); return NULL; }
-    Expr* c_coef = t->coefs[0];
-    if (!(c_coef->type == EXPR_INTEGER && c_coef->data.integer == sign_c)) {
-        so_free(t); return NULL;
-    }
-    for (size_t i = 2; i < t->coef_count; i++) {
-        if (!is_lit_zero(t->coefs[i])) { so_free(t); return NULL; }
-    }
-    Expr* q = expr_copy(t->coefs[1]);
-    if (is_lit_zero(q)) { expr_free(q); so_free(t); return NULL; }
+                                            bool is_arcsin, int64_t user_order,
+                                            SeriesCtx* ctx) {
+    Expr* q;
+    if (!branch_check_linear_inner(inner, sign_c, /*at_imag=*/false, &q)) return NULL;
 
-    int64_t new_den = 2;
-    int64_t new_order = (user_order + 1) * new_den;
-    if (new_order < 2) new_order = 2;
-    SeriesObj* r = so_alloc(t->x, t->x0, 0, new_order, new_den);
-
-    /* Constant at exp 0: ±Pi/2 (ArcSin) or 0/Pi (ArcCos). */
-    Expr* const_term;
-    if (is_arcsin) {
-        const_term = simp(mk_times(make_rational(sign_c, 2), mk_symbol("Pi")));
-    } else {
-        const_term = (sign_c == -1) ? mk_symbol("Pi") : expr_new_integer(0);
-    }
-    if (r->coef_count > 0) so_set_coef(r, 0, const_term);
-    else expr_free(const_term);
+    SeriesObj* r = family_a_alloc(ctx, user_order);
 
     /* s = -sign_c * q, so Sqrt[2s] is real for q in the right domain. */
     Expr* s_expr = (sign_c == 1)
@@ -1286,7 +1292,7 @@ static SeriesObj* so_apply_arc_branch_point(SeriesObj* inner, int sign_c,
      * Chained with the 1/(2k+1) factor: r_{k+1}/r_k = (2k+1)^2 / (4(k+1)(2k+3)). */
     Expr* s_pow = expr_new_integer(1);
     Expr* r_k   = expr_new_integer(1);
-    int64_t max_k = (new_order - 1) / 2;
+    int64_t max_k = (r->order - 1) / 2;
     for (int64_t k = 0; k <= max_k; k++) {
         size_t idx = (size_t)(2*k + 1);
         if (idx >= r->coef_count) break;
@@ -1307,8 +1313,549 @@ static SeriesObj* so_apply_arc_branch_point(SeriesObj* inner, int sign_c,
     expr_free(s_expr);
     expr_free(q);
     expr_free(prefactor);
+
+    /* Additive constant at u^0: ±Pi/2 (ArcSin) or 0/Pi (ArcCos). */
+    Expr* const_term;
+    if (is_arcsin) {
+        const_term = simp(mk_times(make_rational(sign_c, 2), mk_symbol("Pi")));
+    } else {
+        const_term = (sign_c == -1) ? mk_symbol("Pi") : expr_new_integer(0);
+    }
+    return family_a_finalize(r, const_term, ctx);
+}
+
+/* ============================================================================
+ * Branch-point expansion for inverse trig / hyperbolic functions
+ *
+ * Two mathematical families:
+ *   Family A (square-root): derivative has 1/Sqrt[(x-x0)*linear]
+ *      ArcSin / ArcCos at x0 = ±1, ArcSinh at x0 = ±I,  ArcCosh at x0 = ±1.
+ *      Output is a Puiseux series with denom 2 (half-integer exponents).
+ *   Family B (logarithmic):  derivative has a simple pole at x0
+ *      ArcTan / ArcCot at x0 = ±I,  ArcTanh / ArcCoth at x0 = ±1.
+ *      Output is `c_log * Log[x-x0] + regular_power_series`.
+ *
+ * Each handler operates in one of two modes, selected by ctx->allow_branch_wrap:
+ *   - Wrap mode (top-level call from do_series_single): stashes the additive
+ *     constant, log coefficient, and (-1)^Floor[...] branch discriminator into
+ *     ctx->pending_*, returns a SeriesObj with coef[0] = 0. The outermost
+ *     epilogue builds the MMA-faithful
+ *       Plus[add_const, log_coef*Log[x-x0], Times[disc, SeriesData[...]]]
+ *     wrapper around the returned SeriesData.
+ *   - Inline mode (composed under another head): returns a SeriesObj with
+ *     coef[0] = add_const (+ log_coef*Log[x-x0] for Family B) so callers
+ *     like so_apply_sin can compose against the full value. The branch
+ *     discriminator is dropped — composed branch cases give a principal-
+ *     branch numerical answer without the Floor wrapper.
+ * ========================================================================== */
+
+/* Build the imaginary unit times an integer sign: Complex[0, sign]. */
+static Expr* make_imag_unit_signed(int sign) {
+    Expr* args[2] = { expr_new_integer(0), expr_new_integer(sign) };
+    return expr_new_function(mk_symbol("Complex"), args, 2);
+}
+
+/* True iff e is structurally equal to sign * I (i.e. Complex[0, sign]
+ * after canonicalisation). */
+static bool is_imag_unit(Expr* e, int sign) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type != EXPR_SYMBOL) return false;
+    if (e->data.function.head->data.symbol != SYM_Complex) return false;
+    if (e->data.function.arg_count != 2) return false;
+    Expr* re = e->data.function.args[0];
+    Expr* im = e->data.function.args[1];
+    if (!is_lit_zero(re)) return false;
+    return im->type == EXPR_INTEGER && im->data.integer == sign;
+}
+
+/* Detect that the constant term of `inner` is ±I and return that sign.
+ * Returns 0 if not a clean ±I literal. Mirror of so_branch_point_sign. */
+static int so_branch_point_imag_sign(SeriesObj* inner) {
+    SeriesObj* t = so_copy_trimmed(inner);
+    int result = 0;
+    if (t->nmin == 0 && t->coef_count >= 1) {
+        Expr* c = t->coefs[0];
+        if (is_imag_unit(c, 1))       result = 1;
+        else if (is_imag_unit(c, -1)) result = -1;
+    }
     so_free(t);
+    return result;
+}
+
+/* Build x - x0 as a (simplified) Expr (caller owns). */
+static Expr* build_x_minus_x0(Expr* x, Expr* x0) {
+    if (is_lit_zero(x0)) return expr_copy(x);
+    Expr* neg = simp(mk_times(expr_new_integer(-1), expr_copy(x0)));
+    return simp(mk_plus(expr_copy(x), neg));
+}
+
+/* MMA-style branch discriminator (-1)^Floor[(Pi/2 - Arg[x - x0])/(2*Pi)].
+ * For x on the principal sheet near x0 the Floor evaluates to 0 and the
+ * factor is +1; off-sheet evaluation crosses the branch and the factor
+ * flips sign. We use a uniform reference angle of Pi/2 for all eight
+ * branch points; MMA varies this per head/branch but the principal-branch
+ * result is identical (the Floor evaluates to 0 there in every case). */
+static Expr* make_branch_discriminator(Expr* x, Expr* x0) {
+    Expr* xmx0  = build_x_minus_x0(x, x0);
+    Expr* arg_e = mk_fn1("Arg", xmx0);
+    Expr* half_pi  = simp(mk_times(make_rational(1, 2), mk_symbol("Pi")));
+    Expr* diff     = simp(mk_plus(half_pi,
+                                  simp(mk_times(expr_new_integer(-1), arg_e))));
+    Expr* two_pi   = simp(mk_times(expr_new_integer(2), mk_symbol("Pi")));
+    Expr* inv_2pi  = simp(mk_power(two_pi, expr_new_integer(-1)));
+    Expr* ratio    = simp(mk_times(diff, inv_2pi));
+    Expr* floor_e  = mk_fn1("Floor", ratio);
+    return mk_power(expr_new_integer(-1), floor_e);
+}
+
+/* Build `factor * Log[x - x0]` as a (simplified) Expr (caller owns). */
+static Expr* build_log_term(Expr* factor, Expr* x, Expr* x0) {
+    Expr* base = build_x_minus_x0(x, x0);
+    Expr* log_e = simp(mk_fn1("Log", base));
+    return simp(mk_times(expr_copy(factor), log_e));
+}
+
+/* Stash branch-wrapper metadata onto ctx. Takes ownership of all three
+ * Expr arguments (any of which may be NULL). Frees any previous stash. */
+static void ctx_set_branch_meta(SeriesCtx* ctx,
+                                Expr* add_const,
+                                Expr* log_coef,
+                                Expr* discriminator) {
+    if (ctx->pending_add_const)     expr_free(ctx->pending_add_const);
+    if (ctx->pending_log_coef)      expr_free(ctx->pending_log_coef);
+    if (ctx->pending_discriminator) expr_free(ctx->pending_discriminator);
+    ctx->pending_add_const     = add_const;
+    ctx->pending_log_coef      = log_coef;
+    ctx->pending_discriminator = discriminator;
+}
+
+/* Recursive series_expand call that does NOT inherit the parent's
+ * allow_branch_wrap. Used by composition paths (Plus, Times, Power, Log,
+ * elementary-head inner argument expansion) so that a nested branch-point
+ * case is silently produced as a constant-inside SeriesObj (composition-
+ * friendly) rather than corrupting the outer wrap state. */
+static SeriesObj* series_expand_nested(Expr* e, SeriesCtx* ctx) {
+    bool saved = ctx->allow_branch_wrap;
+    ctx->allow_branch_wrap = false;
+    SeriesObj* r = series_expand(e, ctx);
+    ctx->allow_branch_wrap = saved;
     return r;
+}
+
+/* Assemble a Family A handler result from a Puiseux series (built with
+ * coef[0] zero and Puiseux terms at coef[1..]) and the additive constant
+ * f(x0). In wrap mode, stash the constant + discriminator on ctx and
+ * return the SeriesObj as-is. In inline mode, place the constant at
+ * coef[0] for composition. The series must already have nmin == 0 and
+ * den == 2. Takes ownership of add_const. */
+static SeriesObj* family_a_finalize(SeriesObj* puiseux, Expr* add_const,
+                                    SeriesCtx* ctx) {
+    if (ctx->allow_branch_wrap) {
+        Expr* disc = make_branch_discriminator(ctx->x, ctx->x0);
+        ctx_set_branch_meta(ctx, add_const, NULL, disc);
+        /* coef[0] stays 0; wrapper builds Plus[add_const, disc*SeriesData]. */
+        return puiseux;
+    }
+    /* Inline mode: bake the constant at coef[0] for composition. */
+    if (puiseux->coef_count > 0) {
+        so_set_coef(puiseux, 0, add_const);
+    } else {
+        expr_free(add_const);
+    }
+    return puiseux;
+}
+
+/* Assemble a Family B handler result from a regular power series (built
+ * with coef[0] zero and regular coefs at coef[1..], den == 1), the
+ * additive constant f(x0) (finite part), and the coefficient of the
+ * Log[x-x0] singularity. In wrap mode stash all three; in inline mode
+ * bake (add_const + log_coef*Log[x-x0]) into coef[0]. Takes ownership of
+ * add_const and log_coef. */
+static SeriesObj* family_b_finalize(SeriesObj* regular,
+                                    Expr* add_const, Expr* log_coef,
+                                    SeriesCtx* ctx) {
+    if (ctx->allow_branch_wrap) {
+        Expr* disc = make_branch_discriminator(ctx->x, ctx->x0);
+        ctx_set_branch_meta(ctx, add_const, log_coef, disc);
+        return regular;
+    }
+    /* Inline mode: coef[0] gets add_const + log_coef * Log[x - x0]. */
+    Expr* log_term = build_log_term(log_coef, ctx->x, ctx->x0);
+    Expr* combined = simp(mk_plus(add_const, log_term));
+    expr_free(log_coef);
+    if (regular->coef_count > 0) {
+        so_set_coef(regular, 0, combined);
+    } else {
+        expr_free(combined);
+    }
+    return regular;
+}
+
+/* Pre-flight check shared by all new branch-point handlers: `inner` must
+ * decompose exactly as `sign_c*branch_val + q*w`, with all higher
+ * coefficients zero. Returns true and yields q (caller owns) on success.
+ * `branch_val` is either Integer 1 (real branch) or Complex[0, 1] (imag).
+ * `inner` is consumed only for inspection; the original is left intact. */
+static bool branch_check_linear_inner(SeriesObj* inner, int sign_c,
+                                      bool at_imag, Expr** q_out) {
+    *q_out = NULL;
+    SeriesObj* t = so_copy_trimmed(inner);
+    bool ok = (t->nmin == 0 && t->coef_count >= 2);
+    if (ok) {
+        Expr* c = t->coefs[0];
+        if (at_imag) ok = is_imag_unit(c, sign_c);
+        else         ok = (c->type == EXPR_INTEGER && c->data.integer == sign_c);
+    }
+    if (ok) {
+        for (size_t i = 2; i < t->coef_count; i++) {
+            if (!is_lit_zero(t->coefs[i])) { ok = false; break; }
+        }
+    }
+    if (ok) *q_out = expr_copy(t->coefs[1]);
+    so_free(t);
+    if (ok && is_lit_zero(*q_out)) { expr_free(*q_out); *q_out = NULL; return false; }
+    return ok;
+}
+
+/* Allocate a Puiseux SeriesObj for a Family A handler. nmin = 0, den = 2,
+ * coef[0] = 0 (caller fills puiseux coefs at coef[1], coef[3], ...). */
+static SeriesObj* family_a_alloc(SeriesCtx* ctx, int64_t user_order) {
+    int64_t new_order = (user_order + 1) * 2;
+    if (new_order < 2) new_order = 2;
+    return so_alloc(ctx->x, ctx->x0, 0, new_order, 2);
+}
+
+/* Allocate a regular SeriesObj for a Family B handler. nmin = 0, den = 1,
+ * coef[0] = 0 (caller fills regular coefs at coef[1], coef[2], ...). */
+static SeriesObj* family_b_alloc(SeriesCtx* ctx, int64_t user_order) {
+    int64_t new_order = user_order + 1;
+    if (new_order < 1) new_order = 1;
+    return so_alloc(ctx->x, ctx->x0, 0, new_order, 1);
+}
+
+/* ----------------------------------------------------------------------------
+ * Family A — Puiseux at branch points
+ * ---------------------------------------------------------------------------- */
+
+/* ArcSinh[sign_c*I + q*w] = sign_c*I*Pi/2 + 2 * ArcSinh[Sqrt[q*w/(2*sign_c*I)]].
+ * Reuses kernel_coefs("ArcSinh", ...) for the inner ArcSinh expansion.
+ *
+ * Leading Puiseux coefficient (matches MMA's "1+I" * (-I) = 1-I for sign=+1):
+ *   c_0 = 2 / Sqrt[2*sign_c*I] * q^{1/2} = Sqrt[-2*sign_c*I*q]
+ */
+static SeriesObj* so_apply_arcsinh_branch_point(SeriesObj* inner, int sign_c,
+                                                int64_t user_order,
+                                                SeriesCtx* ctx) {
+    Expr* q;
+    if (!branch_check_linear_inner(inner, sign_c, /*at_imag=*/true, &q)) return NULL;
+
+    SeriesObj* r = family_a_alloc(ctx, user_order);
+    /* Use ArcSinh's odd kernel coefficients: ArcSinh[w] = sum_{j odd} a_j w^j.
+     * With w = Sqrt[q*v/(2*sign_c*I)] where v = w (the series variable),
+     * and the outer factor 2, we get terms at v^{(j+1)/2 - 1/2} ... wait.
+     * Cleaner: c_k = coefficient of v^((2k+1)/2) in 2*ArcSinh[Sqrt[v/(2c)]]
+     *             = 2 * arcsinh[2k+1] * (1/(2c))^{k+1/2}
+     *             = 2*arcsinh[2k+1] * (1/(2c))^k * (1/(2c))^{1/2}
+     * With an outer monomial q*v -> coefficient at v^((2k+1)/2) scales by
+     * q^{k+1/2}: c_k(q) = 2*arcsinh[2k+1] * (q/(2c))^k * (q/(2c))^{1/2}
+     * where c = sign_c*I. Set base = q/(2*sign_c*I) = -sign_c*I*q/2.
+     */
+    int64_t max_k = (r->order - 1) / 2;
+    size_t N = (size_t)(2 * max_k + 2);
+    if (N < 2) N = 2;
+    Expr** kc = kernel_coefs("ArcSinh", N);
+
+    /* base = q / (2 * sign_c * I) = -sign_c * I * q / 2 */
+    Expr* iconst = make_imag_unit_signed(-sign_c);
+    Expr* iq     = simp(mk_times(iconst, expr_copy(q)));
+    Expr* base   = simp(mk_times(make_rational(1, 2), iq));
+
+    /* sqrt_base = Sqrt[base] -- leading factor */
+    Expr* sqrt_base = simp(mk_power(expr_copy(base), make_rational(1, 2)));
+    Expr* prefactor = simp(mk_times(expr_new_integer(2), sqrt_base));
+
+    Expr* base_pow = expr_new_integer(1);  /* base^0 */
+    for (int64_t k = 0; k <= max_k; k++) {
+        size_t idx_in_r = (size_t)(2*k + 1);
+        if (idx_in_r >= r->coef_count) break;
+        /* kc[2k+1] is the ArcSinh coefficient at u^{2k+1}. */
+        Expr* ker = (2*(size_t)k + 1 < N) ? kc[2*k + 1] : expr_new_integer(0);
+        Expr* coef = simp(mk_times(expr_copy(prefactor),
+                          simp(mk_times(expr_copy(ker), expr_copy(base_pow)))));
+        so_set_coef(r, idx_in_r, coef);
+        /* Advance base_pow *= base for next iteration. */
+        Expr* next = simp(mk_times(base_pow, expr_copy(base)));
+        base_pow = next;
+    }
+    expr_free(base_pow);
+    expr_free(base);
+    expr_free(prefactor);
+    expr_free(q);
+    kernel_coefs_free(kc, N);
+
+    /* f(x0) = sign_c * I * Pi/2 = sign_c * Complex[0, 1/2] * Pi. */
+    Expr* iconst2 = expr_new_function(mk_symbol("Complex"),
+                        (Expr*[]){ expr_new_integer(0), make_rational(sign_c, 2) }, 2);
+    Expr* add_const = simp(mk_times(iconst2, mk_symbol("Pi")));
+    return family_a_finalize(r, add_const, ctx);
+}
+
+/* ArcCosh[sign_c + q*w]:
+ *   sign_c = +1:  0 + 2*ArcSinh[Sqrt[q*w/2]]
+ *   sign_c = -1:  I*Pi + 2*ArcSinh[Sqrt[q*w/(-2)]] - 2*ArcSinh[0] ... no.
+ *
+ * Use the identities (principal branch):
+ *   ArcCosh[1 + u]  = 2*ArcSinh[Sqrt[u/2]]
+ *   ArcCosh[-1 + u] = I*Pi - ArcCosh[1 - u] = I*Pi - 2*ArcSinh[Sqrt[-u/2]]
+ *
+ * Same Sqrt[base] * 2 * ArcSinh kernel as ArcSinh@±I; the only differences
+ * are the additive constant and the sign of base. */
+static SeriesObj* so_apply_arccosh_branch_point(SeriesObj* inner, int sign_c,
+                                                int64_t user_order,
+                                                SeriesCtx* ctx) {
+    Expr* q;
+    if (!branch_check_linear_inner(inner, sign_c, /*at_imag=*/false, &q)) return NULL;
+
+    SeriesObj* r = family_a_alloc(ctx, user_order);
+    int64_t max_k = (r->order - 1) / 2;
+    size_t N = (size_t)(2 * max_k + 2);
+    if (N < 2) N = 2;
+    Expr** kc = kernel_coefs("ArcSinh", N);
+
+    /* base = q/2 (sign_c=+1) or -q/2 (sign_c=-1, with overall minus sign on
+     * the prefactor: -2*ArcSinh[Sqrt[-u/2]] ... but Sqrt[-u/2] for u>0 real
+     * is imaginary; the i absorbs into the leading Sqrt and yields the
+     * correct principal-branch result.) */
+    Expr* base = (sign_c == 1)
+        ? simp(mk_times(make_rational(1, 2), expr_copy(q)))
+        : simp(mk_times(make_rational(-1, 2), expr_copy(q)));
+
+    Expr* sqrt_base = simp(mk_power(expr_copy(base), make_rational(1, 2)));
+    Expr* sign_factor = (sign_c == 1) ? expr_new_integer(2) : expr_new_integer(-2);
+    Expr* prefactor = simp(mk_times(sign_factor, sqrt_base));
+
+    Expr* base_pow = expr_new_integer(1);
+    for (int64_t k = 0; k <= max_k; k++) {
+        size_t idx_in_r = (size_t)(2*k + 1);
+        if (idx_in_r >= r->coef_count) break;
+        Expr* ker = (2*(size_t)k + 1 < N) ? kc[2*k + 1] : expr_new_integer(0);
+        Expr* coef = simp(mk_times(expr_copy(prefactor),
+                          simp(mk_times(expr_copy(ker), expr_copy(base_pow)))));
+        so_set_coef(r, idx_in_r, coef);
+        Expr* next = simp(mk_times(base_pow, expr_copy(base)));
+        base_pow = next;
+    }
+    expr_free(base_pow);
+    expr_free(base);
+    expr_free(prefactor);
+    expr_free(q);
+    kernel_coefs_free(kc, N);
+
+    /* f(x0): 0 at +1, I*Pi at -1. */
+    Expr* add_const;
+    if (sign_c == 1) {
+        add_const = expr_new_integer(0);
+    } else {
+        Expr* iconst = make_imag_unit_signed(1);
+        add_const = simp(mk_times(iconst, mk_symbol("Pi")));
+    }
+    return family_a_finalize(r, add_const, ctx);
+}
+
+/* ----------------------------------------------------------------------------
+ * Family B — Logarithmic at branch points
+ *
+ * Each function is rewritten near its branch point in the form
+ *     H[x0 + u] = add_const + log_coef * Log[u] + (factor) * Log[1 ± k*u]
+ * where the final Log[1 ± k*u] is expanded by the Log1p kernel. The first
+ * two terms become the add_const / log_coef metadata; the last becomes the
+ * regular power-series part with coef[0] = 0 by construction.
+ * ---------------------------------------------------------------------------- */
+
+/* Compose `factor * Log[1 + alpha*u]` as a regular power series in u
+ * (truncated to user_order). u corresponds to (x - x0) with den = 1.
+ * alpha can be any Expr (Integer, Complex, etc.) free of u.
+ *
+ * Returns a SeriesObj with nmin = 0, den = 1, coef[0] = 0, coef[k>=1] =
+ * factor * (-1)^(k+1) * alpha^k / k. */
+static SeriesObj* family_b_build_log1p_part(SeriesCtx* ctx, int64_t user_order,
+                                            Expr* factor, Expr* alpha) {
+    SeriesObj* r = family_b_alloc(ctx, user_order);
+    Expr* alpha_pow = expr_new_integer(1);  /* alpha^0 */
+    for (int64_t k = 1; k < r->order; k++) {
+        Expr* next = simp(mk_times(alpha_pow, expr_copy(alpha)));
+        alpha_pow = next;
+        /* coef = factor * (-1)^(k+1) * alpha^k / k */
+        int64_t sign = (k & 1) ? 1 : -1;
+        Expr* sk = simp(mk_times(expr_new_integer(sign), expr_copy(alpha_pow)));
+        Expr* over_k = simp(mk_times(sk, make_rational(1, k)));
+        Expr* coef = simp(mk_times(expr_copy(factor), over_k));
+        so_set_coef(r, (size_t)k, coef);
+    }
+    expr_free(alpha_pow);
+    return r;
+}
+
+/* ArcTanh[1 + u] near u = 0:
+ *   = (1/2) * (Log[2 + u] - Log[-u])
+ *   = (Log[2]/2 + I*Pi/2) + (-1/2)*Log[u] + (1/2)*Log[1 + u/2]
+ *
+ * ArcTanh[-1 + u] near u = 0:
+ *   = (1/2) * (Log[u] - Log[2 - u])
+ *   = (-Log[2]/2) + (+1/2)*Log[u] + (-1/2)*Log[1 - u/2]
+ */
+static SeriesObj* so_apply_arctanh_branch_point(SeriesObj* inner, int sign_c,
+                                                int64_t user_order,
+                                                SeriesCtx* ctx) {
+    Expr* q;
+    if (!branch_check_linear_inner(inner, sign_c, /*at_imag=*/false, &q)) return NULL;
+
+    Expr* add_const;
+    Expr* log_coef;
+    Expr* reg_factor;
+    Expr* reg_alpha;  /* alpha in Log[1 + alpha * u] */
+    if (sign_c == 1) {
+        /* add_const = Log[2]/2 + I*Pi/2 */
+        Expr* half_log2 = simp(mk_times(make_rational(1, 2),
+                                       simp(mk_fn1("Log", expr_new_integer(2)))));
+        Expr* ipi2 = simp(mk_times(make_imag_unit_signed(1),
+                                  simp(mk_times(make_rational(1, 2), mk_symbol("Pi")))));
+        add_const = simp(mk_plus(half_log2, ipi2));
+        log_coef  = make_rational(-1, 2);
+        reg_factor = make_rational(1, 2);
+        reg_alpha  = simp(mk_times(make_rational(1, 2), expr_copy(q)));
+    } else {
+        /* add_const = -Log[2]/2 */
+        add_const = simp(mk_times(make_rational(-1, 2),
+                                  simp(mk_fn1("Log", expr_new_integer(2)))));
+        log_coef  = make_rational(1, 2);
+        reg_factor = make_rational(-1, 2);
+        reg_alpha  = simp(mk_times(make_rational(-1, 2), expr_copy(q)));
+    }
+    SeriesObj* r = family_b_build_log1p_part(ctx, user_order, reg_factor, reg_alpha);
+    expr_free(reg_factor); expr_free(reg_alpha); expr_free(q);
+    return family_b_finalize(r, add_const, log_coef, ctx);
+}
+
+/* ArcCoth[1 + u]  = (1/2) * (Log[2 + u] - Log[u])  (both real for u > 0)
+ *                 = Log[2]/2 + (-1/2)*Log[u] + (1/2)*Log[1 + u/2]
+ *
+ * ArcCoth[-1 + u] = (1/2) * (Log[u] - Log[-2 + u])
+ *                 For u > 0 real: -2 + u is negative ⇒ Log[-2+u] = Log[2-u] + I*Pi
+ *                 = -Log[2]/2 + I*Pi/2 + (+1/2)*Log[u] + (-1/2)*Log[1 - u/2]
+ */
+static SeriesObj* so_apply_arccoth_branch_point(SeriesObj* inner, int sign_c,
+                                                int64_t user_order,
+                                                SeriesCtx* ctx) {
+    Expr* q;
+    if (!branch_check_linear_inner(inner, sign_c, /*at_imag=*/false, &q)) return NULL;
+
+    Expr* add_const;
+    Expr* log_coef;
+    Expr* reg_factor;
+    Expr* reg_alpha;
+    if (sign_c == 1) {
+        add_const = simp(mk_times(make_rational(1, 2),
+                                  simp(mk_fn1("Log", expr_new_integer(2)))));
+        log_coef  = make_rational(-1, 2);
+        reg_factor = make_rational(1, 2);
+        reg_alpha  = simp(mk_times(make_rational(1, 2), expr_copy(q)));
+    } else {
+        Expr* neg_half_log2 = simp(mk_times(make_rational(-1, 2),
+                                            simp(mk_fn1("Log", expr_new_integer(2)))));
+        Expr* ipi2 = simp(mk_times(make_imag_unit_signed(1),
+                                  simp(mk_times(make_rational(1, 2), mk_symbol("Pi")))));
+        add_const = simp(mk_plus(neg_half_log2, ipi2));
+        log_coef  = make_rational(1, 2);
+        reg_factor = make_rational(-1, 2);
+        reg_alpha  = simp(mk_times(make_rational(-1, 2), expr_copy(q)));
+    }
+    SeriesObj* r = family_b_build_log1p_part(ctx, user_order, reg_factor, reg_alpha);
+    expr_free(reg_factor); expr_free(reg_alpha); expr_free(q);
+    return family_b_finalize(r, add_const, log_coef, ctx);
+}
+
+/* ArcTan[I + u]  = (Pi/4 + (I/2)*Log[2]) + (-I/2)*Log[u] + (I/2)*Log[1 - I*u/2]
+ * ArcTan[-I + u] = (-3*Pi/4 - (I/2)*Log[2]) + (I/2)*Log[u] + (-I/2)*Log[1 + I*u/2]
+ */
+static SeriesObj* so_apply_arctan_branch_point(SeriesObj* inner, int sign_c,
+                                               int64_t user_order,
+                                               SeriesCtx* ctx) {
+    Expr* q;
+    if (!branch_check_linear_inner(inner, sign_c, /*at_imag=*/true, &q)) return NULL;
+
+    Expr* add_const;
+    Expr* log_coef;
+    Expr* reg_factor;
+    Expr* reg_alpha;
+    Expr* half_i_log2 = simp(mk_times(make_imag_unit_signed(1),
+                              simp(mk_times(make_rational(1, 2),
+                                            simp(mk_fn1("Log", expr_new_integer(2)))))));
+    if (sign_c == 1) {
+        Expr* pi4 = simp(mk_times(make_rational(1, 4), mk_symbol("Pi")));
+        add_const = simp(mk_plus(pi4, half_i_log2));
+        log_coef  = simp(mk_times(make_rational(-1, 2), make_imag_unit_signed(1)));
+        reg_factor = simp(mk_times(make_rational(1, 2), make_imag_unit_signed(1)));
+        /* alpha = -I/2 * q */
+        Expr* mI = make_imag_unit_signed(-1);
+        reg_alpha = simp(mk_times(make_rational(1, 2),
+                                  simp(mk_times(mI, expr_copy(q)))));
+    } else {
+        Expr* neg3pi4 = simp(mk_times(make_rational(-3, 4), mk_symbol("Pi")));
+        /* add_const = -3*Pi/4 - (I/2)*Log[2] = neg3pi4 + (-1)*half_i_log2 */
+        Expr* neg_half_i_log2 = simp(mk_times(expr_new_integer(-1), half_i_log2));
+        add_const = simp(mk_plus(neg3pi4, neg_half_i_log2));
+        log_coef  = simp(mk_times(make_rational(1, 2), make_imag_unit_signed(1)));
+        reg_factor = simp(mk_times(make_rational(-1, 2), make_imag_unit_signed(1)));
+        /* alpha = +I/2 * q */
+        Expr* pI = make_imag_unit_signed(1);
+        reg_alpha = simp(mk_times(make_rational(1, 2),
+                                  simp(mk_times(pI, expr_copy(q)))));
+    }
+    SeriesObj* r = family_b_build_log1p_part(ctx, user_order, reg_factor, reg_alpha);
+    expr_free(reg_factor); expr_free(reg_alpha); expr_free(q);
+    return family_b_finalize(r, add_const, log_coef, ctx);
+}
+
+/* ArcCot = Pi/2 - ArcTan (Mathilda convention; matches the at-zero rule
+ * in so_apply_arccot). At a branch point the constants shift accordingly
+ * and the log_coef / regular factors negate. */
+static SeriesObj* so_apply_arccot_branch_point(SeriesObj* inner, int sign_c,
+                                               int64_t user_order,
+                                               SeriesCtx* ctx) {
+    Expr* q;
+    if (!branch_check_linear_inner(inner, sign_c, /*at_imag=*/true, &q)) return NULL;
+
+    Expr* add_const;
+    Expr* log_coef;
+    Expr* reg_factor;
+    Expr* reg_alpha;
+    Expr* half_i_log2 = simp(mk_times(make_imag_unit_signed(1),
+                              simp(mk_times(make_rational(1, 2),
+                                            simp(mk_fn1("Log", expr_new_integer(2)))))));
+    if (sign_c == 1) {
+        /* Pi/2 - (Pi/4 + (I/2)*Log[2]) = Pi/4 - (I/2)*Log[2] */
+        Expr* pi4 = simp(mk_times(make_rational(1, 4), mk_symbol("Pi")));
+        Expr* neg_half_i_log2 = simp(mk_times(expr_new_integer(-1), half_i_log2));
+        add_const = simp(mk_plus(pi4, neg_half_i_log2));
+        log_coef  = simp(mk_times(make_rational(1, 2), make_imag_unit_signed(1)));
+        reg_factor = simp(mk_times(make_rational(-1, 2), make_imag_unit_signed(1)));
+        Expr* mI = make_imag_unit_signed(-1);
+        reg_alpha = simp(mk_times(make_rational(1, 2),
+                                  simp(mk_times(mI, expr_copy(q)))));
+    } else {
+        /* Pi/2 - (-3*Pi/4 - (I/2)*Log[2]) = 5*Pi/4 + (I/2)*Log[2] */
+        Expr* fpi4 = simp(mk_times(make_rational(5, 4), mk_symbol("Pi")));
+        add_const = simp(mk_plus(fpi4, half_i_log2));
+        log_coef  = simp(mk_times(make_rational(-1, 2), make_imag_unit_signed(1)));
+        reg_factor = simp(mk_times(make_rational(1, 2), make_imag_unit_signed(1)));
+        Expr* pI = make_imag_unit_signed(1);
+        reg_alpha = simp(mk_times(make_rational(1, 2),
+                                  simp(mk_times(pI, expr_copy(q)))));
+    }
+    SeriesObj* r = family_b_build_log1p_part(ctx, user_order, reg_factor, reg_alpha);
+    expr_free(reg_factor); expr_free(reg_alpha); expr_free(q);
+    return family_b_finalize(r, add_const, log_coef, ctx);
 }
 
 /* Apply ArcCos[s] = Pi/2 - ArcSin[s]. Requires ArcSin expansion at s(x0). */
@@ -1410,20 +1957,32 @@ static SeriesObj* so_apply_sinh_or_cosh(SeriesObj* s, bool is_sinh) {
  * series_expand: recursive descent
  * -------------------------------------------------------------------------- */
 
-typedef struct {
-    Expr*   x;      /* expansion variable (borrowed) */
-    Expr*   x0;     /* expansion point (borrowed) */
-    int64_t order;  /* padded internal order; composite series arithmetic
-                     * (so_inv, so_compose_scalar_kernel, ...) needs headroom
-                     * beyond the user-facing order to survive cancellations. */
-    int64_t target_order;  /* user-facing order (unpadded). Independent-coef
-                            * paths like series_taylor_via_D use this so they
-                            * don't compute derivatives they'll just truncate
-                            * away again -- D[f, x, k=13] for ArcTan[x] at x=2
-                            * takes ~12s, versus ~0.01s for k=3. */
-} SeriesCtx;
-
-static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx);
+/* SeriesCtx fields (full documentation; struct defined near SeriesObj):
+ *   x, x0        - expansion variable & point (borrowed)
+ *   order        - padded internal order; composite series arithmetic
+ *                  (so_inv, so_compose_scalar_kernel, ...) needs headroom
+ *                  beyond the user-facing order to survive cancellations.
+ *   target_order - user-facing order (unpadded). Independent-coef paths
+ *                  like series_taylor_via_D use this so they don't compute
+ *                  derivatives they'll just truncate away again --
+ *                  D[f, x, k=13] for ArcTan[x] at x=2 takes ~12s, versus
+ *                  ~0.01s for k=3.
+ *
+ * MMA-faithful branch-point wrapper machinery:
+ *   allow_branch_wrap     - true at the outermost call from do_series_single,
+ *                           false in any nested composition (Plus/Times/Power
+ *                           args, elementary-head inner). series_expand_nested
+ *                           does the save/restore.
+ *   pending_add_const     - H[x0]; populated by a branch-point handler in
+ *                           wrap mode.
+ *   pending_log_coef      - coefficient of Log[x - x0]; NULL for Family A.
+ *   pending_discriminator - (-1)^Floor[(Pi/2 - Arg[x-x0])/(2*Pi)]; NULL
+ *                           means no wrapper was emitted. The outermost
+ *                           do_series_single inspects this to assemble
+ *                             Plus[ add_const,
+ *                                   Times[log_coef, Log[x-x0]],
+ *                                   Times[discriminator, SeriesData[...]] ]
+ */
 
 /* Detect Infinity / ComplexInfinity / Indeterminate / DirectedInfinity
  * anywhere inside e. Used to bail out of naive Taylor before it spins. */
@@ -1460,7 +2019,7 @@ static bool has_infinity(Expr* e) {
  * expression-size blow-up that hits non-trivial heads like ArcCos; tests
  * that truly need more terms should go through a direct kernel path. */
 #define MAX_NAIVE_ORDER 20
-static SeriesObj* series_taylor_via_D(Expr* e, const SeriesCtx* ctx) {
+static SeriesObj* series_taylor_via_D(Expr* e, SeriesCtx* ctx) {
     /* Taylor coefficients are computed independently, so there is no benefit
      * to running beyond the user's requested order -- the padding that
      * composite arithmetic (so_inv, so_compose_scalar_kernel) relies on is
@@ -1553,7 +2112,7 @@ static Expr* rewrite_reciprocal_head(Expr* e) {
     return NULL;
 }
 
-static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
+static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
     /* Early out: free of x => constant series. */
     if (expr_free_of(e, ctx->x)) {
         return so_from_constant(e, ctx->x, ctx->x0, ctx->order, 1);
@@ -1570,7 +2129,7 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
         if (head && strcmp(head, "Plus") == 0) {
             SeriesObj* acc = NULL;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                SeriesObj* t = series_expand(e->data.function.args[i], ctx);
+                SeriesObj* t = series_expand_nested(e->data.function.args[i], ctx);
                 if (!t) { if (acc) so_free(acc); return NULL; }
                 if (!acc) acc = t;
                 else { SeriesObj* sum = so_add(acc, t); so_free(acc); so_free(t); acc = sum; }
@@ -1582,7 +2141,7 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
         if (head && strcmp(head, "Times") == 0) {
             SeriesObj* acc = NULL;
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
-                SeriesObj* t = series_expand(e->data.function.args[i], ctx);
+                SeriesObj* t = series_expand_nested(e->data.function.args[i], ctx);
                 if (!t) { if (acc) so_free(acc); return NULL; }
                 if (!acc) acc = t;
                 else { SeriesObj* mul = so_mul(acc, t); so_free(acc); so_free(t); acc = mul; }
@@ -1600,7 +2159,7 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
                 return so_from_constant(e, ctx->x, ctx->x0, ctx->order, 1);
             }
             if (base_has_x && !exp_has_x) {
-                SeriesObj* bs = series_expand(base, ctx);
+                SeriesObj* bs = series_expand_nested(base, ctx);
                 if (!bs) return NULL;
                 SeriesObj* r = so_pow_expr(bs, exp);
                 so_free(bs);
@@ -1610,7 +2169,7 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
             Expr* log_base = mk_fn1("Log", expr_copy(base));
             Expr* prod = mk_times(expr_copy(exp), log_base);
             Expr* rew = mk_fn1("Exp", prod);
-            SeriesObj* r = series_expand(rew, ctx);
+            SeriesObj* r = series_expand_nested(rew, ctx);
             expr_free(rew);
             return r;
         }
@@ -1645,7 +2204,7 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
                         Expr* log1pu = mk_fn1("Log", inner);
                         Expr* log_a = simp(mk_fn1("Log", a));
                         Expr* rewrite = simp(mk_plus(log_a, log1pu));
-                        SeriesObj* r = series_expand(rewrite, ctx);
+                        SeriesObj* r = series_expand_nested(rewrite, ctx);
                         expr_free(rewrite);
                         if (r) return r;
                         /* Fall through to the generic path on failure. */
@@ -1655,7 +2214,7 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
                 }
             }
             /* General: expand arg, split leading monomial if vanishing. */
-            SeriesObj* as = series_expand(arg, ctx);
+            SeriesObj* as = series_expand_nested(arg, ctx);
             if (!as) return NULL;
             so_trim_leading(as);
             if (as->coef_count == 0) { so_free(as); return NULL; }
@@ -1696,14 +2255,14 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
         {
             Expr* rewrite = rewrite_reciprocal_head(e);
             if (rewrite) {
-                SeriesObj* r = series_expand(rewrite, ctx);
+                SeriesObj* r = series_expand_nested(rewrite, ctx);
                 expr_free(rewrite);
                 return r;
             }
         }
         /* ---- Known elementary functions ---- */
         if (is_known_elementary(e)) {
-            SeriesObj* inner = series_expand(e->data.function.args[0], ctx);
+            SeriesObj* inner = series_expand_nested(e->data.function.args[0], ctx);
             if (!inner) return NULL;
             SeriesObj* r = NULL;
             if (strcmp(head, "Exp") == 0)       r = so_apply_exp(inner);
@@ -1725,9 +2284,20 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
                 if (cs) so_free(cs);
             } else if (strcmp(head, "Log") == 0) {
                 r = so_apply_log(inner);
-            } else if (strcmp(head, "ArcTan")  == 0) r = so_apply_kernel_at_zero("ArcTan",   inner);
+            } else if (strcmp(head, "ArcTan")  == 0) {
+                r = so_apply_kernel_at_zero("ArcTan", inner);
+                if (!r) {
+                    int sc = so_branch_point_imag_sign(inner);
+                    if (sc != 0) r = so_apply_arctan_branch_point(inner, sc, ctx->target_order, ctx);
+                }
+            }
             else if (strcmp(head, "ArcTanh") == 0) {
                 r = so_apply_kernel_at_zero("ArcTanh", inner);
+                /* Branch points at ±1 first; then the at-infinity rewrite. */
+                if (!r) {
+                    int sc = so_branch_point_sign(inner);
+                    if (sc != 0) r = so_apply_arctanh_branch_point(inner, sc, ctx->target_order, ctx);
+                }
                 /* If arg blows up at x0, use principal-branch identity
                  * ArcTanh[1/u] = I*Pi/2 + ArcTanh[u]. */
                 if (!r && inner->nmin < 0) {
@@ -1747,11 +2317,16 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
                 r = so_apply_kernel_at_zero("ArcSin", inner);
                 if (!r) {
                     int sc = so_branch_point_sign(inner);
-                    if (sc != 0) r = so_apply_arc_branch_point(inner, sc, true, ctx->order);
+                    if (sc != 0) r = so_apply_arc_branch_point(inner, sc, true, ctx->target_order, ctx);
                 }
             }
             else if (strcmp(head, "ArcSinh") == 0) {
                 r = so_apply_kernel_at_zero("ArcSinh", inner);
+                /* Branch points at ±I (new): square-root Puiseux series. */
+                if (!r) {
+                    int sc = so_branch_point_imag_sign(inner);
+                    if (sc != 0) r = so_apply_arcsinh_branch_point(inner, sc, ctx->target_order, ctx);
+                }
                 /* Identity at infinity: ArcSinh[1/v] = -Log[v] + Log[1 + Sqrt[1 + v^2]].
                  * Fire when inner actually blows up (nmin < 0); series_expand's
                  * Log-at-x branch absorbs the symbolic -Log[v]. */
@@ -1767,7 +2342,7 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
                     Expr* neg_log_v = simp(mk_times(expr_new_integer(-1),
                                        simp(mk_fn1("Log", v))));
                     Expr* rewrite = simp(mk_plus(neg_log_v, log2));
-                    r = series_expand(rewrite, ctx);
+                    r = series_expand_nested(rewrite, ctx);
                     expr_free(rewrite);
                 }
             }
@@ -1775,11 +2350,16 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
                 r = so_apply_arccos(inner);
                 if (!r) {
                     int sc = so_branch_point_sign(inner);
-                    if (sc != 0) r = so_apply_arc_branch_point(inner, sc, false, ctx->order);
+                    if (sc != 0) r = so_apply_arc_branch_point(inner, sc, false, ctx->target_order, ctx);
                 }
             }
             else if (strcmp(head, "ArcCosh") == 0) {
                 r = so_apply_arccosh(inner);
+                /* Branch points at ±1 (new): square-root Puiseux series. */
+                if (!r) {
+                    int sc = so_branch_point_sign(inner);
+                    if (sc != 0) r = so_apply_arccosh_branch_point(inner, sc, ctx->target_order, ctx);
+                }
                 /* Identity at infinity: ArcCosh[1/v] = -Log[v] + Log[1 + Sqrt[1 - v^2]]. */
                 if (!r && inner->nmin < 0) {
                     Expr* arg = e->data.function.args[0];
@@ -1793,12 +2373,17 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
                     Expr* neg_log_v = simp(mk_times(expr_new_integer(-1),
                                        simp(mk_fn1("Log", v))));
                     Expr* rewrite = simp(mk_plus(neg_log_v, log2));
-                    r = series_expand(rewrite, ctx);
+                    r = series_expand_nested(rewrite, ctx);
                     expr_free(rewrite);
                 }
             }
             else if (strcmp(head, "ArcCot")  == 0) {
                 r = so_apply_arccot(inner);
+                /* Branch points at ±I: logarithmic series. */
+                if (!r) {
+                    int sc = so_branch_point_imag_sign(inner);
+                    if (sc != 0) r = so_apply_arccot_branch_point(inner, sc, ctx->target_order, ctx);
+                }
                 /* If arg blows up at x0 (e.g. 1/x), fall back to the
                  * at-infinity branch: ArcCot[u] = ArcTan[1/u]. */
                 if (!r && inner->nmin < 0) {
@@ -1808,6 +2393,11 @@ static SeriesObj* series_expand(Expr* e, const SeriesCtx* ctx) {
             }
             else if (strcmp(head, "ArcCoth") == 0) {
                 r = so_apply_arccoth(inner);
+                /* Branch points at ±1: logarithmic series. */
+                if (!r) {
+                    int sc = so_branch_point_sign(inner);
+                    if (sc != 0) r = so_apply_arccoth_branch_point(inner, sc, ctx->target_order, ctx);
+                }
                 /* If arg blows up at x0 (e.g. 1/x), use ArcCoth[u] = ArcTanh[1/u]. */
                 if (!r && inner->nmin < 0) {
                     SeriesObj* inv = so_inv(inner);
@@ -2218,7 +2808,13 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
     int64_t pad = x0_is_numeric ? 12 : 2;
     int64_t internal_order = order + pad;
 
-    SeriesCtx ctx = { x_use, x0_use, internal_order, order };
+    SeriesCtx ctx = {
+        x_use, x0_use, internal_order, order,
+        /* allow_branch_wrap */ true,
+        /* pending_add_const  */ NULL,
+        /* pending_log_coef   */ NULL,
+        /* pending_discriminator */ NULL,
+    };
     SeriesObj* s = series_expand(f_use, &ctx);
     Expr* result = NULL;
     if (s) {
@@ -2279,6 +2875,38 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
         result = so_to_expr(s);
         so_free(s);
     }
+
+    /* MMA-faithful branch-point wrapper. A top-level branch-point handler
+     * populated ctx.pending_* with (add_const, log_coef, discriminator).
+     * Build
+     *     Plus[ add_const,
+     *           Times[ log_coef, Log[x - x0] ],   (omitted if log_coef NULL)
+     *           Times[ discriminator, result ] ]
+     * (omitting trivial 0/1 factors). For at_infinity the substituted variable
+     * makes the metadata's x/x0 stale; just discard the wrapper there. */
+    if (result && !at_infinity && ctx.pending_discriminator) {
+        Expr** parts = calloc(3, sizeof(Expr*));
+        size_t pc = 0;
+        if (ctx.pending_add_const && !is_lit_zero(ctx.pending_add_const)) {
+            parts[pc++] = ctx.pending_add_const;
+            ctx.pending_add_const = NULL;
+        }
+        if (ctx.pending_log_coef) {
+            parts[pc++] = build_log_term(ctx.pending_log_coef, x, x0_eval);
+        }
+        Expr* wrapped_series = simp(mk_times(ctx.pending_discriminator, result));
+        ctx.pending_discriminator = NULL;
+        parts[pc++] = wrapped_series;
+        Expr* sum;
+        if (pc == 1) { sum = parts[0]; free(parts); }
+        else         { sum = expr_new_function(mk_symbol("Plus"), parts, pc); free(parts); }
+        result = simp(sum);
+    }
+    /* Clean up any remaining pending metadata (e.g. if the wrap was skipped). */
+    if (ctx.pending_add_const)     { expr_free(ctx.pending_add_const);     ctx.pending_add_const = NULL; }
+    if (ctx.pending_log_coef)      { expr_free(ctx.pending_log_coef);      ctx.pending_log_coef = NULL; }
+    if (ctx.pending_discriminator) { expr_free(ctx.pending_discriminator); ctx.pending_discriminator = NULL; }
+
     if (at_infinity) { expr_free(f_sub_owned); expr_free(u_sym); expr_free(x0_use); }
     else             expr_free(x0_eval);
     if (f_body_owned) expr_free(f_body_owned);
