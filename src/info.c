@@ -3,16 +3,61 @@
 
 void info_init(void) {
     // Arithmetic
-    symtab_set_docstring("Plus", "x + y + ... or Plus[x, y, ...] represents a sum of terms.");
-    symtab_set_docstring("Times", "x * y * ... or Times[x, y, ...] represents a product of terms.");
-    symtab_set_docstring("Power", "x ^ y or Power[x, y] represents x to the power y.");
-    symtab_set_docstring("Subtract", "x - y or Subtract[x, y] represents x - y.");
-    symtab_set_docstring("Divide", "x / y or Divide[x, y] represents x / y.");
-    symtab_set_docstring("Sqrt", "Sqrt[z] represents the square root of z.");
-    symtab_set_docstring("Complex", "Complex[re, im] represents a complex number with real part re and imaginary part im.");
-    symtab_set_docstring("Rational", "Rational[n, d] represents a rational number with numerator n and denominator d. Automatically simplifies if arguments are integers.");
-    symtab_set_docstring("GCD", "GCD[n1, n2, ...] gives the greatest common divisor of the integers ni.");
-    symtab_set_docstring("LCM", "LCM[n1, n2, ...] gives the least common multiple of the integers ni.");
+    symtab_set_docstring("Plus",
+        "x + y + ... or Plus[x, y, ...] represents a sum of terms.\n"
+        "Plus is Flat, Orderless, OneIdentity, Listable, and NumericFunction:\n"
+        "nested Plus is auto-flattened, terms are sorted into canonical order,\n"
+        "like terms are combined, and integer arguments are summed exactly via\n"
+        "GMP (with int64 fast path and BigInt overflow promotion).");
+    symtab_set_docstring("Times",
+        "x * y * ... or Times[x, y, ...] represents a product of terms.\n"
+        "Times is Flat, Orderless, OneIdentity, Listable, and NumericFunction:\n"
+        "nested Times is auto-flattened, factors are sorted, like factors are\n"
+        "merged into Power, and integer products use exact GMP arithmetic.\n"
+        "Numeric zero collapses the product; a Plus factor is left distributed\n"
+        "(use Expand to distribute).");
+    symtab_set_docstring("Power",
+        "x ^ y or Power[x, y] represents x to the power y.\n"
+        "Power is Listable, NumericFunction, and OneIdentity. Integer exponents\n"
+        "are reduced exactly (repeated squaring on GMP); Rational and Real\n"
+        "exponents evaluate numerically when the base is numeric; Power[0, 0]\n"
+        "stays Indeterminate; Power[x, 1/2] is canonicalised to Sqrt[x].");
+    symtab_set_docstring("Subtract",
+        "x - y or Subtract[x, y] represents x - y; rewritten by the evaluator\n"
+        "to Plus[x, Times[-1, y]] so it inherits Plus's flattening and ordering.");
+    symtab_set_docstring("Divide",
+        "x / y or Divide[x, y] represents x / y; rewritten by the evaluator to\n"
+        "Times[x, Power[y, -1]] so it inherits Times's flattening and ordering.");
+    symtab_set_docstring("Sqrt",
+        "Sqrt[z]\n"
+        "\trepresents the principal square root of z.\n"
+        "Sqrt is Listable. Sqrt[z] is canonicalised to Power[z, 1/2]; perfect\n"
+        "integer / rational squares reduce to exact form, negative real inputs\n"
+        "yield I * Sqrt[-x], and numeric inputs (Real / MPFR / Complex) are\n"
+        "evaluated directly. Branch cut along the negative real axis.");
+    symtab_set_docstring("Complex",
+        "Complex[re, im]\n"
+        "\trepresents the complex number re + im I.\n"
+        "Complex is the canonical head produced by arithmetic when an Integer,\n"
+        "Real, or Rational acquires an imaginary part. Pure-real inputs collapse\n"
+        "to the underlying number; im == 0 unwraps to re.");
+    symtab_set_docstring("Rational",
+        "Rational[n, d]\n"
+        "\trepresents the rational number n/d.\n"
+        "When n and d are integers, Rational auto-reduces by gcd, normalises\n"
+        "the sign onto the numerator, and collapses to an Integer when d == 1.\n"
+        "Rationals propagate through Plus / Times exactly via GMP.");
+    symtab_set_docstring("GCD",
+        "GCD[n1, n2, ...]\n"
+        "\tgives the greatest common divisor of the integers ni.\n"
+        "Computed via GMP's binary-GCD (mpz_gcd) folded across the arguments.\n"
+        "Accepts BigInt and Rational inputs (gcd(p1/q1, p2/q2) = gcd(p1,p2) /\n"
+        "lcm(q1,q2)); non-integer Real or symbolic inputs leave GCD unevaluated.");
+    symtab_set_docstring("LCM",
+        "LCM[n1, n2, ...]\n"
+        "\tgives the least common multiple of the integers ni.\n"
+        "Computed via GMP's mpz_lcm folded across the arguments; sign is\n"
+        "normalised non-negative. Accepts BigInt and Rational inputs.");
     symtab_set_docstring("PowerMod", "PowerMod[a, b, m] gives a^b mod m.\nPowerMod[a, -1, m] finds the modular inverse of a modulo m.\nPowerMod[a, 1/r, m] finds a modular r-th root of a.");
     symtab_set_docstring("PrimitiveRoot",
         "PrimitiveRoot[n]\n"
@@ -138,9 +183,21 @@ void info_init(void) {
         "Options: Method ('Newton' | 'Secant' | 'Brent' | Automatic), WorkingPrecision, "
         "MaxIterations, AccuracyGoal, PrecisionGoal, DampingFactor, Jacobian, StepMonitor, "
         "EvaluationMonitor.  FindRoot has HoldAll and effectively uses Block to localize variables.");
-    symtab_set_docstring("Factorial", "n! gives the factorial of n.\nFor integers and half integers, Factorial automatically evaluates to exact values.");
+    symtab_set_docstring("Factorial",
+        "n! or Factorial[n]\n"
+        "\tgives the factorial of n.\n"
+        "For non-negative integers, n! is computed exactly via GMP's mpz_fac_ui.\n"
+        "For half-integers (n = m/2 with m odd) it reduces to Sqrt[Pi] times a\n"
+        "rational from the Gamma functional equation. Negative integers give\n"
+        "ComplexInfinity. Other inputs stay unevaluated.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
-    symtab_set_docstring("Binomial", "Binomial[n, m] gives the binomial coefficient.");
+    symtab_set_docstring("Binomial",
+        "Binomial[n, m]\n"
+        "\tgives the binomial coefficient C(n, m) = n! / (m! (n-m)!).\n"
+        "For non-negative integer arguments, computed exactly via GMP's\n"
+        "mpz_bin_uiui. Generalised forms (negative or symbolic n, half-integer\n"
+        "m) reduce through the Gamma functional equation; non-decidable forms\n"
+        "stay unevaluated.");
 
     // Structural Manipulation
     symtab_set_docstring("Part",
@@ -182,10 +239,37 @@ void info_init(void) {
 
 
     // Linear Algebra
-    symtab_set_docstring("Dot", "a.b.c or Dot[a, b, c] gives products of vectors, matrices, and tensors.");
-    symtab_set_docstring("Det", "Det[m] gives the determinant of the square matrix m.");
-    symtab_set_docstring("Cross", "Cross[a, b, ...] gives the vector cross product of the arguments.");
-    symtab_set_docstring("Norm", "Norm[expr] gives the norm of a number, vector, or matrix.\nNorm[expr, p] gives the p-norm.");
+    symtab_set_docstring("Dot",
+        "a . b . c or Dot[a, b, c]\n"
+        "\tcontracts the last index of each argument with the first index of\n"
+        "\tthe next: matrix-matrix, matrix-vector, vector-vector, and general\n"
+        "\ttensor inner products.\n"
+        "Numeric machine-precision Real / Complex matrix-matrix dot dispatches\n"
+        "to BLAS dgemm / zgemm when available; exact and symbolic inputs use\n"
+        "the elementwise sum-of-products.");
+    symtab_set_docstring("Det",
+        "Det[m]\n"
+        "\tgives the determinant of the square matrix m.\n"
+        "Exact integer / rational / symbolic inputs use Bareiss-style\n"
+        "fraction-free Gaussian elimination; machine-precision Real / Complex\n"
+        "inputs dispatch to LAPACK LU (dgetrf / zgetrf) and accumulate the\n"
+        "pivot-signed product of diagonal entries; arbitrary-precision MPFR\n"
+        "inputs run a Doolittle LU at the input precision.");
+    symtab_set_docstring("Cross",
+        "Cross[a, b]\n"
+        "\tgives the vector cross product of two length-3 vectors.\n"
+        "Cross[a1, a2, ..., a(n-1)]\n"
+        "\tgives the generalized (n-1)-fold cross product in n dimensions,\n"
+        "\ti.e. the unique vector orthogonal to all inputs whose components\n"
+        "\tare the signed cofactor minors of the matrix [a1; a2; ...; en].");
+    symtab_set_docstring("Norm",
+        "Norm[expr]\n"
+        "\tgives the 2-norm of a number, vector, or matrix (Frobenius norm for\n"
+        "\tmatrices).\n"
+        "Norm[expr, p]\n"
+        "\tgives the p-norm: Abs[expr] for scalars; (Sum |xi|^p)^(1/p) for\n"
+        "\tvectors with 1 <= p < Infinity; Max[Abs[expr]] for p == Infinity;\n"
+        "\tinduced operator norm for matrices when p is 1, 2, or Infinity.");
     symtab_set_docstring("Normalize",
         "Normalize[v]\n"
         "\tgives the normalized form of a vector v (effectively v / Norm[v]).\n"
@@ -194,7 +278,16 @@ void info_init(void) {
         "Normalize[expr, f]\n"
         "\tnormalizes with respect to the norm function f, i.e. expr / f[expr].\n"
         "Zero input is returned unchanged.");
-    symtab_set_docstring("Tr", "Tr[list] finds the trace of the matrix or tensor list.\nTr[list, f] finds a generalized trace, combining terms with f instead of Plus.\nTr[list, f, n] goes down to level n in list.");
+    symtab_set_docstring("Tr",
+        "Tr[m]\n"
+        "\tgives the trace of the matrix m, i.e. the sum of its diagonal\n"
+        "\tentries (for a rectangular m, sums entries m[[i, i]] up to\n"
+        "\tMin[Dimensions[m]]).\n"
+        "Tr[m, f]\n"
+        "\tcombines the diagonal entries with f instead of Plus.\n"
+        "Tr[m, f, n]\n"
+        "\twalks down to level n, summing the multi-index diagonal of a\n"
+        "\trank-n tensor.");
     symtab_set_docstring("RowReduce",
         "RowReduce[m]\n"
         "\tgives the row-reduced form of the matrix m.\n"
@@ -715,40 +808,35 @@ void info_init(void) {
         "Interval, generalised problem, Cholesky / LU failure, or\n"
         "non-convergence all fall back to Direct with a one-shot\n"
         "stderr warning.");
-    symtab_set_docstring("FullForm", "FullForm[expr] prints as the full internal structure of expr, without any special formatting.");
+    symtab_set_docstring("FullForm",
+        "FullForm[expr]\n"
+        "\tprints expr as its raw internal tree (heads written before arguments\n"
+        "\tin functional form, no operator or infix sugar).\n"
+        "FullForm is a wrapper recognised by Print/Out; when an input evaluates\n"
+        "to FullForm[expr] the wrapper is consumed by the printer and does not\n"
+        "appear in the output.");
     symtab_set_docstring("Head",
         "Head[expr]\n"
-        "    Gives the head of expr.\n"
+        "\tgives the head of expr.\n"
         "Head[expr, h]\n"
-        "    Wraps the result with h, i.e. returns h[Head[expr]].\n"
+        "\twraps the result with h, i.e. returns h[Head[expr]].\n"
         "\n"
-        "For atoms, Head returns Integer, Real, Symbol, or String. For a\n"
-        "compound expression f[...], Head returns f.\n"
-        "\n"
-        "Examples:\n"
-        "    Head[a + b]      -> Plus\n"
-        "    Head[{a, b, c}]  -> List\n"
-        "    Head[3.14]       -> Real\n"
-        "    Head[x]          -> Symbol\n"
-        "    Head[a + b, f]   -> f[Plus]");
-    symtab_set_docstring("Length", "Length[expr] gives the number of elements in expr.");
+        "For atoms, Head returns Integer, Real, BigInt, Rational, Complex,\n"
+        "Symbol, or String; for a compound expression f[...], Head returns f.");
+    symtab_set_docstring("Length",
+        "Length[expr]\n"
+        "\tgives the number of top-level elements in expr (the arity of its\n"
+        "\thead).  Length of any atom is 0.");
     symtab_set_docstring("Dimensions",
         "Dimensions[expr]\n"
-        "    Gives a list of the dimensions of expr.\n"
+        "\tgives a list of the dimensions of expr.\n"
         "Dimensions[expr, n]\n"
-        "    Gives a list of the dimensions of expr down to level n.\n"
+        "\tgives the dimensions of expr down to at most level n.\n"
         "\n"
         "expr is treated as a full array only at levels where every sub-piece\n"
-        "shares the same head and length; ragged levels are not counted.\n"
-        "Dimensions always returns a List, including the empty List {} for\n"
-        "atomic expressions.\n"
-        "\n"
-        "Examples:\n"
-        "    Dimensions[{{a, b, c}, {d, e, f}}]    -> {2, 3}\n"
-        "    Dimensions[{{a, b, c}, {d, e}, {f}}]  -> {3}      (ragged at level 2)\n"
-        "    Dimensions[{{{{a, b}}}}]              -> {1, 1, 1, 2}\n"
-        "    Dimensions[{{{{a, b}}}}, 2]           -> {1, 1}\n"
-        "    Dimensions[1]                         -> {}");
+        "shares the same head and length; the walk halts at the first ragged\n"
+        "level. Dimensions always returns a List, including the empty List {}\n"
+        "for atomic expressions.");
     symtab_set_docstring("First", "First[expr] gives the first element of expr.");
     symtab_set_docstring("Last", "Last[expr] gives the last element of expr.");
     symtab_set_docstring("Most", "Most[expr] gives all but the last element of expr.");
@@ -776,18 +864,56 @@ void info_init(void) {
         "\tthe spec list and then conjugating every entry.\n"
         "\tOn a 1-D vector, ConjugateTranspose[vec] conjugates the entries without\n"
         "\tchanging the shape of vec.");
-    symtab_set_docstring("Flatten", "Flatten[list] flattens all levels of list.");
-    symtab_set_docstring("Partition", "Partition[list, n] partitions list into sublists of length n.");
+    symtab_set_docstring("Flatten",
+        "Flatten[list]\n"
+        "\tflattens out nested lists, collapsing every level into a flat list\n"
+        "\twith the same head as the top level.\n"
+        "Flatten[list, n]\n"
+        "\tflattens only the top n levels.\n"
+        "Flatten[list, n, h]\n"
+        "\tflattens only sublists whose head matches h, leaving other heads\n"
+        "\tin place.");
+    symtab_set_docstring("Partition",
+        "Partition[list, n]\n"
+        "\tpartitions list into non-overlapping sublists of length n; trailing\n"
+        "\telements that do not fill a block are discarded.\n"
+        "Partition[list, n, d]\n"
+        "\tuses offset d between successive sublists; d = 1 gives a moving\n"
+        "\twindow, d = n gives non-overlapping blocks.");
 
     // List Operations
     symtab_set_docstring("Table", "Table[expr, n]\n\tgenerates a list of n copies of expr.\nTable[expr, {i, imax}]\n\tgenerates a list of the values of expr with i running from 1 to imax.");
     symtab_set_docstring("Range", "Range[n]\n\tgenerates the list {1, 2, 3, ..., n}.\nRange[n, m]\n\tgenerates the list {n, n + 1, ..., m - 1, m}.\nRange[n, m, d]\n\tuses step d.");
-    symtab_set_docstring("Array", "Array[f, n] generates a list of length n with elements f[1], f[2], ..., f[n].");
-    symtab_set_docstring("Union", "Union[list] gives a sorted list of all distinct elements in list.");
+    symtab_set_docstring("Array",
+        "Array[f, n]\n"
+        "\tgenerates a list {f[1], f[2], ..., f[n]}.\n"
+        "Array[f, n, r]\n"
+        "\tgenerates a list of length n starting from index r.\n"
+        "Array[f, {n1, n2, ...}]\n"
+        "\tgenerates an n1 x n2 x ... nested-list array with elements\n"
+        "\tf[i1, i2, ...].");
+    symtab_set_docstring("Union",
+        "Union[list]\n"
+        "\tgives the sorted list of distinct elements in list.\n"
+        "Union[l1, l2, ...]\n"
+        "\tgives the sorted list of distinct elements appearing in any of the\n"
+        "\tinput lists (set union).\n"
+        "Comparison is by canonical structural equality.");
     symtab_set_docstring("Tally", "Tally[list] counts the number of occurrences of each distinct element in list.");
     symtab_set_docstring("Commonest", "Commonest[list] gives a list of the elements that are the most common in list.\nCommonest[list, n] gives a list of the n most common elements in list.");
-    symtab_set_docstring("DeleteDuplicates", "DeleteDuplicates[list] removes duplicate elements from list.");
-    symtab_set_docstring("Split", "Split[list] splits list into sublists of identical adjacent elements.");
+    symtab_set_docstring("DeleteDuplicates",
+        "DeleteDuplicates[list]\n"
+        "\treturns list with duplicate elements removed, keeping the first\n"
+        "\toccurrence of each element and preserving the original order.\n"
+        "DeleteDuplicates[list, test]\n"
+        "\ttreats two elements as duplicates when test[a, b] yields True.");
+    symtab_set_docstring("Split",
+        "Split[list]\n"
+        "\tsplits list into runs of consecutive identical elements, returning\n"
+        "\ta list of these runs.\n"
+        "Split[list, test]\n"
+        "\tgroups runs of consecutive elements ei, ej for which test[ei, ej]\n"
+        "\tyields True.");
 
     // Statistics
     symtab_set_docstring("Mean", "Mean[data] gives the mean estimate of the elements in data.");
@@ -812,10 +938,28 @@ void info_init(void) {
         "The output has the same length as list. The smoothing constant alpha is typically a number between 0 and 1, but may be any expression; ExponentialMovingAverage handles both numerical (machine and arbitrary precision) and symbolic data.");
 
     // Functional Programming
-    symtab_set_docstring("Map", "f /@ expr or Map[f, expr] applies f to each element of expr.");
-    symtab_set_docstring("Apply", "f @@ expr or Apply[f, expr] replaces the head of expr with f.");
-    symtab_set_docstring("MapAll", "f //@ expr or MapAll[f, expr] applies f to every subexpression in expr.");
-    symtab_set_docstring("Through", "Through[p[f, g][x]] gives p[f[x], g[x]].");
+    symtab_set_docstring("Map",
+        "f /@ expr or Map[f, expr]\n"
+        "\tapplies f to each element at level 1 of expr, preserving expr's head.\n"
+        "Map[f, expr, levelspec]\n"
+        "\tapplies f at the parts of expr selected by levelspec (e.g. {2} for\n"
+        "\tlevel 2 only, Infinity for every level).");
+    symtab_set_docstring("Apply",
+        "f @@ expr or Apply[f, expr]\n"
+        "\treplaces the head of expr with f.\n"
+        "Apply[f, expr, levelspec]\n"
+        "\tperforms the head replacement at the parts of expr specified by\n"
+        "\tlevelspec; the default levelspec is {0} (top level only).");
+    symtab_set_docstring("MapAll",
+        "f //@ expr or MapAll[f, expr]\n"
+        "\tapplies f to every subexpression in expr (equivalent to\n"
+        "\tMap[f, expr, {0, Infinity}]).  Atomic leaves are wrapped too.");
+    symtab_set_docstring("Through",
+        "Through[p[f1, f2, ...][x1, x2, ...]]\n"
+        "\tdistributes the trailing argument list across the inner functions,\n"
+        "\tgiving p[f1[x1, x2, ...], f2[x1, x2, ...], ...].\n"
+        "Through[expr, h]\n"
+        "\tdistributes only when the outer head equals h.");
     symtab_set_docstring("Thread",
         "Thread[f[args]]\n"
         "\t\"threads\" f over any lists that appear in args.\n"
@@ -838,16 +982,23 @@ void info_init(void) {
         "\t-n        last n elements\n"
         "\t{n}       element n only\n"
         "\t{m, n}    elements m through n inclusive\n"
-        "\t{m, n, s} elements m through n in steps of s\n"
-        "\n"
-        "Examples:\n"
-        "\tThread[f[{a, b, c}]]              -> {f[a], f[b], f[c]}\n"
-        "\tThread[f[{a, b, c}, x]]           -> {f[a, x], f[b, x], f[c, x]}\n"
-        "\tThread[f[{a, b, c}, {x, y, z}]]   -> {f[a, x], f[b, y], f[c, z]}\n"
-        "\tThread[{a, b, c} == {x, y, z}]    -> {a == x, b == y, c == z}\n"
-        "\tThread[Log[x == y], Equal]        -> Log[x] == Log[y]");
-    symtab_set_docstring("Select", "Select[list, crit] selects elements of list that satisfy crit.");
-    symtab_set_docstring("FreeQ", "FreeQ[expr, form] yields True if no subexpression in expr matches form, and yields False otherwise.");
+        "\t{m, n, s} elements m through n in steps of s");
+    symtab_set_docstring("Select",
+        "Select[list, crit]\n"
+        "\tselects elements e of list for which crit[e] yields True, preserving\n"
+        "\tthe head of list.\n"
+        "Select[list, crit, n]\n"
+        "\tstops after the first n matching elements.\n"
+        "Select[crit]\n"
+        "\tis the operator form: Select[crit][list] == Select[list, crit].");
+    symtab_set_docstring("FreeQ",
+        "FreeQ[expr, form]\n"
+        "\tyields True if no subexpression of expr matches form, False otherwise.\n"
+        "FreeQ[expr, form, levelspec]\n"
+        "\trestricts the search to parts of expr at the levels specified by\n"
+        "\tlevelspec.\n"
+        "FreeQ[form]\n"
+        "\tis the operator form: FreeQ[form][expr] == FreeQ[expr, form].");
     symtab_set_docstring("Function",
         "body & or Function[body]\n"
         "\trepresents a pure function with formal parameters #, #1, #2, ... and ##, ##1, ##2, ... for sequences of arguments.\n"
@@ -865,8 +1016,12 @@ void info_init(void) {
     symtab_set_docstring("SlotSequence", "## or SlotSequence[n] represents arguments from the n-th onward.");
 
     // Predicates
-    symtab_set_docstring("AtomQ", "AtomQ[expr] gives True if expr is an atomic object.");
-    symtab_set_docstring("Identity", "Identity[expr] gives expr (the identity operation).");
+    symtab_set_docstring("AtomQ",
+        "AtomQ[expr]\n"
+        "\tgives True if expr is an atomic object (Integer, Real, BigInt,\n"
+        "\tRational, Complex, Symbol, or String), and False if expr is a\n"
+        "\tcompound expression of the form head[...].");
+    symtab_set_docstring("Identity", "Identity[expr] gives expr unchanged (the identity function).");
     symtab_set_docstring("Composition",
         "Composition[f1, f2, f3, ...]\n"
         "\trepresents a composition of the functions f1, f2, f3, ....\n"
@@ -915,13 +1070,21 @@ void info_init(void) {
         "is ignored and the standard symbolic accumulation is returned.\n"
         "\n"
         "Accumulate has the attribute Protected.");
-    symtab_set_docstring("NumberQ", "NumberQ[expr] gives True if expr is a number.");
+    symtab_set_docstring("NumberQ",
+        "NumberQ[expr]\n"
+        "\tgives True if expr is an explicit number (Integer, BigInt, Rational,\n"
+        "\tReal, MPFR, or Complex), and False otherwise.  Symbolic constants\n"
+        "\tsuch as Pi give False; use NumericQ for those.");
     symtab_set_docstring("MachineNumberQ",
         "MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.");
     symtab_set_docstring("NumericQ", "NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.\nAn expression is considered a numeric quantity if it is either an explicit number or a mathematical constant such as Pi, or is a function that has attribute NumericFunction and all of whose arguments are numeric quantities.");
-    symtab_set_docstring("IntegerQ", "IntegerQ[expr] gives True if expr is an integer.");
-    symtab_set_docstring("EvenQ", "EvenQ[n] gives True if n is an even integer.");
-    symtab_set_docstring("OddQ", "OddQ[n] gives True if n is an odd integer.");
+    symtab_set_docstring("IntegerQ",
+        "IntegerQ[expr]\n"
+        "\tgives True if expr is an Integer or BigInt, False otherwise.\n"
+        "Returns False on rationals with denominator > 1, reals, and symbolic\n"
+        "expressions (even those that are integer-valued, e.g. 2 Pi / Pi).");
+    symtab_set_docstring("EvenQ", "EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.");
+    symtab_set_docstring("OddQ", "OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.");
     symtab_set_docstring("PrimeQ",
         "PrimeQ[n]\n"
         "\tgives True if n is a prime integer, False otherwise.\n"
@@ -951,8 +1114,14 @@ void info_init(void) {
         "that expr has value zero, and False otherwise.\n"
         "The general problem of deciding whether an expression is zero is "
         "undecidable; PossibleZeroQ is a quick but not always accurate test.");
-    symtab_set_docstring("PolynomialQ", "PolynomialQ[expr, var] gives True if expr is a polynomial in var.");
-    symtab_set_docstring("ListQ", "ListQ[expr] gives True if expr is a list.");
+    symtab_set_docstring("PolynomialQ",
+        "PolynomialQ[expr, var]\n"
+        "\tgives True if expr is a polynomial in var, False otherwise.\n"
+        "PolynomialQ[expr, {v1, v2, ...}]\n"
+        "\tgives True if expr is a polynomial in all of the vi simultaneously.\n"
+        "Checks that expr expands to a sum of products of non-negative integer\n"
+        "powers of the vars with var-free coefficients.");
+    symtab_set_docstring("ListQ", "ListQ[expr] gives True if expr is a list (head List), False otherwise.");
     symtab_set_docstring("VectorQ",
         "VectorQ[expr]\n"
         "\tgives True if expr is a list, none of whose elements are themselves lists, and gives False otherwise.\n"
@@ -969,7 +1138,14 @@ void info_init(void) {
         "MatrixQ[expr] gives True only if expr is a list and each of its elements is a list of the same length,\n"
         "containing no elements that are themselves lists.\n"
         "MatrixQ[expr, NumberQ] tests whether expr is a numerical matrix.");
-    symtab_set_docstring("MatchQ", "MatchQ[expr, form] gives True if expr matches form.");
+    symtab_set_docstring("MatchQ",
+        "MatchQ[expr, form]\n"
+        "\tgives True if expr matches the pattern form, False otherwise.\n"
+        "MatchQ[form]\n"
+        "\tis the operator form: MatchQ[form][expr] == MatchQ[expr, form].\n"
+        "Pattern matching honours sequence variables (__, ___), PatternTest,\n"
+        "Condition, attribute-driven flattening / ordering, and the surrounding\n"
+        "$Assumptions / DownValues environment.");
     symtab_set_docstring("HermitianMatrixQ",
         "HermitianMatrixQ[m]\n"
         "\tgives True if m is explicitly Hermitian (m == ConjugateTranspose[m]),\n"
@@ -1069,25 +1245,82 @@ void info_init(void) {
         "zpotrf (complex) when available.  Returns False on non-numeric,\n"
         "non-square, ragged, empty, or higher-rank tensor inputs.");
 
-    // Trigonometric
-    symtab_set_docstring("Sin", "Sin[z] gives the sine of z.");
-    symtab_set_docstring("Cos", "Cos[z] gives the cosine of z.");
-    symtab_set_docstring("Tan", "Tan[z] gives the tangent of z.");
-    symtab_set_docstring("Cot", "Cot[z] gives the cotangent of z.");
-    symtab_set_docstring("Sec", "Sec[z] gives the secant of z.");
-    symtab_set_docstring("Csc", "Csc[z] gives the cosecant of z.");
-    symtab_set_docstring("ArcSin", "ArcSin[z] gives the inverse sine of z.");
-    symtab_set_docstring("ArcCos", "ArcCos[z] gives the inverse cosine of z.");
-    symtab_set_docstring("ArcTan", "ArcTan[z] gives the inverse tangent of z.");
+    // Trigonometric (all Listable, NumericFunction; exact reductions at
+    // rational multiples of Pi via the standard table; numeric inputs route
+    // to libm / MPFR; symbolic arguments stay unevaluated).
+    symtab_set_docstring("Sin",
+        "Sin[z]\n"
+        "\tgives the sine of z (argument in radians).\n"
+        "Sin is Listable. Numeric inputs are evaluated via libm (Real) or MPFR\n"
+        "(arbitrary precision); rational multiples of Pi reduce to exact values.");
+    symtab_set_docstring("Cos",
+        "Cos[z]\n"
+        "\tgives the cosine of z (argument in radians).\n"
+        "Cos is Listable. Numeric inputs route to libm / MPFR; rational\n"
+        "multiples of Pi reduce to exact values.");
+    symtab_set_docstring("Tan",
+        "Tan[z]\n"
+        "\tgives the tangent of z. Equivalent to Sin[z] / Cos[z].\n"
+        "Tan is Listable. Singularities at z = Pi/2 + k Pi yield ComplexInfinity.");
+    symtab_set_docstring("Cot",
+        "Cot[z]\n"
+        "\tgives the cotangent of z. Equivalent to Cos[z] / Sin[z].\n"
+        "Cot is Listable. Singularities at z = k Pi yield ComplexInfinity.");
+    symtab_set_docstring("Sec",
+        "Sec[z]\n"
+        "\tgives the secant of z (= 1 / Cos[z]).\n"
+        "Sec is Listable. Singularities at z = Pi/2 + k Pi yield ComplexInfinity.");
+    symtab_set_docstring("Csc",
+        "Csc[z]\n"
+        "\tgives the cosecant of z (= 1 / Sin[z]).\n"
+        "Csc is Listable. Singularities at z = k Pi yield ComplexInfinity.");
+    symtab_set_docstring("ArcSin",
+        "ArcSin[z]\n"
+        "\tgives the principal inverse sine of z, in [-Pi/2, Pi/2] for real z\n"
+        "\tin [-1, 1].\n"
+        "ArcSin is Listable. Branch cuts run along the real axis with |z| > 1.");
+    symtab_set_docstring("ArcCos",
+        "ArcCos[z]\n"
+        "\tgives the principal inverse cosine of z, in [0, Pi] for real z\n"
+        "\tin [-1, 1].\n"
+        "ArcCos is Listable. Branch cuts run along the real axis with |z| > 1.");
+    symtab_set_docstring("ArcTan",
+        "ArcTan[z]\n"
+        "\tgives the principal inverse tangent of z, in (-Pi/2, Pi/2).\n"
+        "ArcTan[y, x]\n"
+        "\tgives the argument of the complex number x + I y, in (-Pi, Pi]\n"
+        "\t(two-argument atan2 form).\n"
+        "ArcTan is Listable.");
 
-    // Hyperbolic
-    symtab_set_docstring("Sinh", "Sinh[z] gives the hyperbolic sine of z.");
-    symtab_set_docstring("Cosh", "Cosh[z] gives the hyperbolic cosine of z.");
-    symtab_set_docstring("Tanh", "Tanh[z] gives the hyperbolic tangent of z.");
+    // Hyperbolic (Listable, NumericFunction; numeric inputs route to libm /
+    // MPFR; integer / Pi-multiple arguments reduce when applicable).
+    symtab_set_docstring("Sinh",
+        "Sinh[z]\n"
+        "\tgives the hyperbolic sine of z, (Exp[z] - Exp[-z]) / 2.\n"
+        "Sinh is Listable.");
+    symtab_set_docstring("Cosh",
+        "Cosh[z]\n"
+        "\tgives the hyperbolic cosine of z, (Exp[z] + Exp[-z]) / 2.\n"
+        "Cosh is Listable.");
+    symtab_set_docstring("Tanh",
+        "Tanh[z]\n"
+        "\tgives the hyperbolic tangent of z, Sinh[z] / Cosh[z].\n"
+        "Tanh is Listable.");
 
     // Log/Exp
-    symtab_set_docstring("Log", "Log[z] gives the natural logarithm of z. Log[b, z] gives the logarithm to base b.");
-    symtab_set_docstring("Exp", "Exp[z] gives the exponential of z.");
+    symtab_set_docstring("Log",
+        "Log[z]\n"
+        "\tgives the principal natural logarithm of z, with branch cut along\n"
+        "\tthe negative real axis.\n"
+        "Log[b, z]\n"
+        "\tgives the logarithm to base b, i.e. Log[z] / Log[b].\n"
+        "Log is Listable. Log[1] = 0, Log[E] = 1, Log[E^n] = n for symbolic n.\n"
+        "Numeric inputs route to libm / MPFR; negative reals yield I Pi + Log[|z|].");
+    symtab_set_docstring("Exp",
+        "Exp[z]\n"
+        "\tgives the exponential E^z.\n"
+        "Exp is Listable. Exp[0] = 1, Exp[Log[x]] -> x, Exp[I Pi] = -1.\n"
+        "Numeric inputs route to libm / MPFR.");
 
     // Trig simplification / conversion
     symtab_set_docstring("TrigToExp",
@@ -1100,43 +1333,39 @@ void info_init(void) {
         "TrigFactor[expr]\n\tfactors trigonometric functions in expr.\n\tTrigFactor operates on both circular and hyperbolic functions.\n\tTrigFactor factors polynomials in trigonometric functions and collapses\n\tPythagorean, angle-addition, and double-angle identities where possible,\n\tbroadly acting as the inverse of TrigExpand.\n\tTrigFactor automatically threads over lists, as well as equations,\n\tinequalities, and logic functions.");
     symtab_set_docstring("TrigReduce",
         "TrigReduce[expr]\n"
-        "\trewrites products and powers of trigonometric functions in expr in terms\n"
-        "\tof trigonometric functions with combined arguments.\n"
-        "\tTrigReduce operates on both circular and hyperbolic functions.\n"
-        "\tGiven a trigonometric polynomial, TrigReduce typically yields a linear\n"
-        "\texpression involving trigonometric functions with more complicated\n"
-        "\targuments.\n"
-        "\tTrigReduce automatically threads over lists, as well as equations,\n"
-        "\tinequalities and logic functions.\n"
-        "\n"
-        "\tReduce trigonometric expressions:\n"
-        "\t  TrigReduce[2 Cos[x]^2]            ->  1 + Cos[2 x]\n"
-        "\t  TrigReduce[2 Sin[x] Cos[y]]       ->  Sin[x - y] + Sin[x + y]\n"
-        "\n"
-        "\tReduce hyperbolic trigonometric expressions:\n"
-        "\t  TrigReduce[2 Cosh[x]^2]           ->  1 + Cosh[2 x]\n"
-        "\t  TrigReduce[2 Sinh[x] Cosh[y]]     ->  Sinh[x - y] + Sinh[x + y]\n"
-        "\n"
-        "\tTrigonometric expressions:\n"
-        "\t  TrigReduce[2 Sin[x + y] Cos[x - y]]  ->  Sin[2 x] + Sin[2 y]\n"
-        "\t  TrigReduce[Tan[x] + Tan[y]]          ->  Sec[x] Sec[y] Sin[x + y]\n"
-        "\n"
-        "\tHyperbolic trigonometric expressions:\n"
-        "\t  TrigReduce[2 Cosh[x] Cosh[y]]     ->  Cosh[x - y] + Cosh[x + y]\n"
-        "\t  TrigReduce[Coth[x] + Coth[y]]     ->  Csch[x] Csch[y] Sinh[x + y]\n"
-        "\n"
-        "\tThreads over lists:\n"
-        "\t  TrigReduce[{Tan[x] + Cot[y], Tanh[x] - Coth[y]}]\n"
-        "\t    -> {Cos[x - y] Csc[y] Sec[x], -Cosh[x - y] Csch[y] Sech[x]}\n"
-        "\n"
-        "\tThreads over equations, inequalities, and logical operations:\n"
-        "\t  TrigReduce[4 Sin[x]^4 == 1 && 2 Cos[x]^2 >= 1]\n"
-        "\t    -> 1/2 (3 - 4 Cos[2 x] + Cos[4 x]) == 1 && 1 + Cos[2 x] >= 1");
+        "\trewrites products and powers of trigonometric functions in expr in\n"
+        "\tterms of trigonometric functions with combined arguments.\n"
+        "TrigReduce operates on both circular and hyperbolic functions; given a\n"
+        "trigonometric polynomial it typically yields a linear expression\n"
+        "involving trigonometric functions with more complicated arguments\n"
+        "(broadly the inverse of TrigExpand).\n"
+        "TrigReduce automatically threads over lists, equations, inequalities,\n"
+        "and logic functions.");
 
     // Piecewise / Rounding
-    symtab_set_docstring("Floor", "Floor[x] gives the greatest integer less than or equal to x.");
-    symtab_set_docstring("Ceiling", "Ceiling[x] gives the smallest integer greater than or equal to x.");
-    symtab_set_docstring("Round", "Round[x] rounds x to the nearest integer.");
+    symtab_set_docstring("Floor",
+        "Floor[x]\n"
+        "\tgives the greatest integer less than or equal to x.\n"
+        "Floor[x, a]\n"
+        "\tgives the greatest multiple of a less than or equal to x.\n"
+        "Floor is Listable. Exact (Integer / BigInt / Rational) inputs return\n"
+        "exact integers; Real / MPFR inputs are rounded toward -Infinity at\n"
+        "the input precision; symbolic inputs stay unevaluated.");
+    symtab_set_docstring("Ceiling",
+        "Ceiling[x]\n"
+        "\tgives the smallest integer greater than or equal to x.\n"
+        "Ceiling[x, a]\n"
+        "\tgives the smallest multiple of a greater than or equal to x.\n"
+        "Ceiling is Listable. Exact inputs return exact integers; Real / MPFR\n"
+        "inputs are rounded toward +Infinity at the input precision.");
+    symtab_set_docstring("Round",
+        "Round[x]\n"
+        "\trounds x to the nearest integer, breaking ties to the nearest even\n"
+        "\tinteger (banker's rounding).\n"
+        "Round[x, a]\n"
+        "\trounds x to the nearest multiple of a.\n"
+        "Round is Listable. Exact inputs return exact integers; Real / MPFR\n"
+        "inputs round at the input precision.");
     symtab_set_docstring("Chop",
         "Chop[expr]\n"
         "\treplaces approximate real numbers in expr that are close to zero\n"
@@ -1224,7 +1453,15 @@ void info_init(void) {
         "Break[] inside body exits the loop.\n"
         "Continue[] inside body skips the rest of body and re-evaluates test.\n"
         "Return[v] inside body causes While to yield v; otherwise While returns Null.");
-    symtab_set_docstring("If", "If[condition, t, f] gives t if condition evaluates to True, and f if it evaluates to False.\nIf[condition, t, f, u] gives u if condition evaluates to neither True nor False.");
+    symtab_set_docstring("If",
+        "If[cond, t]\n"
+        "\tgives t if cond evaluates to True; gives Null otherwise.\n"
+        "If[cond, t, f]\n"
+        "\tgives t if cond is True, f if False, and is left unevaluated\n"
+        "\tif cond is neither.\n"
+        "If[cond, t, f, u]\n"
+        "\talso supplies u as the result when cond is neither True nor False.\n"
+        "If has attribute HoldRest: only the branch chosen by cond is evaluated.");
     symtab_set_docstring("Which",
         "Which[test1, value1, test2, value2, ...]\n"
         "\tevaluates each test_i in turn, returning the corresponding value_i\n"
@@ -1324,7 +1561,12 @@ void info_init(void) {
         "\tis an attribute which specifies that all arguments to a function are not to be modified or looked at in any way in the process of evaluation.\n"
         "HoldAllComplete prevents argument evaluation, Sequence flattening inside arguments, Unevaluated wrapper stripping, and application of Evaluate.\n"
         "Evaluate cannot override HoldAllComplete.");
-    symtab_set_docstring("Set", "lhs = rhs assigns rhs to lhs.");
+    symtab_set_docstring("Set",
+        "lhs = rhs or Set[lhs, rhs]\n"
+        "\tevaluates rhs once and assigns the result to lhs.  When lhs is a\n"
+        "\tsymbol, the assignment is stored as an OwnValue; when lhs has the\n"
+        "\tform f[args...] it is stored as a DownValue on f.  Set has attribute\n"
+        "\tHoldFirst so lhs is not evaluated before the assignment.");
 
     // In-place numeric assignment operators
     symtab_set_docstring("Increment",
@@ -1381,9 +1623,23 @@ void info_init(void) {
         "symbol or a Part expression referring to an existing value; dx may be a\n"
         "number, a symbolic expression, or a list. If x has no assigned value,\n"
         "SubtractFrom::rvalue is emitted and the expression is left unevaluated.");
-    symtab_set_docstring("SetDelayed", "lhs := rhs assigns rhs to lhs, evaluating it only when needed.");
-    symtab_set_docstring("Default", "Default[f] gives the default value for arguments of the function f obtained with a _. pattern object.");
-    symtab_set_docstring("Optional", "patt:def or Optional[patt,def] is a pattern object that represents an expression of the form patt, which, if omitted, should be replaced by the default value def.");
+    symtab_set_docstring("SetDelayed",
+        "lhs := rhs or SetDelayed[lhs, rhs]\n"
+        "\tassigns rhs to lhs as a delayed rule: rhs is held and evaluated\n"
+        "\teach time the rule fires (with bindings from lhs substituted in),\n"
+        "\tnot at assignment time.  SetDelayed has attribute HoldAll.");
+    symtab_set_docstring("Default",
+        "Default[f]\n"
+        "\tgives the default value supplied for a missing optional argument of\n"
+        "\tf when the pattern _. (Optional[Blank[]]) appears in a rule.\n"
+        "Default[f, i]\n"
+        "\tgives the default value for the i-th argument position of f.");
+    symtab_set_docstring("Optional",
+        "patt:def or Optional[patt, def]\n"
+        "\tis a pattern object that matches patt if it is present; if patt is\n"
+        "\tomitted from the argument sequence, def is used in its place.\n"
+        "patt_. (sugar for Optional[patt_, Default[f]]) draws the default value\n"
+        "from Default[f] at the call site.");
     symtab_set_docstring("Longest", "Longest[p] is a pattern object that matches the longest sequence consistent with the pattern p.");
     symtab_set_docstring("Shortest", "Shortest[p] is a pattern object that matches the shortest sequence consistent with the pattern p.");
     symtab_set_docstring("Repeated", "p.. or Repeated[p] is a pattern object that represents a sequence of one or more expressions, each matching p.\nRepeated[p, max] represents from 1 to max expressions matching p.\nRepeated[p, {min, max}] represents between min and max expressions matching p.\nRepeated[p, {n}] represents exactly n expressions matching p.");
@@ -1391,7 +1647,12 @@ void info_init(void) {
     symtab_set_docstring("Blank", "_ or Blank[] represents any single expression.\n_h or Blank[h] represents any single expression with head h.");
     symtab_set_docstring("BlankSequence", "__ or BlankSequence[] represents a sequence of one or more expressions.");
     symtab_set_docstring("BlankNullSequence", "___ or BlankNullSequence[] represents a sequence of zero or more expressions.");
-    symtab_set_docstring("Clear", "Clear[x, y, ...] clears the values of symbols.");
+    symtab_set_docstring("Clear",
+        "Clear[s1, s2, ...]\n"
+        "\tclears all OwnValues and DownValues attached to the named symbols,\n"
+        "\tleaving attributes and the symbol itself intact.\n"
+        "Clear has attribute HoldAll; Protected symbols are skipped with a\n"
+        "diagnostic.");
     symtab_set_docstring("Flat", "Flat is an attribute that can be assigned to a symbol f to indicate that all expressions involving nested functions f should be flattened out. This property is accounted for in pattern matching.");
     symtab_set_docstring("Orderless", "Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e_i in expressions of the form f[e_1, e_2, ...] should automatically be sorted into canonical order. This property is accounted for in pattern matching.");
     symtab_set_docstring("OneIdentity", "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.");
@@ -1426,12 +1687,39 @@ void info_init(void) {
         "unchanged so that it can reach the boundary.");
 
     // Rules and Replacements
-    symtab_set_docstring("Rule", "lhs -> rhs represents a rule that transforms lhs to rhs.");
-    symtab_set_docstring("RuleDelayed", "lhs :> rhs represents a rule that transforms lhs to rhs, evaluating rhs only when the rule is used.");
-    symtab_set_docstring("Replace", "Replace[expr, rules] applies rules to the entire expr. Replace[expr, rules, levelspec] applies rules to parts of expr specified by levelspec.");
-    symtab_set_docstring("ReplaceAll", "expr /. rules or ReplaceAll[expr, rules] applies rules to transform each subpart of expr.");
-    symtab_set_docstring("ReplaceRepeated", "expr //. rules or ReplaceRepeated[expr, rules] repeatedly applies rules until the expression no longer changes.");
-    symtab_set_docstring("Print", "Print[expr1, expr2, ...] prints the expressions to stdout and returns Null.");
+    symtab_set_docstring("Rule",
+        "lhs -> rhs or Rule[lhs, rhs]\n"
+        "\trepresents an immediate rewrite rule: rhs is evaluated when the\n"
+        "\trule object is constructed, then matched against lhs at use.");
+    symtab_set_docstring("RuleDelayed",
+        "lhs :> rhs or RuleDelayed[lhs, rhs]\n"
+        "\trepresents a delayed rewrite rule: rhs is held and evaluated only\n"
+        "\teach time the rule fires, after the pattern bindings on lhs are\n"
+        "\tsubstituted into rhs.");
+    symtab_set_docstring("Replace",
+        "Replace[expr, rules]\n"
+        "\ttries to match expr at the top level against rules and returns the\n"
+        "\trewritten form; if no rule matches, returns expr unchanged.\n"
+        "Replace[expr, rules, levelspec]\n"
+        "\tapplies rules only at the parts of expr specified by levelspec.\n"
+        "Matching tries each rule in order and uses the first that succeeds;\n"
+        "rules may be a single rule or a list of rules.");
+    symtab_set_docstring("ReplaceAll",
+        "expr /. rules or ReplaceAll[expr, rules]\n"
+        "\ttraverses expr top-down and applies the first matching rule at each\n"
+        "\tsubexpression. A matched subexpression is replaced and NOT recursed\n"
+        "\tinto further -- ReplaceAll is a single pass, not a fixed point.");
+    symtab_set_docstring("ReplaceRepeated",
+        "expr //. rules or ReplaceRepeated[expr, rules]\n"
+        "\trepeatedly applies ReplaceAll[expr, rules] until the result stops\n"
+        "\tchanging, then returns the fixed point.  Useful for chained rewrite\n"
+        "\tsystems; subject to the same recursion-limit guard as evaluator\n"
+        "\tfixed-point iteration.");
+    symtab_set_docstring("Print",
+        "Print[expr1, expr2, ...]\n"
+        "\tprints each argument to stdout, concatenated without separator and\n"
+        "\tfollowed by a newline, and returns Null.  Arguments are formatted in\n"
+        "\tthe default output form (matching the REPL's Out display).");
 
     // File I/O
     symtab_set_docstring("Get",
@@ -1495,8 +1783,12 @@ void info_init(void) {
         "FilePrint returns Null on success and $Failed if the file cannot be opened.\n"
         "Negative indices inside the Span count from the end of the file (-1 is the last line).");
 
-    symtab_set_docstring("FullForm", "FullForm[expr] is a wrapper that causes expr to be printed in full form.");
-    symtab_set_docstring("InputForm", "InputForm[expr] is a wrapper that causes expr to be printed in input form.");
+    symtab_set_docstring("InputForm",
+        "InputForm[expr]\n"
+        "\tprints expr in a form suitable to be re-read by the parser, using\n"
+        "\toperator syntax (a + b, not Plus[a, b]) and explicit string quotes.\n"
+        "Like FullForm, InputForm is a printer wrapper: it is consumed during\n"
+        "output and does not appear in the printed result.");
     symtab_set_docstring("TeXForm",
         "TeXForm[expr]\n"
         "\tprints as a TeX version of expr.\n"
@@ -1507,46 +1799,31 @@ void info_init(void) {
     symtab_set_docstring("HoldForm", "HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.");
     symtab_set_docstring("ToString",
         "ToString[expr]\n"
-        "\tgives a string corresponding to the printed form of expr in InputForm.\n"
+        "\tgives the printed form of expr (as InputForm) as a String.\n"
         "ToString[expr, form]\n"
-        "\tgives the string corresponding to output in the specified form.\n"
-        "Supported forms: InputForm (default), FullForm, TeXForm.\n"
-        "Examples:\n"
-        "\tToString[x^2 + y^3]              -> \"x^2 + y^3\"\n"
-        "\tToString[x^2 + y^3, FullForm]    -> \"Plus[Power[x, 2], Power[y, 3]]\"\n"
-        "\tToString[x^2 + y^3, TeXForm]     -> \"x^2 + y^3\" (rendered in TeX)");
+        "\tuses the specified output form.\n"
+        "Supported forms: InputForm (default), FullForm, TeXForm.");
     symtab_set_docstring("ToExpression",
         "ToExpression[input]\n"
-        "\tparses the string input as Mathilda input and returns the\n"
-        "\tresulting expression (after evaluation).\n"
+        "\tparses input (a String) as Mathilda input and returns the resulting\n"
+        "\texpression after evaluation.\n"
         "ToExpression[input, form]\n"
-        "\tuses interpretation rules corresponding to the specified form.\n"
-        "\tForm may be InputForm or FullForm (both currently use the same parser).\n"
+        "\tuses interpretation rules for the specified form. form may be\n"
+        "\tInputForm or FullForm (both currently use the same parser).\n"
         "ToExpression[input, form, h]\n"
-        "\twraps the head h around the parsed expression before evaluation.\n"
-        "\tUse h = Hold to obtain the unevaluated parsed form.\n"
-        "Returns $Failed if a syntax error is encountered.\n"
-        "Examples:\n"
-        "\tToExpression[\"1+1\"]                  -> 2\n"
-        "\tToExpression[\"1+1\", InputForm, Hold] -> Hold[1 + 1]");
+        "\twraps the head h around the parsed expression before evaluation;\n"
+        "\tuse h = Hold to obtain the unevaluated parsed form.\n"
+        "Returns $Failed if a syntax error is encountered.");
     symtab_set_docstring("Symbol",
         "Symbol[\"name\"]\n"
-        "\trefers to a symbol with the specified name.\n"
+        "\trefers to the symbol with the specified name, creating it in\n"
+        "\t$Context if none yet exists.\n"
         "\n"
-        "All symbols, whether explicitly entered using Symbol or not, have head Symbol.\n"
-        "x_Symbol can be used as a pattern to represent any symbol.\n"
-        "The string \"name\" in Symbol[\"name\"] must be an appropriate name for a symbol.\n"
-        "It can contain any letters, letter-like forms, or digits, but cannot start with\n"
-        "a digit. A backtick (`) separates context prefixes; a leading backtick makes the\n"
+        "All symbols, whether explicitly entered using Symbol or not, have head\n"
+        "Symbol; x_Symbol matches any symbol. The name string may contain\n"
+        "letters, letter-like forms, or digits but must not start with a digit.\n"
+        "A backtick (`) separates context prefixes; a leading backtick makes the\n"
         "name relative to the current context $Context.\n"
-        "Symbol[\"name\"] creates a new symbol if none exists with the specified name.\n"
-        "If Symbol[\"name\"] creates a new symbol, it does so in the context specified by\n"
-        "$Context.\n"
-        "Examples:\n"
-        "\tSymbol[\"x\"]                       -> x\n"
-        "\tHead[Symbol[\"x\"]]                 -> Symbol\n"
-        "\tSymbol[\"a`x\"]                     -> a`x\n"
-        "\t{f[x], f[\"x\"], f[2]} /. f[s_Symbol] :> g[s] -> {g[x], f[\"x\"], f[2]}\n"
         "\n"
         "Attributes: Protected.");
     symtab_set_docstring("ReplaceList", "ReplaceList[expr, rules] attempts to transform the entire expression expr by applying a rule or list of rules in all possible ways, and returns a list of the results obtained.\nReplaceList[expr, rules, n] gives a list of at most n results.");
@@ -1606,7 +1883,14 @@ void info_init(void) {
         "ExpandDenominator leaves the numerator unexpanded.\n"
         "ExpandDenominator automatically threads over lists, as well as equations,\n"
         "\tinequalities, and logic functions.");
-    symtab_set_docstring("Coefficient", "Coefficient[expr, form] gives the coefficient of form in expr.\nCoefficient[expr, form, n] gives the coefficient of form^n in expr.");
+    symtab_set_docstring("Coefficient",
+        "Coefficient[expr, form]\n"
+        "\tgives the coefficient of form^1 in expr.  form is matched\n"
+        "\tstructurally against the bases of products in the expanded form\n"
+        "\tof expr.\n"
+        "Coefficient[expr, form, n]\n"
+        "\tgives the coefficient of form^n.  n may be a non-negative integer\n"
+        "\tor (for Laurent / Puiseux expressions) a rational.");
     symtab_set_docstring("CoefficientList", "CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.\nCoefficientList[poly, {var1, var2, ...}] gives an array of coefficients of the variables.");
     symtab_set_docstring("PolynomialGCD",
         "PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.\n"
@@ -1627,9 +1911,31 @@ void info_init(void) {
     symtab_set_docstring("PolynomialRemainder",
         "PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.\n"
         "Option: Extension -> alpha (default None) computes the remainder over Q(alpha); see PolynomialQuotient for the recognised alpha forms.");
-    symtab_set_docstring("Collect", "Collect[expr, x] collects together terms involving the same powers of objects matching x.");
-    symtab_set_docstring("PolynomialMod", "PolynomialMod[poly,m] gives the polynomial poly reduced modulo m.\nPolynomialMod[poly,{Subscript[m, 1],Subscript[m, 2],...}] reduces modulo all of the Subscript[m, i].");
-    symtab_set_docstring("FactorSquareFree", "FactorSquareFree[poly] pulls out any multiple factors in a polynomial.");
+    symtab_set_docstring("Collect",
+        "Collect[expr, x]\n"
+        "\texpands expr and gathers terms with the same power of x, returning\n"
+        "\ta sum of the form Sum[c_k x^k] with each c_k free of x.\n"
+        "Collect[expr, {x1, x2, ...}]\n"
+        "\tcollects with respect to each xi in turn (nested grouping).\n"
+        "Collect[expr, x, f]\n"
+        "\tapplies f to each coefficient before re-assembling the sum, useful\n"
+        "\tfor f = Simplify or f = Factor.");
+    symtab_set_docstring("PolynomialMod",
+        "PolynomialMod[poly, m]\n"
+        "\treduces poly modulo m.  If m is an integer, each coefficient of\n"
+        "\tpoly is reduced to a canonical residue in {0, ..., m-1}.  If m is a\n"
+        "\tpolynomial, poly is reduced modulo m as polynomials over the\n"
+        "\trationals (in contrast to PolynomialRemainder, the leading\n"
+        "\tcoefficient of m is not normalised).\n"
+        "PolynomialMod[poly, {m1, m2, ...}]\n"
+        "\treduces modulo each mi in turn.");
+    symtab_set_docstring("FactorSquareFree",
+        "FactorSquareFree[poly]\n"
+        "\twrites poly as a product of pairwise-coprime square-free factors,\n"
+        "\tcollecting repeated factors into powers.\n"
+        "Computed via the Yun / Musser square-free decomposition using\n"
+        "polynomial GCDs of poly with its derivative; cheaper than full Factor\n"
+        "and sufficient when only multiplicities are needed.");
     symtab_set_docstring("Factor",
         "Factor[poly] factors a polynomial over the integers.\n"
         "Factor[poly, Extension -> alpha] factors over Q(alpha), where alpha is\n"
@@ -1648,14 +1954,50 @@ void info_init(void) {
     symtab_set_docstring("FactorTermsList",
         "FactorTermsList[poly]\n\tgives a list in which the first element is the overall numerical factor in poly, and the second element is the polynomial with the overall factor removed.\n"
         "FactorTermsList[poly, {x1, x2, ...}]\n\tgives a list of factors of poly. The first element in the list is the overall numerical factor. The second element is a factor that does not depend on any of the xi. Subsequent elements are factors which depend on progressively more of the xi.");
-    symtab_set_docstring("Variables", "Variables[poly] gives a list of all independent variables in the polynomial poly.");
-    symtab_set_docstring("PolynomialQ", "PolynomialQ[expr, var] yields True if expr is a polynomial in var.");
-    symtab_set_docstring("Decompose", "Decompose[poly, x] decomposes a polynomial, if possible, into a composition of simpler polynomials.");
-    symtab_set_docstring("HornerForm", "HornerForm[poly] puts the polynomial poly in Horner form.\nHornerForm[poly, vars] puts poly in Horner form with respect to vars.\nHornerForm[poly1/poly2, vars1, vars2] puts the rational function in Horner form.");
-    symtab_set_docstring("Resultant", "Resultant[poly1, poly2, var] computes the resultant of the polynomials poly1 and poly2 with respect to the variable var.");
-    symtab_set_docstring("Discriminant", "Discriminant[poly, var] computes the discriminant of the polynomial poly with respect to the variable var.");
-    symtab_set_docstring("Numerator", "Numerator[expr] gives the numerator of expr.\nNumerator picks out terms which do not have superficially negative exponents.");
-    symtab_set_docstring("Denominator", "Denominator[expr] gives the denominator of expr.\nDenominator picks out terms which have superficially negative exponents.");
+    symtab_set_docstring("Variables",
+        "Variables[poly]\n"
+        "\tgives the sorted list of independent variables that appear as bases\n"
+        "\tof non-numeric subexpressions in poly.\n"
+        "Walks the expression tree and collects symbols and compound forms\n"
+        "(e.g. Sin[x], a[i]) that occur outside numeric arithmetic; duplicates\n"
+        "are removed via canonical order.");
+    symtab_set_docstring("Decompose",
+        "Decompose[poly, x]\n"
+        "\tdecomposes the univariate polynomial poly into the deepest possible\n"
+        "\tcomposition {p1, p2, ..., pk} such that poly == p1[p2[...[pk[x]]...]],\n"
+        "\twith each pi a polynomial of degree >= 2 in x.\n"
+        "\tReturns {poly} if no nontrivial decomposition exists.");
+    symtab_set_docstring("HornerForm",
+        "HornerForm[poly]\n"
+        "\trewrites the univariate polynomial poly in nested (Horner) form,\n"
+        "\twhich evaluates in n multiplications and n additions instead of\n"
+        "\tthe naive 2n.\n"
+        "HornerForm[poly, var]\n"
+        "\tuses var as the recursion variable for multivariate poly.\n"
+        "HornerForm[poly1 / poly2, vars1, vars2]\n"
+        "\tputs a rational function in Horner form, nested with respect to\n"
+        "\tvars1 in the numerator and vars2 in the denominator.");
+    symtab_set_docstring("Resultant",
+        "Resultant[p, q, var]\n"
+        "\tgives the resultant of p and q as polynomials in var: the unique\n"
+        "\tinteger / polynomial scalar that vanishes iff p and q share a\n"
+        "\troot in var.  Computed via a Sylvester-matrix determinant or, in\n"
+        "\tthe exact path, a subresultant pseudo-remainder sequence.");
+    symtab_set_docstring("Discriminant",
+        "Discriminant[poly, var]\n"
+        "\tgives the discriminant of poly with respect to var: up to sign and\n"
+        "\tleading-coefficient scaling, Resultant[poly, D[poly, var], var] /\n"
+        "\tlc[poly, var].  Vanishes iff poly has a repeated root in var.");
+    symtab_set_docstring("Numerator",
+        "Numerator[expr]\n"
+        "\tgives the numerator of expr regarded as a rational expression.\n"
+        "\tPicks out factors of expr that do not carry a superficially negative\n"
+        "\texponent; constants and symbols pass through as-is.");
+    symtab_set_docstring("Denominator",
+        "Denominator[expr]\n"
+        "\tgives the denominator of expr regarded as a rational expression.\n"
+        "\tCollects factors of expr that carry a superficially negative\n"
+        "\texponent, inverted; returns 1 when no such factors exist.");
     symtab_set_docstring("Cancel",
         "Cancel[expr] cancels out common factors in the numerator and denominator of expr.\n"
         "Option Extension -> alpha cancels factors over Q(alpha) (e.g. simplifies\n"
@@ -1765,14 +2107,44 @@ void info_init(void) {
         "performs no corrections for time zones, daylight saving time, or leap seconds.");
 
     // Comparisons
-    symtab_set_docstring("SameQ", "lhs === rhs yields True if the expression lhs is identical to rhs, and yields False otherwise.");
-    symtab_set_docstring("UnsameQ", "lhs =!= rhs yields True if the expression lhs is not identical to rhs, and yields False otherwise.");
-    symtab_set_docstring("Equal", "lhs == rhs yields True if lhs and rhs are equal.");
-    symtab_set_docstring("Unequal", "lhs != rhs yields True if lhs and rhs are not equal.");
-    symtab_set_docstring("Less", "x < y yields True if x is strictly less than y.");
-    symtab_set_docstring("Greater", "x > y yields True if x is strictly greater than y.");
-    symtab_set_docstring("LessEqual", "x <= y yields True if x is less than or equal to y.");
-    symtab_set_docstring("GreaterEqual", "x >= y yields True if x is greater than or equal to y.");
+    symtab_set_docstring("SameQ",
+        "lhs === rhs or SameQ[lhs, rhs]\n"
+        "\tyields True if lhs and rhs are structurally identical (head-by-head,\n"
+        "\targument-by-argument), and False otherwise.  Numerically equal but\n"
+        "\tdistinct heads (e.g. 1 and 1.) are NOT considered same.");
+    symtab_set_docstring("UnsameQ",
+        "lhs =!= rhs or UnsameQ[lhs, rhs]\n"
+        "\tis the negation of SameQ: True iff lhs and rhs are not structurally\n"
+        "\tidentical.");
+    symtab_set_docstring("Equal",
+        "lhs == rhs or Equal[lhs, rhs]\n"
+        "\ttests mathematical equality. Numeric arguments decide directly\n"
+        "\t(Integer / Rational exact comparison; Real / MPFR comparison with\n"
+        "\tprecision tolerance); structurally identical symbolic forms decide\n"
+        "\tTrue; otherwise the call stays unevaluated as a symbolic equation.\n"
+        "Equal threads over Lists pairwise; chained Equal becomes Inequality.");
+    symtab_set_docstring("Unequal",
+        "lhs != rhs or Unequal[lhs, rhs]\n"
+        "\tis the negation of Equal: True if lhs and rhs can be decided unequal,\n"
+        "\tFalse if they can be decided equal, otherwise unevaluated.");
+    symtab_set_docstring("Less",
+        "x < y or Less[x, y]\n"
+        "\tyields True if x is strictly less than y on numeric inputs, False\n"
+        "\tif strictly greater or equal, otherwise unevaluated.\n"
+        "Chained forms (x < y < z) become Inequality, decided pairwise.");
+    symtab_set_docstring("Greater",
+        "x > y or Greater[x, y]\n"
+        "\tyields True if x is strictly greater than y on numeric inputs,\n"
+        "\tFalse if strictly less or equal, otherwise unevaluated.\n"
+        "Chained forms become Inequality.");
+    symtab_set_docstring("LessEqual",
+        "x <= y or LessEqual[x, y]\n"
+        "\tyields True if x is less than or equal to y on numeric inputs,\n"
+        "\tFalse if strictly greater, otherwise unevaluated.");
+    symtab_set_docstring("GreaterEqual",
+        "x >= y or GreaterEqual[x, y]\n"
+        "\tyields True if x is greater than or equal to y on numeric inputs,\n"
+        "\tFalse if strictly less, otherwise unevaluated.");
     symtab_set_docstring("Inequality",
         "Inequality[v0, op0, v1, op1, v2, ...] is the canonical form for a "
         "chained comparison such as a < b <= c. It returns True if every "
@@ -1869,8 +2241,16 @@ void info_init(void) {
     symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");
     symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x.");
     symtab_set_docstring("NextPrime", "NextPrime[x] gives the next prime after x.");
-    symtab_set_docstring("Distribute", "Distribute[f[x1, x2, ...]]\n\tdistributes f over Plus appearing in any of the xi.\nDistribute[expr, g]\n\tdistributes over g.\nDistribute[expr, g, f]\n\tperforms the distribution only if the head of expr is f.\nDistribute[expr, g, f, gp, fp]\n\tgives gp and fp in place of g and f respectively in the result of the distribution.");
-    symtab_set_docstring("Distribute", "Distribute[f[x1, x2, ...]]\n\tdistributes f over Plus appearing in any of the xi.\nDistribute[expr, g]\n\tdistributes over g.\nDistribute[expr, g, f]\n\tperforms the distribution only if the head of expr is f.\nDistribute[expr, g, f, gp, fp]\n\tgives gp and fp in place of g and f respectively in the result of the distribution.");
+    symtab_set_docstring("Distribute",
+        "Distribute[f[x1, x2, ...]]\n"
+        "\tdistributes f over Plus appearing in any of the xi, building the sum\n"
+        "\tof f applied to every Cartesian-product selection of summands.\n"
+        "Distribute[expr, g]\n"
+        "\tdistributes over the head g instead of Plus.\n"
+        "Distribute[expr, g, f]\n"
+        "\tperforms the distribution only if the head of expr is f.\n"
+        "Distribute[expr, g, f, gp, fp]\n"
+        "\tgives gp and fp in place of g and f respectively in the result.");
     symtab_set_docstring("Inner", "Inner[f,list1,list2,g]\n\tis a generalization of Dot in which f plays the role of multiplication and g of addition.\nInner[f,list1,list2]\n\tuses Plus for g.\nInner[f,list1,list2,g,n]\n\tcontracts index n of the first tensor with the first index of the second tensor.");
     symtab_set_docstring("Outer", "Outer[f,list1,list2,...]\n\tgives the generalized outer product of the listi, forming all possible combinations of the lowest-level elements in each of them, and feeding them as arguments to f.\nOuter[f,list1,list2,...,n]\n\ttreats as separate elements only sublists at level n in the listi.\nOuter[f,list1,list2,...,n1,n2,...]\n\ttreats as separate elements only sublists at level ni in the corresponding listi.");
     symtab_set_docstring("Tuples", "Tuples[list,n]\n\tgenerates a list of all possible n-tuples of elements from list.\nTuples[{list1,list2,...}]\n\tgenerates a list of all possible tuples whose ith element is from listi.\nTuples[list,{n1,n2,...}]\n\tgenerates a list of all possible n1 x n2 x ... arrays of elements in list.");
