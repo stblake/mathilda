@@ -3972,3 +3972,41 @@ Expr* direct_dispatch(Expr* m, Expr* a, int64_t n,
     }
     return direct_dispatch_machine(m, a, n, want, k_spec);
 }
+
+#ifdef USE_MPFR
+/* Public wrapper exposed in eigen.h.  Allocates workspace, runs
+ * Hessenberg + Francis QR on a copy of the input, returns eigenvalues
+ * as parallel (re, im) MPFR arrays.  Used by root_numeric.c as its
+ * companion-matrix all-roots backend. */
+int eigen_all_eigenvalues_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
+                                     mpfr_t* eval_re, mpfr_t* eval_im) {
+    if (n == 0) return 0;
+    if (n == 1) {
+        mpfr_set(eval_re[0], A[0], MPFR_RNDN);
+        mpfr_set_zero(eval_im[0], 1);
+        return 0;
+    }
+
+    mpfr_t* Q   = mpfr_array_alloc(n * n, bits);
+    mpfr_t* u   = mpfr_array_alloc(n, bits);
+    mpfr_t* tmp = mpfr_array_alloc(14, bits);
+
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++)
+            mpfr_set_si(Q[i * n + j], (i == j) ? 1 : 0, MPFR_RNDN);
+
+    if (n >= 3) direct_hessenberg_real_M(A, n, bits, u, Q, tmp);
+
+    for (size_t i = 0; i < n; i++) {
+        mpfr_set_zero(eval_re[i], 1);
+        mpfr_set_zero(eval_im[i], 1);
+    }
+    int status = direct_qr_real_general_M(A, n, bits,
+                                          eval_re, eval_im, Q, tmp);
+
+    mpfr_array_free(Q,   n * n);
+    mpfr_array_free(u,   n);
+    mpfr_array_free(tmp, 14);
+    return status;
+}
+#endif

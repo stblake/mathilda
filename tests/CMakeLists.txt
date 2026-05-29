@@ -203,6 +203,8 @@ set(COMMON_SRC
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
     ../src/root.c
+    ../src/root_numeric.c
+    ../src/poly/poly_eval_mpfr.c
     ../src/solve.c
     ../src/findroot.c
     ../src/findmin.c
@@ -310,6 +312,9 @@ target_include_directories(multiplicative_order_tests PRIVATE ../src)
 
 add_executable(findroot_tests test_findroot.c ${COMMON_SRC})
 target_include_directories(findroot_tests PRIVATE ../src)
+
+add_executable(root_numeric_tests test_root_numeric.c ${COMMON_SRC})
+target_include_directories(root_numeric_tests PRIVATE ../src)
 
 add_executable(findmin_tests test_findmin.c ${COMMON_SRC})
 target_include_directories(findmin_tests PRIVATE ../src)

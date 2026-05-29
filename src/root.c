@@ -265,9 +265,12 @@ void root_init(void) {
     symtab_get_def("Root")->attributes |= ATTR_PROTECTED | ATTR_HOLDALL;
     symtab_set_docstring("Root",
         "Root[Function[t, p[t]], k]\n"
-        "\tRepresents the k-th real root of the univariate polynomial p\n"
-        "\tin the variable t.  Held symbolic form — the system makes no\n"
-        "\tattempt to express the root as a closed-form radical.");
+        "\tRepresents the k-th root of the univariate polynomial p in the\n"
+        "\tvariable t. k is canonical: real roots first ascending, then\n"
+        "\tcomplex roots ordered by Re ascending, |Im| ascending, with the\n"
+        "\tnegative-Im member of each conjugate pair first. N[Root[..]]\n"
+        "\tand N[Root[..], prec] return a numerical approximation via a\n"
+        "\tcompanion-matrix + Sturm + Newton pipeline.");
 
     symtab_add_builtin("RootSum", builtin_rootsum);
     symtab_get_def("RootSum")->attributes |= ATTR_PROTECTED | ATTR_HOLDALL;

@@ -1642,6 +1642,48 @@ In[19]:= Solve[3 x + 2 y == 11 && x + y == 12 && 3 x + y == 32, {x, y}]
 Out[19]= {}                        (* over-determined, inconsistent *)
 ```
 
+## Root
+
+Held symbolic representation of an indexed root of a univariate polynomial.
+
+- `Root[Function[t, p[t]], k]` — the `k`-th root of `p` (1-indexed).
+
+**Canonical index `k`** (matches Mathematica):
+
+1. **Real roots first**, ordered ascending by value.
+2. **Complex roots** afterwards, ordered by `Re` ascending; ties broken by
+   `|Im|` ascending; within a conjugate pair the negative-`Im` member comes
+   first.
+
+This is the convention used by both `Solve`'s emission and `N[Root[..]]`'s
+numericalization, so `Root[f, 1]` always refers to the same root regardless
+of how it was produced.
+
+**Numericalization** — `N[Root[f, k]]` and `N[Root[f, k], prec]`:
+
+The pipeline is companion-matrix QR → Sturm certificate → canonical sort →
+Newton refinement → basin verification. Both real and complex roots are
+returned as MPFR values (`Complex[MPFR, MPFR]` for complex). Failure modes:
+
+- `Root::nonint` — polynomial has non-integer coefficients (deferred case).
+- `Root::indx`   — `k` is outside `1..deg(p)`.
+- `Root::conv`   — QR or Newton did not converge after one precision retry.
+
+Examples:
+```
+In[1]:= N[Root[Function[#^3 - 2 # - 5], 1], 30]
+Out[1]= 2.094551481542326591482386540580
+
+In[2]:= N[Root[Function[#^3 + # + 1], 1], 20]    (* real root first *)
+Out[2]= -0.68232780382801932737
+
+In[3]:= N[Root[Function[#^3 + # + 1], 2], 20]    (* conj pair: -Im first *)
+Out[3]= 0.34116390191400966368 - 1.1615414252683233453 I
+
+In[4]:= N[Root[Function[#^3 + # + 1], 3], 20]
+Out[4]= 0.34116390191400966368 + 1.1615414252683233453 I
+```
+
 ## Solve`SolveLinearSystem
 The linear-system specialist invoked by `Solve` for multi-variable inputs
 (`And` / `List` of equations, or a single equation paired with a multi-symbol

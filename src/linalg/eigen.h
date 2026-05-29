@@ -4,6 +4,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "expr.h"
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* Eigenvalues / Eigenvectors of a square matrix.
  *
@@ -62,5 +65,23 @@ typedef enum {
     MATEIGEN_WANT_VECTORS = 1u << 1,
     MATEIGEN_WANT_BOTH    = MATEIGEN_WANT_VALUES | MATEIGEN_WANT_VECTORS
 } MateigenWant;
+
+#ifdef USE_MPFR
+/* Compute all eigenvalues of a square n*n real matrix at MPFR precision.
+ *
+ * Black-box wrapper around the internal Hessenberg + Francis QR pipeline,
+ * exposed for callers like N[Root[..]] that build a Frobenius companion
+ * matrix and treat eigenvalue extraction as their all-roots backend.
+ *
+ * `A` is row-major, length n*n, with each cell mpfr_init2'd to `bits`.
+ * The matrix is mutated. On return, eval_re[i] + I*eval_im[i] are the n
+ * eigenvalues in arbitrary order — the caller is expected to sort them.
+ *
+ * Both eval_re and eval_im must be arrays of n already-mpfr_init2'd
+ * cells at `bits` precision on entry. Returns 0 on success, non-zero on
+ * QR non-convergence (exceedingly rare for well-conditioned matrices). */
+int eigen_all_eigenvalues_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
+                                    mpfr_t* eval_re, mpfr_t* eval_im);
+#endif
 
 #endif /* MATEIGEN_H */

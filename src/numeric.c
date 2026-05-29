@@ -15,6 +15,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "root_numeric.h"
 
 #include <limits.h>
 #include <math.h>
@@ -484,6 +485,22 @@ static Expr* numericalize_symbol(const Expr* e, NumericSpec spec) {
  * `numericalize` is part of the public module API (declared in numeric.h). */
 
 static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
+    /* Root[Function[p_in_slot1], k] → companion-matrix all-roots backend,
+     * canonical sort, Newton refinement.  Runs first because Root is
+     * HoldAll and we must NOT numericalize its arguments (Slot[1] and the
+     * symbolic polynomial body would lose structure).  On NULL we fall
+     * through to the generic rebuild, which preserves the original Root
+     * call unchanged (the Root builtin itself returns NULL). */
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Root) {
+        Expr* out = root_numericalize(e, spec);
+        if (out) return out;
+        /* Failed (e.g. non-integer coefficients, out-of-range k).  Don't
+         * descend into the held body — return the Root call verbatim. */
+        return expr_copy((Expr*)e);
+    }
+
     /* Rational[n, d] → direct numeric quotient. Compute at full target
      * precision; a plain (double)n/d loses bits beyond 1e-15 and would
      * destroy the request for e.g. N[1/3, 40]. */
