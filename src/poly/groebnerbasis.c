@@ -65,19 +65,35 @@ static bool is_equal(const Expr* e) {
 /*  Option extraction                                                  */
 /* ------------------------------------------------------------------ */
 
+/* Bundle of user-visible options recognised by `GroebnerBasis[]`.  The
+ * fields whose `*_set` companion is false mean "use the engine default";
+ * the only one that is consulted directly is `order` (see below). */
+typedef struct {
+    GBOrder order;                  /* MonomialOrder -> ... */
+    bool    sort_desc;              /* Sort -> True reverses the default
+                                       LM-ascending output ordering */
+    bool    parameter_vars_given;   /* ParameterVariables option set */
+    Expr*   parameter_vars;         /* borrowed; List[...] or symbol or NULL */
+} GBOptions;
+
 /* In-out: `*n_pos` starts at the full argument count; the function
- * decrements it for each trailing Rule[] arg.  All three output options
- * default to Automatic-equivalent values.  Returns `false` on a setting
- * we cannot honour (caller chooses whether to bail or fall back). */
-static bool extract_options(const Expr* res, size_t* n_pos,
-                            GBOrder* order, bool* warned_nimpl) {
+ * decrements it for each trailing Rule[] arg.  Recognised options are
+ * folded into `*opt`; unknown options emit a `nimpl` diagnostic but
+ * never abort evaluation.  Options whose value we cannot honour
+ * (e.g. CoefficientDomain -> Reals, Modulus -> 7) fall back to the
+ * default behaviour with a once-per-call note. */
+static void extract_options(const Expr* res, size_t* n_pos,
+                            GBOptions* opt) {
     size_t argc = res->data.function.arg_count;
     size_t cut = argc;
     while (cut > 0 && is_rule(res->data.function.args[cut - 1])) cut--;
     *n_pos = cut;
 
     /* Defaults. */
-    *order = GB_ORDER_LEX;
+    opt->order = GB_ORDER_LEX;
+    opt->sort_desc = false;
+    opt->parameter_vars_given = false;
+    opt->parameter_vars = NULL;
 
     for (size_t i = cut; i < argc; i++) {
         Expr* rule = res->data.function.args[i];
@@ -90,21 +106,19 @@ static bool extract_options(const Expr* res, size_t* n_pos,
             if (val->type == EXPR_SYMBOL) {
                 if (val->data.symbol == SYM_Lexicographic
                  || val->data.symbol == SYM_Automatic) {
-                    *order = GB_ORDER_LEX;
+                    opt->order = GB_ORDER_LEX;
                 } else if (val->data.symbol == SYM_DegreeReverseLexicographic) {
-                    *order = GB_ORDER_GREVLEX;
+                    opt->order = GB_ORDER_GREVLEX;
                 } else if (val->data.symbol == SYM_EliminationOrder) {
-                    *order = GB_ORDER_ELIM;
+                    opt->order = GB_ORDER_ELIM;
                 } else {
                     warn_once("nimpl", "unsupported MonomialOrder value; "
                                        "falling back to Lexicographic");
-                    *warned_nimpl = true;
-                    *order = GB_ORDER_LEX;
+                    opt->order = GB_ORDER_LEX;
                 }
             } else {
                 warn_once("nimpl", "weight-matrix MonomialOrder not "
                                    "implemented; falling back to Lexicographic");
-                *warned_nimpl = true;
             }
         } else if (key->data.symbol == SYM_CoefficientDomain) {
             bool ok = (val->type == EXPR_SYMBOL
@@ -113,7 +127,6 @@ static bool extract_options(const Expr* res, size_t* n_pos,
             if (!ok) {
                 warn_once("nimpl", "only CoefficientDomain -> Rationals is "
                                    "implemented");
-                *warned_nimpl = true;
             }
         } else if (key->data.symbol == SYM_Method) {
             bool ok = false;
@@ -124,11 +137,41 @@ static bool extract_options(const Expr* res, size_t* n_pos,
             if (!ok) {
                 warn_once("nimpl", "only Method -> \"Buchberger\" is "
                                    "implemented; falling back");
-                *warned_nimpl = true;
             }
+        } else if (key->data.symbol == SYM_Modulus) {
+            /* Honest "not implemented" instead of silently computing the
+             * characteristic-0 basis as if Modulus weren't there.  The
+             * surface accepts any value and ignores it; the basis comes
+             * back over the rationals. */
+            warn_once("modnotimpl", "Modulus option is not yet supported; "
+                                    "the basis is being computed over the "
+                                    "rationals.  Use Mathematica for "
+                                    "modular bases.");
+        } else if (key->data.symbol == SYM_Sort) {
+            /* Mathematica's `Sort -> True` reverses the user-supplied
+             * main-variable list before computing the basis, so the
+             * "smallest" (rightmost-in-original-vars) variable becomes
+             * the lex-leading one.  Empirically: with vars = {x, y, z}
+             * and Sort -> True the basis is the same as with
+             * vars = {z, y, x}.  We rebind the variable list at the
+             * partition step below. */
+            if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_True) {
+                opt->sort_desc = true;
+            } else if (val->type == EXPR_SYMBOL && val->data.symbol == SYM_False) {
+                opt->sort_desc = false;
+            } else {
+                warn_once("nimpl", "Sort option accepts only True or False");
+            }
+        } else if (key->data.symbol == SYM_ParameterVariables) {
+            /* The variables named here are treated as parameters: they
+             * survive in coefficients of the basis polynomials but are
+             * not allowed to appear as leading variables of any
+             * surviving polynomial.  See the per-element discovery
+             * pass below for the realisation. */
+            opt->parameter_vars_given = true;
+            opt->parameter_vars = val;
         }
     }
-    return true;
 }
 
 /* ------------------------------------------------------------------ */
@@ -159,36 +202,134 @@ static Expr* normalise_polynomial(const Expr* p) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Parameter discovery                                                */
+/* ------------------------------------------------------------------ */
+
+/* Names that look like free symbols but are really mathematical
+ * constants (or evaluator sentinels).  They must NOT be auto-promoted
+ * to parameter variables since they have a numeric value. */
+static bool is_known_constant_symbol(const Expr* e) {
+    if (!e || e->type != EXPR_SYMBOL) return false;
+    const char* s = e->data.symbol;
+    return  s == SYM_Pi
+         || s == SYM_E
+         || s == SYM_EulerGamma
+         || s == SYM_Catalan
+         || s == SYM_Degree
+         || s == SYM_True
+         || s == SYM_False
+         || s == SYM_Infinity
+         || s == SYM_DirectedInfinity
+         || s == SYM_Null;
+}
+
+/* Set-like list of Expr* (interned-symbol identity, since symbol names
+ * live in the global intern table).  Used to collect parameter symbols
+ * during the polynomial walk. */
+typedef struct {
+    Expr** items;
+    size_t n, cap;
+} ExprSet;
+
+static void exprset_init(ExprSet* s) { s->items = NULL; s->n = s->cap = 0; }
+
+static void exprset_free(ExprSet* s, bool owned) {
+    if (owned) for (size_t i = 0; i < s->n; i++) expr_free(s->items[i]);
+    free(s->items);
+}
+
+static bool exprset_contains(const ExprSet* s, const Expr* e) {
+    for (size_t i = 0; i < s->n; i++) if (expr_eq(s->items[i], (Expr*)e)) return true;
+    return false;
+}
+
+static void exprset_push_borrowed(ExprSet* s, Expr* e) {
+    if (exprset_contains(s, e)) return;
+    if (s->n == s->cap) {
+        s->cap = s->cap ? s->cap * 2 : 8;
+        s->items = (Expr**)realloc(s->items, sizeof(Expr*) * s->cap);
+    }
+    s->items[s->n++] = e;
+}
+
+/* Walk `e`, collecting any EXPR_SYMBOL leaves that are
+ *   - not a known mathematical constant, and
+ *   - not present in any of the `excluded[*]` sets.
+ * Results are pushed (in first-appearance order) into `out` as
+ * BORROWED pointers — caller must outlive the source tree. */
+static void collect_free_symbols(Expr* e,
+                                 const ExprSet* const* excluded,
+                                 size_t n_excluded,
+                                 ExprSet* out) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (is_known_constant_symbol(e)) return;
+        for (size_t i = 0; i < n_excluded; i++) {
+            if (exprset_contains(excluded[i], e)) return;
+        }
+        exprset_push_borrowed(out, e);
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    /* Do not descend into the head: a function head like `Sin` is not a
+     * parameter, it's an operator name.  We assume `gb_from_expr` will
+     * reject any unrecognised head shape later. */
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        collect_free_symbols(e->data.function.args[i], excluded, n_excluded, out);
+    }
+}
+
+/* Push every symbol element of a List[...] (or a bare symbol) into
+ * `dst` as a borrowed pointer.  Non-symbol elements are silently
+ * skipped — the caller is responsible for noticing shape errors. */
+static void push_var_list(Expr* lst_or_sym, ExprSet* dst) {
+    if (!lst_or_sym) return;
+    if (lst_or_sym->type == EXPR_SYMBOL) {
+        exprset_push_borrowed(dst, lst_or_sym);
+        return;
+    }
+    if (!is_list(lst_or_sym)) return;
+    for (size_t i = 0; i < lst_or_sym->data.function.arg_count; i++) {
+        Expr* v = lst_or_sym->data.function.args[i];
+        if (v->type == EXPR_SYMBOL) exprset_push_borrowed(dst, v);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Builtin entry                                                      */
 /* ------------------------------------------------------------------ */
 
 Expr* builtin_groebner_basis(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
-    if (argc < 2) {
-        if (argc == 0) {
-            fprintf(stderr, "GroebnerBasis::argt: GroebnerBasis called with "
-                            "0 arguments; 2 or 3 expected.\n");
-        } else {
-            fprintf(stderr, "GroebnerBasis::argt: GroebnerBasis called with "
-                            "1 argument; 2 or 3 expected.\n");
-        }
+    if (argc == 0) {
+        fprintf(stderr, "GroebnerBasis::argt: GroebnerBasis called with "
+                        "0 arguments; 2 or 3 expected.\n");
         return NULL;
     }
 
     size_t n_pos;
-    GBOrder order;
-    bool warned_nimpl = false;
-    extract_options(res, &n_pos, &order, &warned_nimpl);
+    GBOptions opt;
+    extract_options(res, &n_pos, &opt);
 
-    if (n_pos < 2 || n_pos > 3) {
+    /* The 1-arg form `GroebnerBasis[polys, ParameterVariables -> ...]`
+     * is allowed: the main-variable list is auto-discovered from the
+     * polynomials below.  Otherwise we want at least the (polys, vars)
+     * pair.  3-arg = (polys, vars, elim_vars). */
+    if (n_pos < 1 || n_pos > 3) {
         fprintf(stderr, "GroebnerBasis::argt: GroebnerBasis takes 2 or 3 "
                         "positional arguments.\n");
         return NULL;
     }
+    if (n_pos == 1 && !opt.parameter_vars_given) {
+        fprintf(stderr, "GroebnerBasis::argt: GroebnerBasis called with "
+                        "1 argument; 2 or 3 expected (or pass "
+                        "ParameterVariables -> ...).\n");
+        return NULL;
+    }
 
     Expr* polys_list = res->data.function.args[0];
-    Expr* vars_list  = res->data.function.args[1];
+    Expr* vars_list  = (n_pos >= 2) ? res->data.function.args[1] : NULL;
     Expr* elim_list  = (n_pos == 3) ? res->data.function.args[2] : NULL;
 
     if (!is_list(polys_list)) return NULL;
@@ -200,7 +341,7 @@ Expr* builtin_groebner_basis(Expr* res) {
      * processing.  The wrappers are freed at the end of the function. */
     Expr* wrap_vars = NULL;
     Expr* wrap_elim = NULL;
-    if (!is_list(vars_list)) {
+    if (vars_list && !is_list(vars_list)) {
         if (vars_list->type != EXPR_SYMBOL) return NULL;
         Expr** wrapped = (Expr**)malloc(sizeof(Expr*));
         wrapped[0] = expr_copy(vars_list);
@@ -228,33 +369,128 @@ Expr* builtin_groebner_basis(Expr* res) {
         return expr_new_function(expr_new_symbol("List"), NULL, 0);
     }
 
-    /* Build the joint variable array: elim variables first when in the
-     * 3-arg form, then the main variables.  The elimination order then
-     * lex-prefers monomials carrying elim-block exponents. */
-    size_t n_main = vars_list->data.function.arg_count;
-    size_t n_elim = elim_list ? elim_list->data.function.arg_count : 0;
-    size_t n_vars = n_main + n_elim;
+    /* ---- Parameter and main-variable discovery. -------------------- */
+    /*
+     * Two complementary inputs steer the partitioning:
+     *
+     *   - explicit main vars (`vars_list`) and elim vars (`elim_list`).
+     *   - the `ParameterVariables -> ...` option (`opt.parameter_vars`).
+     *
+     * Any symbol mentioned by the polynomials that is not in any of
+     * those sets and not a known mathematical constant is auto-
+     * promoted to a parameter ("issue 1" / "issue 6" behaviour:
+     * `GroebnerBasis[{a x^2 + 5 x - 1, ...}, {x, y}]` treats `a` as a
+     * parameter instead of refusing to evaluate).  Parameters become
+     * additional joint-array variables that the Buchberger engine
+     * threads through; after the run, polynomials that mention no
+     * main- or elim-block variable are filtered out as
+     * annihilator-trivial.  The remaining polynomials carry the
+     * parameters naturally as factor terms.
+     */
+    ExprSet param_explicit;  exprset_init(&param_explicit);
+    ExprSet main_set;        exprset_init(&main_set);
+    ExprSet elim_set;        exprset_init(&elim_set);
+
+    if (opt.parameter_vars_given) push_var_list(opt.parameter_vars, &param_explicit);
+    if (vars_list)                push_var_list(vars_list,           &main_set);
+    if (elim_list)                push_var_list(elim_list,           &elim_set);
+
+    /* Symbols the user has named as parameters take priority over any
+     * accidental presence in the main- or elim-var list.  Drop them
+     * from those two sets so the joint var array stays partitioned. */
+    if (param_explicit.n > 0) {
+        size_t w = 0;
+        for (size_t i = 0; i < main_set.n; i++) {
+            if (!exprset_contains(&param_explicit, main_set.items[i])) {
+                main_set.items[w++] = main_set.items[i];
+            }
+        }
+        main_set.n = w;
+        w = 0;
+        for (size_t i = 0; i < elim_set.n; i++) {
+            if (!exprset_contains(&param_explicit, elim_set.items[i])) {
+                elim_set.items[w++] = elim_set.items[i];
+            }
+        }
+        elim_set.n = w;
+    }
+
+    /* Auto-discover parameters: any free symbol in polys that is not
+     * in main, elim, explicit-params, or a known constant.  Also
+     * auto-discover main vars when none were given (the 1-arg
+     * `ParameterVariables -> ...` shorthand). */
+    ExprSet param_auto;  exprset_init(&param_auto);
+    {
+        const ExprSet* excl[3] = { &main_set, &elim_set, &param_explicit };
+        for (size_t i = 0; i < n_polys; i++) {
+            collect_free_symbols(polys_list->data.function.args[i],
+                                 excl, 3, &param_auto);
+        }
+    }
+
+    /* The combined parameter set, in first-appearance order
+     * (explicit first, then auto-discovered). */
+    ExprSet params;  exprset_init(&params);
+    for (size_t i = 0; i < param_explicit.n; i++)
+        exprset_push_borrowed(&params, param_explicit.items[i]);
+    for (size_t i = 0; i < param_auto.n; i++)
+        exprset_push_borrowed(&params, param_auto.items[i]);
+
+    /* `GroebnerBasis[polys, ParameterVariables -> p]`: the main vars
+     * are auto-derived as "every free symbol in polys that is not p". */
+    if (main_set.n == 0 && !vars_list && param_explicit.n > 0) {
+        const ExprSet* excl[3] = { &param_explicit, &elim_set, NULL };
+        for (size_t i = 0; i < n_polys; i++) {
+            collect_free_symbols(polys_list->data.function.args[i],
+                                 excl, 2, &main_set);
+        }
+    }
+
+    /* Sort -> True reverses the main-variable list before the joint
+     * array is built, matching Mathematica's empirical behaviour
+     * (`GroebnerBasis[polys, {x, y, z}, Sort -> True]` returns the
+     * same basis as `GroebnerBasis[polys, {z, y, x}]`). */
+    if (opt.sort_desc && main_set.n > 1) {
+        for (size_t i = 0, j = main_set.n - 1; i < j; i++, j--) {
+            Expr* tmp = main_set.items[i];
+            main_set.items[i] = main_set.items[j];
+            main_set.items[j] = tmp;
+        }
+    }
+
+    size_t n_main = main_set.n;
+    size_t n_elim = elim_set.n;
+    size_t n_params = params.n;
+    size_t n_vars = n_main + n_elim + n_params;
     if (n_vars == 0) {
+        exprset_free(&param_explicit, false);
+        exprset_free(&main_set, false);
+        exprset_free(&elim_set, false);
+        exprset_free(&param_auto, false);
+        exprset_free(&params, false);
         if (wrap_vars) expr_free(wrap_vars);
         if (wrap_elim) expr_free(wrap_elim);
         return NULL;
     }
 
+    /* Joint var array: [elim..., main..., params...].  Elim is the
+     * lex-leading block (preserves the elimination-theorem semantics);
+     * params go last so they act as the lowest-priority symbols and the
+     * Buchberger run preserves their role as "coefficient carriers". */
     Expr** all_vars = (Expr**)malloc(sizeof(Expr*) * n_vars);
-    for (size_t i = 0; i < n_elim; i++) {
-        all_vars[i] = elim_list->data.function.args[i];
-    }
-    for (size_t i = 0; i < n_main; i++) {
-        all_vars[n_elim + i] = vars_list->data.function.args[i];
-    }
+    for (size_t i = 0; i < n_elim; i++)   all_vars[i] = elim_set.items[i];
+    for (size_t i = 0; i < n_main; i++)   all_vars[n_elim + i] = main_set.items[i];
+    for (size_t i = 0; i < n_params; i++) all_vars[n_elim + n_main + i] = params.items[i];
     int elim_pivot = (int)n_elim;
 
     /* The 3-arg form forces Lex (with elim variables placed first) so
      * the elimination theorem applies: any monomial involving any elim
-     * variable is lex-larger than any monomial without one.  The user's
-     * MonomialOrder option is informational in this case (Mathematica
-     * behaves the same way). */
-    GBOrder use_order = (n_elim > 0) ? GB_ORDER_LEX : order;
+     * variable is lex-larger than any monomial without one.  Likewise
+     * the parametric path forces Lex so the params-last placement
+     * orders parametric coefficients below main-variable monomials and
+     * the post-run "drop pure-parameter polynomials" filter is
+     * mathematically the elimination-ideal contraction. */
+    GBOrder use_order = (n_elim > 0 || n_params > 0) ? GB_ORDER_LEX : opt.order;
 
     /* Convert each input polynomial. */
     GBPoly** F = (GBPoly**)malloc(sizeof(GBPoly*) * n_polys);
@@ -273,6 +509,11 @@ Expr* builtin_groebner_basis(Expr* res) {
         for (size_t i = 0; i < nF; i++) gb_poly_free(F[i]);
         free(F);
         free(all_vars);
+        exprset_free(&param_explicit, false);
+        exprset_free(&main_set, false);
+        exprset_free(&elim_set, false);
+        exprset_free(&param_auto, false);
+        exprset_free(&params, false);
         if (wrap_vars) expr_free(wrap_vars);
         if (wrap_elim) expr_free(wrap_elim);
         return NULL;
@@ -282,6 +523,11 @@ Expr* builtin_groebner_basis(Expr* res) {
         /* All inputs reduced to zero -> empty basis. */
         free(F);
         free(all_vars);
+        exprset_free(&param_explicit, false);
+        exprset_free(&main_set, false);
+        exprset_free(&elim_set, false);
+        exprset_free(&param_auto, false);
+        exprset_free(&params, false);
         if (wrap_vars) expr_free(wrap_vars);
         if (wrap_elim) expr_free(wrap_elim);
         return expr_new_function(expr_new_symbol("List"), NULL, 0);
@@ -293,6 +539,11 @@ Expr* builtin_groebner_basis(Expr* res) {
             for (size_t j = 0; j < nF; j++) gb_poly_free(F[j]);
             free(F);
             free(all_vars);
+            exprset_free(&param_explicit, false);
+            exprset_free(&main_set, false);
+            exprset_free(&elim_set, false);
+            exprset_free(&param_auto, false);
+            exprset_free(&params, false);
             if (wrap_vars) expr_free(wrap_vars);
             if (wrap_elim) expr_free(wrap_elim);
             Expr** one = (Expr**)malloc(sizeof(Expr*));
@@ -328,6 +579,16 @@ Expr* builtin_groebner_basis(Expr* res) {
         free(elim_idx);
     }
 
+    /* Note: we INTENTIONALLY do NOT drop polynomials whose every term
+     * has exponent zero in every main / elim variable.  Mathematica
+     * keeps such "pure-parameter" polynomials in the basis when they
+     * arise -- they are precisely the consistency conditions on the
+     * parameter values that an over-determined system imposes (see the
+     * `1625 x^8 + ... + 2` element returned by the issue-6 case
+     * `GroebnerBasis[{...}, {y, z}]`).  The Buchberger run over
+     * Z[params][main_vars] under params-last lex already produces them
+     * as constants in the (y, z) coefficient ring. */
+
     /* If the basis collapses to {<non-zero constant>} -> {1}. */
     bool has_const = false;
     for (size_t i = 0; i < out_n; i++) {
@@ -338,6 +599,11 @@ Expr* builtin_groebner_basis(Expr* res) {
     if (has_const) {
         gb_basis_free(G, out_n);
         free(all_vars);
+        exprset_free(&param_explicit, false);
+        exprset_free(&main_set, false);
+        exprset_free(&elim_set, false);
+        exprset_free(&param_auto, false);
+        exprset_free(&params, false);
         if (wrap_vars) expr_free(wrap_vars);
         if (wrap_elim) expr_free(wrap_elim);
         Expr** one = (Expr**)malloc(sizeof(Expr*));
@@ -347,15 +613,21 @@ Expr* builtin_groebner_basis(Expr* res) {
         return lst;
     }
 
-    /* Convert each basis polynomial back to an Expr (using the elim-
-     * filtered variable view: the elim variables are now unused, but
-     * gb_to_expr will skip exponent-0 vars anyway). */
+    /* Convert each basis polynomial back to an Expr.  Parameters
+     * naturally appear as factor terms because they live in the joint
+     * `all_vars` array and gb_to_expr emits one factor per non-zero
+     * exponent slot. */
     Expr** items = (out_n > 0) ? (Expr**)malloc(sizeof(Expr*) * out_n) : NULL;
     for (size_t i = 0; i < out_n; i++) {
         items[i] = gb_to_expr(G[i], all_vars);
     }
     gb_basis_free(G, out_n);
     free(all_vars);
+    exprset_free(&param_explicit, false);
+    exprset_free(&main_set, false);
+    exprset_free(&elim_set, false);
+    exprset_free(&param_auto, false);
+    exprset_free(&params, false);
     if (wrap_vars) expr_free(wrap_vars);
     if (wrap_elim) expr_free(wrap_elim);
 

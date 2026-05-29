@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "core.h"        /* tc_check_deadline() */
 #include "expr.h"
 #include "sym_names.h"
 
@@ -468,7 +469,20 @@ restart: ;
 
 /* ----- Gebauer–Möller pair management ----- */
 
-typedef struct { size_t i, j; } Pair;
+/* Each pending S-pair carries pre-computed LCM data so we can:
+ *   - rank pairs by "sugar"-free normal strategy (smallest total LCM
+ *     degree first; ties broken by lex order of the LCM exponents),
+ *   - apply Buchberger criterion 1 (coprime leading monomials) and
+ *     Gebauer-Möller criteria M / F / B without re-walking exponents
+ *     during every comparison.
+ * `lcm` is heap-allocated alongside the pair; `dead` flags eliminated
+ * pairs that are compacted out periodically. */
+typedef struct {
+    size_t i, j;
+    int*   lcm;           /* length = n_vars */
+    int    total_deg;
+    bool   dead;
+} GMPair;
 
 /* Coprime LM test: do the leading monomials share no variable?  If so,
  * the S-polynomial reduces to 0 (Buchberger first criterion). */
@@ -482,13 +496,171 @@ static bool lm_coprime(const GBPoly* f, const GBPoly* g) {
     return true;
 }
 
-/* Chain criterion: pair (i, j) can be discarded if there exists k
- * already in the basis with k != i, k != j such that LM(g_k) divides
- * lcm(LM(g_i), LM(g_j)), AND (i, k) and (k, j) are NOT in the active
- * pair list.  We apply a conservative form: discard if such a k exists
- * and BOTH (i,k) and (k,j) have already been processed (i.e., removed
- * from the pair list).  Since we maintain pairs in insertion order and
- * track which i,j pairs are still queued, this is straightforward. */
+/* lcm of two exponent vectors -- pointwise max.  Returns total degree. */
+static int compute_lcm(int* out, const int* a, const int* b, int n_vars) {
+    int tot = 0;
+    for (int v = 0; v < n_vars; v++) {
+        int m = a[v] > b[v] ? a[v] : b[v];
+        out[v] = m;
+        tot += m;
+    }
+    return tot;
+}
+
+/* Does exponent vector `b` divide `a`?  All-component <= test. */
+static bool exp_divides(const int* b, const int* a, int n_vars) {
+    for (int v = 0; v < n_vars; v++) if (a[v] < b[v]) return false;
+    return true;
+}
+
+/* Are two exponent vectors equal? */
+static bool exp_equal(const int* a, const int* b, int n_vars) {
+    for (int v = 0; v < n_vars; v++) if (a[v] != b[v]) return false;
+    return true;
+}
+
+static GMPair gm_pair_new(size_t i, size_t j, const GBPoly* gi,
+                          const GBPoly* gj, int n_vars) {
+    GMPair p;
+    p.i = i; p.j = j;
+    p.lcm = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+    p.total_deg = compute_lcm(p.lcm, gb_exp_at(gi, 0), gb_exp_at(gj, 0), n_vars);
+    p.dead = false;
+    return p;
+}
+
+static void gm_pair_free(GMPair* p) {
+    free(p->lcm); p->lcm = NULL;
+}
+
+/* Compact the pair list, discarding dead entries (in place). */
+static size_t gm_compact(GMPair* pairs, size_t nP) {
+    size_t w = 0;
+    for (size_t i = 0; i < nP; i++) {
+        if (pairs[i].dead) {
+            gm_pair_free(&pairs[i]);
+        } else {
+            if (w != i) pairs[w] = pairs[i];
+            w++;
+        }
+    }
+    return w;
+}
+
+/* Normal-strategy pair selection: index of the live pair with smallest
+ * total LCM degree (ties broken by lex of LCM exponents, then by pair
+ * order to keep results deterministic).  Returns SIZE_MAX if no live
+ * pair exists.  O(nP * n_vars) per call -- the cost is dominated by
+ * the S-poly reduction so a heap would not pay back its complexity. */
+static size_t gm_pick_pair(const GMPair* pairs, size_t nP, int n_vars) {
+    size_t best = (size_t)-1;
+    for (size_t k = 0; k < nP; k++) {
+        if (pairs[k].dead) continue;
+        if (best == (size_t)-1) { best = k; continue; }
+        if (pairs[k].total_deg != pairs[best].total_deg) {
+            if (pairs[k].total_deg < pairs[best].total_deg) best = k;
+            continue;
+        }
+        /* Lex tiebreak: smaller LCM first. */
+        for (int v = 0; v < n_vars; v++) {
+            if (pairs[k].lcm[v] != pairs[best].lcm[v]) {
+                if (pairs[k].lcm[v] < pairs[best].lcm[v]) best = k;
+                break;
+            }
+        }
+    }
+    return best;
+}
+
+/* Gebauer-Möller UPDATE: register a freshly-added basis element h
+ * (= G[h_idx]) and refresh the pair list `pairs` / `nP` accordingly.
+ * Implements:
+ *   - Buchberger criterion 1: candidate pair (h, g) with coprime LMs
+ *     is dropped immediately (the S-poly is known to reduce to 0).
+ *   - Gebauer-Möller M criterion: among candidates (h, g), drop
+ *     (h, g') if some (h, g) has lcm(LM(h), LM(g)) strictly dividing
+ *     lcm(LM(h), LM(g')).
+ *   - Gebauer-Möller B criterion: drop existing pair (a, b) when
+ *     LM(h) divides lcm(LM(a), LM(b)) and the two "lcm-equal" exits
+ *     do not apply -- one of the equivalent pairs (a, h) or (b, h)
+ *     handles the redundancy.
+ * `*capP` is grown in place. */
+static void gm_update(GMPair** pairs_p, size_t* nP_p, size_t* capP_p,
+                      GBPoly* const* G, size_t h_idx, int n_vars) {
+    GMPair* pairs = *pairs_p;
+    size_t nP = *nP_p;
+    size_t capP = *capP_p;
+    const GBPoly* h = G[h_idx];
+
+    /* Step 1: form candidates (h, g) for every g already in G. */
+    GMPair* cand = (GMPair*)malloc(sizeof(GMPair) * (h_idx ? h_idx : 1));
+    size_t nc = 0;
+    for (size_t g = 0; g < h_idx; g++) {
+        GMPair p = gm_pair_new(g, h_idx, G[g], h, n_vars);
+        /* Criterion 1: skip coprime LMs entirely. */
+        if (lm_coprime(G[g], h)) { gm_pair_free(&p); continue; }
+        cand[nc++] = p;
+    }
+
+    /* Step 2: M criterion -- if some candidate has LCM strictly
+     * dividing another's, mark the larger one dead. */
+    for (size_t a = 0; a < nc; a++) {
+        if (cand[a].dead) continue;
+        for (size_t b = 0; b < nc; b++) {
+            if (a == b || cand[b].dead) continue;
+            if (exp_divides(cand[a].lcm, cand[b].lcm, n_vars)
+                && !exp_equal(cand[a].lcm, cand[b].lcm, n_vars)) {
+                cand[b].dead = true;
+            }
+        }
+    }
+    /* F criterion (de-duplicate LCM-equal pairs): keep the first. */
+    for (size_t a = 0; a < nc; a++) {
+        if (cand[a].dead) continue;
+        for (size_t b = a + 1; b < nc; b++) {
+            if (cand[b].dead) continue;
+            if (exp_equal(cand[a].lcm, cand[b].lcm, n_vars)) {
+                cand[b].dead = true;
+            }
+        }
+    }
+
+    /* Step 3: B criterion -- drop existing pairs (a, b) whose LCM is
+     * divisible by LM(h) AND for which (a, h) and (b, h) are not
+     * "lcm-equal".  In our notation: drop (a, b) if LM(h) | lcm(a, b)
+     * and lcm(a, b) != lcm(a, h) and lcm(a, b) != lcm(b, h). */
+    const int* lm_h = gb_exp_at(h, 0);
+    for (size_t k = 0; k < nP; k++) {
+        if (pairs[k].dead) continue;
+        if (!exp_divides(lm_h, pairs[k].lcm, n_vars)) continue;
+        /* lcm(a, h) and lcm(b, h) */
+        int* lcm_ah = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+        int* lcm_bh = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+        compute_lcm(lcm_ah, gb_exp_at(G[pairs[k].i], 0), lm_h, n_vars);
+        compute_lcm(lcm_bh, gb_exp_at(G[pairs[k].j], 0), lm_h, n_vars);
+        bool ah_eq = exp_equal(pairs[k].lcm, lcm_ah, n_vars);
+        bool bh_eq = exp_equal(pairs[k].lcm, lcm_bh, n_vars);
+        if (!ah_eq && !bh_eq) pairs[k].dead = true;
+        free(lcm_ah); free(lcm_bh);
+    }
+
+    /* Compact + append surviving candidates. */
+    nP = gm_compact(pairs, nP);
+    size_t need = nP + nc;
+    if (need > capP) {
+        while (capP < need) capP = capP ? capP * 2 : 16;
+        pairs = (GMPair*)realloc(pairs, sizeof(GMPair) * capP);
+    }
+    for (size_t a = 0; a < nc; a++) {
+        if (cand[a].dead) { gm_pair_free(&cand[a]); continue; }
+        pairs[nP++] = cand[a];
+    }
+    free(cand);
+
+    *pairs_p = pairs;
+    *nP_p = nP;
+    *capP_p = capP;
+}
 
 GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
     /* Filter zeros from input, copy the rest into the working basis. */
@@ -511,71 +683,49 @@ GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
         return NULL;
     }
 
-    /* Generate initial pair list. */
-    Pair* pairs = NULL;
-    size_t nP = 0, capP = 0;
-    for (size_t i = 0; i < nG; i++) {
-        for (size_t j = i + 1; j < nG; j++) {
-            if (nP == capP) {
-                capP = capP ? capP * 2 : 16;
-                pairs = (Pair*)realloc(pairs, sizeof(Pair) * capP);
-            }
-            pairs[nP].i = i;
-            pairs[nP].j = j;
-            nP++;
-        }
-    }
-
     int n_vars = G[0]->n_vars;
-    int* tmpexp = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
 
-    while (nP > 0) {
-        /* Pop the front pair (FIFO). */
-        Pair p = pairs[0];
-        memmove(pairs, pairs + 1, sizeof(Pair) * (nP - 1));
-        nP--;
+    /* Seed the pair set by calling gm_update for each element after the
+     * first; this naturally applies the M/F/B criteria during the
+     * initial pair generation as well as the incremental loop. */
+    GMPair* pairs = NULL;
+    size_t nP = 0, capP = 0;
+    for (size_t h = 1; h < nG; h++) gm_update(&pairs, &nP, &capP, G, h, n_vars);
 
-        const GBPoly* gi = G[p.i];
-        const GBPoly* gj = G[p.j];
+    /* Main loop: process pairs in normal-strategy order. */
+    while (true) {
+        size_t pick = gm_pick_pair(pairs, nP, n_vars);
+        if (pick == (size_t)-1) break;
 
-        /* Buchberger first criterion: skip coprime-LM pairs. */
-        if (lm_coprime(gi, gj)) continue;
+        /* Cooperative abort hook -- so TimeConstrained[GroebnerBasis[...],
+         * t] siglongjmps out at the next pair instead of running to
+         * completion on pathological inputs (the issue-2 hanging case). */
+        tc_check_deadline();
 
-        /* (Chain criterion disabled in this cut -- the conservative
-         * Gebauer-Möller form proved fragile under non-lex orders.
-         * Buchberger criterion 1 alone keeps termination tractable on
-         * every spec example; the redundant pairs that remain reduce
-         * to zero cheaply.) */
-        (void)tmpexp;
+        GMPair pr = pairs[pick];
+        pairs[pick].dead = true;
+        gm_pair_free(&pairs[pick]);
 
-        GBPoly* s = gb_spoly(gi, gj);
+        GBPoly* s = gb_spoly(G[pr.i], G[pr.j]);
         GBPoly* r = gb_reduce(s, G, nG);
         gb_poly_free(s);
         if (r->n_terms == 0) { gb_poly_free(r); continue; }
 
         gb_poly_make_monic(r);
 
-        /* Append r to G and generate new pairs (current_idx, r_idx)
-         * for every existing basis element. */
         if (nG == capG) {
             capG = capG ? capG * 2 : 8;
             G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG);
         }
         G[nG] = r;
-        for (size_t k = 0; k < nG; k++) {
-            if (nP == capP) {
-                capP = capP ? capP * 2 : 16;
-                pairs = (Pair*)realloc(pairs, sizeof(Pair) * capP);
-            }
-            pairs[nP].i = k;
-            pairs[nP].j = nG;
-            nP++;
-        }
+        gm_update(&pairs, &nP, &capP, G, nG, n_vars);
         nG++;
     }
 
+    for (size_t k = 0; k < nP; k++) {
+        if (!pairs[k].dead) gm_pair_free(&pairs[k]);
+    }
     free(pairs);
-    free(tmpexp);
 
     /* Interreduce: discard any g_i whose LM is divisible by LM(g_k)
      * for some k != i, then reduce each survivor by the others. */

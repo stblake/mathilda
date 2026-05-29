@@ -326,17 +326,21 @@ static void test_non_polynomial_unevaluated(void) {
                           "List[x]]");
 }
 
-static void test_parametric_coeffs_unevaluated(void) {
-    /* a is not in the variable list and is treated as a non-poly symbol;
-     * the first-cut implementation returns unevaluated rather than
-     * computing a Q(a) basis. */
+static void test_parametric_coeffs_in_q_of_a(void) {
+    /* `a` is auto-discovered as a parameter; the joint variable array
+     * is [x, y, a] under lex and the post-Buchberger filter keeps
+     * polynomials that mention x or y.  Matches Mathematica's
+     * `GroebnerBasis[{a x^2 + 5x - 1, 3 x y + y^2 + 2 x}, {x, y}]`. */
     check_eq("GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}]",
-             "GroebnerBasis[List[Plus[-1, Times[5, x], "
-                                    "Times[a, Power[x, 2]]], "
-                                "Plus[Times[2, x], "
-                                    "Times[3, Times[x, y]], "
-                                    "Power[y, 2]]], "
-                          "List[x, y]]");
+             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], "
+                       "Times[-15, Power[y, 3]], "
+                       "Times[a, Power[y, 4]]], "
+                  "Plus[18, Times[4, Times[a, x]], Times[27, y], "
+                       "Times[45, Power[y, 2]], "
+                       "Times[2, Times[a, Power[y, 2]]], "
+                       "Times[-3, Times[a, Power[y, 3]]]], "
+                  "Plus[Times[2, x], Times[3, Times[x, y]], "
+                       "Power[y, 2]]]");
 }
 
 /* ------------------------------------------------------------------ */
@@ -387,6 +391,102 @@ static void test_two_var_simple_basis(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 18. Issue regressions: implicit parameters, ParameterVariables,     */
+/*     subset-of-vars, Sort option, Modulus diagnostic                 */
+/* ------------------------------------------------------------------ */
+
+/* Polys mention x but x is omitted from `vars`; x should be auto-
+ * promoted to a parameter, and the basis should match the explicit
+ * 3-arg-with-parameters form.  Matches Mathematica's
+ *   GroebnerBasis[polys, {y, z}]
+ * on the example from the issue report. */
+static void test_subset_vars_auto_parameter(void) {
+    check_eq(
+        "GroebnerBasis["
+        "  {-5 x^2 + y z - x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
+        "  {y, z}]"
+        " === "
+        "GroebnerBasis["
+        "  {-5 x^2 + y z - x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
+        "  ParameterVariables -> x]",
+        "True");
+}
+
+/* `Sort -> True` should be equivalent to reversing the main-variable
+ * list before computation.  Hand-built reference. */
+static void test_sort_true_reverses_vars(void) {
+    check_eq(
+        "GroebnerBasis["
+        "  {-5 x^2 + y z - x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
+        "  {x, y, z}, Sort -> True]"
+        " === "
+        "GroebnerBasis["
+        "  {-5 x^2 + y z - x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
+        "  {z, y, x}]",
+        "True");
+}
+
+/* `Modulus -> n` is accepted but the basis is computed over the
+ * rationals (with a one-shot diagnostic on stderr).  Smoke-test:
+ * the result agrees with the same call without Modulus. */
+static void test_modulus_option_ignored_with_warning(void) {
+    check_eq(
+        "GroebnerBasis["
+        "  {3 x^2 + y z - 5 x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
+        "  {x, y, z}, Modulus -> 7]"
+        " === "
+        "GroebnerBasis["
+        "  {3 x^2 + y z - 5 x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
+        "  {x, y, z}]",
+        "True");
+}
+
+/* `GroebnerBasis[polys, ParameterVariables -> x]` with no positional
+ * `vars` argument should auto-derive the main-variable list (= all
+ * free symbols in polys minus the parameters). */
+static void test_parameter_variables_auto_main(void) {
+    check_eq(
+        "GroebnerBasis["
+        "  {-5 x^2 + y z - x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
+        "  ParameterVariables -> x]"
+        " === "
+        "GroebnerBasis["
+        "  {-5 x^2 + y z - x - 1, 2 x + 3 x y + y^2, x - 3 y + x z - 2 z^2},"
+        "  {y, z}]",
+        "True");
+}
+
+/* TimeConstrained must be able to abort an in-flight Buchberger run.
+ * We use the issue-2 hanging input as the canonical pathological case
+ * (lex coefficient blowup -- intractable without FGLM conversion). */
+static void test_timeconstrained_aborts_buchberger(void) {
+    check_eq(
+        "TimeConstrained["
+        "  GroebnerBasis["
+        "    {x y^4 + y z^4 - 2 x^2 y - 3,"
+        "     y^4 + x y^2 z + x^2 - 2 x y + y^2 + z^2,"
+        "     -x^3 y^2 + x y z^3 + y^4 + x y^2 z - 2 x y},"
+        "    {x, y, z}],"
+        "  3]",
+        "$Aborted");
+}
+
+/* The same pathological system terminates very quickly in
+ * `DegreeReverseLexicographic` -- the recommended workaround for lex
+ * coefficient blowup until an FGLM conversion is implemented. */
+static void test_grevlex_handles_hard_lex_input(void) {
+    /* We only assert that the result is a non-empty List; the exact
+     * basis is long and not the point. */
+    check_true(
+        "Length["
+        "  GroebnerBasis["
+        "    {x y^4 + y z^4 - 2 x^2 y - 3,"
+        "     y^4 + x y^2 z + x^2 - 2 x y + y^2 + z^2,"
+        "     -x^3 y^2 + x y z^3 + y^4 + x y^2 z - 2 x y},"
+        "    {x, y, z}, MonomialOrder -> DegreeReverseLexicographic]] > 0");
+}
+
+/* ------------------------------------------------------------------ */
 
 int main(void) {
     symtab_init();
@@ -418,10 +518,16 @@ int main(void) {
     TEST(test_nimpl_coeff_domain_integers_falls_back);
     TEST(test_nimpl_deglex_falls_back);
     TEST(test_non_polynomial_unevaluated);
-    TEST(test_parametric_coeffs_unevaluated);
+    TEST(test_parametric_coeffs_in_q_of_a);
     TEST(test_membership_input_in_ideal);
     TEST(test_idempotency_no_common_roots);
     TEST(test_two_var_simple_basis);
+    TEST(test_subset_vars_auto_parameter);
+    TEST(test_sort_true_reverses_vars);
+    TEST(test_modulus_option_ignored_with_warning);
+    TEST(test_parameter_variables_auto_main);
+    TEST(test_timeconstrained_aborts_buchberger);
+    TEST(test_grevlex_handles_hard_lex_input);
     TEST(test_memory_smoke);
 
     printf("All GroebnerBasis tests passed!\n");
