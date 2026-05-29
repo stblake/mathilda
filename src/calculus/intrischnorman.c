@@ -304,6 +304,48 @@ static bool contains_algebraic_function_of(const Expr* e, const char* xname) {
     return false;
 }
 
+/* Heads pmint can model: arithmetic plumbing plus the differential-field
+ * generators recognised by head_is_transcendental_atom.  Anything else
+ * (Jones, Floor, Abs, Dt, Derivative[..][..], user-defined heads, ...)
+ * has no place in the parallel-Risch ansatz — without an entry here, an
+ * unknown call g[h(x)] gets substituted as a fresh constant atom and
+ * pmint silently returns g(x)·x as the "antiderivative".  Bail before
+ * that happens so the Integrate dispatcher can hand the integral back
+ * unevaluated. */
+static bool head_is_pmint_supported(const char* hs) {
+    if (hs == SYM_Plus || hs == SYM_Times || hs == SYM_Power || hs == SYM_Divide)
+        return true;
+    if (hs == SYM_Sin  || hs == SYM_Cos  || hs == SYM_Tan  || hs == SYM_Cot
+     || hs == SYM_Sec  || hs == SYM_Csc) return true;
+    if (hs == SYM_Sinh || hs == SYM_Cosh || hs == SYM_Tanh || hs == SYM_Coth
+     || hs == SYM_Sech || hs == SYM_Csch) return true;
+    if (hs == SYM_ArcSin || hs == SYM_ArcCos || hs == SYM_ArcTan
+     || hs == SYM_ArcSinh || hs == SYM_ArcCosh || hs == SYM_ArcTanh) return true;
+    if (hs == SYM_Log || hs == SYM_Exp) return true;
+    if (strcmp(hs, "LambertW") == 0) return true;
+    return false;
+}
+
+/* True iff `e` contains a function call whose head pmint cannot model
+ * (see head_is_pmint_supported) and which mentions `xname`.  Used to
+ * gate builtin_rischnorman so unknown / non-elementary callees of x —
+ * Jones[x], Dt[u], Floor[x], Derivative[1][f][x], ... — bail out rather
+ * than getting silently treated as differential-field constants. */
+static bool contains_unsupported_function_of(const Expr* e, const char* xname) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (expr_free_of_symbol(e, xname)) return false;
+    const Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    /* Non-symbol heads (e.g. Derivative[1][f]) are never pmint-supported. */
+    if (!h || h->type != EXPR_SYMBOL || !head_is_pmint_supported(h->data.symbol)) {
+        return true;
+    }
+    for (size_t i = 0; i < n; i++) {
+        if (contains_unsupported_function_of(e->data.function.args[i], xname)) return true;
+    }
+    return false;
+}
+
 /* Compute D[f, x] by building the Expr and evaluating.  Owned result. */
 static Expr* call_d(Expr* f, Expr* x) {
     Expr* call = mk_binary("D", expr_copy(f), expr_copy(x));
@@ -4103,6 +4145,17 @@ Expr* builtin_rischnorman(Expr* res) {
      * g(x)^(1/3)), bail out — the algorithm has no algebraic-case
      * support and downstream pipeline stages segfault on such inputs. */
     if (contains_algebraic_function_of(f, x->data.symbol)) {
+        return NULL;
+    }
+
+    /* Reject unknown / non-elementary function heads that depend on x
+     * (Jones[x], Dt[u], Floor[x], Derivative[1][f][x], ...).  Without
+     * this guard, collect_indets_closed silently skips such atoms,
+     * substitution maps them to themselves, and the resulting candidate
+     * ansatz "integrates" them as if they were constants — returning
+     * x · g(x) for Integrate[g[x], x].  Falling through to NULL lets
+     * the Integrate dispatcher leave the integral unevaluated. */
+    if (contains_unsupported_function_of(f, x->data.symbol)) {
         return NULL;
     }
 

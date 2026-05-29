@@ -297,6 +297,7 @@ extern const char* SYM_Sinh;
 extern const char* SYM_Slot;
 extern const char* SYM_SlotSequence;
 extern const char* SYM_Solve;
+extern const char* SYM_SolveAlways;
 extern const char* SYM_SolvePolynomialEquality;
 extern const char* SYM_Sort;
 extern const char* SYM_Span;

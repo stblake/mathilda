@@ -297,7 +297,7 @@ static void test_trig_pre_pass_tan(void) {
  * solvetrig declines and the call returns unevaluated. */
 static void test_trig_pre_pass_aborts_on_mixed(void) {
     run_test("Solve[Sin[x] + x == 0, x]",
-             "Solve[Equal[Plus[Sin[x], x], 0], x]");
+             "Solve[Equal[Plus[x, Sin[x]], 0], x]");
 }
 
 /* Exponent-GCD substitution (Maxima solventh): polynomials whose
@@ -372,7 +372,7 @@ static void test_non_polynomial(void) {
     /* Sum of two var-carrying terms with no shared peelable head -- the
      * isolation pre-pass declines and we fall through unevaluated. */
     run_test("Solve[Sin[x] + x == 0, x]",
-             "Solve[Equal[Plus[Sin[x], x], 0], x]");
+             "Solve[Equal[Plus[x, Sin[x]], 0], x]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -857,7 +857,7 @@ static void test_reals_edge_cases(void) {
      * handle (mixed transcendental + polynomial term): still
      * unevaluated, including Reals. */
     run_test("Solve[Sin[x] + x == 0, x, Reals]",
-             "Solve[Equal[Plus[Sin[x], x], 0], x, Reals]");
+             "Solve[Equal[Plus[x, Sin[x]], 0], x, Reals]");
 }
 
 /* ------------------------------------------------------------------ *
@@ -1023,7 +1023,7 @@ static void test_integers_edge_cases(void) {
     /* Non-polynomial input that the inverse specialist also cannot
      * handle: unevaluated. */
     run_test("Solve[Sin[x] + x == 0, x, Integers]",
-             "Solve[Equal[Plus[Sin[x], x], 0], x, Integers]");
+             "Solve[Equal[Plus[x, Sin[x]], 0], x, Integers]");
 }
 
 /* Unsupported domains (Rationals, Algebraics, Booleans, Primes) leave
@@ -1031,9 +1031,9 @@ static void test_integers_edge_cases(void) {
  * guards against accidentally widening the recognised-domain set. */
 static void test_unsupported_domains_unevaluated(void) {
     run_test("Solve[x + 1 == 0, x, Rationals]",
-             "Solve[Equal[Plus[x, 1], 0], x, Rationals]");
+             "Solve[Equal[Plus[1, x], 0], x, Rationals]");
     run_test("Solve[x + 1 == 0, x, Algebraics]",
-             "Solve[Equal[Plus[x, 1], 0], x, Algebraics]");
+             "Solve[Equal[Plus[1, x], 0], x, Algebraics]");
 }
 
 /* ============================================================ */

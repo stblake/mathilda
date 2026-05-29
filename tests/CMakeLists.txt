@@ -210,6 +210,7 @@ set(COMMON_SRC
     ../src/radicals.c
     ../src/poly/poly_eval_mpfr.c
     ../src/solve.c
+    ../src/solvealways.c
     ../src/findroot.c
     ../src/findmin.c
     ../src/poly/solvepoly.c
@@ -400,6 +401,9 @@ target_include_directories(irreduciblepolynomialq_tests PRIVATE ../src)
 
 add_executable(solve_tests test_solve.c ${COMMON_SRC})
 target_include_directories(solve_tests PRIVATE ../src)
+
+add_executable(solvealways_tests test_solvealways.c ${COMMON_SRC})
+target_include_directories(solvealways_tests PRIVATE ../src)
 
 add_executable(solveradicals_tests test_solveradicals.c ${COMMON_SRC})
 target_include_directories(solveradicals_tests PRIVATE ../src)

@@ -6,11 +6,12 @@
  * wired up in this initial cut is Solve`SolvePolynomialEquality
  * (src/solvepoly.c) for a single polynomial equality in one variable.
  *
- * `Solve` has the HoldAll attribute -- the user's `vars` argument
- * (typically a bare symbol) must reach the router without OwnValue
- * substitution.  The `expr` argument is evaluated explicitly inside
- * the builtin to normalise nested calls (e.g. (x-1)(x-2) gets
- * canonicalised before we try to recognise the polynomial shape).
+ * `Solve` does not hold its arguments -- the evaluator delivers
+ * `expr` and `vars` already evaluated, matching Mathematica's
+ * attribute set ({Protected}).  When `vars` has been substituted to
+ * a non-symbol (typically because the user previously assigned
+ * `x = 5` and then called `Solve[..., x]`), the router emits
+ * `Solve::ivar` and returns unevaluated.
  */
 
 #include "solve.h"
@@ -24,8 +25,8 @@
 
 #include "attr.h"
 #include "common.h"
-#include "eval.h"
 #include "expr.h"
+#include "print.h"
 #include "solveinv.h"
 #include "solvelinsys.h"
 #include "solvepoly.h"
@@ -107,6 +108,22 @@ static void apply_option(const Expr* rule, SolveOpts* opts) {
      * not yet wired into the polynomial specialist. */
 }
 
+/* Warn once per distinct unevaluated form that the second argument
+ * is not a valid variable specification (a symbol or a list of
+ * symbols).  Mirrors Mathematica's `Solve::ivar`. */
+static void warn_ivar(const Expr* vars) {
+    static uint64_t last_warned_hash = 0;
+    if (!vars) return;
+    uint64_t h = expr_hash(vars);
+    if (h == last_warned_hash) return;
+    last_warned_hash = h;
+    char* shown = expr_to_string((Expr*)vars);
+    fprintf(stderr,
+        "Solve::ivar: %s is not a valid variable.\n",
+        shown ? shown : "?");
+    free(shown);
+}
+
 /* Warn once per distinct unevaluated form about an unrecognised
  * option.  Mirrors the integrate.c:254-262 idiom. */
 static void warn_bad_option(const Expr* res, const Expr* opt) {
@@ -154,6 +171,204 @@ static bool is_conjunction_of_equations(const Expr* expr) {
     if (expr->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = expr->data.function.head->data.symbol;
     return h == SYM_And || h == SYM_List;
+}
+
+/* True for anything Mathematica would reject as a "solve variable":
+ * a bare numeric atom (Integer / BigInt / Real / MPFR), a string, or
+ * a packaged numeric head (`Rational[_, _]`, `Complex[_, _]`).  Bare
+ * compound expressions like `Dt[y]`, `f[a, b]`, or `x^2` are allowed
+ * as solve variables -- the dispatch later substitutes them through
+ * a fresh internal symbol. */
+static bool is_numeric_literal(const Expr* e) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER:
+        case EXPR_REAL:
+        case EXPR_BIGINT:
+        case EXPR_STRING:
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+#endif
+            return true;
+        case EXPR_FUNCTION:
+            if (e->data.function.head->type == EXPR_SYMBOL) {
+                const char* h = e->data.function.head->data.symbol;
+                if (h == SYM_Complex || h == SYM_Rational) return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+/* Mathematica-style validation of the `vars` argument.  Accepts a
+ * single non-numeric expression (symbol or compound), or a non-empty
+ * List of such expressions.  Everything else triggers `Solve::ivar`
+ * and leaves Solve unevaluated. */
+static bool is_valid_solve_vars(const Expr* vars) {
+    if (!vars) return false;
+    if (vars->type == EXPR_FUNCTION
+        && vars->data.function.head->type == EXPR_SYMBOL
+        && vars->data.function.head->data.symbol == SYM_List) {
+        if (vars->data.function.arg_count == 0) return false;
+        for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+            const Expr* v = vars->data.function.args[i];
+            if (!v || is_numeric_literal(v)) return false;
+        }
+        return true;
+    }
+    return !is_numeric_literal(vars);
+}
+
+/* ------------------------------------------------------------------ *
+ *  Compound-variable substitution.                                    *
+ *                                                                     *
+ *  Mathematica lets `Solve[..., g]` take a non-symbol generalised      *
+ *  variable -- typical examples are `Dt[y]`, `f[a, b]`, or `x^2`.     *
+ *  Mathilda's specialists (polynomial, linear-system, inverse-       *
+ *  function, radicals, trig) all expect a bare symbol, so the router  *
+ *  rewrites compound vars by substituting each one with a fresh       *
+ *  internal symbol (`Solve$var$N`) before dispatch, then reverses     *
+ *  the substitution on the result so the user sees `{{g -> ...}}`.   *
+ *                                                                     *
+ *  Cap of 32 substitutions per call is more than enough -- a real    *
+ *  Solve call rarely has more than a handful of distinct variables.   *
+ * ------------------------------------------------------------------ */
+
+#define SOLVE_MAX_VAR_SUBS 32
+
+typedef struct {
+    Expr* original;     /* borrowed from caller (lives as long as `res`) */
+    const char* fresh;  /* interned symbol name                          */
+} SolveVarSub;
+
+/* Per-process counter for generating fresh internal symbol names.
+ * Monotonic so distinct Solve calls don't collide -- the symbols are
+ * never visible to the user (they only exist between the dispatch
+ * and unsubst). */
+static const char* gen_fresh_var_name(void) {
+    static int counter = 0;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Solve$var$%d", ++counter);
+    return intern_symbol(buf);
+}
+
+/* Replace every subexpression structurally equal to `from` with a
+ * copy of `to`.  Used to substitute a compound variable with its
+ * fresh internal symbol throughout the equation. */
+static Expr* subst_expr(Expr* e, Expr* from, Expr* to) {
+    if (!e) return NULL;
+    if (expr_eq(e, from)) return expr_copy(to);
+    if (e->type == EXPR_FUNCTION) {
+        Expr* new_head = subst_expr(e->data.function.head, from, to);
+        size_t n = e->data.function.arg_count;
+        Expr** new_args = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = subst_expr(e->data.function.args[i], from, to);
+        }
+        Expr* result = expr_new_function(new_head, new_args, n);
+        if (new_args) free(new_args);
+        return result;
+    }
+    return expr_copy(e);
+}
+
+/* Reverse pass: replace every fresh-symbol leaf in `e` with the
+ * original compound it stood for.  Each Rule LHS produced by the
+ * dispatch carries the fresh symbol; this puts the user's `Dt[y]`
+ * (etc.) back so the result reads `{{Dt[y] -> ...}}`. */
+static Expr* unsubst_compound_vars(
+    Expr* e,
+    const SolveVarSub* subs,
+    size_t n_subs)
+{
+    if (!e) return NULL;
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < n_subs; i++) {
+            if (e->data.symbol == subs[i].fresh) {
+                return expr_copy(subs[i].original);
+            }
+        }
+        return expr_copy(e);
+    }
+    if (e->type == EXPR_FUNCTION) {
+        Expr* new_head = unsubst_compound_vars(e->data.function.head, subs, n_subs);
+        size_t n = e->data.function.arg_count;
+        Expr** new_args = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+        for (size_t i = 0; i < n; i++) {
+            new_args[i] = unsubst_compound_vars(e->data.function.args[i], subs, n_subs);
+        }
+        Expr* result = expr_new_function(new_head, new_args, n);
+        if (new_args) free(new_args);
+        return result;
+    }
+    return expr_copy(e);
+}
+
+/* Pre-pass that wraps the dispatch.  Walks `vars_in`, allocates a
+ * fresh symbol for every non-symbol entry, substitutes that entry
+ * through `*expr_inout`, and builds `*vars_out_owned` -- a freshly
+ * owned variable specification where every element is a symbol.
+ *
+ * Ownership:
+ *   - `*expr_inout` enters owned and stays owned (possibly replaced).
+ *   - `*vars_out_owned` is freshly allocated; caller must free.
+ *   - `subs[i].original` borrows from the caller's `vars_in`; valid
+ *     as long as `res` is.
+ *
+ * Returns the number of fresh-symbol substitutions installed (0
+ * means the user's vars were already symbol-only and no substitution
+ * happened -- `*vars_out_owned` is then just a copy of `vars_in`). */
+static size_t collect_and_subst_compound_vars(
+    Expr* vars_in,
+    Expr** expr_inout,
+    SolveVarSub* subs,
+    Expr** vars_out_owned)
+{
+    size_t n_subs = 0;
+
+    bool is_list = (vars_in->type == EXPR_FUNCTION
+        && vars_in->data.function.head->type == EXPR_SYMBOL
+        && vars_in->data.function.head->data.symbol == SYM_List);
+
+    if (!is_list) {
+        if (vars_in->type == EXPR_SYMBOL) {
+            *vars_out_owned = expr_copy(vars_in);
+            return 0;
+        }
+        /* Bare compound variable. */
+        const char* fresh = gen_fresh_var_name();
+        Expr* fresh_sym = expr_new_symbol(fresh);
+        Expr* new_expr = subst_expr(*expr_inout, vars_in, fresh_sym);
+        expr_free(*expr_inout);
+        *expr_inout = new_expr;
+        subs[0].original = vars_in;
+        subs[0].fresh = fresh;
+        *vars_out_owned = fresh_sym;
+        return 1;
+    }
+
+    size_t n = vars_in->data.function.arg_count;
+    Expr** new_args = (n > 0) ? malloc(sizeof(Expr*) * n) : NULL;
+    for (size_t i = 0; i < n; i++) {
+        Expr* v = vars_in->data.function.args[i];
+        if (v->type == EXPR_SYMBOL || n_subs >= SOLVE_MAX_VAR_SUBS) {
+            new_args[i] = expr_copy(v);
+            continue;
+        }
+        const char* fresh = gen_fresh_var_name();
+        Expr* fresh_sym = expr_new_symbol(fresh);
+        Expr* new_expr = subst_expr(*expr_inout, v, fresh_sym);
+        expr_free(*expr_inout);
+        *expr_inout = new_expr;
+        subs[n_subs].original = v;
+        subs[n_subs].fresh = fresh;
+        n_subs++;
+        new_args[i] = fresh_sym;
+    }
+    *vars_out_owned = expr_new_function(expr_new_symbol("List"), new_args, n);
+    if (new_args) free(new_args);
+    return n_subs;
 }
 
 /* True iff `vars` is a List of at least two symbols.  Used to route
@@ -260,12 +475,35 @@ Expr* builtin_solve(Expr* res) {
         if (is_option_arg(a)) apply_option(a, &opts);
     }
 
-    /* HoldAll deferred evaluation of expr; evaluate it now (vars is
-     * intentionally left as a literal symbol so that an OwnValue on
-     * `x` does not get substituted). */
-    Expr* expr = eval_and_free(expr_copy(res->data.function.args[0]));
-    Expr* vars = res->data.function.args[1];   /* borrowed, unevaluated */
+    /* Solve does not hold its args: both `expr` and `vars` arrive
+     * already evaluated.  Take an owned copy of `expr` so the
+     * downstream rationalisation/abs-zero rewrites can free-and-
+     * replace it; `vars` and `dom` stay borrowed from `res`. */
+    Expr* vars = res->data.function.args[1];
     Expr* dom  = (pos_end >= 3) ? res->data.function.args[2] : NULL;
+
+    /* Mathematica-compatible bad-variable handling: emit `Solve::ivar`
+     * and return unevaluated if `vars` is not a symbol or list of
+     * symbols.  This is the path taken when a previously-assigned
+     * OwnValue substitutes the variable to a non-symbol (most often a
+     * number). */
+    if (!is_valid_solve_vars(vars)) {
+        warn_ivar(vars);
+        return NULL;
+    }
+
+    Expr* expr = expr_copy(res->data.function.args[0]);
+
+    /* Compound-variable pre-pass: every non-symbol entry in `vars` is
+     * substituted with a fresh internal symbol throughout `expr` so
+     * the dispatch specialists -- which only understand symbol
+     * variables -- can run.  The substitution is reversed on the
+     * result so the user sees `{{Dt[y] -> ...}}` (etc.) verbatim. */
+    SolveVarSub subs[SOLVE_MAX_VAR_SUBS];
+    Expr* vars_subst = NULL;
+    size_t n_subs = collect_and_subst_compound_vars(
+        vars, &expr, subs, &vars_subst);
+    vars = vars_subst;  /* dispatch sees the symbol-only spec */
 
     /* Approximate-number preprocessing: if the equation system contains
      * any inexact numeric leaf, force-rationalise it so the downstream
@@ -298,11 +536,13 @@ Expr* builtin_solve(Expr* res) {
         out = expr_new_function(expr_new_symbol("List"),
                                 (Expr*[]){ empty }, 1);
         expr_free(expr);
+        expr_free(vars_subst);
         return out;
     }
     if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_False) {
         out = expr_new_function(expr_new_symbol("List"), NULL, 0);
         expr_free(expr);
+        expr_free(vars_subst);
         return out;
     }
 
@@ -348,6 +588,7 @@ Expr* builtin_solve(Expr* res) {
         Expr* var = NULL;
         if (!classify_single_var(vars, &var)) {
             expr_free(expr);
+            expr_free(vars_subst);
             return NULL;
         }
 
@@ -382,6 +623,17 @@ Expr* builtin_solve(Expr* res) {
         expr_free(expr);
     }
 
+    /* Unsubst pass: if we substituted any compound variables with
+     * fresh symbols on the way in, restore the user's original
+     * expression in every Rule LHS (and anywhere else the fresh
+     * symbol leaked through). */
+    if (n_subs > 0 && out) {
+        Expr* restored = unsubst_compound_vars(out, subs, n_subs);
+        expr_free(out);
+        out = restored;
+    }
+    expr_free(vars_subst);
+
     /* If we rationalised the input, round-trip the bindings back to
      * floating-point at the original (minimum) precision.  The
      * traversal recurses through List / Rule so {{x -> 1/2}} comes out
@@ -404,7 +656,7 @@ Expr* builtin_solve(Expr* res) {
 void solve_init(void) {
     symtab_add_builtin("Solve", builtin_solve);
     SymbolDef* def = symtab_get_def("Solve");
-    if (def) def->attributes |= ATTR_PROTECTED | ATTR_HOLDALL;
+    if (def) def->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Solve",
         "Solve[expr, vars]\n"
         "\tAttempts to solve the equation or system expr for the\n"

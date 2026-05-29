@@ -282,6 +282,7 @@ const char* SYM_Sinh = NULL;
 const char* SYM_Slot = NULL;
 const char* SYM_SlotSequence = NULL;
 const char* SYM_Solve = NULL;
+const char* SYM_SolveAlways = NULL;
 const char* SYM_SolvePolynomialEquality = NULL;
 const char* SYM_Sort = NULL;
 const char* SYM_Span = NULL;
@@ -608,6 +609,7 @@ void sym_names_init(void) {
     SYM_Slot                       = intern_symbol("Slot");
     SYM_SlotSequence               = intern_symbol("SlotSequence");
     SYM_Solve                      = intern_symbol("Solve");
+    SYM_SolveAlways                = intern_symbol("SolveAlways");
     SYM_SolvePolynomialEquality    = intern_symbol("Solve`SolvePolynomialEquality");
     SYM_Sort                       = intern_symbol("Sort");
     SYM_Span                       = intern_symbol("Span");

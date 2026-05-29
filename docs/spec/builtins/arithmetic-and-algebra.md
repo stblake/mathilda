@@ -1458,7 +1458,24 @@ Attempts to solve an equation or system of equations for one or more variables.
 - `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`, `Integers`.
 
 **Features**:
-- `HoldAll`, `Protected`.
+- `Protected`.  Matches Mathematica's attribute set -- arguments are
+  evaluated by the evaluator before reaching the router.  When the
+  second argument has been substituted to a numeric atom (typically
+  because an OwnValue like `x = 5` was previously set, or the user
+  literally passed `Solve[..., 5]`), the router emits `Solve::ivar`
+  and returns unevaluated.
+- **Generalised (compound) variables.**  `vars` may contain any
+  non-numeric expression, not only symbols: `Solve[lhs == rhs, Dt[y]]`,
+  `Solve[f[a] + b == c, f[a]]`, `Solve[a x^2 + b == 0, x^2]`, and
+  multi-var forms like `Solve[{...}, {Dt[x], Dt[y]}]` are all
+  accepted.  The router substitutes each non-symbol entry with a
+  fresh internal symbol (`Solve$var$N`), runs the standard dispatch,
+  and reverses the substitution on the result so the user sees Rule
+  LHSes like `Dt[y] -> ...` directly.  The substitution is purely
+  structural (literal `expr_eq`); polynomial identifications like
+  `x^4 == (x^2)^2` are not yet recognised, so `Solve[x^4 - 1 == 0,
+  x^2]` returns the substituted form rather than `{{x^2 -> 1},
+  {x^2 -> -1}}`.
 - Acts as a router that classifies its input and dispatches to a specialist:
   - Single equality, single variable -> `Solve`SolvePolynomialEquality` (below).
   - Single equality, single variable, polynomial specialist declines because
@@ -1737,6 +1754,53 @@ Out[5]= Root[#1^5 - #1 - 1 &, 1]
 
 In[6]:= ToRadicals[Root[Function[#^2 - 2], 2] < 3]      (* threading *)
 Out[6]= True
+```
+
+## SolveAlways
+Finds values of parameters (the symbols appearing in `eqns` but **not** in
+`vars`) that make every equation in `eqns` hold for every value of `vars`.
+The reduction is: each `lhs == rhs` is rewritten as the polynomial
+`lhs - rhs`; `CoefficientList[lhs - rhs, vars]` exposes every coefficient
+as a polynomial in the remaining symbols; every such coefficient must
+vanish; the resulting system is fed to `Solve` with the parameters as
+unknowns.
+- `SolveAlways[eqns, vars]`
+
+**Scope**:
+- `eqns` may be `Equal[lhs, rhs]`, a `List[Equal[...], ...]`, or an
+  `And[Equal[...], ...]`.  `True`/`False` sentinels arising from the
+  evaluator's pre-pass on `==` are folded into the trivial answers.
+- `vars` is a symbol or a `List` of symbols.
+- The empty-parameter case (every symbol in `eqns` already appears in
+  `vars`) returns `{}` — Mathematica's convention that there are no
+  parameter values to report regardless of whether the polynomial is
+  identically zero.
+- `Unequal` (`!=`), `Or`-combinations of equations, radicals
+  (`Sqrt[a x] == ...`), and `Series`-with-`O[x]^n` stripping are **not**
+  handled in this version; those inputs will produce a `Solve`-level
+  result on whatever coefficient system `CoefficientList` produces, which
+  may not be the SolveAlways-correct answer.
+
+**Diagnostics**:
+- `SolveAlways::argt` — wrong number of arguments.
+- `SolveAlways::eqf` — `eqns` contained a non-`Equal` element.
+- `SolveAlways::ivar` — `vars` was not a symbol or non-empty list of
+  symbols.
+
+**Examples**:
+
+```
+In[1]:= SolveAlways[a x + b == 0, x]
+Out[1]= {{b -> 0, a -> 0}}
+
+In[2]:= SolveAlways[(a + b) x + (a - b) y == 0, {x, y}]
+Out[2]= {{a -> 0, b -> 0}}
+
+In[3]:= SolveAlways[{a x + b == 0, c x + d == 0}, x]
+Out[3]= {{b -> 0, a -> 0, d -> 0, c -> 0}}
+
+In[4]:= SolveAlways[(a - b) x == 0, x]
+Out[4]= {{b -> a}}
 ```
 
 ## Solve`SolveLinearSystem

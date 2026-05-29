@@ -86,6 +86,22 @@ static bool result_is_unresolved(const Expr* result, const char* head_name) {
     return head_is(result, intern_symbol(head_name));
 }
 
+/* True iff any subexpression of `e` is an unevaluated call `head_name[...]`.
+ * Needed for the CRC pipeline: the inner table rules can fire partially
+ * (e.g. extracting a `-1` via `IntegrateTable[a_ f_, x_] := a IntegrateTable[f, x]`)
+ * and leave a stray `IntegrateTable[...]` nested inside a Times / Plus.
+ * The top-level head_is check would miss those, so we walk the tree. */
+static bool result_contains_head(const Expr* e, const char* head_name) {
+    if (!e) return false;
+    if (head_is(e, intern_symbol(head_name))) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (result_contains_head(e->data.function.head, head_name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (result_contains_head(e->data.function.args[i], head_name)) return true;
+    }
+    return false;
+}
+
 /* Helper: build and evaluate `head_name[f, x]`, freeing the call
  * expression.  Returns whatever evaluate() produces. */
 static Expr* call_stage(const char* head_name, Expr* f, Expr* x) {
@@ -174,9 +190,14 @@ static Expr* try_crctable(Expr* f, Expr* x) {
 
     /* "Failed" sentinels: either the public head is unresolved (no
      * rule matched the CRCTable wrapper) or the internal IntegrateTable
-     * head leaked through (table lookup found no matching formula). */
+     * head leaked through (table lookup found no matching formula).
+     * The IntegrateTable scan is deep — a partial-match rule like
+     * `IntegrateTable[a_ f_, x_] /; FreeQ[a, x] := a IntegrateTable[f, x]`
+     * can leave `IntegrateTable[...]` nested under Times/Plus when the
+     * inner call has no matching formula; that must also count as
+     * unresolved so Integrate falls back to its own unevaluated form. */
     if (result_is_unresolved(result, "Integrate`CRCTable") ||
-        result_is_unresolved(result, "IntegrateTable")) {
+        result_contains_head(result, "IntegrateTable")) {
         expr_free(result);
         return NULL;
     }

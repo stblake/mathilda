@@ -2024,6 +2024,16 @@ void info_init(void) {
         "\tCos/Tan/Sinh/Cosh/Tanh/Exp/Log wrappers and emits\n"
         "\tEliminate::ifun; non-polynomial systems otherwise return\n"
         "\tunevaluated with Eliminate::nlin.");
+    symtab_set_docstring("SolveAlways",
+        "SolveAlways[eqns, vars]\n"
+        "\tfinds values of parameters appearing in eqns but not in vars\n"
+        "\tsuch that eqns hold for every value of vars.\n"
+        "Equations may be Equal[lhs, rhs] or a List/And of such.\n"
+        "Reduction: each lhs - rhs is treated as a polynomial in vars\n"
+        "\tvia CoefficientList; every coefficient must vanish, and the\n"
+        "\tresulting system is passed to Solve with the remaining\n"
+        "\tsymbols (the parameters) as unknowns.  Returns {} when there\n"
+        "\tare no parameters to solve for.");
     symtab_set_docstring("ToRadicals",
         "ToRadicals[expr]\n"
         "\tattempts to express all Root objects in expr in terms of radicals.\n"
