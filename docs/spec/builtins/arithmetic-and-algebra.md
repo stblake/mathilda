@@ -1206,6 +1206,39 @@ In[11]:= SquareFreeQ[10^70 + 3]
 Out[11]= True
 ```
 
+## Subresultants
+- `Subresultants[poly1, poly2, var]`: Gives the list of **principal
+  subresultant coefficients** (PSCs) of `poly1` and `poly2` treated as
+  polynomials in `var`.
+- The list has length `Min[Exponent[poly1, var], Exponent[poly2, var]] + 1`.
+- The first element equals `Resultant[poly1, poly2, var]`; the first `k`
+  entries vanish exactly when the polynomials have `k` common roots
+  (multiplicity counted), so the index of the first non-zero entry is the
+  degree of `PolynomialGCD[poly1, poly2, var]`.
+- Computed efficiently by a subresultant polynomial-remainder sequence (the
+  same Bronstein γ/β/δ recurrence as `Resultant`), reading off the deflated
+  leading coefficient at each chain degree; defective (degree-gap) indices
+  come out as `0`. Inputs with algebraic-number coefficients (e.g. `Sqrt[2]`)
+  fall back to the Sylvester-minor determinant definition. `var` must be a
+  symbol; PSCs are polynomials in the coefficients of the inputs.
+
+```
+In[1]:= Subresultants[2x^7 + 3x^3 - 7x + 1, 3x^5 - 17x + 21, x]
+Out[1]= {273612691817, 68946901, 1299537, 16641, 0, 9}
+
+In[2]:= Subresultants[(x - 1)(x - 2)(x - 3), (x - 1)(x - 4)(x - 5), x]
+Out[2]= {0, 12, -4, 1}
+
+In[3]:= Subresultants[(x - 1)^5 (x - 2)(x - 3), (x - 1)^4 (x - 4)(x - 5), x]
+Out[3]= {0, 0, 0, 0, 144, 18, 1}
+
+In[4]:= Subresultants[a x^3 + b x^2 + c x + d, x^3 - 5 b x - 7 a, x]
+Out[4]= {-343 a^6 + ... - d^3, -7 a^2 b + 25 a^2 b^2 - 5 b^3 + 10 a b c + c^2 - b d, -b, 1}
+
+In[5]:= Length[Subresultants[x^50 + a, x^20 + b, x]]
+Out[5]= 21
+```
+
 ## IrreduciblePolynomialQ
 - `IrreduciblePolynomialQ[poly]`: Returns `True` if `poly` is an irreducible
   polynomial over the rationals (treating any algebraic-number coefficient

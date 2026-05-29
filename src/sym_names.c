@@ -291,6 +291,7 @@ const char* SYM_SquareFreeQ = NULL;
 const char* SYM_SquareMatrixQ = NULL;
 const char* SYM_StepMonitor = NULL;
 const char* SYM_String = NULL;
+const char* SYM_Subresultants = NULL;
 const char* SYM_SubspaceSize = NULL;
 const char* SYM_Switch = NULL;
 const char* SYM_Symbol = NULL;
@@ -618,6 +619,7 @@ void sym_names_init(void) {
     SYM_SquareMatrixQ              = intern_symbol("SquareMatrixQ");
     SYM_StepMonitor                = intern_symbol("StepMonitor");
     SYM_String                     = intern_symbol("String");
+    SYM_Subresultants              = intern_symbol("Subresultants");
     SYM_SubspaceSize               = intern_symbol("SubspaceSize");
     SYM_Switch                     = intern_symbol("Switch");
     SYM_Symbol                     = intern_symbol("Symbol");

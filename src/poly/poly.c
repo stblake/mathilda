@@ -295,7 +295,7 @@ static Expr* term_coeff_or_null(Expr* term, Expr* var, int n) {
 /* Return the coefficient of var^n in `expanded`, where `expanded` is  */
 /* the result of a prior `expr_expand` call. `var` must be atomic      */
 /* (caller's responsibility -- typically a symbol).                    */
-static Expr* get_coeff_expanded(Expr* expanded, Expr* var, int n) {
+Expr* get_coeff_expanded(Expr* expanded, Expr* var, int n) {
     if (!expanded) return expr_new_integer(0);
 
     bool is_plus = (expanded->type == EXPR_FUNCTION &&
@@ -325,7 +325,7 @@ static Expr* get_coeff_expanded(Expr* expanded, Expr* var, int n) {
 /* `get_coeff_expanded`. Each output slot is a freshly-allocated Expr* */
 /* the caller must free; missing degrees are filled with Integer 0.    */
 /* Returns false if `var` is not atomic.                                */
-static bool get_all_coeffs_expanded(Expr* expanded, Expr* var, int max_deg,
+bool get_all_coeffs_expanded(Expr* expanded, Expr* var, int max_deg,
                                     Expr*** out_coeffs) {
     if (!var_is_atomic(var) || max_deg < 0) return false;
 
@@ -3714,7 +3714,7 @@ static int64_t subres_leaf_count(Expr* e) {
 /* Sqrt[3]^3 → 3^(3/2)) that don't combine with Times[base, Sqrt[base]] */
 /* via Plus alone, so the chain bloats geometrically.  We detect this   */
 /* up front and let the Sylvester+Det path handle it instead.            */
-static bool subres_has_algebraic(Expr* e) {
+bool subres_has_algebraic(Expr* e) {
     if (!e) return false;
     if (e->type != EXPR_FUNCTION) return false;
     if (e->data.function.head->type == EXPR_SYMBOL &&
@@ -3746,7 +3746,7 @@ static bool subres_has_algebraic(Expr* e) {
 /* lc(B) needed to drive the remainder below deg(B)) — Bronstein's    */
 /* chain identities require the full d+1 power so that division by    */
 /* β_i is exact in D.                                                  */
-static Expr* pseudo_rem_standard(Expr* A, Expr* B, Expr* x) {
+Expr* pseudo_rem_standard(Expr* A, Expr* B, Expr* x) {
     Expr* expandedB = expr_expand(B);
     int dB = get_degree_poly(expandedB, x);
     Expr* expandedA = expr_expand(A);
@@ -3803,7 +3803,7 @@ static Expr* pseudo_rem_standard(Expr* A, Expr* B, Expr* x) {
 /* scalar `denom`.  Builds the result by extracting coefficients,      */
 /* dividing each by denom, and rebuilding.  Cancel handles rational   */
 /* simplification.  Returns a fresh expression; the caller frees it.  */
-static Expr* poly_divide_by_scalar(Expr* poly, Expr* denom, Expr* var) {
+Expr* poly_divide_by_scalar(Expr* poly, Expr* denom, Expr* var) {
     if (is_zero_poly(poly)) return expr_new_integer(0);
 
     Expr* expanded = expr_expand(poly);
@@ -4798,4 +4798,5 @@ void poly_init(void) {
     symtab_get_def("PolynomialExtendedGCD")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Discriminant", builtin_discriminant);
     symtab_get_def("Discriminant")->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
+    subresultants_init();
 }

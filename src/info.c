@@ -1988,6 +1988,16 @@ void info_init(void) {
         "\tgives the discriminant of poly with respect to var: up to sign and\n"
         "\tleading-coefficient scaling, Resultant[poly, D[poly, var], var] /\n"
         "\tlc[poly, var].  Vanishes iff poly has a repeated root in var.");
+    symtab_set_docstring("Subresultants",
+        "Subresultants[poly1, poly2, var]\n"
+        "\tgives the list of principal subresultant coefficients of poly1 and\n"
+        "\tpoly2 with respect to var.  The list has length\n"
+        "\tMin[Exponent[poly1, var], Exponent[poly2, var]] + 1, its first\n"
+        "\telement is Resultant[poly1, poly2, var], and the first k entries\n"
+        "\tvanish exactly when the polynomials share k roots (with\n"
+        "\tmultiplicity).  Computed by a subresultant polynomial-remainder\n"
+        "\tsequence, or a Sylvester-minor determinant for algebraic\n"
+        "\tcoefficients.");
     symtab_set_docstring("GroebnerBasis",
         "GroebnerBasis[{p1, p2, ...}, {x1, x2, ...}]\n"
         "\tgives a list of polynomials that form a Gröbner basis for the\n"

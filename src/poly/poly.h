@@ -27,6 +27,8 @@ Expr* builtin_decompose(Expr* res);
 Expr* builtin_hornerform(Expr* res);
 Expr* builtin_resultant(Expr* res);
 Expr* builtin_discriminant(Expr* res);
+Expr* builtin_subresultants(Expr* res);
+void  subresultants_init(void);
 
 /* ------------------------------------------------------------------ */
 /* Internal polynomial helpers used by neighbouring modules           */
@@ -37,6 +39,19 @@ bool is_polynomial(Expr* e, Expr** vars, size_t var_count);
 bool is_zero_poly(Expr* e);
 int  get_degree_poly(Expr* e, Expr* var);
 Expr* get_coeff(Expr* e, Expr* var, int d);
+/* Coefficient of var^n in an already-expanded polynomial (var atomic). */
+Expr* get_coeff_expanded(Expr* expanded, Expr* var, int n);
+/* Bulk coefficient extraction 0..max_deg in one pass; out_coeffs is a   */
+/* freshly malloc'd array of (max_deg+1) Expr* the caller frees. Returns */
+/* false if var is not atomic.                                           */
+bool get_all_coeffs_expanded(Expr* expanded, Expr* var, int max_deg,
+                             Expr*** out_coeffs);
+/* Full pseudo-remainder lc(B)^(deg A - deg B + 1) * A mod B (deg A>=B). */
+Expr* pseudo_rem_standard(Expr* A, Expr* B, Expr* x);
+/* Coefficient-wise division of a polynomial in var by a scalar denom.   */
+Expr* poly_divide_by_scalar(Expr* poly, Expr* denom, Expr* var);
+/* True if e contains an algebraic number Power[base, p/q] with q > 1.   */
+bool subres_has_algebraic(Expr* e);
 Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count);
 Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count);
 Expr* poly_content(Expr* A, Expr** vars, size_t var_count);
