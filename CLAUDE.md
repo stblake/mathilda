@@ -67,13 +67,13 @@ The goal of this project is to use Gemini cli to create a small (pico) computer 
 
 -- Internal symbols should be defined in sym_names.c 
 
--- Every time a builtin function is implemented or modified, we should update `Mathilda_spec.md`. The spec is now an overview file that points into `docs/spec/`; edit the relevant per-category file under `docs/spec/builtins/` (and the matching `docs/spec/changelog/<YYYY-MM>.md` for a change summary), then update the overview only if a new top-level section or category was added.
+-- Every time a builtin function is implemented or modified, we should update `Mathilda_spec.md`. The spec is now an overview file that points into `docs/spec/`; edit the relevant per-category file under `docs/spec/builtins/` (and the matching weekly `docs/spec/changelog/<YYYY-MM-DD>.md` — where `<YYYY-MM-DD>` is the Monday of the current ISO week — for a change summary), then update the overview only if a new top-level section or category was added.
 
 -- Every time a builtin function is implemented we should also assign the appropriate Attributes to that function. 
 
 -- Efficient and careful memory management is important. The system should track memory usage and leaks with valgrind. 
 
-After any change or improvement to the system is made, a summary of the features should be given under an appropriate heading in the current month's `docs/spec/changelog/<YYYY-MM>.md` file. The top-level `Mathilda_spec.md` itself stays terse — it is the navigational entry point only.
+After any change or improvement to the system is made, a summary of the features should be given under an appropriate heading in the current week's `docs/spec/changelog/<YYYY-MM-DD>.md` file, where `<YYYY-MM-DD>` is the Monday of the current ISO week (Mon – Sun). Create the file with a short `# Changelog: week of <Mon> (Mon) – <Sun> (Sun)` heading if it does not yet exist. The top-level `Mathilda_spec.md` itself stays terse — it is the navigational entry point only; add a row to its changelog table when you create a new weekly file.
 
 -- Every builtin function should have an Information string that gives a concise, but complete description of the function (via symtab_set_docstring)
 

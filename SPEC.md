@@ -281,7 +281,7 @@ language.
 The per-category built-in reference is the dedicated index, not this file.
 Start from [`Mathilda_spec.md`](Mathilda_spec.md), which links into the
 category-specific pages under [`docs/spec/builtins/`](docs/spec/builtins/).
-Monthly changes are recorded in
+Weekly changes (Mon – Sun, keyed by Monday's date) are recorded in
 [`docs/spec/changelog/`](docs/spec/changelog/).
 
 ---
@@ -325,8 +325,9 @@ The makefile auto-discovers `src/*.c`. ECM is built and linked by default
 - **Attributes.** Every builtin gets appropriate attributes in its module
   `_init()`.
 - **Docs in sync.** Every new or modified builtin updates the matching file in
-  `docs/spec/builtins/` and adds a changelog note under
-  `docs/spec/changelog/<YYYY-MM>.md`.
+  `docs/spec/builtins/` and adds a changelog note under the current week's
+  `docs/spec/changelog/<YYYY-MM-DD>.md` (where `<YYYY-MM-DD>` is the Monday
+  of the ISO week the change lands in).
 
 `CLAUDE.md` carries the full contributor workflow.
 

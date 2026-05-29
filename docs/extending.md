@@ -120,8 +120,12 @@ Helpers in `tests/test_utils.h`: `TEST`, `ASSERT`, `ASSERT_STR_EQ`,
 ### Step 6 — Update documentation
 
 Edit the matching `docs/spec/builtins/*.md` and add a changelog entry under
-`docs/spec/changelog/<YYYY-MM>.md`. The top-level `Mathilda_spec.md` only needs
-touching if you introduce a new top-level category.
+the current week's `docs/spec/changelog/<YYYY-MM-DD>.md`, where
+`<YYYY-MM-DD>` is the Monday of the ISO week (Mon – Sun) the change lands
+in. Create the file with a `# Changelog: week of <Mon> (Mon) – <Sun> (Sun)`
+header (and a corresponding row in `Mathilda_spec.md`'s changelog table) if
+it does not yet exist. The top-level `Mathilda_spec.md` only needs touching
+if you introduce a new top-level category or a new weekly changelog file.
 
 ---
 

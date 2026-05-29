@@ -45,11 +45,15 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 
 ## Changelog
 
-Detailed feature-addition and bug-fix notes, organized by month, in [`docs/spec/changelog/`](docs/spec/changelog/):
+Detailed feature-addition and bug-fix notes, organized by week (Mon – Sun, keyed by Monday's date), in [`docs/spec/changelog/`](docs/spec/changelog/):
 
-| Period | File |
-|--------|------|
-| April 2026 (2026-04-20 → 2026-04-30) | [`changelog/2026-04.md`](docs/spec/changelog/2026-04.md) |
-| May 2026 (2026-05-01 onwards) | [`changelog/2026-05.md`](docs/spec/changelog/2026-05.md) |
+| Week (Mon – Sun) | File |
+|------------------|------|
+| 2026-04-20 → 2026-04-26 | [`changelog/2026-04-20.md`](docs/spec/changelog/2026-04-20.md) |
+| 2026-04-27 → 2026-05-03 | [`changelog/2026-04-27.md`](docs/spec/changelog/2026-04-27.md) |
+| 2026-05-04 → 2026-05-10 | [`changelog/2026-05-04.md`](docs/spec/changelog/2026-05-04.md) |
+| 2026-05-11 → 2026-05-17 | [`changelog/2026-05-11.md`](docs/spec/changelog/2026-05-11.md) |
+| 2026-05-18 → 2026-05-24 | [`changelog/2026-05-18.md`](docs/spec/changelog/2026-05-18.md) |
+| 2026-05-25 → 2026-05-31 | [`changelog/2026-05-25.md`](docs/spec/changelog/2026-05-25.md) |
 
-When a change touches a built-in's documented behavior, the corresponding `docs/spec/builtins/*.md` file is updated as well; the changelog records the rationale and timing.
+New entries land in the file for the current week (use the Monday-date of that week as the filename, format `YYYY-MM-DD.md`). When a change touches a built-in's documented behavior, the corresponding `docs/spec/builtins/*.md` file is updated as well; the changelog records the rationale and timing.

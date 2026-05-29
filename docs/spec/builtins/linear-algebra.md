@@ -1462,7 +1462,7 @@ Gives a list of the eigenvalues of a square matrix.
   `"Arnoldi"`, `"Banded"`, and `"FEAST"`.  Each accepts a sub-option
   list form (`Method -> {"Name", "Key" -> value, ...}`); see the
   per-method sections in the `?Eigenvalues` REPL docstring and the
-  monthly changelog entries under `docs/spec/changelog/`.
+  weekly changelog entries under `docs/spec/changelog/`.
 
 ### `Method -> "FEAST"` (interval slice)
 
