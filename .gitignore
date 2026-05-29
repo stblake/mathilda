@@ -55,3 +55,13 @@ dkms.conf
 *.dwo
 # Added by code-review-graph
 .code-review-graph/
+
+# macOS
+.DS_Store
+
+# Built binaries
+/Mathilda
+/picocas
+
+# Claude scheduled-task lock
+.claude/scheduled_tasks.lock
