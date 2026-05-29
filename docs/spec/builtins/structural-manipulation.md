@@ -1255,11 +1255,35 @@ elimination ideal collapses to `True` and an inconsistent system to
   emits the `Eliminate::ifun` diagnostic, signalling that the principal
   branch was used and some solutions may be missed — use `Reduce` for
   complete solution information.
-- Equations that remain non-polynomial after the pre-pass return the
-  expression unevaluated with `Eliminate::nlin`.
+- An algebraisation pre-pass handles inputs containing
+  `Power[base, p/q]` with `q > 1` (i.e. `Sqrt[...]`, `(...)^(1/3)`,
+  `(...)^(3/2)`, `1/Sqrt[...]`, ...) whose base mentions an elim
+  variable.  Each unique base gets a fresh auxiliary symbol `$elN$`
+  with the constraint `Power[$elN$, L] == base` (L the LCM of all
+  rational-exponent denominators for that base), the power is rewritten
+  as `Power[$elN$, p*L/q]`, and `$elN$` is appended to the elim list.
+  Nested radicals (e.g. `Sqrt[x + Sqrt[x]]`) work in one shot because
+  the constraint substitutes inner aux vars as well.  When the pass
+  fires, `Eliminate::alg` is emitted to flag that the returned
+  polynomial relation is the cross-multiplied generic consequence —
+  sign / branch information may be lost.
+- Equations are normalised through `Numerator[Together[lhs - rhs]]`
+  before Buchberger, clearing any `Power[t, -k]` denominators
+  introduced by the algebraisation pre-pass.  Surviving basis
+  polynomials are stripped of any common monomial factor so the
+  reported equation matches the primitive form (no spurious factor
+  of a main variable from a `u == Sqrt[...]` equation).
+- Equations that remain non-polynomial after both pre-passes (e.g.
+  `Sin[x*y] == ...` with `x` in the elim set) return the expression
+  unevaluated with `Eliminate::nlin`.
 - Main-block variables (the implicit free parameters) are discovered
   automatically by walking the equations; mathematical constants such
   as `Pi`, `E`, and `EulerGamma` flow through as parameter symbols.
+  Function-shaped subexpressions whose head is not one of
+  `{Plus, Times, Power, List, And, Equal, Or, Not}` are treated as
+  single polynomial atoms (so `Dt[y]`, `f[a]`, `Sin[k]` etc. are
+  whole-expression variables rather than products of their heads and
+  arguments).
 
 ```mathematica
 In[1]:= Eliminate[{x == 2 + y, y == z}, y]
@@ -1288,6 +1312,18 @@ Out[7]= False
 
 In[8]:= Eliminate[x + y == 0, y]                (* solvable -> True *)
 Out[8]= True
+
+In[9]:= Eliminate[{u == Sqrt[x^2 + 1], v == 1/Sqrt[x^2 + 1]}, x]
+Out[9]= u v == 1                                (* shared base, single aux *)
+
+In[10]:= Eliminate[{Dt[y] == x^3/Sqrt[x^2 + 1] Dt[x], u == x^2 + 1,
+                    Dt[u] == 2 x Dt[x]}, {Dt[x], x}]
+Out[10]= Dt[u]^2 + u^2 Dt[u]^2 == 2 u Dt[u]^2 + 4 u Dt[y]^2
+         (* algebraisation pre-pass; equivalent to Mathematica's
+            u^2 Dt[u]^2 + u(-2 Dt[u]^2 - 4 Dt[y]^2) == -Dt[u]^2 *)
+
+In[11]:= Eliminate[{u == x^(1/3), v == x^(2/3)}, x]
+Out[11]= v == u^2                               (* exponent LCM = 3 *)
 ```
 
 **Features**:

@@ -257,6 +257,138 @@ static void test_memory_smoke_larger(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 18-23. Algebraisation pre-pass (radical / rational-power inputs)    */
+/* ------------------------------------------------------------------ */
+
+/* Each Sqrt-bearing or x^(p/q)-bearing equation is rewritten as a
+ * polynomial in a fresh aux symbol, plus the constraint `aux^L == base`.
+ * The expected output is what Mathematica returns (the
+ * cross-multiplied generic consequence; sign / branch info is dropped
+ * along with the `Eliminate::alg` diagnostic). */
+
+static void test_radical_square(void) {
+    /* Eliminate[{Sqrt[x] == y, x == z^2}, x]  ->  y^2 == z^2 */
+    mute_stderr_once();
+    check_eq("Eliminate[{Sqrt[x] == y, x == z^2}, x]",
+             "Equal[Power[z, 2], Power[y, 2]]");
+}
+
+static void test_radical_inv_pair(void) {
+    /* u == Sqrt[x^2+1] and v == 1/Sqrt[x^2+1]  ->  u*v == 1 (since
+     * Sqrt[..] * 1/Sqrt[..] = 1 generically).  Both rationals share
+     * the same base, so a single aux variable is introduced. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Sqrt[x^2+1], v == 1/Sqrt[x^2+1]}, x]",
+             "Equal[Times[u, v], 1]");
+}
+
+static void test_radical_cuberoot_pair(void) {
+    /* u == x^(1/3), v == x^(2/3)  ->  v == u^2 (Power[x, 1/3] and
+     * Power[x, 2/3] collapse onto Power[aux, 1] and Power[aux, 2]). */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == x^(1/3), v == x^(2/3)}, x]",
+             "Equal[v, Power[u, 2]]");
+}
+
+static void test_radical_dt_y_arc(void) {
+    /* Headline example from the user prompt:
+     *   Dt[y] == x^3 / Sqrt[x^2+1] Dt[x]
+     *   u     == x^2 + 1
+     *   Dt[u] == 2 x Dt[x]
+     * Eliminating {Dt[x], x} yields a polynomial relation among
+     * u, Dt[u], Dt[y]; the answer matches Mathematica's modulo a sign
+     * rearrangement.  Mathematica reports:
+     *   u^2 Dt[u]^2 + u (-2 Dt[u]^2 - 4 Dt[y]^2) == -Dt[u]^2
+     * which equals the form below after moving negative terms across. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == x^3/Sqrt[x^2+1] Dt[x], u == x^2 + 1,"
+             " Dt[u] == 2 x Dt[x]}, {Dt[x], x}]",
+             "Equal[Plus[Power[Dt[u], 2], Times[Power[u, 2], Power[Dt[u], 2]]], "
+                   "Plus[Times[2, Times[u, Power[Dt[u], 2]]], "
+                        "Times[4, Times[u, Power[Dt[y], 2]]]]]");
+}
+
+static void test_radical_nested_sqrt(void) {
+    /* Nested radical: Sqrt[x + Sqrt[x]] in one equation, 1/Sqrt[x] in
+     * another.  Two aux variables are needed (one for Sqrt[x], one for
+     * Sqrt[x + aux_inner]).  Mathematica returns:
+     *   4 u^4 Dt[u]^2 - 2 u Dt[u] Dt[y] - 8 u^3 Dt[u] Dt[y]
+     *     + 4 u^2 Dt[y]^2 == -Dt[y]^2 */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == Sqrt[x + Sqrt[x]] Dt[x],"
+             " u == Sqrt[x + Sqrt[x]],"
+             " Dt[u] == (1 + 1/2/Sqrt[x]) Dt[x]}, {Dt[x], x}]",
+             "Equal[Plus[Times[4, Times[Power[u, 4], Power[Dt[u], 2]]], "
+                       "Power[Dt[y], 2], "
+                       "Times[4, Times[Power[u, 2], Power[Dt[y], 2]]]], "
+                   "Plus[Times[2, Times[u, Dt[u], Dt[y]]], "
+                        "Times[8, Times[Power[u, 3], Dt[u], Dt[y]]]]]");
+}
+
+static void test_radical_quartic_with_d(void) {
+    /* `D[x + 1/x, x]` is evaluated to `1 - 1/x^2` before Eliminate
+     * runs; the Sqrt[x^4+1] is then the sole algebraic atom.  The
+     * Numerator[Together[...]] normalisation also has to clear the
+     * `1/x` denominator inside `u == x + 1/x`.  Mathematica returns:
+     *   -2 u^2 Dt[y]^2 + u^4 Dt[y]^2 == Dt[u]^2 */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == (x^2 - 1)/((x^2 + 1) Sqrt[x^4 + 1]) Dt[x],"
+             " u == x + 1/x,"
+             " Dt[u] == (D[x + 1/x, x]) Dt[x]}, {Dt[x], x}]",
+             "Equal[Plus[Power[Dt[u], 2], "
+                       "Times[2, Times[Power[u, 2], Power[Dt[y], 2]]]], "
+                   "Times[Power[u, 4], Power[Dt[y], 2]]]");
+}
+
+static void test_radical_sqrtxp1_with_d(void) {
+    /* Single Sqrt[x+1] appearing in two equations, plus a 1/(x^2+1)
+     * rational coefficient.  Confirms the monomial-factor strip
+     * runs (without it the answer carries an extra factor of u, since
+     * `u == Sqrt[x+1]` introduces a u-multiplier that survives
+     * Buchberger).  Mathematica returns:
+     *   u^4 (2 Dt[u] - Dt[y]) + u^2 (-4 Dt[u] + 2 Dt[y]) == 2 Dt[y] */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == (x^2 - 1)/((x^2 + 1) Sqrt[x + 1]) Dt[x],"
+             " u == Sqrt[x + 1],"
+             " Dt[u] == (D[Sqrt[x + 1], x]) Dt[x]}, {Dt[x], x}]",
+             "Equal[Plus[Times[2, Times[Power[u, 4], Dt[u]]], "
+                       "Times[2, Times[Power[u, 2], Dt[y]]]], "
+                   "Plus[Times[4, Times[Power[u, 2], Dt[u]]], "
+                        "Times[2, Dt[y]], "
+                        "Times[Power[u, 4], Dt[y]]]]");
+}
+
+static void test_radical_memory_smoke(void) {
+    /* Re-run the headline radical example repeatedly to surface any
+     * AlgState / aux-symbol cleanup leaks. */
+    mute_stderr_once();
+    for (int i = 0; i < 25; i++) {
+        Expr* e = parse_expression(
+            "Eliminate[{Dt[y] == x^3/Sqrt[x^2+1] Dt[x],"
+            " u == x^2 + 1, Dt[u] == 2 x Dt[x]}, {Dt[x], x}]");
+        Expr* r = evaluate(e);
+        ASSERT(r != NULL);
+        expr_free(e);
+        expr_free(r);
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* 24. Truly non-polynomial: Sin[x*y] still triggers nlin             */
+/* ------------------------------------------------------------------ */
+
+static void test_nlin_for_transcendental_arg(void) {
+    /* `Sin[x*y]` has an elim variable inside a non-polynomial head;
+     * the algebraisation pass cannot help, so collect_main_vars'
+     * post-validation must reject the input with `Eliminate::nlin`
+     * and return Eliminate[...] unevaluated. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Sin[x*y] + Cos[x] == 1, x + y == 2}, x]",
+             "Eliminate[List[Equal[Plus[Cos[x], Sin[Times[x, y]]], 1], "
+                            "Equal[Plus[x, y], 2]], x]");
+}
+
+/* ------------------------------------------------------------------ */
 
 int main(void) {
     symtab_init();
@@ -280,6 +412,15 @@ int main(void) {
     TEST(test_eliminate_protected);
     TEST(test_memory_smoke);
     TEST(test_memory_smoke_larger);
+    TEST(test_radical_square);
+    TEST(test_radical_inv_pair);
+    TEST(test_radical_cuberoot_pair);
+    TEST(test_radical_dt_y_arc);
+    TEST(test_radical_nested_sqrt);
+    TEST(test_radical_quartic_with_d);
+    TEST(test_radical_sqrtxp1_with_d);
+    TEST(test_radical_memory_smoke);
+    TEST(test_nlin_for_transcendental_arg);
 
     printf("All Eliminate tests passed!\n");
     return 0;

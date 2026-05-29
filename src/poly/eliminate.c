@@ -26,10 +26,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "arithmetic.h"
 #include "attr.h"
 #include "eval.h"
 #include "groebner.h"
 #include "internal.h"
+#include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -49,6 +51,60 @@ static bool is_and(const Expr* e)   { return head_is(e, SYM_And); }
 static bool is_equal(const Expr* e) { return head_is(e, SYM_Equal); }
 static bool is_plus(const Expr* e)  { return head_is(e, SYM_Plus); }
 static bool is_times(const Expr* e) { return head_is(e, SYM_Times); }
+
+/* "Polynomial-recursive" heads: structural heads we walk INTO when
+ * looking for variable atoms (the args are still candidate atoms).
+ * Power is handled separately because we only recurse into its base
+ * when the exponent is an integer. */
+static bool is_poly_recursive_head(const char* hsym) {
+    return hsym == SYM_Plus  || hsym == SYM_Times
+        || hsym == SYM_List  || hsym == SYM_And
+        || hsym == SYM_Equal || hsym == SYM_Or
+        || hsym == SYM_Not;
+}
+
+/* Anything that should never be treated as a polynomial variable atom:
+ * pure numeric literals and the boolean / infinity sentinels.
+ *
+ * Mathematical constants like Pi, E, I, EulerGamma are deliberately
+ * NOT filtered here — they flow through the polynomial pipeline as
+ * parameter symbols (this matches Mathematica's behaviour: `Eliminate[
+ * y == Pi/2, y]` returns True via `Pi` as a free parameter). */
+static bool is_const_atom(const Expr* e) {
+    if (!e) return true;
+    switch (e->type) {
+        case EXPR_INTEGER:
+        case EXPR_REAL:
+        case EXPR_BIGINT:
+            return true;
+        default: break;
+    }
+    if (e->type == EXPR_MPFR) return true;
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol;
+        return s == SYM_True || s == SYM_False
+            || s == SYM_Infinity || s == SYM_ComplexInfinity
+            || s == SYM_Indeterminate;
+    }
+    if (head_is(e, SYM_Rational)) return true;
+    if (head_is(e, SYM_Complex))  return true;
+    return false;
+}
+
+/* True iff a symbol named `name` (string compare, NOT pointer compare —
+ * the callers may pass a non-interned probe) appears anywhere inside e. */
+static bool walk_has_symbol_name(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        return strcmp(e->data.symbol, name) == 0;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (walk_has_symbol_name(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (walk_has_symbol_name(e->data.function.args[i], name)) return true;
+    }
+    return false;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Variable-set membership                                            */
@@ -84,15 +140,6 @@ static bool contains_any_var(const Expr* e, Expr** vars, size_t n) {
 /*  Symbol collection (variable discovery)                             */
 /* ------------------------------------------------------------------ */
 
-/* Booleans / sentinels that should never appear inside a polynomial.
- * Mathematical constants like Pi, E, EulerGamma are *not* filtered: the
- * inverse-function pre-pass routinely produces them (e.g. `ArcSin[1] ->
- * Pi/2`), and treating them as parameter symbols in the polynomial ring
- * is the natural way for them to flow through to the final equation. */
-static bool is_system_constant_sym(const char* s) {
-    return s == SYM_True || s == SYM_False || s == SYM_Infinity;
-}
-
 typedef struct {
     Expr** items;     /* borrowed pointers, deduped by expr_eq */
     size_t n;
@@ -119,46 +166,57 @@ static void varset_push(VarSet* v, Expr* e) {
     v->items[v->n++] = e;
 }
 
-/* Walk `e` collecting every non-constant symbol that isn't in `elim`. */
+/* Walk `e` collecting every variable atom that is not in `elim`.
+ *
+ * An "atom" here is anything we want `gb_from_expr` to treat as a single
+ * polynomial indeterminate:
+ *   - any non-constant symbol (`x`, `y`, ...);
+ *   - any function-shaped expression whose head is NOT one of the
+ *     structural operators we recurse through (Plus/Times/Power/List/
+ *     And/Equal/...).  This is the rule that turns `Dt[y]`, `f[a,b]`,
+ *     `Sin[x]` (when not algebraised) into single variables instead of
+ *     mis-decomposing them into `Dt * y`.
+ *
+ * Heads handled specially:
+ *   - Plus, Times, List, And, Equal, Or, Not: recurse into args.
+ *   - Power[base, exp]:
+ *       * exp is an integer  -> recurse into base only (`x^3` is
+ *         polynomial in `x`).
+ *       * otherwise          -> treat the whole `Power[]` as an atom
+ *         (post-algebraisation this should not occur; safety net).
+ *   - any other head         -> treat the whole `Function[...]` as an
+ *     atom (do NOT recurse into args — we don't want to add `y` from
+ *     `Dt[y]` to the main-vars set).
+ *
+ * Elim-list membership and constant-atom checks are by `expr_eq` so an
+ * elim entry like `Dt[x]` correctly suppresses the entire function. */
 static void collect_main_vars(const Expr* e, Expr** elim, size_t n_elim,
                               VarSet* out) {
-    if (!e) return;
+    if (!e || is_const_atom(e)) return;
+    if (var_in_list(e, elim, n_elim)) return;
     if (e->type == EXPR_SYMBOL) {
-        if (!is_system_constant_sym(e->data.symbol)) {
-            if (!var_in_list(e, elim, n_elim)) {
-                varset_push(out, (Expr*)e);
-            }
-        }
+        varset_push(out, (Expr*)e);
         return;
     }
     if (e->type != EXPR_FUNCTION) return;
-    /* The head itself may be a symbol like `f` in `f[x]`; if `f` is a
-     * generic head with no elim binding, treat it as a parameter symbol
-     * (Mathematica's `Eliminate[{f == x + y, x == 1}, x]` keeps `f` as a
-     * parameter).  Builtin heads will already be elim-irrelevant so this
-     * is safe. */
-    if (e->data.function.head
-        && e->data.function.head->type == EXPR_SYMBOL) {
-        const char* hsym = e->data.function.head->data.symbol;
-        /* Skip "structural" heads we know are operators, not parameters. */
-        if (hsym != SYM_Plus && hsym != SYM_Times && hsym != SYM_Power
-         && hsym != SYM_List && hsym != SYM_And  && hsym != SYM_Equal
-         && hsym != SYM_Sin  && hsym != SYM_Cos  && hsym != SYM_Tan
-         && hsym != SYM_Sinh && hsym != SYM_Cosh && hsym != SYM_Tanh
-         && hsym != SYM_Exp  && hsym != SYM_Log
-         && hsym != SYM_ArcSin && hsym != SYM_ArcCos && hsym != SYM_ArcTan
-         && hsym != SYM_ArcSinh && hsym != SYM_ArcCosh && hsym != SYM_ArcTanh
-         && !is_system_constant_sym(hsym)) {
-            /* Treat `f` in `f[args]` as a free parameter unless an arg
-             * is itself elim-relevant. */
-            if (!var_in_list(e->data.function.head, elim, n_elim)) {
-                varset_push(out, e->data.function.head);
-            }
+
+    const char* hsym = (e->data.function.head
+                        && e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol : NULL;
+
+    if (hsym && is_poly_recursive_head(hsym)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            collect_main_vars(e->data.function.args[i], elim, n_elim, out);
         }
+        return;
     }
-    for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        collect_main_vars(e->data.function.args[i], elim, n_elim, out);
+    if (hsym == SYM_Power && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_INTEGER) {
+        collect_main_vars(e->data.function.args[0], elim, n_elim, out);
+        return;
     }
+    /* Function-shaped atom: register the whole expression. */
+    varset_push(out, (Expr*)e);
 }
 
 /* ------------------------------------------------------------------ */
@@ -258,12 +316,207 @@ static Expr* try_inverse_rewrite(const Expr* eq, Expr** elim, size_t n_elim,
 }
 
 /* ------------------------------------------------------------------ */
+/*  Algebraisation pre-pass                                            */
+/* ------------------------------------------------------------------ */
+
+/* Replace every `Power[base, p/q]` whose `base` mentions an elim
+ * variable with `Power[aux, p*L/q]` where `aux` is a fresh symbol and
+ * `L = lcm({q's seen for this base})`.  In tandem we add an algebraic
+ * constraint `Power[aux, L] == base` to the system and push `aux` onto
+ * the elim list.
+ *
+ * Effect: the system becomes polynomial in the (extended) variable
+ * set, and any output mentioning `aux` is dropped by the elimination
+ * filter just like an original elim variable would be.  The
+ * generically-true cross-multiplied form is what Mathematica's
+ * `Eliminate` returns for radical inputs — see the headline example
+ * in `tests/test_eliminate.c::test_radical_dt_y`. */
+
+typedef struct {
+    Expr**   bases;   /* owned deep copies of the unique algebraic bases */
+    int64_t* lcms;    /* per-base LCM of all rational-exponent denoms    */
+    Expr**   auxs;    /* owned EXPR_SYMBOL nodes, one per base           */
+    size_t   n;
+    size_t   cap;
+} AlgState;
+
+static void alg_init(AlgState* a) {
+    a->bases = NULL; a->lcms = NULL; a->auxs = NULL;
+    a->n = 0; a->cap = 0;
+}
+
+static void alg_free(AlgState* a) {
+    if (a->bases) {
+        for (size_t i = 0; i < a->n; i++) expr_free(a->bases[i]);
+    }
+    if (a->auxs) {
+        for (size_t i = 0; i < a->n; i++) expr_free(a->auxs[i]);
+    }
+    free(a->bases);
+    free(a->lcms);
+    free(a->auxs);
+    alg_init(a);
+}
+
+/* Register a (base, denom) pair, deduping by `expr_eq` on the base.
+ * `q` is the denominator of the rational exponent and is normalised to
+ * positive here so `Sqrt[u]` and `1/Sqrt[u]` collapse onto the same
+ * base. */
+static void alg_add(AlgState* a, const Expr* base, int64_t q) {
+    if (q < 0) q = -q;
+    if (q <= 0) return;
+    for (size_t i = 0; i < a->n; i++) {
+        if (expr_eq(a->bases[i], base)) {
+            a->lcms[i] = lcm(a->lcms[i], q);
+            return;
+        }
+    }
+    if (a->n == a->cap) {
+        a->cap = a->cap ? a->cap * 2 : 4;
+        a->bases = (Expr**)realloc(a->bases, sizeof(Expr*) * a->cap);
+        a->lcms  = (int64_t*)realloc(a->lcms,  sizeof(int64_t) * a->cap);
+    }
+    a->bases[a->n] = expr_copy((Expr*)base);
+    a->lcms[a->n]  = q;
+    a->n++;
+}
+
+/* Walk `e`, registering every `Power[base, Rational[p, q]]` with q != 1
+ * provided `base` mentions at least one elim variable.  Bases without
+ * any elim variable are left alone: they're parameter constants like
+ * `Sqrt[2]` that we cannot eliminate without losing information, and
+ * the user can pre-rationalise such inputs manually if needed. */
+static void alg_collect(const Expr* e, AlgState* a,
+                        Expr** elim, size_t n_elim) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        int64_t p, q;
+        if (is_rational(exp, &p, &q) && q != 1
+            && contains_any_var(base, elim, n_elim)) {
+            alg_add(a, base, q);
+        }
+    }
+    if (e->data.function.head) {
+        alg_collect(e->data.function.head, a, elim, n_elim);
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        alg_collect(e->data.function.args[i], a, elim, n_elim);
+    }
+}
+
+/* Build a fresh tree replacing each registered `Power[base, p/q]` with
+ * `Power[aux, p*L/q]` (collapsed to `1`, `aux`, or `Power[aux, k]` as
+ * the exponent simplifies).  Returns a freshly-allocated Expr* the
+ * caller owns. */
+static Expr* alg_substitute(const Expr* e, const AlgState* a) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* base = e->data.function.args[0];
+        Expr* exp  = e->data.function.args[1];
+        int64_t p, q;
+        if (is_rational(exp, &p, &q) && q != 1) {
+            for (size_t i = 0; i < a->n; i++) {
+                if (!expr_eq(a->bases[i], base)) continue;
+                int64_t L = a->lcms[i];
+                /* L is the LCM of all q's seen for this base, so q | L
+                 * and (p * L / q) is exactly an integer. */
+                int64_t new_exp = (p * L) / q;
+                if (new_exp == 0) return expr_new_integer(1);
+                if (new_exp == 1) return expr_copy(a->auxs[i]);
+                Expr** pa = (Expr**)malloc(sizeof(Expr*) * 2);
+                pa[0] = expr_copy(a->auxs[i]);
+                pa[1] = expr_new_integer(new_exp);
+                Expr* r = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                free(pa);
+                return r;
+            }
+        }
+    }
+
+    Expr* new_head = alg_substitute(e->data.function.head, a);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = alg_substitute(e->data.function.args[i], a);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
+/* `Power[aux_i, L_i] == base_i` (the unsigned algebraic constraint).
+ *
+ * The base is first run through `alg_substitute` so any nested
+ * algebraic atoms inside it (e.g. `Sqrt[x]` inside the base of
+ * `Sqrt[x + Sqrt[x]]`) are rewritten in terms of their own aux vars.
+ * Without this, nested-radical inputs leave a `Power[u, 1/2]` inside
+ * the constraint and the polynomial pipeline correctly rejects them. */
+static Expr* alg_make_constraint(const AlgState* a, size_t i) {
+    Expr** pa = (Expr**)malloc(sizeof(Expr*) * 2);
+    pa[0] = expr_copy(a->auxs[i]);
+    pa[1] = expr_new_integer(a->lcms[i]);
+    Expr* pow_e = expr_new_function(expr_new_symbol("Power"), pa, 2);
+    free(pa);
+
+    Expr** ea = (Expr**)malloc(sizeof(Expr*) * 2);
+    ea[0] = pow_e;
+    ea[1] = alg_substitute(a->bases[i], a);
+    Expr* eq = expr_new_function(expr_new_symbol("Equal"), ea, 2);
+    free(ea);
+    return eq;
+}
+
+/* Pick a symbol name not appearing anywhere in `eqs`, `elim`, the
+ * registered bases, or the auxes assigned so far.  The chosen name is
+ * interned and returned (the interner is global; the same string maps
+ * to the same `const char*` across the program). */
+static const char* alg_fresh_name(Expr** eqs, size_t n_eq,
+                                  Expr** elim, size_t n_elim,
+                                  const AlgState* a, size_t i_so_far,
+                                  int* next_idx) {
+    char buf[64];
+    for (int tries = 0; tries < 10000; tries++) {
+        snprintf(buf, sizeof(buf), "$el%d$", *next_idx);
+        (*next_idx)++;
+        bool collide = false;
+        for (size_t j = 0; j < n_eq && !collide; j++) {
+            if (walk_has_symbol_name(eqs[j], buf)) collide = true;
+        }
+        for (size_t j = 0; j < n_elim && !collide; j++) {
+            if (walk_has_symbol_name(elim[j], buf)) collide = true;
+        }
+        for (size_t j = 0; j < a->n && !collide; j++) {
+            if (walk_has_symbol_name(a->bases[j], buf)) collide = true;
+        }
+        for (size_t j = 0; j < i_so_far && !collide; j++) {
+            if (walk_has_symbol_name(a->auxs[j], buf)) collide = true;
+        }
+        if (!collide) return intern_symbol(buf);
+    }
+    /* Vanishingly unlikely fallback. */
+    return intern_symbol("$el$overflow$");
+}
+
+/* ------------------------------------------------------------------ */
 /*  Equation -> polynomial                                             */
 /* ------------------------------------------------------------------ */
 
-/* Reduce `Equal[a, b]` to the polynomial `a - b` (expanded and
- * evaluated to fix-point).  A bare polynomial input passes through
- * untouched (after Expand).  Caller owns the return. */
+/* Reduce `Equal[a, b]` to the polynomial `a - b`.
+ *
+ * Pipeline:  Together  ->  Numerator  ->  Expand  ->  evaluate.
+ *
+ * The Together+Numerator step clears any negative powers
+ * (`Power[t, -1]`) introduced by the algebraisation pre-pass — the
+ * downstream `gb_from_expr` only accepts non-negative integer
+ * exponents, so we have to pull every `t` out of the denominator
+ * BEFORE building the polynomial.  For a bare polynomial input this is
+ * idempotent: Together returns the polynomial unchanged and Numerator
+ * is the identity.  We still Expand at the end to canonicalise to
+ * `Plus[Times[...], ...]` form, which `expr_term` expects. */
 static Expr* normalise_equation(const Expr* eq) {
     Expr* base;
     if (is_equal(eq) && eq->data.function.arg_count == 2) {
@@ -273,7 +526,9 @@ static Expr* normalise_equation(const Expr* eq) {
     } else {
         base = expr_copy((Expr*)eq);
     }
-    Expr* expanded = internal_expand((Expr*[]){ base }, 1);
+    Expr* together = internal_together((Expr*[]){ base }, 1);
+    Expr* numer    = internal_numerator((Expr*[]){ together }, 1);
+    Expr* expanded = internal_expand((Expr*[]){ numer }, 1);
     Expr* normalised = evaluate(expanded);
     expr_free(expanded);
     return normalised;
@@ -432,6 +687,46 @@ static Expr* balance_polynomial(const GBPoly* g, Expr** all_vars) {
     return evd;
 }
 
+/* Divide `p` by the largest monomial X^(m_1, ..., m_n) that divides
+ * every term — equivalently, for each variable v subtract
+ * `m_v = min_t exp[t][v]` from every term's exponent for v.
+ *
+ * After algebraisation+Buchberger we often pick up an extraneous
+ * factor of a main variable from cross-multiplication (e.g. a final
+ * `u^5 Dt[y] - ...` that is just `u` times the primitive form
+ * `u^4 Dt[y] - ...`).  Stripping the monomial factor makes our output
+ * match Mathematica's reduced-form `Eliminate` result and shortens
+ * downstream `Factor` / `Solve` work.
+ *
+ * Generically valid: dividing both sides of `P == 0` by `u^m` is
+ * equivalent to the original equation as long as `u != 0`.  Eliminate
+ * already returns the generic consequence, so this is consistent with
+ * the rest of the pipeline. */
+static void gb_poly_strip_monomial(GBPoly* p) {
+    if (p->n_terms == 0 || p->n_vars == 0) return;
+    int* mins = (int*)malloc(sizeof(int) * (size_t)p->n_vars);
+    for (int v = 0; v < p->n_vars; v++) {
+        mins[v] = p->exps[v];  /* first term */
+    }
+    for (size_t t = 1; t < p->n_terms; t++) {
+        const int* row = &p->exps[t * (size_t)p->n_vars];
+        for (int v = 0; v < p->n_vars; v++) {
+            if (row[v] < mins[v]) mins[v] = row[v];
+        }
+    }
+    bool any = false;
+    for (int v = 0; v < p->n_vars; v++) {
+        if (mins[v] > 0) { any = true; break; }
+    }
+    if (any) {
+        for (size_t t = 0; t < p->n_terms; t++) {
+            int* row = &p->exps[t * (size_t)p->n_vars];
+            for (int v = 0; v < p->n_vars; v++) row[v] -= mins[v];
+        }
+    }
+    free(mins);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Diagnostics                                                        */
 /* ------------------------------------------------------------------ */
@@ -455,6 +750,21 @@ static void emit_ifun(void) {
     fprintf(stderr, "Eliminate::ifun: Inverse functions are being used by "
                     "Eliminate, so some solutions may not be found; use Reduce "
                     "for complete solution information.\n");
+}
+
+/* Emit at most once per distinct input expression.  `RepeatedTiming`,
+ * `Table[...]`, etc. evaluate the same `Eliminate[...]` form hundreds
+ * of times; without the hash guard each iteration re-prints the warning
+ * and floods the terminal.  Mirrors `solve.c:warn_bad_option`. */
+static void emit_alg(const Expr* res) {
+    static uint64_t last_warned_hash = 0;
+    uint64_t h = res ? expr_hash((Expr*)res) : 0;
+    if (h == last_warned_hash) return;
+    last_warned_hash = h;
+    fprintf(stderr, "Eliminate::alg: Radical (rational-power) subexpressions "
+                    "were replaced by auxiliary variables; the returned "
+                    "polynomial relation is the cross-multiplied generic "
+                    "consequence (sign / branch information may be lost).\n");
 }
 
 /* ------------------------------------------------------------------ */
@@ -568,6 +878,53 @@ Expr* builtin_eliminate(Expr* res) {
         }
     }
 
+    /* ----- Algebraisation pre-pass -----
+     * Identifies `Power[base, p/q]` (q != 1) subexpressions whose base
+     * mentions an elim variable, replaces each with `Power[aux, p*L/q]`
+     * for fresh `aux`, and appends `aux^L == base` to the system + `aux`
+     * to the elim list.  Drops out cheaply (alg.n == 0) when the input
+     * is already polynomial in the elim vars. */
+    AlgState alg; alg_init(&alg);
+    for (size_t i = 0; i < n_eq; i++) {
+        alg_collect(rewritten[i], &alg, elim_items, n_elim);
+    }
+    Expr** alg_elim_array = NULL;
+    if (alg.n > 0) {
+        /* Assign fresh aux symbols. */
+        alg.auxs = (Expr**)calloc(alg.n, sizeof(Expr*));
+        int next_idx = 1;
+        for (size_t i = 0; i < alg.n; i++) {
+            const char* nm = alg_fresh_name(rewritten, n_eq,
+                                            elim_items, n_elim,
+                                            &alg, i, &next_idx);
+            alg.auxs[i] = expr_new_symbol(nm);
+        }
+        /* Substitute every equation in-place: build new tree, free old. */
+        Expr** combined = (Expr**)malloc(sizeof(Expr*) * (n_eq + alg.n));
+        for (size_t i = 0; i < n_eq; i++) {
+            combined[i] = alg_substitute(rewritten[i], &alg);
+            expr_free(rewritten[i]);
+        }
+        for (size_t i = 0; i < alg.n; i++) {
+            combined[n_eq + i] = alg_make_constraint(&alg, i);
+        }
+        free(rewritten);
+        rewritten = combined;
+        n_eq += alg.n;
+        /* Extend elim list with aux symbols.  Borrows pointers; we own
+         * the array itself and must free it at exit. */
+        alg_elim_array = (Expr**)malloc(sizeof(Expr*) * (n_elim + alg.n));
+        for (size_t i = 0; i < n_elim; i++) {
+            alg_elim_array[i] = elim_items[i];
+        }
+        for (size_t i = 0; i < alg.n; i++) {
+            alg_elim_array[n_elim + i] = alg.auxs[i];
+        }
+        elim_items = alg_elim_array;
+        n_elim    += alg.n;
+        emit_alg(res);
+    }
+
     /* ----- Normalise each equation to polynomial form ----- */
     Expr** polys = (Expr**)malloc(sizeof(Expr*) * n_eq);
     for (size_t i = 0; i < n_eq; i++) {
@@ -583,6 +940,33 @@ Expr* builtin_eliminate(Expr* res) {
     }
     /* main_vars borrows pointers into `polys` -- we must not free `polys`
      * before we're done with `all_vars` below. */
+    /* If any function-shaped main atom (e.g. `Sin[x*y]`) STILL contains
+     * an elim variable as a subexpression, treating it as a single
+     * polynomial variable would silently lose the relationship between
+     * that atom and the elim var.  Bail out with nlin instead so the
+     * caller sees the input returned unevaluated rather than a wrong
+     * answer. */
+    {
+        bool nlin_in_atom = false;
+        for (size_t i = 0; i < mains.n; i++) {
+            Expr* m = mains.items[i];
+            if (m && m->type == EXPR_FUNCTION
+                && contains_any_var(m, elim_items, n_elim)) {
+                nlin_in_atom = true;
+                break;
+            }
+        }
+        if (nlin_in_atom) {
+            emit_nlin();
+            for (size_t i = 0; i < n_eq; i++) expr_free(polys[i]);
+            free(polys);
+            varset_free(&mains);
+            if (wrap_vars) expr_free(wrap_vars);
+            free(alg_elim_array);
+            alg_free(&alg);
+            return NULL;
+        }
+    }
     size_t n_main = mains.n;
     size_t n_vars = n_elim + n_main;
     if (n_vars == 0) {
@@ -604,6 +988,8 @@ Expr* builtin_eliminate(Expr* res) {
         free(polys);
         varset_free(&mains);
         if (wrap_vars) expr_free(wrap_vars);
+        free(alg_elim_array);
+        alg_free(&alg);
         return expr_new_symbol(any_false ? "False" : "True");
     }
 
@@ -652,6 +1038,8 @@ Expr* builtin_eliminate(Expr* res) {
         free(polys);
         varset_free(&mains);
         if (wrap_vars) expr_free(wrap_vars);
+        free(alg_elim_array);
+        alg_free(&alg);
         return NULL;
     }
     if (inconsistent_const) {
@@ -662,6 +1050,8 @@ Expr* builtin_eliminate(Expr* res) {
         free(polys);
         varset_free(&mains);
         if (wrap_vars) expr_free(wrap_vars);
+        free(alg_elim_array);
+        alg_free(&alg);
         return expr_new_symbol("False");
     }
     if (nF == 0) {
@@ -672,6 +1062,8 @@ Expr* builtin_eliminate(Expr* res) {
         free(polys);
         varset_free(&mains);
         if (wrap_vars) expr_free(wrap_vars);
+        free(alg_elim_array);
+        alg_free(&alg);
         return expr_new_symbol("True");
     }
 
@@ -695,6 +1087,16 @@ Expr* builtin_eliminate(Expr* res) {
     out_n = k;
     free(elim_idx);
 
+    /* ----- Strip extraneous monomial factors from each surviving poly -----
+     * After cross-multiplying through the algebraisation denominators
+     * the elimination ideal often contains a factor of a main variable
+     * (e.g. `u * (...)` where the `(...)` is the primitive form
+     * Mathematica reports).  Divide it out for cosmetic / downstream
+     * agreement.  Cheap: O(sum of term * n_vars). */
+    for (size_t i = 0; i < out_n; i++) {
+        gb_poly_strip_monomial(G[i]);
+    }
+
     /* ----- Sentinels: empty -> True; contains constant -> False ----- */
     if (out_n == 0) {
         gb_basis_free(G, 0);
@@ -703,6 +1105,8 @@ Expr* builtin_eliminate(Expr* res) {
         free(polys);
         varset_free(&mains);
         if (wrap_vars) expr_free(wrap_vars);
+        free(alg_elim_array);
+        alg_free(&alg);
         return expr_new_symbol("True");
     }
     for (size_t i = 0; i < out_n; i++) {
@@ -713,6 +1117,8 @@ Expr* builtin_eliminate(Expr* res) {
             free(polys);
             varset_free(&mains);
             if (wrap_vars) expr_free(wrap_vars);
+            free(alg_elim_array);
+            alg_free(&alg);
             return expr_new_symbol("False");
         }
     }
@@ -728,6 +1134,8 @@ Expr* builtin_eliminate(Expr* res) {
     free(polys);
     varset_free(&mains);
     if (wrap_vars) expr_free(wrap_vars);
+    free(alg_elim_array);
+    alg_free(&alg);
 
     /* ----- Combine ----- */
     if (out_n == 1) {
