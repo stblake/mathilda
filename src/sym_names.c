@@ -99,6 +99,7 @@ const char* SYM_Eigenvalues = NULL;
 const char* SYM_Eigenvectors = NULL;
 const char* SYM_ECM = NULL;
 const char* SYM_Element = NULL;
+const char* SYM_Eliminate = NULL;
 const char* SYM_EliminationOrder = NULL;
 const char* SYM_Equal = NULL;
 const char* SYM_EulerGamma = NULL;
@@ -422,6 +423,7 @@ void sym_names_init(void) {
     SYM_Eigenvectors               = intern_symbol("Eigenvectors");
     SYM_ECM                        = intern_symbol("ECM");
     SYM_Element                    = intern_symbol("Element");
+    SYM_Eliminate                  = intern_symbol("Eliminate");
     SYM_EliminationOrder           = intern_symbol("EliminationOrder");
     SYM_Equal                      = intern_symbol("Equal");
     SYM_EulerGamma                 = intern_symbol("EulerGamma");

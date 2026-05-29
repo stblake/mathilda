@@ -1178,6 +1178,65 @@ Out[7]= {2 + x - z, -2 y + y z - z^2, 3 + y^2 - 4 z + 2 z^2,
          -6 + 4 y + 11 z - 6 z^2 + 3 z^3}
 ```
 
+## Eliminate
+Eliminates variables between a set of simultaneous equations.
+- `Eliminate[eqns, vars]`
+- `Eliminate[eqns, var]` — single-symbol shorthand for `Eliminate[eqns, {var}]`.
+
+`eqns` is a list `{eq1, eq2, ...}` or a conjunction `eq1 && eq2 && ...` of
+`lhs == rhs` equations (a single `Equal[lhs, rhs]` is also accepted).
+Surviving constraints are returned as balanced `Equal[posPart, negPart]`
+equations, joined with `&&` when more than one remains; the empty
+elimination ideal collapses to `True` and an inconsistent system to
+`False`.
+
+**Features**:
+- `Protected`.
+- Drives the lex-order Buchberger engine (`GroebnerBasis`) with an
+  elimination block: `vars` are placed in the high-priority block so
+  that any polynomial mentioning them is filtered out before output.
+- A single-layer principal-branch inverse-function pre-pass handles
+  equations of the form `f[u] == v` (or `v == f[u]`) for `f` in
+  `{Sin, Cos, Tan, Sinh, Cosh, Tanh, Exp, Log}` and their inverses,
+  rewriting to `u == InverseF[v]`.  Whenever a rewrite fires Eliminate
+  emits the `Eliminate::ifun` diagnostic, signalling that the principal
+  branch was used and some solutions may be missed — use `Reduce` for
+  complete solution information.
+- Equations that remain non-polynomial after the pre-pass return the
+  expression unevaluated with `Eliminate::nlin`.
+- Main-block variables (the implicit free parameters) are discovered
+  automatically by walking the equations; mathematical constants such
+  as `Pi`, `E`, and `EulerGamma` flow through as parameter symbols.
+
+```mathematica
+In[1]:= Eliminate[{x == 2 + y, y == z}, y]
+Out[1]= 2 + z == x
+
+In[2]:= Eliminate[{f == x^5 + y^5, a == x + y, b == x y}, {x, y}]
+Out[2]= a^5 + 5 a b^2 == 5 a^3 b + f                  (* equiv to f == a^5 - 5 a^3 b + 5 a b^2 *)
+
+In[3]:= Eliminate[(2 x + 3 y + 4 z == 1) && (9 x + 8 y + 7 z == 2), z]
+Out[3]= 22 x + 11 y == 1
+
+In[4]:= Eliminate[{x^2 + y^2 + z^2 == 1, x - y + z == 2,
+                   x^3 - y^2 == z + 1}, z]
+Out[4]= 27 + 4 x^2 + 8 x^4 + 4 x^5 + 4 x^6 == 18 x + 28 x^3
+        && 12 + 2 x + 5 x^2 + y == 8 x^3 + 4 x^4 + 2 x^5
+
+In[5]:= Eliminate[{x^2 + y^2 + z^2 == 1, x - y + z == 2,
+                   x^3 - y^2 == z + 1}, {y, z}]
+Out[5]= 27 + 4 x^2 + 8 x^4 + 4 x^5 + 4 x^6 == 18 x + 28 x^3
+
+In[6]:= Eliminate[{x - a == 0, x - b == 0}, x]  (* common-root condition *)
+Out[6]= b == a
+
+In[7]:= Eliminate[1 == 2, x]                    (* inconsistent -> False *)
+Out[7]= False
+
+In[8]:= Eliminate[x + y == 0, y]                (* solvable -> True *)
+Out[8]= True
+```
+
 **Features**:
 - `Protected`.
 - Nests multiplications instead of using powers (e.g., $a + x(b + c x)$ instead of $a + bx + cx^2$).

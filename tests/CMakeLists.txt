@@ -196,6 +196,7 @@ set(COMMON_SRC
     ../src/poly/irrpolyq.c
     ../src/poly/groebner.c
     ../src/poly/groebnerbasis.c
+    ../src/poly/eliminate.c
     ../src/sym_intern.c
     ../src/sym_names.c
     ../src/repl_hooks.c
@@ -324,6 +325,9 @@ target_include_directories(radicals_tests PRIVATE ../src)
 
 add_executable(groebner_tests test_groebner.c ${COMMON_SRC})
 target_include_directories(groebner_tests PRIVATE ../src)
+
+add_executable(eliminate_tests test_eliminate.c ${COMMON_SRC})
+target_include_directories(eliminate_tests PRIVATE ../src)
 
 add_executable(findmin_tests test_findmin.c ${COMMON_SRC})
 target_include_directories(findmin_tests PRIVATE ../src)

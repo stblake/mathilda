@@ -2001,6 +2001,18 @@ void info_init(void) {
         "\tOther settings emit GroebnerBasis::nimpl and fall back.\n"
         "Polynomial equations (Equal[a, b]) are accepted in place of\n"
         "\tpolynomials; each is rewritten as a - b before computation.");
+    symtab_set_docstring("Eliminate",
+        "Eliminate[eqns, vars]\n"
+        "\teliminates vars between a list/conjunction of simultaneous\n"
+        "\tequations lhs == rhs, returning a balanced Equal[] or an\n"
+        "\tAnd[] of Equal[]s in the remaining variables (True if the\n"
+        "\telimination ideal is empty, False if the system is\n"
+        "\tinconsistent). Works on polynomial equations over Q via a\n"
+        "\tlexicographic Gröbner basis with elimination block. A\n"
+        "\tprincipal-branch inverse-function pre-pass peels single Sin/\n"
+        "\tCos/Tan/Sinh/Cosh/Tanh/Exp/Log wrappers and emits\n"
+        "\tEliminate::ifun; non-polynomial systems otherwise return\n"
+        "\tunevaluated with Eliminate::nlin.");
     symtab_set_docstring("ToRadicals",
         "ToRadicals[expr]\n"
         "\tattempts to express all Root objects in expr in terms of radicals.\n"

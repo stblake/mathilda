@@ -519,6 +519,8 @@ void core_init(void) {
     radicals_init();
     void groebner_init(void);
     groebner_init();
+    void eliminate_init(void);
+    eliminate_init();
     void integrate_init(void);
     integrate_init();
     void zero_test_init(void);
