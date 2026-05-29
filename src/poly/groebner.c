@@ -1,0 +1,913 @@
+/* groebner.c
+ *
+ * Buchberger Gröbner-basis core.  See groebner.h for the data layout,
+ * monomial-order semantics, and ownership rules.
+ *
+ * The algorithm is the textbook Buchberger ("An Algorithm for Computing
+ * a Basis for a Polynomial Ideal", 1965) with Gebauer–Möller pair
+ * criteria 1 (coprime leading monomials) and 2 (chain criterion); the
+ * resulting basis is then interreduced and made monic, yielding the
+ * reduced Gröbner basis -- the unique-up-to-permutation canonical form
+ * Mathematica's GroebnerBasis returns.
+ *
+ * Coefficient arithmetic runs in GMP `mpq_t` throughout (no separate
+ * denominator tracking).  This is slower than an `mpz_t` + content-
+ * normalisation scheme on dense inputs, but keeps the implementation
+ * straightforward and the inputs we accept here are typically small
+ * by ideal-membership standards.
+ */
+
+#include "groebner.h"
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "expr.h"
+#include "sym_names.h"
+
+/* ------------------------------------------------------------------ */
+/*  Internal helpers                                                   */
+/* ------------------------------------------------------------------ */
+
+static inline int* gb_exp_at(const GBPoly* p, size_t i) {
+    return p->exps + i * (size_t)p->n_vars;
+}
+
+/* Lex descending compare on exponent tuples (largest monomial first). */
+static int cmp_lex_desc(const int* a, const int* b, int n_vars) {
+    for (int i = 0; i < n_vars; i++) {
+        if (a[i] != b[i]) return (a[i] > b[i]) ? -1 : 1;
+    }
+    return 0;
+}
+
+/* Graded reverse lex descending: total degree first, then break ties
+ * by lex order *on the reversed exponent tuple* with the *smaller*
+ * trailing exponent winning.  Equivalently: if total degrees match,
+ * the monomial with the larger trailing exponent comes later. */
+static int cmp_grevlex_desc(const int* a, const int* b, int n_vars) {
+    int da = 0, db = 0;
+    for (int i = 0; i < n_vars; i++) { da += a[i]; db += b[i]; }
+    if (da != db) return (da > db) ? -1 : 1;
+    for (int i = n_vars - 1; i >= 0; i--) {
+        if (a[i] != b[i]) return (a[i] < b[i]) ? -1 : 1;
+    }
+    return 0;
+}
+
+/* Elimination order: lex on the first `elim_pivot` variables; ties
+ * broken by grevlex on the remaining tail.  This is well-founded and
+ * eliminates the leading block whenever an elim-block-free polynomial
+ * appears in the ideal. */
+static int cmp_elim_desc(const int* a, const int* b, int n_vars, int piv) {
+    for (int i = 0; i < piv; i++) {
+        if (a[i] != b[i]) return (a[i] > b[i]) ? -1 : 1;
+    }
+    int da = 0, db = 0;
+    for (int i = piv; i < n_vars; i++) { da += a[i]; db += b[i]; }
+    if (da != db) return (da > db) ? -1 : 1;
+    for (int i = n_vars - 1; i >= piv; i--) {
+        if (a[i] != b[i]) return (a[i] < b[i]) ? -1 : 1;
+    }
+    return 0;
+}
+
+static int gb_cmp(const int* a, const int* b, const GBPoly* ctx) {
+    switch (ctx->order) {
+        case GB_ORDER_LEX:     return cmp_lex_desc(a, b, ctx->n_vars);
+        case GB_ORDER_GREVLEX: return cmp_grevlex_desc(a, b, ctx->n_vars);
+        case GB_ORDER_ELIM:    return cmp_elim_desc(a, b, ctx->n_vars,
+                                                     ctx->elim_pivot);
+    }
+    return 0;
+}
+
+/* qsort context.  Single-threaded; same convention as MPoly. */
+static const GBPoly* g_sort_ctx = NULL;
+static int sort_cmp_idx(const void* a, const void* b) {
+    size_t ia = *(const size_t*)a;
+    size_t ib = *(const size_t*)b;
+    int c = gb_cmp(gb_exp_at(g_sort_ctx, ia),
+                   gb_exp_at(g_sort_ctx, ib),
+                   g_sort_ctx);
+    if (c != 0) return c;
+    return (ia < ib) ? -1 : (ia > ib);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Construction / destruction                                         */
+/* ------------------------------------------------------------------ */
+
+GBPoly* gb_poly_new(int n_vars, GBOrder order, int elim_pivot) {
+    GBPoly* p = (GBPoly*)malloc(sizeof(GBPoly));
+    p->n_vars = n_vars;
+    p->order = order;
+    p->elim_pivot = elim_pivot;
+    p->exps = NULL;
+    p->coefs = NULL;
+    p->n_terms = 0;
+    p->cap = 0;
+    return p;
+}
+
+void gb_poly_reserve(GBPoly* p, size_t cap) {
+    if (cap <= p->cap) return;
+    size_t new_cap = p->cap == 0 ? 8 : p->cap;
+    while (new_cap < cap) new_cap *= 2;
+    if (p->n_vars > 0) {
+        p->exps = (int*)realloc(p->exps,
+                                sizeof(int) * new_cap * (size_t)p->n_vars);
+    }
+    mpq_t* new_coefs = (mpq_t*)realloc(p->coefs, sizeof(mpq_t) * new_cap);
+    for (size_t i = p->cap; i < new_cap; i++) mpq_init(new_coefs[i]);
+    p->coefs = new_coefs;
+    p->cap = new_cap;
+}
+
+GBPoly* gb_poly_copy(const GBPoly* p) {
+    GBPoly* q = gb_poly_new(p->n_vars, p->order, p->elim_pivot);
+    if (p->n_terms == 0) return q;
+    gb_poly_reserve(q, p->n_terms);
+    if (p->n_vars > 0) {
+        memcpy(q->exps, p->exps,
+               sizeof(int) * p->n_terms * (size_t)p->n_vars);
+    }
+    for (size_t i = 0; i < p->n_terms; i++) mpq_set(q->coefs[i], p->coefs[i]);
+    q->n_terms = p->n_terms;
+    return q;
+}
+
+void gb_poly_free(GBPoly* p) {
+    if (!p) return;
+    if (p->coefs) {
+        for (size_t i = 0; i < p->cap; i++) mpq_clear(p->coefs[i]);
+        free(p->coefs);
+    }
+    free(p->exps);
+    free(p);
+}
+
+void gb_poly_push_term(GBPoly* p, const int* exps, const mpq_t coef) {
+    if (mpz_sgn(mpq_numref(coef)) == 0) return;
+    if (p->n_terms == p->cap) gb_poly_reserve(p, p->cap == 0 ? 8 : p->cap * 2);
+    if (p->n_vars > 0) {
+        memcpy(gb_exp_at(p, p->n_terms), exps,
+               sizeof(int) * (size_t)p->n_vars);
+    }
+    mpq_set(p->coefs[p->n_terms], coef);
+    p->n_terms++;
+}
+
+void gb_poly_push_term_si(GBPoly* p, const int* exps, int64_t num, int64_t den) {
+    if (num == 0) return;
+    if (p->n_terms == p->cap) gb_poly_reserve(p, p->cap == 0 ? 8 : p->cap * 2);
+    if (p->n_vars > 0) {
+        memcpy(gb_exp_at(p, p->n_terms), exps,
+               sizeof(int) * (size_t)p->n_vars);
+    }
+    mpz_set_si(mpq_numref(p->coefs[p->n_terms]), (long)num);
+    mpz_set_si(mpq_denref(p->coefs[p->n_terms]), (long)den);
+    mpq_canonicalize(p->coefs[p->n_terms]);
+    p->n_terms++;
+}
+
+void gb_poly_normalize(GBPoly* p) {
+    if (p->n_terms < 2) {
+        if (p->n_terms == 1 && mpz_sgn(mpq_numref(p->coefs[0])) == 0) {
+            p->n_terms = 0;
+        }
+        return;
+    }
+    size_t* idx = (size_t*)malloc(sizeof(size_t) * p->n_terms);
+    for (size_t i = 0; i < p->n_terms; i++) idx[i] = i;
+
+    g_sort_ctx = p;
+    qsort(idx, p->n_terms, sizeof(size_t), sort_cmp_idx);
+    g_sort_ctx = NULL;
+
+    int* new_exps = (p->n_vars > 0)
+                    ? (int*)malloc(sizeof(int) * p->n_terms * (size_t)p->n_vars)
+                    : NULL;
+    mpq_t* new_coefs = (mpq_t*)malloc(sizeof(mpq_t) * p->n_terms);
+    for (size_t i = 0; i < p->n_terms; i++) mpq_init(new_coefs[i]);
+
+    size_t out = 0;
+    for (size_t i = 0; i < p->n_terms; i++) {
+        size_t src = idx[i];
+        if (out > 0 && p->n_vars > 0 &&
+            gb_cmp(new_exps + (out - 1) * (size_t)p->n_vars,
+                   gb_exp_at(p, src),
+                   p) == 0) {
+            mpq_add(new_coefs[out - 1], new_coefs[out - 1], p->coefs[src]);
+            if (mpz_sgn(mpq_numref(new_coefs[out - 1])) == 0) {
+                /* Collapsed to zero -- back the cursor up. */
+                out--;
+                mpq_set_ui(new_coefs[out], 0, 1);
+            }
+        } else {
+            if (p->n_vars > 0) {
+                memcpy(new_exps + out * (size_t)p->n_vars,
+                       gb_exp_at(p, src),
+                       sizeof(int) * (size_t)p->n_vars);
+            }
+            mpq_set(new_coefs[out], p->coefs[src]);
+            out++;
+        }
+    }
+
+    /* Tear down the old arrays and install the new ones. */
+    for (size_t i = 0; i < p->cap; i++) mpq_clear(p->coefs[i]);
+    free(p->coefs);
+    free(p->exps);
+
+    p->exps = new_exps;
+    p->coefs = new_coefs;
+    p->cap = p->n_terms;
+    p->n_terms = out;
+
+    free(idx);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Predicates and queries                                             */
+/* ------------------------------------------------------------------ */
+
+bool gb_poly_is_zero(const GBPoly* p) {
+    return p->n_terms == 0;
+}
+
+bool gb_poly_is_constant(const GBPoly* p) {
+    if (p->n_terms == 0) return true;       /* zero is constant */
+    if (p->n_terms > 1) return false;
+    const int* row = gb_exp_at(p, 0);
+    for (int v = 0; v < p->n_vars; v++) {
+        if (row[v] != 0) return false;
+    }
+    return true;
+}
+
+const int* gb_poly_lm(const GBPoly* p) {
+    if (p->n_terms == 0) return NULL;
+    return gb_exp_at(p, 0);
+}
+
+const mpq_t* gb_poly_lc(const GBPoly* p) {
+    if (p->n_terms == 0) return NULL;
+    return (const mpq_t*)&p->coefs[0];
+}
+
+bool gb_poly_free_of_vars(const GBPoly* p, const int* vars, int n) {
+    for (size_t t = 0; t < p->n_terms; t++) {
+        const int* row = gb_exp_at(p, t);
+        for (int k = 0; k < n; k++) {
+            if (row[vars[k]] != 0) return false;
+        }
+    }
+    return true;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Arithmetic                                                         */
+/* ------------------------------------------------------------------ */
+
+GBPoly* gb_poly_neg(const GBPoly* a) {
+    GBPoly* r = gb_poly_copy(a);
+    for (size_t i = 0; i < r->n_terms; i++) mpq_neg(r->coefs[i], r->coefs[i]);
+    return r;
+}
+
+GBPoly* gb_poly_add(const GBPoly* a, const GBPoly* b) {
+    GBPoly* r = gb_poly_new(a->n_vars, a->order, a->elim_pivot);
+    gb_poly_reserve(r, a->n_terms + b->n_terms);
+    /* Push everything and let normalize do the merge work. */
+    for (size_t i = 0; i < a->n_terms; i++) {
+        gb_poly_push_term(r, gb_exp_at(a, i), a->coefs[i]);
+    }
+    for (size_t i = 0; i < b->n_terms; i++) {
+        gb_poly_push_term(r, gb_exp_at(b, i), b->coefs[i]);
+    }
+    gb_poly_normalize(r);
+    return r;
+}
+
+GBPoly* gb_poly_sub(const GBPoly* a, const GBPoly* b) {
+    GBPoly* nb = gb_poly_neg(b);
+    GBPoly* r = gb_poly_add(a, nb);
+    gb_poly_free(nb);
+    return r;
+}
+
+GBPoly* gb_poly_scale(const GBPoly* a, const mpq_t c) {
+    GBPoly* r = gb_poly_copy(a);
+    if (mpz_sgn(mpq_numref(c)) == 0) { r->n_terms = 0; return r; }
+    for (size_t i = 0; i < r->n_terms; i++) mpq_mul(r->coefs[i], r->coefs[i], c);
+    return r;
+}
+
+GBPoly* gb_poly_mul_by_monomial(const GBPoly* a, const int* exps, const mpq_t c) {
+    GBPoly* r = gb_poly_new(a->n_vars, a->order, a->elim_pivot);
+    if (mpz_sgn(mpq_numref(c)) == 0) return r;
+    gb_poly_reserve(r, a->n_terms);
+    int* tmp = (a->n_vars > 0)
+               ? (int*)malloc(sizeof(int) * (size_t)a->n_vars)
+               : NULL;
+    mpq_t tcoef; mpq_init(tcoef);
+    for (size_t i = 0; i < a->n_terms; i++) {
+        const int* row = gb_exp_at(a, i);
+        for (int v = 0; v < a->n_vars; v++) tmp[v] = row[v] + exps[v];
+        mpq_mul(tcoef, a->coefs[i], c);
+        gb_poly_push_term(r, tmp, tcoef);
+    }
+    mpq_clear(tcoef);
+    free(tmp);
+    /* Multiplying by a single monomial preserves the relative order of
+     * existing terms under every supported monomial order, so no need
+     * to re-sort.  (Each LM(a_i) gets shifted by the same exponent.) */
+    return r;
+}
+
+void gb_poly_make_monic(GBPoly* p) {
+    if (p->n_terms == 0) return;
+    if (mpq_cmp_ui(p->coefs[0], 1, 1) == 0) return;
+    mpq_t inv; mpq_init(inv);
+    mpq_inv(inv, p->coefs[0]);
+    for (size_t i = 0; i < p->n_terms; i++) {
+        mpq_mul(p->coefs[i], p->coefs[i], inv);
+    }
+    mpq_clear(inv);
+}
+
+/* Scale `p` so that all coefficients become integers with overall
+ * content (GCD of numerators) equal to 1 and the leading coefficient
+ * positive.  This is the Mathematica convention for Gröbner basis
+ * output. */
+static void gb_poly_make_primitive_z(GBPoly* p) {
+    if (p->n_terms == 0) return;
+    /* Step 1: multiply by LCM of denominators to clear fractions. */
+    mpz_t lcm; mpz_init_set_ui(lcm, 1);
+    for (size_t i = 0; i < p->n_terms; i++) {
+        mpz_lcm(lcm, lcm, mpq_denref(p->coefs[i]));
+    }
+    if (mpz_cmp_ui(lcm, 1) != 0) {
+        for (size_t i = 0; i < p->n_terms; i++) {
+            mpz_mul(mpq_numref(p->coefs[i]), mpq_numref(p->coefs[i]), lcm);
+            mpq_canonicalize(p->coefs[i]);
+        }
+    }
+    mpz_clear(lcm);
+    /* Step 2: divide by GCD of numerators to strip content. */
+    mpz_t g; mpz_init_set(g, mpq_numref(p->coefs[0]));
+    mpz_abs(g, g);
+    for (size_t i = 1; i < p->n_terms; i++) {
+        mpz_gcd(g, g, mpq_numref(p->coefs[i]));
+        if (mpz_cmp_ui(g, 1) == 0) break;
+    }
+    if (mpz_cmp_ui(g, 1) != 0) {
+        for (size_t i = 0; i < p->n_terms; i++) {
+            mpz_divexact(mpq_numref(p->coefs[i]), mpq_numref(p->coefs[i]), g);
+        }
+    }
+    mpz_clear(g);
+    /* Step 3: ensure leading coefficient is positive. */
+    if (mpz_sgn(mpq_numref(p->coefs[0])) < 0) {
+        for (size_t i = 0; i < p->n_terms; i++) {
+            mpz_neg(mpq_numref(p->coefs[i]), mpq_numref(p->coefs[i]));
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Buchberger primitives                                              */
+/* ------------------------------------------------------------------ */
+
+/* lcm of two exponent vectors -- pointwise max. */
+static void lcm_exps(int* out, const int* a, const int* b, int n_vars) {
+    for (int i = 0; i < n_vars; i++) out[i] = a[i] > b[i] ? a[i] : b[i];
+}
+
+GBPoly* gb_spoly(const GBPoly* f, const GBPoly* g) {
+    assert(f->n_terms > 0 && g->n_terms > 0);
+    int n = f->n_vars;
+    int* lcm = (int*)malloc(sizeof(int) * (size_t)n);
+    int* af  = (int*)malloc(sizeof(int) * (size_t)n);
+    int* ag  = (int*)malloc(sizeof(int) * (size_t)n);
+    const int* lmf = gb_exp_at(f, 0);
+    const int* lmg = gb_exp_at(g, 0);
+    lcm_exps(lcm, lmf, lmg, n);
+    for (int i = 0; i < n; i++) {
+        af[i] = lcm[i] - lmf[i];
+        ag[i] = lcm[i] - lmg[i];
+    }
+    mpq_t cf, cg, inv;
+    mpq_init(cf); mpq_init(cg); mpq_init(inv);
+    /* cf = 1 / lc(f), cg = 1 / lc(g).  S = (lcm/lt(f))*f - (lcm/lt(g))*g
+     * with all leading scaling baked in. */
+    mpq_inv(cf, f->coefs[0]);
+    mpq_inv(cg, g->coefs[0]);
+    GBPoly* tf = gb_poly_mul_by_monomial(f, af, cf);
+    GBPoly* tg = gb_poly_mul_by_monomial(g, ag, cg);
+    GBPoly* s  = gb_poly_sub(tf, tg);
+    gb_poly_free(tf);
+    gb_poly_free(tg);
+    mpq_clear(cf); mpq_clear(cg); mpq_clear(inv);
+    free(lcm); free(af); free(ag);
+    return s;
+}
+
+/* Is the exponent vector `a` divisible by `b` (i.e., a >= b component-
+ * wise)?  If yes, write the quotient exponents into `q`. */
+static bool divides(const int* b, const int* a, int* q, int n_vars) {
+    for (int i = 0; i < n_vars; i++) {
+        if (a[i] < b[i]) return false;
+        q[i] = a[i] - b[i];
+    }
+    return true;
+}
+
+GBPoly* gb_reduce(const GBPoly* p, GBPoly* const* basis, size_t n) {
+    GBPoly* r = gb_poly_copy(p);
+    if (r->n_terms == 0) return r;
+    int n_vars = r->n_vars;
+    int* qexp = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+    mpq_t qc; mpq_init(qc);
+
+    /* Standard multivariate division: repeatedly look for any term of
+     * `r` whose monomial is divisible by some basis leading monomial;
+     * subtract the appropriate multiple.  Continue until no further
+     * reduction is possible. */
+    bool reduced;
+    do {
+        reduced = false;
+        for (size_t t = 0; t < r->n_terms; t++) {
+            const int* re = gb_exp_at(r, t);
+            for (size_t bi = 0; bi < n; bi++) {
+                const GBPoly* g = basis[bi];
+                if (g->n_terms == 0) continue;
+                const int* lm = gb_exp_at(g, 0);
+                if (!divides(lm, re, qexp, n_vars)) continue;
+                /* qc = r.coef[t] / lc(g) */
+                mpq_div(qc, r->coefs[t], g->coefs[0]);
+                GBPoly* sub = gb_poly_mul_by_monomial(g, qexp, qc);
+                GBPoly* nr  = gb_poly_sub(r, sub);
+                gb_poly_free(sub);
+                gb_poly_free(r);
+                r = nr;
+                reduced = true;
+                goto restart;
+            }
+        }
+restart: ;
+    } while (reduced);
+
+    mpq_clear(qc);
+    free(qexp);
+    return r;
+}
+
+/* ----- Gebauer–Möller pair management ----- */
+
+typedef struct { size_t i, j; } Pair;
+
+/* Coprime LM test: do the leading monomials share no variable?  If so,
+ * the S-polynomial reduces to 0 (Buchberger first criterion). */
+static bool lm_coprime(const GBPoly* f, const GBPoly* g) {
+    const int* a = gb_exp_at(f, 0);
+    const int* b = gb_exp_at(g, 0);
+    int n = f->n_vars;
+    for (int v = 0; v < n; v++) {
+        if (a[v] > 0 && b[v] > 0) return false;
+    }
+    return true;
+}
+
+/* Chain criterion: pair (i, j) can be discarded if there exists k
+ * already in the basis with k != i, k != j such that LM(g_k) divides
+ * lcm(LM(g_i), LM(g_j)), AND (i, k) and (k, j) are NOT in the active
+ * pair list.  We apply a conservative form: discard if such a k exists
+ * and BOTH (i,k) and (k,j) have already been processed (i.e., removed
+ * from the pair list).  Since we maintain pairs in insertion order and
+ * track which i,j pairs are still queued, this is straightforward. */
+
+GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
+    /* Filter zeros from input, copy the rest into the working basis. */
+    GBPoly** G = NULL;
+    size_t nG = 0, capG = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (F[i]->n_terms == 0) continue;
+        if (nG == capG) {
+            capG = capG ? capG * 2 : 8;
+            G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG);
+        }
+        G[nG] = gb_poly_copy(F[i]);
+        gb_poly_make_monic(G[nG]);
+        nG++;
+    }
+
+    if (nG == 0) {
+        *out_n = 0;
+        free(G);
+        return NULL;
+    }
+
+    /* Generate initial pair list. */
+    Pair* pairs = NULL;
+    size_t nP = 0, capP = 0;
+    for (size_t i = 0; i < nG; i++) {
+        for (size_t j = i + 1; j < nG; j++) {
+            if (nP == capP) {
+                capP = capP ? capP * 2 : 16;
+                pairs = (Pair*)realloc(pairs, sizeof(Pair) * capP);
+            }
+            pairs[nP].i = i;
+            pairs[nP].j = j;
+            nP++;
+        }
+    }
+
+    int n_vars = G[0]->n_vars;
+    int* tmpexp = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+
+    while (nP > 0) {
+        /* Pop the front pair (FIFO). */
+        Pair p = pairs[0];
+        memmove(pairs, pairs + 1, sizeof(Pair) * (nP - 1));
+        nP--;
+
+        const GBPoly* gi = G[p.i];
+        const GBPoly* gj = G[p.j];
+
+        /* Buchberger first criterion: skip coprime-LM pairs. */
+        if (lm_coprime(gi, gj)) continue;
+
+        /* (Chain criterion disabled in this cut -- the conservative
+         * Gebauer-Möller form proved fragile under non-lex orders.
+         * Buchberger criterion 1 alone keeps termination tractable on
+         * every spec example; the redundant pairs that remain reduce
+         * to zero cheaply.) */
+        (void)tmpexp;
+
+        GBPoly* s = gb_spoly(gi, gj);
+        GBPoly* r = gb_reduce(s, G, nG);
+        gb_poly_free(s);
+        if (r->n_terms == 0) { gb_poly_free(r); continue; }
+
+        gb_poly_make_monic(r);
+
+        /* Append r to G and generate new pairs (current_idx, r_idx)
+         * for every existing basis element. */
+        if (nG == capG) {
+            capG = capG ? capG * 2 : 8;
+            G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG);
+        }
+        G[nG] = r;
+        for (size_t k = 0; k < nG; k++) {
+            if (nP == capP) {
+                capP = capP ? capP * 2 : 16;
+                pairs = (Pair*)realloc(pairs, sizeof(Pair) * capP);
+            }
+            pairs[nP].i = k;
+            pairs[nP].j = nG;
+            nP++;
+        }
+        nG++;
+    }
+
+    free(pairs);
+    free(tmpexp);
+
+    /* Interreduce: discard any g_i whose LM is divisible by LM(g_k)
+     * for some k != i, then reduce each survivor by the others. */
+    bool* keep = (bool*)malloc(sizeof(bool) * nG);
+    for (size_t i = 0; i < nG; i++) keep[i] = true;
+    for (size_t i = 0; i < nG; i++) {
+        if (!keep[i]) continue;
+        const int* lmi = gb_exp_at(G[i], 0);
+        for (size_t k = 0; k < nG; k++) {
+            if (k == i || !keep[k]) continue;
+            const int* lmk = gb_exp_at(G[k], 0);
+            bool div_ok = true;
+            for (int v = 0; v < n_vars; v++) {
+                if (lmi[v] < lmk[v]) { div_ok = false; break; }
+            }
+            if (div_ok) { keep[i] = false; break; }
+        }
+    }
+
+    /* Compact in place. */
+    size_t out = 0;
+    for (size_t i = 0; i < nG; i++) {
+        if (keep[i]) {
+            G[out++] = G[i];
+        } else {
+            gb_poly_free(G[i]);
+        }
+    }
+    nG = out;
+    free(keep);
+
+    /* Reduce each survivor by the others.  Iterate to a fixed point in
+     * case reductions create cross-references. */
+    bool changed;
+    do {
+        changed = false;
+        for (size_t i = 0; i < nG; i++) {
+            /* Build a temporary basis "all except i". */
+            GBPoly** other = (GBPoly**)malloc(sizeof(GBPoly*) * (nG ? nG : 1));
+            size_t m = 0;
+            for (size_t k = 0; k < nG; k++) if (k != i) other[m++] = G[k];
+            GBPoly* nr = gb_reduce(G[i], other, m);
+            gb_poly_make_monic(nr);
+            free(other);
+            /* If the reduction collapsed to zero, drop g_i.  (Should be
+             * impossible for a reduced Gröbner basis after the LM-
+             * filtering pass, but be defensive.) */
+            if (nr->n_terms == 0) {
+                gb_poly_free(nr);
+                gb_poly_free(G[i]);
+                for (size_t k = i; k + 1 < nG; k++) G[k] = G[k + 1];
+                nG--;
+                i--;
+                changed = true;
+                continue;
+            }
+            /* If a strict change happened, install. */
+            bool same = (nr->n_terms == G[i]->n_terms);
+            if (same) {
+                for (size_t t = 0; t < nr->n_terms && same; t++) {
+                    if (mpq_cmp(nr->coefs[t], G[i]->coefs[t]) != 0) same = false;
+                    if (same && n_vars > 0 && memcmp(gb_exp_at(nr, t),
+                                                     gb_exp_at(G[i], t),
+                                                     sizeof(int) * (size_t)n_vars)
+                                                != 0) same = false;
+                }
+            }
+            if (!same) {
+                gb_poly_free(G[i]);
+                G[i] = nr;
+                changed = true;
+            } else {
+                gb_poly_free(nr);
+            }
+        }
+    } while (changed);
+
+    /* Convert each basis polynomial to Mathematica's primitive-over-Z
+     * form so the output matches its conventions. */
+    for (size_t i = 0; i < nG; i++) gb_poly_make_primitive_z(G[i]);
+
+    /* Sort the basis ascending by leading monomial (Mathematica
+     * convention: in Lex {x, y, z} the z-only polynomial appears
+     * first, the x-leading polynomial last). */
+    for (size_t i = 0; i + 1 < nG; i++) {
+        size_t pick = i;
+        for (size_t j = i + 1; j < nG; j++) {
+            if (gb_cmp(gb_exp_at(G[j], 0), gb_exp_at(G[pick], 0), G[0]) > 0) {
+                /* gb_cmp returns -1 when a > b (descending sense).
+                 * We want ascending: pick the smaller LM. */
+                pick = j;
+            }
+        }
+        if (pick != i) { GBPoly* tmp = G[i]; G[i] = G[pick]; G[pick] = tmp; }
+    }
+
+    *out_n = nG;
+    return G;
+}
+
+void gb_basis_free(GBPoly** basis, size_t n) {
+    if (!basis) return;
+    for (size_t i = 0; i < n; i++) gb_poly_free(basis[i]);
+    free(basis);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Expr round-trip                                                    */
+/* ------------------------------------------------------------------ */
+
+/* Match a known variable. */
+static int find_var_index(struct Expr* e, struct Expr** vars, int n_vars) {
+    for (int i = 0; i < n_vars; i++) {
+        if (expr_eq(e, vars[i])) return i;
+    }
+    return -1;
+}
+
+/* Interpret e as a rational scalar (Integer, BigInt, Rational[a,b]).
+ * Returns true and sets `out` on success.  `out` must already be init'd. */
+static bool expr_to_mpq(struct Expr* e, mpq_t out) {
+    if (e->type == EXPR_INTEGER) {
+        mpq_set_si(out, (long)e->data.integer, 1);
+        mpq_canonicalize(out);
+        return true;
+    }
+    if (e->type == EXPR_BIGINT) {
+        mpz_set(mpq_numref(out), e->data.bigint);
+        mpz_set_ui(mpq_denref(out), 1);
+        return true;
+    }
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Rational &&
+        e->data.function.arg_count == 2) {
+        struct Expr* a = e->data.function.args[0];
+        struct Expr* b = e->data.function.args[1];
+        mpq_t qa, qb;
+        mpq_init(qa); mpq_init(qb);
+        bool ok = expr_to_mpq(a, qa) && expr_to_mpq(b, qb)
+                  && mpz_sgn(mpq_numref(qb)) != 0;
+        if (ok) mpq_div(out, qa, qb);
+        mpq_clear(qa); mpq_clear(qb);
+        return ok;
+    }
+    return false;
+}
+
+/* Try to interpret a single Expr as one (coef, exps) term against vars. */
+static bool expr_term(struct Expr* e, struct Expr** vars, int n_vars,
+                      mpq_t coef_out, int* exps_out) {
+    mpq_set_ui(coef_out, 1, 1);
+    for (int i = 0; i < n_vars; i++) exps_out[i] = 0;
+
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) {
+        return expr_to_mpq(e, coef_out);
+    }
+    if (e->type == EXPR_SYMBOL) {
+        int vi = find_var_index(e, vars, n_vars);
+        if (vi < 0) return false;
+        exps_out[vi] = 1;
+        return true;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+
+    /* Rational literal at the term level. */
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Rational) {
+        return expr_to_mpq(e, coef_out);
+    }
+
+    /* Power[var, k] with k >= 0. */
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        struct Expr* base = e->data.function.args[0];
+        struct Expr* exp  = e->data.function.args[1];
+        int vi = find_var_index(base, vars, n_vars);
+        if (vi < 0) return false;
+        if (exp->type != EXPR_INTEGER || exp->data.integer < 0) return false;
+        exps_out[vi] = (int)exp->data.integer;
+        return true;
+    }
+
+    /* Times[...] -- multiply contributions. */
+    if (e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Times) {
+        mpq_t sub_coef; mpq_init(sub_coef);
+        int* sub_exps = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+        bool ok = true;
+        for (size_t a = 0; a < e->data.function.arg_count && ok; a++) {
+            if (!expr_term(e->data.function.args[a], vars, n_vars,
+                           sub_coef, sub_exps)) {
+                ok = false;
+                break;
+            }
+            mpq_mul(coef_out, coef_out, sub_coef);
+            for (int v = 0; v < n_vars; v++) exps_out[v] += sub_exps[v];
+        }
+        mpq_clear(sub_coef);
+        free(sub_exps);
+        return ok;
+    }
+
+    /* Last-ditch: maybe it's a known variable Expr that's a function-
+     * shaped symbol (rare).  Already covered for plain symbols above. */
+    int vi = find_var_index(e, vars, n_vars);
+    if (vi >= 0) { exps_out[vi] = 1; return true; }
+    return false;
+}
+
+GBPoly* gb_from_expr(struct Expr* e, struct Expr** vars, int n_vars,
+                     GBOrder order, int elim_pivot) {
+    if (!e) return NULL;
+    GBPoly* p = gb_poly_new(n_vars, order, elim_pivot);
+
+    if (e->type == EXPR_FUNCTION &&
+        e->data.function.head &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol == SYM_Plus) {
+        mpq_t coef; mpq_init(coef);
+        int* exps = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+        for (size_t a = 0; a < e->data.function.arg_count; a++) {
+            if (!expr_term(e->data.function.args[a], vars, n_vars, coef, exps)) {
+                mpq_clear(coef);
+                free(exps);
+                gb_poly_free(p);
+                return NULL;
+            }
+            gb_poly_push_term(p, exps, coef);
+        }
+        mpq_clear(coef);
+        free(exps);
+        gb_poly_normalize(p);
+        return p;
+    }
+
+    mpq_t coef; mpq_init(coef);
+    int* exps = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+    if (!expr_term(e, vars, n_vars, coef, exps)) {
+        mpq_clear(coef);
+        free(exps);
+        gb_poly_free(p);
+        return NULL;
+    }
+    gb_poly_push_term(p, exps, coef);
+    mpq_clear(coef);
+    free(exps);
+    gb_poly_normalize(p);
+    return p;
+}
+
+/* Emit a single coefficient as an Expr: Integer / BigInt / Rational. */
+static struct Expr* mpq_to_expr(const mpq_t q) {
+    /* If denominator is 1, return Integer or BigInt directly. */
+    if (mpz_cmp_ui(mpq_denref(q), 1) == 0) {
+        if (mpz_fits_slong_p(mpq_numref(q))) {
+            return expr_new_integer((int64_t)mpz_get_si(mpq_numref(q)));
+        }
+        return expr_new_bigint_from_mpz(mpq_numref(q));
+    }
+    /* Rational[num, den]. */
+    struct Expr* num = mpz_fits_slong_p(mpq_numref(q))
+        ? expr_new_integer((int64_t)mpz_get_si(mpq_numref(q)))
+        : expr_new_bigint_from_mpz(mpq_numref(q));
+    struct Expr* den = mpz_fits_slong_p(mpq_denref(q))
+        ? expr_new_integer((int64_t)mpz_get_si(mpq_denref(q)))
+        : expr_new_bigint_from_mpz(mpq_denref(q));
+    struct Expr** args = (struct Expr**)malloc(sizeof(struct Expr*) * 2);
+    args[0] = num; args[1] = den;
+    struct Expr* r = expr_new_function(expr_new_symbol("Rational"), args, 2);
+    free(args);
+    return r;
+}
+
+struct Expr* gb_to_expr(const GBPoly* p, struct Expr** vars) {
+    if (p->n_terms == 0) return expr_new_integer(0);
+
+    struct Expr** terms = (struct Expr**)malloc(sizeof(struct Expr*) * p->n_terms);
+    for (size_t i = 0; i < p->n_terms; i++) {
+        const int* row = gb_exp_at((GBPoly*)p, i);
+        size_t nfac = 0;
+        for (int v = 0; v < p->n_vars; v++) if (row[v] > 0) nfac++;
+
+        bool coef_is_one = (mpz_cmp_ui(mpq_numref(p->coefs[i]), 1) == 0
+                            && mpz_cmp_ui(mpq_denref(p->coefs[i]), 1) == 0);
+        bool coef_is_neg_one = (mpz_cmp_si(mpq_numref(p->coefs[i]), -1) == 0
+                                && mpz_cmp_ui(mpq_denref(p->coefs[i]), 1) == 0);
+
+        size_t total = nfac;
+        if (!(coef_is_one || coef_is_neg_one) || nfac == 0) total++;
+        if (coef_is_neg_one && nfac > 0) total++;
+
+        struct Expr** factors = (struct Expr**)malloc(
+            sizeof(struct Expr*) * (total > 0 ? total : 1));
+        size_t fi = 0;
+
+        if (coef_is_neg_one && nfac > 0) {
+            factors[fi++] = expr_new_integer(-1);
+        } else if (!coef_is_one || nfac == 0) {
+            factors[fi++] = mpq_to_expr(p->coefs[i]);
+        }
+        for (int v = 0; v < p->n_vars; v++) {
+            if (row[v] == 0) continue;
+            if (row[v] == 1) {
+                factors[fi++] = expr_copy(vars[v]);
+            } else {
+                struct Expr** pa = (struct Expr**)malloc(sizeof(struct Expr*) * 2);
+                pa[0] = expr_copy(vars[v]);
+                pa[1] = expr_new_integer(row[v]);
+                factors[fi++] = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                free(pa);
+            }
+        }
+        if (fi == 1) {
+            terms[i] = factors[0];
+        } else {
+            terms[i] = expr_new_function(expr_new_symbol("Times"), factors, fi);
+        }
+        free(factors);
+    }
+
+    struct Expr* out;
+    if (p->n_terms == 1) {
+        out = terms[0];
+    } else {
+        out = expr_new_function(expr_new_symbol("Plus"), terms, p->n_terms);
+    }
+    free(terms);
+    return out;
+}

@@ -194,6 +194,8 @@ set(COMMON_SRC
     ../src/poly/qafactor.c
     ../src/poly/squarefreeq.c
     ../src/poly/irrpolyq.c
+    ../src/poly/groebner.c
+    ../src/poly/groebnerbasis.c
     ../src/sym_intern.c
     ../src/sym_names.c
     ../src/repl_hooks.c
@@ -319,6 +321,9 @@ target_include_directories(root_numeric_tests PRIVATE ../src)
 
 add_executable(radicals_tests test_radicals.c ${COMMON_SRC})
 target_include_directories(radicals_tests PRIVATE ../src)
+
+add_executable(groebner_tests test_groebner.c ${COMMON_SRC})
+target_include_directories(groebner_tests PRIVATE ../src)
 
 add_executable(findmin_tests test_findmin.c ${COMMON_SRC})
 target_include_directories(findmin_tests PRIVATE ../src)
