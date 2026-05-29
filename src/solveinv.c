@@ -169,6 +169,8 @@ static Expr* mint_param(SolveInvCtx* ctx) {
 
 static Expr* solve_inner_equation(Expr* inner_eq, Expr* var,
                                   SolveInvCtx* ctx);
+static Expr* solveinv_drive(Expr* equation, Expr* var,
+                            SolveInvCtx* ctx);
 
 /* ------------------------------------------------------------------ *
  *  Peel-function table.                                               *
@@ -713,6 +715,21 @@ static PeelFn lookup_peel(const char* head_interned) {
 
 static Expr* peel_power_n(Expr* g, int64_t n, Expr* a, Expr* var,
                           SolveInvCtx* ctx) {
+    /* g^n == 0  <=>  g == 0  for any positive integer n.  Reducing here
+     * avoids re-entering the inverse peel with the identical equation
+     * shape (peel_power_n -> solve_inner_equation -> solveinv_drive ->
+     * peel_power_n) when g is not a polynomial in var, which used to
+     * recurse to the depth cap or, before the depth fix, blow the
+     * stack on inputs like Sin[x]^2 == 0. */
+    bool a_is_zero = (a->type == EXPR_INTEGER && a->data.integer == 0);
+    if (a_is_zero) {
+        Expr* inner_eq = mk_fn2("Equal", expr_copy(g), mk_int(0));
+        inner_eq = eval_and_free(inner_eq);
+        Expr* sols = solve_inner_equation(inner_eq, var, ctx);
+        expr_free(inner_eq);
+        return sols;
+    }
+
     /* Hand the inner binomial Equal[g^n, a] directly to the recursive
      * inner solver -- solvepoly knows how to deal with binomial
      * equations and n-th roots, and that path produces the canonical
@@ -756,10 +773,15 @@ static Expr* solve_inner_equation(Expr* inner_eq, Expr* var,
         inner_eq, var, ctx->dom, &polyopts);
     if (sols) return sols;
 
-    /* Try a nested inverse peel before the radicals specialist. */
+    /* Try a nested inverse peel before the radicals specialist.
+     * Re-enter solveinv_drive directly with the existing ctx so the
+     * depth counter is preserved across the re-entry; routing through
+     * the public solveinv_solve_inverse_equality wrapper would build a
+     * fresh ctx with depth=0 and defeat SOLVEINV_MAX_DEPTH, which lets
+     * pathological cases like Sin[x]^k == c recurse without bound
+     * through peel_power_n -> solve_inner_equation. */
     ctx->depth++;
-    sols = solveinv_solve_inverse_equality(inner_eq, var, ctx->dom,
-                                            ctx->opts);
+    sols = solveinv_drive(inner_eq, var, ctx);
     ctx->depth--;
     if (sols) return sols;
 
@@ -1214,12 +1236,10 @@ Expr* solveinv_solve_inverse_equality(Expr* equation, Expr* var,
                                       Expr* dom,
                                       const SolveInvOpts* opts) {
     if (!equation || !var || !opts || !opts->enabled) return NULL;
-    /* The caller may invoke us with a depth-counted context held in
-     * a thread-local; we operate on a fresh context per top-level
-     * entry and rely on the static depth field inside.  Re-entry from
+    /* Top-of-tree entry from solve.c (or any external caller).  A
+     * fresh per-call ctx is created here; re-entry from
      * solve_inner_equation goes through solveinv_drive directly with
-     * the existing ctx, so this wrapper is only the top of the call
-     * tree from solve.c. */
+     * the existing ctx so SOLVEINV_MAX_DEPTH is honoured. */
     SolveInvCtx ctx = { opts, dom, 0, 0, false };
     return solveinv_drive(equation, var, &ctx);
 }
