@@ -292,6 +292,7 @@ const char* SYM_Times = NULL;
 const char* SYM_Tolerance = NULL;
 const char* SYM_Transpose = NULL;
 const char* SYM_ToExpression = NULL;
+const char* SYM_ToRadicals = NULL;
 const char* SYM_ToString = NULL;
 const char* SYM_TrialDivision = NULL;
 const char* SYM_TrigExpand = NULL;
@@ -602,6 +603,7 @@ void sym_names_init(void) {
     SYM_Tolerance                  = intern_symbol("Tolerance");
     SYM_Transpose                  = intern_symbol("Transpose");
     SYM_ToExpression               = intern_symbol("ToExpression");
+    SYM_ToRadicals                 = intern_symbol("ToRadicals");
     SYM_ToString                   = intern_symbol("ToString");
     SYM_TrialDivision              = intern_symbol("TrialDivision");
     SYM_TrigExpand                 = intern_symbol("TrigExpand");

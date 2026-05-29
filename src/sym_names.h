@@ -307,6 +307,7 @@ extern const char* SYM_Times;
 extern const char* SYM_Tolerance;
 extern const char* SYM_Transpose;
 extern const char* SYM_ToExpression;
+extern const char* SYM_ToRadicals;
 extern const char* SYM_ToString;
 extern const char* SYM_TrialDivision;
 extern const char* SYM_TrigExpand;

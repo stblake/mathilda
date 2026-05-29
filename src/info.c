@@ -1988,6 +1988,19 @@ void info_init(void) {
         "\tgives the discriminant of poly with respect to var: up to sign and\n"
         "\tleading-coefficient scaling, Resultant[poly, D[poly, var], var] /\n"
         "\tlc[poly, var].  Vanishes iff poly has a repeated root in var.");
+    symtab_set_docstring("ToRadicals",
+        "ToRadicals[expr]\n"
+        "\tattempts to express all Root objects in expr in terms of radicals.\n"
+        "\n"
+        "ToRadicals can always give expressions in terms of radicals when the\n"
+        "\thighest degree of the polynomial that appears in any Root object is\n"
+        "\tfour.  Binomial Root objects of the form Root[Function[a #^n + b], k]\n"
+        "\tare also reduced to radicals for any degree n.  Other Root objects\n"
+        "\tof degree five or higher are returned unchanged.\n"
+        "If Root objects in expr contain parameters, ToRadicals[expr] may yield\n"
+        "\ta result that is not equal to expr for all values of the parameters.\n"
+        "ToRadicals automatically threads over lists, equations, inequalities,\n"
+        "\tand logic functions.");
     symtab_set_docstring("Numerator",
         "Numerator[expr]\n"
         "\tgives the numerator of expr regarded as a rational expression.\n"

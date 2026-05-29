@@ -1684,6 +1684,61 @@ In[4]:= N[Root[Function[#^3 + # + 1], 3], 20]
 Out[4]= 0.34116390191400966368 + 1.1615414252683233453 I
 ```
 
+## ToRadicals
+
+Convert held `Root[Function[poly], k]` objects in an expression into
+closed-form radical expressions.
+
+- `ToRadicals[expr]`
+
+**Features**:
+
+- `Protected`.
+- Closed-form radicals are always returned when the polynomial has degree
+  at most four — linear (trivial), quadratic (`Sqrt`), cubic (Cardano), and
+  quartic (Ferrari via the depressed quartic + resolvent cubic).
+- Binomial Root objects `Root[Function[a #^n + b], k]` are reduced to
+  radicals for any degree `n`, using the principal `n`-th root multiplied
+  by `(-1)^(2 (k-1) / n)`.
+- Other Root objects of degree ≥ 5 are returned unchanged — the system
+  makes no attempt at decomposition or solvable-Galois detection (cf.
+  Mathematica's note "ToRadicals cannot find them").
+- The k-th radical root is selected to agree with `N[Root[poly, k]]`'s
+  canonical ordering (real-first ascending, complex by `Re` / `|Im|` /
+  negative-`Im` first) — each formula's natural emission order is
+  numerically matched against `root_numericalize` at machine precision.
+  When the polynomial carries parametric coefficients (no numericalisation
+  possible), the natural per-formula index `k - 1` is used and the result
+  is allowed to disagree with `expr` for some parameter values, matching
+  Mathematica's `nongen` behaviour.
+- Walks its argument recursively, so `Root[..]` nodes inside `List`,
+  `Equal`, `Less`, `Greater`, `And`, `Or`, `Not`, `Implies`, ... thread
+  automatically — every `Root` anywhere in the tree is processed
+  independently and the surrounding structure is preserved.
+- Idempotent: `ToRadicals[ToRadicals[expr]] === ToRadicals[expr]`, since a
+  successful conversion produces an expression free of `Root[..]` nodes.
+
+```mathematica
+In[1]:= ToRadicals[Root[Function[#^2 + 3 # + 5], 1]]
+Out[1]= 1/2 (-3 - I Sqrt[11])
+
+In[2]:= ToRadicals[Root[Function[#^2 + 3 # + 5], 2]]
+Out[2]= 1/2 (-3 + I Sqrt[11])
+
+In[3]:= ToRadicals[Root[Function[#^5 - 2], 3]]
+Out[3]= (-1)^(4/5) 2^(1/5)
+
+In[4]:= With[{r = ToRadicals[Root[Function[#^4 + 3 #^3 - 5 #^2 - 7 # + 9], 1]]},
+              Chop[N[r^4 + 3 r^3 - 5 r^2 - 7 r + 9, 30]]]
+Out[4]= 0
+
+In[5]:= ToRadicals[Root[Function[#^5 - # - 1], 1]]      (* non-binomial deg 5 *)
+Out[5]= Root[#1^5 - #1 - 1 &, 1]
+
+In[6]:= ToRadicals[Root[Function[#^2 - 2], 2] < 3]      (* threading *)
+Out[6]= True
+```
+
 ## Solve`SolveLinearSystem
 The linear-system specialist invoked by `Solve` for multi-variable inputs
 (`And` / `List` of equations, or a single equation paired with a multi-symbol

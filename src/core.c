@@ -515,6 +515,8 @@ void core_init(void) {
     rationalize_init();
     void root_init(void);
     root_init();
+    void radicals_init(void);
+    radicals_init();
     void integrate_init(void);
     integrate_init();
     void zero_test_init(void);
