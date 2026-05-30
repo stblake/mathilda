@@ -296,6 +296,24 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
                                              &min_val, &max_val, &di_val,
                                              &is_real, &is_inf);
     if (numeric && !is_inf) {
+        /* Closed form first: for a unit-step, non-empty, integer-bounded
+         * range a polynomial / geometric / hypergeometric body telescopes to
+         * F(imax+1) - F(imin), whose cost is independent of the span width --
+         * far cheaper than evaluating the body once per term.  This is exact
+         * because the antidifference identity holds for any imin <= imax+1.
+         * Guards (all required):
+         *   - !is_real:  integer bounds/step, no float edge cases;
+         *   - di_val==1: the unit-step antidifference is invalid for di != 1;
+         *   - min<=max:  empty ranges must fold to 0 via expansion, not the
+         *                telescoping form (which would give a wrong value).
+         * The iterator is shadowed because Sum is HoldAll: an outer binding of
+         * var would otherwise leak into the held body and the stage args. */
+        if (!is_real && di_val == 1.0 && min_val <= max_val) {
+            Rule* saved = iter_spec_shadow(s.var);
+            Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
+            iter_spec_restore(s.var, saved);
+            if (cf) { iter_spec_free(&s); return cf; }
+        }
         Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
                                min_val, max_val, di_val, is_real);
         if (r) { iter_spec_free(&s); return r; }

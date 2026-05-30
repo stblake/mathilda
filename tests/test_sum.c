@@ -113,6 +113,21 @@ int main(void) {
     same("DifferenceDelta[Sum[1/(i (i + 1)), i], i]", "1/(i (i + 1))");
     check("DifferenceDelta[i^2, i]", "1 + 2 i");
 
+    /* ---- Closed-form-first on wide finite numeric ranges ----
+     * A unit-step integer range with a polynomial/geometric body must
+     * telescope via the closed form (independent of span width) instead of
+     * expanding term-by-term, while keeping the exact same value. */
+    check("Sum[3/2 i^2 - i/2, {i, -10000, 10000}]", "1000150005000");
+    check("Sum[i^2, {i, 1, 100000}]", "333338333350000");
+    check("Sum[2^i, {i, 0, 100}]", "2535301200456458802993406410751");
+    /* gates that must still force expansion / correct edge results */
+    check("Sum[i^2, {i, 5, 1}]", "0");          /* empty ascending range -> 0 */
+    check("Sum[i^2, {i, 0, 10, 2}]", "220");    /* step != 1 -> expansion     */
+    check("Sum[If[i > 2, i, -i], {i, 1, 5}]", "9"); /* non-poly body -> expand */
+    /* outer binding of the iterator must not leak into the closed form */
+    check("i = 7; Sum[i^2, {i, 1, 4}]", "30");
+    check("Clear[i]; i", "i");
+
     if (failures) {
         fprintf(stderr, "\n%d/%d sum checks FAILED\n", failures, checks);
         return 1;

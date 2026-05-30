@@ -514,12 +514,18 @@ each algorithm also exposed as a context-qualified builtin
 - `Sum[f, i]` — the indefinite sum (antidifference): the `F` with
   `DifferenceDelta[F, i] == f`.
 
-When the range is a finite span of integers (or an explicit list) the
-sum is evaluated by direct expansion.  Otherwise — symbolic bounds or
-the indefinite form — `Sum` runs a method cascade over the
-sub-algorithms below; if none applies the `Sum[...]` is returned
-unevaluated.  `Method -> "Polynomial" | "Geometric" | "Gosper"` forces a
-single algorithm (strict, no fallback).
+For a finite, unit-step, integer range with a summable body, `Sum` first
+tries the closed-form method cascade below — its cost is independent of
+the span width, so `Sum[i^2, {i, 1, 100000}]` is as cheap as the
+symbolic-bound form rather than 100000 term evaluations.  When no closed
+form applies (a non-summable body, e.g. `Sum[Prime[i], {i, 1, 6}]`), or
+the step is not `1`, or the body iterates an explicit list, the sum falls
+back to direct term-by-term expansion (empty ranges fold to `0`).
+Symbolic bounds and the indefinite form go straight to the cascade; if
+none applies the `Sum[...]` is returned unevaluated.
+`Method -> "Polynomial" | "Geometric" | "Gosper"` forces a single
+algorithm (strict, no fallback), and now also takes effect on finite
+unit-step integer ranges.
 
 ```mathematica
 In[1]:= Sum[i^2, {i, 1, 100}]
