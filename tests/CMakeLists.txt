@@ -46,6 +46,7 @@ include_directories(../src/linalg)
 include_directories(../src/poly)
 include_directories(../src/simp)
 include_directories(../src/calculus)
+include_directories(../src/sum)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -207,6 +208,11 @@ set(COMMON_SRC
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
+    ../src/sum/sum.c
+    ../src/sum/sum_util.c
+    ../src/sum/sum_polynomial.c
+    ../src/sum/sum_geometric.c
+    ../src/sum/sum_gosper.c
     ../src/root.c
     ../src/root_numeric.c
     ../src/radicals.c
@@ -259,6 +265,10 @@ target_include_directories(list_tests PRIVATE ../src)
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)
+
+add_executable(sum_tests test_sum.c ${COMMON_SRC})
+target_link_libraries(sum_tests m)
+target_include_directories(sum_tests PRIVATE ../src)
 
 add_executable(cond_tests test_cond.c ${COMMON_SRC})
 target_link_libraries(cond_tests m)

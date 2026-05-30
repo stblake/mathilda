@@ -50,6 +50,155 @@
 #include <stdbool.h>
 
 /*
+ * ============================================================================
+ *  Shared iterator-spec helpers (see iter.h for the contract)
+ * ============================================================================
+ */
+
+void iter_spec_free(IterSpec* s) {
+    if (!s) return;
+    if (s->var)  expr_free(s->var);
+    if (s->imin) expr_free(s->imin);
+    if (s->imax) expr_free(s->imax);
+    if (s->di)   expr_free(s->di);
+    if (s->list) expr_free(s->list);
+    memset(s, 0, sizeof(*s));
+}
+
+static bool is_list_expr(const Expr* e) {
+    return e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_List;
+}
+
+bool iter_spec_parse(Expr* spec, IterSpec* out) {
+    memset(out, 0, sizeof(*out));
+    out->kind = ITER_KIND_COUNT;
+
+    if (is_list_expr(spec)) {
+        size_t len = spec->data.function.arg_count;
+        if (len == 1) {
+            /* {n} -- repeat count only */
+            out->imax = evaluate(spec->data.function.args[0]);
+            return true;
+        }
+        if (len < 2) return false;             /* {} -- malformed */
+
+        /* {i, ...} -- first arg must be the iterator symbol. */
+        Expr* v = spec->data.function.args[0];
+        if (v->type != EXPR_SYMBOL) return false;
+        out->var = expr_copy(v);
+
+        if (len == 2) {
+            /* {i, bound}: list iteration if bound is a List, else {i,1,imax}. */
+            Expr* bound = evaluate(spec->data.function.args[1]);
+            if (is_list_expr(bound)) {
+                out->kind = ITER_KIND_LIST;
+                out->list = bound;
+            } else {
+                out->kind = ITER_KIND_RANGE;
+                out->imin = expr_new_integer(1);
+                out->imax = bound;
+                out->di   = expr_new_integer(1);
+            }
+            return true;
+        }
+        if (len == 3) {
+            out->kind = ITER_KIND_RANGE;
+            out->imin = evaluate(spec->data.function.args[1]);
+            out->imax = evaluate(spec->data.function.args[2]);
+            out->di   = expr_new_integer(1);
+            return true;
+        }
+        if (len == 4) {
+            out->kind = ITER_KIND_RANGE;
+            out->imin = evaluate(spec->data.function.args[1]);
+            out->imax = evaluate(spec->data.function.args[2]);
+            out->di   = evaluate(spec->data.function.args[3]);
+            return true;
+        }
+        /* len >= 5 -- malformed; free the var copy already taken. */
+        iter_spec_free(out);
+        return false;
+    }
+
+    /* Bare count: f[..., n] */
+    out->imax = evaluate(spec);
+    return true;
+}
+
+bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
+                               double* min_val, double* max_val,
+                               double* di_val, bool* is_real, bool* is_inf) {
+    *min_val = 0; *max_val = 0; *di_val = 0;
+    *is_real = false; *is_inf = false;
+    int64_t n, d;
+
+    if (s->kind == ITER_KIND_COUNT) {
+        if (allow_inf && s->imax->type == EXPR_SYMBOL
+                      && s->imax->data.symbol == SYM_Infinity) {
+            *is_inf = true;
+            return true;
+        }
+        if (s->imax->type != EXPR_INTEGER) return false;
+        *max_val = (double)s->imax->data.integer;
+        return true;
+    }
+    if (s->kind != ITER_KIND_RANGE) return false;
+
+    if (allow_inf && s->imax->type == EXPR_SYMBOL
+                  && s->imax->data.symbol == SYM_Infinity) {
+        *is_inf = true;
+    }
+    if (s->imin->type == EXPR_REAL || s->imax->type == EXPR_REAL
+                                   || s->di->type   == EXPR_REAL) {
+        *is_real = true;
+    }
+
+    if (s->imin->type == EXPR_INTEGER)      *min_val = (double)s->imin->data.integer;
+    else if (s->imin->type == EXPR_REAL)    *min_val = s->imin->data.real;
+    else if (is_rational(s->imin, &n, &d))  *min_val = (double)n / d;
+    else return false;
+
+    if (!*is_inf) {
+        if (s->imax->type == EXPR_INTEGER)      *max_val = (double)s->imax->data.integer;
+        else if (s->imax->type == EXPR_REAL)    *max_val = s->imax->data.real;
+        else if (is_rational(s->imax, &n, &d))  *max_val = (double)n / d;
+        else return false;
+    }
+
+    if (s->di->type == EXPR_INTEGER)      *di_val = (double)s->di->data.integer;
+    else if (s->di->type == EXPR_REAL)    *di_val = s->di->data.real;
+    else if (is_rational(s->di, &n, &d))  *di_val = (double)n / d;
+    else return false;
+
+    if (*di_val == 0) return false;        /* zero step never terminates */
+    return true;
+}
+
+Rule* iter_spec_shadow(Expr* var) {
+    if (!var || var->type != EXPR_SYMBOL) return NULL;
+    SymbolDef* def = symtab_get_def(var->data.symbol);
+    Rule* old = def->own_values;
+    def->own_values = NULL;
+    return old;
+}
+
+void iter_spec_restore(Expr* var, Rule* saved_own) {
+    if (!var || var->type != EXPR_SYMBOL) return;
+    SymbolDef* def = symtab_get_def(var->data.symbol);
+    Rule* r = def->own_values;
+    while (r) {
+        Rule* next = r->next;
+        expr_free(r->pattern);
+        expr_free(r->replacement);
+        free(r);
+        r = next;
+    }
+    def->own_values = saved_own;
+}
+
+/*
  * is_flow_control_head
  *
  * Returns the head-name string if `e` is a function of the form
@@ -187,116 +336,32 @@ Expr* builtin_do(Expr* res) {
     Expr* expr = res->data.function.args[0];   /* body, held */
     Expr* spec = res->data.function.args[1];   /* iterator spec, held */
 
-    /* ---- Parse the iterator spec ---- */
-    Expr* var_sym = NULL;   /* iterator symbol (if any) */
-    Expr* imin_e  = NULL;   /* lower bound expression */
-    Expr* imax_e  = NULL;   /* upper bound expression OR repeat count */
-    Expr* di_e    = NULL;   /* step expression */
-    Expr* list_e  = NULL;   /* explicit iterator list (Do over {i, {a,b,...}}) */
-    int is_n_times   = 0;   /* spec degenerates to a pure count */
-    int is_list_iter = 0;   /* iterate over an explicit list */
+    /* ---- Parse the iterator spec (shared helper) ---- */
+    IterSpec s;
+    if (!iter_spec_parse(spec, &s)) return NULL;
+
+    int is_n_times   = (s.kind == ITER_KIND_COUNT);
+    int is_list_iter = (s.kind == ITER_KIND_LIST);
     double min_val = 0, max_val = 0, di_val = 0;
     bool is_real = false;
     bool is_inf  = false;
 
-    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && spec->data.function.head->data.symbol == SYM_List) {
-        size_t len = spec->data.function.arg_count;
-        if (len == 1) {
-            /* {n} -- repeat count only */
-            imax_e = evaluate(spec->data.function.args[0]);
-            is_n_times = 1;
-        } else if (len >= 2) {
-            /* {i, ...} -- first arg must be a symbol (the iterator variable). */
-            var_sym = spec->data.function.args[0];
-            if (var_sym->type != EXPR_SYMBOL) return NULL;
-
-            if (len == 2) {
-                /* {i, bound} -- either {i, imax} or {i, list} depending on bound type. */
-                Expr* bound = evaluate(spec->data.function.args[1]);
-                if (bound->type == EXPR_FUNCTION && bound->data.function.head->type == EXPR_SYMBOL && bound->data.function.head->data.symbol == SYM_List) {
-                    list_e = bound;
-                    is_list_iter = 1;
-                } else {
-                    imin_e = expr_new_integer(1);
-                    imax_e = bound;
-                    di_e   = expr_new_integer(1);
-                }
-            } else if (len == 3) {
-                /* {i, imin, imax} */
-                imin_e = evaluate(spec->data.function.args[1]);
-                imax_e = evaluate(spec->data.function.args[2]);
-                di_e   = expr_new_integer(1);
-            } else if (len == 4) {
-                /* {i, imin, imax, di} */
-                imin_e = evaluate(spec->data.function.args[1]);
-                imax_e = evaluate(spec->data.function.args[2]);
-                di_e   = evaluate(spec->data.function.args[3]);
-            } else {
-                return NULL;
-            }
-        }
-    } else {
-        /* Bare count: Do[expr, n] */
-        imax_e = evaluate(spec);
-        is_n_times = 1;
-    }
-
-    /* ---- Validate and convert iterator bounds ---- */
-    if (is_n_times) {
-        if (imax_e->type == EXPR_SYMBOL && imax_e->data.symbol == SYM_Infinity) {
-            is_inf = true;
-        } else if (imax_e->type != EXPR_INTEGER) {
-            expr_free(imax_e);
-            return NULL;
-        }
-    } else if (!is_list_iter) {
-        if (imax_e->type == EXPR_SYMBOL && imax_e->data.symbol == SYM_Infinity) {
-            is_inf = true;
-        }
-        /* Decide whether to iterate in double precision or exact arithmetic. */
-        if (imin_e->type == EXPR_REAL || imax_e->type == EXPR_REAL || di_e->type == EXPR_REAL) is_real = true;
-
-        int64_t n, d;
-        if (imin_e->type == EXPR_INTEGER) min_val = (double)imin_e->data.integer;
-        else if (imin_e->type == EXPR_REAL) min_val = imin_e->data.real;
-        else if (is_rational(imin_e, &n, &d)) min_val = (double)n / d;
-        else {
-            if (imin_e) expr_free(imin_e);
-            if (imax_e) expr_free(imax_e);
-            if (di_e)   expr_free(di_e);
-            return NULL;
-        }
-
-        if (!is_inf) {
-            if (imax_e->type == EXPR_INTEGER) max_val = (double)imax_e->data.integer;
-            else if (imax_e->type == EXPR_REAL) max_val = imax_e->data.real;
-            else if (is_rational(imax_e, &n, &d)) max_val = (double)n / d;
-            else {
-                if (imin_e) expr_free(imin_e);
-                if (imax_e) expr_free(imax_e);
-                if (di_e)   expr_free(di_e);
-                return NULL;
-            }
-        }
-
-        if (di_e->type == EXPR_INTEGER) di_val = (double)di_e->data.integer;
-        else if (di_e->type == EXPR_REAL) di_val = di_e->data.real;
-        else if (is_rational(di_e, &n, &d)) di_val = (double)n / d;
-        else {
-            if (imin_e) expr_free(imin_e);
-            if (imax_e) expr_free(imax_e);
-            if (di_e)   expr_free(di_e);
-            return NULL;
-        }
-
-        /* Zero step would loop forever without making progress. */
-        if (di_val == 0) {
-            if (imin_e) expr_free(imin_e);
-            if (imax_e) expr_free(imax_e);
-            if (di_e)   expr_free(di_e);
+    /* ---- Validate and convert iterator bounds (Infinity allowed) ---- */
+    if (!is_list_iter) {
+        if (!iter_spec_resolve_numeric(&s, /*allow_inf=*/true,
+                                       &min_val, &max_val, &di_val,
+                                       &is_real, &is_inf)) {
+            iter_spec_free(&s);
             return NULL;
         }
     }
+
+    /* Convenience aliases into the owned IterSpec (freed via iter_spec_free). */
+    Expr* var_sym = s.var;
+    Expr* imin_e  = s.imin;
+    Expr* imax_e  = s.imax;
+    Expr* di_e    = s.di;
+    Expr* list_e  = s.list;
 
     /*
      * Shadow any existing OwnValue for the iterator: we temporarily clear
@@ -304,12 +369,7 @@ Expr* builtin_do(Expr* res) {
      * and restore the original binding after the loop exits. This mimics
      * Mathematica's localisation of Do's iterator.
      */
-    Rule* old_own = NULL;
-    if (var_sym) {
-        SymbolDef* def = symtab_get_def(var_sym->data.symbol);
-        old_own = def->own_values;
-        def->own_values = NULL;
-    }
+    Rule* old_own = iter_spec_shadow(var_sym);
 
     Expr* returned_val = NULL;
 
@@ -406,29 +466,11 @@ Expr* builtin_do(Expr* res) {
     }
 
     /*
-     * Restore the iterator variable's original OwnValue binding.
-     *
-     * symtab_add_own_value stored an expr_copy of BOTH the pattern (the
-     * iterator symbol) and the replacement (the current value). We own
-     * the entire Rule chain we created here, so we must free both.
+     * Restore the iterator variable's original OwnValue binding (frees the
+     * per-iteration OwnValue chain we created), then free the spec.
      */
-    if (var_sym) {
-        SymbolDef* def = symtab_get_def(var_sym->data.symbol);
-        Rule* r = def->own_values;
-        while (r) {
-            Rule* next = r->next;
-            expr_free(r->pattern);
-            expr_free(r->replacement);
-            free(r);
-            r = next;
-        }
-        def->own_values = old_own;
-    }
-
-    if (imax_e) expr_free(imax_e);
-    if (imin_e) expr_free(imin_e);
-    if (di_e)   expr_free(di_e);
-    if (list_e) expr_free(list_e);
+    iter_spec_restore(var_sym, old_own);
+    iter_spec_free(&s);
 
     if (returned_val) return returned_val;
     return expr_new_symbol("Null");

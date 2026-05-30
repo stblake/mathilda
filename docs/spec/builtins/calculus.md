@@ -494,6 +494,102 @@ Out[1]= {1 + x^4, 2 x^3, 2}
 ```
 
 
+## Sum
+
+Definite, indefinite and symbolic summation.  Implemented natively in C
+under `src/sum/`: a dispatcher (`sum.c`) plus one file per algorithm,
+each algorithm also exposed as a context-qualified builtin
+(`Sum`Polynomial`, `Sum`Geometric`, `Sum`Gosper`) — mirroring how
+`Integrate` exposes `Integrate`BronsteinRational`.  `Sum` is `HoldAll`.
+
+### Forms
+
+- `Sum[f, {i, imax}]` — sum of `f` for `i` from `1` to `imax`.
+- `Sum[f, {i, imin, imax}]` — `i` from `imin` to `imax`.
+- `Sum[f, {i, imin, imax, di}]` — step `di`.
+- `Sum[f, {i, {i1, i2, ...}}]` — successive values from an explicit list.
+- `Sum[f, {i, ...}, {j, ...}, ...]` — multiple (nested) sums; the
+  outermost iterator is given first and inner iterators may appear in
+  the bounds of outer ones.
+- `Sum[f, i]` — the indefinite sum (antidifference): the `F` with
+  `DifferenceDelta[F, i] == f`.
+
+When the range is a finite span of integers (or an explicit list) the
+sum is evaluated by direct expansion.  Otherwise — symbolic bounds or
+the indefinite form — `Sum` runs a method cascade over the
+sub-algorithms below; if none applies the `Sum[...]` is returned
+unevaluated.  `Method -> "Polynomial" | "Geometric" | "Gosper"` forces a
+single algorithm (strict, no fallback).
+
+```mathematica
+In[1]:= Sum[i^2, {i, 1, 100}]
+Out[1]= 338350
+In[2]:= Sum[i^2, {i, 1, n}]
+Out[2]= 1/6 n (1 + n) (1 + 2 n)
+In[3]:= Sum[f[i, j], {i, 1, 3}, {j, 1, i}]
+Out[3]= f[1, 1] + f[2, 1] + f[2, 2] + f[3, 1] + f[3, 2] + f[3, 3]
+```
+
+### Sum`Polynomial
+
+Closed-form summation of polynomials via Newton forward differences in
+the falling-factorial basis (no Bernoulli numbers).  `Sum`Polynomial[f, i]`
+gives the antidifference; `Sum`Polynomial[f, i, imin, imax]` the definite
+sum `F(imax+1) - F(imin)`.
+
+```mathematica
+In[1]:= Sum[i^3, {i, 1, n}]
+Out[1]= 1/4 n^2 (1 + n)^2
+In[2]:= Sum[i^2, i]
+Out[2]= 1/6 i (-1 + i) (-1 + 2 i)
+```
+
+### Sum`Geometric
+
+Summation of `p(i) r^i` with `p` polynomial in `i` and `r` free of `i`
+(the base of the exponential factors, combined across several `r^i`
+factors).  The antidifference has the form `q(i) r^i`; `q` solves
+`r q(i+1) - q(i) = p(i)` by undetermined coefficients.
+
+```mathematica
+In[1]:= Sum[a^i, i]
+Out[1]= a^i/(-1 + a)
+In[2]:= Sum[q1^i q2^i, i]
+Out[2]= (q1 q2)^i/(-1 + q1 q2)
+```
+
+### Sum`Gosper
+
+Gosper's algorithm for indefinite summation of a hypergeometric term
+`t(i)` (one whose ratio `t(i+1)/t(i)` is rational): term-ratio test →
+Gosper–Petkovšek normal form (dispersion + gcd peeling) → degree-bounded
+key equation `a(i) x(i+1) - b(i-1) x(i) = c(i)` → antidifference
+`F = (b(i-1)/c(i)) x(i) t(i)`.  Returns unevaluated when `t` is not a
+hypergeometric term or is not Gosper-summable.
+
+```mathematica
+In[1]:= Sum[k k!, k]
+Out[1]= k!
+In[2]:= Sum[k k!, {k, 1, n}]
+Out[2]= -1 + (1 + n)!
+In[3]:= Sum[1/(i (i + 1)), {i, 1, n}]
+Out[3]= 1 - 1/(1 + n)
+```
+
+## DifferenceDelta
+
+`DifferenceDelta[f, i]` gives the forward difference
+`(f /. i -> i+1) - f`, the discrete analogue of `D` and the left inverse
+of indefinite `Sum`.
+
+```mathematica
+In[1]:= DifferenceDelta[i^2, i]
+Out[1]= 1 + 2 i
+In[2]:= DifferenceDelta[Sum[k k!, k], k]
+Out[2]= -k! + (1 + k)!
+```
+
+
 ## FindRoot
 
 Iterative numerical root finder.  Implemented natively in C in

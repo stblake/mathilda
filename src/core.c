@@ -525,6 +525,8 @@ void core_init(void) {
     solvealways_init();
     void integrate_init(void);
     integrate_init();
+    void sum_init(void);
+    sum_init();
     void zero_test_init(void);
     zero_test_init();
 }

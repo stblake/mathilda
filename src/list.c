@@ -3,6 +3,7 @@
 #include "common.h"
 #include "symtab.h"
 #include "eval.h"
+#include "iter.h"
 #include "core.h"
 #include "arithmetic.h"
 #include "print.h"
@@ -37,87 +38,38 @@ Expr* builtin_table(Expr* res) {
     
     Expr* expr = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
-    
-    Expr* var_sym = NULL;
-    Expr* imin_e = NULL;
-    Expr* imax_e = NULL;
-    Expr* di_e = NULL;
-    Expr* list_e = NULL;
-    int is_n_times = 0;
-    int is_list_iter = 0;
-    double min_val = 0, max_val = 0, di_val = 0;
-    bool is_real = false;
 
-    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && spec->data.function.head->data.symbol == SYM_List) {
-        size_t len = spec->data.function.arg_count;
-        if (len == 1) {
-            imax_e = evaluate(spec->data.function.args[0]);
-            is_n_times = 1;
-        } else if (len >= 2) {
-            var_sym = spec->data.function.args[0];
-            if (var_sym->type != EXPR_SYMBOL) return NULL; 
-            
-            if (len == 2) {
-                Expr* bound = evaluate(spec->data.function.args[1]);
-                if (bound->type == EXPR_FUNCTION && bound->data.function.head->type == EXPR_SYMBOL && bound->data.function.head->data.symbol == SYM_List) {
-                    list_e = bound;
-                    is_list_iter = 1;
-                } else {
-                    imin_e = expr_new_integer(1);
-                    imax_e = bound;
-                    di_e = expr_new_integer(1);
-                }
-            } else if (len == 3) {
-                imin_e = evaluate(spec->data.function.args[1]);
-                imax_e = evaluate(spec->data.function.args[2]);
-                di_e = expr_new_integer(1);
-            } else if (len == 4) {
-                imin_e = evaluate(spec->data.function.args[1]);
-                imax_e = evaluate(spec->data.function.args[2]);
-                di_e = evaluate(spec->data.function.args[3]);
-            } else {
-                return NULL;
-            }
+    /* ---- Parse the iterator spec (shared helper) ---- */
+    IterSpec s;
+    if (!iter_spec_parse(spec, &s)) return NULL;
+
+    int is_n_times   = (s.kind == ITER_KIND_COUNT);
+    int is_list_iter = (s.kind == ITER_KIND_LIST);
+    double min_val = 0, max_val = 0, di_val = 0;
+    bool is_real = false, is_inf = false;
+
+    /* Table does not iterate to Infinity; allow_inf = false. */
+    if (!is_list_iter) {
+        if (!iter_spec_resolve_numeric(&s, /*allow_inf=*/false,
+                                       &min_val, &max_val, &di_val,
+                                       &is_real, &is_inf)) {
+            iter_spec_free(&s);
+            return NULL;
         }
-    } else {
-        imax_e = evaluate(spec);
-        is_n_times = 1;
     }
-    
-    if (is_n_times) {
-        if (imax_e->type != EXPR_INTEGER) goto L_fail;
-    } else if (!is_list_iter) {
-        if (imin_e->type == EXPR_REAL || imax_e->type == EXPR_REAL || di_e->type == EXPR_REAL) is_real = true;
-        
-        int64_t n, d;
-        if (imin_e->type == EXPR_INTEGER) min_val = (double)imin_e->data.integer;
-        else if (imin_e->type == EXPR_REAL) min_val = imin_e->data.real;
-        else if (is_rational(imin_e, &n, &d)) min_val = (double)n / d;
-        else goto L_fail;
-        
-        if (imax_e->type == EXPR_INTEGER) max_val = (double)imax_e->data.integer;
-        else if (imax_e->type == EXPR_REAL) max_val = imax_e->data.real;
-        else if (is_rational(imax_e, &n, &d)) max_val = (double)n / d;
-        else goto L_fail;
-        
-        if (di_e->type == EXPR_INTEGER) di_val = (double)di_e->data.integer;
-        else if (di_e->type == EXPR_REAL) di_val = di_e->data.real;
-        else if (is_rational(di_e, &n, &d)) di_val = (double)n / d;
-        else goto L_fail;
-        
-        if (di_val == 0) goto L_fail;
-    }
-    
+
+    /* Convenience aliases into the owned IterSpec (freed via iter_spec_free). */
+    Expr* var_sym = s.var;
+    Expr* imin_e  = s.imin;
+    Expr* imax_e  = s.imax;
+    Expr* di_e    = s.di;
+    Expr* list_e  = s.list;
+
     size_t results_cap = 16;
     size_t results_count = 0;
     Expr** results = malloc(sizeof(Expr*) * results_cap);
 
-    Rule* old_own = NULL;
-    if (var_sym) {
-        SymbolDef* def = symtab_get_def(var_sym->data.symbol);
-        old_own = def->own_values;
-        def->own_values = NULL;
-    }
+    Rule* old_own = iter_spec_shadow(var_sym);
 
     if (is_n_times) {
         int64_t n = imax_e->data.integer;
@@ -161,34 +113,12 @@ Expr* builtin_table(Expr* res) {
         if (curr_e) expr_free(curr_e);
     }
 
-    if (var_sym) {
-        SymbolDef* def = symtab_get_def(var_sym->data.symbol);
-        Rule* temp_own = def->own_values;
-        while (temp_own) {
-            Rule* next = temp_own->next;
-            expr_free(temp_own->pattern);
-            expr_free(temp_own->replacement);
-            free(temp_own);
-            temp_own = next;
-        }
-        def->own_values = old_own;
-    }
-
-    if (imax_e) expr_free(imax_e);
-    if (imin_e) expr_free(imin_e);
-    if (di_e) expr_free(di_e);
-    if (list_e) expr_free(list_e);
+    iter_spec_restore(var_sym, old_own);
+    iter_spec_free(&s);
 
     Expr* result_list = expr_new_function(expr_new_symbol("List"), results, results_count);
     free(results);
     return result_list;
-
-L_fail:
-    if (imin_e) expr_free(imin_e);
-    if (imax_e) expr_free(imax_e);
-    if (di_e) expr_free(di_e);
-    if (list_e) expr_free(list_e);
-    return NULL;
 }
 
 static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_count, size_t current_dim, Expr** current_args) {
