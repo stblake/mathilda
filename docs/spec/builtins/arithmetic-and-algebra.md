@@ -1112,6 +1112,40 @@ In[4]:= N[Fibonacci[15/17], 50]
 Out[4]= 0.95651991392431122508582263427692298648606969012061
 ```
 
+## LucasL
+- `LucasL[n]`: the `n`th Lucas number `L_n`.
+- `LucasL[n, x]`: the `n`th Lucas polynomial `L_n(x)`, the coefficient of
+  `t^n` in `(2 - t x) / (1 - x t - t^2)`.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+Evaluation:
+- Exact integer `n`: `LucasL[n]` uses GMP **fast doubling** (`O(log n)`) of the
+  Fibonacci pair, `L_m = 2 F_{m+1} - F_m`; `LucasL[n, x]` builds the polynomial
+  from the recurrence `L_k = x L_{k-1} + L_{k-2}` with `L_0 = 2`, `L_1 = x`
+  (Expand-ed each step). Negative orders use `L_{-n} = (-1)^n L_n` (and likewise
+  for the polynomials).
+- Inexact / complex order (`Real`, MPFR, or `Complex`): the generalized closed
+  forms — `LucasL[n] = φ^n + Cos[π n] φ^{-n}` with `φ = GoldenRatio`, and
+  `LucasL[n, x] = β^n + Cos[π n] β^{-n}` with `β = (x + Sqrt[x²+4]) / 2` — are
+  numericalized at the precision carried by the inputs (machine or MPFR).
+- Symbolic order (or exact non-integer order with no `N` applied) stays
+  unevaluated.
+
+Derivatives (native, via `src/calculus/deriv.c`):
+- `D[LucasL[n], n]` and both partials of `D[LucasL[n, x], ...]` are provided,
+  e.g. `D[LucasL[n, x], x] = (n (2 LucasL[n-1, x] + x LucasL[n, x])) / (4 + x²)`.
+
+```
+In[1]:= Table[LucasL[n], {n, 10}]
+Out[1]= {1, 3, 4, 7, 11, 18, 29, 47, 76, 123}
+In[2]:= LucasL[7, x]
+Out[2]= 7 x + 14 x^3 + 7 x^5 + x^7
+In[3]:= LucasL[-11.]
+Out[3]= -199.
+In[4]:= N[LucasL[11/3], 50]
+Out[4]= 5.9239626529619554101356978621940126287519855422362
+```
+
 ## PrimeQ
 - `PrimeQ[n]`: Returns `True` if `n` is a prime number, `False` otherwise.
 - `PrimeQ[z]`: For a Gaussian integer `z = a + b I`, returns `True` if `z` is a Gaussian prime.

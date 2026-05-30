@@ -201,6 +201,17 @@ void info_init(void) {
         "F_{-n} = (-1)^(n+1) F_n. Inexact or complex orders evaluate the\n"
         "generalized closed form numerically. Listable; symbolic orders stay\n"
         "unevaluated.");
+    symtab_set_docstring("LucasL",
+        "LucasL[n]\n"
+        "\tgives the nth Lucas number L_n.\n"
+        "LucasL[n, x]\n"
+        "\tgives the nth Lucas polynomial L_n(x).\n"
+        "Exact integer orders are computed via GMP fast doubling (numbers, using\n"
+        "L_m = 2 F_{m+1} - F_m) or the recurrence L_k = x L_{k-1} + L_{k-2} with\n"
+        "L_0 = 2, L_1 = x (polynomials); negative orders use L_{-n} = (-1)^n L_n.\n"
+        "Inexact or complex orders evaluate the generalized closed form\n"
+        "L_n = phi^n + Cos[Pi n] phi^-n (phi = GoldenRatio) numerically.\n"
+        "Listable; symbolic orders stay unevaluated.");
     symtab_set_docstring("Binomial",
         "Binomial[n, m]\n"
         "\tgives the binomial coefficient C(n, m) = n! / (m! (n-m)!).\n"

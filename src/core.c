@@ -39,6 +39,7 @@
 #include "rat.h"
 #include "facint.h"
 #include "fibonacci.h"
+#include "lucas.h"
 #include "facpoly.h"
 #include "solve.h"
 #include "findroot.h"
@@ -442,6 +443,7 @@ void core_init(void) {
 
     facint_init();
     fibonacci_init();
+    lucas_init();
 
     Expr* zero = expr_new_integer(0);
     Expr* one = expr_new_integer(1);
