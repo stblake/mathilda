@@ -41,6 +41,31 @@ void test_inputform_wrapper() {
 }
 
 
+/* Regression: a negative bigint term in a Plus must print as " - <abs>"
+ * rather than " + -<abs>". This previously affected only bignum coefficients
+ * (int64 terms were already handled). */
+void test_negative_bigint_in_plus() {
+    /* Top-level negative bigint term: x - Fibonacci[100] y. */
+    Expr* e = parse_expression("x - Fibonacci[100] y");
+    Expr* res = evaluate(e);
+    char* str = expr_to_string(res);
+    ASSERT(strstr(str, "+ -") == NULL);
+    ASSERT(strstr(str, "- 354224848179261915075 y") != NULL);
+    free(str);
+    expr_free(e);
+    expr_free(res);
+
+    /* Bare negative bigint plus a symbol. */
+    Expr* e2 = parse_expression("-Fibonacci[100] + x");
+    Expr* res2 = evaluate(e2);
+    char* str2 = expr_to_string(res2);
+    ASSERT(strstr(str2, "+ -") == NULL);
+    ASSERT(strncmp(str2, "-354224848179261915075", 22) == 0);
+    free(str2);
+    expr_free(e2);
+    expr_free(res2);
+}
+
 void test_holdform() {
     Expr* e = parse_expression("HoldForm[1 + 1]");
     Expr* res = evaluate(e);
@@ -64,6 +89,7 @@ int main() {
     TEST(test_print_basic);
     TEST(test_fullform_wrapper);
     TEST(test_inputform_wrapper);
+    TEST(test_negative_bigint_in_plus);
     TEST(test_holdform);
     
     printf("All print tests passed!\n");

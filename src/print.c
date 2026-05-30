@@ -22,6 +22,18 @@ static void print_standard(Expr* e, int parent_prec);
 static void print_series_data(Expr* e, int parent_prec);
 static void print_tex(Expr* e, int parent_prec);
 
+/* Returns a fresh expression holding -b, where b is a bigint node. The result
+ * is normalised back to a machine int when it fits. Used by the Plus printers
+ * to pull the sign of a negative bigint term onto the operator. */
+static Expr* negate_bigint(Expr* b) {
+    mpz_t n;
+    mpz_init(n);
+    mpz_neg(n, b->data.bigint);
+    Expr* r = expr_new_bigint_from_mpz(n);
+    mpz_clear(n);
+    return expr_bigint_normalize(r);
+}
+
 /*
  * When non-zero, print_standard renders heads like SeriesData using their
  * literal head[args...] form rather than the pretty mathematical form.
@@ -464,6 +476,10 @@ static void print_standard(Expr* e, int parent_prec) {
                     is_negative = true;
                     t_copy = expr_new_integer(-arg->data.integer);
                     to_print = t_copy;
+                } else if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) < 0) {
+                    is_negative = true;
+                    t_copy = negate_bigint(arg);
+                    to_print = t_copy;
                 } else if (arg->type == EXPR_REAL && arg->data.real < 0) {
                     is_negative = true;
                     t_copy = expr_new_real(-arg->data.real);
@@ -479,6 +495,25 @@ static void print_standard(Expr* e, int parent_prec) {
                             t_copy->data.function.args[0] = expr_new_integer(-f_arg->data.integer);
 
                             if (t_copy->data.function.args[0]->data.integer == 1 && t_copy->data.function.arg_count > 1) {
+                                Expr** new_args = malloc(sizeof(Expr*) * (t_copy->data.function.arg_count - 1));
+                                for (size_t k = 1; k < t_copy->data.function.arg_count; k++) {
+                                    new_args[k-1] = expr_copy(t_copy->data.function.args[k]);
+                                }
+                                Expr* new_times = expr_new_function(expr_new_symbol("Times"), new_args, t_copy->data.function.arg_count - 1);
+                                expr_free(t_copy);
+                                t_copy = new_times;
+                                free(new_args);
+                            }
+                            to_print = t_copy;
+                        } else if (f_arg->type == EXPR_BIGINT && mpz_sgn(f_arg->data.bigint) < 0) {
+                            is_negative = true;
+                            t_copy = expr_unshare(expr_copy(arg));
+                            expr_free(t_copy->data.function.args[0]);
+                            t_copy->data.function.args[0] = negate_bigint(f_arg);
+
+                            if (t_copy->data.function.args[0]->type == EXPR_INTEGER &&
+                                t_copy->data.function.args[0]->data.integer == 1 &&
+                                t_copy->data.function.arg_count > 1) {
                                 Expr** new_args = malloc(sizeof(Expr*) * (t_copy->data.function.arg_count - 1));
                                 for (size_t k = 1; k < t_copy->data.function.arg_count; k++) {
                                     new_args[k-1] = expr_copy(t_copy->data.function.args[k]);
@@ -1249,6 +1284,8 @@ static void print_tex(Expr* e, int parent_prec) {
 
                 if (arg->type == EXPR_INTEGER && arg->data.integer < 0) {
                     is_neg = true; owned = expr_new_integer(-arg->data.integer); to_print = owned;
+                } else if (arg->type == EXPR_BIGINT && mpz_sgn(arg->data.bigint) < 0) {
+                    is_neg = true; owned = negate_bigint(arg); to_print = owned;
                 } else if (arg->type == EXPR_REAL && arg->data.real < 0.0) {
                     is_neg = true; owned = expr_new_real(-arg->data.real); to_print = owned;
                 } else if (arg->type == EXPR_FUNCTION && arg->data.function.head->type == EXPR_SYMBOL
@@ -1261,6 +1298,20 @@ static void print_tex(Expr* e, int parent_prec) {
                         expr_free(owned->data.function.args[0]);
                         owned->data.function.args[0] = expr_new_integer(-f0->data.integer);
                         if (owned->data.function.args[0]->data.integer == 1 && owned->data.function.arg_count > 1) {
+                            Expr** na = malloc(sizeof(Expr*) * (owned->data.function.arg_count - 1));
+                            for (size_t k = 1; k < owned->data.function.arg_count; k++) na[k-1] = expr_copy(owned->data.function.args[k]);
+                            Expr* t = expr_new_function(expr_new_symbol("Times"), na, owned->data.function.arg_count - 1);
+                            expr_free(owned); owned = t; free(na);
+                        }
+                        to_print = owned;
+                    } else if (f0->type == EXPR_BIGINT && mpz_sgn(f0->data.bigint) < 0) {
+                        is_neg = true;
+                        owned = expr_unshare(expr_copy(arg));
+                        expr_free(owned->data.function.args[0]);
+                        owned->data.function.args[0] = negate_bigint(f0);
+                        if (owned->data.function.args[0]->type == EXPR_INTEGER &&
+                            owned->data.function.args[0]->data.integer == 1 &&
+                            owned->data.function.arg_count > 1) {
                             Expr** na = malloc(sizeof(Expr*) * (owned->data.function.arg_count - 1));
                             for (size_t k = 1; k < owned->data.function.arg_count; k++) na[k-1] = expr_copy(owned->data.function.args[k]);
                             Expr* t = expr_new_function(expr_new_symbol("Times"), na, owned->data.function.arg_count - 1);
