@@ -812,6 +812,51 @@ Out[8]= -Infinity
 
 Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
 
+## ContinuedFraction
+Gives the simple continued-fraction expansion of a number.
+- `ContinuedFraction[x, n]`: a list of the first `n` terms.
+- `ContinuedFraction[x]`: all terms determinable from `x`.
+
+The list `{a1, a2, a3, ...}` corresponds to `a1 + 1/(a2 + 1/(a3 + ...))`.
+
+**Features**:
+- `Protected`, `Listable`.
+- **Exact rationals** (Integer / BigInt / Rational) use the Euclidean
+  algorithm and return the canonical terminating form (last term `>= 2`,
+  never `{..., k-1, 1}`). A finite rational may yield fewer than `n` terms.
+- **Quadratic surds** `Sqrt[d]` with `d` a non-square integer use the
+  periodic surd recurrence. Without a count the result is
+  `{a1, ..., {b1, ...}}`, where the bracketed block repeats cyclically; with
+  a count the periodic sequence is unrolled to exactly `n` terms. (General
+  quadratic irrationals are not recognised symbolically — pass an explicit
+  `n` to use the numeric path.) The no-count form is declined for a `d` whose
+  period would be astronomically long.
+- **Inexact reals** (machine `Real` or arbitrary-precision MPFR) yield terms
+  only as far as the input precision determines them, tracking the value's
+  uncertainty and stopping when the next term is no longer pinned down.
+- **Exact symbolic reals with an explicit `n`** (e.g. `Pi`, `Sqrt[E]`,
+  `Exp[Pi Sqrt[163]]`) are numericised at adaptively increasing precision
+  until `n` terms are confirmed by two consecutive evaluations.
+- Left unevaluated for an exact non-rational, non-quadratic value with no
+  count, or a non-real numeric value.
+
+```mathematica
+In[1]:= ContinuedFraction[47/17]
+Out[1]= {2, 1, 3, 4}
+
+In[2]:= ContinuedFraction[Sqrt[13]]
+Out[2]= {3, {1, 1, 1, 1, 6}}
+
+In[3]:= ContinuedFraction[Pi, 20]
+Out[3]= {3, 7, 15, 1, 292, 1, 1, 1, 2, 1, 3, 1, 14, 2, 1, 1, 2, 2, 2, 2}
+
+In[4]:= ContinuedFraction[N[Pi]]
+Out[4]= {3, 7, 15, 1, 292, 1, 1, 1, 2, 1, 3, 1, 14}
+
+In[5]:= ContinuedFraction[Exp[Pi Sqrt[163]], 10]
+Out[5]= {262537412640768743, 1, 1333462407511, 1, 8, 1, 1, 5, 1, 4}
+```
+
 ## PowerMod
 Gives modular exponentiations, inverses, and roots.
 - `PowerMod[a, b, m]`: Gives $a^b \pmod m$.

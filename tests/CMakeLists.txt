@@ -140,6 +140,7 @@ set(COMMON_SRC
     ../src/rat.c
     ../src/poly/facpoly.c
     ../src/parfrac.c
+    ../src/contfrac.c
     ../src/datetime.c
     ../src/linalg/linalg.c
     ../src/linalg/util.c
@@ -1012,6 +1013,9 @@ add_test(NAME matlstsq_tests COMMAND matlstsq_tests)
 add_executable(parfrac_tests test_parfrac.c ${COMMON_SRC})
 target_include_directories(parfrac_tests PRIVATE ../src)
 
+add_executable(contfrac_tests test_contfrac.c ${COMMON_SRC})
+target_include_directories(contfrac_tests PRIVATE ../src)
+
 add_executable(polymod_tests test_polymod.c ${COMMON_SRC})
 target_include_directories(polymod_tests PRIVATE ../src)
 
@@ -1244,6 +1248,7 @@ if(USE_ECM)
     add_dependencies(rat_tests build_ecm)
     add_dependencies(linalg_tests build_ecm)
     add_dependencies(parfrac_tests build_ecm)
+    add_dependencies(contfrac_tests build_ecm)
     add_dependencies(polymod_tests build_ecm)
     add_dependencies(bigint_tests build_ecm)
     add_dependencies(expr_sharing_tests build_ecm)

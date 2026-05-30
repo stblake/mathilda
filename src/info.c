@@ -1379,6 +1379,18 @@ void info_init(void) {
         "\tgives the smallest multiple of a greater than or equal to x.\n"
         "Ceiling is Listable. Exact inputs return exact integers; Real / MPFR\n"
         "inputs are rounded toward +Infinity at the input precision.");
+    symtab_set_docstring("ContinuedFraction",
+        "ContinuedFraction[x, n]\n"
+        "\tgives a list of the first n terms in the continued-fraction\n"
+        "\trepresentation of x.\n"
+        "ContinuedFraction[x]\n"
+        "\tgives all terms determinable from the precision of x.\n"
+        "The list {a1, a2, a3, ...} corresponds to a1 + 1/(a2 + 1/(a3 + ...)).\n"
+        "Exact rationals give a finite (canonical, last term >= 2) expansion.\n"
+        "For Sqrt[d] with d a non-square integer the no-count form returns\n"
+        "{a1, ..., {b1, ...}}, the bracketed block repeating cyclically. Inexact\n"
+        "Real / MPFR inputs yield terms only as far as the precision determines\n"
+        "them. ContinuedFraction is Listable.");
     symtab_set_docstring("Round",
         "Round[x]\n"
         "\trounds x to the nearest integer, breaking ties to the nearest even\n"

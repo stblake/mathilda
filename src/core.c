@@ -69,6 +69,7 @@
 #endif
 #include "rat.h"
 #include "parfrac.h"
+#include "contfrac.h"
 #include "random.h"
 #include "picostrings.h"
 #include "series.h"
@@ -157,6 +158,7 @@ void core_init(void) {
     system_constants_init();
     repl_hooks_init();
     parfrac_init();
+    contfrac_init();
     modular_init();
     symtab_add_builtin("AtomQ", builtin_atomq);
     symtab_add_builtin("Identity", builtin_identity);

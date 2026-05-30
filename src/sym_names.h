@@ -82,6 +82,7 @@ extern const char* SYM_ConditionalExpression;
 extern const char* SYM_Conjugate;
 extern const char* SYM_ConjugateTranspose;
 extern const char* SYM_Continue;
+extern const char* SYM_ContinuedFraction;
 extern const char* SYM_ContourPoints;
 extern const char* SYM_Cos;
 extern const char* SYM_Cosh;
