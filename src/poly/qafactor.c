@@ -1690,7 +1690,7 @@ static Expr* canonicalise_nested_radicands(const Expr* e,
                     (Expr*[]){canon, expr_copy((Expr*)exp_e)}, 2);
             }
             /* Evaluate so the new radical is canonical. */
-            return evaluate(new_radical);
+            return eval_and_free(new_radical);
         }
         if (canon) expr_free(canon);
         /* Fall through to recursive walk if no change. */

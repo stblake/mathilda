@@ -169,7 +169,7 @@ static Expr* transform_prime_rebase_impl(const Expr* e) {
 
     /* Re-evaluate so canonical Times same-base combine collapses the
      * rebased Power factors (e.g. 2^(2x) * 2^(-x) * 2^(-x) -> 2^0 = 1). */
-    Expr* result = evaluate(rebased);
+    Expr* result = eval_and_free(rebased);
     if (!result) result = expr_copy((Expr*)e);
 
     if (dbg) simp_debug_log("PrimeRebase", e, result,
@@ -267,7 +267,7 @@ static Expr* power_oneify_walk(const Expr* e) {
         }
         Expr* times_call = expr_new_function(new_head, new_args, out_n);
         free(new_args);
-        Expr* result = evaluate(times_call);
+        Expr* result = eval_and_free(times_call);
         if (!result) result = expr_copy((Expr*)e);
         return result;
     }
@@ -539,7 +539,7 @@ static Expr* transform_power_distribute_impl(const Expr* e,
     /* Re-evaluate so canonical Times same-base merge collapses the
      * newly-introduced Power[u, e] factors against existing same-base
      * factors elsewhere in the surrounding Times. */
-    Expr* result = evaluate(split);
+    Expr* result = eval_and_free(split);
     if (!result) result = expr_copy((Expr*)e);
 
     if (dbg) simp_debug_log("PowerDistribute", e, result,
@@ -676,8 +676,9 @@ static Expr* radical_canon_rationalise_negexp(const Expr* e) {
     Expr* times_call = expr_new_function(
         expr_new_symbol("Times"), times_args, 2);
     Expr* out = evaluate(times_call);
-    return out ? out : expr_new_function(
-        expr_new_symbol("Times"), times_args, 2);
+    if (!out) out = expr_copy(times_call);  /* fall back to unevaluated form */
+    expr_free(times_call);
+    return out;
 }
 
 /* If e = Power[Rational[a, b], q] with positive integers a, b > 1,
@@ -717,7 +718,7 @@ static Expr* radical_canon_split_rational_base(const Expr* e) {
     Expr* times_args[2] = { pow_a, pow_b };
     Expr* times_call = expr_new_function(
         expr_new_symbol("Times"), times_args, 2);
-    Expr* out = evaluate(times_call);
+    Expr* out = eval_and_free(times_call);
     return out;
 }
 
@@ -763,9 +764,13 @@ static Expr* transform_radical_canon_impl(const Expr* e) {
     /* Re-evaluate so canonical Plus/Times fold the rewritten tree --
      * the walker only evaluates at each Power-level rewrite, leaving the
      * surrounding Plus/Times in unevaluated form (e.g. an arg pair like
-     * 1/2 Sqrt[2] + -1 (1/2 Sqrt[2]) won't auto-cancel without this). */
+     * 1/2 Sqrt[2] + -1 (1/2 Sqrt[2]) won't auto-cancel without this).
+     * evaluate() does not consume its argument, so `walked` is still ours
+     * to release afterwards (refcount-safe even when evaluate returns the
+     * same shared node for an already-stable input). */
     Expr* result = evaluate(walked);
     if (!result) result = expr_copy((Expr*)e);
+    expr_free(walked);
     if (dbg) simp_debug_log("RadicalCanon", e, result,
                             simp_debug_elapsed_ms(t0));
     return result;

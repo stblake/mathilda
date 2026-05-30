@@ -187,7 +187,7 @@ static Expr* denom_subst_radical_to_gen(const Expr* e, const Expr* base,
                                                  base, n, gen);
     Expr* result = expr_new_function(new_head, new_args, count);
     free(new_args);
-    return evaluate(result);
+    return eval_and_free(result);
 }
 
 /* Reverse: substitute Power[gen, k] -> Power[base, k * (1/n)] (so a
@@ -231,7 +231,7 @@ static Expr* denom_subst_gen_to_radical(const Expr* e, const char* gen,
                                                  gen, base, n);
     Expr* result = expr_new_function(new_head, new_args, count);
     free(new_args);
-    return evaluate(result);
+    return eval_and_free(result);
 }
 
 /* Compute the inverse of `denom` (a polynomial in radicals over a

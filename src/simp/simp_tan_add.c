@@ -315,7 +315,7 @@ static Expr* transform_tan_addition_impl(const Expr* e) {
             };
             Expr* sum_call = expr_new_function(
                 expr_new_symbol("Plus"), sum_args, 2);
-            Expr* sum = evaluate(sum_call);
+            Expr* sum = eval_and_free(sum_call);
             if (!sum) continue;
             if (tas_contains(&args, sum)) {
                 /* Use the canonical sum as `c` for the rule LHS.  The
@@ -357,7 +357,7 @@ static Expr* transform_tan_addition_impl(const Expr* e) {
     Expr* ra_args[2] = { expr_copy((Expr*)e), rule_list };
     Expr* ra_call = expr_new_function(
         expr_new_symbol("ReplaceAll"), ra_args, 2);
-    Expr* substituted = evaluate(ra_call);
+    Expr* substituted = eval_and_free(ra_call);
     if (!substituted) {
         Expr* out = expr_copy((Expr*)e);
         if (dbg) simp_debug_log("TanAddition", e, out,
@@ -372,14 +372,14 @@ static Expr* transform_tan_addition_impl(const Expr* e) {
     Expr* tg_args[1] = { substituted };
     Expr* tg_call = expr_new_function(
         expr_new_symbol("Together"), tg_args, 1);
-    Expr* tg = evaluate(tg_call);
+    Expr* tg = eval_and_free(tg_call);
     Expr* result = tg ? tg : expr_copy((Expr*)e);
 
-    Expr* cn_args[1] = { result };
+    Expr* cn_args[1] = { expr_copy(result) };
     Expr* cn_call = expr_new_function(
         expr_new_symbol("Cancel"), cn_args, 1);
-    Expr* cn = evaluate(cn_call);
-    if (cn) result = cn;
+    Expr* cn = eval_and_free(cn_call);
+    if (cn) { expr_free(result); result = cn; }
 
     if (dbg) simp_debug_log("TanAddition", e, result,
                             simp_debug_elapsed_ms(t0));

@@ -361,14 +361,14 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
     };
     Expr* d_call = expr_new_function(
         expr_new_symbol("Plus"), d_args, 2);
-    Expr* d_sum = evaluate(d_call);
+    Expr* d_sum = eval_and_free(d_call);
     /* Expand so Times[2, Plus[...]] partitions term-by-term. The threaded
      * input may already have collected common factors via Collect, which
      * defeats coefficient-level rebalancing. */
     Expr* exp_args[1] = { d_sum };
     Expr* d_exp_call = expr_new_function(
         expr_new_symbol("Expand"), exp_args, 1);
-    Expr* d = evaluate(d_exp_call);
+    Expr* d = eval_and_free(d_exp_call);
 
     Expr* d_singleton[1];
     Expr** terms;
@@ -539,13 +539,13 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
     expr_free(d);
 
     /* Re-evaluate each side so canonical ordering / Plus flattening kicks in. */
-    Expr* lhs_e = evaluate(new_lhs);
-    Expr* rhs_e = evaluate(new_rhs);
+    Expr* lhs_e = eval_and_free(new_lhs);
+    Expr* rhs_e = eval_and_free(new_rhs);
 
     Expr* rel_args[2] = { lhs_e, rhs_e };
     Expr* out = expr_new_function(
         expr_new_symbol(out_head), rel_args, 2);
-    Expr* out_eval = evaluate(out);
+    Expr* out_eval = eval_and_free(out);
     return out_eval;
 }
 
@@ -652,7 +652,7 @@ Expr* builtin_simplify(Expr* res) {
         }
         Expr* threaded = expr_new_function(expr_copy(expr->data.function.head), new_args, n);
         free(new_args);
-        Expr* threaded_eval = evaluate(threaded);
+        Expr* threaded_eval = eval_and_free(threaded);
 
         /* Rebalance candidate: only meaningful for a binary relation that
          * survived evaluation (Equal collapsed to True/False is not a

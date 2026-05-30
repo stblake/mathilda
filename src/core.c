@@ -2591,13 +2591,13 @@ Expr* builtin_time_constrained(Expr* res) {
      * evaluate_step frees `res` once we return non-NULL; the builtin
      * convention is "don't double-free." */
     if (kind == 0) {
-        return evaluate(expr_copy(expr_arg));
+        return eval_and_free(expr_copy(expr_arg));
     }
 
     /* Non-positive (zero, negative, NaN) budgets abort immediately. */
     if (!(seconds > 0.0)) {
         if (fail_arg) {
-            return evaluate(expr_copy(fail_arg));
+            return eval_and_free(expr_copy(fail_arg));
         }
         return expr_new_symbol("$Aborted");
     }
@@ -2703,7 +2703,7 @@ Expr* builtin_time_constrained(Expr* res) {
              * down, with a fresh CPU budget.  Mathematica's semantics
              * say "TimeConstrained evaluates failexpr only if the
              * evaluation is aborted." */
-            return evaluate(expr_copy(fail_arg));
+            return eval_and_free(expr_copy(fail_arg));
         }
         return expr_new_symbol("$Aborted");
     }

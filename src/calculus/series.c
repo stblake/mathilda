@@ -65,8 +65,9 @@ static Expr* mk_plus(Expr* a, Expr* b)  { return mk_fn2("Plus",  a, b); }
 static Expr* mk_times(Expr* a, Expr* b) { return mk_fn2("Times", a, b); }
 static Expr* mk_power(Expr* a, Expr* b) { return mk_fn2("Power", a, b); }
 
-/* Simplify via the evaluator; takes ownership, returns owned. */
-static Expr* simp(Expr* e) { return evaluate(e); }
+/* Simplify via the evaluator; takes ownership, returns owned.
+ * evaluate() does NOT consume its argument, so free `e` after. */
+static Expr* simp(Expr* e) { return eval_and_free(e); }
 
 static bool is_lit_zero(Expr* e) {
     if (!e) return false;
@@ -2501,7 +2502,7 @@ static bool parse_series_spec(Expr* spec, Expr** x_out, Expr** x0_out,
         Expr* n_e = spec->data.function.args[2];
         if (n_e->type != EXPR_INTEGER) {
             /* Evaluate in case the user passed a computable expression. */
-            Expr* ev = evaluate(expr_copy(n_e));
+            Expr* ev = eval_and_free(expr_copy(n_e));
             if (ev->type != EXPR_INTEGER) { expr_free(ev); return false; }
             /* Replace into the spec's own slot for the caller to read back;
              * but we just populate outputs and leak the eval? Easier: we
@@ -2679,7 +2680,7 @@ static Expr* try_apart_preprocess(Expr* f, Expr* x) {
     if (has_non_rational_power_in(f, x)) return NULL;
     Expr* args[2] = { expr_copy(f), expr_copy(x) };
     Expr* call = expr_new_function(mk_symbol("Apart"), args, 2);
-    Expr* result = evaluate(call);
+    Expr* result = eval_and_free(call);
     if (!result) return NULL;
     if (expr_eq(result, f)) { expr_free(result); return NULL; }
     return result;
@@ -2700,8 +2701,8 @@ static int64_t so_first_nonzero_exp(SeriesObj* s, int64_t from_exp) {
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only) {
     /* Evaluate f with the series context implicit. Since Series has
      * HoldAll, f has not been evaluated yet; we evaluate now. */
-    Expr* f_eval = evaluate(expr_copy(f));
-    Expr* x0_eval = evaluate(expr_copy(x0));
+    Expr* f_eval = eval_and_free(expr_copy(f));
+    Expr* x0_eval = eval_and_free(expr_copy(x0));
 
     /* Mathematica convention: Series[c, {x, ...}] where c is free of x
      * returns c verbatim (not SeriesData[...]). Applies to Series[0, ...]
@@ -2950,7 +2951,7 @@ Expr* builtin_series(Expr* res) {
             }
             Expr* call = expr_new_function(mk_symbol("Series"), new_args,
                                            res->data.function.arg_count);
-            threaded[i] = evaluate(call);
+            threaded[i] = eval_and_free(call);
         }
         Expr* lst = expr_new_function(mk_symbol("List"), threaded, n);
         free(threaded);
@@ -2994,7 +2995,7 @@ Expr* builtin_series(Expr* res) {
         for (size_t j = 0; j < rest; j++) new_args[j + 1] = expr_copy(specs[j + 1]);
         Expr* call = expr_new_function(mk_symbol("Series"), new_args, rest + 1);
         free(new_args);
-        Expr* expanded = evaluate(call);
+        Expr* expanded = eval_and_free(call);
         expr_free(coefs->data.function.args[i]);
         coefs->data.function.args[i] = expanded;
     }
