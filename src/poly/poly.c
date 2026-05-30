@@ -4799,4 +4799,5 @@ void poly_init(void) {
     symtab_add_builtin("Discriminant", builtin_discriminant);
     symtab_get_def("Discriminant")->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
     subresultants_init();
+    subresultantpolynomials_init();
 }

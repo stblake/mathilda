@@ -133,6 +133,7 @@ set(COMMON_SRC
     ../src/expand.c
     ../src/poly/poly.c
     ../src/poly/subresultants.c
+    ../src/poly/subresultantpoly.c
     ../src/rat.c
     ../src/poly/facpoly.c
     ../src/parfrac.c
@@ -381,6 +382,9 @@ target_include_directories(poly_tests PRIVATE ../src)
 
 add_executable(subresultants_tests test_subresultants.c ${COMMON_SRC})
 target_include_directories(subresultants_tests PRIVATE ../src)
+
+add_executable(subresultantpolynomials_tests test_subresultantpolynomials.c ${COMMON_SRC})
+target_include_directories(subresultantpolynomials_tests PRIVATE ../src)
 
 add_executable(expand_tests test_expand.c ${COMMON_SRC})
 target_include_directories(expand_tests PRIVATE ../src)
@@ -1218,6 +1222,7 @@ if(USE_ECM)
     add_dependencies(backtrack_tests build_ecm)
     add_dependencies(poly_tests build_ecm)
     add_dependencies(subresultants_tests build_ecm)
+    add_dependencies(subresultantpolynomials_tests build_ecm)
     add_dependencies(expand_tests build_ecm)
     add_dependencies(expandfrac_tests build_ecm)
     add_dependencies(stats_tests build_ecm)

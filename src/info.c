@@ -1998,6 +1998,17 @@ void info_init(void) {
         "\tmultiplicity).  Computed by a subresultant polynomial-remainder\n"
         "\tsequence, or a Sylvester-minor determinant for algebraic\n"
         "\tcoefficients.");
+    symtab_set_docstring("SubresultantPolynomials",
+        "SubresultantPolynomials[poly1, poly2, var]\n"
+        "\tgives the list of subresultant polynomials {S_0, ..., S_m} of\n"
+        "\tpoly1 and poly2 with respect to var, where m = Exponent[poly2,\n"
+        "\tvar].  The list has length m + 1, its first element is\n"
+        "\tResultant[poly1, poly2, var], and the coefficient of var^j in S_j\n"
+        "\tis the j-th principal subresultant coefficient.  Requires\n"
+        "\tExponent[poly1, var] >= Exponent[poly2, var] and exact\n"
+        "\tcoefficients.  Computed by a subresultant polynomial-remainder\n"
+        "\tsequence, with a determinant-polynomial fallback for algebraic\n"
+        "\tcoefficients.");
     symtab_set_docstring("GroebnerBasis",
         "GroebnerBasis[{p1, p2, ...}, {x1, x2, ...}]\n"
         "\tgives a list of polynomials that form a Gröbner basis for the\n"

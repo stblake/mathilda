@@ -222,49 +222,44 @@ static Expr* subresultants_prs(Expr* e1, Expr* e2, int n, int m, Expr* var) {
         int t = i;
         while (t >= 0 && (R[t] == NULL || is_zero_poly(R[t]))) t--;
 
-        /* Deflated leading coefficients: clc[p] is the leading coefficient of
-         * the Mathematica-normalised subresultant at the chain degree deg[p].
-         * Normal steps (delta=1) leave it equal to lc[p]; gap landings divide
-         * out lc(r_{p-1})^{delta-1}.  clc[1] = lc(r_1) (the input, undeflated). */
-        Expr** clc = (Expr**)malloc(sizeof(Expr*) * (size_t)(t + 1));
-        for (int p = 0; p <= t; p++) clc[p] = NULL;
-        for (int p = 1; p <= t; p++) {
-            if (p == 1) { clc[1] = expr_copy(lc[1]); continue; }
-            int dpm = deg[p - 1] - deg[p] - 1;           /* delta_p - 1 >= 0 */
-            if (dpm <= 0) {
-                clc[p] = expr_copy(lc[p]);
-            } else {
-                Expr* den    = internal_power((Expr*[]){expr_copy(clc[p - 1]), expr_new_integer(dpm)}, 2);
-                Expr* invden = internal_power((Expr*[]){den, expr_new_integer(-1)}, 2);
-                Expr* q      = internal_times((Expr*[]){expr_copy(lc[p]), invden}, 2);
-                Expr* qs     = internal_cancel((Expr*[]){q}, 1);
-                clc[p] = expr_expand(qs);
-                expr_free(qs);
-            }
-        }
-
+        /* Principal subresultant coefficients via the subresultant chain.
+         * Each chain member R_p is the defective subresultant of index
+         * deg(R_{p-1}) - 1; the regular subresultant of degree deg(R_p) has
+         * leading coefficient s_p, the p-th principal subresultant
+         * coefficient.  With the convention s at degree deg(R_0) = 1,
+         *
+         *     delta_p = deg(R_{p-1}) - deg(R_p)
+         *     s_p     = lc(R_p)^{delta_p} / s_{p-1}^{delta_p - 1}.
+         *
+         * Defective (degree-gap) indices have leading coefficient zero, so
+         * only the regular degrees deg(R_p) receive a nonzero entry.  (The
+         * earlier per-member deflation clc[p] = lc[p]/clc[p-1]^{delta-1} was
+         * wrong across gaps whose preceding s_{p-1} is not a unit -- e.g.
+         * 7 x^6 + 8 x - 9 vs 2 x^7 + ...; this recurrence carries the
+         * cumulative s_{p-1} factor correctly.) */
         Expr** psc = (Expr**)malloc(sizeof(Expr*) * (size_t)(L + 1));
         for (int j = 0; j <= L; j++) psc[j] = NULL;
 
+        Expr* s_prev = expr_new_integer(1);
         for (int p = 1; p <= t; p++) {
             if (deg[p - 1] <= deg[p]) continue;          /* non-strict drop (p=1, n==m) */
-            int ec = deg[p];
-            if (ec < 0 || ec > L) continue;
-            int e = deg[p - 1] - deg[p];                 /* delta_p >= 1 */
-            Expr* val;
-            if (e == 1) {
-                val = expr_copy(clc[p]);
-            } else {
-                Expr* pw = internal_power((Expr*[]){expr_copy(clc[p]), expr_new_integer(e)}, 2);
-                val = expr_expand(pw);
-                expr_free(pw);
-            }
-            if (psc[ec]) expr_free(psc[ec]);
-            psc[ec] = val;
-        }
+            int delta = deg[p - 1] - deg[p];             /* delta_p >= 1 */
+            int ec    = deg[p];
 
-        for (int p = 0; p <= t; p++) if (clc[p]) expr_free(clc[p]);
-        free(clc);
+            Expr* num   = internal_power((Expr*[]){expr_copy(lc[p]), expr_new_integer(delta)}, 2);
+            Expr* den   = internal_power((Expr*[]){expr_copy(s_prev), expr_new_integer(-(delta - 1))}, 2);
+            Expr* snew  = internal_times((Expr*[]){num, den}, 2);
+            Expr* ssimp = internal_cancel((Expr*[]){snew}, 1);
+            expr_free(s_prev);
+            s_prev = expr_expand(ssimp);
+            expr_free(ssimp);
+
+            if (ec >= 0 && ec <= L) {
+                if (psc[ec]) expr_free(psc[ec]);
+                psc[ec] = expr_copy(s_prev);
+            }
+        }
+        expr_free(s_prev);
 
         /* Equal input degrees: the top minor is empty -> psc_L = 1. */
         if (n == m) {

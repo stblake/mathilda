@@ -1216,11 +1216,13 @@ Out[11]= True
   (multiplicity counted), so the index of the first non-zero entry is the
   degree of `PolynomialGCD[poly1, poly2, var]`.
 - Computed efficiently by a subresultant polynomial-remainder sequence (the
-  same Bronstein γ/β/δ recurrence as `Resultant`), reading off the deflated
-  leading coefficient at each chain degree; defective (degree-gap) indices
-  come out as `0`. Inputs with algebraic-number coefficients (e.g. `Sqrt[2]`)
-  fall back to the Sylvester-minor determinant definition. `var` must be a
-  symbol; PSCs are polynomials in the coefficients of the inputs.
+  same Bronstein γ/β/δ recurrence as `Resultant`), reading off the leading
+  coefficient `s_p = lc(R_p)^{δ_p} / s_{p-1}^{δ_p - 1}` at each chain degree
+  (the cumulative `s_{p-1}` factor is what makes degree gaps correct even when
+  the preceding coefficient is not a unit); defective (degree-gap) indices come
+  out as `0`. Inputs with algebraic-number coefficients (e.g. `Sqrt[2]`) fall
+  back to the Sylvester-minor determinant definition. `var` must be a symbol;
+  PSCs are polynomials in the coefficients of the inputs.
 
 ```
 In[1]:= Subresultants[2x^7 + 3x^3 - 7x + 1, 3x^5 - 17x + 21, x]
@@ -1237,6 +1239,45 @@ Out[4]= {-343 a^6 + ... - d^3, -7 a^2 b + 25 a^2 b^2 - 5 b^3 + 10 a b c + c^2 - 
 
 In[5]:= Length[Subresultants[x^50 + a, x^20 + b, x]]
 Out[5]= 21
+```
+
+## SubresultantPolynomials
+- `SubresultantPolynomials[poly1, poly2, var]`: Gives the list of
+  **subresultant polynomials** `{S_0, ..., S_m}` of `poly1` and `poly2` treated
+  as polynomials in `var`, where `m = Exponent[poly2, var]`.
+- Requires `Exponent[poly1, var] >= Exponent[poly2, var]` and **exact**
+  coefficients; otherwise emits `SubresultantPolynomials::npolys` and stays
+  unevaluated.
+- The list has length `m + 1`. Its first element is
+  `Resultant[poly1, poly2, var]`; its last element is `poly2` (up to a leading
+  power of `lc[poly2]` when `Exponent[poly1, var] > Exponent[poly2, var] + 1`).
+- The degree of `S_j` is at most `j`, and the coefficient of `var^j` in `S_j`
+  is the `j`-th principal subresultant coefficient, i.e.
+  `Subresultants[poly1, poly2, var][[j+1]]`. Defective (degree-gap) entries are
+  lower-degree polynomials or `0`.
+- Computed efficiently by the subresultant polynomial-remainder sequence (the
+  same Bronstein γ/β/δ recurrence as `Subresultants`): each chain member `R_p`
+  is the defective subresultant of index `deg(R_{p-1}) - 1`, and the regular
+  subresultant of degree `deg(R_p)` is `R_p` rescaled by
+  `(lc(R_p) / s_prev)^{δ_p - 1}`. Algebraic-number coefficients fall back to the
+  determinant-polynomial definition.
+
+```
+In[1]:= SubresultantPolynomials[(x - 1)^2 (x - 2) (x - 3), (x - 1) (x - 4)^2, x]
+Out[1]= {0, -36 + 36 x, 38 - 49 x + 11 x^2, -16 + 24 x - 9 x^2 + x^3}
+
+In[2]:= SubresultantPolynomials[a x^3 + b x^2 + c x + d, 3 a x^2 + b x + c, x]
+Out[2]= {4 a^2 c^3 + 2 a b^3 d - 18 a^2 b c d + 27 a^3 d^2,
+         -2 a b c + 9 a^2 d - 2 a b^2 x + 6 a^2 c x, c + b x + 3 a x^2}
+
+In[3]:= SubresultantPolynomials[2 x^7 + 3 x^3 + 5 x - 1, 7 x^6 + 8 x - 9, x]
+Out[3]= {-183782157189, -761749829 + 3208696817 x,
+         -3143546 + 11222638 x + 3838135 x^2,
+         -21609 + 163611 x - 49392 x^2 + 64827 x^3, 0,
+         -49 + 371 x - 112 x^2 + 147 x^3, -9 + 8 x + 7 x^6}
+
+In[4]:= First[%] - Resultant[2 x^7 + 3 x^3 + 5 x - 1, 7 x^6 + 8 x - 9, x]
+Out[4]= 0
 ```
 
 ## IrreduciblePolynomialQ

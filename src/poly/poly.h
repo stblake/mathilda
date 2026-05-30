@@ -29,6 +29,8 @@ Expr* builtin_resultant(Expr* res);
 Expr* builtin_discriminant(Expr* res);
 Expr* builtin_subresultants(Expr* res);
 void  subresultants_init(void);
+Expr* builtin_subresultantpolynomials(Expr* res);
+void  subresultantpolynomials_init(void);
 
 /* ------------------------------------------------------------------ */
 /* Internal polynomial helpers used by neighbouring modules           */

@@ -306,6 +306,7 @@ extern const char* SYM_SquareFreeQ;
 extern const char* SYM_SquareMatrixQ;
 extern const char* SYM_StepMonitor;
 extern const char* SYM_String;
+extern const char* SYM_SubresultantPolynomials;
 extern const char* SYM_Subresultants;
 extern const char* SYM_SubspaceSize;
 extern const char* SYM_Switch;
