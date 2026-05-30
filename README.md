@@ -1,6 +1,6 @@
 # Mathilda
 
-Mathilda is a tiny, AI Agent-generated, computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica. Written entirely in C99, Mathilda implements a recursive expression model, structural pattern matching, rewriting rules, and an extensive library of built-in functions.
+Mathilda is an AI Agent-generated, computer algebra system (CAS) heavily inspired by the core architecture and evaluation semantics of Mathematica. Written entirely in C99, Mathilda implements a recursive expression model, structural pattern matching, rewriting rules, and an extensive library of built-in functions.
 
 ## 🌟 Key Features
 
