@@ -60,6 +60,11 @@ binding does not leak (->30). `sum_tests` 42/42.
 Secondary fix: `Method -> "Polynomial"` now takes effect on finite
 unit-step numeric ranges (was silently ignored before).
 
-Not addressed (pre-existing, out of scope): the symbolic-bound dispatch
-path drops `s.di` entirely, so a symbolic-bound sum with step != 1 would
-be wrong — but that predates this change and no test exercises it.
+Follow-up (now fixed, 2026-05-30): the symbolic-bound dispatch path
+dropped `s.di`, so a symbolic-bound sum with step != 1 (e.g.
+`Sum[i, {i, 1, n, 2}]`) wrongly collapsed to the unit-step closed form
+`1/2 n (1 + n)`. The closed-form stages take no step argument and assume a
+unit step, so the final `dispatch_def` is now guarded by
+`is_unit_step(s.di)`: a non-unit step with no step-aware closed form
+returns NULL and the `Sum[...]` stays held. Two regression checks added
+(`Sum[i, {i, 1, n, 2}]`, `Sum[i^2, {i, 1, n, 3}]`); `sum_tests` 44/44.

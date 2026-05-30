@@ -522,7 +522,10 @@ form applies (a non-summable body, e.g. `Sum[Prime[i], {i, 1, 6}]`), or
 the step is not `1`, or the body iterates an explicit list, the sum falls
 back to direct term-by-term expansion (empty ranges fold to `0`).
 Symbolic bounds and the indefinite form go straight to the cascade; if
-none applies the `Sum[...]` is returned unevaluated.
+none applies the `Sum[...]` is returned unevaluated.  The cascade has no
+step-aware closed form, so a symbolic (or otherwise non-expandable) range
+with a non-unit step — e.g. `Sum[i, {i, 1, n, 2}]` — is returned
+unevaluated rather than reduced to the (wrong) unit-step result.
 `Method -> "Polynomial" | "Geometric" | "Gosper"` forces a single
 algorithm (strict, no fallback), and now also takes effect on finite
 unit-step integer ranges.

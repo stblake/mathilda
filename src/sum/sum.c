@@ -60,6 +60,15 @@ static bool result_is_unresolved(const Expr* result, const char* head_name) {
     return head_is_name(result, head_name);
 }
 
+/* True if the step is the integer 1.  The closed-form stages
+ * (Sum`Polynomial / Sum`Geometric / Sum`Gosper) take no step argument and
+ * assume a unit step, so they may only be consulted when di == 1; a non-unit
+ * step (e.g. {i, 1, n, 2}) must not be dispatched to them or it would silently
+ * produce the wrong, step-1 closed form. */
+static bool is_unit_step(const Expr* di) {
+    return di && di->type == EXPR_INTEGER && di->data.integer == 1;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Method option                                                      */
 /* ------------------------------------------------------------------ */
@@ -319,6 +328,12 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
         if (r) { iter_spec_free(&s); return r; }
         /* span too large: fall through to closed form */
     }
+
+    /* Symbolic / Infinity / over-wide ranges: only the closed-form stages
+     * remain, and they assume a unit step.  A non-unit step has no step-aware
+     * closed form here, so leave the Sum held rather than emit the wrong
+     * step-1 result. */
+    if (!is_unit_step(s.di)) { iter_spec_free(&s); return NULL; }
 
     Expr* r = dispatch_def(method, f, s.var, s.imin, s.imax);
     iter_spec_free(&s);

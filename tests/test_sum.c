@@ -127,6 +127,10 @@ int main(void) {
     /* outer binding of the iterator must not leak into the closed form */
     check("i = 7; Sum[i^2, {i, 1, 4}]", "30");
     check("Clear[i]; i", "i");
+    /* symbolic-bound sum with a non-unit step has no step-aware closed form:
+     * it must stay held, NOT collapse to the wrong unit-step result. */
+    check("Sum[i, {i, 1, n, 2}]", "Sum[i, {i, 1, n, 2}]");
+    check("Sum[i^2, {i, 1, n, 3}]", "Sum[i^2, {i, 1, n, 3}]");
 
     if (failures) {
         fprintf(stderr, "\n%d/%d sum checks FAILED\n", failures, checks);
