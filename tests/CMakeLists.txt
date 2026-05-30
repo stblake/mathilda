@@ -91,6 +91,7 @@ set(COMMON_SRC
     ../src/times.c
     ../src/arithmetic.c
     ../src/facint.c
+    ../src/fibonacci.c
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
@@ -1286,6 +1287,15 @@ else()
     target_link_libraries(simp_tests gmp m)
 endif()
 add_test(NAME simp_tests COMMAND simp_tests)
+
+add_executable(fibonacci_tests test_fibonacci.c ${COMMON_SRC})
+target_include_directories(fibonacci_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(fibonacci_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(fibonacci_tests gmp m)
+endif()
+add_test(NAME fibonacci_tests COMMAND fibonacci_tests)
 
 add_executable(distribute_tests test_distribute.c ${COMMON_SRC})
 target_include_directories(distribute_tests PRIVATE ../src)

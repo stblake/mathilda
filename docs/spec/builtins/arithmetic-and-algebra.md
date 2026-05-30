@@ -1077,6 +1077,41 @@ In[7]:= Binomial[0, 1]
 Out[7]= 0
 ```
 
+## Fibonacci
+- `Fibonacci[n]`: the `n`th Fibonacci number `F_n`.
+- `Fibonacci[n, x]`: the `n`th Fibonacci polynomial `F_n(x)`, the coefficient
+  of `t^n` in `t / (1 - x t - t^2)`.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+Evaluation:
+- Exact integer `n`: `Fibonacci[n]` uses GMP **fast doubling** (`O(log n)`);
+  `Fibonacci[n, x]` builds the polynomial from the recurrence
+  `F_k = x F_{k-1} + F_{k-2}` (Expand-ed each step). Negative orders use
+  `F_{-n} = (-1)^{n+1} F_n` (and likewise for the polynomials).
+- Inexact / complex order (`Real`, MPFR, or `Complex`): the generalized closed
+  forms — `Fibonacci[n] = (φ^n - Cos[π n] φ^{-n}) / Sqrt[5]` with
+  `φ = GoldenRatio`, and `Fibonacci[n, x] = (β^n - Cos[π n] β^{-n}) / Sqrt[x²+4]`
+  with `β = (x + Sqrt[x²+4]) / 2` — are numericalized at the precision carried
+  by the inputs (machine or MPFR).
+- Symbolic order (or exact non-integer order with no `N` applied) stays
+  unevaluated.
+
+Derivatives (native, via `src/calculus/deriv.c`):
+- `D[Fibonacci[n], n]` and both partials of `D[Fibonacci[n, x], ...]` are
+  provided, e.g.
+  `D[Fibonacci[n, x], x] = (2 n Fibonacci[n-1, x] + (n-1) x Fibonacci[n, x]) / (4 + x²)`.
+
+```
+In[1]:= Table[Fibonacci[n], {n, 10}]
+Out[1]= {1, 1, 2, 3, 5, 8, 13, 21, 34, 55}
+In[2]:= Fibonacci[7, x]
+Out[2]= 1 + 6 x^2 + 5 x^4 + x^6
+In[3]:= Fibonacci[5.8, 3]
+Out[3]= 283.483
+In[4]:= N[Fibonacci[15/17], 50]
+Out[4]= 0.95651991392431122508582263427692298648606969012061
+```
+
 ## PrimeQ
 - `PrimeQ[n]`: Returns `True` if `n` is a prime number, `False` otherwise.
 - `PrimeQ[z]`: For a Gaussian integer `z = a + b I`, returns `True` if `z` is a Gaussian prime.

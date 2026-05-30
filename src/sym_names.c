@@ -118,6 +118,7 @@ const char* SYM_FileExistsQ = NULL;
 const char* SYM_FileExtension = NULL;
 const char* SYM_FilePrint = NULL;
 const char* SYM_Fermat = NULL;
+const char* SYM_Fibonacci = NULL;
 const char* SYM_FindMaximum = NULL;
 const char* SYM_FindMinimum = NULL;
 const char* SYM_FindRoot = NULL;
@@ -447,6 +448,7 @@ void sym_names_init(void) {
     SYM_FileExtension              = intern_symbol("FileExtension");
     SYM_FilePrint                  = intern_symbol("FilePrint");
     SYM_Fermat                     = intern_symbol("Fermat");
+    SYM_Fibonacci                  = intern_symbol("Fibonacci");
     SYM_FindMaximum                = intern_symbol("FindMaximum");
     SYM_FindMinimum                = intern_symbol("FindMinimum");
     SYM_FindRoot                   = intern_symbol("FindRoot");

@@ -191,6 +191,16 @@ void info_init(void) {
         "rational from the Gamma functional equation. Negative integers give\n"
         "ComplexInfinity. Other inputs stay unevaluated.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
+    symtab_set_docstring("Fibonacci",
+        "Fibonacci[n]\n"
+        "\tgives the nth Fibonacci number F_n.\n"
+        "Fibonacci[n, x]\n"
+        "\tgives the nth Fibonacci polynomial F_n(x).\n"
+        "Exact integer orders are computed via GMP fast doubling (numbers) or the\n"
+        "recurrence F_k = x F_{k-1} + F_{k-2} (polynomials); negative orders use\n"
+        "F_{-n} = (-1)^(n+1) F_n. Inexact or complex orders evaluate the\n"
+        "generalized closed form numerically. Listable; symbolic orders stay\n"
+        "unevaluated.");
     symtab_set_docstring("Binomial",
         "Binomial[n, m]\n"
         "\tgives the binomial coefficient C(n, m) = n! / (m! (n-m)!).\n"

@@ -38,6 +38,7 @@
 #include "poly.h"
 #include "rat.h"
 #include "facint.h"
+#include "fibonacci.h"
 #include "facpoly.h"
 #include "solve.h"
 #include "findroot.h"
@@ -440,6 +441,7 @@ void core_init(void) {
     symtab_get_def("HoldForm")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
 
     facint_init();
+    fibonacci_init();
 
     Expr* zero = expr_new_integer(0);
     Expr* one = expr_new_integer(1);

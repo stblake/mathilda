@@ -312,6 +312,31 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_fn2("Power", mk_fn2("Times", mk_int(2), mk_fn1("Sqrt", expr_copy(g))), mk_int(-1));
     }
 
+    /* --- Fibonacci number: derivative w.r.t. its single argument. ---
+     *   d/dn Fibonacci[n] = (1/Sqrt[5]) GoldenRatio^-n
+     *       (GoldenRatio^(2 n) Log[GoldenRatio] + Cos[n Pi] Log[GoldenRatio]
+     *        + Pi Sin[n Pi]). */
+    if (!strcmp(name, "Fibonacci")) {
+        Expr* logphi = mk_fn1("Log", mk_sym("GoldenRatio"));
+        Expr* t1 = mk_fn2("Times",
+                          mk_fn2("Power", mk_sym("GoldenRatio"),
+                                 mk_fn2("Times", mk_int(2), expr_copy(g))),
+                          expr_copy(logphi));
+        Expr* t2 = mk_fn2("Times",
+                          mk_fn1("Cos", mk_fn2("Times", expr_copy(g), mk_sym("Pi"))),
+                          logphi);                          /* consumes logphi */
+        Expr* t3 = mk_fn2("Times", mk_sym("Pi"),
+                          mk_fn1("Sin", mk_fn2("Times", expr_copy(g), mk_sym("Pi"))));
+        Expr** terms = malloc(sizeof(Expr*) * 3);
+        terms[0] = t1; terms[1] = t2; terms[2] = t3;
+        Expr* inner = mk_fnN_adopt("Plus", terms, 3);
+        Expr* pref = mk_fn2("Times",
+                            mk_fn2("Power", mk_fn1("Sqrt", mk_int(5)), mk_int(-1)),
+                            mk_fn2("Power", mk_sym("GoldenRatio"),
+                                   mk_fn2("Times", mk_int(-1), expr_copy(g))));
+        return mk_fn2("Times", pref, inner);
+    }
+
     return NULL; /* not a recognised elementary unary */
 }
 
@@ -625,6 +650,84 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             Expr* r = compute_deriv(quot, x, nonconsts);
             expr_free(quot);
             return r;
+        }
+
+        /* --- Fibonacci[A, B]: chain rule through both arguments.
+         *   dF/dB = (2 A F[A-1,B] + (A-1) B F[A,B]) / (4 + B^2)
+         *   dF/dA = (Pi + 2 ArcSinh[B/2] Cot[A Pi]) Csc[A Pi] F[-A,B]
+         *           + (Pi Cot[A Pi]
+         *              + ArcSinh[B/2] (Cot[A Pi]^2 + Csc[A Pi]^2)) F[A,B]
+         * The total derivative is dF/dA D[A,x] + dF/dB D[B,x]; zero-derivative
+         * arms are dropped (so D[F[n,x],x] keeps only the dF/dB term, and
+         * D[F[n,x],n] keeps only dF/dA). */
+        if (h == SYM_Fibonacci && n == 2) {
+            Expr* A = args[0];
+            Expr* B = args[1];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* dB = deriv_of(B, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dB)) {
+                Expr* fAm1 = mk_fn2("Fibonacci",
+                                    mk_fn2("Plus", expr_copy(A), mk_int(-1)),
+                                    expr_copy(B));
+                Expr* fA = mk_fn2("Fibonacci", expr_copy(A), expr_copy(B));
+                Expr* t1 = mk_fn2("Times",
+                                  mk_fn2("Times", mk_int(2), expr_copy(A)), fAm1);
+                Expr* t2 = mk_fn2("Times",
+                                  mk_fn2("Times",
+                                         mk_fn2("Plus", expr_copy(A), mk_int(-1)),
+                                         expr_copy(B)),
+                                  fA);
+                Expr* numer = mk_fn2("Plus", t1, t2);
+                Expr* denom = mk_fn2("Plus", mk_int(4),
+                                     mk_fn2("Power", expr_copy(B), mk_int(2)));
+                Expr* dFdB = mk_fn2("Times", numer,
+                                    mk_fn2("Power", denom, mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", dFdB, dB);
+            } else {
+                expr_free(dB);
+            }
+
+            if (!is_lit_zero(dA)) {
+                Expr* asinh = mk_fn1("ArcSinh",
+                                     mk_fn2("Times", expr_copy(B),
+                                            mk_fn2("Power", mk_int(2), mk_int(-1))));
+                Expr* cot = mk_fn1("Cot",
+                                   mk_fn2("Times", expr_copy(A), mk_sym("Pi")));
+                Expr* csc = mk_fn1("Csc",
+                                   mk_fn2("Times", expr_copy(A), mk_sym("Pi")));
+                Expr* fnegA = mk_fn2("Fibonacci",
+                                     mk_fn2("Times", mk_int(-1), expr_copy(A)),
+                                     expr_copy(B));
+                Expr* fA = mk_fn2("Fibonacci", expr_copy(A), expr_copy(B));
+
+                /* coef1 = (Pi + 2 ArcSinh[B/2] Cot[A Pi]) Csc[A Pi] */
+                Expr* c1inner = mk_fn2("Plus", mk_sym("Pi"),
+                                       mk_fn2("Times",
+                                              mk_fn2("Times", mk_int(2), expr_copy(asinh)),
+                                              expr_copy(cot)));
+                Expr* coef1 = mk_fn2("Times", c1inner, expr_copy(csc));
+
+                /* coef2 = Pi Cot[A Pi] + ArcSinh[B/2] (Cot[A Pi]^2 + Csc[A Pi]^2) */
+                Expr* cot2 = mk_fn2("Power", expr_copy(cot), mk_int(2));
+                Expr* csc2 = mk_fn2("Power", csc, mk_int(2));
+                Expr* c2b = mk_fn2("Times", asinh, mk_fn2("Plus", cot2, csc2));
+                Expr* c2a = mk_fn2("Times", mk_sym("Pi"), cot);
+                Expr* coef2 = mk_fn2("Plus", c2a, c2b);
+
+                Expr* dFdA = mk_fn2("Plus",
+                                    mk_fn2("Times", coef1, fnegA),
+                                    mk_fn2("Times", coef2, fA));
+                terms[nt++] = mk_fn2("Times", dFdA, dA);
+            } else {
+                expr_free(dA);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
         }
 
         /* --- Known elementary unary function: F'(g) * D[g, x]. --- */
