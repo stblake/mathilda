@@ -1091,6 +1091,17 @@ void info_init(void) {
         "is ignored and the standard symbolic accumulation is returned.\n"
         "\n"
         "Accumulate has the attribute Protected.");
+    symtab_set_docstring("Differences",
+        "Differences[list]\n"
+        "\tgives the successive differences of the elements of list.\n"
+        "Differences[list, n] gives the n-th differences (length l - n).\n"
+        "Differences[list, n, s] takes differences of elements step s apart\n"
+        "(length l - n |s|).\n"
+        "Differences[list, {n1, n2, ...}] gives the successive n_k-th differences\n"
+        "at level k of a nested list; for a matrix m, Differences[m, n] (= "
+        "Differences[m, {n, 0}]) differences successive rows.\n"
+        "FoldList[Plus, x, Differences[list]] inverts Differences.\n"
+        "Differences has the attribute Protected.");
     symtab_set_docstring("NumberQ",
         "NumberQ[expr]\n"
         "\tgives True if expr is an explicit number (Integer, BigInt, Rational,\n"
