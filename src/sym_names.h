@@ -271,6 +271,7 @@ extern const char* SYM_Quotient;
 extern const char* SYM_Rational;
 extern const char* SYM_RationalFunctions;
 extern const char* SYM_Rationals;
+extern const char* SYM_Ratios;
 extern const char* SYM_Re;
 extern const char* SYM_ReadProtected;
 extern const char* SYM_Real;

@@ -387,6 +387,9 @@ target_include_directories(split_tests PRIVATE ../src)
 add_executable(differences_tests test_differences.c ${COMMON_SRC})
 target_include_directories(differences_tests PRIVATE ../src)
 
+add_executable(ratios_tests test_ratios.c ${COMMON_SRC})
+target_include_directories(ratios_tests PRIVATE ../src)
+
 add_executable(sort_tests test_sort.c ${COMMON_SRC})
 target_include_directories(sort_tests PRIVATE ../src)
 

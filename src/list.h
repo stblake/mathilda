@@ -22,6 +22,7 @@ Expr* builtin_split(Expr* res);
 Expr* builtin_total(Expr* res);
 Expr* builtin_accumulate(Expr* res);
 Expr* builtin_differences(Expr* res);
+Expr* builtin_ratios(Expr* res);
 Expr* builtin_commonest(Expr* res);
 Expr* builtin_min(Expr* res);
 Expr* builtin_max(Expr* res);

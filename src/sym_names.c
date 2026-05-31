@@ -256,6 +256,7 @@ const char* SYM_Quotient = NULL;
 const char* SYM_Rational = NULL;
 const char* SYM_RationalFunctions = NULL;
 const char* SYM_Rationals = NULL;
+const char* SYM_Ratios = NULL;
 const char* SYM_Re = NULL;
 const char* SYM_ReadProtected = NULL;
 const char* SYM_Real = NULL;
@@ -590,6 +591,7 @@ void sym_names_init(void) {
     SYM_Rational                   = intern_symbol("Rational");
     SYM_RationalFunctions          = intern_symbol("RationalFunctions");
     SYM_Rationals                  = intern_symbol("Rationals");
+    SYM_Ratios                     = intern_symbol("Ratios");
     SYM_Re                         = intern_symbol("Re");
     SYM_ReadProtected              = intern_symbol("ReadProtected");
     SYM_Real                       = intern_symbol("Real");

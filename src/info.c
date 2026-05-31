@@ -1102,6 +1102,17 @@ void info_init(void) {
         "Differences[m, {n, 0}]) differences successive rows.\n"
         "FoldList[Plus, x, Differences[list]] inverts Differences.\n"
         "Differences has the attribute Protected.");
+    symtab_set_docstring("Ratios",
+        "Ratios[list]\n"
+        "\tgives the successive ratios list[[k+1]]/list[[k]] of the elements\n"
+        "\tof list (length l - 1).\n"
+        "Ratios[list, n] gives the n-th iterated ratios (length l - n); n must\n"
+        "be a non-negative integer (n = 0 returns list unchanged).\n"
+        "Ratios[list, {n1, n2, ...}] gives the successive n_k-th ratios at\n"
+        "level k of a nested list; for a matrix m, Ratios[m, n] (= "
+        "Ratios[m, {n, 0}]) takes ratios of successive rows.\n"
+        "FoldList[Times, x, Ratios[list]] inverts Ratios.\n"
+        "Ratios has the attribute Protected.");
     symtab_set_docstring("NumberQ",
         "NumberQ[expr]\n"
         "\tgives True if expr is an explicit number (Integer, BigInt, Rational,\n"
