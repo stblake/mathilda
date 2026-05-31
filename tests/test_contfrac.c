@@ -164,6 +164,106 @@ static void test_numeric_of_exact(void) {
 }
 #endif /* USE_MPFR */
 
+/* ================================================================== */
+/* FromContinuedFraction — inverse of ContinuedFraction.               */
+/* ================================================================== */
+
+/* --- Simple finite lists: exact rationals. --- */
+static void test_fcf_rationals(void) {
+    cf_check("FromContinuedFraction[{2, 1, 3, 4}]", "47/17");   /* doc example */
+    cf_check("FromContinuedFraction[{5}]", "5");
+    cf_check("FromContinuedFraction[{0, 2}]", "1/2");
+    cf_check("FromContinuedFraction[{1, 1, 2}]", "5/3");
+    cf_check("FromContinuedFraction[{-2, 3}]", "-5/3");
+    cf_check("FromContinuedFraction[{2, 3}]", "7/3");
+    /* a single integer term reproduces it */
+    cf_check("FromContinuedFraction[{-7}]", "-7");
+}
+
+/* --- Round-trips against ContinuedFraction (exact rationals). --- */
+static void test_fcf_rational_roundtrip(void) {
+    cf_check("FromContinuedFraction[ContinuedFraction[47/17]]", "47/17");
+    cf_check("FromContinuedFraction[ContinuedFraction[355/113]]", "355/113");
+    cf_check("FromContinuedFraction[ContinuedFraction[-22/7]]", "-22/7");
+    /* big rational survives the GMP path (round-trip yields lowest terms) */
+    cf_check(
+        "FromContinuedFraction[ContinuedFraction["
+        "123456789012345678901234567890/987654321]]",
+        "13717421001371742100137174210/109739369");
+}
+
+/* --- Empty / degenerate / unevaluated forms. --- */
+static void test_fcf_edge(void) {
+    cf_check("FromContinuedFraction[{}]", "0");
+    /* not a list -> unevaluated */
+    cf_check("FromContinuedFraction[5]", "FromContinuedFraction[5]");
+    /* wrong arity -> unevaluated */
+    cf_check("FromContinuedFraction[]", "FromContinuedFraction[]");
+    cf_check("FromContinuedFraction[{1, 2}, 3]",
+             "FromContinuedFraction[{1, 2}, 3]");
+    /* a sub-list anywhere but last is invalid -> unevaluated */
+    cf_check("FromContinuedFraction[{1, {2, 3}, 4}]",
+             "FromContinuedFraction[{1, {2, 3}, 4}]");
+    /* nested list inside the period block -> non-integer terms -> declined */
+    cf_check("FromContinuedFraction[{1, {2, 3, {4}}}]",
+             "FromContinuedFraction[{1, {2, 3, {4}}}]");
+    /* empty period block -> declined */
+    cf_check("FromContinuedFraction[{2, {}}]",
+             "FromContinuedFraction[{2, {}}]");
+}
+
+/* --- Symbolic terms give the nested convergent form. --- */
+static void test_fcf_symbolic(void) {
+    cf_check("FromContinuedFraction[{x}]", "x");
+    cf_check("FromContinuedFraction[{a, b}]", "(1 + a b)/b");
+    /* documented convergent form (un-expanded) */
+    cf_check("FromContinuedFraction[{a, b, c, d}]",
+             "(1 + a b + (a + (1 + a b) c) d)/(b + (1 + b c) d)");
+    /* Together collapses it to the fully expanded rational */
+    cf_check("Together[FromContinuedFraction[{a, b, c, d}]]",
+             "(1 + a b + a d + c d + a b c d)/(b + d + b c d)");
+}
+
+/* --- Purely periodic blocks -> quadratic irrationals (doc examples). --- */
+static void test_fcf_periodic_pure(void) {
+    cf_check("FromContinuedFraction[{{1}}]", "1/2 (1 + Sqrt[5])");
+    cf_check("FromContinuedFraction[{{1, 2}}]", "1/2 (1 + Sqrt[3])");
+    cf_check("FromContinuedFraction[{{1, 2, 3}}]", "1/7 (4 + Sqrt[37])");
+    cf_check("FromContinuedFraction[{{1, 2, 3, 4}}]", "1/15 (9 + 2 Sqrt[39])");
+    /* purely periodic [2;2,2,...] = 1 + Sqrt[2] */
+    cf_check("FromContinuedFraction[{{2}}]", "1 + Sqrt[2]");
+}
+
+/* --- Eventually-periodic blocks and Sqrt round-trips. --- */
+static void test_fcf_periodic_lead(void) {
+    /* documented: the CF of Sqrt[71] reconstructs exactly */
+    cf_check("FromContinuedFraction[{8, {2, 2, 1, 7, 1, 2, 2, 16}}]",
+             "Sqrt[71]");
+    cf_check("FromContinuedFraction[{3, {6}}]", "Sqrt[10]");
+    cf_check("FromContinuedFraction[{1, {2}}]", "Sqrt[2]");
+    /* round-trips through ContinuedFraction for several surds */
+    cf_check("FromContinuedFraction[ContinuedFraction[Sqrt[2]]]", "Sqrt[2]");
+    cf_check("FromContinuedFraction[ContinuedFraction[Sqrt[13]]]", "Sqrt[13]");
+    cf_check("FromContinuedFraction[ContinuedFraction[Sqrt[61]]]", "Sqrt[61]");
+    cf_check("FromContinuedFraction[ContinuedFraction[Sqrt[71]]]", "Sqrt[71]");
+}
+
+/* --- FromContinuedFraction is NOT Listable (acts on the list as a whole). */
+static void test_fcf_not_listable(void) {
+    /* a list of two CF lists would thread if Listable; instead the outer list
+     * is read as a single (here invalid, non-integer-prefixed) CF and the
+     * trailing sub-list marks a period -> evaluates as one quadratic value. */
+    cf_check("FromContinuedFraction[{1, 1, 1, 1, 1, 1}]", "13/8");
+}
+
+#ifdef USE_MPFR
+/* --- Rational approximation: matches the documented N value. --- */
+static void test_fcf_pi_approx(void) {
+    cf_check("FromContinuedFraction[ContinuedFraction[Pi, 3]]", "333/106");
+    cf_check("FromContinuedFraction[ContinuedFraction[Pi, 6]]", "104348/33215");
+}
+#endif
+
 int main(void) {
     symtab_init();
     core_init();
@@ -181,6 +281,18 @@ int main(void) {
     TEST(test_inexact_machine);
     TEST(test_inexact_mpfr);
     TEST(test_numeric_of_exact);
+#endif
+
+    /* FromContinuedFraction (inverse). */
+    TEST(test_fcf_rationals);
+    TEST(test_fcf_rational_roundtrip);
+    TEST(test_fcf_edge);
+    TEST(test_fcf_symbolic);
+    TEST(test_fcf_periodic_pure);
+    TEST(test_fcf_periodic_lead);
+    TEST(test_fcf_not_listable);
+#ifdef USE_MPFR
+    TEST(test_fcf_pi_approx);
 #endif
 
     printf("All contfrac_tests passed.\n");

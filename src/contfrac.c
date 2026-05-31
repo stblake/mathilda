@@ -604,6 +604,266 @@ Expr* builtin_continued_fraction(Expr* res) {
     return NULL;
 }
 
+/* ================================================================== */
+/* FromContinuedFraction — the inverse of ContinuedFraction.           */
+/* ================================================================== */
+/*
+ * FromContinuedFraction[{a1, a2, ..., an}] reconstructs the value
+ *     a1 + 1/(a2 + 1/(a3 + ... + 1/an)).
+ * The terms a_i may be symbolic; the result is the convergent h_n / k_n
+ * built from the fundamental recurrence
+ *     h_i = a_i h_{i-1} + h_{i-2},   k_i = a_i k_{i-1} + k_{i-2},
+ * with h_{-1}=1, h_{-2}=0, k_{-1}=0, k_{-2}=1.  Building the numerator and
+ * denominator separately (rather than collapsing the nested fraction) yields
+ * the Horner-nested polynomial form, e.g.
+ *     FromContinuedFraction[{a,b,c,d}]
+ *         = (1 + a b + (a + (1 + a b) c) d) / (b + (1 + b c) d).
+ *
+ * FromContinuedFraction[{a1, ..., am, {b1, ..., bk}}] reconstructs the exact
+ * quadratic irrational whose continued-fraction terms begin with the a_i and
+ * then cycle through the b_i forever.  The purely periodic tail
+ * x = [b1; b2, ..., bk, b1, ...] satisfies x = (h_{k-1} x + h_{k-2}) /
+ * (k_{k-1} x + k_{k-2}) (h, k the period's convergents), i.e. the quadratic
+ *     k_{k-1} x^2 + (k_{k-2} - h_{k-1}) x - h_{k-2} = 0,
+ * whose positive root x = (P + Q sqrt(R)) / S is then pushed through the
+ * leading terms by a Mobius transform (H x + H')/(K x + K') and rationalised
+ * to a single (P + Q sqrt(R)) / S in lowest terms.  All leading and period
+ * terms must be exact integers in this form.
+ */
+
+/* Build f[a]. */
+static Expr* fcf_un(const char* head, Expr* a) {
+    Expr* args[1] = { a };
+    return expr_new_function(expr_new_symbol(head), args, 1);
+}
+/* Build f[a, b]. */
+static Expr* fcf_bin(const char* head, Expr* a, Expr* b) {
+    Expr* args[2] = { a, b };
+    return expr_new_function(expr_new_symbol(head), args, 2);
+}
+
+/* Is e a List[...] expression? */
+static bool fcf_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol == SYM_List;
+}
+
+/* --- Simple (possibly symbolic) convergent h_{n-1} / k_{n-1}. --- */
+static Expr* fcf_simple(Expr** terms, size_t n) {
+    if (n == 0) return expr_new_integer(0);
+
+    Expr* hp2 = expr_new_integer(0);   /* h_{-2} */
+    Expr* hp1 = expr_new_integer(1);   /* h_{-1} */
+    Expr* kp2 = expr_new_integer(1);   /* k_{-2} */
+    Expr* kp1 = expr_new_integer(0);   /* k_{-1} */
+
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = terms[i];
+        /* h_i = t h_{i-1} + h_{i-2}, evaluated each step to keep trees small
+         * (numeric terms collapse; symbolic ones stay in convergent form). */
+        Expr* h = eval_and_free(fcf_bin("Plus",
+            fcf_bin("Times", expr_copy(t), expr_copy(hp1)), expr_copy(hp2)));
+        Expr* k = eval_and_free(fcf_bin("Plus",
+            fcf_bin("Times", expr_copy(t), expr_copy(kp1)), expr_copy(kp2)));
+        expr_free(hp2); hp2 = hp1; hp1 = h;
+        expr_free(kp2); kp2 = kp1; kp1 = k;
+    }
+
+    /* result = h_{n-1} / k_{n-1}; consumes hp1 and kp1. */
+    Expr* result = eval_and_free(fcf_bin("Times", hp1,
+        fcf_bin("Power", kp1, expr_new_integer(-1))));
+    expr_free(hp2);
+    expr_free(kp2);
+    return result;
+}
+
+/* Largest-square extraction: in = f^2 * sf with sf squarefree (best effort).
+ * f and sf are mpz_init'd by the caller.  Trial division handles every prime
+ * factor up to FCF_SF_CAP; a residual that is itself a perfect square is then
+ * folded into f.  (A residual of the form p^2 q with both p, q > FCF_SF_CAP is
+ * left un-reduced — astronomically unlikely for reconstructed CF data.) */
+#define FCF_SF_CAP 1000000UL
+static void fcf_extract_square(const mpz_t in, mpz_t f, mpz_t sf) {
+    mpz_t r, dd;
+    mpz_init_set(r, in);
+    mpz_init(dd);
+    mpz_set_ui(f, 1);
+    mpz_set_ui(sf, 1);
+
+    for (unsigned long d = 2; d <= FCF_SF_CAP; d++) {
+        mpz_set_ui(dd, d);
+        mpz_mul(dd, dd, dd);            /* d^2 */
+        if (mpz_cmp(dd, r) > 0) break;  /* d^2 > remaining -> done */
+        if (mpz_divisible_ui_p(r, d)) {
+            int e = 0;
+            while (mpz_divisible_ui_p(r, d)) { mpz_divexact_ui(r, r, d); e++; }
+            for (int j = 0; j < e / 2; j++) mpz_mul_ui(f, f, d);
+            if (e & 1) mpz_mul_ui(sf, sf, d);
+        }
+    }
+    if (mpz_cmp_ui(r, 1) > 0) {
+        if (mpz_perfect_square_p(r)) {
+            mpz_t s; mpz_init(s);
+            mpz_sqrt(s, r);
+            mpz_mul(f, f, s);
+            mpz_clear(s);
+        } else {
+            mpz_mul(sf, sf, r);
+        }
+    }
+    mpz_clear(r);
+    mpz_clear(dd);
+}
+
+/* Emit the value (P + Q sqrt(R)) / S in lowest terms.  R is squarefree; the
+ * value is rational when Q == 0 or R == 1.  Consumes nothing; reads P,Q,S,R
+ * (and may mutate them as scratch).  Returns NULL only if S == 0. */
+static Expr* fcf_qirr_to_expr(mpz_t P, mpz_t Q, mpz_t S, mpz_t R) {
+    if (mpz_sgn(S) == 0) return NULL;
+    if (mpz_sgn(S) < 0) { mpz_neg(P, P); mpz_neg(Q, Q); mpz_neg(S, S); }
+
+    bool rational = (mpz_sgn(Q) == 0) || (mpz_cmp_ui(R, 1) == 0);
+    if (rational) {
+        if (mpz_cmp_ui(R, 1) == 0 && mpz_sgn(Q) != 0) {  /* sqrt(1) = 1 */
+            mpz_add(P, P, Q);
+            mpz_set_ui(Q, 0);
+        }
+        Expr* num = mpz_to_expr(P);
+        if (mpz_cmp_ui(S, 1) == 0) return num;
+        return eval_and_free(fcf_bin("Times", num,
+            fcf_bin("Power", mpz_to_expr(S), expr_new_integer(-1))));
+    }
+
+    /* Irrational: divide P, Q, S by their common gcd (keeps S > 0). */
+    mpz_t g;
+    mpz_init(g);
+    mpz_gcd(g, P, Q);
+    mpz_gcd(g, g, S);
+    if (mpz_cmp_ui(g, 1) > 0) {
+        mpz_divexact(P, P, g);
+        mpz_divexact(Q, Q, g);
+        mpz_divexact(S, S, g);
+    }
+    mpz_clear(g);
+
+    /* inner = P + Q Sqrt[R]; the evaluator drops a zero P and a unit Q. */
+    Expr* inner = eval_and_free(fcf_bin("Plus", mpz_to_expr(P),
+        fcf_bin("Times", mpz_to_expr(Q), fcf_un("Sqrt", mpz_to_expr(R)))));
+    if (mpz_cmp_ui(S, 1) == 0) return inner;
+    return eval_and_free(fcf_bin("Times",
+        fcf_bin("Power", mpz_to_expr(S), expr_new_integer(-1)), inner));
+}
+
+/* --- Periodic (eventually cyclic) -> exact quadratic irrational. --- */
+static Expr* fcf_periodic(Expr** lead, size_t m, Expr** per, size_t k) {
+    /* Period convergents: after the loop hp1=h_{k-1}, hp2=h_{k-2}, etc. */
+    mpz_t hp2, hp1, kp2, kp1, h, kk;
+    mpz_inits(hp2, hp1, kp2, kp1, h, kk, (mpz_ptr)0);
+    mpz_set_ui(hp2, 0); mpz_set_ui(hp1, 1);
+    mpz_set_ui(kp2, 1); mpz_set_ui(kp1, 0);
+    for (size_t i = 0; i < k; i++) {
+        mpz_t t; expr_to_mpz(per[i], t);
+        mpz_mul(h, t, hp1);  mpz_add(h, h, hp2);
+        mpz_mul(kk, t, kp1); mpz_add(kk, kk, kp2);
+        mpz_set(hp2, hp1); mpz_set(hp1, h);
+        mpz_set(kp2, kp1); mpz_set(kp1, kk);
+        mpz_clear(t);
+    }
+
+    /* Quadratic A x^2 + B x + C = 0 for the purely periodic tail. */
+    mpz_t A, B, C, Delta, P, Q, S, R, f, sf, tmp;
+    mpz_inits(A, B, C, Delta, P, Q, S, R, f, sf, tmp, (mpz_ptr)0);
+    mpz_set(A, kp1);                 /* k_{k-1} */
+    mpz_sub(B, kp2, hp1);            /* k_{k-2} - h_{k-1} */
+    mpz_neg(C, hp2);                 /* -h_{k-2} */
+    mpz_mul(Delta, B, B);
+    mpz_mul(tmp, A, C); mpz_mul_ui(tmp, tmp, 4);
+    mpz_sub(Delta, Delta, tmp);      /* B^2 - 4AC */
+
+    Expr* result = NULL;
+    if (mpz_sgn(A) != 0 && mpz_sgn(Delta) >= 0) {
+        mpz_neg(P, B);               /* x = (-B + Q sqrt(R)) / S */
+        mpz_mul_ui(S, A, 2);
+        if (mpz_sgn(Delta) == 0) {
+            mpz_set_ui(Q, 0); mpz_set_ui(R, 1);
+        } else {
+            fcf_extract_square(Delta, f, sf);
+            mpz_set(Q, f); mpz_set(R, sf);
+            if (mpz_cmp_ui(R, 1) == 0) {     /* perfect square -> rational */
+                mpz_add(P, P, Q); mpz_set_ui(Q, 0);
+            }
+        }
+
+        /* Leading-term convergents (Mobius (H x + H') / (K x + K')). */
+        mpz_t Hp2, Hp1, Kp2, Kp1, th, tk;
+        mpz_inits(Hp2, Hp1, Kp2, Kp1, th, tk, (mpz_ptr)0);
+        mpz_set_ui(Hp2, 0); mpz_set_ui(Hp1, 1);
+        mpz_set_ui(Kp2, 1); mpz_set_ui(Kp1, 0);
+        for (size_t i = 0; i < m; i++) {
+            mpz_t t; expr_to_mpz(lead[i], t);
+            mpz_mul(th, t, Hp1); mpz_add(th, th, Hp2);
+            mpz_mul(tk, t, Kp1); mpz_add(tk, tk, Kp2);
+            mpz_set(Hp2, Hp1); mpz_set(Hp1, th);
+            mpz_set(Kp2, Kp1); mpz_set(Kp1, tk);
+            mpz_clear(t);
+        }
+
+        /* (a + b sqrt R) / (c + d sqrt R), rationalised. */
+        mpz_t a, b, c, d, Pn, Qn, Sn, t1;
+        mpz_inits(a, b, c, d, Pn, Qn, Sn, t1, (mpz_ptr)0);
+        mpz_mul(a, Hp1, P); mpz_mul(t1, Hp2, S); mpz_add(a, a, t1);
+        mpz_mul(b, Hp1, Q);
+        mpz_mul(c, Kp1, P); mpz_mul(t1, Kp2, S); mpz_add(c, c, t1);
+        mpz_mul(d, Kp1, Q);
+        mpz_mul(Pn, a, c); mpz_mul(t1, b, d); mpz_mul(t1, t1, R); mpz_sub(Pn, Pn, t1);
+        mpz_mul(Qn, b, c); mpz_mul(t1, a, d); mpz_sub(Qn, Qn, t1);
+        mpz_mul(Sn, c, c); mpz_mul(t1, d, d); mpz_mul(t1, t1, R); mpz_sub(Sn, Sn, t1);
+        mpz_set(P, Pn); mpz_set(Q, Qn); mpz_set(S, Sn);
+        mpz_clears(a, b, c, d, Pn, Qn, Sn, t1, (mpz_ptr)0);
+        mpz_clears(Hp2, Hp1, Kp2, Kp1, th, tk, (mpz_ptr)0);
+
+        result = fcf_qirr_to_expr(P, Q, S, R);
+    }
+
+    mpz_clears(hp2, hp1, kp2, kp1, h, kk, (mpz_ptr)0);
+    mpz_clears(A, B, C, Delta, P, Q, S, R, f, sf, tmp, (mpz_ptr)0);
+    return result;
+}
+
+Expr* builtin_from_continued_fraction(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 1) return NULL;
+
+    Expr* arg = res->data.function.args[0];
+    if (!fcf_is_list(arg)) return NULL;
+
+    Expr** terms = arg->data.function.args;
+    size_t n = arg->data.function.arg_count;
+    if (n == 0) return expr_new_integer(0);   /* {} -> 0 */
+
+    /* A trailing sub-list marks the cyclic (period) block. */
+    bool periodic = fcf_is_list(terms[n - 1]);
+    for (size_t i = 0; i + 1 < n; i++)
+        if (fcf_is_list(terms[i])) return NULL;   /* sub-list only allowed last */
+
+    if (!periodic) return fcf_simple(terms, n);
+
+    /* Periodic: leading terms[0..n-2], period = terms[n-1]. */
+    Expr* block = terms[n - 1];
+    Expr** per = block->data.function.args;
+    size_t k = block->data.function.arg_count;
+    if (k == 0) return NULL;                   /* empty period block */
+
+    /* The quadratic-irrational path requires exact integer terms throughout. */
+    for (size_t i = 0; i + 1 < n; i++)
+        if (!expr_is_integer_like(terms[i])) return NULL;
+    for (size_t i = 0; i < k; i++)
+        if (!expr_is_integer_like(per[i])) return NULL;
+
+    return fcf_periodic(terms, n - 1, per, k);
+}
+
 /* ------------------------------------------------------------------ */
 /* Registration.                                                       */
 /* ------------------------------------------------------------------ */
@@ -611,4 +871,7 @@ void contfrac_init(void) {
     symtab_add_builtin("ContinuedFraction", builtin_continued_fraction);
     symtab_get_def("ContinuedFraction")->attributes |=
         ATTR_LISTABLE | ATTR_PROTECTED;
+
+    symtab_add_builtin("FromContinuedFraction", builtin_from_continued_fraction);
+    symtab_get_def("FromContinuedFraction")->attributes |= ATTR_PROTECTED;
 }

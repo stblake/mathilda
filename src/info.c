@@ -1391,6 +1391,15 @@ void info_init(void) {
         "{a1, ..., {b1, ...}}, the bracketed block repeating cyclically. Inexact\n"
         "Real / MPFR inputs yield terms only as far as the precision determines\n"
         "them. ContinuedFraction is Listable.");
+    symtab_set_docstring("FromContinuedFraction",
+        "FromContinuedFraction[{a1, a2, ..., an}]\n"
+        "\treconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)). The terms may be\n"
+        "\tsymbolic; the result is the convergent in nested (un-expanded) form.\n"
+        "FromContinuedFraction[{a1, ..., am, {b1, ..., bk}}]\n"
+        "\tgives the exact quadratic irrational whose continued-fraction terms\n"
+        "\tbegin with the ai then cycle through the bi forever; all ai and bi\n"
+        "\tmust be integers. FromContinuedFraction[{}] is 0. It is the inverse\n"
+        "\tof ContinuedFraction.");
     symtab_set_docstring("Round",
         "Round[x]\n"
         "\trounds x to the nearest integer, breaking ties to the nearest even\n"

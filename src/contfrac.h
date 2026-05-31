@@ -10,10 +10,12 @@
 
 #include "expr.h"
 
-/* Register the ContinuedFraction builtin, attributes and docstring hook. */
+/* Register the ContinuedFraction / FromContinuedFraction builtins,
+ * attributes and docstring hooks. */
 void contfrac_init(void);
 
-/* Builtin entry point (exposed for testing / direct dispatch). */
+/* Builtin entry points (exposed for testing / direct dispatch). */
 Expr* builtin_continued_fraction(Expr* res);
+Expr* builtin_from_continued_fraction(Expr* res);
 
 #endif /* CONTFRAC_H */

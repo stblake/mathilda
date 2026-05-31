@@ -857,6 +857,46 @@ In[5]:= ContinuedFraction[Exp[Pi Sqrt[163]], 10]
 Out[5]= {262537412640768743, 1, 1333462407511, 1, 8, 1, 1, 5, 1, 4}
 ```
 
+## FromContinuedFraction
+The inverse of `ContinuedFraction`: reconstructs a value from its continued-fraction terms.
+- `FromContinuedFraction[{a1, a2, ..., an}]`: gives `a1 + 1/(a2 + 1/(a3 + ... + 1/an))`.
+- `FromContinuedFraction[{a1, ..., am, {b1, ..., bk}}]`: gives the exact
+  quadratic irrational whose terms begin with the `ai` then cycle through the
+  `bi` forever.
+
+**Features**:
+- `Protected` (not `Listable` — the argument is the whole term list).
+- The `ai` of the finite form may be **symbolic**; the result is the convergent
+  `h_n / k_n` built from the fundamental recurrence
+  `h_i = a_i h_{i-1} + h_{i-2}`, `k_i = a_i k_{i-1} + k_{i-2}`, kept in nested
+  (un-expanded) form — `Together` collapses it to a flat rational.
+- The **periodic** form requires all `ai` and `bi` to be integers. The purely
+  periodic tail solves the quadratic
+  `k_{k-1} x^2 + (k_{k-2} - h_{k-1}) x - h_{k-2} = 0` (h, k the period's
+  convergents); its positive root is then pushed through the leading terms by a
+  Möbius transform and rationalised to a single `(P + Q Sqrt[R]) / S` in lowest
+  terms.
+- `FromContinuedFraction[{}]` is `0`; `FromContinuedFraction[{x}]` is `x`.
+- Left unevaluated for a non-list argument, a sub-list anywhere but last, an
+  empty period block, or non-integer terms in a periodic form.
+
+```mathematica
+In[1]:= FromContinuedFraction[{2, 1, 3, 4}]
+Out[1]= 47/17
+
+In[2]:= FromContinuedFraction[{a, b, c, d}]
+Out[2]= (1 + a b + (a + (1 + a b) c) d)/(b + (1 + b c) d)
+
+In[3]:= FromContinuedFraction[{8, {2, 2, 1, 7, 1, 2, 2, 16}}]
+Out[3]= Sqrt[71]
+
+In[4]:= FromContinuedFraction[{{1, 2, 3, 4}}]
+Out[4]= 1/15 (9 + 2 Sqrt[39])
+
+In[5]:= FromContinuedFraction[ContinuedFraction[Pi, 3]]
+Out[5]= 333/106
+```
+
 ## PowerMod
 Gives modular exponentiations, inverses, and roots.
 - `PowerMod[a, b, m]`: Gives $a^b \pmod m$.
