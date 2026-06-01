@@ -315,6 +315,7 @@ const char* SYM_Thread = NULL;
 const char* SYM_Throw = NULL;
 const char* SYM_TimeConstrained = NULL;
 const char* SYM_Times = NULL;
+const char* SYM_ToeplitzMatrix = NULL;
 const char* SYM_Tolerance = NULL;
 const char* SYM_Transpose = NULL;
 const char* SYM_ToExpression = NULL;
@@ -652,6 +653,7 @@ void sym_names_init(void) {
     SYM_Throw                      = intern_symbol("Throw");
     SYM_TimeConstrained            = intern_symbol("TimeConstrained");
     SYM_Times                      = intern_symbol("Times");
+    SYM_ToeplitzMatrix             = intern_symbol("ToeplitzMatrix");
     SYM_Tolerance                  = intern_symbol("Tolerance");
     SYM_Transpose                  = intern_symbol("Transpose");
     SYM_ToExpression               = intern_symbol("ToExpression");

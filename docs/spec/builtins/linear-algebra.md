@@ -1383,6 +1383,58 @@ In[5]:= N[HankelMatrix[3]]
 Out[5]= {{1., 2., 3.}, {2., 3., 0.}, {3., 0., 0.}}
 ```
 
+## ToeplitzMatrix
+Generates a Toeplitz matrix — a matrix that is constant along its diagonals.
+The `(i, j)` entry is `c_{i-j+1}` when `i >= j`, and `r_{j-i+1}` otherwise.
+Toeplitz matrices arise in approximation theory, signal processing, statistics
+and time series.
+- `ToeplitzMatrix[n]`: Gives the `n x n` Toeplitz matrix whose first row and
+  first column are the successive integers `1..n` (entry `(i, j)` is
+  `|i - j| + 1`, so the matrix is symmetric).
+- `ToeplitzMatrix[{c1, ..., cn}]`: Gives the `n x n` symmetric Toeplitz matrix
+  whose first column (and first row) is the given list.
+- `ToeplitzMatrix[{c1, ..., cm}, {r1, ..., rn}]`: Gives the `m x n` Toeplitz
+  matrix with the first list down the first column and the second list across
+  the first row.
+
+**Features**:
+- `Protected`.
+- Entries are copied verbatim, so symbolic, exact, complex, machine and
+  arbitrary-precision entries all flow through unchanged; precision comes from
+  the entries themselves (e.g. ``1`20``) or from wrapping the result in `N`.
+  The single-list form is plain symmetric (no conjugation).
+- For `m = n` the matrix is symmetric, and has real eigenvalues when the
+  entries are real.
+- The shared corner element `c_1` must equal `r_1`. If they differ, the
+  column element `c_1` is used (the formula never reads `r_1`, which sits on
+  the diagonal as `c_1`) and a `ToeplitzMatrix::crs` warning is emitted; the
+  matrix is still produced.
+
+**Diagnostics**:
+```
+  ToeplitzMatrix::argb: ToeplitzMatrix called with 0 arguments; between 1 and 3 arguments are expected.
+  ToeplitzMatrix::crs: Warning: the column element <c_1> and row element <r_1> at positions 1 and 1 are not the same. Using column element.
+```
+A first argument that is neither a positive integer nor a list (and any
+over-arity call) is returned unevaluated.
+
+```mathematica
+In[1]:= ToeplitzMatrix[4]
+Out[1]= {{1, 2, 3, 4}, {2, 1, 2, 3}, {3, 2, 1, 2}, {4, 3, 2, 1}}
+
+In[2]:= ToeplitzMatrix[{a, b, c, d}]
+Out[2]= {{a, b, c, d}, {b, a, b, c}, {c, b, a, b}, {d, c, b, a}}
+
+In[3]:= ToeplitzMatrix[{1, 2, 3, 4, 5}, {1, 6, 7}]
+Out[3]= {{1, 6, 7}, {2, 1, 6}, {3, 2, 1}, {4, 3, 2}, {5, 4, 3}}
+
+In[4]:= ToeplitzMatrix[{1, 2, 3}, {1, 4, 5, 6, 7}]
+Out[4]= {{1, 4, 5, 6, 7}, {2, 1, 4, 5, 6}, {3, 2, 1, 4, 5}}
+
+In[5]:= N[ToeplitzMatrix[3]]
+Out[5]= {{1., 2., 3.}, {2., 1., 2.}, {3., 2., 1.}}
+```
+
 ## LinearSolve
 Finds `x` that solves the matrix equation `m . x == b`.
 - `LinearSolve[m, b]`

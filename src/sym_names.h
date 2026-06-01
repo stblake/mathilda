@@ -330,6 +330,7 @@ extern const char* SYM_Thread;
 extern const char* SYM_Throw;
 extern const char* SYM_TimeConstrained;
 extern const char* SYM_Times;
+extern const char* SYM_ToeplitzMatrix;
 extern const char* SYM_Tolerance;
 extern const char* SYM_Transpose;
 extern const char* SYM_ToExpression;

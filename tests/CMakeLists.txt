@@ -152,6 +152,7 @@ set(COMMON_SRC
     ../src/linalg/tr.c
     ../src/linalg/construct.c
     ../src/linalg/hankelmat.c
+    ../src/linalg/toeplitzmat.c
     ../src/linalg/hilbertmat.c
     ../src/linalg/matpow.c
     ../src/linalg/linsolve.c
@@ -580,6 +581,13 @@ if(USE_ECM)
     add_dependencies(hankelmatrix_tests build_ecm)
 endif()
 add_test(NAME hankelmatrix_tests COMMAND hankelmatrix_tests)
+
+add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c ${COMMON_SRC})
+target_include_directories(toeplitzmatrix_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(toeplitzmatrix_tests build_ecm)
+endif()
+add_test(NAME toeplitzmatrix_tests COMMAND toeplitzmatrix_tests)
 
 add_executable(nullspace_tests test_nullspace.c ${COMMON_SRC})
 target_include_directories(nullspace_tests PRIVATE ../src)
