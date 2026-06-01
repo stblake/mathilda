@@ -19,6 +19,7 @@ Expr* builtin_diagonalmatrix(Expr* res);
 Expr* builtin_hilbertmatrix(Expr* res);
 Expr* builtin_hankelmatrix(Expr* res);
 Expr* builtin_toeplitzmatrix(Expr* res);
+Expr* builtin_vandermondematrix(Expr* res);
 /* Inverse and PseudoInverse live in src/matinv.h. */
 Expr* builtin_matrixpower(Expr* res);
 /* Eigenvalues / Eigenvectors live in src/mateigen.h. */

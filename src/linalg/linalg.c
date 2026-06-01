@@ -37,6 +37,8 @@ void linalg_init(void) {
     symtab_get_def("HankelMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("ToeplitzMatrix", builtin_toeplitzmatrix);
     symtab_get_def("ToeplitzMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("VandermondeMatrix", builtin_vandermondematrix);
+    symtab_get_def("VandermondeMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("MatrixPower", builtin_matrixpower);
     symtab_get_def("MatrixPower")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PositiveDefiniteMatrixQ",

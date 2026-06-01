@@ -351,6 +351,7 @@ extern const char* SYM_UnitStep;
 extern const char* SYM_UnsameQ;
 extern const char* SYM_UpTo;
 extern const char* SYM_UpperTriangularMatrixQ;
+extern const char* SYM_VandermondeMatrix;
 extern const char* SYM_Verbatim;
 extern const char* SYM_VerifySolutions;
 extern const char* SYM_Which;

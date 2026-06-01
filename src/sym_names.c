@@ -336,6 +336,7 @@ const char* SYM_UnitStep = NULL;
 const char* SYM_UnsameQ = NULL;
 const char* SYM_UpTo = NULL;
 const char* SYM_UpperTriangularMatrixQ = NULL;
+const char* SYM_VandermondeMatrix = NULL;
 const char* SYM_Verbatim = NULL;
 const char* SYM_VerifySolutions = NULL;
 const char* SYM_Which = NULL;
@@ -674,6 +675,7 @@ void sym_names_init(void) {
     SYM_UnsameQ                    = intern_symbol("UnsameQ");
     SYM_UpTo                       = intern_symbol("UpTo");
     SYM_UpperTriangularMatrixQ     = intern_symbol("UpperTriangularMatrixQ");
+    SYM_VandermondeMatrix          = intern_symbol("VandermondeMatrix");
     SYM_Verbatim                   = intern_symbol("Verbatim");
     SYM_VerifySolutions            = intern_symbol("VerifySolutions");
     SYM_Which                      = intern_symbol("Which");

@@ -1435,6 +1435,54 @@ In[5]:= N[ToeplitzMatrix[3]]
 Out[5]= {{1., 2., 3.}, {2., 1., 2.}, {3., 2., 1.}}
 ```
 
+## VandermondeMatrix
+Generates a Vandermonde matrix — a matrix whose rows are the successive powers
+of a sequence of nodes. The `(i, j)` entry is `xi^(j-1)`, so the first column
+is all ones, the second column is the nodes themselves, the third their
+squares, and so on. Vandermonde matrices arise in polynomial interpolation and
+in computing moments in the monomial basis.
+- `VandermondeMatrix[{x1, ..., xn}]`: Gives the `n x n` Vandermonde matrix on
+  the nodes `xi`.
+- `VandermondeMatrix[{x1, ..., xn}, k]`: Gives the `n x k` Vandermonde matrix.
+
+**Features**:
+- `Protected`.
+- The nodes need not be numerical and need not be distinct. Symbolic nodes stay
+  as `Power` expressions; numeric powers fold to their value. Precision comes
+  from the nodes themselves (e.g. ``2`20``) or from wrapping the result in `N`.
+- The first column is the literal integer `1` (`xi^0`), so a zero node reads as
+  `1` there rather than `Indeterminate` — matching the interpolation semantics.
+- For distinct nodes the matrix is non-confluent and `LinearSolve[V, b]`
+  recovers the coefficients `{a0, a1, ...}` of the polynomial
+  `p(x) = a0 + a1 x + ...` through the points `{xi, bi}`. The determinant is the
+  product of node differences `prod_{i<j} (xj - xi)`.
+
+**Diagnostics**:
+```
+  VandermondeMatrix::argt: VandermondeMatrix called with 0 arguments; 1 or 2 arguments are expected.
+```
+An empty node list, a non-list first argument, a non-positive integer `k`, the
+single-argument structured-array conversion form `VandermondeMatrix[vmat]`
+(unsupported — Mathilda has no structured-array representation), and any
+over-arity call are returned unevaluated.
+
+```mathematica
+In[1]:= VandermondeMatrix[{x1, x2, x3, x4}]
+Out[1]= {{1, x1, x1^2, x1^3}, {1, x2, x2^2, x2^3}, {1, x3, x3^2, x3^3}, {1, x4, x4^2, x4^3}}
+
+In[2]:= VandermondeMatrix[{2, 3, 5}]
+Out[2]= {{1, 2, 4}, {1, 3, 9}, {1, 5, 25}}
+
+In[3]:= VandermondeMatrix[{a, b, c}, 2]
+Out[3]= {{1, a}, {1, b}, {1, c}}
+
+In[4]:= Factor[Det[VandermondeMatrix[{a, b, c}]]]
+Out[4]= (-a + b) (-a + c) (-b + c)
+
+In[5]:= LinearSolve[VandermondeMatrix[{1, 2, 3}], {6, 11, 18}]
+Out[5]= {3, 2, 1}
+```
+
 ## LinearSolve
 Finds `x` that solves the matrix equation `m . x == b`.
 - `LinearSolve[m, b]`
