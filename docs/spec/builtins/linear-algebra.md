@@ -1286,6 +1286,103 @@ In[3]:= DiagonalMatrix[{1, 2, 3}, 0, {3, 5}]
 Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
 ```
 
+## HilbertMatrix
+Generates a Hilbert matrix, whose `(i, j)` entry is `1/(i + j - 1)`.
+- `HilbertMatrix[n]`: Gives the `n x n` Hilbert matrix.
+- `HilbertMatrix[{m, n}]`: Gives the `m x n` Hilbert matrix.
+
+**Features**:
+- `Protected`.
+- Entries are exact `Rational`s by default. The matrix is symmetric and
+  notoriously ill-conditioned, making it a standard test case for numeric
+  linear-algebra routines.
+- The `WorkingPrecision` option chooses the entry representation:
+  - `WorkingPrecision -> Infinity` (default): exact `Rational`s.
+  - `WorkingPrecision -> MachinePrecision`: machine-precision `Real`s.
+  - `WorkingPrecision -> d`: `d`-digit arbitrary-precision (MPFR) `Real`s.
+    A digit count at or below machine precision (or a build without MPFR)
+    degrades to machine `Real`s.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `WorkingPrecision` | `Infinity` | precision at which to create entries |
+
+**Diagnostics** (the call is returned unevaluated):
+```
+  HilbertMatrix::argx: HilbertMatrix called with 0 arguments; 1 argument is expected.
+  HilbertMatrix::dims: Dimension specification <spec> should be a positive machine integer or a pair of positive machine integers.
+  HilbertMatrix::nonopt: Options expected (instead of <expr>) beyond position 1 in HilbertMatrix[...]. An option must be a rule or a list of rules.
+```
+
+```mathematica
+In[1]:= HilbertMatrix[3]
+Out[1]= {{1, 1/2, 1/3}, {1/2, 1/3, 1/4}, {1/3, 1/4, 1/5}}
+
+In[2]:= HilbertMatrix[{3, 5}]
+Out[2]= {{1, 1/2, 1/3, 1/4, 1/5}, {1/2, 1/3, 1/4, 1/5, 1/6}, {1/3, 1/4, 1/5, 1/6, 1/7}}
+
+In[3]:= HilbertMatrix[3, WorkingPrecision -> MachinePrecision]
+Out[3]= {{1., 0.5, 0.333333}, {0.5, 0.333333, 0.25}, {0.333333, 0.25, 0.2}}
+
+In[4]:= Det[HilbertMatrix[3]]
+Out[4]= 1/2160
+
+In[5]:= Inverse[HilbertMatrix[3]]
+Out[5]= {{9, -36, 30}, {-36, 192, -180}, {30, -180, 180}}
+```
+
+## HankelMatrix
+Generates a Hankel matrix — a matrix that is constant along its
+antidiagonals. The `(i, j)` entry is `c_{i+j-1}` when `i + j - 1 <= m`, and
+`r_{i+j-m}` otherwise (with `m` the number of rows). Hankel matrices arise in
+approximation theory, functional analysis, numerical analysis, and signal
+processing.
+- `HankelMatrix[n]`: Gives the `n x n` Hankel matrix whose first row and
+  first column are the successive integers `1..n`, with zeros below the main
+  antidiagonal.
+- `HankelMatrix[{c1, ..., cm}]`: Gives the `m x m` Hankel matrix whose first
+  column is the given list, with zeros below the antidiagonal.
+- `HankelMatrix[{c1, ..., cm}, {r1, ..., rn}]`: Gives the `m x n` Hankel
+  matrix with the first list down the first column and the second list across
+  the last row.
+
+**Features**:
+- `Protected`.
+- Entries are copied verbatim, so symbolic, exact, complex, machine and
+  arbitrary-precision entries all flow through unchanged; precision comes from
+  the entries themselves (e.g. ``1`20``) or from wrapping the result in `N`.
+  The antidiagonal fill is the exact integer `0`.
+- For `m = n` the matrix is symmetric, and has real eigenvalues when the
+  entries are real.
+- The shared corner element `c_m` must equal `r_1`. If they differ, the
+  column element `c_m` is used (the formula never reads `r_1`) and a
+  `HankelMatrix::crs` warning is emitted; the matrix is still produced.
+
+**Diagnostics**:
+```
+  HankelMatrix::argb: HankelMatrix called with 0 arguments; between 1 and 3 arguments are expected.
+  HankelMatrix::crs: Warning: the column element <c_m> and row element <r_1> at positions <m> and 1 are not the same. Using column element.
+```
+A first argument that is neither a positive integer nor a list (and any
+over-arity call) is returned unevaluated.
+
+```mathematica
+In[1]:= HankelMatrix[4]
+Out[1]= {{1, 2, 3, 4}, {2, 3, 4, 0}, {3, 4, 0, 0}, {4, 0, 0, 0}}
+
+In[2]:= HankelMatrix[{a, b, c, d}]
+Out[2]= {{a, b, c, d}, {b, c, d, 0}, {c, d, 0, 0}, {d, 0, 0, 0}}
+
+In[3]:= HankelMatrix[{x, y, z}, {z, a, b, c, d}]
+Out[3]= {{x, y, z, a, b}, {y, z, a, b, c}, {z, a, b, c, d}}
+
+In[4]:= HankelMatrix[{1, 1 + 2 I, 3 + 4 I}]
+Out[4]= {{1, 1 + 2 I, 3 + 4 I}, {1 + 2 I, 3 + 4 I, 0}, {3 + 4 I, 0, 0}}
+
+In[5]:= N[HankelMatrix[3]]
+Out[5]= {{1., 2., 3.}, {2., 3., 0.}, {3., 0., 0.}}
+```
+
 ## LinearSolve
 Finds `x` that solves the matrix equation `m . x == b`.
 - `LinearSolve[m, b]`

@@ -31,6 +31,10 @@ void linalg_init(void) {
     symtab_get_def("IdentityMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("DiagonalMatrix", builtin_diagonalmatrix);
     symtab_get_def("DiagonalMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("HilbertMatrix", builtin_hilbertmatrix);
+    symtab_get_def("HilbertMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("HankelMatrix", builtin_hankelmatrix);
+    symtab_get_def("HankelMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("MatrixPower", builtin_matrixpower);
     symtab_get_def("MatrixPower")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PositiveDefiniteMatrixQ",

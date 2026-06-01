@@ -151,6 +151,8 @@ set(COMMON_SRC
     ../src/linalg/normalize.c
     ../src/linalg/tr.c
     ../src/linalg/construct.c
+    ../src/linalg/hankelmat.c
+    ../src/linalg/hilbertmat.c
     ../src/linalg/matpow.c
     ../src/linalg/linsolve.c
     ../src/linalg/inv.c
@@ -564,6 +566,20 @@ target_include_directories(rat_tests PRIVATE ../src)
 
 add_executable(linalg_tests test_linalg.c ${COMMON_SRC})
 target_include_directories(linalg_tests PRIVATE ../src)
+
+add_executable(hilbertmatrix_tests test_hilbertmatrix.c ${COMMON_SRC})
+target_include_directories(hilbertmatrix_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(hilbertmatrix_tests build_ecm)
+endif()
+add_test(NAME hilbertmatrix_tests COMMAND hilbertmatrix_tests)
+
+add_executable(hankelmatrix_tests test_hankelmatrix.c ${COMMON_SRC})
+target_include_directories(hankelmatrix_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(hankelmatrix_tests build_ecm)
+endif()
+add_test(NAME hankelmatrix_tests COMMAND hankelmatrix_tests)
 
 add_executable(nullspace_tests test_nullspace.c ${COMMON_SRC})
 target_include_directories(nullspace_tests PRIVATE ../src)
