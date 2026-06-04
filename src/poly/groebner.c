@@ -75,14 +75,126 @@ static int cmp_elim_desc(const int* a, const int* b, int n_vars, int piv) {
     return 0;
 }
 
+/* Exact (mpz) fallback for a single weight-matrix row, used only when the
+ * int64 accumulation in cmp_matrix_desc overflows. */
+static int cmp_matrix_row_mpz(const int* a, const int* b,
+                              const int64_t* row, int n_vars) {
+    mpz_t wa, wb, t;
+    mpz_init_set_ui(wa, 0); mpz_init_set_ui(wb, 0); mpz_init(t);
+    for (int v = 0; v < n_vars; v++) {
+        mpz_set_si(t, (long)row[v]); mpz_mul_si(t, t, (long)a[v]);
+        mpz_add(wa, wa, t);
+        mpz_set_si(t, (long)row[v]); mpz_mul_si(t, t, (long)b[v]);
+        mpz_add(wb, wb, t);
+    }
+    int c = mpz_cmp(wa, wb);
+    mpz_clear(wa); mpz_clear(wb); mpz_clear(t);
+    if (c == 0) return 0;
+    return (c > 0) ? -1 : 1;            /* larger weight first (descending) */
+}
+
+/* Weight-matrix order: rank monomials by the lexicographic comparison of
+ * the integer weight vectors M*a vs M*b (larger weight = larger
+ * monomial).  Each row weight accumulates in int64 with overflow
+ * detection; on overflow that single row is recomputed exactly in mpz so
+ * the comparison never silently wraps. */
+static int cmp_matrix_desc(const int* a, const int* b, const GBWeightMatrix* m) {
+    int n_vars = m->n_vars;
+    for (int r = 0; r < m->n_rows; r++) {
+        const int64_t* row = m->w + (size_t)r * (size_t)n_vars;
+        int64_t wa = 0, wb = 0;
+        bool overflow = false;
+        for (int v = 0; v < n_vars; v++) {
+            int64_t pa, pb;
+            if (__builtin_mul_overflow(row[v], (int64_t)a[v], &pa)
+             || __builtin_add_overflow(wa, pa, &wa)
+             || __builtin_mul_overflow(row[v], (int64_t)b[v], &pb)
+             || __builtin_add_overflow(wb, pb, &wb)) {
+                overflow = true;
+                break;
+            }
+        }
+        int c;
+        if (overflow)        c = cmp_matrix_row_mpz(a, b, row, n_vars);
+        else if (wa != wb)   c = (wa > wb) ? -1 : 1;
+        else                 c = 0;
+        if (c != 0) return c;
+    }
+    return 0;
+}
+
 static int gb_cmp(const int* a, const int* b, const GBPoly* ctx) {
     switch (ctx->order) {
         case GB_ORDER_LEX:     return cmp_lex_desc(a, b, ctx->n_vars);
         case GB_ORDER_GREVLEX: return cmp_grevlex_desc(a, b, ctx->n_vars);
         case GB_ORDER_ELIM:    return cmp_elim_desc(a, b, ctx->n_vars,
                                                      ctx->elim_pivot);
+        case GB_ORDER_MATRIX:  return cmp_matrix_desc(a, b, ctx->wmat);
     }
     return 0;
+}
+
+/* Validate that an n_rows x n_vars integer matrix defines a global term
+ * order.  Two independent, both-required conditions (see groebner.h):
+ *   (1) rank(M) == n_vars  -- injective on exponent vectors;
+ *   (2) every column's first non-zero entry (top to bottom) is positive
+ *       -- each variable exceeds 1, so the order is well-founded.
+ * Rank is computed by exact rational Gaussian elimination (mpq); the
+ * matrix is tiny so the cost is irrelevant. */
+bool gb_wmat_validate(const int64_t* w, int n_rows, int n_vars) {
+    if (!w || n_vars <= 0 || n_rows < n_vars) return false;
+
+    /* Condition (2): first non-zero in each column must be > 0. */
+    for (int c = 0; c < n_vars; c++) {
+        for (int r = 0; r < n_rows; r++) {
+            int64_t e = w[(size_t)r * n_vars + c];
+            if (e != 0) {
+                if (e < 0) return false;
+                break;
+            }
+        }
+    }
+
+    /* Condition (1): rank == n_vars via rational row reduction. */
+    mpq_t* M = (mpq_t*)malloc(sizeof(mpq_t) * (size_t)n_rows * n_vars);
+    for (int i = 0; i < n_rows * n_vars; i++) {
+        mpq_init(M[i]);
+        mpq_set_si(M[i], (long)w[i], 1);
+    }
+    int rank = 0;
+    mpq_t factor, tmp; mpq_init(factor); mpq_init(tmp);
+    for (int col = 0; col < n_vars && rank < n_rows; col++) {
+        /* Find a pivot row at or below `rank` with non-zero entry in col. */
+        int piv = -1;
+        for (int r = rank; r < n_rows; r++) {
+            if (mpq_sgn(M[(size_t)r * n_vars + col]) != 0) { piv = r; break; }
+        }
+        if (piv < 0) continue;
+        /* Swap pivot row into position `rank`. */
+        if (piv != rank) {
+            for (int c = 0; c < n_vars; c++) {
+                mpq_swap(M[(size_t)rank * n_vars + c],
+                         M[(size_t)piv * n_vars + c]);
+            }
+        }
+        /* Eliminate this column from all other rows. */
+        for (int r = 0; r < n_rows; r++) {
+            if (r == rank) continue;
+            mpq_t* rc = &M[(size_t)r * n_vars + col];
+            if (mpq_sgn(*rc) == 0) continue;
+            mpq_div(factor, *rc, M[(size_t)rank * n_vars + col]);
+            for (int c = 0; c < n_vars; c++) {
+                mpq_mul(tmp, factor, M[(size_t)rank * n_vars + c]);
+                mpq_sub(M[(size_t)r * n_vars + c],
+                        M[(size_t)r * n_vars + c], tmp);
+            }
+        }
+        rank++;
+    }
+    mpq_clear(factor); mpq_clear(tmp);
+    for (int i = 0; i < n_rows * n_vars; i++) mpq_clear(M[i]);
+    free(M);
+    return rank == n_vars;
 }
 
 /* qsort context.  Single-threaded; same convention as MPoly. */
@@ -106,6 +218,7 @@ GBPoly* gb_poly_new(int n_vars, GBOrder order, int elim_pivot) {
     p->n_vars = n_vars;
     p->order = order;
     p->elim_pivot = elim_pivot;
+    p->wmat = NULL;
     p->exps = NULL;
     p->coefs = NULL;
     p->n_terms = 0;
@@ -127,8 +240,15 @@ void gb_poly_reserve(GBPoly* p, size_t cap) {
     p->cap = new_cap;
 }
 
+void gb_poly_set_wmat(GBPoly* p, const GBWeightMatrix* wmat) {
+    p->order = GB_ORDER_MATRIX;
+    p->wmat = wmat;
+    /* term order changed; caller must gb_poly_normalize() to re-sort */
+}
+
 GBPoly* gb_poly_copy(const GBPoly* p) {
     GBPoly* q = gb_poly_new(p->n_vars, p->order, p->elim_pivot);
+    q->wmat = p->wmat;
     if (p->n_terms == 0) return q;
     gb_poly_reserve(q, p->n_terms);
     if (p->n_vars > 0) {
@@ -281,6 +401,7 @@ GBPoly* gb_poly_neg(const GBPoly* a) {
 
 GBPoly* gb_poly_add(const GBPoly* a, const GBPoly* b) {
     GBPoly* r = gb_poly_new(a->n_vars, a->order, a->elim_pivot);
+    r->wmat = a->wmat;
     gb_poly_reserve(r, a->n_terms + b->n_terms);
     /* Push everything and let normalize do the merge work. */
     for (size_t i = 0; i < a->n_terms; i++) {
@@ -309,6 +430,7 @@ GBPoly* gb_poly_scale(const GBPoly* a, const mpq_t c) {
 
 GBPoly* gb_poly_mul_by_monomial(const GBPoly* a, const int* exps, const mpq_t c) {
     GBPoly* r = gb_poly_new(a->n_vars, a->order, a->elim_pivot);
+    r->wmat = a->wmat;
     if (mpz_sgn(mpq_numref(c)) == 0) return r;
     gb_poly_reserve(r, a->n_terms);
     int* tmp = (a->n_vars > 0)
@@ -464,6 +586,96 @@ restart: ;
 
     mpq_clear(qc);
     free(qexp);
+    return r;
+}
+
+GBPoly* gb_divmod(const GBPoly* p, GBPoly* const* basis, size_t n,
+                  GBPoly*** quot_out) {
+    GBPoly* r = gb_poly_copy(p);
+    int n_vars = r->n_vars;
+
+    /* One quotient accumulator per basis element (terms pushed in
+     * arbitrary order, merged by normalize at the end). */
+    GBPoly** quot = (GBPoly**)malloc(sizeof(GBPoly*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        quot[i] = gb_poly_new(n_vars, p->order, p->elim_pivot);
+        quot[i]->wmat = p->wmat;
+    }
+
+    if (r->n_terms == 0) { *quot_out = quot; return r; }
+
+    int* qexp = (int*)malloc(sizeof(int) * (size_t)(n_vars > 0 ? n_vars : 1));
+    mpq_t qc; mpq_init(qc);
+
+    /* Same full multivariate division as gb_reduce, but each subtracted
+     * multiple  qc * x^qexp * basis[bi]  is also recorded on quot[bi], so
+     * that on return  p == sum_i quot[i]*basis[i] + r. */
+    bool reduced;
+    do {
+        reduced = false;
+        for (size_t t = 0; t < r->n_terms; t++) {
+            const int* re = gb_exp_at(r, t);
+            for (size_t bi = 0; bi < n; bi++) {
+                const GBPoly* g = basis[bi];
+                if (g->n_terms == 0) continue;
+                const int* lm = gb_exp_at(g, 0);
+                if (!divides(lm, re, qexp, n_vars)) continue;
+                mpq_div(qc, r->coefs[t], g->coefs[0]);
+                gb_poly_push_term(quot[bi], qexp, qc);
+                GBPoly* sub = gb_poly_mul_by_monomial(g, qexp, qc);
+                GBPoly* nr  = gb_poly_sub(r, sub);
+                gb_poly_free(sub);
+                gb_poly_free(r);
+                r = nr;
+                reduced = true;
+                goto restart;
+            }
+        }
+restart: ;
+    } while (reduced);
+
+    mpq_clear(qc);
+    free(qexp);
+    for (size_t i = 0; i < n; i++) gb_poly_normalize(quot[i]);
+    *quot_out = quot;
+    return r;
+}
+
+GBPoly* gb_initial_form(const GBPoly* g, const int64_t* w, int n_vars) {
+    assert(g->n_terms > 0);
+    GBPoly* r = gb_poly_new(n_vars, g->order, g->elim_pivot);
+    r->wmat = g->wmat;
+
+    /* Weight of a term, exact: int64 with mpz fallback on overflow. */
+    mpz_t best, cur, prod;
+    mpz_init(best); mpz_init(cur); mpz_init(prod);
+    bool have_best = false;
+    for (size_t t = 0; t < g->n_terms; t++) {
+        const int* e = gb_exp_at(g, t);
+        mpz_set_ui(cur, 0);
+        for (int v = 0; v < n_vars; v++) {
+            mpz_set_si(prod, (long)w[v]);
+            mpz_mul_si(prod, prod, (long)e[v]);
+            mpz_add(cur, cur, prod);
+        }
+        if (!have_best || mpz_cmp(cur, best) > 0) {
+            mpz_set(best, cur);
+            have_best = true;
+        }
+    }
+    /* Collect every term whose weight equals the maximum. */
+    for (size_t t = 0; t < g->n_terms; t++) {
+        const int* e = gb_exp_at(g, t);
+        mpz_set_ui(cur, 0);
+        for (int v = 0; v < n_vars; v++) {
+            mpz_set_si(prod, (long)w[v]);
+            mpz_mul_si(prod, prod, (long)e[v]);
+            mpz_add(cur, cur, prod);
+        }
+        if (mpz_cmp(cur, best) == 0) gb_poly_push_term(r, e, g->coefs[t]);
+    }
+    mpz_clear(best); mpz_clear(cur); mpz_clear(prod);
+    gb_poly_normalize(r);
     return r;
 }
 
@@ -662,70 +874,17 @@ static void gm_update(GMPair** pairs_p, size_t* nP_p, size_t* capP_p,
     *capP_p = capP;
 }
 
-GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
-    /* Filter zeros from input, copy the rest into the working basis. */
-    GBPoly** G = NULL;
-    size_t nG = 0, capG = 0;
-    for (size_t i = 0; i < n; i++) {
-        if (F[i]->n_terms == 0) continue;
-        if (nG == capG) {
-            capG = capG ? capG * 2 : 8;
-            G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG);
-        }
-        G[nG] = gb_poly_copy(F[i]);
-        gb_poly_make_monic(G[nG]);
-        nG++;
-    }
-
-    if (nG == 0) {
-        *out_n = 0;
-        free(G);
-        return NULL;
-    }
-
+/* Turn a generating set G[0..*nG_io-1] of an ideal (already a Gröbner
+ * basis under G[0]'s order, but not yet reduced) into the canonical
+ * reduced Gröbner basis: drop elements whose LM is divisible by another's,
+ * reduce each survivor by the rest to a fixed point, make each primitive
+ * over Z, and sort ascending by leading monomial.  Operates in place; the
+ * array is only compacted (never grown) and *nG_io is updated.  Shared by
+ * gb_buchberger and the Gröbner walk. */
+void gb_finalize_basis(GBPoly** G, size_t* nG_io) {
+    size_t nG = *nG_io;
+    if (nG == 0) { *nG_io = 0; return; }
     int n_vars = G[0]->n_vars;
-
-    /* Seed the pair set by calling gm_update for each element after the
-     * first; this naturally applies the M/F/B criteria during the
-     * initial pair generation as well as the incremental loop. */
-    GMPair* pairs = NULL;
-    size_t nP = 0, capP = 0;
-    for (size_t h = 1; h < nG; h++) gm_update(&pairs, &nP, &capP, G, h, n_vars);
-
-    /* Main loop: process pairs in normal-strategy order. */
-    while (true) {
-        size_t pick = gm_pick_pair(pairs, nP, n_vars);
-        if (pick == (size_t)-1) break;
-
-        /* Cooperative abort hook -- so TimeConstrained[GroebnerBasis[...],
-         * t] siglongjmps out at the next pair instead of running to
-         * completion on pathological inputs (the issue-2 hanging case). */
-        tc_check_deadline();
-
-        GMPair pr = pairs[pick];
-        pairs[pick].dead = true;
-        gm_pair_free(&pairs[pick]);
-
-        GBPoly* s = gb_spoly(G[pr.i], G[pr.j]);
-        GBPoly* r = gb_reduce(s, G, nG);
-        gb_poly_free(s);
-        if (r->n_terms == 0) { gb_poly_free(r); continue; }
-
-        gb_poly_make_monic(r);
-
-        if (nG == capG) {
-            capG = capG ? capG * 2 : 8;
-            G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG);
-        }
-        G[nG] = r;
-        gm_update(&pairs, &nP, &capP, G, nG, n_vars);
-        nG++;
-    }
-
-    for (size_t k = 0; k < nP; k++) {
-        if (!pairs[k].dead) gm_pair_free(&pairs[k]);
-    }
-    free(pairs);
 
     /* Interreduce: discard any g_i whose LM is divisible by LM(g_k)
      * for some k != i, then reduce each survivor by the others. */
@@ -821,6 +980,76 @@ GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
         }
         if (pick != i) { GBPoly* tmp = G[i]; G[i] = G[pick]; G[pick] = tmp; }
     }
+
+    *nG_io = nG;
+}
+
+GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
+    /* Filter zeros from input, copy the rest into the working basis. */
+    GBPoly** G = NULL;
+    size_t nG = 0, capG = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (F[i]->n_terms == 0) continue;
+        if (nG == capG) {
+            capG = capG ? capG * 2 : 8;
+            G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG);
+        }
+        G[nG] = gb_poly_copy(F[i]);
+        gb_poly_make_monic(G[nG]);
+        nG++;
+    }
+
+    if (nG == 0) {
+        *out_n = 0;
+        free(G);
+        return NULL;
+    }
+
+    int n_vars = G[0]->n_vars;
+
+    /* Seed the pair set by calling gm_update for each element after the
+     * first; this naturally applies the M/F/B criteria during the
+     * initial pair generation as well as the incremental loop. */
+    GMPair* pairs = NULL;
+    size_t nP = 0, capP = 0;
+    for (size_t h = 1; h < nG; h++) gm_update(&pairs, &nP, &capP, G, h, n_vars);
+
+    /* Main loop: process pairs in normal-strategy order. */
+    while (true) {
+        size_t pick = gm_pick_pair(pairs, nP, n_vars);
+        if (pick == (size_t)-1) break;
+
+        /* Cooperative abort hook -- so TimeConstrained[GroebnerBasis[...],
+         * t] siglongjmps out at the next pair instead of running to
+         * completion on pathological inputs (the issue-2 hanging case). */
+        tc_check_deadline();
+
+        GMPair pr = pairs[pick];
+        pairs[pick].dead = true;
+        gm_pair_free(&pairs[pick]);
+
+        GBPoly* s = gb_spoly(G[pr.i], G[pr.j]);
+        GBPoly* r = gb_reduce(s, G, nG);
+        gb_poly_free(s);
+        if (r->n_terms == 0) { gb_poly_free(r); continue; }
+
+        gb_poly_make_monic(r);
+
+        if (nG == capG) {
+            capG = capG ? capG * 2 : 8;
+            G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG);
+        }
+        G[nG] = r;
+        gm_update(&pairs, &nP, &capP, G, nG, n_vars);
+        nG++;
+    }
+
+    for (size_t k = 0; k < nP; k++) {
+        if (!pairs[k].dead) gm_pair_free(&pairs[k]);
+    }
+    free(pairs);
+
+    gb_finalize_basis(G, &nG);
 
     *out_n = nG;
     return G;
@@ -942,9 +1171,11 @@ static bool expr_term(struct Expr* e, struct Expr** vars, int n_vars,
 }
 
 GBPoly* gb_from_expr(struct Expr* e, struct Expr** vars, int n_vars,
-                     GBOrder order, int elim_pivot) {
+                     GBOrder order, int elim_pivot,
+                     const GBWeightMatrix* wmat) {
     if (!e) return NULL;
     GBPoly* p = gb_poly_new(n_vars, order, elim_pivot);
+    if (order == GB_ORDER_MATRIX) p->wmat = wmat;
 
     if (e->type == EXPR_FUNCTION &&
         e->data.function.head &&

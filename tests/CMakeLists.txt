@@ -206,6 +206,7 @@ set(COMMON_SRC
     ../src/poly/irrpolyq.c
     ../src/poly/groebner.c
     ../src/poly/groebnerbasis.c
+    ../src/poly/groebnerwalk.c
     ../src/poly/eliminate.c
     ../src/sym_intern.c
     ../src/sym_names.c

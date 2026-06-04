@@ -65,11 +65,21 @@ static bool is_equal(const Expr* e) {
 /*  Option extraction                                                  */
 /* ------------------------------------------------------------------ */
 
+/* Selectable Gröbner engine (Method -> ...). */
+typedef enum {
+    GB_METHOD_BUCHBERGER = 0,       /* "Buchberger" / Automatic (default) */
+    GB_METHOD_WALK                  /* "GroebnerWalk" */
+} GBMethod;
+
 /* Bundle of user-visible options recognised by `GroebnerBasis[]`.  The
  * fields whose `*_set` companion is false mean "use the engine default";
  * the only one that is consulted directly is `order` (see below). */
 typedef struct {
-    GBOrder order;                  /* MonomialOrder -> ... */
+    GBOrder order;                  /* MonomialOrder -> symbolic order */
+    Expr*   matrix_order;           /* MonomialOrder -> {{...},...}: borrowed
+                                       weight-matrix value, NULL otherwise.
+                                       Validated at dispatch (needs n_main). */
+    GBMethod method;                /* Method -> ... */
     bool    sort_desc;              /* Sort -> True reverses the default
                                        LM-ascending output ordering */
     bool    parameter_vars_given;   /* ParameterVariables option set */
@@ -91,6 +101,8 @@ static void extract_options(const Expr* res, size_t* n_pos,
 
     /* Defaults. */
     opt->order = GB_ORDER_LEX;
+    opt->matrix_order = NULL;
+    opt->method = GB_METHOD_BUCHBERGER;
     opt->sort_desc = false;
     opt->parameter_vars_given = false;
     opt->parameter_vars = NULL;
@@ -117,8 +129,10 @@ static void extract_options(const Expr* res, size_t* n_pos,
                     opt->order = GB_ORDER_LEX;
                 }
             } else {
-                warn_once("nimpl", "weight-matrix MonomialOrder not "
-                                   "implemented; falling back to Lexicographic");
+                /* A non-symbol value is a candidate weight matrix.  It is
+                 * validated at dispatch (the column count must match the
+                 * number of main variables, which is not known here). */
+                opt->matrix_order = val;
             }
         } else if (key->data.symbol == SYM_CoefficientDomain) {
             bool ok = (val->type == EXPR_SYMBOL
@@ -132,11 +146,20 @@ static void extract_options(const Expr* res, size_t* n_pos,
             bool ok = false;
             if (val->type == EXPR_SYMBOL
                 && val->data.symbol == SYM_Automatic) ok = true;
+            if (val->type == EXPR_SYMBOL
+                && val->data.symbol == SYM_GroebnerWalk) {
+                opt->method = GB_METHOD_WALK; ok = true;
+            }
             if (val->type == EXPR_STRING && val->data.string
                 && strcmp(val->data.string, "Buchberger") == 0) ok = true;
+            if (val->type == EXPR_STRING && val->data.string
+                && strcmp(val->data.string, "GroebnerWalk") == 0) {
+                opt->method = GB_METHOD_WALK; ok = true;
+            }
             if (!ok) {
-                warn_once("nimpl", "only Method -> \"Buchberger\" is "
-                                   "implemented; falling back");
+                warn_once("nimpl", "only Method -> \"Buchberger\" or "
+                                   "\"GroebnerWalk\" is implemented; "
+                                   "falling back");
             }
         } else if (key->data.symbol == SYM_Modulus) {
             /* Honest "not implemented" instead of silently computing the
@@ -293,6 +316,56 @@ static void push_var_list(Expr* lst_or_sym, ExprSet* dst) {
         Expr* v = lst_or_sym->data.function.args[i];
         if (v->type == EXPR_SYMBOL) exprset_push_borrowed(dst, v);
     }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Weight-matrix parsing                                              */
+/* ------------------------------------------------------------------ */
+
+/* Extract a signed 64-bit integer from an Integer/BigInt Expr.  Returns
+ * false for any other shape or a BigInt too large for int64. */
+static bool expr_to_i64(const Expr* e, int64_t* out) {
+    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
+    if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
+        *out = (int64_t)mpz_get_si(e->data.bigint);
+        return true;
+    }
+    return false;
+}
+
+/* Parse a `{{...}, {...}, ...}` value into a fresh row-major int64 matrix
+ * (caller frees with free()).  Requires a non-empty rectangular list of
+ * integer rows.  Returns NULL (and leaves rows/cols untouched) on any
+ * shape mismatch or non-integer entry. */
+static int64_t* parse_weight_matrix(const Expr* v, int* rows, int* cols) {
+    if (!is_list(v)) return NULL;
+    size_t r = v->data.function.arg_count;
+    if (r == 0) return NULL;
+
+    int ncols = -1;
+    for (size_t i = 0; i < r; i++) {
+        const Expr* row = v->data.function.args[i];
+        if (!is_list(row)) return NULL;
+        int c = (int)row->data.function.arg_count;
+        if (c == 0) return NULL;
+        if (ncols < 0) ncols = c;
+        else if (c != ncols) return NULL;       /* ragged */
+    }
+
+    int64_t* m = (int64_t*)malloc(sizeof(int64_t) * r * (size_t)ncols);
+    for (size_t i = 0; i < r; i++) {
+        const Expr* row = v->data.function.args[i];
+        for (int j = 0; j < ncols; j++) {
+            if (!expr_to_i64(row->data.function.args[j],
+                             &m[i * (size_t)ncols + j])) {
+                free(m);
+                return NULL;
+            }
+        }
+    }
+    *rows = (int)r;
+    *cols = ncols;
+    return m;
 }
 
 /* ------------------------------------------------------------------ */
@@ -492,6 +565,38 @@ Expr* builtin_groebner_basis(Expr* res) {
      * mathematically the elimination-ideal contraction. */
     GBOrder use_order = (n_elim > 0 || n_params > 0) ? GB_ORDER_LEX : opt.order;
 
+    /* Weight-matrix MonomialOrder: honoured only in the plain form (no
+     * elimination, no parameters) where the joint var array equals the
+     * main-variable list, so the user matrix maps directly.  The matrix
+     * must be rectangular, integer, have exactly n_main columns, and
+     * define a valid term order. */
+    GBWeightMatrix wmat_storage;
+    const GBWeightMatrix* wmat_ptr = NULL;
+    int64_t* wmat_buf = NULL;
+    if (opt.matrix_order) {
+        if (n_elim == 0 && n_params == 0) {
+            int wr = 0, wc = 0;
+            int64_t* buf = parse_weight_matrix(opt.matrix_order, &wr, &wc);
+            if (buf && wc == (int)n_main && gb_wmat_validate(buf, wr, wc)) {
+                wmat_buf = buf;
+                wmat_storage.n_rows = wr;
+                wmat_storage.n_vars = wc;
+                wmat_storage.w = wmat_buf;
+                wmat_ptr = &wmat_storage;
+                use_order = GB_ORDER_MATRIX;
+            } else {
+                free(buf);
+                warn_once("nimpl", "MonomialOrder matrix is not a valid term "
+                                   "order for these variables; falling back "
+                                   "to Lexicographic");
+            }
+        } else {
+            warn_once("nimpl", "weight-matrix MonomialOrder is not supported "
+                               "with elimination or parameter variables; "
+                               "falling back to Lexicographic");
+        }
+    }
+
     /* Convert each input polynomial. */
     GBPoly** F = (GBPoly**)malloc(sizeof(GBPoly*) * n_polys);
     size_t nF = 0;
@@ -499,7 +604,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     for (size_t i = 0; i < n_polys; i++) {
         Expr* norm = normalise_polynomial(polys_list->data.function.args[i]);
         GBPoly* p = gb_from_expr(norm, all_vars, (int)n_vars,
-                                 use_order, elim_pivot);
+                                 use_order, elim_pivot, wmat_ptr);
         expr_free(norm);
         if (!p) { failed = true; break; }
         if (p->n_terms == 0) { gb_poly_free(p); continue; }
@@ -509,6 +614,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         for (size_t i = 0; i < nF; i++) gb_poly_free(F[i]);
         free(F);
         free(all_vars);
+        free(wmat_buf);
         exprset_free(&param_explicit, false);
         exprset_free(&main_set, false);
         exprset_free(&elim_set, false);
@@ -523,6 +629,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         /* All inputs reduced to zero -> empty basis. */
         free(F);
         free(all_vars);
+        free(wmat_buf);
         exprset_free(&param_explicit, false);
         exprset_free(&main_set, false);
         exprset_free(&elim_set, false);
@@ -539,6 +646,7 @@ Expr* builtin_groebner_basis(Expr* res) {
             for (size_t j = 0; j < nF; j++) gb_poly_free(F[j]);
             free(F);
             free(all_vars);
+            free(wmat_buf);
             exprset_free(&param_explicit, false);
             exprset_free(&main_set, false);
             exprset_free(&elim_set, false);
@@ -554,8 +662,22 @@ Expr* builtin_groebner_basis(Expr* res) {
         }
     }
 
+    /* Dispatch to the selected engine.  GroebnerWalk is honoured only in
+     * the plain form (no elimination, no parameters); otherwise the
+     * params-last / elim-first joint order required by the contraction
+     * filter does not match the walk's source order, so we run Buchberger
+     * directly (the reduced basis is identical either way). */
     size_t out_n = 0;
-    GBPoly** G = gb_buchberger(F, nF, &out_n);
+    GBPoly** G;
+    if (opt.method == GB_METHOD_WALK && n_elim == 0 && n_params == 0) {
+        G = gb_groebner_walk(F, nF, use_order, wmat_ptr, &out_n);
+    } else {
+        G = gb_buchberger(F, nF, &out_n);
+    }
+
+    /* The weight matrix is no longer needed: the returned basis only feeds
+     * gb_to_expr (which reads exponents/coefficients, not the order). */
+    free(wmat_buf);
 
     /* Free input working set. */
     for (size_t i = 0; i < nF; i++) gb_poly_free(F[i]);
