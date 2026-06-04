@@ -1292,3 +1292,62 @@ struct Expr* gb_to_expr(const GBPoly* p, struct Expr** vars) {
     free(terms);
     return out;
 }
+
+/* Like gb_to_expr but for the InexactNumbers coefficient domain: the
+ * polynomial is made monic (leading coefficient 1) and every coefficient
+ * -- including a unit leading coefficient -- is emitted as a `bits`-bit
+ * MPFR real, matching Mathematica's approximate-arithmetic output
+ * (`1.00000000000000000 a y^4`, `0.666... x`).  The caller owns the
+ * returned Expr*. */
+struct Expr* gb_to_expr_inexact(const GBPoly* p, struct Expr** vars,
+                                mpfr_prec_t bits) {
+    if (p->n_terms == 0) return expr_new_mpfr_bits(bits);   /* 0.0 */
+
+    GBPoly* m = gb_poly_copy(p);
+    gb_poly_make_monic(m);
+
+    struct Expr** terms = (struct Expr**)malloc(sizeof(struct Expr*) * m->n_terms);
+    for (size_t i = 0; i < m->n_terms; i++) {
+        const int* row = gb_exp_at(m, i);
+        size_t nfac = 0;
+        for (int v = 0; v < m->n_vars; v++) if (row[v] > 0) nfac++;
+
+        /* Coefficient is always emitted, as a real factor. */
+        mpfr_t c; mpfr_init2(c, bits);
+        mpfr_set_q(c, m->coefs[i], MPFR_RNDN);
+        struct Expr* coef = expr_new_mpfr_move(c);   /* takes ownership of c */
+
+        size_t total = nfac + 1;
+        struct Expr** factors = (struct Expr**)malloc(sizeof(struct Expr*) * total);
+        size_t fi = 0;
+        factors[fi++] = coef;
+        for (int v = 0; v < m->n_vars; v++) {
+            if (row[v] == 0) continue;
+            if (row[v] == 1) {
+                factors[fi++] = expr_copy(vars[v]);
+            } else {
+                struct Expr** pa = (struct Expr**)malloc(sizeof(struct Expr*) * 2);
+                pa[0] = expr_copy(vars[v]);
+                pa[1] = expr_new_integer(row[v]);
+                factors[fi++] = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                free(pa);
+            }
+        }
+        if (fi == 1) {
+            terms[i] = factors[0];
+        } else {
+            terms[i] = expr_new_function(expr_new_symbol("Times"), factors, fi);
+        }
+        free(factors);
+    }
+
+    struct Expr* out;
+    if (m->n_terms == 1) {
+        out = terms[0];
+    } else {
+        out = expr_new_function(expr_new_symbol("Plus"), terms, m->n_terms);
+    }
+    free(terms);
+    gb_poly_free(m);
+    return out;
+}

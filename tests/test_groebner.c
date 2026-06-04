@@ -410,6 +410,36 @@ static void test_parametric_coeffs_in_q_of_a(void) {
                        "Power[y, 2]]]");
 }
 
+/* CoefficientDomain -> Polynomials[a]: `a` is a coefficient-ring
+ * variable, i.e. a parameter.  This is exactly the auto-parameter
+ * behaviour, so the basis equals the default. */
+static void test_coeff_domain_polynomials_equals_default(void) {
+    check_true("GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}, "
+               "CoefficientDomain -> Polynomials[a]] == "
+               "GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}]");
+}
+
+/* CoefficientDomain -> InexactNumbers[p]: the basis is the exact basis
+ * made monic with p-digit real coefficients.  We assert the shape
+ * (3 polynomials) and a representative coefficient (the second
+ * polynomial's constant term is 18/4 = 4.5) robustly via Round. */
+static void test_coeff_domain_inexact_numbers(void) {
+    check_true("Length[GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}, "
+               "CoefficientDomain -> InexactNumbers[20]]] == 3");
+    check_true("Round[2 * GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, "
+               "{x, y}, CoefficientDomain -> InexactNumbers[20]][[2, 1]]] "
+               "== 9");
+}
+
+/* Inexact (Real) input coefficients are rationalised before the
+ * Buchberger run, so a real-coefficient system still produces a basis
+ * (previously gb_from_expr rejected reals and the call was left
+ * unevaluated).  1.0 x^2 + ... == x^2 + ... after rationalisation. */
+static void test_real_input_rationalised(void) {
+    check_true("GroebnerBasis[{1.0 x^2 - 2.0 y^2, x y - 3}, {x, y}] == "
+               "GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]");
+}
+
 /* ------------------------------------------------------------------ */
 /* 15. Ideal-membership sanity                                         */
 /* ------------------------------------------------------------------ */
@@ -593,6 +623,9 @@ int main(void) {
     TEST(test_nimpl_coeff_domain_integers_falls_back);
     TEST(test_nimpl_deglex_falls_back);
     TEST(test_non_polynomial_unevaluated);
+    TEST(test_coeff_domain_polynomials_equals_default);
+    TEST(test_coeff_domain_inexact_numbers);
+    TEST(test_real_input_rationalised);
     TEST(test_parametric_coeffs_in_q_of_a);
     TEST(test_membership_input_in_ideal);
     TEST(test_idempotency_no_common_roots);

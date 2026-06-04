@@ -24,6 +24,7 @@
 #include "eval.h"
 #include "groebner.h"
 #include "internal.h"
+#include "rationalize.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -71,6 +72,15 @@ typedef enum {
     GB_METHOD_WALK                  /* "GroebnerWalk" */
 } GBMethod;
 
+/* Coefficient domain (CoefficientDomain -> ...). */
+typedef enum {
+    GB_DOM_RATIONALS = 0,           /* Rationals / Automatic (default) */
+    GB_DOM_INTEGERS,                /* Integers: strong GB over Z */
+    GB_DOM_RATIONAL_FUNCTIONS,      /* RationalFunctions: GB over Q(params) */
+    GB_DOM_POLYNOMIALS,             /* Polynomials[x,...]: x is a coeff-ring var */
+    GB_DOM_INEXACT                  /* InexactNumbers[prec]: approximate output */
+} GBCoeffDomain;
+
 /* Bundle of user-visible options recognised by `GroebnerBasis[]`.  The
  * fields whose `*_set` companion is false mean "use the engine default";
  * the only one that is consulted directly is `order` (see below). */
@@ -84,7 +94,13 @@ typedef struct {
                                        LM-ascending output ordering */
     bool    parameter_vars_given;   /* ParameterVariables option set */
     Expr*   parameter_vars;         /* borrowed; List[...] or symbol or NULL */
+    GBCoeffDomain domain;           /* CoefficientDomain -> ... */
+    int     inexact_prec;           /* decimal digits for GB_DOM_INEXACT */
+    Expr*   poly_domain_vars;       /* borrowed; args of Polynomials[...] */
 } GBOptions;
+
+/* Forward declaration (defined with the weight-matrix helpers below). */
+static bool expr_to_i64(const Expr* e, int64_t* out);
 
 /* In-out: `*n_pos` starts at the full argument count; the function
  * decrements it for each trailing Rule[] arg.  Recognised options are
@@ -106,6 +122,9 @@ static void extract_options(const Expr* res, size_t* n_pos,
     opt->sort_desc = false;
     opt->parameter_vars_given = false;
     opt->parameter_vars = NULL;
+    opt->domain = GB_DOM_RATIONALS;
+    opt->inexact_prec = 16;
+    opt->poly_domain_vars = NULL;
 
     for (size_t i = cut; i < argc; i++) {
         Expr* rule = res->data.function.args[i];
@@ -135,12 +154,50 @@ static void extract_options(const Expr* res, size_t* n_pos,
                 opt->matrix_order = val;
             }
         } else if (key->data.symbol == SYM_CoefficientDomain) {
-            bool ok = (val->type == EXPR_SYMBOL
-                       && (val->data.symbol == SYM_Rationals
-                        || val->data.symbol == SYM_Automatic));
-            if (!ok) {
-                warn_once("nimpl", "only CoefficientDomain -> Rationals is "
-                                   "implemented");
+            if (val->type == EXPR_SYMBOL) {
+                if (val->data.symbol == SYM_Rationals
+                 || val->data.symbol == SYM_Automatic) {
+                    opt->domain = GB_DOM_RATIONALS;
+                } else if (val->data.symbol == SYM_Integers) {
+                    opt->domain = GB_DOM_INTEGERS;
+                } else if (val->data.symbol == SYM_RationalFunctions) {
+                    opt->domain = GB_DOM_RATIONAL_FUNCTIONS;
+                } else if (val->data.symbol == SYM_InexactNumbers) {
+                    /* Bare InexactNumbers -> machine precision (~16 digits). */
+                    opt->domain = GB_DOM_INEXACT;
+                    opt->inexact_prec = 16;
+                } else {
+                    warn_once("nimpl", "unsupported CoefficientDomain value; "
+                                       "falling back to Rationals");
+                    opt->domain = GB_DOM_RATIONALS;
+                }
+            } else if (val->type == EXPR_FUNCTION
+                       && val->data.function.head
+                       && val->data.function.head->type == EXPR_SYMBOL) {
+                const char* h = val->data.function.head->data.symbol;
+                if (h == SYM_InexactNumbers) {
+                    opt->domain = GB_DOM_INEXACT;
+                    int64_t p = 16;
+                    if (val->data.function.arg_count >= 1)
+                        (void)expr_to_i64(val->data.function.args[0], &p);
+                    /* Clamp to a sane positive range. */
+                    if (p < 1)   p = 1;
+                    if (p > 100000) p = 100000;
+                    opt->inexact_prec = (int)p;
+                } else if (h == SYM_Polynomials) {
+                    /* Polynomials[x,...]: the listed symbols become
+                     * coefficient-ring variables, i.e. parameters. */
+                    opt->domain = GB_DOM_POLYNOMIALS;
+                    opt->poly_domain_vars = val;
+                } else {
+                    warn_once("nimpl", "unsupported CoefficientDomain value; "
+                                       "falling back to Rationals");
+                    opt->domain = GB_DOM_RATIONALS;
+                }
+            } else {
+                warn_once("nimpl", "unsupported CoefficientDomain value; "
+                                   "falling back to Rationals");
+                opt->domain = GB_DOM_RATIONALS;
             }
         } else if (key->data.symbol == SYM_Method) {
             bool ok = false;
@@ -214,6 +271,16 @@ static Expr* normalise_polynomial(const Expr* p) {
         base = internal_subtract((Expr*[]){ a, b }, 2);
     } else {
         base = expr_copy((Expr*)p);
+    }
+    /* The Gröbner engine ingests only exact (Integer/BigInt/Rational)
+     * coefficients.  If the input carries inexact leaves (Real/MPFR) --
+     * common with CoefficientDomain -> InexactNumbers, but possible in
+     * any domain -- force-rationalise them first so gb_from_expr can
+     * accept the polynomial. */
+    if (internal_contains_inexact(base)) {
+        Expr* rat = internal_force_rationalize(base);
+        expr_free(base);
+        base = rat;
     }
     /* Expand factored products / collect like terms.  Expand is also a
      * cheap no-op on already-expanded inputs. */
@@ -467,6 +534,17 @@ Expr* builtin_groebner_basis(Expr* res) {
     if (opt.parameter_vars_given) push_var_list(opt.parameter_vars, &param_explicit);
     if (vars_list)                push_var_list(vars_list,           &main_set);
     if (elim_list)                push_var_list(elim_list,           &elim_set);
+
+    /* CoefficientDomain -> Polynomials[x,...]: the named symbols are
+     * coefficient-ring variables, which is exactly the parameter role.
+     * Fold them into the explicit-parameter set (the Polynomials head is
+     * a plain function whose args are the symbols). */
+    if (opt.domain == GB_DOM_POLYNOMIALS && opt.poly_domain_vars) {
+        for (size_t i = 0; i < opt.poly_domain_vars->data.function.arg_count; i++) {
+            Expr* v = opt.poly_domain_vars->data.function.args[i];
+            if (v->type == EXPR_SYMBOL) exprset_push_borrowed(&param_explicit, v);
+        }
+    }
 
     /* Symbols the user has named as parameters take priority over any
      * accidental presence in the main- or elim-var list.  Drop them
@@ -740,8 +818,17 @@ Expr* builtin_groebner_basis(Expr* res) {
      * `all_vars` array and gb_to_expr emits one factor per non-zero
      * exponent slot. */
     Expr** items = (out_n > 0) ? (Expr**)malloc(sizeof(Expr*) * out_n) : NULL;
-    for (size_t i = 0; i < out_n; i++) {
-        items[i] = gb_to_expr(G[i], all_vars);
+    if (opt.domain == GB_DOM_INEXACT) {
+        /* Approximate-arithmetic output: monic, MPFR coefficients at the
+         * requested decimal precision.  bits = ceil(prec * log2(10)). */
+        mpfr_prec_t bits = (mpfr_prec_t)((opt.inexact_prec * 33219L) / 10000L) + 1;
+        for (size_t i = 0; i < out_n; i++) {
+            items[i] = gb_to_expr_inexact(G[i], all_vars, bits);
+        }
+    } else {
+        for (size_t i = 0; i < out_n; i++) {
+            items[i] = gb_to_expr(G[i], all_vars);
+        }
     }
     gb_basis_free(G, out_n);
     free(all_vars);

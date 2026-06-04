@@ -25,6 +25,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <gmp.h>
+#include <mpfr.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -222,6 +223,12 @@ GBPoly* gb_from_expr(struct Expr* e, struct Expr** vars, int n_vars,
  * Coefficients become Integer/BigInt/Rational as appropriate.  The
  * caller owns the returned Expr*. */
 struct Expr* gb_to_expr(const GBPoly* p, struct Expr** vars);
+
+/* Convert a GBPoly to Expr form for the InexactNumbers coefficient
+ * domain: the polynomial is made monic and every coefficient is rendered
+ * as a `bits`-bit MPFR real.  The caller owns the returned Expr*. */
+struct Expr* gb_to_expr_inexact(const GBPoly* p, struct Expr** vars,
+                                mpfr_prec_t bits);
 
 #ifdef __cplusplus
 }
