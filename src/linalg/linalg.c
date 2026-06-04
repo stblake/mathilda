@@ -47,4 +47,6 @@ void linalg_init(void) {
     symtab_add_builtin("NegativeDefiniteMatrixQ",
                        builtin_negative_definite_matrix_q);
     symtab_get_def("NegativeDefiniteMatrixQ")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("LatticeReduce", builtin_latticereduce);
+    symtab_get_def("LatticeReduce")->attributes |= ATTR_PROTECTED;
 }

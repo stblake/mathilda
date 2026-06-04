@@ -327,6 +327,15 @@ void info_init(void) {
         "\t  \"CofactorExpansion\"         — identity-if-invertible via Laplace cofactor\n"
         "\t                                 Det[m] (singular / rectangular m falls back\n"
         "\t                                 to \"DivisionFreeRowReduction\")");
+    symtab_set_docstring("LatticeReduce",
+        "LatticeReduce[m]\n"
+        "\tgives an LLL-reduced basis for the lattice spanned by the rows\n"
+        "\t(vectors) of m.  The entries of m may be integers, Gaussian\n"
+        "\tintegers, rationals, or Gaussian rationals.  Reduction is exact\n"
+        "\t(GMP rational arithmetic, so it is correct for both machine-size\n"
+        "\tand arbitrary-precision entries) and preserves the lattice, its\n"
+        "\tdeterminant, and every linear relation among the rows.  The rows\n"
+        "\tmust be linearly independent.");
     symtab_set_docstring("IdentityMatrix", "IdentityMatrix[n] gives the n x n identity matrix.\nIdentityMatrix[{m, n}] gives the m x n identity matrix.");
     symtab_set_docstring("DiagonalMatrix", "DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.\nDiagonalMatrix[list, k] gives a matrix with the elements of list on the k-th diagonal.\nDiagonalMatrix[list, k, n] pads with zeros to create an n x n matrix.");
     symtab_set_docstring("HilbertMatrix", "HilbertMatrix[n] gives the n x n Hilbert matrix with entries 1/(i + j - 1).\nHilbertMatrix[{m, n}] gives the m x n Hilbert matrix.\nEntries are exact Rationals unless the WorkingPrecision option requests MachinePrecision or a digit count.");

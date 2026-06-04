@@ -905,6 +905,60 @@ Out[9]= 1
 > `cplx_t = {re, im}` struct stands in for `double _Complex` to keep
 > the build strictly C99.
 
+## LatticeReduce
+Gives an LLL-reduced basis for a lattice.
+- `LatticeReduce[m]` — `m` an `n × d` matrix whose rows are the lattice
+  generators.
+
+**Features**:
+- `Protected`.
+- Returns an `n × d` matrix whose rows form a reduced basis of the same
+  lattice (same `Z`- / `Z[i]`-module).
+- Entries may be integers, rationals, Gaussian integers, or Gaussian
+  rationals (`Complex[a, b]` with exact `a`, `b`).
+- Exact Lenstra–Lenstra–Lovász reduction (Lovász parameter `δ = 3/4`)
+  carried out entirely in GMP rational arithmetic — no floating point —
+  so it is correct for both machine-size and arbitrary-precision (bignum)
+  inputs. This matters for integer-relation finding, where a rounding
+  error would yield a wrong relation.
+- The Gram–Schmidt orthogonalisation uses the Hermitian inner product
+  `⟨x, y⟩ = Σ x_k conj(y_k)`, so real and Gaussian lattices share one
+  code path; size reduction rounds to the nearest Gaussian integer.
+- The lattice — and hence `Abs[Det]` and every linear relation in the
+  right null space — is preserved exactly.
+- The rows must be linearly independent; a dependent generating set is
+  reported with `LatticeReduce::dep`.
+- Diagnostics: `LatticeReduce::argx` (wrong argument count),
+  `LatticeReduce::matrix` (not a non-empty rectangular matrix),
+  `LatticeReduce::latm` (an entry is not rational).
+
+```mathematica
+In[1]:= LatticeReduce[{{1, 0, 0, 1345}, {0, 1, 0, 35}, {0, 0, 1, 154}}]
+Out[1]= {{0, 9, -2, 7}, {1, 1, -9, -6}, {1, -3, -8, 8}}
+
+In[2]:= {w1, w2} = LatticeReduce[{{12, 2}, {13, 4}}]
+Out[2]= {{1, 2}, {9, -4}}
+
+(* Integer-relation finding: x0 + a1 x1 + a2 x2 == 0 for a1=2, a2=3 *)
+In[3]:= a = {{1, 0, 0, -1}, {0, 1, 0, -2}, {0, 0, 1, -3}};
+        b = LatticeReduce[a]
+Out[3]= {{1, 0, 0, -1}, {-1, 1, 0, -1}, {-1, -1, 1, 0}}
+
+In[4]:= b . {1, 2, 3, 1}    (* relations preserved *)
+Out[4]= {0, 0, 0}
+
+In[5]:= LatticeReduce[{{1, 2}, {3, 4.5}}]
+LatticeReduce::latm: Matrix contains an entry that is not rational.
+Out[5]= LatticeReduce[{{1, 2}, {3, 4.5}}]
+```
+
+> Implementation lives in `src/linalg/latticereduce.c` (registered by
+> `linalg_init`). Each Gaussian-rational scalar is a pair of GMP `mpq_t`
+> (`GRat`); the Gram–Schmidt data (`μ`, `|b*|²`) is computed once and
+> maintained incrementally — updated in place on size reduction and on a
+> Lovász swap via the conjugate-aware Cohen swap formulas — so no full
+> recomputation is needed.
+
 ## QRDecomposition
 Gives the QR decomposition of a matrix.
 - `QRDecomposition[m]` — returns `{q, r}` such that

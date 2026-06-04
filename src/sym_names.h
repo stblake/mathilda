@@ -208,6 +208,7 @@ extern const char* SYM_LeastSquares;
 extern const char* SYM_LessEqual;
 extern const char* SYM_Level;
 extern const char* SYM_Lexicographic;
+extern const char* SYM_LatticeReduce;
 extern const char* SYM_LinearSolve;
 extern const char* SYM_List;
 extern const char* SYM_Listable;

@@ -161,6 +161,7 @@ set(COMMON_SRC
     ../src/linalg/lstsq.c
     ../src/linalg/nullspace.c
     ../src/linalg/matrank.c
+    ../src/linalg/latticereduce.c
     ../src/linalg/qrdecomp.c
     ../src/linalg/qrdecomp_machine.c
     ../src/linalg/qrdecomp_mpfr.c
@@ -617,6 +618,16 @@ else()
     target_link_libraries(matrank_tests gmp m)
 endif()
 add_test(NAME matrank_tests COMMAND matrank_tests)
+
+add_executable(latticereduce_tests test_latticereduce.c ${COMMON_SRC})
+target_include_directories(latticereduce_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(latticereduce_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(latticereduce_tests build_ecm)
+else()
+    target_link_libraries(latticereduce_tests gmp m)
+endif()
+add_test(NAME latticereduce_tests COMMAND latticereduce_tests)
 
 add_executable(qrdecomposition_tests test_qrdecomposition.c ${COMMON_SRC})
 target_include_directories(qrdecomposition_tests PRIVATE ../src)

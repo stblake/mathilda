@@ -193,6 +193,7 @@ const char* SYM_LeastSquares = NULL;
 const char* SYM_LessEqual = NULL;
 const char* SYM_Level = NULL;
 const char* SYM_Lexicographic = NULL;
+const char* SYM_LatticeReduce = NULL;
 const char* SYM_LinearSolve = NULL;
 const char* SYM_List = NULL;
 const char* SYM_Listable = NULL;
@@ -533,6 +534,7 @@ void sym_names_init(void) {
     SYM_LessEqual                  = intern_symbol("LessEqual");
     SYM_Level                      = intern_symbol("Level");
     SYM_Lexicographic              = intern_symbol("Lexicographic");
+    SYM_LatticeReduce              = intern_symbol("LatticeReduce");
     SYM_LinearSolve                = intern_symbol("LinearSolve");
     SYM_List                       = intern_symbol("List");
     SYM_Listable                   = intern_symbol("Listable");
