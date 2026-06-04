@@ -1589,6 +1589,20 @@ void info_init(void) {
         "evaluated until Switch examines them.\n"
         "Break, Return, and Throw inside the chosen value behave as they\n"
         "do in any other held context.");
+    symtab_set_docstring("InterpolatingFunction",
+        "InterpolatingFunction[domain, table]\n"
+        "\trepresents an approximate function whose values are found by\n"
+        "\tinterpolation. domain is {{x1min, x1max}, ...} with one interval\n"
+        "\tper dimension; table is a list of {coord, value} data points on a\n"
+        "\tfull tensor grid (coord is a scalar for 1-D, an {x1, ..., xm} list\n"
+        "\tfor m-D).\n"
+        "InterpolatingFunction[...][x1, ..., xm]\n"
+        "\tgives the interpolated value using tensor-product piecewise-\n"
+        "\tpolynomial (default order 3) interpolation. Arguments outside the\n"
+        "\tdomain are extrapolated with a warning.\n"
+        "Derivative[d1, ..., dm][InterpolatingFunction[...]]\n"
+        "\tgives an InterpolatingFunction for the mixed partial derivative.\n"
+        "In standard output only the domain is shown; the rest is <>.");
     symtab_set_docstring("Piecewise",
         "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]\n"
         "\trepresents a piecewise function with values val_i in the regions\n"

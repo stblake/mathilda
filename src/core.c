@@ -481,6 +481,8 @@ void core_init(void) {
     simp_init();
     logexp_init();
     piecewise_init();
+    void interp_init(void);
+    interp_init();
     int_init();
     real_init();
     attr_init();

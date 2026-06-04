@@ -865,6 +865,15 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
     if (head->type == EXPR_FUNCTION) {
         Expr* r = deriv_of_derivative_form(f, x, nonconsts);
         if (r) return r;
+
+        /* Applied InterpolatingFunction object: differentiate by the generic
+         * chain rule, producing Derivative[0..1_k..0][InterpolatingFunction[...]]
+         * [g1..gn] * D[gk, x]. The evaluator then reduces the Derivative head
+         * to a derivative-annotated InterpolatingFunction (see interp.c), so
+         * D[ifun[x], x] and ifun'[x] agree. */
+        if (is_sym(head->data.function.head, "InterpolatingFunction")) {
+            return chain_rule_unknown(f, x, nonconsts);
+        }
     }
 
     /* Give up -- caller keeps the expression unevaluated. */

@@ -655,6 +655,15 @@ static void print_standard(Expr* e, int parent_prec) {
             print_standard(e->data.function.args[0], 90);
             printf(" &");
         }
+        else if (head == SYM_InterpolatingFunction && e->data.function.arg_count >= 2) {
+            /* Only the domain element is printed explicitly; the remaining
+             * data elements are abbreviated as <>, matching Mathematica's
+             * standard output format. FullForm (handled separately) still
+             * reveals the full structure. */
+            printf("InterpolatingFunction[");
+            print_standard(e->data.function.args[0], 0);
+            printf(", <>]");
+        }
         else if (head == SYM_Pattern && e->data.function.arg_count == 2 &&
                  e->data.function.args[0]->type == EXPR_SYMBOL &&
                  e->data.function.args[1]->type == EXPR_FUNCTION &&

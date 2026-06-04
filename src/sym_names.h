@@ -154,6 +154,7 @@ extern const char* SYM_FromDigits;
 extern const char* SYM_FullForm;
 extern const char* SYM_Function;
 extern const char* SYM_Gamma;
+extern const char* SYM_InterpolatingFunction;
 extern const char* SYM_GaussianIntegers;
 extern const char* SYM_GeneratedParameters;
 extern const char* SYM_Glaisher;

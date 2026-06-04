@@ -69,6 +69,75 @@ In[7]:= Function[{a, b}, {Length[Unevaluated[a]], Length[Unevaluated[b]]}, HoldF
 Out[7]= {3, 0}
 ```
 
+## InterpolatingFunction
+`InterpolatingFunction[domain, table]` represents an approximate function
+whose values are found by interpolation, and — like `Function` — is evaluated
+by applying it to arguments. Any number of real arguments (dimensions) is
+supported.
+
+- `domain`: one interval per dimension, `{{x1min, x1max}, ..., {xmmin, xmmax}}`.
+  The number of intervals `m` is the dimensionality.
+- `table`: the data points, `{{coord1, val1}, {coord2, val2}, ...}`. For `m = 1`
+  each `coord` is a scalar `x`; for `m ≥ 2` each `coord` is a list
+  `{x1, ..., xm}`. The points must fill the Cartesian product of the
+  per-dimension grids (a full tensor grid). Points may be given in any order;
+  they are sorted by abscissa internally.
+- `InterpolatingFunction[...][x1, ..., xm]` returns the interpolated value.
+- `InterpolatingFunction[domain, table, {d1, ..., dm}]` is the optional
+  derivative-annotated form (see **Derivatives**).
+
+**Method**: tensor-product piecewise-polynomial interpolation of default
+order 3 (cubic) in every dimension. For a query point the bracketing interval
+is found in each dimension and a sliding window of `order + 1` consecutive grid
+points, centred on that interval, is selected; the value is the tensor product
+of the per-dimension Newton divided-difference polynomials. The order drops to
+`min(3, n_k - 1)` when a dimension has fewer than four grid points (two →
+linear, three → quadratic). The windowing reproduces Mathematica's default
+piecewise interpolant.
+
+**Derivatives**: `Derivative[d1, ..., dm][InterpolatingFunction[...]]` (and so
+`ifun'`, `D[ifun[x], x]`, `D[f[x,y], {x,2}]`, etc.) returns another
+`InterpolatingFunction` carrying the accumulated derivative orders — exactly as
+in Mathematica. When applied it evaluates the mixed partial
+`∂^{d1}_{x1} ... ∂^{dm}_{xm}` of the windowed interpolant. Orders are additive
+across repeated differentiation, and an order beyond the local polynomial
+degree yields `0`.
+
+**Semantics**:
+- An *exact* argument tuple (Integer/Rational) coinciding with a grid node
+  returns that node's stored value exactly (value queries only); all other
+  queries return a machine real.
+- An argument outside `domain` is extrapolated from the nearest window, and an
+  `InterpolatingFunction::dmval` warning is issued.
+- A symbolic argument, a wrong number of arguments (≠ `m`), or a malformed
+  object (fewer than two grid points in a dimension, an incomplete tensor grid,
+  non-numeric data) leaves the application unevaluated.
+- In standard output only the `domain` is shown; the rest is abbreviated as
+  `<>`. `FullForm` reveals the full structure.
+
+Attribute: `Protected`.
+
+```mathematica
+In[1]:= ifun = InterpolatingFunction[{{0, 5}}, {{0,0},{1,1},{2,3},{3,4},{4,3},{5,0}}]
+Out[1]= InterpolatingFunction[{{0, 5}}, <>]
+
+In[2]:= ifun[2.5]
+Out[2]= 3.6875
+
+In[3]:= ifun[2]
+Out[3]= 3
+
+In[4]:= ifun'[2.5]
+Out[4]= 1.04167
+
+In[5]:= f = InterpolatingFunction[{{0, 4}, {0, 4}}, {{{0,0},0}, ..., {{4,4},80}}];
+        f[1.5, 2.5]              (* tensor-product 2-D interpolation *)
+Out[5]= 17.875
+
+In[6]:= Derivative[0, 1][f][1.5, 2.5]
+Out[6]= 18.75
+```
+
 ## Map (/@)
 - `f /@ expr` or `Map[f, expr]`
 

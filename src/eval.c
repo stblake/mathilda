@@ -16,6 +16,7 @@
 #include "deriv.h"
 #include "sym_names.h"
 #include "sym_intern.h"
+#include "interp.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -937,6 +938,22 @@ Expr* evaluate_step(Expr* e, bool* changed) {
             } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
                        head->data.function.head->data.symbol == SYM_Derivative &&
                        res->data.function.arg_count == 1 &&
+                       res->data.function.args[0]->type == EXPR_FUNCTION &&
+                       res->data.function.args[0]->data.function.head->type == EXPR_SYMBOL &&
+                       res->data.function.args[0]->data.function.head->data.symbol == SYM_InterpolatingFunction) {
+                /* 7b''. Derivative[d1,...,dm][InterpolatingFunction[...]] reduces
+                 * to a fresh InterpolatingFunction carrying the accumulated
+                 * derivative orders, which evaluates the mixed partial when
+                 * applied. This makes ifun'[x] and D[ifun[x],x] work. */
+                Expr* reduced = interp_make_derivative(head, res->data.function.args[0]);
+                if (reduced) {
+                    expr_free(res);
+                    *changed = true; /* Derivative-of-InterpolatingFunction reduced */
+                    return reduced;
+                }
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       head->data.function.head->data.symbol == SYM_Derivative &&
+                       res->data.function.arg_count == 1 &&
                        res->data.function.args[0]->type == EXPR_SYMBOL) {
                 /* 7b'. Derivative[n1,...,nm][f] where f is a symbol with
                  * DownValues. Reduce by synthesising
@@ -975,6 +992,18 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                 expr_free(res);
                 *changed = true; /* Composition unrolled */
                 return inner;
+            } else if (head->type == EXPR_FUNCTION && head->data.function.head->type == EXPR_SYMBOL &&
+                       head->data.function.head->data.symbol == SYM_InterpolatingFunction) {
+                /* 7d. InterpolatingFunction[domain, table][x] -> interpolated
+                 * value. The object itself is a normal form; only its
+                 * application is reduced here. interp_apply returns NULL for a
+                 * symbolic / out-of-form argument, leaving the call intact. */
+                Expr* applied = interp_apply(head, res->data.function.args, res->data.function.arg_count);
+                if (applied) {
+                    expr_free(res);
+                    *changed = true; /* InterpolatingFunction evaluated */
+                    return applied;
+                }
             }
 
             return res;
