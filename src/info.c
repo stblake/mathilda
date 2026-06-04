@@ -58,6 +58,13 @@ void info_init(void) {
         "\tgives the least common multiple of the integers ni.\n"
         "Computed via GMP's mpz_lcm folded across the arguments; sign is\n"
         "normalised non-negative. Accepts BigInt and Rational inputs.");
+    symtab_set_docstring("ExtendedGCD",
+        "ExtendedGCD[n1, n2, ...]\n"
+        "\tgives the extended GCD {g, {r1, r2, ...}} of the integers ni,\n"
+        "\twhere g == GCD[n1, ...] and g == r1 n1 + r2 n2 + ....\n"
+        "Computed by folding GMP's mpz_gcdext pairwise; accepts machine and\n"
+        "BigInt integers and threads over lists. Non-integer or inexact\n"
+        "arguments leave ExtendedGCD unevaluated.");
     symtab_set_docstring("PowerMod", "PowerMod[a, b, m] gives a^b mod m.\nPowerMod[a, -1, m] finds the modular inverse of a modulo m.\nPowerMod[a, 1/r, m] finds a modular r-th root of a.");
     symtab_set_docstring("PrimitiveRoot",
         "PrimitiveRoot[n]\n"

@@ -878,6 +878,16 @@ Out[8]= -Infinity
 
 Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
 
+## ExtendedGCD
+- `ExtendedGCD[n1, n2, ...]`: returns `{g, {r1, r2, ...}}` where `g == GCD[n1, ...]` and `g == r1 n1 + r2 n2 + ...` (a multi-argument Bézout / extended GCD). Attributes: `Listable`, `Protected` (deliberately *not* `Flat`/`Orderless`/`OneIdentity`, since the cofactor list is positional).
+
+**Features**:
+- Integer-only; both machine integers and GMP bigints are accepted, and cofactors demote back to machine integers when they fit.
+- Computed by folding GMP's `mpz_gcdext` pairwise: `gcd(running_g, n_i) = s·running_g + t·n_i`, scaling the accumulated cofactors by `s` and appending `t` each step. The running gcd stays non-negative, so `g` is exactly `GCD` and the sign convention matches Mathematica.
+- Threads element-wise over lists, e.g. `ExtendedGCD[3, {5, 15}]` → `{{1, {2, -1}}, {3, {1, 0}}}`.
+- Edge cases: `ExtendedGCD[]` → `{0, {}}`; `ExtendedGCD[n]` → `{|n|, {±1}}`; zeros and negatives handled (`g` non-negative).
+- Diagnostics: an inexact (Real) argument emits `ExtendedGCD::exact`; an exact non-integer (Rational) argument emits `ExtendedGCD::egcd`; symbolic arguments leave the call unevaluated silently.
+
 ## ContinuedFraction
 Gives the simple continued-fraction expansion of a number.
 - `ContinuedFraction[x, n]`: a list of the first `n` terms.

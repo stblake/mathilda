@@ -390,6 +390,7 @@ void core_init(void) {
     symtab_add_builtin("QuotientRemainder", builtin_quotientremainder);
     symtab_add_builtin("GCD", builtin_gcd);
     symtab_add_builtin("LCM", builtin_lcm);
+    symtab_add_builtin("ExtendedGCD", builtin_extendedgcd);
     symtab_add_builtin("PowerMod", builtin_powermod);
     symtab_add_builtin("PrimitiveRoot", builtin_primitiveroot);
     symtab_add_builtin("PrimitiveRootList", builtin_primitiverootlist);
@@ -427,6 +428,7 @@ void core_init(void) {
     symtab_get_def("QuotientRemainder")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("GCD")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
     symtab_get_def("LCM")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
+    symtab_get_def("ExtendedGCD")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("PowerMod")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_get_def("PrimitiveRoot")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_get_def("PrimitiveRootList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;

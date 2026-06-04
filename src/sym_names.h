@@ -124,6 +124,7 @@ extern const char* SYM_Evaluate;
 extern const char* SYM_EvaluationMonitor;
 extern const char* SYM_Except;
 extern const char* SYM_Exp;
+extern const char* SYM_ExtendedGCD;
 extern const char* SYM_Extension;
 extern const char* SYM_FEAST;
 extern const char* SYM_Factor;

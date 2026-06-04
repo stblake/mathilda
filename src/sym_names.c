@@ -109,6 +109,7 @@ const char* SYM_Evaluate = NULL;
 const char* SYM_EvaluationMonitor = NULL;
 const char* SYM_Except = NULL;
 const char* SYM_Exp = NULL;
+const char* SYM_ExtendedGCD = NULL;
 const char* SYM_Extension = NULL;
 const char* SYM_FEAST = NULL;
 const char* SYM_Factor = NULL;
@@ -448,6 +449,7 @@ void sym_names_init(void) {
     SYM_EvaluationMonitor          = intern_symbol("EvaluationMonitor");
     SYM_Except                     = intern_symbol("Except");
     SYM_Exp                        = intern_symbol("Exp");
+    SYM_ExtendedGCD                = intern_symbol("ExtendedGCD");
     SYM_Extension                  = intern_symbol("Extension");
     SYM_FEAST                      = intern_symbol("FEAST");
     SYM_Factor                     = intern_symbol("Factor");
