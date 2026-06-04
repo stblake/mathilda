@@ -1055,6 +1055,260 @@ GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
     return G;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Strong Gröbner basis over Z                                         */
+/* ------------------------------------------------------------------ */
+/*
+ * CoefficientDomain -> Integers.  The polynomials live in Z[vars] (Z is a
+ * PID; any parameter symbol is just another variable, placed last under
+ * lex), and we compute a STRONG Gröbner basis: a basis G such that the
+ * leading term of every ideal element is divisible -- monomial AND integer
+ * coefficient -- by the leading term of some g in G.  Buchberger's pair
+ * criteria do not hold over Z, so completion processes all pairs and, per
+ * pair, forms two combinations:
+ *
+ *   S-polynomial (cancel leading terms, coefficient lcm):
+ *     S = (b/d)·x^(L-Xf)·f − (a/d)·x^(L-Xg)·g
+ *   G-polynomial (Bézout combination, coefficient gcd):
+ *     with d = gcd(a,b) = u·a + v·b,
+ *     P = u·x^(L-Xf)·f + v·x^(L-Xg)·g      (leading coefficient d)
+ *
+ * where a=lc(f), b=lc(g), Xf/Xg the leading power products, L=lcm(Xf,Xg).
+ * Each is strong-reduced; non-zero remainders join the basis.  Reduction
+ * over Z cancels a term c·X by g only when Xg|X and lc(g)|c (exact integer
+ * division).  Content is preserved throughout (it is part of the ideal
+ * data over Z), so the GBPoly mpq_t coefficients stay integral but are
+ * never made primitive. */
+
+/* Clear denominators of `p` in place (integer coefficients), preserving
+ * content -- the GCD is NOT stripped. */
+static void gb_poly_clear_denoms(GBPoly* p) {
+    if (p->n_terms == 0) return;
+    mpz_t lcm; mpz_init_set_ui(lcm, 1);
+    for (size_t i = 0; i < p->n_terms; i++)
+        mpz_lcm(lcm, lcm, mpq_denref(p->coefs[i]));
+    if (mpz_cmp_ui(lcm, 1) != 0) {
+        for (size_t i = 0; i < p->n_terms; i++) {
+            mpz_mul(mpq_numref(p->coefs[i]), mpq_numref(p->coefs[i]), lcm);
+            mpq_canonicalize(p->coefs[i]);
+        }
+    }
+    mpz_clear(lcm);
+}
+
+/* Negate `p` in place if its leading integer coefficient is negative, so
+ * the leading coefficient is positive (the canonical strong-GB sign). */
+static void gb_poly_lead_positive(GBPoly* p) {
+    if (p->n_terms == 0) return;
+    if (mpz_sgn(mpq_numref(p->coefs[0])) < 0)
+        for (size_t i = 0; i < p->n_terms; i++)
+            mpq_neg(p->coefs[i], p->coefs[i]);
+}
+
+/* Full reduction of `p` over Z modulo the non-NULL members of
+ * basis[0..n-1].  Any term c·X with Xg|X and lc(g)|c (exact) is cancelled.
+ * Returns a fresh remainder (possibly zero). */
+static GBPoly* gb_strong_reduce(const GBPoly* p, GBPoly* const* basis, size_t n) {
+    GBPoly* r = gb_poly_copy(p);
+    int nv = p->n_vars;
+    int* e = (int*)malloc(sizeof(int) * (size_t)(nv > 0 ? nv : 1));
+    bool progress = true;
+    while (progress) {
+        progress = false;
+        for (size_t t = 0; t < r->n_terms && !progress; t++) {
+            const int* X = gb_exp_at(r, t);
+            for (size_t i = 0; i < n; i++) {
+                if (!basis[i] || gb_poly_is_zero(basis[i])) continue;
+                const int* Xg = gb_exp_at(basis[i], 0);
+                if (!exp_divides(Xg, X, nv)) continue;
+                if (!mpz_divisible_p(mpq_numref(r->coefs[t]),
+                                     mpq_numref(basis[i]->coefs[0]))) continue;
+                mpz_t quo; mpz_init(quo);
+                mpz_divexact(quo, mpq_numref(r->coefs[t]),
+                             mpq_numref(basis[i]->coefs[0]));
+                for (int v = 0; v < nv; v++) e[v] = X[v] - Xg[v];
+                mpq_t q; mpq_init(q); mpq_set_z(q, quo);
+                GBPoly* tt = gb_poly_mul_by_monomial(basis[i], e, q);
+                GBPoly* nr = gb_poly_sub(r, tt);
+                gb_poly_free(tt); gb_poly_free(r); r = nr;
+                mpq_clear(q); mpz_clear(quo);
+                progress = true;
+                break;
+            }
+        }
+    }
+    free(e);
+    return r;
+}
+
+/* S-polynomial over Z (leading-term cancelling, coefficient lcm). */
+static GBPoly* gb_spoly_Z(const GBPoly* f, const GBPoly* g) {
+    int nv = f->n_vars;
+    const int* Xf = gb_exp_at((GBPoly*)f, 0);
+    const int* Xg = gb_exp_at((GBPoly*)g, 0);
+    int* L  = (int*)malloc(sizeof(int) * (size_t)(nv > 0 ? nv : 1));
+    int* ef = (int*)malloc(sizeof(int) * (size_t)(nv > 0 ? nv : 1));
+    int* eg = (int*)malloc(sizeof(int) * (size_t)(nv > 0 ? nv : 1));
+    compute_lcm(L, Xf, Xg, nv);
+    for (int v = 0; v < nv; v++) { ef[v] = L[v] - Xf[v]; eg[v] = L[v] - Xg[v]; }
+    mpz_t d, cf, cg;
+    mpz_init(d); mpz_init(cf); mpz_init(cg);
+    mpz_gcd(d, mpq_numref(f->coefs[0]), mpq_numref(g->coefs[0]));
+    mpz_divexact(cf, mpq_numref(g->coefs[0]), d);   /* b/d */
+    mpz_divexact(cg, mpq_numref(f->coefs[0]), d);   /* a/d */
+    mpq_t qf, qg; mpq_init(qf); mpq_init(qg);
+    mpq_set_z(qf, cf); mpq_set_z(qg, cg);
+    GBPoly* t1 = gb_poly_mul_by_monomial(f, ef, qf);
+    GBPoly* t2 = gb_poly_mul_by_monomial(g, eg, qg);
+    GBPoly* S  = gb_poly_sub(t1, t2);
+    gb_poly_free(t1); gb_poly_free(t2);
+    mpq_clear(qf); mpq_clear(qg);
+    mpz_clear(d); mpz_clear(cf); mpz_clear(cg);
+    free(L); free(ef); free(eg);
+    return S;
+}
+
+/* G-polynomial over Z (Bézout combination, leading coefficient gcd). */
+static GBPoly* gb_gpoly_Z(const GBPoly* f, const GBPoly* g) {
+    int nv = f->n_vars;
+    const int* Xf = gb_exp_at((GBPoly*)f, 0);
+    const int* Xg = gb_exp_at((GBPoly*)g, 0);
+    int* L  = (int*)malloc(sizeof(int) * (size_t)(nv > 0 ? nv : 1));
+    int* ef = (int*)malloc(sizeof(int) * (size_t)(nv > 0 ? nv : 1));
+    int* eg = (int*)malloc(sizeof(int) * (size_t)(nv > 0 ? nv : 1));
+    compute_lcm(L, Xf, Xg, nv);
+    for (int v = 0; v < nv; v++) { ef[v] = L[v] - Xf[v]; eg[v] = L[v] - Xg[v]; }
+    mpz_t d, u, v_;
+    mpz_init(d); mpz_init(u); mpz_init(v_);
+    mpz_gcdext(d, u, v_, mpq_numref(f->coefs[0]), mpq_numref(g->coefs[0]));
+    mpq_t qu, qv; mpq_init(qu); mpq_init(qv);
+    mpq_set_z(qu, u); mpq_set_z(qv, v_);
+    GBPoly* t1 = gb_poly_mul_by_monomial(f, ef, qu);
+    GBPoly* t2 = gb_poly_mul_by_monomial(g, eg, qv);
+    GBPoly* P  = gb_poly_add(t1, t2);
+    gb_poly_free(t1); gb_poly_free(t2);
+    mpq_clear(qu); mpq_clear(qv);
+    mpz_clear(d); mpz_clear(u); mpz_clear(v_);
+    free(L); free(ef); free(eg);
+    return P;
+}
+
+/* True iff the leading term of `b` divides that of `a`: leading monomial
+ * divides AND leading integer coefficient divides. */
+static bool gb_lt_divides(const GBPoly* b, const GBPoly* a) {
+    if (!exp_divides(gb_exp_at((GBPoly*)b, 0), gb_exp_at((GBPoly*)a, 0),
+                     a->n_vars)) return false;
+    return mpz_divisible_p(mpq_numref(a->coefs[0]), mpq_numref(b->coefs[0]));
+}
+
+GBPoly** gb_strong_buchberger(GBPoly* const* F, size_t n, size_t* out_n) {
+    /* Copy inputs, clear denominators (preserving content), drop zeros. */
+    GBPoly** G = NULL;
+    size_t nG = 0, capG = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (F[i]->n_terms == 0) continue;
+        GBPoly* p = gb_poly_copy(F[i]);
+        gb_poly_clear_denoms(p);
+        gb_poly_lead_positive(p);
+        if (p->n_terms == 0) { gb_poly_free(p); continue; }
+        if (nG == capG) { capG = capG ? capG * 2 : 8;
+                          G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG); }
+        G[nG++] = p;
+    }
+    if (nG == 0) { *out_n = 0; free(G); return NULL; }
+
+    /* Pair queue (all pairs; no Gebauer-Möller shortcut over Z). */
+    typedef struct { size_t i, j; } Pair;
+    Pair* pairs = NULL; size_t nP = 0, capP = 0;
+    #define PUSH_PAIR(A,B) do { \
+        if (nP == capP) { capP = capP ? capP * 2 : 16; \
+            pairs = (Pair*)realloc(pairs, sizeof(Pair) * capP); } \
+        pairs[nP].i = (A); pairs[nP].j = (B); nP++; } while (0)
+    for (size_t a = 0; a < nG; a++)
+        for (size_t b = a + 1; b < nG; b++) PUSH_PAIR(a, b);
+
+    /* Completion: process every pair, adding S- and G-polynomial
+     * remainders.  Safety cap mirrors gb_buchberger's deadline hook. */
+    size_t head = 0;
+    while (head < nP) {
+        tc_check_deadline();
+        Pair pr = pairs[head++];
+        GBPoly* f = G[pr.i];
+        GBPoly* g = G[pr.j];
+
+        GBPoly* cand[2];
+        cand[0] = gb_spoly_Z(f, g);
+        cand[1] = gb_gpoly_Z(f, g);
+        for (int c = 0; c < 2; c++) {
+            GBPoly* r = gb_strong_reduce(cand[c], G, nG);
+            gb_poly_free(cand[c]);
+            if (gb_poly_is_zero(r)) { gb_poly_free(r); continue; }
+            gb_poly_lead_positive(r);
+            if (nG == capG) { capG = capG ? capG * 2 : 8;
+                G = (GBPoly**)realloc(G, sizeof(GBPoly*) * capG); }
+            G[nG] = r;
+            for (size_t k = 0; k < nG; k++) PUSH_PAIR(k, nG);
+            nG++;
+        }
+    }
+    free(pairs);
+    #undef PUSH_PAIR
+
+    /* Minimalise: drop any element whose leading term is divisible by
+     * another's (kept) leading term. */
+    for (size_t i = 0; i < nG; i++) {
+        if (!G[i]) continue;
+        for (size_t j = 0; j < nG; j++) {
+            if (i == j || !G[j]) continue;
+            if (gb_lt_divides(G[j], G[i])) {
+                /* If the leading terms are mutually divisible (equal up to
+                 * sign) keep the lower index to stay deterministic. */
+                if (gb_lt_divides(G[i], G[j]) && j > i) continue;
+                gb_poly_free(G[i]); G[i] = NULL;
+                break;
+            }
+        }
+    }
+    size_t k = 0;
+    for (size_t i = 0; i < nG; i++) if (G[i]) G[k++] = G[i];
+    nG = k;
+
+    /* Tail-reduce each survivor modulo the others (fixed point), keep the
+     * leading coefficient positive. */
+    for (int pass = 0; pass < 64; pass++) {
+        bool changed = false;
+        for (size_t i = 0; i < nG; i++) {
+            GBPoly** others = (GBPoly**)malloc(sizeof(GBPoly*) * nG);
+            size_t m = 0;
+            for (size_t j = 0; j < nG; j++) if (j != i) others[m++] = G[j];
+            GBPoly* r = gb_strong_reduce(G[i], others, m);
+            free(others);
+            gb_poly_lead_positive(r);
+            GBPoly* d = gb_poly_sub(G[i], r);
+            bool same = gb_poly_is_zero(d);
+            gb_poly_free(d);
+            if (same) { gb_poly_free(r); }
+            else { gb_poly_free(G[i]); G[i] = r; changed = true; }
+        }
+        if (!changed) break;
+    }
+
+    /* Sort ascending by leading monomial (Mathematica convention; same as
+     * gb_finalize_basis).  gb_cmp returns -1 when a > b, so "pick > 0"
+     * selects the smaller leading monomial. */
+    for (size_t i = 0; i + 1 < nG; i++) {
+        size_t pick = i;
+        for (size_t j = i + 1; j < nG; j++) {
+            if (gb_cmp(gb_exp_at(G[j], 0), gb_exp_at(G[pick], 0), G[0]) > 0)
+                pick = j;
+        }
+        if (pick != i) { GBPoly* tmp = G[i]; G[i] = G[pick]; G[pick] = tmp; }
+    }
+
+    *out_n = nG;
+    return G;
+}
+
 void gb_basis_free(GBPoly** basis, size_t n) {
     if (!basis) return;
     for (size_t i = 0; i < n; i++) gb_poly_free(basis[i]);

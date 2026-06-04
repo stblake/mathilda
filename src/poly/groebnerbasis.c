@@ -718,8 +718,10 @@ Expr* builtin_groebner_basis(Expr* res) {
         return expr_new_function(expr_new_symbol("List"), NULL, 0);
     }
 
-    /* Fast path: any input is a non-zero constant -> ideal = <1>. */
-    for (size_t i = 0; i < nF; i++) {
+    /* Fast path: any input is a non-zero constant -> ideal = <1>.  Not
+     * valid over the integers, where a constant c generates only c*Z[x]
+     * (the strong basis keeps the constant), so skip it for Integers. */
+    for (size_t i = 0; i < nF && opt.domain != GB_DOM_INTEGERS; i++) {
         if (gb_poly_is_constant(F[i])) {
             for (size_t j = 0; j < nF; j++) gb_poly_free(F[j]);
             free(F);
@@ -747,7 +749,11 @@ Expr* builtin_groebner_basis(Expr* res) {
      * directly (the reduced basis is identical either way). */
     size_t out_n = 0;
     GBPoly** G;
-    if (opt.method == GB_METHOD_WALK && n_elim == 0 && n_params == 0) {
+    if (opt.domain == GB_DOM_INTEGERS) {
+        /* Strong Gröbner basis over Z (parameters are ordinary variables
+         * in the PID polynomial ring Z[vars]). */
+        G = gb_strong_buchberger(F, nF, &out_n);
+    } else if (opt.method == GB_METHOD_WALK && n_elim == 0 && n_params == 0) {
         G = gb_groebner_walk(F, nF, use_order, wmat_ptr, &out_n);
     } else {
         G = gb_buchberger(F, nF, &out_n);
@@ -801,9 +807,11 @@ Expr* builtin_groebner_basis(Expr* res) {
         gb_rational_function_reduce(G, &out_n, n_field_main);
     }
 
-    /* If the basis collapses to {<non-zero constant>} -> {1}. */
+    /* If the basis collapses to {<non-zero constant>} -> {1}.  Over the
+     * integers a constant generator c means the ideal is c*Z[x] (not <1>
+     * unless |c| == 1), so the strong basis keeps the constant verbatim. */
     bool has_const = false;
-    for (size_t i = 0; i < out_n; i++) {
+    for (size_t i = 0; i < out_n && opt.domain != GB_DOM_INTEGERS; i++) {
         if (gb_poly_is_constant(G[i]) && !gb_poly_is_zero(G[i])) {
             has_const = true; break;
         }

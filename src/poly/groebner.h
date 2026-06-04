@@ -176,6 +176,15 @@ GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n);
 /* Free a basis array as returned by gb_buchberger. */
 void gb_basis_free(GBPoly** basis, size_t n);
 
+/* Compute a STRONG Gröbner basis over the integers (CoefficientDomain ->
+ * Integers).  Inputs are interpreted in Z[vars]; denominators are cleared
+ * (content preserved).  Completion processes all pairs forming both the
+ * S-polynomial (coefficient lcm) and the G-polynomial (Bézout combination,
+ * coefficient gcd), strong-reducing each.  The result is minimalised,
+ * tail-reduced, leading-coefficient-positive, and LM-ascending.  Output
+ * ownership matches gb_buchberger (free via gb_basis_free). */
+GBPoly** gb_strong_buchberger(GBPoly* const* F, size_t n, size_t* out_n);
+
 /* Autoreduce a ring Gröbner basis (over Q[params][mainvars], parameters
  * placed last under lex) into a Gröbner basis over the field
  * Q(params)[mainvars] -- the CoefficientDomain -> RationalFunctions

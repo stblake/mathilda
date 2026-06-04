@@ -364,13 +364,45 @@ static void test_matrix_order_invalid_falls_back(void) {
                "{x,y,z}, MonomialOrder -> {{1,1,1},{2,2,2},{0,0,1}}]");
 }
 
-static void test_nimpl_coeff_domain_integers_falls_back(void) {
-    mute_stderr_once();
-    /* CoefficientDomain -> Integers not implemented -> nimpl + fall back. */
+/* CoefficientDomain -> Integers: strong Gröbner basis over Z.  Over Z the
+ * leading coefficients are not units, so the strong basis carries extra
+ * generators beyond the rational basis (here 4 rather than 2). */
+static void test_coeff_domain_integers_strong_basis(void) {
     check_eq("GroebnerBasis[{x^2-2y^2, x y-3}, {x, y}, "
              "CoefficientDomain -> Integers]",
              "List[Plus[-9, Times[2, Power[y, 4]]], "
-                  "Plus[Times[3, x], Times[-2, Power[y, 3]]]]");
+                  "Plus[Times[3, x], Times[-2, Power[y, 3]]], "
+                  "Plus[-3, Times[x, y]], "
+                  "Plus[Power[x, 2], Times[-2, Power[y, 2]]]]");
+}
+
+/* Strong basis exposes integer GCD combinations: <2x, 3x> = <x> over Z
+ * (gcd(2, 3) = 1), and <2x+2, 3x+3> = <x+1>. */
+static void test_coeff_domain_integers_gcd_combination(void) {
+    check_eq("GroebnerBasis[{2 x, 3 x}, x, CoefficientDomain -> Integers]",
+             "List[x]");
+    check_eq("GroebnerBasis[{2 x + 2, 3 x + 3}, x, "
+             "CoefficientDomain -> Integers]",
+             "List[Plus[1, x]]");
+}
+
+/* The documented strong-basis example: five generators over Z (the
+ * rational basis has three).  `a` is an ordinary variable of Z[x, y, a]. */
+static void test_coeff_domain_integers_documented(void) {
+    check_eq("GroebnerBasis[{a x^2 + 5 x - 1, 2 x + 3 x y + y^2}, {x, y}, "
+             "CoefficientDomain -> Integers]",
+             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], "
+                       "Times[-15, Power[y, 3]], Times[a, Power[y, 4]]], "
+                  "Plus[18, Times[4, Times[a, x]], Times[27, y], "
+                       "Times[45, Power[y, 2]], "
+                       "Times[2, Times[a, Power[y, 2]]], "
+                       "Times[-3, Times[a, Power[y, 3]]]], "
+                  "Plus[Times[2, x], Times[3, Times[x, y]], Power[y, 2]], "
+                  "Plus[6, Times[2, Times[a, x]], Times[9, y], "
+                       "Times[a, x, y], Times[15, Power[y, 2]], "
+                       "Times[a, Power[y, 2]], "
+                       "Times[-1, Times[a, Power[y, 3]]]], "
+                  "Plus[-1, Times[5, x], Times[a, Power[x, 2]]]]");
 }
 
 static void test_nimpl_deglex_falls_back(void) {
@@ -654,7 +686,9 @@ int main(void) {
     TEST(test_matrix_order_weighted_no_error);
     TEST(test_matrix_order_walk_matches_direct);
     TEST(test_matrix_order_invalid_falls_back);
-    TEST(test_nimpl_coeff_domain_integers_falls_back);
+    TEST(test_coeff_domain_integers_strong_basis);
+    TEST(test_coeff_domain_integers_gcd_combination);
+    TEST(test_coeff_domain_integers_documented);
     TEST(test_nimpl_deglex_falls_back);
     TEST(test_non_polynomial_unevaluated);
     TEST(test_coeff_domain_polynomials_equals_default);
