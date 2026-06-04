@@ -1603,6 +1603,26 @@ void info_init(void) {
         "Derivative[d1, ..., dm][InterpolatingFunction[...]]\n"
         "\tgives an InterpolatingFunction for the mixed partial derivative.\n"
         "In standard output only the domain is shown; the rest is <>.");
+    symtab_set_docstring("Interpolation",
+        "Interpolation[data]\n"
+        "\tconstructs an InterpolatingFunction that interpolates data, given\n"
+        "\tas {f1, f2, ...} (values at x = 1, 2, ...), {{x1, f1}, ...} (values\n"
+        "\tat given abscissae), or {{{x1, y1, ...}, f1}, ...} (an m-D tensor\n"
+        "\tgrid).\n"
+        "Interpolation[data, x]\n"
+        "\tbuilds the interpolating function and evaluates it at x (a number,\n"
+        "\tor a coordinate list in m-D).\n"
+        "Interpolation[{{{x1,...}, f1, df1, ddf1, ...}, ...}]\n"
+        "\treproduces supplied derivatives at the nodes (df = gradient, ddf =\n"
+        "\tHessian, ...) by tensor-product Hermite interpolation.\n"
+        "Interpolation[data, InterpolationOrder -> n]\n"
+        "\tuses piecewise-polynomial pieces of degree n (default 3; 0 gives a\n"
+        "\tpiecewise-constant and 1 a piecewise-linear interpolant).\n"
+        "Interpolation[data, Method -> m]\n"
+        "\tselects \"Spline\" (natural cubic spline) or \"Hermite\" (piecewise\n"
+        "\tcubic Hermite with estimated slopes).\n"
+        "Works at machine or arbitrary (MPFR) precision, matching the data.\n"
+        "PeriodicInterpolation and vector-valued samples are not yet supported.");
     symtab_set_docstring("Piecewise",
         "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]\n"
         "\trepresents a piecewise function with values val_i in the regions\n"

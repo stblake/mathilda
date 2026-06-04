@@ -129,6 +129,7 @@ set(COMMON_SRC
     ../src/logexp.c
     ../src/piecewise.c
     ../src/interp.c
+    ../src/interp_mpfr.c
     ../src/purefunc.c
     ../src/modular.c
     ../src/sort.c

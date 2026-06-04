@@ -138,6 +138,76 @@ In[6]:= Derivative[0, 1][f][1.5, 2.5]
 Out[6]= 18.75
 ```
 
+## Interpolation
+`Interpolation[data]` constructs an [`InterpolatingFunction`](#interpolatingfunction)
+object that agrees with `data` at every supplied point. The data may be given as:
+
+- `{f1, f2, ...}` — function values at `x = 1, 2, ...`.
+- `{{x1, f1}, {x2, f2}, ...}` — values at the given abscissae.
+- `{{{x1, y1, ...}, f1}, ...}` — values on a full m-dimensional tensor grid.
+- `{{{x1, ...}, f1, df1, ddf1, ...}, ...}` — values **and supplied derivatives**
+  at each node; `df` is the gradient (`D[f,{vars,1}]`, a scalar in 1-D, a length-m
+  vector in m-D), `ddf` the Hessian (`D[f,{vars,2}]`), and so on.
+
+`Interpolation[data, x]` builds the function and immediately evaluates it at the
+point `x` (a number, or an `{x, y, ...}` coordinate list in m-D).
+
+**Methods.** Value-only data uses sliding-window Newton interpolation by default.
+
+- `Method -> "Spline"` — natural cubic spline (C², second derivative zero at the
+  ends; reduces to linear for two points).
+- `Method -> "Hermite"` — piecewise cubic Hermite with node slopes estimated by
+  3-point finite differences (reproduces quadratics exactly).
+- Derivative-supplied data is interpolated by **tensor-product Hermite** of
+  per-dimension order `k = max(K, 1)`, where `K` is the highest supplied
+  derivative order. Mixed partials not present in the data (e.g. `f_xy` from
+  gradient-only data) are filled by central finite differences across the grid.
+  This reproduces a cubic from `{f, f'}` and a quintic from `{f, f', f''}`
+  exactly, and likewise for separable polynomials in m-D.
+
+**Options.**
+
+- `InterpolationOrder -> n` — degree of the piecewise-polynomial pieces
+  (default `3`; `0` piecewise-constant, `1` piecewise-linear). Carried on the
+  object and preserved through differentiation.
+- `PeriodicInterpolation` accepts only its default (`False`); vector/array-valued
+  samples are not yet supported (such calls are left unevaluated).
+
+The domain is inferred from the data (the min/max abscissa in each dimension),
+preserving the data's number type (integer abscissae give an integer domain).
+
+**Precision.** Interpolation is carried out at machine precision for machine data
+and at the data's MPFR precision when the data or the evaluation point carry
+arbitrary precision; the result is an `EXPR_MPFR` real in that case. All methods
+and data forms support both precisions. The interpolants are mathematically
+standard (passing through every data point and honouring every supplied
+derivative); interior values need not match Wolfram's B-spline output bit-for-bit.
+
+Attribute: `Protected`.
+
+```mathematica
+In[1]:= f = Interpolation[{1, 2, 3, 5, 8, 5}]
+Out[1]= InterpolatingFunction[{{1, 6}}, <>]
+
+In[2]:= f[2.5]
+Out[2]= 2.4375
+
+In[3]:= Interpolation[{1, 5, 7, 2, 3, 1}, InterpolationOrder -> 1][2.5]
+Out[3]= 6.
+
+In[4]:= Interpolation[{1, 4, 9, 16, 25}, Method -> "Hermite"][2.5]  (* x^2 *)
+Out[4]= 6.25
+
+In[5]:= (* f = x^3 with f and f' supplied: cubic reproduced exactly *)
+        c = Interpolation[{{{0}, 0, 0}, {{1}, 1, 3}, {{2}, 8, 12}, {{3}, 27, 27}}];
+        {c[1.5], c'[1.5]}
+Out[5]= {3.375, 6.75}
+
+In[6]:= (* high-precision data -> high-precision result *)
+        Interpolation[N[{1, 2, 3, 5, 8, 5}, 30], Method -> "Spline"][N[5/2, 30]]
+Out[6]= 2.473086124401913875598086124405
+```
+
 ## Map (/@)
 - `f /@ expr` or `Map[f, expr]`
 
