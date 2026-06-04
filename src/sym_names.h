@@ -226,6 +226,7 @@ extern const char* SYM_MantissaExponent;
 extern const char* SYM_MaxIterations;
 extern const char* SYM_MatrixRank;
 extern const char* SYM_Method;
+extern const char* SYM_MinimalPolynomial;
 extern const char* SYM_Mod;
 extern const char* SYM_Module;
 extern const char* SYM_Modulus;

@@ -1631,6 +1631,47 @@ In[11]:= IrreduciblePolynomialQ[x^7 + 12 x y - 11, Extension -> All]
 Out[11]= True
 ```
 
+## MinimalPolynomial
+- `MinimalPolynomial[s, x]`: Returns the lowest-degree polynomial in `x` with
+  integer coefficients, positive leading coefficient, and content `1` (GCD of
+  coefficients equal to `1`) having the algebraic number `s` as a root.
+- `MinimalPolynomial[s]`: Returns the minimal polynomial as a pure function
+  (e.g. `1 - 10 #1^2 + #1^4 &`).
+- `MinimalPolynomial[s, x, Extension -> a]`: Returns the characteristic
+  polynomial of `s` in `Q(a)` over `Q(a)` — equal to `m_s(x)^([Q(a):Q]/[Q(s):Q])`
+  when `s` lies in `Q(a)`; otherwise the call is left unevaluated.
+
+**Features**:
+- `Listable`, `Protected`. A `List` first argument threads element-wise.
+- `s` may be built from integers and rationals, radicals (`Sqrt`,
+  `Power[_, p/q]`), the imaginary unit, roots of unity (`Power[E, I Pi r]`),
+  `Root[f &, k]` objects, and the field operations `Plus`/`Times`/`Power`.
+- Non-algebraic input (e.g. `Pi`, `Log[2]`) is left unevaluated.
+
+**Algorithm**: each algebraic atom of `s` is replaced by a fresh auxiliary
+variable carrying a polynomial defining relation (negative powers become
+reciprocal variables `D w - 1`, so every relation stays polynomial). The
+auxiliaries are eliminated from `x - s` by repeated `Resultant`, the result is
+made primitive over `Z` and factored, and the unique irreducible factor that
+vanishes at `s` (chosen by a high-precision numeric test) is returned. The
+`Extension` form uses the tower law on the degrees produced by the same core,
+with membership `s ∈ Q(a)` verified through the primitive-element degree
+`[Q(a, s) : Q] = [Q(a) : Q]`.
+
+```
+In[1]:= MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
+Out[1]= 1 - 10 x^2 + x^4
+
+In[2]:= MinimalPolynomial[(1 + I)/Sqrt[2], x]
+Out[2]= 1 + x^4
+
+In[3]:= MinimalPolynomial[Root[2 #1^3 - 2 #1 + 7 &, 1] + 17, x]
+Out[3]= -9785 + 1732 x - 102 x^2 + 2 x^3
+
+In[4]:= MinimalPolynomial[Sqrt[2], x, Extension -> E^(I Pi/4)]
+Out[4]= 4 - 4 x^2 + x^4
+```
+
 ## PrimePi
 - `PrimePi[x]`: Returns the number of primes less than or equal to `x`.
 

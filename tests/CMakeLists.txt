@@ -135,6 +135,7 @@ set(COMMON_SRC
     ../src/info.c
     ../src/expand.c
     ../src/poly/poly.c
+    ../src/poly/minpoly.c
     ../src/poly/subresultants.c
     ../src/poly/subresultantpoly.c
     ../src/rat.c
@@ -628,6 +629,16 @@ else()
     target_link_libraries(latticereduce_tests gmp m)
 endif()
 add_test(NAME latticereduce_tests COMMAND latticereduce_tests)
+
+add_executable(minimalpolynomial_tests test_minimalpolynomial.c ${COMMON_SRC})
+target_include_directories(minimalpolynomial_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(minimalpolynomial_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(minimalpolynomial_tests build_ecm)
+else()
+    target_link_libraries(minimalpolynomial_tests gmp m)
+endif()
+add_test(NAME minimalpolynomial_tests COMMAND minimalpolynomial_tests)
 
 add_executable(findintegernullvector_tests test_findintegernullvector.c ${COMMON_SRC})
 target_include_directories(findintegernullvector_tests PRIVATE ../src)

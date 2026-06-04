@@ -2075,6 +2075,18 @@ void info_init(void) {
         "HornerForm[poly1 / poly2, vars1, vars2]\n"
         "\tputs a rational function in Horner form, nested with respect to\n"
         "\tvars1 in the numerator and vars2 in the denominator.");
+    symtab_set_docstring("MinimalPolynomial",
+        "MinimalPolynomial[s, x]\n"
+        "\tgives the lowest-degree polynomial in x with integer coefficients,\n"
+        "\tpositive leading coefficient and content 1, having the algebraic\n"
+        "\tnumber s as a root.  s may be built from rationals, radicals, the\n"
+        "\timaginary unit, roots of unity, and Root[] objects.\n"
+        "MinimalPolynomial[s]\n"
+        "\tgives the minimal polynomial as a pure function.\n"
+        "MinimalPolynomial[s, x, Extension -> a]\n"
+        "\tgives the characteristic polynomial of s in Q(a) over Q(a).\n"
+        "\tComputed by resultant elimination of the radicals; threads over\n"
+        "\tlists.");
     symtab_set_docstring("Resultant",
         "Resultant[p, q, var]\n"
         "\tgives the resultant of p and q as polynomials in var: the unique\n"

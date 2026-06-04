@@ -492,6 +492,8 @@ void core_init(void) {
     squarefreeq_init();
     void irrpolyq_init(void);
     irrpolyq_init();
+    void minpoly_init(void);
+    minpoly_init();
     rat_init();
     expand_init();
     solve_init();

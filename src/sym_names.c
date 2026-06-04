@@ -211,6 +211,7 @@ const char* SYM_MantissaExponent = NULL;
 const char* SYM_MaxIterations = NULL;
 const char* SYM_MatrixRank = NULL;
 const char* SYM_Method = NULL;
+const char* SYM_MinimalPolynomial = NULL;
 const char* SYM_Mod = NULL;
 const char* SYM_Module = NULL;
 const char* SYM_Modulus = NULL;
@@ -553,6 +554,7 @@ void sym_names_init(void) {
     SYM_MaxIterations              = intern_symbol("MaxIterations");
     SYM_MatrixRank                 = intern_symbol("MatrixRank");
     SYM_Method                     = intern_symbol("Method");
+    SYM_MinimalPolynomial          = intern_symbol("MinimalPolynomial");
     SYM_Mod                        = intern_symbol("Mod");
     SYM_Module                     = intern_symbol("Module");
     SYM_Modulus                    = intern_symbol("Modulus");
