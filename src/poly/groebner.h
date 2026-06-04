@@ -176,6 +176,15 @@ GBPoly** gb_buchberger(GBPoly* const* F, size_t n, size_t* out_n);
 /* Free a basis array as returned by gb_buchberger. */
 void gb_basis_free(GBPoly** basis, size_t n);
 
+/* Autoreduce a ring Gröbner basis (over Q[params][mainvars], parameters
+ * placed last under lex) into a Gröbner basis over the field
+ * Q(params)[mainvars] -- the CoefficientDomain -> RationalFunctions
+ * semantics.  `n_main` is the number of leading field variables; the
+ * trailing exponent slots are the parameters.  Operates in place: NULL'd
+ * (field-redundant) generators are compacted out and *nG is updated; each
+ * survivor is primitive over Z. */
+void gb_rational_function_reduce(GBPoly** G, size_t* nG, int n_main);
+
 /* Turn a generating set that is already a Gröbner basis under G[0]'s
  * order into the canonical reduced basis: interreduce, reduce to a fixed
  * point, make primitive over Z, and sort ascending by leading monomial.

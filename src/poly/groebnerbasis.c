@@ -789,6 +789,18 @@ Expr* builtin_groebner_basis(Expr* res) {
      * Z[params][main_vars] under params-last lex already produces them
      * as constants in the (y, z) coefficient ring. */
 
+    /* CoefficientDomain -> RationalFunctions: the parameters live in the
+     * coefficient FIELD Q(params), so they are units.  Autoreduce the ring
+     * basis into the (smaller) Gröbner basis over Q(params)[main_vars],
+     * dropping generators whose main leading monomial is redundant.  Only
+     * meaningful when parameters are present (Q() over no params is just
+     * Q) and in the plain form (no elimination block). */
+    if (opt.domain == GB_DOM_RATIONAL_FUNCTIONS && n_params > 0
+        && n_elim == 0) {
+        int n_field_main = (int)(n_vars - n_params);
+        gb_rational_function_reduce(G, &out_n, n_field_main);
+    }
+
     /* If the basis collapses to {<non-zero constant>} -> {1}. */
     bool has_const = false;
     for (size_t i = 0; i < out_n; i++) {

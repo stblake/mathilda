@@ -440,6 +440,40 @@ static void test_real_input_rationalised(void) {
                "GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]");
 }
 
+/* CoefficientDomain -> RationalFunctions: the parameters live in the
+ * coefficient field Q(a), so they are units and a generator whose main
+ * leading monomial is a multiple of another's becomes redundant.  Matches
+ * Mathematica's documented two-element basis (the default basis with the
+ * `2x + 3xy + y^2` generator removed). */
+static void test_coeff_domain_rational_functions(void) {
+    check_eq("GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}, "
+             "CoefficientDomain -> RationalFunctions]",
+             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], "
+                       "Times[-15, Power[y, 3]], Times[a, Power[y, 4]]], "
+                  "Plus[18, Times[4, Times[a, x]], Times[27, y], "
+                       "Times[45, Power[y, 2]], "
+                       "Times[2, Times[a, Power[y, 2]]], "
+                       "Times[-3, Times[a, Power[y, 3]]]]]");
+}
+
+/* With no parameters Q(params) == Q, so RationalFunctions must reproduce
+ * the ordinary rational basis. */
+static void test_coeff_domain_rational_functions_no_params(void) {
+    check_true("GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}, "
+               "CoefficientDomain -> RationalFunctions] == "
+               "GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]");
+}
+
+/* Field elimination of x: from {a x + b y, x^2 - y} over Q(a, b) we get
+ * b^2 y^2 - a^2 y and a x + b y (substituting x = -b y / a). */
+static void test_coeff_domain_rational_functions_eliminates(void) {
+    check_eq("GroebnerBasis[{a x + b y, x^2 - y}, {x, y}, "
+             "CoefficientDomain -> RationalFunctions]",
+             "List[Plus[Times[-1, Times[Power[a, 2], y]], "
+                       "Times[Power[b, 2], Power[y, 2]]], "
+                  "Plus[Times[a, x], Times[b, y]]]");
+}
+
 /* ------------------------------------------------------------------ */
 /* 15. Ideal-membership sanity                                         */
 /* ------------------------------------------------------------------ */
@@ -626,6 +660,9 @@ int main(void) {
     TEST(test_coeff_domain_polynomials_equals_default);
     TEST(test_coeff_domain_inexact_numbers);
     TEST(test_real_input_rationalised);
+    TEST(test_coeff_domain_rational_functions);
+    TEST(test_coeff_domain_rational_functions_no_params);
+    TEST(test_coeff_domain_rational_functions_eliminates);
     TEST(test_parametric_coeffs_in_q_of_a);
     TEST(test_membership_input_in_ideal);
     TEST(test_idempotency_no_common_roots);

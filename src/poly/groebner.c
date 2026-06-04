@@ -1062,6 +1062,184 @@ void gb_basis_free(GBPoly** basis, size_t n) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  RationalFunctions coefficient domain                               */
+/* ------------------------------------------------------------------ */
+/*
+ * A Gröbner basis over the field Q(params)[mainvars] is obtained from the
+ * ring Gröbner basis over Q[params][mainvars].  The ring basis is computed
+ * with the parameters placed LAST under lexicographic order, so a ring
+ * leading term projects onto the field leading term (its main-variable
+ * part); the localisation theorem then says the ring basis, autoreduced
+ * with the parameter part of every leading coefficient treated as a unit,
+ * is a Gröbner basis over the field.  Concretely, the field-redundant
+ * generators -- those whose main leading monomial is a multiple of
+ * another's -- are removed and surviving generators are tail-reduced.
+ *
+ * All arithmetic stays integral via PSEUDO-reduction: to cancel f's field
+ * leading term using g (with LM_main(g) | LM_main(f)) we form
+ *     f := lc_main(g) * f  -  (x^q * lc_main(f)) * g
+ * where lc_main(.) is the leading coefficient as a polynomial in the
+ * parameters (a unit in the field) and x^q the main-monomial quotient.
+ * Each intermediate is made primitive over Z to curb coefficient growth.
+ * The first `n_main` exponent slots are the field (main) variables; the
+ * trailing slots are the parameters.
+ */
+
+/* True iff the main projection of monomial `a` divides that of `b`. */
+static bool gb_main_divides(const int* a, const int* b, int n_main) {
+    for (int i = 0; i < n_main; i++) if (a[i] > b[i]) return false;
+    return true;
+}
+
+/* General polynomial product a*b (fresh, normalised). */
+static GBPoly* gb_poly_mul(const GBPoly* a, const GBPoly* b) {
+    GBPoly* out = gb_poly_new(a->n_vars, a->order, a->elim_pivot);
+    out->wmat = a->wmat;
+    for (size_t j = 0; j < b->n_terms; j++) {
+        GBPoly* t = gb_poly_mul_by_monomial(a, gb_exp_at((GBPoly*)b, j),
+                                            b->coefs[j]);
+        GBPoly* s = gb_poly_add(out, t);
+        gb_poly_free(out);
+        gb_poly_free(t);
+        out = s;
+    }
+    return out;
+}
+
+/* lc_main(p): the leading coefficient of non-zero `p` as a polynomial in
+ * the parameters -- the prefix of terms sharing p's leading main monomial,
+ * with the main exponents zeroed.  (Under lex with params last that group
+ * is contiguous at the front.) */
+static GBPoly* gb_lc_main(const GBPoly* p, int n_main) {
+    GBPoly* out = gb_poly_new(p->n_vars, p->order, p->elim_pivot);
+    out->wmat = p->wmat;
+    const int* lm = gb_exp_at((GBPoly*)p, 0);
+    int* row = (int*)malloc(sizeof(int) * (size_t)p->n_vars);
+    for (size_t i = 0; i < p->n_terms; i++) {
+        const int* e = gb_exp_at((GBPoly*)p, i);
+        bool same = true;
+        for (int v = 0; v < n_main; v++) if (e[v] != lm[v]) { same = false; break; }
+        if (!same) break;
+        for (int v = 0; v < p->n_vars; v++) row[v] = (v < n_main) ? 0 : e[v];
+        gb_poly_push_term(out, row, p->coefs[i]);
+    }
+    free(row);
+    gb_poly_normalize(out);
+    return out;
+}
+
+/* The leading main-monomial group of non-zero `p` with its monomials
+ * intact (the field leading term, as a sub-polynomial of p). */
+static GBPoly* gb_lead_group(const GBPoly* p, int n_main) {
+    GBPoly* out = gb_poly_new(p->n_vars, p->order, p->elim_pivot);
+    out->wmat = p->wmat;
+    const int* lm = gb_exp_at((GBPoly*)p, 0);
+    for (size_t i = 0; i < p->n_terms; i++) {
+        const int* e = gb_exp_at((GBPoly*)p, i);
+        bool same = true;
+        for (int v = 0; v < n_main; v++) if (e[v] != lm[v]) { same = false; break; }
+        if (!same) break;
+        gb_poly_push_term(out, e, p->coefs[i]);
+    }
+    gb_poly_normalize(out);
+    return out;
+}
+
+/* Full field reduction of `f` modulo the non-NULL members of
+ * basis[0..n-1].  Returns a fresh remainder (possibly zero); coefficients
+ * are kept primitive over Z. */
+static GBPoly* gb_field_reduce(const GBPoly* f, GBPoly* const* basis,
+                               size_t n, int n_main) {
+    GBPoly* r = gb_poly_copy(f);
+    GBPoly* done = gb_poly_new(f->n_vars, f->order, f->elim_pivot);
+    done->wmat = f->wmat;
+    int* qexp = (int*)malloc(sizeof(int) * (size_t)f->n_vars);
+    mpq_t one; mpq_init(one); mpq_set_ui(one, 1, 1);
+
+    while (!gb_poly_is_zero(r)) {
+        const int* lmr = gb_exp_at(r, 0);
+        size_t gi = n;
+        for (size_t i = 0; i < n; i++) {
+            if (!basis[i] || gb_poly_is_zero(basis[i])) continue;
+            if (gb_main_divides(gb_exp_at(basis[i], 0), lmr, n_main)) {
+                gi = i; break;
+            }
+        }
+        if (gi == n) {
+            /* Leading main group is irreducible: retire it to `done`. */
+            GBPoly* lead = gb_lead_group(r, n_main);
+            GBPoly* rest = gb_poly_sub(r, lead);
+            GBPoly* nd   = gb_poly_add(done, lead);
+            gb_poly_free(done); done = nd;
+            gb_poly_free(lead);
+            gb_poly_free(r); r = rest;
+            continue;
+        }
+        /* Pseudo-reduce: r := lc_main(g)*r - (x^q * lc_main(r)) * g. */
+        const int* lmg = gb_exp_at(basis[gi], 0);
+        for (int v = 0; v < f->n_vars; v++)
+            qexp[v] = (v < n_main) ? (lmr[v] - lmg[v]) : 0;
+        GBPoly* lcg = gb_lc_main(basis[gi], n_main);
+        GBPoly* lcr = gb_lc_main(r, n_main);
+        GBPoly* t1  = gb_poly_mul(lcg, r);
+        GBPoly* tmp = gb_poly_mul(lcr, basis[gi]);
+        GBPoly* t2  = gb_poly_mul_by_monomial(tmp, qexp, one);
+        GBPoly* nr  = gb_poly_sub(t1, t2);
+        gb_poly_make_primitive_z(nr);
+        gb_poly_free(lcg); gb_poly_free(lcr);
+        gb_poly_free(t1);  gb_poly_free(tmp); gb_poly_free(t2);
+        gb_poly_free(r); r = nr;
+    }
+    mpq_clear(one);
+    free(qexp);
+    gb_poly_free(r);
+    return done;
+}
+
+/* Autoreduce the ring basis G[0..*nG-1] into a Gröbner basis over the
+ * field Q(params)[mainvars], in place.  `n_main` is the number of leading
+ * (field) variables; the trailing slots are parameters.  NULL entries are
+ * compacted away and *nG updated; each survivor is primitive over Z. */
+void gb_rational_function_reduce(GBPoly** G, size_t* nG, int n_main) {
+    /* Fixed-point autoreduction with a generous safety cap. */
+    for (int pass = 0; pass < 1000; pass++) {
+        bool changed = false;
+        for (size_t i = 0; i < *nG; i++) {
+            if (!G[i]) continue;
+            /* Reduce G[i] modulo the other (non-NULL) generators. */
+            GBPoly** others = (GBPoly**)malloc(sizeof(GBPoly*) * *nG);
+            size_t m = 0;
+            for (size_t j = 0; j < *nG; j++)
+                if (j != i && G[j]) others[m++] = G[j];
+            GBPoly* r = gb_field_reduce(G[i], others, m, n_main);
+            free(others);
+
+            if (gb_poly_is_zero(r)) {
+                gb_poly_free(G[i]); G[i] = NULL;
+                gb_poly_free(r);
+                changed = true;
+            } else {
+                gb_poly_make_primitive_z(r);
+                GBPoly* d = gb_poly_sub(G[i], r);
+                bool same = gb_poly_is_zero(d);
+                gb_poly_free(d);
+                if (same) {
+                    gb_poly_free(r);
+                } else {
+                    gb_poly_free(G[i]); G[i] = r;
+                    changed = true;
+                }
+            }
+        }
+        if (!changed) break;
+    }
+    /* Compact out the removed generators. */
+    size_t k = 0;
+    for (size_t i = 0; i < *nG; i++) if (G[i]) G[k++] = G[i];
+    *nG = k;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Expr round-trip                                                    */
 /* ------------------------------------------------------------------ */
 
