@@ -138,6 +138,7 @@ extern const char* SYM_FilePrint;
 extern const char* SYM_Fermat;
 extern const char* SYM_Fibonacci;
 extern const char* SYM_LucasL;
+extern const char* SYM_FindIntegerNullVector;
 extern const char* SYM_FindMaximum;
 extern const char* SYM_FindMinimum;
 extern const char* SYM_FindRoot;

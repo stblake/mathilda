@@ -123,6 +123,7 @@ const char* SYM_FilePrint = NULL;
 const char* SYM_Fermat = NULL;
 const char* SYM_Fibonacci = NULL;
 const char* SYM_LucasL = NULL;
+const char* SYM_FindIntegerNullVector = NULL;
 const char* SYM_FindMaximum = NULL;
 const char* SYM_FindMinimum = NULL;
 const char* SYM_FindRoot = NULL;
@@ -464,6 +465,7 @@ void sym_names_init(void) {
     SYM_Fermat                     = intern_symbol("Fermat");
     SYM_Fibonacci                  = intern_symbol("Fibonacci");
     SYM_LucasL                     = intern_symbol("LucasL");
+    SYM_FindIntegerNullVector      = intern_symbol("FindIntegerNullVector");
     SYM_FindMaximum                = intern_symbol("FindMaximum");
     SYM_FindMinimum                = intern_symbol("FindMinimum");
     SYM_FindRoot                   = intern_symbol("FindRoot");

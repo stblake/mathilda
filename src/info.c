@@ -336,6 +336,20 @@ void info_init(void) {
         "\tand arbitrary-precision entries) and preserves the lattice, its\n"
         "\tdeterminant, and every linear relation among the rows.  The rows\n"
         "\tmust be linearly independent.");
+    symtab_set_docstring("FindIntegerNullVector",
+        "FindIntegerNullVector[{x1, ..., xn}]\n"
+        "\tfinds integers {a1, ..., an}, not all zero, with "
+        "a1 x1 + ... + an xn == 0 (PSLQ / integer-relation detection).\n"
+        "FindIntegerNullVector[{x1, ..., xn}, d]\n"
+        "\trestricts the search to relations of norm <= d.\n"
+        "The xi may be real or complex, exact or inexact; for complex xi the "
+        "ai are Gaussian integers.  Exact relations are validated with "
+        "PossibleZeroQ; for inexact xi the relation holds to the precision of "
+        "the input.  When no relation is found the call is returned "
+        "unevaluated.\n"
+        "Options:\n"
+        "\tWorkingPrecision    Automatic, or a digit count for the search.\n"
+        "\tZeroTest            Automatic, or a function applied to the residual.");
     symtab_set_docstring("IdentityMatrix", "IdentityMatrix[n] gives the n x n identity matrix.\nIdentityMatrix[{m, n}] gives the m x n identity matrix.");
     symtab_set_docstring("DiagonalMatrix", "DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.\nDiagonalMatrix[list, k] gives a matrix with the elements of list on the k-th diagonal.\nDiagonalMatrix[list, k, n] pads with zeros to create an n x n matrix.");
     symtab_set_docstring("HilbertMatrix", "HilbertMatrix[n] gives the n x n Hilbert matrix with entries 1/(i + j - 1).\nHilbertMatrix[{m, n}] gives the m x n Hilbert matrix.\nEntries are exact Rationals unless the WorkingPrecision option requests MachinePrecision or a digit count.");

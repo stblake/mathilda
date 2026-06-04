@@ -114,6 +114,14 @@ static void system_constants_init(void) {
     /* Machine-precision quantities — exact IEEE 754 limits of the local
      * double type. */
     register_system_constant("$MachinePrecision", expr_new_real(NUMERIC_MACHINE_PRECISION_DIGITS));
+    /* $MaxExtraPrecision bounds the auto-precision a numeric search (e.g.
+     * FindIntegerNullVector) may add beyond $MachinePrecision.  Unlike the
+     * other constants it is user-settable, so it is NOT marked Protected. */
+    {
+        Expr* sym = expr_new_symbol("$MaxExtraPrecision");
+        symtab_add_own_value("$MaxExtraPrecision", sym, expr_new_real(50.0));
+        expr_free(sym);
+    }
     register_system_constant("$MachineEpsilon",   expr_new_real(DBL_EPSILON));
     register_system_constant("$MinMachineNumber", expr_new_real(DBL_MIN));
     register_system_constant("$MaxMachineNumber", expr_new_real(DBL_MAX));

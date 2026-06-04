@@ -959,6 +959,73 @@ Out[5]= LatticeReduce[{{1, 2}, {3, 4.5}}]
 > Lovász swap via the conjugate-aware Cohen swap formulas — so no full
 > recomputation is needed.
 
+## FindIntegerNullVector
+Finds an integer relation among a list of numbers (PSLQ).
+- `FindIntegerNullVector[{x1, …, xn}]` — integers `{a1, …, an}`, not all
+  zero, with `a1 x1 + … + an xn == 0`.
+- `FindIntegerNullVector[{x1, …, xn}, d]` — restricts the search to
+  relations of norm `≤ d`.
+
+**Features**:
+- `Protected`.
+- The `xi` may be **real or complex**, **exact or inexact**. For complex
+  `xi` the `ai` are **Gaussian integers**.
+- Built on the exact LLL machinery of `LatticeReduce`: the numbers are
+  numericalised to a working precision `b` and embedded as the rows
+  `(e_i | round(2^b x_i))` of an integer-relation lattice; the relation is
+  read off the shortest reduced row.
+- **Validation.** For exact `xi` the residual `a·x` is checked with
+  `PossibleZeroQ`; a confidence guard (`n·log2(‖a‖²) < 1.35·b`) rejects
+  large-coefficient artefacts that hold to only a few digits, forcing a
+  precision increase. For inexact `xi` the relation holds to the precision
+  of the input.
+- **Precision** (`WorkingPrecision` option, default `Automatic`): inexact
+  input uses the precision of the input; exact input starts at
+  `$MachinePrecision` and escalates up to
+  `$MachinePrecision + $MaxExtraPrecision` digits. An explicit digit count
+  fixes the precision (no escalation).
+- **Certified bound.** The rigorous LLL Gram–Schmidt bound
+  `λ₁(L)² ≥ minᵢ |b*ᵢ|²` gives a lower bound
+  `B = √(M² / (1 + n/4))` on the norm of *any* integer relation (`M² =
+  minᵢ |b*ᵢ|²`), conditional on the numeric evaluation being correct to
+  precision. `B` drives the no-relation diagnostics. Because this is the
+  LLL bound (not the tighter PSLQ bound Wolfram reports), it is
+  conservative: near the minimal-relation norm Mathilda may return the
+  relation with a `lgrelb` message where Wolfram proves nonexistence.
+- Relations are returned up to sign and (for complex input) up to a
+  Gaussian-unit multiple — `{a}`, `{-a}`, and `{I a}` are all valid null
+  vectors.
+- Diagnostics: `FindIntegerNullVector::norel` (proven no relation with
+  norm `≤ d`), `::lgrelb` (a relation was found but it exceeds `d`, and
+  nonexistence is proven only below a smaller bound — the larger relation
+  is returned), `::rnfb` (inexact/bounded: none found `≤ d`, proven none
+  below a smaller bound), `::rnfu` (exact/unbounded: no relation found
+  within the precision cap), `::ztest1` (the residual could not be
+  proven zero and is assumed zero). When no vector is returned the call is
+  left unevaluated.
+
+```mathematica
+In[1]:= FindIntegerNullVector[{Log[2], Log[4]}]
+Out[1]= {-2, 1}
+
+In[2]:= FindIntegerNullVector[{Pi, ArcTan[1/5], ArcTan[1/239]}]
+Out[2]= {1, -16, 4}                 (* Machin's formula *)
+
+In[3]:= a = Sqrt[2] + 3^(1/3); FindIntegerNullVector[a^Range[0, 6]]
+Out[3]= {1, -36, 12, -6, -6, 0, 1}  (* minimal polynomial coefficients *)
+
+In[4]:= FindIntegerNullVector[{1, 2 I + Sqrt[3], (2 I + Sqrt[3])^2}]
+Out[4]= {-7, -4 I, 1}               (* Gaussian-integer relation *)
+
+In[5]:= FindIntegerNullVector[{E, Pi}, 1000000]
+FindIntegerNullVector::norel: There is no integer null vector for {E, Pi}.
+Out[5]= FindIntegerNullVector[{E, Pi}, 1000000]
+```
+
+> Implementation lives in `src/linalg/latticereduce.c` alongside
+> `LatticeReduce`, reusing its exact Gaussian-rational LLL kernel
+> (`lll_reduce`, extended to report `minᵢ |b*ᵢ|²`).
+
 ## QRDecomposition
 Gives the QR decomposition of a matrix.
 - `QRDecomposition[m]` — returns `{q, r}` such that

@@ -26,6 +26,7 @@ Expr* builtin_matrixpower(Expr* res);
 Expr* builtin_positive_definite_matrix_q(Expr* res);
 Expr* builtin_negative_definite_matrix_q(Expr* res);
 Expr* builtin_latticereduce(Expr* res);
+Expr* builtin_findintegernullvector(Expr* res);
 void linalg_init(void);
 
 /* Helpers exposed for use by matsol.c (RowReduce / LinearSolve) and
