@@ -33,6 +33,7 @@
 #include "modular.h"
 #include "sort.h"
 #include "stats.h"
+#include "fit.h"
 #include "info.h"
 #include "expand.h"
 #include "poly.h"
@@ -523,6 +524,7 @@ void core_init(void) {
     ludecomp_init();
     void svdecomp_init(void);
     svdecomp_init();
+    fit_init();
     readwrite_init();
     files_init();
     random_init();

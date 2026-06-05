@@ -134,6 +134,7 @@ set(COMMON_SRC
     ../src/modular.c
     ../src/sort.c
     ../src/stats.c
+    ../src/fit.c
     ../src/info.c
     ../src/expand.c
     ../src/poly/poly.c
@@ -356,6 +357,10 @@ target_include_directories(eliminate_tests PRIVATE ../src)
 
 add_executable(findmin_tests test_findmin.c ${COMMON_SRC})
 target_include_directories(findmin_tests PRIVATE ../src)
+
+add_executable(fit_tests test_fit.c ${COMMON_SRC})
+target_include_directories(fit_tests PRIVATE ../src)
+add_test(NAME fit_tests COMMAND fit_tests)
 
 add_executable(funcprog_through_tests test_funcprog_through.c ${COMMON_SRC})
 target_include_directories(funcprog_through_tests PRIVATE ../src)
@@ -1335,6 +1340,7 @@ if(USE_ECM)
     add_dependencies(expand_tests build_ecm)
     add_dependencies(expandfrac_tests build_ecm)
     add_dependencies(stats_tests build_ecm)
+    add_dependencies(fit_tests build_ecm)
     add_dependencies(datetime_tests build_ecm)
     add_dependencies(facpoly_tests build_ecm)
     add_dependencies(factor_terms_tests build_ecm)

@@ -1749,6 +1749,78 @@ In[10]:= LeastSquares[{{1., 2., 3.}, {4., 5., 6.}, {7., 8., 9.}},
 Out[10]= {0.0, 0.0, 0.0}
 ```
 
+## Fit
+
+`Fit[data, {f1, ..., fn}, vars]` finds a linear least-squares fit
+`a1 f1 + ... + an fn` to `data` for basis functions `fi` of the variables
+`vars` (a single symbol `x` or a list `{x, y, ...}`). `Fit[{m, v}]` returns the
+coefficient vector `a` minimising `Norm[m . a - v]` for a design matrix `m` and
+response vector `v`.
+
+- Data shapes: a flat list `{v1, ..., vn}` (coordinates assumed to be
+  `1, 2, ..., n`), univariate pairs `{{x1, v1}, ...}`, or multivariate rows
+  `{{x1, ..., xk, v1}, ...}` whose last entry is the response.
+- The design matrix has entries `m_ij = f_i(coords_j)`; the fit minimises the
+  sum of squared residuals `Sum[(a . f(coords_j) - v_j)^2]`.
+- **WorkingPrecision** `-> Automatic` (default) converts exact input to machine
+  reals while preserving the precision of already-approximate (`N[..., p]`)
+  input; `-> n` uses `n`-digit MPFR arithmetic; `-> Infinity` keeps exact
+  rational arithmetic.
+- **FitRegularization** `-> {"Tikhonov", lambda}` (aliases `"L2"`,
+  `"RidgeRegression"`) minimises `Norm[m.a-v]^2 + lambda Norm[a]^2` (ridge),
+  reduced to ordinary least squares on the augmented system
+  `[m; Sqrt[lambda] I]` / `[v; 0]`. `-> {"LASSO", lambda}` (alias `"L1"`)
+  minimises `Norm[m.a-v]^2 + lambda Norm[a, 1]`, solved by cyclic coordinate
+  descent with soft-thresholding (machine precision; selects basis functions by
+  driving small coefficients to exactly zero).
+- **NormFunction** `-> Function[Norm[#, 1]]` fits in the 1-norm (least absolute
+  deviations) via iteratively reweighted least squares; `Norm[#, 2]` is the
+  default 2-norm; any other norm (or a norm combined with regularisation) is
+  minimised by `FindMinimum`, warm-started from the L2 solution.
+- L2 and ridge solves route through `LeastSquares`, so they inherit exact,
+  machine and MPFR arithmetic. Malformed data (ragged rows, a variable count
+  that does not match the data coordinates, empty data) issues a `Fit::...`
+  message and returns unevaluated.
+- Attribute `Protected`. Lives in `src/fit.c`.
+
+```mathematica
+In[1]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x]
+Out[1]= 0.186441 + 0.694915 x
+
+In[2]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x, x^2}, x, WorkingPrecision -> Infinity]
+Out[2]= 135/199 - 53/199 x + 38/199 x^2
+
+In[3]:= Fit[{N[HilbertMatrix[4]], Range[4]}]
+Out[3]= {-64.0, 900.0, -2520.0, 1820.0}
+
+In[4]:= Fit[{{0,0,0},{1,0,1},{0,1,2},{1,1,0},{1/2,1/2,1}}, {1, x, y}, {x, y}]
+Out[4]= 0.8 - 0.5 x + 0.5 y
+
+In[5]:= Fit[{{0.,0.},{0.001,1},{0.01,1}}, {1, x, x^2}, x,
+            FitRegularization -> {"Tikhonov", 1}]
+Out[5]= 0.499985 + 0.00549961 x + 4.9996e-05 x^2
+
+In[6]:= Fit[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x,
+            NormFunction -> Function[Norm[#, 1]]]
+Out[6]= -1.0 + 1.0 x
+```
+
+## DesignMatrix
+
+`DesignMatrix[data, {f1, ..., fn}, vars]` gives the design matrix with entries
+`f_i` evaluated at the data coordinates — the matrix `Fit` forms internally. The
+data shapes are identical to `Fit`. By default the entries are kept exact; the
+`WorkingPrecision` option (`MachinePrecision` or a digit count) converts them to
+approximate numbers. Attribute `Protected`. Lives in `src/fit.c`.
+
+```mathematica
+In[1]:= DesignMatrix[{{0,1},{1,0},{3,2},{5,4}}, {1, x}, x]
+Out[1]= {{1, 0}, {1, 1}, {1, 3}, {1, 5}}
+
+In[2]:= DesignMatrix[{{0,0,0},{1,0,1},{0,1,2}}, {1, x, y}, {x, y}]
+Out[2]= {{1, 0, 0}, {1, 1, 0}, {1, 0, 1}}
+```
+
 ## Eigenvalues
 Gives a list of the eigenvalues of a square matrix.
 - `Eigenvalues[m]`: eigenvalues of the n×n matrix `m`.
