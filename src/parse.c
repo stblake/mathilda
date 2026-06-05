@@ -982,6 +982,38 @@ static bool can_start_primary(char c) {
     return isalpha(c) || isdigit(c) || c == '.' || c == '{' || c == '(' || c == '"' || c == '_' || c == '`' || c == '$' || c == '#' || c == '%';
 }
 
+/* Scan a numeric literal starting at `p` (pointing at the first digit, or a
+ * leading '.' of a `.5`-style literal) and report whether it is immediately
+ * followed by a '^' (Power) operator, allowing intervening spaces/tabs.
+ * Mirrors the integer/real shape parse_number accepts: digits, optional
+ * '.'fraction, optional 'e[+-]?digits' exponent. */
+static bool number_followed_by_power(const char* p) {
+    while (isdigit((unsigned char)*p)) p++;
+    if (*p == '.') { p++; while (isdigit((unsigned char)*p)) p++; }
+    if (*p == 'e' || *p == 'E') {
+        const char* save = p;
+        p++;
+        if (*p == '+' || *p == '-') p++;
+        if (isdigit((unsigned char)*p)) { while (isdigit((unsigned char)*p)) p++; }
+        else p = save;
+    }
+    while (*p == ' ' || *p == '\t') p++;
+    return *p == '^';
+}
+
+/* Decide whether a leading '-' at `s` binds as a prefix operator
+ * (Times[-1, ...]) rather than folding into a numeric literal. Symbolic
+ * operands (`-x`, `-(...)`, `-Sin[x]`) are always prefix. A numeric operand
+ * is prefix only when the literal is immediately followed by '^', so that
+ * `-3^2` parses as `-(3^2)` = Times[-1, Power[3, 2]] (matching Mathematica)
+ * while plain `-3` stays a negative integer literal. */
+static bool minus_is_prefix(const char* s) {
+    const char* n = s + 1;
+    if (!isdigit((unsigned char)*n) && !(*n == '.' && isdigit((unsigned char)n[1])))
+        return true;
+    return number_followed_by_power(n);
+}
+
 // Pratt parser for operator precedence
 static Expr* parse_expression_prec(ParserState* s, int min_prec) {
     skip_whitespace(s);
@@ -1027,7 +1059,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         if (!right) return NULL;
         Expr* args[1] = { right };
         left = expr_new_function(expr_new_symbol("PreDecrement"), args, 1);
-    } else if (*s->pos == '-' && !isdigit(s->pos[1]) && !(s->pos[1] == '.' && isdigit(s->pos[2]))) {
+    } else if (*s->pos == '-' && minus_is_prefix(s->pos)) {
         s->pos++;
         // Use a precedence higher than Plus (310) and Times (400)
         Expr* right = parse_expression_prec(s, 480);
