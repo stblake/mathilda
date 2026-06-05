@@ -125,6 +125,30 @@ void test_piecewise() {
         {"IntegerPart[-x]", "IntegerPart[Times[-1, x]]"},
         {"FractionalPart[Floor[x]]", "FractionalPart[Floor[x]]"},
 
+        // Exact real numeric quantities (Pi, E, surds) — numericalized to
+        // certified precision and reduced to the exact integer. Previously
+        // these fell through unevaluated.
+        {"Round[10000000*3^(2/3)]", "20800838"},
+        {"Round[25000000000000000000 Pi]", "78539816339744830962"},
+        {"Floor[Pi]", "3"},
+        {"Ceiling[Pi]", "4"},
+        {"Round[E]", "3"},
+        {"Floor[100 E]", "271"},
+        {"Ceiling[100 E]", "272"},
+        {"IntegerPart[10000000*3^(2/3)]", "20800838"},
+        {"IntegerPart[-(7 Pi)]", "-21"},
+        {"Round[Sqrt[2]]", "1"},
+        // Round of a huge exact multiple of Pi (51-digit answer).
+        {"Round[10^50 * Pi]", "314159265358979323846264338327950288419716939937511"},
+        // FractionalPart stays exact: x - IntegerPart[x].
+        {"FractionalPart[10000000*3^(2/3)]", "Plus[-20800838, Times[10000000, Power[3, Rational[2, 3]]]]"},
+        // Sign extraction composes with the numeric path.
+        {"Round[-(3^(2/3))]", "-2"},
+        {"Floor[-(3^(2/3))]", "-3"},
+        // Genuinely symbolic / complex arguments stay unevaluated.
+        {"Round[2.5 + y]", "Round[Plus[2.5, y]]"},
+        {"Round[(-3)^(2/3)]", "Round[Power[-3, Rational[2, 3]]]"},
+
         // Two argument forms
         {"Floor[7, 3]", "6"},
         {"Ceiling[7, 3]", "9"},
