@@ -168,6 +168,25 @@ static bool slot_is_variable_length(const Expr* p) {
     return false;
 }
 
+/* True when `p` is an Optional pattern (`x_.`, `Optional[p]`,
+ * `Optional[p, def]`), possibly under a `Pattern[name, ...]` wrapper.
+ * An Optional argument in a function-call pattern can be omitted, which
+ * collapses the call to its base form (`Power[b_, n_.]` matches a bare
+ * `b` as `b^1`; `Times[a_., x_]` matches `x`), so the concrete value
+ * need not share the pattern's head. */
+static bool pattern_arg_is_optional(const Expr* p) {
+    if (!p || p->type != EXPR_FUNCTION || !p->data.function.head ||
+        p->data.function.head->type != EXPR_SYMBOL) {
+        return false;
+    }
+    const char* h = p->data.function.head->data.symbol;
+    if (h == SYM_Optional) return true;
+    if (h == SYM_Pattern && p->data.function.arg_count == 2) {
+        return pattern_arg_is_optional(p->data.function.args[1]);
+    }
+    return false;
+}
+
 /* Extract the canonical head symbol that any concrete value matching
  * this pattern slot must have. Returns NULL when the slot is wildcard
  * with respect to head (Blank[], _, anything sequence-like, or anything
@@ -233,7 +252,15 @@ static const char* pattern_arg_head_canon(const Expr* p) {
         }
         return acc;
     }
-    /* Plain function call in a pattern -- head must match. */
+    /* Plain function call in a pattern -- head must match, UNLESS one of
+     * its arguments is Optional. An omitted Optional collapses the call to
+     * its base (e.g. Power[b_, n_.] matches a bare `b` as b^1, Times[a_., x_]
+     * matches `x`), so a concrete value need not share this head. Returning
+     * the head here would make the §3.5 dispatch filter skip such rules for
+     * any input that is not literally headed by `h`. */
+    for (size_t i = 0; i < p->data.function.arg_count; i++) {
+        if (pattern_arg_is_optional(p->data.function.args[i])) return NULL;
+    }
     return intern_symbol(h);
 }
 

@@ -1411,18 +1411,30 @@ IntegrateTable[Sqrt[1 + Sin[x_]], x_] := 2 (Sin[x/2] - Cos[x/2]);
    Sqrt[1 - Sin[x]] on every branch. *)
 IntegrateTable[Sqrt[1 - Sin[x_]], x_] := 2 Tan[Pi/4 + x/2] Sqrt[1 - Sin[x]];
 
+(* Formulas 398-401: branch-correct.  The classical primary-branch forms
+   Sqrt[2] Log[Tan[x/4 (+ shift)]] are real on only every other inter-pole
+   interval of the integrand -- on the rest Tan[.] turns negative and the Log
+   goes complex (and even where real its sign is wrong, because the integrand
+   carries an absolute value, e.g. 1/Sqrt[1-Cos[x]] = 1/(Sqrt[2] |Sin[x/2]|)).
+   These integrands have poles (1/Sqrt[1-Cos] at x=2k Pi, etc.), so no
+   continuous antiderivative spans a pole; branch-correctness means the
+   derivative equals the integrand on every pole-bounded interval.  The forms
+   below keep the integrand's radical literally: the factor
+   Sqrt[1-Cos[x]]/(Sqrt[2] Sin[x/2]) = sign(Sin[x/2]) supplies the sign the
+   ArcTanh primitive of the signed reciprocal otherwise drops, so the
+   derivative matches on every branch (incl. negative x). *)
+
 (* Formula 398 *)
-IntegrateTable[1/Sqrt[1 - Cos[x_]], x_] := Sqrt[2] Log[Tan[x/4]];
+IntegrateTable[1/Sqrt[1 - Cos[x_]], x_] := -ArcTanh[Cos[x/2]] Csc[x/2] Sqrt[1 - Cos[x]];
 
 (* Formula 399 *)
-IntegrateTable[1/Sqrt[1 + Cos[x_]], x_] := Sqrt[2] Log[Tan[(x + Pi)/4]];
+IntegrateTable[1/Sqrt[1 + Cos[x_]], x_] := ArcTanh[Sin[x/2]] Sec[x/2] Sqrt[1 + Cos[x]];
 
 (* Formula 400 *)
-IntegrateTable[1/Sqrt[1 - Sin[x_]], x_] := Sqrt[2] Log[Tan[x/4 - Pi/8]];
+IntegrateTable[1/Sqrt[1 - Sin[x_]], x_] := -ArcTanh[Cos[x/2 - Pi/4]] Csc[x/2 - Pi/4] Sqrt[1 - Sin[x]];
 
-(* Formula 401: Primary Branch *)
-IntegrateTable[1/Sqrt[1 + Sin[x_]], x_] := 
-  Sqrt[2] Log[Tan[x/4 + Pi/8]];
+(* Formula 401 *)
+IntegrateTable[1/Sqrt[1 + Sin[x_]], x_] := ArcTanh[Sin[x/2 - Pi/4]] Sec[x/2 - Pi/4] Sqrt[1 + Sin[x]];
 
 (* Formula 402 *)
 IntegrateTable[Tan[a_. x_]^2, x_] /; FreeQ[a, x] := 
