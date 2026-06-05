@@ -1392,7 +1392,9 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         expr_free(poly);
         Expr** outer = (Expr**)malloc(sizeof(Expr*) * 1);
         outer[0] = mk_list(NULL, 0);
-        return mk_list(outer, 1);
+        Expr* tautology = mk_list(outer, 1);
+        free(outer);
+        return tautology;
     }
 
     if (true_d < d) {
@@ -1619,7 +1621,9 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
         outer[i] = mk_list((Expr*[]){ rule }, 1);
     }
     free(sl.vals);
-    return mk_list(outer, sl.count);
+    Expr* result = mk_list(outer, sl.count);
+    free(outer);
+    return result;
 }
 
 /* ------------------------------------------------------------------ *

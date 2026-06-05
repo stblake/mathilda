@@ -287,7 +287,7 @@ static Expr* lift_common_from_plus_impl(const Expr* plus_e) {
         lift_factor = expr_new_function(expr_new_symbol("Times"), args, common_count + 1);
         free(args);
     }
-    Expr* lift_factor_eval = evaluate(lift_factor);
+    Expr* lift_factor_eval = eval_and_free(lift_factor);
 
     /* For each term, divide by lift_factor and let evaluate() cancel. */
     Expr** new_terms = (Expr**)malloc(sizeof(Expr*) * n);
@@ -296,15 +296,15 @@ static Expr* lift_common_from_plus_impl(const Expr* plus_e) {
         Expr* inv = expr_new_function(expr_new_symbol("Power"), inv_args, 2);
         Expr* mul_args[2] = { expr_copy(plus_e->data.function.args[i]), inv };
         Expr* div = expr_new_function(expr_new_symbol("Times"), mul_args, 2);
-        new_terms[i] = evaluate(div);
+        new_terms[i] = eval_and_free(div);
     }
     Expr* sum = expr_new_function(expr_new_symbol("Plus"), new_terms, n);
     free(new_terms);
-    Expr* sum_eval = evaluate(sum);
+    Expr* sum_eval = eval_and_free(sum);
 
     Expr* res_args[2] = { lift_factor_eval, sum_eval };
     Expr* result = expr_new_function(expr_new_symbol("Times"), res_args, 2);
-    Expr* result_eval = evaluate(result);
+    Expr* result_eval = eval_and_free(result);
 
     for (size_t i = 0; i < n; i++) { lift_tl_free(&lists[i]); mpq_clear(coefs[i]); }
     free(lists); free(coefs); free(common);
@@ -350,7 +350,7 @@ Expr* simp_lift_common_factor(const Expr* e) {
                     Expr* new_times = expr_new_function(expr_new_symbol("Times"),
                                                         new_args, e->data.function.arg_count);
                     free(new_args);
-                    Expr* res = evaluate(new_times);
+                    Expr* res = eval_and_free(new_times);
                     if (expr_eq(res, e)) { expr_free(res); return NULL; }
                     return res;
                 }
@@ -427,7 +427,7 @@ static Expr* plus_negate(const Expr* p) {
     }
     Expr* neg_plus = expr_new_function(expr_new_symbol("Plus"), args, n);
     free(args);
-    return evaluate(neg_plus);
+    return eval_and_free(neg_plus);
 }
 
 /* Walk a Times. If two or more Plus children are negative-leading, flip
@@ -471,7 +471,7 @@ Expr* canon_negate_pairs(const Expr* e) {
     Expr* new_times = expr_new_function(expr_copy(e->data.function.head),
                                         new_args, n);
     free(new_args);
-    Expr* result = evaluate(new_times);
+    Expr* result = eval_and_free(new_times);
     if (expr_eq(result, e)) {
         expr_free(result);
         return NULL;

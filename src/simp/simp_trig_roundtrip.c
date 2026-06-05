@@ -206,7 +206,7 @@ void simp_install_roots_of_unity_helpers(void) {
     for (size_t i = 0; i < sizeof(defs)/sizeof(defs[0]); i++) {
         Expr* parsed = parse_expression(defs[i]);
         if (!parsed) continue;
-        Expr* r = evaluate(parsed);
+        Expr* r = eval_and_free(parsed);
         if (r) expr_free(r);
     }
     installed = true;
@@ -219,7 +219,7 @@ Expr* simp_roots_of_unity(const Expr* e) {
     Expr* args[1] = { expr_copy((Expr*)e) };
     Expr* call = expr_new_function(
         expr_new_symbol("$ruSimplify"), args, 1);
-    Expr* out = evaluate(call);
+    Expr* out = eval_and_free(call);
     if (dbg) simp_debug_log("RootsOfUnity", e, out,
                             simp_debug_elapsed_ms(t0));
     return out;
@@ -269,7 +269,7 @@ static Expr* transform_pythag_square_complete_impl(const Expr* e) {
     Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
     Expr* call = expr_new_function(
         expr_new_symbol("ReplaceRepeated"), args, 2);
-    Expr* out = evaluate(call);
+    Expr* out = eval_and_free(call);
     if (dbg) simp_debug_log("PythagSquareComplete", e, out,
                             simp_debug_elapsed_ms(t0));
     return out;
@@ -350,7 +350,7 @@ static Expr* transform_halfangle_impl(const Expr* e) {
     Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
     Expr* call = expr_new_function(
         expr_new_symbol("ReplaceRepeated"), args, 2);
-    Expr* out = evaluate(call);
+    Expr* out = eval_and_free(call);
     if (dbg) simp_debug_log("HalfAngle", e, out,
                             simp_debug_elapsed_ms(t0));
     return out;

@@ -24,6 +24,7 @@
 #include "eval.h"
 #include "groebner.h"
 #include "internal.h"
+#include "rationalize.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -65,16 +66,41 @@ static bool is_equal(const Expr* e) {
 /*  Option extraction                                                  */
 /* ------------------------------------------------------------------ */
 
+/* Selectable Gröbner engine (Method -> ...). */
+typedef enum {
+    GB_METHOD_BUCHBERGER = 0,       /* "Buchberger" / Automatic (default) */
+    GB_METHOD_WALK                  /* "GroebnerWalk" */
+} GBMethod;
+
+/* Coefficient domain (CoefficientDomain -> ...). */
+typedef enum {
+    GB_DOM_RATIONALS = 0,           /* Rationals / Automatic (default) */
+    GB_DOM_INTEGERS,                /* Integers: strong GB over Z */
+    GB_DOM_RATIONAL_FUNCTIONS,      /* RationalFunctions: GB over Q(params) */
+    GB_DOM_POLYNOMIALS,             /* Polynomials[x,...]: x is a coeff-ring var */
+    GB_DOM_INEXACT                  /* InexactNumbers[prec]: approximate output */
+} GBCoeffDomain;
+
 /* Bundle of user-visible options recognised by `GroebnerBasis[]`.  The
  * fields whose `*_set` companion is false mean "use the engine default";
  * the only one that is consulted directly is `order` (see below). */
 typedef struct {
-    GBOrder order;                  /* MonomialOrder -> ... */
+    GBOrder order;                  /* MonomialOrder -> symbolic order */
+    Expr*   matrix_order;           /* MonomialOrder -> {{...},...}: borrowed
+                                       weight-matrix value, NULL otherwise.
+                                       Validated at dispatch (needs n_main). */
+    GBMethod method;                /* Method -> ... */
     bool    sort_desc;              /* Sort -> True reverses the default
                                        LM-ascending output ordering */
     bool    parameter_vars_given;   /* ParameterVariables option set */
     Expr*   parameter_vars;         /* borrowed; List[...] or symbol or NULL */
+    GBCoeffDomain domain;           /* CoefficientDomain -> ... */
+    int     inexact_prec;           /* decimal digits for GB_DOM_INEXACT */
+    Expr*   poly_domain_vars;       /* borrowed; args of Polynomials[...] */
 } GBOptions;
+
+/* Forward declaration (defined with the weight-matrix helpers below). */
+static bool expr_to_i64(const Expr* e, int64_t* out);
 
 /* In-out: `*n_pos` starts at the full argument count; the function
  * decrements it for each trailing Rule[] arg.  Recognised options are
@@ -91,9 +117,14 @@ static void extract_options(const Expr* res, size_t* n_pos,
 
     /* Defaults. */
     opt->order = GB_ORDER_LEX;
+    opt->matrix_order = NULL;
+    opt->method = GB_METHOD_BUCHBERGER;
     opt->sort_desc = false;
     opt->parameter_vars_given = false;
     opt->parameter_vars = NULL;
+    opt->domain = GB_DOM_RATIONALS;
+    opt->inexact_prec = 16;
+    opt->poly_domain_vars = NULL;
 
     for (size_t i = cut; i < argc; i++) {
         Expr* rule = res->data.function.args[i];
@@ -117,26 +148,75 @@ static void extract_options(const Expr* res, size_t* n_pos,
                     opt->order = GB_ORDER_LEX;
                 }
             } else {
-                warn_once("nimpl", "weight-matrix MonomialOrder not "
-                                   "implemented; falling back to Lexicographic");
+                /* A non-symbol value is a candidate weight matrix.  It is
+                 * validated at dispatch (the column count must match the
+                 * number of main variables, which is not known here). */
+                opt->matrix_order = val;
             }
         } else if (key->data.symbol == SYM_CoefficientDomain) {
-            bool ok = (val->type == EXPR_SYMBOL
-                       && (val->data.symbol == SYM_Rationals
-                        || val->data.symbol == SYM_Automatic));
-            if (!ok) {
-                warn_once("nimpl", "only CoefficientDomain -> Rationals is "
-                                   "implemented");
+            if (val->type == EXPR_SYMBOL) {
+                if (val->data.symbol == SYM_Rationals
+                 || val->data.symbol == SYM_Automatic) {
+                    opt->domain = GB_DOM_RATIONALS;
+                } else if (val->data.symbol == SYM_Integers) {
+                    opt->domain = GB_DOM_INTEGERS;
+                } else if (val->data.symbol == SYM_RationalFunctions) {
+                    opt->domain = GB_DOM_RATIONAL_FUNCTIONS;
+                } else if (val->data.symbol == SYM_InexactNumbers) {
+                    /* Bare InexactNumbers -> machine precision (~16 digits). */
+                    opt->domain = GB_DOM_INEXACT;
+                    opt->inexact_prec = 16;
+                } else {
+                    warn_once("nimpl", "unsupported CoefficientDomain value; "
+                                       "falling back to Rationals");
+                    opt->domain = GB_DOM_RATIONALS;
+                }
+            } else if (val->type == EXPR_FUNCTION
+                       && val->data.function.head
+                       && val->data.function.head->type == EXPR_SYMBOL) {
+                const char* h = val->data.function.head->data.symbol;
+                if (h == SYM_InexactNumbers) {
+                    opt->domain = GB_DOM_INEXACT;
+                    int64_t p = 16;
+                    if (val->data.function.arg_count >= 1)
+                        (void)expr_to_i64(val->data.function.args[0], &p);
+                    /* Clamp to a sane positive range. */
+                    if (p < 1)   p = 1;
+                    if (p > 100000) p = 100000;
+                    opt->inexact_prec = (int)p;
+                } else if (h == SYM_Polynomials) {
+                    /* Polynomials[x,...]: the listed symbols become
+                     * coefficient-ring variables, i.e. parameters. */
+                    opt->domain = GB_DOM_POLYNOMIALS;
+                    opt->poly_domain_vars = val;
+                } else {
+                    warn_once("nimpl", "unsupported CoefficientDomain value; "
+                                       "falling back to Rationals");
+                    opt->domain = GB_DOM_RATIONALS;
+                }
+            } else {
+                warn_once("nimpl", "unsupported CoefficientDomain value; "
+                                   "falling back to Rationals");
+                opt->domain = GB_DOM_RATIONALS;
             }
         } else if (key->data.symbol == SYM_Method) {
             bool ok = false;
             if (val->type == EXPR_SYMBOL
                 && val->data.symbol == SYM_Automatic) ok = true;
+            if (val->type == EXPR_SYMBOL
+                && val->data.symbol == SYM_GroebnerWalk) {
+                opt->method = GB_METHOD_WALK; ok = true;
+            }
             if (val->type == EXPR_STRING && val->data.string
                 && strcmp(val->data.string, "Buchberger") == 0) ok = true;
+            if (val->type == EXPR_STRING && val->data.string
+                && strcmp(val->data.string, "GroebnerWalk") == 0) {
+                opt->method = GB_METHOD_WALK; ok = true;
+            }
             if (!ok) {
-                warn_once("nimpl", "only Method -> \"Buchberger\" is "
-                                   "implemented; falling back");
+                warn_once("nimpl", "only Method -> \"Buchberger\" or "
+                                   "\"GroebnerWalk\" is implemented; "
+                                   "falling back");
             }
         } else if (key->data.symbol == SYM_Modulus) {
             /* Honest "not implemented" instead of silently computing the
@@ -191,6 +271,16 @@ static Expr* normalise_polynomial(const Expr* p) {
         base = internal_subtract((Expr*[]){ a, b }, 2);
     } else {
         base = expr_copy((Expr*)p);
+    }
+    /* The Gröbner engine ingests only exact (Integer/BigInt/Rational)
+     * coefficients.  If the input carries inexact leaves (Real/MPFR) --
+     * common with CoefficientDomain -> InexactNumbers, but possible in
+     * any domain -- force-rationalise them first so gb_from_expr can
+     * accept the polynomial. */
+    if (internal_contains_inexact(base)) {
+        Expr* rat = internal_force_rationalize(base);
+        expr_free(base);
+        base = rat;
     }
     /* Expand factored products / collect like terms.  Expand is also a
      * cheap no-op on already-expanded inputs. */
@@ -296,6 +386,56 @@ static void push_var_list(Expr* lst_or_sym, ExprSet* dst) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Weight-matrix parsing                                              */
+/* ------------------------------------------------------------------ */
+
+/* Extract a signed 64-bit integer from an Integer/BigInt Expr.  Returns
+ * false for any other shape or a BigInt too large for int64. */
+static bool expr_to_i64(const Expr* e, int64_t* out) {
+    if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
+    if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
+        *out = (int64_t)mpz_get_si(e->data.bigint);
+        return true;
+    }
+    return false;
+}
+
+/* Parse a `{{...}, {...}, ...}` value into a fresh row-major int64 matrix
+ * (caller frees with free()).  Requires a non-empty rectangular list of
+ * integer rows.  Returns NULL (and leaves rows/cols untouched) on any
+ * shape mismatch or non-integer entry. */
+static int64_t* parse_weight_matrix(const Expr* v, int* rows, int* cols) {
+    if (!is_list(v)) return NULL;
+    size_t r = v->data.function.arg_count;
+    if (r == 0) return NULL;
+
+    int ncols = -1;
+    for (size_t i = 0; i < r; i++) {
+        const Expr* row = v->data.function.args[i];
+        if (!is_list(row)) return NULL;
+        int c = (int)row->data.function.arg_count;
+        if (c == 0) return NULL;
+        if (ncols < 0) ncols = c;
+        else if (c != ncols) return NULL;       /* ragged */
+    }
+
+    int64_t* m = (int64_t*)malloc(sizeof(int64_t) * r * (size_t)ncols);
+    for (size_t i = 0; i < r; i++) {
+        const Expr* row = v->data.function.args[i];
+        for (int j = 0; j < ncols; j++) {
+            if (!expr_to_i64(row->data.function.args[j],
+                             &m[i * (size_t)ncols + j])) {
+                free(m);
+                return NULL;
+            }
+        }
+    }
+    *rows = (int)r;
+    *cols = ncols;
+    return m;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Builtin entry                                                      */
 /* ------------------------------------------------------------------ */
 
@@ -395,6 +535,17 @@ Expr* builtin_groebner_basis(Expr* res) {
     if (vars_list)                push_var_list(vars_list,           &main_set);
     if (elim_list)                push_var_list(elim_list,           &elim_set);
 
+    /* CoefficientDomain -> Polynomials[x,...]: the named symbols are
+     * coefficient-ring variables, which is exactly the parameter role.
+     * Fold them into the explicit-parameter set (the Polynomials head is
+     * a plain function whose args are the symbols). */
+    if (opt.domain == GB_DOM_POLYNOMIALS && opt.poly_domain_vars) {
+        for (size_t i = 0; i < opt.poly_domain_vars->data.function.arg_count; i++) {
+            Expr* v = opt.poly_domain_vars->data.function.args[i];
+            if (v->type == EXPR_SYMBOL) exprset_push_borrowed(&param_explicit, v);
+        }
+    }
+
     /* Symbols the user has named as parameters take priority over any
      * accidental presence in the main- or elim-var list.  Drop them
      * from those two sets so the joint var array stays partitioned. */
@@ -492,6 +643,38 @@ Expr* builtin_groebner_basis(Expr* res) {
      * mathematically the elimination-ideal contraction. */
     GBOrder use_order = (n_elim > 0 || n_params > 0) ? GB_ORDER_LEX : opt.order;
 
+    /* Weight-matrix MonomialOrder: honoured only in the plain form (no
+     * elimination, no parameters) where the joint var array equals the
+     * main-variable list, so the user matrix maps directly.  The matrix
+     * must be rectangular, integer, have exactly n_main columns, and
+     * define a valid term order. */
+    GBWeightMatrix wmat_storage;
+    const GBWeightMatrix* wmat_ptr = NULL;
+    int64_t* wmat_buf = NULL;
+    if (opt.matrix_order) {
+        if (n_elim == 0 && n_params == 0) {
+            int wr = 0, wc = 0;
+            int64_t* buf = parse_weight_matrix(opt.matrix_order, &wr, &wc);
+            if (buf && wc == (int)n_main && gb_wmat_validate(buf, wr, wc)) {
+                wmat_buf = buf;
+                wmat_storage.n_rows = wr;
+                wmat_storage.n_vars = wc;
+                wmat_storage.w = wmat_buf;
+                wmat_ptr = &wmat_storage;
+                use_order = GB_ORDER_MATRIX;
+            } else {
+                free(buf);
+                warn_once("nimpl", "MonomialOrder matrix is not a valid term "
+                                   "order for these variables; falling back "
+                                   "to Lexicographic");
+            }
+        } else {
+            warn_once("nimpl", "weight-matrix MonomialOrder is not supported "
+                               "with elimination or parameter variables; "
+                               "falling back to Lexicographic");
+        }
+    }
+
     /* Convert each input polynomial. */
     GBPoly** F = (GBPoly**)malloc(sizeof(GBPoly*) * n_polys);
     size_t nF = 0;
@@ -499,7 +682,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     for (size_t i = 0; i < n_polys; i++) {
         Expr* norm = normalise_polynomial(polys_list->data.function.args[i]);
         GBPoly* p = gb_from_expr(norm, all_vars, (int)n_vars,
-                                 use_order, elim_pivot);
+                                 use_order, elim_pivot, wmat_ptr);
         expr_free(norm);
         if (!p) { failed = true; break; }
         if (p->n_terms == 0) { gb_poly_free(p); continue; }
@@ -509,6 +692,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         for (size_t i = 0; i < nF; i++) gb_poly_free(F[i]);
         free(F);
         free(all_vars);
+        free(wmat_buf);
         exprset_free(&param_explicit, false);
         exprset_free(&main_set, false);
         exprset_free(&elim_set, false);
@@ -523,6 +707,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         /* All inputs reduced to zero -> empty basis. */
         free(F);
         free(all_vars);
+        free(wmat_buf);
         exprset_free(&param_explicit, false);
         exprset_free(&main_set, false);
         exprset_free(&elim_set, false);
@@ -533,12 +718,15 @@ Expr* builtin_groebner_basis(Expr* res) {
         return expr_new_function(expr_new_symbol("List"), NULL, 0);
     }
 
-    /* Fast path: any input is a non-zero constant -> ideal = <1>. */
-    for (size_t i = 0; i < nF; i++) {
+    /* Fast path: any input is a non-zero constant -> ideal = <1>.  Not
+     * valid over the integers, where a constant c generates only c*Z[x]
+     * (the strong basis keeps the constant), so skip it for Integers. */
+    for (size_t i = 0; i < nF && opt.domain != GB_DOM_INTEGERS; i++) {
         if (gb_poly_is_constant(F[i])) {
             for (size_t j = 0; j < nF; j++) gb_poly_free(F[j]);
             free(F);
             free(all_vars);
+            free(wmat_buf);
             exprset_free(&param_explicit, false);
             exprset_free(&main_set, false);
             exprset_free(&elim_set, false);
@@ -554,8 +742,26 @@ Expr* builtin_groebner_basis(Expr* res) {
         }
     }
 
+    /* Dispatch to the selected engine.  GroebnerWalk is honoured only in
+     * the plain form (no elimination, no parameters); otherwise the
+     * params-last / elim-first joint order required by the contraction
+     * filter does not match the walk's source order, so we run Buchberger
+     * directly (the reduced basis is identical either way). */
     size_t out_n = 0;
-    GBPoly** G = gb_buchberger(F, nF, &out_n);
+    GBPoly** G;
+    if (opt.domain == GB_DOM_INTEGERS) {
+        /* Strong Gröbner basis over Z (parameters are ordinary variables
+         * in the PID polynomial ring Z[vars]). */
+        G = gb_strong_buchberger(F, nF, &out_n);
+    } else if (opt.method == GB_METHOD_WALK && n_elim == 0 && n_params == 0) {
+        G = gb_groebner_walk(F, nF, use_order, wmat_ptr, &out_n);
+    } else {
+        G = gb_buchberger(F, nF, &out_n);
+    }
+
+    /* The weight matrix is no longer needed: the returned basis only feeds
+     * gb_to_expr (which reads exponents/coefficients, not the order). */
+    free(wmat_buf);
 
     /* Free input working set. */
     for (size_t i = 0; i < nF; i++) gb_poly_free(F[i]);
@@ -589,9 +795,23 @@ Expr* builtin_groebner_basis(Expr* res) {
      * Z[params][main_vars] under params-last lex already produces them
      * as constants in the (y, z) coefficient ring. */
 
-    /* If the basis collapses to {<non-zero constant>} -> {1}. */
+    /* CoefficientDomain -> RationalFunctions: the parameters live in the
+     * coefficient FIELD Q(params), so they are units.  Autoreduce the ring
+     * basis into the (smaller) Gröbner basis over Q(params)[main_vars],
+     * dropping generators whose main leading monomial is redundant.  Only
+     * meaningful when parameters are present (Q() over no params is just
+     * Q) and in the plain form (no elimination block). */
+    if (opt.domain == GB_DOM_RATIONAL_FUNCTIONS && n_params > 0
+        && n_elim == 0) {
+        int n_field_main = (int)(n_vars - n_params);
+        gb_rational_function_reduce(G, &out_n, n_field_main);
+    }
+
+    /* If the basis collapses to {<non-zero constant>} -> {1}.  Over the
+     * integers a constant generator c means the ideal is c*Z[x] (not <1>
+     * unless |c| == 1), so the strong basis keeps the constant verbatim. */
     bool has_const = false;
-    for (size_t i = 0; i < out_n; i++) {
+    for (size_t i = 0; i < out_n && opt.domain != GB_DOM_INTEGERS; i++) {
         if (gb_poly_is_constant(G[i]) && !gb_poly_is_zero(G[i])) {
             has_const = true; break;
         }
@@ -618,8 +838,17 @@ Expr* builtin_groebner_basis(Expr* res) {
      * `all_vars` array and gb_to_expr emits one factor per non-zero
      * exponent slot. */
     Expr** items = (out_n > 0) ? (Expr**)malloc(sizeof(Expr*) * out_n) : NULL;
-    for (size_t i = 0; i < out_n; i++) {
-        items[i] = gb_to_expr(G[i], all_vars);
+    if (opt.domain == GB_DOM_INEXACT) {
+        /* Approximate-arithmetic output: monic, MPFR coefficients at the
+         * requested decimal precision.  bits = ceil(prec * log2(10)). */
+        mpfr_prec_t bits = (mpfr_prec_t)((opt.inexact_prec * 33219L) / 10000L) + 1;
+        for (size_t i = 0; i < out_n; i++) {
+            items[i] = gb_to_expr_inexact(G[i], all_vars, bits);
+        }
+    } else {
+        for (size_t i = 0; i < out_n; i++) {
+            items[i] = gb_to_expr(G[i], all_vars);
+        }
     }
     gb_basis_free(G, out_n);
     free(all_vars);

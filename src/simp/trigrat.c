@@ -330,7 +330,10 @@ static Expr* tr_walk_subst(const Expr* e, TRBindings* b, int* counter,
             args_new[i] = tr_walk_subst(e->data.function.args[i], b, counter,
                                         avoid, over_budget);
         }
-        return expr_new_function(expr_new_symbol(hs), args_new, n);
+        /* expr_new_function copies the args array; we own and must free it. */
+        Expr* fn = expr_new_function(expr_new_symbol(hs), args_new, n);
+        free(args_new);
+        return fn;
     }
 
     /* Rational[n,d] / Complex[a,b] -- treat the wrapper as transparent
@@ -350,7 +353,10 @@ static Expr* tr_walk_subst(const Expr* e, TRBindings* b, int* counter,
         Expr** args_new = (Expr**)calloc(2, sizeof(Expr*));
         args_new[0] = base_new;
         args_new[1] = exp_new;
-        return expr_new_function(expr_new_symbol(hs), args_new, 2);
+        /* expr_new_function copies the args array; we own and must free it. */
+        Expr* fn = expr_new_function(expr_new_symbol(hs), args_new, 2);
+        free(args_new);
+        return fn;
     }
 
     /* Tan/Cot/Sec/Csc and hyperbolic analogues -- rewrite to Sin/Cos
@@ -477,7 +483,10 @@ static Expr* tr_subst_back(const Expr* e, const TRBindings* b) {
     for (size_t i = 0; i < n; i++) {
         args_new[i] = tr_subst_back(e->data.function.args[i], b);
     }
-    return expr_new_function(head_new, args_new, n);
+    /* expr_new_function copies the args array; we own and must free it. */
+    Expr* fn = expr_new_function(head_new, args_new, n);
+    free(args_new);
+    return fn;
 }
 
 /* ----------------------------------------------------------------------- */
@@ -553,7 +562,10 @@ static Expr* tr_rewrite_pass(const Expr* e, const TRBindings* b, bool* changed) 
         for (size_t i = 0; i < n; i++) {
             args_new[i] = tr_rewrite_pass(e->data.function.args[i], b, changed);
         }
-        return expr_new_function(head_new, args_new, n);
+        /* expr_new_function copies the args array; we own and must free it. */
+        Expr* fn = expr_new_function(head_new, args_new, n);
+        free(args_new);
+        return fn;
     }
     return expr_copy((Expr*)e);
 }
@@ -619,6 +631,7 @@ static Expr* tr_subst_sym_zero(const Expr* e, const char* name) {
         args_new[i] = tr_subst_sym_zero(e->data.function.args[i], name);
     }
     Expr* call = expr_new_function(head_new, args_new, n);
+    free(args_new);  /* expr_new_function copies the array; free our buffer. */
     /* Evaluate to fold the new constants. */
     Expr* r = evaluate(call);
     expr_free(call);

@@ -1013,7 +1013,7 @@ Expr* builtin_eliminate(Expr* res) {
     bool inconsistent_const = false;
     for (size_t i = 0; i < n_eq; i++) {
         GBPoly* p = gb_from_expr(polys[i], all_vars, (int)n_vars,
-                                 GB_ORDER_LEX, (int)n_elim);
+                                 GB_ORDER_LEX, (int)n_elim, NULL);
         if (!p) { nlin = true; break; }
         if (p->n_terms == 0) { gb_poly_free(p); continue; }
         if (gb_poly_is_constant(p)) {

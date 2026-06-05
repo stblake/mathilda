@@ -756,11 +756,12 @@ Expr* simp_factorial(const Expr* e) {
         Expr* rewritten = simp_fact_rewrite(e, &groups);
         /* Force a full evaluator pass so the auto-cancellation between
          * Factorial[base] in the numerator and the same factor in a
-         * Pochhammer-expanded denominator collapses. evaluate owns its
-         * argument (per the BuiltinFunc convention) so we hand off
-         * `rewritten` and replace the local with the evaluated form. */
+         * Pochhammer-expanded denominator collapses. evaluate() does NOT
+         * consume its argument, so we still own `rewritten` and must free
+         * it after taking the evaluated form. */
         Expr* evaluated = evaluate(rewritten);
         if (!evaluated) evaluated = expr_copy(rewritten);
+        expr_free(rewritten);
         rewritten = NULL;
 
         /* Expand distributes products over sums, which is what makes

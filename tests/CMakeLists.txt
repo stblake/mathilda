@@ -46,6 +46,7 @@ include_directories(../src/linalg)
 include_directories(../src/poly)
 include_directories(../src/simp)
 include_directories(../src/calculus)
+include_directories(../src/sum)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -90,6 +91,8 @@ set(COMMON_SRC
     ../src/times.c
     ../src/arithmetic.c
     ../src/facint.c
+    ../src/fibonacci.c
+    ../src/lucas.c
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
@@ -125,6 +128,8 @@ set(COMMON_SRC
     ../src/hyperbolic.c
     ../src/logexp.c
     ../src/piecewise.c
+    ../src/interp.c
+    ../src/interp_mpfr.c
     ../src/purefunc.c
     ../src/modular.c
     ../src/sort.c
@@ -132,11 +137,13 @@ set(COMMON_SRC
     ../src/info.c
     ../src/expand.c
     ../src/poly/poly.c
+    ../src/poly/minpoly.c
     ../src/poly/subresultants.c
     ../src/poly/subresultantpoly.c
     ../src/rat.c
     ../src/poly/facpoly.c
     ../src/parfrac.c
+    ../src/contfrac.c
     ../src/datetime.c
     ../src/linalg/linalg.c
     ../src/linalg/util.c
@@ -147,12 +154,17 @@ set(COMMON_SRC
     ../src/linalg/normalize.c
     ../src/linalg/tr.c
     ../src/linalg/construct.c
+    ../src/linalg/hankelmat.c
+    ../src/linalg/toeplitzmat.c
+    ../src/linalg/vandermondemat.c
+    ../src/linalg/hilbertmat.c
     ../src/linalg/matpow.c
     ../src/linalg/linsolve.c
     ../src/linalg/inv.c
     ../src/linalg/lstsq.c
     ../src/linalg/nullspace.c
     ../src/linalg/matrank.c
+    ../src/linalg/latticereduce.c
     ../src/linalg/qrdecomp.c
     ../src/linalg/qrdecomp_machine.c
     ../src/linalg/qrdecomp_mpfr.c
@@ -198,6 +210,7 @@ set(COMMON_SRC
     ../src/poly/irrpolyq.c
     ../src/poly/groebner.c
     ../src/poly/groebnerbasis.c
+    ../src/poly/groebnerwalk.c
     ../src/poly/eliminate.c
     ../src/sym_intern.c
     ../src/sym_names.c
@@ -207,6 +220,11 @@ set(COMMON_SRC
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
+    ../src/sum/sum.c
+    ../src/sum/sum_util.c
+    ../src/sum/sum_polynomial.c
+    ../src/sum/sum_geometric.c
+    ../src/sum/sum_gosper.c
     ../src/root.c
     ../src/root_numeric.c
     ../src/radicals.c
@@ -259,6 +277,10 @@ target_include_directories(list_tests PRIVATE ../src)
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)
+
+add_executable(sum_tests test_sum.c ${COMMON_SRC})
+target_link_libraries(sum_tests m)
+target_include_directories(sum_tests PRIVATE ../src)
 
 add_executable(cond_tests test_cond.c ${COMMON_SRC})
 target_link_libraries(cond_tests m)
@@ -370,6 +392,12 @@ target_include_directories(foldlist_tests PRIVATE ../src)
 
 add_executable(split_tests test_split.c ${COMMON_SRC})
 target_include_directories(split_tests PRIVATE ../src)
+
+add_executable(differences_tests test_differences.c ${COMMON_SRC})
+target_include_directories(differences_tests PRIVATE ../src)
+
+add_executable(ratios_tests test_ratios.c ${COMMON_SRC})
+target_include_directories(ratios_tests PRIVATE ../src)
 
 add_executable(sort_tests test_sort.c ${COMMON_SRC})
 target_include_directories(sort_tests PRIVATE ../src)
@@ -546,6 +574,34 @@ target_include_directories(rat_tests PRIVATE ../src)
 add_executable(linalg_tests test_linalg.c ${COMMON_SRC})
 target_include_directories(linalg_tests PRIVATE ../src)
 
+add_executable(hilbertmatrix_tests test_hilbertmatrix.c ${COMMON_SRC})
+target_include_directories(hilbertmatrix_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(hilbertmatrix_tests build_ecm)
+endif()
+add_test(NAME hilbertmatrix_tests COMMAND hilbertmatrix_tests)
+
+add_executable(hankelmatrix_tests test_hankelmatrix.c ${COMMON_SRC})
+target_include_directories(hankelmatrix_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(hankelmatrix_tests build_ecm)
+endif()
+add_test(NAME hankelmatrix_tests COMMAND hankelmatrix_tests)
+
+add_executable(toeplitzmatrix_tests test_toeplitzmatrix.c ${COMMON_SRC})
+target_include_directories(toeplitzmatrix_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(toeplitzmatrix_tests build_ecm)
+endif()
+add_test(NAME toeplitzmatrix_tests COMMAND toeplitzmatrix_tests)
+
+add_executable(vandermondematrix_tests test_vandermondematrix.c ${COMMON_SRC})
+target_include_directories(vandermondematrix_tests PRIVATE ../src)
+if(USE_ECM)
+    add_dependencies(vandermondematrix_tests build_ecm)
+endif()
+add_test(NAME vandermondematrix_tests COMMAND vandermondematrix_tests)
+
 add_executable(nullspace_tests test_nullspace.c ${COMMON_SRC})
 target_include_directories(nullspace_tests PRIVATE ../src)
 if(USE_ECM)
@@ -565,6 +621,46 @@ else()
     target_link_libraries(matrank_tests gmp m)
 endif()
 add_test(NAME matrank_tests COMMAND matrank_tests)
+
+add_executable(latticereduce_tests test_latticereduce.c ${COMMON_SRC})
+target_include_directories(latticereduce_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(latticereduce_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(latticereduce_tests build_ecm)
+else()
+    target_link_libraries(latticereduce_tests gmp m)
+endif()
+add_test(NAME latticereduce_tests COMMAND latticereduce_tests)
+
+add_executable(minimalpolynomial_tests test_minimalpolynomial.c ${COMMON_SRC})
+target_include_directories(minimalpolynomial_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(minimalpolynomial_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(minimalpolynomial_tests build_ecm)
+else()
+    target_link_libraries(minimalpolynomial_tests gmp m)
+endif()
+add_test(NAME minimalpolynomial_tests COMMAND minimalpolynomial_tests)
+
+add_executable(interp_tests test_interp.c ${COMMON_SRC})
+target_include_directories(interp_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(interp_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(interp_tests build_ecm)
+else()
+    target_link_libraries(interp_tests gmp m)
+endif()
+add_test(NAME interp_tests COMMAND interp_tests)
+
+add_executable(findintegernullvector_tests test_findintegernullvector.c ${COMMON_SRC})
+target_include_directories(findintegernullvector_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(findintegernullvector_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(findintegernullvector_tests build_ecm)
+else()
+    target_link_libraries(findintegernullvector_tests gmp m)
+endif()
+add_test(NAME findintegernullvector_tests COMMAND findintegernullvector_tests)
 
 add_executable(qrdecomposition_tests test_qrdecomposition.c ${COMMON_SRC})
 target_include_directories(qrdecomposition_tests PRIVATE ../src)
@@ -877,6 +973,16 @@ else()
 endif()
 add_test(NAME integer_exponent_tests COMMAND integer_exponent_tests)
 
+add_executable(extended_gcd_tests test_extended_gcd.c ${COMMON_SRC})
+target_include_directories(extended_gcd_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(extended_gcd_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(extended_gcd_tests build_ecm)
+else()
+    target_link_libraries(extended_gcd_tests gmp m)
+endif()
+add_test(NAME extended_gcd_tests COMMAND extended_gcd_tests)
+
 add_executable(integer_string_tests test_integer_string.c ${COMMON_SRC})
 target_include_directories(integer_string_tests PRIVATE ../src)
 if(USE_ECM)
@@ -999,6 +1105,9 @@ add_test(NAME matlstsq_tests COMMAND matlstsq_tests)
 
 add_executable(parfrac_tests test_parfrac.c ${COMMON_SRC})
 target_include_directories(parfrac_tests PRIVATE ../src)
+
+add_executable(contfrac_tests test_contfrac.c ${COMMON_SRC})
+target_include_directories(contfrac_tests PRIVATE ../src)
 
 add_executable(polymod_tests test_polymod.c ${COMMON_SRC})
 target_include_directories(polymod_tests PRIVATE ../src)
@@ -1232,6 +1341,7 @@ if(USE_ECM)
     add_dependencies(rat_tests build_ecm)
     add_dependencies(linalg_tests build_ecm)
     add_dependencies(parfrac_tests build_ecm)
+    add_dependencies(contfrac_tests build_ecm)
     add_dependencies(polymod_tests build_ecm)
     add_dependencies(bigint_tests build_ecm)
     add_dependencies(expr_sharing_tests build_ecm)
@@ -1276,6 +1386,24 @@ else()
     target_link_libraries(simp_tests gmp m)
 endif()
 add_test(NAME simp_tests COMMAND simp_tests)
+
+add_executable(fibonacci_tests test_fibonacci.c ${COMMON_SRC})
+target_include_directories(fibonacci_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(fibonacci_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(fibonacci_tests gmp m)
+endif()
+add_test(NAME fibonacci_tests COMMAND fibonacci_tests)
+
+add_executable(lucas_tests test_lucas.c ${COMMON_SRC})
+target_include_directories(lucas_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(lucas_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(lucas_tests gmp m)
+endif()
+add_test(NAME lucas_tests COMMAND lucas_tests)
 
 add_executable(distribute_tests test_distribute.c ${COMMON_SRC})
 target_include_directories(distribute_tests PRIVATE ../src)

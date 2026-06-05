@@ -58,6 +58,13 @@ void info_init(void) {
         "\tgives the least common multiple of the integers ni.\n"
         "Computed via GMP's mpz_lcm folded across the arguments; sign is\n"
         "normalised non-negative. Accepts BigInt and Rational inputs.");
+    symtab_set_docstring("ExtendedGCD",
+        "ExtendedGCD[n1, n2, ...]\n"
+        "\tgives the extended GCD {g, {r1, r2, ...}} of the integers ni,\n"
+        "\twhere g == GCD[n1, ...] and g == r1 n1 + r2 n2 + ....\n"
+        "Computed by folding GMP's mpz_gcdext pairwise; accepts machine and\n"
+        "BigInt integers and threads over lists. Non-integer or inexact\n"
+        "arguments leave ExtendedGCD unevaluated.");
     symtab_set_docstring("PowerMod", "PowerMod[a, b, m] gives a^b mod m.\nPowerMod[a, -1, m] finds the modular inverse of a modulo m.\nPowerMod[a, 1/r, m] finds a modular r-th root of a.");
     symtab_set_docstring("PrimitiveRoot",
         "PrimitiveRoot[n]\n"
@@ -191,6 +198,27 @@ void info_init(void) {
         "rational from the Gamma functional equation. Negative integers give\n"
         "ComplexInfinity. Other inputs stay unevaluated.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
+    symtab_set_docstring("Fibonacci",
+        "Fibonacci[n]\n"
+        "\tgives the nth Fibonacci number F_n.\n"
+        "Fibonacci[n, x]\n"
+        "\tgives the nth Fibonacci polynomial F_n(x).\n"
+        "Exact integer orders are computed via GMP fast doubling (numbers) or the\n"
+        "recurrence F_k = x F_{k-1} + F_{k-2} (polynomials); negative orders use\n"
+        "F_{-n} = (-1)^(n+1) F_n. Inexact or complex orders evaluate the\n"
+        "generalized closed form numerically. Listable; symbolic orders stay\n"
+        "unevaluated.");
+    symtab_set_docstring("LucasL",
+        "LucasL[n]\n"
+        "\tgives the nth Lucas number L_n.\n"
+        "LucasL[n, x]\n"
+        "\tgives the nth Lucas polynomial L_n(x).\n"
+        "Exact integer orders are computed via GMP fast doubling (numbers, using\n"
+        "L_m = 2 F_{m+1} - F_m) or the recurrence L_k = x L_{k-1} + L_{k-2} with\n"
+        "L_0 = 2, L_1 = x (polynomials); negative orders use L_{-n} = (-1)^n L_n.\n"
+        "Inexact or complex orders evaluate the generalized closed form\n"
+        "L_n = phi^n + Cos[Pi n] phi^-n (phi = GoldenRatio) numerically.\n"
+        "Listable; symbolic orders stay unevaluated.");
     symtab_set_docstring("Binomial",
         "Binomial[n, m]\n"
         "\tgives the binomial coefficient C(n, m) = n! / (m! (n-m)!).\n"
@@ -299,8 +327,35 @@ void info_init(void) {
         "\t  \"CofactorExpansion\"         — identity-if-invertible via Laplace cofactor\n"
         "\t                                 Det[m] (singular / rectangular m falls back\n"
         "\t                                 to \"DivisionFreeRowReduction\")");
+    symtab_set_docstring("LatticeReduce",
+        "LatticeReduce[m]\n"
+        "\tgives an LLL-reduced basis for the lattice spanned by the rows\n"
+        "\t(vectors) of m.  The entries of m may be integers, Gaussian\n"
+        "\tintegers, rationals, or Gaussian rationals.  Reduction is exact\n"
+        "\t(GMP rational arithmetic, so it is correct for both machine-size\n"
+        "\tand arbitrary-precision entries) and preserves the lattice, its\n"
+        "\tdeterminant, and every linear relation among the rows.  The rows\n"
+        "\tmust be linearly independent.");
+    symtab_set_docstring("FindIntegerNullVector",
+        "FindIntegerNullVector[{x1, ..., xn}]\n"
+        "\tfinds integers {a1, ..., an}, not all zero, with "
+        "a1 x1 + ... + an xn == 0 (PSLQ / integer-relation detection).\n"
+        "FindIntegerNullVector[{x1, ..., xn}, d]\n"
+        "\trestricts the search to relations of norm <= d.\n"
+        "The xi may be real or complex, exact or inexact; for complex xi the "
+        "ai are Gaussian integers.  Exact relations are validated with "
+        "PossibleZeroQ; for inexact xi the relation holds to the precision of "
+        "the input.  When no relation is found the call is returned "
+        "unevaluated.\n"
+        "Options:\n"
+        "\tWorkingPrecision    Automatic, or a digit count for the search.\n"
+        "\tZeroTest            Automatic, or a function applied to the residual.");
     symtab_set_docstring("IdentityMatrix", "IdentityMatrix[n] gives the n x n identity matrix.\nIdentityMatrix[{m, n}] gives the m x n identity matrix.");
     symtab_set_docstring("DiagonalMatrix", "DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.\nDiagonalMatrix[list, k] gives a matrix with the elements of list on the k-th diagonal.\nDiagonalMatrix[list, k, n] pads with zeros to create an n x n matrix.");
+    symtab_set_docstring("HilbertMatrix", "HilbertMatrix[n] gives the n x n Hilbert matrix with entries 1/(i + j - 1).\nHilbertMatrix[{m, n}] gives the m x n Hilbert matrix.\nEntries are exact Rationals unless the WorkingPrecision option requests MachinePrecision or a digit count.");
+    symtab_set_docstring("HankelMatrix", "HankelMatrix[n] gives the n x n Hankel matrix with first row and column the integers 1..n.\nHankelMatrix[{c1, ..., cm}] gives the m x m Hankel matrix with first column the given list.\nHankelMatrix[{c1, ..., cm}, {r1, ..., rn}] gives the m x n Hankel matrix with first column the first list and last row the second.\nA Hankel matrix is constant along its antidiagonals; entries are copied verbatim.");
+    symtab_set_docstring("ToeplitzMatrix", "ToeplitzMatrix[n] gives the n x n Toeplitz matrix with first row and column the integers 1..n.\nToeplitzMatrix[{c1, ..., cn}] gives the n x n symmetric Toeplitz matrix with first column the given list.\nToeplitzMatrix[{c1, ..., cm}, {r1, ..., rn}] gives the m x n Toeplitz matrix with first column the first list and first row the second.\nA Toeplitz matrix is constant along its diagonals; entries are copied verbatim.");
+    symtab_set_docstring("VandermondeMatrix", "VandermondeMatrix[{x1, ..., xn}] gives the n x n Vandermonde matrix with entry (i, j) equal to xi^(j-1).\nVandermondeMatrix[{x1, ..., xn}, k] gives the n x k Vandermonde matrix.\nThe nodes need not be numerical or distinct; columns are successive powers, so the first column is all ones.");
     symtab_set_docstring("Inverse",
         "Inverse[m]\n"
         "\tgives the inverse of a square matrix m.\n"
@@ -1070,6 +1125,28 @@ void info_init(void) {
         "is ignored and the standard symbolic accumulation is returned.\n"
         "\n"
         "Accumulate has the attribute Protected.");
+    symtab_set_docstring("Differences",
+        "Differences[list]\n"
+        "\tgives the successive differences of the elements of list.\n"
+        "Differences[list, n] gives the n-th differences (length l - n).\n"
+        "Differences[list, n, s] takes differences of elements step s apart\n"
+        "(length l - n |s|).\n"
+        "Differences[list, {n1, n2, ...}] gives the successive n_k-th differences\n"
+        "at level k of a nested list; for a matrix m, Differences[m, n] (= "
+        "Differences[m, {n, 0}]) differences successive rows.\n"
+        "FoldList[Plus, x, Differences[list]] inverts Differences.\n"
+        "Differences has the attribute Protected.");
+    symtab_set_docstring("Ratios",
+        "Ratios[list]\n"
+        "\tgives the successive ratios list[[k+1]]/list[[k]] of the elements\n"
+        "\tof list (length l - 1).\n"
+        "Ratios[list, n] gives the n-th iterated ratios (length l - n); n must\n"
+        "be a non-negative integer (n = 0 returns list unchanged).\n"
+        "Ratios[list, {n1, n2, ...}] gives the successive n_k-th ratios at\n"
+        "level k of a nested list; for a matrix m, Ratios[m, n] (= "
+        "Ratios[m, {n, 0}]) takes ratios of successive rows.\n"
+        "FoldList[Times, x, Ratios[list]] inverts Ratios.\n"
+        "Ratios has the attribute Protected.");
     symtab_set_docstring("NumberQ",
         "NumberQ[expr]\n"
         "\tgives True if expr is an explicit number (Integer, BigInt, Rational,\n"
@@ -1358,6 +1435,27 @@ void info_init(void) {
         "\tgives the smallest multiple of a greater than or equal to x.\n"
         "Ceiling is Listable. Exact inputs return exact integers; Real / MPFR\n"
         "inputs are rounded toward +Infinity at the input precision.");
+    symtab_set_docstring("ContinuedFraction",
+        "ContinuedFraction[x, n]\n"
+        "\tgives a list of the first n terms in the continued-fraction\n"
+        "\trepresentation of x.\n"
+        "ContinuedFraction[x]\n"
+        "\tgives all terms determinable from the precision of x.\n"
+        "The list {a1, a2, a3, ...} corresponds to a1 + 1/(a2 + 1/(a3 + ...)).\n"
+        "Exact rationals give a finite (canonical, last term >= 2) expansion.\n"
+        "For Sqrt[d] with d a non-square integer the no-count form returns\n"
+        "{a1, ..., {b1, ...}}, the bracketed block repeating cyclically. Inexact\n"
+        "Real / MPFR inputs yield terms only as far as the precision determines\n"
+        "them. ContinuedFraction is Listable.");
+    symtab_set_docstring("FromContinuedFraction",
+        "FromContinuedFraction[{a1, a2, ..., an}]\n"
+        "\treconstructs a1 + 1/(a2 + 1/(a3 + ... + 1/an)). The terms may be\n"
+        "\tsymbolic; the result is the convergent in nested (un-expanded) form.\n"
+        "FromContinuedFraction[{a1, ..., am, {b1, ..., bk}}]\n"
+        "\tgives the exact quadratic irrational whose continued-fraction terms\n"
+        "\tbegin with the ai then cycle through the bi forever; all ai and bi\n"
+        "\tmust be integers. FromContinuedFraction[{}] is 0. It is the inverse\n"
+        "\tof ContinuedFraction.");
     symtab_set_docstring("Round",
         "Round[x]\n"
         "\trounds x to the nearest integer, breaking ties to the nearest even\n"
@@ -1491,6 +1589,45 @@ void info_init(void) {
         "evaluated until Switch examines them.\n"
         "Break, Return, and Throw inside the chosen value behave as they\n"
         "do in any other held context.");
+    symtab_set_docstring("InterpolatingFunction",
+        "InterpolatingFunction[domain, table]\n"
+        "\trepresents an approximate function whose values are found by\n"
+        "\tinterpolation. domain is {{x1min, x1max}, ...} with one interval\n"
+        "\tper dimension; table is a list of {coord, value} data points on a\n"
+        "\tfull tensor grid (coord is a scalar for 1-D, an {x1, ..., xm} list\n"
+        "\tfor m-D).\n"
+        "InterpolatingFunction[...][x1, ..., xm]\n"
+        "\tgives the interpolated value using tensor-product piecewise-\n"
+        "\tpolynomial (default order 3) interpolation. Arguments outside the\n"
+        "\tdomain are extrapolated with a warning.\n"
+        "Derivative[d1, ..., dm][InterpolatingFunction[...]]\n"
+        "\tgives an InterpolatingFunction for the mixed partial derivative.\n"
+        "In standard output only the domain is shown; the rest is <>.");
+    symtab_set_docstring("Interpolation",
+        "Interpolation[data]\n"
+        "\tconstructs an InterpolatingFunction that interpolates data, given\n"
+        "\tas {f1, f2, ...} (values at x = 1, 2, ...), {{x1, f1}, ...} (values\n"
+        "\tat given abscissae), or {{{x1, y1, ...}, f1}, ...} (an m-D tensor\n"
+        "\tgrid).\n"
+        "Interpolation[data, x]\n"
+        "\tbuilds the interpolating function and evaluates it at x (a number,\n"
+        "\tor a coordinate list in m-D).\n"
+        "Interpolation[{{{x1,...}, f1, df1, ddf1, ...}, ...}]\n"
+        "\treproduces supplied derivatives at the nodes (df = gradient, ddf =\n"
+        "\tHessian, ...) by tensor-product Hermite interpolation.\n"
+        "Interpolation[data, InterpolationOrder -> n]\n"
+        "\tuses piecewise-polynomial pieces of degree n (default 3; 0 gives a\n"
+        "\tpiecewise-constant and 1 a piecewise-linear interpolant).\n"
+        "Interpolation[data, Method -> m]\n"
+        "\tselects \"Spline\" (natural/cyclic cubic spline) or \"Hermite\"\n"
+        "\t(piecewise cubic Hermite with estimated slopes).\n"
+        "Interpolation[data, PeriodicInterpolation -> True]\n"
+        "\tbuilds a periodic interpolant (period = the data span; the data must\n"
+        "\trepeat its first sample at the last). A per-dimension {True, False}\n"
+        "\tlist selects periodicity per axis.\n"
+        "Vector- or array-valued samples (f_i a list) are interpolated\n"
+        "component-wise and return an array of the same shape.\n"
+        "Works at machine or arbitrary (MPFR) precision, matching the data.");
     symtab_set_docstring("Piecewise",
         "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]\n"
         "\trepresents a piecewise function with values val_i in the regions\n"
@@ -1977,6 +2114,18 @@ void info_init(void) {
         "HornerForm[poly1 / poly2, vars1, vars2]\n"
         "\tputs a rational function in Horner form, nested with respect to\n"
         "\tvars1 in the numerator and vars2 in the denominator.");
+    symtab_set_docstring("MinimalPolynomial",
+        "MinimalPolynomial[s, x]\n"
+        "\tgives the lowest-degree polynomial in x with integer coefficients,\n"
+        "\tpositive leading coefficient and content 1, having the algebraic\n"
+        "\tnumber s as a root.  s may be built from rationals, radicals, the\n"
+        "\timaginary unit, roots of unity, and Root[] objects.\n"
+        "MinimalPolynomial[s]\n"
+        "\tgives the minimal polynomial as a pure function.\n"
+        "MinimalPolynomial[s, x, Extension -> a]\n"
+        "\tgives the characteristic polynomial of s in Q(a) over Q(a).\n"
+        "\tComputed by resultant elimination of the radicals; threads over\n"
+        "\tlists.");
     symtab_set_docstring("Resultant",
         "Resultant[p, q, var]\n"
         "\tgives the resultant of p and q as polynomials in var: the unique\n"
@@ -2020,8 +2169,10 @@ void info_init(void) {
         "\tlike Pi, E, EulerGamma, ...) are auto-promoted to coefficient-ring\n"
         "\tparameters and survive in the basis polynomials.\n"
         "Options: MonomialOrder -> Lexicographic (default) |\n"
-        "\tDegreeReverseLexicographic | EliminationOrder; CoefficientDomain\n"
-        "\t-> Rationals (default); Method -> \"Buchberger\" (default); Sort\n"
+        "\tDegreeReverseLexicographic | EliminationOrder | a weight matrix\n"
+        "\t{{...}, ...} of integers (one column per variable, defining a\n"
+        "\tcustom term order); CoefficientDomain -> Rationals (default);\n"
+        "\tMethod -> \"Buchberger\" (default) | \"GroebnerWalk\"; Sort\n"
         "\t-> True reverses the main-variable list; ParameterVariables -> p\n"
         "\tor {p1, ...} marks parameters explicitly (the main-variable list\n"
         "\tis then optional and is auto-derived from the polys).  Other\n"

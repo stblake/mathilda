@@ -126,6 +126,72 @@ In[5]:= Accumulate[{1.0, 2.0, 3.0}, Method -> "CompensatedSummation"]
 Out[5]= {1., 3., 6.}
 ```
 
+## Differences
+Gives the successive differences of the elements in a list. The inverse of `Accumulate`/`FoldList[Plus, ...]`.
+- `Differences[list]`
+- `Differences[list, n]`
+- `Differences[list, n, s]`
+- `Differences[list, {n1, n2, ...}]`
+
+**Features**:
+- `Protected`.
+- `Differences[list]` gives `{list[[2]] - list[[1]], list[[3]] - list[[2]], ...}`, of length `l - 1`.
+- `Differences[list, n]` applies the first-difference operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
+- `Differences[list, n, s]` takes differences of elements step `s` apart, of length `l - n |s|`. The step `s` is a nonzero integer; for `s < 0` the elements are subtracted in the opposite order.
+- `Differences[list, {n1, n2, ...}]` gives the successive `nk`-th differences at level `k` of a nested list, and is equivalent to `Differences[Differences[list, n1], {0, n2, ...}]`. Each `nk` must be a non-negative integer.
+- Subtraction threads element-wise over sublists via the `Listable` `Plus`/`Times`, so for a matrix `m`, `Differences[m]` (= `Differences[m, 1]` = `Differences[m, {1, 0}]`) differences successive rows within each column, while `Differences[m, {0, 1}]` differences columns within each row.
+- The head of the input is preserved. A list shorter than the reduction yields the empty list.
+- Works on machine integers, GMP arbitrary-precision integers, machine-precision doubles, and symbolic expressions.
+
+```mathematica
+In[1]:= Differences[{a, b, c, d, e}]
+Out[1]= {-a + b, -b + c, -c + d, -d + e}
+
+In[2]:= Differences[{a, b, c, d, e}, 2]
+Out[2]= {a - 2 b + c, b - 2 c + d, c - 2 d + e}
+
+In[3]:= Differences[{1, 2, 4, 8, 16, 32}, 1, 2]
+Out[3]= {3, 6, 12, 24}
+
+In[4]:= Differences[{{a11, a12, a13}, {a21, a22, a23}}, {0, 1}]
+Out[4]= {{-a11 + a12, -a12 + a13}, {-a21 + a22, -a22 + a23}}
+
+In[5]:= FoldList[Plus, a, Differences[{a, b, c, d, e}]]
+Out[5]= {a, b, c, d, e}
+```
+
+## Ratios
+Gives the successive ratios of the elements in a list — the multiplicative analog of `Differences`. The inverse of `FoldList[Times, ...]`.
+- `Ratios[list]`
+- `Ratios[list, n]`
+- `Ratios[list, {n1, n2, ...}]`
+
+**Features**:
+- `Protected`.
+- `Ratios[list]` divides successive elements by preceding ones, giving `{list[[2]]/list[[1]], list[[3]]/list[[2]], ...}` of length `l - 1`; `Ratios[{x1, x2}]` gives `{x2/x1}`.
+- `Ratios[list, n]` applies the ratio operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
+- `Ratios[list, {n1, n2, ...}]` gives the successive `nk`-th ratios at level `k` of a nested list, and is equivalent to `Ratios[Ratios[list, n1], {0, n2, ...}]`. Each `nk` must be a non-negative integer.
+- Division threads element-wise over sublists via the `Listable` `Power`/`Times`, so for a matrix `m`, `Ratios[m]` (= `Ratios[m, 1]` = `Ratios[m, {1, 0}]`) takes ratios of successive rows within each column, while `Ratios[m, {0, 1}]` takes ratios of columns within each row.
+- The head of the input is preserved. A list shorter than the reduction yields the empty list. First ratios are constant for a geometric sequence.
+- Works on machine integers, GMP arbitrary-precision integers (exact `Rational` results), machine-precision doubles, and symbolic expressions.
+
+```mathematica
+In[1]:= Ratios[{a, b, c, d, e}]
+Out[1]= {b/a, c/b, d/c, e/d}
+
+In[2]:= Ratios[{a, b, c, d, e}, 2]
+Out[2]= {(a c)/b^2, (b d)/c^2, (c e)/d^2}
+
+In[3]:= Ratios[Table[2^i, {i, 0, 10}]]
+Out[3]= {2, 2, 2, 2, 2, 2, 2, 2, 2, 2}
+
+In[4]:= Ratios[{{a11, a12, a13}, {a21, a22, a23}}, {0, 1}]
+Out[4]= {{a12/a11, a13/a12}, {a22/a21, a23/a22}}
+
+In[5]:= FoldList[Times, a, Ratios[{a, b, c, d, e}]]
+Out[5]= {a, b, c, d, e}
+```
+
 ## Times (*)
 Symbolic product.
 - `a * b * ...`
@@ -812,6 +878,101 @@ Out[8]= -Infinity
 
 Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
 
+## ExtendedGCD
+- `ExtendedGCD[n1, n2, ...]`: returns `{g, {r1, r2, ...}}` where `g == GCD[n1, ...]` and `g == r1 n1 + r2 n2 + ...` (a multi-argument Bézout / extended GCD). Attributes: `Listable`, `Protected` (deliberately *not* `Flat`/`Orderless`/`OneIdentity`, since the cofactor list is positional).
+
+**Features**:
+- Integer-only; both machine integers and GMP bigints are accepted, and cofactors demote back to machine integers when they fit.
+- Computed by folding GMP's `mpz_gcdext` pairwise: `gcd(running_g, n_i) = s·running_g + t·n_i`, scaling the accumulated cofactors by `s` and appending `t` each step. The running gcd stays non-negative, so `g` is exactly `GCD` and the sign convention matches Mathematica.
+- Threads element-wise over lists, e.g. `ExtendedGCD[3, {5, 15}]` → `{{1, {2, -1}}, {3, {1, 0}}}`.
+- Edge cases: `ExtendedGCD[]` → `{0, {}}`; `ExtendedGCD[n]` → `{|n|, {±1}}`; zeros and negatives handled (`g` non-negative).
+- Diagnostics: an inexact (Real) argument emits `ExtendedGCD::exact`; an exact non-integer (Rational) argument emits `ExtendedGCD::egcd`; symbolic arguments leave the call unevaluated silently.
+
+## ContinuedFraction
+Gives the simple continued-fraction expansion of a number.
+- `ContinuedFraction[x, n]`: a list of the first `n` terms.
+- `ContinuedFraction[x]`: all terms determinable from `x`.
+
+The list `{a1, a2, a3, ...}` corresponds to `a1 + 1/(a2 + 1/(a3 + ...))`.
+
+**Features**:
+- `Protected`, `Listable`.
+- **Exact rationals** (Integer / BigInt / Rational) use the Euclidean
+  algorithm and return the canonical terminating form (last term `>= 2`,
+  never `{..., k-1, 1}`). A finite rational may yield fewer than `n` terms.
+- **Quadratic surds** `Sqrt[d]` with `d` a non-square integer use the
+  periodic surd recurrence. Without a count the result is
+  `{a1, ..., {b1, ...}}`, where the bracketed block repeats cyclically; with
+  a count the periodic sequence is unrolled to exactly `n` terms. (General
+  quadratic irrationals are not recognised symbolically — pass an explicit
+  `n` to use the numeric path.) The no-count form is declined for a `d` whose
+  period would be astronomically long.
+- **Inexact reals** (machine `Real` or arbitrary-precision MPFR) yield terms
+  only as far as the input precision determines them, tracking the value's
+  uncertainty and stopping when the next term is no longer pinned down.
+- **Exact symbolic reals with an explicit `n`** (e.g. `Pi`, `Sqrt[E]`,
+  `Exp[Pi Sqrt[163]]`) are numericised at adaptively increasing precision
+  until `n` terms are confirmed by two consecutive evaluations.
+- Left unevaluated for an exact non-rational, non-quadratic value with no
+  count, or a non-real numeric value.
+
+```mathematica
+In[1]:= ContinuedFraction[47/17]
+Out[1]= {2, 1, 3, 4}
+
+In[2]:= ContinuedFraction[Sqrt[13]]
+Out[2]= {3, {1, 1, 1, 1, 6}}
+
+In[3]:= ContinuedFraction[Pi, 20]
+Out[3]= {3, 7, 15, 1, 292, 1, 1, 1, 2, 1, 3, 1, 14, 2, 1, 1, 2, 2, 2, 2}
+
+In[4]:= ContinuedFraction[N[Pi]]
+Out[4]= {3, 7, 15, 1, 292, 1, 1, 1, 2, 1, 3, 1, 14}
+
+In[5]:= ContinuedFraction[Exp[Pi Sqrt[163]], 10]
+Out[5]= {262537412640768743, 1, 1333462407511, 1, 8, 1, 1, 5, 1, 4}
+```
+
+## FromContinuedFraction
+The inverse of `ContinuedFraction`: reconstructs a value from its continued-fraction terms.
+- `FromContinuedFraction[{a1, a2, ..., an}]`: gives `a1 + 1/(a2 + 1/(a3 + ... + 1/an))`.
+- `FromContinuedFraction[{a1, ..., am, {b1, ..., bk}}]`: gives the exact
+  quadratic irrational whose terms begin with the `ai` then cycle through the
+  `bi` forever.
+
+**Features**:
+- `Protected` (not `Listable` — the argument is the whole term list).
+- The `ai` of the finite form may be **symbolic**; the result is the convergent
+  `h_n / k_n` built from the fundamental recurrence
+  `h_i = a_i h_{i-1} + h_{i-2}`, `k_i = a_i k_{i-1} + k_{i-2}`, kept in nested
+  (un-expanded) form — `Together` collapses it to a flat rational.
+- The **periodic** form requires all `ai` and `bi` to be integers. The purely
+  periodic tail solves the quadratic
+  `k_{k-1} x^2 + (k_{k-2} - h_{k-1}) x - h_{k-2} = 0` (h, k the period's
+  convergents); its positive root is then pushed through the leading terms by a
+  Möbius transform and rationalised to a single `(P + Q Sqrt[R]) / S` in lowest
+  terms.
+- `FromContinuedFraction[{}]` is `0`; `FromContinuedFraction[{x}]` is `x`.
+- Left unevaluated for a non-list argument, a sub-list anywhere but last, an
+  empty period block, or non-integer terms in a periodic form.
+
+```mathematica
+In[1]:= FromContinuedFraction[{2, 1, 3, 4}]
+Out[1]= 47/17
+
+In[2]:= FromContinuedFraction[{a, b, c, d}]
+Out[2]= (1 + a b + (a + (1 + a b) c) d)/(b + (1 + b c) d)
+
+In[3]:= FromContinuedFraction[{8, {2, 2, 1, 7, 1, 2, 2, 16}}]
+Out[3]= Sqrt[71]
+
+In[4]:= FromContinuedFraction[{{1, 2, 3, 4}}]
+Out[4]= 1/15 (9 + 2 Sqrt[39])
+
+In[5]:= FromContinuedFraction[ContinuedFraction[Pi, 3]]
+Out[5]= 333/106
+```
+
 ## PowerMod
 Gives modular exponentiations, inverses, and roots.
 - `PowerMod[a, b, m]`: Gives $a^b \pmod m$.
@@ -1075,6 +1236,75 @@ Out[6]= -1/12 - I/12
 
 In[7]:= Binomial[0, 1]
 Out[7]= 0
+```
+
+## Fibonacci
+- `Fibonacci[n]`: the `n`th Fibonacci number `F_n`.
+- `Fibonacci[n, x]`: the `n`th Fibonacci polynomial `F_n(x)`, the coefficient
+  of `t^n` in `t / (1 - x t - t^2)`.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+Evaluation:
+- Exact integer `n`: `Fibonacci[n]` uses GMP **fast doubling** (`O(log n)`);
+  `Fibonacci[n, x]` builds the polynomial from the recurrence
+  `F_k = x F_{k-1} + F_{k-2}` (Expand-ed each step). Negative orders use
+  `F_{-n} = (-1)^{n+1} F_n` (and likewise for the polynomials).
+- Inexact / complex order (`Real`, MPFR, or `Complex`): the generalized closed
+  forms — `Fibonacci[n] = (φ^n - Cos[π n] φ^{-n}) / Sqrt[5]` with
+  `φ = GoldenRatio`, and `Fibonacci[n, x] = (β^n - Cos[π n] β^{-n}) / Sqrt[x²+4]`
+  with `β = (x + Sqrt[x²+4]) / 2` — are numericalized at the precision carried
+  by the inputs (machine or MPFR).
+- Symbolic order (or exact non-integer order with no `N` applied) stays
+  unevaluated.
+
+Derivatives (native, via `src/calculus/deriv.c`):
+- `D[Fibonacci[n], n]` and both partials of `D[Fibonacci[n, x], ...]` are
+  provided, e.g.
+  `D[Fibonacci[n, x], x] = (2 n Fibonacci[n-1, x] + (n-1) x Fibonacci[n, x]) / (4 + x²)`.
+
+```
+In[1]:= Table[Fibonacci[n], {n, 10}]
+Out[1]= {1, 1, 2, 3, 5, 8, 13, 21, 34, 55}
+In[2]:= Fibonacci[7, x]
+Out[2]= 1 + 6 x^2 + 5 x^4 + x^6
+In[3]:= Fibonacci[5.8, 3]
+Out[3]= 283.483
+In[4]:= N[Fibonacci[15/17], 50]
+Out[4]= 0.95651991392431122508582263427692298648606969012061
+```
+
+## LucasL
+- `LucasL[n]`: the `n`th Lucas number `L_n`.
+- `LucasL[n, x]`: the `n`th Lucas polynomial `L_n(x)`, the coefficient of
+  `t^n` in `(2 - t x) / (1 - x t - t^2)`.
+- Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+Evaluation:
+- Exact integer `n`: `LucasL[n]` uses GMP **fast doubling** (`O(log n)`) of the
+  Fibonacci pair, `L_m = 2 F_{m+1} - F_m`; `LucasL[n, x]` builds the polynomial
+  from the recurrence `L_k = x L_{k-1} + L_{k-2}` with `L_0 = 2`, `L_1 = x`
+  (Expand-ed each step). Negative orders use `L_{-n} = (-1)^n L_n` (and likewise
+  for the polynomials).
+- Inexact / complex order (`Real`, MPFR, or `Complex`): the generalized closed
+  forms — `LucasL[n] = φ^n + Cos[π n] φ^{-n}` with `φ = GoldenRatio`, and
+  `LucasL[n, x] = β^n + Cos[π n] β^{-n}` with `β = (x + Sqrt[x²+4]) / 2` — are
+  numericalized at the precision carried by the inputs (machine or MPFR).
+- Symbolic order (or exact non-integer order with no `N` applied) stays
+  unevaluated.
+
+Derivatives (native, via `src/calculus/deriv.c`):
+- `D[LucasL[n], n]` and both partials of `D[LucasL[n, x], ...]` are provided,
+  e.g. `D[LucasL[n, x], x] = (n (2 LucasL[n-1, x] + x LucasL[n, x])) / (4 + x²)`.
+
+```
+In[1]:= Table[LucasL[n], {n, 10}]
+Out[1]= {1, 3, 4, 7, 11, 18, 29, 47, 76, 123}
+In[2]:= LucasL[7, x]
+Out[2]= 7 x + 14 x^3 + 7 x^5 + x^7
+In[3]:= LucasL[-11.]
+Out[3]= -199.
+In[4]:= N[LucasL[11/3], 50]
+Out[4]= 5.9239626529619554101356978621940126287519855422362
 ```
 
 ## PrimeQ
@@ -1399,6 +1629,47 @@ Out[12]= False
 
 In[11]:= IrreduciblePolynomialQ[x^7 + 12 x y - 11, Extension -> All]
 Out[11]= True
+```
+
+## MinimalPolynomial
+- `MinimalPolynomial[s, x]`: Returns the lowest-degree polynomial in `x` with
+  integer coefficients, positive leading coefficient, and content `1` (GCD of
+  coefficients equal to `1`) having the algebraic number `s` as a root.
+- `MinimalPolynomial[s]`: Returns the minimal polynomial as a pure function
+  (e.g. `1 - 10 #1^2 + #1^4 &`).
+- `MinimalPolynomial[s, x, Extension -> a]`: Returns the characteristic
+  polynomial of `s` in `Q(a)` over `Q(a)` — equal to `m_s(x)^([Q(a):Q]/[Q(s):Q])`
+  when `s` lies in `Q(a)`; otherwise the call is left unevaluated.
+
+**Features**:
+- `Listable`, `Protected`. A `List` first argument threads element-wise.
+- `s` may be built from integers and rationals, radicals (`Sqrt`,
+  `Power[_, p/q]`), the imaginary unit, roots of unity (`Power[E, I Pi r]`),
+  `Root[f &, k]` objects, and the field operations `Plus`/`Times`/`Power`.
+- Non-algebraic input (e.g. `Pi`, `Log[2]`) is left unevaluated.
+
+**Algorithm**: each algebraic atom of `s` is replaced by a fresh auxiliary
+variable carrying a polynomial defining relation (negative powers become
+reciprocal variables `D w - 1`, so every relation stays polynomial). The
+auxiliaries are eliminated from `x - s` by repeated `Resultant`, the result is
+made primitive over `Z` and factored, and the unique irreducible factor that
+vanishes at `s` (chosen by a high-precision numeric test) is returned. The
+`Extension` form uses the tower law on the degrees produced by the same core,
+with membership `s ∈ Q(a)` verified through the primitive-element degree
+`[Q(a, s) : Q] = [Q(a) : Q]`.
+
+```
+In[1]:= MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
+Out[1]= 1 - 10 x^2 + x^4
+
+In[2]:= MinimalPolynomial[(1 + I)/Sqrt[2], x]
+Out[2]= 1 + x^4
+
+In[3]:= MinimalPolynomial[Root[2 #1^3 - 2 #1 + 7 &, 1] + 17, x]
+Out[3]= -9785 + 1732 x - 102 x^2 + 2 x^3
+
+In[4]:= MinimalPolynomial[Sqrt[2], x, Extension -> E^(I Pi/4)]
+Out[4]= 4 - 4 x^2 + x^4
 ```
 
 ## PrimePi

@@ -288,22 +288,121 @@ static void test_argt_one(void) {
              "GroebnerBasis[List[Plus[-1, Power[x, 2]]]]");
 }
 
-static void test_nimpl_groebner_walk_falls_back(void) {
-    mute_stderr_once();
-    /* Method -> "GroebnerWalk" emits nimpl and falls back to Buchberger. */
+static void test_groebner_walk_matches_buchberger(void) {
+    /* Method -> "GroebnerWalk" now computes the basis via the Gröbner walk;
+     * by reduced-GB uniqueness the result is identical to Buchberger. */
     check_eq("GroebnerBasis[{x^2-2y^2, x y-3}, {x, y}, "
              "Method -> \"GroebnerWalk\"]",
              "List[Plus[-9, Times[2, Power[y, 4]]], "
                   "Plus[Times[3, x], Times[-2, Power[y, 3]]]]");
 }
 
-static void test_nimpl_coeff_domain_integers_falls_back(void) {
+/* The walk output equals the direct Buchberger output (lex) on a system
+ * the engine handles quickly.  Comparing the two bases with == is a
+ * self-checking oracle: no hard-coded basis needed. */
+static void test_walk_matches_buchberger_3var(void) {
+    check_true("GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}] == "
+               "GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, Method -> \"GroebnerWalk\"]");
+}
+
+static void test_walk_single_variable(void) {
+    /* n_vars == 1: all orders coincide; the walk short-circuits. */
+    check_eq("GroebnerBasis[{x^2-1, x^3-x}, {x}, Method -> \"GroebnerWalk\"]",
+             "List[Plus[-1, Power[x, 2]]]");
+}
+
+static void test_walk_ideal_one(void) {
+    /* A unit in the ideal: the basis is {1} in every order. */
+    check_eq("GroebnerBasis[{x+1, y+2, 5}, {x, y}, "
+             "Method -> \"GroebnerWalk\"]",
+             "List[1]");
+}
+
+/* The identity weight matrix is exactly Lexicographic. */
+static void test_matrix_order_identity_is_lex(void) {
+    check_true("GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, MonomialOrder -> Lexicographic] == "
+               "GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, MonomialOrder -> {{1,0,0},{0,1,0},{0,0,1}}]");
+}
+
+/* The grevlex matrix is exactly DegreeReverseLexicographic. */
+static void test_matrix_order_grevlex_is_degrevlex(void) {
+    check_true("GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, MonomialOrder -> DegreeReverseLexicographic] == "
+               "GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, MonomialOrder -> {{1,1,1},{0,0,-1},{0,-1,0}}]");
+}
+
+/* A genuine weight matrix evaluates without raising nimpl (the issue
+ * example).  We only assert it produces a list, not its exact content. */
+static void test_matrix_order_weighted_no_error(void) {
+    check_eq("Head[GroebnerBasis[{-5x^2+y z-x-1, 2x+3 x y+y^2, "
+             "x-3y+x z-2 z^2}, {x,y,z}, "
+             "MonomialOrder -> {{1,3,1},{-1,2,0},{4,-3,2}}]]",
+             "List");
+}
+
+/* The walk reaches the same basis as direct Buchberger for a weight-matrix
+ * target order too. */
+static void test_matrix_order_walk_matches_direct(void) {
+    check_true("GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, MonomialOrder -> {{1,3,1},{-1,2,0},{4,-3,2}}] == "
+               "GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, MonomialOrder -> {{1,3,1},{-1,2,0},{4,-3,2}}, "
+               "Method -> \"GroebnerWalk\"]");
+}
+
+/* A rank-deficient matrix is not a term order: nimpl + lex fallback. */
+static void test_matrix_order_invalid_falls_back(void) {
     mute_stderr_once();
-    /* CoefficientDomain -> Integers not implemented -> nimpl + fall back. */
+    check_true("GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, MonomialOrder -> Lexicographic] == "
+               "GroebnerBasis[{x^2+y^2+z^2-1, x y+y z+z x, x y z-1}, "
+               "{x,y,z}, MonomialOrder -> {{1,1,1},{2,2,2},{0,0,1}}]");
+}
+
+/* CoefficientDomain -> Integers: strong Gröbner basis over Z.  Over Z the
+ * leading coefficients are not units, so the strong basis carries extra
+ * generators beyond the rational basis (here 4 rather than 2). */
+static void test_coeff_domain_integers_strong_basis(void) {
     check_eq("GroebnerBasis[{x^2-2y^2, x y-3}, {x, y}, "
              "CoefficientDomain -> Integers]",
              "List[Plus[-9, Times[2, Power[y, 4]]], "
-                  "Plus[Times[3, x], Times[-2, Power[y, 3]]]]");
+                  "Plus[Times[3, x], Times[-2, Power[y, 3]]], "
+                  "Plus[-3, Times[x, y]], "
+                  "Plus[Power[x, 2], Times[-2, Power[y, 2]]]]");
+}
+
+/* Strong basis exposes integer GCD combinations: <2x, 3x> = <x> over Z
+ * (gcd(2, 3) = 1), and <2x+2, 3x+3> = <x+1>. */
+static void test_coeff_domain_integers_gcd_combination(void) {
+    check_eq("GroebnerBasis[{2 x, 3 x}, x, CoefficientDomain -> Integers]",
+             "List[x]");
+    check_eq("GroebnerBasis[{2 x + 2, 3 x + 3}, x, "
+             "CoefficientDomain -> Integers]",
+             "List[Plus[1, x]]");
+}
+
+/* The documented strong-basis example: five generators over Z (the
+ * rational basis has three).  `a` is an ordinary variable of Z[x, y, a]. */
+static void test_coeff_domain_integers_documented(void) {
+    check_eq("GroebnerBasis[{a x^2 + 5 x - 1, 2 x + 3 x y + y^2}, {x, y}, "
+             "CoefficientDomain -> Integers]",
+             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], "
+                       "Times[-15, Power[y, 3]], Times[a, Power[y, 4]]], "
+                  "Plus[18, Times[4, Times[a, x]], Times[27, y], "
+                       "Times[45, Power[y, 2]], "
+                       "Times[2, Times[a, Power[y, 2]]], "
+                       "Times[-3, Times[a, Power[y, 3]]]], "
+                  "Plus[Times[2, x], Times[3, Times[x, y]], Power[y, 2]], "
+                  "Plus[6, Times[2, Times[a, x]], Times[9, y], "
+                       "Times[a, x, y], Times[15, Power[y, 2]], "
+                       "Times[a, Power[y, 2]], "
+                       "Times[-1, Times[a, Power[y, 3]]]], "
+                  "Plus[-1, Times[5, x], Times[a, Power[x, 2]]]]");
 }
 
 static void test_nimpl_deglex_falls_back(void) {
@@ -341,6 +440,70 @@ static void test_parametric_coeffs_in_q_of_a(void) {
                        "Times[-3, Times[a, Power[y, 3]]]], "
                   "Plus[Times[2, x], Times[3, Times[x, y]], "
                        "Power[y, 2]]]");
+}
+
+/* CoefficientDomain -> Polynomials[a]: `a` is a coefficient-ring
+ * variable, i.e. a parameter.  This is exactly the auto-parameter
+ * behaviour, so the basis equals the default. */
+static void test_coeff_domain_polynomials_equals_default(void) {
+    check_true("GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}, "
+               "CoefficientDomain -> Polynomials[a]] == "
+               "GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}]");
+}
+
+/* CoefficientDomain -> InexactNumbers[p]: the basis is the exact basis
+ * made monic with p-digit real coefficients.  We assert the shape
+ * (3 polynomials) and a representative coefficient (the second
+ * polynomial's constant term is 18/4 = 4.5) robustly via Round. */
+static void test_coeff_domain_inexact_numbers(void) {
+    check_true("Length[GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}, "
+               "CoefficientDomain -> InexactNumbers[20]]] == 3");
+    check_true("Round[2 * GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, "
+               "{x, y}, CoefficientDomain -> InexactNumbers[20]][[2, 1]]] "
+               "== 9");
+}
+
+/* Inexact (Real) input coefficients are rationalised before the
+ * Buchberger run, so a real-coefficient system still produces a basis
+ * (previously gb_from_expr rejected reals and the call was left
+ * unevaluated).  1.0 x^2 + ... == x^2 + ... after rationalisation. */
+static void test_real_input_rationalised(void) {
+    check_true("GroebnerBasis[{1.0 x^2 - 2.0 y^2, x y - 3}, {x, y}] == "
+               "GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]");
+}
+
+/* CoefficientDomain -> RationalFunctions: the parameters live in the
+ * coefficient field Q(a), so they are units and a generator whose main
+ * leading monomial is a multiple of another's becomes redundant.  Matches
+ * Mathematica's documented two-element basis (the default basis with the
+ * `2x + 3xy + y^2` generator removed). */
+static void test_coeff_domain_rational_functions(void) {
+    check_eq("GroebnerBasis[{a x^2+5 x-1, 2 x+3 x y+y^2}, {x, y}, "
+             "CoefficientDomain -> RationalFunctions]",
+             "List[Plus[-4, Times[-12, y], Times[-19, Power[y, 2]], "
+                       "Times[-15, Power[y, 3]], Times[a, Power[y, 4]]], "
+                  "Plus[18, Times[4, Times[a, x]], Times[27, y], "
+                       "Times[45, Power[y, 2]], "
+                       "Times[2, Times[a, Power[y, 2]]], "
+                       "Times[-3, Times[a, Power[y, 3]]]]]");
+}
+
+/* With no parameters Q(params) == Q, so RationalFunctions must reproduce
+ * the ordinary rational basis. */
+static void test_coeff_domain_rational_functions_no_params(void) {
+    check_true("GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}, "
+               "CoefficientDomain -> RationalFunctions] == "
+               "GroebnerBasis[{x^2 - 2 y^2, x y - 3}, {x, y}]");
+}
+
+/* Field elimination of x: from {a x + b y, x^2 - y} over Q(a, b) we get
+ * b^2 y^2 - a^2 y and a x + b y (substituting x = -b y / a). */
+static void test_coeff_domain_rational_functions_eliminates(void) {
+    check_eq("GroebnerBasis[{a x + b y, x^2 - y}, {x, y}, "
+             "CoefficientDomain -> RationalFunctions]",
+             "List[Plus[Times[-1, Times[Power[a, 2], y]], "
+                       "Times[Power[b, 2], Power[y, 2]]], "
+                  "Plus[Times[a, x], Times[b, y]]]");
 }
 
 /* ------------------------------------------------------------------ */
@@ -514,10 +677,26 @@ int main(void) {
     TEST(test_attributes_protected);
     TEST(test_argt_zero);
     TEST(test_argt_one);
-    TEST(test_nimpl_groebner_walk_falls_back);
-    TEST(test_nimpl_coeff_domain_integers_falls_back);
+    TEST(test_groebner_walk_matches_buchberger);
+    TEST(test_walk_matches_buchberger_3var);
+    TEST(test_walk_single_variable);
+    TEST(test_walk_ideal_one);
+    TEST(test_matrix_order_identity_is_lex);
+    TEST(test_matrix_order_grevlex_is_degrevlex);
+    TEST(test_matrix_order_weighted_no_error);
+    TEST(test_matrix_order_walk_matches_direct);
+    TEST(test_matrix_order_invalid_falls_back);
+    TEST(test_coeff_domain_integers_strong_basis);
+    TEST(test_coeff_domain_integers_gcd_combination);
+    TEST(test_coeff_domain_integers_documented);
     TEST(test_nimpl_deglex_falls_back);
     TEST(test_non_polynomial_unevaluated);
+    TEST(test_coeff_domain_polynomials_equals_default);
+    TEST(test_coeff_domain_inexact_numbers);
+    TEST(test_real_input_rationalised);
+    TEST(test_coeff_domain_rational_functions);
+    TEST(test_coeff_domain_rational_functions_no_params);
+    TEST(test_coeff_domain_rational_functions_eliminates);
     TEST(test_parametric_coeffs_in_q_of_a);
     TEST(test_membership_input_in_ideal);
     TEST(test_idempotency_no_common_roots);

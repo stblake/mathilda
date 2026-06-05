@@ -340,7 +340,7 @@ static Expr* transform_pythag_reduce_impl(const Expr* e) {
     Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
     Expr* call = expr_new_function(
         expr_new_symbol("ReplaceRepeated"), args, 2);
-    Expr* out = evaluate(call);
+    Expr* out = eval_and_free(call);
     if (dbg) simp_debug_log("PythagReduce", e, out,
                             simp_debug_elapsed_ms(t0));
     return out;
@@ -465,7 +465,7 @@ static Expr* transform_pythag_canon_impl(const Expr* e) {
     Expr* pre_args[1] = { expr_copy((Expr*)e) };
     Expr* pre_call = expr_new_function(
         expr_new_symbol("Expand"), pre_args, 1);
-    Expr* pre_expanded = evaluate(pre_call);
+    Expr* pre_expanded = eval_and_free(pre_call);
     if (!pre_expanded) {
         if (dbg) simp_debug_log("PythagCanon", e, best,
                                 simp_debug_elapsed_ms(t0));
@@ -491,7 +491,7 @@ static Expr* transform_pythag_canon_impl(const Expr* e) {
                               expr_copy(rule_sets[i]) };
         Expr* ra_call = expr_new_function(
             expr_new_symbol("ReplaceRepeated"), ra_args, 2);
-        Expr* substituted = evaluate(ra_call);
+        Expr* substituted = eval_and_free(ra_call);
         if (!substituted) continue;
         if (expr_eq(substituted, pre_expanded)) {
             expr_free(substituted);
@@ -500,7 +500,7 @@ static Expr* transform_pythag_canon_impl(const Expr* e) {
         Expr* exp_args[1] = { substituted };
         Expr* exp_call = expr_new_function(
             expr_new_symbol("Expand"), exp_args, 1);
-        Expr* expanded = evaluate(exp_call);
+        Expr* expanded = eval_and_free(exp_call);
         if (!expanded) continue;
         size_t s = score_with_func(expanded, NULL);
         if (s < best_score) {

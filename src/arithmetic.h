@@ -64,6 +64,7 @@ Expr* builtin_rational(Expr* res);
 Expr* builtin_gcd(Expr* res);
 Expr* builtin_add(Expr* res);
 Expr* builtin_lcm(Expr* res);
+Expr* builtin_extendedgcd(Expr* res);
 Expr* builtin_powermod(Expr* res);
 Expr* builtin_primitiveroot(Expr* res);
 Expr* builtin_primitiverootlist(Expr* res);

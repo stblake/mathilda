@@ -31,6 +31,14 @@ void linalg_init(void) {
     symtab_get_def("IdentityMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("DiagonalMatrix", builtin_diagonalmatrix);
     symtab_get_def("DiagonalMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("HilbertMatrix", builtin_hilbertmatrix);
+    symtab_get_def("HilbertMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("HankelMatrix", builtin_hankelmatrix);
+    symtab_get_def("HankelMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("ToeplitzMatrix", builtin_toeplitzmatrix);
+    symtab_get_def("ToeplitzMatrix")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("VandermondeMatrix", builtin_vandermondematrix);
+    symtab_get_def("VandermondeMatrix")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("MatrixPower", builtin_matrixpower);
     symtab_get_def("MatrixPower")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("PositiveDefiniteMatrixQ",
@@ -39,4 +47,8 @@ void linalg_init(void) {
     symtab_add_builtin("NegativeDefiniteMatrixQ",
                        builtin_negative_definite_matrix_q);
     symtab_get_def("NegativeDefiniteMatrixQ")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("LatticeReduce", builtin_latticereduce);
+    symtab_get_def("LatticeReduce")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("FindIntegerNullVector", builtin_findintegernullvector);
+    symtab_get_def("FindIntegerNullVector")->attributes |= ATTR_PROTECTED;
 }

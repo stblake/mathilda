@@ -3,6 +3,7 @@
 #include "common.h"
 #include "symtab.h"
 #include "eval.h"
+#include "iter.h"
 #include "core.h"
 #include "arithmetic.h"
 #include "print.h"
@@ -37,87 +38,38 @@ Expr* builtin_table(Expr* res) {
     
     Expr* expr = res->data.function.args[0];
     Expr* spec = res->data.function.args[1];
-    
-    Expr* var_sym = NULL;
-    Expr* imin_e = NULL;
-    Expr* imax_e = NULL;
-    Expr* di_e = NULL;
-    Expr* list_e = NULL;
-    int is_n_times = 0;
-    int is_list_iter = 0;
-    double min_val = 0, max_val = 0, di_val = 0;
-    bool is_real = false;
 
-    if (spec->type == EXPR_FUNCTION && spec->data.function.head->type == EXPR_SYMBOL && spec->data.function.head->data.symbol == SYM_List) {
-        size_t len = spec->data.function.arg_count;
-        if (len == 1) {
-            imax_e = evaluate(spec->data.function.args[0]);
-            is_n_times = 1;
-        } else if (len >= 2) {
-            var_sym = spec->data.function.args[0];
-            if (var_sym->type != EXPR_SYMBOL) return NULL; 
-            
-            if (len == 2) {
-                Expr* bound = evaluate(spec->data.function.args[1]);
-                if (bound->type == EXPR_FUNCTION && bound->data.function.head->type == EXPR_SYMBOL && bound->data.function.head->data.symbol == SYM_List) {
-                    list_e = bound;
-                    is_list_iter = 1;
-                } else {
-                    imin_e = expr_new_integer(1);
-                    imax_e = bound;
-                    di_e = expr_new_integer(1);
-                }
-            } else if (len == 3) {
-                imin_e = evaluate(spec->data.function.args[1]);
-                imax_e = evaluate(spec->data.function.args[2]);
-                di_e = expr_new_integer(1);
-            } else if (len == 4) {
-                imin_e = evaluate(spec->data.function.args[1]);
-                imax_e = evaluate(spec->data.function.args[2]);
-                di_e = evaluate(spec->data.function.args[3]);
-            } else {
-                return NULL;
-            }
+    /* ---- Parse the iterator spec (shared helper) ---- */
+    IterSpec s;
+    if (!iter_spec_parse(spec, &s)) return NULL;
+
+    int is_n_times   = (s.kind == ITER_KIND_COUNT);
+    int is_list_iter = (s.kind == ITER_KIND_LIST);
+    double min_val = 0, max_val = 0, di_val = 0;
+    bool is_real = false, is_inf = false;
+
+    /* Table does not iterate to Infinity; allow_inf = false. */
+    if (!is_list_iter) {
+        if (!iter_spec_resolve_numeric(&s, /*allow_inf=*/false,
+                                       &min_val, &max_val, &di_val,
+                                       &is_real, &is_inf)) {
+            iter_spec_free(&s);
+            return NULL;
         }
-    } else {
-        imax_e = evaluate(spec);
-        is_n_times = 1;
     }
-    
-    if (is_n_times) {
-        if (imax_e->type != EXPR_INTEGER) goto L_fail;
-    } else if (!is_list_iter) {
-        if (imin_e->type == EXPR_REAL || imax_e->type == EXPR_REAL || di_e->type == EXPR_REAL) is_real = true;
-        
-        int64_t n, d;
-        if (imin_e->type == EXPR_INTEGER) min_val = (double)imin_e->data.integer;
-        else if (imin_e->type == EXPR_REAL) min_val = imin_e->data.real;
-        else if (is_rational(imin_e, &n, &d)) min_val = (double)n / d;
-        else goto L_fail;
-        
-        if (imax_e->type == EXPR_INTEGER) max_val = (double)imax_e->data.integer;
-        else if (imax_e->type == EXPR_REAL) max_val = imax_e->data.real;
-        else if (is_rational(imax_e, &n, &d)) max_val = (double)n / d;
-        else goto L_fail;
-        
-        if (di_e->type == EXPR_INTEGER) di_val = (double)di_e->data.integer;
-        else if (di_e->type == EXPR_REAL) di_val = di_e->data.real;
-        else if (is_rational(di_e, &n, &d)) di_val = (double)n / d;
-        else goto L_fail;
-        
-        if (di_val == 0) goto L_fail;
-    }
-    
+
+    /* Convenience aliases into the owned IterSpec (freed via iter_spec_free). */
+    Expr* var_sym = s.var;
+    Expr* imin_e  = s.imin;
+    Expr* imax_e  = s.imax;
+    Expr* di_e    = s.di;
+    Expr* list_e  = s.list;
+
     size_t results_cap = 16;
     size_t results_count = 0;
     Expr** results = malloc(sizeof(Expr*) * results_cap);
 
-    Rule* old_own = NULL;
-    if (var_sym) {
-        SymbolDef* def = symtab_get_def(var_sym->data.symbol);
-        old_own = def->own_values;
-        def->own_values = NULL;
-    }
+    Rule* old_own = iter_spec_shadow(var_sym);
 
     if (is_n_times) {
         int64_t n = imax_e->data.integer;
@@ -161,34 +113,12 @@ Expr* builtin_table(Expr* res) {
         if (curr_e) expr_free(curr_e);
     }
 
-    if (var_sym) {
-        SymbolDef* def = symtab_get_def(var_sym->data.symbol);
-        Rule* temp_own = def->own_values;
-        while (temp_own) {
-            Rule* next = temp_own->next;
-            expr_free(temp_own->pattern);
-            expr_free(temp_own->replacement);
-            free(temp_own);
-            temp_own = next;
-        }
-        def->own_values = old_own;
-    }
-
-    if (imax_e) expr_free(imax_e);
-    if (imin_e) expr_free(imin_e);
-    if (di_e) expr_free(di_e);
-    if (list_e) expr_free(list_e);
+    iter_spec_restore(var_sym, old_own);
+    iter_spec_free(&s);
 
     Expr* result_list = expr_new_function(expr_new_symbol("List"), results, results_count);
     free(results);
     return result_list;
-
-L_fail:
-    if (imin_e) expr_free(imin_e);
-    if (imax_e) expr_free(imax_e);
-    if (di_e) expr_free(di_e);
-    if (list_e) expr_free(list_e);
-    return NULL;
 }
 
 static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_count, size_t current_dim, Expr** current_args) {
@@ -1354,6 +1284,8 @@ void list_init(void) {
     symtab_add_builtin("Split", builtin_split);
     symtab_add_builtin("Total", builtin_total);
     symtab_add_builtin("Accumulate", builtin_accumulate);
+    symtab_add_builtin("Differences", builtin_differences);
+    symtab_add_builtin("Ratios", builtin_ratios);
     symtab_add_builtin("Commonest", builtin_commonest);
     symtab_add_builtin("Min", builtin_min);
     symtab_add_builtin("Max", builtin_max);
@@ -1384,6 +1316,8 @@ void list_init(void) {
     symtab_get_def("Split")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Total")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Accumulate")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Differences")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Ratios")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Commonest")->attributes |= ATTR_PROTECTED;
     symtab_get_def("Min")->attributes |= ATTR_FLAT | ATTR_NUMERICFUNCTION | ATTR_ONEIDENTITY | ATTR_ORDERLESS | ATTR_PROTECTED;
     symtab_get_def("Max")->attributes |= ATTR_FLAT | ATTR_NUMERICFUNCTION | ATTR_ONEIDENTITY | ATTR_ORDERLESS | ATTR_PROTECTED;
@@ -1650,6 +1584,266 @@ Expr* builtin_accumulate(Expr* res) {
     Expr* result = expr_new_function(expr_copy(head), out, n);
     free(out);
     return result;
+}
+
+/* ---- Differences ----------------------------------------------------------
+ *
+ * Differences[list]              successive (first) differences of list.
+ * Differences[list, n]           n-fold first differences (length l - n).
+ * Differences[list, n, s]        n-fold differences of elements step s apart
+ *                                (length l - n|s|).
+ * Differences[list, {n1, n2,..}] successive n_k-th differences at level k of a
+ *                                nested list / array.
+ *
+ * The element-wise subtraction list[[i+s]] - list[[i]] is built as
+ * Subtract[hi, lo] and reduced by the evaluator, so integers, bignums, machine
+ * doubles, symbolic terms, and whole sublists (matrix rows, via the Listable
+ * Plus/Times that Subtract rewrites to) all combine correctly. Because row
+ * subtraction threads element-wise, Differences[m, n] on a matrix m takes
+ * differences of successive rows, matching Differences[m, {n, 0}].
+ */
+
+/* Returns the evaluated expression (minuend - subtrahend). The operands are
+ * copied; ownership of the result transfers to the caller. */
+static Expr* diff_minus(Expr* minuend, Expr* subtrahend) {
+    Expr** args = malloc(sizeof(Expr*) * 2);
+    args[0] = expr_copy(minuend);
+    args[1] = expr_copy(subtrahend);
+    Expr* sub = expr_new_function(expr_new_symbol("Subtract"), args, 2);
+    free(args);
+    return eval_and_free(sub);
+}
+
+/* One difference pass with nonzero integer step s over the top level of lst
+ * (an EXPR_FUNCTION). The result keeps lst's head. For s > 0 the i-th element
+ * is elem[i+s] - elem[i]; for s < 0 it is elem[i] - elem[i+|s|]. A list whose
+ * length does not exceed |s| yields the empty list. */
+static Expr* diff_once(Expr* lst, int64_t s) {
+    Expr* head = lst->data.function.head;
+    size_t n = lst->data.function.arg_count;
+    int64_t a = (s < 0) ? -s : s;
+
+    if ((int64_t)n <= a) {
+        return expr_new_function(expr_copy(head), NULL, 0);
+    }
+
+    size_t outn = n - (size_t)a;
+    Expr** out = malloc(sizeof(Expr*) * outn);
+    for (size_t i = 0; i < outn; i++) {
+        Expr* lo = lst->data.function.args[i];
+        Expr* hi = lst->data.function.args[i + (size_t)a];
+        out[i] = (s > 0) ? diff_minus(hi, lo) : diff_minus(lo, hi);
+    }
+    Expr* result = expr_new_function(expr_copy(head), out, outn);
+    free(out);
+    return result;
+}
+
+/* Apply diff_once with step s a total of n times. Returns a fresh expression
+ * (a copy of lst when n == 0). */
+static Expr* diff_n_step(Expr* lst, int64_t n, int64_t s) {
+    Expr* cur = expr_copy(lst);
+    for (int64_t k = 0; k < n; k++) {
+        Expr* nxt = diff_once(cur, s);
+        expr_free(cur);
+        cur = nxt;
+    }
+    return cur;
+}
+
+/* Multidimensional differences: apply levels[0] step-1 first differences at the
+ * top level, then recurse into each element with the remaining levels. */
+static Expr* diff_levels(Expr* lst, const int64_t* levels, size_t num) {
+    if (num == 0 || lst->type != EXPR_FUNCTION) {
+        return expr_copy(lst);
+    }
+
+    Expr* cur = diff_n_step(lst, levels[0], 1);
+    if (num == 1) {
+        return cur;
+    }
+
+    size_t m = cur->data.function.arg_count;
+    Expr* head = cur->data.function.head;
+    Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) {
+        out[i] = diff_levels(cur->data.function.args[i], levels + 1, num - 1);
+    }
+    Expr* result = expr_new_function(expr_copy(head), out, m);
+    free(out);
+    expr_free(cur);
+    return result;
+}
+
+Expr* builtin_differences(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 3) return NULL;
+
+    Expr* lst = res->data.function.args[0];
+    if (lst->type != EXPR_FUNCTION) return NULL;
+
+    /* Differences[list, {n1, n2, ...}] — per-level differences. */
+    if (argc == 2 && is_listq(res->data.function.args[1])) {
+        Expr* spec = res->data.function.args[1];
+        size_t num = spec->data.function.arg_count;
+        if (num == 0) return expr_copy(lst);
+
+        int64_t* levels = malloc(sizeof(int64_t) * num);
+        for (size_t i = 0; i < num; i++) {
+            Expr* e = spec->data.function.args[i];
+            if (e->type != EXPR_INTEGER || e->data.integer < 0) {
+                free(levels);
+                return NULL;
+            }
+            levels[i] = e->data.integer;
+        }
+        Expr* result = diff_levels(lst, levels, num);
+        free(levels);
+        return result;
+    }
+
+    /* Differences[list], Differences[list, n], Differences[list, n, s]. */
+    int64_t n = 1, s = 1;
+    if (argc >= 2) {
+        Expr* an = res->data.function.args[1];
+        if (an->type != EXPR_INTEGER || an->data.integer < 0) return NULL;
+        n = an->data.integer;
+    }
+    if (argc == 3) {
+        Expr* as = res->data.function.args[2];
+        if (as->type != EXPR_INTEGER || as->data.integer == 0) return NULL;
+        s = as->data.integer;
+    }
+
+    return diff_n_step(lst, n, s);
+}
+
+/* ---- Ratios ----------------------------------------------------------------
+ *
+ * Ratios[list]                   successive (first) ratios of list.
+ * Ratios[list, n]                n-fold iterated ratios (length l - n).
+ * Ratios[list, {n1, n2, ...}]    successive n_k-th ratios at level k of a
+ *                                nested list / array.
+ *
+ * Ratios is the multiplicative analog of Differences: the element-wise
+ * subtraction list[[i+1]] - list[[i]] becomes the division list[[i+1]] /
+ * list[[i]], built as Divide[hi, lo] and reduced by the evaluator. Integers,
+ * bignums (-> exact Rationals), machine doubles, symbolic terms, and whole
+ * sublists (matrix rows, via the Listable Power/Times that Divide rewrites to)
+ * all combine correctly. Because row division threads element-wise,
+ * Ratios[m, n] on a matrix m takes ratios of successive rows within each
+ * column, matching Ratios[m, {n, 0}]. FoldList[Times, x, Ratios[list]] inverts
+ * Ratios.
+ */
+
+/* Returns the evaluated expression (numerator / denominator). The operands are
+ * copied; ownership of the result transfers to the caller. */
+static Expr* ratio_divide(Expr* numerator, Expr* denominator) {
+    Expr** args = malloc(sizeof(Expr*) * 2);
+    args[0] = expr_copy(numerator);
+    args[1] = expr_copy(denominator);
+    Expr* div = expr_new_function(expr_new_symbol("Divide"), args, 2);
+    free(args);
+    return eval_and_free(div);
+}
+
+/* One ratio pass over the top level of lst (an EXPR_FUNCTION). The result keeps
+ * lst's head; the i-th element is elem[i+1] / elem[i]. A list of length <= 1
+ * yields the empty list. */
+static Expr* ratio_once(Expr* lst) {
+    Expr* head = lst->data.function.head;
+    size_t n = lst->data.function.arg_count;
+
+    if (n <= 1) {
+        return expr_new_function(expr_copy(head), NULL, 0);
+    }
+
+    size_t outn = n - 1;
+    Expr** out = malloc(sizeof(Expr*) * outn);
+    for (size_t i = 0; i < outn; i++) {
+        Expr* lo = lst->data.function.args[i];
+        Expr* hi = lst->data.function.args[i + 1];
+        out[i] = ratio_divide(hi, lo);
+    }
+    Expr* result = expr_new_function(expr_copy(head), out, outn);
+    free(out);
+    return result;
+}
+
+/* Apply ratio_once a total of n times. Returns a fresh expression (a copy of
+ * lst when n == 0). */
+static Expr* ratio_n(Expr* lst, int64_t n) {
+    Expr* cur = expr_copy(lst);
+    for (int64_t k = 0; k < n; k++) {
+        Expr* nxt = ratio_once(cur);
+        expr_free(cur);
+        cur = nxt;
+    }
+    return cur;
+}
+
+/* Multidimensional ratios: apply levels[0] first ratios at the top level, then
+ * recurse into each element with the remaining levels. */
+static Expr* ratio_levels(Expr* lst, const int64_t* levels, size_t num) {
+    if (num == 0 || lst->type != EXPR_FUNCTION) {
+        return expr_copy(lst);
+    }
+
+    Expr* cur = ratio_n(lst, levels[0]);
+    if (num == 1) {
+        return cur;
+    }
+
+    size_t m = cur->data.function.arg_count;
+    Expr* head = cur->data.function.head;
+    Expr** out = malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) {
+        out[i] = ratio_levels(cur->data.function.args[i], levels + 1, num - 1);
+    }
+    Expr* result = expr_new_function(expr_copy(head), out, m);
+    free(out);
+    expr_free(cur);
+    return result;
+}
+
+Expr* builtin_ratios(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) return NULL;
+
+    Expr* lst = res->data.function.args[0];
+    if (lst->type != EXPR_FUNCTION) return NULL;
+
+    /* Ratios[list, {n1, n2, ...}] — per-level ratios. */
+    if (argc == 2 && is_listq(res->data.function.args[1])) {
+        Expr* spec = res->data.function.args[1];
+        size_t num = spec->data.function.arg_count;
+        if (num == 0) return expr_copy(lst);
+
+        int64_t* levels = malloc(sizeof(int64_t) * num);
+        for (size_t i = 0; i < num; i++) {
+            Expr* e = spec->data.function.args[i];
+            if (e->type != EXPR_INTEGER || e->data.integer < 0) {
+                free(levels);
+                return NULL;
+            }
+            levels[i] = e->data.integer;
+        }
+        Expr* result = ratio_levels(lst, levels, num);
+        free(levels);
+        return result;
+    }
+
+    /* Ratios[list], Ratios[list, n]. */
+    int64_t n = 1;
+    if (argc == 2) {
+        Expr* an = res->data.function.args[1];
+        if (an->type != EXPR_INTEGER || an->data.integer < 0) return NULL;
+        n = an->data.integer;
+    }
+
+    return ratio_n(lst, n);
 }
 
 Expr* builtin_listq(Expr* res) {

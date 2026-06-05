@@ -905,6 +905,127 @@ Out[9]= 1
 > `cplx_t = {re, im}` struct stands in for `double _Complex` to keep
 > the build strictly C99.
 
+## LatticeReduce
+Gives an LLL-reduced basis for a lattice.
+- `LatticeReduce[m]` — `m` an `n × d` matrix whose rows are the lattice
+  generators.
+
+**Features**:
+- `Protected`.
+- Returns an `n × d` matrix whose rows form a reduced basis of the same
+  lattice (same `Z`- / `Z[i]`-module).
+- Entries may be integers, rationals, Gaussian integers, or Gaussian
+  rationals (`Complex[a, b]` with exact `a`, `b`).
+- Exact Lenstra–Lenstra–Lovász reduction (Lovász parameter `δ = 3/4`)
+  carried out entirely in GMP rational arithmetic — no floating point —
+  so it is correct for both machine-size and arbitrary-precision (bignum)
+  inputs. This matters for integer-relation finding, where a rounding
+  error would yield a wrong relation.
+- The Gram–Schmidt orthogonalisation uses the Hermitian inner product
+  `⟨x, y⟩ = Σ x_k conj(y_k)`, so real and Gaussian lattices share one
+  code path; size reduction rounds to the nearest Gaussian integer.
+- The lattice — and hence `Abs[Det]` and every linear relation in the
+  right null space — is preserved exactly.
+- The rows must be linearly independent; a dependent generating set is
+  reported with `LatticeReduce::dep`.
+- Diagnostics: `LatticeReduce::argx` (wrong argument count),
+  `LatticeReduce::matrix` (not a non-empty rectangular matrix),
+  `LatticeReduce::latm` (an entry is not rational).
+
+```mathematica
+In[1]:= LatticeReduce[{{1, 0, 0, 1345}, {0, 1, 0, 35}, {0, 0, 1, 154}}]
+Out[1]= {{0, 9, -2, 7}, {1, 1, -9, -6}, {1, -3, -8, 8}}
+
+In[2]:= {w1, w2} = LatticeReduce[{{12, 2}, {13, 4}}]
+Out[2]= {{1, 2}, {9, -4}}
+
+(* Integer-relation finding: x0 + a1 x1 + a2 x2 == 0 for a1=2, a2=3 *)
+In[3]:= a = {{1, 0, 0, -1}, {0, 1, 0, -2}, {0, 0, 1, -3}};
+        b = LatticeReduce[a]
+Out[3]= {{1, 0, 0, -1}, {-1, 1, 0, -1}, {-1, -1, 1, 0}}
+
+In[4]:= b . {1, 2, 3, 1}    (* relations preserved *)
+Out[4]= {0, 0, 0}
+
+In[5]:= LatticeReduce[{{1, 2}, {3, 4.5}}]
+LatticeReduce::latm: Matrix contains an entry that is not rational.
+Out[5]= LatticeReduce[{{1, 2}, {3, 4.5}}]
+```
+
+> Implementation lives in `src/linalg/latticereduce.c` (registered by
+> `linalg_init`). Each Gaussian-rational scalar is a pair of GMP `mpq_t`
+> (`GRat`); the Gram–Schmidt data (`μ`, `|b*|²`) is computed once and
+> maintained incrementally — updated in place on size reduction and on a
+> Lovász swap via the conjugate-aware Cohen swap formulas — so no full
+> recomputation is needed.
+
+## FindIntegerNullVector
+Finds an integer relation among a list of numbers (PSLQ).
+- `FindIntegerNullVector[{x1, …, xn}]` — integers `{a1, …, an}`, not all
+  zero, with `a1 x1 + … + an xn == 0`.
+- `FindIntegerNullVector[{x1, …, xn}, d]` — restricts the search to
+  relations of norm `≤ d`.
+
+**Features**:
+- `Protected`.
+- The `xi` may be **real or complex**, **exact or inexact**. For complex
+  `xi` the `ai` are **Gaussian integers**.
+- Built on the exact LLL machinery of `LatticeReduce`: the numbers are
+  numericalised to a working precision `b` and embedded as the rows
+  `(e_i | round(2^b x_i))` of an integer-relation lattice; the relation is
+  read off the shortest reduced row.
+- **Validation.** For exact `xi` the residual `a·x` is checked with
+  `PossibleZeroQ`; a confidence guard (`n·log2(‖a‖²) < 1.35·b`) rejects
+  large-coefficient artefacts that hold to only a few digits, forcing a
+  precision increase. For inexact `xi` the relation holds to the precision
+  of the input.
+- **Precision** (`WorkingPrecision` option, default `Automatic`): inexact
+  input uses the precision of the input; exact input starts at
+  `$MachinePrecision` and escalates up to
+  `$MachinePrecision + $MaxExtraPrecision` digits. An explicit digit count
+  fixes the precision (no escalation).
+- **Certified bound.** The rigorous LLL Gram–Schmidt bound
+  `λ₁(L)² ≥ minᵢ |b*ᵢ|²` gives a lower bound
+  `B = √(M² / (1 + n/4))` on the norm of *any* integer relation (`M² =
+  minᵢ |b*ᵢ|²`), conditional on the numeric evaluation being correct to
+  precision. `B` drives the no-relation diagnostics. Because this is the
+  LLL bound (not the tighter PSLQ bound Wolfram reports), it is
+  conservative: near the minimal-relation norm Mathilda may return the
+  relation with a `lgrelb` message where Wolfram proves nonexistence.
+- Relations are returned up to sign and (for complex input) up to a
+  Gaussian-unit multiple — `{a}`, `{-a}`, and `{I a}` are all valid null
+  vectors.
+- Diagnostics: `FindIntegerNullVector::norel` (proven no relation with
+  norm `≤ d`), `::lgrelb` (a relation was found but it exceeds `d`, and
+  nonexistence is proven only below a smaller bound — the larger relation
+  is returned), `::rnfb` (inexact/bounded: none found `≤ d`, proven none
+  below a smaller bound), `::rnfu` (exact/unbounded: no relation found
+  within the precision cap), `::ztest1` (the residual could not be
+  proven zero and is assumed zero). When no vector is returned the call is
+  left unevaluated.
+
+```mathematica
+In[1]:= FindIntegerNullVector[{Log[2], Log[4]}]
+Out[1]= {-2, 1}
+
+In[2]:= FindIntegerNullVector[{Pi, ArcTan[1/5], ArcTan[1/239]}]
+Out[2]= {1, -16, 4}                 (* Machin's formula *)
+
+In[3]:= a = Sqrt[2] + 3^(1/3); FindIntegerNullVector[a^Range[0, 6]]
+Out[3]= {1, -36, 12, -6, -6, 0, 1}  (* minimal polynomial coefficients *)
+
+In[4]:= FindIntegerNullVector[{1, 2 I + Sqrt[3], (2 I + Sqrt[3])^2}]
+Out[4]= {-7, -4 I, 1}               (* Gaussian-integer relation *)
+
+In[5]:= FindIntegerNullVector[{E, Pi}, 1000000]
+FindIntegerNullVector::norel: There is no integer null vector for {E, Pi}.
+Out[5]= FindIntegerNullVector[{E, Pi}, 1000000]
+```
+
+> Implementation lives in `src/linalg/latticereduce.c` alongside
+> `LatticeReduce`, reusing its exact Gaussian-rational LLL kernel
+> (`lll_reduce`, extended to report `minᵢ |b*ᵢ|²`).
+
 ## QRDecomposition
 Gives the QR decomposition of a matrix.
 - `QRDecomposition[m]` — returns `{q, r}` such that
@@ -1284,6 +1405,203 @@ Out[2]= {{0, a, 0}, {0, 0, b}, {0, 0, 0}}
 
 In[3]:= DiagonalMatrix[{1, 2, 3}, 0, {3, 5}]
 Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
+```
+
+## HilbertMatrix
+Generates a Hilbert matrix, whose `(i, j)` entry is `1/(i + j - 1)`.
+- `HilbertMatrix[n]`: Gives the `n x n` Hilbert matrix.
+- `HilbertMatrix[{m, n}]`: Gives the `m x n` Hilbert matrix.
+
+**Features**:
+- `Protected`.
+- Entries are exact `Rational`s by default. The matrix is symmetric and
+  notoriously ill-conditioned, making it a standard test case for numeric
+  linear-algebra routines.
+- The `WorkingPrecision` option chooses the entry representation:
+  - `WorkingPrecision -> Infinity` (default): exact `Rational`s.
+  - `WorkingPrecision -> MachinePrecision`: machine-precision `Real`s.
+  - `WorkingPrecision -> d`: `d`-digit arbitrary-precision (MPFR) `Real`s.
+    A digit count at or below machine precision (or a build without MPFR)
+    degrades to machine `Real`s.
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `WorkingPrecision` | `Infinity` | precision at which to create entries |
+
+**Diagnostics** (the call is returned unevaluated):
+```
+  HilbertMatrix::argx: HilbertMatrix called with 0 arguments; 1 argument is expected.
+  HilbertMatrix::dims: Dimension specification <spec> should be a positive machine integer or a pair of positive machine integers.
+  HilbertMatrix::nonopt: Options expected (instead of <expr>) beyond position 1 in HilbertMatrix[...]. An option must be a rule or a list of rules.
+```
+
+```mathematica
+In[1]:= HilbertMatrix[3]
+Out[1]= {{1, 1/2, 1/3}, {1/2, 1/3, 1/4}, {1/3, 1/4, 1/5}}
+
+In[2]:= HilbertMatrix[{3, 5}]
+Out[2]= {{1, 1/2, 1/3, 1/4, 1/5}, {1/2, 1/3, 1/4, 1/5, 1/6}, {1/3, 1/4, 1/5, 1/6, 1/7}}
+
+In[3]:= HilbertMatrix[3, WorkingPrecision -> MachinePrecision]
+Out[3]= {{1., 0.5, 0.333333}, {0.5, 0.333333, 0.25}, {0.333333, 0.25, 0.2}}
+
+In[4]:= Det[HilbertMatrix[3]]
+Out[4]= 1/2160
+
+In[5]:= Inverse[HilbertMatrix[3]]
+Out[5]= {{9, -36, 30}, {-36, 192, -180}, {30, -180, 180}}
+```
+
+## HankelMatrix
+Generates a Hankel matrix — a matrix that is constant along its
+antidiagonals. The `(i, j)` entry is `c_{i+j-1}` when `i + j - 1 <= m`, and
+`r_{i+j-m}` otherwise (with `m` the number of rows). Hankel matrices arise in
+approximation theory, functional analysis, numerical analysis, and signal
+processing.
+- `HankelMatrix[n]`: Gives the `n x n` Hankel matrix whose first row and
+  first column are the successive integers `1..n`, with zeros below the main
+  antidiagonal.
+- `HankelMatrix[{c1, ..., cm}]`: Gives the `m x m` Hankel matrix whose first
+  column is the given list, with zeros below the antidiagonal.
+- `HankelMatrix[{c1, ..., cm}, {r1, ..., rn}]`: Gives the `m x n` Hankel
+  matrix with the first list down the first column and the second list across
+  the last row.
+
+**Features**:
+- `Protected`.
+- Entries are copied verbatim, so symbolic, exact, complex, machine and
+  arbitrary-precision entries all flow through unchanged; precision comes from
+  the entries themselves (e.g. ``1`20``) or from wrapping the result in `N`.
+  The antidiagonal fill is the exact integer `0`.
+- For `m = n` the matrix is symmetric, and has real eigenvalues when the
+  entries are real.
+- The shared corner element `c_m` must equal `r_1`. If they differ, the
+  column element `c_m` is used (the formula never reads `r_1`) and a
+  `HankelMatrix::crs` warning is emitted; the matrix is still produced.
+
+**Diagnostics**:
+```
+  HankelMatrix::argb: HankelMatrix called with 0 arguments; between 1 and 3 arguments are expected.
+  HankelMatrix::crs: Warning: the column element <c_m> and row element <r_1> at positions <m> and 1 are not the same. Using column element.
+```
+A first argument that is neither a positive integer nor a list (and any
+over-arity call) is returned unevaluated.
+
+```mathematica
+In[1]:= HankelMatrix[4]
+Out[1]= {{1, 2, 3, 4}, {2, 3, 4, 0}, {3, 4, 0, 0}, {4, 0, 0, 0}}
+
+In[2]:= HankelMatrix[{a, b, c, d}]
+Out[2]= {{a, b, c, d}, {b, c, d, 0}, {c, d, 0, 0}, {d, 0, 0, 0}}
+
+In[3]:= HankelMatrix[{x, y, z}, {z, a, b, c, d}]
+Out[3]= {{x, y, z, a, b}, {y, z, a, b, c}, {z, a, b, c, d}}
+
+In[4]:= HankelMatrix[{1, 1 + 2 I, 3 + 4 I}]
+Out[4]= {{1, 1 + 2 I, 3 + 4 I}, {1 + 2 I, 3 + 4 I, 0}, {3 + 4 I, 0, 0}}
+
+In[5]:= N[HankelMatrix[3]]
+Out[5]= {{1., 2., 3.}, {2., 3., 0.}, {3., 0., 0.}}
+```
+
+## ToeplitzMatrix
+Generates a Toeplitz matrix — a matrix that is constant along its diagonals.
+The `(i, j)` entry is `c_{i-j+1}` when `i >= j`, and `r_{j-i+1}` otherwise.
+Toeplitz matrices arise in approximation theory, signal processing, statistics
+and time series.
+- `ToeplitzMatrix[n]`: Gives the `n x n` Toeplitz matrix whose first row and
+  first column are the successive integers `1..n` (entry `(i, j)` is
+  `|i - j| + 1`, so the matrix is symmetric).
+- `ToeplitzMatrix[{c1, ..., cn}]`: Gives the `n x n` symmetric Toeplitz matrix
+  whose first column (and first row) is the given list.
+- `ToeplitzMatrix[{c1, ..., cm}, {r1, ..., rn}]`: Gives the `m x n` Toeplitz
+  matrix with the first list down the first column and the second list across
+  the first row.
+
+**Features**:
+- `Protected`.
+- Entries are copied verbatim, so symbolic, exact, complex, machine and
+  arbitrary-precision entries all flow through unchanged; precision comes from
+  the entries themselves (e.g. ``1`20``) or from wrapping the result in `N`.
+  The single-list form is plain symmetric (no conjugation).
+- For `m = n` the matrix is symmetric, and has real eigenvalues when the
+  entries are real.
+- The shared corner element `c_1` must equal `r_1`. If they differ, the
+  column element `c_1` is used (the formula never reads `r_1`, which sits on
+  the diagonal as `c_1`) and a `ToeplitzMatrix::crs` warning is emitted; the
+  matrix is still produced.
+
+**Diagnostics**:
+```
+  ToeplitzMatrix::argb: ToeplitzMatrix called with 0 arguments; between 1 and 3 arguments are expected.
+  ToeplitzMatrix::crs: Warning: the column element <c_1> and row element <r_1> at positions 1 and 1 are not the same. Using column element.
+```
+A first argument that is neither a positive integer nor a list (and any
+over-arity call) is returned unevaluated.
+
+```mathematica
+In[1]:= ToeplitzMatrix[4]
+Out[1]= {{1, 2, 3, 4}, {2, 1, 2, 3}, {3, 2, 1, 2}, {4, 3, 2, 1}}
+
+In[2]:= ToeplitzMatrix[{a, b, c, d}]
+Out[2]= {{a, b, c, d}, {b, a, b, c}, {c, b, a, b}, {d, c, b, a}}
+
+In[3]:= ToeplitzMatrix[{1, 2, 3, 4, 5}, {1, 6, 7}]
+Out[3]= {{1, 6, 7}, {2, 1, 6}, {3, 2, 1}, {4, 3, 2}, {5, 4, 3}}
+
+In[4]:= ToeplitzMatrix[{1, 2, 3}, {1, 4, 5, 6, 7}]
+Out[4]= {{1, 4, 5, 6, 7}, {2, 1, 4, 5, 6}, {3, 2, 1, 4, 5}}
+
+In[5]:= N[ToeplitzMatrix[3]]
+Out[5]= {{1., 2., 3.}, {2., 1., 2.}, {3., 2., 1.}}
+```
+
+## VandermondeMatrix
+Generates a Vandermonde matrix — a matrix whose rows are the successive powers
+of a sequence of nodes. The `(i, j)` entry is `xi^(j-1)`, so the first column
+is all ones, the second column is the nodes themselves, the third their
+squares, and so on. Vandermonde matrices arise in polynomial interpolation and
+in computing moments in the monomial basis.
+- `VandermondeMatrix[{x1, ..., xn}]`: Gives the `n x n` Vandermonde matrix on
+  the nodes `xi`.
+- `VandermondeMatrix[{x1, ..., xn}, k]`: Gives the `n x k` Vandermonde matrix.
+
+**Features**:
+- `Protected`.
+- The nodes need not be numerical and need not be distinct. Symbolic nodes stay
+  as `Power` expressions; numeric powers fold to their value. Precision comes
+  from the nodes themselves (e.g. ``2`20``) or from wrapping the result in `N`.
+- The first column is the literal integer `1` (`xi^0`), so a zero node reads as
+  `1` there rather than `Indeterminate` — matching the interpolation semantics.
+- For distinct nodes the matrix is non-confluent and `LinearSolve[V, b]`
+  recovers the coefficients `{a0, a1, ...}` of the polynomial
+  `p(x) = a0 + a1 x + ...` through the points `{xi, bi}`. The determinant is the
+  product of node differences `prod_{i<j} (xj - xi)`.
+
+**Diagnostics**:
+```
+  VandermondeMatrix::argt: VandermondeMatrix called with 0 arguments; 1 or 2 arguments are expected.
+```
+An empty node list, a non-list first argument, a non-positive integer `k`, the
+single-argument structured-array conversion form `VandermondeMatrix[vmat]`
+(unsupported — Mathilda has no structured-array representation), and any
+over-arity call are returned unevaluated.
+
+```mathematica
+In[1]:= VandermondeMatrix[{x1, x2, x3, x4}]
+Out[1]= {{1, x1, x1^2, x1^3}, {1, x2, x2^2, x2^3}, {1, x3, x3^2, x3^3}, {1, x4, x4^2, x4^3}}
+
+In[2]:= VandermondeMatrix[{2, 3, 5}]
+Out[2]= {{1, 2, 4}, {1, 3, 9}, {1, 5, 25}}
+
+In[3]:= VandermondeMatrix[{a, b, c}, 2]
+Out[3]= {{1, a}, {1, b}, {1, c}}
+
+In[4]:= Factor[Det[VandermondeMatrix[{a, b, c}]]]
+Out[4]= (-a + b) (-a + c) (-b + c)
+
+In[5]:= LinearSolve[VandermondeMatrix[{1, 2, 3}], {6, 11, 18}]
+Out[5]= {3, 2, 1}
 ```
 
 ## LinearSolve

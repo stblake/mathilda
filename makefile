@@ -3,7 +3,7 @@ USE_MPFR ?= 1
 USE_LAPACK ?= 1
 
 CC = gcc
-CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/linalg -I./src/poly -I./src/simp -I./src/calculus -I/usr/local/include
+CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/linalg -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I/usr/local/include
 LDFLAGS = -lreadline -L/usr/local/lib -lgmp -lm
 
 ifeq ($(USE_ECM), 1)
@@ -66,7 +66,7 @@ ifeq ($(USE_LAPACK), 1)
 endif
 
 SRC_DIR = src
-SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c)
+SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c)
 OBJ = $(SRC:.c=.o)
 TARGET = Mathilda
 

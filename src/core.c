@@ -38,6 +38,8 @@
 #include "poly.h"
 #include "rat.h"
 #include "facint.h"
+#include "fibonacci.h"
+#include "lucas.h"
 #include "facpoly.h"
 #include "solve.h"
 #include "findroot.h"
@@ -67,6 +69,7 @@
 #endif
 #include "rat.h"
 #include "parfrac.h"
+#include "contfrac.h"
 #include "random.h"
 #include "picostrings.h"
 #include "series.h"
@@ -111,6 +114,14 @@ static void system_constants_init(void) {
     /* Machine-precision quantities — exact IEEE 754 limits of the local
      * double type. */
     register_system_constant("$MachinePrecision", expr_new_real(NUMERIC_MACHINE_PRECISION_DIGITS));
+    /* $MaxExtraPrecision bounds the auto-precision a numeric search (e.g.
+     * FindIntegerNullVector) may add beyond $MachinePrecision.  Unlike the
+     * other constants it is user-settable, so it is NOT marked Protected. */
+    {
+        Expr* sym = expr_new_symbol("$MaxExtraPrecision");
+        symtab_add_own_value("$MaxExtraPrecision", sym, expr_new_real(50.0));
+        expr_free(sym);
+    }
     register_system_constant("$MachineEpsilon",   expr_new_real(DBL_EPSILON));
     register_system_constant("$MinMachineNumber", expr_new_real(DBL_MIN));
     register_system_constant("$MaxMachineNumber", expr_new_real(DBL_MAX));
@@ -155,6 +166,7 @@ void core_init(void) {
     system_constants_init();
     repl_hooks_init();
     parfrac_init();
+    contfrac_init();
     modular_init();
     symtab_add_builtin("AtomQ", builtin_atomq);
     symtab_add_builtin("Identity", builtin_identity);
@@ -386,6 +398,7 @@ void core_init(void) {
     symtab_add_builtin("QuotientRemainder", builtin_quotientremainder);
     symtab_add_builtin("GCD", builtin_gcd);
     symtab_add_builtin("LCM", builtin_lcm);
+    symtab_add_builtin("ExtendedGCD", builtin_extendedgcd);
     symtab_add_builtin("PowerMod", builtin_powermod);
     symtab_add_builtin("PrimitiveRoot", builtin_primitiveroot);
     symtab_add_builtin("PrimitiveRootList", builtin_primitiverootlist);
@@ -423,6 +436,7 @@ void core_init(void) {
     symtab_get_def("QuotientRemainder")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("GCD")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
     symtab_get_def("LCM")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
+    symtab_get_def("ExtendedGCD")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("PowerMod")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_get_def("PrimitiveRoot")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_get_def("PrimitiveRootList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
@@ -440,6 +454,8 @@ void core_init(void) {
     symtab_get_def("HoldForm")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
 
     facint_init();
+    fibonacci_init();
+    lucas_init();
 
     Expr* zero = expr_new_integer(0);
     Expr* one = expr_new_integer(1);
@@ -465,6 +481,8 @@ void core_init(void) {
     simp_init();
     logexp_init();
     piecewise_init();
+    void interp_init(void);
+    interp_init();
     int_init();
     real_init();
     attr_init();
@@ -476,6 +494,8 @@ void core_init(void) {
     squarefreeq_init();
     void irrpolyq_init(void);
     irrpolyq_init();
+    void minpoly_init(void);
+    minpoly_init();
     rat_init();
     expand_init();
     solve_init();
@@ -525,6 +545,8 @@ void core_init(void) {
     solvealways_init();
     void integrate_init(void);
     integrate_init();
+    void sum_init(void);
+    sum_init();
     void zero_test_init(void);
     zero_test_init();
 }
@@ -2585,13 +2607,13 @@ Expr* builtin_time_constrained(Expr* res) {
      * evaluate_step frees `res` once we return non-NULL; the builtin
      * convention is "don't double-free." */
     if (kind == 0) {
-        return evaluate(expr_copy(expr_arg));
+        return eval_and_free(expr_copy(expr_arg));
     }
 
     /* Non-positive (zero, negative, NaN) budgets abort immediately. */
     if (!(seconds > 0.0)) {
         if (fail_arg) {
-            return evaluate(expr_copy(fail_arg));
+            return eval_and_free(expr_copy(fail_arg));
         }
         return expr_new_symbol("$Aborted");
     }
@@ -2697,7 +2719,7 @@ Expr* builtin_time_constrained(Expr* res) {
              * down, with a fresh CPU budget.  Mathematica's semantics
              * say "TimeConstrained evaluates failexpr only if the
              * evaluation is aborted." */
-            return evaluate(expr_copy(fail_arg));
+            return eval_and_free(expr_copy(fail_arg));
         }
         return expr_new_symbol("$Aborted");
     }

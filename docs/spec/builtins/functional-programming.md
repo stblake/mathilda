@@ -69,6 +69,165 @@ In[7]:= Function[{a, b}, {Length[Unevaluated[a]], Length[Unevaluated[b]]}, HoldF
 Out[7]= {3, 0}
 ```
 
+## InterpolatingFunction
+`InterpolatingFunction[domain, table]` represents an approximate function
+whose values are found by interpolation, and — like `Function` — is evaluated
+by applying it to arguments. Any number of real arguments (dimensions) is
+supported.
+
+- `domain`: one interval per dimension, `{{x1min, x1max}, ..., {xmmin, xmmax}}`.
+  The number of intervals `m` is the dimensionality.
+- `table`: the data points, `{{coord1, val1}, {coord2, val2}, ...}`. For `m = 1`
+  each `coord` is a scalar `x`; for `m ≥ 2` each `coord` is a list
+  `{x1, ..., xm}`. The points must fill the Cartesian product of the
+  per-dimension grids (a full tensor grid). Points may be given in any order;
+  they are sorted by abscissa internally.
+- `InterpolatingFunction[...][x1, ..., xm]` returns the interpolated value.
+- `InterpolatingFunction[domain, table, {d1, ..., dm}]` is the optional
+  derivative-annotated form (see **Derivatives**).
+
+**Method**: tensor-product piecewise-polynomial interpolation of default
+order 3 (cubic) in every dimension. For a query point the bracketing interval
+is found in each dimension and a sliding window of `order + 1` consecutive grid
+points, centred on that interval, is selected; the value is the tensor product
+of the per-dimension Newton divided-difference polynomials. The order drops to
+`min(3, n_k - 1)` when a dimension has fewer than four grid points (two →
+linear, three → quadratic). The windowing reproduces Mathematica's default
+piecewise interpolant.
+
+**Derivatives**: `Derivative[d1, ..., dm][InterpolatingFunction[...]]` (and so
+`ifun'`, `D[ifun[x], x]`, `D[f[x,y], {x,2}]`, etc.) returns another
+`InterpolatingFunction` carrying the accumulated derivative orders — exactly as
+in Mathematica. When applied it evaluates the mixed partial
+`∂^{d1}_{x1} ... ∂^{dm}_{xm}` of the windowed interpolant. Orders are additive
+across repeated differentiation, and an order beyond the local polynomial
+degree yields `0`.
+
+**Semantics**:
+- An *exact* argument tuple (Integer/Rational) coinciding with a grid node
+  returns that node's stored value exactly (value queries only); all other
+  queries return a machine real.
+- An argument outside `domain` is extrapolated from the nearest window, and an
+  `InterpolatingFunction::dmval` warning is issued.
+- A symbolic argument, a wrong number of arguments (≠ `m`), or a malformed
+  object (fewer than two grid points in a dimension, an incomplete tensor grid,
+  non-numeric data) leaves the application unevaluated.
+- In standard output only the `domain` is shown; the rest is abbreviated as
+  `<>`. `FullForm` reveals the full structure.
+
+Attribute: `Protected`.
+
+```mathematica
+In[1]:= ifun = InterpolatingFunction[{{0, 5}}, {{0,0},{1,1},{2,3},{3,4},{4,3},{5,0}}]
+Out[1]= InterpolatingFunction[{{0, 5}}, <>]
+
+In[2]:= ifun[2.5]
+Out[2]= 3.6875
+
+In[3]:= ifun[2]
+Out[3]= 3
+
+In[4]:= ifun'[2.5]
+Out[4]= 1.04167
+
+In[5]:= f = InterpolatingFunction[{{0, 4}, {0, 4}}, {{{0,0},0}, ..., {{4,4},80}}];
+        f[1.5, 2.5]              (* tensor-product 2-D interpolation *)
+Out[5]= 17.875
+
+In[6]:= Derivative[0, 1][f][1.5, 2.5]
+Out[6]= 18.75
+```
+
+## Interpolation
+`Interpolation[data]` constructs an [`InterpolatingFunction`](#interpolatingfunction)
+object that agrees with `data` at every supplied point. The data may be given as:
+
+- `{f1, f2, ...}` — function values at `x = 1, 2, ...`.
+- `{{x1, f1}, {x2, f2}, ...}` — values at the given abscissae.
+- `{{{x1, y1, ...}, f1}, ...}` — values on a full m-dimensional tensor grid.
+- `{{{x1, ...}, f1, df1, ddf1, ...}, ...}` — values **and supplied derivatives**
+  at each node; `df` is the gradient (`D[f,{vars,1}]`, a scalar in 1-D, a length-m
+  vector in m-D), `ddf` the Hessian (`D[f,{vars,2}]`), and so on.
+
+`Interpolation[data, x]` builds the function and immediately evaluates it at the
+point `x` (a number, or an `{x, y, ...}` coordinate list in m-D).
+
+**Methods.** Value-only data uses sliding-window Newton interpolation by default.
+
+- `Method -> "Spline"` — natural cubic spline (C², second derivative zero at the
+  ends; reduces to linear for two points).
+- `Method -> "Hermite"` — piecewise cubic Hermite with node slopes estimated by
+  3-point finite differences (reproduces quadratics exactly).
+- Derivative-supplied data is interpolated by **tensor-product Hermite** of
+  per-dimension order `k = max(K, 1)`, where `K` is the highest supplied
+  derivative order. Mixed partials not present in the data (e.g. `f_xy` from
+  gradient-only data) are filled by central finite differences across the grid.
+  This reproduces a cubic from `{f, f'}` and a quintic from `{f, f', f''}`
+  exactly, and likewise for separable polynomials in m-D.
+
+**Options.**
+
+- `InterpolationOrder -> n` — degree of the piecewise-polynomial pieces
+  (default `3`; `0` piecewise-constant, `1` piecewise-linear). Carried on the
+  object and preserved through differentiation.
+- `PeriodicInterpolation -> True` — build a periodic interpolant. The period in
+  each dimension is the data span, and the data must repeat its first sample at
+  the last (`f(x_max) = f(x_min)`). Out-of-range arguments wrap (no `dmval`
+  warning); the seam is handled by wrap-around windows for the default/Hermite
+  methods and a **cyclic** cubic spline for `Method -> "Spline"`. A per-dimension
+  list `{True, False, …}` selects periodicity per axis.
+
+**Vector/array-valued data.** A sample `f_i` may itself be a list or array (with
+explicit coordinates, e.g. `{{x}, {v1, v2}}`). Each component is interpolated
+independently and the result is an array of the same shape. This composes with
+every method, with supplied derivatives (whose tensors carry the value-array axes
+first, then the derivative axes), in n-D, and at MPFR precision.
+
+The domain is inferred from the data (the min/max abscissa in each dimension),
+preserving the data's number type (integer abscissae give an integer domain).
+
+**Precision.** Interpolation is carried out at machine precision for machine data
+and at the data's MPFR precision when the data or the evaluation point carry
+arbitrary precision; the result is an `EXPR_MPFR` real in that case. All methods
+and data forms support both precisions. The interpolants are mathematically
+standard (passing through every data point and honouring every supplied
+derivative); interior values need not match Wolfram's B-spline output bit-for-bit.
+
+Attribute: `Protected`.
+
+```mathematica
+In[1]:= f = Interpolation[{1, 2, 3, 5, 8, 5}]
+Out[1]= InterpolatingFunction[{{1, 6}}, <>]
+
+In[2]:= f[2.5]
+Out[2]= 2.4375
+
+In[3]:= Interpolation[{1, 5, 7, 2, 3, 1}, InterpolationOrder -> 1][2.5]
+Out[3]= 6.
+
+In[4]:= Interpolation[{1, 4, 9, 16, 25}, Method -> "Hermite"][2.5]  (* x^2 *)
+Out[4]= 6.25
+
+In[5]:= (* f = x^3 with f and f' supplied: cubic reproduced exactly *)
+        c = Interpolation[{{{0}, 0, 0}, {{1}, 1, 3}, {{2}, 8, 12}, {{3}, 27, 27}}];
+        {c[1.5], c'[1.5]}
+Out[5]= {3.375, 6.75}
+
+In[6]:= (* high-precision data -> high-precision result *)
+        Interpolation[N[{1, 2, 3, 5, 8, 5}, 30], Method -> "Spline"][N[5/2, 30]]
+Out[6]= 2.473086124401913875598086124405
+
+In[7]:= (* vector-valued: each component interpolated independently *)
+        fv = Interpolation[{{{0.}, {1., 2.}}, {{1.2}, {3., 4.}}, {{2.1}, {5., 4.}}, {{3.}, {0., 4.}}}];
+        fv[1.5]
+Out[7]= {4.03175, 4.07143}
+
+In[8]:= (* periodic: f[x] wraps with period = data span (5) *)
+        fp = Interpolation[Table[{x, N[Sin[2 Pi x/5]]}, {x, 0, 5}], PeriodicInterpolation -> True];
+        {fp[0.5], fp[5.5], fp[-4.5]}
+Out[8]= {0.557674, 0.557674, 0.557674}
+```
+
 ## Map (/@)
 - `f /@ expr` or `Map[f, expr]`
 

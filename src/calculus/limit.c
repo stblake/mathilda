@@ -3028,8 +3028,7 @@ static Expr* builtin_limit_impl(Expr* res) {
             }
             Expr* call = expr_new_function(mk_sym("Limit"), new_args, nargs);
             free(new_args);
-            results[i] = evaluate(call);
-            /* evaluate already freed `call`'s internal tree. */
+            results[i] = eval_and_free(call);
         }
         Expr* out = expr_new_function(mk_sym("List"), results, k);
         free(results);

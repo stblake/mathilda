@@ -4,6 +4,13 @@ date_started: 2026-05-11
 status: in progress
 ---
 
+<!-- 2026-06-01: Ratios builtin (src/list.c) implemented as the multiplicative
+     analog of Differences. builtin_ratios + ratio_{divide,once,n,levels}
+     helpers; registered + Protected; SYM_Ratios in sym_names; docstring in
+     info.c; docs/spec builtins + changelog + Mathilda_spec row. 28 tests in
+     tests/test_ratios.c all pass; leaks-clean; strict C99 clean. DONE. -->
+
+
 # BronsteinRational closed-form gaps (2026-05-11)
 
 Five failing `Integrate`BronsteinRational[...]` cases.  All five

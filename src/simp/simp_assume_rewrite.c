@@ -269,7 +269,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
                               expr_new_function(expr_new_symbol("Times"),
                                   (Expr*[]){ expr_new_integer(-1), expr_copy(rhs) }, 2) };
         Expr* sum = expr_new_function(expr_new_symbol("Plus"), sub_args, 2);
-        Expr* diff = evaluate(sum);
+        Expr* diff = eval_and_free(sum);
         eq_diffs[i] = diff;
         /* Always emit the direct heavier->lighter rule. */
         eq_count++;
