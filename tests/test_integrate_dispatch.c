@@ -115,6 +115,35 @@ static void test_crctable_termination(void) {
     ASSERT_MSG(t3 < 5.0, "Formula 49 (n=-7) took %.2fs (>5s) — likely diverging.", t3);
 }
 
+static void test_crctable_reciprocal_sqrt_branch(void) {
+    /* Formulas 398-401: 1/Sqrt[1 +- Cos/Sin[x]].  The classical
+     * Sqrt[2] Log[Tan[...]] primitives are real on only every other
+     * inter-pole interval of the integrand and sign-wrong elsewhere (the
+     * integrand carries an absolute value).  The branch-correct forms keep
+     * the literal radical so D[result, x] - integrand vanishes on every
+     * pole-bounded interval, including the one the old form got wrong.
+     *
+     * Each check picks a point on an interval where the OLD form failed:
+     *   1/Sqrt[1-Sin] at x=0.7 (old form -> complex; this was the corpus
+     *   DIFF-NONZERO regression), the Cos/+Sin siblings at x=8 (second
+     *   inter-pole interval).  We assert Abs[diff] < 1e-6 numerically. */
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[1/Sqrt[1 - Sin[x]], x, Method -> \"CRCTable\"], x]"
+        " - 1/Sqrt[1 - Sin[x]]) /. x -> 0.7]] < 0.000001", "True", 0);
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[1/Sqrt[1 - Sin[x]], x, Method -> \"CRCTable\"], x]"
+        " - 1/Sqrt[1 - Sin[x]]) /. x -> 2.6]] < 0.000001", "True", 0);
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[1/Sqrt[1 - Cos[x]], x, Method -> \"CRCTable\"], x]"
+        " - 1/Sqrt[1 - Cos[x]]) /. x -> 8.0]] < 0.000001", "True", 0);
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[1/Sqrt[1 + Cos[x]], x, Method -> \"CRCTable\"], x]"
+        " - 1/Sqrt[1 + Cos[x]]) /. x -> 8.0]] < 0.000001", "True", 0);
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[1/Sqrt[1 + Sin[x]], x, Method -> \"CRCTable\"], x]"
+        " - 1/Sqrt[1 + Sin[x]]) /. x -> 8.0]] < 0.000001", "True", 0);
+}
+
 void test_integrate_dispatch(void) {
     symtab_init();
     core_init();
@@ -124,6 +153,7 @@ void test_integrate_dispatch(void) {
     TEST(test_method_strict_rational);
     TEST(test_method_invalid);
     TEST(test_crctable_termination);
+    TEST(test_crctable_reciprocal_sqrt_branch);
 
     printf("All Integrate dispatch tests passed!\n");
 }

@@ -33,6 +33,7 @@
 #include "modular.h"
 #include "sort.h"
 #include "stats.h"
+#include "fit.h"
 #include "info.h"
 #include "expand.h"
 #include "poly.h"
@@ -523,6 +524,7 @@ void core_init(void) {
     ludecomp_init();
     void svdecomp_init(void);
     svdecomp_init();
+    fit_init();
     readwrite_init();
     files_init();
     random_init();
@@ -2527,6 +2529,34 @@ void tc_check_deadline(void) {
     siglongjmp(tc_jmp_env, 1);
 }
 
+/* Portable "do not inline" hint.  GCC/Clang both define __GNUC__. */
+#if defined(__GNUC__)
+#  define TC_NOINLINE __attribute__((noinline))
+#else
+#  define TC_NOINLINE
+#endif
+
+/* Evaluate `body` under the already-armed SIGPROF timer / cooperative
+ * deadline.  The sigsetjmp lives HERE, isolated from builtin_time_constrained,
+ * for two reasons:
+ *   1. Correctness — `result` is the only automatic whose value must survive
+ *      a siglongjmp, and it is qualified `volatile` so its post-jump value is
+ *      well-defined (C99 §7.13.2.1p3).
+ *   2. Keeping the setjmp out of the caller stops GCC's conservative
+ *      -Wclobbered from flagging every non-volatile local (and inlined helper
+ *      temporary) in builtin_time_constrained.
+ * On the timeout path evaluate() never returns, so the partially-built tree
+ * rooted at `body` is leaked — an unavoidable consequence of unwinding with
+ * siglongjmp, identical to the behaviour before this refactor.  Marked
+ * TC_NOINLINE so the isolation cannot be undone by the optimiser. */
+static TC_NOINLINE Expr* tc_run_guarded(Expr* body) {
+    Expr* volatile result = NULL;
+    if (sigsetjmp(tc_jmp_env, 1) == 0) {
+        result = evaluate(body);
+    }
+    return result;
+}
+
 /* Returns:
  *   +1  success, *out_seconds is a finite, possibly zero, possibly
  *       negative numeric time budget.
@@ -2678,10 +2708,7 @@ Expr* builtin_time_constrained(Expr* res) {
         tc_deadline_active = 0;
     }
 
-    Expr* result = NULL;
-    if (sigsetjmp(tc_jmp_env, 1) == 0) {
-        result = evaluate(expr_copy(expr_arg));
-    }
+    Expr* result = tc_run_guarded(expr_copy(expr_arg));
 
     /* Restore the cooperative-deadline state first, so that any
      * tc_check_deadline call racing during the teardown below sees the

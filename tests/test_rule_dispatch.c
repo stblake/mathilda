@@ -130,6 +130,63 @@ static void test_dispatch_meta_optional(void) {
     ASSERT(r->dispatch_arity == -1);
 }
 
+static void test_dispatch_meta_nested_optional_head(void) {
+    /* Regression: a function-call slot whose head is fixed-arity but whose
+     * argument is Optional must NOT specialise on that head. An omitted
+     * Optional collapses the call to its base form, so a concrete value
+     * matching the slot need not be headed by the call's head:
+     *   Power[b_, n_.] matches a bare `b` as b^1   (head Symbol, not Power)
+     *   Times[a_., x_] matches `x`                 (head Symbol, not Times)
+     * If first_arg_head_canon were "Power"/"Times", the §3.5 filter would
+     * skip the rule for those collapsed inputs. */
+    symtab_clear_symbol("f5b");
+    /* f5b[Power[b_, n_.]] := {b, n} -- arity 1, first slot must be wildcard. */
+    add_down("f5b", "f5b[Power[b_, n_.]]", "{b, n}");
+    Rule* r = symtab_get_down_values("f5b");
+    ASSERT(r != NULL);
+    ASSERT(r->dispatch_arity == 1);
+    ASSERT(r->first_arg_head_canon == NULL);
+
+    symtab_clear_symbol("f5c");
+    /* f5c[Times[a_., x_]] := {a, x} -- same, Optional in a Times slot. */
+    add_down("f5c", "f5c[Times[a_., x_]]", "{a, x}");
+    r = symtab_get_down_values("f5c");
+    ASSERT(r != NULL);
+    ASSERT(r->dispatch_arity == 1);
+    ASSERT(r->first_arg_head_canon == NULL);
+
+    /* Control: NO Optional -> head must still be specialised. */
+    symtab_clear_symbol("f5d");
+    add_down("f5d", "f5d[Power[b_, n_]]", "{b, n}");
+    r = symtab_get_down_values("f5d");
+    ASSERT(r != NULL);
+    ASSERT(r->dispatch_arity == 1);
+    ASSERT(r->first_arg_head_canon == intern_symbol("Power"));
+}
+
+static void test_functional_nested_optional_collapses(void) {
+    /* The rule must actually FIRE on a collapsed-Optional input that does
+     * not share the pattern's call head -- this is what the filter fix
+     * unblocks end-to-end. */
+    symtab_clear_symbol("fp");
+    add_down("fp", "fp[Power[b_, n_.]]", "{b, n}");
+
+    char* s = eval_str("fp[k]");          /* k as k^1 */
+    ASSERT_STR_EQ(s, "{k, 1}");
+    free(s);
+
+    s = eval_str("fp[w^3]");              /* explicit Power still matches */
+    ASSERT_STR_EQ(s, "{w, 3}");
+    free(s);
+
+    symtab_clear_symbol("ft");
+    add_down("ft", "ft[Times[a_., x_]]", "{a, x}");
+
+    s = eval_str("ft[z]");                /* z as 1*z */
+    ASSERT_STR_EQ(s, "{1, z}");
+    free(s);
+}
+
 static void test_dispatch_meta_literal_int(void) {
     symtab_clear_symbol("f6");
     /* f6[0] := 0 -- arity 1, first arg head Integer (literal atom) */
@@ -491,6 +548,7 @@ int main(void) {
     TEST(test_dispatch_meta_function_head);
     TEST(test_dispatch_meta_sequence_pattern);
     TEST(test_dispatch_meta_optional);
+    TEST(test_dispatch_meta_nested_optional_head);
     TEST(test_dispatch_meta_literal_int);
     TEST(test_dispatch_meta_holdpattern_transparency);
 
@@ -506,6 +564,7 @@ int main(void) {
     TEST(test_functional_head_dispatch);
     TEST(test_functional_sequence_pattern_still_fires);
     TEST(test_functional_typed_blank_dispatch);
+    TEST(test_functional_nested_optional_collapses);
 
     TEST(test_filter_skips_wildcard_arg_rules);
     TEST(test_heavy_downvalue_dispatch);

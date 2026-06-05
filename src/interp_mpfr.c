@@ -787,7 +787,9 @@ Expr* interp_eval_mpfr(Expr* domain, Expr* table, size_t m,
 
     MFun f;
     if (!build_grid_m(domain, table, m, periodic, prec, &f)) {
-        for (size_t k = 0; k < m; k++) mpfr_clear(p[k]); free(p); return NULL;
+        for (size_t k = 0; k < m; k++) mpfr_clear(p[k]);
+        free(p);
+        return NULL;
     }
 
     /* Reduce periodic coordinates into [x0, x0 + P). */
@@ -829,7 +831,8 @@ Expr* interp_eval_mpfr(Expr* domain, Expr* table, size_t m,
     free(comps);
 
     mfun_free(&f);
-    for (size_t k = 0; k < m; k++) mpfr_clear(p[k]); free(p);
+    for (size_t k = 0; k < m; k++) mpfr_clear(p[k]);
+    free(p);
     return result;
 }
 

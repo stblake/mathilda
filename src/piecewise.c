@@ -15,6 +15,7 @@
 #include "eval.h"
 #include "arithmetic.h"
 #include "complex.h"
+#include "numeric.h"
 #include "sym_names.h"
 
 void piecewise_init(void) {
@@ -83,6 +84,14 @@ static bool is_minus_infinity(Expr* e) {
     }
     return false;
 }
+
+#ifdef USE_MPFR
+/* Resolve Floor/Ceiling/Round/IntegerPart of an *exact* real numeric
+ * quantity (e.g. 10000000 3^(2/3), 25000000000000000000 Pi) that the leaf
+ * branches cannot handle. Defined below; forward-declared so do_piecewise_1
+ * can fall back to it. */
+static Expr* do_piecewise_numeric_exact(Expr* x, int op);
+#endif
 
 /*
  * do_piecewise_1:
@@ -279,8 +288,75 @@ static Expr* do_piecewise_1(Expr* x, int op) {
         }
     }
 
+#ifdef USE_MPFR
+    /* Exact real numeric argument that no leaf branch resolved (e.g.
+     * Round[10000000 3^(2/3)], Floor[25000000000000000000 Pi]). Certify
+     * the result by high-precision numeric evaluation. */
+    if (op == OP_FRACPART) {
+        /* FractionalPart[x] = x - IntegerPart[x], kept exact (matches
+         * Mathematica: FractionalPart[10000000 3^(2/3)] stays symbolic as
+         * 10000000 3^(2/3) - 20800838). */
+        Expr* ip = do_piecewise_numeric_exact(x, OP_INTPART);
+        if (ip) {
+            Expr* neg_args[2] = { expr_new_integer(-1), ip };
+            Expr* neg_ip = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+            Expr* sum_args[2] = { expr_copy(x), neg_ip };
+            return eval_and_free(expr_new_function(expr_new_symbol("Plus"), sum_args, 2));
+        }
+        return NULL;
+    }
+    {
+        Expr* r = do_piecewise_numeric_exact(x, op);
+        if (r) return r;
+    }
+#endif
+
     return NULL;
 }
+
+#ifdef USE_MPFR
+/*
+ * do_piecewise_numeric_exact:
+ *   Floor/Ceiling/Round/IntegerPart of an exact real numeric quantity the
+ *   leaf branches above could not resolve. We numericalize `x` to MPFR at
+ *   increasing precision and apply the operation, accepting the result only
+ *   once two successive precisions agree on the integer — an interval-style
+ *   certification that guards against a value sitting arbitrarily close to a
+ *   rounding boundary. Returns NULL (leaving the call unevaluated, never
+ *   wrong) when `x` is not a pure real number or convergence is not reached
+ *   within the precision cap.
+ */
+static Expr* do_piecewise_numeric_exact(Expr* x, int op) {
+    const long max_prec = 1L << 16;   /* ~19,700 decimal digits */
+    Expr* prev = NULL;                /* previous iteration's integer result */
+    for (long prec = 256; prec <= max_prec; prec *= 2) {
+        NumericSpec spec;
+        spec.mode = NUMERIC_MODE_MPFR;
+        spec.bits = prec;
+        Expr* approx = numericalize(x, spec);
+        /* Must collapse to a pure real number; anything else (still
+         * symbolic, or Complex[...]) means `x` is not a real numeric and we
+         * have no business rounding it. */
+        if (!approx || (approx->type != EXPR_MPFR && approx->type != EXPR_REAL
+                        && approx->type != EXPR_INTEGER
+                        && approx->type != EXPR_BIGINT)) {
+            if (approx) expr_free(approx);
+            break;
+        }
+        Expr* cur = do_piecewise_1(approx, op);   /* MPFR/real -> exact int */
+        expr_free(approx);
+        if (!cur) break;
+        if (prev && expr_eq(prev, cur)) {
+            expr_free(prev);
+            return cur;
+        }
+        if (prev) expr_free(prev);
+        prev = cur;
+    }
+    if (prev) expr_free(prev);
+    return NULL;
+}
+#endif
 
 static Expr* make_divide(Expr* num, Expr* den) {
     Expr* pow_args[2] = { expr_copy(den), expr_new_integer(-1) };

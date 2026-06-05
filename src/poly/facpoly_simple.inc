@@ -229,7 +229,20 @@ static Expr* factor_degree_one(Expr* P, Expr** vars, size_t v_count) {
             if (!(G->type == EXPR_INTEGER && G->data.integer == 1)) {
                 Expr* L_G = exact_poly_div(L, G, vars, v_count);
                 Expr* C_G = exact_poly_div(C, G, vars, v_count);
-                
+
+                /* exact_poly_div returns NULL when the division is not exact
+                 * in the working coefficient ring -- e.g. G = gcd(L, C) carries
+                 * radical coefficients (Sqrt[3], ...) so Q[radicals] is not a
+                 * field and L/G need not reconstruct exactly. Without this
+                 * guard the NULL flows into Times[L_G, x] and the evaluator
+                 * dereferences a NULL arg. This var does not factor out
+                 * cleanly; release everything and try the next one. */
+                if (!L_G || !C_G) {
+                    expr_free(L_G); expr_free(C_G);
+                    expr_free(L); expr_free(C); expr_free(G);
+                    continue;
+                }
+
                 Expr* L_G_v = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){L_G, expr_copy(vars[i])}, 2));
                 Expr* prim = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){L_G_v, C_G}, 2));
                 Expr* exp_prim = expr_expand(prim);

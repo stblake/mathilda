@@ -435,6 +435,7 @@ it.
 - Applied component-wise to `Complex` numbers.
 - `Round` rounds to the nearest even integer for ties.
 - `Floor[x, a]` returns the greatest multiple of `a` $\le x$.
+- **Exact real numeric arguments** that no leaf branch resolves (e.g. `Pi`, `E`, surds, and products such as `10000000 3^(2/3)` or `25000000000000000000 Pi`) are numericalized to MPFR at increasing precision and reduced to the exact integer. The result is only accepted once two successive precisions (starting at 256 bits, doubling to a 65536-bit cap) agree on the integer — an interval-style certification that never returns a wrong answer; a value that cannot be certified (or is not a pure real number) is left unevaluated. For `FractionalPart` the answer is kept exact as `x - IntegerPart[x]` (matching Mathematica).
 
 **Symbolic simplifications** (`Floor`, `Ceiling`, `Round` only -- `IntegerPart` and `FractionalPart` are excluded):
 
@@ -470,6 +471,15 @@ Out[3]= 0
 
 In[4]:= Ceiling[Floor[Ceiling[x]]]
 Out[4]= Ceiling[x]
+
+In[5]:= Round[10000000*3^(2/3)]
+Out[5]= 20800838
+
+In[6]:= Round[25000000000000000000 Pi]
+Out[6]= 78539816339744830962
+
+In[7]:= FractionalPart[10000000*3^(2/3)]
+Out[7]= -20800838 + 10000000 3^(2/3)
 ```
 
 ## Chop

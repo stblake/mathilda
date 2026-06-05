@@ -542,6 +542,83 @@ fail:
     return false;
 }
 
+/* --- parsed-grid cache (single entry) ---------------------------------
+ *
+ * Without caching, interp_apply rebuilt the entire tensor grid (abscissae,
+ * strides, node->entry map, value tensor -- O(n) allocations with an O(n^2)
+ * grid_insert term) from scratch on every evaluated point.  Cache the
+ * most-recently-built IFun and reuse it when the next call carries a
+ * structurally identical (domain, table, periodic).  A single entry exactly
+ * serves the common build-once / evaluate-many pattern (e.g. Table[f[x],
+ * {x, ...}]).  Keying on full structural identity (expr_eq) keeps it correct:
+ * redefining the data yields a different table, misses, and rebuilds.
+ * Machine-precision path only; the MPFR kernels are unaffected.  (The other
+ * former per-point O(n) cost -- the evaluator re-evaluating the held-free
+ * table arg -- is removed separately by the HoldAll attribute in interp_init.) */
+static struct {
+    bool   valid;
+    Expr*  domain;       /* owned deep copy */
+    Expr*  table;        /* owned deep copy; f.entryAt points into this */
+    size_t m;
+    bool   has_periodic; /* whether `periodic` below is meaningful */
+    bool*  periodic;     /* owned copy, length m, or NULL */
+    IFun   f;            /* built grid, referencing the cached `table` */
+} g_grid_cache;
+
+/* Release the cached entry (safe on a zeroed cache: frees NULLs / a zero IFun). */
+static void grid_cache_free(void) {
+    expr_free(g_grid_cache.domain);
+    expr_free(g_grid_cache.table);
+    free(g_grid_cache.periodic);
+    ifun_free(&g_grid_cache.f);
+    memset(&g_grid_cache, 0, sizeof(g_grid_cache));
+}
+
+/* Element-wise compare the cached periodicity against (periodic, periodic!=NULL). */
+static bool periodic_match(const bool* periodic, size_t m) {
+    bool has = (periodic != NULL);
+    if (g_grid_cache.has_periodic != has) return false;
+    if (!has) return true;
+    for (size_t k = 0; k < m; k++)
+        if (g_grid_cache.periodic[k] != periodic[k]) return false;
+    return true;
+}
+
+/*
+ * grid_cache_get:
+ *   Return the parsed grid for (domain, table, m, periodic), building and
+ *   caching it on a miss.  The returned IFun is borrowed (owned by the cache) --
+ *   do NOT ifun_free it.  Returns NULL if the grid is malformed (cache stays
+ *   empty), matching build_grid's failure contract.
+ */
+static IFun* grid_cache_get(Expr* domain, Expr* table, size_t m,
+                            const bool* periodic) {
+    if (g_grid_cache.valid && g_grid_cache.m == m
+        && periodic_match(periodic, m)
+        && expr_eq(g_grid_cache.domain, domain)
+        && expr_eq(g_grid_cache.table, table))
+        return &g_grid_cache.f;
+
+    grid_cache_free();
+    g_grid_cache.domain = expr_copy(domain);
+    g_grid_cache.table  = expr_copy(table);
+    g_grid_cache.m      = m;
+    g_grid_cache.has_periodic = (periodic != NULL);
+    if (periodic) {
+        g_grid_cache.periodic = malloc(sizeof(bool) * m);
+        if (!g_grid_cache.periodic) { grid_cache_free(); return NULL; }
+        memcpy(g_grid_cache.periodic, periodic, sizeof(bool) * m);
+    }
+    /* Build against the cached copies so f.entryAt points into stable memory. */
+    if (!build_grid(g_grid_cache.domain, g_grid_cache.table, m,
+                    g_grid_cache.periodic, &g_grid_cache.f)) {
+        grid_cache_free();
+        return NULL;
+    }
+    g_grid_cache.valid = true;
+    return &g_grid_cache.f;
+}
+
 static bool value_component(Expr* entry, const int* cpath, int vrank, double* out);
 
 /* Fill the flat value tensor (component `cpath` of each node value). */
@@ -877,17 +954,18 @@ static Expr* interp_eval_double(Expr* domain, Expr* table, size_t m,
     for (size_t k = 0; k < m; k++)
         if (!node_to_double(call_args[k], &p[k])) { free(p); return NULL; }
 
-    IFun f;
-    if (!build_grid(domain, table, m, periodic, &f)) { free(p); return NULL; }
+    /* Borrowed: owned by the grid cache (do not ifun_free). */
+    IFun* f = grid_cache_get(domain, table, m, periodic);
+    if (!f) { free(p); return NULL; }
 
     /* Reduce periodic coordinates into [x0, x0 + P); warn on aperiodic dims. */
     for (size_t k = 0; k < m; k++) {
-        if (f.periodic[k]) {
-            double x0 = f.grid[k][0], P = f.period[k];
+        if (f->periodic[k]) {
+            double x0 = f->grid[k][0], P = f->period[k];
             double u = x0 + fmod(p[k] - x0, P);
             if (u < x0) u += P;
             p[k] = u;
-        } else if (f.has_range[k] && (p[k] < f.dmin[k] || p[k] > f.dmax[k])) {
+        } else if (f->has_range[k] && (p[k] < f->dmin[k] || p[k] > f->dmax[k])) {
             fprintf(stderr,
                     "InterpolatingFunction::dmval: Input value %g lies outside "
                     "the range of data in the interpolating function. "
@@ -897,7 +975,7 @@ static Expr* interp_eval_double(Expr* domain, Expr* table, size_t m,
 
     size_t vshape[16];
     int vrank;
-    value_shape(entry_value(f.entryAt[0]), vshape, &vrank);
+    value_shape(entry_value(f->entryAt[0]), vshape, &vrank);
     size_t vtotal = 1;
     for (int d = 0; d < vrank; d++) vtotal *= vshape[d];
 
@@ -907,10 +985,9 @@ static Expr* interp_eval_double(Expr* domain, Expr* table, size_t m,
     for (size_t ci = 0; ci < vtotal && ok; ci++) {
         size_t rem = ci;
         for (int d = vrank; d-- > 0; ) { cpath[d] = (int)(rem % vshape[d]); rem /= vshape[d]; }
-        ok = eval_component_double(&f, cpath, vrank, m, p, ders, orders, method, Ksupplied, &comps[ci]);
+        ok = eval_component_double(f, cpath, vrank, m, p, ders, orders, method, Ksupplied, &comps[ci]);
     }
 
-    ifun_free(&f);
     free(p); free(cpath);
     if (!ok) { free(comps); return NULL; }
     size_t idx = 0;
@@ -1314,7 +1391,15 @@ static Expr* builtin_interpolation(Expr* res) {
 
 void interp_init(void) {
     SymbolDef* def = symtab_get_def("InterpolatingFunction");
-    def->attributes |= ATTR_PROTECTED;
+    /* HoldAll: the object's `domain` and `table` arguments are constant,
+     * already-evaluated numeric data (built by Interpolation[] or by
+     * interp_make_derivative).  Without holding them, every application
+     * `ifun[x]` makes the evaluator re-evaluate the entire N-point table on
+     * each call -- an O(N) deep re-traversal that dominated per-point cost.
+     * Holding them keeps the object a true normal form and makes evaluating it
+     * O(1); the application's own argument `x` is still evaluated normally
+     * (attributes of the object head, not InterpolatingFunction, govern that). */
+    def->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
 
     symtab_add_builtin("Interpolation", builtin_interpolation);
     SymbolDef* idef = symtab_get_def("Interpolation");
