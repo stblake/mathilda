@@ -69,6 +69,8 @@ typedef struct {
     Expr**   entryAt;
     long     prec;
     size_t   galloc;     /* mpfr_t's initialised per grid[k] (= npts) */
+    bool*    periodic;   /* per-dimension periodicity */
+    mpfr_t*  period;     /* per-dimension period (grid span); init'd, 0 if aperiodic */
 } MFun;
 
 static void mfun_free(MFun* f) {
@@ -78,7 +80,8 @@ static void mfun_free(MFun* f) {
         }
         free(f->grid);
     }
-    free(f->nk); free(f->stride); free(f->entryAt);
+    if (f->period) { for (size_t k = 0; k < f->m; k++) mpfr_clear(f->period[k]); free(f->period); }
+    free(f->nk); free(f->stride); free(f->entryAt); free(f->periodic);
     memset(f, 0, sizeof(*f));
 }
 
@@ -113,7 +116,8 @@ static size_t bracket_m(mpfr_t* xs, size_t n, const mpfr_t x) {
     return lo;
 }
 
-static bool build_grid_m(Expr* domain, Expr* table, size_t m, long prec, MFun* out) {
+static bool build_grid_m(Expr* domain, Expr* table, size_t m, const bool* periodic,
+                         long prec, MFun* out) {
     (void)domain;
     memset(out, 0, sizeof(*out));
     out->prec = prec;
@@ -163,8 +167,18 @@ static bool build_grid_m(Expr* domain, Expr* table, size_t m, long prec, MFun* o
     mpfr_clear(v);
     for (size_t i = 0; i < total; i++) if (!eat[i]) goto fail_grid;
 
+    bool*   per  = calloc(m, sizeof(bool));
+    mpfr_t* perd = malloc(sizeof(mpfr_t) * m);
+    for (size_t k = 0; k < m; k++) {
+        mpfr_init2(perd[k], prec);
+        per[k] = periodic && periodic[k];
+        if (per[k]) mpfr_sub(perd[k], grid[k][nk[k] - 1], grid[k][0], RND);
+        else mpfr_set_zero(perd[k], 1);
+    }
+
     out->m = m; out->nk = nk; out->grid = grid; out->stride = stride;
     out->total = total; out->entryAt = eat; out->galloc = npts;
+    out->periodic = per; out->period = perd;
     return true;
 
 fail_grid:
@@ -285,6 +299,109 @@ static void spline_eval_m(mpfr_t* xs, mpfr_t* ys, size_t n, const mpfr_t p,
     mpfr_clears(h, A, B, Mi, Mi1, ci, ci1, t1, t2, (mpfr_ptr)0);
 }
 
+/* Periodic (cyclic) cubic spline; mirror of spline_eval_periodic.  xs[0..n-1]
+ * distinct nodes, period P (x_n = x_0 + P), p reduced into [x_0, x_0+P). */
+static void spline_eval_periodic_m(mpfr_t* xs, size_t n, mpfr_t* ys, const mpfr_t P,
+                                   const mpfr_t p, size_t d, mpfr_t out, long prec) {
+    mpfr_t* h = malloc(sizeof(mpfr_t) * n);
+    for (size_t i = 0; i < n; i++) mpfr_init2(h[i], prec);
+    for (size_t i = 0; i + 1 < n; i++) mpfr_sub(h[i], xs[i + 1], xs[i], RND);
+    mpfr_add(h[n - 1], xs[0], P, RND); mpfr_sub(h[n - 1], h[n - 1], xs[n - 1], RND);
+
+    mpfr_t* M = malloc(sizeof(mpfr_t) * n);
+    for (size_t i = 0; i < n; i++) { mpfr_init2(M[i], prec); mpfr_set_zero(M[i], 1); }
+
+    if (n >= 3) {
+        mpfr_t* a = malloc(sizeof(mpfr_t) * n);
+        mpfr_t* b = malloc(sizeof(mpfr_t) * n);
+        mpfr_t* c = malloc(sizeof(mpfr_t) * n);
+        mpfr_t* r = malloc(sizeof(mpfr_t) * n);
+        mpfr_t* bb = malloc(sizeof(mpfr_t) * n);
+        mpfr_t* u = malloc(sizeof(mpfr_t) * n);
+        mpfr_t* cp = malloc(sizeof(mpfr_t) * n);
+        mpfr_t* y1 = malloc(sizeof(mpfr_t) * n);
+        mpfr_t* z1 = malloc(sizeof(mpfr_t) * n);
+        for (size_t i = 0; i < n; i++)
+            mpfr_inits2(prec, a[i], b[i], c[i], r[i], bb[i], u[i], cp[i], y1[i], z1[i], (mpfr_ptr)0);
+        mpfr_t dn, dp, tmp; mpfr_inits2(prec, dn, dp, tmp, (mpfr_ptr)0);
+        for (size_t i = 0; i < n; i++) {
+            mpfr_t* hm = &h[(i + n - 1) % n]; mpfr_t* hi = &h[i];
+            mpfr_set(a[i], *hm, RND); mpfr_set(c[i], *hi, RND);
+            mpfr_add(b[i], *hm, *hi, RND); mpfr_mul_ui(b[i], b[i], 2, RND);
+            mpfr_sub(dn, ys[(i + 1) % n], ys[i], RND); mpfr_div(dn, dn, *hi, RND);
+            mpfr_sub(dp, ys[i], ys[(i + n - 1) % n], RND); mpfr_div(dp, dp, *hm, RND);
+            mpfr_sub(r[i], dn, dp, RND); mpfr_mul_ui(r[i], r[i], 6, RND);
+        }
+        /* Sherman-Morrison setup: alpha=a[0], beta=c[n-1], gamma=-b[0]. */
+        mpfr_t alpha, beta, gamma, ab;
+        mpfr_inits2(prec, alpha, beta, gamma, ab, (mpfr_ptr)0);
+        mpfr_set(alpha, a[0], RND); mpfr_set(beta, c[n - 1], RND); mpfr_neg(gamma, b[0], RND);
+        for (size_t i = 0; i < n; i++) { mpfr_set(bb[i], b[i], RND); mpfr_set_zero(u[i], 1); }
+        mpfr_sub(bb[0], b[0], gamma, RND);
+        mpfr_mul(ab, alpha, beta, RND); mpfr_div(ab, ab, gamma, RND);
+        mpfr_sub(bb[n - 1], b[n - 1], ab, RND);
+        mpfr_set(u[0], gamma, RND); mpfr_set(u[n - 1], beta, RND);
+        /* Thomas solve T y1 = r and T z1 = u. */
+        mpfr_div(cp[0], c[0], bb[0], RND); mpfr_div(y1[0], r[0], bb[0], RND); mpfr_div(z1[0], u[0], bb[0], RND);
+        for (size_t i = 1; i < n; i++) {
+            mpfr_mul(tmp, a[i], cp[i - 1], RND); mpfr_sub(tmp, bb[i], tmp, RND);  /* mden */
+            mpfr_div(cp[i], c[i], tmp, RND);
+            mpfr_t t2b; mpfr_init2(t2b, prec);
+            mpfr_mul(t2b, a[i], y1[i - 1], RND); mpfr_sub(t2b, r[i], t2b, RND); mpfr_div(y1[i], t2b, tmp, RND);
+            mpfr_mul(t2b, a[i], z1[i - 1], RND); mpfr_sub(t2b, u[i], t2b, RND); mpfr_div(z1[i], t2b, tmp, RND);
+            mpfr_clear(t2b);
+        }
+        for (size_t i = n - 1; i-- > 0; ) {
+            mpfr_mul(tmp, cp[i], y1[i + 1], RND); mpfr_sub(y1[i], y1[i], tmp, RND);
+            mpfr_mul(tmp, cp[i], z1[i + 1], RND); mpfr_sub(z1[i], z1[i], tmp, RND);
+        }
+        /* x = y1 - (v.y1)/(1+v.z1) z1, v = e_0 + (alpha/gamma) e_{n-1}. */
+        mpfr_t ag, vy, vz, fac; mpfr_inits2(prec, ag, vy, vz, fac, (mpfr_ptr)0);
+        mpfr_div(ag, alpha, gamma, RND);
+        mpfr_mul(vy, ag, y1[n - 1], RND); mpfr_add(vy, vy, y1[0], RND);
+        mpfr_mul(vz, ag, z1[n - 1], RND); mpfr_add(vz, vz, z1[0], RND);
+        mpfr_set_ui(fac, 1, RND); mpfr_add(fac, fac, vz, RND);   /* 1 + vz */
+        mpfr_div(fac, vy, fac, RND);
+        for (size_t i = 0; i < n; i++) { mpfr_mul(tmp, fac, z1[i], RND); mpfr_sub(M[i], y1[i], tmp, RND); }
+        for (size_t i = 0; i < n; i++)
+            mpfr_clears(a[i], b[i], c[i], r[i], bb[i], u[i], cp[i], y1[i], z1[i], (mpfr_ptr)0);
+        free(a); free(b); free(c); free(r); free(bb); free(u); free(cp); free(y1); free(z1);
+        mpfr_clears(dn, dp, tmp, alpha, beta, gamma, ab, ag, vy, vz, fac, (mpfr_ptr)0);
+    }
+
+    /* Locate interval i (0..n-1); interval n-1 is the wrap. */
+    size_t i = 0;
+    if (mpfr_greaterequal_p(p, xs[n - 1])) i = n - 1;
+    else { while (i + 1 < n && mpfr_lessequal_p(xs[i + 1], p)) i++; }
+    mpfr_t xR, yR, MR, hh, A, B, cL, cR, t1, t2;
+    mpfr_inits2(prec, xR, yR, MR, hh, A, B, cL, cR, t1, t2, (mpfr_ptr)0);
+    if (i + 1 < n) { mpfr_set(xR, xs[i + 1], RND); mpfr_set(yR, ys[i + 1], RND); mpfr_set(MR, M[i + 1], RND); }
+    else { mpfr_add(xR, xs[0], P, RND); mpfr_set(yR, ys[0], RND); mpfr_set(MR, M[0], RND); }
+    mpfr_sub(hh, xR, xs[i], RND);
+    mpfr_sub(A, xR, p, RND); mpfr_sub(B, p, xs[i], RND);
+    mpfr_div(cL, ys[i], hh, RND); mpfr_mul(t1, M[i], hh, RND); mpfr_div_ui(t1, t1, 6, RND); mpfr_sub(cL, cL, t1, RND);
+    mpfr_div(cR, yR, hh, RND);    mpfr_mul(t1, MR, hh, RND);   mpfr_div_ui(t1, t1, 6, RND); mpfr_sub(cR, cR, t1, RND);
+    if (d == 0) {
+        mpfr_pow_ui(t1, A, 3, RND); mpfr_mul(t1, t1, M[i], RND); mpfr_div(t1, t1, hh, RND); mpfr_div_ui(t1, t1, 6, RND); mpfr_set(out, t1, RND);
+        mpfr_pow_ui(t1, B, 3, RND); mpfr_mul(t1, t1, MR, RND); mpfr_div(t1, t1, hh, RND); mpfr_div_ui(t1, t1, 6, RND); mpfr_add(out, out, t1, RND);
+        mpfr_mul(t1, cL, A, RND); mpfr_add(out, out, t1, RND);
+        mpfr_mul(t1, cR, B, RND); mpfr_add(out, out, t1, RND);
+    } else if (d == 1) {
+        mpfr_mul(t1, A, A, RND); mpfr_mul(t1, t1, M[i], RND); mpfr_div(t1, t1, hh, RND); mpfr_div_ui(t1, t1, 2, RND); mpfr_neg(out, t1, RND);
+        mpfr_mul(t1, B, B, RND); mpfr_mul(t1, t1, MR, RND); mpfr_div(t1, t1, hh, RND); mpfr_div_ui(t1, t1, 2, RND); mpfr_add(out, out, t1, RND);
+        mpfr_sub(out, out, cL, RND); mpfr_add(out, out, cR, RND);
+    } else if (d == 2) {
+        mpfr_mul(t1, M[i], A, RND); mpfr_div(t1, t1, hh, RND); mpfr_set(out, t1, RND);
+        mpfr_mul(t1, MR, B, RND); mpfr_div(t1, t1, hh, RND); mpfr_add(out, out, t1, RND);
+    } else if (d == 3) {
+        mpfr_sub(t1, MR, M[i], RND); mpfr_div(out, t1, hh, RND);
+    } else mpfr_set_zero(out, 1);
+
+    for (size_t k = 0; k < n; k++) { mpfr_clear(h[k]); mpfr_clear(M[k]); }
+    free(h); free(M);
+    mpfr_clears(xR, yR, MR, hh, A, B, cL, cR, t1, t2, (mpfr_ptr)0);
+}
+
 /* --- Hermite tensor machinery (mpfr) ---------------------------------- */
 
 static size_t ipow_sz(size_t base, size_t e) { size_t r = 1; while (e--) r *= base; return r; }
@@ -365,10 +482,33 @@ static void phi_eval_m(mpfr_t* c, int deg, int g, const mpfr_t t, mpfr_t out, lo
     mpfr_clear(fl);
 }
 
-/* D^a f at node `entry` (a has total order s); from the supplied tensor. */
-static bool extract_supplied_m(Expr* entry, size_t m, const int* a, int s, mpfr_t out) {
+static Expr* descend_cpath_m(Expr* t, const int* cpath, int vrank) {
+    for (int d = 0; d < vrank; d++) {
+        if (!m_is_list(t) || (int)t->data.function.arg_count <= cpath[d]) return NULL;
+        t = t->data.function.args[cpath[d]];
+    }
+    return t;
+}
+
+static bool value_component_m(Expr* entry, const int* cpath, int vrank, mpfr_t out) {
+    Expr* t = descend_cpath_m(entry->data.function.args[1], cpath, vrank);
+    return t && nm_set(t, out);
+}
+
+/* Value shape from the first node value; rank 0 for a scalar. */
+static void value_shape_m(Expr* e, size_t* vshape, int* vrank) {
+    int r = 0;
+    while (m_is_list(e) && r < 16) { vshape[r++] = e->data.function.arg_count; e = e->data.function.args[0]; }
+    *vrank = r;
+}
+
+/* D^a f_component at node `entry` (a has total order s); from the supplied
+ * tensor, after selecting the value-array component `cpath`. */
+static bool extract_supplied_m(Expr* entry, size_t m, const int* cpath, int vrank,
+                               const int* a, int s, mpfr_t out) {
     if ((size_t)(1 + s) >= entry->data.function.arg_count) return false;
-    Expr* t = entry->data.function.args[1 + s];
+    Expr* t = descend_cpath_m(entry->data.function.args[1 + s], cpath, vrank);
+    if (!t) return false;
     if (m == 1) {
         while (m_is_list(t) && t->data.function.arg_count == 1) t = t->data.function.args[0];
         return nm_set(t, out);
@@ -381,12 +521,30 @@ static bool extract_supplied_m(Expr* entry, size_t m, const int* a, int s, mpfr_
     return nm_set(t, out);
 }
 
-/* estimate d/dx_d of field F over the grid, into G (3-point / one-sided) */
+/* estimate d/dx_d of field F over the grid, into G (3-point / one-sided;
+ * cyclic central differences on a periodic dimension) */
 static void fd_apply_m(const MFun* g, size_t d, mpfr_t* F, mpfr_t* G, long prec) {
     size_t nd = g->nk[d], st = g->stride[d];
     mpfr_t* xs = g->grid[d];
     mpfr_t h0, h1, d0, d1, t1, t2;
     mpfr_inits2(prec, h0, h1, d0, d1, t1, t2, (mpfr_ptr)0);
+    if (g->periodic && g->periodic[d] && nd >= 3) {
+        size_t ndist = nd - 1;
+        for (size_t n = 0; n < g->total; n++) {
+            size_t id = (n / st) % nd;
+            size_t base = n - id * st;
+            size_t idm = (id == nd - 1) ? 0 : id;
+            size_t L = (idm + ndist - 1) % ndist, R = (idm + 1) % ndist;
+            mpfr_sub(h0, xs[idm], xs[L], RND); if (idm == 0) mpfr_add(h0, h0, g->period[d], RND);
+            mpfr_sub(h1, xs[R], xs[idm], RND); if (idm == ndist - 1) mpfr_add(h1, h1, g->period[d], RND);
+            mpfr_sub(d0, F[base + idm * st], F[base + L * st], RND); mpfr_div(d0, d0, h0, RND);
+            mpfr_sub(d1, F[base + R * st], F[base + idm * st], RND); mpfr_div(d1, d1, h1, RND);
+            mpfr_mul(t1, h1, d0, RND); mpfr_mul(t2, h0, d1, RND); mpfr_add(t1, t1, t2, RND);
+            mpfr_add(t2, h0, h1, RND); mpfr_div(G[n], t1, t2, RND);
+        }
+        mpfr_clears(h0, h1, d0, d1, t1, t2, (mpfr_ptr)0);
+        return;
+    }
     for (size_t n = 0; n < g->total; n++) {
         size_t id = (n / st) % nd;
         size_t base = n - id * st;
@@ -426,7 +584,8 @@ static void fd_apply_m(const MFun* g, size_t d, mpfr_t* F, mpfr_t* G, long prec)
 }
 
 /* full mixed-derivative tensor T[node*dcount+idx], idx over {0..k}^m */
-static mpfr_t* build_T_m(const MFun* g, size_t m, int K, int k, size_t dcount, long prec) {
+static mpfr_t* build_T_m(const MFun* g, size_t m, int K, int k, size_t dcount,
+                         const int* cpath, int vrank, long prec) {
     mpfr_t* T = malloc(sizeof(mpfr_t) * g->total * dcount);
     for (size_t i = 0; i < g->total * dcount; i++) { mpfr_init2(T[i], prec); mpfr_set_zero(T[i], 1); }
     mpfr_t* F = malloc(sizeof(mpfr_t) * g->total);
@@ -440,12 +599,12 @@ static mpfr_t* build_T_m(const MFun* g, size_t m, int K, int k, size_t dcount, l
         int s = mi_sum(a, m);
         if (s <= K) {
             for (size_t n = 0; n < g->total; n++)
-                if (!extract_supplied_m(g->entryAt[n], m, a, s, T[n * dcount + idx])) { ok = false; break; }
+                if (!extract_supplied_m(g->entryAt[n], m, cpath, vrank, a, s, T[n * dcount + idx])) { ok = false; break; }
         } else {
             int rem = K;
             for (size_t d = 0; d < m; d++) { int bd = a[d] < rem ? a[d] : rem; b[d] = bd; rem -= bd; }
             for (size_t n = 0; n < g->total; n++)
-                if (!extract_supplied_m(g->entryAt[n], m, b, K, F[n])) { ok = false; break; }
+                if (!extract_supplied_m(g->entryAt[n], m, cpath, vrank, b, K, F[n])) { ok = false; break; }
             if (!ok) break;
             for (size_t d = 0; d < m; d++) {
                 int e = a[d] - b[d];
@@ -513,28 +672,111 @@ static void hermite_tensor_eval_m(const MFun* g, mpfr_t* T, size_t dcount, size_
 }
 
 /* value-only tensor evaluation (default / spline), recursive over dims */
-typedef struct { const MFun* f; mpfr_t* p; const int* ders; size_t* s; size_t* w; int kernel; long prec; } MCtx;
+typedef struct { const MFun* f; mpfr_t* p; const int* ders; int64_t* s; size_t* w; int kernel; long prec; } MCtx;
 
 static void eval_dim_m(const MCtx* ctx, size_t k, size_t base, mpfr_t* V, mpfr_t out) {
-    size_t wk = ctx->w[k], sk = ctx->s[k];
+    const MFun* f = ctx->f;
+    size_t wk = ctx->w[k];
+    int64_t start = ctx->s[k];
+    bool per = f->periodic && f->periodic[k];
+    size_t ndist = per ? f->nk[k] - 1 : f->nk[k];
+
+    mpfr_t* xs = malloc(sizeof(mpfr_t) * wk);
     mpfr_t* tmp = malloc(sizeof(mpfr_t) * wk);
-    for (size_t t = 0; t < wk; t++) mpfr_init2(tmp[t], ctx->prec);
+    for (size_t t = 0; t < wk; t++) { mpfr_init2(xs[t], ctx->prec); mpfr_init2(tmp[t], ctx->prec); }
     for (size_t t = 0; t < wk; t++) {
-        size_t off = base + (sk + t) * ctx->f->stride[k];
-        if (k + 1 == ctx->f->m) mpfr_set(tmp[t], V[off], RND);
+        int64_t j = start + (int64_t)t;
+        size_t r;
+        if (per) {
+            int64_t nd = (int64_t)ndist, rr = ((j % nd) + nd) % nd, q = (j - rr) / nd;
+            r = (size_t)rr;
+            mpfr_mul_si(xs[t], f->period[k], q, RND);   /* q * P */
+            mpfr_add(xs[t], xs[t], f->grid[k][r], RND);
+        } else { r = (size_t)j; mpfr_set(xs[t], f->grid[k][r], RND); }
+        size_t off = base + r * f->stride[k];
+        if (k + 1 == f->m) mpfr_set(tmp[t], V[off], RND);
         else eval_dim_m(ctx, k + 1, off, V, tmp[t]);
     }
-    if (ctx->kernel == 1) spline_eval_m(&ctx->f->grid[k][sk], tmp, wk, ctx->p[k], (size_t)ctx->ders[k], out, ctx->prec);
-    else newton_eval_m(&ctx->f->grid[k][sk], tmp, wk, ctx->p[k], (size_t)ctx->ders[k], out, ctx->prec);
-    for (size_t t = 0; t < wk; t++) mpfr_clear(tmp[t]);
-    free(tmp);
+    if (ctx->kernel == 1) {
+        if (per) spline_eval_periodic_m(xs, wk, tmp, f->period[k], ctx->p[k], (size_t)ctx->ders[k], out, ctx->prec);
+        else     spline_eval_m(xs, tmp, wk, ctx->p[k], (size_t)ctx->ders[k], out, ctx->prec);
+    } else newton_eval_m(xs, tmp, wk, ctx->p[k], (size_t)ctx->ders[k], out, ctx->prec);
+    for (size_t t = 0; t < wk; t++) { mpfr_clear(xs[t]); mpfr_clear(tmp[t]); }
+    free(xs); free(tmp);
+}
+
+/* Evaluate one scalar component (selected by cpath) into the pre-init'd out. */
+static bool eval_component_mpfr(MFun* f, const int* cpath, int vrank, size_t m,
+                                mpfr_t* p, const int* ders, const int* orders,
+                                int method, int Ksupplied, mpfr_t out, long prec) {
+    if (method == METHOD_HERMITE || Ksupplied >= 1) {
+        int K = Ksupplied, k = K > 1 ? K : 1;
+        size_t dcount = ipow_sz((size_t)(k + 1), m);
+        mpfr_t* basis = build_basis_m(k, prec);
+        mpfr_t* T = build_T_m(f, m, K, k, dcount, cpath, vrank, prec);
+        bool ok = (T != NULL);
+        if (ok) {
+            hermite_tensor_eval_m(f, T, dcount, m, k, basis, 2 * k + 2, p, ders, out, prec);
+            for (size_t i = 0; i < f->total * dcount; i++) mpfr_clear(T[i]);
+            free(T);
+        }
+        size_t nb = (size_t)2 * (k + 1) * (2 * k + 2);
+        for (size_t i = 0; i < nb; i++) mpfr_clear(basis[i]);
+        free(basis);
+        return ok;
+    }
+    mpfr_t* V = malloc(sizeof(mpfr_t) * f->total);
+    for (size_t i = 0; i < f->total; i++) mpfr_init2(V[i], prec);
+    bool ok = true;
+    for (size_t i = 0; i < f->total; i++)
+        if (!value_component_m(f->entryAt[i], cpath, vrank, V[i])) { ok = false; break; }
+    if (ok) {
+        int64_t* s = malloc(sizeof(int64_t) * m);
+        size_t* w = malloc(sizeof(size_t) * m);
+        int kernel = (method == METHOD_SPLINE) ? 1 : 0;
+        for (size_t k = 0; k < m; k++) {
+            size_t nkk = f->nk[k];
+            bool per = f->periodic && f->periodic[k];
+            size_t ndist = per ? nkk - 1 : nkk;
+            if (kernel == 1) { s[k] = 0; w[k] = ndist; continue; }
+            size_t order;
+            if (orders) order = (size_t)orders[k];
+            else { order = nkk - 1; if (order > 3) order = 3; }
+            if (order > ndist - 1) order = ndist - 1;
+            size_t wk = order + 1;
+            size_t i = bracket_m(f->grid[k], nkk, p[k]);
+            size_t shift = (wk >= 2) ? (wk / 2 - 1) : 0;
+            if (per) s[k] = (int64_t)i - (int64_t)shift;
+            else { size_t sk = (i < shift) ? 0 : i - shift; if (sk > nkk - wk) sk = nkk - wk; s[k] = (int64_t)sk; }
+            w[k] = wk;
+        }
+        MCtx ctx = { f, p, ders, s, w, kernel, prec };
+        eval_dim_m(&ctx, 0, 0, V, out);
+        free(s); free(w);
+    }
+    for (size_t i = 0; i < f->total; i++) mpfr_clear(V[i]);
+    free(V);
+    return ok;
+}
+
+/* Assemble a nested-List Expr from row-major mpfr components (moved, not freed). */
+static Expr* assemble_array_m(mpfr_t* comps, const size_t* vshape, int vrank,
+                              int level, size_t* idx) {
+    if (level == vrank) return expr_new_mpfr_move(comps[(*idx)++]);
+    size_t n = vshape[level];
+    Expr** items = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) items[i] = assemble_array_m(comps, vshape, vrank, level + 1, idx);
+    Expr* l = expr_new_function(expr_new_symbol("List"), items, n);
+    free(items);
+    return l;
 }
 
 /* --- public entry point ----------------------------------------------- */
 
 Expr* interp_eval_mpfr(Expr* domain, Expr* table, size_t m,
                        Expr** call_args, const int* ders,
-                       const int* orders, int method, int Ksupplied, long bits) {
+                       const int* orders, int method, int Ksupplied,
+                       const bool* periodic, long bits) {
     long prec = bits > 53 ? bits : 53;
 
     mpfr_t* p = malloc(sizeof(mpfr_t) * m);
@@ -544,60 +786,47 @@ Expr* interp_eval_mpfr(Expr* domain, Expr* table, size_t m,
     if (!okp) { for (size_t k = 0; k < m; k++) mpfr_clear(p[k]); free(p); return NULL; }
 
     MFun f;
-    if (!build_grid_m(domain, table, m, prec, &f)) {
+    if (!build_grid_m(domain, table, m, periodic, prec, &f)) {
         for (size_t k = 0; k < m; k++) mpfr_clear(p[k]); free(p); return NULL;
     }
 
-    mpfr_t out; mpfr_init2(out, prec);
-    bool ok = true;
-
-    if (method == METHOD_HERMITE || Ksupplied >= 1) {
-        int K = Ksupplied, k = K > 1 ? K : 1;
-        size_t dcount = ipow_sz((size_t)(k + 1), m);
-        mpfr_t* basis = build_basis_m(k, prec);
-        mpfr_t* T = build_T_m(&f, m, K, k, dcount, prec);
-        if (!T) ok = false;
-        else { hermite_tensor_eval_m(&f, T, dcount, m, k, basis, 2 * k + 2, p, ders, out, prec);
-               for (size_t i = 0; i < f.total * dcount; i++) mpfr_clear(T[i]); free(T); }
-        size_t nb = (size_t)2 * (k + 1) * (2 * k + 2);
-        for (size_t i = 0; i < nb; i++) mpfr_clear(basis[i]); free(basis);
-    } else {
-        /* value tensor */
-        mpfr_t* V = malloc(sizeof(mpfr_t) * f.total);
-        for (size_t i = 0; i < f.total; i++) mpfr_init2(V[i], prec);
-        for (size_t i = 0; i < f.total; i++)
-            if (!nm_set(m_entry_value(f.entryAt[i]), V[i])) { ok = false; break; }
-        if (ok) {
-            size_t* s = calloc(m, sizeof(size_t));
-            size_t* w = malloc(sizeof(size_t) * m);
-            if (method == METHOD_SPLINE) {
-                for (size_t k = 0; k < m; k++) { s[k] = 0; w[k] = f.nk[k]; }
-                MCtx ctx = { &f, p, ders, s, w, 1, prec };
-                eval_dim_m(&ctx, 0, 0, V, out);
-            } else {
-                for (size_t k = 0; k < m; k++) {
-                    size_t nkk = f.nk[k], order;
-                    if (orders) { order = (size_t)orders[k]; if (order > nkk - 1) order = nkk - 1; }
-                    else { order = nkk - 1; if (order > 3) order = 3; }
-                    size_t wk = order + 1;
-                    size_t i = bracket_m(f.grid[k], nkk, p[k]);
-                    size_t shift = (wk >= 2) ? (wk / 2 - 1) : 0;
-                    size_t sk = (i < shift) ? 0 : i - shift;
-                    if (sk > nkk - wk) sk = nkk - wk;
-                    s[k] = sk; w[k] = wk;
-                }
-                MCtx ctx = { &f, p, ders, s, w, 0, prec };
-                eval_dim_m(&ctx, 0, 0, V, out);
-            }
-            free(s); free(w);
+    /* Reduce periodic coordinates into [x0, x0 + P). */
+    mpfr_t u; mpfr_init2(u, prec);
+    for (size_t k = 0; k < m; k++) {
+        if (f.periodic[k]) {
+            mpfr_sub(u, p[k], f.grid[k][0], RND);
+            mpfr_fmod(u, u, f.period[k], RND);
+            if (mpfr_sgn(u) < 0) mpfr_add(u, u, f.period[k], RND);
+            mpfr_add(p[k], u, f.grid[k][0], RND);
         }
-        for (size_t i = 0; i < f.total; i++) mpfr_clear(V[i]);
-        free(V);
     }
+    mpfr_clear(u);
+
+    size_t vshape[16];
+    int vrank;
+    value_shape_m(m_entry_value(f.entryAt[0]), vshape, &vrank);
+    size_t vtotal = 1;
+    for (int dd = 0; dd < vrank; dd++) vtotal *= vshape[dd];
+
+    mpfr_t* comps = malloc(sizeof(mpfr_t) * vtotal);
+    for (size_t i = 0; i < vtotal; i++) mpfr_init2(comps[i], prec);
+    int* cpath = malloc(sizeof(int) * (vrank ? (size_t)vrank : 1));
+    bool ok = true;
+    for (size_t ci = 0; ci < vtotal && ok; ci++) {
+        size_t rem = ci;
+        for (int dd = vrank; dd-- > 0; ) { cpath[dd] = (int)(rem % vshape[dd]); rem /= vshape[dd]; }
+        ok = eval_component_mpfr(&f, cpath, vrank, m, p, ders, orders, method, Ksupplied, comps[ci], prec);
+    }
+    free(cpath);
 
     Expr* result = NULL;
-    if (ok) result = expr_new_mpfr_move(out);   /* takes ownership of `out` */
-    else mpfr_clear(out);
+    if (ok) {
+        size_t idx = 0;
+        result = assemble_array_m(comps, vshape, vrank, 0, &idx);   /* moves comps */
+    } else {
+        for (size_t i = 0; i < vtotal; i++) mpfr_clear(comps[i]);
+    }
+    free(comps);
 
     mfun_free(&f);
     for (size_t k = 0; k < m; k++) mpfr_clear(p[k]); free(p);

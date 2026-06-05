@@ -1619,10 +1619,15 @@ void info_init(void) {
         "\tuses piecewise-polynomial pieces of degree n (default 3; 0 gives a\n"
         "\tpiecewise-constant and 1 a piecewise-linear interpolant).\n"
         "Interpolation[data, Method -> m]\n"
-        "\tselects \"Spline\" (natural cubic spline) or \"Hermite\" (piecewise\n"
-        "\tcubic Hermite with estimated slopes).\n"
-        "Works at machine or arbitrary (MPFR) precision, matching the data.\n"
-        "PeriodicInterpolation and vector-valued samples are not yet supported.");
+        "\tselects \"Spline\" (natural/cyclic cubic spline) or \"Hermite\"\n"
+        "\t(piecewise cubic Hermite with estimated slopes).\n"
+        "Interpolation[data, PeriodicInterpolation -> True]\n"
+        "\tbuilds a periodic interpolant (period = the data span; the data must\n"
+        "\trepeat its first sample at the last). A per-dimension {True, False}\n"
+        "\tlist selects periodicity per axis.\n"
+        "Vector- or array-valued samples (f_i a list) are interpolated\n"
+        "component-wise and return an array of the same shape.\n"
+        "Works at machine or arbitrary (MPFR) precision, matching the data.");
     symtab_set_docstring("Piecewise",
         "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]\n"
         "\trepresents a piecewise function with values val_i in the regions\n"

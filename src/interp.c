@@ -121,6 +121,20 @@ static bool is_exact_real(const Expr* e) {
 /* True for a scalar real atom (Integer/Real/BigInt/MPFR/Rational). */
 static bool is_scalar_real(const Expr* e) { double t; return node_to_double(e, &t); }
 
+/* True for a scalar real or a (recursively) non-empty list of reals/arrays. */
+static bool is_real_or_array(const Expr* e) {
+    if (is_scalar_real(e)) return true;
+    if (e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_List
+        && e->data.function.arg_count > 0) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!is_real_or_array(e->data.function.args[i])) return false;
+        return true;
+    }
+    return false;
+}
+
 /* Extract a non-negative integer from `e` into *out. */
 static bool node_to_order(const Expr* e, int* out) {
     if (e && e->type == EXPR_INTEGER && e->data.integer >= 0
@@ -229,6 +243,91 @@ static double spline_eval(const double* xs, const double* ys,
     return val;
 }
 
+/*
+ * spline_eval_periodic:
+ *   d-th derivative at p of the periodic (cyclic) cubic spline through the n
+ *   distinct nodes (xs[0..n-1], ys[0..n-1]) with period P (so x_n = x_0 + P,
+ *   y_n = y_0).  The C2 periodic conditions give a cyclic tridiagonal system for
+ *   the node second derivatives, solved by Sherman-Morrison.  p is assumed
+ *   already reduced into [x_0, x_0 + P).
+ */
+static double spline_eval_periodic(const double* xs, size_t n, const double* ys,
+                                   double P, double p, size_t d) {
+    /* h[i] = x_{i+1} - x_i, with the wrap interval h[n-1] = (x_0 + P) - x_{n-1}. */
+    double* h = malloc(sizeof(double) * n);
+    for (size_t i = 0; i + 1 < n; i++) h[i] = xs[i + 1] - xs[i];
+    h[n - 1] = (xs[0] + P) - xs[n - 1];
+
+    double* M;
+    if (n < 3) {
+        /* Degenerate: treat as piecewise linear (M = 0). */
+        M = calloc(n, sizeof(double));
+    } else {
+        /* Cyclic tridiagonal: a_i M_{i-1} + b_i M_i + c_i M_{i+1} = r_i (mod n). */
+        double* a = malloc(sizeof(double) * n);
+        double* b = malloc(sizeof(double) * n);
+        double* c = malloc(sizeof(double) * n);
+        double* r = malloc(sizeof(double) * n);
+        for (size_t i = 0; i < n; i++) {
+            double hm = h[(i + n - 1) % n], hi = h[i];
+            a[i] = hm; b[i] = 2.0 * (hm + hi); c[i] = hi;
+            double dnext = (ys[(i + 1) % n] - ys[i]) / hi;
+            double dprev = (ys[i] - ys[(i + n - 1) % n]) / hm;
+            r[i] = 6.0 * (dnext - dprev);
+        }
+        /* Sherman-Morrison: A = T + u v^T, where the corner entries a[0] (M_{n-1})
+         * and c[n-1] (M_0) are moved into a rank-1 update. */
+        double alpha = a[0], beta = c[n - 1];
+        double gamma = -b[0];
+        double* bb = malloc(sizeof(double) * n);
+        for (size_t i = 0; i < n; i++) bb[i] = b[i];
+        bb[0] = b[0] - gamma;
+        bb[n - 1] = b[n - 1] - alpha * beta / gamma;
+        /* Solve T y = r and T z = u (u = gamma e_0 + beta e_{n-1}). */
+        double* u = calloc(n, sizeof(double));
+        u[0] = gamma; u[n - 1] = beta;
+        double* cp = malloc(sizeof(double) * n);
+        double* y1 = malloc(sizeof(double) * n);
+        double* z1 = malloc(sizeof(double) * n);
+        /* Thomas on tridiag (a sub, bb diag, c super) for rhs r -> y1 and u -> z1. */
+        cp[0] = c[0] / bb[0]; y1[0] = r[0] / bb[0]; z1[0] = u[0] / bb[0];
+        for (size_t i = 1; i < n; i++) {
+            double mden = bb[i] - a[i] * cp[i - 1];
+            cp[i] = c[i] / mden;
+            y1[i] = (r[i] - a[i] * y1[i - 1]) / mden;
+            z1[i] = (u[i] - a[i] * z1[i - 1]) / mden;
+        }
+        for (size_t i = n - 1; i-- > 0; ) { y1[i] -= cp[i] * y1[i + 1]; z1[i] -= cp[i] * z1[i + 1]; }
+        /* x = y1 - ((v . y1)/(1 + v . z1)) z1, with v = e_0 + (alpha/gamma) e_{n-1}. */
+        double vy = y1[0] + (alpha / gamma) * y1[n - 1];
+        double vz = z1[0] + (alpha / gamma) * z1[n - 1];
+        double fac = vy / (1.0 + vz);
+        M = malloc(sizeof(double) * n);
+        for (size_t i = 0; i < n; i++) M[i] = y1[i] - fac * z1[i];
+        free(a); free(b); free(c); free(r); free(bb); free(u); free(cp); free(y1); free(z1);
+    }
+
+    /* Locate the interval i (0..n-1); interval n-1 is the wrap [x_{n-1}, x_0+P]. */
+    size_t i = 0;
+    if (p >= xs[n - 1]) i = n - 1;
+    else { while (i + 1 < n && xs[i + 1] <= p) i++; }
+    double xL = xs[i], xR = (i + 1 < n) ? xs[i + 1] : xs[0] + P;
+    double yL = ys[i], yR = (i + 1 < n) ? ys[i + 1] : ys[0];
+    double ML = M[i], MR = (i + 1 < n) ? M[i + 1] : M[0];
+    double hh = xR - xL, A = xR - p, B = p - xL;
+    double cL = yL / hh - ML * hh / 6.0, cR = yR / hh - MR * hh / 6.0;
+    double val;
+    switch (d) {
+        case 0: val = ML * A * A * A / (6 * hh) + MR * B * B * B / (6 * hh) + cL * A + cR * B; break;
+        case 1: val = -ML * A * A / (2 * hh) + MR * B * B / (2 * hh) - cL + cR; break;
+        case 2: val = ML * A / hh + MR * B / hh; break;
+        case 3: val = (MR - ML) / hh; break;
+        default: val = 0.0; break;
+    }
+    free(h); free(M);
+    return val;
+}
+
 /* --- Hermite tensor-product machinery (double) ------------------------ */
 
 static double dfact(int n) { double r = 1; for (int i = 2; i <= n; i++) r *= i; return r; }
@@ -304,12 +403,15 @@ typedef struct {
     bool*   has_range;
     Expr**  entryAt;     /* data entry sitting at each flat grid node */
     double* V;           /* flat value tensor (value-only kernels), or NULL */
+    bool*   periodic;    /* per-dimension periodicity, length m */
+    double* period;      /* per-dimension period (grid span), 0 if aperiodic */
 } IFun;
 
 static void ifun_free(IFun* f) {
     if (f->grid) { for (size_t k = 0; k < f->m; k++) free(f->grid[k]); free(f->grid); }
     free(f->nk); free(f->stride); free(f->V);
     free(f->dmin); free(f->dmax); free(f->has_range); free(f->entryAt);
+    free(f->periodic); free(f->period);
     memset(f, 0, sizeof(*f));
 }
 
@@ -355,7 +457,8 @@ static size_t parse_domain_dim(Expr* domain) {
  *   that the points fill the full Cartesian product.  Does NOT inspect values
  *   or derivative tensors.  Returns true on success (no leaks on failure).
  */
-static bool build_grid(Expr* domain, Expr* table, size_t m, IFun* out) {
+static bool build_grid(Expr* domain, Expr* table, size_t m,
+                       const bool* periodic, IFun* out) {
     memset(out, 0, sizeof(*out));
     if (!interp_is_list(table)) return false;
     size_t npts = table->data.function.arg_count;
@@ -420,9 +523,17 @@ static bool build_grid(Expr* domain, Expr* table, size_t m, IFun* out) {
             hasr[k] = true;
     }
 
+    bool*   per  = calloc(m, sizeof(bool));
+    double* perd = calloc(m, sizeof(double));
+    if (!per || !perd) { free(per); free(perd); goto fail; }
+    for (size_t k = 0; k < m; k++) {
+        per[k] = periodic && periodic[k];
+        perd[k] = per[k] ? (grid[k][nk[k] - 1] - grid[k][0]) : 0.0;
+    }
+
     out->m = m; out->nk = nk; out->grid = grid; out->stride = stride;
     out->total = total; out->dmin = dmin; out->dmax = dmax; out->has_range = hasr;
-    out->entryAt = eat;
+    out->entryAt = eat; out->periodic = per; out->period = perd;
     return true;
 
 fail:
@@ -431,12 +542,15 @@ fail:
     return false;
 }
 
-/* Fill the flat value tensor (node value) for the value-only kernels. */
-static bool fill_values(IFun* f) {
+static bool value_component(Expr* entry, const int* cpath, int vrank, double* out);
+
+/* Fill the flat value tensor (component `cpath` of each node value). */
+static bool fill_values(IFun* f, const int* cpath, int vrank) {
+    free(f->V);
     f->V = malloc(sizeof(double) * f->total);
     if (!f->V) return false;
     for (size_t i = 0; i < f->total; i++)
-        if (!node_to_double(entry_value(f->entryAt[i]), &f->V[i])) return false;
+        if (!value_component(f->entryAt[i], cpath, vrank, &f->V[i])) return false;
     return true;
 }
 
@@ -446,32 +560,72 @@ typedef struct {
     const IFun*   f;
     const double* p;
     const int*    ders;
-    const size_t* s;
+    const int64_t* s;       /* signed window start (may be negative when periodic) */
     const size_t* w;
     int           kernel;   /* 0 = newton, 1 = spline */
 } EvalCtx;
 
 static double eval_dim(const EvalCtx* ctx, size_t k, size_t base) {
-    size_t wk = ctx->w[k], sk = ctx->s[k];
+    const IFun* f = ctx->f;
+    size_t wk = ctx->w[k];
+    int64_t start = ctx->s[k];
+    bool per = f->periodic && f->periodic[k];
+    size_t ndist = per ? f->nk[k] - 1 : f->nk[k];
+    double P = per ? f->period[k] : 0.0;
+
+    double* xs = malloc(sizeof(double) * wk);
     double* tmp = malloc(sizeof(double) * wk);
     for (size_t t = 0; t < wk; t++) {
-        size_t off = base + (sk + t) * ctx->f->stride[k];
-        tmp[t] = (k + 1 == ctx->f->m) ? ctx->f->V[off] : eval_dim(ctx, k + 1, off);
+        int64_t j = start + (int64_t)t;
+        size_t r; double xoff;
+        if (per) {
+            int64_t nd = (int64_t)ndist;
+            int64_t rr = ((j % nd) + nd) % nd;
+            xoff = (double)((j - rr) / nd) * P;
+            r = (size_t)rr;
+        } else { r = (size_t)j; xoff = 0.0; }
+        xs[t] = f->grid[k][r] + xoff;
+        size_t off = base + r * f->stride[k];
+        tmp[t] = (k + 1 == f->m) ? f->V[off] : eval_dim(ctx, k + 1, off);
     }
-    double res = ctx->kernel == 1
-        ? spline_eval(&ctx->f->grid[k][sk], tmp, wk, ctx->p[k], (size_t)ctx->ders[k])
-        : newton_deriv_eval(&ctx->f->grid[k][sk], tmp, wk, ctx->p[k], (size_t)ctx->ders[k]);
-    free(tmp);
+    double res;
+    if (ctx->kernel == 1)
+        res = per ? spline_eval_periodic(xs, wk, tmp, P, ctx->p[k], (size_t)ctx->ders[k])
+                  : spline_eval(xs, tmp, wk, ctx->p[k], (size_t)ctx->ders[k]);
+    else
+        res = newton_deriv_eval(xs, tmp, wk, ctx->p[k], (size_t)ctx->ders[k]);
+    free(xs); free(tmp);
     return res;
 }
 
 /* --- supplied/estimated mixed-derivative tensor (Hermite) ------------- */
 
-/* D^a f at the node held in `entry` (a has total order s = mi_sum(a)); read
- * from the supplied s-th derivative tensor (s==0 -> the value). */
-static bool extract_supplied(Expr* entry, size_t m, const int* a, int s, double* out) {
+/* Navigate the component path `cpath` (length vrank) into a value/derivative
+ * tensor `t` (its outermost vrank axes index the value-array components). */
+static Expr* descend_cpath(Expr* t, const int* cpath, int vrank) {
+    for (int d = 0; d < vrank; d++) {
+        if (!interp_is_list(t) || (int)t->data.function.arg_count <= cpath[d]) return NULL;
+        t = t->data.function.args[cpath[d]];
+    }
+    return t;
+}
+
+/* The scalar value of component `cpath` at node `entry` (vrank == 0 -> scalar
+ * value). */
+static bool value_component(Expr* entry, const int* cpath, int vrank, double* out) {
+    Expr* t = descend_cpath(entry->data.function.args[1], cpath, vrank);
+    return t && node_to_double(t, out);
+}
+
+/* D^a f_component at the node held in `entry` (a has total order s = mi_sum(a));
+ * read from the supplied s-th derivative tensor (s==0 -> the value).  For
+ * array-valued data, `cpath` (length vrank) selects the value-array component;
+ * the derivative axes follow the component axes. */
+static bool extract_supplied(Expr* entry, size_t m, const int* cpath, int vrank,
+                             const int* a, int s, double* out) {
     if ((size_t)(1 + s) >= entry->data.function.arg_count) return false;
-    Expr* t = entry->data.function.args[1 + s];
+    Expr* t = descend_cpath(entry->data.function.args[1 + s], cpath, vrank);
+    if (!t) return false;
     if (m == 1) {
         /* 1-D derivatives are scalars (D[f,x], D[f,{x,2}], ...).  Tolerate the
          * occasional singleton-list wrapping {df}. */
@@ -490,10 +644,30 @@ static bool extract_supplied(Expr* entry, size_t m, const int* a, int s, double*
 }
 
 /* Estimate d/dx_d of the field F over the grid (3-point parabola interior,
- * one-sided at the ends), writing into G. */
+ * one-sided at the ends; cyclic central differences on a periodic dimension),
+ * writing into G. */
 static void fd_apply(const IFun* g, size_t d, const double* F, double* G) {
     size_t nd = g->nk[d], st = g->stride[d];
     const double* xs = g->grid[d];
+    bool per = g->periodic && g->periodic[d];
+    if (per && nd >= 3) {
+        size_t ndist = nd - 1;          /* node nd-1 ≡ node 0 */
+        double P = g->period[d];
+        for (size_t n = 0; n < g->total; n++) {
+            size_t id = (n / st) % nd;
+            size_t base = n - id * st;
+            size_t idm = (id == nd - 1) ? 0 : id;       /* duplicate maps to node 0 */
+            size_t L = (idm + ndist - 1) % ndist, R = (idm + 1) % ndist;
+            double xc = xs[idm];
+            double xl = xs[L] - (idm == 0 ? P : 0.0);
+            double xr = xs[R] + (idm == ndist - 1 ? P : 0.0);
+            double h0 = xc - xl, h1 = xr - xc;
+            double d0 = (F[base + idm * st] - F[base + L * st]) / h0;
+            double d1 = (F[base + R * st] - F[base + idm * st]) / h1;
+            G[n] = (h1 * d0 + h0 * d1) / (h0 + h1);
+        }
+        return;
+    }
     for (size_t n = 0; n < g->total; n++) {
         size_t id = (n / st) % nd;
         size_t base = n - id * st;
@@ -527,7 +701,8 @@ static void fd_apply(const IFun* g, size_t d, const double* F, double* G) {
  *   the data; the rest are estimated by finite-differencing a supplied
  *   order-K derivative.  Returns NULL on malformed data.
  */
-static double* build_T(const IFun* g, size_t m, int K, int k) {
+static double* build_T(const IFun* g, size_t m, int K, int k,
+                       const int* cpath, int vrank) {
     size_t dcount = ipow_sz((size_t)(k + 1), m);
     double* T = malloc(sizeof(double) * g->total * dcount);
     int* a = malloc(sizeof(int) * m);
@@ -541,7 +716,7 @@ static double* build_T(const IFun* g, size_t m, int K, int k) {
         if (s <= K) {
             for (size_t n = 0; n < g->total; n++) {
                 double v;
-                if (!extract_supplied(g->entryAt[n], m, a, s, &v)) { ok = false; break; }
+                if (!extract_supplied(g->entryAt[n], m, cpath, vrank, a, s, &v)) { ok = false; break; }
                 T[n * dcount + idx] = v;
             }
         } else {
@@ -549,7 +724,7 @@ static double* build_T(const IFun* g, size_t m, int K, int k) {
             for (size_t d = 0; d < m; d++) { int bd = a[d] < rem ? a[d] : rem; b[d] = bd; rem -= bd; }
             for (size_t n = 0; n < g->total; n++) {
                 double v;
-                if (!extract_supplied(g->entryAt[n], m, b, K, &v)) { ok = false; break; }
+                if (!extract_supplied(g->entryAt[n], m, cpath, vrank, b, K, &v)) { ok = false; break; }
                 F[n] = v;
             }
             if (!ok) break;
@@ -612,90 +787,144 @@ static double hermite_tensor_eval(const IFun* g, const double* T, size_t dcount,
     return result;
 }
 
+/* --- value-array shape + result assembly ------------------------------ */
+
+static Expr* make_list(Expr** items, size_t n);   /* defined below */
+
+/* Shape of the value array `e` (from the first node): vshape[0..*vrank-1].
+ * A scalar gives rank 0.  Caller provides space for up to 16 axes. */
+static void value_shape(Expr* e, size_t* vshape, int* vrank) {
+    int r = 0;
+    while (interp_is_list(e) && r < 16) {
+        vshape[r++] = e->data.function.arg_count;
+        e = e->data.function.args[0];
+    }
+    *vrank = r;
+}
+
+/* Assemble a nested-List Expr of shape vshape from the row-major component
+ * results `comps`.  Rank 0 yields a bare Real. */
+static Expr* assemble_array(const double* comps, const size_t* vshape,
+                            int vrank, int level, size_t* idx) {
+    if (level == vrank) return expr_new_real(comps[(*idx)++]);
+    size_t n = vshape[level];
+    Expr** items = malloc(sizeof(Expr*) * n);
+    for (size_t i = 0; i < n; i++) items[i] = assemble_array(comps, vshape, vrank, level + 1, idx);
+    Expr* l = make_list(items, n);
+    free(items);
+    return l;
+}
+
+/* Evaluate a single scalar component (selected by `cpath`) of the interpolant
+ * at `p`.  Returns false (no value) on malformed data. */
+static bool eval_component_double(IFun* f, const int* cpath, int vrank, size_t m,
+                                  const double* p, const int* ders,
+                                  const int* orders, int method, int Ksupplied,
+                                  double* out) {
+    if (method == METHOD_HERMITE || Ksupplied >= 1) {
+        int K = Ksupplied, k = K > 1 ? K : 1;
+        double* basis = build_basis(k);
+        double* T = build_T(f, m, K, k, cpath, vrank);
+        if (!T) { free(basis); return false; }
+        *out = hermite_tensor_eval(f, T, ipow_sz((size_t)(k + 1), m), m, k,
+                                   basis, 2 * k + 2, p, ders);
+        free(T); free(basis);
+        return true;
+    }
+    if (!fill_values(f, cpath, vrank)) return false;
+    int64_t* s = malloc(sizeof(int64_t) * m);
+    size_t* w = malloc(sizeof(size_t) * m);
+    int kernel = (method == METHOD_SPLINE) ? 1 : 0;
+    for (size_t k = 0; k < m; k++) {
+        size_t nkk = f->nk[k];
+        bool per = f->periodic && f->periodic[k];
+        size_t ndist = per ? nkk - 1 : nkk;            /* distinct cyclic nodes */
+        if (kernel == 1) { s[k] = 0; w[k] = ndist; continue; }  /* spline: full grid */
+        size_t order;
+        if (orders) { order = (size_t)orders[k]; }
+        else { order = nkk - 1; if (order > 3) order = 3; }
+        if (order > ndist - 1) order = ndist - 1;
+        size_t wk = order + 1;
+        size_t i = bracket_interval(f->grid[k], nkk, p[k]);
+        size_t shift = (wk >= 2) ? (wk / 2 - 1) : 0;
+        if (per) {
+            s[k] = (int64_t)i - (int64_t)shift;        /* signed; window wraps */
+        } else {
+            size_t sk = (i < shift) ? 0 : i - shift;
+            if (sk > nkk - wk) sk = nkk - wk;
+            s[k] = (int64_t)sk;
+        }
+        w[k] = wk;
+    }
+    EvalCtx ctx = { f, p, ders, s, w, kernel };
+    *out = eval_dim(&ctx, 0, 0);
+    free(s); free(w);
+    return true;
+}
+
 /*
  * interp_eval_double:
  *   Evaluate the object at the (machine-precision) point.  Returns a fresh
- *   EXPR_REAL, or NULL if the point is non-numeric / the data is malformed.
- *   `Ksupplied` is the number of supplied derivative tensors per node (0 for
- *   value-only data).
+ *   EXPR_REAL (or a nested List for array-valued data), or NULL if the point is
+ *   non-numeric / the data is malformed.  `Ksupplied` is the number of supplied
+ *   derivative tensors per node (0 for value-only data).
  */
 static Expr* interp_eval_double(Expr* domain, Expr* table, size_t m,
                                 Expr** call_args, const int* ders,
-                                const int* orders, int method, int Ksupplied) {
+                                const int* orders, int method, int Ksupplied,
+                                const bool* periodic) {
     double* p = malloc(sizeof(double) * m);
     for (size_t k = 0; k < m; k++)
         if (!node_to_double(call_args[k], &p[k])) { free(p); return NULL; }
 
     IFun f;
-    if (!build_grid(domain, table, m, &f)) { free(p); return NULL; }
+    if (!build_grid(domain, table, m, periodic, &f)) { free(p); return NULL; }
 
-    for (size_t k = 0; k < m; k++)
-        if (f.has_range[k] && (p[k] < f.dmin[k] || p[k] > f.dmax[k])) {
+    /* Reduce periodic coordinates into [x0, x0 + P); warn on aperiodic dims. */
+    for (size_t k = 0; k < m; k++) {
+        if (f.periodic[k]) {
+            double x0 = f.grid[k][0], P = f.period[k];
+            double u = x0 + fmod(p[k] - x0, P);
+            if (u < x0) u += P;
+            p[k] = u;
+        } else if (f.has_range[k] && (p[k] < f.dmin[k] || p[k] > f.dmax[k])) {
             fprintf(stderr,
                     "InterpolatingFunction::dmval: Input value %g lies outside "
                     "the range of data in the interpolating function. "
                     "Extrapolation will be used.\n", p[k]);
-            break;
-        }
-
-    double value;
-    bool ok = true;
-
-    if (method == METHOD_HERMITE || Ksupplied >= 1) {
-        int K = Ksupplied;
-        int k = K > 1 ? K : 1;
-        double* basis = build_basis(k);
-        double* T = build_T(&f, m, K, k);
-        if (!T) { ok = false; value = 0; }
-        else {
-            value = hermite_tensor_eval(&f, T, ipow_sz((size_t)(k + 1), m),
-                                        m, k, basis, 2 * k + 2, p, ders);
-            free(T);
-        }
-        free(basis);
-    } else if (method == METHOD_SPLINE) {
-        if (!fill_values(&f)) { ok = false; value = 0; }
-        else {
-            size_t* s = calloc(m, sizeof(size_t));
-            size_t* w = malloc(sizeof(size_t) * m);
-            for (size_t k = 0; k < m; k++) w[k] = f.nk[k];   /* full grid */
-            EvalCtx ctx = { &f, p, ders, s, w, 1 };
-            value = eval_dim(&ctx, 0, 0);
-            free(s); free(w);
-        }
-    } else {
-        if (!fill_values(&f)) { ok = false; value = 0; }
-        else {
-            size_t* s = malloc(sizeof(size_t) * m);
-            size_t* w = malloc(sizeof(size_t) * m);
-            for (size_t k = 0; k < m; k++) {
-                size_t nkk = f.nk[k];
-                size_t order;
-                if (orders) { order = (size_t)orders[k]; if (order > nkk - 1) order = nkk - 1; }
-                else { order = nkk - 1; if (order > 3) order = 3; }
-                size_t wk = order + 1;
-                size_t i = bracket_interval(f.grid[k], nkk, p[k]);
-                size_t shift = (wk >= 2) ? (wk / 2 - 1) : 0;
-                size_t sk = (i < shift) ? 0 : i - shift;
-                if (sk > nkk - wk) sk = nkk - wk;
-                s[k] = sk; w[k] = wk;
-            }
-            EvalCtx ctx = { &f, p, ders, s, w, 0 };
-            value = eval_dim(&ctx, 0, 0);
-            free(s); free(w);
         }
     }
 
+    size_t vshape[16];
+    int vrank;
+    value_shape(entry_value(f.entryAt[0]), vshape, &vrank);
+    size_t vtotal = 1;
+    for (int d = 0; d < vrank; d++) vtotal *= vshape[d];
+
+    double* comps = malloc(sizeof(double) * vtotal);
+    int* cpath = malloc(sizeof(int) * (vrank ? (size_t)vrank : 1));
+    bool ok = true;
+    for (size_t ci = 0; ci < vtotal && ok; ci++) {
+        size_t rem = ci;
+        for (int d = vrank; d-- > 0; ) { cpath[d] = (int)(rem % vshape[d]); rem /= vshape[d]; }
+        ok = eval_component_double(&f, cpath, vrank, m, p, ders, orders, method, Ksupplied, &comps[ci]);
+    }
+
     ifun_free(&f);
-    free(p);
-    return ok ? expr_new_real(value) : NULL;
+    free(p); free(cpath);
+    if (!ok) { free(comps); return NULL; }
+    size_t idx = 0;
+    Expr* result = assemble_array(comps, vshape, vrank, 0, &idx);
+    free(comps);
+    return result;
 }
 
 #ifdef USE_MPFR
 /* Implemented in interp_mpfr.c. */
 Expr* interp_eval_mpfr(Expr* domain, Expr* table, size_t m,
                        Expr** call_args, const int* ders,
-                       const int* orders, int method, int Ksupplied, long bits);
+                       const int* orders, int method, int Ksupplied,
+                       const bool* periodic, long bits);
 #endif
 
 /* --- object inspection (precision + table form) ----------------------- */
@@ -721,7 +950,7 @@ static int table_Ksupplied(Expr* table) {
 Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     if (ifun->type != EXPR_FUNCTION) return NULL;
     size_t obj_argc = ifun->data.function.arg_count;
-    if (obj_argc < 2 || obj_argc > 5) return NULL;
+    if (obj_argc < 2 || obj_argc > 6) return NULL;
     Expr* domain = ifun->data.function.args[0];
     Expr* table  = ifun->data.function.args[1];
 
@@ -749,7 +978,7 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
     }
 
     int method = METHOD_DEFAULT;
-    if (obj_argc == 5) {
+    if (obj_argc >= 5) {
         Expr* me = ifun->data.function.args[4];
         if (me->type == EXPR_STRING && me->data.string) {
             if (strcmp(me->data.string, "Spline") == 0) method = METHOD_SPLINE;
@@ -757,8 +986,20 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
         }
     }
 
+    /* Per-dimension periodicity (6th arg): a List of True/False. */
+    bool* periodic = NULL;
+    if (obj_argc == 6) {
+        Expr* pe = ifun->data.function.args[5];
+        if (!interp_is_list(pe) || pe->data.function.arg_count != m) { free(ders); free(orders); return NULL; }
+        periodic = calloc(m, sizeof(bool));
+        for (size_t k = 0; k < m; k++) {
+            Expr* b = pe->data.function.args[k];
+            periodic[k] = (b->type == EXPR_SYMBOL && b->data.symbol == SYM_True);
+        }
+    }
+
     int Ksupplied = table_Ksupplied(table);
-    if (Ksupplied < 0) { free(ders); free(orders); return NULL; }
+    if (Ksupplied < 0) { free(ders); free(orders); free(periodic); return NULL; }
 
     /* Exact node-coincident value query -> exact stored value. */
     if (!any_der) {
@@ -774,7 +1015,7 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
                     if (!expr_eq(call_args[k], entry_coord(e, m, k))) { hit = false; break; }
                 if (hit) {
                     Expr* y = expr_copy(entry_value(e));
-                    free(ders); free(orders);
+                    free(ders); free(orders); free(periodic);
                     return y;
                 }
             }
@@ -803,19 +1044,19 @@ Expr* interp_apply(Expr* ifun, Expr** call_args, size_t argc) {
         if (want_mpfr) bits = (mn > 53) ? mn : 53;
     }
     if (want_mpfr)
-        result = interp_eval_mpfr(domain, table, m, call_args, ders, orders, method, Ksupplied, bits);
+        result = interp_eval_mpfr(domain, table, m, call_args, ders, orders, method, Ksupplied, periodic, bits);
     else
 #endif
-        result = interp_eval_double(domain, table, m, call_args, ders, orders, method, Ksupplied);
+        result = interp_eval_double(domain, table, m, call_args, ders, orders, method, Ksupplied, periodic);
 
-    free(ders); free(orders);
+    free(ders); free(orders); free(periodic);
     return result;
 }
 
 Expr* interp_make_derivative(Expr* deriv_head, Expr* ifun) {
     if (ifun->type != EXPR_FUNCTION) return NULL;
     size_t obj_argc = ifun->data.function.arg_count;
-    if (obj_argc < 2 || obj_argc > 5) return NULL;
+    if (obj_argc < 2 || obj_argc > 6) return NULL;
     Expr* domain = ifun->data.function.args[0];
     Expr* table  = ifun->data.function.args[1];
 
@@ -885,6 +1126,7 @@ static Expr* builtin_interpolation(Expr* res) {
     Expr* eval_point = NULL;
     int explicit_order = -1;
     int method = METHOD_DEFAULT;
+    Expr* periodic_spec = NULL;   /* PeriodicInterpolation rhs: True/False/List */
     for (size_t i = 1; i < argc; i++) {
         Expr* a = res->data.function.args[i];
         if (a->type == EXPR_FUNCTION && a->data.function.arg_count == 2
@@ -904,7 +1146,7 @@ static Expr* builtin_interpolation(Expr* res) {
                          && strcmp(rhs->data.string, "Hermite") == 0) method = METHOD_HERMITE;
                 else return NULL;
             } else if (lhs->data.symbol == SYM_PeriodicInterpolation) {
-                if (!(rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_False)) return NULL;
+                periodic_spec = rhs;   /* validated against m below */
             } else return NULL;
             continue;
         }
@@ -931,6 +1173,26 @@ static Expr* builtin_interpolation(Expr* res) {
         } else return NULL;
     } else return NULL;
 
+    /* Resolve PeriodicInterpolation against the dimensionality. */
+    bool* periodic = NULL;
+    bool any_periodic = false;
+    if (periodic_spec) {
+        bool all_true = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol == SYM_True);
+        bool all_false = (periodic_spec->type == EXPR_SYMBOL && periodic_spec->data.symbol == SYM_False);
+        if (!all_false) {
+            periodic = calloc(m, sizeof(bool));
+            if (all_true) { for (size_t k = 0; k < m; k++) periodic[k] = true; any_periodic = true; }
+            else if (interp_is_list(periodic_spec) && periodic_spec->data.function.arg_count == m) {
+                for (size_t k = 0; k < m; k++) {
+                    Expr* b = periodic_spec->data.function.args[k];
+                    periodic[k] = (b->type == EXPR_SYMBOL && b->data.symbol == SYM_True);
+                    if (periodic[k]) any_periodic = true;
+                }
+            } else { free(periodic); return NULL; }   /* malformed periodic spec */
+            if (!any_periodic) { free(periodic); periodic = NULL; }
+        }
+    }
+
     /* build the {coord,...} table and the per-dimension domain bounds */
     Expr** entries = malloc(sizeof(Expr*) * npts);
     double* dmin = malloc(sizeof(double) * m);
@@ -955,7 +1217,7 @@ static Expr* builtin_interpolation(Expr* res) {
         } else {
             if (!interp_is_list(e) || e->data.function.arg_count < 2) { ok = false; break; }
             if ((int)(e->data.function.arg_count - 2) != Ksupplied) { ok = false; break; }
-            if (!is_scalar_real(e->data.function.args[1])) { ok = false; break; }  /* value */
+            if (!is_real_or_array(e->data.function.args[1])) { ok = false; break; }  /* value */
             for (size_t k = 0; k < m; k++) {
                 Expr* ck = entry_coord(e, m, k);
                 if (!ck || !node_to_double(ck, &coord[k])) { ok = false; break; }
@@ -979,7 +1241,7 @@ static Expr* builtin_interpolation(Expr* res) {
 
     if (!ok) {
         free_exprs(entries, built);
-        free(dmin); free(dmax); free(dminE); free(dmaxE);
+        free(dmin); free(dmax); free(dminE); free(dmaxE); free(periodic);
         return NULL;
     }
 
@@ -997,7 +1259,7 @@ static Expr* builtin_interpolation(Expr* res) {
 
     /* assemble the object */
     Expr* object;
-    bool need_full = (explicit_order >= 0) || (method != METHOD_DEFAULT);
+    bool need_full = (explicit_order >= 0) || (method != METHOD_DEFAULT) || any_periodic;
     if (!need_full) {
         Expr* oargs[2] = { domain, table };
         object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 2);
@@ -1009,15 +1271,27 @@ static Expr* builtin_interpolation(Expr* res) {
         Expr* ders_list  = make_list(zeros, m);
         Expr* order_list = make_list(ords, m);
         free(zeros); free(ords);
-        if (method == METHOD_DEFAULT) {
+        if (!any_periodic && method == METHOD_DEFAULT) {
             Expr* oargs[4] = { domain, table, ders_list, order_list };
             object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 4);
         } else {
-            Expr* mstr = expr_new_string(method == METHOD_SPLINE ? "Spline" : "Hermite");
-            Expr* oargs[5] = { domain, table, ders_list, order_list, mstr };
-            object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 5);
+            Expr* mslot = (method == METHOD_DEFAULT)
+                ? expr_new_symbol("Automatic")
+                : expr_new_string(method == METHOD_SPLINE ? "Spline" : "Hermite");
+            if (!any_periodic) {
+                Expr* oargs[5] = { domain, table, ders_list, order_list, mslot };
+                object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 5);
+            } else {
+                Expr** pf = malloc(sizeof(Expr*) * m);
+                for (size_t k = 0; k < m; k++) pf[k] = expr_new_symbol(periodic[k] ? "True" : "False");
+                Expr* per_list = make_list(pf, m);
+                free(pf);
+                Expr* oargs[6] = { domain, table, ders_list, order_list, mslot, per_list };
+                object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 6);
+            }
         }
     }
+    free(periodic);
 
     if (eval_point) {
         Expr* value;

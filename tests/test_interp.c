@@ -151,6 +151,26 @@ static void run_mpfr(const char* input, double want, double tol) {
     expr_free(res); expr_free(e);
 }
 
+/* Evaluate; assert the result is a length-n List of reals/MPFR within tol. */
+static void run_vec(const char* input, const double* want, size_t n, double tol) {
+    Expr* e = parse_expression(input);
+    if (!e) { printf("Failed to parse: %s\n", input); ASSERT(0); return; }
+    Expr* res = evaluate(e);
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != n) {
+        char* s = expr_to_string_fullform(res);
+        printf("FAIL (not a length-%zu list): %s -> %s\n", n, input, s); free(s); ASSERT(0);
+        expr_free(res); expr_free(e); return;
+    }
+    int bad = 0;
+    for (size_t i = 0; i < n; i++) {
+        double got = result_as_double(res->data.function.args[i], NULL);
+        if (isnan(got) || fabs(got - want[i]) > tol) { bad = 1;
+            printf("FAIL: %s [%zu] -> %.10g (expected %.10g)\n", input, i, got, want[i]); }
+    }
+    if (bad) ASSERT(0); else printf("PASS vec: %s\n", input);
+    expr_free(res); expr_free(e);
+}
+
 /* Two-point linear interpolation. */
 static void test_linear(void) {
     run_close("InterpolatingFunction[{{0,1}},{{0,0},{1,10}}][0.5]", 5.0, 1e-9);
@@ -476,6 +496,92 @@ static void test_precision_mpfr(void) {
     run_val("Interpolation[{1,2,3,5,8,5}][2.5]", 2.4375, 1e-12);
 }
 
+/* --- vector/array-valued samples -------------------------------------- */
+#define VEC_FUN "Interpolation[{{{0.},{1.,2.}},{{1.2},{3.,4.}},{{2.1},{5.,4.}},{{3.},{0.,4.}}}]"
+/* f(x) = {x, x^2} sampled with {x} coordinates. */
+#define VEC_POLY "Interpolation[{{{0.},{0.,0.}},{{1.},{1.,1.}},{{2.},{2.,4.}},{{3.},{3.,9.}}}]"
+static void test_vector(void) {
+    double w1[2] = {4.031746031746032, 4.071428571428571};
+    run_vec(VEC_FUN "[1.5]", w1, 2, 1e-6);     /* documented value */
+    double w0[2] = {1.0, 2.0};
+    run_vec(VEC_FUN "[0.]", w0, 2, 1e-12);     /* exact node -> stored vector */
+    double w2[2] = {1.5, 2.25};
+    run_vec(VEC_POLY "[1.5]", w2, 2, 1e-9);    /* component-wise reproduction */
+    run_vec("Interpolation[{{{0.},{0.,0.}},{{1.},{1.,1.}},{{2.},{2.,4.}},{{3.},{3.,9.}}},"
+            " Method->\"Spline\"][2.]", (double[]){2.0, 4.0}, 2, 1e-9);
+    /* vector with supplied derivatives: f={x^3,x^2}, f'={3x^2,2x} */
+    const char* vd = "Interpolation[{{{0.},{0.,0.},{0.,0.}},{{1.},{1.,1.},{3.,2.}},"
+                     "{{2.},{8.,4.},{12.,4.}},{{3.},{27.,9.},{27.,6.}}}]";
+    char buf[512];
+    snprintf(buf, sizeof buf, "%s[1.5]", vd);
+    run_vec(buf, (double[]){3.375, 2.25}, 2, 1e-9);
+    snprintf(buf, sizeof buf, "Derivative[1][%s][1.5]", vd);
+    run_vec(buf, (double[]){6.75, 3.0}, 2, 1e-9);
+    /* 2-D vector value f(x,y) = {x+y, x*y} */
+    run_vec("Interpolation[{{{0,0},{0,0}},{{0,1},{1,0}},{{0,2},{2,0}},"
+            "{{1,0},{1,0}},{{1,1},{2,1}},{{1,2},{3,2}},"
+            "{{2,0},{2,0}},{{2,1},{3,2}},{{2,2},{4,4}}}][0.5,0.5]",
+            (double[]){1.0, 0.25}, 2, 1e-9);
+}
+
+static void test_vector_mpfr(void) {
+    double w1[2] = {4.031746031746032, 4.071428571428571};
+    run_vec("Interpolation[N[{{{0.},{1.,2.}},{{1.2},{3.,4.}},{{2.1},{5.,4.}},{{3.},{0.,4.}}},30]][N[3/2,30]]",
+            w1, 2, 1e-10);
+}
+
+/* --- periodic interpolation ------------------------------------------- */
+/* Consistent periodic data on x=0..5 (f(5)=f(0)); period 5. */
+#define PER_DATA "{{0,0},{1,1},{2,4},{3,9},{4,4},{5,0}}"
+static void test_periodic(void) {
+    /* node reproduction (exact-node shortcut, integer arg) */
+    run_fullform("Interpolation[" PER_DATA ", PeriodicInterpolation->True][1]", "1");
+    /* wrap: f[x+P] == f[x]; node 1 reached from 6, 11, and -4 */
+    run_val("Interpolation[" PER_DATA ", PeriodicInterpolation->True][6.0]", 1.0, 1e-9);
+    run_val("Interpolation[" PER_DATA ", PeriodicInterpolation->True][11.0]", 1.0, 1e-9);
+    run_val("Interpolation[" PER_DATA ", PeriodicInterpolation->True][-4.0]", 1.0, 1e-9);
+    /* same off-node value at x and x+P, for every method */
+    run_val("Interpolation[" PER_DATA ", PeriodicInterpolation->True][2.5] - "
+            "Interpolation[" PER_DATA ", PeriodicInterpolation->True][7.5]", 0.0, 1e-9);
+    run_val("Interpolation[" PER_DATA ", Method->\"Spline\", PeriodicInterpolation->True][2.5] - "
+            "Interpolation[" PER_DATA ", Method->\"Spline\", PeriodicInterpolation->True][12.5]", 0.0, 1e-9);
+    run_val("Interpolation[" PER_DATA ", Method->\"Hermite\", PeriodicInterpolation->True][2.5] - "
+            "Interpolation[" PER_DATA ", Method->\"Hermite\", PeriodicInterpolation->True][7.5]", 0.0, 1e-9);
+    /* cyclic spline is C1 across the seam: f'(xmax-) == f'(xmin+) */
+    run_val("Interpolation[" PER_DATA ", Method->\"Spline\", PeriodicInterpolation->True]'[5.0] - "
+            "Interpolation[" PER_DATA ", Method->\"Spline\", PeriodicInterpolation->True]'[0.0]", 0.0, 1e-6);
+    /* 2-D periodic: wrap in both dims */
+    const char* d2 = "Interpolation[{{{0,0},0},{{0,1},1},{{0,2},0},{{1,0},2},{{1,1},3},{{1,2},2},"
+                     "{{2,0},0},{{2,1},1},{{2,2},0}}, PeriodicInterpolation->True]";
+    char buf[1024];
+    snprintf(buf, sizeof buf, "%s[0.5,0.5] - %s[2.5,2.5]", d2, d2);
+    run_val(buf, 0.0, 1e-9);
+    /* per-dimension {True, False}: wrap only dim 1 */
+    const char* dpd = "Interpolation[{{{0,0},0},{{0,1},1},{{0,2},0},{{1,0},2},{{1,1},3},{{1,2},2},"
+                      "{{2,0},0},{{2,1},1},{{2,2},0}}, PeriodicInterpolation->{True,False}]";
+    snprintf(buf, sizeof buf, "%s[0.5,1.5] - %s[2.5,1.5]", dpd, dpd);
+    run_val(buf, 0.0, 1e-9);
+}
+
+static void test_periodic_mpfr(void) {
+    /* Genuinely MPFR-valued periodic data (Sin over a full period, f(0)=f(5)=0). */
+    const char* d = "Table[{x, N[Sin[2 Pi x/5], 30]}, {x, 0, 5}]";
+    char buf[768];
+    snprintf(buf, sizeof buf, "Interpolation[%s, PeriodicInterpolation->True][N[1/2,30]]", d);
+    run_mpfr(buf, 0.557673744416191, 1e-9);
+    /* wrap agreement at arbitrary precision: f[x] - f[x+P] == 0 (default + cyclic spline) */
+    snprintf(buf, sizeof buf,
+             "Interpolation[%s, PeriodicInterpolation->True][N[1/2,30]] - "
+             "Interpolation[%s, PeriodicInterpolation->True][N[11/2,30]] + 1", d, d);
+    run_mpfr(buf, 1.0, 1e-18);
+    snprintf(buf, sizeof buf,
+             "Interpolation[%s, Method->\"Spline\", PeriodicInterpolation->True][N[1/2,30]] - "
+             "Interpolation[%s, Method->\"Spline\", PeriodicInterpolation->True][N[11/2,30]] + 1", d, d);
+    run_mpfr(buf, 1.0, 1e-18);
+    snprintf(buf, sizeof buf, "Interpolation[%s, Method->\"Spline\", PeriodicInterpolation->True][N[1/2,30]]", d);
+    run_mpfr(buf, 0.582256125203642, 1e-9);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -509,6 +615,11 @@ int main(void) {
     test_supplied_1d();
     test_supplied_nd();
     test_precision_mpfr();
+
+    test_vector();
+    test_vector_mpfr();
+    test_periodic();
+    test_periodic_mpfr();
 
     symtab_clear();
     printf("\nAll InterpolatingFunction and Interpolation tests passed.\n");

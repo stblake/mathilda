@@ -170,8 +170,18 @@ point `x` (a number, or an `{x, y, ...}` coordinate list in m-D).
 - `InterpolationOrder -> n` — degree of the piecewise-polynomial pieces
   (default `3`; `0` piecewise-constant, `1` piecewise-linear). Carried on the
   object and preserved through differentiation.
-- `PeriodicInterpolation` accepts only its default (`False`); vector/array-valued
-  samples are not yet supported (such calls are left unevaluated).
+- `PeriodicInterpolation -> True` — build a periodic interpolant. The period in
+  each dimension is the data span, and the data must repeat its first sample at
+  the last (`f(x_max) = f(x_min)`). Out-of-range arguments wrap (no `dmval`
+  warning); the seam is handled by wrap-around windows for the default/Hermite
+  methods and a **cyclic** cubic spline for `Method -> "Spline"`. A per-dimension
+  list `{True, False, …}` selects periodicity per axis.
+
+**Vector/array-valued data.** A sample `f_i` may itself be a list or array (with
+explicit coordinates, e.g. `{{x}, {v1, v2}}`). Each component is interpolated
+independently and the result is an array of the same shape. This composes with
+every method, with supplied derivatives (whose tensors carry the value-array axes
+first, then the derivative axes), in n-D, and at MPFR precision.
 
 The domain is inferred from the data (the min/max abscissa in each dimension),
 preserving the data's number type (integer abscissae give an integer domain).
@@ -206,6 +216,16 @@ Out[5]= {3.375, 6.75}
 In[6]:= (* high-precision data -> high-precision result *)
         Interpolation[N[{1, 2, 3, 5, 8, 5}, 30], Method -> "Spline"][N[5/2, 30]]
 Out[6]= 2.473086124401913875598086124405
+
+In[7]:= (* vector-valued: each component interpolated independently *)
+        fv = Interpolation[{{{0.}, {1., 2.}}, {{1.2}, {3., 4.}}, {{2.1}, {5., 4.}}, {{3.}, {0., 4.}}}];
+        fv[1.5]
+Out[7]= {4.03175, 4.07143}
+
+In[8]:= (* periodic: f[x] wraps with period = data span (5) *)
+        fp = Interpolation[Table[{x, N[Sin[2 Pi x/5]]}, {x, 0, 5}], PeriodicInterpolation -> True];
+        {fp[0.5], fp[5.5], fp[-4.5]}
+Out[8]= {0.557674, 0.557674, 0.557674}
 ```
 
 ## Map (/@)
