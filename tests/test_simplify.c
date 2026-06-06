@@ -572,20 +572,21 @@ void test_simplify_user_real_contagion_factored(void) {
      * Mathematica's preferred form is the factored
      *   1./((1. + Sqrt[x]) Sqrt[x] (1. + x))
      * which expands to the equivalent expanded denominator
-     *   1/(x + Sqrt[x] + x^(3/2) + x^2)
-     * Both are mathematically equal. Mathilda currently picks the
-     * expanded form because its SimplifyCount (18) beats the factored
-     * form (23) under the default complexity measure -- factoring
-     * polynomials in a rational-power generator (here Sqrt[x]) and
-     * preserving Real coefficient contagion through the search are both
-     * future enhancements. The test pins the current expanded output;
-     * once those enhancements land, update the expected to match
-     * Mathematica's printed form. */
+     *   1/(x + Sqrt[x] + x^(3/2) + x^2).
+     * All three forms are mathematically equal. Simplify's algebraic-top
+     * Together fast path now combines the radical-fraction sum over a
+     * common denominator before the bottom-up search, so the partially
+     * factored 1/((1 + x) (Sqrt[x] + x)) is reachable -- and it is strictly
+     * simpler than the expanded denominator under both default measures
+     * (SimplifyCount 17 vs 18, LeafCount 15 vs 17), so it wins. This is a
+     * step toward Mathematica's fully factored form. The Real 0.5 contagion
+     * surfaces as the standalone 1. in the (1. + x) factor (the expanded
+     * form had no standalone constant to carry the inexact coefficient). */
     assert_eval_eq(
         "Simplify[1/(2*Sqrt[x]*(1 + x)) "
         "+ (0.5*(1 + x)*(-((1 + Sqrt[x])^2/(1 + x)^2) "
         "+ (1 + Sqrt[x])/(Sqrt[x]*(1 + x))))/(1 + Sqrt[x])^2]",
-        "1/(Sqrt[x] + x + x^(3/2) + x^2)", 0);
+        "1/((1.0 + x) (Sqrt[x] + x))", 0);
 }
 
 void test_simplify_user_log_term_survives(void) {

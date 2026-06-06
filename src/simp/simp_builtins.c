@@ -719,20 +719,46 @@ Expr* builtin_simplify(Expr* res) {
             && expr->data.function.head
             && expr->data.function.head->type == EXPR_SYMBOL
             && expr->data.function.head->data.symbol == SYM_Plus
-            && has_non_integer_power(expr)
+            && simp_has_rational_root(expr)
             && !contains_explicit_complex(expr)
             && !expr_has_nested_radical_radicand(expr)) {
-            /* Layer-0 prefilter shared with builtin_together/cancel:
-             * skip extension_autodetect entirely when the input has a
-             * nested radical and no free polynomial variable.  Even
-             * with builtin_together's own gate, this saves a redundant
-             * autodetect call here (extension_autodetect on a nested-
-             * radical input runs the primitive-element compositum
-             * construction, which is the bulk of the cost). */
+            /* Two flavours of radical-fraction sum collapse here, both of
+             * which simp_bottomup's per-subnode descent cannot reach on its
+             * own (it simplifies each Plus child separately and never combines
+             * them over a common denominator):
+             *
+             *   - Multi-generator algebraic-number towers (e.g. the sum of
+             *     three fractions over {2^(1/3), Sqrt[3], ...} from
+             *     D[Integrate[a x/(x^3+2), x], x]).  extension_autodetect
+             *     returns n >= 2 and Together[expr, Extension -> Automatic]
+             *     collapses it via builtin_together's Phase F multi-gen
+             *     single-alpha fallback.
+             *
+             *   - A single polynomial-radicand radical (e.g. the cube-root
+             *     tower (1 - b x)^(p/3) in D[Integrate[(1-b x)^(1/3)/x, x], x]).
+             *     extension_autodetect returns NULL here -- the QAExt
+             *     machinery only represents integer-base minimal polynomials --
+             *     so plain Together does the work via its Phase E poly-radical
+             *     reduction.
+             *
+             * The outer gate is simp_has_rational_root (a genuine Power[_,
+             * Rational[_, q>=2]]) rather than has_non_integer_power so we never
+             * feed a symbolic-exponent power (a^x) to Together, which can hang
+             * on those.  The strict leaf-count gate below keeps the combined
+             * fraction only when it is genuinely simpler, so there is no
+             * regression when Together is a no-op or worse.
+             *
+             * Layer-0 prefilter shared with builtin_together/cancel: the
+             * nested-radical-radicand condition above skips the expensive
+             * primitive-element compositum construction inside
+             * extension_autodetect. */
             QATower* qa_t = extension_autodetect(expr);
-            if (qa_t && qa_t->n >= 2) {
-                qa_tower_free(qa_t);
-                Expr* tog = expr_new_function(
+            bool multigen = (qa_t && qa_t->n >= 2);
+            if (qa_t) qa_tower_free(qa_t);
+
+            Expr* tog;
+            if (multigen) {
+                tog = expr_new_function(
                     expr_new_symbol("Together"),
                     (Expr*[]){
                         expr_copy(expr),
@@ -740,16 +766,18 @@ Expr* builtin_simplify(Expr* res) {
                             (Expr*[]){expr_new_symbol("Extension"),
                                       expr_new_symbol("Automatic")}, 2)
                     }, 2);
-                Expr* cand = evaluate(tog);
-                expr_free(tog);
-                if (cand && simp_default_complexity(cand)
-                                < simp_default_complexity(expr)) {
-                    alg_top = cand;
-                } else if (cand) {
-                    expr_free(cand);
-                }
-            } else if (qa_t) {
-                qa_tower_free(qa_t);
+            } else {
+                tog = expr_new_function(
+                    expr_new_symbol("Together"),
+                    (Expr*[]){ expr_copy(expr) }, 1);
+            }
+            Expr* cand = evaluate(tog);
+            expr_free(tog);
+            if (cand && simp_default_complexity(cand)
+                            < simp_default_complexity(expr)) {
+                alg_top = cand;
+            } else if (cand) {
+                expr_free(cand);
             }
         }
 
