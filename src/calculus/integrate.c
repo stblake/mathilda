@@ -20,6 +20,7 @@
 #include "integrate_unknown.h"
 #include "integrate_derivdivides.h"
 #include "integrate_linrad.h"
+#include "integrate_quadrad.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "common.h"
@@ -155,6 +156,14 @@ static Expr* try_linrad(Expr* f, Expr* x) {
     return integrate_linrad_try(f, x);
 }
 
+/* Stage 1d: quadratic-radical (Euler) substitution.  Recognises a rational
+ * function of x and square roots (a x^2 + b x + c)^(m/2) of one shared quadratic
+ * argument, applies a single real-valued Euler substitution, integrates the
+ * rational result, and back-substitutes. */
+static Expr* try_quadrad(Expr* f, Expr* x) {
+    return integrate_quadrad_try(f, x);
+}
+
 /* Stage 2: Risch-Norman heuristic (Bronstein pmint). */
 static Expr* try_risch(Expr* f, Expr* x) {
     Expr* result = call_stage("Integrate`RischNorman", f, x);
@@ -240,6 +249,7 @@ typedef enum {
     METHOD_RATIONAL,
     METHOD_DERIVATIVE_DIVIDES,
     METHOD_LINEAR_RADICALS,
+    METHOD_QUADRATIC_RADICALS,
     METHOD_RISCH,
     METHOD_CRCTABLE,
     METHOD_UNDEFINED,
@@ -265,6 +275,7 @@ static IntegrateMethod parse_method_option(Expr* opt) {
     if (strcmp(rhs->data.string, "BronsteinRational") == 0) return METHOD_RATIONAL;
     if (strcmp(rhs->data.string, "DerivativeDivides") == 0) return METHOD_DERIVATIVE_DIVIDES;
     if (strcmp(rhs->data.string, "LinearRadicals") == 0) return METHOD_LINEAR_RADICALS;
+    if (strcmp(rhs->data.string, "QuadraticRadicals") == 0) return METHOD_QUADRATIC_RADICALS;
     if (strcmp(rhs->data.string, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(rhs->data.string, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(rhs->data.string, "Undefined")   == 0) return METHOD_UNDEFINED;
@@ -303,7 +314,8 @@ Expr* builtin_integrate(Expr* res) {
                 fprintf(stderr,
                     "Integrate::method: Method option value is not one of "
                     "\"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", "
-                    "\"LinearRadicals\", \"RischNorman\", \"CRCTable\".\n");
+                    "\"LinearRadicals\", \"QuadraticRadicals\", \"RischNorman\", "
+                    "\"CRCTable\".\n");
                 last_warned_hash = h;
             }
             return NULL;
@@ -335,6 +347,7 @@ Expr* builtin_integrate(Expr* res) {
             result = try_undefined(effective_f, x);
             if (!result) result = try_rational(effective_f, x);
             if (!result) result = try_linrad(effective_f, x);
+            if (!result) result = try_quadrad(effective_f, x);
             if (!result) result = try_derivdivides(effective_f, x);
             if (!result) result = try_risch(effective_f, x);
             if (!result) result = try_crctable(effective_f, x);
@@ -347,6 +360,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_LINEAR_RADICALS:
             result = try_linrad(effective_f, x);
+            break;
+        case METHOD_QUADRATIC_RADICALS:
+            result = try_quadrad(effective_f, x);
             break;
         case METHOD_RISCH:
             result = try_risch(effective_f, x);
@@ -383,6 +399,7 @@ void integrate_init(void) {
         "  \"BronsteinRational\"  — Integrate`BronsteinRational (polynomial / rational)\n"
         "  \"DerivativeDivides\"  — Integrate`DerivativeDivides (substitution u(x); direct + Eliminate/Solve)\n"
         "  \"LinearRadicals\"     — Integrate`LinearRadicals (rationalise radicals of a x + b)\n"
+        "  \"QuadraticRadicals\"  — Integrate`QuadraticRadicals (Euler substitution for Sqrt[a x^2 + b x + c])\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
@@ -403,6 +420,9 @@ void integrate_init(void) {
 
     /* Linear-radical rationalising substitution: Integrate`LinearRadicals. */
     integrate_linrad_init();
+
+    /* Quadratic-radical (Euler) substitution: Integrate`QuadraticRadicals. */
+    integrate_quadrad_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,

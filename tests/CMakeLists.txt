@@ -223,6 +223,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_unknown.c
     ../src/calculus/integrate_derivdivides.c
     ../src/calculus/integrate_linrad.c
+    ../src/calculus/integrate_quadrad.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
@@ -1200,6 +1201,15 @@ else()
     target_link_libraries(integrate_linrad_tests gmp m)
 endif()
 add_test(NAME integrate_linrad_tests COMMAND integrate_linrad_tests)
+
+add_executable(integrate_quadrad_tests test_integrate_quadrad.c ${COMMON_SRC})
+target_include_directories(integrate_quadrad_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_quadrad_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(integrate_quadrad_tests gmp m)
+endif()
+add_test(NAME integrate_quadrad_tests COMMAND integrate_quadrad_tests)
 
 add_executable(condition_downvalue_tests test_condition_downvalue.c ${COMMON_SRC})
 target_include_directories(condition_downvalue_tests PRIVATE ../src)

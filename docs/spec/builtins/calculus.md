@@ -342,9 +342,10 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Six-stage dispatch cascade (`DerivativeDivides` and `LinearRadicals` added
-  2026-06-06): `Integrate[f, x]` (Method -> Automatic, default) tries each
-  subroutine in order and returns the first non-`NULL` result:
+- Seven-stage dispatch cascade (`DerivativeDivides` and `LinearRadicals` added
+  2026-06-06, `QuadraticRadicals` added 2026-06-06): `Integrate[f, x]`
+  (Method -> Automatic, default) tries each subroutine in order and returns the
+  first non-`NULL` result:
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
      derivative (e.g. `f'[x]`); see below.
   2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
@@ -352,10 +353,13 @@ monotonically down.
   3. `Integrate\`LinearRadicals[f, x]` — rational functions of `x` and radicals
      `(a x + b)^(m/n)` of one shared linear argument; rationalised by
      `u = (a x + b)^(1/n)`.
-  4. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
+  4. `Integrate\`QuadraticRadicals[f, x]` — rational functions of `x` and square
+     roots `(a x^2 + b x + c)^(m/2)` of one shared quadratic argument;
+     rationalised by a single real-valued Euler substitution.
+  5. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  5. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  6. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  6. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  7. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
@@ -365,6 +369,7 @@ monotonically down.
   - `"DerivativeDivides"` — `Integrate\`DerivativeDivides[f, x]` (direct **and**
     the more thorough Eliminate/Solve branch search).
   - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
+  - `"QuadraticRadicals"` — `Integrate\`QuadraticRadicals[f, x]`.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
@@ -408,7 +413,8 @@ The `Integrate`` package also exposes the lower-level helpers
 `Integrate`BronsteinRational` (the explicit form),
 `Integrate`IntRationalLogPart` (Phase 2's LRT computation),
 `Integrate`RischNorman` (Bronstein pmint), `Integrate`LinearRadicals`
-(linear-radical substitution), `Integrate`CRCTable`
+(linear-radical substitution), `Integrate`QuadraticRadicals`
+(quadratic-radical Euler substitution), `Integrate`CRCTable`
 (table lookup), `Integrate`Undefined` (unknown-function integration,
 Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
@@ -590,6 +596,58 @@ Out[3]= -3 x^(1/3) + 3/2 x^(2/3) + 3 Log[1 + x^(1/3)]
 
 In[4]:= Integrate[Sqrt[2 x + 3]/x, x, Method -> "LinearRadicals"]
 Out[4]= 2 Sqrt[3 + 2 x] - 2 Sqrt[3] ArcTanh[Sqrt[3 + 2 x]/Sqrt[3]]
+```
+
+### Integrate`QuadraticRadicals
+
+`Integrate`QuadraticRadicals[f, x]` integrates a **rational function of `x` and
+square roots `(a x^2 + b x + c)^(m/2)` that share one quadratic argument** by a
+classical **Euler substitution**.  Implemented in
+`src/calculus/integrate_quadrad.c`.
+
+It scans `f` for every `Power[base, p/q]` whose `x`-dependent `base` is a
+degree-2 polynomial: each must be a **square root** (`q == 2`) and all must be
+the **same** radicand `rad = a x^2 + b x + c` (a cube root such as
+`(x^2+1)^(1/3)`, a radical of a cubic such as `Sqrt[x^3+1]`, or distinct
+radicands are rejected; a purely linear radical belongs to
+`Integrate`LinearRadicals`).  Substituting the radicals to a fresh symbol `y`
+(`rad^(p/2) -> y^p`, via `poly_subst_radical_to_gen`) must leave a rational
+function of `{x, y}`.
+
+To keep the antiderivative **real-valued**, exactly **one** substitution is
+chosen by the sign of the leading coefficient `a` (and, when `a < 0`, of the
+discriminant `b^2 - 4 a c`) — the routine does *not* try all three Euler forms:
+
+| Condition | Euler substitution | Image `y = Sqrt[rad]` |
+|-----------|--------------------|-----------------------|
+| `a > 0` | first | `Sqrt[a] x + u` |
+| `a < 0` and `b^2 - 4 a c > 0` | third | `(x - alpha) u`, with `alpha` a real root |
+| `a` symbolic | first (best-effort `a > 0` branch) | `Sqrt[a] x + u` |
+
+For numeric `a < 0` a real radicand requires real roots, so the third
+substitution subsumes the second (the `c > 0` form).  Each branch yields
+`x = X(u)`, `dx = X'(u) du` and the radical image above; the rationalised
+integrand `f dx /. {y -> ..., x -> X}` re-enters the full `Integrate` and the
+result is back-substituted `u -> U(x)`.  As with `Integrate`LinearRadicals`, the
+Euler substitution is an exact bijection on the relevant domain, so the result
+is **not** put through a `Simplify[D[result, x] - f] === 0` gate — it is correct
+by construction once the rational sub-integral closes.  A depth guard (8) and
+fresh per-call substitution symbols keep the recursion finite.  Strict: returns
+unevaluated when `f` is not of this form or the reduced integral does not close.
+`Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= Integrate[1/Sqrt[x^2 + 1], x]
+Out[1]= -Log[-x + Sqrt[1 + x^2]]
+
+In[2]:= Integrate[1/Sqrt[1 - x^2], x]
+Out[2]= -2 ArcTan[Sqrt[1 - x^2]/(-1 + x)]
+
+In[3]:= Integrate[1/Sqrt[a x^2 + 1], x]               (* symbolic leading coeff *)
+Out[3]= -Log[-Sqrt[a] x + Sqrt[1 + a x^2]]/Sqrt[a]
+
+In[4]:= Integrate[1/Sqrt[x^2 - 1], x, Method -> "QuadraticRadicals"]
+Out[4]= -Log[-x + Sqrt[-1 + x^2]]
 ```
 
 ### InterpolatingFunction integrands
