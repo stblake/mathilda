@@ -342,17 +342,20 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Five-stage dispatch cascade (`DerivativeDivides` added 2026-06-06):
-  `Integrate[f, x]` (Method -> Automatic, default) tries each subroutine in
-  order and returns the first non-`NULL` result:
+- Six-stage dispatch cascade (`DerivativeDivides` and `LinearRadicals` added
+  2026-06-06): `Integrate[f, x]` (Method -> Automatic, default) tries each
+  subroutine in order and returns the first non-`NULL` result:
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
      derivative (e.g. `f'[x]`); see below.
   2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
      rationalQ[f, x]`.
-  3. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
+  3. `Integrate\`LinearRadicals[f, x]` — rational functions of `x` and radicals
+     `(a x + b)^(m/n)` of one shared linear argument; rationalised by
+     `u = (a x + b)^(1/n)`.
+  4. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  4. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  5. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  5. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  6. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
@@ -361,6 +364,7 @@ monotonically down.
   - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.
   - `"DerivativeDivides"` — `Integrate\`DerivativeDivides[f, x]` (direct **and**
     the more thorough Eliminate/Solve branch search).
+  - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
@@ -403,7 +407,8 @@ The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
 `Integrate`BronsteinRational` (the explicit form),
 `Integrate`IntRationalLogPart` (Phase 2's LRT computation),
-`Integrate`RischNorman` (Bronstein pmint), `Integrate`CRCTable`
+`Integrate`RischNorman` (Bronstein pmint), `Integrate`LinearRadicals`
+(linear-radical substitution), `Integrate`CRCTable`
 (table lookup), `Integrate`Undefined` (unknown-function integration,
 Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
@@ -538,6 +543,48 @@ Out[3]= Sec[x]                                      (* via Eliminate/Solve *)
 
 In[4]:= Integrate`DerivativeDivides[2 x Exp[x^2], x]
 Out[4]= E^x^2
+```
+
+### Integrate`LinearRadicals
+
+`Integrate`LinearRadicals[f, x]` integrates a **rational function of `x` and
+radicals `(a x + b)^(m/n)` that share one linear argument** by the classical
+rationalising substitution `u = (a x + b)^(1/n)`, where `n = LCM` of the radical
+denominators.  Implemented in `src/calculus/integrate_linrad.c`.
+
+It first scans `f` for every `Power[base, p/q]` with `q > 1`: each `base` must be
+a degree-1 polynomial in `x` and all must be the **same** linear form `a x + b`
+(distinct bases — e.g. `Sqrt[x] + Sqrt[x+1]` — are rejected, as are radicals of a
+non-linear argument such as `Sqrt[x^2+1]`).  With `x = (u^n - b)/a` and
+`dx = (n/a) u^(n-1) du` the integrand becomes
+
+```
+Integrate[f, x] = (n/a) Integrate[ R[(u^n - b)/a, u^M1, u^M2, ...] u^(n-1), u ],
+                  Mk = mk n / nk,
+```
+
+a **rational function of `u`** that `Integrate`BronsteinRational` closes exactly.
+The radical substitution reuses `poly_subst_radical_to_gen` (shared with the
+algebraic-factoring path); after the substituted integrand is confirmed rational
+in `{x, u}`, the reduced integral re-enters the full `Integrate`, the result is
+back-substituted `u -> (a x + b)^(1/n)`, and accepted only under the
+**unconditional verification gate** `Simplify[D[result, x] - f] === 0`.  A depth
+guard (8) and per-call fresh substitution symbols keep the recursion finite and
+collision-free.  Strict: returns unevaluated when `f` is not of this form or the
+reduced integral does not close.  `Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= Integrate[1/Sqrt[x + 1], x]
+Out[1]= 2 Sqrt[1 + x]
+
+In[2]:= Integrate[Sqrt[x]/(1 + Sqrt[x]), x]
+Out[2]= -2 Sqrt[x] + x + 2 Log[1 + Sqrt[x]]
+
+In[3]:= Integrate[1/(1 + x^(1/3)), x, Method -> "LinearRadicals"]
+Out[3]= -3 x^(1/3) + 3/2 x^(2/3) + 3 Log[1 + x^(1/3)]
+
+In[4]:= Integrate[Sqrt[2 x + 3]/x, x, Method -> "LinearRadicals"]
+Out[4]= 2 Sqrt[3 + 2 x] - 2 Sqrt[3] ArcTanh[Sqrt[3 + 2 x]/Sqrt[3]]
 ```
 
 ### InterpolatingFunction integrands

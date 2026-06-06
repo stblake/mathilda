@@ -52,3 +52,61 @@ grep -E "\.c:[0-9]+\)" run.txt                       # inspect src frames
 - **Severity:** low (small, bounded per call; not in a hot loop), but it scales
   with how often symbolic inequalities are evaluated.
 - **Discovered:** 2026-06-06, during `PowerExpand` implementation.
+
+---
+
+## `PossibleZeroQ`: Schwartz–Zippel numeric stage leaks on symbolic radicals
+
+- **Where:** `src/zero_test.c`, in the Stage-3 Schwartz–Zippel path
+  `decide_schwartz_zippel` (zero_test.c:660) → `decide_numeric` (556) →
+  `evaluate_rung` (529) → `numericalize_at` (→ `numericalize` in `src/numeric.c`).
+  In an `-O3` build the whole chain is inlined, so `leaks` roots every block at
+  `zero_test_decide` (zero_test.c:720, the `return decide_schwartz_zippel(e);`)
+  with the allocation in `expr_new_function` (expr.c:81).
+- **What:** when `PossibleZeroQ[e]` is given a symbolic expression that the
+  structural (`decide_structural`) and rational (`decide_rational`) stages can't
+  settle — characteristically anything containing a **radical of a symbol**
+  (`x^(1/3)`, `Sqrt[x+1]`, …) — it falls through to the random-sampling stage.
+  There, per trial it draws `sample_random_value()`s, `substitute_symbols` →
+  `sub`, then `decide_numeric(sub)` numericalizes `sub` at each precision rung.
+  Some intermediate `Expr` tree built while numericalizing a not-fully-numeric
+  sample is **not freed** — the leaked roots are small `Plus/Times` trees that
+  still contain symbols (i.e. partially-substituted / partially-numericalized
+  subexpressions), pointing at `numericalize`/`evaluate_rung` rather than at
+  `sub`/`vals` (both of which `decide_schwartz_zippel` does free correctly at
+  lines 686/689).
+- **Trigger / nondeterminism:** the leak depends on which random values are
+  drawn (`sample_random_value` sometimes returns a Real, sometimes a Complex,
+  exercising different numericalize branches), so it is **intermittent** — a
+  single call may leak 0; many calls reliably accumulate. Independent of
+  `Integrate`: reproduced directly with bare `PossibleZeroQ` calls:
+  ```bash
+  { for i in $(seq 1 40); do
+      echo "PossibleZeroQ[(x+$i)^(1/3) + Sqrt[x+$i] - x^(1/2)]"; done; echo 'Quit[]'; } \
+    | leaks --atExit -- ./Mathilda 2>&1 | grep 'leaks for'
+  # => ~1300 leaks / ~70 KB (vs 0 for the `1+1` baseline)
+  ```
+- **Stack (representative, inlined):**
+  ```
+  malloc → expr_new_function (src/expr.c:81)
+  zero_test_decide (src/zero_test.c:720)        # inlined decide_schwartz_zippel→decide_numeric→numericalize
+  builtin_possible_zero_q (src/zero_test.c:734)
+  evaluate_step (src/eval.c:813)
+  evaluate (src/eval.c:1079)
+  ...
+  ```
+- **Likely fix:** audit `numericalize` (`src/numeric.c`) for an intermediate
+  `Expr` it allocates but doesn't free when the input is only partially numeric
+  (head/argument rebuild path). The SZ driver itself (`decide_schwartz_zippel`)
+  already balances `sub` and `vals`; the unfreed tree is created one level
+  deeper, inside `numericalize_at(sub, bits)`. A scoped reproduction is to call
+  `numericalize` on `Plus[Real, Power[x, Rational[1,3]]]` (a Plus mixing a Real
+  and a symbolic radical) and leak-check that in isolation.
+- **Severity:** low–moderate. Small per leak (~48–320 B per root tree) but
+  **unbounded in aggregate** — `PossibleZeroQ` is on hot verification paths
+  (every `Integrate` differentiate-back gate, `Simplify`, etc.), so a session
+  that does much symbolic-radical integration accumulates KBs.
+- **Discovered:** 2026-06-06, surfaced by `Integrate`LinearRadicals` — its
+  differentiate-back verification (identical to `DerivativeDivides`) feeds
+  radical `D[result,x] - f` residues to `PossibleZeroQ`; the DerivativeDivides
+  test integrands happen to settle before Stage 3, so they never exposed it.
