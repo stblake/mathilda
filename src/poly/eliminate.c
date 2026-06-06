@@ -31,6 +31,7 @@
 #include "eval.h"
 #include "groebner.h"
 #include "internal.h"
+#include "trigsimp.h"
 #include "sym_intern.h"
 #include "sym_names.h"
 #include "symtab.h"
@@ -502,6 +503,586 @@ static const char* alg_fresh_name(Expr** eqs, size_t n_eq,
 }
 
 /* ------------------------------------------------------------------ */
+/*  Transcendental algebraisation pre-pass                             */
+/* ------------------------------------------------------------------ */
+
+/* The radical pass above handles `Power[base, p/q]`.  This pass is its
+ * transcendental sibling: when an elim variable sits inside a circular /
+ * hyperbolic trig function, an exponential (`b^x`), or a logarithm, we
+ * replace each kernel with fresh aux symbols and push them onto the elim
+ * list.  Circular/hyperbolic kernels contribute a `Sin`/`Cos` aux pair
+ * plus the Pythagorean constraint `s^2 + c^2 == 1` (circular) /
+ * `c^2 - s^2 == 1` (hyperbolic); Exp and Log kernels contribute a single
+ * algebraically-free aux.  After substitution the system is polynomial in
+ * the (extended) variable set, exactly as the radical pass leaves it, so
+ * the rest of the pipeline is unchanged.
+ *
+ * An expansion step makes this fully general rather than a special case:
+ *   - trig: reciprocal heads -> Sin/Cos, then `TrigExpand` reduces every
+ *     multiple/sum angle (`Sin[2x]`, `Sin[x+y]`) to a polynomial in
+ *     Sin/Cos of *atomic* angles;
+ *   - exp:  `b^(p+q) -> b^p b^q`, `b^(k m) -> (b^m)^k`;
+ *   - log:  `Log[a b] -> Log[a]+Log[b]`, `Log[a^n] -> n Log[a]`.
+ * So `Sin[x]` and `Sin[3x]`, or `Exp[x]` and `Exp[2x]`, collapse onto the
+ * same atomic kernel and stay correctly related through one shared aux.
+ *
+ * Soundness is preserved by two conservative gates (kernel_gate_a and the
+ * Gate-B check in builtin_eliminate); when either fires we bail with
+ * `nlin` and return the input unevaluated rather than emit an unsound
+ * relation. */
+
+typedef enum {
+    TK_NONE = 0, TK_SIN, TK_COS, TK_TAN, TK_COT, TK_SEC, TK_CSC
+} TrigWhich;
+
+/* Classify a head symbol as a circular/hyperbolic trig function.
+ * `*hyper` is set true for the hyperbolic family. */
+static TrigWhich trig_which(const char* h, bool* hyper) {
+    *hyper = false;
+    if (h == SYM_Sin) return TK_SIN;
+    if (h == SYM_Cos) return TK_COS;
+    if (h == SYM_Tan) return TK_TAN;
+    if (h == SYM_Cot) return TK_COT;
+    if (h == SYM_Sec) return TK_SEC;
+    if (h == SYM_Csc) return TK_CSC;
+    *hyper = true;
+    if (h == SYM_Sinh) return TK_SIN;
+    if (h == SYM_Cosh) return TK_COS;
+    if (h == SYM_Tanh) return TK_TAN;
+    if (h == SYM_Coth) return TK_COT;
+    if (h == SYM_Sech) return TK_SEC;
+    if (h == SYM_Csch) return TK_CSC;
+    *hyper = false;
+    return TK_NONE;
+}
+
+/* If `e` is a single-argument trig call, return its classification and
+ * store the argument in `*arg_out` (borrowed).  Else TK_NONE. */
+static TrigWhich trig_call(const Expr* e, bool* hyper, Expr** arg_out) {
+    if (!e || e->type != EXPR_FUNCTION) return TK_NONE;
+    if (!e->data.function.head
+     || e->data.function.head->type != EXPR_SYMBOL) return TK_NONE;
+    if (e->data.function.arg_count != 1) return TK_NONE;
+    TrigWhich w = trig_which(e->data.function.head->data.symbol, hyper);
+    if (w != TK_NONE) *arg_out = e->data.function.args[0];
+    return w;
+}
+
+/* Exponential kernel: `Power[base, exp]` with `base` elim-free and `exp`
+ * mentioning an elim variable (covers `E^x`, `2^x`, `a^x`).  This is
+ * disjoint from the radical pass, which fires only when the *base*
+ * contains an elim variable and the exponent is rational. */
+static bool exp_kernel(const Expr* e, Expr** elim, size_t n_elim,
+                       Expr** base_out, Expr** exp_out) {
+    if (!head_is(e, SYM_Power) || e->data.function.arg_count != 2) return false;
+    Expr* base = e->data.function.args[0];
+    Expr* exp  = e->data.function.args[1];
+    if (contains_any_var(base, elim, n_elim)) return false;
+    if (!contains_any_var(exp, elim, n_elim)) return false;
+    if (base_out) *base_out = base;
+    if (exp_out)  *exp_out  = exp;
+    return true;
+}
+
+/* Logarithmic kernel: `Log[arg]` with `arg` mentioning an elim variable. */
+static bool log_kernel(const Expr* e, Expr** elim, size_t n_elim,
+                       Expr** arg_out) {
+    if (!head_is(e, SYM_Log) || e->data.function.arg_count != 1) return false;
+    Expr* arg = e->data.function.args[0];
+    if (!contains_any_var(arg, elim, n_elim)) return false;
+    if (arg_out) *arg_out = arg;
+    return true;
+}
+
+/* True iff any transcendental kernel (circular/hyperbolic trig, Exp, or
+ * Log) over an elim-containing argument appears in `e`.  This is the
+ * cheap gate that keeps polynomial / radical systems on exactly the same
+ * code path as before (no transcendental => no overhead). */
+static bool has_transcendental_with_elim(const Expr* e,
+                                         Expr** elim, size_t n_elim) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    bool hyper;
+    Expr* arg = NULL;
+    if (trig_call(e, &hyper, &arg) != TK_NONE
+        && contains_any_var(arg, elim, n_elim)) {
+        return true;
+    }
+    if (exp_kernel(e, elim, n_elim, NULL, NULL)) return true;
+    if (log_kernel(e, elim, n_elim, NULL)) return true;
+    if (has_transcendental_with_elim(e->data.function.head, elim, n_elim)) {
+        return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        if (has_transcendental_with_elim(e->data.function.args[i],
+                                         elim, n_elim)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Build `Sin[theta]` / `Cos[theta]` (or the hyperbolic variants). */
+static Expr* make_sin(Expr* arg, bool hyper) {
+    return expr_new_function(expr_new_symbol(hyper ? "Sinh" : "Sin"),
+                             (Expr*[]){ arg }, 1);
+}
+static Expr* make_cos(Expr* arg, bool hyper) {
+    return expr_new_function(expr_new_symbol(hyper ? "Cosh" : "Cos"),
+                             (Expr*[]){ arg }, 1);
+}
+/* `Power[base, -1]` (a reciprocal). */
+static Expr* make_recip(Expr* base) {
+    return expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ base, expr_new_integer(-1) }, 2);
+}
+
+/* Rewrite Tan/Cot/Sec/Csc (and hyperbolic kin) of an elim-containing
+ * argument into Sin/Cos, so the whole system is expressed through the
+ * Sin/Cos algebra before TrigExpand and substitution.  Returns a fresh
+ * tree the caller owns.  Non-matching nodes are copied verbatim. */
+static Expr* to_sincos_rewrite(const Expr* e, Expr** elim, size_t n_elim) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    bool hyper;
+    Expr* arg = NULL;
+    TrigWhich w = trig_call(e, &hyper, &arg);
+    if ((w == TK_TAN || w == TK_COT || w == TK_SEC || w == TK_CSC)
+        && contains_any_var(arg, elim, n_elim)) {
+        Expr* inner = to_sincos_rewrite(arg, elim, n_elim);
+        switch (w) {
+            case TK_TAN:  /* Sin/Cos */
+                return expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ make_sin(expr_copy(inner), hyper),
+                               make_recip(make_cos(inner, hyper)) }, 2);
+            case TK_COT:  /* Cos/Sin */
+                return expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ make_cos(expr_copy(inner), hyper),
+                               make_recip(make_sin(inner, hyper)) }, 2);
+            case TK_SEC:  /* 1/Cos */
+                return make_recip(make_cos(inner, hyper));
+            case TK_CSC:  /* 1/Sin */
+                return make_recip(make_sin(inner, hyper));
+            default: break;  /* unreachable */
+        }
+    }
+
+    Expr* new_head = to_sincos_rewrite(e->data.function.head, elim, n_elim);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = to_sincos_rewrite(e->data.function.args[i], elim, n_elim);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
+/* Run a single equation through `TrigExpand`, reducing multiple- and
+ * sum-angle trig to polynomials in Sin/Cos of atomic angles.  TrigExpand
+ * threads over Equal, so the result stays an `Equal[...]`.  Returns a
+ * fresh tree the caller owns. */
+static Expr* trig_expand_eq(const Expr* eq) {
+    Expr* call = expr_new_function(expr_new_symbol("TrigExpand"),
+        (Expr*[]){ expr_copy((Expr*)eq) }, 1);
+    Expr* out = evaluate(call);
+    expr_free(call);
+    return out;
+}
+
+/* `Power[base, exp]` from owned parts. */
+static Expr* make_power(Expr* base, Expr* exp) {
+    return expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ base, exp }, 2);
+}
+
+/* Split `Times[k, rest...]` into its integer literal factor `*k_out` and
+ * the product of the remaining factors `*rest_out` (a fresh owned tree;
+ * `1` if none remain).  Returns false if there is no integer factor. */
+static bool times_split_int(const Expr* e, int64_t* k_out, Expr** rest_out) {
+    if (!is_times(e) || e->data.function.arg_count < 2) return false;
+    size_t n = e->data.function.arg_count;
+    int64_t k = 0;
+    bool found = false;
+    Expr** rest = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t nr = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = e->data.function.args[i];
+        if (!found && f->type == EXPR_INTEGER) {
+            k = f->data.integer; found = true;
+        } else {
+            rest[nr++] = expr_copy(f);
+        }
+    }
+    if (!found) {
+        for (size_t i = 0; i < nr; i++) expr_free(rest[i]);
+        free(rest);
+        return false;
+    }
+    Expr* rest_e;
+    if (nr == 0)      { rest_e = expr_new_integer(1); }
+    else if (nr == 1) { rest_e = rest[0]; }
+    else { rest_e = expr_new_function(expr_new_symbol("Times"), rest, nr); }
+    free(rest);  /* frees the array; rest[0] is kept as rest_e when nr==1 */
+    *k_out = k;
+    *rest_out = rest_e;
+    return true;
+}
+
+/* Algebraically expand exponential kernels so multiple/sum exponents land
+ * on a common atomic exponent:  b^(p+q) -> b^p b^q,  b^(k m) -> (b^m)^k
+ * (k an integer).  Only fires on `Power[base, exp]` with elim-free base
+ * and elim-bearing exponent; everything else is copied.  No evaluator
+ * call is made (which would recombine the split powers), so the caller
+ * must substitute before any re-evaluation. */
+static Expr* exp_expand(const Expr* e, Expr** elim, size_t n_elim) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    Expr* base = NULL;
+    Expr* exp  = NULL;
+    if (exp_kernel(e, elim, n_elim, &base, &exp)) {
+        if (is_plus(exp) && exp->data.function.arg_count >= 2) {
+            size_t n = exp->data.function.arg_count;
+            Expr** factors = (Expr**)malloc(sizeof(Expr*) * n);
+            for (size_t i = 0; i < n; i++) {
+                Expr* term = make_power(expr_copy(base),
+                                        expr_copy(exp->data.function.args[i]));
+                factors[i] = exp_expand(term, elim, n_elim);
+                expr_free(term);
+            }
+            Expr* r = expr_new_function(expr_new_symbol("Times"), factors, n);
+            free(factors);
+            return r;
+        }
+        int64_t k;
+        Expr* rest = NULL;
+        if (times_split_int(exp, &k, &rest) && k != 1
+            && contains_any_var(rest, elim, n_elim)) {
+            Expr* inner = make_power(expr_copy(base), rest);  /* owns rest */
+            Expr* inner_x = exp_expand(inner, elim, n_elim);
+            expr_free(inner);
+            Expr* r = make_power(inner_x, expr_new_integer(k));
+            return r;
+        }
+        if (rest) expr_free(rest);
+        /* Atomic exponent: leave as Power[base, exp]. */
+        return expr_copy((Expr*)e);
+    }
+
+    Expr* new_head = exp_expand(e->data.function.head, elim, n_elim);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = exp_expand(e->data.function.args[i], elim, n_elim);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
+/* Algebraically expand logarithmic kernels onto atomic arguments:
+ *   Log[a b] -> Log[a] + Log[b],   Log[a^n] -> n Log[a]   (n an integer).
+ * Same contract as exp_expand (no evaluator call). */
+static Expr* log_expand(const Expr* e, Expr** elim, size_t n_elim) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    Expr* arg = NULL;
+    if (log_kernel(e, elim, n_elim, &arg)) {
+        if (is_times(arg) && arg->data.function.arg_count >= 2) {
+            size_t n = arg->data.function.arg_count;
+            Expr** terms = (Expr**)malloc(sizeof(Expr*) * n);
+            for (size_t i = 0; i < n; i++) {
+                Expr* lg = expr_new_function(expr_new_symbol("Log"),
+                    (Expr*[]){ expr_copy(arg->data.function.args[i]) }, 1);
+                terms[i] = log_expand(lg, elim, n_elim);
+                expr_free(lg);
+            }
+            Expr* r = expr_new_function(expr_new_symbol("Plus"), terms, n);
+            free(terms);
+            return r;
+        }
+        if (head_is(arg, SYM_Power) && arg->data.function.arg_count == 2
+            && arg->data.function.args[1]->type == EXPR_INTEGER) {
+            Expr* lg = expr_new_function(expr_new_symbol("Log"),
+                (Expr*[]){ expr_copy(arg->data.function.args[0]) }, 1);
+            Expr* inner = log_expand(lg, elim, n_elim);
+            expr_free(lg);
+            Expr* r = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(arg->data.function.args[1]), inner }, 2);
+            return r;
+        }
+        /* Atomic argument: leave as Log[arg]. */
+        return expr_copy((Expr*)e);
+    }
+
+    Expr* new_head = log_expand(e->data.function.head, elim, n_elim);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = log_expand(e->data.function.args[i], elim, n_elim);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
+/* Kernel families handled by the transcendental algebraisation pass.
+ * CIRC / HYP carry an aux pair (Sin/Cos) plus a Pythagorean constraint;
+ * EXP / LOG carry a single aux and no constraint. */
+typedef enum { K_CIRC = 0, K_HYP, K_EXP, K_LOG } KernelKind;
+
+/* One distinct transcendental kernel group. */
+typedef struct {
+    int*     kind;   /* KernelKind                                       */
+    Expr**   key;    /* CIRC/HYP: angle theta; EXP: base; LOG: log-arg   */
+    Expr**   key2;   /* EXP: atomic exponent monomial; else NULL         */
+    Expr**   aux1;   /* owned primary aux (Sin/Sinh, Exp-aux, Log-aux)   */
+    Expr**   aux2;   /* owned secondary aux (Cos/Cosh); NULL for EXP/LOG */
+    size_t   n;
+    size_t   cap;
+} KernelState;
+
+static void kernel_init(KernelState* t) {
+    t->kind = NULL; t->key = NULL; t->key2 = NULL;
+    t->aux1 = NULL; t->aux2 = NULL;
+    t->n = 0; t->cap = 0;
+}
+
+static void kernel_free(KernelState* t) {
+    if (t->key)  for (size_t i = 0; i < t->n; i++) expr_free(t->key[i]);
+    if (t->key2) for (size_t i = 0; i < t->n; i++) expr_free(t->key2[i]);
+    if (t->aux1) for (size_t i = 0; i < t->n; i++) expr_free(t->aux1[i]);
+    if (t->aux2) for (size_t i = 0; i < t->n; i++) expr_free(t->aux2[i]);
+    free(t->kind); free(t->key); free(t->key2); free(t->aux1); free(t->aux2);
+    kernel_init(t);
+}
+
+/* The elim-bearing part of group `g` (what the soundness gates test):
+ * the exponent for EXP kernels, the key (angle / log-arg) otherwise. */
+static Expr* kernel_elim_part(const KernelState* t, size_t g) {
+    return t->key2[g] ? t->key2[g] : t->key[g];
+}
+
+/* Register a kernel group, deduping by (kind, key, key2) under structural
+ * equality.  `key2` may be NULL.  Aux symbols are filled in later. */
+static void kernel_add(KernelState* t, KernelKind kind,
+                       const Expr* key, const Expr* key2) {
+    for (size_t i = 0; i < t->n; i++) {
+        if (t->kind[i] != (int)kind) continue;
+        if (!expr_eq(t->key[i], key)) continue;
+        bool k2eq = (!t->key2[i] && !key2)
+                 || (t->key2[i] && key2 && expr_eq(t->key2[i], key2));
+        if (k2eq) return;
+    }
+    if (t->n == t->cap) {
+        t->cap = t->cap ? t->cap * 2 : 4;
+        t->kind = (int*)  realloc(t->kind, sizeof(int)   * t->cap);
+        t->key  = (Expr**)realloc(t->key,  sizeof(Expr*) * t->cap);
+        t->key2 = (Expr**)realloc(t->key2, sizeof(Expr*) * t->cap);
+        t->aux1 = (Expr**)realloc(t->aux1, sizeof(Expr*) * t->cap);
+        t->aux2 = (Expr**)realloc(t->aux2, sizeof(Expr*) * t->cap);
+    }
+    t->kind[t->n] = (int)kind;
+    t->key[t->n]  = expr_copy((Expr*)key);
+    t->key2[t->n] = key2 ? expr_copy((Expr*)key2) : NULL;
+    t->aux1[t->n] = NULL;
+    t->aux2[t->n] = NULL;
+    t->n++;
+}
+
+/* Walk `e`, registering every transcendental kernel whose elim-bearing
+ * part mentions an elim variable.  Runs AFTER the expansion steps, so
+ * trig is over atomic angles, exp over atomic exponents, and log over
+ * atomic arguments (any surviving compound form shares an elim var
+ * across distinct groups and is rejected by Gate A). */
+static void kernel_collect(const Expr* e, KernelState* t,
+                           Expr** elim, size_t n_elim) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    bool hyper;
+    Expr* arg = NULL;
+    Expr* base = NULL;
+    Expr* exp = NULL;
+    TrigWhich w = trig_call(e, &hyper, &arg);
+    if (w != TK_NONE && contains_any_var(arg, elim, n_elim)) {
+        kernel_add(t, hyper ? K_HYP : K_CIRC, arg, NULL);
+    } else if (exp_kernel(e, elim, n_elim, &base, &exp)) {
+        kernel_add(t, K_EXP, base, exp);
+    } else if (log_kernel(e, elim, n_elim, &arg)) {
+        kernel_add(t, K_LOG, arg, NULL);
+    }
+    kernel_collect(e->data.function.head, t, elim, n_elim);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        kernel_collect(e->data.function.args[i], t, elim, n_elim);
+    }
+}
+
+/* Gate A: an elim variable that appears inside two *distinct* kernel
+ * groups cannot be captured (e.g. `Sin[x]` and `Sin[x*y]` share `x`, but
+ * a product argument has no multiple-angle relation to `x`; likewise
+ * `Sin[x]` and `Sinh[x]`, or `Sin[x]` and `Exp[x]`, are algebraically
+ * independent).  Returns true if the algebraisation would be unsound. */
+static bool kernel_gate_a(const KernelState* t, Expr** elim, size_t n_elim) {
+    for (size_t e = 0; e < n_elim; e++) {
+        int cnt = 0;
+        for (size_t g = 0; g < t->n; g++) {
+            if (contains_any_var(kernel_elim_part(t, g), &elim[e], 1)) cnt++;
+            if (cnt > 1) return true;
+        }
+    }
+    return false;
+}
+
+/* True iff `target` occurs as a genuine polynomial atom in `e` -- i.e.
+ * reachable from the root through only the structural poly-recursive
+ * heads (Plus/Times/...) and integer Power bases, NOT buried inside a
+ * function-shaped atom (which the Groebner engine treats as a single
+ * opaque variable).  Mirrors `collect_main_vars`' traversal so the two
+ * agree on what counts as a live variable.
+ *
+ * Gate B uses this to distinguish a real free occurrence of a trig-bound
+ * variable `x` (e.g. bare `x` in `x + y == 2`, which severs the lost
+ * `x <-> Sin[x]` link) from a harmless one inside another elim atom
+ * (e.g. `Dt[x]`, which the engine eliminates as a unit). */
+static bool poly_atom_occurs(const Expr* e, const Expr* target) {
+    if (!e) return false;
+    if (expr_eq(e, target)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    const char* hsym = (e->data.function.head
+                        && e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol : NULL;
+    if (hsym && is_poly_recursive_head(hsym)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            if (poly_atom_occurs(e->data.function.args[i], target)) return true;
+        }
+        return false;
+    }
+    if (hsym == SYM_Power && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_INTEGER) {
+        return poly_atom_occurs(e->data.function.args[0], target);
+    }
+    /* Function-shaped atom not equal to target: opaque, do not recurse. */
+    return false;
+}
+
+/* Substitute every registered trig call (matching head family + atomic
+ * angle) with the corresponding rational expression in the aux symbols:
+ *   Sin->s   Cos->c   Tan->s/c   Cot->c/s   Sec->1/c   Csc->1/s
+ * The 1/c, 1/s denominators are cleared downstream by the
+ * Together->Numerator step in `normalise_equation`.  Handling every
+ * family here (not just Sin/Cos) is essential: `trig_expand_eq` runs the
+ * evaluator, which re-canonicalises `Sin/Cos` back into `Tan`, so a Tan
+ * kernel can reappear after the to_sincos rewrite.  Returns a fresh
+ * tree. */
+static Expr* kernel_substitute(const Expr* e, const KernelState* t) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    /* Circular / hyperbolic trig: match head family + atomic angle. */
+    bool hyper;
+    Expr* arg = NULL;
+    TrigWhich w = trig_call(e, &hyper, &arg);
+    if (w != TK_NONE) {
+        int want = hyper ? K_HYP : K_CIRC;
+        for (size_t g = 0; g < t->n; g++) {
+            if (t->kind[g] != want) continue;
+            if (!expr_eq(t->key[g], arg)) continue;
+            Expr* s = t->aux1[g];
+            Expr* c = t->aux2[g];
+            switch (w) {
+                case TK_SIN: return expr_copy(s);
+                case TK_COS: return expr_copy(c);
+                case TK_TAN: return expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(s), make_recip(expr_copy(c)) }, 2);
+                case TK_COT: return expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(c), make_recip(expr_copy(s)) }, 2);
+                case TK_SEC: return make_recip(expr_copy(c));
+                case TK_CSC: return make_recip(expr_copy(s));
+                default: break;
+            }
+        }
+    }
+
+    /* Exponential: match Power[base, exponent] structurally. */
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* b = e->data.function.args[0];
+        Expr* x = e->data.function.args[1];
+        for (size_t g = 0; g < t->n; g++) {
+            if (t->kind[g] != K_EXP) continue;
+            if (expr_eq(t->key[g], b) && expr_eq(t->key2[g], x)) {
+                return expr_copy(t->aux1[g]);
+            }
+        }
+    }
+
+    /* Logarithm: match Log[arg]. */
+    if (head_is(e, SYM_Log) && e->data.function.arg_count == 1) {
+        Expr* a = e->data.function.args[0];
+        for (size_t g = 0; g < t->n; g++) {
+            if (t->kind[g] != K_LOG) continue;
+            if (expr_eq(t->key[g], a)) return expr_copy(t->aux1[g]);
+        }
+    }
+
+    Expr* new_head = kernel_substitute(e->data.function.head, t);
+    size_t n = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
+    for (size_t i = 0; i < n; i++) {
+        new_args[i] = kernel_substitute(e->data.function.args[i], t);
+    }
+    Expr* r = expr_new_function(new_head, new_args, n);
+    free(new_args);
+    return r;
+}
+
+/* The algebraic constraint for group `i`, or NULL when the kernel needs
+ * none (Exp/Log auxes are algebraically free):
+ *   circular:   s^2 + c^2 == 1
+ *   hyperbolic: c^2 - s^2 == 1   (cosh^2 - sinh^2 == 1) */
+static Expr* kernel_make_constraint(const KernelState* t, size_t i) {
+    if (t->kind[i] != K_CIRC && t->kind[i] != K_HYP) return NULL;
+    Expr* s2 = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy(t->aux1[i]), expr_new_integer(2) }, 2);
+    Expr* c2 = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy(t->aux2[i]), expr_new_integer(2) }, 2);
+    Expr* sum;
+    if (t->kind[i] == K_HYP) {
+        Expr* neg_s2 = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), s2 }, 2);
+        sum = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ c2, neg_s2 }, 2);
+    } else {
+        sum = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ s2, c2 }, 2);
+    }
+    return expr_new_function(expr_new_symbol("Equal"),
+        (Expr*[]){ sum, expr_new_integer(1) }, 2);
+}
+
+/* Pick an aux symbol name `<prefix><idx>$` not colliding with anything in
+ * `eqs` or the already-assigned auxes. */
+static const char* kernel_fresh_name(const char* prefix, Expr** eqs,
+                                     size_t n_eq, const KernelState* t,
+                                     size_t i_so_far, int* next_idx) {
+    char buf[64];
+    for (int tries = 0; tries < 10000; tries++) {
+        snprintf(buf, sizeof(buf), "%s%d$", prefix, *next_idx);
+        (*next_idx)++;
+        bool collide = false;
+        for (size_t j = 0; j < n_eq && !collide; j++) {
+            if (walk_has_symbol_name(eqs[j], buf)) collide = true;
+        }
+        for (size_t j = 0; j < i_so_far && !collide; j++) {
+            if (t->aux1[j] && walk_has_symbol_name(t->aux1[j], buf)) collide = true;
+            if (t->aux2[j] && walk_has_symbol_name(t->aux2[j], buf)) collide = true;
+        }
+        if (!collide) return intern_symbol(buf);
+    }
+    return intern_symbol("$t$overflow$");
+}
+
+/* ------------------------------------------------------------------ */
 /*  Equation -> polynomial                                             */
 /* ------------------------------------------------------------------ */
 
@@ -854,16 +1435,155 @@ Expr* builtin_eliminate(Expr* res) {
         return ev;
     }
 
-    /* ----- Transcendental pre-pass ----- */
+    /* ----- Owned working copies of the equations -----
+     * `eq_in` is a borrowed array; the pre-passes below build new trees
+     * and may append constraints, so take ownership now. */
+    Expr** eq_work = (Expr**)malloc(sizeof(Expr*) * n_eq);
+    for (size_t i = 0; i < n_eq; i++) eq_work[i] = expr_copy(eq_in[i]);
+    free(eq_in);
+
     bool fired_ifun = false;
+    KernelState ker; kernel_init(&ker);
+    Expr** ker_elim_array = NULL;
+
+    /* ----- Transcendental algebraisation pre-pass -----
+     * When an elim variable sits inside a circular/hyperbolic trig, an
+     * exponential (`b^x`), or a logarithm, expand multiple/sum/product
+     * arguments down to atomic kernels, replace each kernel with fresh
+     * aux symbols (Sin/Cos pairs carry the Pythagorean constraint; Exp
+     * and Log auxes are algebraically free), and push the auxes onto the
+     * elim list.  After this the radical pass and Buchberger see a
+     * polynomial system.  The cheap `has_transcendental_with_elim` gate
+     * keeps purely polynomial / radical inputs on the identical code path
+     * as before (no transcendental => no overhead). */
+    bool trans_seen = false;
+    for (size_t i = 0; i < n_eq && !trans_seen; i++) {
+        if (has_transcendental_with_elim(eq_work[i], elim_items, n_elim)) {
+            trans_seen = true;
+        }
+    }
+    if (trans_seen) {
+        /* (a) trig: reciprocal heads -> Sin/Cos, then TrigExpand (handles
+         *     circular and hyperbolic multiple/sum angles). */
+        for (size_t i = 0; i < n_eq; i++) {
+            Expr* r = to_sincos_rewrite(eq_work[i], elim_items, n_elim);
+            expr_free(eq_work[i]); eq_work[i] = r;
+        }
+        for (size_t i = 0; i < n_eq; i++) {
+            Expr* r = trig_expand_eq(eq_work[i]);
+            expr_free(eq_work[i]); eq_work[i] = r;
+        }
+        /* (b) exp/log: split sum exponents / product logs onto atomic
+         *     kernels.  No evaluator runs after this until substitution
+         *     (which would recombine the split powers/logs). */
+        for (size_t i = 0; i < n_eq; i++) {
+            Expr* r = exp_expand(eq_work[i], elim_items, n_elim);
+            expr_free(eq_work[i]); eq_work[i] = r;
+        }
+        for (size_t i = 0; i < n_eq; i++) {
+            Expr* r = log_expand(eq_work[i], elim_items, n_elim);
+            expr_free(eq_work[i]); eq_work[i] = r;
+        }
+        /* (c) collect distinct kernel groups. */
+        for (size_t i = 0; i < n_eq; i++) {
+            kernel_collect(eq_work[i], &ker, elim_items, n_elim);
+        }
+        if (ker.n > 0) {
+            /* Gate A: an elim var shared across two distinct kernel groups
+             * cannot be captured -> bail to nlin (input unevaluated). */
+            if (kernel_gate_a(&ker, elim_items, n_elim)) {
+                emit_nlin();
+                for (size_t i = 0; i < n_eq; i++) expr_free(eq_work[i]);
+                free(eq_work);
+                kernel_free(&ker);
+                if (wrap_vars) expr_free(wrap_vars);
+                return NULL;
+            }
+            /* Assign fresh aux symbols: one per Exp/Log kernel, a pair per
+             * Sin/Cos (circular/hyperbolic) kernel. */
+            int idx1 = 1, idx2 = 1;
+            size_t n_aux = 0, n_constr = 0;
+            for (size_t g = 0; g < ker.n; g++) {
+                bool pair = (ker.kind[g] == K_CIRC || ker.kind[g] == K_HYP);
+                const char* p1 = (ker.kind[g] == K_EXP) ? "$te"
+                               : (ker.kind[g] == K_LOG) ? "$tl" : "$ts";
+                ker.aux1[g] = expr_new_symbol(
+                    kernel_fresh_name(p1, eq_work, n_eq, &ker, g, &idx1));
+                if (pair) {
+                    ker.aux2[g] = expr_new_symbol(
+                        kernel_fresh_name("$tc", eq_work, n_eq, &ker, g, &idx2));
+                    n_aux += 2; n_constr += 1;
+                } else {
+                    n_aux += 1;
+                }
+            }
+            /* Substitute every kernel -> aux expression everywhere. */
+            for (size_t i = 0; i < n_eq; i++) {
+                Expr* r = kernel_substitute(eq_work[i], &ker);
+                expr_free(eq_work[i]); eq_work[i] = r;
+            }
+            /* Gate B: a kernel-bound elim var still present as a genuine
+             * polynomial atom after substitution (e.g. bare `x` alongside
+             * `Sin[x]`) is not captured by the relations -> bail to nlin. */
+            bool gate_b = false;
+            for (size_t e = 0; e < n_elim && !gate_b; e++) {
+                bool bound = false;
+                for (size_t g = 0; g < ker.n && !bound; g++) {
+                    if (contains_any_var(kernel_elim_part(&ker, g),
+                                         &elim_items[e], 1)) {
+                        bound = true;
+                    }
+                }
+                if (!bound) continue;
+                for (size_t i = 0; i < n_eq && !gate_b; i++) {
+                    if (poly_atom_occurs(eq_work[i], elim_items[e])) {
+                        gate_b = true;
+                    }
+                }
+            }
+            if (gate_b) {
+                emit_nlin();
+                for (size_t i = 0; i < n_eq; i++) expr_free(eq_work[i]);
+                free(eq_work);
+                kernel_free(&ker);
+                if (wrap_vars) expr_free(wrap_vars);
+                return NULL;
+            }
+            /* Append the constraints (only Sin/Cos kernels have one). */
+            eq_work = (Expr**)realloc(eq_work,
+                                      sizeof(Expr*) * (n_eq + n_constr));
+            size_t ci = 0;
+            for (size_t g = 0; g < ker.n; g++) {
+                Expr* c = kernel_make_constraint(&ker, g);
+                if (c) eq_work[n_eq + ci++] = c;
+            }
+            /* Extend the elim list with the aux symbols (borrows aux
+             * pointers; we own the array and free it at every exit). */
+            ker_elim_array =
+                (Expr**)malloc(sizeof(Expr*) * (n_elim + n_aux));
+            for (size_t i = 0; i < n_elim; i++) {
+                ker_elim_array[i] = elim_items[i];
+            }
+            size_t ai = n_elim;
+            for (size_t g = 0; g < ker.n; g++) {
+                ker_elim_array[ai++] = ker.aux1[g];
+                if (ker.aux2[g]) ker_elim_array[ai++] = ker.aux2[g];
+            }
+            elim_items = ker_elim_array;
+            n_elim    += n_aux;
+            n_eq      += n_constr;
+            fired_ifun = true;  /* branch/sign info lost: report `ifun` */
+        }
+    }
+
+    /* ----- Transcendental (inverse-function) pre-pass ----- */
     Expr** rewritten = (Expr**)malloc(sizeof(Expr*) * n_eq);
     for (size_t i = 0; i < n_eq; i++) {
-        rewritten[i] = try_inverse_rewrite(eq_in[i], elim_items, n_elim,
+        rewritten[i] = try_inverse_rewrite(eq_work[i], elim_items, n_elim,
                                            &fired_ifun);
     }
-    /* `eq_in` is just a working array of borrowed pointers; the source
-     * (raw_in / arg list) still owns the real expressions.  Free it now. */
-    free(eq_in);
+    for (size_t i = 0; i < n_eq; i++) expr_free(eq_work[i]);
+    free(eq_work);
     if (fired_ifun) emit_ifun();
 
     /* Validate every rewritten equation is `Equal[lhs, rhs]`. */
@@ -873,6 +1593,8 @@ Expr* builtin_eliminate(Expr* res) {
             emit_eqf();
             for (size_t k = 0; k < n_eq; k++) expr_free(rewritten[k]);
             free(rewritten);
+            free(ker_elim_array);
+            kernel_free(&ker);
             if (wrap_vars) expr_free(wrap_vars);
             return NULL;
         }
@@ -964,6 +1686,8 @@ Expr* builtin_eliminate(Expr* res) {
             if (wrap_vars) expr_free(wrap_vars);
             free(alg_elim_array);
             alg_free(&alg);
+            free(ker_elim_array);
+            kernel_free(&ker);
             return NULL;
         }
     }
@@ -990,6 +1714,8 @@ Expr* builtin_eliminate(Expr* res) {
         if (wrap_vars) expr_free(wrap_vars);
         free(alg_elim_array);
         alg_free(&alg);
+        free(ker_elim_array);
+        kernel_free(&ker);
         return expr_new_symbol(any_false ? "False" : "True");
     }
 
@@ -1040,6 +1766,8 @@ Expr* builtin_eliminate(Expr* res) {
         if (wrap_vars) expr_free(wrap_vars);
         free(alg_elim_array);
         alg_free(&alg);
+        free(ker_elim_array);
+        kernel_free(&ker);
         return NULL;
     }
     if (inconsistent_const) {
@@ -1052,6 +1780,8 @@ Expr* builtin_eliminate(Expr* res) {
         if (wrap_vars) expr_free(wrap_vars);
         free(alg_elim_array);
         alg_free(&alg);
+        free(ker_elim_array);
+        kernel_free(&ker);
         return expr_new_symbol("False");
     }
     if (nF == 0) {
@@ -1064,6 +1794,8 @@ Expr* builtin_eliminate(Expr* res) {
         if (wrap_vars) expr_free(wrap_vars);
         free(alg_elim_array);
         alg_free(&alg);
+        free(ker_elim_array);
+        kernel_free(&ker);
         return expr_new_symbol("True");
     }
 
@@ -1107,6 +1839,8 @@ Expr* builtin_eliminate(Expr* res) {
         if (wrap_vars) expr_free(wrap_vars);
         free(alg_elim_array);
         alg_free(&alg);
+        free(ker_elim_array);
+        kernel_free(&ker);
         return expr_new_symbol("True");
     }
     for (size_t i = 0; i < out_n; i++) {
@@ -1119,6 +1853,8 @@ Expr* builtin_eliminate(Expr* res) {
             if (wrap_vars) expr_free(wrap_vars);
             free(alg_elim_array);
             alg_free(&alg);
+            free(ker_elim_array);
+            kernel_free(&ker);
             return expr_new_symbol("False");
         }
     }
@@ -1136,6 +1872,8 @@ Expr* builtin_eliminate(Expr* res) {
     if (wrap_vars) expr_free(wrap_vars);
     free(alg_elim_array);
     alg_free(&alg);
+    free(ker_elim_array);
+    kernel_free(&ker);
 
     /* ----- Combine ----- */
     if (out_n == 1) {

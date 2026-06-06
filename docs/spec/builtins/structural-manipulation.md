@@ -1334,9 +1334,31 @@ elimination ideal collapses to `True` and an inconsistent system to
   fires, `Eliminate::alg` is emitted to flag that the returned
   polynomial relation is the cross-multiplied generic consequence —
   sign / branch information may be lost.
+- A transcendental algebraisation pre-pass (the general sibling of the
+  radical pass) handles elim variables appearing inside circular /
+  hyperbolic trig, exponential (`b^x`), or logarithmic functions — even
+  in multiple places, where the single-layer inverse pre-pass cannot
+  help.  Each equation is first expanded (`TrigExpand` for trig;
+  `b^(p+q) -> b^p b^q`, `b^(k m) -> (b^m)^k` for exp; `Log[a b] ->
+  Log[a]+Log[b]`, `Log[a^n] -> n Log[a]` for log) so every kernel lands
+  on an *atomic* argument; thus `Sin[x]` and `Sin[3x]`, or `Exp[x]` and
+  `Exp[2x]`, collapse onto one shared aux.  Each `Sin[θ]`/`Cos[θ]`
+  (resp. `Sinh`/`Cosh`) becomes a fresh aux pair `$tsN$`,`$tcN$` with
+  the Pythagorean constraint `s^2 + c^2 == 1` (circular) /
+  `c^2 - s^2 == 1` (hyperbolic); each `b^θ` / `Log[θ]` becomes a single
+  algebraically-free aux `$teN$` / `$tlN$`.  The auxes join the elim
+  list and `Eliminate::ifun` is emitted (branch / sign information may be
+  lost).  Two conservative soundness gates bail to `Eliminate::nlin`
+  rather than emit a wrong relation: when an elim variable is shared
+  across two distinct kernels (e.g. `Sin[x]` and `Sin[x*y]`, or `Sin[x]`
+  and `Exp[x]`), or when it still appears as a bare polynomial atom after
+  substitution (e.g. `x` alongside `Sin[x]`).  This is what lets the
+  integration-by-substitution pattern
+  `Eliminate[{Dt[y] == Cos[x] Sqrt[1-Sin[x]] Dt[x], u == Sin[x],
+  Dt[u] == Cos[x] Dt[x]}, {x, Dt[x]}]` return `Dt[y]^2 == (1-u) Dt[u]^2`.
 - Equations are normalised through `Numerator[Together[lhs - rhs]]`
   before Buchberger, clearing any `Power[t, -k]` denominators
-  introduced by the algebraisation pre-pass.  Surviving basis
+  introduced by the algebraisation pre-passes.  Surviving basis
   polynomials are stripped of any common monomial factor so the
   reported equation matches the primitive form (no spurious factor
   of a main variable from a `u == Sqrt[...]` equation).

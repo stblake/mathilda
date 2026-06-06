@@ -492,7 +492,11 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
             new_args[i] = evaluate(wrap);
             expr_free(wrap);
         }
-        return expr_new_function(expr_copy(arg->data.function.head), new_args, n);
+        /* expr_new_function copies the args array, so free our buffer. */
+        Expr* threaded =
+            expr_new_function(expr_copy(arg->data.function.head), new_args, n);
+        free(new_args);
+        return threaded;
     }
 
     /* Suppress trig_canon for the duration of the pipeline: the expansion
