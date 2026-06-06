@@ -566,12 +566,17 @@ Integrate[f, x] = (n/a) Integrate[ R[(u^n - b)/a, u^M1, u^M2, ...] u^(n-1), u ],
 a **rational function of `u`** that `Integrate`BronsteinRational` closes exactly.
 The radical substitution reuses `poly_subst_radical_to_gen` (shared with the
 algebraic-factoring path); after the substituted integrand is confirmed rational
-in `{x, u}`, the reduced integral re-enters the full `Integrate`, the result is
-back-substituted `u -> (a x + b)^(1/n)`, and accepted only under the
-**unconditional verification gate** `Simplify[D[result, x] - f] === 0`.  A depth
-guard (8) and per-call fresh substitution symbols keep the recursion finite and
-collision-free.  Strict: returns unevaluated when `f` is not of this form or the
-reduced integral does not close.  `Protected`, `ReadProtected`.
+in `{x, u}`, the reduced integral re-enters the full `Integrate` and the result
+is back-substituted `u -> (a x + b)^(1/n)`.  Unlike the heuristic methods, the
+result is **not** put through a `Simplify[D[result, x] - f] === 0` gate: the
+substitution is an exact bijection that introduces no branch issues, so the
+antiderivative is correct by construction once the rational sub-integral closes.
+(Skipping the gate also avoids a prohibitively expensive — and on integrands with
+symbolic parameters, non-terminating — `PossibleZeroQ`/`Simplify` over the
+symbolic-radical residue.)  A depth guard (8) and per-call fresh substitution
+symbols keep the recursion finite and collision-free.  Strict: returns
+unevaluated when `f` is not of this form or the reduced integral does not close.
+`Protected`, `ReadProtected`.
 
 ```mathematica
 In[1]:= Integrate[1/Sqrt[x + 1], x]

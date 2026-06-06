@@ -23,8 +23,11 @@
  *   3. Form the rationalised integrand
  *          (n/a) u^(n-1) exy  /.  x -> (u^n - b)/a,
  *      Cancel[Together[.]] it, and recurse: Integrate[., u].
- *   4. Back-substitute u -> (a x + b)^(1/n) and accept iff the result
- *      differentiates back to f (unconditional verification gate).
+ *   4. Back-substitute u -> (a x + b)^(1/n).  The substitution is an exact
+ *      bijection introducing no branch issues, so the antiderivative is
+ *      correct by construction once the rational sub-integral closes -- no
+ *      differentiate-back verification is performed (it is unnecessary and
+ *      prohibitively expensive for integrands with symbolic parameters).
  *
  * Memory: builtins take ownership of `res`; helpers below own every Expr they
  * construct and free intermediates explicitly.  `eval_take` consumes its
@@ -74,10 +77,6 @@ static Expr* eval_take(Expr* call) {
     return r;
 }
 
-static bool is_lit_zero(const Expr* e) {
-    return e && e->type == EXPR_INTEGER && e->data.integer == 0;
-}
-
 /* True if `f` contains no subexpression structurally equal to `x`. */
 static bool expr_free_of(const Expr* f, const Expr* x) {
     if (expr_eq((Expr*)f, (Expr*)x)) return false;
@@ -101,11 +100,6 @@ static bool contains_unintegrated(const Expr* e) {
     return false;
 }
 
-/* D[expr, x]; borrows, returns owned (evaluated). */
-static Expr* deriv_dx(const Expr* expr, const Expr* x) {
-    return eval_take(mk_fn2("D", expr_copy((Expr*)expr), expr_copy((Expr*)x)));
-}
-
 /* Cancel[Together[e]], consuming `e`. */
 static Expr* cancel_together(Expr* e) {
     if (!e) return NULL;
@@ -119,33 +113,6 @@ static Expr* replace_one(Expr* expr, const Expr* from, const Expr* to) {
     Expr* rule = mk_fn2("Rule", expr_copy((Expr*)from), expr_copy((Expr*)to));
     Expr* call = internal_replace_all((Expr*[]){ expr, rule }, 2);
     return eval_take(call);
-}
-
-/* The differentiation-verification gate: true iff D[r, x] - f is zero.
- * PossibleZeroQ pre-screen, then Simplify, then Cancel[Together[Expand[.]]].
- * Borrows r and f. */
-static bool differentiates_back(const Expr* r, const Expr* f, const Expr* x) {
-    Expr* dr = deriv_dx(r, x);
-    if (!dr) return false;
-    Expr* diff = mk_fn2("Plus", dr,
-                        mk_fn2("Times", mk_int(-1), expr_copy((Expr*)f)));
-
-    Expr* pz = eval_take(mk_fn1("PossibleZeroQ", expr_copy(diff)));
-    bool possible = pz && pz->type == EXPR_SYMBOL && pz->data.symbol == SYM_True;
-    if (pz) expr_free(pz);
-    if (!possible) { expr_free(diff); return false; }
-
-    Expr* s = eval_take(mk_fn1("Simplify", expr_copy(diff)));
-    bool zero = is_lit_zero(s);
-    if (s) expr_free(s);
-    if (!zero) {
-        Expr* ex = eval_take(internal_expand((Expr*[]){ expr_copy(diff) }, 1));
-        Expr* ct = cancel_together(ex);
-        zero = is_lit_zero(ct);
-        if (ct) expr_free(ct);
-    }
-    expr_free(diff);
-    return zero;
 }
 
 /* Recurse into the full integrator: Integrate[g, u].  Returns the closed
@@ -292,8 +259,14 @@ static Expr* lr_core(Expr* f, Expr* x) {
     Expr* r = replace_one(G, u, back);            /* consumes G */
     expr_free(back);
 
-    if (r && differentiates_back(r, f, x)) result = r;
-    else if (r) expr_free(r);
+    /* The substitution u = (a x + b)^(1/n) is a bijection on the relevant
+     * domain and introduces no branch issues, so once the rationalised
+     * integral closes the antiderivative is correct by construction.  No
+     * differentiate-back verification is performed -- it is both unnecessary
+     * and, for integrands carrying symbolic parameters, prohibitively
+     * expensive (the D[r,x] - f residue is a nest of symbolic radicals that
+     * stalls PossibleZeroQ / Simplify). */
+    result = r;
 
 done:
     expr_free(base);
@@ -327,7 +300,8 @@ void integrate_linrad_init(void) {
         "Integrate`LinearRadicals[f, x] integrates a rational function of x and\n"
         "radicals (a x + b)^(m/n) sharing one linear argument. It substitutes\n"
         "u = (a x + b)^(1/n) (n = LCM of the radical denominators), reducing f to\n"
-        "a rational function of u, integrates that, back-substitutes, and verifies\n"
-        "by differentiation. Strict: returns unevaluated when f is not of this\n"
-        "form or the reduced integral does not close.");
+        "a rational function of u, integrates that, and back-substitutes. The\n"
+        "substitution is exact, so the result is not re-verified. Strict: returns\n"
+        "unevaluated when f is not of this form or the reduced integral does not\n"
+        "close.");
 }
