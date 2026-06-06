@@ -342,10 +342,10 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Seven-stage dispatch cascade (`DerivativeDivides` and `LinearRadicals` added
-  2026-06-06, `QuadraticRadicals` added 2026-06-06): `Integrate[f, x]`
-  (Method -> Automatic, default) tries each subroutine in order and returns the
-  first non-`NULL` result:
+- Eight-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
+  `QuadraticRadicals` and `LinearRatioRadicals` added 2026-06-06):
+  `Integrate[f, x]` (Method -> Automatic, default) tries each subroutine in
+  order and returns the first non-`NULL` result:
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
      derivative (e.g. `f'[x]`); see below.
   2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
@@ -356,10 +356,13 @@ monotonically down.
   4. `Integrate\`QuadraticRadicals[f, x]` — rational functions of `x` and square
      roots `(a x^2 + b x + c)^(m/2)` of one shared quadratic argument;
      rationalised by a single real-valued Euler substitution.
-  5. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
+  5. `Integrate\`LinearRatioRadicals[f, x]` — rational functions of `x` and
+     radicals `((a x + b)/(c x + d))^(m/n)` of one shared linear-fractional
+     argument; rationalised by `u = ((a x + b)/(c x + d))^(1/n)`.
+  6. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  6. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  7. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  7. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  8. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
@@ -370,6 +373,7 @@ monotonically down.
     the more thorough Eliminate/Solve branch search).
   - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
   - `"QuadraticRadicals"` — `Integrate\`QuadraticRadicals[f, x]`.
+  - `"LinearRatioRadicals"` — `Integrate\`LinearRatioRadicals[f, x]`.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
@@ -414,7 +418,8 @@ The `Integrate`` package also exposes the lower-level helpers
 `Integrate`IntRationalLogPart` (Phase 2's LRT computation),
 `Integrate`RischNorman` (Bronstein pmint), `Integrate`LinearRadicals`
 (linear-radical substitution), `Integrate`QuadraticRadicals`
-(quadratic-radical Euler substitution), `Integrate`CRCTable`
+(quadratic-radical Euler substitution), `Integrate`LinearRatioRadicals`
+(linear-fractional / Möbius radical substitution), `Integrate`CRCTable`
 (table lookup), `Integrate`Undefined` (unknown-function integration,
 Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
@@ -648,6 +653,55 @@ Out[3]= -Log[-Sqrt[a] x + Sqrt[1 + a x^2]]/Sqrt[a]
 
 In[4]:= Integrate[1/Sqrt[x^2 - 1], x, Method -> "QuadraticRadicals"]
 Out[4]= -Log[-x + Sqrt[-1 + x^2]]
+```
+
+### Integrate`LinearRatioRadicals
+
+`Integrate`LinearRatioRadicals[f, x]` integrates a **rational function of `x`
+and radicals `((a x + b)/(c x + d))^(m/n)` that share one linear-fractional
+(Möbius) argument** by a rationalising substitution.  Implemented in
+`src/calculus/integrate_linratiorad.c`.
+
+It scans `f` for every `Power[base, p/q]` (`|q| > 1`) whose `base` depends on
+`x`; all such bases must be **structurally identical** and `n = LCM` of the
+radical denominators (distinct bases are rejected).  Unlike
+`Integrate`LinearRadicals` / `Integrate`QuadraticRadicals`, the base is **not**
+required to be a polynomial — it is the ratio
+`Times[a x + b, Power[c x + d, -1]]`, which is exactly what partitions this
+method from those two (their scans demand a polynomial base, so a ratio radical
+falls through to here).  The shared base is canonicalised with
+`Cancel[Together[.]]` and the Möbius coefficients read off its numerator
+(`a, b`) and denominator (`c, d`); the denominator must be genuinely linear
+(degree 1 — a constant denominator is `Integrate`LinearRadicals`' job) and the
+map non-degenerate (`a d - b c != 0`).
+
+With `m = n` the substitution `u = ((a x + b)/(c x + d))^(1/m)` inverts the
+Möbius map,
+
+```
+x  = (d u^m - b)/(a - c u^m),
+dx = m (a d - b c) u^(m-1)/(a - c u^m)^2 du,
+```
+
+and the radicals rewrite to `u` (`r^(p/q) -> u^(p m/q)`, via
+`poly_subst_radical_to_gen`).  The result must be rational in `{x, u}`; the
+rationalised integrand re-enters the full `Integrate` and the antiderivative is
+back-substituted `u -> ((a x + b)/(c x + d))^(1/m)`.  As with the other radical
+stages, the Möbius substitution is an exact bijection on the relevant domain, so
+the result is **not** put through a `Simplify[D[result, x] - f] === 0` gate — it
+is correct by construction once the rational sub-integral closes.  A depth guard
+(8) and fresh per-call substitution symbols keep the recursion finite.  Strict:
+returns unevaluated when `f` is not of this form or the reduced integral does
+not close.  `Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= Integrate[1/Sqrt[(x + 1)/(x - 1)], x]
+Out[1]= 2 Sqrt[(1 + x)/(-1 + x)]/(-1 + (1 + x)/(-1 + x)) -
+        2 ArcTanh[Sqrt[(1 + x)/(-1 + x)]]
+
+In[2]:= Integrate[1/Sqrt[(2 x + 1)/(x + 3)], x, Method -> "LinearRatioRadicals"]
+Out[2]= -5 Sqrt[(1 + 2 x)/(3 + x)]/(-4 + 2 (1 + 2 x)/(3 + x)) +
+        5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]]/Sqrt[2]
 ```
 
 ### InterpolatingFunction integrands

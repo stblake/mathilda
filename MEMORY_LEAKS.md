@@ -110,3 +110,53 @@ grep -E "\.c:[0-9]+\)" run.txt                       # inspect src frames
   differentiate-back verification (identical to `DerivativeDivides`) feeds
   radical `D[result,x] - f` residues to `PossibleZeroQ`; the DerivativeDivides
   test integrands happen to settle before Stage 3, so they never exposed it.
+
+---
+
+## `intsimp_log_to_arctanh`: `expr_expand` input subtree leaked (Log[A B] merge)
+
+- **Where:** `src/calculus/intsimp.c:456`, in `intsimp_log_to_arctanh` (the
+  rational integrator's log-term combiner that runs after
+  `Integrate`IntRationalLogPart`).
+- **What:** the equal-coefficient branch (`c1 Log[A] + c2 Log[B]` with
+  `c1 == c2 -> c1 Log[A B]`) builds the product argument as
+  `expr_expand(internal_times({A, B}, 2))`. `expr_expand` (`src/expand.c:175`,
+  via `expr_expand_patt`) **does not take ownership** of its argument — it
+  returns a freshly-built/copied tree — so the `internal_times(...)` result it
+  is handed is never freed. The whole `Times[A, B]` subtree leaks (its node
+  count is why a single integrand shows ~34 lost blocks rooted at one tree).
+  The two sibling `expr_expand` calls in the same function (lines 480, 483 in
+  the opposite-coefficient ArcTanh / `Log[A/B]` branch) do it correctly:
+  `Expr* sumAB = expr_expand(sumAB_raw); expr_free(sumAB_raw);` — line 456 is
+  the lone omission.
+- **Trigger:** any rational integral whose log part merges two same-coefficient
+  `Log` terms into a single `Log[A B]`. Scoped reproduction with **no radicals
+  and no `Integrate`LinearRatioRadicals`** involved:
+  ```
+  Integrate[6 u^3/((u^3 + 1) (1 - u^3)), u]     # 34 leaks / 1888 bytes
+  ```
+  Confirmed pre-existing (independent of the change that surfaced it).
+- **Stack (representative):**
+  ```
+  malloc → expr_new_function (src/expr.c:81)
+  builtin_times (src/times.c:1052)
+  internal_times (src/internal.c:315)
+  intsimp_log_to_arctanh (src/calculus/intsimp.c:456)
+  builtin_intrat_integraterational (src/calculus/intrat.c:3431)
+  ...
+  ```
+- **Likely fix:** split the call so the `internal_times` temporary is owned and
+  freed, mirroring lines 480/483:
+  ```c
+  Expr* prod_raw = internal_times(
+      (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2);
+  Expr* prod = expr_expand(prod_raw);
+  expr_free(prod_raw);
+  ```
+- **Severity:** low per call (one small `Times` tree) but on a hot path — every
+  rational integral with a merged-log part leaks once, and the
+  radical-substitution integrators (`Integrate`LinearRadicals` /
+  `QuadraticRadicals` / `LinearRatioRadicals`) reach it recursively.
+- **Discovered:** 2026-06-06, surfaced by `Integrate`LinearRatioRadicals`
+  (`Integrate[((x-1)/(x+1))^(1/3)/x, x]` rationalises to the `6 u^3/...`
+  integrand above); reproduced standalone to confirm it is not in the new code.
