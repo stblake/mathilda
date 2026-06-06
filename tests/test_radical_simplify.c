@@ -250,12 +250,32 @@ void test_radical_case5_sum_of_cuberoot_conjugates(void) {
 #endif
 }
 
+/* ---- Regression: single-radical fraction integrand recovery ---- */
+
+void test_radical_integrand_recovery_sqrt_quadratic(void) {
+    /* D[Integrate[Sqrt[x^2-x-1]/x, x], x] // Simplify must recover the
+     * integrand exactly.  Previously Simplify returned a value 4x too
+     * large because Factor's bivariate-Hensel path dropped the integer
+     * content of the generator-polynomial it factored (see the facpoly
+     * test_factor_bivariate_content_regression).  Pin both the value and
+     * the canonical single-radical form. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[Sqrt[x^2 - x - 1]/x, x], x]]",
+        "Sqrt[-1 - x + x^2]/x", 0);
+    /* The factor-of-4 corruption in isolation: Simplify of the combined
+     * fraction must preserve value. */
+    assert_eval_eq(
+        "Simplify[Together[D[Integrate[Sqrt[x^2 - x - 1]/x, x], x]]]",
+        "Sqrt[-1 - x + x^2]/x", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     /* Regression sentinel — runs in every phase. */
     TEST(test_radical_case9_zero_test_already_passes);
+    TEST(test_radical_integrand_recovery_sqrt_quadratic);
 
     /* Phase 1. */
     TEST(test_radical_case1_sqrt_3_plus_2sqrt2);

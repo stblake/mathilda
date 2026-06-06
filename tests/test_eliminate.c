@@ -389,6 +389,147 @@ static void test_nlin_for_transcendental_arg(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 25-32. Trigonometric algebraisation pre-pass                        */
+/* ------------------------------------------------------------------ */
+
+/* When an elim variable sits inside circular/hyperbolic trig functions,
+ * each `Sin[theta]`/`Cos[theta]` (etc.) is replaced by fresh aux symbols
+ * with the Pythagorean constraint, after a TrigExpand that reduces
+ * multiple/sum angles to atomic Sin/Cos.  Expected outputs are the
+ * cross-multiplied generic consequence (sign/branch info dropped along
+ * with the `Eliminate::ifun` diagnostic), cross-checked for equivalence
+ * with Mathematica. */
+
+static void test_trig_integration_substitution(void) {
+    /* Headline example: substitution method for
+     *   Integrate[Cos[x] Sqrt[1 - Sin[x]], x]  with  u = Sin[x].
+     * Mathematica returns  -Dt[y]^2 == (-1 + u) Dt[u]^2, i.e.
+     *   Dt[y]^2 == (1 - u) Dt[u]^2, the balanced form below. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == Cos[x] Sqrt[1 - Sin[x]] Dt[x], u == Sin[x],"
+             " Dt[u == Sin[x]]}, {x, Dt[x]}]",
+             "Equal[Plus[Times[u, Power[Dt[u], 2]], Power[Dt[y], 2]], "
+                   "Power[Dt[u], 2]]");
+}
+
+static void test_trig_pythagorean(void) {
+    /* u == Sin[x], v == Cos[x]  ->  u^2 + v^2 == 1. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Sin[x], v == Cos[x]}, x]",
+             "Equal[Plus[Power[u, 2], Power[v, 2]], 1]");
+}
+
+static void test_trig_sin_squared(void) {
+    /* Two occurrences of Sin[x] (one squared) collapse onto one aux. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Sin[x], w == Sin[x]^2}, x]",
+             "Equal[w, Power[u, 2]]");
+}
+
+static void test_trig_double_angle(void) {
+    /* Sin[2x] is TrigExpand'd to 2 Sin[x] Cos[x] onto the SAME atomic
+     * angle x, so the relation v^2 == 4 u^2 (1 - u^2) survives. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Sin[x], v == Sin[2 x]}, x]",
+             "Equal[Plus[Times[4, Power[u, 4]], Power[v, 2]], "
+                   "Times[4, Power[u, 2]]]");
+}
+
+static void test_trig_tangent(void) {
+    /* Tan[x] is rewritten through Sin/Cos; the cleared denominator gives
+     *   v^2 + u^2 v^2 == 1   (i.e. Tan^2 == Sec^2 - 1). */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Tan[x], v == Cos[x]}, x]",
+             "Equal[Plus[Power[v, 2], Times[Power[u, 2], Power[v, 2]]], 1]");
+}
+
+static void test_trig_hyperbolic(void) {
+    /* a == Cosh[x], b == Sinh[x]  ->  a^2 - b^2 == 1 (hyperbolic
+     * Pythagorean: Cosh^2 - Sinh^2 == 1). */
+    mute_stderr_once();
+    check_eq("Eliminate[{a == Cosh[x], b == Sinh[x]}, x]",
+             "Equal[Plus[1, Power[b, 2]], Power[a, 2]]");
+}
+
+static void test_trig_free_var_returns_true(void) {
+    /* a == Cos[x] Dt[x], b == Sin[x], eliminate {x, Dt[x]}: Dt[x] is a
+     * free differential, so a is unconstrained -> no relation -> True.
+     * Exercises Gate B's poly-atom test (x inside the elim atom Dt[x]
+     * must NOT count as a free occurrence). */
+    mute_stderr_once();
+    check_true("Eliminate[{a == Cos[x] Dt[x], b == Sin[x]}, {x, Dt[x]}]");
+}
+
+static void test_trig_mixed_arg_nlin(void) {
+    /* Bare `x` alongside `Sin[x]` severs the x <-> Sin[x] link; Gate B
+     * rejects it as `nlin` and returns the input unevaluated rather than
+     * emit an unsound relation. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Sin[x], x + y == 2}, x]",
+             "Eliminate[List[Equal[u, Sin[x]], Equal[Plus[x, y], 2]], x]");
+}
+
+/* ------------------------------------------------------------------ */
+/* 33-37. Exponential / logarithmic algebraisation                     */
+/* ------------------------------------------------------------------ */
+
+/* Exp (`b^x`) and Log kernels are handled by the same pass with a single
+ * algebraically-free aux per kernel; multiple/sum exponents and product
+ * logs are reduced onto a common atomic kernel before substitution. */
+
+static void test_exp_double_angle(void) {
+    /* Exp[2x] = Exp[x]^2 collapses onto one aux -> v == u^2. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Exp[x], v == Exp[2 x]}, x]",
+             "Equal[v, Power[u, 2]]");
+}
+
+static void test_exp_general_base(void) {
+    /* Non-E base: 2^(3x) = (2^x)^3 -> v == u^3. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == 2^x, v == 2^(3 x)}, x]",
+             "Equal[v, Power[u, 3]]");
+}
+
+static void test_exp_integration_substitution(void) {
+    /* Substitution method for Integrate[Exp[x]/(1 + Exp[x]), x] with
+     * u = Exp[x]:  Dt[y] == Dt[u]/(1 + u), the balanced form below. */
+    mute_stderr_once();
+    check_eq("Eliminate[{Dt[y] == Exp[x]/(1 + Exp[x]) Dt[x], u == Exp[x],"
+             " Dt[u] == Exp[x] Dt[x]}, {x, Dt[x]}]",
+             "Equal[Dt[u], Plus[Dt[y], Times[u, Dt[y]]]]");
+}
+
+static void test_log_power(void) {
+    /* Log[x^3] = 3 Log[x] -> v == 3 u. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Log[x], v == Log[x^3]}, x]",
+             "Equal[v, Times[3, u]]");
+}
+
+static void test_log_squared(void) {
+    /* Two occurrences of Log[x] (one squared) collapse onto one aux. */
+    mute_stderr_once();
+    check_eq("Eliminate[{u == Log[x], w == Log[x]^2}, x]",
+             "Equal[w, Power[u, 2]]");
+}
+
+static void test_trig_memory_smoke(void) {
+    /* Re-run the headline trig example to surface TrigState / aux-symbol
+     * cleanup leaks across the multi-exit cleanup paths. */
+    mute_stderr_once();
+    for (int i = 0; i < 25; i++) {
+        Expr* e = parse_expression(
+            "Eliminate[{Dt[y] == Cos[x] Sqrt[1 - Sin[x]] Dt[x], u == Sin[x],"
+            " Dt[u] == Cos[x] Dt[x]}, {x, Dt[x]}]");
+        Expr* r = evaluate(e);
+        ASSERT(r != NULL);
+        expr_free(e);
+        expr_free(r);
+    }
+}
+
+/* ------------------------------------------------------------------ */
 
 int main(void) {
     symtab_init();
@@ -421,6 +562,20 @@ int main(void) {
     TEST(test_radical_sqrtxp1_with_d);
     TEST(test_radical_memory_smoke);
     TEST(test_nlin_for_transcendental_arg);
+    TEST(test_trig_integration_substitution);
+    TEST(test_trig_pythagorean);
+    TEST(test_trig_sin_squared);
+    TEST(test_trig_double_angle);
+    TEST(test_trig_tangent);
+    TEST(test_trig_hyperbolic);
+    TEST(test_trig_free_var_returns_true);
+    TEST(test_trig_mixed_arg_nlin);
+    TEST(test_exp_double_angle);
+    TEST(test_exp_general_base);
+    TEST(test_exp_integration_substitution);
+    TEST(test_log_power);
+    TEST(test_log_squared);
+    TEST(test_trig_memory_smoke);
 
     printf("All Eliminate tests passed!\n");
     return 0;

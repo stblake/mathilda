@@ -137,6 +137,7 @@ set(COMMON_SRC
     ../src/fit.c
     ../src/info.c
     ../src/expand.c
+    ../src/expand_power.c
     ../src/poly/poly.c
     ../src/poly/minpoly.c
     ../src/poly/subresultants.c
@@ -218,6 +219,10 @@ set(COMMON_SRC
     ../src/repl_hooks.c
     ../src/options.c
     ../src/calculus/integrate.c
+    ../src/calculus/integrate_interp.c
+    ../src/calculus/integrate_unknown.c
+    ../src/calculus/integrate_derivdivides.c
+    ../src/calculus/integrate_linrad.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
@@ -1178,6 +1183,24 @@ else()
     target_link_libraries(integrate_dispatch_tests gmp m)
 endif()
 
+add_executable(integrate_derivdivides_tests test_integrate_derivdivides.c ${COMMON_SRC})
+target_include_directories(integrate_derivdivides_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_derivdivides_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(integrate_derivdivides_tests gmp m)
+endif()
+add_test(NAME integrate_derivdivides_tests COMMAND integrate_derivdivides_tests)
+
+add_executable(integrate_linrad_tests test_integrate_linrad.c ${COMMON_SRC})
+target_include_directories(integrate_linrad_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_linrad_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(integrate_linrad_tests gmp m)
+endif()
+add_test(NAME integrate_linrad_tests COMMAND integrate_linrad_tests)
+
 add_executable(condition_downvalue_tests test_condition_downvalue.c ${COMMON_SRC})
 target_include_directories(condition_downvalue_tests PRIVATE ../src)
 if(USE_ECM)
@@ -1510,6 +1533,16 @@ else()
 endif()
 add_test(NAME intrat_tests COMMAND intrat_tests)
 
+add_executable(integrate_unknown_tests test_integrate_unknown.c ${COMMON_SRC})
+target_include_directories(integrate_unknown_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_unknown_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(integrate_unknown_tests build_ecm)
+else()
+    target_link_libraries(integrate_unknown_tests gmp m)
+endif()
+add_test(NAME integrate_unknown_tests COMMAND integrate_unknown_tests)
+
 add_executable(intrischnorman_tests test_intrischnorman.c ${COMMON_SRC})
 target_include_directories(intrischnorman_tests PRIVATE ../src)
 if(USE_ECM)
@@ -1594,3 +1627,13 @@ else()
     target_link_libraries(time_constrained_tests gmp m)
 endif()
 add_test(NAME time_constrained_tests COMMAND time_constrained_tests)
+
+add_executable(powerexpand_tests test_powerexpand.c ${COMMON_SRC})
+target_include_directories(powerexpand_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(powerexpand_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(powerexpand_tests build_ecm)
+else()
+    target_link_libraries(powerexpand_tests gmp m)
+endif()
+add_test(NAME powerexpand_tests COMMAND powerexpand_tests)

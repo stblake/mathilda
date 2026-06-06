@@ -671,6 +671,62 @@ In[3]:= ExpandDenominator[(a+b)(a-b)/((c+d)(c-d))]
 Out[3]= ((a+b)(a-b))/(c^2 - d^2)
 ```
 
+## PowerExpand
+Expands powers of products and nested powers, and logarithms/arguments of
+products and powers.
+- `PowerExpand[expr]`
+- `PowerExpand[expr, {x1, x2, ...}]`
+- `PowerExpand[expr, Assumptions -> assum]`
+
+**Features**:
+- `Protected`.
+- Applies `(a b)^c -> a^c b^c`, `(a^b)^c -> a^(b c)`, `Log[a b] -> Log[a] + Log[b]`,
+  `Log[a^b] -> b Log[a]`, and `Arg[a b] -> Arg[a] + Arg[b]`. Because `Sqrt[x]` is
+  `Power[x, 1/2]` and `Log[1/z]` is `Log[z^-1]`, these also give
+  `Sqrt[x y] -> Sqrt[x] Sqrt[y]`, `Sqrt[z^2] -> z`, and `Log[1/z] -> -Log[z]`.
+- Rules are applied top-down to a fixed point, so `Log[(a b)^c]` becomes
+  `c (Log[a] + Log[b])` rather than expanding the inner power first.
+- When a product raised to a non-integer (root) exponent carries a negative
+  numeric coefficient together with a `Plus` factor, the sign is folded into
+  that factor so the root stays real, e.g.
+  `Sqrt[-4 Dt[u]^2 (-1 + u)] -> 2 Dt[u] Sqrt[1 - u]` rather than
+  `2 I Dt[u] Sqrt[-1 + u]`. This is value-preserving since `(-1)^c p^c = (-p)^c`.
+- `f^-1[f[x]] -> x` for the inverse-trig / inverse-hyperbolic pairs
+  (`ArcTan[Tan[x]] -> x`, `ArcSin[Sin[x]] -> x`, …).
+- The default `Assumptions -> Automatic` makes the textbook transforms, which
+  are correct when the bases are positive reals or the exponents are integers;
+  branch cuts are otherwise ignored.
+- `Assumptions -> True` emits the universally-correct result, attaching a
+  branch-correction term built from `Floor`, `Arg`, `Im`, `E`, `I`, and `Pi`.
+- `Assumptions -> assum` emits the `True`-mode formula and then refines the
+  correction terms under `assum` (resolving `Arg`/`Im` of known-sign reals and
+  evaluating `Floor` over assumption-bounded intervals). This is faithful on
+  the documented examples; for assumptions outside this reasoning it degrades
+  to the symbolic `True`-mode form.
+- `PowerExpand[expr, {x1, ...}]` expands only subexpressions that mention one
+  of the listed variables.
+- Threads over `List`, equations, inequalities, and logic functions.
+
+Limitations: in `Assumptions -> True` mode the nested-power correction is left
+in `Im[...]` form rather than rewritten to `Arg[...]` (mathematically equal).
+
+```mathematica
+In[1]:= PowerExpand[Sqrt[x y]]
+Out[1]= Sqrt[x] Sqrt[y]
+
+In[2]:= PowerExpand[Log[(a b)^c]]
+Out[2]= c (Log[a] + Log[b])
+
+In[3]:= PowerExpand[Sqrt[a b] + Sqrt[c d], {a, b}]
+Out[3]= Sqrt[a] Sqrt[b] + Sqrt[c d]
+
+In[4]:= PowerExpand[Sqrt[z^2], Assumptions -> z < 0]
+Out[4]= -z
+
+In[5]:= PowerExpand[Log[x y], Assumptions -> True]
+Out[5]= Log[x] + Log[y] + 2 I Pi Floor[1/2 - Arg[x]/(2 Pi) - Arg[y]/(2 Pi)]
+```
+
 ## Coefficient
 Gives the coefficient of a specific form in a polynomial.
 - `Coefficient[expr, form]`
@@ -1334,9 +1390,31 @@ elimination ideal collapses to `True` and an inconsistent system to
   fires, `Eliminate::alg` is emitted to flag that the returned
   polynomial relation is the cross-multiplied generic consequence —
   sign / branch information may be lost.
+- A transcendental algebraisation pre-pass (the general sibling of the
+  radical pass) handles elim variables appearing inside circular /
+  hyperbolic trig, exponential (`b^x`), or logarithmic functions — even
+  in multiple places, where the single-layer inverse pre-pass cannot
+  help.  Each equation is first expanded (`TrigExpand` for trig;
+  `b^(p+q) -> b^p b^q`, `b^(k m) -> (b^m)^k` for exp; `Log[a b] ->
+  Log[a]+Log[b]`, `Log[a^n] -> n Log[a]` for log) so every kernel lands
+  on an *atomic* argument; thus `Sin[x]` and `Sin[3x]`, or `Exp[x]` and
+  `Exp[2x]`, collapse onto one shared aux.  Each `Sin[θ]`/`Cos[θ]`
+  (resp. `Sinh`/`Cosh`) becomes a fresh aux pair `$tsN$`,`$tcN$` with
+  the Pythagorean constraint `s^2 + c^2 == 1` (circular) /
+  `c^2 - s^2 == 1` (hyperbolic); each `b^θ` / `Log[θ]` becomes a single
+  algebraically-free aux `$teN$` / `$tlN$`.  The auxes join the elim
+  list and `Eliminate::ifun` is emitted (branch / sign information may be
+  lost).  Two conservative soundness gates bail to `Eliminate::nlin`
+  rather than emit a wrong relation: when an elim variable is shared
+  across two distinct kernels (e.g. `Sin[x]` and `Sin[x*y]`, or `Sin[x]`
+  and `Exp[x]`), or when it still appears as a bare polynomial atom after
+  substitution (e.g. `x` alongside `Sin[x]`).  This is what lets the
+  integration-by-substitution pattern
+  `Eliminate[{Dt[y] == Cos[x] Sqrt[1-Sin[x]] Dt[x], u == Sin[x],
+  Dt[u] == Cos[x] Dt[x]}, {x, Dt[x]}]` return `Dt[y]^2 == (1-u) Dt[u]^2`.
 - Equations are normalised through `Numerator[Together[lhs - rhs]]`
   before Buchberger, clearing any `Power[t, -k]` denominators
-  introduced by the algebraisation pre-pass.  Surviving basis
+  introduced by the algebraisation pre-passes.  Surviving basis
   polynomials are stripped of any common monomial factor so the
   reported equation matches the primitive form (no spurious factor
   of a main variable from a `u == Sqrt[...]` equation).

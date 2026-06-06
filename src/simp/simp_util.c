@@ -179,8 +179,12 @@ void cs_add_or_free(CandSet* cs, Expr* e) {
 #define SIMP_SCORE_INF ((size_t)-1)
 
 /* True iff a `Power[X, Rational[p, q]]` subtree with q >= 2 (a non-trivial
- * root) appears anywhere in e. Used by the nested-radical detector below. */
-static bool subtree_has_root(const Expr* e) {
+ * root) appears anywhere in e. Used by the nested-radical detector below and
+ * by builtin_simplify's algebraic-top Together fast path -- it is the precise
+ * "genuine radical" gate, excluding symbolic exponents (a^x) and real-power
+ * exponents (x^1.5) that has_non_integer_power would also accept (and that
+ * would otherwise be fed to Together, which can hang on symbolic powers). */
+bool simp_has_rational_root(const Expr* e) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const Expr* head = e->data.function.head;
     size_t argc = e->data.function.arg_count;
@@ -196,7 +200,7 @@ static bool subtree_has_root(const Expr* e) {
         }
     }
     for (size_t i = 0; i < argc; i++) {
-        if (subtree_has_root(e->data.function.args[i])) return true;
+        if (simp_has_rational_root(e->data.function.args[i])) return true;
     }
     return false;
 }
@@ -232,7 +236,7 @@ static size_t nested_radical_penalty(const Expr* e) {
                     && exp->data.function.arg_count == 2) {
                     const Expr* qq = exp->data.function.args[1];
                     if (qq->type == EXPR_INTEGER && qq->data.integer >= 2
-                        && subtree_has_root(base)) {
+                        && simp_has_rational_root(base)) {
                         total += 3;
                     }
                 }

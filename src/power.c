@@ -41,6 +41,20 @@ static bool is_known_positive_pwr(Expr* e) {
     return false;
 }
 
+/* Real-valued numeric-constant predicate: true for explicit real numbers
+ * (integer, bigint, machine real, MPFR real) and exact rationals. Symbolic
+ * expressions return false, so this gates branch-cut-sensitive rewrites that
+ * are only sound when an exponent is provably real. */
+static bool is_real_number(Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT ||
+        e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    int64_t n, d;
+    return is_rational(e, &n, &d);
+}
+
 static int64_t ipow(int64_t base, int64_t exp, bool* overflow) {
     if (exp < 0) return 0;
     if (exp == 0) return 1;
@@ -1282,8 +1296,16 @@ rat_imag_fallthrough: ;
         && base->data.function.arg_count == 2) {
         Expr* inner_base = base->data.function.args[0];
         Expr* inner_exp  = base->data.function.args[1];
+        /* (B^p)^q == B^(p q) is sound when (a) the outer exponent q is an
+         * integer (integer powers cross no branch cut for any B), or (b) B is
+         * positive AND the inner exponent p is real -- then B^p is a positive
+         * real and (B^p)^q = B^(p q) holds for any q. Without the "p real"
+         * guard, symbolic p collapses incorrectly: e.g. (E^x)^y and (2^x)^y
+         * would fold to E^(x y) / 2^(x y), but x may be complex, so they must
+         * stay unevaluated (matching Mathematica). */
         bool can_compose = (exp->type == EXPR_INTEGER)
-                        || is_known_positive_pwr(inner_base);
+                        || (is_known_positive_pwr(inner_base)
+                            && is_real_number(inner_exp));
         if (can_compose) {
             Expr* t_args[2] = { expr_copy(inner_exp), expr_copy(exp) };
             Expr* new_exp = expr_new_function(expr_new_symbol("Times"), t_args, 2);

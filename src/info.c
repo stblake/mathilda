@@ -2007,6 +2007,15 @@ void info_init(void) {
 
     // Polynomials
     symtab_set_docstring("Expand", "Expand[expr] expands out products and powers in expr.\nExpand[expr, patt] leaves unexpanded any parts of expr that are free of the pattern patt.");
+    symtab_set_docstring("PowerExpand",
+        "PowerExpand[expr]\n\texpands (a b)^c to a^c b^c and (a^b)^c to a^(b c), and expands\n"
+        "\tLog and Arg of products and powers.\n"
+        "PowerExpand[expr, {x1, x2, ...}]\n\texpands only with respect to the listed variables.\n"
+        "The transformations are correct in general only when c is an integer or a and b\n"
+        "\tare positive reals; PowerExpand otherwise disregards branch cuts.\n"
+        "With the Assumptions option, Assumptions->True gives a universally-correct result\n"
+        "\tand Assumptions->assum a result valid under assum.\n"
+        "PowerExpand threads over lists, equations, inequalities, and logic functions.");
     symtab_set_docstring("ExpandNumerator",
         "ExpandNumerator[expr]\n\texpands out products and powers that appear in the numerator of expr.\n"
         "ExpandNumerator works on terms that have positive integer exponents.\n"

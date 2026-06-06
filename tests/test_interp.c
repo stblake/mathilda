@@ -275,6 +275,35 @@ static void test_d_chain_rule(void) {
     run_close("D[" IFUN_EX "[x], {x, 2}] /. x -> 2.5", -1.5, 1e-9);
 }
 
+/* Integrate[ifun[x], x] builds the antiderivative as a fresh applied
+ * InterpolatingFunction, mirroring D. */
+#define IFUN_LIN \
+    "InterpolatingFunction[{{0,3}},{{0,0.0},{1,2.0},{2,4.0},{3,6.0}}]"
+
+static void test_integrate_interp(void) {
+    /* Result shape: an InterpolatingFunction object applied to x. */
+    run_print("Integrate[" IFUN_EX "[x], x]",
+              "InterpolatingFunction[{{0, 5}}, <>][x]");
+    run_fullform("Head[Head[Integrate[" IFUN_EX "[x], x]]]",
+                 "InterpolatingFunction");
+
+    /* Numerics: ifun models 2x, so its antiderivative (with F(0)=0) is x^2. */
+    run_close("Integrate[" IFUN_LIN "[x], x] /. x -> 2.0", 4.0, 1e-9);
+    run_close("Integrate[" IFUN_LIN "[x], x] /. x -> 3.0", 9.0, 1e-9);
+    run_close("Integrate[" IFUN_LIN "[x], x] /. x -> 0.0", 0.0, 1e-9);
+
+    /* Round-trip: D[Integrate[f[x], x], x] recovers f exactly (the Hermite
+     * construction supplies F' = f at every node).  IFUN_EX[3.5] == 3.75 per
+     * test_reference_windows. */
+    run_close("D[Integrate[" IFUN_EX "[x], x], x] /. x -> 3.5", 3.75, 1e-9);
+
+    /* Not reducible / not applicable: chain-rule argument and a foreign
+     * variable are left to the normal integration cascade. */
+    run_unevaluated("Integrate[" IFUN_EX "[2 x], x]");
+    run_print("Integrate[" IFUN_EX "[y], x]",
+              "x InterpolatingFunction[{{0, 5}}, <>][y]");
+}
+
 /* 2-D tensor-product interpolation. Data is f(i,j) = i^2 + j^3 on a 5x5 grid,
  * which an order-3 interpolant reproduces exactly. */
 #define IFUN_2D \
@@ -598,6 +627,7 @@ int main(void) {
     test_derivatives_1d();
     test_derivative_object();
     test_d_chain_rule();
+    test_integrate_interp();
     test_multidim();
     test_multidim_derivatives();
     test_multidim_malformed();

@@ -226,6 +226,11 @@ Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
 /* Used by simp_search.c gating logic; also called from simp_bottomup.c. */
 bool has_non_integer_power(const Expr* e);
 
+/* True iff a `Power[X, Rational[p, q]]` (q >= 2) appears anywhere in e -- a
+ * genuine radical, as opposed to a symbolic-exponent (a^x) or real-exponent
+ * (x^1.5) power. The precise gate for the algebraic-top Together fast path. */
+bool simp_has_rational_root(const Expr* e);
+
 /* transform_can_fire is the per-input gate used by both the heuristic
  * search and the bottom-up driver. */
 bool transform_can_fire(const char* name, const Expr* e,

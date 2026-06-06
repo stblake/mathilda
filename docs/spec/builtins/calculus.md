@@ -342,21 +342,32 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Three-stage dispatch cascade (2026-05): `Integrate[f, x]` (Method ->
-  Automatic, default) tries each subroutine in order and returns the
-  first non-`NULL` result:
-  1. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
+- Six-stage dispatch cascade (`DerivativeDivides` and `LinearRadicals` added
+  2026-06-06): `Integrate[f, x]` (Method -> Automatic, default) tries each
+  subroutine in order and returns the first non-`NULL` result:
+  1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
+     derivative (e.g. `f'[x]`); see below.
+  2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
      rationalQ[f, x]`.
-  2. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  3. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  3. `Integrate\`LinearRadicals[f, x]` — rational functions of `x` and radicals
+     `(a x + b)^(m/n)` of one shared linear argument; rationalised by
+     `u = (a x + b)^(1/n)`.
+  4. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
+     cascade the quiet, branch-correct **direct quotient** strategy only.
+  5. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  6. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
   dispatches strictly to a single subroutine, with no fallback:
   - `"Automatic"` — default cascade above.
   - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.
+  - `"DerivativeDivides"` — `Integrate\`DerivativeDivides[f, x]` (direct **and**
+    the more thorough Eliminate/Solve branch search).
+  - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
+  - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   Unknown method names emit `Integrate::method` and bubble back.
 - Universal correctness predicate: `Cancel[Together[D[Integrate[f,x],x] - f]] === 0`.
 
@@ -396,8 +407,10 @@ The `Integrate`` package also exposes the lower-level helpers
 `Integrate`HermiteReduce`, `Integrate`IntegratePolynomial`,
 `Integrate`BronsteinRational` (the explicit form),
 `Integrate`IntRationalLogPart` (Phase 2's LRT computation),
-`Integrate`RischNorman` (Bronstein pmint), `Integrate`CRCTable`
-(table lookup), and the unit-test helpers `Integrate`Helpers`Content`,
+`Integrate`RischNorman` (Bronstein pmint), `Integrate`LinearRadicals`
+(linear-radical substitution), `Integrate`CRCTable`
+(table lookup), `Integrate`Undefined` (unknown-function integration,
+Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
 `...`SquareFree`, `...`ExtractConstants`, `...`ApartList`.  All are
 `Protected`; the BronsteinRational helpers additionally have
@@ -426,6 +439,186 @@ The table currently fires on only a small subset of inputs because
 Mathilda's pattern matcher does not yet fully support `/;`-guarded
 multi-argument rules; this is a separate issue tracked under the
 matcher work.
+
+### Integrate`Undefined
+
+`Integrate`Undefined[f, x]` integrates expressions that are rational in
+**undefined functions** `u[x]` and their derivatives, following Kelly
+Roach, "Indefinite and Definite Integration" (1992), §1.7 ("Undefined
+Functions").  Each undefined function value `u[g]` and its derivative
+tower `u'[g], u''[g], …` is treated as a differential-field generator;
+the integrand is reduced by recognising integration-by-parts /
+total-derivative structure in the top generator.  A single inner call to
+the rational integrator over a substituted generator symbol subsumes
+Roach's polynomial, fraction, and log parts (so `1/u -> Log[u]`,
+`1/u^2 -> -1/u`, and `a/(a^2+u'^2) -> ArcTan` all fall out).  Composite
+arguments are handled via the chain rule (`g' = D[g, x]`).  A logarithm of
+an unknown-function expression, `Log[eta]`, is itself recognised as a
+transcendental generator and reduced by parts
+(`Integrate[C L + D, x] = G L - Integrate[G L' - D, x]` with
+`G = Integrate[C, x]`, `L' = eta'/eta`), with self-referential resolution
+for perfect powers (`Integrate[Log[f] f'/f, x] = Log[f]^2/2`).  The stage
+is gated to only run when `f` contains an undefined-function derivative or
+such a logarithm; genuinely non-elementary integrands (e.g. `f'[x] g'[x]`,
+`f'[x]^2`) are left unevaluated, with a cycle guard preventing the by-parts
+recursion from looping.  `Protected`, `ReadProtected`.
+
+Known limitations: transcendental generators other than `Log` (e.g.
+`ArcTan[eta]`, `Exp[eta]` with `eta` containing an unknown function) are
+not yet recognised; nested unknown arguments `f[g[x]]` (with `g` itself
+undefined) are deferred.
+
+```mathematica
+In[1]:= Integrate[x f'[x] + f[x], x]
+Out[1]= x f[x]
+
+In[2]:= Integrate[f'[x] g[x] + f[x] g'[x], x]
+Out[2]= f[x] g[x]
+
+In[3]:= Integrate[f'[x]/f[x], x]
+Out[3]= Log[f[x]]
+
+In[4]:= Integrate[(f'[x] g'[x] - f[x] g''[x])/(f[x]^2 + g'[x]^2), x]
+Out[4]= -ArcTan[Derivative[1][g][x]/f[x]]
+
+In[5]:= Integrate[2 x f'[x^2], x]            (* composite argument *)
+Out[5]= f[x^2]
+
+In[6]:= Integrate[(f[x] - x f[x] + f[x] Log[x f[x]] + x f'[x])/f[x], x]
+Out[6]= -1/2 x^2 + x Log[x f[x]]            (* Log[eta] generator *)
+
+In[7]:= Integrate[Log[f[x]] f'[x]/f[x], x]
+Out[7]= 1/2 Log[f[x]]^2                     (* self-referential by-parts *)
+```
+
+### Integrate`DerivativeDivides
+
+`Integrate`DerivativeDivides[f, x]` integrates **by substitution** — the
+classical "derivative-divides" method (Moses' SIN, Maxima's `diffdiv`).  It
+recognises an integrand of the shape `f(x) = c · h(u(x)) · u'(x)`, reduces the
+problem to `Integrate[h[u], u]`, and back-substitutes `u -> u(x)`.
+Implemented in `src/calculus/integrate_derivdivides.c`.
+
+Candidate kernels `u(x)` are every distinct subexpression of `f` that depends
+on `x`, except `x` and `f` themselves (the C analogue of
+`Cases[Union[Level[f, {0, Infinity}]], e_ /; !FreeQ[e, x]]`).  Two
+complementary strategies are tried per kernel, each followed by an
+**unconditional verification gate** `Simplify[D[result, x] - f] === 0`:
+
+1. **Direct quotient** — `q = Cancel[Together[f / D[u(x), x]]]`, then
+   `q /. u(x) -> u`; accepted when free of `x`.  Cheap, emits no diagnostics,
+   handles transcendental compositions (`x Exp[x^2]`), and **selects the
+   correct radical branch inherently** (no squaring).  This is the only
+   strategy used inside the Automatic cascade.
+
+2. **Eliminate / Solve** (explicit method only) — builds the differential
+   relation `Eliminate[{Dt[y] == f Dt[x], u == u(x), Dt[u == u(x)]}, {x,
+   Dt[x]}]`, solves for `Dt[y]`, and reduces each branch with `Factor //@ `,
+   `PowerExpand` and `Cancel[. / Dt[u]]`.  It closes integrands the direct
+   strategy cannot — e.g. where `Cancel` canonicalises `1/Cos[x]` to `Sec[x]`,
+   breaking the syntactic substitution.  Because the algebraisation can square
+   radicals and invert functions, `Solve` returns several branches; the
+   verification gate is what **selects the branch that differentiates back to
+   `f`** (Eliminate may emit `::ifun` / `::alg` branch-caveat diagnostics).
+
+The reduced integral re-enters the full `Integrate`, so substitutions compose;
+a depth guard (8) and per-call fresh substitution symbols keep the recursion
+finite and collision-free.  Strict: returns unevaluated when no substitution
+closes the integral.  `Protected`, `ReadProtected`.
+
+Known limitations: kernels must appear **literally** in `f` (so `Tan[x]`,
+which Mathilda keeps atomic rather than `Sin[x]/Cos[x]`, exposes no `Cos[x]`
+kernel — such integrands are handled by RischNorman instead); the reduced
+integral must itself close under the other methods.
+
+```mathematica
+In[1]:= Integrate[Sin[x] Sqrt[1 - Cos[x]], x]      (* direct, correct branch *)
+Out[1]= 2/3 (1 - Cos[x])^(3/2)
+
+In[2]:= Integrate[1/(x Log[x]), x]
+Out[2]= Log[Log[x]]
+
+In[3]:= Integrate[Sin[x]/Cos[x]^2, x, Method -> "DerivativeDivides"]
+Out[3]= Sec[x]                                      (* via Eliminate/Solve *)
+
+In[4]:= Integrate`DerivativeDivides[2 x Exp[x^2], x]
+Out[4]= E^x^2
+```
+
+### Integrate`LinearRadicals
+
+`Integrate`LinearRadicals[f, x]` integrates a **rational function of `x` and
+radicals `(a x + b)^(m/n)` that share one linear argument** by the classical
+rationalising substitution `u = (a x + b)^(1/n)`, where `n = LCM` of the radical
+denominators.  Implemented in `src/calculus/integrate_linrad.c`.
+
+It first scans `f` for every `Power[base, p/q]` with `q > 1`: each `base` must be
+a degree-1 polynomial in `x` and all must be the **same** linear form `a x + b`
+(distinct bases — e.g. `Sqrt[x] + Sqrt[x+1]` — are rejected, as are radicals of a
+non-linear argument such as `Sqrt[x^2+1]`).  With `x = (u^n - b)/a` and
+`dx = (n/a) u^(n-1) du` the integrand becomes
+
+```
+Integrate[f, x] = (n/a) Integrate[ R[(u^n - b)/a, u^M1, u^M2, ...] u^(n-1), u ],
+                  Mk = mk n / nk,
+```
+
+a **rational function of `u`** that `Integrate`BronsteinRational` closes exactly.
+The radical substitution reuses `poly_subst_radical_to_gen` (shared with the
+algebraic-factoring path); after the substituted integrand is confirmed rational
+in `{x, u}`, the reduced integral re-enters the full `Integrate` and the result
+is back-substituted `u -> (a x + b)^(1/n)`.  Unlike the heuristic methods, the
+result is **not** put through a `Simplify[D[result, x] - f] === 0` gate: the
+substitution is an exact bijection that introduces no branch issues, so the
+antiderivative is correct by construction once the rational sub-integral closes.
+(Skipping the gate also avoids a prohibitively expensive — and on integrands with
+symbolic parameters, non-terminating — `PossibleZeroQ`/`Simplify` over the
+symbolic-radical residue.)  A depth guard (8) and per-call fresh substitution
+symbols keep the recursion finite and collision-free.  Strict: returns
+unevaluated when `f` is not of this form or the reduced integral does not close.
+`Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= Integrate[1/Sqrt[x + 1], x]
+Out[1]= 2 Sqrt[1 + x]
+
+In[2]:= Integrate[Sqrt[x]/(1 + Sqrt[x]), x]
+Out[2]= -2 Sqrt[x] + x + 2 Log[1 + Sqrt[x]]
+
+In[3]:= Integrate[1/(1 + x^(1/3)), x, Method -> "LinearRadicals"]
+Out[3]= -3 x^(1/3) + 3/2 x^(2/3) + 3 Log[1 + x^(1/3)]
+
+In[4]:= Integrate[Sqrt[2 x + 3]/x, x, Method -> "LinearRadicals"]
+Out[4]= 2 Sqrt[3 + 2 x] - 2 Sqrt[3] ArcTanh[Sqrt[3 + 2 x]/Sqrt[3]]
+```
+
+### InterpolatingFunction integrands
+
+`Integrate[InterpolatingFunction[...][x], x]` returns the antiderivative as a
+fresh applied `InterpolatingFunction[...][x]`, mirroring how
+`D[InterpolatingFunction[...][x], x]` differentiates such objects.
+Differentiation only bumps the object's derivative-order annotation; the
+per-window evaluation kernels evaluate derivatives of order `>= 0` only and
+cannot produce an antiderivative, so integration instead builds a genuinely new
+interpolant (`src/calculus/integrate_interp.c`):
+
+1. Read the grid x-coordinates from the object's stored table.
+2. Sample the original function values `y_i = ifun[x_i]`.
+3. Accumulate the antiderivative node values `F_0 = 0`,
+   `F_i = F_{i-1} + Integrate_{x_{i-1}}^{x_i} ifun` by 5-point Gauss-Legendre
+   quadrature (exact through degree 9 — i.e. the default/Spline/Hermite
+   piecewise-cubic interpolants; very high explicit `InterpolationOrder` panels
+   incur a small quadrature error).
+4. Build a Hermite `InterpolatingFunction` through `{{x_i}, F_i, y_i}` — because
+   the antiderivative's exact derivative is the original function, supplying
+   `F'(x_i) = y_i` makes `D[Integrate[ifun[x], x], x]` round-trip to `ifun[x]`.
+
+Only the 1-D, direct case (the applied argument is the integration variable
+itself) is reduced; `Integrate[ifun[g[x]], x]` is not generally expressible as
+an `InterpolatingFunction` and is left to the cascade above. The construction
+also handles the derivative-annotated objects produced by `D` (integrating the
+sampled derivative recovers the lower-order antiderivative). Computations use
+machine doubles.
 
 ## Integrate`IntRationalLogPart
 
