@@ -221,6 +221,7 @@ set(COMMON_SRC
     ../src/calculus/integrate.c
     ../src/calculus/integrate_interp.c
     ../src/calculus/integrate_unknown.c
+    ../src/calculus/integrate_derivdivides.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
@@ -1180,6 +1181,15 @@ if(USE_ECM)
 else()
     target_link_libraries(integrate_dispatch_tests gmp m)
 endif()
+
+add_executable(integrate_derivdivides_tests test_integrate_derivdivides.c ${COMMON_SRC})
+target_include_directories(integrate_derivdivides_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_derivdivides_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(integrate_derivdivides_tests gmp m)
+endif()
+add_test(NAME integrate_derivdivides_tests COMMAND integrate_derivdivides_tests)
 
 add_executable(condition_downvalue_tests test_condition_downvalue.c ${COMMON_SRC})
 target_include_directories(condition_downvalue_tests PRIVATE ../src)

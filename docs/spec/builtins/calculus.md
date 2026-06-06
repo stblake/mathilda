@@ -342,21 +342,25 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Four-stage dispatch cascade (2026-06): `Integrate[f, x]` (Method ->
-  Automatic, default) tries each subroutine in order and returns the
-  first non-`NULL` result:
+- Five-stage dispatch cascade (`DerivativeDivides` added 2026-06-06):
+  `Integrate[f, x]` (Method -> Automatic, default) tries each subroutine in
+  order and returns the first non-`NULL` result:
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
      derivative (e.g. `f'[x]`); see below.
   2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
      rationalQ[f, x]`.
-  3. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  4. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  3. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
+     cascade the quiet, branch-correct **direct quotient** strategy only.
+  4. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  5. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
   dispatches strictly to a single subroutine, with no fallback:
   - `"Automatic"` — default cascade above.
   - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.
+  - `"DerivativeDivides"` — `Integrate\`DerivativeDivides[f, x]` (direct **and**
+    the more thorough Eliminate/Solve branch search).
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
@@ -480,6 +484,60 @@ Out[6]= -1/2 x^2 + x Log[x f[x]]            (* Log[eta] generator *)
 
 In[7]:= Integrate[Log[f[x]] f'[x]/f[x], x]
 Out[7]= 1/2 Log[f[x]]^2                     (* self-referential by-parts *)
+```
+
+### Integrate`DerivativeDivides
+
+`Integrate`DerivativeDivides[f, x]` integrates **by substitution** — the
+classical "derivative-divides" method (Moses' SIN, Maxima's `diffdiv`).  It
+recognises an integrand of the shape `f(x) = c · h(u(x)) · u'(x)`, reduces the
+problem to `Integrate[h[u], u]`, and back-substitutes `u -> u(x)`.
+Implemented in `src/calculus/integrate_derivdivides.c`.
+
+Candidate kernels `u(x)` are every distinct subexpression of `f` that depends
+on `x`, except `x` and `f` themselves (the C analogue of
+`Cases[Union[Level[f, {0, Infinity}]], e_ /; !FreeQ[e, x]]`).  Two
+complementary strategies are tried per kernel, each followed by an
+**unconditional verification gate** `Simplify[D[result, x] - f] === 0`:
+
+1. **Direct quotient** — `q = Cancel[Together[f / D[u(x), x]]]`, then
+   `q /. u(x) -> u`; accepted when free of `x`.  Cheap, emits no diagnostics,
+   handles transcendental compositions (`x Exp[x^2]`), and **selects the
+   correct radical branch inherently** (no squaring).  This is the only
+   strategy used inside the Automatic cascade.
+
+2. **Eliminate / Solve** (explicit method only) — builds the differential
+   relation `Eliminate[{Dt[y] == f Dt[x], u == u(x), Dt[u == u(x)]}, {x,
+   Dt[x]}]`, solves for `Dt[y]`, and reduces each branch with `Factor //@ `,
+   `PowerExpand` and `Cancel[. / Dt[u]]`.  It closes integrands the direct
+   strategy cannot — e.g. where `Cancel` canonicalises `1/Cos[x]` to `Sec[x]`,
+   breaking the syntactic substitution.  Because the algebraisation can square
+   radicals and invert functions, `Solve` returns several branches; the
+   verification gate is what **selects the branch that differentiates back to
+   `f`** (Eliminate may emit `::ifun` / `::alg` branch-caveat diagnostics).
+
+The reduced integral re-enters the full `Integrate`, so substitutions compose;
+a depth guard (8) and per-call fresh substitution symbols keep the recursion
+finite and collision-free.  Strict: returns unevaluated when no substitution
+closes the integral.  `Protected`, `ReadProtected`.
+
+Known limitations: kernels must appear **literally** in `f` (so `Tan[x]`,
+which Mathilda keeps atomic rather than `Sin[x]/Cos[x]`, exposes no `Cos[x]`
+kernel — such integrands are handled by RischNorman instead); the reduced
+integral must itself close under the other methods.
+
+```mathematica
+In[1]:= Integrate[Sin[x] Sqrt[1 - Cos[x]], x]      (* direct, correct branch *)
+Out[1]= 2/3 (1 - Cos[x])^(3/2)
+
+In[2]:= Integrate[1/(x Log[x]), x]
+Out[2]= Log[Log[x]]
+
+In[3]:= Integrate[Sin[x]/Cos[x]^2, x, Method -> "DerivativeDivides"]
+Out[3]= Sec[x]                                      (* via Eliminate/Solve *)
+
+In[4]:= Integrate`DerivativeDivides[2 x Exp[x^2], x]
+Out[4]= E^x^2
 ```
 
 ### InterpolatingFunction integrands

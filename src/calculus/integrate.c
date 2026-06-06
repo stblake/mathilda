@@ -18,6 +18,7 @@
 #include "integrate.h"
 #include "integrate_interp.h"
 #include "integrate_unknown.h"
+#include "integrate_derivdivides.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "common.h"
@@ -137,6 +138,15 @@ static Expr* try_rational(Expr* f, Expr* x) {
     return result;
 }
 
+/* Stage 1b: derivative-divides substitution.  Recognises integrands of the
+ * shape c h(u(x)) u'(x) and reduces to Integrate[h[u], u].  In the Automatic
+ * cascade we use the quiet, branch-correct direct-quotient strategy only;
+ * the diagnostic-emitting Eliminate/Solve search is reserved for the explicit
+ * Method -> "DerivativeDivides" head. */
+static Expr* try_derivdivides(Expr* f, Expr* x) {
+    return integrate_derivdivides_try(f, x);
+}
+
 /* Stage 2: Risch-Norman heuristic (Bronstein pmint). */
 static Expr* try_risch(Expr* f, Expr* x) {
     Expr* result = call_stage("Integrate`RischNorman", f, x);
@@ -220,6 +230,7 @@ static Expr* try_crctable(Expr* f, Expr* x) {
 typedef enum {
     METHOD_AUTOMATIC = 0,
     METHOD_RATIONAL,
+    METHOD_DERIVATIVE_DIVIDES,
     METHOD_RISCH,
     METHOD_CRCTABLE,
     METHOD_UNDEFINED,
@@ -243,6 +254,7 @@ static IntegrateMethod parse_method_option(Expr* opt) {
     if (rhs->type != EXPR_STRING) return METHOD_INVALID;
     if (strcmp(rhs->data.string, "Automatic")   == 0) return METHOD_AUTOMATIC;
     if (strcmp(rhs->data.string, "BronsteinRational") == 0) return METHOD_RATIONAL;
+    if (strcmp(rhs->data.string, "DerivativeDivides") == 0) return METHOD_DERIVATIVE_DIVIDES;
     if (strcmp(rhs->data.string, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(rhs->data.string, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(rhs->data.string, "Undefined")   == 0) return METHOD_UNDEFINED;
@@ -280,7 +292,8 @@ Expr* builtin_integrate(Expr* res) {
             if (h != last_warned_hash) {
                 fprintf(stderr,
                     "Integrate::method: Method option value is not one of "
-                    "\"Automatic\", \"BronsteinRational\", \"RischNorman\", \"CRCTable\".\n");
+                    "\"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", "
+                    "\"RischNorman\", \"CRCTable\".\n");
                 last_warned_hash = h;
             }
             return NULL;
@@ -311,11 +324,15 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_AUTOMATIC:
             result = try_undefined(effective_f, x);
             if (!result) result = try_rational(effective_f, x);
+            if (!result) result = try_derivdivides(effective_f, x);
             if (!result) result = try_risch(effective_f, x);
             if (!result) result = try_crctable(effective_f, x);
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);
+            break;
+        case METHOD_DERIVATIVE_DIVIDES:
+            result = try_derivdivides(effective_f, x);
             break;
         case METHOD_RISCH:
             result = try_risch(effective_f, x);
@@ -350,6 +367,7 @@ void integrate_init(void) {
         "subroutine, bypassing the default cascade.  Accepted method names:\n"
         "  \"Automatic\"          — try BronsteinRational, then RischNorman, then CRCTable (default)\n"
         "  \"BronsteinRational\"  — Integrate`BronsteinRational (polynomial / rational)\n"
+        "  \"DerivativeDivides\"  — Integrate`DerivativeDivides (substitution u(x); direct + Eliminate/Solve)\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
@@ -364,6 +382,9 @@ void integrate_init(void) {
 
     /* Undefined-function integrator (Roach §1.7): Integrate`Undefined. */
     integrate_unknown_init();
+
+    /* Derivative-divides substitution: Integrate`DerivativeDivides. */
+    integrate_derivdivides_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,
