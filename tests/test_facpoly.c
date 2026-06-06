@@ -91,6 +91,26 @@ void test_factor_xp_minus_c_regression() {
              "Times[Power[x, 2], Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, x, Power[x, 2]], Plus[1, Times[-1, x], Power[x, 2]], Plus[1, Times[-1, Power[x, 2]], Power[x, 4]], Plus[-1, Times[-1, x], Power[y, 13]], Plus[1, Times[-1, y], Times[-1, Power[z, 14]]]]");
 }
 
+/* Regression: the bivariate Hensel path (Stage-2 Wang x-scale recovery)
+ * reconstructs the product of PRIMITIVE factors, so it used to silently
+ * drop the input's integer content for squarefree inputs with distinct
+ * factors and |lc_x| > 1.  Factor[4 x^2 - 4 y^2] returned (x+y)(x-y)
+ * (= P/4) instead of 4 (x+y)(x-y).  This corrupted Simplify on
+ * single-radical fractions, e.g. Simplify[D[Integrate[Sqrt[x^2-x-1]/x,x],x]]
+ * returned a value 4x too large.  Perfect-square / repeated-factor inputs
+ * were unaffected (they fall back to the content-correct pipeline). */
+void test_factor_bivariate_content_regression() {
+    run_test("Factor[4 x^2 - 4 y^2]",
+             "Times[4, Plus[x, y], Plus[x, Times[-1, y]]]");
+    run_test("Factor[8 x^2 + 4 x y]",
+             "Times[4, x, Plus[Times[2, x], y]]");
+    run_test("Factor[12 x^2 - 27 y^2]",
+             "Times[3, Plus[Times[2, x], Times[-3, y]], Plus[Times[2, x], Times[3, y]]]");
+    /* Content 1 must be unchanged (no spurious extra factor). */
+    run_test("Factor[4 x^2 - y^2]",
+             "Times[Plus[Times[2, x], y], Plus[Times[2, x], Times[-1, y]]]");
+}
+
 void test_factor() {
     run_test("Factor[1 + 2 x + x^2]", "Power[Plus[1, x], 2]");
     run_test("Factor[x^10 - 1]", "Times[Plus[-1, x], Plus[1, x], Plus[1, x, Power[x, 2], Power[x, 3], Power[x, 4]], Plus[1, Times[-1, x], Power[x, 2], Times[-1, Power[x, 3]], Power[x, 4]]]");
@@ -111,6 +131,7 @@ int main() {
     TEST(test_factorsquarefree);
     TEST(test_factorsquarefree_f4_fastpath);
     TEST(test_factor_xp_minus_c_regression);
+    TEST(test_factor_bivariate_content_regression);
     TEST(test_factor);
     printf("All facpoly tests passed!\n");
     return 0;

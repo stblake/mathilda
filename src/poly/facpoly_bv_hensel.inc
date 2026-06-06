@@ -709,6 +709,18 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
         return NULL;
     }
 
+    /* Integer content of the input.  The lift recovers PRIMITIVE factors
+     * (the Stage-2 recovery below divides each factor by its own content),
+     * so their product reconstructs the primitive part of P -- i.e.
+     * P / pcont.  We must re-multiply by pcont when assembling the result
+     * or the factorisation silently drops a constant factor (e.g.
+     * Factor[4 x^2 - 4 y^2] -> (x+y)(x-y) instead of 4 (x+y)(x-y)).
+     * pcont is always +1 for the MONIC/NEGATE cases (lc_x = +-1 forces
+     * content 1); only the SCALE case (|lc_x| > 1) can carry content > 1. */
+    mpz_t pcont; mpz_init(pcont);
+    bpoly_int_content(bp, pcont);
+    if (mpz_sgn(pcont) == 0) mpz_set_si(pcont, 1);  /* defensive */
+
     if (negate) {
         BPoly* bp_neg = bpoly_neg(bp);
         bpoly_free(bp);
@@ -723,6 +735,7 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
         if (!Q) {
             bpoly_free(bp);
             mpz_clear(abs_a);
+            mpz_clear(pcont);
             return NULL;
         }
     }
@@ -736,6 +749,7 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
     if (Q) bpoly_free(Q);
     if (!ok) {
         mpz_clear(abs_a);
+        mpz_clear(pcont);
         return NULL;
     }
 
@@ -749,6 +763,7 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
             free(factors);
         }
         mpz_clear(abs_a);
+        mpz_clear(pcont);
         return NULL;
     }
 
@@ -771,6 +786,7 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
                 for (int k = 0; k < r; k++) bpoly_free(factors[k]);
                 free(factors);
                 mpz_clear(abs_a);
+                mpz_clear(pcont);
                 return NULL;
             }
             BPoly* F = bpoly_div_int_exact(H, ci);
@@ -782,6 +798,7 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
                 for (int k = 0; k < r; k++) bpoly_free(factors[k]);
                 free(factors);
                 mpz_clear(abs_a);
+                mpz_clear(pcont);
                 return NULL;
             }
             bpoly_free(factors[i]);
@@ -846,7 +863,18 @@ static Expr* try_bivariate_via_hensel_with_main(Expr* P, Expr** vars,
 
     Expr* result = expr_new_function(expr_new_symbol("Times"), args, (size_t)r);
     free(args);
-    return eval_and_free(result);
+    Expr* evaluated = eval_and_free(result);
+
+    /* Re-multiply by the integer content dropped during primitive-factor
+     * recovery (see the pcont computation above).  No-op when pcont == 1. */
+    if (mpz_cmp_si(pcont, 1) != 0) {
+        Expr* c = expr_from_mpz_normalized(pcont);
+        evaluated = eval_and_free(expr_new_function(
+            expr_new_symbol("Times"),
+            (Expr*[]){ c, evaluated }, 2));
+    }
+    mpz_clear(pcont);
+    return evaluated;
 }
 
 /* Bivariate Hensel entry point with main-variable fallback (Phase F6).
