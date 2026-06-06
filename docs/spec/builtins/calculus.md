@@ -427,6 +427,34 @@ Mathilda's pattern matcher does not yet fully support `/;`-guarded
 multi-argument rules; this is a separate issue tracked under the
 matcher work.
 
+### InterpolatingFunction integrands
+
+`Integrate[InterpolatingFunction[...][x], x]` returns the antiderivative as a
+fresh applied `InterpolatingFunction[...][x]`, mirroring how
+`D[InterpolatingFunction[...][x], x]` differentiates such objects.
+Differentiation only bumps the object's derivative-order annotation; the
+per-window evaluation kernels evaluate derivatives of order `>= 0` only and
+cannot produce an antiderivative, so integration instead builds a genuinely new
+interpolant (`src/calculus/integrate_interp.c`):
+
+1. Read the grid x-coordinates from the object's stored table.
+2. Sample the original function values `y_i = ifun[x_i]`.
+3. Accumulate the antiderivative node values `F_0 = 0`,
+   `F_i = F_{i-1} + Integrate_{x_{i-1}}^{x_i} ifun` by 5-point Gauss-Legendre
+   quadrature (exact through degree 9 — i.e. the default/Spline/Hermite
+   piecewise-cubic interpolants; very high explicit `InterpolationOrder` panels
+   incur a small quadrature error).
+4. Build a Hermite `InterpolatingFunction` through `{{x_i}, F_i, y_i}` — because
+   the antiderivative's exact derivative is the original function, supplying
+   `F'(x_i) = y_i` makes `D[Integrate[ifun[x], x], x]` round-trip to `ifun[x]`.
+
+Only the 1-D, direct case (the applied argument is the integration variable
+itself) is reduced; `Integrate[ifun[g[x]], x]` is not generally expressible as
+an `InterpolatingFunction` and is left to the cascade above. The construction
+also handles the derivative-annotated objects produced by `D` (integrating the
+sampled derivative recovers the lower-order antiderivative). Computations use
+machine doubles.
+
 ## Integrate`IntRationalLogPart
 
 The Lazard-Rioboo-Trager logarithmic-part computation

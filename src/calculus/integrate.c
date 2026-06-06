@@ -16,6 +16,7 @@
  */
 
 #include "integrate.h"
+#include "integrate_interp.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "common.h"
@@ -248,6 +249,15 @@ Expr* builtin_integrate(Expr* res) {
      * compute derivatives, partial fractions, ... in it. */
     if (x->type != EXPR_SYMBOL) return NULL;
 
+    /* Applied InterpolatingFunction objects integrate to a fresh antiderivative
+     * InterpolatingFunction, mirroring how D differentiates them.  This is
+     * handled before the inexact-rationalisation scan below: the object embeds
+     * Real sample data that must NOT be force-rationalised. */
+    {
+        Expr* interp = integrate_interp(f, x);
+        if (interp) return interp;
+    }
+
     /* Parse the optional Method -> "..." option. */
     IntegrateMethod method = METHOD_AUTOMATIC;
     if (argc == 3) {
@@ -327,7 +337,9 @@ void integrate_init(void) {
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
-        "The CRCTable rules are loaded from disk on first use only.");
+        "The CRCTable rules are loaded from disk on first use only.\n"
+        "An applied 1-D InterpolatingFunction integrates to its antiderivative\n"
+        "InterpolatingFunction (mirroring D).");
 
     /* Initialise the Integrate` package: HermiteReduce, IntegratePolynomial,
      * helpers, and the explicit `Integrate`BronsteinRational` entry. */

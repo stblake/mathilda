@@ -218,6 +218,7 @@ set(COMMON_SRC
     ../src/repl_hooks.c
     ../src/options.c
     ../src/calculus/integrate.c
+    ../src/calculus/integrate_interp.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
