@@ -686,6 +686,11 @@ products and powers.
   `Sqrt[x y] -> Sqrt[x] Sqrt[y]`, `Sqrt[z^2] -> z`, and `Log[1/z] -> -Log[z]`.
 - Rules are applied top-down to a fixed point, so `Log[(a b)^c]` becomes
   `c (Log[a] + Log[b])` rather than expanding the inner power first.
+- When a product raised to a non-integer (root) exponent carries a negative
+  numeric coefficient together with a `Plus` factor, the sign is folded into
+  that factor so the root stays real, e.g.
+  `Sqrt[-4 Dt[u]^2 (-1 + u)] -> 2 Dt[u] Sqrt[1 - u]` rather than
+  `2 I Dt[u] Sqrt[-1 + u]`. This is value-preserving since `(-1)^c p^c = (-p)^c`.
 - `f^-1[f[x]] -> x` for the inverse-trig / inverse-hyperbolic pairs
   (`ArcTan[Tan[x]] -> x`, `ArcSin[Sin[x]] -> x`, …).
 - The default `Assumptions -> Automatic` makes the textbook transforms, which

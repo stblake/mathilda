@@ -43,6 +43,17 @@ static void test_automatic(void) {
      * power first. */
     run_test("PowerExpand[Log[(a b)^c]]",
              "Times[Plus[Log[a], Log[b]], c]");
+    /* A negative numeric coefficient under a root is folded into a Plus factor
+     * so the root stays real: Sqrt[-4 Dt[u]^2 (-1+u)] -> 2 Dt[u] Sqrt[1-u]
+     * rather than 2 I Dt[u] Sqrt[-1+u]. */
+    run_test("PowerExpand[Sqrt[-4 Dt[u]^2 (-1 + u)]]",
+             "Times[2, Dt[u], Power[Plus[1, Times[-1, u]], Rational[1, 2]]]");
+    /* No Plus factor to absorb the sign -> genuinely imaginary, left as is. */
+    run_test("PowerExpand[Sqrt[-4 Dt[u]^2]]",
+             "Times[Complex[0, 2], Dt[u]]");
+    /* Integer exponent: no folding (the sign cannot turn imaginary). */
+    run_test("PowerExpand[(-2 (1 + x))^2]",
+             "Times[4, Power[Plus[1, x], 2]]");
     /* No-op on a plain sum. */
     run_test("PowerExpand[x + y]", "Plus[x, y]");
     run_test("PowerExpand[Sqrt[x] + Sqrt[y]]",

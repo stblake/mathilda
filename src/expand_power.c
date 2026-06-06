@@ -233,12 +233,59 @@ static Expr* arctan_tan_universal(Expr* x) {
 /* Rule application (one rewrite at the current node)                  */
 /* ------------------------------------------------------------------ */
 
-/* Build Times[powers...] (* corr if non-NULL) for (z1..zn)^c. */
+static bool pe_to_double(const Expr* e, double* out);   /* defined below */
+
+/* True when c is a numeric, non-integer exponent (i.e. a genuine root such as
+ * 1/2 or 1/3) -- the case where a negative base would otherwise turn imaginary. */
+static bool pe_exp_nonint(const Expr* c) {
+    double d;
+    return pe_to_double(c, &d) && d != floor(d);
+}
+
+/* Negate a factor, distributing -1 through a leading Plus so that, e.g.,
+ * -(-1 + u) becomes 1 - u rather than the unevaluated Times[-1, -1 + u]. */
+static Expr* pe_negate(const Expr* z) {
+    if (is_head(z, "Plus")) {
+        size_t k = z->data.function.arg_count;
+        Expr** t = malloc(sizeof(Expr*) * k);
+        for (size_t i = 0; i < k; i++)
+            t[i] = fn2("Times", pe_int(-1), expr_copy(z->data.function.args[i]));
+        Expr* sum = fnN("Plus", t, k);
+        free(t);
+        return eval_and_free(sum);
+    }
+    return eval_and_free(fn2("Times", pe_int(-1), expr_copy((Expr*)z)));
+}
+
+/* Build Times[powers...] (* corr if non-NULL) for (z1..zn)^c.
+ *
+ * When c is a non-integer numeric exponent (a root) and the product carries a
+ * negative numeric coefficient together with a Plus factor, fold the sign of
+ * the coefficient into that Plus factor: (-k ... (p))^c -> k^c ... (-p)^c.
+ * This keeps the root real where possible, turning e.g.
+ *   Sqrt[-4 Dt[u]^2 (-1 + u)]  ->  2 Dt[u] Sqrt[1 - u]
+ * instead of 2 I Dt[u] Sqrt[-1 + u].  The rewrite is value-preserving under
+ * PowerExpand's branch-cut-ignoring semantics, since (-1)^c (p)^c = (-p)^c. */
 static Expr* split_power_product(Expr** zs, size_t n, Expr* c, Expr* corr) {
+    size_t neg_i = 0, plus_i = 0;
+    bool has_neg = false, has_plus = false;
+    if (pe_exp_nonint(c)) {
+        for (size_t i = 0; i < n; i++) {
+            double d;
+            if (!has_neg && pe_to_double(zs[i], &d) && d < 0) { neg_i = i; has_neg = true; }
+            if (!has_plus && is_head(zs[i], "Plus"))          { plus_i = i; has_plus = true; }
+        }
+    }
+    bool fold = has_neg && has_plus;
+
     size_t m = n + (corr ? 1 : 0);
     Expr** factors = malloc(sizeof(Expr*) * m);
-    for (size_t i = 0; i < n; i++)
-        factors[i] = fn2("Power", expr_copy(zs[i]), expr_copy(c));
+    for (size_t i = 0; i < n; i++) {
+        Expr* z = (fold && (i == neg_i || i == plus_i))
+                      ? pe_negate(zs[i])            /* -k -> k, p -> -p */
+                      : expr_copy(zs[i]);
+        factors[i] = fn2("Power", z, expr_copy(c));
+    }
     if (corr) factors[n] = corr;
     Expr* res = fnN("Times", factors, m);
     free(factors);
