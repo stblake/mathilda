@@ -328,18 +328,25 @@ static bool match_internal(Expr* expr, Expr* pattern, MatchEnv* env, ParentMatch
          * so the guard runs once all bindings are established. It only
          * applies when inner_pat is a literal-headed function call (so we
          * can route argument matching). When inner_pat is itself a
-         * pattern wrapper (nested Condition, PatternTest, HoldPattern,
-         * Verbatim) we MUST fall through to the simpler recursive path
-         * below, which re-enters this handler for the inner wrapper.
-         * Without this gate, e.g. `f[a_,b_] /; c1 /; c2` would try to
-         * structurally match input's head against `Condition`, which is
-         * the wrong dispatch. */
+         * pattern wrapper -- a nested Condition/PatternTest/HoldPattern/
+         * Verbatim guard OR a pattern object whose head only *looks* like
+         * a function call (Pattern[x, Blank[]] for `x_`, Blank[], etc.) --
+         * we MUST fall through to the simpler recursive path below, which
+         * re-enters this handler for the inner wrapper. Without this gate,
+         * e.g. `f[a_,b_] /; c1 /; c2` would try to structurally match
+         * input's head against `Condition`, and `e_ /; cond` would match
+         * input's head against `Pattern`, both wrong dispatches. */
         bool inner_is_wrapper = false;
         if (inner_pat->type == EXPR_FUNCTION && inner_pat->data.function.head
             && inner_pat->data.function.head->type == EXPR_SYMBOL) {
             const char* ih = inner_pat->data.function.head->data.symbol;
             if (ih == SYM_Condition || ih == SYM_PatternTest
-                || ih == SYM_HoldPattern || ih == SYM_Verbatim) {
+                || ih == SYM_HoldPattern || ih == SYM_Verbatim
+                || ih == SYM_Pattern || ih == SYM_Blank
+                || ih == SYM_BlankSequence || ih == SYM_BlankNullSequence
+                || ih == SYM_Alternatives || ih == SYM_Optional
+                || ih == SYM_Repeated || ih == SYM_RepeatedNull
+                || ih == SYM_Shortest || ih == SYM_Longest) {
                 inner_is_wrapper = true;
             }
         }
