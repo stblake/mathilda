@@ -36,6 +36,7 @@
 #include "fit.h"
 #include "info.h"
 #include "expand.h"
+#include "expand_power.h"
 #include "poly.h"
 #include "rat.h"
 #include "facint.h"
@@ -499,6 +500,7 @@ void core_init(void) {
     minpoly_init();
     rat_init();
     expand_init();
+    expand_power_init();
     solve_init();
     findroot_init();
     void findmin_init(void);

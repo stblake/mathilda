@@ -137,6 +137,7 @@ set(COMMON_SRC
     ../src/fit.c
     ../src/info.c
     ../src/expand.c
+    ../src/expand_power.c
     ../src/poly/poly.c
     ../src/poly/minpoly.c
     ../src/poly/subresultants.c
@@ -1606,3 +1607,13 @@ else()
     target_link_libraries(time_constrained_tests gmp m)
 endif()
 add_test(NAME time_constrained_tests COMMAND time_constrained_tests)
+
+add_executable(powerexpand_tests test_powerexpand.c ${COMMON_SRC})
+target_include_directories(powerexpand_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(powerexpand_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(powerexpand_tests build_ecm)
+else()
+    target_link_libraries(powerexpand_tests gmp m)
+endif()
+add_test(NAME powerexpand_tests COMMAND powerexpand_tests)

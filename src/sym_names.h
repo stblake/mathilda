@@ -270,6 +270,7 @@ extern const char* SYM_Polynomials;
 extern const char* SYM_PositiveDefiniteMatrixQ;
 extern const char* SYM_PossibleZeroQ;
 extern const char* SYM_Power;
+extern const char* SYM_PowerExpand;
 extern const char* SYM_PrecisionGoal;
 extern const char* SYM_Primes;
 extern const char* SYM_PrimitiveRoot;

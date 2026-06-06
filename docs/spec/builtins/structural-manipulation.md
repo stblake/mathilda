@@ -671,6 +671,57 @@ In[3]:= ExpandDenominator[(a+b)(a-b)/((c+d)(c-d))]
 Out[3]= ((a+b)(a-b))/(c^2 - d^2)
 ```
 
+## PowerExpand
+Expands powers of products and nested powers, and logarithms/arguments of
+products and powers.
+- `PowerExpand[expr]`
+- `PowerExpand[expr, {x1, x2, ...}]`
+- `PowerExpand[expr, Assumptions -> assum]`
+
+**Features**:
+- `Protected`.
+- Applies `(a b)^c -> a^c b^c`, `(a^b)^c -> a^(b c)`, `Log[a b] -> Log[a] + Log[b]`,
+  `Log[a^b] -> b Log[a]`, and `Arg[a b] -> Arg[a] + Arg[b]`. Because `Sqrt[x]` is
+  `Power[x, 1/2]` and `Log[1/z]` is `Log[z^-1]`, these also give
+  `Sqrt[x y] -> Sqrt[x] Sqrt[y]`, `Sqrt[z^2] -> z`, and `Log[1/z] -> -Log[z]`.
+- Rules are applied top-down to a fixed point, so `Log[(a b)^c]` becomes
+  `c (Log[a] + Log[b])` rather than expanding the inner power first.
+- `f^-1[f[x]] -> x` for the inverse-trig / inverse-hyperbolic pairs
+  (`ArcTan[Tan[x]] -> x`, `ArcSin[Sin[x]] -> x`, …).
+- The default `Assumptions -> Automatic` makes the textbook transforms, which
+  are correct when the bases are positive reals or the exponents are integers;
+  branch cuts are otherwise ignored.
+- `Assumptions -> True` emits the universally-correct result, attaching a
+  branch-correction term built from `Floor`, `Arg`, `Im`, `E`, `I`, and `Pi`.
+- `Assumptions -> assum` emits the `True`-mode formula and then refines the
+  correction terms under `assum` (resolving `Arg`/`Im` of known-sign reals and
+  evaluating `Floor` over assumption-bounded intervals). This is faithful on
+  the documented examples; for assumptions outside this reasoning it degrades
+  to the symbolic `True`-mode form.
+- `PowerExpand[expr, {x1, ...}]` expands only subexpressions that mention one
+  of the listed variables.
+- Threads over `List`, equations, inequalities, and logic functions.
+
+Limitations: in `Assumptions -> True` mode the nested-power correction is left
+in `Im[...]` form rather than rewritten to `Arg[...]` (mathematically equal).
+
+```mathematica
+In[1]:= PowerExpand[Sqrt[x y]]
+Out[1]= Sqrt[x] Sqrt[y]
+
+In[2]:= PowerExpand[Log[(a b)^c]]
+Out[2]= c (Log[a] + Log[b])
+
+In[3]:= PowerExpand[Sqrt[a b] + Sqrt[c d], {a, b}]
+Out[3]= Sqrt[a] Sqrt[b] + Sqrt[c d]
+
+In[4]:= PowerExpand[Sqrt[z^2], Assumptions -> z < 0]
+Out[4]= -z
+
+In[5]:= PowerExpand[Log[x y], Assumptions -> True]
+Out[5]= Log[x] + Log[y] + 2 I Pi Floor[1/2 - Arg[x]/(2 Pi) - Arg[y]/(2 Pi)]
+```
+
 ## Coefficient
 Gives the coefficient of a specific form in a polynomial.
 - `Coefficient[expr, form]`

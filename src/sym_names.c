@@ -255,6 +255,7 @@ const char* SYM_Polynomials = NULL;
 const char* SYM_PositiveDefiniteMatrixQ = NULL;
 const char* SYM_PossibleZeroQ = NULL;
 const char* SYM_Power = NULL;
+const char* SYM_PowerExpand = NULL;
 const char* SYM_PrecisionGoal = NULL;
 const char* SYM_Primes = NULL;
 const char* SYM_PrimitiveRoot = NULL;
@@ -606,6 +607,7 @@ void sym_names_init(void) {
     SYM_PositiveDefiniteMatrixQ    = intern_symbol("PositiveDefiniteMatrixQ");
     SYM_PossibleZeroQ              = intern_symbol("PossibleZeroQ");
     SYM_Power                      = intern_symbol("Power");
+    SYM_PowerExpand                = intern_symbol("PowerExpand");
     SYM_PrecisionGoal              = intern_symbol("PrecisionGoal");
     SYM_Primes                     = intern_symbol("Primes");
     SYM_PrimitiveRoot              = intern_symbol("PrimitiveRoot");

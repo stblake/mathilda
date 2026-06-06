@@ -171,8 +171,16 @@ static void test_power_of_times_power_factor_composes(void) {
 
 /* Power-of-Power composition with positive base + rational outer (2026-05-12). */
 static void test_power_of_power_positive_base(void) {
-    /* Positive integer base -- exponent merges. */
-    assert_eval_eq("Sqrt[Power[2, a]]", "2^(1/2 a)", 0);
+    /* Positive base with a *real* (rational) inner exponent merges:
+     * (2^(2/3))^(1/2) = 2^(1/3), since 2^(2/3) is a positive real. */
+    assert_eval_eq("Sqrt[Power[2, 2/3]]", "2^(1/3)", 0);
+
+    /* Positive base but *symbolic* inner exponent must NOT merge: a may be
+     * complex, and Sqrt[2^a] != 2^(a/2) on the principal branch (e.g.
+     * a = 3 Pi I / Log[2] gives Sqrt[2^a] = I but 2^(a/2) = -I). Matches
+     * Mathematica, which leaves Sqrt[2^a] unevaluated -- PowerExpand is the
+     * documented route to the merged form. */
+    assert_eval_eq("Sqrt[Power[2, a]]", "Sqrt[2^a]", 0);
 
     /* Pi positive -- Sqrt[Pi^2] reduces to Pi (not |Pi|). */
     assert_eval_eq("Sqrt[Power[Pi, 2]]", "Pi", 0);
@@ -182,6 +190,12 @@ static void test_power_of_power_positive_base(void) {
 
     /* Integer outer exponent on negative base still works (pre-existing rule). */
     assert_eval_eq("Power[Power[-1, 2], 3]", "1", 0);
+
+    /* (E^x)^y with symbolic exponents must stay nested -- x may be complex,
+     * so the core evaluator must not fold it to E^(x y). PowerExpand handles
+     * the merge when the user asserts it is safe. */
+    assert_eval_eq("(E^x)^y", "E^x^y", 0);
+    assert_eval_eq("(E^x)^y", "Power[Power[E, x], y]", 1);
 }
 
 /* Perfect-power extraction on BigInt bases: previously skipped because
