@@ -433,7 +433,9 @@ Expr* builtin_inequality(Expr* res) {
         free(out_args);
         return result;
     }
-    return expr_new_function(expr_new_symbol("Inequality"), out_args, out_n);
+    Expr* residual = expr_new_function(expr_new_symbol("Inequality"), out_args, out_n);
+    free(out_args);
+    return residual;
 }
 
 /*

@@ -593,7 +593,9 @@ static int64_t draw_int_range(int64_t lo, int64_t hi) {
     Expr* range = expr_new_function(expr_new_symbol("List"), list_args, 2);
     Expr* call_args[] = {range};
     Expr* call = expr_new_function(expr_new_symbol("RandomInteger"), call_args, 1);
-    Expr* r = evaluate(call);
+    /* eval_and_free consumes `call`; plain evaluate() would leak the
+     * RandomInteger[List[...]] wrapper, which it does not take ownership of. */
+    Expr* r = eval_and_free(call);
     int64_t out = 0;
     if (r) {
         if (r->type == EXPR_INTEGER) out = r->data.integer;

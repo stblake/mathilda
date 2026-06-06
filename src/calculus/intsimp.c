@@ -453,8 +453,9 @@ Expr* intsimp_log_to_arctanh(Expr* e, Expr* x) {
                 (Expr*[]){expr_copy(coeffs[i]), expr_copy(coeffs[j])}, 2);
             if (intsimp_zero_q(delta)) {
                 expr_free(delta);
-                Expr* prod = expr_expand(internal_times(
-                    (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2));
+                Expr* prod_raw = internal_times(
+                    (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2);
+                Expr* prod = expr_expand(prod_raw); expr_free(prod_raw);
                 Expr* logp = expr_new_function(expr_new_symbol("Log"),
                     (Expr*[]){prod}, 1);
                 Expr* combined = internal_times(
