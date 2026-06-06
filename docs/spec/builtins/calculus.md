@@ -342,13 +342,15 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Three-stage dispatch cascade (2026-05): `Integrate[f, x]` (Method ->
+- Four-stage dispatch cascade (2026-06): `Integrate[f, x]` (Method ->
   Automatic, default) tries each subroutine in order and returns the
   first non-`NULL` result:
-  1. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
+  1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
+     derivative (e.g. `f'[x]`); see below.
+  2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||
      rationalQ[f, x]`.
-  2. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  3. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  3. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  4. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
@@ -357,6 +359,7 @@ monotonically down.
   - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
+  - `"Undefined"` — `Integrate\`Undefined[f, x]`.
   Unknown method names emit `Integrate::method` and bubble back.
 - Universal correctness predicate: `Cancel[Together[D[Integrate[f,x],x] - f]] === 0`.
 
@@ -397,7 +400,8 @@ The `Integrate`` package also exposes the lower-level helpers
 `Integrate`BronsteinRational` (the explicit form),
 `Integrate`IntRationalLogPart` (Phase 2's LRT computation),
 `Integrate`RischNorman` (Bronstein pmint), `Integrate`CRCTable`
-(table lookup), and the unit-test helpers `Integrate`Helpers`Content`,
+(table lookup), `Integrate`Undefined` (unknown-function integration,
+Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
 `...`SquareFree`, `...`ExtractConstants`, `...`ApartList`.  All are
 `Protected`; the BronsteinRational helpers additionally have
@@ -426,6 +430,57 @@ The table currently fires on only a small subset of inputs because
 Mathilda's pattern matcher does not yet fully support `/;`-guarded
 multi-argument rules; this is a separate issue tracked under the
 matcher work.
+
+### Integrate`Undefined
+
+`Integrate`Undefined[f, x]` integrates expressions that are rational in
+**undefined functions** `u[x]` and their derivatives, following Kelly
+Roach, "Indefinite and Definite Integration" (1992), §1.7 ("Undefined
+Functions").  Each undefined function value `u[g]` and its derivative
+tower `u'[g], u''[g], …` is treated as a differential-field generator;
+the integrand is reduced by recognising integration-by-parts /
+total-derivative structure in the top generator.  A single inner call to
+the rational integrator over a substituted generator symbol subsumes
+Roach's polynomial, fraction, and log parts (so `1/u -> Log[u]`,
+`1/u^2 -> -1/u`, and `a/(a^2+u'^2) -> ArcTan` all fall out).  Composite
+arguments are handled via the chain rule (`g' = D[g, x]`).  A logarithm of
+an unknown-function expression, `Log[eta]`, is itself recognised as a
+transcendental generator and reduced by parts
+(`Integrate[C L + D, x] = G L - Integrate[G L' - D, x]` with
+`G = Integrate[C, x]`, `L' = eta'/eta`), with self-referential resolution
+for perfect powers (`Integrate[Log[f] f'/f, x] = Log[f]^2/2`).  The stage
+is gated to only run when `f` contains an undefined-function derivative or
+such a logarithm; genuinely non-elementary integrands (e.g. `f'[x] g'[x]`,
+`f'[x]^2`) are left unevaluated, with a cycle guard preventing the by-parts
+recursion from looping.  `Protected`, `ReadProtected`.
+
+Known limitations: transcendental generators other than `Log` (e.g.
+`ArcTan[eta]`, `Exp[eta]` with `eta` containing an unknown function) are
+not yet recognised; nested unknown arguments `f[g[x]]` (with `g` itself
+undefined) are deferred.
+
+```mathematica
+In[1]:= Integrate[x f'[x] + f[x], x]
+Out[1]= x f[x]
+
+In[2]:= Integrate[f'[x] g[x] + f[x] g'[x], x]
+Out[2]= f[x] g[x]
+
+In[3]:= Integrate[f'[x]/f[x], x]
+Out[3]= Log[f[x]]
+
+In[4]:= Integrate[(f'[x] g'[x] - f[x] g''[x])/(f[x]^2 + g'[x]^2), x]
+Out[4]= -ArcTan[Derivative[1][g][x]/f[x]]
+
+In[5]:= Integrate[2 x f'[x^2], x]            (* composite argument *)
+Out[5]= f[x^2]
+
+In[6]:= Integrate[(f[x] - x f[x] + f[x] Log[x f[x]] + x f'[x])/f[x], x]
+Out[6]= -1/2 x^2 + x Log[x f[x]]            (* Log[eta] generator *)
+
+In[7]:= Integrate[Log[f[x]] f'[x]/f[x], x]
+Out[7]= 1/2 Log[f[x]]^2                     (* self-referential by-parts *)
+```
 
 ### InterpolatingFunction integrands
 

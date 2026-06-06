@@ -586,3 +586,35 @@ check failed with `{0, 0, -3 + i}` instead of all zeros.
 operate over general symbolic data, use iteration variables that
 are unlikely to appear in the data — `ii`, `jj`, `kk`, or
 `Module[{i}, Table[..., {i, n}]]`.
+
+## Integration by parts for unknown functions (Roach §1.7) — 2026-06-06
+
+**Lesson 1 — zero-test a rational difference with `Cancel[Together[Expand[...]]]`,
+not Expand or Together alone.** The unknown-function integrator's linear check
+and residual (`newI`) must collapse mathematically-zero expressions to literal
+`0`. `Expand` alone fails on different-denominator fractions (e.g.
+`1/(1+(g'/f)^2)` vs `1/(f^2+g'^2)` from an ArcTan derivative); `Together`/`Cancel`
+alone fail to combine syntactically-distinct-but-equal *products* like
+`g(1+x^2)` vs `(g + g x^2)`. Only all three passes together are reliable. A bug
+where `(1+x^2)` coefficients failed while `x^2` worked traced exactly to a
+`canon` that omitted `Expand`.
+
+**Why:** `Together`/`Cancel` operate on fraction structure (common denominator,
+cancel common factors) but do not distribute a sum factor over a product;
+`Expand` does the distribution but cannot merge fractions over a common
+denominator. They are complementary, not redundant.
+
+**Lesson 2 — never split an integrable sum into term-by-term integrals.** A
+residual like `f'[x]g'[x] + f[x]g''[x]` is the exact derivative `(f g')'` and
+integrates cleanly *as a whole*, but its individual terms (`f'g'`) have no
+closed form and send integration-by-parts into an infinite cycle
+(`∫f'g' = fg' - ∫fg''`, `∫fg'' = fg' - ∫f'g'`, …). Hand the whole residual back
+to the integrator; only factor out genuine `x`-free constants from a *single*
+term for cosmetics. Splitting caused a segfault (a NULL function-arg built from
+the runaway recursion).
+
+**How to apply:** any by-parts / linearity engine that recurses through a global
+`Integrate` must (a) keep sums intact across the hand-off, and (b) carry a
+canonical-form cycle guard (stack of in-flight integrands compared with
+`expr_eq` after `Cancel[Together[Expand[...]]]`) so genuinely non-elementary
+inputs terminate unevaluated instead of looping.

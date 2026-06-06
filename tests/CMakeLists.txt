@@ -219,6 +219,7 @@ set(COMMON_SRC
     ../src/options.c
     ../src/calculus/integrate.c
     ../src/calculus/integrate_interp.c
+    ../src/calculus/integrate_unknown.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
@@ -1510,6 +1511,16 @@ else()
     target_link_libraries(intrat_tests gmp m)
 endif()
 add_test(NAME intrat_tests COMMAND intrat_tests)
+
+add_executable(integrate_unknown_tests test_integrate_unknown.c ${COMMON_SRC})
+target_include_directories(integrate_unknown_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_unknown_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(integrate_unknown_tests build_ecm)
+else()
+    target_link_libraries(integrate_unknown_tests gmp m)
+endif()
+add_test(NAME integrate_unknown_tests COMMAND integrate_unknown_tests)
 
 add_executable(intrischnorman_tests test_intrischnorman.c ${COMMON_SRC})
 target_include_directories(intrischnorman_tests PRIVATE ../src)

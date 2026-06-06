@@ -17,6 +17,7 @@
 
 #include "integrate.h"
 #include "integrate_interp.h"
+#include "integrate_unknown.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "common.h"
@@ -112,6 +113,15 @@ static Expr* call_stage(const char* head_name, Expr* f, Expr* x) {
     Expr* result = evaluate(call);
     expr_free(call);
     return result;
+}
+
+/* Stage 0: undefined-function integrator (Roach 1992, §1.7).  Handles
+ * integrands rational in unknown functions u[x] and their derivatives,
+ * e.g. Integrate[x f'[x] + f[x], x] -> x f[x].  Cheaply gated: returns
+ * NULL immediately unless the integrand contains an undefined-function
+ * derivative, so ordinary integrands skip it. */
+static Expr* try_undefined(Expr* f, Expr* x) {
+    return integrate_unknown_try(f, x);
 }
 
 /* Stage 1: rational-function integrator.  Returns the antiderivative on
@@ -212,6 +222,7 @@ typedef enum {
     METHOD_RATIONAL,
     METHOD_RISCH,
     METHOD_CRCTABLE,
+    METHOD_UNDEFINED,
     METHOD_INVALID
 } IntegrateMethod;
 
@@ -234,6 +245,7 @@ static IntegrateMethod parse_method_option(Expr* opt) {
     if (strcmp(rhs->data.string, "BronsteinRational") == 0) return METHOD_RATIONAL;
     if (strcmp(rhs->data.string, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(rhs->data.string, "CRCTable")    == 0) return METHOD_CRCTABLE;
+    if (strcmp(rhs->data.string, "Undefined")   == 0) return METHOD_UNDEFINED;
     return METHOD_INVALID;
 }
 
@@ -297,7 +309,8 @@ Expr* builtin_integrate(Expr* res) {
     Expr* result = NULL;
     switch (method) {
         case METHOD_AUTOMATIC:
-            result = try_rational(effective_f, x);
+            result = try_undefined(effective_f, x);
+            if (!result) result = try_rational(effective_f, x);
             if (!result) result = try_risch(effective_f, x);
             if (!result) result = try_crctable(effective_f, x);
             break;
@@ -309,6 +322,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_CRCTABLE:
             result = try_crctable(effective_f, x);
+            break;
+        case METHOD_UNDEFINED:
+            result = try_undefined(effective_f, x);
             break;
         case METHOD_INVALID:
             break;  /* unreachable: handled above */
@@ -336,6 +352,7 @@ void integrate_init(void) {
         "  \"BronsteinRational\"  — Integrate`BronsteinRational (polynomial / rational)\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
+        "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
         "The CRCTable rules are loaded from disk on first use only.\n"
         "An applied 1-D InterpolatingFunction integrates to its antiderivative\n"
@@ -344,6 +361,9 @@ void integrate_init(void) {
     /* Initialise the Integrate` package: HermiteReduce, IntegratePolynomial,
      * helpers, and the explicit `Integrate`BronsteinRational` entry. */
     intrat_init();
+
+    /* Undefined-function integrator (Roach §1.7): Integrate`Undefined. */
+    integrate_unknown_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,
