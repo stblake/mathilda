@@ -176,6 +176,24 @@ void complex_init(void) {
     symtab_set_docstring("Sign",
         "Sign[x] gives -1, 0, or 1 for real numeric x according to its sign, "
         "and z/Abs[z] for a nonzero numeric complex z.");
+    symtab_set_docstring("Re",
+        "Re[z] gives the real part of numeric z; Re[Re[z]], Re[Im[z]], "
+        "Re[Abs[z]], Re[Arg[z]] fold since those heads are real-valued.");
+    symtab_set_docstring("Im",
+        "Im[z] gives the imaginary part of numeric z, and 0 for real or "
+        "real-valued (Re/Im/Abs/Arg) arguments.");
+    symtab_set_docstring("Abs",
+        "Abs[z] gives the absolute value (modulus) of numeric z, "
+        "Sqrt[Re[z]^2 + Im[z]^2] for complex z.");
+    symtab_set_docstring("Arg",
+        "Arg[z] gives the argument (phase angle in (-Pi, Pi]) of numeric z; "
+        "0 for nonnegative reals, Pi for negative reals.");
+    symtab_set_docstring("Conjugate",
+        "Conjugate[z] gives the complex conjugate Re[z] - I Im[z] of numeric z; "
+        "real and real-valued (Re/Im/Abs/Arg) arguments are returned unchanged.");
+    symtab_set_docstring("ReIm",
+        "ReIm[z] gives {Re[z], Im[z]}, the real and imaginary parts of numeric z "
+        "as a list; real-valued arguments give {z, 0}.");
 }
 
 /* True when `e` is `f[x]` for one of the real-valued-by-construction heads
