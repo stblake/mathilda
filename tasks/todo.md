@@ -337,3 +337,43 @@ check.
 - [ ] Update `docs/spec/changelog/2026-05.md`.
 - [ ] Update `docs/spec/builtins/simplify.md` if behaviour text
   needs revising.
+
+---
+
+# Simplify — TransformationFunctions option + docstring restructure (2026-06-07)
+
+## Semantics (Mathematica-faithful)
+- `TransformationFunctions -> Automatic` (default): built-in pipeline only.
+- `TransformationFunctions -> {f1, ...}`: ONLY apply f1, ... (no built-ins).
+- `TransformationFunctions -> {Automatic, f1, ...}`: built-in pipeline + f1, ...
+
+## Plan / checklist
+- [ ] `src/simp/simp_transform.c`: `simp_apply_transformations()` — global-best
+      fixed-point loop applying each user function to the whole expression and
+      every subexpression; accept strictly lower-complexity candidates
+      (`score_with_func`). Bounded by round/node/eval caps.
+- [ ] Declare in `simp_internal.h`.
+- [ ] `builtin_simplify`: parse `TransformationFunctions` -> use_builtin flag +
+      borrowed funcs[]; gate built-in pipeline+polish on use_builtin; apply user funcs.
+- [ ] Restructure `Simplify` docstring (info.c) + add TransformationFunctions.
+- [ ] `?TransformationFunctions` docstring.
+- [ ] docs/spec builtins + weekly changelog.
+- [ ] Build + focused test.
+
+## Review — DONE (2026-06-07)
+
+- `src/simp/simp_transform.c`: `simp_apply_transformations()` — bounded
+  global-best fixed point (round/node/eval caps), DFS subexpression splice +
+  re-evaluate + `score_with_func`. Declared in `simp_internal.h`.
+- `builtin_simplify` (`simp_builtins.c`): parses `TransformationFunctions` into
+  `use_builtin` + borrowed `user_funcs[]`; gates the built-in pipeline+polish on
+  `use_builtin`; applies user funcs afterwards. `free(user_funcs)` on all three
+  return paths (main, relational-threading, obvious-truth).
+- Bonus root-cause fix: pre-existing leak of `sub_args` in the threading path
+  (`expr_new_function` memcpy-copies the array, caller must free it).
+- Docstrings: `Simplify` restructured (forms / options / behaviour) + new
+  `TransformationFunctions` docstring. `docs/spec/changelog/2026-06-01.md` entry.
+- Tests: 7 new in `tests/test_simplify.c`; `CMakeLists.txt` lists the new .c.
+  simplify_tests + simp/log/denest/cuberoot suites all PASS. macOS `leaks`:
+  0 leaks on default, user-only, user+builtin, custom-pure-fn, list/relation/
+  obvious-truth threading. Clean `-std=c99 -Wall -Wextra`.

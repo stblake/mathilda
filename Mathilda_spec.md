@@ -33,6 +33,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | String operations | [`builtins/string-operations.md`](docs/spec/builtins/string-operations.md) |
 | Arithmetic and algebra (`Plus`, `Times`, `Power`, `Mod`, `GCD`, ...) | [`builtins/arithmetic-and-algebra.md`](docs/spec/builtins/arithmetic-and-algebra.md) |
 | Calculus (`D`, `Integrate`, `Limit`, ...) | [`builtins/calculus.md`](docs/spec/builtins/calculus.md) |
+| Simplification (`Simplify`, `SimplifyCount`, `Assuming`, `$Assumptions`, `Element`, ...) | [`builtins/simplification.md`](docs/spec/builtins/simplification.md) |
 | Power series (`Series`, `SeriesData`, `Normal`, ...) | [`builtins/power-series.md`](docs/spec/builtins/power-series.md) |
 | Elementary functions (trig, hyperbolic, log, exp) | [`builtins/elementary-functions.md`](docs/spec/builtins/elementary-functions.md) |
 | Lists and iteration (`Table`, `Range`, `Map`, `Do`, ...) | [`builtins/lists-and-iteration.md`](docs/spec/builtins/lists-and-iteration.md) |

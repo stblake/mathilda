@@ -122,6 +122,7 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_factorial.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_bottomup.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_builtins.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_transform.c
     ../src/complex.c
     ../src/trig.c
     ../src/trig_canon.c

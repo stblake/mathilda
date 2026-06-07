@@ -82,6 +82,55 @@ void test_simplify_complexity_function_leafcount(void) {
     expr_free(result);
 }
 
+/* ---- TransformationFunctions ---- */
+
+void test_simplify_transformation_automatic_is_default(void) {
+    /* TransformationFunctions -> Automatic is the default: built-in pipeline
+     * runs, Pythagorean identity collapses to 1. */
+    assert_eval_eq("Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> Automatic]",
+                   "1", 0);
+}
+
+void test_simplify_transformation_empty_suppresses_builtins(void) {
+    /* An explicit list with no Automatic suppresses the built-in pipeline;
+     * with no functions to apply the input is returned unchanged. */
+    assert_eval_eq("Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {}]",
+                   "Cos[x]^2 + Sin[x]^2", 0);
+}
+
+void test_simplify_transformation_user_only(void) {
+    /* Only Together is applied (built-ins off). 1/(x-1)+1/(1-x) -> 0. */
+    assert_eval_eq("Simplify[1/(x-1) + 1/(1-x), TransformationFunctions -> {Together}]",
+                   "0", 0);
+}
+
+void test_simplify_transformation_user_only_cancel(void) {
+    /* Cancel alone reduces (x^2-1)/(x-1) -> 1 + x; no Factor/Expand needed. */
+    assert_eval_eq("Simplify[(x^2-1)/(x-1), TransformationFunctions -> {Cancel}]",
+                   "1 + x", 0);
+}
+
+void test_simplify_transformation_user_only_excludes_other_transforms(void) {
+    /* Together cannot prove the Pythagorean identity, and the built-in
+     * pipeline is suppressed, so the expression survives unchanged -- proving
+     * the user list really does exclude the built-in transforms. */
+    assert_eval_eq("Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {Together}]",
+                   "Cos[x]^2 + Sin[x]^2", 0);
+}
+
+void test_simplify_transformation_automatic_plus_user(void) {
+    /* {Automatic, Together} runs the built-in pipeline too, so Pythag fires. */
+    assert_eval_eq("Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {Automatic, Together}]",
+                   "1", 0);
+}
+
+void test_simplify_transformation_custom_pure_function(void) {
+    /* A user-supplied pure function transforms part of the expression:
+     * (# /. a -> 0 &) applied to a + b yields b. */
+    assert_eval_eq("Simplify[a + b, TransformationFunctions -> {(# /. a -> 0 &)}]",
+                   "b", 0);
+}
+
 /* ---- Threading ---- */
 
 void test_simplify_threads_over_list(void) {
@@ -1142,6 +1191,13 @@ int main(void) {
     TEST(test_simplify_exp_sinh_ratio);
     TEST(test_simplify_integer_digit_penalty);
     TEST(test_simplify_complexity_function_leafcount);
+    TEST(test_simplify_transformation_automatic_is_default);
+    TEST(test_simplify_transformation_empty_suppresses_builtins);
+    TEST(test_simplify_transformation_user_only);
+    TEST(test_simplify_transformation_user_only_cancel);
+    TEST(test_simplify_transformation_user_only_excludes_other_transforms);
+    TEST(test_simplify_transformation_automatic_plus_user);
+    TEST(test_simplify_transformation_custom_pure_function);
     TEST(test_simplify_threads_over_list);
     TEST(test_simplify_threads_over_equation);
     TEST(test_simplify_list_of_assumptions_is_conjunction);

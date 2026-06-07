@@ -257,6 +257,17 @@ Expr* simp_bottomup(const Expr* input, const AssumeCtx* ctx,
                     int depth);
 
 /* ------------------------------------------------------------------ */
+/* simp_transform.c                                                   */
+/* ------------------------------------------------------------------ */
+
+/* Apply the user-supplied TransformationFunctions option's functions to
+ * `expr`, returning the lowest-complexity result (scored via
+ * score_with_func). `funcs` are borrowed; the result is caller-owned and
+ * never NULL (worst case a copy of `expr`). */
+Expr* simp_apply_transformations(const Expr* expr, Expr* const* funcs,
+                                 size_t nfuncs, const Expr* complexity_func);
+
+/* ------------------------------------------------------------------ */
 /* simp_builtins.c                                                    */
 /* ------------------------------------------------------------------ */
 

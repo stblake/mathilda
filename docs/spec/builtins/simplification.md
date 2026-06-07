@@ -1,0 +1,331 @@
+# Simplification
+
+Functions for transforming an expression into a simpler equivalent form, and
+the assumption machinery they consult. The core entry point is `Simplify`;
+`SimplifyCount` exposes its complexity measure, `Assuming` / `$Assumptions` /
+`Element` supply assumptions, and `TransformationFunctions`, `ComplexityFunction`
+and `$SimplifyDebug` tune or trace the search.
+
+## Simplify
+Performs a sequence of algebraic and other transformations on an expression and
+returns the simplest form it finds.
+
+- `Simplify[expr]` — searches the built-in transformation collection and returns
+  the candidate of minimum complexity.
+- `Simplify[expr, assum]` — simplifies using the assumptions `assum`.
+
+`Simplify` runs a bounded heuristic search: it repeatedly applies a battery of
+transforms to the expression and its subexpressions, scores every candidate with
+a complexity measure, and keeps the lowest-scoring form. Transforms compose
+across rounds, and a candidate that scores worse than its parent is pruned before
+it can seed the next round.
+
+**Features**:
+- `Protected`. **Not** `Listable`: a `List` in the assumption position is a
+  conjunction of facts (see below), not a threading axis.
+- The built-in transformation collection tries `Together`, `Cancel`, `Expand`,
+  `Factor`, `FactorSquareFree`, `Apart`, `TrigExpand`, `TrigFactor`, a
+  `TrigToExp`/`ExpToTrig` roundtrip, and per-variable `Collect`, keeping the
+  smallest result.
+- The default complexity measure is `SimplifyCount` — total subexpression count
+  plus the decimal-digit count of integer leaves — so `100 Log[2]` is preferred
+  over its expanded `Log[2^100]` form.
+- Threads manually over `List`, `Equal`, `Unequal`, `Less`, `LessEqual`,
+  `Greater`, `GreaterEqual`, `And`, `Or`, and `Not`, carrying any options through
+  into each sub-call.
+
+```mathematica
+In[1]:= Simplify[(x - 1)(x + 1)(x^2 + 1) + 1]
+Out[1]= x^4
+
+In[2]:= Simplify[3/(x + 3) + x/(x + 3)]
+Out[2]= 1
+
+In[3]:= Simplify[a x + b x + c]
+Out[3]= c + (a + b) x
+
+In[4]:= Simplify[Sin[x]^2 + Cos[x]^2]
+Out[4]= 1
+
+In[5]:= Simplify[2 Tan[x]/(1 + Tan[x]^2)]
+Out[5]= Sin[2 x]
+
+In[6]:= Simplify[(E^x - E^(-x))/Sinh[x]]
+Out[6]= 2
+
+In[7]:= Simplify[{Sin[x]^2 + Cos[x]^2, 3/(x + 3) + x/(x + 3)}]
+Out[7]= {1, 1}
+```
+
+### Specialised transformations
+
+Beyond the generic algebraic transforms, `Simplify` reaches a number of
+canonical forms that the generic pipeline alone does not:
+
+- **Cross-base radical fusion** — distinct positive-integer radicals sharing an
+  exponent are combined inside a `Times`.
+- **Roots of unity** — `(-1)^(p/q)` and `E^(I p Pi/q)` atoms are reduced modulo
+  the relevant cyclotomic polynomial.
+- **Radical denesting** — `Sqrt[A + Sqrt[B]]` and cube-root towers collapse via
+  the half-sum identity when the result is cleaner.
+- **Inverse trig / hyperbolic identities** — standard relations such as
+  `Sin[ArcCos[x]] == Sqrt[1 - x^2]` and `ArcSin[x] + ArcCos[x] == Pi/2` reduce.
+- **Logarithm simplification** — `Log` of a positive rational is decomposed over
+  its prime factors, and linear combinations of logs are fused
+  (`Sum c_i Log[a_i] -> Log[Prod a_i^c_i]`).
+- **Pythagorean completion and reduction** for trig and hyperbolic squares.
+- **Equation / inequality rebalancing** — a binary relation is normalised by
+  dividing through the GCD of integer coefficients and partitioning terms across
+  the relation; the rebalanced form is kept when its `SimplifyCount` is lower.
+  Strict inequalities flip when divided by a negative.
+
+```mathematica
+In[1]:= Simplify[Sqrt[2] Sqrt[3]]
+Out[1]= Sqrt[6]
+
+In[2]:= Simplify[Sqrt[6] - Sqrt[2] Sqrt[3]]
+Out[2]= 0
+
+In[3]:= Simplify[1 - (-1)^(1/3) + (-1)^(2/3)]
+Out[3]= 0
+
+In[4]:= Simplify[1 - (-1)^(1/5) + (-1)^(2/5) - (-1)^(3/5) + (-1)^(4/5)]
+Out[4]= 0
+
+In[5]:= Simplify[Sqrt[3 + 2 Sqrt[2]] - (1 + Sqrt[2])]
+Out[5]= 0
+
+In[6]:= Simplify[Sin[ArcCos[x]] - Sqrt[1 - x^2]]
+Out[6]= 0
+
+In[7]:= Simplify[ArcSin[x] + ArcCos[x] - Pi/2]
+Out[7]= 0
+
+In[8]:= Simplify[Log[72] - 3 Log[2] - 2 Log[3]]
+Out[8]= 0
+
+In[9]:= Simplify[4 Sin[x]^2 Cos[x]^2 + 4 Sin[x] Cos[x] + 1]
+Out[9]= 1/2 (3 - Cos[4 x] + 4 Sin[2 x])
+
+In[10]:= Simplify[2 x - 4 y + 6 z - 10 == -8]
+Out[10]= x + 3 z == 1 + 2 y
+
+In[11]:= Simplify[-2 x < 4]
+Out[11]= x > -2
+```
+
+### Assumptions
+
+`Simplify[expr, assum]` simplifies under `assum`, which may be equations,
+inequalities, domain specifications such as `Element[x, Integers]`, or logical
+combinations of these. A list `{a1, a2, ...}` is treated as the conjunction
+`And[a1, a2, ...]`. Under provable positivity / reality, `Simplify` applies
+`Log`/`Power` identities — `Log[a b] -> Log[a] + Log[b]`, `(a b)^c -> a^c b^c`,
+`(a^p)^q -> a^(p q)`, `Log[a^p] -> p Log[a]` and the like — whenever the
+operand-domain conditions follow from the assumption set. Per-symbol sign facts
+drive `Sqrt[x^2] -> x` / `-x` / `Abs[x]`, and integer facts drive the
+`Sin[n Pi] -> 0`, `Cos[n Pi] -> (-1)^n` family.
+
+When no positional assumption and no `Assumptions` option are given, `Simplify`
+reads the current value of `$Assumptions`.
+
+```mathematica
+In[1]:= Simplify[Sqrt[x^2], x > 0]
+Out[1]= x
+
+In[2]:= Simplify[Sqrt[x^2], Element[x, Reals]]
+Out[2]= Abs[x]
+
+In[3]:= Simplify[Log[a b], a > 0 && b > 0]
+Out[3]= Log[a] + Log[b]
+
+In[4]:= Simplify[(a^p)^q, a > 0 && Element[p, Reals]]
+Out[4]= a^(p q)
+
+In[5]:= Simplify[Sqrt[x^2 y^2], x > 0 && y < 0]
+Out[5]= -x y
+
+In[6]:= Simplify[Cos[k Pi], Element[k, Integers]]
+Out[6]= (-1)^k
+
+In[7]:= Simplify[Log[E^(x + y)], {Element[x, Reals], Element[y, Reals]}]
+Out[7]= x + y
+```
+
+A predicate that appears literally among the assumed facts folds to `True`:
+
+```mathematica
+In[8]:= Simplify[x > 0, x > 0]
+Out[8]= True
+```
+
+### Options
+
+- **`Assumptions`** (default `$Assumptions`) — the facts assumed while
+  simplifying. An explicit `Assumptions -> X` overrides `$Assumptions`; a
+  positional assumption is conjoined with `$Assumptions`.
+- **`ComplexityFunction`** (default the built-in `SimplifyCount` measure) — ranks
+  candidate forms; `Simplify` returns the lowest-scoring one. A custom function
+  `f` must return an integer or bigint for `f[candidate]`; otherwise the default
+  is used. `ComplexityFunction -> Automatic` is a synonym for the default and
+  takes the fast native scoring path. Compared with the default, `LeafCount`
+  drops the integer-digit penalty.
+- **`TransformationFunctions`** (default `Automatic`) — the functions applied to
+  try to transform parts of `expr` (see [TransformationFunctions](#transformationfunctions)).
+
+```mathematica
+In[1]:= Simplify[1/(x - 1) + 1/(1 - x), TransformationFunctions -> {Together}]
+Out[1]= 0
+
+In[2]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {Together}]
+Out[2]= Cos[x]^2 + Sin[x]^2
+
+In[3]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {Automatic, Together}]
+Out[3]= 1
+
+In[4]:= Simplify[a + b, TransformationFunctions -> {(# /. a -> 0 &)}]
+Out[4]= b
+```
+
+## SimplifyCount
+The complexity measure used by `Simplify` when no `ComplexityFunction` option (or
+`ComplexityFunction -> Automatic`) is given.
+
+- `SimplifyCount[expr]`
+
+**Features**:
+- `Listable`, `Protected`.
+- Per node: a symbol, the integer `0`, or a string counts `1`; a positive integer
+  counts its decimal-digit count; a negative integer counts its digits plus one
+  for the sign; `Rational[n, d]` counts `SimplifyCount[n] + SimplifyCount[d] + 1`;
+  `Complex[re, im]` counts `SimplifyCount[re] + SimplifyCount[im] + 1`; a real
+  (machine or MPFR) counts `2`; a function `h[a1, ...]` counts
+  `SimplifyCount[h] + Sum SimplifyCount[ai]`.
+- Matches Mathematica's definition, so the integer-digit penalty keeps
+  `100 Log[2]` (count 6) ahead of `Log[2^100]` (count 32).
+
+```mathematica
+In[1]:= SimplifyCount[100 Log[2]]
+Out[1]= 6
+
+In[2]:= SimplifyCount[Log[2^100]]
+Out[2]= 32
+
+In[3]:= SimplifyCount[1/2]
+Out[3]= 3
+
+In[4]:= SimplifyCount[3.14]
+Out[4]= 2
+```
+
+## TransformationFunctions
+An option for `Simplify` giving the list of functions to apply to try to
+transform parts of an expression.
+
+- `TransformationFunctions -> Automatic` — use the built-in collection of
+  transformation functions (the default).
+- `TransformationFunctions -> {f1, f2, ...}` — use **only** the functions `fi`;
+  the built-in pipeline is suppressed.
+- `TransformationFunctions -> {Automatic, f1, ...}` — use the built-in
+  transformation functions **together with** the `fi`.
+
+**Features**:
+- Each `fi` may be any function — a builtin head such as `Together` or `Cancel`,
+  or a pure function such as `(# /. a -> 0 &)`.
+- Every function is applied to the whole expression and to each of its
+  subexpressions; the candidate of lowest complexity (per `ComplexityFunction`)
+  is kept, in the same minimum-complexity search used for the built-in
+  transforms.
+- The option propagates through `Simplify`'s list / relation threading and
+  through the inexact-input rationalise/numericalise path.
+
+```mathematica
+In[1]:= Simplify[(x^2 - 1)/(x - 1), TransformationFunctions -> {Cancel}]
+Out[1]= 1 + x
+
+In[2]:= Simplify[Sin[x]^2 + Cos[x]^2, TransformationFunctions -> {}]
+Out[2]= Cos[x]^2 + Sin[x]^2
+```
+
+## Assuming
+Evaluates an expression with extra assumptions in effect.
+
+- `Assuming[assum, expr]` — evaluates `expr` with `assum` appended to
+  `$Assumptions`, so `assum` is included in the default assumptions used by
+  functions such as `Simplify`.
+
+**Features**:
+- `HoldRest`, `Protected` (the assumption argument evaluates; the body is held
+  until the assumption is in scope).
+- Effectively `Block[{$Assumptions = $Assumptions && assum}, expr]`, so nested
+  `Assuming` calls compose and the rebinding of `$Assumptions` is restored on
+  exit. Lists of assumptions are converted to conjunctions.
+
+```mathematica
+In[1]:= Assuming[x > 0, Simplify[Sqrt[x^2 y^2], y < 0]]
+Out[1]= -x y
+```
+
+## $Assumptions
+The default setting for the `Assumptions` option used by `Simplify` and other
+functions that take assumptions.
+
+**Features**:
+- A system symbol with default `OwnValue` `True` (no assumptions). `Assuming`
+  temporarily extends `$Assumptions` for the duration of its body.
+
+```mathematica
+In[1]:= $Assumptions
+Out[1]= True
+```
+
+## Element
+Tests domain membership, consulting the current assumptions.
+
+- `Element[x, dom]` — returns `True` if `x` is provably an element of `dom` under
+  the current `$Assumptions`, `False` if it is provably not, and stays
+  unevaluated otherwise.
+
+**Features**:
+- `Protected`.
+- Supported domains: `Integers`, `Rationals`, `Reals`, `Algebraics`, `Complexes`,
+  `Booleans`, `Primes`, `Composites`.
+- Numeric and structural literals decide directly. Symbolic queries consult
+  `$Assumptions`, honouring the `Integer ⊆ Rational ⊆ Algebraic ⊆ Real ⊆ Complex`
+  lattice.
+- `Element[{x1, ..., xN}, dom]` and `Element[x1 | ... | xN, dom]` are shorthand
+  for the conjunction `Element[x1, dom] && ... && Element[xN, dom]`: `True` /
+  `False` if every component decides, otherwise unevaluated (and treated as a
+  joint per-variable fact by `Simplify`).
+
+```mathematica
+In[1]:= Element[7, Primes]
+Out[1]= True
+
+In[2]:= Element[5/2, Integers]
+Out[2]= False
+
+In[3]:= Element[1 + I, Reals]
+Out[3]= False
+
+In[4]:= Element[x, Reals]
+Out[4]= Element[x, Reals]
+```
+
+## $SimplifyDebug
+A system symbol that turns on tracing of `Simplify`'s transform pipeline.
+
+**Features**:
+- Default `False`. When set to `True`, `Simplify` prints one line per transform
+  invocation to **stderr**, in the form
+  `/<TransformName>/: <input> -> <output> [<elapsed> ms]`. Useful for diagnosing
+  slow or hanging `Simplify` calls and runaway candidate-set growth. The value is
+  read directly off the `OwnValue`, so there is no cost when it is `False`.
+
+```mathematica
+In[1]:= $SimplifyDebug = True; Simplify[a x + b x]; $SimplifyDebug = False;
+(* stderr: *)
+(* /PythagCanon/: a x + b x -> a x + b x [0.01 ms]                    *)
+(* /TanAddition/: a x + b x -> a x + b x [0.00 ms]                    *)
+(* ...                                                                *)
+```

@@ -2271,11 +2271,22 @@ void info_init(void) {
     symtab_set_docstring("Simplify",
         "Simplify[expr]\n\tperforms a sequence of algebraic and other transformations on expr and returns the simplest form it finds.\n"
         "Simplify[expr, assum]\n\tdoes simplification using assumptions assum.\n"
-        "Simplify accepts the options ComplexityFunction (default: leaf count plus integer-digit count, matching Mathematica) and Assumptions (default: $Assumptions).\n"
-        "Simplify tries Together, Cancel, Expand, Factor, FactorSquareFree, Apart, TrigExpand, TrigFactor, and a TrigToExp/ExpToTrig roundtrip, keeping the smallest result.\n"
+        "\n"
+        "Options:\n"
+        "  Assumptions (default $Assumptions) -- facts assumed while simplifying.\n"
+        "  ComplexityFunction (default: leaf count plus integer-digit count, matching Mathematica) -- ranks candidate forms; the lowest-scoring form is returned.\n"
+        "  TransformationFunctions (default Automatic) -- the functions applied to try to transform parts of expr. Automatic uses the built-in collection; {f1, f2, ...} uses only the fi; {Automatic, f1, ...} uses the built-in functions together with the fi.\n"
+        "\n"
+        "The built-in collection tries Together, Cancel, Expand, Factor, FactorSquareFree, Apart, TrigExpand, TrigFactor, and a TrigToExp/ExpToTrig roundtrip, keeping the smallest result.\n"
         "Under positivity / reality assumptions Simplify also applies Log/Power identities -- Log[a b] -> Log[a] + Log[b], (a b)^c -> a^c b^c, (a^p)^q -> a^(p q), Log[a^p] -> p Log[a] and the like -- whenever the operand-domain conditions are provable from the assumption set.\n"
         "Assumptions can be equations, inequalities, domain specifications such as Element[x, Integers], or logical combinations of these. Lists of assumptions are converted to conjunctions.\n"
         "Simplify automatically threads over lists, equations, inequalities, and logic functions.");
+    symtab_set_docstring("TransformationFunctions",
+        "TransformationFunctions\n\tis an option for Simplify giving the list of functions to apply to try to transform parts of an expression.\n"
+        "TransformationFunctions -> Automatic uses the built-in collection of transformation functions.\n"
+        "TransformationFunctions -> {f1, f2, ...} uses only the functions fi.\n"
+        "TransformationFunctions -> {Automatic, f1, ...} uses the built-in transformation functions together with the fi.\n"
+        "Each function is applied to the whole expression and to its subexpressions; the lowest-complexity result (per ComplexityFunction) is kept.");
     symtab_set_docstring("Assuming",
         "Assuming[assum, expr]\n\tevaluates expr with assum appended to $Assumptions, so that assum is included in the default assumptions used by functions such as Simplify.\n"
         "Assuming converts lists of assumptions to conjunctions.\n"

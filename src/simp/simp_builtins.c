@@ -566,10 +566,12 @@ Expr* builtin_simplify(Expr* res) {
     Expr* expr = res->data.function.args[0];
 
     /* Parse remaining args: at most one positional assumption, plus
-     * options Rule[Assumptions, X] and Rule[ComplexityFunction, f]. */
+     * options Rule[Assumptions, X], Rule[ComplexityFunction, f], and
+     * Rule[TransformationFunctions, spec]. */
     Expr* positional_assum = NULL;
     Expr* opt_assumptions  = NULL;
     Expr* opt_complexity   = NULL;
+    Expr* opt_transform    = NULL;
 
     for (size_t i = 1; i < argc; i++) {
         Expr* a = res->data.function.args[i];
@@ -577,8 +579,45 @@ Expr* builtin_simplify(Expr* res) {
             opt_assumptions = a->data.function.args[1];
         } else if (is_rule_with_lhs(a, "ComplexityFunction")) {
             opt_complexity = a->data.function.args[1];
+        } else if (is_rule_with_lhs(a, "TransformationFunctions")) {
+            opt_transform = a->data.function.args[1];
         } else if (positional_assum == NULL) {
             positional_assum = a;
+        }
+    }
+
+    /* Resolve TransformationFunctions into (use_builtin, user_funcs[]).
+     *   Automatic             -> built-in pipeline only (the default).
+     *   {f1, ...}             -> ONLY f1, ... (built-in pipeline suppressed).
+     *   {Automatic, f1, ...}  -> built-in pipeline plus f1, ...
+     *   bare f                -> treat as the single-function list {f}.
+     * The funcs are borrowed pointers into the option expression, which the
+     * evaluator keeps alive until after this builtin returns. */
+    bool   use_builtin = true;
+    Expr** user_funcs  = NULL;
+    size_t n_user_funcs = 0;
+    if (opt_transform) {
+        if (opt_transform->type == EXPR_SYMBOL &&
+            opt_transform->data.symbol == SYM_Automatic) {
+            /* Default: built-in only. */
+        } else if (simp_eq_head_sym(opt_transform, "List")) {
+            size_t m = opt_transform->data.function.arg_count;
+            user_funcs = (Expr**)calloc(m ? m : 1, sizeof(Expr*));
+            use_builtin = false; /* unless Automatic appears in the list */
+            for (size_t i = 0; i < m; i++) {
+                Expr* el = opt_transform->data.function.args[i];
+                if (el->type == EXPR_SYMBOL && el->data.symbol == SYM_Automatic) {
+                    use_builtin = true;
+                } else {
+                    user_funcs[n_user_funcs++] = el;
+                }
+            }
+        } else {
+            /* A bare function: {f}, built-ins suppressed. */
+            user_funcs = (Expr**)calloc(1, sizeof(Expr*));
+            user_funcs[0] = opt_transform;
+            n_user_funcs = 1;
+            use_builtin = false;
         }
     }
 
@@ -624,6 +663,7 @@ Expr* builtin_simplify(Expr* res) {
         for (size_t i = 0; i < ctx->count; i++) {
             if (expr_eq(expr, ctx->facts[i])) {
                 assume_ctx_free(ctx);
+                free(user_funcs);
                 return expr_new_symbol("True");
             }
         }
@@ -647,6 +687,7 @@ Expr* builtin_simplify(Expr* res) {
                 sub_args[k] = expr_copy(res->data.function.args[k]);
             }
             Expr* call = expr_new_function(expr_new_symbol("Simplify"), sub_args, argc);
+            free(sub_args); /* expr_new_function copies the array contents */
             new_args[i] = evaluate(call);
             expr_free(call);
         }
@@ -672,6 +713,9 @@ Expr* builtin_simplify(Expr* res) {
         }
 
         assume_ctx_free(ctx);
+        /* The recursive per-component Simplify calls above re-parse the option
+         * for each element, so the borrowed funcs list is not needed here. */
+        free(user_funcs);
         return threaded_eval;
     }
 
@@ -699,7 +743,12 @@ Expr* builtin_simplify(Expr* res) {
      * Gated on SHAPE_RATIONAL: the classifier rejects inputs with trig,
      * log, abs, and non-integer powers, so we only take the shortcut when
      * the polynomial pipeline has full coverage. */
-    Expr* best;
+    /* The built-in transformation pipeline runs only when TransformationFunctions
+     * permits it (Automatic, the default, or an explicit list that includes
+     * Automatic). With an explicit user-only list we skip straight to applying
+     * those functions to the input. */
+    Expr* best = NULL;
+    if (use_builtin) {
     if (simp_classify(expr) == SIMP_SHAPE_RATIONAL) {
         best = simp_dispatch(expr, ctx, opt_complexity);
     } else {
@@ -882,6 +931,23 @@ Expr* builtin_simplify(Expr* res) {
             best = canon;
         }
     }
+    } else {
+        /* TransformationFunctions -> {f1, ...} without Automatic: the
+         * built-in pipeline is suppressed, so the search starts from the
+         * input itself. */
+        best = expr_copy(expr);
+    }
+
+    /* Apply any user-supplied transformation functions, keeping the
+     * lowest-complexity result. Runs after the built-in pipeline (when
+     * enabled) so the user functions refine the best built-in form. */
+    if (n_user_funcs > 0) {
+        Expr* t = simp_apply_transformations(best, user_funcs, n_user_funcs,
+                                             opt_complexity);
+        expr_free(best);
+        best = t;
+    }
+    free(user_funcs);
 
     factor_memo_pop();
     factor_memo_free(fmemo);
