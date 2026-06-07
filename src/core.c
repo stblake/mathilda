@@ -533,6 +533,8 @@ void core_init(void) {
     integrate_init();
     void sum_init(void);
     sum_init();
+    void hypergeopfq_init(void);
+    hypergeopfq_init();
     void zero_test_init(void);
     zero_test_init();
 }

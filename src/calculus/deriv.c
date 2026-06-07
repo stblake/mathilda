@@ -674,6 +674,56 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return r;
         }
 
+        /* --- HypergeometricPFQ[{a..}, {b..}, z]: derivative w.r.t. z is
+         *   (prod a_i / prod b_j) pFq[{a_i+1}, {b_j+1}, z], times D[z, x].
+         * Only the z-derivative is handled here; if the parameter lists
+         * depend on x, defer to the generic chain rule (return NULL). */
+        if (h == SYM_HypergeometricPFQ && n == 3
+            && args[0]->type == EXPR_FUNCTION && args[1]->type == EXPR_FUNCTION
+            && expr_free_of(args[0], x) && expr_free_of(args[1], x)) {
+            Expr* al = args[0];
+            Expr* bl = args[1];
+            Expr* z  = args[2];
+            Expr* dz = deriv_of(z, x, nonconsts);
+            if (is_lit_zero(dz)) { expr_free(dz); return mk_int(0); }
+            size_t p = al->data.function.arg_count;
+            size_t q = bl->data.function.arg_count;
+
+            /* prefactor = prod a_i / prod b_j */
+            Expr* pref;
+            {
+                size_t w = 0;
+                Expr** pf = malloc(sizeof(Expr*) * (p + 1));
+                for (size_t i = 0; i < p; i++) pf[w++] = expr_copy(al->data.function.args[i]);
+                if (q > 0) {
+                    Expr** db = malloc(sizeof(Expr*) * q);
+                    for (size_t j = 0; j < q; j++) db[j] = expr_copy(bl->data.function.args[j]);
+                    Expr* bprod = mk_fnN_adopt("Times", db, q);
+                    pf[w++] = mk_fn2("Power", bprod, mk_int(-1));
+                }
+                if (w == 0) { free(pf); pref = mk_int(1); }
+                else pref = mk_fnN_adopt("Times", pf, w);
+            }
+
+            /* shifted parameter lists {a_i + 1}, {b_j + 1} */
+            Expr** na = p ? malloc(sizeof(Expr*) * p) : NULL;
+            for (size_t i = 0; i < p; i++)
+                na[i] = mk_fn2("Plus", expr_copy(al->data.function.args[i]), mk_int(1));
+            Expr* nal = expr_new_function(mk_sym("List"), na, p);
+            free(na);
+            Expr** nb = q ? malloc(sizeof(Expr*) * q) : NULL;
+            for (size_t j = 0; j < q; j++)
+                nb[j] = mk_fn2("Plus", expr_copy(bl->data.function.args[j]), mk_int(1));
+            Expr* nbl = expr_new_function(mk_sym("List"), nb, q);
+            free(nb);
+
+            Expr* newp = expr_new_function(mk_sym("HypergeometricPFQ"),
+                             (Expr*[]){ nal, nbl, expr_copy(z) }, 3);
+            Expr** ff = malloc(sizeof(Expr*) * 3);
+            ff[0] = pref; ff[1] = newp; ff[2] = dz;
+            return mk_fnN_adopt("Times", ff, 3);
+        }
+
         /* --- Fibonacci[A, B]: chain rule through both arguments.
          *   dF/dB = (2 A F[A-1,B] + (A-1) B F[A,B]) / (4 + B^2)
          *   dF/dA = (Pi + 2 ArcSinh[B/2] Cot[A Pi]) Csc[A Pi] F[-A,B]

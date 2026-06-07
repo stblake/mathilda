@@ -159,6 +159,7 @@ static Expr* dispatch_def(SumMethod method, Expr* f, Expr* var,
             Expr* r = try_def("Sum`Polynomial", f, var, imin, imax);
             if (!r) r = try_def("Sum`Geometric", f, var, imin, imax);
             if (!r) r = try_def("Sum`Gosper", f, var, imin, imax);
+            if (!r) r = try_def("Sum`Hypergeometric", f, var, imin, imax);
             return r;
         }
         case SUM_METHOD_POLYNOMIAL: return try_def("Sum`Polynomial", f, var, imin, imax);
@@ -422,4 +423,6 @@ void sum_init(void) {
     sum_geometric_init();
     void sum_gosper_init(void);
     sum_gosper_init();
+    void sum_hypergeometric_init(void);
+    sum_hypergeometric_init();
 }

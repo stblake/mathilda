@@ -129,6 +129,7 @@ set(COMMON_SRC
     ../src/trig_canon.c
     ../src/hyperbolic.c
     ../src/logexp.c
+    ../src/hypergeopfq.c
     ../src/piecewise.c
     ../src/interp.c
     ../src/interp_mpfr.c
@@ -235,6 +236,7 @@ set(COMMON_SRC
     ../src/sum/sum_polynomial.c
     ../src/sum/sum_geometric.c
     ../src/sum/sum_gosper.c
+    ../src/sum/sum_hypergeometric.c
     ../src/root.c
     ../src/root_numeric.c
     ../src/radicals.c
@@ -291,6 +293,10 @@ target_include_directories(iter_tests PRIVATE ../src)
 add_executable(sum_tests test_sum.c ${COMMON_SRC})
 target_link_libraries(sum_tests m)
 target_include_directories(sum_tests PRIVATE ../src)
+
+add_executable(hypergeopfq_tests test_hypergeopfq.c ${COMMON_SRC})
+target_link_libraries(hypergeopfq_tests m)
+target_include_directories(hypergeopfq_tests PRIVATE ../src)
 
 add_executable(cond_tests test_cond.c ${COMMON_SRC})
 target_link_libraries(cond_tests m)

@@ -890,6 +890,29 @@ In[3]:= Sum[1/(i (i + 1)), {i, 1, n}]
 Out[3]= 1 - 1/(1 + n)
 ```
 
+### Sum`Hypergeometric
+
+Infinite sums `Sum[t(k), {k, imin, Infinity}]` (concrete integer `imin`)
+whose summand is a hypergeometric term — `t(k+1)/t(k)` rational in `k`. The
+reindexed term ratio is factored into monic linear factors over the rationals;
+the numerator roots give the upper parameters, the denominator roots minus the
+canonical `(m+1)` factorial factor give the lower parameters, and the
+leading-coefficient ratio is the argument `z`. The result
+`t(imin) HypergeometricPFQ[{a}, {b}, z]` is reduced to a closed form by
+[`HypergeometricPFQ`](special-functions.md) when possible. Summed only in the
+convergent regime (`p<=q` for all `z`; `p==q+1` only for numeric `|z|<1`);
+divergent series are left unevaluated rather than returned as the analytic
+continuation.
+
+```mathematica
+In[1]:= Sum[z^k/k!, {k, 0, Infinity}]
+Out[1]= E^z
+In[2]:= Sum[x^k, {k, 0, Infinity}]
+Out[2]= 1/(1 - x)
+In[3]:= Sum[z^k/(2 k)!, {k, 0, Infinity}]
+Out[3]= Cosh[2 Sqrt[1/4 z]]
+```
+
 ## DifferenceDelta
 
 `DifferenceDelta[f, i]` gives the forward difference

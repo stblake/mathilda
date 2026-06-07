@@ -132,6 +132,20 @@ int main(void) {
     check("Sum[i, {i, 1, n, 2}]", "Sum[i, {i, 1, n, 2}]");
     check("Sum[i^2, {i, 1, n, 3}]", "Sum[i^2, {i, 1, n, 3}]");
 
+    /* ---- Infinite hypergeometric series (Sum`Hypergeometric) ---- */
+    check("Sum[z^k/k!, {k, 0, Infinity}]", "E^z");        /* 0F0 -> E^z      */
+    check("Sum[1/k!, {k, 0, Infinity}]", "E");
+    check("Sum[x^k, {k, 0, Infinity}]", "1/(1 - x)");      /* geometric (1F0) */
+    /* Cosh[2 Sqrt[z/4]] == Cosh[Sqrt[z]] is correct but Simplify cannot reduce
+     * the nested radical; verify numerically instead. */
+    check("Chop[N[((Sum[z^k/(2 k)!, {k, 0, Infinity}]) - Cosh[Sqrt[z]]) /. z -> 2]]", "0");
+    same("Sum[1/(2 k + 1)!, {k, 0, Infinity}]", "Sinh[1]");
+    same("Sum[z^k/k!, {k, 1, Infinity}]", "E^z - 1");      /* via 1F1 reduction */
+    /* divergent series must stay unevaluated, NOT return an analytic
+     * continuation (Sum[2^k] is Infinity, never 1/(1-2) = -1). */
+    check("Sum[2^k, {k, 0, Infinity}]", "Sum[2^k, {k, 0, Infinity}]");
+    check("Sum[k, {k, 1, Infinity}]", "Sum[k, {k, 1, Infinity}]");
+
     if (failures) {
         fprintf(stderr, "\n%d/%d sum checks FAILED\n", failures, checks);
         return 1;

@@ -36,6 +36,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Simplification (`Simplify`, `SimplifyCount`, `Assuming`, `$Assumptions`, `Element`, ...) | [`builtins/simplification.md`](docs/spec/builtins/simplification.md) |
 | Power series (`Series`, `SeriesData`, `Normal`, ...) | [`builtins/power-series.md`](docs/spec/builtins/power-series.md) |
 | Elementary functions (trig, hyperbolic, log, exp) | [`builtins/elementary-functions.md`](docs/spec/builtins/elementary-functions.md) |
+| Special functions (`HypergeometricPFQ`, `Hypergeometric0F1`/`1F1`/`2F1`, ...) | [`builtins/special-functions.md`](docs/spec/builtins/special-functions.md) |
 | Lists and iteration (`Table`, `Range`, `Map`, `Do`, ...) | [`builtins/lists-and-iteration.md`](docs/spec/builtins/lists-and-iteration.md) |
 | Functional programming (`Function`, `Apply`, `Select`, ...) | [`builtins/functional-programming.md`](docs/spec/builtins/functional-programming.md) |
 | Control flow (`If`, `Which`, `Switch`, `For`, `While`) | [`builtins/control-flow.md`](docs/spec/builtins/control-flow.md) |

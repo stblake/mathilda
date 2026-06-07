@@ -227,6 +227,30 @@ void info_init(void) {
         "m) reduce through the Gamma functional equation; non-decidable forms\n"
         "stay unevaluated.");
 
+    symtab_set_docstring("HypergeometricPFQ",
+        "HypergeometricPFQ[{a1, ...}, {b1, ...}, z]\n"
+        "\tis the generalized hypergeometric function pFq(a;b;z), the series\n"
+        "Sum (prod_i Pochhammer[a_i, k] / prod_j Pochhammer[b_j, k]) z^k / k!.\n"
+        "Common upper/lower parameters cancel; a non-positive integer upper\n"
+        "parameter terminates the series to a polynomial. Evaluates to machine,\n"
+        "arbitrary-precision (MPFR), and complex numbers by direct summation in\n"
+        "the convergent regime (p<=q for all z; p==q+1 for |z|<1).");
+
+    symtab_set_docstring("Hypergeometric0F1",
+        "Hypergeometric0F1[b, z]\n"
+        "\tis the confluent hypergeometric 0F1, equal to "
+        "HypergeometricPFQ[{}, {b}, z].");
+
+    symtab_set_docstring("Hypergeometric1F1",
+        "Hypergeometric1F1[a, b, z]\n"
+        "\tis Kummer's confluent hypergeometric 1F1, equal to "
+        "HypergeometricPFQ[{a}, {b}, z].");
+
+    symtab_set_docstring("Hypergeometric2F1",
+        "Hypergeometric2F1[a, b, c, z]\n"
+        "\tis the Gauss hypergeometric 2F1, equal to "
+        "HypergeometricPFQ[{a, b}, {c}, z].");
+
     // Structural Manipulation
     symtab_set_docstring("Part",
         "expr[[i]] or Part[expr, i]\n"
