@@ -44,6 +44,8 @@ Out[8]= Median[{a, b, c}]
 
 ## Implementation notes
 
+**Algorithm.** `builtin_median` requires a `List`. If the first element is itself a `List` it treats the input as a matrix/tensor and reduces column-wise through `apply_columnwise` (`Map[Median, Transpose[...]]`). For a 1-D vector it first verifies every element is a real numeric via the helper `is_real_numeric` (which checks `NumericQ` and `FreeQ[#, I]`); non-real data prints `Median::rectn` and leaves the call unevaluated. It then evaluates `Sort[data]`: for odd `n` it returns the middle element (`sorted[n/2]`); for even `n` it returns `(sorted[n/2-1] + sorted[n/2]) / 2`, built as `Plus` then `Divide` and re-evaluated so the result stays exact (rational) when the inputs are exact. `ATTR_PROTECTED`.
+
 - `Protected`.
 - Median is a robust location estimator, which means it not very sensitive to outliers.
 - For `VectorQ` data $\{x_1, \dots, x_n\}$, the median can be thought of as the "middle value". Formally, when data is sorted as $\{x_{(1)}, \dots, x_{(n)}\}$, the median is given by the center element $x_{((n+1)/2)}$ if $n$ is odd and the mean of the two center elements $(x_{(n/2)} + x_{(n/2+1)})/2$ if $n$ is even.
@@ -58,5 +60,5 @@ Out[8]= Median[{a, b, c}]
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

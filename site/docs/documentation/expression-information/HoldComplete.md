@@ -36,6 +36,8 @@ Out[5]= Sequence[1, 2]
 
 ## Implementation notes
 
+`HoldComplete` has no C handler; the attribute table in `src/attr.c` gives it `ATTR_HOLDALLCOMPLETE | ATTR_PROTECTED`, so the evaluator suppresses all argument evaluation and the upvalue/Sequence/Unevaluated-stripping machinery as well. `ReleaseHold` removes the wrapper.
+
 - Attributes: `{HoldAllComplete, Protected}`.
 - `HoldComplete` prevents argument evaluation, `Sequence` flattening inside its own arguments, `Unevaluated` wrapper stripping, and `Evaluate` from firing. `Evaluate` cannot override `HoldAllComplete`.
 - Structural substitution (via `ReplaceAll`, `Replace`, `ReplacePart`, etc.) still descends into `HoldComplete` because substitution is not part of evaluation.
@@ -50,5 +52,5 @@ Out[5]= Sequence[1, 2]
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -32,6 +32,8 @@ Out[3]= {3 f[x, x], a f[x, x], f[x (1 + x), x]}
 
 ## Implementation notes
 
+`builtin_freeq` (`src/funcprog.c`) returns `True` iff no subexpression of the first argument matches the pattern `form`. `freeq_at_level` walks the tree depth-first, calling the pattern matcher `match` at each level permitted by the level spec (default `{0, Infinity}`), and short-circuits to `False` on the first match. `Rational`/`Complex` are treated as atomic; `Heads -> False` excludes function heads from the search.
+
 - `Protected`.
 - By default, explores levels `{0, Infinity}` and option `Heads -> True` is enabled.
 - `form` can be a structural pattern.
@@ -44,5 +46,5 @@ Out[3]= {3 f[x, x], a f[x, x], f[x (1 + x), x]}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

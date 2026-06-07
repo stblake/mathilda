@@ -26,6 +26,8 @@ Out[3]= {a, b, c}
 
 ## Implementation notes
 
+`builtin_identity` (`src/core.c`) is the one-argument identity: it returns a copy of its single argument unchanged, or `NULL` for any other arity.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -34,5 +36,5 @@ Out[3]= {a, b, c}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

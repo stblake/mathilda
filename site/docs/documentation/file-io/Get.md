@@ -18,6 +18,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+**Algorithm.** `builtin_get` reads a Mathilda source file and evaluates it expression by expression, returning the last value. It opens the file (`Get::noopen` + `$Failed` on failure), slurps the entire contents into a `malloc`'d buffer, then walks the buffer with the parser's `parse_next_expression(&ptr)` — the same Pratt parser used by the REPL — `evaluate`ing each parsed expression and keeping the last non-`NULL` result (defaulting to `Null` for an empty file). Parsing stops when `parse_next_expression` returns `NULL` at end-of-input. This is the mechanism `init.m` uses to load the internal `.m` bootstrap files. `ATTR_PROTECTED`.
+
 - `Protected`.
 - Returns `$Failed` if the file cannot be opened.
 - Used by the REPL bootstrap to load `src/internal/init.m` (and the rules it pulls in).
@@ -31,5 +33,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

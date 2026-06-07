@@ -23,6 +23,8 @@ Out[2]= 618970019642690137449562110
 
 ## Implementation notes
 
+`builtin_eulerphi` computes Euler's totient. It takes `|n|` (since `phi(-n)=phi(n)`), factors a working copy via the shared `factorize_mpz` cascade (trial division → Pollard rho → ECM), then applies `phi(n) = n * prod (1 - 1/p_i)` per distinct prime as `phi <- (phi / p) * (p - 1)` with GMP `mpz_divexact`/`mpz_mul`, keeping intermediates exact. `phi(0) = 0`, `phi(1) = 1`. Non-integer arguments return `NULL`. Its cost is dominated by the factorisation of `n`.
+
 - `Listable`, `Protected`.
 - Counts the number of positive integers less than or equal to $n$ that are relatively prime to $n$.
 - Returns 0 for $n = 0$, and handles negative integers via $\phi(-n) = \phi(n)$.
@@ -36,5 +38,5 @@ Out[2]= 618970019642690137449562110
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)

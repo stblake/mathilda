@@ -22,6 +22,8 @@ Out[1]= 3
 
 ## Implementation notes
 
+`builtin_length` (in `src/core.c`) returns an `EXPR_INTEGER` equal to the argument's `arg_count` when it is an `EXPR_FUNCTION`, and `0` for atoms (which have no parts).
+
 - Returns the count of top-level arguments for functions.
 - Returns `0` for all atomic expressions.
 
@@ -33,5 +35,5 @@ Out[1]= 3
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

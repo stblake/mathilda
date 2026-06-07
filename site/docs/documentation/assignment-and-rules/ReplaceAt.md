@@ -51,6 +51,10 @@ Out[8]= {{a, xx}, {a, xx}}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_replace_at` (`src/replace.c`) applies rules at one or more explicit *positions* rather than by structural matching everywhere. It parses the rule(s) with `parse_replace_rules` into a `ReplaceRule[]`, then disambiguates the position argument: a non-empty `List` whose first element is itself a `List` is a list of paths (applied sequentially, repeated positions re-apply the rules); otherwise it is a single path (a bare index or a `List` of indices). Navigation is `replaceat_at_path`, which consumes one index per level: index `0` descends into the head, a positive/negative integer selects an argument (negative counts from the end), `All` recurses into every argument, and a `Span[start, stop, step]` walks a strided slice. When the path is exhausted at a node, the rules are matched against *that node only* via the same `match`/`replace_bindings` machinery used by `Replace`/`ReplaceAll`; the first matching rule's bound replacement is substituted. Sub-trees off the targeted path are deep-copied unchanged.
+
+**Data structures.** `ReplaceRule[]` (borrowed pattern/replacement pointers); the path is an `Expr**` slice advanced by pointer arithmetic (`path + 1`, `plen - 1`) as the recursion descends.
+
 - `Protected`.
 - `rules` may be a single `Rule` (`->`), `RuleDelayed` (`:>`), or a list of such rules. The rules are tried in order; the first one that applies wins. If no rule matches at a targeted position, the part is left unchanged.
 - For `RuleDelayed`, the right-hand side is evaluated separately for each match after substituting bound pattern variables.

@@ -33,6 +33,8 @@ Out[4]= False
 
 ## Implementation notes
 
+A Protected OwnValue set in `system_constants_init` (`src/core.c`) to `expr_new_real(DBL_MAX)`, the largest finite IEEE 754 `double`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -41,5 +43,5 @@ Out[4]= False
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

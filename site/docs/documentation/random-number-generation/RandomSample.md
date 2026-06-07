@@ -50,6 +50,10 @@ Out[8]= {a, b, c}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_randomsample` (in `src/random.c`) selects elements *without replacement*. The uniform form uses `fisher_yates_sample(total, n)`: a partial Fisher–Yates shuffle of an index array `[0..total)` that performs only the first `n` swaps (each swap picks `j` uniformly from the remaining suffix via `random_index`), returning the first `n` shuffled indices. With no count it returns a full random permutation. The size argument may be an integer or `UpTo[n]` (clamped to the list length via `is_upto`).
+
+The weighted form `RandomSample[{w1,...}->{e1,...}, n]` uses `weighted_sample_without_replacement`, which repeatedly draws by inverse-CDF over the live weights (`u = U(0,1)*total`, linear scan accumulating cumulative weight) and zeroes the chosen weight so it cannot be picked again — i.e. sequential weighted sampling without replacement, O(n·count). Both paths draw from the shared Mersenne Twister state and deep-copy the selected elements into a `List[...]`. Requesting more than the available count (without `UpTo`) returns `NULL` (unevaluated).
+
 - `Protected`.
 - `RandomSample[{e1, e2, ...}, n]` never samples any of the ei more than once.
 - `RandomSample[{e1, e2, ...}, n]` samples each of the ei with equal probability.
@@ -67,5 +71,5 @@ Out[8]= {a, b, c}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)

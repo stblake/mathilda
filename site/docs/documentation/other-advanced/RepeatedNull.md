@@ -18,6 +18,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`RepeatedNull[p]` (`p...`) is the zero-or-more variant of `Repeated`, handled in the matcher. `is_repeated` in `src/match.c` recognises the head and sets the default length range to `[0, ∞)` (the only difference from `Repeated`'s `[1, ∞)`); the same optional count specs apply (`max`, `{n}`, `{min, max}` with `Infinity` permitted). The argument matcher backtracks over run lengths down to and including the empty run.
+
 **Attributes:** none registered.
 
 ## Implementation status
@@ -26,5 +28,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

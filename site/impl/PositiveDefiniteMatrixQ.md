@@ -1,0 +1,4 @@
+---
+source: src/linalg/posdef_q.c
+---
+**Algorithm.** `builtin_positive_definite_matrix_q` tests whether `Re[Conjugate[x].m.x] > 0` for all nonzero `x`, equivalently that the Hermitian part `H = (m + ConjugateTranspose[m])/2` admits a Cholesky factorisation. After the square-matrix shape gate it coerces every entry to a `(re, im)` double (`pdq_leaf_to_double`: Integer, BigInt, Real, MPFR, exact `Rational`, `Complex`); any non-coercible leaf yields `False` (the predicate refuses claims it cannot prove). It builds `H` into the upper triangle of a column-major buffer (note: the input need not itself be Hermitian — only `H` matters), checks the diagonal is strictly positive, then runs Cholesky via LAPACK `dpotrf`/`zpotrf` (in-house `pdq_chol_real_inplace`/`pdq_chol_complex_inplace` fallback when `USE_LAPACK` is off). `info == 0` ⇔ positive definite ⇒ `True`. Wrong arity emits `PositiveDefiniteMatrixQ::argx`.

@@ -18,6 +18,10 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+**Algorithm.** `builtin_cos` (`src/trig.c`) applies a fixed cascade of reductions, returning the first that fires. (1) `strip_inverse_call` folds `Cos[ArcCos[x]] -> x`. (2) `try_simp_forward_of_inverse` handles `Cos[ArcSin[x]] -> Sqrt[1-x^2]` and `Cos[ArcTan[x]] -> 1/Sqrt[1+x^2]`, building the unevaluated tree and letting the evaluator canonicalise. (3) `even_fold` uses evenness `Cos[-x] -> Cos[x]`. (4) `trig_i_fold` rewrites `Cos[I y] -> Cosh[y]`. (5) `Cos[0] -> 1`. (6) For a rational-multiple-of-Pi argument (recognised by `extract_pi_multiplier` matching `Pi` or `Times[Rational[n,d], Pi]`), `exact_cos` reduces n/d mod 2π using even symmetry, maps into `[0, π/2]` tracking a sign, and returns the closed surd form from a hardcoded table for denominators 1,2,3,4,5,6,10,12. (7) Numeric fallback: MPFR via `mpfr_cos`/`mpfr_complex_cos` for arbitrary-precision args, else `get_approx` + C99 `ccos` for already-inexact (real or complex) inputs. Anything else returns `NULL` (stays symbolic).
+
+**Data structures.** Plain `Expr*` trees throughout; exact values are assembled with `make_times`/`make_plus`/`make_sqrt`/`make_rational` helpers. Pi multiples are carried as `int64_t n, d`.
+
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## Implementation status
@@ -26,5 +30,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

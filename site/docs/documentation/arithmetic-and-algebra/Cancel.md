@@ -44,6 +44,12 @@ Out[8]= 1/(1 + x^4)
 
 ## Implementation notes
 
+**Algorithm.** `Cancel` reduces a rational expression to lowest terms by cancelling the polynomial GCD of numerator and denominator. `builtin_cancel_compute` strips an optional `Extension -> α` (with `Automatic` via `extension_autodetect`, routing single-generator and tower cases through the `Q(α)` paths `cancel_with_extension` / `qa_cancel_with_tower`) and otherwise calls `cancel_recursive`. That routine recurses through `List`/`Plus`/relational/logical heads, then for a leaf fraction: splits the expression into `num`/`den` with `extract_num_den` (which understands `Rational`, `Complex`, `Power`/`Exp` with negative or split exponents, and `Times`), strips common symbolic atoms (`rat_strip_symbolic_common`), computes `g = PolynomialGCD[num, den]`, and divides both sides by `g` using fraction-free exact polynomial division (`exact_poly_div` over the collected variable set). A soundness gate (`has_embedded_rational_subterm`) leaves the input untouched when a `Power[Plus/Times, negative]` is present, since the multivariate Euclidean GCD could blow up; the denominator's leading sign is normalised to positive.
+
+**Data structures.** `Expr` trees throughout; the cancellation calls into the polynomial subsystem via the `PolynomialGCD` builtin (dispatching to `qaupoly_gcd` for extensions) and `exact_poly_div`, with variable sets collected by `collect_variables` and sorted by `compare_expr_ptrs`. `Numerator`/`Denominator` (same file) expose `extract_num_den` directly.
+
+**Complexity / limits.** Dominated by the multivariate polynomial GCD; the embedded-rational gate and leaf-count fallbacks exist to avoid pathological Euclidean-blowup hangs, so some algebraically-cancellable inputs are returned uncancelled (left for later `Simplify` passes).
+
 - `Protected`, `Listable`.
 - Threads over equations, inequalities, logic functions, and sums dynamically.
 - Evaluates greatest common divisors via polynomial GCD derivations avoiding extraneous expansions.
@@ -62,7 +68,7 @@ Out[8]= 1/(1 + x^4)
 
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCD computation.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function simplification.
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
 
 ## Notes & additional examples

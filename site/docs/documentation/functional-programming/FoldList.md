@@ -51,6 +51,15 @@ Out[8]= {0, 4, 45, 451, 4516, 45167, 451678}
 
 ## Implementation notes
 
+`builtin_foldlist` is `fold_impl(res, true)`: it returns every intermediate
+accumulator, `FoldList[f, x, {a,b,c}]` → `{x, f[x,a], f[f[x,a],b],
+f[f[f[x,a],b],c]}`. The two-argument form seeds with the list's first element;
+`FoldList[f, {}]` returns an empty list under the input list's head. The seed is
+pushed into an `ExprBuf`, and `iter_run` with `fold_step` consumes the remaining
+elements left-to-right via `apply_binary(f, acc, elem)` (`eval_and_free`). With
+`as_list=true`, `ebuf_finalize` wraps the full history under the **input list's
+head** (preserved via `expr_copy(list_head)`). Shares all machinery with `Fold`.
+
 - `Protected`.
 - With a length-`n` list, `FoldList` returns a list of length `n + 1` (or `n` in the no-seed form).
 - The head of the third argument is preserved in the output: `FoldList[f, x, p[a, b]]` gives `p[x, f[x, a], f[f[x, a], b]]`.
@@ -65,5 +74,5 @@ Out[8]= {0, 4, 45, 451, 4516, 45167, 451678}
 
 ## References
 
-- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

@@ -22,6 +22,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_fileextension` is pure string manipulation (no filesystem access). It isolates the filename component (after the last `/`, via `filename_component`) and finds the extension start with `extension_offset`: the offset just past the last `.` that is neither the first nor the last character of the component (so `.bashrc` and `file.` have no extension). It returns the substring from that offset — i.e. the suffix without the dot — as an `EXPR_STRING`, or `""` when there is no extension. `ATTR_PROTECTED`.
+
 - `Protected`.
 - Pure string operation — does not touch the filesystem.
 - Returns `""` when the leaf has no extension, when it ends with `.`, when the leaf has only a leading `.` (e.g. `".bashrc"`), or when the path has the form of a directory (ends with `/`).
@@ -35,5 +37,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/files.c`](https://github.com/stblake/mathilda/blob/main/src/files.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

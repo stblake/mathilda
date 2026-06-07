@@ -18,6 +18,10 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+**Algorithm.** `builtin_lcm` mirrors `builtin_gcd`. It folds pairwise with `lcm(a,b)=ab/gcd(a,b)`: an `int64` fast path, a GMP path (`mpz_lcm`) when any argument is a `EXPR_BIGINT`, and a rational fold using `lcm(a/b, c/d) = lcm(a,c)/gcd(b,d)` (numerator accumulated with `mpz_lcm`, denominator with `mpz_gcd`). A zero argument zeroes the running LCM (and short-circuits). `LCM[]` is `1`, `LCM[x]` is `|x|`; non-rational arguments return `NULL`.
+
+**Data structures.** GMP `mpz_t` accumulators; `expr_bigint_normalize` demotes results that fit in `int64`, and `mpz_pair_to_rational_expr` reduces the rational result. Shares the rational num/den coercion helpers with GCD.
+
 **Attributes:** `Flat`, `Listable`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 
 ## Implementation status
@@ -28,7 +32,7 @@ _No verified examples yet for this function._
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on the Euclidean algorithm and least common multiples.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on GCD/LCM relations.
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
 
 ## Notes & additional examples

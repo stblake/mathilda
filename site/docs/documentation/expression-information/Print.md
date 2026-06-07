@@ -18,6 +18,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_print` (`src/print.c`) calls `print_standard` on each argument in turn (no separators), emits a trailing newline, and returns the symbol `Null`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -26,5 +28,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -33,6 +33,10 @@ Out[5]= {a, E}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_commonest` (in `src/list.c`) tallies element multiplicities with a `HashTable` (one pass, O(N)), recording each distinct element's count and first-appearance index. The tallies are packed into `CommonestItem` records and sorted by descending count (ties broken by first occurrence) to find the maximum multiplicity. Without a count argument it returns every element sharing the maximum count; `Commonest[list, n]` / `Commonest[list, UpTo[n]]` returns up to the `n` most frequent.
+
+**Data structures.** Parallel `Expr**` / `int64_t*` arrays for unique elements and their multiplicities, a `HashTable` mapping element → index, and a `CommonestItem` array (`element`, `count`, `first_index`) used for the stable sort.
+
 - `Protected`.
 - When several elements occur with equal frequency, `Commonest` picks first the ones that occur first in `list`.
 - `Commonest[list, n]` returns the `n` commonest elements in the order they appear in `list`.
@@ -47,5 +51,5 @@ Out[5]= {a, E}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

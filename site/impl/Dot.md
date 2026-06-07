@@ -1,0 +1,6 @@
+---
+source: src/linalg/dot.c
+---
+**Algorithm.** `builtin_dot` left-folds a chain `Dot[a, b, c, …]` by repeatedly contracting adjacent operand pairs through the `dot2` helper until no further contraction is possible. `dot2` contracts the last axis of `a` with the first axis of `b`: it reads both tensor shapes (`get_tensor_dims`), checks the shared dimension `K` matches (else `Dot::dotsh`), flattens both into row-major `Expr**` arrays, and for each output cell `(r, s)` forms `Plus[Times[a_rk, b_ks] for k]`, reducing each `Times`/`Plus` with `eval_and_free` so entries simplify symbolically. The result shape is `dimsA[0..rankA-2] ++ dimsB[1..rankB-1]`, rebuilt into nested `List`s by `build_tensor`. This single routine covers vector·vector (scalar), matrix·vector, matrix·matrix, and higher-rank tensor contractions uniformly. `dot2` is also reused by `MatrixPower` and the eigen solver.
+
+**Data structures.** Dense flat `Expr**` buffers `flatA`/`flatB`/`flatC` in row-major order; dimension vectors are fixed `int64_t[64]`. If only one operand remains it is returned directly; if nothing contracted, `NULL` is returned (leave unevaluated). `Dot` is a thin chain driver — the actual numeric/symbolic arithmetic is delegated to the evaluator's `Plus`/`Times`.

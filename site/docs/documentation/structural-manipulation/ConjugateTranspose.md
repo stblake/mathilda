@@ -32,6 +32,8 @@ Out[3]= {1, -2*I, 3 - 4*I}
 
 ## Implementation notes
 
+`builtin_conjugate_transpose` (in `src/list.c`) is a thin composition over existing primitives. It first checks the argument is a rectangular nested `List` via `get_array_dimensions`; a symbolic (non-list) matrix is left unevaluated so `ConjugateTranspose[A]` survives. For a 1-D vector it just maps `Conjugate` elementwise. Otherwise it builds and evaluates `Transpose[m]` (or `Transpose[m, spec]`), then conjugates the transposed result. All heavy lifting is delegated to `Transpose` and `Conjugate` through `eval_and_free`.
+
 - `Protected`.
 - On a 1-D vector, `ConjugateTranspose[vec]` conjugates the entries but
 
@@ -43,5 +45,5 @@ Out[3]= {1, -2*I, 3 - 4*I}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

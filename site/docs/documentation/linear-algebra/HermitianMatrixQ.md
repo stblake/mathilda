@@ -27,6 +27,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_hermitian_matrix_q` tests whether a matrix equals its conjugate transpose, i.e. `m[i,j] == Conjugate[m[j,i]]`. After validating that the argument is a non-empty square `List` of `List`s with no deeper nesting (returning `False` otherwise), it walks the upper triangle including the diagonal (the pair test is symmetric under `(i,j)↔(j,i)`) and checks each pair with one of three predicates: the default structural test (`hermitian_pair_structural`, exact for symbolic/exact-numeric entries), a user `SameTest -> f`, or `Tolerance -> t` (accepting pairs with `Abs[a - Conjugate[b]] <= t`). `SameTest`/`Tolerance` of `Automatic` fall through to the structural test; any unrecognised option leaves the call unevaluated. Returns `True`/`False`.
+
 - `Protected`.
 - Default test is structural: it accepts (Conjugate[a], a) / (a, Conjugate[a])
 
@@ -38,5 +40,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

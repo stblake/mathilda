@@ -17,6 +17,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_unequal` is the value-level (not structural) negation of `Equal`. For every argument pair it first checks `expr_eq`; on failure it tries `compare_numeric` to decide equality/inequality numerically. If any pair is found equal it returns `False` immediately. It returns `True` only when *every* pair is provably unequal — either decided by `compare_numeric` or, for non-comparable values, when both sides are distinct raw data (`is_raw_data`). If some pair is neither equal nor provably unequal (e.g. symbolic), it returns `NULL` so the call stays unevaluated. Fewer than two arguments returns `True`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -25,5 +27,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

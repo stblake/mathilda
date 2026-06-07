@@ -23,6 +23,8 @@ Out[2]= {a, c}
 
 ## Implementation notes
 
+`builtin_insert` (in `src/part.c`) handles the 3-arg form `Insert[expr, elem, pos]` by delegating to the helper `expr_insert`, which inserts `elem` before position `pos` (negative indices count from the end, and a position may be a list path for nested insertion), deep-copying the surrounding structure and preserving the original head.
+
 - `pos` can be a single index, a list (path), or a list of paths.
 - `Delete[expr, 0]` replaces the head with `Sequence`.
 
@@ -34,5 +36,5 @@ Out[2]= {a, c}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

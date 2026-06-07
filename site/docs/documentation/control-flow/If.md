@@ -30,6 +30,8 @@ Out[2]= Indeterminate
 
 ## Implementation notes
 
+**Algorithm.** `builtin_if` accepts 2–4 arguments and is registered with `ATTR_HOLDREST`, so only the condition (arg 0) is evaluated by the standard evaluator before the builtin runs; the branches stay held. The handler inspects the evaluated condition: if it is the interned symbol `True` it returns a copy of arg 1; if it is `False` it returns a copy of arg 2 (the else branch), or `Null` when no else branch was supplied. The returned branch is still "held" data that the outer fixed-point evaluator then reduces. If the condition is neither `True` nor `False`, a 4-argument call returns a copy of the fourth argument (the "neither" / indeterminate branch), and otherwise the call returns `NULL`, leaving `If[...]` unevaluated so a symbolic condition flows through unchanged. Truth testing is pointer equality against `SYM_True`/`SYM_False`, never a string compare.
+
 - `HoldRest`, evaluating only the chosen branch.
 - Remains unevaluated if the condition is undetermined and `u` is not provided.
 - `If[condition, t]` returns `Null` if `condition` evaluates to `False`.
@@ -42,7 +44,7 @@ Out[2]= Indeterminate
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)
 
 ## Notes & additional examples

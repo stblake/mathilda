@@ -35,6 +35,8 @@ Out[3]= $Failed
 
 ## Implementation notes
 
+`builtin_toexpression` (`src/core.c`) feeds a string argument to `parse_expression` (the Pratt parser, `src/parse.c`) and returns the parsed tree for the evaluator to reduce. An optional second argument (`InputForm`/`FullForm`/`StandardForm`) is accepted but ignored, since the parser is form-agnostic; an optional third argument is a head `h` wrapped around the result (commonly `Hold`). A parse failure returns `$Failed`; non-string input returns `NULL`. The symbol is `Listable`.
+
 - `Protected`, `Listable`. `ToExpression[{"1+1", "2+2"}]` evaluates to `{2, 4}`.
 - Returns the symbol `$Failed` if the parser cannot consume the input.
 - A non-string input or an unsupported `form` leaves the call unevaluated.
@@ -47,5 +49,5 @@ Out[3]= $Failed
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -50,6 +50,19 @@ Out[8]= 451678
 
 ## Implementation notes
 
+**Algorithm.** `builtin_fold` (`fold_impl(res, false)`) is a left fold:
+`Fold[f, x, {a,b,c}]` → `f[f[f[x,a],b],c]`. The two-argument form `Fold[f,
+{a,b,c}]` uses `a` as the seed and folds over the rest; on an empty list this
+form stays unevaluated. The seed is pushed into an `ExprBuf` history and the
+shared `iter_run` driver is invoked with `fold_step`, which consumes the list
+elements in order, computing `apply_binary(f, accumulator, elems[idx++])` (build
+`f[acc, e]`, `eval_and_free`). `ebuf_finalize(..., as_list=false)` returns the
+last accumulator. `Fold`/`FoldList` are the same `fold_impl`.
+
+**Data structures.** The list's underlying argument array is borrowed (no copy of
+the spine); each accumulator value is an owned `Expr*` stored in the history
+buffer. The output preserves the input list's head only in the `FoldList` form.
+
 - `Protected`.
 - The head of the third argument need not be `List` (any compound expression is accepted).
 - `Fold[f, x, {}]` returns `x` (the function is never applied); `Fold[f, {a}]` returns `a`.
@@ -65,7 +78,7 @@ Out[8]= 451678
 ## References
 
 - Richard Bird, *Introduction to Functional Programming using Haskell*, 2nd ed. (the foldl/reduce accumulator pattern).
-- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
 
 ## Notes & additional examples

@@ -19,6 +19,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`Default` is not a builtin handler — it is a symbol whose DownValues the user assigns (`Default[f] = v`) and which the pattern matcher consumes when filling an Optional pattern (`x_.`, i.e. `Optional[x_, Default[f]]`). `get_default_value(pat_head, pos, total_pats)` in `src/default_helper.c` looks up the default for a function head: if no user `Default` DownValues exist it short-circuits to the built-in fallbacks (`Plus -> 0`, `Times`/`Power -> 1`, else none); otherwise it evaluates `Default[f, pos, total_pats]`, then `Default[f, pos]`, then `Default[f]`, returning the first that the user has defined (detected by the result differing from the constructed expression), before falling back to the same Plus/Times/Power defaults. The matcher calls this once per Optional-pattern attempt, hence the no-rule fast path.
+
 **Attributes:** none registered.
 
 ## Implementation status
@@ -27,5 +29,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/default_helper.c`](https://github.com/stblake/mathilda/blob/main/src/default_helper.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

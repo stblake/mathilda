@@ -32,6 +32,10 @@ Out[3]= ((a + b) (a - b))/(c^2 - d^2)
 
 ## Implementation notes
 
+**Algorithm.** `builtin_expand_denominator` (in `src/expand.c`) calls `expr_expand_denominator`, the mirror of `ExpandNumerator`: it expands only the denominator. For a `Times` it collects the negative-integer-power factors (`is_negative_int_power`), rebuilds them as positive powers, multiplies them into a single denominator product, runs `expr_expand` on that product, and re-inverts it as `Power[expandedDen, -1]` multiplied back against the untouched numerator factors. A bare `Power[base, -k]` is handled by expanding `base^k` and re-inverting. Threading over `List`, equations, inequalities, logic heads and `Plus` matches `ExpandNumerator`.
+
+**Data structures.** Parallel `Expr**` buffers for numerator factors and positive-power denominator factors; only the denominator product is expanded, the numerator is copied through.
+
 - `Protected`.
 - Acts only on factors with negative integer exponents (the "denominator part" of `expr`).
 - Combines all denominator factors of a top-level `Times` into a single expanded polynomial wrapped in `Power[..., -1]`.
@@ -47,5 +51,5 @@ Out[3]= ((a + b) (a - b))/(c^2 - d^2)
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/expand.c`](https://github.com/stblake/mathilda/blob/main/src/expand.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

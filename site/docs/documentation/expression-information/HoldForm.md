@@ -20,6 +20,8 @@ Out[1]= 1 + 1
 
 ## Implementation notes
 
+`HoldForm` has no C handler; it is purely an evaluation/display marker. It is given `ATTR_HOLDALL | ATTR_PROTECTED` in `core_init` (`src/core.c`) so its argument stays unevaluated, and the printer renders `HoldForm[expr]` as just `expr` (the wrapper is invisible). `ReleaseHold` strips it.
+
 **Attributes:** `HoldAll`, `Protected`.
 
 ## Implementation status
@@ -28,5 +30,5 @@ Out[1]= 1 + 1
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

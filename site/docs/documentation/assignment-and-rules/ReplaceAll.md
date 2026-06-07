@@ -32,6 +32,10 @@ Out[4]= {"OK", "OK", h[], f[]}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_replace_all` (`/.`, in `src/replace.c`) drives `apply_replace_all_nested`, which first collects the rule(s) into a flat `ReplaceRule[]` (pattern, replacement, delayed flag). A `List` of rules whose first element is *not* itself a `Rule`/`RuleDelayed` is treated as a list of alternative rule-sets and threaded — one result per sub-list. The core traversal is `do_replace_all`: at each node it tries every rule in order via `match(e, rule.pattern, env)` (the structural matcher in `src/match.c`); on the first match it builds the result with `replace_bindings(rule.replacement, env)` and **returns immediately without descending into the matched subexpression** — this is the defining top-down, non-re-entrant `ReplaceAll` semantic. If no rule matches the node, it recurses into the head and every argument and rebuilds the function node. Rule-creation timing (immediate `Rule` vs delayed `RuleDelayed`) is honoured by `replace_bindings`/the surrounding evaluator rather than re-applied here.
+
+**Data structures.** `ReplaceRule` array holding borrowed pointers into the user's rule expressions; a fresh `MatchEnv` (from `env_new`) per match attempt holds the pattern-variable bindings consumed by `replace_bindings`.
+
 - `Protected`.
 - Evaluates the entire expression top-down. The first rule that applies to a particular part is used; no further rules are tried on that part or on any of its subparts.
 - Applies a rule only once to an expression.
@@ -46,7 +50,7 @@ Out[4]= {"OK", "OK", h[], f[]}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
 
 ## Notes & additional examples

@@ -15,6 +15,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_trueq` is a one-argument predicate (no Hold attributes, so its argument is already evaluated). It returns the symbol `True` only when the argument is exactly the interned symbol `True` (pointer equality on `SYM_True`), and `False` for everything else — so unlike a bare condition it never stays symbolic. A non-unary call returns `NULL`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -23,5 +25,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

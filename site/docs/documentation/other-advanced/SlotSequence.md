@@ -15,6 +15,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`SlotSequence[n]` (`##`, `##n`) is an inert marker — `builtin_slotsequence` always returns `NULL`. During pure-`Function` application, `substitute_slots` replaces `SlotSequence[n]` with a `Sequence[...]` of copies of arguments `n` through the last (`arg_count − n + 1` of them), which then splices into the surrounding call when the `Sequence` is flattened by the evaluator. Like `Slot`, recursion stops at nested `Function` nodes. `ATTR_PROTECTED`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -23,5 +25,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/purefunc.c`](https://github.com/stblake/mathilda/blob/main/src/purefunc.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

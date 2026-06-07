@@ -38,6 +38,8 @@ Out[6]= False
 
 ## Implementation notes
 
+`builtin_atomq` (`src/core.c`) returns `True` for any non-`EXPR_FUNCTION` node (integers, reals, bigints, symbols, strings) and for the two function heads Mathilda treats as atomic, `Rational` and `Complex`; every other `EXPR_FUNCTION` yields `False`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -46,5 +48,5 @@ Out[6]= False
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

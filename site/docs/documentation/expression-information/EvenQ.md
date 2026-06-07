@@ -15,6 +15,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_evenq` (`src/core.c`) returns `True` for an `EXPR_INTEGER` with `n % 2 == 0`, uses `mpz_even_p` for an `EXPR_BIGINT`, and returns `False` for everything else.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -23,5 +25,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -29,6 +29,14 @@ Out[3]= Infinity
 
 ## Implementation notes
 
+**Algorithm.** `builtin_max` flattens any `List` arguments into a flat argument sequence, then
+scans for the maximum among real-numeric atoms (compared with `expr_compare`) while collecting
+distinct non-numeric/symbolic terms. `Infinity`/`-Infinity` and `Overflow[]` are handled as
+absorbing/identity elements. If everything reduces to numbers it returns the single largest
+value; otherwise it returns `Max[...]` over the numeric maximum plus the remaining symbolic
+terms (returning `NULL` to stay unevaluated when nothing simplified). Empty `Max[]` is
+`-Infinity`.
+
 - `Flat`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 - Flattens `List` arguments.
 - `Min[]` returns `Infinity`.
@@ -44,5 +52,5 @@ Out[3]= Infinity
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

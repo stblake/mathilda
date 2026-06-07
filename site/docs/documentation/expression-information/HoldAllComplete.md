@@ -18,6 +18,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`HoldAllComplete` is an attribute name, not a function. It maps to the bitflag `ATTR_HOLDALLCOMPLETE` (`attr_name_to_flag` / `get_attributes` in `src/attr.c`); when set on a symbol the evaluator holds all arguments and additionally bypasses Sequence flattening, `Unevaluated` stripping, and upvalue lookup for that head.
+
 **Attributes:** none registered.
 
 ## Implementation status
@@ -26,5 +28,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

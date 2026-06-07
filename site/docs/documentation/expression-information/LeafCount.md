@@ -26,6 +26,8 @@ Out[3]= 7
 
 ## Implementation notes
 
+`builtin_leafcount` (`src/core.c`) returns `leaf_count_internal`, which counts 1 per non-`EXPR_FUNCTION` (atomic) node and recurses into function arguments. By default heads are counted too; the option `Heads -> False` suppresses head counting.
+
 - `Protected`.
 - Counts the number of subexpressions in `expr` that correspond to "leaves" on the expression tree.
 - By default `Heads -> True` includes the head of expressions and their parts. With `Heads -> False`, it excludes them.
@@ -39,5 +41,5 @@ Out[3]= 7
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

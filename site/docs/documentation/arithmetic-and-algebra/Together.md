@@ -39,6 +39,16 @@ Out[6]= (2 x)/(-2 + x^2)
 
 ## Implementation notes
 
+**Algorithm.** `builtin_together` is a `FactorMemo`-keyed memoisation wrapper around `builtin_together_compute`, so repeated `Together[arg, opts]` calls issued during one `Simplify` (which pushes a `FactorMemo`) hit the cache; standalone calls see no overhead. The compute routine puts everything over a common denominator and cancels.
+
+The core walker `together_recursive` recurses structurally. For a `Plus[t_1, ..., t_n]` it first `together`s each summand, splits each into numerator/denominator via `extract_num_den`, computes the iterated `PolynomialLCM` of the denominators, then for each term forms `lcm_den / den_i` using `cancel_exact_div_strict` (exact polynomial division in Q[vars]) — a *strict* combine: if any quotient is not exact (a sign that `PolynomialLCM` was only valid in some algebraic-extension ring, e.g. multi-radical sums), it bails cleanly and leaves the `Plus` uncombined rather than risk the `Power[Plus[...], -1]`-inside-numerator GCD blowup. When all quotients are exact, it sums the rescaled numerators, multiplies by `Power[lcm_den, -1]`, and runs `cancel_recursive` (PolynomialGCD-based cancellation) on the result. `List`/relational/logical heads thread through their args; other heads recurse and then cancel.
+
+Crucially, `together_recursive` never expands `Power[Plus[...], n]` — `extract_num_den` only splits products, powers (pushing negative integer/rational exponents into the denominator), exponentials, complexes, and literal rationals; expansion is left to downstream poly-GCD with size gates. `builtin_together_compute` additionally handles `Extension -> α` (and `Extension -> Automatic`, which calls `extension_autodetect`): single-generator extensions route through `together_recursive_ext` over Q(α)[x]; multi-generator towers route through `qa_cancel_with_tower`, with nested-radical α prefiltered out and a "best generator" guided fallback (`pick_best_tower_generator`) gated on leaf count. A `poly_find_radical_gen` pass substitutes a radical generator to a fresh symbol, runs the no-extension path, and substitutes back. Inexact inputs are rationalised then re-numericalised (`internal_rationalize_then_numericalize`).
+
+**Data structures.** `Expr*` trees; numerator/denominator pairs are plain `Expr*` out-parameters. Extension towers are `QATower`; exact division and LCM run on the multivariate-polynomial representation behind `exact_poly_div` / `PolynomialLCM` / `PolynomialGCD`. `Numerator` carries `ATTR_LISTABLE`.
+
+**Complexity / limits.** Bounded by the polynomial GCD/LCM machinery on the combined fraction. The strict-quotient gate and the leaf-count gates are deliberate safeguards against multivariate-Euclid runaway on multi-radical / algebraic-extension inputs.
+
 - `Protected`, `Listable`.
 - Makes a sum of terms into a single rational function.
 - Computes lowest common multiples (LCM) of denominators securely without unconditionally destroying pre-factored bases unnecessarily.
@@ -56,7 +66,7 @@ Out[6]= (2 x)/(-2 + x^2)
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational function arithmetic and common denominators.
 - von zur Gathen & Gerhard, "Modern Computer Algebra", on polynomial GCDs used in cancellation.
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
 
 ## Notes & additional examples

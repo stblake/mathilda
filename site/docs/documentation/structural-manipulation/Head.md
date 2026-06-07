@@ -32,6 +32,8 @@ Out[3]= f[Plus]
 
 ## Implementation notes
 
+`builtin_head` (in `src/part.c`) returns the head of its argument via `expr_head` — `f` for `f[...]`, and the type symbol (`Integer`, `Symbol`, `List`, etc.) for atoms. The 2-arg form `Head[expr, h]` wraps the result as `h[Head[expr]]`, leaving the outer application for the evaluator to reduce.
+
 - For functions, returns the symbol or expression acting as the head.
 - For atoms, returns the symbolic type name: `Integer`, `Real`, `Rational`, `Complex`, `Symbol`, or `String`.
 
@@ -43,5 +45,5 @@ Out[3]= f[Plus]
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

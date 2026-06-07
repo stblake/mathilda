@@ -29,6 +29,8 @@ Out[3]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
 
 ## Implementation notes
 
+`builtin_digitcount` tallies base-`b` digit occurrences of `|n|` (default base 10). The 3-argument form `DigitCount[n, b, d]` returns the scalar count of digit `d` (`dc_count_one_digit`); the 1/2-argument form returns the histogram `{c(1), c(2), ..., c(b-1), c(0)}` — digit 0 last, matching Mathematica — built by `dc_build_histogram` into a `calloc`'d `int64` array. Validates arity (`DigitCount::argb`), numeric non-integer `n` (`::int`), base `>= 2` (`::base`, also for fractional bases), digit in `[0, base)` (`::digit`), and caps the list-form base to avoid OOM (`::ovfl`); symbolic `n` returns `NULL`.
+
 - `Protected` (intentionally not `Listable`). `DigitCount[{1,2,3}]` is left
 
 **Attributes:** `Protected`.
@@ -39,5 +41,5 @@ Out[3]= {15, 19, 10, 10, 14, 19, 7, 14, 20, 30}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/int.c`](https://github.com/stblake/mathilda/blob/main/src/int.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)

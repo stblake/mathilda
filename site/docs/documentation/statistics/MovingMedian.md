@@ -38,6 +38,8 @@ Out[6]= MovingMedian[{a, b, c}, 2]
 
 ## Implementation notes
 
+**Algorithm.** `builtin_moving_median` takes `(list, r)` with `r` a positive integer window (`EXPR_INTEGER`/`EXPR_BIGINT`); output length is `n - r + 1` and the call is unevaluated unless `1 <= r <= n`. It auto-detects vector vs. matrix mode by whether the first element is a `List`, and validates every leaf with `is_real_numeric` (matrices must be rectangular); invalid data prints `MovingMedian::arg1` and leaves the call unevaluated. It then slides the window, builds an `r`-element sublist, and delegates each window to `Median` (so a matrix window yields a column-wise median vector). Window results are assembled into the output `List`. `ATTR_PROTECTED`.
+
 - `Protected`.
 - Output length is `Length[list] - r + 1`.
 - Operates on real-valued vectors and matrices. For matrix input, each window of `r` consecutive rows is reduced via `Median`, yielding a column-wise median vector per window.
@@ -53,5 +55,5 @@ Out[6]= MovingMedian[{a, b, c}, 2]
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

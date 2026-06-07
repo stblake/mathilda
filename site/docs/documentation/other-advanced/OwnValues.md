@@ -15,6 +15,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_own_values` (1-arg, symbol only) calls `symtab_get_own_values(sym)` to retrieve the symbol's `Rule*` list — the immediate `x = value` assignments — and hands it to the shared `rules_to_list` helper, which deep-copies each `pattern`/`replacement` pair into a `Rule[lhs, rhs]` node and gathers them into a `List`. The list is returned unevaluated so the stored values are reported verbatim rather than re-evaluated.
+
 **Attributes:** `HoldAll`, `Protected`.
 
 ## Implementation status
@@ -23,5 +25,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

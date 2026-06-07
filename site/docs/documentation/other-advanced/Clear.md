@@ -19,6 +19,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_clear` (`src/core.c`) iterates its arguments and, for each that is a symbol, calls `symtab_clear_symbol(name)` to remove that symbol's OwnValues and DownValues (its rules/assignments) while leaving the symbol itself, its attributes, and any builtin binding intact. Non-symbol arguments are ignored. Returns `Null`. It carries `ATTR_HOLDALL` so the symbols are not evaluated to their current values before being cleared.
+
 **Attributes:** `HoldAll`, `Protected`.
 
 ## Implementation status
@@ -27,5 +29,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

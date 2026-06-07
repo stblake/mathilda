@@ -1,0 +1,6 @@
+---
+source: src/patterns.c
+---
+**Algorithm.** `builtin_cases` (`src/patterns.c`) collects subexpressions matching a pattern. It parses the level-spec (default `{1,1}` — immediate elements only; integer `n` → `1..n`, negative `n` → exactly level `n` from the bottom, `{m,n}`, `All`/`Infinity`), a `Heads -> True|False` option, and an optional `n` result limit. If the second argument is `pat -> rhs` / `pat :> rhs` it splits into a pattern plus a replacement applied to each hit. The traversal `do_cases_at_level` is depth-first **pre-order** (it recurses into head — when `heads` — and arguments first, then tests the node): at every in-range node it calls `match(e, pattern, env)` from `src/match.c`; on success it appends either a deep copy of the node, or, for a rule, `replace_bindings(rhs, env)` (evaluated when the rule is `RuleDelayed`). Level membership for negative specs is decided against `get_expr_depth_patterns`. Collection stops once `max_results` hits are gathered. `Cases[pat]` with one argument returns an operator form `Function[Cases[#1, pat]]`.
+
+**Data structures.** A growable `Expr**` results buffer (doubled on demand) wrapped into a `List` at the end; one `MatchEnv` per node tested.

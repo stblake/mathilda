@@ -39,6 +39,8 @@ Out[4]= {-1, Indeterminate, 1}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_which` is `ATTR_HOLDALL`, so every argument arrives unevaluated. It requires an even argument count (test/value pairs); an odd count returns `NULL` (unevaluated usage error) and `Which[]` returns `Null`. It walks the pairs in order, calling `evaluate` on each test in turn. A test that reduces to the interned symbol `True` makes the handler return a copy of the corresponding held value (which the outer evaluator then reduces). A test that reduces to `False` is dropped and iteration continues. An inconclusive test (anything else) short-circuits the scan: the builtin rebuilds `Which[t_i_eval, v_i, ...remaining...]` with the inconclusive test in its already-evaluated form and the remaining arguments copied unevaluated, so re-evaluation does not redo earlier `False` tests. If every test is `False`, it returns `Null`.
+
 - Has attribute `HoldAll`; tests and values are held until `Which` examines them.
 - If every `test_i` evaluates to `False`, `Which` returns `Null`. `Which[]` (no arguments) likewise yields `Null`.
 - If a `test_i` evaluates to something other than `True` or `False`, a `Which` containing that test (in evaluated form) plus the remaining elements is returned unevaluated.
@@ -53,5 +55,5 @@ Out[4]= {-1, Indeterminate, 1}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

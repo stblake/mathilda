@@ -1,0 +1,12 @@
+---
+references:
+  - "G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed. (Johns Hopkins, 2013)."
+source: src/linalg/ludecomp.c
+---
+**Algorithm.** `builtin_ludecomposition` returns `{lu, p, c}` — the combined Doolittle factorisation, the row-permutation list, and a condition-number estimate. A top-level router, `lu_dispatch`, inspects the input with `common_scan_inexact`: machine-precision inexact matrices (`min_bits <= 53`) go to `lu_machine_dispatch` (a LAPACK fast path), higher precision goes to `lu_mpfr_dispatch`, and everything else — including exact integer, rational, complex, and free-symbolic matrices — goes to `lu_symbolic_dispatch`. Any fast-path failure falls through to the symbolic kernel, which absorbs inexact input via the standard `common_rationalize_input` → exact-pipeline → `common_numericalize_result` round-trip.
+
+The symbolic core `lu_symbolic_core` is Doolittle's algorithm (Gaussian elimination producing unit-lower `L` and upper `U` stored in one buffer) with partial pivoting, driven through the Mathilda evaluator so every divide/multiply/subtract works on symbolic, rational, `Sqrt`, or complex entries. Pivoting has two regimes: when a column (from the current row down) is entirely exact-numeric (Integer/BigInt/Rational/Complex of those), `lu_column_all_numeric` is true and the pivot is the entry of *smallest* `|entry|^2` (computed exactly via `numeric_abs_sq_as_mpq`), matching Mathematica's exact-numeric behaviour; otherwise it falls back to "first structurally non-zero" (`is_definitely_zero`, which runs `Together` then `is_zero_poly`). A fully-zero column flags the matrix singular (one-shot `LUDecomposition::sing` warning) but elimination still completes.
+
+**Data structures.** A flat row-major `Expr**` buffer of size `rows*cols` (strict lower triangle = `L`, upper triangle = `U`, unit diagonal implicit), and an `int*` 1-indexed `perm` of length `rows` so `m[[perm]] == l.u`. Exact magnitudes use GMP `mpq_t`. The final `lu` matrix is passed through element-wise `Together` (`tidy_matrix`) to collapse cancellations. The condition slot `c` is exact Integer `0` for the symbolic/exact path (the LAPACK/MPFR kernels supply a real L-infinity estimate).
+
+**Complexity / limits.** O(min(m,n)·m·n) evaluator-level arithmetic operations; symbolic entries can grow in size as elimination proceeds. Rectangular `m × n` input is accepted (elimination stops at step `min(m,n)−1`); only non-list, empty, or higher-rank input is rejected with `LUDecomposition::matsq`.

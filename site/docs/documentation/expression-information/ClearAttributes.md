@@ -28,6 +28,8 @@ Out[3]= {Flat, Orderless}
 
 ## Implementation notes
 
+`builtin_clear_attributes` (`src/attr.c`) clears the bitflags named in its second argument from the target symbol(s) via `clear_attributes_for_symbol`. The first argument may be one symbol/string or a `List` of them; it returns `Null`. `ClearAttributes` carries `ATTR_HOLDFIRST` so the symbol is not evaluated first.
+
 - `HoldFirst`, `Protected`.
 - `ClearAttributes` modifies `Attributes[s]`.
 - Cannot clear attributes of a `Locked` symbol.
@@ -41,5 +43,5 @@ Out[3]= {Flat, Orderless}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

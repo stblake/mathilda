@@ -41,6 +41,8 @@ Out[3]= {one, two, other}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_switch` is `ATTR_HOLDREST`: the discriminant (arg 0) is evaluated by the standard evaluator, while the `form_i, value_i` pairs (args 1..) arrive held. It requires `argc >= 3` and odd (at least one pair, an even number of held args), otherwise returns `NULL`. It scans the pairs in order, calling `evaluate` on each `form_i` just before trying it — later forms and all values are never touched. Matching is structural via a fresh `MatchEnv` and `match(expr, form_eval, env)`; on the first match it returns a copy of the still-held `value_i`, which the outer evaluator reduces. Pattern bindings captured in the form (e.g. `x_`) are deliberately discarded with the local `MatchEnv` and never substituted into the value, matching Mathematica semantics (the form is a pure discriminator). A trailing `_, default` pair works as a default solely because `Blank[]` matches anything. If no form matches, the call is left unevaluated (`NULL`).
+
 - Attribute `HoldRest`; the form/value pairs are held until `Switch` examines them.
 - Each `form_i` is evaluated immediately before its match is tried; only the chosen `value_i` is evaluated.
 - A trailing form of `_` (Blank) acts as a catch-all default clause.
@@ -57,5 +59,5 @@ Out[3]= {one, two, other}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/cond.c`](https://github.com/stblake/mathilda/blob/main/src/cond.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

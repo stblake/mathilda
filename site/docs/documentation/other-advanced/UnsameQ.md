@@ -17,6 +17,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_unsameq` is the negation of structural identity over all argument pairs. With fewer than two arguments it returns `True`; otherwise it checks every pair `(i,j)` with `expr_eq` and returns `False` as soon as any two are structurally equal, else `True`. Like `SameQ` it uses no numeric coercion and always yields a definite boolean.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -25,5 +27,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

@@ -27,6 +27,10 @@ Out[3]= {{1, 0, c}, {0, b, 0}, {a, 0, 0}}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_coefficientlist` (in `src/poly/poly.c`) returns the dense coefficient array of a polynomial. It `expr_expand`s the input, computes each variable's degree with `get_degree_poly`, then the recursive worker `coeff_list_rec` builds a nested `List` whose shape mirrors the variable order. At each level it pulls all coefficients `c_0..c_d` of the current variable — preferring the bulk extractor `get_all_coeffs_expanded` (single pass over the expanded form) and falling back to `get_coeff_expanded` per degree — and recurses on each coefficient for the next variable.
+
+**Data structures.** A `int* max_degrees` array sizes each axis; coefficients are produced as `Expr*` and assembled into nested `List` nodes. The bulk path avoids the naive (degree+1)-passes-per-level cost.
+
 - `Protected`.
 - Gives an array of coefficients starting with power 0.
 - Returns a full rectangular array for multiple variables. Combinations of powers that do not appear in `poly` give zeros in the array.
@@ -41,7 +45,7 @@ Out[3]= {{1, 0, c}, {0, b, 0}, {a, 0, 0}}
 ## References
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (dense polynomial coefficient vectors).
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 
 ## Notes & additional examples

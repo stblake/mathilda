@@ -1,0 +1,6 @@
+---
+source: src/funcprog.c
+---
+**Algorithm.** `builtin_permutations` (in `src/funcprog.c`) generates distinct permutations, correctly handling repeated elements. It first compresses the input into a `UniqueElement[]` multiset — each distinct value (compared with `expr_eq`) paired with its multiplicity `count`. The recursive `permutations_rec` then builds permutations by, at each position, trying every unique element that still has remaining count, decrementing it before recursing and restoring it afterward (classic count-bounded backtracking). Because it only ever places each *distinct* value once per position, it emits each permutation exactly once even with duplicates (so `Permutations[{1,1,2}]` gives 3 results, not 6). The enumeration order is the order in which distinct elements first appear in the input.
+
+The optional second argument selects subsequence lengths: an integer `n` (length-`n` arrangements), `All`, or a `{min}`/`{min,max}`/`{min,max,step}` range; the handler loops over the requested lengths `l` and calls `permutations_rec` with `target_len = l`. The permutation head is inherited from the input; results accumulate in a geometrically grown `Expr**` buffer wrapped as `List[...]`.

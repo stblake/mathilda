@@ -36,6 +36,8 @@ Out[5]= e + d x + c x^2 + b x^3 + a x^4
 
 ## Implementation notes
 
+`builtin_fromdigits` is the inverse of `IntegerDigits`/`IntegerString` (default base 10). For a `List` of digits it Horner-folds `value = value*base + digit` in GMP; symbolic digits or a symbolic base produce a polynomial in the base via the evaluator instead. For a `String` argument each character is mapped to a digit value in `[0, 36)` and folded with an integer base (`FromDigits["abc", b]`); a symbolic/non-integer base over a string is left unevaluated. Validates arity (`FromDigits::argb`) and integer base `>= 2` (`::ibase`).
+
 - `Protected` (intentionally not `Listable`: the first argument *is* a list).
 - Inverse of `IntegerDigits` / `IntegerString`. Since `IntegerDigits` discards
 
@@ -47,5 +49,5 @@ Out[5]= e + d x + c x^2 + b x^3 + a x^4
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/int.c`](https://github.com/stblake/mathilda/blob/main/src/int.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)

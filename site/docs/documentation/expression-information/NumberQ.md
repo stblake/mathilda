@@ -38,6 +38,8 @@ Out[6]= False
 
 ## Implementation notes
 
+`builtin_numberq` (`src/core.c`) returns `True` for an explicit number — `EXPR_INTEGER`, `EXPR_REAL`, `EXPR_BIGINT`, `EXPR_MPFR` (under `USE_MPFR`), or a `Rational`/`Complex` head — and `False` otherwise. (Contrast `NumericQ`, whose `is_numeric_quantity` helper also accepts symbolic constants like `Pi` and numeric-function calls.)
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -46,5 +48,5 @@ Out[6]= False
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

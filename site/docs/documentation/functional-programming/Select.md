@@ -29,6 +29,16 @@ Out[2]= {4}
 
 ## Implementation notes
 
+`builtin_select` filters the arguments of a compound expression by a predicate.
+It iterates the args of `list` (any head, not only `List`), and for each element
+builds `crit[elem]` and runs `evaluate()`; the element is kept only when the
+result is exactly the symbol `True`. The optional third argument caps the number
+of kept elements (`n_max`), stopping the scan early once reached. The surviving
+elements are reassembled under the original head via `expr_new_function`. Returns
+`NULL` (unevaluated) when the first argument is an atom or when the count
+argument is non-integer. Each predicate test allocates a copied call and frees it
+plus its evaluated result, so memory is bounded per element.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -38,7 +48,7 @@ Out[2]= {4}
 ## References
 
 - Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §2.2.3 (sequences as conventional interfaces; filtering).
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
 
 ## Notes & additional examples

@@ -21,6 +21,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_floor` calls the shared `do_piecewise(res, OP_FLOOR, "Floor", true)` dispatcher (the `true` enables the two-argument `Floor[x, a]` → `a Floor[x/a]` unit-quantization form). The per-element kernel `do_piecewise_1` handles each numeric type exactly: `EXPR_INTEGER`/`EXPR_BIGINT` are already integers and pass through; rationals are floored exactly via GMP; `EXPR_REAL` uses C `floor()` cast to `int64_t`; `EXPR_MPFR` uses `mpfr_floor` then `mpfr_get_z` into an `mpz_t` (normalized to int/bigint) so arbitrarily large values never silently truncate; `±Infinity` pass through. `Floor` is registered `LISTABLE | NUMERICFUNCTION | PROTECTED`, so threading over lists is handled by the generic evaluator before the builtin runs. Non-numeric arguments return NULL (left symbolic).
+
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## Implementation status
@@ -29,5 +31,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/piecewise.c`](https://github.com/stblake/mathilda/blob/main/src/piecewise.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

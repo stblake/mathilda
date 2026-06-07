@@ -20,6 +20,10 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+**Algorithm.** `builtin_delete_cases` (`src/patterns.c`) returns a copy of the input with every subexpression matching the pattern (within the level-spec) removed. Level-spec, `Heads` option, and an optional deletion-count budget `n` are parsed as in `Cases` (default level `{1,1}`). The worker `do_delete_cases_at_level` is a depth-first **post-order** rebuild ("leaves before roots"): it recursively transforms the head (only if `heads`) and each argument, dropping any child flagged for deletion and splicing any `Sequence[...]` a head-deletion produced, then rebuilds the node. After rebuilding, it tests the **original** node against the pattern via `match`; a match sets the parent's `*delete_me` flag so the node is dropped from its parent's argument list. A matching head (under `Heads -> True`) turns the call into `Sequence[args…]` (FlattenAt-style), which the enclosing loop splices outward. The `n` budget (`count_remaining`: `-1` unlimited, else decremented per deletion) caps the number removed.
+
+**Data structures.** Per-node freshly-allocated `Expr**` argument buffer (grown as needed); a `bool* delete_me` out-parameter threads the removal decision up to the parent; one `MatchEnv` per match test.
+
 - Uses standard level specifications, defaulting to level `{1}`.
 - Option `Heads -> True` tests heads as well; deleting a head is equivalent to applying `FlattenAt` at that point, splicing the remaining arguments into the parent.
 - Traverses `expr` in depth-first post-order (leaves before roots) so that the `n` budget is spent on deeper matches before shallower ones.
@@ -33,5 +37,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)

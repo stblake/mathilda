@@ -47,6 +47,13 @@ Out[8]= {1000, 1050.0, 1102.5, 1157.62, 1215.51, 1276.28, 1340.1, 1407.1, 1477.4
 
 ## Implementation notes
 
+`builtin_nestlist` is `nest_impl(res, true)`: it returns the full iteration
+history `{expr, f[expr], ..., Nest[f,expr,n]}`. It seeds an `ExprBuf` with a copy
+of `expr` and runs the shared `iter_run` driver with `nest_step` (each step is
+`apply_unary(f, last)` = build `f[last]` and `eval_and_free`). With
+`as_list=true`, `ebuf_finalize` wraps the entire kept history in a `List` head.
+Shares all machinery with `Nest`; `n` must be a non-negative integer.
+
 - `Protected`.
 - Returns a list of length `n + 1` whose first element is `expr` and whose `(k+1)`-th element is `f` applied `k` times to `expr`.
 - `n` must be a non-negative integer; `NestList[f, expr, 0]` returns `{expr}`.
@@ -63,7 +70,7 @@ Out[8]= {1000, 1050.0, 1102.5, 1157.62, 1215.51, 1276.28, 1340.1, 1407.1, 1477.4
 
 ## References
 
-- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)
 
 ## Notes & additional examples

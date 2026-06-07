@@ -37,6 +37,10 @@ Out[5]= Cross[{1, 2, 3}, {4, 5}]
 
 ## Implementation notes
 
+**Algorithm.** `builtin_cross` implements the generalised cross product. Given `m = n-1` input vectors of length `n` (each must be a `List` of equal length, exactly one less than the number of arguments — otherwise it emits `Cross::nonn1` and returns `NULL`), the `i`-th component of the result is the signed minor obtained by stacking the input rows and deleting column `i`. Each minor is evaluated by `laplace_det` (shared with `Det`), and a sign `(-1)^(m+i)` is applied by wrapping the determinant in `Times[-1, …]` and calling `eval_and_free`. The classic 3-vector case `Cross[u, v]` is the `m = 2`, `n = 3` instance.
+
+**Data structures.** Each minor is assembled into a flat `Expr**` array of `m*m` element pointers (borrowed from the input vectors, not copied) and passed to `laplace_det` with an explicit column-index list. Entries flow through symbolically, so the result is exact/symbolic whenever the inputs are. The output is a `List` of `n` components.
+
 - `Protected`.
 - Returns the cross product or totally antisymmetric product of $n-1$ vectors of length $n$.
 - Works for symbolic and numerical inputs.
@@ -50,5 +54,5 @@ Out[5]= Cross[{1, 2, 3}, {4, 5}]
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/linalg/cross.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/cross.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

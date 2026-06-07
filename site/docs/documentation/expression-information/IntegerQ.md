@@ -38,6 +38,8 @@ Out[6]= False
 
 ## Implementation notes
 
+`builtin_integerq` (`src/core.c`) returns `True` exactly when `expr_is_integer_like(arg)` holds (an `EXPR_INTEGER` or `EXPR_BIGINT`), and `False` otherwise.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -46,5 +48,5 @@ Out[6]= False
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

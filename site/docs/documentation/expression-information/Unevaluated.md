@@ -40,6 +40,8 @@ Out[6]= {HoldAllComplete, Protected}
 
 ## Implementation notes
 
+`Unevaluated` has no C handler; the attribute table (`src/attr.c`) gives it `ATTR_HOLDALLCOMPLETE | ATTR_PROTECTED`. The evaluator (`src/eval.c`) special-cases it: in a non-held argument position `f[Unevaluated[expr]]` passes `expr` itself (unevaluated) to `f`, stripping the wrapper. In held positions and under `HoldAllComplete` heads the wrapper is preserved.
+
 - Attributes: `{HoldAllComplete, Protected}`.
 - `f[Unevaluated[expr]]` passes `expr` to `f` as if `f` temporarily held that single argument; the `Unevaluated` wrapper is then stripped before `f`'s body runs, effectively yielding `f[expr]` with `expr` unevaluated.
 - The wrapper is **not** stripped when the enclosing function holds the argument (e.g. `f` has `HoldAll`, or `HoldFirst`/`HoldRest` applies to that position).
@@ -56,5 +58,5 @@ Out[6]= {HoldAllComplete, Protected}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

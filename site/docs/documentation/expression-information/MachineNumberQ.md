@@ -35,6 +35,8 @@ Out[6]= False
 
 ## Implementation notes
 
+`builtin_machinenumberq` (`src/numeric.c`) returns `True` when the argument is a finite `EXPR_REAL` (via `is_machine_real_leaf`, which checks `EXPR_REAL` and `isfinite`), or a `Complex` whose real and imaginary parts are both finite machine reals; otherwise `False`. Exact integers/rationals and arbitrary-precision `EXPR_MPFR` values are not machine numbers.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -43,5 +45,5 @@ Out[6]= False
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/numeric.c`](https://github.com/stblake/mathilda/blob/main/src/numeric.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

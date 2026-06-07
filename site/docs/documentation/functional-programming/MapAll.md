@@ -17,6 +17,14 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_map_all` is a thin wrapper around the same `map_at_level` traversal used
+by `Map`, but with the fixed level-spec `{0, Infinity}` (`min=0`,
+`max=1000000`, `heads=false`), i.e. `MapAll[f, expr]` ≡ `Map[f, expr, {0,
+Infinity}]`. The bottom-up recursion rebuilds every `EXPR_FUNCTION` from its
+mapped children and then wraps each node (including the whole expression at level
+0) in `f[...]`, calling `evaluate()` so `f`'s attributes apply. A trailing
+`Heads -> True` option is honoured via `parse_options`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -25,5 +33,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

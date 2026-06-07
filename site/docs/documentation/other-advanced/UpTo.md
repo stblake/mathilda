@@ -16,6 +16,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`UpTo[n]` is an inert specification object with no builtin handler — it is interpreted by the consumers that accept a count or position. List extractors (`Take`/`Drop` in `src/list.c`, `Part` ranges in `src/part.c`) detect `UpTo[n]` with an integer `n` and clamp the request to whatever is available: if at least `n` elements/positions exist all `n` are used, otherwise only those present, without raising the out-of-range error a bare `n` would. (Note: `SVD`'s `"UpTo"` target clamps to matrix rank, a separate use of the name.)
+
 **Attributes:** none registered.
 
 ## Implementation status
@@ -24,5 +26,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

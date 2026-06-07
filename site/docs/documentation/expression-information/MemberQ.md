@@ -31,6 +31,8 @@ Out[4]= False
 
 ## Implementation notes
 
+`builtin_memberq` (`src/patterns.c`) returns `True`/`False` for whether any part of the first argument matches the second (a pattern), tested by `do_member_at_level` which applies the pattern matcher `match` at each position within the level spec (default level 1 — immediate elements). It supports integer/`{min,max}`/`All`/`Infinity` level specs and the `Heads` option; the one-argument form returns an operator `Function[MemberQ[#1, patt]]`.
+
 - `Protected`.
 - Default option: `Heads -> False`.
 - `form` can be a structural pattern.
@@ -46,5 +48,5 @@ Out[4]= False
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

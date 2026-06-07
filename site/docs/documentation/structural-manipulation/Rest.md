@@ -15,6 +15,10 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+**Algorithm.** `builtin_rest` returns a copy of the input with its first element dropped: it
+copies args `1 .. n−1` into a new function node with the same head. Returns `NULL`
+(unevaluated) for atoms or empty expressions.
+
 **Attributes:** none registered.
 
 ## Implementation status
@@ -23,5 +27,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

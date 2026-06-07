@@ -1,0 +1,4 @@
+---
+source: src/stats.c
+---
+**Algorithm.** `builtin_exponential_moving_average` takes `(list, alpha)` and applies the recurrence `y[1] = x[1]`, `y[i+1] = y[i] + alpha*(x[i+1] - y[i])`; the output has the same length as the input. It chooses between two paths. The **fast path** (taken when at least one of the list elements or `alpha` is `EXPR_REAL` and all of them are real-valued numerics — no complex, no symbolic, bignums excluded) runs the recurrence in C using `double`s, allocating only the output, returning `EXPR_REAL` elements. The **symbolic / exact path** builds the recurrence out of `Plus`/`Times` nodes per step (via `eval_and_free`), letting the evaluator do exact-rational, bignum, and symbolic arithmetic for arbitrary (including symbolic) `alpha`. Empty or non-`List` first argument leaves the call unevaluated. `ATTR_PROTECTED`.

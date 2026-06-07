@@ -48,6 +48,8 @@ Out[6]= {30.103, 30.103}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_randomcomplex` (in `src/random.c`) draws a point uniformly from the axis-aligned rectangle spanned by the corners. A bare `z` gives the rectangle `[0,Re z]×[0,Im z]`; `{z1, z2}` gives `[Re z1, Re z2]×[Im z1, Im z2]`. `random_complex_range` draws the real and imaginary parts as two independent uniforms via `random_uniform_01` (the same 53-bit-mantissa Mersenne Twister sampling used by `RandomReal`) and assembles a `Complex[...]`. An extended-precision path (`randomcomplex_mpfr`, guarded by `USE_MPFR`) draws two `mpfr_urandomb` deviates at the target precision. The `RandomComplex[range, n]` / `{n1,...}` forms produce lists or nested arrays via `random_complex_array`.
+
 - `Protected`.
 - `RandomComplex[{zmin, zmax}]` chooses complex numbers uniformly in the rectangle with corners at `zmin` and `zmax`.
 - RandomComplex gives a different sequence of pseudorandom complex numbers whenever you run Mathilda. You can start with a particular seed using SeedRandom.
@@ -63,5 +65,5 @@ Out[6]= {30.103, 30.103}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)

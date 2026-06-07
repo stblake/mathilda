@@ -32,6 +32,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_upper_triangular_matrix_q` validates that the argument is a non-empty rectangular `List` of equal-length `List`s (no deeper nesting), then returns `True` iff every entry strictly below the `k`-th diagonal (column−row `< k`, default `k = 0`) is zero. The optional second Integer argument selects the diagonal `k`; a `Tolerance -> t` option relaxes the zero test (otherwise a structural zero check is used). Bad arguments/options emit `UpperTriangularMatrixQ::nonopt` / `::argt`; shape rejections return `False`.
+
 - `Protected`.
 - Works for rectangular matrices, not only square -- only the entry-zero
 
@@ -43,5 +45,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

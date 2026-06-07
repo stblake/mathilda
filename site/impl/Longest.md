@@ -1,0 +1,4 @@
+---
+source: src/match.c
+---
+`Longest` is a pattern wrapper, not a function. It is recognised structurally by the matcher in `match.c`: the sequence-matching loop peels off `Longest[p]` (alongside `Pattern`, `Shortest`, and `Optional` wrappers) before binding, setting an `is_longest` flag on the underlying pattern `p`. The flag controls the order in which the backtracking sequence matcher tries argument-count partitions for `__`/`___`/`Repeated` sub-patterns — `Longest` makes the matcher try the greediest (largest) consumption first (the default for `__`/`___`), whereas `Shortest` flips the order to try the smallest first. It does not change *which* matches are possible, only which one is found first. `Longest` appears in the matcher's list of recognised pattern heads that `eval.c` keeps unevaluated.

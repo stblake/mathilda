@@ -40,6 +40,8 @@ Out[5]= {a, b, c, d, e}
 
 ## Implementation notes
 
+`builtin_differences` computes successive differences, keeping the input head. One pass (`diff_once`) emits `elem[i+s] - elem[i]` for step `s` (reversed for negative `s`), each subtraction built as `Subtract` and reduced via `eval_and_free` so integers, rationals, doubles, symbolics, and matrix rows all combine. `Differences[list, n, s]` applies `diff_once` `n` times with step `s` (`diff_n_step`); `Differences[list, {n1, n2, ...}]` applies per-level first differences recursively into each element (`diff_levels`), e.g. for multidimensional arrays. A list no longer than `|s|` yields the empty list. Non-integer or negative `n`, or step `0`, return `NULL`. This is the additive analog of `Ratios` in the same file.
+
 - `Protected`.
 - `Differences[list]` gives `{list[[2]] - list[[1]], list[[3]] - list[[2]], ...}`, of length `l - 1`.
 - `Differences[list, n]` applies the first-difference operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
@@ -57,5 +59,5 @@ Out[5]= {a, b, c, d, e}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)

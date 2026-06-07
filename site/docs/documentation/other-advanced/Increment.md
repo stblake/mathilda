@@ -22,6 +22,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_increment` (1-arg, the `x++` postfix form) builds the literal `1` and calls the shared `increment_core(lhs, 1, negate=false, pre=false, "Increment")`. `increment_core` first checks the target is an assignable symbol with an existing OwnValue (`lvalue_symbol_name` + `symtab_get_own_values`), emitting `Increment::rvalue` and returning NULL otherwise. It then `evaluate`s the current value, forms `Plus[old, ±dx]` and evaluates it to the new value, and writes the new value back by evaluating a `Set[lhs, new]` (Set has HoldFirst, so compound lvalues such as `Part[list, i]` are preserved for the assignment machinery). Because `pre` is false it returns the *old* value (post-increment semantics). The same helper backs `Decrement`, `PreIncrement`, `PreDecrement`, `AddTo`, and `SubtractFrom` via the `negate`/`pre`/`dx` flags.
+
 **Attributes:** `HoldFirst`, `Protected`.
 
 ## Implementation status
@@ -30,5 +32,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

@@ -30,6 +30,8 @@ Out[3]= "x^{2}+y^{3}"
 
 ## Implementation notes
 
+`builtin_tostring` (`src/core.c`) renders an expression to a string. The optional second argument selects the form: `FullForm` uses `expr_to_string_fullform`; `TeXForm` wraps in `TeXForm[...]` and prints; `InputForm`/`StandardForm`/`OutputForm` (and the default) use the standard printer `expr_to_string`. All formatting is shared with the `src/print.c` printer.
+
 - `Protected`.
 - An unsupported form leaves the call unevaluated (e.g. `ToString[x, FooForm]` returns `ToString[x, FooForm]`), so a typo is visible at the call site rather than silently downgraded.
 
@@ -41,5 +43,5 @@ Out[3]= "x^{2}+y^{3}"
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

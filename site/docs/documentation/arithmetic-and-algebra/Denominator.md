@@ -26,6 +26,8 @@ Out[2]= 77
 
 ## Implementation notes
 
+`builtin_denominator` calls `extract_num_den` and returns the denominator part (freeing the numerator). `extract_num_den` recognises `Rational[n, d]` (returns `d`); `Complex` (clears to a common integer denominator); `Power[b, e]`/`Exp[e]` with a superficially-negative exponent or a `Plus` exponent split into positive/negative pieces (the negative-exponent base becomes the denominator); and `Times`, which recurses into each factor and multiplies the collected denominators. A factor with no denominator contributes `1`. `Numerator` in the same file is the symmetric accessor.
+
 - `Protected`, `Listable`.
 - Picks out terms which have superficially negative exponents.
 - Can be used on rational and complex numbers.
@@ -39,7 +41,7 @@ Out[2]= 77
 ## References
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on rational normal forms.
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/rat.c`](https://github.com/stblake/mathilda/blob/main/src/rat.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
 
 ## Notes & additional examples

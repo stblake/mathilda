@@ -40,6 +40,8 @@ Out[5]= {a, b, c, d, e}
 
 ## Implementation notes
 
+`builtin_ratios` returns successive ratios of list elements: `Ratios[{a, b, c, ...}]` gives `{b/a, c/b, ...}`. `Ratios[list, n]` applies the ratio operation n times (`ratio_n`); `Ratios[list, {n1, n2, ...}]` takes ratios along the given levels (`ratio_levels`). Each ratio is formed as a division, so the usual numeric/symbolic simplification follows. Level/count specs must be non-negative integers; bad shapes return `NULL`.
+
 - `Protected`.
 - `Ratios[list]` divides successive elements by preceding ones, giving `{list[[2]]/list[[1]], list[[3]]/list[[2]], ...}` of length `l - 1`; `Ratios[{x1, x2}]` gives `{x2/x1}`.
 - `Ratios[list, n]` applies the ratio operator `n` times, giving length `l - n`. `n` must be a non-negative integer (`n = 0` returns `list` unchanged).
@@ -56,5 +58,5 @@ Out[5]= {a, b, c, d, e}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)

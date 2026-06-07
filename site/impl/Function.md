@@ -1,0 +1,6 @@
+---
+source: src/purefunc.c
+---
+**Algorithm.** `Function` is held as an inert head; the real work is `apply_pure_function` (called from `eval.c` when the evaluator sees `Function[...][args]`). Application is by **lexical substitution**, never by mutating the symbol table — this keeps `Unevaluated`-wrapped references correct and avoids variable capture (nested `Function`s are treated as opaque). Supported shapes: `Function[body]` and `Function[Null, body, attrs]` use the Slot form — `substitute_slots` replaces `#`/`#n` (`Slot`) and `##`/`##n` (`SlotSequence`) with the supplied arguments; `Function[x, body]` and `Function[{x1,…}, body]` use named parameters — `substitute_names` replaces each parameter symbol with its bound argument (missing arguments stay symbolic). The substituted body is then `evaluate`d, and `trap_return` strips a `Return[v]` targeting this `Function` boundary.
+
+**Attributes.** By default `Function` has no Hold attributes, so its call arguments are evaluated before substitution. The 3-arg form `Function[params, body, attrs]` opts into attributes: `pure_function_attributes` maps the attribute spec (a symbol or `List` of symbols) onto the standard `ATTR_*` bits (`HoldAll`/`HoldFirst`/`HoldRest`/`HoldAllComplete`, plus `Listable`/`Flat`/`Orderless`/`OneIdentity`/`NumericFunction`/…), which the evaluator consults when preparing the arguments.

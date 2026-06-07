@@ -15,6 +15,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_listq` (`src/list.c`) returns `True`/`False` according to the `is_listq` helper, i.e. whether the argument is an `EXPR_FUNCTION` whose head is the symbol `List`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -23,5 +25,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

@@ -42,6 +42,8 @@ Out[5]= Symbol["1x"]
 
 ## Implementation notes
 
+`builtin_symbol` (`src/core.c`) converts a string to a symbol. It validates the name with `symbol_name_is_valid` (each backtick-delimited context segment must start with a letter or `$` and continue with alphanumerics/`$`), runs it through `context_resolve_name` to apply the current context, and returns an `EXPR_SYMBOL`. Invalid names emit a `Symbol::symname` message and return `NULL`.
+
 - `Protected`.
 - Every expression's `Head` matches `Symbol` for symbols; `x_Symbol` patterns therefore match any symbol.
 - The string must satisfy the standard symbol-name syntax: each segment (separated by backticks) starts with a letter or `$`, followed by letters, digits, or `$`.
@@ -56,5 +58,5 @@ Out[5]= Symbol["1x"]
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

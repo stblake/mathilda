@@ -43,6 +43,10 @@ Out[7]= 0
 
 ## Implementation notes
 
+**Algorithm.** `builtin_binomial` dispatches on argument kind. (1) Integer/integer: it coerces both to `mpz_t` and calls GMP's `mpz_bin_ui` (requires the lower index to fit a `ulong`), returning `0` when the lower index is negative or exceeds a non-negative `n`, and handling negative `n` via the Pascal/upper-negation extension `C(n,k) = (-1)^k C(k-n-1, k)`. (2) Machine reals: the Gamma form `tgamma(n+1)/(tgamma(m+1) tgamma(n-m+1))`. (3) Symmetry/polynomial reduction: if `n - m` evaluates to a small non-negative integer, or `m` itself is a small concrete non-negative integer (`<= 32`), it expands the falling-factorial polynomial via `binomial_polynomial` so that symbolic `n` produces a degree-`m` polynomial that downstream `Expand`/`D` can act on. The `n - m` Subtract is evaluated with arithmetic warnings muted (the exploratory difference may hit a spurious `Power::infy`).
+
+**Data structures.** GMP `mpz_t` for the exact path (results normalised by `expr_bigint_normalize`); symbolic expansions build `Times`/`Plus` trees through `eval_and_free`.
+
 - `Protected`, `Listable`, `NumericFunction`.
 - Exact integer/integer path uses GMP (`mpz_bin_ui`), including the
 
@@ -56,7 +60,7 @@ Out[7]= 0
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on binomial coefficients.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on the generalized binomial and its polynomial form.
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
 
 ## Notes & additional examples

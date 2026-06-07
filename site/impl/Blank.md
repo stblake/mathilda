@@ -1,0 +1,4 @@
+---
+source: src/match.c
+---
+`Blank` is a pattern object head, not an evaluator builtin: `_` parses to `Blank[]` and `_h` to `Blank[h]`, and `x_` to `Pattern[x, Blank[...]]`. The matcher recognises it in `src/match.c` via `is_blank`, which reports whether a pattern node is `Blank[]` (matches any single expression — `head_out = NULL`) or `Blank[h]` (constrains the head). When a head is present, `match_internal` checks it with `get_expr_head_borrowed` + `expr_eq`, with a special case mapping atomic expression types to their symbolic heads (`Integer`, `Real`, `Symbol`, `String`). A successful single match consumes exactly one argument and continues via `call_parent`. `Blank` and its sequence relatives are also among the pattern heads the matcher treats structurally (e.g. excluded from `OneIdentity`/literal-head handling).

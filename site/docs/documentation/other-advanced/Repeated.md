@@ -18,6 +18,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`Repeated[p]` (`p..`) is a pattern object handled entirely inside the matcher, not by a builtin. `is_repeated` in `src/match.c` recognises the `Repeated` head, sets the matched-length range to `[1, ∞)` by default, and parses an optional count spec: `Repeated[p, max]` gives `[1, max]`, `Repeated[p, {n}]` gives exactly `n`, `Repeated[p, {min, max}]` gives `[min, max]` (with `Infinity` allowed as an open upper bound). The argument-sequence matcher then matches a run of consecutive arguments each satisfying `p`, using the standard backtracking that explores valid run lengths within the range.
+
 **Attributes:** none registered.
 
 ## Implementation status
@@ -26,5 +28,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

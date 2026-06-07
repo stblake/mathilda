@@ -20,6 +20,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_sqrt` is a thin wrapper: it rewrites `Sqrt[x]` to `Power[x, Rational[1, 2]]` (via `make_rational(1, 2)`) and returns that, letting the full `Power` machinery handle all simplification (exact perfect squares, `Sqrt[8] -> 2 Sqrt[2]` radical extraction, numeric/MPFR evaluation, infinity algebra). `Sqrt` carries `LISTABLE | NUMERICFUNCTION | PROTECTED`.
+
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.
 
 ## Implementation status
@@ -30,7 +32,7 @@ _No verified examples yet for this function._
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on square-free factorization and radical simplification.
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on integer square roots.
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/power.c`](https://github.com/stblake/mathilda/blob/main/src/power.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
 
 ## Notes & additional examples

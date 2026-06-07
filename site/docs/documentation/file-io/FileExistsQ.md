@@ -19,6 +19,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_fileexistsq` calls `lstat()` on a single string-path argument and returns the symbol `True` if it succeeds (anything exists at that path), `False` otherwise. Using `lstat` rather than `stat` means a dangling symlink — itself a filesystem object — is reported as existing. The POSIX `lstat` is enabled by defining `_POSIX_C_SOURCE` before the includes for strict-C99 builds. Non-string input leaves the call unevaluated. `ATTR_PROTECTED`.
+
 - `Protected`.
 - `"name"` is interpreted relative to the current working directory. `$Path` is not searched.
 - Implemented with `lstat()`, so dangling symlinks count as existing.
@@ -32,5 +34,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/files.c`](https://github.com/stblake/mathilda/blob/main/src/files.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

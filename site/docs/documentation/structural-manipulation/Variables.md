@@ -31,6 +31,13 @@ Out[3]= {}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_variables` walks the expression with `collect_variables`, gathering the
+distinct symbols that occur as polynomial generators (bare symbols and non-numeric bases,
+excluding numeric atoms and known constants), then sorts the collected `Expr*` array with
+`qsort` under `compare_expr_ptrs` (the canonical `expr_compare` order) and wraps the result in a
+`List`. The output is the deduplicated, canonically-ordered list of variables on which the
+input is treated as a polynomial/rational expression.
+
 - `Protected`.
 - Looks for variables only inside `Plus`, `Times`, and `Power` with rational exponents.
 - Returns a sorted `List` of variables.
@@ -45,7 +52,7 @@ Out[3]= {}
 ## References
 
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), Ch. 3 (multivariate polynomial representation and variable sets).
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
 
 ## Notes & additional examples

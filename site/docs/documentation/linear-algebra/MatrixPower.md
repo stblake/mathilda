@@ -46,6 +46,10 @@ Out[8]= {5, 8}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_matrixpower` computes `MatrixPower[m, e]` (and `MatrixPower[m, e, v]`) for integer exponents by binary exponentiation (square-and-multiply). After validating that `m` is a non-empty square rank-2 tensor (`MatrixPower::matsq`) and that the exponent is an Integer or BigInt that fits in `int64_t`, it loops over the bits of `|e|`, accumulating the product and repeatedly squaring the running matrix; each matrix product goes through `dot2` (the `Dot` kernel, via the local `mat_dot` wrapper) followed by a full `evaluate` pass so entries simplify. `e == 0` returns `IdentityMatrix[n]`. Negative exponents first compute `Inverse[m]` (in `inv.c`) as the base; if `Inverse` returns unevaluated (singular), the call is abandoned. If a third vector argument is supplied, the final matrix is dotted with it.
+
+**Data structures / limits.** Operates directly on `Expr*` `List`-of-`List` matrices; no dense numeric buffer. Fractional exponents (`Rational` or `Real`) are explicitly unsupported — they emit `MatrixPower::fract` and return unevaluated rather than going through an eigendecomposition; symbolic and BigInt-too-large exponents also return unevaluated. Cost is O(log|e|) matrix multiplies.
+
 - `Protected`.
 - `MatrixPower[m, n]` effectively evaluates the product of a matrix with itself `n` times.
 - When `n` is negative, `MatrixPower` finds powers of the inverse of the matrix `m`.
@@ -64,7 +68,7 @@ Out[8]= {5, 8}
 
 - R. A. Horn and C. R. Johnson, *Matrix Analysis*, 2nd ed., Cambridge University Press, 2013 — powers of matrices.
 - G. H. Golub and C. F. Van Loan, *Matrix Computations*, 4th ed., Johns Hopkins University Press, 2013 — repeated multiplication and inversion.
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/linalg/matpow.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/matpow.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
 
 ## Notes & additional examples

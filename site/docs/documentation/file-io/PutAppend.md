@@ -22,6 +22,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_putappend` shares `put_common` with `Put`, differing only in fopen mode: it opens the (last-argument) filename in `"a"` mode, appending each preceding expression — serialized via `expr_to_string` (the standard printer) plus a trailing `\n` — to the end of the file, creating it if absent and never truncating an existing one. `PutAppend["file"]` writes nothing. Open failure prints `PutAppend::noopen` and returns `$Failed`; success returns `Null`. `ATTR_PROTECTED`. The infix `expr >>> "file"` lowers to `PutAppend[expr, "file"]`.
+
 - `Protected`.
 - Creates the file if it does not exist; otherwise preserves prior contents and appends new lines.
 - Returns `Null` on success and `$Failed` on I/O error.
@@ -34,5 +36,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

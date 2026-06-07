@@ -19,6 +19,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`Hold` is not a C builtin. It is registered in `attr.c`'s attribute table as `{"Hold", ATTR_HOLDALL | ATTR_PROTECTED}`, i.e. the symbol `Hold` simply carries the `ATTR_HOLDALL` attribute. When the evaluator (`eval.c`) processes `Hold[args...]` it reads that attribute before evaluating arguments and therefore leaves every argument unevaluated, returning the `Hold[...]` wrapper as-is. There is no per-head logic — holding falls entirely out of the generic attribute-driven argument-evaluation step. `HoldComplete`, `HoldPattern`, and `Unevaluated` are registered the same way with `ATTR_HOLDALLCOMPLETE`/`ATTR_HOLDALL`.
+
 **Attributes:** `HoldAll`, `Protected`.
 
 ## Implementation status
@@ -27,5 +29,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

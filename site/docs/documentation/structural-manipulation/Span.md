@@ -32,6 +32,13 @@ Out[5]= {3, 4, 5, 6, 7, 8, 9, 10}
 
 ## Implementation notes
 
+**Algorithm.** `Span` is not a standalone builtin — it is the head the parser produces for the
+`i;;j` and `i;;j;;k` syntax (`OP_SPAN`, precedence 290, in `parse.c`). A `Span[start, end,
+step]` expression is interpreted only inside `Part`/`Extract`: `expr_part` (in `part.c`)
+resolves it against a concrete list, mapping negative endpoints to `len + k + 1`, clamping
+`UpTo`/`All` endpoints, computing the element count from the step, and emitting the selected
+elements. On its own a bare `Span` stays unevaluated.
+
 - `m[[i;;j;;k]]` is equivalent to `Take[m, {i, j, k}]` but evaluated natively within `Part`.
 - `m[[i;;j]] = v` can be used to assign `v` iteratively over a span of elements. If `v` is a list, elements are assigned sequentially. If `v` is a non-list expression, it is assigned uniformly to all elements in the span.
 - When used in `Part`, negative `i` and `j` count from the end.
@@ -46,5 +53,5 @@ Out[5]= {3, 4, 5, 6, 7, 8, 9, 10}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

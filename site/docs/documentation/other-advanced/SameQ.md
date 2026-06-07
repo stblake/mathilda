@@ -18,6 +18,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_sameq` tests purely structural identity. With fewer than two arguments it returns `True` by convention; otherwise it compares every argument against the first with `expr_eq` and returns `True` only if all are structurally equal, `False` otherwise. Unlike `Equal`, there is no numeric coercion — `1 === 1.` is `False` — and it never returns `NULL` (the result is always a definite boolean).
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -26,5 +28,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

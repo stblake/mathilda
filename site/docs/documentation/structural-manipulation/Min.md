@@ -29,6 +29,12 @@ Out[3]= Infinity
 
 ## Implementation notes
 
+**Algorithm.** `builtin_min` mirrors `Max`: it flattens `List` arguments, scans real-numeric
+atoms for the minimum (via `expr_compare`), collects distinct symbolic terms, and treats
+`Infinity`/`-Infinity`/`Overflow[]` as identity/absorbing elements. All-numeric input returns
+the single smallest value; mixed input returns `Min[...]` over the numeric minimum and the
+remaining symbolic terms, or `NULL` if nothing simplified. Empty `Min[]` is `Infinity`.
+
 - `Flat`, `NumericFunction`, `OneIdentity`, `Orderless`, `Protected`.
 - Flattens `List` arguments.
 - `Min[]` returns `Infinity`.
@@ -44,5 +50,5 @@ Out[3]= Infinity
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

@@ -20,6 +20,12 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+**Algorithm.** `builtin_n` parses the optional precision argument (`N[expr]` → machine spec; `N[expr, p]` → `parse_precision_arg`, converting requested decimal digits to MPFR bits via `numeric_digits_to_bits` = `ceil(digits·log2(10))`) into a `NumericSpec`, then calls the recursive `numericalize(expr, spec)`. `numericalize` walks the tree: `EXPR_INTEGER`/`EXPR_BIGINT` become an `EXPR_REAL` (machine mode) or an `EXPR_MPFR` filled at `spec.bits` (MPFR mode); `EXPR_REAL` is promoted to MPFR with zero-padding beyond its 53 exact bits when a higher precision is requested; `EXPR_MPFR` is re-rounded up or down to the target precision, with a guard so a finite MPFR value beyond `DBL_MAX` is kept as a machine-precision MPFR rather than overflowing to ∞. Named constants (`Pi`, `E`, `EulerGamma`, `Catalan`, `GoldenRatio`, `Degree`) are resolved from a registry: a `double` for machine mode, or a dedicated `mpfr_fill` (e.g. `mpfr_const_pi`, with guard digits for derived constants like `Degree = π/180`). Functions are rebuilt with numericalized arguments and re-evaluated, so the actual arithmetic is performed by the MPFR-aware `Plus`/`Times`/`Power`/trig/log kernels.
+
+**Precision propagation.** Precision flows bottom-up through evaluation, not through `N`: each numeric binary op computes its working precision from its operands (`numeric_combined_bits`/`expr_max_mpfr_prec`, with a 53-bit floor) and produces an `EXPR_MPFR` at that precision; `Precision[]`/`Accuracy[]` later report `mpfr_get_prec / log2(10)`. `N` only seeds the leaves at the requested `spec.bits`; mixed-precision results take the minimum-precision contagion from inexact parts. (Without `USE_MPFR`, everything collapses to machine `double`.)
+
+**Data structures.** `NumericSpec { mode, bits }`; arbitrary-precision values are `EXPR_MPFR` wrapping an `mpfr_t`. `N` is registered `LISTABLE | PROTECTED`, so threading over lists happens in the evaluator before the builtin runs.
+
 **Attributes:** `Listable`, `Protected`.
 
 ## Implementation status

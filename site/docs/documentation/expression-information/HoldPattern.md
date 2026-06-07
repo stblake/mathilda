@@ -33,6 +33,8 @@ Out[4]= True
 
 ## Implementation notes
 
+`HoldPattern` has no C handler; the attribute table in `src/attr.c` gives it `ATTR_HOLDALL | ATTR_PROTECTED` so its argument is not evaluated. In pattern matching it is transparent — `HoldPattern[p]` matches exactly as `p` does, letting `p` contain otherwise-evaluating constructs on a rule's left-hand side. `ReleaseHold` strips it.
+
 - Attributes: `{HoldAll, Protected}`.
 - `HoldPattern[p]` is equivalent to `p` in the pattern matcher; the matcher transparently unwraps a single-argument `HoldPattern` before matching.
 - Useful on the left-hand side of rules and assignments, because those positions are normally evaluated before being used for matching. Wrapping in `HoldPattern` stops that evaluation and preserves the literal pattern shape.
@@ -46,5 +48,5 @@ Out[4]= True
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/attr.c`](https://github.com/stblake/mathilda/blob/main/src/attr.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

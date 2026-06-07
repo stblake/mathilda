@@ -15,6 +15,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`Longest` is a pattern wrapper, not a function. It is recognised structurally by the matcher in `match.c`: the sequence-matching loop peels off `Longest[p]` (alongside `Pattern`, `Shortest`, and `Optional` wrappers) before binding, setting an `is_longest` flag on the underlying pattern `p`. The flag controls the order in which the backtracking sequence matcher tries argument-count partitions for `__`/`___`/`Repeated` sub-patterns — `Longest` makes the matcher try the greediest (largest) consumption first (the default for `__`/`___`), whereas `Shortest` flips the order to try the smallest first. It does not change *which* matches are possible, only which one is found first. `Longest` appears in the matcher's list of recognised pattern heads that `eval.c` keeps unevaluated.
+
 **Attributes:** none registered.
 
 ## Implementation status
@@ -23,5 +25,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/match.c`](https://github.com/stblake/mathilda/blob/main/src/match.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

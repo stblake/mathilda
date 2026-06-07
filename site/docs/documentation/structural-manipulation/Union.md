@@ -28,6 +28,13 @@ Out[2]= {a, b, c, d, e}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_union` concatenates the elements of all argument lists (which must
+share a common head), sorts the combined `Expr**` array with `qsort` under the canonical
+`expr_compare` order, then removes adjacent duplicates — `expr_eq` by default, or an optional
+`SameTest -> f` which is evaluated per adjacent pair. The result is the sorted, deduplicated
+list. (`DeleteDuplicates` in the same file does the order-preserving variant using a hash table
+keyed on `expr_hash`/`expr_eq`.)
+
 - `Flat`, `OneIdentity`, `Protected`, `ReadProtected`.
 - All expressions must have the same head.
 - Result has the same head as the inputs.
@@ -40,5 +47,5 @@ Out[2]= {a, b, c, d, e}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

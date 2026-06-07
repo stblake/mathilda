@@ -23,6 +23,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_put` (and `builtin_putappend`) share `put_common`, which treats the **last** argument as the filename and writes every preceding expression to it, one per line. `Put` opens the file in `"w"` mode (truncating); each `expr_i` is serialized with `expr_to_string` (the standard printer) followed by `\n`. The single-argument form `Put["file"]` runs the loop zero times, leaving an empty file. Open failure prints `Put::noopen` and returns `$Failed`; success returns the symbol `Null`. The output is intended to be re-readable with `Get`. `ATTR_PROTECTED`. The infix `expr >> "file"` lowers to `Put[expr, "file"]`.
+
 - `Protected`.
 - The last argument must be a string; it is interpreted as a filename.
 - Each `expr_i` is rendered with the standard printer (the same form used at the REPL) and followed by a single `\n`.
@@ -37,5 +39,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/readwrite.c`](https://github.com/stblake/mathilda/blob/main/src/readwrite.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)

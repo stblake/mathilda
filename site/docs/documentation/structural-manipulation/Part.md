@@ -40,6 +40,15 @@ Out[3]= Integer
 
 ## Implementation notes
 
+**Algorithm.** `builtin_part` extracts elements by index path, delegating to the recursive
+`expr_part(expr, indices, nindices)`. Each index level may be: a positive or negative integer
+(`-k` resolves to `len + k + 1`); `0`, which extracts the head and is allowed even on atoms; a
+`List` of indices (extract several, returning a list); `All`; or a `Span` (`i;;j;;k`) built by
+the parser from `;;` syntax, which `expr_part` resolves into an explicit element range with the
+given start/end/step (negative endpoints wrap, `UpTo`/`All` endpoints clamp). Index paths apply
+left to right, descending one structural level per index. Out-of-range or non-integer indices on
+atoms yield `NULL` (unevaluated).
+
 - Supports negative indices to count from the end (`-1` is the last element).
 - `expr[[0]]` returns the `Head` of the expression. This is permitted even for atomic expressions.
 - Mapping `All` across a dimension allows column extraction from matrices.
@@ -52,5 +61,5 @@ Out[3]= Integer
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

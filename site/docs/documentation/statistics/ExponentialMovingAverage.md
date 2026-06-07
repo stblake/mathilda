@@ -38,6 +38,8 @@ Out[6]= {1267650600228229401496703205376, 80346902212949513777098104617121512656
 
 ## Implementation notes
 
+**Algorithm.** `builtin_exponential_moving_average` takes `(list, alpha)` and applies the recurrence `y[1] = x[1]`, `y[i+1] = y[i] + alpha*(x[i+1] - y[i])`; the output has the same length as the input. It chooses between two paths. The **fast path** (taken when at least one of the list elements or `alpha` is `EXPR_REAL` and all of them are real-valued numerics — no complex, no symbolic, bignums excluded) runs the recurrence in C using `double`s, allocating only the output, returning `EXPR_REAL` elements. The **symbolic / exact path** builds the recurrence out of `Plus`/`Times` nodes per step (via `eval_and_free`), letting the evaluator do exact-rational, bignum, and symbolic arithmetic for arbitrary (including symbolic) `alpha`. Empty or non-`List` first argument leaves the call unevaluated. `ATTR_PROTECTED`.
+
 - `Protected`.
 - Output has the same length as `list`.
 - Two evaluation strategies: a fast O(n) double-precision path activates when at least one element of `list` or `alpha` itself is a machine-precision real and every other entry is a real-valued numeric (Integer, Real, Rational); otherwise a symbolic recurrence path is taken so exact rationals, bignums (arbitrary-precision integers), and symbolic alpha all work.
@@ -52,5 +54,5 @@ Out[6]= {1267650600228229401496703205376, 80346902212949513777098104617121512656
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/stats.c`](https://github.com/stblake/mathilda/blob/main/src/stats.c)
 - Specification: [`docs/spec/builtins/statistics.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/statistics.md)

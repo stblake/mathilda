@@ -28,6 +28,8 @@ Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
 
 ## Implementation notes
 
+`builtin_diagonalmatrix` builds a matrix placing the entries of the given `List` on the `k`-th diagonal. With one argument the entries go on the main diagonal (`k = 0`); a second integer argument `k` selects a super-/sub-diagonal (`j - i == k`), sizing the matrix to `(s + |k|) × (s + |k|)` where `s` is the list length; an optional third argument fixes the output dimensions as `n` or `{m, n}`. Off-diagonal cells are `Integer` `0`; diagonal cells are deep-copied verbatim from the input list, so symbolic, exact, and inexact entries flow through unchanged. Malformed `k`/dimension specs return the call unevaluated. The result is a `List` of `List`s.
+
 - `Protected`.
 - For `k > 0`, places elements `k` positions above the leading diagonal.
 - For `k < 0`, places elements `k` positions below the leading diagonal.
@@ -41,5 +43,5 @@ Out[3]= {{1, 0, 0, 0, 0}, {0, 2, 0, 0, 0}, {0, 0, 3, 0, 0}}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/linalg/construct.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/construct.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

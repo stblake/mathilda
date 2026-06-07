@@ -31,6 +31,8 @@ Out[4]= {5, 3, 5, 4}
 
 ## Implementation notes
 
+`builtin_integerdigits` returns the base-`b` digit list of `|n|` (default base 10, optional fixed length). It coerces `n` and `base` to GMP, then peels least-significant digits with a `mpz_tdiv_qr` divmod loop into a geometrically-grown `mpz_t` buffer (`O(log_b |n|)`), and emits them most-significant-first into a `List`. A length argument left-pads with zeros (or keeps only the low-order digits if shorter). Validates arity (`IntegerDigits::argb`), non-integer numeric `n` (`::int`), base `>= 2` (`::ibase`), and a non-negative machine-sized length (`::intnn`); symbolic `n` flows through as `NULL`.
+
 - `Protected`, `Listable`. Threading distributes element-wise over a list
 
 **Attributes:** `Listable`, `Protected`.
@@ -41,5 +43,5 @@ Out[4]= {5, 3, 5, 4}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/int.c`](https://github.com/stblake/mathilda/blob/main/src/int.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)

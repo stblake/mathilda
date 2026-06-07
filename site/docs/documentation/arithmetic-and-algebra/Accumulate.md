@@ -49,6 +49,8 @@ Out[5]= {1.0, 3.0, 6.0}
 
 ## Implementation notes
 
+`builtin_accumulate` returns the list of cumulative sums (prefix sums), keeping the input expression's head. The default path folds `running = Plus[running, elem]` left to right via the evaluator, so it works on any addable elements (integers, rationals, symbolics, matrix rows). When the optional `Method -> "CompensatedSummation"` is supplied and every element is a machine number, it instead runs **Kahan compensated summation** in `double` precision (tracking a running correction term `c`), emitting `Real` partial sums. An empty list returns a copy unchanged.
+
 - `Protected`.
 - `Accumulate[list]` has the same length as `list`, and is effectively equivalent to `FoldList[Plus, list]`.
 - The head of the input is preserved, so `Accumulate[f[a, b, c]]` returns `f[a, a + b, a + b + c]`.
@@ -64,5 +66,5 @@ Out[5]= {1.0, 3.0, 6.0}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)

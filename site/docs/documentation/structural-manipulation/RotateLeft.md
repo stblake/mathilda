@@ -15,6 +15,12 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+**Algorithm.** `builtin_rotateleft` cyclically shifts elements toward the front by `n`
+(default 1) using `rotate_rec`: at each level it computes the wrapped offset `((n mod len) +
+len) mod len` and reads element `i` from source index `(i + offset) mod len`. A `List`-valued
+`n` applies a per-level shift amount as the recursion descends into nested lists. `RotateRight`
+is implemented by negating `n` and calling the same routine.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -23,5 +29,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

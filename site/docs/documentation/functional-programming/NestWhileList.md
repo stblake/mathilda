@@ -59,6 +59,17 @@ Out[8]= {2, 4, 8, 16, 13, 7, 14, 9, 18, 17, 15, 11, 3, 6, 12, 5, 10, 1}
 
 ## Implementation notes
 
+`builtin_nestwhilelist` is `nestwhile_impl(res, true)`: same iteration as
+`NestWhile` but it returns the full history list `{expr, f[expr], ...}`. It
+accepts `(f, expr, test, m, max, n)` with identical semantics — `m` selects how
+many recent entries are fed to `test` (integer / `All` / `{mmin,mmax}`, default
+`1`), `max` bounds applications, and post-processing `n` appends extra `f`
+applications (positive) or trims trailing iterates (negative). The shared
+`iter_run` driver runs `nestwhile_step`, which evaluates `test[recent...]` and
+halts before the next `apply_unary(f, last)` when the test fails. With
+`as_list=true`, `ebuf_finalize` wraps the kept history in a `List`. Unbounded runs
+are guarded by `ITER_SAFETY_CAP`; malformed specs return `NULL`.
+
 - `Protected`.
 - Results are listed in generation order, including the final element on which `test` yielded a non-`True` value (or the last element produced when `max` iterations were reached).
 - If `test[expr]` does not yield `True` initially, the result is just `{expr}`.
@@ -76,5 +87,5 @@ Out[8]= {2, 4, 8, 16, 13, 7, 14, 9, 18, 17, 15, 11, 3, 6, 12, 5, 10, 1}
 
 ## References
 
-- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
+- Source: [`src/funcprog.c`](https://github.com/stblake/mathilda/blob/main/src/funcprog.c)
 - Specification: [`docs/spec/builtins/functional-programming.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/functional-programming.md)

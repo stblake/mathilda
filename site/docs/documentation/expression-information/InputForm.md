@@ -19,6 +19,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`InputForm` is an unevaluated display wrapper: `builtin_inputform` (`src/print.c`) returns `NULL`, leaving `InputForm[expr]` intact. The printer's `print_standard` detects the `InputForm` head and renders the argument in a re-parseable form (a printer flag toggles InputForm-specific formatting); `ToString[expr, InputForm]` routes through the same standard printer.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -27,5 +29,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

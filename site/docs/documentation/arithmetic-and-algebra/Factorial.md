@@ -31,6 +31,10 @@ Out[3]= 1
 
 ## Implementation notes
 
+**Algorithm.** `builtin_factorial` reduces only concrete numeric arguments. A non-negative integer `n` uses an `int64` loop for `n <= 20` and GMP's `mpz_fac_ui` beyond that; a negative integer gives `ComplexInfinity` (pole of `Gamma`). A machine `Real` evaluates `tgamma(x+1)`; an MPFR real evaluates `mpfr_gamma` of `x+1` at the input precision. Half-integer arguments (`d == ±2`) are folded to the closed form `coeff * Sqrt[Pi]` via the double-factorial relation, building `coeff` as an exact `Rational`. Other rationals and symbolic inputs return `NULL`. A `EXPR_BIGINT` argument is deliberately left symbolic — its factorial is astronomically large.
+
+**Data structures.** GMP `mpz_t` for the bignum branch; the half-integer branch assembles `Times[Rational[...], Power[Pi, 1/2]]` and reduces it through `eval_and_free`.
+
 - `Protected`, `Listable`, `NumericFunction`.
 - Evaluates exactly for positive integers up to $20!$.
 - Yields `ComplexInfinity` for negative integers.
@@ -47,7 +51,7 @@ Out[3]= 1
 
 - Knuth, "The Art of Computer Programming, Vol. 2: Seminumerical Algorithms", on factorial computation.
 - Geddes, Czapor & Labahn, "Algorithms for Computer Algebra" (1992), on the Gamma function and special values.
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/numbertheory.c`](https://github.com/stblake/mathilda/blob/main/src/numbertheory.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
 
 ## Notes & additional examples

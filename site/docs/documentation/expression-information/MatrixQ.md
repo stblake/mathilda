@@ -22,6 +22,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_matrixq` (`src/list.c`) returns `True` when the argument is a non-empty `List` of equal-length `List` rows whose entries are non-lists; with an optional `test` argument each entry must instead satisfy `test[entry]` (evaluated to `True`). Any ragged row, empty outer list, or failing entry yields `False`.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -30,5 +32,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

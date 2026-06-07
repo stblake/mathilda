@@ -1,0 +1,6 @@
+---
+source: src/linalg/matpow.c
+---
+**Algorithm.** `builtin_matrixpower` computes `MatrixPower[m, e]` (and `MatrixPower[m, e, v]`) for integer exponents by binary exponentiation (square-and-multiply). After validating that `m` is a non-empty square rank-2 tensor (`MatrixPower::matsq`) and that the exponent is an Integer or BigInt that fits in `int64_t`, it loops over the bits of `|e|`, accumulating the product and repeatedly squaring the running matrix; each matrix product goes through `dot2` (the `Dot` kernel, via the local `mat_dot` wrapper) followed by a full `evaluate` pass so entries simplify. `e == 0` returns `IdentityMatrix[n]`. Negative exponents first compute `Inverse[m]` (in `inv.c`) as the base; if `Inverse` returns unevaluated (singular), the call is abandoned. If a third vector argument is supplied, the final matrix is dotted with it.
+
+**Data structures / limits.** Operates directly on `Expr*` `List`-of-`List` matrices; no dense numeric buffer. Fractional exponents (`Rational` or `Real`) are explicitly unsupported — they emit `MatrixPower::fract` and return unevaluated rather than going through an eigendecomposition; symbolic and BigInt-too-large exponents also return unevaluated. Cost is O(log|e|) matrix multiplies.

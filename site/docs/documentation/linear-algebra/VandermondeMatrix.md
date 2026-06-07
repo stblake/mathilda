@@ -34,6 +34,10 @@ Out[5]= {3, 2, 1}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_vandermondematrix` constructs the matrix of successive powers of a node list: entry `(i,j) = x_i^(j−1)`. `VandermondeMatrix[{x1,...,xn}]` is `n × n`; `VandermondeMatrix[{x}, k]` is `n × k`. The builder `vm_build` emits each entry via `vm_entry`: the exponent-0 column is the literal Integer `1` (so `0^0` reads as 1, matching interpolation semantics), and every other entry is a `Power[x_i, j]` node which the evaluator later folds (numeric powers to their value, `Power[x,1]` to `x`), leaving symbolic nodes as clean `Power` expressions. Nodes are deep-copied and need not be numeric or distinct.
+
+**Limits.** Zero arguments emit `VandermondeMatrix::argt`. The single-matrix structured-array conversion form `VandermondeMatrix[vmat]` is unsupported (Mathilda has no structured-array representation), so a list-of-lists argument (`vm_is_matrix`) is left unevaluated.
+
 - `Protected`.
 - The nodes need not be numerical and need not be distinct. Symbolic nodes stay
 
@@ -45,5 +49,5 @@ Out[5]= {3, 2, 1}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/linalg/vandermondemat.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/vandermondemat.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

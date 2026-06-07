@@ -1,0 +1,4 @@
+---
+source: src/random.c
+---
+**Algorithm.** `builtin_randomchoice` (in `src/random.c`) selects elements *with replacement*. For the uniform form `RandomChoice[{e1,...,ek}]`, `random_index(k)` draws an index with `mpz_urandomm` over the shared Mersenne Twister state and the chosen element is deep-copied. For the weighted form `RandomChoice[{w1,...}->{e1,...}]`, the handler builds a cumulative-weight array and `weighted_random_index` performs inverse-CDF sampling: it draws `u = U(0,1) * total` and **binary-searches** for the first index whose cumulative weight exceeds `u` (O(log k) per draw). The `RandomChoice[spec, n]` and `RandomChoice[spec, {n1,...}]` forms recurse over the dimension spec via `random_choice_array` / `weighted_choice_array`, drawing one element per leaf. Selection is always with replacement; for sampling without replacement see `RandomSample`.

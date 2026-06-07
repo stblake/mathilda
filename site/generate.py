@@ -43,6 +43,7 @@ TESTS_DIR = ROOT / "tests"
 DOC_OUT = SITE / "docs" / "documentation"
 ASSETS = SITE / "docs" / "assets"
 OVERLAYS = SITE / "overlays"
+IMPL = SITE / "impl"
 MATHILDA = ROOT / "Mathilda"
 
 GITHUB_BLOB = "https://github.com/stblake/mathilda/blob/main"
@@ -309,19 +310,19 @@ def build_references(name, module, category_slug, spec_rel):
 
 
 # ===========================================================================
-# 7. Overlays
+# 7. Overlays + implementation notes
 # ===========================================================================
-def load_overlay(name):
-    """Parse site/overlays/<Name>.md: optional YAML-ish front matter
-    (status:, references: list) followed by Markdown body."""
-    f = OVERLAYS / f"{name}.md"
-    if not f.exists():
-        return None
-    text = f.read_text()
+def _parse_front_matter(text):
+    """Split a curated Markdown file into ({key: value-or-list}, body).
+
+    Accepts an optional leading ``---\\n … \\n---`` YAML-ish block where each
+    line is ``key: value`` and indented ``- item`` lines extend the previous
+    key into a list. Values may be single- or double-quoted."""
     meta, body = {}, text
     fm = re.match(r"^---\n(.*?)\n---\n?(.*)$", text, re.S)
     if fm:
         body = fm.group(2)
+
         def _unquote(s):
             s = s.strip()
             if len(s) >= 2 and s[0] == s[-1] and s[0] in "\"'":
@@ -338,7 +339,30 @@ def load_overlay(name):
                 cur_key = k.strip()
                 v = v.strip()
                 meta[cur_key] = _unquote(v) if v else []
-    return {"meta": meta, "body": body.strip()}
+    return meta, body.strip()
+
+
+def load_overlay(name):
+    """Parse site/overlays/<Name>.md: optional front matter (status:,
+    references: list) followed by a Markdown body shown under
+    "Notes & additional examples"."""
+    f = OVERLAYS / f"{name}.md"
+    if not f.exists():
+        return None
+    meta, body = _parse_front_matter(f.read_text())
+    return {"meta": meta, "body": body}
+
+
+def load_impl(name):
+    """Parse site/impl/<Name>.md: the source-grounded implementation summary
+    rendered into the "Implementation notes" section. Optional front matter:
+    ``references:`` (literature list, merged into References) and ``source:``
+    (the real implementation file, overriding the info.c docstring-hub link)."""
+    f = IMPL / f"{name}.md"
+    if not f.exists():
+        return None
+    meta, body = _parse_front_matter(f.read_text())
+    return {"meta": meta, "body": body}
 
 
 # ===========================================================================
@@ -373,8 +397,17 @@ def render_examples(blocks):
     return "\n\n".join(out)
 
 
-def render_impl_notes(name, attrs, section_body):
+def render_impl_notes(name, attrs, section_body, impl_body=None):
+    """Assemble the "Implementation notes" section.
+
+    When a hand-authored, source-grounded summary exists in ``site/impl/<Name>.md``
+    it leads the section. The ``**Features**`` bullets mined from the spec (which
+    describe user-facing capabilities, complementary to the algorithm prose) follow,
+    and the attribute list closes it. Without an impl file the behaviour is the
+    original Features + Attributes rendering."""
     notes = []
+    if impl_body:
+        notes.append(impl_body.strip())
     feat = re.search(r"\*\*Features\*\*:?\s*\n((?:[ \t]*-.*\n?)+)", section_body or "")
     if feat:
         notes.append(feat.group(1).rstrip())
@@ -478,8 +511,25 @@ def main():
 
         status = derive_status(name, builtins[name]["doc"], bool(blocks),
                                tests_text, lim_text)
-        refs = build_references(name, builtins[name]["module"], cat, spec_rel)
-        notes = render_impl_notes(name, attrs.get(name, []), body)
+
+        # Source-grounded implementation notes (site/impl/<Name>.md). An optional
+        # `source:` overrides the docstring-hub module for the Source: reference.
+        impl = load_impl(name)
+        impl_body = None
+        impl_refs = []
+        source_module = builtins[name]["module"]
+        if impl:
+            im = impl["meta"]
+            if isinstance(im.get("source"), str) and im["source"].strip():
+                source_module = im["source"].strip()
+            if isinstance(im.get("references"), list) and im["references"]:
+                impl_refs = im["references"]
+            impl_body = impl["body"] or None
+
+        refs = build_references(name, source_module, cat, spec_rel)
+        if impl_refs:
+            refs = impl_refs + refs
+        notes = render_impl_notes(name, attrs.get(name, []), body, impl_body)
 
         overlay = load_overlay(name)
         overlay_body = None
@@ -490,6 +540,14 @@ def main():
             if isinstance(m.get("references"), list) and m["references"]:
                 refs = m["references"] + refs
             overlay_body = overlay["body"] or None
+
+        # Dedupe references, preserving first-seen order (impl, then overlay, then base).
+        seen_refs, deduped = set(), []
+        for r in refs:
+            if r not in seen_refs:
+                seen_refs.add(r)
+                deduped.append(r)
+        refs = deduped
 
         pages[name] = {
             "name": name, "category": cat, "doc": builtins[name]["doc"],
@@ -592,6 +650,8 @@ def main():
     print(f"  Status breakdown:  {statuses}")
     overlays = list(OVERLAYS.glob("*.md")) if OVERLAYS.exists() else []
     print(f"  Overlays merged:   {len(overlays)}")
+    impls = list(IMPL.glob("*.md")) if IMPL.exists() else []
+    print(f"  Impl notes merged: {len(impls)}")
     uncategorized = len(by_cat.get(OTHER_SLUG, []))
     print(f"  Other & Advanced:  {uncategorized}")
 

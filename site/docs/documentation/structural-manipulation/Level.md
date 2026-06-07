@@ -42,6 +42,12 @@ Out[3]= {Plus, Power, x, 2, x^2, Power, y, 3, y^3}
 
 ## Implementation notes
 
+**Algorithm.** `builtin_level` collects the subexpressions of `e` that lie at the depths
+selected by the level spec (an integer `n` = levels `1..n`, `Infinity`, `{n}` = exactly level
+`n`, or `{min, max}`). It descends with the recursive `level_rec`, tracking the current depth
+and appending matching nodes into a growable `Expr**` buffer, then wraps them in a `List`. The
+option `Heads -> True` additionally includes function heads as level elements.
+
 - `Protected`.
 - Default option: `Heads -> False`.
 - Standard level specifications:
@@ -62,5 +68,5 @@ Out[3]= {Plus, Power, x, 2, x^2, Power, y, 3, y^3}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

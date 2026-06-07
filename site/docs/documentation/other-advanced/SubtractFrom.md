@@ -22,6 +22,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_subtractfrom` (`x -= dx`) delegates to the shared `increment_core(lhs, dx, negate=true, pre=true, "SubtractFrom")`. That helper requires `lhs` to be an lvalue with an existing OwnValue (else it emits `SubtractFrom::rvalue` and returns `NULL`), reads the old value via `evaluate`, builds and evaluates `Plus[old, Times[-1, dx]]`, writes the result back through an evaluated `Set[lhs, new]` (preserving lvalue shape such as `Part[...]` via Set's `HoldFirst`), and returns the new value. Has `ATTR_HOLDFIRST` so the target symbol is not evaluated before mutation.
+
 **Attributes:** `HoldFirst`, `Protected`.
 
 ## Implementation status
@@ -30,5 +32,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)

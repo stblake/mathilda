@@ -46,6 +46,8 @@ Out[6]= RandomChoice[x]
 
 ## Implementation notes
 
+**Algorithm.** `builtin_randomchoice` (in `src/random.c`) selects elements *with replacement*. For the uniform form `RandomChoice[{e1,...,ek}]`, `random_index(k)` draws an index with `mpz_urandomm` over the shared Mersenne Twister state and the chosen element is deep-copied. For the weighted form `RandomChoice[{w1,...}->{e1,...}]`, the handler builds a cumulative-weight array and `weighted_random_index` performs inverse-CDF sampling: it draws `u = U(0,1) * total` and **binary-searches** for the first index whose cumulative weight exceeds `u` (O(log k) per draw). The `RandomChoice[spec, n]` and `RandomChoice[spec, {n1,...}]` forms recurse over the dimension spec via `random_choice_array` / `weighted_choice_array`, drawing one element per leaf. Selection is always with replacement; for sampling without replacement see `RandomSample`.
+
 - `Protected`.
 - `RandomChoice[{e1, e2, ...}]` chooses with equal probability between all of the ei.
 - RandomChoice gives a different sequence of pseudorandom choices whenever you run Mathilda. You can start with a particular seed using SeedRandom.
@@ -60,5 +62,5 @@ Out[6]= RandomChoice[x]
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/random.c`](https://github.com/stblake/mathilda/blob/main/src/random.c)
 - Specification: [`docs/spec/builtins/random-number-generation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/random-number-generation.md)

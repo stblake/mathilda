@@ -25,6 +25,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_extract` (in `src/part.c`) reads `Extract[expr, pos]` (optionally with a held wrapper head as a third argument). If `pos` is a list-of-positions (a `List` whose elements are themselves `List`s), it extracts each position via the helper `extract_single` and returns the results in a `List`; otherwise it treats `pos` as a single position path. The 1-arg operator form returns a `Function[Extract[#, pos]]` closure.
+
 - Position specifications have the same form as those returned by `Position`.
 - `Extract[expr, {i, j, ...}]` is equivalent to `Part[expr, i, j, ...]`.
 - `pos` can be of the more general form `{part1, part2, ...}` where `parti` are `Part` specifications such as an integer `i`, `All` or `Span`.
@@ -38,5 +40,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

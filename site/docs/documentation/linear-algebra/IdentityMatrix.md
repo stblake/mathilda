@@ -24,6 +24,8 @@ Out[2]= {{1, 0, 0}, {0, 1, 0}}
 
 ## Implementation notes
 
+`builtin_identitymatrix` accepts either an integer `n` (square `n×n`) or a pair `{m, n}` of integers, and constructs a `List` of `List`s with `Integer` `1` on the main diagonal (`i == j`) and `0` elsewhere. Non-integer or malformed dimension specs are returned unevaluated (`expr_copy(res)`). The output is exact integer entries; no numeric or symbolic processing is involved.
+
 - `Protected`.
 - Generates exact integer outputs (`1` on main diagonal, `0` elsewhere).
 - Will remain unevaluated if arguments are symbolic or negative.
@@ -36,5 +38,5 @@ Out[2]= {{1, 0, 0}, {0, 1, 0}}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/linalg/construct.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/construct.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)

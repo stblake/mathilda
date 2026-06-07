@@ -34,6 +34,8 @@ Out[4]= False
 
 ## Implementation notes
 
+A Protected OwnValue registered in `system_constants_init` (`src/core.c`) as `expr_new_real(NUMERIC_MACHINE_PRECISION_DIGITS)` — the number of decimal digits in a machine `double` (~15.95).
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -42,5 +44,5 @@ Out[4]= False
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

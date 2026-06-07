@@ -43,6 +43,8 @@ Out[8]= {f[3], g[7]}
 
 ## Implementation notes
 
+`builtin_releasehold` (`src/core.c`) calls `release_hold_recursive`, which walks the tree and strips one layer off every `Hold`-family wrapper it finds (`Hold`/`HoldForm`/`HoldPattern`/`HoldComplete`, per `is_hold_head`), replacing a single-argument wrapper with its content and a multi-argument one with `Sequence[...]`. It does not recurse into the released contents.
+
 - `Protected`.
 - `ReleaseHold` removes only one layer of `Hold` etc.; it does not remove inner occurrences in nested `Hold` etc. functions.
 - `ReleaseHold` traverses into subexpressions of `expr` and strips any hold wrapper it finds, but does not recurse into the contents of the stripped wrapper.
@@ -57,5 +59,5 @@ Out[8]= {f[3], g[7]}
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)

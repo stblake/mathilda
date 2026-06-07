@@ -16,6 +16,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+**Algorithm.** `builtin_repeated_timing` takes `(expr)` or `(expr, t)` where `t` (default 1.0 s) is the target measurement budget. It repeatedly `evaluate`s the expression, recording each per-run CPU time via `clock()`/`CLOCKS_PER_SEC` into a growable array, looping until at least 4 runs have completed *and* the accumulated wall budget `t` is reached. The first run's result is kept; later results are freed. It then `qsort`s the timings and returns a **trimmed mean**: it discards the lowest and highest quartile (`count/4` from each end) and averages the middle, returning `{averageSeconds, firstResult}` as a `List` of `EXPR_REAL` and the evaluated expression. Measures CPU time per run.
+
 - `HoldFirst`, `Protected`, `SequenceHold`.
 - Returns `{average_timing, result}`.
 - Does repeated evaluation for at least `t` seconds. Default is 1 second.
@@ -30,5 +32,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/datetime.c`](https://github.com/stblake/mathilda/blob/main/src/datetime.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)

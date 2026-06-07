@@ -46,6 +46,8 @@ Out[5]= 5
 
 ## Implementation notes
 
+**Algorithm.** `Return` has no C builtin handler; it is a control-flow marker (just `ATTR_PROTECTED` in `attr.c`) recognized by `eval_classify_return` in `src/eval.c`. A `Return[...]` expression simply evaluates to itself and bubbles up through `CompoundExpression` and enclosing constructs unchanged until it reaches a boundary that inspects it. `eval_classify_return(e, boundary_head, &out)` uses pointer equality on the interned `SYM_Return` head and returns one of three actions: `CONSUME` with an out-value (the loop yields it), `PROPAGATE` (keep bubbling), or `NONE`. `Return[]` consumes with a fresh `Null`; `Return[expr]` consumes at the nearest boundary regardless of head, copying `expr`; `Return[expr, h]` consumes only at a boundary whose head symbol equals `h` (else PROPAGATE). The classifier is deliberately side-effect free — the single allocation on CONSUME is the copied payload, needed because the caller frees the original marker. The iteration loops (`Do`/`For`/`While`) call it via `iter_flow_classify`, and the body of user functions / `CompoundExpression` is the other principal boundary. Extra arguments beyond the second are ignored.
+
 - `Protected`. No Hold attributes — arguments are evaluated before the marker takes effect.
 - `Return` takes effect as soon as it is evaluated, even when it appears inside other functions (Plus, Times, etc. in argument positions still see the substituted value, but at the top level the marker propagates immediately through `CompoundExpression`).
 - 1-arg `Return[expr]` is consumed by the *innermost* boundary on the call stack. The 2-arg `Return[expr, h]` form lets the user skip past intervening boundaries to a specific enclosing construct.
@@ -59,5 +61,5 @@ Out[5]= 5
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/control-flow.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/control-flow.md)

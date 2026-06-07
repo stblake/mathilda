@@ -43,6 +43,8 @@ Out[8]= -Infinity
 
 ## Implementation notes
 
+`builtin_real_exponent` returns `RealExponent[x]` / `RealExponent[x, b]` — essentially `⌊Log_b|x|⌋`, the exponent of the leading digit. It rejects true (non-zero-imaginary) `Complex` inputs (`RealExponent::realx`/`::ibase`) and bad arg counts (`RealExponent::argt`). Symbolic constants (Pi, E, …) and either argument are numericalised to a recognised numeric kind at a working precision lifted to cover any MPFR input (`+32` guard bits, so the downstream `Log` keeps precision), then the floor of the base-b logarithm of `|x|` is taken.
+
 - `Protected`, `Listable`. Threads over lists in any argument position.
 - Accepts `Integer`, `BigInt`, `Rational`, machine `Real`, and (under
 
@@ -54,5 +56,5 @@ Out[8]= -Infinity
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/real.c`](https://github.com/stblake/mathilda/blob/main/src/real.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)

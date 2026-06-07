@@ -23,6 +23,12 @@ Out[2]= 1
 
 ## Implementation notes
 
+**Algorithm.** `builtin_module` (in `src/modular.c`) implements lexical scoping by **alpha-renaming** locals to unique temporaries. `Module` carries `HoldAll | Protected` (set in `src/attr.c`), so the variable list and body arrive unevaluated. The handler reads (and post-increments) the global `$ModuleNumber` counter and forms a per-invocation suffix; each local `x` (or `x = init`) becomes a fresh symbol `x$<n>` (e.g. `x$7`). Each temporary is tagged `ATTR_TEMPORARY`, and if it had an initializer (evaluated in the outer scope) that value is installed as an `OwnValue` on the renamed symbol.
+
+The rename is applied to the body by `substitute_scoping`, a recursive tree walk over a `ScopingEnv` linked list mapping old name → replacement symbol. Crucially this walk is shadow-aware: when it descends into a *nested* scoping construct (`Module`/`Block`/`With`/`Function`/`Table`) that rebinds one of the same names, that name is dropped from the environment passed downward, so inner bindings are not corrupted; and binding RHSs are substituted with the outer environment (so `With[{q=...}, With[{k=q},...]]` resolves correctly) while binding LHS names are left intact. The renamed body is then `evaluate`d. `Return[v]` (or `Return[v, Module]`) targeting this boundary is trapped via `eval_classify_return`. Finally the `ScopingEnv`, the `VarInfo` temporaries, and the evaluated initializers are freed (the renamed symbols' OwnValues persist in the symbol table, as in Mathematica).
+
+**Limit.** Body is taken as a single expression (arg_count must be 2).
+
 - `HoldAll`, `Protected`.
 - Variables are renamed to `name$nnn` using `$ModuleNumber`.
 - Created symbols have the `Temporary` attribute.
@@ -36,7 +42,7 @@ Out[2]= 1
 ## References
 
 - Harold Abelson and Gerald Jay Sussman, *Structure and Interpretation of Computer Programs*, 2nd ed., §3.1 (local state and lexical scoping).
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/modular.c`](https://github.com/stblake/mathilda/blob/main/src/modular.c)
 - Specification: [`docs/spec/builtins/scoping-constructs.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/scoping-constructs.md)
 
 ## Notes & additional examples

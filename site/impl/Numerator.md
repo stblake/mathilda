@@ -1,0 +1,4 @@
+---
+source: src/rat.c
+---
+`builtin_numerator` calls the shared `extract_num_den` splitter and returns the numerator (freeing the denominator); `Denominator` is the mirror. `extract_num_den` handles literal rationals (`n/d`), complex numbers (clearing the common denominator of the real/imaginary parts), `Power[b, e]`/`Exp[e]` (a negative integer or rational exponent — or a `Plus` exponent with superficially-negative terms — moves the factor into the denominator), and `Times[...]` (recurse on each factor, partition the results into numerator and denominator products). Anything else is its own numerator over denominator 1. It does *not* combine a `Plus` over a common denominator — that is `Together`'s job — so `Numerator[a/b + c/d]` returns the input's surface numerator, not the combined one. `Numerator` carries `ATTR_LISTABLE | ATTR_PROTECTED`.

@@ -33,6 +33,10 @@ Out[3]= 5 + (1 + a) Sqrt[x] + (1 - 2 b) x^(2/3) + (3 - c) x
 
 ## Implementation notes
 
+**Algorithm.** `builtin_collect` (in `src/poly/poly.c`) groups an expression by powers of one or more keys, delegating to the recursive worker `collect_internal`. For each key it expands the expression with respect to that key (`expr_expand_patt`), except when the key is itself a `Plus` — there expansion would distribute the subterm and is skipped so e.g. `Collect[a(c+s)+b(c+s), c+s]` stays grouped. Each summand is decomposed into base–power form; terms are bucketed by the exponent at which the key appears (single-base keys group by the rational/symbolic exponent ratio, multi-factor monomial keys by the integer multiplicity from `get_k`). The collected coefficients are summed and, if a third head argument `h` is given, wrapped with `h`. It threads over `List`, equations and inequalities (skipping operator slots in `Inequality`), and recurses across multiple keys.
+
+**Data structures.** Base–power lists (as in `Coefficient`) for term decomposition; results are rebuilt with `internal_times`/`Plus` and re-evaluated through `eval_and_free`.
+
 - `Protected`.
 - Automatically threads over lists, equations, inequalities, and logic functions.
 - Effectively writes `expr` as a polynomial in `x` or a fractional power of `x`.
@@ -46,5 +50,5 @@ Out[3]= 5 + (1 + a) Sqrt[x] + (1 - 2 b) x^(2/3) + (3 - c) x
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/poly/poly.c`](https://github.com/stblake/mathilda/blob/main/src/poly/poly.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)

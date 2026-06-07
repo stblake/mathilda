@@ -20,6 +20,8 @@ _No verified examples yet for this function._
 
 ## Implementation notes
 
+`builtin_vectorq` (`src/list.c`) returns `True` when the argument is a `List` (`is_listq`) none of whose elements is itself a `List`. With a second argument `test`, each element is instead required to satisfy `test[elem]` (evaluated, must yield `True`). Returns `False` as soon as a check fails.
+
 **Attributes:** `Protected`.
 
 ## Implementation status
@@ -28,5 +30,5 @@ _No verified examples yet for this function._
 
 ## References
 
-- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
