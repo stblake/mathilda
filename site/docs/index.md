@@ -20,8 +20,7 @@ Mathilda is a small ("pico") computer algebra system that recreates the **core
 architecture and evaluation semantics of the Wolfram Language** — a recursive
 expression model, attribute-driven evaluation, structural pattern matching with
 backtracking, and a rewrite-rule engine — together with an extensive library of
-**~388 built-in functions**. The name pays homage to David Stoutemyer's
-PICOMATH-80.
+**~388 built-in functions**.
 
 It spans roughly **159,000 lines of C99**, uses **GMP** for arbitrary-precision
 integers and **MPFR** for arbitrary-precision reals, and is licensed under
