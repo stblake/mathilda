@@ -4,4 +4,5 @@ nav:
   - 01-getting-started.md
   - 02-expressions-and-evaluation.md
   - 03-pattern-matching-and-rules.md
-  - 04-calculus-and-algebra.md
+  - 04-machine-and-arbitrary-precision-arithmetic.md
+  - 05-calculus-and-algebra.md

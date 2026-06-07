@@ -23,7 +23,12 @@ Work through them in order if you're new — each one builds on the last.
     Blanks and named patterns, conditions and tests, transformation rules
     (`->`, `:>`), replacement (`/.`, `//.`), and defining your own functions.
 
--   :material-sigma: __[4. Calculus & algebra](04-calculus-and-algebra.md)__
+-   :material-decimal: __[4. Machine & arbitrary precision](04-machine-and-arbitrary-precision-arithmetic.md)__
+
+    Exact integers and rationals, fast machine-precision reals, and
+    arbitrary-precision arithmetic. Meet `N`, `Precision`, and when to use each.
+
+-   :material-sigma: __[5. Calculus & algebra](05-calculus-and-algebra.md)__
 
     A practical symbolic-math session: simplify, solve and factor, then
     differentiate, integrate, take series and limits.
