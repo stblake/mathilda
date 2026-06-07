@@ -36,4 +36,6 @@
 .mathilda-cta {
   display: inline-block;
   margin: 0.4rem 0.3rem;
+  /* 2/3 of the default size; padding/icon use em, so they scale with this. */
+  font-size: 0.667em;
 }
