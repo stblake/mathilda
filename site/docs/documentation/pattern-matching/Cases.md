@@ -1,0 +1,70 @@
+# Cases
+
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+
+## Description
+
+```text
+Cases[{e1, e2, ...}, pattern] gives a list of the ei that match the pattern.
+Cases[{e1, ...}, pattern -> rhs] gives a list of the values of rhs corresponding to the ei that match the pattern.
+Cases[expr, pattern, levelspec] gives a list of all parts of expr on levels specified by levelspec that match the pattern.
+Cases[expr, pattern -> rhs, levelspec] gives the values of rhs that match the pattern.
+Cases[expr, pattern, levelspec, n] gives the first n parts in expr that match the pattern.
+Cases[pattern] represents an operator form of Cases that can be applied to an expression.
+```
+
+## Examples
+
+_No verified examples yet for this function._
+
+## Implementation notes
+
+- Uses standard level specifications.
+- Defaults to level `{1}`.
+- Option `Heads -> True` includes heads of expressions.
+- Operates in depth-first post-order traversal.
+
+**Attributes:** `Protected`.
+
+## Implementation status
+
+**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+
+## References
+
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Cases[{1, a, 2, b, 3}, _Integer]
+Out[1]= {1, 2, 3}
+```
+
+```mathematica
+In[1]:= Cases[{1, 2, 3, 4}, x_ /; x > 2]
+Out[1]= {3, 4}
+```
+
+```mathematica
+In[1]:= Cases[{f[1], g[2], f[3]}, f[x_] -> x]
+Out[1]= {1, 3}
+```
+
+```mathematica
+In[1]:= Cases[{{1, 2}, {3, 4}}, _Integer, 2]
+Out[1]= {1, 2, 3, 4}
+```
+
+### Notes
+
+`Cases[list, pattern]` returns the elements that match `pattern`. With a
+`pattern -> rhs` rule it instead returns the transformed values (`f[x_] -> x`
+extracts the argument of every `f`). Conditional patterns (`x_ /; x > 2`) filter
+on a predicate. A trailing level specification (here `2`) descends into nested
+lists and collects matches from those deeper levels — without it `Cases` only
+inspects level 1.

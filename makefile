@@ -102,4 +102,19 @@ clean:
 	if [ -f $(TEST_DIR)/Makefile ]; then $(MAKE) -C $(TEST_DIR) clean; fi
 	rm -f $(addprefix $(TEST_DIR)/, $(CMAKE_TEST_BINARIES))
 
-.PHONY: all clean
+# Regenerate the documentation website's per-builtin pages from the docstrings,
+# attributes, and spec examples. Requires the built ./Mathilda binary (examples
+# are verified against it). The generated Markdown is committed; CI only builds
+# the MkDocs site from it.
+docs: $(TARGET)
+	python3 site/generate.py
+
+# Build the static site locally (needs `pip install -r site/requirements.txt`).
+docs-build:
+	mkdocs build --strict -f site/mkdocs.yml
+
+# Serve the site with live reload at http://127.0.0.1:8000
+docs-serve:
+	mkdocs serve -f site/mkdocs.yml
+
+.PHONY: all clean docs docs-build docs-serve

@@ -1,0 +1,60 @@
+# Structural Manipulation
+
+56 built-in function(s) in this category.
+
+- [`Append`](Append.md) — Append[expr, elem] adds elem to the end of expr.  _(Stable)_
+- [`Coefficient`](Coefficient.md) — Coefficient[expr, form]  _(Stable)_
+- [`CoefficientList`](CoefficientList.md) — CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.  _(Stable)_
+- [`Collect`](Collect.md) — Collect[expr, x]  _(Stable)_
+- [`Commonest`](Commonest.md) — Commonest[list] gives a list of the elements that are the most common in list.  _(Stable)_
+- [`ConjugateTranspose`](ConjugateTranspose.md) — ConjugateTranspose[m]  _(Stable)_
+- [`Delete`](Delete.md) — Delete[expr, n] deletes the element at position n in expr.  _(Stable)_
+- [`DeleteDuplicates`](DeleteDuplicates.md) — DeleteDuplicates[list]  _(Stable)_
+- [`Dimensions`](Dimensions.md) — Dimensions[expr]  _(Stable)_
+- [`Discriminant`](Discriminant.md) — Discriminant[poly, var]  _(Stable)_
+- [`Eliminate`](Eliminate.md) — Eliminate[eqns, vars]  _(Stable)_
+- [`Expand`](Expand.md) — Expand[expr] expands out products and powers in expr.  _(Stable)_
+- [`ExpandDenominator`](ExpandDenominator.md) — ExpandDenominator[expr]  _(Stable)_
+- [`ExpandNumerator`](ExpandNumerator.md) — ExpandNumerator[expr]  _(Stable)_
+- [`Extract`](Extract.md) — Extract[expr, pos]  _(Stable)_
+- [`Factor`](Factor.md) — Factor[poly] factors a polynomial over the integers.  _(Stable)_
+- [`FactorSquareFree`](FactorSquareFree.md) — FactorSquareFree[poly]  _(Stable)_
+- [`FactorTerms`](FactorTerms.md) — FactorTerms[poly]  _(Stable)_
+- [`FactorTermsList`](FactorTermsList.md) — FactorTermsList[poly]  _(Stable)_
+- [`First`](First.md) — First[expr] gives the first element of expr.  _(Stable)_
+- [`Flatten`](Flatten.md) — Flatten[list]  _(Stable)_
+- [`GroebnerBasis`](GroebnerBasis.md) — GroebnerBasis[{p1, p2, ...}, {x1, x2, ...}]  _(Stable)_
+- [`Head`](Head.md) — Head[expr]  _(Stable)_
+- [`HornerForm`](HornerForm.md) — HornerForm[poly]  _(Stable)_
+- [`Insert`](Insert.md) — Insert[expr, elem, n] inserts elem at position n in expr.  _(Stable)_
+- [`Join`](Join.md) — Join[list1, list2, ...]  _(Stable)_
+- [`Last`](Last.md) — Last[expr] gives the last element of expr.  _(Stable)_
+- [`Length`](Length.md) — Length[expr]  _(Stable)_
+- [`Level`](Level.md) — Level[expr, levelspec]  _(Stable)_
+- [`Max`](Max.md) — Max[x1, x2, ...]  _(Stable)_
+- [`Min`](Min.md) — Min[x1, x2, ...]  _(Stable)_
+- [`Most`](Most.md) — Most[expr] gives all but the last element of expr.  _(Stable)_
+- [`OrderedQ`](OrderedQ.md) — OrderedQ[h[e1, e2, ...]] gives True if the elements are in canonical order, and False otherwise.  _(Stable)_
+- [`Part`](Part.md) — expr[[i]] or Part[expr, i]  _(Stable)_
+- [`Partition`](Partition.md) — Partition[list, n]  _(Stable)_
+- [`PolynomialExtendedGCD`](PolynomialExtendedGCD.md) — PolynomialExtendedGCD[poly1, poly2, x] gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.  _(Stable)_
+- [`PolynomialGCD`](PolynomialGCD.md) — PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.  _(Stable)_
+- [`PolynomialLCM`](PolynomialLCM.md) — PolynomialLCM[poly1, poly2, ...] gives the least common multiple of the polynomials.  _(Stable)_
+- [`PolynomialMod`](PolynomialMod.md) — PolynomialMod[poly, m]  _(Stable)_
+- [`PolynomialQ`](PolynomialQ.md) — PolynomialQ[expr, var]  _(Stable)_
+- [`PolynomialQuotient`](PolynomialQuotient.md) — PolynomialQuotient[p, q, x] gives the quotient of p and q, treated as polynomials in x, with any remainder dropped.  _(Stable)_
+- [`PolynomialRemainder`](PolynomialRemainder.md) — PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.  _(Stable)_
+- [`PowerExpand`](PowerExpand.md) — PowerExpand[expr]  _(Stable)_
+- [`Prepend`](Prepend.md) — Prepend[expr, elem] adds elem to the beginning of expr.  _(Stable)_
+- [`Rest`](Rest.md) — Rest[expr] gives all but the first element of expr.  _(Stable)_
+- [`Resultant`](Resultant.md) — Resultant[p, q, var]  _(Stable)_
+- [`Reverse`](Reverse.md) — Reverse[expr] reverses the order of elements in expr.  _(Stable)_
+- [`RotateLeft`](RotateLeft.md) — RotateLeft[expr, n] rotates the elements of expr n positions to the left.  _(Stable)_
+- [`RotateRight`](RotateRight.md) — RotateRight[expr, n] rotates the elements of expr n positions to the right.  _(Stable)_
+- [`Sort`](Sort.md) — Sort[list] sorts the elements of list into canonical order.  _(Stable)_
+- [`Span`](Span.md) — i;;j represents a span of elements i through j. i;;j;;k represents a span in steps of k.  _(Stable)_
+- [`Split`](Split.md) — Split[list]  _(Stable)_
+- [`Tally`](Tally.md) — Tally[list] counts the number of occurrences of each distinct element in list.  _(Stable)_
+- [`Transpose`](Transpose.md) — Transpose[list]  _(Stable)_
+- [`Union`](Union.md) — Union[list]  _(Stable)_
+- [`Variables`](Variables.md) — Variables[poly]  _(Stable)_

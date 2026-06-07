@@ -1,0 +1,42 @@
+# Linear Algebra
+
+38 built-in function(s) in this category.
+
+- [`Cross`](Cross.md) — Cross[a, b]  _(Stable)_
+- [`DesignMatrix`](DesignMatrix.md) — DesignMatrix[data, {f1, ..., fn}, vars] gives the design matrix with entries f_i evaluated at the data coordinates.  _(Stable)_
+- [`Det`](Det.md) — Det[m]  _(Stable)_
+- [`DiagonalMatrix`](DiagonalMatrix.md) — DiagonalMatrix[list] gives a matrix with the elements of list on the leading diagonal, and zero elsewhere.  _(Stable)_
+- [`DiagonalMatrixQ`](DiagonalMatrixQ.md) — DiagonalMatrixQ[m]  _(Stable)_
+- [`Dot`](Dot.md) — a . b . c or Dot[a, b, c]  _(Stable)_
+- [`Eigenvalues`](Eigenvalues.md) — Eigenvalues[m]  _(Stable)_
+- [`Eigenvectors`](Eigenvectors.md) — Eigenvectors[m]  _(Stable)_
+- [`FindIntegerNullVector`](FindIntegerNullVector.md) — FindIntegerNullVector[{x1, ..., xn}]  _(Stable)_
+- [`Fit`](Fit.md) — Fit[data, {f1, ..., fn}, vars] finds a least-squares fit a1 f1 + ... + an fn to data for functions of the variables vars (a symbol or list of symbols).  _(Stable)_
+- [`HankelMatrix`](HankelMatrix.md) — HankelMatrix[n] gives the n x n Hankel matrix with first row and column the integers 1..n.  _(Stable)_
+- [`HermitianMatrixQ`](HermitianMatrixQ.md) — HermitianMatrixQ[m]  _(Stable)_
+- [`HilbertMatrix`](HilbertMatrix.md) — HilbertMatrix[n] gives the n x n Hilbert matrix with entries 1/(i + j - 1).  _(Stable)_
+- [`IdentityMatrix`](IdentityMatrix.md) — IdentityMatrix[n] gives the n x n identity matrix.  _(Stable)_
+- [`Inner`](Inner.md) — Inner[f,list1,list2,g]  _(Stable)_
+- [`Inverse`](Inverse.md) — Inverse[m]  _(Stable)_
+- [`LUDecomposition`](LUDecomposition.md) — LUDecomposition[m]  _(Stable)_
+- [`LatticeReduce`](LatticeReduce.md) — LatticeReduce[m]  _(Stable)_
+- [`LeastSquares`](LeastSquares.md) — LeastSquares[m, b]  _(Stable)_
+- [`LinearSolve`](LinearSolve.md) — LinearSolve[m, b]  _(Stable)_
+- [`MatrixPower`](MatrixPower.md) — MatrixPower[m, n]  _(Stable)_
+- [`MatrixRank`](MatrixRank.md) — MatrixRank[m]  _(Stable)_
+- [`NegativeDefiniteMatrixQ`](NegativeDefiniteMatrixQ.md) — NegativeDefiniteMatrixQ[m]  _(Stable)_
+- [`Norm`](Norm.md) — Norm[expr]  _(Stable)_
+- [`Normalize`](Normalize.md) — Normalize[v]  _(Stable)_
+- [`NullSpace`](NullSpace.md) — NullSpace[m]  _(Stable)_
+- [`Outer`](Outer.md) — Outer[f,list1,list2,...]  _(Stable)_
+- [`PositiveDefiniteMatrixQ`](PositiveDefiniteMatrixQ.md) — PositiveDefiniteMatrixQ[m]  _(Stable)_
+- [`PseudoInverse`](PseudoInverse.md) — PseudoInverse[m]  _(Stable)_
+- [`QRDecomposition`](QRDecomposition.md) — QRDecomposition[m]  _(Stable)_
+- [`RowReduce`](RowReduce.md) — RowReduce[m]  _(Stable)_
+- [`SingularValueDecomposition`](SingularValueDecomposition.md) — SingularValueDecomposition[m]  _(Stable)_
+- [`SquareMatrixQ`](SquareMatrixQ.md) — SquareMatrixQ[m]  _(Stable)_
+- [`SymmetricMatrixQ`](SymmetricMatrixQ.md) — SymmetricMatrixQ[m]  _(Stable)_
+- [`ToeplitzMatrix`](ToeplitzMatrix.md) — ToeplitzMatrix[n] gives the n x n Toeplitz matrix with first row and column the integers 1..n.  _(Stable)_
+- [`Tr`](Tr.md) — Tr[m]  _(Stable)_
+- [`UpperTriangularMatrixQ`](UpperTriangularMatrixQ.md) — UpperTriangularMatrixQ[m]  _(Stable)_
+- [`VandermondeMatrix`](VandermondeMatrix.md) — VandermondeMatrix[{x1, ..., xn}] gives the n x n Vandermonde matrix with entry (i, j) equal to xi^(j-1).  _(Stable)_

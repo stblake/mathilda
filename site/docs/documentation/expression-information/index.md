@@ -1,0 +1,43 @@
+# Expression Information
+
+39 built-in function(s) in this category.
+
+- [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
+- [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
+- [`$MaxMachineNumber`]($MaxMachineNumber.md) — $MaxMachineNumber  _(Stable)_
+- [`$MaxNumber`]($MaxNumber.md) — $MaxNumber  _(Stable)_
+- [`$MinMachineNumber`]($MinMachineNumber.md) — $MinMachineNumber  _(Stable)_
+- [`$MinNumber`]($MinNumber.md) — $MinNumber  _(Stable)_
+- [`AtomQ`](AtomQ.md) — AtomQ[expr]  _(Stable)_
+- [`Attributes`](Attributes.md) — Attributes[s] gives the list of attributes for s.  _(Stable)_
+- [`ByteCount`](ByteCount.md) — ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.  _(Stable)_
+- [`ClearAttributes`](ClearAttributes.md) — ClearAttributes[s, attr] removes attr from the list of attributes of s.  _(Stable)_
+- [`ComposeList`](ComposeList.md) — ComposeList[{f1, f2, ...}, x]  _(Stable)_
+- [`Composition`](Composition.md) — Composition[f1, f2, f3, ...]  _(Stable)_
+- [`Evaluate`](Evaluate.md) — Evaluate[expr]  _(Stable)_
+- [`EvenQ`](EvenQ.md) — EvenQ[n] gives True if n is an even integer (Integer or BigInt), False otherwise.  _(Stable)_
+- [`FreeQ`](FreeQ.md) — FreeQ[expr, form]  _(Stable)_
+- [`FullForm`](FullForm.md) — FullForm[expr]  _(Stable)_
+- [`HoldAllComplete`](HoldAllComplete.md) — HoldAllComplete  _(Experimental)_
+- [`HoldComplete`](HoldComplete.md) — HoldComplete[expr]  _(Stable)_
+- [`HoldForm`](HoldForm.md) — HoldForm[expr] prints as the expression expr, with expr maintained in an unevaluated form.  _(Stable)_
+- [`HoldPattern`](HoldPattern.md) — HoldPattern[expr]  _(Stable)_
+- [`Identity`](Identity.md) — Identity[expr] gives expr unchanged (the identity function).  _(Stable)_
+- [`Information`](Information.md) — Information[symbol] or ?symbol returns information on symbol.  _(Stable)_
+- [`InputForm`](InputForm.md) — InputForm[expr]  _(Stable)_
+- [`IntegerQ`](IntegerQ.md) — IntegerQ[expr]  _(Stable)_
+- [`LeafCount`](LeafCount.md) — LeafCount[expr] gives the total number of indivisible subexpressions in expr.  _(Stable)_
+- [`ListQ`](ListQ.md) — ListQ[expr] gives True if expr is a list (head List), False otherwise.  _(Stable)_
+- [`MachineNumberQ`](MachineNumberQ.md) — MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.  _(Stable)_
+- [`MatrixQ`](MatrixQ.md) — MatrixQ[expr]  _(Stable)_
+- [`MemberQ`](MemberQ.md) — MemberQ[list, form] returns True if an element of list matches form, and False otherwise.  _(Stable)_
+- [`NumberQ`](NumberQ.md) — NumberQ[expr]  _(Stable)_
+- [`OddQ`](OddQ.md) — OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.  _(Stable)_
+- [`PossibleZeroQ`](PossibleZeroQ.md) — PossibleZeroQ[expr] gives True if symbolic and numerical methods suggest that expr has value zero, and False otherwise.  _(Stable)_
+- [`Print`](Print.md) — Print[expr1, expr2, ...]  _(Stable)_
+- [`ReleaseHold`](ReleaseHold.md) — ReleaseHold[expr]  _(Stable)_
+- [`Symbol`](Symbol.md) — Symbol["name"]  _(Stable)_
+- [`ToExpression`](ToExpression.md) — ToExpression[input]  _(Stable)_
+- [`ToString`](ToString.md) — ToString[expr]  _(Stable)_
+- [`Unevaluated`](Unevaluated.md) — Unevaluated[expr]  _(Stable)_
+- [`VectorQ`](VectorQ.md) — VectorQ[expr]  _(Stable)_

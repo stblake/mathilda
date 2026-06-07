@@ -1,0 +1,64 @@
+# Permutations
+
+!!! success "Status: Stable"
+    documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+
+## Description
+
+```text
+Permutations[list]
+    generates a list of all possible permutations of the elements in list.
+Permutations[list,n]
+    gives all permutations containing at most n elements.
+Permutations[list,{n}]
+    gives all permutations containing exactly n elements.
+```
+
+## Examples
+
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= Permutations[{a, b, c}]
+Out[1]= {{a, b, c}, {a, c, b}, {b, a, c}, {b, c, a}, {c, a, b}, {c, b, a}}
+
+In[2]:= Permutations[{a, b, c, d}, {3}]
+Out[2]= {{a, b, c}, {a, b, d}, {a, c, b}, {a, c, d}, {a, d, b}, {a, d, c}, {b, a, c}, {b, a, d}, {b, c, a}, {b, c, d}, {b, d, a}, {b, d, c}, {c, a, b}, {c, a, d}, {c, b, a}, {c, b, d}, {c, d, a}, {c, d, b}, {d, a, b}, {d, a, c}, {d, b, a}, {d, b, c}, {d, c, a}, {d, c, b}}
+
+In[3]:= Permutations[{a, a, b}]
+Out[3]= {{a, a, b}, {a, b, a}, {b, a, a}}
+
+In[4]:= Permutations[{x, x^2, x + 1}]
+Out[4]= {{x, x^2, 1 + x}, {x, 1 + x, x^2}, {x^2, x, 1 + x}, {x^2, 1 + x, x}, {1 + x, x, x^2}, {1 + x, x^2, x}}
+
+In[5]:= Permutations[Range[3], All]
+Out[5]= {{}, {1}, {2}, {3}, {1, 2}, {1, 3}, {2, 1}, {2, 3}, {3, 1}, {3, 2}, {1, 2, 3}, {1, 3, 2}, {2, 1, 3}, {2, 3, 1}, {3, 1, 2}, {3, 2, 1}}
+
+In[6]:= Permutations[Range[4], {4, 0, -2}]
+Out[6]= {{1, 2, 3, 4}, {1, 2, 4, 3}, {1, 3, 2, 4}, {1, 3, 4, 2}, {1, 4, 2, 3}, {1, 4, 3, 2}, {2, 1, 3, 4}, {2, 1, 4, 3}, {2, 3, 1, 4}, {2, 3, 4, 1}, {2, 4, 1, 3}, {2, 4, 3, 1}, {3, 1, 2, 4}, {3, 1, 4, 2}, {3, 2, 1, 4}, {3, 2, 4, 1}, {3, 4, 1, 2}, {3, 4, 2, 1}, {4, 1, 2, 3}, {4, 1, 3, 2}, {4, 2, 1, 3}, {4, 2, 3, 1}, {4, 3, 1, 2}, {4, 3, 2, 1}, {1, 2}, {1, 3}, {1, 4}, {2, 1}, {2, 3}, {2, 4}, {3, 1}, {3, 2}, {3, 4}, {4, 1}, {4, 2}, {4, 3}, {}}
+
+In[7]:= Permutations[f[a, b, c]]
+Out[7]= {f[a, b, c], f[a, c, b], f[b, a, c], f[b, c, a], f[c, a, b], f[c, b, a]}
+```
+
+## Implementation notes
+
+- `Protected`.
+- There are $n!$ permutations of a list of $n$ distinct elements.
+- Repeated elements are treated as identical.
+- The object `list` need not have head `List`.
+- `Permutations[list]` is effectively equivalent to `Permutations[list, {Length[list]}]`.
+- `Permutations[list, {n_min, n_max}]` gives permutations of `list` between `n_min` and `n_max` elements.
+- `Permutations[list, {n_min, n_max, dn}]` uses step `dn`.
+- `Permutations[list, All]` is equivalent to `Permutations[list, {0, Length[list]}]`.
+
+**Attributes:** `Protected`.
+
+## Implementation status
+
+**Stable** — documented, exercised by the test suite and/or worked examples, with no known limitations recorded.
+
+## References
+
+- Source: [`src/info.c`](https://github.com/stblake/mathilda/blob/main/src/info.c)
+- Specification: [`docs/spec/builtins/lists-and-iteration.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/lists-and-iteration.md)

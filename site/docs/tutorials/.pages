@@ -1,0 +1,7 @@
+title: Tutorials
+nav:
+  - index.md
+  - 01-getting-started.md
+  - 02-expressions-and-evaluation.md
+  - 03-pattern-matching-and-rules.md
+  - 04-calculus-and-algebra.md

@@ -1,0 +1,54 @@
+name: Deploy documentation site
+
+# Builds the MkDocs Material site in `site/` and deploys it to GitHub Pages.
+# The per-builtin Markdown is generated locally by `site/generate.py` (which
+# needs the compiled Mathilda binary) and committed, so CI only needs MkDocs —
+# no C toolchain, GMP, MPFR or ECM required here.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+          cache: pip
+          cache-dependency-path: site/requirements.txt
+      - name: Install dependencies
+        run: pip install -r site/requirements.txt
+      - name: Build site
+        run: mkdocs build --strict -f site/mkdocs.yml
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

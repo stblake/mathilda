@@ -1,0 +1,39 @@
+/* Mathilda documentation site — small visual tweaks over MkDocs Material. */
+
+:root {
+  --md-code-font: "Roboto Mono", SFMono-Regular, Consolas, monospace;
+}
+
+/* Render In[]/Out[] example blocks with a subtle left rule so they read as a
+   REPL transcript. */
+.md-typeset pre > code {
+  line-height: 1.5;
+}
+
+/* Status badges in category index lists: lightly emphasise the trailing tag. */
+.md-typeset em {
+  color: var(--md-default-fg-color--light);
+}
+
+/* Tighten the dense function-grid on the documentation landing page. */
+.md-typeset h3 + p code {
+  font-size: 0.85em;
+}
+
+/* Hero block on the home page. */
+.mathilda-hero {
+  text-align: center;
+  padding: 2.2rem 0 1rem;
+}
+.mathilda-hero h1 {
+  font-size: 2.6rem;
+  margin-bottom: 0.2rem;
+}
+.mathilda-hero p {
+  font-size: 1.1rem;
+  color: var(--md-default-fg-color--light);
+}
+.mathilda-cta {
+  display: inline-block;
+  margin: 0.4rem 0.3rem;
+}
