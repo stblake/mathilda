@@ -146,3 +146,5 @@ In[1]:= ?Integrate
     [project README](https://github.com/stblake/mathilda) and
     [`SPEC.md`](https://github.com/stblake/mathilda/blob/main/SPEC.md) for the
     architecture in depth.
+
+<!-- Published via GitHub Actions to https://stblake.github.io/mathilda/ -->
