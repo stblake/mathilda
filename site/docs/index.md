@@ -8,7 +8,7 @@ hide:
 
 # Mathilda
 
-**A tiny, faithful symbolic computer algebra system — written from scratch in C99.**
+**A small Mathematica-like computer algebra system — written from scratch in C99.**
 
 [Explore the documentation :material-book-open-variant:](documentation/index.md){ .mathilda-cta .md-button .md-button--primary }
 [Start the tutorials :material-school:](tutorials/index.md){ .mathilda-cta .md-button }
