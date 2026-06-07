@@ -182,6 +182,22 @@ static void test_inexact_contagion(void) {
 
 #ifdef USE_MPFR
 
+static void test_n_bigint_machine_overflow(void) {
+    /* Machine-mode N of an exact integer whose magnitude exceeds DBL_MAX
+     * (~1.8e308) used to overflow the double conversion and print "inf.0".
+     * It must instead fall back to a machine-precision MPFR real with an
+     * arbitrary exponent. (Pinned against Mathematica's N[1001!].) */
+    assert_eval_startswith("N[1001!]", "4.027896473371");
+    assert_eval_startswith("N[1000!]", "4.023872600770");
+    assert_eval_startswith("N[2^2000]", "1.148130695274");
+    /* In-range integers must still produce ordinary machine doubles. */
+    assert_eval_eq("N[12345]", "12345.0", 0);
+    /* The arg here is already an out-of-range MPFR (Plus promotes 1.5 + 1001!
+     * past DBL_MAX); N's MPFR->machine down-conversion must not re-overflow. */
+    assert_eval_startswith("N[1.5 + 1001!]", "4.027896473371");
+    assert_eval_startswith("N[1.5 * 1001!]", "6.041844710057");
+}
+
 static void test_n_prec_constants(void) {
     /* Mathematica-pinned values for Pi, E, Sqrt[2] at 40 digits. We use
      * prefix-match to tolerate last-bit rounding. */
@@ -354,6 +370,7 @@ int main(void) {
     TEST(test_inexact_contagion);
 
 #ifdef USE_MPFR
+    TEST(test_n_bigint_machine_overflow);
     TEST(test_n_prec_constants);
     TEST(test_n_prec_transcendentals);
     TEST(test_n_prec_rational_and_mixed);

@@ -443,8 +443,22 @@ static Expr* leaf_from_bigint(const mpz_t v, NumericSpec spec) {
     if (spec.mode == NUMERIC_MODE_MPFR) {
         return expr_new_mpfr_from_mpz(v, spec.bits);
     }
-#endif
+    /* Machine mode: a plain (double) conversion overflows to +/-inf once the
+     * magnitude exceeds DBL_MAX (~1.8e308), e.g. N[1001!]. Mathematica's
+     * machine-precision numbers carry an arbitrary exponent, so fall back to a
+     * machine-precision (DBL_MANT_DIG-bit) MPFR real, which is finite for any
+     * magnitude. We keep the IEEE double for in-range values so ordinary
+     * machine arithmetic is unaffected. */
+    {
+        double d = mpz_get_d(v);
+        if (isinf(d)) {
+            return expr_new_mpfr_from_mpz(v, DBL_MANT_DIG);
+        }
+        return leaf_from_double(d, spec);
+    }
+#else
     return leaf_from_double(mpz_get_d(v), spec);
+#endif
 }
 
 /* ------------------------------------------------------------------------
@@ -608,8 +622,18 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
 #ifdef USE_MPFR
         case EXPR_MPFR:
             if (spec.mode == NUMERIC_MODE_MACHINE) {
-                /* Down-convert to machine precision. */
-                return expr_new_real(mpfr_get_d(e->data.mpfr, MPFR_RNDN));
+                /* Down-convert to machine precision. A finite MPFR value can
+                 * still exceed DBL_MAX (~1.8e308) — e.g. N[1.5 + 1001!], whose
+                 * argument is already an MPFR ~4e2570. Plain mpfr_get_d would
+                 * overflow to +/-inf, so keep such values as a machine-precision
+                 * (DBL_MANT_DIG-bit) MPFR, which has an arbitrary exponent. */
+                double d = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+                if (isinf(d) && mpfr_number_p(e->data.mpfr)) {
+                    Expr* r = expr_new_mpfr_bits(DBL_MANT_DIG);
+                    if (r) mpfr_set(r->data.mpfr, e->data.mpfr, MPFR_RNDN);
+                    return r;
+                }
+                return expr_new_real(d);
             }
             /* MPFR → MPFR: if precision differs, re-round; otherwise copy. */
             if ((long)mpfr_get_prec(e->data.mpfr) == spec.bits) {
