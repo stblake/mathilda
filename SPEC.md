@@ -46,6 +46,7 @@ src/
   repl.c            REPL entry point + main()
   core.{c,h}        Core builtins and module initialization hub
   plus.c / times.c / power.c / arithmetic.c   Arithmetic heads
+  numbertheory.c    GCD/LCM/Factorial/Binomial/PowerMod/PrimitiveRoot/...
   list.c / part.c / sort.c                    List + structural ops
   trig.c / hyperbolic.c / logexp.c / complex.c
   comparisons.c / boolean.c / cond.c / iter.c

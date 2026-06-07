@@ -1,379 +1,56 @@
----
-title: BronsteinRational closed-form gaps
-date_started: 2026-05-11
-status: in progress
----
+# Task: Split number-theory builtins out of arithmetic.c into numbertheory.c
 
-<!-- 2026-06-01: Ratios builtin (src/list.c) implemented as the multiplicative
-     analog of Differences. builtin_ratios + ratio_{divide,once,n,levels}
-     helpers; registered + Protected; SYM_Ratios in sym_names; docstring in
-     info.c; docs/spec builtins + changelog + Mathilda_spec row. 28 tests in
-     tests/test_ratios.c all pass; leaks-clean; strict C99 clean. DONE. -->
+## Rationale
+`arithmetic.c` (2318 lines) is a grab-bag of two concerns: (1) core
+rational/complex constructors + widely-shared numeric helpers, and (2)
+number-theoretic builtins. Split #2 into a sibling top-level file
+`numbertheory.c`, matching the flat convention of `modular.c`/`facint.c`.
+Introduce `numbertheory_init()` so registration moves out of `core.c`,
+matching every other subsystem.
 
+## Scope (moves to numbertheory.c)
+Builtins: GCD, LCM, ExtendedGCD, PowerMod, Factorial, Factorial2,
+FactorialPower, Binomial, PrimitiveRoot, PrimitiveRootList,
+MultiplicativeOrder + their private static helpers.
 
-# BronsteinRational closed-form gaps (2026-05-11)
+## Stays in arithmetic.c
+int64 `gcd()`/`lcm()` (used repo-wide), `g_arith_warnings_muted`,
+make_rational/builtin_rational, make_complex/builtin_subtract/
+builtin_complex/builtin_divide, and all shared helpers in arithmetic.h.
 
-Five failing `Integrate`BronsteinRational[...]` cases.  All five
-reproduce in Mathilda REPL; all five integrate cleanly via the
-Mathematica .m source (verified with wolframscript), so the gaps are
-in the C port at `src/intrat.c`, not in the underlying algorithm.
+## Steps
+- [ ] 1. Create `src/numbertheory.h` (guard, `numbertheory_init()`, 11 builtin protos)
+- [ ] 2. Create `src/numbertheory.c` (preamble incl. + region A 34-410 + region B 931-EOF + `numbertheory_init()`)
+- [ ] 3. Trim `src/arithmetic.c` to lines 1-33 + 411-930
+- [ ] 4. Remove 11 NT builtin protos from `src/arithmetic.h` (keep builtin_add)
+- [ ] 5. `src/core.c`: include numbertheory.h, replace registration block (401-411) with `numbertheory_init();`, remove attr/docstring block (439-450)
+- [ ] 6. Build clean (`make -j`), smoke test REPL (GCD/Factorial/Binomial/PowerMod)
+- [ ] 7. Run relevant tests; valgrind smoke
+- [ ] 8. Docs: changelog note + SPEC.md layout line; update graph
 
-## Root-cause map
-
-| # | Input | Root cause |
-|---|-------|------------|
-| 1 | `1/(b - a x^3)` | Cubic Q-in-t.  `logtoreal_dispatch` has no deg-3 branch; falls to RootSum. |
-| 2 | `1/(x^5+1)` | Palindromic-quartic Q-in-t `5(t^4-t^3+t^2-t+1)`.  `logtoreal_dispatch` deg-4 only handles biquadratic & Sophie-Germain.  Falls to RootSum. |
-| 3 | `x^4/(a+b x^3)^2` | Same as #1 — cubic Q after Hermite reduction. |
-| 4 | `(-1+x^2)/(1-2x^2+2x^4)` | Biquadratic Q-in-t `2t^4-2t^2+1` with negative inner discriminant.  Current deg-4 c1z&&c3z branch bails on neg disc; falls to `expand_simple_rootsum`, which produces complex form. |
-| 5 | `1/x/(1-2x^2+2x^4)` | Post-processing: `c * piece_int` stays held as `Times[c, Plus[…]]`; also `Log[c p]` not stripped when `FreeQ[c, x]`. |
-
-## Phases (independently testable)
-
-### A — Output post-processing (#5)
-- Distribute scalar Times-over-Plus in the final accumulator.
-- Strip `Log[c · p] -> Log[p]` when `FreeQ[c, x]`.
-
-### B — Negative-inner-disc biquadratic (#4)
-- Extend `logtoreal_dispatch` deg-4 c1z&&c3z branch: when inner disc
-  `c2^2 − 4 c0 c4 < 0` (provably under positive-symbol assumption)
-  and `c0 c4 > 0`, factor over R as
-    `c4 (t^2 + α t + Sqrt[c0/c4])(t^2 − α t + Sqrt[c0/c4])`
-  with `α = Sqrt[2 Sqrt[c0/c4] − c2/c4]`.
-- Dispatch each factor through `logtoreal_quadratic`.
-
-### C — Cubic (#1, #3)
-- Add deg-3 branch to `logtoreal_dispatch`.
-- C.1: nth-root cubic (c1 = c2 = 0).  Real root
-  `r0 = −(c0/c3)^(1/3)`; factor `c3 (t − r0)(t^2 + r0 t + r0^2)`;
-  dispatch the linear and quadratic factors.
-
-### D — Palindromic quartic (#2)
-- Detect `c0 t^4 + c1 t^3 + c2 t^2 + c1 t + c0`.
-- `u = t + 1/t` ⇒ `c0 u^2 + c1 u + (c2 − 2 c0) = 0`.  Factor as
-  `c0 (t^2 − u_+ t + 1)(t^2 − u_− t + 1)` and dispatch through
-  `logtoreal_quadratic`.
-
-### E — Tests
-- Add Mathilda tests for all 5 cases (no `RootSum`/`Function` head in
-  output; `D[result, x] − integrand` simplifies to 0).
-- Extend `IntegrateRationalTests.m` for Mathematica parity.
+## Notes
+- internal.c uses local `extern` decls (lines 149-153) — unaffected.
+- Regions A and B are independent; no static crosses the staying block.
 
 ## Review
+Done. Outcome:
+- New `src/numbertheory.{c,h}` (~2070 LoC) owns the 11 number-theory builtins
+  + private helpers (modular-root, egcd, binomial-poly, primitive-root).
+- `arithmetic.c`: 2318 → 305 LoC. Retains rational/complex constructors,
+  int64 gcd/lcm, and shared numeric predicates (is_infinity_sym,
+  expr_numeric_sign, is_neg_infinity_form, ...).
+- `numbertheory_init()` added, called from `core_init()` after `facint_init()`;
+  registration + attrs + FactorialPower docstring removed from `core.c`.
+- 11 builtin protos moved arithmetic.h → numbertheory.h; `internal.c`'s local
+  `extern` decls unaffected.
+- `numbertheory.c` added to tests `COMMON_SRC`.
+- Verified: clean `-Wall -Wextra` build; REPL smoke (all 12 forms incl.
+  rational-exponent PowerMod, single-arg GCD, attrs Flat/Orderless); suites
+  extended_gcd / primitive_root / modular / factorial_simplify / core PASS.
 
-All 5 phases shipped.
-
-### Phase A — Output post-processing (#5) ✓
-Added `intrat_distribute_plus(e)` (uses `expr_expand`) and
-`intrat_strip_log_constants(e, x)`.  Both run before AND after
-`intrat_log_to_arctanh` in `intrat_integrate_rational`.
-
-### Phase B — Negative-inner-disc biquadratic (#4) ✓
-Extended `logtoreal_dispatch` deg-4 `c1z && c3z` branch with a
-Sophie-Germain-with-c2 sub-branch that factors as
-`c4 (t^2 + α t + β)(t^2 − α t + β)` with `β = Sqrt[c0/c4]`,
-`α = Sqrt[2 β − c2/c4]`.
-
-### Phase C — Cubic (#1, #3) ✓
-New deg-3 branch in `logtoreal_dispatch` for nth-root cubics
-`c3 t^3 + c0`.  Real-root selection under positive-symbol or
-numeric-sign assumption; dispatch linear + quadratic factors.
-
-### Phase D — Palindromic quartic in logtoreal_dispatch ✓ (restricted)
-Detect scaled-palindromic `c4 c1^2 == c3^2 c0`, but only fire when
-r = 1 (pure palindromic).  Scaled cases would need a smarter
-`LogToAtan` (current C port hangs on nested-radical S).
-
-### Phase D2 — Palindromic quartic in NaiveLogPart (#2) ✓
-New `expand_palindromic_quartic_real(a_t, d_t, dd_t, t, x)` builds
-the real form directly from `(a(α) / d'(α)) · Log[x − α] + …` per
-conjugate root pair.  Bypasses LogToReal / LogToAtan entirely; the
-nested-radical S that overwhelms LogToAtan on the LRT path never
-gets constructed here.
-
-### Phase E — Tests ✓
-`tests/test_intrat.c` adds five new regression tests (one per
-issue) using `assert_closed_real` (no `RootSum` / `Function`
-leak) + `assert_integral_numeric_ok` for nested-radical cases.
-All five pass.  `IntegrateRationalTests.m` gains five new
-{integrand, var, optimal-antiderivative} entries.
-
-### New helpers added
-- `intrat_distribute_plus(e)` — Plus-over-Times distribution.
-- `intrat_strip_log_constants(e, x)` — strip x-free constants out of Log args.
-- `intrat_numeric_sign(e)` — N[]-based sign decision, fallback for
-  symbolic positive-symbol bails on `Sqrt[5] − 5` style inputs.
-- `expand_palindromic_quartic_real(a_t, d_t, dd_t, t, x)` —
-  real-form expander for palindromic-quartic d in NaiveLogPart.
-
-### Verification
-- Build clean under `-std=c99 -Wall -Wextra -O3`.
-- All five regressions return `Plus`-headed real-elementary form.
-- Differentiation check passes (symbolic for #5, numeric for #1–#4
-  whose nested radicals don't reduce by Cancel/Together).
-- Full `tests/` suite: only pre-existing `logexp` + `poly` ordering
-  failures (introduced by 2026-05-11's canonical comparator change),
-  no new regressions from the closed-form work.
-
-### Known follow-ups
-- Cardano's formula for non-depressed cubics in `logtoreal_dispatch`.
-- Scaled-palindromic dispatch (r != 1) — requires a cheaper LogToAtan
-  for nested-radical coefficients, or a different routing strategy.
-- The closed-form outputs aren't always Mathematica-minimal; the
-  underlying form is correct but Sqrt simplifications like
-  `Sqrt[1/16 (1 + Sqrt[2])] -> Sqrt[1+Sqrt[2]]/4` are left to a
-  smarter `intrat_simp_pos_sqrt` (or full `Simplify`).
-
-## 2026-05-11 rev 2 — generalised nth-root coverage
-
-User flagged that the cubic-specific fix above was too narrow.
-Adjacent inputs all leaked `RootSum`:
-
-  - `1/(b - a x^4)`, `1/(b - a x^5)`,
-    `1/(b - a x^6)`, `1/(b + a x^6)`,
-    `1/(b + a x^8)`, `1/(b + a x^9)`.
-
-### Generalisation
-Replaced the per-degree branches in `logtoreal_dispatch` with one
-helper `logtoreal_nthroot_sparse(base, deg, s, x, t)` that closes
-`c_n t^n + c_0` (all intermediate coefficients zero) for every
-n ≥ 3 via the standard cyclotomic factorisation over R.  Subsumes
-the previous deg-3 nth-root and deg-4 Sophie-Germain branches.
-
-Algorithm: given `q = -c_0/c_n` and `r = |q|^(1/n)`,
-- q > 0: real roots ±r (r always; -r iff n even), conjugate pairs
-  for k = 1..⌊(n-1)/2⌋ at angles 2πk/n.
-- q < 0: real root -r iff n odd, conjugate pairs at angles
-  (2k+1)π/n.
-Each conjugate pair contributes a real quadratic
-`t^2 - 2 r cos(θ) t + r^2` with discriminant -4 r^2 sin²θ < 0, so
-`logtoreal_quadratic`'s ArcTan branch always fires.
-
-### Tests
-Six new regressions in `tests/test_intrat.c`:
-`test_closed_nth_root_quartic_minus`, `_quintic_minus`,
-`_sextic_minus`, `_sextic_plus`, `_octic_plus`, `_nonic_plus`.
-Each asserts no RootSum/Function head + numerical derivative
-match at two sample points.  All pass.
-
-### Regression status
-Full test suite (105 binaries): 90 pass / 15 fail both before and
-after this change.  Identical failure set (pre-existing canonical
-ordering issues from commit cc8b164).  Zero new regressions.
-
----
-
-# Multi-extension nested-radical denesting (2026-05-14)
-
-Status: PLAN — awaiting user sign-off.
-
-## Motivation
-
-`Simplify[Sqrt[16 - 2 Sqrt[29] + 2 Sqrt[55 - 10 Sqrt[29]]] - Sqrt[5]
-- Sqrt[11 - 2 Sqrt[29]]]` should reduce to 0. It currently returns
-unchanged. The denester collapses `Sqrt[152 - 24 Sqrt[29]]` correctly,
-so the algorithm works one level down — what's missing is recursion
-across nested extensions (Landau / Borodin style).
-
-## What's deferred today
-
-`src/simp.c:2256` (`split_plus_into_a_plus_b_sqrt_c`) refuses any
-radicand with two or more sqrt-bearing terms — the comment at line
-2250 names it explicitly as the "phase 2 multi-extension" case.
-
-`src/simp.c:2129` (`sqrt_if_clean_square`) only recognises integer /
-rational / `Power[u, 2k]` / `FactorSquareFree` even-power patterns —
-it cannot see that `152 - 24 Sqrt[29] = (2 Sqrt[29] - 6)^2`.
-
-The two limits compound: even if we partition multi-sqrt radicands,
-the discriminant `D = A^2 - b^2 C` ends up in `Q(Sqrt[k])` rather
-than `Q`, and `sqrt_if_clean_square` can't take its root.
-
-## Algorithm
-
-Let radicand `r = A + b·Sqrt[C]` with `A`, `b` in `Q(Sqrt[k])` (one
-sqrt-bearing term picked as "outer", the rest absorbed into `A`).
-Half-sum identity still gives
-
-```
-P, Q = (A ± Sqrt[A² - b² C]) / 2
-Sqrt[r] = Sqrt[P] + sgn(b)·Sqrt[Q]
-```
-
-For the failing case (outer = `2 Sqrt[55 - 10 Sqrt[29]]`):
-
-  A = 16 - 2 Sqrt[29],   b = 2,   C = 55 - 10 Sqrt[29]
-  A² - b² C = 152 - 24 Sqrt[29]
-  Sqrt[A² - b² C] = 2 Sqrt[29] - 6           ← needs recursion
-  P = 5,   Q = 11 - 2 Sqrt[29]                ← clean
-  Sqrt[r] = Sqrt[5] + Sqrt[11 - 2 Sqrt[29]]   ✓
-
-The picking matters: the alternative (outer = `Sqrt[29]`) leaves an
-A containing the deep sqrt, and the discriminant doesn't denest
-cleanly. **Heuristic:** prefer the sqrt-bearing term whose own
-radicand contains a nested radical (deepest-outer-first). Fall
-back to trying each candidate in turn.
-
-## Design (modular)
-
-Three small, focused changes; existing single-extension path stays
-byte-for-byte unchanged on inputs it already handles.
-
-### 1. Generalise `split_plus_into_a_plus_b_sqrt_c`
-
-Rename existing call sites unchanged. Add a sibling:
-
-```c
-/* Pick the "best" outer sqrt when there are multiple sqrt-bearing
- * terms. Ranks candidates by sqrt-nesting depth of their radicand
- * (deeper first); ties broken by leaf count (smaller first).
- * Returns a small ordered list the caller iterates. */
-static bool split_plus_pick_outer_sqrt(const Expr* plus_node,
-                                       const AssumeCtx* ctx,
-                                       size_t candidate_idx,
-                                       Expr** out_A, Expr** out_b,
-                                       Expr** out_C);
-```
-
-The caller (`denest_compute_pq_s`) iterates candidate_idx until one
-succeeds or all are exhausted.  Single-sqrt radicands hit
-`candidate_idx == 0` once and behave identically to today.
-
-### 2. Recurse in `sqrt_if_clean_square`
-
-Add one case at the end of the function: when `D` is a Plus that
-matches the "phase-2-shape" (`α + β·Sqrt[γ]` with `α, β` in `Q`),
-recursively call a depth-bounded `simp_denest_sqrt_recursive` on
-`Sqrt[D]`. If the result is a clean `Q(Sqrt[γ])` expression (no
-surviving `Sqrt[…]` head), return it. Otherwise NULL.
-
-Termination: a `depth_budget` integer carried in the `AssumeCtx`
-(or a thread-local — `AssumeCtx` is the cleaner home). Initial
-budget = 4 (handles four nesting levels — far beyond any practical
-input). Each recursive entry decrements; at 0 the recursive call
-returns NULL.
-
-### 3. Memoisation (efficiency)
-
-Nested denesting can revisit the same subexpression: the walker hits
-`Sqrt[55 - 10 Sqrt[29]]` once, but the discriminant path hits
-`Sqrt[152 - 24 Sqrt[29]]` which itself triggers the recursion.
-Add a small hash-table cache `(expr_hash, expr_eq) -> result` keyed
-on the radicand, scoped to a single top-level `Simplify` call (or
-to the AssumeCtx — preferred so we don't need a separate lifetime).
-On miss compute, on hit return a copy. Empirically the cache stays
-in the low tens of entries even on adversarial inputs.
-
-## File-by-file changes
-
-| File | Change |
-|------|--------|
-| `src/simp.c` | Add `split_plus_pick_outer_sqrt`, extend `sqrt_if_clean_square` with the recursive Q(Sqrt[k]) case, thread `depth_budget` through `AssumeCtx`, wire the iteration loop in `denest_compute_pq_s`, add cache. |
-| `src/simp.h` | No public API changes. |
-| `tests/test_simp_denest_phase2.c` | New: targeted regressions. Listed below. |
-| `tests/CMakeLists.txt` | Register new test binary. |
-| `docs/spec/builtins/simplify.md` (or equivalent) | Note the extended denester capability. |
-| `docs/spec/changelog/2026-05.md` | Summary entry. |
-
-## Test plan
-
-Targeted regressions in `tests/test_simp_denest_phase2.c`:
-
-1. The motivating expression:
-   `Simplify[Sqrt[16 - 2 Sqrt[29] + 2 Sqrt[55 - 10 Sqrt[29]]] -
-   Sqrt[5] - Sqrt[11 - 2 Sqrt[29]]]` → `0`.
-2. Direct denesting:
-   `Simplify[Sqrt[16 - 2 Sqrt[29] + 2 Sqrt[55 - 10 Sqrt[29]]]]` →
-   `Sqrt[5] + Sqrt[11 - 2 Sqrt[29]]`.
-3. Inner step (must still work, single-extension):
-   `Simplify[Sqrt[152 - 24 Sqrt[29]]]` → `2 Sqrt[29] - 6`.
-4. Non-denestable multi-sqrt (must remain unchanged, not blow up):
-   `Simplify[Sqrt[1 + Sqrt[2] + Sqrt[3]]]` stays as-is.
-5. Soundness check at random-ish numeric points for all phase-2
-   denestings (the standard pattern: compute LHS-RHS, `NumberQ` the
-   `Abs` at two distinct numeric instantiations of any free symbols
-   — **not** as a zero-detector but as a regression check on test
-   values where the answer is known).
-6. Recursion budget exhaustion: a hand-built triple-nested radical
-   that should denest only at budget ≥ 3 — confirms the budget is
-   load-bearing and the failure mode is "unchanged", not crash.
-
-Full-suite regression: all existing `test_simp_*` binaries must
-remain green. The single-extension code path is unchanged on its
-own inputs, so this is mostly a "did I break ownership somewhere"
-check.
-
-## Risks / edge cases
-
-- **Branch validity.** The half-sum identity picks a specific sign
-  combination. The existing `denest_is_nonneg` prover stays as the
-  gate — for P, Q now living in `Q(Sqrt[k])`, the prover has to
-  decide non-negativity of `(A ± s)/2` where A, s themselves carry
-  a Sqrt. For the motivating case both P=5 and Q=11-2 Sqrt[29] are
-  clearly nonneg (`11 > 2 Sqrt[29]` since 121 > 116). The
-  `denest_prov_nonneg` numeric-bounded path already handles this.
-- **Cost.** Worst case is exponential in nesting depth without the
-  cache. With the cache and a budget of 4, each radicand is denested
-  at most once; total cost is linear in the number of distinct
-  sqrt-bearing radicands in the input.
-- **Ownership.** Every new allocation must have a matching free path
-  on every early-return — the existing function is already careful
-  here, the new code must mirror that pattern.
-- **Wrong-outer choice masks a valid denesting.** The "try every
-  candidate" iteration covers this — order is a heuristic, not a
-  correctness lever.
-
-## Implementation tasks (checklist)
-
-- [ ] Add `depth_budget` field to `AssumeCtx`; initialise to 4 in
-  the top-level entry point; propagate.
-- [ ] Implement `split_plus_pick_outer_sqrt(plus, ctx, idx, ...)`.
-- [ ] Refactor `denest_compute_pq_s` to iterate candidates.
-- [ ] Extend `sqrt_if_clean_square` with the Q(Sqrt[k]) recursion.
-- [ ] Add per-`AssumeCtx` memo cache (hash table keyed on radicand).
-- [ ] Write `tests/test_simp_denest_phase2.c` with the 6 cases
-  above; register in `tests/CMakeLists.txt`.
-- [ ] Run full test suite; confirm zero new failures.
-- [ ] Update `docs/spec/changelog/2026-05.md`.
-- [ ] Update `docs/spec/builtins/simplify.md` if behaviour text
-  needs revising.
-
----
-
-# Simplify — TransformationFunctions option + docstring restructure (2026-06-07)
-
-## Semantics (Mathematica-faithful)
-- `TransformationFunctions -> Automatic` (default): built-in pipeline only.
-- `TransformationFunctions -> {f1, ...}`: ONLY apply f1, ... (no built-ins).
-- `TransformationFunctions -> {Automatic, f1, ...}`: built-in pipeline + f1, ...
-
-## Plan / checklist
-- [ ] `src/simp/simp_transform.c`: `simp_apply_transformations()` — global-best
-      fixed-point loop applying each user function to the whole expression and
-      every subexpression; accept strictly lower-complexity candidates
-      (`score_with_func`). Bounded by round/node/eval caps.
-- [ ] Declare in `simp_internal.h`.
-- [ ] `builtin_simplify`: parse `TransformationFunctions` -> use_builtin flag +
-      borrowed funcs[]; gate built-in pipeline+polish on use_builtin; apply user funcs.
-- [ ] Restructure `Simplify` docstring (info.c) + add TransformationFunctions.
-- [ ] `?TransformationFunctions` docstring.
-- [ ] docs/spec builtins + weekly changelog.
-- [ ] Build + focused test.
-
-## Review — DONE (2026-06-07)
-
-- `src/simp/simp_transform.c`: `simp_apply_transformations()` — bounded
-  global-best fixed point (round/node/eval caps), DFS subexpression splice +
-  re-evaluate + `score_with_func`. Declared in `simp_internal.h`.
-- `builtin_simplify` (`simp_builtins.c`): parses `TransformationFunctions` into
-  `use_builtin` + borrowed `user_funcs[]`; gates the built-in pipeline+polish on
-  `use_builtin`; applies user funcs afterwards. `free(user_funcs)` on all three
-  return paths (main, relational-threading, obvious-truth).
-- Bonus root-cause fix: pre-existing leak of `sub_args` in the threading path
-  (`expr_new_function` memcpy-copies the array, caller must free it).
-- Docstrings: `Simplify` restructured (forms / options / behaviour) + new
-  `TransformationFunctions` docstring. `docs/spec/changelog/2026-06-01.md` entry.
-- Tests: 7 new in `tests/test_simplify.c`; `CMakeLists.txt` lists the new .c.
-  simplify_tests + simp/log/denest/cuberoot suites all PASS. macOS `leaks`:
-  0 leaks on default, user-only, user+builtin, custom-pure-fn, list/relation/
-  obvious-truth threading. Clean `-std=c99 -Wall -Wextra`.
+## Gotcha hit (logged to lessons.md)
+Two non-`Expr*`-returning groups lived *inside* the number-theory span and my
+first `^Expr\*|^static Expr` boundary grep missed both: PowerMod's `static int`
+modular-root helpers (orig 639-929) and the `bool`/`int` numeric predicates
+(orig 1406-1478, which are core helpers and had to stay). Always grep ALL
+return types when carving regions.

@@ -90,6 +90,7 @@ set(COMMON_SRC
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
+    ../src/numbertheory.c
     ../src/facint.c
     ../src/fibonacci.c
     ../src/lucas.c

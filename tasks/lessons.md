@@ -1,5 +1,25 @@
 # Lessons learned
 
+## Carving a C file into regions: grep ALL return types, not just the obvious one (2026-06-07)
+
+When splitting `arithmetic.c` into `numbertheory.c`, I mapped function
+boundaries with `grep '^(static )?Expr\*|^void .*_init|^static Expr'`. That
+pattern misses functions returning `int`/`bool`/other types. Two such groups
+sat *inside* the span I was moving and silently broke the cut:
+- PowerMod's `static int` modular-root helpers (modroot_brute, tonelli_shanks,
+  hensel_lift, modular_root) — needed to move WITH PowerMod.
+- The `bool`/`int` numeric predicates (is_infinity_sym, expr_numeric_sign,
+  is_neg_infinity_form) — core helpers used by plus/times/power that had to
+  STAY, even though they were physically interleaved among NT builtins.
+
+Rule: before choosing line ranges, enumerate every top-level definition with a
+return-type-agnostic grep like
+`grep -nE '^[A-Za-z_].*\b[a-z_]+\s*\(' file.c` (or list all of `Expr*`, `int`,
+`bool`, `void`, `static ...`). Then classify each by concern, not by file
+position — interleaved code means contiguous line ranges rarely equal one
+concern. The main build can link fine while the test build (fixed COMMON_SRC)
+exposes the misplacement, so always build BOTH after a move.
+
 ## Power / Times radical canonicalisation are coupled (2026-05-24)
 
 ### `Power[N, p/q]` splitting and Times "generalised radical fusion" are inverses

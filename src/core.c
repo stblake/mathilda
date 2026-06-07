@@ -14,6 +14,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "arithmetic.h"
+#include "numbertheory.h"
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
@@ -398,17 +399,9 @@ void core_init(void) {
     symtab_add_builtin("Mod", builtin_mod);
     symtab_add_builtin("Quotient", builtin_quotient);
     symtab_add_builtin("QuotientRemainder", builtin_quotientremainder);
-    symtab_add_builtin("GCD", builtin_gcd);
-    symtab_add_builtin("LCM", builtin_lcm);
-    symtab_add_builtin("ExtendedGCD", builtin_extendedgcd);
-    symtab_add_builtin("PowerMod", builtin_powermod);
-    symtab_add_builtin("PrimitiveRoot", builtin_primitiveroot);
-    symtab_add_builtin("PrimitiveRootList", builtin_primitiverootlist);
-    symtab_add_builtin("MultiplicativeOrder", builtin_multiplicativeorder);
-    symtab_add_builtin("Factorial", builtin_factorial);
-    symtab_add_builtin("Factorial2", builtin_factorial2);
-    symtab_add_builtin("FactorialPower", builtin_factorialpower);
-    symtab_add_builtin("Binomial", builtin_binomial);
+    /* Number-theory builtins (GCD, LCM, ExtendedGCD, PowerMod, Factorial,
+       Factorial2, FactorialPower, Binomial, PrimitiveRoot, PrimitiveRootList,
+       MultiplicativeOrder) are registered by numbertheory_init() below. */
     symtab_add_builtin("Print", builtin_print);
     symtab_add_builtin("FullForm", builtin_fullform);
     symtab_add_builtin("InputForm", builtin_inputform);
@@ -436,19 +429,7 @@ void core_init(void) {
     symtab_get_def("Mod")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Quotient")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("QuotientRemainder")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
-    symtab_get_def("GCD")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
-    symtab_get_def("LCM")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_FLAT | ATTR_ORDERLESS | ATTR_ONEIDENTITY);
-    symtab_get_def("ExtendedGCD")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
-    symtab_get_def("PowerMod")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
-    symtab_get_def("PrimitiveRoot")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
-    symtab_get_def("PrimitiveRootList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
-    symtab_get_def("MultiplicativeOrder")->attributes |= ATTR_PROTECTED;
-    symtab_get_def("Factorial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
-    symtab_get_def("Factorial2")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
-    symtab_get_def("FactorialPower")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
-    symtab_set_docstring("FactorialPower",
-        "FactorialPower[n, k]\n\tThe falling factorial n (n - 1) (n - 2) ... (n - k + 1).\n\tFor non-negative integer k, expands to a product of k linear factors.\n\tEquivalent to n! / (n - k)! when both n and k are non-negative integers.");
-    symtab_get_def("Binomial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
+    /* Number-theory builtin attributes + docstrings live in numbertheory_init(). */
     symtab_get_def("Print")->attributes |= ATTR_PROTECTED;
     symtab_get_def("FullForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("InputForm")->attributes |= ATTR_PROTECTED;
@@ -456,6 +437,7 @@ void core_init(void) {
     symtab_get_def("HoldForm")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
 
     facint_init();
+    numbertheory_init();
     fibonacci_init();
     lucas_init();
 

@@ -61,17 +61,9 @@ Expr* builtin_divide(Expr* res);
 Expr* builtin_subtract(Expr* res);
 Expr* builtin_complex(Expr* res);
 Expr* builtin_rational(Expr* res);
-Expr* builtin_gcd(Expr* res);
 Expr* builtin_add(Expr* res);
-Expr* builtin_lcm(Expr* res);
-Expr* builtin_extendedgcd(Expr* res);
-Expr* builtin_powermod(Expr* res);
-Expr* builtin_primitiveroot(Expr* res);
-Expr* builtin_primitiverootlist(Expr* res);
-Expr* builtin_multiplicativeorder(Expr* res);
-Expr* builtin_factorial(Expr* res);
-Expr* builtin_factorial2(Expr* res);
-Expr* builtin_factorialpower(Expr* res);
-Expr* builtin_binomial(Expr* res);
+
+/* Number-theoretic builtins (GCD/LCM/Factorial/Binomial/PowerMod/...) now
+ * live in numbertheory.{c,h}. */
 
 #endif
