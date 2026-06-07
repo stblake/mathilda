@@ -1482,13 +1482,26 @@ rat_imag_fallthrough: ;
 
         int64_t a_int = 0;
         int64_t b_rem = p;
-        /* Integer-part extraction: write p = a_int*q + b_rem with |b_rem|<q
-         * and b_rem same-sign as p. C99 `/` truncates toward zero, which
-         * gives exactly the canonical Mathematica decomposition for both
-         * signs (e.g. -5/3 -> a_int=-1, b_rem=-2, so 2^(-5/3) = 2^-1 *
-         * 2^(-2/3)). Skip when |p|<q (no integer part to extract; the
-         * perfect-q-th-power reduction below still runs). */
-        if (p >= q || p <= -q) {
+        if (n_negative) {
+            /* Negative base: use FLOOR division so the residual exponent
+             * b_rem/q lands in [0, 1), matching Mathematica's canonical
+             * form for (-1)^r. The pulled-out (-1)^a_int becomes a sign
+             * (or, via the q==2 arm above, an I) that merges into the
+             * coefficient. Soundness: (-1)^(p/q) = (-1)^a_int *
+             * (-1)^(b_rem/q) is exact for the principal branch e^{i pi x},
+             * for any integer split p = a_int*q + b_rem. Runs even when
+             * |p|<q so a negative residue like (-1)^(-1/5) is normalised:
+             *   -1/5 -> a_int=-1, b_rem=4 -> -(-1)^(4/5).
+             * C99 `/` truncates toward zero; correct downward when the
+             * remainder is negative (q>0 here). */
+            a_int = p / q;
+            b_rem = p - a_int * q;
+            if (b_rem < 0) { a_int -= 1; b_rem += q; }
+        } else if (p >= q || p <= -q) {
+            /* Positive base: write p = a_int*q + b_rem with |b_rem|<q and
+             * b_rem same-sign as p (truncation toward zero). Skip when
+             * |p|<q (no integer part to extract; the perfect-q-th-power
+             * reduction below still runs). */
             a_int = p / q;
             b_rem = p - a_int * q;
         }

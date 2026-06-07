@@ -235,12 +235,15 @@ Exponentiation.
   Higher-power cases for `q == 2` now also reduce: `(-1)^(3/2) → -I`,
   `(-1)^(5/2) → I`, `(-12)^(3/2) → -24 I Sqrt[3]` (the principal-branch
   rule `(-n)^(p/2) = I^p · |n|^(p/2)`).
-- `Power[-1, p/q]` with even `q ≥ 4` and `|p| ≥ q` does integer-part
-  extraction, e.g. `(-1)^(5/4) → -(-1)^(1/4)`, `(-1)^(7/6) → -(-1)^(1/6)`.
-  `(-1)^(p/q)` with `|p| < q` (and odd-`q` negative-base cases for any
-  base) continue to canonicalise via the existing path.  Negative bases
-  other than `-1` with even `q ≥ 4` (e.g. `(-16)^(1/4)`) are still left
-  unevaluated.
+- For a negative base, the residual `(-1)^(b/q)` exponent is reduced into
+  `[0, 1)` by **floor** division of `p/q`, pulling out a `(-1)^a = ±1` sign
+  that merges into the coefficient (Mathematica canonical form). This covers
+  negative exponents and `|p| ≥ q` alike, e.g. `(-1)^(-1/5) → -(-1)^(4/5)`,
+  `(-1)^(-2/3) → -(-1)^(1/3)`, `(-1)^(-7/5) → (-1)^(3/5)`, `(-1)^(5/4) →
+  -(-1)^(1/4)`, `(-8)^(-1/3) → -(-1)^(2/3)/2`. Positive bases keep
+  truncation toward zero (residual exponent in `(-1, 1)`), unchanged.
+  Negative bases other than `-1` with even `q ≥ 4` (e.g. `(-16)^(1/4)`) are
+  still left unevaluated.
 - Distributes power over product if the exponent is an integer.
 - For `Power[Integer, Rational]` with positive base and positive
   `p/q` exponent, splits the base's prime factorisation into a
@@ -261,6 +264,9 @@ Out[3]= -I
 
 In[4]:= (-1)^(7/4)
 Out[4]= -(-1)^(3/4)
+
+In[4b]:= (-1)^(-1/5)        (* floor reduces exponent into [0,1) *)
+Out[4b]= -(-1)^(4/5)
 
 In[5]:= 18^(1/3)
 Out[5]= 2^(1/3) 3^(2/3)

@@ -51,9 +51,11 @@ static void test_bug3_imag_times_positive(void) {
     /* Multiple positive factors. */
     assert_eval_eq("(I*Pi*2)^(1/2)",
                    "(-1)^(1/4) Sqrt[2] Sqrt[Pi]", 0);
-    /* -I (negative imaginary). */
+    /* -I (negative imaginary). Power[-1, -1/4] canonicalises (floor of the
+     * exponent into [0,1)) to -(-1)^(3/4), matching Mathematica:
+     * Sqrt[Pi]/(-1)^(1/4) == (-1)^(-1/4) Sqrt[Pi] == -(-1)^(3/4) Sqrt[Pi]. */
     assert_eval_eq("(-I*Pi)^(1/2)",
-                   "Sqrt[Pi]/(-1)^(1/4)", 0);
+                   "-(-1)^(3/4) Sqrt[Pi]", 0);
     /* Cube root case. */
     assert_eval_eq("(I*Pi)^(1/3)",
                    "(-1)^(1/6) Pi^(1/3)", 0);
