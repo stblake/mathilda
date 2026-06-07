@@ -33,7 +33,7 @@ Out[1]= 1/4*Pi
   `src/numeric_complex.c`.
 
 ## Exponential and Logarithmic Functions
-- `Exp[z]`: Natural exponential. Reduces `Exp[I*q*Pi]` using Euler's formula.
+- `Exp[z]`: Natural exponential. Canonicalizes `Exp[I*q*Pi]` (rational `q`) to `(-1)^q`, matching Mathematica — e.g. `Exp[I Pi/5] -> (-1)^(1/5)`, `Exp[I Pi] -> -1`, `Exp[I Pi/2] -> I`. `Power[-1, q]` reduces the half/integer cases itself and leaves irreducible roots intact instead of over-eagerly expanding into trig radicals.
 - `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
 - `Log[b, z]`: Logarithm to base `b`.
 

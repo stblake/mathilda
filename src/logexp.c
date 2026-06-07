@@ -410,25 +410,13 @@ Expr* builtin_exp(Expr* res) {
             int64_t n, d;
             // Only perform expansion if the coefficient is rational or integer (e.g. q * Pi)
             if (im_coeff->type == EXPR_INTEGER || is_rational(im_coeff, &n, &d)) {
-                // Construct the angle y = im_coeff * Pi
-                Expr* y_args[2] = { expr_copy(im_coeff), expr_new_symbol("Pi") };
-                Expr* y = expr_new_function(expr_new_symbol("Times"), y_args, 2);
-
-                // Construct Cos[y]
-                Expr* cos_args[1] = { expr_copy(y) };
-                Expr* cos_part = expr_new_function(expr_new_symbol("Cos"), cos_args, 1);
-
-                // Construct I * Sin[y]
-                Expr* sin_args[1] = { y }; // y ownership is transferred here
-                Expr* sin_part = expr_new_function(expr_new_symbol("Sin"), sin_args, 1);
-
-                Expr* i_sym = make_complex(expr_new_integer(0), expr_new_integer(1));
-                Expr* i_sin_args[2] = { i_sym, sin_part };
-                Expr* i_sin_part = expr_new_function(expr_new_symbol("Times"), i_sin_args, 2);
-
-                // Combine into Plus[Cos[y], Times[I, Sin[y]]]
-                Expr* plus_args[2] = { cos_part, i_sin_part };
-                Expr* ret = expr_new_function(expr_new_symbol("Plus"), plus_args, 2);
+                // Canonicalize Exp[I q Pi] -> (-1)^q (matching Mathematica).
+                // Power[-1, q] already reduces the special cases itself:
+                // (-1)^1 = -1, (-1)^(1/2) = I, (-1)^2 = 1, etc., while
+                // leaving non-reducible roots like (-1)^(1/5) intact rather
+                // than over-eagerly expanding into trig radicals.
+                Expr* pow_args[2] = { expr_new_integer(-1), expr_copy(im_coeff) };
+                Expr* ret = expr_new_function(expr_new_symbol("Power"), pow_args, 2);
                 return ret;
             }
         }
