@@ -198,9 +198,9 @@ apart with `Precision` and `Head`, how to drop to machine precision or climb to
 arbitrary precision with `N`, and — most importantly — when each is the right
 tool.
 
-- **[5. Calculus & algebra](05-calculus-and-algebra.md)** — put exact and
-  approximate arithmetic to work in a real symbolic session: simplify, factor,
-  solve, differentiate, integrate, and take series and limits.
+- **[5. Algebra](05-algebra.md)** — put exact arithmetic to work: expand and
+  factor polynomials, reshape rational expressions, simplify, and solve
+  equations and systems.
 - **[Function reference](../documentation/index.md)** — the full catalogue of
   built-in functions, including the complete details of `N`, `Precision`,
   `Accuracy`, and the constants `Pi`, `E`, and `$MachinePrecision` used above.

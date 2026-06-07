@@ -5,4 +5,5 @@ nav:
   - 02-expressions-and-evaluation.md
   - 03-pattern-matching-and-rules.md
   - 04-machine-and-arbitrary-precision-arithmetic.md
-  - 05-calculus-and-algebra.md
+  - 05-algebra.md
+  - 06-calculus.md

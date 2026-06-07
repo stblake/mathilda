@@ -28,10 +28,15 @@ Work through them in order if you're new — each one builds on the last.
     Exact integers and rationals, fast machine-precision reals, and
     arbitrary-precision arithmetic. Meet `N`, `Precision`, and when to use each.
 
--   :material-sigma: __[5. Calculus & algebra](05-calculus-and-algebra.md)__
+-   :material-function-variant: __[5. Algebra](05-algebra.md)__
 
-    A practical symbolic-math session: simplify, solve and factor, then
-    differentiate, integrate, take series and limits.
+    Expand and factor polynomials, dissect and divide them, reshape rational
+    expressions with `Together`/`Apart`, simplify, and solve equations.
+
+-   :material-math-integral: __[6. Calculus](06-calculus.md)__
+
+    Differentiate and integrate, expand power series, take limits, evaluate
+    symbolic sums, and find roots and extrema numerically.
 
 </div>
 
