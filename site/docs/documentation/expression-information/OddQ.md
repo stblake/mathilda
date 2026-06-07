@@ -27,3 +27,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= OddQ[7]
+Out[1]= True
+
+In[2]:= OddQ[4]
+Out[2]= False
+```
+
+### Notes
+
+`OddQ` returns `True` only for odd integers (`Integer` or `BigInt`); any non-integer argument gives `False`.

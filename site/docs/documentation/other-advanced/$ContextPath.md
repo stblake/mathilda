@@ -29,3 +29,22 @@ Not a builtin: `$ContextPath` is a symbol whose OwnValue tracks the internal sea
 
 - Source: [`src/context.c`](https://github.com/stblake/mathilda/blob/main/src/context.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= $ContextPath
+Out[1]= {"Global`", "System`"}
+
+In[2]:= BeginPackage["MyPkg`"]
+Out[2]= "MyPkg`"
+
+In[3]:= $ContextPath
+Out[3]= {"MyPkg`", "System`"}
+```
+
+### Notes
+
+`$ContextPath` is the ordered list of contexts searched to resolve bare identifiers to existing qualified symbols. It is read-only for direct assignment and is modified by `BeginPackage` and `EndPackage`.

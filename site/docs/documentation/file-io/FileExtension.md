@@ -39,3 +39,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/files.c`](https://github.com/stblake/mathilda/blob/main/src/files.c)
 - Specification: [`docs/spec/builtins/file-io.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/file-io.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= FileExtension["report.txt"]
+Out[1]= "txt"
+
+In[2]:= FileExtension["/tmp/data/report.txt"]
+Out[2]= "txt"
+```
+
+### Notes
+
+`FileExtension` returns the extension (without the dot), taken after the final dot in the file name.

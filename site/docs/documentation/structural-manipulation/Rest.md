@@ -29,3 +29,16 @@ copies args `1 .. n−1` into a new function node with the same head. Returns `N
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Rest[{a,b,c,d}]
+Out[1]= {b, c, d}
+```
+
+### Notes
+
+`Rest[expr]` drops the first element; it is the complement of `First`.

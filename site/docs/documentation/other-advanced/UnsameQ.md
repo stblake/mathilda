@@ -29,3 +29,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= a =!= b
+Out[1]= True
+
+In[2]:= a =!= a
+Out[2]= False
+```
+
+### Notes
+
+`UnsameQ` (`=!=`) is the structural negation of `SameQ`; it always decides to `True` or `False`.

@@ -33,3 +33,22 @@ _No verified examples yet for this function._
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= k = 5
+Out[1]= 5
+
+In[2]:= k--
+Out[2]= 5
+
+In[3]:= k
+Out[3]= 4
+```
+
+### Notes
+
+`k--` (`Decrement`) returns the *old* value of `k` and then decreases it by 1. Use `--k` (`PreDecrement`) to get the new value instead.

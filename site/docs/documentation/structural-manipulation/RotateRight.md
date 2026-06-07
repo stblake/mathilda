@@ -30,3 +30,16 @@ behaviour are identical with the opposite sign.
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= RotateRight[{1,2,3,4},1]
+Out[1]= {4, 1, 2, 3}
+```
+
+### Notes
+
+Cyclically shifts elements `n` positions to the right; it is the inverse of `RotateLeft`.

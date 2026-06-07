@@ -30,3 +30,25 @@ _No verified examples yet for this function._
 
 - Source: [`src/print.c`](https://github.com/stblake/mathilda/blob/main/src/print.c)
 - Specification: [`docs/spec/builtins/expression-information.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/expression-information.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Print["Hello, Mathilda!"]
+"Hello, Mathilda!"
+Out[1]= Null
+
+In[2]:= Print[2 + 3]
+5
+Out[2]= Null
+
+In[3]:= Print["x = ", 2^10]
+"x = "1024
+Out[3]= Null
+```
+
+### Notes
+
+`Print` writes its evaluated arguments to stdout, concatenated with no separator, then returns `Null`. String arguments are printed with their surrounding quotes.

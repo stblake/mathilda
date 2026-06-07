@@ -33,3 +33,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= x = 5
+Out[1]= 5
+
+In[2]:= x + 1
+Out[2]= 6
+```
+
+### Notes
+
+`=` (`Set`) evaluates the right-hand side once and stores the result. For a bare symbol the assignment is an OwnValue, so later uses of `x` substitute the stored value.

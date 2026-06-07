@@ -30,3 +30,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/replace.c`](https://github.com/stblake/mathilda/blob/main/src/replace.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= {1, 2, 3} /. n_ :> n^2
+Out[1]= {1, 4, 9}
+
+In[2]:= FullForm[a :> b]
+Out[2]= RuleDelayed[a, b]
+```
+
+### Notes
+
+`a :> b` is shorthand for `RuleDelayed[a, b]`. The right-hand side is held and evaluated separately for each match, after the pattern bindings are substituted in.

@@ -27,3 +27,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Im[3 + 4 I]
+Out[1]= 4
+
+In[2]:= Im[7]
+Out[2]= 0
+```
+
+### Notes
+
+`Im[z]` extracts the imaginary part of numeric `z`, giving 0 for real (or real-valued) arguments. It is Listable.

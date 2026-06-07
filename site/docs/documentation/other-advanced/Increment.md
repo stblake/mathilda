@@ -34,3 +34,22 @@ _No verified examples yet for this function._
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= i = 5
+Out[1]= 5
+
+In[2]:= i++
+Out[2]= 5
+
+In[3]:= i
+Out[3]= 6
+```
+
+### Notes
+
+`i++` (`Increment`) returns the *old* value of `i` and then increases it by 1. Use `++i` (`PreIncrement`) to get the new value instead.

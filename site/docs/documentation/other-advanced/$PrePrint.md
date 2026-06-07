@@ -31,3 +31,22 @@ A REPL session hook, not a builtin. Registered (docstring only) in `repl_hooks_i
 
 - Source: [`src/repl_hooks.c`](https://github.com/stblake/mathilda/blob/main/src/repl_hooks.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= $PrePrint = Framed
+Out[1]= Framed[Framed]
+
+In[2]:= 3 + 4
+Out[2]= Framed[7]
+```
+
+### Notes
+
+`$PrePrint`, if set, is applied to every expression just before it is printed.
+The displayed form reflects the `$PrePrint` value (here wrapped in `Framed`),
+but `Out[n]` is assigned the unmodified result, so later references see the
+plain value. Unset by default.

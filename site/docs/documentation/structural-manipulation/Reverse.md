@@ -31,3 +31,19 @@ reversed depending on whether the current level is selected, and recursing into 
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Reverse[{1,2,3}]
+Out[1]= {3, 2, 1}
+
+In[2]:= Reverse[{a,b,c,d}]
+Out[2]= {d, c, b, a}
+```
+
+### Notes
+
+`Reverse[expr]` reverses the order of top-level elements.

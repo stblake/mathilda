@@ -27,3 +27,16 @@ _No verified examples yet for this function._
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= First[{a,b,c}]
+Out[1]= a
+```
+
+### Notes
+
+`First[expr]` returns the first element (part 1) of any expression, not only lists.

@@ -29,3 +29,22 @@ A REPL session hook, not a builtin. Registered (docstring only) in `repl_hooks_i
 
 - Source: [`src/repl_hooks.c`](https://github.com/stblake/mathilda/blob/main/src/repl_hooks.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= $Epilog := Print["bye"]
+Out[1]= Null
+
+In[2]:= Quit[]
+"bye"
+```
+
+### Notes
+
+`$Epilog` is a symbol whose value, if any, is evaluated exactly once when the
+session terminates via `Quit[]` or EOF. Assigning it with `:=` (delayed) lets
+it run cleanup or a parting action at shutdown; the `"bye"` above is printed as
+the session exits.

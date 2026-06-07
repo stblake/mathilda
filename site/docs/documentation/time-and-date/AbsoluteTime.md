@@ -50,3 +50,16 @@ _No verified examples yet for this function._
 
 - Source: [`src/datetime.c`](https://github.com/stblake/mathilda/blob/main/src/datetime.c)
 - Specification: [`docs/spec/builtins/time-and-date.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/time-and-date.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= AbsoluteTime[]
+Out[1]= 3.98985e+09
+```
+
+### Notes
+
+`AbsoluteTime[]` gives the number of seconds since the start of January 1, 1900. The value increases on every call, so the exact number you see will differ from the one above.

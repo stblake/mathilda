@@ -31,3 +31,22 @@ _No verified examples yet for this function._
 
 - Source: [`src/trig.c`](https://github.com/stblake/mathilda/blob/main/src/trig.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Cot[Pi/4]
+Out[1]= 1
+
+In[2]:= N[Cot[1]]
+Out[2]= 0.642093
+
+In[3]:= Cot[Pi]
+Out[3]= ComplexInfinity
+```
+
+### Notes
+
+`Cot[z]` is equivalent to `Cos[z]/Sin[z]`. Singularities at `z = k Pi` yield `ComplexInfinity`. `Cot` is Listable.

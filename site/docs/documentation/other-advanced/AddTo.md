@@ -35,3 +35,22 @@ _No verified examples yet for this function._
 
 - Source: [`src/core.c`](https://github.com/stblake/mathilda/blob/main/src/core.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= x = 10
+Out[1]= 10
+
+In[2]:= x += 3
+Out[2]= 13
+
+In[3]:= x
+Out[3]= 13
+```
+
+### Notes
+
+`x += dx` (`AddTo`) is equivalent to `x = x + dx`: it updates `x` in place and returns the new value.

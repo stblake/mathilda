@@ -29,3 +29,16 @@ for atoms or empty expressions.
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Most[{a,b,c,d}]
+Out[1]= {a, b, c}
+```
+
+### Notes
+
+`Most[expr]` drops the last element; it is the complement of `Last`.

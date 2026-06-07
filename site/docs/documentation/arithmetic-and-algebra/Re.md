@@ -27,3 +27,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Re[3 + 4 I]
+Out[1]= 3
+
+In[2]:= Re[7]
+Out[2]= 7
+```
+
+### Notes
+
+`Re[z]` extracts the real part of numeric `z`; a purely real argument is returned unchanged. It is Listable.

@@ -36,3 +36,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/list.c`](https://github.com/stblake/mathilda/blob/main/src/list.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Flatten[{{1,2},{3,{4}}}]
+Out[1]= {1, 2, 3, 4}
+
+In[2]:= Flatten[{{1,{2,3}},{4,{5}}},1]
+Out[2]= {1, {2, 3}, 4, {5}}
+```
+
+### Notes
+
+Without a level argument, `Flatten` removes all nesting; with a level `n` it flattens only the top `n` levels.

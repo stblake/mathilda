@@ -27,3 +27,16 @@ _No verified examples yet for this function._
 
 - Source: [`src/complex.c`](https://github.com/stblake/mathilda/blob/main/src/complex.c)
 - Specification: [`docs/spec/builtins/arithmetic-and-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/arithmetic-and-algebra.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= ReIm[3 + 4 I]
+Out[1]= {3, 4}
+```
+
+### Notes
+
+`ReIm[z]` is shorthand for `{Re[z], Im[z]}`; a real-valued argument gives `{z, 0}`.

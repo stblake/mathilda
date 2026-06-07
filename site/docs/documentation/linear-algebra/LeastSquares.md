@@ -96,3 +96,22 @@ _No verified examples yet for this function._
 - Gene H. Golub, Charles F. Van Loan, *Matrix Computations*, 4th ed. (Johns Hopkins University Press, 2013).
 - Source: [`src/linalg/lstsq.c`](https://github.com/stblake/mathilda/blob/main/src/linalg/lstsq.c)
 - Specification: [`docs/spec/builtins/linear-algebra.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/linear-algebra.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= LeastSquares[{{1, 1}, {1, 2}, {1, 3}}, {1, 2, 2}]
+Out[1]= {2/3, 1/2}
+
+In[2]:= LeastSquares[{{1, 0}, {0, 1}, {1, 1}}, {1, 1, 3}]
+Out[2]= {4/3, 4/3}
+```
+
+### Notes
+
+`LeastSquares[m, b]` returns the `x` minimising `Norm[m . x - b]` for the
+overdetermined system `m . x == b`. With exact (rational) input it gives an
+exact rational answer via the pseudoinverse; pass `Method ->` or
+`Tolerance ->` to control the solver and singular-value truncation.

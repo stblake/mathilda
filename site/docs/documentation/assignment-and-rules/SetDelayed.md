@@ -32,3 +32,22 @@ _No verified examples yet for this function._
 
 - Source: [`src/eval.c`](https://github.com/stblake/mathilda/blob/main/src/eval.c)
 - Specification: [`docs/spec/builtins/assignment-and-rules.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/assignment-and-rules.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= f[n_] := n^2
+Out[1]= Null
+
+In[2]:= f[4]
+Out[2]= 16
+
+In[3]:= f[a + b]
+Out[3]= (a + b)^2
+```
+
+### Notes
+
+`:=` (`SetDelayed`) holds the right-hand side and re-evaluates it each time the rule fires, with the pattern bindings substituted in. The definition itself returns `Null`.

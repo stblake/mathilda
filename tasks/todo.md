@@ -1,56 +1,60 @@
-# Task: Split number-theory builtins out of arithmetic.c into numbertheory.c
+# Task: Add examples to every builtin in the documentation center
 
-## Rationale
-`arithmetic.c` (2318 lines) is a grab-bag of two concerns: (1) core
-rational/complex constructors + widely-shared numeric helpers, and (2)
-number-theoretic builtins. Split #2 into a sibling top-level file
-`numbertheory.c`, matching the flat convention of `modular.c`/`facint.c`.
-Introduce `numbertheory_init()` so registration moves out of `core.c`,
-matching every other subsystem.
+## Problem
+154 builtin pages in the docs site show "_No verified examples yet for this
+function._" with no examples anywhere (e.g. MapAll). 15 more have overlay-only
+examples (acceptable, like Map). The user wants every builtin to have a couple
+of simple examples (+ a harder one where appropriate).
 
-## Scope (moves to numbertheory.c)
-Builtins: GCD, LCM, ExtendedGCD, PowerMod, Factorial, Factorial2,
-FactorialPower, Binomial, PrimitiveRoot, PrimitiveRootList,
-MultiplicativeOrder + their private static helpers.
+## Root cause
+`site/generate.py` mines `In[]:=` example blocks from `docs/spec/builtins/*.md`,
+but only maps a function to a spec section when the function name appears as an
+H2 heading token. Functions grouped under shared headings (e.g. `## Trig
+Functions` covering Sin/Cos/Tan/...) get no section -> no mined examples. Per-
+function examples cannot be expressed in a grouped spec section.
 
-## Stays in arithmetic.c
-int64 `gcd()`/`lcm()` (used repo-wide), `g_arith_warnings_muted`,
-make_rational/builtin_rational, make_complex/builtin_subtract/
-builtin_complex/builtin_divide, and all shared helpers in arithmetic.h.
+## Approach
+Use the established **overlay** mechanism: `site/overlays/<Name>.md`. The
+generator merges overlay worked-examples into a "Notes & additional examples"
+section (this is exactly how `Map` shows its examples today). One file per
+function => parallel subagents never conflict. Every example is verified by
+running it through `./Mathilda` and capturing the real output.
 
-## Steps
-- [ ] 1. Create `src/numbertheory.h` (guard, `numbertheory_init()`, 11 builtin protos)
-- [ ] 2. Create `src/numbertheory.c` (preamble incl. + region A 34-410 + region B 931-EOF + `numbertheory_init()`)
-- [ ] 3. Trim `src/arithmetic.c` to lines 1-33 + 411-930
-- [ ] 4. Remove 11 NT builtin protos from `src/arithmetic.h` (keep builtin_add)
-- [ ] 5. `src/core.c`: include numbertheory.h, replace registration block (401-411) with `numbertheory_init();`, remove attr/docstring block (439-450)
-- [ ] 6. Build clean (`make -j`), smoke test REPL (GCD/Factorial/Binomial/PowerMod)
-- [ ] 7. Run relevant tests; valgrind smoke
-- [ ] 8. Docs: changelog note + SPEC.md layout line; update graph
+## Plan
+- [ ] Build the definitive list of 154 functions missing all examples (done: .tmp_noex.txt)
+- [ ] Dispatch subagents (batched by category) to create verified overlays
+- [ ] Re-run detection; mop up any stragglers
+- [ ] `make docs` to regenerate + verify pages render examples
+- [ ] Confirm "_No verified examples_" count dropped to ~0
+- [ ] Changelog entry under docs/spec/changelog/<Monday>.md
+- [ ] Review section below
 
-## Notes
-- internal.c uses local `extern` decls (lines 149-153) — unaffected.
-- Regions A and B are independent; no static crosses the staying block.
+## Constraints
+- No edits to src/ or src/external/. No edits to generate.py.
+- Every overlay example must be run through ./Mathilda; outputs must be the
+  real captured output (no fabricated outputs).
+- Skip examples that error / return Null / are unevaluated unless that IS the
+  point being illustrated.
 
 ## Review
-Done. Outcome:
-- New `src/numbertheory.{c,h}` (~2070 LoC) owns the 11 number-theory builtins
-  + private helpers (modular-root, egcd, binomial-poly, primitive-root).
-- `arithmetic.c`: 2318 → 305 LoC. Retains rational/complex constructors,
-  int64 gcd/lcm, and shared numeric predicates (is_infinity_sym,
-  expr_numeric_sign, is_neg_infinity_form, ...).
-- `numbertheory_init()` added, called from `core_init()` after `facint_init()`;
-  registration + attrs + FactorialPower docstring removed from `core.c`.
-- 11 builtin protos moved arithmetic.h → numbertheory.h; `internal.c`'s local
-  `extern` decls unaffected.
-- `numbertheory.c` added to tests `COMMON_SRC`.
-- Verified: clean `-Wall -Wextra` build; REPL smoke (all 12 forms incl.
-  rational-exponent PowerMod, single-arg GCD, attrs Flat/Orderless); suites
-  extended_gcd / primitive_root / modular / factorial_simplify / core PASS.
+Done. Created 154 hand-curated overlays under `site/overlays/` (one per builtin
+that had no examples), each with 2-4 worked examples verified against `./Mathilda`
+plus a terse note. Dispatched 12 category-batched subagents in parallel; each
+verified every example by piping inputs through the binary and capturing the real
+`Out[]` (no fabricated outputs). Overlay files are one-per-function so the parallel
+agents never conflicted.
 
-## Gotcha hit (logged to lessons.md)
-Two non-`Expr*`-returning groups lived *inside* the number-theory span and my
-first `^Expr\*|^static Expr` boundary grep missed both: PowerMod's `static int`
-modular-root helpers (orig 639-929) and the `bool`/`int` numeric predicates
-(orig 1406-1478, which are core helpers and had to stay). Always grep ALL
-return types when carving regions.
+Results after `make docs`:
+- Overlays: 60 -> 214. Verified examples reported by the generator: 1020.
+- Pages with NO examples anywhere: 154 -> 0 (every public builtin now shows examples).
+- Strict MkDocs build passes clean.
+- No edits to src/, src/external/, or generate.py. New overlays carry no status
+  front matter (no over-claiming) — status stays auto-derived.
+- Changelog entry added to docs/spec/changelog/2026-06-01.md.
+
+Known cosmetic limitation (pre-existing, matches the 60 prior overlays incl. Map):
+overlay examples render under "## Notes & additional examples"; the main
+"## Examples" section still reads "No verified examples yet" for these because the
+generator only auto-mines the main section from per-function spec H2 headings.
+Promoting overlay examples into the main section would require a generate.py
+change (out of scope; left as a possible follow-up).

@@ -35,3 +35,19 @@ _No verified examples yet for this function._
 
 - Source: [`src/patterns.c`](https://github.com/stblake/mathilda/blob/main/src/patterns.c)
 - Specification: [`docs/spec/builtins/pattern-matching.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/pattern-matching.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Position[{a,b,a},a]
+Out[1]= {{1}, {3}}
+
+In[2]:= Position[{1,2,3,4},_?EvenQ]
+Out[2]= {{2}, {4}}
+```
+
+### Notes
+
+Returns a list of position specifications (each itself a list), suitable for use with `Extract`.

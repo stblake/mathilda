@@ -32,3 +32,22 @@ _No verified examples yet for this function._
 
 - Source: [`src/logexp.c`](https://github.com/stblake/mathilda/blob/main/src/logexp.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Exp[0]
+Out[1]= 1
+
+In[2]:= Exp[I Pi]
+Out[2]= -1
+
+In[3]:= Exp[Log[x]]
+Out[3]= x
+```
+
+### Notes
+
+`Exp[z]` is `E^z`; it inverts `Log` and evaluates Euler's identity exactly. Exp is Listable, and numeric inputs route to libm / MPFR.

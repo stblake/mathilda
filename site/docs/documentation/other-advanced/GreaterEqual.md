@@ -29,3 +29,22 @@ _No verified examples yet for this function._
 
 - Source: [`src/comparisons.c`](https://github.com/stblake/mathilda/blob/main/src/comparisons.c)
 - Specification index: [`Mathilda_spec.md`](https://github.com/stblake/mathilda/blob/main/Mathilda_spec.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= 3 >= 2
+Out[1]= True
+
+In[2]:= 2 >= 2
+Out[2]= True
+
+In[3]:= GreaterEqual[2, 5]
+Out[3]= False
+```
+
+### Notes
+
+`>=` is the operator form of `GreaterEqual`. Unlike `Greater`, it yields `True` when the two numeric arguments are equal.

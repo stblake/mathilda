@@ -27,3 +27,16 @@ _No verified examples yet for this function._
 
 - Source: [`src/part.c`](https://github.com/stblake/mathilda/blob/main/src/part.c)
 - Specification: [`docs/spec/builtins/structural-manipulation.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/structural-manipulation.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= Last[{a,b,c}]
+Out[1]= c
+```
+
+### Notes
+
+`Last[expr]` returns the final element of any expression.
