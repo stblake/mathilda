@@ -208,6 +208,21 @@ void info_init(void) {
         "and rational multiples of Sqrt[Pi]); non-positive integers give\n"
         "ComplexInfinity. Machine and arbitrary-precision (MPFR) real inputs\n"
         "evaluate numerically, as do machine-precision complex inputs. Listable.");
+    symtab_set_docstring("PolyGamma",
+        "PolyGamma[z]\n"
+        "\tgives the digamma function psi(z) (rewritten as PolyGamma[0, z]).\n"
+        "PolyGamma[n, z]\n"
+        "\tgives the n-th derivative of the digamma function, psi^(n)(z).\n"
+        "Positive-integer arguments reduce to exact values: psi(m) to a rational\n"
+        "minus EulerGamma, and psi^(n)(m) for odd n to a rational plus a rational\n"
+        "multiple of Pi^(n+1); even orders stay symbolic. Non-positive integer\n"
+        "arguments give ComplexInfinity. Inexact real and complex arguments evaluate\n"
+        "numerically at machine or arbitrary (MPFR) precision. PolyGamma[-1, z] gives\n"
+        "the inert LogGamma[z]. Listable.");
+    symtab_set_docstring("LogGamma",
+        "LogGamma[z]\n"
+        "\tdenotes the log-gamma function log(Gamma(z)). It is inert: it carries no\n"
+        "evaluation rules and is produced by PolyGamma[-1, z]. Listable.");
     symtab_set_docstring("Pochhammer",
         "Pochhammer[a, n]\n"
         "\tgives the Pochhammer symbol (a)_n = a (a+1) ... (a+n-1) = Gamma[a+n]/Gamma[a].\n"

@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -42,12 +42,60 @@ Higher transcendental functions: the gamma function `Gamma`, the Pochhammer symb
     fraction otherwise, e.g. `Gamma[2.0, 1 + I] = (2 + I) e^-(1+I)` and
     `N[Gamma[3/2, 2 + I], 30] = 0.160487401929263240… − 0.176588715957602346… I`.
 - Derivatives: `D[Gamma[a, z], z] = -z^(a-1) E^-z` (chain rule on both
-  arguments; the `a`-derivative is the generic `Derivative[1,0][Gamma][a,z]`,
-  and `D[Gamma[z], z]` stays `Derivative[1][Gamma][z]` since `PolyGamma`
-  is not yet implemented).
+  arguments; the `a`-derivative is the generic `Derivative[1,0][Gamma][a,z]`).
+  `D[Gamma[z], z] = Gamma[z] PolyGamma[0, z]`, so higher derivatives compose
+  through `PolyGamma`, e.g.
+  `D[Gamma[z], {z, 2}] = Gamma[z] PolyGamma[1, z] + Gamma[z] PolyGamma[0, z]^2`.
 - All other arguments (e.g. `Gamma[1/3]`, `Gamma[x]`, `Gamma[a, z]`,
   exact non-integer `Gamma[3/2, z]`, exact complex `Gamma[3/2, I]`) stay
   unevaluated.
+
+## PolyGamma
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+- `PolyGamma[z]` — the digamma function ψ(z) = Γ′(z)/Γ(z). Always rewrites to
+  the two-argument form `PolyGamma[0, z]`.
+- `PolyGamma[n, z]` — the n-th polygamma ψ⁽ⁿ⁾(z) = dⁿ/dzⁿ ψ(z).
+
+Behaviour:
+
+- **Special values.** Non-positive integer arguments are poles:
+  `PolyGamma[0]`, `PolyGamma[n, -k]` → `ComplexInfinity`. At infinity,
+  `PolyGamma[0, Infinity]` → `Infinity` and `PolyGamma[n, Infinity]` → `0` for
+  `n ≥ 1`. `PolyGamma[ComplexInfinity]` and `PolyGamma[n, Indeterminate]`
+  → `Indeterminate`.
+- **Exact at positive integers.** `PolyGamma[0, m] = H_{m-1} − EulerGamma`
+  (a rational minus Euler's constant), e.g. `PolyGamma[5] = 25/12 - EulerGamma`,
+  `PolyGamma[100]` a large exact rational minus `EulerGamma`. For **odd** order
+  `n ≥ 1` the value closes via ζ(n+1) into a rational plus a rational multiple of
+  `Pi^(n+1)`: `PolyGamma[1, 1] = Pi^2/6`, `PolyGamma[3, 1] = Pi^4/15`,
+  `PolyGamma[3, 5] = -22369/3456 + Pi^4/15`. For **even** order `n ≥ 1` the value
+  involves ζ(odd) and stays symbolic, e.g. `PolyGamma[2, 1]`, `PolyGamma[4, 1]`.
+- **Negative order.** `PolyGamma[-1, z] = LogGamma[z]` (an inert log-gamma
+  symbol; see below). Orders ≤ −2 stay unevaluated.
+- **Numeric.** Inexact real arguments evaluate at machine precision (`Real`) or
+  arbitrary precision (`MPFR`, precision tracked from the input):
+  `PolyGamma[100.5] = 4.605174…`, `PolyGamma[1, 3.5] = 0.330358…`,
+  `N[PolyGamma[22/10], 50] = 0.5442934367411450377861253708833812285077…`.
+  `n = 0` uses MPFR's digamma; higher orders use a recurrence-shift plus the
+  Bernoulli asymptotic expansion.
+- **Complex.** Inexact complex arguments evaluate (machine or arbitrary
+  precision) by the same asymptotic in complex arithmetic, e.g.
+  `PolyGamma[2.5 + 3 I] = 1.28127 + 0.979805 I`.
+- **Derivatives.** `D[PolyGamma[n, z], z] = PolyGamma[n+1, z]`, e.g.
+  `D[PolyGamma[x], x] = PolyGamma[1, x]`.
+- Everything else (symbolic `z`, exact non-integer arguments such as
+  `PolyGamma[0, 5/2]`, non-integer or complex *order*) stays unevaluated.
+
+*Out of scope:* complex / fractional **order** `n` (so `PolyGamma[6 + I, z]`
+stays symbolic), `PolyGamma[n, z]` for `n ≤ −2`, and dedicated `Series`
+expansions (only the generic `D`-based Taylor fallback applies).
+
+### LogGamma
+
+`LogGamma[z]` denotes log Γ(z). It is **inert** — registered (`Listable`,
+`Protected`) with no evaluation rules — and is produced by `PolyGamma[-1, z]`.
 
 ## Pochhammer
 

@@ -932,6 +932,58 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- PolyGamma[N, Z] (the polygamma family): chain rule on both args.
+         *   d/dZ PolyGamma[N, Z] = PolyGamma[N+1, Z]   (raises the order)
+         *   d/dN PolyGamma[N, Z] = Derivative[1,0][PolyGamma][N,Z]  (generic; the
+         *               derivative with respect to the order has no elementary form).
+         * Zero-derivative arms are dropped, so D[PolyGamma[n,x],x] keeps only the
+         * dZ term, matching Mathematica's PolyGamma[1+n, x]. */
+        if (h == SYM_PolyGamma && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* PolyGamma[N+1, Z] * dZ */
+                Expr* np1 = mk_fn2("Plus", expr_copy(N), mk_int(1));
+                Expr* pg  = mk_fn2("PolyGamma", np1, expr_copy(Z));
+                terms[nt++] = mk_fn2("Times", pg, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1, 0][PolyGamma][N, Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("PolyGamma"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
+        /* --- Gamma[A] (one-argument): d/dA Gamma[A] = Gamma[A] PolyGamma[0, A].
+         * Repeated differentiation then composes via the product rule, e.g.
+         * D[Gamma[z], {z, 2}] = Gamma[z] PolyGamma[0,z]^2 + Gamma[z] PolyGamma[1,z]. */
+        if (h == SYM_Gamma && n == 1) {
+            Expr* A = args[0];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* g  = mk_fn1("Gamma", expr_copy(A));
+            Expr* pg = mk_fn2("PolyGamma", mk_int(0), expr_copy(A));
+            Expr* dGdA = mk_fn2("Times", g, pg);
+            return mk_fn2("Times", dGdA, dA);
+        }
+
         /* --- Known elementary unary function: F'(g) * D[g, x]. --- */
         if (n == 1) {
             Expr* fp = elementary_fprime(h, args[0]);

@@ -188,8 +188,8 @@ void test_gamma_derivatives() {
     assert_eval_eq("D[Gamma[a, x^2], x]", "-2 x E^(-x^2) x^2^(-1 + a)", 0);
     /* Derivative wrt the first argument has no closed form here: generic. */
     assert_eval_eq("D[Gamma[x, z], x]", "Derivative[1, 0][Gamma][x, z]", 0);
-    /* One-argument Gamma'[z] stays generic (PolyGamma is out of scope). */
-    assert_eval_eq("D[Gamma[x], x]", "Derivative[1][Gamma][x]", 0);
+    /* One-argument Gamma'[z] = Gamma[z] PolyGamma[0, z]. */
+    assert_eval_eq("D[Gamma[x], x]", "Gamma[x] PolyGamma[0, x]", 0);
 }
 
 void test_gamma_incomplete_numeric() {
