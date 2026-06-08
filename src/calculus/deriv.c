@@ -206,6 +206,8 @@ static bool is_dt_constant_symbol(const Expr* e) {
            s == SYM_Infinity || s == SYM_ComplexInfinity ||
            s == SYM_EulerGamma || s == SYM_Catalan ||
            s == SYM_GoldenRatio || s == SYM_Degree ||
+           s == SYM_GoldenAngle || s == SYM_Glaisher ||
+           s == SYM_Khinchin ||
            s == SYM_True || s == SYM_False;
 }
 

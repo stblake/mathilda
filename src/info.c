@@ -225,6 +225,66 @@ void info_init(void) {
         "constant: it has attributes Constant and Protected, NumericQ[EulerGamma]\n"
         "is True, and D[EulerGamma, x] is 0. N[EulerGamma, prec] evaluates it to\n"
         "any precision.");
+    symtab_set_docstring("Pi",
+        "Pi\n"
+        "\tis pi, with numerical value ~= 3.14159.\n"
+        "Pi is a mathematical constant: it has attributes Constant and Protected,\n"
+        "NumericQ[Pi] is True, and D[Pi, x] is 0. N[Pi, prec] evaluates it to any\n"
+        "precision.");
+    symtab_set_docstring("E",
+        "E\n"
+        "\tis the exponential constant e (base of natural logarithms), with\n"
+        "\tnumerical value ~= 2.71828.\n"
+        "E is a mathematical constant: it has attributes Constant and Protected,\n"
+        "NumericQ[E] is True, and D[E, x] is 0. N[E, prec] evaluates it to any\n"
+        "precision.");
+    symtab_set_docstring("Catalan",
+        "Catalan\n"
+        "\tis Catalan's constant, with numerical value ~= 0.915966.\n"
+        "Catalan is the sum over k >= 0 of (-1)^k (2 k + 1)^-2. It is a\n"
+        "mathematical constant: it has attributes Constant and Protected,\n"
+        "NumericQ[Catalan] is True, and D[Catalan, x] is 0. N[Catalan, prec]\n"
+        "evaluates it to any precision.");
+    symtab_set_docstring("Degree",
+        "Degree\n"
+        "\tgives the number of radians in one degree, with numerical value\n"
+        "\tPi/180 (~= 0.0174533).\n"
+        "Multiply by Degree to convert degrees to radians, so 30 Degree is 30\n"
+        "degrees. It is a mathematical constant: it has attributes Constant and\n"
+        "Protected, NumericQ[Degree] is True, and D[Degree, x] is 0. N[Degree,\n"
+        "prec] evaluates it to any precision.");
+    symtab_set_docstring("GoldenRatio",
+        "GoldenRatio\n"
+        "\tis the golden ratio phi = (1 + Sqrt[5])/2, with numerical value\n"
+        "\t~= 1.61803.\n"
+        "GoldenRatio is the positive root of x^2 == x + 1. It is a mathematical\n"
+        "constant: it has attributes Constant and Protected, NumericQ[GoldenRatio]\n"
+        "is True, and D[GoldenRatio, x] is 0. N[GoldenRatio, prec] evaluates it to\n"
+        "any precision.");
+    symtab_set_docstring("GoldenAngle",
+        "GoldenAngle\n"
+        "\tis the golden angle (3 - Sqrt[5]) Pi = 2 Pi / GoldenRatio^2, with\n"
+        "\tnumerical value ~= 2.39996 radians (~= 137.5 degrees).\n"
+        "GoldenAngle is a mathematical constant: it has attributes Constant and\n"
+        "Protected, NumericQ[GoldenAngle] is True, and D[GoldenAngle, x] is 0.\n"
+        "N[GoldenAngle, prec] evaluates it to any precision.");
+    symtab_set_docstring("Glaisher",
+        "Glaisher\n"
+        "\tis the Glaisher-Kinkelin constant A, with numerical value ~= 1.28243.\n"
+        "Glaisher's constant satisfies Log[A] == 1/12 - Zeta'[-1], where Zeta is\n"
+        "the Riemann zeta function. It is a mathematical constant: it has\n"
+        "attributes Constant and Protected, NumericQ[Glaisher] is True, and\n"
+        "D[Glaisher, x] is 0. N[Glaisher, prec] evaluates it to any precision.");
+    symtab_set_docstring("Khinchin",
+        "Khinchin\n"
+        "\tis Khinchin's constant K (also Khintchine's constant), with numerical\n"
+        "\tvalue ~= 2.68545.\n"
+        "Khinchin's constant is the limiting geometric mean of the partial\n"
+        "quotients in the continued-fraction expansion of almost every real\n"
+        "number, given by the product over s >= 1 of (1 + 1/(s (s + 2)))^Log2[s].\n"
+        "It is a mathematical constant: it has attributes Constant and Protected,\n"
+        "NumericQ[Khinchin] is True, and D[Khinchin, x] is 0. N[Khinchin, prec]\n"
+        "evaluates it to any precision.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Fibonacci",
         "Fibonacci[n]\n"

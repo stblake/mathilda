@@ -87,6 +87,9 @@ static void fill_mpfr_eulergamma(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_catalan(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_goldenratio(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_degree(mpfr_t out, mpfr_prec_t bits);
+static void fill_mpfr_goldenangle(mpfr_t out, mpfr_prec_t bits);
+static void fill_mpfr_glaisher(mpfr_t out, mpfr_prec_t bits);
+static void fill_mpfr_khinchin(mpfr_t out, mpfr_prec_t bits);
 #define MPFR_FILL(fn) fn
 #else
 #define MPFR_FILL(fn) NULL
@@ -99,6 +102,9 @@ static const NumericConstant kConstants[] = {
     { "Catalan",     0.9159655941772190150546035149323841107741, MPFR_FILL(fill_mpfr_catalan)     },
     { "GoldenRatio", 1.6180339887498948482045868343656381177203, MPFR_FILL(fill_mpfr_goldenratio) },
     { "Degree",      M_PI / 180.0,                               MPFR_FILL(fill_mpfr_degree)      },
+    { "GoldenAngle", 2.3999632297286533222315555066336138531249, MPFR_FILL(fill_mpfr_goldenangle) },
+    { "Glaisher",    1.2824271291006226368753425688697917277676, MPFR_FILL(fill_mpfr_glaisher)    },
+    { "Khinchin",    2.6854520010653064453097148354817956938203, MPFR_FILL(fill_mpfr_khinchin)    },
 };
 static const size_t kConstantCount = sizeof(kConstants) / sizeof(kConstants[0]);
 
@@ -849,6 +855,200 @@ static void fill_mpfr_degree(mpfr_t out, mpfr_prec_t bits) {
     mpfr_div_ui(out, pi, 180, MPFR_RNDN);
     mpfr_clear(pi);
 }
+
+/* GoldenAngle = (3 - sqrt(5)) pi = 2 pi / GoldenRatio^2, the closed form the
+ * Mathematica constant carries. Computed at guard precision, then rounded. */
+static void fill_mpfr_goldenangle(mpfr_t out, mpfr_prec_t bits) {
+    mpfr_prec_t guard = bits + 20;
+    mpfr_t s, pi; mpfr_init2(s, guard); mpfr_init2(pi, guard);
+    mpfr_set_ui(s, 5, MPFR_RNDN);
+    mpfr_sqrt(s, s, MPFR_RNDN);          /* sqrt(5)        */
+    mpfr_ui_sub(s, 3, s, MPFR_RNDN);     /* 3 - sqrt(5)    */
+    mpfr_const_pi(pi, MPFR_RNDN);
+    mpfr_set_prec(out, bits);
+    mpfr_mul(out, s, pi, MPFR_RNDN);     /* (3-sqrt(5)) pi */
+    mpfr_clear(s); mpfr_clear(pi);
+}
+
+/* Glaisher-Kinkelin constant A, via
+ *
+ *     ln A = (gamma + ln(2 pi)) / 12  -  zeta'(2) / (2 pi^2).
+ *
+ * MPFR has no zeta-derivative primitive, so zeta'(2) = -sum_{n>=1} ln(n)/n^2
+ * is evaluated by Euler-Maclaurin summation. With f(x) = ln(x) x^-2,
+ *
+ *     sum_{n>=1} f(n) = sum_{n=1}^{N-1} f(n) + int_N^inf f + f(N)/2
+ *                       - sum_{k>=1} B_{2k}/(2k)! f^{(2k-1)}(N),
+ *
+ *     int_N^inf f = (ln N + 1)/N,
+ *     f^{(2k-1)}(N) = (2k-1)! N^-(2k+1) [2k (H_{2k-1} - ln N) - (2k-1)].
+ *
+ * The required even Bernoulli numbers come from MPFR's zeta:
+ *     B_{2k} = (-1)^(k+1) 2 (2k)! zeta(2k) / (2 pi)^(2k),
+ * and (2k)! cancels against the 1/(2k)! prefactor, so the correction term is
+ *     B_{2k}/(2k)! f^{(2k-1)}(N)
+ *       = (-1)^(k+1) 2 zeta(2k) (2k-1)! / ((2 pi N)^(2k) N)
+ *         * [2k (H_{2k-1} - ln N) - (2k-1)].
+ * The asymptotic correction series is divergent, so we stop once a term stops
+ * shrinking (smallest-term truncation). N ~ bits/6 makes that floor lie below
+ * the target precision. */
+static void fill_mpfr_glaisher(mpfr_t out, mpfr_prec_t bits) {
+    mpfr_prec_t guard = bits + 64;
+    unsigned long N = (unsigned long)(bits / 6);
+    if (N < 40) N = 40;
+
+    mpfr_t S, t, lnN, Hk, twopiN, num, prevmag, mag;
+    mpfr_init2(S, guard);   mpfr_init2(t, guard);    mpfr_init2(lnN, guard);
+    mpfr_init2(Hk, guard);  mpfr_init2(twopiN, guard);
+    mpfr_init2(num, guard); mpfr_init2(prevmag, guard); mpfr_init2(mag, guard);
+
+    /* head: sum_{n=2}^{N-1} ln(n)/n^2 (n=1 term is 0) */
+    mpfr_set_zero(S, +1);
+    for (unsigned long n = 2; n < N; ++n) {
+        mpfr_set_ui(t, n, MPFR_RNDN);
+        mpfr_log(t, t, MPFR_RNDN);          /* ln n          */
+        mpfr_div_ui(t, t, n, MPFR_RNDN);
+        mpfr_div_ui(t, t, n, MPFR_RNDN);    /* ln n / n^2    */
+        mpfr_add(S, S, t, MPFR_RNDN);
+    }
+    /* ln N */
+    mpfr_set_ui(lnN, N, MPFR_RNDN);
+    mpfr_log(lnN, lnN, MPFR_RNDN);
+    /* integral tail (ln N + 1)/N */
+    mpfr_add_ui(t, lnN, 1, MPFR_RNDN);
+    mpfr_div_ui(t, t, N, MPFR_RNDN);
+    mpfr_add(S, S, t, MPFR_RNDN);
+    /* f(N)/2 = ln N / (2 N^2) */
+    mpfr_div_ui(t, lnN, N, MPFR_RNDN);
+    mpfr_div_ui(t, t, N, MPFR_RNDN);
+    mpfr_div_ui(t, t, 2, MPFR_RNDN);
+    mpfr_add(S, S, t, MPFR_RNDN);
+
+    /* (2 pi N) for the (2 pi N)^(2k) denominator */
+    mpfr_const_pi(twopiN, MPFR_RNDN);
+    mpfr_mul_ui(twopiN, twopiN, 2, MPFR_RNDN);
+    mpfr_mul_ui(twopiN, twopiN, N, MPFR_RNDN);
+
+    mpfr_set_inf(prevmag, +1);
+    mpfr_set_zero(Hk, +1);                  /* running H_{2k-1} */
+    for (unsigned long k = 1; k < 4 * N; ++k) {
+        unsigned long two_k = 2 * k;
+        /* H_{2k-1} = H_{2k-3} + 1/(2k-2) + 1/(2k-1) */
+        if (k > 1) {
+            mpfr_set_ui(t, 1, MPFR_RNDN);
+            mpfr_div_ui(t, t, two_k - 2, MPFR_RNDN);
+            mpfr_add(Hk, Hk, t, MPFR_RNDN);
+        }
+        mpfr_set_ui(t, 1, MPFR_RNDN);
+        mpfr_div_ui(t, t, two_k - 1, MPFR_RNDN);
+        mpfr_add(Hk, Hk, t, MPFR_RNDN);
+
+        /* bracket = 2k (H_{2k-1} - ln N) - (2k-1) */
+        mpfr_sub(num, Hk, lnN, MPFR_RNDN);
+        mpfr_mul_ui(num, num, two_k, MPFR_RNDN);
+        mpfr_sub_ui(num, num, two_k - 1, MPFR_RNDN);
+
+        /* zeta(2k) */
+        mpfr_zeta_ui(t, two_k, MPFR_RNDN);
+        mpfr_mul(num, num, t, MPFR_RNDN);
+        /* * 2 (2k-1)! */
+        mpfr_mul_ui(num, num, 2, MPFR_RNDN);
+        mpfr_set_ui(t, 1, MPFR_RNDN);
+        for (unsigned long j = 1; j <= two_k - 1; ++j)
+            mpfr_mul_ui(t, t, j, MPFR_RNDN);   /* (2k-1)! */
+        mpfr_mul(num, num, t, MPFR_RNDN);
+        /* / (2pi N)^(2k) */
+        mpfr_pow_ui(t, twopiN, two_k, MPFR_RNDN);
+        mpfr_div(num, num, t, MPFR_RNDN);
+        /* / N */
+        mpfr_div_ui(num, num, N, MPFR_RNDN);
+        /* sign (-1)^(k+1) */
+        if ((k % 2) == 0) mpfr_neg(num, num, MPFR_RNDN);
+
+        /* smallest-term truncation: stop when the asymptotic term grows */
+        mpfr_abs(mag, num, MPFR_RNDN);
+        if (mpfr_cmp(mag, prevmag) > 0) break;
+        mpfr_set(prevmag, mag, MPFR_RNDN);
+
+        /* S -= B_{2k}/(2k)! f^{(2k-1)}(N) == num */
+        mpfr_sub(S, S, num, MPFR_RNDN);
+    }
+    /* S now == sum_{n>=1} ln(n)/n^2 == -zeta'(2). So zeta'(2) = -S. */
+
+    /* ln A = (gamma + ln(2 pi))/12 - zeta'(2)/(2 pi^2)
+     *      = (gamma + ln(2 pi))/12 + S/(2 pi^2). */
+    mpfr_t pi, lnA, term;
+    mpfr_init2(pi, guard); mpfr_init2(lnA, guard); mpfr_init2(term, guard);
+    mpfr_const_pi(pi, MPFR_RNDN);
+    mpfr_const_euler(lnA, MPFR_RNDN);       /* gamma */
+    mpfr_mul_ui(term, pi, 2, MPFR_RNDN);
+    mpfr_log(term, term, MPFR_RNDN);        /* ln(2 pi) */
+    mpfr_add(lnA, lnA, term, MPFR_RNDN);
+    mpfr_div_ui(lnA, lnA, 12, MPFR_RNDN);   /* (gamma + ln(2 pi))/12 */
+    mpfr_mul(term, pi, pi, MPFR_RNDN);
+    mpfr_mul_ui(term, term, 2, MPFR_RNDN);  /* 2 pi^2 */
+    mpfr_div(term, S, term, MPFR_RNDN);     /* S/(2 pi^2) */
+    mpfr_add(lnA, lnA, term, MPFR_RNDN);
+
+    mpfr_set_prec(out, bits);
+    mpfr_exp(out, lnA, MPFR_RNDN);
+
+    mpfr_clear(S); mpfr_clear(t); mpfr_clear(lnN); mpfr_clear(Hk);
+    mpfr_clear(twopiN); mpfr_clear(num); mpfr_clear(prevmag); mpfr_clear(mag);
+    mpfr_clear(pi); mpfr_clear(lnA); mpfr_clear(term);
+}
+
+/* Khinchin's constant K, via the geometrically convergent zeta series
+ * (Bailey-Borwein-Crandall):
+ *
+ *     ln K * ln 2 = sum_{n>=1} (zeta(2n) - 1)/n * sum_{k=1}^{2n-1} (-1)^(k+1)/k.
+ *
+ * zeta(2n) - 1 ~ 4^-n, so ~bits/2 terms reach the target precision; we stop
+ * once a term drops below the working epsilon. */
+static void fill_mpfr_khinchin(mpfr_t out, mpfr_prec_t bits) {
+    mpfr_prec_t guard = bits + 64;
+    mpfr_t S, z, inner, h, term, mag, eps;
+    mpfr_init2(S, guard);    mpfr_init2(z, guard);   mpfr_init2(inner, guard);
+    mpfr_init2(h, guard);    mpfr_init2(term, guard);
+    mpfr_init2(mag, guard);  mpfr_init2(eps, guard);
+
+    /* eps = 2^-(bits+32): term cutoff */
+    mpfr_set_ui(eps, 1, MPFR_RNDN);
+    mpfr_div_2ui(eps, eps, bits + 32, MPFR_RNDN);
+
+    mpfr_set_zero(S, +1);
+    mpfr_set_zero(inner, +1);               /* running alternating harmonic */
+    unsigned long last_k = 0;               /* last index summed into inner  */
+    for (unsigned long n = 1; n < 8 * (unsigned long)bits + 16; ++n) {
+        unsigned long upper = 2 * n - 1;
+        /* extend inner sum_{k=1}^{2n-1} (-1)^(k+1)/k */
+        for (unsigned long k = last_k + 1; k <= upper; ++k) {
+            mpfr_set_ui(h, 1, MPFR_RNDN);
+            mpfr_div_ui(h, h, k, MPFR_RNDN);
+            if ((k % 2) == 0) mpfr_neg(h, h, MPFR_RNDN);
+            mpfr_add(inner, inner, h, MPFR_RNDN);
+        }
+        last_k = upper;
+
+        mpfr_zeta_ui(z, 2 * n, MPFR_RNDN);
+        mpfr_sub_ui(z, z, 1, MPFR_RNDN);    /* zeta(2n) - 1 */
+        mpfr_div_ui(z, z, n, MPFR_RNDN);    /* /n           */
+        mpfr_mul(term, z, inner, MPFR_RNDN);
+        mpfr_add(S, S, term, MPFR_RNDN);
+
+        mpfr_abs(mag, term, MPFR_RNDN);
+        if (n > 3 && mpfr_cmp(mag, eps) < 0) break;
+    }
+
+    /* K = exp(S / ln 2) */
+    mpfr_const_log2(h, MPFR_RNDN);
+    mpfr_div(S, S, h, MPFR_RNDN);
+    mpfr_set_prec(out, bits);
+    mpfr_exp(out, S, MPFR_RNDN);
+
+    mpfr_clear(S); mpfr_clear(z); mpfr_clear(inner); mpfr_clear(h);
+    mpfr_clear(term); mpfr_clear(mag); mpfr_clear(eps);
+}
 #endif /* USE_MPFR */
 
 /* ------------------------------------------------------------------------
@@ -920,4 +1120,15 @@ void numeric_init(void) {
     /* MachinePrecision is a reserved name — mark it protected so users
      * can't accidentally overwrite it. */
     symtab_get_def("MachinePrecision")->attributes |= ATTR_PROTECTED;
+
+    /* Mathematical constants (Pi, E, EulerGamma, Catalan, GoldenRatio,
+     * Degree) are first-class constant symbols. Stamp each Constant (so D
+     * treats them as constants and they read as genuine constants) and
+     * Protected (so they cannot be reassigned). Their numeric values live in
+     * the kConstants table above, the single source of truth for the set;
+     * EulerGamma's identity is additionally stamped in src/eulergamma.c. */
+    for (size_t i = 0; i < kConstantCount; ++i) {
+        SymbolDef* cdef = symtab_get_def(kConstants[i].name);
+        if (cdef) cdef->attributes |= (ATTR_CONSTANT | ATTR_PROTECTED);
+    }
 }

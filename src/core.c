@@ -1455,7 +1455,9 @@ static bool is_numeric_quantity(Expr* e) {
         if (name == SYM_Pi || name == SYM_E || name == SYM_I ||
             name == SYM_Infinity || name == SYM_ComplexInfinity ||
             name == SYM_EulerGamma || name == SYM_GoldenRatio ||
-            name == SYM_Catalan || name == SYM_Degree) {
+            name == SYM_Catalan || name == SYM_Degree ||
+            name == SYM_GoldenAngle || name == SYM_Glaisher ||
+            name == SYM_Khinchin) {
             return true;
         }
         return false;

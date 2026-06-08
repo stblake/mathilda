@@ -132,7 +132,9 @@ static bool is_numeric_quantity(const Expr* e) {
         const char* name = e->data.symbol;
         return name == SYM_Pi || name == SYM_E || name == SYM_I
             || name == SYM_EulerGamma || name == SYM_GoldenRatio
-            || name == SYM_Catalan || name == SYM_Degree;
+            || name == SYM_Catalan || name == SYM_Degree
+            || name == SYM_GoldenAngle || name == SYM_Glaisher
+            || name == SYM_Khinchin;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* head_name = e->data.function.head->data.symbol;

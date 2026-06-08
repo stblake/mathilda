@@ -164,6 +164,7 @@ extern const char* SYM_PeriodicInterpolation;
 extern const char* SYM_GaussianIntegers;
 extern const char* SYM_GeneratedParameters;
 extern const char* SYM_Glaisher;
+extern const char* SYM_GoldenAngle;
 extern const char* SYM_GoldenRatio;
 extern const char* SYM_Gradient;
 extern const char* SYM_Greater;

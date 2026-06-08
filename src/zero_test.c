@@ -125,6 +125,7 @@ static bool is_known_constant(const char* sym_name) {
            sym_name == SYM_I           || sym_name == SYM_EulerGamma ||
            sym_name == SYM_Catalan     || sym_name == SYM_GoldenRatio||
            sym_name == SYM_Glaisher    || sym_name == SYM_Khinchin   ||
+           sym_name == SYM_GoldenAngle ||
            sym_name == SYM_Degree      || sym_name == SYM_Infinity   ||
            sym_name == SYM_ComplexInfinity || sym_name == SYM_Indeterminate ||
            sym_name == SYM_True        || sym_name == SYM_False;

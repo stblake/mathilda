@@ -46,6 +46,24 @@ static void test_n_constants(void) {
     assert_eval_eq("N[GoldenRatio]", "1.61803", 0);
     /* Degree = Pi / 180 ≈ 0.0174533 */
     assert_eval_eq("N[Degree]",      "0.0174533", 0);
+    /* GoldenAngle = (3 - Sqrt[5]) Pi; Glaisher A; Khinchin K. */
+    assert_eval_eq("N[GoldenAngle]", "2.39996",   0);
+    assert_eval_eq("N[Glaisher]",    "1.28243",   0);
+    assert_eval_eq("N[Khinchin]",    "2.68545",   0);
+}
+
+/* GoldenAngle / Glaisher / Khinchin are first-class constants: Constant +
+ * Protected, numeric to NumericQ, and constant to D. */
+static void test_new_constants_identity(void) {
+    assert_eval_eq("Attributes[GoldenAngle]", "{Constant, Protected}", 0);
+    assert_eval_eq("Attributes[Glaisher]",    "{Constant, Protected}", 0);
+    assert_eval_eq("Attributes[Khinchin]",    "{Constant, Protected}", 0);
+    assert_eval_eq("NumericQ[GoldenAngle]", "True", 0);
+    assert_eval_eq("NumericQ[Glaisher]",    "True", 0);
+    assert_eval_eq("NumericQ[Khinchin]",    "True", 0);
+    assert_eval_eq("D[GoldenAngle x, x]", "GoldenAngle", 0);
+    assert_eval_eq("D[Glaisher x, x]",    "Glaisher",    0);
+    assert_eval_eq("D[Khinchin x, x]",    "Khinchin",    0);
 }
 
 static void test_n_unknown_symbols_pass_through(void) {
@@ -206,6 +224,30 @@ static void test_n_prec_constants(void) {
     assert_eval_startswith("N[Sqrt[2], 40]", "1.41421356237309504880168872420969807");
 }
 
+static void test_n_prec_new_constants(void) {
+    /* GoldenAngle = (3 - Sqrt[5]) Pi; Glaisher (Euler-Maclaurin on zeta'(2))
+     * and Khinchin (BBC zeta series) — see src/numeric.c. We request more
+     * digits than we assert so the checked prefix sits inside the
+     * guaranteed-correct region (the system carries no display guard over
+     * ceil(digits*log2 10) bits, so the very last printed digit of N[x, k]
+     * is never pinned — true for every constant). References are
+     * Mathematica-pinned. */
+    assert_eval_startswith("N[GoldenAngle, 60]",
+        "2.39996322972865332223155550663361385312499901105811");
+    assert_eval_startswith("N[Glaisher, 60]",
+        "1.28242712910062263687534256886979172776768892732500");
+    assert_eval_startswith("N[Khinchin, 60]",
+        "2.68545200106530644530971483548179569382038229399446");
+    /* Deep precision exercises series convergence / Euler-Maclaurin truncation:
+     * request 130 digits, assert a 110-digit prefix. */
+    assert_eval_startswith("N[Glaisher, 130]",
+        "1.28242712910062263687534256886979172776768892732500"
+        "1192063740021740406308858826461129736491958202374394206461");
+    assert_eval_startswith("N[Khinchin, 130]",
+        "2.68545200106530644530971483548179569382038229399446"
+        "2953051152345557218859537152002801141174931847697995153465");
+}
+
 static void test_n_prec_transcendentals(void) {
     assert_eval_startswith("N[Sin[1], 40]",
                            "0.8414709848078965066525023216302989");
@@ -356,6 +398,7 @@ int main(void) {
     TEST(test_n_rational_leaf);
     TEST(test_n_real_leaf);
     TEST(test_n_constants);
+    TEST(test_new_constants_identity);
     TEST(test_n_unknown_symbols_pass_through);
     TEST(test_n_on_sin_cos);
     TEST(test_n_descend_then_reevaluate);
@@ -372,6 +415,7 @@ int main(void) {
 #ifdef USE_MPFR
     TEST(test_n_bigint_machine_overflow);
     TEST(test_n_prec_constants);
+    TEST(test_n_prec_new_constants);
     TEST(test_n_prec_transcendentals);
     TEST(test_n_prec_rational_and_mixed);
     TEST(test_precision_literal_basic);
