@@ -1,5 +1,37 @@
 # Special Functions
 
+## Gamma
+
+- `Gamma[z]` — the Euler gamma function Γ(z) = ∫₀^∞ tᶻ⁻¹ e⁻ᵗ dt.
+- `Gamma[a, z]` — the upper incomplete gamma function Γ(a, z) = ∫_z^∞ tᵃ⁻¹ e⁻ᵗ dt.
+- `Gamma[a, z0, z1]` — the generalized incomplete gamma Γ(a, z0) − Γ(a, z1).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- Exact reductions for `Gamma[z]`:
+  - Positive integers: `Gamma[n] = (n-1)!` (exact, with GMP BigInt for large `n`).
+  - Non-positive integers are poles: `Gamma[0]`, `Gamma[-n]` → `ComplexInfinity`.
+  - Half-integers reduce to rational multiples of `Sqrt[Pi]`, e.g.
+    `Gamma[1/2] = Sqrt[Pi]`, `Gamma[5/2] = 3/4 Sqrt[Pi]`,
+    `Gamma[-1/2] = -2 Sqrt[Pi]` (via the Factorial functional equation).
+  - `Gamma[Infinity]` → `Infinity`, `Gamma[-Infinity]` → `Indeterminate`,
+    `Gamma[ComplexInfinity]` → `ComplexInfinity`.
+- Exact reductions for the incomplete form:
+  - `Gamma[a, 0] = Gamma[a]`, `Gamma[1, z] = E^-z`, `Gamma[a, Infinity] = 0`.
+- Numeric evaluation:
+  - Machine-precision real → libm `tgamma`; machine-precision complex →
+    Lanczos approximation, e.g. `Gamma[2.3 + I] = 0.719141 + 0.540614 I`.
+  - Arbitrary precision (MPFR) real → `mpfr_gamma`, output precision tracking
+    the input, e.g. `N[Gamma[22/10], 50]` and `Gamma[2.2`200]`.
+  - Incomplete real (machine or MPFR) → `mpfr_gamma_inc`, e.g.
+    `Gamma[1.5, 7.5] = 0.00160996`, `Gamma[1, 1.1, 2.2] = 0.222068`.
+- Arbitrary-precision **complex** gamma is intentionally left symbolic rather
+  than emitting a value whose advertised precision a fixed Lanczos series can
+  not actually deliver (machine-precision complex is supported).
+- All other arguments (e.g. `Gamma[1/3]`, `Gamma[x]`, `Gamma[a, z]`,
+  exact-integer `Gamma[2, 3]`) stay unevaluated.
+
 ## HypergeometricPFQ
 
 `HypergeometricPFQ[{a1, …, ap}, {b1, …, bq}, z]` is the generalized

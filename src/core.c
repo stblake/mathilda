@@ -15,6 +15,7 @@
 #include "parse.h"
 #include "arithmetic.h"
 #include "numbertheory.h"
+#include "gamma.h"
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
@@ -438,6 +439,7 @@ void core_init(void) {
 
     facint_init();
     numbertheory_init();
+    gamma_init();
     fibonacci_init();
     lucas_init();
 

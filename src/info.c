@@ -197,6 +197,17 @@ void info_init(void) {
         "For half-integers (n = m/2 with m odd) it reduces to Sqrt[Pi] times a\n"
         "rational from the Gamma functional equation. Negative integers give\n"
         "ComplexInfinity. Other inputs stay unevaluated.");
+    symtab_set_docstring("Gamma",
+        "Gamma[z]\n"
+        "\tis the Euler gamma function Gamma(z).\n"
+        "Gamma[a, z]\n"
+        "\tis the upper incomplete gamma function Gamma(a, z).\n"
+        "Gamma[a, z0, z1]\n"
+        "\tis the generalized incomplete gamma Gamma(a, z0) - Gamma(a, z1).\n"
+        "Integer and half-integer arguments reduce to exact values ((z-1)!,\n"
+        "and rational multiples of Sqrt[Pi]); non-positive integers give\n"
+        "ComplexInfinity. Machine and arbitrary-precision (MPFR) real inputs\n"
+        "evaluate numerically, as do machine-precision complex inputs. Listable.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Fibonacci",
         "Fibonacci[n]\n"

@@ -1,60 +1,87 @@
-# Task: Add examples to every builtin in the documentation center
+# Task: Implement `Gamma` builtin in `src/gamma.c`
 
-## Problem
-154 builtin pages in the docs site show "_No verified examples yet for this
-function._" with no examples anywhere (e.g. MapAll). 15 more have overlay-only
-examples (acceptable, like Map). The user wants every builtin to have a couple
-of simple examples (+ a harder one where appropriate).
+Faithful recreation of Mathematica's `Gamma`:
+- `Gamma[z]` — Euler gamma function Γ(z)
+- `Gamma[a, z]` — upper incomplete gamma Γ(a,z) = ∫_z^∞ t^{a-1} e^{-t} dt
+- `Gamma[a, z0, z1]` — generalized = Γ(a,z0) − Γ(a,z1)
 
-## Root cause
-`site/generate.py` mines `In[]:=` example blocks from `docs/spec/builtins/*.md`,
-but only maps a function to a spec section when the function name appears as an
-H2 heading token. Functions grouped under shared headings (e.g. `## Trig
-Functions` covering Sin/Cos/Tan/...) get no section -> no mined examples. Per-
-function examples cannot be expressed in a grouped spec section.
+Attributes: Listable, NumericFunction, Protected.
 
-## Approach
-Use the established **overlay** mechanism: `site/overlays/<Name>.md`. The
-generator merges overlay worked-examples into a "Notes & additional examples"
-section (this is exactly how `Map` shows its examples today). One file per
-function => parallel subagents never conflict. Every example is verified by
-running it through `./Mathilda` and capturing the real output.
+## Design (dispatch in `builtin_gamma`)
 
-## Plan
-- [ ] Build the definitive list of 154 functions missing all examples (done: .tmp_noex.txt)
-- [ ] Dispatch subagents (batched by category) to create verified overlays
-- [ ] Re-run detection; mop up any stragglers
-- [ ] `make docs` to regenerate + verify pages render examples
-- [ ] Confirm "_No verified examples_" count dropped to ~0
-- [ ] Changelog entry under docs/spec/changelog/<Monday>.md
-- [ ] Review section below
+### Gamma[z] (1 arg)
+1. Exact integer / half-integer → reuse `Factorial[z-1]` machinery
+   (Gamma[z] = (z-1)!): integers → (n-1)! exact/BigInt or ComplexInfinity
+   for n≤0; half-integers → rational·Sqrt[Pi]. (Build `Factorial[z-1]`,
+   eval; if it stays a `Factorial[...]` head, free + return NULL.)
+2. Symbolic infinities: Infinity→Infinity, -Infinity→Indeterminate,
+   ComplexInfinity→ComplexInfinity, Indeterminate→Indeterminate.
+3. Machine real (EXPR_REAL) → `tgamma`. (poles → ComplexInfinity)
+4. Machine complex (Complex[real,real], inexact) → Lanczos (double complex).
+5. MPFR real → `mpfr_gamma` at input precision.
+6. MPFR complex (Complex[mpfr,mpfr]) → Lanczos via exported `mpfr_complex_*`
+   primitives (exp/log/sin + manual complex mul) with reflection for Re<1/2.
+7. Otherwise NULL (stay symbolic).
 
-## Constraints
-- No edits to src/ or src/external/. No edits to generate.py.
-- Every overlay example must be run through ./Mathilda; outputs must be the
-  real captured output (no fabricated outputs).
-- Skip examples that error / return Null / are unevaluated unless that IS the
-  point being illustrated.
+### Gamma[a, z] (2 args)
+1. Exact rewrites: Gamma[a,0]→Gamma[a]; Gamma[1,z]→E^-z; Gamma[a,Infinity]→0.
+2. Numeric real a,z (machine or MPFR) → `mpfr_gamma_inc`
+   (returns EXPR_REAL for machine inputs @53-bit, EXPR_MPFR for mpfr inputs).
+3. Otherwise NULL.
+
+### Gamma[a, z0, z1] (3 args)
+Rewrite to `Gamma[a,z0] - Gamma[a,z1]` and evaluate.
+
+## Files
+- [ ] NEW `src/gamma.c` — builtin + helpers + `gamma_init()`
+- [ ] NEW `src/gamma.h` — `void gamma_init(void);` + `Expr* builtin_gamma(Expr*);`
+- [ ] `src/core.c` — `#include "gamma.h"` + call `gamma_init();`
+- [ ] `src/info.c` — docstring for Gamma (terse, no examples)
+- [ ] `src/sym_names.c` — already has `SYM_Gamma` (verify, no change)
+- [ ] NEW `tests/test_gamma.c` — extensive coverage
+- [ ] `tests/CMakeLists.txt` — add `gamma_tests` target
+- [ ] `docs/spec/builtins/` — add Gamma entry (special-functions page)
+- [ ] `docs/spec/changelog/2026-06-08.md` — changelog note (Mon of ISO week)
+
+## Out of scope (future work)
+- D[Gamma...] / Integrate[Gamma...] / Series[Gamma...].
+
+## Verification
+- [ ] `make -j` clean (`-std=c99 -Wall -Wextra`)
+- [ ] Build + run only `gamma_tests` (scoped)
+- [ ] valgrind diff vs Sin[1.0] baseline — no Mathilda-src leaks
+- [ ] Spot-check REPL against spec example values
 
 ## Review
-Done. Created 154 hand-curated overlays under `site/overlays/` (one per builtin
-that had no examples), each with 2-4 worked examples verified against `./Mathilda`
-plus a terse note. Dispatched 12 category-batched subagents in parallel; each
-verified every example by piping inputs through the binary and capturing the real
-`Out[]` (no fabricated outputs). Overlay files are one-per-function so the parallel
-agents never conflicted.
 
-Results after `make docs`:
-- Overlays: 60 -> 214. Verified examples reported by the generator: 1020.
-- Pages with NO examples anywhere: 154 -> 0 (every public builtin now shows examples).
-- Strict MkDocs build passes clean.
-- No edits to src/, src/external/, or generate.py. New overlays carry no status
-  front matter (no over-claiming) — status stays auto-derived.
-- Changelog entry added to docs/spec/changelog/2026-06-01.md.
+**Status: complete.** `Gamma[z]`, `Gamma[a,z]`, `Gamma[a,z0,z1]` implemented
+in `src/gamma.c` (+ `gamma.h`), wired into `core.c`, docstring in `info.c`.
+`SYM_Gamma` was already interned in `sym_names.c` (no change needed).
 
-Known cosmetic limitation (pre-existing, matches the 60 prior overlays incl. Map):
-overlay examples render under "## Notes & additional examples"; the main
-"## Examples" section still reads "No verified examples yet" for these because the
-generator only auto-mines the main section from per-function spec H2 headings.
-Promoting overlay examples into the main section would require a generate.py
-change (out of scope; left as a possible follow-up).
+Files touched:
+- NEW `src/gamma.c`, `src/gamma.h`
+- `src/core.c` (include + `gamma_init()`)
+- `src/info.c` (docstring)
+- NEW `tests/test_gamma.c`; `tests/CMakeLists.txt` (COMMON_SRC + `gamma_tests`)
+- `docs/spec/builtins/special-functions.md` (Gamma section)
+- NEW `docs/spec/changelog/2026-06-08.md`; `Mathilda_spec.md` (changelog row)
+
+Verification:
+- `make -j` clean under `-std=c99 -Wall -Wextra`; no warnings on new files.
+- `gamma_tests`: all 13 groups pass (exact ints/half-ints/BigInt, poles,
+  infinities, symbolic, machine real/complex, MPFR precision tracking,
+  incomplete + generalized, Listable, attributes).
+- valgrind: a 16-evaluation Gamma driver matches the `Sin[1.0]` baseline
+  byte-for-byte (12,800 B/400 blocks definitely + 3,720 B/56 indirectly —
+  documented dyld/Accelerate noise); zero Gamma frames in any lost stack.
+- REPL spot-checks reproduce every spec example value.
+
+Design notes / deliberate limitations:
+- Exact integer/half-integer `Gamma[z]` reuses the `Factorial[z-1]` machinery
+  (DRY: one code path for exact int64 / BigInt / rational·Sqrt[Pi]).
+- Real numerics use `tgamma` (machine) and `mpfr_gamma` / `mpfr_gamma_inc`
+  (arbitrary). Machine complex uses a Lanczos approximation.
+- Arbitrary-precision **complex** gamma is left symbolic on purpose — a fixed
+  Lanczos series can't honour the advertised precision; honest > wrong.
+- Out of scope (future): D/Integrate/Series of Gamma; closed forms for
+  exact-integer incomplete gamma (`Gamma[2,3]` stays symbolic).

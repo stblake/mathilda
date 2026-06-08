@@ -91,6 +91,7 @@ set(COMMON_SRC
     ../src/times.c
     ../src/arithmetic.c
     ../src/numbertheory.c
+    ../src/gamma.c
     ../src/facint.c
     ../src/fibonacci.c
     ../src/lucas.c
@@ -1305,6 +1306,9 @@ target_include_directories(increment_tests PRIVATE ../src)
 
 add_executable(numeric_tests test_numeric.c ${COMMON_SRC})
 target_include_directories(numeric_tests PRIVATE ../src)
+
+add_executable(gamma_tests test_gamma.c ${COMMON_SRC})
+target_include_directories(gamma_tests PRIVATE ../src)
 
 add_executable(simplify_tests test_simplify.c ${COMMON_SRC})
 target_include_directories(simplify_tests PRIVATE ../src)
