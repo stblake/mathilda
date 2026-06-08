@@ -9,27 +9,27 @@
   },
   {
     "name": "$Context",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Scoping Constructs",
+    "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "$Context is a string giving the current context. New symbols are created",
-    "url": "documentation/other-advanced/$Context/"
+    "url": "documentation/scoping-constructs/$Context/"
   },
   {
     "name": "$ContextPath",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Scoping Constructs",
+    "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "$ContextPath is a list of contexts used (in order) to resolve bare",
-    "url": "documentation/other-advanced/$ContextPath/"
+    "url": "documentation/scoping-constructs/$ContextPath/"
   },
   {
     "name": "$Epilog",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Control Flow",
+    "slug": "control-flow",
     "status": "Stable",
     "summary": "$Epilog",
-    "url": "documentation/other-advanced/$Epilog/"
+    "url": "documentation/control-flow/$Epilog/"
   },
   {
     "name": "$MachineEpsilon",
@@ -81,43 +81,43 @@
   },
   {
     "name": "$Post",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Control Flow",
+    "slug": "control-flow",
     "status": "Stable",
     "summary": "$Post",
-    "url": "documentation/other-advanced/$Post/"
+    "url": "documentation/control-flow/$Post/"
   },
   {
     "name": "$Pre",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Control Flow",
+    "slug": "control-flow",
     "status": "Stable",
     "summary": "$Pre",
-    "url": "documentation/other-advanced/$Pre/"
+    "url": "documentation/control-flow/$Pre/"
   },
   {
     "name": "$PrePrint",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Control Flow",
+    "slug": "control-flow",
     "status": "Stable",
     "summary": "$PrePrint",
-    "url": "documentation/other-advanced/$PrePrint/"
+    "url": "documentation/control-flow/$PrePrint/"
   },
   {
     "name": "$PreRead",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Control Flow",
+    "slug": "control-flow",
     "status": "Stable",
     "summary": "$PreRead",
-    "url": "documentation/other-advanced/$PreRead/"
+    "url": "documentation/control-flow/$PreRead/"
   },
   {
     "name": "$RecursionLimit",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Control Flow",
+    "slug": "control-flow",
     "status": "Stable",
     "summary": "$RecursionLimit",
-    "url": "documentation/other-advanced/$RecursionLimit/"
+    "url": "documentation/control-flow/$RecursionLimit/"
   },
   {
     "name": "$SimplifyDebug",
@@ -129,11 +129,11 @@
   },
   {
     "name": "Abs",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Abs[z] gives the absolute value (modulus) of numeric z, Sqrt[Re[z]^2 + Im[z]^2] for complex z.",
-    "url": "documentation/arithmetic-and-algebra/Abs/"
+    "url": "documentation/arithmetic/Abs/"
   },
   {
     "name": "AbsoluteTime",
@@ -145,35 +145,35 @@
   },
   {
     "name": "Accumulate",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Accumulate[list]",
-    "url": "documentation/arithmetic-and-algebra/Accumulate/"
+    "url": "documentation/arithmetic/Accumulate/"
   },
   {
     "name": "Accuracy",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Accuracy[x]",
-    "url": "documentation/other-advanced/Accuracy/"
+    "url": "documentation/arithmetic/Accuracy/"
   },
   {
     "name": "AddTo",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "AddTo[x, dx] or x += dx",
-    "url": "documentation/other-advanced/AddTo/"
+    "url": "documentation/assignment-and-rules/AddTo/"
   },
   {
     "name": "Apart",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.",
-    "url": "documentation/arithmetic-and-algebra/Apart/"
+    "url": "documentation/algebra/Apart/"
   },
   {
     "name": "Append",
@@ -193,35 +193,35 @@
   },
   {
     "name": "ArcCos",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "ArcCos[z]",
-    "url": "documentation/other-advanced/ArcCos/"
+    "url": "documentation/elementary-functions/ArcCos/"
   },
   {
     "name": "ArcSin",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "ArcSin[z]",
-    "url": "documentation/other-advanced/ArcSin/"
+    "url": "documentation/elementary-functions/ArcSin/"
   },
   {
     "name": "ArcTan",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "ArcTan[z]",
-    "url": "documentation/other-advanced/ArcTan/"
+    "url": "documentation/elementary-functions/ArcTan/"
   },
   {
     "name": "Arg",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Arg[z] gives the argument (phase angle in (-Pi, Pi]) of numeric z; 0 for nonnegative reals, Pi for negative reals.",
-    "url": "documentation/arithmetic-and-algebra/Arg/"
+    "url": "documentation/arithmetic/Arg/"
   },
   {
     "name": "Array",
@@ -257,51 +257,51 @@
   },
   {
     "name": "Begin",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Scoping Constructs",
+    "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "Begin[\"ctx`\"] sets the current context ($Context) to \"ctx`\", saving",
-    "url": "documentation/other-advanced/Begin/"
+    "url": "documentation/scoping-constructs/Begin/"
   },
   {
     "name": "BeginPackage",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Scoping Constructs",
+    "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "BeginPackage[\"ctx`\"] sets the current context to \"ctx`\" and restricts",
-    "url": "documentation/other-advanced/BeginPackage/"
+    "url": "documentation/scoping-constructs/BeginPackage/"
   },
   {
     "name": "Binomial",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Binomial[n, m]",
-    "url": "documentation/arithmetic-and-algebra/Binomial/"
+    "url": "documentation/arithmetic/Binomial/"
   },
   {
     "name": "Blank",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "_ or Blank[] represents any single expression.",
-    "url": "documentation/other-advanced/Blank/"
+    "url": "documentation/pattern-matching/Blank/"
   },
   {
     "name": "BlankNullSequence",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "___ or BlankNullSequence[] represents a sequence of zero or more expressions.",
-    "url": "documentation/other-advanced/BlankNullSequence/"
+    "url": "documentation/pattern-matching/BlankNullSequence/"
   },
   {
     "name": "BlankSequence",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Experimental",
     "summary": "__ or BlankSequence[] represents a sequence of one or more expressions.",
-    "url": "documentation/other-advanced/BlankSequence/"
+    "url": "documentation/pattern-matching/BlankSequence/"
   },
   {
     "name": "Block",
@@ -329,11 +329,11 @@
   },
   {
     "name": "Cancel",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Cancel[expr] cancels out common factors in the numerator and denominator of expr.",
-    "url": "documentation/arithmetic-and-algebra/Cancel/"
+    "url": "documentation/algebra/Cancel/"
   },
   {
     "name": "Cases",
@@ -344,12 +344,20 @@
     "url": "documentation/pattern-matching/Cases/"
   },
   {
+    "name": "Catalan",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Experimental",
+    "summary": "Catalan",
+    "url": "documentation/mathematical-constants/Catalan/"
+  },
+  {
     "name": "Ceiling",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Ceiling[x]",
-    "url": "documentation/other-advanced/Ceiling/"
+    "url": "documentation/arithmetic/Ceiling/"
   },
   {
     "name": "Characters",
@@ -369,11 +377,11 @@
   },
   {
     "name": "Clear",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "Clear[s1, s2, ...]",
-    "url": "documentation/other-advanced/Clear/"
+    "url": "documentation/assignment-and-rules/Clear/"
   },
   {
     "name": "ClearAttributes",
@@ -393,43 +401,43 @@
   },
   {
     "name": "Coefficient",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Coefficient[expr, form]",
-    "url": "documentation/structural-manipulation/Coefficient/"
+    "url": "documentation/algebra/Coefficient/"
   },
   {
     "name": "CoefficientList",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.",
-    "url": "documentation/structural-manipulation/CoefficientList/"
+    "url": "documentation/algebra/CoefficientList/"
   },
   {
     "name": "Collect",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Collect[expr, x]",
-    "url": "documentation/structural-manipulation/Collect/"
+    "url": "documentation/algebra/Collect/"
   },
   {
     "name": "Commonest",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Statistics",
+    "slug": "statistics",
     "status": "Stable",
     "summary": "Commonest[list] gives a list of the elements that are the most common in list.",
-    "url": "documentation/structural-manipulation/Commonest/"
+    "url": "documentation/statistics/Commonest/"
   },
   {
     "name": "Complex",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Complex[re, im]",
-    "url": "documentation/other-advanced/Complex/"
+    "url": "documentation/arithmetic/Complex/"
   },
   {
     "name": "ComposeList",
@@ -465,59 +473,59 @@
   },
   {
     "name": "Conjugate",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Conjugate[z] gives the complex conjugate Re[z] - I Im[z] of numeric z; real and real-valued (Re/Im/Abs/Arg) arguments are returned unchanged.",
-    "url": "documentation/arithmetic-and-algebra/Conjugate/"
+    "url": "documentation/arithmetic/Conjugate/"
   },
   {
     "name": "ConjugateTranspose",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Linear Algebra",
+    "slug": "linear-algebra",
     "status": "Stable",
     "summary": "ConjugateTranspose[m]",
-    "url": "documentation/structural-manipulation/ConjugateTranspose/"
+    "url": "documentation/linear-algebra/ConjugateTranspose/"
   },
   {
     "name": "Context",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Scoping Constructs",
+    "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "Context[] gives the current context ($Context).",
-    "url": "documentation/other-advanced/Context/"
+    "url": "documentation/scoping-constructs/Context/"
   },
   {
     "name": "ContinuedFraction",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "ContinuedFraction[x, n]",
-    "url": "documentation/arithmetic-and-algebra/ContinuedFraction/"
+    "url": "documentation/arithmetic/ContinuedFraction/"
   },
   {
     "name": "Cos",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Cos[z]",
-    "url": "documentation/other-advanced/Cos/"
+    "url": "documentation/elementary-functions/Cos/"
   },
   {
     "name": "Cosh",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Cosh[z]",
-    "url": "documentation/other-advanced/Cosh/"
+    "url": "documentation/elementary-functions/Cosh/"
   },
   {
     "name": "Cot",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Cot[z]",
-    "url": "documentation/other-advanced/Cot/"
+    "url": "documentation/elementary-functions/Cot/"
   },
   {
     "name": "Count",
@@ -537,19 +545,19 @@
   },
   {
     "name": "Csc",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Csc[z]",
-    "url": "documentation/other-advanced/Csc/"
+    "url": "documentation/elementary-functions/Csc/"
   },
   {
     "name": "Cubics",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Experimental",
     "summary": "Cubics is an option for Solve that controls whether cubic",
-    "url": "documentation/arithmetic-and-algebra/Cubics/"
+    "url": "documentation/algebra/Cubics/"
   },
   {
     "name": "D",
@@ -561,27 +569,35 @@
   },
   {
     "name": "Decompose",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Decompose[poly, x]",
-    "url": "documentation/other-advanced/Decompose/"
+    "url": "documentation/algebra/Decompose/"
   },
   {
     "name": "Decrement",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "Decrement[x] or x--",
-    "url": "documentation/other-advanced/Decrement/"
+    "url": "documentation/assignment-and-rules/Decrement/"
   },
   {
     "name": "Default",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Experimental",
     "summary": "Default[f]",
-    "url": "documentation/other-advanced/Default/"
+    "url": "documentation/pattern-matching/Default/"
+  },
+  {
+    "name": "Degree",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Experimental",
+    "summary": "Degree",
+    "url": "documentation/mathematical-constants/Degree/"
   },
   {
     "name": "Delete",
@@ -609,11 +625,11 @@
   },
   {
     "name": "Denominator",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Denominator[expr]",
-    "url": "documentation/arithmetic-and-algebra/Denominator/"
+    "url": "documentation/algebra/Denominator/"
   },
   {
     "name": "Derivative",
@@ -665,19 +681,19 @@
   },
   {
     "name": "Differences",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Differences[list]",
-    "url": "documentation/arithmetic-and-algebra/Differences/"
+    "url": "documentation/arithmetic/Differences/"
   },
   {
     "name": "DigitCount",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "DigitCount[n] gives a list of the counts of digits 1, 2, ..., 9, 0 in the base-10 representation of n.",
-    "url": "documentation/arithmetic-and-algebra/DigitCount/"
+    "url": "documentation/arithmetic/DigitCount/"
   },
   {
     "name": "Dimensions",
@@ -689,11 +705,11 @@
   },
   {
     "name": "Discriminant",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Discriminant[poly, var]",
-    "url": "documentation/structural-manipulation/Discriminant/"
+    "url": "documentation/algebra/Discriminant/"
   },
   {
     "name": "Distribute",
@@ -705,11 +721,11 @@
   },
   {
     "name": "Divide",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "x / y or Divide[x, y] represents x / y; rewritten by the evaluator to",
-    "url": "documentation/other-advanced/Divide/"
+    "url": "documentation/arithmetic/Divide/"
   },
   {
     "name": "Do",
@@ -729,11 +745,11 @@
   },
   {
     "name": "DownValues",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Experimental",
     "summary": "DownValues[s] gives a list of down-value rules for s.",
-    "url": "documentation/other-advanced/DownValues/"
+    "url": "documentation/assignment-and-rules/DownValues/"
   },
   {
     "name": "Dt",
@@ -742,6 +758,14 @@
     "status": "Stable",
     "summary": "Dt[f] gives the total derivative of f.",
     "url": "documentation/calculus/Dt/"
+  },
+  {
+    "name": "E",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Stable",
+    "summary": "E",
+    "url": "documentation/mathematical-constants/E/"
   },
   {
     "name": "Eigenvalues",
@@ -769,43 +793,51 @@
   },
   {
     "name": "Eliminate",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Eliminate[eqns, vars]",
-    "url": "documentation/structural-manipulation/Eliminate/"
+    "url": "documentation/algebra/Eliminate/"
   },
   {
     "name": "End",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Scoping Constructs",
+    "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "End[] restores the context that was active before the matching Begin[]",
-    "url": "documentation/other-advanced/End/"
+    "url": "documentation/scoping-constructs/End/"
   },
   {
     "name": "EndPackage",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Scoping Constructs",
+    "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "EndPackage[] restores the state saved by BeginPackage and prepends the",
-    "url": "documentation/other-advanced/EndPackage/"
+    "url": "documentation/scoping-constructs/EndPackage/"
   },
   {
     "name": "Equal",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "lhs == rhs or Equal[lhs, rhs]",
-    "url": "documentation/other-advanced/Equal/"
+    "url": "documentation/comparisons/Equal/"
+  },
+  {
+    "name": "EulerGamma",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Experimental",
+    "summary": "EulerGamma",
+    "url": "documentation/mathematical-constants/EulerGamma/"
   },
   {
     "name": "EulerPhi",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "EulerPhi[n] gives the Euler totient function phi(n).",
-    "url": "documentation/arithmetic-and-algebra/EulerPhi/"
+    "url": "documentation/arithmetic/EulerPhi/"
   },
   {
     "name": "Evaluate",
@@ -825,11 +857,11 @@
   },
   {
     "name": "Exp",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Exp[z]",
-    "url": "documentation/other-advanced/Exp/"
+    "url": "documentation/elementary-functions/Exp/"
   },
   {
     "name": "ExpToTrig",
@@ -841,27 +873,27 @@
   },
   {
     "name": "Expand",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Expand[expr] expands out products and powers in expr.",
-    "url": "documentation/structural-manipulation/Expand/"
+    "url": "documentation/algebra/Expand/"
   },
   {
     "name": "ExpandDenominator",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "ExpandDenominator[expr]",
-    "url": "documentation/structural-manipulation/ExpandDenominator/"
+    "url": "documentation/algebra/ExpandDenominator/"
   },
   {
     "name": "ExpandNumerator",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "ExpandNumerator[expr]",
-    "url": "documentation/structural-manipulation/ExpandNumerator/"
+    "url": "documentation/algebra/ExpandNumerator/"
   },
   {
     "name": "ExponentialMovingAverage",
@@ -873,11 +905,11 @@
   },
   {
     "name": "ExtendedGCD",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "ExtendedGCD[n1, n2, ...]",
-    "url": "documentation/arithmetic-and-algebra/ExtendedGCD/"
+    "url": "documentation/arithmetic/ExtendedGCD/"
   },
   {
     "name": "Extract",
@@ -889,75 +921,75 @@
   },
   {
     "name": "Factor",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Factor[poly] factors a polynomial over the integers.",
-    "url": "documentation/structural-manipulation/Factor/"
+    "url": "documentation/algebra/Factor/"
   },
   {
     "name": "FactorInteger",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.",
-    "url": "documentation/arithmetic-and-algebra/FactorInteger/"
+    "url": "documentation/arithmetic/FactorInteger/"
   },
   {
     "name": "FactorSquareFree",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "FactorSquareFree[poly]",
-    "url": "documentation/structural-manipulation/FactorSquareFree/"
+    "url": "documentation/algebra/FactorSquareFree/"
   },
   {
     "name": "FactorTerms",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "FactorTerms[poly]",
-    "url": "documentation/structural-manipulation/FactorTerms/"
+    "url": "documentation/algebra/FactorTerms/"
   },
   {
     "name": "FactorTermsList",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "FactorTermsList[poly]",
-    "url": "documentation/structural-manipulation/FactorTermsList/"
+    "url": "documentation/algebra/FactorTermsList/"
   },
   {
     "name": "Factorial",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "n! or Factorial[n]",
-    "url": "documentation/arithmetic-and-algebra/Factorial/"
+    "url": "documentation/arithmetic/Factorial/"
   },
   {
     "name": "Factorial2",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Factorial2[n] (also typeset n!!) gives the double factorial of n.",
-    "url": "documentation/other-advanced/Factorial2/"
+    "url": "documentation/arithmetic/Factorial2/"
   },
   {
     "name": "FactorialPower",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "FactorialPower[n, k]",
-    "url": "documentation/arithmetic-and-algebra/FactorialPower/"
+    "url": "documentation/arithmetic/FactorialPower/"
   },
   {
     "name": "Fibonacci",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Fibonacci[n]",
-    "url": "documentation/arithmetic-and-algebra/Fibonacci/"
+    "url": "documentation/arithmetic/Fibonacci/"
   },
   {
     "name": "FileBaseName",
@@ -1041,11 +1073,11 @@
   },
   {
     "name": "FixedPoint",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
     "status": "Stable",
     "summary": "FixedPoint[f, expr]",
-    "url": "documentation/other-advanced/FixedPoint/"
+    "url": "documentation/functional-programming/FixedPoint/"
   },
   {
     "name": "FixedPointList",
@@ -1057,11 +1089,11 @@
   },
   {
     "name": "Flat",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Expression Information",
+    "slug": "expression-information",
     "status": "Partial",
     "summary": "Flat is an attribute that can be assigned to a symbol f to indicate that all expressions involving nested functions f should be flattened out. This property is accounted for in pattern matching.",
-    "url": "documentation/other-advanced/Flat/"
+    "url": "documentation/expression-information/Flat/"
   },
   {
     "name": "Flatten",
@@ -1073,11 +1105,11 @@
   },
   {
     "name": "Floor",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Floor[x]",
-    "url": "documentation/other-advanced/Floor/"
+    "url": "documentation/arithmetic/Floor/"
   },
   {
     "name": "Fold",
@@ -1113,19 +1145,19 @@
   },
   {
     "name": "FromContinuedFraction",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "FromContinuedFraction[{a1, a2, ..., an}]",
-    "url": "documentation/arithmetic-and-algebra/FromContinuedFraction/"
+    "url": "documentation/arithmetic/FromContinuedFraction/"
   },
   {
     "name": "FromDigits",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "FromDigits[list] constructs an integer from a list of decimal digits, most-significant first.",
-    "url": "documentation/arithmetic-and-algebra/FromDigits/"
+    "url": "documentation/arithmetic/FromDigits/"
   },
   {
     "name": "FullForm",
@@ -1137,19 +1169,19 @@
   },
   {
     "name": "Function",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
     "status": "Stable",
     "summary": "body & or Function[body]",
-    "url": "documentation/other-advanced/Function/"
+    "url": "documentation/functional-programming/Function/"
   },
   {
     "name": "GCD",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "GCD[n1, n2, ...]",
-    "url": "documentation/arithmetic-and-algebra/GCD/"
+    "url": "documentation/arithmetic/GCD/"
   },
   {
     "name": "Gamma",
@@ -1161,11 +1193,11 @@
   },
   {
     "name": "GeneratedParameters",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Experimental",
     "summary": "GeneratedParameters is an option for Solve specifying the",
-    "url": "documentation/other-advanced/GeneratedParameters/"
+    "url": "documentation/algebra/GeneratedParameters/"
   },
   {
     "name": "Get",
@@ -1176,28 +1208,52 @@
     "url": "documentation/file-io/Get/"
   },
   {
+    "name": "Glaisher",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Stable",
+    "summary": "Glaisher",
+    "url": "documentation/mathematical-constants/Glaisher/"
+  },
+  {
+    "name": "GoldenAngle",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Stable",
+    "summary": "GoldenAngle",
+    "url": "documentation/mathematical-constants/GoldenAngle/"
+  },
+  {
+    "name": "GoldenRatio",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Experimental",
+    "summary": "GoldenRatio",
+    "url": "documentation/mathematical-constants/GoldenRatio/"
+  },
+  {
     "name": "Greater",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "x > y or Greater[x, y]",
-    "url": "documentation/other-advanced/Greater/"
+    "url": "documentation/comparisons/Greater/"
   },
   {
     "name": "GreaterEqual",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "x >= y or GreaterEqual[x, y]",
-    "url": "documentation/other-advanced/GreaterEqual/"
+    "url": "documentation/comparisons/GreaterEqual/"
   },
   {
     "name": "GroebnerBasis",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "GroebnerBasis[{p1, p2, ...}, {x1, x2, ...}]",
-    "url": "documentation/structural-manipulation/GroebnerBasis/"
+    "url": "documentation/algebra/GroebnerBasis/"
   },
   {
     "name": "HankelMatrix",
@@ -1233,11 +1289,11 @@
   },
   {
     "name": "Hold",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Expression Information",
+    "slug": "expression-information",
     "status": "Stable",
     "summary": "Hold[expr]",
-    "url": "documentation/other-advanced/Hold/"
+    "url": "documentation/expression-information/Hold/"
   },
   {
     "name": "HoldAllComplete",
@@ -1265,19 +1321,19 @@
   },
   {
     "name": "HoldPattern",
-    "category": "Expression Information",
-    "slug": "expression-information",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "HoldPattern[expr]",
-    "url": "documentation/expression-information/HoldPattern/"
+    "url": "documentation/pattern-matching/HoldPattern/"
   },
   {
     "name": "HornerForm",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "HornerForm[poly]",
-    "url": "documentation/structural-manipulation/HornerForm/"
+    "url": "documentation/algebra/HornerForm/"
   },
   {
     "name": "Hypergeometric0F1",
@@ -1337,27 +1393,27 @@
   },
   {
     "name": "Im",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Im[z] gives the imaginary part of numeric z, and 0 for real or real-valued (Re/Im/Abs/Arg) arguments.",
-    "url": "documentation/arithmetic-and-algebra/Im/"
+    "url": "documentation/arithmetic/Im/"
   },
   {
     "name": "Increment",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "Increment[x] or x++",
-    "url": "documentation/other-advanced/Increment/"
+    "url": "documentation/assignment-and-rules/Increment/"
   },
   {
     "name": "Inequality",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "Inequality[v0, op0, v1, op1, v2, ...] is the canonical form for a chained comparison such as a < b <= c. It returns True if every adjacent pair holds, False if any pair fails, and otherwise the residual chain with decidable pairs dropped.",
-    "url": "documentation/other-advanced/Inequality/"
+    "url": "documentation/comparisons/Inequality/"
   },
   {
     "name": "Information",
@@ -1393,27 +1449,27 @@
   },
   {
     "name": "IntegerDigits",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "IntegerDigits[n] gives a list of the decimal digits in the integer n.",
-    "url": "documentation/arithmetic-and-algebra/IntegerDigits/"
+    "url": "documentation/arithmetic/IntegerDigits/"
   },
   {
     "name": "IntegerExponent",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "IntegerExponent[n, b] gives the highest power of b that divides n.",
-    "url": "documentation/arithmetic-and-algebra/IntegerExponent/"
+    "url": "documentation/arithmetic/IntegerExponent/"
   },
   {
     "name": "IntegerLength",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "IntegerLength[n] gives the number of decimal digits in the integer n.",
-    "url": "documentation/arithmetic-and-algebra/IntegerLength/"
+    "url": "documentation/arithmetic/IntegerLength/"
   },
   {
     "name": "IntegerQ",
@@ -1425,11 +1481,11 @@
   },
   {
     "name": "IntegerString",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "IntegerString[n] gives a string consisting of the decimal digits in the integer n.",
-    "url": "documentation/arithmetic-and-algebra/IntegerString/"
+    "url": "documentation/arithmetic/IntegerString/"
   },
   {
     "name": "Integrate",
@@ -1465,19 +1521,19 @@
   },
   {
     "name": "InverseFunctions",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Experimental",
     "summary": "InverseFunctions is an option for Solve that enables the",
-    "url": "documentation/other-advanced/InverseFunctions/"
+    "url": "documentation/algebra/InverseFunctions/"
   },
   {
     "name": "IrreduciblePolynomialQ",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "IrreduciblePolynomialQ[poly]",
-    "url": "documentation/arithmetic-and-algebra/IrreduciblePolynomialQ/"
+    "url": "documentation/algebra/IrreduciblePolynomialQ/"
   },
   {
     "name": "Join",
@@ -1488,12 +1544,20 @@
     "url": "documentation/structural-manipulation/Join/"
   },
   {
+    "name": "Khinchin",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Stable",
+    "summary": "Khinchin",
+    "url": "documentation/mathematical-constants/Khinchin/"
+  },
+  {
     "name": "LCM",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "LCM[n1, n2, ...]",
-    "url": "documentation/arithmetic-and-algebra/LCM/"
+    "url": "documentation/arithmetic/LCM/"
   },
   {
     "name": "LUDecomposition",
@@ -1545,19 +1609,19 @@
   },
   {
     "name": "Less",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "x < y or Less[x, y]",
-    "url": "documentation/other-advanced/Less/"
+    "url": "documentation/comparisons/Less/"
   },
   {
     "name": "LessEqual",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "x <= y or LessEqual[x, y]",
-    "url": "documentation/other-advanced/LessEqual/"
+    "url": "documentation/comparisons/LessEqual/"
   },
   {
     "name": "Level",
@@ -1569,11 +1633,11 @@
   },
   {
     "name": "Limit",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Calculus",
+    "slug": "calculus",
     "status": "Stable",
     "summary": "Limit[f, x -> a]",
-    "url": "documentation/other-advanced/Limit/"
+    "url": "documentation/calculus/Limit/"
   },
   {
     "name": "LinearSolve",
@@ -1593,27 +1657,27 @@
   },
   {
     "name": "Log",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Log[z]",
-    "url": "documentation/other-advanced/Log/"
+    "url": "documentation/elementary-functions/Log/"
   },
   {
     "name": "Longest",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "Longest[p] is a pattern object that matches the longest sequence consistent with the pattern p.",
-    "url": "documentation/other-advanced/Longest/"
+    "url": "documentation/pattern-matching/Longest/"
   },
   {
     "name": "LucasL",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "LucasL[n]",
-    "url": "documentation/arithmetic-and-algebra/LucasL/"
+    "url": "documentation/arithmetic/LucasL/"
   },
   {
     "name": "MachineNumberQ",
@@ -1625,11 +1689,11 @@
   },
   {
     "name": "MantissaExponent",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "MantissaExponent[x] gives a list {m, e} containing the mantissa and exponent of the real number x, such that x = m * 10^e and 1/10 <= |m| < 1 (or m = 0 when x = 0).",
-    "url": "documentation/arithmetic-and-algebra/MantissaExponent/"
+    "url": "documentation/arithmetic/MantissaExponent/"
   },
   {
     "name": "Map",
@@ -1657,11 +1721,11 @@
   },
   {
     "name": "MatchQ",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "MatchQ[expr, form]",
-    "url": "documentation/other-advanced/MatchQ/"
+    "url": "documentation/pattern-matching/MatchQ/"
   },
   {
     "name": "MatrixPower",
@@ -1729,11 +1793,11 @@
   },
   {
     "name": "MinimalPolynomial",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "MinimalPolynomial[s, x]",
-    "url": "documentation/arithmetic-and-algebra/MinimalPolynomial/"
+    "url": "documentation/algebra/MinimalPolynomial/"
   },
   {
     "name": "Module",
@@ -1769,19 +1833,19 @@
   },
   {
     "name": "MultiplicativeOrder",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "MultiplicativeOrder[k, n]",
-    "url": "documentation/arithmetic-and-algebra/MultiplicativeOrder/"
+    "url": "documentation/arithmetic/MultiplicativeOrder/"
   },
   {
     "name": "N",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "N[expr]",
-    "url": "documentation/other-advanced/N/"
+    "url": "documentation/arithmetic/N/"
   },
   {
     "name": "NegativeDefiniteMatrixQ",
@@ -1825,11 +1889,11 @@
   },
   {
     "name": "NextPrime",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "NextPrime[x] gives the next prime after x.",
-    "url": "documentation/arithmetic-and-algebra/NextPrime/"
+    "url": "documentation/arithmetic/NextPrime/"
   },
   {
     "name": "Norm",
@@ -1873,19 +1937,19 @@
   },
   {
     "name": "Numerator",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Numerator[expr]",
-    "url": "documentation/arithmetic-and-algebra/Numerator/"
+    "url": "documentation/algebra/Numerator/"
   },
   {
     "name": "NumericQ",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Expression Information",
+    "slug": "expression-information",
     "status": "Stable",
     "summary": "NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.",
-    "url": "documentation/other-advanced/NumericQ/"
+    "url": "documentation/expression-information/NumericQ/"
   },
   {
     "name": "OddQ",
@@ -1897,19 +1961,19 @@
   },
   {
     "name": "OneIdentity",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Expression Information",
+    "slug": "expression-information",
     "status": "Experimental",
     "summary": "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.",
-    "url": "documentation/other-advanced/OneIdentity/"
+    "url": "documentation/expression-information/OneIdentity/"
   },
   {
     "name": "Optional",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "patt:def or Optional[patt, def]",
-    "url": "documentation/other-advanced/Optional/"
+    "url": "documentation/pattern-matching/Optional/"
   },
   {
     "name": "OrderedQ",
@@ -1921,11 +1985,11 @@
   },
   {
     "name": "Orderless",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Expression Information",
+    "slug": "expression-information",
     "status": "Partial",
     "summary": "Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e_i in expressions of the form f[e_1, e_2, ...] should automatically be sorted into canonical order. This property is accounted for in pattern matching.",
-    "url": "documentation/other-advanced/Orderless/"
+    "url": "documentation/expression-information/Orderless/"
   },
   {
     "name": "Outer",
@@ -1937,11 +2001,11 @@
   },
   {
     "name": "OwnValues",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Experimental",
     "summary": "OwnValues[s] gives a list of own-value rules for s.",
-    "url": "documentation/other-advanced/OwnValues/"
+    "url": "documentation/assignment-and-rules/OwnValues/"
   },
   {
     "name": "Part",
@@ -1968,6 +2032,14 @@
     "url": "documentation/lists-and-iteration/Permutations/"
   },
   {
+    "name": "Pi",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Stable",
+    "summary": "Pi",
+    "url": "documentation/mathematical-constants/Pi/"
+  },
+  {
     "name": "Piecewise",
     "category": "Control Flow",
     "slug": "control-flow",
@@ -1977,11 +2049,11 @@
   },
   {
     "name": "Plus",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "x + y + ... or Plus[x, y, ...] represents a sum of terms.",
-    "url": "documentation/arithmetic-and-algebra/Plus/"
+    "url": "documentation/arithmetic/Plus/"
   },
   {
     "name": "Pochhammer",
@@ -1993,51 +2065,51 @@
   },
   {
     "name": "PolynomialExtendedGCD",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "PolynomialExtendedGCD[poly1, poly2, x] gives the extended GCD of poly1 and poly2 treated as univariate polynomials in x.",
-    "url": "documentation/structural-manipulation/PolynomialExtendedGCD/"
+    "url": "documentation/algebra/PolynomialExtendedGCD/"
   },
   {
     "name": "PolynomialGCD",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "PolynomialGCD[poly1, poly2, ...] gives the greatest common divisor of the polynomials.",
-    "url": "documentation/structural-manipulation/PolynomialGCD/"
+    "url": "documentation/algebra/PolynomialGCD/"
   },
   {
     "name": "PolynomialLCM",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "PolynomialLCM[poly1, poly2, ...] gives the least common multiple of the polynomials.",
-    "url": "documentation/structural-manipulation/PolynomialLCM/"
+    "url": "documentation/algebra/PolynomialLCM/"
   },
   {
     "name": "PolynomialMod",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "PolynomialMod[poly, m]",
-    "url": "documentation/structural-manipulation/PolynomialMod/"
+    "url": "documentation/algebra/PolynomialMod/"
   },
   {
     "name": "PolynomialQ",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "PolynomialQ[expr, var]",
-    "url": "documentation/structural-manipulation/PolynomialQ/"
+    "url": "documentation/algebra/PolynomialQ/"
   },
   {
     "name": "PolynomialQuotient",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "PolynomialQuotient[p, q, x] gives the quotient of p and q, treated as polynomials in x, with any remainder dropped.",
-    "url": "documentation/structural-manipulation/PolynomialQuotient/"
+    "url": "documentation/algebra/PolynomialQuotient/"
   },
   {
     "name": "PolynomialQuotientRemainder",
@@ -2049,11 +2121,11 @@
   },
   {
     "name": "PolynomialRemainder",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.",
-    "url": "documentation/structural-manipulation/PolynomialRemainder/"
+    "url": "documentation/algebra/PolynomialRemainder/"
   },
   {
     "name": "Position",
@@ -2081,51 +2153,51 @@
   },
   {
     "name": "Power",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "x ^ y or Power[x, y] represents x to the power y.",
-    "url": "documentation/arithmetic-and-algebra/Power/"
+    "url": "documentation/arithmetic/Power/"
   },
   {
     "name": "PowerExpand",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "PowerExpand[expr]",
-    "url": "documentation/structural-manipulation/PowerExpand/"
+    "url": "documentation/algebra/PowerExpand/"
   },
   {
     "name": "PowerMod",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "PowerMod[a, b, m] gives a^b mod m.",
-    "url": "documentation/arithmetic-and-algebra/PowerMod/"
+    "url": "documentation/arithmetic/PowerMod/"
   },
   {
     "name": "PreDecrement",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "PreDecrement[x] or --x",
-    "url": "documentation/other-advanced/PreDecrement/"
+    "url": "documentation/assignment-and-rules/PreDecrement/"
   },
   {
     "name": "PreIncrement",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "PreIncrement[x] or ++x",
-    "url": "documentation/other-advanced/PreIncrement/"
+    "url": "documentation/assignment-and-rules/PreIncrement/"
   },
   {
     "name": "Precision",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Precision[x]",
-    "url": "documentation/other-advanced/Precision/"
+    "url": "documentation/arithmetic/Precision/"
   },
   {
     "name": "Prepend",
@@ -2137,35 +2209,35 @@
   },
   {
     "name": "PrimePi",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "PrimePi[x] gives the number of primes less than or equal to x.",
-    "url": "documentation/arithmetic-and-algebra/PrimePi/"
+    "url": "documentation/arithmetic/PrimePi/"
   },
   {
     "name": "PrimeQ",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "PrimeQ[n]",
-    "url": "documentation/arithmetic-and-algebra/PrimeQ/"
+    "url": "documentation/arithmetic/PrimeQ/"
   },
   {
     "name": "PrimitiveRoot",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "PrimitiveRoot[n]",
-    "url": "documentation/arithmetic-and-algebra/PrimitiveRoot/"
+    "url": "documentation/arithmetic/PrimitiveRoot/"
   },
   {
     "name": "PrimitiveRootList",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "PrimitiveRootList[n]",
-    "url": "documentation/arithmetic-and-algebra/PrimitiveRootList/"
+    "url": "documentation/arithmetic/PrimitiveRootList/"
   },
   {
     "name": "Print",
@@ -2209,19 +2281,19 @@
   },
   {
     "name": "Quartics",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Experimental",
     "summary": "Quartics is an option for Solve that controls whether quartic",
-    "url": "documentation/arithmetic-and-algebra/Quartics/"
+    "url": "documentation/algebra/Quartics/"
   },
   {
     "name": "Quartiles",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Statistics",
+    "slug": "statistics",
     "status": "Stable",
     "summary": "Quartiles[data]",
-    "url": "documentation/other-advanced/Quartiles/"
+    "url": "documentation/statistics/Quartiles/"
   },
   {
     "name": "RandomChoice",
@@ -2273,59 +2345,59 @@
   },
   {
     "name": "Rational",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Rational[n, d]",
-    "url": "documentation/arithmetic-and-algebra/Rational/"
+    "url": "documentation/arithmetic/Rational/"
   },
   {
     "name": "Rationalize",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Rationalize[x]",
-    "url": "documentation/other-advanced/Rationalize/"
+    "url": "documentation/arithmetic/Rationalize/"
   },
   {
     "name": "Ratios",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Ratios[list]",
-    "url": "documentation/arithmetic-and-algebra/Ratios/"
+    "url": "documentation/arithmetic/Ratios/"
   },
   {
     "name": "Re",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Re[z] gives the real part of numeric z; Re[Re[z]], Re[Im[z]], Re[Abs[z]], Re[Arg[z]] fold since those heads are real-valued.",
-    "url": "documentation/arithmetic-and-algebra/Re/"
+    "url": "documentation/arithmetic/Re/"
   },
   {
     "name": "ReIm",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "ReIm[z] gives {Re[z], Im[z]}, the real and imaginary parts of numeric z as a list; real-valued arguments give {z, 0}.",
-    "url": "documentation/arithmetic-and-algebra/ReIm/"
+    "url": "documentation/arithmetic/ReIm/"
   },
   {
     "name": "RealDigits",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "RealDigits[x] gives a list {digits, exp} of the digits in the approximate real number x together with the exponent such that the first digit is the coefficient of 10^(exp - 1).",
-    "url": "documentation/arithmetic-and-algebra/RealDigits/"
+    "url": "documentation/arithmetic/RealDigits/"
   },
   {
     "name": "RealExponent",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "RealExponent[x] gives Log[10, |x|] -- the base-10 real exponent of x.",
-    "url": "documentation/arithmetic-and-algebra/RealExponent/"
+    "url": "documentation/arithmetic/RealExponent/"
   },
   {
     "name": "ReleaseHold",
@@ -2337,19 +2409,19 @@
   },
   {
     "name": "Repeated",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "p.. or Repeated[p] is a pattern object that represents a sequence of one or more expressions, each matching p.",
-    "url": "documentation/other-advanced/Repeated/"
+    "url": "documentation/pattern-matching/Repeated/"
   },
   {
     "name": "RepeatedNull",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "p... or RepeatedNull[p] is a pattern object that represents a sequence of zero or more expressions, each matching p.",
-    "url": "documentation/other-advanced/RepeatedNull/"
+    "url": "documentation/pattern-matching/RepeatedNull/"
   },
   {
     "name": "RepeatedTiming",
@@ -2385,19 +2457,19 @@
   },
   {
     "name": "ReplaceList",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "ReplaceList[expr, rules] attempts to transform the entire expression expr by applying a rule or list of rules in all possible ways, and returns a list of the results obtained.",
-    "url": "documentation/other-advanced/ReplaceList/"
+    "url": "documentation/assignment-and-rules/ReplaceList/"
   },
   {
     "name": "ReplaceRepeated",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Experimental",
     "summary": "expr //. rules or ReplaceRepeated[expr, rules]",
-    "url": "documentation/other-advanced/ReplaceRepeated/"
+    "url": "documentation/assignment-and-rules/ReplaceRepeated/"
   },
   {
     "name": "Rest",
@@ -2409,11 +2481,11 @@
   },
   {
     "name": "Resultant",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Resultant[p, q, var]",
-    "url": "documentation/structural-manipulation/Resultant/"
+    "url": "documentation/algebra/Resultant/"
   },
   {
     "name": "Return",
@@ -2433,11 +2505,11 @@
   },
   {
     "name": "Root",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Root[Function[t, p[t]], k]",
-    "url": "documentation/arithmetic-and-algebra/Root/"
+    "url": "documentation/algebra/Root/"
   },
   {
     "name": "RootMeanSquare",
@@ -2449,11 +2521,11 @@
   },
   {
     "name": "RootSum",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "RootSum[Function[t, p[t]], Function[t, body[t]]]",
-    "url": "documentation/other-advanced/RootSum/"
+    "url": "documentation/algebra/RootSum/"
   },
   {
     "name": "RotateLeft",
@@ -2473,11 +2545,11 @@
   },
   {
     "name": "Round",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Round[x]",
-    "url": "documentation/other-advanced/Round/"
+    "url": "documentation/arithmetic/Round/"
   },
   {
     "name": "RowReduce",
@@ -2489,35 +2561,35 @@
   },
   {
     "name": "Rule",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "lhs -> rhs or Rule[lhs, rhs]",
-    "url": "documentation/other-advanced/Rule/"
+    "url": "documentation/assignment-and-rules/Rule/"
   },
   {
     "name": "RuleDelayed",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Experimental",
     "summary": "lhs :> rhs or RuleDelayed[lhs, rhs]",
-    "url": "documentation/other-advanced/RuleDelayed/"
+    "url": "documentation/assignment-and-rules/RuleDelayed/"
   },
   {
     "name": "SameQ",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "lhs === rhs or SameQ[lhs, rhs]",
-    "url": "documentation/other-advanced/SameQ/"
+    "url": "documentation/comparisons/SameQ/"
   },
   {
     "name": "Sec",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Sec[z]",
-    "url": "documentation/other-advanced/Sec/"
+    "url": "documentation/elementary-functions/Sec/"
   },
   {
     "name": "SeedRandom",
@@ -2561,19 +2633,19 @@
   },
   {
     "name": "SetAccuracy",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "SetAccuracy[x, n]",
-    "url": "documentation/other-advanced/SetAccuracy/"
+    "url": "documentation/arithmetic/SetAccuracy/"
   },
   {
     "name": "SetAttributes",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Expression Information",
+    "slug": "expression-information",
     "status": "Stable",
     "summary": "SetAttributes[s, attr] sets the attributes for s.",
-    "url": "documentation/other-advanced/SetAttributes/"
+    "url": "documentation/expression-information/SetAttributes/"
   },
   {
     "name": "SetDelayed",
@@ -2585,27 +2657,27 @@
   },
   {
     "name": "SetPrecision",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "SetPrecision[x, n]",
-    "url": "documentation/other-advanced/SetPrecision/"
+    "url": "documentation/arithmetic/SetPrecision/"
   },
   {
     "name": "Shortest",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Pattern Matching",
+    "slug": "pattern-matching",
     "status": "Stable",
     "summary": "Shortest[p] is a pattern object that matches the shortest sequence consistent with the pattern p.",
-    "url": "documentation/other-advanced/Shortest/"
+    "url": "documentation/pattern-matching/Shortest/"
   },
   {
     "name": "Sign",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Sign[x] gives -1, 0, or 1 for real numeric x according to its sign, and z/Abs[z] for a nonzero numeric complex z.",
-    "url": "documentation/arithmetic-and-algebra/Sign/"
+    "url": "documentation/arithmetic/Sign/"
   },
   {
     "name": "Simplify",
@@ -2625,11 +2697,11 @@
   },
   {
     "name": "Sin",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Sin[z]",
-    "url": "documentation/other-advanced/Sin/"
+    "url": "documentation/elementary-functions/Sin/"
   },
   {
     "name": "SingularValueDecomposition",
@@ -2641,43 +2713,43 @@
   },
   {
     "name": "Sinh",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Sinh[z]",
-    "url": "documentation/other-advanced/Sinh/"
+    "url": "documentation/elementary-functions/Sinh/"
   },
   {
     "name": "Slot",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
     "status": "Stable",
     "summary": "# or Slot[n] represents the n-th argument of a pure function.",
-    "url": "documentation/other-advanced/Slot/"
+    "url": "documentation/functional-programming/Slot/"
   },
   {
     "name": "SlotSequence",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Functional Programming",
+    "slug": "functional-programming",
     "status": "Stable",
     "summary": "## or SlotSequence[n] represents arguments from the n-th onward.",
-    "url": "documentation/other-advanced/SlotSequence/"
+    "url": "documentation/functional-programming/SlotSequence/"
   },
   {
     "name": "Solve",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Solve[expr, vars]",
-    "url": "documentation/arithmetic-and-algebra/Solve/"
+    "url": "documentation/algebra/Solve/"
   },
   {
     "name": "SolveAlways",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "SolveAlways[eqns, vars]",
-    "url": "documentation/arithmetic-and-algebra/SolveAlways/"
+    "url": "documentation/algebra/SolveAlways/"
   },
   {
     "name": "Sort",
@@ -2705,19 +2777,19 @@
   },
   {
     "name": "Sqrt",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Sqrt[z]",
-    "url": "documentation/arithmetic-and-algebra/Sqrt/"
+    "url": "documentation/arithmetic/Sqrt/"
   },
   {
     "name": "SquareFreeQ",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "SquareFreeQ[expr]",
-    "url": "documentation/arithmetic-and-algebra/SquareFreeQ/"
+    "url": "documentation/arithmetic/SquareFreeQ/"
   },
   {
     "name": "SquareMatrixQ",
@@ -2777,35 +2849,35 @@
   },
   {
     "name": "SubresultantPolynomials",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "SubresultantPolynomials[poly1, poly2, var]",
-    "url": "documentation/arithmetic-and-algebra/SubresultantPolynomials/"
+    "url": "documentation/algebra/SubresultantPolynomials/"
   },
   {
     "name": "Subresultants",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Subresultants[poly1, poly2, var]",
-    "url": "documentation/arithmetic-and-algebra/Subresultants/"
+    "url": "documentation/algebra/Subresultants/"
   },
   {
     "name": "Subtract",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "x - y or Subtract[x, y] represents x - y; rewritten by the evaluator",
-    "url": "documentation/other-advanced/Subtract/"
+    "url": "documentation/arithmetic/Subtract/"
   },
   {
     "name": "SubtractFrom",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
     "status": "Stable",
     "summary": "SubtractFrom[x, dx] or x -= dx",
-    "url": "documentation/other-advanced/SubtractFrom/"
+    "url": "documentation/assignment-and-rules/SubtractFrom/"
   },
   {
     "name": "Sum",
@@ -2857,27 +2929,27 @@
   },
   {
     "name": "Tan",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Tan[z]",
-    "url": "documentation/other-advanced/Tan/"
+    "url": "documentation/elementary-functions/Tan/"
   },
   {
     "name": "Tanh",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Tanh[z]",
-    "url": "documentation/other-advanced/Tanh/"
+    "url": "documentation/elementary-functions/Tanh/"
   },
   {
     "name": "TeXForm",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Expression Information",
+    "slug": "expression-information",
     "status": "Experimental",
     "summary": "TeXForm[expr]",
-    "url": "documentation/other-advanced/TeXForm/"
+    "url": "documentation/expression-information/TeXForm/"
   },
   {
     "name": "Thread",
@@ -2905,11 +2977,11 @@
   },
   {
     "name": "Times",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "x * y * ... or Times[x, y, ...] represents a product of terms.",
-    "url": "documentation/arithmetic-and-algebra/Times/"
+    "url": "documentation/arithmetic/Times/"
   },
   {
     "name": "Timing",
@@ -2929,11 +3001,11 @@
   },
   {
     "name": "ToRadicals",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "ToRadicals[expr]",
-    "url": "documentation/arithmetic-and-algebra/ToRadicals/"
+    "url": "documentation/algebra/ToRadicals/"
   },
   {
     "name": "ToString",
@@ -2953,19 +3025,19 @@
   },
   {
     "name": "Together",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Together[expr] combines fractions over a common denominator, then cancels.",
-    "url": "documentation/arithmetic-and-algebra/Together/"
+    "url": "documentation/algebra/Together/"
   },
   {
     "name": "Total",
-    "category": "Arithmetic and Algebra",
-    "slug": "arithmetic-and-algebra",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
     "status": "Stable",
     "summary": "Total[list]",
-    "url": "documentation/arithmetic-and-algebra/Total/"
+    "url": "documentation/arithmetic/Total/"
   },
   {
     "name": "Tr",
@@ -3041,11 +3113,11 @@
   },
   {
     "name": "Unequal",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "lhs != rhs or Unequal[lhs, rhs]",
-    "url": "documentation/other-advanced/Unequal/"
+    "url": "documentation/comparisons/Unequal/"
   },
   {
     "name": "Unevaluated",
@@ -3065,19 +3137,19 @@
   },
   {
     "name": "UnsameQ",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Comparisons",
+    "slug": "comparisons",
     "status": "Stable",
     "summary": "lhs =!= rhs or UnsameQ[lhs, rhs]",
-    "url": "documentation/other-advanced/UnsameQ/"
+    "url": "documentation/comparisons/UnsameQ/"
   },
   {
     "name": "UpTo",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
     "status": "Stable",
     "summary": "UpTo[n]",
-    "url": "documentation/other-advanced/UpTo/"
+    "url": "documentation/structural-manipulation/UpTo/"
   },
   {
     "name": "UpperTriangularMatrixQ",
@@ -3097,11 +3169,11 @@
   },
   {
     "name": "Variables",
-    "category": "Structural Manipulation",
-    "slug": "structural-manipulation",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Stable",
     "summary": "Variables[poly]",
-    "url": "documentation/structural-manipulation/Variables/"
+    "url": "documentation/algebra/Variables/"
   },
   {
     "name": "Variance",
@@ -3121,11 +3193,11 @@
   },
   {
     "name": "VerifySolutions",
-    "category": "Other & Advanced",
-    "slug": "other-advanced",
+    "category": "Algebra",
+    "slug": "algebra",
     "status": "Experimental",
     "summary": "VerifySolutions is an option for Solve that decides whether to",
-    "url": "documentation/other-advanced/VerifySolutions/"
+    "url": "documentation/algebra/VerifySolutions/"
   },
   {
     "name": "Which",

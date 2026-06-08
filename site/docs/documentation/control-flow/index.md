@@ -1,7 +1,13 @@
 # Control Flow
 
-11 built-in function(s) in this category.
+17 built-in function(s) in this category.
 
+- [`$Epilog`]($Epilog.md) — $Epilog  _(Stable)_
+- [`$Post`]($Post.md) — $Post  _(Stable)_
+- [`$Pre`]($Pre.md) — $Pre  _(Stable)_
+- [`$PrePrint`]($PrePrint.md) — $PrePrint  _(Stable)_
+- [`$PreRead`]($PreRead.md) — $PreRead  _(Stable)_
+- [`$RecursionLimit`]($RecursionLimit.md) — $RecursionLimit  _(Stable)_
 - [`Boole`](Boole.md) — Boole[expr]  _(Stable)_
 - [`ConditionalExpression`](ConditionalExpression.md) — ConditionalExpression[expr, cond]  _(Stable)_
 - [`Do`](Do.md) — Do[expr, n] evaluates expr n times.  _(Stable)_

@@ -1,10 +1,23 @@
 # Assignment and Rules
 
-6 built-in function(s) in this category.
+19 built-in function(s) in this category.
 
+- [`AddTo`](AddTo.md) — AddTo[x, dx] or x += dx  _(Stable)_
+- [`Clear`](Clear.md) — Clear[s1, s2, ...]  _(Stable)_
 - [`CompoundExpression`](CompoundExpression.md) — expr1; expr2; ... evaluates its arguments in sequence, returning the last result.  _(Stable)_
+- [`Decrement`](Decrement.md) — Decrement[x] or x--  _(Stable)_
+- [`DownValues`](DownValues.md) — DownValues[s] gives a list of down-value rules for s.  _(Experimental)_
+- [`Increment`](Increment.md) — Increment[x] or x++  _(Stable)_
+- [`OwnValues`](OwnValues.md) — OwnValues[s] gives a list of own-value rules for s.  _(Experimental)_
+- [`PreDecrement`](PreDecrement.md) — PreDecrement[x] or --x  _(Stable)_
+- [`PreIncrement`](PreIncrement.md) — PreIncrement[x] or ++x  _(Stable)_
 - [`Replace`](Replace.md) — Replace[expr, rules]  _(Stable)_
 - [`ReplaceAll`](ReplaceAll.md) — expr /. rules or ReplaceAll[expr, rules]  _(Stable)_
 - [`ReplaceAt`](ReplaceAt.md) — ReplaceAt[expr, rules, n]  _(Stable)_
+- [`ReplaceList`](ReplaceList.md) — ReplaceList[expr, rules] attempts to transform the entire expression expr by applying a rule or list of rules in all possible ways, and returns a list of the results obtained.  _(Stable)_
+- [`ReplaceRepeated`](ReplaceRepeated.md) — expr //. rules or ReplaceRepeated[expr, rules]  _(Experimental)_
+- [`Rule`](Rule.md) — lhs -> rhs or Rule[lhs, rhs]  _(Stable)_
+- [`RuleDelayed`](RuleDelayed.md) — lhs :> rhs or RuleDelayed[lhs, rhs]  _(Experimental)_
 - [`Set`](Set.md) — lhs = rhs or Set[lhs, rhs]  _(Stable)_
 - [`SetDelayed`](SetDelayed.md) — lhs := rhs or SetDelayed[lhs, rhs]  _(Stable)_
+- [`SubtractFrom`](SubtractFrom.md) — SubtractFrom[x, dx] or x -= dx  _(Stable)_

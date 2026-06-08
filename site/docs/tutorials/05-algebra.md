@@ -326,7 +326,8 @@ Mathilda's symbolic mathematics rests on.
   power series, take limits, evaluate sums, and solve problems numerically.
 - **[Function reference](../documentation/index.md)** — the full catalogue of
   built-in functions. The
-  [arithmetic and algebra](../documentation/arithmetic-and-algebra/index.md) and
+  [arithmetic](../documentation/arithmetic/index.md),
+  [algebra](../documentation/algebra/index.md), and
   [simplification](../documentation/simplification/index.md) sections cover every
   function used above, including the complete options for `Factor`, `Solve`, and
   `Simplify`.

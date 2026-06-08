@@ -49,7 +49,92 @@ MATHILDA = ROOT / "Mathilda"
 GITHUB_BLOB = "https://github.com/stblake/mathilda/blob/main"
 
 # A built-in name: an uppercase-initial identifier, or a $-system symbol.
+# Context-qualified internal helpers (e.g. ``Solve`SolveLinearSystem``) contain a
+# backtick and therefore fail this pattern; they are intentionally excluded from
+# the public documentation centre.
 NAME_RE = re.compile(r"^\$?[A-Z][A-Za-z0-9]*$")
+
+# ---------------------------------------------------------------------------
+# Curated category map (authoritative grouping)
+# ---------------------------------------------------------------------------
+# The spec-file heuristic (parse_spec_files) only assigns a category when a
+# function's name literally appears in an ``## H2`` heading of a
+# ``docs/spec/builtins/*.md`` file. Functions documented under *thematic*
+# headings ("## Trig Functions"), or not yet documented at all, fall through to
+# "Other & Advanced". This table is the single, reviewable place that pins such
+# functions — and a few mis-filed ones — to the right category. The value is a
+# spec-file slug (the ``*.md`` stem). Entries here override the heuristic;
+# functions already placed correctly by their spec file need no entry.
+CATEGORY_OVERRIDES = {
+    # Elementary functions documented under thematic headings -----------------
+    "Sin": "elementary-functions", "Cos": "elementary-functions",
+    "Tan": "elementary-functions", "Cot": "elementary-functions",
+    "Sec": "elementary-functions", "Csc": "elementary-functions",
+    "ArcSin": "elementary-functions", "ArcCos": "elementary-functions",
+    "ArcTan": "elementary-functions", "Sinh": "elementary-functions",
+    "Cosh": "elementary-functions", "Tanh": "elementary-functions",
+    "Exp": "elementary-functions", "Log": "elementary-functions",
+    # Arithmetic (rounding, basic operators, complex parts, precision) --------
+    "Floor": "arithmetic", "Ceiling": "arithmetic", "Round": "arithmetic",
+    "Rationalize": "arithmetic", "Complex": "arithmetic", "Divide": "arithmetic",
+    "Subtract": "arithmetic", "Factorial2": "arithmetic",
+    "Accuracy": "arithmetic", "Precision": "arithmetic",
+    "SetAccuracy": "arithmetic", "SetPrecision": "arithmetic",
+    # Pattern matching --------------------------------------------------------
+    "Blank": "pattern-matching", "BlankSequence": "pattern-matching",
+    "BlankNullSequence": "pattern-matching", "Optional": "pattern-matching",
+    "Repeated": "pattern-matching", "RepeatedNull": "pattern-matching",
+    "Longest": "pattern-matching", "Shortest": "pattern-matching",
+    "MatchQ": "pattern-matching", "Default": "pattern-matching",
+    "HoldPattern": "pattern-matching",
+    # Assignment and rules ----------------------------------------------------
+    "Rule": "assignment-and-rules", "RuleDelayed": "assignment-and-rules",
+    "Clear": "assignment-and-rules", "AddTo": "assignment-and-rules",
+    "SubtractFrom": "assignment-and-rules", "Increment": "assignment-and-rules",
+    "Decrement": "assignment-and-rules", "PreIncrement": "assignment-and-rules",
+    "PreDecrement": "assignment-and-rules", "DownValues": "assignment-and-rules",
+    "OwnValues": "assignment-and-rules", "ReplaceList": "assignment-and-rules",
+    "ReplaceRepeated": "assignment-and-rules",
+    # Expression information (predicates, attributes, hold/forms) -------------
+    "NumericQ": "expression-information", "SetAttributes": "expression-information",
+    "TeXForm": "expression-information", "Hold": "expression-information",
+    "Flat": "expression-information", "Orderless": "expression-information",
+    "OneIdentity": "expression-information",
+    # Functional programming --------------------------------------------------
+    "Function": "functional-programming", "Slot": "functional-programming",
+    "SlotSequence": "functional-programming", "FixedPoint": "functional-programming",
+    # Scoping constructs / contexts ------------------------------------------
+    "Begin": "scoping-constructs", "BeginPackage": "scoping-constructs",
+    "End": "scoping-constructs", "EndPackage": "scoping-constructs",
+    "Context": "scoping-constructs", "$Context": "scoping-constructs",
+    "$ContextPath": "scoping-constructs",
+    # Control flow / session-evaluation hooks --------------------------------
+    "$RecursionLimit": "control-flow", "$Pre": "control-flow",
+    "$Post": "control-flow", "$PrePrint": "control-flow",
+    "$PreRead": "control-flow", "$Epilog": "control-flow",
+    # Calculus ----------------------------------------------------------------
+    "Limit": "calculus",
+    # Statistics --------------------------------------------------------------
+    "Quartiles": "statistics", "Commonest": "statistics",
+    # Linear algebra ----------------------------------------------------------
+    "ConjugateTranspose": "linear-algebra",
+    # Structural manipulation -------------------------------------------------
+    "UpTo": "structural-manipulation",
+    # Algebra (Other-rescues + moved out of Structural Manipulation) ----------
+    "Decompose": "algebra", "RootSum": "algebra",
+    "GeneratedParameters": "algebra", "InverseFunctions": "algebra",
+    "VerifySolutions": "algebra",
+    "Coefficient": "algebra", "CoefficientList": "algebra", "Collect": "algebra",
+    "Discriminant": "algebra", "Eliminate": "algebra", "Expand": "algebra",
+    "ExpandDenominator": "algebra", "ExpandNumerator": "algebra",
+    "Factor": "algebra", "FactorSquareFree": "algebra", "FactorTerms": "algebra",
+    "FactorTermsList": "algebra", "GroebnerBasis": "algebra",
+    "HornerForm": "algebra", "PolynomialExtendedGCD": "algebra",
+    "PolynomialGCD": "algebra", "PolynomialLCM": "algebra",
+    "PolynomialMod": "algebra", "PolynomialQ": "algebra",
+    "PolynomialQuotient": "algebra", "PolynomialRemainder": "algebra",
+    "PowerExpand": "algebra", "Resultant": "algebra", "Variables": "algebra",
+}
 
 # Status taxonomy ----------------------------------------------------------
 STATUS_BADGE = {
@@ -477,8 +562,12 @@ def main():
 
     print("Discovering builtins from source ...")
     builtins = discover_builtins()
-    names = sorted(builtins)
-    print(f"  {len(names)} public builtins discovered.")
+    # Drop context-qualified internal helpers (``Head`Helper``) — they carry a
+    # docstring for ?-lookup but are not part of the public documentation centre.
+    names = sorted(n for n in builtins if NAME_RE.match(n))
+    dropped = len(builtins) - len(names)
+    print(f"  {len(names)} public builtins discovered "
+          f"({dropped} internal helper(s) excluded).")
 
     print("Parsing category specs ...")
     categories, sections = parse_spec_files()
@@ -498,9 +587,13 @@ def main():
     print("Building + verifying pages ...")
     for name in names:
         sec = sections.get(name)
-        cat = sec["category"] if sec else OTHER_SLUG
+        doc_slug = sec["category"] if sec else None          # where it's documented
+        cat = CATEGORY_OVERRIDES.get(name) or doc_slug or OTHER_SLUG
         body = sec["body"] if sec else ""
-        spec_rel = cat_spec.get(cat, "")
+        # The "Specification" reference points at the file that actually
+        # documents the function, which may differ from its (overridden)
+        # display category.
+        spec_rel = cat_spec.get(doc_slug or cat, "")
 
         blocks = []
         for inputs in mine_example_inputs(body):

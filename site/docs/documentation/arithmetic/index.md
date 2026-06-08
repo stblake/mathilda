@@ -1,0 +1,62 @@
+# Arithmetic
+
+58 built-in function(s) in this category.
+
+- [`Abs`](Abs.md) — Abs[z] gives the absolute value (modulus) of numeric z, Sqrt[Re[z]^2 + Im[z]^2] for complex z.  _(Stable)_
+- [`Accumulate`](Accumulate.md) — Accumulate[list]  _(Stable)_
+- [`Accuracy`](Accuracy.md) — Accuracy[x]  _(Stable)_
+- [`Arg`](Arg.md) — Arg[z] gives the argument (phase angle in (-Pi, Pi]) of numeric z; 0 for nonnegative reals, Pi for negative reals.  _(Stable)_
+- [`Binomial`](Binomial.md) — Binomial[n, m]  _(Stable)_
+- [`Ceiling`](Ceiling.md) — Ceiling[x]  _(Stable)_
+- [`Complex`](Complex.md) — Complex[re, im]  _(Stable)_
+- [`Conjugate`](Conjugate.md) — Conjugate[z] gives the complex conjugate Re[z] - I Im[z] of numeric z; real and real-valued (Re/Im/Abs/Arg) arguments are returned unchanged.  _(Stable)_
+- [`ContinuedFraction`](ContinuedFraction.md) — ContinuedFraction[x, n]  _(Stable)_
+- [`Differences`](Differences.md) — Differences[list]  _(Stable)_
+- [`DigitCount`](DigitCount.md) — DigitCount[n] gives a list of the counts of digits 1, 2, ..., 9, 0 in the base-10 representation of n.  _(Stable)_
+- [`Divide`](Divide.md) — x / y or Divide[x, y] represents x / y; rewritten by the evaluator to  _(Stable)_
+- [`EulerPhi`](EulerPhi.md) — EulerPhi[n] gives the Euler totient function phi(n).  _(Stable)_
+- [`ExtendedGCD`](ExtendedGCD.md) — ExtendedGCD[n1, n2, ...]  _(Stable)_
+- [`FactorInteger`](FactorInteger.md) — FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.  _(Stable)_
+- [`Factorial`](Factorial.md) — n! or Factorial[n]  _(Stable)_
+- [`Factorial2`](Factorial2.md) — Factorial2[n] (also typeset n!!) gives the double factorial of n.  _(Stable)_
+- [`FactorialPower`](FactorialPower.md) — FactorialPower[n, k]  _(Stable)_
+- [`Fibonacci`](Fibonacci.md) — Fibonacci[n]  _(Stable)_
+- [`Floor`](Floor.md) — Floor[x]  _(Stable)_
+- [`FromContinuedFraction`](FromContinuedFraction.md) — FromContinuedFraction[{a1, a2, ..., an}]  _(Stable)_
+- [`FromDigits`](FromDigits.md) — FromDigits[list] constructs an integer from a list of decimal digits, most-significant first.  _(Stable)_
+- [`GCD`](GCD.md) — GCD[n1, n2, ...]  _(Stable)_
+- [`Im`](Im.md) — Im[z] gives the imaginary part of numeric z, and 0 for real or real-valued (Re/Im/Abs/Arg) arguments.  _(Stable)_
+- [`IntegerDigits`](IntegerDigits.md) — IntegerDigits[n] gives a list of the decimal digits in the integer n.  _(Stable)_
+- [`IntegerExponent`](IntegerExponent.md) — IntegerExponent[n, b] gives the highest power of b that divides n.  _(Stable)_
+- [`IntegerLength`](IntegerLength.md) — IntegerLength[n] gives the number of decimal digits in the integer n.  _(Stable)_
+- [`IntegerString`](IntegerString.md) — IntegerString[n] gives a string consisting of the decimal digits in the integer n.  _(Stable)_
+- [`LCM`](LCM.md) — LCM[n1, n2, ...]  _(Stable)_
+- [`LucasL`](LucasL.md) — LucasL[n]  _(Stable)_
+- [`MantissaExponent`](MantissaExponent.md) — MantissaExponent[x] gives a list {m, e} containing the mantissa and exponent of the real number x, such that x = m * 10^e and 1/10 <= |m| < 1 (or m = 0 when x = 0).  _(Stable)_
+- [`MultiplicativeOrder`](MultiplicativeOrder.md) — MultiplicativeOrder[k, n]  _(Stable)_
+- [`N`](N.md) — N[expr]  _(Stable)_
+- [`NextPrime`](NextPrime.md) — NextPrime[x] gives the next prime after x.  _(Stable)_
+- [`Plus`](Plus.md) — x + y + ... or Plus[x, y, ...] represents a sum of terms.  _(Stable)_
+- [`Power`](Power.md) — x ^ y or Power[x, y] represents x to the power y.  _(Stable)_
+- [`PowerMod`](PowerMod.md) — PowerMod[a, b, m] gives a^b mod m.  _(Stable)_
+- [`Precision`](Precision.md) — Precision[x]  _(Stable)_
+- [`PrimePi`](PrimePi.md) — PrimePi[x] gives the number of primes less than or equal to x.  _(Stable)_
+- [`PrimeQ`](PrimeQ.md) — PrimeQ[n]  _(Stable)_
+- [`PrimitiveRoot`](PrimitiveRoot.md) — PrimitiveRoot[n]  _(Stable)_
+- [`PrimitiveRootList`](PrimitiveRootList.md) — PrimitiveRootList[n]  _(Stable)_
+- [`Rational`](Rational.md) — Rational[n, d]  _(Stable)_
+- [`Rationalize`](Rationalize.md) — Rationalize[x]  _(Stable)_
+- [`Ratios`](Ratios.md) — Ratios[list]  _(Stable)_
+- [`Re`](Re.md) — Re[z] gives the real part of numeric z; Re[Re[z]], Re[Im[z]], Re[Abs[z]], Re[Arg[z]] fold since those heads are real-valued.  _(Stable)_
+- [`ReIm`](ReIm.md) — ReIm[z] gives {Re[z], Im[z]}, the real and imaginary parts of numeric z as a list; real-valued arguments give {z, 0}.  _(Stable)_
+- [`RealDigits`](RealDigits.md) — RealDigits[x] gives a list {digits, exp} of the digits in the approximate real number x together with the exponent such that the first digit is the coefficient of 10^(exp - 1).  _(Stable)_
+- [`RealExponent`](RealExponent.md) — RealExponent[x] gives Log[10, |x|] -- the base-10 real exponent of x.  _(Stable)_
+- [`Round`](Round.md) — Round[x]  _(Stable)_
+- [`SetAccuracy`](SetAccuracy.md) — SetAccuracy[x, n]  _(Stable)_
+- [`SetPrecision`](SetPrecision.md) — SetPrecision[x, n]  _(Stable)_
+- [`Sign`](Sign.md) — Sign[x] gives -1, 0, or 1 for real numeric x according to its sign, and z/Abs[z] for a nonzero numeric complex z.  _(Stable)_
+- [`Sqrt`](Sqrt.md) — Sqrt[z]  _(Stable)_
+- [`SquareFreeQ`](SquareFreeQ.md) — SquareFreeQ[expr]  _(Stable)_
+- [`Subtract`](Subtract.md) — x - y or Subtract[x, y] represents x - y; rewritten by the evaluator  _(Stable)_
+- [`Times`](Times.md) — x * y * ... or Times[x, y, ...] represents a product of terms.  _(Stable)_
+- [`Total`](Total.md) — Total[list]  _(Stable)_

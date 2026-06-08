@@ -1,47 +1,54 @@
-# Task: Implement EulerGamma as a first-class constant
+# Documentation-center function regrouping
 
-## Background (already present in tree)
-- [x] `N[EulerGamma]` / `N[EulerGamma, n]` — numeric.c constant table + MPFR fill
-- [x] `D[EulerGamma, x] = 0` — deriv.c constant list
-- [x] `NumericQ[EulerGamma] = True` — core.c is_numeric_quantity
-- [x] `SYM_EulerGamma` interned — sym_names.c / sym_names.h
-- [x] LaTeX printing `\gamma` — print.c
+Goal: fix how the documentation center groups builtins. Driven entirely by
+`site/generate.py` (a function gets a category only if its name appears in an
+`## H2` heading of `docs/spec/builtins/*.md`). Thematic headings and
+undocumented builtins fall through to "Other & Advanced" (104 functions).
 
-## To do
-- [ ] Add `ATTR_CONSTANT` flag to attr.h (next free bit, 1<<14)
-- [ ] Teach attr.c about "Constant": parse in string_to_attribute,
-      count+emit in builtin_attributes (alphabetically first)
-- [ ] New module src/eulergamma.{c,h}: `eulergamma_init()` registers the
-      EulerGamma symbol with attributes Constant | Protected
-- [ ] Wire eulergamma_init() into core_init() (core.c) + include header
-- [ ] Docstring for EulerGamma in info.c (terse, no examples)
-- [ ] Docs: add EulerGamma section to docs/spec/builtins/special-functions.md
-- [ ] Changelog note in docs/spec/changelog/2026-06-08.md
-- [ ] Build + verify: Attributes, ?EulerGamma, N, D, NumericQ
+User decisions:
+- Mechanism: curated override map in generate.py + physical split of the
+  arithmetic-and-algebra spec file.
+- Relational operators get a new **Comparisons** category.
+- Full review: also move mis-filed functions (polynomial/algebra out of
+  Structural Manipulation, etc.).
+
+## Tasks
+
+- [x] 1. Created `docs/spec/builtins/comparisons.md` (Comparisons category).
+- [x] 2. Split `arithmetic-and-algebra.md` → `arithmetic.md` (41 secs) +
+      `algebra.md` (19 secs); deleted combined file.
+- [x] 2b. (added) Split mathematical constants out of `special-functions.md`
+      into `mathematical-constants.md` (9 secs); Special Functions keeps Gamma,
+      Pochhammer, Hypergeometric* (6 secs).
+- [x] 3. generate.py: NAME_RE filter excludes internal `Head`Helper`` symbols;
+      added CATEGORY_OVERRIDES (~70 entries); spec-reference link follows the
+      documenting file via doc_slug.
+- [x] 4. Updated `Mathilda_spec.md` index (arithmetic, algebra, comparisons,
+      mathematical-constants rows; broadened pattern/special notes).
+- [x] 5. Regenerated: 403 pages, 0 in "Other & Advanced". Removed stale
+      `arithmetic-and-algebra/` and `other-advanced/` dirs.
+- [x] 6. Changelog entry added to `docs/spec/changelog/2026-06-08.md`.
+- [x] 7. Fixed live tutorial link (`05-algebra.md`) to the split categories.
 
 ## Review
-All items done. EulerGamma is now a first-class constant symbol.
 
-Files changed:
-- src/attr.h         — new ATTR_CONSTANT flag (1<<14)
-- src/attr.c         — parse "Constant"; count + emit it (alphabetically first)
-- src/eulergamma.{c,h} — NEW module; eulergamma_init() sets {Constant, Protected}
-- src/core.c         — include + call eulergamma_init()
-- src/info.c         — terse EulerGamma docstring
-- tests/CMakeLists.txt — add ../src/eulergamma.c to COMMON_SRC
-- docs/spec/builtins/special-functions.md — EulerGamma section
-- docs/spec/changelog/2026-06-08.md — changelog entry
+Root cause: the site only categorised a function when its name appeared
+literally in an `## H2` heading of a `docs/spec/builtins/*.md` file. Functions
+under thematic headings (`## Trig Functions`) or undocumented fell into a
+104-strong "Other & Advanced" bucket; ~25 polynomial functions were mis-filed
+under Structural Manipulation.
 
-Verified (matches Mathematica exactly):
-- Attributes[EulerGamma] = {Constant, Protected}
-- ?EulerGamma shows docstring
-- N[EulerGamma]=0.577216; N[EulerGamma,50]/N[EulerGamma,250] full precision
-- D[EulerGamma,x]=0; NumericQ[EulerGamma]=True
-- Round[1/EulerGamma^100] = 734833795660954410469466
-- RealDigits[EulerGamma,10,50,-10^4] = digits 10000-10049
-- EulerGamma=5 blocked by Set::wrsym (Protected)
-- core_tests pass (incl. test_clear_attributes, test_information)
+Final tally (403 functions, 23 categories, **0 in Other**):
+Arithmetic 58, Expression Information 45, Algebra 44, Linear Algebra 39,
+Structural Manipulation 31, Elementary Functions 21, Functional Programming 21,
+Assignment and Rules 19, Control Flow 17, Pattern Matching 15, Calculus 12,
+Scoping Constructs 10, Statistics 10, Comparisons 9, Mathematical Constants 9,
+File I/O 7, Simplification 7, Random 6, Special Functions 6, Lists 5, String 5,
+Time/Date 4, Power Series 3.
 
-Note: numeric eval (numeric.c, mpfr_const_euler) and derivative (deriv.c)
-were already wired before this task; left untouched. Only EulerGamma was given
-the Constant attribute (minimal impact); Pi/E/Catalan/etc. were not changed.
+Mechanism notes: grouping corrections live in one reviewable place
+(`CATEGORY_OVERRIDES` in `site/generate.py`); the doc bodies stay where they are
+documented and the per-function "Specification" link follows the documenting
+file, so display category and source-of-truth can differ without broken links.
+Internal context-qualified helpers (`Solve`SolveLinearSystem``, `Sum`Gosper``,
+…) are no longer emitted as public pages.

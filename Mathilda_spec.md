@@ -31,12 +31,15 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Statistics (`Mean`, `Variance`, `Median`, ...) | [`builtins/statistics.md`](docs/spec/builtins/statistics.md) |
 | Random number generation | [`builtins/random-number-generation.md`](docs/spec/builtins/random-number-generation.md) |
 | String operations | [`builtins/string-operations.md`](docs/spec/builtins/string-operations.md) |
-| Arithmetic and algebra (`Plus`, `Times`, `Power`, `Mod`, `GCD`, ...) | [`builtins/arithmetic-and-algebra.md`](docs/spec/builtins/arithmetic-and-algebra.md) |
+| Arithmetic (`Plus`, `Times`, `Power`, `Mod`, `GCD`, `Factorial`, `PrimeQ`, ...) | [`builtins/arithmetic.md`](docs/spec/builtins/arithmetic.md) |
+| Algebra (`Solve`, `Factor`, `Expand`, `Together`, `Apart`, `GroebnerBasis`, ...) | [`builtins/algebra.md`](docs/spec/builtins/algebra.md) |
+| Comparisons (`Equal`, `Less`, `Greater`, `SameQ`, `Inequality`, ...) | [`builtins/comparisons.md`](docs/spec/builtins/comparisons.md) |
 | Calculus (`D`, `Integrate`, `Limit`, ...) | [`builtins/calculus.md`](docs/spec/builtins/calculus.md) |
 | Simplification (`Simplify`, `SimplifyCount`, `Assuming`, `$Assumptions`, `Element`, ...) | [`builtins/simplification.md`](docs/spec/builtins/simplification.md) |
 | Power series (`Series`, `SeriesData`, `Normal`, ...) | [`builtins/power-series.md`](docs/spec/builtins/power-series.md) |
 | Elementary functions (trig, hyperbolic, log, exp) | [`builtins/elementary-functions.md`](docs/spec/builtins/elementary-functions.md) |
-| Special functions (`HypergeometricPFQ`, `Hypergeometric0F1`/`1F1`/`2F1`, ...) | [`builtins/special-functions.md`](docs/spec/builtins/special-functions.md) |
+| Mathematical constants (`Pi`, `E`, `Degree`, `EulerGamma`, `Catalan`, `GoldenRatio`, `Glaisher`, `Khinchin`, ...) | [`builtins/mathematical-constants.md`](docs/spec/builtins/mathematical-constants.md) |
+| Special functions (`Gamma`, `Pochhammer`, `HypergeometricPFQ`, `Hypergeometric0F1`/`1F1`/`2F1`, ...) | [`builtins/special-functions.md`](docs/spec/builtins/special-functions.md) |
 | Lists and iteration (`Table`, `Range`, `Map`, `Do`, ...) | [`builtins/lists-and-iteration.md`](docs/spec/builtins/lists-and-iteration.md) |
 | Functional programming (`Function`, `Apply`, `Select`, ...) | [`builtins/functional-programming.md`](docs/spec/builtins/functional-programming.md) |
 | Control flow (`If`, `Which`, `Switch`, `For`, `While`) | [`builtins/control-flow.md`](docs/spec/builtins/control-flow.md) |
