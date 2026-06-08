@@ -216,6 +216,27 @@ static void test_n_bigint_machine_overflow(void) {
     assert_eval_startswith("N[1.5 * 1001!]", "6.041844710057");
 }
 
+static void test_n_preserves_inexact_precision(void) {
+    /* Bare N[expr] numericalizes only the exact parts of expr and must NOT
+     * lower the precision of numbers that are already approximate (matching
+     * Mathematica). Regression: N[Pi, 100] // N (== N[N[Pi, 100]]) used to
+     * collapse 100 digits to machine precision. */
+    assert_eval_startswith("N[N[Pi, 100]]",
+        "3.14159265358979323846264338327950288419716939937510");
+    assert_eval_startswith("Precision[N[N[Pi, 100]]]", "100.");
+    /* Other constants and a bare high-precision literal preserve precision too. */
+    assert_eval_startswith("Precision[N[N[E, 50]]]", "50.");
+    assert_eval_startswith("Precision[N[2.5`100]]", "100.");
+    /* Exact symbols still numericalize to machine precision. */
+    assert_eval_eq("N[Pi]", "3.14159", 0);
+    assert_eval_eq("Precision[N[Pi]]", "MachinePrecision", 0);
+    /* The explicit two-argument form is a precision request and can still
+     * lower an already-approximate value. */
+    assert_eval_startswith("Precision[N[N[Pi, 100], 20]]", "20.");
+    /* Inexact contagion is unchanged: a machine real wins. */
+    assert_eval_eq("Precision[1. + N[Pi, 100]]", "MachinePrecision", 0);
+}
+
 static void test_n_prec_constants(void) {
     /* Mathematica-pinned values for Pi, E, Sqrt[2] at 40 digits. We use
      * prefix-match to tolerate last-bit rounding. */
@@ -414,6 +435,7 @@ int main(void) {
 
 #ifdef USE_MPFR
     TEST(test_n_bigint_machine_overflow);
+    TEST(test_n_preserves_inexact_precision);
     TEST(test_n_prec_constants);
     TEST(test_n_prec_new_constants);
     TEST(test_n_prec_transcendentals);

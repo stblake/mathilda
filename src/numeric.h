@@ -53,6 +53,15 @@ typedef enum {
 typedef struct {
     NumericMode mode;
     long bits;
+    /* Bare-N[expr] intent: when true (and mode is MACHINE), already-inexact
+     * arbitrary-precision leaves keep their existing precision instead of
+     * being down-converted to a machine double. Mathematica's N[expr]
+     * numericalizes only *exact* quantities and leaves approximate numbers
+     * alone, so N[N[Pi, 100]] must stay 100 digits. Consulted solely in the
+     * MACHINE/EXPR_MPFR branch of numericalize(); every MPFR-mode spec leaves
+     * it untouched (harmless) and every MACHINE-mode spec is built through
+     * numeric_machine_spec(), which clears it. */
+    bool preserve_inexact;
 } NumericSpec;
 
 /* Decimal-digit equivalent of one full machine double's mantissa,
@@ -72,6 +81,7 @@ static inline NumericSpec numeric_machine_spec(void) {
     NumericSpec s;
     s.mode = NUMERIC_MODE_MACHINE;
     s.bits = 0;
+    s.preserve_inexact = false;
     return s;
 }
 

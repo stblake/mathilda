@@ -628,6 +628,16 @@ Expr* numericalize(const Expr* e, NumericSpec spec) {
 #ifdef USE_MPFR
         case EXPR_MPFR:
             if (spec.mode == NUMERIC_MODE_MACHINE) {
+                /* Bare N[expr] leaves already-approximate numbers at their
+                 * existing precision — only exact quantities are numericalized
+                 * to machine. Without this, N[N[Pi, 100]] (i.e. N[Pi,100]//N)
+                 * would collapse 100 digits to machine precision. The flag is
+                 * set solely by the one-argument N builtin; contagion and the
+                 * explicit two-argument N[..., MachinePrecision] form leave it
+                 * clear, so 1. + N[Pi,100] still collapses to machine. */
+                if (spec.preserve_inexact) {
+                    return expr_new_mpfr_copy(e->data.mpfr);
+                }
                 /* Down-convert to machine precision. A finite MPFR value can
                  * still exceed DBL_MAX (~1.8e308) — e.g. N[1.5 + 1001!], whose
                  * argument is already an MPFR ~4e2570. Plain mpfr_get_d would
@@ -804,6 +814,14 @@ Expr* builtin_n(Expr* res) {
         if (!parse_precision_arg(res->data.function.args[1], &spec)) {
             return NULL;  /* non-numeric precision → remain unevaluated */
         }
+    } else {
+        /* One-argument N[expr]: Mathematica's N numericalizes only the exact
+         * parts of expr and preserves the precision of numbers that are
+         * already approximate. So N[N[Pi, 100]] stays at 100 digits rather
+         * than collapsing to machine precision (see numericalize's EXPR_MPFR
+         * branch). The two-argument form is an explicit precision request and
+         * deliberately does not set this. */
+        spec.preserve_inexact = true;
     }
 
     /* Ownership: Mathilda evaluator frees `res` after a non-NULL return

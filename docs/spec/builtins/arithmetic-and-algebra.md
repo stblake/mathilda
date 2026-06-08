@@ -51,6 +51,33 @@ Mathematica-style backtick suffixes (`` ` ``, `` `` ``) still override
 the implicit decision: `3.14`50` is 50-digit MPFR, `3.14``49` is
 49-digit accuracy, and `3``50` is `EXPR_REAL`.
 
+## N
+Numerical evaluation.
+- `N[expr]` — machine-precision approximation.
+- `N[expr, p]` — `p`-digit (arbitrary-precision, MPFR) approximation.
+
+**Precision semantics**:
+- `N[expr]` numericalizes only the **exact** parts of `expr` (integers,
+  rationals, constants such as `Pi`, `E`, `GoldenRatio`, …) and **leaves the
+  precision of numbers that are already approximate untouched**. So
+  `N[N[Pi, 100]]` (i.e. `N[Pi, 100] // N`) stays at 100 digits rather than
+  collapsing to `MachinePrecision`, matching Mathematica. Likewise `N[2.5`100]`
+  keeps its 100-digit precision.
+- `N[expr, p]` is an explicit precision request: it can both raise precision
+  (re-evaluating exact parts at `p` digits) and lower an already-approximate
+  value (`N[N[Pi, 100], 20]` → 20 digits).
+- Inexact contagion is unaffected: mixing a machine real with a
+  higher-precision value collapses to machine precision
+  (`1. + N[Pi, 100]` → `4.14159`), since `MachinePrecision` is the floor.
+
+```mathematica
+In[1]:= N[Pi, 100] // N
+Out[1]= 3.141592653589793238462643383279502884197169399375105820974944592307816406286208998628034825342117068
+
+In[2]:= Precision[%]
+Out[2]= 100.243
+```
+
 ## Plus (+)
 Symbolic sum.
 - `a + b + ...`
