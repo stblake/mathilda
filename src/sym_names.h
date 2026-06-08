@@ -269,6 +269,7 @@ extern const char* SYM_Pi;
 extern const char* SYM_Piecewise;
 extern const char* SYM_Pivoting;
 extern const char* SYM_Plus;
+extern const char* SYM_Pochhammer;
 extern const char* SYM_PollardRho;
 extern const char* SYM_PolynomialGCD;
 extern const char* SYM_Polynomials;

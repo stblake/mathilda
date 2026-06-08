@@ -2,7 +2,7 @@
 
 Every public built-in function in Mathilda, grouped by category. Each page follows the same shape: **Description** (the function's docstring), **Examples** (verified against the current build), **Implementation notes**, **Implementation status**, and **References**.
 
-_388 functions across 20 categories. Use the search box (press `/`) to jump to any function._
+_394 functions across 21 categories. Use the search box (press `/`) to jump to any function._
 
 ## Categories
 
@@ -65,6 +65,10 @@ _388 functions across 20 categories. Use the search box (press `/`) to jump to a
 ### [Simplification](simplification/index.md)
 
 [`$Assumptions`](simplification/$Assumptions.md)  [`$SimplifyDebug`](simplification/$SimplifyDebug.md)  [`Assuming`](simplification/Assuming.md)  [`Element`](simplification/Element.md)  [`Simplify`](simplification/Simplify.md)  [`SimplifyCount`](simplification/SimplifyCount.md)  [`TransformationFunctions`](simplification/TransformationFunctions.md)
+
+### [Special Functions](special-functions/index.md)
+
+[`Gamma`](special-functions/Gamma.md)  [`Hypergeometric0F1`](special-functions/Hypergeometric0F1.md)  [`Hypergeometric1F1`](special-functions/Hypergeometric1F1.md)  [`Hypergeometric2F1`](special-functions/Hypergeometric2F1.md)  [`HypergeometricPFQ`](special-functions/HypergeometricPFQ.md)  [`Pochhammer`](special-functions/Pochhammer.md)
 
 ### [Statistics](statistics/index.md)
 
@@ -232,6 +236,7 @@ _388 functions across 20 categories. Use the search box (press `/`) to jump to a
 - [`FullForm`](expression-information/FullForm.md)
 - [`Function`](other-advanced/Function.md)
 - [`GCD`](arithmetic-and-algebra/GCD.md)
+- [`Gamma`](special-functions/Gamma.md)
 - [`GeneratedParameters`](other-advanced/GeneratedParameters.md)
 - [`Get`](file-io/Get.md)
 - [`Greater`](other-advanced/Greater.md)
@@ -247,6 +252,10 @@ _388 functions across 20 categories. Use the search box (press `/`) to jump to a
 - [`HoldForm`](expression-information/HoldForm.md)
 - [`HoldPattern`](expression-information/HoldPattern.md)
 - [`HornerForm`](structural-manipulation/HornerForm.md)
+- [`Hypergeometric0F1`](special-functions/Hypergeometric0F1.md)
+- [`Hypergeometric1F1`](special-functions/Hypergeometric1F1.md)
+- [`Hypergeometric2F1`](special-functions/Hypergeometric2F1.md)
+- [`HypergeometricPFQ`](special-functions/HypergeometricPFQ.md)
 - [`Identity`](expression-information/Identity.md)
 - [`IdentityMatrix`](linear-algebra/IdentityMatrix.md)
 - [`If`](control-flow/If.md)
@@ -331,6 +340,7 @@ _388 functions across 20 categories. Use the search box (press `/`) to jump to a
 - [`Permutations`](lists-and-iteration/Permutations.md)
 - [`Piecewise`](control-flow/Piecewise.md)
 - [`Plus`](arithmetic-and-algebra/Plus.md)
+- [`Pochhammer`](special-functions/Pochhammer.md)
 - [`PolynomialExtendedGCD`](structural-manipulation/PolynomialExtendedGCD.md)
 - [`PolynomialGCD`](structural-manipulation/PolynomialGCD.md)
 - [`PolynomialLCM`](structural-manipulation/PolynomialLCM.md)

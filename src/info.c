@@ -208,6 +208,15 @@ void info_init(void) {
         "and rational multiples of Sqrt[Pi]); non-positive integers give\n"
         "ComplexInfinity. Machine and arbitrary-precision (MPFR) real inputs\n"
         "evaluate numerically, as do machine-precision complex inputs. Listable.");
+    symtab_set_docstring("Pochhammer",
+        "Pochhammer[a, n]\n"
+        "\tgives the Pochhammer symbol (a)_n = a (a+1) ... (a+n-1) = Gamma[a+n]/Gamma[a].\n"
+        "Exact integer n expands to the product of n linear factors: a polynomial\n"
+        "product for symbolic a, an exact Integer/Rational for numeric a (negative n\n"
+        "gives the reciprocal product). Other numeric arguments evaluate via the\n"
+        "Gamma ratio, reducing exact half-integers to rational multiples of Sqrt[Pi]\n"
+        "and tracking machine or arbitrary (MPFR) precision; machine-precision\n"
+        "complex arguments evaluate too. Other arguments stay symbolic. Listable.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Fibonacci",
         "Fibonacci[n]\n"

@@ -1152,6 +1152,14 @@
     "url": "documentation/arithmetic-and-algebra/GCD/"
   },
   {
+    "name": "Gamma",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Gamma[z]",
+    "url": "documentation/special-functions/Gamma/"
+  },
+  {
     "name": "GeneratedParameters",
     "category": "Other & Advanced",
     "slug": "other-advanced",
@@ -1270,6 +1278,38 @@
     "status": "Stable",
     "summary": "HornerForm[poly]",
     "url": "documentation/structural-manipulation/HornerForm/"
+  },
+  {
+    "name": "Hypergeometric0F1",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Hypergeometric0F1[b, z]",
+    "url": "documentation/special-functions/Hypergeometric0F1/"
+  },
+  {
+    "name": "Hypergeometric1F1",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Hypergeometric1F1[a, b, z]",
+    "url": "documentation/special-functions/Hypergeometric1F1/"
+  },
+  {
+    "name": "Hypergeometric2F1",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Hypergeometric2F1[a, b, c, z]",
+    "url": "documentation/special-functions/Hypergeometric2F1/"
+  },
+  {
+    "name": "HypergeometricPFQ",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "HypergeometricPFQ[{a1, ...}, {b1, ...}, z]",
+    "url": "documentation/special-functions/HypergeometricPFQ/"
   },
   {
     "name": "Identity",
@@ -1942,6 +1982,14 @@
     "status": "Stable",
     "summary": "x + y + ... or Plus[x, y, ...] represents a sum of terms.",
     "url": "documentation/arithmetic-and-algebra/Plus/"
+  },
+  {
+    "name": "Pochhammer",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Pochhammer[a, n]",
+    "url": "documentation/special-functions/Pochhammer/"
   },
   {
     "name": "PolynomialExtendedGCD",

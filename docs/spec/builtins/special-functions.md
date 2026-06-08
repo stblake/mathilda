@@ -46,6 +46,43 @@
   exact non-integer `Gamma[3/2, z]`, exact complex `Gamma[3/2, I]`) stay
   unevaluated.
 
+## Pochhammer
+
+- `Pochhammer[a, n]` — the Pochhammer symbol (rising factorial)
+  (a)ₙ = a (a+1) … (a+n-1) = Γ(a+n)/Γ(a).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- `Pochhammer[a, 0] = 1` for any `a` (including symbolic and `Infinity`).
+- Exact integer order `n` (|n| ≤ 1000) expands to the explicit product of
+  `n` linear factors:
+  - Symbolic base → a polynomial product, e.g. `Pochhammer[n, 5] =
+    n (1 + n) (2 + n) (3 + n) (4 + n)` and `Pochhammer[x, 4] =
+    x (1 + x) (2 + x) (3 + x)`.
+  - Numeric base → an exact value, e.g. `Pochhammer[10, 6] = 3603600`,
+    `Pochhammer[1, 25] = 25!` (GMP BigInt), `Pochhammer[1/2, 3] = 15/8`.
+  - Negative `n` gives the reciprocal product, e.g. `Pochhammer[n, -5] =
+    1/((-5 + n) (-4 + n) (-3 + n) (-2 + n) (-1 + n))`,
+    `Pochhammer[10, -3] = 1/504`.
+  - `Pochhammer[0, n] = 0` for positive integer `n` (short-circuited, so
+    even `Pochhammer[0, 1285] = 0`); `Pochhammer[Infinity, n] = Infinity`.
+- Other numeric arguments evaluate via the Gamma ratio `Γ(a+n)/Γ(a)`,
+  reusing the `Gamma` builtin:
+  - Exact half-integers reduce to rational multiples of `Sqrt[Pi]`, e.g.
+    `Pochhammer[3/2, 1/2] = 2/Sqrt[Pi]`, `Pochhammer[1/2, 1/2] = 1/Sqrt[Pi]`.
+  - Machine-precision real → e.g. `Pochhammer[2.4, 8.5] = 2.31022×10⁶`.
+  - Arbitrary precision (MPFR) tracks the input precision, e.g.
+    `N[Pochhammer[1/3, 7], 50]` and
+    `Pochhammer[1.011111111111000000000000000, 8] = 41552.275849087780380888…`.
+  - Machine-precision complex → e.g.
+    `Pochhammer[2. + 5 I, 8 I] = 2.13868×10⁻⁶ − 1.42187×10⁻⁵ I`.
+- Threads over lists (Listable), e.g.
+  `Pochhammer[{2, 3, 5, 7, 11}, 3] = {24, 60, 210, 504, 1716}`.
+- All other arguments (e.g. `Pochhammer[a, n]`, `Pochhammer[a, 1/2]`,
+  `Pochhammer[1/2, 1/3]`) stay unevaluated. (Derivatives and series, which
+  Mathematica expresses through `PolyGamma`, are not yet implemented.)
+
 ## HypergeometricPFQ
 
 `HypergeometricPFQ[{a1, …, ap}, {b1, …, bq}, z]` is the generalized

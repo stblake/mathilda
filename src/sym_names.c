@@ -254,6 +254,7 @@ const char* SYM_Pi = NULL;
 const char* SYM_Piecewise = NULL;
 const char* SYM_Pivoting = NULL;
 const char* SYM_Plus = NULL;
+const char* SYM_Pochhammer = NULL;
 const char* SYM_PollardRho = NULL;
 const char* SYM_PolynomialGCD = NULL;
 const char* SYM_Polynomials = NULL;
@@ -611,6 +612,7 @@ void sym_names_init(void) {
     SYM_Piecewise                  = intern_symbol("Piecewise");
     SYM_Pivoting                   = intern_symbol("Pivoting");
     SYM_Plus                       = intern_symbol("Plus");
+    SYM_Pochhammer                 = intern_symbol("Pochhammer");
     SYM_PollardRho                 = intern_symbol("PollardRho");
     SYM_PolynomialGCD              = intern_symbol("PolynomialGCD");
     SYM_Polynomials                = intern_symbol("Polynomials");
