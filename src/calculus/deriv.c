@@ -888,6 +888,48 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- Gamma[A, Z] (upper incomplete gamma): chain rule on both args.
+         *   dGamma/dZ = -Z^(A-1) E^-Z    (elementary)
+         *   dGamma/dA = Derivative[1,0][Gamma][A,Z]  (no closed form without
+         *               PolyGamma; left as the generic partial).
+         * Zero-derivative arms are dropped, so D[Gamma[a,z],z] keeps only the
+         * dZ term, matching Mathematica's -E^-z z^(a-1). */
+        if (h == SYM_Gamma && n == 2) {
+            Expr* A = args[0];
+            Expr* Z = args[1];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* -Z^(A-1) E^-Z * dZ */
+                Expr* zpow = mk_fn2("Power", expr_copy(Z),
+                                    mk_fn2("Plus", expr_copy(A), mk_int(-1)));
+                Expr* enz  = mk_fn1("Exp", mk_neg(expr_copy(Z)));
+                Expr* dGdZ = mk_neg(mk_fn2("Times", zpow, enz));
+                terms[nt++] = mk_fn2("Times", dGdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dA)) {
+                /* Derivative[1,0][Gamma][A,Z] * dA */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("Gamma"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(A), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dA);
+            } else {
+                expr_free(dA);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- Known elementary unary function: F'(g) * D[g, x]. --- */
         if (n == 1) {
             Expr* fp = elementary_fprime(h, args[0]);

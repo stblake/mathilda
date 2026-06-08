@@ -18,19 +18,33 @@
   - `Gamma[Infinity]` → `Infinity`, `Gamma[-Infinity]` → `Indeterminate`,
     `Gamma[ComplexInfinity]` → `ComplexInfinity`.
 - Exact reductions for the incomplete form:
-  - `Gamma[a, 0] = Gamma[a]`, `Gamma[1, z] = E^-z`, `Gamma[a, Infinity] = 0`.
+  - `Gamma[a, 0] = Gamma[a]`, `Gamma[a, Infinity] = 0`.
+  - **Positive integer first argument** reduces to its finite closed form
+    `Gamma[n, z] = (n-1)! e^-z Σ_{k=0}^{n-1} z^k/k!` for symbolic or exact `z`,
+    e.g. `Gamma[1, z] = E^-z`, `Gamma[2, x] = (1 + x) E^-x`,
+    `Gamma[3, x] = (2 + 2 x + x^2) E^-x`, and exact `Gamma[2, 3] = 4/E^3`.
 - Numeric evaluation:
   - Machine-precision real → libm `tgamma`; machine-precision complex →
     Lanczos approximation, e.g. `Gamma[2.3 + I] = 0.719141 + 0.540614 I`.
   - Arbitrary precision (MPFR) real → `mpfr_gamma`, output precision tracking
     the input, e.g. `N[Gamma[22/10], 50]` and `Gamma[2.2`200]`.
+  - **Arbitrary-precision complex** `Gamma[z]` → Spouge's approximation,
+    whose coefficients are computed at runtime to the requested precision
+    (reflection for `Re(z) < 1/2`), e.g.
+    `N[Gamma[I], 50] = -0.15494982830181068512… − 0.49801566811835604271… I`.
   - Incomplete real (machine or MPFR) → `mpfr_gamma_inc`, e.g.
     `Gamma[1.5, 7.5] = 0.00160996`, `Gamma[1, 1.1, 2.2] = 0.222068`.
-- Arbitrary-precision **complex** gamma is intentionally left symbolic rather
-  than emitting a value whose advertised precision a fixed Lanczos series can
-  not actually deliver (machine-precision complex is supported).
+  - **Incomplete complex** `Gamma[a, z]` (machine or arbitrary precision) →
+    a lower-incomplete series (`Re(z) < Re(a)+1`) or a Lentz continued
+    fraction otherwise, e.g. `Gamma[2.0, 1 + I] = (2 + I) e^-(1+I)` and
+    `N[Gamma[3/2, 2 + I], 30] = 0.160487401929263240… − 0.176588715957602346… I`.
+- Derivatives: `D[Gamma[a, z], z] = -z^(a-1) E^-z` (chain rule on both
+  arguments; the `a`-derivative is the generic `Derivative[1,0][Gamma][a,z]`,
+  and `D[Gamma[z], z]` stays `Derivative[1][Gamma][z]` since `PolyGamma`
+  is not yet implemented).
 - All other arguments (e.g. `Gamma[1/3]`, `Gamma[x]`, `Gamma[a, z]`,
-  exact-integer `Gamma[2, 3]`) stay unevaluated.
+  exact non-integer `Gamma[3/2, z]`, exact complex `Gamma[3/2, I]`) stay
+  unevaluated.
 
 ## HypergeometricPFQ
 

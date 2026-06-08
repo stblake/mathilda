@@ -105,8 +105,10 @@ void test_gamma_symbolic() {
     assert_eval_eq("Gamma[x]", "Gamma[x]", 0);
     assert_eval_eq("Gamma[1/3]", "Gamma[1/3]", 0);
     assert_eval_eq("Gamma[a, z]", "Gamma[a, z]", 0);
-    /* Exact positive-integer incomplete gamma is left symbolic (not closed). */
-    assert_eval_eq("Gamma[2, 3]", "Gamma[2, 3]", 0);
+    /* Exact non-integer incomplete gamma stays symbolic (no closed form). */
+    assert_eval_eq("Gamma[3/2, z]", "Gamma[3/2, z]", 0);
+    /* Exact complex incomplete gamma stays symbolic (no inexact part). */
+    assert_eval_eq("Gamma[3/2, I]", "Gamma[3/2, I]", 0);
 }
 
 /* ---- machine-precision numerics ------------------------------------- */
@@ -144,6 +146,17 @@ void test_gamma_arbitrary_precision() {
     assert_eval_startswith("N[Gamma[10], 30]", "362880.");
 }
 
+void test_gamma_arbitrary_complex() {
+    /* Arbitrary-precision complex Gamma via Spouge. N[Gamma[I], 50]:
+       Gamma[I] = -0.15494982830181068512... - 0.49801566811835604271... I. */
+    assert_eval_startswith("N[Gamma[I], 50]",
+                           "-0.154949828301810685124955130483886605195879");
+    /* Gamma[1/2 + I] = 0.30069461726065582 - 0.42496787943312381 I. */
+    assert_eval_startswith("N[Gamma[1/2 + I], 20]", "0.3006946172606558");
+    /* Reflection (Re < 1/2) agrees with the machine path. */
+    assert_eval_startswith("N[Gamma[-3/2 + 2 I], 20]", "-0.0018843965411520");
+}
+
 /* ---- incomplete & generalized incomplete gamma ---------------------- */
 
 void test_gamma_incomplete_exact() {
@@ -156,6 +169,29 @@ void test_gamma_incomplete_exact() {
     assert_eval_eq("Gamma[3.0, Infinity]", "0", 0);
 }
 
+void test_gamma_incomplete_int_closed() {
+    /* Positive integer first argument -> finite closed form. */
+    assert_eval_eq("Gamma[2, 3]", "4/E^3", 0);            /* exact stays exact */
+    assert_eval_eq("Gamma[2, x]", "(1 + x) E^(-x)", 0);   /* symbolic reduces  */
+    assert_eval_eq("Gamma[3, x]", "E^(-x) (2 + 2 x + x^2)", 0);
+    assert_eval_eq("Gamma[2, 1/2]", "3/2/Sqrt[E]", 0);    /* exact rational z  */
+    /* Gamma[4, 2] = 38 e^-2. */
+    assert_eval_eq("Gamma[4, 2]", "38/E^2", 0);
+    /* Numerically consistent with the incomplete-gamma integral. */
+    assert_close("Gamma[2, 3.0]", 4.0 * exp(-3.0), 1e-12);
+}
+
+void test_gamma_derivatives() {
+    /* dGamma/dz of the incomplete form: -z^(a-1) e^-z. */
+    assert_eval_eq("D[Gamma[a, x], x]", "-E^(-x) x^(-1 + a)", 0);
+    /* Chain rule through the second argument. */
+    assert_eval_eq("D[Gamma[a, x^2], x]", "-2 x E^(-x^2) x^2^(-1 + a)", 0);
+    /* Derivative wrt the first argument has no closed form here: generic. */
+    assert_eval_eq("D[Gamma[x, z], x]", "Derivative[1, 0][Gamma][x, z]", 0);
+    /* One-argument Gamma'[z] stays generic (PolyGamma is out of scope). */
+    assert_eval_eq("D[Gamma[x], x]", "Derivative[1][Gamma][x]", 0);
+}
+
 void test_gamma_incomplete_numeric() {
     /* Gamma[1.5, 7.5] = 0.00160996322827... (matches Mathematica's 0.00160996). */
     assert_close("Gamma[1.5, 7.5]", 0.0016099632282723202, 1e-12);
@@ -165,6 +201,20 @@ void test_gamma_incomplete_numeric() {
     assert_close("Gamma[2.2, 0.0]", 1.1018024908797127, 1e-12);
     /* Arbitrary-precision incomplete gamma. */
     assert_eval_startswith("N[Gamma[1/2, 1], 30]", "0.27880");
+}
+
+void test_gamma_incomplete_complex() {
+    /* Machine complex incomplete gamma. Gamma[2.0, 1+I] = (2+I) e^-(1+I):
+       0.70709209634593808 - 0.42035364095981146 I. */
+    assert_complex_close("Gamma[2.0, 1.0 + 1.0 I]",
+                         0.7070920963459381, -0.4203536409598115, 1e-12);
+    /* Continued-fraction branch (Re(z) large). Tiny imaginary part tracks the
+       real incomplete gamma Gamma[1.5, 8.0] = 0.001004967410648. */
+    assert_complex_close("Gamma[1.5, 8.0 + 1.0*^-12 I]",
+                         0.001004967410648176, 0.0, 1e-12);
+    /* Arbitrary-precision complex incomplete (series branch). N[Gamma[3/2, 2+I], 30]
+       = 0.160487401929263240325468324955 - 0.176588715957602345887257880028 I. */
+    assert_eval_startswith("N[Gamma[3/2, 2 + I], 30]", "0.16048740192926324032");
 }
 
 void test_gamma_generalized() {
@@ -202,8 +252,12 @@ int main() {
     TEST(test_gamma_machine_real);
     TEST(test_gamma_machine_complex);
     TEST(test_gamma_arbitrary_precision);
+    TEST(test_gamma_arbitrary_complex);
     TEST(test_gamma_incomplete_exact);
+    TEST(test_gamma_incomplete_int_closed);
+    TEST(test_gamma_derivatives);
     TEST(test_gamma_incomplete_numeric);
+    TEST(test_gamma_incomplete_complex);
     TEST(test_gamma_generalized);
     TEST(test_gamma_listable);
     TEST(test_gamma_attributes);
