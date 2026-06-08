@@ -16,6 +16,14 @@
 extern "C" {
 #endif
 
+/* When non-zero, Eliminate suppresses its advisory diagnostics
+ * (::ifun, ::alg, ::nlin, ...).  Internal callers that drive Eliminate as a
+ * private sub-step -- e.g. the DerivativeDivides integrator -- raise this
+ * around their call so the user does not see branch-caveat messages for an
+ * elimination they never asked for.  Save/restore it (a plain global, not
+ * re-entrant). */
+extern int eliminate_suppress_messages;
+
 /* Entry point bound to the Eliminate symbol in eliminate_init(). */
 Expr* builtin_eliminate(Expr* res);
 

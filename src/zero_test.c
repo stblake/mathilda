@@ -70,6 +70,17 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
 #define ZT_NUMERATOR_BITS    20
 #define ZT_DENOMINATOR_BITS  16
 
+/* Imaginary parts of samples are kept small in magnitude. Transcendental
+ * kernels such as Tan/Tanh saturate to +-I once |Im| exceeds ~18: there
+ * 1 + Tan^2 (= Sec^2) cancels to below machine epsilon, so an expression
+ * that is identically zero evaluates to O(1) noise and a true zero is
+ * misreported as non-zero. Branch cuts of Sqrt/Log/ArcTan depend on the
+ * SIGN of the imaginary part, not its magnitude, so a small imaginary
+ * perturbation still exercises them. The denominator keeps full
+ * granularity (ZT_DENOMINATOR_BITS) so the sample set stays large for the
+ * Schwartz-Zippel guarantee; only the magnitude is bounded (|Im| <= 8). */
+#define ZT_IMAG_NUMERATOR_BITS 3
+
 /* Safety bits in the cancellation threshold. The IEEE-cancellation rule of
  * thumb is that a result is "ambiguous" if smaller than scale * 2^(-p/2);
  * we add a couple of extra bits as a guard against fma / parsing slop. */
@@ -623,7 +634,10 @@ static Expr* sample_random_value(void) {
     int64_t coin = draw_int_range(0, 1);
     if (coin == 0) return re;
 
-    int64_t n_im = draw_int_range(-num_bound, num_bound);
+    /* Bounded imaginary part: small numerator, full-granularity denominator
+     * (see ZT_IMAG_NUMERATOR_BITS). */
+    int64_t im_num_bound = (int64_t)1 << ZT_IMAG_NUMERATOR_BITS;
+    int64_t n_im = draw_int_range(-im_num_bound, im_num_bound);
     if (n_im == 0) n_im = 1;  /* keep imaginary part non-trivial */
     int64_t d_im = draw_int_range(1, den_bound);
     if (d_im == 0) d_im = 1;

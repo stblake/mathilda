@@ -99,7 +99,11 @@ Pipeline (each stage exits early on a definite verdict):
    re-evaluate when the residual lies near the rounding-noise floor.
 4. **Schwartz–Zippel** — for inputs with free symbols, substitute
    random real/complex samples and recurse into the numeric stage.
-   Requires four independent confirmations.
+   Requires four independent confirmations. Sampled imaginary parts are
+   bounded in magnitude (real parts are not): `Tan`/`Tanh` saturate to
+   `±I` for large `|Im|`, where `1 + Tan^2` cancels below machine epsilon
+   and a true zero would otherwise read as `O(1)`. Branch cuts depend on
+   the sign of the imaginary part, not its size, so they are still tested.
 
 Attributes: `Listable`, `Protected`.
 

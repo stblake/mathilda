@@ -519,18 +519,21 @@ complementary strategies are tried per kernel, each followed by an
 1. **Direct quotient** — `q = Cancel[Together[f / D[u(x), x]]]`, then
    `q /. u(x) -> u`; accepted when free of `x`.  Cheap, emits no diagnostics,
    handles transcendental compositions (`x Exp[x^2]`), and **selects the
-   correct radical branch inherently** (no squaring).  This is the only
-   strategy used inside the Automatic cascade.
+   correct radical branch inherently** (no squaring).  Tried first.
 
-2. **Eliminate / Solve** (explicit method only) — builds the differential
-   relation `Eliminate[{Dt[y] == f Dt[x], u == u(x), Dt[u == u(x)]}, {x,
-   Dt[x]}]`, solves for `Dt[y]`, and reduces each branch with `Factor //@ `,
+2. **Eliminate / Solve** — builds the differential relation
+   `Eliminate[{Dt[y] == f Dt[x], u == u(x), Dt[u == u(x)]}, {x, Dt[x]}]`,
+   solves for `Dt[y]`, and reduces each branch with `Factor //@ `,
    `PowerExpand` and `Cancel[. / Dt[u]]`.  It closes integrands the direct
-   strategy cannot — e.g. where `Cancel` canonicalises `1/Cos[x]` to `Sec[x]`,
-   breaking the syntactic substitution.  Because the algebraisation can square
-   radicals and invert functions, `Solve` returns several branches; the
-   verification gate is what **selects the branch that differentiates back to
-   `f`** (Eliminate may emit `::ifun` / `::alg` branch-caveat diagnostics).
+   strategy cannot — including **radical substitutions** like
+   `u = Sqrt[Tan[x]]` (reducing `Integrate[Sqrt[Tan[x]], x]` to the rational
+   integral `2 u^2/(1 + u^4)`), and cases where `Cancel` canonicalises
+   `1/Cos[x]` to `Sec[x]`, breaking the syntactic substitution.  Because the
+   algebraisation can square radicals and invert functions, `Solve` returns
+   several branches; the verification gate is what **selects the branch that
+   differentiates back to `f`**.  As of 2026-06-09 this strategy runs in the
+   Automatic cascade as well as under the explicit method (its Eliminate
+   `::ifun` / `::alg` diagnostics are muted while the integrator drives it).
 
 The reduced integral re-enters the full `Integrate`, so substitutions compose;
 a depth guard (8) and per-call fresh substitution symbols keep the recursion
@@ -554,6 +557,11 @@ Out[3]= Sec[x]                                      (* via Eliminate/Solve *)
 
 In[4]:= Integrate`DerivativeDivides[2 x Exp[x^2], x]
 Out[4]= E^x^2
+
+In[5]:= Integrate[Sqrt[Tan[x]], x]                  (* u = Sqrt[Tan[x]] *)
+Out[5]= ArcTan[-1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] + ArcTan[1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]
+          - Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/(2 Sqrt[2])
+          + Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/(2 Sqrt[2])
 ```
 
 ### Integrate`LinearRadicals

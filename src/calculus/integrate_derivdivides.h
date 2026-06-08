@@ -46,6 +46,12 @@
  * of `f` or `x`. */
 Expr* integrate_derivdivides_try(Expr* f, Expr* x);
 
+/* Explicit `Method -> "DerivativeDivides"` entry.  Runs the direct strategy
+ * and then the thorough Eliminate/Solve branch-search (strategy 2), the same
+ * combination as the `Integrate`DerivativeDivides` builtin.  May emit
+ * Eliminate's ::ifun / ::alg diagnostics.  Does NOT take ownership of `f`/`x`. */
+Expr* integrate_derivdivides_full(Expr* f, Expr* x);
+
 /* `Integrate`DerivativeDivides[f, x]` builtin.  Runs the direct strategy and
  * then the more thorough Eliminate/Solve branch-search (strategy 2).  Strict:
  * returns NULL (unevaluated) when neither strategy produces a result that

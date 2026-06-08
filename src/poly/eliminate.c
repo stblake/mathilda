@@ -1312,22 +1312,30 @@ static void gb_poly_strip_monomial(GBPoly* p) {
 /*  Diagnostics                                                        */
 /* ------------------------------------------------------------------ */
 
+/* See eliminate.h: internal drivers (DerivativeDivides) raise this to mute
+ * the advisory diagnostics for an elimination the user never requested. */
+int eliminate_suppress_messages = 0;
+
 static void emit_argt(size_t argc) {
+    if (eliminate_suppress_messages) return;
     fprintf(stderr, "Eliminate::argt: Eliminate called with %zu argument(s); "
                     "2 expected.\n", argc);
 }
 
 static void emit_eqf(void) {
+    if (eliminate_suppress_messages) return;
     fprintf(stderr, "Eliminate::eqf: equations must be given as Equal[lhs, rhs] "
                     "(==) or a list/And of such.\n");
 }
 
 static void emit_nlin(void) {
+    if (eliminate_suppress_messages) return;
     fprintf(stderr, "Eliminate::nlin: system is not polynomial in the given "
                     "variables.\n");
 }
 
 static void emit_ifun(void) {
+    if (eliminate_suppress_messages) return;
     fprintf(stderr, "Eliminate::ifun: Inverse functions are being used by "
                     "Eliminate, so some solutions may not be found; use Reduce "
                     "for complete solution information.\n");
@@ -1338,6 +1346,7 @@ static void emit_ifun(void) {
  * of times; without the hash guard each iteration re-prints the warning
  * and floods the terminal.  Mirrors `solve.c:warn_bad_option`. */
 static void emit_alg(const Expr* res) {
+    if (eliminate_suppress_messages) return;
     static uint64_t last_warned_hash = 0;
     uint64_t h = res ? expr_hash((Expr*)res) : 0;
     if (h == last_warned_hash) return;

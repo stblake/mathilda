@@ -121,6 +121,48 @@ void test_trigrat_risch_xn_sin_cos_derivative(void) {
     expr_free(r);
 }
 
+/* ---- Quadratic-radical generators: Sqrt[Tan[x]] etc. ---- */
+
+void test_trigrat_sqrt_tan_derivative(void) {
+    /* D[Integrate[Sqrt[Tan[x]], x], x] is a rational function of the
+     * radical kernel Sqrt[Tan[x]] (Tan = t^2, Sec^2 = 1 + t^4).  Before
+     * the trig-rational quadratic-radical generators existed, Simplify
+     * hung indefinitely on this (Factor over Q(Sqrt[2]) blew up).  It must
+     * now collapse to Sqrt[Tan[x]] within a generous wall-clock budget. */
+    const char* expr =
+        "Simplify[D[ArcTan[-1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]"
+        " + ArcTan[1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]"
+        " - 1/2 Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]"
+        " + 1/2 Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2], x]]";
+    struct Expr* parsed = parse_expression(expr);
+    assert(parsed != NULL);
+    double t0 = seconds();
+    struct Expr* r = evaluate(parsed);
+    double dt = seconds() - t0;
+    expr_free(parsed);
+    char* s = expr_to_string(r);
+    if (strcmp(s, "Sqrt[Tan[x]]") != 0) {
+        fprintf(stderr, "FAIL: trigrat_sqrt_tan: expected Sqrt[Tan[x]], got: %s\n", s);
+    }
+    if (dt > 30.0) {
+        fprintf(stderr, "FAIL: trigrat_sqrt_tan: took %.2f s (> 30 s budget)\n", dt);
+    }
+    assert(strcmp(s, "Sqrt[Tan[x]]") == 0);
+    assert(dt <= 30.0);
+    free(s);
+    expr_free(r);
+}
+
+void test_trigrat_sqrt_tan_rational_combos(void) {
+    /* Rational functions of Sqrt[Tan[x]] reduce algebraically. */
+    assert_eval_eq("Simplify[Tan[x]/Sqrt[Tan[x]]]", "Sqrt[Tan[x]]", 0);
+    assert_eval_eq(
+        "Simplify[(Sqrt[Tan[x]] + Tan[x]^(3/2))/(1 + Tan[x])]",
+        "Sqrt[Tan[x]]", 0);
+    /* Radical-only inputs (no trig) also reduce. */
+    assert_eval_eq("Simplify[(x + Sqrt[x])/Sqrt[x]]", "1 + Sqrt[x]", 0);
+}
+
 /* ---- Non-applicable inputs: must not regress simp_search wins ---- */
 
 void test_trigrat_double_angle_preserved(void) {
@@ -148,6 +190,8 @@ int main(void) {
     TEST(test_trigrat_angle_addition_sin);
     TEST(test_trigrat_risch_tan_squared_derivative);
     TEST(test_trigrat_risch_xn_sin_cos_derivative);
+    TEST(test_trigrat_sqrt_tan_derivative);
+    TEST(test_trigrat_sqrt_tan_rational_combos);
     TEST(test_trigrat_double_angle_preserved);
     TEST(test_trigrat_half_angle_preserved);
 

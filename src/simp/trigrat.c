@@ -63,6 +63,7 @@
 #define TRIGRAT_BUDGET     4   /* max number of distinct (trig+hyp) args */
 #define TRIGRAT_OPAQUE_MAX 24  /* max number of distinct opaque atoms    */
 #define TRIGRAT_MAX_REDUCE 64  /* hard iteration cap for ideal reduction */
+#define TRIGRAT_RADICAL_MAX 3  /* max number of distinct Sqrt[g] kernels */
 /*
  * Below this leaf-count we always defer to simp_bottomup. simp_search's
  * heuristic transforms (TrigReduce, TrigFactor, HalfAngle, TanAddition,
@@ -156,13 +157,19 @@ static Expr* tr_neg(Expr* e) {
 static Expr* tr_raw_times(Expr* a, Expr* b) {
     Expr** args = (Expr**)calloc(2, sizeof(Expr*));
     args[0] = a; args[1] = b;
-    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
+    /* expr_new_function copies the args array (it does not adopt the
+     * buffer), so we own and must free it. */
+    Expr* fn = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
+    free(args);
+    return fn;
 }
 
 static Expr* tr_raw_pow(Expr* a, Expr* b) {
     Expr** args = (Expr**)calloc(2, sizeof(Expr*));
     args[0] = a; args[1] = b;
-    return expr_new_function(expr_new_symbol(SYM_Power), args, 2);
+    Expr* fn = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
+    free(args);
+    return fn;
 }
 
 /* ----------------------------------------------------------------------- */
@@ -186,6 +193,22 @@ typedef struct {
     char* name;      /* fresh symbol name                                */
 } TROpaque;
 
+/* Quadratic radical generator: a kernel Sqrt[g] (i.e. Power[g, p/2]).
+ * Treated as an algebraic element l with the defining relation
+ *   l^2 = radicand_subst   (the substituted value of g, rational in the
+ *                           trig generators s_i, c_i and ground symbols).
+ * This is structurally identical to a trig "odd" generator s_i, whose
+ * relation is s_i^2 = 1 - c_i^2: in both cases the square of the generator
+ * reduces to a known lower expression, so the existing ideal-reduction and
+ * conjugate-rationalisation machinery applies verbatim once it learns the
+ * generator's name and reduction RHS. All half-integer powers of the same g
+ * (Sqrt[g], g^(3/2), 1/Sqrt[g], ...) collapse to integer powers of l. */
+typedef struct {
+    char* name;            /* fresh symbol name for l                    */
+    Expr* radicand_subst;  /* l^2 = this (rational in s_i, c_i, ...) own */
+    Expr* orig;            /* original Sqrt[g] subtree, for back-sub own */
+} TRRadical;
+
 typedef struct {
     TRBind*   items;
     size_t    count;
@@ -193,11 +216,15 @@ typedef struct {
     TROpaque* opaques;
     size_t    opaque_count;
     size_t    opaque_capacity;
+    TRRadical* radicals;
+    size_t     radical_count;
+    size_t     radical_capacity;
 } TRBindings;
 
 static void tr_bindings_init(TRBindings* b) {
     b->items = NULL; b->count = 0; b->capacity = 0;
     b->opaques = NULL; b->opaque_count = 0; b->opaque_capacity = 0;
+    b->radicals = NULL; b->radical_count = 0; b->radical_capacity = 0;
 }
 
 static void tr_bindings_free(TRBindings* b) {
@@ -213,8 +240,59 @@ static void tr_bindings_free(TRBindings* b) {
         free(b->opaques[i].name);
     }
     free(b->opaques);
+    for (size_t i = 0; i < b->radical_count; i++) {
+        if (b->radicals[i].radicand_subst) expr_free(b->radicals[i].radicand_subst);
+        if (b->radicals[i].orig) expr_free(b->radicals[i].orig);
+        free(b->radicals[i].name);
+    }
+    free(b->radicals);
     b->items = NULL; b->count = 0; b->capacity = 0;
     b->opaques = NULL; b->opaque_count = 0; b->opaque_capacity = 0;
+    b->radicals = NULL; b->radical_count = 0; b->radical_capacity = 0;
+}
+
+/* Find a radical generator by its original Sqrt[g] subtree. */
+static TRRadical* tr_radical_find(const TRBindings* b, const Expr* orig) {
+    for (size_t i = 0; i < b->radical_count; i++) {
+        if (expr_eq(b->radicals[i].orig, (Expr*)orig)) return &b->radicals[i];
+    }
+    return NULL;
+}
+
+/* True if `e` mentions any radical generator's fresh symbol name. */
+static bool tr_uses_any_radical(const Expr* e, const TRBindings* b) {
+    for (size_t i = 0; i < b->radical_count; i++) {
+        if (tr_has_symbol_name(e, b->radicals[i].name)) return true;
+    }
+    return false;
+}
+
+/* Add a radical generator. Takes ownership of `radicand` (the l^2 value);
+ * copies `orig`. Returns NULL on allocation failure. */
+static TRRadical* tr_radical_add(TRBindings* b, const Expr* avoid,
+                                 const Expr* orig, Expr* radicand,
+                                 int* counter) {
+    if (b->radical_count == b->radical_capacity) {
+        size_t nc = b->radical_capacity == 0 ? 4 : b->radical_capacity * 2;
+        TRRadical* nb = (TRRadical*)realloc(b->radicals, nc * sizeof(TRRadical));
+        if (!nb) return NULL;
+        b->radicals = nb;
+        b->radical_capacity = nc;
+    }
+    char buf[64];
+    int tries = 0;
+    while (tries < 1000) {
+        snprintf(buf, sizeof(buf), "$pc_rad_%d$", *counter);
+        if (!tr_has_symbol_name(avoid, buf)) break;
+        (*counter)++;
+        tries++;
+    }
+    TRRadical* it = &b->radicals[b->radical_count++];
+    it->name = strdup(buf);
+    it->radicand_subst = radicand;
+    it->orig = expr_copy((Expr*)orig);
+    (*counter)++;
+    return it;
 }
 
 static TRBind* tr_bindings_find(const TRBindings* b, const Expr* arg, bool is_hyp) {
@@ -359,6 +437,60 @@ static Expr* tr_walk_subst(const Expr* e, TRBindings* b, int* counter,
         return fn;
     }
 
+    /* Power[base, Rational[p, 2]] -- a quadratic radical.  Introduce (or
+     * reuse) a radical generator l = Sqrt[base] with l^2 = base-substituted,
+     * and rewrite the whole power as the integer power l^p (p odd).  All
+     * half-integer powers of the same base thereby collapse to powers of one
+     * generator, and the algebraic relation l^2 = base ties the radical to
+     * any plain (integer-power) occurrences of base elsewhere. */
+    if (hs == SYM_Power && n == 2 && e->data.function.args[1] &&
+        e->data.function.args[1]->type == EXPR_FUNCTION) {
+        const Expr* exp_e = e->data.function.args[1];
+        const Expr* eh = exp_e->data.function.head;
+        if (eh && eh->type == EXPR_SYMBOL && eh->data.symbol == SYM_Rational &&
+            exp_e->data.function.arg_count == 2 &&
+            exp_e->data.function.args[0] &&
+            exp_e->data.function.args[0]->type == EXPR_INTEGER &&
+            exp_e->data.function.args[1] &&
+            exp_e->data.function.args[1]->type == EXPR_INTEGER &&
+            exp_e->data.function.args[1]->data.integer == 2) {
+            int64_t p = exp_e->data.function.args[0]->data.integer;
+            const Expr* base = e->data.function.args[0];
+
+            /* Canonical key/back-sub form Sqrt[base] = Power[base, 1/2]. */
+            Expr* half = expr_new_function(expr_new_symbol(SYM_Rational),
+                            (Expr*[]){ tr_int(1), tr_int(2) }, 2);
+            Expr* sqrt_key = expr_new_function(expr_new_symbol(SYM_Power),
+                            (Expr*[]){ expr_copy((Expr*)base), half }, 2);
+
+            TRRadical* rb = tr_radical_find(b, sqrt_key);
+            if (!rb) {
+                if (b->radical_count >= TRIGRAT_RADICAL_MAX) {
+                    *over_budget = true;
+                    expr_free(sqrt_key);
+                    return expr_copy((Expr*)e);
+                }
+                /* Substitute the radicand in the SAME binding set so its
+                 * trig generators are shared with the rest of the input. */
+                Expr* g_sub = tr_walk_subst(base, b, counter, avoid, over_budget);
+                /* Nested radicals (Sqrt of an expression that itself contains
+                 * a radical) are not supported by the single-conjugate
+                 * rationalisation: bail cleanly. */
+                if (*over_budget || !g_sub || tr_uses_any_radical(g_sub, b)) {
+                    *over_budget = true;
+                    if (g_sub) expr_free(g_sub);
+                    expr_free(sqrt_key);
+                    return expr_copy((Expr*)e);
+                }
+                rb = tr_radical_add(b, avoid, sqrt_key, g_sub, counter);
+            }
+            expr_free(sqrt_key);
+            if (!rb) { *over_budget = true; return expr_copy((Expr*)e); }
+            if (p == 1) return expr_new_symbol(rb->name);
+            return tr_raw_pow(expr_new_symbol(rb->name), tr_int(p));
+        }
+    }
+
     /* Tan/Cot/Sec/Csc and hyperbolic analogues -- rewrite to Sin/Cos
      * form, then recurse. Uses RAW (non-evaluating) constructors to
      * avoid the evaluator's Sin[x]/Cos[x] -> Tan[x] canonicalisation,
@@ -474,6 +606,11 @@ static Expr* tr_subst_back(const Expr* e, const TRBindings* b) {
                 return expr_copy(b->opaques[i].subtree);
             }
         }
+        for (size_t i = 0; i < b->radical_count; i++) {
+            if (strcmp(e->data.symbol, b->radicals[i].name) == 0) {
+                return expr_copy(b->radicals[i].orig);
+            }
+        }
         return expr_copy((Expr*)e);
     }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
@@ -509,6 +646,25 @@ static const TRBind* tr_find_by_s_name(const TRBindings* b, const char* sym) {
         if (strcmp(b->items[i].s_name, sym) == 0) return &b->items[i];
     }
     return NULL;
+}
+
+/* Look up a radical generator by its fresh symbol name. */
+static const TRRadical* tr_find_radical_by_name(const TRBindings* b,
+                                                const char* sym) {
+    if (!sym) return NULL;
+    for (size_t i = 0; i < b->radical_count; i++) {
+        if (strcmp(b->radicals[i].name, sym) == 0) return &b->radicals[i];
+    }
+    return NULL;
+}
+
+/* Build the replacement for a radical generator l^n (n >= 2):
+ *   l^(n-2) * radicand   (since l^2 = radicand). */
+static Expr* tr_build_radical_rhs(const TRRadical* rb, int64_t n) {
+    Expr* base_pow = (n == 2)
+        ? tr_int(1)
+        : tr_pow(expr_new_symbol(rb->name), tr_int(n - 2));
+    return tr_times(base_pow, expr_copy(rb->radicand_subst));
 }
 
 /* Build the replacement expression for a generator s_i^n with n >= 2. */
@@ -552,6 +708,12 @@ static Expr* tr_rewrite_pass(const Expr* e, const TRBindings* b, bool* changed) 
                 if (it) {
                     *changed = true;
                     return tr_build_reduce_rhs(it, exp_e->data.integer);
+                }
+                const TRRadical* rb =
+                    tr_find_radical_by_name(b, base->data.symbol);
+                if (rb) {
+                    *changed = true;
+                    return tr_build_radical_rhs(rb, exp_e->data.integer);
                 }
             }
         }
@@ -649,6 +811,31 @@ static void tr_rationalise_denom(const Expr* num_in, const Expr* den_in,
                                  Expr** num_out, Expr** den_out) {
     Expr* num = expr_copy((Expr*)num_in);
     Expr* den = expr_copy((Expr*)den_in);
+
+    /* Clear radical generators FIRST. Clearing l reintroduces its radicand
+     * (rational in s_i, c_i), so the trig generators must be cleared after.
+     * The reverse order would re-dirty the denominator with the radical. */
+    for (size_t i = 0; i < b->radical_count; i++) {
+        const char* lname = b->radicals[i].name;
+        if (!tr_uses_sname(den, lname)) continue;
+        /* den = den_0 + l * den_1 (l degree <= 1 after reduction). Conjugate
+         * den_0 - l * den_1 = 2*den_0 - den; product den_0^2 - l^2 den_1^2
+         * is l-free after l^2 -> radicand reduction. */
+        Expr* den_0 = tr_subst_sym_zero(den, lname);
+        Expr* conj = tr_plus(tr_times(tr_int(2), expr_copy(den_0)),
+                             tr_neg(expr_copy(den)));
+        expr_free(den_0);
+
+        Expr* new_num = tr_call_unary("Expand", tr_times(num, expr_copy(conj)));
+        Expr* new_den = tr_call_unary("Expand", tr_times(den, conj));
+
+        Expr* num_red = tr_reduce_mod_ideal(new_num, b);
+        Expr* den_red = tr_reduce_mod_ideal(new_den, b);
+        expr_free(new_num);
+        expr_free(new_den);
+        num = num_red;
+        den = den_red;
+    }
 
     for (size_t i = 0; i < b->count; i++) {
         const char* sname = b->items[i].s_name;
@@ -1113,7 +1300,7 @@ Expr* simp_trig_rational(const Expr* input,
     int counter = 0;
     bool over_budget = false;
     Expr* substed = tr_walk_subst(input, &b, &counter, input, &over_budget);
-    if (over_budget || b.count == 0 || !substed) {
+    if (over_budget || (b.count == 0 && b.radical_count == 0) || !substed) {
         tr_bindings_free(&b);
         if (substed) expr_free(substed);
         return NULL;

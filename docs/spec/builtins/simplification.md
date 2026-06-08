@@ -74,6 +74,12 @@ canonical forms that the generic pipeline alone does not:
   its prime factors, and linear combinations of logs are fused
   (`Sum c_i Log[a_i] -> Log[Prod a_i^c_i]`).
 - **Pythagorean completion and reduction** for trig and hyperbolic squares.
+- **Trig / radical-trig rational normal form** — rational functions of trig and
+  hyperbolic kernels are reduced to a canonical fraction modulo the Pythagorean
+  ideal. A quadratic radical of a kernel (e.g. `Sqrt[Tan[x]]`, `Tan[x]^(3/2)`) is
+  carried as an algebraic generator `l` with `l^2 = g`, so rational functions of
+  `Sqrt[Tan[x]]` reduce too — `Simplify[Tan[x]/Sqrt[Tan[x]]] -> Sqrt[Tan[x]]`,
+  and `D[Integrate[Sqrt[Tan[x]], x], x] // Simplify -> Sqrt[Tan[x]]`.
 - **Equation / inequality rebalancing** — a binary relation is normalised by
   dividing through the GCD of integer coefficients and partitioning terms across
   the relation; the rebalanced form is kept when its `SimplifyCount` is lower.

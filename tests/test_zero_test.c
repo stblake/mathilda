@@ -245,6 +245,21 @@ static void test_stage3_tan_in_terms_of_sin_cos(void) {
     seed_rng(42);
     assert_pzq("PossibleZeroQ[Tan[x] - Sin[x]/Cos[x]]", "True");
 }
+static void test_stage3_sqrt_tan_derivative_identity(void) {
+    /* D[Integrate[Sqrt[Tan[x]], x], x] == Sqrt[Tan[x]].  A true identity
+     * that was misreported False because the Schwartz-Zippel sampler drew
+     * a huge imaginary part (|Im| ~ 450), where Tan saturates to +-I and
+     * 1 + Tan^2 (= Sec^2) catastrophically cancels to 0 in IEEE arithmetic
+     * -- so the Sec^2-scaled derivative read as 0 while Sqrt[Tan[x]] stayed
+     * O(1).  Bounding the sampled imaginary magnitude fixes it. */
+    seed_rng(42);
+    assert_pzq(
+        "PossibleZeroQ[D[ArcTan[-1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]"
+        " + ArcTan[1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]"
+        " - 1/2 Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]"
+        " + 1/2 Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2], x]"
+        " - Sqrt[Tan[x]]]", "True");
+}
 
 /* ============================================================== */
 /*  5. Listable threading and registration                        */
@@ -485,6 +500,7 @@ int main(void) {
     TEST(test_stage3_exp_log_identity);
     TEST(test_stage3_cos_double_angle);
     TEST(test_stage3_tan_in_terms_of_sin_cos);
+    TEST(test_stage3_sqrt_tan_derivative_identity);
 
     /* Group 5 — Listable / registration */
     TEST(test_listable_threading);

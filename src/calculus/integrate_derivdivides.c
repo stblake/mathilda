@@ -54,6 +54,7 @@
 #include "internal.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "poly/eliminate.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -319,7 +320,13 @@ static Expr* try_eliminate_kernel(const Expr* f, const Expr* x, const Expr* w) {
     Expr* vars = expr_new_function(expr_new_symbol("List"),
                                    (Expr*[]){ expr_copy((Expr*)x), expr_copy(dtx) }, 2);
 
+    /* Eliminate runs as a private sub-step here; mute its advisory ::ifun /
+     * ::alg / ::nlin diagnostics so the user never sees branch caveats for an
+     * elimination they did not request. */
+    int saved_quiet = eliminate_suppress_messages;
+    eliminate_suppress_messages = 1;
     Expr* rel = eval_take(mk_fn2("Eliminate", eqns, vars));   /* consumes eqns, vars */
+    eliminate_suppress_messages = saved_quiet;
 
     Expr* result = NULL;
     /* Eliminate must have produced an equation, not bailed back unevaluated. */
@@ -401,6 +408,12 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate) {
 Expr* integrate_derivdivides_try(Expr* f, Expr* x) {
     /* Automatic cascade: direct strategy only (fast, no diagnostics). */
     return dd_core(f, x, false);
+}
+
+Expr* integrate_derivdivides_full(Expr* f, Expr* x) {
+    /* Explicit Method -> "DerivativeDivides": direct strategy, then the
+     * thorough Eliminate/Solve branch-search. */
+    return dd_core(f, x, true);
 }
 
 Expr* builtin_integrate_derivdivides(Expr* res) {

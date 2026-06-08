@@ -142,12 +142,13 @@ static Expr* try_rational(Expr* f, Expr* x) {
 }
 
 /* Stage 1b: derivative-divides substitution.  Recognises integrands of the
- * shape c h(u(x)) u'(x) and reduces to Integrate[h[u], u].  In the Automatic
- * cascade we use the quiet, branch-correct direct-quotient strategy only;
- * the diagnostic-emitting Eliminate/Solve search is reserved for the explicit
- * Method -> "DerivativeDivides" head. */
+ * shape c h(u(x)) u'(x) and reduces to Integrate[h[u], u].  Runs the fast,
+ * branch-correct direct-quotient strategy first and then the more thorough
+ * Eliminate/Solve branch-search (which closes radical substitutions such as
+ * u = Sqrt[Tan[x]]); the latter's Eliminate diagnostics are muted while the
+ * integrator drives it (see integrate_derivdivides.c). */
 static Expr* try_derivdivides(Expr* f, Expr* x) {
-    return integrate_derivdivides_try(f, x);
+    return integrate_derivdivides_full(f, x);
 }
 
 /* Stage 1c: linear-radical substitution.  Recognises a rational function of x
@@ -369,7 +370,10 @@ Expr* builtin_integrate(Expr* res) {
             result = try_rational(effective_f, x);
             break;
         case METHOD_DERIVATIVE_DIVIDES:
-            result = try_derivdivides(effective_f, x);
+            /* Explicit method runs the thorough Eliminate/Solve search in
+             * addition to the direct quotient (the Automatic cascade uses the
+             * direct strategy only). */
+            result = integrate_derivdivides_full(effective_f, x);
             break;
         case METHOD_LINEAR_RADICALS:
             result = try_linrad(effective_f, x);

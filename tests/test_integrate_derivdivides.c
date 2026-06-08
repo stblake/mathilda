@@ -71,6 +71,29 @@ static void test_explicit_eliminate(void) {
         " - Sin[x]/Cos[x]^4]", "0", 0);
 }
 
+/* Radical substitution u = Sqrt[Tan[x]].  The Eliminate/Solve search closes
+ * Integrate[Sqrt[Tan[x]], x] (reducing to the rational integral 2u^2/(1+u^4)),
+ * which the direct strategy cannot.  This is now reachable from BOTH the
+ * Automatic cascade and the explicit method.  Correctness is verified by the
+ * differentiation predicate; the simplification of the radical-trig derivative
+ * back to Sqrt[Tan[x]] exercises the trigrat quadratic-radical generators. */
+static void test_radical_substitution(void) {
+    /* Automatic cascade closes it. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[Sqrt[Tan[x]], x], x] - Sqrt[Tan[x]]]", "0", 0);
+    /* Explicit method and package head close it too. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[Sqrt[Tan[x]], x, Method -> \"DerivativeDivides\"], x]"
+        " - Sqrt[Tan[x]]]", "0", 0);
+    assert_eval_eq(
+        "Simplify[D[Integrate`DerivativeDivides[Sqrt[Tan[x]], x], x]"
+        " - Sqrt[Tan[x]]]", "0", 0);
+    /* Pin the branch numerically at an interior point. */
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[Sqrt[Tan[x]], x], x] - Sqrt[Tan[x]]) /. x -> 0.7]]"
+        " < 0.000001", "True", 0);
+}
+
 /* Method plumbing: both the option string and the explicit package head
  * route to the routine and close the headline case. */
 static void test_method_plumbing(void) {
@@ -104,6 +127,7 @@ void test_integrate_derivdivides(void) {
 
     TEST(test_automatic_direct);
     TEST(test_explicit_eliminate);
+    TEST(test_radical_substitution);
     TEST(test_method_plumbing);
     TEST(test_strict_no_fallback);
 
