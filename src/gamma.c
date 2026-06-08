@@ -26,6 +26,7 @@
 #include <complex.h>
 #include <math.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -824,6 +825,16 @@ static Expr* gamma_three_arg(Expr* a, Expr* z0, Expr* z1) {
 /* Builtin entry point                                                */
 /* ------------------------------------------------------------------ */
 
+/* Print a Mathematica-compatible argt diagnostic for a wrong argument count
+ * and return NULL so the evaluator leaves the call unevaluated. */
+static Expr* gamma_emit_argt(size_t argc) {
+    fprintf(stderr,
+            "Gamma::argt: Gamma called with %zu argument%s; "
+            "1 or 3 arguments are expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
 Expr* builtin_gamma(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -832,7 +843,7 @@ Expr* builtin_gamma(Expr* res) {
     if (argc == 1) return gamma_one_arg(args[0]);
     if (argc == 2) return gamma_two_arg(args[0], args[1]);
     if (argc == 3) return gamma_three_arg(args[0], args[1], args[2]);
-    return NULL;
+    return gamma_emit_argt(argc);
 }
 
 /* ------------------------------------------------------------------ */
