@@ -93,6 +93,7 @@ set(COMMON_SRC
     ../src/numbertheory.c
     ../src/gamma.c
     ../src/pochhammer.c
+    ../src/eulergamma.c
     ../src/facint.c
     ../src/fibonacci.c
     ../src/lucas.c

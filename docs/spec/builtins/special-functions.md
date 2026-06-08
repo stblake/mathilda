@@ -83,6 +83,28 @@
   `Pochhammer[1/2, 1/3]`) stay unevaluated. (Derivatives and series, which
   Mathematica expresses through `PolyGamma`, are not yet implemented.)
 
+## EulerGamma
+
+`EulerGamma` is the Euler–Mascheroni constant γ, the limiting value of
+`HarmonicNumber[n] - Log[n]` as `n → ∞`, with numerical value
+≈ 0.5772156649015328606.
+
+**Features**:
+- Attributes `Constant`, `Protected`. `Attributes[EulerGamma] = {Constant,
+  Protected}`; the symbol cannot be reassigned.
+- Propagated as an exact, unevaluated symbol; `NumericQ[EulerGamma]` is
+  `True` and `D[EulerGamma, x] = 0`.
+- `N[EulerGamma]` gives the machine value `0.577216`; `N[EulerGamma, prec]`
+  gives any precision (MPFR `mpfr_const_euler`), e.g.
+  `N[EulerGamma, 50] = 0.57721566490153286060651209008240243104215933593992`.
+- Participates in exact numeric work, e.g.
+  `Round[1/EulerGamma^100] = 734833795660954410469466`, and digit/continued-
+  fraction extraction, e.g. `RealDigits[EulerGamma, 10, 50, -10^4]` returns
+  decimal digits 10000–10049.
+
+The constant value lives in the central numeric constant table (`src/numeric.c`);
+the symbol's identity (attributes) is registered in `src/eulergamma.c`.
+
 ## HypergeometricPFQ
 
 `HypergeometricPFQ[{a1, …, ap}, {b1, …, bq}, z]` is the generalized

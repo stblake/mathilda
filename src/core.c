@@ -17,6 +17,7 @@
 #include "numbertheory.h"
 #include "gamma.h"
 #include "pochhammer.h"
+#include "eulergamma.h"
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
@@ -442,6 +443,7 @@ void core_init(void) {
     numbertheory_init();
     gamma_init();
     pochhammer_init();
+    eulergamma_init();
     fibonacci_init();
     lucas_init();
 

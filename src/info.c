@@ -217,6 +217,14 @@ void info_init(void) {
         "Gamma ratio, reducing exact half-integers to rational multiples of Sqrt[Pi]\n"
         "and tracking machine or arbitrary (MPFR) precision; machine-precision\n"
         "complex arguments evaluate too. Other arguments stay symbolic. Listable.");
+    symtab_set_docstring("EulerGamma",
+        "EulerGamma\n"
+        "\tis Euler's constant gamma, with numerical value ~= 0.5772156649.\n"
+        "EulerGamma is the Euler-Mascheroni constant, the limit of\n"
+        "HarmonicNumber[n] - Log[n] as n -> Infinity. It is a mathematical\n"
+        "constant: it has attributes Constant and Protected, NumericQ[EulerGamma]\n"
+        "is True, and D[EulerGamma, x] is 0. N[EulerGamma, prec] evaluates it to\n"
+        "any precision.");
     symtab_set_docstring("Factorial2", "Factorial2[n] (also typeset n!!) gives the double factorial of n.\nFor non-negative integer n: n!! = n * (n-2) * (n-4) * ... down to 2 (n even) or 1 (n odd).\nSpecial values: 0!! = 1, (-1)!! = 1.\nNegative even integers and negative odd integers below -1 give ComplexInfinity.\nFactorial2 stays unevaluated on symbolic arguments.");
     symtab_set_docstring("Fibonacci",
         "Fibonacci[n]\n"

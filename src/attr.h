@@ -21,6 +21,7 @@
 #define ATTR_READPROTECTED   (1 << 11)
 #define ATTR_TEMPORARY       (1 << 12)
 #define ATTR_SEQUENCEHOLD    (1 << 13)
+#define ATTR_CONSTANT        (1 << 14)
 
 // Get attributes for a given symbol
 uint32_t get_attributes(const char* symbol_name);

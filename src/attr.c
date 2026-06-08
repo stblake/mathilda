@@ -193,6 +193,7 @@ static uint32_t string_to_attribute(const char* name) {
     if (strcmp(name, "ReadProtected") == 0) return ATTR_READPROTECTED;
     if (strcmp(name, "Temporary") == 0) return ATTR_TEMPORARY;
     if (strcmp(name, "SequenceHold") == 0) return ATTR_SEQUENCEHOLD;
+    if (strcmp(name, "Constant") == 0) return ATTR_CONSTANT;
     return ATTR_NONE;
 }
 
@@ -323,6 +324,7 @@ Expr* builtin_attributes(Expr* res) {
     
     // Count attributes
     size_t count = 0;
+    if (attrs & ATTR_CONSTANT) count++;
     if (attrs & ATTR_HOLDFIRST) count++;
     if (attrs & ATTR_HOLDREST) count++;
     if (attrs & ATTR_HOLDALLCOMPLETE) count++;
@@ -340,6 +342,7 @@ Expr* builtin_attributes(Expr* res) {
 
     Expr** attr_list = malloc(sizeof(Expr*) * count);
     size_t i = 0;
+    if (attrs & ATTR_CONSTANT) attr_list[i++] = expr_new_symbol("Constant");
     if (attrs & ATTR_FLAT) attr_list[i++] = expr_new_symbol("Flat");
     if ((attrs & ATTR_HOLDALL) == ATTR_HOLDALL) {
         attr_list[i++] = expr_new_symbol("HoldAll");
