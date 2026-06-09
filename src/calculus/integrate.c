@@ -22,6 +22,7 @@
 #include "integrate_linrad.h"
 #include "integrate_quadrad.h"
 #include "integrate_linratiorad.h"
+#include "integrate_jeffrey.h"
 #include "intrat.h"
 #include "intrischnorman.h"
 #include "common.h"
@@ -174,6 +175,19 @@ static Expr* try_linratiorad(Expr* f, Expr* x) {
     return integrate_linratiorad_try(f, x);
 }
 
+/* Stage 1f: continuous Weierstrass substitution (Jeffrey & Rich 1994).
+ * Recognises a rational function of the trig kernels Sin/Cos/Tan/Cot/Sec/Csc[x]
+ * (or the hyperbolic kernels) carrying a kernel in a denominator, substitutes
+ * u = Tan[x/2] (Tanh[x/2] for hyperbolic), integrates the resulting rational
+ * function of u, back-substitutes, and -- for the trig case -- adds the
+ * K Floor[(x - b)/p] secular term that removes the spurious discontinuities at
+ * the poles of Tan[x/2].  Runs ahead of Risch-Norman so genuine rational-trig
+ * integrands get the real, continuous antiderivative rather than pmint's
+ * complex-logarithm form. */
+static Expr* try_weierstrass(Expr* f, Expr* x) {
+    return integrate_jeffrey_try(f, x);
+}
+
 /* Stage 2: Risch-Norman heuristic (Bronstein pmint). */
 static Expr* try_risch(Expr* f, Expr* x) {
     Expr* result = call_stage("Integrate`RischNorman", f, x);
@@ -261,6 +275,7 @@ typedef enum {
     METHOD_LINEAR_RADICALS,
     METHOD_QUADRATIC_RADICALS,
     METHOD_LINEAR_RATIO_RADICALS,
+    METHOD_WEIERSTRASS,
     METHOD_RISCH,
     METHOD_CRCTABLE,
     METHOD_UNDEFINED,
@@ -288,6 +303,7 @@ static IntegrateMethod parse_method_option(Expr* opt) {
     if (strcmp(rhs->data.string, "LinearRadicals") == 0) return METHOD_LINEAR_RADICALS;
     if (strcmp(rhs->data.string, "QuadraticRadicals") == 0) return METHOD_QUADRATIC_RADICALS;
     if (strcmp(rhs->data.string, "LinearRatioRadicals") == 0) return METHOD_LINEAR_RATIO_RADICALS;
+    if (strcmp(rhs->data.string, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(rhs->data.string, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(rhs->data.string, "CRCTable")    == 0) return METHOD_CRCTABLE;
     if (strcmp(rhs->data.string, "Undefined")   == 0) return METHOD_UNDEFINED;
@@ -327,7 +343,7 @@ Expr* builtin_integrate(Expr* res) {
                     "Integrate::method: Method option value is not one of "
                     "\"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", "
                     "\"LinearRadicals\", \"QuadraticRadicals\", "
-                    "\"LinearRatioRadicals\", \"RischNorman\", "
+                    "\"LinearRatioRadicals\", \"Weierstrass\", \"RischNorman\", "
                     "\"CRCTable\".\n");
                 last_warned_hash = h;
             }
@@ -362,6 +378,12 @@ Expr* builtin_integrate(Expr* res) {
             if (!result) result = try_linrad(effective_f, x);
             if (!result) result = try_quadrad(effective_f, x);
             if (!result) result = try_linratiorad(effective_f, x);
+            /* Weierstrass before derivative-divides: it is a domain-specific,
+             * deterministic algorithm for rational trig/hyperbolic integrands
+             * that is guaranteed to close (and verified by construction), so it
+             * runs ahead of the more expensive Eliminate/Solve substitution
+             * search and ahead of Risch-Norman's complex-logarithm forms. */
+            if (!result) result = try_weierstrass(effective_f, x);
             if (!result) result = try_derivdivides(effective_f, x);
             if (!result) result = try_risch(effective_f, x);
             if (!result) result = try_crctable(effective_f, x);
@@ -383,6 +405,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_LINEAR_RATIO_RADICALS:
             result = try_linratiorad(effective_f, x);
+            break;
+        case METHOD_WEIERSTRASS:
+            result = integrate_jeffrey_full(effective_f, x);
             break;
         case METHOD_RISCH:
             result = try_risch(effective_f, x);
@@ -421,6 +446,7 @@ void integrate_init(void) {
         "  \"LinearRadicals\"     — Integrate`LinearRadicals (rationalise radicals of a x + b)\n"
         "  \"QuadraticRadicals\"  — Integrate`QuadraticRadicals (Euler substitution for Sqrt[a x^2 + b x + c])\n"
         "  \"LinearRatioRadicals\" — Integrate`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d))\n"
+        "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
@@ -447,6 +473,10 @@ void integrate_init(void) {
 
     /* Linear-ratio-radical (Möbius) substitution: Integrate`LinearRatioRadicals. */
     integrate_linratiorad_init();
+
+    /* Continuous Weierstrass substitution (Jeffrey & Rich 1994):
+     * Integrate`Weierstrass. */
+    integrate_jeffrey_init();
 
     /* Initialise the parallel-Risch / Risch-Norman heuristic
      * (Bronstein's pmint).  Provides `Integrate`RischNorman[f, x]`,

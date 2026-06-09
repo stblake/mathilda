@@ -342,8 +342,9 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Eight-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
-  `QuadraticRadicals` and `LinearRatioRadicals` added 2026-06-06):
+- Nine-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
+  `QuadraticRadicals` and `LinearRatioRadicals` added 2026-06-06; `Weierstrass`
+  added 2026-06-09):
   `Integrate[f, x]` (Method -> Automatic, default) tries each subroutine in
   order and returns the first non-`NULL` result:
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
@@ -359,10 +360,16 @@ monotonically down.
   5. `Integrate\`LinearRatioRadicals[f, x]` — rational functions of `x` and
      radicals `((a x + b)/(c x + d))^(m/n)` of one shared linear-fractional
      argument; rationalised by `u = ((a x + b)/(c x + d))^(1/n)`.
-  6. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
+  6. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
+     `Sin/Cos/Tan/Cot/Sec/Csc[x]` (or hyperbolic `Sinh/Cosh/.../Csch[x]`) with a
+     kernel in a denominator; continuous `Tan[x/2]` / `Tanh[x/2]` substitution
+     (Jeffrey & Rich 1994).  Runs ahead of `DerivativeDivides`: it is
+     domain-specific, deterministic, correct by construction, and yields a real,
+     continuous antiderivative rather than a complex-logarithm form.
+  7. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  7. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  8. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  8. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  9. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
@@ -374,6 +381,9 @@ monotonically down.
   - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
   - `"QuadraticRadicals"` — `Integrate\`QuadraticRadicals[f, x]`.
   - `"LinearRatioRadicals"` — `Integrate\`LinearRatioRadicals[f, x]`.
+  - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
+    to any rational function of the trig/hyperbolic kernels of `x`, including
+    polynomial trig).
   - `"RischNorman"` — `Integrate\`RischNorman[f, x]`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"Undefined"` — `Integrate\`Undefined[f, x]`.
@@ -419,7 +429,8 @@ The `Integrate`` package also exposes the lower-level helpers
 `Integrate`RischNorman` (Bronstein pmint), `Integrate`LinearRadicals`
 (linear-radical substitution), `Integrate`QuadraticRadicals`
 (quadratic-radical Euler substitution), `Integrate`LinearRatioRadicals`
-(linear-fractional / Möbius radical substitution), `Integrate`CRCTable`
+(linear-fractional / Möbius radical substitution), `Integrate`Weierstrass`
+(continuous `Tan[x/2]` / `Tanh[x/2]` substitution), `Integrate`CRCTable`
 (table lookup), `Integrate`Undefined` (unknown-function integration,
 Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
@@ -727,6 +738,53 @@ Out[1]= 2 Sqrt[(1 + x)/(-1 + x)]/(-1 + (1 + x)/(-1 + x)) -
 In[2]:= Integrate[1/Sqrt[(2 x + 1)/(x + 3)], x, Method -> "LinearRatioRadicals"]
 Out[2]= -5 Sqrt[(1 + 2 x)/(3 + x)]/(-4 + 2 (1 + 2 x)/(3 + x)) +
         5/2 ArcTanh[Sqrt[(1 + 2 x)/(3 + x)]/Sqrt[2]]/Sqrt[2]
+```
+
+### Integrate`Weierstrass
+
+`Integrate`Weierstrass[f, x]` integrates a **rational function of the
+trigonometric kernels** `Sin/Cos/Tan/Cot/Sec/Csc[x]` — or the **hyperbolic
+kernels** `Sinh/Cosh/Tanh/Coth/Sech/Csch[x]` — by the continuous Weierstrass
+substitution of Jeffrey & Rich (*The Evaluation of Trigonometric Integrals
+Avoiding Spurious Discontinuities*, ACM TOMS 20(1), 1994).  Added 2026-06-09.
+
+Algorithm: substitute `u = Tan[x/2]` (`u = Tanh[x/2]` for hyperbolic), turning
+`f` into a rational function of `u`; integrate that (recursing through
+`Integrate`BronsteinRational`); back-substitute; and — for the trigonometric
+case — add the secular correction `K Floor[(x - b)/p]` (`b = Pi`, `p = 2 Pi`)
+that removes the spurious jump discontinuities the classical substitution
+introduces at the poles of `Tan[x/2]` (odd multiples of `Pi`).  The jump `K` is
+the difference of the one-sided limits of the `u`-antiderivative at `±Infinity`;
+if that limit diverges (a *genuine* singularity of the integrand) no correction
+is applied.  A `TrigExpand` pre-pass reduces multiple/sum-angle arguments
+(`Cos[2 x]`, `Cosh[x] Cosh[2 x]`, ...) to kernels of the bare variable.
+
+**Hyperbolic case needs no `Floor` correction**: `Tanh[x/2]` is a smooth,
+strictly monotone bijection `R -> (-1, 1)` with no poles, so the substitution
+introduces no spurious discontinuity — the back-substituted antiderivative is
+already continuous (genuine singularities such as `Cosh[x] = 2` are real poles
+and are correctly left in place).
+
+The substitution is an exact identity, the rational sub-integral is closed by a
+verified integrator, and `Floor' = 0` almost everywhere, so the result is
+**correct by construction** — no differentiate-back gate is applied (and the
+`Floor` term would defeat symbolic `D` anyway).  In the Automatic cascade only
+genuine rational integrands (a kernel in a denominator) are intercepted, so
+polynomial trig such as `Integrate[Sin[x], x]` keeps its cleaner table form; the
+explicit `Method -> "Weierstrass"` has no such gate.  Strict: returns unevaluated
+when `f` is not a rational function of the trig/hyperbolic kernels of `x` (e.g.
+`x` outside a kernel, a kernel of a nonlinear argument, mixed trig + hyperbolic,
+or a radical of a kernel).  `Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= Integrate[3/(5 - 4 Cos[x]), x]               (* paper eq. (10) *)
+Out[1]= 2 Pi Floor[(-Pi + x)/(2 Pi)] + 2 ArcTan[3 Tan[x/2]]
+
+In[2]:= Integrate[1/(2 + Cos[x]), x]                 (* continuous form *)
+Out[2]= 2 Pi Floor[(-Pi + x)/(2 Pi)]/Sqrt[3] + 2 ArcTan[Tan[x/2]/Sqrt[3]]/Sqrt[3]
+
+In[3]:= Integrate[1/(2 + Cosh[x]), x]                (* hyperbolic: no Floor *)
+Out[3]= 2 ArcTanh[Tanh[x/2]/Sqrt[3]]/Sqrt[3]
 ```
 
 ### InterpolatingFunction integrands

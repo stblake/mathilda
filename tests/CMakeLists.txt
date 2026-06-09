@@ -239,6 +239,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_linrad.c
     ../src/calculus/integrate_quadrad.c
     ../src/calculus/integrate_linratiorad.c
+    ../src/calculus/integrate_jeffrey.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
     ../src/calculus/intsimp.c
@@ -1239,6 +1240,15 @@ else()
     target_link_libraries(integrate_linratiorad_tests gmp m)
 endif()
 add_test(NAME integrate_linratiorad_tests COMMAND integrate_linratiorad_tests)
+
+add_executable(integrate_jeffrey_tests test_integrate_jeffrey.c ${COMMON_SRC})
+target_include_directories(integrate_jeffrey_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_jeffrey_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(integrate_jeffrey_tests gmp m)
+endif()
+add_test(NAME integrate_jeffrey_tests COMMAND integrate_jeffrey_tests)
 
 add_executable(condition_downvalue_tests test_condition_downvalue.c ${COMMON_SRC})
 target_include_directories(condition_downvalue_tests PRIVATE ../src)

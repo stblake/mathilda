@@ -731,3 +731,40 @@ hiding a defect in a shared primitive, fix the primitive — a silent-wrong-valu
 bug in a building block is worse and more widely felt than the symptom you hit.
 Verify big exact values with folding identities (functional equation,
 reflection) so the test asserts a clean result instead of a giant literal.
+
+## Integrate cascade ordering: deterministic domain-specific methods go FIRST (2026-06-09)
+
+While adding the Jeffrey–Rich Weierstrass integrator I first placed it *after*
+`DerivativeDivides` (after the radical-substitution stages, before Risch). The
+user corrected: a domain-specific algorithm that is **guaranteed to succeed and
+is correct by construction** (no differentiate-back verification needed) should
+run *ahead* of the search-and-verify methods (`DerivativeDivides`'
+Eliminate/Solve branch search) and ahead of `RischNorman` (whose complex-log
+forms for trig rationals are ugly/discontinuous). **Pattern:** order the
+`Integrate` cascade by *(a)* confidence — methods that close deterministically
+for their domain before heuristic/search methods — then *(b)* output quality
+(continuous real forms before complex-log forms). Cheap, precise gating
+(`wj_has_kernel_in_denominator`, kernel detection) keeps an early stage from
+clobbering integrands other stages handle more cleanly.
+
+## TrigExpand pre-pass for trig/hyperbolic substitution integrators (2026-06-09)
+
+The Weierstrass detector requires every kernel argument to be the bare variable
+`x`, so `Cosh[x] Cosh[2 x]` (multiple angle) and `Sin[x + 1]` (sum angle) failed
+detection. The user pointed out `TrigExpand` rewrites those into kernels of the
+bare `x` (`Cosh[x] Cosh[2 x] // TrigExpand` = `Cosh[x]^3 + Cosh[x] Sinh[x]^2`).
+**Pattern:** for any method keyed on "kernel of the bare variable", try the
+integrand verbatim first (fast common path), then retry on `TrigExpand[f]` only
+on failure. `TrigExpand` leaves single-angle kernels untouched (so the verbatim
+path and clean rational denominators are unaffected) and reduces multiple/sum
+angles — exactly the normalisation these substitutions need.
+
+## Verify Tan[x/2]-rational antiderivatives with PossibleZeroQ, not Simplify (2026-06-09)
+
+The test predicate `Simplify[D[Integrate[f,x] /. Floor[_]->0, x] - f] === 0`
+times out on integrands whose antiderivative carries `Tan[x/2]^3` (e.g.
+`1/(1 + Sin[x]^2)`): the residue is a deep nest of half-angle rationals that
+defeats `Simplify`. `PossibleZeroQ[...]` (the numeric two-phase sampler) returns
+`True` instantly and is the right correctness oracle for these. (Strip the
+secular `Floor` term first with `/. Floor[_] -> 0`, since its symbolic `D` is
+`Derivative[1][Floor]`, not 0.)
