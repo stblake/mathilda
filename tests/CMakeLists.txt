@@ -47,6 +47,7 @@ include_directories(../src/poly)
 include_directories(../src/simp)
 include_directories(../src/calculus)
 include_directories(../src/sum)
+include_directories(../src/special_functions)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -91,19 +92,19 @@ set(COMMON_SRC
     ../src/times.c
     ../src/arithmetic.c
     ../src/numbertheory.c
-    ../src/gamma.c
-    ../src/loggamma.c
-    ../src/polygamma.c
-    ../src/pochhammer.c
-    ../src/eulergamma.c
-    ../src/zeta.c
-    ../src/stieltjesgamma.c
-    ../src/bernoullib.c
-    ../src/eulere.c
-    ../src/polylog.c
+    ../src/special_functions/gamma.c
+    ../src/special_functions/loggamma.c
+    ../src/special_functions/polygamma.c
+    ../src/special_functions/pochhammer.c
+    ../src/special_functions/eulergamma.c
+    ../src/special_functions/zeta.c
+    ../src/special_functions/stieltjesgamma.c
+    ../src/special_functions/bernoullib.c
+    ../src/special_functions/eulere.c
+    ../src/special_functions/polylog.c
     ../src/facint.c
-    ../src/fibonacci.c
-    ../src/lucas.c
+    ../src/special_functions/fibonacci.c
+    ../src/special_functions/lucas.c
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
@@ -139,7 +140,7 @@ set(COMMON_SRC
     ../src/trig_canon.c
     ../src/hyperbolic.c
     ../src/logexp.c
-    ../src/hypergeopfq.c
+    ../src/special_functions/hypergeopfq.c
     ../src/piecewise.c
     ../src/interp.c
     ../src/interp_mpfr.c

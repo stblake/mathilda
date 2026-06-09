@@ -59,6 +59,10 @@ src/
   linalg/           Dense linear algebra; eigen kernels split by algorithm
   simp/             Simplify, trig simplification, trig rationalisation
   calculus/         D / Dt / Derivative, Series, Limit, Integrate, Risch-Norman
+  special_functions/ Higher transcendental & special functions: Gamma, LogGamma,
+                    PolyGamma, Pochhammer, Zeta, StieltjesGamma, EulerGamma,
+                    BernoulliB, EulerE, PolyLog, HypergeometricPFQ, Fibonacci,
+                    LucasL
   internal/         .m bootstrap scripts (init.m, deriv.m, integral tables)
   external/ecm/     Vendored GMP-ECM (DO NOT MODIFY)
 tests/              CMake-built unit suite (test_*.c)

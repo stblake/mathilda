@@ -23,7 +23,7 @@ Exact symbolic constants with arbitrary-precision numeric values via `N`. Each i
   decimal digits 10000–10049.
 
 The constant value lives in the central numeric constant table (`src/numeric.c`);
-the symbol's identity (attributes) is registered in `src/eulergamma.c`.
+the symbol's identity (attributes) is registered in `src/special_functions/eulergamma.c`.
 
 ## Pi
 

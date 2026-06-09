@@ -378,7 +378,7 @@ Out[2]= 1/4 - 3/2 z^2 + z^3
 - `PolyLog[n, p, z]` — the Nielsen generalized polylogarithm S_{n,p}(z). Accepted
   for surface compatibility but left unevaluated (no closed-form engine).
 
-Implemented in `src/polylog.c`, modelled on `Gamma` / `Zeta`.
+Implemented in `src/special_functions/polylog.c`, modelled on `Gamma` / `Zeta`.
 
 - **Exact closed forms.**
   - `PolyLog[n, 0] = 0`.
