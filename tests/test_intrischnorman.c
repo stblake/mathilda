@@ -703,6 +703,43 @@ static void test_phase7_num_two_exps(void) {
         "(E^(-1 + x^2) (-2 x + E^x (-1 + 2 x)))/(-1 + E^x)^2");
 }
 
+/* --- 7g: constant-of-integration stripping. -------------------------- */
+/* An antiderivative is defined only up to an additive constant, so the
+ * result must never carry a stray term that is free of x.  pmint's
+ * parametric solve used to leave one — e.g. x Sin[x^2] integrated to
+ * 1/2 (-1 - Cos[x^2]) with a spurious -1/2.  We assert both that the
+ * derivative checks out AND that Expand[result] has no x-free summand. */
+static void assert_no_constant_of_integration(const char* integrand) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "Module[{r, e, terms},"
+        "  r = Integrate`RischNorman[%s, x];"
+        "  e = Expand[r];"
+        "  terms = If[Head[e] === Plus, List @@ e, {e}];"
+        "  Select[terms, FreeQ[#, x] &]]",
+        integrand);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "{}") != 0) {
+        printf("FAIL: Integrate`RischNorman[%s, x] carries a constant of "
+               "integration.\n  x-free summands: %s\n", integrand, got);
+        ASSERT_STR_EQ(got, "{}");
+    }
+    free(got);
+    expr_free(e);
+    expr_free(res);
+}
+
+static void test_phase7_no_const_x_sin_x2(void) {
+    assert_rischnorman_correct("x Sin[x^2]");
+    assert_no_constant_of_integration("x Sin[x^2]");
+}
+static void test_phase7_no_const_x_cos_x2(void) {
+    assert_rischnorman_correct("x Cos[x^2]");
+    assert_no_constant_of_integration("x Cos[x^2]");
+}
+
 /* ------------------------------------------------------------------ */
 /* main().                                                              */
 /* ------------------------------------------------------------------ */
@@ -827,6 +864,8 @@ int main(void) {
     TEST(test_phase7_sin_sin_2x);
     TEST(test_phase7_num_quadratic_exp);
     TEST(test_phase7_num_two_exps);
+    TEST(test_phase7_no_const_x_sin_x2);
+    TEST(test_phase7_no_const_x_cos_x2);
 
     printf("All intrischnorman tests passed!\n");
     return 0;

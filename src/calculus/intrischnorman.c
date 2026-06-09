@@ -1167,6 +1167,61 @@ static Expr* eval_cancel(Expr* f) {
     return eval_and_free(mk_unary("Cancel", f));
 }
 
+/* Drop the additive constant of integration from a Risch-Norman result.
+ *
+ * An antiderivative is only defined up to an arbitrary additive constant,
+ * so any summand that is free of the integration variable x is a constant
+ * w.r.t. x and may be discarded.  pmint's parametric solve can leave a
+ * stray such term — e.g. Integrate[x Sin[x^2], x] comes back as
+ * 1/2 (-1 - Cos[x^2]) where the -1/2 is spurious.
+ *
+ * We Expand a copy first so a scalar times (… + const) distributes and the
+ * constant surfaces as a top-level Plus summand, then keep only the
+ * x-dependent summands.  To avoid uglifying results that have no constant
+ * to strip, we only return the rebuilt form when a term was actually
+ * dropped and something x-dependent remains; otherwise the original
+ * (often more compact) result is preserved.  Consumes `result`. */
+static Expr* strip_constant_of_integration(Expr* result, Expr* x) {
+    if (!result || !x || x->type != EXPR_SYMBOL) return result;
+    const char* xname = x->data.symbol;
+
+    Expr* expanded = eval_expand(expr_copy(result));
+    if (!expanded
+        || expanded->type != EXPR_FUNCTION
+        || expanded->data.function.head->type != EXPR_SYMBOL
+        || expanded->data.function.head->data.symbol != SYM_Plus) {
+        if (expanded) expr_free(expanded);
+        return result;
+    }
+
+    size_t n = expanded->data.function.arg_count;
+    Expr** keep = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nkeep = 0;
+    bool dropped = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* term = expanded->data.function.args[i];
+        if (expr_free_of_symbol(term, xname)) {
+            dropped = true;
+        } else {
+            keep[nkeep++] = expr_copy(term);
+        }
+    }
+
+    if (!dropped || nkeep == 0) {
+        for (size_t i = 0; i < nkeep; i++) expr_free(keep[i]);
+        free(keep);
+        expr_free(expanded);
+        return result;
+    }
+
+    Expr* rebuilt = expr_new_function(expr_new_symbol("Plus"), keep, nkeep);
+    free(keep);
+    rebuilt = eval_and_free(rebuilt);
+    expr_free(expanded);
+    expr_free(result);
+    return rebuilt;
+}
+
 /* Evaluate PolynomialGCD[a, b].  Consumes both a and b. */
 static Expr* eval_poly_gcd(Expr* a, Expr* b) {
     return eval_and_free(mk_binary("PolynomialGCD", a, b));
@@ -3836,6 +3891,10 @@ static Expr* rischnorman_integrate(Expr* f, Expr* x) {
         }
         PM_PHE(oc, PM_PH_OUTPUT_CLEANUP);
     }
+
+    /* An antiderivative is defined only up to an additive constant; drop any
+     * stray constant-of-integration term left by the parametric solve. */
+    result = strip_constant_of_integration(result, x);
 
     return result;
 }
