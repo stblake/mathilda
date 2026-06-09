@@ -260,6 +260,24 @@ static void test_stage3_sqrt_tan_derivative_identity(void) {
         " + 1/2 Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2], x]"
         " - Sqrt[Tan[x]]]", "True");
 }
+static void test_stage3_branch_dependent_nonzero(void) {
+    /* D[2 Sqrt[1-Cos[x]], x] - Sqrt[1+Cos[x]] is identically 0 on (0,pi),
+     * (2pi,3pi), ... but genuinely non-zero on (pi,2pi), (3pi,4pi), ... (the
+     * two Sqrt factors sit on different analytic branches).  It is NOT an
+     * identical zero, so PossibleZeroQ must report False.  With only 4
+     * Schwartz-Zippel samples it returned True ~6% of the time -- whenever all
+     * four random real parts happened to land in a zero interval.  A small
+     * imaginary perturbation does not help (by the identity theorem the
+     * function is zero on a whole complex neighbourhood of each zero interval);
+     * defeating it requires many sample POINTS, which the machine-precision
+     * screen now provides.  Sweep several seeds so the screen is exercised. */
+    for (int64_t s = 1; s <= 8; ++s) {
+        seed_rng(s);
+        assert_pzq(
+            "PossibleZeroQ[D[2 Sqrt[1 - Cos[x]], x] - Sqrt[1 + Cos[x]]]",
+            "False");
+    }
+}
 
 /* ============================================================== */
 /*  5. Listable threading and registration                        */
@@ -501,6 +519,7 @@ int main(void) {
     TEST(test_stage3_cos_double_angle);
     TEST(test_stage3_tan_in_terms_of_sin_cos);
     TEST(test_stage3_sqrt_tan_derivative_identity);
+    TEST(test_stage3_branch_dependent_nonzero);
 
     /* Group 5 — Listable / registration */
     TEST(test_listable_threading);

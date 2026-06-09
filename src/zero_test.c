@@ -58,10 +58,33 @@
 static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
 #define PRECISION_LADDER_LEN ((int)(sizeof PRECISION_LADDER / sizeof PRECISION_LADDER[0]))
 
-/* Number of independent random-substitution trials for Stage 3. Each
- * trial reduces the false-positive probability geometrically (see
- * Schwartz–Zippel: false-positive ≤ (degree/|S|)^k for k samples). */
-#define ZT_NUM_SAMPLES 4
+/* Stage 3 runs in two phases that exploit a sharp cost asymmetry:
+ *
+ *   - A sample that lands on a NON-zero branch is O(1) at machine precision
+ *     and is rejected at ladder rung 0 (cheap).
+ *   - Confirming a genuine identity requires climbing the full MPFR ladder
+ *     per sample to rule out catastrophic-cancellation false zeros (costly).
+ *
+ * Phase A ("screen") draws many points but evaluates each only at machine
+ * precision, catching branch-dependent non-zeros cheaply. A single 4-sample
+ * budget was too small here: for an expression that is identically zero on a
+ * real-analytic branch but genuinely non-zero on an adjacent branch (e.g.
+ * D[2 Sqrt[1-Cos[x]],x] - Sqrt[1+Cos[x]], zero on (0,pi) but not (pi,2pi)),
+ * each random real part lands in a zero interval ~1/2 the time, so all-k-zero
+ * — a false positive — had probability ~(1/2)^4 = 6%. With SCREEN_SAMPLES
+ * points the half-and-half case drops to ~(1/2)^24, and a lopsided 3:1
+ * zero:non-zero split to ~(3/4)^24 ~ 1e-3.  Note: a small imaginary
+ * perturbation does NOT break this coincidence — by the identity theorem the
+ * function is zero on a whole complex neighbourhood of each zero interval, so
+ * only the sample's real-part branch interval matters; more POINTS, not
+ * complex ones, is what defeats it.
+ *
+ * Phase B ("confirm") is reached only when every screen point looked zero. It
+ * climbs the full precision ladder on a few fresh points to reject
+ * cancellation-hidden small non-zeros (the classic Schwartz–Zippel guarantee:
+ * false-positive <= (degree/|S|)^k for k laddered samples). */
+#define ZT_SCREEN_SAMPLES  24
+#define ZT_CONFIRM_SAMPLES 4
 
 /* Sampling ranges for Stage 3. Numerators are uniform on
  * [-2^NUMERATOR_BITS, 2^NUMERATOR_BITS]; denominators on
@@ -674,6 +697,49 @@ static Expr* substitute_symbols(const Expr* e, const char** syms, Expr** vals, s
     return expr_copy((Expr*)e);
 }
 
+/* One Stage-3 trial: draw a fresh value for every free symbol, substitute it
+ * into `e`, and return that point's verdict.
+ *
+ * Substitution is structural (no evaluation): the Mathilda evaluator would
+ * eagerly numericalize, collapsing the top-level Plus into a single Complex
+ * residue and discarding the operand magnitudes decide_numeric relies on for
+ * its cancellation threshold. The structural shape (Plus / Times / Sin / ...)
+ * is preserved through substitute_symbols and numericalized per rung.
+ *
+ *   - screen == true : evaluate at machine precision only (rung 0). Cheap;
+ *     rejects branch-dependent non-zeros that are O(1) at this point. If
+ *     machine precision cannot reduce the point at all (UNKNOWN), fall back to
+ *     the full ladder so the point is still classified rather than silently
+ *     passing the screen.
+ *   - screen == false: climb the full precision ladder (decide_numeric) to
+ *     reject cancellation-hidden small non-zeros. */
+static ZeroTestResult sz_trial(const Expr* e, const char** syms, size_t nsyms,
+                               bool screen) {
+    Expr** vals = malloc(sizeof(Expr*) * nsyms);
+    for (size_t i = 0; i < nsyms; ++i) vals[i] = sample_random_value();
+
+    Expr* sub = substitute_symbols(e, syms, vals, nsyms);
+
+    ZeroTestResult r = ZERO_TEST_UNKNOWN;
+    if (sub) {
+        r = decide_structural(sub);
+        if (r == ZERO_TEST_UNKNOWN) {
+            if (screen) {
+                double mag = 0.0;
+                r = evaluate_rung(sub, PRECISION_LADDER[0], &mag);
+                if (r == ZERO_TEST_UNKNOWN) r = decide_numeric(sub);
+            } else {
+                r = decide_numeric(sub);
+            }
+        }
+        expr_free(sub);
+    }
+
+    for (size_t i = 0; i < nsyms; ++i) expr_free(vals[i]);
+    free(vals);
+    return r;
+}
+
 static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
     SymPtrSet syms; sps_init(&syms);
     collect_free(e, &syms);
@@ -683,34 +749,27 @@ static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
     }
 
     ZeroTestResult verdict = ZERO_TEST_TRUE;
-    for (int trial = 0; trial < ZT_NUM_SAMPLES; ++trial) {
-        Expr** vals = malloc(sizeof(Expr*) * syms.count);
-        for (size_t i = 0; i < syms.count; ++i) vals[i] = sample_random_value();
 
-        /* Substitute without evaluating: the Mathilda evaluator would
-         * eagerly numericalize, collapsing the top-level Plus into a
-         * single Complex residue and discarding the operand magnitudes
-         * decide_numeric relies on for its threshold. The structural
-         * shape (Plus / Times / Sin / Cos / ...) is preserved through
-         * substitute_symbols, and decide_numeric will numericalize the
-         * whole expression at each ladder rung. */
-        Expr* sub = substitute_symbols(e, syms.items, vals, syms.count);
-
-        ZeroTestResult r = ZERO_TEST_UNKNOWN;
-        if (sub) {
-            r = decide_structural(sub);
-            if (r == ZERO_TEST_UNKNOWN) r = decide_numeric(sub);
-            expr_free(sub);
-        }
-
-        for (size_t i = 0; i < syms.count; ++i) expr_free(vals[i]);
-        free(vals);
-
-        if (r == ZERO_TEST_FALSE) { verdict = ZERO_TEST_FALSE; break; }
-        if (r == ZERO_TEST_UNKNOWN) { verdict = ZERO_TEST_UNKNOWN; break; }
-        /* r == TRUE: continue, need k consecutive hits */
+    /* Phase A — screen: many cheap machine-precision points catch
+     * branch-dependent non-zeros. A single decisively non-zero point settles
+     * the whole test. */
+    for (int trial = 0; trial < ZT_SCREEN_SAMPLES; ++trial) {
+        ZeroTestResult r = sz_trial(e, syms.items, syms.count, true);
+        if (r == ZERO_TEST_FALSE)   { verdict = ZERO_TEST_FALSE;   goto done; }
+        if (r == ZERO_TEST_UNKNOWN) { verdict = ZERO_TEST_UNKNOWN; goto done; }
+        /* r == TRUE: zero-ish at machine precision, keep screening. */
     }
 
+    /* Phase B — confirm: every screened point looked zero. Climb the full
+     * ladder on a few fresh points to reject cancellation-hidden small
+     * non-zeros before declaring a genuine identity. */
+    for (int trial = 0; trial < ZT_CONFIRM_SAMPLES; ++trial) {
+        ZeroTestResult r = sz_trial(e, syms.items, syms.count, false);
+        if (r == ZERO_TEST_FALSE)   { verdict = ZERO_TEST_FALSE;   goto done; }
+        if (r == ZERO_TEST_UNKNOWN) { verdict = ZERO_TEST_UNKNOWN; goto done; }
+    }
+
+done:
     sps_free(&syms);
     return verdict;
 }
