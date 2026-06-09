@@ -206,6 +206,12 @@ static void print_standard(Expr* e, int parent_prec) {
                 } else if (im->type == EXPR_REAL && im->data.real < 0.0) {
                     im_neg = true;
                     im_abs = expr_new_real(-im->data.real);
+#ifdef USE_MPFR
+                } else if (im->type == EXPR_MPFR && mpfr_sgn(im->data.mpfr) < 0) {
+                    im_neg = true;
+                    im_abs = expr_new_mpfr_copy(im->data.mpfr);
+                    mpfr_neg(im_abs->data.mpfr, im_abs->data.mpfr, MPFR_RNDN);
+#endif
                 } else if (is_rational(im, &rn, &rd) && rn < 0) {
                     im_neg = true;
                     im_abs = make_rational(-rn, rd);
