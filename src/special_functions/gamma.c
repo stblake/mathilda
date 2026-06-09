@@ -33,6 +33,7 @@
 #include <gmp.h>
 
 #include "arithmetic.h"   /* is_rational, make_rational, is_complex, make_complex */
+#include "numeric.h"      /* numeric_min_inexact_bits */
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
@@ -169,13 +170,16 @@ static bool gamma_set_mpfr(mpfr_t out, const Expr* e) {
     return false;
 }
 
-/* Working precision for a numeric Gamma: the largest precision among any
- * MPFR operands, else 53 bits (machine). */
+/* Working precision for a numeric Gamma under Mathematica contagion: the
+ * MINIMUM precision among the inexact leaves of the operands (each may itself
+ * be a Complex[..]), floored at machine (53). A machine-precision operand thus
+ * forces a machine-precision result even alongside a high-precision MPFR one.
+ * See numeric_min_inexact_bits. */
 static mpfr_prec_t gamma_work_prec(const Expr* a, const Expr* b) {
-    mpfr_prec_t p = 53;
-    if (a && a->type == EXPR_MPFR && mpfr_get_prec(a->data.mpfr) > p) p = mpfr_get_prec(a->data.mpfr);
-    if (b && b->type == EXPR_MPFR && mpfr_get_prec(b->data.mpfr) > p) p = mpfr_get_prec(b->data.mpfr);
-    return p;
+    long pa = numeric_min_inexact_bits(a);
+    long pb = numeric_min_inexact_bits(b);
+    long m  = (pa && pb) ? (pa < pb ? pa : pb) : (pa ? pa : pb);
+    return m < 53 ? 53 : (mpfr_prec_t)m;
 }
 
 /* ------------------------------------------------------------------ */
@@ -771,7 +775,7 @@ static Expr* gamma_two_arg(Expr* a, Expr* z) {
             mpfr_gamma_inc(rv, av, zv, MPFR_RNDN);
             if (mpfr_nan_p(rv)) {
                 out = NULL;
-            } else if (a->type == EXPR_MPFR || z->type == EXPR_MPFR) {
+            } else if (prec > 53) {
                 out = expr_new_mpfr_copy(rv);            /* arbitrary precision */
             } else {
                 out = expr_new_real(mpfr_get_d(rv, MPFR_RNDN)); /* machine */
@@ -792,9 +796,9 @@ static Expr* gamma_two_arg(Expr* a, Expr* z) {
         bool any_inexact  = gamma_is_inexact(are) || gamma_is_inexact(aim) ||
                             gamma_is_inexact(zre) || gamma_is_inexact(zim);
         if (any_complex && any_inexact) {
-            mpfr_prec_t p1 = gamma_work_prec(are, aim);
-            mpfr_prec_t p2 = gamma_work_prec(zre, zim);
-            mpfr_prec_t p  = p1 > p2 ? p1 : p2;
+            /* Min-contagion across all inexact parts of both complex args
+             * (gamma_work_prec descends into Complex and floors at 53). */
+            mpfr_prec_t p = gamma_work_prec(a, z);
             Expr* out = gamma_mpfr_inc_complex(are, aim, zre, zim, p);
             if (out) { expr_free(zero); return out; }
         }

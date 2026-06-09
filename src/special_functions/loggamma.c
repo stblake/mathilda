@@ -39,6 +39,7 @@
 #include <gmp.h>
 
 #include "arithmetic.h"   /* is_rational, make_rational, is_complex, make_complex */
+#include "numeric.h"      /* numeric_min_inexact_bits */
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
@@ -494,12 +495,14 @@ static bool lg_set_mpfr(mpfr_t out, const Expr* e) {
     return false;
 }
 
-/* Largest MPFR precision among (re, im), else 53 (machine). */
+/* Result precision (bits) for LogGamma[re + im I] under Mathematica
+ * contagion: the minimum precision among the inexact parts, floored at
+ * machine (53). See numeric_min_inexact_bits. */
 static mpfr_prec_t lg_complex_prec(const Expr* re, const Expr* im) {
-    mpfr_prec_t p = 53;
-    if (re && re->type == EXPR_MPFR && mpfr_get_prec(re->data.mpfr) > p) p = mpfr_get_prec(re->data.mpfr);
-    if (im && im->type == EXPR_MPFR && mpfr_get_prec(im->data.mpfr) > p) p = mpfr_get_prec(im->data.mpfr);
-    return p;
+    long pr = numeric_min_inexact_bits(re);
+    long pi = numeric_min_inexact_bits(im);
+    long m  = (pr && pi) ? (pr < pi ? pr : pi) : (pr ? pr : pi);
+    return m < 53 ? 53 : (mpfr_prec_t)m;
 }
 
 /* Build a Complex result from lcx components at the requested precision. */

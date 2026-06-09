@@ -42,6 +42,7 @@
 #include <gmp.h>
 
 #include "arithmetic.h"   /* is_rational, make_rational, is_complex, make_complex */
+#include "numeric.h"      /* numeric_min_inexact_bits */
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
@@ -465,11 +466,15 @@ static bool zeta_set_mpfr(mpfr_t out, const Expr* e) {
     return false;
 }
 
-/* Largest MPFR precision among a list of leaves, else 53 (machine). */
-static mpfr_prec_t zeta_prec_of(const Expr* e, mpfr_prec_t cur) {
-    if (e && e->type == EXPR_MPFR && mpfr_get_prec(e->data.mpfr) > cur)
-        return mpfr_get_prec(e->data.mpfr);
-    return cur;
+/* Result precision (bits) for Zeta[s, a] under Mathematica contagion: the
+ * minimum precision among the inexact leaves of s and a, floored at machine
+ * (53). A machine-precision argument forces a machine-precision result even if
+ * the other argument is high-precision MPFR. See numeric_min_inexact_bits. */
+static mpfr_prec_t zeta_out_prec(const Expr* s, const Expr* a) {
+    long ps = numeric_min_inexact_bits(s);
+    long pa = numeric_min_inexact_bits(a);
+    long m  = (ps && pa) ? (ps < pa ? ps : pa) : (ps ? ps : pa);
+    return m < 53 ? 53 : (mpfr_prec_t)m;
 }
 
 /* Build the numeric result: Real / Complex[Real,Real] for machine precision,
@@ -506,9 +511,7 @@ static Expr* zeta_numeric(Expr* s, Expr* a) {
     zeta_decompose(s, zero, &sre, &sim);
     zeta_decompose(a, zero, &are, &aim);
 
-    mpfr_prec_t out_prec = 53;
-    out_prec = zeta_prec_of(sre, out_prec); out_prec = zeta_prec_of(sim, out_prec);
-    out_prec = zeta_prec_of(are, out_prec); out_prec = zeta_prec_of(aim, out_prec);
+    mpfr_prec_t out_prec = zeta_out_prec(s, a);
     mpfr_prec_t wp = out_prec + 64;
 
     bool real_only = (sim == zero) && (aim == zero);

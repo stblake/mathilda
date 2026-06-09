@@ -44,6 +44,7 @@
 #include <gmp.h>
 
 #include "arithmetic.h"   /* is_rational, make_rational, is_complex, make_complex */
+#include "numeric.h"      /* numeric_min_inexact_bits */
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
@@ -570,10 +571,13 @@ static Expr* pg_numeric_real(long n, const Expr* z) {
 
 /* PolyGamma[n, Complex[re, im]] with at least one inexact part. */
 static Expr* pg_numeric_complex(long n, Expr* re, Expr* im) {
-    bool any_mpfr = (re->type == EXPR_MPFR) || (im->type == EXPR_MPFR);
-    mpfr_prec_t prec = 53;
-    if (re->type == EXPR_MPFR && mpfr_get_prec(re->data.mpfr) > prec) prec = mpfr_get_prec(re->data.mpfr);
-    if (im->type == EXPR_MPFR && mpfr_get_prec(im->data.mpfr) > prec) prec = mpfr_get_prec(im->data.mpfr);
+    /* Min-contagion across the inexact parts, floored at machine (53). A
+     * machine-precision part forces a machine-precision result. */
+    long pr = numeric_min_inexact_bits(re);
+    long pi = numeric_min_inexact_bits(im);
+    long mbits = (pr && pi) ? (pr < pi ? pr : pi) : (pr ? pr : pi);
+    mpfr_prec_t prec = mbits < 53 ? 53 : (mpfr_prec_t)mbits;
+    bool any_mpfr = (prec > 53);
 
     mpfr_t xr, xi, rr, ri;
     mpfr_inits2(prec, xr, xi, rr, ri, (mpfr_ptr)0);

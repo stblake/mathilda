@@ -161,6 +161,26 @@ bool numeric_any_mpfr(const Expr* a, const Expr* b) {
     return expr_max_mpfr_prec(a) > 0 || expr_max_mpfr_prec(b) > 0;
 }
 
+/* Minimum precision among the inexact (Real/MPFR) leaves of `e`, descending
+ * into Complex[...]; 0 if there is no inexact leaf. A machine Real counts as
+ * 53 bits, an MPFR as its own precision; exact atoms impose no constraint. */
+long numeric_min_inexact_bits(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_REAL) return 53;
+    if (e->type == EXPR_MPFR) return (long)mpfr_get_prec(e->data.mpfr);
+    if (e->type == EXPR_FUNCTION) {
+        Expr *re, *im;
+        if (is_complex((Expr*)e, &re, &im)) {
+            long a = numeric_min_inexact_bits(re);
+            long b = numeric_min_inexact_bits(im);
+            if (a == 0) return b;          /* re exact: only im constrains */
+            if (b == 0) return a;          /* im exact: only re constrains */
+            return a < b ? a : b;          /* both inexact: tighter wins */
+        }
+    }
+    return 0;                              /* exact atom: no constraint */
+}
+
 typedef int (*MpfrBinaryOp)(mpfr_t, const mpfr_t, const mpfr_t, mpfr_rnd_t);
 
 /* Generic MPFR binary dispatcher. Handles the common shape: extract real

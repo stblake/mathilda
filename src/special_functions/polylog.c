@@ -43,6 +43,7 @@
 #include <gmp.h>
 
 #include "arithmetic.h"   /* is_rational, make_rational, is_complex, make_complex */
+#include "numeric.h"      /* numeric_min_inexact_bits */
 #include "attr.h"
 #include "eval.h"          /* eval_and_free */
 #include "symtab.h"
@@ -388,11 +389,16 @@ static bool pl_set_mpfr(mpfr_t out, const Expr* e) {
     return false;
 }
 
-/* Largest MPFR precision among a value's leaves, else `cur`. */
-static mpfr_prec_t pl_prec_of(const Expr* e, mpfr_prec_t cur) {
-    if (e && e->type == EXPR_MPFR && mpfr_get_prec(e->data.mpfr) > cur)
-        return mpfr_get_prec(e->data.mpfr);
-    return cur;
+/* Result precision (bits) under Mathematica contagion: the minimum precision
+ * among the inexact leaves of `a` and `b`, floored at machine (53). A machine
+ * `Real` argument therefore forces a machine-precision result, even alongside
+ * a high-precision MPFR argument: PolyLog[N[1/2], 1.3429`50] is machine, not
+ * 50-digit. See numeric_min_inexact_bits. */
+static mpfr_prec_t pl_out_prec(const Expr* a, const Expr* b) {
+    long pa = numeric_min_inexact_bits(a);
+    long pb = numeric_min_inexact_bits(b);
+    long m  = (pa && pb) ? (pa < pb ? pa : pb) : (pa ? pa : pb);
+    return m < 53 ? 53 : (mpfr_prec_t)m;
 }
 
 /* Build the numeric result: Real / Complex[Real,Real] at machine precision,
@@ -771,9 +777,7 @@ static Expr* polylog_numeric(Expr* n, Expr* z, long intord) {
         expr_free(zero); return NULL;
     }
 
-    mpfr_prec_t out_prec = 53;
-    out_prec = pl_prec_of(nre, out_prec); out_prec = pl_prec_of(nim, out_prec);
-    out_prec = pl_prec_of(zre, out_prec); out_prec = pl_prec_of(zim, out_prec);
+    mpfr_prec_t out_prec = pl_out_prec(n, z);
     mpfr_prec_t wp = out_prec + 64;
 
     bool n_real = (nim == zero);

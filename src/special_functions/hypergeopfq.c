@@ -480,13 +480,6 @@ static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
     free(ac); free(bc);
     return result;
 }
-
-/* True if any element of a List carries MPFR precision. */
-static bool list_any_mpfr(const Expr* list) {
-    for (size_t i = 0; i < list->data.function.arg_count; i++)
-        if (numeric_expr_is_mpfr(list->data.function.args[i])) return true;
-    return false;
-}
 #endif /* USE_MPFR */
 
 /* ------------------------------------------------------------------ */
@@ -523,19 +516,26 @@ static Expr* try_numeric(Expr* a, Expr* b, Expr* z) {
 
     Expr* result = NULL;
 #ifdef USE_MPFR
-    if (numeric_expr_is_mpfr(z) || list_any_mpfr(a) || list_any_mpfr(b)) {
-        long bits = numeric_combined_bits(z, NULL, 0);
+    /* Precision contagion: the governing precision is the MINIMUM among the
+     * inexact (Real/MPFR) leaves of z and every parameter. A machine-precision
+     * argument forces the machine path even when others are high-precision
+     * MPFR (matching Mathematica). Only when every inexact argument exceeds
+     * machine precision do we take the arbitrary-precision MPFR sum. */
+    {
+        long gov = numeric_min_inexact_bits(z);
         for (size_t i = 0; i < p; i++) {
-            long bi = numeric_combined_bits(a->data.function.args[i], NULL, 0);
-            if (bi > bits) bits = bi;
+            long bi = numeric_min_inexact_bits(a->data.function.args[i]);
+            if (bi > 0 && (gov == 0 || bi < gov)) gov = bi;
         }
         for (size_t j = 0; j < q; j++) {
-            long bj = numeric_combined_bits(b->data.function.args[j], NULL, 0);
-            if (bj > bits) bits = bj;
+            long bj = numeric_min_inexact_bits(b->data.function.args[j]);
+            if (bj > 0 && (gov == 0 || bj < gov)) gov = bj;
         }
-        result = hgpfq_mpfr_sum(z, a, b, p, q, bits);
-        free(ac); free(bc);
-        return result;
+        if (gov > 53) {
+            result = hgpfq_mpfr_sum(z, a, b, p, q, gov);
+            free(ac); free(bc);
+            return result;
+        }
     }
 #endif
     result = machine_sum(zc, ac, p, bc, q, all_real);

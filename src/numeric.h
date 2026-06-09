@@ -115,6 +115,20 @@ bool numeric_constant_machine_value(const char* name, double* out);
  * Rational) contribute no precision and accept the ambient precision. */
 long numeric_combined_bits(const Expr* a, const Expr* b, long default_bits);
 
+/* Governing precision (bits) for a numeric result built from `e`, following
+ * Mathematica's precision contagion: the MINIMUM precision among the inexact
+ * (Real/MPFR) leaves of `e`, descending into Complex[...]. A machine `Real`
+ * counts as 53 bits, an `MPFR` as its own bit precision, and exact atoms
+ * (Integer/Rational/BigInt) impose no constraint. Returns 0 if `e` has no
+ * inexact leaf.
+ *
+ * Unlike `numeric_combined_bits` (which takes the MAX and treats a machine
+ * Real as no constraint), this is the rule a multi-argument special function
+ * needs: e.g. PolyLog[N[1/2], 1.3429`50] must yield a machine-precision
+ * result because one argument is machine precision. Combine several arguments
+ * by taking the min of their non-zero results, then floor at 53. */
+long numeric_min_inexact_bits(const Expr* e);
+
 /* Binary MPFR-level numeric operators. Each returns a freshly allocated
  * EXPR_MPFR (real-valued) on success, or NULL if either input is not
  * representable as a real MPFR value (e.g. it's a Complex[...] or symbolic).
