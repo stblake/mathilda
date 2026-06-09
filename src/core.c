@@ -21,6 +21,7 @@
 #include "eulergamma.h"
 #include "zeta.h"
 #include "stieltjesgamma.h"
+#include "bernoullib.h"
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
@@ -450,6 +451,7 @@ void core_init(void) {
     eulergamma_init();
     zeta_init();
     stieltjesgamma_init();
+    bernoullib_init();
     fibonacci_init();
     lucas_init();
 

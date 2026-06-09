@@ -299,20 +299,36 @@ static bool has_list_arg(Expr* e) {
  * Example: f[{a, b}, c] -> {f[a, c], f[b, c]}
  */
 static Expr* apply_listable(Expr* e) {
-    /* Determine the required length of the result list */
+    /* Determine the required result length from the list arguments, and verify
+     * that every List argument shares that length (Mathematica threads over
+     * equal-length lists only). The length may legitimately be 0: threading a
+     * Listable function over an empty list yields an empty list, e.g.
+     * BernoulliB[{}] -> {} and f[{}, c] -> {}. */
+    bool have_list = false;
     size_t list_len = 0;
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
         Expr* arg = e->data.function.args[i];
         if (arg->type == EXPR_FUNCTION &&
             arg->data.function.head->type == EXPR_SYMBOL &&
             arg->data.function.head->data.symbol == SYM_List) {
-            list_len = arg->data.function.arg_count;
-            break;
+            size_t len = arg->data.function.arg_count;
+            if (!have_list) { have_list = true; list_len = len; }
+            else if (len != list_len) {
+                char* s = expr_to_string(e);
+                printf("Thread::tdlen: Objects of unequal length in %s cannot be combined.\n", s);
+                free(s);
+                return NULL;
+            }
         }
     }
-    
-    if (list_len == 0) return NULL;
-    
+
+    if (!have_list) return NULL;
+
+    /* Empty list: thread to an empty list without per-element work. */
+    if (list_len == 0) {
+        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+    }
+
     /* Construct a new List containing the threaded evaluations */
     Expr** new_list_args = malloc(sizeof(Expr*) * list_len);
     for (size_t j = 0; j < list_len; j++) {

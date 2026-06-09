@@ -243,6 +243,16 @@ void info_init(void) {
         "reduces to Zeta[s] minus a finite power sum. Real, complex, machine and\n"
         "arbitrary-precision (MPFR) numeric arguments evaluate numerically via\n"
         "mpfr_zeta (real Riemann) or an Euler-Maclaurin kernel. Listable.");
+    symtab_set_docstring("BernoulliB",
+        "BernoulliB[n]\n"
+        "\tgives the Bernoulli number B_n.\n"
+        "BernoulliB[n, x]\n"
+        "\tgives the Bernoulli polynomial B_n(x).\n"
+        "Non-negative integer n gives the exact rational B_n (odd n > 1 give 0,\n"
+        "B_0 = 1, B_1 = -1/2); an inexact integer-valued n evaluates it at machine\n"
+        "or arbitrary (MPFR) precision. BernoulliB[n, x] expands the degree-n\n"
+        "polynomial with exact rational coefficients, staying symbolic in x or\n"
+        "evaluating numerically when x is inexact. Listable.");
     symtab_set_docstring("StieltjesGamma",
         "StieltjesGamma[n]\n"
         "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"

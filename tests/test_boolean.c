@@ -30,11 +30,11 @@ void test_boole_listable_nested() {
                    "{{1, 0}, {0, 1}}", 0);
 }
 
-/* Listable threading on empty lists is not applied in Mathilda --
- * mirrors the behaviour of Sin[{}], Abs[{}], etc., which all stay
- * symbolic. We assert that current behaviour explicitly. */
+/* Listable threading over an empty list yields an empty list, consistent with
+ * every other Listable builtin (Sin[{}], Abs[{}], BernoulliB[{}], ... all give
+ * {}). */
 void test_boole_listable_empty_list() {
-    assert_eval_eq("Boole[{}]", "Boole[{}]", 0);
+    assert_eval_eq("Boole[{}]", "{}", 0);
 }
 
 /* For neither-True-nor-False scalar input, Boole stays unevaluated. */

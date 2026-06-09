@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -280,4 +280,37 @@ form). It appears in the `Series` expansions of `Zeta`.
 ```mathematica
 In[1]:= StieltjesGamma[0]
 Out[1]= EulerGamma
+```
+
+## BernoulliB
+
+- `BernoulliB[n]` — the Bernoulli number Bₙ.
+- `BernoulliB[n, x]` — the Bernoulli polynomial Bₙ(x).
+
+The Bernoulli polynomials are defined by the generating function
+t·eˣᵗ/(eᵗ−1) = Σ_{n≥0} Bₙ(x) tⁿ/n!, and the numbers are Bₙ = Bₙ(0).
+
+- **Exact numbers.** A non-negative integer `n` gives the exact rational Bₙ
+  from the recurrence B₀ = 1, Bₘ = −1/(m+1) Σ_{k=0}^{m−1} C(m+1, k) Bₖ
+  (lazily cached with GMP, so large indices stay exact). Odd `n > 1` give `0`,
+  `BernoulliB[0] = 1`, `BernoulliB[1] = -1/2`; e.g. `BernoulliB[12] = -691/2730`.
+- **Polynomials.** For a non-negative integer `n`, `BernoulliB[n, x]` expands
+  to Σ_{j=0}^{n} C(n, j) B_{n−j} xʲ with exact rational coefficients, staying
+  symbolic in `x` (e.g. `BernoulliB[2, z] = 1/6 - z + z^2`) and evaluating
+  numerically when `x` is inexact.
+- **Numerics.** An inexact integer-valued order evaluates the rational at
+  machine (`BernoulliB[2.] = 0.166667`) or arbitrary precision; `BernoulliB`
+  can be evaluated to arbitrary numerical precision via `N`, e.g.
+  `N[BernoulliB[12], 30] = -0.253113553113553113553113553113`.
+- **Listable.** `BernoulliB[{2, 4, 6}] = {1/6, -1/30, 1/42}`; `BernoulliB[{}] = {}`.
+- Negative, non-integer, and symbolic orders stay unevaluated.
+
+Attributes: `Listable`, `Protected`.
+
+```mathematica
+In[1]:= Table[BernoulliB[k], {k, 0, 10}]
+Out[1]= {1, -1/2, 1/6, 0, -1/30, 0, 1/42, 0, -1/30, 0, 5/66}
+
+In[2]:= BernoulliB[3, z]
+Out[2]= 1/2 z - 3/2 z^2 + z^3
 ```
