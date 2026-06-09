@@ -79,7 +79,11 @@ canonical forms that the generic pipeline alone does not:
   ideal. A quadratic radical of a kernel (e.g. `Sqrt[Tan[x]]`, `Tan[x]^(3/2)`) is
   carried as an algebraic generator `l` with `l^2 = g`, so rational functions of
   `Sqrt[Tan[x]]` reduce too — `Simplify[Tan[x]/Sqrt[Tan[x]]] -> Sqrt[Tan[x]]`,
-  and `D[Integrate[Sqrt[Tan[x]], x], x] // Simplify -> Sqrt[Tan[x]]`.
+  and `D[Integrate[Sqrt[Tan[x]], x], x] // Simplify -> Sqrt[Tan[x]]`. Radicands
+  that are rational with an *odd* generator in the denominator (`Cot = Cos/Sin`,
+  `Csc = 1/Sin`) are handled too: the inverse odd-generator powers the relation
+  injects are cleared before the denominator is rationalised, so
+  `Simplify[Cot[x]/Sqrt[Cot[x]]] -> Sqrt[Cot[x]]`.
 - **Equation / inequality rebalancing** — a binary relation is normalised by
   dividing through the GCD of integer coefficients and partitioning terms across
   the relation; the rebalanced form is kept when its `SimplifyCount` is lower.

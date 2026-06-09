@@ -801,6 +801,64 @@ static Expr* tr_subst_sym_zero(const Expr* e, const char* name) {
 }
 
 /* ----------------------------------------------------------------------- */
+/* Inverse odd-generator powers.                                           */
+/*                                                                         */
+/* A radical Sqrt[g] whose radicand g is *rational* in the generators with */
+/* an odd generator s_i in its denominator -- Cot = Cos/Sin, Csc = 1/Sin   */
+/* -- carries the relation l^2 = g = .../s_i.  Reducing l^2 then injects   */
+/* Power[s_i, -1] into the working num/den.  The conjugate rationalisation  */
+/* below clears s_i via the substitution den|_{s_i -> 0}, which would       */
+/* evaluate Power[0, -1] -- a literal 1/0 -- on such a term.  We detect and */
+/* clear these inverse powers first.  (For Tan = Sin/Cos the inverse        */
+/* generator is the *even* c_i, which is never substitute-zeroed, so that   */
+/* path never triggers this and is left exactly as before.)                */
+/* ----------------------------------------------------------------------- */
+
+/* True if `e` contains Power[s_i, k] with k a negative integer for some odd
+ * trig generator s_i. */
+static bool tr_has_neg_sgen_power(const Expr* e, const TRBindings* b) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* ex   = e->data.function.args[1];
+        if (base && base->type == EXPR_SYMBOL &&
+            ex && ex->type == EXPR_INTEGER && ex->data.integer < 0 &&
+            tr_find_by_s_name(b, base->data.symbol)) {
+            return true;
+        }
+    }
+    if (tr_has_neg_sgen_power(e->data.function.head, b)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (tr_has_neg_sgen_power(e->data.function.args[i], b)) return true;
+    return false;
+}
+
+/* If num/den carry inverse odd-generator powers, recombine over a common
+ * denominator and re-split so both are polynomials in every s_i, then
+ * re-reduce mod the ideal.  This is only reached after the radical
+ * generators are cleared, so the re-reduction cannot reintroduce a fresh
+ * inverse power (no l^2 remains to expand into .../s_i).  Borrows nothing;
+ * rewrites *num and *den in place. */
+static void tr_clear_neg_sgen(Expr** num, Expr** den, const TRBindings* b) {
+    if (!tr_has_neg_sgen_power(*num, b) && !tr_has_neg_sgen_power(*den, b))
+        return;
+    Expr* frac = tr_times(expr_copy(*num),
+                          tr_pow(expr_copy(*den), tr_int(-1)));
+    Expr* tg = tr_call_unary("Together", frac);   /* consumes frac */
+    if (!tg) return;
+    Expr* n2; Expr* d2;
+    tr_split_frac(tg, &n2, &d2);
+    expr_free(tg);
+    Expr* nr = tr_reduce_mod_ideal(n2, b);
+    Expr* dr = tr_reduce_mod_ideal(d2, b);
+    expr_free(n2); expr_free(d2);
+    expr_free(*num); expr_free(*den);
+    *num = nr; *den = dr;
+}
+
+/* ----------------------------------------------------------------------- */
 /* Rationalise the denominator: clear every s_i / sigma_j from den.        */
 /* Returns new (num, den) by output pointers, both freshly allocated.      */
 /* Inputs are borrowed.                                                    */
@@ -836,6 +894,12 @@ static void tr_rationalise_denom(const Expr* num_in, const Expr* den_in,
         num = num_red;
         den = den_red;
     }
+
+    /* Clearing the radicals above can leave inverse odd-generator powers
+     * (s_i^(-1)) when a radicand was rational with s_i in its denominator
+     * (Cot, Csc).  Clear them now so the conjugate substitution den|_{s->0}
+     * below never evaluates a literal 1/0. */
+    tr_clear_neg_sgen(&num, &den, b);
 
     for (size_t i = 0; i < b->count; i++) {
         const char* sname = b->items[i].s_name;

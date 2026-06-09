@@ -163,6 +163,45 @@ void test_trigrat_sqrt_tan_rational_combos(void) {
     assert_eval_eq("Simplify[(x + Sqrt[x])/Sqrt[x]]", "1 + Sqrt[x]", 0);
 }
 
+void test_trigrat_sqrt_cot_derivative(void) {
+    /* Mirror of test_trigrat_sqrt_tan_derivative for Cot.  The radicand
+     * Cot = Cos/Sin is rational with the *odd* generator Sin in its
+     * denominator, so the radical relation l^2 = Cos/Sin injects Sin^(-1)
+     * into the rationalisation.  Before the inverse-odd-generator clearing,
+     * the conjugate substitution Sin -> 0 evaluated Power[0,-1] (a literal
+     * 1/0) and Simplify returned Indeterminate; it must now collapse to
+     * Sqrt[Cot[x]]. */
+    const char* expr =
+        "Simplify[D[-ArcTan[-1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2]"
+        " - ArcTan[1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2]"
+        " - 1/2 Log[1 + Cot[x] - Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2]"
+        " + 1/2 Log[1 + Cot[x] + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2], x]]";
+    struct Expr* parsed = parse_expression(expr);
+    assert(parsed != NULL);
+    double t0 = seconds();
+    struct Expr* r = evaluate(parsed);
+    double dt = seconds() - t0;
+    expr_free(parsed);
+    char* s = expr_to_string(r);
+    if (strcmp(s, "Sqrt[Cot[x]]") != 0) {
+        fprintf(stderr, "FAIL: trigrat_sqrt_cot: expected Sqrt[Cot[x]], got: %s\n", s);
+    }
+    if (dt > 30.0) {
+        fprintf(stderr, "FAIL: trigrat_sqrt_cot: took %.2f s (> 30 s budget)\n", dt);
+    }
+    assert(strcmp(s, "Sqrt[Cot[x]]") == 0);
+    assert(dt <= 30.0);
+    free(s);
+    expr_free(r);
+}
+
+void test_trigrat_sqrt_cot_rational_combos(void) {
+    /* Rational functions of Sqrt[Cot[x]] reduce algebraically (Csc is the
+     * analogous 1/Sin radicand). */
+    assert_eval_eq("Simplify[Cot[x]/Sqrt[Cot[x]]]", "Sqrt[Cot[x]]", 0);
+    assert_eval_eq("Simplify[Csc[x]/Sqrt[Csc[x]]]", "Sqrt[Csc[x]]", 0);
+}
+
 /* ---- Non-applicable inputs: must not regress simp_search wins ---- */
 
 void test_trigrat_double_angle_preserved(void) {
@@ -192,6 +231,8 @@ int main(void) {
     TEST(test_trigrat_risch_xn_sin_cos_derivative);
     TEST(test_trigrat_sqrt_tan_derivative);
     TEST(test_trigrat_sqrt_tan_rational_combos);
+    TEST(test_trigrat_sqrt_cot_derivative);
+    TEST(test_trigrat_sqrt_cot_rational_combos);
     TEST(test_trigrat_double_angle_preserved);
     TEST(test_trigrat_half_angle_preserved);
 

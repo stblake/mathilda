@@ -513,8 +513,11 @@ Implemented in `src/calculus/integrate_derivdivides.c`.
 Candidate kernels `u(x)` are every distinct subexpression of `f` that depends
 on `x`, except `x` and `f` themselves (the C analogue of
 `Cases[Union[Level[f, {0, Infinity}]], e_ /; !FreeQ[e, x]]`).  Two
-complementary strategies are tried per kernel, each followed by an
-**unconditional verification gate** `Simplify[D[result, x] - f] === 0`:
+complementary strategies are tried per kernel, each followed by a
+**verification gate** `PossibleZeroQ[D[result, x] - f] === True` (numeric
+sampling; as of 2026-06-09 the former rigorous `Simplify` confirm was dropped —
+it cost ~1.1 s of `trigrat` normalization on the radical-trig cases for no gain
+over the sampler):
 
 1. **Direct quotient** — `q = Cancel[Together[f / D[u(x), x]]]`, then
    `q /. u(x) -> u`; accepted when free of `x`.  Cheap, emits no diagnostics,
@@ -531,14 +534,23 @@ complementary strategies are tried per kernel, each followed by an
    `1/Cos[x]` to `Sec[x]`, breaking the syntactic substitution.  Because the
    algebraisation can square radicals and invert functions, `Solve` returns
    several branches; the verification gate is what **selects the branch that
-   differentiates back to `f`**.  As of 2026-06-09 this strategy runs in the
-   Automatic cascade as well as under the explicit method (its Eliminate
-   `::ifun` / `::alg` diagnostics are muted while the integrator drives it).
+   differentiates back to `f`**.  This strategy runs in the Automatic cascade as
+   well as under the explicit method (its Eliminate `::ifun` / `::alg`
+   diagnostics are muted while the integrator drives it).  Because it is
+   heavyweight (~0.1–1 s per kernel), as of 2026-06-09 it runs **only on the
+   outermost integrand** — reduced sub-integrals are finished by the direct
+   strategy and the rest of the cascade.
 
-The reduced integral re-enters the full `Integrate`, so substitutions compose;
-a depth guard (8) and per-call fresh substitution symbols keep the recursion
-finite and collision-free.  Strict: returns unevaluated when no substitution
-closes the integral.  `Protected`, `ReadProtected`.
+The reduced integral re-enters the full `Integrate`, so substitutions compose.
+Three guards keep the recursion finite and cheap: an **integrand memo** that
+short-circuits any integrand (canonicalised by renaming the integration variable
+to a fixed sentinel) already attempted in the current top-level descent — this
+breaks circular substitution chains and collapses overlapping subproblems that
+would otherwise fan out exponentially (e.g. `Integrate[x Sin[x^2], x]`); the
+**outermost-only** restriction on the Eliminate/Solve search above; and a hard
+depth backstop (8) with per-call fresh substitution symbols.  Strict: returns
+unevaluated when no substitution closes the integral.  `Protected`,
+`ReadProtected`.
 
 Known limitations: kernels must appear **literally** in `f` (so `Tan[x]`,
 which Mathilda keeps atomic rather than `Sin[x]/Cos[x]`, exposes no `Cos[x]`
@@ -562,6 +574,11 @@ In[5]:= Integrate[Sqrt[Tan[x]], x]                  (* u = Sqrt[Tan[x]] *)
 Out[5]= ArcTan[-1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2] + ArcTan[1 + Sqrt[2] Sqrt[Tan[x]]]/Sqrt[2]
           - Log[1 + Tan[x] + Sqrt[2] Sqrt[Tan[x]]]/(2 Sqrt[2])
           + Log[1 + Tan[x] - Sqrt[2] Sqrt[Tan[x]]]/(2 Sqrt[2])
+
+In[6]:= Integrate[Sqrt[Cot[x]], x]                  (* u = Sqrt[Cot[x]] *)
+Out[6]= -ArcTan[-1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2] - ArcTan[1 + Sqrt[2] Sqrt[Cot[x]]]/Sqrt[2]
+          - Log[1 + Cot[x] - Sqrt[2] Sqrt[Cot[x]]]/(2 Sqrt[2])
+          + Log[1 + Cot[x] + Sqrt[2] Sqrt[Cot[x]]]/(2 Sqrt[2])
 ```
 
 ### Integrate`LinearRadicals

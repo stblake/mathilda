@@ -94,6 +94,29 @@ static void test_radical_substitution(void) {
         " < 0.000001", "True", 0);
 }
 
+/* Radical substitution u = Sqrt[Cot[x]].  Mirror of the Sqrt[Tan[x]] case, but
+ * the radicand Cot = Cos/Sin is rational with the odd generator Sin in its
+ * denominator: the trigrat verification gate previously evaluated Power[0,-1]
+ * (1/0) during the conjugate rationalisation and returned Indeterminate, so the
+ * differentiation gate failed and Integrate returned unevaluated.  With the
+ * inverse-odd-generator clearing it closes end to end. */
+static void test_radical_substitution_cot(void) {
+    /* Automatic cascade closes it. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[Sqrt[Cot[x]], x], x] - Sqrt[Cot[x]]]", "0", 0);
+    /* Explicit method and package head close it too. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[Sqrt[Cot[x]], x, Method -> \"DerivativeDivides\"], x]"
+        " - Sqrt[Cot[x]]]", "0", 0);
+    assert_eval_eq(
+        "Simplify[D[Integrate`DerivativeDivides[Sqrt[Cot[x]], x], x]"
+        " - Sqrt[Cot[x]]]", "0", 0);
+    /* Pin the branch numerically at an interior point. */
+    assert_eval_eq(
+        "Abs[N[(D[Integrate[Sqrt[Cot[x]], x], x] - Sqrt[Cot[x]]) /. x -> 0.7]]"
+        " < 0.000001", "True", 0);
+}
+
 /* Method plumbing: both the option string and the explicit package head
  * route to the routine and close the headline case. */
 static void test_method_plumbing(void) {
@@ -128,6 +151,7 @@ void test_integrate_derivdivides(void) {
     TEST(test_automatic_direct);
     TEST(test_explicit_eliminate);
     TEST(test_radical_substitution);
+    TEST(test_radical_substitution_cot);
     TEST(test_method_plumbing);
     TEST(test_strict_no_fallback);
 

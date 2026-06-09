@@ -638,3 +638,78 @@ the runaway recursion).
 canonical-form cycle guard (stack of in-flight integrands compared with
 `expr_eq` after `Cancel[Together[Expand[...]]]`) so genuinely non-elementary
 inputs terminate unevaluated instead of looping.
+
+---
+
+## Polynomial-ideal frameworks: fix the *boundary*, don't change the generator (2026-06-09)
+
+**Context.** `Integrate[Sqrt[Cot[x]], x]` threw `Power::infy` (1/0) where the
+symmetric `Sqrt[Tan[x]]` worked. Root cause in `src/simp/trigrat.c`: a radical
+`Sqrt[g]` is carried as `l` with `l^2 = g`; for `Cot = Cos/Sin = c·s^(-1)` the
+radicand is rational with the *odd* generator `s` in its denominator, so
+reducing `l^2` injects `s^(-1)`, and the conjugate `den|_{s->0}` evaluates
+`Power[0,-1]`. (`Tan = s/c` escaped: its inverse generator is the *even* `c`,
+never substitute-zeroed.)
+
+**Correction from user.** My first fix normalised the radicand globally via
+`Sqrt[N/D] = Sqrt[N D]/D` (so `l^2 = N·D` is always polynomial). It removed the
+crash but made the case **~20× slower** — `l^2 = c·s` (degree 2) instead of the
+natural `c/s` raises every downstream `Together`/`Cancel` degree. User caught the
+hang.
+
+**Lesson.** In a polynomial-ideal reduction (Gröbner-like normal forms,
+conjugate rationalisation), changing the generator's defining relation to dodge a
+degenerate boundary case usually inflates degree and tanks performance across the
+*whole* pipeline. Prefer a **local, conditionally-triggered repair at the exact
+boundary** that misbehaves. Here: keep the natural low-degree `l^2 = g`, and just
+before the conjugate substitute-zero, clear inverse powers of the generator being
+zeroed (`tr_has_neg_sgen_power` / `tr_clear_neg_sgen`: recombine → re-split →
+re-reduce). Gate the trigger narrowly (odd-generator inverse powers only) so the
+already-working path (`Tan`, `c^(-1)`) stays byte-for-byte unchanged and pays
+nothing.
+
+**How to apply.** When a symmetric pair (A works, B crashes) diverges inside a
+canonical-form engine, find the *single* operation that assumes a precondition B
+violates (here: "den is polynomial in the var being cleared"), and restore that
+precondition in place — don't re-architect the representation both cases share.
+Verify the fast case is untouched (diff its output/timing) and the slow case
+matches the fast one's cost.
+
+---
+
+## DerivativeDivides hang: a loop guard must fix *termination* AND *cost* (2026-06-09)
+
+**Symptom.** `Integrate[x Sin[x^2], x]` hung. The reduced sub-integral
+`Integrate[Sin[u]/2, u]` re-enters the *full* derivative-divides stage; each
+level mints a fresh substitution variable, so overlapping branches regenerate
+the same integrand and fan out exponentially with the expensive Eliminate/Solve
+search at every node.
+
+**Correction from user (twice).** (1) My first instinct — gate the Eliminate
+search off on recursive calls — was rejected: "we still should try
+derivative-divides on recursive calls, but guard against infinite loops by
+checking the current integrand against previous ones." So I built an **integrand
+memo** (canonicalise by renaming the integration var to a fixed sentinel so
+gensym'd duplicates compare equal; short-circuit anything seen in this descent).
+(2) The memo *terminated* but left a 7–18 s near-hang — it bounds the *count* of
+nodes but not the ~0.1–1 s cost of Eliminate at each. I surfaced the data and
+the user then chose memo **+** restricting the heavyweight Eliminate/Solve search
+to the outermost call (direct derivative-divides still runs recursively).
+
+**Lesson.** "Stop the infinite loop" ≠ "make it usable." A memo/cycle guard on a
+recursive symbolic routine restores *termination* but does nothing for a heavy
+per-node cost — a bounded-but-exponential-work tree still reads as a hang.
+Always **measure wall-clock after the guard**, not just "does it return." When a
+correctness guard isn't enough, the lever is usually to confine the *expensive*
+strategy to where it pays off (here: the heavyweight Eliminate search only earns
+its keep on the original integrand; reduced sub-integrals are finished cheaply by
+the rest of the cascade).
+
+**How to apply.** Before declaring a hang fixed: (a) confirm it terminates, then
+(b) time the actual user-facing case and compare against a known-fast sibling
+(`Integrate[Sqrt[Tan[x]], x]` here). If still slow, separate the two failure
+modes — *non-termination* (fix with a memo/cycle guard) vs *too-much-work* (fix
+by scoping the costly stage) — and address both. When the user has stated a
+preferred mechanism that you find insufficient, implement it faithfully, then
+present before/after numbers and let them choose the augmentation rather than
+silently overriding.

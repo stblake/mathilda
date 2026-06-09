@@ -21,7 +21,7 @@
  *         G  = Integrate[qu, u]      (recurse into the full integrator)
  *         if G closes (no leftover Integrate):
  *             r = G /. u -> u(x)
- *             if Simplify[D[r, x] - f] === 0:  return r
+ *             if PossibleZeroQ[D[r, x] - f]:  return r
  *
  *   Eliminate / Solve strategy (explicit method only)
  *   -------------------------------------------------
@@ -33,11 +33,14 @@
  *         if FreeQ[g, x] && FreeQ[g, Dt[x]] && FreeQ[g, Dt[u]]:
  *             G = Integrate[g, u];  if G closes:
  *                 r = G /. u -> u(x)
- *                 if Simplify[D[r, x] - f] === 0:  return r
+ *                 if PossibleZeroQ[D[r, x] - f]:  return r
  *
- * The Simplify[D[r, x] - f] === 0 gate is unconditional and is what selects
+ * The PossibleZeroQ[D[r, x] - f] gate is unconditional and is what selects
  * the correct inverse-function branch among Solve's +- solutions and the
- * branch assumptions PowerExpand bakes in.
+ * branch assumptions PowerExpand bakes in.  PossibleZeroQ's numeric sampling
+ * settles these branches decisively; we deliberately avoid a follow-up
+ * Simplify confirm, which on entangled radical-trig integrands (e.g.
+ * Sqrt[Tan[x]]) cost ~1.1s of trigrat normalization for no behavioural gain.
  *
  * Memory: builtins take ownership of `res`; helpers below own every Expr they
  * construct and free intermediates explicitly.  `eval_take` consumes its
@@ -136,35 +139,22 @@ static Expr* replace_one(Expr* expr, const Expr* from, const Expr* to) {
 
 /* The differentiation-verification gate: true iff D[r, x] - f is zero.
  *
- * A cheap PossibleZeroQ pre-screen rejects the (common) clearly-non-zero
- * candidate before paying for Simplify: PossibleZeroQ uses numeric sampling
- * and so settles most wrong branches without any symbolic work.  Only when it
- * reports a likely zero do we confirm rigorously with Simplify, then a
- * Cancel[Together[Expand[.]]] fallback for the forms Simplify leaves
- * non-canonical.  Borrows r and f. */
+ * Acceptance rests solely on PossibleZeroQ[D[r, x] - f] === True.  PossibleZeroQ
+ * uses numeric sampling, which settles these candidates (including the entangled
+ * radical-trig forms) decisively.  We deliberately do NOT follow up with a
+ * rigorous Simplify confirm: that confirm cost ~1.1s on
+ * Integrate[Sqrt[Tan[x]], x] (a heavy trigrat normalization of the
+ * back-substituted difference) for no behavioural gain over the sampler.
+ * Borrows r and f. */
 static bool differentiates_back(const Expr* r, const Expr* f, const Expr* x) {
     Expr* dr = deriv_dx(r, x);
     if (!dr) return false;
     Expr* diff = mk_fn2("Plus", dr,
                         mk_fn2("Times", mk_int(-1), expr_copy((Expr*)f)));
 
-    /* Cheap pre-screen: bail unless PossibleZeroQ[diff] === True. */
-    Expr* pz = eval_take(mk_fn1("PossibleZeroQ", expr_copy(diff)));
-    bool possible = pz && pz->type == EXPR_SYMBOL && pz->data.symbol == SYM_True;
+    Expr* pz = eval_take(mk_fn1("PossibleZeroQ", diff));
+    bool zero = pz && pz->type == EXPR_SYMBOL && pz->data.symbol == SYM_True;
     if (pz) expr_free(pz);
-    if (!possible) { expr_free(diff); return false; }
-
-    /* Confirm: Simplify[diff], then Cancel[Together[Expand[diff]]]. */
-    Expr* s = eval_take(mk_fn1("Simplify", expr_copy(diff)));
-    bool zero = is_lit_zero(s);
-    if (s) expr_free(s);
-    if (!zero) {
-        Expr* ex = eval_take(internal_expand((Expr*[]){ expr_copy(diff) }, 1));
-        Expr* ct = cancel_together(ex);
-        zero = is_lit_zero(ct);
-        if (ct) expr_free(ct);
-    }
-    expr_free(diff);
     return zero;
 }
 
@@ -245,8 +235,63 @@ static void sort_kernels(ExprVec* v) {
 /* Recursion guard (the reduced integral re-enters Integrate)             */
 /* ---------------------------------------------------------------------- */
 
+/* Every substitution trial reduces Integrate[f, x] to Integrate[g, u] and
+ * recurses through the whole integrator via integrate_in().  Derivative-divides
+ * (the cheap direct-quotient strategy) stays available on those sub-integrals;
+ * we do NOT switch it off when nested.  Two guards keep the recursion finite
+ * and cheap:
+ *
+ * 1. Integrand memo (loop guard).  Overlapping substitution branches routinely
+ *    regenerate integrands seen earlier in the descent: Integrate[x Sin[x^2], x]
+ *    spawns Integrate[Sin[u]/2, u], whose Eliminate/Solve branches reduce to a
+ *    handful of radical forms that fold back into one another.  Without
+ *    memoisation that fans out into an exponential tree -- an effective hang --
+ *    even though the number of *distinct* integrands is tiny.  We therefore
+ *    memoise every integrand attempted in the current top-level descent.  Each
+ *    level mints a fresh substitution variable, so the recurrence is invisible
+ *    to plain structural equality; we canonicalise by renaming the integration
+ *    variable to a fixed sentinel before comparing.  A canonical integrand seen
+ *    before short-circuits to NULL (its integrability does not depend on the
+ *    path that reached it, so re-attempting it can only loop or repeat work).
+ *    The memo is owned by the outermost dd_core frame and freed when it
+ *    returns, so independent top-level integrals never share state.
+ *
+ * 2. Eliminate/Solve only at the outermost call (see dd_core).  The memo makes
+ *    the recursion terminate, but the Eliminate + Solve + Factor + PowerExpand
+ *    branch-search costs ~0.1-1s per node, so even a memo-bounded chain of a
+ *    dozen radical nodes is a multi-second near-hang.  That heavyweight search
+ *    only earns its keep on the *original* integrand (e.g. u = Sqrt[Tan[x]],
+ *    whose reduction is rational and is finished by the rational stage without
+ *    re-entering dd); reduced sub-integrals are better finished by the cheaper
+ *    cascade stages.  Restricting it to the outermost frame takes the
+ *    formerly-hanging cases to a few milliseconds while leaving every closed
+ *    radical substitution intact.
+ *
+ * dd_depth remains as a hard backstop ceiling. */
 #define DD_MAX_DEPTH 8
 static int dd_depth = 0;
+
+/* Canonical integrands already attempted in the current top-level descent.
+ * Valid while dd_depth > 0; freed by the outermost frame on exit. */
+static ExprVec dd_seen = { NULL, 0, 0 };
+
+/* Canonical key for (f, x): f with the integration variable renamed to a
+ * fixed sentinel, so integrands that differ only in their (gensym'd) variable
+ * name compare equal.  Returns an owned Expr the caller must free. */
+static Expr* dd_canon_key(const Expr* f, const Expr* x) {
+    Expr* sentinel = expr_new_symbol("Integrate`DerivativeDivides`$var");
+    Expr* key = replace_one(expr_copy((Expr*)f), x, sentinel); /* consumes copy */
+    expr_free(sentinel);
+    return key;
+}
+
+/* True iff `key` was already attempted in this descent. */
+static bool dd_seen_contains(const Expr* key) {
+    if (!key) return false;
+    for (size_t i = 0; i < dd_seen.n; i++)
+        if (expr_eq(dd_seen.items[i], (Expr*)key)) return true;
+    return false;
+}
 
 /* Per-call fresh-symbol counter so nested substitutions never collide. */
 static unsigned long dd_sym_counter = 0;
@@ -379,25 +424,44 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate) {
     if (expr_free_of(f, x))      return NULL;   /* nothing to integrate in x */
     if (dd_depth >= DD_MAX_DEPTH) return NULL;
 
+    bool outermost = (dd_depth == 0);
+
+    /* Loop guard: short-circuit any integrand (modulo the integration
+     * variable) we have already attempted in this descent.  Breaks circular
+     * substitution chains and collapses overlapping subproblems so the
+     * recursion cannot fan out exponentially. */
+    Expr* key = dd_canon_key(f, x);
+    if (dd_seen_contains(key)) { expr_free(key); return NULL; }
+    vec_add_unique(&dd_seen, key);              /* copies key into the memo */
+    expr_free(key);
+
     ExprVec kernels; vec_init(&kernels);
     collect_kernels(f, x, f, &kernels);
-    if (kernels.n == 0) { vec_free(&kernels); return NULL; }
+    Expr* result = NULL;
+    if (kernels.n == 0) { vec_free(&kernels); goto done; }
     sort_kernels(&kernels);
 
     dd_depth++;
-    Expr* result = NULL;
 
     /* Pass 1: the cheap, quiet, branch-correct direct quotient. */
     for (size_t i = 0; i < kernels.n && !result; i++)
         result = try_direct_kernel(f, x, kernels.items[i]);
 
-    /* Pass 2: the thorough Eliminate/Solve search (explicit method only). */
-    if (!result && use_eliminate)
+    /* Pass 2: the thorough Eliminate/Solve search.  Heavyweight (~0.1-1s per
+     * kernel), so it runs only on the outermost integrand; reduced sub-integrals
+     * are finished by the direct strategy above and the rest of the cascade.
+     * See the recursion-guard note above for why. */
+    if (!result && use_eliminate && outermost)
         for (size_t i = 0; i < kernels.n && !result; i++)
             result = try_eliminate_kernel(f, x, kernels.items[i]);
 
     dd_depth--;
     vec_free(&kernels);
+
+done:
+    /* The outermost frame owns the memo for the whole descent; reset it so the
+     * next independent top-level integral starts clean. */
+    if (outermost) vec_free(&dd_seen);
     return result;
 }
 
