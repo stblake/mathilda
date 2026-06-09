@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -347,4 +347,58 @@ Out[1]= {1, 0, -1, 0, 5, 0, -61, 0, 1385, 0, -50521}
 
 In[2]:= EulerE[3, z]
 Out[2]= 1/4 - 3/2 z^2 + z^3
+```
+
+## PolyLog
+
+- `PolyLog[n, z]` — the polylogarithm Liₙ(z) = Σ_{k≥1} zᵏ/kⁿ (|z| < 1; analytic
+  continuation elsewhere, with a branch cut from 1 to ∞).
+- `PolyLog[n, p, z]` — the Nielsen generalized polylogarithm S_{n,p}(z). Accepted
+  for surface compatibility but left unevaluated (no closed-form engine).
+
+Implemented in `src/polylog.c`, modelled on `Gamma` / `Zeta`.
+
+- **Exact closed forms.**
+  - `PolyLog[n, 0] = 0`.
+  - `PolyLog[1, z] = -Log[1 - z]` and `PolyLog[0, z] = z/(1 - z)`.
+  - Negative integer orders are Eulerian-number rational functions:
+    `PolyLog[-1, z] = z/(1-z)^2`, `PolyLog[-2, z] = (z+z²)/(1-z)^3`,
+    `PolyLog[-3, z] = (z+4z²+z³)/(1-z)^4`. (Built from the Eulerian triangle
+    with GMP, so exact `z` reduces to an exact rational and symbolic `z` gives a
+    rational function.)
+  - For integer `n ≥ 2`: `PolyLog[n, 1] = Zeta[n]` (e.g. `PolyLog[2, 1] = Pi²/6`)
+    and `PolyLog[n, -1] = (2^(1-n) - 1) Zeta[n]` (e.g. `PolyLog[2, -1] = -Pi²/12`).
+  - The dilogarithm and trilogarithm at ½:
+    `PolyLog[2, 1/2] = Pi²/12 - Log[2]²/2`,
+    `PolyLog[3, 1/2] = Log[2]³/6 - Pi² Log[2]/12 + 7 Zeta[3]/8`.
+- **Numerics.** With at least one inexact operand, machine- and
+  arbitrary-precision (MPFR) real and complex inputs evaluate numerically:
+  a direct power series for `|z| ≤ 1/2` (a fast pure-real path for real order and
+  real −1 < z < 1), and the Jonquière / zeta expansion
+  Liₛ(z) = Γ(1−s)(−ln z)^{s−1} + Σ_{k≥0} ζ(s−k) (ln z)ᵏ/k! (with the
+  integer-order variant carrying the Hₙ₋₁ − ln(−ln z) term) for
+  1/2 < |z| with |ln z| < 2π. The required ζ values for a complex order use the
+  ζ functional equation in the left half-plane to stay well-conditioned.
+  Examples: `PolyLog[2, 0.9] = 1.29971`, `PolyLog[0, 5.0] = -1.25`,
+  `N[PolyLog[1, 1/3], 50] = 0.40546510810816438197801311546434913657199042346249`,
+  `PolyLog[.2 + I, .5 - I] = -0.0898526 - 0.595865 I`. The branch cut runs along
+  the real axis from 1 to ∞; values on it are taken continuous from below,
+  matching Mathematica (e.g. Im Li₂(x) = −π Log[x] for real x > 1, so
+  `PolyLog[2, 2.0] = 2.4674 - 2.17759 I`), and the branch point `PolyLog[2, 1.0]`
+  is the finite real `Pi²/6`.
+- **Derivatives.** `D[PolyLog[n, z], z] = PolyLog[n-1, z]/z`; the order
+  derivative is the generic `Derivative[1, 0][PolyLog][n, z]`.
+- **Listable.** `PolyLog[{2, 4}, -1] = {-Pi²/12, -7/720 Pi⁴}`;
+  `PolyLog[{}, x] = {}`.
+- Other exact/symbolic arguments (e.g. `PolyLog[2, 1/3]`, `PolyLog[5, 1/2]`)
+  stay unevaluated.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= PolyLog[3, 1/2]
+Out[1]= 1/6 Log[2]^3 - 1/12 Log[2] Pi^2 + 7/8 Zeta[3]
+
+In[2]:= PolyLog[2, 0.9]
+Out[2]= 1.29971
 ```

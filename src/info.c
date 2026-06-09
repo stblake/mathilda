@@ -264,6 +264,20 @@ void info_init(void) {
         "polynomial with exact rational coefficients, staying symbolic in x or\n"
         "evaluating numerically when x is inexact; EulerE[n, 1/2] folds to\n"
         "2^-n EulerE[n]. Listable.");
+    symtab_set_docstring("PolyLog",
+        "PolyLog[n, z]\n"
+        "\tgives the polylogarithm Li_n(z) = Sum_{k>=1} z^k/k^n.\n"
+        "PolyLog[n, p, z]\n"
+        "\tgives the Nielsen generalized polylogarithm S_{n,p}(z) (accepted but\n"
+        "left unevaluated).\n"
+        "Special arguments reduce in closed form: PolyLog[n, 0] = 0,\n"
+        "PolyLog[1, z] = -Log[1-z], PolyLog[0, z] = z/(1-z), negative integer\n"
+        "orders give rational functions, PolyLog[n, 1] = Zeta[n] and\n"
+        "PolyLog[n, -1] = (2^(1-n)-1) Zeta[n] for integer n >= 2, with exact forms\n"
+        "for PolyLog[2, 1/2] and PolyLog[3, 1/2]. Inexact real or complex arguments\n"
+        "evaluate numerically at machine or arbitrary (MPFR) precision via a power\n"
+        "series or the Jonquiere/zeta expansion. There is a branch cut from 1 to\n"
+        "Infinity. Listable.");
     symtab_set_docstring("StieltjesGamma",
         "StieltjesGamma[n]\n"
         "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"

@@ -945,6 +945,48 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Times", applied, dS);
         }
 
+        /* --- PolyLog[N, Z] (polylogarithm): chain rule on both args.
+         *   d/dZ PolyLog[N, Z] = PolyLog[N-1, Z]/Z   (elementary)
+         *   d/dN PolyLog[N, Z] = Derivative[1,0][PolyLog][N, Z]  (no elementary
+         *               closed form in the order N).
+         * Zero-derivative arms are dropped, so D[PolyLog[n,z],z] keeps only the
+         * dZ term, matching Mathematica's PolyLog[n-1, z]/z. */
+        if (h == SYM_PolyLog && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* PolyLog[N-1, Z] Z^-1 * dZ */
+                Expr* nm1 = mk_fn2("Plus", expr_copy(N), mk_int(-1));
+                Expr* pl  = mk_fn2("PolyLog", nm1, expr_copy(Z));
+                Expr* dPdZ = mk_fn2("Times", pl,
+                                    mk_fn2("Power", expr_copy(Z), mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", dPdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1, 0][PolyLog][N, Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("PolyLog"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- Gamma[A, Z] (upper incomplete gamma): chain rule on both args.
          *   dGamma/dZ = -Z^(A-1) E^-Z    (elementary)
          *   dGamma/dA = Derivative[1,0][Gamma][A,Z]  (no closed form without

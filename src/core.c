@@ -23,6 +23,7 @@
 #include "stieltjesgamma.h"
 #include "bernoullib.h"
 #include "eulere.h"
+#include "polylog.h"
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
@@ -454,6 +455,7 @@ void core_init(void) {
     stieltjesgamma_init();
     bernoullib_init();
     eulere_init();
+    polylog_init();
     fibonacci_init();
     lucas_init();
 

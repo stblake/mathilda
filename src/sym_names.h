@@ -385,6 +385,7 @@ extern const char* SYM_StieltjesGamma;
 extern const char* SYM_Zeta;
 extern const char* SYM_BernoulliB;
 extern const char* SYM_EulerE;
+extern const char* SYM_PolyLog;
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
