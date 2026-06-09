@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -313,4 +313,38 @@ Out[1]= {1, -1/2, 1/6, 0, -1/30, 0, 1/42, 0, -1/30, 0, 5/66}
 
 In[2]:= BernoulliB[3, z]
 Out[2]= 1/2 z - 3/2 z^2 + z^3
+```
+
+## EulerE
+
+- `EulerE[n]` — the Euler number Eₙ.
+- `EulerE[n, x]` — the Euler polynomial Eₙ(x).
+
+The Euler polynomials are defined by the generating function
+2·eˣᵗ/(eᵗ+1) = Σ_{n≥0} Eₙ(x) tⁿ/n!, and the numbers are Eₙ = 2ⁿ Eₙ(1/2).
+
+- **Exact numbers.** A non-negative integer `n` gives the exact integer Eₙ
+  from the recurrence E₀ = 1, E_{2m} = −Σ_{k=0}^{m−1} C(2m, 2k) E_{2k}
+  (lazily cached with GMP, so large indices stay exact). Odd `n` give `0`,
+  `EulerE[0] = 1`, `EulerE[2] = -1`, `EulerE[4] = 5`; e.g. `EulerE[10] = -50521`.
+- **Polynomials.** For a non-negative integer `n`, `EulerE[n, x]` expands to the
+  degree-`n` polynomial in monomial form with exact rational coefficients,
+  staying symbolic in `x` (e.g. `EulerE[2, z] = -z + z^2`) and evaluating
+  numerically when `x` is inexact. `EulerE[n, 1/2]` with symbolic `n` folds to
+  `2^-n EulerE[n]`.
+- **Numerics.** An inexact integer-valued order evaluates the integer at
+  machine (`EulerE[2.] = -1.`) or arbitrary precision; an Euler polynomial at an
+  exact argument can be evaluated to arbitrary numerical precision via `N`, e.g.
+  `N[EulerE[6, 1/3], 30] = -0.825788751714677640603566529492`.
+- **Listable.** `EulerE[{2, 4, 6}] = {-1, 5, -61}`; `EulerE[{}] = {}`.
+- Negative, non-integer, and symbolic orders stay unevaluated.
+
+Attributes: `Listable`, `Protected`.
+
+```mathematica
+In[1]:= Table[EulerE[k], {k, 0, 10}]
+Out[1]= {1, 0, -1, 0, 5, 0, -61, 0, 1385, 0, -50521}
+
+In[2]:= EulerE[3, z]
+Out[2]= 1/4 - 3/2 z^2 + z^3
 ```

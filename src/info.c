@@ -253,6 +253,17 @@ void info_init(void) {
         "or arbitrary (MPFR) precision. BernoulliB[n, x] expands the degree-n\n"
         "polynomial with exact rational coefficients, staying symbolic in x or\n"
         "evaluating numerically when x is inexact. Listable.");
+    symtab_set_docstring("EulerE",
+        "EulerE[n]\n"
+        "\tgives the Euler number E_n.\n"
+        "EulerE[n, x]\n"
+        "\tgives the Euler polynomial E_n(x).\n"
+        "Non-negative integer n gives the exact integer E_n (odd n give 0,\n"
+        "E_0 = 1, E_2 = -1, E_4 = 5); an inexact integer-valued n evaluates it at\n"
+        "machine or arbitrary (MPFR) precision. EulerE[n, x] expands the degree-n\n"
+        "polynomial with exact rational coefficients, staying symbolic in x or\n"
+        "evaluating numerically when x is inexact; EulerE[n, 1/2] folds to\n"
+        "2^-n EulerE[n]. Listable.");
     symtab_set_docstring("StieltjesGamma",
         "StieltjesGamma[n]\n"
         "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"

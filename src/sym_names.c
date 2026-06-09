@@ -369,6 +369,7 @@ const char* SYM_Xor = NULL;
 const char* SYM_StieltjesGamma = NULL;
 const char* SYM_Zeta = NULL;
 const char* SYM_BernoulliB = NULL;
+const char* SYM_EulerE = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -733,4 +734,5 @@ void sym_names_init(void) {
     SYM_StieltjesGamma             = intern_symbol("StieltjesGamma");
     SYM_Zeta                       = intern_symbol("Zeta");
     SYM_BernoulliB                 = intern_symbol("BernoulliB");
+    SYM_EulerE                     = intern_symbol("EulerE");
 }

@@ -98,6 +98,7 @@ set(COMMON_SRC
     ../src/zeta.c
     ../src/stieltjesgamma.c
     ../src/bernoullib.c
+    ../src/eulere.c
     ../src/facint.c
     ../src/fibonacci.c
     ../src/lucas.c
@@ -1330,6 +1331,9 @@ target_include_directories(stieltjesgamma_tests PRIVATE ../src)
 
 add_executable(bernoullib_tests test_bernoullib.c ${COMMON_SRC})
 target_include_directories(bernoullib_tests PRIVATE ../src)
+
+add_executable(eulere_tests test_eulere.c ${COMMON_SRC})
+target_include_directories(eulere_tests PRIVATE ../src)
 
 add_executable(simplify_tests test_simplify.c ${COMMON_SRC})
 target_include_directories(simplify_tests PRIVATE ../src)
