@@ -536,6 +536,55 @@ static Expr* numericalize_function(const Expr* e, NumericSpec spec) {
         return leaf_from_double((double)rn / (double)rd, spec);
     }
 
+    /* Bigint-aware Rational[n, d] → direct numeric quotient. The int64 path
+     * above only fires when both components fit int64; once a numerator or
+     * denominator overflows into a BigInt, is_rational() reports false and the
+     * generic rebuild below would numericalize each component independently and
+     * leave a frozen Rational[Real, Real] (e.g. N[1/10^30] → 1.0/1.0e+30).
+     * Compute the true quotient here instead, exactly like the int64 path. */
+    if (e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Rational
+        && e->data.function.arg_count == 2
+        && expr_is_integer_like(e->data.function.args[0])
+        && expr_is_integer_like(e->data.function.args[1])) {
+        mpq_t q;
+        mpq_init(q);
+        expr_to_mpz(e->data.function.args[0], mpq_numref(q));
+        expr_to_mpz(e->data.function.args[1], mpq_denref(q));
+        mpq_canonicalize(q);
+#ifdef USE_MPFR
+        if (spec.mode == NUMERIC_MODE_MPFR) {
+            mpfr_t r;
+            mpfr_init2(r, spec.bits);
+            mpfr_set_q(r, q, MPFR_RNDN);
+            mpq_clear(q);
+            return expr_new_mpfr_move(r);
+        }
+        /* Machine mode: a plain double quotient overflows to +/-inf or
+         * underflows to 0 once either component exceeds DBL_MAX (~1.8e308) —
+         * e.g. N[10^400/3] or N[1/10^400]. Mathematica's machine-precision
+         * numbers carry an arbitrary exponent, so fall back to a
+         * machine-precision (DBL_MANT_DIG-bit) MPFR, which is finite and
+         * nonzero for any in-range rational. In-range values keep the IEEE
+         * double so ordinary machine arithmetic is unaffected. */
+        double dq = mpq_get_d(q);
+        if (!isfinite(dq) || (dq == 0.0 && mpq_sgn(q) != 0)) {
+            mpfr_t r;
+            mpfr_init2(r, DBL_MANT_DIG);
+            mpfr_set_q(r, q, MPFR_RNDN);
+            mpq_clear(q);
+            return expr_new_mpfr_move(r);
+        }
+        mpq_clear(q);
+        return leaf_from_double(dq, spec);
+#else
+        double dq = mpq_get_d(q);
+        mpq_clear(q);
+        return leaf_from_double(dq, spec);
+#endif
+    }
+
     /* Complex[re, im] → numericalize components, rebuild via make_complex,
      * which normalizes (im == 0 → return the real component). */
     Expr *re, *im;

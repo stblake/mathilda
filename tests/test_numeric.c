@@ -33,6 +33,25 @@ static void test_n_rational_leaf(void) {
     assert_eval_eq("N[1/7]", "0.142857", 0);
 }
 
+/* Regression: a rational whose numerator or denominator overflows int64 into
+ * a BigInt must still numericalize to a single real leaf, not a frozen
+ * Rational[Real, Real] (e.g. the old bug N[1/10^30] -> 1.0/1.0e+30). */
+static void test_n_big_rational_leaf(void) {
+    assert_eval_eq("N[1/10^30]", "1e-30", 0);
+    assert_eval_eq("N[(-3)/10^30]", "-3e-30", 0);
+    assert_eval_eq("Head[N[1/10^30]]", "Real", 0);
+    /* Out-of-range machine quotient: carried as a machine-precision MPFR
+     * real (arbitrary exponent, ~16 sig figs) so it stays finite and
+     * nonzero, not Rational[Real, Real]. */
+    assert_eval_startswith("N[10^400/3]", "3.333333333333333");
+    assert_eval_startswith("N[1/10^400]", "9.999999999999999e-401");
+    /* In-range BigInt-component quotient: ordinary IEEE double (~6 sig figs). */
+    assert_eval_startswith("N[(7*10^350)/(3*10^300)]", "2.33333e+50");
+    /* Two-argument N computes the quotient at the requested precision. */
+    assert_eval_startswith("N[(7*10^350)/(3*10^300), 30]",
+                           "2.33333333333333333333333333333");
+}
+
 static void test_n_real_leaf(void) {
     /* Already inexact — N is a no-op on value. */
     assert_eval_eq("N[3.14]", "3.14", 0);
@@ -417,6 +436,7 @@ int main(void) {
 
     TEST(test_n_integer_leaf);
     TEST(test_n_rational_leaf);
+    TEST(test_n_big_rational_leaf);
     TEST(test_n_real_leaf);
     TEST(test_n_constants);
     TEST(test_new_constants_identity);

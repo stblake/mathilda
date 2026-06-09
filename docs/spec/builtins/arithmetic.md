@@ -73,6 +73,11 @@ Numerical evaluation.
 - Inexact contagion is unaffected: mixing a machine real with a
   higher-precision value collapses to machine precision
   (`1. + N[Pi, 100]` → `4.14159`), since `MachinePrecision` is the floor.
+- Rationals whose numerator or denominator overflow `int64`/`double` still
+  numericalize to a **single** real, not a frozen `Rational[Real, Real]`
+  (`N[1/10^30]` → `1.e-30`, `N[10^400/3]` → `3.33e+399`). Out-of-range machine
+  results are carried as a machine-precision MPFR real so the arbitrary
+  exponent survives (matching `N[1001!]`).
 
 ```mathematica
 In[1]:= N[Pi, 100] // N
