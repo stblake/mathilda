@@ -218,11 +218,14 @@ void info_init(void) {
         "multiple of Pi^(n+1); even orders stay symbolic. Non-positive integer\n"
         "arguments give ComplexInfinity. Inexact real and complex arguments evaluate\n"
         "numerically at machine or arbitrary (MPFR) precision. PolyGamma[-1, z] gives\n"
-        "the inert LogGamma[z]. Listable.");
+        "LogGamma[z]. Listable.");
     symtab_set_docstring("LogGamma",
         "LogGamma[z]\n"
-        "\tdenotes the log-gamma function log(Gamma(z)). It is inert: it carries no\n"
-        "evaluation rules and is produced by PolyGamma[-1, z]. Listable.");
+        "\tgives the log-gamma function log(Gamma(z)), analytic except for a branch\n"
+        "cut on the negative reals. Exact at integer and half-integer z (with the\n"
+        "negative-axis branch term), divergent (Infinity) at non-positive integers,\n"
+        "and evaluated numerically for real and complex z at machine or arbitrary\n"
+        "(MPFR) precision. D[LogGamma[z], z] is PolyGamma[0, z]. Listable.");
     symtab_set_docstring("Pochhammer",
         "Pochhammer[a, n]\n"
         "\tgives the Pochhammer symbol (a)_n = a (a+1) ... (a+n-1) = Gamma[a+n]/Gamma[a].\n"

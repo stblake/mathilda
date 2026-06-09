@@ -3,7 +3,7 @@
  * Covers canonicalisation to the two-argument form, argument-count errors,
  * special values (poles, infinities), exact closed forms at positive integers
  * (digamma -> rational - EulerGamma; odd polygamma -> rational + rational*Pi^k;
- * even polygamma stays symbolic), the inert LogGamma at order -1, machine and
+ * even polygamma stays symbolic), the LogGamma reduction at order -1, machine and
  * arbitrary-precision (MPFR) real numerics with precision tracking, complex
  * numerics, derivative rules, Listable threading, and attributes. */
 
@@ -126,9 +126,10 @@ void test_polygamma_even_order_symbolic() {
 }
 
 void test_polygamma_loggamma() {
-    /* PolyGamma[-1, z] = LogGamma[z] (inert). */
+    /* PolyGamma[-1, z] = LogGamma[z], which now evaluates: symbolic stays
+     * LogGamma[z], exact integers reduce through LogGamma to Log[(n-1)!]. */
     assert_eval_eq("PolyGamma[-1, z]", "LogGamma[z]", 0);
-    assert_eval_eq("PolyGamma[-1, 5]", "LogGamma[5]", 0);
+    assert_eval_eq("PolyGamma[-1, 5]", "Log[24]", 0);
     /* Orders <= -2 stay symbolic. */
     assert_eval_eq("PolyGamma[-2, z]", "PolyGamma[-2, z]", 0);
 }

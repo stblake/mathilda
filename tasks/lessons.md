@@ -713,3 +713,21 @@ by scoping the costly stage) — and address both. When the user has stated a
 preferred mechanism that you find insufficient, implement it faithfully, then
 present before/after numbers and let them choose the augmentation rather than
 silently overriding.
+
+## Fix the root cause, not a cap (Gamma[201/2] / LogGamma, 2026-06-09)
+
+When an exact path delegates to another builtin (LogGamma's half-integer path
+called `Gamma`, which calls `Factorial`), do NOT assume the delegate is correct
+across the full input range. `Factorial` of a half-integer built the odd double
+factorial and `2^k` denominator in `int64_t` and silently overflowed past
+~`37/2`, so `Gamma[201/2]` returned garbage and LogGamma inherited it.
+
+My first instinct was to *cap* LogGamma's exact path to a "safe" magnitude and
+fall through above it. The user's correction ("We must fix this bug:
+Gamma[201/2]") was right: cap = papering over a real overflow that also breaks
+`Gamma`/`Factorial` directly. The fix was to rebuild the coefficient in GMP
+(`mpz` + `mpz_pair_to_rational_expr`). **Pattern:** if a "safe range" cap is
+hiding a defect in a shared primitive, fix the primitive — a silent-wrong-value
+bug in a building block is worse and more widely felt than the symptom you hit.
+Verify big exact values with folding identities (functional equation,
+reflection) so the test asserts a clean result instead of a giant literal.

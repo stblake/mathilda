@@ -16,6 +16,7 @@
 #include "arithmetic.h"
 #include "numbertheory.h"
 #include "gamma.h"
+#include "loggamma.h"
 #include "polygamma.h"
 #include "pochhammer.h"
 #include "eulergamma.h"
@@ -448,6 +449,7 @@ void core_init(void) {
     facint_init();
     numbertheory_init();
     gamma_init();
+    loggamma_init();
     polygamma_init();
     pochhammer_init();
     eulergamma_init();

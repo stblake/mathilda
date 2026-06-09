@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -72,8 +72,8 @@ Behaviour:
   `Pi^(n+1)`: `PolyGamma[1, 1] = Pi^2/6`, `PolyGamma[3, 1] = Pi^4/15`,
   `PolyGamma[3, 5] = -22369/3456 + Pi^4/15`. For **even** order `n ≥ 1` the value
   involves ζ(odd) and stays symbolic, e.g. `PolyGamma[2, 1]`, `PolyGamma[4, 1]`.
-- **Negative order.** `PolyGamma[-1, z] = LogGamma[z]` (an inert log-gamma
-  symbol; see below). Orders ≤ −2 stay unevaluated.
+- **Negative order.** `PolyGamma[-1, z] = LogGamma[z]` (the log-gamma function;
+  see below). Orders ≤ −2 stay unevaluated.
 - **Numeric.** Inexact real arguments evaluate at machine precision (`Real`) or
   arbitrary precision (`MPFR`, precision tracked from the input):
   `PolyGamma[100.5] = 4.605174…`, `PolyGamma[1, 3.5] = 0.330358…`,
@@ -94,8 +94,30 @@ expansions (only the generic `D`-based Taylor fallback applies).
 
 ### LogGamma
 
-`LogGamma[z]` denotes log Γ(z). It is **inert** — registered (`Listable`,
-`Protected`) with no evaluation rules — and is produced by `PolyGamma[-1, z]`.
+`LogGamma[z]` is the log-gamma function log Γ(z) — the analytic continuation of
+log(Γ(z)) with a single branch cut on the negative real axis (not identical to
+`Log[Gamma[z]]`). It stays finite where `Gamma` overflows, so it is the right
+primitive for factorial ratios and asymptotics.
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+**Features**:
+- **Exact closed forms.** Integers reduce as `LogGamma[n] = Log[(n-1)!]`
+  (`LogGamma[5] = Log[24]`); positive half-integers give `Log` of the exact
+  `Sqrt[Pi]` form; negative half-integers carry the branch term
+  `-Ceiling[-z] Pi I`, e.g. `LogGamma[-3/2] = -2 I Pi + Log[(4 Sqrt[Pi])/3]`.
+- **Poles.** Non-positive integers diverge: `LogGamma[0] = LogGamma[-1] = … =
+  Infinity`.
+- **Symbolic infinities.** `LogGamma[Infinity] = Infinity`,
+  `LogGamma[-Infinity] = Indeterminate`, `LogGamma[I Infinity] =
+  LogGamma[ComplexInfinity] = ComplexInfinity`.
+- **Numerics.** Machine real via `lgamma`; arbitrary-precision real via MPFR
+  `lgamma`; machine complex via a Lanczos log-series; arbitrary-precision
+  complex via a Stirling series with argument reduction (the continuous
+  branch — its imaginary part grows past π where `Log[Gamma]` would wrap).
+  Negative real arguments return the complex value `log|Γ(z)| - Pi Ceiling[-z] I`.
+- **Derivative.** `D[LogGamma[z], z] = PolyGamma[0, z]`; higher derivatives
+  raise the `PolyGamma` order. Produced by `PolyGamma[-1, z]`.
 
 ## Pochhammer
 

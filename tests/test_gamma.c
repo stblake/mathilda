@@ -91,6 +91,13 @@ void test_gamma_half_integers() {
     assert_eval_eq("Table[Gamma[n + 1/2], {n, 5}]",
                    "{1/2 Sqrt[Pi], 3/4 Sqrt[Pi], 15/8 Sqrt[Pi], "
                    "105/16 Sqrt[Pi], 945/32 Sqrt[Pi]}", 0);
+    /* Regression: large half-integers must stay exact (the odd double
+     * factorial and 2^k denominator overflow int64 -- they are built in GMP).
+     * Verified via the functional equation and the reflection formula, both of
+     * which cancel Sqrt[Pi] and fold the giant rationals to a clean result. */
+    assert_eval_eq("Gamma[201/2]/Gamma[199/2]", "199/2", 0);
+    assert_eval_eq("Gamma[41/2]/Gamma[39/2]",   "39/2", 0);
+    assert_eval_eq("Gamma[-41/2] Gamma[43/2]",  "-Pi", 0);
 }
 
 void test_gamma_infinities() {

@@ -92,6 +92,7 @@ set(COMMON_SRC
     ../src/arithmetic.c
     ../src/numbertheory.c
     ../src/gamma.c
+    ../src/loggamma.c
     ../src/polygamma.c
     ../src/pochhammer.c
     ../src/eulergamma.c
@@ -1338,6 +1339,9 @@ target_include_directories(eulere_tests PRIVATE ../src)
 
 add_executable(polylog_tests test_polylog.c ${COMMON_SRC})
 target_include_directories(polylog_tests PRIVATE ../src)
+
+add_executable(loggamma_tests test_loggamma.c ${COMMON_SRC})
+target_include_directories(loggamma_tests PRIVATE ../src)
 
 add_executable(simplify_tests test_simplify.c ${COMMON_SRC})
 target_include_directories(simplify_tests PRIVATE ../src)

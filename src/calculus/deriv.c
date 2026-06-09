@@ -1081,6 +1081,15 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Times", dGdA, dA);
         }
 
+        /* --- LogGamma[A]: d/dA LogGamma[A] = PolyGamma[0, A] (the digamma).
+         * Higher derivatives then raise the PolyGamma order automatically. */
+        if (h == SYM_LogGamma && n == 1) {
+            Expr* A = args[0];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* pg = mk_fn2("PolyGamma", mk_int(0), expr_copy(A));
+            return mk_fn2("Times", pg, dA);
+        }
+
         /* --- Known elementary unary function: F'(g) * D[g, x]. --- */
         if (n == 1) {
             Expr* fp = elementary_fprime(h, args[0]);

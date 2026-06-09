@@ -660,7 +660,6 @@ void polygamma_init(void) {
     symtab_get_def("PolyGamma")->attributes |=
         (ATTR_LISTABLE | ATTR_NUMERICFUNCTION | ATTR_PROTECTED);
 
-    /* PolyGamma[-1, z] emits LogGamma[z]; register it as a recognised,
-     * protected, inert symbol (no builtin / rules) so it at least prints. */
-    symtab_get_def("LogGamma")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
+    /* PolyGamma[-1, z] emits LogGamma[z]; the LogGamma builtin itself is
+     * registered separately by loggamma_init (see loggamma.c). */
 }
