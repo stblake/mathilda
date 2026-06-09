@@ -97,6 +97,56 @@ bool has_non_integer_power(const Expr* e) {
     return false;
 }
 
+/* Collect distinct polynomial "generators" of `e` -- the maximal
+ * subexpressions the polynomial machinery (poly.c collect_variables) treats
+ * as independent indeterminates: non-constant symbols and function kernels
+ * whose head is not Plus/Times. Power[base, integer-exp] descends into base;
+ * any other opaque head (Sin, Cosh, Log, f[...], or a non-integer Power such
+ * as a radical) is itself a generator. Deduplicated by structural equality,
+ * capped at `cap` (stops as soon as the cap is reached). */
+static void collect_generators_capped(const Expr* e, const Expr** gens,
+                                      size_t* n, size_t cap) {
+    if (!e || *n >= cap) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (is_real_constant_symbol(e->data.symbol)) return;
+        for (size_t i = 0; i < *n; i++)
+            if (expr_eq((Expr*)gens[i], (Expr*)e)) return;
+        gens[(*n)++] = e;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;  /* Integer/Real/String: not a generator */
+    const Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL) {
+        const char* h = head->data.symbol;
+        if (h == SYM_Plus || h == SYM_Times) {
+            for (size_t i = 0; i < e->data.function.arg_count && *n < cap; i++)
+                collect_generators_capped(e->data.function.args[i], gens, n, cap);
+            return;
+        }
+        if (h == SYM_Power && e->data.function.arg_count == 2) {
+            const Expr* exp = e->data.function.args[1];
+            if (exp->type == EXPR_INTEGER || exp->type == EXPR_BIGINT) {
+                collect_generators_capped(e->data.function.args[0], gens, n, cap);
+                return;
+            }
+            /* non-integer exponent -> the whole Power is an opaque generator */
+        }
+        if (h == SYM_Rational || h == SYM_Complex) return;  /* numeric literal */
+    }
+    for (size_t i = 0; i < *n; i++)
+        if (expr_eq((Expr*)gens[i], (Expr*)e)) return;
+    gens[(*n)++] = e;
+}
+
+/* Number of distinct polynomial generators of `e`, capped at `cap`. */
+static size_t expr_generator_count_capped(const Expr* e, size_t cap) {
+    const Expr* gens[16];
+    if (cap > 16) cap = 16;
+    size_t n = 0;
+    collect_generators_capped(e, gens, &n, cap);
+    return n;
+}
+
 /* Centralised cheap-precondition gate. Returns false only when the
  * predicate proves the named transform cannot possibly fire on `e` (and
  * `ctx`, where applicable). Conservative: returns true if uncertain.
@@ -124,6 +174,20 @@ bool transform_can_fire(const char* name, const Expr* e,
         strcmp(name, "FactorTerms") == 0 ||
         strcmp(name, "Apart") == 0) {
         if (!contains_variable(e)) return false;
+        /* Multivariate-explosion gate. Factor / Apart (and FactorTerms /
+         * FactorSquareFree, which share the heuristic_factor machinery) run
+         * recursive content / Hensel / variable-specialisation whose cost is
+         * exponential in the number of polynomial generators. With >= 4
+         * generators the result almost never beats the running best, yet it
+         * dominates the run: Simplify of a derivative in Tanh[x/2]/Sech[x/2]
+         * builds a rational in {Sinh[x/2], Cosh[x/2], Sinh[x], Cosh[x], ...}
+         * and these transforms (re-applied at every bottom-up node) were the
+         * bulk of an ~18s call. Genuine wins -- univariate Factor (1
+         * generator), Pythagorean trig identities (2: Sin[x]/Cos[x]),
+         * bi/trivariate polynomials -- are below the threshold and unaffected.
+         * The simpler form, when one exists at this generator count, is still
+         * reached via Together/Cancel/TrigReduce/TrigToExp. */
+        if (expr_generator_count_capped(e, 4) >= 4) return false;
     }
     /* Trig family: skip when there's no trig or hyperbolic head anywhere.
      * The roundtrip composite is gated identically. */

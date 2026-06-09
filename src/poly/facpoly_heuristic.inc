@@ -14,9 +14,48 @@ static Expr* heuristic_factor(Expr* P) {
     if (heuristic_factor_depth >= HEURISTIC_FACTOR_MAX_DEPTH) {
         return expr_copy(P);
     }
+
+    /* Memoize the recursive factorisation. The multivariate paths
+     * (factor_via_z_independent_split in particular) re-factor the *same*
+     * residual sub-polynomial along many different variable-specialisation
+     * branches: a single Simplify of a derivative in Tanh[x/2]/Sech[x/2]
+     * re-entered heuristic_factor 144x on one identical 16-leaf trivariate
+     * poly. builtin_factor caches only its top-level call, so the internal
+     * recursion bypassed the cache entirely. Consulting the active memo
+     * here collapses the combinatorial re-entry.
+     *
+     * The key is wrapped in a private "$HeuristicFactor" head so heuristic
+     * results (which can be less complete than a full builtin_factor run on
+     * the same polynomial, e.g. a multivariate input that needs the
+     * FactorSquareFree pre-pass) never collide with builtin_factor's own raw
+     * keys in the shared memo. Stores are gated to shallow depth so a
+     * depth-cap-truncated result is never cached and served to a shallower
+     * caller. The key borrows P (no deep copy for the lookup); factor_memo_*
+     * deep-copy on store. */
+    FactorMemo* hf_memo = factor_memo_active();
+    Expr* hf_key = NULL;
+    if (hf_memo) {
+        hf_key = expr_new_function(expr_new_symbol("$HeuristicFactor"),
+                                   (Expr*[]){ P }, 1);
+        const Expr* hit = factor_memo_get(hf_memo, hf_key);
+        if (hit) {
+            hf_key->data.function.args[0] = NULL;  /* don't free borrowed P */
+            expr_free(hf_key);
+            return expr_copy((Expr*)hit);
+        }
+    }
+
     heuristic_factor_depth++;
     Expr* r = heuristic_factor_impl(P);
     heuristic_factor_depth--;
+
+    if (hf_key) {
+        if (r && heuristic_factor_depth < HEURISTIC_FACTOR_MAX_DEPTH - 8) {
+            factor_memo_put(hf_memo, hf_key, r);
+        }
+        hf_key->data.function.args[0] = NULL;  /* don't free borrowed P */
+        expr_free(hf_key);
+    }
     return r;
 }
 

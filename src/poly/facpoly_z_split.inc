@@ -75,8 +75,24 @@ static Expr* expr_substitute_var_zero(Expr* P, Expr* var) {
     return result;
 }
 
+/* Nesting depth of the z-independent split.  The exploratory step (line:
+ * `heuristic_factor(P_at_z0)` below) speculatively factors P specialised at
+ * each of v_count variables -- and that speculative factorisation can itself
+ * re-enter z_split, giving an O(v_count!) explosion: a single Simplify of a
+ * derivative in Tanh[x/2]/Sech[x/2] reached v_count=6 and recursed four
+ * levels deep, spending seconds re-specialising. The common, productive case
+ * (peel one z-independent shape factor, then recurse on the smaller residual)
+ * needs only shallow nesting, so cap the *speculative* nesting depth. Beyond
+ * the cap z_split returns NULL and the caller falls through to the other
+ * multivariate paths (Hensel, factor_roots) or returns P unfactored -- a
+ * less-factored result, never an incorrect one. */
+static int z_split_depth = 0;
+#define Z_SPLIT_MAX_DEPTH 2
+
 static Expr* factor_via_z_independent_split(Expr* P, Expr** vars, size_t v_count) {
     if (v_count < 3) return NULL;
+    if (z_split_depth >= Z_SPLIT_MAX_DEPTH) return NULL;
+    z_split_depth++;
 
     /* Try each variable as the "z" specialisation. */
     for (size_t z_idx = 0; z_idx < v_count; z_idx++) {
@@ -170,8 +186,10 @@ static Expr* factor_via_z_independent_split(Expr* P, Expr** vars, size_t v_count
         Expr* result = expr_new_function(expr_new_symbol("Times"),
                                          times_args, total);
         free(times_args);
+        z_split_depth--;
         return eval_and_free(result);
     }
 
+    z_split_depth--;
     return NULL;
 }

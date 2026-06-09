@@ -2294,11 +2294,40 @@ Expr* builtin_polynomialgcd(Expr* res) {
         return NULL;
     }
     
-    Expr* cur_gcd = expr_copy(rems[0]);
-    for (size_t i = 1; i < count; i++) {
-        Expr* next_gcd = poly_gcd_internal(cur_gcd, rems[i], vars, v_count);
-        expr_free(cur_gcd);
-        cur_gcd = next_gcd;
+    /* Multivariate explosion guard. The recursive content/pseudo-remainder
+     * GCD below is exponential in the number of generators: poly_content
+     * recurses one variable smaller for *every* coefficient, and each
+     * exact_poly_div / is_zero_poly re-expands and re-extracts coefficient
+     * lists. With >= 3 generators and large operands this dominates whole
+     * Simplify runs (e.g. TrigReduce of a derivative in Tanh[x/2]/Sech[x/2]
+     * builds a rational over {Sinh[x/2], Cosh[x/2], Cosh[x], ...} and the
+     * final Together spent ~18s here for a result Simplify then discards).
+     *
+     * Skipping the polynomial GCD and keeping only the numeric/monomial
+     * content (numG * common_args) is sound: that content is always a
+     * divisor of the true GCD, so Cancel under-reduces rather than reduces
+     * incorrectly -- the same correctness-preserving pessimism the
+     * pseudo-remainder size_budget in poly_gcd_internal already relies on
+     * (poly.c:1865) and the subresultant-PRS size budget (poly.c:3340).
+     * The leaf budget is generous: genuine small multivariate GCDs (a few
+     * generators, < ~200 leaves) run as before. */
+    bool multivar_gcd_skipped = false;
+    if (v_count >= 3) {
+        int64_t total_leaves = 0;
+        for (size_t i = 0; i < count; i++) total_leaves += subres_leaf_count(rems[i]);
+        if (total_leaves > 200) multivar_gcd_skipped = true;
+    }
+
+    Expr* cur_gcd;
+    if (multivar_gcd_skipped) {
+        cur_gcd = expr_new_integer(1);
+    } else {
+        cur_gcd = expr_copy(rems[0]);
+        for (size_t i = 1; i < count; i++) {
+            Expr* next_gcd = poly_gcd_internal(cur_gcd, rems[i], vars, v_count);
+            expr_free(cur_gcd);
+            cur_gcd = next_gcd;
+        }
     }
     
     size_t final_count = 0;
