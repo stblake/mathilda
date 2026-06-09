@@ -2113,6 +2113,115 @@ static Expr* rewrite_reciprocal_head(Expr* e) {
     return NULL;
 }
 
+/* Taylor coefficient c_k of Zeta about s = 0 (k = 0..3), matching
+ * Series[Zeta[x], {x, 0, 3}]. L = Log[2 Pi]. Returns an owned, evaluated Expr;
+ * StieltjesGamma[k], Zeta[3], EulerGamma, Pi and L stay symbolic. */
+static Expr* series_zeta0_coef(int64_t k) {
+    Expr* L = mk_fn1("Log", mk_times(expr_new_integer(2), mk_symbol("Pi")));
+    switch (k) {
+    case 0:
+        expr_free(L);
+        return make_rational(-1, 2);
+    case 1:
+        /* -1/2 L */
+        return simp(mk_times(make_rational(-1, 2), L));
+    case 2: {
+        /* 1/2 ( 1/2 EulerGamma^2 - 1/24 Pi^2 - 1/2 L^2 + StieltjesGamma[1] ) */
+        Expr* t1 = mk_times(make_rational(1, 2),
+                            mk_power(mk_symbol("EulerGamma"), expr_new_integer(2)));
+        Expr* t2 = mk_times(make_rational(-1, 24),
+                            mk_power(mk_symbol("Pi"), expr_new_integer(2)));
+        Expr* t3 = mk_times(make_rational(-1, 2),
+                            mk_power(expr_copy(L), expr_new_integer(2)));
+        Expr* t4 = mk_fn1("StieltjesGamma", expr_new_integer(1));
+        expr_free(L);
+        Expr* inner = mk_plus(mk_plus(t1, t2), mk_plus(t3, t4));
+        return simp(mk_times(make_rational(1, 2), inner));
+    }
+    case 3: {
+        /* 1/48 ( 8 EG^3 + 12 EG^2 L - Pi^2 L - 4 L^3
+         *        + 24 EG SG1 + 24 L SG1 + 12 SG2 - 8 Zeta[3] ),  EG = EulerGamma. */
+        Expr* a1 = mk_times(expr_new_integer(8),
+                            mk_power(mk_symbol("EulerGamma"), expr_new_integer(3)));
+        Expr* a2 = mk_times(expr_new_integer(12),
+                            mk_times(mk_power(mk_symbol("EulerGamma"), expr_new_integer(2)),
+                                     expr_copy(L)));
+        Expr* a3 = mk_times(expr_new_integer(-1),
+                            mk_times(mk_power(mk_symbol("Pi"), expr_new_integer(2)),
+                                     expr_copy(L)));
+        Expr* a4 = mk_times(expr_new_integer(-4),
+                            mk_power(expr_copy(L), expr_new_integer(3)));
+        Expr* a5 = mk_times(expr_new_integer(24),
+                            mk_times(mk_symbol("EulerGamma"),
+                                     mk_fn1("StieltjesGamma", expr_new_integer(1))));
+        Expr* a6 = mk_times(expr_new_integer(24),
+                            mk_times(expr_copy(L),
+                                     mk_fn1("StieltjesGamma", expr_new_integer(1))));
+        Expr* a7 = mk_times(expr_new_integer(12),
+                            mk_fn1("StieltjesGamma", expr_new_integer(2)));
+        Expr* a8 = mk_times(expr_new_integer(-8),
+                            mk_fn1("Zeta", expr_new_integer(3)));
+        expr_free(L);
+        Expr* sum = mk_plus(mk_plus(mk_plus(a1, a2), mk_plus(a3, a4)),
+                            mk_plus(mk_plus(a5, a6), mk_plus(a7, a8)));
+        return simp(mk_times(make_rational(1, 48), sum));
+    }
+    default:
+        expr_free(L);
+        return expr_new_integer(0);
+    }
+}
+
+/* Custom series for Zeta[x] about x0 = 1 (the Laurent expansion that defines
+ * the Stieltjes constants) and x0 = 0 (low-order Taylor). Returns NULL for any
+ * other expansion point, or for x0 = 0 beyond x^3, deferring to the generic
+ * differentiation path. */
+static SeriesObj* series_zeta_at(SeriesCtx* ctx) {
+    Expr* x  = ctx->x;
+    Expr* x0 = ctx->x0;
+    int64_t order = ctx->order;
+
+    /* x0 = 1:  zeta(s) = 1/(s-1) + Sum_{k>=0} ((-1)^k / k!) gamma_k (s-1)^k,
+     *          gamma_0 = EulerGamma, gamma_k = StieltjesGamma[k] (k >= 1). */
+    if (x0->type == EXPR_INTEGER && x0->data.integer == 1) {
+        SeriesObj* s = so_alloc(x, x0, -1, order, 1);
+        for (size_t i = 0; i < s->coef_count; i++) {
+            int64_t expo = s->nmin + (int64_t)i;     /* -1, 0, 1, ... */
+            Expr* c;
+            if (expo == -1) {
+                c = expr_new_integer(1);
+            } else if (expo == 0) {
+                c = mk_symbol("EulerGamma");
+            } else {
+                /* (-1)^expo / expo! * StieltjesGamma[expo] (Factorial keeps
+                 * the coefficient exact for any order via BigInt). */
+                Expr* sg   = mk_fn1("StieltjesGamma", expr_new_integer(expo));
+                Expr* finv = mk_power(mk_fn1("Factorial", expr_new_integer(expo)),
+                                      expr_new_integer(-1));
+                Expr* sgn  = expr_new_integer((expo % 2 == 0) ? 1 : -1);
+                c = simp(mk_times(sgn, mk_times(finv, sg)));
+            }
+            so_set_coef(s, i, c);
+        }
+        return s;
+    }
+
+    /* x0 = 0:  low-order Taylor with closed-form coefficients (up to x^3).
+     * The cap is on the user-facing target order; padding coefficients beyond
+     * x^3 are zero and get truncated away by the outer Series builtin. */
+    if (is_lit_zero(x0)) {
+        /* target_order is the user n plus 1 (the O-term exponent); n <= 3. */
+        if (ctx->target_order > 4) return NULL;      /* beyond x^3: defer */
+        SeriesObj* s = so_alloc(x, x0, 0, order, 1);
+        for (size_t i = 0; i < s->coef_count; i++) {
+            so_set_coef(s, i, series_zeta0_coef((int64_t)i));
+        }
+        return s;
+    }
+
+    return NULL;
+}
+
 static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
     /* Early out: free of x => constant series. */
     if (expr_free_of(e, ctx->x)) {
@@ -2251,6 +2360,14 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
             SeriesObj* r = so_add(extras, log_rest);
             so_free(extras); so_free(log_rest);
             return r;
+        }
+        /* ---- Zeta[x]: custom expansions about x0 = 1 (Laurent, introducing
+         * the Stieltjes constants) and x0 = 0 (low-order Taylor). ---- */
+        if (head && strcmp(head, "Zeta") == 0 && e->data.function.arg_count == 1 &&
+            expr_eq(e->data.function.args[0], ctx->x)) {
+            SeriesObj* z = series_zeta_at(ctx);
+            if (z) return z;
+            /* unsupported point/order: fall through to generic differentiation */
         }
         /* ---- Reciprocal heads (Sec, Csc, Cot, Sech, Csch, Coth) ---- */
         {

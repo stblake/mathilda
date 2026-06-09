@@ -366,6 +366,8 @@ const char* SYM_While = NULL;
 const char* SYM_With = NULL;
 const char* SYM_WorkingPrecision = NULL;
 const char* SYM_Xor = NULL;
+const char* SYM_StieltjesGamma = NULL;
+const char* SYM_Zeta = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -727,4 +729,6 @@ void sym_names_init(void) {
     SYM_With                       = intern_symbol("With");
     SYM_WorkingPrecision           = intern_symbol("WorkingPrecision");
     SYM_Xor                        = intern_symbol("Xor");
+    SYM_StieltjesGamma             = intern_symbol("StieltjesGamma");
+    SYM_Zeta                       = intern_symbol("Zeta");
 }

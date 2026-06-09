@@ -95,6 +95,8 @@ set(COMMON_SRC
     ../src/polygamma.c
     ../src/pochhammer.c
     ../src/eulergamma.c
+    ../src/zeta.c
+    ../src/stieltjesgamma.c
     ../src/facint.c
     ../src/fibonacci.c
     ../src/lucas.c
@@ -1318,6 +1320,12 @@ target_include_directories(polygamma_tests PRIVATE ../src)
 
 add_executable(pochhammer_tests test_pochhammer.c ${COMMON_SRC})
 target_include_directories(pochhammer_tests PRIVATE ../src)
+
+add_executable(zeta_tests test_zeta.c ${COMMON_SRC})
+target_include_directories(zeta_tests PRIVATE ../src)
+
+add_executable(stieltjesgamma_tests test_stieltjesgamma.c ${COMMON_SRC})
+target_include_directories(stieltjesgamma_tests PRIVATE ../src)
 
 add_executable(simplify_tests test_simplify.c ${COMMON_SRC})
 target_include_directories(simplify_tests PRIVATE ../src)

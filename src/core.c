@@ -19,6 +19,8 @@
 #include "polygamma.h"
 #include "pochhammer.h"
 #include "eulergamma.h"
+#include "zeta.h"
+#include "stieltjesgamma.h"
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
@@ -446,6 +448,8 @@ void core_init(void) {
     polygamma_init();
     pochhammer_init();
     eulergamma_init();
+    zeta_init();
+    stieltjesgamma_init();
     fibonacci_init();
     lucas_init();
 

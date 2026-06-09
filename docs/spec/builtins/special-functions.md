@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma` (with the inert `LogGamma`), the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -220,4 +220,64 @@ equal to `HypergeometricPFQ[{a, b}, {c}, z]`.
 ```mathematica
 In[1]:= Hypergeometric2F1[1, 1, 2, z]
 Out[1]= -Log[1 - z]/z
+```
+
+## Zeta
+
+- `Zeta[s]` — the Riemann zeta function ζ(s) = Σ_{k≥1} k⁻ˢ (Re s > 1; analytic
+  continuation elsewhere).
+- `Zeta[s, a]` — the Hurwitz (generalized) zeta function ζ(s, a) = Σ_{k≥0} (k+a)⁻ˢ.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+- **Exact integer arguments** (via Bernoulli numbers):
+  - Even positive integers are rational multiples of πⁿ:
+    `Zeta[2] = Pi^2/6`, `Zeta[4] = Pi^4/90`, `Zeta[6] = Pi^6/945`.
+  - Negative integers are rational: `Zeta[-1] = -1/12`, `Zeta[-3] = 1/120`;
+    negative even integers are the trivial zeros, `Zeta[-2] = 0`.
+  - `Zeta[0] = -1/2`, and the pole `Zeta[1] = ComplexInfinity`.
+  - Odd positive integers have no closed form and stay symbolic (`Zeta[3]`,
+    `Zeta[5]`). `Zeta[Infinity] = 1`.
+- **Exact Hurwitz at a positive integer `a`.** `Zeta[s, m]` reduces to
+  `Zeta[s] - Σ_{k=1}^{m-1} k⁻ˢ`, valid for symbolic / exact `s`, e.g.
+  `Zeta[3, 2] = -1 + Zeta[3]` and `Zeta[4, 5] = Pi^4/90 - 22369/20736`.
+  `Zeta[s, 1] = Zeta[s]`.
+- **Numerics.** Real one-argument zeta uses MPFR's `mpfr_zeta` (machine or
+  arbitrary precision). All complex inputs, and all two-argument (Hurwitz)
+  inputs, use one Euler–Maclaurin complex-MPFR kernel (Riemann is the `a = 1`
+  case). Precision tracks the input, e.g.
+  `N[Zeta[3], 50] = 1.2020569031595942853997381615114499907649862923405…`,
+  `N[Zeta[5/4], 50] = 4.5951118258429433806853780396946256522810297806048…`,
+  `N[Zeta[1/2 + I/2]] = -0.459303 - 0.961254 I`,
+  `Zeta[-1.5 + I, 2.5 - I] = 0.0184868 + 1.67553 I`.
+- **Derivatives.** `D[Zeta[s, a], a] = -s Zeta[1+s, a]` (the `s`-derivative is the
+  generic `Derivative[1,0][Zeta][s, a]`); `D[Zeta[s], s] = Derivative[1][Zeta][s]`.
+- **Series.** `Series[Zeta[x], {x, 1, n}]` gives the Laurent expansion that
+  defines the Stieltjes constants,
+  `1/(x-1) + EulerGamma - StieltjesGamma[1](x-1) + ½ StieltjesGamma[2](x-1)² + …`,
+  and `Series[Zeta[x], {x, 0, n}]` (n ≤ 3) the Taylor expansion
+  `-1/2 - ½ Log[2 Pi] x + …`. Other expansion points fall back to the generic
+  differentiation path.
+
+```mathematica
+In[1]:= Zeta[2]
+Out[1]= 1/6 Pi^2
+
+In[2]:= Series[Zeta[x], {x, 1, 2}] // Normal
+Out[2]= EulerGamma + 1/(-1 + x) - StieltjesGamma[1] (-1 + x) + 1/2 StieltjesGamma[2] (-1 + x)^2
+```
+
+## StieltjesGamma
+
+`StieltjesGamma[n]` is the n-th Stieltjes constant γₙ, the coefficients of the
+Laurent expansion of `Zeta` about s = 1:
+ζ(s) = 1/(s-1) + Σ_{n≥0} ((-1)ⁿ/n!) γₙ (s-1)ⁿ.
+
+Attributes: `Listable`, `Protected`. It is inert: `StieltjesGamma[0]` reduces to
+`EulerGamma`, and higher indices stay symbolic (they have no elementary closed
+form). It appears in the `Series` expansions of `Zeta`.
+
+```mathematica
+In[1]:= StieltjesGamma[0]
+Out[1]= EulerGamma
 ```

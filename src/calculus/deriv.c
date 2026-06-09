@@ -890,6 +890,61 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- Zeta[S, A] (Hurwitz zeta): chain rule on both args.
+         *   d/dA Zeta[S, A] = -S Zeta[1+S, A]   (elementary)
+         *   d/dS Zeta[S, A] = Derivative[1,0][Zeta][S,A]  (generic; the
+         *               derivative with respect to the order s has no
+         *               elementary closed form).
+         * Zero-derivative arms are dropped, so D[Zeta[s,a],a] keeps only the
+         * dA term, matching Mathematica's -s Zeta[1+s, a]. */
+        if (h == SYM_Zeta && n == 2) {
+            Expr* S = args[0];
+            Expr* A = args[1];
+            Expr* dS = deriv_of(S, x, nonconsts);
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dA)) {
+                /* -S Zeta[1+S, A] * dA */
+                Expr* s1 = mk_fn2("Plus", mk_int(1), expr_copy(S));
+                Expr* z  = mk_fn2("Zeta", s1, expr_copy(A));
+                Expr* dZdA = mk_neg(mk_fn2("Times", expr_copy(S), z));
+                terms[nt++] = mk_fn2("Times", dZdA, dA);
+            } else {
+                expr_free(dA);
+            }
+
+            if (!is_lit_zero(dS)) {
+                /* Derivative[1, 0][Zeta][S, A] * dS */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("Zeta"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(S), expr_copy(A) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dS);
+            } else {
+                expr_free(dS);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
+        /* --- Zeta[S] (one-argument Riemann zeta): d/dS Zeta[S] has no
+         * elementary closed form, so emit Derivative[1][Zeta][S] * D[S, x]. */
+        if (h == SYM_Zeta && n == 1) {
+            Expr* S = args[0];
+            Expr* dS = deriv_of(S, x, nonconsts);
+            if (is_lit_zero(dS)) { expr_free(dS); return mk_int(0); }
+            Expr* op = expr_new_function(mk_sym("Derivative"),
+                          (Expr*[]){ mk_int(1) }, 1);
+            Expr* op_g = mk_fn_head1(op, mk_sym("Zeta"));
+            Expr* applied = expr_new_function(op_g, (Expr*[]){ expr_copy(S) }, 1);
+            return mk_fn2("Times", applied, dS);
+        }
+
         /* --- Gamma[A, Z] (upper incomplete gamma): chain rule on both args.
          *   dGamma/dZ = -Z^(A-1) E^-Z    (elementary)
          *   dGamma/dA = Derivative[1,0][Gamma][A,Z]  (no closed form without

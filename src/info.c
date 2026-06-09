@@ -232,6 +232,22 @@ void info_init(void) {
         "Gamma ratio, reducing exact half-integers to rational multiples of Sqrt[Pi]\n"
         "and tracking machine or arbitrary (MPFR) precision; machine-precision\n"
         "complex arguments evaluate too. Other arguments stay symbolic. Listable.");
+    symtab_set_docstring("Zeta",
+        "Zeta[s]\n"
+        "\tis the Riemann zeta function zeta(s) = Sum_{k>=1} k^-s.\n"
+        "Zeta[s, a]\n"
+        "\tis the Hurwitz zeta function zeta(s, a) = Sum_{k>=0} (k+a)^-s.\n"
+        "Even positive integers give rational multiples of Pi^(2n), negative\n"
+        "integers give rationals, Zeta[0] is -1/2, and Zeta[1] is ComplexInfinity;\n"
+        "odd positive integers stay symbolic. Hurwitz zeta at a positive integer a\n"
+        "reduces to Zeta[s] minus a finite power sum. Real, complex, machine and\n"
+        "arbitrary-precision (MPFR) numeric arguments evaluate numerically via\n"
+        "mpfr_zeta (real Riemann) or an Euler-Maclaurin kernel. Listable.");
+    symtab_set_docstring("StieltjesGamma",
+        "StieltjesGamma[n]\n"
+        "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"
+        "Zeta about s = 1. StieltjesGamma[0] is EulerGamma; higher constants are\n"
+        "inert (they stay symbolic) and appear in Series expansions of Zeta. Listable.");
     symtab_set_docstring("EulerGamma",
         "EulerGamma\n"
         "\tis Euler's constant gamma, with numerical value ~= 0.5772156649.\n"
