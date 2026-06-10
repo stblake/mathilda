@@ -197,6 +197,73 @@ In[4]:= Simplify[a + b, TransformationFunctions -> {(# /. a -> 0 &)}]
 Out[4]= b
 ```
 
+## FullSimplify
+Tries a wider range of transformations than `Simplify`, drawing on a library of
+known elementary- and special-function identities, and returns the simplest form
+it finds.
+
+- `FullSimplify[expr]` — simplify using the relevant function identities.
+- `FullSimplify[expr, assum]` — simplify under the assumptions `assum`.
+
+`FullSimplify` is a wrapper around `Simplify`: it scans `expr` for the function
+heads it contains, gathers the transformation functions registered for those
+heads, and feeds them to `Simplify` via `TransformationFunctions ->
+{Automatic, ...}`. Because `Simplify` only ever keeps a candidate of strictly
+lower complexity, **`FullSimplify` always yields at least as simple a form as
+`Simplify`** but may take longer.
+
+Identities are organised into per-function-family libraries that are loaded
+**only when a matching head appears** in the input, so a request involving no
+special functions costs no more than `Simplify`, and the collection scales to
+many identities without slowing the common case. The first-cut libraries cover
+the gamma family (`Gamma`/`LogGamma`/`PolyGamma` recurrences,
+`Pochhammer`/`Beta`/`Factorial` → `Gamma`), the error functions
+(`Erf[z] + Erfc[z] -> 1`), the dilogarithm (`PolyLog[2, z] + PolyLog[2, -z] ->
+PolyLog[2, z^2]/2`), and real radicals (`Surd[x, n]^n -> x`).
+
+**Options** (in addition to the positional assumption):
+- `ComplexityFunction -> f` — custom complexity measure (forwarded to `Simplify`).
+- `TransformationFunctions -> {f1, ...}` — extra user transforms, merged with the
+  relevance-selected set (`Automatic` is always retained).
+- `TimeConstraint -> {tLoc, tTot}` — at most `tLoc` seconds per individual
+  transformation and `tTot` seconds in total; a bare `t` means `{t, t}` and the
+  default is `Infinity`. On a total timeout the plain-`Simplify` result is
+  returned, preserving the contract above.
+
+`FullSimplify` is implemented in the Mathilda language
+(`src/internal/simp/FullSimplify.m`, loaded at startup) rather than C; see
+[`LoadModule`](file-io.md#loadmodule) for the runtime module-loading mechanism it
+uses. `Protected`.
+
+```mathematica
+In[1]:= FullSimplify[Gamma[x + 1]/Gamma[x]]
+Out[1]= x
+
+In[2]:= FullSimplify[LogGamma[x + 1] - LogGamma[x]]
+Out[2]= Log[x]
+
+In[3]:= FullSimplify[Erf[x] + Erfc[x]]
+Out[3]= 1
+
+In[4]:= FullSimplify[PolyLog[2, z] + PolyLog[2, -z]]
+Out[4]= 1/2 PolyLog[2, z^2]
+
+In[5]:= FullSimplify[Surd[x, 3]^3]
+Out[5]= x
+
+In[6]:= FullSimplify[Pochhammer[a, n]/Gamma[a + n]]
+Out[6]= 1/Gamma[a]
+
+In[7]:= FullSimplify[Gamma[x + 1]/Gamma[x], TimeConstraint -> {1, 5}]
+Out[7]= x
+```
+
+First-cut limitations: the gamma recurrence matches a literal `+1` shift only
+(`Gamma[x + 2]/Gamma[x]` is left unreduced), and an identity over an `Orderless`
+sum must match the whole sum (`a + Erf[x] + Erfc[x]` is not collapsed). The
+identity collection is expected to grow; each family lives in its own file under
+`src/internal/simp/transforms/`.
+
 ## SimplifyCount
 The complexity measure used by `Simplify` when no `ComplexityFunction` option (or
 `ComplexityFunction -> Automatic`) is given.

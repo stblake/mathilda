@@ -207,6 +207,7 @@ set(COMMON_SRC
     ../src/linalg/eigen_banded.c
     ../src/linalg/eigen_feast.c
     ../src/readwrite.c
+    ../src/loadmodule.c
     ../src/files.c
     ../src/iter.c
     ../src/cond.c
@@ -1759,3 +1760,26 @@ else()
     target_link_libraries(powerexpand_tests gmp m)
 endif()
 add_test(NAME powerexpand_tests COMMAND powerexpand_tests)
+
+add_executable(fullsimplify_tests test_fullsimplify.c ${COMMON_SRC})
+target_include_directories(fullsimplify_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(fullsimplify_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(fullsimplify_tests build_ecm)
+else()
+    target_link_libraries(fullsimplify_tests gmp m)
+endif()
+add_test(NAME fullsimplify_tests COMMAND fullsimplify_tests)
+
+# Per-rule corpus: loads tests/fullsimplify_corpus.m and checks
+# FullSimplify[input] == expected for each {input, expected} pair.
+add_executable(fullsimplify_corpus_tests test_fullsimplify_corpus.c ${COMMON_SRC})
+target_include_directories(fullsimplify_corpus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(fullsimplify_corpus_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(fullsimplify_corpus_tests build_ecm)
+else()
+    target_link_libraries(fullsimplify_corpus_tests gmp m)
+endif()
+add_test(NAME fullsimplify_corpus_tests
+         COMMAND fullsimplify_corpus_tests ../fullsimplify_corpus.m)

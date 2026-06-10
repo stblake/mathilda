@@ -12,6 +12,25 @@ Reads a sequence of Mathilda expressions from a file, evaluates each in order, a
 - Used by the REPL bootstrap to load `src/internal/init.m` (and the rules it pulls in).
 - Files conventionally end with `.m`.
 
+## LoadModule
+Loads an internal Mathilda source module, resolving its location independently of
+the current working directory.
+- `LoadModule["relpath"]` — `relpath` is relative to the source tree's
+  `src/internal` directory (e.g. `"simp/FullSimplify.m"`).
+
+**Features**:
+- `Protected`. Returns `True` if the module was located and loaded (or had already
+  been loaded), `False` otherwise.
+- Resolution tries `$MATHILDA_HOME/<relpath>` first, then a relative ladder
+  (`src/internal/`, `../src/internal/`, `../../src/internal/`,
+  `../../../src/internal/`), so it works from the REPL (run at the repo root) and
+  from the test binaries (run from `tests/build/`).
+- Each module is loaded **at most once**, so repeated calls — and the lazy
+  per-family loading used by [`FullSimplify`](simplification.md#fullsimplify) —
+  never re-register rules.
+- Generalises the bespoke fallback previously hard-coded for the CRC integral
+  tables; `Get` (above) shares its file-reading core.
+
 ## Put
 Writes one or more expressions to a file, replacing any prior contents.
 - `expr >> "filename"` — shorthand for `Put[expr, "filename"]`.

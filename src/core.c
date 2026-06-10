@@ -66,6 +66,7 @@
 #include "datetime.h"
 #include "linalg.h"
 #include "readwrite.h"
+#include "loadmodule.h"
 #include "files.h"
 #include "part.h"
 #include "plus.h"
@@ -562,6 +563,7 @@ void core_init(void) {
     svdecomp_init();
     fit_init();
     readwrite_init();
+    loadmodule_init();
     files_init();
     random_init();
     strings_init();
@@ -589,6 +591,28 @@ void core_init(void) {
     hypergeopfq_init();
     void zero_test_init(void);
     zero_test_init();
+
+    /* Eager-load the lightweight FullSimplify driver (definitions + manifest
+     * only; the heavy per-function identity libraries load lazily on demand).
+     * Done last so every builtin it relies on -- Simplify above all -- is
+     * already registered. Resolved working-directory-independently so the
+     * REPL and the CMake test binaries both pick it up. The docstring is set
+     * here (C-side, per project convention); Protected is applied AFTER the
+     * driver defines its DownValues so the .m load is not blocked. */
+    symtab_set_docstring("FullSimplify",
+        "FullSimplify[expr]\n"
+        "\ttries a wide range of transformations on expr involving elementary\n"
+        "\tand special functions and returns the simplest form it finds.\n"
+        "FullSimplify[expr, assum]\n"
+        "\tsimplifies using the assumptions assum.\n"
+        "\n"
+        "FullSimplify yields at least as simple a form as Simplify but may take\n"
+        "substantially longer. Options: ComplexityFunction, TransformationFunc-\n"
+        "tions, and TimeConstraint -> {tLoc, tTot} (per-transform and total\n"
+        "time budgets in seconds).");
+    if (mathilda_load_module("simp/FullSimplify.m")) {
+        symtab_get_def("FullSimplify")->attributes |= ATTR_PROTECTED;
+    }
 }
 
 Expr* builtin_compoundexpression(Expr* res) {

@@ -11,10 +11,9 @@
  */
 
 #include "readwrite.h"
+#include "loadmodule.h"
 #include "expr.h"
 #include "symtab.h"
-#include "parse.h"
-#include "eval.h"
 #include "print.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,52 +26,15 @@ Expr* builtin_get(Expr* res) {
     if (file_arg->type != EXPR_STRING) return NULL;
 
     const char* filename = file_arg->data.string;
-    FILE* fp = fopen(filename, "r");
-    if (!fp) {
+    int opened = 0;
+    Expr* last_eval = mathilda_run_file(filename, &opened);
+    if (!opened) {
         printf("Get::noopen: Cannot open %s.\n", filename);
         return expr_new_symbol("$Failed");
     }
-
-    fseek(fp, 0, SEEK_END);
-    long fsize = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
-
-    if (fsize < 0) {
-        fclose(fp);
-        return expr_new_symbol("$Failed");
-    }
-
-    char* buffer = malloc(fsize + 1);
-    if (!buffer) {
-        fclose(fp);
-        return expr_new_symbol("$Failed");
-    }
-
-    size_t read_len = fread(buffer, 1, fsize, fp);
-    buffer[read_len] = '\0';
-    fclose(fp);
-
-    Expr* last_eval = expr_new_symbol("Null");
-    const char* ptr = buffer;
-
-    while (*ptr != '\0') {
-        Expr* parsed = parse_next_expression(&ptr);
-        if (parsed) {
-            Expr* evaluated = evaluate(parsed);
-            if (evaluated) {
-                expr_free(last_eval);
-                last_eval = evaluated;
-            }
-            expr_free(parsed);
-        } else {
-            /* EOF or unparseable. parse_next_expression returns NULL once
-             * the input pointer reaches '\0'. */
-            break;
-        }
-    }
-
-    free(buffer);
-    return last_eval;
+    /* mathilda_run_file returns Null for an empty file; never NULL when
+     * opened succeeded. */
+    return last_eval ? last_eval : expr_new_symbol("Null");
 }
 
 /* Shared implementation for Put / PutAppend.  `mode` selects fopen
