@@ -115,6 +115,7 @@ extern const char* SYM_DollarMinMachineNumber;
 extern const char* SYM_DollarMinNumber;
 extern const char* SYM_E;
 extern const char* SYM_Eigenvalues;
+extern const char* SYM_Erf;
 extern const char* SYM_Eigenvectors;
 extern const char* SYM_ECM;
 extern const char* SYM_Element;

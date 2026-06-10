@@ -208,6 +208,14 @@ void info_init(void) {
         "and rational multiples of Sqrt[Pi]); non-positive integers give\n"
         "ComplexInfinity. Machine and arbitrary-precision (MPFR) real inputs\n"
         "evaluate numerically, as do machine-precision complex inputs. Listable.");
+    symtab_set_docstring("Erf",
+        "Erf[z]\n"
+        "\tgives the error function erf(z) = (2/Sqrt[Pi]) Integral_0^z e^(-t^2) dt.\n"
+        "Erf[z0, z1]\n"
+        "\tgives the generalized error function erf(z1) - erf(z0).\n"
+        "Erf[0] = 0, Erf[Infinity] = 1, Erf[-Infinity] = -1. An entire function,\n"
+        "odd in z. Real and complex inputs evaluate numerically at machine or\n"
+        "arbitrary (MPFR) precision; D[Erf[z], z] = (2/Sqrt[Pi]) E^(-z^2). Listable.");
     symtab_set_docstring("PolyGamma",
         "PolyGamma[z]\n"
         "\tgives the digamma function psi(z) (rewritten as PolyGamma[0, z]).\n"

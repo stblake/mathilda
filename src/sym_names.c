@@ -109,6 +109,7 @@ const char* SYM_Equal = NULL;
 const char* SYM_EulerGamma = NULL;
 const char* SYM_Evaluate = NULL;
 const char* SYM_EvaluationMonitor = NULL;
+const char* SYM_Erf = NULL;
 const char* SYM_Except = NULL;
 const char* SYM_Exp = NULL;
 const char* SYM_ExtendedGCD = NULL;
@@ -480,6 +481,7 @@ void sym_names_init(void) {
     SYM_EulerGamma                 = intern_symbol("EulerGamma");
     SYM_Evaluate                   = intern_symbol("Evaluate");
     SYM_EvaluationMonitor          = intern_symbol("EvaluationMonitor");
+    SYM_Erf                        = intern_symbol("Erf");
     SYM_Except                     = intern_symbol("Except");
     SYM_Exp                        = intern_symbol("Exp");
     SYM_ExtendedGCD                = intern_symbol("ExtendedGCD");

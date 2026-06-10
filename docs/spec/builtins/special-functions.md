@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -49,6 +49,45 @@ Higher transcendental functions: the gamma function `Gamma`, the digamma/polygam
 - All other arguments (e.g. `Gamma[1/3]`, `Gamma[x]`, `Gamma[a, z]`,
   exact non-integer `Gamma[3/2, z]`, exact complex `Gamma[3/2, I]`) stay
   unevaluated.
+
+## Erf
+
+- `Erf[z]` — the error function erf(z) = (2/√π) ∫₀^z e^(−t²) dt.
+- `Erf[z0, z1]` — the generalized error function erf(z1) − erf(z0).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+`Erf` is an entire function (no branch cuts) and odd in z.
+
+**Features**:
+- Exact special values: `Erf[0] = 0`, `Erf[Infinity] = 1`,
+  `Erf[-Infinity] = -1`, `Erf[I Infinity] = DirectedInfinity[I]`,
+  `Erf[-I Infinity] = DirectedInfinity[-I]`, plus `ComplexInfinity` and
+  `Indeterminate` pass through.
+- Odd symmetry for symbolic arguments: `Erf[-x] = -Erf[x]`,
+  `Erf[-2 x] = -Erf[2 x]`.
+- Numeric evaluation:
+  - Machine-precision real → libm `erf`, e.g. `Erf[0.95] = 0.820891`,
+    `Erf[1.5] = 0.966105`.
+  - Arbitrary precision (MPFR) real → `mpfr_erf`, output precision tracking the
+    input, e.g.
+    `N[Erf[3/2], 50] = 0.96610514647531072706697626164594785868141047925764`
+    and `Erf[0.95`100]`.
+  - **Complex** (machine *and* arbitrary precision) → the cancellation-aware
+    Maclaurin series erf(z) = (2/√π) e^(−z²) Σ 2ⁿ z^(2n+1)/(1·3···(2n+1))
+    (DLMF 7.6.2), evaluated in MPFR with `|z|²/ln2` guard bits so even
+    machine-precision complex results carry full accuracy, e.g.
+    `Erf[1.5 - I] = 1.0784 + 0.0279637 I`,
+    `N[Erf[1/2 + I], 30] = 1.20484755831421800270211268210 + 1.02440088160844588172486045441 I`.
+    A `double complex` series is the fallback for `USE_MPFR=0` builds.
+- The two-argument form `Erf[z0, z1]` reduces to `erf(z1) − erf(z0)` only when
+  both reduce to something concrete, e.g. `Erf[1.5, 2] = 0.0292171`,
+  `Erf[-Infinity, Infinity] = 2`; exact/symbolic pairs such as `Erf[2, 3]` and
+  `Erf[a, b]` stay unevaluated.
+- Derivative: `D[Erf[z], z] = (2/Sqrt[Pi]) E^(−z²)` (chain rule applies), so
+  the origin Taylor series follows from the generic `D`-based fallback, e.g.
+  `Series[Erf[x], {x, 0, 5}]` begins `2/Sqrt[Pi] x − 2/(3 Sqrt[Pi]) x^3 + …`.
+- All other arguments (symbolic `Erf[x]`, exact `Erf[2]`) stay unevaluated.
 
 ## PolyGamma
 
