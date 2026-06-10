@@ -209,6 +209,29 @@ In[3]:= Positive[Sqrt[-2]]
 Out[3]= False
 ```
 
+## Negative
+- `Negative[x]`: `True` if `x` is a negative real number; `False` if `x` is a
+  manifestly non-negative real number (including zero) or a non-real complex
+  number.
+- For non-numeric (`NumericQ`-false) arguments the expression is left
+  unevaluated, so symbolic quantities flow through unchanged.
+- Exact integers, rationals, and bigints are decided exactly; reals (machine and
+  arbitrary-precision MPFR), symbolic constants, and numeric functions are
+  classified by their machine-precision numeric value.
+- Attributes: `Listable`, `Protected` — `Negative` threads element-wise over
+  lists.
+
+```mathematica
+In[1]:= Negative[{1.6, 3/4, Pi, 0, -5, 1 + I, Sin[10^5]}]
+Out[1]= {False, False, False, False, True, False, False}
+
+In[2]:= Negative[{x, Sin[y]}]
+Out[2]= {Negative[x], Negative[Sin[y]]}
+
+In[3]:= Negative[1 - Pi]
+Out[3]= True
+```
+
 ## Identity
 - `Identity[expr]` returns `expr` unchanged. Useful as a default callable in higher-order functions.
 - Attributes: `Protected`.
