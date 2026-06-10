@@ -232,6 +232,29 @@ In[3]:= Negative[1 - Pi]
 Out[3]= True
 ```
 
+## NonNegative
+- `NonNegative[x]`: `True` if `x` is a real number that is positive or zero;
+  `False` if `x` is a manifestly negative real number or a non-real complex
+  number.
+- For non-numeric (`NumericQ`-false) arguments the expression is left
+  unevaluated, so symbolic quantities flow through unchanged.
+- Exact integers, rationals, and bigints are decided exactly; reals (machine and
+  arbitrary-precision MPFR), symbolic constants, and numeric functions are
+  classified by their machine-precision numeric value.
+- Attributes: `Listable`, `Protected` — `NonNegative` threads element-wise over
+  lists.
+
+```mathematica
+In[1]:= NonNegative[{1.6, 3/4, Pi, 0, -5, 1 + I, Sin[10^5]}]
+Out[1]= {True, True, True, True, False, False, True}
+
+In[2]:= NonNegative[{x, Sin[y]}]
+Out[2]= {NonNegative[x], NonNegative[Sin[y]]}
+
+In[3]:= NonNegative[Pi - 3]
+Out[3]= True
+```
+
 ## Identity
 - `Identity[expr]` returns `expr` unchanged. Useful as a default callable in higher-order functions.
 - Attributes: `Protected`.

@@ -1389,6 +1389,12 @@ void info_init(void) {
         "manifestly non-negative real number (including zero) or a non-real\n"
         "complex number. For non-numeric x the expression is left unevaluated.\n"
         "Negative is Listable, so it threads over lists element by element.");
+    symtab_set_docstring("NonNegative",
+        "NonNegative[x]\n"
+        "\tgives True if x is a real number that is positive or zero, and False\n"
+        "if x is a manifestly negative real number or a non-real complex number.\n"
+        "For non-numeric x the expression is left unevaluated. NonNegative is\n"
+        "Listable, so it threads over lists element by element.");
     symtab_set_docstring("IntegerQ",
         "IntegerQ[expr]\n"
         "\tgives True if expr is an Integer or BigInt, False otherwise.\n"
