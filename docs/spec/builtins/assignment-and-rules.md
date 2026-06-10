@@ -5,6 +5,35 @@
 - `lhs := rhs`: `SetDelayed`. Delayed evaluation of `rhs`.
 - `lhs := rhs /; condition`: When the RHS of `SetDelayed` is a `Condition`, it is automatically moved to the LHS pattern. This makes `f[x_] := body /; test` equivalent to `f[x_] /; test := body`.
 
+## Unset (=.)
+
+- `Unset[lhs]` or `lhs =.`: Removes any rule whose left-hand side is `lhs`. A
+  bare symbol clears its `OwnValue`; a function form (`f[args]`) clears the one
+  matching `DownValue` on the head symbol, leaving sibling rules untouched.
+- Rules are removed only when their left-hand sides are identical to `lhs` *up
+  to renaming of bound pattern variables* — so `f[x_] =.` removes a rule defined
+  as `f[y_] := ...`, while `fact[1] =.` leaves the separate `fact[n_]` rule in
+  place.
+
+**Features**:
+- `=.` is a low-precedence postfix operator (precedence 40, like `Set`), so it
+  captures the whole preceding expression: `a b =.` parses as `Unset[a b]`. The
+  guard against a trailing digit keeps `k =.5` parsing as `Set[k, 0.5]`.
+- `Unset` has attributes `{HoldFirst, Protected}`; it holds `lhs`, so the symbol
+  (not its value) is operated on. `Protected`/`Locked` symbols are not affected.
+- Always returns `Null`, whether or not a matching rule was found.
+
+```mathematica
+In[1]:= x = 5; x =.; x
+Out[1]= x
+
+In[2]:= f[x_] := x^2; f[x_] =.; f[3]
+Out[2]= f[3]
+
+In[3]:= fact[1] = 1; fact[n_] := n fact[n - 1]; fact[1] =.; fact[1]
+Out[3]= fact[1]
+```
+
 ## Replace
 Applies a rule or list of rules to transform an expression.
 - `Replace[expr, rules]`: Applies rules to the entire expression.

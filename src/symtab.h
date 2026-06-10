@@ -64,6 +64,13 @@ void symtab_clear_symbol(const char* symbol_name);
 // fresh, empty definition. No-op if the symbol is not present.
 void symtab_remove_symbol(const char* symbol_name);
 
+// Remove the single OwnValue (own_value=true) or DownValue (own_value=false)
+// rule on `symbol_name` whose left-hand side is identical to `lhs` up to
+// renaming of bound pattern variables (alpha-equivalence). Backs Unset /
+// `lhs =.`. Returns true iff a matching rule was found and removed.
+bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
+                                 bool own_value);
+
 // Get definition for a symbol, or create it if it doesn't exist
 SymbolDef* symtab_get_def(const char* symbol_name);
 

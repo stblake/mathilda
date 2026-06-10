@@ -10,6 +10,7 @@
 #include "arithmetic.h"
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define SYMTAB_SIZE 65535
 
@@ -756,6 +757,114 @@ void symtab_remove_symbol(const char* symbol_name) {
         prev = entry;
         entry = entry->next;
     }
+}
+
+/* ============================================================
+ * Unset: remove a single rule by left-hand side
+ *
+ * Mathematica's `lhs =.` (Unset[lhs]) drops the one rule whose LHS is
+ * identical to `lhs` "up to renaming of patterns" -- i.e. up to
+ * alpha-equivalence of the bound pattern variables. `f[x_] =.` therefore
+ * removes a rule defined as `f[y_] := ...`, but `fact[1] =.` leaves the
+ * separate `fact[n_]` rule untouched.
+ *
+ * We compare by alpha-normalizing both the query LHS and each stored rule
+ * LHS: every Pattern variable name is rewritten to a positional placeholder
+ * ($Pat$0, $Pat$1, ...) in first-occurrence order, after which two
+ * alpha-equivalent patterns become structurally equal under expr_eq.
+ * ============================================================ */
+
+#define ALPHA_MAX_VARS 64
+
+/* Collect the distinct Pattern[name, ...] variable names of `p` into
+ * `names`, in first-occurrence (pre-order) order. Names are interned, so
+ * identity comparison suffices for the dedup check. */
+static void alpha_collect_names(const Expr* p, const char** names, int* n) {
+    if (!p || p->type != EXPR_FUNCTION) return;
+    Expr* head = p->data.function.head;
+    if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Pattern
+        && p->data.function.arg_count >= 1
+        && p->data.function.args[0]
+        && p->data.function.args[0]->type == EXPR_SYMBOL) {
+        const char* nm = p->data.function.args[0]->data.symbol;
+        int seen = 0;
+        for (int i = 0; i < *n; i++) if (names[i] == nm) { seen = 1; break; }
+        if (!seen && *n < ALPHA_MAX_VARS) names[(*n)++] = nm;
+    }
+    alpha_collect_names(head, names, n);
+    for (size_t i = 0; i < p->data.function.arg_count; i++)
+        alpha_collect_names(p->data.function.args[i], names, n);
+}
+
+/* In-place rewrite of every symbol of `p` that names a bound pattern
+ * variable (found in `names`) to its positional placeholder. Symbol names
+ * are interned, so we only ever swap the interned pointer -- no allocation
+ * is freed and the placeholder is itself interned for expr_eq identity. */
+static void alpha_rename(Expr* p, const char** names, int n) {
+    if (!p) return;
+    if (p->type == EXPR_SYMBOL) {
+        for (int i = 0; i < n; i++) {
+            if (p->data.symbol == names[i]) {
+                char buf[24];
+                snprintf(buf, sizeof(buf), "$Pat$%d", i);
+                p->data.symbol = (char*)intern_symbol(buf);
+                break;
+            }
+        }
+        return;
+    }
+    if (p->type == EXPR_FUNCTION) {
+        alpha_rename(p->data.function.head, names, n);
+        for (size_t i = 0; i < p->data.function.arg_count; i++)
+            alpha_rename(p->data.function.args[i], names, n);
+    }
+}
+
+/* Return a freshly allocated, alpha-normalized copy of `p`. Caller owns it. */
+static Expr* pattern_alpha_normalize(const Expr* p) {
+    Expr* copy = expr_copy((Expr*)p);
+    const char* names[ALPHA_MAX_VARS];
+    int n = 0;
+    alpha_collect_names(copy, names, &n);
+    alpha_rename(copy, names, n);
+    return copy;
+}
+
+bool symtab_remove_matching_rule(const char* symbol_name, const Expr* lhs,
+                                 bool own_value) {
+    if (!symbol_name || !lhs) return false;
+
+    /* Canonicalize the query LHS the same way add_rule() canonicalized the
+     * stored patterns, then alpha-normalize so renamed pattern variables
+     * still compare equal. */
+    Expr* canon = pattern_canonicalize(expr_copy((Expr*)lhs));
+    Expr* key = pattern_alpha_normalize(canon);
+    expr_free(canon);
+
+    SymbolDef* def = symtab_get_def(symbol_name);
+    Rule** list = own_value ? &def->own_values : &def->down_values;
+
+    Rule* prev = NULL;
+    bool removed = false;
+    for (Rule* curr = *list; curr; prev = curr, curr = curr->next) {
+        Expr* curr_key = pattern_alpha_normalize(curr->pattern);
+        int match = expr_eq(curr_key, key);
+        expr_free(curr_key);
+        if (!match) continue;
+
+        if (prev) prev->next = curr->next;
+        else *list = curr->next;
+        expr_free(curr->pattern);
+        expr_free(curr->replacement);
+        free(curr);
+        /* Removing a rule invalidates cached evaluations that relied on it. */
+        eval_clock_bump();
+        removed = true;
+        break;
+    }
+
+    expr_free(key);
+    return removed;
 }
 
 void symtab_clear(void) {

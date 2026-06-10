@@ -191,6 +191,7 @@ void core_init(void) {
     symtab_add_builtin("Length", builtin_length);
     symtab_add_builtin("Dimensions", builtin_dimensions);
     symtab_add_builtin("Clear", builtin_clear);
+    symtab_add_builtin("Unset", builtin_unset);
     symtab_add_builtin("ClearAll", builtin_clear_all);
     symtab_add_builtin("Remove", builtin_remove);
     symtab_add_builtin("Protect", builtin_protect);
@@ -204,6 +205,7 @@ void core_init(void) {
     symtab_add_builtin("Rest", builtin_rest);
 
     symtab_get_def("Clear")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("Unset")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("ClearAll")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Remove")->attributes |= ATTR_HOLDALL | ATTR_LOCKED | ATTR_PROTECTED;
     symtab_get_def("Protect")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
@@ -597,6 +599,61 @@ Expr* builtin_clear(Expr* res) {
         return expr_new_symbol("Null");
     }
     return NULL;
+}
+
+/* Unset[lhs] / `lhs =.`: remove the single rule whose left-hand side is
+ * `lhs` (up to renaming of bound pattern variables). A bare symbol clears
+ * its OwnValue; a function form clears the matching DownValue on the head
+ * symbol. Unset carries HoldFirst, so `lhs` arrives unevaluated. Always
+ * returns Null, matching Mathematica -- whether or not a rule was found. */
+Expr* builtin_unset(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        return NULL;
+    }
+    Expr* lhs = res->data.function.args[0];
+
+    const char* symbol_name = NULL;
+    bool own_value = false;
+
+    if (lhs->type == EXPR_SYMBOL) {
+        symbol_name = lhs->data.symbol;
+        own_value = true;
+    } else if (lhs->type == EXPR_FUNCTION &&
+               lhs->data.function.head &&
+               lhs->data.function.head->type == EXPR_SYMBOL) {
+        const char* head = lhs->data.function.head->data.symbol;
+        /* `f[x_] /; cond =.` parses to Unset[Condition[f[x_], cond]]; the
+         * stored rule is keyed by the inner head, so resolve through it. */
+        if (head == SYM_Condition && lhs->data.function.arg_count == 2) {
+            Expr* inner = lhs->data.function.args[0];
+            if (inner->type == EXPR_SYMBOL) {
+                symbol_name = inner->data.symbol;
+                own_value = true;
+            } else if (inner->type == EXPR_FUNCTION &&
+                       inner->data.function.head &&
+                       inner->data.function.head->type == EXPR_SYMBOL) {
+                symbol_name = inner->data.function.head->data.symbol;
+            } else {
+                return NULL;
+            }
+        } else {
+            symbol_name = head;
+        }
+    } else {
+        /* e.g. Unset[5] -- not an assignable left-hand side. */
+        return NULL;
+    }
+
+    /* Protected/Locked symbols (every builtin among them) cannot be Unset,
+     * mirroring Set's wrsym guard. */
+    uint32_t attrs = get_attributes(symbol_name);
+    if (attrs & (ATTR_PROTECTED | ATTR_LOCKED)) {
+        fprintf(stderr, "Unset::wrsym: Symbol %s is Protected.\n", symbol_name);
+        return expr_new_symbol("Null");
+    }
+
+    symtab_remove_matching_rule(symbol_name, lhs, own_value);
+    return expr_new_symbol("Null");
 }
 
 /* ============================================================

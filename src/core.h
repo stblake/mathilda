@@ -12,6 +12,7 @@ Expr* builtin_length(Expr* res);
 int64_t leaf_count_internal(Expr* e, bool heads);
 Expr* builtin_dimensions(Expr* res);
 Expr* builtin_clear(Expr* res);
+Expr* builtin_unset(Expr* res);
 Expr* builtin_clear_all(Expr* res);
 Expr* builtin_remove(Expr* res);
 Expr* builtin_protect(Expr* res);

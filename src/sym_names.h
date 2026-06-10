@@ -375,6 +375,7 @@ extern const char* SYM_Unevaluated;
 extern const char* SYM_Unprotect;
 extern const char* SYM_UnitStep;
 extern const char* SYM_UnsameQ;
+extern const char* SYM_Unset;
 extern const char* SYM_UpTo;
 extern const char* SYM_UpperTriangularMatrixQ;
 extern const char* SYM_VandermondeMatrix;

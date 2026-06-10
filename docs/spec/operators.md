@@ -20,5 +20,6 @@
 | `===`    | `SameQ` | 290 | None |
 | `=`      | `Set`   | 40 | Right |
 | `:=`     | `SetDelayed` | 40 | Right |
+| `=.`     | `Unset` (postfix) | 40 | None |
 | `;`      | `CompoundExpression` | 10 | Left |
 

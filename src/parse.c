@@ -693,6 +693,7 @@ typedef enum {
     OP_POWER,
     OP_SET,
     OP_SETDELAYED,
+    OP_UNSET,
     OP_EQUAL,
     OP_UNEQUAL,
     OP_LESS,
@@ -816,6 +817,12 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_PART; def.prec = 1100; def.head_name = "Part"; def.len = 2;
     } else if (*pos == ':') {
         def.type = OP_COLON; def.prec = 140; def.right_assoc = 1; def.head_name = "Optional"; def.len = 1;
+    } else if (strncmp(pos, "=.", 2) == 0 && !isdigit((unsigned char)pos[2])) {
+        /* Unset (postfix `lhs =.`). Guarded against `=.5` etc. (a real
+         * literal on the RHS of Set) by requiring the char after `.` not be
+         * a digit. Low precedence, like Set, so it captures the whole
+         * preceding expression: `a b =.` -> Unset[a b]. */
+        def.type = OP_UNSET; def.prec = 40; def.head_name = "Unset"; def.len = 2;
     } else if (*pos == '=') {
         def.type = OP_SET; def.prec = 40; def.right_assoc = 1; def.head_name = "Set"; def.len = 1;
     } else if (strncmp(pos, "++", 2) == 0) {
@@ -1155,6 +1162,11 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         } else if (op_def.type == OP_DECREMENT) {
             Expr* args[1] = { left };
             left = expr_new_function(expr_new_symbol("Decrement"), args, 1);
+            continue;
+        } else if (op_def.type == OP_UNSET) {
+            /* Postfix `lhs =.` -> Unset[lhs]. */
+            Expr* args[1] = { left };
+            left = expr_new_function(expr_new_symbol("Unset"), args, 1);
             continue;
         } else if (op_def.type == OP_REPEATED) {
             Expr* args[1] = { left };

@@ -360,6 +360,7 @@ const char* SYM_Unevaluated = NULL;
 const char* SYM_Unprotect = NULL;
 const char* SYM_UnitStep = NULL;
 const char* SYM_UnsameQ = NULL;
+const char* SYM_Unset = NULL;
 const char* SYM_UpTo = NULL;
 const char* SYM_UpperTriangularMatrixQ = NULL;
 const char* SYM_VandermondeMatrix = NULL;
@@ -730,6 +731,7 @@ void sym_names_init(void) {
     SYM_Unprotect                  = intern_symbol("Unprotect");
     SYM_UnitStep                   = intern_symbol("UnitStep");
     SYM_UnsameQ                    = intern_symbol("UnsameQ");
+    SYM_Unset                      = intern_symbol("Unset");
     SYM_UpTo                       = intern_symbol("UpTo");
     SYM_UpperTriangularMatrixQ     = intern_symbol("UpperTriangularMatrixQ");
     SYM_VandermondeMatrix          = intern_symbol("VandermondeMatrix");

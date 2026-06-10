@@ -1973,6 +1973,12 @@ void info_init(void) {
         "\tleaving attributes and the symbol itself intact.\n"
         "Clear has attribute HoldAll; Protected symbols are skipped with a\n"
         "diagnostic.");
+    symtab_set_docstring("Unset",
+        "Unset[lhs] or lhs =.\n"
+        "\tremoves any rule whose left-hand side is lhs, up to renaming of\n"
+        "\tpattern variables. A bare symbol clears its value; a function form\n"
+        "\tclears the matching definition on the head symbol.\n"
+        "Unset has attribute HoldFirst; Protected symbols are not affected.");
     symtab_set_docstring("ClearAll",
         "ClearAll[s1, s2, ...]\n"
         "\tclears all values, definitions, attributes and messages for the\n"
