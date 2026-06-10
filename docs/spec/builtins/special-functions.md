@@ -121,6 +121,42 @@ unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
   `Series[Erfc[x], {x, 0, 3}]` begins `1 − 2/Sqrt[Pi] x + …`.
 - All other arguments (symbolic `Erfc[x]`, exact `Erfc[2]`) stay unevaluated.
 
+## InverseErf
+
+- `InverseErf[s]` — the inverse error function: the z solving s = erf(z).
+- `InverseErf[z0, s]` — the inverse of the generalized error function
+  `Erf[z0, z]`, i.e. `InverseErf[s + Erf[z0]]`.
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+`InverseErf` is odd in s and (per Mathematica) produces explicit numerical
+values only for **real** s in `[-1, 1]`; complex and out-of-domain (`|s| > 1`)
+inputs stay symbolic.
+
+**Features**:
+- Exact special values: `InverseErf[0] = 0`, `InverseErf[1] = Infinity`,
+  `InverseErf[-1] = -Infinity` (likewise `InverseErf[1.] = Infinity`), plus
+  `Indeterminate` passes through.
+- Odd symmetry for symbolic arguments: `InverseErf[-x] = -InverseErf[x]`.
+- Numeric evaluation (neither C99 libm nor MPFR ships an inverse-erf, so the
+  kernel is Newton's iteration on `f(z) = erf(z) − s`,
+  `z ← z − (erf(z) − s)(Sqrt[Pi]/2) e^{z²}`):
+  - Machine-precision real → a Winitzki seed polished by Newton on libm `erf`,
+    e.g. `InverseErf[0.6] = 0.595116`, `InverseErf[1/{2.,3.,4.,5.}] =
+    {0.476936, 0.30457, 0.225312, 0.179143}`.
+  - Arbitrary precision (MPFR) real → Newton with precision doubling on
+    `mpfr_erf`, output precision tracking the input, e.g.
+    `N[InverseErf[33/100], 50] = 0.30133214613370582612850271815839477396582428282853`.
+- Two-argument form: `InverseErf[0.4, 0.2] = 0.631776`; if `Erf[z0]` does not
+  reduce the call stays in two-argument form, while a reducible `z0` collapses to
+  the one-argument inverse, e.g. `InverseErf[0, 1.3] = InverseErf[1.3]`.
+- Derivative: `D[InverseErf[z], z] = (Sqrt[Pi]/2) E^(InverseErf[z]²)` (chain rule
+  applies), so the origin Taylor series follows from the generic `D`-based
+  fallback, e.g. `Series[InverseErf[x], {x, 0, 8}] = (Sqrt[Pi]/2) x +
+  (Pi^(3/2)/24) x³ + (7 Pi^(5/2)/960) x⁵ + (127 Pi^(7/2)/80640) x⁷ + O[x]^9`.
+- All other arguments (symbolic `InverseErf[x]`, exact `InverseErf[1/2]`,
+  out-of-domain `InverseErf[2]`) stay unevaluated.
+
 ## PolyGamma
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.

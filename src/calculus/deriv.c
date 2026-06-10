@@ -324,6 +324,14 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_fn2("Times", coeff, gaussian);
     }
 
+    /* --- inverse error function: d/dg InverseErf[g] = (Sqrt[Pi]/2) E^(InverseErf[g]^2). --- */
+    if (!strcmp(name, "InverseErf")) {
+        Expr* coeff = mk_fn2("Times", mk_fn1("Sqrt", mk_sym("Pi")),
+                             mk_fn2("Power", mk_int(2), mk_int(-1)));
+        Expr* sq = mk_fn2("Power", mk_fn1("InverseErf", expr_copy(g)), mk_int(2));
+        return mk_fn2("Times", coeff, mk_fn1("Exp", sq));
+    }
+
     /* --- exp/log and sqrt --- */
     if (!strcmp(name, "Exp")) return mk_fn1("Exp", expr_copy(g));
     if (!strcmp(name, "Log")) return mk_fn2("Power", expr_copy(g), mk_int(-1));

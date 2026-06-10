@@ -223,6 +223,15 @@ void info_init(void) {
         "function. Real inputs evaluate via libm/MPFR erfc (cancellation-free);\n"
         "complex inputs via 1 - erf(z) at machine or arbitrary (MPFR) precision.\n"
         "D[Erfc[z], z] = -(2/Sqrt[Pi]) E^(-z^2). Listable.");
+    symtab_set_docstring("InverseErf",
+        "InverseErf[s]\n"
+        "\tgives the inverse error function: the z solving s = Erf[z].\n"
+        "InverseErf[z0, s]\n"
+        "\tgives the inverse of the generalized error function Erf[z0, z].\n"
+        "InverseErf[0] = 0, InverseErf[1] = Infinity, InverseErf[-1] = -Infinity.\n"
+        "Odd in s. Numerical values are given only for real s in [-1, 1], at\n"
+        "machine or arbitrary (MPFR) precision; D[InverseErf[z], z] =\n"
+        "(Sqrt[Pi]/2) E^(InverseErf[z]^2). Listable.");
     symtab_set_docstring("PolyGamma",
         "PolyGamma[z]\n"
         "\tgives the digamma function psi(z) (rewritten as PolyGamma[0, z]).\n"
