@@ -418,6 +418,7 @@ void core_init(void) {
     symtab_add_builtin("CompoundExpression", builtin_compoundexpression);
     symtab_add_builtin("NumberQ", builtin_numberq);
     symtab_add_builtin("NumericQ", builtin_numericq);
+    symtab_add_builtin("Positive", builtin_positive);
     symtab_add_builtin("IntegerQ", builtin_integerq);
     symtab_add_builtin("EvenQ", builtin_evenq);
     symtab_add_builtin("OddQ", builtin_oddq);
@@ -446,6 +447,7 @@ void core_init(void) {
     symtab_get_def("AtomQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("NumberQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("NumericQ")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Positive")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("IntegerQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("EvenQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("OddQ")->attributes |= ATTR_PROTECTED;
@@ -1718,6 +1720,75 @@ Expr* builtin_numericq(Expr* res) {
         return expr_new_symbol("True");
     }
     return expr_new_symbol("False");
+}
+
+/* Classify a numeric-quantity expression by reality and sign. Returns:
+ *   1  -> arg is real; *sign set to -1, 0, or +1
+ *   0  -> arg numericalizes to a genuinely complex (non-real) value
+ *  -1  -> arg could not be numericalized to a concrete number
+ * Exact integer/rational/real (and MPFR) inputs are read directly; everything
+ * else is numericalized to machine precision, mirroring is_numeric_real() in
+ * complex.c. The caller is expected to have already established that arg is a
+ * numeric quantity via is_numeric_quantity(). */
+static int numeric_real_sign(Expr* arg, int* sign) {
+    int64_t n, d;
+    if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL ||
+        arg->type == EXPR_BIGINT || is_rational(arg, &n, &d)) {
+        *sign = expr_numeric_sign(arg);
+        return 1;
+    }
+#ifdef USE_MPFR
+    if (arg->type == EXPR_MPFR) {
+        *sign = mpfr_zero_p(arg->data.mpfr) ? 0 : mpfr_sgn(arg->data.mpfr);
+        return 1;
+    }
+#endif
+    Expr* approx = numericalize(arg, numeric_machine_spec());
+    if (!approx) return -1;
+    int kind;
+    if (approx->type == EXPR_INTEGER || approx->type == EXPR_REAL ||
+        approx->type == EXPR_BIGINT || is_rational(approx, &n, &d)) {
+        *sign = expr_numeric_sign(approx);
+        kind = 1;
+    }
+#ifdef USE_MPFR
+    else if (approx->type == EXPR_MPFR) {
+        *sign = mpfr_zero_p(approx->data.mpfr) ? 0 : mpfr_sgn(approx->data.mpfr);
+        kind = 1;
+    }
+#endif
+    else {
+        kind = 0;  /* Complex (or otherwise non-real) numeric value. */
+    }
+    expr_free(approx);
+    return kind;
+}
+
+/* Positive[x] gives True when x is a real positive number, False when x is a
+ * manifestly non-positive numeric quantity (negative, zero, or a non-real
+ * complex value). Non-numeric arguments are left unevaluated so symbolic
+ * expressions flow through the evaluator unchanged. Mirrors Wolfram's
+ * Positive. */
+Expr* builtin_positive(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        size_t n = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
+        fprintf(stderr,
+                "Positive::argx: Positive called with %zu argument%s; "
+                "1 argument is expected.\n",
+                n, n == 1 ? "" : "s");
+        return NULL;
+    }
+
+    Expr* arg = res->data.function.args[0];
+
+    /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
+    if (!is_numeric_quantity(arg)) return NULL;
+
+    int sign;
+    int kind = numeric_real_sign(arg, &sign);
+    if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
+    if (kind == 0) return expr_new_symbol("False");  /* non-real complex */
+    return expr_new_symbol(sign > 0 ? "True" : "False");
 }
 
 Expr* builtin_integerq(Expr* res) {

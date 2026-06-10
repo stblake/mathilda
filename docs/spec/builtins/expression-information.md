@@ -187,6 +187,28 @@ Predicates for testing lists and their structures.
 - `EvenQ[n]`: `True` if `n` is an even integer.
 - `OddQ[n]`: `True` if `n` is an odd integer.
 
+## Positive
+- `Positive[x]`: `True` if `x` is a positive real number; `False` if `x` is a
+  manifestly negative real number, a non-real complex number, or zero.
+- For non-numeric (`NumericQ`-false) arguments the expression is left
+  unevaluated, so symbolic quantities flow through unchanged.
+- Exact integers, rationals, and bigints are decided exactly; reals (machine and
+  arbitrary-precision MPFR), symbolic constants, and numeric functions are
+  classified by their machine-precision numeric value.
+- Attributes: `Listable`, `Protected` — `Positive` threads element-wise over
+  lists.
+
+```mathematica
+In[1]:= Positive[{1.6, 3/4, Pi, 0, -5, 1 + I, Sin[10^5]}]
+Out[1]= {True, True, True, False, False, False, True}
+
+In[2]:= Positive[{x, Sin[y]}]
+Out[2]= {Positive[x], Positive[Sin[y]]}
+
+In[3]:= Positive[Sqrt[-2]]
+Out[3]= False
+```
+
 ## Identity
 - `Identity[expr]` returns `expr` unchanged. Useful as a default callable in higher-order functions.
 - Attributes: `Protected`.

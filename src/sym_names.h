@@ -282,6 +282,7 @@ extern const char* SYM_PolyGamma;
 extern const char* SYM_PollardRho;
 extern const char* SYM_PolynomialGCD;
 extern const char* SYM_Polynomials;
+extern const char* SYM_Positive;
 extern const char* SYM_PositiveDefiniteMatrixQ;
 extern const char* SYM_PossibleZeroQ;
 extern const char* SYM_Power;

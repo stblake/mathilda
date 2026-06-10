@@ -1377,6 +1377,12 @@ void info_init(void) {
     symtab_set_docstring("MachineNumberQ",
         "MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.");
     symtab_set_docstring("NumericQ", "NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.\nAn expression is considered a numeric quantity if it is either an explicit number or a mathematical constant such as Pi, or is a function that has attribute NumericFunction and all of whose arguments are numeric quantities.");
+    symtab_set_docstring("Positive",
+        "Positive[x]\n"
+        "\tgives True if x is a positive real number, and False if x is a\n"
+        "manifestly negative real number, a non-real complex number, or zero.\n"
+        "For non-numeric x the expression is left unevaluated. Positive is\n"
+        "Listable, so it threads over lists element by element.");
     symtab_set_docstring("IntegerQ",
         "IntegerQ[expr]\n"
         "\tgives True if expr is an Integer or BigInt, False otherwise.\n"

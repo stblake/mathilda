@@ -267,6 +267,7 @@ const char* SYM_PolyGamma = NULL;
 const char* SYM_PollardRho = NULL;
 const char* SYM_PolynomialGCD = NULL;
 const char* SYM_Polynomials = NULL;
+const char* SYM_Positive = NULL;
 const char* SYM_PositiveDefiniteMatrixQ = NULL;
 const char* SYM_PossibleZeroQ = NULL;
 const char* SYM_Power = NULL;
@@ -643,6 +644,7 @@ void sym_names_init(void) {
     SYM_PollardRho                 = intern_symbol("PollardRho");
     SYM_PolynomialGCD              = intern_symbol("PolynomialGCD");
     SYM_Polynomials                = intern_symbol("Polynomials");
+    SYM_Positive                   = intern_symbol("Positive");
     SYM_PositiveDefiniteMatrixQ    = intern_symbol("PositiveDefiniteMatrixQ");
     SYM_PossibleZeroQ              = intern_symbol("PossibleZeroQ");
     SYM_Power                      = intern_symbol("Power");

@@ -1350,6 +1350,9 @@ target_include_directories(erfc_tests PRIVATE ../src)
 add_executable(erfi_tests test_erfi.c ${COMMON_SRC})
 target_include_directories(erfi_tests PRIVATE ../src)
 
+add_executable(positive_tests test_positive.c ${COMMON_SRC})
+target_include_directories(positive_tests PRIVATE ../src)
+
 add_executable(inverf_tests test_inverf.c ${COMMON_SRC})
 target_include_directories(inverf_tests PRIVATE ../src)
 

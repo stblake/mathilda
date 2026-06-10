@@ -31,6 +31,7 @@ Expr* builtin_composition(Expr* res);
 Expr* builtin_compose_list(Expr* res);
 Expr* builtin_numberq(Expr* res);
 Expr* builtin_numericq(Expr* res);
+Expr* builtin_positive(Expr* res);
 Expr* builtin_integerq(Expr* res);
 Expr* builtin_evenq(Expr* res);
 Expr* builtin_oddq(Expr* res);
