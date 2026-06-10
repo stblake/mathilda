@@ -17,6 +17,7 @@
 #include "numbertheory.h"
 #include "gamma.h"
 #include "erf.h"
+#include "erfc.h"
 #include "loggamma.h"
 #include "polygamma.h"
 #include "pochhammer.h"
@@ -461,6 +462,7 @@ void core_init(void) {
     numbertheory_init();
     gamma_init();
     erf_init();
+    erfc_init();
     loggamma_init();
     polygamma_init();
     pochhammer_init();

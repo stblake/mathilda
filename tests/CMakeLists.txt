@@ -94,6 +94,7 @@ set(COMMON_SRC
     ../src/numbertheory.c
     ../src/special_functions/gamma.c
     ../src/special_functions/erf.c
+    ../src/special_functions/erfc.c
     ../src/special_functions/loggamma.c
     ../src/special_functions/polygamma.c
     ../src/special_functions/pochhammer.c
@@ -1339,6 +1340,9 @@ target_include_directories(gamma_tests PRIVATE ../src)
 
 add_executable(erf_tests test_erf.c ${COMMON_SRC})
 target_include_directories(erf_tests PRIVATE ../src)
+
+add_executable(erfc_tests test_erfc.c ${COMMON_SRC})
+target_include_directories(erfc_tests PRIVATE ../src)
 
 add_executable(polygamma_tests test_polygamma.c ${COMMON_SRC})
 target_include_directories(polygamma_tests PRIVATE ../src)

@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf` and its complement `Erfc`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -88,6 +88,38 @@ Higher transcendental functions: the gamma function `Gamma`, the error function 
   the origin Taylor series follows from the generic `D`-based fallback, e.g.
   `Series[Erf[x], {x, 0, 5}]` begins `2/Sqrt[Pi] x − 2/(3 Sqrt[Pi]) x^3 + …`.
 - All other arguments (symbolic `Erf[x]`, exact `Erf[2]`) stay unevaluated.
+
+## Erfc
+
+- `Erfc[z]` — the complementary error function erfc(z) = 1 − erf(z).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+`Erfc` is an entire function. Unlike `Erf` it is not odd, so `Erfc[-x]` is left
+unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
+
+**Features**:
+- Exact special values: `Erfc[0] = 1`, `Erfc[Infinity] = 0`,
+  `Erfc[-Infinity] = 2`, `Erfc[I Infinity] = DirectedInfinity[-I]`,
+  `Erfc[-I Infinity] = DirectedInfinity[I]` (negated relative to `Erf`), plus
+  `ComplexInfinity` and `Indeterminate` pass through.
+- Numeric evaluation:
+  - Machine-precision real → libm `erfc`, e.g. `Erfc[0.95] = 0.179109`,
+    `Erfc[1.5] = 0.0338949`.
+  - Arbitrary precision (MPFR) real → `mpfr_erfc`, which is cancellation-free
+    even for large positive z (where `1 − erf(z)` would lose all significance),
+    output precision tracking the input, e.g.
+    `N[Erfc[3/2], 50] = 0.033894853524689272933023738354052141318589520742363`.
+  - **Complex** (machine *and* arbitrary precision) → `1 − erf(z)`, with erf(z)
+    from the cancellation-aware DLMF 7.6.2 series evaluated in MPFR; the
+    complement is formed at working precision (with `|z|²/ln2` guard bits) before
+    rounding, so even machine-precision complex results carry full accuracy, e.g.
+    `Erfc[1.5 - I] = -0.0783992 - 0.0279637 I`. A `double complex` series is the
+    fallback for `USE_MPFR=0` builds.
+- Derivative: `D[Erfc[z], z] = -(2/Sqrt[Pi]) E^(−z²)` (chain rule applies), so
+  the origin Taylor series follows from the generic `D`-based fallback, e.g.
+  `Series[Erfc[x], {x, 0, 3}]` begins `1 − 2/Sqrt[Pi] x + …`.
+- All other arguments (symbolic `Erfc[x]`, exact `Erfc[2]`) stay unevaluated.
 
 ## PolyGamma
 

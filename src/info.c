@@ -216,6 +216,13 @@ void info_init(void) {
         "Erf[0] = 0, Erf[Infinity] = 1, Erf[-Infinity] = -1. An entire function,\n"
         "odd in z. Real and complex inputs evaluate numerically at machine or\n"
         "arbitrary (MPFR) precision; D[Erf[z], z] = (2/Sqrt[Pi]) E^(-z^2). Listable.");
+    symtab_set_docstring("Erfc",
+        "Erfc[z]\n"
+        "\tgives the complementary error function erfc(z) = 1 - erf(z).\n"
+        "Erfc[0] = 1, Erfc[Infinity] = 0, Erfc[-Infinity] = 2. An entire\n"
+        "function. Real inputs evaluate via libm/MPFR erfc (cancellation-free);\n"
+        "complex inputs via 1 - erf(z) at machine or arbitrary (MPFR) precision.\n"
+        "D[Erfc[z], z] = -(2/Sqrt[Pi]) E^(-z^2). Listable.");
     symtab_set_docstring("PolyGamma",
         "PolyGamma[z]\n"
         "\tgives the digamma function psi(z) (rewritten as PolyGamma[0, z]).\n"
