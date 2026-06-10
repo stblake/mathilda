@@ -95,6 +95,7 @@ set(COMMON_SRC
     ../src/special_functions/gamma.c
     ../src/special_functions/erf.c
     ../src/special_functions/erfc.c
+    ../src/special_functions/erfi.c
     ../src/special_functions/inverf.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
@@ -1345,6 +1346,9 @@ target_include_directories(erf_tests PRIVATE ../src)
 
 add_executable(erfc_tests test_erfc.c ${COMMON_SRC})
 target_include_directories(erfc_tests PRIVATE ../src)
+
+add_executable(erfi_tests test_erfi.c ${COMMON_SRC})
+target_include_directories(erfi_tests PRIVATE ../src)
 
 add_executable(inverf_tests test_inverf.c ${COMMON_SRC})
 target_include_directories(inverf_tests PRIVATE ../src)

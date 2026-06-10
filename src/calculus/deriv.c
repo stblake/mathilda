@@ -315,6 +315,15 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_fn2("Times", coeff, gaussian);
     }
 
+    /* --- imaginary error function: d/dg Erfi[g] = (2/Sqrt[Pi]) E^(g^2). --- */
+    if (!strcmp(name, "Erfi")) {
+        Expr* coeff = mk_fn2("Times", mk_int(2),
+                             mk_fn2("Power", mk_fn1("Sqrt", mk_sym("Pi")), mk_int(-1)));
+        Expr* gaussian = mk_fn1("Exp",
+                             mk_fn2("Power", expr_copy(g), mk_int(2)));
+        return mk_fn2("Times", coeff, gaussian);
+    }
+
     /* --- complementary error function: d/dg Erfc[g] = -(2/Sqrt[Pi]) E^(-g^2). --- */
     if (!strcmp(name, "Erfc")) {
         Expr* coeff = mk_fn2("Times", mk_int(-2),

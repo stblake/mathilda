@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf` and its complement `Erfc`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
 
 ## Gamma
 
@@ -120,6 +120,43 @@ unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
   the origin Taylor series follows from the generic `D`-based fallback, e.g.
   `Series[Erfc[x], {x, 0, 3}]` begins `1 − 2/Sqrt[Pi] x + …`.
 - All other arguments (symbolic `Erfc[x]`, exact `Erfc[2]`) stay unevaluated.
+
+## Erfi
+
+- `Erfi[z]` — the imaginary error function erfi(z) = erf(i z)/i
+  = (2/√π) ∫₀^z e^(t²) dt.
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+`Erfi` is an entire function (no branch cuts) and odd in z.
+
+**Features**:
+- Exact special values: `Erfi[0] = 0`, `Erfi[Infinity] = Infinity`,
+  `Erfi[-Infinity] = -Infinity`. The imaginary-axis limits are **finite** (unlike
+  `Erf`): `Erfi[I Infinity] = I`, `Erfi[-I Infinity] = -I`, since
+  erfi(i y) = -i·erf(-y) → i as y → ∞. `ComplexInfinity` and `Indeterminate`
+  pass through.
+- Odd symmetry for symbolic arguments: `Erfi[-x] = -Erfi[x]`,
+  `Erfi[-2 x] = -Erfi[2 x]`.
+- Numeric evaluation (there is no libm/MPFR `erfi`, so the kernels are
+  hand-rolled):
+  - Real (machine *and* arbitrary precision) → the all-positive Maclaurin series
+    erfi(x) = (2/√π) Σ x^(2n+1)/(n!(2n+1)). For real x every term shares x's
+    sign, so the partial sums climb monotonically to the result — no
+    cancellation, no e^(x²) prefactor — evaluated in MPFR with output precision
+    tracking the input, e.g. `Erfi[2.5] = 130.396`, `Erfi[0.5] = 0.614952`,
+    `N[Erfi[1/2], 50] = 0.61495209469651098083968118562364139305134561789540`.
+  - **Complex** (machine *and* arbitrary precision) → erfi(z) = -i erf(i z),
+    reusing the cancellation-aware erf series (DLMF 7.6.2) in MPFR with
+    `|z|²/ln2` guard bits, so even machine-precision complex results carry full
+    accuracy, e.g. `Erfi[1.5 - I] = -0.70136 - 1.84683 I`,
+    `N[Erfi[1/2 + I], 30] = 0.187973467223383313628263810077 + 0.950709728318957173804611826379 I`.
+    A `double complex` series is the fallback for `USE_MPFR=0` builds.
+- Derivative: `D[Erfi[z], z] = (2/Sqrt[Pi]) E^(z^2)` (positive exponent, vs
+  `Erf`'s E^(−z²); chain rule applies), so the origin Taylor series follows from
+  the generic `D`-based fallback, e.g. `Series[Erfi[x], {x, 0, 7}]` begins
+  `2/Sqrt[Pi] x + 2/(3 Sqrt[Pi]) x^3 + …`.
+- All other arguments (symbolic `Erfi[x]`, exact `Erfi[2]`) stay unevaluated.
 
 ## InverseErf
 

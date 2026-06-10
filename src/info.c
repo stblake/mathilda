@@ -223,6 +223,14 @@ void info_init(void) {
         "function. Real inputs evaluate via libm/MPFR erfc (cancellation-free);\n"
         "complex inputs via 1 - erf(z) at machine or arbitrary (MPFR) precision.\n"
         "D[Erfc[z], z] = -(2/Sqrt[Pi]) E^(-z^2). Listable.");
+    symtab_set_docstring("Erfi",
+        "Erfi[z]\n"
+        "\tgives the imaginary error function erfi(z) = -I Erf[I z]\n"
+        "\t= (2/Sqrt[Pi]) Integral_0^z e^(t^2) dt.\n"
+        "Erfi[0] = 0, Erfi[Infinity] = Infinity, Erfi[I Infinity] = I. An entire\n"
+        "function, odd in z. Real and complex inputs evaluate numerically at\n"
+        "machine or arbitrary (MPFR) precision; D[Erfi[z], z] = (2/Sqrt[Pi]) E^(z^2).\n"
+        "Listable.");
     symtab_set_docstring("InverseErf",
         "InverseErf[s]\n"
         "\tgives the inverse error function: the z solving s = Erf[z].\n"

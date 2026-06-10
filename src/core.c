@@ -18,6 +18,7 @@
 #include "gamma.h"
 #include "erf.h"
 #include "erfc.h"
+#include "erfi.h"
 #include "inverf.h"
 #include "inverfc.h"
 #include "loggamma.h"
@@ -465,6 +466,7 @@ void core_init(void) {
     gamma_init();
     erf_init();
     erfc_init();
+    erfi_init();
     inverf_init();
     inverfc_init();
     loggamma_init();
