@@ -241,6 +241,7 @@ const char* SYM_NHoldRest = NULL;
 const char* SYM_RealExponent = NULL;
 const char* SYM_Negative = NULL;
 const char* SYM_NonNegative = NULL;
+const char* SYM_NonPositive = NULL;
 const char* SYM_NegativeDefiniteMatrixQ = NULL;
 const char* SYM_NonConstants = NULL;
 const char* SYM_None = NULL;
@@ -620,6 +621,7 @@ void sym_names_init(void) {
     SYM_RealExponent               = intern_symbol("RealExponent");
     SYM_Negative                   = intern_symbol("Negative");
     SYM_NonNegative                = intern_symbol("NonNegative");
+    SYM_NonPositive                = intern_symbol("NonPositive");
     SYM_NegativeDefiniteMatrixQ    = intern_symbol("NegativeDefiniteMatrixQ");
     SYM_NonConstants               = intern_symbol("NonConstants");
     SYM_None                       = intern_symbol("None");

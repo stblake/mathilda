@@ -34,6 +34,7 @@ Expr* builtin_numericq(Expr* res);
 Expr* builtin_positive(Expr* res);
 Expr* builtin_negative(Expr* res);
 Expr* builtin_nonnegative(Expr* res);
+Expr* builtin_nonpositive(Expr* res);
 Expr* builtin_integerq(Expr* res);
 Expr* builtin_evenq(Expr* res);
 Expr* builtin_oddq(Expr* res);

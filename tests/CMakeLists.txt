@@ -1359,6 +1359,9 @@ target_include_directories(negative_tests PRIVATE ../src)
 add_executable(nonnegative_tests test_nonnegative.c ${COMMON_SRC})
 target_include_directories(nonnegative_tests PRIVATE ../src)
 
+add_executable(nonpositive_tests test_nonpositive.c ${COMMON_SRC})
+target_include_directories(nonpositive_tests PRIVATE ../src)
+
 add_executable(inverf_tests test_inverf.c ${COMMON_SRC})
 target_include_directories(inverf_tests PRIVATE ../src)
 

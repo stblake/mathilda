@@ -421,6 +421,7 @@ void core_init(void) {
     symtab_add_builtin("Positive", builtin_positive);
     symtab_add_builtin("Negative", builtin_negative);
     symtab_add_builtin("NonNegative", builtin_nonnegative);
+    symtab_add_builtin("NonPositive", builtin_nonpositive);
     symtab_add_builtin("IntegerQ", builtin_integerq);
     symtab_add_builtin("EvenQ", builtin_evenq);
     symtab_add_builtin("OddQ", builtin_oddq);
@@ -452,6 +453,7 @@ void core_init(void) {
     symtab_get_def("Positive")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("Negative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("NonNegative")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
+    symtab_get_def("NonPositive")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
     symtab_get_def("IntegerQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("EvenQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("OddQ")->attributes |= ATTR_PROTECTED;
@@ -1840,6 +1842,31 @@ Expr* builtin_nonnegative(Expr* res) {
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
     if (kind == 0) return expr_new_symbol("False");  /* non-real complex */
     return expr_new_symbol(sign >= 0 ? "True" : "False");
+}
+
+/* NonPositive[x] gives True when x is a real number that is negative or zero,
+ * False when x is a manifestly positive real or a non-real complex value.
+ * Non-numeric arguments are left unevaluated. Mirrors Wolfram's NonPositive. */
+Expr* builtin_nonpositive(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
+        size_t n = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
+        fprintf(stderr,
+                "NonPositive::argx: NonPositive called with %zu argument%s; "
+                "1 argument is expected.\n",
+                n, n == 1 ? "" : "s");
+        return NULL;
+    }
+
+    Expr* arg = res->data.function.args[0];
+
+    /* Only decide for numeric quantities; symbolic arguments stay unevaluated. */
+    if (!is_numeric_quantity(arg)) return NULL;
+
+    int sign;
+    int kind = numeric_real_sign(arg, &sign);
+    if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
+    if (kind == 0) return expr_new_symbol("False");  /* non-real complex */
+    return expr_new_symbol(sign <= 0 ? "True" : "False");
 }
 
 Expr* builtin_integerq(Expr* res) {
