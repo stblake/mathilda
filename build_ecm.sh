@@ -20,8 +20,46 @@ fi
 
 cd src/external/ecm
 
+# Generate ECM's build system (configure, Makefile.in, libtool, ...) if it is
+# not already present.  This is the ONLY step in the entire ECM build that
+# needs Perl: autoreconf drives autoconf/automake/libtoolize, which are Perl
+# programs.  Everything afterwards -- the generated `configure` script, libtool,
+# and `make` -- is pure POSIX shell / m4 and needs no Perl.
+#
+# Therefore, if a pre-generated `configure` is already shipped (e.g. copied from
+# a machine where this build has succeeded, or unpacked from a GMP-ECM release
+# tarball), the whole ECM build runs Perl-free and this block is skipped.
 if [ ! -f configure ]; then
-    autoreconf -i
+    # `autoreconf` may be installed but non-functional -- the classic symptom is
+    # a stale `#!/usr/bin/perlX.Y` shebang pointing at a Perl that no longer
+    # exists, which makes the kernel reject it with "bad interpreter" (exit 126).
+    # Probe it for real (not just `command -v`) so we can fail with an
+    # actionable message instead of that cryptic error.
+    if autoreconf --version >/dev/null 2>&1; then
+        autoreconf -i
+    else
+        echo "build_ecm.sh: ERROR: ECM's 'configure' is missing and 'autoreconf'" >&2
+        echo "  is unavailable or non-functional (it requires Perl + the GNU" >&2
+        echo "  autotools, and one of those is broken on this machine)." >&2
+        echo >&2
+        echo "  Perl is only needed for this one-time bootstrap that generates" >&2
+        echo "  'configure'.  The rest of the ECM build is Perl-free, so you have" >&2
+        echo "  two options:" >&2
+        echo >&2
+        echo "    1. Copy a pre-generated build system into src/external/ecm/" >&2
+        echo "       from a machine where 'make' has already succeeded -- at" >&2
+        echo "       minimum 'configure', plus 'config.h.in', 'aclocal.m4', the" >&2
+        echo "       'Makefile.in' files, the build-aux scripts (compile," >&2
+        echo "       config.guess, config.sub, depcomp, install-sh, ltmain.sh," >&2
+        echo "       missing, test-driver) and 'm4/lt*.m4'.  Then re-run 'make'." >&2
+        echo >&2
+        echo "    2. Install a working Perl plus autoconf, automake and libtool" >&2
+        echo "       (e.g. 'brew install autoconf automake libtool', or your" >&2
+        echo "       distro's package manager), then re-run 'make'." >&2
+        echo >&2
+        echo "  Alternatively, build Mathilda without ECM:  make USE_ECM=0" >&2
+        exit 1
+    fi
 fi
 
 # Fix endian functions on macOS
