@@ -58,6 +58,12 @@ void symtab_clear(void);
 // Clear own_values and down_values for a specific symbol
 void symtab_clear_symbol(const char* symbol_name);
 
+// Remove a symbol entirely: free its definition (values, attributes,
+// docstring) and unlink it from the table. The interned name itself is
+// owned by sym_intern and is NOT freed, so a later reference recreates a
+// fresh, empty definition. No-op if the symbol is not present.
+void symtab_remove_symbol(const char* symbol_name);
+
 // Get definition for a symbol, or create it if it doesn't exist
 SymbolDef* symtab_get_def(const char* symbol_name);
 

@@ -1973,6 +1973,28 @@ void info_init(void) {
         "\tleaving attributes and the symbol itself intact.\n"
         "Clear has attribute HoldAll; Protected symbols are skipped with a\n"
         "diagnostic.");
+    symtab_set_docstring("ClearAll",
+        "ClearAll[s1, s2, ...]\n"
+        "\tclears all values, definitions, attributes and messages for the\n"
+        "\tnamed symbols. ClearAll[{s1, s2, ...}] accepts a list of specs.\n"
+        "ClearAll has attribute HoldAll; symbols with attribute Locked or\n"
+        "Protected are not affected.");
+    symtab_set_docstring("Remove",
+        "Remove[s1, s2, ...]\n"
+        "\tremoves the named symbols completely, deleting their definitions\n"
+        "\tfrom the symbol table. Remove[{s1, s2, ...}] accepts a list of specs.\n"
+        "Remove has attribute HoldAll; symbols with attribute Locked or\n"
+        "Protected are not affected.");
+    symtab_set_docstring("Protect",
+        "Protect[s1, s2, ...]\n"
+        "\tsets the attribute Protected for the named symbols and returns the\n"
+        "\tlist of their names. Protect[{s1, s2, ...}] accepts a list of specs.\n"
+        "Protect has attribute HoldAll; Locked symbols are not affected.");
+    symtab_set_docstring("Unprotect",
+        "Unprotect[s1, s2, ...]\n"
+        "\tremoves the attribute Protected from the named symbols and returns\n"
+        "\tthe list of their names. Unprotect[{s1, ...}] accepts a list of specs.\n"
+        "Unprotect has attribute HoldAll; Locked symbols are not affected.");
     symtab_set_docstring("Flat", "Flat is an attribute that can be assigned to a symbol f to indicate that all expressions involving nested functions f should be flattened out. This property is accounted for in pattern matching.");
     symtab_set_docstring("Orderless", "Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e_i in expressions of the form f[e_1, e_2, ...] should automatically be sorted into canonical order. This property is accounted for in pattern matching.");
     symtab_set_docstring("OneIdentity", "OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.");

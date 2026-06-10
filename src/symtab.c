@@ -717,6 +717,47 @@ void symtab_clear_symbol(const char* symbol_name) {
     def->down_values = NULL;
 }
 
+void symtab_remove_symbol(const char* symbol_name) {
+    const char* canon = intern_symbol(symbol_name);
+    unsigned int idx = hash(canon);
+    SymEntry* entry = symtab[idx];
+    SymEntry* prev = NULL;
+    while (entry) {
+        if (entry->def->symbol_name == canon) {
+            /* Removing the definition invalidates any cached evaluation
+             * that referenced this symbol's rules. */
+            eval_clock_bump();
+
+            Rule* curr = entry->def->own_values;
+            while (curr) {
+                Rule* next = curr->next;
+                expr_free(curr->pattern);
+                expr_free(curr->replacement);
+                free(curr);
+                curr = next;
+            }
+            curr = entry->def->down_values;
+            while (curr) {
+                Rule* next = curr->next;
+                expr_free(curr->pattern);
+                expr_free(curr->replacement);
+                free(curr);
+                curr = next;
+            }
+            if (entry->def->docstring) free(entry->def->docstring);
+            /* symbol_name is interned and owned by sym_intern; do not free. */
+            free(entry->def);
+
+            if (prev) prev->next = entry->next;
+            else symtab[idx] = entry->next;
+            free(entry);
+            return;
+        }
+        prev = entry;
+        entry = entry->next;
+    }
+}
+
 void symtab_clear(void) {
     for (int i = 0; i < SYMTAB_SIZE; i++) {
         SymEntry* entry = symtab[i];

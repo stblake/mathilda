@@ -331,6 +331,9 @@ target_include_directories(core_tests PRIVATE ../src)
 add_executable(chop_tests test_chop.c ${COMMON_SRC})
 target_include_directories(chop_tests PRIVATE ../src)
 
+add_executable(clearall_remove_protect_tests test_clearall_remove_protect.c ${COMMON_SRC})
+target_include_directories(clearall_remove_protect_tests PRIVATE ../src)
+
 add_executable(clip_tests test_clip.c ${COMMON_SRC})
 target_include_directories(clip_tests PRIVATE ../src)
 

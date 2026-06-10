@@ -159,3 +159,59 @@ Out[4]= {"OK", "OK", h[], f[]}
 ## CompoundExpression (;)
 - `expr1; expr2; ...`: Evaluates a sequence of expressions, returning the last one.
 
+## ClearAll, Remove
+
+- `ClearAll[s1, s2, ...]`: Clears all values (OwnValues and DownValues),
+  attributes and usage messages for the named symbols, leaving the symbols
+  themselves in the symbol table. `ClearAll[{s1, s2, ...}]` accepts a list of
+  specs.
+- `Remove[s1, s2, ...]`: Removes the named symbols completely, deleting their
+  definitions from the symbol table. A later reference recreates a fresh, empty
+  symbol of the same name. `Remove[{s1, s2, ...}]` accepts a list of specs.
+
+**Features**:
+- `ClearAll` has attributes `{HoldAll, Protected}`; `Remove` has
+  `{HoldAll, Locked, Protected}`. Both hold their arguments, so they operate on
+  the symbol, not its current value.
+- Neither affects symbols with the attribute `Locked` or `Protected`. This is
+  what prevents `Remove`/`ClearAll` from ever deleting or wiping a built-in.
+- `ClearAll`, unlike `Clear`, also removes attributes and the usage message.
+- Both return `Null`.
+
+```mathematica
+In[1]:= f[x_] := x^2; SetAttributes[f, Listable]; Attributes[f]
+Out[1]= {Listable}
+
+In[2]:= ClearAll[f]; {Attributes[f], DownValues[f]}
+Out[2]= {{}, {}}
+
+In[3]:= x = 2; Remove[x]; x
+Out[3]= x
+```
+
+## Protect, Unprotect
+
+- `Protect[s1, s2, ...]`: Sets the attribute `Protected` for the named symbols.
+- `Unprotect[s1, s2, ...]`: Removes the attribute `Protected` from the named
+  symbols.
+- Both accept a list of specs (`Protect[{s1, s2, ...}]`) and return the list of
+  names (as strings) whose protection state actually changed — `{}` when nothing
+  changed.
+
+**Features**:
+- Both have attributes `{HoldAll, Protected}` and hold their arguments.
+- Neither affects symbols with the attribute `Locked`.
+- The typical sequence for adding rules to an existing symbol is
+  `Unprotect[f]; definition; Protect[f]`.
+
+```mathematica
+In[1]:= f[x_] := x^2; Protect[f]
+Out[1]= {"f"}
+
+In[2]:= f[x_, y_] := x + y
+SetDelayed::wrsym: Symbol f is Protected.
+
+In[3]:= Unprotect[f]
+Out[3]= {"f"}
+```
+

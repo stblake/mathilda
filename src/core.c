@@ -191,6 +191,10 @@ void core_init(void) {
     symtab_add_builtin("Length", builtin_length);
     symtab_add_builtin("Dimensions", builtin_dimensions);
     symtab_add_builtin("Clear", builtin_clear);
+    symtab_add_builtin("ClearAll", builtin_clear_all);
+    symtab_add_builtin("Remove", builtin_remove);
+    symtab_add_builtin("Protect", builtin_protect);
+    symtab_add_builtin("Unprotect", builtin_unprotect);
     symtab_add_builtin("Part", builtin_part);
     symtab_add_builtin("Extract", builtin_extract);
     symtab_add_builtin("Head", builtin_head);
@@ -200,6 +204,10 @@ void core_init(void) {
     symtab_add_builtin("Rest", builtin_rest);
 
     symtab_get_def("Clear")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("ClearAll")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("Remove")->attributes |= ATTR_HOLDALL | ATTR_LOCKED | ATTR_PROTECTED;
+    symtab_get_def("Protect")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_get_def("Unprotect")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_get_def("Part")->attributes |= ATTR_NHOLDREST | ATTR_PROTECTED;
     symtab_get_def("Extract")->attributes |= ATTR_NHOLDREST | ATTR_PROTECTED;
     symtab_add_builtin("Insert", builtin_insert);
@@ -589,6 +597,145 @@ Expr* builtin_clear(Expr* res) {
         return expr_new_symbol("Null");
     }
     return NULL;
+}
+
+/* ============================================================
+ * ClearAll / Remove / Protect / Unprotect
+ *
+ * The four symbol-management builtins share an argument shape: each
+ * argument is a symbol, a string naming a symbol, or a List of such
+ * specs (e.g. ClearAll[{a, b}]). All four carry HoldAll so the symbols
+ * arrive at the builtin unevaluated.
+ * ============================================================ */
+
+/* Extract a symbol name from a spec element, or NULL if it is neither a
+ * bare symbol nor a string. */
+static const char* core_symbol_name_of(const Expr* e) {
+    if (!e) return NULL;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol;
+    if (e->type == EXPR_STRING) return e->data.string;
+    return NULL;
+}
+
+/* ClearAll[s]: drop all OwnValues/DownValues, attributes and the usage
+ * message (docstring) for s -- unless s is Protected or Locked, which
+ * ClearAll never touches. The builtin C function pointer (if any) is
+ * left intact; the Protected guard already shields every builtin. */
+static void core_clear_all_one(const char* name) {
+    if (!name) return;
+    uint32_t attrs = get_attributes(name);
+    if (attrs & (ATTR_PROTECTED | ATTR_LOCKED)) return;
+
+    symtab_clear_symbol(name);          /* values */
+    SymbolDef* def = symtab_get_def(name);
+    if (def->attributes != 0) {         /* attributes */
+        def->attributes = 0;
+        eval_clock_bump();
+    }
+    if (def->docstring) {               /* usage / messages */
+        free(def->docstring);
+        def->docstring = NULL;
+    }
+}
+
+/* Remove[s]: delete the symbol's definition entirely. The Protected /
+ * Locked guard is what keeps Remove from ever deleting a builtin. */
+static void core_remove_one(const char* name) {
+    if (!name) return;
+    uint32_t attrs = get_attributes(name);
+    if (attrs & (ATTR_PROTECTED | ATTR_LOCKED)) return;
+    symtab_remove_symbol(name);
+}
+
+/* Protect[s]: set the Protected attribute. Returns true iff the bit was
+ * newly set (so the caller can report the changed name, as WL does).
+ * Locked symbols are left untouched. */
+static bool core_protect_one(const char* name) {
+    if (!name) return false;
+    SymbolDef* def = symtab_get_def(name);
+    if (def->attributes & ATTR_LOCKED) return false;
+    if (def->attributes & ATTR_PROTECTED) return false;
+    def->attributes |= ATTR_PROTECTED;
+    eval_clock_bump();
+    return true;
+}
+
+/* Unprotect[s]: clear the Protected attribute. Returns true iff the bit
+ * was actually cleared. Locked symbols are left untouched. */
+static bool core_unprotect_one(const char* name) {
+    if (!name) return false;
+    SymbolDef* def = symtab_get_def(name);
+    if (def->attributes & ATTR_LOCKED) return false;
+    if (!(def->attributes & ATTR_PROTECTED)) return false;
+    def->attributes &= ~ATTR_PROTECTED;
+    eval_clock_bump();
+    return true;
+}
+
+/* Apply `action` to every symbol spec in `res`'s argument list, where a
+ * spec is a symbol/string or a flat List of them. Used by ClearAll and
+ * Remove, which both return Null. */
+static Expr* core_apply_symbol_action(Expr* res, void (*action)(const char*)) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        Expr* arg = res->data.function.args[i];
+        if (head_is(arg, SYM_List)) {
+            for (size_t j = 0; j < arg->data.function.arg_count; j++) {
+                action(core_symbol_name_of(arg->data.function.args[j]));
+            }
+        } else {
+            action(core_symbol_name_of(arg));
+        }
+    }
+    return expr_new_symbol("Null");
+}
+
+Expr* builtin_clear_all(Expr* res) {
+    return core_apply_symbol_action(res, core_clear_all_one);
+}
+
+Expr* builtin_remove(Expr* res) {
+    return core_apply_symbol_action(res, core_remove_one);
+}
+
+/* Shared driver for Protect / Unprotect. Walks the spec arguments,
+ * applies the change, and returns a List of the names (as strings) whose
+ * Protected state actually changed -- matching WL's return value. */
+static Expr* core_protect_unprotect(Expr* res, bool protecting) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+
+    Expr** changed = NULL;
+    size_t count = 0, cap = 0;
+
+    for (size_t i = 0; i < res->data.function.arg_count; i++) {
+        Expr* arg = res->data.function.args[i];
+        size_t n = head_is(arg, SYM_List) ? arg->data.function.arg_count : 1;
+        for (size_t j = 0; j < n; j++) {
+            const char* name = core_symbol_name_of(
+                head_is(arg, SYM_List) ? arg->data.function.args[j] : arg);
+            bool did = protecting ? core_protect_one(name)
+                                  : core_unprotect_one(name);
+            if (did) {
+                if (count == cap) {
+                    cap = cap ? cap * 2 : 4;
+                    changed = realloc(changed, cap * sizeof(Expr*));
+                }
+                changed[count++] = expr_new_string(name);
+            }
+        }
+    }
+
+    Expr* list = expr_new_function(expr_new_symbol("List"), changed, count);
+    free(changed);
+    return list;
+}
+
+Expr* builtin_protect(Expr* res) {
+    return core_protect_unprotect(res, true);
+}
+
+Expr* builtin_unprotect(Expr* res) {
+    return core_protect_unprotect(res, false);
 }
 
 Expr* builtin_length(Expr* res) {
