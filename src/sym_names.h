@@ -118,6 +118,7 @@ extern const char* SYM_Eigenvalues;
 extern const char* SYM_Erf;
 extern const char* SYM_Erfc;
 extern const char* SYM_InverseErf;
+extern const char* SYM_InverseErfc;
 extern const char* SYM_Eigenvectors;
 extern const char* SYM_ECM;
 extern const char* SYM_Element;

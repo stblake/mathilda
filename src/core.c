@@ -19,6 +19,7 @@
 #include "erf.h"
 #include "erfc.h"
 #include "inverf.h"
+#include "inverfc.h"
 #include "loggamma.h"
 #include "polygamma.h"
 #include "pochhammer.h"
@@ -465,6 +466,7 @@ void core_init(void) {
     erf_init();
     erfc_init();
     inverf_init();
+    inverfc_init();
     loggamma_init();
     polygamma_init();
     pochhammer_init();

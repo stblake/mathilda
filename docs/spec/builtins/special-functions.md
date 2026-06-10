@@ -157,6 +157,42 @@ inputs stay symbolic.
 - All other arguments (symbolic `InverseErf[x]`, exact `InverseErf[1/2]`,
   out-of-domain `InverseErf[2]`) stay unevaluated.
 
+## InverseErfc
+
+- `InverseErfc[s]` — the inverse complementary error function: the z solving
+  s = erfc(z).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+Since erfc decreases from 2 (at −∞) to 0 (at +∞), `InverseErfc` produces
+explicit numerical values only for **real** s in `[0, 2]`; complex and
+out-of-domain (`s < 0` or `s > 2`) inputs stay symbolic.
+
+**Features**:
+- Exact special values: `InverseErfc[0] = Infinity`, `InverseErfc[1] = 0`,
+  `InverseErfc[2] = -Infinity` (likewise the real `0.`/`2.`), plus
+  `Indeterminate` passes through.
+- Numeric evaluation. Mathematically `InverseErfc[s] = InverseErf[1 − s]`, but
+  for small s (large z) that subtraction loses all significance to
+  cancellation, so the kernel instead Newton-iterates directly on the
+  cancellation-free `erfc`: `f(z) = erfc(z) − s`,
+  `z ← z + (erfc(z) − s)(Sqrt[Pi]/2) e^{z²}`:
+  - Machine-precision real → a Winitzki seed polished by Newton on libm `erfc`,
+    e.g. `InverseErfc[0.6] = 0.370807`, `InverseErfc[1/{2.,3.,4.,5.}] =
+    {0.476936, 0.68407, 0.81342, 0.906194}`.
+  - Arbitrary precision (MPFR) real → Newton with precision doubling on
+    `mpfr_erfc`, output precision tracking the input, e.g.
+    `N[InverseErfc[33/100], 50] = 0.68880252811655645040250472890525783544948992349371`
+    (≈0.002 s even at 500-digit precision).
+- erfc is **not** odd, so unlike `InverseErf` there is no auto-applied symmetry
+  rewrite; the reflection `InverseErfc[1.5] = -InverseErfc[0.5]` is computed
+  numerically rather than rewritten.
+- Derivative: `D[InverseErfc[z], z] = -(Sqrt[Pi]/2) E^(InverseErfc[z]²)` (chain
+  rule applies), so higher derivatives and the Taylor series follow from the
+  generic `D`-based fallback.
+- All other arguments (symbolic `InverseErfc[x]`, exact `InverseErfc[1/2]`,
+  out-of-domain `InverseErfc[2.3]`) stay unevaluated.
+
 ## PolyGamma
 
 **Attributes:** `Listable`, `NumericFunction`, `Protected`.

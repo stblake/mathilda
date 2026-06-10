@@ -232,6 +232,13 @@ void info_init(void) {
         "Odd in s. Numerical values are given only for real s in [-1, 1], at\n"
         "machine or arbitrary (MPFR) precision; D[InverseErf[z], z] =\n"
         "(Sqrt[Pi]/2) E^(InverseErf[z]^2). Listable.");
+    symtab_set_docstring("InverseErfc",
+        "InverseErfc[s]\n"
+        "\tgives the inverse complementary error function: the z solving s = Erfc[z].\n"
+        "InverseErfc[0] = Infinity, InverseErfc[1] = 0, InverseErfc[2] = -Infinity.\n"
+        "Numerical values are given only for real s in [0, 2], at machine or\n"
+        "arbitrary (MPFR) precision; D[InverseErfc[z], z] =\n"
+        "-(Sqrt[Pi]/2) E^(InverseErfc[z]^2). Listable.");
     symtab_set_docstring("PolyGamma",
         "PolyGamma[z]\n"
         "\tgives the digamma function psi(z) (rewritten as PolyGamma[0, z]).\n"

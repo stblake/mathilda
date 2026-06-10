@@ -96,6 +96,7 @@ set(COMMON_SRC
     ../src/special_functions/erf.c
     ../src/special_functions/erfc.c
     ../src/special_functions/inverf.c
+    ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
     ../src/special_functions/polygamma.c
     ../src/special_functions/pochhammer.c
@@ -1347,6 +1348,9 @@ target_include_directories(erfc_tests PRIVATE ../src)
 
 add_executable(inverf_tests test_inverf.c ${COMMON_SRC})
 target_include_directories(inverf_tests PRIVATE ../src)
+
+add_executable(inverfc_tests test_inverfc.c ${COMMON_SRC})
+target_include_directories(inverfc_tests PRIVATE ../src)
 
 add_executable(polygamma_tests test_polygamma.c ${COMMON_SRC})
 target_include_directories(polygamma_tests PRIVATE ../src)
