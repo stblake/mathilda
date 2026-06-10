@@ -97,6 +97,7 @@ set(COMMON_SRC
     ../src/special_functions/erfc.c
     ../src/special_functions/erfi.c
     ../src/special_functions/expintegralei.c
+    ../src/special_functions/logintegral.c
     ../src/special_functions/inverf.c
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
@@ -1353,6 +1354,9 @@ target_include_directories(erfi_tests PRIVATE ../src)
 
 add_executable(expintegralei_tests test_expintegralei.c ${COMMON_SRC})
 target_include_directories(expintegralei_tests PRIVATE ../src)
+
+add_executable(logintegral_tests test_logintegral.c ${COMMON_SRC})
+target_include_directories(logintegral_tests PRIVATE ../src)
 
 add_executable(positive_tests test_positive.c ${COMMON_SRC})
 target_include_directories(positive_tests PRIVATE ../src)

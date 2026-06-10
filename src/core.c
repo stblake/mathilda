@@ -20,6 +20,7 @@
 #include "erfc.h"
 #include "erfi.h"
 #include "expintegralei.h"
+#include "logintegral.h"
 #include "inverf.h"
 #include "inverfc.h"
 #include "loggamma.h"
@@ -477,6 +478,7 @@ void core_init(void) {
     erfc_init();
     erfi_init();
     expintegralei_init();
+    logintegral_init();
     inverf_init();
     inverfc_init();
     loggamma_init();

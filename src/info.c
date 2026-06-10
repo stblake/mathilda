@@ -239,6 +239,14 @@ void info_init(void) {
         "ExpIntegralEi[-Infinity] = 0, ExpIntegralEi[+-I Infinity] = +-I Pi. Real and\n"
         "complex inputs evaluate numerically at machine or arbitrary (MPFR) precision;\n"
         "D[ExpIntegralEi[z], z] = E^z/z. Listable.");
+    symtab_set_docstring("LogIntegral",
+        "LogIntegral[z]\n"
+        "\tgives the logarithmic integral li(z), the principal value of\n"
+        "\tIntegral_0^z dt/ln t, equal to ExpIntegralEi[Log[z]], with a branch cut\n"
+        "\ton (-Infinity, 1). LogIntegral[0] = 0, LogIntegral[1] = -Infinity,\n"
+        "LogIntegral[Infinity] = Infinity. Real and complex inputs evaluate\n"
+        "numerically at machine or arbitrary (MPFR) precision; D[LogIntegral[z], z] =\n"
+        "1/Log[z]. Listable.");
     symtab_set_docstring("InverseErf",
         "InverseErf[s]\n"
         "\tgives the inverse error function: the z solving s = Erf[z].\n"

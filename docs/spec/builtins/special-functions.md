@@ -195,6 +195,41 @@ the principal value (the average of the two sides) is returned.
   point follows from the generic `D`-based fallback.
 - Wrong arity emits `ExpIntegralEi::argx` and stays unevaluated.
 
+## LogIntegral
+
+- `LogIntegral[z]` — the logarithmic integral li(z), the principal value of
+  ∫₀^z dt/ln t.
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+`LogIntegral` is computed from the identity **li(z) = Ei(Log z)**, reusing the
+`ExpIntegralEi` numeric kernels; the principal `Log` supplies the ±i π jump, so
+the branch cut runs along (−∞, +1).
+
+**Features**:
+- Exact special values: `LogIntegral[0] = 0`, `LogIntegral[1] = -Infinity`,
+  `LogIntegral[Infinity] = Infinity`; `ComplexInfinity` and `Indeterminate` map
+  to `Indeterminate`.
+- Exact non-special arguments stay symbolic (`LogIntegral[2]`,
+  `LogIntegral[1/2]`); numeric values follow from a `Real`/MPFR argument or from
+  `N`.
+- Numeric evaluation (machine *and* arbitrary precision) routes through
+  `ExpIntegralEi[Log[z]]`:
+  - Real z > 1 (`Log z > 0`) → MPFR `mpfr_eint`, correctly rounded and fast even
+    at very high precision: `LogIntegral[20.] = 9.9053`, `LogIntegral[2.] = 1.04516`,
+    `N[LogIntegral[2], 50] = 1.0451637801174927848445888891946131365226155781512`.
+  - Real 0 < z < 1 (`Log z < 0`) → the on-cut convergent series, returning a
+    **real** principal value: `LogIntegral[0.5] = -0.378671`,
+    `LogIntegral[1.2] = -0.933787`.
+  - **Complex** (and real z < 0, whose principal `Log` is complex) → the complex
+    series with guard bits, so machine-precision complex results are fully
+    accurate, e.g. `LogIntegral[2. + I] = 1.41126 + 1.22471 I`,
+    `N[Re[LogIntegral[2 + I]], 30] = 1.41125904201780100568439320706`.
+- Derivative: `D[LogIntegral[z], z] = 1/Log[z]` (chain rule applies, e.g.
+  `D[LogIntegral[x^2], x] = (2 x)/Log[x^2]`); the Taylor series at a regular
+  point follows from the generic `D`-based fallback.
+- Wrong arity emits `LogIntegral::argx` and stays unevaluated.
+
 ## InverseErf
 
 - `InverseErf[s]` — the inverse error function: the z solving s = erf(z).
