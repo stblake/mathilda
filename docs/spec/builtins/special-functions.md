@@ -158,6 +158,43 @@ unexpanded (mathematically erfc(−x) = 2 − erfc(x)).
   `2/Sqrt[Pi] x + 2/(3 Sqrt[Pi]) x^3 + …`.
 - All other arguments (symbolic `Erfi[x]`, exact `Erfi[2]`) stay unevaluated.
 
+## ExpIntegralEi
+
+- `ExpIntegralEi[z]` — the exponential integral Ei(z), the principal value of
+  −∫₋ᵤ^∞ e^(−t)/t dt (z = −u).
+
+**Attributes**: `Listable`, `NumericFunction`, `Protected`.
+
+`ExpIntegralEi` has a branch cut along the negative real axis (−∞, 0); on the cut
+the principal value (the average of the two sides) is returned.
+
+**Features**:
+- Exact special values: `ExpIntegralEi[0] = -Infinity`,
+  `ExpIntegralEi[Infinity] = Infinity`, `ExpIntegralEi[-Infinity] = 0`,
+  `ExpIntegralEi[I Infinity] = I Pi`, `ExpIntegralEi[-I Infinity] = -I Pi`;
+  `ComplexInfinity` and `Indeterminate` map to `Indeterminate`.
+- Exact non-zero arguments stay symbolic (`ExpIntegralEi[2]`, `ExpIntegralEi[1/2]`);
+  numeric values follow from a `Real`/MPFR argument or from `N`.
+- Numeric evaluation (machine *and* arbitrary precision):
+  - Real x > 0 → MPFR `mpfr_eint` (correctly rounded, fast even at very high
+    precision: `ExpIntegralEi[1.8] = 4.24987`, `ExpIntegralEi[2.] = 4.95423`,
+    `N[ExpIntegralEi[2], 50] = 4.9542343560018901633795051302270352755180535624200`).
+  - Real x < 0 → the on-cut convergent series Ei(x) = γ + ln|x| + Σ xᵏ/(k·k!),
+    in MPFR with `|x|/ln2` guard bits to absorb the partial-sum cancellation, and
+    returns a **real** principal value (`ExpIntegralEi[-1.] = -0.219384`,
+    `ExpIntegralEi[-5.] = -0.00114830`).
+  - **Complex** → the same series with the principal `Log(z)`, evaluated in MPFR
+    with `(|z| + |Re z|)/ln2` guard bits, so machine-precision complex results are
+    fully accurate, e.g. `ExpIntegralEi[2. + I] = 4.06998 + 3.40094 I`,
+    `N[ExpIntegralEi[2 + I], 30] = 4.06998094789392774228769025521 + 3.40094396980012162163040462603 I`.
+    Approaching the cut from above gives +I Pi, from below −I Pi
+    (`ExpIntegralEi[-1. + 10^-10 I] ≈ -0.219384 + 3.14159 I`). A `double complex`
+    series is the `USE_MPFR=0` fallback.
+- Derivative: `D[ExpIntegralEi[z], z] = E^z/z` (chain rule applies, e.g.
+  `D[ExpIntegralEi[x^2], x] = (2 E^x^2)/x`); the origin Taylor series at a regular
+  point follows from the generic `D`-based fallback.
+- Wrong arity emits `ExpIntegralEi::argx` and stays unevaluated.
+
 ## InverseErf
 
 - `InverseErf[s]` — the inverse error function: the z solving s = erf(z).

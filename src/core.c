@@ -19,6 +19,7 @@
 #include "erf.h"
 #include "erfc.h"
 #include "erfi.h"
+#include "expintegralei.h"
 #include "inverf.h"
 #include "inverfc.h"
 #include "loggamma.h"
@@ -475,6 +476,7 @@ void core_init(void) {
     erf_init();
     erfc_init();
     erfi_init();
+    expintegralei_init();
     inverf_init();
     inverfc_init();
     loggamma_init();

@@ -231,6 +231,14 @@ void info_init(void) {
         "function, odd in z. Real and complex inputs evaluate numerically at\n"
         "machine or arbitrary (MPFR) precision; D[Erfi[z], z] = (2/Sqrt[Pi]) E^(z^2).\n"
         "Listable.");
+    symtab_set_docstring("ExpIntegralEi",
+        "ExpIntegralEi[z]\n"
+        "\tgives the exponential integral Ei(z), the principal value of\n"
+        "\t-Integral_{-z}^Infinity e^-t/t dt, with a branch cut on (-Infinity, 0).\n"
+        "ExpIntegralEi[0] = -Infinity, ExpIntegralEi[Infinity] = Infinity,\n"
+        "ExpIntegralEi[-Infinity] = 0, ExpIntegralEi[+-I Infinity] = +-I Pi. Real and\n"
+        "complex inputs evaluate numerically at machine or arbitrary (MPFR) precision;\n"
+        "D[ExpIntegralEi[z], z] = E^z/z. Listable.");
     symtab_set_docstring("InverseErf",
         "InverseErf[s]\n"
         "\tgives the inverse error function: the z solving s = Erf[z].\n"

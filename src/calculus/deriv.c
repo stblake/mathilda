@@ -351,6 +351,12 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_fn2("Times", coeff, mk_fn1("Exp", sq));
     }
 
+    /* --- exponential integral: d/dg ExpIntegralEi[g] = E^g / g. --- */
+    if (!strcmp(name, "ExpIntegralEi")) {
+        return mk_fn2("Times", mk_fn1("Exp", expr_copy(g)),
+                      mk_fn2("Power", expr_copy(g), mk_int(-1)));
+    }
+
     /* --- exp/log and sqrt --- */
     if (!strcmp(name, "Exp")) return mk_fn1("Exp", expr_copy(g));
     if (!strcmp(name, "Log")) return mk_fn2("Power", expr_copy(g), mk_int(-1));
