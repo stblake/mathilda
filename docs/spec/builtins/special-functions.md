@@ -50,6 +50,56 @@ Higher transcendental functions: the gamma function `Gamma`, the error function 
   exact non-integer `Gamma[3/2, z]`, exact complex `Gamma[3/2, I]`) stay
   unevaluated.
 
+## Beta
+
+- `Beta[a, b]` — the Euler beta function B(a, b) = Γ(a)Γ(b)/Γ(a+b)
+  = ∫₀¹ tᵃ⁻¹(1−t)ᵇ⁻¹ dt.
+- `Beta[z, a, b]` — the incomplete beta function B_z(a, b)
+  = ∫₀ᶻ tᵃ⁻¹(1−t)ᵇ⁻¹ dt (branch cut along z < 0).
+- `Beta[z0, z1, a, b]` — the generalized incomplete beta
+  B(z0, z1; a, b) = Beta[z1, a, b] − Beta[z0, a, b].
+
+Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+Note that, unlike `Gamma`'s incomplete form, the integration variable `z`
+comes **first** in `Beta[z, a, b]`.
+
+- Exact reductions for `Beta[a, b]` (reduced through the `Gamma` machinery):
+  - When one argument is a positive integer `n`, the gamma ratio collapses to
+    `Beta[n, b] = (n−1)!/Pochhammer[b, n]`, an exact rational for rational `b`,
+    e.g. `Beta[2, 3] = 1/12`, `Beta[5, 4] = 1/280`, `Beta[3, 1/3] = 27/14`,
+    `Beta[7/2, 2] = 4/63`.
+  - Half-integer arguments fold to rational multiples of `Pi`,
+    e.g. `Beta[5/2, 7/2] = 3/256 Pi`, `Beta[1/2, 1/2] = Pi`.
+  - Other exact arguments keep the residual gamma form,
+    e.g. `Beta[1/3, 1/3] = Gamma[1/3]^2/Gamma[2/3]`,
+    `Beta[2/3, 4/3] = Gamma[2/3] Gamma[4/3]`.
+  - Symmetric: `Beta[a, b] = Beta[b, a]`.
+- Poles: when `a`, `b`, or `a+b` lands on a gamma pole (a non-positive
+  integer), a surviving pole gives `ComplexInfinity`
+  (`Beta[0, b]`, `Beta[a, 0]`, `Beta[0, n]`, `Beta[-2, 5]`,
+  `Beta[Infinity, 0]`); a cancelling pair reduces by the finite limit of the
+  gamma ratio (`Beta[-2, 1] = -1/2`, `Beta[2, -5] = 1/20`).
+- Numeric `Beta[a, b]`: machine and arbitrary-precision (MPFR) real and complex
+  arguments evaluate numerically with precision tracking,
+  e.g. `Beta[2.3, 3.2] = 0.0540298`, `Beta[2.5 + I, 1 − I] = 0.0831078 +
+  0.142164 I`, `N[Beta[22/10, 33/10], 50] =
+  0.056485691373282566807051754004491429369537777015241`.
+- Incomplete `Beta[z, a, b]` reduces through `Hypergeometric2F1` via
+  `B_z(a, b) = zᵃ/a · ₂F₁(a, 1−b; a+1; z)`: `Beta[0, a, b] = 0`,
+  `Beta[1, a, b] = Beta[a, b]`, `Beta[z, a, 1] = z^a/a`; a positive-integer `b`
+  terminates the series to an exact closed form (`Beta[1/2, 3, 4] = 7/640`),
+  and a fully numeric call evaluates to a number. The four-argument form
+  evaluates as the difference when all arguments are numeric.
+- Derivatives:
+  - `D[Beta[a, b], a] = Beta[a, b] (PolyGamma[0, a] − PolyGamma[0, a+b])`
+    (symmetric in `b`); higher derivatives compose through `PolyGamma`.
+  - `D[Beta[z, a, b], z] = z^(a−1) (1−z)^(b−1)`; the derivatives with respect
+    to `a`, `b` are the inert `Derivative[0,1,0]/[0,0,1][Beta][z, a, b]`.
+  - `D[Beta[z0, z1, a, b], z1] = z1^(a−1)(1−z1)^(b−1)`,
+    `D[…, z0] = −z0^(a−1)(1−z0)^(b−1)`.
+- Symbolic arguments (`Beta[a, b]`, `Beta[z, a, b]`, `Beta[z0, z1, a, b]`)
+  stay unevaluated.
+
 ## Erf
 
 - `Erf[z]` — the error function erf(z) = (2/√π) ∫₀^z e^(−t²) dt.

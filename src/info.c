@@ -208,6 +208,18 @@ void info_init(void) {
         "and rational multiples of Sqrt[Pi]); non-positive integers give\n"
         "ComplexInfinity. Machine and arbitrary-precision (MPFR) real inputs\n"
         "evaluate numerically, as do machine-precision complex inputs. Listable.");
+    symtab_set_docstring("Beta",
+        "Beta[a, b]\n"
+        "\tis the Euler beta function B(a, b) = Gamma(a) Gamma(b) / Gamma(a+b).\n"
+        "Beta[z, a, b]\n"
+        "\tis the incomplete beta function Integral_0^z t^(a-1) (1-t)^(b-1) dt.\n"
+        "Beta[z0, z1, a, b]\n"
+        "\tis the generalized incomplete beta Beta[z1, a, b] - Beta[z0, a, b].\n"
+        "Exact for rational arguments (a positive integer gives a rational via\n"
+        "Pochhammer); non-positive integer poles give ComplexInfinity. Machine\n"
+        "and arbitrary-precision (MPFR) real and complex inputs evaluate\n"
+        "numerically. The incomplete form reduces through Hypergeometric2F1.\n"
+        "Listable.");
     symtab_set_docstring("Erf",
         "Erf[z]\n"
         "\tgives the error function erf(z) = (2/Sqrt[Pi]) Integral_0^z e^(-t^2) dt.\n"

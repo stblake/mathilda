@@ -150,6 +150,7 @@ const char* SYM_FromContinuedFraction = NULL;
 const char* SYM_FromDigits = NULL;
 const char* SYM_FullForm = NULL;
 const char* SYM_Function = NULL;
+const char* SYM_Beta = NULL;
 const char* SYM_Gamma = NULL;
 const char* SYM_GaussianIntegers = NULL;
 const char* SYM_GeneratedParameters = NULL;
@@ -533,6 +534,7 @@ void sym_names_init(void) {
     SYM_FromDigits                 = intern_symbol("FromDigits");
     SYM_FullForm                   = intern_symbol("FullForm");
     SYM_Function                   = intern_symbol("Function");
+    SYM_Beta                       = intern_symbol("Beta");
     SYM_Gamma                      = intern_symbol("Gamma");
     SYM_GaussianIntegers           = intern_symbol("GaussianIntegers");
     SYM_GeneratedParameters        = intern_symbol("GeneratedParameters");
@@ -777,7 +779,6 @@ void sym_names_init(void) {
      * package's private context) -- they appear as symbolic heads in the
      * FullSimplify identity libraries and must match the same heads when typed
      * by the user. Interning them here lets intern_mark_all_system() flag them.
-     * (Surd: real n-th root; Beta: Euler beta function.) */
+     * (Surd: real n-th root.) */
     intern_symbol("Surd");
-    intern_symbol("Beta");
 }

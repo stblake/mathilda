@@ -1125,6 +1125,149 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- Beta[A, B] (Euler beta): chain rule on both arguments.
+         *   d/dA Beta[A,B] = Beta[A,B] (PolyGamma[0,A] - PolyGamma[0,A+B])
+         *   d/dB Beta[A,B] = Beta[A,B] (PolyGamma[0,B] - PolyGamma[0,A+B])
+         * Higher derivatives compose automatically by re-differentiating the
+         * Beta and PolyGamma factors. Zero-derivative arms are dropped. */
+        if (h == SYM_Beta && n == 2) {
+            Expr* A = args[0];
+            Expr* B = args[1];
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* dB = deriv_of(B, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dA)) {
+                Expr* psiA = mk_fn2("PolyGamma", mk_int(0), expr_copy(A));
+                Expr* psiS = mk_fn2("PolyGamma", mk_int(0),
+                                    mk_fn2("Plus", expr_copy(A), expr_copy(B)));
+                Expr* fac  = mk_fn2("Times",
+                                    mk_fn2("Beta", expr_copy(A), expr_copy(B)),
+                                    mk_fn2("Subtract", psiA, psiS));
+                terms[nt++] = mk_fn2("Times", fac, dA);
+            } else { expr_free(dA); }
+
+            if (!is_lit_zero(dB)) {
+                Expr* psiB = mk_fn2("PolyGamma", mk_int(0), expr_copy(B));
+                Expr* psiS = mk_fn2("PolyGamma", mk_int(0),
+                                    mk_fn2("Plus", expr_copy(A), expr_copy(B)));
+                Expr* fac  = mk_fn2("Times",
+                                    mk_fn2("Beta", expr_copy(A), expr_copy(B)),
+                                    mk_fn2("Subtract", psiB, psiS));
+                terms[nt++] = mk_fn2("Times", fac, dB);
+            } else { expr_free(dB); }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
+        /* --- Beta[Z, A, B] (incomplete beta): chain rule on all three args.
+         *   d/dZ Beta[Z,A,B] = Z^(A-1) (1-Z)^(B-1)   (the integrand; elementary)
+         *   d/dA, d/dB        = generic Derivative[0,1,0]/[0,0,1][Beta][Z,A,B]
+         *               (no elementary form). Zero-derivative arms are dropped,
+         * so D[Beta[z,a,b],z] keeps only Z^(a-1)(1-z)^(b-1). */
+        if (h == SYM_Beta && n == 3) {
+            Expr* Z = args[0];
+            Expr* A = args[1];
+            Expr* B = args[2];
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* dB = deriv_of(B, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                Expr* za  = mk_fn2("Power", expr_copy(Z),
+                                   mk_fn2("Plus", expr_copy(A), mk_int(-1)));
+                Expr* omz = mk_fn2("Power",
+                                   mk_fn2("Subtract", mk_int(1), expr_copy(Z)),
+                                   mk_fn2("Plus", expr_copy(B), mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", mk_fn2("Times", za, omz), dZ);
+            } else { expr_free(dZ); }
+
+            if (!is_lit_zero(dA)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(1), mk_int(0) }, 3);
+                Expr* opb = mk_fn_head1(op, mk_sym("Beta"));
+                Expr* applied = expr_new_function(opb,
+                              (Expr*[]){ expr_copy(Z), expr_copy(A), expr_copy(B) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dA);
+            } else { expr_free(dA); }
+
+            if (!is_lit_zero(dB)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(0), mk_int(1) }, 3);
+                Expr* opb = mk_fn_head1(op, mk_sym("Beta"));
+                Expr* applied = expr_new_function(opb,
+                              (Expr*[]){ expr_copy(Z), expr_copy(A), expr_copy(B) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dB);
+            } else { expr_free(dB); }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return expr_new_function(mk_sym("Plus"), terms, nt);
+        }
+
+        /* --- Beta[Z0, Z1, A, B] (generalized incomplete beta).
+         *   d/dZ1 = Z1^(A-1) (1-Z1)^(B-1),  d/dZ0 = -Z0^(A-1) (1-Z0)^(B-1)
+         *   d/dA, d/dB = generic Derivative[0,0,1,0]/[0,0,0,1][Beta][...]. */
+        if (h == SYM_Beta && n == 4) {
+            Expr* Z0 = args[0];
+            Expr* Z1 = args[1];
+            Expr* A  = args[2];
+            Expr* B  = args[3];
+            Expr* dZ0 = deriv_of(Z0, x, nonconsts);
+            Expr* dZ1 = deriv_of(Z1, x, nonconsts);
+            Expr* dA  = deriv_of(A,  x, nonconsts);
+            Expr* dB  = deriv_of(B,  x, nonconsts);
+            Expr* terms[4];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ1)) {
+                Expr* za  = mk_fn2("Power", expr_copy(Z1),
+                                   mk_fn2("Plus", expr_copy(A), mk_int(-1)));
+                Expr* omz = mk_fn2("Power",
+                                   mk_fn2("Subtract", mk_int(1), expr_copy(Z1)),
+                                   mk_fn2("Plus", expr_copy(B), mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", mk_fn2("Times", za, omz), dZ1);
+            } else { expr_free(dZ1); }
+
+            if (!is_lit_zero(dZ0)) {
+                Expr* za  = mk_fn2("Power", expr_copy(Z0),
+                                   mk_fn2("Plus", expr_copy(A), mk_int(-1)));
+                Expr* omz = mk_fn2("Power",
+                                   mk_fn2("Subtract", mk_int(1), expr_copy(Z0)),
+                                   mk_fn2("Plus", expr_copy(B), mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", mk_neg(mk_fn2("Times", za, omz)), dZ0);
+            } else { expr_free(dZ0); }
+
+            if (!is_lit_zero(dA)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(0), mk_int(1), mk_int(0) }, 4);
+                Expr* opb = mk_fn_head1(op, mk_sym("Beta"));
+                Expr* applied = expr_new_function(opb,
+                              (Expr*[]){ expr_copy(Z0), expr_copy(Z1),
+                                         expr_copy(A), expr_copy(B) }, 4);
+                terms[nt++] = mk_fn2("Times", applied, dA);
+            } else { expr_free(dA); }
+
+            if (!is_lit_zero(dB)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(0), mk_int(0), mk_int(1) }, 4);
+                Expr* opb = mk_fn_head1(op, mk_sym("Beta"));
+                Expr* applied = expr_new_function(opb,
+                              (Expr*[]){ expr_copy(Z0), expr_copy(Z1),
+                                         expr_copy(A), expr_copy(B) }, 4);
+                terms[nt++] = mk_fn2("Times", applied, dB);
+            } else { expr_free(dB); }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return expr_new_function(mk_sym("Plus"), terms, nt);
+        }
+
         /* --- Gamma[A] (one-argument): d/dA Gamma[A] = Gamma[A] PolyGamma[0, A].
          * Repeated differentiation then composes via the product rule, e.g.
          * D[Gamma[z], {z, 2}] = Gamma[z] PolyGamma[0,z]^2 + Gamma[z] PolyGamma[1,z]. */

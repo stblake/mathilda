@@ -93,6 +93,7 @@ set(COMMON_SRC
     ../src/arithmetic.c
     ../src/numbertheory.c
     ../src/special_functions/gamma.c
+    ../src/special_functions/beta.c
     ../src/special_functions/erf.c
     ../src/special_functions/erfc.c
     ../src/special_functions/erfi.c
@@ -1343,6 +1344,9 @@ target_include_directories(numeric_tests PRIVATE ../src)
 
 add_executable(gamma_tests test_gamma.c ${COMMON_SRC})
 target_include_directories(gamma_tests PRIVATE ../src)
+
+add_executable(beta_tests test_beta.c ${COMMON_SRC})
+target_include_directories(beta_tests PRIVATE ../src)
 
 add_executable(erf_tests test_erf.c ${COMMON_SRC})
 target_include_directories(erf_tests PRIVATE ../src)

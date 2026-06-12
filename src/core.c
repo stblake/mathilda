@@ -16,6 +16,7 @@
 #include "arithmetic.h"
 #include "numbertheory.h"
 #include "gamma.h"
+#include "beta.h"
 #include "erf.h"
 #include "erfc.h"
 #include "erfi.h"
@@ -475,6 +476,7 @@ void core_init(void) {
     facint_init();
     numbertheory_init();
     gamma_init();
+    beta_init();
     erf_init();
     erfc_init();
     erfi_init();
