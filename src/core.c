@@ -592,27 +592,33 @@ void core_init(void) {
     void zero_test_init(void);
     zero_test_init();
 
-    /* Eager-load the lightweight FullSimplify driver (definitions + manifest
-     * only; the heavy per-function identity libraries load lazily on demand).
-     * Done last so every builtin it relies on -- Simplify above all -- is
-     * already registered. Resolved working-directory-independently so the
-     * REPL and the CMake test binaries both pick it up. The docstring is set
-     * here (C-side, per project convention); Protected is applied AFTER the
-     * driver defines its DownValues so the .m load is not blocked. */
-    symtab_set_docstring("FullSimplify",
-        "FullSimplify[expr]\n"
-        "\ttries a wide range of transformations on expr involving elementary\n"
-        "\tand special functions and returns the simplest form it finds.\n"
-        "FullSimplify[expr, assum]\n"
-        "\tsimplifies using the assumptions assum.\n"
-        "\n"
-        "FullSimplify yields at least as simple a form as Simplify but may take\n"
-        "substantially longer. Options: ComplexityFunction, TransformationFunc-\n"
-        "tions, and TimeConstraint -> {tLoc, tTot} (per-transform and total\n"
-        "time budgets in seconds).");
-    if (mathilda_load_module("simp/FullSimplify.m")) {
-        symtab_get_def("FullSimplify")->attributes |= ATTR_PROTECTED;
-    }
+    /* Flag every symbol interned so far as a System symbol. At this point in
+     * startup the interner holds exactly the kernel's built-in names (cached
+     * SYM_* pointers, registered builtins, option names with docstrings, ...).
+     * The context resolver consults this flag so that a bare System name --
+     * including pure structural heads and constants (List, Rule, Integer,
+     * Automatic, Infinity, None, Heads, ...) that have no SymbolDef until used
+     * -- resolves to System` rather than being qualified into the current
+     * context. Without it, a package referencing such a name in its prologue
+     * (e.g. a `_List` pattern head or an Automatic option default) would bind a
+     * stray private symbol. This only sets a flag; it creates no SymbolDefs and
+     * changes no evaluation behaviour. Must run before the first package load. */
+    intern_mark_all_system();
+
+    /* Eager-load the FullSimplify package (driver + manifest only; the heavy
+     * per-function identity libraries load lazily on demand). Done last so
+     * every builtin it relies on -- Simplify above all -- is already
+     * registered. Resolved working-directory-independently so the REPL and the
+     * CMake test binaries both pick it up.
+     *
+     * FullSimplify.m is a proper package: BeginPackage["FullSimplify`"]
+     * exports FullSimplify and RegisterTransforms (with their usage messages,
+     * which become the symbols' docstrings), implements everything in the
+     * FullSimplify`Private` context, and runs Protect[FullSimplify] itself.
+     * So no C-side docstring or attribute wiring is needed here -- the package
+     * is self-documenting and self-protecting, and EndPackage[] leaves
+     * FullSimplify` on $ContextPath so bare FullSimplify[...] resolves. */
+    mathilda_load_module("simp/FullSimplify.m");
 }
 
 Expr* builtin_compoundexpression(Expr* res) {

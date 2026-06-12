@@ -3,6 +3,7 @@
 #include "attr.h"
 #include "expr.h"
 #include "sym_names.h"
+#include "sym_intern.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -215,9 +216,21 @@ char* context_resolve_name(const char* raw) {
         free(probe);
     }
 
-    /* Fall back: if a bare builtin exists, use it (implicit System`). */
+    /* Fall back: resolve to the bare (implicit System`) name when it denotes a
+     * System symbol. System` is always on the conceptual context path, and its
+     * symbols are stored under bare names. A name qualifies as System if it
+     * either already has a SymbolDef (registered builtins, and option symbols
+     * that carry a docstring) OR was flagged System at kernel-init time
+     * (intern_mark_all_system). The flag is essential because many System
+     * symbols -- List, Symbol, Rule, Integer, Infinity, Automatic, None, the
+     * pattern heads, ... -- are pure interned symbols with no SymbolDef until
+     * first use. Without it, bare heads like `_List` / `_Symbol` or defaults
+     * like Automatic inside a package (a non-Global current context) were
+     * mis-qualified to the package's private context, so e.g. `allOpts_List`
+     * never matched a real System`List. In the Global case this is a no-op:
+     * the legacy branch below already returns the bare name. */
     SymbolDef* bare = symtab_lookup(raw);
-    if (bare && bare->builtin_func) return ctx_strdup(raw);
+    if (bare || intern_is_system(raw)) return ctx_strdup(raw);
 
     /* If current context is Global`, keep bare for legacy behavior. Otherwise
      * qualify with the current context. */

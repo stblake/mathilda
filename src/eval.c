@@ -422,7 +422,11 @@ static const char* assignment_target_symbol(Expr* lhs) {
         lhs->data.function.head->type == EXPR_SYMBOL &&
         lhs->data.function.arg_count >= 1) {
         const char* h = lhs->data.function.head->data.symbol;
-        if (h == SYM_Condition || h == SYM_HoldPattern || h == SYM_Part) {
+        if (h == SYM_Condition || h == SYM_HoldPattern || h == SYM_Part ||
+            h == SYM_MessageName) {
+            /* f::tag = ... targets f, not MessageName: a usage message may be
+             * attached to an unprotected symbol even though MessageName itself
+             * is Protected. */
             return assignment_target_symbol(lhs->data.function.args[0]);
         }
         return h;
@@ -544,6 +548,20 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
             /* Pattern-based assignment (DownValues) */
             /* We use the entire lhs as the pattern, and its head as the key */
             const char* symbol_name = lhs->data.function.head->data.symbol;
+
+            /* f::usage = "..." additionally registers the string as f's
+             * docstring so ?f and Information[f] surface it. The message is
+             * still installed as a DownValue on MessageName below, which makes
+             * MessageName[f, "usage"] (i.e. f::usage) retrievable. */
+            if (symbol_name == SYM_MessageName &&
+                lhs->data.function.arg_count == 2 &&
+                lhs->data.function.args[0]->type == EXPR_SYMBOL &&
+                lhs->data.function.args[1]->type == EXPR_STRING &&
+                strcmp(lhs->data.function.args[1]->data.string, "usage") == 0 &&
+                rhs->type == EXPR_STRING) {
+                symtab_set_docstring(lhs->data.function.args[0]->data.symbol,
+                                     rhs->data.string);
+            }
 
             Expr* actual_pattern = lhs;
             Expr* actual_rhs = rhs;

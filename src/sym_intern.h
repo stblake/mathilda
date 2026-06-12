@@ -25,6 +25,19 @@ extern "C" {
  * always return the same pointer. NULL input returns NULL. */
 const char* intern_symbol(const char* name);
 
+/* Flag every name interned so far as a System symbol. Called once, after all
+ * System symbols have been interned (end of the kernel's C-side init) and
+ * before any user/package source is parsed. Names interned afterwards (a
+ * package's private symbols, user identifiers) are NOT flagged. */
+void intern_mark_all_system(void);
+
+/* True if `name` was flagged by intern_mark_all_system() -- i.e. it is a
+ * built-in System symbol. The context resolver uses this to resolve such a
+ * bare name to System` instead of qualifying it into the current context,
+ * even when the symbol has no SymbolDef yet (pure structural heads and
+ * constants like List, Rule, Automatic, Infinity are created lazily). */
+int intern_is_system(const char* name);
+
 /* Free every interned string and clear the table. Any previously-returned
  * pointer becomes invalid. Intended for end-of-program cleanup. */
 void intern_clear(void);

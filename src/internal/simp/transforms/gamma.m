@@ -16,7 +16,13 @@
 (* == Pi/Sin[Pi z] is intentionally omitted: it usually raises complexity and  *)
 (* emits spurious ComplexInfinity at integer z during the search.) *)
 RegisterTransforms[Gamma, {
-    Function[e, Replace[e, Gamma[z_ + 1] :> z Gamma[z]]]
+    Function[e, Replace[e, Gamma[z_ + 1] :> z Gamma[z]]],
+    (* Raising / consolidation: z Gamma[z] == Gamma[z+1]. Absorbs a factor   *)
+    (* that matches the gamma argument (e.g. x Gamma[x] -> Gamma[1+x]). The   *)
+    (* Orderless Times match lets the factor and the Gamma appear in any      *)
+    (* position, and the leading r___ carries any unrelated cofactors along.  *)
+    Function[e, Replace[e,
+        HoldPattern[Times[r___, z_, Gamma[z_]]] :> Gamma[z + 1] Times[r]]]
 }];
 
 (* LogGamma[z+1] == Log[z] + LogGamma[z]. *)

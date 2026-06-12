@@ -21,6 +21,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Unevaluated", ATTR_HOLDALLCOMPLETE | ATTR_PROTECTED},
     {"Set", ATTR_HOLDFIRST | ATTR_PROTECTED},
     {"SetDelayed", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"MessageName", ATTR_HOLDFIRST | ATTR_PROTECTED},
     {"Clear", ATTR_HOLDALL | ATTR_PROTECTED},
     {"AppendTo", ATTR_HOLDFIRST | ATTR_PROTECTED},
     {"PrependTo", ATTR_HOLDFIRST | ATTR_PROTECTED},

@@ -48,6 +48,7 @@ static int get_expr_prec(Expr* e) {
     const char* head = e->data.function.head->data.symbol;
 
     if (head == SYM_Set || head == SYM_SetDelayed) return 40;
+    if (head == SYM_MessageName) return 780;
     if (head == SYM_Rule || head == SYM_RuleDelayed) return 120;
     if (head == SYM_Condition) return 130;
     if (head == SYM_Alternatives) return 160;
@@ -446,6 +447,12 @@ static void print_standard(Expr* e, int parent_prec) {
                     printf("%s", op);
                 }
             }
+        }
+        else if (head == SYM_MessageName && e->data.function.arg_count == 2 &&
+                 e->data.function.args[1]->type == EXPR_STRING) {
+            /* MessageName[f, "tag"] -> f::tag  (the tag prints bare, not quoted). */
+            print_standard(e->data.function.args[0], my_prec);
+            printf("::%s", e->data.function.args[1]->data.string);
         }
         else if ((head == SYM_Equal || head == SYM_Unequal || head == SYM_Less || head == SYM_Greater || head == SYM_LessEqual || head == SYM_GreaterEqual || head == SYM_SameQ || head == SYM_UnsameQ || head == SYM_Set || head == SYM_SetDelayed || head == SYM_Rule || head == SYM_RuleDelayed || head == SYM_Condition || head == SYM_And || head == SYM_Or || head == SYM_Alternatives) && e->data.function.arg_count >= 2) {
             const char* op = "";

@@ -23,6 +23,7 @@
 
 typedef struct InternEntry {
     char* name;                  /* malloc'd, owned by this table */
+    int   is_system;             /* 1 once intern_mark_all_system() has run */
     struct InternEntry* next;
 } InternEntry;
 
@@ -64,9 +65,38 @@ const char* intern_symbol(const char* name) {
         return NULL;
     }
     ne->name = copy;
+    ne->is_system = 0;
     ne->next = g_buckets[idx];
     g_buckets[idx] = ne;
     return copy;
+}
+
+void intern_mark_all_system(void) {
+    for (int i = 0; i < INTERN_BUCKETS; i++) {
+        for (InternEntry* e = g_buckets[i]; e; e = e->next) {
+            e->is_system = 1;
+        }
+    }
+}
+
+int intern_is_system(const char* name) {
+    if (!name) return 0;
+    unsigned int idx = hash_string(name) % INTERN_BUCKETS;
+    for (InternEntry* e = g_buckets[idx]; e; e = e->next) {
+        if (e->name == name || strcmp(e->name, name) == 0) {
+            return e->is_system;
+        }
+    }
+    return 0;
+}
+
+void intern_for_each(void (*fn)(const char* name, void* ctx), void* ctx) {
+    if (!fn) return;
+    for (int i = 0; i < INTERN_BUCKETS; i++) {
+        for (InternEntry* e = g_buckets[i]; e; e = e->next) {
+            fn(e->name, ctx);
+        }
+    }
 }
 
 void intern_clear(void) {

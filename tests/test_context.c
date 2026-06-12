@@ -16,10 +16,16 @@
 /* ---- Direct API (non-parser) tests ---- */
 
 static void test_initial_state(void) {
+    /* core_init() loads the FullSimplify package (BeginPackage["FullSimplify`"]
+     * ... EndPackage[]), which -- exactly as Mathematica's EndPackage does --
+     * prepends the package context to $ContextPath so its exported symbols
+     * (FullSimplify, RegisterTransforms) resolve under their short names. The
+     * current context returns to Global` and System` stays last. */
     ASSERT_STR_EQ(context_current(), "Global`");
-    ASSERT(context_path_count() == 2);
-    ASSERT_STR_EQ(context_path_at(0), "Global`");
-    ASSERT_STR_EQ(context_path_at(1), "System`");
+    ASSERT(context_path_count() == 3);
+    ASSERT_STR_EQ(context_path_at(0), "FullSimplify`");
+    ASSERT_STR_EQ(context_path_at(1), "Global`");
+    ASSERT_STR_EQ(context_path_at(2), "System`");
 }
 
 static void test_resolve_bare_builtin(void) {
@@ -116,7 +122,10 @@ static void test_context_builtin_of_builtin(void) {
 
 static void test_dollar_context_and_path(void) {
     assert_eval_eq("$Context", "\"Global`\"", 0);
-    assert_eval_eq("$ContextPath", "{\"Global`\", \"System`\"}", 0);
+    /* The FullSimplify package, loaded by core_init, leaves its context on
+     * $ContextPath (see test_initial_state). */
+    assert_eval_eq("$ContextPath",
+                   "{\"FullSimplify`\", \"Global`\", \"System`\"}", 0);
 }
 
 static void test_begin_changes_context(void) {

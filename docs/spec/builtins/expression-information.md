@@ -626,6 +626,27 @@ Range[n, m, d]
 	uses step d."
 ```
 
+## MessageName
+Associates a named text string (a "message") with a symbol, written with the
+`::` operator.
+- `symbol::tag` &rarr; `MessageName[symbol, "tag"]`; the tag is taken literally
+  as a string.
+- `symbol::tag = "text"` stores the message; later `symbol::tag` returns it.
+- `symbol::usage = "text"` additionally registers `text` as the symbol's
+  docstring, so `?symbol` / `Information[symbol]` display it. This is the
+  idiomatic way to declare exported symbols in a `BeginPackage[...]` prologue.
+
+**Features**: `HoldFirst`, `Protected`. An unset message stays unevaluated and
+prints in the `symbol::tag` form.
+
+```mathematica
+In[1]:= f::usage = "f[x] does a thing."; ?f
+Out[1]= "f[x] does a thing."
+
+In[2]:= f::adhoc = "custom note"; f::adhoc
+Out[2]= "custom note"
+```
+
 ## MemberQ
 - `MemberQ[list, form]`: Returns `True` if an element of list matches form, and `False` otherwise.
 - `MemberQ[list, form, levelspec]`: Tests all parts of list specified by levelspec.

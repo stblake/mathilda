@@ -723,6 +723,7 @@ typedef enum {
     OP_PREFIX,
     OP_PATTERNTEST,
     OP_COLON,
+    OP_MESSAGENAME,
     OP_INFORMATION,
     OP_FACTORIAL,
     OP_FACTORIAL2,
@@ -815,6 +816,11 @@ static OperatorDef get_operator(const char* pos) {
         def.type = OP_SETDELAYED; def.prec = 40; def.right_assoc = 1; def.head_name = "SetDelayed"; def.len = 2;
     } else if (strncmp(pos, "[[", 2) == 0) {
         def.type = OP_PART; def.prec = 1100; def.head_name = "Part"; def.len = 2;
+    } else if (strncmp(pos, "::", 2) == 0) {
+        /* MessageName: f::tag. High precedence so it binds tighter than
+         * function application's operands; the tag is read literally (as a
+         * string) by the binary loop, not parsed as an expression. */
+        def.type = OP_MESSAGENAME; def.prec = 780; def.head_name = "MessageName"; def.len = 2;
     } else if (*pos == ':') {
         def.type = OP_COLON; def.prec = 140; def.right_assoc = 1; def.head_name = "Optional"; def.len = 1;
     } else if (strncmp(pos, "=.", 2) == 0 && !isdigit((unsigned char)pos[2])) {
@@ -1103,7 +1109,37 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         if (op_def.type == OP_NONE || op_def.prec < min_prec) break;
         
         s->pos += op_def.len;
-        
+
+        if (op_def.type == OP_MESSAGENAME) {
+            /* f::tag -> MessageName[f, "tag"]. The tag is read literally: a
+             * bare identifier becomes a string, or a quoted "tag" is taken as
+             * given. This mirrors Mathematica, where `f::usage` has the string
+             * "usage" as its second argument. */
+            skip_whitespace(s);
+            Expr* tag = NULL;
+            if (*s->pos == '"') {
+                tag = parse_string(s);
+            } else {
+                char buf[256];
+                size_t bi = 0;
+                while (*s->pos && bi + 1 < sizeof(buf) &&
+                       (isalnum((unsigned char)*s->pos) || *s->pos == '$')) {
+                    buf[bi++] = *s->pos++;
+                }
+                buf[bi] = '\0';
+                if (bi == 0) {
+                    fprintf(stderr, "Expected message tag after '::'\n");
+                    expr_free(left);
+                    return NULL;
+                }
+                tag = expr_new_string(buf);
+            }
+            if (!tag) { expr_free(left); return NULL; }
+            Expr* args[2] = { left, tag };
+            left = expr_new_function(expr_new_symbol("MessageName"), args, 2);
+            continue;
+        }
+
         if (op_def.type == OP_PART) {
             Expr* args[64];
             size_t count = 0;
@@ -1406,14 +1442,32 @@ Expr* parse_expression(const char* input) {
 Expr* parse_next_expression(const char** input_ptr) {
     if (!input_ptr || !*input_ptr) return NULL;
     ParserState state = {*input_ptr, *input_ptr};
+
+    /* Skip leading whitespace, comments, and empty ';' separators so that a
+     * stray or doubled separator never yields a spurious empty statement. */
+    for (;;) {
+        skip_whitespace(&state);
+        if (*state.pos == ';' && state.pos[1] != ';') { state.pos++; continue; }
+        break;
+    }
+    if (*state.pos == '\0') { *input_ptr = state.pos; return NULL; }
+
+    /* Parse a SINGLE top-level statement. We require a minimum precedence just
+     * above CompoundExpression (prec 10) so the ';' separator is NOT consumed:
+     * each ';'-terminated statement in a file is parsed and evaluated on its
+     * own. This is essential for context-changing prologues (BeginPackage /
+     * Begin["`Private`"]) to affect the symbols parsed in *subsequent*
+     * statements -- if the whole ';'-chain were parsed as one
+     * CompoundExpression up front (prec 0), every symbol would be resolved
+     * under the context in force before BeginPackage had a chance to run. */
+    Expr* result = parse_expression_prec(&state, 11);
+
+    /* Consume one trailing top-level ';' separator so the next call begins at
+     * the following statement. */
     skip_whitespace(&state);
-    if (*state.pos == '\0') return NULL;
-    
-    Expr* result = parse_expression_state(&state);
-    
-    skip_whitespace(&state);
+    if (*state.pos == ';' && state.pos[1] != ';') state.pos++;
+
     *input_ptr = state.pos;
-    
     return result;
 }
 

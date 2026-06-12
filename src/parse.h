@@ -18,9 +18,14 @@
 Expr* parse_expression(const char* input);
 
 /*
- * Parses the next expression from the input string pointer,
- * advancing the pointer to the character after the parsed expression.
- * Returns NULL if no more expressions can be parsed.
+ * Parses the next top-level STATEMENT from the input string pointer,
+ * advancing the pointer past the parsed statement and its trailing ';'
+ * separator (if any). Unlike parse_expression, a ';'-chain is NOT folded into
+ * a single CompoundExpression: each ';'-terminated statement is returned
+ * separately, so a caller that evaluates between calls (the file loader) lets
+ * context-changing prologues such as BeginPackage[]/Begin[] take effect on the
+ * symbols parsed in later statements. Leading/empty ';' separators are skipped.
+ * Returns NULL when no more statements can be parsed.
  */
 Expr* parse_next_expression(const char** input_ptr);
 

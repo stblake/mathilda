@@ -78,6 +78,7 @@ extern const char* SYM_Complexes;
 extern const char* SYM_Composites;
 extern const char* SYM_Composition;
 extern const char* SYM_CompoundExpression;
+extern const char* SYM_MessageName;
 extern const char* SYM_Condition;
 extern const char* SYM_ConditionalExpression;
 extern const char* SYM_Conjugate;

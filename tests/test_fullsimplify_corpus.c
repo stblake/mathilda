@@ -18,6 +18,7 @@
 #include "parse.h"
 #include "eval.h"
 #include "print.h"
+#include "context.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,10 +69,15 @@ int main(int argc, char** argv) {
         Expr* input    = pair->data.function.args[0];
         Expr* expected = pair->data.function.args[1];
 
-        /* Build FullSimplify[input] from a copy and evaluate it. */
+        /* Build FullSimplify[input] from a copy and evaluate it. The head name
+         * is resolved through the context system exactly as the parser would,
+         * so the bare "FullSimplify" maps to the package's FullSimplify`
+         * FullSimplify symbol (where the DownValue lives) via $ContextPath. */
         Expr** args = (Expr**)malloc(sizeof(Expr*));
         args[0] = expr_copy(input);
-        Expr* call = expr_new_function(expr_new_symbol("FullSimplify"), args, 1);
+        char* head_name = context_resolve_name("FullSimplify");
+        Expr* call = expr_new_function(expr_new_symbol(head_name), args, 1);
+        free(head_name);
         free(args);
         Expr* result = evaluate(call);
         expr_free(call); /* evaluate does not free its argument */

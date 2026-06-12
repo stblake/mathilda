@@ -63,6 +63,7 @@ const char* SYM_Complexes = NULL;
 const char* SYM_Composites = NULL;
 const char* SYM_Composition = NULL;
 const char* SYM_CompoundExpression = NULL;
+const char* SYM_MessageName = NULL;
 const char* SYM_Condition = NULL;
 const char* SYM_ConditionalExpression = NULL;
 const char* SYM_Conjugate = NULL;
@@ -445,6 +446,7 @@ void sym_names_init(void) {
     SYM_Composites                 = intern_symbol("Composites");
     SYM_Composition                = intern_symbol("Composition");
     SYM_CompoundExpression         = intern_symbol("CompoundExpression");
+    SYM_MessageName                = intern_symbol("MessageName");
     SYM_Condition                  = intern_symbol("Condition");
     SYM_ConditionalExpression      = intern_symbol("ConditionalExpression");
     SYM_Conjugate                  = intern_symbol("Conjugate");
@@ -769,4 +771,13 @@ void sym_names_init(void) {
     SYM_BernoulliB                 = intern_symbol("BernoulliB");
     SYM_EulerE                     = intern_symbol("EulerE");
     SYM_PolyLog                    = intern_symbol("PolyLog");
+
+    /* System symbols that have no kernel implementation and no cached SYM_*
+     * pointer, but must still be recognized as System` (not qualified into a
+     * package's private context) -- they appear as symbolic heads in the
+     * FullSimplify identity libraries and must match the same heads when typed
+     * by the user. Interning them here lets intern_mark_all_system() flag them.
+     * (Surd: real n-th root; Beta: Euler beta function.) */
+    intern_symbol("Surd");
+    intern_symbol("Beta");
 }
