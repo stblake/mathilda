@@ -239,6 +239,37 @@ static void ecx_log(ecx* out, const ecx* z, mpfr_prec_t p) {
     mpfr_clears(r, ang, (mpfr_ptr)0);
 }
 
+/* out = exp(z) = e^Re (cos Im + i sin Im). Alias-safe (reads z into temps). */
+static void ecx_exp(ecx* out, const ecx* z, mpfr_prec_t p) {
+    mpfr_t er, c, s;
+    mpfr_inits2(p, er, c, s, (mpfr_ptr)0);
+    mpfr_exp(er, z->re, ERND);
+    mpfr_sin_cos(s, c, z->im, ERND);
+    mpfr_mul(out->re, er, c, ERND);
+    mpfr_mul(out->im, er, s, ERND);
+    mpfr_clears(er, c, s, (mpfr_ptr)0);
+}
+
+/* out = a / b. Alias-safe (reads inputs into temps before writing out). */
+static void ecx_div(ecx* out, const ecx* a, const ecx* b, mpfr_prec_t p) {
+    mpfr_t ar, ai, br, bi, den, t;
+    mpfr_inits2(p, ar, ai, br, bi, den, t, (mpfr_ptr)0);
+    mpfr_set(ar, a->re, ERND); mpfr_set(ai, a->im, ERND);
+    mpfr_set(br, b->re, ERND); mpfr_set(bi, b->im, ERND);
+    mpfr_mul(den, br, br, ERND);          /* |b|^2 = br^2 + bi^2 */
+    mpfr_mul(t,   bi, bi, ERND);
+    mpfr_add(den, den, t, ERND);
+    mpfr_mul(out->re, ar, br, ERND);      /* re = (ar*br + ai*bi)/|b|^2 */
+    mpfr_mul(t,       ai, bi, ERND);
+    mpfr_add(out->re, out->re, t, ERND);
+    mpfr_div(out->re, out->re, den, ERND);
+    mpfr_mul(out->im, ai, br, ERND);      /* im = (ai*br - ar*bi)/|b|^2 */
+    mpfr_mul(t,       ar, bi, ERND);
+    mpfr_sub(out->im, out->im, t, ERND);
+    mpfr_div(out->im, out->im, den, ERND);
+    mpfr_clears(ar, ai, br, bi, den, t, (mpfr_ptr)0);
+}
+
 /* Set an already-init2'd mpfr from an exact-or-real leaf. */
 static bool ei_set_mpfr(mpfr_t out, const Expr* e) {
     if (!e) return false;
@@ -283,6 +314,38 @@ static void ei_real_series_sum(mpfr_t sum, const mpfr_t x, mpfr_prec_t wp, doubl
         }
     }
     mpfr_clears(p, term, mag, peak, thr, (mpfr_ptr)0);
+}
+
+/* Ei(x) for real x via the divergent asymptotic series (DLMF 6.12.2)
+ *
+ *   Ei(x) ~ (e^x / x) Sum_{k>=0} k!/x^k,
+ *
+ * summed up to the smallest term (optimal truncation). Used only when |x| is
+ * large enough that the smallest term is below the target precision, so the
+ * truncation error is negligible. This is the only feasible route once |x| is
+ * so large that the convergent series would demand ~|x|/ln2 guard bits. */
+static void ei_real_asymptotic(mpfr_t out, const mpfr_t x, mpfr_prec_t wp, double xabs) {
+    mpfr_t term, sum, mag, prev, thr, ex;
+    mpfr_inits2(wp, term, sum, mag, prev, thr, ex, (mpfr_ptr)0);
+    mpfr_set_ui(term, 1, ERND);             /* k = 0 term = 1 */
+    mpfr_set_ui(sum, 1, ERND);
+    mpfr_set_ui(prev, 1, ERND);             /* |t_0| = 1 */
+    mpfr_set_ui(thr, 1, ERND);
+    mpfr_mul_2si(thr, thr, -(long)wp, ERND);  /* 2^-wp */
+    unsigned long cap = (unsigned long)xabs + 2;  /* never iterate past the term minimum */
+    for (unsigned long k = 1; k <= cap; k++) {
+        mpfr_mul_ui(term, term, k, ERND);
+        mpfr_div(term, term, x, ERND);      /* term *= k/x */
+        mpfr_abs(mag, term, ERND);
+        if (mpfr_cmp(mag, prev) >= 0) break; /* terms growing: stop before adding */
+        mpfr_add(sum, sum, term, ERND);
+        mpfr_set(prev, mag, ERND);
+        if (mpfr_cmp(mag, thr) < 0) break;   /* tail below target precision */
+    }
+    mpfr_exp(ex, x, ERND);
+    mpfr_div(out, ex, x, ERND);             /* e^x / x */
+    mpfr_mul(out, out, sum, ERND);          /* (e^x/x) * Sum k!/x^k */
+    mpfr_clears(term, sum, mag, prev, thr, ex, (mpfr_ptr)0);
 }
 
 /* Ei(z) for complex z into already-init'd `out` (precision wp), via the
@@ -333,6 +396,60 @@ static bool ei_ecx_series(ecx* out, const ecx* z, mpfr_prec_t wp, double zabs) {
     return ok;
 }
 
+/* Ei(z) for complex z into already-init'd `out` (precision wp) via the
+ * divergent asymptotic expansion (DLMF 6.12.2 continued off the real axis)
+ *
+ *   Ei(z) ~ (e^z / z) Sum_{k>=0} k!/z^k  +  i pi sign(Im z),
+ *
+ * summed to the smallest term. The leading e^z/z is the asymptotic of
+ * -E_1(-z); the i pi sign(Im z) constant is the jump of the principal Ei
+ * across its branch cut (so Ei(+-I Inf) = +-I Pi). `im_sign` is the sign of
+ * Im z. Used only when |z| is large enough that the smallest term is below the
+ * target precision -- the regime where the convergent series is infeasible. */
+static void ei_ecx_asymptotic(ecx* out, const ecx* z, mpfr_prec_t wp,
+                              double zabs, int im_sign) {
+    ecx term, sum, scaled, ez, ratio;
+    ecx_init(&term, wp); ecx_init(&sum, wp); ecx_init(&scaled, wp);
+    ecx_init(&ez, wp);   ecx_init(&ratio, wp);
+    mpfr_t mag, prev, thr;
+    mpfr_inits2(wp, mag, prev, thr, (mpfr_ptr)0);
+
+    /* sum = Sum_{k>=0} k!/z^k, truncated at the smallest term. */
+    mpfr_set_ui(term.re, 1, ERND); mpfr_set_zero(term.im, 1);   /* k = 0 term = 1 */
+    mpfr_set_ui(sum.re, 1, ERND);  mpfr_set_zero(sum.im, 1);
+    mpfr_set_ui(prev, 1, ERND);                                 /* |t_0| = 1 */
+    mpfr_set_ui(thr, 1, ERND);
+    mpfr_mul_2si(thr, thr, -(long)wp, ERND);                    /* 2^-wp */
+    unsigned long cap = (unsigned long)zabs + 2;  /* never iterate past the minimum */
+    for (unsigned long k = 1; k <= cap; k++) {
+        mpfr_mul_ui(scaled.re, term.re, k, ERND);  /* scaled = term * k */
+        mpfr_mul_ui(scaled.im, term.im, k, ERND);
+        ecx_div(&term, &scaled, z, wp);            /* term *= k/z */
+        ecx_abs(mag, &term);
+        if (mpfr_cmp(mag, prev) >= 0) break;       /* terms growing: stop before adding */
+        ecx_add(&sum, &sum, &term);
+        mpfr_set(prev, mag, ERND);
+        if (mpfr_cmp(mag, thr) < 0) break;         /* tail below target precision */
+    }
+
+    ecx_exp(&ez, z, wp);
+    ecx_div(&ratio, &ez, z, wp);                   /* e^z / z */
+    ecx_mul(out, &ratio, &sum, wp);                /* (e^z/z) * Sum k!/z^k */
+
+    if (im_sign != 0) {                            /* + i pi sign(Im z) */
+        mpfr_t pi;
+        mpfr_init2(pi, wp);
+        mpfr_const_pi(pi, ERND);
+        if (im_sign < 0) mpfr_neg(pi, pi, ERND);
+        mpfr_add(out->im, out->im, pi, ERND);
+        mpfr_clear(pi);
+    }
+
+    mpfr_clears(mag, prev, thr, (mpfr_ptr)0);
+    ecx_clear(&term); ecx_clear(&sum); ecx_clear(&scaled);
+    ecx_clear(&ez);   ecx_clear(&ratio);
+}
+
 /* Build a complex result from (re, im) at out_prec: machine precision (<= 53)
  * yields Real parts, higher yields MPFR parts. make_complex drops a zero
  * imaginary part to a bare real. */
@@ -374,12 +491,33 @@ static Expr* ei_mpfr_real(const Expr* arg, mpfr_prec_t out_prec) {
         }
     } else {
         double xd = mpfr_get_d(x, ERND);
-        long guard = 64 + (long)(fabs(xd) / M_LN2);
+        double xabs = fabs(xd);
+        /* Large |x|: the convergent series would need ~|x|/ln2 guard bits (and
+         * overflows the guard arithmetic for astronomically large |x|). Switch
+         * to the asymptotic series, which is accurate precisely here -- its
+         * smallest term ~ e^-|x| sits below the target precision. */
+        if (xabs > (double)(out_prec + 24) * M_LN2 + 8.0) {
+            mpfr_prec_t wp = out_prec + 64;
+            mpfr_t xv, sum;
+            mpfr_inits2(wp, xv, sum, (mpfr_ptr)0);
+            ei_set_mpfr(xv, arg);
+            ei_real_asymptotic(sum, xv, wp, xabs);
+            if (out_prec <= 53) {
+                out = expr_new_real(mpfr_get_d(sum, ERND));
+            } else {
+                out = expr_new_mpfr_bits(out_prec);
+                mpfr_set(out->data.mpfr, sum, ERND);
+            }
+            mpfr_clears(xv, sum, (mpfr_ptr)0);
+            mpfr_clear(x);
+            return out;
+        }
+        long guard = 64 + (long)(xabs / M_LN2);
         mpfr_prec_t wp = out_prec + (mpfr_prec_t)guard;
         mpfr_t xv, sum, euler, lnx;
         mpfr_inits2(wp, xv, sum, euler, lnx, (mpfr_ptr)0);
         ei_set_mpfr(xv, arg);
-        ei_real_series_sum(sum, xv, wp, fabs(xd));
+        ei_real_series_sum(sum, xv, wp, xabs);
         mpfr_const_euler(euler, ERND);
         mpfr_abs(lnx, xv, ERND);
         mpfr_log(lnx, lnx, ERND);            /* ln|x| */
@@ -404,9 +542,31 @@ static Expr* ei_mpfr_complex(Expr* re, Expr* im, mpfr_prec_t out_prec) {
     double red = 0.0, imd = 0.0;
     (void)ei_to_double(re, &red);
     (void)ei_to_double(im, &imd);
+    double zabs = sqrt(red * red + imd * imd);
+
+    /* Large |z|: the convergent series needs ~|z|/ln2 guard bits and ~2|z|
+     * terms -- infeasible, and the guard arithmetic overflows for very large
+     * |z|. Use the asymptotic expansion instead; its smallest term ~ e^-|z| is
+     * below the target precision exactly in this regime. The threshold also
+     * keeps the convergent branch's working precision bounded (no overflow). */
+    if (zabs > (double)(out_prec + 24) * M_LN2 + 8.0) {
+        mpfr_prec_t wp = out_prec + 64;
+        int im_sign = (imd > 0.0) ? 1 : (imd < 0.0 ? -1 : 0);
+        ecx z, g;
+        ecx_init(&z, wp); ecx_init(&g, wp);
+        Expr* out = NULL;
+        if (ei_set_mpfr(z.re, re) && ei_set_mpfr(z.im, im)) {
+            ei_ecx_asymptotic(&g, &z, wp, zabs, im_sign);
+            if (!mpfr_nan_p(g.re) && !mpfr_nan_p(g.im) &&
+                !mpfr_inf_p(g.re) && !mpfr_inf_p(g.im))
+                out = ei_complex_result(g.re, g.im, out_prec);
+        }
+        ecx_clear(&z); ecx_clear(&g);
+        return out;
+    }
+
     /* Guard bits absorb the cancellation: terms peak ~e^|z|, the answer is
      * ~e^Re z, so the lost leading digits number (|z| + |Re z|)/ln2 bits. */
-    double zabs = sqrt(red * red + imd * imd);
     long guard = 64 + (long)((zabs + fabs(red)) / M_LN2);
     mpfr_prec_t wp = out_prec + (mpfr_prec_t)guard;
 

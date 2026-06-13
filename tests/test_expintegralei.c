@@ -151,6 +151,41 @@ void test_ei_branch() {
                          -0.21938393439552027, -3.14159265, 1e-4);
 }
 
+/* ---- large |z|: asymptotic expansion -------------------------------- */
+
+void test_ei_large_magnitude() {
+    /* For large |z| the convergent series is infeasible (and its guard-bit
+     * arithmetic used to overflow, aborting in mpfr_init2); the asymptotic
+     * series takes over. At 8 digits z = -50 I routes through the asymptotic
+     * path and must agree with the 25-digit convergent reference:
+     *   Ei(-50 I) = Ci(50) - I (Pi/2 + Si(50)). */
+    assert_eval_startswith("N[Re[ExpIntegralEi[-50 I]], 8]", "-0.0056283");
+    assert_eval_startswith("N[Im[ExpIntegralEi[-50 I]], 8]", "-3.122413");
+    /* +50 I is the conjugate (+I Pi branch). */
+    assert_eval_startswith("N[Im[ExpIntegralEi[50 I]], 8]", "3.122413");
+
+    /* Re z << 0: e^z underflows, the result collapses to the branch constant
+     * -I Pi (Im z < 0) with a vanishing real part. */
+    assert_eval_startswith("N[Im[ExpIntegralEi[-80 - 2 I]], 12]",
+                           "-3.14159265358");
+
+    /* Regression: the reported abort. N numericises -10^60 I, driving |z| to
+     * 1e60; this must now yield a finite numeric result, not crash. */
+    {
+        Expr* e = parse_expression("N[ExpIntegralEi[-10^60 I] + I Pi, 20]");
+        ASSERT(e != NULL);
+        Expr* r = evaluate(e);
+        expr_free(e);
+        ASSERT_MSG(r != NULL && (r->type == EXPR_REAL ||
+                   (r->type == EXPR_FUNCTION &&
+                    strcmp(r->data.function.head->data.symbol, "Complex") == 0)),
+                   "N[ExpIntegralEi[-10^60 I] + I Pi, 20] must be finite numeric");
+        expr_free(r);
+    }
+    /* Real large-negative argument: Ei(-10^60) ~ 0 (e^x underflow), no crash. */
+    assert_eval_startswith("N[ExpIntegralEi[-10^60], 20]", "-0.");
+}
+
 /* ---- derivatives ---------------------------------------------------- */
 
 void test_ei_derivatives() {
@@ -210,6 +245,7 @@ int main() {
     TEST(test_ei_machine_complex);
     TEST(test_ei_arbitrary_complex);
     TEST(test_ei_branch);
+    TEST(test_ei_large_magnitude);
     TEST(test_ei_derivatives);
     TEST(test_ei_listable);
     TEST(test_ei_attributes);

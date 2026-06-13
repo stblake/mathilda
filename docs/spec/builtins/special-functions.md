@@ -240,6 +240,16 @@ the principal value (the average of the two sides) is returned.
     Approaching the cut from above gives +I Pi, from below −I Pi
     (`ExpIntegralEi[-1. + 10^-10 I] ≈ -0.219384 + 3.14159 I`). A `double complex`
     series is the `USE_MPFR=0` fallback.
+  - **Large |z|** (real or complex) → the convergent series is infeasible
+    (it would need ~`|z|/ln2` guard bits and ~`2|z|` terms), so once `|z|`
+    exceeds roughly `prec·ln2` the **asymptotic expansion** takes over:
+    `Ei(z) ~ (e^z/z) Σ_{k≥0} k!/z^k + i π sign(Im z)`, summed to its smallest
+    term (DLMF 6.12.2; the `i π sign(Im z)` constant is the branch jump, so
+    `ExpIntegralEi[±I Infinity] = ±I Pi` is recovered in the limit). The two
+    regimes overlap and agree (`ExpIntegralEi[-50 I]` from either route gives
+    `-0.00562839 − 3.12241 I`). This also fixes an `mpfr_init2` abort: the old
+    guard-bit count `(long)(|z|/ln2)` overflowed for astronomically large `|z|`
+    (e.g. `N[ExpIntegralEi[-10^60 I] + I Pi, 20]`).
 - Derivative: `D[ExpIntegralEi[z], z] = E^z/z` (chain rule applies, e.g.
   `D[ExpIntegralEi[x^2], x] = (2 E^x^2)/x`); the origin Taylor series at a regular
   point follows from the generic `D`-based fallback.
