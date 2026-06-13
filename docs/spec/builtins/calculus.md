@@ -1324,6 +1324,95 @@ Out[10]= -14.420070264639875819037588981065446865125
 ```
 
 
+## NSeries
+
+Numerical Taylor/Laurent series.  `NSeries[f, {x, x0, n}]` gives a numerical
+approximation to the series expansion of `f` about `x = x0`, including the
+terms `(x - x0)^-n` through `(x - x0)^n`, as a `SeriesData` object.
+Implemented natively in C in `src/numerical_calculus/nseries.{c,h}`.
+Attribute: `Protected`.
+
+Unlike the symbolic `Series` (which needs a power series at `x0`), `NSeries`
+needs only to **sample `f` numerically**, so it works for functions whose
+coefficients have no closed form and for **Laurent expansions about essential
+singularities** such as `Sin[x + 1/x]`.  It cannot tell a tiny spurious
+residual from a true zero -- `Chop` the result when needed -- and returns an
+incorrect value if the disk centred at `x0` contains a branch cut of `f`.
+For a Laurent result, the `SeriesData` neglects higher-order poles.
+
+### Method
+
+`f` is sampled at `N` equispaced points on a circle of radius `r` centred at
+`x0`, and a discrete Fourier transform of the samples recovers the Laurent
+coefficients via Cauchy's integral formula (Lyness & Sande, 1971;
+Bornemann, *FoCM* 2011):
+
+```
+z_j = x0 + r e^{2 pi i j / N},  j = 0 .. N-1,
+c_k = (1/N) sum_j f(z_j) e^{-2 pi i j k / N},     (DFT of the samples)
+a_e = c_{e mod N} * r^{-e}        for e = -n .. n  (coeff of (x-x0)^e).
+```
+
+The upper-half DFT bins (`k = N - m`) supply the **negative**-power
+coefficients, so one transform yields both the principal part and the
+analytic part; this is exact when `f` is analytic on an annulus containing
+the circle.  The sample count is a power of two with an oversampling margin,
+`N = 2^{ceil(log2 n) + 2}`, which pushes the leading aliased term below the
+round-off floor.  A direct `O(N^2)` DFT is used (no FFT dependency): `N` is
+small and each sample requires a full symbolic evaluation of `f`, which
+dominates the runtime.  The same path serves machine (`double _Complex`) and
+arbitrary-precision (MPFR) computations.
+
+### Result
+
+`SeriesData[x, x0, {a_-n, ..., a_n}, -n, n+1, 1]` -- the coefficient list runs
+from exponent `-n` upward, with an `O[(x-x0)^{n+1}]` term.  Coefficients are
+real (`Real`/MPFR) when their imaginary part is exactly zero, else
+`Complex[re, im]`.
+
+### Options
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `Radius`           | `1`             | Radius of the sampled circle; picks the annulus within which a Laurent series converges. |
+| `WorkingPrecision` | `MachinePrecision` | Machine doubles, or MPFR at the requested decimal precision (also shrinks spurious imaginary residuals). |
+
+### Diagnostics (stderr)
+
+| Tag              | Triggered when |
+|------------------|----------------|
+| `NSeries::ivar`  | Second argument is not a `{x, x0, n}` list, the variable is not a symbol, or `n` is not a non-negative integer. |
+| `NSeries::nnum`  | `x0` is not numeric, or `f` did not evaluate to a number on the contour. |
+| `NSeries::badopt`| Invalid option value or unrecognised option. |
+
+### Examples
+
+```mathematica
+In[1]:= NSeries[Exp[x], {x, 0, 5}] // Chop
+Out[1]= 1. + x + 0.5 x^2 + 0.166667 x^3 + 0.0416667 x^4 + 0.00833333 x^5 + O[x]^6
+
+In[2]:= NSeries[Exp[x], {x, I, 5}] // Chop
+Out[2]= (0.540302 + 0.841471 I) + (0.540302 + 0.841471 I) (x - I) + ... + O[x - I]^6
+
+In[3]:= NSeries[Sin[x + 1/x], {x, 0, 10}] // Chop
+Out[3]= 2.49234*10^-6/x^9 - 0.000174944/x^7 + ... + 0.576725/x + 0.576725 x - ... + O[x]^11
+
+In[4]:= NSeries[1/((1 + x) (3 + x)), {x, 0, 10}, Radius -> 5] // Chop
+Out[4]= 9841./x^10 - 3280./x^9 + 1093./x^8 - 364./x^7 + 121./x^6 - 40./x^5 + 13./x^4 - 4./x^3 + 1/x^2 + O[x]^11
+
+In[5]:= NSeries[Exp[x], {x, 0, 5}, WorkingPrecision -> 30] // Chop
+Out[5]= 1. + x + 0.5 x^2 + 0.16666666666666666... x^3 + ... + O[x]^6
+```
+
+### Notes
+
+- Unlike Mathematica's `NSeries` (whose documented count is
+  `2^{ceil(log2 n) + 1}`), Mathilda oversamples by `+2` for a wider
+  anti-aliasing margin.
+- `Series[Sin[x + 1/x], {x, 0, 10}]` returns unevaluated (no power series at
+  the essential singularity); `NSeries` recovers the Laurent expansion.
+
+
 ## FindMinimum / FindMaximum
 
 Iterative local optimisation.  Implemented natively in C in

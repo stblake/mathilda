@@ -277,6 +277,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/quadrature.c
     ../src/numerical_calculus/nresidue.c
     ../src/numerical_calculus/nderiv.c
+    ../src/numerical_calculus/nseries.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -349,6 +350,9 @@ target_include_directories(nresidue_tests PRIVATE ../src ../src/numerical_calcul
 
 add_executable(nderiv_tests test_nderiv.c ${COMMON_SRC})
 target_include_directories(nderiv_tests PRIVATE ../src ../src/numerical_calculus)
+
+add_executable(nseries_tests test_nseries.c ${COMMON_SRC})
+target_include_directories(nseries_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(clearall_remove_protect_tests test_clearall_remove_protect.c ${COMMON_SRC})
 target_include_directories(clearall_remove_protect_tests PRIVATE ../src)

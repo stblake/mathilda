@@ -247,6 +247,7 @@ const char* SYM_ND = NULL;
 const char* SYM_NHoldRest = NULL;
 const char* SYM_NIntegrate = NULL;
 const char* SYM_NResidue = NULL;
+const char* SYM_NSeries = NULL;
 const char* SYM_RealExponent = NULL;
 const char* SYM_Negative = NULL;
 const char* SYM_NonNegative = NULL;
@@ -639,6 +640,7 @@ void sym_names_init(void) {
     SYM_NHoldRest                  = intern_symbol("NHoldRest");
     SYM_NIntegrate                 = intern_symbol("NIntegrate");
     SYM_NResidue                   = intern_symbol("NResidue");
+    SYM_NSeries                    = intern_symbol("NSeries");
     SYM_RealExponent               = intern_symbol("RealExponent");
     SYM_Negative                   = intern_symbol("Negative");
     SYM_NonNegative                = intern_symbol("NonNegative");

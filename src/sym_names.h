@@ -262,6 +262,7 @@ extern const char* SYM_ND;
 extern const char* SYM_NHoldRest;
 extern const char* SYM_NIntegrate;
 extern const char* SYM_NResidue;
+extern const char* SYM_NSeries;
 extern const char* SYM_RealExponent;
 extern const char* SYM_Negative;
 extern const char* SYM_NonNegative;

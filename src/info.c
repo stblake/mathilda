@@ -221,6 +221,23 @@ void info_init(void) {
         "Options: Method (EulerSum | NIntegrate), Scale (step size / contour radius / "
         "complex direction, default 1), Terms (EulerSum extrapolation terms, default 7), "
         "WorkingPrecision, PrecisionGoal, MaxRecursion.");
+    symtab_set_docstring("NSeries",
+        "NSeries[f, {x, x0, n}]\n"
+        "\tgives a numerical approximation to the series expansion of f about "
+        "x = x0, including the terms (x - x0)^-n through (x - x0)^n, as a "
+        "SeriesData object.\n\n"
+        "f is sampled on a circle in the complex plane centred at x0 and a "
+        "discrete Fourier transform of the samples recovers the Taylor or "
+        "Laurent coefficients (Cauchy's integral formula). The region of "
+        "convergence is the annulus, containing the sampled circle, where f is "
+        "analytic. Works for essential singularities (e.g. Sin[x + 1/x]) where "
+        "the symbolic Series cannot. Returns an incorrect result if the disk "
+        "centred at x0 contains a branch cut of f; for a Laurent series the "
+        "SeriesData neglects higher-order poles. No effort is made to justify "
+        "the precision of the coefficients, and small spurious residuals are "
+        "not recognised as zero -- Chop the result when needed.\n\n"
+        "Options: Radius (radius of the sampled circle, default 1), "
+        "WorkingPrecision (default MachinePrecision).");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"

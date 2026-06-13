@@ -546,6 +546,8 @@ void core_init(void) {
     nresidue_init();
     void nd_init(void);
     nd_init();
+    void nseries_init(void);
+    nseries_init();
     info_init();
     datetime_init();
     linalg_init();
