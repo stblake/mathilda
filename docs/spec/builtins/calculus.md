@@ -1413,6 +1413,110 @@ Out[5]= 1. + x + 0.5 x^2 + 0.16666666666666666... x^3 + ... + O[x]^6
   the essential singularity); `NSeries` recovers the Laurent expansion.
 
 
+## NLimit
+
+Numerical limit.  `NLimit[expr, z -> z0]` numerically finds the limiting value
+of `expr` as `z` approaches `z0`.  Implemented natively in C in
+`src/numerical_calculus/nlimit.{c,h}`.  Attribute: `Protected`.  Like the other
+numerical-calculus builtins, `NLimit` cannot tell a tiny spurious residual from
+a true zero -- `Chop` the result when needed.
+
+`NLimit` constructs a geometric sequence of sample points approaching `z0` and
+recovers the limit by sequence acceleration:
+
+- **Finite `z0`:** samples `z_k = z0 - d * Scale * 2^-k`, where `d` is the
+  (unit) `Direction` vector.  The points lie on the `-d` side of `z0`, so one
+  moves *along* `d` to reach it.
+- **Infinite `z0`** (`Infinity`, `-Infinity`, `I Infinity`,
+  `DirectedInfinity[d]`, `ComplexInfinity`): samples march outward on the
+  point's ray from the origin, `z_k = u * Scale * 2^k`.
+
+### Methods
+
+- **`EulerSum`** (default) -- Richardson / Romberg extrapolation of the sample
+  sequence, using the all-powers denominator `2^j - 1` (the same convention as
+  `ND`'s `EulerSum`).  Best for smooth power-series approaches; depth is set by
+  `Terms`.
+- **`SequenceLimit`** -- Wynn's epsilon algorithm (iterated Shanks transform).
+  Exact in one step for a geometric / exponential tail; the number of
+  iterations is `WynnDegree` (which needs at least `2(WynnDegree + 1)` terms).
+  The estimate is read from the `ε_{2·WynnDegree}` column at the entry that best
+  agrees with its neighbour (avoiding the roundoff-amplified bottom corner).
+
+### Options
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `Method` | `EulerSum` | `EulerSum` or `SequenceLimit`. |
+| `WorkingPrecision` | `MachinePrecision` | `MachinePrecision`, or digits → MPFR. |
+| `Direction` | `Automatic` (≡ `-1`) | complex approach vector for finite `z0`. |
+| `Scale` | `1` | initial step (finite) / distance from origin (infinite). |
+| `Terms` | `7` | number of sample points / extrapolation depth. |
+| `WynnDegree` | `1` | `SequenceLimit` iterations. |
+
+`Direction -> Automatic` (`-1`) approaches a finite point from larger values;
+`Direction -> 1` from smaller; complex rays such as `-Exp[225 Degree I]` select
+an arbitrary direction in the complex plane (essential for path-dependent
+limits and branch cuts).
+
+### Robustness
+
+The last two extrapolates are compared against the *sample scale* (the largest
+`|S_k|`).  A divergent or non-settling sequence -- e.g. a power-law approach to
+infinity like `NLimit[1/x, x -> 0]` -- yields `NLimit::noise` and the form is
+returned unevaluated.  A bounded but only roughly-resolved limit is returned
+rather than refused, matching Mathematica.
+
+### Beyond / unlike Mathematica's NLimit
+
+- `EulerSum` is implemented as Richardson/Romberg extrapolation (consistent
+  with `ND`), not Euler series summation; results agree on smooth cases.
+- Some sequences that make Mathematica's `EulerSum` fail (e.g.
+  `NLimit[Tanh[x], x -> Infinity]` at the default `Terms`) succeed here because
+  Richardson does not divide by a vanishing Euler ratio.
+
+### Messages
+
+| Message | When |
+|---------|------|
+| `NLimit::noise` | Cannot recognise a limiting value (divergent / noisy sequence). |
+| `NLimit::notnum` | `expr` not numerical at a sample point, or the point/Direction/Scale is not numerical. |
+| `NLimit::ndterm` | Not enough `Terms` for the chosen `Method`. |
+| `NLimit::badopt` / `NLimit::badmeth` | Invalid option value / unsupported `Method`. |
+
+### Examples
+
+```mathematica
+In[1]:= NLimit[Sin[x]/x, x -> 0]
+Out[1]= 1.
+
+In[2]:= NLimit[(1 + 1/n)^n, n -> Infinity]
+Out[2]= 2.71828
+
+In[3]:= NLimit[(1 + I/x)^x, x -> Infinity]
+Out[3]= 0.540302 + 0.841471 I
+
+In[4]:= NLimit[Tanh[Pi x]/(1 + x^2), x -> I] // Chop
+Out[4]= -1.5708 I
+
+In[5]:= NLimit[(10^x - 1)/x, x -> 0, Terms -> 10, Method -> SequenceLimit]
+Out[5]= 2.30259                                   (= Log[10])
+
+In[6]:= NLimit[z + Conjugate[z]/z, z -> 0, Direction -> -I] // Chop
+Out[6]= -1.
+
+In[7]:= NLimit[Tan[z], z -> Infinity I, Method -> SequenceLimit] // Chop
+Out[7]= 1. I
+
+In[8]:= NLimit[(2^x - 1)/x, x -> 0, WorkingPrecision -> 30, Terms -> 14]
+Out[8]= 0.693147180559945309417232121458   (= Log[2])
+
+In[9]:= NLimit[1/x, x -> 0]
+        NLimit::noise: Cannot recognize a limiting value. ...
+Out[9]= NLimit[1/x, x -> 0]
+```
+
+
 ## FindMinimum / FindMaximum
 
 Iterative local optimisation.  Implemented natively in C in

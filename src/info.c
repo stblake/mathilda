@@ -238,6 +238,20 @@ void info_init(void) {
         "not recognised as zero -- Chop the result when needed.\n\n"
         "Options: Radius (radius of the sampled circle, default 1), "
         "WorkingPrecision (default MachinePrecision).");
+    symtab_set_docstring("NLimit",
+        "NLimit[expr, z -> z0]\n"
+        "\tnumerically finds the limiting value of expr as z approaches z0.\n\n"
+        "A geometric sequence of sample points approaching z0 is constructed "
+        "(z0 may be finite, complex, or an infinite point such as Infinity or "
+        "I Infinity) and the limit is recovered by sequence acceleration. "
+        "Method -> EulerSum (default) uses Richardson/Romberg extrapolation; "
+        "Method -> SequenceLimit uses Wynn's epsilon algorithm. expr must be "
+        "numerical when z is numerical. Small spurious residuals are not "
+        "recognised as zero -- Chop if needed.\n\n"
+        "Options: Method (EulerSum | SequenceLimit), WorkingPrecision (default "
+        "MachinePrecision), Direction (Automatic == -1, or a complex approach "
+        "vector), Scale (initial step / distance, default 1), Terms (default 7), "
+        "WynnDegree (SequenceLimit iterations, default 1).");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"
