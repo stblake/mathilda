@@ -550,6 +550,8 @@ void core_init(void) {
     nseries_init();
     void nlimit_init(void);
     nlimit_init();
+    void nsum_init(void);
+    nsum_init();
     info_init();
     datetime_init();
     linalg_init();

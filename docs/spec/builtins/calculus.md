@@ -1517,6 +1517,117 @@ Out[9]= NLimit[1/x, x -> 0]
 ```
 
 
+## NSum
+
+Numerical summation.  `NSum[f, {i, imin, imax}]` gives a numerical
+approximation to the sum of `f` for `i` running from `imin` to `imax` (which
+may be `Infinity`).  Implemented natively in C in
+`src/numerical_calculus/nsum.{c,h}`.  Attributes: `HoldAll, Protected` -- the
+summand and the iterator bounds are held, and the index is `Block`-localised.
+Like the other numerical-calculus builtins, `NSum` cannot tell a tiny spurious
+residual from a true zero -- `Chop` when needed.
+
+### Forms
+
+- `NSum[f, {i, imin, imax}]` -- sum with unit step (`{i, imax}` means
+  `imin = 1`).
+- `NSum[f, {i, imin, imax, di}]` -- step `di`; terms are reindexed to
+  `x_k = imin + k di`.
+- `NSum[f, {i, ...}, {j, ...}, ...]` -- multidimensional sum; an inner bound
+  may depend on an outer index (e.g. `{k, 1, n}`), handled by making the outer
+  summand an inner `NSum`.
+
+### Methods
+
+The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, default
+15) are always summed explicitly, after which the tail is approximated.
+
+- **`EulerMaclaurin`** (alias `Integrate`) -- explicit head terms plus the
+  Euler–Maclaurin tail
+  `(1/di) ∫_N^∞ f dx + f(N)/2 − Σ_{j≥1} B_{2j}/(2j)! · di^{2j-1} f^(2j-1)(N)`,
+  with `N = imin + NSumTerms·di`.  The tail integral uses a self-contained
+  **double-exponential (exp-sinh)** quadrature (`dequad.{c,h}`); the derivative
+  corrections use iterated symbolic `D` and `BernoulliB`, truncated at the
+  smallest term (the series is asymptotic) and capped by derivative size so a
+  summand like `1/Fibonacci[i]` cannot blow up.  Best for monotone,
+  slowly-converging positive series.
+- **`AlternatingSigns`** -- the Cohen–Villegas–Zagier (2000) algorithm: a single
+  pass over `n` terms with Chebyshev weights `d_n = ((3+√8)^n + (3+√8)^{-n})/2`
+  delivering ≈ `2.54 n` bits.  The state of the art for alternating series.
+- **`WynnEpsilon`** (alias `SequenceLimit`) -- Wynn's epsilon algorithm applied
+  to the partial sums (shared with `NLimit` via `seqaccel.{c,h}`).  General
+  fallback; excellent for alternating / geometric tails, weak on monotone ones.
+- **`Automatic`** (default) -- probes the first terms and chooses
+  `AlternatingSigns` for a strictly alternating decreasing summand,
+  `EulerMaclaurin` for a monotone tail, else `WynnEpsilon`.
+
+A **large finite** sum is evaluated as the difference of two infinite tails,
+`Σ_{imin}^∞ − Σ_{imax+di}^∞`, when the summand decays.
+
+### Options
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `Method` | `Automatic` | `Automatic`, `EulerMaclaurin`, `AlternatingSigns`, `WynnEpsilon`. |
+| `WorkingPrecision` | `MachinePrecision` | `MachinePrecision`, or digits → MPFR. |
+| `NSumTerms` | `15` | head terms summed explicitly before extrapolation. |
+| `NSumExtraTerms` | auto | length of the Wynn partial-sum sequence. |
+| `WynnDegree` | `1` | `WynnEpsilon` iterations. |
+| `VerifyConvergence` | `True` | ratio-test divergence check (infinite sums). |
+| `AccuracyGoal` / `PrecisionGoal` | `Infinity` / `Automatic` | target tolerances. |
+
+### Convergence
+
+For infinite sums `VerifyConvergence -> True` runs a tail ratio test; a clearly
+divergent sum (`|a_{k+1}/a_k| > 1`) yields `NSum::div` and `ComplexInfinity`.
+The test is deliberately blind to ratios → 1, so (like Mathematica) it does not
+detect the divergence of `Σ 1/k`.  `VerifyConvergence -> False` skips the test
+and returns the formal accelerated value (e.g. `NSum[2^i, {i,0,Infinity}]`
+gives the Shanks value `-1`).
+
+### Messages
+
+| Message | When |
+|---------|------|
+| `NSum::div`  | The sum does not appear to converge (returns `ComplexInfinity`). |
+| `NSum::ncvg` | The extrapolation did not converge (try more `NSumExtraTerms` or higher `WorkingPrecision`). |
+| `NSum::nnum` | The summand did not evaluate to a number at a term. |
+| `NSum::badopt` | Invalid option value. |
+
+### Examples
+
+```mathematica
+In[1]:= NSum[(-5)^i/i!, {i, 0, Infinity}, NSumTerms -> 25] - Exp[-5]
+Out[1]= 1.4*10^-15
+
+In[2]:= NSum[1/i^2, {i, 1, Infinity}] - Pi^2/6 // N
+Out[2]= 2.2*10^-16
+
+In[3]:= NSum[1/n^(11/10), {n, 1, Infinity}, WorkingPrecision -> 40] - Zeta[11/10]
+Out[3]= -2.78*10^-27
+
+In[4]:= NSum[(-1)^x/(1 + (x - 12)^2), {x, 0, Infinity},
+          Method -> "AlternatingSigns", WorkingPrecision -> 30]
+Out[4]= 0.275193859413953039568971561592
+
+In[5]:= NSum[1/2^i, {i, 0, Infinity, 2}]
+Out[5]= 1.33333                                    (= 4/3)
+
+In[6]:= NSum[Log[x]/x^(2 + 2 I), {x, 1, Infinity}]
+Out[6]= -0.182175 - 0.136618 I
+
+In[7]:= NSum[1/i^2, {i, 100, 10^6}]
+Out[7]= 0.0100492
+
+In[8]:= NSum[(-1)^n (2/n)^k/k^2, {n, 2, Infinity}, {k, 1, n}]
+Out[8]= 0.770188
+
+In[9]:= NSum[2^i, {i, 0, Infinity}]
+        NSum::div: the sum does not appear to converge
+Out[9]= ComplexInfinity
+```
+
+
 ## FindMinimum / FindMaximum
 
 Iterative local optimisation.  Implemented natively in C in

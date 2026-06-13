@@ -252,6 +252,23 @@ void info_init(void) {
         "MachinePrecision), Direction (Automatic == -1, or a complex approach "
         "vector), Scale (initial step / distance, default 1), Terms (default 7), "
         "WynnDegree (SequenceLimit iterations, default 1).");
+    symtab_set_docstring("NSum",
+        "NSum[f, {i, imin, imax}]\n"
+        "\tgives a numerical approximation to the sum of f for i from imin to "
+        "imax.\n\n"
+        "NSum[f, {i, imin, imax, di}] uses step di. imax may be Infinity. "
+        "NSum[f, {i, ...}, {j, ...}, ...] evaluates a multidimensional sum (an "
+        "inner bound may depend on an outer index). The index is localised "
+        "(HoldAll). Method -> Automatic picks Euler-Maclaurin for monotone "
+        "series, the Cohen-Villegas-Zagier method for alternating series, and "
+        "Wynn's epsilon (partial-sum acceleration) otherwise; large finite sums "
+        "use the difference of two infinite tails. Machine or arbitrary "
+        "precision via WorkingPrecision.\n\n"
+        "Options: Method (Automatic | EulerMaclaurin | AlternatingSigns | "
+        "WynnEpsilon), WorkingPrecision (default MachinePrecision), NSumTerms "
+        "(head terms summed explicitly, default 15), NSumExtraTerms, WynnDegree, "
+        "VerifyConvergence (default True; a divergent sum gives ComplexInfinity), "
+        "AccuracyGoal, PrecisionGoal.");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"

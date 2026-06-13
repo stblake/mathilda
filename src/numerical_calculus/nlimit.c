@@ -71,6 +71,7 @@
 #include "attr.h"
 #include "eval.h"
 #include "numeric.h"
+#include "seqaccel.h"     /* shared Richardson + Wynn-epsilon kernels */
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -372,229 +373,15 @@ static bool nl_infinite_ray(Expr* z0, Expr** ray) {
 }
 
 /* ------------------------------------------------------------------ *
- *  Extrapolation — machine precision                                  *
- * ------------------------------------------------------------------ */
-
-/* Richardson / Romberg (the "EulerSum" method).  Returns the accelerated value
- * and, via *step, the magnitude of the last extrapolation step (the difference
- * between the last two diagonal entries) for the convergence test. */
-static bool nl_richardson_machine(const double _Complex* S, int terms,
-                                  double _Complex* result, double* step) {
-    double _Complex* T = malloc(sizeof(double _Complex) * (size_t)terms * terms);
-    if (!T) return false;
-    for (int i = 0; i < terms; i++) T[(size_t)i * terms + 0] = S[i];
-    for (int j = 1; j < terms; j++) {
-        double denom = ldexp(1.0, j) - 1.0;        /* 2^j - 1 */
-        for (int i = j; i < terms; i++) {
-            double _Complex a = T[(size_t)i * terms + (j - 1)];
-            double _Complex b = T[(size_t)(i - 1) * terms + (j - 1)];
-            T[(size_t)i * terms + j] = a + (a - b) / denom;
-        }
-    }
-    double _Complex last = T[(size_t)(terms - 1) * terms + (terms - 1)];
-    double _Complex prev = (terms >= 2)
-        ? T[(size_t)(terms - 2) * terms + (terms - 2)] : last;
-    *result = last;
-    *step = cabs(last - prev);
-    free(T);
-    return true;
-}
-
-/* Wynn's epsilon algorithm (the "SequenceLimit" method). Columns are stored
- * shifted by one so that column c holds ε_{c-1}; column 0 is ε_{-1} = 0,
- * column 1 is ε_0 = S. The degree-d estimate lives in column 2d+1. */
-static bool nl_wynn_machine(const double _Complex* S, int terms, int degree,
-                            double _Complex* result, double* step) {
-    int maxdeg = (terms - 1) / 2;
-    if (maxdeg < 1) return false;          /* need >= 3 terms for one Shanks */
-    if (degree > maxdeg) degree = maxdeg;
-    if (degree < 1) degree = 1;
-
-    int cols = terms + 1;
-    size_t stride = (size_t)cols;
-    double _Complex* eps = malloc(sizeof(double _Complex) * stride * stride);
-    if (!eps) return false;
-    for (size_t i = 0; i < stride * stride; i++) eps[i] = 0.0;
-#define NL_E(c, n) eps[(size_t)(c) * stride + (size_t)(n)]
-    for (int n = 0; n < terms; n++) NL_E(1, n) = S[n];   /* ε_0 */
-
-    for (int c = 2; c <= terms; c++) {
-        int len = terms + 1 - c;
-        for (int n = 0; n < len; n++) {
-            double _Complex d = NL_E(c - 1, n + 1) - NL_E(c - 1, n);
-            double _Complex recip;
-            if (cabs(d) <= 0.0) recip = 1e300;          /* singular bridge */
-            else                recip = 1.0 / d;
-            NL_E(c, n) = NL_E(c - 2, n + 1) + recip;
-        }
-    }
-
-    /* Result is read from the deepest even column ε_{2d} (column 2d+1 in the
-     * shifted layout).  Rather than blindly taking the bottom corner — whose
-     * tiny Shanks denominators amplify roundoff — pick the entry that best
-     * agrees with its neighbour, i.e. where the algorithm has converged. */
-    int rc = 2 * degree + 1;               /* result column (ε_{2d}) */
-    int rl = terms + 1 - rc;               /* its length */
-    double _Complex res = NL_E(rc, rl - 1);
-    double best_d = INFINITY;
-    bool found = false;
-    for (int n = 1; n < rl; n++) {
-        double _Complex a = NL_E(rc, n), b = NL_E(rc, n - 1);
-        if (!isfinite(creal(a)) || !isfinite(cimag(a))) continue;
-        if (!isfinite(creal(b)) || !isfinite(cimag(b))) continue;
-        double d = cabs(a - b);
-        if (d < best_d) { best_d = d; res = a; found = true; }
-    }
-    if (!found) {                           /* single-entry column fallback */
-        res = NL_E(rc, rl - 1);
-        double _Complex prev = (rc >= 3)
-            ? NL_E(rc - 2, terms + 1 - (rc - 2) - 1) : NL_E(1, terms - 1);
-        best_d = cabs(res - prev);
-    }
-
-    *result = res;
-    *step = best_d;
-#undef NL_E
-    free(eps);
-    return true;
-}
-
-/* ------------------------------------------------------------------ *
- *  Extrapolation — MPFR precision                                     *
+ *  Extrapolation kernels live in seqaccel.{c,h} (shared with NSum).   *
+ *  NLimit keeps only its own acceptance/noise policy (nl_accept) and  *
+ *  the Expr construction around the raw extrapolated value.           *
  * ------------------------------------------------------------------ */
 
 #ifdef USE_MPFR
 /* L1 magnitude |re| + |im| of (re, im) as a double, for the gauges. */
 static double nl_l1_d(const mpfr_t re, const mpfr_t im) {
     return fabs(mpfr_get_d(re, MPFR_RNDN)) + fabs(mpfr_get_d(im, MPFR_RNDN));
-}
-
-static Expr* nl_richardson_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
-                                long bits, double maxsample, bool* converged) {
-    mpfr_prec_t p = (mpfr_prec_t)bits;
-    size_t cells = (size_t)terms * terms;
-    mpfr_t* Tr = malloc(sizeof(mpfr_t) * cells);
-    mpfr_t* Ti = malloc(sizeof(mpfr_t) * cells);
-    for (size_t c = 0; c < cells; c++) { mpfr_init2(Tr[c], p); mpfr_init2(Ti[c], p); }
-    mpfr_t tr, ti, denom;
-    mpfr_inits2(p, tr, ti, denom, (mpfr_ptr)0);
-
-    for (int i = 0; i < terms; i++) {
-        mpfr_set(Tr[(size_t)i * terms + 0], Sr[i], MPFR_RNDN);
-        mpfr_set(Ti[(size_t)i * terms + 0], Si[i], MPFR_RNDN);
-    }
-    for (int j = 1; j < terms; j++) {
-        mpfr_set_ui(denom, 1, MPFR_RNDN);
-        mpfr_mul_2ui(denom, denom, (unsigned long)j, MPFR_RNDN);
-        mpfr_sub_ui(denom, denom, 1, MPFR_RNDN);
-        for (int i = j; i < terms; i++) {
-            size_t cur = (size_t)i * terms + j;
-            size_t a = (size_t)i * terms + (j - 1);
-            size_t b = (size_t)(i - 1) * terms + (j - 1);
-            mpfr_sub(tr, Tr[a], Tr[b], MPFR_RNDN);
-            mpfr_sub(ti, Ti[a], Ti[b], MPFR_RNDN);
-            mpfr_div(tr, tr, denom, MPFR_RNDN);
-            mpfr_div(ti, ti, denom, MPFR_RNDN);
-            mpfr_add(Tr[cur], Tr[a], tr, MPFR_RNDN);
-            mpfr_add(Ti[cur], Ti[a], ti, MPFR_RNDN);
-        }
-    }
-
-    size_t last = (size_t)(terms - 1) * terms + (terms - 1);
-    size_t prev = (terms >= 2)
-        ? (size_t)(terms - 2) * terms + (terms - 2) : last;
-    mpfr_sub(tr, Tr[last], Tr[prev], MPFR_RNDN);
-    mpfr_sub(ti, Ti[last], Ti[prev], MPFR_RNDN);
-    double gd = nl_l1_d(tr, ti);
-    double gm = nl_l1_d(Tr[last], Ti[last]);
-    bool finite = mpfr_number_p(Tr[last]) && mpfr_number_p(Ti[last]);
-    *converged = finite && nl_accept(gm, gd, maxsample);
-
-    Expr* out = nl_from_complex_mpfr(Tr[last], Ti[last]);
-    for (size_t c = 0; c < cells; c++) { mpfr_clear(Tr[c]); mpfr_clear(Ti[c]); }
-    free(Tr); free(Ti);
-    mpfr_clears(tr, ti, denom, (mpfr_ptr)0);
-    return out;
-}
-
-static Expr* nl_wynn_mpfr(const mpfr_t* Sr, const mpfr_t* Si, int terms,
-                          int degree, long bits, double maxsample,
-                          bool* converged) {
-    int maxdeg = (terms - 1) / 2;
-    if (maxdeg < 1) { *converged = false; return NULL; }
-    if (degree > maxdeg) degree = maxdeg;
-    if (degree < 1) degree = 1;
-
-    mpfr_prec_t p = (mpfr_prec_t)bits;
-    int cols = terms + 1;
-    size_t stride = (size_t)cols;
-    size_t cells = stride * stride;
-    mpfr_t* er = malloc(sizeof(mpfr_t) * cells);
-    mpfr_t* ei = malloc(sizeof(mpfr_t) * cells);
-    for (size_t i = 0; i < cells; i++) {
-        mpfr_init2(er[i], p); mpfr_init2(ei[i], p);
-        mpfr_set_ui(er[i], 0, MPFR_RNDN); mpfr_set_ui(ei[i], 0, MPFR_RNDN);
-    }
-    mpfr_t dr, di, rr, ri, one, zero;
-    mpfr_inits2(p, dr, di, rr, ri, one, zero, (mpfr_ptr)0);
-    mpfr_set_ui(one, 1, MPFR_RNDN);
-    mpfr_set_ui(zero, 0, MPFR_RNDN);
-#define NL_ER(c, n) er[(size_t)(c) * stride + (size_t)(n)]
-#define NL_EI(c, n) ei[(size_t)(c) * stride + (size_t)(n)]
-    for (int n = 0; n < terms; n++) {
-        mpfr_set(NL_ER(1, n), Sr[n], MPFR_RNDN);
-        mpfr_set(NL_EI(1, n), Si[n], MPFR_RNDN);
-    }
-    for (int c = 2; c <= terms; c++) {
-        int len = terms + 1 - c;
-        for (int n = 0; n < len; n++) {
-            mpfr_sub(dr, NL_ER(c - 1, n + 1), NL_ER(c - 1, n), MPFR_RNDN);
-            mpfr_sub(di, NL_EI(c - 1, n + 1), NL_EI(c - 1, n), MPFR_RNDN);
-            if (mpfr_zero_p(dr) && mpfr_zero_p(di)) {
-                mpfr_set_d(rr, 1e300, MPFR_RNDN);
-                mpfr_set_ui(ri, 0, MPFR_RNDN);
-            } else {
-                mpfr_complex_div(rr, ri, one, zero, dr, di);
-            }
-            mpfr_add(NL_ER(c, n), NL_ER(c - 2, n + 1), rr, MPFR_RNDN);
-            mpfr_add(NL_EI(c, n), NL_EI(c - 2, n + 1), ri, MPFR_RNDN);
-        }
-    }
-
-    /* Pick the ε_{2d} entry that best agrees with its neighbour (see the
-     * machine path for the rationale). */
-    int rc = 2 * degree + 1;
-    int rl = terms + 1 - rc;
-    int best_n = rl - 1;
-    double best_d = -1.0;
-    for (int n = 1; n < rl; n++) {
-        if (!mpfr_number_p(NL_ER(rc, n)) || !mpfr_number_p(NL_EI(rc, n))) continue;
-        if (!mpfr_number_p(NL_ER(rc, n - 1)) || !mpfr_number_p(NL_EI(rc, n - 1))) continue;
-        mpfr_sub(dr, NL_ER(rc, n), NL_ER(rc, n - 1), MPFR_RNDN);
-        mpfr_sub(di, NL_EI(rc, n), NL_EI(rc, n - 1), MPFR_RNDN);
-        double d = nl_l1_d(dr, di);
-        if (best_d < 0.0 || d < best_d) { best_d = d; best_n = n; }
-    }
-    if (best_d < 0.0) {                      /* single-entry fallback */
-        int pc = (rc >= 3) ? rc - 2 : 1;
-        int pn = (rc >= 3) ? terms + 1 - pc - 1 : terms - 1;
-        mpfr_sub(dr, NL_ER(rc, rl - 1), NL_ER(pc, pn), MPFR_RNDN);
-        mpfr_sub(di, NL_EI(rc, rl - 1), NL_EI(pc, pn), MPFR_RNDN);
-        best_d = nl_l1_d(dr, di);
-        best_n = rl - 1;
-    }
-    double gd = best_d;
-    double gm = nl_l1_d(NL_ER(rc, best_n), NL_EI(rc, best_n));
-    bool finite = mpfr_number_p(NL_ER(rc, best_n)) && mpfr_number_p(NL_EI(rc, best_n));
-    *converged = finite && nl_accept(gm, gd, maxsample);
-
-    Expr* out = nl_from_complex_mpfr(NL_ER(rc, best_n), NL_EI(rc, best_n));
-#undef NL_ER
-#undef NL_EI
-    for (size_t i = 0; i < cells; i++) { mpfr_clear(er[i]); mpfr_clear(ei[i]); }
-    free(er); free(ei);
-    mpfr_clears(dr, di, rr, ri, one, zero, (mpfr_ptr)0);
-    return out;
 }
 #endif /* USE_MPFR */
 
@@ -738,9 +525,9 @@ static Expr* nl_run_machine(Expr* expr, const char* var, double _Complex z0,
     double step = 0.0;
     bool got;
     if (o->method == SYM_SequenceLimit)
-        got = nl_wynn_machine(S, terms, o->wynn, &result, &step);
+        got = seqaccel_wynn_machine(S, terms, o->wynn, &result, &step);
     else
-        got = nl_richardson_machine(S, terms, &result, &step);
+        got = seqaccel_richardson_machine(S, terms, &result, &step);
     free(S);
     if (!got) { nl_warn("ndterm", "not enough Terms for the chosen Method"); return NULL; }
 
@@ -838,17 +625,23 @@ static Expr* nl_run_mpfr(Expr* expr, const char* var, Expr* z0_expr,
 
     Expr* out = NULL;
     if (ok) {
-        bool converged = false;
+        mpfr_t rr, ri;
+        mpfr_init2(rr, p); mpfr_init2(ri, p);
+        double step = 0.0;
+        bool finite = false, got;
         if (o->method == SYM_SequenceLimit)
-            out = nl_wynn_mpfr(Sr, Si, terms, o->wynn, bits, maxsample, &converged);
+            got = seqaccel_wynn_mpfr(Sr, Si, terms, o->wynn, bits, rr, ri, &step, &finite);
         else
-            out = nl_richardson_mpfr(Sr, Si, terms, bits, maxsample, &converged);
-        if (!converged) {
-            expr_free(out); out = NULL;
+            got = seqaccel_richardson_mpfr(Sr, Si, terms, bits, rr, ri, &step, &finite);
+        bool converged = got && finite && nl_accept(nl_l1_d(rr, ri), step, maxsample);
+        if (converged) {
+            out = nl_from_complex_mpfr(rr, ri);
+        } else {
             nl_warn("noise", "Cannot recognize a limiting value. This may be due "
                              "to noise from roundoff; try higher WorkingPrecision, "
                              "fewer Terms, or a different Scale.");
         }
+        mpfr_clear(rr); mpfr_clear(ri);
     } else {
         nl_warn("notnum", "the expression is not numerical at a sample point");
     }
