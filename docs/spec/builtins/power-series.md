@@ -64,6 +64,9 @@ Expansions where the inner series diverges at the expansion point (e.g. `Series[
 - `ArcTanh[1/u] = I*Pi/2 + ArcTanh[u]` (principal branch).
 - `ArcSinh[1/v] = -Log[v] + Log[1 + Sqrt[1 + v^2]]` and `ArcCosh[1/v] = -Log[v] + Log[1 + Sqrt[1 - v^2]]` (handled by rewriting at the expression level; the symbolic `-Log[x]` term rides the existing `Log[x]` symbolic-coefficient path).
 
+**Asymptotic expansions at Infinity for special functions with essential singularities**: Some functions have no Laurent series at `Infinity` because their leading behaviour is an essential singularity (a factor like `E^x`). For these the generic `x -> 1/u` substitution would hand a pole to naive Taylor, so they are emitted from dedicated asymptotic identities with the essential factor kept symbolic:
+- `Series[ExpIntegralEi[x], {x, Infinity, n}]` returns `E^x (1/x + 1/x^2 + 2/x^3 + ... + O[1/x]^(n+1))`, i.e. `Times[Power[E, x], SeriesData[Power[x, -1], 0, {0!, 1!, ..., (n-1)!}, 1, n+1, 1]]` (DLMF 6.12.2: `Ei(x) ~ E^x Σ_{k≥0} k!/x^(k+1)`). The `E^x` factor rides the expression-level `Times` exactly as a symbolic `x^alpha` prefactor does.
+
 **Internal padding for symbolic expansion points**: The engine computes series at a padded internal order (user order + 12 by default) so that intermediate Laurent/Puiseux operations don't lose accuracy. When the expansion point `x0` is not a literal number, padding is capped at 2 — at a symbolic point the series coefficients are themselves symbolic expressions (e.g. `Cosh[a]`, `Sinh[a]`), and the `O(N^2)` convolution inside `so_inv`/`so_div` would otherwise spin indefinitely on exponentially growing expression trees. This makes cases like `Series[Coth[x], {x, a, 1}]`, `Series[Tanh[x], {x, a, 1}]`, `Series[Sec[x], {x, a, 1}]`, and `Series[1/Cosh[x], {x, a, 1}]` terminate in milliseconds.
 
 **Constant inputs**: If `f` is free of the expansion variable (e.g. `Series[0, {x, 0, 4}]`, `Series[Sin[y], {x, 0, 4}]`, `Series[a + b^2, {x, 0, 3}]`), `Series` returns `f` verbatim instead of wrapping it in a trivial `SeriesData`.
@@ -114,7 +117,7 @@ Out[]= (-1)^Floor[(Pi/2 - Arg[x])/(2 Pi)] (
 
 `Normal[Series[ArcTanh[x], {x, 1, 3}]]` preserves the `Log[x - 1]` term and the branch discriminator — `Normal` collapses the inner `SeriesData` but the surrounding `Plus`/`Times` pass through unchanged (matching MMA).
 
-**Naive-Taylor fallback**: For expansion points that are not branch points (e.g. `Series[ArcSinh[x], {x, 1 + I, 3}]`, `Series[ArcSin[x], {x, 1/2, 3}]`), `series_expand` falls back to naive Taylor via repeated `D`. The fallback caps iterations and bails out on `Infinity` / `Indeterminate` derivatives so unknown heads cannot spin the engine.
+**Naive-Taylor fallback**: For expansion points that are not branch points (e.g. `Series[ArcSinh[x], {x, 1 + I, 3}]`, `Series[ArcSin[x], {x, 1/2, 3}]`), `series_expand` falls back to naive Taylor via repeated `D`. The fallback caps iterations and bails out on `Infinity` / `Indeterminate` derivatives so unknown heads cannot spin the engine. The singularity probe **evaluates** the substituted `f^(k)(x0)` with arithmetic warnings muted before testing for infinities, so an *unevaluated* pole produced by the substitution (e.g. `f[1/x]` at `x = 0` becoming `f[1/0]`) collapses to `ComplexInfinity` / `Indeterminate` and is detected cleanly — it no longer spills a spurious `Power::infy: 1/0` to stderr before the guard fires. So `Series[Gamma[x], {x, Infinity, 2}]`, `Series[ExpIntegralEi[x], {x, 0, 3}]`, etc. return unevaluated silently rather than with a stray warning.
 
 ```mathematica
 In[1]:= Series[Exp[x], {x, 0, 10}]

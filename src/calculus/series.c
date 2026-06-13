@@ -2030,8 +2030,16 @@ static SeriesObj* series_taylor_via_D(Expr* e, SeriesCtx* ctx) {
     if (n_iter > ctx->order) n_iter = ctx->order;
     if (n_iter > MAX_NAIVE_ORDER) n_iter = MAX_NAIVE_ORDER;
     if (n_iter < 1) n_iter = 1;
-    /* Quick singularity check before starting. */
-    Expr* probe = replace_all_of(e, ctx->x, ctx->x0);
+    /* Quick singularity check before starting. The raw substitution
+     * x -> x0 may leave an *unevaluated* pole (e.g. f[1/x] at x=0 becomes
+     * f[1/0] = f[Power[0,-1]]), which has_infinity cannot see and which would
+     * later spill a spurious `Power::infy: 1/0` to stderr once a coefficient
+     * is simplified. Evaluate the probe (with arithmetic warnings muted, since
+     * any 1/0 here is our exploratory substitution, not the user's) so the
+     * pole collapses to ComplexInfinity / Indeterminate and is detected. */
+    arith_warnings_mute_push();
+    Expr* probe = eval_and_free(replace_all_of(e, ctx->x, ctx->x0));
+    arith_warnings_mute_pop();
     bool bad = has_infinity(probe);
     expr_free(probe);
     if (bad) return NULL;
@@ -2041,7 +2049,13 @@ static SeriesObj* series_taylor_via_D(Expr* e, SeriesCtx* ctx) {
     Expr* factorial = expr_new_integer(1);
     for (int64_t k = 0; k < n_iter; k++) {
         if (k > 0) factorial = simp(mk_times(factorial, expr_new_integer(k)));
-        Expr* at_x0 = replace_all_of(current, ctx->x, ctx->x0);
+        /* Evaluate f^(k)(x0) with warnings muted so an unevaluated pole in the
+         * substitution collapses to ComplexInfinity / Indeterminate (detected
+         * below) instead of leaking a spurious `Power::infy` when the
+         * coefficient is later simplified. */
+        arith_warnings_mute_push();
+        Expr* at_x0 = eval_and_free(replace_all_of(current, ctx->x, ctx->x0));
+        arith_warnings_mute_pop();
         if (has_infinity(at_x0)) {
             expr_free(at_x0); expr_free(current); expr_free(factorial);
             so_free(s); return NULL;
@@ -2814,6 +2828,47 @@ static int64_t so_first_nonzero_exp(SeriesObj* s, int64_t from_exp) {
     return INT64_MAX;
 }
 
+/* Asymptotic expansion of ExpIntegralEi[x] at x = Infinity (DLMF 6.12.2):
+ *
+ *   Ei(x) ~ E^x * Sum_{k>=0} k! / x^(k+1)
+ *         = E^x ( 1/x + 1/x^2 + 2/x^3 + 6/x^4 + ... ).
+ *
+ * The leading E^x is an essential singularity and cannot live inside a
+ * power series, so it stays as a symbolic prefactor (matching Mathematica,
+ * which returns `E^x (1/x + 1/x^2 + 2/x^3 + O[1/x]^4)`) while the bracket is
+ * a clean Laurent series in 1/x. We build the result expression directly:
+ *
+ *   Times[ Exp[x],
+ *          SeriesData[1/x, 0, {0!, 1!, ..., (n-1)!}, 1, n+1, 1] ].
+ *
+ * Returns NULL (so the caller falls through) unless f is exactly
+ * ExpIntegralEi[x] in the expansion variable. */
+static Expr* try_series_ei_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "ExpIntegralEi") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* Coefficients k! for k = 0 .. n-1, placed at 1/x exponents 1 .. n. */
+    Expr** coefs = calloc((size_t)n, sizeof(Expr*));
+    for (int64_t k = 0; k < n; k++)
+        coefs[k] = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, (size_t)n);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1)); /* expansion var 1/x */
+    sd[1] = expr_new_integer(0);                          /* x0 (in 1/x)       */
+    sd[2] = coef_list;                                    /* coefficients      */
+    sd[3] = expr_new_integer(1);                          /* nmin              */
+    sd[4] = expr_new_integer(n + 1);                      /* nmax (O-term)     */
+    sd[5] = expr_new_integer(1);                          /* denominator       */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+
+    return mk_times(mk_fn1("Exp", expr_copy(x)), series);
+}
+
 /* Expand f around x=x0 to order n and return SeriesData expression. */
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only) {
     /* Evaluate f with the series context implicit. Since Series has
@@ -2827,6 +2882,19 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
     if (expr_free_of(f_eval, x)) {
         expr_free(x0_eval);
         return f_eval;
+    }
+
+    /* Special functions with essential singularities at Infinity (e.g.
+     * ExpIntegralEi) have no Laurent series there -- the generic x -> 1/u
+     * substitution would hand a pole to naive Taylor. Emit their known
+     * asymptotic expansions (with the E^x prefactor kept symbolic) directly. */
+    if (x0_eval->type == EXPR_SYMBOL && x0_eval->data.symbol == SYM_Infinity) {
+        Expr* ei = try_series_ei_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (ei) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return ei;
+        }
     }
 
     /* Apart preprocessing: if f_eval is (or contains) a rational function

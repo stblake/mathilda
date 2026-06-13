@@ -1312,6 +1312,25 @@ static void test_apart_at_infinity(void) {
         "SeriesData[Power[x, -1], 0, List[0, 1, 0, 1, 0, 1], 1, 7, 1]");
 }
 
+/* Asymptotic expansion of ExpIntegralEi at Infinity (DLMF 6.12.2):
+ *   Ei(x) ~ E^x (1/x + 1/x^2 + 2/x^3 + ...) = E^x Sum_{k>=0} k!/x^(k+1).
+ * The E^x essential singularity stays as a symbolic prefactor; the bracket
+ * is a Laurent series in 1/x with coefficients k!. Regression: this used to
+ * spill `Power::infy: 1/0` and return unevaluated because the generic
+ * x -> 1/u substitution handed a pole to naive Taylor. */
+static void test_series_expintegralei_at_infinity(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ExpIntegralEi[x], {x, Infinity, 3}]",
+        "Times[Power[E, x], "
+        "SeriesData[Power[x, -1], 0, List[1, 1, 2], 1, 4, 1]]");
+    /* Higher order exercises the factorial coefficients 6 = 3!, 24 = 4!. */
+    assert_fullform(
+        "Series[ExpIntegralEi[x], {x, Infinity, 5}]",
+        "Times[Power[E, x], "
+        "SeriesData[Power[x, -1], 0, List[1, 1, 2, 6, 24], 1, 6, 1]]");
+}
+
 /* Regression: Series at Infinity must not leak the internal inverse
  * variable $SeriesInvVar$ back to the user. Before the fix, Log[x] at
  * Infinity kept its coefficient as Log[$SeriesInvVar$] because the
@@ -1500,6 +1519,7 @@ int main(void) {
     TEST(test_apart_at_infinity);
 
     /* Regression: no $SeriesInvVar$ leakage for Series at Infinity. */
+    TEST(test_series_expintegralei_at_infinity);
     TEST(test_series_infinity_no_inv_var_leak);
 
     printf("All series tests passed.\n");
