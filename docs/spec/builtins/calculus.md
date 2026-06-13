@@ -1120,6 +1120,106 @@ Out[8]= {x -> 1.0}
 ```
 
 
+## NResidue
+
+Numerical residue by contour integration.  `NResidue[expr, {z, z0}]`
+estimates the residue of `expr` at `z = z0` -- the coefficient of
+`(z - z0)^-1` in the Laurent expansion -- by integrating around a small
+circle in the complex plane.  Implemented natively in C in
+`src/numerical_calculus/`: the reusable periodic-trapezoidal contour core
+lives in `quadrature.{c,h}`, the builtin in `nresidue.{c,h}`.  Attribute:
+`Protected`.
+
+Unlike the symbolic `Residue` (which needs a power series at `z0`),
+`NResidue` works for **essential singularities** such as `Exp[1/x]` and
+`Sin[1/x]`.  It cannot tell a tiny spurious residual from a true zero --
+`Chop` the result when needed -- and returns an incorrect value if the
+contour encloses another singularity or crosses a branch cut.
+
+### Method
+
+The residue equals the Cauchy integral over the circle of radius `r`:
+
+```
+Res(f, z0) = (1/2 pi i) oint f dz = (r/N) sum_{k=0}^{N-1} f(z0 + r e^{i th_k}) e^{i th_k},  th_k = 2 pi k / N.
+```
+
+The integrand is 2*pi*-periodic and analytic in *theta*, so the periodic
+trapezoidal rule converges geometrically (Trefethen & Weideman, *SIAM
+Review* 2014).  The engine doubles `N` (reusing samples) until
+`|S_{2N} - S_N|` meets the precision goal, applies Aitken/Shanks
+extrapolation to the doubling sequence, and runs at machine precision or,
+when `WorkingPrecision` requests it, in MPFR complex arithmetic.
+
+### Forms
+
+- `NResidue[expr, {z, z0}]` -- residue of `expr` near `z = z0`.
+- `NResidue[{e1, e2, ...}, {z, z0}]` -- threads element-wise over the
+  first argument (manual threading; `NResidue` is deliberately **not**
+  `Listable`, so the `{z, z0}` spec is never split).
+
+### Options
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `Radius`           | `1/100`         | Contour radius, or `Automatic` for an adaptive (Fornberg/Bornemann-style) search that favours fast-converging radii. |
+| `WorkingPrecision` | `MachinePrecision` | Machine doubles, or MPFR at the requested decimal precision. |
+| `PrecisionGoal`    | `WorkingPrecision - 2` | Target accuracy (decimal digits). |
+| `MaxRecursion`     | `10`            | Maximum number of `N`-doublings. |
+| `Method`           | `Trapezoidal`   | Only the trapezoidal rule is implemented. |
+
+### Beyond Mathematica's NResidue
+
+- `Radius -> Automatic` removes the manual radius tuning the reference
+  implementation requires (its own `Exp[1/x]` example fails until you
+  guess `Radius -> 1`).
+- A relative-jump / decay-rate diagnostic flags a branch cut that
+  **crosses** the contour (`NResidue::bcut`) instead of silently returning
+  garbage.  A cut lying entirely *inside* the disk (e.g.
+  `Sqrt[x-1] Sqrt[x+1]` on `Radius -> 2`, where the integrand is analytic
+  on the circle) is undetectable on the contour and returns the same value
+  as Mathematica.
+- Aitken/Shanks extrapolation plus a reported error estimate.
+
+### Diagnostics (stderr)
+
+| Tag                | Triggered when |
+|--------------------|----------------|
+| `NResidue::ivar`   | Second argument is not a `{z, z0}` list, or the variable is not a symbol. |
+| `NResidue::nnum`   | `z0` is not numeric, or `expr` did not evaluate to a number on the contour. |
+| `NResidue::ncvi`   | Did not converge to the precision goal within `MaxRecursion` (the best estimate is still returned). |
+| `NResidue::bcut`   | The integrand appears non-analytic on the contour (a branch-cut crossing); the result is unreliable. |
+| `NResidue::badopt` / `NResidue::badmeth` | Invalid option value / unsupported `Method`. |
+
+### Examples
+
+```mathematica
+In[1]:= NResidue[1/x, {x, 0}]
+Out[1]= 1.
+
+In[2]:= NResidue[Sin[1/(10 x)], {x, 0}] // Chop
+Out[2]= 0.1
+
+In[3]:= NResidue[1/(1.7 - 2.7 z + z^2), {z, 1.}] // Chop
+Out[3]= -1.42857
+
+In[4]:= NResidue[Exp[1/x], {x, 0}, Radius -> 1] // Chop
+Out[4]= 1.
+
+In[5]:= NResidue[{Exp[1/x], Sin[1/x], Cos[1/x]}, {x, 0}, Radius -> 1] // Chop
+Out[5]= {1., 1., 0}
+
+In[6]:= NResidue[1/x + 1/(x + 0.005), {x, 0}, Radius -> 0.001] // Chop
+Out[6]= 1.
+
+In[7]:= NResidue[Exp[1/x], {x, 0}, Radius -> Automatic] // Chop
+Out[7]= 1.
+
+In[8]:= 10! NResidue[Zeta[x]/x^11, {x, 0}, Radius -> 1/2, WorkingPrecision -> 30]
+Out[8]= -3.6287999994567658842202915*10^6   (= Derivative[10][Zeta][0])
+```
+
+
 ## FindMinimum / FindMaximum
 
 Iterative local optimisation.  Implemented natively in C in

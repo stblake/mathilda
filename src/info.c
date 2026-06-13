@@ -190,6 +190,21 @@ void info_init(void) {
         "Options: Method ('Newton' | 'Secant' | 'Brent' | Automatic), WorkingPrecision, "
         "MaxIterations, AccuracyGoal, PrecisionGoal, DampingFactor, Jacobian, StepMonitor, "
         "EvaluationMonitor.  FindRoot has HoldAll and effectively uses Block to localize variables.");
+
+    symtab_set_docstring("NResidue",
+        "NResidue[expr, {z, z0}]\n"
+        "\tnumerically finds the residue of expr near z = z0 (the coefficient of "
+        "(z - z0)^-1 in the Laurent expansion) by integrating around a small circle "
+        "in the complex plane.\n"
+        "NResidue[{e1, e2, ...}, {z, z0}]\n"
+        "\tthreads element-wise over the first argument.\n\n"
+        "Works for essential singularities where the symbolic Residue (which needs a "
+        "power series) cannot. Cannot distinguish a tiny spurious residual from a true "
+        "zero -- Chop the result when needed; returns an incorrect value if the contour "
+        "encloses another singularity or crosses a branch cut.\n\n"
+        "Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, "
+        "PrecisionGoal, MaxRecursion (max contour refinements, default 10), "
+        "Method ('Trapezoidal').");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"

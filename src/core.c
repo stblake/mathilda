@@ -542,6 +542,8 @@ void core_init(void) {
     findroot_init();
     void findmin_init(void);
     findmin_init();
+    void nresidue_init(void);
+    nresidue_init();
     info_init();
     datetime_init();
     linalg_init();
