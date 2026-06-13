@@ -205,6 +205,22 @@ void info_init(void) {
         "Options: Radius (contour radius, default 1/100, or Automatic), WorkingPrecision, "
         "PrecisionGoal, MaxRecursion (max contour refinements, default 10), "
         "Method ('Trapezoidal').");
+    symtab_set_docstring("ND",
+        "ND[expr, x, x0]\n"
+        "\tgives a numerical approximation to the derivative of expr with respect "
+        "to x at the point x0.\n"
+        "ND[expr, {x, n}, x0]\n"
+        "\tgives a numerical approximation to the n-th derivative.\n"
+        "ND[{e1, e2, ...}, x, x0]\n"
+        "\tthreads element-wise over the first argument.\n\n"
+        "Default Method -> EulerSum uses Richardson extrapolation of forward, "
+        "direction-Scale finite differences (works for non-analytic expr; needs "
+        "integer n >= 0). Method -> NIntegrate uses Cauchy's integral formula via "
+        "NResidue (needs expr analytic near x0; allows fractional/complex order). "
+        "ND cannot recognize small numbers that should be zero -- Chop if needed.\n\n"
+        "Options: Method (EulerSum | NIntegrate), Scale (step size / contour radius / "
+        "complex direction, default 1), Terms (EulerSum extrapolation terms, default 7), "
+        "WorkingPrecision, PrecisionGoal, MaxRecursion.");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"

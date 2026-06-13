@@ -1331,6 +1331,57 @@ static void test_series_expintegralei_at_infinity(void) {
         "SeriesData[Power[x, -1], 0, List[1, 1, 2, 6, 24], 1, 6, 1]]");
 }
 
+/* LogIntegral[x] = Ei(Log[x]) at x = 0: a generalized asymptotic series whose
+ * x^1 coefficient is a series in 1/Log[x] (2n+2 terms). Reproduces MMA's
+ * Assumptions -> x > 0 output. Before the fix this returned unevaluated and
+ * leaked Power::infy / Infinity::indet from naive Taylor-via-D hitting the
+ * 1/0 pole of the second derivative -1/(x Log[x]^2). */
+static void test_series_logintegral_at_zero(void) {
+    setup_full();
+    /* n = 2: x*(1/L + 1/L^2 + 2/L^3 + 6/L^4 + 24/L^5 + 120/L^6) + O[x]^3. */
+    assert_fullform(
+        "Series[LogIntegral[x], {x, 0, 2}]",
+        "SeriesData[x, 0, List[Times[Power[Log[x], -6], "
+        "Plus[120, Power[Log[x], 4], Power[Log[x], 5], "
+        "Times[2, Power[Log[x], 3]], Times[6, Power[Log[x], 2]], "
+        "Times[24, Log[x]]]], 0], 1, 3, 1]");
+    /* n = 1: 2n+2 = 4 terms; only x^1 is present, O-term at x^2. */
+    assert_fullform(
+        "Series[LogIntegral[x], {x, 0, 1}]",
+        "SeriesData[x, 0, List[Times[Power[Log[x], -4], "
+        "Plus[6, Power[Log[x], 2], Power[Log[x], 3], Times[2, Log[x]]]]], "
+        "1, 2, 1]");
+    /* Assumptions -> x > 0 yields the same principal form. */
+    assert_fullform(
+        "Series[LogIntegral[x], {x, 0, 2}, Assumptions -> x > 0]",
+        "SeriesData[x, 0, List[Times[Power[Log[x], -6], "
+        "Plus[120, Power[Log[x], 4], Power[Log[x], 5], "
+        "Times[2, Power[Log[x], 3]], Times[6, Power[Log[x], 2]], "
+        "Times[24, Log[x]]]], 0], 1, 3, 1]");
+}
+
+/* ExpIntegralEi[x] at x = 0: the logarithmic series (DLMF 6.6.2)
+ *   Ei(x) = EulerGamma + Log[x] + x + x^2/4 + x^3/18 + ...
+ * with the EulerGamma + Log[x] branch term baked into the x^0 coefficient.
+ * Before the fix this returned unevaluated since Ei(0) = -Infinity blocks
+ * naive Taylor-via-D. */
+static void test_series_expintegralei_at_zero(void) {
+    setup_full();
+    assert_fullform(
+        "Series[ExpIntegralEi[x], {x, 0, 2}]",
+        "SeriesData[x, 0, "
+        "List[Plus[EulerGamma, Log[x]], 1, Rational[1, 4]], 0, 3, 1]");
+    /* Higher order exercises 1/(k k!): 1/18, 1/96, 1/600. */
+    assert_fullform(
+        "Series[ExpIntegralEi[x], {x, 0, 5}]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[x]], 1, Rational[1, 4], "
+        "Rational[1, 18], Rational[1, 96], Rational[1, 600]], 0, 6, 1]");
+    /* Order 0: just the constant + log term. */
+    assert_fullform(
+        "Series[ExpIntegralEi[x], {x, 0, 0}]",
+        "SeriesData[x, 0, List[Plus[EulerGamma, Log[x]]], 0, 1, 1]");
+}
+
 /* Regression: Series at Infinity must not leak the internal inverse
  * variable $SeriesInvVar$ back to the user. Before the fix, Log[x] at
  * Infinity kept its coefficient as Log[$SeriesInvVar$] because the
@@ -1520,6 +1571,8 @@ int main(void) {
 
     /* Regression: no $SeriesInvVar$ leakage for Series at Infinity. */
     TEST(test_series_expintegralei_at_infinity);
+    TEST(test_series_logintegral_at_zero);
+    TEST(test_series_expintegralei_at_zero);
     TEST(test_series_infinity_no_inv_var_leak);
 
     printf("All series tests passed.\n");

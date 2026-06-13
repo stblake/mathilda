@@ -2869,6 +2869,119 @@ static Expr* try_series_ei_at_infinity(Expr* f, Expr* x, int64_t n) {
     return mk_times(mk_fn1("Exp", expr_copy(x)), series);
 }
 
+/* Generalized asymptotic series of LogIntegral[x] at x = 0.
+ *
+ * li(x) = Ei(Log[x]). With L = Log[x] -> -Infinity as x -> 0+, the function
+ * lands in Ei's asymptotic regime (DLMF 6.12.2), giving
+ *
+ *   li(x) ~ E^L * Sum_{k>=0} k!/L^(k+1)
+ *         = x * ( 1/L + 1/L^2 + 2/L^3 + 6/L^4 + ... )
+ *
+ * since E^L = x. The ONLY x-dependence is the prefactor E^L = x, so every
+ * term carries exactly x^1: there is no ordinary power series here -- the x^1
+ * coefficient is itself a (divergent, asymptotic) series in 1/Log[x]. We keep
+ * 2n+2 terms of that 1/L series (k = 0 .. 2n+1), which reproduces
+ * Mathematica's Series[LogIntegral[x], {x, 0, n}] output in its
+ * Assumptions -> x > 0 form, e.g. for n = 2:
+ *
+ *   ((120 + 24 Log[x] + 6 Log[x]^2 + 2 Log[x]^3 + Log[x]^4 + Log[x]^5) x)
+ *     / Log[x]^6 + O[x]^3.
+ *
+ * Result shape (only the x^1 slot is non-zero):
+ *
+ *   SeriesData[x, 0, {Together[Sum k!/Log[x]^(k+1)], 0, ..., 0}, 1, n+1, 1].
+ *
+ * Mathematica's no-assumptions form wraps this in a Floor[Arg[...]] branch
+ * discriminator; we always emit the principal (x > 0) form. Returns NULL
+ * unless f is exactly LogIntegral[x] in the expansion variable. */
+static Expr* try_series_logintegral_at_zero(Expr* f, Expr* x, int64_t n) {
+    if (!has_symbol_head(f, "LogIntegral") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    if (n < 1) n = 1;
+
+    /* x^1 coefficient: Sum_{k=0}^{2n+1} k! / Log[x]^(k+1). */
+    int64_t kmax = 2 * n + 1;
+    Expr* logx = mk_fn1("Log", expr_copy(x));
+    Expr** terms = calloc((size_t)kmax + 1, sizeof(Expr*));
+    for (int64_t k = 0; k <= kmax; k++) {
+        Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+        Expr* logpow = mk_power(expr_copy(logx), expr_new_integer(-(k + 1)));
+        terms[k] = mk_times(fact, logpow);
+    }
+    expr_free(logx);
+    Expr* sum = expr_new_function(mk_symbol("Plus"), terms, (size_t)kmax + 1);
+    free(terms);
+    /* Combine over a common Log[x]^(2n+2) denominator to match MMA's form;
+     * Together falls through to the raw sum if it cannot combine. */
+    Expr* coef1 = eval_and_free(mk_fn1("Together", sum));
+
+    /* Coefficients span exponents 1 .. n (length n); only x^1 is non-zero. */
+    size_t ncoef = (size_t)n;
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    coefs[0] = coef1;
+    for (size_t i = 1; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);            /* expansion var      */
+    sd[1] = expr_new_integer(0);     /* x0                 */
+    sd[2] = coef_list;               /* coefficients       */
+    sd[3] = expr_new_integer(1);     /* nmin (leading x^1) */
+    sd[4] = expr_new_integer(n + 1); /* nmax (O-term)      */
+    sd[5] = expr_new_integer(1);     /* denominator        */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
+/* Logarithmic series of ExpIntegralEi[x] at x = 0 (DLMF 6.6.2):
+ *
+ *   Ei(x) = EulerGamma + Log[x] + Sum_{k>=1} x^k / (k * k!)
+ *         = EulerGamma + Log[x] + x + x^2/4 + x^3/18 + ...
+ *
+ * This is a convergent series with a single logarithmic term. The branch
+ * term Log[x] (and the additive EulerGamma) is baked into the x^0
+ * coefficient; the remaining coefficients are the regular Taylor
+ * coefficients 1/(k*k!). Naive Taylor-via-D cannot produce it because
+ * f(0) = Ei(0) = -Infinity. Result:
+ *
+ *   SeriesData[x, 0, {EulerGamma + Log[x], 1, 1/4, ...}, 0, n+1, 1].
+ *
+ * Returns NULL unless f is exactly ExpIntegralEi[x] in the expansion var. */
+static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n) {
+    if (!has_symbol_head(f, "ExpIntegralEi") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+    if (n < 0) n = 0;
+
+    size_t ncoef = (size_t)n + 1;            /* exponents 0 .. n */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    /* x^0 coefficient: EulerGamma + Log[x]. */
+    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"),
+                            mk_fn1("Log", expr_copy(x))));
+    /* x^k coefficient: 1/(k*k!), exact rational via the bigint Factorial. */
+    for (int64_t k = 1; k <= n; k++) {
+        Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+        Expr* denom = eval_and_free(mk_times(expr_new_integer(k), kfact));
+        coefs[k] = eval_and_free(mk_power(denom, expr_new_integer(-1)));
+    }
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);            /* expansion var */
+    sd[1] = expr_new_integer(0);     /* x0            */
+    sd[2] = coef_list;               /* coefficients  */
+    sd[3] = expr_new_integer(0);     /* nmin          */
+    sd[4] = expr_new_integer(n + 1); /* nmax (O-term) */
+    sd[5] = expr_new_integer(1);     /* denominator   */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
 /* Expand f around x=x0 to order n and return SeriesData expression. */
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only) {
     /* Evaluate f with the series context implicit. Since Series has
@@ -2894,6 +3007,28 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return ei;
+        }
+    }
+
+    /* LogIntegral[x] = Ei(Log[x]) has no Taylor series at x = 0 -- Log[x]
+     * drives it into Ei's asymptotic regime, yielding a generalized series
+     * whose x^1 coefficient is a series in 1/Log[x]. Emit it directly so
+     * naive Taylor-via-D does not hit (and leak) the 1/0 pole of the second
+     * derivative. */
+    if (is_lit_zero(x0_eval)) {
+        Expr* li = try_series_logintegral_at_zero(f_eval, x, leading_only ? 1 : n);
+        if (li) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return li;
+        }
+        /* ExpIntegralEi[x] at x = 0: Ei(0) = -Infinity blocks naive Taylor;
+         * emit the DLMF 6.6.2 logarithmic series directly. */
+        Expr* ei0 = try_series_ei_at_zero(f_eval, x, leading_only ? 0 : n);
+        if (ei0) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return ei0;
         }
     }
 

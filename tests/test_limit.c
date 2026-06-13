@@ -746,6 +746,25 @@ static void test_abs_directional(void) {
     check_equiv("Limit[Abs[x] Sin[1/x], x -> 0]", "0");
 }
 
+/* ----------------------------------------------------------------- */
+/* Special functions with a logarithmic leading-order term            */
+/*                                                                    */
+/* ExpIntegralEi[x] at x -> 0 has no Taylor series: its Series leading */
+/* (x^0) coefficient is EulerGamma + Log[x], which itself diverges.   */
+/* The series layer reads that coefficient and recurses on its limit  */
+/* (every higher-order term vanishes), giving -Infinity. LogIntegral  */
+/* takes the finite value 0 at the origin and must stay 0.            */
+/* ----------------------------------------------------------------- */
+static void test_special_log_leading(void) {
+    check_equiv("Limit[ExpIntegralEi[x], x -> 0]", "-Infinity");
+    check_equiv("Limit[LogIntegral[x], x -> 0]",   "0");
+    /* The leading coefficient itself, resolved via finite-point
+     * single-dominant termwise reduction. */
+    check_equiv("Limit[EulerGamma + Log[x], x -> 0]", "-Infinity");
+    /* Plain Log baseline (handled by layer_log_of_finite) still works. */
+    check_equiv("Limit[Log[x], x -> 0]", "-Infinity");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -778,6 +797,7 @@ int main(void) {
     TEST(test_wp9_branch_cuts);
     TEST(test_wp7_gruntz_log_sum);
     TEST(test_abs_directional);
+    TEST(test_special_log_leading);
 
     printf("All limit tests passed.\n");
     return 0;

@@ -955,6 +955,25 @@ static Expr* read_leading_term_limit(Expr* s, LimitCtx* ctx) {
      * avoid an expensive retry at k=32 (Series on these shapes is O(n^3)
      * in the expansion order), we detect the same residual early. */
     if (expr_contains(leading_coef, ctx->x)) {
+        /* For a leading exponent of exactly 0 the residual x is the
+         * logarithmic-constant part of an asymptotic expansion (e.g.
+         * ExpIntegralEi[x] at x -> 0, whose x^0 coefficient is
+         * EulerGamma + Log[x]). Every higher-order term carries a strictly
+         * positive power of x and vanishes at the point, so the limit of f
+         * equals the limit of this leading coefficient. Recurse to resolve
+         * it; only accept an answer that no longer mentions x. If the
+         * recursion can't make progress we fall through to the bail below,
+         * preserving the old behaviour for genuinely-stuck shapes. */
+        if (leading_num == 0) {
+            LimitCtx sub = *ctx; sub.depth += 1;
+            Expr* lim_c = compute_limit(leading_coef, &sub);
+            if (lim_c && !expr_contains(lim_c, ctx->x)) {
+                expr_free(leading_coef);
+                if (prefactor) lim_c = simp(mk_times(prefactor, lim_c));
+                return lim_c;
+            }
+            if (lim_c) expr_free(lim_c);
+        }
         expr_free(leading_coef);
         if (prefactor) expr_free(prefactor);
         return NULL;
@@ -1760,14 +1779,16 @@ static bool is_structurally_bounded(Expr* e, Expr* x) {
 /* ---------------------------------------------------------------------- */
 static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
     if (!head_is(f, SYM_Plus)) return NULL;
-    if (!is_infinity_sym(ctx->point) && !is_neg_infinity(ctx->point)) return NULL;
+    bool at_infinity = is_infinity_sym(ctx->point) || is_neg_infinity(ctx->point);
     size_t n = f->data.function.arg_count;
     if (n == 0) return NULL;
 
     /* First, try the growth-exponent dominant-term shortcut. If one
      * term has strictly larger growth than every other term and its
      * individual limit is +/- Infinity, return that -- every other
-     * term is at most O(x^(lower)) which the dominant absorbs. */
+     * term is at most O(x^(lower)) which the dominant absorbs. This
+     * reasoning is asymptotic, so it only applies at infinity. */
+    if (at_infinity) {
     int64_t max_g = 0;
     int max_idx = -1;
     int max_count = 0;
@@ -1786,6 +1807,7 @@ static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
         }
         if (lim_dom) expr_free(lim_dom);
     }
+    } /* end at_infinity growth-exponent shortcut */
 
     Expr** terms = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) terms[i] = NULL;
@@ -1856,6 +1878,16 @@ static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
      * bounded-unresolved placeholder and no dominant term actually
      * fired, the sum is not valid -- bail. */
     if (dominant_idx == -1000) {
+        for (size_t j = 0; j < n; j++) if (terms[j]) expr_free(terms[j]);
+        free(terms);
+        return NULL;
+    }
+    /* All terms converge. At a finite point we defer the plain sum to the
+     * analytic layers (Series etc.) to preserve established behaviour --
+     * only the single-dominant-divergent case above is emitted there.
+     * The all-finite termwise sum is reserved for the at-infinity shapes
+     * this layer was built for (x + Sin[x], etc.). */
+    if (!at_infinity) {
         for (size_t j = 0; j < n; j++) if (terms[j]) expr_free(terms[j]);
         free(terms);
         return NULL;

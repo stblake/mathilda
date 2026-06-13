@@ -1220,6 +1220,110 @@ Out[8]= -3.6287999994567658842202915*10^6   (= Derivative[10][Zeta][0])
 ```
 
 
+## ND
+
+Numerical derivative.  `ND[expr, x, x0]` gives a numerical approximation to
+the derivative of `expr` with respect to `x` at `x = x0`; `ND[expr, {x, n},
+x0]` gives the `n`-th derivative.  Implemented natively in C in
+`src/numerical_calculus/nderiv.{c,h}`.  Attribute: `Protected`.  Like
+`NResidue`, `ND` cannot tell a tiny spurious residual from a true zero --
+`Chop` when needed.
+
+### Methods
+
+**`Method -> EulerSum`** (default).  Richardson (Romberg/Neville)
+extrapolation of the `n`-th **forward** finite difference taken along the
+complex direction `Scale = s`:
+
+```
+D(h) = (1/(s h)^n) sum_{k=0}^n (-1)^{n-k} C(n,k) f(x0 + k s h),   h_i = 2^-i,
+T(i,0) = D(h_i),   T(i,j) = T(i,j-1) + (T(i,j-1) - T(i-1,j-1)) / (2^j - 1),
+result = T(Terms-1, Terms-1).
+```
+
+The forward (one-sided) stencil along `s` is what produces directional and
+one-sided derivatives -- the left/right derivatives of `Abs`, and complex
+directions such as `Scale -> 1 + I`.  Because a forward difference has an
+error expansion in *all* powers of `h`, the Richardson denominator is
+`2^j - 1` (not the `4^j - 1` of a central stencil).  EulerSum samples only
+along `s`, so it works for **non-analytic** `expr` (e.g. `Re[Cos[I y]]`).  It
+requires an integer order `n >= 0` and, for high-order derivatives, fights
+subtractive cancellation via higher `WorkingPrecision` and more `Terms`.
+
+**`Method -> NIntegrate`**.  Cauchy's integral formula, evaluated by reusing
+`NResidue`:
+
+```
+f^(n)(x0) = n! Res_{z=x0} f(z)/(z - x0)^(n+1)
+          = Gamma(n+1) * NResidue[expr/(x-x0)^(n+1), {x, x0}, Radius -> Scale].
+```
+
+`Scale` is the contour radius (default `1`).  `Gamma(n+1)` in place of `n!`
+lets the order be **fractional or complex** (e.g. `ND[x, {x, -1/2}, 1]` =
+`4/(3 Sqrt[Pi])`).  This method requires `expr` to be **analytic** near `x0`
+and silently returns the derivative of the analytic continuation otherwise
+(so `Re[Cos[I y]]` gives a wrong answer -- use EulerSum there).
+
+### Forms and options
+
+- `ND[expr, x, x0]` -- first derivative at `x0` (equivalent to `{x, 1}`).
+- `ND[expr, {x, n}, x0]` -- `n`-th derivative.
+- `ND[{e1, e2, ...}, x, x0]` -- threads element-wise over the first argument
+  (manual threading; `ND` is deliberately **not** `Listable`, which would
+  split the `{x, n}` spec).
+
+| Option | Default | Meaning |
+|--------|---------|---------|
+| `Method` | `EulerSum` | `EulerSum` or `NIntegrate`. |
+| `Scale` | `1` | EulerSum: step size / complex direction.  NIntegrate: contour radius. |
+| `Terms` | `7` | EulerSum extrapolation depth. |
+| `WorkingPrecision` | `MachinePrecision` | machine `double` or, for a digit count, MPFR. |
+| `PrecisionGoal` | `Automatic` | target accuracy (NIntegrate). |
+| `MaxRecursion` | `10` | max contour refinements (NIntegrate). |
+
+| Message | When |
+|---------|------|
+| `ND::ivar` | The second argument is not `x` or `{x, n}` with `x` a symbol. |
+| `ND::nnum` | `x0`/`Scale` is not numeric, or `expr` did not evaluate to a number at a sample point. |
+| `ND::ord`  | `Method -> EulerSum` was given a non-integer order (use `NIntegrate`). |
+| `ND::badscl` | `Scale` did not evaluate to a nonzero number. |
+| `ND::badopt` / `ND::badmeth` | Invalid option value / unsupported `Method`. |
+
+### Examples
+
+```mathematica
+In[1]:= ND[Exp[x], x, 1]
+Out[1]= 2.71828
+
+In[2]:= ND[Cos[x]^3, {x, 2}, 0]
+Out[2]= -3.
+
+In[3]:= ND[Sin[x], x, Pi I]
+Out[3]= 11.592 + 1.32527*10^-10 I
+
+In[4]:= ND[{Exp[x], Sin[x]}, x, 1]
+Out[4]= {2.71828, 0.540302}
+
+In[5]:= ND[Re[Cos[I y]], y, 1]          (* non-analytic: use EulerSum *)
+Out[5]= 1.1752
+
+In[6]:= ND[Abs[x], {x, 1}, 0, Scale -> 1 + I]
+Out[6]= 0.707107 - 0.707107 I
+
+In[7]:= ND[Sin[100 x], x, 0, Scale -> 1/100]
+Out[7]= 100.
+
+In[8]:= ND[Exp[x^2], {x, 4}, 0, Method -> NIntegrate]
+Out[8]= 12. - 3.3723*10^-15 I
+
+In[9]:= ND[x, {x, -1/2}, 1, Method -> NIntegrate]   (* = 4/(3 Sqrt[Pi]) *)
+Out[9]= 0.752253
+
+In[10]:= ND[Sin[x^2], {x, 3}, 1, Terms -> 20, WorkingPrecision -> 40]
+Out[10]= -14.420070264639875819037588981065446865125
+```
+
+
 ## FindMinimum / FindMaximum
 
 Iterative local optimisation.  Implemented natively in C in
