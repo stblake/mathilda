@@ -1,52 +1,45 @@
-# Documentation refresh: numerical calculus + special functions — 2026-06-14
+# Task: Implement UnitStep (piecewise.c)
 
-Goal: tutorials for the numerical-calculus routines and for the special
-functions, list both pillars in the main-page "What's inside", and bring all
-generated docs up to date with every built-in.
+## Spec
+- `UnitStep[x]` = 0 for x<0, 1 for x>=0 (value at 0 is **1**).
+- `UnitStep[x1,...,xn]` = 1 iff none of the xi are negative, else 0 (acts as product of UnitStep[xi]).
+- `UnitStep[]` = 1.
+- Always returns an exact result (0 or 1) for real numeric input.
+- Exact symbolic reals (Pi, Sqrt[2], ...) resolved by numerical certification (MPFR precision-doubling).
+- Non-real / symbolic args -> leave unevaluated (drop resolved-nonneg args, keep unknowns).
+- Attributes: Listable, NumericFunction, Orderless, Protected.
 
 ## Plan
-
-- [ ] 1. Spec file `docs/spec/builtins/numerical-calculus.md` — H2 sections for
-      `ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`
-      (drives a new site category; was falling into "Other & Advanced").
-      Include verified `In[]/Out[]` example blocks.
-- [ ] 2. `docs/spec/builtins/special-functions.md` — add a `## LogGamma` H2 so
-      `LogGamma` is filed under Special Functions (was Other & Advanced).
-- [ ] 3. `Mathilda_spec.md` — add a "Numerical calculus" row to the built-in
-      reference table.
-- [ ] 4. Changelog note in `docs/spec/changelog/2026-06-08.md`.
-- [ ] 5. New tutorial `site/docs/tutorials/07-numerical-calculus.md`.
-- [ ] 6. New tutorial `site/docs/tutorials/08-special-functions.md`.
-- [ ] 7. `site/docs/tutorials/.pages` + `index.md` — register both tutorials.
-- [ ] 8. `site/docs/index.md` — add "Numerical calculus" and "Special functions"
-      cards to "What's inside"; refresh function count.
-- [ ] 9. Regenerate the site: `python3 site/generate.py`.
-- [ ] 10. Verify generated output + tutorial transcripts.
-
-All example transcripts captured by running `./Mathilda` directly.
+- [ ] piecewise.c: `builtin_unitstep` + helpers (real_sign, ustep_class, MPFR certify).
+- [ ] piecewise.h: prototype.
+- [ ] piecewise_init: register builtin + attributes.
+- [ ] info.c: terse docstring.
+- [x] sym_names.c: SYM_UnitStep — ALREADY PRESENT (verified line 400/811).
+- [ ] deriv.c: D[UnitStep[a1..an],x] via product rule -> Piecewise[{{Indeterminate, ai==0}},0]*UnitStep[rest].
+- [ ] tests/test_piecewise.c: extensive UnitStep cases.
+- [ ] docs/spec/builtins/elementary-functions.md + changelog 2026-06-08.md.
+- [ ] Build clean, run piecewise_tests, valgrind clean.
 
 ## Review — DONE 2026-06-14
 
-All 10 steps complete and verified.
+All explicit deliverables complete and verified.
 
-- **New doc category.** `docs/spec/builtins/numerical-calculus.md` now owns
-  `ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`. The
-  rich authoritative sections were **moved** out of `calculus.md` (not copied —
-  no duplication); `calculus.md` keeps the symbolic routines + FindRoot/FindMin/
-  FindMax. Added verified `In[]/Out[]` example blocks to the NProduct/NIntegrate
-  sections (they had none) and fixed a line-wrapped `NSum` example that blocked
-  example mining. Registered the category in `Mathilda_spec.md`.
-- **Special functions.** Promoted `LogGamma` from `###` to `##` in
-  `special-functions.md`; the category now generates 21 pages (was 6 — stale).
-- **Tutorials.** Added `07-numerical-calculus.md` (19/19 transcripts match the
-  build) and `08-special-functions.md` (34/34). Registered both in
-  `tutorials/.pages` and the tutorials index.
-- **Landing page.** Added "Numerical calculus" + "Special functions" cards to
-  "What's inside"; bumped the count to ~435.
-- **Regeneration.** `python3 site/generate.py` → 435 pages, 1111 verified
-  examples, **0** in "Other & Advanced". 24 categories. Doc centre landing,
-  per-category indexes, `.pages` nav, and `builtins.json` all refreshed.
-- **Validation.** `mkdocs build --strict` passes (no broken links). Changelog
-  note added to `docs/spec/changelog/2026-06-08.md`.
+- **piecewise.c**: `builtin_unitstep` + helpers `ustep_real_sign`,
+  `ustep_is_pos_infinity`, `ustep_certify` (MPFR precision-doubling), `ustep_class`.
+  Multidim = product semantics; drops proven-non-negative args; non-real/unresolved
+  left unevaluated. Registered with attributes Listable|NumericFunction|Orderless|Protected.
+- **info.c**: terse docstring (no examples, per house style).
+- **deriv.c**: product-rule derivative; `D[UnitStep[x],x]` = `Piecewise[{{Indeterminate,x==0}},0]`,
+  multidim matches MMA (`UnitStep[x,y] Piecewise[...]`).
+- **tests**: `test_unitstep` (~55 cases) in test_piecewise.c — all pass (exit 0).
+  deriv_tests / deriv_symbolic_order_tests / deriv_array_tests all still pass.
+- **build**: clean under `-std=c99 -Wall -Wextra`.
+- **valgrind**: only the documented macOS baseline (12,800 B / 400 blocks from
+  dyld/libobjc/Accelerate); zero leak stacks reference Mathilda source.
+- **docs**: elementary-functions.md UnitStep section + changelog 2026-06-08.md entry.
 
-No `src/` changes — documentation only. `src/external/` untouched.
+All 23 spec example outputs reproduced exactly (incl. boundary case Sqrt[2]-99/70 → 0).
+
+### Deferred (noted in changelog)
+- `Integrate[UnitStep[x],x]` = `x UnitStep[x]` — needs an integral-table hook.
+- `UnitStep'[x] === UnitStep''[x]` — needs cleaner `D` of `Piecewise`.

@@ -181,11 +181,112 @@ void test_piecewise() {
     }
 }
 
+void test_unitstep() {
+    struct {
+        const char* input;
+        const char* expected;
+    } cases[] = {
+        // --- Integer arguments. Value at 0 is 1. ---
+        {"UnitStep[1]", "1"},
+        {"UnitStep[0]", "1"},
+        {"UnitStep[-1]", "0"},
+        {"UnitStep[5]", "1"},
+        {"UnitStep[-123]", "0"},
+
+        // --- Real arguments: always an exact 0 or 1. ---
+        {"UnitStep[.8]", "1"},
+        {"UnitStep[0.0]", "1"},
+        {"UnitStep[-0.001]", "0"},
+        {"UnitStep[2.4]", "1"},
+        {"UnitStep[-1.6]", "0"},
+        {"UnitStep[3.200000000000]", "1"},
+
+        // --- Rational arguments. ---
+        {"UnitStep[1/2]", "1"},
+        {"UnitStep[-3/7]", "0"},
+        {"UnitStep[7/2]", "1"},
+
+        // --- BigInt and BigInt-rational arguments (exact GMP path). ---
+        {"UnitStep[10^50]", "1"},
+        {"UnitStep[-(10^50)]", "0"},
+        {"UnitStep[10^50/7]", "1"},
+        {"UnitStep[-(10^50)/7]", "0"},
+
+        // --- Exact symbolic real arguments resolved by certification. ---
+        {"UnitStep[Pi]", "1"},
+        {"UnitStep[-Pi]", "0"},
+        {"UnitStep[Sqrt[2]]", "1"},
+        {"UnitStep[E - 3]", "0"},
+        {"UnitStep[3 - E]", "1"},
+        {"UnitStep[Pi - 4]", "0"},
+        // Tight boundary: Sqrt[2] - 99/70 ~ -6.4*10^-5 (certification must
+        // separate it from zero and return 0, not guess).
+        {"UnitStep[Sqrt[2] - 99/70]", "0"},
+        {"UnitStep[99/70 - Sqrt[2]]", "1"},
+
+        // --- Infinities (only the real positive point at infinity is >= 0). ---
+        {"UnitStep[Infinity]", "1"},
+        {"UnitStep[-Infinity]", "0"},
+
+        // --- The empty form. ---
+        {"UnitStep[]", "1"},
+
+        // --- Multidimensional: 1 iff none are negative. ---
+        {"UnitStep[1, 2, 3]", "1"},
+        {"UnitStep[1, Pi, 5.3]", "1"},
+        {"UnitStep[1, -2, 3]", "0"},
+        {"UnitStep[-1, Pi]", "0"},
+        {"UnitStep[Pi, Sqrt[2], 1/2]", "1"},
+        // A negative arg wins even when others are unknown.
+        {"UnitStep[x, -2, y]", "0"},
+
+        // --- Mixed: proven-non-negative args are dropped (factor of 1). ---
+        {"UnitStep[1, x]", "UnitStep[x]"},
+        {"UnitStep[x, 2, y]", "UnitStep[x, y]"},
+
+        // --- Purely symbolic / non-real arguments stay unevaluated. ---
+        {"UnitStep[x]", "UnitStep[x]"},
+        {"UnitStep[I]", "UnitStep[Complex[0, 1]]"},
+        {"UnitStep[2 + 3 I]", "UnitStep[Complex[2, 3]]"},
+
+        // --- Listable threading over a list argument. ---
+        {"UnitStep[{-1.6, 3.200000000000}]", "List[0, 1]"},
+        {"UnitStep[{-1, 0, 1}]", "List[0, 1, 1]"},
+
+        // --- High-precision arguments resolve via their MPFR sign directly. ---
+        {"UnitStep[1/7`100]", "1"},
+        {"UnitStep[-1/7`100]", "0"},
+
+        // --- Derivatives (product rule -> Piecewise). ---
+        {"D[UnitStep[x], x]",
+         "Piecewise[List[List[Indeterminate, Equal[x, 0]]], 0]"},
+        {"D[UnitStep[x, y, z], z]",
+         "Times[UnitStep[x, y], Piecewise[List[List[Indeterminate, Equal[z, 0]]], 0]]"},
+        {"D[UnitStep[x^2], x]",
+         "Times[2, x, Piecewise[List[List[Indeterminate, Equal[Power[x, 2], 0]]], 0]]"},
+        // Derivative w.r.t. a variable the argument does not contain is 0.
+        {"D[UnitStep[x], y]", "0"},
+
+        {NULL, NULL}
+    };
+
+    for (int i = 0; cases[i].input != NULL; i++) {
+        Expr* e = parse_expression(cases[i].input);
+        Expr* res = evaluate(e);
+        char* s = expr_to_string_fullform(res);
+        ASSERT_MSG(strcmp(s, cases[i].expected) == 0, "UnitStep %s: expected %s, got %s", cases[i].input, cases[i].expected, s);
+        free(s);
+        expr_free(e);
+        expr_free(res);
+    }
+}
+
 int main() {
     symtab_init();
     core_init();
-    
+
     TEST(test_piecewise);
-    
+    TEST(test_unitstep);
+
     return 0;
 }

@@ -24,11 +24,17 @@ void piecewise_init(void) {
     symtab_add_builtin("Round", builtin_round);
     symtab_add_builtin("IntegerPart", builtin_integerpart);
     symtab_add_builtin("FractionalPart", builtin_fractionalpart);
+    symtab_add_builtin("UnitStep", builtin_unitstep);
 
     const char* funcs[] = {"Floor", "Ceiling", "Round", "IntegerPart", "FractionalPart", NULL};
     for (int i = 0; funcs[i] != NULL; i++) {
         symtab_get_def(funcs[i])->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     }
+
+    /* UnitStep: Listable threads over lists, NumericFunction marks it for N,
+     * Orderless because UnitStep[x1,...,xn] is symmetric in its arguments. */
+    symtab_get_def("UnitStep")->attributes |=
+        (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE | ATTR_ORDERLESS);
 }
 
 enum { OP_FLOOR, OP_CEILING, OP_ROUND, OP_INTPART, OP_FRACPART };
@@ -383,6 +389,167 @@ static Expr* do_piecewise(Expr* res, int op, const char* name, bool allow_2_args
     }
     
     return NULL;
+}
+
+/* ====================================================================== */
+/* UnitStep                                                               */
+/* ====================================================================== */
+
+/* Sign class of a single UnitStep argument. UnitStep[x] is 1 for x >= 0
+ * (the value at 0 is 1) and 0 for x < 0. */
+enum { USTEP_UNKNOWN = -1, USTEP_NEG = 0, USTEP_NONNEG = 1 };
+
+/* Real sign of a concrete numeric expression: returns -1, 0 or +1, or the
+ * sentinel -2 when `a` is not a pure real number (symbolic, complex with a
+ * non-zero imaginary part, etc.). Mirrors builtin_sign's leaf logic but is
+ * self-contained so it can also classify the results of numericalize(). */
+static int ustep_real_sign(Expr* a) {
+    switch (a->type) {
+        case EXPR_INTEGER: return a->data.integer < 0 ? -1 : a->data.integer > 0 ? 1 : 0;
+        case EXPR_BIGINT:  return mpz_sgn(a->data.bigint);
+        case EXPR_REAL:    return a->data.real < 0.0 ? -1 : a->data.real > 0.0 ? 1 : 0;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    return mpfr_zero_p(a->data.mpfr) ? 0 : mpfr_sgn(a->data.mpfr);
+#endif
+        default: break;
+    }
+    int64_t n, d;
+    if (is_rational(a, &n, &d)) {
+        if (n == 0) return 0;
+        return ((n < 0) ^ (d < 0)) ? -1 : 1;   /* canonical d > 0, but be safe */
+    }
+    /* Exact GMP rational the int64 is_rational() refuses to extract. */
+    if (a->type == EXPR_FUNCTION
+        && a->data.function.head->type == EXPR_SYMBOL
+        && a->data.function.head->data.symbol == SYM_Rational
+        && a->data.function.arg_count == 2
+        && expr_is_integer_like(a->data.function.args[0])
+        && expr_is_integer_like(a->data.function.args[1])) {
+        mpz_t num, den;
+        expr_to_mpz(a->data.function.args[0], num);
+        expr_to_mpz(a->data.function.args[1], den);
+        int s = mpz_sgn(num) * mpz_sgn(den);
+        mpz_clears(num, den, NULL);
+        return s;
+    }
+    return -2;
+}
+
+/* True only for the (positive) real point at infinity. ComplexInfinity and
+ * DirectedInfinity are NOT real and must not classify as non-negative. */
+static bool ustep_is_pos_infinity(Expr* e) {
+    return e->type == EXPR_SYMBOL && e->data.symbol == SYM_Infinity;
+}
+
+/* Certify the sign of an *exact* real numeric quantity (Pi, Sqrt[2], 3^(2/3),
+ * ...) that no leaf branch resolved, by numericalizing at increasing
+ * precision and accepting the result only once two successive precisions
+ * agree on the same non-zero sign. Returns the USTEP_* class, or
+ * USTEP_UNKNOWN when `x` is not a real number or the sign cannot be pinned
+ * down within the precision cap (mirrors $MaxExtraPrecision: we never guess). */
+static int ustep_certify(Expr* x) {
+#ifdef USE_MPFR
+    const long max_prec = 1L << 14;   /* ~4900 decimal digits */
+    int prev = 0;                     /* last non-zero sign seen (0 = none) */
+    for (long prec = 64; prec <= max_prec; prec *= 4) {
+        NumericSpec spec;
+        spec.mode = NUMERIC_MODE_MPFR;
+        spec.bits = prec;
+        spec.preserve_inexact = false;
+        Expr* approx = numericalize(x, spec);
+        if (!approx) return USTEP_UNKNOWN;
+        int s = ustep_real_sign(approx);
+        expr_free(approx);
+        if (s == -2) return USTEP_UNKNOWN;   /* not a real numeric */
+        if (s != 0) {
+            if (prev != 0 && prev == s) return s > 0 ? USTEP_NONNEG : USTEP_NEG;
+            prev = s;
+        }
+        /* s == 0 only means this precision could not separate x from 0; keep
+         * refining. A genuinely non-zero exact real eventually stabilises. */
+    }
+    return USTEP_UNKNOWN;
+#else
+    NumericSpec spec = numeric_machine_spec();
+    Expr* approx = numericalize(x, spec);
+    if (!approx) return USTEP_UNKNOWN;
+    int s = ustep_real_sign(approx);
+    expr_free(approx);
+    if (s == -2 || s == 0) return USTEP_UNKNOWN;
+    return s > 0 ? USTEP_NONNEG : USTEP_NEG;
+#endif
+}
+
+/* Classify one UnitStep argument as NEG (< 0), NONNEG (>= 0) or UNKNOWN. */
+static int ustep_class(Expr* x) {
+    if (ustep_is_pos_infinity(x)) return USTEP_NONNEG;
+    if (is_minus_infinity(x))     return USTEP_NEG;
+
+    int s = ustep_real_sign(x);
+    if (s != -2) return s < 0 ? USTEP_NEG : USTEP_NONNEG;   /* s == 0 -> NONNEG */
+
+    /* A genuine complex value (non-zero imaginary part) is not real, so
+     * UnitStep has no defined value -- leave it unknown. */
+    Expr *re, *im;
+    if (is_complex(x, &re, &im)) {
+        (void)re;
+        if (ustep_real_sign(im) != 0) return USTEP_UNKNOWN;
+        /* Imaginary part is exactly zero -> classify by the real part. */
+        int rs = ustep_real_sign(re);
+        if (rs != -2) return rs < 0 ? USTEP_NEG : USTEP_NONNEG;
+    }
+
+    /* Exact symbolic real (Pi, Sqrt[2], ...): certify numerically. */
+    return ustep_certify(x);
+}
+
+/*
+ * UnitStep[x1, ..., xn]:
+ *   - UnitStep[]                 -> 1.
+ *   - any argument < 0           -> 0.
+ *   - all arguments >= 0         -> 1.
+ *   - otherwise drop the proven-non-negative arguments (they contribute a
+ *     factor of 1) and leave UnitStep over the unresolved ones; if nothing
+ *     can be dropped the call is returned unevaluated (NULL).
+ * The result is always exact (an integer 0 or 1) when fully determined.
+ */
+Expr* builtin_unitstep(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t n = res->data.function.arg_count;
+    if (n == 0) return expr_new_integer(1);          /* UnitStep[] is 1 */
+
+    Expr** args = res->data.function.args;
+    int* cls = malloc(sizeof(int) * n);
+    if (!cls) return NULL;
+
+    for (size_t i = 0; i < n; i++) {
+        cls[i] = ustep_class(args[i]);
+        if (cls[i] == USTEP_NEG) {                   /* one negative -> 0 */
+            free(cls);
+            return expr_new_integer(0);
+        }
+    }
+
+    /* No argument is negative. Drop the proven-non-negative ones. */
+    size_t keep = 0;
+    bool any_dropped = false;
+    for (size_t i = 0; i < n; i++) {
+        if (cls[i] == USTEP_NONNEG) any_dropped = true;
+        else                        keep++;
+    }
+    if (keep == 0) { free(cls); return expr_new_integer(1); }  /* all >= 0 */
+    if (!any_dropped) { free(cls); return NULL; }              /* nothing resolved */
+
+    /* Some args resolved, some unknown: return UnitStep over the remainder. */
+    Expr** new_args = malloc(sizeof(Expr*) * keep);
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (cls[i] != USTEP_NONNEG) new_args[k++] = expr_copy(args[i]);
+    }
+    free(cls);
+    Expr* out = expr_new_function(expr_new_symbol("UnitStep"), new_args, keep);
+    free(new_args);
+    return out;
 }
 
 Expr* builtin_floor(Expr* res) { return do_piecewise(res, OP_FLOOR, "Floor", true); }

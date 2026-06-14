@@ -482,6 +482,54 @@ In[7]:= FractionalPart[10000000*3^(2/3)]
 Out[7]= -20800838 + 10000000 3^(2/3)
 ```
 
+## UnitStep
+
+`UnitStep[x]` is the unit step (Heaviside) function: `0` for $x < 0$ and `1`
+for $x \ge 0$. The value at zero is `1`.
+
+`UnitStep[x1, x2, ...]` is the multidimensional unit step, equal to `1` only
+when none of the `xi` are negative, and `0` otherwise (it behaves as the
+product of the per-argument `UnitStep[xi]`). `UnitStep[]` is `1`.
+
+**Features**:
+- `Listable`, `NumericFunction`, `Orderless`, `Protected`.
+- The result is **always exact** -- an integer `0` or `1` -- for real numeric
+  input, including `Real`/`MPFR` arguments (e.g. `UnitStep[{-1.6, 3.2}]` gives
+  `{0, 1}`).
+- **Exact symbolic real arguments** (`Pi`, `Sqrt[2]`, `E - 3`, ...) are
+  resolved by numerical certification: the argument is numericalized to MPFR at
+  increasing precision and the sign is accepted only once two successive
+  precisions agree on the same non-zero sign. This separates tight cases such
+  as `Sqrt[2] - 99/70` ($\approx -6.4\times10^{-5}$) from zero without ever
+  guessing; an argument whose sign cannot be certified is left unevaluated.
+- Non-real arguments (a `Complex` with non-zero imaginary part) and unresolved
+  symbolic arguments are left unevaluated. In a multidimensional call the
+  proven-non-negative arguments are dropped (they contribute a factor of `1`),
+  so e.g. `UnitStep[1, x]` reduces to `UnitStep[x]`.
+
+**Derivative** -- via the product rule, each argument contributes
+`Piecewise[{{Indeterminate, xi == 0}}, 0]`:
+
+```mathematica
+In[1]:= UnitStep[0]
+Out[1]= 1
+
+In[2]:= UnitStep[1, Pi, 5.3]
+Out[2]= 1
+
+In[3]:= UnitStep[{-1.6, 3.200000000000}]
+Out[3]= {0, 1}
+
+In[4]:= UnitStep[Sqrt[2] - 99/70]
+Out[4]= 0
+
+In[5]:= D[UnitStep[x], x]
+Out[5]= Piecewise[{{Indeterminate, x == 0}}, 0]
+
+In[6]:= D[UnitStep[x, y, z], z]
+Out[6]= UnitStep[x, y] Piecewise[{{Indeterminate, z == 0}}, 0]
+```
+
 ## Chop
 
 `Chop[expr]` replaces approximate real numbers in `expr` whose absolute

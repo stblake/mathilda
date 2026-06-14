@@ -1289,6 +1289,37 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Times", pg, dA);
         }
 
+        /* --- UnitStep[a1, ..., an]: acts as the product of the per-argument
+         *     UnitStep[ai], so the derivative follows the product rule. Each
+         *     factor contributes UnitStep'[ai] = Piecewise[{{Indeterminate,
+         *     ai == 0}}, 0], multiplied by D[ai, x] and the UnitStep of the
+         *     remaining arguments. For n == 1 the trailing UnitStep factor is
+         *     absent and the result collapses to the single Piecewise. --- */
+        if (h == SYM_UnitStep && n >= 1) {
+            Expr** terms = malloc(sizeof(Expr*) * n);
+            for (size_t i = 0; i < n; i++) {
+                Expr* cond  = mk_fn2("Equal", expr_copy(args[i]), mk_int(0));
+                Expr* pair  = mk_fn2("List", mk_sym("Indeterminate"), cond);
+                Expr* pairs = mk_fn1("List", pair);
+                Expr* pw    = mk_fn2("Piecewise", pairs, mk_int(0));
+                Expr* dai   = deriv_of(args[i], x, nonconsts);
+
+                size_t fc = 0;
+                Expr** factors = malloc(sizeof(Expr*) * 3);
+                factors[fc++] = pw;
+                factors[fc++] = dai;
+                if (n > 1) {
+                    Expr** rest = malloc(sizeof(Expr*) * (n - 1));
+                    size_t rc = 0;
+                    for (size_t j = 0; j < n; j++)
+                        if (j != i) rest[rc++] = expr_copy(args[j]);
+                    factors[fc++] = mk_fnN_adopt("UnitStep", rest, n - 1);
+                }
+                terms[i] = mk_fnN_adopt("Times", factors, fc);
+            }
+            return mk_fnN_adopt("Plus", terms, n);
+        }
+
         /* --- Known elementary unary function: F'(g) * D[g, x]. --- */
         if (n == 1) {
             Expr* fp = elementary_fprime(h, args[0]);

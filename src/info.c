@@ -1857,6 +1857,15 @@ void info_init(void) {
         "\trounds x to the nearest multiple of a.\n"
         "Round is Listable. Exact inputs return exact integers; Real / MPFR\n"
         "inputs round at the input precision.");
+    symtab_set_docstring("UnitStep",
+        "UnitStep[x]\n"
+        "\tgives 0 for x < 0 and 1 for x >= 0 (the value at 0 is 1).\n"
+        "UnitStep[x1, x2, ...]\n"
+        "\tgives 1 only when none of the xi are negative, otherwise 0.\n"
+        "UnitStep[] is 1. The result is always exact. Exact symbolic real\n"
+        "arguments are resolved by numerical certification; non-real or\n"
+        "unresolved arguments are left unevaluated. UnitStep is Listable and\n"
+        "Orderless.");
     symtab_set_docstring("Chop",
         "Chop[expr]\n"
         "\treplaces approximate real numbers in expr that are close to zero\n"
