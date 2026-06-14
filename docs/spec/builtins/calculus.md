@@ -1718,6 +1718,7 @@ integrand evaluated/numericalised at each sample point.
 | arbitrary `WorkingPrecision` (> machine) | double-exponential at the target precision + guard bits (MPFR) |
 | semi-infinite / doubly-infinite | exp-sinh / sinh-sinh |
 | oscillatory (many periods / slow tail) | integrate between zeros + Wynn epsilon (finite: half-period panels) |
+| doubly-infinite, non-decaying oscillation (e.g. `Exp[I x^2]`, `Cos[x^2]`) | split at 0, each half integrated between the zeros + Wynn epsilon (sinh-sinh fallback) |
 | oscillatory endpoint singularity (e.g. `Cos[Log[x]/x]/x` at 0) | exponential endpoint map `x = a + (b−a)e^{−t}` onto a half line, then integrate between the (accelerating) zeros + Wynn epsilon |
 | multidimensional, constant rectangular box (2 ≤ d ≤ 5) | adaptive Genz-Malik cubature (degree-7 / degree-5 error) |
 | multidimensional, variable-dependent / infinite bounds | iterated 1D quadrature |

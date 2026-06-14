@@ -172,6 +172,14 @@ static void test_oscillatory(void) {
     ASSERT_EQ_STR("N[Total[Abs[NIntegrate[{Cos[x],Sin[x]},{x,1,100}] "
                   "- {Sin[100]-Sin[1], Cos[1]-Cos[100]}]]] < 1/100000", "True");
     ASSERT_CLOSE("NIntegrate[Cos[x],{x,0,100}]", "Sin[100]", 1e-5);
+    /* Doubly-infinite, non-decaying oscillation (Fresnel): sinh-sinh diverges,
+     * so the line is split at 0 and each half integrated between the zeros.
+     * ∫_{-∞}^{∞} Exp[I x^2] dx = Sqrt[Pi/2] (1 + I); the real and imaginary
+     * Fresnel integrals each give Sqrt[Pi/2]. */
+    ASSERT_CLOSE("NIntegrate[Cos[x^2],{x,-Infinity,Infinity}]", "Sqrt[Pi/2]", 1e-5);
+    ASSERT_CLOSE("NIntegrate[Sin[x^2],{x,-Infinity,Infinity}]", "Sqrt[Pi/2]", 1e-5);
+    ASSERT_EQ_STR("Abs[NIntegrate[Exp[I x^2],{x,-Infinity,Infinity}] "
+                  "- Sqrt[Pi/2](1+I)] < 1/100000", "True");
 }
 
 static void test_oscillatory_singularity(void) {

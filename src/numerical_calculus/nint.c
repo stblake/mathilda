@@ -988,6 +988,26 @@ static Expr* ni_run_1d_wholeline(Expr* body, const char* var, double sign,
     double _Complex val; double abserr;
     bool conv = denint_sinhsinh_machine(ni_sample_machine, &ctx, reltol,
                                         ni_de_levels(o), &val, &abserr);
+
+    /* Oscillatory fallback: a non-decaying oscillatory integrand (Exp[I x^2],
+     * Cos[x^2], Sin[x] …) defeats sinh-sinh, which presumes the tails decay and
+     * otherwise diverges into garbage.  Split the line at 0 — integrating the
+     * left half via the reflection x = -u — and integrate each half between the
+     * zeros of the oscillation, accelerating the partial sums with Wynn's
+     * epsilon (mirrors the half-line path).  If neither half registers as
+     * oscillatory, osc_integrate reports failure and the sinh-sinh result
+     * stands. */
+    if (!conv && o->method == NI_AUTO) {
+        double _Complex lv, rv; double lerr, rerr;
+        ctx.x_scale = -1.0;   /* (-∞, 0] via x = -u, u in [0, ∞) */
+        bool lc = osc_integrate_machine(ni_sample_machine, &ctx, 0.0, 0.0, true,
+                                        reltol, 600, &lv, &lerr);
+        ctx.x_scale = 1.0;    /* [0, ∞) */
+        bool rc = osc_integrate_machine(ni_sample_machine, &ctx, 0.0, 0.0, true,
+                                        reltol, 600, &rv, &rerr);
+        if (lc && rc) { val = lv + rv; abserr = lerr + rerr; conv = true; }
+    }
+
     ni_bind_restore(&bind);
 
     if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
