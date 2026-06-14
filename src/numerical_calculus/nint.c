@@ -19,6 +19,7 @@
 #include "denint.h"
 #include "oscint.h"
 #include "mcint.h"
+#include "cubature.h"
 
 #include <complex.h>
 #include <math.h>
@@ -944,6 +945,60 @@ static Expr* ni_run_mc(Expr* body, Expr** specs, size_t d, const NiOpts* o, bool
     return ni_from_complex_d(val);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Adaptive Genz-Malik cubature (low-to-moderate dimension)           *
+ * ------------------------------------------------------------------ */
+
+/* Try adaptive cubature over the box defined by `specs` (each {v, vmin, vmax}
+ * with constant finite real bounds).  Returns NULL — so the caller falls back
+ * to iterated 1-D quadrature — when the box is not a constant finite real
+ * rectangle (e.g. a variable-dependent or infinite bound) or the integrand is
+ * non-numeric there.  A single adaptive process over the whole box avoids the
+ * multiplicative cost of nested 1-D adaptive quadrature, and the rule never
+ * samples the box corners, so a singularity on a corner is handled cleanly. */
+static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o) {
+    if (d < 2 || d > 15) return NULL;
+    double* a = malloc(d * sizeof(double));
+    double* b = malloc(d * sizeof(double));
+    NiBind* binds = malloc(d * sizeof(NiBind));
+    bool ok = true;
+    for (size_t j = 0; j < d && ok; j++) {
+        Expr* s = specs[j];
+        if (s->type != EXPR_FUNCTION || s->data.function.arg_count != 3
+            || s->data.function.args[0]->type != EXPR_SYMBOL) { ok = false; break; }
+        Expr* lo = ni_num_endpoint(s->data.function.args[1]);
+        Expr* hi = ni_num_endpoint(s->data.function.args[2]);
+        if (!ni_to_double_real(lo, &a[j]) || !ni_to_double_real(hi, &b[j])) ok = false;
+        expr_free(lo); expr_free(hi);
+    }
+    if (!ok) { free(a); free(b); free(binds); return NULL; }
+
+    for (size_t j = 0; j < d; j++)
+        ni_bind_snapshot(&binds[j], specs[j]->data.function.args[0]->data.symbol);
+
+    NiMcCtx ctx;
+    ctx.body = body; ctx.binds = binds; ctx.d = d;
+    ctx.spec = numeric_machine_spec();
+
+    double reltol, abstol;
+    ni_machine_tols(o, &reltol, &abstol);
+    long max_eval = (o->max_points > 0) ? o->max_points : 0;
+
+    double _Complex val; double abserr;
+    CubStatus st = cub_integrate_machine(ni_mc_sample, &ctx, a, b, d,
+                                         abstol, reltol, max_eval, &val, &abserr);
+
+    for (size_t j = 0; j < d; j++) ni_bind_restore(&binds[j]);
+    free(a); free(b); free(binds);
+
+    if (st == CUB_NONNUMERIC) return NULL;   /* fall back to iterated quadrature */
+    if (!isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
+    if (st == CUB_NOCONV)
+        ni_warn("ncvb", "cubature did not reach the accuracy goal "
+                "(error estimate %.3g)", abserr);
+    return ni_from_complex_d(val);
+}
+
 /* Route a single {x, xmin, xmax} integral by the kinds of its bounds. */
 static Expr* ni_dispatch_1d(Expr* body, const char* var,
                             Expr* amin, Expr* amax, const NiOpts* o) {
@@ -1198,6 +1253,16 @@ Expr* builtin_nintegrate(Expr* res) {
     }
     if (want_mc)
         return ni_run_mc(body, &res->data.function.args[1], nspecs, &o, mc_quasi);
+
+    /* Multidimensional over a constant rectangular box: a single adaptive
+     * Genz-Malik cubature is far cheaper than nested 1-D adaptive quadrature
+     * (whose cost is multiplicative in dimension).  Falls through to the
+     * iterated path when the box is not a constant finite real rectangle
+     * (dependent / infinite / complex bounds) or at arbitrary precision. */
+    if (o.method == NI_AUTO && nspecs >= 2 && !o.prec_mpfr && !o.exclusions) {
+        Expr* cub = ni_try_cubature(body, &res->data.function.args[1], nspecs, &o);
+        if (cub) return cub;
+    }
 
     /* Multidimensional: iterated 1D quadrature.  The integrand of the outer
      * variable is an inner NIntegrate over the remaining specs (HoldAll plus

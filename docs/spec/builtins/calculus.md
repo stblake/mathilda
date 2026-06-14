@@ -1698,11 +1698,14 @@ Like Mathematica, NProduct can miss the divergence of slowly diverging products
 ## NIntegrate
 
 Numerical integration.  `NIntegrate[f, {x, xmin, xmax}]` approximates
-∫ f dx; `NIntegrate[f, {x,…}, {y,…}, …]` is multidimensional (iterated 1D
-quadrature, so an inner bound may depend on an outer variable).  Implemented in
+∫ f dx; `NIntegrate[f, {x,…}, {y,…}, …]` is multidimensional — adaptive
+Genz-Malik cubature over a constant rectangular box, or iterated 1D quadrature
+when an inner bound depends on an outer variable (or is infinite/complex).
+Implemented in
 `src/numerical_calculus/nint.{c,h}` with the rule kernels `gkadapt`
 (Gauss-Kronrod), `denint` (tanh-sinh / sinh-sinh), `dequad` (exp-sinh, shared
-with NSum), `oscint` (oscillatory), and `mcint` (Monte-Carlo).  Attributes:
+with NSum), `oscint` (oscillatory), `cubature` (adaptive Genz-Malik
+multidimensional cubature), and `mcint` (Monte-Carlo).  Attributes:
 `HoldAll, Protected`.  The integration variable is `Block`-localised and the
 integrand evaluated/numericalised at each sample point.
 
@@ -1715,6 +1718,8 @@ integrand evaluated/numericalised at each sample point.
 | arbitrary `WorkingPrecision` (> machine) | double-exponential at the target precision + guard bits (MPFR) |
 | semi-infinite / doubly-infinite | exp-sinh / sinh-sinh |
 | oscillatory (many periods / slow tail) | integrate between zeros + Wynn epsilon (finite: half-period panels) |
+| multidimensional, constant rectangular box (2 ≤ d ≤ 5) | adaptive Genz-Malik cubature (degree-7 / degree-5 error) |
+| multidimensional, variable-dependent / infinite bounds | iterated 1D quadrature |
 | region (`Boole`/`UnitStep`) or dimension ≥ 6 | (quasi-)Monte-Carlo |
 | complex `xmin`/`xmax` or extra nodes | straight-line / piecewise-linear contour; complex ∞ gives a ray |
 

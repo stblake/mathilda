@@ -143,6 +143,14 @@ static void test_multidim(void) {
     ASSERT_CLOSE("NIntegrate[Exp[-x+y],{x,0,Infinity},{y,0,1}]", "E - 1", 1e-6);
     /* Variable-dependent inner bound: area of the unit disk. */
     ASSERT_CLOSE("NIntegrate[1,{x,-1,1},{y,-Sqrt[1-x^2],Sqrt[1-x^2]}]", "Pi", 1e-5);
+    /* Adaptive Genz-Malik cubature over a constant box: a corner singularity
+     * (integrable; never sampled) that hangs naive iterated quadrature. */
+    ASSERT_CLOSE("NIntegrate[1/Sqrt[x+y^2+z^3],{x,0,1},{y,0,1},{z,0,1}]",
+                 "1.088537", 1e-4);
+    /* Cancelling integrand whose signed value is 0 — the magnitude-scaled
+     * tolerance must converge rather than chase an unreachable relative goal. */
+    ASSERT_CLOSE("NIntegrate[Sin[x+y],{x,0,Pi},{y,0,Pi}]", "0", 1e-6);
+    ASSERT_CLOSE("NIntegrate[Cos[x+y],{x,0,Pi},{y,0,Pi}]", "-4", 1e-6);
 }
 
 static void test_vector_integrand(void) {
