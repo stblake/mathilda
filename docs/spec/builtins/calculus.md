@@ -1695,6 +1695,62 @@ Like Mathematica, NProduct can miss the divergence of slowly diverging products
 `+0. I` residue on products of real negative factors.
 
 
+## NIntegrate
+
+Numerical integration.  `NIntegrate[f, {x, xmin, xmax}]` approximates
+∫ f dx; `NIntegrate[f, {x,…}, {y,…}, …]` is multidimensional (iterated 1D
+quadrature, so an inner bound may depend on an outer variable).  Implemented in
+`src/numerical_calculus/nint.{c,h}` with the rule kernels `gkadapt`
+(Gauss-Kronrod), `denint` (tanh-sinh / sinh-sinh), `dequad` (exp-sinh, shared
+with NSum), `oscint` (oscillatory), and `mcint` (Monte-Carlo).  Attributes:
+`HoldAll, Protected`.  The integration variable is `Block`-localised and the
+integrand evaluated/numericalised at each sample point.
+
+### Method selection (`Method -> Automatic`)
+
+| Region / integrand | Engine |
+|--------------------|--------|
+| finite real, smooth | globally-adaptive Gauss-Kronrod (G7-K15) with QAGS Wynn extrapolation |
+| finite real, endpoint singularity | tanh-sinh double-exponential |
+| arbitrary `WorkingPrecision` (> machine) | double-exponential at the target precision + guard bits (MPFR) |
+| semi-infinite / doubly-infinite | exp-sinh / sinh-sinh |
+| oscillatory (many periods / slow tail) | integrate between zeros + Wynn epsilon (finite: half-period panels) |
+| region (`Boole`/`UnitStep`) or dimension ≥ 6 | (quasi-)Monte-Carlo |
+| complex `xmin`/`xmax` or extra nodes | straight-line / piecewise-linear contour; complex ∞ gives a ray |
+
+Named methods are accepted as strings: `"GlobalAdaptive"`, `"GaussKronrodRule"`,
+`"DoubleExponential"`, `"LevinRule"`, `"MonteCarlo"`, `"QuasiMonteCarlo"`,
+`"AdaptiveMonteCarlo"`, `"PrincipalValue"`.  A recognised but **not-yet-implemented**
+method (e.g. `"ClenshawCurtisRule"`, `"NewtonCotesRule"`) emits
+`NIntegrate::method` and returns unevaluated rather than silently approximating.
+
+### Forms and features
+
+- `NIntegrate[f, {x, x0, x1, …, xk}]` — splits at the interior nodes (handles
+  singularities there) or, with complex nodes, integrates a piecewise-linear
+  contour in the complex plane.
+- `NIntegrate[f, {x, a, b}, Exclusions -> {p1, …}]` or `Exclusions -> (g==0)`
+  — splits the domain at the given points / equation roots (best-effort via
+  `Solve` for the equation form).
+- `Method -> "PrincipalValue"` with `Exclusions` — Cauchy principal value via the
+  symmetric mirror rule about each simple pole.
+- A `List` (vector/matrix) integrand threads element-wise.
+
+Options: `WorkingPrecision` (default `MachinePrecision`), `PrecisionGoal`,
+`AccuracyGoal`, `MaxRecursion`, `MinRecursion`, `MaxPoints`, `Method`,
+`Exclusions` (`EvaluationMonitor` accepted and ignored).  Diagnostics:
+`NIntegrate::ncvb` (did not converge), `NIntegrate::maxp` (Monte-Carlo did not
+reach the goal), `NIntegrate::method`, `NIntegrate::badopt`.
+
+### Limitations
+
+Monte-Carlo and complex-contour paths are machine precision (high
+`WorkingPrecision` applies to real ranges).  Finite-range MPFR bounds are taken
+to machine precision (exact for rational bounds).  The oscillatory engine
+assumes a roughly constant period (chirps such as `Sin[x^2]` are not specially
+transformed).
+
+
 ## FindMinimum / FindMaximum
 
 Iterative local optimisation.  Implemented natively in C in

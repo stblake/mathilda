@@ -285,6 +285,27 @@ void info_init(void) {
         "factors taken explicitly, default 15), NProductExtraFactors, "
         "WynnDegree, VerifyConvergence (default True; a divergent product gives "
         "ComplexInfinity), AccuracyGoal, PrecisionGoal.");
+    symtab_set_docstring("NIntegrate",
+        "NIntegrate[f, {x, xmin, xmax}]\n"
+        "\tgives a numerical approximation to the integral of f with respect "
+        "to x from xmin to xmax.\n\n"
+        "NIntegrate[f, {x, xmin, xmax}, {y, ymin, ymax}, ...] evaluates a "
+        "multidimensional integral by iterated 1D quadrature (an inner bound "
+        "may depend on an outer variable). The variable is localised (HoldAll). "
+        "xmin/xmax may be Infinity, -Infinity, or complex (a straight-line "
+        "contour); extra nodes {x, x0, x1, ..., xk} give a piecewise-linear "
+        "contour or mark interior singularities. Method -> Automatic chooses "
+        "globally-adaptive Gauss-Kronrod for smooth finite integrands, "
+        "double-exponential (tanh-sinh / sinh-sinh / exp-sinh) for endpoint "
+        "singularities and infinite ranges and high precision, a Levin/zeros "
+        "scheme for oscillatory integrands, and Monte-Carlo for high "
+        "dimensions and region (Boole) integrands. Machine or arbitrary "
+        "precision via WorkingPrecision.\n\n"
+        "Options: Method (Automatic | GlobalAdaptive | GaussKronrodRule | "
+        "DoubleExponential | TrapezoidalRule | LevinRule | MonteCarlo | "
+        "QuasiMonteCarlo | AdaptiveMonteCarlo | PrincipalValue), "
+        "WorkingPrecision (default MachinePrecision), PrecisionGoal, "
+        "AccuracyGoal, MaxRecursion, MinRecursion, MaxPoints, Exclusions.");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"
