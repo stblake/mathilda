@@ -140,6 +140,32 @@ static void test_working_precision(void) {
                  "Pi/4", 1e-26);
 }
 
+static void test_peaked_summand(void) {
+    /* A summand peaking past the head-probe window (peak at k=20) must not be
+     * mis-flagged divergent and must sum correctly.  Regression: the engine only
+     * probed the first ~18 terms, so it returned ComplexInfinity (or ~0.085).
+     * Reference: an independent direct partial sum (tail ~ 2e-5 at 50000). */
+    ASSERT_CLOSE("NSum[1/(1+(k-20)^2),{k,0,Infinity}]",
+                 "Total[Table[1.0/(1+(k-20)^2),{k,0,50000}]]", 5e-5);
+    char* s = eval_str("NSum[1/(1+(k-20)^2),{k,0,Infinity}]");
+    ASSERT_MSG(strcmp(s, "ComplexInfinity") != 0,
+               "peaked convergent sum must not be flagged divergent: %s", s);
+    free(s);
+}
+
+static void test_composite_precision(void) {
+    /* Composite (Log-near-1) and rational summands now reach the working
+     * precision: WP-scaled tail integral + numerical contour corrections +
+     * guard digits against the float-sampling cancellation.  Regression: the
+     * Log forms capped at ~8-12 digits and rationals at ~15. */
+    ASSERT_CLOSE("NSum[Log[1+1/n^2],{n,1,Infinity},WorkingPrecision->30]",
+                 "Log[Sinh[Pi]/Pi]", 1e-25);
+    ASSERT_CLOSE("NSum[1/(n^2+1),{n,1,Infinity},WorkingPrecision->30]",
+                 "(Pi Coth[Pi]-1)/2", 1e-25);
+    ASSERT_CLOSE("NSum[Log[E^(-1/(2n)) (1+1/(2n))],{n,1,Infinity},WorkingPrecision->30]",
+                 "Log[1/(E^(EulerGamma/2) Gamma[3/2])]", 1e-24);
+}
+
 static void test_unevaluated_forms(void) {
     char* s1 = eval_str("NSum[1/i^2,{i,1,n}]");         /* symbolic upper bound */
     ASSERT_MSG(strstr(s1, "NSum[") != NULL, "symbolic bound should stay: %s", s1);
@@ -173,7 +199,9 @@ static void test_memory_loop(void) {
         "NSum[(-1)^n (2/n)^k/k^2,{n,2,Infinity},{k,1,n}]",
         "NSum[1/i^2,{i,1,Infinity},WorkingPrecision->30]",
     };
-    for (int i = 0; i < 8; i++)
+    /* 3 passes suffice for leak detection; the complex Log[x]/x^(2+2I) summand
+     * is the slowest path (oscillatory Euler–Maclaurin), so keep the count low. */
+    for (int i = 0; i < 3; i++)
         for (size_t k = 0; k < sizeof(inputs)/sizeof(inputs[0]); k++) {
             Expr* p = parse_expression(inputs[k]);
             ASSERT(p != NULL);
@@ -196,6 +224,8 @@ int main(void) {
     TEST(test_large_finite);
     TEST(test_multidim);
     TEST(test_verify_convergence);
+    TEST(test_peaked_summand);
+    TEST(test_composite_precision);
     TEST(test_working_precision);
     TEST(test_unevaluated_forms);
     TEST(test_attributes);

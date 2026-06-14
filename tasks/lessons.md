@@ -768,3 +768,31 @@ defeats `Simplify`. `PossibleZeroQ[...]` (the numeric two-phase sampler) returns
 `True` instantly and is the right correctness oracle for these. (Strip the
 secular `Floor` term first with `/. Floor[_] -> 0`, since its symbolic `D` is
 `Derivative[1][Floor]`, not 0.)
+
+## 2026-06-14 — Rewriting a numerical engine: prefer hybrid over wholesale replacement
+
+Context: fixing 3 NSum deficiencies. Planned to *replace* symbolic Euler–Maclaurin
+derivatives with numerical contour derivatives. That broke things the original did
+fine (contour is fragile for geometric/oscillatory summands; an over-broad
+"black-box → never EM" rule killed valid nested EM and a passing multidim test).
+
+Lessons:
+- **Make the new path a SUPERSET, not a replacement.** The robust design kept
+  symbolic D as primary (byte-identical to original for simple summands → zero
+  regressions) and used the new mechanism only where the old one fails (composite
+  summands that balloon). When a rewrite "fixes case A but regresses B", the answer
+  is usually a hybrid keyed on the property that distinguishes A from B.
+- **Validate a "fix" against the EXISTING test suite early, not just the target
+  case.** I confirmed the target (Log WP35) before running `nsum_tests`; the suite
+  caught `(-5)^i/i!`, the multidim cases, and a forced-CVZ peaked case I'd have
+  missed. Run the affected `*_tests` binary after each behavioural change.
+- **Adding per-call work can amplify a PRE-EXISTING leak.** NSum's evaluator leaks
+  a GMP rational per summand eval (present on `main`). My far-tail ladder (16
+  evals/profile) and an extra oscillatory-probe eval doubled multidim valgrind
+  blocks. Fix was to not add evals (skip ladder on monotone heads; read signs from
+  existing head terms), not to chase the shared-evaluator leak. Always valgrind a
+  representative input against the ORIGINAL binary to separate your delta from
+  baseline noise (file-swap `git show HEAD:path`, not `git stash`).
+- **MPFR convergence gates must sit ABOVE the roundoff floor.** Setting a DE-quad
+  reltol *below* achievable precision means it never trips → refines to a
+  catastrophic node count (looked like a hang). Scale reltol to `target-2` digits.

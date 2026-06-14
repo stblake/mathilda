@@ -269,6 +269,22 @@ void info_init(void) {
         "(head terms summed explicitly, default 15), NSumExtraTerms, WynnDegree, "
         "VerifyConvergence (default True; a divergent sum gives ComplexInfinity), "
         "AccuracyGoal, PrecisionGoal.");
+    symtab_set_docstring("NProduct",
+        "NProduct[f, {i, imin, imax}]\n"
+        "\tgives a numerical approximation to the product of f for i from imin "
+        "to imax.\n\n"
+        "NProduct[f, {i, imin, imax, di}] uses step di. imax may be Infinity. "
+        "NProduct[f, {i, ...}, {j, ...}, ...] evaluates a multidimensional "
+        "product (an inner bound may depend on an outer index). The index is "
+        "localised (HoldAll). Evaluated as Exp[NSum[Log[f], ...]], so the NSum "
+        "engine (Euler-Maclaurin for monotone factors, Wynn's epsilon "
+        "otherwise) and its convergence test carry over. Machine or arbitrary "
+        "precision via WorkingPrecision.\n\n"
+        "Options: Method (Automatic | EulerMaclaurin | WynnEpsilon), "
+        "WorkingPrecision (default MachinePrecision), NProductFactors (leading "
+        "factors taken explicitly, default 15), NProductExtraFactors, "
+        "WynnDegree, VerifyConvergence (default True; a divergent product gives "
+        "ComplexInfinity), AccuracyGoal, PrecisionGoal.");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"

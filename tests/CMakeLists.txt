@@ -282,6 +282,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/nseries.c
     ../src/numerical_calculus/nlimit.c
     ../src/numerical_calculus/nsum.c
+    ../src/numerical_calculus/nprod.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -363,6 +364,9 @@ target_include_directories(nlimit_tests PRIVATE ../src ../src/numerical_calculus
 
 add_executable(nsum_tests test_nsum.c ${COMMON_SRC})
 target_include_directories(nsum_tests PRIVATE ../src ../src/numerical_calculus)
+
+add_executable(nprod_tests test_nprod.c ${COMMON_SRC})
+target_include_directories(nprod_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(clearall_remove_protect_tests test_clearall_remove_protect.c ${COMMON_SRC})
 target_include_directories(clearall_remove_protect_tests PRIVATE ../src)

@@ -552,6 +552,8 @@ void core_init(void) {
     nlimit_init();
     void nsum_init(void);
     nsum_init();
+    void nprod_init(void);
+    nprod_init();
     info_init();
     datetime_init();
     linalg_init();

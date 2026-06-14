@@ -1545,21 +1545,31 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
 - **`EulerMaclaurin`** (alias `Integrate`) -- explicit head terms plus the
   Euler–Maclaurin tail
   `(1/di) ∫_N^∞ f dx + f(N)/2 − Σ_{j≥1} B_{2j}/(2j)! · di^{2j-1} f^(2j-1)(N)`,
-  with `N = imin + NSumTerms·di`.  The tail integral uses a self-contained
-  **double-exponential (exp-sinh)** quadrature (`dequad.{c,h}`); the derivative
-  corrections use iterated symbolic `D` and `BernoulliB`, truncated at the
-  smallest term (the series is asymptotic) and capped by derivative size so a
-  summand like `1/Fibonacci[i]` cannot blow up.  Best for monotone,
-  slowly-converging positive series.
+  with `N = imin + max(NSumTerms, settle)·di` (the head extends through any late
+  peak so the tail integral starts in the monotone region).  The tail integral
+  uses a self-contained **double-exponential (exp-sinh)** quadrature
+  (`dequad.{c,h}`) whose tolerance and depth scale with `WorkingPrecision`.  The
+  derivative corrections are **hybrid**: symbolic `D` + `BernoulliB` while the
+  derivative tree stays small (robust, and the original path for simple
+  summands), switching to **numerical contour (circle-DFT) derivatives** once it
+  balloons — so composite summands like `Log[1 + 1/n^2]` no longer truncate
+  early.  An oscillatory (sign-alternating) extension stays on the symbolic path
+  (its contour DFT is ill-conditioned).  At arbitrary precision the summand is
+  evaluated with guard digits so near-1 cancellation (e.g. `Log[1 + 1/x^2]`)
+  does not eat into the result.  Best for monotone, slowly-converging series.
 - **`AlternatingSigns`** -- the Cohen–Villegas–Zagier (2000) algorithm: a single
   pass over `n` terms with Chebyshev weights `d_n = ((3+√8)^n + (3+√8)^{-n})/2`
   delivering ≈ `2.54 n` bits.  The state of the art for alternating series.
 - **`WynnEpsilon`** (alias `SequenceLimit`) -- Wynn's epsilon algorithm applied
   to the partial sums (shared with `NLimit` via `seqaccel.{c,h}`).  General
   fallback; excellent for alternating / geometric tails, weak on monotone ones.
-- **`Automatic`** (default) -- probes the first terms and chooses
-  `AlternatingSigns` for a strictly alternating decreasing summand,
-  `EulerMaclaurin` for a monotone tail, else `WynnEpsilon`.
+- **`Automatic`** (default) -- probes the first terms, and (when the head is not
+  already monotone) a geometric far-tail ladder that locates a late peak or
+  sustained growth far beyond the head window.  Chooses `AlternatingSigns` for a
+  strictly alternating decreasing summand, `EulerMaclaurin` for a monotone /
+  late-settling tail, else `WynnEpsilon`.  The far-tail ladder also drives
+  convergence verification, so a summand that merely peaks late (e.g.
+  `1/(1 + (k-20)^2)`) is no longer mistaken for divergent.
 
 A **large finite** sum is evaluated as the difference of two infinite tails,
 `Σ_{imin}^∞ − Σ_{imax+di}^∞`, when the summand decays.
@@ -1626,6 +1636,63 @@ In[9]:= NSum[2^i, {i, 0, Infinity}]
         NSum::div: the sum does not appear to converge
 Out[9]= ComplexInfinity
 ```
+
+### Resolved limitations
+
+Three `NSum` deficiencies surfaced while validating `NProduct` have been fixed
+(2026-06-14):
+
+1. **Peaked / late-settling summands** (was false divergence).  A geometric
+   far-tail ladder now sees structure beyond the head probe, so a summand that
+   peaks late (e.g. `NSum[1/(1+(k-20)^2), {k, 0, Infinity}]` ≈ 3.10462) is summed
+   correctly and never mistaken for divergent — while genuinely divergent series
+   (`2^k`) are still flagged.
+2. **Accuracy at high `WorkingPrecision`** (was an EM ceiling).  Scaling the
+   tail-integral tolerance to `WorkingPrecision`, computing the correction series
+   from numerical contour derivatives once symbolic `D` balloons, and evaluating
+   the summand with guard digits now reach the requested precision on composite
+   summands: `NSum[Log[1+1/n^2], …, WP -> 35]` and
+   `NSum[Log[E^(-1/(2n))(1+1/(2n))], …, WP -> 35]` give ~33–34 correct digits
+   (were ~8–12).
+
+### Remaining limitation
+
+**Nested mixed alternating + smooth summands.**  An infinite-*outer*
+multidimensional **product** whose log-summand is alternating with a smooth
+(non-alternating) tail — `NProduct[1+(-1)^n (2/n)^k/k^2, {n,2,Infinity},
+{k,1,n}]` ≈ 0.607 vs the true ≈ 0.564 — is not summed to high accuracy by any
+single classical accelerator (Euler–Maclaurin, Wynn, or Cohen–Villegas–Zagier
+each miss it).  The routing is correct (no invalid EM, no hang); the residual
+~few-percent error is inherent to the extrapolation.  Infinite-outer
+multidimensional **sums** (`NSum[(-1)^n (2/n)^k/k^2, {n,2,Infinity},
+{k,1,Infinity}]` ≈ 1.14434, `{k,1,n}` ≈ 0.770188) and all finite ranges are
+accurate.
+
+
+## NProduct
+
+Numerical multiplication.  `NProduct[f, {i, imin, imax}]` gives a numerical
+approximation to the product of `f` for `i` from `imin` to `imax` (which may be
+`Infinity`); `NProduct[f, {i, imin, imax, di}]` uses step `di`, and
+`NProduct[f, {i,…}, {j,…}, …]` is multidimensional (an inner bound may depend on
+an outer index).  Implemented in `src/numerical_calculus/nprod.{c,h}`.
+Attributes: `HoldAll, Protected`.
+
+Per Keiper (1992) the product is evaluated as `Exp[NSum[Log[f], …]]`, reusing
+the full NSum engine: Euler-Maclaurin (`Method -> "EulerMaclaurin"`, default for
+monotone factors), Wynn epsilon (`Method -> "WynnEpsilon"`), automatic method
+selection, MPFR working precision, large-finite tail differences, and the
+convergence test (factors are checked for `-> 1`; a divergent product such as
+`∏(1+2^i)` returns `ComplexInfinity`).  Options: `Method`, `WorkingPrecision`,
+`NProductFactors` (leading factors taken explicitly, default 15),
+`NProductExtraFactors`, `WynnDegree`, `VerifyConvergence`, `AccuracyGoal`,
+`PrecisionGoal`.  On the arbitrary-precision path NProduct carries guard digits
+because `Exp` turns the exponent's absolute error into the product's relative
+error.
+
+Like Mathematica, NProduct can miss the divergence of slowly diverging products
+(e.g. `∏(1+1/k)`, whose log-sum is the harmonic series) and may leave a harmless
+`+0. I` residue on products of real negative factors.
 
 
 ## FindMinimum / FindMaximum
