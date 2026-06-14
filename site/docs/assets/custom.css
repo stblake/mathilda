@@ -10,6 +10,18 @@
   line-height: 1.5;
 }
 
+/* Wrap long lines in code blocks instead of forcing a horizontal scrollbar.
+   The Description box renders each function's raw docstring verbatim, and some
+   docstrings (and the wider option lists / transcripts) run well past the page
+   width; pre-wrap keeps them readable on every page without sideways scrolling.
+   Wrapping happens at whitespace; overflow-wrap only breaks genuinely
+   unbreakable tokens (e.g. a 150-digit factorial). */
+.md-typeset .highlight pre,
+.md-typeset .highlight pre > code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 /* Status badges in category index lists: lightly emphasise the trailing tag. */
 .md-typeset em {
   color: var(--md-default-fg-color--light);
