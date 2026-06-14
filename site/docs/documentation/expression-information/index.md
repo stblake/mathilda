@@ -1,6 +1,6 @@
 # Expression Information
 
-45 built-in function(s) in this category.
+49 built-in function(s) in this category.
 
 - [`$MachineEpsilon`]($MachineEpsilon.md) — $MachineEpsilon  _(Stable)_
 - [`$MachinePrecision`]($MachinePrecision.md) — $MachinePrecision  _(Stable)_
@@ -32,11 +32,15 @@
 - [`MachineNumberQ`](MachineNumberQ.md) — MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.  _(Stable)_
 - [`MatrixQ`](MatrixQ.md) — MatrixQ[expr]  _(Stable)_
 - [`MemberQ`](MemberQ.md) — MemberQ[list, form] returns True if an element of list matches form, and False otherwise.  _(Stable)_
+- [`Negative`](Negative.md) — Negative[x]  _(Stable)_
+- [`NonNegative`](NonNegative.md) — NonNegative[x]  _(Stable)_
+- [`NonPositive`](NonPositive.md) — NonPositive[x]  _(Stable)_
 - [`NumberQ`](NumberQ.md) — NumberQ[expr]  _(Stable)_
 - [`NumericQ`](NumericQ.md) — NumericQ[expr] gives True if expr is a numeric quantity, and False otherwise.  _(Stable)_
 - [`OddQ`](OddQ.md) — OddQ[n] gives True if n is an odd integer (Integer or BigInt), False otherwise.  _(Stable)_
 - [`OneIdentity`](OneIdentity.md) — OneIdentity is an attribute that can be assigned to a symbol f to indicate that f[x], f[f[x]], etc. are all equivalent to x for the purpose of pattern matching.  _(Experimental)_
 - [`Orderless`](Orderless.md) — Orderless is an attribute that can be assigned to a symbol f to indicate that the elements e_i in expressions of the form f[e_1, e_2, ...] should automatically be sorted into canonical order. This property is accounted for in pattern matching.  _(Partial)_
+- [`Positive`](Positive.md) — Positive[x]  _(Stable)_
 - [`PossibleZeroQ`](PossibleZeroQ.md) — PossibleZeroQ[expr] gives True if symbolic and numerical methods suggest that expr has value zero, and False otherwise.  _(Stable)_
 - [`Print`](Print.md) — Print[expr1, expr2, ...]  _(Stable)_
 - [`ReleaseHold`](ReleaseHold.md) — ReleaseHold[expr]  _(Stable)_

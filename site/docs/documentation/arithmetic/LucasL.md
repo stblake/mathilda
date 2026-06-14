@@ -20,7 +20,21 @@ Listable; symbolic orders stay unevaluated.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= Table[LucasL[n], {n, 10}]
+Out[1]= {1, 3, 4, 7, 11, 18, 29, 47, 76, 123}
+
+In[2]:= LucasL[7, x]
+Out[2]= 7 x + 14 x^3 + 7 x^5 + x^7
+
+In[3]:= LucasL[-11.]
+Out[3]= -199.0
+
+In[4]:= N[LucasL[11/3], 50]
+Out[4]= 5.92396265296195541013569786219401262875198554223617
+```
 
 ## Implementation notes
 

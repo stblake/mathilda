@@ -19,7 +19,21 @@ unevaluated.
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= Table[Fibonacci[n], {n, 10}]
+Out[1]= {1, 1, 2, 3, 5, 8, 13, 21, 34, 55}
+
+In[2]:= Fibonacci[7, x]
+Out[2]= 1 + 6 x^2 + 5 x^4 + x^6
+
+In[3]:= Fibonacci[5.8, 3]
+Out[3]= 283.483
+
+In[4]:= N[Fibonacci[15/17], 50]
+Out[4]= 0.956519913924311225085822634276922986486069690120617
+```
 
 ## Implementation notes
 

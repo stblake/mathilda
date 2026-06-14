@@ -38,6 +38,18 @@ Work through them in order if you're new — each one builds on the last.
     Differentiate and integrate, expand power series, take limits, evaluate
     symbolic sums, and find roots and extrema numerically.
 
+-   :material-calculator-variant: __[7. Numerical calculus](07-numerical-calculus.md)__
+
+    When there is no closed form: numerical integration, differentiation,
+    summation, products, limits, series, and residues — `NIntegrate`, `ND`,
+    `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`.
+
+-   :material-sigma-lower: __[8. Special functions](08-special-functions.md)__
+
+    The higher transcendental functions: `Gamma`, `Zeta`, `PolyGamma`, `Erf`,
+    `PolyLog`, the Bernoulli and Euler numbers, and the hypergeometric family —
+    with their exact reductions and numerical values.
+
 </div>
 
 !!! tip "Following along"

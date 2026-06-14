@@ -17,7 +17,21 @@ Root[Function[t, p[t]], k]
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= N[Root[Function[#^3 - 2 # - 5], 1], 30]
+Out[1]= 2.094551481542326591482386540579
+
+In[2]:= N[Root[Function[#^3 + # + 1], 1], 20]    (* real root first *)
+Out[2]= -0.682327803828019327372
+
+In[3]:= N[Root[Function[#^3 + # + 1], 2], 20]    (* conj pair: -Im first *)
+Out[3]= 0.341163901914009663686 - 1.16154139999725193609*I
+
+In[4]:= N[Root[Function[#^3 + # + 1], 3], 20]
+Out[4]= 0.341163901914009663686 + 1.16154139999725193609*I
+```
 
 ## Implementation notes
 

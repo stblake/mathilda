@@ -40,6 +40,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Elementary functions (trig, hyperbolic, log, exp) | [`builtins/elementary-functions.md`](docs/spec/builtins/elementary-functions.md) |
 | Mathematical constants (`Pi`, `E`, `Degree`, `EulerGamma`, `Catalan`, `GoldenRatio`, `Glaisher`, `Khinchin`, ...) | [`builtins/mathematical-constants.md`](docs/spec/builtins/mathematical-constants.md) |
 | Special functions (`Gamma`, `Pochhammer`, `HypergeometricPFQ`, `Hypergeometric0F1`/`1F1`/`2F1`, ...) | [`builtins/special-functions.md`](docs/spec/builtins/special-functions.md) |
+| Numerical calculus (`ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`) | [`builtins/numerical-calculus.md`](docs/spec/builtins/numerical-calculus.md) |
 | Lists and iteration (`Table`, `Range`, `Map`, `Do`, ...) | [`builtins/lists-and-iteration.md`](docs/spec/builtins/lists-and-iteration.md) |
 | Functional programming (`Function`, `Apply`, `Select`, ...) | [`builtins/functional-programming.md`](docs/spec/builtins/functional-programming.md) |
 | Control flow (`If`, `Which`, `Switch`, `For`, `While`) | [`builtins/control-flow.md`](docs/spec/builtins/control-flow.md) |

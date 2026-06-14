@@ -21,7 +21,21 @@ MinimalPolynomial[s, x, Extension -> a]
 
 ## Examples
 
-_No verified examples yet for this function._
+All examples below are verified against the current Mathilda build.
+
+```mathematica
+In[1]:= MinimalPolynomial[Sqrt[2] + Sqrt[3], x]
+Out[1]= 1 - 10 x^2 + x^4
+
+In[2]:= MinimalPolynomial[(1 + I)/Sqrt[2], x]
+Out[2]= 1 + x^4
+
+In[3]:= MinimalPolynomial[Root[2 #1^3 - 2 #1 + 7 &, 1] + 17, x]
+Out[3]= -9785 + 1732 x - 102 x^2 + 2 x^3
+
+In[4]:= MinimalPolynomial[Sqrt[2], x, Extension -> E^(I Pi/4)]
+Out[4]= 4 - 4 x^2 + x^4
+```
 
 ## Implementation notes
 

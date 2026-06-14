@@ -20,7 +20,7 @@ Mathilda is a small computer algebra system that recreates the **core
 architecture and evaluation semantics of the Mathematica programming language** — a recursive
 expression model, attribute-driven evaluation, structural pattern matching with
 backtracking, and a rewrite-rule engine — together with an extensive library of
-**~388 built-in functions**.
+**~435 built-in functions**.
 
 It spans roughly **159,000 lines of C99**, uses **GMP** for arbitrary-precision
 integers and **MPFR** for arbitrary-precision reals, and is licensed under
@@ -94,6 +94,19 @@ Out[9]= {{193707721, 1}, {761838257287, 1}}
     Differentiation, multi-method integration, `Series`, `Limit`, symbolic
     summation, polynomial factorization (over ℤ and ℚ(α)), Gröbner bases,
     dense linear algebra, and a complexity-driven `Simplify`.
+
+-   :material-calculator-variant: __Numerical calculus__
+
+    Machine- and arbitrary-precision numerics for the cases with no closed
+    form: `NIntegrate` (adaptive, oscillatory, multidimensional), `NSum`,
+    `NProduct`, `ND`, `NLimit`, `NSeries`, and `NResidue`.
+
+-   :material-function: __Special functions__
+
+    Gamma, log-gamma, beta and the digamma/polygamma family; the Riemann/Hurwitz
+    `Zeta` and Stieltjes constants; `Erf`/`Erfc`/`Erfi`; `ExpIntegralEi`,
+    `LogIntegral`, `PolyLog`, Bernoulli/Euler numbers, and the hypergeometric
+    family.
 
 -   :material-shape: __Number theory & factorization__
 

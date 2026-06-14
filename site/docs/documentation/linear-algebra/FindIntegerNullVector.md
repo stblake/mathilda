@@ -25,10 +25,10 @@ In[1]:= FindIntegerNullVector[{Log[2], Log[4]}]
 Out[1]= {-2, 1}
 
 In[2]:= FindIntegerNullVector[{Pi, ArcTan[1/5], ArcTan[1/239]}]
-Out[2]= {-101842074, 1612412935, 397496960}
+Out[2]= {1, -16, 4}
 
 In[3]:= a = Sqrt[2] + 3^(1/3); FindIntegerNullVector[a^Range[0, 6]]
-Out[3]= FindIntegerNullVector[{1, Sqrt[2] + 3^(1/3), (Sqrt[2] + 3^(1/3))^2, (Sqrt[2] + 3^(1/3))^3, (Sqrt[2] + 3^(1/3))^4, (Sqrt[2] + 3^(1/3))^5, (Sqrt[2] + 3^(1/3))^6}]
+Out[3]= {1, -36, 12, -6, -6, 0, 1}
 
 In[4]:= FindIntegerNullVector[{1, 2 I + Sqrt[3], (2 I + Sqrt[3])^2}]
 Out[4]= {-7, -4*I, 1}

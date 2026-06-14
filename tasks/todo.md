@@ -1,42 +1,52 @@
-# NSum engine deficiency fixes — DONE 2026-06-14
+# Documentation refresh: numerical calculus + special functions — 2026-06-14
 
-Plan: `/Users/user/.claude/plans/cuddly-napping-orbit.md`. All changes in
-`src/numerical_calculus/nsum.c` + tests + docs.
+Goal: tutorials for the numerical-calculus routines and for the special
+functions, list both pillars in the main-page "What's inside", and bring all
+generated docs up to date with every built-in.
 
-## D1 — peaked / late-settling summands ✅
-- [x] Far-tail magnitude ladder (run only when head isn't already monotone)
-- [x] `ns_diverges` → sustained far-tail growth (`rising_far`)
-- [x] decay-onset `settle` → EM adaptive base `N=imin+max(NSumTerms,settle)·di`
-- [x] Verified: 1/(1+(k-20)^2)→3.10462; 2^k still CI; harmonic not flagged
+## Plan
 
-## D2 — accuracy ceiling ✅
-- [x] dequad reltol/levels scaled to target precision (just above the floor)
-- [x] Hybrid corrections: symbolic D primary, numerical contour DFT on balloon
-- [x] Guard digits (2·target+32 bits) vs near-1 float-sample cancellation
-- [x] Oscillatory (sign-alternating) extensions stay symbolic → NULL → Wynn
-- [x] Verified: Log[1+1/n^2] & EM-gamma @WP35 → ~33–34 digits (were 8–12)
+- [ ] 1. Spec file `docs/spec/builtins/numerical-calculus.md` — H2 sections for
+      `ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`
+      (drives a new site category; was falling into "Other & Advanced").
+      Include verified `In[]/Out[]` example blocks.
+- [ ] 2. `docs/spec/builtins/special-functions.md` — add a `## LogGamma` H2 so
+      `LogGamma` is filed under Special Functions (was Other & Advanced).
+- [ ] 3. `Mathilda_spec.md` — add a "Numerical calculus" row to the built-in
+      reference table.
+- [ ] 4. Changelog note in `docs/spec/changelog/2026-06-08.md`.
+- [ ] 5. New tutorial `site/docs/tutorials/07-numerical-calculus.md`.
+- [ ] 6. New tutorial `site/docs/tutorials/08-special-functions.md`.
+- [ ] 7. `site/docs/tutorials/.pages` + `index.md` — register both tutorials.
+- [ ] 8. `site/docs/index.md` — add "Numerical calculus" and "Special functions"
+      cards to "What's inside"; refresh function count.
+- [ ] 9. Regenerate the site: `python3 site/generate.py`.
+- [ ] 10. Verify generated output + tutorial transcripts.
 
-## D3 — nested summands ✅ (routing) / documented residual
-- [x] Removed wrong-premise black-box EM-exclusion; EM valid for independent inner
-- [x] Verified: multidim {k,1,∞}→1.14434, {k,1,n}→0.770188
-- [ ] (residual, documented) infinite-outer multidim PRODUCT mixed series ≈0.607 vs 0.564
+All example transcripts captured by running `./Mathilda` directly.
 
-## Wrap-up ✅
-- [x] `test_peaked_summand` + `test_composite_precision` added to test_nsum.c
-- [x] nprod WP composite tolerance tightened 1e-11 → 1e-25
-- [x] nsum/nprod/nseries/nlimit tests pass; suite under the 60s alarm
-- [x] valgrind matches pre-change baseline (no new leaks)
-- [x] docs/spec calculus.md + changelog 2026-06-08.md + memory updated
+## Review — DONE 2026-06-14
 
-## Review
-The plan's "robust full fix" (replace symbolic EM derivatives with contour) was
-too aggressive on its own: contour is fragile for geometric/oscillatory summands
-and the black-box exclusion broke valid nested EM. The shipped design is a
-**hybrid** — symbolic D primary (byte-identical to the original for simple
-summands, so no regressions), contour only when symbolic balloons (composite
-summands), never for oscillatory extensions — plus WP-scaled integral tolerance
-and guard digits. This fixes D1 and D2 fully and corrects D3's routing, with one
-genuinely-hard nested mixed-series case left documented. Key trap: NSum's shared
-evaluator has a pre-existing per-eval GMP-rational leak, so any added per-call
-summand evaluation amplifies it — the far-tail ladder is skipped on monotone
-heads and oscillation is read from existing head terms to keep evals flat.
+All 10 steps complete and verified.
+
+- **New doc category.** `docs/spec/builtins/numerical-calculus.md` now owns
+  `ND`, `NIntegrate`, `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`. The
+  rich authoritative sections were **moved** out of `calculus.md` (not copied —
+  no duplication); `calculus.md` keeps the symbolic routines + FindRoot/FindMin/
+  FindMax. Added verified `In[]/Out[]` example blocks to the NProduct/NIntegrate
+  sections (they had none) and fixed a line-wrapped `NSum` example that blocked
+  example mining. Registered the category in `Mathilda_spec.md`.
+- **Special functions.** Promoted `LogGamma` from `###` to `##` in
+  `special-functions.md`; the category now generates 21 pages (was 6 — stale).
+- **Tutorials.** Added `07-numerical-calculus.md` (19/19 transcripts match the
+  build) and `08-special-functions.md` (34/34). Registered both in
+  `tutorials/.pages` and the tutorials index.
+- **Landing page.** Added "Numerical calculus" + "Special functions" cards to
+  "What's inside"; bumped the count to ~435.
+- **Regeneration.** `python3 site/generate.py` → 435 pages, 1111 verified
+  examples, **0** in "Other & Advanced". 24 categories. Doc centre landing,
+  per-category indexes, `.pages` nav, and `builtins.json` all refreshed.
+- **Validation.** `mkdocs build --strict` passes (no broken links). Changelog
+  note added to `docs/spec/changelog/2026-06-08.md`.
+
+No `src/` changes — documentation only. `src/external/` untouched.

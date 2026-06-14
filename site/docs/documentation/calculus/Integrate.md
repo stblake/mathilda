@@ -15,6 +15,7 @@ subroutine, bypassing the default cascade.  Accepted method names:
   "LinearRadicals"     — Integrate`LinearRadicals (rationalise radicals of a x + b)
   "QuadraticRadicals"  — Integrate`QuadraticRadicals (Euler substitution for Sqrt[a x^2 + b x + c])
   "LinearRatioRadicals" — Integrate`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d))
+  "Weierstrass"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)
   "RischNorman"        — Integrate`RischNorman (Bronstein pmint heuristic)
   "CRCTable"           — Integrate`CRCTable (lazy-loaded CRC integral table)
   "Undefined"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)
@@ -51,7 +52,7 @@ In[7]:= Integrate[1/(x^4 + x^2 + 1), x]            (* two quadratic factors *)
 Out[7]= 1/4 Log[1 + x + x^2] + 1/2 ArcTan[(-1 + 2 x)/Sqrt[3]]/Sqrt[3] + 1/2 ArcTan[(1 + 2 x)/Sqrt[3]]/Sqrt[3] - 1/4 Log[1 - x + x^2]
 
 In[8]:= Integrate[Sin[x], x, Method -> "RischNorman"]  (* strict, no fallback *)
-Out[8]= -(1 + Cos[x])
+Out[8]= -Cos[x]
 ```
 
 ## Implementation notes
@@ -113,7 +114,7 @@ heuristic (pmint may give up) backed by a finite table. No definite integrals,
 no multivariate integration, no constant of integration.
 
 - `Protected`, `Listable`.
-- Eight-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
+- Nine-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
 
 **Attributes:** `Listable`, `Protected`.
 

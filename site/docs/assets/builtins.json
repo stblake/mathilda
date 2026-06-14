@@ -272,6 +272,22 @@
     "url": "documentation/scoping-constructs/BeginPackage/"
   },
   {
+    "name": "BernoulliB",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "BernoulliB[n]",
+    "url": "documentation/special-functions/BernoulliB/"
+  },
+  {
+    "name": "Beta",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Beta[a, b]",
+    "url": "documentation/special-functions/Beta/"
+  },
+  {
     "name": "Binomial",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -382,6 +398,14 @@
     "status": "Stable",
     "summary": "Clear[s1, s2, ...]",
     "url": "documentation/assignment-and-rules/Clear/"
+  },
+  {
+    "name": "ClearAll",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "ClearAll[s1, s2, ...]",
+    "url": "documentation/assignment-and-rules/ClearAll/"
   },
   {
     "name": "ClearAttributes",
@@ -747,7 +771,7 @@
     "name": "DownValues",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "DownValues[s] gives a list of down-value rules for s.",
     "url": "documentation/assignment-and-rules/DownValues/"
   },
@@ -824,10 +848,42 @@
     "url": "documentation/comparisons/Equal/"
   },
   {
+    "name": "Erf",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Erf[z]",
+    "url": "documentation/special-functions/Erf/"
+  },
+  {
+    "name": "Erfc",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Erfc[z]",
+    "url": "documentation/special-functions/Erfc/"
+  },
+  {
+    "name": "Erfi",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Erfi[z]",
+    "url": "documentation/special-functions/Erfi/"
+  },
+  {
+    "name": "EulerE",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "EulerE[n]",
+    "url": "documentation/special-functions/EulerE/"
+  },
+  {
     "name": "EulerGamma",
     "category": "Mathematical Constants",
     "slug": "mathematical-constants",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "EulerGamma",
     "url": "documentation/mathematical-constants/EulerGamma/"
   },
@@ -862,6 +918,14 @@
     "status": "Stable",
     "summary": "Exp[z]",
     "url": "documentation/elementary-functions/Exp/"
+  },
+  {
+    "name": "ExpIntegralEi",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "ExpIntegralEi[z]",
+    "url": "documentation/special-functions/ExpIntegralEi/"
   },
   {
     "name": "ExpToTrig",
@@ -1520,6 +1584,22 @@
     "url": "documentation/linear-algebra/Inverse/"
   },
   {
+    "name": "InverseErf",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "InverseErf[s]",
+    "url": "documentation/special-functions/InverseErf/"
+  },
+  {
+    "name": "InverseErfc",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "InverseErfc[s]",
+    "url": "documentation/special-functions/InverseErfc/"
+  },
+  {
     "name": "InverseFunctions",
     "category": "Algebra",
     "slug": "algebra",
@@ -1656,12 +1736,36 @@
     "url": "documentation/expression-information/ListQ/"
   },
   {
+    "name": "LoadModule",
+    "category": "File I/O",
+    "slug": "file-io",
+    "status": "Experimental",
+    "summary": "LoadModule[\"relpath\"]",
+    "url": "documentation/file-io/LoadModule/"
+  },
+  {
     "name": "Log",
     "category": "Elementary Functions",
     "slug": "elementary-functions",
     "status": "Stable",
     "summary": "Log[z]",
     "url": "documentation/elementary-functions/Log/"
+  },
+  {
+    "name": "LogGamma",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "LogGamma[z]",
+    "url": "documentation/special-functions/LogGamma/"
+  },
+  {
+    "name": "LogIntegral",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "LogIntegral[z]",
+    "url": "documentation/special-functions/LogIntegral/"
   },
   {
     "name": "Longest",
@@ -1848,6 +1952,70 @@
     "url": "documentation/arithmetic/N/"
   },
   {
+    "name": "ND",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "ND[expr, x, x0]",
+    "url": "documentation/numerical-calculus/ND/"
+  },
+  {
+    "name": "NIntegrate",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NIntegrate[f, {x, xmin, xmax}]",
+    "url": "documentation/numerical-calculus/NIntegrate/"
+  },
+  {
+    "name": "NLimit",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NLimit[expr, z -> z0]",
+    "url": "documentation/numerical-calculus/NLimit/"
+  },
+  {
+    "name": "NProduct",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NProduct[f, {i, imin, imax}]",
+    "url": "documentation/numerical-calculus/NProduct/"
+  },
+  {
+    "name": "NResidue",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NResidue[expr, {z, z0}]",
+    "url": "documentation/numerical-calculus/NResidue/"
+  },
+  {
+    "name": "NSeries",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NSeries[f, {x, x0, n}]",
+    "url": "documentation/numerical-calculus/NSeries/"
+  },
+  {
+    "name": "NSum",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NSum[f, {i, imin, imax}]",
+    "url": "documentation/numerical-calculus/NSum/"
+  },
+  {
+    "name": "Negative",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Negative[x]",
+    "url": "documentation/expression-information/Negative/"
+  },
+  {
     "name": "NegativeDefiniteMatrixQ",
     "category": "Linear Algebra",
     "slug": "linear-algebra",
@@ -1894,6 +2062,22 @@
     "status": "Stable",
     "summary": "NextPrime[x] gives the next prime after x.",
     "url": "documentation/arithmetic/NextPrime/"
+  },
+  {
+    "name": "NonNegative",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "NonNegative[x]",
+    "url": "documentation/expression-information/NonNegative/"
+  },
+  {
+    "name": "NonPositive",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "NonPositive[x]",
+    "url": "documentation/expression-information/NonPositive/"
   },
   {
     "name": "Norm",
@@ -2003,7 +2187,7 @@
     "name": "OwnValues",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
-    "status": "Experimental",
+    "status": "Stable",
     "summary": "OwnValues[s] gives a list of own-value rules for s.",
     "url": "documentation/assignment-and-rules/OwnValues/"
   },
@@ -2062,6 +2246,22 @@
     "status": "Stable",
     "summary": "Pochhammer[a, n]",
     "url": "documentation/special-functions/Pochhammer/"
+  },
+  {
+    "name": "PolyGamma",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "PolyGamma[z]",
+    "url": "documentation/special-functions/PolyGamma/"
+  },
+  {
+    "name": "PolyLog",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "PolyLog[n, z]",
+    "url": "documentation/special-functions/PolyLog/"
   },
   {
     "name": "PolynomialExtendedGCD",
@@ -2134,6 +2334,14 @@
     "status": "Stable",
     "summary": "Position[expr, pattern] gives a list of the positions at which objects matching pattern appear in expr.",
     "url": "documentation/pattern-matching/Position/"
+  },
+  {
+    "name": "Positive",
+    "category": "Expression Information",
+    "slug": "expression-information",
+    "status": "Stable",
+    "summary": "Positive[x]",
+    "url": "documentation/expression-information/Positive/"
   },
   {
     "name": "PositiveDefiniteMatrixQ",
@@ -2246,6 +2454,14 @@
     "status": "Stable",
     "summary": "Print[expr1, expr2, ...]",
     "url": "documentation/expression-information/Print/"
+  },
+  {
+    "name": "Protect",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "Protect[s1, s2, ...]",
+    "url": "documentation/assignment-and-rules/Protect/"
   },
   {
     "name": "PseudoInverse",
@@ -2406,6 +2622,14 @@
     "status": "Stable",
     "summary": "ReleaseHold[expr]",
     "url": "documentation/expression-information/ReleaseHold/"
+  },
+  {
+    "name": "Remove",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "Remove[s1, s2, ...]",
+    "url": "documentation/assignment-and-rules/Remove/"
   },
   {
     "name": "Repeated",
@@ -2808,6 +3032,14 @@
     "url": "documentation/statistics/StandardDeviation/"
   },
   {
+    "name": "StieltjesGamma",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "StieltjesGamma[n]",
+    "url": "documentation/special-functions/StieltjesGamma/"
+  },
+  {
     "name": "StringJoin",
     "category": "String Operations",
     "slug": "string-operations",
@@ -3136,12 +3368,28 @@
     "url": "documentation/structural-manipulation/Union/"
   },
   {
+    "name": "Unprotect",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "Unprotect[s1, s2, ...]",
+    "url": "documentation/assignment-and-rules/Unprotect/"
+  },
+  {
     "name": "UnsameQ",
     "category": "Comparisons",
     "slug": "comparisons",
     "status": "Stable",
     "summary": "lhs =!= rhs or UnsameQ[lhs, rhs]",
     "url": "documentation/comparisons/UnsameQ/"
+  },
+  {
+    "name": "Unset",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "Unset[lhs] or lhs =.",
+    "url": "documentation/assignment-and-rules/Unset/"
   },
   {
     "name": "UpTo",
@@ -3222,5 +3470,13 @@
     "status": "Stable",
     "summary": "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.",
     "url": "documentation/scoping-constructs/With/"
+  },
+  {
+    "name": "Zeta",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Zeta[s]",
+    "url": "documentation/special-functions/Zeta/"
   }
 ]

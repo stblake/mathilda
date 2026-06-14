@@ -34,7 +34,7 @@ In[6]:= PossibleZeroQ[Sqrt[x^2] - x]
 Out[6]= False
 
 In[7]:= PossibleZeroQ[Sin[x]^2 + Cos[x]^2 - 1]
-Out[7]= False
+Out[7]= True
 ```
 
 ## Implementation notes

@@ -7,3 +7,5 @@ nav:
   - 04-machine-and-arbitrary-precision-arithmetic.md
   - 05-algebra.md
   - 06-calculus.md
+  - 07-numerical-calculus.md
+  - 08-special-functions.md

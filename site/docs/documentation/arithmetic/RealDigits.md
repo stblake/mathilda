@@ -22,7 +22,7 @@ In[1]:= RealDigits[123.55555]
 Out[1]= {{1, 2, 3, 5, 5, 5, 5, 5, 0, 0, 0, 0, 0, 0, 0, 0}, 3}
 
 In[2]:= RealDigits[Pi, 10, 25]
-Out[2]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate}, 1}
+Out[2]= {{3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3}, 1}
 
 In[3]:= RealDigits[19/7]
 Out[3]= {{2, {7, 1, 4, 2, 8, 5}}, 1}
@@ -31,7 +31,7 @@ In[4]:= RealDigits[5.635, 10, 20]
 Out[4]= {{5, 6, 3, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Indeterminate, Indeterminate, Indeterminate, Indeterminate}, 1}
 
 In[5]:= RealDigits[Pi, 10, 20, -5]
-Out[5]= {{9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate, Indeterminate}, -4}
+Out[5]= {{9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3, 2, 3, 8, 4, 6, 2, 6, 4, 3}, -4}
 
 In[6]:= RealDigits[1.234, 2, 15]
 Out[6]= {{1, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 1}, 1}

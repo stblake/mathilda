@@ -404,7 +404,7 @@ Behaviour:
 stays symbolic), `PolyGamma[n, z]` for `n ≤ −2`, and dedicated `Series`
 expansions (only the generic `D`-based Taylor fallback applies).
 
-### LogGamma
+## LogGamma
 
 `LogGamma[z]` is the log-gamma function log Γ(z) — the analytic continuation of
 log(Γ(z)) with a single branch cut on the negative real axis (not identical to
