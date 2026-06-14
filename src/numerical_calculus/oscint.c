@@ -28,7 +28,10 @@ static bool osc_halfperiod_comp(GkSampleMachine f, void* ctx, double a, double b
         double pRe = 0, pIm = 0; bool have = false;
         double minRe = 1e300, maxRe = -1e300, minIm = 1e300, maxIm = -1e300;
         for (int i = 0; i < N; i++) {
-            double x = a + win * (double)i / (N - 1);
+            /* Sample at cell centres so a sample never lands exactly on an
+             * endpoint: a singular endpoint (1/x at x=0) would otherwise raise a
+             * spurious Power::infy and contribute a discarded non-finite value. */
+            double x = a + win * ((double)i + 0.5) / (double)N;
             double _Complex v;
             if (!f(ctx, x, &v)) continue;
             double re = creal(v), im = cimag(v);
@@ -49,24 +52,38 @@ static bool osc_halfperiod_comp(GkSampleMachine f, void* ctx, double a, double b
     return false;
 }
 
-/* Locate the next sign change (zero) of component `comp` of f strictly after x,
- * marching forward in steps of `step` (< the half-period) and bisecting. */
+/* Locate the next sign change (zero) of component `comp` of f strictly after x.
+ *
+ * The local oscillation frequency can drift markedly from one panel to the next
+ * — most sharply for an oscillatory endpoint singularity, where it grows without
+ * bound.  A fixed marching step (sized from a single global half-period estimate)
+ * then either crawls or, worse, leaps over whole lobes once the frequency rises.
+ * Instead we probe outward from x with a step that starts at a small fraction of
+ * the last zero-to-zero gap `scale` and grows geometrically until a sign change
+ * is bracketed, then bisect.  Starting small guarantees a closer-than-expected
+ * next zero is never skipped; the geometric growth keeps the probe count low
+ * when the frequency instead falls. */
 static bool osc_next_zero(GkSampleMachine f, void* ctx, int comp,
-                          double x, double step, int max_steps, double* z) {
+                          double x, double scale, double* z) {
+    if (!(scale > 0.0)) return false;
     double _Complex v;
-    /* Start a quarter-step past x: the previous zero sits at x, where f ≈ 0, so
-     * sampling there would spuriously re-detect it as the next crossing. */
-    double cur = x + 0.25 * step;
-    if (!f(ctx, cur, &v)) { cur += 0.01 * step; if (!f(ctx, cur, &v)) return false; }
+    /* First sample just inside the next lobe (the previous zero sits at x). */
+    double h = 0.02 * scale;
+    double pos = x + h;
+    if (!f(ctx, pos, &v)) {
+        bool ok = false;
+        for (int k = 0; k < 8; k++) { h *= 1.7; pos = x + h; if (f(ctx, pos, &v)) { ok = true; break; } }
+        if (!ok) return false;
+    }
     double f0 = comp ? cimag(v) : creal(v);
-    for (int i = 0; i < max_steps; i++) {
-        double nx = cur + step;
+    for (int i = 0; i < 100000; i++) {
+        double nx = pos + h;
         double _Complex vn;
         if (!f(ctx, nx, &vn)) return false;
         double f1 = comp ? cimag(vn) : creal(vn);
         if ((f0 <= 0 && f1 >= 0) || (f0 >= 0 && f1 <= 0)) {
-            double lo = cur, hi = nx, flo = f0;
-            for (int bj = 0; bj < 50; bj++) {
+            double lo = pos, hi = nx, flo = f0;
+            for (int bj = 0; bj < 60; bj++) {
                 double m = 0.5 * (lo + hi);
                 double _Complex vm;
                 if (!f(ctx, m, &vm)) return false;
@@ -77,7 +94,8 @@ static bool osc_next_zero(GkSampleMachine f, void* ctx, int comp,
             *z = 0.5 * (lo + hi);
             return true;
         }
-        cur = nx; f0 = f1;
+        pos = nx; f0 = f1;
+        h *= 1.3;
     }
     return false;
 }
@@ -89,6 +107,27 @@ static bool osc_panel(GkSampleMachine f, void* ctx, double x0, double x1,
     if (R.status == GK_NONNUMERIC) return false;
     *out = R.value;
     return true;
+}
+
+/* Sum half-period panels of width `w` across the finite range [a,b].  Writes the
+ * total and returns whether every panel was numeric and the range was covered. */
+static bool osc_finite_sum(GkSampleMachine f, void* ctx, double a, double b,
+                           double w, double panel_tol, int max_panels,
+                           double _Complex* out) {
+    double _Complex total = 0.0;
+    double x = a;
+    int np = 0;
+    bool all_ok = true;
+    while (x < b && np < max_panels) {
+        double x1 = x + w;
+        if (x1 > b) x1 = b;
+        double _Complex p;
+        if (osc_panel(f, ctx, x, x1, panel_tol, &p)) total += p;
+        else all_ok = false;
+        x = x1; np++;
+    }
+    *out = total;
+    return all_ok && x >= b;
 }
 
 bool osc_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
@@ -104,20 +143,25 @@ bool osc_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
     if (infinite) {
         /* Panels run between successive zeros of the oscillation, so each
          * carries a single-signed lobe and the running partial sums alternate
-         * cleanly — exactly the sequence Wynn's epsilon accelerates. */
-        double step = 0.4 * hp;
+         * cleanly — exactly the sequence Wynn's epsilon accelerates.  The local
+         * lobe width (`scale`) is seeded from the half-period estimate and then
+         * tracked from the last zero-to-zero gap, so the zero finder stays in
+         * step even when the frequency drifts (e.g. an oscillatory singularity
+         * whose lobes shrink without bound). */
+        double scale = hp;
         double _Complex* S = malloc((size_t)max_panels * sizeof(double _Complex));
         if (!S) return false;
         int n = 0;
         double _Complex total = 0.0, best = 0.0;
         double err = INFINITY, maxS = 0.0;
-        bool conv = false, have_best = false;
+        bool conv = false;
         double x = a;
         for (int k = 0; k < max_panels; k++) {
             double z;
-            if (!osc_next_zero(f, ctx, comp, x, step, 100000, &z)) break;
+            if (!osc_next_zero(f, ctx, comp, x, scale, &z)) break;
             double _Complex p;
             if (osc_panel(f, ctx, x, z, panel_tol, &p)) total += p;
+            scale = z - x;
             x = z;
             S[n++] = total;
             if (cabs(total) > maxS) maxS = cabs(total);
@@ -130,7 +174,7 @@ bool osc_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
                      * best (smallest-error) estimate — late high-degree entries
                      * degrade as the tableau corner goes singular. */
                     && cabs(acc) <= 1e3 * maxS + 1.0 && sstep < err) {
-                    best = acc; err = sstep; have_best = true;
+                    best = acc; err = sstep;
                     if (sstep <= reltol * cabs(acc) + 1e-14) { conv = true; break; }
                 }
             }
@@ -143,20 +187,17 @@ bool osc_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
         return conv;
     }
 
-    /* Finite range: cover [a,b] with half-period panels and sum. */
-    double _Complex total = 0.0;
-    double x = a;
-    int np = 0;
-    bool all_ok = true;
-    while (x < b && np < max_panels) {
-        double x1 = x + w;
-        if (x1 > b) x1 = b;
-        double _Complex p;
-        if (osc_panel(f, ctx, x, x1, panel_tol, &p)) total += p;
-        else all_ok = false;
-        x = x1; np++;
-    }
-    *result = total;
-    *abserr = 0.0;
-    return all_ok && x >= b;
+    /* Finite range: cover [a,b] with half-period panels and sum.  The sum is
+     * computed at panel width w and again at w/2; their difference is a genuine
+     * error estimate (the two agree once the panels resolve the oscillation, and
+     * diverge when they do not — e.g. an oscillatory endpoint singularity, where
+     * no fixed width resolves the ever-finer lobes).  Reporting that honest error
+     * (rather than a blanket 0) keeps a poorly-resolved estimate from being
+     * mistaken for a converged one by the caller. */
+    double _Complex s1, s2;
+    bool ok1 = osc_finite_sum(f, ctx, a, b, w,       panel_tol, max_panels, &s1);
+    bool ok2 = osc_finite_sum(f, ctx, a, b, 0.5 * w, panel_tol, max_panels, &s2);
+    *result = s2;
+    *abserr = cabs(s2 - s1);
+    return ok1 && ok2 && *abserr <= reltol * cabs(s2) + 1e-12;
 }

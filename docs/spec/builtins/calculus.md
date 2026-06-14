@@ -1718,14 +1718,18 @@ integrand evaluated/numericalised at each sample point.
 | arbitrary `WorkingPrecision` (> machine) | double-exponential at the target precision + guard bits (MPFR) |
 | semi-infinite / doubly-infinite | exp-sinh / sinh-sinh |
 | oscillatory (many periods / slow tail) | integrate between zeros + Wynn epsilon (finite: half-period panels) |
+| oscillatory endpoint singularity (e.g. `Cos[Log[x]/x]/x` at 0) | exponential endpoint map `x = a + (b−a)e^{−t}` onto a half line, then integrate between the (accelerating) zeros + Wynn epsilon |
 | multidimensional, constant rectangular box (2 ≤ d ≤ 5) | adaptive Genz-Malik cubature (degree-7 / degree-5 error) |
 | multidimensional, variable-dependent / infinite bounds | iterated 1D quadrature |
 | region (`Boole`/`UnitStep`) or dimension ≥ 6 | (quasi-)Monte-Carlo |
 | complex `xmin`/`xmax` or extra nodes | straight-line / piecewise-linear contour; complex ∞ gives a ray |
 
 Named methods are accepted as strings: `"GlobalAdaptive"`, `"GaussKronrodRule"`,
-`"DoubleExponential"`, `"LevinRule"`, `"MonteCarlo"`, `"QuasiMonteCarlo"`,
-`"AdaptiveMonteCarlo"`, `"PrincipalValue"`.  A recognised but **not-yet-implemented**
+`"DoubleExponential"`, `"LevinRule"`, `"OscillatorySingularity"`, `"MonteCarlo"`,
+`"QuasiMonteCarlo"`, `"AdaptiveMonteCarlo"`, `"PrincipalValue"`.  `"OscillatorySingularity"`
+forces the exponential endpoint-map + integrate-between-the-zeros engine on the
+detected singular endpoint(s) (both are tried when neither is detected singular).
+A recognised but **not-yet-implemented**
 method (e.g. `"ClenshawCurtisRule"`, `"NewtonCotesRule"`) emits
 `NIntegrate::method` and returns unevaluated rather than silently approximating.
 
@@ -1751,9 +1755,11 @@ reach the goal), `NIntegrate::method`, `NIntegrate::badopt`.
 
 Monte-Carlo and complex-contour paths are machine precision (high
 `WorkingPrecision` applies to real ranges).  Finite-range MPFR bounds are taken
-to machine precision (exact for rational bounds).  The oscillatory engine
-assumes a roughly constant period (chirps such as `Sin[x^2]` are not specially
-transformed).
+to machine precision (exact for rational bounds).  The oscillatory zero finder
+tracks a drifting local period (the lobe step adapts to the last zero-to-zero
+gap), so an *endpoint* chirp is handled via the `"OscillatorySingularity"`
+transform; an *interior* chirp such as `Sin[x^2]` over a wide finite range is not
+specially transformed.
 
 
 ## FindMinimum / FindMaximum

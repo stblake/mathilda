@@ -17,6 +17,7 @@
 #include "nint.h"
 #include "gkadapt.h"
 #include "denint.h"
+#include "dequad.h"
 #include "oscint.h"
 #include "mcint.h"
 #include "cubature.h"
@@ -162,6 +163,13 @@ static void ni_bind_restore(NiBind* b) {
  *  Integrand evaluation context                                       *
  * ------------------------------------------------------------------ */
 
+/* Abscissa map applied before binding the integration variable. */
+typedef enum {
+    NI_MAP_AFFINE = 0,  /* x_scale·z + x_shift (real axis, reflection, contour) */
+    NI_MAP_EXP_LO,      /* end_a + span·e^{-z}: maps z∈[0,∞) onto a singular a   */
+    NI_MAP_EXP_HI       /* end_a − span·e^{-z}: maps z∈[0,∞) onto a singular b   */
+} NiMapMode;
+
 typedef struct {
     Expr*       body;    /* borrowed integrand (free in the variable)      */
     NiBind*     bind;
@@ -171,18 +179,32 @@ typedef struct {
      * complex contour. */
     double _Complex x_scale;
     double _Complex x_shift;
+    /* Exponential endpoint map (NI_MAP_EXP_*): tames a singular finite endpoint
+     * by spreading it onto a half line.  The sample is multiplied by the map
+     * Jacobian span·e^{-z}, which vanishes at the singular end. */
+    NiMapMode   map_mode;
+    double      end_a;   /* singular endpoint coordinate                   */
+    double      span;    /* b − a > 0                                      */
 } NiCtx;
 
 static void ni_ctx_init(NiCtx* c, Expr* body, NiBind* bind, NumericSpec spec) {
     c->body = body; c->bind = bind; c->spec = spec;
     c->x_scale = 1.0; c->x_shift = 0.0;
+    c->map_mode = NI_MAP_AFFINE; c->end_a = 0.0; c->span = 0.0;
 }
 
-/* Build the numeric leaf the variable is bound to from a mapped abscissa. */
+/* Build the numeric leaf the variable is bound to from an affine-mapped
+ * abscissa (real axis, reflection, or a complex contour segment). */
 static Expr* ni_abscissa_expr(const NiCtx* c, double _Complex z) {
     double _Complex w = c->x_scale * z + c->x_shift;
     if (cimag(w) == 0.0) return expr_new_real(creal(w));
     return make_complex(expr_new_real(creal(w)), expr_new_real(cimag(w)));
+}
+
+/* Real abscissa of the exponential-endpoint map at half-line parameter z >= 0. */
+static double ni_exp_abscissa(const NiCtx* c, double z) {
+    double off = c->span * exp(-z);
+    return (c->map_mode == NI_MAP_EXP_LO) ? c->end_a + off : c->end_a - off;
 }
 
 /* Evaluate the integrand with the variable bound to `value` (consumed).
@@ -201,12 +223,36 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
 /* Machine sample callback: f at a (possibly mapped) real abscissa x. */
 static bool ni_sample_machine(void* vctx, double x, double _Complex* out) {
     NiCtx* c = (NiCtx*)vctx;
+    /* Exponential-endpoint map: the Jacobian d x/d z = span·e^{-z} vanishes at
+     * the singular end, taming the integrand there.  Past the underflow horizon
+     * (e^{-z} = 0) the abscissa would collapse exactly onto the singular endpoint
+     * — evaluating the integrand there raises a spurious 1/0; the contribution is
+     * negligible, so truncate the tail instead. */
+    if (c->map_mode != NI_MAP_AFFINE) {
+        double jac = c->span * exp(-x);
+        double w = ni_exp_abscissa(c, x);
+        /* Once the offset span·e^{-z} falls below the endpoint's rounding unit,
+         * the abscissa collapses onto the singular endpoint itself — by
+         * underflow when the endpoint is 0, or by catastrophic cancellation
+         * (1 − tiny == 1) otherwise.  Evaluating the integrand there raises a
+         * spurious 1/0; the tail past this horizon is negligible, so truncate. */
+        if (w == c->end_a || !(jac > 0.0)) return false;
+        Expr* num = ni_eval_at(c, expr_new_real(w));
+        if (!num) return false;
+        bool ok = ni_to_complex(num, out);
+        expr_free(num);
+        if (!ok) return false;
+        *out *= jac;
+        if (!isfinite(creal(*out)) || !isfinite(cimag(*out))) return false;
+        return true;
+    }
     Expr* num = ni_eval_at(c, ni_abscissa_expr(c, x));
     if (!num) return false;
     bool ok = ni_to_complex(num, out);
-    if (ok && (!isfinite(creal(*out)) || !isfinite(cimag(*out)))) ok = false;
     expr_free(num);
-    return ok;
+    if (!ok) return false;
+    if (!isfinite(creal(*out)) || !isfinite(cimag(*out))) return false;
+    return true;
 }
 
 #ifdef USE_MPFR
@@ -339,7 +385,7 @@ static Expr* ni_num_endpoint(Expr* e) {
 
 typedef enum {
     NI_AUTO = 0, NI_GK, NI_DE, NI_TRAP, NI_LEVIN,
-    NI_MC, NI_QMC, NI_AMC, NI_PV,
+    NI_MC, NI_QMC, NI_AMC, NI_PV, NI_OSCSING,
     NI_UNIMPL          /* recognised name with no implementation yet            */
 } NiMethod;
 
@@ -349,7 +395,8 @@ typedef enum {
  * adds its method here as it lands. */
 static bool ni_method_implemented(NiMethod m) {
     return m == NI_AUTO || m == NI_GK || m == NI_DE || m == NI_LEVIN
-        || m == NI_MC || m == NI_QMC || m == NI_AMC || m == NI_PV;
+        || m == NI_MC || m == NI_QMC || m == NI_AMC || m == NI_PV
+        || m == NI_OSCSING;
 }
 
 typedef struct {
@@ -394,6 +441,9 @@ static NiMethod ni_method_from_string(const char* s) {
     if (!strcmp(s, "DoubleExponential")) return NI_DE;
     if (!strcmp(s, "Trapezoidal") || !strcmp(s, "TrapezoidalRule")) return NI_TRAP;
     if (!strcmp(s, "LevinRule")) return NI_LEVIN;
+    /* Exponential endpoint transform + integration-between-the-zeros for an
+     * oscillatory endpoint singularity (∫_0^1 Cos[Log[x]/x]/x dx). */
+    if (!strcmp(s, "OscillatorySingularity")) return NI_OSCSING;
     if (!strcmp(s, "MonteCarlo")) return NI_MC;
     if (!strcmp(s, "QuasiMonteCarlo")) return NI_QMC;
     if (!strcmp(s, "AdaptiveMonteCarlo") || !strcmp(s, "AdaptiveQuasiMonteCarlo")) return NI_AMC;
@@ -611,12 +661,87 @@ static NiAtt ni_try_osc(NiCtx* ctx, double a, double b, double reltol) {
     return out;
 }
 
+/* Probe the integrand approaching one endpoint (`side` +1 → a, −1 → b) over a
+ * geometric ladder of distances.  An endpoint is treated as singular when a
+ * probe is non-numeric there, or the integrand's magnitude both becomes large
+ * in absolute terms and grows far beyond its value a tenth of the way in — the
+ * envelope of an algebraic / one-over-x or oscillatory singularity.  Requiring a
+ * large absolute magnitude keeps a merely large relative swing of a bounded
+ * oscillation (whose outer probe happened to land near a zero) from registering. */
+static bool ni_endpoint_singular(NiCtx* c, double a, double b, int side) {
+    double span = b - a;
+    double mref = 0.0, mmax = 0.0;
+    for (int k = 1; k <= 8; k++) {
+        double d = span * pow(10.0, -(double)k);
+        double x = (side > 0) ? a + d : b - d;
+        double _Complex v;
+        if (!ni_sample_machine(c, x, &v)) return true;   /* non-numeric at endpoint */
+        double m = cabs(v);
+        if (k == 1) mref = m;
+        if (m > mmax) mmax = m;
+    }
+    return mmax > 1.0e3 && mmax > 1.0e2 * fmax(1.0, mref);
+}
+
+/* Handle a singular endpoint of the real interval [a,b] by the exponential
+ * coordinate map  x = a + (b−a)e^{-t}  (or its mirror for a singular b), which
+ * carries the singularity to t → ∞ where the map Jacobian (b−a)e^{-t} damps it,
+ * then integrates the resulting half line.  An oscillatory singularity yields a
+ * non-decaying oscillation on the half line, which the exp-sinh rule cannot
+ * resolve but the integrate-between-the-zeros + Wynn extrapolation can.  This is
+ * the engine behind Method -> "OscillatorySingularity".  When `force` is false
+ * only endpoints detected singular are transformed; when true (explicit method)
+ * both endpoints are tried and the better-converged result kept. */
+static NiAtt ni_try_endpoint_sing(NiCtx* ctx, double a, double b,
+                                  const NiOpts* o, bool force) {
+    NiAtt best = { false, false, 0.0, INFINITY };
+    /* Only meaningful on the plain real axis (not an affine contour segment). */
+    if (!(b > a) || ctx->map_mode != NI_MAP_AFFINE
+        || creal(ctx->x_scale) != 1.0 || cimag(ctx->x_scale) != 0.0
+        || ctx->x_shift != 0.0) return best;
+
+    double reltol, abstol;
+    ni_machine_tols(o, &reltol, &abstol);
+    /* Transform only an endpoint detected singular: the exponential map damps a
+     * singularity at the z → ∞ end only, so applying it to a regular endpoint
+     * (the wrong mirror) would instead sample the *other*, singular end at z = 0
+     * and converge to the wrong value.  With an explicit method (`force`) and no
+     * endpoint detected singular, fall back to trying both mirrors. */
+    int sides[2]; int ns = 0;
+    if (ni_endpoint_singular(ctx, a, b, +1)) sides[ns++] = +1;
+    if (ni_endpoint_singular(ctx, a, b, -1)) sides[ns++] = -1;
+    if (ns == 0 && force) { sides[ns++] = +1; sides[ns++] = -1; }
+
+    for (int s = 0; s < ns; s++) {
+        ctx->span = b - a;
+        if (sides[s] > 0) { ctx->map_mode = NI_MAP_EXP_LO; ctx->end_a = a; }
+        else              { ctx->map_mode = NI_MAP_EXP_HI; ctx->end_a = b; }
+        double _Complex v; double err;
+        bool conv = dequad_halfline_machine(ni_sample_machine, ctx, 0.0, reltol,
+                                            ni_de_levels(o), &v, &err);
+        if (!conv) {
+            double _Complex ov; double oerr;
+            if (osc_integrate_machine(ni_sample_machine, ctx, 0.0, 0.0, true,
+                                      reltol, 600, &ov, &oerr)) {
+                v = ov; err = oerr; conv = true;
+            }
+        }
+        ctx->map_mode = NI_MAP_AFFINE;
+        NiAtt at;
+        at.have = isfinite(creal(v)) && isfinite(cimag(v));
+        at.conv = conv; at.val = v; at.err = err;
+        ni_consider(&best, at);
+    }
+    return best;
+}
+
 /* Integrate over the finite real parameter interval [a,b] with the variable
  * already configured in `ctx` (directly, or through an affine abscissa map for
  * a complex segment).  Gauss-Kronrod samples strictly interior abscissae, so it
  * never evaluates a singular endpoint (no spurious 1/0 messages); for Automatic
- * it falls back to the endpoint-robust tanh-sinh rule when it cannot reach the
- * tolerance (the signature of an endpoint singularity or slow convergence). */
+ * it falls back to the endpoint-robust tanh-sinh rule, then — at a detected
+ * oscillatory endpoint singularity — to the exponential-endpoint transform, and
+ * finally to between-the-zeros panel quadrature for a many-period integrand. */
 static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
     double reltol, abstol;
     ni_machine_tols(o, &reltol, &abstol);
@@ -625,10 +750,16 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
         ni_consider(&best, ni_try_osc(ctx, a, b, reltol));
     } else if (o->method == NI_DE) {
         ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
+    } else if (o->method == NI_OSCSING) {
+        ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, true));
     } else {
         ni_consider(&best, ni_try_gk(ctx, a, b, o, reltol, abstol));
         if (!best.conv && (o->method == NI_AUTO || !best.have))
             ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
+        /* Oscillatory endpoint singularity: spread the singular endpoint onto a
+         * half line by the exponential map and integrate between the zeros. */
+        if (!best.conv && o->method == NI_AUTO)
+            ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, false));
         /* Oscillatory fallback: neither GK (a subdivision per half-period) nor
          * tanh-sinh (assumes endpoint decay) converges on a many-period
          * integrand; integrate between the zeros instead. */

@@ -796,3 +796,22 @@ Lessons:
 - **MPFR convergence gates must sit ABOVE the roundoff floor.** Setting a DE-quad
   reltol *below* achievable precision means it never trips → refines to a
   catastrophic node count (looked like a hang). Scale reltol to `target-2` digits.
+
+## NIntegrate: a "new method" must be named & listed (2026-06-14)
+- When a fix adds a genuinely new quadrature *strategy* (not just a tweak),
+  expose it as a named `Method -> "..."` string AND list it in the docstring +
+  docs/spec method table — the user explicitly requires this. Wire it in
+  `ni_method_from_string` + `ni_method_implemented`, give it a forced path, and
+  keep it as an `Automatic` fallback too. (Added `"OscillatorySingularity"`.)
+- **A multi-method dispatcher's selection is only as honest as each method's
+  conv/err.** The osc finite path returned `conv=true, abserr=0` unconditionally;
+  AUTO then preferred its garbage over correct non-converged estimates. Any
+  method that competes via `ni_consider` MUST report a real error estimate.
+- **An exponential endpoint map x=a±(b−a)e^{−t} samples the singular endpoint by
+  rounding**, not just underflow: for end≠0, `1 − tiny == 1` → 1/0. Gate the
+  sample on `mapped_abscissa == endpoint`, not on Jacobian underflow alone.
+- **The wrong mirror of an endpoint transform converges to a wrong value.** EXP_HI
+  on a left-singular integrand samples the (undamped) left singularity at t=0.
+  Only transform a *detected-singular* endpoint; never blindly try both.
+- **Between-the-zeros marchers need an adaptive step** (sized from the last gap),
+  not a fixed half-period — otherwise an accelerating chirp leaps over lobes.

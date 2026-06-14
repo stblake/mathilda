@@ -174,6 +174,23 @@ static void test_oscillatory(void) {
     ASSERT_CLOSE("NIntegrate[Cos[x],{x,0,100}]", "Sin[100]", 1e-5);
 }
 
+static void test_oscillatory_singularity(void) {
+    /* Oscillatory endpoint singularity: the integrand oscillates infinitely
+     * fast under a 1/x envelope as x -> 0.  Adaptive Gauss-Kronrod and
+     * tanh-sinh both fail; the exponential endpoint map x = e^{-t} carries it to
+     * the non-decaying oscillatory half-line integral Cos[t Exp[t]], integrated
+     * between the zeros with Wynn extrapolation.  (Mathematica: 0.3233674...) */
+    ASSERT_CLOSE("NIntegrate[Cos[Log[x]/x]/x,{x,0,1}]", "0.32336743", 1e-5);
+    /* Same, requested explicitly by name. */
+    ASSERT_CLOSE("NIntegrate[Cos[Log[x]/x]/x,{x,0,1},"
+                 "Method->\"OscillatorySingularity\"]", "0.32336743", 1e-5);
+    /* Mirror singularity at the upper endpoint (exercises the b-side map). */
+    ASSERT_CLOSE("NIntegrate[Cos[Log[1-x]/(1-x)]/(1-x),{x,0,1}]", "0.32336743", 1e-5);
+    /* The named method also handles a plain algebraic endpoint singularity. */
+    ASSERT_CLOSE("NIntegrate[1/Sqrt[x],{x,0,1},"
+                 "Method->\"OscillatorySingularity\"]", "2", 1e-5);
+}
+
 static void test_montecarlo(void) {
     /* Region (Boole) integrands route to Monte-Carlo automatically. */
     ASSERT_CLOSE("NIntegrate[Boole[x^2+y^2<1],{x,-1,1},{y,-1,1}]", "Pi", 0.02);
@@ -272,6 +289,7 @@ static void test_memory_loop(void) {
         "NIntegrate[1/Sqrt[x],{x,0,1}]",
         "NIntegrate[Log[x],{x,0,1}]",
         "NIntegrate[1/Sqrt[x(1-x)],{x,0,1}]",
+        "NIntegrate[Cos[Log[x]/x]/x,{x,0,1}]",
         "NIntegrate[1/(1+x^2),{x,0,Infinity}]",
         "NIntegrate[Exp[-x^2],{x,-Infinity,Infinity}]",
         "NIntegrate[x,{x,0,a}]",
@@ -299,6 +317,7 @@ int main(void) {
     TEST(test_multidim);
     TEST(test_vector_integrand);
     TEST(test_oscillatory);
+    TEST(test_oscillatory_singularity);
     TEST(test_montecarlo);
     TEST(test_exclusions_pv);
     TEST(test_high_precision);
