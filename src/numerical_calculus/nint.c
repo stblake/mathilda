@@ -51,6 +51,13 @@
  * ------------------------------------------------------------------ */
 
 static void ni_warn(const char* tag, const char* fmt, ...) {
+    /* Suppressed while an enclosing numeric probe holds the arithmetic-warning
+     * mute (see arith_warnings_mute_push).  In particular, iterated
+     * multidimensional NIntegrate evaluates each outer sample by running an
+     * *inner* NIntegrate over the remaining variables; the inner integral's
+     * convergence diagnostics are sampling noise — only the outer integral's
+     * verdict should reach the user. */
+    if (arith_warnings_muted()) return;
     va_list ap;
     fprintf(stderr, "NIntegrate::%s: ", tag);
     va_start(ap, fmt);
@@ -213,7 +220,12 @@ static Expr* ni_eval_at(NiCtx* c, Expr* value) {
     ni_bind_set(c->bind, value);
     expr_free(value);
     eval_clock_bump();
+    /* Mute arithmetic diagnostics (e.g. Power::infy 1/0) raised by evaluating
+     * the integrand at or near a singular abscissa: such samples are detected
+     * as non-finite below and discarded, so the message is pure noise. */
+    arith_warnings_mute_push();
     Expr* raw = eval_and_free(expr_copy(c->body));
+    arith_warnings_mute_pop();
     if (!raw) return NULL;
     Expr* num = numericalize(raw, c->spec);
     expr_free(raw);
@@ -1017,7 +1029,9 @@ static bool ni_mc_sample(void* vctx, const double* x, size_t d, double _Complex*
         expr_free(xe);
     }
     eval_clock_bump();
+    arith_warnings_mute_push();   /* see ni_eval_at: integrand-message noise */
     Expr* raw = eval_and_free(expr_copy(c->body));
+    arith_warnings_mute_pop();
     if (!raw) return false;
     Expr* num = numericalize(raw, c->spec);
     expr_free(raw);
@@ -1240,7 +1254,9 @@ static bool ni_eval_complex_at(Expr* body, NiBind* bind, NumericSpec spec,
     ni_bind_set(bind, xe);
     expr_free(xe);
     eval_clock_bump();
+    arith_warnings_mute_push();   /* see ni_eval_at: integrand-message noise */
     Expr* raw = eval_and_free(expr_copy(body));
+    arith_warnings_mute_pop();
     if (!raw) return false;
     Expr* num = numericalize(raw, spec);
     expr_free(raw);
