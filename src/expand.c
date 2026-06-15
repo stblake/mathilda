@@ -35,10 +35,10 @@ static Expr* multiply_two(Expr* a, Expr* b) {
         for (size_t i = 0; i < a->data.function.arg_count; i++) {
             for (size_t j = 0; j < b->data.function.arg_count; j++) {
                 Expr* t_args[2] = { expr_copy(a->data.function.args[i]), expr_copy(b->data.function.args[j]) };
-                args[k++] = eval_and_free(expr_new_function(expr_new_symbol("Times"), t_args, 2));
+                args[k++] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
             }
         }
-        Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), args, count));
+        Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), args, count));
         free(args);
         return res;
     } else if (a_is_plus) {
@@ -46,9 +46,9 @@ static Expr* multiply_two(Expr* a, Expr* b) {
         Expr** args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) {
             Expr* t_args[2] = { expr_copy(a->data.function.args[i]), expr_copy(b) };
-            args[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), t_args, 2));
+            args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
         }
-        Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), args, count));
+        Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), args, count));
         free(args);
         return res;
     } else if (b_is_plus) {
@@ -56,14 +56,14 @@ static Expr* multiply_two(Expr* a, Expr* b) {
         Expr** args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) {
             Expr* t_args[2] = { expr_copy(a), expr_copy(b->data.function.args[i]) };
-            args[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), t_args, 2));
+            args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
         }
-        Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), args, count));
+        Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), args, count));
         free(args);
         return res;
     } else {
         Expr* t_args[2] = { expr_copy(a), expr_copy(b) };
-        return eval_and_free(expr_new_function(expr_new_symbol("Times"), t_args, 2));
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
     }
 }
 
@@ -137,7 +137,7 @@ Expr* expr_expand_patt(Expr* e, Expr* patt) {
         for (size_t i = 0; i < e->data.function.arg_count; i++) {
             args[i] = expr_expand_patt(e->data.function.args[i], patt);
         }
-        Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), args, e->data.function.arg_count));
+        Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), args, e->data.function.arg_count));
         free(args);
         return res;
     }
@@ -250,7 +250,7 @@ Expr* expr_expand_numerator(Expr* e) {
         } else if (nc == 1) {
             num = num_args[0]; /* takes ownership */
         } else {
-            num = eval_and_free(expr_new_function(expr_new_symbol("Times"), num_args, nc));
+            num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), num_args, nc));
         }
         free(num_args);
 
@@ -266,7 +266,7 @@ Expr* expr_expand_numerator(Expr* e) {
         result_args[0] = expanded_num;
         for (size_t i = 0; i < dc; i++) result_args[i + 1] = den_args[i];
         free(den_args);
-        Expr* ret = eval_and_free(expr_new_function(expr_new_symbol("Times"), result_args, dc + 1));
+        Expr* ret = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), result_args, dc + 1));
         free(result_args);
         return ret;
     }
@@ -317,7 +317,7 @@ Expr* expr_expand_denominator(Expr* e) {
                 Expr* base = arg->data.function.args[0];
                 int64_t k = -arg->data.function.args[1]->data.integer; /* k > 0 */
                 den_pos[dc++] = eval_and_free(expr_new_function(
-                    expr_new_symbol("Power"),
+                    expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_copy(base), expr_new_integer(k)}, 2));
             } else {
                 num_args[nc++] = expr_copy(arg);
@@ -335,21 +335,21 @@ Expr* expr_expand_denominator(Expr* e) {
         if (dc == 1) {
             den_product = den_pos[0];
         } else {
-            den_product = eval_and_free(expr_new_function(expr_new_symbol("Times"), den_pos, dc));
+            den_product = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), den_pos, dc));
         }
         free(den_pos);
 
         Expr* expanded_den = expr_expand(den_product);
         expr_free(den_product);
 
-        Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){expanded_den, expr_new_integer(-1)}, 2));
 
         Expr** result_args = malloc(sizeof(Expr*) * (nc + 1));
         for (size_t i = 0; i < nc; i++) result_args[i] = num_args[i];
         result_args[nc] = den_inv;
         free(num_args);
-        Expr* ret = eval_and_free(expr_new_function(expr_new_symbol("Times"), result_args, nc + 1));
+        Expr* ret = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), result_args, nc + 1));
         free(result_args);
         return ret;
     }
@@ -359,11 +359,11 @@ Expr* expr_expand_denominator(Expr* e) {
         if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
             int64_t k = -exp->data.integer;
             Expr* base = e->data.function.args[0];
-            Expr* pos = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            Expr* pos = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                 (Expr*[]){expr_copy(base), expr_new_integer(k)}, 2));
             Expr* expanded = expr_expand(pos);
             expr_free(pos);
-            Expr* ret = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            Expr* ret = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                 (Expr*[]){expanded, expr_new_integer(-1)}, 2));
             return ret;
         }

@@ -364,7 +364,7 @@ static void fileprint_emit(const LineSpan* lines, size_t total,
  * FilePrint["file", m;;n;;s]        — explicit range with signed step
  *
  * The evaluator owns `res`; on NULL return we leave it alone, on any
- * other return we hand back ownership.  Returning expr_new_symbol("Null")
+ * other return we hand back ownership.  Returning expr_new_symbol(SYM_Null)
  * mirrors Print's contract. */
 Expr* builtin_fileprint(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
@@ -414,7 +414,7 @@ Expr* builtin_fileprint(Expr* res) {
 
     free(lines);
     free(buf);
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 void files_init(void) {

@@ -22,6 +22,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "gamma.h"
+#include "sym_names.h"
 
 #include <complex.h>
 #include <math.h>
@@ -424,7 +425,7 @@ static Expr* gamma_mpfr_complex(Expr* re, Expr* im) {
         gcx_gamma(&g, &z, wp);
         if (mpfr_inf_p(g.re) || mpfr_inf_p(g.im) ||
             mpfr_nan_p(g.re) || mpfr_nan_p(g.im)) {
-            out = expr_new_symbol("ComplexInfinity");
+            out = expr_new_symbol(SYM_ComplexInfinity);
         } else {
             out = gamma_complex_result(g.re, g.im, out_prec);
         }
@@ -622,18 +623,18 @@ static Expr* gamma_one_arg(Expr* arg) {
     }
 
     /* 2. Symbolic infinities. */
-    if (gamma_is_symbol(arg, "Infinity"))        return expr_new_symbol("Infinity");
-    if (gamma_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol("ComplexInfinity");
-    if (gamma_is_symbol(arg, "Indeterminate"))   return expr_new_symbol("Indeterminate");
-    if (gamma_is_neg_infinity(arg))              return expr_new_symbol("Indeterminate");
+    if (gamma_is_symbol(arg, "Infinity"))        return expr_new_symbol(SYM_Infinity);
+    if (gamma_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
+    if (gamma_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
+    if (gamma_is_neg_infinity(arg))              return expr_new_symbol(SYM_Indeterminate);
 
     /* 3. Machine real. */
     if (arg->type == EXPR_REAL) {
         double v = arg->data.real;
         double r = tgamma(v);
-        if (isnan(r)) return expr_new_symbol("ComplexInfinity"); /* pole at <=0 integer */
+        if (isnan(r)) return expr_new_symbol(SYM_ComplexInfinity); /* pole at <=0 integer */
         if (isinf(r)) {
-            if (v <= 0.0) return expr_new_symbol("ComplexInfinity");
+            if (v <= 0.0) return expr_new_symbol(SYM_ComplexInfinity);
             return NULL; /* overflow for large positive z: stay symbolic */
         }
         return expr_new_real(r);
@@ -645,8 +646,8 @@ static Expr* gamma_one_arg(Expr* arg) {
         mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
         Expr* out = expr_new_mpfr_bits(prec);
         mpfr_gamma(out->data.mpfr, arg->data.mpfr, MPFR_RNDN);
-        if (mpfr_inf_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol("ComplexInfinity"); }
-        if (mpfr_nan_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol("ComplexInfinity"); }
+        if (mpfr_inf_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol(SYM_ComplexInfinity); }
+        if (mpfr_nan_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol(SYM_ComplexInfinity); }
         return out;
     }
 #endif
@@ -707,9 +708,9 @@ static Expr* gamma_incomplete_int(int64_t n, Expr* z) {
         if (k == 0) {
             term = coeff;                        /* z^0 = 1 */
         } else {
-            Expr* zk = expr_new_function(expr_new_symbol("Power"),
+            Expr* zk = expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){ expr_copy(z), expr_new_integer(k) }, 2);
-            term = expr_new_function(expr_new_symbol("Times"),
+            term = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ coeff, zk }, 2);
         }
         sum[k] = term;
@@ -719,15 +720,15 @@ static Expr* gamma_incomplete_int(int64_t n, Expr* z) {
 
     Expr* poly = (terms == 1)
         ? sum[0]
-        : expr_new_function(expr_new_symbol("Plus"), sum, terms);
+        : expr_new_function(expr_new_symbol(SYM_Plus), sum, terms);
     free(sum);
 
     /* e^{-z} = Exp[-z]. */
-    Expr* nz  = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+    Expr* nz  = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1), expr_copy(z) }, 2));
-    Expr* exp = eval_and_free(expr_new_function(expr_new_symbol("Exp"), &nz, 1));
+    Expr* exp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Exp), &nz, 1));
 
-    return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ exp, poly }, 2));
 }
 
@@ -750,7 +751,7 @@ static Expr* gamma_two_arg(Expr* a, Expr* z) {
     if (z->type == EXPR_INTEGER && z->data.integer == 0) {
         /* Gamma[a, 0] = Gamma[a]. */
         Expr* ga = expr_copy(a);
-        return eval_and_free(expr_new_function(expr_new_symbol("Gamma"), &ga, 1));
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Gamma), &ga, 1));
     }
     if (gamma_is_symbol(z, "Infinity")) return expr_new_integer(0); /* Gamma[a, Inf] = 0 */
 
@@ -816,9 +817,9 @@ static Expr* gamma_two_arg(Expr* a, Expr* z) {
 /* ------------------------------------------------------------------ */
 
 static Expr* gamma_three_arg(Expr* a, Expr* z0, Expr* z1) {
-    Expr* g0 = expr_new_function(expr_new_symbol("Gamma"),
+    Expr* g0 = expr_new_function(expr_new_symbol(SYM_Gamma),
                                  (Expr*[]){ expr_copy(a), expr_copy(z0) }, 2);
-    Expr* g1 = expr_new_function(expr_new_symbol("Gamma"),
+    Expr* g1 = expr_new_function(expr_new_symbol(SYM_Gamma),
                                  (Expr*[]){ expr_copy(a), expr_copy(z1) }, 2);
     Expr* diff = expr_new_function(expr_new_symbol("Subtract"),
                                    (Expr*[]){ g0, g1 }, 2);

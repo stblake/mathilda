@@ -28,6 +28,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "inverf.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -95,8 +96,8 @@ static bool iee_contains_head(const Expr* e, const char* head) {
 
 /* Build -Infinity, represented (as elsewhere in Mathilda) as Times[-1, Infinity]. */
 static Expr* iee_neg_infinity(void) {
-    return expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_new_integer(-1), expr_new_symbol("Infinity") }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
 }
 
 /* ------------------------------------------------------------------ */
@@ -185,17 +186,17 @@ static Expr* inverf_one_arg(Expr* arg) {
     /* 1. Exact special values. */
     if (arg->type == EXPR_INTEGER) {
         if (arg->data.integer == 0)  return expr_new_integer(0);          /* 0 */
-        if (arg->data.integer == 1)  return expr_new_symbol("Infinity");  /* +Inf */
+        if (arg->data.integer == 1)  return expr_new_symbol(SYM_Infinity);  /* +Inf */
         if (arg->data.integer == -1) return iee_neg_infinity();           /* -Inf */
         return NULL;                          /* |n| >= 2: out of domain */
     }
-    if (iee_is_symbol(arg, "Indeterminate")) return expr_new_symbol("Indeterminate");
+    if (iee_is_symbol(arg, "Indeterminate")) return expr_new_symbol(SYM_Indeterminate);
 
     /* 2. Machine real (only inside the real domain [-1, 1]). */
     if (arg->type == EXPR_REAL) {
         double x = arg->data.real;
         if (x > 1.0 || x < -1.0) return NULL;            /* out of domain */
-        if (x == 1.0)  return expr_new_symbol("Infinity");
+        if (x == 1.0)  return expr_new_symbol(SYM_Infinity);
         if (x == -1.0) return iee_neg_infinity();
         return expr_new_real(inverf_double(x));
     }
@@ -210,7 +211,7 @@ static Expr* inverf_one_arg(Expr* arg) {
         mpfr_clear(one);
         if (c > 0) return NULL;                          /* out of domain */
         if (c == 0)
-            return mpfr_sgn(arg->data.mpfr) > 0 ? expr_new_symbol("Infinity")
+            return mpfr_sgn(arg->data.mpfr) > 0 ? expr_new_symbol(SYM_Infinity)
                                                 : iee_neg_infinity();
         mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
         Expr* out = expr_new_mpfr_bits(prec);
@@ -222,10 +223,10 @@ static Expr* inverf_one_arg(Expr* arg) {
     /* 4. Odd symmetry: InverseErf[-x] = -InverseErf[x] for a symbolic
      *    negative-leading argument (numeric negatives handled above). */
     if (iee_is_neg_leading_times(arg)) {
-        Expr* pos = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* pos = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2));
-        Expr* inner = expr_new_function(expr_new_symbol("InverseErf"), &pos, 1);
-        return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_InverseErf), &pos, 1);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), inner }, 2));
     }
 
@@ -238,11 +239,11 @@ static Expr* inverf_one_arg(Expr* arg) {
 
 static Expr* inverf_two_arg(Expr* z0, Expr* s) {
     /* s = erf(z) - erf(z0)  =>  z = InverseErf[s + Erf[z0]]. */
-    Expr* erf_z0 = expr_new_function(expr_new_symbol("Erf"),
+    Expr* erf_z0 = expr_new_function(expr_new_symbol(SYM_Erf),
                                      (Expr*[]){ expr_copy(z0) }, 1);
-    Expr* sum = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+    Expr* sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                                      (Expr*[]){ expr_copy(s), erf_z0 }, 2));
-    Expr* res = eval_and_free(expr_new_function(expr_new_symbol("InverseErf"),
+    Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_InverseErf),
                                      &sum, 1));
     /* If Erf[z0] did not reduce (still an Erf head survives), keep the
      * two-argument form symbolic rather than committing to the rewrite. */

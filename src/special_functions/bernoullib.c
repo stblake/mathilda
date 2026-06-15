@@ -28,6 +28,7 @@
  * Attributes: Listable, Protected.
  */
 #include "bernoullib.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -112,9 +113,9 @@ static Expr* bern_expr_from_mpq(const mpq_t q) {
         out = en;
     } else {
         Expr* ed = expr_bigint_normalize(expr_new_bigint_from_mpz(den));
-        Expr* inv = expr_new_function(expr_new_symbol("Power"),
+        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ ed, expr_new_integer(-1) }, 2);
-        out = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ en, inv }, 2));
     }
     mpz_clear(num); mpz_clear(den);
@@ -229,9 +230,9 @@ static Expr* bernoulli_polynomial(size_t n, Expr* x) {
         if (j == 0) {
             term = c;                          /* x^0 = 1 */
         } else {
-            Expr* xj = expr_new_function(expr_new_symbol("Power"),
+            Expr* xj = expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){ expr_copy(x), expr_new_integer((int64_t)j) }, 2);
-            term = expr_new_function(expr_new_symbol("Times"),
+            term = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ c, xj }, 2);
         }
         terms[count++] = term;
@@ -246,7 +247,7 @@ static Expr* bernoulli_polynomial(size_t n, Expr* x) {
     } else if (count == 1) {
         poly = terms[0];
     } else {
-        poly = expr_new_function(expr_new_symbol("Plus"), terms, count);
+        poly = expr_new_function(expr_new_symbol(SYM_Plus), terms, count);
     }
     free(terms);
     return eval_and_free(poly);

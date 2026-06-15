@@ -108,7 +108,7 @@ static Expr* substitute_slots(Expr* e, Expr** args, size_t arg_count) {
                         for (size_t i = 0; i < seq_count; i++) {
                             seq_args[i] = expr_copy(args[(size_t)idx - 1 + i]);
                         }
-                        Expr* seq = expr_new_function(expr_new_symbol("Sequence"), seq_args, seq_count);
+                        Expr* seq = expr_new_function(expr_new_symbol(SYM_Sequence), seq_args, seq_count);
                         free(seq_args);
                         return seq;
                     }

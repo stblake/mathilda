@@ -429,6 +429,11 @@ void test_parse_dots() {
 }
 
 int main() {
+    /* The parser builds expressions with the cached SYM_* symbol pointers
+     * (e.g. expr_new_symbol(SYM_List)), which are only populated by
+     * sym_names_init() — invoked from core_init(). Initialise the symbol
+     * system before exercising the parser. */
+    symtab_init(); core_init();
     TEST(test_parse_atomics);
     TEST(test_negative_numbers);
     TEST(test_implicit_multiplication);
@@ -444,7 +449,7 @@ int main() {
     TEST(test_parse_precedence);
     TEST(test_parse_comments);
     TEST(test_parse_trailing_semicolon);
-    symtab_init(); core_init(); TEST(test_parse_dots);
+    TEST(test_parse_dots);
     TEST(test_parse_scaled_scientific);
 
     printf("\nAll parser tests passed!\n");

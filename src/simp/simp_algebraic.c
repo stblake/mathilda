@@ -160,12 +160,12 @@ static Expr* alg_subst_sqrt_to_gens(const Expr* e, const Expr** bases,
                     if (r < 0) { m -= 1; r += 2; }
                     Expr* base_pow = (m == 0)
                         ? expr_new_integer(1)
-                        : eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                        : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                               (Expr*[]){expr_copy((Expr*)base), expr_new_integer(m)}, 2));
                     Expr* g_pow = (r == 0)
                         ? expr_new_integer(1)
                         : expr_new_symbol(gens[i]);
-                    return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+                    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                               (Expr*[]){base_pow, g_pow}, 2));
                 }
             }
@@ -189,7 +189,7 @@ static Expr* alg_subst_gens_to_sqrt(const Expr* e, const char** gens,
     if (e->type == EXPR_SYMBOL) {
         for (size_t i = 0; i < n; i++) {
             if (e->data.symbol == gens[i]) {
-                return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){expr_copy((Expr*)bases[i]), make_rational(1, 2)}, 2));
             }
         }
@@ -212,7 +212,7 @@ static Expr* alg_subst_gens_to_sqrt(const Expr* e, const char** gens,
 static Expr* alg_sigma_negate(const Expr* e, const char* gi_sym) {
     if (!e) return NULL;
     if (e->type == EXPR_SYMBOL && e->data.symbol == gi_sym) {
-        return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){expr_new_integer(-1), expr_copy((Expr*)e)}, 2));
     }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
@@ -256,9 +256,9 @@ static Expr* alg_reduce_one_gen(const Expr* poly, const char* gi_sym,
         int64_t exp_u = (int64_t)(k / 2);
         Expr* upow = (exp_u == 0)
             ? expr_new_integer(1)
-            : eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){expr_copy((Expr*)ui), expr_new_integer(exp_u)}, 2));
-        Expr* term = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){expr_copy(ck), upow}, 2));
         if ((k & 1) == 0) evens[ne++] = term;
         else              odds[no++]  = term;
@@ -268,20 +268,20 @@ static Expr* alg_reduce_one_gen(const Expr* poly, const char* gi_sym,
     Expr* a_sum;
     if (ne == 0)      a_sum = expr_new_integer(0);
     else if (ne == 1) a_sum = evens[0];
-    else              a_sum = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+    else              a_sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                                                               evens, ne));
     Expr* b_sum;
     if (no == 0)      b_sum = expr_new_integer(0);
     else if (no == 1) b_sum = odds[0];
-    else              b_sum = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+    else              b_sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                                                               odds, no));
     free(evens);
     free(odds);
 
     /* Combine A + B*gi into a single expression. */
-    Expr* b_gi = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+    Expr* b_gi = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){b_sum, expr_new_symbol(gi_sym)}, 2));
-    return eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                   (Expr*[]){a_sum, b_gi}, 2));
 }
 
@@ -440,8 +440,8 @@ static Expr* simp_algebraic_impl(const Expr* e) {
                 expr_new_symbol("Together"),
                 (Expr*[]){
                     expr_copy((Expr*)e),
-                    expr_new_function(expr_new_symbol("Rule"),
-                        (Expr*[]){expr_new_symbol("Extension"), alpha}, 2)
+                    expr_new_function(expr_new_symbol(SYM_Rule),
+                        (Expr*[]){expr_new_symbol(SYM_Extension), alpha}, 2)
                 }, 2);
             Expr* qa_out = evaluate(tog);
             expr_free(tog);
@@ -521,9 +521,9 @@ static Expr* simp_algebraic_impl(const Expr* e) {
     /* Step 5: rationalise each generator out of the denominator in turn. */
     for (size_t i = 0; i < n; i++) {
         Expr* sig = alg_sigma_negate(den_r, gens[i]);
-        Expr* num_mul = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* num_mul = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){num_r, expr_copy(sig)}, 2));
-        Expr* den_mul = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* den_mul = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){den_r, sig}, 2));
         Expr* num_next = alg_reduce_all(num_mul, gens, bases, n);
         Expr* den_next = alg_reduce_all(den_mul, gens, bases, n);
@@ -565,20 +565,20 @@ static Expr* simp_algebraic_impl(const Expr* e) {
         /* num_r = num_resid * Power[g_i, 2*kn]
          * den_r = den_resid * Power[g_i, 2*kd] */
         if (kn > 0) {
-            Expr* g_pow = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            Expr* g_pow = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){expr_new_symbol(gens[i]), expr_new_integer(2 * kn)}, 2));
             expr_free(num_r);
-            num_r = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+            num_r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){num_resid, g_pow}, 2));
         } else {
             expr_free(num_r);
             num_r = num_resid;
         }
         if (kd > 0) {
-            Expr* g_pow = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            Expr* g_pow = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){expr_new_symbol(gens[i]), expr_new_integer(2 * kd)}, 2));
             expr_free(den_r);
-            den_r = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+            den_r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){den_resid, g_pow}, 2));
         } else {
             expr_free(den_r);
@@ -598,9 +598,9 @@ static Expr* simp_algebraic_impl(const Expr* e) {
     Expr* num_factored = call_unary_owned("Factor", num_r);
     Expr* den_factored = call_unary_owned("Factor", den_r);
 
-    Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+    Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){den_factored, expr_new_integer(-1)}, 2));
-    Expr* quot = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+    Expr* quot = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){num_factored, den_inv}, 2));
 
     Expr* with_sqrt = alg_subst_gens_to_sqrt(quot, gens, bases, n);

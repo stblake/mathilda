@@ -111,13 +111,13 @@ static Expr* expand_complex_to_i(const Expr* e) {
         Expr* im = expand_complex_to_i(e->data.function.args[1]);
         Expr** tm = malloc(sizeof(Expr*) * 2);
         tm[0] = im;
-        tm[1] = expr_new_symbol("I");
-        Expr* mul = expr_new_function(expr_new_symbol("Times"), tm, 2);
+        tm[1] = expr_new_symbol(SYM_I);
+        Expr* mul = expr_new_function(expr_new_symbol(SYM_Times), tm, 2);
         free(tm);
         Expr** pl = malloc(sizeof(Expr*) * 2);
         pl[0] = re;
         pl[1] = mul;
-        return expr_new_function(expr_new_symbol("Plus"), pl, 2);
+        return expr_new_function(expr_new_symbol(SYM_Plus), pl, 2);
     }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
 
@@ -337,7 +337,7 @@ static Expr* factor_over_q(const Expr* poly) {
     Expr* frozen = freeze_algebraic_constants(poly);
     Expr** args = malloc(sizeof(Expr*) * 1);
     args[0] = frozen;  /* hands ownership over */
-    Expr* call = expr_new_function(expr_new_symbol("Factor"), args, 1);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Factor), args, 1);
     free(args);
     return eval_and_free(call);
 }
@@ -346,15 +346,15 @@ static Expr* factor_over_q(const Expr* poly) {
  * here).  Returns a fresh Expr owned by the caller. */
 static Expr* factor_over_extension(const Expr* poly, const Expr* alpha) {
     Expr** rule_args = malloc(sizeof(Expr*) * 2);
-    rule_args[0] = expr_new_symbol("Extension");
+    rule_args[0] = expr_new_symbol(SYM_Extension);
     rule_args[1] = expr_copy((Expr*)alpha);
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"), rule_args, 2);
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), rule_args, 2);
     free(rule_args);
 
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy((Expr*)poly);
     args[1] = rule;
-    Expr* call = expr_new_function(expr_new_symbol("Factor"), args, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Factor), args, 2);
     free(args);
     return eval_and_free(call);
 }
@@ -556,13 +556,13 @@ static bool irr_dispatch(Expr* poly, ExtMode mode, Expr* alpha_expr,
             free(vars);
             return (deg == 1);
         }
-        Expr* i_sym = expr_new_symbol("I");
+        Expr* i_sym = expr_new_symbol(SYM_I);
         factored = factor_over_extension(poly, i_sym);
         expr_free(i_sym);
     } else if (mode == EXT_MODE_EXPLICIT && alpha_expr) {
         factored = factor_over_extension(poly, alpha_expr);
     } else if (mode == EXT_MODE_AUTOMATIC) {
-        Expr* auto_sym = expr_new_symbol("Automatic");
+        Expr* auto_sym = expr_new_symbol(SYM_Automatic);
         factored = factor_over_extension(poly, auto_sym);
         expr_free(auto_sym);
     } else if (gaussian) {
@@ -573,7 +573,7 @@ static bool irr_dispatch(Expr* poly, ExtMode mode, Expr* alpha_expr,
          * The lifted form is intentionally un-evaluated (see
          * `expand_complex_to_i`'s docstring for why). */
         Expr* lifted = expand_complex_to_i(poly);
-        Expr* i_sym  = expr_new_symbol("I");
+        Expr* i_sym  = expr_new_symbol(SYM_I);
         if (v_count == 1) {
             /* Direct call into qa_factor_with_extension bypasses the
              * public Factor entry point and, with it, the Together /
@@ -615,10 +615,10 @@ static bool irr_dispatch(Expr* poly, ExtMode mode, Expr* alpha_expr,
         if (mode == EXT_MODE_EXPLICIT && alpha_expr) {
             probe_alpha = alpha_expr;
         } else if (mode == EXT_MODE_ALL) {
-            probe_alpha_owned = expr_new_symbol("I");
+            probe_alpha_owned = expr_new_symbol(SYM_I);
             probe_alpha = probe_alpha_owned;
         } else if (gaussian && mode == EXT_MODE_NONE) {
-            probe_alpha_owned = expr_new_symbol("I");
+            probe_alpha_owned = expr_new_symbol(SYM_I);
             probe_alpha = probe_alpha_owned;
         }
         if (probe_alpha &&

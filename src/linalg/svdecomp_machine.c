@@ -177,7 +177,7 @@ static Expr* svdm_scalar(double re, double im, bool is_complex)
     Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
     args[0] = expr_new_real(re);
     args[1] = expr_new_real(im);
-    Expr* z = expr_new_function(expr_new_symbol("Complex"), args, 2);
+    Expr* z = expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
     free(args);
     return z;
 }
@@ -208,11 +208,11 @@ static Expr* svdm_wrap_cm(const double* buf, int rows, int cols,
             if (is_complex && transpose_conj) im = -im;
             elems[j] = svdm_scalar(re, im, is_complex);
         }
-        row_exprs[i] = expr_new_function(expr_new_symbol("List"),
+        row_exprs[i] = expr_new_function(expr_new_symbol(SYM_List),
                                           elems, (size_t)cols);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   row_exprs, (size_t)rows);
     free(row_exprs);
     return m;
@@ -231,11 +231,11 @@ static Expr* svdm_sigma_rect(const double* S, int mn, int n, int p)
             if (i == j && i < mn) elems[j] = expr_new_real(S[i]);
             else                   elems[j] = expr_new_real(0.0);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"),
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
                                       elems, (size_t)p);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   rows, (size_t)n);
     free(rows);
     return m;
@@ -396,11 +396,11 @@ static Expr* svdm_build_sigma_m(const double* R, int kpl,
             }
             elems[j] = svdm_scalar(val_re, val_im, is_complex);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"),
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
                                       elems, (size_t)Ln);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   rows, (size_t)Lm);
     free(rows);
     return m;
@@ -435,11 +435,11 @@ static Expr* svdm_build_sigma_a(const double* R, int kpl,
             }
             elems[j] = svdm_scalar(val_re, val_im, is_complex);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"),
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
                                       elems, (size_t)Ln);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   rows, (size_t)Lp);
     free(rows);
     return m;
@@ -534,19 +534,19 @@ static Expr* svdm_dispatch_generalized(const SvdArgs* args,
 
     Expr** u_pair_args = (Expr**)malloc(sizeof(Expr*) * 2);
     u_pair_args[0] = u_mat;  u_pair_args[1] = ua_mat;
-    Expr* u_pair = expr_new_function(expr_new_symbol("List"),
+    Expr* u_pair = expr_new_function(expr_new_symbol(SYM_List),
                                        u_pair_args, 2);
     free(u_pair_args);
 
     Expr** s_pair_args = (Expr**)malloc(sizeof(Expr*) * 2);
     s_pair_args[0] = sigma_m; s_pair_args[1] = sigma_a;
-    Expr* s_pair = expr_new_function(expr_new_symbol("List"),
+    Expr* s_pair = expr_new_function(expr_new_symbol(SYM_List),
                                        s_pair_args, 2);
     free(s_pair_args);
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = u_pair; items[1] = s_pair; items[2] = v_mat;
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, 3);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
 
     return svd_apply_postprocess(result, args, n, p, kpl);
@@ -628,7 +628,7 @@ Expr* svd_machine_dispatch(const SvdArgs* args, int n, int p, int n_a)
     /* Build {u, sigma, v}. */
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = u_mat; items[1] = sigma_mat; items[2] = v_mat;
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, 3);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
 
     /* Hand the result to the shared post-processing for truncation,

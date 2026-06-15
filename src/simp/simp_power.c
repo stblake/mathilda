@@ -138,10 +138,10 @@ static Expr* prime_rebase_copy(const Expr* e) {
         Expr* k_expr = expr_new_integer(k_val);
         Expr* times_args[2] = { k_expr, new_args[1] };
         Expr* times_call = expr_new_function(
-            expr_new_symbol("Times"), times_args, 2);
+            expr_new_symbol(SYM_Times), times_args, 2);
         Expr* power_args[2] = { p_expr, times_call };
         Expr* result = expr_new_function(
-            expr_new_symbol("Power"), power_args, 2);
+            expr_new_symbol(SYM_Power), power_args, 2);
         expr_free(new_args[0]);  /* the original integer c */
         free(new_args);
         expr_free(new_head);
@@ -244,11 +244,11 @@ static Expr* power_oneify_walk(const Expr* e) {
                 Expr* one = expr_new_integer(1);
                 Expr* plus_args[2] = { expr_copy(old_exp), one };
                 Expr* new_exp = expr_new_function(
-                    expr_new_symbol("Plus"), plus_args, 2);
+                    expr_new_symbol(SYM_Plus), plus_args, 2);
                 Expr* power_args[2] = {
                     expr_copy(p->data.function.args[0]), new_exp };
                 Expr* new_power = expr_new_function(
-                    expr_new_symbol("Power"), power_args, 2);
+                    expr_new_symbol(SYM_Power), power_args, 2);
                 expr_free(new_args[j]);
                 new_args[j] = new_power;
                 expr_free(new_args[i]);
@@ -403,11 +403,11 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
     if (base->type == EXPR_INTEGER && base->data.integer < -1) {
         int64_t v = base->data.integer;
         Expr* p1_args[2] = { expr_new_integer(-1), expr_copy(exp_) };
-        Expr* p1 = expr_new_function(expr_new_symbol("Power"), p1_args, 2);
+        Expr* p1 = expr_new_function(expr_new_symbol(SYM_Power), p1_args, 2);
         Expr* p2_args[2] = { expr_new_integer(-v), exp_ };
-        Expr* p2 = expr_new_function(expr_new_symbol("Power"), p2_args, 2);
+        Expr* p2 = expr_new_function(expr_new_symbol(SYM_Power), p2_args, 2);
         Expr* tm_args[2] = { p1, p2 };
-        Expr* tm = expr_new_function(expr_new_symbol("Times"), tm_args, 2);
+        Expr* tm = expr_new_function(expr_new_symbol(SYM_Times), tm_args, 2);
         expr_free(base);             /* original neg-int base */
         free(new_args);
         expr_free(new_head);
@@ -429,10 +429,10 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
             for (size_t i = 0; i < bn; i++) {
                 Expr* pa[2] = { expr_copy(ba[i]), expr_copy(exp_) };
                 powers[i] = expr_new_function(
-                    expr_new_symbol("Power"), pa, 2);
+                    expr_new_symbol(SYM_Power), pa, 2);
             }
             Expr* tm = expr_new_function(
-                expr_new_symbol("Times"), powers, bn);
+                expr_new_symbol(SYM_Times), powers, bn);
             expr_free(base);
             expr_free(exp_);
             free(new_args);
@@ -456,7 +456,7 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
                 if (is_constant_positive_factor(ba[i])) {
                     Expr* pa[2] = { expr_copy(ba[i]), expr_copy(exp_) };
                     out[out_i++] = expr_new_function(
-                        expr_new_symbol("Power"), pa, 2);
+                        expr_new_symbol(SYM_Power), pa, 2);
                 } else {
                     rest[rest_i++] = expr_copy(ba[i]);
                 }
@@ -467,13 +467,13 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
                 free(rest);
             } else {
                 rest_times = expr_new_function(
-                    expr_new_symbol("Times"), rest, rest_n);
+                    expr_new_symbol(SYM_Times), rest, rest_n);
             }
             Expr* pa[2] = { rest_times, expr_copy(exp_) };
             out[out_i++] = expr_new_function(
-                expr_new_symbol("Power"), pa, 2);
+                expr_new_symbol(SYM_Power), pa, 2);
             Expr* tm = expr_new_function(
-                expr_new_symbol("Times"), out, pos_count + 1);
+                expr_new_symbol(SYM_Times), out, pos_count + 1);
             expr_free(base);
             expr_free(exp_);
             free(new_args);
@@ -486,10 +486,10 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
             for (size_t i = 0; i < bn; i++) {
                 Expr* pa[2] = { expr_copy(ba[i]), expr_copy(exp_) };
                 powers[i] = expr_new_function(
-                    expr_new_symbol("Power"), pa, 2);
+                    expr_new_symbol(SYM_Power), pa, 2);
             }
             Expr* tm = expr_new_function(
-                expr_new_symbol("Times"), powers, bn);
+                expr_new_symbol(SYM_Times), powers, bn);
             expr_free(base);
             expr_free(exp_);
             free(new_args);
@@ -507,9 +507,9 @@ static Expr* power_distribute_walk(const Expr* e, const AssumeCtx* ctx) {
         Expr* u  = base->data.function.args[0];
         Expr* p  = base->data.function.args[1];
         Expr* tm_args[2] = { expr_copy(p), exp_ };
-        Expr* prod = expr_new_function(expr_new_symbol("Times"), tm_args, 2);
+        Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), tm_args, 2);
         Expr* pa[2] = { expr_copy(u), prod };
-        Expr* po = expr_new_function(expr_new_symbol("Power"), pa, 2);
+        Expr* po = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
         expr_free(base);
         free(new_args);
         expr_free(new_head);
@@ -660,21 +660,21 @@ static Expr* radical_canon_rationalise_negexp(const Expr* e) {
     Expr* pow_args[2] = {
         expr_new_integer(a),
         expr_new_function(
-            expr_new_symbol("Rational"),
+            expr_new_symbol(SYM_Rational),
             (Expr*[]){ expr_new_integer(r_num), expr_new_integer(den) }, 2)
     };
     Expr* pow_call = expr_new_function(
-        expr_new_symbol("Power"), pow_args, 2);
+        expr_new_symbol(SYM_Power), pow_args, 2);
 
     /* Rational[1, a^k].  When a^k == 1 (impossible for a >= 2, k >= 1),
      * the evaluator folds to the integer 1. */
     Expr* recip = expr_new_function(
-        expr_new_symbol("Rational"),
+        expr_new_symbol(SYM_Rational),
         (Expr*[]){ expr_new_integer(1), expr_new_integer(a_k) }, 2);
 
     Expr* times_args[2] = { pow_call, recip };
     Expr* times_call = expr_new_function(
-        expr_new_symbol("Times"), times_args, 2);
+        expr_new_symbol(SYM_Times), times_args, 2);
     Expr* out = evaluate(times_call);
     if (!out) out = expr_copy(times_call);  /* fall back to unevaluated form */
     expr_free(times_call);
@@ -702,22 +702,22 @@ static Expr* radical_canon_split_rational_base(const Expr* e) {
         expr_new_integer(a), expr_copy(exp)
     };
     Expr* pow_a = expr_new_function(
-        expr_new_symbol("Power"), pow_a_args, 2);
+        expr_new_symbol(SYM_Power), pow_a_args, 2);
 
     Expr* neg_exp_args[2] = {
         expr_new_integer(-1), expr_copy(exp)
     };
     Expr* neg_exp = expr_new_function(
-        expr_new_symbol("Times"), neg_exp_args, 2);
+        expr_new_symbol(SYM_Times), neg_exp_args, 2);
     Expr* pow_b_args[2] = {
         expr_new_integer(b), neg_exp
     };
     Expr* pow_b = expr_new_function(
-        expr_new_symbol("Power"), pow_b_args, 2);
+        expr_new_symbol(SYM_Power), pow_b_args, 2);
 
     Expr* times_args[2] = { pow_a, pow_b };
     Expr* times_call = expr_new_function(
-        expr_new_symbol("Times"), times_args, 2);
+        expr_new_symbol(SYM_Times), times_args, 2);
     Expr* out = eval_and_free(times_call);
     return out;
 }

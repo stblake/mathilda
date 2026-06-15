@@ -52,6 +52,7 @@
  * Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
  */
 #include "airyai.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -113,31 +114,31 @@ static bool ai_is_neg_infinity(const Expr* e) {
 /* Build the exact value AiryAi[0] = 1 / (3^(2/3) Gamma[2/3]) and evaluate it. */
 static Expr* ai_value_at_zero(void) {
     /* 3^(2/3) */
-    Expr* p = expr_new_function(expr_new_symbol("Power"),
+    Expr* p = expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ expr_new_integer(3), make_rational(2, 3) }, 2);
     /* Gamma[2/3] */
-    Expr* g = expr_new_function(expr_new_symbol("Gamma"),
+    Expr* g = expr_new_function(expr_new_symbol(SYM_Gamma),
                   (Expr*[]){ make_rational(2, 3) }, 1);
     /* 3^(2/3) Gamma[2/3] */
-    Expr* denom = expr_new_function(expr_new_symbol("Times"),
+    Expr* denom = expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){ p, g }, 2);
     /* 1 / (...) = Power[denom, -1] */
-    Expr* inv = expr_new_function(expr_new_symbol("Power"),
+    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ denom, expr_new_integer(-1) }, 2);
     return eval_and_free(inv);
 }
 
 /* Build the exact value AiryAiPrime[0] = -1 / (3^(1/3) Gamma[1/3]). */
 static Expr* ai_prime_value_at_zero(void) {
-    Expr* p = expr_new_function(expr_new_symbol("Power"),
+    Expr* p = expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ expr_new_integer(3), make_rational(1, 3) }, 2);
-    Expr* g = expr_new_function(expr_new_symbol("Gamma"),
+    Expr* g = expr_new_function(expr_new_symbol(SYM_Gamma),
                   (Expr*[]){ make_rational(1, 3) }, 1);
-    Expr* denom = expr_new_function(expr_new_symbol("Times"),
+    Expr* denom = expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){ p, g }, 2);
-    Expr* inv = expr_new_function(expr_new_symbol("Power"),
+    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ denom, expr_new_integer(-1) }, 2);
-    Expr* neg = expr_new_function(expr_new_symbol("Times"),
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){ expr_new_integer(-1), inv }, 2);
     return eval_and_free(neg);
 }
@@ -633,7 +634,7 @@ static Expr* airyai_one_arg(Expr* arg) {
         return ai_value_at_zero();                 /* AiryAi[0] = 1/(3^(2/3) Gamma[2/3]) */
     if (ai_is_symbol(arg, "Infinity"))   return expr_new_integer(0);  /* Ai(+inf) = 0 */
     if (ai_is_neg_infinity(arg))          return expr_new_integer(0);  /* Ai(-inf) = 0 */
-    if (ai_is_symbol(arg, "Indeterminate")) return expr_new_symbol("Indeterminate");
+    if (ai_is_symbol(arg, "Indeterminate")) return expr_new_symbol(SYM_Indeterminate);
 
 #ifdef USE_MPFR
     /* 2. Machine real. */
@@ -672,7 +673,7 @@ static Expr* airyaiprime_one_arg(Expr* arg) {
      * Ai' oscillates with *growing* amplitude (~|z|^(1/4)) and has no limit,
      * so -Infinity is deliberately left unevaluated (unlike AiryAi). */
     if (ai_is_symbol(arg, "Infinity"))       return expr_new_integer(0);
-    if (ai_is_symbol(arg, "Indeterminate"))  return expr_new_symbol("Indeterminate");
+    if (ai_is_symbol(arg, "Indeterminate"))  return expr_new_symbol(SYM_Indeterminate);
 
 #ifdef USE_MPFR
     /* 2. Machine real. */

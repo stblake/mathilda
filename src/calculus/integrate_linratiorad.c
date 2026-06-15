@@ -323,7 +323,7 @@ static Expr* lrr_core(Expr* f, Expr* x) {
         Expr* aceum = mk_fn2("Plus", expr_copy(a),
             mk_fn3("Times", mk_int(-1), expr_copy(c),
                    mk_fn2("Power", expr_copy(u), mk_int(m))));
-        Expr* jac = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        Expr* jac = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
             mk_int(m),
             det,                                            /* consumes det */
             mk_fn2("Power", expr_copy(u), mk_int(m - 1)),

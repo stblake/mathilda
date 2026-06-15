@@ -359,10 +359,10 @@ static Expr* try_eliminate_kernel(const Expr* f, const Expr* x, const Expr* w) {
                        mk_fn2("Times", expr_copy((Expr*)f), expr_copy(dtx)));
     Expr* eq2 = mk_fn2("Equal", expr_copy(u), expr_copy((Expr*)w));
     Expr* eq3 = mk_fn1("Dt", mk_fn2("Equal", expr_copy(u), expr_copy((Expr*)w)));
-    Expr* eqns = expr_new_function(expr_new_symbol("List"),
+    Expr* eqns = expr_new_function(expr_new_symbol(SYM_List),
                                    (Expr*[]){ eq1, eq2, eq3 }, 3);
     /* vars = { x, Dt[x] } */
-    Expr* vars = expr_new_function(expr_new_symbol("List"),
+    Expr* vars = expr_new_function(expr_new_symbol(SYM_List),
                                    (Expr*[]){ expr_copy((Expr*)x), expr_copy(dtx) }, 2);
 
     /* Eliminate runs as a private sub-step here; mute its advisory ::ifun /
@@ -382,7 +382,7 @@ static Expr* try_eliminate_kernel(const Expr* f, const Expr* x, const Expr* w) {
             Expr* dvals = eval_take(internal_replace_all(
                 (Expr*[]){ expr_copy(dty), expr_copy(sol) }, 2));
             Expr* fac = dvals ? eval_take(mk_fn2("MapAll",
-                                expr_new_symbol("Factor"), dvals)) : NULL;
+                                expr_new_symbol(SYM_Factor), dvals)) : NULL;
             Expr* pe  = fac ? eval_take(mk_fn1("PowerExpand", fac)) : NULL;
             Expr* gs  = pe ? cancel_together(mk_fn2("Times", pe,
                                 mk_fn2("Power", expr_copy(dtu), mk_int(-1)))) : NULL;

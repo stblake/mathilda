@@ -690,7 +690,7 @@ static Expr* banded_real_sym_mpfr(const MatM* A, size_t b,
     bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
 
     if (n == 0) {
-        Expr* empty = expr_new_function(expr_new_symbol("List"), NULL, 0);
+        Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         return direct_apply_k_spec_list(empty, k_spec);
     }
 

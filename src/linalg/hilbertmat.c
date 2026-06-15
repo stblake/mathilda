@@ -214,10 +214,10 @@ Expr* builtin_hilbertmatrix(Expr* res) {
         for (int64_t j = 0; j < n; j++) {
             cells[j] = hm_entry(i + j + 1, mode, bits);  /* (i+1)+(j+1)-1 */
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), cells, (size_t)n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)n);
         free(cells);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, (size_t)m);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
     free(rows);
     return result;
 }

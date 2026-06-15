@@ -20,7 +20,7 @@ Expr* builtin_table(Expr* res) {
         Expr** inner_args = malloc(sizeof(Expr*) * 2);
         inner_args[0] = expr_copy(res->data.function.args[0]);
         inner_args[1] = expr_copy(res->data.function.args[res->data.function.arg_count - 1]);
-        Expr* inner_table = expr_new_function(expr_new_symbol("Table"), inner_args, 2);
+        Expr* inner_table = expr_new_function(expr_new_symbol(SYM_Table), inner_args, 2);
         free(inner_args);
         
         Expr** outer_args = malloc(sizeof(Expr*) * (res->data.function.arg_count - 1));
@@ -28,7 +28,7 @@ Expr* builtin_table(Expr* res) {
         for (size_t i = 1; i < res->data.function.arg_count - 1; i++) {
             outer_args[i] = expr_copy(res->data.function.args[i]);
         }
-        Expr* outer_table = expr_new_function(expr_new_symbol("Table"), outer_args, res->data.function.arg_count - 1);
+        Expr* outer_table = expr_new_function(expr_new_symbol(SYM_Table), outer_args, res->data.function.arg_count - 1);
         free(outer_args);
         
         Expr* eval_outer = evaluate(outer_table);
@@ -100,7 +100,7 @@ Expr* builtin_table(Expr* res) {
             expr_free(i_val);
             
             Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
-            Expr* next_expr = expr_new_function(expr_new_symbol("Plus"), next_args, 2);
+            Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
             Expr* next_e = evaluate(next_expr);
             expr_free(next_expr);
             expr_free(curr_e);
@@ -116,7 +116,7 @@ Expr* builtin_table(Expr* res) {
     iter_spec_restore(var_sym, old_own);
     iter_spec_free(&s);
 
-    Expr* result_list = expr_new_function(expr_new_symbol("List"), results, results_count);
+    Expr* result_list = expr_new_function(expr_new_symbol(SYM_List), results, results_count);
     free(results);
     return result_list;
 }
@@ -139,7 +139,7 @@ static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_co
     Expr** results = malloc(sizeof(Expr*) * (size_t)n_val);
     if (n_val == 0) {
         free(results);
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
     
     int is_range = 0;
@@ -163,9 +163,9 @@ static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_co
             if (n_val == 1) {
                 arg = expr_copy(a_expr);
             } else {
-                Expr* diff = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(b_expr), expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), expr_copy(a_expr)}, 2)}, 2);
-                Expr* frac = expr_new_function(expr_new_symbol("Divide"), (Expr*[]){expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(i), diff}, 2), expr_new_integer(n_val - 1)}, 2);
-                Expr* sum = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(a_expr), frac}, 2);
+                Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(b_expr), expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(a_expr)}, 2)}, 2);
+                Expr* frac = expr_new_function(expr_new_symbol(SYM_Divide), (Expr*[]){expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(i), diff}, 2), expr_new_integer(n_val - 1)}, 2);
+                Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(a_expr), frac}, 2);
                 arg = evaluate(sum);
                 expr_free(sum);
             }
@@ -173,7 +173,7 @@ static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_co
             if (i == 0) {
                 arg = expr_copy(r_base);
             } else {
-                Expr* sum = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(r_base), expr_new_integer(i)}, 2);
+                Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(r_base), expr_new_integer(i)}, 2);
                 arg = evaluate(sum);
                 expr_free(sum);
             }
@@ -186,7 +186,7 @@ static Expr* array_helper(Expr* f, Expr** n_array, Expr** r_array, size_t dim_co
     
     if (r_base) expr_free(r_base);
     
-    Expr* list_result = expr_new_function(expr_new_symbol("List"), results, (size_t)n_val);
+    Expr* list_result = expr_new_function(expr_new_symbol(SYM_List), results, (size_t)n_val);
     free(results);
     return list_result;
 }
@@ -604,7 +604,7 @@ Expr* builtin_rotateright(Expr* res) {
                 neg_args[i] = expr_copy(n_spec->data.function.args[i]);
             }
         }
-        neg_n_spec = expr_new_function(expr_new_symbol("List"), neg_args, n_spec->data.function.arg_count);
+        neg_n_spec = expr_new_function(expr_new_symbol(SYM_List), neg_args, n_spec->data.function.arg_count);
         free(neg_args);
     } else {
         return NULL;
@@ -775,7 +775,7 @@ Expr* builtin_conjugate_transpose(Expr* res) {
     if (argc == 1 && depth == 1) {
         Expr** conj_args = malloc(sizeof(Expr*) * 1);
         conj_args[0] = expr_copy(m);
-        Expr* conj = expr_new_function(expr_new_symbol("Conjugate"), conj_args, 1);
+        Expr* conj = expr_new_function(expr_new_symbol(SYM_Conjugate), conj_args, 1);
         free(conj_args);
         return eval_and_free(conj);
     }
@@ -787,7 +787,7 @@ Expr* builtin_conjugate_transpose(Expr* res) {
     Expr** tr_args = malloc(sizeof(Expr*) * argc);
     tr_args[0] = expr_copy(m);
     if (argc == 2) tr_args[1] = expr_copy(res->data.function.args[1]);
-    Expr* transposed_call = expr_new_function(expr_new_symbol("Transpose"), tr_args, argc);
+    Expr* transposed_call = expr_new_function(expr_new_symbol(SYM_Transpose), tr_args, argc);
     free(tr_args);
 
     Expr* transposed = eval_and_free(transposed_call);
@@ -802,7 +802,7 @@ Expr* builtin_conjugate_transpose(Expr* res) {
 
     Expr** conj_args = malloc(sizeof(Expr*) * 1);
     conj_args[0] = transposed;
-    Expr* conj = expr_new_function(expr_new_symbol("Conjugate"), conj_args, 1);
+    Expr* conj = expr_new_function(expr_new_symbol(SYM_Conjugate), conj_args, 1);
     free(conj_args);
     return eval_and_free(conj);
 }
@@ -962,10 +962,10 @@ Expr* builtin_tally(Expr* res) {
     Expr* list = res->data.function.args[0];
     Expr* test = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     
-    if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol("List"), NULL, 0);
+    if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     
     size_t count = list->data.function.arg_count;
-    if (count == 0) return expr_new_function(expr_new_symbol("List"), NULL, 0);
+    if (count == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     
     Expr** unique_elems = malloc(sizeof(Expr*) * count);
     int64_t* multiplicities = malloc(sizeof(int64_t) * count);
@@ -1019,14 +1019,14 @@ Expr* builtin_tally(Expr* res) {
         Expr** pair_args = malloc(sizeof(Expr*) * 2);
         pair_args[0] = unique_elems[i];
         pair_args[1] = expr_new_integer(multiplicities[i]);
-        result_args[i] = expr_new_function(expr_new_symbol("List"), pair_args, 2);
+        result_args[i] = expr_new_function(expr_new_symbol(SYM_List), pair_args, 2);
         free(pair_args);
     }
     
     free(unique_elems);
     free(multiplicities);
     
-    Expr* result = expr_new_function(expr_new_symbol("List"), result_args, unique_count);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), result_args, unique_count);
     free(result_args);
     
     return result;
@@ -1167,10 +1167,10 @@ Expr* builtin_commonest(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
     
     Expr* list = res->data.function.args[0];
-    if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol("List"), NULL, 0);
+    if (list->type != EXPR_FUNCTION) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     
     size_t count = list->data.function.arg_count;
-    if (count == 0) return expr_new_function(expr_new_symbol("List"), NULL, 0);
+    if (count == 0) return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 
     Expr* n_arg = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     int64_t n = -1;
@@ -1254,7 +1254,7 @@ Expr* builtin_commonest(Expr* res) {
     }
     free(items);
 
-    return expr_new_function(expr_new_symbol("List"), result_args, target_n);
+    return expr_new_function(expr_new_symbol(SYM_List), result_args, target_n);
 }
 
 void list_init(void) {
@@ -1360,8 +1360,8 @@ static bool is_minus_infinity(Expr* e) {
 }
 
 static Expr* make_minus_infinity(void) {
-    Expr* args[2] = { expr_new_integer(-1), expr_new_symbol("Infinity") };
-    return expr_new_function(expr_new_symbol("Times"), args, 2);
+    Expr* args[2] = { expr_new_integer(-1), expr_new_symbol(SYM_Infinity) };
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
 }
 
 static bool is_real_numeric(Expr* e) {
@@ -1405,7 +1405,7 @@ static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
         if (count == 0) return expr_new_integer(0);
         Expr** plus_args = malloc(sizeof(Expr*) * count);
         for (size_t i = 0; i < count; i++) plus_args[i] = expr_copy(e->data.function.args[i]);
-        Expr* plus_expr = expr_new_function(expr_new_symbol("Plus"), plus_args, count);
+        Expr* plus_expr = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, count);
         free(plus_args);
         Expr* res = evaluate(plus_expr);
         expr_free(plus_expr);
@@ -1575,7 +1575,7 @@ Expr* builtin_accumulate(Expr* res) {
         }
         plus_args[0] = expr_copy(out[i - 1]);
         plus_args[1] = expr_copy(lst->data.function.args[i]);
-        Expr* plus_expr = expr_new_function(expr_new_symbol("Plus"), plus_args, 2);
+        Expr* plus_expr = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
         free(plus_args);
         out[i] = evaluate(plus_expr);
         expr_free(plus_expr);
@@ -1743,7 +1743,7 @@ static Expr* ratio_divide(Expr* numerator, Expr* denominator) {
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy(numerator);
     args[1] = expr_copy(denominator);
-    Expr* div = expr_new_function(expr_new_symbol("Divide"), args, 2);
+    Expr* div = expr_new_function(expr_new_symbol(SYM_Divide), args, 2);
     free(args);
     return eval_and_free(div);
 }
@@ -1850,22 +1850,22 @@ Expr* builtin_listq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     if (is_listq(arg)) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
-    return expr_new_symbol("False");
+    return expr_new_symbol(SYM_False);
 }
 
 Expr* builtin_vectorq(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (!is_listq(arg)) return expr_new_symbol("False");
+    if (!is_listq(arg)) return expr_new_symbol(SYM_False);
 
     Expr* test = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
 
     for (size_t i = 0; i < arg->data.function.arg_count; i++) {
         Expr* elem = arg->data.function.args[i];
         if (test == NULL) {
-            if (is_listq(elem)) return expr_new_symbol("False");
+            if (is_listq(elem)) return expr_new_symbol(SYM_False);
         } else {
             Expr* call_args[1] = { expr_copy(elem) };
             Expr* call = expr_new_function(expr_copy(test), call_args, 1);
@@ -1873,18 +1873,18 @@ Expr* builtin_vectorq(Expr* res) {
             bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
             expr_free(eval_res);
             expr_free(call);
-            if (!is_true) return expr_new_symbol("False");
+            if (!is_true) return expr_new_symbol(SYM_False);
         }
     }
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 Expr* builtin_matrixq(Expr* res) {
     if (res->type != EXPR_FUNCTION || (res->data.function.arg_count != 1 && res->data.function.arg_count != 2)) return NULL;
     Expr* arg = res->data.function.args[0];
-    if (!is_listq(arg)) return expr_new_symbol("False");
+    if (!is_listq(arg)) return expr_new_symbol(SYM_False);
 
-    if (arg->data.function.arg_count == 0) return expr_new_symbol("False");
+    if (arg->data.function.arg_count == 0) return expr_new_symbol(SYM_False);
 
     Expr* test = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
 
@@ -1893,19 +1893,19 @@ Expr* builtin_matrixq(Expr* res) {
 
     for (size_t i = 0; i < arg->data.function.arg_count; i++) {
         Expr* row = arg->data.function.args[i];
-        if (!is_listq(row)) return expr_new_symbol("False");
+        if (!is_listq(row)) return expr_new_symbol(SYM_False);
 
         if (first_row) {
             col_count = row->data.function.arg_count;
             first_row = false;
         } else {
-            if (row->data.function.arg_count != col_count) return expr_new_symbol("False");
+            if (row->data.function.arg_count != col_count) return expr_new_symbol(SYM_False);
         }
 
         for (size_t j = 0; j < row->data.function.arg_count; j++) {
             Expr* elem = row->data.function.args[j];
             if (test == NULL) {
-                if (is_listq(elem)) return expr_new_symbol("False");
+                if (is_listq(elem)) return expr_new_symbol(SYM_False);
             } else {
                 Expr* call_args[1] = { expr_copy(elem) };
                 Expr* call = expr_new_function(expr_copy(test), call_args, 1);
@@ -1913,12 +1913,12 @@ Expr* builtin_matrixq(Expr* res) {
                 bool is_true = (eval_res->type == EXPR_SYMBOL && eval_res->data.symbol == SYM_True);
                 expr_free(eval_res);
                 expr_free(call);
-                if (!is_true) return expr_new_symbol("False");
+                if (!is_true) return expr_new_symbol(SYM_False);
             }
         }
     }
 
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 /* --- HermitianMatrixQ ----------------------------------------------------
@@ -1964,7 +1964,7 @@ static bool is_conjugate_node(Expr* n) {
 static Expr* eval_conjugate_of(Expr* e) {
     Expr** args = malloc(sizeof(Expr*) * 1);
     args[0] = expr_copy(e);
-    Expr* call = expr_new_function(expr_new_symbol("Conjugate"), args, 1);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Conjugate), args, 1);
     free(args);
     return eval_and_free(call);
 }
@@ -2008,14 +2008,14 @@ static bool hermitian_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
 
     Expr** abs_args = malloc(sizeof(Expr*) * 1);
     abs_args[0] = diff_e;
-    Expr* abs_call = expr_new_function(expr_new_symbol("Abs"), abs_args, 1);
+    Expr* abs_call = expr_new_function(expr_new_symbol(SYM_Abs), abs_args, 1);
     free(abs_args);
     Expr* abs_e = eval_and_free(abs_call);
 
     Expr** le_args = malloc(sizeof(Expr*) * 2);
     le_args[0] = abs_e;
     le_args[1] = expr_copy(tol);
-    Expr* le_call = expr_new_function(expr_new_symbol("LessEqual"), le_args, 2);
+    Expr* le_call = expr_new_function(expr_new_symbol(SYM_LessEqual), le_args, 2);
     free(le_args);
     Expr* le_e = eval_and_free(le_call);
     bool ok = (le_e->type == EXPR_SYMBOL &&
@@ -2062,16 +2062,16 @@ Expr* builtin_hermitian_matrix_q(Expr* res) {
     }
 
     /* Must be a non-empty square List of Lists with no deeper nesting. */
-    if (!is_listq(m)) return expr_new_symbol("False");
+    if (!is_listq(m)) return expr_new_symbol(SYM_False);
     size_t n = m->data.function.arg_count;
-    if (n == 0) return expr_new_symbol("False");
+    if (n == 0) return expr_new_symbol(SYM_False);
     for (size_t i = 0; i < n; i++) {
         Expr* row = m->data.function.args[i];
-        if (!is_listq(row)) return expr_new_symbol("False");
-        if (row->data.function.arg_count != n) return expr_new_symbol("False");
+        if (!is_listq(row)) return expr_new_symbol(SYM_False);
+        if (row->data.function.arg_count != n) return expr_new_symbol(SYM_False);
         for (size_t j = 0; j < n; j++) {
             if (is_listq(row->data.function.args[j])) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
         }
     }
@@ -2093,11 +2093,11 @@ Expr* builtin_hermitian_matrix_q(Expr* res) {
             } else {
                 ok = hermitian_pair_structural(a, b);
             }
-            if (!ok) return expr_new_symbol("False");
+            if (!ok) return expr_new_symbol(SYM_False);
         }
     }
 
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 /* --- SymmetricMatrixQ ----------------------------------------------------
@@ -2143,14 +2143,14 @@ static bool symmetric_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
 
     Expr** abs_args = malloc(sizeof(Expr*) * 1);
     abs_args[0] = diff_e;
-    Expr* abs_call = expr_new_function(expr_new_symbol("Abs"), abs_args, 1);
+    Expr* abs_call = expr_new_function(expr_new_symbol(SYM_Abs), abs_args, 1);
     free(abs_args);
     Expr* abs_e = eval_and_free(abs_call);
 
     Expr** le_args = malloc(sizeof(Expr*) * 2);
     le_args[0] = abs_e;
     le_args[1] = expr_copy(tol);
-    Expr* le_call = expr_new_function(expr_new_symbol("LessEqual"), le_args, 2);
+    Expr* le_call = expr_new_function(expr_new_symbol(SYM_LessEqual), le_args, 2);
     free(le_args);
     Expr* le_e = eval_and_free(le_call);
     bool ok = (le_e->type == EXPR_SYMBOL &&
@@ -2196,16 +2196,16 @@ Expr* builtin_symmetric_matrix_q(Expr* res) {
     }
 
     /* Must be a non-empty square List of Lists with no deeper nesting. */
-    if (!is_listq(m)) return expr_new_symbol("False");
+    if (!is_listq(m)) return expr_new_symbol(SYM_False);
     size_t n = m->data.function.arg_count;
-    if (n == 0) return expr_new_symbol("False");
+    if (n == 0) return expr_new_symbol(SYM_False);
     for (size_t i = 0; i < n; i++) {
         Expr* row = m->data.function.args[i];
-        if (!is_listq(row)) return expr_new_symbol("False");
-        if (row->data.function.arg_count != n) return expr_new_symbol("False");
+        if (!is_listq(row)) return expr_new_symbol(SYM_False);
+        if (row->data.function.arg_count != n) return expr_new_symbol(SYM_False);
         for (size_t j = 0; j < n; j++) {
             if (is_listq(row->data.function.args[j])) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
         }
     }
@@ -2225,11 +2225,11 @@ Expr* builtin_symmetric_matrix_q(Expr* res) {
             } else {
                 ok = expr_eq(a, b);
             }
-            if (!ok) return expr_new_symbol("False");
+            if (!ok) return expr_new_symbol(SYM_False);
         }
     }
 
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 /* --- SquareMatrixQ -----------------------------------------------------
@@ -2260,20 +2260,20 @@ Expr* builtin_square_matrix_q(Expr* res) {
 
     Expr* m = res->data.function.args[0];
 
-    if (!is_listq(m)) return expr_new_symbol("False");
+    if (!is_listq(m)) return expr_new_symbol(SYM_False);
     size_t n = m->data.function.arg_count;
-    if (n == 0) return expr_new_symbol("False");
+    if (n == 0) return expr_new_symbol(SYM_False);
     for (size_t i = 0; i < n; i++) {
         Expr* row = m->data.function.args[i];
-        if (!is_listq(row)) return expr_new_symbol("False");
-        if (row->data.function.arg_count != n) return expr_new_symbol("False");
+        if (!is_listq(row)) return expr_new_symbol(SYM_False);
+        if (row->data.function.arg_count != n) return expr_new_symbol(SYM_False);
         for (size_t j = 0; j < n; j++) {
             if (is_listq(row->data.function.args[j])) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
         }
     }
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 /* --- DiagonalMatrixQ -----------------------------------------------------
@@ -2320,14 +2320,14 @@ static bool diag_entry_under_tolerance(Expr* e, Expr* tol) {
     /* Build LessEqual[Abs[e], tol] and require evaluation to True. */
     Expr** abs_args = malloc(sizeof(Expr*) * 1);
     abs_args[0] = expr_copy(e);
-    Expr* abs_call = expr_new_function(expr_new_symbol("Abs"), abs_args, 1);
+    Expr* abs_call = expr_new_function(expr_new_symbol(SYM_Abs), abs_args, 1);
     free(abs_args);
     Expr* abs_e = eval_and_free(abs_call);
 
     Expr** le_args = malloc(sizeof(Expr*) * 2);
     le_args[0] = abs_e;
     le_args[1] = expr_copy(tol);
-    Expr* le_call = expr_new_function(expr_new_symbol("LessEqual"), le_args, 2);
+    Expr* le_call = expr_new_function(expr_new_symbol(SYM_LessEqual), le_args, 2);
     free(le_args);
     Expr* le_e = eval_and_free(le_call);
     bool ok = (le_e->type == EXPR_SYMBOL && le_e->data.symbol == SYM_True);
@@ -2431,22 +2431,22 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
      * length, no entries that are themselves Lists.  The empty list `{}`
      * (a vector with zero entries) is not a matrix and returns False;
      * `{{}, {}, ...}` (n x 0) is accepted as a vacuous matrix. */
-    if (!is_listq(m)) return expr_new_symbol("False");
+    if (!is_listq(m)) return expr_new_symbol(SYM_False);
     size_t nrows = m->data.function.arg_count;
-    if (nrows == 0) return expr_new_symbol("False");
+    if (nrows == 0) return expr_new_symbol(SYM_False);
     size_t ncols = 0;
     for (size_t i = 0; i < nrows; i++) {
         Expr* row = m->data.function.args[i];
-        if (!is_listq(row)) return expr_new_symbol("False");
+        if (!is_listq(row)) return expr_new_symbol(SYM_False);
         size_t this_ncols = row->data.function.arg_count;
         if (i == 0) {
             ncols = this_ncols;
         } else if (this_ncols != ncols) {
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         }
         for (size_t j = 0; j < this_ncols; j++) {
             if (is_listq(row->data.function.args[j])) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
         }
     }
@@ -2466,11 +2466,11 @@ Expr* builtin_diagonal_matrix_q(Expr* res) {
             } else {
                 zero = diag_entry_is_exact_zero(entry);
             }
-            if (!zero) return expr_new_symbol("False");
+            if (!zero) return expr_new_symbol(SYM_False);
         }
     }
 
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 /* --- UpperTriangularMatrixQ --------------------------------------------
@@ -2588,22 +2588,22 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
     }
 
     /* Validate matrix shape -- same gate as DiagonalMatrixQ. */
-    if (!is_listq(m)) return expr_new_symbol("False");
+    if (!is_listq(m)) return expr_new_symbol(SYM_False);
     size_t nrows = m->data.function.arg_count;
-    if (nrows == 0) return expr_new_symbol("False");
+    if (nrows == 0) return expr_new_symbol(SYM_False);
     size_t ncols = 0;
     for (size_t i = 0; i < nrows; i++) {
         Expr* row = m->data.function.args[i];
-        if (!is_listq(row)) return expr_new_symbol("False");
+        if (!is_listq(row)) return expr_new_symbol(SYM_False);
         size_t this_ncols = row->data.function.arg_count;
         if (i == 0) {
             ncols = this_ncols;
         } else if (this_ncols != ncols) {
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         }
         for (size_t j = 0; j < this_ncols; j++) {
             if (is_listq(row->data.function.args[j])) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
         }
     }
@@ -2623,16 +2623,16 @@ Expr* builtin_upper_triangular_matrix_q(Expr* res) {
             } else {
                 zero = diag_entry_is_exact_zero(entry);
             }
-            if (!zero) return expr_new_symbol("False");
+            if (!zero) return expr_new_symbol(SYM_False);
         }
     }
 
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 Expr* builtin_min(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
-    if (n == 0) return expr_new_symbol("Infinity");
+    if (n == 0) return expr_new_symbol(SYM_Infinity);
     
     // Check for List arguments to flatten
     bool has_list = false;
@@ -2678,7 +2678,7 @@ Expr* builtin_min(Expr* res) {
     // Check for Overflow[] and -Infinity
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
-        if (is_overflow(arg)) return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
+        if (is_overflow(arg)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         if (is_minus_infinity(arg)) return expr_copy(arg);
     }
     
@@ -2721,7 +2721,7 @@ Expr* builtin_min(Expr* res) {
             if (min_num) expr_free(min_num);
             for (size_t i = 0; i < unique_count; i++) expr_free(unique_args[i]);
             free(unique_args);
-            return expr_new_symbol("Infinity");
+            return expr_new_symbol(SYM_Infinity);
         }
         if (final_count == 1) {
             Expr* single = min_num ? min_num : unique_args[0];
@@ -2794,7 +2794,7 @@ Expr* builtin_max(Expr* res) {
     // Check for Overflow[] and Infinity
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
-        if (is_overflow(arg)) return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
+        if (is_overflow(arg)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         if (is_infinity(arg)) return expr_copy(arg);
     }
     
@@ -2907,7 +2907,7 @@ Expr* builtin_range(Expr* res) {
     if (di_val == 0) goto L_fail_range;
     if ((di_val > 0 && min_val > max_val) || (di_val < 0 && min_val < max_val)) {
         expr_free(imin_e); expr_free(imax_e); expr_free(di_e);
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
     
     size_t results_cap = 16;
@@ -2925,7 +2925,7 @@ Expr* builtin_range(Expr* res) {
         results[results_count++] = i_val;
         
         Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
-        Expr* next_expr = expr_new_function(expr_new_symbol("Plus"), next_args, 2);
+        Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
         Expr* next_e = evaluate(next_expr);
         expr_free(next_expr);
         expr_free(curr_e);
@@ -2941,7 +2941,7 @@ Expr* builtin_range(Expr* res) {
     expr_free(imax_e);
     expr_free(di_e);
     
-    Expr* result_list = expr_new_function(expr_new_symbol("List"), results, results_count);
+    Expr* result_list = expr_new_function(expr_new_symbol(SYM_List), results, results_count);
     free(results);
     return result_list;
 

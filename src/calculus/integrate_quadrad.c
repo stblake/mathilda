@@ -127,7 +127,7 @@ static Expr* replace_one(Expr* expr, const Expr* from, const Expr* to) {
 /* ReplaceAll[expr, {rule1, rule2}] -- simultaneous list of rules.  Consumes
  * `expr`, `rule1`, `rule2`; returns owned (evaluated). */
 static Expr* replace_rules2(Expr* expr, Expr* rule1, Expr* rule2) {
-    Expr* rules = expr_new_function(expr_new_symbol("List"),
+    Expr* rules = expr_new_function(expr_new_symbol(SYM_List),
                       (Expr*[]){ rule1, rule2 }, 2);
     Expr* call = internal_replace_all((Expr*[]){ expr, rules }, 2);
     return eval_take(call);
@@ -307,7 +307,7 @@ static QrSub qr_euler3(Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x, Expr* u) {
         expr_copy(u));
 
     {
-        Expr* dxnum = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        Expr* dxnum = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
             mk_int(2), expr_copy(u), expr_copy(a),
             mk_fn2("Plus", expr_copy(beta), mk_fn2("Times", mk_int(-1), expr_copy(alpha)))
         }, 4);

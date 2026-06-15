@@ -311,7 +311,7 @@ static Expr* try_inverse_rewrite(const Expr* eq, Expr** elim, size_t n_elim,
     Expr* ev_rhs = evaluate(cur_rhs);
     expr_free(cur_lhs);
     expr_free(cur_rhs);
-    Expr* out = expr_new_function(expr_new_symbol("Equal"),
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ ev_lhs, ev_rhs }, 2);
     return out;
 }
@@ -431,7 +431,7 @@ static Expr* alg_substitute(const Expr* e, const AlgState* a) {
                 Expr** pa = (Expr**)malloc(sizeof(Expr*) * 2);
                 pa[0] = expr_copy(a->auxs[i]);
                 pa[1] = expr_new_integer(new_exp);
-                Expr* r = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                Expr* r = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
                 free(pa);
                 return r;
             }
@@ -460,13 +460,13 @@ static Expr* alg_make_constraint(const AlgState* a, size_t i) {
     Expr** pa = (Expr**)malloc(sizeof(Expr*) * 2);
     pa[0] = expr_copy(a->auxs[i]);
     pa[1] = expr_new_integer(a->lcms[i]);
-    Expr* pow_e = expr_new_function(expr_new_symbol("Power"), pa, 2);
+    Expr* pow_e = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
     free(pa);
 
     Expr** ea = (Expr**)malloc(sizeof(Expr*) * 2);
     ea[0] = pow_e;
     ea[1] = alg_substitute(a->bases[i], a);
-    Expr* eq = expr_new_function(expr_new_symbol("Equal"), ea, 2);
+    Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal), ea, 2);
     free(ea);
     return eq;
 }
@@ -632,7 +632,7 @@ static Expr* make_cos(Expr* arg, bool hyper) {
 }
 /* `Power[base, -1]` (a reciprocal). */
 static Expr* make_recip(Expr* base) {
-    return expr_new_function(expr_new_symbol("Power"),
+    return expr_new_function(expr_new_symbol(SYM_Power),
         (Expr*[]){ base, expr_new_integer(-1) }, 2);
 }
 
@@ -652,11 +652,11 @@ static Expr* to_sincos_rewrite(const Expr* e, Expr** elim, size_t n_elim) {
         Expr* inner = to_sincos_rewrite(arg, elim, n_elim);
         switch (w) {
             case TK_TAN:  /* Sin/Cos */
-                return expr_new_function(expr_new_symbol("Times"),
+                return expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ make_sin(expr_copy(inner), hyper),
                                make_recip(make_cos(inner, hyper)) }, 2);
             case TK_COT:  /* Cos/Sin */
-                return expr_new_function(expr_new_symbol("Times"),
+                return expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ make_cos(expr_copy(inner), hyper),
                                make_recip(make_sin(inner, hyper)) }, 2);
             case TK_SEC:  /* 1/Cos */
@@ -683,7 +683,7 @@ static Expr* to_sincos_rewrite(const Expr* e, Expr** elim, size_t n_elim) {
  * threads over Equal, so the result stays an `Equal[...]`.  Returns a
  * fresh tree the caller owns. */
 static Expr* trig_expand_eq(const Expr* eq) {
-    Expr* call = expr_new_function(expr_new_symbol("TrigExpand"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_TrigExpand),
         (Expr*[]){ expr_copy((Expr*)eq) }, 1);
     Expr* out = evaluate(call);
     expr_free(call);
@@ -692,7 +692,7 @@ static Expr* trig_expand_eq(const Expr* eq) {
 
 /* `Power[base, exp]` from owned parts. */
 static Expr* make_power(Expr* base, Expr* exp) {
-    return expr_new_function(expr_new_symbol("Power"),
+    return expr_new_function(expr_new_symbol(SYM_Power),
         (Expr*[]){ base, exp }, 2);
 }
 
@@ -722,7 +722,7 @@ static bool times_split_int(const Expr* e, int64_t* k_out, Expr** rest_out) {
     Expr* rest_e;
     if (nr == 0)      { rest_e = expr_new_integer(1); }
     else if (nr == 1) { rest_e = rest[0]; }
-    else { rest_e = expr_new_function(expr_new_symbol("Times"), rest, nr); }
+    else { rest_e = expr_new_function(expr_new_symbol(SYM_Times), rest, nr); }
     free(rest);  /* frees the array; rest[0] is kept as rest_e when nr==1 */
     *k_out = k;
     *rest_out = rest_e;
@@ -751,7 +751,7 @@ static Expr* exp_expand(const Expr* e, Expr** elim, size_t n_elim) {
                 factors[i] = exp_expand(term, elim, n_elim);
                 expr_free(term);
             }
-            Expr* r = expr_new_function(expr_new_symbol("Times"), factors, n);
+            Expr* r = expr_new_function(expr_new_symbol(SYM_Times), factors, n);
             free(factors);
             return r;
         }
@@ -794,22 +794,22 @@ static Expr* log_expand(const Expr* e, Expr** elim, size_t n_elim) {
             size_t n = arg->data.function.arg_count;
             Expr** terms = (Expr**)malloc(sizeof(Expr*) * n);
             for (size_t i = 0; i < n; i++) {
-                Expr* lg = expr_new_function(expr_new_symbol("Log"),
+                Expr* lg = expr_new_function(expr_new_symbol(SYM_Log),
                     (Expr*[]){ expr_copy(arg->data.function.args[i]) }, 1);
                 terms[i] = log_expand(lg, elim, n_elim);
                 expr_free(lg);
             }
-            Expr* r = expr_new_function(expr_new_symbol("Plus"), terms, n);
+            Expr* r = expr_new_function(expr_new_symbol(SYM_Plus), terms, n);
             free(terms);
             return r;
         }
         if (head_is(arg, SYM_Power) && arg->data.function.arg_count == 2
             && arg->data.function.args[1]->type == EXPR_INTEGER) {
-            Expr* lg = expr_new_function(expr_new_symbol("Log"),
+            Expr* lg = expr_new_function(expr_new_symbol(SYM_Log),
                 (Expr*[]){ expr_copy(arg->data.function.args[0]) }, 1);
             Expr* inner = log_expand(lg, elim, n_elim);
             expr_free(lg);
-            Expr* r = expr_new_function(expr_new_symbol("Times"),
+            Expr* r = expr_new_function(expr_new_symbol(SYM_Times),
                 (Expr*[]){ expr_copy(arg->data.function.args[1]), inner }, 2);
             return r;
         }
@@ -993,9 +993,9 @@ static Expr* kernel_substitute(const Expr* e, const KernelState* t) {
             switch (w) {
                 case TK_SIN: return expr_copy(s);
                 case TK_COS: return expr_copy(c);
-                case TK_TAN: return expr_new_function(expr_new_symbol("Times"),
+                case TK_TAN: return expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_copy(s), make_recip(expr_copy(c)) }, 2);
-                case TK_COT: return expr_new_function(expr_new_symbol("Times"),
+                case TK_COT: return expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_copy(c), make_recip(expr_copy(s)) }, 2);
                 case TK_SEC: return make_recip(expr_copy(c));
                 case TK_CSC: return make_recip(expr_copy(s));
@@ -1042,21 +1042,21 @@ static Expr* kernel_substitute(const Expr* e, const KernelState* t) {
  *   hyperbolic: c^2 - s^2 == 1   (cosh^2 - sinh^2 == 1) */
 static Expr* kernel_make_constraint(const KernelState* t, size_t i) {
     if (t->kind[i] != K_CIRC && t->kind[i] != K_HYP) return NULL;
-    Expr* s2 = expr_new_function(expr_new_symbol("Power"),
+    Expr* s2 = expr_new_function(expr_new_symbol(SYM_Power),
         (Expr*[]){ expr_copy(t->aux1[i]), expr_new_integer(2) }, 2);
-    Expr* c2 = expr_new_function(expr_new_symbol("Power"),
+    Expr* c2 = expr_new_function(expr_new_symbol(SYM_Power),
         (Expr*[]){ expr_copy(t->aux2[i]), expr_new_integer(2) }, 2);
     Expr* sum;
     if (t->kind[i] == K_HYP) {
-        Expr* neg_s2 = expr_new_function(expr_new_symbol("Times"),
+        Expr* neg_s2 = expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_new_integer(-1), s2 }, 2);
-        sum = expr_new_function(expr_new_symbol("Plus"),
+        sum = expr_new_function(expr_new_symbol(SYM_Plus),
             (Expr*[]){ c2, neg_s2 }, 2);
     } else {
-        sum = expr_new_function(expr_new_symbol("Plus"),
+        sum = expr_new_function(expr_new_symbol(SYM_Plus),
             (Expr*[]){ s2, c2 }, 2);
     }
-    return expr_new_function(expr_new_symbol("Equal"),
+    return expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ sum, expr_new_integer(1) }, 2);
 }
 
@@ -1154,7 +1154,7 @@ static Expr* term_negate(const Expr* t) {
     if (head_is(t, SYM_Rational) && t->data.function.arg_count == 2) {
         Expr* num_neg = term_negate(t->data.function.args[0]);
         Expr* den = expr_copy(t->data.function.args[1]);
-        return expr_new_function(expr_new_symbol("Rational"),
+        return expr_new_function(expr_new_symbol(SYM_Rational),
             (Expr*[]){ num_neg, den }, 2);
     }
     if (is_times(t) && t->data.function.arg_count >= 1) {
@@ -1168,7 +1168,7 @@ static Expr* term_negate(const Expr* t) {
             for (size_t i = 0; i < n - 1; i++) {
                 args[i] = expr_copy(t->data.function.args[i + 1]);
             }
-            Expr* r = expr_new_function(expr_new_symbol("Times"), args, n - 1);
+            Expr* r = expr_new_function(expr_new_symbol(SYM_Times), args, n - 1);
             free(args);
             return r;
         }
@@ -1181,7 +1181,7 @@ static Expr* term_negate(const Expr* t) {
             for (size_t i = 1; i < n; i++) {
                 args[i] = expr_copy(t->data.function.args[i]);
             }
-            Expr* r = expr_new_function(expr_new_symbol("Times"), args, n);
+            Expr* r = expr_new_function(expr_new_symbol(SYM_Times), args, n);
             free(args);
             return r;
         }
@@ -1191,7 +1191,7 @@ static Expr* term_negate(const Expr* t) {
         for (size_t i = 0; i < n; i++) {
             args[i + 1] = expr_copy(t->data.function.args[i]);
         }
-        Expr* r = expr_new_function(expr_new_symbol("Times"), args, n + 1);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_Times), args, n + 1);
         free(args);
         return r;
     }
@@ -1199,7 +1199,7 @@ static Expr* term_negate(const Expr* t) {
     Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
     args[0] = expr_new_integer(-1);
     args[1] = expr_copy((Expr*)t);
-    Expr* r = expr_new_function(expr_new_symbol("Times"), args, 2);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
     free(args);
     return r;
 }
@@ -1247,7 +1247,7 @@ static Expr* balance_polynomial(const GBPoly* g, Expr** all_vars) {
     } else if (n_pos == 1) {
         lhs = pos[0];
     } else {
-        lhs = expr_new_function(expr_new_symbol("Plus"), pos, n_pos);
+        lhs = expr_new_function(expr_new_symbol(SYM_Plus), pos, n_pos);
     }
     free(pos);
 
@@ -1257,11 +1257,11 @@ static Expr* balance_polynomial(const GBPoly* g, Expr** all_vars) {
     } else if (n_neg == 1) {
         rhs = neg[0];
     } else {
-        rhs = expr_new_function(expr_new_symbol("Plus"), neg, n_neg);
+        rhs = expr_new_function(expr_new_symbol(SYM_Plus), neg, n_neg);
     }
     free(neg);
 
-    Expr* eq = expr_new_function(expr_new_symbol("Equal"),
+    Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ lhs, rhs }, 2);
     Expr* evd = evaluate(eq);
     expr_free(eq);
@@ -1377,8 +1377,8 @@ Expr* builtin_eliminate(Expr* res) {
      * Eliminate is not HoldAll; same for `True`.  Fold these into the
      * obvious answer without emitting `eqf`. */
     if (eqns_arg && eqns_arg->type == EXPR_SYMBOL) {
-        if (eqns_arg->data.symbol == SYM_True)  return expr_new_symbol("True");
-        if (eqns_arg->data.symbol == SYM_False) return expr_new_symbol("False");
+        if (eqns_arg->data.symbol == SYM_True)  return expr_new_symbol(SYM_True);
+        if (eqns_arg->data.symbol == SYM_False) return expr_new_symbol(SYM_False);
     }
 
     /* ----- Unpack equation list (filtering True/False sentinels) ----- */
@@ -1393,7 +1393,7 @@ Expr* builtin_eliminate(Expr* res) {
     }
     if (raw_n == 0) {
         /* Empty system: no constraint at all. */
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     /* Pre-filter for True/False sentinels mixed inside a list/And. */
     Expr** eq_in = (Expr**)malloc(sizeof(Expr*) * raw_n);
@@ -1405,14 +1405,14 @@ Expr* builtin_eliminate(Expr* res) {
             if (x->data.symbol == SYM_False) {
                 /* Any False element makes the whole conjunction False. */
                 free(eq_in);
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
         }
         eq_in[n_eq++] = x;
     }
     if (n_eq == 0) {
         free(eq_in);
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
 
     /* ----- Unpack elim-variable list (allow bare symbol/expr) ----- */
@@ -1425,7 +1425,7 @@ Expr* builtin_eliminate(Expr* res) {
     } else {
         Expr** wrapped = (Expr**)malloc(sizeof(Expr*));
         wrapped[0] = expr_copy(vars_arg);
-        wrap_vars = expr_new_function(expr_new_symbol("List"), wrapped, 1);
+        wrap_vars = expr_new_function(expr_new_symbol(SYM_List), wrapped, 1);
         free(wrapped);
         n_elim = 1;
         elim_items = wrap_vars->data.function.args;
@@ -1437,7 +1437,7 @@ Expr* builtin_eliminate(Expr* res) {
         if (n_eq == 1) return expr_copy(eq_in[0]);
         Expr** copies = (Expr**)malloc(sizeof(Expr*) * n_eq);
         for (size_t i = 0; i < n_eq; i++) copies[i] = expr_copy(eq_in[i]);
-        Expr* and_e = expr_new_function(expr_new_symbol("And"), copies, n_eq);
+        Expr* and_e = expr_new_function(expr_new_symbol(SYM_And), copies, n_eq);
         free(copies);
         Expr* ev = evaluate(and_e);
         expr_free(and_e);
@@ -1791,7 +1791,7 @@ Expr* builtin_eliminate(Expr* res) {
         alg_free(&alg);
         free(ker_elim_array);
         kernel_free(&ker);
-        return expr_new_symbol("False");
+        return expr_new_symbol(SYM_False);
     }
     if (nF == 0) {
         /* All inputs collapsed to 0 -> no constraint remains. */
@@ -1805,7 +1805,7 @@ Expr* builtin_eliminate(Expr* res) {
         alg_free(&alg);
         free(ker_elim_array);
         kernel_free(&ker);
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
 
     /* ----- Buchberger ----- */
@@ -1850,7 +1850,7 @@ Expr* builtin_eliminate(Expr* res) {
         alg_free(&alg);
         free(ker_elim_array);
         kernel_free(&ker);
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     for (size_t i = 0; i < out_n; i++) {
         if (gb_poly_is_constant(G[i]) && !gb_poly_is_zero(G[i])) {
@@ -1864,7 +1864,7 @@ Expr* builtin_eliminate(Expr* res) {
             alg_free(&alg);
             free(ker_elim_array);
             kernel_free(&ker);
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         }
     }
 
@@ -1890,7 +1890,7 @@ Expr* builtin_eliminate(Expr* res) {
         free(eqs);
         return out;
     }
-    Expr* and_e = expr_new_function(expr_new_symbol("And"), eqs, out_n);
+    Expr* and_e = expr_new_function(expr_new_symbol(SYM_And), eqs, out_n);
     free(eqs);
     Expr* evd = evaluate(and_e);
     expr_free(and_e);

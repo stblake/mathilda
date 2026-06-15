@@ -240,7 +240,7 @@ static bool parse_tolerance_option(Expr* opt, bool* is_automatic_out,
  * ------------------------------------------------------------------ */
 static Expr* compute_norm_squared(Expr* v) {
     Expr* flat = eval_and_free(expr_new_function(
-        expr_new_symbol("Flatten"),
+        expr_new_symbol(SYM_Flatten),
         (Expr*[]){expr_copy(v)}, 1));
     if (!flat) return NULL;
     Expr* flat_copy = expr_copy(flat);
@@ -391,7 +391,7 @@ static Expr* doubles_to_vector_expr(const double* x, int n) {
     Expr** args = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
     if (!args) return NULL;
     for (int i = 0; i < n; i++) args[i] = expr_new_real(x[i]);
-    Expr* v = expr_new_function(expr_new_symbol("List"), args, (size_t)n);
+    Expr* v = expr_new_function(expr_new_symbol(SYM_List), args, (size_t)n);
     free(args);
     return v;
 }
@@ -403,7 +403,7 @@ static Expr* make_zero_vector(int n) {
     Expr** args = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
     if (!args) return NULL;
     for (int i = 0; i < n; i++) args[i] = expr_new_integer(0);
-    Expr* v = expr_new_function(expr_new_symbol("List"), args, (size_t)n);
+    Expr* v = expr_new_function(expr_new_symbol(SYM_List), args, (size_t)n);
     free(args);
     return v;
 }
@@ -430,11 +430,11 @@ static Expr* direct_solve(Expr* m, Expr* b, Expr* tol_opt_or_null) {
     Expr* pinv = NULL;
     if (tol_opt_or_null) {
         pinv = eval_and_free(expr_new_function(
-            expr_new_symbol("PseudoInverse"),
+            expr_new_symbol(SYM_PseudoInverse),
             (Expr*[]){expr_copy(m), expr_copy(tol_opt_or_null)}, 2));
     } else {
         pinv = eval_and_free(expr_new_function(
-            expr_new_symbol("PseudoInverse"),
+            expr_new_symbol(SYM_PseudoInverse),
             (Expr*[]){expr_copy(m)}, 1));
     }
     if (!pinv) return NULL;
@@ -504,11 +504,11 @@ static Expr* iter_refine_solve(Expr* m, Expr* b, Expr* tol_opt_or_null,
             (Expr*[]){expr_copy(m), expr_copy(x)}, 2));
         /* neg_mx = -1 * mx */
         Expr* neg_mx = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){expr_new_integer(-1), mx}, 2));
         /* r = b - m . x */
         Expr* r = eval_and_free(expr_new_function(
-            expr_new_symbol("Plus"),
+            expr_new_symbol(SYM_Plus),
             (Expr*[]){expr_copy(b), neg_mx}, 2));
 
         /* dx = PseudoInverse[m] . r */
@@ -519,7 +519,7 @@ static Expr* iter_refine_solve(Expr* m, Expr* b, Expr* tol_opt_or_null,
         /* x <- x + dx (consumes x; we still need dx for the norm test) */
         Expr* dx_copy = expr_copy(dx);
         x = eval_and_free(expr_new_function(
-            expr_new_symbol("Plus"),
+            expr_new_symbol(SYM_Plus),
             (Expr*[]){x, dx_copy}, 2));
 
         /* Convergence: ||dx||^2 <= tol^2 (numeric) or exactly zero (exact). */
@@ -625,29 +625,29 @@ static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
 
         /* alpha = gamma / qq = gamma * Power[qq, -1] */
         Expr* inv_qq = eval_and_free(expr_new_function(
-            expr_new_symbol("Power"),
+            expr_new_symbol(SYM_Power),
             (Expr*[]){qq, expr_new_integer(-1)}, 2));
         Expr* alpha = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){expr_copy(gamma), inv_qq}, 2));
 
         /* x <- x + alpha p */
         Expr* alpha_p = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){expr_copy(alpha), expr_copy(p)}, 2));
         x = eval_and_free(expr_new_function(
-            expr_new_symbol("Plus"),
+            expr_new_symbol(SYM_Plus),
             (Expr*[]){x, alpha_p}, 2));
 
         /* r <- r - alpha q  (alpha and q consumed here) */
         Expr* alpha_q = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){alpha, q}, 2));
         Expr* neg_alpha_q = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){expr_new_integer(-1), alpha_q}, 2));
         r = eval_and_free(expr_new_function(
-            expr_new_symbol("Plus"),
+            expr_new_symbol(SYM_Plus),
             (Expr*[]){r, neg_alpha_q}, 2));
 
         /* s_new = A^T r */
@@ -662,18 +662,18 @@ static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
 
         /* beta = gamma_new / gamma  (gamma consumed here) */
         Expr* inv_gamma = eval_and_free(expr_new_function(
-            expr_new_symbol("Power"),
+            expr_new_symbol(SYM_Power),
             (Expr*[]){gamma, expr_new_integer(-1)}, 2));
         Expr* beta = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){expr_copy(gamma_new), inv_gamma}, 2));
 
         /* p <- s_new + beta p  (beta and old p consumed here) */
         Expr* beta_p = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){beta, p}, 2));
         p = eval_and_free(expr_new_function(
-            expr_new_symbol("Plus"),
+            expr_new_symbol(SYM_Plus),
             (Expr*[]){expr_copy(s_new), beta_p}, 2));
 
         /* Rotate s and gamma. */
@@ -701,7 +701,7 @@ static Expr* cgls_solve(Expr* m, Expr* b,
 
     /* mt = Transpose[m] shared across every RHS column. */
     Expr* mt = eval_and_free(expr_new_function(
-        expr_new_symbol("Transpose"),
+        expr_new_symbol(SYM_Transpose),
         (Expr*[]){expr_copy(m)}, 1));
     if (!mt) return NULL;
 
@@ -717,7 +717,7 @@ static Expr* cgls_solve(Expr* m, Expr* b,
 
     /* bT = Transpose[b]: rows of bT are columns of b. */
     Expr* bT = eval_and_free(expr_new_function(
-        expr_new_symbol("Transpose"),
+        expr_new_symbol(SYM_Transpose),
         (Expr*[]){expr_copy(b)}, 1));
     if (!bT || bT->type != EXPR_FUNCTION
         || bT->data.function.head->type != EXPR_SYMBOL
@@ -749,10 +749,10 @@ static Expr* cgls_solve(Expr* m, Expr* b,
     if (failed) { free(xT_rows); return NULL; }
 
     /* xT is k x n; transpose to get n x k. */
-    Expr* xT = expr_new_function(expr_new_symbol("List"), xT_rows, (size_t)k);
+    Expr* xT = expr_new_function(expr_new_symbol(SYM_List), xT_rows, (size_t)k);
     free(xT_rows);  /* shallow free; row pointers transferred to xT */
     Expr* x = eval_and_free(expr_new_function(
-        expr_new_symbol("Transpose"),
+        expr_new_symbol(SYM_Transpose),
         (Expr*[]){xT}, 1));
     return x;
 }
@@ -994,11 +994,11 @@ static Expr* lsqr_solve_double(Expr* m, Expr* b,
     free(A); free(B); free(col_b); free(col_x);
     if (failed) { free(xT_rows); return NULL; }
 
-    Expr* xT = expr_new_function(expr_new_symbol("List"),
+    Expr* xT = expr_new_function(expr_new_symbol(SYM_List),
                                   xT_rows, (size_t)b_cols);
     free(xT_rows);
     Expr* x = eval_and_free(expr_new_function(
-        expr_new_symbol("Transpose"),
+        expr_new_symbol(SYM_Transpose),
         (Expr*[]){xT}, 1));
     return x;
 }

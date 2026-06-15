@@ -10,15 +10,15 @@ Expr* builtin_not(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* arg = res->data.function.args[0];
     if (arg->type == EXPR_SYMBOL) {
-        if (arg->data.symbol == SYM_True) return expr_new_symbol("False");
-        if (arg->data.symbol == SYM_False) return expr_new_symbol("True");
+        if (arg->data.symbol == SYM_True) return expr_new_symbol(SYM_False);
+        if (arg->data.symbol == SYM_False) return expr_new_symbol(SYM_True);
     }
     return NULL;
 }
 
 Expr* builtin_and(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    if (res->data.function.arg_count == 0) return expr_new_symbol("True");
+    if (res->data.function.arg_count == 0) return expr_new_symbol(SYM_True);
     if (res->data.function.arg_count == 1) {
         /* And has HoldAll, so the single arg has not been evaluated yet. */
         return evaluate(res->data.function.args[0]);
@@ -34,7 +34,7 @@ Expr* builtin_and(Expr* res) {
             expr_free(evaluated_arg);
             for (size_t j = 0; j < new_count; j++) expr_free(new_args[j]);
             free(new_args);
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         } else if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_True) {
             expr_free(evaluated_arg);
             changed = true;
@@ -45,7 +45,7 @@ Expr* builtin_and(Expr* res) {
     }
     if (new_count == 0) {
         free(new_args);
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     if (!changed) {
         for (size_t i = 0; i < new_count; i++) expr_free(new_args[i]);
@@ -64,7 +64,7 @@ Expr* builtin_and(Expr* res) {
 
 Expr* builtin_or(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    if (res->data.function.arg_count == 0) return expr_new_symbol("False");
+    if (res->data.function.arg_count == 0) return expr_new_symbol(SYM_False);
     if (res->data.function.arg_count == 1) {
         /* Or has HoldAll, so the single arg has not been evaluated yet. */
         return evaluate(res->data.function.args[0]);
@@ -80,7 +80,7 @@ Expr* builtin_or(Expr* res) {
             expr_free(evaluated_arg);
             for (size_t j = 0; j < new_count; j++) expr_free(new_args[j]);
             free(new_args);
-            return expr_new_symbol("True");
+            return expr_new_symbol(SYM_True);
         } else if (evaluated_arg->type == EXPR_SYMBOL && evaluated_arg->data.symbol == SYM_False) {
             expr_free(evaluated_arg);
             changed = true;
@@ -91,7 +91,7 @@ Expr* builtin_or(Expr* res) {
     }
     if (new_count == 0) {
         free(new_args);
-        return expr_new_symbol("False");
+        return expr_new_symbol(SYM_False);
     }
     if (!changed) {
         for (size_t i = 0; i < new_count; i++) expr_free(new_args[i]);
@@ -145,7 +145,7 @@ Expr* builtin_conditional_expression(Expr* res) {
             return expr;
         }
         if (cond->data.symbol == SYM_False) {
-            return expr_new_symbol("Undefined");
+            return expr_new_symbol(SYM_Undefined);
         }
     }
 
@@ -159,14 +159,14 @@ Expr* builtin_conditional_expression(Expr* res) {
         Expr** and_args = malloc(sizeof(Expr*) * 2);
         and_args[0] = expr_copy(expr->data.function.args[1]);
         and_args[1] = expr_copy(cond);
-        Expr* combined = expr_new_function(expr_new_symbol("And"), and_args, 2);
+        Expr* combined = expr_new_function(expr_new_symbol(SYM_And), and_args, 2);
         free(and_args);
         Expr* combined_eval = evaluate(combined);
         expr_free(combined);
         Expr** new_args = malloc(sizeof(Expr*) * 2);
         new_args[0] = inner_expr;
         new_args[1] = combined_eval;
-        Expr* out = expr_new_function(expr_new_symbol("ConditionalExpression"),
+        Expr* out = expr_new_function(expr_new_symbol(SYM_ConditionalExpression),
                                       new_args, 2);
         free(new_args);
         return out;

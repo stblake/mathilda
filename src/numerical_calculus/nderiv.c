@@ -598,8 +598,8 @@ static Expr* nd_nintegrate(Expr* expr, const char* var, Expr* n_expr,
 
     Expr* speclist = mk2("List", expr_new_symbol(var), expr_copy(x0_expr));
     Expr* radius = o->scale
-        ? mk2("Rule", expr_new_symbol("Radius"), mk1("Abs", expr_copy(o->scale)))
-        : mk2("Rule", expr_new_symbol("Radius"), expr_new_integer(1));
+        ? mk2("Rule", expr_new_symbol(SYM_Radius), mk1("Abs", expr_copy(o->scale)))
+        : mk2("Rule", expr_new_symbol(SYM_Radius), expr_new_integer(1));
 
     int extra = (o->wp_val ? 1 : 0) + (o->pg_val ? 1 : 0) + (o->mr_val ? 1 : 0);
     int cnt = 3 + extra;
@@ -607,12 +607,12 @@ static Expr* nd_nintegrate(Expr* expr, const char* var, Expr* n_expr,
     a[0] = integrand; a[1] = speclist; a[2] = radius;
     int idx = 3;
     if (o->wp_val)
-        a[idx++] = mk2("Rule", expr_new_symbol("WorkingPrecision"), expr_copy(o->wp_val));
+        a[idx++] = mk2("Rule", expr_new_symbol(SYM_WorkingPrecision), expr_copy(o->wp_val));
     if (o->pg_val)
-        a[idx++] = mk2("Rule", expr_new_symbol("PrecisionGoal"), expr_copy(o->pg_val));
+        a[idx++] = mk2("Rule", expr_new_symbol(SYM_PrecisionGoal), expr_copy(o->pg_val));
     if (o->mr_val)
-        a[idx++] = mk2("Rule", expr_new_symbol("MaxRecursion"), expr_copy(o->mr_val));
-    Expr* nres = expr_new_function(expr_new_symbol("NResidue"), a, cnt);
+        a[idx++] = mk2("Rule", expr_new_symbol(SYM_MaxRecursion), expr_copy(o->mr_val));
+    Expr* nres = expr_new_function(expr_new_symbol(SYM_NResidue), a, cnt);
     free(a);
 
     Expr* gam = mk1("Gamma", mk2("Plus", expr_copy(n_expr), expr_new_integer(1)));
@@ -647,10 +647,10 @@ static Expr* nd_thread_over_list(Expr* res) {
         Expr** ca = malloc(sizeof(Expr*) * argc);
         ca[0] = expr_copy(lst->data.function.args[i]);
         for (size_t j = 1; j < argc; j++) ca[j] = expr_copy(res->data.function.args[j]);
-        items[i] = expr_new_function(expr_new_symbol("ND"), ca, argc);
+        items[i] = expr_new_function(expr_new_symbol(SYM_ND), ca, argc);
         free(ca);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return eval_and_free(out);
 }

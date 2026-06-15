@@ -107,7 +107,7 @@ static Expr* tv_to_list(const TermVec* t) {
     size_t n = t->n;
     Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
     for (size_t i = 0; i < n; i++) args[i] = mpz_to_expr(t->v[i]);
-    Expr* list = expr_new_function(expr_new_symbol("List"), args, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), args, n);
     free(args);
     return list;
 }
@@ -317,7 +317,7 @@ static Expr* cf_sqrt_build(const mpz_t D, long nlimit) {
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = mpz_to_expr(a0);
     args[1] = inner;
-    Expr* result = expr_new_function(expr_new_symbol("List"), args, 2);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), args, 2);
     free(args);
 
     tv_clear(&period);

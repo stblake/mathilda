@@ -24,7 +24,7 @@ static Expr* build_tensor(int64_t* dims, int rank, Expr** flat, size_t* idx) {
     for (int64_t i = 0; i < len; i++) {
         args[i] = build_tensor(dims + 1, rank - 1, flat, idx);
     }
-    Expr* res = expr_new_function(expr_new_symbol("List"), args, len);
+    Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, len);
     if (args) free(args);
     return res;
 }
@@ -73,14 +73,14 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
                 Expr* a_elem = flatA[r * K + k];
                 Expr* b_elem = flatB[k * S + s];
                 Expr* t_args[2] = { expr_copy(a_elem), expr_copy(b_elem) };
-                sum_args[k] = eval_and_free(expr_new_function(expr_new_symbol("Times"), t_args, 2));
+                sum_args[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
             }
             if (K == 0) {
                 flatC[r * S + s] = expr_new_integer(0);
             } else if (K == 1) {
                 flatC[r * S + s] = sum_args[0];
             } else {
-                flatC[r * S + s] = eval_and_free(expr_new_function(expr_new_symbol("Plus"), sum_args, K));
+                flatC[r * S + s] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, K));
             }
             if (sum_args) free(sum_args);
         }

@@ -134,7 +134,7 @@ static Expr* rowreduce_divfree(Expr* arg) {
             if (is_zero_poly(M_ic)) {
                 for (int j = 0; j < n; j++) {
                     if (j == c) continue;
-                    Expr* num_eval = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * n + j])}, 2));
+                    Expr* num_eval = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * n + j])}, 2));
                     Expr* new_val = exact_div_wrapper(num_eval, P);
                     expr_free(num_eval);
                     expr_free(matrix[i * n + j]);
@@ -143,10 +143,10 @@ static Expr* rowreduce_divfree(Expr* arg) {
             } else {
                 for (int j = 0; j < n; j++) {
                     if (j == c) continue;
-                    Expr* t1 = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * n + j])}, 2));
-                    Expr* t2 = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(M_ic), expr_copy(matrix[r * n + j])}, 2));
-                    Expr* t2_neg = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), t2}, 2));
-                    Expr* num_eval = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){t1, t2_neg}, 2));
+                    Expr* t1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * n + j])}, 2));
+                    Expr* t2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(M_ic), expr_copy(matrix[r * n + j])}, 2));
+                    Expr* t2_neg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), t2}, 2));
+                    Expr* num_eval = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){t1, t2_neg}, 2));
                     Expr* new_val = exact_div_wrapper(num_eval, P);
                     expr_free(num_eval);
                     expr_free(matrix[i * n + j]);
@@ -184,13 +184,13 @@ static Expr* rowreduce_divfree(Expr* arg) {
                     Expr* num_val = matrix[i * n + j];
                     Expr* den_val = expr_copy(leading);
 
-                    Expr* g = eval_and_free(expr_new_function(expr_new_symbol("PolynomialGCD"), (Expr*[]){expr_copy(num_val), expr_copy(den_val)}, 2));
+                    Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialGCD), (Expr*[]){expr_copy(num_val), expr_copy(den_val)}, 2));
                     Expr* new_num = exact_div_wrapper(num_val, g);
                     Expr* new_den = exact_div_wrapper(den_val, g);
                     expr_free(g);
 
                     if (new_den->type == EXPR_INTEGER && new_den->data.integer < 0) {
-                        Expr* t = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){new_num, expr_new_integer(-1)}, 2));
+                        Expr* t = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){new_num, expr_new_integer(-1)}, 2));
                         new_num = expr_expand(t);
                         expr_free(t);
                         /* Replace, don't mutate: the integer atom may be
@@ -204,8 +204,8 @@ static Expr* rowreduce_divfree(Expr* arg) {
                         expr_free(new_den);
                         matrix[i * n + j] = new_num;
                     } else {
-                        Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){new_den, expr_new_integer(-1)}, 2));
-                        Expr* final_val = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){new_num, inv_den}, 2));
+                        Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){new_den, expr_new_integer(-1)}, 2));
+                        Expr* final_val = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){new_num, inv_den}, 2));
                         matrix[i * n + j] = expr_expand(final_val);
                         expr_free(final_val);
                     }
@@ -223,11 +223,11 @@ static Expr* rowreduce_divfree(Expr* arg) {
         for (int j = 0; j < n; j++) {
             row_elems[j] = matrix[i * n + j];
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, (size_t)n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, (size_t)n);
         free(row_elems);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, (size_t)m);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
     free(rows);
     free(matrix);
 
@@ -258,10 +258,10 @@ Expr* matsol_div_entry(Expr* num, Expr* den) {
     Expr* q = exact_div_wrapper(num, den);
     if (!q) {
         Expr* inv = eval_and_free(expr_new_function(
-            expr_new_symbol("Power"),
+            expr_new_symbol(SYM_Power),
             (Expr*[]){expr_copy(den), expr_new_integer(-1)}, 2));
         q = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){expr_copy(num), inv}, 2));
     }
     Expr* qc = matsol_canon_entry(q);
@@ -344,13 +344,13 @@ static Expr* rowreduce_onestep(Expr* arg) {
                 if (j == c) continue;
                 /* M[i,j] <- M[i,j] - factor * M[r,j] */
                 Expr* term = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){expr_copy(factor), expr_copy(matrix[r * n + j])}, 2));
                 Expr* neg_term = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){expr_new_integer(-1), term}, 2));
                 Expr* updated = eval_and_free(expr_new_function(
-                    expr_new_symbol("Plus"),
+                    expr_new_symbol(SYM_Plus),
                     (Expr*[]){expr_copy(matrix[i * n + j]), neg_term}, 2));
                 Expr* updated_c = matsol_canon_entry(updated);
                 expr_free(updated);
@@ -371,10 +371,10 @@ static Expr* rowreduce_onestep(Expr* arg) {
         for (int j = 0; j < n; j++) {
             row_elems[j] = matrix[i * n + j];
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, (size_t)n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, (size_t)n);
         free(row_elems);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, (size_t)m);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
     free(rows);
     free(matrix);
     return result;
@@ -439,10 +439,10 @@ static Expr* rowreduce_cofactor(Expr* arg) {
         for (int j = 0; j < n; j++) {
             row_elems[j] = expr_new_integer(i == j ? 1 : 0);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, (size_t)n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, (size_t)n);
         free(row_elems);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, (size_t)n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
     free(rows);
     return result;
 }
@@ -464,7 +464,7 @@ static Expr* build_nested_list(Expr** flat, int64_t* dims, int rank,
     for (size_t i = 0; i < n; i++) {
         items[i] = build_nested_list(flat, dims + 1, rank - 1, idx);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, n);
     if (items) free(items);
     return result;
 }
@@ -564,7 +564,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
                 for (int j = 0; j < cols; j++) {
                     if (j == col) continue;
                     Expr* num_eval = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * cols + j])}, 2));
                     Expr* new_val = exact_div_wrapper(num_eval, P);
                     expr_free(num_eval);
@@ -575,16 +575,16 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
                 for (int j = 0; j < cols; j++) {
                     if (j == col) continue;
                     Expr* t1 = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * cols + j])}, 2));
                     Expr* t2 = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){expr_copy(M_ic), expr_copy(matrix[row * cols + j])}, 2));
                     Expr* t2_neg = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){expr_new_integer(-1), t2}, 2));
                     Expr* num_eval = eval_and_free(expr_new_function(
-                        expr_new_symbol("Plus"),
+                        expr_new_symbol(SYM_Plus),
                         (Expr*[]){t1, t2_neg}, 2));
                     Expr* new_val = exact_div_wrapper(num_eval, P);
                     expr_free(num_eval);
@@ -636,7 +636,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
             Expr* den_val = expr_copy(pivot);
 
             Expr* g = eval_and_free(expr_new_function(
-                expr_new_symbol("PolynomialGCD"),
+                expr_new_symbol(SYM_PolynomialGCD),
                 (Expr*[]){expr_copy(num_val), expr_copy(den_val)}, 2));
             Expr* new_num = exact_div_wrapper(num_val, g);
             Expr* new_den = exact_div_wrapper(den_val, g);
@@ -644,7 +644,7 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
 
             if (new_den->type == EXPR_INTEGER && new_den->data.integer < 0) {
                 Expr* t = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){new_num, expr_new_integer(-1)}, 2));
                 new_num = expr_expand(t);
                 expr_free(t);
@@ -658,10 +658,10 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
                 matrix[i * cols + j] = new_num;
             } else {
                 Expr* inv_den = eval_and_free(expr_new_function(
-                    expr_new_symbol("Power"),
+                    expr_new_symbol(SYM_Power),
                     (Expr*[]){new_den, expr_new_integer(-1)}, 2));
                 Expr* final_val = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){new_num, inv_den}, 2));
                 matrix[i * cols + j] = expr_expand(final_val);
                 expr_free(final_val);
@@ -778,13 +778,13 @@ static Expr* linearsolve_onestep(Expr* m, Expr* b,
             for (int j = 0; j < cols; j++) {
                 if (j == col) continue;
                 Expr* term = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){expr_copy(factor), expr_copy(matrix[row * cols + j])}, 2));
                 Expr* neg_term = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){expr_new_integer(-1), term}, 2));
                 Expr* updated = eval_and_free(expr_new_function(
-                    expr_new_symbol("Plus"),
+                    expr_new_symbol(SYM_Plus),
                     (Expr*[]){expr_copy(matrix[i * cols + j]), neg_term}, 2));
                 Expr* updated_c = matsol_canon_entry(updated);
                 expr_free(updated);

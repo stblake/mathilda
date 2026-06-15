@@ -783,7 +783,7 @@ struct Expr* mpoly_to_expr(const MPoly* p, struct Expr** vars) {
                 pa[0] = expr_copy(vars[v]);
                 pa[1] = expr_new_integer(row[v]);
                 factors[fi++] = expr_new_function(
-                    expr_new_symbol("Power"), pa, 2);
+                    expr_new_symbol(SYM_Power), pa, 2);
             }
         }
 
@@ -791,7 +791,7 @@ struct Expr* mpoly_to_expr(const MPoly* p, struct Expr** vars) {
             terms[i] = factors[0];
             free(factors);
         } else {
-            terms[i] = expr_new_function(expr_new_symbol("Times"), factors, fi);
+            terms[i] = expr_new_function(expr_new_symbol(SYM_Times), factors, fi);
         }
     }
 
@@ -800,5 +800,5 @@ struct Expr* mpoly_to_expr(const MPoly* p, struct Expr** vars) {
         free(terms);
         return result;
     }
-    return expr_new_function(expr_new_symbol("Plus"), terms, p->n_terms);
+    return expr_new_function(expr_new_symbol(SYM_Plus), terms, p->n_terms);
 }

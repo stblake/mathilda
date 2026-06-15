@@ -688,7 +688,7 @@ static Expr* lum_make_scalar(const mpfr_t re, const mpfr_t im,
     Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
     args[0] = expr_new_mpfr_copy(re);
     args[1] = expr_new_mpfr_copy(im);
-    Expr* z = expr_new_function(expr_new_symbol("Complex"), args, 2);
+    Expr* z = expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
     free(args);
     return z;
 }
@@ -712,12 +712,12 @@ static Expr* lum_build_lu(const mpfr_t* LU_re, const mpfr_t* LU_im,
             }
         }
         row_exprs[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)cols);
+            expr_new_symbol(SYM_List), elems, (size_t)cols);
         free(elems);
     }
     mpfr_clear(zero_im);
     Expr* lu = expr_new_function(
-        expr_new_symbol("List"), row_exprs, (size_t)rows);
+        expr_new_symbol(SYM_List), row_exprs, (size_t)rows);
     free(row_exprs);
     return lu;
 }
@@ -727,7 +727,7 @@ static Expr* lum_build_perm(const int* perm, int n)
     Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
     for (int k = 0; k < n; k++) elems[k] = expr_new_integer(perm[k]);
     Expr* p = expr_new_function(
-        expr_new_symbol("List"), elems, (size_t)n);
+        expr_new_symbol(SYM_List), elems, (size_t)n);
     free(elems);
     return p;
 }
@@ -864,7 +864,7 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = lu; items[1] = p; items[2] = c;
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, 3);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
     return result;
 }

@@ -192,12 +192,12 @@ static Expr* ns_index_value(NsCtx* c, long k) {
     {
         Expr** v = malloc(sizeof(Expr*) * 2);
         v[0] = kk; v[1] = expr_copy(c->di);
-        term = expr_new_function(expr_new_symbol("Times"), v, 2);
+        term = expr_new_function(expr_new_symbol(SYM_Times), v, 2);
         free(v);
     }
     Expr** v = malloc(sizeof(Expr*) * 2);
     v[0] = expr_copy(c->imin); v[1] = term;
-    Expr* sumexpr = expr_new_function(expr_new_symbol("Plus"), v, 2);
+    Expr* sumexpr = expr_new_function(expr_new_symbol(SYM_Plus), v, 2);
     free(v);
     return eval_and_free(sumexpr);
 }
@@ -1419,7 +1419,7 @@ static Expr* ns_sum_infinite(NsCtx* c, const char* var, NsOpts* o, bool do_verif
         ns_build_profile(c, -1, &prof);
         if (do_verify && ns_diverges(&prof)) {
             ns_warn("div", "the sum does not appear to converge");
-            return expr_new_symbol("ComplexInfinity");
+            return expr_new_symbol(SYM_ComplexInfinity);
         }
         if (method == SYM_Automatic) method = ns_choose_method(&prof);
         settle = prof.settle;
@@ -1584,7 +1584,7 @@ Expr* builtin_nsum(Expr* res) {
         v[w++] = expr_copy(body);
         for (size_t i = 2; i < pos_end; i++) v[w++] = expr_copy(res->data.function.args[i]);
         for (size_t i = pos_end; i < argc; i++) v[w++] = expr_copy(res->data.function.args[i]);
-        inner_body = expr_new_function(expr_new_symbol("NSum"), v, w);
+        inner_body = expr_new_function(expr_new_symbol(SYM_NSum), v, w);
         free(v);
         eff_body = inner_body;
     }

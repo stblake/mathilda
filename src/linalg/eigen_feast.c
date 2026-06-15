@@ -509,7 +509,7 @@ static Expr* feast_build_real_eigenvalue_list_subset(const double* vals,
     for (size_t i = 0; i < count; i++) {
         items[i] = expr_new_real(vals[perm[i]]);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, count);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, count);
     free(items);
     return out;
 }
@@ -525,10 +525,10 @@ static Expr* feast_build_real_eigenvector_list_subset(const double* vecs,
         for (size_t i = 0; i < dim; i++) {
             comps[i] = expr_new_real(vecs[i * count + col]);
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, dim);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, dim);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, count);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, count);
     free(rows);
     return out;
 }
@@ -991,14 +991,14 @@ static Expr* feast_build_complex_eigenvector_list_subset(const double* V_re,
                 Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
                 args[0] = expr_new_real(rv);
                 args[1] = expr_new_real(iv);
-                comps[i] = expr_new_function(expr_new_symbol("Complex"), args, 2);
+                comps[i] = expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
                 free(args);
             }
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, dim);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, dim);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, count);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, count);
     free(rows);
     return out;
 }
@@ -2009,7 +2009,7 @@ static Expr* feast_build_real_eigenvalue_list_subset_M(const mpfr_t* vals,
     for (size_t i = 0; i < count; i++) {
         items[i] = expr_new_mpfr_copy(vals[perm[i]]);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, count);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, count);
     free(items);
     return out;
 }
@@ -2025,10 +2025,10 @@ static Expr* feast_build_real_eigenvector_list_subset_M(const mpfr_t* vecs,
         for (size_t i = 0; i < dim; i++) {
             comps[i] = expr_new_mpfr_copy(vecs[i * count + col]);
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, dim);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, dim);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, count);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, count);
     free(rows);
     return out;
 }
@@ -2049,15 +2049,15 @@ static Expr* feast_build_complex_eigenvector_list_subset_M(const mpfr_t* V_re,
                 Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
                 args[0] = expr_new_mpfr_copy(V_re[i * count + col]);
                 args[1] = expr_new_mpfr_copy(V_im[i * count + col]);
-                comps[i] = expr_new_function(expr_new_symbol("Complex"),
+                comps[i] = expr_new_function(expr_new_symbol(SYM_Complex),
                                               args, 2);
                 free(args);
             }
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, dim);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, dim);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, count);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, count);
     free(rows);
     return out;
 }

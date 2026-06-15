@@ -85,12 +85,12 @@ static bool complex_decompose(Expr* e, Expr** re_out, Expr** im_out) {
         }
         Expr* re_sum;
         if (nr == 1) { re_sum = re_terms[0]; }
-        else { re_sum = expr_new_function(expr_new_symbol("Plus"), re_terms, nr); }
+        else { re_sum = expr_new_function(expr_new_symbol(SYM_Plus), re_terms, nr); }
         free(re_terms);
         Expr* im_sum;
         if (ni == 0) { im_sum = expr_new_integer(0); }
         else if (ni == 1) { im_sum = im_terms[0]; }
-        else { im_sum = expr_new_function(expr_new_symbol("Plus"), im_terms, ni); }
+        else { im_sum = expr_new_function(expr_new_symbol(SYM_Plus), im_terms, ni); }
         free(im_terms);
         *re_out = eval_and_free(re_sum);
         *im_out = eval_and_free(im_sum);
@@ -113,20 +113,20 @@ static bool complex_decompose(Expr* e, Expr** re_out, Expr** im_out) {
             if (complex_decompose(fac, &fre, &fim)) {
                 any_complex = true;
                 Expr* ac_args[2] = { expr_copy(acc_re), expr_copy(fre) };
-                Expr* ac = expr_new_function(expr_new_symbol("Times"), ac_args, 2);
+                Expr* ac = expr_new_function(expr_new_symbol(SYM_Times), ac_args, 2);
                 Expr* bd_args[2] = { expr_copy(acc_im), expr_copy(fim) };
-                Expr* bd = expr_new_function(expr_new_symbol("Times"), bd_args, 2);
+                Expr* bd = expr_new_function(expr_new_symbol(SYM_Times), bd_args, 2);
                 Expr* neg_bd_args[2] = { expr_new_integer(-1), bd };
-                Expr* neg_bd = expr_new_function(expr_new_symbol("Times"), neg_bd_args, 2);
+                Expr* neg_bd = expr_new_function(expr_new_symbol(SYM_Times), neg_bd_args, 2);
                 Expr* re_sum_args[2] = { ac, neg_bd };
-                Expr* re_new = expr_new_function(expr_new_symbol("Plus"), re_sum_args, 2);
+                Expr* re_new = expr_new_function(expr_new_symbol(SYM_Plus), re_sum_args, 2);
 
                 Expr* ad_args[2] = { expr_copy(acc_re), expr_copy(fim) };
-                Expr* ad = expr_new_function(expr_new_symbol("Times"), ad_args, 2);
+                Expr* ad = expr_new_function(expr_new_symbol(SYM_Times), ad_args, 2);
                 Expr* bc_args[2] = { expr_copy(acc_im), expr_copy(fre) };
-                Expr* bc = expr_new_function(expr_new_symbol("Times"), bc_args, 2);
+                Expr* bc = expr_new_function(expr_new_symbol(SYM_Times), bc_args, 2);
                 Expr* im_sum_args[2] = { ad, bc };
-                Expr* im_new = expr_new_function(expr_new_symbol("Plus"), im_sum_args, 2);
+                Expr* im_new = expr_new_function(expr_new_symbol(SYM_Plus), im_sum_args, 2);
 
                 expr_free(acc_re);
                 expr_free(acc_im);
@@ -136,9 +136,9 @@ static bool complex_decompose(Expr* e, Expr** re_out, Expr** im_out) {
                 acc_im = eval_and_free(im_new);
             } else {
                 Expr* re_args[2] = { acc_re, expr_copy(fac) };
-                Expr* re_new = expr_new_function(expr_new_symbol("Times"), re_args, 2);
+                Expr* re_new = expr_new_function(expr_new_symbol(SYM_Times), re_args, 2);
                 Expr* im_args[2] = { acc_im, expr_copy(fac) };
-                Expr* im_new = expr_new_function(expr_new_symbol("Times"), im_args, 2);
+                Expr* im_new = expr_new_function(expr_new_symbol(SYM_Times), im_args, 2);
                 acc_re = eval_and_free(re_new);
                 acc_im = eval_and_free(im_new);
             }
@@ -277,7 +277,7 @@ Expr* builtin_reim(Expr* res) {
         res->data.function.args[0] = NULL;
         results[0] = arg;
         results[1] = expr_new_integer(0);
-        Expr* list = expr_new_function(expr_new_symbol("List"), results, 2);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, 2);
         free(results);
         return list;
     }
@@ -286,21 +286,21 @@ Expr* builtin_reim(Expr* res) {
         Expr** results = malloc(sizeof(Expr*) * 2);
         results[0] = expr_copy(re);
         results[1] = expr_copy(im);
-        return expr_new_function(expr_new_symbol("List"), results, 2);
+        return expr_new_function(expr_new_symbol(SYM_List), results, 2);
     }
     int64_t n, d;
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || is_rational(arg, &n, &d)) {
         Expr** results = malloc(sizeof(Expr*) * 2);
         results[0] = expr_copy(arg);
         results[1] = expr_new_integer(0);
-        return expr_new_function(expr_new_symbol("List"), results, 2);
+        return expr_new_function(expr_new_symbol(SYM_List), results, 2);
     }
     if (complex_decompose(arg, &re, &im)) {
         if (is_numeric_real(re) && is_numeric_real(im)) {
             Expr** results = malloc(sizeof(Expr*) * 2);
             results[0] = re;
             results[1] = im;
-            Expr* list = expr_new_function(expr_new_symbol("List"), results, 2);
+            Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, 2);
             free(results);
             return list;
         }
@@ -360,18 +360,18 @@ Expr* builtin_abs(Expr* res) {
         }
 #endif
         Expr* pow_re_args[2] = { re_owned, expr_new_integer(2) };
-        Expr* pow_re = expr_new_function(expr_new_symbol("Power"), pow_re_args, 2);
+        Expr* pow_re = expr_new_function(expr_new_symbol(SYM_Power), pow_re_args, 2);
 
         Expr* pow_im_args[2] = { im_owned, expr_new_integer(2) };
-        Expr* pow_im = expr_new_function(expr_new_symbol("Power"), pow_im_args, 2);
+        Expr* pow_im = expr_new_function(expr_new_symbol(SYM_Power), pow_im_args, 2);
 
         Expr* sum_args[2] = { pow_re, pow_im };
-        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
 
         Expr* rat_args[2] = { expr_new_integer(1), expr_new_integer(2) };
-        Expr* half = expr_new_function(expr_new_symbol("Rational"), rat_args, 2);
+        Expr* half = expr_new_function(expr_new_symbol(SYM_Rational), rat_args, 2);
         Expr* pow_args[2] = { sum, half };
-        return expr_new_function(expr_new_symbol("Power"), pow_args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Power), pow_args, 2);
     }
     int64_t n, d;
     if (arg->type == EXPR_BIGINT) {
@@ -493,11 +493,11 @@ Expr* builtin_sign(Expr* res) {
 #endif
 
         Expr* abs_args[1] = { expr_copy(arg) };
-        Expr* abs_call = eval_and_free(expr_new_function(expr_new_symbol("Abs"), abs_args, 1));
+        Expr* abs_call = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), abs_args, 1));
         Expr* inv_args[2] = { abs_call, expr_new_integer(-1) };
-        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"), inv_args, 2));
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), inv_args, 2));
         Expr* times_args[2] = { expr_copy(arg), inv };
-        return eval_and_free(expr_new_function(expr_new_symbol("Times"), times_args, 2));
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), times_args, 2));
     }
 
     return NULL;
@@ -533,7 +533,7 @@ Expr* builtin_conjugate(Expr* res) {
         Expr** args_times = malloc(sizeof(Expr*) * 2);
         args_times[0] = expr_new_integer(-1);
         args_times[1] = expr_copy(im);
-        Expr* minus_im = expr_new_function(expr_new_symbol("Times"), args_times, 2);
+        Expr* minus_im = expr_new_function(expr_new_symbol(SYM_Times), args_times, 2);
         /* expr_new_function copies the pointers out of args_times into its
          * own internal storage; the caller still owns the temporary array. */
         free(args_times);
@@ -554,9 +554,9 @@ Expr* builtin_conjugate(Expr* res) {
         if (is_numeric_real(cre) && is_numeric_real(cim)) {
             Expr* neg_i = make_complex(expr_new_integer(0), expr_new_integer(-1));
             Expr* neg_args[2] = { neg_i, cim };
-            Expr* neg_im_term = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+            Expr* neg_im_term = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
             Expr* plus_args[2] = { cre, neg_im_term };
-            Expr* plus = expr_new_function(expr_new_symbol("Plus"), plus_args, 2);
+            Expr* plus = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
             return eval_and_free(plus);
         }
         expr_free(cre);
@@ -579,7 +579,7 @@ Expr* builtin_arg(Expr* res) {
     if (arg->type == EXPR_MPFR) {
         int sgn = mpfr_sgn(arg->data.mpfr);
         if (sgn > 0 || mpfr_zero_p(arg->data.mpfr)) return expr_new_integer(0);
-        return expr_new_symbol("Pi");
+        return expr_new_symbol(SYM_Pi);
     }
 #endif
 
@@ -637,31 +637,31 @@ Expr* builtin_arg(Expr* res) {
     if (!inexact) {
         if (im_val == 0.0) {
             if (re_val > 0.0) return expr_new_integer(0);
-            else return expr_new_symbol("Pi");
+            else return expr_new_symbol(SYM_Pi);
         }
         if (re_val == 0.0) {
             Expr* args[2];
             args[0] = make_rational(im_val > 0.0 ? 1 : -1, 2);
-            args[1] = expr_new_symbol("Pi");
-            return expr_new_function(expr_new_symbol("Times"), args, 2);
+            args[1] = expr_new_symbol(SYM_Pi);
+            return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
         }
         if (re_val == im_val) {
             Expr* args[2];
             args[0] = make_rational(re_val > 0.0 ? 1 : -3, 4);
-            args[1] = expr_new_symbol("Pi");
-            return expr_new_function(expr_new_symbol("Times"), args, 2);
+            args[1] = expr_new_symbol(SYM_Pi);
+            return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
         }
         if (re_val == -im_val) {
             Expr* args[2];
             args[0] = make_rational(re_val > 0.0 ? -1 : 3, 4);
-            args[1] = expr_new_symbol("Pi");
-            return expr_new_function(expr_new_symbol("Times"), args, 2);
+            args[1] = expr_new_symbol(SYM_Pi);
+            return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
         }
 
         Expr* args[2];
         args[0] = expr_copy(re);
         args[1] = im ? expr_copy(im) : expr_new_integer(0);
-        return expr_new_function(expr_new_symbol("ArcTan"), args, 2);
+        return expr_new_function(expr_new_symbol(SYM_ArcTan), args, 2);
     }
     
     return expr_new_real(atan2(im_val, re_val));

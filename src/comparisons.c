@@ -131,17 +131,17 @@ Expr* builtin_sameq(Expr* res) {
     
     // SameQ[] and SameQ[x] return True by convention.
     if (res->data.function.arg_count < 2) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     
     Expr* first = res->data.function.args[0];
     for (size_t i = 1; i < res->data.function.arg_count; i++) {
         if (!expr_eq(first, res->data.function.args[i])) {
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         }
     }
     
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 /*
@@ -155,18 +155,18 @@ Expr* builtin_unsameq(Expr* res) {
     
     // UnsameQ[] and UnsameQ[x] return True by convention.
     if (res->data.function.arg_count < 2) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
         for (size_t j = i + 1; j < res->data.function.arg_count; j++) {
             if (expr_eq(res->data.function.args[i], res->data.function.args[j])) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
         }
     }
     
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 /*
@@ -181,7 +181,7 @@ Expr* builtin_equal(Expr* res) {
     
     // Equal[] and Equal[x] return True.
     if (res->data.function.arg_count < 2) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     
     bool all_equal = true;
@@ -205,14 +205,14 @@ Expr* builtin_equal(Expr* res) {
 
         if (!equal) {
             if (definitely_unequal || (is_raw_data(a) && is_raw_data(b))) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
             all_equal = false;
         }
     }
 
     if (all_equal) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
 
     return NULL;
@@ -230,7 +230,7 @@ Expr* builtin_unequal(Expr* res) {
     
     // Unequal[] and Unequal[x] return True.
     if (res->data.function.arg_count < 2) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     
     bool all_definitely_unequal = true;
@@ -261,7 +261,7 @@ Expr* builtin_unequal(Expr* res) {
             }
             
             if (equal) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
             if (!definitely_unequal) {
                 all_definitely_unequal = false;
@@ -270,7 +270,7 @@ Expr* builtin_unequal(Expr* res) {
     }
     
     if (all_definitely_unequal) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     
     return NULL;
@@ -279,7 +279,7 @@ Expr* builtin_unequal(Expr* res) {
 /* Inequality helpers */
 static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp_2) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    if (res->data.function.arg_count < 2) return expr_new_symbol("True");
+    if (res->data.function.arg_count < 2) return expr_new_symbol(SYM_True);
 
     for (size_t i = 0; i < res->data.function.arg_count - 1; i++) {
         Expr* a = res->data.function.args[i];
@@ -293,10 +293,10 @@ static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp
         }
         
         if (cmp != expected_cmp_1 && cmp != expected_cmp_2) {
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         }
     }
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 Expr* builtin_less(Expr* res) {
@@ -357,8 +357,8 @@ static int decide_pair(const char* op, Expr* a, Expr* b) {
 Expr* builtin_inequality(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
-    if (n == 0) return expr_new_symbol("True");
-    if (n == 1) return expr_new_symbol("True");  /* one value, no pair */
+    if (n == 0) return expr_new_symbol(SYM_True);
+    if (n == 1) return expr_new_symbol(SYM_True);  /* one value, no pair */
     if ((n & 1u) == 0) return NULL;              /* must be 2k+1 */
 
     /* Validate operator slots upfront — every odd index must be one of the
@@ -386,7 +386,7 @@ Expr* builtin_inequality(Expr* res) {
         int d = decide_pair(op->data.symbol, a, b);
         if (d == 0) {                    /* definitely False */
             free(undecided);
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         }
         if (d < 0) {
             undecided[k] = true;
@@ -395,7 +395,7 @@ Expr* builtin_inequality(Expr* res) {
     }
     if (!any_undecided) {
         free(undecided);
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
 
     /* Build a residual Inequality from the undecided pairs. Each surviving
@@ -433,7 +433,7 @@ Expr* builtin_inequality(Expr* res) {
         free(out_args);
         return result;
     }
-    Expr* residual = expr_new_function(expr_new_symbol("Inequality"), out_args, out_n);
+    Expr* residual = expr_new_function(expr_new_symbol(SYM_Inequality), out_args, out_n);
     free(out_args);
     return residual;
 }

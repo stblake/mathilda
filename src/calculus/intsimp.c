@@ -226,7 +226,7 @@ Expr* intsimp_pos_sqrt_factor(Expr* e) {
         int64_t v = e->data.integer;
         if (v < 0) {
             /* Sqrt of a negative integer: leave inside Sqrt. */
-            return expr_new_function(expr_new_symbol("Sqrt"),
+            return expr_new_function(expr_new_symbol(SYM_Sqrt),
                 (Expr*[]){expr_copy(e)}, 1);
         }
         if (v == 0) return expr_new_integer(0);
@@ -239,11 +239,11 @@ Expr* intsimp_pos_sqrt_factor(Expr* e) {
             }
         }
         if (s == 1) {
-            return expr_new_function(expr_new_symbol("Sqrt"),
+            return expr_new_function(expr_new_symbol(SYM_Sqrt),
                 (Expr*[]){expr_new_integer(r)}, 1);
         }
         if (r == 1) return expr_new_integer(s);
-        Expr* sqrt_part = expr_new_function(expr_new_symbol("Sqrt"),
+        Expr* sqrt_part = expr_new_function(expr_new_symbol(SYM_Sqrt),
             (Expr*[]){expr_new_integer(r)}, 1);
         return eval_and_free(internal_times(
             (Expr*[]){expr_new_integer(s), sqrt_part}, 2));
@@ -268,7 +268,7 @@ Expr* intsimp_pos_sqrt_factor(Expr* e) {
             int64_t k = exp_e->data.integer;
             int b_sign = intsimp_sign_pos_assumption(base);
             if (k % 2 == 0 && b_sign > 0) {
-                return expr_new_function(expr_new_symbol("Power"),
+                return expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_copy(base),
                               expr_new_integer(k / 2)}, 2);
             }
@@ -277,24 +277,24 @@ Expr* intsimp_pos_sqrt_factor(Expr* e) {
                 int64_t kh = (k - 1) / 2;  /* may be negative for k < 0 */
                 Expr* p1;
                 if (kh == 0) p1 = expr_new_integer(1);
-                else p1 = expr_new_function(expr_new_symbol("Power"),
+                else p1 = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_copy(base), expr_new_integer(kh)}, 2);
-                Expr* p2 = expr_new_function(expr_new_symbol("Sqrt"),
+                Expr* p2 = expr_new_function(expr_new_symbol(SYM_Sqrt),
                     (Expr*[]){expr_copy(base)}, 1);
                 return eval_and_free(internal_times(
                     (Expr*[]){p1, p2}, 2));
             }
         }
-        return expr_new_function(expr_new_symbol("Sqrt"),
+        return expr_new_function(expr_new_symbol(SYM_Sqrt),
             (Expr*[]){expr_copy(e)}, 1);
     }
     if (e->type == EXPR_SYMBOL) {
         /* Sqrt[symbol] is irreducible — keep wrapped. */
-        return expr_new_function(expr_new_symbol("Sqrt"),
+        return expr_new_function(expr_new_symbol(SYM_Sqrt),
             (Expr*[]){expr_copy(e)}, 1);
     }
     /* Fallback: no structural simplification. */
-    return expr_new_function(expr_new_symbol("Sqrt"),
+    return expr_new_function(expr_new_symbol(SYM_Sqrt),
         (Expr*[]){expr_copy(e)}, 1);
 }
 
@@ -458,7 +458,7 @@ Expr* intsimp_log_to_arctanh(Expr* e, Expr* x) {
                 Expr* prod_raw = internal_times(
                     (Expr*[]){expr_copy(logargs[i]), expr_copy(logargs[j])}, 2);
                 Expr* prod = expr_expand(prod_raw); expr_free(prod_raw);
-                Expr* logp = expr_new_function(expr_new_symbol("Log"),
+                Expr* logp = expr_new_function(expr_new_symbol(SYM_Log),
                     (Expr*[]){prod}, 1);
                 Expr* combined = internal_times(
                     (Expr*[]){expr_copy(coeffs[i]), logp}, 2);
@@ -498,7 +498,7 @@ Expr* intsimp_log_to_arctanh(Expr* e, Expr* x) {
                     Expr* coef_diff = internal_subtract(
                         (Expr*[]){expr_copy(coeffs[j]), expr_copy(coeffs[i])}, 2);
                     coef_diff = eval_and_free(coef_diff);
-                    Expr* atanh = expr_new_function(expr_new_symbol("ArcTanh"),
+                    Expr* atanh = expr_new_function(expr_new_symbol(SYM_ArcTanh),
                         (Expr*[]){arg_can}, 1);
                     Expr* term = internal_times(
                         (Expr*[]){coef_diff, atanh}, 2);
@@ -517,7 +517,7 @@ Expr* intsimp_log_to_arctanh(Expr* e, Expr* x) {
                 bool divlog_ok = intrat_freeq_test(AoverB_den_eval, x);
                 expr_free(AoverB_den_eval);
                 if (divlog_ok) {
-                    Expr* logp = expr_new_function(expr_new_symbol("Log"),
+                    Expr* logp = expr_new_function(expr_new_symbol(SYM_Log),
                         (Expr*[]){AoverB}, 1);
                     Expr* term = internal_times(
                         (Expr*[]){expr_copy(coeffs[i]), logp}, 2);
@@ -619,7 +619,7 @@ Expr* intsimp_strip_log_constants(Expr* e, Expr* x) {
     else            { new_inner = eval_and_free(internal_times(keep, nkeep)); }
     free(keep);
 
-    Expr* new_log = expr_new_function(expr_new_symbol("Log"),
+    Expr* new_log = expr_new_function(expr_new_symbol(SYM_Log),
         (Expr*[]){new_inner}, 1);
     expr_free(rebuilt);
     return eval_and_free(new_log);
@@ -797,7 +797,7 @@ static Expr* it_normalize_xfree_powers(Expr* e, Expr* x) {
         if (is_rational(e->data.function.args[1], &pn, &pd) && pd != 1
             && it_pos_base(e->data.function.args[0])
             && intrat_freeq_test(e, x)) {
-            Expr* pe = expr_new_function(expr_new_symbol("PowerExpand"),
+            Expr* pe = expr_new_function(expr_new_symbol(SYM_PowerExpand),
                                          (Expr*[]){ expr_copy(e) }, 1);
             return eval_and_free(pe);
         }

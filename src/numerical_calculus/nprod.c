@@ -134,7 +134,7 @@ static Expr* np_rule(const char* name, Expr* rhs) {
     Expr* a[2];
     a[0] = expr_new_symbol(name);
     a[1] = rhs;
-    return expr_new_function(expr_new_symbol("Rule"), a, 2);
+    return expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
 }
 
 /* Wrap head[child] adopting child. */
@@ -228,7 +228,7 @@ Expr* builtin_nprod(Expr* res) {
         v[w++] = expr_copy(body);
         for (size_t i = 2; i < pos_end; i++) v[w++] = expr_copy(args[i]);
         for (size_t i = pos_end; i < argc; i++) v[w++] = expr_copy(args[i]);
-        eff_body = expr_new_function(expr_new_symbol("NProduct"), v, w);
+        eff_body = expr_new_function(expr_new_symbol(SYM_NProduct), v, w);
         free(v);
     } else {
         eff_body = expr_copy(body);
@@ -256,7 +256,7 @@ Expr* builtin_nprod(Expr* res) {
         nv[nw++] = np_rule("WorkingPrecision", expr_copy(o.wprec));
     }
 
-    Expr* nsum = expr_new_function(expr_new_symbol("NSum"), nv, nw);
+    Expr* nsum = expr_new_function(expr_new_symbol(SYM_NSum), nv, nw);
     free(nv);
 
     Expr* s = eval_and_free(nsum);      /* the numeric Log-sum, or special  */
@@ -264,7 +264,7 @@ Expr* builtin_nprod(Expr* res) {
     /* Divergent product: NSum reports the divergent log-sum as ComplexInfinity. */
     if (s && s->type == EXPR_SYMBOL && s->data.symbol == SYM_ComplexInfinity) {
         expr_free(s);
-        return expr_new_symbol("ComplexInfinity");
+        return expr_new_symbol(SYM_ComplexInfinity);
     }
     /* Could not reduce to a number (symbolic body / bound): stay unevaluated. */
     if (!s || (!np_is_numberlike(s) && !np_is_infinity(s))) {

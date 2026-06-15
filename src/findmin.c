@@ -638,12 +638,12 @@ static Expr* fm_build_result(double fmin, Expr** vars, const double* vals,
     Expr** rules = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
     for (size_t i = 0; i < n; i++) {
         Expr* r_args[2] = { expr_copy(vars[i]), expr_new_real(vals[i]) };
-        rules[i] = expr_new_function(expr_new_symbol("Rule"), r_args, 2);
+        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), r_args, 2);
     }
-    Expr* rule_list = expr_new_function(expr_new_symbol("List"), rules, n);
+    Expr* rule_list = expr_new_function(expr_new_symbol(SYM_List), rules, n);
     free(rules);
     Expr* top_args[2] = { expr_new_real(fmin), rule_list };
-    return expr_new_function(expr_new_symbol("List"), top_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_List), top_args, 2);
 }
 
 #ifdef USE_MPFR
@@ -654,12 +654,12 @@ static Expr* fm_build_result_mpfr(const mpfr_t fmin, Expr** vars,
     Expr** rules = (Expr**)malloc(sizeof(Expr*) * (n > 0 ? n : 1));
     for (size_t i = 0; i < n; i++) {
         Expr* r_args[2] = { expr_copy(vars[i]), expr_new_mpfr_copy(vals[i]) };
-        rules[i] = expr_new_function(expr_new_symbol("Rule"), r_args, 2);
+        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), r_args, 2);
     }
-    Expr* rule_list = expr_new_function(expr_new_symbol("List"), rules, n);
+    Expr* rule_list = expr_new_function(expr_new_symbol(SYM_List), rules, n);
     free(rules);
     Expr* top_args[2] = { expr_new_mpfr_copy(fmin), rule_list };
-    return expr_new_function(expr_new_symbol("List"), top_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_List), top_args, 2);
 }
 
 /* Allocate `count` MPFR scalars at precision `bits`. */
@@ -1197,7 +1197,7 @@ static bool fm_constraint_to_g(Expr* cmp, Expr** expr_out, bool* equality_out) {
     if (op == SYM_GreaterEqual || op == SYM_Greater) {
         /* lhs op rhs  →  rhs - lhs <= 0  →  -(lhs - rhs) <= 0 */
         Expr* neg_args[2] = { expr_new_integer(-1), lhs_minus_rhs };
-        *expr_out = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+        *expr_out = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
         *equality_out = false;
         return true;
     }
@@ -2756,19 +2756,19 @@ Expr* builtin_findmaximum(Expr* res) {
         Expr* inner_f = f_orig->data.function.args[0];
         Expr* cons = f_orig->data.function.args[1];
         Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(inner_f) };
-        neg_f = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+        neg_f = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
         Expr* list_args[2] = { neg_f, expr_copy(cons) };
-        new_first = expr_new_function(expr_new_symbol("List"), list_args, 2);
+        new_first = expr_new_function(expr_new_symbol(SYM_List), list_args, 2);
     } else {
         Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(f_orig) };
-        neg_f = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+        neg_f = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
         new_first = neg_f;
     }
     /* Construct synthetic FindMinimum[new_first, vars, opts...]. */
     Expr** new_args = (Expr**)malloc(sizeof(Expr*) * argc);
     new_args[0] = new_first;
     for (size_t i = 1; i < argc; i++) new_args[i] = expr_copy(res->data.function.args[i]);
-    Expr* synthetic = expr_new_function(expr_new_symbol("FindMinimum"), new_args, argc);
+    Expr* synthetic = expr_new_function(expr_new_symbol(SYM_FindMinimum), new_args, argc);
     free(new_args);
     /* Drive findmin directly so the diagnostic tag is FindMaximum. */
     Expr* min_result = findmin_driver(synthetic, "FindMaximum");

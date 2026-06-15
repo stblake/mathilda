@@ -121,7 +121,7 @@ static bool simp_fact_decompose(const Expr* arg, Expr** sym_out,
         } else if (rest_count == 1) {
             *sym_out = rest[0];
         } else {
-            *sym_out = expr_new_function(expr_new_symbol("Plus"), rest,
+            *sym_out = expr_new_function(expr_new_symbol(SYM_Plus), rest,
                                          rest_count);
         }
         free(rest);
@@ -143,7 +143,7 @@ static Expr* simp_fact_make_offset(Expr* sym, int64_t c) {
     }
     if (c == 0) return sym;
     Expr* args[2] = { sym, expr_new_integer(c) };
-    return expr_new_function(expr_new_symbol("Plus"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), args, 2);
 }
 
 /* Group registry. Each entry maps a symbolic part to its minimum integer
@@ -242,7 +242,7 @@ static Expr* simp_fact_pochhammer_expansion(const Expr* b_sym_template,
         args[(size_t)k] = simp_fact_make_offset(
             expr_copy((Expr*)b_sym_template), b_const + k);
     }
-    Expr* out = expr_new_function(expr_new_symbol("Times"), args, n_args);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Times), args, n_args);
     free(args);
     return out;
 }
@@ -442,7 +442,7 @@ static bool simp_fact_refold_times(Expr** args, size_t n,
             Expr* fac = simp_fact_make_offset(expr_copy(base_sym),
                                               base_c + m);
             Expr* pa[2] = { fac, expr_new_integer(-1) };
-            built[w++] = expr_new_function(expr_new_symbol("Power"), pa, 2);
+            built[w++] = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
         }
     }
 
@@ -520,11 +520,11 @@ static Expr* simp_fact_combine_inverses(const Expr* e) {
     } else {
         Expr** dargs = (Expr**)calloc(dn, sizeof(Expr*));
         for (size_t i = 0; i < dn; i++) dargs[i] = den[i];
-        den_times = expr_new_function(expr_new_symbol("Times"), dargs, dn);
+        den_times = expr_new_function(expr_new_symbol(SYM_Times), dargs, dn);
         free(dargs);
     }
     Expr* den_pow_args[2] = { den_times, expr_new_integer(-1) };
-    Expr* den_pow = expr_new_function(expr_new_symbol("Power"),
+    Expr* den_pow = expr_new_function(expr_new_symbol(SYM_Power),
                                       den_pow_args, 2);
     /* Build new Times: numerator factors + den_pow. */
     if (nn == 0) {
@@ -535,7 +535,7 @@ static Expr* simp_fact_combine_inverses(const Expr* e) {
     Expr** new_args = (Expr**)calloc(nn + 1, sizeof(Expr*));
     for (size_t i = 0; i < nn; i++) new_args[i] = num[i];
     new_args[nn] = den_pow;
-    Expr* out = expr_new_function(expr_new_symbol("Times"), new_args, nn + 1);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Times), new_args, nn + 1);
     free(new_args);
     for (size_t i = 0; i < n; i++) expr_free(child[i]);
     free(child); free(num); free(den);
@@ -641,7 +641,7 @@ static Expr* simp_fact_double_factorial(const Expr* e) {
             /* Build Times[-1, v_expr_candidate] and compare. We instead
              * compare via -exp == v: evaluate Times[-1, exp] and check. */
             Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(exp) };
-            Expr* neg_call = expr_new_function(expr_new_symbol("Times"),
+            Expr* neg_call = expr_new_function(expr_new_symbol(SYM_Times),
                                                neg_args, 2);
             Expr* neg_eval = evaluate(neg_call);
             expr_free(neg_call);
@@ -664,9 +664,9 @@ static Expr* simp_fact_double_factorial(const Expr* e) {
 
     /* Build Factorial2[2 v - 1]. */
     Expr* two_v_args[2] = { expr_new_integer(2), expr_copy(v_expr) };
-    Expr* two_v = expr_new_function(expr_new_symbol("Times"), two_v_args, 2);
+    Expr* two_v = expr_new_function(expr_new_symbol(SYM_Times), two_v_args, 2);
     Expr* arg_args[2] = { two_v, expr_new_integer(-1) };
-    Expr* arg_plus = expr_new_function(expr_new_symbol("Plus"), arg_args, 2);
+    Expr* arg_plus = expr_new_function(expr_new_symbol(SYM_Plus), arg_args, 2);
     Expr* fac2_args[1] = { arg_plus };
     Expr* fac2 = expr_new_function(expr_new_symbol("Factorial2"), fac2_args, 1);
     expr_free(v_expr);
@@ -688,7 +688,7 @@ static Expr* simp_fact_double_factorial(const Expr* e) {
             (int)i == idx_2_pow_neg) continue;
         all[w++] = expr_copy(e->data.function.args[i]);
     }
-    Expr* out = expr_new_function(expr_new_symbol("Times"), all, residue + 1);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Times), all, residue + 1);
     free(all);
     return out;
 }

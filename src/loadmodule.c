@@ -8,6 +8,7 @@
  */
 
 #include "loadmodule.h"
+#include "sym_names.h"
 #include "expr.h"
 #include "symtab.h"
 #include "attr.h"
@@ -44,7 +45,7 @@ Expr* mathilda_run_file(const char* path, int* opened) {
     buffer[read_len] = '\0';
     fclose(fp);
 
-    Expr* last_eval = expr_new_symbol("Null");
+    Expr* last_eval = expr_new_symbol(SYM_Null);
     const char* ptr = buffer;
     while (*ptr != '\0') {
         Expr* parsed = parse_next_expression(&ptr);

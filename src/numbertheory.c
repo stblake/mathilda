@@ -94,7 +94,7 @@ static Expr* mpz_pair_to_rational_expr(const mpz_t num_in, const mpz_t den_in) {
         Expr* en = expr_bigint_normalize(expr_new_bigint_from_mpz(n));
         Expr* ed = expr_bigint_normalize(expr_new_bigint_from_mpz(d));
         Expr* args[2] = { en, ed };
-        out = expr_new_function(expr_new_symbol("Rational"), args, 2);
+        out = expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
     }
     mpz_clears(n, d, g, NULL);
     return out;
@@ -315,9 +315,9 @@ Expr* builtin_extendedgcd(Expr* res) {
     /* ExtendedGCD[] -> {0, {}} */
     if (count == 0) {
         Expr* g = expr_new_integer(0);
-        Expr* empty = expr_new_function(expr_new_symbol("List"), NULL, 0);
+        Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         Expr* pair[2] = { g, empty };
-        return expr_new_function(expr_new_symbol("List"), pair, 2);
+        return expr_new_function(expr_new_symbol(SYM_List), pair, 2);
     }
 
     /* Classify the arguments in a single pass. */
@@ -393,11 +393,11 @@ Expr* builtin_extendedgcd(Expr* res) {
     free(coeffs);
     mpz_clears(running_g, new_g, s, t, NULL);
 
-    Expr* coeff_list = expr_new_function(expr_new_symbol("List"), coeff_args, count);
+    Expr* coeff_list = expr_new_function(expr_new_symbol(SYM_List), coeff_args, count);
     free(coeff_args);
 
     Expr* pair[2] = { g_expr, coeff_list };
-    return expr_new_function(expr_new_symbol("List"), pair, 2);
+    return expr_new_function(expr_new_symbol(SYM_List), pair, 2);
 }
 
 
@@ -835,7 +835,7 @@ Expr* builtin_factorial(Expr* res) {
     int64_t n, d;
     if (is_rational(arg, &n, &d)) {
         if (d == 1) {
-            if (n < 0) return expr_new_symbol("ComplexInfinity");
+            if (n < 0) return expr_new_symbol(SYM_ComplexInfinity);
             if (n <= 20) {
                 int64_t f = 1;
                 for (int64_t i = 2; i <= n; i++) f *= i;
@@ -874,15 +874,15 @@ Expr* builtin_factorial(Expr* res) {
             mpz_clears(num, den, NULL);
             if (!coeff) coeff = expr_new_integer(0);
 
-            Expr* pi_sym = expr_new_symbol("Pi");
+            Expr* pi_sym = expr_new_symbol(SYM_Pi);
             Expr* half = make_rational(1, 2);
-            Expr* sqrt_pi = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){pi_sym, half}, 2));
+            Expr* sqrt_pi = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){pi_sym, half}, 2));
             
             if (coeff->type == EXPR_INTEGER && coeff->data.integer == 1) {
                 expr_free(coeff);
                 return sqrt_pi;
             } else {
-                return eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){coeff, sqrt_pi}, 2));
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){coeff, sqrt_pi}, 2));
             }
         }
     }
@@ -951,11 +951,11 @@ Expr* builtin_factorialpower(Expr* res) {
                 factors[i] = expr_copy(n_arg);
             } else {
                 Expr* shift = expr_new_integer(-i);
-                factors[i] = expr_new_function(expr_new_symbol("Plus"),
+                factors[i] = expr_new_function(expr_new_symbol(SYM_Plus),
                     (Expr*[]){ expr_copy(n_arg), shift }, 2);
             }
         }
-        Expr* product = expr_new_function(expr_new_symbol("Times"), factors, (size_t)k);
+        Expr* product = expr_new_function(expr_new_symbol(SYM_Times), factors, (size_t)k);
         free(factors);
         return eval_and_free(product);
     }
@@ -987,7 +987,7 @@ Expr* builtin_factorial2(Expr* res) {
         if (n < 0) {
             /* Even negative integers: ComplexInfinity (pole). Odd negative
              * integers below -1 also diverge. */
-            return expr_new_symbol("ComplexInfinity");
+            return expr_new_symbol(SYM_ComplexInfinity);
         }
         if (n <= 30) {
             int64_t f = 1;
@@ -1011,7 +1011,7 @@ Expr* builtin_factorial2(Expr* res) {
         /* For arguments large enough to be BigInt, use GMP. We only
          * handle non-negative inputs; negative BigInt is ComplexInfinity. */
         if (mpz_sgn(arg->data.bigint) < 0) {
-            return expr_new_symbol("ComplexInfinity");
+            return expr_new_symbol(SYM_ComplexInfinity);
         }
         if (mpz_sgn(arg->data.bigint) == 0) return expr_new_integer(1);
         /* Cap at a sane size: if mpz_fits_ulong_p fails the input is too
@@ -1062,7 +1062,7 @@ static Expr* binomial_polynomial(Expr* n, int64_t k) {
             factors[i] = expr_copy(n);
         } else {
             Expr* shift = expr_new_integer(-i);
-            factors[i] = expr_new_function(expr_new_symbol("Plus"),
+            factors[i] = expr_new_function(expr_new_symbol(SYM_Plus),
                 (Expr*[]){ expr_copy(n), shift }, 2);
         }
     }
@@ -1083,12 +1083,12 @@ static Expr* binomial_polynomial(Expr* n, int64_t k) {
         expr_free(fact_expr);
     } else {
         Expr* one = expr_new_integer(1);
-        inv = expr_new_function(expr_new_symbol("Rational"),
+        inv = expr_new_function(expr_new_symbol(SYM_Rational),
             (Expr*[]){ one, fact_expr }, 2);
     }
     factors[k] = inv;
 
-    Expr* product = expr_new_function(expr_new_symbol("Times"),
+    Expr* product = expr_new_function(expr_new_symbol(SYM_Times),
         factors, (size_t)(k + 1));
     free(factors);
     return eval_and_free(product);
@@ -1702,7 +1702,7 @@ Expr* builtin_primitiverootlist(Expr* res) {
     expr_to_mpz(n_expr, n);
     if (mpz_cmp_ui(n, 1) <= 0) {
         mpz_clear(n);
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
     mpz_t p; uint64_t k;
@@ -1710,7 +1710,7 @@ Expr* builtin_primitiverootlist(Expr* res) {
     pr_cyclic_kind kind = pr_classify(n, p, &k);
     if (kind == PR_CYC_NONE) {
         mpz_clears(n, p, NULL);
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
     mpz_t phi;
@@ -1790,7 +1790,7 @@ Expr* builtin_primitiverootlist(Expr* res) {
             items[i] = expr_bigint_normalize(expr_new_bigint_from_mpz(roots[i]));
         }
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, root_count);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, root_count);
     free(items);
 
     for (size_t i = 0; i < root_count; i++) mpz_clear(roots[i]);

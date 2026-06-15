@@ -171,7 +171,7 @@ static Expr* denom_subst_radical_to_gen(const Expr* e, const Expr* base,
             expr_eq((Expr*)this_base, (Expr*)base)) {
             int64_t k = p * (n / q);
             Expr* pa[2] = { expr_new_symbol(gen), expr_new_integer(k) };
-            Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+            Expr* pc = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
             Expr* out = evaluate(pc);
             expr_free(pc);
             return out;
@@ -198,7 +198,7 @@ static Expr* denom_subst_gen_to_radical(const Expr* e, const char* gen,
     if (!e) return NULL;
     if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, gen) == 0) {
         Expr* pa[2] = { expr_copy((Expr*)base), make_rational(1, n) };
-        Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+        Expr* pc = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
         Expr* out = evaluate(pc);
         expr_free(pc);
         return out;
@@ -215,7 +215,7 @@ static Expr* denom_subst_gen_to_radical(const Expr* e, const char* gen,
             int64_t k = exp->data.integer;
             /* gen^k = c^(k/n). Build directly. */
             Expr* pa[2] = { expr_copy((Expr*)base), make_rational(k, n) };
-            Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+            Expr* pc = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
             Expr* out = evaluate(pc);
             expr_free(pc);
             return out;
@@ -264,11 +264,11 @@ static Expr* denom_compute_inverse(const Expr* denom) {
 
     /* Build the relation polynomial: gen^n - c. */
     Expr* gen_pow_args[2] = { expr_new_symbol(gen), expr_new_integer(n) };
-    Expr* gen_pow = expr_new_function(expr_new_symbol("Power"), gen_pow_args, 2);
+    Expr* gen_pow = expr_new_function(expr_new_symbol(SYM_Power), gen_pow_args, 2);
     Expr* gen_pow_e = evaluate(gen_pow);
     expr_free(gen_pow);
     Expr* relation_args[2] = { gen_pow_e, expr_new_integer(-c) };
-    Expr* relation_call = expr_new_function(expr_new_symbol("Plus"),
+    Expr* relation_call = expr_new_function(expr_new_symbol(SYM_Plus),
                                             relation_args, 2);
     Expr* relation = evaluate(relation_call);
     expr_free(relation_call);
@@ -318,12 +318,12 @@ static Expr* denom_compute_inverse(const Expr* denom) {
 
     /* Build inverse = u_in_a / gcd_e (still in `gen` form). */
     Expr* inv_gen_args[2] = { expr_copy(gcd_e), expr_new_integer(-1) };
-    Expr* gcd_inv_call = expr_new_function(expr_new_symbol("Power"),
+    Expr* gcd_inv_call = expr_new_function(expr_new_symbol(SYM_Power),
                                            inv_gen_args, 2);
     Expr* gcd_inv = evaluate(gcd_inv_call);
     expr_free(gcd_inv_call);
     Expr* prod_args[2] = { expr_copy(u_in_a), gcd_inv };
-    Expr* prod_call = expr_new_function(expr_new_symbol("Times"),
+    Expr* prod_call = expr_new_function(expr_new_symbol(SYM_Times),
                                         prod_args, 2);
     Expr* inv_in_gen = evaluate(prod_call);
     expr_free(prod_call);

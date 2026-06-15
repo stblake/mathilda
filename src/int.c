@@ -263,7 +263,7 @@ Expr* builtin_integerdigits(Expr* res) {
     mpz_clear(n);
     mpz_clear(base);
 
-    Expr* list_head = expr_new_symbol("List");
+    Expr* list_head = expr_new_symbol(SYM_List);
     Expr* result = expr_new_function(list_head, out_args, output_len);
     free(out_args);
     return result;
@@ -486,7 +486,7 @@ Expr* builtin_integerexponent(Expr* res) {
     if (mpz_sgn(n) == 0) {
         mpz_clear(n);
         mpz_clear(base);
-        return expr_new_symbol("Infinity");
+        return expr_new_symbol(SYM_Infinity);
     }
 
     size_t k = intexp_count(n, base);
@@ -748,7 +748,7 @@ Expr* builtin_digitcount(Expr* res) {
     out_args[b_val - 1] = expr_new_integer(counts[0]);
     free(counts);
 
-    Expr* list_head = expr_new_symbol("List");
+    Expr* list_head = expr_new_symbol(SYM_List);
     Expr* result = expr_new_function(list_head, out_args, (size_t)b_val);
     free(out_args);
     return result;
@@ -943,7 +943,7 @@ static Expr* fd_build_symbolic(Expr* list, Expr* base_expr) {
         Expr** power_args = malloc(sizeof(Expr*) * 2);
         power_args[0] = expr_copy(base_expr);
         power_args[1] = expr_new_integer((int64_t)exponent);
-        Expr* power_node = expr_new_function(expr_new_symbol("Power"),
+        Expr* power_node = expr_new_function(expr_new_symbol(SYM_Power),
                                               power_args, 2);
         free(power_args);
 
@@ -951,7 +951,7 @@ static Expr* fd_build_symbolic(Expr* list, Expr* base_expr) {
         Expr** times_args = malloc(sizeof(Expr*) * 2);
         times_args[0] = digit;
         times_args[1] = power_node;
-        Expr* times_node = expr_new_function(expr_new_symbol("Times"),
+        Expr* times_node = expr_new_function(expr_new_symbol(SYM_Times),
                                               times_args, 2);
         free(times_args);
         plus_args[i] = times_node;
@@ -960,7 +960,7 @@ static Expr* fd_build_symbolic(Expr* list, Expr* base_expr) {
     /* Single-element list collapses to Plus[x] which the evaluator
      * simplifies to x via the OneIdentity attribute -- still correct
      * even though we could short-circuit it here. */
-    Expr* plus_node = expr_new_function(expr_new_symbol("Plus"),
+    Expr* plus_node = expr_new_function(expr_new_symbol(SYM_Plus),
                                          plus_args, n);
     free(plus_args);
     return plus_node;

@@ -91,7 +91,7 @@ static bool hg_linear_params(Expr* P, Expr* var,
         int d = hg_pdeg(work, var);
         if (d <= 0) { *params = ps; *np = n; *lc = work; return true; }
 
-        Expr* eq = expr_new_function(expr_new_symbol("Equal"),
+        Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
                        (Expr*[]){ expr_copy(work), sum_int(0) }, 2);
         Expr* sol = sum_eval("Solve", (Expr*[]){ eq, expr_copy(var) }, 2);
         Expr* r = hg_first_root(sol);
@@ -107,9 +107,9 @@ static bool hg_linear_params(Expr* P, Expr* var,
         ps[n++] = param;
 
         /* deflate: work = PolynomialQuotient[work, var - r, var] */
-        Expr* lin = expr_new_function(expr_new_symbol("Plus"),
+        Expr* lin = expr_new_function(expr_new_symbol(SYM_Plus),
                         (Expr*[]){ expr_copy(var),
-                                   expr_new_function(expr_new_symbol("Times"),
+                                   expr_new_function(expr_new_symbol(SYM_Times),
                                        (Expr*[]){ sum_int(-1), r }, 2) }, 2);
         Expr* q = sum_eval("PolynomialQuotient",
                       (Expr*[]){ expr_copy(work), lin, expr_copy(var) }, 3);
@@ -127,7 +127,7 @@ fail:
 
 /* List[elems...] from an owned array (adopts the elements; copies pointers). */
 static Expr* hg_make_list(Expr** elems, size_t n) {
-    Expr* l = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     return l;
 }
 
@@ -144,13 +144,13 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
     if (imin->type != EXPR_INTEGER) return NULL;
 
     /* Term ratio t(k+1)/t(k), reduced to a rational function num/den in var. */
-    Expr* nv = expr_new_function(expr_new_symbol("Plus"),
+    Expr* nv = expr_new_function(expr_new_symbol(SYM_Plus),
                    (Expr*[]){ expr_copy(var), sum_int(1) }, 2);
     Expr* tshift = sum_subst(f, var, nv);
     expr_free(nv);
-    Expr* ratio_raw = expr_new_function(expr_new_symbol("Times"),
+    Expr* ratio_raw = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ tshift,
-                                     expr_new_function(expr_new_symbol("Power"),
+                                     expr_new_function(expr_new_symbol(SYM_Power),
                                          (Expr*[]){ expr_copy(f), sum_int(-1) }, 2) }, 2);
     Expr* simp = sum_eval("Simplify", (Expr*[]){ ratio_raw }, 1);
     Expr* ratio = sum_eval("Together", (Expr*[]){ simp }, 1);
@@ -163,7 +163,7 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
     }
 
     /* Reindex to m >= 0: substitute var -> var + imin (no-op when imin == 0). */
-    Expr* shift = expr_new_function(expr_new_symbol("Plus"),
+    Expr* shift = expr_new_function(expr_new_symbol(SYM_Plus),
                       (Expr*[]){ expr_copy(var), expr_copy(imin) }, 2);
     Expr* num_m = sum_subst(num, var, shift);
     Expr* den_m = sum_subst(den, var, shift);
@@ -208,7 +208,7 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
     /* z = lcN / lcD. */
     Expr* z = sum_eval("Times",
                   (Expr*[]){ lcN,
-                             expr_new_function(expr_new_symbol("Power"),
+                             expr_new_function(expr_new_symbol(SYM_Power),
                                  (Expr*[]){ lcD, sum_int(-1) }, 2) }, 2);
 
     /* Convergence gate.  p <= q is entire (sums for all z).  p == q+1 converges
@@ -238,7 +238,7 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
 
     Expr* upList = hg_make_list(up, up_n); free(up);
     Expr* loList = hg_make_list(lo, lo_n); free(lo);
-    Expr* pfq = expr_new_function(expr_new_symbol("HypergeometricPFQ"),
+    Expr* pfq = expr_new_function(expr_new_symbol(SYM_HypergeometricPFQ),
                     (Expr*[]){ upList, loList, z }, 3);
     Expr* result = sum_eval("Times", (Expr*[]){ prefactor, pfq }, 2);
     return result;

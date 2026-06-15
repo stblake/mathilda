@@ -1157,7 +1157,7 @@ Expr* interp_make_derivative(Expr* deriv_head, Expr* ifun) {
 
     Expr** der_args = malloc(sizeof(Expr*) * m);
     for (size_t k = 0; k < m; k++) der_args[k] = expr_new_integer(ders[k]);
-    Expr* ders_list = expr_new_function(expr_new_symbol("List"), der_args, m);
+    Expr* ders_list = expr_new_function(expr_new_symbol(SYM_List), der_args, m);
     free(der_args);
     free(ders);
 
@@ -1167,7 +1167,7 @@ Expr* interp_make_derivative(Expr* deriv_head, Expr* ifun) {
     args[1] = expr_copy(table);
     args[2] = ders_list;
     for (size_t k = 3; k < out_argc; k++) args[k] = expr_copy(ifun->data.function.args[k]);
-    Expr* result = expr_new_function(expr_new_symbol("InterpolatingFunction"), args, out_argc);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), args, out_argc);
     free(args);
     return result;
 }
@@ -1177,12 +1177,12 @@ Expr* interp_make_derivative(Expr* deriv_head, Expr* ifun) {
 /* List[a, b], taking ownership of a and b. */
 static Expr* make_pair(Expr* a, Expr* b) {
     Expr* args[2] = { a, b };
-    return expr_new_function(expr_new_symbol("List"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_List), args, 2);
 }
 
 /* List from an owned array of `n` exprs (array borrowed; caller frees). */
 static Expr* make_list(Expr** items, size_t n) {
-    return expr_new_function(expr_new_symbol("List"), items, n);
+    return expr_new_function(expr_new_symbol(SYM_List), items, n);
 }
 
 static void free_exprs(Expr** xs, size_t n) {
@@ -1339,7 +1339,7 @@ static Expr* builtin_interpolation(Expr* res) {
     bool need_full = (explicit_order >= 0) || (method != METHOD_DEFAULT) || any_periodic;
     if (!need_full) {
         Expr* oargs[2] = { domain, table };
-        object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 2);
+        object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 2);
     } else {
         int ov = (explicit_order >= 0) ? explicit_order : 3;
         Expr** zeros = malloc(sizeof(Expr*) * m);
@@ -1350,21 +1350,21 @@ static Expr* builtin_interpolation(Expr* res) {
         free(zeros); free(ords);
         if (!any_periodic && method == METHOD_DEFAULT) {
             Expr* oargs[4] = { domain, table, ders_list, order_list };
-            object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 4);
+            object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 4);
         } else {
             Expr* mslot = (method == METHOD_DEFAULT)
-                ? expr_new_symbol("Automatic")
+                ? expr_new_symbol(SYM_Automatic)
                 : expr_new_string(method == METHOD_SPLINE ? "Spline" : "Hermite");
             if (!any_periodic) {
                 Expr* oargs[5] = { domain, table, ders_list, order_list, mslot };
-                object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 5);
+                object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 5);
             } else {
                 Expr** pf = malloc(sizeof(Expr*) * m);
                 for (size_t k = 0; k < m; k++) pf[k] = expr_new_symbol(periodic[k] ? "True" : "False");
                 Expr* per_list = make_list(pf, m);
                 free(pf);
                 Expr* oargs[6] = { domain, table, ders_list, order_list, mslot, per_list };
-                object = expr_new_function(expr_new_symbol("InterpolatingFunction"), oargs, 6);
+                object = expr_new_function(expr_new_symbol(SYM_InterpolatingFunction), oargs, 6);
             }
         }
     }

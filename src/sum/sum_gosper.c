@@ -68,7 +68,7 @@ static Expr* pquot(Expr* a, Expr* b, Expr* var) {
 
 /* e /. var -> var + k */
 static Expr* shift_var(Expr* e, Expr* var, int k) {
-    Expr* nv = expr_new_function(expr_new_symbol("Plus"),
+    Expr* nv = expr_new_function(expr_new_symbol(SYM_Plus),
                    (Expr*[]){ expr_copy(var), sum_int(k) }, 2);
     Expr* r = sum_subst(e, var, nv);
     expr_free(nv);
@@ -83,9 +83,9 @@ static Expr* shift_var(Expr* e, Expr* var, int k) {
 static Expr* gosper_antidiff(Expr* t, Expr* var) {
     /* 1. term ratio r = t(var+1)/t(var), reduced to a rational function. */
     Expr* tshift = shift_var(t, var, 1);
-    Expr* ratio_raw = expr_new_function(expr_new_symbol("Times"),
+    Expr* ratio_raw = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ tshift,
-                                     expr_new_function(expr_new_symbol("Power"),
+                                     expr_new_function(expr_new_symbol(SYM_Power),
                                          (Expr*[]){ expr_copy(t), sum_int(-1) }, 2) }, 2);
     Expr* sarg[1] = { ratio_raw };
     Expr* simp = sum_eval("Simplify", sarg, 1);
@@ -137,7 +137,7 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
 
         for (int i = 1; i <= h; i++) {
             Expr* si = shift_var(s, var, -i);
-            Expr* tc = expr_new_function(expr_new_symbol("Times"),
+            Expr* tc = expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ c, si }, 2);
             c = evaluate(tc);
             expr_free(tc);
@@ -162,32 +162,32 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
         for (int k = 0; k <= d; k++) {
             snprintf(name, sizeof name, "Sum`gx`%d`%d", id, k);
             csym[k] = expr_new_symbol(name);
-            Expr* pw = expr_new_function(expr_new_symbol("Power"),
+            Expr* pw = expr_new_function(expr_new_symbol(SYM_Power),
                            (Expr*[]){ expr_copy(var), sum_int(k) }, 2);
-            xt[k] = expr_new_function(expr_new_symbol("Times"),
+            xt[k] = expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_copy(csym[k]), pw }, 2);
         }
         Expr** xa = malloc(sizeof(Expr*) * (d + 1));
         for (int k = 0; k <= d; k++) xa[k] = expr_copy(xt[k]);
-        Expr* x = expr_new_function(expr_new_symbol("Plus"), xa, d + 1);
+        Expr* x = expr_new_function(expr_new_symbol(SYM_Plus), xa, d + 1);
         free(xa);
         for (int k = 0; k <= d; k++) expr_free(xt[k]);
         free(xt);
 
         /* eqn = a*x(var+1) - bb*x - c */
         Expr* xshift = shift_var(x, var, 1);
-        Expr* term1 = expr_new_function(expr_new_symbol("Times"),
+        Expr* term1 = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ expr_copy(a), xshift }, 2);
-        Expr* term2 = expr_new_function(expr_new_symbol("Times"),
+        Expr* term2 = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ sum_int(-1), expr_copy(bb), expr_copy(x) }, 3);
-        Expr* term3 = expr_new_function(expr_new_symbol("Times"),
+        Expr* term3 = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ sum_int(-1), expr_copy(c) }, 2);
-        Expr* eqraw = expr_new_function(expr_new_symbol("Plus"),
+        Expr* eqraw = expr_new_function(expr_new_symbol(SYM_Plus),
                           (Expr*[]){ term1, term2, term3 }, 3);
         Expr* eea[1] = { eqraw };
         Expr* eqn = sum_eval("Expand", eea, 1);
 
-        Expr* eq = expr_new_function(expr_new_symbol("Equal"),
+        Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
                        (Expr*[]){ eqn, sum_int(0) }, 2);
         Expr* saa[2] = { eq, expr_copy(var) };
         Expr* sol = sum_eval("SolveAlways", saa, 2);
@@ -206,9 +206,9 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
                 /* zero leftovers */
                 Expr** zr = malloc(sizeof(Expr*) * (d + 1));
                 for (int k = 0; k <= d; k++)
-                    zr[k] = expr_new_function(expr_new_symbol("Rule"),
+                    zr[k] = expr_new_function(expr_new_symbol(SYM_Rule),
                                 (Expr*[]){ expr_copy(csym[k]), sum_int(0) }, 2);
-                Expr* zrl = expr_new_function(expr_new_symbol("List"), zr, d + 1);
+                Expr* zrl = expr_new_function(expr_new_symbol(SYM_List), zr, d + 1);
                 free(zr);
                 Expr* za[2] = { xr, zrl };
                 x_sol = sum_eval("ReplaceAll", za, 2);
@@ -225,11 +225,11 @@ static Expr* gosper_antidiff(Expr* t, Expr* var) {
     Expr* result = NULL;
     if (x_sol) {
         /* 4. F = (b(var-1)/c) * x * t, cleaned with Cancel. */
-        Expr* Rcoef = expr_new_function(expr_new_symbol("Times"),
+        Expr* Rcoef = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ expr_copy(bb), x_sol,
-                                     expr_new_function(expr_new_symbol("Power"),
+                                     expr_new_function(expr_new_symbol(SYM_Power),
                                          (Expr*[]){ expr_copy(c), sum_int(-1) }, 2) }, 3);
-        Expr* Fraw = expr_new_function(expr_new_symbol("Times"),
+        Expr* Fraw = expr_new_function(expr_new_symbol(SYM_Times),
                          (Expr*[]){ Rcoef, expr_copy(t) }, 2);
         Expr* F = evaluate(Fraw);
         expr_free(Fraw);
@@ -256,7 +256,7 @@ Expr* builtin_sum_gosper(Expr* res) {
     if (!definite) return F;
 
     /* Definite: F(imax+1) - F(imin), cleaned with Cancel. */
-    Expr* up = expr_new_function(expr_new_symbol("Plus"),
+    Expr* up = expr_new_function(expr_new_symbol(SYM_Plus),
                    (Expr*[]){ expr_copy(imax), sum_int(1) }, 2);
     Expr* Fhi = sum_subst(F, var, up);
     Expr* Flo = sum_subst(F, var, imin);

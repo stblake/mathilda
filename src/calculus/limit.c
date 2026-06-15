@@ -1538,7 +1538,7 @@ static Expr* layer_log_merge(Expr* f, LimitCtx* ctx) {
             factors[i] = mk_fn1("Exp", expr_copy(t));
         }
     }
-    Expr* prod = expr_new_function(expr_new_symbol("Times"), factors, n);
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), factors, n);
     free(factors);
     Expr* prod_s = simp(prod);
     Expr* prod_expanded = simp(mk_fn1("Expand", prod_s));
@@ -1892,7 +1892,7 @@ static Expr* layer_plus_termwise(Expr* f, LimitCtx* ctx) {
         free(terms);
         return NULL;
     }
-    Expr* sum = expr_new_function(expr_new_symbol("Plus"), terms, n);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, n);
     free(terms);
     return simp(sum);
 }

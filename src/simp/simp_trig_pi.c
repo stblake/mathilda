@@ -94,16 +94,16 @@ static bool trig_pi_extract(const Expr* arg, int64_t* n_out, int64_t* d_out) {
 /* Build (out_n / out_d) * Pi as an Expr*. */
 static Expr* trig_pi_make_arg(int64_t n, int64_t d) {
     if (n == 0) return expr_new_integer(0);
-    if (n == 1 && d == 1) return expr_new_symbol("Pi");
+    if (n == 1 && d == 1) return expr_new_symbol(SYM_Pi);
     Expr* coeff;
     if (d == 1) {
         coeff = expr_new_integer(n);
     } else {
-        coeff = expr_new_function(expr_new_symbol("Rational"),
+        coeff = expr_new_function(expr_new_symbol(SYM_Rational),
             (Expr*[]){ expr_new_integer(n), expr_new_integer(d) }, 2);
     }
-    Expr* args[2] = { coeff, expr_new_symbol("Pi") };
-    return eval_and_free(expr_new_function(expr_new_symbol("Times"), args, 2));
+    Expr* args[2] = { coeff, expr_new_symbol(SYM_Pi) };
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), args, 2));
 }
 
 /* Compute the canonical (head, n, d, sign) for `head[(n/d) Pi]`.  See
@@ -229,7 +229,7 @@ static Expr* simp_trig_pi_canon_walk(const Expr* e) {
                     Expr* call_eval = eval_and_free(call);
                     if (out_sign == -1) {
                         Expr* neg = expr_new_function(
-                            expr_new_symbol("Times"),
+                            expr_new_symbol(SYM_Times),
                             (Expr*[]){ expr_new_integer(-1), call_eval }, 2);
                         return eval_and_free(neg);
                     }

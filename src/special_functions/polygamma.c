@@ -34,6 +34,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "polygamma.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -150,7 +151,7 @@ static Expr* expr_from_mpq(const mpq_t q) {
         Expr* num = expr_from_mpz(mpq_numref(t));
         Expr* den = expr_from_mpz(mpq_denref(t));
         Expr* args[2] = { num, den };
-        out = expr_new_function(expr_new_symbol("Rational"), args, 2);
+        out = expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
     }
     mpq_clear(t);
     return out;
@@ -263,10 +264,10 @@ static Expr* pg_exact_at_positive_int(long n, long m) {
         harmonic_sum(H, m);
         Expr* hrat = expr_from_mpq(H);
         mpq_clear(H);
-        Expr* eg_args[2] = { expr_new_integer(-1), expr_new_symbol("EulerGamma") };
-        Expr* eg = expr_new_function(expr_new_symbol("Times"), eg_args, 2);
+        Expr* eg_args[2] = { expr_new_integer(-1), expr_new_symbol(SYM_EulerGamma) };
+        Expr* eg = expr_new_function(expr_new_symbol(SYM_Times), eg_args, 2);
         Expr* sum_args[2] = { hrat, eg };
-        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
         return eval_and_free(sum);
     }
 
@@ -307,13 +308,13 @@ static Expr* pg_exact_at_positive_int(long n, long m) {
     mpq_canonicalize(B);
 
     Expr* Aex = expr_from_mpq(A);
-    Expr* pipow_args[2] = { expr_new_symbol("Pi"), expr_new_integer(n + 1) };
-    Expr* pipow = expr_new_function(expr_new_symbol("Power"), pipow_args, 2);
+    Expr* pipow_args[2] = { expr_new_symbol(SYM_Pi), expr_new_integer(n + 1) };
+    Expr* pipow = expr_new_function(expr_new_symbol(SYM_Power), pipow_args, 2);
     Expr* term_args[2] = { Aex, pipow };
-    Expr* term = expr_new_function(expr_new_symbol("Times"), term_args, 2);
+    Expr* term = expr_new_function(expr_new_symbol(SYM_Times), term_args, 2);
     Expr* Bex = expr_from_mpq(B);
     Expr* sum_args[2] = { term, Bex };
-    Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
 
     mpq_clears(c, tmpq, A, B, S, (mpq_ptr)0);
     mpz_clears(pw, f2j, nf, (mpz_ptr)0);
@@ -552,7 +553,7 @@ static Expr* pg_numeric_real(long n, const Expr* z) {
         mpfr_init2(rv, prec);
         mpfr_digamma(rv, x, GRND);
         if (mpfr_nan_p(rv))      out = NULL;
-        else if (mpfr_inf_p(rv)) out = expr_new_symbol("ComplexInfinity");
+        else if (mpfr_inf_p(rv)) out = expr_new_symbol(SYM_ComplexInfinity);
         else out = (z->type == EXPR_MPFR) ? expr_new_mpfr_copy(rv)
                                           : expr_new_real(mpfr_get_d(rv, GRND));
         mpfr_clear(rv);
@@ -606,16 +607,16 @@ static Expr* polygamma_two_arg(Expr* order, Expr* z) {
     if (n == -1) {
         /* psi^(-1) = log-gamma; emitted as the inert LogGamma. */
         Expr* zc = expr_copy(z);
-        return expr_new_function(expr_new_symbol("LogGamma"), &zc, 1);
+        return expr_new_function(expr_new_symbol(SYM_LogGamma), &zc, 1);
     }
     if (n < 0) return NULL;                     /* orders <= -2 stay symbolic */
 
     /* Special values. */
-    if (pg_is_symbol(z, "ComplexInfinity")) return expr_new_symbol("Indeterminate");
-    if (pg_is_symbol(z, "Indeterminate"))   return expr_new_symbol("Indeterminate");
+    if (pg_is_symbol(z, "ComplexInfinity")) return expr_new_symbol(SYM_Indeterminate);
+    if (pg_is_symbol(z, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
     if (pg_is_symbol(z, "Infinity"))
-        return (n == 0) ? expr_new_symbol("Infinity") : expr_new_integer(0);
-    if (pg_nonpos_int(z)) return expr_new_symbol("ComplexInfinity"); /* pole */
+        return (n == 0) ? expr_new_symbol(SYM_Infinity) : expr_new_integer(0);
+    if (pg_nonpos_int(z)) return expr_new_symbol(SYM_ComplexInfinity); /* pole */
 
     /* Exact closed form at positive integer arguments. */
     long m;
@@ -653,7 +654,7 @@ Expr* builtin_polygamma(Expr* res) {
     if (argc == 1) {
         /* PolyGamma[z] -> PolyGamma[0, z] (re-evaluated to a fixed point). */
         Expr* pg_args[2] = { expr_new_integer(0), expr_copy(args[0]) };
-        return expr_new_function(expr_new_symbol("PolyGamma"), pg_args, 2);
+        return expr_new_function(expr_new_symbol(SYM_PolyGamma), pg_args, 2);
     }
     if (argc == 2) return polygamma_two_arg(args[0], args[1]);
     return pg_emit_argt(argc);

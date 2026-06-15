@@ -32,7 +32,7 @@ static bool is_positive_numeric_expr(Expr* e) {
 }
 
 static Expr* multiply_numbers(Expr* a, Expr* b) {
-    if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
+    if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
 #ifdef USE_MPFR
     if (numeric_any_mpfr(a, b) && !is_complex(a, NULL, NULL) && !is_complex(b, NULL, NULL)) {
         Expr* r = numeric_mpfr_mul(a, b, 0);
@@ -115,7 +115,7 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
         mpz_clear(r);
         Expr* r_den = expr_new_integer(final_den);
         Expr* r_args[2] = { r_num, r_den };
-        return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
     }
 
     if (a->type == EXPR_INTEGER && b->type == EXPR_INTEGER) {
@@ -157,7 +157,7 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
                 return r_num;
             }
             Expr* r_args[2] = { r_num, r_den };
-            return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+            return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
         }
         return make_rational((int64_t)num, (int64_t)den);
     }
@@ -221,7 +221,7 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
                 return r_num;
             }
             Expr* r_args[2] = { r_num, r_den };
-            return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+            return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
         }
         if (a_ok) { mpz_clear(an); mpz_clear(ad); }
         if (b_ok) { mpz_clear(bn); mpz_clear(bd); }
@@ -232,7 +232,7 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
 
 Expr* make_times(Expr* a, Expr* b) {
     Expr* args[2] = { a, b };
-    return expr_new_function(expr_new_symbol("Times"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
 }
 
 /* BasePower (the (base, exponent) pair) is shared with trig_canon.h, which
@@ -283,7 +283,7 @@ Expr* builtin_times(Expr* res) {
             else if (is_complex_infinity_sym(arg)) { cinf_count++; }
             else if (is_infinity_sym(arg))      { inf_count++; }
         }
-        if (has_indet) return expr_new_symbol("Indeterminate");
+        if (has_indet) return expr_new_symbol(SYM_Indeterminate);
         if (inf_count > 0 || cinf_count > 0) {
             Expr* coeff = expr_new_integer(1);
             bool has_symbolic = false;
@@ -311,13 +311,13 @@ Expr* builtin_times(Expr* res) {
                     if (!arith_warnings_muted())
                         fprintf(stderr,
                             "Infinity::indet: Indeterminate expression 0 %s encountered.\n", what);
-                    return expr_new_symbol("Indeterminate");
+                    return expr_new_symbol(SYM_Indeterminate);
                 }
-                if (cinf_count > 0) return expr_new_symbol("ComplexInfinity");
+                if (cinf_count > 0) return expr_new_symbol(SYM_ComplexInfinity);
                 /* inf_count > 0, coeff != 0 */
-                if (sign > 0) return expr_new_symbol("Infinity");
-                return expr_new_function(expr_new_symbol("Times"),
-                    (Expr*[]){ expr_new_integer(-1), expr_new_symbol("Infinity") }, 2);
+                if (sign > 0) return expr_new_symbol(SYM_Infinity);
+                return expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
             }
             expr_free(coeff);
             /* fall through: keep symbolic, let the rest run */
@@ -335,7 +335,7 @@ Expr* builtin_times(Expr* res) {
         if (is_overflow(arg)) {
             expr_free(num_prod); if (complex_val) expr_free(complex_val);
             for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
-            free(groups); return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
+            free(groups); return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         }
 
         if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL)) {
@@ -364,13 +364,13 @@ Expr* builtin_times(Expr* res) {
             else {
                 Expr *re1, *im1, *re2, *im2;
                 is_complex(complex_val, &re1, &im1); is_complex(c_arg, &re2, &im2);
-                Expr* re = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
-                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(re1), expr_copy(re2)}, 2),
-                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(im1), expr_copy(im2)}, 2)}, 2)
+                Expr* re = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(re1), expr_copy(re2)}, 2),
+                    expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(im1), expr_copy(im2)}, 2)}, 2)
                 }, 2));
-                Expr* im = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
-                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(re1), expr_copy(im2)}, 2),
-                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(re2), expr_copy(im1)}, 2)
+                Expr* im = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(re1), expr_copy(im2)}, 2),
+                    expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(re2), expr_copy(im1)}, 2)
                 }, 2));
                 expr_free(complex_val); expr_free(c_arg);
                 complex_val = make_complex(re, im);
@@ -384,7 +384,7 @@ Expr* builtin_times(Expr* res) {
             int found = -1;
             for (size_t j = 0; j < group_count; j++) { if (expr_eq(groups[j].base, base)) { found = (int)j; break; } }
             if (found != -1) {
-                Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){groups[found].exponent, exponent}, 2));
+                Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){groups[found].exponent, exponent}, 2));
                 groups[found].exponent = new_exp;
             } else {
                 groups[group_count].base = expr_copy(base);
@@ -589,7 +589,7 @@ Expr* builtin_times(Expr* res) {
                     } else {
                         Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(num_z));
                         Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(den_z));
-                        num_prod = expr_new_function(expr_new_symbol("Rational"),
+                        num_prod = expr_new_function(expr_new_symbol(SYM_Rational),
                                                      (Expr*[]){num_e, den_e}, 2);
                     }
                 }
@@ -682,9 +682,9 @@ Expr* builtin_times(Expr* res) {
             /* new_base = pri.base * sec.base^k. */
             Expr* sec_pow_k = (k == 1)
                 ? expr_copy(groups[sec].base)
-                : eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_copy(groups[sec].base), expr_new_integer(k) }, 2));
-            Expr* new_base = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+            Expr* new_base = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                 (Expr*[]){ expr_copy(groups[pri].base), sec_pow_k }, 2));
 
             /* The fused base must remain a positive numeric we can wrap
@@ -967,7 +967,7 @@ Expr* builtin_times(Expr* res) {
                             Expr* den_e = expr_bigint_normalize(
                                 expr_new_bigint_from_mpz(q_sq));
                             num_prod = expr_new_function(
-                                expr_new_symbol("Rational"),
+                                expr_new_symbol(SYM_Rational),
                                 (Expr*[]){ num_e, den_e }, 2);
                         }
                         mpz_clear(coef_num);
@@ -998,7 +998,7 @@ Expr* builtin_times(Expr* res) {
                             Expr* den_e = expr_bigint_normalize(
                                 expr_new_bigint_from_mpz(q));
                             groups[0].base = expr_new_function(
-                                expr_new_symbol("Rational"),
+                                expr_new_symbol(SYM_Rational),
                                 (Expr*[]){ num_e, den_e }, 2);
                             groups[0].exponent = make_rational(1, 2);
                         }
@@ -1014,8 +1014,8 @@ Expr* builtin_times(Expr* res) {
 
     if (complex_val && !(num_prod->type == EXPR_INTEGER && num_prod->data.integer == 1)) {
         Expr *re, *im; is_complex(complex_val, &re, &im);
-        Expr* nr = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(num_prod), expr_copy(re)}, 2));
-        Expr* ni = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(num_prod), expr_copy(im)}, 2));
+        Expr* nr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(num_prod), expr_copy(re)}, 2));
+        Expr* ni = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(num_prod), expr_copy(im)}, 2));
         expr_free(complex_val); complex_val = make_complex(nr, ni);
         expr_free(num_prod); num_prod = expr_new_integer(1);
     }
@@ -1044,11 +1044,11 @@ Expr* builtin_times(Expr* res) {
         if (groups[i].exponent->type == EXPR_INTEGER && groups[i].exponent->data.integer == 1) {
             final_args[idx++] = groups[i].base; expr_free(groups[i].exponent);
         } else {
-            final_args[idx++] = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){groups[i].base, groups[i].exponent}, 2));
+            final_args[idx++] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){groups[i].base, groups[i].exponent}, 2));
         }
     }
     free(groups);
     if (idx == 1) { Expr* res_final = final_args[0]; free(final_args); return res_final; }
-    Expr* result = expr_new_function(expr_new_symbol("Times"), final_args, idx);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Times), final_args, idx);
     free(final_args); return result;
 }

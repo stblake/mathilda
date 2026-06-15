@@ -49,7 +49,7 @@ Expr* make_rational(int64_t n, int64_t d) {
     Expr* args[2];
     args[0] = expr_new_integer(n);
     args[1] = expr_new_integer(d);
-    return expr_new_function(expr_new_symbol("Rational"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
 }
 
 Expr* builtin_rational(Expr* res) {
@@ -67,9 +67,9 @@ Expr* builtin_rational(Expr* res) {
                 if (!arith_warnings_muted())
                     fprintf(stderr,
                         "Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.\n");
-                return expr_new_symbol("Indeterminate");
+                return expr_new_symbol(SYM_Indeterminate);
             }
-            return expr_new_symbol("ComplexInfinity");
+            return expr_new_symbol(SYM_ComplexInfinity);
         }
         
         Expr* r = make_rational(n, d);
@@ -149,7 +149,7 @@ bool is_complex(Expr* e, Expr** re, Expr** im) {
 
 Expr* make_complex(Expr* re, Expr* im) {
     Expr* args[2] = { re, im };
-    return expr_new_function(expr_new_symbol("Complex"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
 }
 
 Expr* builtin_subtract(Expr* res) {
@@ -160,10 +160,10 @@ Expr* builtin_subtract(Expr* res) {
 
     Expr* minus_one = expr_new_integer(-1);
     Expr* mb_args[2] = { minus_one, expr_copy(b) };
-    Expr* minus_b = expr_new_function(expr_new_symbol("Times"), mb_args, 2);
+    Expr* minus_b = expr_new_function(expr_new_symbol(SYM_Times), mb_args, 2);
 
     Expr* p_args[2] = { expr_copy(a), minus_b };
-    return expr_new_function(expr_new_symbol("Plus"), p_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), p_args, 2);
 }
 
 Expr* builtin_complex(Expr* res) {
@@ -197,7 +197,7 @@ Expr* builtin_divide(Expr* res) {
         if (vden == 0.0) {
             if (!arith_warnings_muted())
                 fprintf(stderr, "Power::infy: Infinite expression 1/0 encountered.\n");
-            return expr_new_symbol("ComplexInfinity");
+            return expr_new_symbol(SYM_ComplexInfinity);
         }
         return expr_new_real(vnum / vden);
     }
@@ -214,9 +214,9 @@ Expr* builtin_divide(Expr* res) {
                 if (!arith_warnings_muted())
                     fprintf(stderr,
                         "Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.\n");
-                return expr_new_symbol("Indeterminate");
+                return expr_new_symbol(SYM_Indeterminate);
             }
-            return expr_new_symbol("ComplexInfinity");
+            return expr_new_symbol(SYM_ComplexInfinity);
         }
         Expr* r = make_rational(n1 * d2, d1 * n2);
         if (r) return r;
@@ -224,10 +224,10 @@ Expr* builtin_divide(Expr* res) {
 
     Expr* minus_one = expr_new_integer(-1);
     Expr* p_args[2] = { expr_copy(den), minus_one };
-    Expr* power = expr_new_function(expr_new_symbol("Power"), p_args, 2);
+    Expr* power = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
     
     Expr* t_args[2] = { expr_copy(num), power };
-    return expr_new_function(expr_new_symbol("Times"), t_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
 }
 
 bool is_infinity_sym(Expr* e) {

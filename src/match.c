@@ -743,7 +743,7 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
 
                 if (type_ok) {
                     if (p_sym) {
-                        Expr* seq_val = expr_new_function(expr_new_symbol("Sequence"), NULL, k);
+                        Expr* seq_val = expr_new_function(expr_new_symbol(SYM_Sequence), NULL, k);
                         for (size_t i = 0; i < k; i++) seq_val->data.function.args[i] = expr_copy(subset[i]);
                         Expr* existing = env_get(env, p_sym->data.symbol);
                         if (existing) {

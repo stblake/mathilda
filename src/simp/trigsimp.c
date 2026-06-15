@@ -168,7 +168,7 @@ Expr* builtin_trigtoexp(Expr* res) {
     Expr* memo_key = NULL;
     if (memo) {
         Expr* key_args[1] = { expr_copy(arg) };
-        memo_key = expr_new_function(expr_new_symbol("TrigToExp"),
+        memo_key = expr_new_function(expr_new_symbol(SYM_TrigToExp),
                                      key_args, 1);
         const Expr* hit = factor_memo_lookup(memo, memo_key);
         if (hit) {
@@ -488,7 +488,7 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
         if (!new_args) return NULL;
         for (size_t i = 0; i < n; i++) {
             Expr* inner[1] = { expr_copy(arg->data.function.args[i]) };
-            Expr* wrap = expr_new_function(expr_new_symbol("TrigExpand"), inner, 1);
+            Expr* wrap = expr_new_function(expr_new_symbol(SYM_TrigExpand), inner, 1);
             new_args[i] = evaluate(wrap);
             expr_free(wrap);
         }
@@ -549,7 +549,7 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
         expr_free(pyth_expr);
     } else {
         Expr* factor_args[1] = { expanded };
-        Expr* factor_expr = expr_new_function(expr_new_symbol("Factor"), factor_args, 1);
+        Expr* factor_expr = expr_new_function(expr_new_symbol(SYM_Factor), factor_args, 1);
         Expr* factored = evaluate(factor_expr);
         expr_free(factor_expr);
 
@@ -633,7 +633,7 @@ static Expr* trigfactor_run_pipeline(Expr* input) {
         factored = togethered;
     } else {
         Expr* fac_args[1] = { togethered };
-        Expr* fac_expr = expr_new_function(expr_new_symbol("Factor"), fac_args, 1);
+        Expr* fac_expr = expr_new_function(expr_new_symbol(SYM_Factor), fac_args, 1);
         factored = evaluate(fac_expr);
         expr_free(fac_expr);
     }
@@ -798,7 +798,7 @@ static Expr* builtin_trigfactor_impl(Expr* res) {
         if (!new_args) return NULL;
         for (size_t i = 0; i < n; i++) {
             Expr* inner[1] = { expr_copy(arg->data.function.args[i]) };
-            Expr* wrap = expr_new_function(expr_new_symbol("TrigFactor"), inner, 1);
+            Expr* wrap = expr_new_function(expr_new_symbol(SYM_TrigFactor), inner, 1);
             new_args[i] = evaluate(wrap);
             expr_free(wrap);
         }
@@ -839,7 +839,7 @@ static Expr* builtin_trigfactor_impl(Expr* res) {
 
     /* Path B: apply TrigExpand first, then run the pipeline. */
     Expr* te_args[1] = { expr_copy(arg) };
-    Expr* te_expr = expr_new_function(expr_new_symbol("TrigExpand"), te_args, 1);
+    Expr* te_expr = expr_new_function(expr_new_symbol(SYM_TrigExpand), te_args, 1);
     Expr* expanded = evaluate(te_expr);
     expr_free(te_expr);
     Expr* result_b = trigfactor_run_pipeline(expanded);
@@ -920,7 +920,7 @@ static Expr* builtin_trigreduce_impl(Expr* res) {
         if (!new_args) return NULL;
         for (size_t i = 0; i < n; i++) {
             Expr* inner[1] = { expr_copy(arg->data.function.args[i]) };
-            Expr* wrap = expr_new_function(expr_new_symbol("TrigReduce"),
+            Expr* wrap = expr_new_function(expr_new_symbol(SYM_TrigReduce),
                                            inner, 1);
             new_args[i] = evaluate(wrap);
             expr_free(wrap);

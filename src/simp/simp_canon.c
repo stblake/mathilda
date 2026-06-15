@@ -120,7 +120,7 @@ static Expr* lift_mpq_to_expr(const mpq_t v) {
                   ? expr_new_integer((int64_t)mpz_get_si(mpq_denref(v)))
                   : expr_new_bigint_from_mpz(mpq_denref(v));
     Expr* args[2] = { num, den };
-    return expr_new_function(expr_new_symbol("Rational"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
 }
 
 /* Decompose one Plus term into (mpq coefficient, list of token aliases).
@@ -284,7 +284,7 @@ static Expr* lift_common_from_plus_impl(const Expr* plus_e) {
         for (size_t i = 0; i < common_count; i++) {
             args[i + 1] = expr_copy(common[i]);
         }
-        lift_factor = expr_new_function(expr_new_symbol("Times"), args, common_count + 1);
+        lift_factor = expr_new_function(expr_new_symbol(SYM_Times), args, common_count + 1);
         free(args);
     }
     Expr* lift_factor_eval = eval_and_free(lift_factor);
@@ -293,17 +293,17 @@ static Expr* lift_common_from_plus_impl(const Expr* plus_e) {
     Expr** new_terms = (Expr**)malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* inv_args[2] = { expr_copy(lift_factor_eval), expr_new_integer(-1) };
-        Expr* inv = expr_new_function(expr_new_symbol("Power"), inv_args, 2);
+        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power), inv_args, 2);
         Expr* mul_args[2] = { expr_copy(plus_e->data.function.args[i]), inv };
-        Expr* div = expr_new_function(expr_new_symbol("Times"), mul_args, 2);
+        Expr* div = expr_new_function(expr_new_symbol(SYM_Times), mul_args, 2);
         new_terms[i] = eval_and_free(div);
     }
-    Expr* sum = expr_new_function(expr_new_symbol("Plus"), new_terms, n);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), new_terms, n);
     free(new_terms);
     Expr* sum_eval = eval_and_free(sum);
 
     Expr* res_args[2] = { lift_factor_eval, sum_eval };
-    Expr* result = expr_new_function(expr_new_symbol("Times"), res_args, 2);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Times), res_args, 2);
     Expr* result_eval = eval_and_free(result);
 
     for (size_t i = 0; i < n; i++) { lift_tl_free(&lists[i]); mpq_clear(coefs[i]); }
@@ -347,7 +347,7 @@ Expr* simp_lift_common_factor(const Expr* e) {
                                           ? lifted
                                           : expr_copy(e->data.function.args[j]);
                     }
-                    Expr* new_times = expr_new_function(expr_new_symbol("Times"),
+                    Expr* new_times = expr_new_function(expr_new_symbol(SYM_Times),
                                                         new_args, e->data.function.arg_count);
                     free(new_args);
                     Expr* res = eval_and_free(new_times);
@@ -423,9 +423,9 @@ static Expr* plus_negate(const Expr* p) {
     for (size_t i = 0; i < n; i++) {
         Expr* neg_args[2] = { expr_new_integer(-1),
                               expr_copy(p->data.function.args[i]) };
-        args[i] = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+        args[i] = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
     }
-    Expr* neg_plus = expr_new_function(expr_new_symbol("Plus"), args, n);
+    Expr* neg_plus = expr_new_function(expr_new_symbol(SYM_Plus), args, n);
     free(args);
     return eval_and_free(neg_plus);
 }

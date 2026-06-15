@@ -27,6 +27,7 @@
 #include <stdint.h>
 
 #include "expr.h"
+#include "sym_names.h"
 #include "eval.h"
 #include "core.h"
 #include "arithmetic.h"
@@ -292,12 +293,12 @@ Expr* simp_radical_rational(const Expr* input,
         }
         if (!rr_symbols_subset(V, ringset, rn)) { expr_free(V); continue; }
         /* rel = g_k^{q_k} - V */
-        Expr* gpow = expr_new_function(expr_new_symbol("Power"),
+        Expr* gpow = expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){expr_new_symbol(gens[k].gen),
                       expr_new_integer(gens[k].q)}, 2);
-        Expr* negV = expr_new_function(expr_new_symbol("Times"),
+        Expr* negV = expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){expr_new_integer(-1), V}, 2);
-        Expr* relcall = expr_new_function(expr_new_symbol("Plus"),
+        Expr* relcall = expr_new_function(expr_new_symbol(SYM_Plus),
             (Expr*[]){gpow, negV}, 2);
         Expr* rel = evaluate(relcall);
         expr_free(relcall);
@@ -356,13 +357,13 @@ Expr* simp_radical_rational(const Expr* input,
         if (gcd_deg != 0) { expr_free(eg); continue; }
 
         /* prod = num * u ; combine ; numerator reduced mod rel, denom *= gcd */
-        Expr* prod = rr_eval_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* prod = rr_eval_free(expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){expr_copy(num), expr_copy(u)}, 2));
         Expr* comb = rr_call1("Together", prod);
         Expr* pnum = rr_call1("Numerator", expr_copy(comb));
         Expr* pden = rr_call1("Denominator", comb);
         pnum = rr_polyrem(pnum, rels[i], rel_gen[i]);
-        Expr* nden = rr_eval_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* nden = rr_eval_free(expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){expr_copy(gcd_e), pden}, 2));
         expr_free(eg);
 
@@ -408,8 +409,8 @@ Expr* simp_radical_rational(const Expr* input,
     for (int i = 0; i < n; i++) { expr_free(gens[i].base); free(gens[i].gen); }
 
     Expr* dfac = rr_call1("Factor", den);              /* consumes den */
-    Expr* frac = rr_eval_free(expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){num, expr_new_function(expr_new_symbol("Power"),
+    Expr* frac = rr_eval_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){num, expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){dfac, expr_new_integer(-1)}, 2)}, 2));
     Expr* result = rr_call1("Cancel", frac);           /* consumes frac */
     if (!result) return NULL;

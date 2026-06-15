@@ -119,9 +119,9 @@ static Expr* euler_expr_from_mpq(const mpq_t q) {
         out = en;
     } else {
         Expr* ed = euler_expr_from_mpz(den);
-        Expr* inv = expr_new_function(expr_new_symbol("Power"),
+        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ ed, expr_new_integer(-1) }, 2);
-        out = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ en, inv }, 2));
     }
     mpz_clear(num); mpz_clear(den);
@@ -264,9 +264,9 @@ static Expr* euler_polynomial(size_t n, Expr* x) {
         if (i == 0) {
             term = c;                          /* x^0 = 1 */
         } else {
-            Expr* xi = expr_new_function(expr_new_symbol("Power"),
+            Expr* xi = expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){ expr_copy(x), expr_new_integer((int64_t)i) }, 2);
-            term = expr_new_function(expr_new_symbol("Times"),
+            term = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ c, xi }, 2);
         }
         terms[count++] = term;
@@ -281,7 +281,7 @@ static Expr* euler_polynomial(size_t n, Expr* x) {
     } else if (count == 1) {
         poly = terms[0];
     } else {
-        poly = expr_new_function(expr_new_symbol("Plus"), terms, count);
+        poly = expr_new_function(expr_new_symbol(SYM_Plus), terms, count);
     }
     free(terms);
     return eval_and_free(poly);
@@ -290,13 +290,13 @@ static Expr* euler_polynomial(size_t n, Expr* x) {
 /* EulerE[n, 1/2] -> 2^-n EulerE[n] for symbolic n. */
 static Expr* euler_half_rule(Expr* nexpr) {
     Expr* base   = expr_new_integer(2);
-    Expr* negn   = expr_new_function(expr_new_symbol("Times"),
+    Expr* negn   = expr_new_function(expr_new_symbol(SYM_Times),
                        (Expr*[]){ expr_new_integer(-1), expr_copy(nexpr) }, 2);
-    Expr* twopow = expr_new_function(expr_new_symbol("Power"),
+    Expr* twopow = expr_new_function(expr_new_symbol(SYM_Power),
                        (Expr*[]){ base, negn }, 2);
-    Expr* en     = expr_new_function(expr_new_symbol("EulerE"),
+    Expr* en     = expr_new_function(expr_new_symbol(SYM_EulerE),
                        (Expr*[]){ expr_copy(nexpr) }, 1);
-    return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                        (Expr*[]){ twopow, en }, 2));
 }
 

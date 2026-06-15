@@ -1214,7 +1214,7 @@ static Expr* strip_constant_of_integration(Expr* result, Expr* x) {
         return result;
     }
 
-    Expr* rebuilt = expr_new_function(expr_new_symbol("Plus"), keep, nkeep);
+    Expr* rebuilt = expr_new_function(expr_new_symbol(SYM_Plus), keep, nkeep);
     free(keep);
     rebuilt = eval_and_free(rebuilt);
     expr_free(expanded);
@@ -2695,8 +2695,8 @@ static Expr* builtin_pm_qmb_stress(Expr* res) {
     int64_t mod     = args[3]->data.integer;
     uint64_t seed   = (uint64_t)args[4]->data.integer;
 
-    if (nv < 0 || nv > (int64_t)PMINT_MAX_INDETS) return expr_new_symbol("False");
-    if (ncols < 1 || ntrials < 0 || mod < 1) return expr_new_symbol("False");
+    if (nv < 0 || nv > (int64_t)PMINT_MAX_INDETS) return expr_new_symbol(SYM_False);
+    if (ncols < 1 || ntrials < 0 || mod < 1) return expr_new_symbol(SYM_False);
 
     QMatBuild M;
     M.rows = NULL; M.n = 0; M.cap = 0;
@@ -2704,7 +2704,7 @@ static Expr* builtin_pm_qmb_stress(Expr* res) {
     M.buckets = NULL; M.bucket_cap = 0; M.bucket_mask = 0;
 
     int64_t* vec = (int64_t*)malloc(sizeof(int64_t) * (nv ? (size_t)nv : 1));
-    if (!vec) return expr_new_symbol("False");
+    if (!vec) return expr_new_symbol(SYM_False);
 
     /* Knuth-style LCG; gives well-spread int sequences for small mod. */
     uint64_t s = seed ? seed : 0x9E3779B97F4A7C15ULL;
@@ -3055,15 +3055,15 @@ static int my_factors(Expr* p, int over_Qi,
     Expr* factored;
     if (over_Qi) {
         Expr* ext_rule = mk_binary(SYM_Rule,
-                                     expr_new_symbol("Extension"),
+                                     expr_new_symbol(SYM_Extension),
                                      expr_new_symbol(SYM_I));
         Expr* args[2] = { expr_copy(p), ext_rule };
         factored = eval_and_free(
-            expr_new_function(expr_new_symbol("Factor"), args, 2));
+            expr_new_function(expr_new_symbol(SYM_Factor), args, 2));
     } else {
         Expr* arg = expr_copy(p);
         factored = eval_and_free(
-            expr_new_function(expr_new_symbol("Factor"), &arg, 1));
+            expr_new_function(expr_new_symbol(SYM_Factor), &arg, 1));
     }
     if (!factored) return 1;
 

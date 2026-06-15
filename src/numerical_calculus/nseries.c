@@ -263,7 +263,7 @@ static int ns_sample_count(int n) {
 static Expr* ns_build_seriesdata(const char* varname, Expr* x0_orig,
                                  Expr** coefs, int n) {
     size_t cnt = (size_t)(2 * n + 1);
-    Expr* coefs_list = expr_new_function(expr_new_symbol("List"), coefs, cnt);
+    Expr* coefs_list = expr_new_function(expr_new_symbol(SYM_List), coefs, cnt);
     Expr* args[6] = {
         expr_new_symbol(varname),
         expr_copy(x0_orig),
@@ -272,7 +272,7 @@ static Expr* ns_build_seriesdata(const char* varname, Expr* x0_orig,
         expr_new_integer((int64_t)n + 1),    /* nmax (O-term exponent) */
         expr_new_integer(1)                  /* den (no fractional powers) */
     };
-    return expr_new_function(expr_new_symbol("SeriesData"), args, 6);
+    return expr_new_function(expr_new_symbol(SYM_SeriesData), args, 6);
 }
 
 /* ------------------------------------------------------------------ *

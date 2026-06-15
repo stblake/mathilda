@@ -101,9 +101,9 @@ static Expr* find_x_minus_slot1(const Expr* e) {
          * the other free of Slot[1]. */
         Expr* a = e->data.function.args[0];
         Expr* b = e->data.function.args[1];
-        Expr* slot = expr_new_function(expr_new_symbol("Slot"),
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot),
             (Expr*[]){ expr_new_integer(1) }, 1);
-        Expr* neg_slot = expr_new_function(expr_new_symbol("Times"),
+        Expr* neg_slot = expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_new_integer(-1), expr_copy(slot) }, 2);
         Expr* x_candidate = NULL;
         if (expr_eq(a, neg_slot) && expr_free_of(b, slot)) {
@@ -154,7 +154,7 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
     if (!x) return NULL;
 
     /* d_prime = D[poly, Slot[1]]. */
-    Expr* slot = expr_new_function(expr_new_symbol("Slot"),
+    Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot),
         (Expr*[]){ expr_new_integer(1) }, 1);
     Expr* d_call = expr_new_function(expr_new_symbol("D"),
         (Expr*[]){ expr_copy(poly), expr_copy(slot) }, 2);
@@ -162,12 +162,12 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
 
     /* a(#1) = body * (x - #1) * d'(#1).  Use the Lagrange identity
      * Σ_α body[α] = a(x)/d(x) iff body = a(t)/(d'(t)(x-t)). */
-    Expr* x_minus_slot = expr_new_function(expr_new_symbol("Plus"),
+    Expr* x_minus_slot = expr_new_function(expr_new_symbol(SYM_Plus),
         (Expr*[]){ expr_copy(x),
-                   expr_new_function(expr_new_symbol("Times"),
+                   expr_new_function(expr_new_symbol(SYM_Times),
                        (Expr*[]){ expr_new_integer(-1),
                                   expr_copy(slot) }, 2) }, 2);
-    Expr* prod_raw = expr_new_function(expr_new_symbol("Times"),
+    Expr* prod_raw = expr_new_function(expr_new_symbol(SYM_Times),
         (Expr*[]){ expr_copy(body), x_minus_slot, d_prime }, 3);
     Expr* prod_eval = evaluate(prod_raw); expr_free(prod_raw);
     Expr* a_of_slot = simplify_rational(prod_eval); expr_free(prod_eval);
@@ -186,9 +186,9 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
 
     /* Build a(x)/d(x).  Run Together so the rational form prints
      * canonically. */
-    Expr* quotient_raw = expr_new_function(expr_new_symbol("Times"),
+    Expr* quotient_raw = expr_new_function(expr_new_symbol(SYM_Times),
         (Expr*[]){ a_at_x,
-                   expr_new_function(expr_new_symbol("Power"),
+                   expr_new_function(expr_new_symbol(SYM_Power),
                        (Expr*[]){ d_at_x, expr_new_integer(-1) }, 2) }, 2);
     Expr* quotient_eval = evaluate(quotient_raw); expr_free(quotient_raw);
     Expr* tg = internal_together((Expr*[]){ quotient_eval }, 1);
@@ -211,7 +211,7 @@ static Expr* builtin_rootsum(Expr* res) {
 static Expr* substitute_bvar_with_slot(Expr* e, const char* bvar_name) {
     if (!e) return NULL;
     if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, bvar_name) == 0) {
-        return expr_new_function(expr_new_symbol("Slot"),
+        return expr_new_function(expr_new_symbol(SYM_Slot),
             (Expr*[]){ expr_new_integer(1) }, 1);
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
@@ -241,23 +241,23 @@ Expr* root_make_rootsum(Expr* bvar, Expr* poly, Expr* body) {
         Expr* body_s = substitute_bvar_with_slot(body, name);
         expr_free(bvar); expr_free(poly); expr_free(body);
 
-        Expr* fn1 = expr_new_function(expr_new_symbol("Function"),
+        Expr* fn1 = expr_new_function(expr_new_symbol(SYM_Function),
             (Expr*[]){ poly_s }, 1);
-        Expr* fn2 = expr_new_function(expr_new_symbol("Function"),
+        Expr* fn2 = expr_new_function(expr_new_symbol(SYM_Function),
             (Expr*[]){ body_s }, 1);
-        return expr_new_function(expr_new_symbol("RootSum"),
+        return expr_new_function(expr_new_symbol(SYM_RootSum),
             (Expr*[]){ fn1, fn2 }, 2);
     }
 
     /* Defensive fallback for non-symbol bvar: original 2-arg form. */
     Expr* fn1_args[2] = { bvar, poly };
-    Expr* fn1 = expr_new_function(expr_new_symbol("Function"), fn1_args, 2);
+    Expr* fn1 = expr_new_function(expr_new_symbol(SYM_Function), fn1_args, 2);
 
     Expr* fn2_args[2] = { expr_copy(bvar), body };
-    Expr* fn2 = expr_new_function(expr_new_symbol("Function"), fn2_args, 2);
+    Expr* fn2 = expr_new_function(expr_new_symbol(SYM_Function), fn2_args, 2);
 
     Expr* rs_args[2] = { fn1, fn2 };
-    return expr_new_function(expr_new_symbol("RootSum"), rs_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_RootSum), rs_args, 2);
 }
 
 void root_init(void) {

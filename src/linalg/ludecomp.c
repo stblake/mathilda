@@ -65,15 +65,15 @@
  * ------------------------------------------------------------------ */
 static Expr* eval_plus(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Plus"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Plus), (Expr*[]){a, b}, 2));
 }
 static Expr* eval_times(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Times"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Times), (Expr*[]){a, b}, 2));
 }
 static Expr* eval_power(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Power"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Power), (Expr*[]){a, b}, 2));
 }
 static Expr* eval_together(Expr* a) {
     return eval_and_free(expr_new_function(
@@ -329,11 +329,11 @@ static Expr* wrap_matrix(Expr** buf, int rows, int cols) {
         if (cols > 0) elems = (Expr**)malloc(sizeof(Expr*) * (size_t)cols);
         for (int j = 0; j < cols; j++) elems[j] = buf[i * cols + j]; /* steal */
         row_exprs[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)cols);
+            expr_new_symbol(SYM_List), elems, (size_t)cols);
         if (elems) free(elems);
     }
     Expr* out = expr_new_function(
-        expr_new_symbol("List"), row_exprs, (size_t)rows);
+        expr_new_symbol(SYM_List), row_exprs, (size_t)rows);
     free(row_exprs);
     return out;
 }
@@ -344,7 +344,7 @@ static Expr* wrap_perm(const int* perm, int n) {
     Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)n);
     for (int k = 0; k < n; k++) elems[k] = expr_new_integer(perm[k]);
     Expr* out = expr_new_function(
-        expr_new_symbol("List"), elems, (size_t)n);
+        expr_new_symbol(SYM_List), elems, (size_t)n);
     free(elems);
     return out;
 }
@@ -440,7 +440,7 @@ Expr* lu_symbolic_dispatch(Expr* m, int rows, int cols)
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = lu; items[1] = p; items[2] = c;
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, 3);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
     return result;
 }

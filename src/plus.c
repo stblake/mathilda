@@ -80,7 +80,7 @@ static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_b
                     for (size_t i = 1; i < e->data.function.arg_count; i++) {
                         rest_args[i-1] = expr_copy(e->data.function.args[i]);
                     }
-                    *base = expr_new_function(expr_new_symbol("Times"), rest_args, e->data.function.arg_count - 1);
+                    *base = expr_new_function(expr_new_symbol(SYM_Times), rest_args, e->data.function.arg_count - 1);
                     *allocated_base = true;
                     free(rest_args);
                 }
@@ -94,7 +94,7 @@ static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_b
 }
 
 static Expr* add_numbers(Expr* a, Expr* b) {
-    if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
+    if (is_overflow(a) || is_overflow(b)) return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
 
 #ifdef USE_MPFR
     /* MPFR path: if either operand carries arbitrary precision, fold
@@ -114,17 +114,17 @@ static Expr* add_numbers(Expr* a, Expr* b) {
     if (a_comp || b_comp) {
         if (!a_comp) re1 = a;
         if (!b_comp) re2 = b;
-        Expr* p1 = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(re1), expr_copy(re2)}, 2));
+        Expr* p1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(re1), expr_copy(re2)}, 2));
         
         Expr* zero = expr_new_integer(0);
         Expr* i1 = a_comp ? expr_copy(im1) : expr_copy(zero);
         Expr* i2 = b_comp ? expr_copy(im2) : expr_copy(zero);
-        Expr* p2 = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){i1, i2}, 2));
+        Expr* p2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){i1, i2}, 2));
         expr_free(zero);
         
         if (is_overflow(p1) || is_overflow(p2)) {
             expr_free(p1); expr_free(p2);
-            return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
+            return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         }
 
         Expr* res = make_complex(p1, p2);
@@ -208,7 +208,7 @@ static Expr* add_numbers(Expr* a, Expr* b) {
                 return r_num;
             }
             Expr* r_args[2] = { r_num, r_den };
-            return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+            return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
         }
         return make_rational((int64_t)num, (int64_t)den);
     }
@@ -274,7 +274,7 @@ static Expr* add_numbers(Expr* a, Expr* b) {
                 return r_num;
             }
             Expr* r_args[2] = { r_num, r_den };
-            return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+            return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
         }
         if (a_ok) { mpz_clear(an); mpz_clear(ad); }
         if (b_ok) { mpz_clear(bn); mpz_clear(bd); }
@@ -285,7 +285,7 @@ static Expr* add_numbers(Expr* a, Expr* b) {
 
 Expr* make_plus(Expr* a, Expr* b) {
     Expr* args[2] = { a, b };
-    return expr_new_function(expr_new_symbol("Plus"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), args, 2);
 }
 
 /* Detect Times[-1, Plus[...]] (canonical form for `-(a+b+...)`).
@@ -355,7 +355,7 @@ Expr* builtin_plus(Expr* res) {
                 for (size_t j = 0; j < inner->data.function.arg_count; j++) {
                     Expr* tj = inner->data.function.args[j];
                     new_args[k++] = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), expr_copy(tj) }, 2));
                 }
                 expr_free(res->data.function.args[i]);
@@ -411,24 +411,24 @@ Expr* builtin_plus(Expr* res) {
             else if (c == -1) neg_inf++;
             else if (c == 2) cinf++;
         }
-        if (has_indet) return expr_new_symbol("Indeterminate");
+        if (has_indet) return expr_new_symbol(SYM_Indeterminate);
         if (pos_inf > 0 && neg_inf > 0) {
             if (!arith_warnings_muted())
                 fprintf(stderr,
                     "Infinity::indet: Indeterminate expression -Infinity + Infinity encountered.\n");
-            return expr_new_symbol("Indeterminate");
+            return expr_new_symbol(SYM_Indeterminate);
         }
         if (cinf > 1 || (cinf > 0 && (pos_inf > 0 || neg_inf > 0))) {
             if (!arith_warnings_muted())
                 fprintf(stderr,
                     "Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.\n");
-            return expr_new_symbol("Indeterminate");
+            return expr_new_symbol(SYM_Indeterminate);
         }
-        if (cinf == 1) return expr_new_symbol("ComplexInfinity");
-        if (pos_inf > 0) return expr_new_symbol("Infinity");
+        if (cinf == 1) return expr_new_symbol(SYM_ComplexInfinity);
+        if (pos_inf > 0) return expr_new_symbol(SYM_Infinity);
         if (neg_inf > 0) {
-            return expr_new_function(expr_new_symbol("Times"),
-                (Expr*[]){ expr_new_integer(-1), expr_new_symbol("Infinity") }, 2);
+            return expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
         }
     }
 
@@ -459,7 +459,7 @@ Expr* builtin_plus(Expr* res) {
             free(groups);
             expr_free(c);
             if (is_temp_base && b != arg) expr_free(b);
-            return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
+            return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
         }
 
         if (b == NULL) {
@@ -521,7 +521,7 @@ Expr* builtin_plus(Expr* res) {
                         if (groups[j].temp_base) expr_free(groups[j].base);
                     }
                     free(groups);
-                    return expr_new_function(expr_new_symbol("Overflow"), NULL, 0);
+                    return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
                 }
             } else {
                 groups[group_count].base = b; 
@@ -561,7 +561,7 @@ Expr* builtin_plus(Expr* res) {
             final_args[idx++] = expr_copy(groups[j].base);
         } else {
             Expr* t_args[] = {expr_copy(groups[j].coeff), expr_copy(groups[j].base)};
-            final_args[idx++] = expr_new_function(expr_new_symbol("Times"), t_args, 2);
+            final_args[idx++] = expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
         }
     }
     
@@ -573,7 +573,7 @@ Expr* builtin_plus(Expr* res) {
         final_res = final_args[0];
         free(final_args);
     } else {
-        final_res = expr_new_function(expr_new_symbol("Plus"), final_args, idx);
+        final_res = expr_new_function(expr_new_symbol(SYM_Plus), final_args, idx);
         free(final_args);
     }
     

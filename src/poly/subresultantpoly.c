@@ -107,7 +107,7 @@ static Expr* subres_poly_det(Expr** p1d, int n, Expr** p2d, int m, int j, Expr* 
             elems[c] = (k >= 0 && k <= n) ? expr_copy(p1d[k]) : expr_new_integer(0);
         }
         elems[dim - 1] = trunc_shift_poly(p1d, n, m - j - 1 - i, j, var);
-        rows[i] = expr_new_function(expr_new_symbol("List"), elems, (size_t)dim);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), elems, (size_t)dim);
         free(elems);
     }
     for (int i = 0; i < rowsQ; i++) {
@@ -117,11 +117,11 @@ static Expr* subres_poly_det(Expr** p1d, int n, Expr** p2d, int m, int j, Expr* 
             elems[c] = (k >= 0 && k <= m) ? expr_copy(p2d[k]) : expr_new_integer(0);
         }
         elems[dim - 1] = trunc_shift_poly(p2d, m, n - j - 1 - i, j, var);
-        rows[rowsP + i] = expr_new_function(expr_new_symbol("List"), elems, (size_t)dim);
+        rows[rowsP + i] = expr_new_function(expr_new_symbol(SYM_List), elems, (size_t)dim);
         free(elems);
     }
 
-    Expr* matrix = expr_new_function(expr_new_symbol("List"), rows, (size_t)dim);
+    Expr* matrix = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)dim);
     free(rows);
 
     Expr* det_call = expr_new_function(expr_new_symbol("Det"), (Expr*[]){matrix}, 1);
@@ -139,7 +139,7 @@ static Expr* subres_poly_det(Expr** p1d, int n, Expr** p2d, int m, int j, Expr* 
 static Expr* subrespoly_determinant(Expr** p1d, int n, Expr** p2d, int m, Expr* var) {
     Expr** S = (Expr**)malloc(sizeof(Expr*) * (size_t)(m + 1));
     for (int j = 0; j <= m; j++) S[j] = subres_poly_det(p1d, n, p2d, m, j, var);
-    Expr* list = expr_new_function(expr_new_symbol("List"), S, (size_t)(m + 1));
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), S, (size_t)(m + 1));
     free(S);
     return list;
 }
@@ -280,7 +280,7 @@ static Expr* subrespoly_prs(Expr* e1, Expr* e2, int n, int m, Expr* var) {
         }
 
         for (int j = 0; j <= m; j++) if (!S[j]) S[j] = expr_new_integer(0);
-        result = expr_new_function(expr_new_symbol("List"), S, (size_t)(m + 1));
+        result = expr_new_function(expr_new_symbol(SYM_List), S, (size_t)(m + 1));
         free(S);
     }
 

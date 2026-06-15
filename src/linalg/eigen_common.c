@@ -94,30 +94,30 @@ Expr* eigen_build_lambda_matrix(Expr* m, Expr* a_or_null,
             if (a_or_null) {
                 Expr* aij = a_row->data.function.args[j];
                 Expr* neg_lam_a = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1),
                                expr_new_symbol(lambda_name),
                                expr_copy(aij) }, 3));
                 sub = eval_and_free(expr_new_function(
-                    expr_new_symbol("Plus"),
+                    expr_new_symbol(SYM_Plus),
                     (Expr*[]){ expr_copy(mij), neg_lam_a }, 2));
             } else if (i == j) {
                 Expr* neg_lam = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1),
                                expr_new_symbol(lambda_name) }, 2));
                 sub = eval_and_free(expr_new_function(
-                    expr_new_symbol("Plus"),
+                    expr_new_symbol(SYM_Plus),
                     (Expr*[]){ expr_copy(mij), neg_lam }, 2));
             } else {
                 sub = expr_copy(mij);
             }
             elems[j] = sub;
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), elems, n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), elems, n);
         free(elems);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
     return result;
 }
@@ -157,7 +157,7 @@ static Expr* eigen_mat_trace(Expr* M, int n) {
             M->data.function.args[i]->data.function.args[i]);
     }
     Expr* res = eval_and_free(expr_new_function(
-        expr_new_symbol("Plus"), terms, n));
+        expr_new_symbol(SYM_Plus), terms, n));
     free(terms);
     return res;
 }
@@ -171,20 +171,20 @@ static Expr* eigen_mat_minus_scalar_id(Expr* M, Expr* s, int n) {
             Expr* mij = M->data.function.args[i]->data.function.args[j];
             if (i == j) {
                 row[j] = eval_and_free(expr_new_function(
-                    expr_new_symbol("Plus"),
+                    expr_new_symbol(SYM_Plus),
                     (Expr*[]){ expr_copy(mij),
                                eval_and_free(expr_new_function(
-                                   expr_new_symbol("Times"),
+                                   expr_new_symbol(SYM_Times),
                                    (Expr*[]){ expr_new_integer(-1),
                                               expr_copy(s) }, 2)) }, 2));
             } else {
                 row[j] = expr_copy(mij);
             }
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row, n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row, n);
         free(row);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
     return result;
 }
@@ -215,7 +215,7 @@ Expr* eigen_char_poly_faddeev(Expr* A, const char* lambda_name, int n) {
     Expr** coeffs = malloc(sizeof(Expr*) * (n + 1));
     coeffs[n] = expr_new_integer(1);
     coeffs[n - 1] = eval_and_free(expr_new_function(
-        expr_new_symbol("Times"),
+        expr_new_symbol(SYM_Times),
         (Expr*[]){ expr_new_integer(-1), expr_copy(p_prev) }, 2));
 
     for (int k = 2; k <= n; k++) {
@@ -232,10 +232,10 @@ Expr* eigen_char_poly_faddeev(Expr* A, const char* lambda_name, int n) {
         }
         Expr* tr = eigen_mat_trace(M, n);
         Expr* p_k = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){ tr,
                        eval_and_free(expr_new_function(
-                           expr_new_symbol("Power"),
+                           expr_new_symbol(SYM_Power),
                            (Expr*[]){ expr_new_integer(k),
                                       expr_new_integer(-1) }, 2)) }, 2));
         expr_free(p_prev);
@@ -243,7 +243,7 @@ Expr* eigen_char_poly_faddeev(Expr* A, const char* lambda_name, int n) {
 
         /* coefficient of λ^{n-k} in det(λI − A) is −p_k. */
         coeffs[n - k] = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_new_integer(-1), expr_copy(p_k) }, 2));
     }
 
@@ -263,17 +263,17 @@ Expr* eigen_char_poly_faddeev(Expr* A, const char* lambda_name, int n) {
             lam_pow = expr_new_symbol(lambda_name);
         } else {
             lam_pow = eval_and_free(expr_new_function(
-                expr_new_symbol("Power"),
+                expr_new_symbol(SYM_Power),
                 (Expr*[]){ expr_new_symbol(lambda_name),
                            expr_new_integer(k) }, 2));
         }
         terms[tcount++] = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){ coeffs[k], lam_pow }, 2));
     }
     free(coeffs);
     Expr* poly = eval_and_free(expr_new_function(
-        expr_new_symbol("Plus"), terms, tcount));
+        expr_new_symbol(SYM_Plus), terms, tcount));
     free(terms);
     return poly;
 }
@@ -285,16 +285,16 @@ Expr* eigen_char_poly_faddeev(Expr* A, const char* lambda_name, int n) {
  * Returns the solution List, or NULL on failure. */
 Expr* eigen_solve_poly(Expr* poly, const char* lambda_name,
                               bool cubics_radical, bool quartics_radical) {
-    Expr* eq = expr_new_function(expr_new_symbol("Equal"),
+    Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ expr_copy(poly), expr_new_integer(0) }, 2);
     Expr* lam = expr_new_symbol(lambda_name);
-    Expr* opt_cubics = expr_new_function(expr_new_symbol("Rule"),
-        (Expr*[]){ expr_new_symbol("Cubics"),
+    Expr* opt_cubics = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_Cubics),
                    expr_new_symbol(cubics_radical ? "True" : "False") }, 2);
-    Expr* opt_quartics = expr_new_function(expr_new_symbol("Rule"),
-        (Expr*[]){ expr_new_symbol("Quartics"),
+    Expr* opt_quartics = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ expr_new_symbol(SYM_Quartics),
                    expr_new_symbol(quartics_radical ? "True" : "False") }, 2);
-    Expr* solve_call = expr_new_function(expr_new_symbol("Solve"),
+    Expr* solve_call = expr_new_function(expr_new_symbol(SYM_Solve),
         (Expr*[]){ eq, lam, opt_cubics, opt_quartics }, 4);
     return eval_and_free(solve_call);
 }
@@ -374,8 +374,8 @@ Expr* eigen_chop(Expr* val) {
             if (drop_re) {
                 /* Pure imaginary: i * im */
                 return eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
-                    (Expr*[]){ expr_copy(im), expr_new_symbol("I") }, 2));
+                    expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_copy(im), expr_new_symbol(SYM_I) }, 2));
             }
         }
     }
@@ -387,7 +387,7 @@ Expr* eigen_chop(Expr* val) {
  * Rational / MPFR / BigInt -- i.e. the value carries symbolic terms. */
 static bool eigen_abs_to_double(Expr* val, double* out) {
     Expr* abs_e = eval_and_free(expr_new_function(
-        expr_new_symbol("Abs"), (Expr*[]){ expr_copy(val) }, 1));
+        expr_new_symbol(SYM_Abs), (Expr*[]){ expr_copy(val) }, 1));
     Expr* n_abs = eval_and_free(expr_new_function(
         expr_new_symbol("N"), (Expr*[]){ abs_e }, 1));
     bool ok = true;
@@ -496,12 +496,12 @@ Expr** eigen_null_space(Expr* M, int n, size_t* count_out) {
             Expr* r_val =
                 R->data.function.args[i]->data.function.args[free_col];
             Expr* neg = eval_and_free(expr_new_function(
-                expr_new_symbol("Times"),
+                expr_new_symbol(SYM_Times),
                 (Expr*[]){ expr_new_integer(-1), expr_copy(r_val) }, 2));
             expr_free(vec[pc]);
             vec[pc] = neg;
         }
-        basis[bc++] = expr_new_function(expr_new_symbol("List"), vec, n);
+        basis[bc++] = expr_new_function(expr_new_symbol(SYM_List), vec, n);
         free(vec);
     }
 
@@ -824,14 +824,14 @@ Expr* mateigen_build_complex_eigvec_list_rect(const double* V_re,
                 Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
                 args[0] = expr_new_real(r);
                 args[1] = expr_new_real(m);
-                comps[i] = expr_new_function(expr_new_symbol("Complex"), args, 2);
+                comps[i] = expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
                 free(args);
             }
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n_components);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, n_components);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, k_vectors);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, k_vectors);
     free(rows);
     return out;
 }
@@ -1084,15 +1084,15 @@ Expr* mateigen_build_complex_eigvec_list_rect_M(const mpfr_t* V_re,
                 Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
                 args[0] = expr_new_mpfr_copy(V_re[k * n_components + i]);
                 args[1] = expr_new_mpfr_copy(V_im[k * n_components + i]);
-                comps[i] = expr_new_function(expr_new_symbol("Complex"),
+                comps[i] = expr_new_function(expr_new_symbol(SYM_Complex),
                                               args, 2);
                 free(args);
             }
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n_components);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, n_components);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, k_vectors);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, k_vectors);
     free(rows);
     return out;
 }

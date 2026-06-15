@@ -30,6 +30,7 @@
  * return an owned result; numericalize does not consume its input.
  */
 #include "minpoly.h"
+#include "sym_names.h"
 #include "expr.h"
 #include "internal.h"
 #include "symtab.h"
@@ -108,7 +109,7 @@ static Expr* mp_subst_symbol(const Expr* e, const char* from, const char* to) {
 static Expr* mp_subst_symbol_with_slot(const Expr* e, const char* from) {
     if (!e) return NULL;
     if (e->type == EXPR_SYMBOL && strcmp(e->data.symbol, from) == 0)
-        return expr_new_function(expr_new_symbol("Slot"),
+        return expr_new_function(expr_new_symbol(SYM_Slot),
                                  (Expr*[]){ expr_new_integer(1) }, 1);
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
@@ -366,7 +367,7 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
                 return internal_power((Expr*[]){ B, expr_new_integer(n) }, 2);
             }
             /* n < 0: reciprocal of the positive power. */
-            Expr* pos = expr_new_function(expr_new_symbol("Power"),
+            Expr* pos = expr_new_function(expr_new_symbol(SYM_Power),
                 (Expr*[]){ expr_copy((Expr*)base), expr_new_integer(-n) }, 2);
             Expr* val = mp_walk(pos, c);
             expr_free(pos);
@@ -381,9 +382,9 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
             int64_t q = exp->data.function.args[1]->data.integer;
             if (q < 0) { p = -p; q = -q; }
             if (p < 0) {
-                Expr* pos = expr_new_function(expr_new_symbol("Power"),
+                Expr* pos = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_copy((Expr*)base),
-                        expr_new_function(expr_new_symbol("Rational"),
+                        expr_new_function(expr_new_symbol(SYM_Rational),
                             (Expr*[]){ expr_new_integer(-p),
                                        expr_new_integer(q) }, 2) }, 2);
                 Expr* val = mp_walk(pos, c);
@@ -499,7 +500,7 @@ static double mp_to_double(const Expr* e) {
 /* |f(value)| as a double, value substituted for var, evaluated under spec. */
 static double mp_eval_abs(const Expr* f, const Expr* var,
                           const Expr* value, NumericSpec spec) {
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){ expr_copy((Expr*)var), expr_copy((Expr*)value) }, 2);
     Expr* sub = internal_replace_all((Expr*[]){ expr_copy((Expr*)f), rule }, 2);
     Expr* num = numericalize(sub, spec);
@@ -682,7 +683,7 @@ Expr* builtin_minimalpolynomial(Expr* res) {
         Expr* body = mp_subst_symbol_with_slot(p, nm);
         expr_free(p);
         free(nm);
-        return expr_new_function(expr_new_symbol("Function"),
+        return expr_new_function(expr_new_symbol(SYM_Function),
                                  (Expr*[]){ body }, 1);
     }
 

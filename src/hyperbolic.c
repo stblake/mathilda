@@ -104,7 +104,7 @@ static bool is_infinity(Expr* e) {
  */
 static Expr* flip_sign(Expr* e) {
     Expr* args[2] = { expr_new_integer(-1), expr_copy(e) };
-    return eval_and_free(expr_new_function(expr_new_symbol("Times"), args, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), args, 2));
 }
 
 /*
@@ -155,7 +155,7 @@ static Expr* peel_imaginary_unit(Expr* arg) {
         Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
         new_args[0] = expr_copy(fim);
         for (size_t i = 1; i < n; i++) new_args[i] = expr_copy(arg->data.function.args[i]);
-        Expr* t = expr_new_function(expr_new_symbol("Times"), new_args, n);
+        Expr* t = expr_new_function(expr_new_symbol(SYM_Times), new_args, n);
         free(new_args);
         return eval_and_free(t);
     }
@@ -208,21 +208,21 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
     Expr* x = arg->data.function.args[0];
 
     #define SQRT_OF(arg_e)                                                     \
-        eval_and_free(expr_new_function(expr_new_symbol("Power"),              \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),              \
             (Expr*[]){ (arg_e), make_rational(1, 2) }, 2))
     #define X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol("Power"),              \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),              \
             (Expr*[]){ expr_copy(x), expr_new_integer(2) }, 2))
     #define ONE_PLUS_X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),               \
             (Expr*[]){ expr_new_integer(1), X_SQ() }, 2))
     #define ONE_MINUS_X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),               \
             (Expr*[]){ expr_new_integer(1),                                    \
-                       eval_and_free(expr_new_function(expr_new_symbol("Times"), \
+                       eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), \
                            (Expr*[]){ expr_new_integer(-1), X_SQ() }, 2)) }, 2))
     #define X_PLUS_K(k) \
-        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),               \
             (Expr*[]){ expr_new_integer(k), expr_copy(x) }, 2))
     /* Sqrt[(x-1)(x+1)] expressed as Sqrt[x-1]*Sqrt[x+1] -- the principal-
      * branch form Mathematica returns for Sinh[ArcCosh[x]]. Storing it as
@@ -240,30 +240,30 @@ static Expr* try_simp_forward_of_inverse_hyp(const char* outer, Expr* arg) {
     }
     if (strcmp(outer, "Sinh") == 0 && strcmp(inner, "ArcTanh") == 0) {
         Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
-        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
         return make_times(expr_copy(x), inv);
     }
     if (strcmp(outer, "Cosh") == 0 && strcmp(inner, "ArcTanh") == 0) {
         Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
     }
     if (strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcSinh") == 0) {
         Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
-        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
         return make_times(expr_copy(x), inv);
     }
     if (strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcCosh") == 0) {
         Expr* num = SQRT_X_MINUS_1_TIMES_SQRT_X_PLUS_1();
-        Expr* inv_x = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        Expr* inv_x = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
         return make_times(num, inv_x);
     }
     if ((strcmp(outer, "Tanh") == 0 && strcmp(inner, "ArcCoth") == 0) ||
         (strcmp(outer, "Coth") == 0 && strcmp(inner, "ArcTanh") == 0)) {
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
     }
 
@@ -317,10 +317,10 @@ Expr* builtin_sinh(Expr* res) {
     { Expr* f = hyp_i_fold(arg, "Sin", +1); if (f) return f; }
 
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(0);
-    if (is_infinity(arg)) return expr_new_symbol("Infinity");
+    if (is_infinity(arg)) return expr_new_symbol(SYM_Infinity);
     if (is_minus_infinity(arg)) {
-        Expr* args[2] = { expr_new_integer(-1), expr_new_symbol("Infinity") };
-        return expr_new_function(expr_new_symbol("Times"), args, 2);
+        Expr* args[2] = { expr_new_integer(-1), expr_new_symbol(SYM_Infinity) };
+        return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
     }
 
 #ifdef USE_MPFR
@@ -357,7 +357,7 @@ Expr* builtin_cosh(Expr* res) {
     { Expr* f = hyp_i_fold(arg, "Cos", 0); if (f) return f; }
 
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(1);
-    if (is_infinity(arg) || is_minus_infinity(arg)) return expr_new_symbol("Infinity");
+    if (is_infinity(arg) || is_minus_infinity(arg)) return expr_new_symbol(SYM_Infinity);
 
     double complex c;
     bool inexact = false;
@@ -430,7 +430,7 @@ Expr* builtin_coth(Expr* res) {
     // Coth[I y] -> -I Cot[y]
     { Expr* f = hyp_i_fold(arg, "Cot", -1); if (f) return f; }
 
-    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol("ComplexInfinity");
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol(SYM_ComplexInfinity);
     if (is_infinity(arg)) return expr_new_integer(1);
     if (is_minus_infinity(arg)) return expr_new_integer(-1);
 
@@ -497,7 +497,7 @@ Expr* builtin_csch(Expr* res) {
     // Csch[I y] -> -I Csc[y]
     { Expr* f = hyp_i_fold(arg, "Csc", -1); if (f) return f; }
 
-    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol("ComplexInfinity");
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol(SYM_ComplexInfinity);
     if (is_infinity(arg) || is_minus_infinity(arg)) return expr_new_integer(0);
 
     double complex c;
@@ -529,7 +529,7 @@ Expr* builtin_arcsinh(Expr* res) {
     { Expr* f = hyp_i_fold(arg, "ArcSin", +1); if (f) return f; }
 
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_integer(0);
-    if (is_infinity(arg)) return expr_new_symbol("Infinity");
+    if (is_infinity(arg)) return expr_new_symbol(SYM_Infinity);
 
     double complex c;
     bool inexact = false;
@@ -554,7 +554,7 @@ Expr* builtin_arccosh(Expr* res) {
     Expr* arg = res->data.function.args[0];
     
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1) return expr_new_integer(0);
-    if (is_infinity(arg)) return expr_new_symbol("Infinity");
+    if (is_infinity(arg)) return expr_new_symbol(SYM_Infinity);
 
     double complex c;
     bool inexact = false;

@@ -170,7 +170,7 @@ static Expr* random_array(const mpz_t imin, const mpz_t imax,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     free(elems);
     return list;
 }
@@ -245,7 +245,7 @@ Expr* builtin_randominteger(Expr* res) {
                     return NULL;
                 }
             }
-            Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+            Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
             free(elems);
             mpz_clear(imin);
             mpz_clear(imax);
@@ -397,7 +397,7 @@ static Expr* random_real_array(double xmin, double xmax,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     free(elems);
     return list;
 }
@@ -543,7 +543,7 @@ static Expr* random_real_array_mpfr(const mpfr_t xmin, const mpfr_t xmax,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     free(elems);
     return list;
 }
@@ -586,7 +586,7 @@ static Expr* randomreal_mpfr(Expr* res, size_t effective_argc, long bits) {
             for (size_t i = 0; i < n; i++) {
                 elems[i] = random_real_range_mpfr(xmin, xmax, bits);
             }
-            Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+            Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
             free(elems);
             mpfr_clear(xmin); mpfr_clear(xmax);
             return list;
@@ -648,7 +648,7 @@ static Expr* randomreal_machine(Expr* res, size_t effective_argc) {
             for (size_t i = 0; i < n; i++) {
                 elems[i] = random_real_range(xmin, xmax);
             }
-            Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+            Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
             free(elems);
             return list;
         }
@@ -721,7 +721,7 @@ Expr* builtin_seedrandom(Expr* res) {
         /* Re-seed from system entropy */
         ensure_rand_init();
         gmp_randseed_ui(g_rand_state, (unsigned long)time(NULL) ^ (unsigned long)clock());
-        return expr_new_symbol("Null");
+        return expr_new_symbol(SYM_Null);
     }
 
     if (argc == 1) {
@@ -729,12 +729,12 @@ Expr* builtin_seedrandom(Expr* res) {
         if (arg->type == EXPR_INTEGER) {
             ensure_rand_init();
             gmp_randseed_ui(g_rand_state, (unsigned long)arg->data.integer);
-            return expr_new_symbol("Null");
+            return expr_new_symbol(SYM_Null);
         }
         if (arg->type == EXPR_BIGINT) {
             ensure_rand_init();
             gmp_randseed(g_rand_state, arg->data.bigint);
-            return expr_new_symbol("Null");
+            return expr_new_symbol(SYM_Null);
         }
         return NULL; /* Non-integer seed */
     }
@@ -859,7 +859,7 @@ static Expr* random_complex_array(double re_min, double re_max,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     free(elems);
     return list;
 }
@@ -953,7 +953,7 @@ static Expr* random_complex_array_mpfr(const mpfr_t re_min, const mpfr_t re_max,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     free(elems);
     return list;
 }
@@ -1007,7 +1007,7 @@ static Expr* randomcomplex_mpfr(Expr* res, size_t effective_argc, long bits) {
             for (size_t i = 0; i < n; i++) {
                 elems[i] = random_complex_range_mpfr(re_min, re_max, im_min, im_max, bits);
             }
-            Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+            Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
             free(elems);
             mpfr_clear(re_min); mpfr_clear(re_max);
             mpfr_clear(im_min); mpfr_clear(im_max);
@@ -1075,7 +1075,7 @@ static Expr* randomcomplex_machine(Expr* res, size_t effective_argc) {
             for (size_t i = 0; i < n; i++) {
                 elems[i] = random_complex_range(re_min, re_max, im_min, im_max);
             }
-            Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+            Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
             free(elems);
             return list;
         }
@@ -1210,7 +1210,7 @@ static Expr* random_choice_array(Expr** choices, size_t choice_count,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     free(elems);
     return list;
 }
@@ -1250,7 +1250,7 @@ static Expr* weighted_choice_array(Expr** choices, size_t choice_count,
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     free(elems);
     return list;
 }
@@ -1362,7 +1362,7 @@ Expr* builtin_randomchoice(Expr* res) {
                 result_elems[i] = expr_copy(elems_args[idx]);
             }
             free(cum_weights);
-            Expr* list = expr_new_function(expr_new_symbol("List"), result_elems, n);
+            Expr* list = expr_new_function(expr_new_symbol(SYM_List), result_elems, n);
             free(result_elems);
             return list;
         }
@@ -1412,7 +1412,7 @@ Expr* builtin_randomchoice(Expr* res) {
             size_t idx = random_index(choice_count);
             elems[i] = expr_copy(choices[idx]);
         }
-        Expr* list = expr_new_function(expr_new_symbol("List"), elems, n);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), elems, n);
         free(elems);
         return list;
     }
@@ -1607,7 +1607,7 @@ Expr* builtin_randomsample(Expr* res) {
         }
         free(selected);
 
-        Expr* list = expr_new_function(expr_new_symbol("List"), result_elems, sample_n);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), result_elems, sample_n);
         free(result_elems);
         return list;
     }
@@ -1650,7 +1650,7 @@ Expr* builtin_randomsample(Expr* res) {
     }
     free(selected);
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), result_elems, sample_n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), result_elems, sample_n);
     free(result_elems);
     return list;
 }

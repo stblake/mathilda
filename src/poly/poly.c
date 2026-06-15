@@ -416,8 +416,8 @@ static int64_t get_k(BPList* term_bp, BPList* target_bp) {
                     Expr* div_args[2];
                     div_args[0] = expr_copy(trm_exp);
                     Expr* inv_args[2] = { expr_copy(t_exp), expr_new_integer(-1) };
-                    div_args[1] = expr_new_function(expr_new_symbol("Power"), inv_args, 2);
-                    Expr* div = expr_new_function(expr_new_symbol("Times"), div_args, 2);
+                    div_args[1] = expr_new_function(expr_new_symbol(SYM_Power), inv_args, 2);
+                    Expr* div = expr_new_function(expr_new_symbol(SYM_Times), div_args, 2);
                     Expr* canc_args[1] = { div };
                     Expr* ratio = internal_cancel(canc_args, 1);
                     bool ok = (ratio && ratio->type == EXPR_INTEGER &&
@@ -640,7 +640,7 @@ static void decompose_exponent(Expr* exp, int64_t* c_n, int64_t* c_d, Expr** A_o
             for (size_t i = 0; i < n; i++) {
                 rest[i] = expr_copy(exp->data.function.args[i + 1]);
             }
-            *A_out = eval_and_free(expr_new_function(expr_new_symbol("Times"), rest, n));
+            *A_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), rest, n));
             free(rest);
         }
         return;
@@ -817,7 +817,7 @@ Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, cons
     int64_t cn, cd;
     if (is_target_power(e, base, atom, &cn, &cd)) {
         int64_t k = cn * (m / cd);
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){expr_new_symbol(gen), expr_new_integer(k)}, 2));
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
@@ -852,14 +852,14 @@ Expr* poly_subst_radical_to_gen(Expr* e, Expr* base, Expr* atom, int64_t m, cons
 static Expr* build_back_power(Expr* base, Expr* atom, int64_t k, int64_t m) {
     if (atom_is_one(atom)) {
         Expr* exp = make_rational(k, m);
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){expr_copy(base), exp}, 2));
     }
     /* Power[B, (k/m)*A]. */
     Expr* coeff = make_rational(k, m);
-    Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+    Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){coeff, expr_copy(atom)}, 2));
-    return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
               (Expr*[]){expr_copy(base), new_exp}, 2));
 }
 
@@ -882,13 +882,13 @@ Expr* poly_subst_radical_from_gen(Expr* e, Expr* base, Expr* atom, int64_t m, co
             /* g^(pp/qq) -> Power[B, A * (pp / (qq * m))]. */
             if (atom_is_one(atom)) {
                 Expr* new_exp = make_rational(pp, qq * m);
-                return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+                return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                           (Expr*[]){expr_copy(base), new_exp}, 2));
             }
             Expr* coeff = make_rational(pp, qq * m);
-            Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+            Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){coeff, expr_copy(atom)}, 2));
-            return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                       (Expr*[]){expr_copy(base), new_exp}, 2));
         }
         /* g^exp where exp is symbolic — Power[B, exp*A/m]. */
@@ -907,9 +907,9 @@ Expr* poly_subst_radical_from_gen(Expr* e, Expr* base, Expr* atom, int64_t m, co
             factors[2] = expr_copy(atom);
             nf = 3;
         }
-        Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol("Times"), factors, nf));
+        Expr* new_exp = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), factors, nf));
         free(factors);
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){expr_copy(base), new_exp}, 2));
     }
     size_t count = e->data.function.arg_count;
@@ -960,7 +960,7 @@ Expr* builtin_variables(Expr* res) {
     Expr** vars = malloc(sizeof(Expr*) * capacity);
     collect_variables(res->data.function.args[0], &vars, &count, &capacity);
     if (count > 0) qsort(vars, count, sizeof(Expr*), compare_expr_ptrs);
-    Expr* list = expr_new_function(expr_new_symbol("List"), vars, count);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), vars, count);
     free(vars); return list;
 }
 
@@ -1674,7 +1674,7 @@ Expr* builtin_polynomialquotientremainder(Expr* res) {
         Expr* qext = polynomialdivrem_with_extension(p, q, x, alpha, 0);
         Expr* rext = polynomialdivrem_with_extension(p, q, x, alpha, 1);
         if (qext && rext) {
-            Expr* list = expr_new_function(expr_new_symbol("List"),
+            Expr* list = expr_new_function(expr_new_symbol(SYM_List),
                                            (Expr*[]){qext, rext}, 2);
             if (alpha_auto) expr_free(alpha_auto);
             if (auto_tower) qa_tower_free(auto_tower);
@@ -1696,7 +1696,7 @@ Expr* builtin_polynomialquotientremainder(Expr* res) {
     }
     Expr* expanded_Q = expr_expand(Q);
     expr_free(Q);
-    Expr* list = expr_new_function(expr_new_symbol("List"),
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List),
                                    (Expr*[]){expanded_Q, R}, 2);
     return list;
 }
@@ -1750,7 +1750,7 @@ Expr* builtin_subresultantpolynomialremainders(Expr* res) {
         chain[n++] = r;
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), chain, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), chain, n);
     free(chain);
     return list;
 }
@@ -3212,7 +3212,7 @@ static Expr* coeff_list_rec(Expr* expr, Expr** vars, int* max_degrees, size_t nu
     free(coeffs);
     expr_free(expanded);
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), args, d + 1);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), args, d + 1);
     free(args);
     return list;
 }
@@ -3223,7 +3223,7 @@ Expr* builtin_coefficientlist(Expr* res) {
     Expr* vars_expr = res->data.function.args[1];
 
     if (expr->type == EXPR_INTEGER && expr->data.integer == 0) {
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
     size_t num_vars = 1;
@@ -3263,7 +3263,7 @@ static Expr* decompose_recursive(Expr* f, Expr* x) {
     Expr* expanded = expr_expand(f);
     int n = get_degree_poly(expanded, x);
     if (n < 2) {
-        Expr* res = expr_new_function(expr_new_symbol("List"), (Expr*[]){expr_copy(expanded)}, 1);
+        Expr* res = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){expr_copy(expanded)}, 1);
         expr_free(expanded);
         return res;
     }
@@ -3323,7 +3323,7 @@ static Expr* decompose_recursive(Expr* f, Expr* x) {
 
         if (expr_eq(g, x)) {
             expr_free(g);
-            return expr_new_function(expr_new_symbol("List"), (Expr*[]){H}, 1);
+            return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){H}, 1);
         }
 
         Expr* Lg = decompose_recursive(g, x);
@@ -3334,7 +3334,7 @@ static Expr* decompose_recursive(Expr* f, Expr* x) {
         for (size_t i = 0; i < Lg_count; i++) L_args[i] = expr_copy(Lg->data.function.args[i]);
         L_args[Lg_count] = H;
         
-        Expr* res = expr_new_function(expr_new_symbol("List"), L_args, Lg_count + 1);
+        Expr* res = expr_new_function(expr_new_symbol(SYM_List), L_args, Lg_count + 1);
         free(L_args);
         expr_free(Lg);
         return res;
@@ -3465,7 +3465,7 @@ static Expr* decompose_recursive(Expr* f, Expr* x) {
                 for (size_t i = 0; i < c1; i++) final_args[i] = expr_copy(Lg->data.function.args[i]);
                 for (size_t i = 0; i < c2; i++) final_args[c1 + i] = expr_copy(Lh->data.function.args[i]);
                 
-                Expr* res = expr_new_function(expr_new_symbol("List"), final_args, c1 + c2);
+                Expr* res = expr_new_function(expr_new_symbol(SYM_List), final_args, c1 + c2);
                 free(final_args);
                 expr_free(Lg);
                 expr_free(Lh);
@@ -3480,7 +3480,7 @@ static Expr* decompose_recursive(Expr* f, Expr* x) {
     }
     expr_free(a_n);
     
-    Expr* res = expr_new_function(expr_new_symbol("List"), (Expr*[]){expr_copy(expanded)}, 1);
+    Expr* res = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){expr_copy(expanded)}, 1);
     expr_free(expanded);
     return res;
 }
@@ -3598,7 +3598,7 @@ Expr* builtin_hornerform(Expr* res) {
                             d_args[d_count++] = internal_power((Expr*[]){expr_copy(arg->data.function.args[0]), expr_new_integer(-exp->data.integer)}, 2);
                         }
                     } else { 
-                        Expr* new_rat = eval_and_free(expr_new_function(expr_new_symbol("Rational"), (Expr*[]){expr_new_integer(-exp->data.function.args[0]->data.integer), expr_copy(exp->data.function.args[1])}, 2));
+                        Expr* new_rat = eval_and_free(expr_new_function(expr_new_symbol(SYM_Rational), (Expr*[]){expr_new_integer(-exp->data.function.args[0]->data.integer), expr_copy(exp->data.function.args[1])}, 2));
                         d_args[d_count++] = internal_power((Expr*[]){expr_copy(arg->data.function.args[0]), new_rat}, 2);
                     }
                     continue;
@@ -3650,10 +3650,10 @@ Expr* builtin_hornerform(Expr* res) {
     }
     
     if (vars1_expr && (vars1_expr->type != EXPR_FUNCTION || vars1_expr->data.function.head->type != EXPR_SYMBOL || vars1_expr->data.function.head->data.symbol != SYM_List)) {
-        vars1_expr = eval_and_free(expr_new_function(expr_new_symbol("List"), (Expr*[]){vars1_expr}, 1));
+        vars1_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){vars1_expr}, 1));
     }
     if (vars2_expr && (vars2_expr->type != EXPR_FUNCTION || vars2_expr->data.function.head->type != EXPR_SYMBOL || vars2_expr->data.function.head->data.symbol != SYM_List)) {
-        vars2_expr = eval_and_free(expr_new_function(expr_new_symbol("List"), (Expr*[]){vars2_expr}, 1));
+        vars2_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){vars2_expr}, 1));
     }
     
     Expr** vars1 = vars1_expr ? vars1_expr->data.function.args : NULL;
@@ -4213,7 +4213,7 @@ static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
             if (j >= i && j - i <= n) row_elems[j] = expr_copy(p_coeffs[j - i]);
             else row_elems[j] = expr_new_integer(0);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, dim);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, dim);
         free(row_elems);
     }
     
@@ -4223,11 +4223,11 @@ static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
             if (j >= i && j - i <= m) row_elems[j] = expr_copy(q_coeffs[j - i]);
             else row_elems[j] = expr_new_integer(0);
         }
-        rows[m + i] = expr_new_function(expr_new_symbol("List"), row_elems, dim);
+        rows[m + i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, dim);
         free(row_elems);
     }
     
-    Expr* matrix = expr_new_function(expr_new_symbol("List"), rows, dim);
+    Expr* matrix = expr_new_function(expr_new_symbol(SYM_List), rows, dim);
     free(rows);
     
     Expr* det_call = expr_new_function(expr_new_symbol("Det"), (Expr*[]){matrix}, 1);
@@ -4397,7 +4397,7 @@ static Expr* apply_floor_to_coeffs(Expr* e) {
     if (e->type == EXPR_FUNCTION && e->data.function.head->data.symbol == SYM_Complex) {
         Expr* re = apply_floor_to_coeffs(e->data.function.args[0]);
         Expr* im = apply_floor_to_coeffs(e->data.function.args[1]);
-        Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Complex"), (Expr*[]){re, im}, 2));
+        Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Complex), (Expr*[]){re, im}, 2));
         return res;
     }
     return expr_copy(e);
@@ -4450,7 +4450,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
                     if (r < 0) r += m_val;
                     int64_t i_val = term->data.function.args[1]->data.integer % m_val;
                     if (i_val < 0) i_val += m_val;
-                    args[i] = eval_and_free(expr_new_function(expr_new_symbol("Complex"), (Expr*[]){expr_new_integer(r), expr_new_integer(i_val)}, 2));
+                    args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Complex), (Expr*[]){expr_new_integer(r), expr_new_integer(i_val)}, 2));
                 } else {
                     int64_t c = 1 % m_val;
                     if (c < 0) c += m_val;
@@ -4482,7 +4482,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
                 if (r < 0) r += m_val;
                 int64_t i_val = term->data.function.args[1]->data.integer % m_val;
                 if (i_val < 0) i_val += m_val;
-                res = eval_and_free(expr_new_function(expr_new_symbol("Complex"), (Expr*[]){expr_new_integer(r), expr_new_integer(i_val)}, 2));
+                res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Complex), (Expr*[]){expr_new_integer(r), expr_new_integer(i_val)}, 2));
             } else {
                 int64_t c = 1 % m_val;
                 if (c < 0) c += m_val;
@@ -4497,7 +4497,7 @@ static Expr* polynomial_mod_single(Expr* poly, Expr* m, bool use_integer_div) {
     size_t v_count = 0, v_cap = 16;
     Expr** vars = malloc(sizeof(Expr*) * v_cap);
     
-    Expr* t_list = eval_and_free(expr_new_function(expr_new_symbol("List"), (Expr*[]){expr_copy(poly), expr_copy(m)}, 2));
+    Expr* t_list = eval_and_free(expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){expr_copy(poly), expr_copy(m)}, 2));
     collect_variables(t_list, &vars, &v_count, &v_cap);
     expr_free(t_list);
     
@@ -4775,8 +4775,8 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
         expr_free(lc);
     }
 
-    Expr* coef_list = expr_new_function(expr_new_symbol("List"), (Expr*[]){s0, t0}, 2);
-    Expr* ret = expr_new_function(expr_new_symbol("List"), (Expr*[]){r0, coef_list}, 2);
+    Expr* coef_list = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){s0, t0}, 2);
+    Expr* ret = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){r0, coef_list}, 2);
     return ret;
 }
 

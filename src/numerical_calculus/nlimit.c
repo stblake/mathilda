@@ -361,7 +361,7 @@ static bool nl_infinite_ray(Expr* z0, Expr** ray) {
             } else {
                 Expr** v = malloc(sizeof(Expr*) * 2);
                 v[0] = prod; v[1] = contrib;
-                prod = expr_new_function(expr_new_symbol("Times"), v, 2);
+                prod = expr_new_function(expr_new_symbol(SYM_Times), v, 2);
                 free(v);
             }
         }

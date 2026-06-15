@@ -251,7 +251,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     print_standard(e->data.function.args[0], 470);
                 } else {
                     Expr* args[2] = { expr_copy(e->data.function.args[0]), expr_copy(pos_exp) };
-                    Expr* tmp = expr_new_function(expr_new_symbol("Power"), args, 2);
+                    Expr* tmp = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
                     print_standard(tmp, 470);
                     expr_free(tmp);
                 }
@@ -319,7 +319,7 @@ static void print_standard(Expr* e, int parent_prec) {
                     Expr* num = a0->data.function.args[0];
                     Expr* den = a0->data.function.args[1];
                     Expr* rargs[2] = { expr_new_integer(-num->data.integer), expr_copy(den) };
-                    flipped_head = expr_new_function(expr_new_symbol("Rational"), rargs, 2);
+                    flipped_head = expr_new_function(expr_new_symbol(SYM_Rational), rargs, 2);
                 } else if (a0->type == EXPR_FUNCTION &&
                            a0->data.function.head->type == EXPR_SYMBOL &&
                            a0->data.function.head->data.symbol == SYM_Complex &&
@@ -337,10 +337,10 @@ static void print_standard(Expr* e, int parent_prec) {
                         /* Drop the imaginary unit's -1; the loop will print
                          * Complex[0, 1] = "I" as the new lead factor. */
                         Expr* cargs[2] = { expr_new_integer(0), expr_new_integer(1) };
-                        flipped_head = expr_new_function(expr_new_symbol("Complex"), cargs, 2);
+                        flipped_head = expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
                     } else {
                         Expr* cargs[2] = { expr_new_integer(0), expr_new_integer(-im->data.integer) };
-                        flipped_head = expr_new_function(expr_new_symbol("Complex"), cargs, 2);
+                        flipped_head = expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
                     }
                 }
             }
@@ -372,7 +372,7 @@ static void print_standard(Expr* e, int parent_prec) {
                             den_args[den_count++] = expr_copy(arg->data.function.args[0]);
                         } else {
                             Expr* p_args[2] = { expr_copy(arg->data.function.args[0]), pos_exp };
-                            den_args[den_count++] = expr_new_function(expr_new_symbol("Power"), p_args, 2);
+                            den_args[den_count++] = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
                             pos_exp = NULL; 
                         }
                         if (pos_exp) expr_free(pos_exp);
@@ -396,7 +396,7 @@ static void print_standard(Expr* e, int parent_prec) {
                 else {
                     Expr** nc = malloc(sizeof(Expr*) * num_count);
                     for(size_t i=0; i<num_count; i++) nc[i] = expr_copy(num_args[i]);
-                    num = expr_new_function(expr_new_symbol("Times"), nc, num_count);
+                    num = expr_new_function(expr_new_symbol(SYM_Times), nc, num_count);
                     free(nc);
                 }
                 
@@ -405,7 +405,7 @@ static void print_standard(Expr* e, int parent_prec) {
                 else {
                     Expr** dc = malloc(sizeof(Expr*) * den_count);
                     for(size_t i=0; i<den_count; i++) dc[i] = expr_copy(den_args[i]);
-                    den = expr_new_function(expr_new_symbol("Times"), dc, den_count);
+                    den = expr_new_function(expr_new_symbol(SYM_Times), dc, den_count);
                     free(dc);
                 }
                 
@@ -512,7 +512,7 @@ static void print_standard(Expr* e, int parent_prec) {
                                 for (size_t k = 1; k < t_copy->data.function.arg_count; k++) {
                                     new_args[k-1] = expr_copy(t_copy->data.function.args[k]);
                                 }
-                                Expr* new_times = expr_new_function(expr_new_symbol("Times"), new_args, t_copy->data.function.arg_count - 1);
+                                Expr* new_times = expr_new_function(expr_new_symbol(SYM_Times), new_args, t_copy->data.function.arg_count - 1);
                                 expr_free(t_copy);
                                 t_copy = new_times;
                                 free(new_args);
@@ -531,7 +531,7 @@ static void print_standard(Expr* e, int parent_prec) {
                                 for (size_t k = 1; k < t_copy->data.function.arg_count; k++) {
                                     new_args[k-1] = expr_copy(t_copy->data.function.args[k]);
                                 }
-                                Expr* new_times = expr_new_function(expr_new_symbol("Times"), new_args, t_copy->data.function.arg_count - 1);
+                                Expr* new_times = expr_new_function(expr_new_symbol(SYM_Times), new_args, t_copy->data.function.arg_count - 1);
                                 expr_free(t_copy);
                                 t_copy = new_times;
                                 free(new_args);
@@ -596,7 +596,7 @@ static void print_standard(Expr* e, int parent_prec) {
                         is_negative = true;
                         int64_t im_val = arg->data.function.args[1]->data.integer;
                         Expr* cargs[2] = { expr_new_integer(0), expr_new_integer(-im_val) };
-                        t_copy = expr_new_function(expr_new_symbol("Complex"), cargs, 2);
+                        t_copy = expr_new_function(expr_new_symbol(SYM_Complex), cargs, 2);
                         to_print = t_copy;
                     }
                 }
@@ -761,7 +761,7 @@ Expr* builtin_print(Expr* res) {
         print_standard(res->data.function.args[i], 0);
     }
     printf("\n");
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 Expr* builtin_fullform(Expr* res) {
@@ -802,17 +802,17 @@ static Expr* series_build_base(Expr* x, Expr* x0) {
 
     if (x0->type == EXPR_INTEGER && x0->data.integer < 0) {
         Expr* args[2] = { expr_copy(x), expr_new_integer(-x0->data.integer) };
-        return expr_new_function(expr_new_symbol("Plus"), args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Plus), args, 2);
     }
     if (x0->type == EXPR_REAL && x0->data.real < 0.0) {
         Expr* args[2] = { expr_copy(x), expr_new_real(-x0->data.real) };
-        return expr_new_function(expr_new_symbol("Plus"), args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Plus), args, 2);
     }
 
     Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(x0) };
-    Expr* neg = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
     Expr* plus_args[2] = { expr_copy(x), neg };
-    return expr_new_function(expr_new_symbol("Plus"), plus_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
 }
 
 /* Builds base^(num/den) as an Expr, reducing the exponent to lowest terms.
@@ -834,7 +834,7 @@ static Expr* series_build_power(Expr* base, int64_t num, int64_t den) {
     else exp = make_rational(n, d);
 
     Expr* pargs[2] = { expr_copy(base), exp };
-    return expr_new_function(expr_new_symbol("Power"), pargs, 2);
+    return expr_new_function(expr_new_symbol(SYM_Power), pargs, 2);
 }
 
 /* Combines a coefficient with an optional power term into a single summand.
@@ -856,13 +856,13 @@ static Expr* series_build_term(Expr* coef, Expr* power /* borrowed, may be NULL 
             power->data.function.head->type == EXPR_SYMBOL &&
             power->data.function.head->data.symbol == SYM_Plus) {
             Expr* targs[1] = { expr_copy(power) };
-            return expr_new_function(expr_new_symbol("Times"), targs, 1);
+            return expr_new_function(expr_new_symbol(SYM_Times), targs, 1);
         }
         return expr_copy(power);
     }
 
     Expr* args[2] = { expr_copy(coef), expr_copy(power) };
-    return expr_new_function(expr_new_symbol("Times"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
 }
 
 /* Renders e as the generic head[arg1, arg2, ...] form. Used as a fallback
@@ -929,14 +929,14 @@ static void print_series_data(Expr* e, int parent_prec) {
         if (d < 0) { d = -d; n = -n; }
         Expr* exp_expr = (d == 1) ? expr_new_integer(n) : make_rational(n, d);
         Expr* pargs[2] = { o_call, exp_expr };
-        terms[tcount++] = expr_new_function(expr_new_symbol("Power"), pargs, 2);
+        terms[tcount++] = expr_new_function(expr_new_symbol(SYM_Power), pargs, 2);
     }
 
     Expr* sum;
     if (tcount == 1) {
         sum = terms[0];
     } else {
-        sum = expr_new_function(expr_new_symbol("Plus"), terms, tcount);
+        sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, tcount);
     }
     free(terms);
 
@@ -1174,7 +1174,7 @@ static void print_tex(Expr* e, int parent_prec) {
                     print_tex(base, 0);
                 } else {
                     Expr* pargs[2] = { expr_copy(base), expr_copy(pos_exp) };
-                    Expr* tmp = expr_new_function(expr_new_symbol("Power"), pargs, 2);
+                    Expr* tmp = expr_new_function(expr_new_symbol(SYM_Power), pargs, 2);
                     print_tex(tmp, 0);
                     expr_free(tmp);
                 }
@@ -1262,7 +1262,7 @@ static void print_tex(Expr* e, int parent_prec) {
                             expr_free(pos_exp);
                         } else {
                             Expr* p_args[2] = { expr_copy(arg->data.function.args[0]), pos_exp };
-                            den_args[den_count++] = expr_new_function(expr_new_symbol("Power"), p_args, 2);
+                            den_args[den_count++] = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
                         }
                         den_ok = true;
                     }
@@ -1322,7 +1322,7 @@ static void print_tex(Expr* e, int parent_prec) {
                         if (owned->data.function.args[0]->data.integer == 1 && owned->data.function.arg_count > 1) {
                             Expr** na = malloc(sizeof(Expr*) * (owned->data.function.arg_count - 1));
                             for (size_t k = 1; k < owned->data.function.arg_count; k++) na[k-1] = expr_copy(owned->data.function.args[k]);
-                            Expr* t = expr_new_function(expr_new_symbol("Times"), na, owned->data.function.arg_count - 1);
+                            Expr* t = expr_new_function(expr_new_symbol(SYM_Times), na, owned->data.function.arg_count - 1);
                             expr_free(owned); owned = t; free(na);
                         }
                         to_print = owned;
@@ -1336,7 +1336,7 @@ static void print_tex(Expr* e, int parent_prec) {
                             owned->data.function.arg_count > 1) {
                             Expr** na = malloc(sizeof(Expr*) * (owned->data.function.arg_count - 1));
                             for (size_t k = 1; k < owned->data.function.arg_count; k++) na[k-1] = expr_copy(owned->data.function.args[k]);
-                            Expr* t = expr_new_function(expr_new_symbol("Times"), na, owned->data.function.arg_count - 1);
+                            Expr* t = expr_new_function(expr_new_symbol(SYM_Times), na, owned->data.function.arg_count - 1);
                             expr_free(owned); owned = t; free(na);
                         }
                         to_print = owned;

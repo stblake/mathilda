@@ -766,7 +766,7 @@ static Expr* assemble_array_m(mpfr_t* comps, const size_t* vshape, int vrank,
     size_t n = vshape[level];
     Expr** items = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) items[i] = assemble_array_m(comps, vshape, vrank, level + 1, idx);
-    Expr* l = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return l;
 }

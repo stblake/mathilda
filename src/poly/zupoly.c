@@ -37,6 +37,7 @@
 #include <string.h>
 
 #include "zupoly.h"
+#include "sym_names.h"
 #include "expr.h"
 #include "expand.h"
 #include "eval.h"
@@ -570,7 +571,7 @@ struct Expr* zupoly_to_expr(const ZUPoly* p, const struct Expr* var) {
             if (i == 1) var_part = expr_copy((Expr*)var);
             else {
                 Expr* args[2] = { expr_copy((Expr*)var), expr_new_integer(i) };
-                var_part = expr_new_function(expr_new_symbol("Power"), args, 2);
+                var_part = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
                 var_part = eval_and_free(var_part);
             }
             if (mpz_cmp_ui(p->c[i], 1) == 0) {
@@ -579,11 +580,11 @@ struct Expr* zupoly_to_expr(const ZUPoly* p, const struct Expr* var) {
             } else if (mpz_cmp_si(p->c[i], -1) == 0) {
                 expr_free(coef_expr);
                 Expr* args[2] = { expr_new_integer(-1), var_part };
-                term = expr_new_function(expr_new_symbol("Times"), args, 2);
+                term = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
                 term = eval_and_free(term);
             } else {
                 Expr* args[2] = { coef_expr, var_part };
-                term = expr_new_function(expr_new_symbol("Times"), args, 2);
+                term = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
                 term = eval_and_free(term);
             }
         }
@@ -593,7 +594,7 @@ struct Expr* zupoly_to_expr(const ZUPoly* p, const struct Expr* var) {
     if (n_terms == 1) {
         result = terms[0];
     } else {
-        result = expr_new_function(expr_new_symbol("Plus"), terms, n_terms);
+        result = expr_new_function(expr_new_symbol(SYM_Plus), terms, n_terms);
         result = eval_and_free(result);
     }
     free(terms);

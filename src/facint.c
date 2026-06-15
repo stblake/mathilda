@@ -206,7 +206,7 @@ Expr* builtin_primeq(Expr* res) {
      * unevaluated. Zero-arg or non-function res (the latter unreachable
      * via the evaluator, kept defensive) is therefore not prime. */
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) {
-        return expr_new_symbol("False");
+        return expr_new_symbol(SYM_False);
     }
     Expr* arg = res->data.function.args[0];
 
@@ -215,7 +215,7 @@ Expr* builtin_primeq(Expr* res) {
     bool gaussian = false;
     if (res->data.function.arg_count > 1) {
         if (!primeq_parse_options(res, 1, &gaussian)) {
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         }
     }
 
@@ -252,7 +252,7 @@ Expr* builtin_primeq(Expr* res) {
             bool re_int = (re_expr->type == EXPR_INTEGER || re_expr->type == EXPR_BIGINT);
             bool im_int = (im_expr->type == EXPR_INTEGER || im_expr->type == EXPR_BIGINT);
             if (!re_int || !im_int) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
             mpz_t a, b;
             expr_to_mpz(re_expr, a);
@@ -268,7 +268,7 @@ Expr* builtin_primeq(Expr* res) {
     /* Everything else (symbols, reals, rationals, strings, symbolic
      * functions, etc.) is not a (Gaussian) prime. *Q predicates must
      * always return True or False — never remain unevaluated. */
-    return expr_new_symbol("False");
+    return expr_new_symbol(SYM_False);
 }
 
 Expr* builtin_nextprime(Expr* res) {
@@ -1312,12 +1312,12 @@ Expr* builtin_factorinteger(Expr* res) {
         Expr** pair = malloc(sizeof(Expr*) * 2);
         pair[0] = expr_bigint_normalize(expr_new_bigint_from_mpz(factors[i].p));
         pair[1] = expr_new_integer(factors[i].count);
-        list_args[i] = expr_new_function(expr_new_symbol("List"), pair, 2);
+        list_args[i] = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
         free(pair);
         mpz_clear(factors[i].p);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), list_args, num_factors);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), list_args, num_factors);
     free(list_args);
     mpz_clear(num); mpz_clear(den); mpz_clear(num_orig);
     return result;

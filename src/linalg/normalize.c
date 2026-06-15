@@ -21,6 +21,7 @@
  */
 
 #include "linalg.h"
+#include "sym_names.h"
 #include "eval.h"
 #include "expr.h"
 
@@ -86,10 +87,10 @@ Expr* builtin_normalize(Expr* res) {
     /* Times[expr, Power[norm_val, -1]].  Times is Listable so this
      * threads the reciprocal across every leaf of a tensor `expr`. */
     Expr* inv = eval_and_free(expr_new_function(
-        expr_new_symbol("Power"),
+        expr_new_symbol(SYM_Power),
         (Expr*[]){ norm_val, expr_new_integer(-1) }, 2));
 
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Times"),
+        expr_new_symbol(SYM_Times),
         (Expr*[]){ expr_copy(expr), inv }, 2));
 }

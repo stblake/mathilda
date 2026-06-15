@@ -33,6 +33,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "polylog.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -142,8 +143,8 @@ static bool pl_is_half(const Expr* e) {
 static Expr* pl_order1(Expr* z) {
     Expr* omz = expr_new_function(expr_new_symbol("Subtract"),
                     (Expr*[]){ expr_new_integer(1), expr_copy(z) }, 2);
-    Expr* lg  = expr_new_function(expr_new_symbol("Log"), &omz, 1);
-    Expr* neg = expr_new_function(expr_new_symbol("Times"),
+    Expr* lg  = expr_new_function(expr_new_symbol(SYM_Log), &omz, 1);
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1), lg }, 2);
     return eval_and_free(neg);
 }
@@ -152,9 +153,9 @@ static Expr* pl_order1(Expr* z) {
 static Expr* pl_order0(Expr* z) {
     Expr* omz = expr_new_function(expr_new_symbol("Subtract"),
                     (Expr*[]){ expr_new_integer(1), expr_copy(z) }, 2);
-    Expr* inv = expr_new_function(expr_new_symbol("Power"),
+    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ omz, expr_new_integer(-1) }, 2);
-    Expr* out = expr_new_function(expr_new_symbol("Times"),
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_copy(z), inv }, 2);
     return eval_and_free(out);
 }
@@ -193,32 +194,32 @@ static Expr* pl_neg_order(long m, Expr* z) {
     for (long k = 0; k < m; k++) {
         Expr* coeff = expr_bigint_normalize(expr_new_bigint_from_mpz(A[k]));
         long pw = m - k;                           /* exponent m-k, >= 1 */
-        Expr* zk = expr_new_function(expr_new_symbol("Power"),
+        Expr* zk = expr_new_function(expr_new_symbol(SYM_Power),
                        (Expr*[]){ expr_copy(z), expr_new_integer(pw) }, 2);
-        terms[k] = expr_new_function(expr_new_symbol("Times"),
+        terms[k] = expr_new_function(expr_new_symbol(SYM_Times),
                        (Expr*[]){ coeff, zk }, 2);
         mpz_clear(A[k]);
     }
     free(A);
 
     Expr* numer = (m == 1) ? terms[0]
-                  : expr_new_function(expr_new_symbol("Plus"), terms, (size_t)m);
+                  : expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)m);
     free(terms);
 
     /* denom^{-1} = (1 - z)^{-(m+1)}. */
     Expr* omz = expr_new_function(expr_new_symbol("Subtract"),
                     (Expr*[]){ expr_new_integer(1), expr_copy(z) }, 2);
-    Expr* denom = expr_new_function(expr_new_symbol("Power"),
+    Expr* denom = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ omz, expr_new_integer(-(m + 1)) }, 2);
 
-    Expr* out = expr_new_function(expr_new_symbol("Times"),
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ numer, denom }, 2);
     return eval_and_free(out);
 }
 
 /* PolyLog[n, 1] = Zeta[n] (integer n >= 2). */
 static Expr* pl_at_one(long n) {
-    Expr* z = expr_new_function(expr_new_symbol("Zeta"),
+    Expr* z = expr_new_function(expr_new_symbol(SYM_Zeta),
                   (Expr*[]){ expr_new_integer(n) }, 1);
     return eval_and_free(z);
 }
@@ -226,56 +227,56 @@ static Expr* pl_at_one(long n) {
 /* PolyLog[n, -1] = (2^(1-n) - 1) Zeta[n] = -eta(n) (integer n >= 2). */
 static Expr* pl_at_minus_one(long n) {
     /* coefficient 2^(1-n) - 1 = Subtract[Power[2, 1-n], 1]. */
-    Expr* pw = expr_new_function(expr_new_symbol("Power"),
+    Expr* pw = expr_new_function(expr_new_symbol(SYM_Power),
                    (Expr*[]){ expr_new_integer(2), expr_new_integer(1 - n) }, 2);
     Expr* coeff = expr_new_function(expr_new_symbol("Subtract"),
                    (Expr*[]){ pw, expr_new_integer(1) }, 2);
-    Expr* zeta = expr_new_function(expr_new_symbol("Zeta"),
+    Expr* zeta = expr_new_function(expr_new_symbol(SYM_Zeta),
                    (Expr*[]){ expr_new_integer(n) }, 1);
-    Expr* out = expr_new_function(expr_new_symbol("Times"),
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Times),
                    (Expr*[]){ coeff, zeta }, 2);
     return eval_and_free(out);
 }
 
 /* PolyLog[2, 1/2] = Pi^2/12 - Log[2]^2/2. */
 static Expr* pl_two_half(void) {
-    Expr* pi2 = expr_new_function(expr_new_symbol("Power"),
-                    (Expr*[]){ expr_new_symbol("Pi"), expr_new_integer(2) }, 2);
-    Expr* t1 = expr_new_function(expr_new_symbol("Times"),
+    Expr* pi2 = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_symbol(SYM_Pi), expr_new_integer(2) }, 2);
+    Expr* t1 = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ make_rational(1, 12), pi2 }, 2);
-    Expr* log2 = expr_new_function(expr_new_symbol("Log"),
+    Expr* log2 = expr_new_function(expr_new_symbol(SYM_Log),
                     (Expr*[]){ expr_new_integer(2) }, 1);
-    Expr* log2sq = expr_new_function(expr_new_symbol("Power"),
+    Expr* log2sq = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ log2, expr_new_integer(2) }, 2);
-    Expr* t2 = expr_new_function(expr_new_symbol("Times"),
+    Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ make_rational(-1, 2), log2sq }, 2);
-    Expr* out = expr_new_function(expr_new_symbol("Plus"),
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Plus),
                     (Expr*[]){ t1, t2 }, 2);
     return eval_and_free(out);
 }
 
 /* PolyLog[3, 1/2] = Log[2]^3/6 - Pi^2 Log[2]/12 + 7 Zeta[3]/8. */
 static Expr* pl_three_half(void) {
-    Expr* log2a = expr_new_function(expr_new_symbol("Log"),
+    Expr* log2a = expr_new_function(expr_new_symbol(SYM_Log),
                     (Expr*[]){ expr_new_integer(2) }, 1);
-    Expr* log2cube = expr_new_function(expr_new_symbol("Power"),
+    Expr* log2cube = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ log2a, expr_new_integer(3) }, 2);
-    Expr* t1 = expr_new_function(expr_new_symbol("Times"),
+    Expr* t1 = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ make_rational(1, 6), log2cube }, 2);
 
-    Expr* pi2 = expr_new_function(expr_new_symbol("Power"),
-                    (Expr*[]){ expr_new_symbol("Pi"), expr_new_integer(2) }, 2);
-    Expr* log2b = expr_new_function(expr_new_symbol("Log"),
+    Expr* pi2 = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_symbol(SYM_Pi), expr_new_integer(2) }, 2);
+    Expr* log2b = expr_new_function(expr_new_symbol(SYM_Log),
                     (Expr*[]){ expr_new_integer(2) }, 1);
-    Expr* t2 = expr_new_function(expr_new_symbol("Times"),
+    Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ make_rational(-1, 12), pi2, log2b }, 3);
 
-    Expr* zeta3 = expr_new_function(expr_new_symbol("Zeta"),
+    Expr* zeta3 = expr_new_function(expr_new_symbol(SYM_Zeta),
                     (Expr*[]){ expr_new_integer(3) }, 1);
-    Expr* t3 = expr_new_function(expr_new_symbol("Times"),
+    Expr* t3 = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ make_rational(7, 8), zeta3 }, 2);
 
-    Expr* out = expr_new_function(expr_new_symbol("Plus"),
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Plus),
                     (Expr*[]){ t1, t2, t3 }, 3);
     return eval_and_free(out);
 }
@@ -444,7 +445,7 @@ static bool pl_gamma_cx(pcx* out, const pcx* w) {
         return mpfr_number_p(out->re);
     }
     Expr* arg = make_complex(expr_new_mpfr_copy(w->re), expr_new_mpfr_copy(w->im));
-    Expr* r = eval_and_free(expr_new_function(expr_new_symbol("Gamma"), &arg, 1));
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Gamma), &arg, 1));
     bool ok = pl_set_pcx_from_expr(out, r);
     expr_free(r);
     return ok && mpfr_number_p(out->re) && mpfr_number_p(out->im);
@@ -455,7 +456,7 @@ static bool pl_gamma_cx(pcx* out, const pcx* w) {
  * for the left half-plane (see pl_zeta_cx). */
 static bool pl_zeta_eval_raw(pcx* out, const pcx* w) {
     Expr* arg = make_complex(expr_new_mpfr_copy(w->re), expr_new_mpfr_copy(w->im));
-    Expr* r = eval_and_free(expr_new_function(expr_new_symbol("Zeta"), &arg, 1));
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Zeta), &arg, 1));
     bool ok = pl_set_pcx_from_expr(out, r);
     expr_free(r);
     return ok && mpfr_number_p(out->re) && mpfr_number_p(out->im);

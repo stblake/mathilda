@@ -1235,7 +1235,7 @@ static void ni_extract_points(Expr* excl, const char* var, double a, double b,
             Expr** sv = malloc(2 * sizeof(Expr*));
             sv[0] = expr_copy(excl);
             sv[1] = expr_new_symbol(var);
-            Expr* sol = eval_and_free(expr_new_function(expr_new_symbol("Solve"), sv, 2));
+            Expr* sol = eval_and_free(expr_new_function(expr_new_symbol(SYM_Solve), sv, 2));
             free(sv);
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
@@ -1402,10 +1402,10 @@ Expr* builtin_nintegrate(Expr* res) {
             size_t w = 0;
             v[w++] = expr_copy(body->data.function.args[c]);
             for (size_t i = 1; i < argc; i++) v[w++] = expr_copy(res->data.function.args[i]);
-            comps[c] = expr_new_function(expr_new_symbol("NIntegrate"), v, w);
+            comps[c] = expr_new_function(expr_new_symbol(SYM_NIntegrate), v, w);
             free(v);
         }
-        Expr* listr = expr_new_function(expr_new_symbol("List"), comps, nc);
+        Expr* listr = expr_new_function(expr_new_symbol(SYM_List), comps, nc);
         free(comps);
         return listr;
     }
@@ -1444,7 +1444,7 @@ Expr* builtin_nintegrate(Expr* res) {
         v[w++] = expr_copy(body);
         for (size_t i = 2; i < pos_end; i++) v[w++] = expr_copy(res->data.function.args[i]);
         for (size_t i = pos_end; i < argc; i++) v[w++] = expr_copy(res->data.function.args[i]);
-        inner = expr_new_function(expr_new_symbol("NIntegrate"), v, w);
+        inner = expr_new_function(expr_new_symbol(SYM_NIntegrate), v, w);
         free(v);
         eff_body = inner;
     }

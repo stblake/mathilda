@@ -416,5 +416,5 @@ Expr* trig_canon_power(Expr* base, int64_t exp) {
         return nb;
     }
     Expr* args[2] = { nb, ne };
-    return expr_new_function(expr_new_symbol("Power"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Power), args, 2);
 }

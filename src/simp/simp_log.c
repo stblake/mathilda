@@ -153,7 +153,7 @@ static Expr* decompose_log_integer(const mpz_t n) {
         free(terms);
         return NULL;
     }
-    Expr* plus = expr_new_function(expr_new_symbol("Plus"), terms, emitted);
+    Expr* plus = expr_new_function(expr_new_symbol(SYM_Plus), terms, emitted);
     free(terms);
     return eval_take(plus);
 }
@@ -357,7 +357,7 @@ static bool extract_log_term(const Expr* term, Expr** coeff_out, Expr** arg_out)
         coeff = rest[0];
         free(rest);
     } else {
-        coeff = eval_take(expr_new_function(expr_new_symbol("Times"),
+        coeff = eval_take(expr_new_function(expr_new_symbol(SYM_Times),
                                             rest, emitted));
         free(rest);
     }
@@ -423,7 +423,7 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
     }
     /* args[] and coeffs[] are consumed by the Power factors above. */
     free(coeffs); free(args);
-    Expr* prod = expr_new_function(expr_new_symbol("Times"), factors, n_log);
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), factors, n_log);
     free(factors);
     Expr* prod_eval = eval_take(prod);
 
@@ -480,7 +480,7 @@ static Expr* try_fuse_plus(const Expr* plus_expr, const AssumeCtx* ctx) {
         new_plus = all[0];
         free(all);
     } else {
-        new_plus = expr_new_function(expr_new_symbol("Plus"), all, n_rest + 1);
+        new_plus = expr_new_function(expr_new_symbol(SYM_Plus), all, n_rest + 1);
         free(all);
         new_plus = eval_take(new_plus);
     }

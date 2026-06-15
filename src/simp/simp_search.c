@@ -920,7 +920,7 @@ static Expr* simp_split_additive(const Expr* input, const AssumeCtx* ctx,
         if (comp_n[c] == 1) {
             sub = comp_addends[c][0];
         } else {
-            Expr* p = expr_new_function(expr_new_symbol("Plus"),
+            Expr* p = expr_new_function(expr_new_symbol(SYM_Plus),
                                         comp_addends[c], comp_n[c]);
             sub = evaluate(p);
             expr_free(p);
@@ -928,7 +928,7 @@ static Expr* simp_split_additive(const Expr* input, const AssumeCtx* ctx,
         results[c] = simp_dispatch(sub, ctx, complexity_func);
         expr_free(sub);
     }
-    Expr* sum_raw = expr_new_function(expr_new_symbol("Plus"),
+    Expr* sum_raw = expr_new_function(expr_new_symbol(SYM_Plus),
                                       results, comp_count);
     Expr* sum = evaluate(sum_raw);
     expr_free(sum_raw);
@@ -1043,7 +1043,7 @@ static Expr* simp_split_multiplicative(const Expr* input,
         if (comp_n[c] == 1) {
             sub = comp_factors[c][0];
         } else {
-            Expr* p = expr_new_function(expr_new_symbol("Times"),
+            Expr* p = expr_new_function(expr_new_symbol(SYM_Times),
                                         comp_factors[c], comp_n[c]);
             sub = evaluate(p);
             expr_free(p);
@@ -1051,7 +1051,7 @@ static Expr* simp_split_multiplicative(const Expr* input,
         results[c] = simp_dispatch(sub, ctx, complexity_func);
         expr_free(sub);
     }
-    Expr* prod_raw = expr_new_function(expr_new_symbol("Times"),
+    Expr* prod_raw = expr_new_function(expr_new_symbol(SYM_Times),
                                        results, comp_count);
     Expr* prod = evaluate(prod_raw);
     expr_free(prod_raw);

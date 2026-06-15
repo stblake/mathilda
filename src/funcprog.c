@@ -596,9 +596,9 @@ Expr* builtin_freeq(Expr* res) {
     }
 
     if (freeq_at_level(expr, form, 0, spec)) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     } else {
-        return expr_new_symbol("False");
+        return expr_new_symbol(SYM_False);
     }
 }
 
@@ -633,7 +633,7 @@ Expr* builtin_distribute(Expr* res) {
     Expr* expr = res->data.function.args[0];
     if (expr->type != EXPR_FUNCTION) return expr_copy(expr);
 
-    Expr* g = (res->data.function.arg_count >= 2) ? res->data.function.args[1] : expr_new_symbol("Plus");
+    Expr* g = (res->data.function.arg_count >= 2) ? res->data.function.args[1] : expr_new_symbol(SYM_Plus);
     Expr* f = (res->data.function.arg_count >= 3) ? res->data.function.args[2] : expr_copy(expr->data.function.head);
     Expr* gp = (res->data.function.arg_count >= 4) ? res->data.function.args[3] : expr_copy(g);
     Expr* fp = (res->data.function.arg_count >= 5) ? res->data.function.args[4] : expr_copy(f);
@@ -805,10 +805,10 @@ static Expr* contract_V_B(Expr* f, Expr* V, Expr* B, Expr* g, Expr* head) {
                     if (B_i->type == EXPR_FUNCTION && j < B_i->data.function.arg_count) {
                         col_args[i] = expr_copy(B_i->data.function.args[j]);
                     } else {
-                        col_args[i] = expr_new_symbol("Null");
+                        col_args[i] = expr_new_symbol(SYM_Null);
                     }
                 } else {
-                    col_args[i] = expr_new_symbol("Null");
+                    col_args[i] = expr_new_symbol(SYM_Null);
                 }
             }
             Expr* B_col = expr_new_function(expr_copy(head), col_args, N);
@@ -875,7 +875,7 @@ Expr* builtin_inner(Expr* res) {
     Expr* f = res->data.function.args[0];
     Expr* A = res->data.function.args[1];
     Expr* B = res->data.function.args[2];
-    Expr* g = (res->data.function.arg_count >= 4) ? res->data.function.args[3] : expr_new_symbol("Plus");
+    Expr* g = (res->data.function.arg_count >= 4) ? res->data.function.args[3] : expr_new_symbol(SYM_Plus);
     
     Expr* n_expr = (res->data.function.arg_count >= 5) ? res->data.function.args[4] : NULL;
     
@@ -1104,7 +1104,7 @@ Expr* builtin_tuples(Expr* res) {
             free(current_tuple);
             free(lists);
             
-            return expr_new_function(expr_new_symbol("List"), results, res_count);
+            return expr_new_function(expr_new_symbol(SYM_List), results, res_count);
         } else if (n_expr->type == EXPR_FUNCTION && expr_eq(n_expr->data.function.head, head)) {
             size_t dims_count = n_expr->data.function.arg_count;
             int64_t total_elements = 1;
@@ -1143,7 +1143,7 @@ Expr* builtin_tuples(Expr* res) {
             }
             
             free(dims);
-            return expr_new_function(expr_new_symbol("List"), results, res_count);
+            return expr_new_function(expr_new_symbol(SYM_List), results, res_count);
         }
     }
     return expr_copy(res);
@@ -1268,7 +1268,7 @@ Expr* builtin_permutations(Expr* res) {
     free(current_perm);
     free(elements);
     
-    Expr* final_res = expr_new_function(expr_new_symbol("List"), results, res_count);
+    Expr* final_res = expr_new_function(expr_new_symbol(SYM_List), results, res_count);
     if (results) free(results);
     return final_res;
 }
@@ -1468,7 +1468,7 @@ static Expr* nest_impl(Expr* res, bool as_list) {
     IterRunResult r = iter_run(&buf, nest_step, &ctx, n, false, &early);
     if (r == ITER_RUN_SAFETY) return NULL;
     if (r == ITER_RUN_EARLY) return early;
-    return ebuf_finalize(&buf, as_list, expr_new_symbol("List"));
+    return ebuf_finalize(&buf, as_list, expr_new_symbol(SYM_List));
 }
 
 Expr* builtin_nest(Expr* res)     { return nest_impl(res, false); }
@@ -1690,7 +1690,7 @@ static Expr* nestwhile_impl(Expr* res, bool as_list) {
         ebuf_truncate(&buf, (size_t)(-n_extra));
     }
 
-    return ebuf_finalize(&buf, as_list, expr_new_symbol("List"));
+    return ebuf_finalize(&buf, as_list, expr_new_symbol(SYM_List));
 }
 
 Expr* builtin_nestwhile(Expr* res)     { return nestwhile_impl(res, false); }
@@ -1821,7 +1821,7 @@ static Expr* fixedpoint_impl(Expr* res, bool as_list) {
     if (r == ITER_RUN_SAFETY) return NULL;
     if (r == ITER_RUN_EARLY) return early;
 
-    return ebuf_finalize(&buf, as_list, expr_new_symbol("List"));
+    return ebuf_finalize(&buf, as_list, expr_new_symbol(SYM_List));
 }
 
 Expr* builtin_fixedpoint(Expr* res)     { return fixedpoint_impl(res, false); }
@@ -1945,7 +1945,7 @@ Expr* builtin_thread(Expr* res) {
 
     /* Default threading head is List. We use the interned symbol so
      * pointer comparisons in expr_eq work. */
-    Expr* h = h_spec ? expr_ref(h_spec) : expr_new_symbol("List");
+    Expr* h = h_spec ? expr_ref(h_spec) : expr_new_symbol(SYM_List);
 
     size_t K = expr->data.function.arg_count;
     bool* mask = (K > 0) ? (bool*)malloc(sizeof(bool) * K) : NULL;

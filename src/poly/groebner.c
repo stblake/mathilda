@@ -1663,7 +1663,7 @@ static struct Expr* mpq_to_expr(const mpq_t q) {
         : expr_new_bigint_from_mpz(mpq_denref(q));
     struct Expr** args = (struct Expr**)malloc(sizeof(struct Expr*) * 2);
     args[0] = num; args[1] = den;
-    struct Expr* r = expr_new_function(expr_new_symbol("Rational"), args, 2);
+    struct Expr* r = expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
     free(args);
     return r;
 }
@@ -1703,14 +1703,14 @@ struct Expr* gb_to_expr(const GBPoly* p, struct Expr** vars) {
                 struct Expr** pa = (struct Expr**)malloc(sizeof(struct Expr*) * 2);
                 pa[0] = expr_copy(vars[v]);
                 pa[1] = expr_new_integer(row[v]);
-                factors[fi++] = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                factors[fi++] = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
                 free(pa);
             }
         }
         if (fi == 1) {
             terms[i] = factors[0];
         } else {
-            terms[i] = expr_new_function(expr_new_symbol("Times"), factors, fi);
+            terms[i] = expr_new_function(expr_new_symbol(SYM_Times), factors, fi);
         }
         free(factors);
     }
@@ -1719,7 +1719,7 @@ struct Expr* gb_to_expr(const GBPoly* p, struct Expr** vars) {
     if (p->n_terms == 1) {
         out = terms[0];
     } else {
-        out = expr_new_function(expr_new_symbol("Plus"), terms, p->n_terms);
+        out = expr_new_function(expr_new_symbol(SYM_Plus), terms, p->n_terms);
     }
     free(terms);
     return out;
@@ -1761,14 +1761,14 @@ struct Expr* gb_to_expr_inexact(const GBPoly* p, struct Expr** vars,
                 struct Expr** pa = (struct Expr**)malloc(sizeof(struct Expr*) * 2);
                 pa[0] = expr_copy(vars[v]);
                 pa[1] = expr_new_integer(row[v]);
-                factors[fi++] = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                factors[fi++] = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
                 free(pa);
             }
         }
         if (fi == 1) {
             terms[i] = factors[0];
         } else {
-            terms[i] = expr_new_function(expr_new_symbol("Times"), factors, fi);
+            terms[i] = expr_new_function(expr_new_symbol(SYM_Times), factors, fi);
         }
         free(factors);
     }
@@ -1777,7 +1777,7 @@ struct Expr* gb_to_expr_inexact(const GBPoly* p, struct Expr** vars,
     if (m->n_terms == 1) {
         out = terms[0];
     } else {
-        out = expr_new_function(expr_new_symbol("Plus"), terms, m->n_terms);
+        out = expr_new_function(expr_new_symbol(SYM_Plus), terms, m->n_terms);
     }
     free(terms);
     gb_poly_free(m);

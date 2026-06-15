@@ -92,8 +92,8 @@ static bool is_minus_infinity(Expr* e) {
  * Constructs and returns a new expression representing '-Infinity'.
  */
 static Expr* make_minus_infinity() {
-    Expr* args[2] = { expr_new_integer(-1), expr_new_symbol("Infinity") };
-    return expr_new_function(expr_new_symbol("Times"), args, 2);
+    Expr* args[2] = { expr_new_integer(-1), expr_new_symbol(SYM_Infinity) };
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
 }
 
 /* True when e is a concrete real numeric value (int, bigint, rational, real).
@@ -167,7 +167,7 @@ Expr* builtin_log(Expr* res) {
         // limit is Indeterminate (matches Mathematica's Log[0.] behaviour).
         // Catches both +0.0 and -0.0 by IEEE 754 equality.
         if (z->type == EXPR_REAL && z->data.real == 0.0) {
-            return expr_new_symbol("Indeterminate");
+            return expr_new_symbol(SYM_Indeterminate);
         }
         if (z->type == EXPR_INTEGER && z->data.integer == 1) {
             Expr* ret = expr_new_integer(0); // Log[1] = 0
@@ -197,15 +197,15 @@ Expr* builtin_log(Expr* res) {
                 neg_z = expr_bigint_normalize(neg_z);
             }
             Expr* log_args[1] = { neg_z };
-            Expr* log_neg = expr_new_function(expr_new_symbol("Log"), log_args, 1);
-            Expr* times_args[2] = { expr_new_symbol("I"), expr_new_symbol("Pi") };
-            Expr* i_pi = expr_new_function(expr_new_symbol("Times"), times_args, 2);
+            Expr* log_neg = expr_new_function(expr_new_symbol(SYM_Log), log_args, 1);
+            Expr* times_args[2] = { expr_new_symbol(SYM_I), expr_new_symbol(SYM_Pi) };
+            Expr* i_pi = expr_new_function(expr_new_symbol(SYM_Times), times_args, 2);
             Expr* plus_args[2] = { i_pi, log_neg };
-            return expr_new_function(expr_new_symbol("Plus"), plus_args, 2);
+            return expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
         }
 
         if (is_infinity(z)) {
-            Expr* ret = expr_new_symbol("Infinity"); // Log[Infinity] = Infinity
+            Expr* ret = expr_new_symbol(SYM_Infinity); // Log[Infinity] = Infinity
             return ret;
         }
         if (z->type == EXPR_SYMBOL && z->data.symbol == SYM_E) {
@@ -272,7 +272,7 @@ Expr* builtin_log(Expr* res) {
         // Inexact zero argument: Log[b, 0.] = Indeterminate, matching the
         // 1-arg float-zero case. Direction is ambiguous in floating point.
         if (z->type == EXPR_REAL && z->data.real == 0.0) {
-            return expr_new_symbol("Indeterminate");
+            return expr_new_symbol(SYM_Indeterminate);
         }
         // Exact integer zero argument with a real-positive base b != 1:
         //   Log[b, 0] = Log[0] / Log[b] = -Infinity / Log[b].
@@ -301,7 +301,7 @@ Expr* builtin_log(Expr* res) {
                 }
             }
             if (sgn == +1) return make_minus_infinity();
-            if (sgn == -1) return expr_new_symbol("Infinity");
+            if (sgn == -1) return expr_new_symbol(SYM_Infinity);
             /* else fall through to the default rewrite */
         }
 
@@ -346,14 +346,14 @@ Expr* builtin_log(Expr* res) {
         // Default rewrite: Log[b, z] -> Log[z] / Log[b]
         Expr* num_args[1] = { expr_copy(z) };
         Expr* den_args[1] = { expr_copy(b) };
-        Expr* num = expr_new_function(expr_new_symbol("Log"), num_args, 1);
-        Expr* den = expr_new_function(expr_new_symbol("Log"), den_args, 1);
+        Expr* num = expr_new_function(expr_new_symbol(SYM_Log), num_args, 1);
+        Expr* den = expr_new_function(expr_new_symbol(SYM_Log), den_args, 1);
 
         Expr* pow_args[2] = { den, expr_new_integer(-1) };
-        Expr* inv_den = expr_new_function(expr_new_symbol("Power"), pow_args, 2);
+        Expr* inv_den = expr_new_function(expr_new_symbol(SYM_Power), pow_args, 2);
 
         Expr* times_args[2] = { num, inv_den };
-        Expr* ret = expr_new_function(expr_new_symbol("Times"), times_args, 2);
+        Expr* ret = expr_new_function(expr_new_symbol(SYM_Times), times_args, 2);
         return ret;
     }
 
@@ -379,7 +379,7 @@ Expr* builtin_exp(Expr* res) {
         return ret;
     }
     if (is_infinity(z)) {
-        Expr* ret = expr_new_symbol("Infinity"); // Exp[Infinity] = Infinity
+        Expr* ret = expr_new_symbol(SYM_Infinity); // Exp[Infinity] = Infinity
         return ret;
     }
 
@@ -416,7 +416,7 @@ Expr* builtin_exp(Expr* res) {
                 // leaving non-reducible roots like (-1)^(1/5) intact rather
                 // than over-eagerly expanding into trig radicals.
                 Expr* pow_args[2] = { expr_new_integer(-1), expr_copy(im_coeff) };
-                Expr* ret = expr_new_function(expr_new_symbol("Power"), pow_args, 2);
+                Expr* ret = expr_new_function(expr_new_symbol(SYM_Power), pow_args, 2);
                 return ret;
             }
         }
@@ -449,5 +449,5 @@ Expr* builtin_exp(Expr* res) {
     }
 
     // Remains unevaluated if it doesn't match above rules
-    return expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_new_symbol("E"), expr_copy(z)}, 2);
+    return expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_new_symbol(SYM_E), expr_copy(z)}, 2);
 }

@@ -81,11 +81,11 @@ Expr* builtin_cases(Expr* res) {
     
     if (argc == 1) {
         Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol("Slot"), slot_args, 1);
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
         Expr* inner_cases = expr_new_function(expr_new_symbol("Cases"), inner_args, 2);
         Expr* func_args[1] = { inner_cases };
-        return expr_new_function(expr_new_symbol("Function"), func_args, 1);
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
     
     if (argc < 2) return NULL;
@@ -158,7 +158,7 @@ Expr* builtin_cases(Expr* res) {
 
     do_cases_at_level(expr, 0, min_l, max_l, heads, pattern, replacement, delayed, &results, &count, &cap, max_results);
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), results, count);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
     free(results);
     return list;
 }
@@ -235,7 +235,7 @@ static Expr* do_delete_cases_at_level(Expr* e, int64_t current_level, int64_t mi
 
         if (head_delete) {
             expr_free(new_head);
-            result = expr_new_function(expr_new_symbol("Sequence"), new_args, new_count);
+            result = expr_new_function(expr_new_symbol(SYM_Sequence), new_args, new_count);
         } else {
             result = expr_new_function(new_head, new_args, new_count);
         }
@@ -273,11 +273,11 @@ Expr* builtin_delete_cases(Expr* res) {
 
     if (argc == 1) {
         Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol("Slot"), slot_args, 1);
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
-        Expr* inner_dc = expr_new_function(expr_new_symbol("DeleteCases"), inner_args, 2);
+        Expr* inner_dc = expr_new_function(expr_new_symbol(SYM_DeleteCases), inner_args, 2);
         Expr* func_args[1] = { inner_dc };
-        return expr_new_function(expr_new_symbol("Function"), func_args, 1);
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
 
     if (argc < 2) return NULL;
@@ -375,7 +375,7 @@ static void do_position_at_level(Expr* e, int64_t current_level, int64_t min_l, 
             for (size_t i = 0; i < path_len; i++) {
                 path_exprs[i] = expr_new_integer(current_path[i]);
             }
-            Expr* pos_expr = expr_new_function(expr_new_symbol("List"), path_exprs, path_len);
+            Expr* pos_expr = expr_new_function(expr_new_symbol(SYM_List), path_exprs, path_len);
             free(path_exprs);
             
             if (*count >= *cap) {
@@ -394,11 +394,11 @@ Expr* builtin_position(Expr* res) {
     
     if (argc == 1) {
         Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol("Slot"), slot_args, 1);
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
         Expr* inner_pos = expr_new_function(expr_new_symbol("Position"), inner_args, 2);
         Expr* func_args[1] = { inner_pos };
-        return expr_new_function(expr_new_symbol("Function"), func_args, 1);
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
     
     if (argc < 2) return NULL;
@@ -456,7 +456,7 @@ Expr* builtin_position(Expr* res) {
 
     do_position_at_level(expr, 0, min_l, max_l, heads, pattern, &results, &count, &cap, max_results, NULL, 0);
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), results, count);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
     free(results);
     return list;
 }
@@ -498,11 +498,11 @@ Expr* builtin_count(Expr* res) {
     
     if (argc == 1) {
         Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol("Slot"), slot_args, 1);
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
         Expr* inner_count = expr_new_function(expr_new_symbol("Count"), inner_args, 2);
         Expr* func_args[1] = { inner_count };
-        return expr_new_function(expr_new_symbol("Function"), func_args, 1);
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
     
     if (argc < 2) return NULL;
@@ -592,11 +592,11 @@ Expr* builtin_memberq(Expr* res) {
     
     if (argc == 1) {
         Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol("Slot"), slot_args, 1);
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
         Expr* inner_memberq = expr_new_function(expr_new_symbol("MemberQ"), inner_args, 2);
         Expr* func_args[1] = { inner_memberq };
-        return expr_new_function(expr_new_symbol("Function"), func_args, 1);
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
     
     if (argc < 2) return NULL;
@@ -641,9 +641,9 @@ Expr* builtin_memberq(Expr* res) {
     }
 
     if (do_member_at_level(expr, 0, min_l, max_l, heads, pattern)) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     } else {
-        return expr_new_symbol("False");
+        return expr_new_symbol(SYM_False);
     }
 }
 

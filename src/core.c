@@ -504,7 +504,7 @@ void core_init(void) {
 
     Expr* zero = expr_new_integer(0);
     Expr* one = expr_new_integer(1);
-    Expr* sym_I = expr_new_symbol("I");
+    Expr* sym_I = expr_new_symbol(SYM_I);
     Expr* val_I = make_complex(zero, one);
     symtab_add_own_value("I", sym_I, val_I);
     expr_free(sym_I);
@@ -645,7 +645,7 @@ void core_init(void) {
 
 Expr* builtin_compoundexpression(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
-    if (res->data.function.arg_count == 0) return expr_new_symbol("Null");
+    if (res->data.function.arg_count == 0) return expr_new_symbol(SYM_Null);
 
     Expr* last_val = NULL;
     for (size_t i = 0; i < res->data.function.arg_count; i++) {
@@ -670,7 +670,7 @@ Expr* builtin_clear(Expr* res) {
                 symtab_clear_symbol(arg->data.symbol);
             }
         }
-        return expr_new_symbol("Null");
+        return expr_new_symbol(SYM_Null);
     }
     return NULL;
 }
@@ -723,11 +723,11 @@ Expr* builtin_unset(Expr* res) {
     uint32_t attrs = get_attributes(symbol_name);
     if (attrs & (ATTR_PROTECTED | ATTR_LOCKED)) {
         fprintf(stderr, "Unset::wrsym: Symbol %s is Protected.\n", symbol_name);
-        return expr_new_symbol("Null");
+        return expr_new_symbol(SYM_Null);
     }
 
     symtab_remove_matching_rule(symbol_name, lhs, own_value);
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 /* ============================================================
@@ -818,7 +818,7 @@ static Expr* core_apply_symbol_action(Expr* res, void (*action)(const char*)) {
             action(core_symbol_name_of(arg));
         }
     }
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 Expr* builtin_clear_all(Expr* res) {
@@ -856,7 +856,7 @@ static Expr* core_protect_unprotect(Expr* res, bool protecting) {
         }
     }
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), changed, count);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), changed, count);
     free(changed);
     return list;
 }
@@ -960,7 +960,7 @@ Expr* builtin_dimensions(Expr* res) {
         dim_args[i] = expr_new_integer(dims[i]);
     }
 
-    Expr* ret = expr_new_function(expr_new_symbol("List"), dim_args, (size_t)depth);
+    Expr* ret = expr_new_function(expr_new_symbol(SYM_List), dim_args, (size_t)depth);
     free(dim_args);
     return ret;
 }
@@ -1001,7 +1001,7 @@ static Expr* release_hold_recursive(Expr* e) {
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 args[i] = expr_copy(e->data.function.args[i]);
             }
-            Expr* seq = expr_new_function(expr_new_symbol("Sequence"), args, e->data.function.arg_count);
+            Expr* seq = expr_new_function(expr_new_symbol(SYM_Sequence), args, e->data.function.arg_count);
             free(args);
             return seq;
         }
@@ -1279,11 +1279,11 @@ Expr* builtin_clip(Expr* res) {
             for (size_t k = 1; k < argc; k++) {
                 call_args[k] = expr_copy(res->data.function.args[k]);
             }
-            Expr* call = expr_new_function(expr_new_symbol("Clip"), call_args, argc);
+            Expr* call = expr_new_function(expr_new_symbol(SYM_Clip), call_args, argc);
             free(call_args);
             out[i] = eval_and_free(call);
         }
-        Expr* list = expr_new_function(expr_new_symbol("List"), out, n);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), out, n);
         if (out) free(out);
         return list;
     }
@@ -1501,12 +1501,12 @@ static Expr* rules_to_list(Rule* r) {
         Expr** rule_args = malloc(sizeof(Expr*) * 2);
         rule_args[0] = expr_copy(curr->pattern);
         rule_args[1] = expr_copy(curr->replacement);
-        rule_exprs[i] = expr_new_function(expr_new_symbol("Rule"), rule_args, 2);
+        rule_exprs[i] = expr_new_function(expr_new_symbol(SYM_Rule), rule_args, 2);
         free(rule_args);
         curr = curr->next;
     }
     
-    Expr* list = expr_new_function(expr_new_symbol("List"), rule_exprs, count);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), rule_exprs, count);
     if (count > 0) free(rule_exprs); else { free(rule_exprs); } 
     /* IMPORTANT: Rules in DownValues/OwnValues should be returned unevaluated */
     return list;
@@ -1576,7 +1576,7 @@ Expr* builtin_composition(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t n = res->data.function.arg_count;
 
-    if (n == 0) return expr_new_symbol("Identity");
+    if (n == 0) return expr_new_symbol(SYM_Identity);
     if (n == 1) return expr_copy(res->data.function.args[0]);
 
     Expr** args = res->data.function.args;
@@ -1634,7 +1634,7 @@ Expr* builtin_composition(Expr* res) {
 
     if (out_count == 0) {
         free(out);
-        return expr_new_symbol("Identity");
+        return expr_new_symbol(SYM_Identity);
     }
     if (out_count == 1) {
         Expr* result = expr_copy(out[0]);
@@ -1648,7 +1648,7 @@ Expr* builtin_composition(Expr* res) {
         return NULL;
     }
     for (size_t i = 0; i < out_count; i++) copies[i] = expr_copy(out[i]);
-    Expr* result = expr_new_function(expr_new_symbol("Composition"), copies, out_count);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Composition), copies, out_count);
     free(copies);
     free(out);
     return result;
@@ -1684,7 +1684,7 @@ Expr* builtin_compose_list(Expr* res) {
         out[i + 1] = expr_new_function(expr_copy(fi), &arg, 1);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), out, out_count);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, out_count);
     free(out);
     return result;
 }
@@ -1700,13 +1700,13 @@ Expr* builtin_atomq(Expr* res) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = arg->data.function.head->data.symbol;
             if (head_name == SYM_Complex || head_name == SYM_Rational) {
-                return expr_new_symbol("True");
+                return expr_new_symbol(SYM_True);
             }
         }
-        return expr_new_symbol("False");
+        return expr_new_symbol(SYM_False);
     }
 
-    return expr_new_symbol("True");
+    return expr_new_symbol(SYM_True);
 }
 
 Expr* builtin_numberq(Expr* res) {
@@ -1717,11 +1717,11 @@ Expr* builtin_numberq(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL || arg->type == EXPR_BIGINT) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
 #ifdef USE_MPFR
     if (arg->type == EXPR_MPFR) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
 #endif
 
@@ -1729,12 +1729,12 @@ Expr* builtin_numberq(Expr* res) {
         if (arg->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = arg->data.function.head->data.symbol;
             if (head_name == SYM_Complex || head_name == SYM_Rational) {
-                return expr_new_symbol("True");
+                return expr_new_symbol(SYM_True);
             }
         }
     }
 
-    return expr_new_symbol("False");
+    return expr_new_symbol(SYM_False);
 }
 
 static bool is_numeric_quantity(Expr* e) {
@@ -1779,9 +1779,9 @@ Expr* builtin_numericq(Expr* res) {
 
     Expr* arg = res->data.function.args[0];
     if (is_numeric_quantity(arg)) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
-    return expr_new_symbol("False");
+    return expr_new_symbol(SYM_False);
 }
 
 /* Classify a numeric-quantity expression by reality and sign. Returns:
@@ -1849,7 +1849,7 @@ Expr* builtin_positive(Expr* res) {
     int sign;
     int kind = numeric_real_sign(arg, &sign);
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
-    if (kind == 0) return expr_new_symbol("False");  /* non-real complex */
+    if (kind == 0) return expr_new_symbol(SYM_False);  /* non-real complex */
     return expr_new_symbol(sign > 0 ? "True" : "False");
 }
 
@@ -1871,7 +1871,7 @@ Expr* builtin_negative(Expr* res) {
     int sign;
     int kind = numeric_real_sign(arg, &sign);
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
-    if (kind == 0) return expr_new_symbol("False");  /* non-real complex */
+    if (kind == 0) return expr_new_symbol(SYM_False);  /* non-real complex */
     return expr_new_symbol(sign < 0 ? "True" : "False");
 }
 
@@ -1896,7 +1896,7 @@ Expr* builtin_nonnegative(Expr* res) {
     int sign;
     int kind = numeric_real_sign(arg, &sign);
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
-    if (kind == 0) return expr_new_symbol("False");  /* non-real complex */
+    if (kind == 0) return expr_new_symbol(SYM_False);  /* non-real complex */
     return expr_new_symbol(sign >= 0 ? "True" : "False");
 }
 
@@ -1921,7 +1921,7 @@ Expr* builtin_nonpositive(Expr* res) {
     int sign;
     int kind = numeric_real_sign(arg, &sign);
     if (kind < 0) return NULL;                       /* numeric but un-numericalizable */
-    if (kind == 0) return expr_new_symbol("False");  /* non-real complex */
+    if (kind == 0) return expr_new_symbol(SYM_False);  /* non-real complex */
     return expr_new_symbol(sign <= 0 ? "True" : "False");
 }
 
@@ -1933,10 +1933,10 @@ Expr* builtin_integerq(Expr* res) {
     Expr* arg = res->data.function.args[0];
 
     if (expr_is_integer_like(arg)) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
 
-    return expr_new_symbol("False");
+    return expr_new_symbol(SYM_False);
 }
 
 Expr* builtin_information(Expr* res) {
@@ -1969,15 +1969,15 @@ Expr* builtin_evenq(Expr* res) {
 
     if (arg->type == EXPR_INTEGER) {
         if (arg->data.integer % 2 == 0) {
-            return expr_new_symbol("True");
+            return expr_new_symbol(SYM_True);
         }
     }
 
     if (arg->type == EXPR_BIGINT) {
-        return mpz_even_p(arg->data.bigint) ? expr_new_symbol("True") : expr_new_symbol("False");
+        return mpz_even_p(arg->data.bigint) ? expr_new_symbol(SYM_True) : expr_new_symbol(SYM_False);
     }
 
-    return expr_new_symbol("False");
+    return expr_new_symbol(SYM_False);
 }
 
 Expr* builtin_oddq(Expr* res) {
@@ -1989,15 +1989,15 @@ Expr* builtin_oddq(Expr* res) {
 
     if (arg->type == EXPR_INTEGER) {
         if (arg->data.integer % 2 != 0) {
-            return expr_new_symbol("True");
+            return expr_new_symbol(SYM_True);
         }
     }
 
     if (arg->type == EXPR_BIGINT) {
-        return mpz_odd_p(arg->data.bigint) ? expr_new_symbol("True") : expr_new_symbol("False");
+        return mpz_odd_p(arg->data.bigint) ? expr_new_symbol(SYM_True) : expr_new_symbol(SYM_False);
     }
 
-    return expr_new_symbol("False");
+    return expr_new_symbol(SYM_False);
 }
 
 /* Lift Integer, BigInt, or Rational[Integer|BigInt, Integer|BigInt] into an
@@ -2051,7 +2051,7 @@ static Expr* mod_quot_mpq_to_expr(const mpq_t q) {
     Expr* num = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_numref(q)));
     Expr* den = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_denref(q)));
     Expr* args[2] = { num, den };
-    return expr_new_function(expr_new_symbol("Rational"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
 }
 
 Expr* builtin_mod(Expr* res) {
@@ -2559,7 +2559,7 @@ Expr* builtin_level(Expr* res) {
     Expr** results = malloc(sizeof(Expr*) * cap);
     level_rec(e, 0, min_l, max_l, heads, &results, &count, &cap);
 
-    Expr* list = expr_new_function(expr_new_symbol("List"), results, count);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), results, count);
     free(results);
     return list;
 }
@@ -2619,7 +2619,7 @@ static Expr* increment_core(Expr* lhs, Expr* dx, bool negate, bool pre, const ch
         Expr** neg_args = malloc(sizeof(Expr*) * 2);
         neg_args[0] = expr_new_integer(-1);
         neg_args[1] = expr_copy(dx);
-        delta_term = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+        delta_term = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
         free(neg_args);
     } else {
         delta_term = expr_copy(dx);
@@ -2627,7 +2627,7 @@ static Expr* increment_core(Expr* lhs, Expr* dx, bool negate, bool pre, const ch
     Expr** plus_args = malloc(sizeof(Expr*) * 2);
     plus_args[0] = expr_copy(old_val);
     plus_args[1] = delta_term;
-    Expr* plus_expr = expr_new_function(expr_new_symbol("Plus"), plus_args, 2);
+    Expr* plus_expr = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, 2);
     free(plus_args);
     Expr* new_val = evaluate(plus_expr);
     expr_free(plus_expr);
@@ -2637,7 +2637,7 @@ static Expr* increment_core(Expr* lhs, Expr* dx, bool negate, bool pre, const ch
     Expr** set_args = malloc(sizeof(Expr*) * 2);
     set_args[0] = expr_copy(lhs);
     set_args[1] = expr_copy(new_val);
-    Expr* set_call = expr_new_function(expr_new_symbol("Set"), set_args, 2);
+    Expr* set_call = expr_new_function(expr_new_symbol(SYM_Set), set_args, 2);
     free(set_args);
     Expr* set_result = evaluate(set_call);
     expr_free(set_call);
@@ -2699,8 +2699,8 @@ Expr* builtin_quotientremainder(Expr* res) {
         return NULL;
     }
 
-    Expr* quot_expr = expr_new_function(expr_new_symbol("Quotient"), res->data.function.args, 2);
-    Expr* mod_expr = expr_new_function(expr_new_symbol("Mod"), res->data.function.args, 2);
+    Expr* quot_expr = expr_new_function(expr_new_symbol(SYM_Quotient), res->data.function.args, 2);
+    Expr* mod_expr = expr_new_function(expr_new_symbol(SYM_Mod), res->data.function.args, 2);
 
     Expr* quotient = builtin_quotient(quot_expr);
     Expr* remainder = builtin_mod(mod_expr);
@@ -2720,7 +2720,7 @@ Expr* builtin_quotientremainder(Expr* res) {
     results[0] = quotient;
     results[1] = remainder;
 
-    Expr* final_res = expr_new_function(expr_new_symbol("List"), results, 2);
+    Expr* final_res = expr_new_function(expr_new_symbol(SYM_List), results, 2);
     free(results);
     return final_res;
 }
@@ -2757,7 +2757,7 @@ Expr* builtin_tostring(Expr* res) {
     } else if (form_name == SYM_TeXForm) {
         Expr* inner[1];
         inner[0] = expr_copy(expr);
-        Expr* wrapper = expr_new_function(expr_new_symbol("TeXForm"), inner, 1);
+        Expr* wrapper = expr_new_function(expr_new_symbol(SYM_TeXForm), inner, 1);
         str = expr_to_string(wrapper);
         expr_free(wrapper);
     } else if (form_name == SYM_InputForm

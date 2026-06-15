@@ -51,7 +51,7 @@ Expr* builtin_tr(Expr* res) {
     if (count >= 2) {
         f = res->data.function.args[1];
     } else {
-        f = expr_new_symbol("Plus");
+        f = expr_new_symbol(SYM_Plus);
         free_f = true;
     }
 

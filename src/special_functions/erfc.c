@@ -31,6 +31,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "erfc.h"
+#include "sym_names.h"
 
 #include <complex.h>
 #include <math.h>
@@ -131,7 +132,7 @@ static int erfc_directed_imag_infinity(const Expr* e) {
 /* Build DirectedInfinity[Complex[0, s]] for s = +-1. */
 static Expr* erfc_make_directed_imag_infinity(int s) {
     Expr* dir = make_complex(expr_new_integer(0), expr_new_integer(s));
-    return expr_new_function(expr_new_symbol("DirectedInfinity"), &dir, 1);
+    return expr_new_function(expr_new_symbol(SYM_DirectedInfinity), &dir, 1);
 }
 
 #ifndef USE_MPFR
@@ -353,8 +354,8 @@ static Expr* erfc_one_arg(Expr* arg) {
         return expr_new_integer(1);                       /* Erfc[0] = 1 */
     if (erfc_is_symbol(arg, "Infinity"))      return expr_new_integer(0);
     if (erfc_is_neg_infinity(arg))            return expr_new_integer(2);
-    if (erfc_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol("ComplexInfinity");
-    if (erfc_is_symbol(arg, "Indeterminate"))   return expr_new_symbol("Indeterminate");
+    if (erfc_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
+    if (erfc_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
     {
         /* erfc(z) = 1 - erf(z), so the directed imaginary infinities are
          * negated relative to erf: Erfc[I Infinity] = DirectedInfinity[-I]. */

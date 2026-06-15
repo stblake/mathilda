@@ -99,7 +99,7 @@ static bool extract_pi_multiplier(Expr* e, int64_t* n, int64_t* d) {
  */
 static Expr* flip_sign(Expr* e) {
     Expr* args[2] = { expr_new_integer(-1), expr_copy(e) };
-    return eval_and_free(expr_new_function(expr_new_symbol("Times"), args, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), args, 2));
 }
 
 /*
@@ -155,7 +155,7 @@ static Expr* peel_imaginary_unit(Expr* arg) {
         Expr** new_args = (Expr**)malloc(sizeof(Expr*) * n);
         new_args[0] = expr_copy(fim);
         for (size_t i = 1; i < n; i++) new_args[i] = expr_copy(arg->data.function.args[i]);
-        Expr* t = expr_new_function(expr_new_symbol("Times"), new_args, n);
+        Expr* t = expr_new_function(expr_new_symbol(SYM_Times), new_args, n);
         free(new_args);
         return eval_and_free(t);
     }
@@ -198,8 +198,8 @@ static Expr* arc_pi_minus_fold(Expr* arg, const char* head_name) {
     Expr* inner_args[1] = { neg };
     Expr* inner = expr_new_function(expr_new_symbol(head_name), inner_args, 1);
     Expr* neg_inner = make_times(expr_new_integer(-1), inner);
-    Expr* sum_args[2] = { expr_new_symbol("Pi"), neg_inner };
-    return expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+    Expr* sum_args[2] = { expr_new_symbol(SYM_Pi), neg_inner };
+    return expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
 }
 
 /*
@@ -213,14 +213,14 @@ static Expr* arccos_i_fold(Expr* arg) {
     Expr* y = peel_imaginary_unit(arg);
     if (!y) return NULL;
     Expr* a[1] = { y };
-    Expr* asinh_call = expr_new_function(expr_new_symbol("ArcSinh"), a, 1);
+    Expr* asinh_call = expr_new_function(expr_new_symbol(SYM_ArcSinh), a, 1);
     Expr* neg_i = make_complex(expr_new_integer(0), expr_new_integer(-1));
     Expr* neg_i_asinh = make_times(neg_i, asinh_call);
     Expr* half = make_rational(1, 2);
-    Expr* pi = expr_new_symbol("Pi");
+    Expr* pi = expr_new_symbol(SYM_Pi);
     Expr* half_pi = make_times(half, pi);
     Expr* sum_args[2] = { half_pi, neg_i_asinh };
-    return expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
 }
 
 /*
@@ -248,18 +248,18 @@ static Expr* try_simp_forward_of_inverse(const char* outer, Expr* arg) {
      * x / Sqrt[1 - x^2], etc. We construct the unevaluated tree and let the
      * outer evaluator canonicalise (it folds Plus, Power, Times). */
     #define SQRT_OF(arg_e)                                                     \
-        eval_and_free(expr_new_function(expr_new_symbol("Power"),              \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),              \
             (Expr*[]){ (arg_e), make_rational(1, 2) }, 2))
     #define X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol("Power"),              \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),              \
             (Expr*[]){ expr_copy(x), expr_new_integer(2) }, 2))
     #define ONE_MINUS_X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),               \
             (Expr*[]){ expr_new_integer(1),                                    \
-                       eval_and_free(expr_new_function(expr_new_symbol("Times"), \
+                       eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), \
                            (Expr*[]){ expr_new_integer(-1), X_SQ() }, 2)) }, 2))
     #define ONE_PLUS_X_SQ() \
-        eval_and_free(expr_new_function(expr_new_symbol("Plus"),               \
+        eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),               \
             (Expr*[]){ expr_new_integer(1), X_SQ() }, 2))
 
     if (strcmp(outer, "Sin") == 0 && strcmp(inner, "ArcCos") == 0) {
@@ -270,30 +270,30 @@ static Expr* try_simp_forward_of_inverse(const char* outer, Expr* arg) {
     }
     if (strcmp(outer, "Sin") == 0 && strcmp(inner, "ArcTan") == 0) {
         Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
-        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
         return make_times(expr_copy(x), inv);
     }
     if (strcmp(outer, "Cos") == 0 && strcmp(inner, "ArcTan") == 0) {
         Expr* den = SQRT_OF(ONE_PLUS_X_SQ());
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
     }
     if (strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcSin") == 0) {
         Expr* den = SQRT_OF(ONE_MINUS_X_SQ());
-        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ den, expr_new_integer(-1) }, 2));
         return make_times(expr_copy(x), inv);
     }
     if (strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcCos") == 0) {
         Expr* num = SQRT_OF(ONE_MINUS_X_SQ());
-        Expr* inv_x = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        Expr* inv_x = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
         return make_times(num, inv_x);
     }
     if ((strcmp(outer, "Tan") == 0 && strcmp(inner, "ArcCot") == 0) ||
         (strcmp(outer, "Cot") == 0 && strcmp(inner, "ArcTan") == 0)) {
-        return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ expr_copy(x), expr_new_integer(-1) }, 2));
     }
 
@@ -463,7 +463,7 @@ static Expr* exact_tan(int64_t n, int64_t d) {
     
     Expr* res = NULL;
     if (d == 1) res = expr_new_integer(0);
-    else if (d == 2) res = expr_new_symbol("ComplexInfinity");
+    else if (d == 2) res = expr_new_symbol(SYM_ComplexInfinity);
     else if (d == 3) res = make_sqrt(3);
     else if (d == 4) res = expr_new_integer(1);
     else if (d == 5) {
@@ -508,7 +508,7 @@ static Expr* exact_cot(int64_t n, int64_t d) {
     n /= g; d /= g;
     
     Expr* res = NULL;
-    if (d == 1) res = expr_new_symbol("ComplexInfinity");
+    if (d == 1) res = expr_new_symbol(SYM_ComplexInfinity);
     else if (d == 2) res = expr_new_integer(0);
     else if (d == 3) res = make_power(expr_new_integer(3), make_rational(-1, 2));
     else if (d == 4) res = expr_new_integer(1);
@@ -556,7 +556,7 @@ static Expr* exact_sec(int64_t n, int64_t d) {
     
     Expr* res = NULL;
     if (d == 1) res = expr_new_integer(1);
-    else if (d == 2) res = expr_new_symbol("ComplexInfinity");
+    else if (d == 2) res = expr_new_symbol(SYM_ComplexInfinity);
     else if (d == 3) res = expr_new_integer(2);
     else if (d == 4) res = make_sqrt(2);
     else if (d == 5) {
@@ -602,7 +602,7 @@ static Expr* exact_csc(int64_t n, int64_t d) {
     n /= g; d /= g;
     
     Expr* res = NULL;
-    if (d == 1) res = expr_new_symbol("ComplexInfinity");
+    if (d == 1) res = expr_new_symbol(SYM_ComplexInfinity);
     else if (d == 2) res = expr_new_integer(1);
     else if (d == 3) res = make_times(expr_new_integer(2), make_power(expr_new_integer(3), make_rational(-1, 2)));
     else if (d == 4) res = make_sqrt(2);
@@ -819,7 +819,7 @@ Expr* builtin_cot(Expr* res) {
     { Expr* f = trig_i_fold(arg, "Coth", -1); if (f) return f; }
 
     // Cot[0] = ComplexInfinity
-    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol("ComplexInfinity");
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol(SYM_ComplexInfinity);
     
     // Attempt exact evaluation if argument is a rational multiple of Pi
     int64_t n, d;
@@ -913,7 +913,7 @@ Expr* builtin_csc(Expr* res) {
     { Expr* f = trig_i_fold(arg, "Csch", -1); if (f) return f; }
 
     // Csc[0] = ComplexInfinity
-    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol("ComplexInfinity");
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0) return expr_new_symbol(SYM_ComplexInfinity);
     
     // Attempt exact evaluation if argument is a rational multiple of Pi
     int64_t n, d;
@@ -950,7 +950,7 @@ static Expr* exact_arcsin(Expr* arg) {
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
-                    return make_times(make_rational(n, d), expr_new_symbol("Pi"));
+                    return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
                 }
                 expr_free(val);
             }
@@ -968,7 +968,7 @@ static Expr* exact_arccos(Expr* arg) {
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
-                    return make_times(make_rational(n, d), expr_new_symbol("Pi"));
+                    return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
                 }
                 expr_free(val);
             }
@@ -986,7 +986,7 @@ static Expr* exact_arctan(Expr* arg) {
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
-                    return make_times(make_rational(n, d), expr_new_symbol("Pi"));
+                    return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
                 }
                 expr_free(val);
             }
@@ -1004,7 +1004,7 @@ static Expr* exact_arccot(Expr* arg) {
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
-                    return make_times(make_rational(n, d), expr_new_symbol("Pi"));
+                    return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
                 }
                 expr_free(val);
             }
@@ -1022,7 +1022,7 @@ static Expr* exact_arcsec(Expr* arg) {
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
-                    return make_times(make_rational(n, d), expr_new_symbol("Pi"));
+                    return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
                 }
                 expr_free(val);
             }
@@ -1040,7 +1040,7 @@ static Expr* exact_arccsc(Expr* arg) {
             if (val) {
                 if (expr_eq(arg, val)) {
                     expr_free(val);
-                    return make_times(make_rational(n, d), expr_new_symbol("Pi"));
+                    return make_times(make_rational(n, d), expr_new_symbol(SYM_Pi));
                 }
                 expr_free(val);
             }
@@ -1190,19 +1190,19 @@ Expr* builtin_arctan(Expr* res) {
             if (xv == 0 && yv == 0) return NULL; // Indeterminate form
             if (yv == 0) {
                 if (xv > 0) return expr_new_integer(0);
-                if (xv < 0) return expr_new_symbol("Pi");
+                if (xv < 0) return expr_new_symbol(SYM_Pi);
             }
             if (xv == 0) {
-                if (yv > 0) return make_times(make_rational(1, 2), expr_new_symbol("Pi"));
-                if (yv < 0) return make_times(make_rational(-1, 2), expr_new_symbol("Pi"));
+                if (yv > 0) return make_times(make_rational(1, 2), expr_new_symbol(SYM_Pi));
+                if (yv < 0) return make_times(make_rational(-1, 2), expr_new_symbol(SYM_Pi));
             }
             if (xv == yv) {
-                if (xv > 0) return make_times(make_rational(1, 4), expr_new_symbol("Pi"));
-                if (xv < 0) return make_times(make_rational(-3, 4), expr_new_symbol("Pi"));
+                if (xv > 0) return make_times(make_rational(1, 4), expr_new_symbol(SYM_Pi));
+                if (xv < 0) return make_times(make_rational(-3, 4), expr_new_symbol(SYM_Pi));
             }
             if (xv == -yv) {
-                if (xv > 0) return make_times(make_rational(-1, 4), expr_new_symbol("Pi"));
-                if (xv < 0) return make_times(make_rational(3, 4), expr_new_symbol("Pi"));
+                if (xv > 0) return make_times(make_rational(-1, 4), expr_new_symbol(SYM_Pi));
+                if (xv < 0) return make_times(make_rational(3, 4), expr_new_symbol(SYM_Pi));
             }
         }
         
@@ -1307,7 +1307,7 @@ Expr* builtin_arcsec(Expr* res) {
     double complex c;
     bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
-        if (c == 0.0) return expr_new_symbol("ComplexInfinity"); // ArcSec[0] = ComplexInfinity
+        if (c == 0.0) return expr_new_symbol(SYM_ComplexInfinity); // ArcSec[0] = ComplexInfinity
         double complex s = cacos(1.0 / c);
         if (cimag(c) == 0.0 && (creal(c) <= -1.0 || creal(c) >= 1.0)) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
@@ -1347,7 +1347,7 @@ Expr* builtin_arccsc(Expr* res) {
     double complex c;
     bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
-        if (c == 0.0) return expr_new_symbol("ComplexInfinity"); // ArcCsc[0] = ComplexInfinity
+        if (c == 0.0) return expr_new_symbol(SYM_ComplexInfinity); // ArcCsc[0] = ComplexInfinity
         double complex s = casin(1.0 / c);
         if (cimag(c) == 0.0 && (creal(c) <= -1.0 || creal(c) >= 1.0)) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));

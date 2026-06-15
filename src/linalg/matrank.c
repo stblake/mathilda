@@ -333,9 +333,9 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
         default:              name = "Automatic";                break;
     }
     Expr** rule_args = malloc(sizeof(Expr*) * 2);
-    rule_args[0] = expr_new_symbol("Method");
+    rule_args[0] = expr_new_symbol(SYM_Method);
     rule_args[1] = expr_new_string(name);
-    Expr* opt = expr_new_function(expr_new_symbol("Rule"), rule_args, 2);
+    Expr* opt = expr_new_function(expr_new_symbol(SYM_Rule), rule_args, 2);
     free(rule_args);
 
     Expr** args = malloc(sizeof(Expr*) * 2);

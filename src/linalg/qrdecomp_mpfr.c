@@ -611,7 +611,7 @@ static Expr* qrm_make_scalar(const mpfr_t re, const mpfr_t im,
     Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
     args[0] = expr_new_mpfr_copy(re);
     args[1] = expr_new_mpfr_copy(im);
-    Expr* z = expr_new_function(expr_new_symbol("Complex"), args, 2);
+    Expr* z = expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
     free(args);
     return z;
 }
@@ -643,12 +643,12 @@ static Expr* qrm_build_q(const mpfr_t* Q_re, const mpfr_t* Q_im,
                 elems[i] = qrm_make_scalar(Q_re[off], neg_im, false);
             }
         }
-        rows[j] = expr_new_function(expr_new_symbol("List"),
+        rows[j] = expr_new_function(expr_new_symbol(SYM_List),
                                     elems, (size_t)n);
         if (elems) free(elems);
     }
     mpfr_clear(neg_im);
-    Expr* q = expr_new_function(expr_new_symbol("List"),
+    Expr* q = expr_new_function(expr_new_symbol(SYM_List),
                                 rows, (size_t)rank);
     free(rows);
     return q;
@@ -678,12 +678,12 @@ static Expr* qrm_build_r(const mpfr_t* R_re, const mpfr_t* R_im,
                 elems[k] = qrm_make_scalar(R_re[off], zero_im, false);
             }
         }
-        rows[j] = expr_new_function(expr_new_symbol("List"),
+        rows[j] = expr_new_function(expr_new_symbol(SYM_List),
                                     elems, (size_t)p);
         if (elems) free(elems);
     }
     mpfr_clear(zero_im);
-    Expr* r = expr_new_function(expr_new_symbol("List"),
+    Expr* r = expr_new_function(expr_new_symbol(SYM_List),
                                 rows, (size_t)rank);
     free(rows);
     return r;
@@ -703,11 +703,11 @@ static Expr* qrm_build_perm(const int* perm, int p)
             int src_col = perm[j] - 1;
             elems[j] = expr_new_integer(src_col == i ? 1 : 0);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"),
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
                                     elems, (size_t)p);
         if (elems) free(elems);
     }
-    Expr* P = expr_new_function(expr_new_symbol("List"),
+    Expr* P = expr_new_function(expr_new_symbol(SYM_List),
                                 rows, (size_t)p);
     free(rows);
     return P;
@@ -787,8 +787,8 @@ Expr* qr_mpfr_dispatch(Expr* m, int n, int p, const QrOpts* opts)
     Expr* q;
     Expr* r;
     if (rank == 0) {
-        q = expr_new_function(expr_new_symbol("List"), NULL, 0);
-        r = expr_new_function(expr_new_symbol("List"), NULL, 0);
+        q = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        r = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     } else {
         q = qrm_build_q(Q_re, Q_im, n, rank, is_complex, bits);
         r = qrm_build_r(R_re, R_im, rank, p, is_complex, bits);
@@ -805,13 +805,13 @@ Expr* qr_mpfr_dispatch(Expr* m, int n, int p, const QrOpts* opts)
         free(perm);
         Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
         items[0] = q; items[1] = r; items[2] = P;
-        result = expr_new_function(expr_new_symbol("List"), items, 3);
+        result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
         free(items);
     } else {
         free(perm);
         Expr** items = (Expr**)malloc(sizeof(Expr*) * 2);
         items[0] = q; items[1] = r;
-        result = expr_new_function(expr_new_symbol("List"), items, 2);
+        result = expr_new_function(expr_new_symbol(SYM_List), items, 2);
         free(items);
     }
     return result;

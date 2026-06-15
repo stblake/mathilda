@@ -180,20 +180,20 @@ Expr* builtin_positive_definite_matrix_q(Expr* res) {
 
     /* Shape gate: must be a non-empty square List of Lists with no
      * deeper nesting.  Identical to the gate used by SquareMatrixQ. */
-    if (!pdq_is_list(m)) return expr_new_symbol("False");
+    if (!pdq_is_list(m)) return expr_new_symbol(SYM_False);
     size_t n_sz = m->data.function.arg_count;
-    if (n_sz == 0) return expr_new_symbol("False");
+    if (n_sz == 0) return expr_new_symbol(SYM_False);
     for (size_t i = 0; i < n_sz; i++) {
         Expr* row = m->data.function.args[i];
-        if (!pdq_is_list(row)) return expr_new_symbol("False");
+        if (!pdq_is_list(row)) return expr_new_symbol(SYM_False);
         if (row->data.function.arg_count != n_sz)
-            return expr_new_symbol("False");
+            return expr_new_symbol(SYM_False);
         for (size_t j = 0; j < n_sz; j++) {
             if (pdq_is_list(row->data.function.args[j]))
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
         }
     }
-    if (n_sz > (size_t)INT_MAX) return expr_new_symbol("False");
+    if (n_sz > (size_t)INT_MAX) return expr_new_symbol(SYM_False);
     int n = (int)n_sz;
 
     /* Probe numericity and detect whether any entry is non-real.  Any
@@ -204,7 +204,7 @@ Expr* builtin_positive_definite_matrix_q(Expr* res) {
         for (int j = 0; j < n; j++) {
             double re, im;
             if (!pdq_leaf_to_double(row->data.function.args[j], &re, &im)) {
-                return expr_new_symbol("False");
+                return expr_new_symbol(SYM_False);
             }
             if (im != 0.0) is_complex = true;
         }
@@ -221,7 +221,7 @@ Expr* builtin_positive_definite_matrix_q(Expr* res) {
     size_t stride = is_complex ? 2 : 1;
     double* A = (double*)malloc(stride * (size_t)n * (size_t)n
                                 * sizeof(double));
-    if (!A) return expr_new_symbol("False");
+    if (!A) return expr_new_symbol(SYM_False);
 
     for (int i = 0; i < n; i++) {
         Expr* row = m->data.function.args[i];
@@ -272,7 +272,7 @@ Expr* builtin_positive_definite_matrix_q(Expr* res) {
     }
     if (!diag_ok) {
         free(A);
-        return expr_new_symbol("False");
+        return expr_new_symbol(SYM_False);
     }
 
     /* Dispatch to LAPACK's blocked Cholesky when available; otherwise

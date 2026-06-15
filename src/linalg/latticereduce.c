@@ -228,7 +228,7 @@ static Expr* mpq_to_expr(const mpq_t q) {
     if (mpz_cmp_ui(mpq_denref(q), 1) == 0) return num;
     Expr* den = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_denref(q)));
     Expr* args[2] = { num, den };
-    return expr_new_function(expr_new_symbol("Rational"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
 }
 
 /* Build an exact Integer / Rational / Complex Expr from a GRat. */
@@ -237,7 +237,7 @@ static Expr* grat_to_expr(const GRat* z) {
     Expr* re = mpq_to_expr(z->re);
     Expr* im = mpq_to_expr(z->im);
     Expr* args[2] = { re, im };
-    return expr_new_function(expr_new_symbol("Complex"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
 }
 
 /* ------------------------------------------------------------------ *
@@ -492,10 +492,10 @@ Expr* builtin_latticereduce(Expr* res) {
     for (int r = 0; r < n; r++) {
         Expr** cells = malloc(sizeof(Expr*) * (size_t)d);
         for (int c = 0; c < d; c++) cells[c] = grat_to_expr(&ROW(B, r, d)[c]);
-        rows[r] = expr_new_function(expr_new_symbol("List"), cells, (size_t)d);
+        rows[r] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)d);
         free(cells);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, (size_t)n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
     free(rows);
 
     for (int i = 0; i < n * d; i++) gr_clear(&B[i]);
@@ -644,9 +644,9 @@ static Expr* finv_build_dot(Expr** a_list, Expr** entries, size_t n) {
     Expr** terms = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* factors[2] = { expr_copy(a_list[i]), expr_copy(entries[i]) };
-        terms[i] = expr_new_function(expr_new_symbol("Times"), factors, 2);
+        terms[i] = expr_new_function(expr_new_symbol(SYM_Times), factors, 2);
     }
-    Expr* dot = expr_new_function(expr_new_symbol("Plus"), terms, n);
+    Expr* dot = expr_new_function(expr_new_symbol(SYM_Plus), terms, n);
     free(terms);
     return dot;
 }
@@ -807,7 +807,7 @@ Expr* builtin_findintegernullvector(Expr* res) {
         for (int c = 0; c < nc; c++) { gr_norm2(t, &ROW(B, best, dcol)[c]); mpq_add(anorm2, anorm2, t); }
         Expr** a_cells = malloc(sizeof(Expr*) * n);
         for (int c = 0; c < nc; c++) a_cells[c] = grat_to_expr(&ROW(B, best, dcol)[c]);
-        Expr* A = expr_new_function(expr_new_symbol("List"), a_cells, n);
+        Expr* A = expr_new_function(expr_new_symbol(SYM_List), a_cells, n);
 
         /* certified lower bound B = sqrt(M2/(1+n/4)) */
         double M2 = dep ? 0.0 : mpq_get_d(min_gso2);

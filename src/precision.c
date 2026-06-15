@@ -38,8 +38,8 @@
 static const double LOG2_10 = 3.3219280948873626;
 
 /* Sentinel doubles for the symbolic "precision" values. */
-static Expr* make_infinity(void)         { return expr_new_symbol("Infinity"); }
-static Expr* make_machineprecision(void) { return expr_new_symbol("MachinePrecision"); }
+static Expr* make_infinity(void)         { return expr_new_symbol(SYM_Infinity); }
+static Expr* make_machineprecision(void) { return expr_new_symbol(SYM_MachinePrecision); }
 
 /* ------------------------------------------------------------------------
  *  Forward-declared helpers

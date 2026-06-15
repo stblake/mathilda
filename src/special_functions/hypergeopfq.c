@@ -72,7 +72,7 @@ static bool is_nonpos_int(const Expr* e, long* neg) {
 /* Build HypergeometricPFQ[a, b, z] from owned argument copies and evaluate. */
 static Expr* rebuild_eval(Expr* a, Expr* b, Expr* z) {
     Expr* args[3] = { a, b, z };
-    Expr* call = expr_new_function(expr_new_symbol("HypergeometricPFQ"), args, 3);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_HypergeometricPFQ), args, 3);
     Expr* r = evaluate(call);
     expr_free(call);
     return r;
@@ -88,10 +88,10 @@ static Expr* poch_product(Expr* x, long k) {
             fac[i] = expr_copy(x);
         } else {
             Expr* pa[2] = { expr_copy(x), expr_new_integer(i) };
-            fac[i] = expr_new_function(expr_new_symbol("Plus"), pa, 2);
+            fac[i] = expr_new_function(expr_new_symbol(SYM_Plus), pa, 2);
         }
     }
-    Expr* t = expr_new_function(expr_new_symbol("Times"), fac, (size_t)k);
+    Expr* t = expr_new_function(expr_new_symbol(SYM_Times), fac, (size_t)k);
     free(fac);
     return t;
 }
@@ -120,8 +120,8 @@ static Expr* try_cancel(Expr* a, Expr* b, Expr* z) {
             w = 0;
             for (size_t k = 0; k < q; k++)
                 if (k != j) nb[w++] = expr_copy(b->data.function.args[k]);
-            Expr* nal = expr_new_function(expr_new_symbol("List"), na, p - 1);
-            Expr* nbl = expr_new_function(expr_new_symbol("List"), nb, q - 1);
+            Expr* nal = expr_new_function(expr_new_symbol(SYM_List), na, p - 1);
+            Expr* nbl = expr_new_function(expr_new_symbol(SYM_List), nb, q - 1);
             free(na); free(nb);
             return rebuild_eval(nal, nbl, expr_copy(z));
         }
@@ -174,19 +174,19 @@ static Expr* try_terminate(Expr* a, Expr* b, Expr* z) {
             den[dw++] = poch_product(b->data.function.args[j], k);
         den[dw++] = expr_new_function(expr_new_symbol("Factorial"),
                         (Expr*[]){ expr_new_integer(k) }, 1);
-        Expr* denom = expr_new_function(expr_new_symbol("Times"), den, nden);
+        Expr* denom = expr_new_function(expr_new_symbol(SYM_Times), den, nden);
         free(den);
-        mul[w++] = expr_new_function(expr_new_symbol("Power"),
+        mul[w++] = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ denom, expr_new_integer(-1) }, 2);
 
         /* z^k */
-        mul[w++] = expr_new_function(expr_new_symbol("Power"),
+        mul[w++] = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ expr_copy(z), expr_new_integer(k) }, 2);
 
-        terms[k] = expr_new_function(expr_new_symbol("Times"), mul, w);
+        terms[k] = expr_new_function(expr_new_symbol(SYM_Times), mul, w);
         free(mul);
     }
-    Expr* sum = expr_new_function(expr_new_symbol("Plus"), terms, (size_t)(n + 1));
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, (size_t)(n + 1));
     free(terms);
     Expr* r = evaluate(sum);
     expr_free(sum);
@@ -209,14 +209,14 @@ static bool is_half_int(const Expr* e, int64_t* twice) {
 
 /* 1 - z as Plus[1, Times[-1, z]]. */
 static Expr* one_minus(Expr* z) {
-    Expr* neg = expr_new_function(expr_new_symbol("Times"),
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1), expr_copy(z) }, 2);
-    return expr_new_function(expr_new_symbol("Plus"),
+    return expr_new_function(expr_new_symbol(SYM_Plus),
                     (Expr*[]){ expr_new_integer(1), neg }, 2);
 }
 /* Sqrt[z] as Power[z, 1/2]. */
 static Expr* sqrt_of(Expr* z) {
-    return expr_new_function(expr_new_symbol("Power"),
+    return expr_new_function(expr_new_symbol(SYM_Power),
                (Expr*[]){ expr_copy(z), make_rational(1, 2) }, 2);
 }
 
@@ -233,51 +233,51 @@ static Expr* try_reduce(Expr* a, Expr* b, Expr* z) {
 
     if (p == 0 && q == 0) {
         /* 0F0(;;z) = E^z */
-        out = expr_new_function(expr_new_symbol("Exp"), (Expr*[]){ expr_copy(z) }, 1);
+        out = expr_new_function(expr_new_symbol(SYM_Exp), (Expr*[]){ expr_copy(z) }, 1);
     } else if (p == 1 && q == 0) {
         /* 1F0(a;;z) = (1 - z)^(-a) */
-        Expr* nega = expr_new_function(expr_new_symbol("Times"),
+        Expr* nega = expr_new_function(expr_new_symbol(SYM_Times),
                          (Expr*[]){ expr_new_integer(-1), expr_copy(au[0]) }, 2);
-        out = expr_new_function(expr_new_symbol("Power"),
+        out = expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ one_minus(z), nega }, 2);
     } else if (p == 0 && q == 1) {
         int64_t tw;
         if (is_half_int(bl[0], &tw) && tw == 1) {
             /* 0F1(;1/2;z) = Cosh[2 Sqrt[z]] */
-            Expr* arg = expr_new_function(expr_new_symbol("Times"),
+            Expr* arg = expr_new_function(expr_new_symbol(SYM_Times),
                             (Expr*[]){ expr_new_integer(2), sqrt_of(z) }, 2);
-            out = expr_new_function(expr_new_symbol("Cosh"), (Expr*[]){ arg }, 1);
+            out = expr_new_function(expr_new_symbol(SYM_Cosh), (Expr*[]){ arg }, 1);
         } else if (is_half_int(bl[0], &tw) && tw == 3) {
             /* 0F1(;3/2;z) = Sinh[2 Sqrt[z]] / (2 Sqrt[z]) */
-            Expr* twosq = expr_new_function(expr_new_symbol("Times"),
+            Expr* twosq = expr_new_function(expr_new_symbol(SYM_Times),
                               (Expr*[]){ expr_new_integer(2), sqrt_of(z) }, 2);
-            Expr* sinh = expr_new_function(expr_new_symbol("Sinh"),
+            Expr* sinh = expr_new_function(expr_new_symbol(SYM_Sinh),
                              (Expr*[]){ expr_copy(twosq) }, 1);
-            Expr* inv = expr_new_function(expr_new_symbol("Power"),
+            Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                             (Expr*[]){ twosq, expr_new_integer(-1) }, 2);
-            out = expr_new_function(expr_new_symbol("Times"),
+            out = expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){ sinh, inv }, 2);
         }
     } else if (p == 1 && q == 1) {
         /* 1F1(1;2;z) = (E^z - 1) / z */
         if (is_int_val(au[0], 1) && is_int_val(bl[0], 2)) {
-            Expr* em1 = expr_new_function(expr_new_symbol("Plus"),
-                            (Expr*[]){ expr_new_function(expr_new_symbol("Exp"),
+            Expr* em1 = expr_new_function(expr_new_symbol(SYM_Plus),
+                            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Exp),
                                            (Expr*[]){ expr_copy(z) }, 1),
                                        expr_new_integer(-1) }, 2);
-            Expr* invz = expr_new_function(expr_new_symbol("Power"),
+            Expr* invz = expr_new_function(expr_new_symbol(SYM_Power),
                              (Expr*[]){ expr_copy(z), expr_new_integer(-1) }, 2);
-            out = expr_new_function(expr_new_symbol("Times"),
+            out = expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){ em1, invz }, 2);
         }
     } else if (p == 2 && q == 1) {
         /* 2F1(1,1;2;z) = -Log[1 - z] / z */
         if (is_int_val(au[0], 1) && is_int_val(au[1], 1) && is_int_val(bl[0], 2)) {
-            Expr* lg = expr_new_function(expr_new_symbol("Log"),
+            Expr* lg = expr_new_function(expr_new_symbol(SYM_Log),
                            (Expr*[]){ one_minus(z) }, 1);
-            Expr* invz = expr_new_function(expr_new_symbol("Power"),
+            Expr* invz = expr_new_function(expr_new_symbol(SYM_Power),
                              (Expr*[]){ expr_copy(z), expr_new_integer(-1) }, 2);
-            out = expr_new_function(expr_new_symbol("Times"),
+            out = expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){ expr_new_integer(-1), lg, invz }, 3);
         }
     }
@@ -561,7 +561,7 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
         for (size_t i = 0; i < n; i++)
             out[i] = rebuild_eval(expr_copy(a), expr_copy(b),
                                   expr_copy(z->data.function.args[i]));
-        Expr* lst = expr_new_function(expr_new_symbol("List"), out, n);
+        Expr* lst = expr_new_function(expr_new_symbol(SYM_List), out, n);
         free(out);
         return lst;
     }
@@ -595,14 +595,14 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
 
 /* Wrap a scalar parameter into a one-element List (copying). */
 static Expr* list1(Expr* x) {
-    return expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(x) }, 1);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ expr_copy(x) }, 1);
 }
 
 Expr* builtin_hypergeometric_0f1(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* b = res->data.function.args[0];
     Expr* z = res->data.function.args[1];
-    Expr* empty = expr_new_function(expr_new_symbol("List"), NULL, 0);
+    Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     return rebuild_eval(empty, list1(b), expr_copy(z));
 }
 
@@ -620,7 +620,7 @@ Expr* builtin_hypergeometric_2f1(Expr* res) {
     Expr* b = res->data.function.args[1];
     Expr* cc = res->data.function.args[2];
     Expr* z = res->data.function.args[3];
-    Expr* up = expr_new_function(expr_new_symbol("List"),
+    Expr* up = expr_new_function(expr_new_symbol(SYM_List),
                    (Expr*[]){ expr_copy(a), expr_copy(b) }, 2);
     return rebuild_eval(up, list1(cc), expr_copy(z));
 }

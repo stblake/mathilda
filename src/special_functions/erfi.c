@@ -29,6 +29,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "erfi.h"
+#include "sym_names.h"
 
 #include <complex.h>
 #include <math.h>
@@ -464,12 +465,12 @@ static Expr* erfi_one_arg(Expr* arg) {
     /* 1. Exact special values. */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
         return expr_new_integer(0);                       /* Erfi[0] = 0 */
-    if (erfi_is_symbol(arg, "Infinity"))      return expr_new_symbol("Infinity");
+    if (erfi_is_symbol(arg, "Infinity"))      return expr_new_symbol(SYM_Infinity);
     if (erfi_is_neg_infinity(arg))
-        return eval_and_free(expr_new_function(expr_new_symbol("Times"),
-                    (Expr*[]){ expr_new_integer(-1), expr_new_symbol("Infinity") }, 2));
-    if (erfi_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol("ComplexInfinity");
-    if (erfi_is_symbol(arg, "Indeterminate"))   return expr_new_symbol("Indeterminate");
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2));
+    if (erfi_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
+    if (erfi_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
     {
         int s = erfi_directed_imag_infinity(arg);
         if (s != 0)                                       /* +-I Infinity -> +-I */
@@ -526,10 +527,10 @@ static Expr* erfi_one_arg(Expr* arg) {
     /* 5. Odd symmetry: Erfi[-x] = -Erfi[x] for a symbolic negative-leading
      *    argument (numeric negatives are already handled above). */
     if (erfi_is_neg_leading_times(arg)) {
-        Expr* pos = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* pos = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2));
-        Expr* inner = expr_new_function(expr_new_symbol("Erfi"), &pos, 1);
-        return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_Erfi), &pos, 1);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), inner }, 2));
     }
 

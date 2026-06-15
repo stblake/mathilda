@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "bpoly.h"
+#include "sym_names.h"
 #include "expr.h"
 #include "expand.h"
 #include "eval.h"
@@ -436,11 +437,11 @@ struct Expr* bpoly_to_expr(const BPoly* p,
             if (i == 1) x_pow = expr_copy((Expr*)x_var);
             else {
                 Expr* args[2] = { expr_copy((Expr*)x_var), expr_new_integer(i) };
-                x_pow = expr_new_function(expr_new_symbol("Power"), args, 2);
+                x_pow = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
                 x_pow = eval_and_free(x_pow);
             }
             Expr* args[2] = { y_part, x_pow };
-            term = expr_new_function(expr_new_symbol("Times"), args, 2);
+            term = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
             term = eval_and_free(term);
         }
         terms[idx++] = term;
@@ -449,7 +450,7 @@ struct Expr* bpoly_to_expr(const BPoly* p,
     if (n_terms == 1) {
         result = terms[0];
     } else {
-        result = expr_new_function(expr_new_symbol("Plus"), terms, n_terms);
+        result = expr_new_function(expr_new_symbol(SYM_Plus), terms, n_terms);
         result = eval_and_free(result);
     }
     free(terms);

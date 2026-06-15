@@ -56,7 +56,7 @@
 
 /* Build the empty result `List[]` used when `m` has full column rank. */
 static Expr* empty_basis(void) {
-    return expr_new_function(expr_new_symbol("List"), NULL, 0);
+    return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
 }
 
 /* Call `RowReduce[m, Method -> "<name>"]` via the evaluator.  When
@@ -81,9 +81,9 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
         default:              name = "Automatic";                break;
     }
     Expr** rule_args = malloc(sizeof(Expr*) * 2);
-    rule_args[0] = expr_new_symbol("Method");
+    rule_args[0] = expr_new_symbol(SYM_Method);
     rule_args[1] = expr_new_string(name);
-    Expr* opt = expr_new_function(expr_new_symbol("Rule"), rule_args, 2);
+    Expr* opt = expr_new_function(expr_new_symbol(SYM_Rule), rule_args, 2);
     free(rule_args);
 
     Expr** args = malloc(sizeof(Expr*) * 2);
@@ -142,7 +142,7 @@ static void clear_int_denominators(Expr** v, int n) {
         mul_args[0] = v[i];                       /* steal ownership */
         mul_args[1] = expr_copy(lcm_expr);
         Expr* new_val = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"), mul_args, 2));
+            expr_new_symbol(SYM_Times), mul_args, 2));
         free(mul_args);
         v[i] = new_val;
     }
@@ -224,7 +224,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
                 neg_args[0] = expr_new_integer(-1);
                 neg_args[1] = expr_copy(flat[pr * cols + f]);
                 v[j] = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"), neg_args, 2));
+                    expr_new_symbol(SYM_Times), neg_args, 2));
                 free(neg_args);
             } else {
                 v[j] = expr_new_integer(0);
@@ -233,7 +233,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
 
         clear_int_denominators(v, cols);
 
-        Expr* row = expr_new_function(expr_new_symbol("List"), v, (size_t)cols);
+        Expr* row = expr_new_function(expr_new_symbol(SYM_List), v, (size_t)cols);
         free(v);
 
         if (basis_count >= basis_cap) {
@@ -252,7 +252,7 @@ static Expr* nullspace_core(Expr* m, MatsolMethod method) {
         free(basis_rows);
         result = empty_basis();
     } else {
-        result = expr_new_function(expr_new_symbol("List"),
+        result = expr_new_function(expr_new_symbol(SYM_List),
                                     basis_rows, (size_t)basis_count);
         free(basis_rows);
     }

@@ -66,7 +66,7 @@ static void root_warn(const char* tag, const char* fmt, ...) {
 /* Build a fresh Expr representing Slot[1]. */
 static Expr* make_slot1(void) {
     Expr* one = expr_new_integer(1);
-    Expr* slot = expr_new_function(expr_new_symbol("Slot"),
+    Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot),
                                    (Expr*[]){ one }, 1);
     return slot;
 }

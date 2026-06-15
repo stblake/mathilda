@@ -390,14 +390,14 @@ Expr* builtin_orderedq(Expr* res) {
     
     Expr* list = res->data.function.args[0];
     if (list->type != EXPR_FUNCTION) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     
     Expr* p = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
     size_t count = list->data.function.arg_count;
     
     if (count <= 1) {
-        return expr_new_symbol("True");
+        return expr_new_symbol(SYM_True);
     }
     
     Expr* old_p = current_sort_p;

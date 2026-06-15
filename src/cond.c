@@ -21,7 +21,7 @@ Expr* builtin_if(Expr* res) {
             if (argc >= 3) {
                 return expr_copy(res->data.function.args[2]);
             } else {
-                return expr_new_symbol("Null");
+                return expr_new_symbol(SYM_Null);
             }
         }
     }
@@ -56,7 +56,7 @@ Expr* builtin_which(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
 
-    if (argc == 0) return expr_new_symbol("Null");
+    if (argc == 0) return expr_new_symbol(SYM_Null);
     if (argc % 2 != 0) return NULL;
 
     Expr** args = res->data.function.args;
@@ -97,7 +97,7 @@ Expr* builtin_which(Expr* res) {
         return out;
     }
 
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 /*
@@ -199,7 +199,7 @@ static Expr* piecewise_make_pair(Expr* val, Expr* cond) {
     if (!pa) { expr_free(val); expr_free(cond); return NULL; }
     pa[0] = val;
     pa[1] = cond;
-    Expr* pair = expr_new_function(expr_new_symbol("List"), pa, 2);
+    Expr* pair = expr_new_function(expr_new_symbol(SYM_List), pa, 2);
     free(pa);
     return pair;
 }
@@ -281,7 +281,7 @@ Expr* builtin_piecewise(Expr* res) {
                 size_t span = k - r;
                 Expr** or_args = malloc(span * sizeof(Expr*));
                 for (size_t j = 0; j < span; j++) or_args[j] = out_conds[r + j];
-                Expr* or_expr = expr_new_function(expr_new_symbol("Or"), or_args, span);
+                Expr* or_expr = expr_new_function(expr_new_symbol(SYM_Or), or_args, span);
                 free(or_args);
                 /* eval_and_free consumes or_expr (which now owns the
                  * per-clause conditions) and returns the reduced form. */
@@ -324,7 +324,7 @@ Expr* builtin_piecewise(Expr* res) {
     for (size_t i = 0; i < out_count; i++) {
         pair_nodes[i] = piecewise_make_pair(out_vals[i], out_conds[i]);
     }
-    Expr* clauses_list = expr_new_function(expr_new_symbol("List"), pair_nodes, out_count);
+    Expr* clauses_list = expr_new_function(expr_new_symbol(SYM_List), pair_nodes, out_count);
     free(pair_nodes);
     free(out_vals); free(out_conds);
 
@@ -340,7 +340,7 @@ Expr* builtin_piecewise(Expr* res) {
         pw_args[1] = default_arg ? expr_copy(default_arg) : expr_new_integer(0);
         pw_argc = 2;
     }
-    Expr* result = expr_new_function(expr_new_symbol("Piecewise"), pw_args, pw_argc);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Piecewise), pw_args, pw_argc);
     free(pw_args);
 
     /* If we produced the exact same expression as the input, signal "no

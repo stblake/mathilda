@@ -54,7 +54,7 @@ Expr* builtin_characters(Expr* res) {
     Expr** chars = malloc(sizeof(Expr*) * len);
     if (!chars) {
     
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
     char buf[2];
@@ -64,7 +64,7 @@ Expr* builtin_characters(Expr* res) {
         chars[i] = expr_new_string(buf);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), chars, len);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), chars, len);
     free(chars);
 
     return result;
@@ -202,7 +202,7 @@ Expr* builtin_stringpart(Expr* res) {
             expr_free(call);
             results[i] = r;
         }
-        Expr* result = expr_new_function(expr_new_symbol("List"), results, n);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), results, n);
         free(results);
         return result;
     }
@@ -233,7 +233,7 @@ Expr* builtin_stringpart(Expr* res) {
             }
             results[i] = ch;
         }
-        Expr* result = expr_new_function(expr_new_symbol("List"), results, n);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), results, n);
         free(results);
         return result;
     }
@@ -296,7 +296,7 @@ Expr* builtin_stringpart(Expr* res) {
             current += step;
         }
 
-        Expr* result = expr_new_function(expr_new_symbol("List"),
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List),
                                          results, (size_t)count);
         free(results);
         return result;
@@ -375,7 +375,7 @@ Expr* builtin_stringtake(Expr* res) {
             expr_free(call);
             results[i] = r;
         }
-        Expr* result = expr_new_function(expr_new_symbol("List"), results, n);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), results, n);
         free(results);
         return result;
     }

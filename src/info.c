@@ -650,6 +650,14 @@ void info_init(void) {
         "HypergeometricPFQ[{a, b}, {c}, z].");
 
     // Structural Manipulation
+    symtab_set_docstring("List",
+        "{e1, e2, ...} or List[e1, e2, ...]\n"
+        "\trepresents an ordered list of the elements ei.\n"
+        "List is the fundamental container head: vectors are lists, matrices are\n"
+        "lists of lists, and the structural operators (Part, Map, Take, Drop,\n"
+        "Length, ...) act on List. Elements are evaluated normally and kept in the\n"
+        "given order (List has no Orderless attribute). The parser writes the {...}\n"
+        "syntax to List, and the printer renders List[...] back as {...}.");
     symtab_set_docstring("Part",
         "expr[[i]] or Part[expr, i]\n"
         "\tgives the i-th part of expr.\n"
@@ -686,6 +694,37 @@ void info_init(void) {
     symtab_set_docstring("UpTo",
         "UpTo[n]\n"
         "\tis a symbolic specification that represents up to n objects or positions. If n objects or positions are available, all are used. If fewer are available, only those available are used.");
+    symtab_set_docstring("Take",
+        "Take[list, n]\n"
+        "\tgives the first n elements of list.\n"
+        "Take[list, -n]\n"
+        "\tgives the last n elements.\n"
+        "Take[list, {m, n}]\n"
+        "\tgives elements m through n.\n"
+        "Take[list, {m, n, s}]\n"
+        "\tgives elements m through n in steps of s.\n"
+        "Take[list, {m}]\n"
+        "\tgives the single element at position m (wrapped in the head of list).\n"
+        "Take[list, spec1, spec2, ...]\n"
+        "\ttakes elements at successive levels, e.g. a sub-block of a matrix.\n\n"
+        "Negative indices count from the end; UpTo[n], All, and None are also accepted\n"
+        "as specifications. Indices are 1-based; out-of-range requests leave the\n"
+        "expression unevaluated. Take operates on any expression, not just List.");
+    symtab_set_docstring("Drop",
+        "Drop[list, n]\n"
+        "\tgives list with its first n elements dropped.\n"
+        "Drop[list, -n]\n"
+        "\tdrops the last n elements.\n"
+        "Drop[list, {m, n}]\n"
+        "\tdrops elements m through n.\n"
+        "Drop[list, {m, n, s}]\n"
+        "\tdrops elements m through n in steps of s.\n"
+        "Drop[list, {m}]\n"
+        "\tdrops the single element at position m.\n"
+        "Drop[list, spec1, spec2, ...]\n"
+        "\tdrops elements at successive levels.\n\n"
+        "Negative indices count from the end; UpTo[n], All, and None are also accepted.\n"
+        "Indices are 1-based; out-of-range requests leave the expression unevaluated.");
 
 
     // Linear Algebra

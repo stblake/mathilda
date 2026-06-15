@@ -130,7 +130,7 @@ static Expr** eigen_compute_eigenvalues_full(Expr* m, Expr* a,
             vals = malloc(sizeof(Expr*) * n);
         }
         for (size_t i = val_count; i < (size_t)n; i++) {
-            vals[i] = expr_new_symbol("Infinity");
+            vals[i] = expr_new_symbol(SYM_Infinity);
         }
         val_count = (size_t)n;
     }
@@ -238,7 +238,7 @@ Expr* builtin_eigenvalues(Expr* res) {
                                              &result_count);
     free(vals);
 
-    Expr* out = expr_new_function(expr_new_symbol("List"),
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List),
                                   result_vals, result_count);
     free(result_vals);
     return out;
@@ -250,7 +250,7 @@ Expr* builtin_eigenvalues(Expr* res) {
  * Returns a freshly allocated matrix. */
 static Expr* eigen_subst_lambda(Expr* M, const char* lambda_name, Expr* val) {
     /* Use ReplaceAll: M /. lambda_name -> val */
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){ expr_new_symbol(lambda_name), expr_copy(val) }, 2);
     Expr* replaced = eval_and_free(expr_new_function(
         expr_new_symbol("ReplaceAll"),
@@ -277,7 +277,7 @@ static Expr* eigen_residual_matrix(Expr* m, Expr* a, Expr* val, int64_t n) {
 static Expr* eigen_zero_vector(int64_t n) {
     Expr** v = malloc(sizeof(Expr*) * n);
     for (int64_t i = 0; i < n; i++) v[i] = expr_new_integer(0);
-    Expr* out = expr_new_function(expr_new_symbol("List"), v, (size_t)n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), v, (size_t)n);
     free(v);
     return out;
 }
@@ -290,10 +290,10 @@ static Expr* eigen_normalize_vector(Expr* v) {
     /* If Norm is zero or symbolic, skip normalisation. */
     if (is_zero_poly(norm)) { expr_free(norm); return expr_copy(v); }
     Expr* inv = eval_and_free(expr_new_function(
-        expr_new_symbol("Power"),
+        expr_new_symbol(SYM_Power),
         (Expr*[]){ norm, expr_new_integer(-1) }, 2));
     Expr* scaled = eval_and_free(expr_new_function(
-        expr_new_symbol("Times"),
+        expr_new_symbol(SYM_Times),
         (Expr*[]){ inv, expr_copy(v) }, 2));
     return scaled;
 }
@@ -462,7 +462,7 @@ Expr* builtin_eigenvectors(Expr* res) {
                                              &result_count);
     free(vectors);
 
-    Expr* out = expr_new_function(expr_new_symbol("List"),
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List),
                                   result_vecs, result_count);
     free(result_vecs);
 

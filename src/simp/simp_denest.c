@@ -124,7 +124,7 @@ static Expr* simp_radicals_combine_times(const Expr* tn) {
             if (!expr_eq((Expr*)exp_i, (Expr*)exp_j)) continue;
 
             Expr* mul_args[2] = { prod_base, expr_copy((Expr*)base_j) };
-            Expr* mul = expr_new_function(expr_new_symbol("Times"),
+            Expr* mul = expr_new_function(expr_new_symbol(SYM_Times),
                                           mul_args, 2);
             prod_base = evaluate(mul);
             expr_free(mul);
@@ -135,7 +135,7 @@ static Expr* simp_radicals_combine_times(const Expr* tn) {
 
         if (group >= 2) {
             Expr* pow_args[2] = { prod_base, expr_copy((Expr*)exp_i) };
-            Expr* pow = expr_new_function(expr_new_symbol("Power"),
+            Expr* pow = expr_new_function(expr_new_symbol(SYM_Power),
                                           pow_args, 2);
             new_args[out++] = evaluate(pow);
             expr_free(pow);
@@ -152,7 +152,7 @@ static Expr* simp_radicals_combine_times(const Expr* tn) {
         free(new_args);
         return NULL;
     }
-    Expr* rebuilt = expr_new_function(expr_new_symbol("Times"),
+    Expr* rebuilt = expr_new_function(expr_new_symbol(SYM_Times),
                                       new_args, out);
     Expr* canonical = evaluate(rebuilt);
     expr_free(rebuilt);
@@ -294,7 +294,7 @@ static Expr* denest_rationalise_sqrt_of_rational(const Expr* e) {
                         make_rational(1, 2)
                     };
                     Expr* sqrt_call = expr_new_function(
-                        expr_new_symbol("Power"), sqrt_args, 2);
+                        expr_new_symbol(SYM_Power), sqrt_args, 2);
                     Expr* sqrt_e = evaluate(sqrt_call);
                     expr_free(sqrt_call);
                     Expr* prod_args[2] = {
@@ -302,7 +302,7 @@ static Expr* denest_rationalise_sqrt_of_rational(const Expr* e) {
                         make_rational(1, nn)
                     };
                     Expr* prod = expr_new_function(
-                        expr_new_symbol("Times"), prod_args, 2);
+                        expr_new_symbol(SYM_Times), prod_args, 2);
                     Expr* out = evaluate(prod);
                     expr_free(prod);
                     expr_free(rebuilt);
@@ -427,7 +427,7 @@ static bool extract_sqrt_term(const Expr* e, const AssumeCtx* ctx,
                 b = expr_copy(base);
             } else {
                 Expr* pa[2] = { expr_copy(base), expr_new_integer(k) };
-                Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                Expr* pc = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
                 b = evaluate(pc);
                 expr_free(pc);
             }
@@ -526,7 +526,7 @@ static bool extract_sqrt_term(const Expr* e, const AssumeCtx* ctx,
     if (si == 1) {
         C = sqrt_bases[0];
     } else {
-        Expr* tn = expr_new_function(expr_new_symbol("Times"),
+        Expr* tn = expr_new_function(expr_new_symbol(SYM_Times),
                                       sqrt_bases, si);
         C = evaluate(tn);
         expr_free(tn);
@@ -542,7 +542,7 @@ static bool extract_sqrt_term(const Expr* e, const AssumeCtx* ctx,
         b = other[0];
         free(other);
     } else {
-        Expr* tn = expr_new_function(expr_new_symbol("Times"), other, oi);
+        Expr* tn = expr_new_function(expr_new_symbol(SYM_Times), other, oi);
         b = evaluate(tn);
         expr_free(tn);
     }
@@ -775,11 +775,11 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
         Expr* sd = sqrt_if_clean_square(D->data.function.args[1], ctx);
         if (!sd) { expr_free(sn); return NULL; }
         Expr* inv_args[2] = { sd, expr_new_integer(-1) };
-        Expr* inv = expr_new_function(expr_new_symbol("Power"), inv_args, 2);
+        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power), inv_args, 2);
         Expr* inv_e = evaluate(inv);
         expr_free(inv);
         Expr* prod_args[2] = { sn, inv_e };
-        Expr* prod = expr_new_function(expr_new_symbol("Times"), prod_args, 2);
+        Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), prod_args, 2);
         Expr* out = evaluate(prod);
         expr_free(prod);
         return out;
@@ -799,7 +799,7 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
             Expr* u = expr_copy(D->data.function.args[0]);
             if (k == 1) return u;
             Expr* pa[2] = { u, expr_new_integer(k) };
-            Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+            Expr* pc = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
             Expr* out = evaluate(pc);
             expr_free(pc);
             return out;
@@ -838,7 +838,7 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
                             expr_free(fsf);
                             if (k == 1) return u;
                             Expr* pa[2] = { u, expr_new_integer(k) };
-                            Expr* pc = expr_new_function(expr_new_symbol("Power"), pa, 2);
+                            Expr* pc = expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
                             Expr* out = evaluate(pc);
                             expr_free(pc);
                             return out;
@@ -867,7 +867,7 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
         }
 
         Expr* sqrtD_args[2] = { expr_copy((Expr*)D), make_rational(1, 2) };
-        Expr* sqrtD = expr_new_function(expr_new_symbol("Power"),
+        Expr* sqrtD = expr_new_function(expr_new_symbol(SYM_Power),
                                          sqrtD_args, 2);
         Expr* sqrtD_e = evaluate(sqrtD);
         expr_free(sqrtD);
@@ -997,7 +997,7 @@ static bool split_plus_into_a_plus_b_sqrt_c(const Expr* plus_node,
             if (i == chosen_idx) continue;
             a_args[ai++] = expr_copy(plus_node->data.function.args[i]);
         }
-        Expr* pn = expr_new_function(expr_new_symbol("Plus"), a_args, ai);
+        Expr* pn = expr_new_function(expr_new_symbol(SYM_Plus), a_args, ai);
         *out_A = evaluate(pn);
         expr_free(pn);
     }
@@ -1280,7 +1280,7 @@ static bool classify_q_sqrt_term(const Expr* term,
                 *alpha_inc_out = coef_args[0];
                 free(coef_args);
             } else {
-                Expr* tn = expr_new_function(expr_new_symbol("Times"),
+                Expr* tn = expr_new_function(expr_new_symbol(SYM_Times),
                                               coef_args, ci);
                 *alpha_inc_out = evaluate(tn);
                 expr_free(tn);
@@ -1295,7 +1295,7 @@ static bool classify_q_sqrt_term(const Expr* term,
             coef = coef_args[0];
             free(coef_args);
         } else {
-            Expr* tn = expr_new_function(expr_new_symbol("Times"),
+            Expr* tn = expr_new_function(expr_new_symbol(SYM_Times),
                                           coef_args, ci);
             coef = evaluate(tn);
             expr_free(tn);
@@ -1311,27 +1311,27 @@ static bool classify_q_sqrt_term(const Expr* term,
  * a, b, g consumed by the call. */
 static Expr* compute_discriminant_eval(Expr* a, Expr* b, Expr* g) {
     Expr* a2_args[2] = { a, expr_new_integer(2) };
-    Expr* a2_p = expr_new_function(expr_new_symbol("Power"), a2_args, 2);
+    Expr* a2_p = expr_new_function(expr_new_symbol(SYM_Power), a2_args, 2);
     Expr* a2 = evaluate(a2_p);
     expr_free(a2_p);
 
     Expr* b2_args[2] = { b, expr_new_integer(2) };
-    Expr* b2_p = expr_new_function(expr_new_symbol("Power"), b2_args, 2);
+    Expr* b2_p = expr_new_function(expr_new_symbol(SYM_Power), b2_args, 2);
     Expr* b2 = evaluate(b2_p);
     expr_free(b2_p);
 
     Expr* bg_args[2] = { b2, g };
-    Expr* bg_t = expr_new_function(expr_new_symbol("Times"), bg_args, 2);
+    Expr* bg_t = expr_new_function(expr_new_symbol(SYM_Times), bg_args, 2);
     Expr* bg = evaluate(bg_t);
     expr_free(bg_t);
 
     Expr* neg_args[2] = { expr_new_integer(-1), bg };
-    Expr* neg_t = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+    Expr* neg_t = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
     Expr* neg_bg = evaluate(neg_t);
     expr_free(neg_t);
 
     Expr* D_args[2] = { a2, neg_bg };
-    Expr* D_p = expr_new_function(expr_new_symbol("Plus"), D_args, 2);
+    Expr* D_p = expr_new_function(expr_new_symbol(SYM_Plus), D_args, 2);
     Expr* D = evaluate(D_p);
     expr_free(D_p);
     return D;
@@ -1426,7 +1426,7 @@ static bool q_sqrt_extension_is_nonneg(const Expr* e) {
         alpha = alpha_parts[0];
         free(alpha_parts);
     } else {
-        Expr* pn = expr_new_function(expr_new_symbol("Plus"), alpha_parts, ai);
+        Expr* pn = expr_new_function(expr_new_symbol(SYM_Plus), alpha_parts, ai);
         alpha = evaluate(pn);
         expr_free(pn);
     }
@@ -1438,7 +1438,7 @@ static bool q_sqrt_extension_is_nonneg(const Expr* e) {
         beta = beta_parts[0];
         free(beta_parts);
     } else {
-        Expr* pn = expr_new_function(expr_new_symbol("Plus"), beta_parts, bi);
+        Expr* pn = expr_new_function(expr_new_symbol(SYM_Plus), beta_parts, bi);
         beta = evaluate(pn);
         expr_free(pn);
     }
@@ -1542,26 +1542,26 @@ static bool denest_compute_pq_s_at_candidate(const Expr* plus_node,
     /* B = b^2 * C; evaluate so symbolic b^2 simplifies and rational
      * b^2 collapses to a literal. */
     Expr* b2_args[2] = { expr_copy(b), expr_new_integer(2) };
-    Expr* b2_pow = expr_new_function(expr_new_symbol("Power"), b2_args, 2);
+    Expr* b2_pow = expr_new_function(expr_new_symbol(SYM_Power), b2_args, 2);
     Expr* b2 = evaluate(b2_pow);
     expr_free(b2_pow);
     Expr* B_args[2] = { b2, expr_copy(C) };
-    Expr* B_times = expr_new_function(expr_new_symbol("Times"), B_args, 2);
+    Expr* B_times = expr_new_function(expr_new_symbol(SYM_Times), B_args, 2);
     Expr* B = evaluate(B_times);
     expr_free(B_times);
 
     /* D = A^2 - B; Expand to put it in canonical polynomial form so
      * sqrt_if_clean_square's FactorSquareFree path has a chance. */
     Expr* A2_args[2] = { expr_copy(A), expr_new_integer(2) };
-    Expr* A2_pow = expr_new_function(expr_new_symbol("Power"), A2_args, 2);
+    Expr* A2_pow = expr_new_function(expr_new_symbol(SYM_Power), A2_args, 2);
     Expr* A2 = evaluate(A2_pow);
     expr_free(A2_pow);
     Expr* negB_args[2] = { expr_new_integer(-1), B };
-    Expr* negB_times = expr_new_function(expr_new_symbol("Times"), negB_args, 2);
+    Expr* negB_times = expr_new_function(expr_new_symbol(SYM_Times), negB_args, 2);
     Expr* negB = evaluate(negB_times);
     expr_free(negB_times);
     Expr* D_args[2] = { A2, negB };
-    Expr* D_plus = expr_new_function(expr_new_symbol("Plus"), D_args, 2);
+    Expr* D_plus = expr_new_function(expr_new_symbol(SYM_Plus), D_args, 2);
     Expr* D_unexp = evaluate(D_plus);
     expr_free(D_plus);
     /* call_unary_owned consumes D_unexp; if it returns NULL we treat as
@@ -1592,11 +1592,11 @@ static bool denest_compute_pq_s_at_candidate(const Expr* plus_node,
      * obscuring the simple "u - v >= 0" subtraction pattern that the
      * branch check uses on case 7. */
     Expr* Ap_args[2] = { expr_copy(A), expr_copy(s) };
-    Expr* Ap = expr_new_function(expr_new_symbol("Plus"), Ap_args, 2);
+    Expr* Ap = expr_new_function(expr_new_symbol(SYM_Plus), Ap_args, 2);
     Expr* Ap_e = evaluate(Ap);
     expr_free(Ap);
     Expr* halfP_args[2] = { make_rational(1, 2), Ap_e };
-    Expr* halfP = expr_new_function(expr_new_symbol("Times"), halfP_args, 2);
+    Expr* halfP = expr_new_function(expr_new_symbol(SYM_Times), halfP_args, 2);
     Expr* P_raw = evaluate(halfP);
     expr_free(halfP);
     /* call_unary_owned consumes P_raw; Expand never returns NULL on a
@@ -1614,15 +1614,15 @@ static bool denest_compute_pq_s_at_candidate(const Expr* plus_node,
      * to return s untouched, and the original code only worked because it
      * never reached for s again. */
     Expr* neg_s_args[2] = { expr_new_integer(-1), expr_copy(s) };
-    Expr* neg_s = expr_new_function(expr_new_symbol("Times"), neg_s_args, 2);
+    Expr* neg_s = expr_new_function(expr_new_symbol(SYM_Times), neg_s_args, 2);
     Expr* neg_s_e = evaluate(neg_s);
     expr_free(neg_s);
     Expr* Am_args[2] = { expr_copy(A), neg_s_e };
-    Expr* Am = expr_new_function(expr_new_symbol("Plus"), Am_args, 2);
+    Expr* Am = expr_new_function(expr_new_symbol(SYM_Plus), Am_args, 2);
     Expr* Am_e = evaluate(Am);
     expr_free(Am);
     Expr* halfQ_args[2] = { make_rational(1, 2), Am_e };
-    Expr* halfQ = expr_new_function(expr_new_symbol("Times"), halfQ_args, 2);
+    Expr* halfQ = expr_new_function(expr_new_symbol(SYM_Times), halfQ_args, 2);
     Expr* Q_raw = evaluate(halfQ);
     expr_free(halfQ);
     Expr* Q = call_unary_owned("Together", Q_raw);
@@ -1714,7 +1714,7 @@ static bool match_half_int_power(const Expr* e, int64_t* m_out,
 /* Raise `base` (consumed) to integer exponent k and evaluate. */
 static Expr* power_int_eval(Expr* base, int64_t k) {
     Expr* args[2] = { base, expr_new_integer(k) };
-    Expr* pow = expr_new_function(expr_new_symbol("Power"), args, 2);
+    Expr* pow = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
     Expr* result = evaluate(pow);
     expr_free(pow);
     return result;
@@ -1740,11 +1740,11 @@ static Expr* try_denest_pow_half_int(const Expr* plus_node, int64_t m,
     }
 
     Expr* sP_args[2] = { P, make_rational(1, 2) };
-    Expr* sP = expr_new_function(expr_new_symbol("Power"), sP_args, 2);
+    Expr* sP = expr_new_function(expr_new_symbol(SYM_Power), sP_args, 2);
     Expr* sP_e = evaluate(sP);
     expr_free(sP);
     Expr* sQ_args[2] = { Q, make_rational(1, 2) };
-    Expr* sQ = expr_new_function(expr_new_symbol("Power"), sQ_args, 2);
+    Expr* sQ = expr_new_function(expr_new_symbol(SYM_Power), sQ_args, 2);
     Expr* sQ_e = evaluate(sQ);
     expr_free(sQ);
 
@@ -1759,17 +1759,17 @@ static Expr* try_denest_pow_half_int(const Expr* plus_node, int64_t m,
     Expr* R;
     if (plus_q) {
         Expr* sum_args[2] = { sP_e, sQ_e };
-        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
         R = evaluate(sum);
         expr_free(sum);
     } else {
         Expr* neg_sQ_args[2] = { expr_new_integer(-1), sQ_e };
-        Expr* neg_sQ = expr_new_function(expr_new_symbol("Times"),
+        Expr* neg_sQ = expr_new_function(expr_new_symbol(SYM_Times),
                                           neg_sQ_args, 2);
         Expr* neg_sQ_e = evaluate(neg_sQ);
         expr_free(neg_sQ);
         Expr* sum_args[2] = { sP_e, neg_sQ_e };
-        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
         R = evaluate(sum);
         expr_free(sum);
     }
@@ -1781,12 +1781,12 @@ static Expr* try_denest_pow_half_int(const Expr* plus_node, int64_t m,
     if (m < 0) {
         /* Divide by s^k. Build R_pow * Power[s, -k] and evaluate. */
         Expr* inv_s_args[2] = { s, expr_new_integer(-k) };
-        Expr* inv_s = expr_new_function(expr_new_symbol("Power"),
+        Expr* inv_s = expr_new_function(expr_new_symbol(SYM_Power),
                                          inv_s_args, 2);
         Expr* inv_s_e = evaluate(inv_s);
         expr_free(inv_s);
         Expr* prod_args[2] = { R_pow, inv_s_e };
-        Expr* prod = expr_new_function(expr_new_symbol("Times"),
+        Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
                                         prod_args, 2);
         result = evaluate(prod);
         expr_free(prod);

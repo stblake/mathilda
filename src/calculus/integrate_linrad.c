@@ -232,7 +232,7 @@ static Expr* lr_core(Expr* f, Expr* x) {
     }
 
     /* --- 3. (n/a) u^(n-1) exy  /.  x -> (u^n - b)/a, then Cancel. --- */
-    Expr* jac = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+    Expr* jac = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
         mk_int(n),
         mk_fn2("Power", expr_copy(a), mk_int(-1)),
         mk_fn2("Power", expr_copy(u), mk_int(n - 1)),

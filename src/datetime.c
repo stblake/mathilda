@@ -27,7 +27,7 @@ Expr* builtin_timing(Expr* res) {
     results[0] = expr_new_real(time_used);
     results[1] = evaluated;
     
-    Expr* final_res = expr_new_function(expr_new_symbol("List"), results, 2);
+    Expr* final_res = expr_new_function(expr_new_symbol(SYM_List), results, 2);
     free(results);
     return final_res;
 }
@@ -120,7 +120,7 @@ Expr* builtin_repeated_timing(Expr* res) {
     results[0] = expr_new_real(average_time);
     results[1] = first_evaluated;
     
-    Expr* final_res = expr_new_function(expr_new_symbol("List"), results, 2);
+    Expr* final_res = expr_new_function(expr_new_symbol(SYM_List), results, 2);
     free(results);
     return final_res;
 }

@@ -145,7 +145,7 @@ static Expr* inverse_divfree(Expr* arg, int n) {
                 for (int j = 0; j < cols; j++) {
                     if (j == c) continue;
                     Expr* num_eval = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * cols + j])}, 2));
                     Expr* new_val = exact_div_wrapper(num_eval, P);
                     expr_free(num_eval);
@@ -156,16 +156,16 @@ static Expr* inverse_divfree(Expr* arg, int n) {
                 for (int j = 0; j < cols; j++) {
                     if (j == c) continue;
                     Expr* t1 = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){expr_copy(pivot), expr_copy(matrix[i * cols + j])}, 2));
                     Expr* t2 = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){expr_copy(M_ic), expr_copy(matrix[r * cols + j])}, 2));
                     Expr* t2_neg = eval_and_free(expr_new_function(
-                        expr_new_symbol("Times"),
+                        expr_new_symbol(SYM_Times),
                         (Expr*[]){expr_new_integer(-1), t2}, 2));
                     Expr* num_eval = eval_and_free(expr_new_function(
-                        expr_new_symbol("Plus"),
+                        expr_new_symbol(SYM_Plus),
                         (Expr*[]){t1, t2_neg}, 2));
                     Expr* new_val = exact_div_wrapper(num_eval, P);
                     expr_free(num_eval);
@@ -204,7 +204,7 @@ static Expr* inverse_divfree(Expr* arg, int n) {
 
             /* Cancel common factors via PolynomialGCD */
             Expr* g = eval_and_free(expr_new_function(
-                expr_new_symbol("PolynomialGCD"),
+                expr_new_symbol(SYM_PolynomialGCD),
                 (Expr*[]){expr_copy(num_val), expr_copy(den_val)}, 2));
             Expr* new_num = exact_div_wrapper(num_val, g);
             Expr* new_den = exact_div_wrapper(den_val, g);
@@ -213,7 +213,7 @@ static Expr* inverse_divfree(Expr* arg, int n) {
             /* Normalize sign so denominator is positive */
             if (new_den->type == EXPR_INTEGER && new_den->data.integer < 0) {
                 Expr* t = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){new_num, expr_new_integer(-1)}, 2));
                 new_num = expr_expand(t);
                 expr_free(t);
@@ -228,10 +228,10 @@ static Expr* inverse_divfree(Expr* arg, int n) {
                 matrix[i * cols + j] = new_num;
             } else {
                 Expr* inv_den = eval_and_free(expr_new_function(
-                    expr_new_symbol("Power"),
+                    expr_new_symbol(SYM_Power),
                     (Expr*[]){new_den, expr_new_integer(-1)}, 2));
                 Expr* final_val = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){new_num, inv_den}, 2));
                 matrix[i * cols + j] = expr_expand(final_val);
                 expr_free(final_val);
@@ -248,10 +248,10 @@ static Expr* inverse_divfree(Expr* arg, int n) {
         for (int j = 0; j < n; j++) {
             row_elems[j] = matrix[i * cols + n + j]; /* take ownership */
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, n);
         free(row_elems);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
 
     /* Free the left half and the flat matrix array */
@@ -347,13 +347,13 @@ static Expr* inverse_onestep(Expr* arg, int n) {
             for (int j = 0; j < cols; j++) {
                 if (j == c) continue;
                 Expr* term = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){expr_copy(factor), expr_copy(matrix[c * cols + j])}, 2));
                 Expr* neg_term = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){expr_new_integer(-1), term}, 2));
                 Expr* updated = eval_and_free(expr_new_function(
-                    expr_new_symbol("Plus"),
+                    expr_new_symbol(SYM_Plus),
                     (Expr*[]){expr_copy(matrix[i * cols + j]), neg_term}, 2));
                 Expr* updated_c = matsol_canon_entry(updated);
                 expr_free(updated);
@@ -372,10 +372,10 @@ static Expr* inverse_onestep(Expr* arg, int n) {
         for (int j = 0; j < n; j++) {
             row_elems[j] = matrix[i * cols + n + j]; /* take ownership */
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, (size_t)n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, (size_t)n);
         free(row_elems);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, (size_t)n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
     free(rows);
 
     /* Free the left (identity) half; right-half ownership transferred. */
@@ -436,9 +436,9 @@ static Expr* inverse_cofactor(Expr* arg, int n) {
         Expr** row_elems = malloc(sizeof(Expr*));
         row_elems[0] = inv;
         Expr** rows = malloc(sizeof(Expr*));
-        rows[0] = expr_new_function(expr_new_symbol("List"), row_elems, 1);
+        rows[0] = expr_new_function(expr_new_symbol(SYM_List), row_elems, 1);
         free(row_elems);
-        Expr* result = expr_new_function(expr_new_symbol("List"), rows, 1);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, 1);
         free(rows);
         expr_free(det_a);
         for (int i = 0; i < n * n; i++) expr_free(flat[i]);
@@ -474,7 +474,7 @@ static Expr* inverse_cofactor(Expr* arg, int n) {
             /* Sign: (-1)^(i + j). */
             if (((i + j) & 1) != 0) {
                 Expr* neg = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){expr_new_integer(-1), minor_det}, 2));
                 minor_det = neg;
             }
@@ -487,11 +487,11 @@ static Expr* inverse_cofactor(Expr* arg, int n) {
 
             row_elems[j] = entry;
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, (size_t)n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, (size_t)n);
         free(row_elems);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, (size_t)n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
     free(rows);
     free(minor_cols);
     free(minor_flat);
@@ -565,10 +565,10 @@ Expr* builtin_inverse(Expr* res) {
 /* Return Conjugate[Transpose[m]] as a fresh expression.  Caller owns. */
 static Expr* hermitian_transpose(Expr* m) {
     Expr* trans = eval_and_free(expr_new_function(
-        expr_new_symbol("Transpose"),
+        expr_new_symbol(SYM_Transpose),
         (Expr*[]){expr_copy(m)}, 1));
     Expr* conj = eval_and_free(expr_new_function(
-        expr_new_symbol("Conjugate"),
+        expr_new_symbol(SYM_Conjugate),
         (Expr*[]){trans}, 1));
     return conj;
 }
@@ -584,7 +584,7 @@ static Expr* mat_mult(Expr* a, Expr* b) {
  * Returns NULL (with an Inverse::sing error already on stderr) when m is
  * singular; otherwise a fresh n x n matrix. */
 static Expr* mat_invert(Expr* m) {
-    Expr* call = expr_new_function(expr_new_symbol("Inverse"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Inverse),
         (Expr*[]){expr_copy(m)}, 1);
     Expr* result = evaluate(call);
     /* If Inverse failed, the evaluator returns the call unchanged. */
@@ -641,10 +641,10 @@ static Expr* extract_columns(Expr* a, int m, int r, const int* col_indices) {
         for (int k = 0; k < r; k++) {
             elems[k] = expr_copy(a_row->data.function.args[col_indices[k]]);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), elems, (size_t)r);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), elems, (size_t)r);
         if (elems) free(elems);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, (size_t)m);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
     free(rows);
     return out;
 }
@@ -660,10 +660,10 @@ static Expr* extract_rows(Expr* rref, int r, int n) {
         for (int j = 0; j < n; j++) {
             elems[j] = expr_copy(src_row->data.function.args[j]);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), elems, (size_t)n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), elems, (size_t)n);
         if (elems) free(elems);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, (size_t)r);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)r);
     free(rows);
     return out;
 }
@@ -675,10 +675,10 @@ static Expr* zero_matrix(int rows, int cols) {
         Expr** elems = NULL;
         if (cols > 0) elems = malloc(sizeof(Expr*) * (size_t)cols);
         for (int j = 0; j < cols; j++) elems[j] = expr_new_integer(0);
-        row_arr[i] = expr_new_function(expr_new_symbol("List"), elems, (size_t)cols);
+        row_arr[i] = expr_new_function(expr_new_symbol(SYM_List), elems, (size_t)cols);
         if (elems) free(elems);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), row_arr, (size_t)rows);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), row_arr, (size_t)rows);
     free(row_arr);
     return out;
 }

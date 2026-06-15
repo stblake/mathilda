@@ -27,6 +27,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "erf.h"
+#include "sym_names.h"
 
 #include <complex.h>
 #include <math.h>
@@ -148,7 +149,7 @@ static int erf_directed_imag_infinity(const Expr* e) {
 /* Build DirectedInfinity[Complex[0, s]] for s = +-1. */
 static Expr* erf_make_directed_imag_infinity(int s) {
     Expr* dir = make_complex(expr_new_integer(0), expr_new_integer(s));
-    return expr_new_function(expr_new_symbol("DirectedInfinity"), &dir, 1);
+    return expr_new_function(expr_new_symbol(SYM_DirectedInfinity), &dir, 1);
 }
 
 /* Recursively test whether `e` contains a subexpression headed by Erf.
@@ -375,8 +376,8 @@ static Expr* erf_one_arg(Expr* arg) {
         return expr_new_integer(0);                       /* Erf[0] = 0 */
     if (erf_is_symbol(arg, "Infinity"))      return expr_new_integer(1);
     if (erf_is_neg_infinity(arg))            return expr_new_integer(-1);
-    if (erf_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol("ComplexInfinity");
-    if (erf_is_symbol(arg, "Indeterminate"))   return expr_new_symbol("Indeterminate");
+    if (erf_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
+    if (erf_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
     {
         int s = erf_directed_imag_infinity(arg);
         if (s != 0) return erf_make_directed_imag_infinity(s);   /* +-I Infinity */
@@ -426,10 +427,10 @@ static Expr* erf_one_arg(Expr* arg) {
     /* 5. Odd symmetry: Erf[-x] = -Erf[x] for a symbolic negative-leading
      *    argument (numeric negatives are already handled above). */
     if (erf_is_neg_leading_times(arg)) {
-        Expr* pos = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* pos = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), expr_copy(arg) }, 2));
-        Expr* inner = expr_new_function(expr_new_symbol("Erf"), &pos, 1);
-        return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_Erf), &pos, 1);
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1), inner }, 2));
     }
 
@@ -441,11 +442,11 @@ static Expr* erf_one_arg(Expr* arg) {
 /* ------------------------------------------------------------------ */
 
 static Expr* erf_two_arg(Expr* z0, Expr* z1) {
-    Expr* e1 = expr_new_function(expr_new_symbol("Erf"), (Expr*[]){ expr_copy(z1) }, 1);
-    Expr* e0 = expr_new_function(expr_new_symbol("Erf"), (Expr*[]){ expr_copy(z0) }, 1);
-    Expr* neg0 = expr_new_function(expr_new_symbol("Times"),
+    Expr* e1 = expr_new_function(expr_new_symbol(SYM_Erf), (Expr*[]){ expr_copy(z1) }, 1);
+    Expr* e0 = expr_new_function(expr_new_symbol(SYM_Erf), (Expr*[]){ expr_copy(z0) }, 1);
+    Expr* neg0 = expr_new_function(expr_new_symbol(SYM_Times),
                                    (Expr*[]){ expr_new_integer(-1), e0 }, 2);
-    Expr* diff = eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+    Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                                    (Expr*[]){ e1, neg0 }, 2));
     /* Only commit to the reduction if both erf calls became concrete; if any
      * Erf[...] survives, keep Erf[z0, z1] symbolic. */

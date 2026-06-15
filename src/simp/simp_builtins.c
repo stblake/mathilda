@@ -42,7 +42,7 @@ static Expr* read_dollar_assumptions(void) {
      * gets re-evaluated -> ...). The first OwnValue rule on a symbol is its
      * current value (newest first); we deep-copy its replacement. */
     Rule* r = symtab_get_own_values("$Assumptions");
-    if (!r || !r->replacement) return expr_new_symbol("True");
+    if (!r || !r->replacement) return expr_new_symbol(SYM_True);
     return expr_copy(r->replacement);
 }
 
@@ -201,7 +201,7 @@ Expr* builtin_element(Expr* res) {
         bool any_false = false;
         for (size_t i = 0; i < n; i++) {
             Expr* sub_args[2] = { expr_copy(x->data.function.args[i]), expr_copy(dom) };
-            Expr* call = expr_new_function(expr_new_symbol("Element"), sub_args, 2);
+            Expr* call = expr_new_function(expr_new_symbol(SYM_Element), sub_args, 2);
             Expr* sub = evaluate(call);
             expr_free(call);
             if (sub && sub->type == EXPR_SYMBOL) {
@@ -219,8 +219,8 @@ Expr* builtin_element(Expr* res) {
             if (sub) expr_free(sub);
             if (any_false) break;
         }
-        if (any_false) return expr_new_symbol("False");
-        if (all_true)  return expr_new_symbol("True");
+        if (any_false) return expr_new_symbol(SYM_False);
+        if (all_true)  return expr_new_symbol(SYM_True);
         return NULL;
     }
 
@@ -235,15 +235,15 @@ Expr* builtin_element(Expr* res) {
     int decision = element_decide(x, d, ctx);
     assume_ctx_free(ctx);
 
-    if (decision == 1)  return expr_new_symbol("True");
-    if (decision == 0)  return expr_new_symbol("False");
+    if (decision == 1)  return expr_new_symbol(SYM_True);
+    if (decision == 0)  return expr_new_symbol(SYM_False);
     return NULL;
 }
 
 static Expr* combine_with_and(Expr* a, Expr* b) {
     /* Both inputs owned and consumed. */
     Expr* args[2] = { a, b };
-    Expr* call = expr_new_function(expr_new_symbol("And"), args, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_And), args, 2);
     Expr* r = evaluate(call);
     expr_free(call);
     return r;
@@ -291,7 +291,7 @@ static bool simp_plus_term_int_coeff(const Expr* term, int64_t* coef,
                     args[i - 1] = expr_copy(term->data.function.args[i]);
                 }
                 *rest_out = expr_new_function(
-                    expr_new_symbol("Times"), args, n - 1);
+                    expr_new_symbol(SYM_Times), args, n - 1);
                 free(args);
             }
             return true;
@@ -323,13 +323,13 @@ static Expr* simp_make_term(int64_t c, Expr* rest) {
             args[i + 1] = expr_copy(rest->data.function.args[i]);
         }
         Expr* out = expr_new_function(
-            expr_new_symbol("Times"), args, n + 1);
+            expr_new_symbol(SYM_Times), args, n + 1);
         free(args);
         expr_free(rest);
         return out;
     }
     Expr* args[2] = { expr_new_integer(c), rest };
-    return expr_new_function(expr_new_symbol("Times"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
 }
 
 /* Returns NULL when no rebalanced form is produced (non-int64 coeffs,
@@ -354,13 +354,13 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
         expr_copy(relation->data.function.args[1])
     };
     Expr* neg_rhs = expr_new_function(
-        expr_new_symbol("Times"), neg_args, 2);
+        expr_new_symbol(SYM_Times), neg_args, 2);
     Expr* d_args[2] = {
         expr_copy(relation->data.function.args[0]),
         neg_rhs
     };
     Expr* d_call = expr_new_function(
-        expr_new_symbol("Plus"), d_args, 2);
+        expr_new_symbol(SYM_Plus), d_args, 2);
     Expr* d_sum = eval_and_free(d_call);
     /* Expand so Times[2, Plus[...]] partitions term-by-term. The threaded
      * input may already have collected common factors via Collect, which
@@ -478,7 +478,7 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
     if (pn == 0)      new_lhs = expr_new_integer(0);
     else if (pn == 1) new_lhs = pos[0];
     else              new_lhs = expr_new_function(
-                          expr_new_symbol("Plus"), pos, pn);
+                          expr_new_symbol(SYM_Plus), pos, pn);
 
     /* RHS = (negated negative-coef vars) + (-const). */
     size_t total_rhs = nn + cn;
@@ -514,7 +514,7 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
                     /* Wrap in Times[-1, ...]. */
                     Expr* args[2] = { expr_new_integer(-1), const_terms[i] };
                     rhs_terms[rt++] = expr_new_function(
-                        expr_new_symbol("Times"), args, 2);
+                        expr_new_symbol(SYM_Times), args, 2);
                 }
             }
         }
@@ -526,7 +526,7 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
             free(rhs_terms);
         } else {
             new_rhs = expr_new_function(
-                expr_new_symbol("Plus"), rhs_terms, rt);
+                expr_new_symbol(SYM_Plus), rhs_terms, rt);
             free(rhs_terms);
         }
     }
@@ -664,7 +664,7 @@ Expr* builtin_simplify(Expr* res) {
             if (expr_eq(expr, ctx->facts[i])) {
                 assume_ctx_free(ctx);
                 free(user_funcs);
-                return expr_new_symbol("True");
+                return expr_new_symbol(SYM_True);
             }
         }
     }
@@ -811,9 +811,9 @@ Expr* builtin_simplify(Expr* res) {
                     expr_new_symbol("Together"),
                     (Expr*[]){
                         expr_copy(expr),
-                        expr_new_function(expr_new_symbol("Rule"),
-                            (Expr*[]){expr_new_symbol("Extension"),
-                                      expr_new_symbol("Automatic")}, 2)
+                        expr_new_function(expr_new_symbol(SYM_Rule),
+                            (Expr*[]){expr_new_symbol(SYM_Extension),
+                                      expr_new_symbol(SYM_Automatic)}, 2)
                     }, 2);
             } else {
                 tog = expr_new_function(
@@ -978,7 +978,7 @@ Expr* builtin_assuming(Expr* res) {
         size_t n = assum->data.function.arg_count;
         Expr** copies = (Expr**)calloc(n, sizeof(Expr*));
         for (size_t i = 0; i < n; i++) copies[i] = expr_copy(assum->data.function.args[i]);
-        Expr* and_call = expr_new_function(expr_new_symbol("And"), copies, n);
+        Expr* and_call = expr_new_function(expr_new_symbol(SYM_And), copies, n);
         free(copies);
         assum_norm = and_call;  /* not yet evaluated; Block will evaluate it */
     } else {
@@ -987,19 +987,19 @@ Expr* builtin_assuming(Expr* res) {
 
     /* Build $Assumptions && assum_norm */
     Expr* and_args[2] = { expr_new_symbol("$Assumptions"), assum_norm };
-    Expr* combined = expr_new_function(expr_new_symbol("And"), and_args, 2);
+    Expr* combined = expr_new_function(expr_new_symbol(SYM_And), and_args, 2);
 
     /* Build Set[$Assumptions, combined] -- represents
      * "$Assumptions = $Assumptions && a" inside the Block var list. */
     Expr* set_args[2] = { expr_new_symbol("$Assumptions"), combined };
-    Expr* set_call = expr_new_function(expr_new_symbol("Set"), set_args, 2);
+    Expr* set_call = expr_new_function(expr_new_symbol(SYM_Set), set_args, 2);
 
     /* Block[{Set[$Assumptions, ...]}, body] */
     Expr* var_list_args[1] = { set_call };
-    Expr* var_list = expr_new_function(expr_new_symbol("List"), var_list_args, 1);
+    Expr* var_list = expr_new_function(expr_new_symbol(SYM_List), var_list_args, 1);
 
     Expr* block_args[2] = { var_list, expr_copy(body) };
-    Expr* block_call = expr_new_function(expr_new_symbol("Block"), block_args, 2);
+    Expr* block_call = expr_new_function(expr_new_symbol(SYM_Block), block_args, 2);
 
     Expr* result = evaluate(block_call);
     expr_free(block_call);

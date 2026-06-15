@@ -156,11 +156,11 @@ static bool is_atomic(Expr* e) {
 Expr* expr_head(Expr* e) {
     if (!e) return NULL;
     switch (e->type) {
-        case EXPR_INTEGER: return expr_new_symbol("Integer");
-        case EXPR_BIGINT: return expr_new_symbol("Integer");
-        case EXPR_REAL: return expr_new_symbol("Real");
-        case EXPR_SYMBOL: return expr_new_symbol("Symbol");
-        case EXPR_STRING: return expr_new_symbol("String");
+        case EXPR_INTEGER: return expr_new_symbol(SYM_Integer);
+        case EXPR_BIGINT: return expr_new_symbol(SYM_Integer);
+        case EXPR_REAL: return expr_new_symbol(SYM_Real);
+        case EXPR_SYMBOL: return expr_new_symbol(SYM_Symbol);
+        case EXPR_STRING: return expr_new_symbol(SYM_String);
         case EXPR_FUNCTION: return expr_copy(e->data.function.head);
         default: return NULL;
     }
@@ -415,11 +415,11 @@ Expr* builtin_extract(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc == 1) { // Operator form
         Expr* slot_args[1] = { expr_new_integer(1) };
-        Expr* slot = expr_new_function(expr_new_symbol("Slot"), slot_args, 1);
+        Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
         Expr* inner_extract = expr_new_function(expr_new_symbol("Extract"), inner_args, 2);
         Expr* func_args[1] = { inner_extract };
-        return expr_new_function(expr_new_symbol("Function"), func_args, 1);
+        return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
     if (argc < 2 || argc > 3) return NULL;
     Expr* expr = res->data.function.args[0];
@@ -449,7 +449,7 @@ Expr* builtin_extract(Expr* res) {
                 return NULL;
             }
         }
-        return expr_new_function(expr_new_symbol("List"), args, npos);
+        return expr_new_function(expr_new_symbol(SYM_List), args, npos);
     } else {
         return extract_single(expr, pos, h);
     }
@@ -630,7 +630,7 @@ Expr* builtin_insert(Expr* res) {
 
 static Expr* delete_path(Expr* expr, Expr** path, size_t path_len) {
     if (path_len == 0) {
-        return expr_new_function(expr_new_symbol("Sequence"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_Sequence), NULL, 0);
     }
     
     if (is_atomic(expr)) return expr_copy(expr);
@@ -648,7 +648,7 @@ static Expr* delete_path(Expr* expr, Expr** path, size_t path_len) {
                     new_args[i] = expr_copy(expr->data.function.args[i]);
                 }
             }
-            Expr* result = expr_new_function(expr_new_symbol("Sequence"), new_args, expr->data.function.arg_count);
+            Expr* result = expr_new_function(expr_new_symbol(SYM_Sequence), new_args, expr->data.function.arg_count);
             if (new_args) free(new_args);
             return result;
         }

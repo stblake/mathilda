@@ -321,10 +321,10 @@ static Expr* nr_thread_over_list(Expr* res) {
         Expr** ca = malloc(sizeof(Expr*) * argc);
         ca[0] = expr_copy(lst->data.function.args[i]);
         for (size_t j = 1; j < argc; j++) ca[j] = expr_copy(res->data.function.args[j]);
-        items[i] = expr_new_function(expr_new_symbol("NResidue"), ca, argc);
+        items[i] = expr_new_function(expr_new_symbol(SYM_NResidue), ca, argc);
         free(ca);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return eval_and_free(out);
 }

@@ -316,7 +316,7 @@ Expr* builtin_do(Expr* res) {
         Expr** inner_args = malloc(sizeof(Expr*) * 2);
         inner_args[0] = expr_copy(res->data.function.args[0]);
         inner_args[1] = expr_copy(res->data.function.args[res->data.function.arg_count - 1]);
-        Expr* inner_do = expr_new_function(expr_new_symbol("Do"), inner_args, 2);
+        Expr* inner_do = expr_new_function(expr_new_symbol(SYM_Do), inner_args, 2);
         free(inner_args);
 
         size_t outer_argc = res->data.function.arg_count - 1;
@@ -325,7 +325,7 @@ Expr* builtin_do(Expr* res) {
         for (size_t i = 1; i < outer_argc; i++) {
             outer_args[i] = expr_copy(res->data.function.args[i]);
         }
-        Expr* outer_do = expr_new_function(expr_new_symbol("Do"), outer_args, outer_argc);
+        Expr* outer_do = expr_new_function(expr_new_symbol(SYM_Do), outer_args, outer_argc);
         free(outer_args);
 
         Expr* eval_outer = evaluate(outer_do);
@@ -428,7 +428,7 @@ Expr* builtin_do(Expr* res) {
                 /* Still advance the iterator before re-testing the loop. */
                 expr_free(eval_expr);
                 Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
-                Expr* next_expr = expr_new_function(expr_new_symbol("Plus"), next_args, 2);
+                Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
                 Expr* next_e = evaluate(next_expr);
                 expr_free(next_expr);
                 expr_free(curr_e);
@@ -447,7 +447,7 @@ Expr* builtin_do(Expr* res) {
 
             /* Normal end-of-iteration: step curr_e and val forward. */
             Expr* next_args[2] = { expr_copy(curr_e), expr_copy(di_e) };
-            Expr* next_expr = expr_new_function(expr_new_symbol("Plus"), next_args, 2);
+            Expr* next_expr = expr_new_function(expr_new_symbol(SYM_Plus), next_args, 2);
             Expr* next_e = evaluate(next_expr);
             expr_free(next_expr);
             expr_free(curr_e);
@@ -473,7 +473,7 @@ Expr* builtin_do(Expr* res) {
     iter_spec_free(&s);
 
     if (returned_val) return returned_val;
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 /*
@@ -541,7 +541,7 @@ Expr* builtin_for(Expr* res) {
     }
 
     if (returned_val) return returned_val;
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 /*
@@ -615,7 +615,7 @@ Expr* builtin_while(Expr* res) {
     }
 
     if (returned_val) return returned_val;
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 /*

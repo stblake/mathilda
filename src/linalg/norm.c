@@ -32,7 +32,7 @@ Expr* builtin_norm(Expr* res) {
         // Scalar: Norm[x] -> Abs[x]
         if (!p) {
             Expr* args[1] = { expr_copy(expr) };
-            return eval_and_free(expr_new_function(expr_new_symbol("Abs"), args, 1));
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), args, 1));
         }
         return NULL;
     }
@@ -56,9 +56,9 @@ Expr* builtin_norm(Expr* res) {
             } else {
                 Expr** max_args = malloc(sizeof(Expr*) * N);
                 for (int64_t i = 0; i < N; i++) {
-                    max_args[i] = eval_and_free(expr_new_function(expr_new_symbol("Abs"), (Expr*[]){expr_copy(flat[i])}, 1));
+                    max_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(flat[i])}, 1));
                 }
-                result = eval_and_free(expr_new_function(expr_new_symbol("Max"), max_args, N));
+                result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Max), max_args, N));
                 free(max_args);
             }
         } else {
@@ -74,19 +74,19 @@ Expr* builtin_norm(Expr* res) {
             } else {
                 Expr** plus_args = malloc(sizeof(Expr*) * N);
                 for (int64_t i = 0; i < N; i++) {
-                    Expr* abs_val = eval_and_free(expr_new_function(expr_new_symbol("Abs"), (Expr*[]){expr_copy(flat[i])}, 1));
-                    plus_args[i] = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){abs_val, expr_copy(norm_p)}, 2));
+                    Expr* abs_val = eval_and_free(expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(flat[i])}, 1));
+                    plus_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){abs_val, expr_copy(norm_p)}, 2));
                 }
                 Expr* sum = NULL;
                 if (N == 1) {
                     sum = plus_args[0];
                 } else {
-                    sum = eval_and_free(expr_new_function(expr_new_symbol("Plus"), plus_args, N));
+                    sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), plus_args, N));
                 }
                 free(plus_args);
 
-                Expr* inv_p = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(norm_p), expr_new_integer(-1)}, 2));
-                result = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){sum, inv_p}, 2));
+                Expr* inv_p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(norm_p), expr_new_integer(-1)}, 2));
+                result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){sum, inv_p}, 2));
             }
             expr_free(norm_p);
         }

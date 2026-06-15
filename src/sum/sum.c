@@ -193,7 +193,7 @@ static Expr* dispatch_indef(SumMethod method, Expr* f, Expr* var) {
  * the array.  An empty sum is 0. */
 static Expr* fold_plus(Expr** terms, size_t count) {
     if (count == 0) { free(terms); return expr_new_integer(0); }
-    Expr* plus = expr_new_function(expr_new_symbol("Plus"), terms, count);
+    Expr* plus = expr_new_function(expr_new_symbol(SYM_Plus), terms, count);
     free(terms);
     Expr* r = evaluate(plus);
     expr_free(plus);
@@ -249,7 +249,7 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
 
         /* advance curr_e and val */
         Expr* nargs[2] = { expr_copy(curr_e), expr_copy(di) };
-        Expr* nexpr = expr_new_function(expr_new_symbol("Plus"), nargs, 2);
+        Expr* nexpr = expr_new_function(expr_new_symbol(SYM_Plus), nargs, 2);
         Expr* next_e = evaluate(nexpr);
         expr_free(nexpr);
         expr_free(curr_e);

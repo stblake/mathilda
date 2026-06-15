@@ -38,7 +38,7 @@ static bool is_numeric(Expr* e, double* val, bool* complex) {
 static Expr* apply_columnwise(const char* func_name, Expr* matrix) {
     // Result is Map[func_name, Transpose[matrix]]
     Expr* transpose_args[1] = { expr_copy(matrix) };
-    Expr* transpose_call = expr_new_function(expr_new_symbol("Transpose"), transpose_args, 1);
+    Expr* transpose_call = expr_new_function(expr_new_symbol(SYM_Transpose), transpose_args, 1);
     Expr* transposed = evaluate(transpose_call);
     expr_free(transpose_call);
 
@@ -60,7 +60,7 @@ Expr* builtin_mean(Expr* res) {
 
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
-    Expr* matrixq_call = expr_new_function(expr_new_symbol("MatrixQ"), matrixq_args, 1);
+    Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
     Expr* is_matrix = evaluate(matrixq_call);
     expr_free(matrixq_call);
     if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol == SYM_True) {
@@ -71,7 +71,7 @@ Expr* builtin_mean(Expr* res) {
 
     // Check if it's a vector (list)
     Expr* listq_args[1] = { expr_copy(data) };
-    Expr* listq_call = expr_new_function(expr_new_symbol("ListQ"), listq_args, 1);
+    Expr* listq_call = expr_new_function(expr_new_symbol(SYM_ListQ), listq_args, 1);
     Expr* is_list = evaluate(listq_call);
     expr_free(listq_call);
     if (is_list->type == EXPR_SYMBOL && is_list->data.symbol == SYM_False) {
@@ -136,13 +136,13 @@ Expr* builtin_mean(Expr* res) {
     }
 
     // Fallback to symbolic: Mean = (1/n) * Plus @@ data
-    Expr* sum_call = expr_new_function(expr_new_symbol("Apply"), (Expr*[]){expr_new_symbol("Plus"), expr_copy(data)}, 2);
+    Expr* sum_call = expr_new_function(expr_new_symbol("Apply"), (Expr*[]){expr_new_symbol(SYM_Plus), expr_copy(data)}, 2);
     Expr* sum = evaluate(sum_call);
     expr_free(sum_call);
 
     Expr* n_inv = make_rational(1, (int64_t)n);
     Expr* mean_args[2] = { n_inv, sum };
-    Expr* mean_call = expr_new_function(expr_new_symbol("Times"), mean_args, 2);
+    Expr* mean_call = expr_new_function(expr_new_symbol(SYM_Times), mean_args, 2);
     Expr* result = evaluate(mean_call);
     expr_free(mean_call);
     return result;
@@ -154,7 +154,7 @@ Expr* builtin_rootmeansquare(Expr* res) {
 
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
-    Expr* matrixq_call = expr_new_function(expr_new_symbol("MatrixQ"), matrixq_args, 1);
+    Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
     Expr* is_matrix = evaluate(matrixq_call);
     expr_free(matrixq_call);
     if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol == SYM_True) {
@@ -165,7 +165,7 @@ Expr* builtin_rootmeansquare(Expr* res) {
 
     // Check if it's a vector (list)
     Expr* listq_args[1] = { expr_copy(data) };
-    Expr* listq_call = expr_new_function(expr_new_symbol("ListQ"), listq_args, 1);
+    Expr* listq_call = expr_new_function(expr_new_symbol(SYM_ListQ), listq_args, 1);
     Expr* is_list = evaluate(listq_call);
     expr_free(listq_call);
     if (is_list->type == EXPR_SYMBOL && is_list->data.symbol == SYM_False) {
@@ -209,12 +209,12 @@ Expr* builtin_rootmeansquare(Expr* res) {
     Expr** sq_args = malloc(n * sizeof(Expr*));
     for (size_t i = 0; i < n; i++) {
         Expr* power_args[2] = { expr_copy(data->data.function.args[i]), expr_new_integer(2) };
-        Expr* power_call = expr_new_function(expr_new_symbol("Power"), power_args, 2);
+        Expr* power_call = expr_new_function(expr_new_symbol(SYM_Power), power_args, 2);
         sq_args[i] = evaluate(power_call);
         expr_free(power_call);
     }
     
-    Expr* sum_call = expr_new_function(expr_new_symbol("Plus"), sq_args, n);
+    Expr* sum_call = expr_new_function(expr_new_symbol(SYM_Plus), sq_args, n);
     Expr* sum = evaluate(sum_call);
     expr_free(sum_call);
     free(sq_args);
@@ -224,20 +224,20 @@ Expr* builtin_rootmeansquare(Expr* res) {
     int64_t root_n = (int64_t)round(sqrt((double)n));
     if (!sum_is_numeric && root_n * root_n == (int64_t)n) {
         Expr* sqrt_sum_args[2] = { sum, make_rational(1, 2) };
-        Expr* sqrt_sum_call = expr_new_function(expr_new_symbol("Power"), sqrt_sum_args, 2);
+        Expr* sqrt_sum_call = expr_new_function(expr_new_symbol(SYM_Power), sqrt_sum_args, 2);
         Expr* sqrt_sum = evaluate(sqrt_sum_call);
         expr_free(sqrt_sum_call);
 
         Expr* n_inv = make_rational(1, root_n);
         Expr* times_args[2] = { n_inv, sqrt_sum };
-        Expr* times_call = expr_new_function(expr_new_symbol("Times"), times_args, 2);
+        Expr* times_call = expr_new_function(expr_new_symbol(SYM_Times), times_args, 2);
         Expr* result = evaluate(times_call);
         expr_free(times_call);
         return result;
     } else {
         Expr* n_inv = make_rational(1, (int64_t)n);
         Expr* mean_sq_args[2] = { n_inv, sum };
-        Expr* mean_sq_call = expr_new_function(expr_new_symbol("Times"), mean_sq_args, 2);
+        Expr* mean_sq_call = expr_new_function(expr_new_symbol(SYM_Times), mean_sq_args, 2);
         Expr* mean_sq = evaluate(mean_sq_call);
         expr_free(mean_sq_call);
         
@@ -246,12 +246,12 @@ Expr* builtin_rootmeansquare(Expr* res) {
             int64_t root_den = (int64_t)round(sqrt((double)den));
             if (root_den * root_den == den && root_den > 1) {
                 Expr* sqrt_num_args[2] = { expr_new_integer(num), make_rational(1, 2) };
-                Expr* sqrt_num_call = expr_new_function(expr_new_symbol("Power"), sqrt_num_args, 2);
+                Expr* sqrt_num_call = expr_new_function(expr_new_symbol(SYM_Power), sqrt_num_args, 2);
                 Expr* sqrt_num = evaluate(sqrt_num_call);
                 expr_free(sqrt_num_call);
                 
                 Expr* times_args[2] = { make_rational(1, root_den), sqrt_num };
-                Expr* times_call = expr_new_function(expr_new_symbol("Times"), times_args, 2);
+                Expr* times_call = expr_new_function(expr_new_symbol(SYM_Times), times_args, 2);
                 Expr* result = evaluate(times_call);
                 expr_free(times_call);
                 expr_free(mean_sq);
@@ -260,7 +260,7 @@ Expr* builtin_rootmeansquare(Expr* res) {
         }
 
         Expr* sqrt_args[2] = { mean_sq, make_rational(1, 2) };
-        Expr* sqrt_call = expr_new_function(expr_new_symbol("Power"), sqrt_args, 2);
+        Expr* sqrt_call = expr_new_function(expr_new_symbol(SYM_Power), sqrt_args, 2);
         Expr* result = evaluate(sqrt_call);
         expr_free(sqrt_call);
         return result;
@@ -273,7 +273,7 @@ Expr* builtin_variance(Expr* res) {
 
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
-    Expr* matrixq_call = expr_new_function(expr_new_symbol("MatrixQ"), matrixq_args, 1);
+    Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
     Expr* is_matrix = evaluate(matrixq_call);
     expr_free(matrixq_call);
     if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol == SYM_True) {
@@ -284,7 +284,7 @@ Expr* builtin_variance(Expr* res) {
 
     // Check if it's a vector (list)
     Expr* listq_args[1] = { expr_copy(data) };
-    Expr* listq_call = expr_new_function(expr_new_symbol("ListQ"), listq_args, 1);
+    Expr* listq_call = expr_new_function(expr_new_symbol(SYM_ListQ), listq_args, 1);
     Expr* is_list = evaluate(listq_call);
     expr_free(listq_call);
     if (is_list->type == EXPR_SYMBOL && is_list->data.symbol == SYM_False) {
@@ -381,26 +381,26 @@ Expr* builtin_variance(Expr* res) {
     Expr** diffs = malloc(sizeof(Expr*) * n);
     for (size_t i = 0; i < n; i++) {
         Expr* x = data->data.function.args[i];
-        Expr* sub_args[2] = { expr_copy(x), expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), expr_copy(mu)}, 2) };
-        Expr* diff = eval_and_free(expr_new_function(expr_new_symbol("Plus"), sub_args, 2));
+        Expr* sub_args[2] = { expr_copy(x), expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(mu)}, 2) };
+        Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sub_args, 2));
         
         Expr* conj_args[1] = { expr_copy(diff) };
-        Expr* conj_call = expr_new_function(expr_new_symbol("Conjugate"), conj_args, 1);
+        Expr* conj_call = expr_new_function(expr_new_symbol(SYM_Conjugate), conj_args, 1);
         Expr* conj_diff = evaluate(conj_call);
         expr_free(conj_call);
 
         Expr* prod_args[2] = { diff, conj_diff };
-        diffs[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), prod_args, 2));
+        diffs[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), prod_args, 2));
     }
     expr_free(mu);
 
-    Expr* sum_diffs = expr_new_function(expr_new_symbol("Plus"), diffs, n);
+    Expr* sum_diffs = expr_new_function(expr_new_symbol(SYM_Plus), diffs, n);
     Expr* sum = evaluate(sum_diffs);
     expr_free(sum_diffs);
     free(diffs);
 
     Expr* n_minus_1_inv = make_rational(1, (int64_t)n - 1);
-    Expr* var_call = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ n_minus_1_inv, sum }, 2);
+    Expr* var_call = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ n_minus_1_inv, sum }, 2);
     Expr* result = evaluate(var_call);
     expr_free(var_call);
     return result;
@@ -412,7 +412,7 @@ Expr* builtin_standard_deviation(Expr* res) {
 
     // Check if it's a matrix
     Expr* matrixq_args[1] = { expr_copy(data) };
-    Expr* matrixq_call = expr_new_function(expr_new_symbol("MatrixQ"), matrixq_args, 1);
+    Expr* matrixq_call = expr_new_function(expr_new_symbol(SYM_MatrixQ), matrixq_args, 1);
     Expr* is_matrix = evaluate(matrixq_call);
     expr_free(matrixq_call);
     if (is_matrix->type == EXPR_SYMBOL && is_matrix->data.symbol == SYM_True) {
@@ -452,7 +452,7 @@ Expr* builtin_standard_deviation(Expr* res) {
 
     if (!var) return NULL;
 
-    Expr* sqrt_call = expr_new_function(expr_new_symbol("Power"), (Expr*[]){ var, make_rational(1, 2) }, 2);
+    Expr* sqrt_call = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ var, make_rational(1, 2) }, 2);
     Expr* result = evaluate(sqrt_call);
     expr_free(sqrt_call);
     return result;
@@ -472,7 +472,7 @@ static bool is_real_numeric(Expr* e) {
     }
     expr_free(numq_eval);
     
-    Expr* freeq = expr_new_function(expr_new_symbol("FreeQ"), (Expr*[]){expr_copy(e), expr_new_symbol("I")}, 2);
+    Expr* freeq = expr_new_function(expr_new_symbol("FreeQ"), (Expr*[]){expr_copy(e), expr_new_symbol(SYM_I)}, 2);
     Expr* freeq_eval = evaluate(freeq);
     expr_free(freeq);
     if (freeq_eval->type != EXPR_SYMBOL || freeq_eval->data.symbol != SYM_True) {
@@ -522,7 +522,7 @@ Expr* builtin_median(Expr* res) {
     }
 
     // Sort the list
-    Expr* sort_expr = expr_new_function(expr_new_symbol("Sort"), (Expr*[]){expr_copy(data)}, 1);
+    Expr* sort_expr = expr_new_function(expr_new_symbol(SYM_Sort), (Expr*[]){expr_copy(data)}, 1);
     Expr* sorted = evaluate(sort_expr);
     expr_free(sort_expr);
 
@@ -537,11 +537,11 @@ Expr* builtin_median(Expr* res) {
     } else {
         Expr* m1 = sorted->data.function.args[n / 2 - 1];
         Expr* m2 = sorted->data.function.args[n / 2];
-        Expr* sum = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(m1), expr_copy(m2)}, 2);
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(m1), expr_copy(m2)}, 2);
         Expr* sum_eval = evaluate(sum);
         expr_free(sum);
         
-        Expr* div = expr_new_function(expr_new_symbol("Divide"), (Expr*[]){sum_eval, expr_new_integer(2)}, 2);
+        Expr* div = expr_new_function(expr_new_symbol(SYM_Divide), (Expr*[]){sum_eval, expr_new_integer(2)}, 2);
         result = evaluate(div);
         expr_free(div);
     }
@@ -572,7 +572,7 @@ Expr* builtin_quartiles(Expr* res) {
         data->data.function.args[0]->data.function.head->type == EXPR_SYMBOL && 
         data->data.function.args[0]->data.function.head->data.symbol == SYM_List) {
         
-        Expr* t_expr = expr_new_function(expr_new_symbol("Transpose"), (Expr*[]){expr_copy(data)}, 1);
+        Expr* t_expr = expr_new_function(expr_new_symbol(SYM_Transpose), (Expr*[]){expr_copy(data)}, 1);
         Expr* t_eval = evaluate(t_expr);
         expr_free(t_expr);
         
@@ -595,7 +595,7 @@ Expr* builtin_quartiles(Expr* res) {
             q_args[i] = evaluate(q_call);
             expr_free(q_call);
         }
-        Expr* res_list = expr_new_function(expr_new_symbol("List"), q_args, cols);
+        Expr* res_list = expr_new_function(expr_new_symbol(SYM_List), q_args, cols);
         free(q_args);
         expr_free(t_eval);
         return res_list;
@@ -642,7 +642,7 @@ Expr* builtin_quartiles(Expr* res) {
         d = expr_new_integer(1);
     }
 
-    Expr* sort_expr = expr_new_function(expr_new_symbol("Sort"), (Expr*[]){expr_copy(data)}, 1);
+    Expr* sort_expr = expr_new_function(expr_new_symbol(SYM_Sort), (Expr*[]){expr_copy(data)}, 1);
     Expr* sorted = evaluate(sort_expr);
     expr_free(sort_expr);
 
@@ -662,13 +662,13 @@ Expr* builtin_quartiles(Expr* res) {
     for (int k = 0; k < 3; k++) {
         Expr* q = q_vals[k];
         Expr* n_expr = expr_new_integer(n);
-        Expr* n_plus_b = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){n_expr, expr_copy(b)}, 2));
-        Expr* times_q = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){n_plus_b, expr_copy(q)}, 2));
-        Expr* h = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(a), times_q}, 2));
+        Expr* n_plus_b = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){n_expr, expr_copy(b)}, 2));
+        Expr* times_q = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){n_plus_b, expr_copy(q)}, 2));
+        Expr* h = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(a), times_q}, 2));
 
         double h_val = 0;
         if (!is_numeric(h, &h_val, NULL)) {
-            results[k] = expr_new_symbol("Indeterminate");
+            results[k] = expr_new_symbol(SYM_Indeterminate);
             expr_free(h);
             continue;
         }
@@ -684,7 +684,7 @@ Expr* builtin_quartiles(Expr* res) {
             continue;
         }
 
-        Expr* j_expr = eval_and_free(expr_new_function(expr_new_symbol("Floor"), (Expr*[]){expr_copy(h)}, 1));
+        Expr* j_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Floor), (Expr*[]){expr_copy(h)}, 1));
         int64_t j_idx = 0;
         if (j_expr->type == EXPR_INTEGER) j_idx = j_expr->data.integer;
         else j_idx = (int64_t)floor(h_val);
@@ -694,19 +694,19 @@ Expr* builtin_quartiles(Expr* res) {
         if (j_idx >= (int64_t)n) j_idx = n - 1;
 
         Expr* j_expr2 = expr_new_integer(j_idx);
-        Expr* neg_j = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), j_expr2}, 2));
-        Expr* g = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(h), neg_j}, 2));
+        Expr* neg_j = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), j_expr2}, 2));
+        Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(h), neg_j}, 2));
         expr_free(h);
 
-        Expr* d_times_g = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(d), expr_copy(g)}, 2));
-        Expr* g_weight = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(c), d_times_g}, 2));
+        Expr* d_times_g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(d), expr_copy(g)}, 2));
+        Expr* g_weight = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(c), d_times_g}, 2));
         expr_free(g);
 
-        Expr* neg_Aj1 = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), expr_copy(sorted_A[j_idx-1])}, 2));
-        Expr* diff = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(sorted_A[j_idx]), neg_Aj1}, 2));
+        Expr* neg_Aj1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(sorted_A[j_idx-1])}, 2));
+        Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_A[j_idx]), neg_Aj1}, 2));
 
-        Expr* weight_diff = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){g_weight, diff}, 2));
-        results[k] = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){expr_copy(sorted_A[j_idx-1]), weight_diff}, 2));
+        Expr* weight_diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){g_weight, diff}, 2));
+        results[k] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_A[j_idx-1]), weight_diff}, 2));
     }
 
     expr_free(q_vals[0]);
@@ -719,7 +719,7 @@ Expr* builtin_quartiles(Expr* res) {
     expr_free(c);
     expr_free(d);
 
-    return expr_new_function(expr_new_symbol("List"), results, 3);
+    return expr_new_function(expr_new_symbol(SYM_List), results, 3);
 }
 
 /* ------------------- MovingAverage ------------------- */
@@ -779,7 +779,7 @@ Expr* builtin_moving_average(Expr* res) {
             for (size_t k = 0; k < r; k++) {
                 sub[k] = expr_copy(data->data.function.args[i + k]);
             }
-            Expr* sublist = expr_new_function(expr_new_symbol("List"), sub, r);
+            Expr* sublist = expr_new_function(expr_new_symbol(SYM_List), sub, r);
             free(sub);
             out[i] = eval_and_free(expr_new_function(
                 expr_new_symbol("Mean"), (Expr*[]){ sublist }, 1));
@@ -788,17 +788,17 @@ Expr* builtin_moving_average(Expr* res) {
         Expr** w_copies = malloc(sizeof(Expr*) * r);
         for (size_t k = 0; k < r; k++) w_copies[k] = expr_copy(weights[k]);
         Expr* wsum = eval_and_free(expr_new_function(
-            expr_new_symbol("Plus"), w_copies, r));
+            expr_new_symbol(SYM_Plus), w_copies, r));
         free(w_copies);
 
         Expr* wsum_inv = eval_and_free(expr_new_function(
-            expr_new_symbol("Power"),
+            expr_new_symbol(SYM_Power),
             (Expr*[]){ wsum, expr_new_integer(-1) }, 2));
 
         Expr** coefs = malloc(sizeof(Expr*) * r);
         for (size_t k = 0; k < r; k++) {
             coefs[k] = eval_and_free(expr_new_function(
-                expr_new_symbol("Times"),
+                expr_new_symbol(SYM_Times),
                 (Expr*[]){ expr_copy(weights[k]), expr_copy(wsum_inv) }, 2));
         }
         expr_free(wsum_inv);
@@ -807,12 +807,12 @@ Expr* builtin_moving_average(Expr* res) {
             Expr** terms = malloc(sizeof(Expr*) * r);
             for (size_t k = 0; k < r; k++) {
                 terms[k] = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_copy(coefs[k]),
                                expr_copy(data->data.function.args[i + k]) }, 2));
             }
             out[i] = eval_and_free(expr_new_function(
-                expr_new_symbol("Plus"), terms, r));
+                expr_new_symbol(SYM_Plus), terms, r));
             free(terms);
         }
 
@@ -820,7 +820,7 @@ Expr* builtin_moving_average(Expr* res) {
         free(coefs);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), out, out_n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, out_n);
     free(out);
     return result;
 }
@@ -910,13 +910,13 @@ Expr* builtin_moving_median(Expr* res) {
         for (size_t k = 0; k < r; k++) {
             sub[k] = expr_copy(data->data.function.args[i + k]);
         }
-        Expr* sublist = expr_new_function(expr_new_symbol("List"), sub, r);
+        Expr* sublist = expr_new_function(expr_new_symbol(SYM_List), sub, r);
         free(sub);
         out[i] = eval_and_free(expr_new_function(
             expr_new_symbol("Median"), (Expr*[]){ sublist }, 1));
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), out, out_n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, out_n);
     free(out);
     return result;
 }
@@ -996,7 +996,7 @@ Expr* builtin_exponential_moving_average(Expr* res) {
             y = y + a * (x - y);
             out[i] = expr_new_real(y);
         }
-        Expr* result = expr_new_function(expr_new_symbol("List"), out, n);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, n);
         free(out);
         return result;
     }
@@ -1008,20 +1008,20 @@ Expr* builtin_exponential_moving_average(Expr* res) {
     for (size_t i = 1; i < n; i++) {
         Expr* x_i = expr_copy(data->data.function.args[i]);
         Expr* neg_y_prev = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_new_integer(-1), expr_copy(out[i-1]) }, 2));
         Expr* diff = eval_and_free(expr_new_function(
-            expr_new_symbol("Plus"),
+            expr_new_symbol(SYM_Plus),
             (Expr*[]){ x_i, neg_y_prev }, 2));
         Expr* alpha_diff = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_copy(alpha), diff }, 2));
         out[i] = eval_and_free(expr_new_function(
-            expr_new_symbol("Plus"),
+            expr_new_symbol(SYM_Plus),
             (Expr*[]){ expr_copy(out[i-1]), alpha_diff }, 2));
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), out, n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, n);
     free(out);
     return result;
 }

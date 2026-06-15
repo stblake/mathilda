@@ -104,7 +104,7 @@ static bool normalise_vars(Expr* vars_arg, Expr*** items, size_t* n,
         Expr** wrapped = (Expr**)malloc(sizeof(Expr*));
         if (!wrapped) return false;
         wrapped[0] = expr_copy(vars_arg);
-        Expr* wrap = expr_new_function(expr_new_symbol("List"), wrapped, 1);
+        Expr* wrap = expr_new_function(expr_new_symbol(SYM_List), wrapped, 1);
         free(wrapped);
         *wrap_owned = wrap;
         *items = wrap->data.function.args;
@@ -267,22 +267,22 @@ static Expr* call_solve(Expr** coeff_eqs, size_t n_eq,
         Expr** ea = (Expr**)malloc(sizeof(Expr*) * 2);
         ea[0] = coeff_eqs[i];
         ea[1] = expr_new_integer(0);
-        eq_nodes[i] = expr_new_function(expr_new_symbol("Equal"), ea, 2);
+        eq_nodes[i] = expr_new_function(expr_new_symbol(SYM_Equal), ea, 2);
         free(ea);
     }
-    Expr* eq_list = expr_new_function(expr_new_symbol("List"),
+    Expr* eq_list = expr_new_function(expr_new_symbol(SYM_List),
                                       eq_nodes, n_eq);
     free(eq_nodes);
 
     /* Build List[ params... ]. */
-    Expr* param_list = expr_new_function(expr_new_symbol("List"),
+    Expr* param_list = expr_new_function(expr_new_symbol(SYM_List),
                                          params, n_params);
 
     /* Build Solve[eq_list, param_list]. */
     Expr** sa = (Expr**)malloc(sizeof(Expr*) * 2);
     sa[0] = eq_list;
     sa[1] = param_list;
-    Expr* call = expr_new_function(expr_new_symbol("Solve"), sa, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Solve), sa, 2);
     free(sa);
 
     return eval_and_free(call);
@@ -324,7 +324,7 @@ Expr* builtin_solvealways(Expr* res) {
     }
     if (kind == EQNS_UNSAT) {
         if (wrap_vars) expr_free(wrap_vars);
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
     /* EQNS_TAUT (True / empty list) falls through: the eqns loop below
      * just produces no coefficients, and the final "no constraints"
@@ -375,7 +375,7 @@ Expr* builtin_solvealways(Expr* res) {
         free(all_coeffs);
         free(params);
         if (wrap_vars) expr_free(wrap_vars);
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
     if (n_coeffs == 0) {
@@ -385,10 +385,10 @@ Expr* builtin_solvealways(Expr* res) {
         free(params);
         free(all_coeffs);
         if (wrap_vars) expr_free(wrap_vars);
-        Expr* inner = expr_new_function(expr_new_symbol("List"), NULL, 0);
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         Expr** outer = (Expr**)malloc(sizeof(Expr*));
         outer[0] = inner;
-        Expr* r = expr_new_function(expr_new_symbol("List"), outer, 1);
+        Expr* r = expr_new_function(expr_new_symbol(SYM_List), outer, 1);
         free(outer);
         return r;
     }

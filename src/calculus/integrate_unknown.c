@@ -148,7 +148,7 @@ static Expr* make_atom(const Expr* func, int order, const Expr* arg) {
         return expr_new_function(expr_copy((Expr*)func), a, 1);
     }
     Expr* nidx[1] = { mk_int(order) };
-    Expr* dop = expr_new_function(expr_new_symbol("Derivative"), nidx, 1);
+    Expr* dop = expr_new_function(expr_new_symbol(SYM_Derivative), nidx, 1);
     Expr* df[1] = { expr_copy((Expr*)func) };
     Expr* dop_f = expr_new_function(dop, df, 1);
     Expr* g[1] = { expr_copy((Expr*)arg) };
@@ -305,7 +305,7 @@ static Expr* subst(Expr* expr, Expr** from, Expr** to, size_t n) {
     for (size_t i = 0; i < n; i++) {
         rules[i] = mk_fn2("Rule", expr_copy(from[i]), expr_copy(to[i]));
     }
-    Expr* rulelist = expr_new_function(expr_new_symbol("List"), rules, n);
+    Expr* rulelist = expr_new_function(expr_new_symbol(SYM_List), rules, n);
     free(rules);
     Expr* call = internal_replace_all((Expr*[]){ expr, rulelist }, 2);
     return eval_take(call);
@@ -435,9 +435,9 @@ static Expr* residual_integral(Expr* integrand, const Expr* x) {
         }
         if (cn > 0 && rn > 0) {
             Expr* c = (cn == 1) ? cf[0]
-                    : expr_new_function(expr_new_symbol("Times"), cf, cn);
+                    : expr_new_function(expr_new_symbol(SYM_Times), cf, cn);
             Expr* r = (rn == 1) ? rf[0]
-                    : expr_new_function(expr_new_symbol("Times"), rf, rn);
+                    : expr_new_function(expr_new_symbol(SYM_Times), rf, rn);
             free(cf); free(rf); expr_free(e);
             Expr* integ = mk_fn2("Integrate", r, expr_copy((Expr*)x));
             return eval_take(mk_fn2("Times", c, integ));

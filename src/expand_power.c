@@ -81,8 +81,8 @@ static Expr* fnN(const char* head, Expr** args, size_t n) {
 }
 
 static Expr* pe_int(int64_t n)  { return expr_new_integer(n); }
-static Expr* pe_pi(void)        { return expr_new_symbol("Pi"); }
-static Expr* pe_E(void)         { return expr_new_symbol("E"); }
+static Expr* pe_pi(void)        { return expr_new_symbol(SYM_Pi); }
+static Expr* pe_E(void)         { return expr_new_symbol(SYM_E); }
 static Expr* pe_I(void)         { return fn2("Complex", pe_int(0), pe_int(1)); }
 static Expr* pe_half(void)      { return fn2("Rational", pe_int(1), pe_int(2)); }
 static Expr* pe_recip_2pi(void) { return fn2("Power", fn2("Times", pe_int(2), pe_pi()), pe_int(-1)); }

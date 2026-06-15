@@ -28,6 +28,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "loggamma.h"
+#include "sym_names.h"
 
 #include <complex.h>
 #include <math.h>
@@ -127,7 +128,7 @@ static bool lg_is_complex_infinity_dir(const Expr* e) {
  * positive half-integer z. Returns NULL if Gamma did not reduce. */
 static Expr* lg_log_of_gamma(Expr* g_value) {
     Expr* arg = g_value;
-    Expr* logc = expr_new_function(expr_new_symbol("Log"), &arg, 1);
+    Expr* logc = expr_new_function(expr_new_symbol(SYM_Log), &arg, 1);
     return eval_and_free(logc);
 }
 
@@ -139,11 +140,11 @@ static Expr* lg_exact(Expr* arg) {
     if (d != 1 && d != 2) return NULL;
 
     /* Non-positive integers are poles of Gamma; LogGamma diverges to Infinity. */
-    if (d == 1 && n <= 0) return expr_new_symbol("Infinity");
+    if (d == 1 && n <= 0) return expr_new_symbol(SYM_Infinity);
 
     /* Evaluate the exact Gamma[z] (integer factorial or rational*Sqrt[Pi]). */
     Expr* zc = expr_copy(arg);
-    Expr* g  = eval_and_free(expr_new_function(expr_new_symbol("Gamma"), &zc, 1));
+    Expr* g  = eval_and_free(expr_new_function(expr_new_symbol(SYM_Gamma), &zc, 1));
     if (!g) return NULL;
     if (g->type == EXPR_FUNCTION && lg_is_symbol(g->data.function.head, "Gamma")) {
         expr_free(g);   /* did not reduce -- stay symbolic */
@@ -165,7 +166,7 @@ static Expr* lg_exact(Expr* arg) {
     Expr* posg;
     if (c_ceil & 1) {
         /* Gamma(z) < 0: negate to obtain the positive magnitude. */
-        posg = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        posg = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1), g }, 2));
     } else {
         posg = g;
@@ -174,11 +175,11 @@ static Expr* lg_exact(Expr* arg) {
     if (!re) return NULL;
 
     /* im = Times[-c_ceil, I, Pi]. */
-    Expr* im = expr_new_function(expr_new_symbol("Times"),
+    Expr* im = expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){ expr_new_integer(-c_ceil),
-                             expr_new_symbol("I"),
-                             expr_new_symbol("Pi") }, 3);
-    return eval_and_free(expr_new_function(expr_new_symbol("Plus"),
+                             expr_new_symbol(SYM_I),
+                             expr_new_symbol(SYM_Pi) }, 3);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
                   (Expr*[]){ re, im }, 2));
 }
 
@@ -534,7 +535,7 @@ static Expr* lg_mpfr_complex(Expr* re, Expr* im) {
         lcx_loggamma(&g, &z, wp);
         if (mpfr_inf_p(g.re) || mpfr_inf_p(g.im) ||
             mpfr_nan_p(g.re) || mpfr_nan_p(g.im)) {
-            out = expr_new_symbol("ComplexInfinity");
+            out = expr_new_symbol(SYM_ComplexInfinity);
         } else {
             out = lg_complex_result(g.re, g.im, out_prec);
         }
@@ -549,7 +550,7 @@ static Expr* lg_mpfr_real(Expr* arg) {
 
     /* Non-positive integer -> pole. */
     if (mpfr_integer_p(arg->data.mpfr) && mpfr_sgn(arg->data.mpfr) <= 0)
-        return expr_new_symbol("ComplexInfinity");
+        return expr_new_symbol(SYM_ComplexInfinity);
 
     int sgn;
     mpfr_t r;
@@ -557,7 +558,7 @@ static Expr* lg_mpfr_real(Expr* arg) {
     mpfr_lgamma(r, &sgn, arg->data.mpfr, GRND);  /* log|Gamma(z)| */
     if (mpfr_inf_p(r) || mpfr_nan_p(r)) {
         mpfr_clear(r);
-        return expr_new_symbol("ComplexInfinity");
+        return expr_new_symbol(SYM_ComplexInfinity);
     }
 
     if (mpfr_sgn(arg->data.mpfr) > 0) {
@@ -596,11 +597,11 @@ static Expr* loggamma_one_arg(Expr* arg) {
     }
 
     /* 2. Symbolic infinities. */
-    if (lg_is_symbol(arg, "Infinity"))        return expr_new_symbol("Infinity");
-    if (lg_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol("ComplexInfinity");
-    if (lg_is_symbol(arg, "Indeterminate"))   return expr_new_symbol("Indeterminate");
-    if (lg_is_neg_infinity(arg))              return expr_new_symbol("Indeterminate");
-    if (lg_is_complex_infinity_dir(arg))      return expr_new_symbol("ComplexInfinity");
+    if (lg_is_symbol(arg, "Infinity"))        return expr_new_symbol(SYM_Infinity);
+    if (lg_is_symbol(arg, "ComplexInfinity")) return expr_new_symbol(SYM_ComplexInfinity);
+    if (lg_is_symbol(arg, "Indeterminate"))   return expr_new_symbol(SYM_Indeterminate);
+    if (lg_is_neg_infinity(arg))              return expr_new_symbol(SYM_Indeterminate);
+    if (lg_is_complex_infinity_dir(arg))      return expr_new_symbol(SYM_ComplexInfinity);
 
     /* 3. Machine real. */
     if (arg->type == EXPR_REAL) {
@@ -610,7 +611,7 @@ static Expr* loggamma_one_arg(Expr* arg) {
             if (isinf(r) || isnan(r)) return NULL; /* overflow: stay symbolic */
             return expr_new_real(r);
         }
-        if (v == floor(v)) return expr_new_symbol("ComplexInfinity"); /* pole */
+        if (v == floor(v)) return expr_new_symbol(SYM_ComplexInfinity); /* pole */
         /* z < 0 non-integer: log|Gamma| + branch term -> complex. */
         double re = lgamma(v);
         double im = -M_PI * ceil(-v);

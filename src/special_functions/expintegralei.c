@@ -28,6 +28,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "expintegralei.h"
+#include "sym_names.h"
 
 #include <complex.h>
 #include <math.h>
@@ -123,15 +124,15 @@ static int ei_directed_imag_infinity(const Expr* e) {
 
 /* Build -Infinity = Times[-1, Infinity]. */
 static Expr* ei_make_neg_infinity(void) {
-    return expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_new_integer(-1), expr_new_symbol("Infinity") }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
 }
 
 /* Build +-I Pi = Times[Complex[0, s], Pi] for s = +-1. */
 static Expr* ei_make_i_pi(int s) {
     Expr* imag = make_complex(expr_new_integer(0), expr_new_integer(s));
-    return eval_and_free(expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ imag, expr_new_symbol("Pi") }, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ imag, expr_new_symbol(SYM_Pi) }, 2));
 }
 
 #ifndef USE_MPFR
@@ -592,10 +593,10 @@ static Expr* ei_one_arg(Expr* arg) {
     /* 1. Exact special values. */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
         return ei_make_neg_infinity();                       /* Ei[0] = -Inf  */
-    if (ei_is_symbol(arg, "Infinity"))         return expr_new_symbol("Infinity");
+    if (ei_is_symbol(arg, "Infinity"))         return expr_new_symbol(SYM_Infinity);
     if (ei_is_neg_infinity(arg))               return expr_new_integer(0);  /* Ei[-Inf]=0 */
-    if (ei_is_symbol(arg, "ComplexInfinity"))  return expr_new_symbol("Indeterminate");
-    if (ei_is_symbol(arg, "Indeterminate"))    return expr_new_symbol("Indeterminate");
+    if (ei_is_symbol(arg, "ComplexInfinity"))  return expr_new_symbol(SYM_Indeterminate);
+    if (ei_is_symbol(arg, "Indeterminate"))    return expr_new_symbol(SYM_Indeterminate);
     {
         int s = ei_directed_imag_infinity(arg);
         if (s != 0) return ei_make_i_pi(s);                  /* Ei[+-I Inf]=+-I Pi */

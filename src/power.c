@@ -265,13 +265,13 @@ static Expr* power_split_residue(int64_t r, int64_t b_rem, int64_t q) {
         Expr* base_e = expr_bigint_normalize(expr_new_bigint_from_mpz(base_z));
         mpz_clear(base_z);
         Expr* exp_e = make_rational(eff_num[i], eff_den[i]);
-        out[out_count++] = expr_new_function(expr_new_symbol("Power"),
+        out[out_count++] = expr_new_function(expr_new_symbol(SYM_Power),
                                              (Expr*[]){base_e, exp_e}, 2);
     }
 
     if (out_count == 0) { free(out); return expr_new_integer(1); }
     if (out_count == 1) { Expr* r_ = out[0]; free(out); return r_; }
-    Expr* result = expr_new_function(expr_new_symbol("Times"), out, out_count);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Times), out, out_count);
     free(out);
     return result;
 }
@@ -426,7 +426,7 @@ static Expr* bigint_pow(const Expr* base, int64_t exp) {
 
 Expr* make_power(Expr* base, Expr* exp) {
     Expr* args[2] = { base, exp };
-    return expr_new_function(expr_new_symbol("Power"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Power), args, 2);
 }
 
 static bool is_head_call(Expr* e, const char* sym, size_t argc) {
@@ -496,12 +496,12 @@ static Expr* simplify_exp_log(Expr* base, Expr* exp) {
             coeff = rest[0];
             free(rest);
         } else {
-            coeff = expr_new_function(expr_new_symbol("Times"), rest, kept);
+            coeff = expr_new_function(expr_new_symbol(SYM_Times), rest, kept);
             free(rest);
         }
     }
 
-    return eval_and_free(expr_new_function(expr_new_symbol("Power"),
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
         (Expr*[]){ expr_copy(a), coeff }, 2));
 }
 
@@ -517,11 +517,11 @@ Expr* builtin_power(Expr* res) {
         for (size_t i = 0; i < n_args - 1; i++) {
             sub_args[i] = expr_copy(res->data.function.args[i+1]);
         }
-        Expr* sub_power = expr_new_function(expr_new_symbol("Power"), sub_args, n_args - 1);
+        Expr* sub_power = expr_new_function(expr_new_symbol(SYM_Power), sub_args, n_args - 1);
         free(sub_args);
         
         Expr* final_args[2] = { expr_copy(res->data.function.args[0]), sub_power };
-        return expr_new_function(expr_new_symbol("Power"), final_args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Power), final_args, 2);
     }
 
     if (n_args == 1) return NULL;
@@ -552,7 +552,7 @@ Expr* builtin_power(Expr* res) {
     {
         bool b_indet = is_indeterminate_sym(base);
         bool e_indet = is_indeterminate_sym(exp);
-        if (b_indet || e_indet) return expr_new_symbol("Indeterminate");
+        if (b_indet || e_indet) return expr_new_symbol(SYM_Indeterminate);
 
         bool b_inf  = is_infinity_sym(base);
         bool b_ninf = is_neg_infinity_form(base);
@@ -577,7 +577,7 @@ Expr* builtin_power(Expr* res) {
             if (!arith_warnings_muted())
                 fprintf(stderr,
                     "Infinity::indet: Indeterminate expression 1^%s encountered.\n", what);
-            return expr_new_symbol("Indeterminate");
+            return expr_new_symbol(SYM_Indeterminate);
         }
 
         if (base_is_inf && exp_is_zero_lit) {
@@ -585,14 +585,14 @@ Expr* builtin_power(Expr* res) {
             if (!arith_warnings_muted())
                 fprintf(stderr,
                     "Infinity::indet: Indeterminate expression %s^0 encountered.\n", what);
-            return expr_new_symbol("Indeterminate");
+            return expr_new_symbol(SYM_Indeterminate);
         }
 
         if (base_is_zero_lit && e_cinf) {
             if (!arith_warnings_muted())
                 fprintf(stderr,
                     "Infinity::indet: Indeterminate expression 0^ComplexInfinity encountered.\n");
-            return expr_new_symbol("Indeterminate");
+            return expr_new_symbol(SYM_Indeterminate);
         }
 
         if (base_is_zero_lit && e_inf) {
@@ -602,23 +602,23 @@ Expr* builtin_power(Expr* res) {
         if (base_is_zero_lit && e_ninf) {
             if (!arith_warnings_muted())
                 fprintf(stderr, "Power::infy: Infinite expression 1/0 encountered.\n");
-            return expr_new_symbol("ComplexInfinity");
+            return expr_new_symbol(SYM_ComplexInfinity);
         }
 
         if (b_inf) {
-            if (e_inf)  return expr_new_symbol("ComplexInfinity");
+            if (e_inf)  return expr_new_symbol(SYM_ComplexInfinity);
             if (e_ninf) return expr_new_integer(0);
-            if (e_cinf) return expr_new_symbol("Indeterminate");
+            if (e_cinf) return expr_new_symbol(SYM_Indeterminate);
             int es = expr_numeric_sign(exp);
-            if (es > 0) return expr_new_symbol("Infinity");
+            if (es > 0) return expr_new_symbol(SYM_Infinity);
             if (es < 0) return expr_new_integer(0);
         }
 
         if (b_cinf) {
-            if (e_inf)  return expr_new_symbol("ComplexInfinity");
+            if (e_inf)  return expr_new_symbol(SYM_ComplexInfinity);
             if (e_ninf) return expr_new_integer(0);
             int es = expr_numeric_sign(exp);
-            if (es > 0) return expr_new_symbol("ComplexInfinity");
+            if (es > 0) return expr_new_symbol(SYM_ComplexInfinity);
             if (es < 0) return expr_new_integer(0);
         }
     }
@@ -635,7 +635,7 @@ Expr* builtin_power(Expr* res) {
             if (!arith_warnings_muted())
                 fprintf(stderr,
                     "Power::indet: Indeterminate expression 0^0 encountered.\n");
-            return expr_new_symbol("Indeterminate");
+            return expr_new_symbol(SYM_Indeterminate);
         }
     }
 
@@ -666,7 +666,7 @@ Expr* builtin_power(Expr* res) {
     if (base_is_zero && exp_is_negative) {
         if (!arith_warnings_muted())
             fprintf(stderr, "Power::infy: Infinite expression 1/0 encountered.\n");
-        return expr_new_symbol("ComplexInfinity");
+        return expr_new_symbol(SYM_ComplexInfinity);
     }
     /* 0^positive -> 0 (includes 0^(1/2) = Sqrt[0] = 0, 0^0.5 = 0, etc.).
      * Preserves the base's numeric type: real 0.0 for real exponents or a
@@ -709,9 +709,9 @@ Expr* builtin_power(Expr* res) {
             if (r == 1 || r == 3) {
                 Expr* sgn_re = expr_new_integer((r == 1) ? 1 : -1);
                 Expr* sgn_im = expr_new_integer(1);
-                Expr* sqrt2_inv = expr_new_function(expr_new_symbol("Power"),
+                Expr* sqrt2_inv = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_new_integer(2),
-                              expr_new_function(expr_new_symbol("Rational"),
+                              expr_new_function(expr_new_symbol(SYM_Rational),
                                   (Expr*[]){expr_new_integer(-1),
                                             expr_new_integer(2)}, 2)}, 2);
                 sqrt2_inv = eval_and_free(sqrt2_inv);
@@ -727,9 +727,9 @@ Expr* builtin_power(Expr* res) {
             if (r == 1 || r == 3) {
                 Expr* sgn_re = expr_new_integer((r == 1) ? 1 : -1);
                 Expr* sgn_im = expr_new_integer(-1);
-                Expr* sqrt2_inv = expr_new_function(expr_new_symbol("Power"),
+                Expr* sqrt2_inv = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_new_integer(2),
-                              expr_new_function(expr_new_symbol("Rational"),
+                              expr_new_function(expr_new_symbol(SYM_Rational),
                                   (Expr*[]){expr_new_integer(-1),
                                             expr_new_integer(2)}, 2)}, 2);
                 sqrt2_inv = eval_and_free(sqrt2_inv);
@@ -846,7 +846,7 @@ Expr* builtin_power(Expr* res) {
         int64_t e = exp->data.integer;
         if (e < 0 && e > -1000) {
             // e < 0, compute (base^-e)^-1
-            Expr* pos_pow = expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(base), expr_new_integer(-e)}, 2);
+            Expr* pos_pow = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(base), expr_new_integer(-e)}, 2);
             Expr* denom = evaluate(pos_pow);
             expr_free(pos_pow);
             
@@ -856,21 +856,21 @@ Expr* builtin_power(Expr* res) {
             Expr* re; Expr* im;
             if (is_complex(denom, &re, &im)) {
                 // conj = a - b I
-                Expr* conj = make_complex(expr_copy(re), expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), expr_copy(im)}, 2));
+                Expr* conj = make_complex(expr_copy(re), expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(im)}, 2));
                 // mag_sq = a^2 + b^2
-                Expr* a2 = expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(re), expr_new_integer(2)}, 2);
-                Expr* b2 = expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(im), expr_new_integer(2)}, 2);
-                Expr* mag_sq = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){a2, b2}, 2);
+                Expr* a2 = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(re), expr_new_integer(2)}, 2);
+                Expr* b2 = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(im), expr_new_integer(2)}, 2);
+                Expr* mag_sq = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){a2, b2}, 2);
                 
                 // Result = conj / mag_sq
-                Expr* res_ast = expr_new_function(expr_new_symbol("Divide"), (Expr*[]){conj, mag_sq}, 2);
+                Expr* res_ast = expr_new_function(expr_new_symbol(SYM_Divide), (Expr*[]){conj, mag_sq}, 2);
                 Expr* result = evaluate(res_ast);
                 expr_free(res_ast);
                 expr_free(denom);
                 return result;
             } else {
                 // If it evaluated to Real or Integer, just do Power[denom, -1] natively
-                Expr* res_ast = expr_new_function(expr_new_symbol("Divide"), (Expr*[]){expr_new_integer(1), expr_copy(denom)}, 2);
+                Expr* res_ast = expr_new_function(expr_new_symbol(SYM_Divide), (Expr*[]){expr_new_integer(1), expr_copy(denom)}, 2);
                 Expr* result = evaluate(res_ast);
                 expr_free(res_ast);
                 expr_free(denom);
@@ -880,7 +880,7 @@ Expr* builtin_power(Expr* res) {
         if (e >= 0 && e < 1000) { 
             Expr** prod_args = malloc(sizeof(Expr*) * (size_t)e);
             for(int64_t i=0; i<e; i++) prod_args[i] = expr_copy(base);
-            Expr* prod = expr_new_function(expr_new_symbol("Times"), prod_args, (size_t)e);
+            Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), prod_args, (size_t)e);
             free(prod_args);
             return prod;
         }
@@ -895,7 +895,7 @@ Expr* builtin_power(Expr* res) {
             Expr* denom = bigint_pow(base, -e);
             if (!denom) return NULL;
             Expr* r_args[2] = { expr_new_integer(1), denom };
-            return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+            return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
         }
     }
 
@@ -915,7 +915,7 @@ Expr* builtin_power(Expr* res) {
                 Expr* denom = bigint_pow(base, -e);
                 if (!denom) return NULL;
                 Expr* r_args[2] = { expr_new_integer(1), denom };
-                return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+                return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
             }
             return make_rational(1, res_val);
         }
@@ -1016,7 +1016,7 @@ Expr* builtin_power(Expr* res) {
         Expr* den_out = expr_bigint_normalize(expr_new_bigint_from_mpz(rden));
         mpz_clear(rnum); mpz_clear(rden);
         Expr* r_args[2] = { num_out, den_out };
-        return expr_new_function(expr_new_symbol("Rational"), r_args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
 
         rational_bigint_giveup:;
     }
@@ -1070,12 +1070,12 @@ Expr* builtin_power(Expr* res) {
             (void)r_n_rb; (void)r_d_rb;
             bool trigger = (abs_bn == 1) || (m_n_rb > 1) || (m_d_rb > 1);
             if (trigger) {
-                Expr* num_pow = expr_new_function(expr_new_symbol("Power"),
+                Expr* num_pow = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_new_integer(bn), expr_copy(exp) }, 2);
                 Expr* neg_exp = make_rational(-pp_rb, qq_rb);
-                Expr* den_pow = expr_new_function(expr_new_symbol("Power"),
+                Expr* den_pow = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_new_integer(bd), neg_exp }, 2);
-                Expr* result = expr_new_function(expr_new_symbol("Times"),
+                Expr* result = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ num_pow, den_pow }, 2);
                 return eval_and_free(result);
             }
@@ -1087,9 +1087,9 @@ Expr* builtin_power(Expr* res) {
         Expr** new_args = malloc(sizeof(Expr*) * bc);
         for (size_t i = 0; i < bc; i++) {
             Expr* p_args[2] = { expr_copy(base->data.function.args[i]), expr_copy(exp) };
-            new_args[i] = expr_new_function(expr_new_symbol("Power"), p_args, 2);
+            new_args[i] = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
         }
-        Expr* result = expr_new_function(expr_new_symbol("Times"), new_args, bc);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_Times), new_args, bc);
         free(new_args);
         return result;
     }
@@ -1163,10 +1163,10 @@ Expr* builtin_power(Expr* res) {
                         coef_base = num_e;
                     } else {
                         Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(coef_den));
-                        coef_base = expr_new_function(expr_new_symbol("Rational"),
+                        coef_base = expr_new_function(expr_new_symbol(SYM_Rational),
                                                      (Expr*[]){num_e, den_e}, 2);
                     }
-                    coef_part = expr_new_function(expr_new_symbol("Power"),
+                    coef_part = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ coef_base, expr_copy(exp) }, 2);
                 }
                 /* pos_part = Power[Times[pos_factors...], p/q]. The
@@ -1174,12 +1174,12 @@ Expr* builtin_power(Expr* res) {
                  * (Pi^(1/2) -> Sqrt[Pi], etc.). */
                 Expr* pos_part = NULL;
                 if (pos_count == 1) {
-                    pos_part = expr_new_function(expr_new_symbol("Power"),
+                    pos_part = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ pos_factors[0], expr_copy(exp) }, 2);
                 } else if (pos_count > 1) {
-                    Expr* pos_times = expr_new_function(expr_new_symbol("Times"),
+                    Expr* pos_times = expr_new_function(expr_new_symbol(SYM_Times),
                                                         pos_factors, pos_count);
-                    pos_part = expr_new_function(expr_new_symbol("Power"),
+                    pos_part = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ pos_times, expr_copy(exp) }, 2);
                 } else {
                     free(pos_factors);
@@ -1208,7 +1208,7 @@ Expr* builtin_power(Expr* res) {
                         goto rat_imag_fallthrough;
                     }
                 }
-                Expr* sign_part = expr_new_function(expr_new_symbol("Power"),
+                Expr* sign_part = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_new_integer(-1), sign_exp }, 2);
                 /* assemble Times[sign_part, coef_part?, pos_part?] */
                 Expr* parts[3];
@@ -1223,7 +1223,7 @@ Expr* builtin_power(Expr* res) {
                 if (pcount == 1) return parts[0];
                 Expr** result_args = malloc(sizeof(Expr*) * pcount);
                 for (size_t i = 0; i < pcount; i++) result_args[i] = parts[i];
-                Expr* result = expr_new_function(expr_new_symbol("Times"),
+                Expr* result = expr_new_function(expr_new_symbol(SYM_Times),
                                                  result_args, pcount);
                 free(result_args);
                 return eval_and_free(result);
@@ -1290,11 +1290,11 @@ rat_imag_fallthrough: ;
             if (all_pos && has_full_reducer) {
                 Expr** new_args = malloc(sizeof(Expr*) * bc);
                 for (size_t i = 0; i < bc; i++) {
-                    new_args[i] = expr_new_function(expr_new_symbol("Power"),
+                    new_args[i] = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ expr_copy(base->data.function.args[i]),
                                    expr_copy(exp) }, 2);
                 }
-                Expr* result = expr_new_function(expr_new_symbol("Times"),
+                Expr* result = expr_new_function(expr_new_symbol(SYM_Times),
                                                  new_args, bc);
                 free(new_args);
                 return eval_and_free(result);
@@ -1333,16 +1333,16 @@ rat_imag_fallthrough: ;
                     else                        rest[ri++] = expr_copy(f);
                 }
                 Expr* coef_base = (pos_n == 1) ? coef[0]
-                    : expr_new_function(expr_new_symbol("Times"), coef, pos_n);
+                    : expr_new_function(expr_new_symbol(SYM_Times), coef, pos_n);
                 Expr* rest_base = (rest_n == 1) ? rest[0]
-                    : expr_new_function(expr_new_symbol("Times"), rest, rest_n);
+                    : expr_new_function(expr_new_symbol(SYM_Times), rest, rest_n);
                 free(coef);
                 free(rest);
-                Expr* coef_pow = expr_new_function(expr_new_symbol("Power"),
+                Expr* coef_pow = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ coef_base, expr_copy(exp) }, 2);
-                Expr* rest_pow = expr_new_function(expr_new_symbol("Power"),
+                Expr* rest_pow = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ rest_base, expr_copy(exp) }, 2);
-                Expr* result = expr_new_function(expr_new_symbol("Times"),
+                Expr* result = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ coef_pow, rest_pow }, 2);
                 return eval_and_free(result);
             }
@@ -1386,9 +1386,9 @@ rat_imag_fallthrough: ;
                         || inner_exp_abs_lt_one(inner_exp);
         if (can_compose) {
             Expr* t_args[2] = { expr_copy(inner_exp), expr_copy(exp) };
-            Expr* new_exp = expr_new_function(expr_new_symbol("Times"), t_args, 2);
+            Expr* new_exp = expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
             Expr* p_args[2] = { expr_copy(inner_base), new_exp };
-            return expr_new_function(expr_new_symbol("Power"), p_args, 2);
+            return expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
         }
     }
 
@@ -1438,7 +1438,7 @@ rat_imag_fallthrough: ;
                     /* make_rational reduces and collapses to integer when
                      * the gcd makes the denominator 1. */
                     Expr* new_exp_e = make_rational(new_p, qq_);
-                    Expr* new_pow = expr_new_function(expr_new_symbol("Power"),
+                    Expr* new_pow = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ new_base_e, new_exp_e }, 2);
                     mpz_clear(b_z);
                     mpz_clear(n_z);
@@ -1496,10 +1496,10 @@ rat_imag_fallthrough: ;
 
         int64_t pmod = ((p % 4) + 4) % 4;
         int i_sign = (pmod == 1) ? 1 : -1;
-        Expr* i_val = expr_new_function(expr_new_symbol("Complex"),
+        Expr* i_val = expr_new_function(expr_new_symbol(SYM_Complex),
             (Expr*[]){expr_new_integer(0), expr_new_integer(i_sign)}, 2);
         Expr* pos_power_args[2] = { pos_base, expr_copy(exp) };
-        Expr* pos_power = expr_new_function(expr_new_symbol("Power"), pos_power_args, 2);
+        Expr* pos_power = expr_new_function(expr_new_symbol(SYM_Power), pos_power_args, 2);
         Expr* rest = evaluate(pos_power);
         expr_free(pos_power);
 
@@ -1509,7 +1509,7 @@ rat_imag_fallthrough: ;
             return i_val;
         }
         Expr* t_args[2] = { i_val, rest };
-        return expr_new_function(expr_new_symbol("Times"), t_args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
     }
 
     if (base->type == EXPR_INTEGER && is_rational(exp, &p, &q) && q > 1) {
@@ -1526,11 +1526,11 @@ rat_imag_fallthrough: ;
             if (q == 2) {
                 int64_t pmod = ((p % 4) + 4) % 4;
                 int i_sign = (pmod == 1) ? 1 : -1;     /* p odd => pmod in {1,3} */
-                Expr* i_val = expr_new_function(expr_new_symbol("Complex"),
+                Expr* i_val = expr_new_function(expr_new_symbol(SYM_Complex),
                     (Expr*[]){expr_new_integer(0), expr_new_integer(i_sign)}, 2);
                 Expr* pos_base = expr_new_integer(-n);
                 Expr* tmp_p_args[2] = { pos_base, expr_copy(exp) };
-                Expr* tmp_power = expr_new_function(expr_new_symbol("Power"), tmp_p_args, 2);
+                Expr* tmp_power = expr_new_function(expr_new_symbol(SYM_Power), tmp_p_args, 2);
                 Expr* rest = builtin_power(tmp_power);
                 if (!rest) rest = tmp_power; else expr_free(tmp_power);
                 bool rest_is_one = (rest->type == EXPR_INTEGER
@@ -1540,7 +1540,7 @@ rat_imag_fallthrough: ;
                     return i_val;
                 }
                 Expr* t_args[2] = { i_val, rest };
-                return expr_new_function(expr_new_symbol("Times"), t_args, 2);
+                return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
             }
             /* Even q >= 4: for base == -1 we can still do integer-part
              * extraction -- (-1)^(p/q) = (-1)^a_int * (-1)^(b_rem/q) with
@@ -1624,7 +1624,7 @@ rat_imag_fallthrough: ;
             } else {
                 Expr* num_e = expr_bigint_normalize(expr_new_bigint_from_mpz(num_z));
                 Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(den_z));
-                coeff = expr_new_function(expr_new_symbol("Rational"),
+                coeff = expr_new_function(expr_new_symbol(SYM_Rational),
                                           (Expr*[]){num_e, den_e}, 2);
             }
             mpz_clear(num_z); mpz_clear(den_z);
@@ -1632,7 +1632,7 @@ rat_imag_fallthrough: ;
             /* For negative n, integer-part a contributes (-1)^a to the
              * coefficient. Even a -> +; odd a -> negate. */
             if (n_negative && (a_int % 2 != 0)) {
-                coeff = expr_new_function(expr_new_symbol("Times"),
+                coeff = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1), coeff }, 2);
                 coeff = eval_and_free(coeff);
             }
@@ -1652,7 +1652,7 @@ rat_imag_fallthrough: ;
                 /* p/q is in lowest terms by construction, so gcd(b_rem, q)
                  * divides gcd(p, q) = 1. make_rational still normalises. */
                 Expr* new_exp = make_rational(b_rem, q);
-                residue = expr_new_function(expr_new_symbol("Power"),
+                residue = expr_new_function(expr_new_symbol(SYM_Power),
                                             (Expr*[]){expr_new_integer(res_base), new_exp}, 2);
             }
 
@@ -1660,7 +1660,7 @@ rat_imag_fallthrough: ;
             bool residue_is_one = (residue->type == EXPR_INTEGER && residue->data.integer == 1);
             if (residue_is_one) { expr_free(residue); return coeff; }
             if (coeff_is_one) { expr_free(coeff); return residue; }
-            return expr_new_function(expr_new_symbol("Times"),
+            return expr_new_function(expr_new_symbol(SYM_Times),
                                      (Expr*[]){coeff, residue}, 2);
         }
 
@@ -1704,5 +1704,5 @@ Expr* builtin_sqrt(Expr* res) {
     Expr* arg = res->data.function.args[0];
     Expr* half = make_rational(1, 2);
     Expr* p_args[2] = { expr_copy(arg), half };
-    return expr_new_function(expr_new_symbol("Power"), p_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
 }

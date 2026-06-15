@@ -11,6 +11,7 @@
  */
 
 #include "readwrite.h"
+#include "sym_names.h"
 #include "loadmodule.h"
 #include "expr.h"
 #include "symtab.h"
@@ -34,7 +35,7 @@ Expr* builtin_get(Expr* res) {
     }
     /* mathilda_run_file returns Null for an empty file; never NULL when
      * opened succeeded. */
-    return last_eval ? last_eval : expr_new_symbol("Null");
+    return last_eval ? last_eval : expr_new_symbol(SYM_Null);
 }
 
 /* Shared implementation for Put / PutAppend.  `mode` selects fopen
@@ -68,7 +69,7 @@ static Expr* put_common(Expr* res, const char* mode, const char* who) {
     }
 
     fclose(fp);
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 /* Put[expr_1, ..., expr_n, "file"] truncates "file" and writes each

@@ -32,6 +32,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "zeta.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -169,9 +170,9 @@ static Expr* zeta_expr_from_mpq(const mpq_t q) {
         out = en;
     } else {
         Expr* ed = expr_bigint_normalize(expr_new_bigint_from_mpz(den));
-        Expr* inv = expr_new_function(expr_new_symbol("Power"),
+        Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ ed, expr_new_integer(-1) }, 2);
-        out = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ en, inv }, 2));
     }
     mpz_clear(num); mpz_clear(den);
@@ -200,9 +201,9 @@ static Expr* zeta_exact_even(long two_n) {
     mpq_canonicalize(c);
 
     Expr* crat = zeta_expr_from_mpq(c);
-    Expr* pipow = expr_new_function(expr_new_symbol("Power"),
-                    (Expr*[]){ expr_new_symbol("Pi"), expr_new_integer(two_n) }, 2);
-    Expr* out = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+    Expr* pipow = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_symbol(SYM_Pi), expr_new_integer(two_n) }, 2);
+    Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ crat, pipow }, 2));
 
     mpq_clears(c, tmp, (mpq_ptr)0);
@@ -525,7 +526,7 @@ static Expr* zeta_numeric(Expr* s, Expr* a) {
         if (zeta_hurwitz_cx(&res, &sc, &ac, wp)) {
             out = zeta_result(res.re, res.im, out_prec, real_only);
         } else {
-            out = expr_new_symbol("ComplexInfinity");
+            out = expr_new_symbol(SYM_ComplexInfinity);
         }
     }
     zcx_clear(&sc); zcx_clear(&ac); zcx_clear(&res);
@@ -542,7 +543,7 @@ static Expr* zeta_one_arg(Expr* s) {
     /* 1. Exact integer arguments -> closed forms. */
     long n;
     if (zeta_exact_int(s, &n)) {
-        if (n == 1) return expr_new_symbol("ComplexInfinity");
+        if (n == 1) return expr_new_symbol(SYM_ComplexInfinity);
         if (n == 0) return make_rational(-1, 2);
         if (n > 0) {
             if ((n & 1L) == 0) {                    /* even positive: rational*Pi^n */
@@ -569,7 +570,7 @@ static Expr* zeta_one_arg(Expr* s) {
         mpfr_zeta(rv, sv, ZRND);
         Expr* out;
         if (!mpfr_number_p(rv)) {
-            out = expr_new_symbol("ComplexInfinity");   /* pole at s = 1 */
+            out = expr_new_symbol(SYM_ComplexInfinity);   /* pole at s = 1 */
         } else if (s->type == EXPR_MPFR) {
             out = expr_new_mpfr_bits(prec);
             mpfr_set(out->data.mpfr, rv, ZRND);
@@ -608,7 +609,7 @@ static Expr* zeta_one_arg(Expr* s) {
 static Expr* zeta_hurwitz_int_a(Expr* s, long m) {
     if (m < 1 || m > ZETA_HURWITZ_A_CAP) return NULL;
 
-    Expr* zs = expr_new_function(expr_new_symbol("Zeta"), (Expr*[]){ expr_copy(s) }, 1);
+    Expr* zs = expr_new_function(expr_new_symbol(SYM_Zeta), (Expr*[]){ expr_copy(s) }, 1);
     if (m == 1) return eval_and_free(zs);          /* zeta(s, 1) = zeta(s) */
 
     /* Build Zeta[s] - Sum_{k=1}^{m-1} k^-s. */
@@ -618,14 +619,14 @@ static Expr* zeta_hurwitz_int_a(Expr* s, long m) {
     parts[0] = zs;
     for (long k = 1; k < m; k++) {
         /* -(k^-s) = Times[-1, Power[k, -s]]. */
-        Expr* negs = expr_new_function(expr_new_symbol("Times"),
+        Expr* negs = expr_new_function(expr_new_symbol(SYM_Times),
                          (Expr*[]){ expr_new_integer(-1), expr_copy(s) }, 2);
-        Expr* kpow = expr_new_function(expr_new_symbol("Power"),
+        Expr* kpow = expr_new_function(expr_new_symbol(SYM_Power),
                          (Expr*[]){ expr_new_integer(k), negs }, 2);
-        parts[(size_t)k] = expr_new_function(expr_new_symbol("Times"),
+        parts[(size_t)k] = expr_new_function(expr_new_symbol(SYM_Times),
                          (Expr*[]){ expr_new_integer(-1), kpow }, 2);
     }
-    Expr* sum = expr_new_function(expr_new_symbol("Plus"), parts, terms);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), parts, terms);
     free(parts);
     return eval_and_free(sum);
 }
@@ -633,7 +634,7 @@ static Expr* zeta_hurwitz_int_a(Expr* s, long m) {
 static Expr* zeta_two_arg(Expr* s, Expr* a) {
     /* 1. zeta(s, 1) = zeta(s). */
     if (a->type == EXPR_INTEGER && a->data.integer == 1)
-        return eval_and_free(expr_new_function(expr_new_symbol("Zeta"),
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Zeta),
                              (Expr*[]){ expr_copy(s) }, 1));
 
     /* 2. Exact Hurwitz at a positive integer a (only when s is not inexact;

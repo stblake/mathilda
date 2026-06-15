@@ -97,7 +97,7 @@ Expr* builtin_matrixpower(Expr* res) {
     if (exp_val < 0) {
         abs_exp = -exp_val;
         /* Compute Inverse[m] */
-        Expr* inv_call = expr_new_function(expr_new_symbol("Inverse"),
+        Expr* inv_call = expr_new_function(expr_new_symbol(SYM_Inverse),
             (Expr*[]){expr_copy(m)}, 1);
         Expr* inv_result = evaluate(inv_call);
         expr_free(inv_call);

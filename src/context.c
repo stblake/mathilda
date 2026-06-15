@@ -135,7 +135,7 @@ Expr* context_as_string(void) {
 Expr* context_path_as_list(void) {
     Expr** args = (Expr**)malloc(g_path_count * sizeof(Expr*));
     for (size_t i = 0; i < g_path_count; i++) args[i] = expr_new_string(g_path[i]);
-    Expr* head = expr_new_symbol("List");
+    Expr* head = expr_new_symbol(SYM_List);
     Expr* res = expr_new_function(head, args, g_path_count);
     /* expr_new_function memcpy's the slot pointers into its own array;
      * the caller-owned `args` buffer is no longer needed. */
@@ -436,7 +436,7 @@ static Expr* builtin_end_package(Expr* res) {
     }
     free(closed);
     /* EndPackage returns Null (an unevaluated Symbol named "Null"). */
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 /* -------------------- Init / Shutdown -------------------- */

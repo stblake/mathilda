@@ -23,6 +23,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "pochhammer.h"
+#include "sym_names.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -85,16 +86,16 @@ static Expr* poch_build_product(Expr* a, int64_t n) {
         if (off == 0) {
             factors[i] = expr_copy(a);
         } else {
-            factors[i] = expr_new_function(expr_new_symbol("Plus"),
+            factors[i] = expr_new_function(expr_new_symbol(SYM_Plus),
                 (Expr*[]){ expr_copy(a), expr_new_integer(off) }, 2);
         }
     }
 
-    Expr* product = expr_new_function(expr_new_symbol("Times"), factors, cnt);
+    Expr* product = expr_new_function(expr_new_symbol(SYM_Times), factors, cnt);
     free(factors);
 
     if (negative) {
-        product = expr_new_function(expr_new_symbol("Power"),
+        product = expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){ product, expr_new_integer(-1) }, 2);
     }
     return eval_and_free(product);
@@ -108,16 +109,16 @@ static Expr* poch_build_product(Expr* a, int64_t n) {
  * ratio failed to reduce (a residual Gamma head survived), leaving the
  * Pochhammer call symbolic. Only meaningful for numeric a and n. */
 static Expr* poch_via_gamma(Expr* a, Expr* n) {
-    Expr* apn = expr_new_function(expr_new_symbol("Plus"),
+    Expr* apn = expr_new_function(expr_new_symbol(SYM_Plus),
         (Expr*[]){ expr_copy(a), expr_copy(n) }, 2);
-    Expr* g_top = expr_new_function(expr_new_symbol("Gamma"), &apn, 1);
+    Expr* g_top = expr_new_function(expr_new_symbol(SYM_Gamma), &apn, 1);
 
     Expr* ga = expr_copy(a);
-    Expr* g_bot = expr_new_function(expr_new_symbol("Gamma"), &ga, 1);
-    Expr* g_bot_inv = expr_new_function(expr_new_symbol("Power"),
+    Expr* g_bot = expr_new_function(expr_new_symbol(SYM_Gamma), &ga, 1);
+    Expr* g_bot_inv = expr_new_function(expr_new_symbol(SYM_Power),
         (Expr*[]){ g_bot, expr_new_integer(-1) }, 2);
 
-    Expr* ratio = expr_new_function(expr_new_symbol("Times"),
+    Expr* ratio = expr_new_function(expr_new_symbol(SYM_Times),
         (Expr*[]){ g_top, g_bot_inv }, 2);
     Expr* out = eval_and_free(ratio);
 
@@ -144,7 +145,7 @@ static Expr* pochhammer_two_arg(Expr* a, Expr* n) {
 
     /* 3. Pochhammer[Infinity, n] = Infinity for a positive integer n. */
     if (poch_is_symbol(a, "Infinity") && n_is_int && n->data.integer > 0) {
-        return expr_new_symbol("Infinity");
+        return expr_new_symbol(SYM_Infinity);
     }
 
     /* 4. Exact integer n within the cap: expand to the linear-factor product.

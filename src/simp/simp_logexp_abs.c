@@ -140,7 +140,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
                     for (size_t i = 0; i < in; i++) {
                         logs[i] = build_unary("Log", expr_copy(ia[i]));
                     }
-                    Expr* sum = expr_new_function(expr_new_symbol("Plus"), logs, in);
+                    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), logs, in);
                     free(logs);
                     Expr* canon = evaluate(sum);
                     expr_free(sum);
@@ -201,10 +201,10 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
                 size_t en = expanded_exp->data.function.arg_count;
                 Expr** factors = (Expr**)calloc(en, sizeof(Expr*));
                 for (size_t i = 0; i < en; i++) {
-                    factors[i] = build_binary("Power", expr_new_symbol("E"),
+                    factors[i] = build_binary("Power", expr_new_symbol(SYM_E),
                                               expr_copy(expanded_exp->data.function.args[i]));
                 }
-                Expr* prod = expr_new_function(expr_new_symbol("Times"), factors, en);
+                Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), factors, en);
                 free(factors);
                 Expr* canon = evaluate(prod);
                 expr_free(prod);
@@ -231,7 +231,7 @@ static Expr* logexp_top_rewrite(const Expr* e, const AssumeCtx* ctx) {
                     for (size_t i = 0; i < bn; i++) {
                         powers[i] = build_binary("Power", expr_copy(ba[i]), expr_copy(exp_));
                     }
-                    Expr* prod = expr_new_function(expr_new_symbol("Times"), powers, bn);
+                    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), powers, bn);
                     free(powers);
                     Expr* canon = evaluate(prod);
                     expr_free(prod);
@@ -483,7 +483,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
         arg->data.function.head->data.symbol == SYM_Conjugate &&
         arg->data.function.arg_count == 1) {
         Expr* a[1] = { expr_copy(arg->data.function.args[0]) };
-        return expr_new_function(expr_new_symbol("Abs"), a, 1);
+        return expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
     }
 
     /* Universal: Abs[E^z] -> E^Re[z]. The magnitude of any complex
@@ -495,9 +495,9 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
         arg->data.function.args[0]->type == EXPR_SYMBOL &&
         arg->data.function.args[0]->data.symbol == SYM_E) {
         Expr* re_in[1] = { expr_copy(arg->data.function.args[1]) };
-        Expr* re_call = expr_new_function(expr_new_symbol("Re"), re_in, 1);
-        Expr* pa[2] = { expr_new_symbol("E"), re_call };
-        return expr_new_function(expr_new_symbol("Power"), pa, 2);
+        Expr* re_call = expr_new_function(expr_new_symbol(SYM_Re), re_in, 1);
+        Expr* pa[2] = { expr_new_symbol(SYM_E), re_call };
+        return expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
     }
 
     /* Universal: split products. Abs[Times[a, b, ...]] -> Abs[a] Abs[b] ...
@@ -511,9 +511,9 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
         Expr** new_args = (Expr**)calloc(n, sizeof(Expr*));
         for (size_t i = 0; i < n; i++) {
             Expr* a[1] = { expr_copy(arg->data.function.args[i]) };
-            new_args[i] = expr_new_function(expr_new_symbol("Abs"), a, 1);
+            new_args[i] = expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
         }
-        Expr* result = expr_new_function(expr_new_symbol("Times"), new_args, n);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_Times), new_args, n);
         free(new_args);
         return result;
     }
@@ -531,9 +531,9 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
         Expr* base = arg->data.function.args[0];
         Expr* exp  = arg->data.function.args[1];
         Expr* a[1] = { expr_copy(base) };
-        Expr* abs_call = expr_new_function(expr_new_symbol("Abs"), a, 1);
+        Expr* abs_call = expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
         Expr* pa[2] = { abs_call, expr_copy(exp) };
-        return expr_new_function(expr_new_symbol("Power"), pa, 2);
+        return expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
     }
 
     /* The remaining rules need an assumption context. */
@@ -547,7 +547,7 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
     /* Cascading: Abs[x] -> -x  if x <= 0 (provably nonpositive). */
     if (assume_known_nonpos(ctx, arg)) {
         Expr* na[2] = { expr_new_integer(-1), expr_copy((Expr*)arg) };
-        return expr_new_function(expr_new_symbol("Times"), na, 2);
+        return expr_new_function(expr_new_symbol(SYM_Times), na, 2);
     }
 
     /* Cascading: Abs[x^y] -> Abs[x]^y if y is real. The integer-power
@@ -561,9 +561,9 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
         Expr* base = arg->data.function.args[0];
         Expr* exp  = arg->data.function.args[1];
         Expr* a[1] = { expr_copy(base) };
-        Expr* abs_call = expr_new_function(expr_new_symbol("Abs"), a, 1);
+        Expr* abs_call = expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
         Expr* pa[2] = { abs_call, expr_copy(exp) };
-        return expr_new_function(expr_new_symbol("Power"), pa, 2);
+        return expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
     }
 
     /* Cascading: Abs[x^y] -> x^Re[y] if x > 0 (strictly positive).
@@ -577,9 +577,9 @@ static Expr* try_simp_abs(const Expr* arg, const AssumeCtx* ctx) {
         Expr* base = arg->data.function.args[0];
         Expr* exp  = arg->data.function.args[1];
         Expr* re_in[1] = { expr_copy(exp) };
-        Expr* re_call = expr_new_function(expr_new_symbol("Re"), re_in, 1);
+        Expr* re_call = expr_new_function(expr_new_symbol(SYM_Re), re_in, 1);
         Expr* pa[2] = { expr_copy(base), re_call };
-        return expr_new_function(expr_new_symbol("Power"), pa, 2);
+        return expr_new_function(expr_new_symbol(SYM_Power), pa, 2);
     }
 
     /* The Abs[Sin[x]] -> Sign[Sin[x]] Sin[x] rule from the user-provided
@@ -710,14 +710,14 @@ static Expr* try_simp_sqrt_of_square(const Expr* sqrt_node, const AssumeCtx* ctx
     if (prov_np(ctx, base)) {
         /* base <= 0 → Sqrt[base^2] = -base. */
         Expr* na[2] = { expr_new_integer(-1), expr_copy((Expr*)base) };
-        return expr_new_function(expr_new_symbol("Times"), na, 2);
+        return expr_new_function(expr_new_symbol(SYM_Times), na, 2);
     }
     if (prov_re(ctx, base)) {
         /* base real but sign undetermined → Sqrt[base^2] = Abs[base].
          * Downstream Abs simplification may reduce further (or stop here
          * — Abs[real] is at least as canonical as Sqrt[real^2]). */
         Expr* a[1] = { expr_copy((Expr*)base) };
-        return expr_new_function(expr_new_symbol("Abs"), a, 1);
+        return expr_new_function(expr_new_symbol(SYM_Abs), a, 1);
     }
     return NULL;
 }

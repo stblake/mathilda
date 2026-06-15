@@ -452,7 +452,7 @@ static bool is_foldable_numeric_exponent(const Expr* e) {
  * Power exponents; both inputs must satisfy `is_foldable_numeric_exponent`. */
 static Expr* compose_numeric_exponents(const Expr* a, const Expr* b) {
     Expr* args[2] = { expr_copy((Expr*)a), expr_copy((Expr*)b) };
-    Expr* prod = expr_new_function(expr_new_symbol("Times"), args, 2);
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
     Expr* res = evaluate(prod);
     /* evaluate() makes its own copy of the input — release ours. */
     expr_free(prod);
@@ -585,10 +585,10 @@ static Expr* pattern_canonicalize(Expr* p) {
                     expr_copy(exp)
                 };
                 new_args[i] = expr_new_function(
-                    expr_new_symbol("Power"), pow_args, 2);
+                    expr_new_symbol(SYM_Power), pow_args, 2);
             }
             Expr* times = expr_new_function(
-                expr_new_symbol("Times"), new_args, bc);
+                expr_new_symbol(SYM_Times), new_args, bc);
             free(new_args);
             expr_free(p);
             /* Recurse on the new Times so its children (each a Power
@@ -617,7 +617,7 @@ static Expr* pattern_canonicalize(Expr* p) {
                 Expr* new_exp = compose_numeric_exponents(inner_exp, outer_exp);
                 Expr* pow_args[2] = { expr_copy(inner_base), new_exp };
                 Expr* folded = expr_new_function(
-                    expr_new_symbol("Power"), pow_args, 2);
+                    expr_new_symbol(SYM_Power), pow_args, 2);
                 expr_free(p);
                 /* The collapsed Power may now expose a further Power-of-
                  * Times opportunity if `inner_base` itself is a Times;

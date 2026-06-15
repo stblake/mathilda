@@ -524,7 +524,7 @@ static Expr* intrat_hermite_reduce(Expr* f, Expr* x) {
     Expr* h = intrat_canonic(h_raw);
     expr_free(h_raw);
 
-    Expr* result = expr_new_function(expr_new_symbol("List"),
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List),
         (Expr*[]){g, h}, 2);
     intrat_trace("HermiteReduce", "OUT", result);
     return result;
@@ -685,7 +685,7 @@ static Expr* intrat_derivative_recognition(Expr* num, Expr* den, Expr* x) {
     Expr* result;
     if (k == 1) {
         /* ∫ c * D[pol]/pol dx = c * Log[pol] */
-        Expr* log_pol = expr_new_function(expr_new_symbol("Log"),
+        Expr* log_pol = expr_new_function(expr_new_symbol(SYM_Log),
             (Expr*[]){pol}, 1);
         result = internal_times(
             (Expr*[]){c_const, log_pol}, 2);
@@ -800,9 +800,9 @@ static Expr* intrat_squarefree_list(Expr* p) {
     }
     if (max_mult == 0) {
         /* Constant input — return {{c, 1}}. */
-        Expr* pair = expr_new_function(expr_new_symbol("List"),
+        Expr* pair = expr_new_function(expr_new_symbol(SYM_List),
             (Expr*[]){expr_copy(p), expr_new_integer(1)}, 2);
-        Expr* list = expr_new_function(expr_new_symbol("List"),
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List),
             (Expr*[]){pair}, 1);
         for (size_t i = 0; i < pcount; i++) expr_free(pairs[i].poly);
         free(pairs);
@@ -834,10 +834,10 @@ static Expr* intrat_squarefree_list(Expr* p) {
             expr_free(prod);
         }
         if (factors) free(factors);
-        out_args[m - 1] = expr_new_function(expr_new_symbol("List"),
+        out_args[m - 1] = expr_new_function(expr_new_symbol(SYM_List),
             (Expr*[]){poly_for_m, expr_new_integer(m)}, 2);
     }
-    Expr* list = expr_new_function(expr_new_symbol("List"), out_args, max_mult);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), out_args, max_mult);
     free(out_args);
 
     for (size_t i = 0; i < pcount; i++) expr_free(pairs[i].poly);
@@ -925,7 +925,7 @@ static Expr* intrat_extract_constants(Expr* f, Expr* x) {
         (Expr*[]){nr, dr}, 2);
     residue = eval_and_free(residue);
 
-    return expr_new_function(expr_new_symbol("List"),
+    return expr_new_function(expr_new_symbol(SYM_List),
         (Expr*[]){const_part, residue}, 2);
 }
 
@@ -942,10 +942,10 @@ static Expr* intrat_apart_list(Expr* f, Expr* x, const Expr* alpha) {
     args[0] = expr_copy(f);
     args[1] = expr_copy(x);
     if (alpha) {
-        args[2] = expr_new_function(expr_new_symbol("Rule"),
-            (Expr*[]){expr_new_symbol("Extension"), expr_copy((Expr*)alpha)}, 2);
+        args[2] = expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){expr_new_symbol(SYM_Extension), expr_copy((Expr*)alpha)}, 2);
     }
-    Expr* call = expr_new_function(expr_new_symbol("Apart"), args, argc);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Apart), args, argc);
     Expr* ap = evaluate(call);
     expr_free(call);
     free(args);
@@ -961,11 +961,11 @@ static Expr* intrat_apart_list(Expr* f, Expr* x, const Expr* alpha) {
         expr_free(ap);
         /* expr_new_function memcpy's the args buffer into its own
          * backing store, so the caller's `terms` buffer must be freed. */
-        Expr* list = expr_new_function(expr_new_symbol("List"), terms, n);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), terms, n);
         free(terms);
         return list;
     }
-    return expr_new_function(expr_new_symbol("List"), (Expr*[]){ap}, 1);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ap}, 1);
 }
 
 /* ----- Cyclotomic / nth-root pre-detection ----- */
@@ -1117,9 +1117,9 @@ static Expr* nlp_neg(Expr* a) {
 static Expr* nlp_sqrt(Expr* a) {
     /* Power[a, 1/2] — Mathilda's Power evaluator turns this into the
      * canonical Sqrt[..] surface form during printing. */
-    return expr_new_function(expr_new_symbol("Power"),
+    return expr_new_function(expr_new_symbol(SYM_Power),
         (Expr*[]){ a,
-                   expr_new_function(expr_new_symbol("Rational"),
+                   expr_new_function(expr_new_symbol(SYM_Rational),
                        (Expr*[]){ expr_new_integer(1),
                                   expr_new_integer(2) }, 2) },
         2);
@@ -1130,7 +1130,7 @@ static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr);
 static void split_re_im(Expr* p, Expr** re_out, Expr** im_out);
 
 static Expr* nlp_sub_body(Expr* body, Expr* bvar, Expr* value) {
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){ expr_copy(bvar), expr_copy(value) }, 2);
     Expr* sub = internal_replace_all(
         (Expr*[]){ expr_copy(body), rule }, 2);
@@ -1287,7 +1287,7 @@ static Expr* expand_palindromic_quartic_real(
             (Expr*[]){expr_copy(u), expr_new_integer(2)}, 2));
 
         /* α = u_half + I · v_im. */
-        Expr* I_unit = expr_new_function(expr_new_symbol("Complex"),
+        Expr* I_unit = expr_new_function(expr_new_symbol(SYM_Complex),
             (Expr*[]){expr_new_integer(0), expr_new_integer(1)}, 2);
         Expr* I_v = eval_and_free(internal_times(
             (Expr*[]){I_unit, expr_copy(v_im)}, 2));
@@ -1346,9 +1346,9 @@ static Expr* expand_palindromic_quartic_real(
             (Expr*[]){expr_copy(v_im), expr_copy(x_m_uh)}, 2));
         expr_free(x_m_uh); expr_free(v_im); expr_free(u_half);
 
-        Expr* log_L = expr_new_function(expr_new_symbol("Log"),
+        Expr* log_L = expr_new_function(expr_new_symbol(SYM_Log),
             (Expr*[]){L}, 1);
-        Expr* atan_T = expr_new_function(expr_new_symbol("ArcTan"),
+        Expr* atan_T = expr_new_function(expr_new_symbol(SYM_ArcTan),
             (Expr*[]){T}, 1);
 
         Expr* term_log = eval_and_free(internal_times(
@@ -1556,7 +1556,7 @@ static Expr* intrat_naive_log_part(Expr* f, Expr* x) {
     Expr* t = expr_new_symbol("Integrate`Private`t");
 
     /* Substitute t for x in a, d, dd via ReplaceAll. */
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){ expr_copy(x), expr_copy(t) }, 2);
 
     Expr* a_t = eval_and_free(internal_replace_all(
@@ -1593,7 +1593,7 @@ static Expr* intrat_naive_log_part(Expr* f, Expr* x) {
         (Expr*[]){ expr_copy(x), neg_t }, 2);
     Expr* x_minus_t_e = eval_and_free(x_minus_t);
 
-    Expr* log_term = expr_new_function(expr_new_symbol("Log"),
+    Expr* log_term = expr_new_function(expr_new_symbol(SYM_Log),
         (Expr*[]){ x_minus_t_e }, 1);
 
     Expr* numer = internal_times(
@@ -1782,15 +1782,15 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
             if (get_degree_poly(Qi, t) <= 0) { expr_free(Qi); continue; }
 
             /* RootSum[Function[t, Qi], Function[t, t Log[S[i]]]]. */
-            Expr* func1 = expr_new_function(expr_new_symbol("Function"),
+            Expr* func1 = expr_new_function(expr_new_symbol(SYM_Function),
                 (Expr*[]){expr_copy(t), Qi}, 2);
-            Expr* logS = expr_new_function(expr_new_symbol("Log"),
+            Expr* logS = expr_new_function(expr_new_symbol(SYM_Log),
                 (Expr*[]){expr_copy(S[i_idx])}, 1);
             Expr* tlog = internal_times(
                 (Expr*[]){expr_copy(t), logS}, 2);
-            Expr* func2 = expr_new_function(expr_new_symbol("Function"),
+            Expr* func2 = expr_new_function(expr_new_symbol(SYM_Function),
                 (Expr*[]){expr_copy(t), tlog}, 2);
-            terms[nterms++] = expr_new_function(expr_new_symbol("RootSum"),
+            terms[nterms++] = expr_new_function(expr_new_symbol(SYM_RootSum),
                 (Expr*[]){func1, func2}, 2);
         }
         for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (S[i_idx]) expr_free(S[i_idx]);
@@ -1813,14 +1813,14 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
         Expr* Qi = list_get(Qi_pair, 1);
         if (!Qi) continue;
         if (get_degree_poly(Qi, t) <= 0) { expr_free(Qi); continue; }
-        pairs[npairs++] = expr_new_function(expr_new_symbol("List"),
+        pairs[npairs++] = expr_new_function(expr_new_symbol(SYM_List),
             (Expr*[]){Qi, expr_copy(S[i_idx])}, 2);
     }
     for (size_t i_idx = 0; i_idx < nQ; i_idx++) if (S[i_idx]) expr_free(S[i_idx]);
     free(S);
     expr_free(Q);
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), pairs, npairs);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), pairs, npairs);
     free(pairs);
     intrat_trace("IntRationalLogPart", "OUT", result);
     return result;
@@ -1849,7 +1849,7 @@ static Expr* intrat_log_to_atan(Expr* a, Expr* b, Expr* x) {
         if (intrat_freeq_test(a, x)) return expr_new_integer(0);
         Expr* ratio = internal_divide((Expr*[]){expr_copy(a), expr_copy(b)}, 2);
         Expr* canon = intrat_canonic(ratio); expr_free(ratio);
-        Expr* arctan = expr_new_function(expr_new_symbol("ArcTan"),
+        Expr* arctan = expr_new_function(expr_new_symbol(SYM_ArcTan),
             (Expr*[]){canon}, 1);
         Expr* res = internal_times((Expr*[]){expr_new_integer(2), arctan}, 2);
         return eval_and_free(res);
@@ -1875,7 +1875,7 @@ static Expr* intrat_log_to_atan(Expr* a, Expr* b, Expr* x) {
                 expr_free(q); expr_free(A); expr_free(B);
                 return expr_new_integer(0);
             }
-            Expr* arctan = expr_new_function(expr_new_symbol("ArcTan"),
+            Expr* arctan = expr_new_function(expr_new_symbol(SYM_ArcTan),
                 (Expr*[]){q}, 1);
             Expr* res = internal_times((Expr*[]){expr_new_integer(2), arctan}, 2);
             expr_free(A); expr_free(B);
@@ -1943,7 +1943,7 @@ static Expr* intrat_log_to_atan(Expr* a, Expr* b, Expr* x) {
     }
 
     /* Else: 2 ArcTan[v] + LogToAtan[d, c, x]. */
-    Expr* arctan = expr_new_function(expr_new_symbol("ArcTan"),
+    Expr* arctan = expr_new_function(expr_new_symbol(SYM_ArcTan),
         (Expr*[]){v}, 1);
     Expr* head_term = internal_times(
         (Expr*[]){expr_new_integer(2), arctan}, 2);
@@ -1976,13 +1976,13 @@ static Expr* extract_linear_root(Expr* poly, Expr* t) {
 
 /* Produce a single Log term: α * Log[S(α, x)]. */
 static Expr* build_log_term(Expr* alpha, Expr* S, Expr* t) {
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){expr_copy(t), expr_copy(alpha)}, 2);
     Expr* substituted = expr_new_function(expr_new_symbol("ReplaceAll"),
         (Expr*[]){expr_copy(S), rule}, 2);
     Expr* Sat = evaluate(substituted);
     expr_free(substituted);
-    Expr* logS = expr_new_function(expr_new_symbol("Log"),
+    Expr* logS = expr_new_function(expr_new_symbol(SYM_Log),
         (Expr*[]){Sat}, 1);
     Expr* term = internal_times(
         (Expr*[]){expr_copy(alpha), logS}, 2);
@@ -2107,7 +2107,7 @@ static void split_re_im(Expr* p, Expr** re_out, Expr** im_out) {
 
 /* Substitute t -> sub_expr inside e (full ReplaceAll). */
 static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr) {
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){expr_copy(t), expr_copy(sub_expr)}, 2);
     Expr* call = expr_new_function(expr_new_symbol("ReplaceAll"),
         (Expr*[]){expr_copy(e), rule}, 2);
@@ -2149,7 +2149,7 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
 
     if (disc_sign > 0) {
         /* Two real roots.  α± = (-b ± Sqrt[disc])/(2 a). */
-        Expr* sqrt_d = expr_new_function(expr_new_symbol("Sqrt"),
+        Expr* sqrt_d = expr_new_function(expr_new_symbol(SYM_Sqrt),
             (Expr*[]){expr_copy(disc)}, 1);
         sqrt_d = eval_and_free(sqrt_d);
         Expr* neg_b = internal_times(
@@ -2167,9 +2167,9 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
         /* Each contributes α * Log[s(α, x)]. */
         Expr* s_at_plus  = subst_t(s, t, alpha_plus);
         Expr* s_at_minus = subst_t(s, t, alpha_minus);
-        Expr* log_plus = expr_new_function(expr_new_symbol("Log"),
+        Expr* log_plus = expr_new_function(expr_new_symbol(SYM_Log),
             (Expr*[]){s_at_plus}, 1);
-        Expr* log_minus = expr_new_function(expr_new_symbol("Log"),
+        Expr* log_minus = expr_new_function(expr_new_symbol(SYM_Log),
             (Expr*[]){s_at_minus}, 1);
         Expr* term_plus  = internal_times((Expr*[]){alpha_plus, log_plus}, 2);
         Expr* term_minus = internal_times((Expr*[]){alpha_minus, log_minus}, 2);
@@ -2201,7 +2201,7 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
 
     /* Substitute t -> u_root + I*v_root in s and split into A + I B. */
     Expr* iv = internal_times((Expr*[]){
-        expr_new_function(expr_new_symbol("Complex"),
+        expr_new_function(expr_new_symbol(SYM_Complex),
             (Expr*[]){expr_new_integer(0), expr_new_integer(1)}, 2),
         expr_copy(v_root)
     }, 2);
@@ -2222,7 +2222,7 @@ static Expr* logtoreal_quadratic(Expr* a, Expr* b, Expr* c,
         (Expr*[]){expr_copy(B), expr_new_integer(2)}, 2));
     Expr* mod2 = eval_and_free(internal_plus((Expr*[]){A2, B2}, 2));
     Expr* mod2_can = intrat_canonic(mod2); expr_free(mod2);
-    Expr* logmod = expr_new_function(expr_new_symbol("Log"),
+    Expr* logmod = expr_new_function(expr_new_symbol(SYM_Log),
         (Expr*[]){mod2_can}, 1);
     Expr* term1 = internal_times((Expr*[]){expr_copy(u_root), logmod}, 2);
     term1 = eval_and_free(term1);
@@ -2300,7 +2300,7 @@ static Expr* logtoreal_nthroot_sparse(Expr* base, int deg,
         : eval_and_free(internal_times(
               (Expr*[]){expr_new_integer(-1), q}, 2));
     Expr* inv_n = expr_new_function(
-        expr_new_symbol("Rational"),
+        expr_new_symbol(SYM_Rational),
         (Expr*[]){expr_new_integer(1), expr_new_integer(deg)}, 2);
     inv_n = eval_and_free(inv_n);
     Expr* r = eval_and_free(internal_power(
@@ -2357,10 +2357,10 @@ static Expr* logtoreal_nthroot_sparse(Expr* base, int deg,
         int angle_num_k = q_pos ? (2 * k) : (2 * k + 1);
         Expr* angle_num = eval_and_free(internal_times(
             (Expr*[]){expr_new_integer(angle_num_k),
-                      expr_new_symbol("Pi")}, 2));
+                      expr_new_symbol(SYM_Pi)}, 2));
         Expr* angle = eval_and_free(internal_divide(
             (Expr*[]){angle_num, expr_new_integer(deg)}, 2));
-        Expr* cos_v = expr_new_function(expr_new_symbol("Cos"),
+        Expr* cos_v = expr_new_function(expr_new_symbol(SYM_Cos),
             (Expr*[]){angle}, 1);
         cos_v = eval_and_free(cos_v);
 
@@ -3701,7 +3701,7 @@ void intrat_init(void) {
     /* Trace flag: Integrate`$Verbose. Default False. */
     {
         Expr* pat = expr_new_symbol("Integrate`$Verbose");
-        Expr* val = expr_new_symbol("False");
+        Expr* val = expr_new_symbol(SYM_False);
         symtab_add_own_value("Integrate`$Verbose", pat, val);
         expr_free(pat); expr_free(val);
     }

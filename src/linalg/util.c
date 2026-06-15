@@ -69,8 +69,8 @@ Expr* exact_div_wrapper(Expr* num, Expr* den) {
         expr_free(exp_den);
         return res;
     } else {
-        Expr* t = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){exp_den, expr_new_integer(-1)}, 2));
-        Expr* r = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){exp_num, t}, 2));
+        Expr* t = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){exp_den, expr_new_integer(-1)}, 2));
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){exp_num, t}, 2));
         return r;
     }
 }

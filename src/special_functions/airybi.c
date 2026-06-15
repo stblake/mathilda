@@ -64,6 +64,7 @@
  * Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
  */
 #include "airybi.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -125,29 +126,29 @@ static bool bi_is_neg_infinity(const Expr* e) {
 /* Build the exact value AiryBi[0] = 1 / (3^(1/6) Gamma[2/3]) and evaluate it. */
 static Expr* bi_value_at_zero(void) {
     /* 3^(1/6) */
-    Expr* p = expr_new_function(expr_new_symbol("Power"),
+    Expr* p = expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ expr_new_integer(3), make_rational(1, 6) }, 2);
     /* Gamma[2/3] */
-    Expr* g = expr_new_function(expr_new_symbol("Gamma"),
+    Expr* g = expr_new_function(expr_new_symbol(SYM_Gamma),
                   (Expr*[]){ make_rational(2, 3) }, 1);
     /* 3^(1/6) Gamma[2/3] */
-    Expr* denom = expr_new_function(expr_new_symbol("Times"),
+    Expr* denom = expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){ p, g }, 2);
     /* 1 / (...) = Power[denom, -1] */
-    Expr* inv = expr_new_function(expr_new_symbol("Power"),
+    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ denom, expr_new_integer(-1) }, 2);
     return eval_and_free(inv);
 }
 
 /* Build the exact value AiryBiPrime[0] = 3^(1/6) / Gamma[1/3]. */
 static Expr* bi_prime_value_at_zero(void) {
-    Expr* p = expr_new_function(expr_new_symbol("Power"),
+    Expr* p = expr_new_function(expr_new_symbol(SYM_Power),
                   (Expr*[]){ expr_new_integer(3), make_rational(1, 6) }, 2);
-    Expr* ginv = expr_new_function(expr_new_symbol("Power"),
-                  (Expr*[]){ expr_new_function(expr_new_symbol("Gamma"),
+    Expr* ginv = expr_new_function(expr_new_symbol(SYM_Power),
+                  (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Gamma),
                                  (Expr*[]){ make_rational(1, 3) }, 1),
                              expr_new_integer(-1) }, 2);
-    Expr* prod = expr_new_function(expr_new_symbol("Times"),
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
                   (Expr*[]){ p, ginv }, 2);
     return eval_and_free(prod);
 }
@@ -822,9 +823,9 @@ static Expr* airybi_one_arg(Expr* arg) {
     /* 1. Exact special values. */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
         return bi_value_at_zero();                 /* AiryBi[0] = 1/(3^(1/6) Gamma[2/3]) */
-    if (bi_is_symbol(arg, "Infinity"))   return expr_new_symbol("Infinity"); /* Bi(+inf) = inf */
+    if (bi_is_symbol(arg, "Infinity"))   return expr_new_symbol(SYM_Infinity); /* Bi(+inf) = inf */
     if (bi_is_neg_infinity(arg))          return expr_new_integer(0);         /* Bi(-inf) = 0 */
-    if (bi_is_symbol(arg, "Indeterminate")) return expr_new_symbol("Indeterminate");
+    if (bi_is_symbol(arg, "Indeterminate")) return expr_new_symbol(SYM_Indeterminate);
 
 #ifdef USE_MPFR
     /* 2. Machine real. */
@@ -862,8 +863,8 @@ static Expr* airybiprime_one_arg(Expr* arg) {
     /* Bi'(z) -> +Infinity as z -> +Infinity (dominant solution grows). At
      * -Infinity Bi' oscillates with *growing* amplitude (~|z|^(1/4)) and has no
      * limit, so -Infinity is deliberately left unevaluated. */
-    if (bi_is_symbol(arg, "Infinity"))       return expr_new_symbol("Infinity");
-    if (bi_is_symbol(arg, "Indeterminate"))  return expr_new_symbol("Indeterminate");
+    if (bi_is_symbol(arg, "Infinity"))       return expr_new_symbol(SYM_Infinity);
+    if (bi_is_symbol(arg, "Indeterminate"))  return expr_new_symbol(SYM_Indeterminate);
 
 #ifdef USE_MPFR
     /* 2. Machine real. */

@@ -266,9 +266,9 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
         Expr* lhs = f->data.function.args[0];
         Expr* rhs = f->data.function.args[1];
         Expr* sub_args[2] = { expr_copy(lhs),
-                              expr_new_function(expr_new_symbol("Times"),
+                              expr_new_function(expr_new_symbol(SYM_Times),
                                   (Expr*[]){ expr_new_integer(-1), expr_copy(rhs) }, 2) };
-        Expr* sum = expr_new_function(expr_new_symbol("Plus"), sub_args, 2);
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), sub_args, 2);
         Expr* diff = eval_and_free(sum);
         eq_diffs[i] = diff;
         /* Always emit the direct heavier->lighter rule. */
@@ -321,7 +321,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
             src = rhs; dst = lhs;
         }
         Expr* direct[2] = { expr_copy(src), expr_copy(dst) };
-        all[fill++] = expr_new_function(expr_new_symbol("Rule"), direct, 2);
+        all[fill++] = expr_new_function(expr_new_symbol(SYM_Rule), direct, 2);
 
         /* Polynomial-relation monomial-isolation rule (one per fact). */
         if (diff->type == EXPR_FUNCTION &&
@@ -351,7 +351,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
                 size_t oi = 0;
                 for (size_t k = 0; k < n; k++) {
                     if (k == pick) continue;
-                    other_args[oi++] = expr_new_function(expr_new_symbol("Times"),
+                    other_args[oi++] = expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_new_integer(-1),
                                    expr_copy(diff->data.function.args[k]) }, 2);
                 }
@@ -360,11 +360,11 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
                     iso_rhs = other_args[0];
                     free(other_args);
                 } else {
-                    iso_rhs = expr_new_function(expr_new_symbol("Plus"), other_args, n - 1);
+                    iso_rhs = expr_new_function(expr_new_symbol(SYM_Plus), other_args, n - 1);
                     free(other_args);
                 }
                 Expr* iso[2] = { expr_copy(term), iso_rhs };
-                all[fill++] = expr_new_function(expr_new_symbol("Rule"), iso, 2);
+                all[fill++] = expr_new_function(expr_new_symbol(SYM_Rule), iso, 2);
             }
         }
     }
@@ -372,7 +372,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
     free(eq_diffs);
     if (string_rules) expr_free(string_rules);
 
-    Expr* rules_list = expr_new_function(expr_new_symbol("List"), all, fill);
+    Expr* rules_list = expr_new_function(expr_new_symbol(SYM_List), all, fill);
     free(all);
 
     Expr* call_args[2] = { expr_copy((Expr*)input), rules_list };

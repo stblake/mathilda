@@ -52,11 +52,11 @@ static Expr* var_power_base(Expr* e, Expr* var) {
 
 /* Multiply acc (owned) by base^(-var) and evaluate, cancelling base^var. */
 static Expr* divide_off(Expr* acc, Expr* base, Expr* var) {
-    Expr* inv = expr_new_function(expr_new_symbol("Power"),
+    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_copy(base),
-                               expr_new_function(expr_new_symbol("Times"),
+                               expr_new_function(expr_new_symbol(SYM_Times),
                                    (Expr*[]){ sum_int(-1), expr_copy(var) }, 2) }, 2);
-    Expr* prod = expr_new_function(expr_new_symbol("Times"),
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
                      (Expr*[]){ acc, inv }, 2);
     Expr* r = evaluate(prod);
     expr_free(prod);
@@ -86,7 +86,7 @@ static bool find_geometric(Expr* f, Expr* var, Expr** r_out, Expr** p_out) {
         p = divide_off(p, b, var);                 /* cancel b^i out of p */
         if (!r) { r = b; }
         else {
-            Expr* tr = expr_new_function(expr_new_symbol("Times"),
+            Expr* tr = expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ r, b }, 2);
             r = evaluate(tr);
             expr_free(tr);
@@ -116,27 +116,27 @@ static Expr* solve_q(Expr* p, Expr* r, Expr* var) {
     for (int k = 0; k <= m; k++) {
         snprintf(name, sizeof name, "Sum`g`%d`%d", id, k);
         csym[k] = expr_new_symbol(name);
-        Expr* pw = expr_new_function(expr_new_symbol("Power"),
+        Expr* pw = expr_new_function(expr_new_symbol(SYM_Power),
                        (Expr*[]){ expr_copy(var), sum_int(k) }, 2);
-        qterms[k] = expr_new_function(expr_new_symbol("Times"),
+        qterms[k] = expr_new_function(expr_new_symbol(SYM_Times),
                        (Expr*[]){ expr_copy(csym[k]), pw }, 2);
     }
     /* q = Plus[qterms...] (takes ownership of qterms elements). */
-    Expr* q = expr_new_function(expr_new_symbol("Plus"), qterms, m + 1);
+    Expr* q = expr_new_function(expr_new_symbol(SYM_Plus), qterms, m + 1);
     free(qterms);
 
     /* E = r * q(var+1) - q(var) - p */
-    Expr* vp1 = expr_new_function(expr_new_symbol("Plus"),
+    Expr* vp1 = expr_new_function(expr_new_symbol(SYM_Plus),
                     (Expr*[]){ expr_copy(var), sum_int(1) }, 2);
     Expr* qshift = sum_subst(q, var, vp1);
     expr_free(vp1);
-    Expr* rqshift = expr_new_function(expr_new_symbol("Times"),
+    Expr* rqshift = expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_copy(r), qshift }, 2);
-    Expr* Eraw = expr_new_function(expr_new_symbol("Plus"),
+    Expr* Eraw = expr_new_function(expr_new_symbol(SYM_Plus),
                      (Expr*[]){ rqshift,
-                                expr_new_function(expr_new_symbol("Times"),
+                                expr_new_function(expr_new_symbol(SYM_Times),
                                     (Expr*[]){ sum_int(-1), expr_copy(q) }, 2),
-                                expr_new_function(expr_new_symbol("Times"),
+                                expr_new_function(expr_new_symbol(SYM_Times),
                                     (Expr*[]){ sum_int(-1), expr_copy(pexp) }, 2) }, 3);
     expr_free(pexp);
     Expr* Eargs[1] = { Eraw };
@@ -148,7 +148,7 @@ static Expr* solve_q(Expr* p, Expr* r, Expr* var) {
     expr_free(E);
 
     bool ok = true;
-    Expr* rules = expr_new_function(expr_new_symbol("List"), (Expr*[]){ NULL }, 0);
+    Expr* rules = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ NULL }, 0);
 
     size_t ncoeff = (cl->type == EXPR_FUNCTION) ? cl->data.function.arg_count : 0;
     /* Walk coefficients high degree -> low; each is linear in its own c_k. */
@@ -177,16 +177,16 @@ static Expr* solve_q(Expr* p, Expr* r, Expr* var) {
             continue;
         }
         /* c_k = -B / A */
-        Expr* negB = expr_new_function(expr_new_symbol("Times"),
+        Expr* negB = expr_new_function(expr_new_symbol(SYM_Times),
                          (Expr*[]){ sum_int(-1), B }, 2);
-        Expr* invA = expr_new_function(expr_new_symbol("Power"),
+        Expr* invA = expr_new_function(expr_new_symbol(SYM_Power),
                          (Expr*[]){ A, sum_int(-1) }, 2);
-        Expr* valraw = expr_new_function(expr_new_symbol("Times"),
+        Expr* valraw = expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ negB, invA }, 2);
         Expr* vargs[1] = { valraw };
         Expr* val = sum_eval("Cancel", vargs, 1);
 
-        Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
                          (Expr*[]){ expr_copy(ck), val }, 2);
         Expr* aargs[2] = { rules, rule };
         rules = sum_eval("Append", aargs, 2);
@@ -231,9 +231,9 @@ Expr* builtin_sum_geometric(Expr* res) {
     Expr* qt = sum_eval("Together", qt_arg, 1);
 
     /* F(var) = qt(var) * r^var */
-    Expr* rv = expr_new_function(expr_new_symbol("Power"),
+    Expr* rv = expr_new_function(expr_new_symbol(SYM_Power),
                    (Expr*[]){ expr_copy(r), expr_copy(var) }, 2);
-    Expr* Fraw = expr_new_function(expr_new_symbol("Times"),
+    Expr* Fraw = expr_new_function(expr_new_symbol(SYM_Times),
                      (Expr*[]){ expr_copy(qt), rv }, 2);
     Expr* F = evaluate(Fraw);
     expr_free(Fraw);
@@ -244,7 +244,7 @@ Expr* builtin_sum_geometric(Expr* res) {
         out = F;
         F = NULL;
     } else {
-        Expr* up = expr_new_function(expr_new_symbol("Plus"),
+        Expr* up = expr_new_function(expr_new_symbol(SYM_Plus),
                        (Expr*[]){ expr_copy(imax), sum_int(1) }, 2);
         Expr* Fhi = sum_subst(F, var, up);
         Expr* Flo = sum_subst(F, var, imin);

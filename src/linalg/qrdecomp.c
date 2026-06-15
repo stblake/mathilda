@@ -96,23 +96,23 @@
  * ------------------------------------------------------------------ */
 static Expr* eval_plus(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Plus"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Plus), (Expr*[]){a, b}, 2));
 }
 static Expr* eval_times(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Times"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Times), (Expr*[]){a, b}, 2));
 }
 static Expr* eval_power(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Power"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Power), (Expr*[]){a, b}, 2));
 }
 static Expr* eval_conjugate(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Conjugate"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Conjugate), (Expr*[]){a}, 1));
 }
 static Expr* eval_sqrt(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Sqrt"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Sqrt), (Expr*[]){a}, 1));
 }
 static Expr* eval_simplify(Expr* a) {
     /* Together is enough for canonicalising zero-detection on
@@ -461,11 +461,11 @@ static Expr* wrap_matrix(Expr** buf, int rows, int cols) {
         if (cols > 0) elems = (Expr**)malloc(sizeof(Expr*) * (size_t)cols);
         for (int j = 0; j < cols; j++) elems[j] = buf[i * cols + j];   /* steal */
         row_exprs[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)cols);
+            expr_new_symbol(SYM_List), elems, (size_t)cols);
         if (elems) free(elems);
     }
     Expr* out = expr_new_function(
-        expr_new_symbol("List"), row_exprs, (size_t)rows);
+        expr_new_symbol(SYM_List), row_exprs, (size_t)rows);
     free(row_exprs);
     return out;
 }
@@ -494,11 +494,11 @@ static Expr* build_q_from_Q(Expr** Q_flat, int n, int rank,
             elems[i] = complex_input ? eval_conjugate(entry) : entry;
         }
         rows[j] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)n);
+            expr_new_symbol(SYM_List), elems, (size_t)n);
         if (elems) free(elems);
     }
     Expr* q = expr_new_function(
-        expr_new_symbol("List"), rows, (size_t)rank);
+        expr_new_symbol(SYM_List), rows, (size_t)rank);
     free(rows);
     return q;
 }
@@ -531,11 +531,11 @@ static Expr* build_perm_matrix(const int* perm, int p) {
             elems[j] = expr_new_integer(perm[j] == i ? 1 : 0);
         }
         rows[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)p);
+            expr_new_symbol(SYM_List), elems, (size_t)p);
         if (elems) free(elems);
     }
     Expr* P = expr_new_function(
-        expr_new_symbol("List"), rows, (size_t)p);
+        expr_new_symbol(SYM_List), rows, (size_t)p);
     free(rows);
     return P;
 }
@@ -628,8 +628,8 @@ Expr* qr_symbolic_dispatch(Expr* m, int n, int p, const QrOpts* opts) {
         /* Free the (empty) buffers and emit `{}` / `{}`. */
         free(Q_flat);
         free(R_flat);
-        q = expr_new_function(expr_new_symbol("List"), NULL, 0);
-        r = expr_new_function(expr_new_symbol("List"), NULL, 0);
+        q = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        r = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     } else {
         q = build_q_from_Q(Q_flat, n, rank, complex_input);
         for (int t = 0; t < n * rank; t++) expr_free(Q_flat[t]);
@@ -658,13 +658,13 @@ Expr* qr_symbolic_dispatch(Expr* m, int n, int p, const QrOpts* opts) {
          * numericalisation needed even when info.has_inexact. */
         Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
         items[0] = q; items[1] = r; items[2] = P;
-        result = expr_new_function(expr_new_symbol("List"), items, 3);
+        result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
         free(items);
     } else {
         if (perm) free(perm);
         Expr** items = (Expr**)malloc(sizeof(Expr*) * 2);
         items[0] = q; items[1] = r;
-        result = expr_new_function(expr_new_symbol("List"), items, 2);
+        result = expr_new_function(expr_new_symbol(SYM_List), items, 2);
         free(items);
     }
     return result;

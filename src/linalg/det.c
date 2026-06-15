@@ -26,13 +26,13 @@ Expr* laplace_det(Expr** flat, int original_n, int n, int row, int* cols) {
         Expr* elem = flat[row * original_n + cols[i]];
         if (i % 2 != 0) {
             Expr* t_args[3] = { expr_new_integer(-1), expr_copy(elem), minor_det };
-            sum_args[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), t_args, 3));
+            sum_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 3));
         } else {
             Expr* t_args[2] = { expr_copy(elem), minor_det };
-            sum_args[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), t_args, 2));
+            sum_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
         }
     }
-    Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), sum_args, n));
+    Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, n));
     free(sum_args);
     return res;
 }

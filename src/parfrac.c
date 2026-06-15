@@ -87,14 +87,14 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
                 if (apart_argc == 2) ap_args[1] = expr_copy(res->data.function.args[1]);
                 if (apart_alpha) {
                     ap_args[apart_argc] = expr_new_function(
-                        expr_new_symbol("Rule"),
+                        expr_new_symbol(SYM_Rule),
                         (Expr*[]){
-                            expr_new_symbol("Extension"),
+                            expr_new_symbol(SYM_Extension),
                             expr_copy((Expr*)apart_alpha)
                         }, 2);
                 }
                 args[i] = eval_and_free(expr_new_function(
-                    expr_new_symbol("Apart"), ap_args, inner_argc));
+                    expr_new_symbol(SYM_Apart), ap_args, inner_argc));
                 free(ap_args);
             }
             Expr* ret = eval_and_free(expr_new_function(expr_copy(expr->data.function.head), args, expr->data.function.arg_count));
@@ -123,13 +123,13 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             ap_args[0] = substituted;
             if (apart_alpha) {
                 ap_args[1] = expr_new_function(
-                    expr_new_symbol("Rule"),
+                    expr_new_symbol(SYM_Rule),
                     (Expr*[]){
-                        expr_new_symbol("Extension"),
+                        expr_new_symbol(SYM_Extension),
                         expr_copy((Expr*)apart_alpha)
                     }, 2);
             }
-            Expr* call = expr_new_function(expr_new_symbol("Apart"),
+            Expr* call = expr_new_function(expr_new_symbol(SYM_Apart),
                               ap_args, inner_argc);
             free(ap_args);
             Expr* result_in_g = evaluate(call);
@@ -153,9 +153,9 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             (Expr*[]){
                 expr_copy(expr),
                 expr_new_function(
-                    expr_new_symbol("Rule"),
+                    expr_new_symbol(SYM_Rule),
                     (Expr*[]){
-                        expr_new_symbol("Extension"),
+                        expr_new_symbol(SYM_Extension),
                         expr_copy((Expr*)apart_alpha)
                     }, 2)
             }, 2));
@@ -209,7 +209,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     expr_free(together);
 
     if (get_degree_poly(D, var) == 0) {
-        Expr* expanded = eval_and_free(expr_new_function(expr_new_symbol("Expand"), (Expr*[]){eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){N, eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){D, expr_new_integer(-1)}, 2))}, 2))}, 1));
+        Expr* expanded = eval_and_free(expr_new_function(expr_new_symbol("Expand"), (Expr*[]){eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){N, eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){D, expr_new_integer(-1)}, 2))}, 2))}, 1));
         expr_free(var);
         return expanded;
     }
@@ -224,19 +224,19 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     Expr* f_den;
     if (apart_alpha) {
         f_den = eval_and_free(expr_new_function(
-            expr_new_symbol("Factor"),
+            expr_new_symbol(SYM_Factor),
             (Expr*[]){
                 expr_copy(D),
                 expr_new_function(
-                    expr_new_symbol("Rule"),
+                    expr_new_symbol(SYM_Rule),
                     (Expr*[]){
-                        expr_new_symbol("Extension"),
+                        expr_new_symbol(SYM_Extension),
                         expr_copy((Expr*)apart_alpha)
                     }, 2)
             }, 2));
     } else {
         f_den = eval_and_free(expr_new_function(
-            expr_new_symbol("Factor"), (Expr*[]){expr_copy(D)}, 1));
+            expr_new_symbol(SYM_Factor), (Expr*[]){expr_copy(D)}, 1));
     }
     expr_free(N); expr_free(D);
     
@@ -264,8 +264,8 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
         }
         
         if (get_degree_poly(base, var) == 0) {
-            Expr* term = (factor == base && k != 1) ? eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(base), expr_new_integer(k)}, 2)) : expr_copy(factor);
-            C = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){C, term}, 2));
+            Expr* term = (factor == base && k != 1) ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(base), expr_new_integer(k)}, 2)) : expr_copy(factor);
+            C = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){C, term}, 2));
         } else {
             bases[m] = expr_copy(base);
             ks[m] = k;
@@ -274,17 +274,17 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     }
     
     if (m == 0) {
-        Expr* C_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){C, expr_new_integer(-1)}, 2));
-        Expr* R_term = eval_and_free(expr_new_function(expr_new_symbol("Expand"), (Expr*[]){eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){R, C_inv}, 2))}, 1));
-        Expr* res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){Q, R_term}, 2));
+        Expr* C_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){C, expr_new_integer(-1)}, 2));
+        Expr* R_term = eval_and_free(expr_new_function(expr_new_symbol("Expand"), (Expr*[]){eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){R, C_inv}, 2))}, 1));
+        Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){Q, R_term}, 2));
         expr_free(f_den); free(bases); free(ks); expr_free(var);
         return res;
     }
     
     Expr* D_main = expr_new_integer(1);
     for (size_t i = 0; i < m; i++) {
-        Expr* term = ks[i] == 1 ? expr_copy(bases[i]) : eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(bases[i]), expr_new_integer(ks[i])}, 2));
-        D_main = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){D_main, term}, 2));
+        Expr* term = ks[i] == 1 ? expr_copy(bases[i]) : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(bases[i]), expr_new_integer(ks[i])}, 2));
+        D_main = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){D_main, term}, 2));
     }
     
     Expr* exp_D_main = expr_expand(D_main);
@@ -310,13 +310,13 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
                 for (size_t p = 0; p < m; p++) {
                     int exp = (p == i) ? ks[p] - j : ks[p];
                     if (exp > 0) {
-                        Expr* term = (exp == 1) ? expr_copy(bases[p]) : eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(bases[p]), expr_new_integer(exp)}, 2));
-                        M_ij = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){M_ij, term}, 2));
+                        Expr* term = (exp == 1) ? expr_copy(bases[p]) : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(bases[p]), expr_new_integer(exp)}, 2));
+                        M_ij = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){M_ij, term}, 2));
                     }
                 }
                 
-                Expr* var_pow = (r == 0) ? expr_new_integer(1) : ((r == 1) ? expr_copy(var) : eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(var), expr_new_integer(r)}, 2)));
-                Expr* term_mult = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){M_ij, var_pow}, 2));
+                Expr* var_pow = (r == 0) ? expr_new_integer(1) : ((r == 1) ? expr_copy(var) : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(var), expr_new_integer(r)}, 2)));
+                Expr* term_mult = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){M_ij, var_pow}, 2));
                 Expr* expanded_term = expr_expand(term_mult);
                 expr_free(term_mult);
                 
@@ -330,8 +330,8 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
         }
     }
     
-    Expr* C_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){C, expr_new_integer(-1)}, 2));
-    Expr* tmp_R = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){R, C_inv}, 2));
+    Expr* C_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){C, expr_new_integer(-1)}, 2));
+    Expr* tmp_R = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){R, C_inv}, 2));
     Expr* R_rhs = expr_expand(tmp_R);
     expr_free(tmp_R);
     for (int row = 0; row < S; row++) {
@@ -342,12 +342,12 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     
     Expr** row_args = malloc(sizeof(Expr*) * S);
     for (int row = 0; row < S; row++) {
-        row_args[row] = expr_new_function(expr_new_symbol("List"), M[row], S + 1);
+        row_args[row] = expr_new_function(expr_new_symbol(SYM_List), M[row], S + 1);
         free(M[row]);
     }
     free(M);
     
-    Expr* matrix_expr = expr_new_function(expr_new_symbol("List"), row_args, S);
+    Expr* matrix_expr = expr_new_function(expr_new_symbol(SYM_List), row_args, S);
     free(row_args);
     
     Expr* reduced = eval_and_free(expr_new_function(expr_new_symbol("RowReduce"), (Expr*[]){matrix_expr}, 1));
@@ -365,19 +365,19 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
                 for (int r = 0; r < d_B; r++) {
                     Expr* coeff = expr_copy(reduced->data.function.args[col]->data.function.args[S]);
                     
-                    Expr* fact_coeff = eval_and_free(expr_new_function(expr_new_symbol("Factor"), (Expr*[]){coeff}, 1));
+                    Expr* fact_coeff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Factor), (Expr*[]){coeff}, 1));
                     
-                    Expr* var_pow = (r == 0) ? expr_new_integer(1) : ((r == 1) ? expr_copy(var) : eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(var), expr_new_integer(r)}, 2)));
-                    Expr* term = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){fact_coeff, var_pow}, 2));
+                    Expr* var_pow = (r == 0) ? expr_new_integer(1) : ((r == 1) ? expr_copy(var) : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(var), expr_new_integer(r)}, 2)));
+                    Expr* term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){fact_coeff, var_pow}, 2));
                     
-                    A_ij = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){A_ij, term}, 2));
+                    A_ij = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){A_ij, term}, 2));
                     col++;
                 }
                 
-                Expr* denom = (j == 1) ? expr_copy(bases[i]) : eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(bases[i]), expr_new_integer(j)}, 2));
-                Expr* fraction = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){A_ij, eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){denom, expr_new_integer(-1)}, 2))}, 2));
+                Expr* denom = (j == 1) ? expr_copy(bases[i]) : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(bases[i]), expr_new_integer(j)}, 2));
+                Expr* fraction = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){A_ij, eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){denom, expr_new_integer(-1)}, 2))}, 2));
                 
-                pfrac_sum = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){pfrac_sum, fraction}, 2));
+                pfrac_sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){pfrac_sum, fraction}, 2));
             }
         }
     } else {
@@ -385,7 +385,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     }
     expr_free(reduced);
     
-    Expr* final_res = eval_and_free(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){Q, pfrac_sum}, 2));
+    Expr* final_res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){Q, pfrac_sum}, 2));
     
     for (size_t i = 0; i < m; i++) expr_free(bases[i]);
     free(bases); free(ks);

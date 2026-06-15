@@ -625,7 +625,7 @@ static int64_t draw_int_range(int64_t lo, int64_t hi) {
     Expr* low  = expr_new_integer(lo);
     Expr* high = expr_new_integer(hi);
     Expr* list_args[] = {low, high};
-    Expr* range = expr_new_function(expr_new_symbol("List"), list_args, 2);
+    Expr* range = expr_new_function(expr_new_symbol(SYM_List), list_args, 2);
     Expr* call_args[] = {range};
     Expr* call = expr_new_function(expr_new_symbol("RandomInteger"), call_args, 1);
     /* eval_and_free consumes `call`; plain evaluate() would leak the
@@ -807,8 +807,8 @@ Expr* builtin_possible_zero_q(Expr* res) {
      * and emit a PossibleZeroQ::ztest1 message. Mathilda currently has
      * no general message channel; we silently collapse UNKNOWN to True
      * to preserve the documented public-facing return value. */
-    if (r == ZERO_TEST_FALSE) return expr_new_symbol("False");
-    return expr_new_symbol("True");
+    if (r == ZERO_TEST_FALSE) return expr_new_symbol(SYM_False);
+    return expr_new_symbol(SYM_True);
 }
 
 void zero_test_init(void) {

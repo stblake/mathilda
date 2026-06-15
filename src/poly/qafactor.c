@@ -54,7 +54,7 @@ static Expr* mpq_to_expr(const mpq_t q) {
         Expr* n = expr_bigint_normalize(expr_new_bigint_from_mpz(num));
         Expr* d = expr_bigint_normalize(expr_new_bigint_from_mpz(den));
         Expr* args[2] = { n, d };
-        result = expr_new_function(expr_new_symbol("Rational"), args, 2);
+        result = expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
     }
 
     mpz_clear(num);
@@ -69,7 +69,7 @@ static Expr* var_power(const char* var, long k) {
     if (k == 0) return expr_new_integer(1);
     if (k == 1) return expr_new_symbol(var);
     Expr* args[2] = { expr_new_symbol(var), expr_new_integer((int64_t)k) };
-    return expr_new_function(expr_new_symbol("Power"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Power), args, 2);
 }
 
 /* Multiply `coef` (an Expr*, ownership taken) by var^k, with sensible
@@ -86,11 +86,11 @@ static Expr* term_coef_times_var_power(Expr* coef, const char* var, long k) {
     if (coef->type == EXPR_INTEGER && coef->data.integer == -1) {
         expr_free(coef);
         Expr* args[2] = { expr_new_integer(-1), vp };
-        return expr_new_function(expr_new_symbol("Times"), args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
     }
 
     Expr* args[2] = { coef, vp };
-    return expr_new_function(expr_new_symbol("Times"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
 }
 
 /* Build a polynomial expression from an mpq_t-array of coefficients
@@ -119,7 +119,7 @@ static Expr* mpq_array_to_poly_expr(const mpq_t* coefs,
         return r;
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("Plus"), terms, n_terms);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_Plus), terms, n_terms);
     free(terms);
     return result;
 }
@@ -159,7 +159,7 @@ Expr* qaupoly_to_expr(const QAUPoly* f,
     if (n_x_terms == 1) {
         g = x_terms[0];
     } else {
-        g = expr_new_function(expr_new_symbol("Plus"), x_terms, n_x_terms);
+        g = expr_new_function(expr_new_symbol(SYM_Plus), x_terms, n_x_terms);
     }
     free(x_terms);
     return g;
@@ -611,7 +611,7 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
         qaext_set_coef_si(ext, 0,  1, 1);   /* +1 */
         qaext_set_coef_si(ext, 1,  0, 1);
         qaext_set_coef_si(ext, 2,  1, 1);   /* y² */
-        *render_out = expr_new_symbol("I");
+        *render_out = expr_new_symbol(SYM_I);
         return ext;
     }
 
@@ -700,10 +700,10 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
                     Expr* rat_args[2] = { expr_new_integer(1),
                                           expr_new_integer(q_red) };
                     Expr* exp_natural = expr_new_function(
-                        expr_new_symbol("Rational"), rat_args, 2);
+                        expr_new_symbol(SYM_Rational), rat_args, 2);
                     Expr* pow_args[2] = { expr_new_integer(cv), exp_natural };
                     *render_out = expr_new_function(
-                        expr_new_symbol("Power"), pow_args, 2);
+                        expr_new_symbol(SYM_Power), pow_args, 2);
                 }
                 return ext;
             }
@@ -1157,7 +1157,7 @@ static Expr* qa_factor_inner(const Expr* poly,
             terms[out++] = h;
         } else {
             Expr* p_args[2] = { h, expr_new_integer((int64_t)mult[i]) };
-            terms[out++] = expr_new_function(expr_new_symbol("Power"),
+            terms[out++] = expr_new_function(expr_new_symbol(SYM_Power),
                                              p_args, 2);
         }
     }
@@ -1165,7 +1165,7 @@ static Expr* qa_factor_inner(const Expr* poly,
     Expr* result;
     if (n_terms == 0)      result = expr_new_integer(1);
     else if (n_terms == 1) result = terms[0];
-    else                   result = expr_new_function(expr_new_symbol("Times"),
+    else                   result = expr_new_function(expr_new_symbol(SYM_Times),
                                                       terms, n_terms);
     free(terms);
     free(mult);
@@ -1238,11 +1238,11 @@ static Expr* expr_y_minus_s_z(const char* y_name, const char* z_name, int s) {
     if (s == 0) return expr_new_symbol(y_name);
     Expr* sz_args[2] = { expr_new_integer((int64_t)s),
                          expr_new_symbol(z_name) };
-    Expr* sz = expr_new_function(expr_new_symbol("Times"), sz_args, 2);
+    Expr* sz = expr_new_function(expr_new_symbol(SYM_Times), sz_args, 2);
     Expr* neg_args[2] = { expr_new_integer(-1), sz };
-    Expr* neg_sz = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+    Expr* neg_sz = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
     Expr* sum_args[2] = { expr_new_symbol(y_name), neg_sz };
-    return expr_new_function(expr_new_symbol("Plus"), sum_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2);
 }
 
 /* Substitute y_name → (y_name − s·z_name) in P, then expand. */
@@ -1504,10 +1504,10 @@ static bool qa_tower_extend(QATower* t, const Expr* alpha_new) {
         } else {
             Expr* args[2] = { expr_new_integer((int64_t)s),
                               expr_copy(alpha_render_new) };
-            term = expr_new_function(expr_new_symbol("Times"), args, 2);
+            term = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
         }
         Expr* args[2] = { t->gamma_render, term };
-        new_gamma_render = expr_new_function(expr_new_symbol("Plus"), args, 2);
+        new_gamma_render = expr_new_function(expr_new_symbol(SYM_Plus), args, 2);
         /* t->gamma_render is consumed into the new tree — null out to
          * avoid double-free below. */
     }
@@ -1667,13 +1667,13 @@ static Expr* canonicalise_nested_radicands(const Expr* e,
         Expr* base_e = expr_new_integer(c_base);
         Expr* rat_args[2] = { expr_new_integer(1),
                               expr_new_integer(q_natural) };
-        Expr* exp_natural = expr_new_function(expr_new_symbol("Rational"),
+        Expr* exp_natural = expr_new_function(expr_new_symbol(SYM_Rational),
                                               rat_args, 2);
         Expr* pow_args[2] = { base_e, exp_natural };
-        Expr* alpha = expr_new_function(expr_new_symbol("Power"),
+        Expr* alpha = expr_new_function(expr_new_symbol(SYM_Power),
                                         pow_args, 2);
-        Expr* rule = expr_new_function(expr_new_symbol("Rule"),
-            (Expr*[]){expr_new_symbol("Extension"), alpha}, 2);
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){expr_new_symbol(SYM_Extension), alpha}, 2);
         Expr* tg_call = expr_new_function(expr_new_symbol("Together"),
             (Expr*[]){expr_copy((Expr*)radicand), rule}, 2);
         Expr* canon = evaluate(tg_call);
@@ -1683,10 +1683,10 @@ static Expr* canonicalise_nested_radicands(const Expr* e,
             /* Rebuild the radical with the canonical radicand. */
             Expr* new_radical;
             if (is_sqrt_head) {
-                new_radical = expr_new_function(expr_new_symbol("Sqrt"),
+                new_radical = expr_new_function(expr_new_symbol(SYM_Sqrt),
                                                 (Expr*[]){canon}, 1);
             } else {
-                new_radical = expr_new_function(expr_new_symbol("Power"),
+                new_radical = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){canon, expr_copy((Expr*)exp_e)}, 2);
             }
             /* Evaluate so the new radical is canonical. */
@@ -1786,10 +1786,10 @@ static Expr* decompose_redundant_sqrts_walk(const Expr* e,
                         Expr* b = expr_new_integer(factors[i]);
                         Expr* args_one[1] = {b};
                         factor_exprs[i] = expr_new_function(
-                            expr_new_symbol("Sqrt"), args_one, 1);
+                            expr_new_symbol(SYM_Sqrt), args_one, 1);
                     }
                     Expr* out = expr_new_function(
-                        expr_new_symbol("Times"), factor_exprs, n_factors);
+                        expr_new_symbol(SYM_Times), factor_exprs, n_factors);
                     free(factor_exprs);
                     return out;
                 }
@@ -2263,9 +2263,9 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
                                               t->gamma_render);
         Expr* den_out = qaupoly_to_expr_alpha(q_den, var->data.symbol,
                                               t->gamma_render);
-        Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol("Power"),
+        Expr* den_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
             (Expr*[]){den_out, expr_new_integer(-1)}, 2));
-        result = eval_and_free(expr_new_function(expr_new_symbol("Times"),
+        result = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){num_out, den_inv}, 2));
     }
 
@@ -2936,16 +2936,16 @@ static Expr* expr_zn_minus_base(const Expr* base_internal,
     /* z^n */
     Expr* zpow_args[2] = { expr_new_symbol(z_name),
                            expr_new_integer((int64_t)n) };
-    Expr* zpow = expr_new_function(expr_new_symbol("Power"),
+    Expr* zpow = expr_new_function(expr_new_symbol(SYM_Power),
                                    zpow_args, 2);
     /* −base_internal */
     Expr* neg_args[2] = { expr_new_integer(-1),
                           expr_copy((Expr*)base_internal) };
-    Expr* neg_base = expr_new_function(expr_new_symbol("Times"),
+    Expr* neg_base = expr_new_function(expr_new_symbol(SYM_Times),
                                        neg_args, 2);
     /* z^n + (−base_internal) */
     Expr* sum_args[2] = { zpow, neg_base };
-    Expr* sum = expr_new_function(expr_new_symbol("Plus"),
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus),
                                   sum_args, 2);
     Expr* expanded = expr_expand(sum);
     expr_free(sum);
@@ -3481,21 +3481,21 @@ static Expr* autodetect_rewrite_to_atomic(const Expr* e) {
             if (b == 0) {
                 /* Power[c, a]: pure integer exponent. */
                 return eval_and_free(expr_new_function(
-                    expr_new_symbol("Power"),
+                    expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_new_integer(c), expr_new_integer(a)}, 2));
             }
             /* Power[c, a] * Power[c, b/q]  with 1 <= b < q. */
             Expr* int_part = (a == 0)
                 ? expr_new_integer(1)
                 : eval_and_free(expr_new_function(
-                    expr_new_symbol("Power"),
+                    expr_new_symbol(SYM_Power),
                     (Expr*[]){expr_new_integer(c), expr_new_integer(a)}, 2));
             Expr* rat_args[2] = { expr_new_integer(b), expr_new_integer(q) };
-            Expr* exp_atomic = expr_new_function(expr_new_symbol("Rational"),
+            Expr* exp_atomic = expr_new_function(expr_new_symbol(SYM_Rational),
                                                  rat_args, 2);
-            Expr* atomic_part = expr_new_function(expr_new_symbol("Power"),
+            Expr* atomic_part = expr_new_function(expr_new_symbol(SYM_Power),
                 (Expr*[]){expr_new_integer(c), exp_atomic}, 2);
-            return eval_and_free(expr_new_function(expr_new_symbol("Times"),
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
                 (Expr*[]){int_part, atomic_part}, 2));
         }
     }
@@ -3529,12 +3529,12 @@ static Expr* autodetect_canonicalise_radicand(const Expr* u,
                                               int64_t base, int64_t q_lcm) {
     Expr* base_e = expr_new_integer(base);
     Expr* rat_args[2] = { expr_new_integer(1), expr_new_integer(q_lcm) };
-    Expr* exp_e = expr_new_function(expr_new_symbol("Rational"), rat_args, 2);
+    Expr* exp_e = expr_new_function(expr_new_symbol(SYM_Rational), rat_args, 2);
     Expr* pow_args[2] = { base_e, exp_e };
-    Expr* alpha = expr_new_function(expr_new_symbol("Power"), pow_args, 2);
+    Expr* alpha = expr_new_function(expr_new_symbol(SYM_Power), pow_args, 2);
 
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
-        (Expr*[]){expr_new_symbol("Extension"), alpha}, 2);
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){expr_new_symbol(SYM_Extension), alpha}, 2);
     Expr* tg_call = expr_new_function(expr_new_symbol("Together"),
         (Expr*[]){expr_copy((Expr*)u), rule}, 2);
     Expr* canon = evaluate(tg_call);
@@ -3653,15 +3653,15 @@ static void autodetect_canonicalise_post(AutodetectGen* gens, size_t* n,
         Expr* new_surface;
         if (q_natural == 2) {
             new_surface = eval_and_free(expr_new_function(
-                expr_new_symbol("Sqrt"),
+                expr_new_symbol(SYM_Sqrt),
                 (Expr*[]){canon_radicand}, 1));
         } else {
             Expr* rat_args[2] = { expr_new_integer(1),
                                   expr_new_integer(q_natural) };
             Expr* exp_pos = expr_new_function(
-                expr_new_symbol("Rational"), rat_args, 2);
+                expr_new_symbol(SYM_Rational), rat_args, 2);
             new_surface = eval_and_free(expr_new_function(
-                expr_new_symbol("Power"),
+                expr_new_symbol(SYM_Power),
                 (Expr*[]){canon_radicand, exp_pos}, 2));
         }
         /* Only adopt the new render if it actually differs from the
@@ -3844,10 +3844,10 @@ static QATower* autodetect_build_tower(const AutodetectGen* gens, size_t n) {
             Expr* base_e = expr_new_integer(gens[i].base);
             Expr* rat_args[2] = { expr_new_integer(1),
                                   expr_new_integer(gens[i].q_lcm) };
-            Expr* exp_e = expr_new_function(expr_new_symbol("Rational"),
+            Expr* exp_e = expr_new_function(expr_new_symbol(SYM_Rational),
                                             rat_args, 2);
             Expr* pow_args[2] = { base_e, exp_e };
-            alpha_exprs[i] = expr_new_function(expr_new_symbol("Power"),
+            alpha_exprs[i] = expr_new_function(expr_new_symbol(SYM_Power),
                                                pow_args, 2);
         } else {
             /* GEN_NESTED: surface form is borrowed from the input.  Deep-
@@ -4130,16 +4130,16 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
      * num and den modulo it w.r.t. S. */
     Expr* gen_pow_args[2] = { expr_new_symbol(gen_name),
                                expr_new_integer(q) };
-    Expr* gen_pow = expr_new_function(expr_new_symbol("Power"),
+    Expr* gen_pow = expr_new_function(expr_new_symbol(SYM_Power),
                                       gen_pow_args, 2);
     Expr* gen_pow_e = evaluate(gen_pow);
     expr_free(gen_pow);
     Expr* neg_radicand_args[2] = { expr_new_integer(-1),
                                     expr_copy((Expr*)radicand) };
-    Expr* neg_radicand = expr_new_function(expr_new_symbol("Times"),
+    Expr* neg_radicand = expr_new_function(expr_new_symbol(SYM_Times),
                                             neg_radicand_args, 2);
     Expr* relation_args[2] = { gen_pow_e, neg_radicand };
-    Expr* relation_call = expr_new_function(expr_new_symbol("Plus"),
+    Expr* relation_call = expr_new_function(expr_new_symbol(SYM_Plus),
                                              relation_args, 2);
     Expr* relation = evaluate(relation_call);
     expr_free(relation_call);
@@ -4217,7 +4217,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                         Expr* prod_args[2] = { expr_copy(num_reduced),
                                                 expr_copy(u_in_s) };
                         Expr* prod_call = expr_new_function(
-                            expr_new_symbol("Times"), prod_args, 2);
+                            expr_new_symbol(SYM_Times), prod_args, 2);
                         Expr* prod = evaluate(prod_call);
                         expr_free(prod_call);
 
@@ -4253,7 +4253,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                         Expr* dprod_args[2] = { expr_copy(gcd_e),
                                                  prod_den };
                         Expr* dprod_call = expr_new_function(
-                            expr_new_symbol("Times"), dprod_args, 2);
+                            expr_new_symbol(SYM_Times), dprod_args, 2);
                         Expr* new_den_raw = evaluate(dprod_call);
                         expr_free(dprod_call);
                         Expr* den_tg_call = expr_new_function(
@@ -4306,7 +4306,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                                expr_copy(den_reduced),
                                expr_new_symbol(gen_name) };
         Expr* gcd_call = expr_new_function(
-            expr_new_symbol("PolynomialGCD"), gcd_args, 3);
+            expr_new_symbol(SYM_PolynomialGCD), gcd_args, 3);
         Expr* gcd_e = evaluate(gcd_call);
         expr_free(gcd_call);
         /* If gcd is a non-trivial polynomial in S (or params/vars),
@@ -4368,10 +4368,10 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
     } else {
         Expr* inv_args[2] = { den_back, expr_new_integer(-1) };
         Expr* inv = evaluate(expr_new_function(
-            expr_new_symbol("Power"), inv_args, 2));
+            expr_new_symbol(SYM_Power), inv_args, 2));
         Expr* times_args[2] = { num_back, inv };
         result = evaluate(expr_new_function(
-            expr_new_symbol("Times"), times_args, 2));
+            expr_new_symbol(SYM_Times), times_args, 2));
     }
 
     free(rads);

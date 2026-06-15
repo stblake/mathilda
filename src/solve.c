@@ -366,7 +366,7 @@ static size_t collect_and_subst_compound_vars(
         n_subs++;
         new_args[i] = fresh_sym;
     }
-    *vars_out_owned = expr_new_function(expr_new_symbol("List"), new_args, n);
+    *vars_out_owned = expr_new_function(expr_new_symbol(SYM_List), new_args, n);
     if (new_args) free(new_args);
     return n_subs;
 }
@@ -385,7 +385,7 @@ static bool is_multi_var_list(const Expr* vars) {
 /* Wrap a single Expr* (borrowed) in a freshly allocated `List[expr]`.
  * The caller takes ownership of the returned wrapper. */
 static Expr* wrap_in_list(Expr* expr) {
-    return expr_new_function(expr_new_symbol("List"),
+    return expr_new_function(expr_new_symbol(SYM_List),
                              (Expr*[]){ expr_copy(expr) }, 1);
 }
 
@@ -417,7 +417,7 @@ static Expr* try_abs_zero_rewrite(const Expr* expr) {
     if (zero_side->type != EXPR_INTEGER || zero_side->data.integer != 0)
         return NULL;
     Expr* u = abs_side->data.function.args[0];
-    return expr_new_function(expr_new_symbol("Equal"),
+    return expr_new_function(expr_new_symbol(SYM_Equal),
         (Expr*[]){ expr_copy(u), expr_new_integer(0) }, 2);
 }
 
@@ -532,15 +532,15 @@ Expr* builtin_solve(Expr* res) {
      *   False -> {}     (contradiction: no solutions)             */
     Expr* out = NULL;
     if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_True) {
-        Expr* empty = expr_new_function(expr_new_symbol("List"), NULL, 0);
-        out = expr_new_function(expr_new_symbol("List"),
+        Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
+        out = expr_new_function(expr_new_symbol(SYM_List),
                                 (Expr*[]){ empty }, 1);
         expr_free(expr);
         expr_free(vars_subst);
         return out;
     }
     if (expr->type == EXPR_SYMBOL && expr->data.symbol == SYM_False) {
-        out = expr_new_function(expr_new_symbol("List"), NULL, 0);
+        out = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         expr_free(expr);
         expr_free(vars_subst);
         return out;

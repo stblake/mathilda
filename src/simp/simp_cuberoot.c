@@ -267,17 +267,17 @@ static Expr* try_cuberoot_denest(int64_t a_num, int64_t a_den,
                 Expr* p = make_rational(p_n, d);
                 Expr* q = make_rational(q_n, d);
                 Expr* sq_args[2] = { expr_new_integer(c), make_rational(1, 2) };
-                Expr* sq_call = expr_new_function(expr_new_symbol("Power"),
+                Expr* sq_call = expr_new_function(expr_new_symbol(SYM_Power),
                                                   sq_args, 2);
                 Expr* sq = evaluate(sq_call);
                 expr_free(sq_call);
                 Expr* qsq_args[2] = { q, sq };
-                Expr* qsq_call = expr_new_function(expr_new_symbol("Times"),
+                Expr* qsq_call = expr_new_function(expr_new_symbol(SYM_Times),
                                                    qsq_args, 2);
                 Expr* qsq = evaluate(qsq_call);
                 expr_free(qsq_call);
                 Expr* sum_args[2] = { p, qsq };
-                Expr* sum_call = expr_new_function(expr_new_symbol("Plus"),
+                Expr* sum_call = expr_new_function(expr_new_symbol(SYM_Plus),
                                                    sum_args, 2);
                 Expr* sum = evaluate(sum_call);
                 expr_free(sum_call);
@@ -396,7 +396,7 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
                         if (pn == -1) {
                             Expr* recip_args[2] = { d, expr_new_integer(-1) };
                             Expr* recip_call = expr_new_function(
-                                expr_new_symbol("Power"), recip_args, 2);
+                                expr_new_symbol(SYM_Power), recip_args, 2);
                             Expr* recip = evaluate(recip_call);
                             expr_free(recip_call);
                             return recip;
@@ -464,7 +464,7 @@ static Expr* simp_cuberoot_walk(const Expr* e, const AssumeCtx* ctx) {
                     new_pa[out++] = expr_copy(target->data.function.args[k]);
                 }
                 new_pa[out++] = sum_value;
-                Expr* new_plus = expr_new_function(expr_new_symbol("Plus"),
+                Expr* new_plus = expr_new_function(expr_new_symbol(SYM_Plus),
                                                    new_pa, out);
                 Expr* new_eval = evaluate(new_plus);
                 expr_free(new_plus);

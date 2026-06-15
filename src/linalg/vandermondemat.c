@@ -68,7 +68,7 @@ static Expr* vm_entry(Expr* node, int64_t exp) {
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy(node);
     args[1] = expr_new_integer(exp);
-    Expr* p = expr_new_function(expr_new_symbol("Power"), args, 2);
+    Expr* p = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
     free(args);
     return p;
 }
@@ -83,10 +83,10 @@ static Expr* vm_build(int64_t n, int64_t k, Expr* const* nodes) {
         for (int64_t j = 0; j < k; j++) {
             cells[j] = vm_entry(nodes[i], j);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), cells, (size_t)k);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)k);
         free(cells);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, (size_t)n);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
     free(rows);
     return result;
 }

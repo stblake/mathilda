@@ -728,16 +728,16 @@ static Expr* svdm_wrap_cm_complex(const mpfr_t* buf_re, const mpfr_t* buf_im,
                 Expr** ca = (Expr**)malloc(sizeof(Expr*) * 2);
                 ca[0] = svdm_mpfr_to_expr(buf_re[off], bits);
                 ca[1] = svdm_mpfr_to_expr(buf_im[off], bits);
-                elems[j] = expr_new_function(expr_new_symbol("Complex"),
+                elems[j] = expr_new_function(expr_new_symbol(SYM_Complex),
                                                ca, 2);
                 free(ca);
             }
         }
-        row_exprs[i] = expr_new_function(expr_new_symbol("List"),
+        row_exprs[i] = expr_new_function(expr_new_symbol(SYM_List),
                                           elems, (size_t)cols);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   row_exprs, (size_t)rows);
     free(row_exprs);
     return m;
@@ -912,11 +912,11 @@ static Expr* svdm_wrap_cm(const mpfr_t* buf, int rows, int cols, int lda,
             size_t off = (size_t)i + (size_t)j * (size_t)lda;
             elems[j] = svdm_mpfr_to_expr(buf[off], bits);
         }
-        row_exprs[i] = expr_new_function(expr_new_symbol("List"),
+        row_exprs[i] = expr_new_function(expr_new_symbol(SYM_List),
                                           elems, (size_t)cols);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   row_exprs, (size_t)rows);
     free(row_exprs);
     return m;
@@ -942,11 +942,11 @@ static Expr* svdm_sigma_rect(const mpfr_t* sigma, int n, int p,
                 elems[j] = expr_new_mpfr_from_si(0, bits);
             }
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"),
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
                                       elems, (size_t)p);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   rows, (size_t)n);
     free(rows);
     return m;
@@ -1000,7 +1000,7 @@ static Expr* svd_mpfr_dispatch_complex(const SvdArgs* args, int n, int p,
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = u_mat; items[1] = sigma_mat; items[2] = v_mat;
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, 3);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
 
     int mn = (n < p) ? n : p;
@@ -1093,7 +1093,7 @@ Expr* svd_mpfr_dispatch(const SvdArgs* args, int n, int p, int n_a)
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = u_mat; items[1] = sigma_mat; items[2] = v_mat;
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, 3);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
 
     int mn = (n < p) ? n : p;

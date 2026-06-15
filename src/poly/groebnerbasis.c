@@ -485,7 +485,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         if (vars_list->type != EXPR_SYMBOL) return NULL;
         Expr** wrapped = (Expr**)malloc(sizeof(Expr*));
         wrapped[0] = expr_copy(vars_list);
-        wrap_vars = expr_new_function(expr_new_symbol("List"), wrapped, 1);
+        wrap_vars = expr_new_function(expr_new_symbol(SYM_List), wrapped, 1);
         free(wrapped);
         vars_list = wrap_vars;
     }
@@ -496,7 +496,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         }
         Expr** wrapped = (Expr**)malloc(sizeof(Expr*));
         wrapped[0] = expr_copy(elim_list);
-        wrap_elim = expr_new_function(expr_new_symbol("List"), wrapped, 1);
+        wrap_elim = expr_new_function(expr_new_symbol(SYM_List), wrapped, 1);
         free(wrapped);
         elim_list = wrap_elim;
     }
@@ -506,7 +506,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     if (n_polys == 0) {
         if (wrap_vars) expr_free(wrap_vars);
         if (wrap_elim) expr_free(wrap_elim);
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
     /* ---- Parameter and main-variable discovery. -------------------- */
@@ -715,7 +715,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         exprset_free(&params, false);
         if (wrap_vars) expr_free(wrap_vars);
         if (wrap_elim) expr_free(wrap_elim);
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
     /* Fast path: any input is a non-zero constant -> ideal = <1>.  Not
@@ -736,7 +736,7 @@ Expr* builtin_groebner_basis(Expr* res) {
             if (wrap_elim) expr_free(wrap_elim);
             Expr** one = (Expr**)malloc(sizeof(Expr*));
             one[0] = expr_new_integer(1);
-            Expr* lst = expr_new_function(expr_new_symbol("List"), one, 1);
+            Expr* lst = expr_new_function(expr_new_symbol(SYM_List), one, 1);
             free(one);
             return lst;
         }
@@ -828,7 +828,7 @@ Expr* builtin_groebner_basis(Expr* res) {
         if (wrap_elim) expr_free(wrap_elim);
         Expr** one = (Expr**)malloc(sizeof(Expr*));
         one[0] = expr_new_integer(1);
-        Expr* lst = expr_new_function(expr_new_symbol("List"), one, 1);
+        Expr* lst = expr_new_function(expr_new_symbol(SYM_List), one, 1);
         free(one);
         return lst;
     }
@@ -860,7 +860,7 @@ Expr* builtin_groebner_basis(Expr* res) {
     if (wrap_vars) expr_free(wrap_vars);
     if (wrap_elim) expr_free(wrap_elim);
 
-    Expr* lst = expr_new_function(expr_new_symbol("List"), items, out_n);
+    Expr* lst = expr_new_function(expr_new_symbol(SYM_List), items, out_n);
     free(items);
     return lst;
 }

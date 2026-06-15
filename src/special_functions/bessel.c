@@ -48,6 +48,7 @@
  * Attributes: Listable, NumericFunction, Protected, ReadProtected.
  */
 #include "bessel.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -169,7 +170,7 @@ static void bj_cgamma(ncpx* out, const ncpx* a, mpfr_prec_t wp) {
     Expr* re = expr_new_mpfr_copy(a->re);
     Expr* im = expr_new_mpfr_copy(a->im);
     Expr* arg = make_complex(re, im);
-    Expr* call = expr_new_function(expr_new_symbol("Gamma"), (Expr*[]){ arg }, 1);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Gamma), (Expr*[]){ arg }, 1);
     Expr* val = eval_and_free(call);
     bool inexact;
     if (!val || !get_approx_mpfr(val, out->re, out->im, &inexact)) {
@@ -1123,8 +1124,8 @@ static Expr* besselk_two_arg(Expr* order, Expr* z) {
      * K_nu(0) = ComplexInfinity for any other order. */
     if (z->type == EXPR_INTEGER && z->data.integer == 0) {
         if (order->type == EXPR_INTEGER && order->data.integer == 0)
-            return expr_new_symbol("Infinity");
-        return expr_new_symbol("ComplexInfinity");
+            return expr_new_symbol(SYM_Infinity);
+        return expr_new_symbol(SYM_ComplexInfinity);
     }
 
 #ifdef USE_MPFR

@@ -74,7 +74,7 @@ static Expr* subres_det(Expr** p1d, int n, Expr** p2d, int m, int j) {
             int k = c - i;       /* index into descending coeff array */
             elems[c] = (k >= 0 && k <= n) ? expr_copy(p1d[k]) : expr_new_integer(0);
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), elems, (size_t)dim);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), elems, (size_t)dim);
         free(elems);
     }
     for (int i = 0; i < rowsQ; i++) {
@@ -83,11 +83,11 @@ static Expr* subres_det(Expr** p1d, int n, Expr** p2d, int m, int j) {
             int k = c - i;
             elems[c] = (k >= 0 && k <= m) ? expr_copy(p2d[k]) : expr_new_integer(0);
         }
-        rows[rowsP + i] = expr_new_function(expr_new_symbol("List"), elems, (size_t)dim);
+        rows[rowsP + i] = expr_new_function(expr_new_symbol(SYM_List), elems, (size_t)dim);
         free(elems);
     }
 
-    Expr* matrix = expr_new_function(expr_new_symbol("List"), rows, (size_t)dim);
+    Expr* matrix = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)dim);
     free(rows);
 
     Expr* det_call = expr_new_function(expr_new_symbol("Det"), (Expr*[]){matrix}, 1);
@@ -105,7 +105,7 @@ static Expr* subresultants_determinant(Expr** p1d, int n, Expr** p2d, int m) {
     int L = (n < m) ? n : m;
     Expr** psc = (Expr**)malloc(sizeof(Expr*) * (size_t)(L + 1));
     for (int j = 0; j <= L; j++) psc[j] = subres_det(p1d, n, p2d, m, j);
-    Expr* list = expr_new_function(expr_new_symbol("List"), psc, (size_t)(L + 1));
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), psc, (size_t)(L + 1));
     free(psc);
     return list;
 }
@@ -280,7 +280,7 @@ static Expr* subresultants_prs(Expr* e1, Expr* e2, int n, int m, Expr* var) {
         }
 
         for (int j = 0; j <= L; j++) if (!psc[j]) psc[j] = expr_new_integer(0);
-        result = expr_new_function(expr_new_symbol("List"), psc, (size_t)(L + 1));
+        result = expr_new_function(expr_new_symbol(SYM_List), psc, (size_t)(L + 1));
         free(psc);
     }
 

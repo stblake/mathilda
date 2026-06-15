@@ -289,7 +289,7 @@ Expr* builtin_clear_attributes(Expr* res) {
         }
     }
 
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 Expr* builtin_set_attributes(Expr* res) {
@@ -309,7 +309,7 @@ Expr* builtin_set_attributes(Expr* res) {
         }
     }
     
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 Expr* builtin_attributes(Expr* res) {
@@ -344,26 +344,26 @@ Expr* builtin_attributes(Expr* res) {
     Expr** attr_list = malloc(sizeof(Expr*) * count);
     size_t i = 0;
     if (attrs & ATTR_CONSTANT) attr_list[i++] = expr_new_symbol("Constant");
-    if (attrs & ATTR_FLAT) attr_list[i++] = expr_new_symbol("Flat");
+    if (attrs & ATTR_FLAT) attr_list[i++] = expr_new_symbol(SYM_Flat);
     if ((attrs & ATTR_HOLDALL) == ATTR_HOLDALL) {
-        attr_list[i++] = expr_new_symbol("HoldAll");
+        attr_list[i++] = expr_new_symbol(SYM_HoldAll);
     } else {
-        if (attrs & ATTR_HOLDFIRST) attr_list[i++] = expr_new_symbol("HoldFirst");
-        if (attrs & ATTR_HOLDREST) attr_list[i++] = expr_new_symbol("HoldRest");
+        if (attrs & ATTR_HOLDFIRST) attr_list[i++] = expr_new_symbol(SYM_HoldFirst);
+        if (attrs & ATTR_HOLDREST) attr_list[i++] = expr_new_symbol(SYM_HoldRest);
     }
-    if (attrs & ATTR_HOLDALLCOMPLETE) attr_list[i++] = expr_new_symbol("HoldAllComplete");
-    if (attrs & ATTR_LISTABLE) attr_list[i++] = expr_new_symbol("Listable");
-    if (attrs & ATTR_LOCKED) attr_list[i++] = expr_new_symbol("Locked");
-    if (attrs & ATTR_NUMERICFUNCTION) attr_list[i++] = expr_new_symbol("NumericFunction");
-    if (attrs & ATTR_ONEIDENTITY) attr_list[i++] = expr_new_symbol("OneIdentity");
-    if (attrs & ATTR_NHOLDREST) attr_list[i++] = expr_new_symbol("NHoldRest");
-    if (attrs & ATTR_ORDERLESS) attr_list[i++] = expr_new_symbol("Orderless");
-    if (attrs & ATTR_PROTECTED) attr_list[i++] = expr_new_symbol("Protected");
-    if (attrs & ATTR_READPROTECTED) attr_list[i++] = expr_new_symbol("ReadProtected");
-    if (attrs & ATTR_SEQUENCEHOLD) attr_list[i++] = expr_new_symbol("SequenceHold");
-    if (attrs & ATTR_TEMPORARY) attr_list[i++] = expr_new_symbol("Temporary");
+    if (attrs & ATTR_HOLDALLCOMPLETE) attr_list[i++] = expr_new_symbol(SYM_HoldAllComplete);
+    if (attrs & ATTR_LISTABLE) attr_list[i++] = expr_new_symbol(SYM_Listable);
+    if (attrs & ATTR_LOCKED) attr_list[i++] = expr_new_symbol(SYM_Locked);
+    if (attrs & ATTR_NUMERICFUNCTION) attr_list[i++] = expr_new_symbol(SYM_NumericFunction);
+    if (attrs & ATTR_ONEIDENTITY) attr_list[i++] = expr_new_symbol(SYM_OneIdentity);
+    if (attrs & ATTR_NHOLDREST) attr_list[i++] = expr_new_symbol(SYM_NHoldRest);
+    if (attrs & ATTR_ORDERLESS) attr_list[i++] = expr_new_symbol(SYM_Orderless);
+    if (attrs & ATTR_PROTECTED) attr_list[i++] = expr_new_symbol(SYM_Protected);
+    if (attrs & ATTR_READPROTECTED) attr_list[i++] = expr_new_symbol(SYM_ReadProtected);
+    if (attrs & ATTR_SEQUENCEHOLD) attr_list[i++] = expr_new_symbol(SYM_SequenceHold);
+    if (attrs & ATTR_TEMPORARY) attr_list[i++] = expr_new_symbol(SYM_Temporary);
     
-    Expr* result = expr_new_function(expr_new_symbol("List"), attr_list, i);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), attr_list, i);
     free(attr_list);
     return result;
 }

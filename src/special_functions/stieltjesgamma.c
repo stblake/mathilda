@@ -17,6 +17,7 @@
  *
  * Attributes: Listable, Protected. */
 #include "stieltjesgamma.h"
+#include "sym_names.h"
 
 #include <stdbool.h>
 
@@ -28,7 +29,7 @@ Expr* builtin_stieltjesgamma(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     Expr* n = res->data.function.args[0];
     if (n->type == EXPR_INTEGER && n->data.integer == 0)
-        return expr_new_symbol("EulerGamma");
+        return expr_new_symbol(SYM_EulerGamma);
     return NULL; /* inert */
 }
 

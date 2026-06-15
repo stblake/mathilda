@@ -40,11 +40,11 @@ Expr* builtin_identitymatrix(Expr* res) {
                 row_elems[j] = expr_new_integer(0);
             }
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, n);
         free(row_elems);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, m);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, m);
     free(rows);
     return result;
 }
@@ -108,11 +108,11 @@ Expr* builtin_diagonalmatrix(Expr* res) {
                 row_elems[j] = expr_new_integer(0);
             }
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), row_elems, n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), row_elems, n);
         free(row_elems);
     }
 
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, m);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, m);
     free(rows);
     return result;
 }

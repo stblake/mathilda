@@ -143,9 +143,9 @@ static Expr* mk_unary_call(const char* head, Expr* arg) {
 static Expr* mk_div(Expr* num, Expr* den) {
     Expr* inv_args[2] = { den, expr_new_integer(-1) };
     Expr* inv = expr_new_function(
-        expr_new_symbol("Power"), inv_args, 2);
+        expr_new_symbol(SYM_Power), inv_args, 2);
     Expr* args[2] = { num, inv };
-    return expr_new_function(expr_new_symbol("Times"), args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
 }
 
 /* Append rule list entries (RuleDelayed nodes) for the heads that
@@ -192,16 +192,16 @@ static void append_addition_rules_for_triple(Expr* input,
             mk_unary_call("Cos", expr_copy((Expr*)b))
         };
         Expr* sa_cb = expr_new_function(
-            expr_new_symbol("Times"), sa_cb_args, 2);
+            expr_new_symbol(SYM_Times), sa_cb_args, 2);
         Expr* ca_sb_args[2] = {
             mk_unary_call("Cos", expr_copy((Expr*)a)),
             mk_unary_call("Sin", expr_copy((Expr*)b))
         };
         Expr* ca_sb = expr_new_function(
-            expr_new_symbol("Times"), ca_sb_args, 2);
+            expr_new_symbol(SYM_Times), ca_sb_args, 2);
         Expr* sin_args[2] = { sa_cb, ca_sb };
         sin_rhs = expr_new_function(
-            expr_new_symbol("Plus"), sin_args, 2);
+            expr_new_symbol(SYM_Plus), sin_args, 2);
     }
 
     Expr* cos_rhs = NULL;
@@ -211,51 +211,51 @@ static void append_addition_rules_for_triple(Expr* input,
             mk_unary_call("Cos", expr_copy((Expr*)b))
         };
         Expr* ca_cb = expr_new_function(
-            expr_new_symbol("Times"), ca_cb_args, 2);
+            expr_new_symbol(SYM_Times), ca_cb_args, 2);
         Expr* neg_sa_sb_args[3] = {
             expr_new_integer(-1),
             mk_unary_call("Sin", expr_copy((Expr*)a)),
             mk_unary_call("Sin", expr_copy((Expr*)b))
         };
         Expr* neg_sa_sb = expr_new_function(
-            expr_new_symbol("Times"), neg_sa_sb_args, 3);
+            expr_new_symbol(SYM_Times), neg_sa_sb_args, 3);
         Expr* cos_args[2] = { ca_cb, neg_sa_sb };
         cos_rhs = expr_new_function(
-            expr_new_symbol("Plus"), cos_args, 2);
+            expr_new_symbol(SYM_Plus), cos_args, 2);
     }
 
     if (need_sin) {
         Expr* lhs = mk_unary_call("Sin", expr_copy((Expr*)c));
         Expr* rule_args[2] = { lhs, expr_copy(sin_rhs) };
         Expr* rule = expr_new_function(
-            expr_new_symbol("RuleDelayed"), rule_args, 2);
+            expr_new_symbol(SYM_RuleDelayed), rule_args, 2);
         RAPPEND(rule);
     }
     if (need_csc) {
         Expr* lhs = mk_unary_call("Csc", expr_copy((Expr*)c));
         Expr* inv_args[2] = { expr_copy(sin_rhs), expr_new_integer(-1) };
         Expr* inv = expr_new_function(
-            expr_new_symbol("Power"), inv_args, 2);
+            expr_new_symbol(SYM_Power), inv_args, 2);
         Expr* rule_args[2] = { lhs, inv };
         Expr* rule = expr_new_function(
-            expr_new_symbol("RuleDelayed"), rule_args, 2);
+            expr_new_symbol(SYM_RuleDelayed), rule_args, 2);
         RAPPEND(rule);
     }
     if (need_cos) {
         Expr* lhs = mk_unary_call("Cos", expr_copy((Expr*)c));
         Expr* rule_args[2] = { lhs, expr_copy(cos_rhs) };
         Expr* rule = expr_new_function(
-            expr_new_symbol("RuleDelayed"), rule_args, 2);
+            expr_new_symbol(SYM_RuleDelayed), rule_args, 2);
         RAPPEND(rule);
     }
     if (need_sec) {
         Expr* lhs = mk_unary_call("Sec", expr_copy((Expr*)c));
         Expr* inv_args[2] = { expr_copy(cos_rhs), expr_new_integer(-1) };
         Expr* inv = expr_new_function(
-            expr_new_symbol("Power"), inv_args, 2);
+            expr_new_symbol(SYM_Power), inv_args, 2);
         Expr* rule_args[2] = { lhs, inv };
         Expr* rule = expr_new_function(
-            expr_new_symbol("RuleDelayed"), rule_args, 2);
+            expr_new_symbol(SYM_RuleDelayed), rule_args, 2);
         RAPPEND(rule);
     }
     if (need_tan) {
@@ -263,7 +263,7 @@ static void append_addition_rules_for_triple(Expr* input,
         Expr* rhs = mk_div(expr_copy(sin_rhs), expr_copy(cos_rhs));
         Expr* rule_args[2] = { lhs, rhs };
         Expr* rule = expr_new_function(
-            expr_new_symbol("RuleDelayed"), rule_args, 2);
+            expr_new_symbol(SYM_RuleDelayed), rule_args, 2);
         RAPPEND(rule);
     }
     if (need_cot) {
@@ -271,7 +271,7 @@ static void append_addition_rules_for_triple(Expr* input,
         Expr* rhs = mk_div(expr_copy(cos_rhs), expr_copy(sin_rhs));
         Expr* rule_args[2] = { lhs, rhs };
         Expr* rule = expr_new_function(
-            expr_new_symbol("RuleDelayed"), rule_args, 2);
+            expr_new_symbol(SYM_RuleDelayed), rule_args, 2);
         RAPPEND(rule);
     }
 
@@ -314,7 +314,7 @@ static Expr* transform_tan_addition_impl(const Expr* e) {
                 expr_copy(args.items[i]), expr_copy(args.items[j])
             };
             Expr* sum_call = expr_new_function(
-                expr_new_symbol("Plus"), sum_args, 2);
+                expr_new_symbol(SYM_Plus), sum_args, 2);
             Expr* sum = eval_and_free(sum_call);
             if (!sum) continue;
             if (tas_contains(&args, sum)) {
@@ -352,7 +352,7 @@ static Expr* transform_tan_addition_impl(const Expr* e) {
 
     /* Assemble rule list { rule1, rule2, ... } and apply ReplaceAll. */
     Expr* rule_list = expr_new_function(
-        expr_new_symbol("List"), rules, rcount);
+        expr_new_symbol(SYM_List), rules, rcount);
     free(rules);
     Expr* ra_args[2] = { expr_copy((Expr*)e), rule_list };
     Expr* ra_call = expr_new_function(

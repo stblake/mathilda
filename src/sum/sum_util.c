@@ -1,6 +1,7 @@
 /* sum_util.c -- shared helpers for the Sum sub-algorithms. */
 
 #include "sum_internal.h"
+#include "sym_names.h"
 #include "eval.h"
 #include "expr.h"
 #include <string.h>
@@ -16,7 +17,7 @@ Expr* sum_eval(const char* head, Expr** args, size_t n) {
 Expr* sum_int(int64_t v) { return expr_new_integer(v); }
 
 Expr* sum_subst(Expr* e, Expr* var, Expr* val) {
-    Expr* rule = expr_new_function(expr_new_symbol("Rule"),
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
                     (Expr*[]){ expr_copy(var), expr_copy(val) }, 2);
     Expr* args[2] = { expr_copy(e), rule };
     return sum_eval("ReplaceAll", args, 2);
@@ -44,7 +45,7 @@ bool sum_free_of(Expr* e, Expr* var) {
 }
 
 Expr* sum_sub(Expr* a, Expr* b) {
-    Expr* neg = expr_new_function(expr_new_symbol("Times"),
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
                     (Expr*[]){ expr_new_integer(-1), expr_copy(b) }, 2);
     Expr* args[2] = { expr_copy(a), neg };
     return sum_eval("Plus", args, 2);

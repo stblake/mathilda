@@ -194,7 +194,7 @@ static Expr* expr_from_mpz_rational(const mpz_t n, const mpz_t d) {
         Expr* n_expr = expr_from_mpz_int(nn);
         Expr* d_expr = expr_from_mpz_int(dd);
         Expr* args[2] = { n_expr, d_expr };
-        result = expr_new_function(expr_new_symbol("Rational"), args, 2);
+        result = expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
     }
     mpz_clear(nn); mpz_clear(dd); mpz_clear(g);
     return result;

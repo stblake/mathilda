@@ -60,7 +60,7 @@ Expr* transform_trig_roundtrip(const Expr* e) {
     Expr* raw_key = NULL;
     if (memo) {
         Expr* raw_args[1] = { expr_copy((Expr*)e) };
-        raw_key = expr_new_function(expr_new_symbol("TrigRoundtrip"),
+        raw_key = expr_new_function(expr_new_symbol(SYM_TrigRoundtrip),
                                     raw_args, 1);
         const Expr* hit = factor_memo_lookup(memo, raw_key);
         if (hit) {
@@ -79,7 +79,7 @@ Expr* transform_trig_roundtrip(const Expr* e) {
     Expr* canon_key = NULL;
     if (memo) {
         Expr* canon_args[1] = { expr_copy(a) };
-        canon_key = expr_new_function(expr_new_symbol("TrigRoundtrip"),
+        canon_key = expr_new_function(expr_new_symbol(SYM_TrigRoundtrip),
                                       canon_args, 1);
         const Expr* hit = factor_memo_lookup(memo, canon_key);
         if (hit) {

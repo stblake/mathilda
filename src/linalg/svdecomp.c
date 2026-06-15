@@ -273,23 +273,23 @@ bool svd_parse_args(Expr* res, SvdArgs* args) {
  * ------------------------------------------------------------------ */
 static Expr* sv_plus(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Plus"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Plus), (Expr*[]){a, b}, 2));
 }
 static Expr* sv_times(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Times"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Times), (Expr*[]){a, b}, 2));
 }
 static Expr* sv_power(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Power"), (Expr*[]){a, b}, 2));
+        expr_new_symbol(SYM_Power), (Expr*[]){a, b}, 2));
 }
 static Expr* sv_sqrt(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Sqrt"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Sqrt), (Expr*[]){a}, 1));
 }
 static Expr* sv_conjugate(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Conjugate"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Conjugate), (Expr*[]){a}, 1));
 }
 static Expr* sv_together(Expr* a) {
     return eval_and_free(expr_new_function(
@@ -297,11 +297,11 @@ static Expr* sv_together(Expr* a) {
 }
 static Expr* sv_eigenvalues(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Eigenvalues"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Eigenvalues), (Expr*[]){a}, 1));
 }
 static Expr* sv_eigenvectors(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Eigenvectors"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Eigenvectors), (Expr*[]){a}, 1));
 }
 
 /* Squared-norm zero test, robust on Sqrt / rational forms (same idiom
@@ -449,11 +449,11 @@ static Expr* sv_matrix_from_flat(Expr** flat, int rows, int cols) {
         Expr** elems = (Expr**)malloc(sizeof(Expr*) * (size_t)cols);
         for (int j = 0; j < cols; j++) elems[j] = expr_copy(flat[i * cols + j]);
         row_exprs[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)cols);
+            expr_new_symbol(SYM_List), elems, (size_t)cols);
         free(elems);
     }
     Expr* m = expr_new_function(
-        expr_new_symbol("List"), row_exprs, (size_t)rows);
+        expr_new_symbol(SYM_List), row_exprs, (size_t)rows);
     free(row_exprs);
     return m;
 }
@@ -462,9 +462,9 @@ static Expr* sv_matrix_from_flat(Expr** flat, int rows, int cols) {
  * through the evaluator.  Caller owns the result. */
 static Expr* sv_gram(Expr* A_expr, bool use_AHA, bool use_conj) {
     Expr* op   = use_conj
-                 ? expr_new_function(expr_new_symbol("ConjugateTranspose"),
+                 ? expr_new_function(expr_new_symbol(SYM_ConjugateTranspose),
                                      (Expr*[]){expr_copy(A_expr)}, 1)
-                 : expr_new_function(expr_new_symbol("Transpose"),
+                 : expr_new_function(expr_new_symbol(SYM_Transpose),
                                      (Expr*[]){expr_copy(A_expr)}, 1);
     Expr* AT   = eval_and_free(op);
     Expr* lhs  = use_AHA ? AT            : expr_copy(A_expr);
@@ -896,11 +896,11 @@ static Expr* sv_wrap_matrix(Expr** buf, int rows, int cols) {
         if (cols > 0) elems = (Expr**)malloc(sizeof(Expr*) * (size_t)cols);
         for (int j = 0; j < cols; j++) elems[j] = buf[i * cols + j];
         row_exprs[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)cols);
+            expr_new_symbol(SYM_List), elems, (size_t)cols);
         if (elems) free(elems);
     }
     Expr* m = expr_new_function(
-        expr_new_symbol("List"), row_exprs, (size_t)rows);
+        expr_new_symbol(SYM_List), row_exprs, (size_t)rows);
     free(row_exprs);
     return m;
 }
@@ -917,11 +917,11 @@ static Expr* sv_build_sigma_rect(Expr** S_flat, int g, int n, int p) {
             else                  elems[j] = expr_new_integer(0);
         }
         rows[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)p);
+            expr_new_symbol(SYM_List), elems, (size_t)p);
         free(elems);
     }
     Expr* m = expr_new_function(
-        expr_new_symbol("List"), rows, (size_t)n);
+        expr_new_symbol(SYM_List), rows, (size_t)n);
     free(rows);
     return m;
 }
@@ -1043,7 +1043,7 @@ Expr* svd_symbolic_dispatch(const SvdArgs* args, int n, int p, int n_a) {
     /* Build {u, sigma, v}. */
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = u_mat; items[1] = sigma_mat; items[2] = v_mat;
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, 3);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
 
     return svd_apply_postprocess(result, args, n, p, rank);
@@ -1106,11 +1106,11 @@ static bool sv_below_tol(Expr* e, Expr* tol) {
      * it reliably handles every numeric type (Integer, Real, MPFR,
      * Rational) without bespoke arithmetic. */
     Expr* lhs = eval_and_free(expr_new_function(
-        expr_new_symbol("Abs"), (Expr*[]){expr_copy(e)}, 1));
+        expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(e)}, 1));
     Expr* rhs = eval_and_free(expr_new_function(
-        expr_new_symbol("Abs"), (Expr*[]){expr_copy(tol)}, 1));
+        expr_new_symbol(SYM_Abs), (Expr*[]){expr_copy(tol)}, 1));
     Expr* cmp = eval_and_free(expr_new_function(
-        expr_new_symbol("Less"), (Expr*[]){lhs, rhs}, 2));
+        expr_new_symbol(SYM_Less), (Expr*[]){lhs, rhs}, 2));
     bool below = (cmp->type == EXPR_SYMBOL
                   && strcmp(cmp->data.symbol, "True") == 0);
     expr_free(cmp);
@@ -1153,11 +1153,11 @@ static Expr* sv_slice_cols(Expr* src, int n, int col_lo, int k) {
         for (int j = 0; j < k; j++) {
             elems[j] = expr_copy(sv_matrix_get(src, i, col_lo + j));
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"),
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
                                       elems, (size_t)k);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   rows, (size_t)n);
     free(rows);
     return m;
@@ -1178,11 +1178,11 @@ static Expr* sv_build_sigma_square(Expr* sigma_full, int idx_lo, int k) {
                 elems[j] = expr_new_integer(0);
             }
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"),
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List),
                                       elems, (size_t)k);
         free(elems);
     }
-    Expr* m = expr_new_function(expr_new_symbol("List"),
+    Expr* m = expr_new_function(expr_new_symbol(SYM_List),
                                   rows, (size_t)k);
     free(rows);
     return m;
@@ -1196,7 +1196,7 @@ static Expr* sv_wrap_diag(Expr* sq_sigma, int k) {
     for (int i = 0; i < k; i++) {
         diag[i] = expr_copy(sv_matrix_get(sq_sigma, i, i));
     }
-    Expr* diag_list = expr_new_function(expr_new_symbol("List"),
+    Expr* diag_list = expr_new_function(expr_new_symbol(SYM_List),
                                           diag, (size_t)k);
     free(diag);
     expr_free(sq_sigma);

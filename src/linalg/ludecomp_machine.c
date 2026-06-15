@@ -177,7 +177,7 @@ static Expr* lu_mach_make_scalar(double re, double im, bool is_complex)
     Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
     args[0] = expr_new_real(re);
     args[1] = expr_new_real(im);
-    Expr* z = expr_new_function(expr_new_symbol("Complex"), args, 2);
+    Expr* z = expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
     free(args);
     return z;
 }
@@ -201,11 +201,11 @@ static Expr* lu_mach_build_lu(const double* A_cm, int rows, int cols,
             elems[j] = lu_mach_make_scalar(re, im, is_complex);
         }
         row_exprs[i] = expr_new_function(
-            expr_new_symbol("List"), elems, (size_t)cols);
+            expr_new_symbol(SYM_List), elems, (size_t)cols);
         free(elems);
     }
     Expr* lu = expr_new_function(
-        expr_new_symbol("List"), row_exprs, (size_t)rows);
+        expr_new_symbol(SYM_List), row_exprs, (size_t)rows);
     free(row_exprs);
     return lu;
 }
@@ -232,7 +232,7 @@ static Expr* lu_mach_build_perm(const int* ipiv, int rows, int ipiv_len)
     Expr** elems = (Expr**)malloc((size_t)rows * sizeof(Expr*));
     for (int i = 0; i < rows; i++) elems[i] = expr_new_integer(perm[i]);
     Expr* p = expr_new_function(
-        expr_new_symbol("List"), elems, (size_t)rows);
+        expr_new_symbol(SYM_List), elems, (size_t)rows);
     free(elems);
     free(perm);
     return p;
@@ -360,7 +360,7 @@ Expr* lu_machine_dispatch(Expr* m, int rows, int cols)
 
     Expr** items = (Expr**)malloc(sizeof(Expr*) * 3);
     items[0] = lu; items[1] = p; items[2] = c;
-    Expr* result = expr_new_function(expr_new_symbol("List"), items, 3);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), items, 3);
     free(items);
     return result;
 #endif /* USE_LAPACK */

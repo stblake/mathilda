@@ -39,11 +39,11 @@ static Expr* falling_factorial(Expr* var, int k) {
         if (j == 0) {
             factors[j] = expr_copy(var);
         } else {
-            factors[j] = expr_new_function(expr_new_symbol("Plus"),
+            factors[j] = expr_new_function(expr_new_symbol(SYM_Plus),
                 (Expr*[]){ expr_copy(var), sum_int(-j) }, 2);
         }
     }
-    Expr* prod = expr_new_function(expr_new_symbol("Times"), factors, k + 1);
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times), factors, k + 1);
     free(factors);
     return prod;
 }
@@ -91,14 +91,14 @@ static Expr* antidifference(Expr* f_in, Expr* var) {
         int64_t fact = 1;
         for (int j = 2; j <= k + 1; j++) fact *= j;   /* (k+1)! */
         Expr* prod = falling_factorial(var, k);
-        Expr* invf = expr_new_function(expr_new_symbol("Power"),
+        Expr* invf = expr_new_function(expr_new_symbol(SYM_Power),
                         (Expr*[]){ sum_int(fact), sum_int(-1) }, 2);
-        terms[k] = expr_new_function(expr_new_symbol("Times"),
+        terms[k] = expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ delta0[k], prod, invf }, 3);
     }
     free(delta0);
 
-    Expr* sum = expr_new_function(expr_new_symbol("Plus"), terms, d + 1);
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), terms, d + 1);
     free(terms);
     Expr* F = evaluate(sum);
     expr_free(sum);
@@ -124,7 +124,7 @@ Expr* builtin_sum_polynomial(Expr* res) {
     }
 
     /* Definite: F(imax+1) - F(imin). */
-    Expr* up = expr_new_function(expr_new_symbol("Plus"),
+    Expr* up = expr_new_function(expr_new_symbol(SYM_Plus),
                   (Expr*[]){ expr_copy(imax), sum_int(1) }, 2);
     Expr* Fhi = sum_subst(F, var, up);
     Expr* Flo = sum_subst(F, var, imin);

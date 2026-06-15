@@ -30,6 +30,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "inverfc.h"
+#include "sym_names.h"
 
 #include <math.h>
 #include <stdbool.h>
@@ -64,8 +65,8 @@ static bool ifc_is_symbol(const Expr* e, const char* name) {
 
 /* Build -Infinity, represented (as elsewhere in Mathilda) as Times[-1, Infinity]. */
 static Expr* ifc_neg_infinity(void) {
-    return expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_new_integer(-1), expr_new_symbol("Infinity") }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
 }
 
 /* ------------------------------------------------------------------ */
@@ -154,18 +155,18 @@ static void inverfc_mpfr(mpfr_t out, const mpfr_t s, mpfr_prec_t target) {
 static Expr* inverfc_one_arg(Expr* arg) {
     /* 1. Exact special values. */
     if (arg->type == EXPR_INTEGER) {
-        if (arg->data.integer == 0) return expr_new_symbol("Infinity");   /* +Inf */
+        if (arg->data.integer == 0) return expr_new_symbol(SYM_Infinity);   /* +Inf */
         if (arg->data.integer == 1) return expr_new_integer(0);           /* 0    */
         if (arg->data.integer == 2) return ifc_neg_infinity();            /* -Inf */
         return NULL;                          /* out of domain [0, 2] */
     }
-    if (ifc_is_symbol(arg, "Indeterminate")) return expr_new_symbol("Indeterminate");
+    if (ifc_is_symbol(arg, "Indeterminate")) return expr_new_symbol(SYM_Indeterminate);
 
     /* 2. Machine real (only inside the real domain [0, 2]). */
     if (arg->type == EXPR_REAL) {
         double x = arg->data.real;
         if (x < 0.0 || x > 2.0) return NULL;             /* out of domain */
-        if (x == 0.0) return expr_new_symbol("Infinity");
+        if (x == 0.0) return expr_new_symbol(SYM_Infinity);
         if (x == 2.0) return ifc_neg_infinity();
         return expr_new_real(inverfc_double(x));
     }
@@ -176,7 +177,7 @@ static Expr* inverfc_one_arg(Expr* arg) {
         int lo = mpfr_cmp_ui(arg->data.mpfr, 0);         /* s vs 0 */
         int hi = mpfr_cmp_ui(arg->data.mpfr, 2);         /* s vs 2 */
         if (lo < 0 || hi > 0) return NULL;               /* out of domain */
-        if (lo == 0) return expr_new_symbol("Infinity");
+        if (lo == 0) return expr_new_symbol(SYM_Infinity);
         if (hi == 0) return ifc_neg_infinity();
         mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
         Expr* out = expr_new_mpfr_bits(prec);

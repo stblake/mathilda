@@ -248,7 +248,7 @@ Expr* direct_build_real_eigenvalue_list(const double* vals, size_t n,
     for (size_t i = 0; i < n; i++) {
         items[i] = expr_new_real(vals[perm[i]]);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return out;
 }
@@ -266,10 +266,10 @@ Expr* direct_build_real_eigenvector_list(const double* Q, size_t n,
         for (size_t i = 0; i < n; i++) {
             comps[i] = expr_new_real(Q[i * n + col]);
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, n);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
     return out;
 }
@@ -709,12 +709,12 @@ Expr* direct_build_complex_eigenvalue_list(const double* re,
             Expr** comp_args = (Expr**)malloc(sizeof(Expr*) * 2);
             comp_args[0] = expr_new_real(re[idx]);
             comp_args[1] = expr_new_real(im[idx]);
-            items[i] = expr_new_function(expr_new_symbol("Complex"),
+            items[i] = expr_new_function(expr_new_symbol(SYM_Complex),
                                           comp_args, 2);
             free(comp_args);
         }
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return out;
 }
@@ -974,14 +974,14 @@ static Expr* direct_build_complex_eigenvector_list(const double* V_re,
                 Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
                 args[0] = expr_new_real(r);
                 args[1] = expr_new_real(m);
-                comps[i] = expr_new_function(expr_new_symbol("Complex"), args, 2);
+                comps[i] = expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
                 free(args);
             }
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, n);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
     return out;
 }
@@ -1379,14 +1379,14 @@ Expr* direct_build_complex_hermitian_eigvec_list(const double* V_re,
                 Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
                 args[0] = expr_new_real(rv);
                 args[1] = expr_new_real(iv);
-                comps[i] = expr_new_function(expr_new_symbol("Complex"), args, 2);
+                comps[i] = expr_new_function(expr_new_symbol(SYM_Complex), args, 2);
                 free(args);
             }
         }
-        rows[r] = expr_new_function(expr_new_symbol("List"), comps, n);
+        rows[r] = expr_new_function(expr_new_symbol(SYM_List), comps, n);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
     return out;
 }
@@ -2038,7 +2038,7 @@ Expr* direct_build_real_eigenvalue_list_M(const mpfr_t* vals, size_t n,
     for (size_t i = 0; i < n; i++) {
         items[i] = expr_new_mpfr_copy(vals[perm[i]]);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return out;
 }
@@ -2053,10 +2053,10 @@ Expr* direct_build_real_eigenvector_list_M(const mpfr_t* Q, size_t n,
         for (size_t i = 0; i < n; i++) {
             comps[i] = expr_new_mpfr_copy(Q[i * n + col]);
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, n);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
     return out;
 }
@@ -2069,7 +2069,7 @@ static Expr* direct_real_sym_mpfr(const MatM* A, MateigenWant want,
     bool want_Q = (want & MATEIGEN_WANT_VECTORS) != 0;
 
     if (n == 0) {
-        Expr* empty = expr_new_function(expr_new_symbol("List"), NULL, 0);
+        Expr* empty = expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
         return direct_apply_k_spec_list(empty, k_spec);
     }
 
@@ -2701,12 +2701,12 @@ Expr* direct_build_complex_eigenvalue_list_M(const mpfr_t* re,
             Expr** comp_args = (Expr**)malloc(sizeof(Expr*) * 2);
             comp_args[0] = expr_new_mpfr_copy(re[idx]);
             comp_args[1] = expr_new_mpfr_copy(im[idx]);
-            items[i] = expr_new_function(expr_new_symbol("Complex"),
+            items[i] = expr_new_function(expr_new_symbol(SYM_Complex),
                                           comp_args, 2);
             free(comp_args);
         }
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return out;
 }
@@ -3107,15 +3107,15 @@ static Expr* direct_build_complex_eigenvector_list_M(const mpfr_t* V_re,
                 Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
                 args[0] = expr_new_mpfr_copy(V_re[k * n + i]);
                 args[1] = expr_new_mpfr_copy(V_im[k * n + i]);
-                comps[i] = expr_new_function(expr_new_symbol("Complex"),
+                comps[i] = expr_new_function(expr_new_symbol(SYM_Complex),
                                               args, 2);
                 free(args);
             }
         }
-        rows[k] = expr_new_function(expr_new_symbol("List"), comps, n);
+        rows[k] = expr_new_function(expr_new_symbol(SYM_List), comps, n);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
     return out;
 }
@@ -3503,15 +3503,15 @@ Expr* direct_build_complex_hermitian_eigvec_list_M(const mpfr_t* V_re,
                 Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
                 args[0] = expr_new_mpfr_copy(V_re[i * n + col]);
                 args[1] = expr_new_mpfr_copy(V_im[i * n + col]);
-                comps[i] = expr_new_function(expr_new_symbol("Complex"),
+                comps[i] = expr_new_function(expr_new_symbol(SYM_Complex),
                                               args, 2);
                 free(args);
             }
         }
-        rows[r] = expr_new_function(expr_new_symbol("List"), comps, n);
+        rows[r] = expr_new_function(expr_new_symbol(SYM_List), comps, n);
         free(comps);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), rows, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), rows, n);
     free(rows);
     return out;
 }

@@ -295,14 +295,14 @@ static Expr* apply_pow10_scale(Expr* val, long exp) {
         mpz_clear(pow10);
 
         Expr* rargs[2] = { num, den };
-        return expr_new_function(expr_new_symbol("Rational"), rargs, 2);
+        return expr_new_function(expr_new_symbol(SYM_Rational), rargs, 2);
     }
 
     /* Fallback for any other numeric atom: leave it to the evaluator. */
     Expr* p_args[2] = { expr_new_integer(10), expr_new_integer((int64_t)exp) };
-    Expr* p = expr_new_function(expr_new_symbol("Power"), p_args, 2);
+    Expr* p = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
     Expr* t_args[2] = { val, p };
-    return expr_new_function(expr_new_symbol("Times"), t_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
 }
 
 // Parses numbers (integers, reals, scientific notation), plus optional
@@ -626,7 +626,7 @@ static Expr* parse_list(ParserState* s) {
     s->pos++;  // Skip '}'
 
     // Create List[...] expression
-    Expr* list = expr_new_function(expr_new_symbol("List"), elements, count);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), elements, count);
     free(elements);
     return list;
 }
@@ -667,9 +667,9 @@ static Expr* parse_function(ParserState* s, Expr* head) {
     if (head && head->type == EXPR_SYMBOL && head->data.symbol == SYM_Sqrt && count == 1) {
         expr_free(head);
         Expr* rat_args[2] = { expr_new_integer(1), expr_new_integer(2) };
-        Expr* half = expr_new_function(expr_new_symbol("Rational"), rat_args, 2);
+        Expr* half = expr_new_function(expr_new_symbol(SYM_Rational), rat_args, 2);
         Expr* pow_args[2] = { args[0], half };
-        Expr* result = expr_new_function(expr_new_symbol("Power"), pow_args, 2);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_Power), pow_args, 2);
         free(args);
         return result;
     }
@@ -927,10 +927,10 @@ static Expr* parse_primary(ParserState* s) {
             }
             if (count == 1) {
                 Expr* args[1] = { expr_new_integer(n) };
-                return expr_new_function(expr_new_symbol("Slot"), args, 1);
+                return expr_new_function(expr_new_symbol(SYM_Slot), args, 1);
             } else {
                 Expr* args[1] = { expr_new_integer(n) };
-                return expr_new_function(expr_new_symbol("SlotSequence"), args, 1);
+                return expr_new_function(expr_new_symbol(SYM_SlotSequence), args, 1);
             }
         }
         
@@ -959,16 +959,16 @@ static Expr* parse_primary(ParserState* s) {
                     if (blank_head) args_b[0] = blank_head;
                     
                     if (underscores == 1) {
-                        blank = expr_new_function(expr_new_symbol("Blank"), blank_head ? args_b : NULL, n_args);
+                        blank = expr_new_function(expr_new_symbol(SYM_Blank), blank_head ? args_b : NULL, n_args);
                     } else if (underscores == 2) {
-                        blank = expr_new_function(expr_new_symbol("BlankSequence"), blank_head ? args_b : NULL, n_args);
+                        blank = expr_new_function(expr_new_symbol(SYM_BlankSequence), blank_head ? args_b : NULL, n_args);
                     } else {
-                        blank = expr_new_function(expr_new_symbol("BlankNullSequence"), blank_head ? args_b : NULL, n_args);
+                        blank = expr_new_function(expr_new_symbol(SYM_BlankNullSequence), blank_head ? args_b : NULL, n_args);
                     }
                     
                     if (head) {
                         Expr* args[2] = { head, blank };
-                        head = expr_new_function(expr_new_symbol("Pattern"), args, 2);
+                        head = expr_new_function(expr_new_symbol(SYM_Pattern), args, 2);
                     } else {
                         head = blank;
                     }
@@ -976,7 +976,7 @@ static Expr* parse_primary(ParserState* s) {
                     if (*s->pos == '.') {
                         s->pos++;
                         Expr* opt_args[1] = { head };
-                        head = expr_new_function(expr_new_symbol("Optional"), opt_args, 1);
+                        head = expr_new_function(expr_new_symbol(SYM_Optional), opt_args, 1);
                     }
                 }
                 
@@ -1079,13 +1079,13 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         if (!right) return NULL;
         Expr* minus_one = expr_new_integer(-1);
         Expr* args[2] = { minus_one, right };
-        left = expr_new_function(expr_new_symbol("Times"), args, 2);
+        left = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
     } else if (*s->pos == '!' && s->pos[1] != '=') {
         s->pos++;
         Expr* right = parse_expression_prec(s, 230); // Not precedence is 230
         if (!right) return NULL;
         Expr* args[1] = { right };
-        left = expr_new_function(expr_new_symbol("Not"), args, 1);
+        left = expr_new_function(expr_new_symbol(SYM_Not), args, 1);
     } else {
         left = parse_primary(s);
     }
@@ -1136,7 +1136,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             }
             if (!tag) { expr_free(left); return NULL; }
             Expr* args[2] = { left, tag };
-            left = expr_new_function(expr_new_symbol("MessageName"), args, 2);
+            left = expr_new_function(expr_new_symbol(SYM_MessageName), args, 2);
             continue;
         }
 
@@ -1163,7 +1163,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 return NULL;
             }
             s->pos += 2; // skip ']]'
-            left = expr_new_function(expr_new_symbol("Part"), args, count);
+            left = expr_new_function(expr_new_symbol(SYM_Part), args, count);
             continue;
         } else if (op_def.type == OP_CALL) {
             s->pos--; // parse_function expects '[' to be there
@@ -1172,7 +1172,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             continue;
         } else if (op_def.type == OP_FUNCTION) {
             Expr* args[1] = { left };
-            left = expr_new_function(expr_new_symbol("Function"), args, 1);
+            left = expr_new_function(expr_new_symbol(SYM_Function), args, 1);
             continue;
         } else if (op_def.type == OP_FACTORIAL) {
             Expr* args[1] = { left };
@@ -1187,7 +1187,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             int n = 1;
             while (*s->pos == '\'') { n++; s->pos++; }
             Expr* order_args[1] = { expr_new_integer(n) };
-            Expr* deriv_head = expr_new_function(expr_new_symbol("Derivative"), order_args, 1);
+            Expr* deriv_head = expr_new_function(expr_new_symbol(SYM_Derivative), order_args, 1);
             Expr* f_args[1] = { left };
             left = expr_new_function(deriv_head, f_args, 1);
             continue;
@@ -1202,15 +1202,15 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         } else if (op_def.type == OP_UNSET) {
             /* Postfix `lhs =.` -> Unset[lhs]. */
             Expr* args[1] = { left };
-            left = expr_new_function(expr_new_symbol("Unset"), args, 1);
+            left = expr_new_function(expr_new_symbol(SYM_Unset), args, 1);
             continue;
         } else if (op_def.type == OP_REPEATED) {
             Expr* args[1] = { left };
-            left = expr_new_function(expr_new_symbol("Repeated"), args, 1);
+            left = expr_new_function(expr_new_symbol(SYM_Repeated), args, 1);
             continue;
         } else if (op_def.type == OP_REPEATEDNULL) {
             Expr* args[1] = { left };
-            left = expr_new_function(expr_new_symbol("RepeatedNull"), args, 1);
+            left = expr_new_function(expr_new_symbol(SYM_RepeatedNull), args, 1);
             continue;
         } else if (op_def.type == OP_PUT || op_def.type == OP_PUTAPPEND) {
             /* Right side of `>>` / `>>>` is a filename — either a quoted
@@ -1256,10 +1256,10 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             skip_whitespace(s);
             Expr* right = NULL;
             if (*s->pos == ']' || *s->pos == ',' || *s->pos == '}' || *s->pos == '\0' || *s->pos == ';' || strncmp(s->pos, ";;", 2) == 0) {
-                right = expr_new_symbol("All");
+                right = expr_new_symbol(SYM_All);
             } else {
                 right = parse_expression_prec(s, next_prec);
-                if (!right) right = expr_new_symbol("All");
+                if (!right) right = expr_new_symbol(SYM_All);
             }
             span_args[1] = right;
             
@@ -1269,15 +1269,15 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                 skip_whitespace(s);
                 Expr* step = NULL;
                 if (*s->pos == ']' || *s->pos == ',' || *s->pos == '}' || *s->pos == '\0' || *s->pos == ';') {
-                    step = expr_new_symbol("All");
+                    step = expr_new_symbol(SYM_All);
                 } else {
                     step = parse_expression_prec(s, next_prec);
-                    if (!step) step = expr_new_symbol("All");
+                    if (!step) step = expr_new_symbol(SYM_All);
                 }
                 span_args[2] = step;
-                left = expr_new_function(expr_new_symbol("Span"), span_args, 3);
+                left = expr_new_function(expr_new_symbol(SYM_Span), span_args, 3);
             } else {
-                left = expr_new_function(expr_new_symbol("Span"), span_args, 2);
+                left = expr_new_function(expr_new_symbol(SYM_Span), span_args, 2);
             }
             continue;
         }
@@ -1287,7 +1287,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         Expr* right = parse_expression_prec(s, next_min_prec);
         if (!right) {
             if (op_def.type == OP_COMPOUND) {
-                right = expr_new_symbol("Null");
+                right = expr_new_symbol(SYM_Null);
             } else {
                 expr_free(left);
                 return NULL;
@@ -1297,28 +1297,28 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         if (op_def.type == OP_MINUS) {
             Expr* minus_one = expr_new_integer(-1);
             Expr* args_times[2] = { minus_one, right };
-            Expr* neg_right = expr_new_function(expr_new_symbol("Times"), args_times, 2);
+            Expr* neg_right = expr_new_function(expr_new_symbol(SYM_Times), args_times, 2);
             if (extend_flat_head(left, "Plus", neg_right)) {
                 /* left is now the extended Plus; keep it */
             } else {
                 Expr* args_plus[2] = { left, neg_right };
-                left = expr_new_function(expr_new_symbol("Plus"), args_plus, 2);
+                left = expr_new_function(expr_new_symbol(SYM_Plus), args_plus, 2);
             }
         } else if (op_def.type == OP_DIVIDE) {
             if (left->type == EXPR_INTEGER && right->type == EXPR_INTEGER) {
                 Expr* rat_args[2] = { left, right };
-                left = expr_new_function(expr_new_symbol("Rational"), rat_args, 2);
+                left = expr_new_function(expr_new_symbol(SYM_Rational), rat_args, 2);
             } else {
                 Expr* minus_one = expr_new_integer(-1);
                 Expr* args_power[2] = { right, minus_one };
-                Expr* inv_right = expr_new_function(expr_new_symbol("Power"), args_power, 2);
+                Expr* inv_right = expr_new_function(expr_new_symbol(SYM_Power), args_power, 2);
                 
                 if (left->type == EXPR_INTEGER && left->data.integer == 1) {
                     expr_free(left);
                     left = inv_right;
                 } else {
                     Expr* args_times[2] = { left, inv_right };
-                    left = expr_new_function(expr_new_symbol("Times"), args_times, 2);
+                    left = expr_new_function(expr_new_symbol(SYM_Times), args_times, 2);
                 }
             }
         } else if (op_def.type == OP_APPLY) {
@@ -1326,7 +1326,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             left = expr_new_function(expr_new_symbol("Apply"), args, 2);
         } else if (op_def.type == OP_APPLY1) {
             Expr* level_args[1] = { expr_new_integer(1) };
-            Expr* level = expr_new_function(expr_new_symbol("List"), level_args, 1);
+            Expr* level = expr_new_function(expr_new_symbol(SYM_List), level_args, 1);
             Expr* args[3] = { left, right, level };
             left = expr_new_function(expr_new_symbol("Apply"), args, 3);
         } else if (op_def.type == OP_MAP) {
@@ -1343,10 +1343,10 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             left = expr_new_function(expr_new_symbol("ReplaceRepeated"), args, 2);
         } else if (op_def.type == OP_ALTERNATIVES) {
             Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol("Alternatives"), args, 2);
+            left = expr_new_function(expr_new_symbol(SYM_Alternatives), args, 2);
         } else if (op_def.type == OP_CONDITION) {
             Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol("Condition"), args, 2);
+            left = expr_new_function(expr_new_symbol(SYM_Condition), args, 2);
         } else if (op_def.type == OP_POSTFIX) {
             Expr* args[1] = { left };
             left = expr_new_function(right, args, 1);
@@ -1356,10 +1356,10 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         } else if (op_def.type == OP_COLON) {
             if (left->type == EXPR_SYMBOL) {
                 Expr* args[2] = { left, right };
-                left = expr_new_function(expr_new_symbol("Pattern"), args, 2);
+                left = expr_new_function(expr_new_symbol(SYM_Pattern), args, 2);
             } else {
                 Expr* args[2] = { left, right };
-                left = expr_new_function(expr_new_symbol("Optional"), args, 2);
+                left = expr_new_function(expr_new_symbol(SYM_Optional), args, 2);
             }
         } else {
             /* Chained comparisons. `a < b <= c == d > e` is left-associated
@@ -1400,7 +1400,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
                     expr_new_symbol(op_def.head_name),
                     right
                 };
-                left = expr_new_function(expr_new_symbol("Inequality"), args, 5);
+                left = expr_new_function(expr_new_symbol(SYM_Inequality), args, 5);
             }
             /* Flatten repeated Plus/Times at parse time so that held
              * expressions reflect the n-ary form (a+b+c -> Plus[a,b,c]). */

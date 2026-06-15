@@ -84,7 +84,7 @@ static void ctx_walk(AssumeCtx* ctx, const Expr* a) {
                     expr_copy(xs->data.function.args[i]),
                     expr_copy((Expr*)dom)
                 };
-                Expr* fact = expr_new_function(expr_new_symbol("Element"),
+                Expr* fact = expr_new_function(expr_new_symbol(SYM_Element),
                                                sub_args, 2);
                 ctx_push(ctx, fact);
                 expr_free(fact);

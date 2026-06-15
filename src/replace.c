@@ -46,7 +46,7 @@ static void parse_single_rule(Expr* rule_expr, RawRule** rules, size_t* cap, siz
         }
     } else {
         Expr* lhs_copy = expr_copy(lhs);
-        Expr* wrapped = expr_new_function(expr_new_symbol("List"), &lhs_copy, 1);
+        Expr* wrapped = expr_new_function(expr_new_symbol(SYM_List), &lhs_copy, 1);
         add_raw_rule(rules, cap, count, wrapped, rhs, delayed);
         expr_free(wrapped);
     }
@@ -104,7 +104,7 @@ static bool check_match(RawRule* rules, size_t num_rules, PathElement* path, siz
         for (size_t d = 0; d < depth; d++) {
             alias_args[d] = expr_new_integer(path[d].pos_index);
         }
-        Expr* alias_expr = expr_new_function(expr_new_symbol("List"), alias_args, depth);
+        Expr* alias_expr = expr_new_function(expr_new_symbol(SYM_List), alias_args, depth);
 
         /* Normalize any negative indices in the rule's pos_spec to positive */
         Expr* norm_spec = normalize_pos_spec(rules[r].pos_spec, path, depth);
@@ -325,7 +325,7 @@ static Expr* apply_replace_nested(Expr* expr, Expr* rules_expr, int64_t min_l, i
             for (size_t i = 0; i < count; i++) {
                 args[i] = apply_replace_nested(expr, rules_expr->data.function.args[i], min_l, max_l, heads);
             }
-            Expr* res = expr_new_function(expr_new_symbol("List"), args, count);
+            Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
             return res;
         }
@@ -438,7 +438,7 @@ static Expr* apply_replace_all_nested(Expr* expr, Expr* rules_expr) {
             for (size_t i = 0; i < count; i++) {
                 args[i] = apply_replace_all_nested(expr, rules_expr->data.function.args[i]);
             }
-            Expr* res = expr_new_function(expr_new_symbol("List"), args, count);
+            Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
             return res;
         }
@@ -492,7 +492,7 @@ static Expr* apply_replace_repeated_nested(Expr* expr, Expr* rules_expr) {
             for (size_t i = 0; i < count; i++) {
                 args[i] = apply_replace_repeated_nested(expr, rules_expr->data.function.args[i]);
             }
-            Expr* res = expr_new_function(expr_new_symbol("List"), args, count);
+            Expr* res = expr_new_function(expr_new_symbol(SYM_List), args, count);
             free(args);
             return res;
         }
@@ -614,7 +614,7 @@ Expr* builtin_replacelist(Expr* res) {
     
     free(rules);
     
-    Expr* list = expr_new_function(expr_new_symbol("List"), state.results, state.count);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), state.results, state.count);
     free(state.results);
     return list;
 }

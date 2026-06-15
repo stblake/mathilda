@@ -111,7 +111,7 @@ EvalReturnAction eval_classify_return(Expr* e,
 
     /* Return[]: yield Null at the nearest boundary. */
     if (argc == 0) {
-        if (out_value) *out_value = expr_new_symbol("Null");
+        if (out_value) *out_value = expr_new_symbol(SYM_Null);
         return EVAL_RETURN_CONSUME;
     }
 
@@ -326,7 +326,7 @@ static Expr* apply_listable(Expr* e) {
 
     /* Empty list: thread to an empty list without per-element work. */
     if (list_len == 0) {
-        return expr_new_function(expr_new_symbol("List"), NULL, 0);
+        return expr_new_function(expr_new_symbol(SYM_List), NULL, 0);
     }
 
     /* Construct a new List containing the threaded evaluations */
@@ -362,7 +362,7 @@ static Expr* apply_listable(Expr* e) {
         expr_free(tmp);
     }
     
-    Expr* final_res = expr_new_function(expr_new_symbol("List"), new_list_args, list_len);
+    Expr* final_res = expr_new_function(expr_new_symbol(SYM_List), new_list_args, list_len);
     free(new_list_args);
     return final_res;
 }
@@ -577,7 +577,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
                 Expr** cond_args = malloc(sizeof(Expr*) * 2);
                 cond_args[0] = expr_copy(lhs);
                 cond_args[1] = expr_copy(rhs->data.function.args[1]);
-                actual_pattern = expr_new_function(expr_new_symbol("Condition"), cond_args, 2);
+                actual_pattern = expr_new_function(expr_new_symbol(SYM_Condition), cond_args, 2);
                 free(cond_args);
                 /* The actual replacement is just the body */
                 actual_rhs = rhs->data.function.args[0];
@@ -923,7 +923,7 @@ Expr* evaluate_step(Expr* e, bool* changed) {
                     }
 
                     if (apply_assignment(target_lhs, rhs, is_delayed)) {
-                        Expr* ret = is_delayed ? expr_new_symbol("Null") : evaluate(rhs);
+                        Expr* ret = is_delayed ? expr_new_symbol(SYM_Null) : evaluate(rhs);
                         if (free_target) expr_free(target_lhs);
                         expr_free(res);
                         *changed = true; /* Set/SetDelayed installed a rule */
@@ -1086,7 +1086,7 @@ Expr* evaluate(Expr* e) {
         eval_overflow = true;
         Expr** wrap = malloc(sizeof(Expr*));
         wrap[0] = expr_copy(e);
-        Expr* held = expr_new_function(expr_new_symbol("Hold"), wrap, 1);
+        Expr* held = expr_new_function(expr_new_symbol(SYM_Hold), wrap, 1);
         free(wrap);
         return held;
     }

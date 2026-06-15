@@ -23,7 +23,7 @@
 static Expr* together_recursive(Expr* e);
 
 static Expr* negate_expr(Expr* e) {
-    return eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), expr_copy(e)}, 2));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), expr_copy(e)}, 2));
 }
 
 static bool is_superficially_negative(Expr* e) {
@@ -88,13 +88,13 @@ static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         
         Expr* d_expr = expr_new_integer(common_den);
         *den_out = d_expr;
-        *num_out = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(expr), expr_copy(d_expr)}, 2));
+        *num_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(expr), expr_copy(d_expr)}, 2));
         return;
     }
 
     if (expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL && (expr->data.function.head->data.symbol == SYM_Power || expr->data.function.head->data.symbol == SYM_Exp)) {
         bool is_exp = expr->data.function.head->data.symbol == SYM_Exp;
-        Expr* base = is_exp ? expr_new_symbol("E") : expr->data.function.args[0];
+        Expr* base = is_exp ? expr_new_symbol(SYM_E) : expr->data.function.args[0];
         Expr* exp = is_exp ? expr->data.function.args[0] : expr->data.function.args[1];
 
         if (exp->type == EXPR_FUNCTION && exp->data.function.head->type == EXPR_SYMBOL && exp->data.function.head->data.symbol == SYM_Plus) {
@@ -111,16 +111,16 @@ static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
                 }
             }
             if (n_c == 0) *num_out = expr_new_integer(1);
-            else if (n_c == 1) *num_out = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(base), num_args[0]}, 2));
+            else if (n_c == 1) *num_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(base), num_args[0]}, 2));
             else {
-                Expr* p = eval_and_free(expr_new_function(expr_new_symbol("Plus"), num_args, n_c));
-                *num_out = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(base), p}, 2));
+                Expr* p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), num_args, n_c));
+                *num_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(base), p}, 2));
             }
             if (d_c == 0) *den_out = expr_new_integer(1);
-            else if (d_c == 1) *den_out = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(base), den_args[0]}, 2));
+            else if (d_c == 1) *den_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(base), den_args[0]}, 2));
             else {
-                Expr* p = eval_and_free(expr_new_function(expr_new_symbol("Plus"), den_args, d_c));
-                *den_out = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(base), p}, 2));
+                Expr* p = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), den_args, d_c));
+                *den_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(base), p}, 2));
             }
             free(num_args);
             free(den_args);
@@ -129,10 +129,10 @@ static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         } else {
             if (is_superficially_negative(exp)) {
                 *num_out = expr_new_integer(1);
-                *den_out = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(base), negate_expr(exp)}, 2));
+                *den_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(base), negate_expr(exp)}, 2));
             } else {
                 if (is_exp) {
-                    *num_out = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(base), expr_copy(exp)}, 2));
+                    *num_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(base), expr_copy(exp)}, 2));
                 } else {
                     *num_out = expr_copy(expr);
                 }
@@ -158,11 +158,11 @@ static void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         }
         if (n_c == 0) *num_out = expr_new_integer(1);
         else if (n_c == 1) *num_out = n_args[0];
-        else *num_out = eval_and_free(expr_new_function(expr_new_symbol("Times"), n_args, n_c));
+        else *num_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), n_args, n_c));
 
         if (d_c == 0) *den_out = expr_new_integer(1);
         else if (d_c == 1) *den_out = d_args[0];
-        else *den_out = eval_and_free(expr_new_function(expr_new_symbol("Times"), d_args, d_c));
+        else *den_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), d_args, d_c));
 
         free(n_args); free(d_args);
         return;
@@ -249,8 +249,8 @@ static Expr* cancel_exact_div_wrapper(Expr* num, Expr* den) {
         expr_free(exp_den);
         return res;
     } else {
-        Expr* t = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){exp_den, expr_new_integer(-1)}, 2));
-        Expr* r = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){exp_num, t}, 2));
+        Expr* t = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){exp_den, expr_new_integer(-1)}, 2));
+        Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){exp_num, t}, 2));
         return r;
     }
 }
@@ -449,7 +449,7 @@ static Expr* rat_symbolic_content(const Expr* e) {
         free(running);
         return r;
     }
-    Expr* r = expr_new_function(expr_new_symbol("Times"), running, n_running);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), running, n_running);
     return r;
 }
 
@@ -470,19 +470,19 @@ static Expr* rat_div_distribute(Expr* e, const Expr* divisor) {
         Expr** new_args = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
         for (size_t i = 0; i < n; i++) {
             Expr* inv = eval_and_free(expr_new_function(
-                expr_new_symbol("Power"),
+                expr_new_symbol(SYM_Power),
                 (Expr*[]){expr_copy((Expr*)divisor), expr_new_integer(-1)}, 2));
             new_args[i] = eval_and_free(expr_new_function(
-                expr_new_symbol("Times"),
+                expr_new_symbol(SYM_Times),
                 (Expr*[]){expr_copy(e->data.function.args[i]), inv}, 2));
         }
-        return eval_and_free(expr_new_function(expr_new_symbol("Plus"), new_args, n));
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), new_args, n));
     }
     Expr* inv = eval_and_free(expr_new_function(
-        expr_new_symbol("Power"),
+        expr_new_symbol(SYM_Power),
         (Expr*[]){expr_copy((Expr*)divisor), expr_new_integer(-1)}, 2));
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Times"),
+        expr_new_symbol(SYM_Times),
         (Expr*[]){expr_copy(e), inv}, 2));
 }
 
@@ -527,7 +527,7 @@ static void rat_strip_symbolic_common(Expr** num_io, Expr** den_io) {
         common = num_factors[0];
         free(num_factors);
     } else {
-        common = expr_new_function(expr_new_symbol("Times"), num_factors, num_nf);
+        common = expr_new_function(expr_new_symbol(SYM_Times), num_factors, num_nf);
     }
 
     Expr* new_num = rat_div_distribute(*num_io, common);
@@ -602,15 +602,15 @@ static Expr* cancel_recursive(Expr* e) {
     }
 
     cancel_recursive_inside_gcd++;
-    Expr* g = eval_and_free(expr_new_function(expr_new_symbol("PolynomialGCD"), (Expr*[]){expr_copy(num), expr_copy(den)}, 2));
+    Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialGCD), (Expr*[]){expr_copy(num), expr_copy(den)}, 2));
     cancel_recursive_inside_gcd--;
     
     Expr* new_num = cancel_exact_div_wrapper(num, g);
     Expr* new_den = cancel_exact_div_wrapper(den, g);
     
     if (new_num && new_den && den_has_negative_lead(new_den)) {
-        Expr* t1 = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), new_num}, 2));
-        Expr* t2 = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_new_integer(-1), new_den}, 2));
+        Expr* t1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), new_num}, 2));
+        Expr* t2 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_new_integer(-1), new_den}, 2));
         new_num = expr_expand(t1);
         new_den = expr_expand(t2);
         expr_free(t1);
@@ -622,8 +622,8 @@ static Expr* cancel_recursive(Expr* e) {
         res = new_num;
         expr_free(new_den);
     } else if (new_num && new_den) {
-        Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){new_den, expr_new_integer(-1)}, 2));
-        res = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){new_num, inv_den}, 2));
+        Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){new_den, expr_new_integer(-1)}, 2));
+        res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){new_num, inv_den}, 2));
     } else {
         if (new_num) expr_free(new_num);
         if (new_den) expr_free(new_den);
@@ -676,9 +676,9 @@ static Expr* together_recursive_ext(Expr* e, const Expr* alpha) {
                         expr_copy(lcm_den),
                         expr_copy(dens[i]),
                         expr_new_function(
-                            expr_new_symbol("Rule"),
+                            expr_new_symbol(SYM_Rule),
                             (Expr*[]){
-                                expr_new_symbol("Extension"),
+                                expr_new_symbol(SYM_Extension),
                                 expr_copy((Expr*)alpha)
                             }, 2)
                     }, 3);
@@ -723,27 +723,27 @@ static Expr* together_recursive_ext(Expr* e, const Expr* alpha) {
                         expr_copy(dens[i]),
                         expr_copy(var),
                         expr_new_function(
-                            expr_new_symbol("Rule"),
+                            expr_new_symbol(SYM_Rule),
                             (Expr*[]){
-                                expr_new_symbol("Extension"),
+                                expr_new_symbol(SYM_Extension),
                                 expr_copy((Expr*)alpha)
                             }, 2)
                     }, 4);
                 Expr* q = evaluate(q_call);
                 expr_free(q_call);
                 new_nums[i] = eval_and_free(expr_new_function(
-                    expr_new_symbol("Times"),
+                    expr_new_symbol(SYM_Times),
                     (Expr*[]){nums[i], q}, 2));
             }
             expr_free(var);
 
             Expr* combined_num = eval_and_free(expr_new_function(
-                expr_new_symbol("Plus"), new_nums, count));
+                expr_new_symbol(SYM_Plus), new_nums, count));
             Expr* inv_den = eval_and_free(expr_new_function(
-                expr_new_symbol("Power"),
+                expr_new_symbol(SYM_Power),
                 (Expr*[]){expr_copy(lcm_den), expr_new_integer(-1)}, 2));
             Expr* combined = eval_and_free(expr_new_function(
-                expr_new_symbol("Times"),
+                expr_new_symbol(SYM_Times),
                 (Expr*[]){combined_num, inv_den}, 2));
 
             Expr* result = cancel_with_extension(combined, alpha);
@@ -845,14 +845,14 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
 
     /* Compute g = PolynomialGCD[num, den, Extension -> alpha]. */
     Expr* gcd_call = expr_new_function(
-        expr_new_symbol("PolynomialGCD"),
+        expr_new_symbol(SYM_PolynomialGCD),
         (Expr*[]){
             expr_copy(num),
             expr_copy(den),
             expr_new_function(
-                expr_new_symbol("Rule"),
+                expr_new_symbol(SYM_Rule),
                 (Expr*[]){
-                    expr_new_symbol("Extension"),
+                    expr_new_symbol(SYM_Extension),
                     expr_copy((Expr*)alpha)
                 }, 2)
         }, 3);
@@ -869,11 +869,11 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
     if (trivial) {
         expr_free(g);
         Expr* result = eval_and_free(expr_new_function(
-            expr_new_symbol("Times"),
+            expr_new_symbol(SYM_Times),
             (Expr*[]){
                 num,
                 eval_and_free(expr_new_function(
-                    expr_new_symbol("Power"),
+                    expr_new_symbol(SYM_Power),
                     (Expr*[]){den, expr_new_integer(-1)}, 2))
             }, 2));
         return result;
@@ -905,8 +905,8 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
     /* Pass Extension -> α so the division runs in Q(α)[x] rather than
      * dropping to the multivariate Q[α, x] path. */
     Expr* ext_rule_a = expr_new_function(
-        expr_new_symbol("Rule"),
-        (Expr*[]){expr_new_symbol("Extension"), expr_copy((Expr*)alpha)}, 2);
+        expr_new_symbol(SYM_Rule),
+        (Expr*[]){expr_new_symbol(SYM_Extension), expr_copy((Expr*)alpha)}, 2);
     Expr* new_num_call = expr_new_function(
         expr_new_symbol("PolynomialQuotient"),
         (Expr*[]){num, expr_copy(g), expr_copy(var), ext_rule_a}, 4);
@@ -914,8 +914,8 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
     expr_free(new_num_call);
 
     Expr* ext_rule_b = expr_new_function(
-        expr_new_symbol("Rule"),
-        (Expr*[]){expr_new_symbol("Extension"), expr_copy((Expr*)alpha)}, 2);
+        expr_new_symbol(SYM_Rule),
+        (Expr*[]){expr_new_symbol(SYM_Extension), expr_copy((Expr*)alpha)}, 2);
     Expr* new_den_call = expr_new_function(
         expr_new_symbol("PolynomialQuotient"),
         (Expr*[]){den, g, var, ext_rule_b}, 4);
@@ -942,10 +942,10 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
 
     /* Result = new_num / new_den. */
     Expr* inv_den = eval_and_free(expr_new_function(
-        expr_new_symbol("Power"),
+        expr_new_symbol(SYM_Power),
         (Expr*[]){new_den, expr_new_integer(-1)}, 2));
     Expr* result = eval_and_free(expr_new_function(
-        expr_new_symbol("Times"),
+        expr_new_symbol(SYM_Times),
         (Expr*[]){new_num, inv_den}, 2));
     return result;
 }
@@ -1235,7 +1235,7 @@ static Expr* together_recursive(Expr* e) {
                     new_nums[i] = NULL;
                     break;
                 }
-                new_nums[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){expr_copy(nums[i]), q}, 2));
+                new_nums[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(nums[i]), q}, 2));
             }
 
             if (!exact) {
@@ -1247,7 +1247,7 @@ static Expr* together_recursive(Expr* e) {
                 } else {
                     Expr** plus_args = malloc(sizeof(Expr*) * count);
                     for (size_t i = 0; i < count; i++) plus_args[i] = expr_copy(args[i]);
-                    ret = eval_and_free(expr_new_function(expr_new_symbol("Plus"), plus_args, count));
+                    ret = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), plus_args, count));
                     free(plus_args);
                 }
                 for (size_t i = 0; i < count; i++) {
@@ -1261,9 +1261,9 @@ static Expr* together_recursive(Expr* e) {
             }
 
             /* All quotients exact -- proceed with the standard combine. */
-            Expr* combined_num = eval_and_free(expr_new_function(expr_new_symbol("Plus"), new_nums, count));
-            Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol("Power"), (Expr*[]){expr_copy(lcm_den), expr_new_integer(-1)}, 2));
-            Expr* combined_expr = eval_and_free(expr_new_function(expr_new_symbol("Times"), (Expr*[]){combined_num, inv_den}, 2));
+            Expr* combined_num = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), new_nums, count));
+            Expr* inv_den = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(lcm_den), expr_new_integer(-1)}, 2));
+            Expr* combined_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){combined_num, inv_den}, 2));
 
             Expr* res = cancel_recursive(combined_expr);
             expr_free(combined_expr);

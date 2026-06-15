@@ -211,7 +211,7 @@ static Expr* do_piecewise_1(Expr* x, int op) {
             Expr* den_e = expr_bigint_normalize(expr_new_bigint_from_mpz(den));
             Expr* args[2] = { num_e, den_e };
             mpz_clears(num, den, int_num, frac_num, NULL);
-            return eval_and_free(expr_new_function(expr_new_symbol("Rational"), args, 2));
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Rational), args, 2));
         }
         mpz_t q;
         mpz_init(q);
@@ -286,11 +286,11 @@ static Expr* do_piecewise_1(Expr* x, int op) {
                           : (op == OP_CEILING) ? OP_FLOOR
                           : OP_ROUND;
             Expr* neg_args[2] = { expr_new_integer(-1), expr_copy(x) };
-            Expr* pos = eval_and_free(expr_new_function(expr_new_symbol("Times"), neg_args, 2));
+            Expr* pos = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2));
             Expr* inner_args[1] = { pos };
             Expr* inner = expr_new_function(expr_new_symbol(op_head_name(swapped_op)), inner_args, 1);
             Expr* outer_args[2] = { expr_new_integer(-1), inner };
-            return expr_new_function(expr_new_symbol("Times"), outer_args, 2);
+            return expr_new_function(expr_new_symbol(SYM_Times), outer_args, 2);
         }
     }
 
@@ -305,9 +305,9 @@ static Expr* do_piecewise_1(Expr* x, int op) {
         Expr* ip = do_piecewise_numeric_exact(x, OP_INTPART);
         if (ip) {
             Expr* neg_args[2] = { expr_new_integer(-1), ip };
-            Expr* neg_ip = expr_new_function(expr_new_symbol("Times"), neg_args, 2);
+            Expr* neg_ip = expr_new_function(expr_new_symbol(SYM_Times), neg_args, 2);
             Expr* sum_args[2] = { expr_copy(x), neg_ip };
-            return eval_and_free(expr_new_function(expr_new_symbol("Plus"), sum_args, 2));
+            return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), sum_args, 2));
         }
         return NULL;
     }
@@ -366,9 +366,9 @@ static Expr* do_piecewise_numeric_exact(Expr* x, int op) {
 
 static Expr* make_divide(Expr* num, Expr* den) {
     Expr* pow_args[2] = { expr_copy(den), expr_new_integer(-1) };
-    Expr* inv = expr_new_function(expr_new_symbol("Power"), pow_args, 2);
+    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power), pow_args, 2);
     Expr* times_args[2] = { expr_copy(num), inv };
-    return expr_new_function(expr_new_symbol("Times"), times_args, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times), times_args, 2);
 }
 
 static Expr* do_piecewise(Expr* res, int op, const char* name, bool allow_2_args) {
@@ -385,7 +385,7 @@ static Expr* do_piecewise(Expr* res, int op, const char* name, bool allow_2_args
         Expr* func = expr_new_function(expr_new_symbol(name), func_args, 1);
         
         Expr* times_args[2] = { expr_copy(a), func };
-        return expr_new_function(expr_new_symbol("Times"), times_args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Times), times_args, 2);
     }
     
     return NULL;
@@ -547,7 +547,7 @@ Expr* builtin_unitstep(Expr* res) {
         if (cls[i] != USTEP_NONNEG) new_args[k++] = expr_copy(args[i]);
     }
     free(cls);
-    Expr* out = expr_new_function(expr_new_symbol("UnitStep"), new_args, keep);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_UnitStep), new_args, keep);
     free(new_args);
     return out;
 }

@@ -26,6 +26,7 @@
  * Attributes: Listable, NumericFunction, Protected.
  */
 #include "logintegral.h"
+#include "sym_names.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -76,8 +77,8 @@ static bool li_is_numeric_inexact(Expr* e) {
 
 /* Build -Infinity = Times[-1, Infinity]. */
 static Expr* li_make_neg_infinity(void) {
-    return expr_new_function(expr_new_symbol("Times"),
-        (Expr*[]){ expr_new_integer(-1), expr_new_symbol("Infinity") }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_new_integer(-1), expr_new_symbol(SYM_Infinity) }, 2);
 }
 
 /* ------------------------------------------------------------------ */
@@ -90,16 +91,16 @@ static Expr* li_one_arg(Expr* arg) {
         return expr_new_integer(0);                          /* li(0) = 0      */
     if (arg->type == EXPR_INTEGER && arg->data.integer == 1)
         return li_make_neg_infinity();                       /* li(1) = -Inf   */
-    if (li_is_symbol(arg, "Infinity"))         return expr_new_symbol("Infinity");
-    if (li_is_symbol(arg, "ComplexInfinity"))  return expr_new_symbol("Indeterminate");
-    if (li_is_symbol(arg, "Indeterminate"))    return expr_new_symbol("Indeterminate");
+    if (li_is_symbol(arg, "Infinity"))         return expr_new_symbol(SYM_Infinity);
+    if (li_is_symbol(arg, "ComplexInfinity"))  return expr_new_symbol(SYM_Indeterminate);
+    if (li_is_symbol(arg, "Indeterminate"))    return expr_new_symbol(SYM_Indeterminate);
 
     /* 2. Numeric (inexact) arguments: li(z) = Ei(Log z). Build
      * ExpIntegralEi[Log[z]] and evaluate it through the existing kernels. */
     if (li_is_numeric_inexact(arg)) {
-        Expr* inner = expr_new_function(expr_new_symbol("Log"),
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_Log),
             (Expr*[]){ expr_copy(arg) }, 1);
-        Expr* call = expr_new_function(expr_new_symbol("ExpIntegralEi"),
+        Expr* call = expr_new_function(expr_new_symbol(SYM_ExpIntegralEi),
             (Expr*[]){ inner }, 1);
         Expr* out = eval_and_free(call);
         /* Defensive: only accept a reduced (numeric) result. If the

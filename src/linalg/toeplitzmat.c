@@ -69,10 +69,10 @@ static Expr* tz_build(int64_t m, int64_t n,
                 cells[j] = expr_copy(rvals[j - i]);
             }
         }
-        rows[i] = expr_new_function(expr_new_symbol("List"), cells, (size_t)n);
+        rows[i] = expr_new_function(expr_new_symbol(SYM_List), cells, (size_t)n);
         free(cells);
     }
-    Expr* result = expr_new_function(expr_new_symbol("List"), rows, (size_t)m);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)m);
     free(rows);
     return result;
 }

@@ -356,7 +356,7 @@ static Expr* rd_rational_exact_form(const mpq_t q, const mpz_t base, long* out_e
     if (mpq_sgn(q) == 0) {
         Expr** a = malloc(sizeof(Expr*));
         a[0] = expr_new_integer(0);
-        Expr* list = expr_new_function(expr_new_symbol("List"), a, 1);
+        Expr* list = expr_new_function(expr_new_symbol(SYM_List), a, 1);
         free(a);
         *out_exp = 0;
         return list;
@@ -484,7 +484,7 @@ static Expr* rd_rational_exact_form(const mpq_t q, const mpz_t base, long* out_e
      *      [List(frac_digits[cycle_start..end])].
      *   3. cap reached without cycle: degrade to flat int_digits + frac_digits.
      */
-    Expr* list_head = expr_new_symbol("List");
+    Expr* list_head = expr_new_symbol(SYM_List);
     Expr** out_args;
     size_t out_len;
 
@@ -499,7 +499,7 @@ static Expr* rd_rational_exact_form(const mpq_t q, const mpz_t base, long* out_e
         Expr** cyc_args = malloc(sizeof(Expr*) * cyc_len);
         for (size_t i = 0; i < cyc_len; i++)
             cyc_args[i] = frac_digits[cycle_start + i];
-        Expr* sub = expr_new_function(expr_new_symbol("List"), cyc_args, cyc_len);
+        Expr* sub = expr_new_function(expr_new_symbol(SYM_List), cyc_args, cyc_len);
         free(cyc_args);
         out_args[int_count + cycle_start] = sub;
     } else {
@@ -870,7 +870,7 @@ Expr* builtin_realdigits(Expr* res) {
         Expr** pair = malloc(sizeof(Expr*) * 2);
         pair[0] = digits;
         pair[1] = expr_new_integer((int64_t)exp_val);
-        Expr* result = expr_new_function(expr_new_symbol("List"), pair, 2);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
         free(pair);
         return result;
     }
@@ -908,7 +908,7 @@ Expr* builtin_realdigits(Expr* res) {
             /* Exact zero: {{0}, 0}. */
             Expr** za = malloc(sizeof(Expr*));
             za[0] = expr_new_integer(0);
-            zero_list = expr_new_function(expr_new_symbol("List"), za, 1);
+            zero_list = expr_new_function(expr_new_symbol(SYM_List), za, 1);
             free(za);
             out_exp = has_n ? start_n + 1 : 0;
             /* With explicit len, pad to len. */
@@ -916,7 +916,7 @@ Expr* builtin_realdigits(Expr* res) {
                 expr_free(zero_list);
                 Expr** za2 = malloc(sizeof(Expr*) * (target_len ? target_len : 1));
                 for (size_t i = 0; i < target_len; i++) za2[i] = expr_new_integer(0);
-                zero_list = expr_new_function(expr_new_symbol("List"), za2,
+                zero_list = expr_new_function(expr_new_symbol(SYM_List), za2,
                                                target_len);
                 free(za2);
             }
@@ -939,7 +939,7 @@ Expr* builtin_realdigits(Expr* res) {
             long acc_floor = (long)floor(acc_digits);
             Expr** za = malloc(sizeof(Expr*));
             za[0] = expr_new_integer(0);
-            zero_list = expr_new_function(expr_new_symbol("List"), za, 1);
+            zero_list = expr_new_function(expr_new_symbol(SYM_List), za, 1);
             free(za);
             out_exp = -acc_floor;
             if (has_n) out_exp = start_n + 1;
@@ -947,7 +947,7 @@ Expr* builtin_realdigits(Expr* res) {
                 expr_free(zero_list);
                 Expr** za2 = malloc(sizeof(Expr*) * (target_len ? target_len : 1));
                 for (size_t i = 0; i < target_len; i++) za2[i] = expr_new_integer(0);
-                zero_list = expr_new_function(expr_new_symbol("List"), za2,
+                zero_list = expr_new_function(expr_new_symbol(SYM_List), za2,
                                                target_len);
                 free(za2);
             }
@@ -957,7 +957,7 @@ Expr* builtin_realdigits(Expr* res) {
         Expr** pair = malloc(sizeof(Expr*) * 2);
         pair[0] = zero_list;
         pair[1] = expr_new_integer((int64_t)out_exp);
-        Expr* result = expr_new_function(expr_new_symbol("List"), pair, 2);
+        Expr* result = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
         free(pair);
         return result;
     }
@@ -1101,7 +1101,7 @@ Expr* builtin_realdigits(Expr* res) {
                 if (pos > hi) {
                     out_args[i] = expr_new_integer(0);
                 } else if (pos < lo_p) {
-                    out_args[i] = expr_new_symbol("Indeterminate");
+                    out_args[i] = expr_new_symbol(SYM_Indeterminate);
                 } else {
                     size_t idx = (size_t)(hi - pos);
                     out_args[i] = expr_new_integer(
@@ -1115,7 +1115,7 @@ Expr* builtin_realdigits(Expr* res) {
             for (size_t i = 0; i < out_len; i++) {
                 long pos = start_pos - (long)i;
                 if (pos < (natural_exp - (long)avail)) {
-                    out_args[i] = expr_new_symbol("Indeterminate");
+                    out_args[i] = expr_new_symbol(SYM_Indeterminate);
                 } else if (pos > natural_exp - 1) {
                     out_args[i] = expr_new_integer(0);
                 } else {
@@ -1167,7 +1167,7 @@ Expr* builtin_realdigits(Expr* res) {
 #endif
     }
 
-    Expr* digits_list = expr_new_function(expr_new_symbol("List"),
+    Expr* digits_list = expr_new_function(expr_new_symbol(SYM_List),
                                             out_args, out_len);
     free(out_args);
     mpz_clear(base);
@@ -1176,7 +1176,7 @@ Expr* builtin_realdigits(Expr* res) {
     Expr** pair = malloc(sizeof(Expr*) * 2);
     pair[0] = digits_list;
     pair[1] = expr_new_integer((int64_t)out_exp);
-    Expr* result = expr_new_function(expr_new_symbol("List"), pair, 2);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
     free(pair);
     return result;
 }
@@ -1230,7 +1230,7 @@ static Expr* me_make_pair(Expr* m_expr, long e_val) {
     Expr** pair = malloc(sizeof(Expr*) * 2);
     pair[0] = m_expr;
     pair[1] = expr_new_integer((int64_t)e_val);
-    Expr* result = expr_new_function(expr_new_symbol("List"), pair, 2);
+    Expr* result = expr_new_function(expr_new_symbol(SYM_List), pair, 2);
     free(pair);
     return result;
 }
@@ -1256,7 +1256,7 @@ static Expr* me_mpq_to_expr(const mpq_t q) {
     } else {
         args[1] = expr_new_bigint_from_mpz(mpq_denref(q));
     }
-    Expr* r = expr_new_function(expr_new_symbol("Rational"), args, 2);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
     free(args);
     return r;
 }
@@ -1565,8 +1565,8 @@ static Expr* re_emit_ibase(Expr* b_expr) {
 static Expr* re_make_minus_infinity(void) {
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_new_integer(-1);
-    args[1] = expr_new_symbol("Infinity");
-    Expr* r = expr_new_function(expr_new_symbol("Times"), args, 2);
+    args[1] = expr_new_symbol(SYM_Infinity);
+    Expr* r = expr_new_function(expr_new_symbol(SYM_Times), args, 2);
     free(args);
     return r;
 }

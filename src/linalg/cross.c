@@ -60,13 +60,13 @@ Expr* builtin_cross(Expr* res) {
         int sign = ((m + i) % 2 == 0) ? 1 : -1;
         if (sign == -1) {
             Expr* t_args[2] = { expr_new_integer(-1), det_val };
-            result_args[i] = eval_and_free(expr_new_function(expr_new_symbol("Times"), t_args, 2));
+            result_args[i] = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), t_args, 2));
         } else {
             result_args[i] = det_val;
         }
     }
 
-    Expr* final_res = expr_new_function(expr_new_symbol("List"), result_args, n);
+    Expr* final_res = expr_new_function(expr_new_symbol(SYM_List), result_args, n);
     free(result_args);
     return final_res;
 }

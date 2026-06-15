@@ -1764,7 +1764,7 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
             }
             parts[i] = d;
         }
-        Expr* sum = expr_new_function(expr_new_symbol("Plus"), parts, n);
+        Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), parts, n);
         free(parts);
         return eval_and_free(sum);
     }
@@ -1804,7 +1804,7 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
         Expr** product_args = malloc(sizeof(Expr*) * (free_count + 1));
         for (size_t i = 0; i < free_count; i++) product_args[i] = free_factors[i];
         product_args[free_count] = d_var;
-        Expr* prod = expr_new_function(expr_new_symbol("Times"),
+        Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
                                        product_args, free_count + 1);
         free(product_args);
         free(free_factors);
@@ -1821,10 +1821,10 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
          *   D[x^n, {x, k}] = FactorialPower[n, k] * Power[x, n - k]. */
         if (expr_eq(base, var) && expr_free_of(exp, var)) {
             Expr* fp = mk_fn2("FactorialPower", expr_copy(exp), expr_copy(k));
-            Expr* new_exp = expr_new_function(expr_new_symbol("Plus"),
+            Expr* new_exp = expr_new_function(expr_new_symbol(SYM_Plus),
                 (Expr*[]){ expr_copy(exp), mk_neg(expr_copy(k)) }, 2);
             Expr* new_pow = mk_fn2("Power", expr_copy(var), new_exp);
-            Expr* product = expr_new_function(expr_new_symbol("Times"),
+            Expr* product = expr_new_function(expr_new_symbol(SYM_Times),
                 (Expr*[]){ fp, new_pow }, 2);
             return eval_and_free(product);
         }
@@ -1835,7 +1835,7 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
             Expr* same  = mk_fn2("Power", expr_copy(base), expr_copy(var));
             Expr* logb  = mk_fn1("Log", expr_copy(base));
             Expr* logbk = mk_fn2("Power", logb, expr_copy(k));
-            Expr* product = expr_new_function(expr_new_symbol("Times"),
+            Expr* product = expr_new_function(expr_new_symbol(SYM_Times),
                 (Expr*[]){ same, logbk }, 2);
             return eval_and_free(product);
         }
@@ -1867,9 +1867,9 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
                 expr_free(du_raw);
                 if (expr_free_of(a, var)) {
                     /* half_pi_k = k * Pi / 2 */
-                    Expr* half_pi_k = expr_new_function(expr_new_symbol("Times"),
+                    Expr* half_pi_k = expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ expr_copy(k),
-                                   expr_new_symbol("Pi"),
+                                   expr_new_symbol(SYM_Pi),
                                    mk_fn2("Power", mk_int(2), mk_int(-1)) }, 3);
                     Expr* ak = mk_fn2("Power", a, expr_copy(k));
                     Expr* result;
@@ -1882,20 +1882,20 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
                         /* a^k * (-I)^k * Cos[k*Pi/2 - I u]      (Cosh)
                          * a^k * I * (-I)^k * Sin[k*Pi/2 - I u]  (Sinh) */
                         Expr* minus_I_u = mk_fn2("Times",
-                            mk_fn2("Times", mk_int(-1), expr_new_symbol("I")),
+                            mk_fn2("Times", mk_int(-1), expr_new_symbol(SYM_I)),
                             expr_copy(u));
                         Expr* arg     = mk_fn2("Plus", half_pi_k, minus_I_u);
                         const char* trig_name = (h == SYM_Cosh) ? "Cos" : "Sin";
                         Expr* trig    = mk_fn1(trig_name, arg);
                         Expr* neg_I   = mk_fn2("Times", mk_int(-1),
-                                               expr_new_symbol("I"));
+                                               expr_new_symbol(SYM_I));
                         Expr* neg_I_k = mk_fn2("Power", neg_I, expr_copy(k));
                         if (h == SYM_Cosh) {
-                            result = expr_new_function(expr_new_symbol("Times"),
+                            result = expr_new_function(expr_new_symbol(SYM_Times),
                                 (Expr*[]){ ak, neg_I_k, trig }, 3);
                         } else {
-                            result = expr_new_function(expr_new_symbol("Times"),
-                                (Expr*[]){ ak, expr_new_symbol("I"),
+                            result = expr_new_function(expr_new_symbol(SYM_Times),
+                                (Expr*[]){ ak, expr_new_symbol(SYM_I),
                                            neg_I_k, trig }, 4);
                         }
                     }
@@ -1913,7 +1913,7 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
 /* Build an unevaluated D[f, {var, k}] tree. Used as the fallback when
  * compute_deriv_symbolic_order can't reduce the expression. */
 static Expr* build_unevaluated_d(Expr* f, Expr* var, Expr* k) {
-    Expr* spec = expr_new_function(expr_new_symbol("List"),
+    Expr* spec = expr_new_function(expr_new_symbol(SYM_List),
         (Expr*[]){ expr_copy(var), expr_copy(k) }, 2);
     return expr_new_function(expr_new_symbol("D"),
         (Expr*[]){ expr_copy(f), spec }, 2);

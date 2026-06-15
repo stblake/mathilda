@@ -496,10 +496,10 @@ static Expr* fr_build_rule_list(Expr* const* vars, Expr** vals, size_t n) {
     Expr** rules = malloc(sizeof(Expr*) * (n > 0 ? n : 1));
     for (size_t i = 0; i < n; i++) {
         Expr* r_args[2] = { expr_copy(vars[i]), vals[i] };
-        rules[i] = expr_new_function(expr_new_symbol("Rule"), r_args, 2);
+        rules[i] = expr_new_function(expr_new_symbol(SYM_Rule), r_args, 2);
         vals[i] = NULL; /* ownership transferred */
     }
-    Expr* list = expr_new_function(expr_new_symbol("List"), rules, n);
+    Expr* list = expr_new_function(expr_new_symbol(SYM_List), rules, n);
     free(rules);
     return list;
 }
@@ -1032,7 +1032,7 @@ static Expr* fr_normalize_eqn_list(Expr* eqlist) {
     for (size_t i = 0; i < n; i++) {
         items[i] = fr_normalize_eqn(eqlist->data.function.args[i]);
     }
-    Expr* out = expr_new_function(expr_new_symbol("List"), items, n);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), items, n);
     free(items);
     return out;
 }

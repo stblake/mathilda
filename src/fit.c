@@ -128,7 +128,7 @@ static bool fit_is_infinity(const Expr* e) {
 
 /* Build List[args...] taking ownership of the element pointers. */
 static Expr* fit_list(Expr** elems, size_t n) {
-    Expr* l = expr_new_function(expr_new_symbol("List"), elems, n);
+    Expr* l = expr_new_function(expr_new_symbol(SYM_List), elems, n);
     return l;
 }
 
@@ -479,7 +479,7 @@ static Expr* fit_realize_precision(Expr* e, const FitOpts* opts) {
 /* Call LeastSquares[m, v]; returns owned coefficient vector or NULL if the
  * call comes back unevaluated. */
 static Expr* fit_leastsquares(Expr* m, Expr* v) {
-    Expr* call = expr_new_function(expr_new_symbol("LeastSquares"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_LeastSquares),
                                    (Expr*[]){ expr_copy(m), expr_copy(v) }, 2);
     Expr* r = evaluate(call);
     expr_free(call);
@@ -505,7 +505,7 @@ static Expr* fit_solve_tikhonov(Expr* M, Expr* V, const FitOpts* opts) {
     size_t n = fit_len(fit_elem(M, 0));  /* columns = basis functions */
 
     Expr* sqrtlam = eval_and_free(expr_new_function(
-        expr_new_symbol("Sqrt"), (Expr*[]){ expr_copy(opts->reg_lambda) }, 1));
+        expr_new_symbol(SYM_Sqrt), (Expr*[]){ expr_copy(opts->reg_lambda) }, 1));
 
     size_t total = npts + n;
     Expr** rows = calloc(total, sizeof(Expr*));
@@ -781,9 +781,9 @@ static Expr* fit_solve_findmin(Expr* M, Expr* V, const FitOpts* opts) {
     Expr* vR = fit_realize_precision(V, opts);
     Expr* dotma = expr_new_function(expr_new_symbol("Dot"),
                                     (Expr*[]){ mR, aexpr }, 2);
-    Expr* negv = expr_new_function(expr_new_symbol("Times"),
+    Expr* negv = expr_new_function(expr_new_symbol(SYM_Times),
                                    (Expr*[]){ expr_new_integer(-1), vR }, 2);
-    Expr* residual = expr_new_function(expr_new_symbol("Plus"),
+    Expr* residual = expr_new_function(expr_new_symbol(SYM_Plus),
                                        (Expr*[]){ dotma, negv }, 2);
 
     /* Objective = normf[residual] + reg(a). */
@@ -797,16 +797,16 @@ static Expr* fit_solve_findmin(Expr* M, Expr* V, const FitOpts* opts) {
         /* + lambda * (a.a) */
         Expr* aa = expr_new_function(expr_new_symbol("Dot"),
             (Expr*[]){ expr_copy(aexpr), expr_copy(aexpr) }, 2);
-        Expr* term = expr_new_function(expr_new_symbol("Times"),
+        Expr* term = expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_copy(opts->reg_lambda), aa }, 2);
-        objective = expr_new_function(expr_new_symbol("Plus"),
+        objective = expr_new_function(expr_new_symbol(SYM_Plus),
             (Expr*[]){ normf, term }, 2);
     } else if (opts->reg_kind == FIT_REG_LASSO) {
         Expr* anorm = expr_new_function(expr_new_symbol("Norm"),
             (Expr*[]){ expr_copy(aexpr), expr_new_integer(1) }, 2);
-        Expr* term = expr_new_function(expr_new_symbol("Times"),
+        Expr* term = expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_copy(opts->reg_lambda), anorm }, 2);
-        objective = expr_new_function(expr_new_symbol("Plus"),
+        objective = expr_new_function(expr_new_symbol(SYM_Plus),
             (Expr*[]){ normf, term }, 2);
     }
 
@@ -822,7 +822,7 @@ static Expr* fit_solve_findmin(Expr* M, Expr* V, const FitOpts* opts) {
     Expr* varspec = fit_list(boxes, n);
     free(boxes);
 
-    Expr* call = expr_new_function(expr_new_symbol("FindMinimum"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_FindMinimum),
                                    (Expr*[]){ objective, varspec }, 2);
     Expr* fm = evaluate(call);
     expr_free(call);
@@ -919,10 +919,10 @@ static Expr* fit_assemble_output(const Expr* coeffs, Expr** funs, size_t nfun) {
     if (!fit_is_list(coeffs) || fit_len(coeffs) != nfun) return NULL;
     Expr** terms = calloc(nfun, sizeof(Expr*));
     for (size_t j = 0; j < nfun; j++) {
-        terms[j] = expr_new_function(expr_new_symbol("Times"),
+        terms[j] = expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_copy(fit_elem(coeffs, j)), expr_copy(funs[j]) }, 2);
     }
-    Expr* plus = expr_new_function(expr_new_symbol("Plus"), terms, nfun);
+    Expr* plus = expr_new_function(expr_new_symbol(SYM_Plus), terms, nfun);
     free(terms);
     return eval_and_free(plus);
 }
