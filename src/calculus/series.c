@@ -2939,6 +2939,80 @@ static Expr* try_series_airyai_at_infinity(Expr* f, Expr* x, int64_t n) {
     return mk_times(mk_fn1("Exp", zeta), series);
 }
 
+/* Asymptotic expansion of AiryAiPrime[x] at x = Infinity (DLMF 9.7.6):
+ *
+ *   Ai'(x) ~ -x^(1/4) E^(-zeta) / (2 Sqrt[Pi]) Sum_{k>=0} (-1)^k v_k / zeta^k,
+ *            zeta = (2/3) x^(3/2),  v_k = -(6k+1)/(6k-1) u_k,
+ *   with u_k the DLMF 9.7.2 coefficients (v_0 = 1).
+ *
+ * Since zeta^(-k) = (3/2)^k x^(-3k/2), term k contributes
+ *   -(-1)^k v_k (3/2)^k / (2 Sqrt[Pi]) * x^((1-6k)/4),
+ * a Puiseux series in (1/x) with denominator 4 and powers 1/4, -5/4, -11/4, ...
+ * i.e. numerators 1-6k = -1+6m (starting at +1, then descending). Relative to
+ * the AiryAi expansion the leading power is x^(+1/4) (nmin = -1, vs +1 for Ai)
+ * and the coefficients use v_k. The result is built as
+ *
+ *   Times[ Exp[-(2/3) x^(3/2)],
+ *          SeriesData[1/x, 0, {coefs}, -1, 6(K+1)-1, 4] ].
+ *
+ * Coefficient at position 6k is -(1/(2 Sqrt[Pi])) (-1)^k v_k (3/2)^k, matching
+ * the reference values -1/(2 Sqrt[Pi]), -7/(96 Sqrt[Pi]), 455/(9216 Sqrt[Pi]).
+ * Returns NULL unless f is exactly AiryAiPrime[x] in the expansion variable. */
+static Expr* try_series_airyaiprime_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "AiryAiPrime") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* Largest k whose x-power numerator (6k-1) <= 4n. */
+    int64_t K = (4 * n + 1) / 6;
+    if (K < 0) K = 0;
+
+    size_t ncoef = (size_t)(6 * K + 1);     /* positions 0..6K, nonzero at 6k */
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+
+    Expr* uk = expr_new_integer(1);          /* u_0 = 1 (kept as an evaluated rational) */
+    for (int64_t k = 0; k <= K; k++) {
+        /* v_k = -(6k+1)/(6k-1) u_k; coef_k = -(-1)^k v_k (3/2)^k / 2 * Pi^(-1/2). */
+        Expr* vk = mk_times(make_rational(-(6 * k + 1), 6 * k - 1), expr_copy(uk));
+        Expr* c = mk_times(expr_new_integer((k % 2 == 0) ? -1 : 1), vk);  /* -(-1)^k v_k */
+        c = mk_times(c, mk_power(make_rational(3, 2), expr_new_integer(k)));
+        c = mk_times(c, make_rational(1, 2));
+        c = mk_times(c, mk_power(mk_symbol("Pi"), make_rational(-1, 2)));
+        expr_free(coefs[(size_t)(6 * k)]);
+        coefs[(size_t)(6 * k)] = eval_and_free(c);
+
+        /* u_{k+1} = u_k (6m-5)(6m-3)(6m-1)/((2m-1) 216 m),  m = k+1 (DLMF 9.7.2). */
+        if (k < K) {
+            int64_t m = k + 1;
+            Expr* num = expr_new_integer((6 * m - 5) * (6 * m - 3) * (6 * m - 1));
+            Expr* den = mk_power(expr_new_integer((2 * m - 1) * 216 * m), expr_new_integer(-1));
+            Expr* nxt = mk_times(uk, mk_times(num, den));
+            uk = eval_and_free(nxt);
+        } else {
+            expr_free(uk);
+        }
+    }
+
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1)); /* expansion var 1/x   */
+    sd[1] = expr_new_integer(0);                          /* x0 (in 1/x)         */
+    sd[2] = coef_list;                                    /* coefficients        */
+    sd[3] = expr_new_integer(-1);                         /* nmin (x^(+1/4))     */
+    sd[4] = expr_new_integer(6 * (K + 1) - 1);            /* nmax (O-term)       */
+    sd[5] = expr_new_integer(4);                          /* denominator         */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+
+    /* Prefactor Exp[-(2/3) x^(3/2)]. */
+    Expr* zeta = mk_times(make_rational(-2, 3), mk_power(expr_copy(x), make_rational(3, 2)));
+    return mk_times(mk_fn1("Exp", zeta), series);
+}
+
 /* Asymptotic expansion of AiryBi[x] at x = Infinity (DLMF 9.7.7):
  *
  *   Bi(x) ~ E^(zeta) / (Sqrt[Pi] x^(1/4)) Sum_{k>=0} u_k / zeta^k,
@@ -3157,6 +3231,12 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return bi;
+        }
+        Expr* aip = try_series_airyaiprime_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (aip) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return aip;
         }
     }
 

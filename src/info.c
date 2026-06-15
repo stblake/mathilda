@@ -349,7 +349,9 @@ void info_init(void) {
     symtab_set_docstring("AiryAiPrime",
         "AiryAiPrime[z]\n"
         "\tgives the derivative Ai'(z) of the Airy function AiryAi.\n"
-        "AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3]); D[AiryAiPrime[z], z] = z AiryAi[z].");
+        "AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3]), AiryAiPrime[+Infinity] = 0. Real\n"
+        "and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[AiryAiPrime[z], z] = z AiryAi[z]. Listable.");
     symtab_set_docstring("AiryBi",
         "AiryBi[z]\n"
         "\tgives the Airy function Bi(z), the solution of y'' = z y that grows\n"

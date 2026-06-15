@@ -779,12 +779,30 @@ returns Ai(z) and Ai′(z) together).
 - **Listable.** `AiryAi[{1.2, 1.5, 1.8}] = {0.106126, 0.0717495, 0.0470362}`;
   `AiryAi[{}] = {}`.
 
-`AiryAiPrime[z]` is a minimal head: it carries the derivative rule
-(`D[AiryAiPrime[z], z] = z AiryAi[z]`) and the exact value
-`AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3])` (needed by the Taylor series), but has
-no general numeric evaluator — `N[AiryAiPrime[2.0]]` stays unevaluated.
+`AiryAiPrime[z]` = Ai′(z) is a full numeric evaluator in its own right. Because
+the unified core returns Ai(z) and Ai′(z) together, `AiryAiPrime` reuses the very
+same Maclaurin / asymptotic / connection machinery and simply selects the
+derivative component:
 
-Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+- **Exact values.** `AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3])` and
+  `AiryAiPrime[Infinity] = 0` (Ai′ decays). At −∞ Ai′ oscillates with *growing*
+  (~|z|^(1/4)) amplitude and has no limit, so `AiryAiPrime[-Infinity]` is left
+  unevaluated. Other exact arguments stay symbolic and numericalize under `N`.
+- **Numerics.** Real and complex inputs evaluate at machine and arbitrary (MPFR)
+  precision, with the same overflow→MPFR promotion as `AiryAi`. Examples:
+  `AiryAiPrime[0.5] = -0.224911`, `AiryAiPrime[2.5 + I] = -0.00187921 +
+  0.0310276 I`,
+  `N[AiryAiPrime[5/2], 50] = -0.026250881035903230364895496297232509446317838135771`.
+- **Derivative.** `D[AiryAiPrime[z], z] = z AiryAi[z]` (from Ai″ = z Ai).
+- **Series at 0.** `Series[AiryAiPrime[x], {x, 0, n}]` via the closed-form Taylor
+  path: `-1/(3^(1/3) Gamma[1/3]) + x^2/(2·3^(2/3) Gamma[2/3]) - …`.
+- **Series at ∞.** `Series[AiryAiPrime[x], {x, Infinity, n}]` gives the DLMF 9.7.6
+  expansion `E^(-2/3 x^(3/2)) (-x^(1/4)/(2 Sqrt[Pi]) - 7 (1/x)^(5/4)/(96 Sqrt[Pi])
+  + …)`.
+- **Listable.** `AiryAiPrime[{1.2, 1.5, 1.8}] = {-0.132785, -0.097382, -0.0685248}`.
+
+Attributes (both heads): `Listable`, `NumericFunction`, `Protected`,
+`ReadProtected`.
 
 ```mathematica
 In[1]:= AiryAi[0]

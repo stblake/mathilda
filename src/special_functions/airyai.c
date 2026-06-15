@@ -42,7 +42,14 @@
  * at 0 is produced by the generic Taylor-via-D path once AiryAi[0] / AiryAiPrime[0]
  * have closed-form values.
  *
- * Attributes: Listable, NumericFunction, Protected, ReadProtected.
+ * AiryAiPrime[z] = Ai'(z) is a full numeric evaluator in its own right: because
+ * `airy_ai_core` returns Ai(z) and Ai'(z) together, AiryAiPrime reuses the very
+ * same Maclaurin / asymptotic / connection machinery and simply selects the
+ * derivative component. Its exact values are AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3])
+ * and AiryAiPrime[+Infinity] = 0; at -Infinity Ai' has no limit (oscillation with
+ * growing ~|z|^(1/4) amplitude) and is left unevaluated.
+ *
+ * Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
  */
 #include "airyai.h"
 
@@ -577,8 +584,10 @@ static Expr* ai_complex_result(const mpfr_t re, const mpfr_t im, mpfr_prec_t out
     return make_complex(rr, ii);
 }
 
-/* AiryAi for a real numeric leaf (Real / MPFR) at out_prec bits. */
-static Expr* ai_eval_real(const Expr* arg, mpfr_prec_t out_prec) {
+/* AiryAi (prime=false) or AiryAiPrime (prime=true) for a real numeric leaf
+ * (Real / MPFR) at out_prec bits. The core computes Ai and Ai' together; we
+ * select the requested component for the result. */
+static Expr* ai_eval_real(const Expr* arg, mpfr_prec_t out_prec, bool prime) {
     mpfr_prec_t wp = (out_prec < 64 ? 64 : out_prec);
     acx z, Ai, Aip;
     acx_init(&z, wp); acx_init(&Ai, wp); acx_init(&Aip, wp);
@@ -586,24 +595,28 @@ static Expr* ai_eval_real(const Expr* arg, mpfr_prec_t out_prec) {
     if (ai_set_mpfr(z.re, arg)) {
         mpfr_set_ui(z.im, 0, ARND);
         airy_ai_core(&z, &Ai, &Aip, out_prec);
-        if (!mpfr_nan_p(Ai.re) && !mpfr_inf_p(Ai.re))
-            out = ai_real_result(Ai.re, out_prec);
+        const acx* R = prime ? &Aip : &Ai;
+        if (!mpfr_nan_p(R->re) && !mpfr_inf_p(R->re))
+            out = ai_real_result(R->re, out_prec);
     }
     acx_clear(&z); acx_clear(&Ai); acx_clear(&Aip);
     return out;
 }
 
-/* AiryAi for a numeric Complex[re, im] at out_prec bits. */
-static Expr* ai_eval_complex(const Expr* re, const Expr* im, mpfr_prec_t out_prec) {
+/* AiryAi (prime=false) or AiryAiPrime (prime=true) for a numeric
+ * Complex[re, im] at out_prec bits. */
+static Expr* ai_eval_complex(const Expr* re, const Expr* im, mpfr_prec_t out_prec,
+                             bool prime) {
     mpfr_prec_t wp = (out_prec < 64 ? 64 : out_prec);
     acx z, Ai, Aip;
     acx_init(&z, wp); acx_init(&Ai, wp); acx_init(&Aip, wp);
     Expr* out = NULL;
     if (ai_set_mpfr(z.re, re) && ai_set_mpfr(z.im, im)) {
         airy_ai_core(&z, &Ai, &Aip, out_prec);
-        if (!mpfr_nan_p(Ai.re) && !mpfr_nan_p(Ai.im) &&
-            !mpfr_inf_p(Ai.re) && !mpfr_inf_p(Ai.im))
-            out = ai_complex_result(Ai.re, Ai.im, out_prec);
+        const acx* R = prime ? &Aip : &Ai;
+        if (!mpfr_nan_p(R->re) && !mpfr_nan_p(R->im) &&
+            !mpfr_inf_p(R->re) && !mpfr_inf_p(R->im))
+            out = ai_complex_result(R->re, R->im, out_prec);
     }
     acx_clear(&z); acx_clear(&Ai); acx_clear(&Aip);
     return out;
@@ -625,11 +638,11 @@ static Expr* airyai_one_arg(Expr* arg) {
 #ifdef USE_MPFR
     /* 2. Machine real. */
     if (arg->type == EXPR_REAL)
-        return ai_eval_real(arg, 53);
+        return ai_eval_real(arg, 53, false);
 
     /* 3. Arbitrary-precision real. */
     if (arg->type == EXPR_MPFR)
-        return ai_eval_real(arg, mpfr_get_prec(arg->data.mpfr));
+        return ai_eval_real(arg, mpfr_get_prec(arg->data.mpfr), false);
 
     /* 4. Complex argument (Complex[..] with an inexact part). */
     {
@@ -637,13 +650,52 @@ static Expr* airyai_one_arg(Expr* arg) {
         if (is_complex(arg, &re, &im) && (ai_is_inexact(re) || ai_is_inexact(im))) {
             long bits = numeric_min_inexact_bits(arg);
             mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
-            Expr* out = ai_eval_complex(re, im, out_prec);
+            Expr* out = ai_eval_complex(re, im, out_prec, false);
             if (out) return out;
         }
     }
 #endif /* USE_MPFR */
 
     return NULL; /* leave symbolic (e.g. AiryAi[2], AiryAi[x]) */
+}
+
+/* ------------------------------------------------------------------ */
+/* AiryAiPrime[z] = Ai'(z)                                            */
+/* Shares the unified core with AiryAi (the core returns Ai').        */
+/* ------------------------------------------------------------------ */
+
+static Expr* airyaiprime_one_arg(Expr* arg) {
+    /* 1. Exact special values. */
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
+        return ai_prime_value_at_zero();   /* Ai'(0) = -1/(3^(1/3) Gamma[1/3]) */
+    /* Ai'(z) -> 0 as z -> +Infinity (recessive solution decays). At -Infinity
+     * Ai' oscillates with *growing* amplitude (~|z|^(1/4)) and has no limit,
+     * so -Infinity is deliberately left unevaluated (unlike AiryAi). */
+    if (ai_is_symbol(arg, "Infinity"))       return expr_new_integer(0);
+    if (ai_is_symbol(arg, "Indeterminate"))  return expr_new_symbol("Indeterminate");
+
+#ifdef USE_MPFR
+    /* 2. Machine real. */
+    if (arg->type == EXPR_REAL)
+        return ai_eval_real(arg, 53, true);
+
+    /* 3. Arbitrary-precision real. */
+    if (arg->type == EXPR_MPFR)
+        return ai_eval_real(arg, mpfr_get_prec(arg->data.mpfr), true);
+
+    /* 4. Complex argument (Complex[..] with an inexact part). */
+    {
+        Expr *re, *im;
+        if (is_complex(arg, &re, &im) && (ai_is_inexact(re) || ai_is_inexact(im))) {
+            long bits = numeric_min_inexact_bits(arg);
+            mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
+            Expr* out = ai_eval_complex(re, im, out_prec, true);
+            if (out) return out;
+        }
+    }
+#endif /* USE_MPFR */
+
+    return NULL; /* leave symbolic (e.g. AiryAiPrime[2], AiryAiPrime[x]) */
 }
 
 /* ------------------------------------------------------------------ */
@@ -667,16 +719,24 @@ Expr* builtin_airyai(Expr* res) {
     return airyai_one_arg(res->data.function.args[0]);
 }
 
-/* AiryAiPrime is a minimal symbolic head: it carries the derivative rule
- * (calculus/deriv.c) and the exact value AiryAiPrime[0], which the Taylor
- * series of AiryAi at 0 needs. It has no general numeric evaluator, so any
- * other argument is left unevaluated. */
+/* Mathematica-compatible argx diagnostic for AiryAiPrime. */
+static Expr* airyaiprime_emit_argx(size_t argc) {
+    fprintf(stderr,
+            "AiryAiPrime::argx: AiryAiPrime called with %zu argument%s; "
+            "1 argument is expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* AiryAiPrime[z] = Ai'(z). Full numeric evaluator (real/complex, machine and
+ * arbitrary precision) sharing AiryAi's unified core, plus the exact value at
+ * 0 and the +Infinity limit. It also carries the derivative rule
+ * (calculus/deriv.c); AiryAiPrime[0] feeds the Taylor series of AiryAi at 0. */
 Expr* builtin_airyaiprime(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    Expr* arg = res->data.function.args[0];
-    if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
-        return ai_prime_value_at_zero();
-    return NULL; /* inert otherwise */
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return airyaiprime_emit_argx(argc);
+    return airyaiprime_one_arg(res->data.function.args[0]);
 }
 
 /* ------------------------------------------------------------------ */
