@@ -126,6 +126,7 @@ set(COMMON_SRC
     ../src/replace.c
     ${CMAKE_SOURCE_DIR}/../src/simp/trigsimp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/trigrat.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/radrat.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_log.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_complexity.c

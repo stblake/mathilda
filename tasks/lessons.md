@@ -835,3 +835,35 @@ Lessons:
   `Plus` before wrapping, so the argument has no leading `-1` to re-pull.
 - **The macOS valgrind baseline is 12,800 B / 400 blocks** (dyld/Accelerate);
   grep leak stacks for your own source frames rather than trusting the total.
+
+## Multi-generator radical simplification (simp_radical_rational, 2026-06-15)
+- **Reduce before you rationalise.** Combining a multi-radical rational gives a
+  big `P/Q` in the generators. Reduce `P` and `Q` modulo the relation ideal
+  (`PolynomialRemainder`) FIRST — they shrink dramatically — then rationalise the
+  denominator with `PolynomialExtendedGCD`. Rationalising the *un-reduced*
+  numerator (`Expand[P*u]`) detonates the multivariate GCD: in dev this left
+  three `./Mathilda` processes pegged at 100% CPU for minutes (kill specific PIDs;
+  never broad `pkill -f Mathilda` — it also kills the user's REPL). This is the
+  "Simplify multi-generator explosion" wall in action.
+- **Plain `Cancel` cannot use the generator relation.** After reducing mod
+  `{t^3 - (a+b x)}`, `Cancel[P/Q]` still leaves a relation-dependent common factor
+  (`s^2 + s t + t^2`) because multivariate GCD treats `s,t,a,b,x` as independent.
+  Clear the generators from the denominator via the extended-GCD/norm
+  (`PolynomialExtendedGCD[Q, rel, g]`) instead — that's what actually collapses it.
+- **FRAMING-2 relations only work when bases nest.** Substituting every base
+  (incl. the bare symbol `a -> s^3`) eliminates the symbol; the relation for the
+  outer base `t^3 = a+b x` becomes `t^3 = s^3 + b x` (good — `s,b,x` survive). But
+  for *independent* bases (e.g. `a^(1/3)` and `(a+b x)^(1/3)` with no other
+  occurrence of `a,b,x`), the free vars vanish into the generators and no relation
+  can be expressed in the ring. Guard each relation by ring-symbol membership and
+  drop the unusable ones; the strict score gate then returns NULL (no regression).
+- **Prove a test FAIL is pre-existing by neutralising the new hook, not by
+  `git stash`.** New untracked files make `git stash push -- <paths>` abort, and
+  `main` already carries a stray stash. Instead replace the new call with
+  `Expr* rr = NULL;`, rebuild just the affected `*_tests`, and confirm the same
+  FAIL count; then restore. (Did this for the 2 `Sqrt[x^2+6]`/`Sqrt[6]`
+  `simplify_tests` soft-asserts — n=1 symbolic base, so the pass is inert.)
+- **Corpus `*_tests` binaries load their `.m` via `../`-relative paths.** Run
+  `fullsimplify_corpus_tests`/`crc_corpus_tests` from `tests/build/` (so `../` ->
+  `tests/`); `intrat_corpus_tests` wants `IntegrateRationalTests.m` in the repo
+  root. A "could not load … as a List" failure is a cwd issue, not a result DIFF.

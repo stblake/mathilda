@@ -84,6 +84,17 @@ canonical forms that the generic pipeline alone does not:
   `Csc = 1/Sin`) are handled too: the inverse odd-generator powers the relation
   injects are cleared before the denominator is rationalised, so
   `Simplify[Cot[x]/Sqrt[Cot[x]]] -> Sqrt[Cot[x]]`.
+- **Multi-generator radical rational normal form** — a rational function of two
+  or more distinct *positive* radical bases (e.g. `a^(1/3)` and `(a+b x)^(1/3)`)
+  is reduced in the quotient ring `K[g_1, ..., g_n] / <g_k^{q_k} - base_k>`: each
+  base is carried as an algebraic generator, the terms are combined over a common
+  denominator, reduced modulo the generator relations, and the denominator is
+  rationalised, before the radicals are substituted back. This recovers
+  cross-base cancellations the single-generator `Together`/`Cancel` path cannot —
+  e.g. `D[Integrate[1/(x^3 (a+b x)^(1/3)), x], x] // Simplify ->
+  1/(x^3 (a+b x)^(1/3))`. Bases that are not provably positive (negative or
+  complex numeric radicands) are left untouched for branch-cut safety, and the
+  result is adopted only when its `SimplifyCount` strictly improves.
 - **Equation / inequality rebalancing** — a binary relation is normalised by
   dividing through the GCD of integer coefficients and partitioning terms across
   the relation; the rebalanced form is kept when its `SimplifyCount` is lower.

@@ -15,6 +15,7 @@
 #include "sym_names.h"
 #include "sym_intern.h"
 #include "trigrat.h"
+#include "radrat.h"
 #include "qa.h"
 #include "qafactor.h"
 #include "simp_log.h"
@@ -1165,6 +1166,17 @@ Expr* simp_dispatch(const Expr* input, const AssumeCtx* ctx,
      * search space. */
     Expr* tsplit = simp_split_multiplicative(input, ctx, complexity_func);
     if (tsplit) return tsplit;
+
+    /* Multi-generator radical-rational fast path: combine rational
+     * functions of two or more distinct radical generators (e.g.
+     * a^(1/3) and (a+b x)^(1/3)) by reducing modulo their generator
+     * relations.  Returns NULL when fewer than two positive radical
+     * bases are present or the reduction does not strictly improve the
+     * input, so every other case falls through unchanged. */
+    {
+        Expr* rr = simp_radical_rational(input, ctx, complexity_func);
+        if (rr) return rr;
+    }
 
     SimpShape shape = simp_classify(input);
     switch (shape) {
