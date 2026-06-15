@@ -41,6 +41,21 @@ static bool is_known_positive_pwr(Expr* e) {
     return false;
 }
 
+/* Strictly positive *numeric* constant: positive integer, positive bigint,
+ * positive real, or Rational with positive numerator. Excludes Pi/E and
+ * Power[...] (unlike is_known_positive_pwr) so the mixed-Times-base split
+ * pulls out only a genuine numeric coefficient c>0, leaving symbolic and
+ * irrational factors inside the residual. (c*w)^s = c^s w^s holds for ALL
+ * complex w when c>0 is real (Arg(c)=0 crosses no branch cut). */
+static bool is_positive_numeric(Expr* e) {
+    if (e->type == EXPR_INTEGER) return e->data.integer > 0;
+    if (e->type == EXPR_BIGINT)  return mpz_sgn(e->data.bigint) > 0;
+    if (e->type == EXPR_REAL)    return e->data.real > 0.0;
+    int64_t n, d;
+    if (is_rational(e, &n, &d)) return n > 0;
+    return false;
+}
+
 /* Real-valued numeric-constant predicate: true for explicit real numbers
  * (integer, bigint, machine real, MPFR real) and exact rationals. Symbolic
  * expressions return false, so this gates branch-cut-sensitive rewrites that
@@ -53,6 +68,17 @@ static bool is_real_number(Expr* e) {
 #endif
     int64_t n, d;
     return is_rational(e, &n, &d);
+}
+
+/* True iff e is a non-integer rational p/q (q>1) with |p|<q, i.e. |e|<1.
+ * For such an inner exponent r, (B^r)^s = B^(r s) holds on principal branches
+ * for ANY complex B: |r|<1 keeps r*Arg(B) within (-pi,pi], so the inner power
+ * never crosses a branch cut and the exponents merge soundly regardless of the
+ * sign of B or the value of s. */
+static bool inner_exp_abs_lt_one(Expr* e) {
+    int64_t n, d;
+    if (!is_rational(e, &n, &d) || d <= 1) return false;
+    return (n < 0 ? -n : n) < d;
 }
 
 static int64_t ipow(int64_t base, int64_t exp, bool* overflow) {
@@ -1273,6 +1299,53 @@ rat_imag_fallthrough: ;
                 free(new_args);
                 return eval_and_free(result);
             }
+
+            /* Mixed-factor fallback: pull a positive *numeric* coefficient out
+             * of a Times base under a rational power. (c*w)^(p/q) =
+             * c^(p/q) * w^(p/q) is valid for ALL complex w when c>0 is real, so
+             * no positivity assumption on the symbolic residual w is needed.
+             *
+             * Gated to fire only when (a) there is a non-numeric/residual
+             * factor (otherwise the all-positive branch above owns it), and
+             * (b) at least one positive-numeric factor FULLY reduces under q
+             * -- i.e. the split yields a genuine rational coefficient, not a
+             * cosmetic radical. This keeps Sqrt[2 Pi], (4 Pi)^(2/3),
+             * Sqrt[2 Sqrt[3]] nested (2,4 have no clean q-th root) while
+             * reducing e.g. (1/27 a^-1)^(1/3) -> 1/3 (1/a)^(1/3) (27 = 3^3). */
+            size_t pos_n = 0, rest_n = 0;
+            bool coef_reduces = false;
+            for (size_t i = 0; i < bc; i++) {
+                Expr* f = base->data.function.args[i];
+                if (is_positive_numeric(f)) {
+                    pos_n++;
+                    if (factor_fully_reduces_under_q(f, qq_pt)) coef_reduces = true;
+                } else {
+                    rest_n++;
+                }
+            }
+            if (pos_n >= 1 && rest_n >= 1 && coef_reduces) {
+                Expr** coef = malloc(sizeof(Expr*) * pos_n);
+                Expr** rest = malloc(sizeof(Expr*) * rest_n);
+                size_t ci = 0, ri = 0;
+                for (size_t i = 0; i < bc; i++) {
+                    Expr* f = base->data.function.args[i];
+                    if (is_positive_numeric(f)) coef[ci++] = expr_copy(f);
+                    else                        rest[ri++] = expr_copy(f);
+                }
+                Expr* coef_base = (pos_n == 1) ? coef[0]
+                    : expr_new_function(expr_new_symbol("Times"), coef, pos_n);
+                Expr* rest_base = (rest_n == 1) ? rest[0]
+                    : expr_new_function(expr_new_symbol("Times"), rest, rest_n);
+                free(coef);
+                free(rest);
+                Expr* coef_pow = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ coef_base, expr_copy(exp) }, 2);
+                Expr* rest_pow = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ rest_base, expr_copy(exp) }, 2);
+                Expr* result = expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ coef_pow, rest_pow }, 2);
+                return eval_and_free(result);
+            }
         }
     }
 
@@ -1299,13 +1372,18 @@ rat_imag_fallthrough: ;
         /* (B^p)^q == B^(p q) is sound when (a) the outer exponent q is an
          * integer (integer powers cross no branch cut for any B), or (b) B is
          * positive AND the inner exponent p is real -- then B^p is a positive
-         * real and (B^p)^q = B^(p q) holds for any q. Without the "p real"
-         * guard, symbolic p collapses incorrectly: e.g. (E^x)^y and (2^x)^y
-         * would fold to E^(x y) / 2^(x y), but x may be complex, so they must
-         * stay unevaluated (matching Mathematica). */
+         * real and (B^p)^q = B^(p q) holds for any q, or (c) the inner exponent
+         * p is a non-integer rational with |p|<1 -- then for ANY complex B the
+         * intermediate B^p has argument p*Arg(B) in (-pi,pi], so no branch cut
+         * is crossed and the exponents merge for any q (e.g.
+         * (z^(2/3))^(1/2) = z^(1/3), Sqrt[Sqrt[a]] = a^(1/4)). Without the "p
+         * real" guard in (b), symbolic p collapses incorrectly: e.g. (E^x)^y
+         * and (2^x)^y would fold to E^(x y) / 2^(x y), but x may be complex, so
+         * they must stay unevaluated (matching Mathematica). */
         bool can_compose = (exp->type == EXPR_INTEGER)
                         || (is_known_positive_pwr(inner_base)
-                            && is_real_number(inner_exp));
+                            && is_real_number(inner_exp))
+                        || inner_exp_abs_lt_one(inner_exp);
         if (can_compose) {
             Expr* t_args[2] = { expr_copy(inner_exp), expr_copy(exp) };
             Expr* new_exp = expr_new_function(expr_new_symbol("Times"), t_args, 2);

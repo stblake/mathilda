@@ -171,6 +171,24 @@ static void test_power_of_times_power_factor_composes(void) {
     assert_eval_eq("Power[4 Pi, 2/3]",     "(4 Pi)^(2/3)",          0);
 }
 
+/* Nested rational powers with |inner exponent| < 1 compose on the principal
+ * branch for ANY base (no positivity assumption), and a positive numeric
+ * coefficient that fully reduces under the outer denominator splits out of a
+ * mixed Times base. Together these reduce Sqrt[(1/27/a)^(2/3)] to
+ * 1/3 (1/a)^(1/3) for symbolic a (2026-06-15). */
+static void test_power_nested_symbolic_compose(void) {
+    /* Main case: compose (z^(2/3))^(1/2) -> z^(1/3), then split out 1/27. */
+    assert_eval_eq("Sqrt[(1/27/a)^(2/3)]", "1/3 (1/a)^(1/3)", 0);
+    /* Composition alone, symbolic base (|2/3| < 1). */
+    assert_eval_eq("Sqrt[a^(2/3)]",        "a^(1/3)",         0);
+    /* Repeated Sqrt folds: |1/2| < 1 at each level. */
+    assert_eval_eq("Sqrt[Sqrt[Sqrt[a]]]",  "a^(1/8)",         0);
+    /* Inner exponent |p| >= q must NOT compose for unknown-sign base. */
+    assert_eval_eq("Sqrt[a^(3/2)]",        "Sqrt[a^(3/2)]",   0);
+    /* Symbolic inner exponent must NOT compose (branch-cut unsafe). */
+    assert_eval_eq("Sqrt[Power[2, a]]",    "Sqrt[2^a]",       0);
+}
+
 /* Power-of-Power composition with positive base + rational outer (2026-05-12). */
 static void test_power_of_power_positive_base(void) {
     /* Positive base with a *real* (rational) inner exponent merges:
@@ -238,6 +256,7 @@ int main(void) {
     TEST(test_power_of_times_positives);
     TEST(test_power_of_power_positive_base);
     TEST(test_power_of_times_power_factor_composes);
+    TEST(test_power_nested_symbolic_compose);
     TEST(test_bigint_perfect_root);
 
     printf("All power_corpus tests passed!\n");

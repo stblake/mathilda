@@ -288,6 +288,20 @@ Exponentiation.
   Negative bases other than `-1` with even `q ≥ 4` (e.g. `(-16)^(1/4)`) are
   still left unevaluated.
 - Distributes power over product if the exponent is an integer.
+- **Nested rational powers compose for any base when `|inner exponent| < 1`.**
+  `(B^r)^s → B^(r·s)` holds on the principal branch for *any* complex `B` when
+  `r = p/q` is a non-integer rational with `|p| < q` (then `r·Arg(B)` stays in
+  `(-π, π]`, so no branch cut is crossed). This works without a positivity
+  assumption: `Sqrt[a^(2/3)] → a^(1/3)`, `Sqrt[Sqrt[a]] → a^(1/4)`. Inner
+  exponents with `|p| ≥ q` (e.g. `a^(3/2)`) and symbolic inner exponents (e.g.
+  `2^a`) still stay unevaluated.
+- **Positive numeric coefficient splits out of a mixed `Times` base** under a
+  rational power: `(c·w)^(p/q) → c^(p/q) · w^(p/q)` when `c > 0` is a numeric
+  rational/integer/real that fully reduces under `q` and `w` is the symbolic
+  residual (valid for any `w` since `Arg(c) = 0`). Combined with the nested-power
+  rule this gives `Sqrt[(1/27/a)^(2/3)] → 1/3 (1/a)^(1/3)`. Gated to fire only
+  when the coefficient genuinely reduces, so `Sqrt[2 Pi]`, `(4 Pi)^(2/3)`,
+  `Sqrt[2 Sqrt[3]]` stay nested.
 - For `Power[Integer, Rational]` with positive base and positive
   `p/q` exponent, splits the base's prime factorisation into a
   product of distinct-prime powers grouped by reduced effective

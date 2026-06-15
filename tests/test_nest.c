@@ -134,10 +134,11 @@ static void test_nest_list_building(void) {
 }
 
 static void test_nest_sqrt_symbolic(void) {
-    /* Sqrt[a] reduces to Power[a, 1/2] internally, so nesting produces
-     * nested Power heads rather than nested Sqrt calls. */
+    /* Sqrt[a] reduces to Power[a, 1/2] internally, and nested rational powers
+     * with |exponent| < 1 compose on the principal branch for any base, so
+     * Sqrt[Sqrt[Sqrt[a]]] folds to a^(1/8). */
     run_full("Nest[Sqrt, a, 3]",
-             "Power[Power[Power[a, Rational[1, 2]], Rational[1, 2]], Rational[1, 2]]");
+             "Power[a, Rational[1, 8]]");
 }
 
 static void test_nest_negative_n_unevaluated(void) {
