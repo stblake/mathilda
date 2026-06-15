@@ -815,3 +815,23 @@ Lessons:
   Only transform a *detected-singular* endpoint; never blindly try both.
 - **Between-the-zeros marchers need an adaptive step** (sized from the last gap),
   not a fixed half-period — otherwise an accelerating chirp leaps over lobes.
+
+## Post-integration normalisation (intsimp_finalize, 2026-06-15)
+- **Result-cleanup passes must respect the verifier's assumptions.** The
+  intrat corpus checks `Cancel[Together[Expand[D[result,x]-f]]] == 0` WITHOUT
+  assuming free symbols positive. A cleanup that rewrites an x-free constant
+  under a positivity assumption (`(1/a)^(1/3) -> a^(-1/3)`, or PowerExpand on a
+  negative/complex numeric base like `(-3)^(1/2)`) changes the constant's value
+  and the differentiate-back no longer cancels. Scope such rewrites to
+  positive bases AND to the result class that actually needs them
+  (radical-bearing antiderivatives) — never blanket-apply to all Integrate
+  output.
+- **Never re-`evaluate()` an integration result that still contains a nested
+  `Integrate[...]`.** It re-enters `builtin_integrate` and blows the 1024
+  recursion limit → segfault. Guard with a contains-Integrate tree-walk.
+- **ArcTan/ArcTanh oddness will undo a hand-rolled sign pull.** Building
+  `Times[-1, ArcTan[Times[-1, negPlus]]]` collapses straight back: ArcTan pulls
+  the inner `-1` out again. `Expand` the negation into a genuinely positive
+  `Plus` before wrapping, so the argument has no leading `-1` to re-pull.
+- **The macOS valgrind baseline is 12,800 B / 400 blocks** (dyld/Accelerate);
+  grep leak stacks for your own source frames rather than trusting the total.

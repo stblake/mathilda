@@ -297,6 +297,22 @@ remaining child crashes from earlier runs are eliminated, while
     advisory.
   Options are stripped before dispatch — Phase 7 keeps them advisory
   while the algorithmic path uses the Mathematica defaults.
+- **Post-method normalisation of radical antiderivatives
+  (`intsimp_finalize`)** — closed antiderivatives carrying a
+  `Power[f(x), p/q]` of the integration variable pass through one final
+  cleanup at the `builtin_integrate` chokepoint
+  (`src/calculus/intsimp.c`); non-radical and partially-closed results
+  are left exactly as the method produced them. For radical results:
+  x-free reciprocal/product powers over a positive base are flattened
+  (`(1/a)^(2/3) -> a^(-2/3)`, branch-safe because only x-free,
+  positive-base subexpressions are `PowerExpand`-ed); the algebraic part
+  is recombined with its `Numerator` / `Denominator` `Expand`-ed so
+  integer-power compounds collapse in x
+  (`6 a^4 - 12 a^3 (a+b x) + 6 a^2 (a+b x)^2 -> 6 a^2 b^2 x^2`, gated to
+  fire only when it strictly shrinks); and inverse-trig arguments are
+  distributed and sign-normalised. This is why
+  `Integrate[1/(x^3 (a+b x)^(1/3)), x]` returns the compact
+  `(4 (a+b x)^(5/3) - 7 a (a+b x)^(2/3))/(6 a^2 x^2) + ...` form.
 
 Inputs whose denominator is real-irreducible-over-Q with degree > 4
 or non-biquadratic degree 4 close in held `RootSum` form rather than

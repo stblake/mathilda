@@ -23,6 +23,8 @@
 #include "internal.h"
 #include "expand.h"
 #include "poly.h"
+#include "arithmetic.h"
+#include "core.h"
 #include "sym_names.h"
 
 #include <stdio.h>
@@ -705,4 +707,346 @@ Expr* intsimp_normalize_inverse_trig_signs(Expr* e) {
     free(new_args);
     /* Run a single evaluator pass so Plus / Times canonicalise. */
     return eval_and_free(result);
+}
+
+/* ====================================================================
+ * Final antiderivative normalisation — intsimp_finalize.
+ * ====================================================================
+ *
+ * Applied once to every closed antiderivative (all Integrate methods).
+ * Two independent clean-ups that the per-method pipelines leave on the
+ * table:
+ *
+ *  (1) x-free reciprocal / product powers.  Substitution-based radical
+ *      integrators emit constants like (1/a)^(1/3) that the core Power
+ *      evaluator deliberately will NOT flatten (branch-cut safety: `a`
+ *      is not provably positive).  Integration output carries implicit
+ *      domain assumptions, so a PowerExpand restricted to *x-free*
+ *      subexpressions is the correct, Mathematica-matching cleanup; it
+ *      turns (1/a)^(2/3) -> a^(-2/3), which then collects against the
+ *      surrounding a^k into the familiar a^(7/3) denominators.
+ *
+ *  (2) algebraic recombination.  The linear/quadratic-radical methods
+ *      back-substitute u -> (a x + b)^(1/n) into an *un-combined* sum of
+ *      Hermite terms whose denominators are polynomials in the compound
+ *      radicand (a x + b).  A single Cancel[Together[.]] over the
+ *      algebraic part collapses e.g.
+ *        2 a^3 - 4 a^2 (a+b x) + 2 a (a+b x)^2  ->  2 a b^2 x^2
+ *      because the integer-power radicand expands in x and the radical
+ *      (a x + b)^(2/3) rides along as an opaque generator.  Gated to fire
+ *      only when it strictly shrinks the algebraic part, so it never
+ *      enlarges or reshapes a result that was already tidy.
+ *
+ *  (3) the inverse-trig arguments are then distributed (Expand) and
+ *      sign-normalised so ArcTan[-(p+q)] -> -ArcTan[p+q].
+ *
+ * Memory: returns a fresh owned Expr*; does NOT free `r`.
+ */
+
+/* Cancel[Together[e]], consuming `e`. */
+static Expr* it_cancel_together(Expr* e) {
+    if (!e) return NULL;
+    Expr* t = eval_and_free(internal_together((Expr*[]){ e }, 1));
+    if (!t) return NULL;
+    return eval_and_free(internal_cancel((Expr*[]){ t }, 1));
+}
+
+/* Positive under the integration convention (free symbols denote positive
+ * reals).  PowerExpand is only branch-safe on such bases: rewriting
+ * (1/a)^(1/3) -> a^(-1/3) is sound when a > 0, but the same rewrite on a
+ * negative or complex numeric constant (e.g. (-3)^(1/2)) crosses a branch
+ * cut and silently changes the value — which would corrupt the constant
+ * coefficient of an antiderivative and break differentiate-back. */
+static bool it_pos_base(const Expr* c) {
+    if (!c) return false;
+    if (c->type == EXPR_SYMBOL) return true;       /* assume positive */
+    if (c->type == EXPR_INTEGER) return c->data.integer > 0;
+    if (c->type == EXPR_REAL)    return c->data.real > 0.0;
+    {
+        int64_t n, d;
+        if (is_rational(c, &n, &d)) return ((n > 0) == (d > 0)) && n != 0;
+    }
+    if (c->type == EXPR_FUNCTION
+        && c->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = c->data.function.head->data.symbol;
+        if (h == SYM_Times) {
+            for (size_t i = 0; i < c->data.function.arg_count; i++)
+                if (!it_pos_base(c->data.function.args[i])) return false;
+            return true;
+        }
+        if (h == SYM_Power && c->data.function.arg_count == 2)
+            return it_pos_base(c->data.function.args[0]);  /* b>0 => b^e>0 */
+    }
+    return false;
+}
+
+/* Rewrite every x-free Power[c, p/q] (q != 1, c positive under the
+ * symbol-positive convention) node via PowerExpand so (1/c)^r -> c^(-r)
+ * and (c1 c2)^r -> c1^r c2^r.  Only x-free, positive-base nodes are
+ * touched; x-dependent radicals such as (a x + b)^(2/3) and negative /
+ * complex numeric constants are left intact.  Returns a fresh copy;
+ * `e` is untouched. */
+static Expr* it_normalize_xfree_powers(Expr* e, Expr* x) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        int64_t pn, pd;
+        if (is_rational(e->data.function.args[1], &pn, &pd) && pd != 1
+            && it_pos_base(e->data.function.args[0])
+            && intrat_freeq_test(e, x)) {
+            Expr* pe = expr_new_function(expr_new_symbol("PowerExpand"),
+                                         (Expr*[]){ expr_copy(e) }, 1);
+            return eval_and_free(pe);
+        }
+    }
+
+    size_t n = e->data.function.arg_count;
+    Expr** na = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        na[i] = it_normalize_xfree_powers(e->data.function.args[i], x);
+    Expr* head = it_normalize_xfree_powers(e->data.function.head, x);
+    Expr* r = expr_new_function(head, na, n);
+    free(na);
+    return r;
+}
+
+/* True if `e` contains a Power[base, p/q] (q != 1) whose base depends on
+ * x — i.e. a genuine algebraic radical of the integration variable. */
+static bool it_has_x_radical(const Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        int64_t pn, pd;
+        if (is_rational(e->data.function.args[1], &pn, &pd) && pd != 1
+            && !intrat_freeq_test(e->data.function.args[0], x))
+            return true;
+    }
+    if (it_has_x_radical(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (it_has_x_radical(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+static bool it_is_invtrig_head(const char* s) {
+    return s == SYM_ArcTan  || s == SYM_ArcTanh
+        || s == SYM_ArcSin  || s == SYM_ArcCos  || s == SYM_ArcCot
+        || s == SYM_ArcSinh || s == SYM_ArcCosh || s == SYM_ArcCoth;
+}
+
+/* True if `e` contains a Log or inverse-trig head anywhere. */
+static bool it_term_is_transcendental(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* s = e->data.function.head->data.symbol;
+        if (s == SYM_Log || it_is_invtrig_head(s)) return true;
+    }
+    if (it_term_is_transcendental(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (it_term_is_transcendental(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Leading numeric sign of a single Times/atom term is negative. */
+static bool it_summand_negative(const Expr* t) {
+    if (!t) return false;
+    if (t->type == EXPR_INTEGER) return t->data.integer < 0;
+    if (t->type == EXPR_REAL)    return t->data.real < 0.0;
+    if (t->type == EXPR_FUNCTION
+        && t->data.function.head->type == EXPR_SYMBOL) {
+        const char* s = t->data.function.head->data.symbol;
+        if (s == SYM_Rational && t->data.function.arg_count == 2
+            && t->data.function.args[0]->type == EXPR_INTEGER)
+            return t->data.function.args[0]->data.integer < 0;
+        if (s == SYM_Times && t->data.function.arg_count >= 1)
+            return it_summand_negative(t->data.function.args[0]);
+    }
+    return false;
+}
+
+/* True if `e` has an overall negative leading sign: a Plus all of whose
+ * summands are negative, or a single negative term. */
+static bool it_all_negative(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Plus) {
+        if (e->data.function.arg_count == 0) return false;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!it_summand_negative(e->data.function.args[i])) return false;
+        return true;
+    }
+    return it_summand_negative(e);
+}
+
+/* Distribute (Expand) and sign-normalise inverse-trig arguments:
+ * ArcTan[(-p - q)/d] -> -ArcTan[(p + q)/d] (distributed). */
+static Expr* it_tidy_invtrig_args(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+
+    size_t n = e->data.function.arg_count;
+    Expr** na = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++)
+        na[i] = it_tidy_invtrig_args(e->data.function.args[i]);
+    Expr* head = expr_copy(e->data.function.head);
+    Expr* rebuilt = expr_new_function(head, na, n);
+    free(na);
+
+    if (rebuilt->data.function.head->type == EXPR_SYMBOL
+        && it_is_invtrig_head(rebuilt->data.function.head->data.symbol)
+        && rebuilt->data.function.arg_count == 1) {
+        Expr* ax = expr_expand(rebuilt->data.function.args[0]);
+        Expr* ae = eval_and_free(ax);
+        Expr* node;
+        if (it_all_negative(ae)) {
+            /* Distribute the negation so the argument becomes a genuinely
+             * positive sum.  A bare Times[-1, Plus[...]] would be re-pulled
+             * by ArcTan's own oddness, silently undoing the flip. */
+            Expr* neg = internal_times(
+                (Expr*[]){ expr_new_integer(-1), ae }, 2);    /* consumes ae */
+            Expr* pos = expr_expand(neg);
+            expr_free(neg);
+            pos = eval_and_free(pos);
+            Expr* inner = expr_new_function(
+                expr_copy(rebuilt->data.function.head),
+                (Expr*[]){ pos }, 1);
+            node = eval_and_free(internal_times(
+                (Expr*[]){ expr_new_integer(-1), inner }, 2));
+        } else {
+            node = expr_new_function(
+                expr_copy(rebuilt->data.function.head),
+                (Expr*[]){ ae }, 1);
+        }
+        expr_free(rebuilt);
+        return node;
+    }
+    return rebuilt;
+}
+
+/* Recombine an algebraic (radical) sum into a single reduced fraction.
+ * Cancel[Together] alone leaves the denominator as a polynomial in the
+ * compound radicand (e.g. 6 a^4 - 12 a^3 (a+b x) + 6 a^2 (a+b x)^2);
+ * splitting into Numerator / Denominator and Expand-ing each collapses
+ * those integer-power compounds in x (-> 6 a^2 b^2 x^2) while the
+ * fractional-power radicals ride through untouched.  A final Cancel
+ * clears the shared polynomial factor.  Consumes nothing; returns a
+ * fresh owned Expr* (or NULL on failure). */
+static Expr* it_recombine_algebraic(Expr* alg) {
+    Expr* cand = it_cancel_together(expr_copy(alg));
+    if (!cand) return NULL;
+
+    Expr* num = eval_and_free(internal_numerator(
+        (Expr*[]){ expr_copy(cand) }, 1));
+    Expr* den = eval_and_free(internal_denominator(
+        (Expr*[]){ expr_copy(cand) }, 1));
+    if (!num || !den) {
+        if (num) expr_free(num);
+        if (den) expr_free(den);
+        return cand;
+    }
+
+    Expr* num_e = expr_expand(num);  expr_free(num);
+    Expr* den_e = expr_expand(den);  expr_free(den);
+    Expr* frac  = eval_and_free(internal_divide((Expr*[]){ num_e, den_e }, 2));
+    Expr* out   = eval_and_free(internal_cancel((Expr*[]){ frac }, 1));
+    expr_free(cand);
+    return out;
+}
+
+/* Largest algebraic part we will attempt to Cancel[Together] — a guard
+ * against the multivariate-GCD blow-up on high-generator results. */
+#define IT_RECOMBINE_GATE 800
+
+/* True if `e` contains an unevaluated Integrate[...] head anywhere — a
+ * partially-closed result we must not re-evaluate (it would re-enter the
+ * integrator and can blow the recursion limit). */
+static bool it_contains_integrate(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Integrate) return true;
+    if (it_contains_integrate(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (it_contains_integrate(e->data.function.args[i])) return true;
+    return false;
+}
+
+Expr* intsimp_finalize(Expr* r, Expr* x) {
+    if (!r) return NULL;
+
+    /* This pass is scoped to radical-bearing antiderivatives — the only
+     * class where the per-method pipelines leave the deficiency (the
+     * substitution integrators back-substitute an un-combined sum and emit
+     * (1/a)^(k/q) constants).  Pure-rational / Risch / trig output is passed
+     * straight through: re-touching it perturbs forms the corpus verifier
+     * pins (and reciprocal-power flattening on a generic symbol would not be
+     * branch-sound without an assumption the verifier does not share).  A
+     * partially-closed result (nested Integrate) is likewise left as-is — re-
+     * evaluating it would re-enter the integrator and risk the recursion
+     * limit.  Both checks are single tree-walks; this function takes
+     * ownership of `r` and returns it (or a derived tree). */
+    if (it_contains_integrate(r) || !it_has_x_radical(r, x)) return r;
+
+    /* (1) x-free power normalisation, then one evaluator pass so the
+     *     freed reciprocal powers collect against neighbouring a^k. */
+    Expr* p = it_normalize_xfree_powers(r, x);
+    expr_free(r);
+    p = eval_and_free(p);
+
+    /* (2) split into algebraic vs transcendental summands. */
+    bool is_plus = (p->type == EXPR_FUNCTION
+        && p->data.function.head->type == EXPR_SYMBOL
+        && p->data.function.head->data.symbol == SYM_Plus);
+    size_t n = is_plus ? p->data.function.arg_count : 1;
+
+    Expr** alg = (Expr**)malloc(sizeof(Expr*) * n);
+    Expr** trn = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t na2 = 0, nt = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* term = is_plus ? p->data.function.args[i] : p;
+        if (it_term_is_transcendental(term)) trn[nt++] = expr_copy(term);
+        else                                 alg[na2++] = expr_copy(term);
+    }
+
+    Expr* alg_sum = NULL;
+    if (na2 == 1) alg_sum = alg[0];
+    else if (na2 > 1) alg_sum = eval_and_free(internal_plus(alg, na2));
+    free(alg);
+
+    Expr* trn_sum = NULL;
+    if (nt == 1) trn_sum = trn[0];
+    else if (nt > 1) trn_sum = eval_and_free(internal_plus(trn, nt));
+    free(trn);
+
+    /* (3) recombine the algebraic part when it strictly shrinks. */
+    if (alg_sum && leaf_count_internal(alg_sum, true) <= IT_RECOMBINE_GATE) {
+        Expr* cand = it_recombine_algebraic(alg_sum);
+        if (cand && leaf_count_internal(cand, true)
+                    < leaf_count_internal(alg_sum, true)) {
+            expr_free(alg_sum);
+            alg_sum = cand;
+        } else if (cand) {
+            expr_free(cand);
+        }
+    }
+
+    /* (4) distribute + sign-normalise inverse-trig arguments. */
+    if (trn_sum) {
+        Expr* t2 = it_tidy_invtrig_args(trn_sum);
+        expr_free(trn_sum);
+        trn_sum = t2;
+    }
+
+    expr_free(p);
+
+    /* (5) reassemble + final evaluator pass. */
+    Expr* out;
+    if (alg_sum && trn_sum)
+        out = eval_and_free(internal_plus((Expr*[]){ alg_sum, trn_sum }, 2));
+    else if (alg_sum) out = alg_sum;
+    else if (trn_sum) out = trn_sum;
+    else out = expr_new_integer(0);
+    return out;
 }

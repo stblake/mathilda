@@ -1,45 +1,44 @@
-# Task: Implement UnitStep (piecewise.c)
+# Task: Fix post-integration simplification (radical antiderivatives)
 
-## Spec
-- `UnitStep[x]` = 0 for x<0, 1 for x>=0 (value at 0 is **1**).
-- `UnitStep[x1,...,xn]` = 1 iff none of the xi are negative, else 0 (acts as product of UnitStep[xi]).
-- `UnitStep[]` = 1.
-- Always returns an exact result (0 or 1) for real numeric input.
-- Exact symbolic reals (Pi, Sqrt[2], ...) resolved by numerical certification (MPFR precision-doubling).
-- Non-real / symbolic args -> leave unevaluated (drop resolved-nonneg args, keep unknowns).
-- Attributes: Listable, NumericFunction, Orderless, Protected.
+## Problem
+`Integrate[1/(x^3 (a + b x)^(1/3)), x]` returned a correct but verbose result:
+unsimplified rational pieces over denominators in the compound `(a+b x)` and
+stray `(1/a)^(k/3)` constants. Target = Mathematica's compact form with
+`6 a^2 x^2` denominator and `a^(7/3)` coefficients.
 
-## Plan
-- [ ] piecewise.c: `builtin_unitstep` + helpers (real_sign, ustep_class, MPFR certify).
-- [ ] piecewise.h: prototype.
-- [ ] piecewise_init: register builtin + attributes.
-- [ ] info.c: terse docstring.
-- [x] sym_names.c: SYM_UnitStep — ALREADY PRESENT (verified line 400/811).
-- [ ] deriv.c: D[UnitStep[a1..an],x] via product rule -> Piecewise[{{Indeterminate, ai==0}},0]*UnitStep[rest].
-- [ ] tests/test_piecewise.c: extensive UnitStep cases.
-- [ ] docs/spec/builtins/elementary-functions.md + changelog 2026-06-08.md.
-- [ ] Build clean, run piecewise_tests, valgrind clean.
+## Plan (done)
+- [x] New `intsimp_finalize(r, x)` in `src/calculus/intsimp.c`, wired at the
+      single `builtin_integrate` chokepoint (`integrate.c`). Takes ownership.
+- [x] Scope to **radical-bearing** results (`it_has_x_radical`); non-radical /
+      nested-`Integrate` results pass through untouched.
+- [x] x-free, positive-base `PowerExpand` (`it_normalize_xfree_powers` +
+      `it_pos_base`): `(1/a)^(2/3) -> a^(-2/3)`.
+- [x] Algebraic recombine: `Cancel[Together]` then `Numerator`/`Denominator`
+      `Expand` + `Cancel` so `(a+b x)`-poly denominators collapse in x
+      (`it_recombine_algebraic`); only kept when it strictly shrinks.
+- [x] Inverse-trig arg distribute + sign-pull (`it_tidy_invtrig_args`).
+- [x] Docs: changelog `2026-06-15.md` + `docs/spec/builtins/calculus.md`.
 
-## Review — DONE 2026-06-14
+## Review
+- **Result now matches the target** (algebraic part collapses to `6 a^2 x^2`,
+  `ArcTan[1/Sqrt[3] + ...]` with sign pulled, `a^(7/3)` denominators, clean
+  `Log` args) up to an immaterial `Log` sign (constant of integration).
+  `PossibleZeroQ[D[r,x] - integrand] = True`.
+- **No new builtins/attributes.** One new function + helpers in an existing
+  module; prototype in `intsimp.h`.
+- **Tests:** `integrate_linrad/quadrad/linratiorad`, `integrate_unknown`
+  (previously segfaulted — fixed by the nested-`Integrate` guard + radical-only
+  scoping), `intrat`, `integrate_dispatch`, `integrals`, `intrischnorman`,
+  `integrate_derivdivides` — all pass. `IntegrateRationalTests.m` corpus passes
+  (1 diff ≤ baseline 2, 0 crashes; was 9 diffs + 2 crashes mid-development).
+- **valgrind:** no new leaks — only the documented 12,800 B / 400 blocks macOS
+  dyld/Accelerate baseline; no `intsimp`/`it_*` frames in any leak stack.
 
-All explicit deliverables complete and verified.
-
-- **piecewise.c**: `builtin_unitstep` + helpers `ustep_real_sign`,
-  `ustep_is_pos_infinity`, `ustep_certify` (MPFR precision-doubling), `ustep_class`.
-  Multidim = product semantics; drops proven-non-negative args; non-real/unresolved
-  left unevaluated. Registered with attributes Listable|NumericFunction|Orderless|Protected.
-- **info.c**: terse docstring (no examples, per house style).
-- **deriv.c**: product-rule derivative; `D[UnitStep[x],x]` = `Piecewise[{{Indeterminate,x==0}},0]`,
-  multidim matches MMA (`UnitStep[x,y] Piecewise[...]`).
-- **tests**: `test_unitstep` (~55 cases) in test_piecewise.c — all pass (exit 0).
-  deriv_tests / deriv_symbolic_order_tests / deriv_array_tests all still pass.
-- **build**: clean under `-std=c99 -Wall -Wextra`.
-- **valgrind**: only the documented macOS baseline (12,800 B / 400 blocks from
-  dyld/libobjc/Accelerate); zero leak stacks reference Mathilda source.
-- **docs**: elementary-functions.md UnitStep section + changelog 2026-06-08.md entry.
-
-All 23 spec example outputs reproduced exactly (incl. boundary case Sqrt[2]-99/70 → 0).
-
-### Deferred (noted in changelog)
-- `Integrate[UnitStep[x],x]` = `x UnitStep[x]` — needs an integral-table hook.
-- `UnitStep'[x] === UnitStep''[x]` — needs cleaner `D` of `Piecewise`.
+## Key gotchas hit (see lessons.md)
+1. Broad x-free `PowerExpand` on *all* results changed negative/complex constant
+   values across branch cuts → corpus DIFF regressions. Gated to positive bases
+   AND radical-bearing results only.
+2. Re-evaluating results that contain nested `Integrate` re-enters the
+   integrator → recursion-limit segfault. Skip those.
+3. Pulling an ArcTan sign by `Times[-1, NegativePlus]` is undone by ArcTan's own
+   oddness; must `Expand` the negation into a genuinely positive sum first.

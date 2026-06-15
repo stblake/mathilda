@@ -68,4 +68,15 @@ Expr* intsimp_strip_log_constants(Expr* e, Expr* x);
 Expr* intsimp_distribute_plus(Expr* e);
 Expr* intsimp_normalize_inverse_trig_signs(Expr* e);
 
+/* Final normalisation applied once to every closed antiderivative, scoped
+ * to radical-bearing results (those carrying a Power[f(x), p/q] of the
+ * integration variable).  For such results it flattens x-free
+ * reciprocal/product powers ((1/a)^(1/3) -> a^(-1/3)), recombines the
+ * algebraic part (Cancel[Together] with Numerator/Denominator Expand, when
+ * it strictly shrinks), and distributes / sign-normalises inverse-trig
+ * arguments.  Non-radical and partially-closed (nested Integrate) results
+ * are returned unchanged.  TAKES OWNERSHIP of `r` and returns it (or a
+ * derived tree). */
+Expr* intsimp_finalize(Expr* r, Expr* x);
+
 #endif /* MATHILDA_INTSIMP_H */

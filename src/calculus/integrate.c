@@ -25,6 +25,7 @@
 #include "integrate_jeffrey.h"
 #include "intrat.h"
 #include "intrischnorman.h"
+#include "intsimp.h"
 #include "common.h"
 #include "expr.h"
 #include "eval.h"
@@ -421,6 +422,13 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_INVALID:
             break;  /* unreachable: handled above */
     }
+
+    /* Single post-method normalisation chokepoint: flatten x-free
+     * reciprocal/product powers across every method's output, and — for
+     * radical-bearing antiderivatives — recombine the algebraic part and
+     * tidy inverse-trig arguments.  Runs on the symbolic result before the
+     * inexact path numericalises it.  See intsimp_finalize. */
+    if (result) result = intsimp_finalize(result, x);   /* takes ownership */
 
     if (coerced) expr_free(coerced);
 
