@@ -366,6 +366,34 @@ void info_init(void) {
         "AiryBiPrime[0] = 3^(1/6)/Gamma[1/3], AiryBiPrime[+Infinity] = Infinity. Real\n"
         "and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
         "precision; D[AiryBiPrime[z], z] = z AiryBi[z]. Listable.");
+    symtab_set_docstring("BesselJ",
+        "BesselJ[n, z]\n"
+        "\tgives the Bessel function of the first kind J_n(z), a solution of\n"
+        "\tz^2 y'' + z y' + (z^2 - n^2) y = 0 regular at the origin.\n"
+        "J_0(0) = 1, J_n(0) = 0 for integer n != 0. Has a branch cut along the\n"
+        "negative real z axis for non-integer n. Real and complex order and\n"
+        "argument evaluate numerically at machine or arbitrary (MPFR) precision;\n"
+        "D[BesselJ[n, z], z] = (BesselJ[n-1, z] - BesselJ[n+1, z])/2. Listable.");
+
+    symtab_set_docstring("BesselK",
+        "BesselK[n, z]\n"
+        "\tgives the modified Bessel function of the second kind K_n(z), a\n"
+        "\tsolution of z^2 y'' + z y' - (z^2 + n^2) y = 0.\n"
+        "K_n(z) is even in n (K_{-n} = K_n) and decays like e^{-z} as z -> Inf.\n"
+        "K_0(0) = Infinity, K_n(0) = ComplexInfinity. Has a branch cut along the\n"
+        "negative real z axis. Real and complex order and argument evaluate\n"
+        "numerically at machine or arbitrary (MPFR) precision;\n"
+        "D[BesselK[n, z], z] = -(BesselK[n-1, z] + BesselK[n+1, z])/2. Listable.");
+
+    symtab_set_docstring("BesselI",
+        "BesselI[n, z]\n"
+        "\tgives the modified Bessel function of the first kind I_n(z), the\n"
+        "\tsolution of z^2 y'' + z y' - (z^2 + n^2) y = 0 regular at the origin.\n"
+        "I_0(0) = 1, I_n(0) = 0 for integer n != 0; I_n grows like e^z as\n"
+        "z -> Inf and is even in n (I_{-n} = I_n). Has a branch cut along the\n"
+        "negative real z axis for non-integer n. Real and complex order and\n"
+        "argument evaluate numerically at machine or arbitrary (MPFR) precision;\n"
+        "D[BesselI[n, z], z] = (BesselI[n-1, z] + BesselI[n+1, z])/2. Listable.");
     symtab_set_docstring("Erf",
         "Erf[z]\n"
         "\tgives the error function erf(z) = (2/Sqrt[Pi]) Integral_0^z e^(-t^2) dt.\n"
@@ -2444,6 +2472,11 @@ void info_init(void) {
         "The result of Series is a SeriesData object; use Normal to convert it back to\n"
         "\tan ordinary expression by dropping the O-term.\n"
         "Series is Protected and HoldAll so the expansion variable is not evaluated.");
+    symtab_set_docstring("SeriesCoefficient",
+        "SeriesCoefficient[f, {x, x0, k}]\n"
+        "\tgives the coefficient of (x - x0)^k in the power-series expansion of f\n"
+        "\tabout x = x0. Works for a concrete integer index k and a finite expansion\n"
+        "point, for any f that Series can expand. HoldAll, Protected.");
     symtab_set_docstring("Normal",
         "Normal[expr]\n"
         "\tconverts expr to a normal expression. If expr is a SeriesData object, the\n"

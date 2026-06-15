@@ -456,4 +456,166 @@ Expr* numeric_mpfr_apply_complex_unary(const Expr* e, long default_bits,
     return make_complex(re_expr, im_expr);
 }
 
+/* --------------------------------------------------------------------
+ *  ncpx — raw complex-MPFR arithmetic (see numeric_complex.h).
+ *
+ *  Each op is alias-safe: every input component that must outlive a write
+ *  to the output is read into scratch first. Binary ops that allocate take
+ *  the working precision `wp` for that scratch.
+ * ------------------------------------------------------------------ */
+
+#define NRND MPFR_RNDN
+
+void ncpx_init (ncpx* z, mpfr_prec_t p) { mpfr_init2(z->re, p); mpfr_init2(z->im, p); }
+void ncpx_clear(ncpx* z)                { mpfr_clear(z->re);    mpfr_clear(z->im);    }
+
+void ncpx_set(ncpx* d, const ncpx* s) {
+    mpfr_set(d->re, s->re, NRND);
+    mpfr_set(d->im, s->im, NRND);
+}
+void ncpx_set_d(ncpx* d, double re, double im) {
+    mpfr_set_d(d->re, re, NRND);
+    mpfr_set_d(d->im, im, NRND);
+}
+void ncpx_set_ui(ncpx* d, unsigned long re) {
+    mpfr_set_ui(d->re, re, NRND);
+    mpfr_set_ui(d->im, 0,  NRND);
+}
+
+void ncpx_add(ncpx* out, const ncpx* a, const ncpx* b) {
+    mpfr_add(out->re, a->re, b->re, NRND);
+    mpfr_add(out->im, a->im, b->im, NRND);
+}
+void ncpx_sub(ncpx* out, const ncpx* a, const ncpx* b) {
+    mpfr_sub(out->re, a->re, b->re, NRND);
+    mpfr_sub(out->im, a->im, b->im, NRND);
+}
+void ncpx_neg(ncpx* out, const ncpx* a) {
+    mpfr_neg(out->re, a->re, NRND);
+    mpfr_neg(out->im, a->im, NRND);
+}
+
+/* out = a * b. */
+void ncpx_mul(ncpx* out, const ncpx* a, const ncpx* b, mpfr_prec_t wp) {
+    mpfr_t ac, bd, ad, bc;
+    mpfr_inits2(wp, ac, bd, ad, bc, (mpfr_ptr)0);
+    mpfr_mul(ac, a->re, b->re, NRND);
+    mpfr_mul(bd, a->im, b->im, NRND);
+    mpfr_mul(ad, a->re, b->im, NRND);
+    mpfr_mul(bc, a->im, b->re, NRND);
+    mpfr_sub(out->re, ac, bd, NRND);
+    mpfr_add(out->im, ad, bc, NRND);
+    mpfr_clears(ac, bd, ad, bc, (mpfr_ptr)0);
+}
+
+/* out = a / b. */
+void ncpx_div(ncpx* out, const ncpx* a, const ncpx* b, mpfr_prec_t wp) {
+    mpfr_t ac, bd, ad, bc, den;
+    mpfr_inits2(wp, ac, bd, ad, bc, den, (mpfr_ptr)0);
+    mpfr_mul(ac, a->re, b->re, NRND);
+    mpfr_mul(bd, a->im, b->im, NRND);
+    mpfr_mul(ad, a->im, b->re, NRND);
+    mpfr_mul(bc, a->re, b->im, NRND);
+    mpfr_mul(den, b->re, b->re, NRND);
+    mpfr_fma(den, b->im, b->im, den, NRND);   /* |b|^2 */
+    mpfr_add(ac, ac, bd, NRND);               /* re num = ac + bd */
+    mpfr_sub(ad, ad, bc, NRND);               /* im num = ad - bc */
+    mpfr_div(out->re, ac, den, NRND);
+    mpfr_div(out->im, ad, den, NRND);
+    mpfr_clears(ac, bd, ad, bc, den, (mpfr_ptr)0);
+}
+
+void ncpx_scale(ncpx* out, const ncpx* z, const mpfr_t s) {
+    mpfr_mul(out->re, z->re, s, NRND);
+    mpfr_mul(out->im, z->im, s, NRND);
+}
+
+void ncpx_abs(mpfr_t mag, const ncpx* z) { mpfr_hypot(mag, z->re, z->im, NRND); }
+void ncpx_arg(mpfr_t out, const ncpx* z) { mpfr_atan2(out, z->im, z->re, NRND); }
+
+/* out = exp(z) = e^re (cos im + i sin im). */
+void ncpx_exp(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
+    mpfr_t ea, c, s;
+    mpfr_inits2(wp, ea, c, s, (mpfr_ptr)0);
+    mpfr_exp(ea, z->re, NRND);
+    mpfr_sin_cos(s, c, z->im, NRND);
+    mpfr_mul(out->re, ea, c, NRND);
+    mpfr_mul(out->im, ea, s, NRND);
+    mpfr_clears(ea, c, s, (mpfr_ptr)0);
+}
+
+/* out = log(z) = log|z| + i arg(z). */
+void ncpx_log(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
+    mpfr_t r, th;
+    mpfr_inits2(wp, r, th, (mpfr_ptr)0);
+    mpfr_hypot(r, z->re, z->im, NRND);
+    mpfr_atan2(th, z->im, z->re, NRND);
+    mpfr_log(out->re, r, NRND);
+    mpfr_set(out->im, th, NRND);
+    mpfr_clears(r, th, (mpfr_ptr)0);
+}
+
+/* out = sin(z) = sin(re) cosh(im) + i cos(re) sinh(im). */
+void ncpx_sin(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
+    mpfr_t sa, ca, sh, ch;
+    mpfr_inits2(wp, sa, ca, sh, ch, (mpfr_ptr)0);
+    mpfr_sin_cos(sa, ca, z->re, NRND);
+    mpfr_sinh_cosh(sh, ch, z->im, NRND);
+    mpfr_mul(out->re, sa, ch, NRND);
+    mpfr_mul(out->im, ca, sh, NRND);
+    mpfr_clears(sa, ca, sh, ch, (mpfr_ptr)0);
+}
+
+/* out = cos(z) = cos(re) cosh(im) - i sin(re) sinh(im). */
+void ncpx_cos(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
+    mpfr_t sa, ca, sh, ch;
+    mpfr_inits2(wp, sa, ca, sh, ch, (mpfr_ptr)0);
+    mpfr_sin_cos(sa, ca, z->re, NRND);
+    mpfr_sinh_cosh(sh, ch, z->im, NRND);
+    mpfr_mul(out->re, ca, ch, NRND);
+    mpfr_mul(out->im, sa, sh, NRND);
+    mpfr_neg(out->im, out->im, NRND);
+    mpfr_clears(sa, ca, sh, ch, (mpfr_ptr)0);
+}
+
+/* out = sqrt(z), principal branch (Re >= 0), via polar form. */
+void ncpx_sqrt(ncpx* out, const ncpx* z, mpfr_prec_t wp) {
+    mpfr_t r, th, c, s;
+    mpfr_inits2(wp, r, th, c, s, (mpfr_ptr)0);
+    mpfr_hypot(r, z->re, z->im, NRND);
+    mpfr_atan2(th, z->im, z->re, NRND);
+    mpfr_sqrt(r, r, NRND);
+    mpfr_div_2ui(th, th, 1, NRND);         /* arg/2, in (-pi/2, pi/2] */
+    mpfr_sin_cos(s, c, th, NRND);
+    mpfr_mul(out->re, r, c, NRND);
+    mpfr_mul(out->im, r, s, NRND);
+    mpfr_clears(r, th, c, s, (mpfr_ptr)0);
+}
+
+/* out = z^e (principal branch) for a real exponent e:
+ *   out = |z|^e (cos(e arg z) + i sin(e arg z)). */
+void ncpx_pow_d(ncpx* out, const ncpx* z, double e, mpfr_prec_t wp) {
+    mpfr_t r, th, c, s, ex;
+    mpfr_inits2(wp, r, th, c, s, ex, (mpfr_ptr)0);
+    mpfr_hypot(r, z->re, z->im, NRND);
+    mpfr_atan2(th, z->im, z->re, NRND);
+    mpfr_set_d(ex, e, NRND);
+    mpfr_pow(r, r, ex, NRND);              /* |z|^e */
+    mpfr_mul_d(th, th, e, NRND);           /* e arg z */
+    mpfr_sin_cos(s, c, th, NRND);
+    mpfr_mul(out->re, r, c, NRND);
+    mpfr_mul(out->im, r, s, NRND);
+    mpfr_clears(r, th, c, s, ex, (mpfr_ptr)0);
+}
+
+/* out = z^w = exp(w log z), principal branch. */
+void ncpx_pow(ncpx* out, const ncpx* z, const ncpx* w, mpfr_prec_t wp) {
+    ncpx l, m;
+    ncpx_init(&l, wp); ncpx_init(&m, wp);
+    ncpx_log(&l, z, wp);
+    ncpx_mul(&m, w, &l, wp);
+    ncpx_exp(out, &m, wp);
+    ncpx_clear(&l); ncpx_clear(&m);
+}
+
 #endif /* USE_MPFR */

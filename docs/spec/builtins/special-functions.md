@@ -887,3 +887,206 @@ Out[1]= 1/(3^(1/6) Gamma[2/3])
 In[2]:= AiryBi[1.8]
 Out[2]= 2.59587
 ```
+
+## BesselJ
+
+- `BesselJ[n, z]` — the Bessel function of the first kind Jₙ(z), the solution of
+  z² y″ + z y′ + (z² − n²) y = 0 that is regular at the origin. For non-integer
+  order it has a branch cut along the negative real z axis (from the (z/2)ⁿ
+  factor).
+
+Implemented in `src/special_functions/besselj.c`. The complex-MPFR arithmetic
+is the reusable `ncpx` toolkit (`src/numeric_complex.{c,h}`) — the shared
+successor to the file-local `acx`/`ecx`/`gcx` toolkits, so future
+`BesselY`/`BesselI`/`BesselK` reuse it.
+
+- **Exact values.** `BesselJ[0, 0] = 1`; `BesselJ[n, 0] = 0` for integer
+  n ≠ 0. Other exact / symbolic arguments stay unevaluated and numericalize only
+  under `N` (e.g. `N[BesselJ[0, 4], 50]`).
+- **Numerics.** When some argument is inexact, machine- and arbitrary-precision
+  (MPFR) real and complex order and argument evaluate numerically. The core
+  routes on `r = |z|` and the requested precision `P`:
+  - integer order with a real argument takes MPFR's correctly-rounded
+    `mpfr_jn` fast path (J₋ₙ = (−1)ⁿ Jₙ);
+  - a **power series** for small/moderate `r` (DLMF 10.2.2,
+    `t_k = t_{k-1}·(−(z/2)²)/(k(ν+k))`, one `Gamma(ν+1)` via `mpfr_gamma` for
+    real order or the `Gamma` builtin for complex order, with ~`2r/ln2` guard
+    bits to absorb the alternating-series cancellation);
+  - an **asymptotic series** for large `r` away from the negative-real axis
+    (DLMF 10.17.3, summed to the optimal smallest-term truncation).
+
+  Examples: `BesselJ[0, 5.2] = -0.11029`, `BesselJ[7/3 + I, 4.5 - I] =
+  1.18908 + 0.715653 I`, `N[BesselJ[0, 4], 50] =
+  -0.39714980986384737228659076845169804197561868528939`. Precision tracks the
+  input (`BesselJ[0, 4.000000000000000000000000]` carries 25 digits).
+- **Half-integer order.** With a **symbolic** argument, `BesselJ[(2k+1)/2, x]`
+  rewrites to the elementary spherical-Bessel closed form (e.g.
+  `BesselJ[1/2, x] = Sqrt[2/(Pi x)] Sin[x]`); with a numeric argument the call
+  uses the accurate general numeric path instead (e.g.
+  `BesselJ[35/2, 1.] = 3.55153×10⁻²¹`), and an exact numeric argument such as
+  `BesselJ[11/2, 1]` is left unevaluated. These rewrites and the
+  negative-integer reflection `BesselJ[-n, x] = (-1)ⁿ BesselJ[n, x]` live in
+  `src/internal/bessel.m`.
+- **Derivative.** `D[BesselJ[n, x], x] = (BesselJ[n-1, x] - BesselJ[n+1, x])/2`
+  (DLMF 10.6.1).
+- **Series at 0.** `Series[BesselJ[0, x], {x, 0, 10}] =
+  1 - x²/4 + x⁴/64 - x⁶/2304 + …` (Puiseux for half-integer order).
+- **Series at ∞.** `Series[BesselJ[n, x], {x, Infinity, k}]` gives the
+  asymptotic expansion `Cos[(2n+1)π/4 - x] (Sqrt[2/Pi]/Sqrt[x] + …) +
+  Sin[(2n+1)π/4 - x] (…)`, valid for symbolic order too.
+- **Listable.** `BesselJ[1, {0.5, 1.0, 1.5}] = {0.242268, 0.440051, 0.557937}`.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+
+Not yet implemented: `Limit[BesselJ[n, x], x -> Infinity]` is left unevaluated
+(the limit engine does not yet consume the oscillatory asymptotic leading term);
+the symbolic-index general term `SeriesCoefficient[BesselJ[0, x], {x, 0, n}]`
+(the Piecewise closed form) — concrete-index `SeriesCoefficient` works.
+
+```mathematica
+In[1]:= BesselJ[0, 5.2]
+Out[1]= -0.11029
+
+In[2]:= D[BesselJ[n, x], x]
+Out[2]= 1/2 (BesselJ[-1 + n, x] - BesselJ[1 + n, x])
+```
+
+## BesselK
+
+- `BesselK[n, z]` — the modified Bessel function of the second kind Kₙ(z), a
+  solution of z² y″ + z y′ − (z² + n²) y = 0. It is even in the order
+  (K₋ₙ = Kₙ), decays like e⁻ᶻ as z → ∞, and has a branch cut along the negative
+  real z axis.
+
+Implemented in `src/special_functions/bessel.c` (the consolidated Bessel module,
+which also houses `BesselJ`), reusing the `ncpx` complex-MPFR toolkit
+(`src/numeric_complex.{c,h}`). Unlike `BesselJ` there is **no** MPFR library
+routine for the modified Bessel functions, so every value is summed from scratch.
+
+- **Exact values at the origin.** `BesselK[0, 0] = Infinity`;
+  `BesselK[n, 0] = ComplexInfinity` otherwise. Other exact / symbolic arguments
+  stay unevaluated and numericalize only under `N`.
+- **Numerics.** When some argument is inexact, machine- and arbitrary-precision
+  (MPFR) real and complex order and argument evaluate numerically. The core
+  routes on `r = |z|` and the requested precision `P`:
+  - an **asymptotic series** for large `r`, valid on the whole principal sheet
+    (DLMF 10.40.2, `K_ν(z) ~ sqrt(π/(2z)) e⁻ᶻ Σ a_k/zᵏ`, summed to the optimal
+    smallest-term truncation);
+  - for small/moderate `r` and **non-integer order**, the connection formula
+    `K_ν = (π/2)(I₋ᵥ − Iᵥ)/sin(νπ)` (DLMF 10.27.4) with the modified-Bessel
+    series `Iᵤ`, plus `−log₂|sin(νπ)|` guard bits to absorb the cancellation as
+    ν → integer;
+  - for small/moderate `r` and **integer order**, the logarithmic series
+    (DLMF 10.31.1), with `ψ(k+1) = −γ + H_k` accumulated incrementally.
+
+  Examples: `BesselK[0, 0.53] = 0.87656`, `BesselK[0, 4.0] = 0.0111597`,
+  `BesselK[1 + I, 3.0 - 2 I] = -0.0225108 + 0.0169607 I`,
+  `N[BesselK[0, 4], 50] = 0.011159676085853024269745195979833489225009023888474`.
+  Precision tracks the input.
+- **Half-integer order.** With a **symbolic** argument, `BesselK[(2k+1)/2, x]`
+  rewrites to the elementary closed form (e.g.
+  `BesselK[1/2, x] = Sqrt[Pi/(2 x)] Exp[-x]`,
+  `BesselK[3/2, x] = Sqrt[Pi/(2 x)] Exp[-x] (1 + 1/x)`); with a numeric argument
+  the accurate general numeric path is used instead, and an exact numeric
+  argument such as `BesselK[11/2, 1]` is left unevaluated. These rewrites and the
+  even-order reflection `BesselK[-n, x] = BesselK[n, x]` live in
+  `src/internal/bessel.m`.
+- **Derivative.** `D[BesselK[n, x], x] = -(BesselK[n-1, x] + BesselK[n+1, x])/2`
+  (DLMF 10.29.5; note the sign differs from `BesselJ`).
+- **Series at 0.** A logarithmic expansion (the coefficients carry `Log[x]`):
+  `Series[BesselK[0, x], {x, 0, 3}] =
+  (-EulerGamma + Log[2] - Log[x]) + (1 - EulerGamma + Log[2] - Log[x]) x²/4 +
+  O[x]⁴`. Integer orders ≥ 1 also carry a 1/xⁿ principal part.
+- **Series at ∞.** `Series[BesselK[n, x], {x, Infinity, k}]` gives the
+  asymptotic expansion `E⁻ˣ (Sqrt[π/2]/Sqrt[x] − Sqrt[π/2]/(8 x^(3/2)) + …)`,
+  valid for symbolic order too. `Limit[BesselK[n, x], x -> Infinity] = 0`.
+- **Listable.** `BesselK[{1, 2, 3}, 1.0] = {0.601907, 1.62484, 7.10126}`.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+
+On the branch cut (negative real axis) the principal-branch value is returned
+consistently at all precisions; this convention can differ from other systems'
+large-order machine-precision heuristics.
+
+```mathematica
+In[1]:= BesselK[0, 4.0]
+Out[1]= 0.0111597
+
+In[2]:= D[BesselK[n, x], x]
+Out[2]= -1/2 (BesselK[-1 + n, x] + BesselK[1 + n, x])
+```
+
+## BesselI
+
+- `BesselI[n, z]` — the modified Bessel function of the first kind Iₙ(z), the
+  solution of z² y″ + z y′ − (z² + n²) y = 0 that is regular at the origin. It
+  grows like eᶻ as z → ∞, is even in the order for integer index (I₋ₙ = Iₙ), and
+  has a branch cut along the negative real z axis for non-integer order.
+
+Implemented in `src/special_functions/bessel.c` (the consolidated Bessel module,
+alongside `BesselJ`/`BesselK`), reusing the `ncpx` complex-MPFR toolkit
+(`src/numeric_complex.{c,h}`). As with `BesselK` there is **no** MPFR library
+routine for the modified Bessel functions, so every value is summed from scratch;
+the small-|z| power series is the same `I_μ(z)` series `BesselK` already uses.
+
+- **Exact values.** `BesselI[0, 0] = 1`; `BesselI[n, 0] = 0` for integer n ≠ 0.
+  Other exact / symbolic arguments stay unevaluated and numericalize only under
+  `N`.
+- **Numerics.** When some argument is inexact, machine- and arbitrary-precision
+  (MPFR) real and complex order and argument evaluate numerically. The core
+  routes on `r = |z|` and the requested precision `P`:
+  - a **power series** for small/moderate `r` (DLMF 10.25.2,
+    `t_k = t_{k-1}·(z/2)²/(k(ν+k))`, one `Gamma(ν+1)`; for a non-negative
+    integer order `(z/2)ⁿ` is formed by repeated multiplication so a real `z`
+    stays exactly real, with ~`2r/ln2` guard bits for complex-argument
+    cancellation);
+  - an **asymptotic series** for large `r`, valid on the whole principal sheet
+    (DLMF 10.40.5, the two-exponential form `eᶻ Σ(−1)ᵏaₖ/zᵏ +
+    e^{i(ν+½)π}e⁻ᶻ Σaₖ/zᵏ`, summed to the optimal smallest-term truncation; the
+    e⁻ᶻ term dominates on the left half-plane). When the order is real, `z` is
+    real, and the result is mathematically real (integer order, or `z ≥ 0`), the
+    sub-precision imaginary noise the complex phase would leave is dropped.
+
+  Examples: `BesselI[0, 2.0] = 2.27959`, `BesselI[3 + I, 1.5 - I] =
+  −0.25665 + 0.0492771 I`, `N[BesselI[0, 1], 50] =
+  1.2660658777520083355982446252147175376076703113550`. Precision tracks the
+  input.
+- **Half-integer order.** With a **symbolic** argument, `BesselI[(2k+1)/2, x]`
+  rewrites to the elementary closed form — unlike `BesselK`, I is **not** even
+  for half-integer order, so both base cases are needed
+  (`BesselI[1/2, x] = Sqrt[2/(Pi x)] Sinh[x]`,
+  `BesselI[-1/2, x] = Sqrt[2/(Pi x)] Cosh[x]`) with an up/down recurrence; with a
+  numeric argument the accurate general numeric path is used instead, and an
+  exact numeric argument such as `BesselI[11/2, 1]` is left unevaluated. These
+  rewrites and the even-order reflection `BesselI[-n, x] = BesselI[n, x]` live in
+  `src/internal/bessel.m`.
+- **Derivative.** `D[BesselI[n, x], x] = (BesselI[n-1, x] + BesselI[n+1, x])/2`
+  (DLMF 10.29.5; the two-term sum carries a `+` like `BesselK`, but the overall
+  coefficient is `+1/2`).
+- **Series at 0.** `Series[BesselI[0, x], {x, 0, 10}] =
+  1 + x²/4 + x⁴/64 + x⁶/2304 + x⁸/147456 + x¹⁰/14745600 + O[x]¹¹` (via the
+  generic Taylor path; Puiseux for half-integer order).
+- **Series at ∞.** `Series[BesselI[n, x], {x, Infinity, k}]` gives the full
+  two-exponential asymptotic (DLMF 10.40.5), e.g. for n = 0
+  `E^x (1/(Sqrt[2π] Sqrt[x]) + 1/(8 Sqrt[2π] x^(3/2)) + …) +
+  I E^(-x) (1/(Sqrt[2π] Sqrt[x]) − 1/(8 Sqrt[2π] x^(3/2)) + …)`, matching
+  Mathematica's `Normal` form, valid for symbolic order too.
+- **Indefinite integrals** (recurrence forms, `src/internal/CRCMathTablesIntegrals.m`):
+  `∫ xᵖ⁺¹ Iₚ(x) dx = xᵖ⁺¹ Iₚ₊₁(x)`, `∫ x⁻ᵖ⁺¹ Iₚ(x) dx = x⁻ᵖ⁺¹ Iₚ₋₁(x)`,
+  `∫ I₁(x) dx = I₀(x)`.
+- **Listable.** `BesselI[{0, 1, 2}, 1.] = {1.26607, 0.565159, 0.135748}`.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+
+Not yet implemented: `Limit[BesselI[n, x], x -> Infinity]` (= ∞) and at
+`I Infinity` (= 0) are left unevaluated — the Limit engine does not distribute
+over the `Plus` of the two-exponential asymptotic at infinity (the `Series`
+itself is exact).
+
+```mathematica
+In[1]:= BesselI[0, 2.0]
+Out[1]= 2.27959
+
+In[2]:= D[BesselI[n, x], x]
+Out[2]= 1/2 (BesselI[-1 + n, x] + BesselI[1 + n, x])
+```

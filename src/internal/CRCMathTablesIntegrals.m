@@ -1970,6 +1970,13 @@ IntegrateTable[x_^(-p_ + 1) BesselY[p_, x_], x_] /; FreeQ[p, x] := -x^(-p + 1) B
 IntegrateTable[BesselJ[1, x_], x_] := -BesselJ[0, x];
 IntegrateTable[x_ BesselJ[0, x_], x_] := x BesselJ[1, x];
 
+(* Modified Bessel I (DLMF 10.29.4): d/dx[x^p I_p] = x^p I_{p-1},
+   d/dx[x^-p I_p] = x^-p I_{p+1}.  Note the second carries a '+' (vs BesselJ). *)
+IntegrateTable[x_^(p_ + 1) BesselI[p_, x_], x_] /; FreeQ[p, x] := x^(p + 1) BesselI[p + 1, x];
+IntegrateTable[x_^(-p_ + 1) BesselI[p_, x_], x_] /; FreeQ[p, x] := x^(-p + 1) BesselI[p - 1, x];
+IntegrateTable[BesselI[1, x_], x_] := BesselI[0, x];
+IntegrateTable[x_ BesselI[0, x_], x_] := x BesselI[1, x];
+
 SetAttributes[IntegrateTable, {Protected, ReadProtected}];
 
 (* Public wrapper.  The C dispatcher treats either head

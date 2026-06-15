@@ -35,6 +35,7 @@
 #include "polylog.h"
 #include "airyai.h"
 #include "airybi.h"
+#include "bessel.h"
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
@@ -497,6 +498,7 @@ void core_init(void) {
     polylog_init();
     airyai_init();
     airybi_init();
+    bessel_init();
     fibonacci_init();
     lucas_init();
 

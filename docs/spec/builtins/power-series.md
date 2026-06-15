@@ -170,3 +170,24 @@ In[2]:= Normal[a + b]
 Out[2]= a + b
 ```
 
+## SeriesCoefficient
+Gives the coefficient of `(x - x0)^k` in the power-series expansion of `f`.
+- `SeriesCoefficient[f, {x, x0, k}]`
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Computed by expanding with `Series` and extracting the `k`-th coefficient from
+  the resulting `SeriesData`; general for any head `Series` can expand, with a
+  concrete integer index `k` and a finite expansion point.
+- Composite results (a prefactor times a `SeriesData`, e.g. asymptotic
+  expansions at Infinity) and non-integer indices are left unevaluated; the
+  symbolic-index general term (a Piecewise) is not produced.
+
+```mathematica
+In[1]:= SeriesCoefficient[BesselJ[0, x], {x, 0, 4}]
+Out[1]= 1/64
+
+In[2]:= SeriesCoefficient[Exp[x], {x, 0, 5}]
+Out[2]= 1/120
+```
+

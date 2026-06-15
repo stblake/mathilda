@@ -3155,6 +3155,120 @@ static Expr* try_series_airybiprime_at_infinity(Expr* f, Expr* x, int64_t n) {
     return mk_times(mk_fn1("Exp", zeta), series);
 }
 
+/* Asymptotic expansion of BesselJ[nu, x] at x = Infinity (DLMF 10.17.3):
+ *
+ *   J_nu(x) ~ sqrt(2/(pi x)) [ cos(w0) P(1/x) + sin(w0) Q(1/x) ],
+ *     w0 = (2 nu + 1) pi/4 - x,
+ *     P  = Sum_{k>=0} (-1)^k a_{2k} / x^{2k},
+ *     Q  = Sum_{k>=0} (-1)^k a_{2k+1} / x^{2k+1},
+ *     a_0 = 1,  a_j = a_{j-1} (mu - (2j-1)^2) / (8 j),  mu = 4 nu^2.
+ *
+ * Folding sqrt(2/(pi x)) in, the two oscillatory parts become Puiseux series
+ * in 1/x with half-integer powers (denominator 2):
+ *   P-part powers  1/2, 5/2, 9/2, ...  (nmin = 1, nonzero at index 4k)
+ *   Q-part powers  3/2, 7/2, 11/2,...  (nmin = 3, nonzero at index 4k)
+ * with coefficient sqrt(2/pi) (-1)^k a_{2k} (resp. a_{2k+1}). The result is
+ *
+ *   Cos[w0] SeriesData[1/x, 0, {Pcoefs}, 1, ..., 2]
+ *   + Sin[w0] SeriesData[1/x, 0, {Qcoefs}, 3, ..., 2].
+ *
+ * The coefficients are polynomials in nu (via mu), so this works for symbolic
+ * order too, matching Mathematica's Series[BesselJ[n,x],{x,Infinity,k}].
+ * Returns NULL unless f is exactly BesselJ[nu, x] in the expansion variable. */
+static Expr* try_series_besselj_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "BesselJ") || f->data.function.arg_count != 2)
+        return NULL;
+    Expr* nu = f->data.function.args[0];
+    if (!expr_eq(f->data.function.args[1], x)) return NULL;
+
+    /* Largest k with the relevant power <= n: P power (1+4k)/2, Q power (3+4k)/2. */
+    int64_t kP_max = -1, kQ_max = -1;
+    while (1 + 4 * (kP_max + 1) <= 2 * n) kP_max++;
+    while (3 + 4 * (kQ_max + 1) <= 2 * n) kQ_max++;
+
+    int64_t maxidx = 2 * kP_max;               /* highest a-index needed */
+    if (kQ_max >= 0 && 2 * kQ_max + 1 > maxidx) maxidx = 2 * kQ_max + 1;
+
+    /* mu = 4 nu^2 (symbolic if nu is). */
+    Expr* mu = simp(mk_times(expr_new_integer(4),
+                             mk_power(expr_copy(nu), expr_new_integer(2))));
+    Expr* sqrt2pi = simp(mk_power(mk_times(expr_new_integer(2),
+                             mk_power(mk_symbol("Pi"), expr_new_integer(-1))),
+                             make_rational(1, 2)));   /* Sqrt[2/Pi] */
+
+    /* a-sequence a_0..a_maxidx, evaluated. */
+    Expr** a = calloc((size_t)maxidx + 1, sizeof(Expr*));
+    a[0] = expr_new_integer(1);
+    for (int64_t j = 1; j <= maxidx; j++) {
+        int64_t odd = 2 * j - 1;
+        Expr* num = mk_plus(expr_copy(mu), expr_new_integer(-(odd * odd)));
+        Expr* den = mk_power(expr_new_integer(8 * j), expr_new_integer(-1));
+        a[j] = simp(mk_times(expr_copy(a[j - 1]), mk_times(num, den)));
+    }
+
+    /* P coefficients (positions 4k, k = 0..kP_max). */
+    size_t ncoefP = (size_t)(4 * kP_max + 1);
+    Expr** coefP = calloc(ncoefP, sizeof(Expr*));
+    for (size_t i = 0; i < ncoefP; i++) coefP[i] = expr_new_integer(0);
+    for (int64_t k = 0; k <= kP_max; k++) {
+        Expr* c = mk_times(expr_new_integer((k % 2 == 0) ? 1 : -1),
+                           expr_copy(a[2 * k]));
+        c = mk_times(c, expr_copy(sqrt2pi));
+        expr_free(coefP[(size_t)(4 * k)]);
+        coefP[(size_t)(4 * k)] = simp(c);
+    }
+    Expr** sdP = calloc(6, sizeof(Expr*));
+    sdP[0] = mk_power(expr_copy(x), expr_new_integer(-1));   /* 1/x */
+    sdP[1] = expr_new_integer(0);
+    sdP[2] = expr_new_function(mk_symbol("List"), coefP, ncoefP);
+    sdP[3] = expr_new_integer(1);                            /* nmin = 1 */
+    sdP[4] = expr_new_integer(1 + 4 * (kP_max + 1));         /* nmax */
+    sdP[5] = expr_new_integer(2);                            /* den  */
+    Expr* seriesP = expr_new_function(mk_symbol("SeriesData"), sdP, 6);
+    free(sdP); free(coefP);
+
+    /* w0 = (2 nu + 1) pi/4 - x. */
+    Expr* twonu1 = mk_plus(mk_times(expr_new_integer(2), expr_copy(nu)),
+                           expr_new_integer(1));
+    Expr* w0 = simp(mk_plus(mk_times(make_rational(1, 4),
+                                     mk_times(twonu1, mk_symbol("Pi"))),
+                            mk_times(expr_new_integer(-1), expr_copy(x))));
+
+    Expr* result = mk_times(mk_fn1("Cos", expr_copy(w0)), seriesP);
+
+    /* Q part (Sin), only if it carries any term. */
+    if (kQ_max >= 0) {
+        size_t ncoefQ = (size_t)(4 * kQ_max + 1);
+        Expr** coefQ = calloc(ncoefQ, sizeof(Expr*));
+        for (size_t i = 0; i < ncoefQ; i++) coefQ[i] = expr_new_integer(0);
+        for (int64_t k = 0; k <= kQ_max; k++) {
+            Expr* c = mk_times(expr_new_integer((k % 2 == 0) ? 1 : -1),
+                               expr_copy(a[2 * k + 1]));
+            c = mk_times(c, expr_copy(sqrt2pi));
+            expr_free(coefQ[(size_t)(4 * k)]);
+            coefQ[(size_t)(4 * k)] = simp(c);
+        }
+        Expr** sdQ = calloc(6, sizeof(Expr*));
+        sdQ[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+        sdQ[1] = expr_new_integer(0);
+        sdQ[2] = expr_new_function(mk_symbol("List"), coefQ, ncoefQ);
+        sdQ[3] = expr_new_integer(3);                       /* nmin = 3 */
+        sdQ[4] = expr_new_integer(3 + 4 * (kQ_max + 1));    /* nmax */
+        sdQ[5] = expr_new_integer(2);
+        Expr* seriesQ = expr_new_function(mk_symbol("SeriesData"), sdQ, 6);
+        free(sdQ); free(coefQ);
+        result = mk_plus(result, mk_times(mk_fn1("Sin", expr_copy(w0)), seriesQ));
+    }
+
+    expr_free(w0);
+    expr_free(mu);
+    expr_free(sqrt2pi);
+    for (int64_t j = 0; j <= maxidx; j++) expr_free(a[j]);
+    free(a);
+    return result;
+}
+
 /* Generalized asymptotic series of LogIntegral[x] at x = 0.
  *
  * li(x) = Ei(Log[x]). With L = Log[x] -> -Infinity as x -> 0+, the function
@@ -3268,6 +3382,270 @@ static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n) {
     return series;
 }
 
+/* Asymptotic series of BesselK[nu, x] at x = Infinity (DLMF 10.40.2):
+ *
+ *   K_nu(x) ~ sqrt(pi/(2x)) e^{-x} Sum_{k>=0} a_k / x^k,
+ *     a_0 = 1,  a_k = a_{k-1} (4 nu^2 - (2k-1)^2) / (8 k).
+ *
+ * Folding sqrt(pi/(2x)) = sqrt(pi/2) x^{-1/2} in, the sum becomes a Puiseux
+ * series in 1/x with half-integer powers (1/2, 3/2, 5/2, ...; denominator 2),
+ * coefficient sqrt(pi/2) a_k, and the e^{-x} prefactor is kept symbolic:
+ *
+ *   E^{-x} SeriesData[1/x, 0, {sqrt(pi/2) a_k at index 2k}, 1, 2n+1, 2].
+ *
+ * Coefficients are polynomial in nu, so symbolic order works too. Returns NULL
+ * unless f is exactly BesselK[nu, x] in the expansion variable. */
+static Expr* try_series_besselk_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "BesselK") || f->data.function.arg_count != 2)
+        return NULL;
+    Expr* nu = f->data.function.args[0];
+    if (!expr_eq(f->data.function.args[1], x)) return NULL;
+
+    int64_t kmax = n - 1;                    /* (2k+1)/2 <= n  <=>  k <= n-1/2 */
+    if (kmax < 0) kmax = 0;
+
+    /* mu = 4 nu^2 (symbolic if nu is). */
+    Expr* mu = simp(mk_times(expr_new_integer(4),
+                             mk_power(expr_copy(nu), expr_new_integer(2))));
+    Expr* sqrtpi2 = simp(mk_power(mk_times(mk_symbol("Pi"), make_rational(1, 2)),
+                                  make_rational(1, 2)));   /* Sqrt[Pi/2] */
+
+    /* a-sequence a_0..a_kmax. */
+    Expr** a = calloc((size_t)kmax + 1, sizeof(Expr*));
+    a[0] = expr_new_integer(1);
+    for (int64_t k = 1; k <= kmax; k++) {
+        int64_t odd = 2 * k - 1;
+        Expr* num = mk_plus(expr_copy(mu), expr_new_integer(-(odd * odd)));
+        Expr* den = mk_power(expr_new_integer(8 * k), expr_new_integer(-1));
+        a[k] = simp(mk_times(expr_copy(a[k - 1]), mk_times(num, den)));
+    }
+
+    /* Coefficients: index 2k carries sqrt(pi/2) a_k; length 2*(kmax+1). */
+    size_t ncoef = (size_t)(2 * kmax + 1);
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+    for (int64_t k = 0; k <= kmax; k++) {
+        expr_free(coefs[(size_t)(2 * k)]);
+        coefs[(size_t)(2 * k)] = simp(mk_times(expr_copy(sqrtpi2), expr_copy(a[k])));
+    }
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1));   /* 1/x */
+    sd[1] = expr_new_integer(0);
+    sd[2] = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    sd[3] = expr_new_integer(1);                            /* nmin = 1 (x^{-1/2}) */
+    sd[4] = expr_new_integer(2 * kmax + 3);                 /* nmax (O-term)       */
+    sd[5] = expr_new_integer(2);                            /* den                 */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd); free(coefs);
+
+    Expr* result = mk_times(mk_fn1("Exp", mk_times(expr_new_integer(-1), expr_copy(x))),
+                            series);
+
+    expr_free(mu);
+    expr_free(sqrtpi2);
+    for (int64_t k = 0; k <= kmax; k++) expr_free(a[k]);
+    free(a);
+    return result;
+}
+
+/* Asymptotic series of BesselI[nu, x] at x = Infinity (DLMF 10.40.5):
+ *
+ *   I_nu(x) ~ e^x/sqrt(2 pi x) Sum_{k} (-1)^k a_k/x^k
+ *           + i e^{i nu pi} e^{-x}/sqrt(2 pi x) Sum_{k} a_k/x^k,
+ *     a_0 = 1, a_k = a_{k-1}(4 nu^2 - (2k-1)^2)/(8k),
+ *
+ * using the upper-sign (arg x = 0) branch e^{i(nu+1/2)pi} = i e^{i nu pi}.
+ * Both sums fold sqrt(1/(2 pi)) x^{-1/2} into half-integer-power Puiseux series
+ * in 1/x (the same shape as BesselK's), with the two exponential prefactors
+ * kept symbolic. The result is a Plus of two E^... * SeriesData terms,
+ * reproducing Mathematica's Normal form. Coefficients are polynomial in nu, so
+ * symbolic order works. Returns NULL unless f is exactly BesselI[nu, x]. */
+static Expr* try_series_besseli_at_infinity(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "BesselI") || f->data.function.arg_count != 2)
+        return NULL;
+    Expr* nu = f->data.function.args[0];
+    if (!expr_eq(f->data.function.args[1], x)) return NULL;
+
+    int64_t kmax = n - 1;
+    if (kmax < 0) kmax = 0;
+
+    /* mu = 4 nu^2; sqrt(1/(2 pi)) = (2 pi)^{-1/2}. */
+    Expr* mu = simp(mk_times(expr_new_integer(4),
+                             mk_power(expr_copy(nu), expr_new_integer(2))));
+    Expr* sqrt12pi = simp(mk_power(mk_times(expr_new_integer(2), mk_symbol("Pi")),
+                                   make_rational(-1, 2)));   /* 1/Sqrt[2 Pi] */
+
+    /* a-sequence a_0..a_kmax. */
+    Expr** a = calloc((size_t)kmax + 1, sizeof(Expr*));
+    a[0] = expr_new_integer(1);
+    for (int64_t k = 1; k <= kmax; k++) {
+        int64_t odd = 2 * k - 1;
+        Expr* num = mk_plus(expr_copy(mu), expr_new_integer(-(odd * odd)));
+        Expr* den = mk_power(expr_new_integer(8 * k), expr_new_integer(-1));
+        a[k] = simp(mk_times(expr_copy(a[k - 1]), mk_times(num, den)));
+    }
+
+    size_t ncoef = (size_t)(2 * kmax + 1);
+
+    /* Build a SeriesData[1/x, 0, {c_k}, 1, 2kmax+3, 2] from per-k coefficients;
+     * `dom` selects (-1)^k a_k sqrt(1/2pi) (dominant) vs a_k sqrt(1/2pi). */
+    /* (constructed inline twice below) */
+    Expr** coefs_dom = calloc(ncoef, sizeof(Expr*));
+    Expr** coefs_sub = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) {
+        coefs_dom[i] = expr_new_integer(0);
+        coefs_sub[i] = expr_new_integer(0);
+    }
+    for (int64_t k = 0; k <= kmax; k++) {
+        Expr* base = simp(mk_times(expr_copy(sqrt12pi), expr_copy(a[k])));
+        expr_free(coefs_sub[(size_t)(2 * k)]);
+        coefs_sub[(size_t)(2 * k)] = expr_copy(base);
+        expr_free(coefs_dom[(size_t)(2 * k)]);
+        coefs_dom[(size_t)(2 * k)] =
+            (k & 1) ? simp(mk_times(expr_new_integer(-1), base))
+                    : base;
+    }
+
+    Expr** sdd = calloc(6, sizeof(Expr*));
+    sdd[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sdd[1] = expr_new_integer(0);
+    sdd[2] = expr_new_function(mk_symbol("List"), coefs_dom, ncoef);
+    sdd[3] = expr_new_integer(1);
+    sdd[4] = expr_new_integer(2 * kmax + 3);
+    sdd[5] = expr_new_integer(2);
+    Expr* series_dom = expr_new_function(mk_symbol("SeriesData"), sdd, 6);
+    free(sdd); free(coefs_dom);
+
+    Expr** sds = calloc(6, sizeof(Expr*));
+    sds[0] = mk_power(expr_copy(x), expr_new_integer(-1));
+    sds[1] = expr_new_integer(0);
+    sds[2] = expr_new_function(mk_symbol("List"), coefs_sub, ncoef);
+    sds[3] = expr_new_integer(1);
+    sds[4] = expr_new_integer(2 * kmax + 3);
+    sds[5] = expr_new_integer(2);
+    Expr* series_sub = expr_new_function(mk_symbol("SeriesData"), sds, 6);
+    free(sds); free(coefs_sub);
+
+    /* Dominant: E^x * series_dom. */
+    Expr* dom = mk_times(mk_fn1("Exp", expr_copy(x)), series_dom);
+
+    /* Subdominant: E^{I nu pi - x} * I * series_sub. */
+    Expr* exparg = mk_plus(
+        mk_times(mk_symbol("I"), mk_times(expr_copy(nu), mk_symbol("Pi"))),
+        mk_times(expr_new_integer(-1), expr_copy(x)));
+    Expr* sub = mk_times(mk_fn1("Exp", exparg),
+                         mk_times(mk_symbol("I"), series_sub));
+
+    Expr* result = mk_plus(dom, sub);
+
+    expr_free(mu);
+    expr_free(sqrt12pi);
+    for (int64_t k = 0; k <= kmax; k++) expr_free(a[k]);
+    free(a);
+    return result;
+}
+
+/* HarmonicNumber H_m = Sum_{j=1}^{m} 1/j, as an exact rational Expr. */
+static Expr* bk_harmonic(long m) {
+    if (m <= 0) return expr_new_integer(0);
+    Expr** terms = calloc((size_t)m, sizeof(Expr*));
+    for (long j = 1; j <= m; j++)
+        terms[(size_t)(j - 1)] = mk_power(expr_new_integer(j), expr_new_integer(-1));
+    Expr* sum = expr_new_function(mk_symbol("Plus"), terms, (size_t)m);
+    free(terms);
+    return eval_and_free(sum);
+}
+
+/* Logarithmic series of BesselK[p, x] at x = 0 for integer order p (DLMF
+ * 10.31.1). K_p is even in p (K_{-p}=K_p), so the caller's |p| is used. The
+ * coefficient of x^{p+2k} carries the branch term Log[x] and EulerGamma:
+ *
+ *   coef(x^{p+2k}) = (-1)^p (-2 EulerGamma + 2 Log[2] - 2 Log[x]
+ *                            + H_k + H_{p+k}) / (2^{p+2k+1} k! (p+k)!),
+ *
+ * plus, for p >= 1, the finite principal part at x^{-p+2k}, k = 0..p-1:
+ *
+ *   coef(x^{-p+2k}) = (-1)^k (p-k-1)! 2^{p-1-2k} / k!.
+ *
+ * For p = 0 this reproduces Mathematica's Series[BesselK[0,x],{x,0,n}]
+ * exactly: x^0 -> -EulerGamma+Log[2]-Log[x], x^2 -> (1-EulerGamma+Log[2]-
+ * Log[x])/4, ... Returns NULL unless f is BesselK[<integer>, x] in the
+ * expansion variable. Non-integer order (a pure x^nu Puiseux series, with no
+ * logarithm) is left to the elementary half-integer rewrites / generic path. */
+static Expr* try_series_besselk_at_zero(Expr* f, Expr* x, int64_t n) {
+    if (!has_symbol_head(f, "BesselK") || f->data.function.arg_count != 2)
+        return NULL;
+    if (!expr_eq(f->data.function.args[1], x)) return NULL;
+    Expr* ord = f->data.function.args[0];
+    if (ord->type != EXPR_INTEGER) return NULL;       /* integer order only */
+    long p = (long)ord->data.integer;
+    if (p < 0) p = -p;                                 /* K_{-p} = K_p */
+    if (n < 0) n = 0;
+
+    int64_t nmin = (p == 0) ? 0 : -p;
+    int64_t nmax = n + 1;
+    if (nmax <= nmin) nmax = nmin + 1;
+    size_t ncoef = (size_t)(nmax - nmin);
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (size_t i = 0; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+
+    long sign_p = (p & 1) ? -1 : 1;
+
+    /* Finite principal part (p >= 1): power -p+2k, k = 0..p-1. */
+    for (long k = 0; k <= p - 1; k++) {
+        int64_t power = -p + 2 * k;
+        if (power < nmin || power >= nmax) continue;
+        Expr* fk = eval_and_free(mk_fn1("Factorial", expr_new_integer(p - k - 1)));
+        Expr* kf = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+        Expr* pow2 = eval_and_free(mk_power(expr_new_integer(2),
+                                            expr_new_integer(p - 1 - 2 * k)));
+        Expr* c = mk_times(expr_new_integer((k & 1) ? -1 : 1),
+                           mk_times(fk, mk_times(pow2,
+                                    mk_power(kf, expr_new_integer(-1)))));
+        size_t idx = (size_t)(power - nmin);
+        expr_free(coefs[idx]);
+        coefs[idx] = simp(c);
+    }
+
+    /* Main (log + regular) part: power p+2k, k = 0,1,... while p+2k < nmax. */
+    for (long k = 0; (int64_t)(p + 2 * k) < nmax; k++) {
+        int64_t power = p + 2 * k;
+        /* numerator: -2 EulerGamma + 2 Log[2] - 2 Log[x] + H_k + H_{p+k}. */
+        Expr* num = mk_plus(
+            mk_times(expr_new_integer(-2), mk_symbol("EulerGamma")),
+            mk_plus(
+                mk_times(expr_new_integer(2), mk_fn1("Log", expr_new_integer(2))),
+                mk_plus(
+                    mk_times(expr_new_integer(-2), mk_fn1("Log", expr_copy(x))),
+                    mk_plus(bk_harmonic(k), bk_harmonic(p + k)))));
+        /* denominator: 2^{p+2k+1} k! (p+k)!. */
+        Expr* pow2 = eval_and_free(mk_power(expr_new_integer(2),
+                                            expr_new_integer(power + 1)));
+        Expr* kf = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+        Expr* pkf = eval_and_free(mk_fn1("Factorial", expr_new_integer(p + k)));
+        Expr* den = eval_and_free(mk_times(pow2, mk_times(kf, pkf)));
+        Expr* c = mk_times(expr_new_integer(sign_p),
+                           mk_times(num, mk_power(den, expr_new_integer(-1))));
+        size_t idx = (size_t)(power - nmin);
+        expr_free(coefs[idx]);
+        coefs[idx] = simp(c);
+    }
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);
+    sd[1] = expr_new_integer(0);
+    sd[2] = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    sd[3] = expr_new_integer(nmin);
+    sd[4] = expr_new_integer(nmax);
+    sd[5] = expr_new_integer(1);
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd); free(coefs);
+    return series;
+}
+
 /* Expand f around x=x0 to order n and return SeriesData expression. */
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only) {
     /* Evaluate f with the series context implicit. Since Series has
@@ -3318,6 +3696,24 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(x0_eval);
             return bip;
         }
+        Expr* bj = try_series_besselj_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (bj) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return bj;
+        }
+        Expr* bk = try_series_besselk_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (bk) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return bk;
+        }
+        Expr* besi = try_series_besseli_at_infinity(f_eval, x, leading_only ? 1 : n);
+        if (besi) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return besi;
+        }
     }
 
     /* LogIntegral[x] = Ei(Log[x]) has no Taylor series at x = 0 -- Log[x]
@@ -3339,6 +3735,15 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return ei0;
+        }
+        /* BesselK[p, x] at x = 0 (integer p): K_p has a pole and a logarithmic
+         * branch term, so naive Taylor-via-D cannot produce it. Emit the
+         * DLMF 10.31.1 logarithmic series directly. */
+        Expr* bk0 = try_series_besselk_at_zero(f_eval, x, leading_only ? 0 : n);
+        if (bk0) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return bk0;
         }
     }
 
@@ -3632,6 +4037,67 @@ Expr* builtin_series(Expr* res) {
     return outer;
 }
 
+/* SeriesCoefficient[f, {x, x0, k}] -- the coefficient of (x - x0)^k in the
+ * power-series expansion of f about x = x0. Computed by expanding with Series
+ * and extracting the k-th coefficient from the resulting SeriesData; this is
+ * general (works for any head Series can expand) for a concrete integer index
+ * and a finite expansion point. Composite results (a prefactor times a
+ * SeriesData, e.g. the asymptotic expansions at Infinity) and non-integer
+ * indices are left unevaluated. The symbolic-index general term (a Piecewise)
+ * is not produced. */
+Expr* builtin_seriescoefficient(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (internal_args_contain_inexact(res)) {
+        return internal_rationalize_then_numericalize(res, builtin_seriescoefficient);
+    }
+
+    Expr* f    = res->data.function.args[0];
+    Expr* spec = res->data.function.args[1];
+
+    Expr* x_arg; Expr* x0_arg; int64_t k; bool leading;
+    if (!parse_series_spec(spec, &x_arg, &x0_arg, &k, &leading)) return NULL;
+    if (leading) return NULL;  /* {x, x0} 2-arg form has no coefficient index */
+
+    /* Expand to an order that includes (x - x0)^k. */
+    int64_t order = k > 0 ? k : 0;
+    Expr** sp = calloc(3, sizeof(Expr*));
+    sp[0] = expr_copy(x_arg);
+    sp[1] = expr_copy(x0_arg);
+    sp[2] = expr_new_integer(order);
+    Expr* spec2 = expr_new_function(mk_symbol("List"), sp, 3);
+    free(sp);
+    Expr* call = expr_new_function(mk_symbol("Series"),
+                     (Expr*[]){ expr_copy(f), spec2 }, 2);
+    Expr* s = eval_and_free(call);
+    if (!s) return NULL;
+
+    Expr* result = NULL;
+    if (has_symbol_head(s, "SeriesData") && s->data.function.arg_count == 6 &&
+        expr_eq(s->data.function.args[0], x_arg)) {
+        Expr* coefs = s->data.function.args[2];
+        Expr* nminE = s->data.function.args[3];
+        Expr* denE  = s->data.function.args[5];
+        if (coefs->type == EXPR_FUNCTION &&
+            nminE->type == EXPR_INTEGER && denE->type == EXPR_INTEGER) {
+            int64_t nmin = nminE->data.integer, den = denE->data.integer;
+            long long j = (long long)k * den - nmin;   /* power k = (nmin+j)/den */
+            size_t len = coefs->data.function.arg_count;
+            if (j >= 0 && (size_t)j < len)
+                result = expr_copy(coefs->data.function.args[(size_t)j]);
+            else
+                result = expr_new_integer(0);
+        }
+    } else if (expr_free_of(s, x_arg)) {
+        /* Series collapsed to something free of x (e.g. a constant). */
+        result = (k == 0) ? expr_copy(s) : expr_new_integer(0);
+    }
+    /* Otherwise (composite prefactor * SeriesData, expansion in 1/x, ...)
+     * leave unevaluated. */
+
+    expr_free(s);
+    return result;
+}
+
 /* ----------------------------------------------------------------------------
  * Initialization
  * -------------------------------------------------------------------------- */
@@ -3642,4 +4108,6 @@ void series_init(void) {
     symtab_get_def("Series")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_add_builtin("Normal", builtin_normal);
     symtab_get_def("Normal")->attributes |= ATTR_PROTECTED;
+    symtab_add_builtin("SeriesCoefficient", builtin_seriescoefficient);
+    symtab_get_def("SeriesCoefficient")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
 }

@@ -118,6 +118,48 @@ void mpfr_complex_acoth(mpfr_t out_re, mpfr_t out_im, const mpfr_t in_re, const 
 void mpfr_complex_asech(mpfr_t out_re, mpfr_t out_im, const mpfr_t in_re, const mpfr_t in_im);
 void mpfr_complex_acsch(mpfr_t out_re, mpfr_t out_im, const mpfr_t in_re, const mpfr_t in_im);
 
+/* --------------------------------------------------------------------
+ *  ncpx — a raw paired-mpfr_t complex value with explicit-working-precision
+ *  arithmetic.
+ *
+ *  This is the tight-inner-loop counterpart to the Expr-level
+ *  `mpfr_complex_*` ops above. Special-function kernels that sum series or
+ *  asymptotic expansions (BesselJ today; BesselY/BesselI/BesselK and friends
+ *  in future) build directly on `ncpx` instead of re-rolling a file-local
+ *  complex struct — the role played by the older `acx`/`ecx`/`gcx` toolkits
+ *  in airyai.c / erf.c / gamma.c, hoisted here so siblings share one copy.
+ *
+ *  Each value is `mpfr_init2`'d at a precision (`ncpx_init`); binary ops that
+ *  need scratch take an explicit working precision `wp`. Every op is
+ *  alias-safe (the output may alias an input). Rounding is MPFR_RNDN. The
+ *  memory contract matches the rest of this file: every ncpx_init pairs with
+ *  an ncpx_clear; no allocation survives a call. */
+typedef struct { mpfr_t re, im; } ncpx;
+
+void ncpx_init (ncpx* z, mpfr_prec_t p);
+void ncpx_clear(ncpx* z);
+void ncpx_set   (ncpx* d, const ncpx* s);            /* d = s             */
+void ncpx_set_d (ncpx* d, double re, double im);     /* d = re + i*im     */
+void ncpx_set_ui(ncpx* d, unsigned long re);         /* d = re (real)     */
+
+void ncpx_add  (ncpx* out, const ncpx* a, const ncpx* b);
+void ncpx_sub  (ncpx* out, const ncpx* a, const ncpx* b);
+void ncpx_neg  (ncpx* out, const ncpx* a);
+void ncpx_mul  (ncpx* out, const ncpx* a, const ncpx* b, mpfr_prec_t wp);
+void ncpx_div  (ncpx* out, const ncpx* a, const ncpx* b, mpfr_prec_t wp);
+void ncpx_scale(ncpx* out, const ncpx* z, const mpfr_t s);   /* out = z*s, real s */
+
+void ncpx_abs(mpfr_t mag, const ncpx* z);   /* mag = |z|              */
+void ncpx_arg(mpfr_t out, const ncpx* z);   /* out = arg z, (-pi, pi] */
+
+void ncpx_exp  (ncpx* out, const ncpx* z, mpfr_prec_t wp);
+void ncpx_log  (ncpx* out, const ncpx* z, mpfr_prec_t wp);
+void ncpx_sin  (ncpx* out, const ncpx* z, mpfr_prec_t wp);
+void ncpx_cos  (ncpx* out, const ncpx* z, mpfr_prec_t wp);
+void ncpx_sqrt (ncpx* out, const ncpx* z, mpfr_prec_t wp);
+void ncpx_pow_d(ncpx* out, const ncpx* z, double e, mpfr_prec_t wp);          /* z^e, real e        */
+void ncpx_pow  (ncpx* out, const ncpx* z, const ncpx* w, mpfr_prec_t wp);     /* z^w = exp(w log z) */
+
 #endif /* USE_MPFR */
 
 #endif /* NUMERIC_COMPLEX_H */

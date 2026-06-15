@@ -1063,6 +1063,138 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- BesselJ[N, Z]: chain rule on both args.
+         *   d/dZ BesselJ[N, Z] = (BesselJ[N-1, Z] - BesselJ[N+1, Z]) / 2  (DLMF 10.6.1)
+         *   d/dN BesselJ[N, Z] = Derivative[1,0][BesselJ][N,Z]  (the derivative
+         *               with respect to the order has no elementary form).
+         * Zero-derivative arms are dropped, so D[BesselJ[n,x],x] keeps only the
+         * dZ term, matching Mathematica's 1/2 (BesselJ[-1+n,x]-BesselJ[1+n,x]). */
+        if (h == SYM_BesselJ && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* (BesselJ[N-1, Z] - BesselJ[N+1, Z]) / 2 * dZ */
+                Expr* bm1 = mk_fn2("BesselJ",
+                              mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
+                Expr* bp1 = mk_fn2("BesselJ",
+                              mk_fn2("Plus", expr_copy(N), mk_int(1)), expr_copy(Z));
+                Expr* diff = mk_fn2("Plus", bm1, mk_neg(bp1));
+                Expr* dBdZ = mk_fn2("Times",
+                              mk_fn2("Power", mk_int(2), mk_int(-1)), diff);
+                terms[nt++] = mk_fn2("Times", dBdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1,0][BesselJ][N,Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("BesselJ"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
+        /* --- BesselK[N, Z]: chain rule on both args.
+         *   d/dZ BesselK[N, Z] = -(BesselK[N-1, Z] + BesselK[N+1, Z]) / 2  (DLMF 10.29.5)
+         *   d/dN BesselK[N, Z] = Derivative[1,0][BesselK][N,Z]  (no elementary form).
+         * Note the sign differs from BesselJ. */
+        if (h == SYM_BesselK && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* -(BesselK[N-1, Z] + BesselK[N+1, Z]) / 2 * dZ */
+                Expr* bm1 = mk_fn2("BesselK",
+                              mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
+                Expr* bp1 = mk_fn2("BesselK",
+                              mk_fn2("Plus", expr_copy(N), mk_int(1)), expr_copy(Z));
+                Expr* sum = mk_fn2("Plus", bm1, bp1);
+                Expr* dBdZ = mk_fn2("Times",
+                              mk_fn2("Power", mk_int(-2), mk_int(-1)), sum);
+                terms[nt++] = mk_fn2("Times", dBdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1,0][BesselK][N,Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("BesselK"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
+        /* --- BesselI[N, Z]: chain rule on both args.
+         *   d/dZ BesselI[N, Z] = (BesselI[N-1, Z] + BesselI[N+1, Z]) / 2  (DLMF 10.29.5)
+         *   d/dN BesselI[N, Z] = Derivative[1,0][BesselI][N,Z]  (no elementary form).
+         * Like BesselK the two-term sum carries a '+', but (like BesselJ) the
+         * overall coefficient is +1/2 rather than -1/2. */
+        if (h == SYM_BesselI && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* (BesselI[N-1, Z] + BesselI[N+1, Z]) / 2 * dZ */
+                Expr* bm1 = mk_fn2("BesselI",
+                              mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
+                Expr* bp1 = mk_fn2("BesselI",
+                              mk_fn2("Plus", expr_copy(N), mk_int(1)), expr_copy(Z));
+                Expr* sum = mk_fn2("Plus", bm1, bp1);
+                Expr* dBdZ = mk_fn2("Times",
+                              mk_fn2("Power", mk_int(2), mk_int(-1)), sum);
+                terms[nt++] = mk_fn2("Times", dBdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1,0][BesselI][N,Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("BesselI"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- Gamma[A, Z] (upper incomplete gamma): chain rule on both args.
          *   dGamma/dZ = -Z^(A-1) E^-Z    (elementary)
          *   dGamma/dA = Derivative[1,0][Gamma][A,Z]  (no closed form without

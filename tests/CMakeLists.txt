@@ -113,6 +113,7 @@ set(COMMON_SRC
     ../src/special_functions/polylog.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
+    ../src/special_functions/bessel.c
     ../src/facint.c
     ../src/special_functions/fibonacci.c
     ../src/special_functions/lucas.c
@@ -1446,6 +1447,15 @@ target_include_directories(airyai_tests PRIVATE ../src)
 
 add_executable(airybi_tests test_airybi.c ${COMMON_SRC})
 target_include_directories(airybi_tests PRIVATE ../src)
+
+add_executable(besselj_tests test_besselj.c ${COMMON_SRC})
+target_include_directories(besselj_tests PRIVATE ../src)
+
+add_executable(besselk_tests test_besselk.c ${COMMON_SRC})
+target_include_directories(besselk_tests PRIVATE ../src)
+
+add_executable(besseli_tests test_besseli.c ${COMMON_SRC})
+target_include_directories(besseli_tests PRIVATE ../src)
 
 add_executable(loggamma_tests test_loggamma.c ${COMMON_SRC})
 target_include_directories(loggamma_tests PRIVATE ../src)
