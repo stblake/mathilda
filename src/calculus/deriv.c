@@ -316,6 +316,16 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_fn2("Times", expr_copy(g), mk_fn1("AiryAi", expr_copy(g)));
     }
 
+    /* --- Airy Bi: d/dg AiryBi[g] = AiryBiPrime[g]. --- */
+    if (!strcmp(name, "AiryBi")) {
+        return mk_fn1("AiryBiPrime", expr_copy(g));
+    }
+
+    /* --- Airy Bi': d/dg AiryBiPrime[g] = g AiryBi[g]  (from Bi'' = z Bi). --- */
+    if (!strcmp(name, "AiryBiPrime")) {
+        return mk_fn2("Times", expr_copy(g), mk_fn1("AiryBi", expr_copy(g)));
+    }
+
     /* --- error function: d/dg Erf[g] = (2/Sqrt[Pi]) E^(-g^2). --- */
     if (!strcmp(name, "Erf")) {
         Expr* coeff = mk_fn2("Times", mk_int(2),

@@ -114,6 +114,8 @@ const char* SYM_Evaluate = NULL;
 const char* SYM_EvaluationMonitor = NULL;
 const char* SYM_AiryAi = NULL;
 const char* SYM_AiryAiPrime = NULL;
+const char* SYM_AiryBi = NULL;
+const char* SYM_AiryBiPrime = NULL;
 const char* SYM_Erf = NULL;
 const char* SYM_Erfc = NULL;
 const char* SYM_Erfi = NULL;
@@ -527,6 +529,8 @@ void sym_names_init(void) {
     SYM_EvaluationMonitor          = intern_symbol("EvaluationMonitor");
     SYM_AiryAi                     = intern_symbol("AiryAi");
     SYM_AiryAiPrime                = intern_symbol("AiryAiPrime");
+    SYM_AiryBi                     = intern_symbol("AiryBi");
+    SYM_AiryBiPrime                = intern_symbol("AiryBiPrime");
     SYM_Erf                        = intern_symbol("Erf");
     SYM_Erfc                       = intern_symbol("Erfc");
     SYM_Erfi                       = intern_symbol("Erfi");

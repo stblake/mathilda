@@ -350,6 +350,18 @@ void info_init(void) {
         "AiryAiPrime[z]\n"
         "\tgives the derivative Ai'(z) of the Airy function AiryAi.\n"
         "AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3]); D[AiryAiPrime[z], z] = z AiryAi[z].");
+    symtab_set_docstring("AiryBi",
+        "AiryBi[z]\n"
+        "\tgives the Airy function Bi(z), the solution of y'' = z y that grows\n"
+        "\texponentially as z -> +Infinity.\n"
+        "AiryBi[0] = 1/(3^(1/6) Gamma[2/3]), AiryBi[Infinity] = Infinity,\n"
+        "AiryBi[-Infinity] = 0. An entire function of z. Real and complex inputs\n"
+        "evaluate numerically at machine or arbitrary (MPFR) precision;\n"
+        "D[AiryBi[z], z] = AiryBiPrime[z]. Listable.");
+    symtab_set_docstring("AiryBiPrime",
+        "AiryBiPrime[z]\n"
+        "\tgives the derivative Bi'(z) of the Airy function AiryBi.\n"
+        "AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]; D[AiryBiPrime[z], z] = z AiryBi[z].");
     symtab_set_docstring("Erf",
         "Erf[z]\n"
         "\tgives the error function erf(z) = (2/Sqrt[Pi]) Integral_0^z e^(-t^2) dt.\n"

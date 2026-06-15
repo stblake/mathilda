@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy function `AiryAi`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy functions `AiryAi` and `AiryBi`.
 
 ## Gamma
 
@@ -792,4 +792,63 @@ Out[1]= 1/(3^(2/3) Gamma[2/3])
 
 In[2]:= AiryAi[1.8]
 Out[2]= 0.0470362
+```
+
+## AiryBi
+
+- `AiryBi[z]` — the Airy function Bi(z), the second solution of y″ = z y; it
+  grows exponentially as z → +∞ and oscillates with decaying amplitude as
+  z → −∞. An entire function of z (no branch cuts), the companion of `AiryAi`.
+
+Implemented in `src/special_functions/airybi.c`, modelled on `AiryAi` (a
+file-local complex-MPFR toolkit `acx` and a unified core that returns Bi(z) and
+Bi′(z) together).
+
+- **Exact values.** `AiryBi[0] = 1/(3^(1/6) Gamma[2/3])`;
+  `AiryBi[Infinity] = Infinity`, `AiryBi[-Infinity] = 0`. Other exact arguments
+  (e.g. `AiryBi[2]`) stay unevaluated and numericalize only under `N`.
+- **Numerics.** With an inexact argument, machine- and arbitrary-precision
+  (MPFR) real and complex inputs evaluate numerically. The unified core routes
+  on `r = |z|`, `θ = arg z`, and the requested precision `P`:
+  - a **Maclaurin series** for small/moderate `r` (recurrence
+    `b_n = b_{n-3}/(n(n-1))` from Bi″ = z Bi, seeded by `Bi(0)`/`Bi′(0)`, with
+    `(2/3) r^{3/2}/ln2` guard bits to absorb the partial-sum cancellation),
+  - the **dominant asymptotic series** (DLMF 9.7.7) for large `r` in the central
+    sector, with ζ = (2/3) z^{3/2}, the same `u_k`/`v_k` as Ai (no `(-1)^k`,
+    prefactor `1/Sqrt[Pi]`), used only where the recessive companion
+    `~exp(-2 Re ζ)` is below 2^−P (`Re ζ = (2/3) r^{3/2} cos(3θ/2) > (P ln2)/2`),
+    which keeps the exponentially large positive axis at full precision, and
+  - near/left of the anti-Stokes line `|arg z| = π/3` (incl. the oscillatory
+    negative real axis) the **DLMF 9.2.10 connection to Ai**,
+    `Bi(z) = e^{iπ/6} Ai(z e^{2πi/3}) + e^{-iπ/6} Ai(z e^{-2πi/3})`, so the
+    oscillation falls out of two well-conditioned in-sector Ai evaluations.
+
+  Examples: `AiryBi[1.8] = 2.59587`, `AiryBi[2.5 + I] = 0.512544 + 5.335 I`,
+  `N[AiryBi[2], 50] = 3.2980949999782147102806044252234524220039759634036`.
+  Precision tracks the input (`AiryBi[1.8\`30]` is accurate to 30 digits).
+  Machine inputs whose magnitude overflows the machine range are returned as
+  arbitrary-precision numbers (e.g. `AiryBi[1000.] ≈ 5.4077×10^9154`).
+- **Derivative.** `D[AiryBi[z], z] = AiryBiPrime[z]`; higher derivatives reduce
+  via Bi″ = z Bi (e.g. `D[AiryBi[x], {x, 2}] = x AiryBi[x]`).
+- **Series at 0.** `Series[AiryBi[x], {x, 0, n}]` gives the closed-form Taylor
+  series, e.g. `1/(3^(1/6) Gamma[2/3]) + 3^(1/6) x/Gamma[1/3] + …`.
+- **Series at ∞.** `Series[AiryBi[x], {x, Infinity, n}]` gives the asymptotic
+  expansion with the essential-singularity prefactor kept symbolic:
+  `E^(2/3 x^(3/2)) ((1/x)^(1/4)/Sqrt[Pi] + 5 (1/x)^(7/4)/(48 Sqrt[Pi]) + …)`.
+- **Listable.** `AiryBi[{1.2, 1.5, 1.8}] = {1.42113, 1.87894, 2.59587}`;
+  `AiryBi[{}] = {}`.
+
+`AiryBiPrime[z]` is a minimal head: it carries the derivative rule
+(`D[AiryBiPrime[z], z] = z AiryBi[z]`) and the exact value
+`AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]` (needed by the Taylor series), but has no
+general numeric evaluator — `N[AiryBiPrime[2.0]]` stays unevaluated.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= AiryBi[0]
+Out[1]= 1/(3^(1/6) Gamma[2/3])
+
+In[2]:= AiryBi[1.8]
+Out[2]= 2.59587
 ```
