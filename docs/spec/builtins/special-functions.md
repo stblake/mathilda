@@ -856,12 +856,29 @@ Bi′(z) together).
 - **Listable.** `AiryBi[{1.2, 1.5, 1.8}] = {1.42113, 1.87894, 2.59587}`;
   `AiryBi[{}] = {}`.
 
-`AiryBiPrime[z]` is a minimal head: it carries the derivative rule
-(`D[AiryBiPrime[z], z] = z AiryBi[z]`) and the exact value
-`AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]` (needed by the Taylor series), but has no
-general numeric evaluator — `N[AiryBiPrime[2.0]]` stays unevaluated.
+`AiryBiPrime[z]` = Bi′(z) is a full numeric evaluator in its own right. Because
+the unified core returns Bi(z) and Bi′(z) together, `AiryBiPrime` reuses the very
+same Maclaurin / asymptotic / connection machinery and simply selects the
+derivative component:
 
-Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+- **Exact values.** `AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]` and
+  `AiryBiPrime[Infinity] = Infinity` (Bi′ is the dominant, growing solution). At
+  −∞ Bi′ oscillates with *growing* (~|z|^(1/4)) amplitude and has no limit, so
+  `AiryBiPrime[-Infinity]` is left unevaluated. Other exact arguments stay
+  symbolic and numericalize under `N`.
+- **Numerics.** Real and complex inputs evaluate at machine and arbitrary (MPFR)
+  precision, with the same overflow→MPFR promotion as `AiryBi`. Examples:
+  `AiryBiPrime[1.8] = 2.98554`, `AiryBiPrime[2.5 + I] = -1.20505 + 8.29097 I`,
+  `N[AiryBiPrime[5/2], 50] = 9.4214233173343017555823088857282415621646345227564`.
+- **Derivative.** `D[AiryBiPrime[z], z] = z AiryBi[z]` (from Bi″ = z Bi).
+- **Series at 0.** `Series[AiryBiPrime[x], {x, 0, n}]` via the closed-form Taylor
+  path: `3^(1/6)/Gamma[1/3] + x^2/(2·3^(1/6) Gamma[2/3]) + …`.
+- **Series at ∞.** `Series[AiryBiPrime[x], {x, Infinity, n}]` gives the DLMF 9.7.8
+  expansion `E^(2/3 x^(3/2)) (x^(1/4)/Sqrt[Pi] - 7 (1/x)^(5/4)/(48 Sqrt[Pi]) + …)`.
+- **Listable.** `AiryBiPrime[{1.2, 1.5, 1.8}] = {1.22123, 1.88621, 2.98554}`.
+
+Attributes (both heads): `Listable`, `NumericFunction`, `Protected`,
+`ReadProtected`.
 
 ```mathematica
 In[1]:= AiryBi[0]

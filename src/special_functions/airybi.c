@@ -53,7 +53,15 @@
  * at 0 is produced by the generic Taylor-via-D path once AiryBi[0] / AiryBiPrime[0]
  * have closed-form values.
  *
- * Attributes: Listable, NumericFunction, Protected, ReadProtected.
+ * AiryBiPrime[z] = Bi'(z) is a full numeric evaluator in its own right: because
+ * `airy_bi_core` returns Bi(z) and Bi'(z) together, AiryBiPrime reuses the very
+ * same Maclaurin / asymptotic / connection machinery and simply selects the
+ * derivative component. Its exact values are AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]
+ * and AiryBiPrime[+Infinity] = Infinity (Bi' is the dominant, growing solution);
+ * at -Infinity Bi' has no limit (oscillation with growing ~|z|^(1/4) amplitude)
+ * and is left unevaluated.
+ *
+ * Attributes (both heads): Listable, NumericFunction, Protected, ReadProtected.
  */
 #include "airybi.h"
 
@@ -767,8 +775,10 @@ static Expr* bi_complex_result(const mpfr_t re, const mpfr_t im, mpfr_prec_t out
     return make_complex(rr, ii);
 }
 
-/* AiryBi for a real numeric leaf (Real / MPFR) at out_prec bits. */
-static Expr* bi_eval_real(const Expr* arg, mpfr_prec_t out_prec) {
+/* AiryBi (prime=false) or AiryBiPrime (prime=true) for a real numeric leaf
+ * (Real / MPFR) at out_prec bits. The core computes Bi and Bi' together; we
+ * select the requested component for the result. */
+static Expr* bi_eval_real(const Expr* arg, mpfr_prec_t out_prec, bool prime) {
     mpfr_prec_t wp = (out_prec < 64 ? 64 : out_prec);
     acx z, Bi, Bip;
     acx_init(&z, wp); acx_init(&Bi, wp); acx_init(&Bip, wp);
@@ -776,24 +786,28 @@ static Expr* bi_eval_real(const Expr* arg, mpfr_prec_t out_prec) {
     if (bi_set_mpfr(z.re, arg)) {
         mpfr_set_ui(z.im, 0, ARND);
         airy_bi_core(&z, &Bi, &Bip, out_prec);
-        if (!mpfr_nan_p(Bi.re) && !mpfr_inf_p(Bi.re))
-            out = bi_real_result(Bi.re, out_prec);
+        const acx* R = prime ? &Bip : &Bi;
+        if (!mpfr_nan_p(R->re) && !mpfr_inf_p(R->re))
+            out = bi_real_result(R->re, out_prec);
     }
     acx_clear(&z); acx_clear(&Bi); acx_clear(&Bip);
     return out;
 }
 
-/* AiryBi for a numeric Complex[re, im] at out_prec bits. */
-static Expr* bi_eval_complex(const Expr* re, const Expr* im, mpfr_prec_t out_prec) {
+/* AiryBi (prime=false) or AiryBiPrime (prime=true) for a numeric
+ * Complex[re, im] at out_prec bits. */
+static Expr* bi_eval_complex(const Expr* re, const Expr* im, mpfr_prec_t out_prec,
+                             bool prime) {
     mpfr_prec_t wp = (out_prec < 64 ? 64 : out_prec);
     acx z, Bi, Bip;
     acx_init(&z, wp); acx_init(&Bi, wp); acx_init(&Bip, wp);
     Expr* out = NULL;
     if (bi_set_mpfr(z.re, re) && bi_set_mpfr(z.im, im)) {
         airy_bi_core(&z, &Bi, &Bip, out_prec);
-        if (!mpfr_nan_p(Bi.re) && !mpfr_nan_p(Bi.im) &&
-            !mpfr_inf_p(Bi.re) && !mpfr_inf_p(Bi.im))
-            out = bi_complex_result(Bi.re, Bi.im, out_prec);
+        const acx* R = prime ? &Bip : &Bi;
+        if (!mpfr_nan_p(R->re) && !mpfr_nan_p(R->im) &&
+            !mpfr_inf_p(R->re) && !mpfr_inf_p(R->im))
+            out = bi_complex_result(R->re, R->im, out_prec);
     }
     acx_clear(&z); acx_clear(&Bi); acx_clear(&Bip);
     return out;
@@ -815,11 +829,11 @@ static Expr* airybi_one_arg(Expr* arg) {
 #ifdef USE_MPFR
     /* 2. Machine real. */
     if (arg->type == EXPR_REAL)
-        return bi_eval_real(arg, 53);
+        return bi_eval_real(arg, 53, false);
 
     /* 3. Arbitrary-precision real. */
     if (arg->type == EXPR_MPFR)
-        return bi_eval_real(arg, mpfr_get_prec(arg->data.mpfr));
+        return bi_eval_real(arg, mpfr_get_prec(arg->data.mpfr), false);
 
     /* 4. Complex argument (Complex[..] with an inexact part). */
     {
@@ -827,13 +841,52 @@ static Expr* airybi_one_arg(Expr* arg) {
         if (is_complex(arg, &re, &im) && (bi_is_inexact(re) || bi_is_inexact(im))) {
             long bits = numeric_min_inexact_bits(arg);
             mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
-            Expr* out = bi_eval_complex(re, im, out_prec);
+            Expr* out = bi_eval_complex(re, im, out_prec, false);
             if (out) return out;
         }
     }
 #endif /* USE_MPFR */
 
     return NULL; /* leave symbolic (e.g. AiryBi[2], AiryBi[x]) */
+}
+
+/* ------------------------------------------------------------------ */
+/* AiryBiPrime[z] = Bi'(z)                                            */
+/* Shares the unified core with AiryBi (the core returns Bi').        */
+/* ------------------------------------------------------------------ */
+
+static Expr* airybiprime_one_arg(Expr* arg) {
+    /* 1. Exact special values. */
+    if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
+        return bi_prime_value_at_zero();   /* Bi'(0) = 3^(1/6)/Gamma[1/3] */
+    /* Bi'(z) -> +Infinity as z -> +Infinity (dominant solution grows). At
+     * -Infinity Bi' oscillates with *growing* amplitude (~|z|^(1/4)) and has no
+     * limit, so -Infinity is deliberately left unevaluated. */
+    if (bi_is_symbol(arg, "Infinity"))       return expr_new_symbol("Infinity");
+    if (bi_is_symbol(arg, "Indeterminate"))  return expr_new_symbol("Indeterminate");
+
+#ifdef USE_MPFR
+    /* 2. Machine real. */
+    if (arg->type == EXPR_REAL)
+        return bi_eval_real(arg, 53, true);
+
+    /* 3. Arbitrary-precision real. */
+    if (arg->type == EXPR_MPFR)
+        return bi_eval_real(arg, mpfr_get_prec(arg->data.mpfr), true);
+
+    /* 4. Complex argument (Complex[..] with an inexact part). */
+    {
+        Expr *re, *im;
+        if (is_complex(arg, &re, &im) && (bi_is_inexact(re) || bi_is_inexact(im))) {
+            long bits = numeric_min_inexact_bits(arg);
+            mpfr_prec_t out_prec = (bits && bits > 53) ? (mpfr_prec_t)bits : 53;
+            Expr* out = bi_eval_complex(re, im, out_prec, true);
+            if (out) return out;
+        }
+    }
+#endif /* USE_MPFR */
+
+    return NULL; /* leave symbolic (e.g. AiryBiPrime[2], AiryBiPrime[x]) */
 }
 
 /* ------------------------------------------------------------------ */
@@ -857,16 +910,24 @@ Expr* builtin_airybi(Expr* res) {
     return airybi_one_arg(res->data.function.args[0]);
 }
 
-/* AiryBiPrime is a minimal symbolic head: it carries the derivative rule
- * (calculus/deriv.c) and the exact value AiryBiPrime[0], which the Taylor
- * series of AiryBi at 0 needs. It has no general numeric evaluator, so any
- * other argument is left unevaluated. */
+/* Mathematica-compatible argx diagnostic for AiryBiPrime. */
+static Expr* airybiprime_emit_argx(size_t argc) {
+    fprintf(stderr,
+            "AiryBiPrime::argx: AiryBiPrime called with %zu argument%s; "
+            "1 argument is expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* AiryBiPrime[z] = Bi'(z). Full numeric evaluator (real/complex, machine and
+ * arbitrary precision) sharing AiryBi's unified core, plus the exact value at
+ * 0 and the +Infinity limit. It also carries the derivative rule
+ * (calculus/deriv.c); AiryBiPrime[0] feeds the Taylor series of AiryBi at 0. */
 Expr* builtin_airybiprime(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    Expr* arg = res->data.function.args[0];
-    if (arg->type == EXPR_INTEGER && arg->data.integer == 0)
-        return bi_prime_value_at_zero();
-    return NULL; /* inert otherwise */
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return airybiprime_emit_argx(argc);
+    return airybiprime_one_arg(res->data.function.args[0]);
 }
 
 /* ------------------------------------------------------------------ */

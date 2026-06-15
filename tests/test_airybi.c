@@ -1,5 +1,5 @@
-/* Tests for AiryBi: the Airy function Bi(z) and its minimal derivative head
- * AiryBiPrime.
+/* Tests for AiryBi: the Airy function Bi(z) and its derivative head
+ * AiryBiPrime (a full numeric evaluator sharing AiryBi's unified core).
  *
  * Covers the exact value at 0 and limits at +-Infinity; machine- and
  * arbitrary-precision (MPFR) real and complex numerics across the Maclaurin
@@ -66,6 +66,26 @@ static void assert_xcheck(const char* zexpr, double tol) {
         zexpr, zexpr, zexpr, zexpr, zexpr, zexpr, zexpr, zexpr);
     double v = eval_real(buf);
     ASSERT_MSG(v <= tol, "AiryBi cross-check at %s: relative residual %.3e > %.3e",
+               zexpr, v, tol);
+}
+
+/* Oracle for Bi': MPFR has no Airy-Bi function, so the strongest available
+ * independent check is the exact DLMF 9.2.10 *derivative* connection relation
+ *   Bi'(z) = e^{i5pi/6} Ai'(z e^{2pi i/3}) + e^{-i5pi/6} Ai'(z e^{-2pi i/3}),
+ * which ties Bi' to AiryAiPrime (itself pinned to a 4th-order central difference
+ * of mpfr_ai in test_airyai.c). The relative L1 residual must vanish to working
+ * precision in every argument sector. */
+static void assert_xcheck_prime(const char* zexpr, double tol) {
+    char buf[896];
+    snprintf(buf, sizeof buf,
+        "(Abs[Re[AiryBiPrime[%s] - (Exp[I 5 Pi/6] AiryAiPrime[(%s) Exp[2 Pi I/3]] "
+        "+ Exp[-I 5 Pi/6] AiryAiPrime[(%s) Exp[-2 Pi I/3]])]] + "
+        "Abs[Im[AiryBiPrime[%s] - (Exp[I 5 Pi/6] AiryAiPrime[(%s) Exp[2 Pi I/3]] "
+        "+ Exp[-I 5 Pi/6] AiryAiPrime[(%s) Exp[-2 Pi I/3]])]]) / "
+        "(1 + Abs[Re[AiryBiPrime[%s]]] + Abs[Im[AiryBiPrime[%s]]])",
+        zexpr, zexpr, zexpr, zexpr, zexpr, zexpr, zexpr, zexpr);
+    double v = eval_real(buf);
+    ASSERT_MSG(v <= tol, "AiryBiPrime cross-check at %s: relative residual %.3e > %.3e",
                zexpr, v, tol);
 }
 
@@ -191,12 +211,141 @@ void test_airybi_series_infinity() {
         "((1/x)^(1/4)/Sqrt[Pi] + O[1/x]^(7/4)) E^(2/3 x^(3/2))", 0);
 }
 
-/* ---- inert AiryBiPrime ---------------------------------------------- */
+/* ==================================================================== */
+/* AiryBiPrime[z] = Bi'(z): full numeric evaluator                       */
+/* ==================================================================== */
 
-void test_airybiprime_inert() {
-    /* No general numeric evaluator: stays unevaluated away from 0. */
-    assert_eval_eq("N[AiryBiPrime[2.0]]", "AiryBiPrime[2.0]", 0);
+/* ---- exact values and limits ---------------------------------------- */
+
+void test_airybiprime_special() {
+    /* AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]. */
+    assert_eval_eq("AiryBiPrime[0]", "3^(1/6)/Gamma[1/3]", 0);
+    /* Bi' grows to +Infinity at +Infinity (dominant solution) -- the opposite
+     * of Ai', which decays to 0. */
+    assert_eval_eq("AiryBiPrime[Infinity]", "Infinity", 0);
+    /* At -Infinity Bi' oscillates with growing amplitude: no limit, so the call
+     * is deliberately left unevaluated. */
+    assert_eval_eq("AiryBiPrime[-Infinity]", "AiryBiPrime[-Infinity]", 0);
+    assert_eval_eq("AiryBiPrime[Indeterminate]", "Indeterminate", 0);
+    /* Exact non-zero / symbolic arguments stay unevaluated. */
+    assert_eval_eq("AiryBiPrime[2]", "AiryBiPrime[2]", 0);
     assert_eval_eq("AiryBiPrime[y]", "AiryBiPrime[y]", 0);
+}
+
+/* ---- machine-precision real ----------------------------------------- */
+
+void test_airybiprime_machine_real() {
+    /* Spec values. */
+    assert_close("AiryBiPrime[1.2]", 1.22123, 1e-5);
+    assert_close("AiryBiPrime[1.5]", 1.88621, 1e-5);
+    assert_close("AiryBiPrime[1.8]", 2.98554, 1e-5);
+    /* Negative axis: oscillatory, exercises the connection-to-Ai path.
+     * Values pinned by the DLMF 9.2.10 derivative oracle (residual ~1e-15). */
+    assert_close("AiryBiPrime[-2.0]", 0.278795, 1e-5);
+    assert_close("AiryBiPrime[-5.0]", 0.778412, 1e-5);
+}
+
+/* ---- DLMF 9.2.10 derivative-connection oracle, all sectors ---------- */
+
+void test_airybiprime_oracle() {
+    for (int t = -36; t <= 36; t++) {
+        double x = t * 0.5;
+        char z[32];
+        snprintf(z, sizeof z, "%.1f", x);
+        assert_xcheck_prime(z, 1e-8);
+    }
+    const char* cpts[] = {
+        "2.0 + 3.0 I", "-30.0 + 5.0 I", "8.0 I", "-8.0 + 0.5 I",
+        "5.0 - 2.0 I", "-15.0 - 4.0 I", "1.0 + 1.0 I", "20.0 I",
+        "0.3 + 0.2 I", "-1.0 - 1.0 I"
+    };
+    for (size_t i = 0; i < sizeof cpts / sizeof cpts[0]; i++)
+        assert_xcheck_prime(cpts[i], 1e-8);
+}
+
+/* ---- arbitrary-precision real --------------------------------------- */
+
+void test_airybiprime_arbitrary_real() {
+    /* N[AiryBiPrime[5/2], 50] -- matches the reference to all 50 digits. */
+    assert_eval_startswith("N[AiryBiPrime[5/2], 50]",
+        "9.4214233173343017555823088857282415621646345227564");
+    /* Backtick-precision input tracks exactly (30 significant digits). */
+    assert_eval_startswith("AiryBiPrime[2.5`30]",
+        "9.42142331733430175558230888572");
+    /* Explicit-zeros literal: Mathilda tracks ~21 trustworthy digits here (the
+     * literal form pins a tighter working precision than the `30/N paths, so
+     * the last couple of printed digits are unreliable -- cf. N's unpinned
+     * last digit). Assert only the stable prefix. */
+    assert_eval_startswith("AiryBiPrime[2.50000000000000000000000]",
+        "9.421423317334301755582");
+    /* High precision via N on an exact rational. */
+    assert_eval_startswith("N[AiryBiPrime[1/2], 60]",
+        "0.544572564140592301827164018217823325654528898231887144094946");
+}
+
+/* ---- machine and arbitrary-precision complex ------------------------ */
+
+void test_airybiprime_complex() {
+    /* AiryBiPrime[2.5 + I] = -1.20505 + 8.29097 I. */
+    assert_close("Re[AiryBiPrime[2.5 + I]]", -1.20505, 1e-4);
+    assert_close("Im[AiryBiPrime[2.5 + I]]", 8.29097, 1e-4);
+    /* High precision tracks (30-digit complex). */
+    assert_eval_startswith("Re[AiryBiPrime[2.5`30 + I]]", "-1.2050");
+    assert_eval_startswith("Im[AiryBiPrime[2.5`30 + I]]", "8.2909");
+}
+
+/* ---- magnitude-overflow promotion ----------------------------------- */
+/* AiryBiPrime[1000.] ~ 1.71e9156 overflows the double range, so the machine
+ * input result is promoted to MPFR rather than becoming Inf. */
+void test_airybiprime_overflow_promotion() {
+    Expr* e = parse_expression("AiryBiPrime[1000.0]");
+    Expr* r = evaluate(e);
+    expr_free(e);
+    char* s = expr_to_string(r);
+    ASSERT_MSG(strstr(s, "inf") == NULL && strstr(s, "Inf") == NULL,
+               "AiryBiPrime[1000.0] overflowed to %s", s);
+    ASSERT_MSG(strstr(s, "e+9156") != NULL,
+               "AiryBiPrime[1000.0] expected ~1.7e9156 magnitude, got %s", s);
+    free(s);
+    expr_free(r);
+}
+
+/* ---- list threading (Listable) -------------------------------------- */
+
+void test_airybiprime_listable() {
+    assert_eval_eq("AiryBiPrime[{a, b}]", "{AiryBiPrime[a], AiryBiPrime[b]}", 0);
+    assert_eval_eq("AiryBiPrime[{}]", "{}", 0);
+    assert_close("AiryBiPrime[{1.2, 1.8}][[1]]", 1.22123, 1e-5);
+    assert_close("AiryBiPrime[{1.2, 1.8}][[2]]", 2.98554, 1e-5);
+}
+
+/* ---- Series (Taylor at 0 and asymptotic at Infinity) ---------------- */
+
+void test_airybiprime_series() {
+    /* Taylor at 0 via the generic Taylor-via-D path on AiryBiPrime[0] and the
+     * Bi'' = z Bi derivative rules. */
+    assert_eval_eq("Series[AiryBiPrime[x], {x, 0, 5}]",
+        "3^(1/6)/Gamma[1/3] + 1/2/(3^(1/6) Gamma[2/3]) x^2 + "
+        "1/(3^(5/6) Gamma[1/3]) x^3 + 1/30/(3^(1/6) Gamma[2/3]) x^5 + O[x]^6", 0);
+    /* Asymptotic at Infinity (DLMF 9.7.8): leading x^(1/4)/Sqrt[Pi],
+     * next coefficient -7/(48 Sqrt[Pi]). */
+    assert_eval_eq("Series[AiryBiPrime[x], {x, Infinity, 2}]",
+        "E^(2/3 x^(3/2)) (1/(Sqrt[Pi] (1/x)^(1/4)) + "
+        "-7/48/Sqrt[Pi] (1/x)^(5/4) + O[1/x]^(11/4))", 0);
+}
+
+/* ---- derivative rule ------------------------------------------------ */
+
+void test_airybiprime_derivative() {
+    /* D[AiryBiPrime[x], x] = x AiryBi[x]  (from Bi'' = z Bi). */
+    assert_eval_eq("D[AiryBiPrime[x], x]", "x AiryBi[x]", 0);
+}
+
+/* ---- argument-count diagnostics ------------------------------------- */
+
+void test_airybiprime_argcount() {
+    assert_eval_eq("AiryBiPrime[]", "AiryBiPrime[]", 0);
+    assert_eval_eq("AiryBiPrime[1, 2, 3]", "AiryBiPrime[1, 2, 3]", 0);
 }
 
 /* ---- argument-count diagnostics ------------------------------------- */
@@ -219,7 +368,10 @@ void test_airybi_attributes() {
 
     SymbolDef* p = symtab_get_def("AiryBiPrime");
     ASSERT_MSG(p != NULL, "AiryBiPrime not registered");
+    ASSERT_MSG((p->attributes & ATTR_LISTABLE) != 0, "AiryBiPrime not Listable");
+    ASSERT_MSG((p->attributes & ATTR_NUMERICFUNCTION) != 0, "AiryBiPrime not NumericFunction");
     ASSERT_MSG((p->attributes & ATTR_PROTECTED) != 0, "AiryBiPrime not Protected");
+    ASSERT_MSG((p->attributes & ATTR_READPROTECTED) != 0, "AiryBiPrime not ReadProtected");
 }
 
 int main() {
@@ -235,9 +387,20 @@ int main() {
     TEST(test_airybi_listable);
     TEST(test_airybi_derivatives);
     TEST(test_airybi_series_infinity);
-    TEST(test_airybiprime_inert);
     TEST(test_airybi_argcount);
     TEST(test_airybi_attributes);
+
+    /* AiryBiPrime: full numeric evaluator. */
+    TEST(test_airybiprime_special);
+    TEST(test_airybiprime_machine_real);
+    TEST(test_airybiprime_oracle);
+    TEST(test_airybiprime_arbitrary_real);
+    TEST(test_airybiprime_complex);
+    TEST(test_airybiprime_overflow_promotion);
+    TEST(test_airybiprime_listable);
+    TEST(test_airybiprime_series);
+    TEST(test_airybiprime_derivative);
+    TEST(test_airybiprime_argcount);
 
     printf("All AiryBi tests passed.\n");
     return 0;

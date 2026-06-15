@@ -363,7 +363,9 @@ void info_init(void) {
     symtab_set_docstring("AiryBiPrime",
         "AiryBiPrime[z]\n"
         "\tgives the derivative Bi'(z) of the Airy function AiryBi.\n"
-        "AiryBiPrime[0] = 3^(1/6)/Gamma[1/3]; D[AiryBiPrime[z], z] = z AiryBi[z].");
+        "AiryBiPrime[0] = 3^(1/6)/Gamma[1/3], AiryBiPrime[+Infinity] = Infinity. Real\n"
+        "and complex inputs evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[AiryBiPrime[z], z] = z AiryBi[z]. Listable.");
     symtab_set_docstring("Erf",
         "Erf[z]\n"
         "\tgives the error function erf(z) = (2/Sqrt[Pi]) Integral_0^z e^(-t^2) dt.\n"
