@@ -127,9 +127,36 @@ Out[9]= {{193707721, 1}, {761838257287, 1}}
 ## Build & run
 
 Mathilda builds with a C99 toolchain and links GMP, MPFR and GNU Readline.
+LAPACK/BLAS is optional (auto-detected) and accelerates machine-precision
+linear algebra.
+
+### Install dependencies
+
+=== "Linux (Debian / Ubuntu)"
+
+    ```bash
+    # Build tools for the vendored GMP-ECM
+    sudo apt install autoconf automake libtool
+
+    # Required libraries
+    sudo apt install libgmp-dev libmpfr-dev libreadline-dev
+
+    # Optional: LAPACK/BLAS (fast linear algebra) and CMake (test suite)
+    sudo apt install liblapacke-dev libopenblas-dev cmake
+    ```
+
+=== "macOS (Homebrew)"
+
+    ```bash
+    brew install gmp mpfr readline cmake
+    brew install autoconf automake libtool   # for the vendored GMP-ECM
+    # LAPACK/BLAS is provided by Apple's Accelerate framework — no install needed.
+    ```
+
+### Clone, build, run
 
 ```bash
-git clone https://github.com/stblake/mathilda.git
+git clone --recurse-submodules https://github.com/stblake/mathilda.git
 cd mathilda
 make -j            # builds ./Mathilda
 ./Mathilda         # start the interactive REPL

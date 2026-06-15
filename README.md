@@ -84,6 +84,40 @@ The optional backends are controlled by build-time flags and **degrade gracefull
 | `USE_LAPACK`| `1` | Fast machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack`/`blas` on Linux. Falls back to the pure-C path (`USE_LAPACK=0`) if none is found. |
 | `USE_ECM`   | `1` | Elliptic Curve Method factorization via the vendored GMP-ECM (`src/external/ecm/`), built automatically. |
 
+#### Installing dependencies
+
+**Linux (Debian / Ubuntu):**
+
+```bash
+# Build tools for the vendored GMP-ECM (autoconf/automake/libtool)
+sudo apt install autoconf automake libtool
+
+# Required libraries
+sudo apt install libgmp-dev        # GMP — arbitrary-precision integers
+sudo apt install libmpfr-dev       # MPFR — arbitrary-precision reals
+sudo apt install libreadline-dev   # GNU Readline — interactive REPL
+
+# Optional: LAPACK / BLAS for fast machine-precision linear algebra
+sudo apt install liblapacke-dev libopenblas-dev
+
+# Optional: CMake, only needed to build the test suite
+sudo apt install cmake
+```
+
+On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
+`lapack-devel`/`openblas-devel`, plus `autoconf automake libtool cmake`.
+
+**macOS (Homebrew):**
+
+```bash
+brew install gmp mpfr readline cmake
+# autoconf/automake/libtool are needed to build the vendored GMP-ECM:
+brew install autoconf automake libtool
+```
+
+LAPACK/BLAS need not be installed on macOS — the build auto-detects Apple's
+**Accelerate** framework.
+
 ### Building Mathilda
 
 The `makefile` auto-discovers `src/*.c`, configures and compiles internal dependencies, then links the main executable (`-std=c99 -O3`).
