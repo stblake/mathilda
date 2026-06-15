@@ -115,6 +115,8 @@ extern const char* SYM_DollarMaxMachineNumber;
 extern const char* SYM_DollarMaxNumber;
 extern const char* SYM_DollarMinMachineNumber;
 extern const char* SYM_DollarMinNumber;
+extern const char* SYM_AiryAi;
+extern const char* SYM_AiryAiPrime;
 extern const char* SYM_E;
 extern const char* SYM_Eigenvalues;
 extern const char* SYM_Erf;

@@ -112,6 +112,8 @@ const char* SYM_EulerGamma = NULL;
 const char* SYM_EulerSum = NULL;
 const char* SYM_Evaluate = NULL;
 const char* SYM_EvaluationMonitor = NULL;
+const char* SYM_AiryAi = NULL;
+const char* SYM_AiryAiPrime = NULL;
 const char* SYM_Erf = NULL;
 const char* SYM_Erfc = NULL;
 const char* SYM_Erfi = NULL;
@@ -523,6 +525,8 @@ void sym_names_init(void) {
     SYM_EulerSum                   = intern_symbol("EulerSum");
     SYM_Evaluate                   = intern_symbol("Evaluate");
     SYM_EvaluationMonitor          = intern_symbol("EvaluationMonitor");
+    SYM_AiryAi                     = intern_symbol("AiryAi");
+    SYM_AiryAiPrime                = intern_symbol("AiryAiPrime");
     SYM_Erf                        = intern_symbol("Erf");
     SYM_Erfc                       = intern_symbol("Erfc");
     SYM_Erfi                       = intern_symbol("Erfi");

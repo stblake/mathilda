@@ -339,6 +339,17 @@ void info_init(void) {
         "and arbitrary-precision (MPFR) real and complex inputs evaluate\n"
         "numerically. The incomplete form reduces through Hypergeometric2F1.\n"
         "Listable.");
+    symtab_set_docstring("AiryAi",
+        "AiryAi[z]\n"
+        "\tgives the Airy function Ai(z), the solution of y'' = z y that decays\n"
+        "\tas z -> +Infinity.\n"
+        "AiryAi[0] = 1/(3^(2/3) Gamma[2/3]), AiryAi[+-Infinity] = 0. An entire\n"
+        "function of z. Real and complex inputs evaluate numerically at machine\n"
+        "or arbitrary (MPFR) precision; D[AiryAi[z], z] = AiryAiPrime[z]. Listable.");
+    symtab_set_docstring("AiryAiPrime",
+        "AiryAiPrime[z]\n"
+        "\tgives the derivative Ai'(z) of the Airy function AiryAi.\n"
+        "AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3]); D[AiryAiPrime[z], z] = z AiryAi[z].");
     symtab_set_docstring("Erf",
         "Erf[z]\n"
         "\tgives the error function erf(z) = (2/Sqrt[Pi]) Integral_0^z e^(-t^2) dt.\n"

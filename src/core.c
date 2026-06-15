@@ -33,6 +33,7 @@
 #include "bernoullib.h"
 #include "eulere.h"
 #include "polylog.h"
+#include "airyai.h"
 #include "comparisons.h"
 #include "boolean.h"
 #include "list.h"
@@ -493,6 +494,7 @@ void core_init(void) {
     bernoullib_init();
     eulere_init();
     polylog_init();
+    airyai_init();
     fibonacci_init();
     lucas_init();
 

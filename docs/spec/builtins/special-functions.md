@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, and the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy function `AiryAi`.
 
 ## Gamma
 
@@ -735,4 +735,61 @@ Out[1]= 1/6 Log[2]^3 - 1/12 Log[2] Pi^2 + 7/8 Zeta[3]
 
 In[2]:= PolyLog[2, 0.9]
 Out[2]= 1.29971
+```
+
+## AiryAi
+
+- `AiryAi[z]` — the Airy function Ai(z), the solution of y″ = z y that decays as
+  z → +∞. An entire function of z (no branch cuts).
+
+Implemented in `src/special_functions/airyai.c`, modelled on `Erf` (an entire
+function with a file-local complex-MPFR toolkit `acx` and a unified core that
+returns Ai(z) and Ai′(z) together).
+
+- **Exact values.** `AiryAi[0] = 1/(3^(2/3) Gamma[2/3])`;
+  `AiryAi[Infinity] = AiryAi[-Infinity] = 0`. Other exact arguments (e.g.
+  `AiryAi[2]`) stay unevaluated and numericalize only under `N`.
+- **Numerics.** With an inexact argument, machine- and arbitrary-precision
+  (MPFR) real and complex inputs evaluate numerically. The unified core routes
+  on `r = |z|` and the requested precision `P`:
+  - a **Maclaurin series** for small/moderate `r` (recurrence
+    `a_n = a_{n-3}/(n(n-1))` from Ai″ = z Ai, with `(2/3) r^{3/2}/ln2` guard bits
+    to absorb the partial-sum cancellation), and
+  - the **asymptotic series** (DLMF 9.7.5) for large `r`, with
+    ζ = (2/3) z^{3/2} and `u_k = (6k-5)(6k-3)(6k-1)/((2k-1) 216 k) u_{k-1}`,
+    summed to optimal truncation; near the negative real axis
+    (2π/3 < |arg z| ≤ π) it applies the DLMF 9.2.12 connection relation
+    `Ai(z) = -[ω Ai(ωz) + ω̄ Ai(ω̄z)]`, ω = e^{2πi/3}, so the oscillation falls
+    out of two well-conditioned in-sector evaluations.
+
+  Examples: `AiryAi[1.8] = 0.0470362`, `AiryAi[2.5 + I] = -0.00191209 -
+  0.0180329 I`,
+  `N[AiryAi[2], 50] = 0.034924130423274379135322080791807609761060213897583`.
+  Precision tracks the input (`AiryAi[4.8\`40]` is accurate to 40 digits).
+  Large imaginary arguments whose magnitude overflows the machine range are
+  returned as arbitrary-precision numbers (e.g. `AiryAi[150. I] ≈ 8.1951×10^374
+  + 6.3801×10^374 I`).
+- **Derivative.** `D[AiryAi[z], z] = AiryAiPrime[z]`; higher derivatives reduce
+  via Ai″ = z Ai (e.g. `D[AiryAi[x], {x, 2}] = x AiryAi[x]`).
+- **Series at 0.** `Series[AiryAi[x], {x, 0, n}]` gives the closed-form Taylor
+  series, e.g. `1/(3^(2/3) Gamma[2/3]) - x/(3^(1/3) Gamma[1/3]) + …`.
+- **Series at ∞.** `Series[AiryAi[x], {x, Infinity, n}]` gives the asymptotic
+  expansion with the essential-singularity prefactor kept symbolic:
+  `E^(-2/3 x^(3/2)) ((1/x)^(1/4)/(2 Sqrt[Pi]) - 5 (1/x)^(7/4)/(96 Sqrt[Pi]) + …)`.
+- **Listable.** `AiryAi[{1.2, 1.5, 1.8}] = {0.106126, 0.0717495, 0.0470362}`;
+  `AiryAi[{}] = {}`.
+
+`AiryAiPrime[z]` is a minimal head: it carries the derivative rule
+(`D[AiryAiPrime[z], z] = z AiryAi[z]`) and the exact value
+`AiryAiPrime[0] = -1/(3^(1/3) Gamma[1/3])` (needed by the Taylor series), but has
+no general numeric evaluator — `N[AiryAiPrime[2.0]]` stays unevaluated.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= AiryAi[0]
+Out[1]= 1/(3^(2/3) Gamma[2/3])
+
+In[2]:= AiryAi[1.8]
+Out[2]= 0.0470362
 ```

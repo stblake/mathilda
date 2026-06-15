@@ -306,6 +306,16 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_neg(mk_fn2("Power", denom, mk_int(-1)));
     }
 
+    /* --- Airy Ai: d/dg AiryAi[g] = AiryAiPrime[g]. --- */
+    if (!strcmp(name, "AiryAi")) {
+        return mk_fn1("AiryAiPrime", expr_copy(g));
+    }
+
+    /* --- Airy Ai': d/dg AiryAiPrime[g] = g AiryAi[g]  (from Ai'' = z Ai). --- */
+    if (!strcmp(name, "AiryAiPrime")) {
+        return mk_fn2("Times", expr_copy(g), mk_fn1("AiryAi", expr_copy(g)));
+    }
+
     /* --- error function: d/dg Erf[g] = (2/Sqrt[Pi]) E^(-g^2). --- */
     if (!strcmp(name, "Erf")) {
         Expr* coeff = mk_fn2("Times", mk_int(2),
