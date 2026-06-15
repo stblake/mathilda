@@ -5,6 +5,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "repl_hooks.h"
+#include "sym_names.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,7 +44,7 @@ void process_input(const char* input, int line_number) {
     if (is_blank_or_comment_only(input)) return;
 
     // Update $Line
-    Expr* line_sym = expr_new_symbol("$Line");
+    Expr* line_sym = expr_new_symbol(SYM_DollarLine);
     Expr* line_val = expr_new_integer(line_number);
     symtab_add_own_value("$Line", line_sym, line_val);
     expr_free(line_sym);
@@ -67,7 +68,7 @@ void process_input(const char* input, int line_number) {
 
     /* Store In[line_number] = parsed BEFORE running $Pre/$Post so that
      * In[n] reflects what the user typed, not whatever a hook did. */
-    Expr* in_sym = expr_new_symbol("In");
+    Expr* in_sym = expr_new_symbol(SYM_In);
     Expr* in_arg = expr_new_integer(line_number);
     Expr* in_args[] = {in_arg};
     Expr* in_pattern = expr_new_function(in_sym, in_args, 1);
@@ -94,7 +95,7 @@ void process_input(const char* input, int line_number) {
 
     /* Store Out[line_number] = evaluated (post-$Post, pre-$PrePrint:
      * Mathematica's documented ordering). */
-    Expr* out_sym = expr_new_symbol("Out");
+    Expr* out_sym = expr_new_symbol(SYM_Out);
     Expr* out_arg = expr_new_integer(line_number);
     Expr* out_args[] = {out_arg};
     Expr* out_pattern = expr_new_function(out_sym, out_args, 1);

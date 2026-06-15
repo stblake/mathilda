@@ -119,7 +119,7 @@ static Expr* eval_simplify(Expr* a) {
      * rational + Sqrt expressions, and is materially cheaper than
      * Simplify.  is_zero_poly works correctly on the result. */
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Together"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Together), (Expr*[]){a}, 1));
 }
 
 /* ------------------------------------------------------------------ *
@@ -547,7 +547,7 @@ static Expr* build_perm_matrix(const int* perm, int p) {
 static Expr* tidy_matrix(Expr* m) {
     /* Expand is Listable -> threads automatically. */
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Expand"), (Expr*[]){expr_copy(m)}, 1));
+        expr_new_symbol(SYM_Expand), (Expr*[]){expr_copy(m)}, 1));
 }
 
 /* ------------------------------------------------------------------ *

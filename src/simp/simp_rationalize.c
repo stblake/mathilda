@@ -277,7 +277,7 @@ static Expr* denom_compute_inverse(const Expr* denom) {
     Expr* xgcd_args[3] = {
         p_in_a, relation, expr_new_symbol(gen)
     };
-    Expr* xgcd_call = expr_new_function(expr_new_symbol("PolynomialExtendedGCD"),
+    Expr* xgcd_call = expr_new_function(expr_new_symbol(SYM_PolynomialExtendedGCD),
                                         xgcd_args, 3);
     Expr* xgcd_result = evaluate(xgcd_call);
     expr_free(xgcd_call);

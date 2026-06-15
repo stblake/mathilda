@@ -231,7 +231,7 @@ static Expr* simp_fact_pochhammer_expansion(const Expr* b_sym_template,
     Expr* base = simp_fact_make_offset(expr_copy((Expr*)b_sym_template),
                                        b_const);
     Expr* fact_args[1] = { base };
-    Expr* fact_b = expr_new_function(expr_new_symbol("Factorial"), fact_args, 1);
+    Expr* fact_b = expr_new_function(expr_new_symbol(SYM_Factorial), fact_args, 1);
     if (offset == 0) return fact_b;
 
     /* Times[Factorial[b], (b+1), (b+2), ..., (b+offset)] */
@@ -431,7 +431,7 @@ static bool simp_fact_refold_times(Expr** args, size_t n,
             Expr* nb = simp_fact_make_offset(expr_copy(base_sym),
                                              base_c + best_k);
             Expr* fa[1] = { nb };
-            built[w++] = expr_new_function(expr_new_symbol("Factorial"),
+            built[w++] = expr_new_function(expr_new_symbol(SYM_Factorial),
                                            fa, 1);
         } else if (!absorbed[i]) {
             built[w++] = expr_copy(args[i]);
@@ -668,7 +668,7 @@ static Expr* simp_fact_double_factorial(const Expr* e) {
     Expr* arg_args[2] = { two_v, expr_new_integer(-1) };
     Expr* arg_plus = expr_new_function(expr_new_symbol(SYM_Plus), arg_args, 2);
     Expr* fac2_args[1] = { arg_plus };
-    Expr* fac2 = expr_new_function(expr_new_symbol("Factorial2"), fac2_args, 1);
+    Expr* fac2 = expr_new_function(expr_new_symbol(SYM_Factorial2), fac2_args, 1);
     expr_free(v_expr);
 
     /* If there are residual cofactors, multiply them in. */

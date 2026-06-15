@@ -73,7 +73,7 @@ Expr* builtin_normalize(Expr* res) {
     if (argc == 2) {
         fhead = expr_copy(res->data.function.args[1]);
     } else {
-        fhead = expr_new_symbol("Norm");
+        fhead = expr_new_symbol(SYM_Norm);
     }
     Expr* norm_call = expr_new_function(
         fhead, (Expr*[]){ expr_copy(expr) }, 1);

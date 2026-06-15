@@ -138,7 +138,7 @@ static Expr* intrat_polyrem_t(Expr* a, Expr* b, Expr* var) {
 static bool intrat_polyqr(Expr* a, Expr* b, Expr* x, Expr** out_q, Expr** out_r) {
     Expr* args[3] = {expr_copy(a), expr_copy(b), expr_copy(x)};
     Expr* call = expr_new_function(
-        expr_new_symbol("PolynomialQuotientRemainder"), args, 3);
+        expr_new_symbol(SYM_PolynomialQuotientRemainder), args, 3);
     Expr* result = evaluate(call);
     expr_free(call);
     if (!result || result->type != EXPR_FUNCTION
@@ -979,7 +979,7 @@ static Expr* intrat_apart_list(Expr* f, Expr* x, const Expr* alpha) {
 __attribute__((unused))
 static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** b_out) {
     /* Run Collect[p, x] to gather the polynomial in canonical form. */
-    Expr* coll = expr_new_function(expr_new_symbol("Collect"),
+    Expr* coll = expr_new_function(expr_new_symbol(SYM_Collect),
         (Expr*[]){expr_copy(p), expr_copy(x)}, 2);
     Expr* c = evaluate(coll);
     expr_free(coll);
@@ -1146,7 +1146,7 @@ static Expr* nlp_sub_body(Expr* body, Expr* bvar, Expr* value) {
  * form, which the user can verify formally and which avoids
  * apparent-regression noise on the corpus. */
 static bool poly_only_uses(Expr* poly, Expr* bvar) {
-    Expr* vars_call = expr_new_function(expr_new_symbol("Variables"),
+    Expr* vars_call = expr_new_function(expr_new_symbol(SYM_Variables),
         (Expr*[]){ expr_copy(poly) }, 1);
     Expr* vars = evaluate(vars_call);
     expr_free(vars_call);
@@ -1394,7 +1394,7 @@ static Expr* expand_palindromic_quartic_real(
 static Expr* expand_simple_rootsum(Expr* poly, Expr* bvar, Expr* body) {
     if (!poly_only_uses(poly, bvar)) return NULL;
 
-    Expr* cl_call = expr_new_function(expr_new_symbol("CoefficientList"),
+    Expr* cl_call = expr_new_function(expr_new_symbol(SYM_CoefficientList),
         (Expr*[]){ expr_copy(poly), expr_copy(bvar) }, 2);
     Expr* cl = evaluate(cl_call);
     expr_free(cl_call);
@@ -1660,7 +1660,7 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
 
     Expr* prs_args[3] = { expr_copy(d), expr_copy(atdp), expr_copy(x) };
     Expr* prs_call = expr_new_function(
-        expr_new_symbol("SubresultantPolynomialRemainders"), prs_args, 3);
+        expr_new_symbol(SYM_SubresultantPolynomialRemainders), prs_args, 3);
     Expr* prs = evaluate(prs_call);
     expr_free(prs_call);
     if (!prs) {
@@ -1682,7 +1682,7 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
      * different. */
     Expr* res_args[3] = { expr_copy(d), atdp, expr_copy(x) };
     Expr* res_call = expr_new_function(
-        expr_new_symbol("Resultant"), res_args, 3);
+        expr_new_symbol(SYM_Resultant), res_args, 3);
     Expr* resultant_raw = evaluate(res_call);
     expr_free(res_call);
     if (!resultant_raw) {
@@ -1978,7 +1978,7 @@ static Expr* extract_linear_root(Expr* poly, Expr* t) {
 static Expr* build_log_term(Expr* alpha, Expr* S, Expr* t) {
     Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){expr_copy(t), expr_copy(alpha)}, 2);
-    Expr* substituted = expr_new_function(expr_new_symbol("ReplaceAll"),
+    Expr* substituted = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
         (Expr*[]){expr_copy(S), rule}, 2);
     Expr* Sat = evaluate(substituted);
     expr_free(substituted);
@@ -2109,7 +2109,7 @@ static void split_re_im(Expr* p, Expr** re_out, Expr** im_out) {
 static Expr* subst_t(Expr* e, Expr* t, Expr* sub_expr) {
     Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){expr_copy(t), expr_copy(sub_expr)}, 2);
-    Expr* call = expr_new_function(expr_new_symbol("ReplaceAll"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
         (Expr*[]){expr_copy(e), rule}, 2);
     Expr* result = evaluate(call);
     expr_free(call);

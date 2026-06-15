@@ -245,7 +245,7 @@ static Expr* compute_norm_squared(Expr* v) {
     if (!flat) return NULL;
     Expr* flat_copy = expr_copy(flat);
     Expr* nsq = eval_and_free(expr_new_function(
-        expr_new_symbol("Dot"),
+        expr_new_symbol(SYM_Dot),
         (Expr*[]){flat, flat_copy}, 2));
     return nsq;
 }
@@ -447,7 +447,7 @@ static Expr* direct_solve(Expr* m, Expr* b, Expr* tol_opt_or_null) {
     }
 
     Expr* result = eval_and_free(expr_new_function(
-        expr_new_symbol("Dot"),
+        expr_new_symbol(SYM_Dot),
         (Expr*[]){pinv, expr_copy(b)}, 2));
     /* `pinv` was transferred into the Dot call above; eval_and_free
      * frees the call's input tree.  Ownership of `result` is ours. */
@@ -500,7 +500,7 @@ static Expr* iter_refine_solve(Expr* m, Expr* b, Expr* tol_opt_or_null,
     for (int k = 0; k < LSTSQ_REFINE_MAX_ITER; k++) {
         /* mx = m . x */
         Expr* mx = eval_and_free(expr_new_function(
-            expr_new_symbol("Dot"),
+            expr_new_symbol(SYM_Dot),
             (Expr*[]){expr_copy(m), expr_copy(x)}, 2));
         /* neg_mx = -1 * mx */
         Expr* neg_mx = eval_and_free(expr_new_function(
@@ -588,14 +588,14 @@ static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
 
     /* s = A^T r */
     Expr* s = eval_and_free(expr_new_function(
-        expr_new_symbol("Dot"),
+        expr_new_symbol(SYM_Dot),
         (Expr*[]){expr_copy(mt), expr_copy(r)}, 2));
 
     Expr* p = expr_copy(s);
 
     /* gamma = s . s */
     Expr* gamma = eval_and_free(expr_new_function(
-        expr_new_symbol("Dot"),
+        expr_new_symbol(SYM_Dot),
         (Expr*[]){expr_copy(s), expr_copy(s)}, 2));
 
     for (int k = 0; k < max_iter; k++) {
@@ -603,12 +603,12 @@ static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
 
         /* q = A p */
         Expr* q = eval_and_free(expr_new_function(
-            expr_new_symbol("Dot"),
+            expr_new_symbol(SYM_Dot),
             (Expr*[]){expr_copy(m), expr_copy(p)}, 2));
 
         /* qq = q . q */
         Expr* qq = eval_and_free(expr_new_function(
-            expr_new_symbol("Dot"),
+            expr_new_symbol(SYM_Dot),
             (Expr*[]){expr_copy(q), expr_copy(q)}, 2));
 
         /* Null-direction guard: at the LS solution of a rank-deficient
@@ -652,12 +652,12 @@ static Expr* cgls_solve_single_rhs(Expr* m, Expr* mt, Expr* b,
 
         /* s_new = A^T r */
         Expr* s_new = eval_and_free(expr_new_function(
-            expr_new_symbol("Dot"),
+            expr_new_symbol(SYM_Dot),
             (Expr*[]){expr_copy(mt), expr_copy(r)}, 2));
 
         /* gamma_new = s_new . s_new */
         Expr* gamma_new = eval_and_free(expr_new_function(
-            expr_new_symbol("Dot"),
+            expr_new_symbol(SYM_Dot),
             (Expr*[]){expr_copy(s_new), expr_copy(s_new)}, 2));
 
         /* beta = gamma_new / gamma  (gamma consumed here) */

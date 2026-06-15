@@ -523,7 +523,7 @@ static bool fm_eval_scalar(Expr* f, FmVarBind* binds,
 /* Build (and evaluate) D[f, x]. */
 static Expr* fm_compute_partial(Expr* f, Expr* var) {
     Expr* args[2] = { expr_copy(f), expr_copy(var) };
-    Expr* call = expr_new_function(expr_new_symbol("D"), args, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_D), args, 2);
     return eval_and_free(call);
 }
 
@@ -1186,7 +1186,7 @@ static bool fm_constraint_to_g(Expr* cmp, Expr** expr_out, bool* equality_out) {
 
     /* lhs - rhs */
     Expr* diff_args[2] = { expr_copy(lhs), expr_copy(rhs) };
-    Expr* lhs_minus_rhs = expr_new_function(expr_new_symbol("Subtract"), diff_args, 2);
+    Expr* lhs_minus_rhs = expr_new_function(expr_new_symbol(SYM_Subtract), diff_args, 2);
 
     if (op == SYM_LessEqual || op == SYM_Less) {
         /* lhs op rhs  →  lhs - rhs <= 0 */

@@ -386,7 +386,7 @@ static Expr* canon_diff(const Expr* a, const Expr* b) {
 
 /* D[expr, x]; borrows, returns owned. */
 static Expr* deriv_dx(const Expr* expr, const Expr* x) {
-    Expr* call = expr_new_function(expr_new_symbol("D"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_D),
         (Expr*[]){ expr_copy((Expr*)expr), expr_copy((Expr*)x) }, 2);
     return eval_take(call);
 }

@@ -253,7 +253,7 @@ static Expr* eigen_subst_lambda(Expr* M, const char* lambda_name, Expr* val) {
     Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){ expr_new_symbol(lambda_name), expr_copy(val) }, 2);
     Expr* replaced = eval_and_free(expr_new_function(
-        expr_new_symbol("ReplaceAll"),
+        expr_new_symbol(SYM_ReplaceAll),
         (Expr*[]){ expr_copy(M), rule }, 2));
     return replaced;
 }
@@ -286,7 +286,7 @@ static Expr* eigen_zero_vector(int64_t n) {
  * Used by the numerical eigenvector path to emit unit vectors. */
 static Expr* eigen_normalize_vector(Expr* v) {
     Expr* norm = eval_and_free(expr_new_function(
-        expr_new_symbol("Norm"), (Expr*[]){ expr_copy(v) }, 1));
+        expr_new_symbol(SYM_Norm), (Expr*[]){ expr_copy(v) }, 1));
     /* If Norm is zero or symbolic, skip normalisation. */
     if (is_zero_poly(norm)) { expr_free(norm); return expr_copy(v); }
     Expr* inv = eval_and_free(expr_new_function(

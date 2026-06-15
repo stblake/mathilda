@@ -405,7 +405,7 @@ static Expr* squarefreeq_deriv(Expr* p, Expr* var) {
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy(p);
     args[1] = expr_copy(var);
-    Expr* call = expr_new_function(expr_new_symbol("D"), args, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_D), args, 2);
     free(args);
     Expr* d = eval_and_free(call);
     return d;

@@ -121,7 +121,7 @@ Expr* builtin_matrixpower(Expr* res) {
         expr_free(base);
         Expr* id_args[1];
         id_args[0] = expr_new_integer(n);
-        Expr* id_call = expr_new_function(expr_new_symbol("IdentityMatrix"), id_args, 1);
+        Expr* id_call = expr_new_function(expr_new_symbol(SYM_IdentityMatrix), id_args, 1);
         result = evaluate(id_call);
         expr_free(id_call);
     } else {

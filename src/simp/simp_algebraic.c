@@ -236,7 +236,7 @@ static Expr* alg_sigma_negate(const Expr* e, const char* gi_sym) {
 static Expr* alg_reduce_one_gen(const Expr* poly, const char* gi_sym,
                                 const Expr* ui) {
     Expr* cl_args[2] = { expr_copy((Expr*)poly), expr_new_symbol(gi_sym) };
-    Expr* cl_call = expr_new_function(expr_new_symbol("CoefficientList"),
+    Expr* cl_call = expr_new_function(expr_new_symbol(SYM_CoefficientList),
                                       cl_args, 2);
     Expr* coefs = evaluate(cl_call);
     expr_free(cl_call);
@@ -301,12 +301,12 @@ static Expr* alg_extract_u_power(const Expr* poly, const Expr* u,
     Expr* cur = expr_copy((Expr*)poly);
     for (;;) {
         Expr* qa[3] = { expr_copy(cur), expr_copy((Expr*)u), expr_copy((Expr*)var) };
-        Expr* qcall = expr_new_function(expr_new_symbol("PolynomialQuotient"), qa, 3);
+        Expr* qcall = expr_new_function(expr_new_symbol(SYM_PolynomialQuotient), qa, 3);
         Expr* q = evaluate(qcall);
         expr_free(qcall);
 
         Expr* ra[3] = { expr_copy(cur), expr_copy((Expr*)u), expr_copy((Expr*)var) };
-        Expr* rcall = expr_new_function(expr_new_symbol("PolynomialRemainder"), ra, 3);
+        Expr* rcall = expr_new_function(expr_new_symbol(SYM_PolynomialRemainder), ra, 3);
         Expr* r = evaluate(rcall);
         expr_free(rcall);
 
@@ -437,7 +437,7 @@ static Expr* simp_algebraic_impl(const Expr* e) {
         if (qa_t && qa_t->n == 1) {
             Expr* alpha = expr_copy(qa_t->alpha_renders[0]);
             Expr* tog = expr_new_function(
-                expr_new_symbol("Together"),
+                expr_new_symbol(SYM_Together),
                 (Expr*[]){
                     expr_copy((Expr*)e),
                     expr_new_function(expr_new_symbol(SYM_Rule),

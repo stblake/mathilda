@@ -195,7 +195,7 @@ Expr* builtin_stringpart(Expr* res) {
             Expr** inner_args = malloc(sizeof(Expr*) * 2);
             inner_args[0] = expr_copy(arg0->data.function.args[i]);
             inner_args[1] = expr_copy(spec);
-            Expr* call = expr_new_function(expr_new_symbol("StringPart"),
+            Expr* call = expr_new_function(expr_new_symbol(SYM_StringPart),
                                            inner_args, 2);
             free(inner_args);
             Expr* r = evaluate(call);
@@ -368,7 +368,7 @@ Expr* builtin_stringtake(Expr* res) {
             Expr** inner_args = malloc(sizeof(Expr*) * 2);
             inner_args[0] = expr_copy(arg0->data.function.args[i]);
             inner_args[1] = expr_copy(spec);
-            Expr* call = expr_new_function(expr_new_symbol("StringTake"),
+            Expr* call = expr_new_function(expr_new_symbol(SYM_StringTake),
                                            inner_args, 2);
             free(inner_args);
             Expr* r = evaluate(call);

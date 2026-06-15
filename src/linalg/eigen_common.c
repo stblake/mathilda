@@ -389,7 +389,7 @@ static bool eigen_abs_to_double(Expr* val, double* out) {
     Expr* abs_e = eval_and_free(expr_new_function(
         expr_new_symbol(SYM_Abs), (Expr*[]){ expr_copy(val) }, 1));
     Expr* n_abs = eval_and_free(expr_new_function(
-        expr_new_symbol("N"), (Expr*[]){ abs_e }, 1));
+        expr_new_symbol(SYM_N), (Expr*[]){ abs_e }, 1));
     bool ok = true;
     double d = 0;
     if (n_abs->type == EXPR_REAL) d = n_abs->data.real;
@@ -457,7 +457,7 @@ void eigen_sort_by_abs_desc(Expr** vals, size_t n) {
  * Expr* vectors (each a List of n elements). */
 Expr** eigen_null_space(Expr* M, int n, size_t* count_out) {
     *count_out = 0;
-    Expr* rr_call = expr_new_function(expr_new_symbol("RowReduce"),
+    Expr* rr_call = expr_new_function(expr_new_symbol(SYM_RowReduce),
         (Expr*[]){ expr_copy(M) }, 1);
     Expr* R = eval_and_free(rr_call);
     if (!R || R->type != EXPR_FUNCTION

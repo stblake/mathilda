@@ -293,7 +293,7 @@ static Expr* sv_conjugate(Expr* a) {
 }
 static Expr* sv_together(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Together"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Together), (Expr*[]){a}, 1));
 }
 static Expr* sv_eigenvalues(Expr* a) {
     return eval_and_free(expr_new_function(
@@ -470,7 +470,7 @@ static Expr* sv_gram(Expr* A_expr, bool use_AHA, bool use_conj) {
     Expr* lhs  = use_AHA ? AT            : expr_copy(A_expr);
     Expr* rhs  = use_AHA ? expr_copy(A_expr) : AT;
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Dot"), (Expr*[]){lhs, rhs}, 2));
+        expr_new_symbol(SYM_Dot), (Expr*[]){lhs, rhs}, 2));
 }
 
 /* Sort eigenvalue / eigenvector pairs by descending magnitude.
@@ -930,7 +930,7 @@ static Expr* sv_build_sigma_rect(Expr** S_flat, int g, int n, int p) {
  * because Together is Listable -- the evaluator threads automatically. */
 static Expr* sv_tidy_matrix(Expr* m) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Together"), (Expr*[]){expr_copy(m)}, 1));
+        expr_new_symbol(SYM_Together), (Expr*[]){expr_copy(m)}, 1));
 }
 
 /* ------------------------------------------------------------------ *
@@ -1200,7 +1200,7 @@ static Expr* sv_wrap_diag(Expr* sq_sigma, int k) {
                                           diag, (size_t)k);
     free(diag);
     expr_free(sq_sigma);
-    return expr_new_function(expr_new_symbol("DiagonalMatrix"),
+    return expr_new_function(expr_new_symbol(SYM_DiagonalMatrix),
                               (Expr*[]){diag_list}, 1);
 }
 

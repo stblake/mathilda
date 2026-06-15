@@ -152,7 +152,7 @@ Expr* builtin_dot(Expr* res) {
     if (new_count == 1) {
         final_res = new_args[0];
     } else {
-        final_res = expr_new_function(expr_new_symbol("Dot"), new_args, new_count);
+        final_res = expr_new_function(expr_new_symbol(SYM_Dot), new_args, new_count);
     }
 
     free(new_args);

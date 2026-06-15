@@ -19,7 +19,7 @@ void modular_init(void) {
 
     // Initial value for $ModuleNumber
     Expr* mn = expr_new_integer(module_number);
-    Expr* sym_mn = expr_new_symbol("$ModuleNumber");
+    Expr* sym_mn = expr_new_symbol(SYM_DollarModuleNumber);
     symtab_add_own_value("$ModuleNumber", sym_mn, mn);
     expr_free(mn);
     expr_free(sym_mn);
@@ -170,7 +170,7 @@ Expr* builtin_module(Expr* res) {
     ScopingEnv* env = NULL;
 
     // Increment $ModuleNumber
-    Expr* mn_sym = expr_new_symbol("$ModuleNumber");
+    Expr* mn_sym = expr_new_symbol(SYM_DollarModuleNumber);
     Expr* mn_val_expr = evaluate(mn_sym);
     if (mn_val_expr->type == EXPR_INTEGER) {
         module_number = mn_val_expr->data.integer;

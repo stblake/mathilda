@@ -299,7 +299,7 @@ static void try_collect_per_variable(const Expr* seed, size_t parent_score,
     for (size_t i = 0; i < nv; i++) {
         Expr* v = vars->data.function.args[i];
         Expr* args[2] = { expr_copy((Expr*)seed), expr_copy(v) };
-        Expr* call = expr_new_function(expr_new_symbol("Collect"), args, 2);
+        Expr* call = expr_new_function(expr_new_symbol(SYM_Collect), args, 2);
         clock_t t0 = dbg ? clock() : 0;
         Expr* r = evaluate(call);
         expr_free(call);
@@ -375,7 +375,7 @@ static bool simp_is_polynomial_in_own_vars(const Expr* e) {
         return false;
     }
     Expr* args[2] = { expr_copy((Expr*)e), vars };
-    Expr* pq = expr_new_function(expr_new_symbol("PolynomialQ"), args, 2);
+    Expr* pq = expr_new_function(expr_new_symbol(SYM_PolynomialQ), args, 2);
     Expr* r = evaluate(pq);
     expr_free(pq);
     bool ok = (r && r->type == EXPR_SYMBOL &&

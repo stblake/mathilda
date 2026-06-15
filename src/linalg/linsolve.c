@@ -251,7 +251,7 @@ static Expr* rowreduce_divfree(Expr* arg) {
  * ------------------------------------------------------------------ */
 Expr* matsol_canon_entry(Expr* e) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Together"), (Expr*[]){expr_copy(e)}, 1));
+        expr_new_symbol(SYM_Together), (Expr*[]){expr_copy(e)}, 1));
 }
 
 Expr* matsol_div_entry(Expr* num, Expr* den) {

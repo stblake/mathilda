@@ -1915,7 +1915,7 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
 static Expr* build_unevaluated_d(Expr* f, Expr* var, Expr* k) {
     Expr* spec = expr_new_function(expr_new_symbol(SYM_List),
         (Expr*[]){ expr_copy(var), expr_copy(k) }, 2);
-    return expr_new_function(expr_new_symbol("D"),
+    return expr_new_function(expr_new_symbol(SYM_D),
         (Expr*[]){ expr_copy(f), spec }, 2);
 }
 

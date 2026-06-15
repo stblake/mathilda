@@ -427,7 +427,7 @@ static Expr* fr_normalize_eqn(Expr* e) {
             expr_copy(e->data.function.args[0]),
             expr_copy(e->data.function.args[1])
         };
-        return expr_new_function(expr_new_symbol("Subtract"), args, 2);
+        return expr_new_function(expr_new_symbol(SYM_Subtract), args, 2);
     }
     return expr_copy(e);
 }
@@ -484,7 +484,7 @@ static Expr* fr_eval_with_bindings(Expr* f, FrVarBind* binds,
  * owns the return value. Returns NULL on failure. */
 static Expr* fr_compute_derivative(Expr* f, Expr* var) {
     Expr* args[2] = { expr_copy(f), expr_copy(var) };
-    Expr* call = expr_new_function(expr_new_symbol("D"), args, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_D), args, 2);
     Expr* d = eval_and_free(call);
     return d;
 }

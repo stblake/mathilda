@@ -417,7 +417,7 @@ Expr* builtin_extract(Expr* res) {
         Expr* slot_args[1] = { expr_new_integer(1) };
         Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
-        Expr* inner_extract = expr_new_function(expr_new_symbol("Extract"), inner_args, 2);
+        Expr* inner_extract = expr_new_function(expr_new_symbol(SYM_Extract), inner_args, 2);
         Expr* func_args[1] = { inner_extract };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }

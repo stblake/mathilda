@@ -83,7 +83,7 @@ Expr* builtin_cases(Expr* res) {
         Expr* slot_args[1] = { expr_new_integer(1) };
         Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
-        Expr* inner_cases = expr_new_function(expr_new_symbol("Cases"), inner_args, 2);
+        Expr* inner_cases = expr_new_function(expr_new_symbol(SYM_Cases), inner_args, 2);
         Expr* func_args[1] = { inner_cases };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
@@ -396,7 +396,7 @@ Expr* builtin_position(Expr* res) {
         Expr* slot_args[1] = { expr_new_integer(1) };
         Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
-        Expr* inner_pos = expr_new_function(expr_new_symbol("Position"), inner_args, 2);
+        Expr* inner_pos = expr_new_function(expr_new_symbol(SYM_Position), inner_args, 2);
         Expr* func_args[1] = { inner_pos };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
@@ -500,7 +500,7 @@ Expr* builtin_count(Expr* res) {
         Expr* slot_args[1] = { expr_new_integer(1) };
         Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
-        Expr* inner_count = expr_new_function(expr_new_symbol("Count"), inner_args, 2);
+        Expr* inner_count = expr_new_function(expr_new_symbol(SYM_Count), inner_args, 2);
         Expr* func_args[1] = { inner_count };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }
@@ -594,7 +594,7 @@ Expr* builtin_memberq(Expr* res) {
         Expr* slot_args[1] = { expr_new_integer(1) };
         Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot), slot_args, 1);
         Expr* inner_args[2] = { slot, expr_copy(res->data.function.args[0]) };
-        Expr* inner_memberq = expr_new_function(expr_new_symbol("MemberQ"), inner_args, 2);
+        Expr* inner_memberq = expr_new_function(expr_new_symbol(SYM_MemberQ), inner_args, 2);
         Expr* func_args[1] = { inner_memberq };
         return expr_new_function(expr_new_symbol(SYM_Function), func_args, 1);
     }

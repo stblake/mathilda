@@ -68,7 +68,7 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
     if (method == MATSOL_AUTOMATIC) {
         Expr** args = malloc(sizeof(Expr*) * 1);
         args[0] = expr_copy(m);
-        Expr* call = expr_new_function(expr_new_symbol("RowReduce"), args, 1);
+        Expr* call = expr_new_function(expr_new_symbol(SYM_RowReduce), args, 1);
         free(args);
         return eval_and_free(call);
     }
@@ -89,7 +89,7 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy(m);
     args[1] = opt;
-    Expr* call = expr_new_function(expr_new_symbol("RowReduce"), args, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_RowReduce), args, 2);
     free(args);
     return eval_and_free(call);
 }
@@ -109,7 +109,7 @@ static void clear_int_denominators(Expr** v, int n) {
         Expr** den_args = malloc(sizeof(Expr*) * 1);
         den_args[0] = expr_copy(v[i]);
         Expr* d = eval_and_free(expr_new_function(
-            expr_new_symbol("Denominator"), den_args, 1));
+            expr_new_symbol(SYM_Denominator), den_args, 1));
         free(den_args);
 
         if (d->type == EXPR_INTEGER) {

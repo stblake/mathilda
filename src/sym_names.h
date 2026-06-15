@@ -459,6 +459,79 @@ extern const char* SYM_BernoulliB;
 extern const char* SYM_EulerE;
 extern const char* SYM_PolyLog;
 
+/* Legitimate uncached builtins and system variables migrated to cached
+ * SYM_* pointers (2026-06-16). Excludes context-qualified/private and
+ * dummy symbols, which must never be cached. */
+extern const char* SYM_Apply;
+extern const char* SYM_Cancel;
+extern const char* SYM_Cases;
+extern const char* SYM_Coefficient;
+extern const char* SYM_CoefficientList;
+extern const char* SYM_Collect;
+extern const char* SYM_Constant;
+extern const char* SYM_Count;
+extern const char* SYM_D;
+extern const char* SYM_Decrement;
+extern const char* SYM_Default;
+extern const char* SYM_Denominator;
+extern const char* SYM_Det;
+extern const char* SYM_DiagonalMatrix;
+extern const char* SYM_Dot;
+extern const char* SYM_Expand;
+extern const char* SYM_Extract;
+extern const char* SYM_Factorial;
+extern const char* SYM_Factorial2;
+extern const char* SYM_FreeQ;
+extern const char* SYM_IdentityMatrix;
+extern const char* SYM_In;
+extern const char* SYM_Increment;
+extern const char* SYM_Information;
+extern const char* SYM_Map;
+extern const char* SYM_MapAll;
+extern const char* SYM_Mean;
+extern const char* SYM_Median;
+extern const char* SYM_MemberQ;
+extern const char* SYM_N;
+extern const char* SYM_Norm;
+extern const char* SYM_Numerator;
+extern const char* SYM_NumericQ;
+extern const char* SYM_O;
+extern const char* SYM_Out;
+extern const char* SYM_PolynomialExtendedGCD;
+extern const char* SYM_PolynomialLCM;
+extern const char* SYM_PolynomialQ;
+extern const char* SYM_PolynomialQuotient;
+extern const char* SYM_PolynomialQuotientRemainder;
+extern const char* SYM_PolynomialRemainder;
+extern const char* SYM_Position;
+extern const char* SYM_PreDecrement;
+extern const char* SYM_PreIncrement;
+extern const char* SYM_Quartiles;
+extern const char* SYM_RandomInteger;
+extern const char* SYM_ReplaceAll;
+extern const char* SYM_ReplaceRepeated;
+extern const char* SYM_Resultant;
+extern const char* SYM_RowReduce;
+extern const char* SYM_Simplify;
+extern const char* SYM_StringPart;
+extern const char* SYM_StringTake;
+extern const char* SYM_SubresultantPolynomialRemainders;
+extern const char* SYM_Subtract;
+extern const char* SYM_Sum;
+extern const char* SYM_Together;
+extern const char* SYM_Variables;
+extern const char* SYM_Variance;
+extern const char* SYM_DollarAborted;
+extern const char* SYM_DollarAssumptions;
+extern const char* SYM_DollarEpilog;
+extern const char* SYM_DollarFailed;
+extern const char* SYM_DollarLine;
+extern const char* SYM_DollarMaxExtraPrecision;
+extern const char* SYM_DollarModuleNumber;
+extern const char* SYM_DollarRecursionLimit;
+extern const char* SYM_DollarSimplifyDebug;
+extern const char* SYM_DollarruSimplify;
+
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
  * pointer; in practice it is called from core_init(). */

@@ -127,7 +127,7 @@ static bool parse_tolerance_value(Expr* rhs, bool* is_auto_out, double* tol_out)
      * examples (Tolerance -> 10^-8).  Fall back to evaluating N[rhs]
      * to a real. */
     Expr* n = eval_and_free(expr_new_function(
-        expr_new_symbol("N"),
+        expr_new_symbol(SYM_N),
         (Expr*[]){ expr_copy(rhs) }, 1));
     bool ok = false;
     double v = 0.0;
@@ -241,7 +241,7 @@ static bool entry_to_cplx(Expr* e, cplx_t* out) {
      * such as Pi, E, Sqrt[2], etc.  N returns a Real or Complex literal
      * which we then re-feed through this function. */
     Expr* n = eval_and_free(expr_new_function(
-        expr_new_symbol("N"),
+        expr_new_symbol(SYM_N),
         (Expr*[]){ expr_copy(e) }, 1));
     bool ok = false;
     /* Prevent infinite recursion: only recurse when N produced
@@ -321,7 +321,7 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
     if (method == MATSOL_AUTOMATIC) {
         Expr** args = malloc(sizeof(Expr*) * 1);
         args[0] = expr_copy(m);
-        Expr* call = expr_new_function(expr_new_symbol("RowReduce"), args, 1);
+        Expr* call = expr_new_function(expr_new_symbol(SYM_RowReduce), args, 1);
         free(args);
         return eval_and_free(call);
     }
@@ -341,7 +341,7 @@ static Expr* call_rowreduce(Expr* m, MatsolMethod method) {
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy(m);
     args[1] = opt;
-    Expr* call = expr_new_function(expr_new_symbol("RowReduce"), args, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_RowReduce), args, 2);
     free(args);
     return eval_and_free(call);
 }

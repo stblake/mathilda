@@ -77,7 +77,7 @@ static Expr* eval_power(Expr* a, Expr* b) {
 }
 static Expr* eval_together(Expr* a) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Together"), (Expr*[]){a}, 1));
+        expr_new_symbol(SYM_Together), (Expr*[]){a}, 1));
 }
 
 /* True iff e canonicalises to zero.  Mirrors qrdecomp.c's
@@ -353,7 +353,7 @@ static Expr* wrap_perm(const int* perm, int n) {
  * matrix.  Together is Listable so threading is automatic. */
 static Expr* tidy_matrix(Expr* m) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Together"), (Expr*[]){expr_copy(m)}, 1));
+        expr_new_symbol(SYM_Together), (Expr*[]){expr_copy(m)}, 1));
 }
 
 /* One-shot singular warning. */

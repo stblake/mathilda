@@ -1674,7 +1674,7 @@ static Expr* canonicalise_nested_radicands(const Expr* e,
                                         pow_args, 2);
         Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
             (Expr*[]){expr_new_symbol(SYM_Extension), alpha}, 2);
-        Expr* tg_call = expr_new_function(expr_new_symbol("Together"),
+        Expr* tg_call = expr_new_function(expr_new_symbol(SYM_Together),
             (Expr*[]){expr_copy((Expr*)radicand), rule}, 2);
         Expr* canon = evaluate(tg_call);
         expr_free(tg_call);
@@ -1894,7 +1894,7 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
      * leaf-count gates still apply if a pathological Expand inflates
      * the surface form. */
     Expr* expanded_call = expr_new_function(
-        expr_new_symbol("Expand"),
+        expr_new_symbol(SYM_Expand),
         (Expr*[]){expr_copy((Expr*)arg)}, 1);
     Expr* arg_expanded = evaluate(expanded_call);
     expr_free(expanded_call);
@@ -2078,17 +2078,17 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
      * is QA_ALPHA_INTERNAL — treated as a free polynomial symbol by the
      * standard path, which is exactly what we want before lifting. */
     Expr* together_call = expr_new_function(
-        expr_new_symbol("Together"),
+        expr_new_symbol(SYM_Together),
         (Expr*[]){arg_internal}, 1);
     Expr* arg_combined = evaluate(together_call);
     expr_free(together_call);
 
     /* 3. Extract numerator and denominator. */
-    Expr* num_call = expr_new_function(expr_new_symbol("Numerator"),
+    Expr* num_call = expr_new_function(expr_new_symbol(SYM_Numerator),
         (Expr*[]){expr_copy(arg_combined)}, 1);
     Expr* num_expr = evaluate(num_call);
     expr_free(num_call);
-    Expr* den_call = expr_new_function(expr_new_symbol("Denominator"),
+    Expr* den_call = expr_new_function(expr_new_symbol(SYM_Denominator),
         (Expr*[]){expr_copy(arg_combined)}, 1);
     Expr* den_expr = evaluate(den_call);
     expr_free(den_call);
@@ -2133,14 +2133,14 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
         Expr* gamma_sym_e   = expr_new_symbol(QA_ALPHA_INTERNAL);
 
         Expr* num_reduced_call = expr_new_function(
-            expr_new_symbol("PolynomialRemainder"),
+            expr_new_symbol(SYM_PolynomialRemainder),
             (Expr*[]){expr_copy(num_expr), expr_copy(gamma_minpoly),
                       expr_copy(gamma_sym_e)}, 3);
         Expr* num_reduced = evaluate(num_reduced_call);
         expr_free(num_reduced_call);
 
         Expr* den_reduced_call = expr_new_function(
-            expr_new_symbol("PolynomialRemainder"),
+            expr_new_symbol(SYM_PolynomialRemainder),
             (Expr*[]){expr_copy(den_expr), expr_copy(gamma_minpoly),
                       expr_copy(gamma_sym_e)}, 3);
         Expr* den_reduced = evaluate(den_reduced_call);
@@ -2204,13 +2204,13 @@ Expr* qa_cancel_with_tower(const Expr* arg, const QATower* t) {
                  * GCD.  The downstream leaf-count gate keeps the
                  * candidate only if it beats the input. */
                 Expr* expand_call = expr_new_function(
-                    expr_new_symbol("Expand"),
+                    expr_new_symbol(SYM_Expand),
                     (Expr*[]){candidate}, 1);
                 Expr* expanded = evaluate(expand_call);
                 expr_free(expand_call);
 
                 Expr* tog_call = expr_new_function(
-                    expr_new_symbol("Together"),
+                    expr_new_symbol(SYM_Together),
                     (Expr*[]){expanded}, 1);
                 candidate = evaluate(tog_call);
                 expr_free(tog_call);
@@ -3535,7 +3535,7 @@ static Expr* autodetect_canonicalise_radicand(const Expr* u,
 
     Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
         (Expr*[]){expr_new_symbol(SYM_Extension), alpha}, 2);
-    Expr* tg_call = expr_new_function(expr_new_symbol("Together"),
+    Expr* tg_call = expr_new_function(expr_new_symbol(SYM_Together),
         (Expr*[]){expr_copy((Expr*)u), rule}, 2);
     Expr* canon = evaluate(tg_call);
     expr_free(tg_call);
@@ -4097,7 +4097,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
 
     /* Step 3: Together (no extension). */
     Expr* together_call = expr_new_function(
-        expr_new_symbol("Together"),
+        expr_new_symbol(SYM_Together),
         (Expr*[]){substituted}, 1);
     Expr* combined = evaluate(together_call);
     expr_free(together_call);
@@ -4108,11 +4108,11 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
     }
 
     /* Step 4: extract num and den. */
-    Expr* num_call = expr_new_function(expr_new_symbol("Numerator"),
+    Expr* num_call = expr_new_function(expr_new_symbol(SYM_Numerator),
         (Expr*[]){expr_copy(combined)}, 1);
     Expr* num_expr = evaluate(num_call);
     expr_free(num_call);
-    Expr* den_call = expr_new_function(expr_new_symbol("Denominator"),
+    Expr* den_call = expr_new_function(expr_new_symbol(SYM_Denominator),
         (Expr*[]){expr_copy(combined)}, 1);
     Expr* den_expr = evaluate(den_call);
     expr_free(den_call);
@@ -4148,7 +4148,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                                expr_copy(relation),
                                expr_new_symbol(gen_name) };
     Expr* num_rem_call = expr_new_function(
-        expr_new_symbol("PolynomialRemainder"), num_rem_args, 3);
+        expr_new_symbol(SYM_PolynomialRemainder), num_rem_args, 3);
     Expr* num_reduced = evaluate(num_rem_call);
     expr_free(num_rem_call);
 
@@ -4156,7 +4156,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                                expr_copy(relation),
                                expr_new_symbol(gen_name) };
     Expr* den_rem_call = expr_new_function(
-        expr_new_symbol("PolynomialRemainder"), den_rem_args, 3);
+        expr_new_symbol(SYM_PolynomialRemainder), den_rem_args, 3);
     Expr* den_reduced = evaluate(den_rem_call);
     expr_free(den_rem_call);
 
@@ -4187,7 +4187,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                                     expr_copy(relation),
                                     expr_new_symbol(gen_name) };
             Expr* xgcd_call = expr_new_function(
-                expr_new_symbol("PolynomialExtendedGCD"), xgcd_args, 3);
+                expr_new_symbol(SYM_PolynomialExtendedGCD), xgcd_args, 3);
             Expr* xgcd_result = evaluate(xgcd_call);
             expr_free(xgcd_call);
 
@@ -4222,18 +4222,18 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                         expr_free(prod_call);
 
                         Expr* prod_tg_call = expr_new_function(
-                            expr_new_symbol("Together"),
+                            expr_new_symbol(SYM_Together),
                             (Expr*[]){prod}, 1);
                         Expr* prod_combined = evaluate(prod_tg_call);
                         expr_free(prod_tg_call);
 
                         Expr* prod_num_call = expr_new_function(
-                            expr_new_symbol("Numerator"),
+                            expr_new_symbol(SYM_Numerator),
                             (Expr*[]){expr_copy(prod_combined)}, 1);
                         Expr* prod_num = evaluate(prod_num_call);
                         expr_free(prod_num_call);
                         Expr* prod_den_call = expr_new_function(
-                            expr_new_symbol("Denominator"),
+                            expr_new_symbol(SYM_Denominator),
                             (Expr*[]){expr_copy(prod_combined)}, 1);
                         Expr* prod_den = evaluate(prod_den_call);
                         expr_free(prod_den_call);
@@ -4243,7 +4243,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                                                 expr_copy(relation),
                                                 expr_new_symbol(gen_name) };
                         Expr* nrem_call = expr_new_function(
-                            expr_new_symbol("PolynomialRemainder"),
+                            expr_new_symbol(SYM_PolynomialRemainder),
                             nrem_args, 3);
                         Expr* num_new = evaluate(nrem_call);
                         expr_free(nrem_call);
@@ -4257,7 +4257,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                         Expr* new_den_raw = evaluate(dprod_call);
                         expr_free(dprod_call);
                         Expr* den_tg_call = expr_new_function(
-                            expr_new_symbol("Together"),
+                            expr_new_symbol(SYM_Together),
                             (Expr*[]){new_den_raw}, 1);
                         Expr* den_new = evaluate(den_tg_call);
                         expr_free(den_tg_call);
@@ -4325,7 +4325,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                                   expr_copy(gcd_e),
                                   expr_new_symbol(gen_name) };
             Expr* nq_call = expr_new_function(
-                expr_new_symbol("PolynomialQuotient"), nq_args, 3);
+                expr_new_symbol(SYM_PolynomialQuotient), nq_args, 3);
             Expr* num_div = evaluate(nq_call);
             expr_free(nq_call);
 
@@ -4333,7 +4333,7 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
                                   expr_copy(gcd_e),
                                   expr_new_symbol(gen_name) };
             Expr* dq_call = expr_new_function(
-                expr_new_symbol("PolynomialQuotient"), dq_args, 3);
+                expr_new_symbol(SYM_PolynomialQuotient), dq_args, 3);
             Expr* den_div = evaluate(dq_call);
             expr_free(dq_call);
 

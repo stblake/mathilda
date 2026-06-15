@@ -143,7 +143,7 @@ static void system_constants_init(void) {
      * FindIntegerNullVector) may add beyond $MachinePrecision.  Unlike the
      * other constants it is user-settable, so it is NOT marked Protected. */
     {
-        Expr* sym = expr_new_symbol("$MaxExtraPrecision");
+        Expr* sym = expr_new_symbol(SYM_DollarMaxExtraPrecision);
         symtab_add_own_value("$MaxExtraPrecision", sym, expr_new_real(50.0));
         expr_free(sym);
     }
@@ -1537,7 +1537,7 @@ Expr* builtin_out(Expr* res) {
     
     int64_t n = arg->data.integer;
     if (n < 0) {
-        Expr* line_sym = expr_new_symbol("$Line");
+        Expr* line_sym = expr_new_symbol(SYM_DollarLine);
         Expr* line_expr = evaluate(line_sym);
         expr_free(line_sym);
         if (line_expr->type == EXPR_INTEGER) {
@@ -1549,7 +1549,7 @@ Expr* builtin_out(Expr* res) {
     
     if (n <= 0) return NULL;
     
-    Expr* out_head = expr_new_symbol("Out");
+    Expr* out_head = expr_new_symbol(SYM_Out);
     Expr* out_arg = expr_new_integer(n);
     Expr* out_call = expr_new_function(out_head, &out_arg, 1);
     
@@ -2809,7 +2809,7 @@ Expr* builtin_toexpression(Expr* res) {
 
     Expr* parsed = parse_expression(input->data.string);
     if (!parsed) {
-        return expr_new_symbol("$Failed");
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
     if (argc == 3) {
@@ -3072,7 +3072,7 @@ Expr* builtin_time_constrained(Expr* res) {
         if (fail_arg) {
             return eval_and_free(expr_copy(fail_arg));
         }
-        return expr_new_symbol("$Aborted");
+        return expr_new_symbol(SYM_DollarAborted);
     }
 
     /* Translate seconds -> (it_value.tv_sec, it_value.tv_usec).  Round
@@ -3175,7 +3175,7 @@ Expr* builtin_time_constrained(Expr* res) {
              * evaluation is aborted." */
             return eval_and_free(expr_copy(fail_arg));
         }
-        return expr_new_symbol("$Aborted");
+        return expr_new_symbol(SYM_DollarAborted);
     }
 
     /* `res` is owned by the caller (evaluate_step) and will be freed

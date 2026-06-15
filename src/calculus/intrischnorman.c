@@ -1230,7 +1230,7 @@ static Expr* eval_poly_gcd(Expr* a, Expr* b) {
 /* Evaluate Coefficient[p, x, n].  Consumes p and x. */
 static Expr* eval_coefficient(Expr* p, Expr* x, int64_t deg) {
     Expr* args[3] = { p, x, mk_int(deg) };
-    Expr* call = expr_new_function(expr_new_symbol("Coefficient"), args, 3);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Coefficient), args, 3);
     return eval_and_free(call);
 }
 

@@ -1177,7 +1177,7 @@ Expr* builtin_binomial(Expr* res) {
      * Power::infy diagnostic would be spurious. --- */
     {
         arith_warnings_mute_push();
-        Expr* diff = expr_new_function(expr_new_symbol("Subtract"),
+        Expr* diff = expr_new_function(expr_new_symbol(SYM_Subtract),
             (Expr*[]){ expr_copy(arg_n), expr_copy(arg_m) }, 2);
         Expr* diff_eval = eval_and_free(diff);
         arith_warnings_mute_pop();

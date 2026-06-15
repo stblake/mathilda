@@ -32,13 +32,13 @@ Expr* mathilda_run_file(const char* path, int* opened) {
     fseek(fp, 0, SEEK_SET);
     if (fsize < 0) {
         fclose(fp);
-        return expr_new_symbol("$Failed");
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
     char* buffer = malloc((size_t)fsize + 1);
     if (!buffer) {
         fclose(fp);
-        return expr_new_symbol("$Failed");
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
     size_t read_len = fread(buffer, 1, (size_t)fsize, fp);

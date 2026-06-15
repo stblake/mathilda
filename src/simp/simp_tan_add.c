@@ -356,7 +356,7 @@ static Expr* transform_tan_addition_impl(const Expr* e) {
     free(rules);
     Expr* ra_args[2] = { expr_copy((Expr*)e), rule_list };
     Expr* ra_call = expr_new_function(
-        expr_new_symbol("ReplaceAll"), ra_args, 2);
+        expr_new_symbol(SYM_ReplaceAll), ra_args, 2);
     Expr* substituted = eval_and_free(ra_call);
     if (!substituted) {
         Expr* out = expr_copy((Expr*)e);
@@ -371,13 +371,13 @@ static Expr* transform_tan_addition_impl(const Expr* e) {
      * 0 cleanly. */
     Expr* tg_args[1] = { substituted };
     Expr* tg_call = expr_new_function(
-        expr_new_symbol("Together"), tg_args, 1);
+        expr_new_symbol(SYM_Together), tg_args, 1);
     Expr* tg = eval_and_free(tg_call);
     Expr* result = tg ? tg : expr_copy((Expr*)e);
 
     Expr* cn_args[1] = { expr_copy(result) };
     Expr* cn_call = expr_new_function(
-        expr_new_symbol("Cancel"), cn_args, 1);
+        expr_new_symbol(SYM_Cancel), cn_args, 1);
     Expr* cn = eval_and_free(cn_call);
     if (cn) { expr_free(result); result = cn; }
 

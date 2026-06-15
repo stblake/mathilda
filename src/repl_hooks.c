@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "sym_names.h"
 
 /* Local strdup so the hook module does not depend on the POSIX
  * implementation; CLAUDE.md forbids unguarded strdup elsewhere but
@@ -156,7 +157,7 @@ Expr* repl_apply_pre_print(Expr* expr) {
 
 void repl_apply_epilog(void) {
     if (!hook_is_set("$Epilog")) return;
-    Expr* sym = expr_new_symbol("$Epilog");
+    Expr* sym = expr_new_symbol(SYM_DollarEpilog);
     Expr* result = evaluate(sym);
     expr_free(sym);
     if (result) expr_free(result);

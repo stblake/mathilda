@@ -31,7 +31,7 @@ Expr* builtin_get(Expr* res) {
     Expr* last_eval = mathilda_run_file(filename, &opened);
     if (!opened) {
         printf("Get::noopen: Cannot open %s.\n", filename);
-        return expr_new_symbol("$Failed");
+        return expr_new_symbol(SYM_DollarFailed);
     }
     /* mathilda_run_file returns Null for an empty file; never NULL when
      * opened succeeded. */
@@ -53,7 +53,7 @@ static Expr* put_common(Expr* res, const char* mode, const char* who) {
     FILE* fp = fopen(filename, mode);
     if (!fp) {
         printf("%s::noopen: Cannot open %s.\n", who, filename);
-        return expr_new_symbol("$Failed");
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
     /* When only the filename is supplied (Put["file"]) the loop runs

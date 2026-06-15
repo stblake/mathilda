@@ -149,7 +149,7 @@ EvalReturnAction eval_classify_return(Expr* e,
  * Must be called after symtab_init().
  */
 void eval_init(void) {
-    Expr* sym = expr_new_symbol("$RecursionLimit");
+    Expr* sym = expr_new_symbol(SYM_DollarRecursionLimit);
     Expr* val = expr_new_integer(eval_recursion_limit);
     symtab_add_own_value("$RecursionLimit", sym, val);
     expr_free(sym);
@@ -191,7 +191,7 @@ static void sync_recursion_limit_from_value(Expr* value) {
                 MIN_RECURSION_LIMIT);
         /* Restore the OwnValue to the current C-side limit so the symbol
          * does not lie about the active value. */
-        Expr* sym  = expr_new_symbol("$RecursionLimit");
+        Expr* sym  = expr_new_symbol(SYM_DollarRecursionLimit);
         Expr* curr = expr_new_integer(eval_recursion_limit);
         symtab_add_own_value("$RecursionLimit", sym, curr);
         expr_free(sym);

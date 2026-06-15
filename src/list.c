@@ -1609,7 +1609,7 @@ static Expr* diff_minus(Expr* minuend, Expr* subtrahend) {
     Expr** args = malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy(minuend);
     args[1] = expr_copy(subtrahend);
-    Expr* sub = expr_new_function(expr_new_symbol("Subtract"), args, 2);
+    Expr* sub = expr_new_function(expr_new_symbol(SYM_Subtract), args, 2);
     free(args);
     return eval_and_free(sub);
 }
@@ -2002,7 +2002,7 @@ static bool hermitian_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
     Expr** sub_args = malloc(sizeof(Expr*) * 2);
     sub_args[0] = expr_copy(a);
     sub_args[1] = cb;
-    Expr* diff = expr_new_function(expr_new_symbol("Subtract"), sub_args, 2);
+    Expr* diff = expr_new_function(expr_new_symbol(SYM_Subtract), sub_args, 2);
     free(sub_args);
     Expr* diff_e = eval_and_free(diff);
 
@@ -2137,7 +2137,7 @@ static bool symmetric_pair_tolerance(Expr* a, Expr* b, Expr* tol) {
     Expr** sub_args = malloc(sizeof(Expr*) * 2);
     sub_args[0] = expr_copy(a);
     sub_args[1] = expr_copy(b);
-    Expr* diff = expr_new_function(expr_new_symbol("Subtract"), sub_args, 2);
+    Expr* diff = expr_new_function(expr_new_symbol(SYM_Subtract), sub_args, 2);
     free(sub_args);
     Expr* diff_e = eval_and_free(diff);
 

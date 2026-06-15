@@ -921,7 +921,7 @@ static void print_series_data(Expr* e, int parent_prec) {
      * coefficients are zero, because it conveys the truncation order. */
     {
         Expr* oargs[1] = { expr_copy(base) };
-        Expr* o_call   = expr_new_function(expr_new_symbol("O"), oargs, 1);
+        Expr* o_call   = expr_new_function(expr_new_symbol(SYM_O), oargs, 1);
         int64_t g  = gcd(abs_i64(nmax), abs_i64(den));
         if (g == 0) g = 1;
         int64_t n  = nmax / g;

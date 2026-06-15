@@ -172,7 +172,7 @@ static Expr* try_terminate(Expr* a, Expr* b, Expr* z) {
         size_t dw = 0;
         for (size_t j = 0; j < q; j++)
             den[dw++] = poch_product(b->data.function.args[j], k);
-        den[dw++] = expr_new_function(expr_new_symbol("Factorial"),
+        den[dw++] = expr_new_function(expr_new_symbol(SYM_Factorial),
                         (Expr*[]){ expr_new_integer(k) }, 1);
         Expr* denom = expr_new_function(expr_new_symbol(SYM_Times), den, nden);
         free(den);

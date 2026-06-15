@@ -74,7 +74,7 @@
 
 void simp_init(void) {
     /* $Assumptions defaults to True. */
-    Expr* dollar_pat = expr_new_symbol("$Assumptions");
+    Expr* dollar_pat = expr_new_symbol(SYM_DollarAssumptions);
     Expr* dollar_val = expr_new_symbol(SYM_True);
     symtab_add_own_value("$Assumptions", dollar_pat, dollar_val);
     expr_free(dollar_pat);
@@ -84,7 +84,7 @@ void simp_init(void) {
      * one stderr line per transform invocation in the form
      *   /<TransformName>/: <input> -> <output> [<elapsed> ms]
      * to help diagnose hangs and runaway candidate explosion. */
-    Expr* dbg_pat = expr_new_symbol("$SimplifyDebug");
+    Expr* dbg_pat = expr_new_symbol(SYM_DollarSimplifyDebug);
     Expr* dbg_val = expr_new_symbol(SYM_False);
     symtab_add_own_value("$SimplifyDebug", dbg_pat, dbg_val);
     expr_free(dbg_pat);

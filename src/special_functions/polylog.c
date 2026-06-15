@@ -141,7 +141,7 @@ static bool pl_is_half(const Expr* e) {
 
 /* PolyLog[1, z] = -Log[1 - z]. */
 static Expr* pl_order1(Expr* z) {
-    Expr* omz = expr_new_function(expr_new_symbol("Subtract"),
+    Expr* omz = expr_new_function(expr_new_symbol(SYM_Subtract),
                     (Expr*[]){ expr_new_integer(1), expr_copy(z) }, 2);
     Expr* lg  = expr_new_function(expr_new_symbol(SYM_Log), &omz, 1);
     Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
@@ -151,7 +151,7 @@ static Expr* pl_order1(Expr* z) {
 
 /* PolyLog[0, z] = z/(1 - z). */
 static Expr* pl_order0(Expr* z) {
-    Expr* omz = expr_new_function(expr_new_symbol("Subtract"),
+    Expr* omz = expr_new_function(expr_new_symbol(SYM_Subtract),
                     (Expr*[]){ expr_new_integer(1), expr_copy(z) }, 2);
     Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ omz, expr_new_integer(-1) }, 2);
@@ -207,7 +207,7 @@ static Expr* pl_neg_order(long m, Expr* z) {
     free(terms);
 
     /* denom^{-1} = (1 - z)^{-(m+1)}. */
-    Expr* omz = expr_new_function(expr_new_symbol("Subtract"),
+    Expr* omz = expr_new_function(expr_new_symbol(SYM_Subtract),
                     (Expr*[]){ expr_new_integer(1), expr_copy(z) }, 2);
     Expr* denom = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ omz, expr_new_integer(-(m + 1)) }, 2);
@@ -229,7 +229,7 @@ static Expr* pl_at_minus_one(long n) {
     /* coefficient 2^(1-n) - 1 = Subtract[Power[2, 1-n], 1]. */
     Expr* pw = expr_new_function(expr_new_symbol(SYM_Power),
                    (Expr*[]){ expr_new_integer(2), expr_new_integer(1 - n) }, 2);
-    Expr* coeff = expr_new_function(expr_new_symbol("Subtract"),
+    Expr* coeff = expr_new_function(expr_new_symbol(SYM_Subtract),
                    (Expr*[]){ pw, expr_new_integer(1) }, 2);
     Expr* zeta = expr_new_function(expr_new_symbol(SYM_Zeta),
                    (Expr*[]){ expr_new_integer(n) }, 1);

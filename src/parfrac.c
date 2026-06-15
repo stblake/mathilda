@@ -149,7 +149,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     Expr* together;
     if (apart_alpha) {
         together = eval_and_free(expr_new_function(
-            expr_new_symbol("Together"),
+            expr_new_symbol(SYM_Together),
             (Expr*[]){
                 expr_copy(expr),
                 expr_new_function(
@@ -161,7 +161,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             }, 2));
     } else {
         together = eval_and_free(expr_new_function(
-            expr_new_symbol("Together"), (Expr*[]){expr_copy(expr)}, 1));
+            expr_new_symbol(SYM_Together), (Expr*[]){expr_copy(expr)}, 1));
     }
 
     Expr* var = NULL;
@@ -180,11 +180,11 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     }
     
     if (!var) {
-        return eval_and_free(expr_new_function(expr_new_symbol("Expand"), (Expr*[]){together}, 1));
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){together}, 1));
     }
     
-    Expr* N = eval_and_free(expr_new_function(expr_new_symbol("Numerator"), (Expr*[]){expr_copy(together)}, 1));
-    Expr* D = eval_and_free(expr_new_function(expr_new_symbol("Denominator"), (Expr*[]){expr_copy(together)}, 1));
+    Expr* N = eval_and_free(expr_new_function(expr_new_symbol(SYM_Numerator), (Expr*[]){expr_copy(together)}, 1));
+    Expr* D = eval_and_free(expr_new_function(expr_new_symbol(SYM_Denominator), (Expr*[]){expr_copy(together)}, 1));
 
     /* Apart's matrix-construction step assumes both N and D are polynomials
      * in `var`. When Together produces a numerator or denominator with
@@ -195,9 +195,9 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
      * decomposition is undefined when the numerator is not polynomial in
      * the chosen variable. */
     Expr* npq_args[2] = { expr_copy(N), expr_copy(var) };
-    Expr* npq = eval_and_free(expr_new_function(expr_new_symbol("PolynomialQ"), npq_args, 2));
+    Expr* npq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ), npq_args, 2));
     Expr* dpq_args[2] = { expr_copy(D), expr_copy(var) };
-    Expr* dpq = eval_and_free(expr_new_function(expr_new_symbol("PolynomialQ"), dpq_args, 2));
+    Expr* dpq = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ), dpq_args, 2));
     bool n_poly = (npq->type == EXPR_SYMBOL && npq->data.symbol == SYM_True);
     bool d_poly = (dpq->type == EXPR_SYMBOL && dpq->data.symbol == SYM_True);
     expr_free(npq); expr_free(dpq);
@@ -209,13 +209,13 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     expr_free(together);
 
     if (get_degree_poly(D, var) == 0) {
-        Expr* expanded = eval_and_free(expr_new_function(expr_new_symbol("Expand"), (Expr*[]){eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){N, eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){D, expr_new_integer(-1)}, 2))}, 2))}, 1));
+        Expr* expanded = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){N, eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){D, expr_new_integer(-1)}, 2))}, 2))}, 1));
         expr_free(var);
         return expanded;
     }
     
-    Expr* Q = eval_and_free(expr_new_function(expr_new_symbol("PolynomialQuotient"), (Expr*[]){expr_copy(N), expr_copy(D), expr_copy(var)}, 3));
-    Expr* R = eval_and_free(expr_new_function(expr_new_symbol("PolynomialRemainder"), (Expr*[]){expr_copy(N), expr_copy(D), expr_copy(var)}, 3));
+    Expr* Q = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQuotient), (Expr*[]){expr_copy(N), expr_copy(D), expr_copy(var)}, 3));
+    Expr* R = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialRemainder), (Expr*[]){expr_copy(N), expr_copy(D), expr_copy(var)}, 3));
     
     /* Factor the denominator over Q (default) or Q(α) when an Extension
      * option was supplied to Apart.  Splitting D over the extension lets
@@ -275,7 +275,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     
     if (m == 0) {
         Expr* C_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){C, expr_new_integer(-1)}, 2));
-        Expr* R_term = eval_and_free(expr_new_function(expr_new_symbol("Expand"), (Expr*[]){eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){R, C_inv}, 2))}, 1));
+        Expr* R_term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){R, C_inv}, 2))}, 1));
         Expr* res = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){Q, R_term}, 2));
         expr_free(f_den); free(bases); free(ks); expr_free(var);
         return res;
@@ -350,7 +350,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     Expr* matrix_expr = expr_new_function(expr_new_symbol(SYM_List), row_args, S);
     free(row_args);
     
-    Expr* reduced = eval_and_free(expr_new_function(expr_new_symbol("RowReduce"), (Expr*[]){matrix_expr}, 1));
+    Expr* reduced = eval_and_free(expr_new_function(expr_new_symbol(SYM_RowReduce), (Expr*[]){matrix_expr}, 1));
     
     Expr* pfrac_sum = expr_new_integer(0);
     if (reduced->type == EXPR_FUNCTION && reduced->data.function.head->data.symbol == SYM_List && reduced->data.function.arg_count == (size_t)S) {

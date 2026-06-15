@@ -110,7 +110,7 @@ static Expr* gamma_exact_via_factorial(int64_t n, int64_t d) {
     /* z = n/d, so z - 1 = (n - d)/d. */
     Expr* zm1 = make_rational(n - d, d);
     if (!zm1) return NULL;
-    Expr* call = expr_new_function(expr_new_symbol("Factorial"), &zm1, 1);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Factorial), &zm1, 1);
     Expr* out = eval_and_free(call);
     /* If it came back still headed by Factorial, it did not reduce. */
     if (out && out->type == EXPR_FUNCTION &&
@@ -821,7 +821,7 @@ static Expr* gamma_three_arg(Expr* a, Expr* z0, Expr* z1) {
                                  (Expr*[]){ expr_copy(a), expr_copy(z0) }, 2);
     Expr* g1 = expr_new_function(expr_new_symbol(SYM_Gamma),
                                  (Expr*[]){ expr_copy(a), expr_copy(z1) }, 2);
-    Expr* diff = expr_new_function(expr_new_symbol("Subtract"),
+    Expr* diff = expr_new_function(expr_new_symbol(SYM_Subtract),
                                    (Expr*[]){ g0, g1 }, 2);
     return eval_and_free(diff);
 }

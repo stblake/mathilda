@@ -1211,7 +1211,7 @@ Expr* get_coeff(Expr* e, Expr* var, int d) {
             return result;
         }
     }
-    Expr* call = expr_new_function(expr_new_symbol("Coefficient"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Coefficient),
                                    (Expr*[]){expr_copy(e), expr_copy(var), expr_new_integer(d)}, 3);
     Expr* res = evaluate(call);
     expr_free(call);
@@ -3521,7 +3521,7 @@ static Expr* horner_form_rec(Expr* expr, Expr** vars, size_t num_vars) {
         return NULL;
     }
     
-    Expr* cl = eval_and_free(expr_new_function(expr_new_symbol("CoefficientList"), (Expr*[]){expr_copy(expanded), expr_copy(v)}, 2));
+    Expr* cl = eval_and_free(expr_new_function(expr_new_symbol(SYM_CoefficientList), (Expr*[]){expr_copy(expanded), expr_copy(v)}, 2));
     expr_free(expanded);
     
     if (!cl || cl->type != EXPR_FUNCTION || cl->data.function.head->data.symbol != SYM_List) {
@@ -3639,8 +3639,8 @@ Expr* builtin_hornerform(Expr* res) {
     Expr* vars2_expr = NULL;
     
     if (res->data.function.arg_count == 1) {
-        vars1_expr = eval_and_free(expr_new_function(expr_new_symbol("Variables"), (Expr*[]){expr_copy(num)}, 1));
-        vars2_expr = eval_and_free(expr_new_function(expr_new_symbol("Variables"), (Expr*[]){expr_copy(den)}, 1));
+        vars1_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables), (Expr*[]){expr_copy(num)}, 1));
+        vars2_expr = eval_and_free(expr_new_function(expr_new_symbol(SYM_Variables), (Expr*[]){expr_copy(den)}, 1));
     } else if (res->data.function.arg_count == 2) {
         vars1_expr = expr_copy(res->data.function.args[1]);
         vars2_expr = expr_copy(res->data.function.args[1]);
@@ -4230,7 +4230,7 @@ static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
     Expr* matrix = expr_new_function(expr_new_symbol(SYM_List), rows, dim);
     free(rows);
     
-    Expr* det_call = expr_new_function(expr_new_symbol("Det"), (Expr*[]){matrix}, 1);
+    Expr* det_call = expr_new_function(expr_new_symbol(SYM_Det), (Expr*[]){matrix}, 1);
     Expr* evaluated_det = evaluate(det_call);
     expr_free(det_call);
     

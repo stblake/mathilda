@@ -905,10 +905,10 @@ static Expr* parse_primary(ParserState* s) {
                 int64_t n = strtoll(s->pos, &end, 10);
                 s->pos = end;
                 Expr* out_args[1] = { expr_new_integer(n) };
-                return expr_new_function(expr_new_symbol("Out"), out_args, 1);
+                return expr_new_function(expr_new_symbol(SYM_Out), out_args, 1);
             } else {
                 Expr* out_args[1] = { expr_new_integer(-count) };
-                return expr_new_function(expr_new_symbol("Out"), out_args, 1);
+                return expr_new_function(expr_new_symbol(SYM_Out), out_args, 1);
             }
         }
         
@@ -1054,7 +1054,7 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         Expr* sym = parse_symbol(s);
         if (!sym) return NULL;
         Expr* args[1] = { sym };
-        left = expr_new_function(expr_new_symbol("Information"), args, 1);
+        left = expr_new_function(expr_new_symbol(SYM_Information), args, 1);
         return left; // ?symbol is top-level only usually
     }
 
@@ -1065,13 +1065,13 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
         Expr* right = parse_expression_prec(s, 660);
         if (!right) return NULL;
         Expr* args[1] = { right };
-        left = expr_new_function(expr_new_symbol("PreIncrement"), args, 1);
+        left = expr_new_function(expr_new_symbol(SYM_PreIncrement), args, 1);
     } else if (strncmp(s->pos, "--", 2) == 0) {
         s->pos += 2;
         Expr* right = parse_expression_prec(s, 660);
         if (!right) return NULL;
         Expr* args[1] = { right };
-        left = expr_new_function(expr_new_symbol("PreDecrement"), args, 1);
+        left = expr_new_function(expr_new_symbol(SYM_PreDecrement), args, 1);
     } else if (*s->pos == '-' && minus_is_prefix(s->pos)) {
         s->pos++;
         // Use a precedence higher than Plus (310) and Times (400)
@@ -1176,11 +1176,11 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             continue;
         } else if (op_def.type == OP_FACTORIAL) {
             Expr* args[1] = { left };
-            left = expr_new_function(expr_new_symbol("Factorial"), args, 1);
+            left = expr_new_function(expr_new_symbol(SYM_Factorial), args, 1);
             continue;
         } else if (op_def.type == OP_FACTORIAL2) {
             Expr* args[1] = { left };
-            left = expr_new_function(expr_new_symbol("Factorial2"), args, 1);
+            left = expr_new_function(expr_new_symbol(SYM_Factorial2), args, 1);
             continue;
         } else if (op_def.type == OP_DERIVATIVE) {
             /* Collapse consecutive apostrophes: f'''  ->  Derivative[3][f]. */
@@ -1193,11 +1193,11 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             continue;
         } else if (op_def.type == OP_INCREMENT) {
             Expr* args[1] = { left };
-            left = expr_new_function(expr_new_symbol("Increment"), args, 1);
+            left = expr_new_function(expr_new_symbol(SYM_Increment), args, 1);
             continue;
         } else if (op_def.type == OP_DECREMENT) {
             Expr* args[1] = { left };
-            left = expr_new_function(expr_new_symbol("Decrement"), args, 1);
+            left = expr_new_function(expr_new_symbol(SYM_Decrement), args, 1);
             continue;
         } else if (op_def.type == OP_UNSET) {
             /* Postfix `lhs =.` -> Unset[lhs]. */
@@ -1323,24 +1323,24 @@ static Expr* parse_expression_prec(ParserState* s, int min_prec) {
             }
         } else if (op_def.type == OP_APPLY) {
             Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol("Apply"), args, 2);
+            left = expr_new_function(expr_new_symbol(SYM_Apply), args, 2);
         } else if (op_def.type == OP_APPLY1) {
             Expr* level_args[1] = { expr_new_integer(1) };
             Expr* level = expr_new_function(expr_new_symbol(SYM_List), level_args, 1);
             Expr* args[3] = { left, right, level };
-            left = expr_new_function(expr_new_symbol("Apply"), args, 3);
+            left = expr_new_function(expr_new_symbol(SYM_Apply), args, 3);
         } else if (op_def.type == OP_MAP) {
             Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol("Map"), args, 2);
+            left = expr_new_function(expr_new_symbol(SYM_Map), args, 2);
         } else if (op_def.type == OP_MAPALL) {
             Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol("MapAll"), args, 2);
+            left = expr_new_function(expr_new_symbol(SYM_MapAll), args, 2);
         } else if (op_def.type == OP_REPLACEALL) {
             Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol("ReplaceAll"), args, 2);
+            left = expr_new_function(expr_new_symbol(SYM_ReplaceAll), args, 2);
         } else if (op_def.type == OP_REPLACEREPEATED) {
             Expr* args[2] = { left, right };
-            left = expr_new_function(expr_new_symbol("ReplaceRepeated"), args, 2);
+            left = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), args, 2);
         } else if (op_def.type == OP_ALTERNATIVES) {
             Expr* args[2] = { left, right };
             left = expr_new_function(expr_new_symbol(SYM_Alternatives), args, 2);

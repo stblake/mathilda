@@ -39,13 +39,13 @@
  * different, so the TrigToExp computation is purely overhead. */
 static Expr* trig_canonicalize(Expr* arg) {
     Expr* expand_args[1] = { expr_copy(arg) };
-    Expr* expand_call = expr_new_function(expr_new_symbol("Expand"),
+    Expr* expand_call = expr_new_function(expr_new_symbol(SYM_Expand),
                                           expand_args, 1);
     Expr* expanded = evaluate(expand_call);
     expr_free(expand_call);
 
     Expr* together_args[1] = { expanded };
-    Expr* together_call = expr_new_function(expr_new_symbol("Together"),
+    Expr* together_call = expr_new_function(expr_new_symbol(SYM_Together),
                                             together_args, 1);
     Expr* canonical = evaluate(together_call);
     expr_free(together_call);
@@ -125,22 +125,22 @@ Expr* builtin_exptotrig(Expr* res) {
     trig_canon_suppress_inc();
 
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(exp_to_trig_rules) };
-    Expr* replace_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), replace_args, 2);
+    Expr* replace_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), replace_args, 2);
     Expr* replaced = evaluate(replace_expr);
     expr_free(replace_expr);
 
     Expr* together_args[1] = { replaced };
-    Expr* together_expr = expr_new_function(expr_new_symbol("Together"), together_args, 1);
+    Expr* together_expr = expr_new_function(expr_new_symbol(SYM_Together), together_args, 1);
     Expr* togethered = evaluate(together_expr);
     expr_free(together_expr);
 
     Expr* cancel_args[1] = { togethered };
-    Expr* cancel_expr = expr_new_function(expr_new_symbol("Cancel"), cancel_args, 1);
+    Expr* cancel_expr = expr_new_function(expr_new_symbol(SYM_Cancel), cancel_args, 1);
     Expr* cancelled = evaluate(cancel_expr);
     expr_free(cancel_expr);
 
     Expr* rep_args[2] = { cancelled, expr_copy(exp_to_trig_simp) };
-    Expr* rep_simp = expr_new_function(expr_new_symbol("ReplaceRepeated"), rep_args, 2);
+    Expr* rep_simp = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), rep_args, 2);
     Expr* result = evaluate(rep_simp);
     expr_free(rep_simp);
 
@@ -185,12 +185,12 @@ Expr* builtin_trigtoexp(Expr* res) {
     trig_canon_suppress_inc();
 
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(trig_to_exp_rules) };
-    Expr* replace_expr = expr_new_function(expr_new_symbol("ReplaceAll"), replace_args, 2);
+    Expr* replace_expr = expr_new_function(expr_new_symbol(SYM_ReplaceAll), replace_args, 2);
     Expr* replaced = evaluate(replace_expr);
     expr_free(replace_expr);
 
     Expr* expand_args[1] = { replaced };
-    Expr* expand_expr = expr_new_function(expr_new_symbol("Expand"), expand_args, 1);
+    Expr* expand_expr = expr_new_function(expr_new_symbol(SYM_Expand), expand_args, 1);
     Expr* result = evaluate(expand_expr);
     expr_free(expand_expr);
 
@@ -506,13 +506,13 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
 
     /* Apply the angle-addition and multiple-angle rules to a fixed point. */
     Expr* replace_args[2] = { expr_copy(arg), expr_copy(trig_expand_rules) };
-    Expr* replace_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), replace_args, 2);
+    Expr* replace_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), replace_args, 2);
     Expr* replaced = evaluate(replace_expr);
     expr_free(replace_expr);
 
     /* Distribute products of sums so the result is a flat sum of monomials. */
     Expr* expand_args[1] = { replaced };
-    Expr* expand_expr = expr_new_function(expr_new_symbol("Expand"), expand_args, 1);
+    Expr* expand_expr = expr_new_function(expr_new_symbol(SYM_Expand), expand_args, 1);
     Expr* expanded = evaluate(expand_expr);
     expr_free(expand_expr);
 
@@ -544,7 +544,7 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
     if (has_reciprocal_power(expanded) || !input_has_pythag_pair(arg) ||
         count_distinct_squared_trig_atoms(expanded) > TRIG_FACTOR_ATOM_THRESHOLD) {
         Expr* pyth_args[2] = { expanded, expr_copy(trig_expand_pythag) };
-        Expr* pyth_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), pyth_args, 2);
+        Expr* pyth_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), pyth_args, 2);
         reduced = evaluate(pyth_expr);
         expr_free(pyth_expr);
     } else {
@@ -554,7 +554,7 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
         expr_free(factor_expr);
 
         Expr* pyth_args[2] = { factored, expr_copy(trig_expand_pythag) };
-        Expr* pyth_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), pyth_args, 2);
+        Expr* pyth_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), pyth_args, 2);
         reduced = evaluate(pyth_expr);
         expr_free(pyth_expr);
     }
@@ -562,7 +562,7 @@ static Expr* builtin_trigexpand_impl(Expr* res) {
     /* Re-expand so that any residual factored products are distributed back
      * into the canonical TrigExpand monomial form. */
     Expr* final_args[1] = { reduced };
-    Expr* final_expr = expr_new_function(expr_new_symbol("Expand"), final_args, 1);
+    Expr* final_expr = expr_new_function(expr_new_symbol(SYM_Expand), final_args, 1);
     Expr* result = evaluate(final_expr);
     expr_free(final_expr);
 
@@ -597,13 +597,13 @@ static Expr* trigfactor_run_pipeline(Expr* input) {
 
     /* Rewrite reciprocal heads as Sin/Cos ratios. */
     Expr* ts_args[2] = { input, expr_copy(trig_factor_to_sincos) };
-    Expr* ts_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), ts_args, 2);
+    Expr* ts_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), ts_args, 2);
     Expr* sincos = evaluate(ts_expr);
     expr_free(ts_expr);
 
     /* Combine over a common denominator. */
     Expr* tog_args[1] = { sincos };
-    Expr* tog_expr = expr_new_function(expr_new_symbol("Together"), tog_args, 1);
+    Expr* tog_expr = expr_new_function(expr_new_symbol(SYM_Together), tog_args, 1);
     Expr* togethered = evaluate(tog_expr);
     expr_free(tog_expr);
 
@@ -640,13 +640,13 @@ static Expr* trigfactor_run_pipeline(Expr* input) {
 
     /* Apply identity collapse rules to a fixed point. */
     Expr* id_args[2] = { factored, expr_copy(trig_factor_identities) };
-    Expr* id_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), id_args, 2);
+    Expr* id_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), id_args, 2);
     Expr* collapsed = evaluate(id_expr);
     expr_free(id_expr);
 
     /* Restore Tan/Sec/Cot/Csc (and hyperbolic analogs). */
     Expr* fs_args[2] = { collapsed, expr_copy(trig_factor_from_sincos) };
-    Expr* fs_expr = expr_new_function(expr_new_symbol("ReplaceRepeated"), fs_args, 2);
+    Expr* fs_expr = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), fs_args, 2);
     Expr* result = evaluate(fs_expr);
     expr_free(fs_expr);
 
@@ -888,7 +888,7 @@ static Expr* builtin_trigfactor_impl(Expr* res) {
  */
 static Expr* trigreduce_apply_rules(Expr* input, Expr* rules) {
     Expr* args[2] = { input, expr_copy(rules) };
-    Expr* call = expr_new_function(expr_new_symbol("ReplaceRepeated"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated),
                                    args, 2);
     Expr* result = evaluate(call);
     expr_free(call);

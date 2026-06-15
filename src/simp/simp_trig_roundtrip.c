@@ -218,7 +218,7 @@ Expr* simp_roots_of_unity(const Expr* e) {
     clock_t t0 = dbg ? clock() : 0;
     Expr* args[1] = { expr_copy((Expr*)e) };
     Expr* call = expr_new_function(
-        expr_new_symbol("$ruSimplify"), args, 1);
+        expr_new_symbol(SYM_DollarruSimplify), args, 1);
     Expr* out = eval_and_free(call);
     if (dbg) simp_debug_log("RootsOfUnity", e, out,
                             simp_debug_elapsed_ms(t0));
@@ -268,7 +268,7 @@ static Expr* transform_pythag_square_complete_impl(const Expr* e) {
 
     Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
     Expr* call = expr_new_function(
-        expr_new_symbol("ReplaceRepeated"), args, 2);
+        expr_new_symbol(SYM_ReplaceRepeated), args, 2);
     Expr* out = eval_and_free(call);
     if (dbg) simp_debug_log("PythagSquareComplete", e, out,
                             simp_debug_elapsed_ms(t0));
@@ -349,7 +349,7 @@ static Expr* transform_halfangle_impl(const Expr* e) {
 
     Expr* args[2] = { expr_copy((Expr*)e), expr_copy(rules) };
     Expr* call = expr_new_function(
-        expr_new_symbol("ReplaceRepeated"), args, 2);
+        expr_new_symbol(SYM_ReplaceRepeated), args, 2);
     Expr* out = eval_and_free(call);
     if (dbg) simp_debug_log("HalfAngle", e, out,
                             simp_debug_elapsed_ms(t0));

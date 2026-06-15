@@ -367,7 +367,7 @@ static Expr* simp_try_rebalance_relation(const Expr* relation) {
      * defeats coefficient-level rebalancing. */
     Expr* exp_args[1] = { d_sum };
     Expr* d_exp_call = expr_new_function(
-        expr_new_symbol("Expand"), exp_args, 1);
+        expr_new_symbol(SYM_Expand), exp_args, 1);
     Expr* d = eval_and_free(d_exp_call);
 
     Expr* d_singleton[1];
@@ -686,7 +686,7 @@ Expr* builtin_simplify(Expr* res) {
             for (size_t k = 1; k < argc; k++) {
                 sub_args[k] = expr_copy(res->data.function.args[k]);
             }
-            Expr* call = expr_new_function(expr_new_symbol("Simplify"), sub_args, argc);
+            Expr* call = expr_new_function(expr_new_symbol(SYM_Simplify), sub_args, argc);
             free(sub_args); /* expr_new_function copies the array contents */
             new_args[i] = evaluate(call);
             expr_free(call);
@@ -808,7 +808,7 @@ Expr* builtin_simplify(Expr* res) {
             Expr* tog;
             if (multigen) {
                 tog = expr_new_function(
-                    expr_new_symbol("Together"),
+                    expr_new_symbol(SYM_Together),
                     (Expr*[]){
                         expr_copy(expr),
                         expr_new_function(expr_new_symbol(SYM_Rule),
@@ -817,7 +817,7 @@ Expr* builtin_simplify(Expr* res) {
                     }, 2);
             } else {
                 tog = expr_new_function(
-                    expr_new_symbol("Together"),
+                    expr_new_symbol(SYM_Together),
                     (Expr*[]){ expr_copy(expr) }, 1);
             }
             Expr* cand = evaluate(tog);
@@ -986,12 +986,12 @@ Expr* builtin_assuming(Expr* res) {
     }
 
     /* Build $Assumptions && assum_norm */
-    Expr* and_args[2] = { expr_new_symbol("$Assumptions"), assum_norm };
+    Expr* and_args[2] = { expr_new_symbol(SYM_DollarAssumptions), assum_norm };
     Expr* combined = expr_new_function(expr_new_symbol(SYM_And), and_args, 2);
 
     /* Build Set[$Assumptions, combined] -- represents
      * "$Assumptions = $Assumptions && a" inside the Block var list. */
-    Expr* set_args[2] = { expr_new_symbol("$Assumptions"), combined };
+    Expr* set_args[2] = { expr_new_symbol(SYM_DollarAssumptions), combined };
     Expr* set_call = expr_new_function(expr_new_symbol(SYM_Set), set_args, 2);
 
     /* Block[{Set[$Assumptions, ...]}, body] */

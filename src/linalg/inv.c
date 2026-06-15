@@ -576,7 +576,7 @@ static Expr* hermitian_transpose(Expr* m) {
 /* Matrix product a . b via Dot, fully evaluated.  Caller owns. */
 static Expr* mat_mult(Expr* a, Expr* b) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Dot"),
+        expr_new_symbol(SYM_Dot),
         (Expr*[]){expr_copy(a), expr_copy(b)}, 2));
 }
 
@@ -602,7 +602,7 @@ static Expr* mat_invert(Expr* m) {
 /* RowReduce[m] via the registered builtin, fully evaluated.  Caller owns. */
 static Expr* mat_rref(Expr* m) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("RowReduce"),
+        expr_new_symbol(SYM_RowReduce),
         (Expr*[]){expr_copy(m)}, 1));
 }
 
@@ -687,7 +687,7 @@ static Expr* zero_matrix(int rows, int cols) {
  * tidy normal form. */
 static Expr* expand_matrix(Expr* m) {
     return eval_and_free(expr_new_function(
-        expr_new_symbol("Expand"),
+        expr_new_symbol(SYM_Expand),
         (Expr*[]){expr_copy(m)}, 1));
 }
 

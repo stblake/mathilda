@@ -779,7 +779,7 @@ static Expr* fit_solve_findmin(Expr* M, Expr* V, const FitOpts* opts) {
     /* Residual = M . a - V  (realised to the requested precision). */
     Expr* mR = fit_realize_precision(M, opts);
     Expr* vR = fit_realize_precision(V, opts);
-    Expr* dotma = expr_new_function(expr_new_symbol("Dot"),
+    Expr* dotma = expr_new_function(expr_new_symbol(SYM_Dot),
                                     (Expr*[]){ mR, aexpr }, 2);
     Expr* negv = expr_new_function(expr_new_symbol(SYM_Times),
                                    (Expr*[]){ expr_new_integer(-1), vR }, 2);
@@ -790,19 +790,19 @@ static Expr* fit_solve_findmin(Expr* M, Expr* V, const FitOpts* opts) {
     Expr* normf = opts->norm_fun
         ? expr_new_function(expr_copy(opts->norm_fun),
                             (Expr*[]){ residual }, 1)
-        : expr_new_function(expr_new_symbol("Norm"),
+        : expr_new_function(expr_new_symbol(SYM_Norm),
                             (Expr*[]){ residual }, 1);
     Expr* objective = normf;
     if (opts->reg_kind == FIT_REG_TIKHONOV) {
         /* + lambda * (a.a) */
-        Expr* aa = expr_new_function(expr_new_symbol("Dot"),
+        Expr* aa = expr_new_function(expr_new_symbol(SYM_Dot),
             (Expr*[]){ expr_copy(aexpr), expr_copy(aexpr) }, 2);
         Expr* term = expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_copy(opts->reg_lambda), aa }, 2);
         objective = expr_new_function(expr_new_symbol(SYM_Plus),
             (Expr*[]){ normf, term }, 2);
     } else if (opts->reg_kind == FIT_REG_LASSO) {
-        Expr* anorm = expr_new_function(expr_new_symbol("Norm"),
+        Expr* anorm = expr_new_function(expr_new_symbol(SYM_Norm),
             (Expr*[]){ expr_copy(aexpr), expr_new_integer(1) }, 2);
         Expr* term = expr_new_function(expr_new_symbol(SYM_Times),
             (Expr*[]){ expr_copy(opts->reg_lambda), anorm }, 2);

@@ -124,7 +124,7 @@ static Expr* subres_poly_det(Expr** p1d, int n, Expr** p2d, int m, int j, Expr* 
     Expr* matrix = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)dim);
     free(rows);
 
-    Expr* det_call = expr_new_function(expr_new_symbol("Det"), (Expr*[]){matrix}, 1);
+    Expr* det_call = expr_new_function(expr_new_symbol(SYM_Det), (Expr*[]){matrix}, 1);
     Expr* det = evaluate(det_call);
     expr_free(det_call);
 

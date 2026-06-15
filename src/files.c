@@ -391,14 +391,14 @@ Expr* builtin_fileprint(Expr* res) {
     char* buf = fileprint_slurp(file_arg->data.string, &fsize);
     if (!buf) {
         printf("FilePrint::noopen: Cannot open %s.\n", file_arg->data.string);
-        return expr_new_symbol("$Failed");
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
     LineSpan* lines = NULL;
     size_t total = 0;
     if (!fileprint_split_lines(buf, fsize, &lines, &total)) {
         free(buf);
-        return expr_new_symbol("$Failed");
+        return expr_new_symbol(SYM_DollarFailed);
     }
 
     int64_t start = 1, end = (int64_t)total, step = 1;

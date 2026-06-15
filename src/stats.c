@@ -48,7 +48,7 @@ static Expr* apply_columnwise(const char* func_name, Expr* matrix) {
     }
 
     Expr* map_args[2] = { expr_new_symbol(func_name), transposed };
-    Expr* map_call = expr_new_function(expr_new_symbol("Map"), map_args, 2);
+    Expr* map_call = expr_new_function(expr_new_symbol(SYM_Map), map_args, 2);
     Expr* result = evaluate(map_call);
     expr_free(map_call);
     return result;
@@ -136,7 +136,7 @@ Expr* builtin_mean(Expr* res) {
     }
 
     // Fallback to symbolic: Mean = (1/n) * Plus @@ data
-    Expr* sum_call = expr_new_function(expr_new_symbol("Apply"), (Expr*[]){expr_new_symbol(SYM_Plus), expr_copy(data)}, 2);
+    Expr* sum_call = expr_new_function(expr_new_symbol(SYM_Apply), (Expr*[]){expr_new_symbol(SYM_Plus), expr_copy(data)}, 2);
     Expr* sum = evaluate(sum_call);
     expr_free(sum_call);
 
@@ -373,7 +373,7 @@ Expr* builtin_variance(Expr* res) {
 
     // Fallback to symbolic: Compute Mean
     Expr* mean_args[1] = { expr_copy(data) };
-    Expr* mean_call = expr_new_function(expr_new_symbol("Mean"), mean_args, 1);
+    Expr* mean_call = expr_new_function(expr_new_symbol(SYM_Mean), mean_args, 1);
     Expr* mu = evaluate(mean_call);
     expr_free(mean_call);
 
@@ -433,7 +433,7 @@ Expr* builtin_standard_deviation(Expr* res) {
             }
         }
         if (all_real && n > 1) {
-            Expr* var_call = expr_new_function(expr_new_symbol("Variance"), (Expr*[]){ expr_copy(data) }, 1);
+            Expr* var_call = expr_new_function(expr_new_symbol(SYM_Variance), (Expr*[]){ expr_copy(data) }, 1);
             Expr* var_e = evaluate(var_call);
             expr_free(var_call);
             if (var_e->type == EXPR_REAL) {
@@ -446,7 +446,7 @@ Expr* builtin_standard_deviation(Expr* res) {
     }
 
     // StandardDeviation[data] = Variance[data]^(1/2)
-    Expr* var_call = expr_new_function(expr_new_symbol("Variance"), (Expr*[]){ expr_copy(data) }, 1);
+    Expr* var_call = expr_new_function(expr_new_symbol(SYM_Variance), (Expr*[]){ expr_copy(data) }, 1);
     Expr* var = evaluate(var_call);
     expr_free(var_call);
 
@@ -463,7 +463,7 @@ Expr* builtin_standard_deviation(Expr* res) {
 /* ------------------- Median ------------------- */
 
 static bool is_real_numeric(Expr* e) {
-    Expr* numq = expr_new_function(expr_new_symbol("NumericQ"), (Expr*[]){expr_copy(e)}, 1);
+    Expr* numq = expr_new_function(expr_new_symbol(SYM_NumericQ), (Expr*[]){expr_copy(e)}, 1);
     Expr* numq_eval = evaluate(numq);
     expr_free(numq);
     if (numq_eval->type != EXPR_SYMBOL || numq_eval->data.symbol != SYM_True) {
@@ -472,7 +472,7 @@ static bool is_real_numeric(Expr* e) {
     }
     expr_free(numq_eval);
     
-    Expr* freeq = expr_new_function(expr_new_symbol("FreeQ"), (Expr*[]){expr_copy(e), expr_new_symbol(SYM_I)}, 2);
+    Expr* freeq = expr_new_function(expr_new_symbol(SYM_FreeQ), (Expr*[]){expr_copy(e), expr_new_symbol(SYM_I)}, 2);
     Expr* freeq_eval = evaluate(freeq);
     expr_free(freeq);
     if (freeq_eval->type != EXPR_SYMBOL || freeq_eval->data.symbol != SYM_True) {
@@ -591,7 +591,7 @@ Expr* builtin_quartiles(Expr* res) {
                 call_args[1] = expr_copy(param_expr);
                 call_cnt = 2;
             }
-            Expr* q_call = expr_new_function(expr_new_symbol("Quartiles"), call_args, call_cnt);
+            Expr* q_call = expr_new_function(expr_new_symbol(SYM_Quartiles), call_args, call_cnt);
             q_args[i] = evaluate(q_call);
             expr_free(q_call);
         }
@@ -782,7 +782,7 @@ Expr* builtin_moving_average(Expr* res) {
             Expr* sublist = expr_new_function(expr_new_symbol(SYM_List), sub, r);
             free(sub);
             out[i] = eval_and_free(expr_new_function(
-                expr_new_symbol("Mean"), (Expr*[]){ sublist }, 1));
+                expr_new_symbol(SYM_Mean), (Expr*[]){ sublist }, 1));
         }
     } else {
         Expr** w_copies = malloc(sizeof(Expr*) * r);
@@ -913,7 +913,7 @@ Expr* builtin_moving_median(Expr* res) {
         Expr* sublist = expr_new_function(expr_new_symbol(SYM_List), sub, r);
         free(sub);
         out[i] = eval_and_free(expr_new_function(
-            expr_new_symbol("Median"), (Expr*[]){ sublist }, 1));
+            expr_new_symbol(SYM_Median), (Expr*[]){ sublist }, 1));
     }
 
     Expr* result = expr_new_function(expr_new_symbol(SYM_List), out, out_n);

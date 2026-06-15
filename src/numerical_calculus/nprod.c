@@ -279,7 +279,7 @@ Expr* builtin_nprod(Expr* res) {
         Expr* a[2];
         a[0] = result;
         a[1] = expr_new_integer((long)(o.wdigits + 0.5));
-        result = eval_and_free(expr_new_function(expr_new_symbol("N"), a, 2));
+        result = eval_and_free(expr_new_function(expr_new_symbol(SYM_N), a, 2));
     }
 
     (void)np_warn;   /* reserved for future divergence/convergence messages  */

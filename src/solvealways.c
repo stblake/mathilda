@@ -183,7 +183,7 @@ static Expr* call_coefficient_list(Expr* poly, Expr* vars_list) {
     Expr** args = (Expr**)malloc(sizeof(Expr*) * 2);
     args[0] = expr_copy(poly);
     args[1] = expr_copy(vars_list);
-    Expr* call = expr_new_function(expr_new_symbol("CoefficientList"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_CoefficientList),
                                    args, 2);
     free(args);
     return eval_and_free(call);

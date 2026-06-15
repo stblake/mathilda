@@ -671,7 +671,7 @@ static Expr* together_recursive_ext(Expr* e, const Expr* alpha) {
             Expr* lcm_den = count > 0 ? expr_copy(dens[0]) : expr_new_integer(1);
             for (size_t i = 1; i < count; i++) {
                 Expr* lcm_call = expr_new_function(
-                    expr_new_symbol("PolynomialLCM"),
+                    expr_new_symbol(SYM_PolynomialLCM),
                     (Expr*[]){
                         expr_copy(lcm_den),
                         expr_copy(dens[i]),
@@ -717,7 +717,7 @@ static Expr* together_recursive_ext(Expr* e, const Expr* alpha) {
             Expr** new_nums = malloc(sizeof(Expr*) * count);
             for (size_t i = 0; i < count; i++) {
                 Expr* q_call = expr_new_function(
-                    expr_new_symbol("PolynomialQuotient"),
+                    expr_new_symbol(SYM_PolynomialQuotient),
                     (Expr*[]){
                         expr_copy(lcm_den),
                         expr_copy(dens[i]),
@@ -812,13 +812,13 @@ static Expr* together_recursive_ext(Expr* e, const Expr* alpha) {
 static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
     /* num = Numerator[arg], den = Denominator[arg]. */
     Expr* num_call = expr_new_function(
-        expr_new_symbol("Numerator"),
+        expr_new_symbol(SYM_Numerator),
         (Expr*[]){expr_copy((Expr*)arg)}, 1);
     Expr* num = evaluate(num_call);
     expr_free(num_call);
 
     Expr* den_call = expr_new_function(
-        expr_new_symbol("Denominator"),
+        expr_new_symbol(SYM_Denominator),
         (Expr*[]){expr_copy((Expr*)arg)}, 1);
     Expr* den = evaluate(den_call);
     expr_free(den_call);
@@ -908,7 +908,7 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
         expr_new_symbol(SYM_Rule),
         (Expr*[]){expr_new_symbol(SYM_Extension), expr_copy((Expr*)alpha)}, 2);
     Expr* new_num_call = expr_new_function(
-        expr_new_symbol("PolynomialQuotient"),
+        expr_new_symbol(SYM_PolynomialQuotient),
         (Expr*[]){num, expr_copy(g), expr_copy(var), ext_rule_a}, 4);
     Expr* new_num = evaluate(new_num_call);
     expr_free(new_num_call);
@@ -917,7 +917,7 @@ static Expr* cancel_with_extension(const Expr* arg, const Expr* alpha) {
         expr_new_symbol(SYM_Rule),
         (Expr*[]){expr_new_symbol(SYM_Extension), expr_copy((Expr*)alpha)}, 2);
     Expr* new_den_call = expr_new_function(
-        expr_new_symbol("PolynomialQuotient"),
+        expr_new_symbol(SYM_PolynomialQuotient),
         (Expr*[]){den, g, var, ext_rule_b}, 4);
     Expr* new_den = evaluate(new_den_call);
     expr_free(new_den_call);
@@ -1077,7 +1077,7 @@ static Expr* builtin_cancel_compute(Expr* res) {
                             ? together_recursive_ext(arg, gen)
                             : cancel_with_extension(arg, gen);
                         if (cand) {
-                            Expr* tg = expr_new_function(expr_new_symbol("Together"),
+                            Expr* tg = expr_new_function(expr_new_symbol(SYM_Together),
                                 (Expr*[]){cand}, 1);
                             Expr* folded = evaluate(tg);
                             expr_free(tg);
@@ -1204,7 +1204,7 @@ static Expr* together_recursive(Expr* e) {
             
             Expr* lcm_den = count > 0 ? expr_copy(dens[0]) : expr_new_integer(1);
             for (size_t i = 1; i < count; i++) {
-                Expr* call_lcm = expr_new_function(expr_new_symbol("PolynomialLCM"), (Expr*[]){expr_copy(lcm_den), expr_copy(dens[i])}, 2);
+                Expr* call_lcm = expr_new_function(expr_new_symbol(SYM_PolynomialLCM), (Expr*[]){expr_copy(lcm_den), expr_copy(dens[i])}, 2);
                 Expr* new_lcm = evaluate(call_lcm);
                 expr_free(call_lcm);
                 expr_free(lcm_den);
@@ -1378,7 +1378,7 @@ static Expr* builtin_together_compute(Expr* res) {
                         const Expr* gen = auto_tower->alpha_renders[idx];
                         Expr* cand = together_recursive_ext(arg, gen);
                         if (cand) {
-                            Expr* tg = expr_new_function(expr_new_symbol("Together"),
+                            Expr* tg = expr_new_function(expr_new_symbol(SYM_Together),
                                 (Expr*[]){cand}, 1);
                             Expr* folded = evaluate(tg);
                             expr_free(tg);

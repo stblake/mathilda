@@ -475,7 +475,7 @@ static Expr* cf_exact_numeric(const Expr* x, long nlimit) {
 
     for (int tries = 0; tries < 48 && digits <= 400000; tries++, digits *= 2) {
         Expr* nexpr = expr_new_function(
-            expr_new_symbol("N"),
+            expr_new_symbol(SYM_N),
             (Expr*[]){ expr_copy((Expr*)x), expr_new_integer(digits) }, 2);
         Expr* val = eval_and_free(nexpr);
         if (!val) { tv_clear(&prev); return NULL; }
@@ -531,7 +531,7 @@ static Expr* cf_exact_numeric(const Expr* x, long nlimit) {
     return NULL;
 #else
     /* Machine-only build: a single N pass at machine precision. */
-    Expr* nexpr = expr_new_function(expr_new_symbol("N"),
+    Expr* nexpr = expr_new_function(expr_new_symbol(SYM_N),
                                     (Expr*[]){ expr_copy((Expr*)x) }, 1);
     Expr* val = eval_and_free(nexpr);
     if (val && val->type == EXPR_REAL && isfinite(val->data.real)) {

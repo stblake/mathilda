@@ -156,7 +156,7 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
     /* d_prime = D[poly, Slot[1]]. */
     Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot),
         (Expr*[]){ expr_new_integer(1) }, 1);
-    Expr* d_call = expr_new_function(expr_new_symbol("D"),
+    Expr* d_call = expr_new_function(expr_new_symbol(SYM_D),
         (Expr*[]){ expr_copy(poly), expr_copy(slot) }, 2);
     Expr* d_prime = evaluate(d_call); expr_free(d_call);
 

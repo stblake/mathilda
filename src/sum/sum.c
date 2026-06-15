@@ -383,7 +383,7 @@ Expr* builtin_sum(Expr* res) {
         in[0] = expr_copy(f);
         in[1] = expr_copy(a[nspecs_end - 1]);
         for (size_t k = 0; k < nopts; k++) in[2 + k] = expr_copy(a[nspecs_end + k]);
-        Expr* inner = expr_new_function(expr_new_symbol("Sum"), in, 2 + nopts);
+        Expr* inner = expr_new_function(expr_new_symbol(SYM_Sum), in, 2 + nopts);
         free(in);
 
         /* outer = Sum[inner, s1, ..., s_{k-1}, opts...] */
@@ -393,7 +393,7 @@ Expr* builtin_sum(Expr* res) {
         out[w++] = inner;
         for (size_t i = 1; i < nspecs; i++) out[w++] = expr_copy(a[i]);
         for (size_t k = 0; k < nopts; k++) out[w++] = expr_copy(a[nspecs_end + k]);
-        Expr* outer = expr_new_function(expr_new_symbol("Sum"), out, outc);
+        Expr* outer = expr_new_function(expr_new_symbol(SYM_Sum), out, outc);
         free(out);
 
         Expr* r = evaluate(outer);

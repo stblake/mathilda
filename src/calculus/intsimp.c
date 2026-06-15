@@ -66,7 +66,7 @@ bool intsimp_has_radical(const Expr* e) {
 Expr* intsimp_simplify_if_radical(Expr* e) {
     if (!e || !intsimp_has_radical(e)) return e;
     Expr* call = expr_new_function(
-        expr_new_symbol("Simplify"), (Expr*[]){ e }, 1);
+        expr_new_symbol(SYM_Simplify), (Expr*[]){ e }, 1);
     Expr* simplified = evaluate(call);
     expr_free(call);
     return simplified;
@@ -171,7 +171,7 @@ int intsimp_sign_pos_assumption(Expr* e) {
 
 int intsimp_numeric_sign(Expr* e) {
     if (!e) return 0;
-    Expr* call = expr_new_function(expr_new_symbol("N"),
+    Expr* call = expr_new_function(expr_new_symbol(SYM_N),
         (Expr*[]){expr_copy(e)}, 1);
     Expr* r = evaluate(call);
     expr_free(call);

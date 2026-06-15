@@ -343,7 +343,7 @@ Expr* builtin_attributes(Expr* res) {
 
     Expr** attr_list = malloc(sizeof(Expr*) * count);
     size_t i = 0;
-    if (attrs & ATTR_CONSTANT) attr_list[i++] = expr_new_symbol("Constant");
+    if (attrs & ATTR_CONSTANT) attr_list[i++] = expr_new_symbol(SYM_Constant);
     if (attrs & ATTR_FLAT) attr_list[i++] = expr_new_symbol(SYM_Flat);
     if ((attrs & ATTR_HOLDALL) == ATTR_HOLDALL) {
         attr_list[i++] = expr_new_symbol(SYM_HoldAll);

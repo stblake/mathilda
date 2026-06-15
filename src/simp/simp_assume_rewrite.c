@@ -376,7 +376,7 @@ Expr* apply_assumption_rules(const Expr* input, const AssumeCtx* ctx) {
     free(all);
 
     Expr* call_args[2] = { expr_copy((Expr*)input), rules_list };
-    Expr* call = expr_new_function(expr_new_symbol("ReplaceRepeated"), call_args, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_ReplaceRepeated), call_args, 2);
     Expr* out = evaluate(call);
     expr_free(call);
     return out;
