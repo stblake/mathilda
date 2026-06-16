@@ -1199,8 +1199,13 @@ Evaluation:
   `φ = GoldenRatio`, and `Fibonacci[n, x] = (β^n - Cos[π n] β^{-n}) / Sqrt[x²+4]`
   with `β = (x + Sqrt[x²+4]) / 2` — are numericalized at the precision carried
   by the inputs (machine or MPFR).
-- Symbolic order (or exact non-integer order with no `N` applied) stays
-  unevaluated.
+- Exact non-integer order with a numeric `x` (`Fibonacci[n, x]` only): the same
+  closed form is evaluated *exactly*. An inexact `x` numericalizes it
+  (`Fibonacci[1/2, 3.2] = 0.494833`); an exact `x` keeps the result only when it
+  collapses to a number (`Fibonacci[1/2, 0] = 1/2`, since `F_n(0) = (1 - Cos[π n])/2`),
+  otherwise the call stays unevaluated.
+- Symbolic order, symbolic `x`, or a one-argument exact non-integer order with
+  no `N` applied stays unevaluated.
 
 Derivatives (native, via `src/calculus/deriv.c`):
 - `D[Fibonacci[n], n]` and both partials of `D[Fibonacci[n, x], ...]` are
@@ -1216,6 +1221,10 @@ In[3]:= Fibonacci[5.8, 3]
 Out[3]= 283.483
 In[4]:= N[Fibonacci[15/17], 50]
 Out[4]= 0.95651991392431122508582263427692298648606969012061
+In[5]:= Fibonacci[1/2, 0]
+Out[5]= 1/2
+In[6]:= Fibonacci[1/2, 3.2]
+Out[6]= 0.494833
 ```
 
 ## LucasL

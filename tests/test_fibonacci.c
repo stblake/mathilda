@@ -65,6 +65,18 @@ static void test_polynomials(void) {
     assert_eval_eq("Fibonacci[5, 8 - I]", "3903 - 2064*I", 0);
 }
 
+/* ---- Non-integer (rational) order, exact closed form --------------- */
+
+static void test_rational_order(void) {
+    /* Exact non-integer order with x = 0 collapses to (1 - Cos[Pi n])/2. */
+    assert_eval_eq("Fibonacci[1/2, 0]", "1/2", 0);
+    assert_eval_eq("Fibonacci[1/3, 0]", "1/4", 0);
+    assert_eval_eq("Fibonacci[2/3, 0]", "3/4", 0);
+    assert_eval_eq("Fibonacci[3/2, 0]", "1/2", 0);
+    /* Symbolic x keeps the rational-order call unevaluated. */
+    assert_eval_eq("Fibonacci[1/2, x]", "Fibonacci[1/2, x]", 0);
+}
+
 /* ---- Symbolic (unevaluated) ---------------------------------------- */
 
 static void test_symbolic(void) {
@@ -79,6 +91,8 @@ static void test_symbolic(void) {
 static void test_numeric_machine(void) {
     /* Generalized Fibonacci polynomial at real order. */
     assert_eval_startswith("Fibonacci[5.8, 3]", "283.48");
+    /* Rational order with an inexact x numericalizes the closed form. */
+    assert_eval_startswith("Fibonacci[1/2, 3.2]", "0.49483");
     /* Numeric one-argument order: Cos[Pi/2] = 0, so this is
      * GoldenRatio^(1/2)/Sqrt[5] = 0.568864... */
     assert_eval_startswith("Fibonacci[0.5]", "0.5688");
@@ -110,6 +124,7 @@ int main(void) {
     TEST(test_negative_order);
     TEST(test_listable);
     TEST(test_polynomials);
+    TEST(test_rational_order);
     TEST(test_symbolic);
     TEST(test_numeric_machine);
 #ifdef USE_MPFR

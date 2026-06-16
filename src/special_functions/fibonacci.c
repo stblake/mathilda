@@ -33,8 +33,16 @@
  *     paths (machine and MPFR), `numericalize` drives the whole reduction;
  *     this also yields complex results for complex arguments for free.
  *
- *   * Anything else (purely symbolic order, exact non-integer order with no
- *     N applied) -> NULL, leaving the call unevaluated.
+ *   * Fibonacci[n, x] with an exact non-integer order n (e.g. a Rational)
+ *     and an exact numeric x evaluates the SAME closed form exactly, but
+ *     only keeps the result when it collapses to a number -- so
+ *     Fibonacci[1/2, 0] -> 1/2 while Fibonacci[1/2, x] (symbolic x) and a
+ *     non-collapsing exact x stay unevaluated, matching the one-argument
+ *     convention that exact non-integer orders stay symbolic until they
+ *     reduce to a value.
+ *
+ *   * Anything else (purely symbolic order, one-argument exact non-integer
+ *     order with no N applied) -> NULL, leaving the call unevaluated.
  *
  * Memory: the builtin honours the ownership contract -- it never frees `res`,
  * returns a fresh Expr* on success or NULL otherwise, and clears every
@@ -231,10 +239,18 @@ static Expr* fib_number_numeric(const Expr* n) {
     return r;
 }
 
-/* Fibonacci[n, x] for inexact order with numeric x:
+/* Fibonacci[n, x] via the generalized closed form, for a non-integer numeric
+ * order n and a numeric x:
  *     beta = (x + Sqrt[x^2 + 4]) / 2,
- *     (beta^n - Cos[Pi n] beta^-n) / Sqrt[x^2 + 4]. */
-static Expr* fib_polynomial_numeric(const Expr* n, const Expr* x) {
+ *     (beta^n - Cos[Pi n] beta^-n) / Sqrt[x^2 + 4].
+ *
+ * When any input is inexact the form is numericalized at the inputs'
+ * precision (e.g. Fibonacci[1/2, 3.2] -> 0.4948...). When every input is
+ * exact the form is evaluated exactly and the result is kept only if it
+ * collapses to a number -- so Fibonacci[1/2, 0] -> 1/2, while exact inputs
+ * that would leave a radical stay unevaluated (NULL), mirroring the
+ * one-argument rule that exact non-integer orders stay symbolic. */
+static Expr* fib_polynomial_closed(const Expr* n, const Expr* x, bool inexact) {
     Expr* x2p4 = mk_fn2("Plus", mk_fn2("Power", expr_copy((Expr*)x), mk_int(2)),
                         mk_int(4));
     Expr* sqrtd = mk_fn1("Sqrt", x2p4);                 /* Sqrt[x^2 + 4] */
@@ -242,9 +258,18 @@ static Expr* fib_polynomial_numeric(const Expr* n, const Expr* x) {
                          mk_fn2("Plus", expr_copy((Expr*)x), expr_copy(sqrtd)),
                          mk_fn2("Power", mk_int(2), mk_int(-1)));
     Expr* form  = closed_form(beta, n, sqrtd);          /* adopts sqrtd as denom */
-    Expr* r = numericalize(form, fib_spec(n, x));
-    expr_free(form);
-    return r;
+
+    if (inexact) {
+        Expr* r = numericalize(form, fib_spec(n, x));
+        expr_free(form);
+        return r;
+    }
+
+    /* Exact path: evaluate, but accept only a numeric result. */
+    Expr* r = eval_and_free(form);
+    if (expr_is_numeric_like(r)) return r;
+    expr_free(r);
+    return NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -266,8 +291,12 @@ Expr* builtin_fibonacci(Expr* res) {
         Expr* n = res->data.function.args[0];
         Expr* x = res->data.function.args[1];
         if (expr_is_integer_like(n))  return fib_polynomial(n, x);
-        if (contains_inexact(n) && expr_is_numeric_like(x))
-            return fib_polynomial_numeric(n, x);
+        /* Non-integer numeric order with numeric x -> generalized closed
+         * form (numeric when any input is inexact, exact-then-collapse
+         * otherwise). Symbolic order or symbolic x stays unevaluated. */
+        if (expr_is_numeric_like(n) && expr_is_numeric_like(x))
+            return fib_polynomial_closed(n, x, contains_inexact(n) ||
+                                               contains_inexact(x));
         return NULL;                  /* symbolic order, or symbolic x */
     }
 
