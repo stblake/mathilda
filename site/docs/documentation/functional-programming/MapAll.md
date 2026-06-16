@@ -54,6 +54,16 @@ In[4]:= Map[f, {a, {b, c}}]
 Out[4]= {f[a], f[{b, c}]}
 ```
 
+```mathematica
+In[1]:= f //@ (x^2 + y)
+Out[1]= f[f[f[x]^f[2]] + f[y]]
+```
+
+```mathematica
+In[1]:= MapAll[g, 1 + x^2]
+Out[1]= g[g[1] + g[g[x]^g[2]]]
+```
+
 ### Notes
 
 `MapAll` applies `f` to every subexpression including atomic leaves, equivalent to `Map[f, expr, {0, Infinity}]`; its operator form is `f //@ expr`. Unlike `Map`, which only touches the first level (compare In[1] vs In[4]), `MapAll` reaches all levels and wraps the whole expression too.

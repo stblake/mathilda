@@ -11,6 +11,11 @@ In[3]:= x
 Out[3]= 10
 ```
 
+```mathematica
+In[1]:= Block[{n = 5}, Sum[k, {k, 1, n}]]
+Out[1]= 15
+```
+
 ### Notes
 
 `Block` localizes the *values* of the listed symbols: it temporarily resets them for the duration of the body and restores the outer values on exit. Unlike `Module`, it does not rename the symbols, so the same global `x` is reused with a saved-and-restored value.

@@ -23,6 +23,13 @@ In[1]:= {{1, 0}, {3/2, 1}} . {{4, 3}, {0, -3/2}}
 Out[1]= {{4, 3}, {6, 3}}
 ```
 
+A non-trivial `3x3` integer matrix factors exactly with no row swap (`p = {1, 2, 3}`), the multipliers `3, 2, 1` packed into the lower triangle:
+
+```mathematica
+In[1]:= LUDecomposition[{{1, 2, 4}, {3, 8, 14}, {2, 6, 13}}]
+Out[1]= {{{1, 2, 4}, {3, 2, 2}, {2, 1, 3}}, {1, 2, 3}, 0}
+```
+
 ### Notes
 
 `LUDecomposition` returns a list `{lu, p, c}`: `lu` is the combined Doolittle factor whose strictly-lower triangle is `L` (with an implicit unit diagonal) and whose upper triangle is `U`; `p` is the 1-indexed row-permutation vector (here `{1, 2}`, i.e. no swap was needed); and `c` is an `L`-infinity condition estimate that is `0` for exact or symbolic input. The relation is `m[[p]] == L . U`, as the manual reconstruction above confirms. The algorithm is Doolittle elimination with partial pivoting; exact integer inputs keep exact rational factors. A singular matrix emits `LUDecomposition::sing` and completes with a zero pivot on `U`'s diagonal; a non-square or empty matrix emits `LUDecomposition::matsq`.

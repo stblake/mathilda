@@ -117,6 +117,19 @@ In[1]:= Solve[{x + y == 3, x - y == 1}, {x, y}]
 Out[1]= {{x -> 2, y -> 1}}
 ```
 
+```mathematica
+In[1]:= Solve[a x^2 + b x + c == 0, x]
+Out[1]= {{x -> (1/2 (-b + Sqrt[b^2 - 4 a c]))/a}, {x -> (1/2 (-b - Sqrt[b^2 - 4 a c]))/a}}
+```
+
+```mathematica
+In[1]:= Solve[x^4 - 1 == 0, x]
+Out[1]= {{x -> -1}, {x -> 1}, {x -> -I}, {x -> I}}
+
+In[2]:= Solve[Sin[x] == 0, x]
+Out[2]= {{x -> ConditionalExpression[Pi + 2 C[1] Pi, Element[C[1], Integers]]}, {x -> ConditionalExpression[2 C[1] Pi, Element[C[1], Integers]]}}
+```
+
 ### Notes
 
 `Solve` returns a list of solution rule-lists, one per solution; each inner

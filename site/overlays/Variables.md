@@ -25,6 +25,13 @@ In[1]:= Variables[x^2 + 3 x + 2]
 Out[1]= {x}
 ```
 
+Fractional powers are treated as polynomial generators in their own right, so each radical base contributes its variable:
+
+```mathematica
+In[1]:= Variables[x^(1/2) + y^(2/3)]
+Out[1]= {x, y}
+```
+
 ### Notes
 
 `Variables` collects the independent generators that appear as bases of

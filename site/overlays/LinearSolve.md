@@ -17,8 +17,18 @@ Out[1]= {3, 2}
 ```
 
 ```mathematica
-In[1]:= LinearSolve[{{1, 1}, {0, 1}}, {3, 1}]
-Out[1]= {2, 1}
+In[1]:= LinearSolve[{{1, 1, 1}, {1, 2, 4}, {1, 3, 9}}, {a, b, c}]
+Out[1]= {3 a - 3 b + c, -5/2 a + 4 b - 3/2 c, 1/2 a - b + 1/2 c}
+```
+
+```mathematica
+In[1]:= LinearSolve[{{1, c}, {c, 1}}, {1, 0}]
+Out[1]= {1/(1 - c^2), -c/(1 - c^2)}
+```
+
+```mathematica
+In[1]:= LinearSolve[{{1, 2}, {3, 4}}, {{1, 0}, {0, 1}}]
+Out[1]= {{-2, 1}, {3/2, -1/2}}
 ```
 
 ```mathematica

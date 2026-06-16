@@ -26,6 +26,19 @@ In[1]:= MatrixPower[{{2, 0}, {0, 3}}, 2, {1, 1}]
 Out[1]= {4, 9}
 ```
 
+```mathematica
+In[1]:= MatrixPower[{{2, 1}, {0, 2}}, -2]
+Out[1]= {{1/4, -1/4}, {0, 1/4}}
+```
+
+```mathematica
+In[1]:= MatrixPower[{{0, 1}, {1, 1}}, 10]
+Out[1]= {{34, 55}, {55, 89}}
+
+In[2]:= MatrixPower[{{0, 1}, {1, 1}}, 10][[1, 2]] == Fibonacci[10]
+Out[2]= True
+```
+
 ### Notes
 
-`MatrixPower[m, n]` computes the `n`-th power by repeated matrix multiplication. A negative exponent (third example) raises the inverse to the corresponding positive power, so it requires a non-singular matrix; `MatrixPower[m, 0]` returns the identity matrix of the right size. The three-argument form `MatrixPower[m, n, v]` applies the matrix power to a vector — equivalent to `MatrixPower[m, n] . v` but without forming the full power matrix. Fractional exponents are not currently supported.
+`MatrixPower[m, n]` computes the `n`-th power by repeated matrix multiplication. A negative exponent raises the inverse to the corresponding positive power, so it requires a non-singular matrix; `MatrixPower[m, 0]` returns the identity matrix of the right size. The three-argument form `MatrixPower[m, n, v]` applies the matrix power to a vector — equivalent to `MatrixPower[m, n] . v` but without forming the full power matrix. The last example is the classic identity for the Fibonacci `Q`-matrix: the powers of `{{0, 1}, {1, 1}}` carry consecutive Fibonacci numbers, with the off-diagonal entry of the `n`-th power equal to `Fibonacci[n]`. Because the arithmetic is exact (with automatic GMP bignum promotion), these powers stay exact for arbitrarily large `n`. Fractional exponents are not currently supported.

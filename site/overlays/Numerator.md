@@ -25,6 +25,22 @@ In[1]:= Numerator[a/b + c/d]
 Out[1]= a/b + c/d
 ```
 
+Combine the sum into a single fraction first, then `Numerator` returns the
+genuine combined top:
+
+```mathematica
+In[1]:= Numerator[Together[a/b + c/d]]
+Out[1]= b c + a d
+```
+
+Several factors are sorted into numerator and denominator by the sign of their
+exponents — only `z^(-1)` is pushed below the bar:
+
+```mathematica
+In[1]:= Numerator[2 x/(3 y) * z^(-1)]
+Out[1]= 2 x
+```
+
 ### Notes
 
 Numerator extracts the numerator of the structural rational form of its argument.

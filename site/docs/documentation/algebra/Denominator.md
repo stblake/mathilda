@@ -59,13 +59,23 @@ Out[1]= -1 + x
 ```
 
 ```mathematica
-In[1]:= Denominator[3]
+In[1]:= Denominator[a/b + c/d]
 Out[1]= 1
 ```
 
 ```mathematica
-In[1]:= Denominator[a/b + c/d]
-Out[1]= 1
+In[1]:= Denominator[Together[a/b + c/d]]
+Out[1]= b d
+```
+
+```mathematica
+In[1]:= Denominator[(x^2-1)/((x-2)^3 (x+5))]
+Out[1]= (5 + x) (-2 + x)^3
+```
+
+```mathematica
+In[1]:= Denominator[x^(-2) y^3 z^(-1)]
+Out[1]= x^2 z
 ```
 
 ### Notes

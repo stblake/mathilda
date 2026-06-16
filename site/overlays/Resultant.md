@@ -26,6 +26,21 @@ In[1]:= Resultant[x^2 - y, x^2 + y, x]
 Out[1]= 4 y^2
 ```
 
+```mathematica
+In[1]:= Resultant[x^2 + a x + b, 2 x + a, x]
+Out[1]= -a^2 + 4 b
+```
+
+```mathematica
+In[1]:= Resultant[x^3 + p x + q, 3 x^2 + p, x]
+Out[1]= 4 p^3 + 27 q^2
+```
+
+```mathematica
+In[1]:= Factor[Resultant[x^2 + y^2 - 1, x + y - 1, x]]
+Out[1]= 2 y (-1 + y)
+```
+
 ### Notes
 
 `Resultant[p, q, x]` returns a scalar in the remaining variables that

@@ -25,6 +25,16 @@ In[1]:= Expand[(x + 2)^2 (x - 1)]
 Out[1]= -4 + 3 x^2 + x^3
 ```
 
+```mathematica
+In[1]:= Expand[(1 + x + y)^3]
+Out[1]= 1 + 3 x + 3 x^2 + x^3 + 3 y + 6 x y + 3 x^2 y + 3 y^2 + 3 x y^2 + y^3
+```
+
+```mathematica
+In[1]:= Expand[(1 + x)^10]
+Out[1]= 1 + 10 x + 45 x^2 + 120 x^3 + 210 x^4 + 252 x^5 + 210 x^6 + 120 x^7 + 45 x^8 + 10 x^9 + x^10
+```
+
 ### Notes
 
 `Expand` applies the distributive law to products and integer powers,

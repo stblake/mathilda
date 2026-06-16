@@ -79,6 +79,11 @@ In[1]:= PolynomialRemainder[x^2 + 1, x, x]
 Out[1]= 1
 ```
 
+```mathematica
+In[1]:= PolynomialRemainder[x^5 + x + 1, x^2 + 1, x]
+Out[1]= 1 + 2 x
+```
+
 ### Notes
 
 `PolynomialRemainder[p, q, x]` returns the remainder left after dividing `p`

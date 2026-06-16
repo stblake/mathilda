@@ -106,6 +106,16 @@ In[1]:= PolynomialGCD[x^3 - x, x^2 - x]
 Out[1]= -x + x^2
 ```
 
+```mathematica
+In[1]:= PolynomialGCD[x^6 - 1, x^4 - 1, x^9 - 1]
+Out[1]= -1 + x
+```
+
+```mathematica
+In[1]:= PolynomialGCD[x^4 - 2, x^2 - Sqrt[2], Extension -> Sqrt[2]]
+Out[1]= -Sqrt[2] + x^2
+```
+
 ### Notes
 
 `PolynomialGCD` returns the greatest common divisor of its polynomial

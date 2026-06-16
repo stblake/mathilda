@@ -25,6 +25,16 @@ In[1]:= Map[f, {{a}, {b}}, {2}]
 Out[1]= {{f[a]}, {f[b]}}
 ```
 
+```mathematica
+In[1]:= Map[Total, {{1, 2, 3}, {4, 5, 6}}]
+Out[1]= {6, 15}
+```
+
+```mathematica
+In[1]:= Map[#^2 &, x + y + z]
+Out[1]= x^2 + y^2 + z^2
+```
+
 ### Notes
 
 `f /@ expr` is the operator shorthand for `Map[f, expr]`. By default the function

@@ -25,6 +25,16 @@ In[1]:= Coefficient[3 x^2 y + 2 x y, x, 2]
 Out[1]= 3 y
 ```
 
+```mathematica
+In[1]:= Coefficient[(1 + x)^50, x, 25]
+Out[1]= 126410606437752
+```
+
+```mathematica
+In[1]:= Coefficient[(a + b)^4, a^2 b^2]
+Out[1]= 6
+```
+
 ### Notes
 
 `Coefficient[expr, form]` returns the coefficient of `form^1` after expanding
@@ -33,4 +43,8 @@ coefficient of `form^n`. Using `n = 0` recovers the term free of `form`, e.g.
 the constant `c` in `a x^2 + b x + c`. The extracted coefficient retains any
 other variables, so the `x^2` coefficient of `3 x^2 y + 2 x y` is `3 y`. The
 `form` is matched structurally against the bases of products, and `n` may be a
-non-negative integer (or a rational for Laurent/Puiseux expressions).
+non-negative integer (or a rational for Laurent/Puiseux expressions). It scales
+to high degrees — extracting the central binomial coefficient
+`C(50, 25) = 126410606437752` from `(1 + x)^50` directly — and `form` need not be
+a single variable: passing the monomial `a^2 b^2` picks out its coefficient `6`
+in `(a + b)^4`.

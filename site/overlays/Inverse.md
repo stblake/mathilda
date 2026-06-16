@@ -21,6 +21,21 @@ Out[1]= {{1, -1, 0}, {0, 1, -1}, {0, 0, 1}}
 ```
 
 ```mathematica
+In[1]:= Inverse[{{a, b}, {c, d}}]
+Out[1]= {{d/(-b c + a d), -b/(-b c + a d)}, {-c/(-b c + a d), a/(-b c + a d)}}
+```
+
+```mathematica
+In[1]:= Inverse[{{1, x}, {x, 1}}]
+Out[1]= {{1/(1 - x^2), -x/(1 - x^2)}, {-x/(1 - x^2), 1/(1 - x^2)}}
+```
+
+```mathematica
+In[1]:= Inverse[{{2.0, 1.0}, {1.0, 3.0}}]
+Out[1]= {{0.6, -0.2}, {-0.2, 0.4}}
+```
+
+```mathematica
 In[1]:= Inverse[{{1, 2}, {2, 4}}]
 Out[1]= Inverse[{{1, 2}, {2, 4}}]
 ```

@@ -17,13 +17,23 @@ Out[1]= {5, 2}
 ```
 
 ```mathematica
-In[1]:= Eigenvalues[{{2, 1}, {1, 2}}]
-Out[1]= {3, 1}
+In[1]:= Eigenvalues[{{0, 1}, {-1, 0}}]
+Out[1]= {-I, I}
 ```
 
 ```mathematica
-In[1]:= Eigenvalues[{{0, 1}, {-1, 0}}]
-Out[1]= {-I, I}
+In[1]:= Eigenvalues[{{a, b}, {c, d}}]
+Out[1]= {1/2 (a + d + Sqrt[(-a - d)^2 - 4 (-b c + a d)]), 1/2 (a + d - Sqrt[(-a - d)^2 - 4 (-b c + a d)])}
+```
+
+```mathematica
+In[1]:= Eigenvalues[{{0, 1, 0}, {0, 0, 1}, {1, 0, 0}}]
+Out[1]= {1, -(-1)^(1/3), (-1)^(2/3)}
+```
+
+```mathematica
+In[1]:= Eigenvalues[{{5, 4, 2}, {4, 5, 2}, {2, 2, 2}}]
+Out[1]= {10, 1, 1}
 ```
 
 ### Notes

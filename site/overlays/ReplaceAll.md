@@ -20,8 +20,18 @@ Out[1]= 1 + a + (1 + a)^2
 ```
 
 ```mathematica
-In[1]:= f[1, 2] /. f[a_, b_] -> a + b
-Out[1]= 3
+In[1]:= D[x^x, x] /. Log[x] -> L
+Out[1]= x^(-1 + x) (x + L x)
+```
+
+```mathematica
+In[1]:= {{1, 2}, {3, 4}} /. {a_, b_} :> a + b
+Out[1]= {4, 6}
+```
+
+```mathematica
+In[1]:= x^4 + 1 /. x -> Sqrt[2]
+Out[1]= 5
 ```
 
 ### Notes

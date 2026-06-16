@@ -87,6 +87,13 @@ In[1]:= Binomial[n, 2]
 Out[1]= 1/2 n (-1 + n)
 ```
 
+The polynomial coefficients reproduce the binomial theorem:
+
+```mathematica
+In[1]:= Sum[Binomial[4, k] x^k, {k, 0, 4}]
+Out[1]= 1 + 4 x + 6 x^2 + 4 x^3 + x^4
+```
+
 ### Notes
 
 Integer arguments give exact coefficients via the falling-factorial product, with

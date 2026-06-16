@@ -60,6 +60,16 @@ In[1]:= GCD[0, 5]
 Out[1]= 5
 ```
 
+```mathematica
+In[1]:= GCD[2^60 - 1, 2^36 - 1]
+Out[1]= 4095
+```
+
+```mathematica
+In[1]:= GCD[Fibonacci[30], Fibonacci[18]]
+Out[1]= 8
+```
+
 ### Notes
 
 GCD folds the Euclidean algorithm across all arguments, so three-or-more-argument
@@ -67,4 +77,7 @@ calls such as `GCD[12, 18, 30]` reduce pairwise to `6`. It extends to rationals
 via `gcd(a/b, c/d) = gcd(a,c)/lcm(b,d)`, giving `GCD[1/2, 1/3] = 1/6`. The
 convention `GCD[0, n] = n` holds, since zero is divisible by every integer. Large
 powers of two are handled exactly through GMP, with `GCD[2^20, 2^15] = 2^15 =
-32768`.
+32768`. Two number-theoretic identities show through the arithmetic:
+`gcd(2^m - 1, 2^n - 1) = 2^gcd(m,n) - 1`, so `GCD[2^60 - 1, 2^36 - 1] = 2^12 - 1 =
+4095`; and Fibonacci numbers satisfy `gcd(F_m, F_n) = F_gcd(m,n)`, giving
+`GCD[Fibonacci[30], Fibonacci[18]] = Fibonacci[6] = 8`.

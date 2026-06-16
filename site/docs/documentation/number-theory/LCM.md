@@ -49,14 +49,28 @@ In[1]:= LCM[12, 18, 30]
 Out[1]= 180
 ```
 
-```mathematica
-In[1]:= LCM[4, 6]
-Out[1]= 12
-```
+The absorbing convention `LCM[0, n] = 0`:
 
 ```mathematica
 In[1]:= LCM[0, 5]
 Out[1]= 0
+```
+
+`LCM` extends to rationals via numerator/denominator (`lcm(numerators)/gcd(denominators)`):
+
+```mathematica
+In[1]:= LCM[1/2, 2/3, 3/4]
+Out[1]= 6
+```
+
+Folded across a range it gives the smallest number divisible by every integer `1..20`, and large inputs promote to a GMP bigint:
+
+```mathematica
+In[1]:= LCM @@ Range[1, 20]
+Out[1]= 232792560
+
+In[2]:= LCM[123456789, 987654321]
+Out[2]= 13548070123626141
 ```
 
 ### Notes

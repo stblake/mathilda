@@ -21,6 +21,11 @@ In[1]:= PolynomialQuotient[x^2 + 1, x, x]
 Out[1]= x
 ```
 
+```mathematica
+In[1]:= PolynomialQuotient[x^4 - 2, x^2 - Sqrt[2], x, Extension -> Sqrt[2]]
+Out[1]= Sqrt[2] + x^2
+```
+
 ### Notes
 
 `PolynomialQuotient[p, q, x]` performs long division of `p` by `q` in the

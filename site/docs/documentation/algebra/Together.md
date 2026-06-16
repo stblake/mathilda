@@ -88,6 +88,26 @@ In[1]:= Together[a/b + c/d]
 Out[1]= (b c + a d)/(b d)
 ```
 
+```mathematica
+In[1]:= Together[1/x + 1/(x+1) + 1/(x+2)]
+Out[1]= (2 + 6 x + 3 x^2)/(2 x + 3 x^2 + x^3)
+```
+
+A telescoping sum collapses completely, with the GCD machinery cancelling the
+common factor so the result is an exact `1`:
+
+```mathematica
+In[1]:= Together[a/(a-b) + b/(b-a)]
+Out[1]= 1
+```
+
+Common factors hidden across a factorable denominator are detected and removed:
+
+```mathematica
+In[1]:= Together[1/(x-1) - 2/(x^2-1)]
+Out[1]= 1/(1 + x)
+```
+
 ### Notes
 
 Together combines a sum of fractions over a single common denominator, the inverse

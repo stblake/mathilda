@@ -87,9 +87,19 @@ In[1]:= NestList[2 # &, 1, 5]
 Out[1]= {1, 2, 4, 8, 16, 32}
 ```
 
+The successive convergents of Newton's iteration for `Sqrt[2]`, kept exact —
+each entry roughly doubles the number of correct digits:
+
 ```mathematica
-In[1]:= NestList[# + 1 &, 0, 4]
-Out[1]= {0, 1, 2, 3, 4}
+In[1]:= NestList[(# + 2/#)/2 &, 1, 4]
+Out[1]= {1, 3/2, 17/12, 577/408, 665857/470832}
+```
+
+Building the first few convergents of a continued fraction symbolically:
+
+```mathematica
+In[1]:= NestList[1/(1 + #) &, x, 3]
+Out[1]= {x, 1/(1 + x), 1/(1 + 1/(1 + x)), 1/(1 + 1/(1 + 1/(1 + x)))}
 ```
 
 ### Notes

@@ -6,13 +6,8 @@ references:
 ### Worked examples
 
 ```mathematica
-In[1]:= Limit[(Cos[x] - 1)/x^2, x -> 0]
-Out[1]= -1/2
-```
-
-```mathematica
-In[1]:= Limit[(1 + 1/x)^x, x -> Infinity]
-Out[1]= E
+In[1]:= Limit[Sin[x]/x, x -> 0]
+Out[1]= 1
 ```
 
 ```mathematica
@@ -21,8 +16,36 @@ Out[1]= 2
 ```
 
 ```mathematica
-In[1]:= Limit[Tan[x]/x, x -> 0]
-Out[1]= 1
+In[1]:= Limit[(1 + a/x)^x, x -> Infinity]
+Out[1]= E^a
+```
+
+```mathematica
+In[1]:= Limit[(Sin[x] - x + x^3/6)/x^5, x -> 0]
+Out[1]= 1/120
+```
+
+```mathematica
+In[1]:= Limit[(x^x - x)/(1 - x + Log[x]), x -> 1]
+Out[1]= -2
+```
+
+```mathematica
+In[1]:= Limit[x - Sqrt[x^2 + x], x -> Infinity]
+Out[1]= -1/2
+```
+
+```mathematica
+In[1]:= Limit[x^2 + y^2, {x, y} -> {1, 2}]
+Out[1]= 5
+```
+
+```mathematica
+In[1]:= Limit[1/x, x -> 0, Direction -> "FromAbove"]
+Out[1]= Infinity
+
+In[2]:= Limit[1/x, x -> 0, Direction -> "FromBelow"]
+Out[2]= -Infinity
 ```
 
 ### Notes

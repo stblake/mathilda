@@ -48,3 +48,25 @@ For `x ≤ 10^6`, `pi_base` answers directly by binary-searching the cached prim
 - M. Deléglise and J. Rivat, "Computing π(x): the Meissel, Lehmer, Lagarias, Miller, Odlyzko method", Math. Comp. 65, 1996.
 - Source: [`src/facint.c`](https://github.com/stblake/mathilda/blob/main/src/facint.c)
 - Specification: [`docs/spec/builtins/number-theory.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/number-theory.md)
+
+## Notes & additional examples
+
+### Worked examples
+
+```mathematica
+In[1]:= PrimePi[100]
+Out[1]= 25
+```
+
+The count scales to large bounds; there are 78498 primes below one million:
+
+```mathematica
+In[1]:= PrimePi[10^6]
+Out[1]= 78498
+```
+
+### Notes
+
+`PrimePi[x]` gives the prime-counting function `π(x)`, the number of primes
+less than or equal to `x`. For `x = 100` the answer is `25`; for `x = 10^6` it
+is `78498`, consistent with the asymptotic `π(x) ~ x / Log[x]`.
