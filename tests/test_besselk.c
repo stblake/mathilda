@@ -84,6 +84,16 @@ void test_besselk_origin() {
     assert_eval_eq("BesselK[11/2, 1]", "BesselK[11/2, 1]", 0);
 }
 
+/* ---- no argument-parity fold: K_n has a branch cut on z < 0 --------- */
+
+void test_besselk_no_argument_parity() {
+    /* Unlike BesselJ/BesselI, K_n(-z) carries no clean parity (branch cut
+     * along the negative real axis), so it must stay unevaluated. */
+    assert_eval_eq("BesselK[0, -z]", "BesselK[0, -z]", 0);
+    assert_eval_eq("BesselK[1, -z]", "BesselK[1, -z]", 0);
+    assert_eval_eq("BesselK[2, -z]", "BesselK[2, -z]", 0);
+}
+
 /* ---- machine-precision real (reference constants) ------------------- */
 
 void test_besselk_machine_real() {
@@ -300,6 +310,7 @@ int main() {
     core_init();
 
     TEST(test_besselk_origin);
+    TEST(test_besselk_no_argument_parity);
     TEST(test_besselk_machine_real);
     TEST(test_besselk_arbitrary_real);
     TEST(test_besselk_halfinteger_oracle);

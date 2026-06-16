@@ -1075,6 +1075,43 @@ static Expr* bi_eval(const Expr* order, const Expr* z, mpfr_prec_t out_prec) {
 /* Dispatch                                                           */
 /* ------------------------------------------------------------------ */
 
+/*
+ * bessel_z_parity_fold:
+ * For INTEGER order n and a superficially-negative argument z, apply the
+ * argument-parity reflection  F_n(z) = (-1)^n F_n(-z), where F is BesselJ or
+ * BesselI -- both entire in z for integer order. Returns the rewritten
+ * expression  (-1)^n F[n, -z]  (with -z canonicalised), or NULL when the fold
+ * does not apply (non-integer order, or z not superficially negative).
+ *
+ * NOT used for BesselK: K_n has a branch cut along the negative real axis, so
+ * K_n(-z) carries no clean parity (Mathematica leaves it unevaluated).
+ * Non-integer orders are excluded for the same branch-cut reason (J_nu / I_nu
+ * are not entire). The negative-integer-order reflection (J_{-n}=(-1)^n J_n,
+ * I_{-n}=I_n) is handled separately by the DownValues in src/internal/bessel.m
+ * and composes with this fold.
+ */
+static Expr* bessel_z_parity_fold(const char* head, Expr* order, Expr* z) {
+    if (order->type != EXPR_INTEGER) return NULL;
+    if (!expr_is_superficially_negative(z)) return NULL;
+
+    /* -z, evaluated so Times[-1, Times[-1, w]] collapses back to w (this also
+     * guarantees the recursive call's argument is not superficially negative,
+     * so the fold cannot loop). */
+    Expr* negz_args[2] = { expr_new_integer(-1), expr_copy(z) };
+    Expr* negz = eval_and_free(
+        expr_new_function(expr_new_symbol(SYM_Times), negz_args, 2));
+
+    Expr* call_args[2] = { expr_copy(order), negz };
+    Expr* call = expr_new_function(expr_new_symbol(head), call_args, 2);
+
+    /* (-1)^n: n even -> +call, n odd -> -call. (C's & on a negative odd long
+     * still yields 1 under two's complement, but order here is always the
+     * literal integer the user wrote.) */
+    if (((long)order->data.integer & 1L) == 0) return call;
+    Expr* t_args[2] = { expr_new_integer(-1), call };
+    return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
+}
+
 static Expr* besselj_two_arg(Expr* order, Expr* z) {
     /* Exact special value at the origin (integer order). */
     if (z->type == EXPR_INTEGER && z->data.integer == 0) {
@@ -1097,6 +1134,11 @@ static Expr* besselj_two_arg(Expr* order, Expr* z) {
         if (out) return out;
     }
 #endif
+
+    /* Argument parity: J_n(-z) = (-1)^n J_n(z) for integer n. Fires only for
+     * symbolic / exact-symbolic z (concrete inexact z is handled numerically
+     * above). */
+    { Expr* f = bessel_z_parity_fold(SYM_BesselJ, order, z); if (f) return f; }
 
     return NULL;
 }
@@ -1181,6 +1223,10 @@ static Expr* besseli_two_arg(Expr* order, Expr* z) {
         if (out) return out;
     }
 #endif
+
+    /* Argument parity: I_n(-z) = (-1)^n I_n(z) for integer n. Fires only for
+     * symbolic / exact-symbolic z (concrete inexact z handled numerically). */
+    { Expr* f = bessel_z_parity_fold(SYM_BesselI, order, z); if (f) return f; }
 
     return NULL;
 }

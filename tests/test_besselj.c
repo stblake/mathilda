@@ -69,6 +69,24 @@ void test_besselj_exact() {
     assert_eval_eq("BesselJ[11/2, 1]", "BesselJ[11/2, 1]", 0);
 }
 
+/* ---- argument parity: J_n(-z) = (-1)^n J_n(z), integer n only ------- */
+
+void test_besselj_argument_parity() {
+    /* Even / odd integer order folds the negated argument. */
+    assert_eval_eq("BesselJ[0, -z]", "BesselJ[0, z]", 0);
+    assert_eval_eq("BesselJ[2, -z]", "BesselJ[2, z]", 0);
+    assert_eval_eq("BesselJ[1, -z]", "-BesselJ[1, z]", 0);
+    assert_eval_eq("BesselJ[3, -z]", "-BesselJ[3, z]", 0);
+    /* Negated coefficient inside a product. */
+    assert_eval_eq("BesselJ[1, -2 x]", "-BesselJ[1, 2 x]", 0);
+    /* Exact negative integer argument folds (stays symbolic). */
+    assert_eval_eq("BesselJ[1, -2]", "-BesselJ[1, 2]", 0);
+    /* Non-integer / symbolic order does NOT fold (parity needs integer n). */
+    assert_eval_eq("BesselJ[n, -z]", "BesselJ[n, -z]", 0);
+    /* Positive-looking argument is untouched (no spurious fold / loop). */
+    assert_eval_eq("BesselJ[1, z]", "BesselJ[1, z]", 0);
+}
+
 /* ---- machine-precision real ----------------------------------------- */
 
 void test_besselj_machine_real() {
@@ -290,6 +308,7 @@ int main() {
     core_init();
 
     TEST(test_besselj_exact);
+    TEST(test_besselj_argument_parity);
     TEST(test_besselj_machine_real);
     TEST(test_besselj_arbitrary_real);
     TEST(test_besselj_mpfr_oracle);

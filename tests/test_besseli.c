@@ -86,6 +86,20 @@ void test_besseli_origin() {
     assert_eval_eq("BesselI[11/2, 1]", "BesselI[11/2, 1]", 0);
 }
 
+/* ---- argument parity: I_n(-z) = (-1)^n I_n(z), integer n only ------- */
+
+void test_besseli_argument_parity() {
+    assert_eval_eq("BesselI[0, -z]", "BesselI[0, z]", 0);
+    assert_eval_eq("BesselI[2, -z]", "BesselI[2, z]", 0);
+    assert_eval_eq("BesselI[1, -z]", "-BesselI[1, z]", 0);
+    assert_eval_eq("BesselI[3, -z]", "-BesselI[3, z]", 0);
+    assert_eval_eq("BesselI[1, -2 x]", "-BesselI[1, 2 x]", 0);
+    assert_eval_eq("BesselI[1, -2]", "-BesselI[1, 2]", 0);
+    /* Non-integer / symbolic order does NOT fold. */
+    assert_eval_eq("BesselI[n, -z]", "BesselI[n, -z]", 0);
+    assert_eval_eq("BesselI[1, z]", "BesselI[1, z]", 0);
+}
+
 /* ---- machine-precision real (reference constants) ------------------- */
 
 void test_besseli_machine_real() {
@@ -308,6 +322,7 @@ int main() {
     core_init();
 
     TEST(test_besseli_origin);
+    TEST(test_besseli_argument_parity);
     TEST(test_besseli_machine_real);
     TEST(test_besseli_arbitrary_real);
     TEST(test_besseli_halfinteger_oracle);

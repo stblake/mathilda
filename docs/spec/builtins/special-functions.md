@@ -927,6 +927,14 @@ successor to the file-local `acx`/`ecx`/`gcx` toolkits, so future
   `BesselJ[11/2, 1]` is left unevaluated. These rewrites and the
   negative-integer reflection `BesselJ[-n, x] = (-1)ⁿ BesselJ[n, x]` live in
   `src/internal/bessel.m`.
+- **Argument parity.** For **integer** order, Jₙ is entire and obeys
+  `BesselJ[n, -z] = (-1)ⁿ BesselJ[n, z]` (even in z for even n, odd for odd n),
+  applied whenever the argument is superficially negative — e.g.
+  `BesselJ[0, -z] = BesselJ[0, z]`, `BesselJ[1, -z] = -BesselJ[1, z]`,
+  `BesselJ[1, -2 x] = -BesselJ[1, 2 x]`. Folded in the C builtin (reusing
+  `expr_is_superficially_negative`) only for symbolic / exact arguments; a
+  concrete inexact argument is evaluated numerically instead. Non-integer and
+  symbolic orders are left unevaluated (no parity across the branch cut).
 - **Derivative.** `D[BesselJ[n, x], x] = (BesselJ[n-1, x] - BesselJ[n+1, x])/2`
   (DLMF 10.6.1).
 - **Series at 0.** `Series[BesselJ[0, x], {x, 0, 10}] =
@@ -1060,6 +1068,11 @@ the small-|z| power series is the same `I_μ(z)` series `BesselK` already uses.
   exact numeric argument such as `BesselI[11/2, 1]` is left unevaluated. These
   rewrites and the even-order reflection `BesselI[-n, x] = BesselI[n, x]` live in
   `src/internal/bessel.m`.
+- **Argument parity.** For **integer** order, Iₙ is entire and obeys
+  `BesselI[n, -z] = (-1)ⁿ BesselI[n, z]` (e.g. `BesselI[0, -z] = BesselI[0, z]`,
+  `BesselI[1, -z] = -BesselI[1, z]`), folded in the C builtin for symbolic /
+  exact arguments exactly as for `BesselJ`. `BesselK` carries **no** such fold —
+  its negative-real axis is a branch cut, so `BesselK[n, -z]` stays unevaluated.
 - **Derivative.** `D[BesselI[n, x], x] = (BesselI[n-1, x] + BesselI[n+1, x])/2`
   (DLMF 10.29.5; the two-term sum carries a `+` like `BesselK`, but the overall
   coefficient is `+1/2`).
