@@ -31,8 +31,10 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Statistics (`Mean`, `Variance`, `Median`, ...) | [`builtins/statistics.md`](docs/spec/builtins/statistics.md) |
 | Random number generation | [`builtins/random-number-generation.md`](docs/spec/builtins/random-number-generation.md) |
 | String operations | [`builtins/string-operations.md`](docs/spec/builtins/string-operations.md) |
-| Arithmetic (`Plus`, `Times`, `Power`, `Mod`, `GCD`, `Factorial`, `PrimeQ`, ...) | [`builtins/arithmetic.md`](docs/spec/builtins/arithmetic.md) |
-| Algebra (`Solve`, `Factor`, `Expand`, `Together`, `Apart`, `GroebnerBasis`, ...) | [`builtins/algebra.md`](docs/spec/builtins/algebra.md) |
+| Arithmetic (`Plus`, `Times`, `Power`, `Mod`, `Factorial`, `Binomial`, ...) | [`builtins/arithmetic.md`](docs/spec/builtins/arithmetic.md) |
+| Number theory (`GCD`, `LCM`, `PowerMod`, `PrimeQ`, `FactorInteger`, `EulerPhi`, ...) | [`builtins/number-theory.md`](docs/spec/builtins/number-theory.md) |
+| Algebra (`Factor`, `Expand`, `Together`, `Apart`, `GroebnerBasis`, ...) | [`builtins/algebra.md`](docs/spec/builtins/algebra.md) |
+| Solutions of equations (`Solve`, `SolveAlways`, `Root`, `ToRadicals`, `Eliminate`, ...) | [`builtins/solutions-of-equations.md`](docs/spec/builtins/solutions-of-equations.md) |
 | Comparisons (`Equal`, `Less`, `Greater`, `SameQ`, `Inequality`, ...) | [`builtins/comparisons.md`](docs/spec/builtins/comparisons.md) |
 | Calculus (`D`, `Integrate`, `Limit`, ...) | [`builtins/calculus.md`](docs/spec/builtins/calculus.md) |
 | Simplification (`Simplify`, `SimplifyCount`, `Assuming`, `$Assumptions`, `Element`, ...) | [`builtins/simplification.md`](docs/spec/builtins/simplification.md) |

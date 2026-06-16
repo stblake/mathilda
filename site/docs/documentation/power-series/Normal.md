@@ -22,6 +22,9 @@ Out[1]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5
 
 In[2]:= Normal[a + b]
 Out[2]= a + b
+
+In[3]:= Normal[Series[BesselJ[0, x], {x, Infinity, 2}]]
+Out[3]= Sqrt[2/Pi] Sqrt[1/x] Cos[1/4 Pi - x] - 1/8 Sqrt[2/Pi] (1/x)^(3/2) Sin[1/4 Pi - x]
 ```
 
 ## Implementation notes
@@ -40,6 +43,7 @@ for degenerate cases), evaluating the result. Any argument that is not a 6-eleme
 
 - `Protected`.
 - Returns the Plus of the coefficient-times-power terms (zero coefficients skipped). For non-`SeriesData` input, `Normal` is the identity.
+- Recurses through the whole expression, dropping the O-term of **every** `SeriesData` at any depth. This matters for expansions around `+-Infinity`, whose `SeriesData` is wrapped inside `Plus`/`Times` (e.g. the trig- or exponential-prefactored asymptotic forms of `BesselJ`, `BesselY`, `BesselK`, `BesselI`, `AiryAi`, `AiryBiPrime`); the surrounding factors are preserved and recombined by the evaluator.
 
 **Attributes:** `Protected`.
 

@@ -23,28 +23,42 @@ Work through them in order if you're new — each one builds on the last.
     Blanks and named patterns, conditions and tests, transformation rules
     (`->`, `:>`), replacement (`/.`, `//.`), and defining your own functions.
 
--   :material-decimal: __[4. Machine & arbitrary precision](04-machine-and-arbitrary-precision-arithmetic.md)__
+-   :material-decimal: __[4. Arithmetic](04-arithmetic.md)__
 
     Exact integers and rationals, fast machine-precision reals, and
-    arbitrary-precision arithmetic. Meet `N`, `Precision`, and when to use each.
+    arbitrary-precision arithmetic (`N`, `Precision`); the basic operators,
+    digit and radix manipulation, and combinatorial functions.
 
--   :material-function-variant: __[5. Algebra](05-algebra.md)__
+-   :material-key-variant: __[5. Number theory](05-number-theory.md)__
+
+    `GCD`, `ExtendedGCD`, modular arithmetic and `PowerMod`, primes
+    (`PrimeQ`, `FactorInteger`, `NextPrime`), `EulerPhi`, and continued
+    fractions — up to RSA-style worked examples.
+
+-   :material-function-variant: __[6. Algebra](06-algebra.md)__
 
     Expand and factor polynomials, dissect and divide them, reshape rational
-    expressions with `Together`/`Apart`, simplify, and solve equations.
+    expressions with `Together`/`Apart`, simplify, and put the polynomial
+    toolkit (`Resultant`, `GroebnerBasis`) to work on real problems.
 
--   :material-math-integral: __[6. Calculus](06-calculus.md)__
+-   :material-equal: __[7. Solutions of equations](07-solutions-of-equations.md)__
+
+    Solve polynomial, transcendental, and simultaneous equations with `Solve`;
+    `Root` objects and `ToRadicals`; eliminate variables with `Eliminate`; and
+    tackle geometry and optimisation problems.
+
+-   :material-math-integral: __[8. Calculus](08-calculus.md)__
 
     Differentiate and integrate, expand power series, take limits, evaluate
     symbolic sums, and find roots and extrema numerically.
 
--   :material-calculator-variant: __[7. Numerical calculus](07-numerical-calculus.md)__
+-   :material-calculator-variant: __[9. Numerical calculus](09-numerical-calculus.md)__
 
     When there is no closed form: numerical integration, differentiation,
     summation, products, limits, series, and residues — `NIntegrate`, `ND`,
     `NSum`, `NProduct`, `NLimit`, `NSeries`, `NResidue`.
 
--   :material-sigma-lower: __[8. Special functions](08-special-functions.md)__
+-   :material-sigma-lower: __[10. Special functions](10-special-functions.md)__
 
     The higher transcendental functions: `Gamma`, `Zeta`, `PolyGamma`, `Erf`,
     `PolyLog`, the Bernoulli and Euler numbers, and the hypergeometric family —

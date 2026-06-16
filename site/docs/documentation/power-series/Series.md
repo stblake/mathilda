@@ -103,6 +103,7 @@ avoid `O(N^2)` symbolic coefficient blow-up.
 - Symbolic parameters in exponents are supported: `Series[(1 + x)^n, {x, 0, 4}]` returns the binomial expansion with `n` kept unexpanded.
 - Approximate numeric coefficients flow through series arithmetic unchanged.
 - For unknown heads (e.g. `f[x]` where `f` has no rules), the engine falls back to naive Taylor via `D` at the expansion point; the coefficients appear as `Derivative[k][f][x0]`.
+- The `Assumptions -> assm` option selects the branch of the logarithmic expansions at `x = 0` (`ExpIntegralEi`, `LogIntegral`). When `assm` forces the expansion variable negative (e.g. `x < 0`, `x < -2`, `0 > x`, or an `And[...]` containing such a relation), `Log[x]` is emitted as `Log[-x]`; otherwise the principal `x > 0` form is used. The option is matched by its LHS symbol `Assumptions` (so it is not confused with a leading-term spec `x -> x0`) and is forwarded into each inner variable for multivariate expansions.
 
 **Attributes:** `HoldAll`, `Protected`.
 

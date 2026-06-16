@@ -20,7 +20,7 @@ All examples below are verified against the current Mathilda build.
 
 ```mathematica
 In[1]:= NSum[(-5)^i/i!, {i, 0, Infinity}, NSumTerms -> 25] - Exp[-5]
-Out[1]= 1.44069e-15
+Out[1]= 1.43895e-15
 
 In[2]:= NSum[1/i^2, {i, 1, Infinity}] - Pi^2/6 // N
 Out[2]= 2.22045e-16

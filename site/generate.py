@@ -120,12 +120,17 @@ CATEGORY_OVERRIDES = {
     "ConjugateTranspose": "linear-algebra",
     # Structural manipulation -------------------------------------------------
     "UpTo": "structural-manipulation",
+    # Solutions of Equations (Other-rescues; the core solver lives in its own
+    # spec file solutions-of-equations.md) ------------------------------------
+    "RootSum": "solutions-of-equations",
+    "GeneratedParameters": "solutions-of-equations",
+    "InverseFunctions": "solutions-of-equations",
+    "VerifySolutions": "solutions-of-equations",
+    "Eliminate": "solutions-of-equations",
     # Algebra (Other-rescues + moved out of Structural Manipulation) ----------
-    "Decompose": "algebra", "RootSum": "algebra",
-    "GeneratedParameters": "algebra", "InverseFunctions": "algebra",
-    "VerifySolutions": "algebra",
+    "Decompose": "algebra",
     "Coefficient": "algebra", "CoefficientList": "algebra", "Collect": "algebra",
-    "Discriminant": "algebra", "Eliminate": "algebra", "Expand": "algebra",
+    "Discriminant": "algebra", "Expand": "algebra",
     "ExpandDenominator": "algebra", "ExpandNumerator": "algebra",
     "Factor": "algebra", "FactorSquareFree": "algebra", "FactorTerms": "algebra",
     "FactorTermsList": "algebra", "GroebnerBasis": "algebra",

@@ -1,17 +1,15 @@
 # Algebra
 
-44 built-in function(s) in this category.
+33 built-in function(s) in this category.
 
 - [`Apart`](Apart.md) — Apart[expr] rewrites a rational expression as a sum of terms with minimal denominators.  _(Stable)_
 - [`Cancel`](Cancel.md) — Cancel[expr] cancels out common factors in the numerator and denominator of expr.  _(Stable)_
 - [`Coefficient`](Coefficient.md) — Coefficient[expr, form]  _(Stable)_
 - [`CoefficientList`](CoefficientList.md) — CoefficientList[poly, var] gives a list of coefficients of powers of var in poly, starting with power 0.  _(Stable)_
 - [`Collect`](Collect.md) — Collect[expr, x]  _(Stable)_
-- [`Cubics`](Cubics.md) — Cubics is an option for Solve that controls whether cubic  _(Experimental)_
 - [`Decompose`](Decompose.md) — Decompose[poly, x]  _(Stable)_
 - [`Denominator`](Denominator.md) — Denominator[expr]  _(Stable)_
 - [`Discriminant`](Discriminant.md) — Discriminant[poly, var]  _(Stable)_
-- [`Eliminate`](Eliminate.md) — Eliminate[eqns, vars]  _(Stable)_
 - [`Expand`](Expand.md) — Expand[expr] expands out products and powers in expr.  _(Stable)_
 - [`ExpandDenominator`](ExpandDenominator.md) — ExpandDenominator[expr]  _(Stable)_
 - [`ExpandNumerator`](ExpandNumerator.md) — ExpandNumerator[expr]  _(Stable)_
@@ -19,10 +17,8 @@
 - [`FactorSquareFree`](FactorSquareFree.md) — FactorSquareFree[poly]  _(Stable)_
 - [`FactorTerms`](FactorTerms.md) — FactorTerms[poly]  _(Stable)_
 - [`FactorTermsList`](FactorTermsList.md) — FactorTermsList[poly]  _(Stable)_
-- [`GeneratedParameters`](GeneratedParameters.md) — GeneratedParameters is an option for Solve specifying the  _(Experimental)_
 - [`GroebnerBasis`](GroebnerBasis.md) — GroebnerBasis[{p1, p2, ...}, {x1, x2, ...}]  _(Stable)_
 - [`HornerForm`](HornerForm.md) — HornerForm[poly]  _(Stable)_
-- [`InverseFunctions`](InverseFunctions.md) — InverseFunctions is an option for Solve that enables the  _(Experimental)_
 - [`IrreduciblePolynomialQ`](IrreduciblePolynomialQ.md) — IrreduciblePolynomialQ[poly]  _(Stable)_
 - [`MinimalPolynomial`](MinimalPolynomial.md) — MinimalPolynomial[s, x]  _(Stable)_
 - [`Numerator`](Numerator.md) — Numerator[expr]  _(Stable)_
@@ -34,15 +30,8 @@
 - [`PolynomialQuotient`](PolynomialQuotient.md) — PolynomialQuotient[p, q, x] gives the quotient of p and q, treated as polynomials in x, with any remainder dropped.  _(Stable)_
 - [`PolynomialRemainder`](PolynomialRemainder.md) — PolynomialRemainder[p, q, x] gives the remainder from dividing p by q, treated as polynomials in x.  _(Stable)_
 - [`PowerExpand`](PowerExpand.md) — PowerExpand[expr]  _(Stable)_
-- [`Quartics`](Quartics.md) — Quartics is an option for Solve that controls whether quartic  _(Experimental)_
 - [`Resultant`](Resultant.md) — Resultant[p, q, var]  _(Stable)_
-- [`Root`](Root.md) — Root[Function[t, p[t]], k]  _(Stable)_
-- [`RootSum`](RootSum.md) — RootSum[Function[t, p[t]], Function[t, body[t]]]  _(Stable)_
-- [`Solve`](Solve.md) — Solve[expr, vars]  _(Stable)_
-- [`SolveAlways`](SolveAlways.md) — SolveAlways[eqns, vars]  _(Stable)_
 - [`SubresultantPolynomials`](SubresultantPolynomials.md) — SubresultantPolynomials[poly1, poly2, var]  _(Stable)_
 - [`Subresultants`](Subresultants.md) — Subresultants[poly1, poly2, var]  _(Stable)_
-- [`ToRadicals`](ToRadicals.md) — ToRadicals[expr]  _(Stable)_
 - [`Together`](Together.md) — Together[expr] combines fractions over a common denominator, then cancels.  _(Stable)_
 - [`Variables`](Variables.md) — Variables[poly]  _(Stable)_
-- [`VerifySolutions`](VerifySolutions.md) — VerifySolutions is an option for Solve that decides whether to  _(Experimental)_

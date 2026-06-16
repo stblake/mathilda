@@ -4,8 +4,10 @@ nav:
   - 01-getting-started.md
   - 02-expressions-and-evaluation.md
   - 03-pattern-matching-and-rules.md
-  - 04-machine-and-arbitrary-precision-arithmetic.md
-  - 05-algebra.md
-  - 06-calculus.md
-  - 07-numerical-calculus.md
-  - 08-special-functions.md
+  - 04-arithmetic.md
+  - 05-number-theory.md
+  - 06-algebra.md
+  - 07-solutions-of-equations.md
+  - 08-calculus.md
+  - 09-numerical-calculus.md
+  - 10-special-functions.md

@@ -1,11 +1,12 @@
 # Structural Manipulation
 
-31 built-in function(s) in this category.
+33 built-in function(s) in this category.
 
 - [`Append`](Append.md) — Append[expr, elem] adds elem to the end of expr.  _(Stable)_
 - [`Delete`](Delete.md) — Delete[expr, n] deletes the element at position n in expr.  _(Stable)_
 - [`DeleteDuplicates`](DeleteDuplicates.md) — DeleteDuplicates[list]  _(Stable)_
 - [`Dimensions`](Dimensions.md) — Dimensions[expr]  _(Stable)_
+- [`Drop`](Drop.md) — Drop[list, n]  _(Stable)_
 - [`Extract`](Extract.md) — Extract[expr, pos]  _(Stable)_
 - [`First`](First.md) — First[expr] gives the first element of expr.  _(Stable)_
 - [`Flatten`](Flatten.md) — Flatten[list]  _(Stable)_
@@ -29,6 +30,7 @@
 - [`Sort`](Sort.md) — Sort[list] sorts the elements of list into canonical order.  _(Stable)_
 - [`Span`](Span.md) — i;;j represents a span of elements i through j. i;;j;;k represents a span in steps of k.  _(Stable)_
 - [`Split`](Split.md) — Split[list]  _(Stable)_
+- [`Take`](Take.md) — Take[list, n]  _(Stable)_
 - [`Tally`](Tally.md) — Tally[list] counts the number of occurrences of each distinct element in list.  _(Stable)_
 - [`Transpose`](Transpose.md) — Transpose[list]  _(Stable)_
 - [`Union`](Union.md) — Union[list]  _(Stable)_

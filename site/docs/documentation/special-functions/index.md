@@ -1,8 +1,14 @@
 # Special Functions
 
-21 built-in function(s) in this category.
+27 built-in function(s) in this category.
 
+- [`AiryAi`](AiryAi.md) — AiryAi[z]  _(Stable)_
+- [`AiryBi`](AiryBi.md) — AiryBi[z]  _(Stable)_
 - [`BernoulliB`](BernoulliB.md) — BernoulliB[n]  _(Stable)_
+- [`BesselI`](BesselI.md) — BesselI[n, z]  _(Stable)_
+- [`BesselJ`](BesselJ.md) — BesselJ[n, z]  _(Stable)_
+- [`BesselK`](BesselK.md) — BesselK[n, z]  _(Stable)_
+- [`BesselY`](BesselY.md) — BesselY[n, z]  _(Stable)_
 - [`Beta`](Beta.md) — Beta[a, b]  _(Stable)_
 - [`Erf`](Erf.md) — Erf[z]  _(Stable)_
 - [`Erfc`](Erfc.md) — Erfc[z]  _(Stable)_

@@ -168,6 +168,38 @@
     "url": "documentation/assignment-and-rules/AddTo/"
   },
   {
+    "name": "AiryAi",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "AiryAi[z]",
+    "url": "documentation/special-functions/AiryAi/"
+  },
+  {
+    "name": "AiryAiPrime",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "AiryAiPrime[z]",
+    "url": "documentation/other-advanced/AiryAiPrime/"
+  },
+  {
+    "name": "AiryBi",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "AiryBi[z]",
+    "url": "documentation/special-functions/AiryBi/"
+  },
+  {
+    "name": "AiryBiPrime",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "AiryBiPrime[z]",
+    "url": "documentation/other-advanced/AiryBiPrime/"
+  },
+  {
     "name": "Apart",
     "category": "Algebra",
     "slug": "algebra",
@@ -278,6 +310,38 @@
     "status": "Stable",
     "summary": "BernoulliB[n]",
     "url": "documentation/special-functions/BernoulliB/"
+  },
+  {
+    "name": "BesselI",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "BesselI[n, z]",
+    "url": "documentation/special-functions/BesselI/"
+  },
+  {
+    "name": "BesselJ",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "BesselJ[n, z]",
+    "url": "documentation/special-functions/BesselJ/"
+  },
+  {
+    "name": "BesselK",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "BesselK[n, z]",
+    "url": "documentation/special-functions/BesselK/"
+  },
+  {
+    "name": "BesselY",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "BesselY[n, z]",
+    "url": "documentation/special-functions/BesselY/"
   },
   {
     "name": "Beta",
@@ -521,11 +585,11 @@
   },
   {
     "name": "ContinuedFraction",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "ContinuedFraction[x, n]",
-    "url": "documentation/arithmetic/ContinuedFraction/"
+    "url": "documentation/number-theory/ContinuedFraction/"
   },
   {
     "name": "Cos",
@@ -577,11 +641,11 @@
   },
   {
     "name": "Cubics",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Experimental",
     "summary": "Cubics is an option for Solve that controls whether cubic",
-    "url": "documentation/algebra/Cubics/"
+    "url": "documentation/solutions-of-equations/Cubics/"
   },
   {
     "name": "D",
@@ -776,6 +840,14 @@
     "url": "documentation/assignment-and-rules/DownValues/"
   },
   {
+    "name": "Drop",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "Drop[list, n]",
+    "url": "documentation/structural-manipulation/Drop/"
+  },
+  {
     "name": "Dt",
     "category": "Calculus",
     "slug": "calculus",
@@ -817,11 +889,11 @@
   },
   {
     "name": "Eliminate",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Stable",
     "summary": "Eliminate[eqns, vars]",
-    "url": "documentation/algebra/Eliminate/"
+    "url": "documentation/solutions-of-equations/Eliminate/"
   },
   {
     "name": "End",
@@ -889,11 +961,11 @@
   },
   {
     "name": "EulerPhi",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "EulerPhi[n] gives the Euler totient function phi(n).",
-    "url": "documentation/arithmetic/EulerPhi/"
+    "url": "documentation/number-theory/EulerPhi/"
   },
   {
     "name": "Evaluate",
@@ -969,11 +1041,11 @@
   },
   {
     "name": "ExtendedGCD",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "ExtendedGCD[n1, n2, ...]",
-    "url": "documentation/arithmetic/ExtendedGCD/"
+    "url": "documentation/number-theory/ExtendedGCD/"
   },
   {
     "name": "Extract",
@@ -993,11 +1065,11 @@
   },
   {
     "name": "FactorInteger",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.",
-    "url": "documentation/arithmetic/FactorInteger/"
+    "url": "documentation/number-theory/FactorInteger/"
   },
   {
     "name": "FactorSquareFree",
@@ -1209,11 +1281,11 @@
   },
   {
     "name": "FromContinuedFraction",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "FromContinuedFraction[{a1, a2, ..., an}]",
-    "url": "documentation/arithmetic/FromContinuedFraction/"
+    "url": "documentation/number-theory/FromContinuedFraction/"
   },
   {
     "name": "FromDigits",
@@ -1241,11 +1313,11 @@
   },
   {
     "name": "GCD",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "GCD[n1, n2, ...]",
-    "url": "documentation/arithmetic/GCD/"
+    "url": "documentation/number-theory/GCD/"
   },
   {
     "name": "Gamma",
@@ -1257,11 +1329,11 @@
   },
   {
     "name": "GeneratedParameters",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Experimental",
     "summary": "GeneratedParameters is an option for Solve specifying the",
-    "url": "documentation/algebra/GeneratedParameters/"
+    "url": "documentation/solutions-of-equations/GeneratedParameters/"
   },
   {
     "name": "Get",
@@ -1601,11 +1673,11 @@
   },
   {
     "name": "InverseFunctions",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Experimental",
     "summary": "InverseFunctions is an option for Solve that enables the",
-    "url": "documentation/algebra/InverseFunctions/"
+    "url": "documentation/solutions-of-equations/InverseFunctions/"
   },
   {
     "name": "IrreduciblePolynomialQ",
@@ -1633,11 +1705,11 @@
   },
   {
     "name": "LCM",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "LCM[n1, n2, ...]",
-    "url": "documentation/arithmetic/LCM/"
+    "url": "documentation/number-theory/LCM/"
   },
   {
     "name": "LUDecomposition",
@@ -1726,6 +1798,14 @@
     "status": "Stable",
     "summary": "LinearSolve[m, b]",
     "url": "documentation/linear-algebra/LinearSolve/"
+  },
+  {
+    "name": "List",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "{e1, e2, ...} or List[e1, e2, ...]",
+    "url": "documentation/other-advanced/List/"
   },
   {
     "name": "ListQ",
@@ -1937,11 +2017,11 @@
   },
   {
     "name": "MultiplicativeOrder",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "MultiplicativeOrder[k, n]",
-    "url": "documentation/arithmetic/MultiplicativeOrder/"
+    "url": "documentation/number-theory/MultiplicativeOrder/"
   },
   {
     "name": "N",
@@ -2057,11 +2137,11 @@
   },
   {
     "name": "NextPrime",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "NextPrime[x] gives the next prime after x.",
-    "url": "documentation/arithmetic/NextPrime/"
+    "url": "documentation/number-theory/NextPrime/"
   },
   {
     "name": "NonNegative",
@@ -2377,11 +2457,11 @@
   },
   {
     "name": "PowerMod",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "PowerMod[a, b, m] gives a^b mod m.",
-    "url": "documentation/arithmetic/PowerMod/"
+    "url": "documentation/number-theory/PowerMod/"
   },
   {
     "name": "PreDecrement",
@@ -2417,35 +2497,35 @@
   },
   {
     "name": "PrimePi",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "PrimePi[x] gives the number of primes less than or equal to x.",
-    "url": "documentation/arithmetic/PrimePi/"
+    "url": "documentation/number-theory/PrimePi/"
   },
   {
     "name": "PrimeQ",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "PrimeQ[n]",
-    "url": "documentation/arithmetic/PrimeQ/"
+    "url": "documentation/number-theory/PrimeQ/"
   },
   {
     "name": "PrimitiveRoot",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "PrimitiveRoot[n]",
-    "url": "documentation/arithmetic/PrimitiveRoot/"
+    "url": "documentation/number-theory/PrimitiveRoot/"
   },
   {
     "name": "PrimitiveRootList",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "PrimitiveRootList[n]",
-    "url": "documentation/arithmetic/PrimitiveRootList/"
+    "url": "documentation/number-theory/PrimitiveRootList/"
   },
   {
     "name": "Print",
@@ -2497,11 +2577,11 @@
   },
   {
     "name": "Quartics",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Experimental",
     "summary": "Quartics is an option for Solve that controls whether quartic",
-    "url": "documentation/algebra/Quartics/"
+    "url": "documentation/solutions-of-equations/Quartics/"
   },
   {
     "name": "Quartiles",
@@ -2729,11 +2809,11 @@
   },
   {
     "name": "Root",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Stable",
     "summary": "Root[Function[t, p[t]], k]",
-    "url": "documentation/algebra/Root/"
+    "url": "documentation/solutions-of-equations/Root/"
   },
   {
     "name": "RootMeanSquare",
@@ -2745,11 +2825,11 @@
   },
   {
     "name": "RootSum",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Stable",
     "summary": "RootSum[Function[t, p[t]], Function[t, body[t]]]",
-    "url": "documentation/algebra/RootSum/"
+    "url": "documentation/solutions-of-equations/RootSum/"
   },
   {
     "name": "RotateLeft",
@@ -2838,6 +2918,14 @@
     "status": "Stable",
     "summary": "Series[f, {x, x0, n}]",
     "url": "documentation/power-series/Series/"
+  },
+  {
+    "name": "SeriesCoefficient",
+    "category": "Power Series",
+    "slug": "power-series",
+    "status": "Stable",
+    "summary": "SeriesCoefficient[f, {x, x0, k}]",
+    "url": "documentation/power-series/SeriesCoefficient/"
   },
   {
     "name": "SeriesData",
@@ -2961,19 +3049,19 @@
   },
   {
     "name": "Solve",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Stable",
     "summary": "Solve[expr, vars]",
-    "url": "documentation/algebra/Solve/"
+    "url": "documentation/solutions-of-equations/Solve/"
   },
   {
     "name": "SolveAlways",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Stable",
     "summary": "SolveAlways[eqns, vars]",
-    "url": "documentation/algebra/SolveAlways/"
+    "url": "documentation/solutions-of-equations/SolveAlways/"
   },
   {
     "name": "Sort",
@@ -3009,11 +3097,11 @@
   },
   {
     "name": "SquareFreeQ",
-    "category": "Arithmetic",
-    "slug": "arithmetic",
+    "category": "Number Theory",
+    "slug": "number-theory",
     "status": "Stable",
     "summary": "SquareFreeQ[expr]",
-    "url": "documentation/arithmetic/SquareFreeQ/"
+    "url": "documentation/number-theory/SquareFreeQ/"
   },
   {
     "name": "SquareMatrixQ",
@@ -3152,6 +3240,14 @@
     "url": "documentation/lists-and-iteration/Table/"
   },
   {
+    "name": "Take",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "Take[list, n]",
+    "url": "documentation/structural-manipulation/Take/"
+  },
+  {
     "name": "Tally",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -3233,11 +3329,11 @@
   },
   {
     "name": "ToRadicals",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Stable",
     "summary": "ToRadicals[expr]",
-    "url": "documentation/algebra/ToRadicals/"
+    "url": "documentation/solutions-of-equations/ToRadicals/"
   },
   {
     "name": "ToString",
@@ -3368,6 +3464,14 @@
     "url": "documentation/structural-manipulation/Union/"
   },
   {
+    "name": "UnitStep",
+    "category": "Elementary Functions",
+    "slug": "elementary-functions",
+    "status": "Stable",
+    "summary": "UnitStep[x]",
+    "url": "documentation/elementary-functions/UnitStep/"
+  },
+  {
     "name": "Unprotect",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -3441,11 +3545,11 @@
   },
   {
     "name": "VerifySolutions",
-    "category": "Algebra",
-    "slug": "algebra",
+    "category": "Solutions of Equations",
+    "slug": "solutions-of-equations",
     "status": "Experimental",
     "summary": "VerifySolutions is an option for Solve that decides whether to",
-    "url": "documentation/algebra/VerifySolutions/"
+    "url": "documentation/solutions-of-equations/VerifySolutions/"
   },
   {
     "name": "Which",

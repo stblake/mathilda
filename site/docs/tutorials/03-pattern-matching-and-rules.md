@@ -289,9 +289,10 @@ named patterns, guard matches with conditions and tests, rewrite with rules, and
 define your own (even recursive) functions. This is the heart of how Mathilda
 works — and how *you* extend it.
 
-- **[4. Machine & arbitrary precision](04-machine-and-arbitrary-precision-arithmetic.md)**
-  — meet Mathilda's three kinds of numbers: exact integers and rationals, fast
-  machine-precision reals, and arbitrary-precision arithmetic with `N`.
+- **[4. Arithmetic](04-arithmetic.md)**
+  — Mathilda's three kinds of numbers (exact integers and rationals, fast
+  machine-precision reals, and arbitrary-precision arithmetic with `N`), the
+  basic operators, digit and radix manipulation, and combinatorial functions.
 - **[Function reference](../documentation/index.md)** — the full catalogue of
   built-in functions, including the complete details of `MatchQ`, `Cases`,
   `Count`, `Replace`, and the rule operators used above.
