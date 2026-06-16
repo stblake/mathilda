@@ -58,13 +58,22 @@ static void assert_close(const char* input, double expected, double tol) {
 /* ---- exact values and passthrough ----------------------------------- */
 
 void test_besselj_exact() {
-    /* J_0(0) = 1, J_n(0) = 0 for integer n != 0. */
+    /* J_0(0) = 1, J_n(0) = 0 for integer n != 0 (either sign). */
     assert_eval_eq("BesselJ[0, 0]", "1", 0);
     assert_eval_eq("BesselJ[3, 0]", "0", 0);
     assert_eval_eq("BesselJ[5, 0]", "0", 0);
+    assert_eval_eq("BesselJ[-2, 0]", "0", 0);
+    /* Non-integer order at the origin: J_nu(0) = 0 for Re(nu) > 0, and
+     * ComplexInfinity for non-integer Re(nu) < 0 ((z/2)^nu -> inf). */
+    assert_eval_eq("BesselJ[1/2, 0]", "0", 0);
+    assert_eval_eq("BesselJ[3/2, 0]", "0", 0);
+    assert_eval_eq("BesselJ[-1/2, 0]", "ComplexInfinity", 0);
+    assert_eval_eq("BesselJ[-3/2, 0]", "ComplexInfinity", 0);
     /* Exact non-zero / symbolic arguments stay symbolic (no auto-numericize). */
     assert_eval_eq("BesselJ[0, 2]", "BesselJ[0, 2]", 0);
     assert_eval_eq("BesselJ[n, x]", "BesselJ[n, x]", 0);
+    /* Symbolic order at the origin stays symbolic (could be 0, 1, or inf). */
+    assert_eval_eq("BesselJ[a, 0]", "BesselJ[a, 0]", 0);
     /* Half-integer order with exact numeric argument stays unevaluated. */
     assert_eval_eq("BesselJ[11/2, 1]", "BesselJ[11/2, 1]", 0);
 }

@@ -900,9 +900,13 @@ is the reusable `ncpx` toolkit (`src/numeric_complex.{c,h}`) — the shared
 successor to the file-local `acx`/`ecx`/`gcx` toolkits, so future
 `BesselY`/`BesselI`/`BesselK` reuse it.
 
-- **Exact values.** `BesselJ[0, 0] = 1`; `BesselJ[n, 0] = 0` for integer
-  n ≠ 0. Other exact / symbolic arguments stay unevaluated and numericalize only
-  under `N` (e.g. `N[BesselJ[0, 4], 50]`).
+- **Exact values at the origin.** From the leading `(z/2)^ν/Γ(ν+1)` behaviour:
+  `BesselJ[0, 0] = 1`; `0` for integer n ≠ 0 (either sign) or non-integer Re(ν) > 0
+  (e.g. `BesselJ[1/2, 0] = 0`); `ComplexInfinity` for non-integer Re(ν) < 0 (e.g.
+  `BesselJ[-1/2, 0] = ComplexInfinity`); `Indeterminate` for pure-imaginary order.
+  A symbolic order at the origin stays unevaluated. Other exact / symbolic
+  arguments stay unevaluated and numericalize only under `N` (e.g.
+  `N[BesselJ[0, 4], 50]`).
 - **Numerics.** When some argument is inexact, machine- and arbitrary-precision
   (MPFR) real and complex order and argument evaluate numerically. The core
   routes on `r = |z|` and the requested precision `P`:
@@ -971,9 +975,12 @@ which also houses `BesselJ`), reusing the `ncpx` complex-MPFR toolkit
 (`src/numeric_complex.{c,h}`). Unlike `BesselJ` there is **no** MPFR library
 routine for the modified Bessel functions, so every value is summed from scratch.
 
-- **Exact values at the origin.** `BesselK[0, 0] = Infinity`;
-  `BesselK[n, 0] = ComplexInfinity` otherwise. Other exact / symbolic arguments
-  stay unevaluated and numericalize only under `N`.
+- **Exact values at the origin.** Kₙ diverges for every order with nonzero real
+  part: `BesselK[0, 0] = Infinity`; `BesselK[n, 0] = ComplexInfinity` otherwise
+  (integer, rational, or symbolic). A **pure-imaginary** order is the lone
+  exception — `K_{iτ}` oscillates with bounded amplitude as z → 0, so
+  `BesselK[I, 0] = Indeterminate`. Other exact / symbolic arguments stay
+  unevaluated and numericalize only under `N`.
 - **Numerics.** When some argument is inexact, machine- and arbitrary-precision
   (MPFR) real and complex order and argument evaluate numerically. The core
   routes on `r = |z|` and the requested precision `P`:
@@ -1037,9 +1044,12 @@ alongside `BesselJ`/`BesselK`), reusing the `ncpx` complex-MPFR toolkit
 routine for the modified Bessel functions, so every value is summed from scratch;
 the small-|z| power series is the same `I_μ(z)` series `BesselK` already uses.
 
-- **Exact values.** `BesselI[0, 0] = 1`; `BesselI[n, 0] = 0` for integer n ≠ 0.
-  Other exact / symbolic arguments stay unevaluated and numericalize only under
-  `N`.
+- **Exact values at the origin.** Same leading `(z/2)^ν/Γ(ν+1)` law as `BesselJ`:
+  `BesselI[0, 0] = 1`; `0` for integer n ≠ 0 or non-integer Re(ν) > 0 (e.g.
+  `BesselI[1/2, 0] = 0`); `ComplexInfinity` for non-integer Re(ν) < 0 (e.g.
+  `BesselI[-1/2, 0] = ComplexInfinity`); `Indeterminate` for pure-imaginary order;
+  symbolic order at the origin stays unevaluated. Other exact / symbolic arguments
+  stay unevaluated and numericalize only under `N`.
 - **Numerics.** When some argument is inexact, machine- and arbitrary-precision
   (MPFR) real and complex order and argument evaluate numerically. The core
   routes on `r = |z|` and the requested precision `P`:
@@ -1114,9 +1124,14 @@ Implemented in `src/special_functions/bessel.c` (the consolidated Bessel module,
 alongside `BesselJ`/`BesselK`/`BesselI`), reusing the `ncpx` complex-MPFR toolkit
 (`src/numeric_complex.{c,h}`) and the `BesselJ` power-series kernel directly.
 
-- **Exact values at the origin.** `BesselY[0, 0] = -Infinity`;
-  `BesselY[n, 0] = ComplexInfinity` for integer n ≠ 0. A non-integer order at the
-  origin, and other exact / symbolic arguments, stay symbolic.
+- **Exact values at the origin.** `BesselY[0, 0] = -Infinity`. Yₙ diverges for
+  every other order **except the negative half-odd-integers**, where `cos(νπ)`
+  cancels the divergent term (`Y_{-1/2}(z) = J_{1/2}(z) → 0`,
+  `Y_{-3/2} = -J_{3/2} → 0`, …) — so `BesselY[-1/2, 0] = 0`,
+  `BesselY[-3/2, 0] = 0`, etc. Everything else gives `ComplexInfinity` (integer
+  n ≠ 0, non-integer Re(ν) > 0, negative non-half-odd-integer, and symbolic
+  order), with `Indeterminate` for pure-imaginary order. Other exact arguments
+  stay symbolic.
 - **Numeric evaluation** at machine and arbitrary precision, real and complex,
   routed by `|z|` and order:
   - integer order, real **z > 0** → MPFR-native `mpfr_yn` (correctly rounded);

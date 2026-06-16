@@ -77,6 +77,12 @@ void test_besselk_origin() {
     assert_eval_eq("BesselK[0, 0]", "Infinity", 0);
     assert_eval_eq("BesselK[1, 0]", "ComplexInfinity", 0);
     assert_eval_eq("BesselK[2, 0]", "ComplexInfinity", 0);
+    /* Non-integer and symbolic orders also diverge -> ComplexInfinity. */
+    assert_eval_eq("BesselK[1/2, 0]", "ComplexInfinity", 0);
+    assert_eval_eq("BesselK[-1/2, 0]", "ComplexInfinity", 0);
+    assert_eval_eq("BesselK[a, 0]", "ComplexInfinity", 0);
+    /* Pure-imaginary order oscillates boundedly -> Indeterminate. */
+    assert_eval_eq("BesselK[I, 0]", "Indeterminate", 0);
     /* Exact non-zero / symbolic arguments stay symbolic. */
     assert_eval_eq("BesselK[0, 2]", "BesselK[0, 2]", 0);
     assert_eval_eq("BesselK[n, x]", "BesselK[n, x]", 0);

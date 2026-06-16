@@ -79,9 +79,17 @@ void test_besseli_origin() {
     assert_eval_eq("BesselI[1, 0]", "0", 0);
     assert_eval_eq("BesselI[3, 0]", "0", 0);
     assert_eval_eq("BesselI[-2, 0]", "0", 0);
+    /* Non-integer order at the origin: I_nu(0) = 0 for Re(nu) > 0, and
+     * ComplexInfinity for non-integer Re(nu) < 0 ((z/2)^nu -> inf). */
+    assert_eval_eq("BesselI[1/2, 0]", "0", 0);
+    assert_eval_eq("BesselI[3/2, 0]", "0", 0);
+    assert_eval_eq("BesselI[-1/2, 0]", "ComplexInfinity", 0);
+    assert_eval_eq("BesselI[-3/2, 0]", "ComplexInfinity", 0);
     /* Exact non-zero / symbolic arguments stay symbolic. */
     assert_eval_eq("BesselI[0, 2]", "BesselI[0, 2]", 0);
     assert_eval_eq("BesselI[n, x]", "BesselI[n, x]", 0);
+    /* Symbolic order at the origin stays symbolic. */
+    assert_eval_eq("BesselI[a, 0]", "BesselI[a, 0]", 0);
     /* Half-integer order with exact numeric argument stays unevaluated. */
     assert_eval_eq("BesselI[11/2, 1]", "BesselI[11/2, 1]", 0);
 }

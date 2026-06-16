@@ -71,8 +71,16 @@ void test_bessely_exact() {
     assert_eval_eq("BesselY[n, x]", "BesselY[n, x]", 0);
     /* Half-integer order with exact numeric argument stays unevaluated. */
     assert_eval_eq("BesselY[11/2, 1]", "BesselY[11/2, 1]", 0);
-    /* Non-integer order at the origin stays symbolic. */
-    assert_eval_eq("BesselY[1/2, 0]", "BesselY[1/2, 0]", 0);
+    /* Non-integer order at the origin: Y_nu diverges for every order EXCEPT
+     * the negative half-odd-integers, where cos(nu pi) cancels the divergent
+     * term (Y_{-1/2}(z) = J_{1/2}(z) -> 0, Y_{-3/2} = -J_{3/2} -> 0, ...). */
+    assert_eval_eq("BesselY[1/2, 0]", "ComplexInfinity", 0);
+    assert_eval_eq("BesselY[3/2, 0]", "ComplexInfinity", 0);
+    assert_eval_eq("BesselY[-1/2, 0]", "0", 0);
+    assert_eval_eq("BesselY[-3/2, 0]", "0", 0);
+    assert_eval_eq("BesselY[-5/2, 0]", "0", 0);
+    /* Symbolic order diverges generically. */
+    assert_eval_eq("BesselY[a, 0]", "ComplexInfinity", 0);
 }
 
 /* ---- no argument-parity fold (branch cut on the negative axis) ------- */

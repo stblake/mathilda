@@ -1505,16 +1505,109 @@ static Expr* bessel_z_parity_fold(const char* head, Expr* order, Expr* z) {
     return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
 }
 
-static Expr* besselj_two_arg(Expr* order, Expr* z) {
-    /* Exact special value at the origin (integer order). */
-    if (z->type == EXPR_INTEGER && z->data.integer == 0) {
-        long n;
-        if (order->type == EXPR_INTEGER) {
-            n = (long)order->data.integer;
-            return expr_new_integer(n == 0 ? 1 : 0);
-        }
-        return NULL;  /* non-integer order at 0: leave symbolic */
+/* ------------------------------------------------------------------ */
+/* Exact value at the origin z == 0, for any of the four kinds.        */
+/*                                                                      */
+/* The leading small-z behaviour is governed by (z/2)^nu / Gamma(nu+1) */
+/* (J, I) or by the connection formulae to it (Y, K). Classify the     */
+/* order nu and read off the limit:                                    */
+/*                                                                      */
+/*   J_nu(0), I_nu(0):  1            (nu = 0)                            */
+/*                      0            (nu integer != 0, or Re(nu) > 0)   */
+/*                      ComplexInfinity   (non-integer, Re(nu) < 0)     */
+/*                      Indeterminate     (Re(nu) = 0, nu != 0)         */
+/*                                                                      */
+/*   K_nu(0):           Infinity     (nu = 0)   else ComplexInfinity    */
+/*                      (diverges for every order)                      */
+/*                                                                      */
+/*   Y_nu(0):          -Infinity     (nu = 0)                           */
+/*                      0            (nu a negative half-odd-integer,   */
+/*                                    where cos(nu pi) = 0 cancels the  */
+/*                                    divergent term: Y_{-1/2}=J_{1/2}) */
+/*                      Indeterminate     (Re(nu) = 0, nu != 0)         */
+/*                      ComplexInfinity   (every other order)           */
+/* ------------------------------------------------------------------ */
+typedef struct {
+    bool exact;    /* nu is an exact number (not symbolic / inexact)   */
+    bool real;     /* imaginary part is zero                           */
+    bool is_int;   /* exact real integer                               */
+    bool half_odd; /* exact real with reduced denominator 2            */
+    int  re_sign;  /* sign of Re(nu): -1, 0, +1                        */
+} BesselOrder;
+
+static BesselOrder bessel_classify_order(Expr* order) {
+    BesselOrder o = { false, false, false, false, 0 };
+    Expr *re, *im;
+    if (is_complex(order, &re, &im)) {
+        /* Complex[re, im] with concrete parts. Inexact parts are left to
+         * the numeric path; symbolic parts make the order non-exact. */
+        if (bj_is_inexact_leaf(re) || bj_is_inexact_leaf(im)) return o;
+        if (!expr_is_numeric_like(re) || !expr_is_numeric_like(im)) return o;
+        o.exact = true;
+        o.re_sign = expr_numeric_sign(re);
+        o.real = (expr_numeric_sign(im) == 0);
+        return o;
     }
+    if (order->type == EXPR_INTEGER || order->type == EXPR_BIGINT) {
+        o.exact = true; o.real = true; o.is_int = true;
+        o.re_sign = expr_numeric_sign(order);
+        return o;
+    }
+    int64_t n, d;
+    if (is_rational(order, &n, &d)) {
+        o.exact = true; o.real = true;
+        o.re_sign = (n > 0) ? 1 : (n < 0 ? -1 : 0);
+        o.half_odd = (d == 2);  /* reduced n/2 => n is odd */
+        return o;
+    }
+    return o;  /* symbolic, or an inexact real leaf: leave to caller */
+}
+
+/* -Infinity, as Times[-1, Infinity]. */
+static Expr* bessel_neg_infinity(void) {
+    Expr* args[2] = { expr_new_integer(-1), expr_new_symbol(SYM_Infinity) };
+    return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
+}
+
+static Expr* bessel_origin_value(const char* kind, Expr* order) {
+    BesselOrder o = bessel_classify_order(order);
+
+    if (kind == SYM_BesselJ || kind == SYM_BesselI) {
+        if (!o.exact) return NULL;   /* symbolic order: leave for DownValues */
+        if (o.re_sign > 0) return expr_new_integer(0);
+        if (o.re_sign == 0)
+            return o.is_int ? expr_new_integer(1)            /* nu = 0      */
+                            : expr_new_symbol(SYM_Indeterminate); /* nu = i t */
+        /* Re(nu) < 0 */
+        return o.is_int ? expr_new_integer(0)                /* J_{-n} entire */
+                        : expr_new_symbol(SYM_ComplexInfinity);
+    }
+
+    if (kind == SYM_BesselK) {
+        if (o.exact && o.re_sign == 0) {
+            if (o.is_int) return expr_new_symbol(SYM_Infinity);  /* K_0(0) = +inf */
+            /* pure-imaginary order: bounded oscillation, no limit */
+            return expr_new_symbol(SYM_Indeterminate);
+        }
+        return expr_new_symbol(SYM_ComplexInfinity);
+    }
+
+    /* BesselY: diverges for every order except negative half-odd-integers. */
+    if (o.exact) {
+        if (o.is_int && o.re_sign == 0) return bessel_neg_infinity();
+        if (o.real && o.half_odd && o.re_sign < 0) return expr_new_integer(0);
+        if (o.real && o.re_sign == 0 && !o.is_int)           /* (unreachable for */
+            return expr_new_symbol(SYM_Indeterminate);       /*  real nu)        */
+        if (!o.real && o.re_sign == 0)
+            return expr_new_symbol(SYM_Indeterminate);       /* pure imaginary   */
+    }
+    return expr_new_symbol(SYM_ComplexInfinity);
+}
+
+static Expr* besselj_two_arg(Expr* order, Expr* z) {
+    /* Exact special value at the origin. */
+    if (z->type == EXPR_INTEGER && z->data.integer == 0)
+        return bessel_origin_value(SYM_BesselJ, order);
 
 #ifdef USE_MPFR
     /* Numeric path: evaluate when some argument is inexact and both are
@@ -1557,11 +1650,8 @@ Expr* builtin_besselj(Expr* res) {
 static Expr* besselk_two_arg(Expr* order, Expr* z) {
     /* Exact pole at the origin: K_0(0) = Infinity (real, directed),
      * K_nu(0) = ComplexInfinity for any other order. */
-    if (z->type == EXPR_INTEGER && z->data.integer == 0) {
-        if (order->type == EXPR_INTEGER && order->data.integer == 0)
-            return expr_new_symbol(SYM_Infinity);
-        return expr_new_symbol(SYM_ComplexInfinity);
-    }
+    if (z->type == EXPR_INTEGER && z->data.integer == 0)
+        return bessel_origin_value(SYM_BesselK, order);
 
 #ifdef USE_MPFR
     /* Numeric path: evaluate when some argument is inexact and both are
@@ -1595,15 +1685,9 @@ Expr* builtin_besselk(Expr* res) {
 }
 
 static Expr* besseli_two_arg(Expr* order, Expr* z) {
-    /* Exact special value at the origin (integer order): I_0(0) = 1,
-     * I_n(0) = 0 for integer n != 0. */
-    if (z->type == EXPR_INTEGER && z->data.integer == 0) {
-        if (order->type == EXPR_INTEGER) {
-            long n = (long)order->data.integer;
-            return expr_new_integer(n == 0 ? 1 : 0);
-        }
-        return NULL;  /* non-integer order at 0: leave symbolic */
-    }
+    /* Exact special value at the origin. */
+    if (z->type == EXPR_INTEGER && z->data.integer == 0)
+        return bessel_origin_value(SYM_BesselI, order);
 
 #ifdef USE_MPFR
     /* Numeric path: evaluate when some argument is inexact and both are
@@ -1641,20 +1725,11 @@ Expr* builtin_besseli(Expr* res) {
 }
 
 static Expr* bessely_two_arg(Expr* order, Expr* z) {
-    /* Exact singularity at the origin (integer order): Y_0(0) = -Infinity
-     * (real, directed), Y_n(0) = ComplexInfinity for integer n != 0. A
-     * non-integer order is left symbolic (matching besselj_two_arg). */
-    if (z->type == EXPR_INTEGER && z->data.integer == 0) {
-        if (order->type == EXPR_INTEGER) {
-            if (order->data.integer == 0) {
-                Expr* args[2] = { expr_new_integer(-1),
-                                  expr_new_symbol(SYM_Infinity) };
-                return expr_new_function(expr_new_symbol(SYM_Times), args, 2);
-            }
-            return expr_new_symbol(SYM_ComplexInfinity);
-        }
-        return NULL;  /* non-integer order at 0: leave symbolic */
-    }
+    /* Exact singularity at the origin. Y_nu diverges for every order except
+     * the negative half-odd-integers (where cos(nu pi) cancels the divergent
+     * term, e.g. Y_{-1/2}(z) = J_{1/2}(z) -> 0). See bessel_origin_value. */
+    if (z->type == EXPR_INTEGER && z->data.integer == 0)
+        return bessel_origin_value(SYM_BesselY, order);
 
 #ifdef USE_MPFR
     /* Numeric path: evaluate when some argument is inexact and both are
