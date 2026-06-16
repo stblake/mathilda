@@ -1358,6 +1358,16 @@ static void test_series_logintegral_at_zero(void) {
         "Plus[120, Power[Log[x], 4], Power[Log[x], 5], "
         "Times[2, Power[Log[x], 3]], Times[6, Power[Log[x], 2]], "
         "Times[24, Log[x]]]], 0], 1, 3, 1]");
+    /* Assumptions -> x < 0: every Log[x] becomes Log[-x] and an additive
+     * I Pi leads the series at the x^0 slot (nmin drops to 0). */
+    assert_fullform(
+        "Series[LogIntegral[x], {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, List[Times[Complex[0, 1], Pi], "
+        "Times[Power[Log[Times[-1, x]], -6], "
+        "Plus[120, Power[Log[Times[-1, x]], 4], Power[Log[Times[-1, x]], 5], "
+        "Times[2, Power[Log[Times[-1, x]], 3]], "
+        "Times[6, Power[Log[Times[-1, x]], 2]], "
+        "Times[24, Log[Times[-1, x]]]]], 0], 0, 3, 1]");
 }
 
 /* ExpIntegralEi[x] at x = 0: the logarithmic series (DLMF 6.6.2)
@@ -1380,6 +1390,12 @@ static void test_series_expintegralei_at_zero(void) {
     assert_fullform(
         "Series[ExpIntegralEi[x], {x, 0, 0}]",
         "SeriesData[x, 0, List[Plus[EulerGamma, Log[x]]], 0, 1, 1]");
+    /* Assumptions -> x < 0: the branch term becomes EulerGamma + Log[-x];
+     * the regular Taylor coefficients are unchanged. */
+    assert_fullform(
+        "Series[ExpIntegralEi[x], {x, 0, 2}, Assumptions -> x < 0]",
+        "SeriesData[x, 0, "
+        "List[Plus[EulerGamma, Log[Times[-1, x]]], 1, Rational[1, 4]], 0, 3, 1]");
 }
 
 /* Regression: Series at Infinity must not leak the internal inverse

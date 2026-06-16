@@ -2654,6 +2654,68 @@ Expr* builtin_normal(Expr* res) {
  * Series builtin
  * -------------------------------------------------------------------------- */
 
+/* Sign of a recognizable real numeric literal: -1, 0, +1; or 2 ("unknown")
+ * for anything that is not an obvious real number. Used to interpret the
+ * Assumptions option of Series (e.g. the bound in `x < 0`). */
+static int lit_real_sign(Expr* e) {
+    if (!e) return 2;
+    switch (e->type) {
+        case EXPR_INTEGER:
+            return e->data.integer < 0 ? -1 : (e->data.integer > 0 ? 1 : 0);
+        case EXPR_REAL:
+            return e->data.real < 0.0 ? -1 : (e->data.real > 0.0 ? 1 : 0);
+        case EXPR_BIGINT:
+            return mpz_sgn(e->data.bigint);
+#ifdef USE_MPFR
+        case EXPR_MPFR:
+            return mpfr_sgn(e->data.mpfr) < 0 ? -1
+                 : (mpfr_sgn(e->data.mpfr) > 0 ? 1 : 0);
+#endif
+        default: break;
+    }
+    /* Rational[p, q] has q > 0 by construction, so its sign is sign of p. */
+    if (has_symbol_head(e, "Rational") && e->data.function.arg_count == 2)
+        return lit_real_sign(e->data.function.args[0]);
+    return 2;
+}
+
+/* Interpret a Series Assumptions option as the sign of the expansion
+ * variable `x`. Returns -1 if the assumption forces x < 0, +1 if it forces
+ * x > 0, and 0 if it says nothing definite about x's sign. Recognizes the
+ * ordering of x against a real numeric bound (Less/LessEqual/Greater/
+ * GreaterEqual, in either argument order) and conjunctions (And) thereof.
+ * Series uses this to choose the principal branch of Log[x] in the
+ * logarithmic expansions of ExpIntegralEi / LogIntegral at x = 0. */
+static int assumption_sign_of(Expr* assm, Expr* x) {
+    if (!assm || assm->type != EXPR_FUNCTION) return 0;
+    size_t ac = assm->data.function.arg_count;
+    /* And[...]: the first component with a definite sign wins. */
+    if (has_symbol_head(assm, "And")) {
+        for (size_t i = 0; i < ac; i++) {
+            int s = assumption_sign_of(assm->data.function.args[i], x);
+            if (s) return s;
+        }
+        return 0;
+    }
+    bool less    = has_symbol_head(assm, "Less")    || has_symbol_head(assm, "LessEqual");
+    bool greater = has_symbol_head(assm, "Greater") || has_symbol_head(assm, "GreaterEqual");
+    if ((!less && !greater) || ac != 2) return 0;
+
+    Expr* a = assm->data.function.args[0];
+    Expr* b = assm->data.function.args[1];
+    Expr* bound; bool x_on_left;
+    if (expr_eq(a, x))      { bound = b; x_on_left = true;  }
+    else if (expr_eq(b, x)) { bound = a; x_on_left = false; }
+    else return 0;
+
+    int bs = lit_real_sign(bound);
+    if (bs == 2) return 0;
+    /* Normalize "a REL b" with x on one side into "x < bound" vs "x > bound". */
+    bool x_less_than_bound = (x_on_left && less) || (!x_on_left && greater);
+    if (x_less_than_bound) return (bs <= 0) ? -1 : 0;  /* x < (<=0) => x < 0 */
+    else                   return (bs >= 0) ?  1 : 0;  /* x > (>=0) => x > 0 */
+}
+
 /* Parse a single spec argument, accepting either `{x, x0, n}` (full form)
  * or `x -> x0` (leading-term form). Returns true on success and populates
  * *x_out / *x0_out / *n_out (borrowed Expr pointers into the spec) and
@@ -3325,15 +3387,22 @@ static Expr* try_series_besselj_at_infinity(Expr* f, Expr* x, int64_t n) {
  * Mathematica's no-assumptions form wraps this in a Floor[Arg[...]] branch
  * discriminator; we always emit the principal (x > 0) form. Returns NULL
  * unless f is exactly LogIntegral[x] in the expansion variable. */
-static Expr* try_series_logintegral_at_zero(Expr* f, Expr* x, int64_t n) {
+static Expr* try_series_logintegral_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
     if (!has_symbol_head(f, "LogIntegral") || f->data.function.arg_count != 1)
         return NULL;
     if (!expr_eq(f->data.function.args[0], x)) return NULL;
     if (n < 1) n = 1;
 
-    /* x^1 coefficient: Sum_{k=0}^{2n+1} k! / Log[x]^(k+1). */
+    /* On the principal (x > 0) branch the log argument is x; when the
+     * Assumptions option forces x < 0, li(x) = Ei(Log[x]) picks up the
+     * I*Pi from Log[x] = Log[-x] + I*Pi: every Log[x] becomes Log[-x] and
+     * an additive I*Pi (the x^0 term) appears in front of the series. */
+    bool neg = (x_sign < 0);
+
+    /* x^1 coefficient: Sum_{k=0}^{2n+1} k! / Log[.]^(k+1). */
     int64_t kmax = 2 * n + 1;
-    Expr* logx = mk_fn1("Log", expr_copy(x));
+    Expr* logx = neg ? mk_fn1("Log", mk_times(expr_new_integer(-1), expr_copy(x)))
+                     : mk_fn1("Log", expr_copy(x));
     Expr** terms = calloc((size_t)kmax + 1, sizeof(Expr*));
     for (int64_t k = 0; k <= kmax; k++) {
         Expr* fact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
@@ -3347,11 +3416,16 @@ static Expr* try_series_logintegral_at_zero(Expr* f, Expr* x, int64_t n) {
      * Together falls through to the raw sum if it cannot combine. */
     Expr* coef1 = eval_and_free(mk_fn1("Together", sum));
 
-    /* Coefficients span exponents 1 .. n (length n); only x^1 is non-zero. */
-    size_t ncoef = (size_t)n;
+    /* Principal branch: coefficients span exponents 1 .. n (length n, leading
+     * x^1). For x < 0 the additive I*Pi is an x^0 term, so the series starts
+     * at exponent 0: coefs = {I*Pi, coef1, 0, ..., 0}, length n + 1. */
+    int64_t nmin = neg ? 0 : 1;
+    size_t ncoef = neg ? (size_t)n + 1 : (size_t)n;
     Expr** coefs = calloc(ncoef, sizeof(Expr*));
-    coefs[0] = coef1;
-    for (size_t i = 1; i < ncoef; i++) coefs[i] = expr_new_integer(0);
+    size_t slot = 0;
+    if (neg) coefs[slot++] = simp(mk_times(mk_symbol("I"), mk_symbol("Pi")));
+    coefs[slot++] = coef1;
+    for (size_t i = slot; i < ncoef; i++) coefs[i] = expr_new_integer(0);
     Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
     free(coefs);
 
@@ -3359,7 +3433,7 @@ static Expr* try_series_logintegral_at_zero(Expr* f, Expr* x, int64_t n) {
     sd[0] = expr_copy(x);            /* expansion var      */
     sd[1] = expr_new_integer(0);     /* x0                 */
     sd[2] = coef_list;               /* coefficients       */
-    sd[3] = expr_new_integer(1);     /* nmin (leading x^1) */
+    sd[3] = expr_new_integer(nmin);  /* nmin               */
     sd[4] = expr_new_integer(n + 1); /* nmax (O-term)      */
     sd[5] = expr_new_integer(1);     /* denominator        */
     Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
@@ -3381,7 +3455,7 @@ static Expr* try_series_logintegral_at_zero(Expr* f, Expr* x, int64_t n) {
  *   SeriesData[x, 0, {EulerGamma + Log[x], 1, 1/4, ...}, 0, n+1, 1].
  *
  * Returns NULL unless f is exactly ExpIntegralEi[x] in the expansion var. */
-static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n) {
+static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
     if (!has_symbol_head(f, "ExpIntegralEi") || f->data.function.arg_count != 1)
         return NULL;
     if (!expr_eq(f->data.function.args[0], x)) return NULL;
@@ -3389,9 +3463,12 @@ static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n) {
 
     size_t ncoef = (size_t)n + 1;            /* exponents 0 .. n */
     Expr** coefs = calloc(ncoef, sizeof(Expr*));
-    /* x^0 coefficient: EulerGamma + Log[x]. */
-    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"),
-                            mk_fn1("Log", expr_copy(x))));
+    /* x^0 coefficient: EulerGamma + Log[x] on the principal (x > 0) branch,
+     * or EulerGamma + Log[-x] when the Assumptions option forces x < 0. */
+    Expr* logarg = (x_sign < 0)
+                 ? mk_times(expr_new_integer(-1), expr_copy(x))
+                 : expr_copy(x);
+    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"), mk_fn1("Log", logarg)));
     /* x^k coefficient: 1/(k*k!), exact rational via the bigint Factorial. */
     for (int64_t k = 1; k <= n; k++) {
         Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
@@ -3678,7 +3755,8 @@ static Expr* try_series_besselk_at_zero(Expr* f, Expr* x, int64_t n) {
 }
 
 /* Expand f around x=x0 to order n and return SeriesData expression. */
-static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only) {
+static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only,
+                              int x_sign) {
     /* Evaluate f with the series context implicit. Since Series has
      * HoldAll, f has not been evaluated yet; we evaluate now. */
     Expr* f_eval = eval_and_free(expr_copy(f));
@@ -3753,7 +3831,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * naive Taylor-via-D does not hit (and leak) the 1/0 pole of the second
      * derivative. */
     if (is_lit_zero(x0_eval)) {
-        Expr* li = try_series_logintegral_at_zero(f_eval, x, leading_only ? 1 : n);
+        Expr* li = try_series_logintegral_at_zero(f_eval, x, leading_only ? 1 : n, x_sign);
         if (li) {
             expr_free(f_eval);
             expr_free(x0_eval);
@@ -3761,7 +3839,7 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
         }
         /* ExpIntegralEi[x] at x = 0: Ei(0) = -Infinity blocks naive Taylor;
          * emit the DLMF 6.6.2 logarithmic series directly. */
-        Expr* ei0 = try_series_ei_at_zero(f_eval, x, leading_only ? 0 : n);
+        Expr* ei0 = try_series_ei_at_zero(f_eval, x, leading_only ? 0 : n, x_sign);
         if (ei0) {
             expr_free(f_eval);
             expr_free(x0_eval);
@@ -4024,9 +4102,28 @@ Expr* builtin_series(Expr* res) {
         return lst;
     }
 
-    /* Parse specs. */
-    size_t spec_count = res->data.function.arg_count - 1;
-    Expr** specs = res->data.function.args + 1;
+    /* Separate the Assumptions option (if present) from the expansion specs.
+     * Series[f, spec..., Assumptions -> assm]: the option may appear in any
+     * trailing position. We pull it out so it is not mistaken for an extra
+     * expansion spec (a leading-order spec `x -> x0` is also a Rule, so we
+     * key on the LHS symbol being exactly Assumptions). `assm` and the
+     * entries of `specs` borrow pointers into `res`. */
+    size_t raw_count = res->data.function.arg_count - 1;
+    Expr** raw = res->data.function.args + 1;
+    Expr* assm = NULL;
+    Expr** specs = calloc(raw_count, sizeof(Expr*));
+    size_t spec_count = 0;
+    for (size_t i = 0; i < raw_count; i++) {
+        Expr* s = raw[i];
+        if (has_symbol_head(s, "Rule") && s->data.function.arg_count == 2 &&
+            s->data.function.args[0]->type == EXPR_SYMBOL &&
+            strcmp(s->data.function.args[0]->data.symbol, "Assumptions") == 0) {
+            assm = s->data.function.args[1];
+            continue;
+        }
+        specs[spec_count++] = s;
+    }
+    if (spec_count == 0) { free(specs); return NULL; }
 
     /* Multivariate: process right-to-left. Expand f first in the rightmost
      * variable, which produces a series whose coefficients are themselves
@@ -4034,8 +4131,13 @@ Expr* builtin_series(Expr* res) {
      * in the next variable. */
     if (spec_count == 1) {
         Expr* x_arg; Expr* x0_arg; int64_t n_val; bool leading;
-        if (!parse_series_spec(specs[0], &x_arg, &x0_arg, &n_val, &leading)) return NULL;
-        return do_series_single(f, x_arg, x0_arg, n_val, leading);
+        if (!parse_series_spec(specs[0], &x_arg, &x0_arg, &n_val, &leading)) {
+            free(specs); return NULL;
+        }
+        int x_sign = assm ? assumption_sign_of(assm, x_arg) : 0;
+        Expr* out = do_series_single(f, x_arg, x0_arg, n_val, leading, x_sign);
+        free(specs);
+        return out;
     }
 
     /* For multivariate: expand outermost (leftmost) first -- the natural
@@ -4043,28 +4145,39 @@ Expr* builtin_series(Expr* res) {
      * expand in x first, getting coefs that are expressions in y, then
      * expand each coef in y. */
     Expr* x_arg; Expr* x0_arg; int64_t n_val; bool leading;
-    if (!parse_series_spec(specs[0], &x_arg, &x0_arg, &n_val, &leading)) return NULL;
-    Expr* outer = do_series_single(f, x_arg, x0_arg, n_val, leading);
-    if (!outer) return NULL;
+    if (!parse_series_spec(specs[0], &x_arg, &x0_arg, &n_val, &leading)) {
+        free(specs); return NULL;
+    }
+    int x_sign = assm ? assumption_sign_of(assm, x_arg) : 0;
+    Expr* outer = do_series_single(f, x_arg, x0_arg, n_val, leading, x_sign);
+    if (!outer) { free(specs); return NULL; }
 
     /* outer is SeriesData[x, x0, {a0, a1, ...}, 0, n+1, 1]. Recurse on
-     * each coefficient with the remaining specs. */
+     * each coefficient with the remaining specs (forwarding the Assumptions
+     * option so the inner variables see it too). */
     if (!has_symbol_head(outer, "SeriesData") || outer->data.function.arg_count != 6) {
+        free(specs);
         return outer;
     }
     Expr* coefs = outer->data.function.args[2];
     for (size_t i = 0; i < coefs->data.function.arg_count; i++) {
-        /* Build Series[ai, spec_y, spec_z, ...] and evaluate. */
+        /* Build Series[ai, spec_y, spec_z, ..., Assumptions -> assm]. */
         size_t rest = spec_count - 1;
-        Expr** new_args = calloc(rest + 1, sizeof(Expr*));
+        size_t extra = assm ? 1 : 0;
+        Expr** new_args = calloc(rest + 1 + extra, sizeof(Expr*));
         new_args[0] = expr_copy(coefs->data.function.args[i]);
         for (size_t j = 0; j < rest; j++) new_args[j + 1] = expr_copy(specs[j + 1]);
-        Expr* call = expr_new_function(mk_symbol("Series"), new_args, rest + 1);
+        if (assm) {
+            new_args[rest + 1] = mk_fn2("Rule", mk_symbol("Assumptions"),
+                                        expr_copy(assm));
+        }
+        Expr* call = expr_new_function(mk_symbol("Series"), new_args, rest + 1 + extra);
         free(new_args);
         Expr* expanded = eval_and_free(call);
         expr_free(coefs->data.function.args[i]);
         coefs->data.function.args[i] = expanded;
     }
+    free(specs);
     return outer;
 }
 
