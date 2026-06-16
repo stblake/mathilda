@@ -2565,15 +2565,10 @@ static Expr* series_build_xmx0(Expr* x, Expr* x0) {
     return simp(mk_plus(expr_copy(x), neg));
 }
 
-Expr* builtin_normal(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    Expr* arg = res->data.function.args[0];
-
-    if (!has_symbol_head(arg, "SeriesData") || arg->data.function.arg_count != 6) {
-        /* Pass-through for any non-SeriesData argument. */
-        return expr_copy(arg);
-    }
-
+/* Convert a single validated SeriesData[x, x0, coefs, nmin, nmax, den] node
+ * into an ordinary sum, dropping the O-term. Returns NULL if the node is
+ * malformed (so the caller can leave it untouched). */
+static Expr* seriesdata_to_normal(Expr* arg) {
     Expr* x      = arg->data.function.args[0];
     Expr* x0     = arg->data.function.args[1];
     Expr* coefs  = arg->data.function.args[2];
@@ -2617,6 +2612,42 @@ Expr* builtin_normal(Expr* res) {
     if (terms) free(terms);
 
     return simp(sum);
+}
+
+/* Recursively replace every SeriesData subexpression (at any depth) with its
+ * O-term-free sum. Series expansions around +-Infinity wrap their SeriesData
+ * inside Plus/Times (e.g. the trig-prefactored asymptotic forms of BesselJ,
+ * AiryAi, ...), so Normal must see through the wrapping rather than only
+ * handling a top-level SeriesData. Returns a freshly allocated tree. */
+static Expr* normal_recurse(Expr* e) {
+    if (e->type == EXPR_FUNCTION &&
+        has_symbol_head(e, "SeriesData") &&
+        e->data.function.arg_count == 6) {
+        Expr* n = seriesdata_to_normal(e);
+        if (n) return n;
+        /* Malformed SeriesData: fall through to a structural copy. */
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+
+    Expr* head = normal_recurse(e->data.function.head);
+    size_t n = e->data.function.arg_count;
+    Expr** args = n ? calloc(n, sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++) {
+        args[i] = normal_recurse(e->data.function.args[i]);
+    }
+    Expr* out = expr_new_function(head, args, n);
+    if (args) free(args);
+    return out;
+}
+
+Expr* builtin_normal(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    Expr* arg = res->data.function.args[0];
+
+    /* Drop the O-term from every SeriesData, including those nested inside the
+     * Plus/Times wrappers produced by expansions at +-Infinity. The rebuilt
+     * tree is re-evaluated by the evaluator, which recombines the factors. */
+    return normal_recurse(arg);
 }
 
 /* ----------------------------------------------------------------------------
