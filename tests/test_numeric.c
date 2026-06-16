@@ -422,10 +422,21 @@ static void test_mpfr_complex_corner_cases(void) {
     assert_eval_startswith("Precision[Sin[Complex[N[1, 100], N[1, 100]]]]",
                            "100.");
 
-    /* Round-trip: Log[Exp[z]] = z at MPFR precision for principal-branch z. */
+    /* Round-trip: Log[Exp[z]] = z at MPFR precision for principal-branch z.
+     * Use a non-dyadic real part (1/3) so the round-trip exercises real
+     * 50-digit output: a dyadic value like 0.5 round-trips to an exact
+     * binary fraction whose trailing zeros the printer trims (%.*Rg), so
+     * the printed form would be "0.5" and the prefix check vacuous. The
+     * low-order digits carry the expected Exp/Log bit-level rounding, hence
+     * a startswith check over the stable leading digits. */
     assert_eval_startswith(
-        "Re[Log[Exp[Complex[N[0.5, 50], N[0.25, 50]]]]]",
-        "0.5000000000000000000000000000000000000000000000000");
+        "Re[Log[Exp[Complex[N[1/3, 50], N[0.25, 50]]]]]",
+        "0.33333333333333333333333333333333333333333");
+    assert_eval_startswith(
+        "Im[Log[Exp[Complex[N[1/3, 50], N[0.25, 50]]]]]",
+        "0.25000000000000000000000000000000000000000");
+    assert_eval_startswith(
+        "Precision[Log[Exp[Complex[N[1/3, 50], N[0.25, 50]]]]]", "50.");
 }
 
 #endif /* USE_MPFR */
