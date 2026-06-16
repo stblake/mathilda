@@ -394,6 +394,17 @@ void info_init(void) {
         "negative real z axis for non-integer n. Real and complex order and\n"
         "argument evaluate numerically at machine or arbitrary (MPFR) precision;\n"
         "D[BesselI[n, z], z] = (BesselI[n-1, z] + BesselI[n+1, z])/2. Listable.");
+
+    symtab_set_docstring("BesselY",
+        "BesselY[n, z]\n"
+        "\tgives the Bessel function of the second kind Y_n(z), the solution of\n"
+        "\tz^2 y'' + z y' + (z^2 - n^2) y = 0 singular at the origin.\n"
+        "Y_0(0) = -Infinity, Y_n(0) = ComplexInfinity for integer n != 0; Y_n has\n"
+        "a logarithmic branch point at 0 and a branch cut along the negative real\n"
+        "z axis, with Y_{-n} = (-1)^n Y_n for integer n. Real and complex order\n"
+        "and argument evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision; D[BesselY[n, z], z] = (BesselY[n-1, z] - BesselY[n+1, z])/2.\n"
+        "Listable.");
     symtab_set_docstring("Erf",
         "Erf[z]\n"
         "\tgives the error function erf(z) = (2/Sqrt[Pi]) Integral_0^z e^(-t^2) dt.\n"

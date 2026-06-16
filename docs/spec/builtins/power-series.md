@@ -162,7 +162,7 @@ Converts a `SeriesData` back into an ordinary expression by dropping its O-term.
 **Features**:
 - `Protected`.
 - Returns the Plus of the coefficient-times-power terms (zero coefficients skipped). For non-`SeriesData` input, `Normal` is the identity.
-- Recurses through the whole expression, dropping the O-term of **every** `SeriesData` at any depth. This matters for expansions around `+-Infinity`, whose `SeriesData` is wrapped inside `Plus`/`Times` (e.g. the trig- or exponential-prefactored asymptotic forms of `BesselJ`, `BesselK`, `AiryAi`, `AiryBiPrime`); the surrounding factors are preserved and recombined by the evaluator.
+- Recurses through the whole expression, dropping the O-term of **every** `SeriesData` at any depth. This matters for expansions around `+-Infinity`, whose `SeriesData` is wrapped inside `Plus`/`Times` (e.g. the trig- or exponential-prefactored asymptotic forms of `BesselJ`, `BesselY`, `BesselK`, `BesselI`, `AiryAi`, `AiryBiPrime`); the surrounding factors are preserved and recombined by the evaluator.
 
 ```mathematica
 In[1]:= Normal[Series[Exp[x], {x, 0, 5}]]

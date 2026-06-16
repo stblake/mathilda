@@ -125,6 +125,7 @@ extern const char* SYM_AiryAiPrime;
 extern const char* SYM_BesselJ;
 extern const char* SYM_BesselK;
 extern const char* SYM_BesselI;
+extern const char* SYM_BesselY;
 extern const char* SYM_E;
 extern const char* SYM_Eigenvalues;
 extern const char* SYM_Erf;

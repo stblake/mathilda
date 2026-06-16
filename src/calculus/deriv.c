@@ -1202,6 +1202,49 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- BesselY[N, Z]: chain rule on both args.
+         *   d/dZ BesselY[N, Z] = (BesselY[N-1, Z] - BesselY[N+1, Z]) / 2  (DLMF 10.6.1)
+         *   d/dN BesselY[N, Z] = Derivative[1,0][BesselY][N,Z]  (no elementary form).
+         * Identical in shape to BesselJ (Y satisfies the same recurrence). */
+        if (h == SYM_BesselY && n == 2) {
+            Expr* N = args[0];
+            Expr* Z = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* (BesselY[N-1, Z] - BesselY[N+1, Z]) / 2 * dZ */
+                Expr* bm1 = mk_fn2("BesselY",
+                              mk_fn2("Plus", expr_copy(N), mk_int(-1)), expr_copy(Z));
+                Expr* bp1 = mk_fn2("BesselY",
+                              mk_fn2("Plus", expr_copy(N), mk_int(1)), expr_copy(Z));
+                Expr* diff = mk_fn2("Plus", bm1, mk_neg(bp1));
+                Expr* dBdZ = mk_fn2("Times",
+                              mk_fn2("Power", mk_int(2), mk_int(-1)), diff);
+                terms[nt++] = mk_fn2("Times", dBdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dN)) {
+                /* Derivative[1,0][BesselY][N,Z] * dN */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(1), mk_int(0) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("BesselY"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(Z) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- Gamma[A, Z] (upper incomplete gamma): chain rule on both args.
          *   dGamma/dZ = -Z^(A-1) E^-Z    (elementary)
          *   dGamma/dA = Derivative[1,0][Gamma][A,Z]  (no closed form without

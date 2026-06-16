@@ -99,3 +99,35 @@ BesselI[-1/2, z_] /; !NumberQ[z] := Sqrt[2/(Pi z)] Cosh[z];
 BesselI[n_Integer, z_] /; n < 0 := BesselI[-n, z];
 
 Protect[BesselI];
+
+(* ------------------------------------------------------------------ *)
+(* BesselY -- Bessel function of the second kind.                     *)
+(*                                                                    *)
+(* Numeric evaluation (machine / arbitrary precision, real / complex) *)
+(* lives in the C builtin bessel.c. As with BesselJ, half-integer     *)
+(* closed forms fire only for non-numeric z so inexact arguments take *)
+(* the accurate C path (BesselY[11/2, 1] stays unevaluated). Like      *)
+(* BesselJ, Y obeys Y_{-n} = (-1)^n Y_n for integer n and the SAME    *)
+(* three-term recurrence (a '-' between the two Y terms); only the     *)
+(* half-integer base cases differ (Y_{1/2} = -Sqrt[2/(Pi z)] Cos[z],   *)
+(* Y_{-1/2} = Sqrt[2/(Pi z)] Sin[z]).                                  *)
+(* ------------------------------------------------------------------ *)
+
+Unprotect[BesselY];
+
+(* Upward recurrence for half-integers >= 3/2 (symbolic z only). *)
+BesselY[n_, z_] /; IntegerQ[n - 1/2] && n >= 3/2 && !NumberQ[z] :=
+    (2 (n - 1)/z) BesselY[n - 1, z] - BesselY[n - 2, z];
+
+(* Downward recurrence for half-integers <= -3/2 (symbolic z only). *)
+BesselY[n_, z_] /; IntegerQ[n - 1/2] && n <= -3/2 && !NumberQ[z] :=
+    (2 (n + 1)/z) BesselY[n + 1, z] - BesselY[n + 2, z];
+
+(* Base cases (half-integer order is NOT even, so both are needed). *)
+BesselY[1/2, z_] /; !NumberQ[z] := -Sqrt[2/(Pi z)] Cos[z];
+BesselY[-1/2, z_] /; !NumberQ[z] := Sqrt[2/(Pi z)] Sin[z];
+
+(* Negative integer order reflection (fires after the C builtin declines). *)
+BesselY[n_Integer, z_] /; n < 0 := (-1)^n BesselY[-n, z];
+
+Protect[BesselY];

@@ -1458,6 +1458,9 @@ target_include_directories(besselk_tests PRIVATE ../src)
 add_executable(besseli_tests test_besseli.c ${COMMON_SRC})
 target_include_directories(besseli_tests PRIVATE ../src)
 
+add_executable(bessely_tests test_bessely.c ${COMMON_SRC})
+target_include_directories(bessely_tests PRIVATE ../src)
+
 add_executable(loggamma_tests test_loggamma.c ${COMMON_SRC})
 target_include_directories(loggamma_tests PRIVATE ../src)
 

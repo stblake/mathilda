@@ -1103,3 +1103,59 @@ Out[1]= 2.27959
 In[2]:= D[BesselI[n, x], x]
 Out[2]= 1/2 (BesselI[-1 + n, x] + BesselI[1 + n, x])
 ```
+
+## BesselY
+
+- `BesselY[n, z]` — the Bessel function of the second kind Yₙ(z), the solution of
+  `z² y″ + z y′ + (z² − n²) y = 0` that is singular (logarithmically, for integer
+  order) at the origin. Second linearly-independent companion of `BesselJ`.
+
+Implemented in `src/special_functions/bessel.c` (the consolidated Bessel module,
+alongside `BesselJ`/`BesselK`/`BesselI`), reusing the `ncpx` complex-MPFR toolkit
+(`src/numeric_complex.{c,h}`) and the `BesselJ` power-series kernel directly.
+
+- **Exact values at the origin.** `BesselY[0, 0] = -Infinity`;
+  `BesselY[n, 0] = ComplexInfinity` for integer n ≠ 0. A non-integer order at the
+  origin, and other exact / symbolic arguments, stay symbolic.
+- **Numeric evaluation** at machine and arbitrary precision, real and complex,
+  routed by `|z|` and order:
+  - integer order, real **z > 0** → MPFR-native `mpfr_yn` (correctly rounded);
+  - large `|z|` → trig-prefactored asymptotic series (DLMF 10.17.4);
+  - small `|z|`, non-integer order → connection formula
+    `Y_ν = (J_ν cos(νπ) − J_{−ν}) / sin(νπ)` (DLMF 10.2.3);
+  - small `|z|`, integer order → logarithmic series (DLMF 10.8.1).
+  Precision tracks the least-precise inexact argument. Examples:
+  `BesselY[0, 2.5] = 0.49807`, `BesselY[0.5 I, 3 − I] = 1.04686 + 0.884784 I`,
+  `N[BesselY[0, 1], 50] = 0.088256964215676957982926766023515162827817523090676`.
+- **Branch cut.** Yₙ(z) has a logarithmic branch point at 0 and a branch cut
+  along the negative real axis, so `BesselY[0, -1.0] = 0.0882570 + 1.530395 I` is
+  genuinely complex. Unlike `BesselJ`/`BesselI` there is **no** argument-parity
+  fold — `BesselY[n, -z]` stays unevaluated (as for `BesselK`).
+- **Half-integer order.** With a **symbolic** argument, `BesselY[(2k+1)/2, x]`
+  rewrites to the elementary spherical-Bessel closed form
+  (`BesselY[1/2, x] = -Sqrt[2/(Pi x)] Cos[x]`,
+  `BesselY[-1/2, x] = Sqrt[2/(Pi x)] Sin[x]`) with an up/down recurrence; with a
+  numeric argument the call uses the accurate C path, and an exact numeric
+  argument such as `BesselY[11/2, 1]` is left unevaluated. These rewrites and the
+  negative-integer reflection `BesselY[-n, x] = (-1)ⁿ BesselY[n, x]` live in
+  `src/internal/bessel.m`.
+- **Derivative.** `D[BesselY[n, x], x] = (BesselY[n-1, x] - BesselY[n+1, x])/2`
+  (DLMF 10.6.1; same shape as `BesselJ`).
+- **Series at 0.** Integer order gives the logarithmic expansion, e.g.
+  `Series[BesselY[0, x], {x, 0, 3}] =
+  (2 (EulerGamma - Log[2] + Log[x]))/Pi +
+  ((1 - EulerGamma + Log[2] - Log[x]) x²)/(2 Pi) + O[x]^4` (DLMF 10.8.1).
+- **Series at ∞.** `Series[BesselY[n, x], {x, Infinity, k}]` gives the
+  trig-prefactored asymptotic expansion (DLMF 10.17.4), valid for symbolic order
+  too.
+- **Listable.** `BesselY[0, {1.0, 2.0, 3.0}] = {0.088257, 0.510376, 0.37685}`.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= BesselY[0, 2.5]
+Out[1]= 0.49807
+
+In[2]:= D[BesselY[n, x], x]
+Out[2]= 1/2 (BesselY[-1 + n, x] - BesselY[1 + n, x])
+```

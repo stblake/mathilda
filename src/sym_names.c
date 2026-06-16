@@ -124,6 +124,7 @@ const char* SYM_AiryBiPrime = NULL;
 const char* SYM_BesselJ = NULL;
 const char* SYM_BesselK = NULL;
 const char* SYM_BesselI = NULL;
+const char* SYM_BesselY = NULL;
 const char* SYM_Erf = NULL;
 const char* SYM_Erfc = NULL;
 const char* SYM_Erfi = NULL;
@@ -636,6 +637,7 @@ void sym_names_init(void) {
     SYM_BesselJ                    = intern_symbol("BesselJ");
     SYM_BesselK                    = intern_symbol("BesselK");
     SYM_BesselI                    = intern_symbol("BesselI");
+    SYM_BesselY                    = intern_symbol("BesselY");
     SYM_Erf                        = intern_symbol("Erf");
     SYM_Erfc                       = intern_symbol("Erfc");
     SYM_Erfi                       = intern_symbol("Erfi");
