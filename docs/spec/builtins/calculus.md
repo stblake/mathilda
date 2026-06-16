@@ -63,6 +63,17 @@ Partial derivative.
 - Distributes over `Equal`: `D[a == b, x]` becomes
   `Equal[D[a, x], D[b, x]]`. The evaluator folds `Equal[0, 0]` to
   `True`, matching Mathematica.
+- Differentiates `Piecewise` clause-wise:
+  `D[Piecewise[{{v1, c1}, ...}, d], x]` becomes
+  `Piecewise[{{D[v1, x], c1}, ...}, D[d, x]]` — the value expressions
+  (and the default) are differentiated while the conditions ride
+  through unchanged. Because `Piecewise` is `HoldAll`, each value
+  derivative is reduced before being placed back. This makes higher
+  derivatives of `UnitStep` stable: `UnitStep'[x]` is
+  `Piecewise[{{Indeterminate, x == 0}}, 0]`, and every further
+  derivative reproduces the same Piecewise (with
+  `D[Indeterminate, x] = Indeterminate`) instead of degrading into a
+  `Derivative[1, 0][Piecewise][...]` chain-rule form.
 
 **Examples**:
 ```mathematica

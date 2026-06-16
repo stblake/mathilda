@@ -132,6 +132,25 @@ static void test_list_threading(void) {
     check("D[{x, x^2, Sin[x]}, x]", "List[1, Times[2, x], Cos[x]]");
 }
 
+/* --- Piecewise / UnitStep higher derivatives -------------------------- */
+static void test_piecewise_deriv(void) {
+    /* D differentiates each Piecewise value (the conditions ride through);
+     * because Piecewise is HoldAll the value derivatives must be reduced. */
+    check("D[Piecewise[{{x^2, x > 0}, {x^3, x < 0}}, 1], x]",
+          "Piecewise[List[List[Times[2, x], Greater[x, 0]], "
+          "List[Times[3, Power[x, 2]], Less[x, 0]]], 0]");
+    /* D[Indeterminate, x] = Indeterminate (not 0). */
+    check("D[Indeterminate, x]", "Indeterminate");
+    /* UnitStep' is a Piecewise; every higher derivative must reproduce the
+     * same Piecewise[{{Indeterminate, x == 0}}, 0] rather than degrade into
+     * Derivative[1,0][Piecewise][...] garbage. */
+    const char* ustep = "Piecewise[List[List[Indeterminate, Equal[x, 0]]], 0]";
+    check("D[UnitStep[x], {x, 1}]", ustep);
+    check("D[UnitStep[x], {x, 2}]", ustep);
+    check("D[UnitStep[x], {x, 3}]", ustep);
+    check("D[UnitStep[x], {x, 5}]", ustep);
+}
+
 /* --- Total derivative (Dt) -------------------------------------------- */
 static void test_dt(void) {
     check("Dt[5]", "0");
@@ -202,6 +221,7 @@ int main(void) {
     TEST(test_chain_on_derivative);
     TEST(test_higher_order);
     TEST(test_list_threading);
+    TEST(test_piecewise_deriv);
     TEST(test_dt);
     TEST(test_equal_distribution);
     TEST(test_nonconstants);

@@ -564,6 +564,13 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
     /* --- Partial-derivative base cases. --- */
     if (x) {
         if (expr_eq(f, x)) return mk_int(1);
+        /* D[Indeterminate, x] = Indeterminate: an indeterminate quantity has
+         * no well-defined derivative. Matches Mathematica and keeps higher
+         * derivatives of UnitStep (whose first derivative carries an
+         * Indeterminate Piecewise value) stable rather than collapsing the
+         * value to 0. */
+        if (f->type == EXPR_SYMBOL && f->data.symbol == SYM_Indeterminate)
+            return expr_copy(f);
         /* A symbol declared as NonConstant produces the canonical
          * unevaluated implicit-derivative form. */
         if (f->type == EXPR_SYMBOL && nonconsts_contains(nonconsts, f)) {
@@ -1439,6 +1446,46 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             Expr* dA = deriv_of(A, x, nonconsts);
             Expr* pg = mk_fn2("PolyGamma", mk_int(0), expr_copy(A));
             return mk_fn2("Times", pg, dA);
+        }
+
+        /* --- Piecewise[{{v1, c1}, ...}, default]: differentiate each value
+         *     expression and the default; the conditions ride through
+         *     unchanged. D[Piecewise[{{vi, ci}}, d], x]
+         *       = Piecewise[{{D[vi, x], ci}}, D[d, x]].
+         *     Without this rule a second derivative of UnitStep (whose first
+         *     derivative is a Piecewise) falls through to the generic chain
+         *     rule and produces garbage. The default is 0 when omitted. --- */
+        if (h == SYM_Piecewise && n >= 1 &&
+            args[0]->type == EXPR_FUNCTION &&
+            args[0]->data.function.head->type == EXPR_SYMBOL &&
+            args[0]->data.function.head->data.symbol == SYM_List) {
+            Expr* pairs = args[0];
+            size_t np = pairs->data.function.arg_count;
+            Expr** new_pairs = malloc(sizeof(Expr*) * (np ? np : 1));
+            bool ok = true;
+            size_t built = 0;
+            for (size_t i = 0; i < np; i++) {
+                Expr* pr = pairs->data.function.args[i];
+                if (!(pr->type == EXPR_FUNCTION &&
+                      pr->data.function.head->type == EXPR_SYMBOL &&
+                      pr->data.function.head->data.symbol == SYM_List &&
+                      pr->data.function.arg_count == 2)) { ok = false; break; }
+                /* Piecewise has HoldAll, so its branch values are not
+                 * re-evaluated by the outer evaluator; reduce each derivative
+                 * here (e.g. 2 x^(2-1) -> 2 x). Conditions ride through
+                 * verbatim. */
+                Expr* dv   = eval_and_free(deriv_of(pr->data.function.args[0], x, nonconsts));
+                Expr* cond = expr_copy(pr->data.function.args[1]);
+                new_pairs[built++] = mk_fn2("List", dv, cond);
+            }
+            if (ok) {
+                Expr* pairs_list = mk_fnN_adopt("List", new_pairs, np);
+                Expr* ddefault = (n >= 2) ? eval_and_free(deriv_of(args[1], x, nonconsts))
+                                          : mk_int(0);
+                return mk_fn2("Piecewise", pairs_list, ddefault);
+            }
+            for (size_t i = 0; i < built; i++) expr_free(new_pairs[i]);
+            free(new_pairs);
         }
 
         /* --- UnitStep[a1, ..., an]: acts as the product of the per-argument
