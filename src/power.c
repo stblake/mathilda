@@ -825,7 +825,19 @@ Expr* builtin_power(Expr* res) {
                     Expr* comp = make_complex(c_re, c_im);
                     return comp;
                 }
-                
+
+                /* Purely real operands whose result is provably real:
+                 * non-negative base, or any base with an integer exponent.
+                 * Compute with pow() directly. Routing these through cpow(z,w)
+                 * below is numerically unstable for a negative base, since
+                 * clog(-x) = log|x| + I*pi feeds a ~1e-16 rounding error into
+                 * the imaginary part; scaled by a large magnitude it survives
+                 * the cleanup threshold (e.g. 1/(-2.22e-16) -> ... - 0.55 I). */
+                if (vbase_im == 0.0 && vexp_im == 0.0 &&
+                    (vbase_re >= 0.0 || floor(vexp_re) == vexp_re)) {
+                    return expr_new_real(pow(vbase_re, vexp_re));
+                }
+
                 double complex result = cpow(z, w);
                 double r_re = creal(result);
                 double r_im = cimag(result);
