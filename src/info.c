@@ -309,6 +309,19 @@ void info_init(void) {
         "QuasiMonteCarlo | AdaptiveMonteCarlo | PrincipalValue), "
         "WorkingPrecision (default MachinePrecision), PrecisionGoal, "
         "AccuracyGoal, MaxRecursion, MinRecursion, MaxPoints, Exclusions.");
+    symtab_set_docstring("NRoots",
+        "NRoots[lhs == rhs, var]\n"
+        "\tyields a disjunction of equations var==r1 || var==r2 || ... giving "
+        "numerical approximations to the roots of the polynomial equation in var. "
+        "Roots of multiplicity k appear as k identical equations; a single root "
+        "yields a bare equation. Real and complex coefficients are handled at "
+        "machine and arbitrary precision. Method -> Automatic uses the Aberth-"
+        "Ehrlich simultaneous iteration; \"CompanionMatrix\" uses companion-matrix "
+        "eigenvalues (real QR directly, complex via a real 2n embedding); "
+        "\"JenkinsTraub\" uses the three-stage Jenkins-Traub algorithm.\n\n"
+        "Options: Method (Automatic | \"Aberth\" | \"CompanionMatrix\" | "
+        "\"JenkinsTraub\"), PrecisionGoal (Automatic = machine; a digit count "
+        "selects arbitrary precision), MaxIterations, StepMonitor.");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"

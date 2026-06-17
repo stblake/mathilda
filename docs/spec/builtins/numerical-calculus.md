@@ -696,3 +696,85 @@ Out[5]= 3.14159
 `In[2]` is the Gaussian integral `√π/2`; `In[3]` has an inverse-square-root
 endpoint singularity; `In[4]` is the Dirichlet integral `π/2`; `In[5]` is the
 two-dimensional Gaussian, `π`.
+
+## NRoots
+
+Numerical roots of a univariate polynomial equation.
+`NRoots[lhs == rhs, var]` returns a disjunction of equations
+`var==r1 || var==r2 || …` approximating **every** root of `lhs - rhs` in `var`.
+A root of multiplicity `k` appears as `k` identical equations; a degree-1
+polynomial yields a single bare equation (no `Or`). A numerically vacuous
+equation collapses first: `NRoots[1==0, x]` → `False`, `NRoots[1==1, x]` → `True`.
+
+Implemented in `src/numerical_calculus/nroots.{c,h}` (orchestration +
+CompanionMatrix), `nroots_aberth.{c,h}` (Aberth–Ehrlich + Bini initialization +
+shared `ncpx` polynomial helpers), and `nroots_jt.{c,h}` (Jenkins–Traub).
+Attribute: `Protected`. Real and complex coefficients are handled at machine and
+arbitrary precision; all numeric work is MPFR complex (the `ncpx` toolkit). The
+coefficients are extracted symbolically (`Expand` + `get_all_coeffs_expanded`),
+numericalized to a complex MPFR coefficient array, a trailing `x^m` factor is
+deflated to `m` exact zero roots, and the reduced polynomial is dispatched to the
+selected engine. **Exact integer-coefficient polynomials are first squarefree-
+decomposed** (Yun's algorithm on the integer polynomial): each squarefree factor
+is solved separately — well-conditioned — and its roots emitted with the factor's
+multiplicity. This keeps high powers such as `(x^2-2)^30` exact and fast, where
+solving the expanded degree-60 polynomial directly would be catastrophically
+ill-conditioned. Results are then noise-chopped, conjugate-symmetrized (for real
+polynomials), clustered so multiple roots print identically, canonically ordered
+(reals ascending, then complex by Re, then |Im|, negative Im first), and rounded
+to the target precision.
+
+### Methods (`Method -> …`)
+
+| Method | Algorithm |
+|--------|-----------|
+| `Automatic` (= `"Aberth"`) | Aberth–Ehrlich simultaneous iteration; cubic convergence, all roots at once, Bini circle initialization from the Newton polygon of `(k, log\|a_k\|)`. |
+| `"Aberth"` | as above. |
+| `"CompanionMatrix"` | Eigenvalues of the Frobenius companion matrix. Real coefficients use the existing real MPFR QR (`eigen_all_eigenvalues_real_mpfr`) directly; complex coefficients use the `C^{n×n}→R^{2n×2n}` real embedding, with genuine roots selected by residual and multiplicities read from `p` by repeated synthetic division. |
+| `"JenkinsTraub"` | The three-stage shifted-deflation algorithm (CPOLY, ACM TOMS 419), used for real and complex coefficients alike; one root per deflation, polished against the original polynomial. The real-arithmetic RPOLY (TOMS 493) is a speed/storage optimization that yields identical roots and is folded into the complex path. |
+
+All three methods agree to tolerance on the same polynomials. Aberth is the
+default: it is precision- and complex-agnostic and returns clustered multiple
+roots directly.
+
+Options: `Method`, `PrecisionGoal` (`Automatic` ⇒ machine precision; a digit
+count selects arbitrary precision via MPFR), `MaxIterations` (caps the Aberth
+sweep; `Automatic` ⇒ `100 + 20·degree`), `StepMonitor` (accepted for
+compatibility). Diagnostics: `NRoots::neqn` (not an equation),
+`NRoots::ivar` (variable not a symbol), `NRoots::npoly` (not polynomial in the
+variable), `NRoots::nnum` (non-numeric coefficient), `NRoots::bdmtd` (unknown
+method), `NRoots::conv` (a method did not converge).
+
+### Limitations
+
+The complex-coefficient `"CompanionMatrix"` path uses the real `2n` embedding,
+which cannot distinguish a complex-coefficient polynomial having a conjugate pair
+of roots with *unequal* multiplicities (a measure-zero case); the root values are
+still correct. For such inputs use `"Aberth"` or `"JenkinsTraub"`. `StepMonitor`
+is accepted but not invoked per step.
+
+### Examples
+
+```mathematica
+In[1]:= NRoots[1 + 2 x + 3 x^2 + 4 x^3 == 0, x]
+Out[1]= x == -0.60583 || x == -0.0720852 - 0.638327 I || x == -0.0720852 + 0.638327 I
+
+In[2]:= NRoots[x^2 - 2 == 0, x]
+Out[2]= x == -1.41421 || x == 1.41421
+
+In[3]:= NRoots[x^2 + 1 == 0, x]
+Out[3]= x == -I || x == I
+
+In[4]:= NRoots[(x - 1)^3 == 0, x]
+Out[4]= x == 1. || x == 1. || x == 1.
+
+In[5]:= NRoots[x^2 - (3 + 4 I) == 0, x]
+Out[5]= x == -2. - I || x == 2. + I
+
+In[6]:= NRoots[x^2 - 2 == 0, x, PrecisionGoal -> 30]
+Out[6]= x == -1.414213562373095048801688724209 || x == 1.414213562373095048801688724209
+```
+
+`In[1]` is the documentation example (one real root and a conjugate pair);
+`In[4]` shows multiplicity as repeated equations; `In[5]` solves a
+complex-coefficient equation (`x = ±(2 + I)`); `In[6]` returns 30-digit roots.
