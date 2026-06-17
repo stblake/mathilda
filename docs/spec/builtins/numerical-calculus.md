@@ -706,7 +706,7 @@ A root of multiplicity `k` appears as `k` identical equations; a degree-1
 polynomial yields a single bare equation (no `Or`). A numerically vacuous
 equation collapses first: `NRoots[1==0, x]` → `False`, `NRoots[1==1, x]` → `True`.
 
-Implemented in `src/numerical_calculus/nroots.{c,h}` (orchestration +
+Implemented in `src/numerical_roots/nroots.{c,h}` (orchestration +
 CompanionMatrix), `nroots_aberth.{c,h}` (Aberth–Ehrlich + Bini initialization +
 shared `ncpx` polynomial helpers), and `nroots_jt.{c,h}` (Jenkins–Traub).
 Attribute: `Protected`. Real and complex coefficients are handled at machine and
@@ -778,3 +778,75 @@ Out[6]= x == -1.414213562373095048801688724209 || x == 1.41421356237309504880168
 `In[1]` is the documentation example (one real root and a conjugate pair);
 `In[4]` shows multiplicity as repeated equations; `In[5]` solves a
 complex-coefficient equation (`x = ±(2 + I)`); `In[6]` returns 30-digit roots.
+
+## NSolve
+
+Numerical solutions of an equation or system of equations.
+`NSolve[expr, vars]` returns approximate solutions as a list of
+replacement-rule lists; `NSolve[expr, vars, Reals]` restricts to real
+solutions (the default domain is the complexes). `vars` may be a single
+symbol or a list, and `NSolve[{e1, e2, …}, vars]` is the conjunction
+`e1 && e2 && …`. A working precision may be given via `WorkingPrecision` or as
+a trailing positional argument (`NSolve[poly, x, Reals, 30]`); with no
+variable list, `NSolve[expr]` collects the variable. Results: `{}` no
+solutions, `{{x->s,…},…}` the solutions, `{{}}` the universal solution. For a
+single variable, roots are repeated by multiplicity.
+
+Implemented in `src/numerical_roots/nsolve.{c}` (dispatcher) and
+`nsolve_system.{c,h}` (the polynomial-system engine). Attribute: `Protected`.
+The dispatcher routes each input to the most specific method:
+
+| Input | Method |
+|-------|--------|
+| Univariate polynomial | `NRoots` (multiplicity repeated; `Reals` discards complex roots). |
+| Square / zero-dimensional polynomial system | **Eigenvalue / multiplication-matrix** (Möller–Stetter): a Gröbner basis over `Q` gives the quotient ring `Q[x]/I`; eigenvalues/eigenvectors of multiplication by a generic linear form (via the MPFR real-matrix backend `eigen_all_eigenvectors_real_mpfr`) yield every solution, with coordinates read off as `(M_{x_i} v)[j]/v[j]`. |
+| Square polynomial system, `Method -> "Symbolic"` (and the eigenvalue fallback) | **Elimination**: a lexicographic Gröbner basis is solved triangularly by NRoots back-substitution, verifying each completed tuple. |
+| Linear / underdetermined / radical / inverse-function | `Solve`, numericalized to the working precision (underdetermined systems give a parametric family; inconsistent give `{}`). |
+| Univariate non-polynomial Solve cannot reduce | **FindRoot grid-seeding** (best-effort, a finite sample). |
+
+Solutions are found at the working precision (machine by default, MPFR
+otherwise); integer, real, and complex coefficients are all supported, with
+solutions over the complexes. Candidate solutions are verified by residual
+(controlled by `VerifySolutions`).
+
+Options: `MaxRoots` (cap on the count), `Method`
+(`Automatic | "EndomorphismMatrix" | "Homotopy" | "Symbolic"`),
+`WorkingPrecision`, `VerifySolutions`, `RandomSeeding` (seeds the generic
+linear form). The four methods agree on the same solution set.
+
+### Beyond / unlike Mathematica's NSolve
+
+The supported envelope is polynomial and linear systems plus the
+`Solve`/`FindRoot` fallbacks. Not yet handled (the input is left unevaluated
+or routed to a fallback rather than guessed): real-algebraic solving of strict
+inequalities `>`, `>=` (no CAD); `MaxRoots -> Infinity` symbolic root families;
+quantified systems (`Exists`); bounded-region holomorphic / special-function
+solving; and full transcendental completeness (grid-seeding samples a bounded
+region only). `!=` is honoured only as a post-filter. `"Homotopy"` is routed to
+the eigenvalue engine (no continuation tracker).
+
+### Examples
+
+```mathematica
+In[1]:= NSolve[x^5 - 2 x + 3 == 0, x, Reals]
+Out[1]= {{x -> -1.42361}}
+
+In[2]:= NSolve[{x^2 + y^2 == 1, x^3 - y^3 == 2}, {x, y}]
+Out[2]= {{x -> -1.09791 + 0.839887 I, y -> 1.09791 + 0.839887 I}, … (6 solutions)}
+
+In[3]:= NSolve[{x^2 + y^3 == 1, 2 x + 3 y == 4}, {x, y}, Reals]
+Out[3]= {{x -> 7.93641, y -> -3.95761}}
+
+In[4]:= NSolve[x + 2 y + 3 z == 4 && 3 x + 4 y + 5 z == 6 && 6 x + 7 y + 8 z == 0, {x, y, z}]
+Out[4]= {}
+
+In[5]:= NSolve[E^x - x == 7, x, Reals]
+Out[5]= {{x -> -6.99909}, {x -> 2.22154}}
+
+In[6]:= NSolve[{x^2 + y^2 == 1, x^3 - y^3 == 2}, {x, y}, WorkingPrecision -> 25]
+Out[6]= {{x -> -1.097911672722823576416400 + 0.839886921615659203622803 I, …}, …}
+```
+
+`In[2]` is the global solver returning all six complex solutions;
+`In[4]` is an inconsistent linear system; `In[5]` uses FindRoot grid-seeding
+for a transcendental equation Solve cannot reduce.

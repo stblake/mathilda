@@ -322,6 +322,25 @@ void info_init(void) {
         "Options: Method (Automatic | \"Aberth\" | \"CompanionMatrix\" | "
         "\"JenkinsTraub\"), PrecisionGoal (Automatic = machine; a digit count "
         "selects arbitrary precision), MaxIterations, StepMonitor.");
+    symtab_set_docstring("NSolve",
+        "NSolve[expr, vars]\n"
+        "\tgives numerical approximations to the solutions of the equation or "
+        "system expr for the variables vars, as a list of replacement-rule "
+        "lists. NSolve[expr, vars, Reals] restricts to real solutions; the "
+        "default domain is the complexes. vars may be a single variable or a "
+        "list; NSolve[{e1, e2, ...}, vars] is the conjunction e1 && e2 && .... "
+        "A working precision may be given as a trailing positional argument or "
+        "via WorkingPrecision. Results: {} no solutions, {{x->s,...},...} the "
+        "solutions (univariate roots are repeated by multiplicity), {{}} the "
+        "universal solution. A univariate polynomial equation is solved with "
+        "NRoots; square zero-dimensional polynomial systems use a Groebner-basis "
+        "multiplication-matrix eigenvalue method (Method -> \"Symbolic\" uses "
+        "lexicographic elimination); other equations fall back to Solve or "
+        "FindRoot seeding. Integer, real, and complex coefficients are handled "
+        "at machine and arbitrary precision.\n\n"
+        "Options: MaxRoots, Method (Automatic | \"EndomorphismMatrix\" | "
+        "\"Homotopy\" | \"Symbolic\"), WorkingPrecision, VerifySolutions, "
+        "RandomSeeding.");
     symtab_set_docstring("Factorial",
         "n! or Factorial[n]\n"
         "\tgives the factorial of n.\n"

@@ -4009,4 +4009,74 @@ int eigen_all_eigenvalues_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
     mpfr_array_free(tmp, 14);
     return status;
 }
+
+/* Public wrapper exposed in eigen.h.  Eigenvalues + right eigenvectors of
+ * a real matrix at MPFR precision: Hessenberg + Francis QR leaves the real
+ * Schur form in A and the Schur vectors in Q, then schur_compute_eigvecs_M
+ * back-substitutes the eigenvectors.  Pairs are returned in descending
+ * |lambda| order (eigenvector row k <-> eigenvalue k).  Used by the NSolve
+ * polynomial-system solver's multiplication-matrix coordinate recovery. */
+int eigen_all_eigenvectors_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
+                                      mpfr_t* eval_re, mpfr_t* eval_im,
+                                      mpfr_t* evec_re, mpfr_t* evec_im) {
+    if (n == 0) return 0;
+    if (n == 1) {
+        mpfr_set(eval_re[0], A[0], MPFR_RNDN);
+        mpfr_set_zero(eval_im[0], 1);
+        mpfr_set_ui(evec_re[0], 1, MPFR_RNDN);
+        mpfr_set_zero(evec_im[0], 1);
+        return 0;
+    }
+
+    mpfr_t* Q   = mpfr_array_alloc(n * n, bits);
+    mpfr_t* u   = mpfr_array_alloc(n, bits);
+    mpfr_t* tmp = mpfr_array_alloc(14, bits);
+
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = 0; j < n; j++)
+            mpfr_set_si(Q[i * n + j], (i == j) ? 1 : 0, MPFR_RNDN);
+
+    if (n >= 3) direct_hessenberg_real_M(A, n, bits, u, Q, tmp);
+
+    for (size_t i = 0; i < n; i++) {
+        mpfr_set_zero(eval_re[i], 1);
+        mpfr_set_zero(eval_im[i], 1);
+    }
+    int status = direct_qr_real_general_M(A, n, bits, eval_re, eval_im, Q, tmp);
+    if (status != 0) {
+        mpfr_array_free(Q,   n * n);
+        mpfr_array_free(u,   n);
+        mpfr_array_free(tmp, 14);
+        return status;
+    }
+
+    /* A now holds the real Schur form H; Q the Schur vectors. */
+    size_t* perm = (size_t*)malloc(sizeof(size_t) * n);
+    direct_sort_perm_desc_abs_complex_M(eval_re, eval_im, n, perm);
+
+    schur_compute_eigvecs_M(A, Q, n, bits, eval_re, eval_im, perm,
+                            evec_re, evec_im);
+
+    /* schur_compute_eigvecs_M stores eigenvector row k for the sorted slot;
+     * reorder the eigenvalues into that same descending-|lambda| order so
+     * row k pairs with eval[k]. */
+    mpfr_t* sr = mpfr_array_alloc(n, bits);
+    mpfr_t* si = mpfr_array_alloc(n, bits);
+    for (size_t k = 0; k < n; k++) {
+        mpfr_set(sr[k], eval_re[perm[k]], MPFR_RNDN);
+        mpfr_set(si[k], eval_im[perm[k]], MPFR_RNDN);
+    }
+    for (size_t k = 0; k < n; k++) {
+        mpfr_set(eval_re[k], sr[k], MPFR_RNDN);
+        mpfr_set(eval_im[k], si[k], MPFR_RNDN);
+    }
+    mpfr_array_free(sr, n);
+    mpfr_array_free(si, n);
+
+    free(perm);
+    mpfr_array_free(Q,   n * n);
+    mpfr_array_free(u,   n);
+    mpfr_array_free(tmp, 14);
+    return 0;
+}
 #endif

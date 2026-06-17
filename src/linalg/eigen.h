@@ -82,6 +82,28 @@ typedef enum {
  * QR non-convergence (exceedingly rare for well-conditioned matrices). */
 int eigen_all_eigenvalues_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
                                     mpfr_t* eval_re, mpfr_t* eval_im);
+
+/* Compute all eigenvalues AND right eigenvectors of a square n*n real
+ * matrix at MPFR precision.  The eigenvector twin of the eigenvalue
+ * wrapper above, exposed for callers (e.g. the NSolve polynomial-system
+ * solver) that build a real multiplication / companion matrix and need
+ * the eigenvectors to recover root coordinates.
+ *
+ * `A` is row-major, length n*n, each cell mpfr_init2'd to `bits`; it is
+ * MUTATED in place (left holding the real Schur form).
+ *
+ * On return, for each k = 0..n-1:
+ *   - eval_re[k] + I*eval_im[k] is the k-th eigenvalue, and
+ *   - evec_re[k*n + j] + I*evec_im[k*n + j] is component j of the k-th
+ *     (unit-2-norm) right eigenvector.
+ * The pairs are ordered by descending |eigenvalue|; complex eigenvalues
+ * of a real matrix appear in conjugate pairs.  All of eval_re, eval_im,
+ * evec_re, evec_im must be arrays of already-mpfr_init2'd cells at `bits`
+ * (n, n, n*n, n*n cells respectively).  Returns 0 on success, non-zero on
+ * QR non-convergence. */
+int eigen_all_eigenvectors_real_mpfr(mpfr_t* A, size_t n, mpfr_prec_t bits,
+                                     mpfr_t* eval_re, mpfr_t* eval_im,
+                                     mpfr_t* evec_re, mpfr_t* evec_im);
 #endif
 
 #endif /* MATEIGEN_H */

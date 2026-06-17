@@ -49,6 +49,7 @@ include_directories(../src/calculus)
 include_directories(../src/sum)
 include_directories(../src/special_functions)
 include_directories(../src/numerical_calculus)
+include_directories(../src/numerical_roots)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -269,7 +270,7 @@ set(COMMON_SRC
     ../src/poly/poly_eval_mpfr.c
     ../src/solve.c
     ../src/solvealways.c
-    ../src/findroot.c
+    ../src/numerical_roots/findroot.c
     ../src/findmin.c
     ../src/poly/solvepoly.c
     ../src/solvelinsys.c
@@ -293,9 +294,11 @@ set(COMMON_SRC
     ../src/numerical_calculus/mcint.c
     ../src/numerical_calculus/cubature.c
     ../src/numerical_calculus/nint.c
-    ../src/numerical_calculus/nroots.c
-    ../src/numerical_calculus/nroots_aberth.c
-    ../src/numerical_calculus/nroots_jt.c
+    ../src/numerical_roots/nroots.c
+    ../src/numerical_roots/nroots_aberth.c
+    ../src/numerical_roots/nroots_jt.c
+    ../src/numerical_roots/nsolve.c
+    ../src/numerical_roots/nsolve_system.c
 )
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
@@ -385,7 +388,10 @@ add_executable(nint_tests test_nint.c ${COMMON_SRC})
 target_include_directories(nint_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(nroots_tests test_nroots.c ${COMMON_SRC})
-target_include_directories(nroots_tests PRIVATE ../src ../src/numerical_calculus)
+target_include_directories(nroots_tests PRIVATE ../src ../src/numerical_roots)
+
+add_executable(nsolve_tests test_nsolve.c ${COMMON_SRC})
+target_include_directories(nsolve_tests PRIVATE ../src ../src/numerical_roots)
 
 add_executable(clearall_remove_protect_tests test_clearall_remove_protect.c ${COMMON_SRC})
 target_include_directories(clearall_remove_protect_tests PRIVATE ../src)
@@ -430,7 +436,7 @@ add_executable(multiplicative_order_tests test_multiplicative_order.c ${COMMON_S
 target_include_directories(multiplicative_order_tests PRIVATE ../src)
 
 add_executable(findroot_tests test_findroot.c ${COMMON_SRC})
-target_include_directories(findroot_tests PRIVATE ../src)
+target_include_directories(findroot_tests PRIVATE ../src ../src/numerical_roots)
 
 add_executable(root_numeric_tests test_root_numeric.c ${COMMON_SRC})
 target_include_directories(root_numeric_tests PRIVATE ../src)

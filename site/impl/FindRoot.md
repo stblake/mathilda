@@ -1,10 +1,10 @@
 ---
 references:
   - "W. H. Press et al., *Numerical Recipes*, 3rd ed. (Cambridge, 2007) — Newton, secant, Brent's method."
-source: src/findroot.c
+source: src/numerical_roots/findroot.c
 ---
 **Algorithm.** `FindRoot` (`HoldAll | Protected`) does iterative numerical
-root-finding (src/findroot.c). It Block-binds the search variables via temporary
+root-finding (src/numerical_roots/findroot.c). It Block-binds the search variables via temporary
 OwnValues so the global symbol table is unperturbed, restoring them on every
 exit path. The variable spec selects the method:
 

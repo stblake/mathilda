@@ -564,6 +564,8 @@ void core_init(void) {
     nintegrate_init();
     void nroots_init(void);
     nroots_init();
+    void nsolve_init(void);
+    nsolve_init();
     info_init();
     datetime_init();
     linalg_init();
