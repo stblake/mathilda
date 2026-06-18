@@ -393,6 +393,9 @@ target_include_directories(nroots_tests PRIVATE ../src ../src/numerical_roots)
 add_executable(nsolve_tests test_nsolve.c ${COMMON_SRC})
 target_include_directories(nsolve_tests PRIVATE ../src ../src/numerical_roots)
 
+add_executable(nsolve_stress_tests test_nsolve_stress.c ${COMMON_SRC})
+target_include_directories(nsolve_stress_tests PRIVATE ../src ../src/numerical_roots)
+
 add_executable(clearall_remove_protect_tests test_clearall_remove_protect.c ${COMMON_SRC})
 target_include_directories(clearall_remove_protect_tests PRIVATE ../src)
 
