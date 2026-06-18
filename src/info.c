@@ -285,6 +285,40 @@ void info_init(void) {
         "factors taken explicitly, default 15), NProductExtraFactors, "
         "WynnDegree, VerifyConvergence (default True; a divergent product gives "
         "ComplexInfinity), AccuracyGoal, PrecisionGoal.");
+    symtab_set_docstring("Product",
+        "Product[f, {i, imax}]\n"
+        "\tgives the product of f for i from 1 to imax.\n\n"
+        "Product[f, {i, imin, imax}], Product[f, {i, imin, imax, di}] and "
+        "Product[f, {i, {i1, i2, ...}}] use the standard iterator forms; "
+        "multiple iterators give nested products (an inner bound may depend on "
+        "an outer index). Product[f, i] gives the indefinite product "
+        "(anti-quotient). The index is localised (HoldAll). Finite ranges are "
+        "multiplied out directly; symbolic, indefinite and convergent infinite "
+        "products are evaluated in exact closed form (n!, Pochhammer, Gamma "
+        "ratios, base^k, QPochhammer, BarnesG) via a Method polyalgorithm.\n\n"
+        "Options: Method (Automatic | \"Telescoping\" | \"Rational\" | "
+        "\"Geometric\" | \"QProduct\"), VerifyConvergence (default True; a "
+        "divergent infinite product gives Product::div), GenerateConditions, "
+        "Assumptions. N[Product[...]] routes to NProduct.");
+    symtab_set_docstring("Hyperfactorial",
+        "Hyperfactorial[n]\n"
+        "\tgives the hyperfactorial prod_{k=1}^{n} k^k.\n"
+        "Exact (GMP) for a non-negative integer n; other orders stay symbolic. "
+        "Listable, NumericFunction.");
+    symtab_set_docstring("BarnesG",
+        "BarnesG[z]\n"
+        "\tgives the Barnes G-function.\n"
+        "G(z+1) = Gamma[z] G(z) with G(1)=G(2)=1; for a positive integer n, "
+        "G(n+1) = prod_{k=1}^{n-1} k! (exact via GMP), and G(m)=0 for "
+        "non-positive integer m. Non-integer orders stay symbolic. Listable, "
+        "NumericFunction.");
+    symtab_set_docstring("QPochhammer",
+        "QPochhammer[a, q, n]\n"
+        "\tgives the q-Pochhammer symbol prod_{k=0}^{n-1} (1 - a q^k).\n"
+        "QPochhammer[a, q] gives the infinite q-Pochhammer (a;q)_Inf for |q|<1. "
+        "The finite form is exact/symbolic for a non-negative integer n; the "
+        "infinite form evaluates for machine-real a, q. Listable, "
+        "NumericFunction.");
     symtab_set_docstring("NIntegrate",
         "NIntegrate[f, {x, xmin, xmax}]\n"
         "\tgives a numerical approximation to the integral of f with respect "

@@ -1037,6 +1037,92 @@ Out[2]= -k! + (1 + k)!
 ```
 
 
+## Product
+
+Definite, indefinite, symbolic and convergent-infinite products — the
+multiplicative analogue of `Sum`.  Implemented natively in C under
+`src/product/`: a dispatcher (`product.c`) plus one file per algorithm,
+each exposed as a context-qualified builtin (`Product`Telescoping`,
+`Product`Rational`, `Product`Geometric`, `Product`QProduct`,
+`Product`Special`, `Product`Infinite`).  `Product` is `HoldAll`.
+
+### Forms
+
+- `Product[f, {i, imax}]` — product of `f` for `i` from `1` to `imax`.
+- `Product[f, {i, imin, imax}]` — `i` from `imin` to `imax`.
+- `Product[f, {i, imin, imax, di}]` — step `di`.
+- `Product[f, {i, {i1, i2, ...}}]` — successive values from a list.
+- `Product[f, {i, ...}, {j, ...}, ...]` — multiple (nested) products.
+- `Product[f, i]` — the indefinite product (anti-quotient).
+
+A finite, unit-step, integer range with a closed-form body first tries
+the method cascade below (cost independent of span width); otherwise the
+product expands term-by-term.  **Empty or reversed ranges fold to `1`**
+(the multiplicative identity), not `0`.  Symbolic bounds, the indefinite
+form, and `imax == Infinity` go to the cascade; if none applies the
+`Product[...]` is returned unevaluated.  The `Automatic` cascade runs
+Telescoping → Rational → Geometric → QProduct → Special → Infinite, so
+the cleanest closed form wins; `Method -> "Telescoping" | "Rational" |
+"Geometric" | "QProduct"` forces a single algorithm.  Other options:
+`VerifyConvergence` (default `True`; a divergent infinite product prints
+`Product::div` and stays unevaluated).  `N[Product[...]]` routes to
+`NProduct`.
+
+```mathematica
+In[1]:= Product[k, {k, 1, n}]
+Out[1]= Factorial[n]
+In[2]:= Product[k + a, {k, 1, n}]
+Out[2]= Pochhammer[1 + a, n]
+In[3]:= Product[2^k, {k, 1, n}]
+Out[3]= 2^(1/2 n (1 + n))
+In[4]:= Product[1 + 1/k^2, {k, 1, Infinity}]
+Out[4]= Sinh[Pi]/Pi
+In[5]:= Product[1 - a q^k, {k, 0, n - 1}]
+Out[5]= QPochhammer[a, q, n]
+In[6]:= Product[k^k, {k, 1, n}]
+Out[6]= Hyperfactorial[n]
+```
+
+### Product`Telescoping
+
+Rational products whose anti-quotient is itself rational (Gamma-free),
+via integer-spaced root chains: `Product[1 - 1/k^2, {k, 2, n}]`
+→ `(1 + n)/(2 n)`.  Falls through when the anti-quotient is not rational.
+
+### Product`Rational
+
+The workhorse: any rational `f` whose numerator and denominator factor
+into linear factors over `Q`, output in `Pochhammer` / `Factorial`
+(`Product[k, {k, 1, n}]` → `n!`).  Falls through on irreducible
+quadratic-or-higher factors.
+
+### Product`Geometric
+
+Factors `base^(p(i))` with `base` free of `i`, routed through `Sum`:
+`Product[base^p(i)] = base^Sum[p(i), {i, imin, imax}]`, multiplying any
+rational cofactor via `Product`Rational`.  The `base^...` factor is never
+passed to `Together`/`Factor` (which loop on a symbolic exponent).
+
+### Product`QProduct
+
+Factors linear in `q^i` (`q` free of `i`) in terms of `QPochhammer`:
+`Product[1 - a q^i, {i, imin, imax}] = QPochhammer[a q^imin, q, imax-imin+1]`.
+
+### Product`Special
+
+Named special-function products: `Product[i^i, {i, 1, n}]`
+→ `Hyperfactorial[n]`, `Product[Gamma[i], {i, 1, n-1}]` → `BarnesG[n]`.
+
+### Product`Infinite
+
+`imax == Infinity`: a rational convergence gate (equal degree, leading
+and next-to-leading coefficients) separates convergent from divergent
+products; convergent ones are evaluated as the limit of the finite closed
+form, and the Weierstrass family `Product[1 + c/k^2, {k, 1, Infinity}]`
+→ `Sinh[Pi Sqrt[c]]/(Pi Sqrt[c])` is recognised directly.  A divergent
+product prints `Product::div` and stays unevaluated.
+
+
 ## FindRoot
 
 Iterative numerical root finder.  Implemented natively in C in

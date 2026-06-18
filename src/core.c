@@ -501,6 +501,9 @@ void core_init(void) {
     bessel_init();
     fibonacci_init();
     lucas_init();
+    void hyperfactorial_init(void); hyperfactorial_init();
+    void barnesg_init(void);        barnesg_init();
+    void qpochhammer_init(void);    qpochhammer_init();
 
     Expr* zero = expr_new_integer(0);
     Expr* one = expr_new_integer(1);
@@ -613,6 +616,8 @@ void core_init(void) {
     integrate_init();
     void sum_init(void);
     sum_init();
+    void product_init(void);
+    product_init();
     void hypergeopfq_init(void);
     hypergeopfq_init();
     void zero_test_init(void);

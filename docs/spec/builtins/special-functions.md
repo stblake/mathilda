@@ -1174,3 +1174,49 @@ Out[1]= 0.49807
 In[2]:= D[BesselY[n, x], x]
 Out[2]= 1/2 (BesselY[-1 + n, x] - BesselY[1 + n, x])
 ```
+
+## Hyperfactorial
+
+`Hyperfactorial[n]` gives the hyperfactorial `prod_{k=1}^{n} k^k`
+(`H(0) = H(1) = 1`).  Exact via GMP for a non-negative integer `n`;
+non-positive-integer, non-integer or symbolic orders are left
+unevaluated.  Used by `Product` to recognise `Product[k^k, {k, 1, n}]`.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= Hyperfactorial[4]
+Out[1]= 27648
+```
+
+## BarnesG
+
+`BarnesG[z]`, the Barnes G-function, with `G(1) = G(2) = 1` and
+`G(z+1) = Gamma[z] G(z)`.  For a positive integer `n`,
+`G(n+1) = prod_{k=1}^{n-1} k!` (the superfactorial, exact via GMP), and
+`G(m) = 0` for non-positive integer `m`.  Non-integer orders are left
+unevaluated.  Used by `Product` to recognise
+`Product[Gamma[i], {i, 1, n-1}]` → `BarnesG[n]`.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= BarnesG[5]
+Out[1]= 12
+```
+
+## QPochhammer
+
+`QPochhammer[a, q, n]` gives the q-Pochhammer symbol (q-shifted
+factorial) `prod_{k=0}^{n-1} (1 - a q^k)`; `QPochhammer[a, q]` gives the
+infinite product `(a;q)_Inf` for `|q| < 1`.  The finite form is
+exact/symbolic for a non-negative integer `n` (a symbolic `n` is left
+unevaluated, which is what `Product` emits as a closed form); the
+infinite form evaluates for machine-real `a`, `q`.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= QPochhammer[a, q, 3]
+Out[1]= (1 - a) (1 - a q) (1 - a q^2)
+```

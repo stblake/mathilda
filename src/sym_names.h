@@ -339,6 +339,7 @@ extern const char* SYM_Power;
 extern const char* SYM_PowerExpand;
 extern const char* SYM_PrecisionGoal;
 extern const char* SYM_Primes;
+extern const char* SYM_Product;
 extern const char* SYM_PrimitiveRoot;
 extern const char* SYM_PrimitiveRootList;
 extern const char* SYM_Protect;

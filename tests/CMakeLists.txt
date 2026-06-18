@@ -118,6 +118,9 @@ set(COMMON_SRC
     ../src/facint.c
     ../src/special_functions/fibonacci.c
     ../src/special_functions/lucas.c
+    ../src/special_functions/hyperfactorial.c
+    ../src/special_functions/barnesg.c
+    ../src/special_functions/qpochhammer.c
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
@@ -264,6 +267,14 @@ set(COMMON_SRC
     ../src/sum/sum_geometric.c
     ../src/sum/sum_gosper.c
     ../src/sum/sum_hypergeometric.c
+    ../src/product/product.c
+    ../src/product/product_util.c
+    ../src/product/product_telescoping.c
+    ../src/product/product_rational.c
+    ../src/product/product_geometric.c
+    ../src/product/product_qproduct.c
+    ../src/product/product_special.c
+    ../src/product/product_infinite.c
     ../src/root.c
     ../src/root_numeric.c
     ../src/radicals.c
@@ -340,6 +351,18 @@ target_include_directories(iter_tests PRIVATE ../src)
 add_executable(sum_tests test_sum.c ${COMMON_SRC})
 target_link_libraries(sum_tests m)
 target_include_directories(sum_tests PRIVATE ../src)
+
+add_executable(product_tests test_product.c ${COMMON_SRC})
+target_link_libraries(product_tests m)
+target_include_directories(product_tests PRIVATE ../src ../src/product)
+
+add_executable(product_stress_tests test_product_stress.c ${COMMON_SRC})
+target_link_libraries(product_stress_tests m)
+target_include_directories(product_stress_tests PRIVATE ../src ../src/product)
+
+add_executable(product_special_tests test_product_special.c ${COMMON_SRC})
+target_link_libraries(product_special_tests m)
+target_include_directories(product_special_tests PRIVATE ../src ../src/special_functions)
 
 add_executable(hypergeopfq_tests test_hypergeopfq.c ${COMMON_SRC})
 target_link_libraries(hypergeopfq_tests m)
