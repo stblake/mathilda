@@ -809,6 +809,23 @@ otherwise); integer, real, and complex coefficients are all supported, with
 solutions over the complexes. Candidate solutions are verified by residual
 (controlled by `VerifySolutions`).
 
+For the `Solve` fallback specifically, every numericalized root is re-checked
+against the original equation: radical substitution (`t = x^(1/q)`,
+`x = t^q`) can introduce extraneous roots that `Solve` does not always discharge
+symbolically, so a candidate whose residual numericalizes clearly away from
+zero is dropped, and under `Reals` a manifestly complex root is dropped too
+(`NSolve[Sqrt[x] + 3 x^(1/3) == 5, x]` → `{{x -> 1.80863}}`, not the two
+extraneous complex roots `Solve` reports). Solutions that do not numericalize
+(symbolic, or `ConditionalExpression` families with free parameters) are kept.
+
+Guards prevent run-away inputs: a univariate polynomial whose literal degree
+exceeds **10000** (e.g. `x^1000000 - 2 x + 3`) is left unevaluated with an
+`NSolve::deg` message rather than handed to the (simultaneous) `NRoots` engine
+or to `Solve`; and a radical exponent whose denominator-LCM exceeds the radical
+solver's cap (e.g. `x^(123451/67890)`) makes the `Solve` radical path bail
+instead of building an astronomically high-degree polynomial — `NSolve` then
+falls back to grid-seeding for any real roots.
+
 Options: `MaxRoots` (cap on the count), `Method`
 (`Automatic | "EndomorphismMatrix" | "Homotopy" | "Symbolic"`),
 `WorkingPrecision`, `VerifySolutions`, `RandomSeeding` (seeds the generic

@@ -66,6 +66,11 @@
 #include <mpfr.h>
 #endif
 
+/* Largest univariate polynomial degree NSolve will hand to the (simultaneous)
+ * NRoots engine.  Beyond this, computing every root is infeasible and would
+ * hang, so NSolve leaves the input unevaluated with an NSolve::deg message. */
+#define NSOLVE_MAX_POLY_DEGREE 10000
+
 /* ------------------------------------------------------------------ *
  *  Small Expr helpers
  * ------------------------------------------------------------------ */
@@ -327,6 +332,41 @@ static Expr* as_equation(Expr* expr) {
                (Expr*[]){ expr_copy(expr), expr_new_integer(0) }, 2);
 }
 
+/* True if `e` mentions the variable symbol `var` anywhere. */
+static bool expr_mentions(const Expr* e, const Expr* var) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return var->type == EXPR_SYMBOL && e->data.symbol == var->data.symbol;
+    if (e->type == EXPR_FUNCTION) {
+        if (expr_mentions(e->data.function.head, var)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (expr_mentions(e->data.function.args[i], var)) return true;
+    }
+    return false;
+}
+
+/* Cheap structural check (no dense-polynomial materialisation): is there a
+ * Power[b, n] with a literal integer exponent n > cap whose base b mentions
+ * `var`?  Used to bail on absurd-degree inputs (x^1000000) before the polynomial
+ * machinery — which would otherwise allocate a million-entry coefficient array
+ * just to discover the degree. */
+static bool has_huge_power(const Expr* e, const Expr* var, long cap) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_head(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* ex = e->data.function.args[1];
+        bool too_big = false;
+        if (ex->type == EXPR_BIGINT) too_big = true;          /* > any long cap */
+        else if (ex->type == EXPR_INTEGER && (long)ex->data.integer > cap)
+            too_big = true;
+        if (too_big && expr_mentions(e->data.function.args[0], var))
+            return true;
+    }
+    if (has_huge_power(e->data.function.head, var, cap)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_huge_power(e->data.function.args[i], var, cap)) return true;
+    return false;
+}
+
 /* Try the polynomial path.  Returns the solution list on success, or NULL to
  * fall through to the Solve specialist.  `expr` and `var` are borrowed. */
 static Expr* nsolve_polynomial(Expr* expr, Expr* var,
@@ -391,6 +431,89 @@ static Expr* cap_solutions(Expr* lst, long max_roots) {
     return out;
 }
 
+/* If `e` numericalizes to a concrete number, set *mag = |e| and return true. */
+static bool nsolve_number_abs(Expr* e, double* mag) {
+    Expr* nexpr = expr_new_function(expr_new_symbol(SYM_N),
+                      (Expr*[]){ expr_copy(e) }, 1);
+    Expr* n = eval_and_free(nexpr);
+    double re, im;
+    bool ok = false;
+    if (expr_to_double(n, &re)) { *mag = fabs(re); ok = true; }
+    else if (is_head(n, SYM_Complex) && n->data.function.arg_count == 2 &&
+             expr_to_double(n->data.function.args[0], &re) &&
+             expr_to_double(n->data.function.args[1], &im)) {
+        *mag = hypot(re, im); ok = true;
+    }
+    expr_free(n);
+    return ok;
+}
+
+/* True if a single solution `sol` ({var -> val, ...}) is provably extraneous for
+ * the equation / system `expr`: substituting it into some equation's residual
+ * numericalizes to a value clearly away from zero, or (under `reals_only`) a
+ * bound value is a manifestly non-real number.  Solutions that do not
+ * numericalize (symbolic, or ConditionalExpression families with free
+ * parameters) are kept (return false) — only provably wrong roots are dropped.
+ * This filters the extraneous roots that radical substitution (t = x^(1/q),
+ * x = t^q) introduces, which Solve cannot always discharge symbolically. */
+static bool solution_is_extraneous(Expr* expr, Expr* sol, bool reals_only) {
+    if (!is_head(sol, SYM_List)) return false;     /* not a rule list -> keep */
+
+    /* Reals filter: drop if any bound value is a manifestly non-real number. */
+    if (reals_only) {
+        for (size_t i = 0; i < sol->data.function.arg_count; i++) {
+            Expr* rule = sol->data.function.args[i];
+            if (is_head(rule, SYM_Rule) && rule->data.function.arg_count == 2) {
+                Expr* val = rule->data.function.args[1];
+                if (is_head(val, SYM_Complex) && val->data.function.arg_count == 2) {
+                    double im;
+                    if (expr_to_double(val->data.function.args[1], &im) &&
+                        fabs(im) > 1e-9)
+                        return true;
+                }
+            }
+        }
+    }
+
+    /* Residual check: substitute the solution into each equation's residual. */
+    Expr** eqs; size_t neq; Expr* single[1];
+    if (is_head(expr, SYM_And) || is_head(expr, SYM_List)) {
+        eqs = expr->data.function.args;
+        neq = expr->data.function.arg_count;
+    } else {
+        single[0] = expr; eqs = single; neq = 1;
+    }
+    for (size_t i = 0; i < neq; i++) {
+        Expr* resid  = equation_residual(eqs[i]);  /* lhs - rhs (owned) */
+        Expr* subbed = expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                           (Expr*[]){ resid, expr_copy(sol) }, 2);
+        Expr* ev = eval_and_free(subbed);
+        double mag;
+        bool isnum = nsolve_number_abs(ev, &mag);
+        expr_free(ev);
+        if (isnum && mag > 1e-6) return true;      /* provably wrong */
+    }
+    return false;
+}
+
+/* Drop provably-extraneous / non-real solutions from a numericalized result
+ * List.  `lst` is consumed; returns a freshly owned List. */
+static Expr* filter_solutions(Expr* lst, Expr* expr, bool reals_only) {
+    if (!is_head(lst, SYM_List)) return lst;
+    size_t n = lst->data.function.arg_count;
+    Expr** keep = malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nk = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* sol = lst->data.function.args[i];
+        if (!solution_is_extraneous(expr, sol, reals_only))
+            keep[nk++] = expr_copy(sol);
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), keep, nk);
+    free(keep);
+    expr_free(lst);
+    return out;
+}
+
 /* Solve `expr` for `varlist` over `dom` symbolically, then round the bindings
  * to the requested working precision.  Returns NULL (leaving NSolve
  * unevaluated) when Solve cannot reduce the input. `expr`, `varlist`, `dom`
@@ -414,6 +537,14 @@ static Expr* nsolve_via_solve(Expr* expr, Expr* varlist,
 
     Expr* numeric = common_numericalize_result(sol, want_machine ? 53 : bits);
     expr_free(sol);
+
+    /* Drop roots that radical/inverse substitution introduced but that do not
+     * satisfy the original equation, and (under Reals) manifestly complex roots.
+     * Solve can leave such extraneous roots when it cannot discharge the
+     * substitution branch symbolically. */
+    bool reals_only = dom && dom->type == EXPR_SYMBOL && dom->data.symbol == SYM_Reals;
+    numeric = filter_solutions(numeric, expr, reals_only);
+
     return cap_solutions(numeric, max_roots);
 }
 
@@ -714,6 +845,18 @@ Expr* builtin_nsolve(Expr* res) {
     Expr* out = NULL;
     if (nvars == 1 && !integers_dom) {
         Expr* var = varlist->data.function.args[0];
+        /* Degree guard: the NRoots engine (Aberth) computes every root, and
+         * Solve cannot factor a degree-millions polynomial either, so an
+         * enormous literal exponent (e.g. x^1000000 - 2 x + 3) would hang both
+         * paths regardless of MaxRoots.  Bail cheaply, leaving NSolve
+         * unevaluated, before either path is entered. */
+        if (has_huge_power(expr, var, NSOLVE_MAX_POLY_DEGREE)) {
+            fprintf(stderr,
+                    "NSolve::deg: the polynomial degree exceeds the supported "
+                    "limit (%d); leaving unevaluated.\n", NSOLVE_MAX_POLY_DEGREE);
+            expr_free(varlist);
+            return NULL;
+        }
         out = nsolve_polynomial(expr, var, reals_only, &opts);
     }
 

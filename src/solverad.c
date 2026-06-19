@@ -401,6 +401,11 @@ static const char* fresh_u_name(Expr* witness1, Expr* witness2, int* counter) {
  * eliminate.  Each pass adds one Resultant call, which is polynomial in
  * the inputs' Sylvester dimension -- big problems explode rapidly. */
 #define SOLVERAD_MAX_GENS 12
+/* Cap on the lcm of exponent denominators (= the radical substitution exponent
+ * u^L).  The cleared polynomial degree scales with L, so an absurd denominator
+ * such as x^(p/67890) would otherwise build a degree-67890 polynomial and hang.
+ * Real radical equations use small denominators (2, 3, 4, 6, 12, ...). */
+#define SOLVERAD_MAX_LCM 120
 
 Expr* solverad_solve_radicals_equality(Expr* equation, Expr* var, Expr* dom) {
     if (!equation || !var) return NULL;
@@ -484,6 +489,16 @@ Expr* solverad_solve_radicals_equality(Expr* equation, Expr* var, Expr* dom) {
         }
         if (L <= 1) {
             /* Shouldn't happen -- is_radical_atom rejects q<=1.  Defensive. */
+            expr_free(base);
+            overflow = true;
+            break;
+        }
+        /* Guard against an exponent-denominator explosion: the substitution
+         * u^L makes the cleared polynomial degree scale with L, so a base like
+         * x^(123451/67890) (L = 67890) would build an astronomically high-degree
+         * polynomial and hang the resultant/root step.  Real radical equations
+         * use small denominators; bail (leave Solve unevaluated) past the cap. */
+        if (L > SOLVERAD_MAX_LCM) {
             expr_free(base);
             overflow = true;
             break;

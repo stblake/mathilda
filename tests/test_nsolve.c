@@ -165,6 +165,27 @@ static void test_transcendental_seed(void) {
     ASSERT_SYS("{E^x-x-7}", "NSolve[E^x-x==7, x, Reals]", "1e-6");
 }
 
+static void test_radical_verification(void) {
+    /* Radical substitution (t = x^(1/6)) introduces extraneous complex roots
+     * that do not satisfy the original equation; they must be filtered out, so
+     * only the single real root x ~ 1.80863 survives. */
+    ASSERT_TRUE("Length[NSolve[Sqrt[x] + 3 x^(1/3) == 5, x]] == 1");
+    ASSERT_TRUE("Length[NSolve[Sqrt[x] + 3 x^(1/3) == 5, x, Reals]] == 1");
+    ASSERT_TRUE("N[Abs[Part[NSolve[Sqrt[x]+3 x^(1/3)==5,x],1,1,2] - 1.80863]] < 1e-4");
+    /* Every returned root genuinely satisfies the original equation. */
+    ASSERT_SYS("{Sqrt[x] + 3 x^(1/3) - 5}", "NSolve[Sqrt[x]+3 x^(1/3)==5,x]", "1e-6");
+}
+
+static void test_degree_and_lcm_guards(void) {
+    /* Enormous polynomial degree: leave unevaluated rather than hang. */
+    ASSERT_TRUE("Head[NSolve[x^1000000-2 x+3==0, x, MaxRoots->3]] === NSolve");
+    /* Absurd radical denominator (x^(p/67890)): the radical path bails on the
+     * LCM cap, so NSolve must not hang (here the grid seeder still finds real
+     * roots that all satisfy the equation). */
+    ASSERT_TRUE("Head[NSolve[2 x^(123451/67890) - x^2 + 4 Sqrt[x] - 4 x - 9/8 == 0, "
+                "x, Reals]] === List");
+}
+
 static void test_attributes(void) {
     ASSERT_TRUE("MemberQ[Attributes[NSolve], Protected]");
 }
@@ -191,6 +212,8 @@ int main(void) {
     TEST(test_poly_systems);
     TEST(test_method_agreement);
     TEST(test_verify_solutions);
+    TEST(test_radical_verification);
+    TEST(test_degree_and_lcm_guards);
     TEST(test_transcendental_seed);
     TEST(test_attributes);
     TEST(test_memory_loop);
