@@ -128,6 +128,14 @@ void test_zeta_machine_real() {
     assert_close("Zeta[-1., 5]", -10.083333333333334, 1e-7);
     /* Hurwitz real: zeta(3, 2) = zeta(3) - 1. */
     assert_close("Zeta[3., 2]", 0.20205690315959429, 1e-12);
+    /* Negative a uses the symmetric ((a+k)^2)^(-s/2) convention (|a+k|^-s on the
+     * real axis): the left-half-plane head terms ADD rather than cancel, so this
+     * differs from the principal-branch HurwitzZeta value. */
+    assert_close("Zeta[3, -1.5]", 16.710694618413456, 1e-6);
+    assert_close("Zeta[3, -3.5]", 16.798018233573806, 1e-6);
+    assert_close("Zeta[2.5, -0.5]", 11.903964884061192, 1e-6);
+    /* HurwitzZeta keeps the principal branch (negative terms cancel pairwise). */
+    assert_close("HurwitzZeta[3, -1.5]", 0.1181020258, 1e-6);
 }
 
 void test_zeta_machine_complex() {

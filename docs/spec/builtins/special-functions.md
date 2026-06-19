@@ -623,7 +623,10 @@ Attributes: `Listable`, `NumericFunction`, `Protected`.
   `N[Zeta[3], 50] = 1.2020569031595942853997381615114499907649862923405…`,
   `N[Zeta[5/4], 50] = 4.5951118258429433806853780396946256522810297806048…`,
   `N[Zeta[1/2 + I/2]] = -0.459303 - 0.961254 I`,
-  `Zeta[-1.5 + I, 2.5 - I] = 0.0184868 + 1.67553 I`.
+  `Zeta[-1.5 + I, 2.5 - I] = 0.0184868 + 1.67553 I`. The two-argument kernel uses
+  the symmetric power `((a+k)^2)^(-s/2)` (= `|a+k|^-s` on the real axis), so for
+  `Re(a) < 0` it differs from the principal-branch `HurwitzZeta`:
+  `Zeta[3, -1.5] = 16.7107` while `HurwitzZeta[3, -1.5] = 0.118102`.
 - **Derivatives.** `D[Zeta[s, a], a] = -s Zeta[1+s, a]` (the `s`-derivative is the
   generic `Derivative[1,0][Zeta][s, a]`); `D[Zeta[s], s] = Derivative[1][Zeta][s]`.
 - **Series.** `Series[Zeta[x], {x, 1, n}]` gives the Laurent expansion that

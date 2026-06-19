@@ -336,13 +336,29 @@ static unsigned long zeta_em_terms(mpfr_prec_t wp, const zcx* s) {
     return (unsigned long)n;
 }
 
-/* zeta(s, a) for complex s, a (Re(a) > 0 after the head shift) into `out`.
- * Returns false on a non-finite result (e.g. the s = 1 pole). */
+/* zeta(s, a) for complex s, a (the two-argument Zeta convention) into `out`.
+ * Returns false on a non-finite result (e.g. the s = 1 pole).
+ *
+ * Unlike HurwitzZeta, two-argument Zeta uses the *symmetric* power
+ * ((a+k)^2)^(-s/2) (= |a+k|^-s on the real axis), so for Re(a) < 0 the head
+ * terms whose base lies in the left half-plane differ from the principal branch
+ * (a+k)^-s.  We sum the head with the symmetric power and run the
+ * Euler-Maclaurin tail from a+N, where N is forced large enough that Re(a+N) is
+ * comfortably positive (there the symmetric and principal powers coincide). */
 static bool zeta_hurwitz_cx(zcx* out, const zcx* s, const zcx* a, mpfr_prec_t wp) {
     unsigned long N = zeta_em_terms(wp, s);
+    /* Push the tail base a+N safely into the right half-plane for Re(a) < 0. */
+    {
+        double are = mpfr_get_d(a->re, ZRND);
+        if (are < 0) {
+            unsigned long need = (unsigned long)(-are) + 8UL;
+            if (need > N) N = need;
+        }
+    }
 
-    zcx S, negs, base, term, w, P0, f, winv2, w2, sm1, r, tmp, tmp2;
-    zcx_init(&S, wp); zcx_init(&negs, wp); zcx_init(&base, wp); zcx_init(&term, wp);
+    zcx S, negs, hnegs, base, base2, term, w, P0, f, winv2, w2, sm1, r, tmp, tmp2;
+    zcx_init(&S, wp); zcx_init(&negs, wp); zcx_init(&hnegs, wp);
+    zcx_init(&base, wp); zcx_init(&base2, wp); zcx_init(&term, wp);
     zcx_init(&w, wp); zcx_init(&P0, wp); zcx_init(&f, wp); zcx_init(&winv2, wp);
     zcx_init(&w2, wp); zcx_init(&sm1, wp); zcx_init(&r, wp); zcx_init(&tmp, wp);
     zcx_init(&tmp2, wp);
@@ -352,18 +368,22 @@ static bool zeta_hurwitz_cx(zcx* out, const zcx* s, const zcx* a, mpfr_prec_t wp
     mpfr_set_ui(eps, 1, ZRND);
     mpfr_div_2ui(eps, eps, (unsigned long)(wp > 12 ? wp - 8 : 1), ZRND);
 
-    /* -s */
+    /* -s and -s/2 */
     mpfr_neg(negs.re, s->re, ZRND);
     mpfr_neg(negs.im, s->im, ZRND);
+    mpfr_div_2ui(hnegs.re, negs.re, 1, ZRND);
+    mpfr_div_2ui(hnegs.im, negs.im, 1, ZRND);
 
-    /* Head sum S = Sum_{k=0}^{N-1} (a+k)^-s, skipping any k with a+k == 0. */
+    /* Head sum S = Sum_{k=0}^{N-1} ((a+k)^2)^(-s/2), skipping any k with
+     * a+k == 0 (symmetric power keeps the singular term excluded). */
     mpfr_set_ui(S.re, 0, ZRND); mpfr_set_ui(S.im, 0, ZRND);
     for (unsigned long k = 0; k < N; k++) {
         mpfr_add_ui(base.re, a->re, k, ZRND);
         mpfr_set(base.im, a->im, ZRND);
         zcx_abs(mag, &base);
         if (mpfr_sgn(mag) == 0) continue;          /* k + a == 0 excluded */
-        zcx_pow(&term, &base, &negs, wp);
+        zcx_mul(&base2, &base, &base, wp);         /* (a+k)^2 */
+        zcx_pow(&term, &base2, &hnegs, wp);        /* ((a+k)^2)^(-s/2) */
         zcx_add(&S, &S, &term);
     }
 
@@ -448,7 +468,8 @@ static bool zeta_hurwitz_cx(zcx* out, const zcx* s, const zcx* a, mpfr_prec_t wp
     bool ok = mpfr_number_p(out->re) && mpfr_number_p(out->im);
 
     mpfr_clears(eps, mag, prevmag, sabs, cj, bq_d, (mpfr_ptr)0);
-    zcx_clear(&S); zcx_clear(&negs); zcx_clear(&base); zcx_clear(&term);
+    zcx_clear(&S); zcx_clear(&negs); zcx_clear(&hnegs); zcx_clear(&base);
+    zcx_clear(&base2); zcx_clear(&term);
     zcx_clear(&w); zcx_clear(&P0); zcx_clear(&f); zcx_clear(&winv2);
     zcx_clear(&w2); zcx_clear(&sm1); zcx_clear(&r); zcx_clear(&tmp); zcx_clear(&tmp2);
     return ok;
