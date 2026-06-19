@@ -109,6 +109,7 @@ set(COMMON_SRC
     ../src/special_functions/pochhammer.c
     ../src/special_functions/eulergamma.c
     ../src/special_functions/zeta.c
+    ../src/special_functions/hurwitzzeta.c
     ../src/special_functions/stieltjesgamma.c
     ../src/special_functions/bernoullib.c
     ../src/special_functions/eulere.c
@@ -1477,6 +1478,9 @@ target_include_directories(pochhammer_tests PRIVATE ../src)
 
 add_executable(zeta_tests test_zeta.c ${COMMON_SRC})
 target_include_directories(zeta_tests PRIVATE ../src)
+
+add_executable(hurwitzzeta_tests test_hurwitzzeta.c ${COMMON_SRC})
+target_include_directories(hurwitzzeta_tests PRIVATE ../src)
 
 add_executable(stieltjesgamma_tests test_stieltjesgamma.c ${COMMON_SRC})
 target_include_directories(stieltjesgamma_tests PRIVATE ../src)

@@ -575,6 +575,19 @@ void info_init(void) {
         "reduces to Zeta[s] minus a finite power sum. Real, complex, machine and\n"
         "arbitrary-precision (MPFR) numeric arguments evaluate numerically via\n"
         "mpfr_zeta (real Riemann) or an Euler-Maclaurin kernel. Listable.");
+    symtab_set_docstring("HurwitzZeta",
+        "HurwitzZeta[s, a]\n"
+        "\tis the Hurwitz zeta function zeta(s, a) = Sum_{k>=0} (k + a)^-s.\n"
+        "Identical to Zeta[s, a] for Re(a) > 0, but built on the principal-branch\n"
+        "power (k + a)^-s, so it differs from Zeta for non-positive real a and has\n"
+        "poles at a = 0, -1, -2, ... . HurwitzZeta[s, 1] is Zeta[s], "
+        "HurwitzZeta[s, 1/2]\n"
+        "is (2^s - 1) Zeta[s], and a positive integer a reduces to Zeta[s] minus a\n"
+        "finite power sum. A non-positive integer a gives ComplexInfinity for "
+        "positive\n"
+        "integer s and the Bernoulli-polynomial value for non-positive integer s.\n"
+        "Real, complex, machine and arbitrary-precision (MPFR) arguments evaluate\n"
+        "numerically via an Euler-Maclaurin kernel. Listable.");
     symtab_set_docstring("BernoulliB",
         "BernoulliB[n]\n"
         "\tgives the Bernoulli number B_n.\n"

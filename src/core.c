@@ -30,6 +30,7 @@
 #include "pochhammer.h"
 #include "eulergamma.h"
 #include "zeta.h"
+#include "hurwitzzeta.h"
 #include "stieltjesgamma.h"
 #include "bernoullib.h"
 #include "eulere.h"
@@ -494,6 +495,7 @@ void core_init(void) {
     pochhammer_init();
     eulergamma_init();
     zeta_init();
+    hurwitzzeta_init();
     stieltjesgamma_init();
     bernoullib_init();
     eulere_init();

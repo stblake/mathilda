@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy functions `AiryAi` and `AiryBi`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy functions `AiryAi` and `AiryBi`.
 
 ## Gamma
 
@@ -634,6 +634,50 @@ Out[1]= 1/6 Pi^2
 
 In[2]:= Series[Zeta[x], {x, 1, 2}] // Normal
 Out[2]= EulerGamma + 1/(-1 + x) - StieltjesGamma[1] (-1 + x) + 1/2 StieltjesGamma[2] (-1 + x)^2
+```
+
+## HurwitzZeta
+
+- `HurwitzZeta[s, a]` — the Hurwitz zeta function ζ(s, a) = Σ_{k≥0} (k+a)⁻ˢ
+  (Re s > 1; analytic continuation elsewhere).
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+`HurwitzZeta` is identical to `Zeta[s, a]` for Re a > 0, but it sums the
+**principal-branch** power (k+a)⁻ˢ rather than ((k+a)²)^(−s/2). Two consequences
+follow: the functions disagree for non-positive real `a` (e.g.
+`HurwitzZeta[3, -3.5] = 0.0307784` versus `Zeta[3, -3.5] = 16.798`), and
+`HurwitzZeta` keeps the singular summands `Zeta` discards, so it has poles at
+`a = 0, -1, -2, …`.
+
+- **Exact reductions** (when neither argument is inexact):
+  - `HurwitzZeta[s, 1] = Zeta[s]`, inheriting all the Riemann closed forms;
+    `Table[HurwitzZeta[s, 1], {s, -2, 2}] = {0, -1/12, -1/2, ComplexInfinity, Pi^2/6}`.
+  - `HurwitzZeta[s, 1/2] = (2^s - 1) Zeta[s]`.
+  - A positive integer `a = m` reduces to `Zeta[s] − Σ_{k=1}^{m-1} k⁻ˢ`, e.g.
+    `HurwitzZeta[3, 2] = -1 + Zeta[3]` and `HurwitzZeta[2, 5] = -205/144 + Pi^2/6`.
+- **Poles and special points.** `HurwitzZeta[1, a] = ComplexInfinity` for any `a`.
+  At a non-positive integer `a`: a positive integer `s` gives `ComplexInfinity`
+  (`HurwitzZeta[2, -2] = ComplexInfinity`), while a non-positive integer `s` gives
+  the finite Bernoulli-polynomial value `−BernoulliB[1-s, a]/(1-s)`, e.g.
+  `HurwitzZeta[0, 0] = 1/2` and `HurwitzZeta[-1, 0] = -1/12`.
+- **Numerics.** Real and complex, machine- and arbitrary-precision arguments
+  evaluate through one Euler–Maclaurin complex-MPFR kernel; a numeric pole gives
+  `ComplexInfinity`. Precision tracks the input, e.g.
+  `HurwitzZeta[3, .2] = 125.739`, `HurwitzZeta[7., 5] = 1.84949×10⁻⁵`,
+  `HurwitzZeta[2.3, 8 + I] = 0.0544701 - 0.00944852 I`,
+  `N[HurwitzZeta[1/3, 8/7], 50] = -1.1389367444490991746548674334535727810961919460755…`.
+- **Derivatives.** `D[HurwitzZeta[s, a], a] = -s HurwitzZeta[1+s, a]` (the
+  `s`-derivative is the generic `Derivative[1,0][HurwitzZeta][s, a]`); higher
+  `a`-derivatives follow the rising-factorial pattern
+  `(-1)^k Pochhammer[s, k] HurwitzZeta[k+s, a]`.
+
+```mathematica
+In[1]:= HurwitzZeta[s, 1/2]
+Out[1]= (-1 + 2^s) Zeta[s]
+
+In[2]:= HurwitzZeta[3, -3.5]
+Out[2]= 0.0307784
 ```
 
 ## StieltjesGamma

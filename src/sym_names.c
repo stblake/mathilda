@@ -448,6 +448,7 @@ const char* SYM_WynnDegree = NULL;
 const char* SYM_Xor = NULL;
 const char* SYM_StieltjesGamma = NULL;
 const char* SYM_Zeta = NULL;
+const char* SYM_HurwitzZeta = NULL;
 const char* SYM_BernoulliB = NULL;
 const char* SYM_EulerE = NULL;
 const char* SYM_PolyLog = NULL;
@@ -967,6 +968,7 @@ void sym_names_init(void) {
     SYM_Xor                        = intern_symbol("Xor");
     SYM_StieltjesGamma             = intern_symbol("StieltjesGamma");
     SYM_Zeta                       = intern_symbol("Zeta");
+    SYM_HurwitzZeta                = intern_symbol("HurwitzZeta");
     SYM_BernoulliB                 = intern_symbol("BernoulliB");
     SYM_EulerE                     = intern_symbol("EulerE");
     SYM_PolyLog                    = intern_symbol("PolyLog");
