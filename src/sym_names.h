@@ -89,6 +89,7 @@ extern const char* SYM_ConjugateTranspose;
 extern const char* SYM_Continue;
 extern const char* SYM_ContinuedFraction;
 extern const char* SYM_ContourPoints;
+extern const char* SYM_CoprimeQ;
 extern const char* SYM_Cos;
 extern const char* SYM_Cosh;
 extern const char* SYM_Cot;

@@ -74,6 +74,7 @@ const char* SYM_ConjugateTranspose = NULL;
 const char* SYM_Continue = NULL;
 const char* SYM_ContinuedFraction = NULL;
 const char* SYM_ContourPoints = NULL;
+const char* SYM_CoprimeQ = NULL;
 const char* SYM_Cos = NULL;
 const char* SYM_Cosh = NULL;
 const char* SYM_Cot = NULL;
@@ -599,6 +600,7 @@ void sym_names_init(void) {
     SYM_Continue                   = intern_symbol("Continue");
     SYM_ContinuedFraction          = intern_symbol("ContinuedFraction");
     SYM_ContourPoints              = intern_symbol("ContourPoints");
+    SYM_CoprimeQ                   = intern_symbol("CoprimeQ");
     SYM_Cos                        = intern_symbol("Cos");
     SYM_Cosh                       = intern_symbol("Cosh");
     SYM_Cot                        = intern_symbol("Cot");

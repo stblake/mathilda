@@ -356,6 +356,10 @@ add_executable(divisible_tests test_divisible.c ${COMMON_SRC})
 target_include_directories(divisible_tests PRIVATE ../src)
 add_test(NAME divisible_tests COMMAND divisible_tests)
 
+add_executable(coprimeq_tests test_coprimeq.c ${COMMON_SRC})
+target_include_directories(coprimeq_tests PRIVATE ../src)
+add_test(NAME coprimeq_tests COMMAND coprimeq_tests)
+
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)

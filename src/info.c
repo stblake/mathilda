@@ -74,6 +74,16 @@ void info_init(void) {
         "quotient n/m must reduce to an integer or Gaussian integer).  Returns\n"
         "False unless n and m are manifestly divisible; symbolic, non-numeric\n"
         "arguments are left unevaluated.  Listable.");
+    symtab_set_docstring("CoprimeQ",
+        "CoprimeQ[n1, n2, ...]\n"
+        "\tyields True if the arguments are pairwise relatively prime, and\n"
+        "\tFalse otherwise.\n"
+        "Integers are relatively prime when their GCD is 1.  Works for machine\n"
+        "and BigInt integers.  With GaussianIntegers -> True, or when any\n"
+        "argument is an exact Gaussian integer, coprimality is tested over the\n"
+        "Gaussian integers Z[i].  Returns False unless the arguments are\n"
+        "manifestly coprime; CoprimeQ[] is False and CoprimeQ[n] is True.\n"
+        "Listable and Orderless.");
     symtab_set_docstring("PowerMod", "PowerMod[a, b, m] gives a^b mod m.\nPowerMod[a, -1, m] finds the modular inverse of a modulo m.\nPowerMod[a, 1/r, m] finds a modular r-th root of a.");
     symtab_set_docstring("PrimitiveRoot",
         "PrimitiveRoot[n]\n"
