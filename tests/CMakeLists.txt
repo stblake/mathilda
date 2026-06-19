@@ -348,6 +348,10 @@ add_test(NAME zero_test_tests COMMAND zero_test_tests)
 add_executable(list_tests test_list.c ${COMMON_SRC})
 target_include_directories(list_tests PRIVATE ../src)
 
+add_executable(rescale_tests test_rescale.c ${COMMON_SRC})
+target_include_directories(rescale_tests PRIVATE ../src)
+add_test(NAME rescale_tests COMMAND rescale_tests)
+
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)

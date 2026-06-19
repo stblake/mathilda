@@ -353,6 +353,7 @@ const char* SYM_RealDigits = NULL;
 const char* SYM_Reals = NULL;
 const char* SYM_Repeated = NULL;
 const char* SYM_RepeatedNull = NULL;
+const char* SYM_Rescale = NULL;
 const char* SYM_Return = NULL;
 const char* SYM_Reverse = NULL;
 const char* SYM_Root = NULL;
@@ -880,6 +881,7 @@ void sym_names_init(void) {
     SYM_RootSum                    = intern_symbol("RootSum");
     SYM_RotateLeft                 = intern_symbol("RotateLeft");
     SYM_RotateRight                = intern_symbol("RotateRight");
+    SYM_Rescale                    = intern_symbol("Rescale");
     SYM_Return                     = intern_symbol("Return");
     SYM_Reverse                    = intern_symbol("Reverse");
     SYM_Round                      = intern_symbol("Round");

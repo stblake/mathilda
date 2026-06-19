@@ -90,3 +90,32 @@ Generates an array by applying a function to indices.
 - `Array[f, n]`
 - `Array[f, {n1, n2, ...}]`
 
+## Rescale
+Linearly rescales values onto a target interval. Attributes: `NumericFunction`,
+`Protected`.
+- `Rescale[x, {min, max}]`: rescales `x` to run from 0 to 1 over the range
+  `min` to `max`, equivalent to `(x - min)/(max - min)`.
+- `Rescale[x, {min, max}, {ymin, ymax}]`: rescales `x` to run from `ymin` to
+  `ymax` over the range `min` to `max`.
+- `Rescale[list]`: rescales each element of `list` to run from 0 to 1 over the
+  range `Min[list]` to `Max[list]`.
+
+Rescale threads element-wise over a `List` first argument (recursively, so it
+maps over matrices), and works uniformly on exact integers/rationals, reals
+(output precision tracks the input), arbitrary-precision numbers, complex
+numbers, and purely symbolic quantities, deferring all arithmetic to the core
+evaluator.
+
+```
+In[1]:= Rescale[2.5, {-10, 10}]
+Out[1]= 0.625
+In[2]:= Rescale[-3/2, {-2, 2}]
+Out[2]= 1/8
+In[3]:= Rescale[3, {-9, 7}, {11, 28}]
+Out[3]= 95/4
+In[4]:= Rescale[{-2, 0, 2}]
+Out[4]= {0, 1/2, 1}
+In[5]:= Rescale[1 + 2 I, {0, 1 + I}]
+Out[5]= 3/2 + 1/2 I
+```
+

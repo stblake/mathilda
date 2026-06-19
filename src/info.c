@@ -1477,6 +1477,17 @@ void info_init(void) {
     symtab_set_docstring("Insert", "Insert[expr, elem, n] inserts elem at position n in expr.");
     symtab_set_docstring("Delete", "Delete[expr, n] deletes the element at position n in expr.");
     symtab_set_docstring("Reverse", "Reverse[expr] reverses the order of elements in expr.");
+    symtab_set_docstring("Rescale",
+        "Rescale[x, {min, max}]\n"
+        "\tgives x rescaled to run from 0 to 1 over the range min to max, "
+        "equivalent to (x - min)/(max - min).\n"
+        "Rescale[x, {min, max}, {ymin, ymax}]\n"
+        "\tgives x rescaled to run from ymin to ymax over the range min to max.\n"
+        "Rescale[list]\n"
+        "\trescales each element of list to run from 0 to 1 over the range "
+        "Min[list] to Max[list].\n"
+        "Rescale threads over a list first argument and works with exact, "
+        "real, complex, and symbolic quantities.");
     symtab_set_docstring("RotateLeft", "RotateLeft[expr, n] rotates the elements of expr n positions to the left.");
     symtab_set_docstring("RotateRight", "RotateRight[expr, n] rotates the elements of expr n positions to the right.");
     symtab_set_docstring("Transpose",
