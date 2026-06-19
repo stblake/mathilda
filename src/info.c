@@ -572,7 +572,8 @@ void info_init(void) {
         "Even positive integers give rational multiples of Pi^(2n), negative\n"
         "integers give rationals, Zeta[0] is -1/2, and Zeta[1] is ComplexInfinity;\n"
         "odd positive integers stay symbolic. Hurwitz zeta at a positive integer a\n"
-        "reduces to Zeta[s] minus a finite power sum. Real, complex, machine and\n"
+        "reduces to Zeta[s] minus a finite power sum, and Zeta[s, 1/2] is\n"
+        "(2^s - 1) Zeta[s]. Real, complex, machine and\n"
         "arbitrary-precision (MPFR) numeric arguments evaluate numerically via\n"
         "mpfr_zeta (real Riemann) or an Euler-Maclaurin kernel. Listable.");
     symtab_set_docstring("HurwitzZeta",
@@ -623,6 +624,17 @@ void info_init(void) {
         "evaluate numerically at machine or arbitrary (MPFR) precision via a power\n"
         "series or the Jonquiere/zeta expansion. There is a branch cut from 1 to\n"
         "Infinity. Listable.");
+    symtab_set_docstring("LerchPhi",
+        "LerchPhi[z, s, a]\n"
+        "\tis the Lerch transcendent Phi(z, s, a) = Sum_{k>=0} z^k/(k + a)^s.\n"
+        "It generalizes Zeta, HurwitzZeta and PolyLog: LerchPhi[1, s, a] is\n"
+        "Zeta[s, a] and z LerchPhi[z, s, 1] is PolyLog[s, z]. Exact reductions\n"
+        "cover z = 0 (a^-s), s = 0 (1/(1-z)), z = +-1, positive integer a (a\n"
+        "PolyLog form) and negative integer s (a rational function of z). The\n"
+        "options DoublyInfinite -> True (sum k from -Infinity to Infinity) and\n"
+        "IncludeSingularTerm -> True (keep the k + a = 0 term) are supported.\n"
+        "Inexact arguments with |z| < 1 evaluate numerically at machine or\n"
+        "arbitrary (MPFR) precision; |z| > 1 stays symbolic. Listable.");
     symtab_set_docstring("StieltjesGamma",
         "StieltjesGamma[n]\n"
         "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"

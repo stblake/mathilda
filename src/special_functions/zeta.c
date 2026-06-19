@@ -95,6 +95,12 @@ static bool zeta_exact_int(const Expr* e, long* out) {
     return false;
 }
 
+/* True if `e` is exactly the rational 1/2. */
+static bool zeta_is_half(const Expr* e) {
+    int64_t n, d;
+    return is_rational(e, &n, &d) && n == 1 && d == 2;
+}
+
 /* ------------------------------------------------------------------ */
 /* Bernoulli numbers B_k (exact, lazily cached, process-lifetime)      */
 /*                                                                     */
@@ -606,6 +612,20 @@ static Expr* zeta_one_arg(Expr* s) {
  *   zeta(s, m) = Zeta[s] - Sum_{k=1}^{m-1} k^-s.
  * Valid for symbolic / exact / integer s (gives Zeta[3,2] -> -1+Zeta[3],
  * Zeta[4,5] -> Pi^4/90 - 22369/20736). Returns NULL past the cap. */
+/* Zeta[s, 1/2] = (2^s - 1) Zeta[s].  Valid because a = 1/2 > 0, so the symmetric
+ * power ((k+1/2)^2)^(-s/2) coincides with the principal (k+1/2)^-s. */
+static Expr* zeta_half(Expr* s) {
+    Expr* twos = expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ expr_new_integer(2), expr_copy(s) }, 2);
+    Expr* coeff = expr_new_function(expr_new_symbol(SYM_Plus),
+                     (Expr*[]){ twos, expr_new_integer(-1) }, 2);
+    Expr* zs = expr_new_function(expr_new_symbol(SYM_Zeta),
+                     (Expr*[]){ expr_copy(s) }, 1);
+    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ coeff, zs }, 2);
+    return eval_and_free(prod);
+}
+
 static Expr* zeta_hurwitz_int_a(Expr* s, long m) {
     if (m < 1 || m > ZETA_HURWITZ_A_CAP) return NULL;
 
@@ -637,7 +657,10 @@ static Expr* zeta_two_arg(Expr* s, Expr* a) {
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Zeta),
                              (Expr*[]){ expr_copy(s) }, 1));
 
-    /* 2. Exact Hurwitz at a positive integer a (only when s is not inexact;
+    /* 2. a == 1/2: Zeta[s, 1/2] = (2^s - 1) Zeta[s] (exact s only). */
+    if (!zeta_is_inexact(s) && zeta_is_half(a)) return zeta_half(s);
+
+    /* 3. Exact Hurwitz at a positive integer a (only when s is not inexact;
      *    inexact s falls through to the numeric kernel). */
     if (!zeta_is_inexact(s)) {
         long m;
@@ -648,7 +671,7 @@ static Expr* zeta_two_arg(Expr* s, Expr* a) {
     }
 
 #ifdef USE_MPFR
-    /* 3. Numeric (real or complex) Hurwitz: at least one inexact operand. */
+    /* 4. Numeric (real or complex) Hurwitz: at least one inexact operand. */
     {
         Expr* zero = expr_new_integer(0);
         Expr *sre, *sim, *are, *aim;

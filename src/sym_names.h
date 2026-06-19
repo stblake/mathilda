@@ -465,6 +465,9 @@ extern const char* SYM_HurwitzZeta;
 extern const char* SYM_BernoulliB;
 extern const char* SYM_EulerE;
 extern const char* SYM_PolyLog;
+extern const char* SYM_LerchPhi;
+extern const char* SYM_DoublyInfinite;
+extern const char* SYM_IncludeSingularTerm;
 
 /* Legitimate uncached builtins and system variables migrated to cached
  * SYM_* pointers (2026-06-16). Excludes context-qualified/private and

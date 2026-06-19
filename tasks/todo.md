@@ -1,50 +1,38 @@
-# Task: Trivial + highly-non-trivial examples for all non-trivial builtins
+# Task: Implement LerchPhi[z, s, a]
 
-Goal: For every non-trivial builtin, the doc page should show BOTH a simple/trivial
-example AND one or more highly non-trivial ("research level") examples that show off
-Mathilda's capabilities. Examples live in `site/overlays/<Name>.md` (the established
-"Worked examples" channel) and MUST be verified against the built `./Mathilda`.
-
-## Decisions (confirmed with user)
-- Scope: all non-trivial functions — 320 candidates (448 total minus 128 trivial
-  accessors / `$`-sysvars / simple File I/O / RNG / basic comparisons & assignment).
-- Placement: `site/overlays/<Name>.md` (NOT spec files). Overlays render under
-  "Notes & additional examples". Not auto-verified by generate.py → each example
-  verified by hand against the binary during authoring.
-
-## Pipeline
-- `site/generate.py` merges `overlays/<Name>.md` onto each page. Front matter
-  (`status:`, `references:`) overrides; body appended. Examples are plain
-  ```mathematica In[n]:= / Out[n]= ``` blocks.
-- After all overlays written: `python3 site/generate.py` (needs `./Mathilda`),
-  then `make docs-build` (strict MkDocs) to confirm the site still builds.
+Lerch transcendent Phi(z,s,a) = Sum_{k>=0} z^k / (k+a)^s. Generalizes Zeta,
+HurwitzZeta and PolyLog. Template: src/special_functions/{zeta,hurwitzzeta,polylog}.c.
 
 ## Plan
-- [x] Understand generator + overlay format
-- [x] Confirm scope + placement with user
-- [x] Compute 320 candidates -> 30 batches (/tmp/mathilda_doc_candidates.json)
-- [ ] PILOT: one agent on batch 06; review quality + round-trip
-- [ ] Fan out remaining 29 batches (subagents, ~11 fns each)
-- [ ] Regenerate site (generate.py) + strict build
-- [ ] Spot-check a sample of rendered pages for fabricated outputs
-- [ ] Commit + push
 
-## Constraints for authoring agents
-- Run `./Mathilda` FOREGROUND only (printf ... | ./Mathilda). No backgrounding,
-  no until-loop pollers (OOM risk), no `timeout` (macOS lacks it).
-- NEVER fabricate Out[]; paste the exact verified output.
-- Preserve existing overlay front matter (status/references) and Notes prose.
-- Only edit `site/overlays/<Name>.md`. Do not touch generate.py / spec / src.
+- [ ] `src/special_functions/lerchphi.{c,h}` — builtin_lerchphi + lerchphi_init
+  - Option parsing: 3 positional args + DoublyInfinite / IncludeSingularTerm;
+    argrx for <3 args, nonopt for bad options beyond position 3.
+  - Exact reductions (built symbolically, eval_and_free): z==0 -> a^-s; s==0 ->
+    1/(1-z); z==1 -> Zeta[s,a]; z==-1 -> 2^-s(Zeta[s,a/2]-Zeta[s,(a+1)/2]);
+    a positive integer m -> z^-m(PolyLog[s,z]-Sum_{j=1}^{m-1} z^j j^-s);
+    s negative integer -n -> (z d/dz + a)^n[1/(1-z)] Together'd;
+    IncludeSingularTerm->True & a non-positive integer -> ComplexInfinity.
+  - DoublyInfinite->True -> LerchPhi[z,s,a] + z^-1 LerchPhi[1/z,s,1-a].
+  - Numeric single-sum kernel (complex MPFR `lcx`), |z|<1, machine + MPFR, complex.
+- [ ] sym_names.{c,h}: SYM_LerchPhi, SYM_DoublyInfinite, SYM_IncludeSingularTerm
+- [ ] core.c: include + lerchphi_init()
+- [ ] info.c: docstring
+- [ ] calculus/deriv.c: d/dz, d/da elementary rules; d/ds generic Derivative
+- [ ] tests/CMakeLists.txt + tests/test_lerchphi.c
+- [ ] docs/spec/builtins/special-functions.md + changelog/2026-06-15.md
+- [ ] Build, run tests, valgrind clean.
 
-## Review
-- Done: 320 candidate builtins processed across 30 batches (1 pilot + 29 fan-out
-  subagents). Overlays merged grew 215 -> 396. `generate.py` re-verified examples;
-  strict MkDocs build passes (1134 spec-verified + many overlay examples).
-- Every overlay example was run through `./Mathilda` by the authoring agent; I
-  additionally reproduced the wrong-result bug claims before logging them.
-- Bugs/discrepancies consolidated in `MATHILDA_BUGS.md` (8 confirmed wrong-result/
-  broken items incl. Coefficient-Laurent, EvenQ-of-symbol corrupting Sum, matrix
-  Norm, Flatten[_,Infinity], Root[Function]-N, Variables[eqn]; plus a discrepancy
-  list and unimplemented-function list).
-- Known cosmetic nit (not fixed): a few multi-step overlay blocks reuse `In[1]`
-  across lines instead of 1,2,3; outputs are all correct/verified.
+## Scope note
+Numeric continuation for |z|>1 (general a) is NOT implemented (stays symbolic).
+
+## Review (done)
+- All planned pieces implemented and wired. `lerchphi_tests` (16 cases) pass;
+  zeta/hurwitzzeta/polylog/deriv neighbours still green. Main binary builds clean
+  under -std=c99 -Wall -Wextra. Valgrind: no LerchPhi/src frames in any leak
+  stack (only the documented ~12,800 B macOS dyld/Accelerate baseline).
+- Bug found & fixed: negative-integer-s operator collapsed when z was a concrete
+  number (D of a constant); now differentiates against a fresh placeholder symbol
+  then substitutes z (LerchPhi[2,-1,a] -> 2-a, was -a).
+- Numerics cross-checked independently: z·LerchPhi[z,s,1] == PolyLog[s,z] and
+  LerchPhi[1,s,a] == Zeta[s,a] agree across the distinct kernels.

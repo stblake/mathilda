@@ -452,6 +452,9 @@ const char* SYM_HurwitzZeta = NULL;
 const char* SYM_BernoulliB = NULL;
 const char* SYM_EulerE = NULL;
 const char* SYM_PolyLog = NULL;
+const char* SYM_LerchPhi = NULL;
+const char* SYM_DoublyInfinite = NULL;
+const char* SYM_IncludeSingularTerm = NULL;
 
 /* Legitimate uncached builtins and system variables migrated to cached
  * SYM_* pointers (2026-06-16). See header for rationale. */
@@ -972,6 +975,9 @@ void sym_names_init(void) {
     SYM_BernoulliB                 = intern_symbol("BernoulliB");
     SYM_EulerE                     = intern_symbol("EulerE");
     SYM_PolyLog                    = intern_symbol("PolyLog");
+    SYM_LerchPhi                   = intern_symbol("LerchPhi");
+    SYM_DoublyInfinite             = intern_symbol("DoublyInfinite");
+    SYM_IncludeSingularTerm        = intern_symbol("IncludeSingularTerm");
 
     /* Uncached builtins & system variables migrated 2026-06-16 (see header). */
     SYM_Apply                      = intern_symbol("Apply");

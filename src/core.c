@@ -35,6 +35,7 @@
 #include "bernoullib.h"
 #include "eulere.h"
 #include "polylog.h"
+#include "lerchphi.h"
 #include "airyai.h"
 #include "airybi.h"
 #include "bessel.h"
@@ -500,6 +501,7 @@ void core_init(void) {
     bernoullib_init();
     eulere_init();
     polylog_init();
+    lerchphi_init();
     airyai_init();
     airybi_init();
     bessel_init();

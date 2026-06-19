@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy functions `AiryAi` and `AiryBi`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy functions `AiryAi` and `AiryBi`.
 
 ## Gamma
 
@@ -610,7 +610,8 @@ Attributes: `Listable`, `NumericFunction`, `Protected`.
 - **Exact Hurwitz at a positive integer `a`.** `Zeta[s, m]` reduces to
   `Zeta[s] - Σ_{k=1}^{m-1} k⁻ˢ`, valid for symbolic / exact `s`, e.g.
   `Zeta[3, 2] = -1 + Zeta[3]` and `Zeta[4, 5] = Pi^4/90 - 22369/20736`.
-  `Zeta[s, 1] = Zeta[s]`.
+  `Zeta[s, 1] = Zeta[s]` and `Zeta[s, 1/2] = (2^s - 1) Zeta[s]`
+  (e.g. `Zeta[2, 1/2] = Pi^2/2`, `Zeta[3, 1/2] = 7 Zeta[3]`).
 - **Numerics.** Real one-argument zeta uses MPFR's `mpfr_zeta` (machine or
   arbitrary precision). All complex inputs, and all two-argument (Hurwitz)
   inputs, use one Euler–Maclaurin complex-MPFR kernel (Riemann is the `a = 1`
@@ -814,6 +815,57 @@ Out[1]= 1/6 Log[2]^3 - 1/12 Log[2] Pi^2 + 7/8 Zeta[3]
 
 In[2]:= PolyLog[2, 0.9]
 Out[2]= 1.29971
+```
+
+## LerchPhi
+
+- `LerchPhi[z, s, a]` — the Lerch transcendent Φ(z, s, a) = Σ_{k≥0} zᵏ/(k+a)ˢ
+  (|z| < 1; analytic continuation elsewhere, branch cut z ∈ [1, ∞)). For Re a < 0
+  the principal value uses the symmetric power ((k+a)²)^(−s/2) and excludes any
+  term with k + a = 0.
+
+`LerchPhi` is the common generalization of `Zeta`, `HurwitzZeta` and `PolyLog`:
+`LerchPhi[1, s, a] = Zeta[s, a]` and `z LerchPhi[z, s, 1] = PolyLog[s, z]`.
+Implemented in `src/special_functions/lerchphi.c`, registered via
+`lerchphi_init()` in `core_init()`.
+
+- **Exact reductions** (built symbolically, so they also numericalize through the
+  reused kernels):
+  - `LerchPhi[0, s, a] = a^(-s)` (only the k = 0 term survives).
+  - `LerchPhi[z, 0, a] = 1/(1 - z)` (the geometric sum, independent of `a`).
+  - `LerchPhi[1, s, a] = Zeta[s, a]`; `LerchPhi[z, s, 1] = PolyLog[s, z]/z`.
+  - `LerchPhi[-1, s, 1/2] = 2^(-s) (Zeta[s, 1/4] - Zeta[s, 3/4])`.
+  - A positive integer `a` shifts down to the `PolyLog` series, e.g.
+    `LerchPhi[z, s, 2] = (PolyLog[s, z] - z)/z^2`.
+  - A negative integer `s = -n` gives a rational function of `z`,
+    `(z d/dz + a)^n [1/(1-z)]` (e.g. `LerchPhi[2, -1, a] = 2 - a`,
+    `LerchPhi[z, -2, a] = (a² + (1+2a+a²) z + (1-2a-2a²) z² + a² z³)/(1-z)³`).
+- **Options.** `DoublyInfinite -> True` sums k from −∞ to ∞, realised as
+  `Φ(z,s,a) + z⁻¹ Φ(1/z, s, 1-a)` (in a symmetric case it just doubles, e.g.
+  `LerchPhi[1, 2, 0.5, DoublyInfinite -> True] = Pi² = 9.8696`).
+  `IncludeSingularTerm -> True` keeps the `k + a = 0` term, giving
+  `ComplexInfinity` at a non-positive integer `a`.
+- **Numerics.** With an inexact operand and `|z| < 1`, a complex-MPFR power
+  series evaluates the value at machine or arbitrary precision (real and
+  complex), e.g. `LerchPhi[0.5, 3, 2.5] = 0.0794983`,
+  `LerchPhi[0.3 + 0.2 I, 2, 1.5] = 0.495505 + 0.0444653 I`,
+  `N[LerchPhi[1/2, 2, 5/2], 30] = 0.219693113434910235649039949138…`. `|z| > 1`
+  has no analytic continuation here and stays symbolic.
+- **Derivatives.** `D[LerchPhi[z, s, a], z] = (LerchPhi[z, -1+s, a]
+  - a LerchPhi[z, s, a])/z` and `D[LerchPhi[z, s, a], a] = -s LerchPhi[z, 1+s, a]`;
+  the `s`-derivative is the generic `Derivative[0, 1, 0][LerchPhi][z, s, a]`.
+- **Diagnostics.** Fewer than three arguments emit `LerchPhi::argrx`; a
+  non-option beyond position 3 emits `LerchPhi::nonopt`; both leave the call
+  unevaluated.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= LerchPhi[z, s, 1]
+Out[1]= PolyLog[s, z]/z
+
+In[2]:= LerchPhi[0.5, 3, 2.5]
+Out[2]= 0.0794983
 ```
 
 ## AiryAi

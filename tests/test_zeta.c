@@ -108,6 +108,11 @@ void test_zeta_hurwitz_exact() {
     assert_eval_eq("Zeta[4, 5]", "-22369/20736 + 1/90 Pi^4", 0);
     /* The pole carries through: zeta(1, 2) = zeta(1) - 1 = ComplexInfinity. */
     assert_eval_eq("Zeta[1, 2]", "ComplexInfinity", 0);
+    /* a = 1/2: Zeta[s, 1/2] = (2^s - 1) Zeta[s]. */
+    assert_eval_eq("Zeta[s, 1/2]", "(-1 + 2^s) Zeta[s]", 0);
+    assert_eval_eq("Zeta[2, 1/2]", "1/2 Pi^2", 0);   /* 3 Zeta[2] */
+    assert_eval_eq("Zeta[3, 1/2]", "7 Zeta[3]", 0);
+    assert_eval_eq("Zeta[-2, 1/2]", "0", 0);          /* Zeta[-2] = 0 */
 }
 
 /* ---- machine-precision numerics ------------------------------------- */

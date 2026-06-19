@@ -1111,6 +1111,67 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- LerchPhi[Z, S, A] (Lerch transcendent): chain rule on all three args.
+         *   d/dZ Phi = (LerchPhi[Z,-1+S,A] - A LerchPhi[Z,S,A]) / Z   (elementary)
+         *   d/dA Phi = -S LerchPhi[Z,1+S,A]                           (elementary)
+         *   d/dS Phi = Derivative[0,1,0][LerchPhi][Z,S,A]  (no elementary form in
+         *               the order S).
+         * Zero-derivative arms are dropped. */
+        if (h == SYM_LerchPhi && n == 3) {
+            Expr* Z = args[0];
+            Expr* S = args[1];
+            Expr* A = args[2];
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            Expr* dS = deriv_of(S, x, nonconsts);
+            Expr* dA = deriv_of(A, x, nonconsts);
+            Expr* terms[3];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dZ)) {
+                /* (LerchPhi[Z,-1+S,A] - A LerchPhi[Z,S,A]) Z^-1 * dZ */
+                Expr* sm1 = mk_fn2("Plus", mk_int(-1), expr_copy(S));
+                Expr* lp1 = expr_new_function(mk_sym("LerchPhi"),
+                              (Expr*[]){ expr_copy(Z), sm1, expr_copy(A) }, 3);
+                Expr* lp0 = expr_new_function(mk_sym("LerchPhi"),
+                              (Expr*[]){ expr_copy(Z), expr_copy(S), expr_copy(A) }, 3);
+                Expr* num = mk_fn2("Plus", lp1,
+                                   mk_neg(mk_fn2("Times", expr_copy(A), lp0)));
+                Expr* dPdZ = mk_fn2("Times", num,
+                                    mk_fn2("Power", expr_copy(Z), mk_int(-1)));
+                terms[nt++] = mk_fn2("Times", dPdZ, dZ);
+            } else {
+                expr_free(dZ);
+            }
+
+            if (!is_lit_zero(dA)) {
+                /* -S LerchPhi[Z, 1+S, A] * dA */
+                Expr* sp1 = mk_fn2("Plus", mk_int(1), expr_copy(S));
+                Expr* lp = expr_new_function(mk_sym("LerchPhi"),
+                              (Expr*[]){ expr_copy(Z), sp1, expr_copy(A) }, 3);
+                Expr* dPdA = mk_neg(mk_fn2("Times", expr_copy(S), lp));
+                terms[nt++] = mk_fn2("Times", dPdA, dA);
+            } else {
+                expr_free(dA);
+            }
+
+            if (!is_lit_zero(dS)) {
+                /* Derivative[0, 1, 0][LerchPhi][Z, S, A] * dS */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(1), mk_int(0) }, 3);
+                Expr* op_g = mk_fn_head1(op, mk_sym("LerchPhi"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(Z), expr_copy(S), expr_copy(A) }, 3);
+                terms[nt++] = mk_fn2("Times", applied, dS);
+            } else {
+                expr_free(dS);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            if (nt == 2) return mk_fn2("Plus", terms[0], terms[1]);
+            return expr_new_function(mk_sym("Plus"), terms, 3);
+        }
+
         /* --- BesselJ[N, Z]: chain rule on both args.
          *   d/dZ BesselJ[N, Z] = (BesselJ[N-1, Z] - BesselJ[N+1, Z]) / 2  (DLMF 10.6.1)
          *   d/dN BesselJ[N, Z] = Derivative[1,0][BesselJ][N,Z]  (the derivative
