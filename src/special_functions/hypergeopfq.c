@@ -300,7 +300,8 @@ static bool approx_machine(const Expr* e, double complex* out, bool* inexact) {
     if (e->type == EXPR_REAL)    { *out = e->data.real; if (inexact) *inexact = true; return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
-                                   if (inexact) *inexact = true; return true; }
+                                   if (inexact) *inexact = true;
+                                   return true; }
 #endif
     int64_t nn, dd;
     if (is_rational((Expr*)e, &nn, &dd)) { *out = (double)nn / (double)dd; return true; }

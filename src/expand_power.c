@@ -662,8 +662,12 @@ static bool pe_interval(const Expr* e, const PECtx* ctx, double* lo, double* hi)
             if (!pe_interval(e->data.function.args[i], ctx, &l, &h)) return false;
             double c1 = p_lo*l, c2 = p_lo*h, c3 = p_hi*l, c4 = p_hi*h;
             double mn = c1, mx = c1;
-            if (c2<mn) mn=c2; if (c3<mn) mn=c3; if (c4<mn) mn=c4;
-            if (c2>mx) mx=c2; if (c3>mx) mx=c3; if (c4>mx) mx=c4;
+            if (c2<mn) mn=c2;
+            if (c3<mn) mn=c3;
+            if (c4<mn) mn=c4;
+            if (c2>mx) mx=c2;
+            if (c3>mx) mx=c3;
+            if (c4>mx) mx=c4;
             p_lo = mn; p_hi = mx;
         }
         *lo = p_lo; *hi = p_hi; return true;

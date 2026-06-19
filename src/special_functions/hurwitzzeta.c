@@ -550,7 +550,7 @@ static Expr* hz_two_arg(Expr* s, Expr* a) {
 
     /* Exact reductions (only when neither operand is inexact). */
     if (!s_inexact && !a_inexact) {
-        long sn, m;
+        long sn = 0, m;
         bool s_is_int = hz_exact_int(s, &sn);
 
         /* s == 1: pole for any a. */

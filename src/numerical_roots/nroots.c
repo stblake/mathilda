@@ -403,6 +403,7 @@ static int nr_solve_exact(const ZUPoly* zp, NrMethod method, int max_iter,
     for (int k = 0; k < nf && rc == 0; k++) {
         NrPoly* fp = nr_zupoly_to_nrpoly(facs[k], wp);
         int di = fp->deg;
+        if (di <= 0) { nr_poly_free(fp); continue; }
         ncpx* fr = (ncpx*)malloc(sizeof(ncpx) * (size_t)di);
         for (int j = 0; j < di; j++) ncpx_init(&fr[j], wp);
         if (nr_solve(fp, method, max_iter, wp, fr) == 0) {

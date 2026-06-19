@@ -651,12 +651,15 @@ Expr* nsolve_system_eliminate(Expr** polys, int npoly, Expr** vars, int nvar,
         if (!gb_poly_is_zero(g)) F[nF++] = g; else gb_poly_free(g);
     }
     if (!ok || nF == 0 || !gb_set_degree_ok(F, nF)) {
-        for (int i = 0; i < nF; i++) gb_poly_free(F[i]); free(F); return NULL;
+        for (int i = 0; i < nF; i++) gb_poly_free(F[i]);
+        free(F);
+        return NULL;
     }
 
     size_t nG = 0;
     GBPoly** G = gb_groebner_walk(F, (size_t)nF, GB_ORDER_LEX, NULL, &nG);
-    for (int i = 0; i < nF; i++) gb_poly_free(F[i]); free(F);
+    for (int i = 0; i < nF; i++) gb_poly_free(F[i]);
+    free(F);
     if (!G || nG == 0) { if (G) gb_basis_free(G, nG); return NULL; }
 
     for (size_t i = 0; i < nG; i++)

@@ -35,8 +35,10 @@ static bool osc_halfperiod_comp(GkSampleMachine f, void* ctx, double a, double b
             double _Complex v;
             if (!f(ctx, x, &v)) continue;
             double re = creal(v), im = cimag(v);
-            if (re < minRe) minRe = re; if (re > maxRe) maxRe = re;
-            if (im < minIm) minIm = im; if (im > maxIm) maxIm = im;
+            if (re < minRe) minRe = re;
+            if (re > maxRe) maxRe = re;
+            if (im < minIm) minIm = im;
+            if (im > maxIm) maxIm = im;
             if (have) {
                 if ((pRe <= 0 && re > 0) || (pRe >= 0 && re < 0)) scRe++;
                 if ((pIm <= 0 && im > 0) || (pIm >= 0 && im < 0)) scIm++;
