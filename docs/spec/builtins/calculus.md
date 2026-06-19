@@ -941,8 +941,8 @@ none applies the `Sum[...]` is returned unevaluated.  The cascade has no
 step-aware closed form, so a symbolic (or otherwise non-expandable) range
 with a non-unit step — e.g. `Sum[i, {i, 1, n, 2}]` — is returned
 unevaluated rather than reduced to the (wrong) unit-step result.
-`Method -> "Polynomial" | "Geometric" | "Gosper"` forces a single
-algorithm (strict, no fallback), and now also takes effect on finite
+`Method -> "Polynomial" | "Geometric" | "Gosper" | "Rational"` forces a
+single algorithm (strict, no fallback), and now also takes effect on finite
 unit-step integer ranges.
 
 ```mathematica
@@ -1021,6 +1021,39 @@ In[2]:= Sum[x^k, {k, 0, Infinity}]
 Out[2]= 1/(1 - x)
 In[3]:= Sum[z^k/(2 k)!, {k, 0, Infinity}]
 Out[3]= Cosh[2 Sqrt[1/4 z]]
+```
+
+### Sum`Rational
+
+Infinite sums `Sum[p(i)/q(i), {i, imin, Infinity}]` (concrete integer `imin`)
+of a rational function of the index, in the convergent regime
+`deg q >= deg p + 2`. Decompose into linear partial fractions over the
+denominator's splitting field and sum each pole term `c/(i-rho)^k` with the
+master identity (`n = i - rho`):
+
+- `k >= 2`: `Zeta[k, imin - rho]` (a Hurwitz Zeta; reduces `1/i^s` to `Zeta[s]`,
+  even `s` to powers of `Pi`).
+- `k == 1`: `-c (PolyGamma[0, imin - rho] + EulerGamma)` (individually divergent,
+  but the residues sum to zero so the combination converges).
+
+Rational poles are found by `Apart[f, i]` over the rationals. An irreducible
+quadratic factor with **complex-conjugate** roots (`disc < 0`) is handled in
+real partial-fraction form: its constant-numerator (symmetric) part collapses to
+`Coth`, while its linear-numerator (antisymmetric) part is the conjugate digamma
+sum. A factor with **real radical** roots (`disc >= 0`) is split over the
+auto-detected field extension (`Apart[f, i, Extension -> {I, Sqrt[...], ...}]`),
+giving `PolyGamma` at radical/complex arguments. Symbolic-coefficient
+denominators and finite/indefinite rational sums are out of scope (left
+unevaluated). Dispatched in the `Automatic` cascade ahead of
+`Sum`Hypergeometric`; `Method -> "Rational"` forces it.
+
+```mathematica
+In[1]:= Sum[1/i^2, {i, 1, Infinity}]
+Out[1]= 1/6 Pi^2
+In[2]:= Sum[1/(i^2 (i^2 + 1)), {i, 1, Infinity}]
+Out[2]= 1/6 (3 + Pi^2 - 3 Pi Coth[Pi])
+In[3]:= Sum[1/(i (i^2 + 1)), {i, 1, Infinity}]
+Out[3]= 1/2 (2 EulerGamma + PolyGamma[0, 1 - I] + PolyGamma[0, 1 + I])
 ```
 
 ## DifferenceDelta

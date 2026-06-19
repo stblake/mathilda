@@ -268,6 +268,7 @@ set(COMMON_SRC
     ../src/sum/sum_geometric.c
     ../src/sum/sum_gosper.c
     ../src/sum/sum_hypergeometric.c
+    ../src/sum/sum_rational.c
     ../src/product/product.c
     ../src/product/product_util.c
     ../src/product/product_telescoping.c
@@ -352,6 +353,10 @@ target_include_directories(iter_tests PRIVATE ../src)
 add_executable(sum_tests test_sum.c ${COMMON_SRC})
 target_link_libraries(sum_tests m)
 target_include_directories(sum_tests PRIVATE ../src)
+
+add_executable(sum_rational_tests test_sum_rational.c ${COMMON_SRC})
+target_link_libraries(sum_rational_tests m)
+target_include_directories(sum_rational_tests PRIVATE ../src)
 
 add_executable(product_tests test_product.c ${COMMON_SRC})
 target_link_libraries(product_tests m)

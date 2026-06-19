@@ -78,6 +78,7 @@ typedef enum {
     SUM_METHOD_POLYNOMIAL,
     SUM_METHOD_GEOMETRIC,
     SUM_METHOD_GOSPER,
+    SUM_METHOD_RATIONAL,
     SUM_METHOD_INVALID
 } SumMethod;
 
@@ -107,6 +108,7 @@ static SumMethod parse_method_option(const Expr* opt) {
     if (strcmp(m, "Geometric") == 0)                 return SUM_METHOD_GEOMETRIC;
     if (strcmp(m, "Gosper") == 0)                    return SUM_METHOD_GOSPER;
     if (strcmp(m, "HypergeometricTermGosper") == 0)  return SUM_METHOD_GOSPER;
+    if (strcmp(m, "Rational") == 0)                  return SUM_METHOD_RATIONAL;
     return SUM_METHOD_INVALID;
 }
 
@@ -159,12 +161,14 @@ static Expr* dispatch_def(SumMethod method, Expr* f, Expr* var,
             Expr* r = try_def("Sum`Polynomial", f, var, imin, imax);
             if (!r) r = try_def("Sum`Geometric", f, var, imin, imax);
             if (!r) r = try_def("Sum`Gosper", f, var, imin, imax);
+            if (!r) r = try_def("Sum`Rational", f, var, imin, imax);
             if (!r) r = try_def("Sum`Hypergeometric", f, var, imin, imax);
             return r;
         }
         case SUM_METHOD_POLYNOMIAL: return try_def("Sum`Polynomial", f, var, imin, imax);
         case SUM_METHOD_GEOMETRIC:  return try_def("Sum`Geometric",  f, var, imin, imax);
         case SUM_METHOD_GOSPER:     return try_def("Sum`Gosper",     f, var, imin, imax);
+        case SUM_METHOD_RATIONAL:   return try_def("Sum`Rational",   f, var, imin, imax);
         default:                    return NULL;
     }
 }
@@ -181,6 +185,7 @@ static Expr* dispatch_indef(SumMethod method, Expr* f, Expr* var) {
         case SUM_METHOD_POLYNOMIAL: return try_indef("Sum`Polynomial", f, var);
         case SUM_METHOD_GEOMETRIC:  return try_indef("Sum`Geometric",  f, var);
         case SUM_METHOD_GOSPER:     return try_indef("Sum`Gosper",     f, var);
+        case SUM_METHOD_RATIONAL:   return NULL;   /* infinite-only stage */
         default:                    return NULL;
     }
 }
@@ -425,4 +430,6 @@ void sum_init(void) {
     sum_gosper_init();
     void sum_hypergeometric_init(void);
     sum_hypergeometric_init();
+    void sum_rational_init(void);
+    sum_rational_init();
 }

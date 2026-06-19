@@ -63,48 +63,57 @@ Verified end-to-end against `Sum[1/(i(i^2+1))]`: master identity gives
 
 ## Plan
 
-### Phase A — scaffold + recognizer  (rational, rational poles)
-- [ ] Create `src/sum/sum_rational.c`; register `Sum`Rational` builtin in
+### Phase A — scaffold + recognizer  (rational, rational poles)  ✅ DONE 2026-06-19
+- [x] Create `src/sum/sum_rational.c`; register `Sum`Rational` builtin in
       `sum_rational_init()`; add `void sum_rational_init(void); sum_rational_init();`
       to `sum_init()` in `sum.c`; add the file to `tests/CMakeLists.txt`
       COMMON_SRC (memory: a new `src/*.c` builtin must be listed or `*_tests`
       fail to link).
-- [ ] Add `"Rational"` to `parse_method_option` + `SUM_METHOD_RATIONAL` enum,
+- [x] Add `"Rational"` to `parse_method_option` + `SUM_METHOD_RATIONAL` enum,
       and one `try_def("Sum`Rational", …)` line in the Automatic cascade
       **before** `Sum`Hypergeometric`.
-- [ ] Use `sum_stage_args` to unpack `[f, var, imin, imax]`. Bail (`NULL`) unless
+- [x] Use `sum_stage_args` to unpack `[f, var, imin, imax]`. Bail (`NULL`) unless
       `definite`, `imax` is Infinity (`is_infinity_sym`), and `imin` is
       `EXPR_INTEGER`.
-- [ ] Recognize rational summand: `Together` then split `Numerator`/
+- [x] Recognize rational summand: `Together` then split `Numerator`/
       `Denominator`; require both polynomial in `var`; reject if
       `deg q < deg p + 2` (divergent — leave held).
-- [ ] **Rational-pole sub-case first** (no extension): `Apart[f, var]`. For each
+- [x] **Rational-pole sub-case first** (no extension): `Apart[f, var]`. For each
       term `c/(i−ρ)^k` with `ρ ∈ Q`, apply the master identity. Integer/rational
       `ρ` with `k≥2` → `Zeta[k, imin−ρ]`; this already reduces `1/i^s` →
-      `Zeta[s]` and even-`s` → π powers via existing `zeta.c`.
-- [ ] **Acceptance:** `1/i^2 → Pi^2/6`, `1/i^3 → Zeta[3]`, `1/i^4 → Pi^4/90`.
+      `Zeta[s]` and even-`s` → π powers via existing `zeta.c`. Terms with a
+      non-linear (irreducible quadratic) base bail `NULL` → left for Phase B.
+- [x] **Acceptance:** `1/i^2 → Pi^2/6`, `1/i^3 → Zeta[3]`, `1/i^4 → Pi^4/90`.
+      Also verified: `1/(i(i+2)) → 3/4` (multi-term k=1 telescope),
+      shifted bounds (`{i,2,Inf}`), divergence gate (`i`, `1/i` held),
+      complex pole held (`1/(i^2+1)`). 52/52 existing sum tests still pass.
 
-### Phase B — splitting-field decomposition (complex / radical roots)
-- [ ] Compute the pole set: `Solve[Denominator==0, var]`, collect the distinct
-      algebraic generators (e.g. `I`, `Sqrt[5]`) for the `Extension` list.
-- [ ] Call `Apart[f, Extension -> {generators}, var]` → linear poles. Parse each
-      `c_{j,k}/(var − ρ_j)^k` term: read multiplicity `k` and residue `c`.
-- [ ] Emit `Σ` of master-identity terms; wrap in `Together`/`Simplify` for a
-      clean form. Sum simple-pole residues to confirm `Σc = 0` (sanity gate).
-- [ ] **Acceptance:** `1/(i(i^2+1))` → `1/2(2 EulerGamma + PolyGamma[0,1-I] +
-      PolyGamma[0,1+I])`; `1/((i^2+3i+1)(i^2+1))` → four-`PolyGamma` form.
-      Verify each numerically vs a 3000-term partial sum *inside the language*
-      (memory: don't parse printed reals).
+### Phase B — splitting-field decomposition (complex / radical roots)  ✅ DONE 2026-06-19
+- [x] Compute the pole set: `Solve[Denominator==0, var]`, collect the distinct
+      algebraic generators (`sr_walk_gens`/`sr_generators`: `I` + each surd
+      `Power[c,p/q]`; bails on `Root[]`).
+- [x] Call `Apart[f, var, Extension -> {generators}]` → linear poles. `sr_scan`/
+      `sr_find_pole` descends nested `Times` (extension output isn't flattened),
+      `sr_residue` recovers each residue via `Cancel[term*base^k]`.
+- [x] Emit `Σ` of master-identity terms; post-pass `Simplify` (not `Together` —
+      it cancels the spurious overall `I` and groups EulerGamma).
+- [x] **Acceptance:** `1/(i(i^2+1))` → `1/2(2 EulerGamma + PolyGamma[0,1-I] +
+      PolyGamma[0,1+I])`; `1/((i^2+3i+1)(i^2+1))` → four-`PolyGamma` form. Both
+      numerically verified vs partial sums (0.12777931731762 vs 0.1277793173).
 
-### Phase C — conjugate-pair → `Coth`/`Csc` post-pass
-- [ ] Detect conjugate pole pairs `ρ = α ± βI` with equal multiplicity/residue
-      magnitude and rewrite `PolyGamma[k, a+βI] + PolyGamma[k, a−βI]` via the
-      reflection identity `Σ_{n≥1} 1/(n^2+β^2) = (πβ coth(πβ) − 1)/(2β^2)`
-      (and the `k=1` analogue → `Csc^2`).
-- [ ] Apply only when it strictly simplifies (WL keeps the raw PolyGamma form in
-      Out[186] but collapses to `Coth` in Out[191]) — gate on "no leftover
-      explicit `I`".
-- [ ] **Acceptance:** `1/(i^2 (i^2+1))` → `1/6 (3 + Pi^2 - 3 Pi Coth[Pi])`.
+### Phase C — conjugate-pair → `Coth`/`Csc`  ✅ DONE 2026-06-19
+Implemented at the over-Q residue level (cleaner than an output post-pass): an
+irreducible quadratic `(A i+B)/(i^2+p i+q)` with disc<0 splits about `i=α=-p/2`
+into an **odd** part (`A(i-α)` → conjugate digamma sum, kept as PolyGamma) and an
+**even** part (constant → `Coth`). `sr_quadratic_contribution` (k=1):
+`-(Ã/2)(ψ(t-βI)+ψ(t+βI)+2γ) + S((πβ Coth[πβ]-1)/(2β²) - Σ_{j=1}^{t-1}1/(j²+β²))`,
+`t=imin-α` (gated to a positive integer; disc≥0 / higher mult / non-integer t →
+extension fallback). This also yields Phase B's `1/(i(i^2+1))` over Q without an
+extension; the extension path remains the fallback for disc≥0 radical factors.
+- [x] **Acceptance:** `1/(i^2 (i^2+1))` → `1/6 (3 + Pi^2 - 3 Pi Coth[Pi])`.
+      Also: `1/(i^2+1)` → `1/2(-1+Pi Coth[Pi])`; β=2 `1/(i^2(i^2+4))` →
+      `Coth[2Pi]`; shifted t=2 `1/(i^2+1),{i,2,∞}` → `1/2(-2+Pi Coth[Pi])`
+      (finite correction). All numerically verified.
 
 ### Phase D — symbolic-coefficient roots (stretch)
 - [ ] `Apart` can't decompose with symbolic `a,b` (probed). Use the **direct
@@ -121,15 +130,24 @@ Verified end-to-end against `Sum[1/(i(i^2+1))]`: master identity gives
       `PolyGamma` differences). Track as its own task; do **not** route finite
       rational sums into `Sum`Rational`.
 
-### Phase F — docs, attributes, changelog, valgrind
-- [ ] Docstring for `Sum`Rational` via `symtab_set_docstring` (terse; no
-      examples — memory). Stage symbol Protected like its siblings.
-- [ ] Update `docs/spec/builtins/` Sum entry + this week's
-      `docs/spec/changelog/2026-06-15.md` (Monday of the ISO week).
-- [ ] Update `SUM_DEVEL_PLAN.md`: mark Stage 5 shipped.
-- [ ] `tests/sum_rational_tests.c` covering the acceptance set (Phases A–C
-      mandatory, D if landed). Run only that binary (memory: scope tests).
-- [ ] `valgrind` clean vs the macOS dyld baseline; build foreground.
+### Phase D — symbolic-coefficient roots (stretch)  — NOT DONE (deferred)
+Out of scope for this pass. `Sum[1/((i^2+3i+2)(a i^2+b))]` stays held: needs the
+direct-residue route (`Solve[q==0]` radical roots, `c = p(ρ)/q'(ρ)` via `D`),
+since `Apart` can't decompose with symbolic `a,b`. Tracked as a follow-up.
+
+### Phase F — docs, attributes, changelog, valgrind  ✅ DONE 2026-06-19
+- [x] Docstring for `Sum`Rational` via `symtab_set_docstring` (terse). Stage
+      symbol `Protected | ReadProtected` like its siblings.
+- [x] `docs/spec/builtins/calculus.md` Sum`Rational` section + Method list +
+      this week's `docs/spec/changelog/2026-06-15.md` feature entry.
+- [x] `SUM_DEVEL_PLAN.md`: Stage 5 infinite path marked shipped (finite/Phase E
+      and symbolic/Phase D noted as still open).
+- [x] `tests/test_sum_rational.c` (17 checks, Phases A–C) wired into
+      `tests/CMakeLists.txt`; `sum_rational_tests` + `sum_tests` (52) green.
+- [x] `valgrind` clean: 0 frames in `sum_rational.c`; total 12,992B/404 blocks
+      vs the 12,800B/400 macOS dyld baseline (+192B/4 in the pre-existing
+      Solve/Apart-extension path). Fixed one real leak found en route (the
+      `gens` array in `sr_generators` — `expr_new_function` copies, doesn't adopt).
 
 ## Risks / notes
 - Memory contract: `Sum`Rational` takes ownership of `res`, must not free it;
@@ -141,5 +159,36 @@ Verified end-to-end against `Sum[1/(i(i^2+1))]`: master identity gives
   fall back to Phase D's direct-residue path uniformly.
 - Convergence gate must run *before* any expensive `Solve`/`Apart`.
 
-## Review
-_(to be filled after implementation)_
+## Review (2026-06-19)
+
+Shipped Phases A–C of `Sum`Rational` (`src/sum/sum_rational.c`). Key design
+decisions and deviations from the original plan:
+
+- **Phase C done at the residue level, not as an output post-pass.** The plan
+  proposed detecting conjugate `PolyGamma` pairs in the result and rewriting via
+  the reflection identity. That turned out fragile (the `I→-I` symmetric/
+  antisymmetric split gives `anti=0` because the real result is already manifestly
+  conjugation-symmetric). The clean route: handle an irreducible quadratic
+  `(A i+B)/(i^2+p i+q)` (disc<0) directly from the **over-Q** `Apart` — its
+  constant-numerator (even) part collapses to `Coth`, its linear-numerator (odd)
+  part is the conjugate digamma sum. This naturally produces WL's exact forms and
+  also resolves Phase B's `1/(i(i^2+1))` over Q (no extension).
+- **Extension route is the fallback** for disc≥0 irreducible factors (real
+  radical roots, e.g. the four-pole's `i^2+3i+1`). Generators (`I` + surds) are
+  auto-discovered from `Solve[q==0]`; `Apart[f, i, Extension -> {...}]` fully
+  splits to linear poles.
+- **Post-pass is `Simplify`, not `Together`** — `Together` left a spurious overall
+  `I` and an ugly complex denominator; `Simplify` rationalises the residue
+  coefficients into WL's clean form.
+- Generalises beyond the acceptance set: β≠1 (`Coth[2 Pi]`), shifted lower bounds
+  (`t = imin-α` with the finite correction `Σ_{j=1}^{t-1} 1/(j²+β²)`).
+- **Gotcha:** `Apart`'s extension output is not flattened — a pole term can be a
+  nested `Times[c, Times[..., Power[quad,-1]]]`; `sr_find_pole` recurses.
+- **Gotcha:** `Apart[expr, var, Extension -> α]` needs `var` *before* the option;
+  with the option first it returns unevaluated. (The prereq audit's
+  `Extension -> I` probe was mis-ordered.)
+- **Memory:** `expr_new_function` *copies* the passed arg array; the caller must
+  free it. The `gens` array in `sr_generators` leaked until fixed.
+
+Deferred: Phase D (symbolic coefficients, direct-residue route) and Phase E
+(finite/indefinite rational → HarmonicNumber).
