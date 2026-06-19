@@ -452,10 +452,131 @@ static int lp_series_cx(lcx* out, const lcx* Z, const lcx* s, const lcx* a,
     return code;
 }
 
+/* Evaluate the Expr `e` (consumed) to a complex value via N[e, digits] (machine
+ * N when digits <= 0) and read its real/imaginary parts into the pre-init'd
+ * `out`.  Returns false if the result is not a concrete number. */
+static bool lp_eval_to_lcx(Expr* e, long digits, lcx* out) {
+    Expr* ncall = (digits > 0)
+        ? expr_new_function(expr_new_symbol(SYM_N),
+              (Expr*[]){ e, expr_new_integer(digits) }, 2)
+        : expr_new_function(expr_new_symbol(SYM_N), (Expr*[]){ e }, 1);
+    Expr* v = eval_and_free(ncall);
+    Expr* zero = expr_new_integer(0);
+    Expr *re, *im;
+    lp_decompose(v, zero, &re, &im);
+    bool ok = lp_set_mpfr(out->re, re) && lp_set_mpfr(out->im, im);
+    expr_free(v); expr_free(zero);
+    return ok;
+}
+
+/* |z| > 1 numeric continuation via the Lerch/Erdelyi expansion
+ * (Erdelyi, Higher Transcendental Functions I, 1.11(8)):
+ *   Phi(z,s,a) = z^-a [ Gamma(1-s) (-Log z)^(s-1)
+ *                       + Sum_{n>=0} HurwitzZeta(s-n, a) (Log z)^n / n! ],
+ * valid for |Log z| < 2pi, s not a positive integer, a not a non-positive
+ * integer.  The HurwitzZeta values grow factorially, so the (convergent) series
+ * is summed with optimal truncation: once a term stops shrinking, machine /
+ * working-precision noise dominates and we stop -- which at the working
+ * precision already yields full accuracy.  HurwitzZeta and Gamma are evaluated
+ * through the ordinary numeric kernels (via N).  The caller has verified
+ * |z| > 1 and that z is off the branch cut [1, Infinity).  Returns NULL to stay
+ * symbolic on any failure. */
+static Expr* lp_erdelyi_large_z(Expr* s_e, Expr* a_e,
+                                const lcx* Z, const lcx* S, const lcx* A,
+                                mpfr_prec_t out_prec, mpfr_prec_t wp) {
+    long digits = (long)(out_prec / 3.3219) + 12;
+    if (digits < 20) digits = 20;
+    const long NMAX = 2000;
+
+    lcx Lz, lnzp, term, zeta_n, tmp, sumz, negLz, sm1, zpow, negA, inner, result;
+    lcx_init(&Lz, wp); lcx_init(&lnzp, wp); lcx_init(&term, wp); lcx_init(&zeta_n, wp);
+    lcx_init(&tmp, wp); lcx_init(&sumz, wp); lcx_init(&negLz, wp);
+    lcx_init(&sm1, wp); lcx_init(&zpow, wp); lcx_init(&negA, wp); lcx_init(&inner, wp);
+    lcx_init(&result, wp);
+
+    lcx_log(&Lz, Z, wp);                            /* Log z */
+    mpfr_set_ui(sumz.re, 0, LRND); mpfr_set_ui(sumz.im, 0, LRND);
+    mpfr_set_ui(lnzp.re, 1, LRND); mpfr_set_ui(lnzp.im, 0, LRND);  /* (Log z)^0 */
+
+    mpfr_t fact, mag, minmag, smag, eps, lim;
+    mpfr_inits2(wp, fact, mag, minmag, smag, eps, lim, (mpfr_ptr)0);
+    mpfr_set_ui(fact, 1, LRND);
+    mpfr_set_inf(minmag, 1);
+    mpfr_set_ui(eps, 1, LRND);
+    mpfr_div_2ui(eps, eps, (unsigned long)(wp > 12 ? wp - 8 : 1), LRND);
+
+    bool ok = true;
+    int patience = 0;
+    for (long n = 0; n <= NMAX; n++) {
+        Expr* smn = expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ expr_copy(s_e), expr_new_integer(-n) }, 2);
+        Expr* hz = expr_new_function(expr_new_symbol(SYM_HurwitzZeta),
+                        (Expr*[]){ smn, expr_copy(a_e) }, 2);
+        if (!lp_eval_to_lcx(hz, digits, &zeta_n)) { ok = false; break; }
+
+        /* term = zeta_n * (Log z)^n / n!. */
+        lcx_mul(&term, &zeta_n, &lnzp, wp);
+        mpfr_div(term.re, term.re, fact, LRND);
+        mpfr_div(term.im, term.im, fact, LRND);
+        lcx_add(&sumz, &sumz, &term);
+
+        lcx_abs(mag, &term);
+        lcx_abs(smag, &sumz);
+        mpfr_mul(smag, smag, eps, LRND);
+        if (mpfr_cmp(mag, smag) < 0) {
+            if (++patience >= 2) break;             /* converged */
+        } else {
+            patience = 0;
+        }
+        /* Optimal-truncation safeguard: once terms climb well past their
+         * minimum the series can no longer improve at this precision. */
+        if (mpfr_cmp(mag, minmag) < 0) {
+            mpfr_set(minmag, mag, LRND);
+        } else if (n > 2) {
+            mpfr_mul_ui(lim, minmag, 1000000UL, LRND);
+            if (mpfr_cmp(mag, lim) > 0) break;
+        }
+
+        lcx_mul(&tmp, &lnzp, &Lz, wp);              /* advance (Log z)^n */
+        lcx_set(&lnzp, &tmp);
+        mpfr_mul_ui(fact, fact, (unsigned long)(n + 1), LRND);  /* advance n! */
+    }
+
+    Expr* out = NULL;
+    if (ok) {
+        /* gpart = Gamma[1-s] * (-Log z)^(s-1). */
+        Expr* oneMs = expr_new_function(expr_new_symbol(SYM_Subtract),
+                          (Expr*[]){ expr_new_integer(1), expr_copy(s_e) }, 2);
+        Expr* gam = expr_new_function(expr_new_symbol(SYM_Gamma),
+                          (Expr*[]){ oneMs }, 1);
+        lcx gval; lcx_init(&gval, wp);
+        if (lp_eval_to_lcx(gam, digits, &gval)) {
+            mpfr_neg(negLz.re, Lz.re, LRND); mpfr_neg(negLz.im, Lz.im, LRND);
+            mpfr_sub_ui(sm1.re, S->re, 1, LRND); mpfr_set(sm1.im, S->im, LRND);
+            lcx_pow(&tmp, &negLz, &sm1, wp);        /* (-Log z)^(s-1) */
+            lcx_mul(&inner, &gval, &tmp, wp);       /* Gamma(1-s)(-Log z)^(s-1) */
+            lcx_add(&inner, &inner, &sumz);
+            mpfr_neg(negA.re, A->re, LRND); mpfr_neg(negA.im, A->im, LRND);
+            lcx_pow(&zpow, Z, &negA, wp);           /* z^-a */
+            lcx_mul(&result, &zpow, &inner, wp);
+            if (mpfr_number_p(result.re) && mpfr_number_p(result.im))
+                out = lp_result(result.re, result.im, out_prec, false);
+        }
+        lcx_clear(&gval);
+    }
+
+    mpfr_clears(fact, mag, minmag, smag, eps, lim, (mpfr_ptr)0);
+    lcx_clear(&Lz); lcx_clear(&lnzp); lcx_clear(&term); lcx_clear(&zeta_n);
+    lcx_clear(&tmp); lcx_clear(&sumz); lcx_clear(&negLz);
+    lcx_clear(&sm1); lcx_clear(&zpow); lcx_clear(&negA); lcx_clear(&inner);
+    lcx_clear(&result);
+    return out;
+}
+
 /* Numeric LerchPhi[z, s, a] (at least one inexact operand).  Returns a
  * Real/Complex/MPFR result, ComplexInfinity at an included singular term, or
- * NULL to stay symbolic (non-numeric parts, or |z| > 1 where the series
- * diverges and no continuation is implemented). */
+ * NULL to stay symbolic (non-numeric parts, or |z| > 1 outside the Erdelyi
+ * continuation's domain). */
 static Expr* lp_numeric(Expr* z, Expr* s, Expr* a, bool include_singular) {
     Expr* zero = expr_new_integer(0);
     Expr *zre, *zim, *sre, *sim, *are, *aim;
@@ -487,6 +608,32 @@ static Expr* lp_numeric(Expr* z, Expr* s, Expr* a, bool include_singular) {
             int code = lp_series_cx(&res, &Z, &sc, &ac, include_singular, wp);
             if (code == LP_OK)            out = lp_result(res.re, res.im, out_prec, real_only);
             else if (code == LP_SINGULAR) out = expr_new_symbol(SYM_ComplexInfinity);
+        } else {
+            /* |z| > 1: try the Lerch/Erdelyi analytic continuation, valid for
+             * s not a positive integer, a not a non-positive integer, z off the
+             * branch cut [1, Infinity), and |Log z| < 2pi.  Otherwise stay
+             * symbolic (in particular integer s on the cut -- e.g.
+             * LerchPhi[2, 3, -1.5] -- has a logarithmic confluent form not
+             * implemented here). */
+            double sre_d = mpfr_get_d(sc.re, LRND), sim_d = mpfr_get_d(sc.im, LRND);
+            double are_d = mpfr_get_d(ac.re, LRND), aim_d = mpfr_get_d(ac.im, LRND);
+            double zre_d = mpfr_get_d(Z.re, LRND),  zim_d = mpfr_get_d(Z.im, LRND);
+            long sr = (long)floor(sre_d + 0.5);
+            long ar = (long)floor(are_d + 0.5);
+            bool s_posint    = fabs(sim_d) < 1e-9 && sr >= 1 && fabs(sre_d - sr) < 1e-9;
+            bool a_nonposint = fabs(aim_d) < 1e-9 && ar <= 0 && fabs(are_d - ar) < 1e-9;
+            bool on_cut      = fabs(zim_d) < 1e-12 && zre_d > 1.0;
+
+            mpfr_t lzmag; mpfr_init2(lzmag, wp);
+            lcx Lz; lcx_init(&Lz, wp);
+            lcx_log(&Lz, &Z, wp);
+            lcx_abs(lzmag, &Lz);
+            bool small_logz = mpfr_cmp_d(lzmag, 2.0 * M_PI - 1e-6) < 0;
+            lcx_clear(&Lz);
+            mpfr_clear(lzmag);
+
+            if (!s_posint && !a_nonposint && !on_cut && small_logz)
+                out = lp_erdelyi_large_z(s, a, &Z, &sc, &ac, out_prec, wp);
         }
     }
     lcx_clear(&Z); lcx_clear(&sc); lcx_clear(&ac); lcx_clear(&res);

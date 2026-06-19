@@ -166,9 +166,23 @@ void test_lp_arbitrary_complex() {
                            "0.49550545314863301");
 }
 
-/* ---- |z| > 1 stays symbolic (no continuation implemented) ----------- */
+/* ---- |z| > 1 numeric continuation (Lerch/Erdelyi expansion) --------- */
+
+void test_lp_large_z_continuation() {
+    /* Off the branch cut, non-integer s: Erdelyi continuation gives the value. */
+    assert_complex_close("LerchPhi[5. + I, I, I + 2]", -0.581502, 0.384767, 1e-5);
+    /* Independently cross-checked against PolyLog: z LerchPhi[z,s,1] = PolyLog[s,z]
+     * for |z| > 1 (PolyLog has its own continuation), to ~machine epsilon. */
+    assert_close("Abs[(2.+0.5 I) LerchPhi[2.+0.5 I, 1.5, 1] - PolyLog[1.5, 2.+0.5 I]]",
+                 0.0, 1e-12);
+    assert_close("Abs[(2.+0.5 I) LerchPhi[2.+0.5 I, 0.7+0.3 I, 1] "
+                 "- PolyLog[0.7+0.3 I, 2.+0.5 I]]", 0.0, 1e-12);
+}
+
+/* ---- |z| > 1 stays symbolic where no continuation is implemented ----- */
 
 void test_lp_large_z_symbolic() {
+    /* Integer s on the branch cut needs the logarithmic confluent form. */
     assert_eval_eq("LerchPhi[2, 3, -1.5]", "LerchPhi[2, 3, -1.5]", 0);
     assert_eval_eq("LerchPhi[2.0, 3, 0.5]", "LerchPhi[2.0, 3, 0.5]", 0);
 }
@@ -259,6 +273,7 @@ int main() {
     TEST(test_lp_machine_complex);
     TEST(test_lp_arbitrary_precision);
     TEST(test_lp_arbitrary_complex);
+    TEST(test_lp_large_z_continuation);
     TEST(test_lp_large_z_symbolic);
     TEST(test_lp_doubly_infinite);
     TEST(test_lp_include_singular_term);

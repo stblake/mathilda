@@ -864,8 +864,16 @@ Implemented in `src/special_functions/lerchphi.c`, registered via
   series evaluates the value at machine or arbitrary precision (real and
   complex), e.g. `LerchPhi[0.5, 3, 2.5] = 0.0794983`,
   `LerchPhi[0.3 + 0.2 I, 2, 1.5] = 0.495505 + 0.0444653 I`,
-  `N[LerchPhi[1/2, 2, 5/2], 30] = 0.219693113434910235649039949138…`. `|z| > 1`
-  has no analytic continuation here and stays symbolic.
+  `N[LerchPhi[1/2, 2, 5/2], 30] = 0.219693113434910235649039949138…`.
+  For `|z| > 1` (off the branch cut `[1, ∞)`, with `s` not a positive integer,
+  `a` not a non-positive integer, and `|Log z| < 2π`) the value comes from the
+  Lerch/Erdélyi continuation
+  `Φ(z,s,a) = z^(-a)[Γ(1-s)(-Log z)^(s-1) + Σ_{n≥0} HurwitzZeta(s-n,a)(Log z)^n/n!]`,
+  summed with optimal truncation: `LerchPhi[5. + I, I, I + 2] =
+  -0.581502 + 0.384767 I` (cross-checked against `z LerchPhi[z,s,1] =
+  PolyLog[s,z]`). Outside that domain — integer `s`, or `z` on the cut
+  `[1, ∞)` (e.g. `LerchPhi[2, 3, -1.5]`, which needs the logarithmic confluent
+  form) — `|z| > 1` stays symbolic.
 - **Series at `z = 0`.** `Series[LerchPhi[z, s, a], {z, 0, n}]` returns the
   defining power series, coefficient of `z^k` being `((k+a)^2)^(-s/2)`:
   `Series[LerchPhi[z, s, a], {z, 0, 5}] // Normal =
