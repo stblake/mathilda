@@ -3956,6 +3956,48 @@ static Expr* try_series_bessely_at_zero(Expr* f, Expr* x, int64_t n) {
     return series;
 }
 
+/* LerchPhi[x, s, a] at x = 0: the defining series Sum_{k>=0} x^k (k+a)^-s is
+ * already a power series, so the coefficient of x^k is the symmetric power
+ * ((k+a)^2)^(-s/2) that Mathematica reports.  Emit it directly: naive
+ * Taylor-via-D fails because D[LerchPhi[x,s,a],x] =
+ * (LerchPhi[x,s-1,a] - a LerchPhi[x,s,a])/x is a 0/0 form at x = 0.  Only fires
+ * when the expansion variable is the first argument and s, a are still symbolic
+ * (a reducible a -- positive/non-positive integer -- has already collapsed onto
+ * PolyLog before this point, and that form expands fine). */
+static Expr* try_series_lerchphi_at_zero(Expr* f, Expr* x, int64_t n) {
+    if (!f || f->type != EXPR_FUNCTION) return NULL;
+    if (!has_symbol_head(f, "LerchPhi")) return NULL;
+    if (f->data.function.arg_count != 3) return NULL;
+    Expr* z = f->data.function.args[0];
+    Expr* s = f->data.function.args[1];
+    Expr* a = f->data.function.args[2];
+    if (!expr_eq(z, x)) return NULL;
+    if (n < 0) return NULL;
+
+    size_t ncoef = (size_t)n + 1;
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (int64_t k = 0; k <= n; k++) {
+        /* ((k + a)^2)^(-s/2) */
+        Expr* kpa  = mk_plus(expr_new_integer(k), expr_copy(a));
+        Expr* sq   = mk_power(kpa, expr_new_integer(2));
+        Expr* hns  = mk_times(expr_copy(s),
+                              mk_power(expr_new_integer(2), expr_new_integer(-1)));
+        Expr* c    = mk_power(sq, mk_times(expr_new_integer(-1), hns));
+        coefs[(size_t)k] = simp(c);
+    }
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);
+    sd[1] = expr_new_integer(0);
+    sd[2] = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    sd[3] = expr_new_integer(0);
+    sd[4] = expr_new_integer(n + 1);
+    sd[5] = expr_new_integer(1);
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd); free(coefs);
+    return series;
+}
+
 /* Expand f around x=x0 to order n and return SeriesData expression. */
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only,
                               int x_sign) {
@@ -4069,6 +4111,14 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return by0;
+        }
+        /* LerchPhi[x, s, a] at x = 0 (symbolic s, a): the defining power series,
+         * coefficient ((k+a)^2)^(-s/2). Naive Taylor-via-D hits a 0/0 form. */
+        Expr* lp0 = try_series_lerchphi_at_zero(f_eval, x, leading_only ? 0 : n);
+        if (lp0) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return lp0;
         }
     }
 

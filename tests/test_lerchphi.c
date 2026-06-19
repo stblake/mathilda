@@ -95,10 +95,10 @@ void test_lp_nonpositive_integer_a() {
     /* Value at the origin: the singular k = 0 term is dropped. */
     assert_eval_eq("LerchPhi[0, s, 0]", "0", 0);
     assert_eval_eq("LerchPhi[0, 0, 0]", "0", 0);
-    /* LerchPhi[1/2, 1, 0] = PolyLog[1, 1/2] = Log[2]. */
-    assert_eval_eq("LerchPhi[1/2, 1, 0]", "Log[2]", 0);
+    /* LerchPhi[1/2, 1, 0] = PolyLog[1, 1/2] = -Log[1/2] (= Log[2]). */
+    assert_eval_eq("LerchPhi[1/2, 1, 0]", "-Log[1/2]", 0);
     /* Negative integer a = -1: z PolyLog[s,z] + (-1)^-s. */
-    assert_eval_eq("LerchPhi[z, s, -1]", "z PolyLog[s, z] + (-1)^(-s)", 0);
+    assert_eval_eq("LerchPhi[z, s, -1]", "(-1)^(-s) + z PolyLog[s, z]", 0);
 }
 
 void test_lp_minus_one_integer_a() {
@@ -107,7 +107,17 @@ void test_lp_minus_one_integer_a() {
     assert_eval_eq("LerchPhi[-1, 1, 1]", "Log[2]", 0);
     /* The reported divergent table: {Log[2], 1, ComplexInfinity, -I Pi/2}. */
     assert_eval_eq("Table[LerchPhi[z, 1, 1], {z, -1, 2}]",
-                   "{Log[2], 1, ComplexInfinity, -I Pi/2}", 0);
+                   "{Log[2], 1, ComplexInfinity, (-1/2*I) Pi}", 0);
+}
+
+void test_lp_series_at_zero() {
+    /* Series at z = 0 with symbolic s, a: coefficient ((k+a)^2)^(-s/2). */
+    assert_eval_eq("Normal[Series[LerchPhi[z, s, a], {z, 0, 3}]]",
+                   "(a^2)^(-1/2 s) + ((1 + a)^2)^(-1/2 s) z + "
+                   "((2 + a)^2)^(-1/2 s) z^2 + ((3 + a)^2)^(-1/2 s) z^3", 0);
+    /* Reducible case (a positive integer) goes through PolyLog and matches. */
+    assert_eval_eq("Normal[Series[LerchPhi[z, 1, 2], {z, 0, 4}]]",
+                   "1/2 + 1/3 z + 1/4 z^2 + 1/5 z^3 + 1/6 z^4", 0);
 }
 
 void test_lp_negative_integer_s() {
@@ -243,6 +253,7 @@ int main() {
     TEST(test_lp_reduce_to_zeta);
     TEST(test_lp_nonpositive_integer_a);
     TEST(test_lp_minus_one_integer_a);
+    TEST(test_lp_series_at_zero);
     TEST(test_lp_negative_integer_s);
     TEST(test_lp_machine_real);
     TEST(test_lp_machine_complex);

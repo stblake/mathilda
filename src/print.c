@@ -276,7 +276,10 @@ static void print_standard(Expr* e, int parent_prec) {
                     print_standard(base, 0);
                     printf(")");
                 } else {
-                    print_standard(base, 590);
+                    /* Context 591 (one above Power's 590) so a Power base is
+                     * parenthesised: `^` is right-associative, so (a^2)^x must
+                     * print as (a^2)^x, not a^2^x (= a^(2^x)). */
+                    print_standard(base, 591);
                 }
                 printf("^");
                 print_standard(e->data.function.args[1], 590);

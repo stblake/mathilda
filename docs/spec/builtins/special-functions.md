@@ -866,6 +866,10 @@ Implemented in `src/special_functions/lerchphi.c`, registered via
   `LerchPhi[0.3 + 0.2 I, 2, 1.5] = 0.495505 + 0.0444653 I`,
   `N[LerchPhi[1/2, 2, 5/2], 30] = 0.219693113434910235649039949138…`. `|z| > 1`
   has no analytic continuation here and stays symbolic.
+- **Series at `z = 0`.** `Series[LerchPhi[z, s, a], {z, 0, n}]` returns the
+  defining power series, coefficient of `z^k` being `((k+a)^2)^(-s/2)`:
+  `Series[LerchPhi[z, s, a], {z, 0, 5}] // Normal =
+  (a^2)^(-s/2) + ((1+a)^2)^(-s/2) z + …`.
 - **Derivatives.** `D[LerchPhi[z, s, a], z] = (LerchPhi[z, -1+s, a]
   - a LerchPhi[z, s, a])/z` and `D[LerchPhi[z, s, a], a] = -s LerchPhi[z, 1+s, a]`;
   the `s`-derivative is the generic `Derivative[0, 1, 0][LerchPhi][z, s, a]`.

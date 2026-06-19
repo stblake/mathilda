@@ -152,7 +152,7 @@ void test_hn_symbolic() {
 void test_hn_derivatives() {
     /* d/dn H_n = Zeta[2] - HarmonicNumber[n, 2] = Pi^2/6 - HarmonicNumber[n,2]. */
     assert_eval_eq("D[HarmonicNumber[n], n]",
-                   "Pi^2/6 - HarmonicNumber[n, 2]", 0);
+                   "1/6 Pi^2 - HarmonicNumber[n, 2]", 0);
     /* d/dn H_n^(r) = r (Zeta[r+1] - HarmonicNumber[n, r+1]). */
     assert_eval_eq("D[HarmonicNumber[n, r], n]",
                    "r (Zeta[1 + r] - HarmonicNumber[n, 1 + r])", 0);
@@ -161,7 +161,7 @@ void test_hn_derivatives() {
                    "Derivative[0, 1][HarmonicNumber][n, r]", 0);
     /* chain rule through the index */
     assert_eval_eq("D[HarmonicNumber[n^2], n]",
-                   "2 n (Pi^2/6 - HarmonicNumber[n^2, 2])", 0);
+                   "2 n (1/6 Pi^2 - HarmonicNumber[n^2, 2])", 0);
 }
 
 /* ---- Listable threading --------------------------------------------- */
