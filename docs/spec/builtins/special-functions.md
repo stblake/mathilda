@@ -396,6 +396,10 @@ Behaviour:
 - Everything else (symbolic `n` with positive order, generic free symbols such as
   `HarmonicNumber[x, 2.5]`, exact non-integer `n` such as `HarmonicNumber[1/17,
   5]`, negative-integer `n`) stays unevaluated.
+- **Derivatives** (w.r.t. the continuous index):
+  `D[HarmonicNumber[n], n] = Pi^2/6 - HarmonicNumber[n, 2]` and
+  `D[HarmonicNumber[n, r], n] = r (Zeta[r+1] - HarmonicNumber[n, r+1])`; the
+  `r`-derivative is the generic `Derivative[0,1][HarmonicNumber][n, r]`.
 
 ## PolyGamma
 
@@ -671,7 +675,8 @@ follow: the functions disagree for non-positive real `a` (e.g.
 - **Derivatives.** `D[HurwitzZeta[s, a], a] = -s HurwitzZeta[1+s, a]` (the
   `s`-derivative is the generic `Derivative[1,0][HurwitzZeta][s, a]`); higher
   `a`-derivatives follow the rising-factorial pattern
-  `(-1)^k Pochhammer[s, k] HurwitzZeta[k+s, a]`.
+  `(-1)^k Pochhammer[s, k] HurwitzZeta[k+s, a]`, including a **symbolic order**
+  `D[HurwitzZeta[s, a], {a, n}] = (-1)^n Pochhammer[s, n] HurwitzZeta[n+s, a]`.
 
 ```mathematica
 In[1]:= HurwitzZeta[s, 1/2]

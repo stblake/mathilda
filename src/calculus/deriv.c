@@ -1056,6 +1056,58 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- HarmonicNumber[N] and HarmonicNumber[N, R]: derivative w.r.t. the
+         *   continuous index N.
+         *   d/dN H_N     = Zeta[2] - HarmonicNumber[N, 2]
+         *   d/dN H_N^(R) = R (Zeta[R+1] - HarmonicNumber[N, R+1])
+         *   d/dR H_N^(R) = Derivative[0,1][HarmonicNumber][N, R] (no elementary
+         *                  closed form in the order R). */
+        if (h == SYM_HarmonicNumber && n == 1) {
+            Expr* N = args[0];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            if (is_lit_zero(dN)) { expr_free(dN); return mk_int(0); }
+            Expr* dHdN = mk_fn2("Plus", mk_fn1("Zeta", mk_int(2)),
+                                mk_neg(mk_fn2("HarmonicNumber",
+                                              expr_copy(N), mk_int(2))));
+            return mk_fn2("Times", dHdN, dN);
+        }
+        if (h == SYM_HarmonicNumber && n == 2) {
+            Expr* N = args[0];
+            Expr* R = args[1];
+            Expr* dN = deriv_of(N, x, nonconsts);
+            Expr* dR = deriv_of(R, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+
+            if (!is_lit_zero(dN)) {
+                /* R (Zeta[R+1] - HarmonicNumber[N, R+1]) * dN */
+                Expr* zr = mk_fn1("Zeta", mk_fn2("Plus", expr_copy(R), mk_int(1)));
+                Expr* hn = mk_fn2("HarmonicNumber", expr_copy(N),
+                                  mk_fn2("Plus", expr_copy(R), mk_int(1)));
+                Expr* inner = mk_fn2("Plus", zr, mk_neg(hn));
+                Expr* dHdN = mk_fn2("Times", expr_copy(R), inner);
+                terms[nt++] = mk_fn2("Times", dHdN, dN);
+            } else {
+                expr_free(dN);
+            }
+
+            if (!is_lit_zero(dR)) {
+                /* Derivative[0, 1][HarmonicNumber][N, R] * dR */
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(1) }, 2);
+                Expr* op_g = mk_fn_head1(op, mk_sym("HarmonicNumber"));
+                Expr* applied = expr_new_function(op_g,
+                              (Expr*[]){ expr_copy(N), expr_copy(R) }, 2);
+                terms[nt++] = mk_fn2("Times", applied, dR);
+            } else {
+                expr_free(dR);
+            }
+
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
+
         /* --- Zeta[S] (one-argument Riemann zeta): d/dS Zeta[S] has no
          * elementary closed form, so emit Derivative[1][Zeta][S] * D[S, x]. */
         if (h == SYM_Zeta && n == 1) {
@@ -2095,6 +2147,25 @@ static Expr* compute_deriv_symbolic_order(Expr* f, Expr* var, Expr* k) {
                 }
                 expr_free(a);
             }
+        }
+    }
+
+    /* HurwitzZeta[s, a] differentiated to symbolic order k in its second
+     * argument a (s free of a = var):
+     *   D[HurwitzZeta[s, a], {a, k}] = (-1)^k Pochhammer[s, k] HurwitzZeta[s+k, a].
+     */
+    if (f->type == EXPR_FUNCTION && is_sym(f->data.function.head, "HurwitzZeta") &&
+        f->data.function.arg_count == 2) {
+        Expr* s = f->data.function.args[0];
+        Expr* a = f->data.function.args[1];
+        if (expr_eq(a, var) && expr_free_of(s, var)) {
+            Expr* sign = mk_fn2("Power", mk_int(-1), expr_copy(k));
+            Expr* poch = mk_fn2("Pochhammer", expr_copy(s), expr_copy(k));
+            Expr* spk  = mk_fn2("Plus", expr_copy(s), expr_copy(k));
+            Expr* hz   = mk_fn2("HurwitzZeta", spk, expr_copy(a));
+            Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ sign, poch, hz }, 3);
+            return eval_and_free(prod);
         }
     }
 

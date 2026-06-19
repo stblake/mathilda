@@ -147,6 +147,23 @@ void test_hn_symbolic() {
     assert_eval_eq("HarmonicNumber[-2, 3]", "HarmonicNumber[-2, 3]", 0);
 }
 
+/* ---- derivatives ---------------------------------------------------- */
+
+void test_hn_derivatives() {
+    /* d/dn H_n = Zeta[2] - HarmonicNumber[n, 2] = Pi^2/6 - HarmonicNumber[n,2]. */
+    assert_eval_eq("D[HarmonicNumber[n], n]",
+                   "Pi^2/6 - HarmonicNumber[n, 2]", 0);
+    /* d/dn H_n^(r) = r (Zeta[r+1] - HarmonicNumber[n, r+1]). */
+    assert_eval_eq("D[HarmonicNumber[n, r], n]",
+                   "r (Zeta[1 + r] - HarmonicNumber[n, 1 + r])", 0);
+    /* d/dr has no elementary closed form: generic partial. */
+    assert_eval_eq("D[HarmonicNumber[n, r], r]",
+                   "Derivative[0, 1][HarmonicNumber][n, r]", 0);
+    /* chain rule through the index */
+    assert_eval_eq("D[HarmonicNumber[n^2], n]",
+                   "2 n (Pi^2/6 - HarmonicNumber[n^2, 2])", 0);
+}
+
 /* ---- Listable threading --------------------------------------------- */
 
 void test_hn_listable() {
@@ -187,6 +204,7 @@ int main() {
     TEST(test_hn_highprec);
     TEST(test_hn_complex);
     TEST(test_hn_symbolic);
+    TEST(test_hn_derivatives);
     TEST(test_hn_listable);
     TEST(test_hn_argt);
     TEST(test_hn_attributes);
