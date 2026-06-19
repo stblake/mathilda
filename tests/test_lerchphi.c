@@ -88,6 +88,28 @@ void test_lp_reduce_to_zeta() {
                    "2^(-s) (-Zeta[s, 3/4] + Zeta[s, 1/4])", 0);
 }
 
+void test_lp_nonpositive_integer_a() {
+    /* a = 0: LerchPhi[z, s, 0] = PolyLog[s, z]. */
+    assert_eval_eq("LerchPhi[z, s, 0]", "PolyLog[s, z]", 0);
+    assert_eval_eq("PolyLog[s, z] == LerchPhi[z, s, 0]", "True", 0);
+    /* Value at the origin: the singular k = 0 term is dropped. */
+    assert_eval_eq("LerchPhi[0, s, 0]", "0", 0);
+    assert_eval_eq("LerchPhi[0, 0, 0]", "0", 0);
+    /* LerchPhi[1/2, 1, 0] = PolyLog[1, 1/2] = Log[2]. */
+    assert_eval_eq("LerchPhi[1/2, 1, 0]", "Log[2]", 0);
+    /* Negative integer a = -1: z PolyLog[s,z] + (-1)^-s. */
+    assert_eval_eq("LerchPhi[z, s, -1]", "z PolyLog[s, z] + (-1)^(-s)", 0);
+}
+
+void test_lp_minus_one_integer_a() {
+    /* z = -1 with integer a routes through PolyLog (the two-Zeta form is
+     * indeterminate at integer s). LerchPhi[-1, 1, 1] = Log[2]. */
+    assert_eval_eq("LerchPhi[-1, 1, 1]", "Log[2]", 0);
+    /* The reported divergent table: {Log[2], 1, ComplexInfinity, -I Pi/2}. */
+    assert_eval_eq("Table[LerchPhi[z, 1, 1], {z, -1, 2}]",
+                   "{Log[2], 1, ComplexInfinity, -I Pi/2}", 0);
+}
+
 void test_lp_negative_integer_s() {
     /* LerchPhi[z, -n, a] = (z d/dz + a)^n [1/(1-z)], a rational function. */
     assert_eval_eq("LerchPhi[2, -1, a]", "2 - a", 0);
@@ -219,6 +241,8 @@ int main() {
     TEST(test_lp_trivial_reductions);
     TEST(test_lp_reduce_to_polylog);
     TEST(test_lp_reduce_to_zeta);
+    TEST(test_lp_nonpositive_integer_a);
+    TEST(test_lp_minus_one_integer_a);
     TEST(test_lp_negative_integer_s);
     TEST(test_lp_machine_real);
     TEST(test_lp_machine_complex);

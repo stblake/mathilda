@@ -186,6 +186,36 @@ static Expr* lp_pos_int_a(Expr* z, Expr* s, long m) {
     return eval_and_free(lp_times(zinv, bracket));
 }
 
+/* a = -m, m >= 0 (a a non-positive integer).  By Mathematica's convention the
+ * singular k = m term (the one with k + a = 0) is dropped, so shifting the index
+ * j = k - m onto the PolyLog series gives
+ *   Phi(z, s, -m) = z^m PolyLog[s, z] + Sum_{j=1}^{m} z^(m-j) (-j)^-s.
+ * For m = 0 this is just PolyLog[s, z] (so Phi(z, s, 0) = PolyLog[s, z], and in
+ * particular Phi(0, s, 0) = 0).  NULL past the cap. */
+static Expr* lp_nonpos_int_a(Expr* z, Expr* s, long m) {
+    if (m < 0 || m > LP_POS_A_CAP) return NULL;
+
+    Expr* poly = expr_new_function(expr_new_symbol(SYM_PolyLog),
+                     (Expr*[]){ expr_copy(s), expr_copy(z) }, 2);
+    if (m == 0) return eval_and_free(poly);          /* Phi(z, s, 0) = PolyLog[s, z] */
+
+    Expr* main = lp_times(lp_pow(expr_copy(z), expr_new_integer(m)), poly);
+
+    size_t terms = (size_t)m + 1;                    /* main + m extra terms */
+    Expr** parts = (Expr**)malloc(terms * sizeof(Expr*));
+    if (!parts) { expr_free(main); return NULL; }
+    parts[0] = main;
+    for (long j = 1; j <= m; j++) {
+        /* z^(m-j) (-j)^-s = Times[Power[z, m-j], Power[-j, -s]]. */
+        Expr* zpow = lp_pow(expr_copy(z), expr_new_integer(m - j));
+        Expr* jpow = lp_pow(expr_new_integer(-j), lp_neg_s(expr_copy(s)));
+        parts[(size_t)j] = lp_times(zpow, jpow);
+    }
+    Expr* sum = expr_new_function(expr_new_symbol(SYM_Plus), parts, terms);
+    free(parts);
+    return eval_and_free(sum);
+}
+
 /* s = -n, n >= 1: Phi(z, -n, a) = Sum_{k>=0} (k+a)^n z^k = (z d/dz + a)^n
  * applied to 1/(1-z), a rational function of z.  Built by applying the Euler
  * operator theta = z d/dz n times, then Together. NULL past the cap. */
@@ -497,23 +527,34 @@ static Expr* lerchphi_single(Expr* z, Expr* s, Expr* a, bool include_singular) {
     if (include_singular && lp_exact_int(a, &m) && m <= 0)
         return expr_new_symbol(SYM_ComplexInfinity);
 
+    /* a non-positive integer (default convention drops the singular term):
+     * Phi(z, s, -m) reduces onto PolyLog.  Checked before the z special cases
+     * so that a = 0 wins over z = 0 (Phi(0, s, 0) = 0, not 0^-s). */
+    if (lp_exact_int(a, &m) && m <= 0) {
+        Expr* r = lp_nonpos_int_a(z, s, -m);
+        if (r) return r;
+    }
+
     /* z = 0: a^-s. */
     if (lp_is_int(z, 0)) return lp_z_zero(s, a);
 
     /* s = 0: 1/(1 - z) (also handles z = 1 -> ComplexInfinity). */
     if (lp_is_int(s, 0)) return lp_s_zero(z);
 
-    /* z = 1: Zeta[s, a]. */
+    /* z = 1: Zeta[s, a] (kept ahead of the positive-integer-a reduction so the
+     * clean Hurwitz form is preferred for z = 1). */
     if (lp_is_int(z, 1)) return lp_z_one(s, a);
 
-    /* z = -1: 2^-s (Zeta[s,a/2] - Zeta[s,(a+1)/2]). */
-    if (lp_is_int(z, -1)) return lp_z_minus_one(s, a);
-
-    /* a positive integer: PolyLog reduction. */
+    /* a positive integer: PolyLog reduction.  Ahead of z = -1 so that integer a
+     * routes through PolyLog (e.g. Phi(-1, 1, 1) = Log[2]) instead of the
+     * two-Zeta form, which is indeterminate at integer s. */
     if (lp_exact_int(a, &m) && m >= 1) {
         Expr* r = lp_pos_int_a(z, s, m);
         if (r) return r;
     }
+
+    /* z = -1: 2^-s (Zeta[s,a/2] - Zeta[s,(a+1)/2]) (non-integer a). */
+    if (lp_is_int(z, -1)) return lp_z_minus_one(s, a);
 
     /* s negative integer: rational function of z. */
     if (lp_exact_int(s, &m) && m < 0) {

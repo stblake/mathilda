@@ -836,7 +836,14 @@ Implemented in `src/special_functions/lerchphi.c`, registered via
   - `LerchPhi[1, s, a] = Zeta[s, a]`; `LerchPhi[z, s, 1] = PolyLog[s, z]/z`.
   - `LerchPhi[-1, s, 1/2] = 2^(-s) (Zeta[s, 1/4] - Zeta[s, 3/4])`.
   - A positive integer `a` shifts down to the `PolyLog` series, e.g.
-    `LerchPhi[z, s, 2] = (PolyLog[s, z] - z)/z^2`.
+    `LerchPhi[z, s, 2] = (PolyLog[s, z] - z)/z^2`.  This reduction is also taken
+    for `z = -1` with integer `a`, so `LerchPhi[-1, 1, 1] = Log[2]` (the
+    two-`Zeta` `z = -1` form is indeterminate at integer `s`).
+  - A non-positive integer `a = -m` drops the singular `k = m` term (Wolfram's
+    default) and shifts onto `PolyLog`:
+    `LerchPhi[z, s, 0] = PolyLog[s, z]` (so `LerchPhi[z, s, 0] == PolyLog[s, z]`,
+    `LerchPhi[0, s, 0] = 0`, `LerchPhi[0, 0, 0] = 0`), and in general
+    `LerchPhi[z, s, -m] = z^m PolyLog[s, z] + Σ_{j=1}^{m} z^(m-j) (-j)^(-s)`.
   - A negative integer `s = -n` gives a rational function of `z`,
     `(z d/dz + a)^n [1/(1-z)]` (e.g. `LerchPhi[2, -1, a] = 2 - a`,
     `LerchPhi[z, -2, a] = (a² + (1+2a+a²) z + (1-2a-2a²) z² + a² z³)/(1-z)³`).
