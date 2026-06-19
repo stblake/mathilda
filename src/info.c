@@ -65,6 +65,15 @@ void info_init(void) {
         "Computed by folding GMP's mpz_gcdext pairwise; accepts machine and\n"
         "BigInt integers and threads over lists. Non-integer or inexact\n"
         "arguments leave ExtendedGCD unevaluated.");
+    symtab_set_docstring("Divisible",
+        "Divisible[n, m]\n"
+        "\tyields True if n is divisible by m, and False otherwise.\n"
+        "n is divisible by m when n is an integer multiple of m; this is\n"
+        "effectively Mod[n, m] == 0.  Works for machine and BigInt integers,\n"
+        "Gaussian integers, rationals, and exact numeric quantities (the\n"
+        "quotient n/m must reduce to an integer or Gaussian integer).  Returns\n"
+        "False unless n and m are manifestly divisible; symbolic, non-numeric\n"
+        "arguments are left unevaluated.  Listable.");
     symtab_set_docstring("PowerMod", "PowerMod[a, b, m] gives a^b mod m.\nPowerMod[a, -1, m] finds the modular inverse of a modulo m.\nPowerMod[a, 1/r, m] finds a modular r-th root of a.");
     symtab_set_docstring("PrimitiveRoot",
         "PrimitiveRoot[n]\n"

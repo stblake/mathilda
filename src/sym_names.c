@@ -96,6 +96,7 @@ const char* SYM_DirectedInfinity = NULL;
 const char* SYM_Direction = NULL;
 const char* SYM_DiscreteDelta = NULL;
 const char* SYM_Divide = NULL;
+const char* SYM_Divisible = NULL;
 const char* SYM_Dixon = NULL;
 const char* SYM_Do = NULL;
 const char* SYM_DollarMachineEpsilon = NULL;
@@ -620,6 +621,7 @@ void sym_names_init(void) {
     SYM_Direction                  = intern_symbol("Direction");
     SYM_DiscreteDelta              = intern_symbol("DiscreteDelta");
     SYM_Divide                     = intern_symbol("Divide");
+    SYM_Divisible                  = intern_symbol("Divisible");
     SYM_Dixon                      = intern_symbol("Dixon");
     SYM_Do                         = intern_symbol("Do");
     SYM_DollarMachineEpsilon       = intern_symbol("$MachineEpsilon");

@@ -9,6 +9,39 @@ Integer and number-theoretic functions: greatest common divisor and least common
 
 Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
 
+## Divisible
+
+- `Divisible[n, m]`: yields `True` if `n` is divisible by `m`, and `False` otherwise. Attributes: `Listable`, `Protected`.
+
+`n` is divisible by `m` when `n` is an integer multiple of `m`; this is effectively `Mod[n, m] == 0`. `Divisible[n, m]` returns `False` unless `n` and `m` are manifestly divisible.
+
+**Features**:
+- Machine integers and GMP bigints: tested directly with `mpz_divisible_p`, so large cases such as `Divisible[10^3000 + 1, 16001]` → `True` are exact. By the GMP convention, divisibility by `0` holds iff `n == 0` (`Divisible[0, 0]` → `True`, `Divisible[6, 0]` → `False`); sign is ignored (`Divisible[10, -2]` → `True`).
+- Gaussian integers, rationals, and exact numeric quantities: the quotient `n/m` is formed and evaluated; the result is `True` iff it reduces to an integer or a Gaussian integer. So `Divisible[3 + I, 1 - I]` → `True`, `Divisible[3/2, 1/2]` → `True`, `Divisible[2 Pi, Pi/2]` → `True`, while `Divisible[Sqrt[6], Sqrt[2]]` → `False`.
+- `Listable`: threads element-wise over lists, e.g. `Divisible[{1, 2, 3, 4, 5, 6}, 2]` → `{False, True, False, True, False, True}`.
+- Symbolic, non-numeric arguments leave the call unevaluated (e.g. `Divisible[x, 2]`).
+- Diagnostics: too few arguments emit `Divisible::argm`, too many emit `Divisible::argt`; both leave the call unevaluated.
+
+```
+In[1]:= Divisible[10, 2]
+Out[1]= True
+
+In[2]:= Divisible[5, 2]
+Out[2]= False
+
+In[3]:= Divisible[3 + I, 1 - I]
+Out[3]= True
+
+In[4]:= Divisible[2 Pi, Pi/2]
+Out[4]= True
+
+In[5]:= Divisible[Sqrt[6], Sqrt[2]]
+Out[5]= False
+
+In[6]:= Divisible[{1, 2, 3, 4, 5, 6}, 2]
+Out[6]= {False, True, False, True, False, True}
+```
+
 ## ExtendedGCD
 
 - `ExtendedGCD[n1, n2, ...]`: returns `{g, {r1, r2, ...}}` where `g == GCD[n1, ...]` and `g == r1 n1 + r2 n2 + ...` (a multi-argument Bézout / extended GCD). Attributes: `Listable`, `Protected` (deliberately *not* `Flat`/`Orderless`/`OneIdentity`, since the cofactor list is positional).

@@ -352,6 +352,10 @@ add_executable(rescale_tests test_rescale.c ${COMMON_SRC})
 target_include_directories(rescale_tests PRIVATE ../src)
 add_test(NAME rescale_tests COMMAND rescale_tests)
 
+add_executable(divisible_tests test_divisible.c ${COMMON_SRC})
+target_include_directories(divisible_tests PRIVATE ../src)
+add_test(NAME divisible_tests COMMAND divisible_tests)
+
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)

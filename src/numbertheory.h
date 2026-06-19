@@ -26,5 +26,6 @@ Expr* builtin_factorial(Expr* res);
 Expr* builtin_factorial2(Expr* res);
 Expr* builtin_factorialpower(Expr* res);
 Expr* builtin_binomial(Expr* res);
+Expr* builtin_divisible(Expr* res);
 
 #endif
