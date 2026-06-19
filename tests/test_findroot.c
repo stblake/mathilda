@@ -102,6 +102,19 @@ static void test_root_returns_rule_list(void) {
     check_eq("Head[First[FindRoot[x^2 - 4, {x, 1.0}]]]", "Rule");
 }
 
+static void test_root_finite_difference_zeta(void) {
+    /* Zeta' is an inert Derivative[1][Zeta]; Newton must fall back to a
+     * finite-difference derivative. Real root of Zeta[s] == 1.05 near 4.613. */
+    check_true("Abs[(s /. First[FindRoot[Zeta[s] == 1.05, {s, 5}]]) - "
+               "4.612973128439312] < 1.*^-6");
+    /* Complex start: a zeta-difference root near 0.948962 + 20.3778 I. */
+    check_true("Abs[(s /. First[FindRoot[2^(-s) (Zeta[s] - Zeta[s, 3/2]) == 0, "
+               "{s, 20 I}]]) - (0.948962 + 20.3778 I)] < 1.*^-3");
+    /* Finite-difference fallback also works at arbitrary precision. */
+    check_true("Abs[(s /. First[FindRoot[Zeta[s] == 1.05, {s, 5}, "
+               "WorkingPrecision -> 30]]) - 4.612973128439312] < 1.*^-6");
+}
+
 /* ------------------------------------------------------------------ */
 /* 2. Method dispatch                                                  */
 /* ------------------------------------------------------------------ */
@@ -380,6 +393,7 @@ int main(void) {
     TEST(test_root_exp_plus_sin);
     TEST(test_root_polynomial);
     TEST(test_root_returns_rule_list);
+    TEST(test_root_finite_difference_zeta);
 
     TEST(test_method_brent_implicit);
     TEST(test_method_brent_bracket_spec);

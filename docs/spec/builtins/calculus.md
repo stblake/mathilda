@@ -1198,6 +1198,16 @@ The `Method` option overrides this when explicit (`"Newton"`,
 `"Secant"`, or `"Brent"`).  `Method -> "Brent"` accepts either a
 4-element bracket spec or a 2-start spec used as `[a, b]`.
 
+When the symbolic derivative `D[f, x]` cannot be reduced to a
+numericalizable form — `D` returns an inert `Derivative[..]` head, as for
+`Zeta'`, `HurwitzZeta`'s order derivative, `PolyGamma`, etc. — the Newton
+iteration falls back to a **central finite-difference** derivative
+(`(f(x+h) − f(x−h))/(2h)`) instead of failing with `nlnum`. This covers all
+four scalar Newton kernels (real / complex × machine / MPFR), so e.g.
+`FindRoot[Zeta[s] == 1.05, {s, 5}]` → `{s -> 4.61297}` and
+`FindRoot[2^(-s)(Zeta[s] - Zeta[s, 3/2]) == 0, {s, 20 I}]` →
+`{s -> 0.948962 + 20.3778 I}`.
+
 ### Complex roots
 
 `FindRoot` automatically engages a complex Newton inner loop when the

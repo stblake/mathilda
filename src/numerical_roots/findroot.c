@@ -489,6 +489,146 @@ static Expr* fr_compute_derivative(Expr* f, Expr* var) {
     return d;
 }
 
+/* True if `e` still contains an inert Derivative[...][...] application -- i.e. D
+ * could not produce a closed-form derivative (e.g. Zeta', PolyGamma order
+ * derivatives, Derivative[1][f]).  Such a derivative never numericalizes, so
+ * Newton must fall back to a finite-difference derivative. */
+static bool fr_has_inert_derivative(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_FUNCTION &&
+        head->data.function.head &&
+        head->data.function.head->type == EXPR_SYMBOL &&
+        head->data.function.head->data.symbol == SYM_Derivative)
+        return true;
+    if (fr_has_inert_derivative(head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (fr_has_inert_derivative(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Central finite-difference derivative f'(x) at a real machine point, used when
+ * no usable symbolic derivative is available.  Returns false if f cannot be
+ * evaluated to a real number at the two probe points. */
+static bool fr_fd_deriv_real(Expr* f, FrVarBind* bind, double x,
+                             const FrOpts* opts, double* out) {
+    double h = (fabs(x) + 1.0) * 1.0e-7;
+    double fph, fmh;
+    Expr* arr[1];
+    Expr* e;
+    arr[0] = expr_new_real(x + h);
+    e = fr_eval_with_bindings(f, bind, arr, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    expr_free(arr[0]);
+    if (!e) return false;
+    bool ok = fr_expr_to_double_real(e, &fph); expr_free(e);
+    if (!ok) return false;
+    arr[0] = expr_new_real(x - h);
+    e = fr_eval_with_bindings(f, bind, arr, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    expr_free(arr[0]);
+    if (!e) return false;
+    ok = fr_expr_to_double_real(e, &fmh); expr_free(e);
+    if (!ok) return false;
+    *out = (fph - fmh) / (2.0 * h);
+    return true;
+}
+
+/* Central finite-difference derivative f'(z) at a complex machine point. */
+static bool fr_fd_deriv_complex(Expr* f, FrVarBind* bind, double complex z,
+                                const FrOpts* opts, double complex* out) {
+    double h = (cabs(z) + 1.0) * 1.0e-7;
+    double complex fph, fmh;
+    Expr* arr[1];
+    Expr* e;
+    arr[0] = fr_expr_from_complex_d(z + h);
+    e = fr_eval_with_bindings(f, bind, arr, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    expr_free(arr[0]);
+    if (!e) return false;
+    bool ok = fr_expr_to_complex(e, &fph); expr_free(e);
+    if (!ok) return false;
+    arr[0] = fr_expr_from_complex_d(z - h);
+    e = fr_eval_with_bindings(f, bind, arr, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    expr_free(arr[0]);
+    if (!e) return false;
+    ok = fr_expr_to_complex(e, &fmh); expr_free(e);
+    if (!ok) return false;
+    *out = (fph - fmh) / (2.0 * h);
+    return true;
+}
+
+#ifdef USE_MPFR
+/* Central finite-difference derivative f'(x) at an MPFR real point (out must be
+ * pre-init2'd).  Returns false on a non-real / non-numeric probe value. */
+static bool fr_fd_deriv_mpfr_real(Expr* f, FrVarBind* bind, const mpfr_t x,
+                                  const FrOpts* opts, long bits, mpfr_t out) {
+    mpfr_t h, xp, fph, fmh, im;
+    mpfr_inits2(bits, h, xp, fph, fmh, im, (mpfr_ptr)0);
+    mpfr_abs(h, x, MPFR_RNDN);
+    mpfr_add_ui(h, h, 1, MPFR_RNDN);
+    mpfr_mul_2si(h, h, -(bits / 2), MPFR_RNDN);          /* (|x|+1) * 2^(-bits/2) */
+    bool dummy, ok = true;
+    Expr* a[1];
+    Expr* e;
+    mpfr_add(xp, x, h, MPFR_RNDN);
+    a[0] = expr_new_mpfr_copy(xp);
+    e = fr_eval_with_bindings(f, bind, a, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    expr_free(a[0]);
+    ok = e && get_approx_mpfr(e, fph, im, &dummy) && mpfr_zero_p(im);
+    if (e) expr_free(e);
+    if (ok) {
+        mpfr_sub(xp, x, h, MPFR_RNDN);
+        a[0] = expr_new_mpfr_copy(xp);
+        e = fr_eval_with_bindings(f, bind, a, 1, opts->eval_monitor, fr_numeric_spec(opts));
+        expr_free(a[0]);
+        ok = e && get_approx_mpfr(e, fmh, im, &dummy) && mpfr_zero_p(im);
+        if (e) expr_free(e);
+    }
+    if (ok) {
+        mpfr_sub(out, fph, fmh, MPFR_RNDN);
+        mpfr_mul_2ui(h, h, 1, MPFR_RNDN);                /* 2h */
+        mpfr_div(out, out, h, MPFR_RNDN);
+    }
+    mpfr_clears(h, xp, fph, fmh, im, (mpfr_ptr)0);
+    return ok;
+}
+
+/* Central finite-difference complex derivative at an MPFR point (dr, di pre-
+ * init2'd).  Probes along the real axis (f is analytic). */
+static bool fr_fd_deriv_mpfr_complex(Expr* f, FrVarBind* bind,
+                                     const mpfr_t zr, const mpfr_t zi,
+                                     const FrOpts* opts, long bits,
+                                     mpfr_t dr, mpfr_t di) {
+    mpfr_t h, t, fpr, fpi, fmr, fmi;
+    mpfr_inits2(bits, h, t, fpr, fpi, fmr, fmi, (mpfr_ptr)0);
+    mpfr_hypot(h, zr, zi, MPFR_RNDN);
+    mpfr_add_ui(h, h, 1, MPFR_RNDN);
+    mpfr_mul_2si(h, h, -(bits / 2), MPFR_RNDN);
+    bool dummy, ok = true;
+    Expr* a[1];
+    Expr* e;
+    mpfr_add(t, zr, h, MPFR_RNDN);
+    a[0] = fr_expr_from_complex_mpfr(t, zi);
+    e = fr_eval_with_bindings(f, bind, a, 1, opts->eval_monitor, fr_numeric_spec(opts));
+    expr_free(a[0]);
+    ok = e && get_approx_mpfr(e, fpr, fpi, &dummy);
+    if (e) expr_free(e);
+    if (ok) {
+        mpfr_sub(t, zr, h, MPFR_RNDN);
+        a[0] = fr_expr_from_complex_mpfr(t, zi);
+        e = fr_eval_with_bindings(f, bind, a, 1, opts->eval_monitor, fr_numeric_spec(opts));
+        expr_free(a[0]);
+        ok = e && get_approx_mpfr(e, fmr, fmi, &dummy);
+        if (e) expr_free(e);
+    }
+    if (ok) {
+        mpfr_mul_2ui(h, h, 1, MPFR_RNDN);                /* 2h */
+        mpfr_sub(dr, fpr, fmr, MPFR_RNDN); mpfr_div(dr, dr, h, MPFR_RNDN);
+        mpfr_sub(di, fpi, fmi, MPFR_RNDN); mpfr_div(di, di, h, MPFR_RNDN);
+    }
+    mpfr_clears(h, t, fpr, fpi, fmr, fmi, (mpfr_ptr)0);
+    return ok;
+}
+#endif /* USE_MPFR */
+
 /* Build the final result {var1 -> val1, var2 -> val2, ...}.
  * `vars[i]` are borrowed; `vals[i]` are owned by this function on
  * entry (consumed into the result tree, NOT freed by the caller). */
@@ -533,17 +673,22 @@ static Expr* fr_run_newton_real(Expr* f, Expr* df,
          * Also avoids the f'(x*) = 0 case for repeated roots. */
         if (fabs(fv) < tol_acc) return expr_new_real(x);
 
-        xv = expr_new_real(x);
-        Expr* arr2[1] = { xv };
-        Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1,
-                                              opts->eval_monitor,
-                                              fr_numeric_spec(opts));
-        expr_free(xv);
-        if (!dv_expr) { fr_warn("nlnum", "could not evaluate derivative"); return NULL; }
         double dv;
-        bool ok_d = fr_expr_to_double_real(dv_expr, &dv);
-        expr_free(dv_expr);
-        if (!ok_d) { fr_warn("nlnum", "non-real derivative"); return NULL; }
+        if (df) {
+            xv = expr_new_real(x);
+            Expr* arr2[1] = { xv };
+            Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1,
+                                                  opts->eval_monitor,
+                                                  fr_numeric_spec(opts));
+            expr_free(xv);
+            if (!dv_expr) { fr_warn("nlnum", "could not evaluate derivative"); return NULL; }
+            bool ok_d = fr_expr_to_double_real(dv_expr, &dv);
+            expr_free(dv_expr);
+            if (!ok_d) { fr_warn("nlnum", "non-real derivative"); return NULL; }
+        } else if (!fr_fd_deriv_real(f, bind, x, opts, &dv)) {
+            fr_warn("nlnum", "could not evaluate finite-difference derivative");
+            return NULL;
+        }
         if (dv == 0.0) { fr_warn("dsing", "derivative vanished"); return NULL; }
         double step = opts->damping * fv / dv;
         if (!isfinite(step)) { fr_warn("noconv", "divergence (non-finite step)"); return NULL; }
@@ -583,17 +728,22 @@ static Expr* fr_run_newton_complex(Expr* f, Expr* df,
         if (!ok_f) { fr_warn("nlnum", "non-numeric value"); return NULL; }
         if (cabs(fv) < tol_acc) return fr_expr_from_complex_d(z);
 
-        zv = fr_expr_from_complex_d(z);
-        Expr* arr2[1] = { zv };
-        Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1,
-                                              opts->eval_monitor,
-                                              fr_numeric_spec(opts));
-        expr_free(zv);
-        if (!dv_expr) { fr_warn("nlnum", "could not evaluate derivative"); return NULL; }
         double complex dv;
-        bool ok_d = fr_expr_to_complex(dv_expr, &dv);
-        expr_free(dv_expr);
-        if (!ok_d) { fr_warn("nlnum", "non-numeric derivative"); return NULL; }
+        if (df) {
+            zv = fr_expr_from_complex_d(z);
+            Expr* arr2[1] = { zv };
+            Expr* dv_expr = fr_eval_with_bindings(df, bind, arr2, 1,
+                                                  opts->eval_monitor,
+                                                  fr_numeric_spec(opts));
+            expr_free(zv);
+            if (!dv_expr) { fr_warn("nlnum", "could not evaluate derivative"); return NULL; }
+            bool ok_d = fr_expr_to_complex(dv_expr, &dv);
+            expr_free(dv_expr);
+            if (!ok_d) { fr_warn("nlnum", "non-numeric derivative"); return NULL; }
+        } else if (!fr_fd_deriv_complex(f, bind, z, opts, &dv)) {
+            fr_warn("nlnum", "could not evaluate finite-difference derivative");
+            return NULL;
+        }
         if (dv == 0.0) { fr_warn("dsing", "derivative vanished"); return NULL; }
         double complex step = opts->damping * fv / dv;
         if (!isfinite(creal(step)) || !isfinite(cimag(step))) {
@@ -810,24 +960,29 @@ static Expr* fr_run_newton_mpfr_real(Expr* f, Expr* df,
             break;
         }
 
-        xv = expr_new_mpfr_copy(x);
-        Expr* a1[1] = { xv };
-        Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1,
-                                           opts->eval_monitor,
-                                           fr_numeric_spec(opts));
-        expr_free(xv);
-        if (!dv_e) {
-            fr_warn("nlnum", "could not evaluate derivative at MPFR precision");
+        if (df) {
+            xv = expr_new_mpfr_copy(x);
+            Expr* a1[1] = { xv };
+            Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1,
+                                               opts->eval_monitor,
+                                               fr_numeric_spec(opts));
+            expr_free(xv);
+            if (!dv_e) {
+                fr_warn("nlnum", "could not evaluate derivative at MPFR precision");
+                goto cleanup;
+            }
+            mpfr_t im_d;
+            mpfr_init2(im_d, bits);
+            bool ok_d = get_approx_mpfr(dv_e, dv, im_d, &inexact_dummy);
+            bool dim_zero = mpfr_zero_p(im_d);
+            mpfr_clear(im_d);
+            expr_free(dv_e);
+            if (!ok_d || !dim_zero) {
+                fr_warn("nlnum", "non-real derivative during iteration"); goto cleanup;
+            }
+        } else if (!fr_fd_deriv_mpfr_real(f, bind, x, opts, bits, dv)) {
+            fr_warn("nlnum", "could not evaluate finite-difference derivative");
             goto cleanup;
-        }
-        mpfr_t im_d;
-        mpfr_init2(im_d, bits);
-        bool ok_d = get_approx_mpfr(dv_e, dv, im_d, &inexact_dummy);
-        bool dim_zero = mpfr_zero_p(im_d);
-        mpfr_clear(im_d);
-        expr_free(dv_e);
-        if (!ok_d || !dim_zero) {
-            fr_warn("nlnum", "non-real derivative during iteration"); goto cleanup;
         }
         if (mpfr_zero_p(dv)) { fr_warn("dsing", "derivative vanished"); goto cleanup; }
         mpfr_div(step, fv, dv, MPFR_RNDN);
@@ -966,20 +1121,25 @@ static Expr* fr_run_newton_mpfr_complex(Expr* f, Expr* df,
             break;
         }
 
-        zv = fr_expr_from_complex_mpfr(zr, zi);
-        Expr* a1[1] = { zv };
-        Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1,
-                                           opts->eval_monitor,
-                                           fr_numeric_spec(opts));
-        expr_free(zv);
-        if (!dv_e) {
-            fr_warn("nlnum", "could not evaluate derivative at MPFR precision");
+        if (df) {
+            zv = fr_expr_from_complex_mpfr(zr, zi);
+            Expr* a1[1] = { zv };
+            Expr* dv_e = fr_eval_with_bindings(df, bind, a1, 1,
+                                               opts->eval_monitor,
+                                               fr_numeric_spec(opts));
+            expr_free(zv);
+            if (!dv_e) {
+                fr_warn("nlnum", "could not evaluate derivative at MPFR precision");
+                goto cleanup;
+            }
+            bool ok_d = get_approx_mpfr(dv_e, dr, di, &inexact_dummy);
+            expr_free(dv_e);
+            if (!ok_d) {
+                fr_warn("nlnum", "non-numeric derivative"); goto cleanup;
+            }
+        } else if (!fr_fd_deriv_mpfr_complex(f, bind, zr, zi, opts, bits, dr, di)) {
+            fr_warn("nlnum", "could not evaluate finite-difference derivative");
             goto cleanup;
-        }
-        bool ok_d = get_approx_mpfr(dv_e, dr, di, &inexact_dummy);
-        expr_free(dv_e);
-        if (!ok_d) {
-            fr_warn("nlnum", "non-numeric derivative"); goto cleanup;
         }
         if (!fr_mpc_newton_step(zr, zi, fr_, fi, dr, di,
                                 opts->damping, step_r, step_i, bits)) {
@@ -1414,12 +1574,15 @@ Expr* builtin_findroot(Expr* res) {
         }
         result = fr_run_secant_real(fnorm, &bind, x0, x1, &opts);
     } else {
-        /* Newton scalar (kind ignored beyond x0). */
+        /* Newton scalar (kind ignored beyond x0).  When the symbolic derivative
+         * is unavailable -- D returns an inert Derivative[..] (e.g. Zeta',
+         * PolyGamma order derivatives) -- fall back to a finite-difference
+         * derivative inside the Newton iteration (deriv == NULL signals that). */
         Expr* deriv = opts.jacobian ? expr_copy(opts.jacobian)
                                     : fr_compute_derivative(fnorm, var);
-        if (!deriv) {
-            fr_warn("nlnum", "could not compute symbolic derivative");
-            goto scalar_cleanup;
+        if (deriv && !opts.jacobian && fr_has_inert_derivative(deriv)) {
+            expr_free(deriv);
+            deriv = NULL;
         }
 #ifdef USE_MPFR
         if (opts.prec_mode == FR_PREC_MPFR) {
