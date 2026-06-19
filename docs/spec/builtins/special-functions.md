@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy functions `AiryAi` and `AiryBi`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy functions `AiryAi` and `AiryBi`.
 
 ## Gamma
 
@@ -361,6 +361,41 @@ out-of-domain (`s < 0` or `s > 2`) inputs stay symbolic.
   generic `D`-based fallback.
 - All other arguments (symbolic `InverseErfc[x]`, exact `InverseErfc[1/2]`,
   out-of-domain `InverseErfc[2.3]`) stay unevaluated.
+
+## HarmonicNumber
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+- `HarmonicNumber[n]` — the n-th harmonic number `H_n = Sum_{i=1}^n 1/i`.
+- `HarmonicNumber[n, r]` — the order-r harmonic number
+  `H_n^(r) = Sum_{i=1}^n 1/i^r`.
+
+Behaviour:
+
+- **Exact integer n.** A non-negative integer `n` expands to the explicit finite
+  sum `Sum_{i=1}^n i^-r`: an exact rational for integer `r`
+  (`HarmonicNumber[10] = 7381/2520`, `HarmonicNumber[5, 2] = 5269/3600`), and an
+  explicit sum for symbolic order (`HarmonicNumber[4, r] = 1 + 2^-r + 3^-r +
+  4^-r`). `HarmonicNumber[0, r] = 0`.
+- **At infinity.** `HarmonicNumber[Infinity, r] = Zeta[r]`, so
+  `HarmonicNumber[Infinity, 2] = Pi^2/6`, `HarmonicNumber[Infinity, 4] = Pi^4/90`,
+  `HarmonicNumber[Infinity, 3] = Zeta[3]`; `HarmonicNumber[Infinity]` →
+  `ComplexInfinity`.
+- **Non-positive integer order.** `HarmonicNumber[n, -m]` is the Faulhaber
+  polynomial `Sum_{i=1}^n i^m`, returned as a polynomial in `n` (built from
+  `BernoulliB`): `HarmonicNumber[n, 0] = n`, `HarmonicNumber[n, -1] = n/2 + n^2/2`,
+  `HarmonicNumber[z, -4] = -z/30 + z^3/3 + z^4/2 + z^5/5`.
+- **Numeric.** With an inexact argument and a numericizable `n`, the value comes
+  from the analytic identity `H_n^(r) = Zeta[r] - Zeta[r, n+1]` (and the digamma
+  form `EulerGamma + PolyGamma[0, n+1]` for `r = 1`), evaluated at machine or
+  arbitrary (`MPFR`) precision with precision tracked from the input:
+  `HarmonicNumber[.8, 3] = 0.940124`, `HarmonicNumber[E, 1.] = 1.75002`,
+  `N[HarmonicNumber[1/17, 5], 50] =
+  0.25327615206118707521034626118754228313433140885976`. Complex order is
+  supported: `N[HarmonicNumber[27, 5 - I]] = 1.02598 + 0.0251513 I`.
+- Everything else (symbolic `n` with positive order, generic free symbols such as
+  `HarmonicNumber[x, 2.5]`, exact non-integer `n` such as `HarmonicNumber[1/17,
+  5]`, negative-integer `n`) stays unevaluated.
 
 ## PolyGamma
 

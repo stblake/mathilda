@@ -537,6 +537,17 @@ void info_init(void) {
         "arguments give ComplexInfinity. Inexact real and complex arguments evaluate\n"
         "numerically at machine or arbitrary (MPFR) precision. PolyGamma[-1, z] gives\n"
         "LogGamma[z]. Listable.");
+    symtab_set_docstring("HarmonicNumber",
+        "HarmonicNumber[n]\n"
+        "\tgives the n-th harmonic number H_n = Sum_{i=1}^n 1/i.\n"
+        "HarmonicNumber[n, r]\n"
+        "\tgives the order-r harmonic number H_n^(r) = Sum_{i=1}^n 1/i^r.\n"
+        "Non-negative integer n expands to the exact finite sum (a rational for\n"
+        "integer r, an explicit sum for symbolic r); HarmonicNumber[Infinity, r] is\n"
+        "Zeta[r]; a non-positive integer order r gives the Faulhaber polynomial in n.\n"
+        "Inexact arguments evaluate numerically at machine or arbitrary (MPFR)\n"
+        "precision, including complex order, via Zeta[r] - Zeta[r, n+1] (and the\n"
+        "digamma form for r = 1). Listable.");
     symtab_set_docstring("LogGamma",
         "LogGamma[z]\n"
         "\tgives the log-gamma function log(Gamma(z)), analytic except for a branch\n"

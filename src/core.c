@@ -26,6 +26,7 @@
 #include "inverfc.h"
 #include "loggamma.h"
 #include "polygamma.h"
+#include "harmonicnumber.h"
 #include "pochhammer.h"
 #include "eulergamma.h"
 #include "zeta.h"
@@ -489,6 +490,7 @@ void core_init(void) {
     inverfc_init();
     loggamma_init();
     polygamma_init();
+    harmonicnumber_init();
     pochhammer_init();
     eulergamma_init();
     zeta_init();

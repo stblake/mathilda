@@ -180,6 +180,7 @@ const char* SYM_GreaterEqual = NULL;
 const char* SYM_GroebnerBasis = NULL;
 const char* SYM_GroebnerWalk = NULL;
 const char* SYM_HankelMatrix = NULL;
+const char* SYM_HarmonicNumber = NULL;
 const char* SYM_Heads = NULL;
 const char* SYM_Hypergeometric0F1 = NULL;
 const char* SYM_Hypergeometric1F1 = NULL;
@@ -698,6 +699,7 @@ void sym_names_init(void) {
     SYM_GroebnerBasis              = intern_symbol("GroebnerBasis");
     SYM_GroebnerWalk               = intern_symbol("GroebnerWalk");
     SYM_HankelMatrix               = intern_symbol("HankelMatrix");
+    SYM_HarmonicNumber             = intern_symbol("HarmonicNumber");
     SYM_Heads                      = intern_symbol("Heads");
     SYM_Hypergeometric0F1          = intern_symbol("Hypergeometric0F1");
     SYM_Hypergeometric1F1          = intern_symbol("Hypergeometric1F1");

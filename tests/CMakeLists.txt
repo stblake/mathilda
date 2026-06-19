@@ -105,6 +105,7 @@ set(COMMON_SRC
     ../src/special_functions/inverfc.c
     ../src/special_functions/loggamma.c
     ../src/special_functions/polygamma.c
+    ../src/special_functions/harmonicnumber.c
     ../src/special_functions/pochhammer.c
     ../src/special_functions/eulergamma.c
     ../src/special_functions/zeta.c
@@ -1462,6 +1463,9 @@ target_include_directories(inverfc_tests PRIVATE ../src)
 
 add_executable(polygamma_tests test_polygamma.c ${COMMON_SRC})
 target_include_directories(polygamma_tests PRIVATE ../src)
+
+add_executable(harmonicnumber_tests test_harmonicnumber.c ${COMMON_SRC})
+target_include_directories(harmonicnumber_tests PRIVATE ../src)
 
 add_executable(pochhammer_tests test_pochhammer.c ${COMMON_SRC})
 target_include_directories(pochhammer_tests PRIVATE ../src)
