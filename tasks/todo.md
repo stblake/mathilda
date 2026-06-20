@@ -1,38 +1,49 @@
-# Task: Implement LerchPhi[z, s, a]
+# Task: Implement PadRight in list.c
 
-Lerch transcendent Phi(z,s,a) = Sum_{k>=0} z^k / (k+a)^s. Generalizes Zeta,
-HurwitzZeta and PolyLog. Template: src/special_functions/{zeta,hurwitzzeta,polylog}.c.
+PadRight is the right-padding mirror of WL PadLeft. Implement a comprehensive,
+multidimensional engine.
 
 ## Plan
+- [x] sym_names.h / sym_names.c: register `SYM_PadRight`
+- [x] list.h: declare `builtin_padright`
+- [x] list.c: implement `builtin_padright` + helpers
+      - [x] `pr_pad_at` — cyclic index into padding block by coord path
+      - [x] `pr_full_dims` — max dims of a ragged array (for `PadRight[list]` / Automatic)
+      - [x] `pr_build` — recursive multidim padding engine
+      - [x] argb validation (1..4 args), head preservation
+- [x] list_init: register builtin + ATTR_PROTECTED
+- [x] info.c: docstring
+- [x] tests/test_padright.c + CMakeLists entry
+- [ ] docs/spec/builtins/<list>.md + changelog
+- [ ] build, run tests, valgrind
 
-- [ ] `src/special_functions/lerchphi.{c,h}` — builtin_lerchphi + lerchphi_init
-  - Option parsing: 3 positional args + DoublyInfinite / IncludeSingularTerm;
-    argrx for <3 args, nonopt for bad options beyond position 3.
-  - Exact reductions (built symbolically, eval_and_free): z==0 -> a^-s; s==0 ->
-    1/(1-z); z==1 -> Zeta[s,a]; z==-1 -> 2^-s(Zeta[s,a/2]-Zeta[s,(a+1)/2]);
-    a positive integer m -> z^-m(PolyLog[s,z]-Sum_{j=1}^{m-1} z^j j^-s);
-    s negative integer -n -> (z d/dz + a)^n[1/(1-z)] Together'd;
-    IncludeSingularTerm->True & a non-positive integer -> ComplexInfinity.
-  - DoublyInfinite->True -> LerchPhi[z,s,a] + z^-1 LerchPhi[1/z,s,1-a].
-  - Numeric single-sum kernel (complex MPFR `lcx`), |z|<1, machine + MPFR, complex.
-- [ ] sym_names.{c,h}: SYM_LerchPhi, SYM_DoublyInfinite, SYM_IncludeSingularTerm
-- [ ] core.c: include + lerchphi_init()
-- [ ] info.c: docstring
-- [ ] calculus/deriv.c: d/dz, d/da elementary rules; d/ds generic Derivative
-- [ ] tests/CMakeLists.txt + tests/test_lerchphi.c
-- [ ] docs/spec/builtins/special-functions.md + changelog/2026-06-15.md
-- [ ] Build, run tests, valgrind clean.
+## Semantics (PadRight = mirror of PadLeft)
+- PadRight[list, n]            pad with 0 on the right to length n
+- PadRight[list, n, x]         pad with element x
+- PadRight[list, n, {x...}]    cyclic padding (first list elem -> P[0])
+- PadRight[list, n, pad, m]    margin m of padding on the LEFT
+- PadRight[list, n, pad, -m]   truncates first m elements
+- negative n                   pads on the LEFT instead
+- PadRight[list, {n1,n2,...}]  nested full array, dim n_i at level i
+- PadRight[list]               pad ragged array to full with 0
+- PadRight[list, Automatic, x] pad to full array with x
+- head need not be List (preserved)
 
-## Scope note
-Numeric continuation for |z|>1 (general a) is NOT implemented (stays symbolic).
+## Review
+Done. Implemented BOTH PadRight and PadLeft (user follow-up) in src/list.c as
+exact mirrors sharing one recursive engine `pr_build(... pad_left ...)`.
 
-## Review (done)
-- All planned pieces implemented and wired. `lerchphi_tests` (16 cases) pass;
-  zeta/hurwitzzeta/polylog/deriv neighbours still green. Main binary builds clean
-  under -std=c99 -Wall -Wextra. Valgrind: no LerchPhi/src frames in any leak
-  stack (only the documented ~12,800 B macOS dyld/Accelerate baseline).
-- Bug found & fixed: negative-integer-s operator collapsed when z was a concrete
-  number (D of a constant); now differentiates against a fresh placeholder symbol
-  then substitutes z (LerchPhi[2,-1,a] -> 2-a, was -a).
-- Numerics cross-checked independently: z·LerchPhi[z,s,1] == PolyLog[s,z] and
-  LerchPhi[1,s,a] == Zeta[s,a] agree across the distinct kernels.
+- Engine: pr_pad_at (cyclic block index), pr_scan_dims (full dims), pr_build
+  (recursive multidim layout), pad_dispatch (arg parsing, shared by both).
+- Key correctness point: padding phase is data-anchored. For PadLeft the
+  `list_start + L` anchor makes L cancel (= N - m), so empty pure-padding
+  sub-rows in a margined multidim pad share the data rows' tiling. Only a
+  wholly-empty *top-level* list anchors at position 0 (empty_anchor flag).
+  This made the documented {5,5},{{x,y},{z}},{1,2} example match WL exactly.
+- All documented WL examples reproduced exactly (verified in REPL).
+- Symbols in sym_names.{c,h}; docstrings in info.c; ATTR_PROTECTED in list_init.
+- Tests: tests/test_padright.c + tests/test_padleft.c (19 cases each), both
+  registered in tests/CMakeLists.txt. All pass; list_tests still pass.
+- Valgrind: only the ~12,800B/400-block macOS dyld baseline; no list.c frames
+  in any leak stack -> no new leaks.
+- Docs: docs/spec/builtins/structural-manipulation.md + changelog 2026-06-15.md.

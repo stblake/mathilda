@@ -150,6 +150,29 @@ Cycles elements.
 - `RotateLeft[expr, {n1, n2, ...}]`: Cycles at successive levels.
 - `RotateRight[...]`: Similar, but cycles to the right.
 
+## PadLeft, PadRight
+Pads a (possibly ragged, possibly nested) array to a requested length or set
+of dimensions. `PadLeft` pads on the left; `PadRight` is its exact mirror,
+padding on the right. The head of `list` need not be `List` (it is preserved).
+- `PadLeft[list, n]`: length-`n` list, padded with `0` on the left.
+- `PadLeft[list, n, x]`: pads by repeating the element `x`.
+- `PadLeft[list, n, {x1, x2, ...}]`: pads by cyclically repeating the `xi`.
+- `PadLeft[list, n, padding, m]`: leaves a margin of `m` padding elements on
+  the right (`PadRight`: on the left); negative `m` truncates `m` elements.
+- `PadLeft[list, {n1, n2, ...}]`: builds a full nested array with length `ni`
+  at level `i`, padding ragged data; a nested `padding` block is tiled.
+- `PadLeft[list]` / `PadLeft[list, Automatic, x]`: pads a ragged array to a
+  full rectangular array (with `0`, resp. `x`).
+- A negative length `n` pads on the opposite side.
+
+```
+In[1]:= PadLeft[{a, b, c}, 10, {x, y, z}]
+Out[1]= {z, x, y, z, x, y, z, a, b, c}
+
+In[2]:= PadRight[{{a, b}, {c}}, {3, 5}]
+Out[2]= {{a, b, 0, 0, 0}, {c, 0, 0, 0, 0}, {0, 0, 0, 0, 0}}
+```
+
 ## Transpose
 Transposes levels in a rectangular array.
 - `Transpose[list]`: Transposes the first two levels.

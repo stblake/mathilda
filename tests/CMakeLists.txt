@@ -352,6 +352,14 @@ add_executable(rescale_tests test_rescale.c ${COMMON_SRC})
 target_include_directories(rescale_tests PRIVATE ../src)
 add_test(NAME rescale_tests COMMAND rescale_tests)
 
+add_executable(padright_tests test_padright.c ${COMMON_SRC})
+target_include_directories(padright_tests PRIVATE ../src)
+add_test(NAME padright_tests COMMAND padright_tests)
+
+add_executable(padleft_tests test_padleft.c ${COMMON_SRC})
+target_include_directories(padleft_tests PRIVATE ../src)
+add_test(NAME padleft_tests COMMAND padleft_tests)
+
 add_executable(divisible_tests test_divisible.c ${COMMON_SRC})
 target_include_directories(divisible_tests PRIVATE ../src)
 add_test(NAME divisible_tests COMMAND divisible_tests)

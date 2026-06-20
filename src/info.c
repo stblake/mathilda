@@ -1507,6 +1507,36 @@ void info_init(void) {
         "Min[list] to Max[list].\n"
         "Rescale threads over a list first argument and works with exact, "
         "real, complex, and symbolic quantities.");
+    symtab_set_docstring("PadLeft",
+        "PadLeft[list, n]\n"
+        "\tmakes a list of length n by padding list with zeros on the left.\n"
+        "PadLeft[list, n, x]\n"
+        "\tpads by repeating the element x.\n"
+        "PadLeft[list, n, {x1, x2, ...}]\n"
+        "\tpads by cyclically repeating the elements xi.\n"
+        "PadLeft[list, n, padding, m]\n"
+        "\tleaves a margin of m elements of padding on the right.\n"
+        "PadLeft[list, {n1, n2, ...}]\n"
+        "\tmakes a nested list with length ni at level i.\n"
+        "PadLeft[list]\n"
+        "\tpads a ragged array list with zeros to make it full.\n"
+        "A negative length pads on the right; a negative margin truncates "
+        "trailing elements. The head of list need not be List.");
+    symtab_set_docstring("PadRight",
+        "PadRight[list, n]\n"
+        "\tmakes a list of length n by padding list with zeros on the right.\n"
+        "PadRight[list, n, x]\n"
+        "\tpads by repeating the element x.\n"
+        "PadRight[list, n, {x1, x2, ...}]\n"
+        "\tpads by cyclically repeating the elements xi.\n"
+        "PadRight[list, n, padding, m]\n"
+        "\tleaves a margin of m elements of padding on the left.\n"
+        "PadRight[list, {n1, n2, ...}]\n"
+        "\tmakes a nested list with length ni at level i.\n"
+        "PadRight[list]\n"
+        "\tpads a ragged array list with zeros to make it full.\n"
+        "A negative length pads on the left; a negative margin truncates "
+        "leading elements. The head of list need not be List.");
     symtab_set_docstring("RotateLeft", "RotateLeft[expr, n] rotates the elements of expr n positions to the left.");
     symtab_set_docstring("RotateRight", "RotateRight[expr, n] rotates the elements of expr n positions to the right.");
     symtab_set_docstring("Transpose",

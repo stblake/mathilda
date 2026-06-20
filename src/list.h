@@ -14,6 +14,8 @@ Expr* builtin_rotateleft(Expr* res);
 Expr* builtin_rotateright(Expr* res);
 Expr* builtin_reverse(Expr* res);
 Expr* builtin_rescale(Expr* res);
+Expr* builtin_padright(Expr* res);
+Expr* builtin_padleft(Expr* res);
 Expr* builtin_transpose(Expr* res);
 Expr* builtin_conjugate_transpose(Expr* res);
 Expr* builtin_tally(Expr* res);
