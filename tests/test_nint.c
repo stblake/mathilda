@@ -254,13 +254,106 @@ static void test_methods_accepted(void) {
                  "12.15611", 1e-4);
 }
 
+/* ---- Equally-spaced composite rules (Riemann / Trapezoidal / Newton–Cotes) ---- */
+
+static void test_riemann_rule(void) {
+    /* Midpoint rule is exact for linear integrands at any panel count. */
+    ASSERT_CLOSE("NIntegrate[x,{x,0,1},Method->{\"RiemannRule\",\"Type\"->\"Midpoint\"}]",
+                 "1/2", 1e-12);
+    ASSERT_CLOSE("NIntegrate[2 x + 3,{x,-1,2},Method->{\"RiemannRule\",\"Type\"->\"Midpoint\"}]",
+                 "12", 1e-12);
+    /* Midpoint is second order: a modest PrecisionGoal converges on smooth f. */
+    ASSERT_CLOSE("NIntegrate[Exp[x],{x,0,1},Method->{\"RiemannRule\",\"Type\"->\"Midpoint\"},"
+                 "PrecisionGoal->6]", "E - 1", 1e-4);
+    ASSERT_CLOSE("NIntegrate[Sin[x],{x,0,Pi},Method->{\"RiemannRule\",\"Type\"->\"Midpoint\"},"
+                 "PrecisionGoal->5]", "2", 1e-3);
+    /* Left / Right are first order: they bracket a monotone integrand. */
+    ASSERT_CLOSE("NIntegrate[Exp[x],{x,0,1},Method->{\"RiemannRule\",\"Type\"->\"Left\"},"
+                 "PrecisionGoal->4]", "E - 1", 5e-4);
+    ASSERT_CLOSE("NIntegrate[Exp[x],{x,0,1},Method->{\"RiemannRule\",\"Type\"->\"Right\"},"
+                 "PrecisionGoal->4]", "E - 1", 5e-4);
+    /* Left underestimates, Right overestimates a strictly increasing integrand. */
+    ASSERT_EQ_STR("NIntegrate[Exp[x],{x,0,1},Method->{\"RiemannRule\",\"Type\"->\"Left\"},"
+                  "PrecisionGoal->4] < E - 1", "True");
+    ASSERT_EQ_STR("NIntegrate[Exp[x],{x,0,1},Method->{\"RiemannRule\",\"Type\"->\"Right\"},"
+                  "PrecisionGoal->4] > E - 1", "True");
+    /* Default Type is Left when the sub-option is omitted. */
+    ASSERT_CLOSE("NIntegrate[Exp[x],{x,0,1},Method->\"RiemannRule\",PrecisionGoal->4]",
+                 "E - 1", 5e-4);
+    ASSERT_EQ_STR("NIntegrate[Exp[x],{x,0,1},Method->\"RiemannRule\",PrecisionGoal->4] =="
+                  "NIntegrate[Exp[x],{x,0,1},Method->{\"RiemannRule\",\"Type\"->\"Left\"},"
+                  "PrecisionGoal->4]", "True");
+    /* The documented examples (uniform-schedule values; Left > true > Right). */
+    ASSERT_CLOSE("NIntegrate[Exp[Cos[x]],{x,0,10},Method->{\"RiemannRule\",\"Type\"->\"Left\"},"
+                 "PrecisionGoal->2]", "12.2455", 1e-3);
+    ASSERT_CLOSE("NIntegrate[Exp[Cos[x]],{x,0,10},Method->{\"RiemannRule\",\"Type\"->\"Right\"},"
+                 "PrecisionGoal->2]", "12.0669", 1e-3);
+}
+
+static void test_trapezoidal_rule(void) {
+    /* Trapezoidal is exact for linear integrands. */
+    ASSERT_CLOSE("NIntegrate[3 x - 1,{x,0,2},Method->\"TrapezoidalRule\"]", "4", 1e-12);
+    /* Romberg (default) — smooth integrands to high accuracy. */
+    ASSERT_CLOSE("NIntegrate[Exp[Cos[x]],{x,0,10},Method->\"TrapezoidalRule\"]", "12.15611", 1e-4);
+    ASSERT_CLOSE("NIntegrate[4/(1+x^2),{x,0,1},Method->\"TrapezoidalRule\"]", "Pi", 1e-9);
+    ASSERT_CLOSE("NIntegrate[Sin[x],{x,0,Pi},Method->\"TrapezoidalRule\"]", "2", 1e-9);
+    ASSERT_CLOSE("NIntegrate[x^2,{x,-2,2},Method->\"TrapezoidalRule\"]", "16/3", 1e-9);
+    /* Romberg requested explicitly is identical to the default. */
+    ASSERT_CLOSE("NIntegrate[Exp[Cos[x]],{x,0,10},"
+                 "Method->{\"TrapezoidalRule\",\"RombergQuadrature\"->True}]", "12.15611", 1e-4);
+    /* Plain piecewise-linear (no extrapolation) still converges, more slowly. */
+    ASSERT_CLOSE("NIntegrate[Exp[Cos[x]],{x,0,10},"
+                 "Method->{\"TrapezoidalRule\",\"RombergQuadrature\"->False}]", "12.15611", 1e-3);
+    ASSERT_CLOSE("NIntegrate[4/(1+x^2),{x,0,1},"
+                 "Method->{\"TrapezoidalRule\",\"RombergQuadrature\"->False}]", "Pi", 1e-5);
+}
+
+static void test_newtoncotes_rule(void) {
+    /* Default (Points->3, Simpson) on the documented example. */
+    ASSERT_CLOSE("NIntegrate[Exp[Cos[x]],{x,0,10},Method->\"NewtonCotesRule\"]", "12.15611", 1e-4);
+    ASSERT_CLOSE("NIntegrate[4/(1+x^2),{x,0,1},Method->\"NewtonCotesRule\"]", "Pi", 1e-9);
+    /* Simpson (Points->3) is exact for cubics. */
+    ASSERT_CLOSE("NIntegrate[x^3,{x,0,2},Method->{\"NewtonCotesRule\",\"Points\"->3}]", "4", 1e-9);
+    ASSERT_CLOSE("NIntegrate[x^2,{x,0,2},Method->{\"NewtonCotesRule\",\"Points\"->3}]", "8/3", 1e-9);
+    /* Points->2 is the (composite) trapezoid rule. */
+    ASSERT_CLOSE("NIntegrate[Sin[x],{x,0,Pi},Method->{\"NewtonCotesRule\",\"Points\"->2}]", "2", 1e-9);
+    /* Points->4 (Simpson 3/8) is exact for cubics. */
+    ASSERT_CLOSE("NIntegrate[x^3,{x,0,2},Method->{\"NewtonCotesRule\",\"Points\"->4}]", "4", 1e-9);
+    ASSERT_CLOSE("NIntegrate[Exp[x],{x,0,1},Method->{\"NewtonCotesRule\",\"Points\"->4}]", "E - 1", 1e-9);
+    /* Points->5 (Boole) is exact for quintics. */
+    ASSERT_CLOSE("NIntegrate[x^5,{x,0,2},Method->{\"NewtonCotesRule\",\"Points\"->5}]", "32/3", 1e-8);
+    ASSERT_CLOSE("NIntegrate[1/(1+x^2),{x,0,1},Method->{\"NewtonCotesRule\",\"Points\"->5}]",
+                 "Pi/4", 1e-10);
+    /* Out-of-range Points is clamped (1 -> 2, 99 -> 5), still a valid result. */
+    ASSERT_CLOSE("NIntegrate[Sin[x],{x,0,Pi},Method->{\"NewtonCotesRule\",\"Points\"->99}]", "2", 1e-8);
+}
+
+static void test_fixed_rule_high_precision(void) {
+    /* Romberg trapezoidal at arbitrary precision (smooth, no endpoint trouble). */
+    ASSERT_CLOSE("NIntegrate[4/(1+x^2),{x,0,1},Method->\"TrapezoidalRule\",WorkingPrecision->30]",
+                 "Pi", 1e-25);
+    ASSERT_CLOSE("NIntegrate[4/(1+x^2),{x,0,1},Method->\"TrapezoidalRule\",WorkingPrecision->40]",
+                 "Pi", 1e-33);
+    /* Newton–Cotes at high precision: the weights are exact rationals, so Simpson
+     * is exact for a cubic to the full working precision (not capped at 1e-16). */
+    ASSERT_CLOSE("NIntegrate[x^3,{x,0,2},Method->{\"NewtonCotesRule\",\"Points\"->3},"
+                 "WorkingPrecision->40]", "4", 1e-33);
+    ASSERT_CLOSE("NIntegrate[x^2,{x,0,2},Method->{\"NewtonCotesRule\",\"Points\"->3},"
+                 "WorkingPrecision->30]", "8/3", 1e-25);
+    ASSERT_CLOSE("NIntegrate[4/(1+x^2),{x,0,1},Method->{\"NewtonCotesRule\",\"Points\"->5},"
+                 "WorkingPrecision->30]", "Pi", 1e-22);
+    /* The high-precision result actually carries the requested precision. */
+    ASSERT_EQ_STR("Precision[NIntegrate[4/(1+x^2),{x,0,1},Method->\"TrapezoidalRule\","
+                  "WorkingPrecision->30]] > 25", "True");
+}
+
 static void test_unimplemented_method(void) {
     /* A recognised-but-unimplemented method must warn and stay unevaluated, not
      * silently approximate, so the missing implementation is visible. */
     char* s = eval_str("NIntegrate[Exp[Cos[x]],{x,0,10},Method->\"ClenshawCurtisRule\"]");
     ASSERT_MSG(strstr(s, "NIntegrate") != NULL, "unimplemented method should stay unevaluated, got %s", s);
     free(s);
-    s = eval_str("NIntegrate[Exp[Cos[x]],{x,0,10},Method->\"NewtonCotesRule\"]");
+    s = eval_str("NIntegrate[Exp[Cos[x]],{x,0,10},Method->\"LobattoKronrodRule\"]");
     ASSERT_MSG(strstr(s, "NIntegrate") != NULL, "unimplemented method should stay unevaluated, got %s", s);
     free(s);
 }
@@ -331,6 +424,10 @@ int main(void) {
     TEST(test_high_precision);
     TEST(test_accuracygoal);
     TEST(test_methods_accepted);
+    TEST(test_riemann_rule);
+    TEST(test_trapezoidal_rule);
+    TEST(test_newtoncotes_rule);
+    TEST(test_fixed_rule_high_precision);
     TEST(test_unimplemented_method);
     TEST(test_maxrecursion_zero);
     TEST(test_attributes);

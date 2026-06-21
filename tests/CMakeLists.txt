@@ -331,6 +331,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/oscint.c
     ../src/numerical_calculus/mcint.c
     ../src/numerical_calculus/cubature.c
+    ../src/numerical_calculus/ncrule.c
     ../src/numerical_calculus/nint.c
     ../src/numerical_roots/nroots.c
     ../src/numerical_roots/nroots_aberth.c

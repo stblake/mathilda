@@ -638,13 +638,35 @@ integrand evaluated/numericalised at each sample point.
 | complex `xmin`/`xmax` or extra nodes | straight-line / piecewise-linear contour; complex ∞ gives a ray |
 
 Named methods are accepted as strings: `"GlobalAdaptive"`, `"GaussKronrodRule"`,
-`"DoubleExponential"`, `"LevinRule"`, `"OscillatorySingularity"`, `"MonteCarlo"`,
-`"QuasiMonteCarlo"`, `"AdaptiveMonteCarlo"`, `"PrincipalValue"`.  `"OscillatorySingularity"`
+`"DoubleExponential"`, `"TrapezoidalRule"`, `"RiemannRule"`, `"NewtonCotesRule"`,
+`"LevinRule"`, `"OscillatorySingularity"`, `"MonteCarlo"`, `"QuasiMonteCarlo"`,
+`"AdaptiveMonteCarlo"`, `"PrincipalValue"`.  `"OscillatorySingularity"`
 forces the exponential endpoint-map + integrate-between-the-zeros engine on the
 detected singular endpoint(s) (both are tried when neither is detected singular).
 A recognised but **not-yet-implemented**
-method (e.g. `"ClenshawCurtisRule"`, `"NewtonCotesRule"`) emits
+method (e.g. `"ClenshawCurtisRule"`, `"LobattoKronrodRule"`) emits
 `NIntegrate::method` and returns unevaluated rather than silently approximating.
+
+#### Equally-spaced composite rules
+
+`"RiemannRule"`, `"TrapezoidalRule"` and `"NewtonCotesRule"` are the fixed
+uniform-sampling Newton–Cotes family (these sample the interval *endpoints*,
+unlike Gauss–Kronrod, so a non-numeric endpoint aborts the rule).  Each refines
+by panel doubling until `PrecisionGoal` / `AccuracyGoal` is met (bounded by
+`MaxRecursion` / `MaxPoints`), at machine **and** arbitrary `WorkingPrecision`.
+They take Method sub-options in the `Method -> {"rule", "opt" -> val, …}` form:
+
+| Rule | Sub-option | Values (default) |
+|------|-----------|------------------|
+| `"RiemannRule"` | `"Type"` | `"Left"` (default), `"Right"`, `"Midpoint"` |
+| `"TrapezoidalRule"` | `"RombergQuadrature"` | `True` (default; Richardson/Romberg extrapolation) or `False` (plain piecewise-linear) |
+| `"NewtonCotesRule"` | `"Points"` | `2` trapezoid, `3` Simpson (default), `4` Simpson-3/8, `5` Boole |
+
+The Riemann rectangle rules are first order (midpoint second order) and are not
+extrapolated; Trapezoidal and Newton–Cotes drive a Romberg table by default.
+(Wolfram's same-named methods plug these as *local* rules into the adaptive
+strategy, so its crude-`PrecisionGoal` values come from non-uniform subdivision;
+the values here are the well-defined uniform-composite estimates.)
 
 ### Forms and features
 

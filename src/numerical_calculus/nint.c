@@ -21,6 +21,7 @@
 #include "oscint.h"
 #include "mcint.h"
 #include "cubature.h"
+#include "ncrule.h"
 
 #include <complex.h>
 #include <math.h>
@@ -398,6 +399,7 @@ static Expr* ni_num_endpoint(Expr* e) {
 typedef enum {
     NI_AUTO = 0, NI_GK, NI_DE, NI_TRAP, NI_LEVIN,
     NI_MC, NI_QMC, NI_AMC, NI_PV, NI_OSCSING,
+    NI_RIEMANN, NI_NEWTONCOTES,
     NI_UNIMPL          /* recognised name with no implementation yet            */
 } NiMethod;
 
@@ -408,7 +410,8 @@ typedef enum {
 static bool ni_method_implemented(NiMethod m) {
     return m == NI_AUTO || m == NI_GK || m == NI_DE || m == NI_LEVIN
         || m == NI_MC || m == NI_QMC || m == NI_AMC || m == NI_PV
-        || m == NI_OSCSING;
+        || m == NI_OSCSING || m == NI_TRAP || m == NI_RIEMANN
+        || m == NI_NEWTONCOTES;
 }
 
 typedef struct {
@@ -423,6 +426,10 @@ typedef struct {
     int    min_recursion;   /* default 0                                      */
     long   max_points;      /* -1 => Automatic                                */
     Expr*  exclusions;      /* borrowed; NULL if none                         */
+    /* Fixed-rule sub-options (RiemannRule / TrapezoidalRule / NewtonCotesRule). */
+    int    rule_type;       /* Riemann sampling: 0 Left, 1 Right, 2 Midpoint   */
+    bool   romberg;         /* Romberg (Richardson) extrapolation; default on  */
+    int    nc_points;       /* Newton–Cotes points per panel (2..5); default 3 */
 } NiOpts;
 
 static bool ni_is_known_option(const char* s) {
@@ -452,6 +459,8 @@ static NiMethod ni_method_from_string(const char* s) {
     if (!strcmp(s, "GlobalAdaptive") || !strcmp(s, "GaussKronrodRule")) return NI_GK;
     if (!strcmp(s, "DoubleExponential")) return NI_DE;
     if (!strcmp(s, "Trapezoidal") || !strcmp(s, "TrapezoidalRule")) return NI_TRAP;
+    if (!strcmp(s, "RiemannRule")) return NI_RIEMANN;
+    if (!strcmp(s, "NewtonCotesRule") || !strcmp(s, "NewtonCotes")) return NI_NEWTONCOTES;
     if (!strcmp(s, "LevinRule")) return NI_LEVIN;
     /* Exponential endpoint transform + integration-between-the-zeros for an
      * oscillatory endpoint singularity (∫_0^1 Cos[Log[x]/x]/x dx). */
@@ -460,9 +469,9 @@ static NiMethod ni_method_from_string(const char* s) {
     if (!strcmp(s, "QuasiMonteCarlo")) return NI_QMC;
     if (!strcmp(s, "AdaptiveMonteCarlo") || !strcmp(s, "AdaptiveQuasiMonteCarlo")) return NI_AMC;
     if (!strcmp(s, "PrincipalValue")) return NI_PV;
-    /* LocalAdaptive, ClenshawCurtisRule, NewtonCotesRule, LobattoKronrodRule,
-     * MultidimensionalRule, CartesianRule, MultipanelRule, RiemannRule, and any
-     * unknown name: not implemented as a distinct rule. */
+    /* LocalAdaptive, ClenshawCurtisRule, LobattoKronrodRule, MultidimensionalRule,
+     * CartesianRule, MultipanelRule, and any unknown name: not implemented as a
+     * distinct rule. */
     return NI_UNIMPL;
 }
 
@@ -499,6 +508,37 @@ static bool ni_parse_int(Expr* v, int* out, bool allow_auto) {
     return false;
 }
 
+/* A fixed-rule sub-option "name" -> value inside Method -> {"rule", subopts...}.
+ * Recognises "Type" (Riemann sampling), "RombergQuadrature" (Trapezoidal /
+ * Newton–Cotes extrapolation) and "Points" (Newton–Cotes panel order).  Unknown
+ * sub-options are accepted and ignored, matching the engine's lenient option
+ * handling. */
+static void ni_apply_method_subopt(Expr* sub, NiOpts* o) {
+    if (!sub || sub->type != EXPR_FUNCTION) return;
+    Expr* h = sub->data.function.head;
+    if (h->type != EXPR_SYMBOL) return;
+    if ((h->data.symbol != SYM_Rule && h->data.symbol != SYM_RuleDelayed)
+        || sub->data.function.arg_count != 2) return;
+    Expr* k = sub->data.function.args[0];
+    Expr* v = sub->data.function.args[1];
+    if (k->type != EXPR_STRING) return;
+    const char* key = k->data.string;
+
+    if (!strcmp(key, "Type") && v->type == EXPR_STRING) {
+        if      (!strcmp(v->data.string, "Left"))     o->rule_type = 0;
+        else if (!strcmp(v->data.string, "Right"))    o->rule_type = 1;
+        else if (!strcmp(v->data.string, "Midpoint")) o->rule_type = 2;
+    } else if (!strcmp(key, "RombergQuadrature") && v->type == EXPR_SYMBOL) {
+        if      (v->data.symbol == SYM_True)  o->romberg = true;
+        else if (v->data.symbol == SYM_False) o->romberg = false;
+    } else if (!strcmp(key, "Points") && v->type == EXPR_INTEGER) {
+        long pts = v->data.integer;
+        if (pts < 2) pts = 2;
+        if (pts > 5) pts = 5;
+        o->nc_points = (int)pts;
+    }
+}
+
 static bool ni_apply_option(Expr* rule, NiOpts* o) {
     Expr* lhs = rule->data.function.args[0];
     Expr* rhs = rule->data.function.args[1];
@@ -509,8 +549,11 @@ static bool ni_apply_option(Expr* rule, NiOpts* o) {
         /* Method -> {"name", subopts...} or Method -> "name" or symbol. */
         if (m->type == EXPR_FUNCTION && m->data.function.head->type == EXPR_SYMBOL
             && m->data.function.head->data.symbol == SYM_List
-            && m->data.function.arg_count >= 1)
+            && m->data.function.arg_count >= 1) {
+            for (size_t i = 1; i < m->data.function.arg_count; i++)
+                ni_apply_method_subopt(m->data.function.args[i], o);
             m = m->data.function.args[0];
+        }
         if (m->type == EXPR_STRING) {
             o->method_name = m->data.string;
             o->method = ni_method_from_string(m->data.string);
@@ -673,6 +716,46 @@ static NiAtt ni_try_osc(NiCtx* ctx, double a, double b, double reltol) {
     return out;
 }
 
+/* Map MaxRecursion / MaxPoints to a fixed-rule level and evaluation budget.
+ * Romberg-accelerated rules (Trapezoidal / Newton–Cotes) converge in a handful
+ * of levels; the un-extrapolated Riemann sums need far more panels, so they get
+ * more levels but a bounded evaluation count to stop an over-tight PrecisionGoal
+ * from grinding indefinitely. */
+static void ni_ncr_budget(const NiOpts* o, int* max_levels, long* max_eval) {
+    int r = o->max_recursion;
+    if (o->method == NI_RIEMANN) {
+        *max_levels = (r < 0) ? 24 : (r > 30 ? 30 : (r < 6 ? 6 : r));
+        *max_eval   = (o->max_points > 0) ? o->max_points : 4000000;
+    } else {
+        *max_levels = (r < 0) ? 20 : (r > 30 ? 30 : (r < 4 ? 4 : r));
+        *max_eval   = (o->max_points > 0) ? o->max_points : 0;
+    }
+}
+
+/* Equally-spaced composite rule (RiemannRule / TrapezoidalRule /
+ * NewtonCotesRule) over a finite interval. */
+static NiAtt ni_try_ncr(NiCtx* ctx, double a, double b, const NiOpts* o,
+                        double reltol, double abstol) {
+    NcrRuleKind kind;
+    if      (o->method == NI_TRAP)        kind = NCR_TRAPEZOIDAL;
+    else if (o->method == NI_NEWTONCOTES) kind = NCR_NEWTONCOTES;
+    else kind = (o->rule_type == 1) ? NCR_RIEMANN_RIGHT
+              : (o->rule_type == 2) ? NCR_RIEMANN_MIDPOINT
+                                    : NCR_RIEMANN_LEFT;
+    int max_levels; long max_eval;
+    ni_ncr_budget(o, &max_levels, &max_eval);
+    double _Complex v; double err;
+    bool conv = ncr_integrate_machine(ni_sample_machine, ctx, a, b, kind,
+                                      o->nc_points, o->romberg, reltol, abstol,
+                                      max_levels, max_eval, &v, &err);
+    NiAtt out;
+    out.have = isfinite(creal(v)) && isfinite(cimag(v));
+    out.conv = conv;
+    out.val = v;
+    out.err = err;
+    return out;
+}
+
 /* Probe the integrand approaching one endpoint (`side` +1 → a, −1 → b) over a
  * geometric ladder of distances.  An endpoint is treated as singular when a
  * probe is non-numeric there, or the integrand's magnitude both becomes large
@@ -764,6 +847,9 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
         ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
     } else if (o->method == NI_OSCSING) {
         ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, true));
+    } else if (o->method == NI_TRAP || o->method == NI_RIEMANN
+               || o->method == NI_NEWTONCOTES) {
+        ni_consider(&best, ni_try_ncr(ctx, a, b, o, reltol, abstol));
     } else {
         ni_consider(&best, ni_try_gk(ctx, a, b, o, reltol, abstol));
         if (!best.conv && (o->method == NI_AUTO || !best.have))
@@ -801,9 +887,26 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
         mpfr_init2(re, bits); mpfr_init2(im, bits);
         mpfr_set_d(am, a, MPFR_RNDN); mpfr_set_d(bm, b, MPFR_RNDN);
         double abserr;
-        bool conv = denint_tanhsinh_mpfr(ni_sample_mpfr, &ctx, am, bm, bits,
-                                         ni_mpfr_reltol(o), ni_mpfr_levels(o),
-                                         re, im, &abserr);
+        bool conv;
+        /* An explicit fixed rule is honoured at high precision too (the default
+         * MPFR path is the endpoint-robust tanh-sinh rule). */
+        if (o->method == NI_TRAP || o->method == NI_RIEMANN
+            || o->method == NI_NEWTONCOTES) {
+            NcrRuleKind kind = (o->method == NI_TRAP) ? NCR_TRAPEZOIDAL
+                : (o->method == NI_NEWTONCOTES) ? NCR_NEWTONCOTES
+                : (o->rule_type == 1) ? NCR_RIEMANN_RIGHT
+                : (o->rule_type == 2) ? NCR_RIEMANN_MIDPOINT : NCR_RIEMANN_LEFT;
+            int max_levels; long max_eval;
+            ni_ncr_budget(o, &max_levels, &max_eval);
+            conv = ncr_integrate_mpfr(ni_sample_mpfr, &ctx, am, bm, kind,
+                                      o->nc_points, o->romberg, bits,
+                                      ni_mpfr_reltol(o), 0.0, max_levels, max_eval,
+                                      re, im, &abserr);
+        } else {
+            conv = denint_tanhsinh_mpfr(ni_sample_mpfr, &ctx, am, bm, bits,
+                                        ni_mpfr_reltol(o), ni_mpfr_levels(o),
+                                        re, im, &abserr);
+        }
         if (sign < 0) { mpfr_neg(re, re, MPFR_RNDN); mpfr_neg(im, im, MPFR_RNDN); }
         ni_bind_restore(&bind);
         Expr* out = (mpfr_number_p(re) && mpfr_number_p(im))
@@ -1369,6 +1472,7 @@ Expr* builtin_nintegrate(Expr* res) {
     o.acc_goal = -1.0; o.prec_goal = -1.0;
     o.max_recursion = -1; o.min_recursion = 0; o.max_points = -1;
     o.exclusions = NULL;
+    o.rule_type = 0; o.romberg = true; o.nc_points = 3;
     for (size_t i = pos_end; i < argc; i++)
         if (!ni_apply_option(res->data.function.args[i], &o)) return NULL;
 
@@ -1513,4 +1617,13 @@ void nintegrate_init(void) {
     /* HoldAll: the integrand and iterator specs must not be pre-evaluated;
      * the variable is Block-localised internally. Not Listable. */
     symtab_get_def("NIntegrate")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("NIntegrate",
+        "NIntegrate[f, {x, a, b}] numerically integrates f over a..b. Bounds may "
+        "be real, complex (a straight-line/contour) or infinite. Options: Method "
+        "(\"GlobalAdaptive\", \"DoubleExponential\", \"TrapezoidalRule\", "
+        "\"RiemannRule\", \"NewtonCotesRule\", \"LevinRule\", "
+        "\"OscillatorySingularity\", \"MonteCarlo\", \"PrincipalValue\", ...), "
+        "WorkingPrecision, PrecisionGoal, AccuracyGoal, MaxRecursion, MaxPoints, "
+        "Exclusions. Fixed rules take Method sub-options \"Type\" "
+        "(\"Left\"/\"Right\"/\"Midpoint\"), \"RombergQuadrature\" and \"Points\".");
 }
