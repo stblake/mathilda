@@ -3,7 +3,7 @@ USE_MPFR ?= 1
 USE_LAPACK ?= 1
 
 CC = gcc
-CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/linalg -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I/usr/local/include
+CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I/usr/local/include
 LDFLAGS = -lreadline -L/usr/local/lib -lgmp -lm
 
 ifeq ($(USE_ECM), 1)
@@ -66,7 +66,7 @@ ifeq ($(USE_LAPACK), 1)
 endif
 
 SRC_DIR = src
-SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c)
+SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c)
 OBJ = $(SRC:.c=.o)
 TARGET = Mathilda
 
@@ -86,9 +86,6 @@ $(SRC_DIR)/%.o: $(SRC_DIR)/%.c $(ECM_TARGET)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(SRC_DIR)/boolean.o: $(SRC_DIR)/boolean.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(SRC_DIR)/list.o: $(SRC_DIR)/list.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:

@@ -42,6 +42,7 @@ if(USE_LAPACK)
 endif()
 
 include_directories(/usr/local/include)
+include_directories(../src/list)
 include_directories(../src/linalg)
 include_directories(../src/poly)
 include_directories(../src/simp)
@@ -127,7 +128,29 @@ set(COMMON_SRC
     ../src/power.c
     ../src/funcprog.c
     ../src/boolean.c
-    ../src/list.c
+    ../src/list/table.c
+    ../src/list/range.c
+    ../src/list/array.c
+    ../src/list/take_drop.c
+    ../src/list/flatten.c
+    ../src/list/partition.c
+    ../src/list/rotate.c
+    ../src/list/reverse.c
+    ../src/list/transpose.c
+    ../src/list/setops.c
+    ../src/list/split.c
+    ../src/list/rescale.c
+    ../src/list/pad.c
+    ../src/list/total.c
+    ../src/list/accumulate.c
+    ../src/list/differences.c
+    ../src/list/ratios.c
+    ../src/list/listpredicates.c
+    ../src/list/matrixq.c
+    ../src/list/minmax.c
+    ../src/list/join.c
+    ../src/list/list_common.c
+    ../src/list/list_init.c
     ../src/patterns.c
     ../src/patterns.c
     ../src/replace.c
