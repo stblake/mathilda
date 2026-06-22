@@ -408,28 +408,42 @@ static void draw_axes_lines(const PlotRange2D* range) {
 }
 
 /* Screen-space tick labels -- call after EndMode2D with the same camera
- * so labels stay a crisp, fixed pixel size regardless of zoom. */
+ * so labels stay a crisp, fixed pixel size regardless of zoom.
+ *
+ * Each label is anchored to the *outer* end of its tick mark (not the axis
+ * line) plus a small screen-pixel gap, so the digits sit clear of the ticks
+ * instead of overprinting them. The Hershey baseline grows upward by
+ * `cap = HERSHEY_CAP_HEIGHT * scale` px, which the offsets account for:
+ * x-labels drop the baseline a full cap-height below the tick so the whole
+ * glyph clears it; y-labels recentre vertically on the tick by half a cap. */
 static void draw_axes_labels(const PlotRange2D* range, Camera2D camera) {
     double ox = (range->xmin <= 0 && range->xmax >= 0) ? 0.0 : range->xmin;
     double oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
     double xstep = nice_step(range->xmax - range->xmin, 8);
     double ystep = nice_step(range->ymax - range->ymin, 6);
+    /* World-space tick half-lengths, matching draw_axes_lines exactly. */
+    double xtick = (range->ymax - range->ymin) * 0.015;
+    double ytick = (range->xmax - range->xmin) * 0.015;
     const float scale = 1.5f;
+    const float cap = HERSHEY_CAP_HEIGHT * scale; /* glyph height in px */
+    const float gap = 5.0f;                       /* clearance past the tick end */
     char buf[64];
 
     for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
         if (fabs(tx) < 1e-9) tx = 0.0;
         snprintf(buf, sizeof(buf), "%g", tx);
-        Vector2 screen = GetWorldToScreen2D((Vector2){ (float)tx, (float)-oy }, camera);
+        /* Screen position of the tick's lower (below-axis) end. */
+        Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
         float w = hershey_text_width(buf, scale);
-        hershey_draw_text(buf, screen.x - w / 2.0f, screen.y + 6.0f, scale, 0.0f, DARKGRAY);
+        hershey_draw_text(buf, tip.x - w / 2.0f, tip.y + gap + cap, scale, 0.0f, DARKGRAY);
     }
     for (double ty = ceil(range->ymin / ystep) * ystep; ty <= range->ymax + 1e-9; ty += ystep) {
         if (fabs(ty) < 1e-9) ty = 0.0;
         snprintf(buf, sizeof(buf), "%g", ty);
-        Vector2 screen = GetWorldToScreen2D((Vector2){ (float)ox, (float)-ty }, camera);
+        /* Screen position of the tick's left (outside-axis) end. */
+        Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)-ty }, camera);
         float w = hershey_text_width(buf, scale);
-        hershey_draw_text(buf, screen.x - w - 8.0f, screen.y - 4.0f, scale, 0.0f, DARKGRAY);
+        hershey_draw_text(buf, tip.x - w - gap, tip.y + cap / 2.0f, scale, 0.0f, DARKGRAY);
     }
 }
 
@@ -521,7 +535,11 @@ void graphics_show(const Expr* graphics_expr) {
 
     DrawState init_state;
     init_state.color = to_raylib(opts.style_color);
-    init_state.thickness = 0.0f;
+    /* Default stroke renders 1.5 px wide at the home zoom (1.5x the former
+     * 1-px hairline). Expressed in world units (= screen px / zoom) so the
+     * line scales with zoom like point_size, rather than staying pinned to
+     * a single pixel. base_zoom is guaranteed positive and finite above. */
+    init_state.thickness = 1.5f / base_zoom;
     init_state.point_size = (float)(fmax(data_w, data_h) * 0.006);
     init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
 
