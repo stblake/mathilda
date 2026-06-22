@@ -332,6 +332,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/mcint.c
     ../src/numerical_calculus/cubature.c
     ../src/numerical_calculus/ncrule.c
+    ../src/numerical_calculus/levincoll.c
     ../src/numerical_calculus/nint.c
     ../src/numerical_roots/nroots.c
     ../src/numerical_roots/nroots_aberth.c
@@ -461,6 +462,9 @@ target_include_directories(nprod_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(nint_tests test_nint.c ${COMMON_SRC})
 target_include_directories(nint_tests PRIVATE ../src ../src/numerical_calculus)
+
+add_executable(levincoll_tests test_levincoll.c ${COMMON_SRC})
+target_include_directories(levincoll_tests PRIVATE ../src ../src/numerical_calculus)
 
 add_executable(nroots_tests test_nroots.c ${COMMON_SRC})
 target_include_directories(nroots_tests PRIVATE ../src ../src/numerical_roots)

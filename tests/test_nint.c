@@ -405,6 +405,40 @@ static void test_memory_loop(void) {
         }
 }
 
+/* Levin collocation: genuine Levin (regular oscillatory, all phase/kernel
+ * forms, ultra-high frequency Gauss-Kronrod cannot resolve), the singular-phase
+ * fallback, arbitrary precision, multivariate reduction, and Automatic use. */
+static void test_levin_rule(void) {
+    /* 1-D: amplitude 1 / x, linear and nonlinear phase, complex kernel. */
+    ASSERT_CLOSE("NIntegrate[Cos[1000 x],{x,0,1},Method->\"LevinRule\"]",
+                 "Sin[1000]/1000", 1e-9);
+    ASSERT_CLOSE("NIntegrate[x Cos[100 x],{x,0,1},Method->\"LevinRule\"]",
+                 "(Cos[100]+100 Sin[100])/10000 - 1/10000", 1e-9);
+    ASSERT_CLOSE("NIntegrate[Exp[I 50 x],{x,0,1},Method->\"LevinRule\"]",
+                 "(Exp[I 50]-1)/(I 50)", 1e-9);
+    /* Ultra-high frequency: Gauss-Kronrod cannot resolve this in budget; Levin
+     * is exact. */
+    ASSERT_CLOSE("NIntegrate[Cos[100000 x],{x,0,1},Method->\"LevinRule\"]",
+                 "Sin[100000]/100000", 1e-9);
+    /* Automatic picks Levin up when the smooth rules fail. */
+    ASSERT_CLOSE("NIntegrate[Cos[100000 x],{x,0,1}]", "Sin[100000]/100000", 1e-9);
+    /* Singular-phase fallback (1/x diverges at 0): collocation declines, the
+     * cascade still integrates it. */
+    ASSERT_CLOSE("NIntegrate[Sin[1/x],{x,0,1},Method->\"LevinRule\"]",
+                 "0.50417", 1e-3);
+    /* Arbitrary precision. */
+    ASSERT_CLOSE("NIntegrate[Cos[1000 x],{x,0,1},Method->\"LevinRule\","
+                 "WorkingPrecision->30]", "N[Sin[1000]/1000,30]", 1e-25);
+    /* Multivariate reduction over a box. */
+    ASSERT_CLOSE("NIntegrate[Cos[50 x] Cos[50 y],{x,0,1},{y,0,1},"
+                 "Method->\"LevinRule\"]", "(Sin[50]/50)^2", 1e-9);
+    ASSERT_CLOSE("NIntegrate[Cos[3 x] Cos[1000 y],{x,0,1},{y,0,1},"
+                 "Method->\"LevinRule\"]", "(Sin[3]/3)(Sin[1000]/1000)", 1e-9);
+    /* The motivating separable example with a singular oscillatory outer axis. */
+    ASSERT_CLOSE("NIntegrate[Sin[1/x] Cos[1000 y],{x,0,1},{y,0,1},"
+                 "Method->\"LevinRule\"]", "0.0004168", 1e-6);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -433,6 +467,7 @@ int main(void) {
     TEST(test_attributes);
     TEST(test_unevaluated_forms);
     TEST(test_memory_loop);
+    TEST(test_levin_rule);
 
     printf("All nint_tests passed.\n");
     return 0;

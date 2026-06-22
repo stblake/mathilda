@@ -22,6 +22,7 @@
 #include "mcint.h"
 #include "cubature.h"
 #include "ncrule.h"
+#include "levincoll.h"
 
 #include <complex.h>
 #include <math.h>
@@ -716,6 +717,238 @@ static NiAtt ni_try_osc(NiCtx* ctx, double a, double b, double reltol) {
     return out;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Levin collocation: kernel detection + driver                       *
+ * ------------------------------------------------------------------ */
+
+/* True if the symbol named `name` occurs anywhere in e. */
+static bool levin_occurs(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return strcmp(e->data.symbol, name) == 0;
+    if (e->type == EXPR_FUNCTION) {
+        if (levin_occurs(e->data.function.head, name)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (levin_occurs(e->data.function.args[i], name)) return true;
+    }
+    return false;
+}
+
+static bool levin_is_sym(const Expr* e, const char* name) {
+    return e && e->type == EXPR_SYMBOL && strcmp(e->data.symbol, name) == 0;
+}
+static bool levin_is_head(const Expr* e, const char* head) {
+    return e && e->type == EXPR_FUNCTION
+        && levin_is_sym(e->data.function.head, head);
+}
+
+/* Extract the real phase h from an exponent of the form I·h (the argument of
+ * Exp[...] or the exponent of Power[E, ...]).  Returns an owned phase Expr, or
+ * NULL when the exponent is not a pure-imaginary multiple of an I-free factor
+ * (a real part would make the kernel decay/grow, not oscillate). */
+static Expr* levin_phase_from_exponent(const Expr* z) {
+    if (!levin_is_head(z, SYM_Times)) return NULL;   /* need I·h */
+    size_t n = z->data.function.arg_count;
+    int icount = 0;
+    for (size_t i = 0; i < n; i++)
+        if (levin_is_sym(z->data.function.args[i], SYM_I)) icount++;
+    if (icount != 1) return NULL;
+    Expr** rest = malloc(sizeof(Expr*) * n);
+    if (!rest) return NULL;
+    size_t r = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = z->data.function.args[i];
+        if (levin_is_sym(f, SYM_I)) continue;
+        if (levin_occurs(f, SYM_I)) {   /* I nested in another factor */
+            for (size_t k = 0; k < r; k++) expr_free(rest[k]);
+            free(rest); return NULL;
+        }
+        rest[r++] = expr_copy(f);
+    }
+    Expr* h;
+    if (r == 0)      { free(rest); return NULL; }    /* exponent was just I */
+    else if (r == 1) { h = rest[0]; free(rest); }
+    else             { h = expr_new_function(expr_new_symbol(SYM_Times), rest, r);
+                       free(rest); }
+    return h;
+}
+
+/* Recognise one oscillatory factor: Cos[h], Sin[h], Exp[I·h] or Power[E, I·h].
+ * On success sets *k and returns the owned phase *g. */
+static bool levin_match_osc_factor(const Expr* f, LevinKernel* k, Expr** g) {
+    if (levin_is_head(f, SYM_Cos) && f->data.function.arg_count == 1) {
+        *k = LEVIN_KERNEL_COS; *g = expr_copy(f->data.function.args[0]); return true;
+    }
+    if (levin_is_head(f, SYM_Sin) && f->data.function.arg_count == 1) {
+        *k = LEVIN_KERNEL_SIN; *g = expr_copy(f->data.function.args[0]); return true;
+    }
+    if (levin_is_head(f, SYM_Exp) && f->data.function.arg_count == 1) {
+        Expr* h = levin_phase_from_exponent(f->data.function.args[0]);
+        if (!h) return false;
+        *k = LEVIN_KERNEL_EXP; *g = h; return true;
+    }
+    if (levin_is_head(f, SYM_Power) && f->data.function.arg_count == 2
+        && levin_is_sym(f->data.function.args[0], SYM_E)) {
+        Expr* h = levin_phase_from_exponent(f->data.function.args[1]);
+        if (!h) return false;
+        *k = LEVIN_KERNEL_EXP; *g = h; return true;
+    }
+    return false;
+}
+
+/* Decompose `body` into amp·{cos g | sin g | e^{ig}} with exactly one
+ * oscillatory factor whose phase contains `var`.  On success returns owned
+ * *g_out (phase) and *amp_out (amplitude, literal 1 if none).  Returns false —
+ * leaving outputs untouched — when no/multiple oscillatory factors are present
+ * or the phase is constant in `var`. */
+static bool levin_detect_kernel(const Expr* body, const char* var,
+                                LevinKernel* kind, Expr** g_out, Expr** amp_out) {
+    Expr* const single[1] = { (Expr*)body };
+    Expr* const* fs;
+    size_t nf;
+    if (levin_is_head(body, SYM_Times)) {
+        fs = body->data.function.args;
+        nf = body->data.function.arg_count;
+    } else { fs = single; nf = 1; }
+
+    /* The oscillatory factor must oscillate in *this* axis: its phase contains
+     * `var`.  A trig/exp factor whose phase is free of `var` (a constant, or an
+     * oscillation in another integration variable, as in a separable product
+     * Sin[1/x] Cos[1000 y]) is part of the amplitude for this axis. */
+    int osc_idx = -1;
+    LevinKernel k = LEVIN_KERNEL_EXP;
+    Expr* g = NULL;
+    for (size_t i = 0; i < nf; i++) {
+        LevinKernel kk; Expr* gg = NULL;
+        if (levin_match_osc_factor(fs[i], &kk, &gg)) {
+            if (!levin_occurs(gg, var)) { expr_free(gg); continue; }  /* amplitude */
+            if (osc_idx >= 0) { expr_free(gg); expr_free(g); return false; }
+            osc_idx = (int)i; k = kk; g = gg;
+        }
+    }
+    if (osc_idx < 0) return false;
+
+    /* amp = product of the non-oscillatory factors (or the literal 1). */
+    Expr* amp;
+    if (nf == 1) {
+        amp = expr_new_integer(1);
+    } else {
+        Expr** rest = malloc(sizeof(Expr*) * (nf - 1));
+        size_t r = 0;
+        for (size_t i = 0; i < nf; i++)
+            if ((int)i != osc_idx) rest[r++] = expr_copy(fs[i]);
+        amp = (r == 1) ? rest[0]
+                       : expr_new_function(expr_new_symbol(SYM_Times), rest, r);
+        free(rest);
+    }
+    *kind = k; *g_out = g; *amp_out = amp;
+    return true;
+}
+
+/* g' = D[g, var], evaluated symbolically.  Returns owned g' or NULL when the
+ * derivative cannot be taken in closed form (an unevaluated D/Derivative head
+ * survives), so the caller can fall back. */
+static Expr* levin_phase_derivative(const Expr* g, const char* var) {
+    Expr** dargs = malloc(sizeof(Expr*) * 2);
+    if (!dargs) return NULL;
+    dargs[0] = expr_copy((Expr*)g);
+    dargs[1] = expr_new_symbol(var);
+    Expr* dcall = expr_new_function(expr_new_symbol(SYM_D), dargs, 2);
+    free(dargs);
+    /* The derivative must be taken with `var` FREE.  In the Automatic cascade a
+     * prior quadrature rule may have left `var` bound to its last sample value,
+     * which would collapse D[g, var] to 0 (or worse).  Detach any current
+     * binding for the duration of the symbolic differentiation, then restore it
+     * (the per-node samplers rebind it themselves). */
+    SymbolDef* vd = symtab_get_def(var);
+    Rule* saved_own = vd->own_values;
+    vd->own_values = NULL;
+    eval_clock_bump();
+    Expr* gp = eval_and_free(dcall);
+    vd->own_values = saved_own;
+    eval_clock_bump();
+    if (!gp) return NULL;
+    if (levin_occurs(gp, SYM_D) || levin_occurs(gp, "Derivative")) {
+        expr_free(gp); return NULL;
+    }
+    return gp;
+}
+
+/* Levin collocation on a finite real interval.  Detects the oscillatory kernel
+ * in ctx->body, differentiates the phase symbolically, and runs the collocation
+ * engine through the existing numeric sampler.  Restricted to the plain real
+ * axis; returns have=false (caller falls back) on any non-Levin input, a
+ * singular phase endpoint, or weak oscillation. */
+static NiAtt ni_try_levin_collocation(NiCtx* ctx, double a, double b,
+                                      const NiOpts* o, double reltol) {
+    (void)o;
+    NiAtt none = { false, false, 0.0, INFINITY };
+    if (ctx->map_mode != NI_MAP_AFFINE
+        || creal(ctx->x_scale) != 1.0 || cimag(ctx->x_scale) != 0.0
+        || ctx->x_shift != 0.0) return none;
+
+    const char* var = ctx->bind->name;
+    LevinKernel kind; Expr* g = NULL; Expr* amp = NULL;
+    if (!levin_detect_kernel(ctx->body, var, &kind, &g, &amp)) return none;
+
+    Expr* gp = levin_phase_derivative(g, var);
+    if (!gp) { expr_free(g); expr_free(amp); return none; }
+
+    /* Three sampler contexts sharing the binding/precision but evaluating the
+     * amplitude, the phase, and its derivative respectively. */
+    NiCtx camp = *ctx; camp.body = amp;
+    NiCtx cg   = *ctx; cg.body   = g;
+    NiCtx cgp  = *ctx; cgp.body  = gp;
+
+    /* Spot-check the symbolic g' against a central difference of g at the
+     * midpoint — a cheap guard against a mis-evaluated derivative. */
+    double xm = 0.5 * (a + b), hh = 1e-6 * fmax(1.0, fabs(b - a));
+    double _Complex gpm, gphi, gplo;
+    if (ni_sample_machine(&cgp, xm, &gpm)
+        && ni_sample_machine(&cg, xm + hh, &gphi)
+        && ni_sample_machine(&cg, xm - hh, &gplo)) {
+        double _Complex fd = (gphi - gplo) / (2.0 * hh);
+        if (cabs(fd - gpm) > 1e-3 * (1.0 + cabs(gpm))) {
+            expr_free(g); expr_free(amp); expr_free(gp); return none;
+        }
+    }
+
+    LevinResult r = levin_collocation_machine(
+        a, b, ni_sample_machine, &camp, ni_sample_machine, &cgp,
+        ni_sample_machine, &cg, kind, reltol, 64);
+
+    expr_free(g); expr_free(amp); expr_free(gp);
+    NiAtt out;
+    out.have = r.have; out.conv = r.conv; out.val = r.val; out.err = r.err;
+    return out;
+}
+
+#ifdef USE_MPFR
+/* Arbitrary-precision Levin collocation on a finite real interval.  `ctx` must
+ * already carry the MPFR numeric spec.  Writes the result into (re,im) and the
+ * convergence verdict into *conv; returns true if an estimate was produced. */
+static bool ni_try_levin_collocation_mpfr(NiCtx* ctx, double a, double b,
+                                          const NiOpts* o, mpfr_t re, mpfr_t im,
+                                          bool* conv) {
+    if (ctx->map_mode != NI_MAP_AFFINE
+        || creal(ctx->x_scale) != 1.0 || cimag(ctx->x_scale) != 0.0
+        || ctx->x_shift != 0.0) return false;
+    const char* var = ctx->bind->name;
+    LevinKernel kind; Expr* g = NULL; Expr* amp = NULL;
+    if (!levin_detect_kernel(ctx->body, var, &kind, &g, &amp)) return false;
+    Expr* gp = levin_phase_derivative(g, var);
+    if (!gp) { expr_free(g); expr_free(amp); return false; }
+
+    NiCtx camp = *ctx; camp.body = amp;
+    NiCtx cg   = *ctx; cg.body   = g;
+    NiCtx cgp  = *ctx; cgp.body  = gp;
+    bool ok = levin_collocation_mpfr(
+        a, b, o->bits, ni_sample_mpfr, &camp, ni_sample_mpfr, &cgp,
+        ni_sample_mpfr, &cg, kind, ni_mpfr_reltol(o), 64, re, im, conv);
+    expr_free(g); expr_free(amp); expr_free(gp);
+    return ok;
+}
+#endif
+
 /* Map MaxRecursion / MaxPoints to a fixed-rule level and evaluation budget.
  * Romberg-accelerated rules (Trapezoidal / Newton–Cotes) converge in a handful
  * of levels; the un-extrapolated Riemann sums need far more panels, so they get
@@ -842,7 +1075,19 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
     ni_machine_tols(o, &reltol, &abstol);
     NiAtt best = { false, false, 0.0, INFINITY };
     if (o->method == NI_LEVIN) {
-        ni_consider(&best, ni_try_osc(ctx, a, b, reltol));
+        /* Genuine Levin collocation for a detected f·{cos g|sin g|e^{ig}}
+         * kernel.  When collocation does not apply or does not converge (a
+         * phase singular at an endpoint, e.g. Sin[1/x] at 0; weak oscillation;
+         * a non-Levin kernel) fall back through the same cascade Automatic
+         * uses: adaptive Gauss-Kronrod, the endpoint-robust tanh-sinh rule, the
+         * exponential endpoint-singularity transform (only for a *detected*
+         * singular end — forcing the wrong mirror would converge to a wrong
+         * value), and finally between-the-zeros panel quadrature. */
+        ni_consider(&best, ni_try_levin_collocation(ctx, a, b, o, reltol));
+        if (!best.conv) ni_consider(&best, ni_try_gk(ctx, a, b, o, reltol, abstol));
+        if (!best.conv) ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
+        if (!best.conv) ni_consider(&best, ni_try_endpoint_sing(ctx, a, b, o, false));
+        if (!best.conv) ni_consider(&best, ni_try_osc(ctx, a, b, reltol));
     } else if (o->method == NI_DE) {
         ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
     } else if (o->method == NI_OSCSING) {
@@ -854,6 +1099,12 @@ static NiAtt ni_core_finite(NiCtx* ctx, double a, double b, const NiOpts* o) {
         ni_consider(&best, ni_try_gk(ctx, a, b, o, reltol, abstol));
         if (!best.conv && (o->method == NI_AUTO || !best.have))
             ni_consider(&best, ni_try_de(ctx, a, b, o, reltol));
+        /* Levin collocation: when the smooth/tanh-sinh rules fail, a detected
+         * f·{cos|sin|e^{i}} kernel oscillating too fast for Gauss-Kronrod is
+         * resolved exactly by collocation (self-gated; returns nothing if the
+         * integrand is not of Levin form or the oscillation is too weak). */
+        if (!best.conv && o->method == NI_AUTO)
+            ni_consider(&best, ni_try_levin_collocation(ctx, a, b, o, reltol));
         /* Oscillatory endpoint singularity: spread the singular endpoint onto a
          * half line by the exponential map and integrate between the zeros. */
         if (!best.conv && o->method == NI_AUTO)
@@ -903,9 +1154,21 @@ static Expr* ni_run_1d_finite_real(Expr* body, const char* var,
                                       ni_mpfr_reltol(o), 0.0, max_levels, max_eval,
                                       re, im, &abserr);
         } else {
-            conv = denint_tanhsinh_mpfr(ni_sample_mpfr, &ctx, am, bm, bits,
-                                        ni_mpfr_reltol(o), ni_mpfr_levels(o),
-                                        re, im, &abserr);
+            /* Levin collocation at high precision for a detected oscillatory
+             * kernel (explicit LevinRule, or Automatic when it converges);
+             * otherwise the endpoint-robust tanh-sinh rule. */
+            bool got = false; conv = false; abserr = 0.0;
+            if (o->method == NI_LEVIN || o->method == NI_AUTO) {
+                bool lconv = false;
+                if (ni_try_levin_collocation_mpfr(&ctx, a, b, o, re, im, &lconv)
+                    && (o->method == NI_LEVIN || lconv)) {
+                    conv = lconv; got = true;
+                }
+            }
+            if (!got)
+                conv = denint_tanhsinh_mpfr(ni_sample_mpfr, &ctx, am, bm, bits,
+                                            ni_mpfr_reltol(o), ni_mpfr_levels(o),
+                                            re, im, &abserr);
         }
         if (sign < 0) { mpfr_neg(re, re, MPFR_RNDN); mpfr_neg(im, im, MPFR_RNDN); }
         ni_bind_restore(&bind);
@@ -1267,6 +1530,246 @@ static Expr* ni_try_cubature(Expr* body, Expr** specs, size_t d, const NiOpts* o
     return ni_from_complex_d(val);
 }
 
+/* ------------------------------------------------------------------ *
+ *  Multivariate Levin (dimension reduction over a rectangular box)    *
+ * ------------------------------------------------------------------ */
+
+/* Levin's multivariate method reduces a d-dimensional oscillatory integral one
+ * axis at a time.  Reducing the oscillatory axis x_k by collocation turns the
+ * inner integral into its boundary term  ∫ f e^{ig} dx_k = [p e^{ig}], so the
+ * remaining (d-1)-dimensional integral has the *same* phase restricted to the
+ * faces and a new amplitude p — crucially evaluated by a single small linear
+ * solve, NOT a nested adaptive quadrature.  This avoids the combinatorial blow
+ * up of iterated quadrature when an axis oscillates rapidly (every outer sample
+ * would otherwise spawn a full inner integral).
+ *
+ * This implementation covers the 2-D case: one axis is reduced by 1-D Levin and
+ * the remaining axis is integrated by the ordinary 1-D machine cascade, each of
+ * whose samples costs one inner Levin solve.  Higher dimensions fall through to
+ * the iterated path. */
+
+/* Bind `b`'s variable to a real value.  ni_bind_set copies its argument but does
+ * NOT take ownership, so the value Expr must be freed by the caller. */
+static void nd_bind_real(NiBind* b, double v) {
+    Expr* e = expr_new_real(v);
+    ni_bind_set(b, e);
+    expr_free(e);
+}
+
+/* Outer-axis sampler: bind the outer variable to xo and return the inner
+ * integral over the reduction axis, evaluated by 1-D Levin collocation. */
+typedef struct {
+    NiBind* outer_bind;
+    double  a_red, b_red;
+    NiCtx*  camp; NiCtx* cg; NiCtx* cgp;   /* reduction-axis amp / g / g' */
+    LevinKernel kind;
+    double  reltol;
+    LevinPrep* prep;   /* non-NULL: factored-once fast path (g' const in outer) */
+} NdLevinCtx;
+
+static bool nd_levin_outer_sample(void* vctx, double xo, double _Complex* out) {
+    NdLevinCtx* c = (NdLevinCtx*)vctx;
+    nd_bind_real(c->outer_bind, xo);
+    if (c->prep) {
+        /* Fast path: the collocation matrix is fixed; one back-substitution. */
+        if (!levin_prepared_solve(c->prep, ni_sample_machine, c->camp,
+                                  ni_sample_machine, c->cg, c->kind, out))
+            return false;
+        return isfinite(creal(*out)) && isfinite(cimag(*out));
+    }
+    LevinResult r = levin_collocation_machine(
+        c->a_red, c->b_red,
+        ni_sample_machine, c->camp,
+        ni_sample_machine, c->cgp,
+        ni_sample_machine, c->cg,
+        c->kind, c->reltol, 64);
+    if (!r.have || !r.conv) return false;
+    if (!isfinite(creal(r.val)) || !isfinite(cimag(r.val))) return false;
+    *out = r.val;
+    return true;
+}
+
+/* True if the phase derivative g' (sampled at the reduction endpoints/midpoint)
+ * is independent of the outer variable — the condition under which the
+ * collocation matrix can be factored once and re-used across outer samples. */
+static bool nd_gprime_const_in_outer(NiCtx* cgp, NiBind* ob,
+                                     double a_red, double b_red,
+                                     double a_out, double b_out) {
+    double rs[3] = { a_red, 0.5 * (a_red + b_red), b_red };
+    double os[2] = { a_out + 0.25 * (b_out - a_out),
+                     a_out + 0.75 * (b_out - a_out) };
+    double _Complex v0[3];
+    nd_bind_real(ob, os[0]);
+    for (int i = 0; i < 3; i++)
+        if (!ni_sample_machine(cgp, rs[i], &v0[i])) return false;
+    nd_bind_real(ob, os[1]);
+    for (int i = 0; i < 3; i++) {
+        double _Complex v1;
+        if (!ni_sample_machine(cgp, rs[i], &v1)) return false;
+        if (cabs(v1 - v0[i]) > 1e-9 * (1.0 + cabs(v0[i]))) return false;
+    }
+    return true;
+}
+
+/* Test whether axis `var_red` of `body` is a good reduction axis: a single
+ * oscillatory factor in var_red whose phase and derivative stay finite over the
+ * reduction interval for a few interior values of the outer variable, and whose
+ * inner Levin solve converges at the box centre.  On success returns the owned
+ * kernel pieces. */
+static bool nd_axis_reducible(Expr* body, const char* var_red, const char* var_out,
+                              double a_red, double b_red, double a_out, double b_out,
+                              const NiOpts* o, LevinKernel* kind,
+                              Expr** g_out, Expr** amp_out, Expr** gp_out) {
+    LevinKernel k; Expr* g = NULL; Expr* amp = NULL;
+    if (!levin_detect_kernel(body, var_red, &k, &g, &amp)) return false;
+    Expr* gp = levin_phase_derivative(g, var_red);
+    if (!gp) { expr_free(g); expr_free(amp); return false; }
+
+    NiBind ob; ni_bind_snapshot(&ob, var_out);
+    NiBind rb; ni_bind_snapshot(&rb, var_red);
+    NiCtx cg, cgp; ni_ctx_init(&cg, g, &rb, numeric_machine_spec());
+    ni_ctx_init(&cgp, gp, &rb, numeric_machine_spec());
+
+    /* Phase regularity: g and g' finite at the reduction endpoints/midpoint for
+     * a few interior outer abscissae. */
+    bool ok = true;
+    for (int io = 1; io <= 3 && ok; io++) {
+        double xo = a_out + (b_out - a_out) * io / 4.0;
+        nd_bind_real(&ob, xo);
+        double rs[3] = { a_red, 0.5 * (a_red + b_red), b_red };
+        for (int ir = 0; ir < 3 && ok; ir++) {
+            double _Complex gv, gpv;
+            if (!ni_sample_machine(&cg, rs[ir], &gv)
+                || !ni_sample_machine(&cgp, rs[ir], &gpv)) ok = false;
+        }
+    }
+    /* Inner Levin must actually converge at the box centre. */
+    if (ok) {
+        NiCtx camp; ni_ctx_init(&camp, amp, &rb, numeric_machine_spec());
+        nd_bind_real(&ob, 0.5 * (a_out + b_out));
+        LevinResult r = levin_collocation_machine(
+            a_red, b_red, ni_sample_machine, &camp, ni_sample_machine, &cgp,
+            ni_sample_machine, &cg, k, o->prec_goal > 0 ? 0.0 : 1e-9, 64);
+        if (!r.have || !r.conv) ok = false;
+    }
+    ni_bind_restore(&rb);
+    ni_bind_restore(&ob);
+
+    if (!ok) { expr_free(g); expr_free(amp); expr_free(gp); return false; }
+    *kind = k; *g_out = g; *amp_out = amp; *gp_out = gp;
+    return true;
+}
+
+/* Two-dimensional Levin: reduce one axis by collocation, integrate the other by
+ * the 1-D machine cascade.  Returns the result, or NULL to fall back. */
+static Expr* ni_try_levin_nd(Expr* body, Expr** specs, size_t nspecs,
+                             const NiOpts* o) {
+    if (nspecs != 2 || o->prec_mpfr || o->exclusions) return NULL;
+
+    /* Both specs must be a constant finite real interval {v, a, b}. */
+    const char* var[2]; double lo[2], hi[2];
+    for (int s = 0; s < 2; s++) {
+        Expr* sp = specs[s];
+        if (sp->data.function.arg_count != 3) return NULL;
+        var[s] = sp->data.function.args[0]->data.symbol;
+        Expr* amin = ni_num_endpoint(sp->data.function.args[1]);
+        Expr* amax = ni_num_endpoint(sp->data.function.args[2]);
+        bool okb = amin && amax && ni_to_double_real(amin, &lo[s])
+                && ni_to_double_real(amax, &hi[s]);
+        expr_free(amin); expr_free(amax);
+        if (!okb || !(hi[s] > lo[s])) return NULL;
+    }
+
+    /* Choose the reduction axis: try each, prefer the first that qualifies. */
+    for (int rsel = 0; rsel < 2; rsel++) {
+        int osel = 1 - rsel;
+        LevinKernel kind; Expr* g = NULL; Expr* amp = NULL; Expr* gp = NULL;
+        if (!nd_axis_reducible(body, var[rsel], var[osel],
+                               lo[rsel], hi[rsel], lo[osel], hi[osel],
+                               o, &kind, &g, &amp, &gp))
+            continue;
+
+        /* Drive the outer (osel) axis with the reduction sampler. */
+        NiBind ob; ni_bind_snapshot(&ob, var[osel]);
+        NiBind rb; ni_bind_snapshot(&rb, var[rsel]);
+        NiCtx camp, cg, cgp;
+        ni_ctx_init(&camp, amp, &rb, numeric_machine_spec());
+        ni_ctx_init(&cg,   g,   &rb, numeric_machine_spec());
+        ni_ctx_init(&cgp,  gp,  &rb, numeric_machine_spec());
+        double in_reltol = (o->prec_goal > 0) ? 0.0 : 1e-9;
+        NdLevinCtx nd = { &ob, lo[rsel], hi[rsel], &camp, &cg, &cgp, kind,
+                          in_reltol, NULL };
+
+        /* If g' does not depend on the outer variable, factor the collocation
+         * matrix once: every outer sample is then a cheap back-substitution
+         * rather than a full O(n^3) solve, which is what makes a rapidly
+         * oscillatory outer axis (many samples) tractable. */
+        if (nd_gprime_const_in_outer(&cgp, &ob, lo[rsel], hi[rsel],
+                                     lo[osel], hi[osel])) {
+            double xc = 0.5 * (lo[osel] + hi[osel]);
+            nd_bind_real(&ob, xc);
+            LevinResult ref = levin_collocation_machine(
+                lo[rsel], hi[rsel], ni_sample_machine, &camp, ni_sample_machine,
+                &cgp, ni_sample_machine, &cg, kind, in_reltol, 64);
+            for (int n = 8; n <= 64 && ref.have; n *= 2) {
+                LevinPrep* P = levin_prepare_machine(lo[rsel], hi[rsel], n,
+                                                     ni_sample_machine, &cgp);
+                if (!P) continue;
+                double _Complex tv;
+                if (levin_prepared_solve(P, ni_sample_machine, &camp,
+                                         ni_sample_machine, &cg, kind, &tv)
+                    && cabs(tv - ref.val) <= 1e-8 * (1.0 + cabs(ref.val))) {
+                    nd.prep = P; break;
+                }
+                levin_prepare_free(P);
+            }
+        }
+
+        double reltol, abstol; ni_machine_tols(o, &reltol, &abstol);
+        int max_subdiv; long max_eval; ni_gk_budget(o, &max_subdiv, &max_eval);
+        /* Bound the outer evaluation count so a hard outer axis (an oscillatory
+         * endpoint singularity such as Sin[1/x], whose zeros cluster without
+         * bound) returns a best estimate in finite time rather than grinding.
+         * The cached path is far cheaper per sample, so it gets a higher cap. */
+        long cap = nd.prep ? 50000 : 6000;
+        if (max_eval <= 0 || max_eval > cap) max_eval = cap;
+        double _Complex val = 0.0; double err = INFINITY; bool conv = false, have = false;
+
+        GkResult R = gk_integrate_machine(nd_levin_outer_sample, &nd,
+                                          lo[osel], hi[osel], abstol, reltol,
+                                          max_subdiv, max_eval, true);
+        if (R.status != GK_NONNUMERIC) {
+            val = R.value; err = R.abs_err; have = true; conv = (R.status == GK_OK);
+        }
+        if (!conv) {
+            double _Complex v2; double e2;
+            if (denint_tanhsinh_machine(nd_levin_outer_sample, &nd, lo[osel],
+                                        hi[osel], reltol, ni_de_levels(o), &v2, &e2)
+                && isfinite(creal(v2)) && isfinite(cimag(v2))) {
+                val = v2; err = e2; have = true; conv = true;
+            }
+        }
+        /* No between-the-zeros fallback here: each of its panels would trigger
+         * an inner Levin solve, and for an outer axis whose phase is singular at
+         * an endpoint (e.g. Sin[1/x] at 0) the zeros cluster without bound — a
+         * combinatorial blow-up.  GK/tanh-sinh are budget-bounded; if they do
+         * not converge we report the best estimate with a warning rather than
+         * grinding indefinitely. */
+
+        ni_bind_restore(&rb);
+        ni_bind_restore(&ob);
+        if (nd.prep) levin_prepare_free(nd.prep);
+        expr_free(g); expr_free(amp); expr_free(gp);
+
+        if (!have || !isfinite(creal(val)) || !isfinite(cimag(val))) return NULL;
+        if (!conv)
+            ni_warn("ncvb", "multivariate Levin did not reach the accuracy goal "
+                    "(error estimate %.3g)", err);
+        return ni_from_complex_d(val);
+    }
+    return NULL;   /* no reducible axis — fall back to iterated quadrature */
+}
+
 /* Route a single {x, xmin, xmax} integral by the kinds of its bounds. */
 static Expr* ni_dispatch_1d(Expr* body, const char* var,
                             Expr* amin, Expr* amax, const NiOpts* o) {
@@ -1530,6 +2033,18 @@ Expr* builtin_nintegrate(Expr* res) {
      * (whose cost is multiplicative in dimension).  Falls through to the
      * iterated path when the box is not a constant finite real rectangle
      * (dependent / infinite / complex bounds) or at arbitrary precision. */
+    /* Multivariate Levin: reduce an oscillatory axis by collocation so the
+     * remaining integral costs one inner solve per outer sample instead of a
+     * nested adaptive quadrature.  Requested explicitly, or chosen by Automatic
+     * (ni_try_levin_nd self-gates: it returns NULL unless an axis carries a
+     * detectable, regular oscillatory kernel that converges), before the more
+     * general cubature / iterated paths. */
+    if ((o.method == NI_LEVIN || o.method == NI_AUTO)
+        && nspecs == 2 && !o.prec_mpfr && !o.exclusions) {
+        Expr* lv = ni_try_levin_nd(body, &res->data.function.args[1], nspecs, &o);
+        if (lv) return lv;
+    }
+
     if (o.method == NI_AUTO && nspecs >= 2 && !o.prec_mpfr && !o.exclusions) {
         Expr* cub = ni_try_cubature(body, &res->data.function.args[1], nspecs, &o);
         if (cub) return cub;

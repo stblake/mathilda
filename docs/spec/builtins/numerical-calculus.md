@@ -647,6 +647,35 @@ A recognised but **not-yet-implemented**
 method (e.g. `"ClenshawCurtisRule"`, `"LobattoKronrodRule"`) emits
 `NIntegrate::method` and returns unevaluated rather than silently approximating.
 
+#### Levin collocation (`"LevinRule"`)
+
+For a highly oscillatory integrand of the form `f(x)·{Cos[g]|Sin[g]|Exp[I g]}`
+(amplitude `f` slowly varying, kernel oscillating rapidly), `"LevinRule"` uses
+Levin's collocation method: it solves the ODE `p'(x) + i g'(x) p(x) = f(x)` in a
+Chebyshev basis at Chebyshev–Gauss–Lobatto nodes — a small dense complex linear
+system — so the integral becomes the boundary term `p(b)e^{i g(b)} − p(a)e^{i g(a)}`
+(`Cos`/`Sin` kernels take the real/imaginary part).  Accuracy **improves** with
+the oscillation rate, the opposite of ordinary quadrature: e.g.
+`NIntegrate[Cos[100000 x], {x,0,1}]` is resolved exactly where Gauss–Kronrod
+cannot.  The phase derivative `g'` is obtained symbolically (`D`); the order is
+doubled until two estimates agree.  It runs at machine and arbitrary
+`WorkingPrecision` (an in-house complex-MPFR collocation solve).  When the
+integrand is not of Levin form, the phase is singular at an endpoint (e.g.
+`Sin[1/x]` at 0), or the oscillation is too weak (an ill-conditioned collocation
+matrix), it falls back to the ordinary oscillatory cascade.  Automatic selects
+it for a detected oscillatory kernel that the smooth rules fail to resolve.
+
+**Multivariate Levin.**  Over a constant rectangular box, an oscillatory axis is
+reduced by collocation so the inner integral becomes a single linear solve
+rather than a nested adaptive quadrature, and the remaining axis is integrated
+by the ordinary 1-D cascade — each of its samples costing one inner solve.  This
+makes a separable oscillatory product such as
+`NIntegrate[Sin[1/x] Cos[1000 y], {x,0,1}, {y,0,1}, Method -> "LevinRule"]`
+tractable.  When the reduction axis's phase derivative is independent of the
+outer variable the collocation matrix is factored once and re-used across outer
+samples.  (Two-dimensional; higher dimensions fall through to cubature /
+iterated quadrature.)
+
 #### Equally-spaced composite rules
 
 `"RiemannRule"`, `"TrapezoidalRule"` and `"NewtonCotesRule"` are the fixed
