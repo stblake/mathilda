@@ -549,6 +549,35 @@ extern const char* SYM_DollarRecursionLimit;
 extern const char* SYM_DollarSimplifyDebug;
 extern const char* SYM_DollarruSimplify;
 
+/* Graphics engine (src/graphics/): primitives, style directives, and
+ * Graphics[]/Show[]/Plot[] plus Plot's option names. MaxRecursion is
+ * shared with the existing NIntegrate/ND option of the same name above. */
+extern const char* SYM_Graphics;
+extern const char* SYM_Point;
+extern const char* SYM_Line;
+extern const char* SYM_Rectangle;
+extern const char* SYM_Circle;
+extern const char* SYM_Disk;
+extern const char* SYM_Polygon;
+extern const char* SYM_Text;
+extern const char* SYM_Show;
+extern const char* SYM_Plot;
+extern const char* SYM_RGBColor;
+extern const char* SYM_GrayLevel;
+extern const char* SYM_Opacity;
+extern const char* SYM_Thickness;
+extern const char* SYM_PointSize;
+extern const char* SYM_PlotPoints;
+extern const char* SYM_MaxPlotPoints;
+extern const char* SYM_PlotRange;
+extern const char* SYM_PlotStyle;
+extern const char* SYM_Axes;
+extern const char* SYM_AxesLabel;
+extern const char* SYM_PlotLabel;
+extern const char* SYM_AspectRatio;
+extern const char* SYM_Background;
+extern const char* SYM_ImageSize;
+
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
  * pointer; in practice it is called from core_init(). */

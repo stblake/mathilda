@@ -50,6 +50,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Scoping constructs (`Module`, `Block`, `With`) | [`builtins/scoping-constructs.md`](docs/spec/builtins/scoping-constructs.md) |
 | Pattern matching (`MatchQ`, `Cases`, `DeleteCases`, `Position`, `Count`, ...) | [`builtins/pattern-matching.md`](docs/spec/builtins/pattern-matching.md) |
 | File I/O (`Get`, `Put`, `PutAppend`, `>>`, `>>>`) | [`builtins/file-io.md`](docs/spec/builtins/file-io.md) |
+| Graphics (`Graphics`, `Show`, `Plot`, `Point`, `Line`, `Rectangle`, `Circle`, `Disk`, `Polygon`, `Text`, ...) | [`builtins/graphics.md`](docs/spec/builtins/graphics.md) |
 
 ## Changelog
 

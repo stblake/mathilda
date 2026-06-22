@@ -630,6 +630,8 @@ void core_init(void) {
     hypergeopfq_init();
     void zero_test_init(void);
     zero_test_init();
+    void graphics_init(void);
+    graphics_init();
 
     /* Flag every symbol interned so far as a System symbol. At this point in
      * startup the interner holds exactly the kernel's built-in names (cached

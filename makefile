@@ -1,9 +1,10 @@
 USE_ECM ?= 1
 USE_MPFR ?= 1
 USE_LAPACK ?= 1
+USE_GRAPHICS ?= 1
 
 CC = gcc
-CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I/usr/local/include
+CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I/usr/local/include
 LDFLAGS = -lreadline -L/usr/local/lib -lgmp -lm
 
 ifeq ($(USE_ECM), 1)
@@ -65,8 +66,28 @@ ifeq ($(USE_LAPACK), 1)
   endif
 endif
 
+# Raylib for the 2D graphics engine (Graphics[]/Show[]/Plot[] rendering).
+# System library only (like GMP/Readline) — never vendored, since it's a
+# full windowing/OpenGL framework. Autodetected via pkg-config; when absent
+# the build still succeeds and Show/Plot fall back to a text placeholder
+# at runtime, matching the USE_MPFR=0 / USE_LAPACK=0 graceful-degrade policy.
+ifeq ($(USE_GRAPHICS), 1)
+  ifneq ($(shell pkg-config --exists raylib 2>/dev/null && echo y),)
+    CFLAGS  += -DUSE_GRAPHICS $(shell pkg-config --cflags raylib)
+    LDFLAGS += $(shell pkg-config --libs raylib)
+  else
+    $(warning Raylib not detected; building with USE_GRAPHICS=0 (Show/Plot will print a text placeholder))
+    $(warning   macOS (Homebrew): brew install raylib)
+    $(warning   Ubuntu/Debian:    sudo apt install libraylib-dev)
+    override USE_GRAPHICS := 0
+  endif
+endif
+
 SRC_DIR = src
-SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c)
+SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c)
+ifneq ($(USE_GRAPHICS), 1)
+SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/hershey_font.c, $(SRC))
+endif
 OBJ = $(SRC:.c=.o)
 TARGET = Mathilda
 

@@ -21,6 +21,9 @@ PICOMATH-80.
 - **GNU Readline** — interactive line editing and history.
 - **GMP-ECM** — advanced integer factorization (vendored in `src/external/ecm/`,
   do not modify).
+- **Raylib** (optional, `USE_GRAPHICS`) — windowing/rendering backend for
+  `Graphics[]`/`Show[]`/`Plot[]`. Autodetected via `pkg-config`; the build
+  degrades gracefully to a text placeholder when absent.
 
 **Companion documents:**
 - [`Mathilda_spec.md`](Mathilda_spec.md) — built-in function reference index.
@@ -63,6 +66,8 @@ src/
                     PolyGamma, Pochhammer, Zeta, StieltjesGamma, EulerGamma,
                     BernoulliB, EulerE, PolyLog, HypergeometricPFQ, Fibonacci,
                     LucasL
+  graphics/         2D graphics engine: Graphics[]/Show[]/Plot[] primitives,
+                    adaptive sampler, Raylib renderer (USE_GRAPHICS), vector font
   internal/         .m bootstrap scripts (init.m, deriv.m, integral tables)
   external/ecm/     Vendored GMP-ECM (DO NOT MODIFY)
 tests/              CMake-built unit suite (test_*.c)
@@ -257,7 +262,7 @@ return arg0;
 `*_init()` function: `parfrac`, `modular`, `facint`, `comparisons`, `boolean`,
 `list`, `replace`, `patterns`, `cond`, `iter`, `complex`, `trig`, `simp`,
 `hyperbolic`, `logexp`, `piecewise`, `attr`, `purefunc`, `stats`, `poly`,
-`facpoly`, `rat`, `expand`, `info`, `datetime`, `linalg`, `load`.
+`facpoly`, `rat`, `expand`, `info`, `datetime`, `linalg`, `load`, `graphics`.
 
 After C-side init, `main()` loads `src/internal/init.m`, which `Get[]`s the
 remaining `.m` bootstrap files.

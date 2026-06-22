@@ -4,6 +4,7 @@ project(Mathilda_tests)
 option(USE_ECM "Use ECM library for factorisation" ON)
 option(USE_MPFR "Use MPFR for arbitrary-precision reals (N[expr, prec])" ON)
 option(USE_LAPACK "Use BLAS/LAPACK for fast machine-precision linear algebra" ON)
+option(USE_GRAPHICS "Use Raylib for the 2D graphics engine (Graphics[]/Show[]/Plot[] rendering)" ON)
 
 if(USE_MPFR)
     add_compile_definitions(USE_MPFR)
@@ -41,6 +42,28 @@ if(USE_LAPACK)
     endif()
 endif()
 
+# Raylib autodetection for the graphics engine.  Mirrors the makefile's
+# pkg-config probe; degrades to USE_GRAPHICS=OFF (sampling.c and the
+# symbolic Graphics[]/Plot[] construction path are still fully testable —
+# only render.c/hershey_font.c, which need a live display, are excluded).
+if(USE_GRAPHICS)
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(RAYLIB QUIET raylib)
+    endif()
+    if(RAYLIB_FOUND)
+        add_compile_definitions(USE_GRAPHICS)
+        include_directories(${RAYLIB_INCLUDE_DIRS})
+        link_directories(${RAYLIB_LIBRARY_DIRS})
+        link_libraries(${RAYLIB_LIBRARIES})
+    else()
+        message(WARNING "Raylib not detected; building tests with USE_GRAPHICS=OFF")
+        message(WARNING "  macOS (Homebrew): brew install raylib")
+        message(WARNING "  Ubuntu/Debian:    sudo apt install libraylib-dev")
+        set(USE_GRAPHICS OFF)
+    endif()
+endif()
+
 include_directories(/usr/local/include)
 include_directories(../src/list)
 include_directories(../src/linalg)
@@ -51,6 +74,7 @@ include_directories(../src/sum)
 include_directories(../src/special_functions)
 include_directories(../src/numerical_calculus)
 include_directories(../src/numerical_roots)
+include_directories(../src/graphics)
 if(USE_ECM)
     include_directories(../src/external/ecm)
 endif()
@@ -340,7 +364,20 @@ set(COMMON_SRC
     ../src/numerical_roots/nroots_jt.c
     ../src/numerical_roots/nsolve.c
     ../src/numerical_roots/nsolve_system.c
+    ../src/graphics/graphics_init.c
+    ../src/graphics/sampling.c
+    ../src/graphics/plot.c
+    ../src/graphics/show.c
 )
+
+# render.c / hershey_font.c need a live Raylib + display; only compiled
+# into COMMON_SRC when USE_GRAPHICS actually resolved to ON above.
+if(USE_GRAPHICS)
+    list(APPEND COMMON_SRC
+        ../src/graphics/render.c
+        ../src/graphics/hershey_font.c
+    )
+endif()
 
 add_executable(expr_tests test_expr.c test_part.c ${COMMON_SRC})
 target_include_directories(expr_tests PRIVATE ../src)
@@ -1411,6 +1448,15 @@ endif()
 
 add_executable(print_tests test_print.c ${COMMON_SRC})
 target_include_directories(print_tests PRIVATE ../src)
+
+add_executable(graphics_sampling_tests test_graphics_sampling.c ${COMMON_SRC})
+target_link_libraries(graphics_sampling_tests m)
+target_include_directories(graphics_sampling_tests PRIVATE ../src ../src/graphics)
+add_test(NAME graphics_sampling_tests COMMAND graphics_sampling_tests)
+
+add_executable(graphics_tests test_graphics.c ${COMMON_SRC})
+target_include_directories(graphics_tests PRIVATE ../src ../src/graphics)
+add_test(NAME graphics_tests COMMAND graphics_tests)
 
 add_executable(context_tests test_context.c ${COMMON_SRC})
 target_include_directories(context_tests PRIVATE ../src)

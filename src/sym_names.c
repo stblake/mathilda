@@ -535,6 +535,32 @@ const char* SYM_DollarRecursionLimit = NULL;
 const char* SYM_DollarSimplifyDebug = NULL;
 const char* SYM_DollarruSimplify = NULL;
 
+const char* SYM_Graphics = NULL;
+const char* SYM_Point = NULL;
+const char* SYM_Line = NULL;
+const char* SYM_Rectangle = NULL;
+const char* SYM_Circle = NULL;
+const char* SYM_Disk = NULL;
+const char* SYM_Polygon = NULL;
+const char* SYM_Text = NULL;
+const char* SYM_Show = NULL;
+const char* SYM_Plot = NULL;
+const char* SYM_RGBColor = NULL;
+const char* SYM_GrayLevel = NULL;
+const char* SYM_Opacity = NULL;
+const char* SYM_Thickness = NULL;
+const char* SYM_PointSize = NULL;
+const char* SYM_PlotPoints = NULL;
+const char* SYM_MaxPlotPoints = NULL;
+const char* SYM_PlotRange = NULL;
+const char* SYM_PlotStyle = NULL;
+const char* SYM_Axes = NULL;
+const char* SYM_AxesLabel = NULL;
+const char* SYM_PlotLabel = NULL;
+const char* SYM_AspectRatio = NULL;
+const char* SYM_Background = NULL;
+const char* SYM_ImageSize = NULL;
+
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
      * times without re-allocating. */
@@ -1062,6 +1088,32 @@ void sym_names_init(void) {
     SYM_DollarRecursionLimit       = intern_symbol("$RecursionLimit");
     SYM_DollarSimplifyDebug        = intern_symbol("$SimplifyDebug");
     SYM_DollarruSimplify           = intern_symbol("$ruSimplify");
+
+    SYM_Graphics                   = intern_symbol("Graphics");
+    SYM_Point                      = intern_symbol("Point");
+    SYM_Line                       = intern_symbol("Line");
+    SYM_Rectangle                  = intern_symbol("Rectangle");
+    SYM_Circle                     = intern_symbol("Circle");
+    SYM_Disk                       = intern_symbol("Disk");
+    SYM_Polygon                    = intern_symbol("Polygon");
+    SYM_Text                       = intern_symbol("Text");
+    SYM_Show                       = intern_symbol("Show");
+    SYM_Plot                       = intern_symbol("Plot");
+    SYM_RGBColor                   = intern_symbol("RGBColor");
+    SYM_GrayLevel                  = intern_symbol("GrayLevel");
+    SYM_Opacity                    = intern_symbol("Opacity");
+    SYM_Thickness                  = intern_symbol("Thickness");
+    SYM_PointSize                  = intern_symbol("PointSize");
+    SYM_PlotPoints                 = intern_symbol("PlotPoints");
+    SYM_MaxPlotPoints              = intern_symbol("MaxPlotPoints");
+    SYM_PlotRange                  = intern_symbol("PlotRange");
+    SYM_PlotStyle                  = intern_symbol("PlotStyle");
+    SYM_Axes                       = intern_symbol("Axes");
+    SYM_AxesLabel                  = intern_symbol("AxesLabel");
+    SYM_PlotLabel                  = intern_symbol("PlotLabel");
+    SYM_AspectRatio                = intern_symbol("AspectRatio");
+    SYM_Background                 = intern_symbol("Background");
+    SYM_ImageSize                  = intern_symbol("ImageSize");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a
