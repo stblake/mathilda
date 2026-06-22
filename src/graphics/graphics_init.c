@@ -77,7 +77,9 @@ void graphics_init(void) {
     symtab_set_docstring("Plot",
         "Plot[f, {x, xmin, xmax}, opts...]\n\tAdaptively samples f over "
         "[xmin, xmax], displays the resulting curve in an interactive "
-        "window, and returns it as a Graphics[...] object. Options: "
+        "window, and returns it as a Graphics[...] object. A list of "
+        "functions Plot[{f1, f2, ...}, {x, xmin, xmax}] draws each on the "
+        "same axes in a distinct palette colour. Options: "
         "PlotPoints (initial sample count, default 25), MaxRecursion "
         "(adaptive refinement depth, default 6), MaxPlotPoints (overall "
         "point cap, default Infinity), PlotRange, AspectRatio, PlotStyle, "

@@ -127,10 +127,16 @@ Adaptively samples and displays a function of one real variable.
   `Graphics[{Line[...], ...}, opts]` object. A gap in `f` (a singularity,
   or a non-real result) breaks the curve into separate `Line[...]`
   segments rather than bridging it.
+- `Plot[{f1, f2, ...}, {x, xmin, xmax}]`: plots several curves on the same
+  axes. Each is sampled independently (its own gaps/singularities) and
+  drawn in a distinct colour drawn from the default plot palette
+  (Mathematica's `ColorData[97]`), chosen so the series read as distinct
+  yet harmonious; the palette cycles when there are more curves than
+  entries. A single curve keeps the `PlotStyle` colour.
 - `Plot[f, {x, xmin, xmax}, opts...]`: as above, with sampling and/or
   rendering options (see below and the `Show` table above).
-- `HoldAll`: `f` and the iterator spec are not pre-evaluated (`x` has no
-  value until sampling binds it).
+- `HoldAll`: `f` (or the function list) and the iterator spec are not
+  pre-evaluated (`x` has no value until sampling binds it).
 
 Sampling options (consumed by `Plot` itself; not stored on the resulting
 `Graphics[...]`), implemented by one shared adaptive sampler so the same
@@ -161,4 +167,7 @@ Out[2]= -Graphics-
 
 In[3]:= Plot[Sin[x], {x, a, b}]
 Out[3]= Plot[Sin[x], {x, a, b}]
+
+In[4]:= Plot[{Sin[1/x], Cos[1/x]}, {x, -Pi, Pi}]
+Out[4]= -Graphics-
 ```

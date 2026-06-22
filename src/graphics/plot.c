@@ -175,6 +175,70 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
     return true;
 }
 
+/* Distinct, harmonious per-curve colours for multi-function plots. This is
+ * Mathematica's default plot palette (ColorData[97], "the 97 colours"),
+ * hand-tuned so any prefix of the list reads well together; we cycle it for
+ * plots with more curves than entries. */
+static Expr* palette_color(size_t i) {
+    static const double pal[][3] = {
+        { 0.368417, 0.506779, 0.709798 },
+        { 0.880722, 0.611041, 0.142051 },
+        { 0.560181, 0.691569, 0.194885 },
+        { 0.922526, 0.385626, 0.209179 },
+        { 0.528488, 0.470624, 0.701351 },
+        { 0.772079, 0.431554, 0.102387 },
+        { 0.363898, 0.618501, 0.782349 },
+        { 1.000000, 0.750000, 0.000000 },
+        { 0.647624, 0.378160, 0.614037 },
+        { 0.571589, 0.586483, 0.000000 },
+    };
+    size_t k = i % (sizeof(pal) / sizeof(pal[0]));
+    Expr* a[3] = { expr_new_real(pal[k][0]), expr_new_real(pal[k][1]), expr_new_real(pal[k][2]) };
+    return expr_new_function(expr_new_symbol(SYM_RGBColor), a, 3);
+}
+
+/* Sample one function `body` over [xmin,xmax] and return its run-split
+ * Line[...] primitives (a run boundary is a recorded gap/singularity).
+ * Returns NULL with *out_count == 0 when nothing is plottable. The caller
+ * must already have shadowed the iterator variable. */
+static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
+                           const PlotSampleOpts* sopts, size_t* out_count) {
+    *out_count = 0;
+    PlotEvalCtx ctx = { .var = var, .body = body };
+
+    size_t npts;
+    PlotPoint* pts = plot_sample_adaptive(plot_eval_fn, &ctx, xmin, xmax,
+                                           sopts->plot_points, sopts->max_recursion,
+                                           sopts->max_plot_points, &npts);
+    if (!pts || npts == 0) { plot_points_free(pts); return NULL; }
+
+    Expr** prims = malloc(sizeof(Expr*) * npts);
+    size_t prim_count = 0;
+    size_t run_start = 0;
+    for (size_t i = 1; i <= npts; i++) {
+        bool end_of_run = (i == npts) || pts[i].break_before;
+        if (end_of_run) {
+            size_t run_len = i - run_start;
+            if (run_len >= 2) {
+                Expr** line_pts = malloc(sizeof(Expr*) * run_len);
+                for (size_t j = 0; j < run_len; j++) {
+                    Expr* xy[2] = { expr_new_real(pts[run_start + j].x), expr_new_real(pts[run_start + j].y) };
+                    line_pts[j] = expr_new_function(expr_new_symbol(SYM_List), xy, 2);
+                }
+                Expr* pts_list = expr_new_function(expr_new_symbol(SYM_List), line_pts, run_len);
+                free(line_pts);
+                Expr* line_args[1] = { pts_list };
+                prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_Line), line_args, 1);
+            }
+            run_start = i;
+        }
+    }
+    plot_points_free(pts);
+    if (prim_count == 0) { free(prims); return NULL; }
+    *out_count = prim_count;
+    return prims;
+}
+
 Expr* builtin_plot(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
@@ -200,48 +264,64 @@ Expr* builtin_plot(Expr* res) {
         return NULL;
     }
 
-    PlotEvalCtx ctx = { .var = ispec.var, .body = f };
-    Rule* old_own = iter_spec_shadow(ispec.var);
+    /* One curve (Plot[f, …]) or several (Plot[{f1, f2, …}, …]). A List head
+     * on the first argument is the multi-curve form. */
+    Expr* single = f;
+    Expr** bodies;
+    size_t nfun;
+    bool is_list = (f->type == EXPR_FUNCTION && f->data.function.head
+                    && f->data.function.head->type == EXPR_SYMBOL
+                    && f->data.function.head->data.symbol == SYM_List);
+    if (is_list) {
+        nfun = f->data.function.arg_count;
+        bodies = f->data.function.args; /* borrowed */
+    } else {
+        nfun = 1;
+        bodies = &single;               /* borrowed */
+    }
 
-    size_t npts;
-    PlotPoint* pts = plot_sample_adaptive(plot_eval_fn, &ctx, xmin, xmax,
-                                           sopts.plot_points, sopts.max_recursion,
-                                           sopts.max_plot_points, &npts);
-
-    iter_spec_restore(ispec.var, old_own);
-    iter_spec_free(&ispec);
-
-    if (!pts || npts == 0) {
-        plot_points_free(pts);
+    if (nfun == 0) { /* Plot[{}, …] — nothing to draw */
+        iter_spec_free(&ispec);
         for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
         free(passthrough);
         return NULL;
     }
 
-    /* Split the sampled points into one Line[...] primitive per
-     * uninterrupted run (a run boundary is a recorded gap/singularity). */
-    Expr** prims = malloc(sizeof(Expr*) * npts);
-    size_t prim_count = 0;
-    size_t run_start = 0;
-    for (size_t i = 1; i <= npts; i++) {
-        bool end_of_run = (i == npts) || pts[i].break_before;
-        if (end_of_run) {
-            size_t run_len = i - run_start;
-            if (run_len >= 2) {
-                Expr** line_pts = malloc(sizeof(Expr*) * run_len);
-                for (size_t j = 0; j < run_len; j++) {
-                    Expr* xy[2] = { expr_new_real(pts[run_start + j].x), expr_new_real(pts[run_start + j].y) };
-                    line_pts[j] = expr_new_function(expr_new_symbol(SYM_List), xy, 2);
-                }
-                Expr* pts_list = expr_new_function(expr_new_symbol(SYM_List), line_pts, run_len);
-                free(line_pts);
-                Expr* line_args[1] = { pts_list };
-                prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_Line), line_args, 1);
-            }
-            run_start = i;
-        }
+    /* Sample every curve under a single shadow of the iterator variable. */
+    Rule* old_own = iter_spec_shadow(ispec.var);
+    Expr*** per = malloc(sizeof(Expr**) * nfun);
+    size_t* per_count = malloc(sizeof(size_t) * nfun);
+    size_t total = 0;
+    bool any = false;
+    for (size_t fi = 0; fi < nfun; fi++) {
+        per[fi] = sample_lines(bodies[fi], ispec.var, xmin, xmax, &sopts, &per_count[fi]);
+        total += per_count[fi];
+        if (per_count[fi] > 0) any = true;
     }
-    plot_points_free(pts);
+    iter_spec_restore(ispec.var, old_own);
+    iter_spec_free(&ispec);
+
+    if (!any) {
+        free(per); free(per_count); /* all per[fi] are NULL when nothing plotted */
+        for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
+        free(passthrough);
+        return NULL;
+    }
+
+    /* Assemble the primitive list. With more than one curve, each curve's
+     * runs are introduced by a palette colour directive so the series read
+     * as distinct yet harmonious; a single curve keeps the PlotStyle colour
+     * that split_options supplied. */
+    bool multi = (nfun > 1);
+    size_t cap = total + (multi ? nfun : 0);
+    Expr** prims = malloc(sizeof(Expr*) * (cap > 0 ? cap : 1));
+    size_t prim_count = 0;
+    for (size_t fi = 0; fi < nfun; fi++) {
+        if (multi) prims[prim_count++] = palette_color(fi);
+        for (size_t j = 0; j < per_count[fi]; j++) prims[prim_count++] = per[fi][j];
+        free(per[fi]);
+    }
+    free(per); free(per_count);
 
     Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, prim_count);
     free(prims);
