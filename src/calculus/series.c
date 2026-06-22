@@ -3998,6 +3998,214 @@ static Expr* try_series_lerchphi_at_zero(Expr* f, Expr* x, int64_t n) {
     return series;
 }
 
+/* ----------------------------------------------------------------------------
+ * ProductLog (Lambert W) series expansions.
+ * ------------------------------------------------------------------------- */
+
+/* Taylor series of ProductLog[x] at x = 0:
+ *   W(x) = Sum_{k>=1} (-k)^(k-1)/k! x^k
+ *        = x - x^2 + 3/2 x^3 - 8/3 x^4 + 125/24 x^5 - ...
+ * The generic Taylor-via-D path cannot produce this (W'(0) is a 0/0 form), so
+ * the closed-form coefficients are emitted directly. Principal branch only. */
+static Expr* try_series_productlog_at_zero(Expr* f, Expr* x, int64_t n) {
+    if (n < 1) n = 1;
+    if (!has_symbol_head(f, "ProductLog") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    /* a_k = (-k)^(k-1)/k! at x-power k, k = 1 .. n. */
+    Expr** coefs = calloc((size_t)n, sizeof(Expr*));
+    for (int64_t k = 1; k <= n; k++) {
+        Expr* num = mk_power(expr_new_integer(-k), expr_new_integer(k - 1));
+        Expr* den = mk_power(mk_fn1("Factorial", expr_new_integer(k)),
+                             expr_new_integer(-1));
+        coefs[k - 1] = eval_and_free(mk_times(num, den));
+    }
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, (size_t)n);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);                /* expansion variable */
+    sd[1] = expr_new_integer(0);         /* x0                 */
+    sd[2] = coef_list;                   /* coefficients       */
+    sd[3] = expr_new_integer(1);         /* nmin (x^1)         */
+    sd[4] = expr_new_integer(n + 1);     /* nmax (O-term)      */
+    sd[5] = expr_new_integer(1);         /* denominator        */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
+/* Multiply two truncated power series a[0..D], b[0..D] (coefficients are owned
+ * Expr*), returning a freshly allocated array c[0..D] with c_p = Sum a_i b_{p-i}
+ * simplified. Inputs are left intact (the caller frees them). */
+static Expr** pl_poly_mul(Expr** a, Expr** b, int64_t D) {
+    Expr** c = calloc((size_t)(D + 1), sizeof(Expr*));
+    for (int64_t p = 0; p <= D; p++) {
+        Expr* acc = expr_new_integer(0);
+        for (int64_t i = 0; i <= p; i++) {
+            Expr* term = mk_times(expr_copy(a[i]), expr_copy(b[p - i]));
+            acc = eval_and_free(mk_plus(acc, term));
+        }
+        c[p] = acc;
+    }
+    return c;
+}
+
+/* Compute the rational branch-point coefficients mu_0..mu_K of
+ *   W(z) = Sum_{k>=0} mu_k p^k,   p = Sqrt[2(e z + 1)],   z near -1/e,
+ * by reverting  p^2/2 = Sum_{j>=2} (j-1)/j! v^j  with v = Sum_{k>=1} mu_k p^k.
+ * Returns an array of K+1 owned Expr* (mu_0 = -1, mu_1 = 1, ...). */
+static Expr** pl_branch_mu(int64_t K) {
+    Expr** mu = calloc((size_t)(K + 1), sizeof(Expr*));
+    mu[0] = expr_new_integer(-1);
+    if (K >= 1) mu[1] = expr_new_integer(1);
+
+    for (int64_t i = 2; i <= K; i++) {
+        int64_t J = i + 1;                       /* solve at p-power J */
+        /* v[0..J] from already-known mu_1..mu_{i-1} (mu_i, ... treated as 0). */
+        Expr** v = calloc((size_t)(J + 1), sizeof(Expr*));
+        for (int64_t t = 0; t <= J; t++)
+            v[t] = (t >= 1 && t <= i - 1) ? expr_copy(mu[t]) : expr_new_integer(0);
+
+        /* acc = [p^J] Sum_{j=2}^{J} c_j v^j,  c_j = (j-1)/j!. */
+        Expr* acc = expr_new_integer(0);
+        Expr** vpow = calloc((size_t)(J + 1), sizeof(Expr*)); /* v^1 */
+        for (int64_t t = 0; t <= J; t++) vpow[t] = expr_copy(v[t]);
+        for (int64_t j = 2; j <= J; j++) {
+            Expr** nxt = pl_poly_mul(vpow, v, J);            /* v^j */
+            for (int64_t t = 0; t <= J; t++) expr_free(vpow[t]);
+            free(vpow);
+            vpow = nxt;
+            Expr* cj = eval_and_free(mk_times(expr_new_integer(j - 1),
+                          mk_power(mk_fn1("Factorial", expr_new_integer(j)),
+                                   expr_new_integer(-1))));
+            Expr* contrib = mk_times(cj, expr_copy(vpow[J]));
+            acc = eval_and_free(mk_plus(acc, contrib));
+        }
+        for (int64_t t = 0; t <= J; t++) expr_free(vpow[t]);
+        free(vpow);
+        for (int64_t t = 0; t <= J; t++) expr_free(v[t]);
+        free(v);
+
+        /* mu_i = -[p^J](...). */
+        mu[i] = eval_and_free(mk_times(expr_new_integer(-1), acc));
+    }
+    return mu;
+}
+
+/* Puiseux series of ProductLog[x] at the branch point x = -1/E:
+ *   W(x) = Sum_{k>=0} mu_k (2E)^(k/2) (x + 1/E)^(k/2)
+ *        = -1 + Sqrt[2E] Sqrt[x+1/E] - 2/3 E (x+1/E) + ...
+ * Half-integer powers (denominator 2). The O-term convention here keeps powers
+ * through (x+1/E)^n (i.e. numerator 2n); it is mathematically a valid degree-n
+ * truncation and need not match Mathematica's term count exactly. Principal
+ * branch only. */
+static Expr* try_series_productlog_at_branchpoint(Expr* f, Expr* x, int64_t n) {
+    if (n < 0) n = 0;
+    if (!has_symbol_head(f, "ProductLog") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    int64_t K = 2 * n;                          /* highest half-integer numerator */
+    if (K < 1) K = 1;
+    Expr** mu = pl_branch_mu(K);
+
+    /* coef numerator p -> mu_p (2E)^(p/2) at (x+1/E)^(p/2). */
+    size_t ncoef = (size_t)(K + 1);
+    Expr** coefs = calloc(ncoef, sizeof(Expr*));
+    for (int64_t p = 0; p <= K; p++) {
+        Expr* two_e = mk_times(expr_new_integer(2), mk_symbol("E"));
+        Expr* fac   = mk_power(two_e, make_rational(p, 2));   /* (2E)^(p/2) */
+        coefs[(size_t)p] = eval_and_free(mk_times(expr_copy(mu[p]), fac));
+    }
+    for (int64_t p = 0; p <= K; p++) expr_free(mu[p]);
+    free(mu);
+
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, ncoef);
+    free(coefs);
+
+    /* x0 = -1/E; the printer forms powers of (x - x0) = x + 1/E. */
+    Expr* x0 = mk_times(expr_new_integer(-1),
+                        mk_power(mk_symbol("E"), expr_new_integer(-1)));
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = expr_copy(x);                /* expansion variable x       */
+    sd[1] = eval_and_free(x0);           /* x0 = -1/E                  */
+    sd[2] = coef_list;
+    sd[3] = expr_new_integer(0);         /* nmin (numerator)           */
+    sd[4] = expr_new_integer(K + 1);     /* nmax (O-term numerator)    */
+    sd[5] = expr_new_integer(2);         /* denominator (half powers)  */
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
+/* Unsigned Stirling numbers of the first kind c1(m, k) (cycle counts), small m. */
+static int64_t pl_stirling1u(int64_t m, int64_t k) {
+    if (k < 0 || k > m) return 0;
+    if (m == 0) return (k == 0) ? 1 : 0;
+    /* c1(m,k) = c1(m-1,k-1) + (m-1) c1(m-1,k). */
+    return pl_stirling1u(m - 1, k - 1) + (m - 1) * pl_stirling1u(m - 1, k);
+}
+
+/* Asymptotic (nested-logarithm) expansion of ProductLog[x] at x = Infinity:
+ *   W(x) ~ L1 - L2 + Sum_{k>=0,m>=1} ((-1)^k/m!) c1(k+m, k+1) L2^m / L1^(k+m),
+ *   L1 = Log[x],  L2 = Log[Log[x]].
+ * This is the coefficient of x^0; it is not a power series in 1/x, so it is
+ * emitted as the single x^0 coefficient of a SeriesData[1/x, ...] with an
+ * O[1/x]^1 term (matching Mathematica's order-0 output, which keeps 1/L1 powers
+ * through 2). Higher 1/x corrections are not produced. */
+static Expr* try_series_productlog_at_infinity(Expr* f, Expr* x, int64_t n) {
+    (void)n;
+    if (!has_symbol_head(f, "ProductLog") || f->data.function.arg_count != 1)
+        return NULL;
+    if (!expr_eq(f->data.function.args[0], x)) return NULL;
+
+    Expr* L1 = mk_fn1("Log", expr_copy(x));
+    Expr* L2 = mk_fn1("Log", mk_fn1("Log", expr_copy(x)));
+
+    /* block = L1 - L2 + double sum (k+m from 1 to DEPTH). */
+    const int64_t DEPTH = 2;            /* max power of 1/L1 (matches WL order 0) */
+    Expr* block = mk_plus(expr_copy(L1),
+                          mk_times(expr_new_integer(-1), expr_copy(L2)));
+    for (int64_t d = 1; d <= DEPTH; d++) {           /* d = k + m = 1/L1 power */
+        for (int64_t m = 1; m <= d; m++) {
+            int64_t k = d - m;
+            int64_t s1 = pl_stirling1u(k + m, k + 1);
+            if (s1 == 0) continue;
+            /* coeff = (-1)^k c1(k+m,k+1) / m!  (a rational). */
+            Expr* rat = eval_and_free(mk_times(
+                expr_new_integer(((k % 2) == 0) ? s1 : -s1),
+                mk_power(mk_fn1("Factorial", expr_new_integer(m)),
+                         expr_new_integer(-1))));
+            Expr* term = mk_times(rat,
+                mk_times(mk_power(expr_copy(L2), expr_new_integer(m)),
+                         mk_power(expr_copy(L1), expr_new_integer(-d))));
+            block = mk_plus(block, term);
+        }
+    }
+    expr_free(L1);
+    expr_free(L2);
+    block = eval_and_free(block);
+
+    Expr** coefs = calloc(1, sizeof(Expr*));
+    coefs[0] = block;                                /* coefficient of (1/x)^0 */
+    Expr* coef_list = expr_new_function(mk_symbol("List"), coefs, 1);
+    free(coefs);
+
+    Expr** sd = calloc(6, sizeof(Expr*));
+    sd[0] = mk_power(expr_copy(x), expr_new_integer(-1));  /* expansion var 1/x */
+    sd[1] = expr_new_integer(0);
+    sd[2] = coef_list;
+    sd[3] = expr_new_integer(0);         /* nmin (x^0)   */
+    sd[4] = expr_new_integer(1);         /* nmax -> O[1/x]^1 */
+    sd[5] = expr_new_integer(1);
+    Expr* series = expr_new_function(mk_symbol("SeriesData"), sd, 6);
+    free(sd);
+    return series;
+}
+
 /* Expand f around x=x0 to order n and return SeriesData expression. */
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only,
                               int x_sign) {
@@ -4073,6 +4281,14 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(x0_eval);
             return by;
         }
+        /* ProductLog[x] at Infinity: nested-logarithm asymptotic expansion
+         * (the x^0 coefficient), not a power series in 1/x. */
+        Expr* plw = try_series_productlog_at_infinity(f_eval, x, leading_only ? 0 : n);
+        if (plw) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return plw;
+        }
     }
 
     /* LogIntegral[x] = Ei(Log[x]) has no Taylor series at x = 0 -- Log[x]
@@ -4119,6 +4335,33 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
             expr_free(f_eval);
             expr_free(x0_eval);
             return lp0;
+        }
+        /* ProductLog[x] at x = 0: closed-form Taylor coefficients (-k)^(k-1)/k!
+         * (W'(0) is a 0/0 form, so naive Taylor-via-D fails). */
+        Expr* plw0 = try_series_productlog_at_zero(f_eval, x, leading_only ? 1 : n);
+        if (plw0) {
+            expr_free(f_eval);
+            expr_free(x0_eval);
+            return plw0;
+        }
+    }
+
+    /* ProductLog[x] at the branch point x = -1/E: Puiseux series in
+     * Sqrt[x + 1/E] (W'(-1/e) = Infinity blocks naive Taylor-via-D). */
+    {
+        Expr* neg_inv_e = eval_and_free(
+            mk_times(expr_new_integer(-1),
+                     mk_power(mk_symbol("E"), expr_new_integer(-1))));
+        bool at_bp = expr_eq(neg_inv_e, x0_eval);
+        expr_free(neg_inv_e);
+        if (at_bp) {
+            Expr* plbp = try_series_productlog_at_branchpoint(
+                f_eval, x, leading_only ? 0 : n);
+            if (plbp) {
+                expr_free(f_eval);
+                expr_free(x0_eval);
+                return plbp;
+            }
         }
     }
 
@@ -4457,6 +4700,37 @@ Expr* builtin_series(Expr* res) {
  * is not produced. */
 Expr* builtin_seriescoefficient(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+
+    /* General term SeriesCoefficient[ProductLog[x], {x, 0, n}] with symbolic n:
+     *   Piecewise[{{(-n)^(n-1)/n!, n >= 1}}, 0]. */
+    {
+        Expr* f0  = res->data.function.args[0];
+        Expr* sp0 = res->data.function.args[1];
+        if (has_symbol_head(f0, "ProductLog") && f0->data.function.arg_count == 1 &&
+            sp0->type == EXPR_FUNCTION && has_symbol_head(sp0, "List") &&
+            sp0->data.function.arg_count == 3) {
+            Expr* xv  = sp0->data.function.args[0];
+            Expr* x0v = sp0->data.function.args[1];
+            Expr* nv  = sp0->data.function.args[2];
+            if (expr_eq(f0->data.function.args[0], xv) &&
+                is_lit_zero(x0v) && nv->type == EXPR_SYMBOL) {
+                Expr* val = mk_times(
+                    mk_power(mk_times(expr_new_integer(-1), expr_copy(nv)),
+                             mk_plus(expr_new_integer(-1), expr_copy(nv))),
+                    mk_power(mk_fn1("Factorial", expr_copy(nv)),
+                             expr_new_integer(-1)));
+                Expr* cond = mk_fn2("GreaterEqual", expr_copy(nv), expr_new_integer(1));
+                Expr* pair = expr_new_function(mk_symbol("List"),
+                                 (Expr*[]){ val, cond }, 2);
+                Expr* pairs = expr_new_function(mk_symbol("List"),
+                                  (Expr*[]){ pair }, 1);
+                Expr* pw = expr_new_function(mk_symbol("Piecewise"),
+                               (Expr*[]){ pairs, expr_new_integer(0) }, 2);
+                return eval_and_free(pw);
+            }
+        }
+    }
+
     if (internal_args_contain_inexact(res)) {
         return internal_rationalize_then_numericalize(res, builtin_seriescoefficient);
     }

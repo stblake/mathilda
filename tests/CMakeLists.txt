@@ -116,6 +116,7 @@ set(COMMON_SRC
     ../src/special_functions/eulere.c
     ../src/special_functions/polylog.c
     ../src/special_functions/lerchphi.c
+    ../src/special_functions/productlog.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
     ../src/special_functions/bessel.c
@@ -1545,6 +1546,9 @@ target_include_directories(polylog_tests PRIVATE ../src)
 
 add_executable(lerchphi_tests test_lerchphi.c ${COMMON_SRC})
 target_include_directories(lerchphi_tests PRIVATE ../src)
+
+add_executable(productlog_tests test_productlog.c ${COMMON_SRC})
+target_include_directories(productlog_tests PRIVATE ../src)
 
 add_executable(airyai_tests test_airyai.c ${COMMON_SRC})
 target_include_directories(airyai_tests PRIVATE ../src)

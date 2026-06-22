@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, and the Airy functions `AiryAi` and `AiryBi`.
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, and the generalized `HypergeometricPFQ`, the Airy functions `AiryAi` and `AiryBi`, and the Lambert W function `ProductLog`.
 
 ## Gamma
 
@@ -1377,4 +1377,59 @@ Attributes: `Listable`, `NumericFunction`, `Protected`.
 ```mathematica
 In[1]:= QPochhammer[a, q, 3]
 Out[1]= (1 - a) (1 - a q) (1 - a q^2)
+```
+
+## ProductLog
+
+- `ProductLog[z]` — the principal branch W₀(z) of the Lambert W function, the
+  solution `w` of `z = w e^w` that is real for `z ≥ -1/e`.
+- `ProductLog[k, z]` — the k-th branch Wₖ(z) (`k` any integer, `k = 0`
+  principal). Branches are ordered by imaginary part.
+
+Implemented in `src/special_functions/productlog.c`. Numeric evaluation runs
+through a single complex-MPFR Halley core built on the shared `ncpx` toolkit
+(`numeric_complex.h`).
+
+- **Exact values.** `ProductLog[0] = 0`, `ProductLog[E] = 1`,
+  `ProductLog[-1/E] = -1`, `ProductLog[-Pi/2] = I Pi/2`,
+  `ProductLog[Infinity] = ProductLog[ComplexInfinity] = Infinity`, and
+  `ProductLog[k, 0] = -Infinity` for `k ≠ 0`. Other exact arguments (e.g.
+  `ProductLog[1/3]`) stay unevaluated and numericalize only under `N`.
+- **Numerics.** With an inexact argument, machine- and arbitrary-precision
+  (MPFR) real and complex inputs evaluate numerically on any branch. The core
+  seeds an initial approximation by region — a branch-point series in
+  `p = Sqrt[2(e z + 1)]` near `z = -1/e` (branches 0 and -1), the Maclaurin seed
+  `z(1 - z + 3/2 z²)` for the principal branch near 0, and otherwise the
+  asymptotic `L1 - L2 + L2/L1` with `L1 = Log z + 2πi k`, `L2 = Log L1` — then
+  refines with Halley's cubically-convergent iteration. A real seed keeps the
+  iteration exactly real, so real-valued branches return a real leaf without
+  imaginary noise; otherwise the result is `Complex[…]`. Examples:
+  `ProductLog[2.5] = 0.958586`, `ProductLog[-1.5] = -0.0327837 + 1.54964 I`,
+  `ProductLog[1 + 3.5 I] = 1.0546 + 0.703928 I`,
+  `Table[ProductLog[k, 2.3], {k, -2, 2}]` spans the five lowest branches.
+  Precision tracks the input: `N[ProductLog[1/3], 100]` and `ProductLog[7/3\`100]`
+  are accurate to 100 digits.
+- **Derivative.** `D[ProductLog[z], z] = ProductLog[z]/(z (1 + ProductLog[z]))`;
+  the two-argument form differentiates the same way in the argument `z`.
+- **Series at 0.** `Series[ProductLog[x], {x, 0, n}]` gives the closed-form
+  Taylor series `x - x^2 + 3/2 x^3 - 8/3 x^4 + 125/24 x^5 + …`
+  (coefficient `(-k)^(k-1)/k!`).
+- **Series at the branch point -1/E.** A Puiseux series in `Sqrt[x + 1/E]`:
+  `-1 + Sqrt[2 E] Sqrt[x + 1/E] - 2/3 E (x + 1/E) + …`.
+- **Series at ∞.** The nested-logarithm asymptotic expansion (the x⁰
+  coefficient): `Log[x] - Log[Log[x]] + Log[Log[x]]/Log[x] - … + O[1/x]`.
+- **SeriesCoefficient.** Numeric indices reduce via the series; the symbolic
+  general term is `SeriesCoefficient[ProductLog[x], {x, 0, n}] =
+  Piecewise[{{(-n)^(n-1)/n!, n ≥ 1}}, 0]`.
+- **Listable.** `ProductLog[{1.5, 3.75, 5.5, 7.25}] = {0.725861, 1.16717,
+  1.38155, 1.54559}`.
+
+Attributes: `Listable`, `NumericFunction`, `Protected`, `ReadProtected`.
+
+```mathematica
+In[1]:= ProductLog[1.0]
+Out[1]= 0.567143
+
+In[2]:= ProductLog[-1/E]
+Out[2]= -1
 ```

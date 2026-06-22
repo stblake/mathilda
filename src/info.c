@@ -654,6 +654,17 @@ void info_init(void) {
         "IncludeSingularTerm -> True (keep the k + a = 0 term) are supported.\n"
         "Inexact arguments with |z| < 1 evaluate numerically at machine or\n"
         "arbitrary (MPFR) precision; |z| > 1 stays symbolic. Listable.");
+    symtab_set_docstring("ProductLog",
+        "ProductLog[z]\n"
+        "\tgives the principal solution w of z == w e^w (the Lambert W function).\n"
+        "ProductLog[k, z] gives the k-th solution (k any integer, k == 0 the\n"
+        "principal branch); branches are ordered by imaginary part. ProductLog[z]\n"
+        "is real for z >= -1/e and has a branch cut along (-Infinity, -1/e].\n"
+        "Exact values include ProductLog[0] = 0, ProductLog[-1/E] = -1,\n"
+        "ProductLog[E] = 1, ProductLog[-Pi/2] = I Pi/2 and ProductLog[k, 0] =\n"
+        "-Infinity for k != 0. Inexact real or complex arguments evaluate\n"
+        "numerically at machine or arbitrary (MPFR) precision. Satisfies\n"
+        "D[ProductLog[z], z] = ProductLog[z]/(z (1 + ProductLog[z])). Listable.");
     symtab_set_docstring("StieltjesGamma",
         "StieltjesGamma[n]\n"
         "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"

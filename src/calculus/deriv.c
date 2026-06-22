@@ -326,6 +326,15 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
         return mk_fn2("Times", expr_copy(g), mk_fn1("AiryBi", expr_copy(g)));
     }
 
+    /* --- Lambert W: d/dg ProductLog[g] = ProductLog[g] / (g (1 + ProductLog[g])). --- */
+    if (!strcmp(name, "ProductLog")) {
+        Expr* w = mk_fn1("ProductLog", expr_copy(g));
+        Expr* one_plus_w = mk_fn2("Plus", mk_int(1), w);
+        Expr* denom = mk_fn2("Times", expr_copy(g), one_plus_w);
+        return mk_fn2("Times", mk_fn1("ProductLog", expr_copy(g)),
+                      mk_fn2("Power", denom, mk_int(-1)));
+    }
+
     /* --- error function: d/dg Erf[g] = (2/Sqrt[Pi]) E^(-g^2). --- */
     if (!strcmp(name, "Erf")) {
         Expr* coeff = mk_fn2("Times", mk_int(2),
@@ -1230,6 +1239,23 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
          *               with respect to the order has no elementary form).
          * Zero-derivative arms are dropped, so D[BesselJ[n,x],x] keeps only the
          * dZ term, matching Mathematica's 1/2 (BesselJ[-1+n,x]-BesselJ[1+n,x]). */
+        /* --- ProductLog[K, Z] (Lambert W, k-th branch): the branch index K is
+         *   discrete, so only the Z-derivative contributes.
+         *   d/dZ ProductLog[K, Z] = ProductLog[K, Z] / (Z (1 + ProductLog[K, Z])). */
+        if (h == SYM_ProductLog && n == 2) {
+            Expr* K = args[0];
+            Expr* Z = args[1];
+            Expr* dZ = deriv_of(Z, x, nonconsts);
+            if (is_lit_zero(dZ)) { expr_free(dZ); return mk_int(0); }
+            Expr* w = mk_fn2("ProductLog", expr_copy(K), expr_copy(Z));
+            Expr* one_plus_w = mk_fn2("Plus", mk_int(1), w);
+            Expr* denom = mk_fn2("Times", expr_copy(Z), one_plus_w);
+            Expr* dWdZ = mk_fn2("Times",
+                              mk_fn2("ProductLog", expr_copy(K), expr_copy(Z)),
+                              mk_fn2("Power", denom, mk_int(-1)));
+            return mk_fn2("Times", dWdZ, dZ);
+        }
+
         if (h == SYM_BesselJ && n == 2) {
             Expr* N = args[0];
             Expr* Z = args[1];
