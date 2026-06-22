@@ -691,6 +691,11 @@ void info_init(void) {
         "E is a mathematical constant: it has attributes Constant and Protected,\n"
         "NumericQ[E] is True, and D[E, x] is 0. N[E, prec] evaluates it to any\n"
         "precision.");
+    symtab_set_docstring("I",
+        "I\n"
+        "\tis the imaginary unit Sqrt[-1].\n"
+        "I represents the imaginary unit; I^2 evaluates to -1 and complex numbers\n"
+        "are written a + b I. It has attribute Protected, and N[I] is 0. + 1. I.");
     symtab_set_docstring("Catalan",
         "Catalan\n"
         "\tis Catalan's constant, with numerical value ~= 0.915966.\n"

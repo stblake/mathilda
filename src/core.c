@@ -468,7 +468,7 @@ void core_init(void) {
     symtab_get_def("IntegerQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("EvenQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("OddQ")->attributes |= ATTR_PROTECTED;
-    symtab_get_def("Information")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Information")->attributes |= (ATTR_HOLDALL | ATTR_PROTECTED);
 
     symtab_get_def("Mod")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Quotient")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);

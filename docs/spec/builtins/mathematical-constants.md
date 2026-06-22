@@ -58,6 +58,17 @@ numerical value ≈ 2.71828.
 - Participates in exact numeric work, e.g.
   `Round[E^100] = 26881171418161354484126255515800135873611119`.
 
+## I
+
+`I` is the imaginary unit, Sqrt[-1].
+
+**Features**:
+- Attribute `Protected`. `Attributes[I] = {Protected}`; the symbol cannot be
+  reassigned.
+- Carries the OwnValue `Complex[0, 1]`, so `I` evaluates to the imaginary unit;
+  `I^2 = -1` and complex numbers are written `a + b I`.
+- `N[I] = 0. + 1. I`.
+
 ## Catalan
 
 
