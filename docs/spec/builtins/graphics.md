@@ -1,10 +1,16 @@
 # Graphics
 
 A 2D graphics engine modeled on Mathematica's: symbolic primitives compose
-into a `Graphics[...]` object, which `Show[]` (or `Plot[]`, which
-auto-displays) renders in an interactive window via a Raylib backend.
-Renders a `-Graphics-` placeholder in the textual REPL, matching
-Mathematica's own behavior outside a notebook front end.
+into a `Graphics[...]` object, which is rendered in an interactive window
+via a Raylib backend. Rendering is owned by the REPL "front end": **any
+top-level result whose head is `Graphics` is auto-displayed**, just as
+Mathematica's notebook front end does. `Show[]` and `Plot[]` therefore
+simply build and return a `Graphics[...]` object -- the window is opened by
+the REPL when that object is the output, so `g // Graphics`, `Show[g]` and
+`Plot[...]` all render through one path. A trailing `;` (whose result is
+`Null`) suppresses the window. The textual `Out[n]=` line still shows the
+`-Graphics-` placeholder, matching Mathematica's behavior outside a
+notebook.
 
 Requires Raylib (a system library, autodetected via `pkg-config` at build
 time -- `brew install raylib` on macOS, `apt install libraylib-dev` on
@@ -50,11 +56,14 @@ axis-aligned filled rectangle.
 
 ## Circle
 A graphics primitive: `Circle[{x,y}, r]` is a circle outline of radius `r`
-centered at `{x,y}`.
+centered at `{x,y}`. The radius and centre carry Mathematica's defaults:
+`Circle[{x,y}]` is radius 1, and `Circle[]` is the unit circle at the
+origin.
 
 ## Disk
 A graphics primitive: `Disk[{x,y}, r]` is a filled disk of radius `r`
-centered at `{x,y}`.
+centered at `{x,y}`. As with `Circle`, `Disk[{x,y}]` is radius 1 and
+`Disk[]` is the unit disk at the origin.
 
 ## Polygon
 A graphics primitive: `Polygon[{{x1,y1}, {x2,y2}, ...}]` is a filled,
@@ -82,12 +91,13 @@ Out[1]= -Graphics-
 ```
 
 ## Show
-Displays a `Graphics[...]` object.
-- `Show[graphics]`: opens an interactive window rendering `graphics` and
-  returns it. The window blocks the REPL until closed.
-- `Show[graphics, opt -> val, ...]`: as above, merging the given options
-  into `graphics`'s option list (a later/explicit option overrides one
-  already present; the merged `Graphics[...]` is what's returned).
+Normalizes a `Graphics[...]` object for display; the REPL front end opens
+the window when the result is a top-level `Graphics` (see the auto-display
+note at the top). The window blocks the REPL until closed.
+- `Show[graphics]`: returns `graphics` (a copy).
+- `Show[graphics, opt -> val, ...]`: merges the given options into
+  `graphics`'s option list (a later/explicit option overrides one already
+  present) and returns the merged `Graphics[...]`.
 
 Rendering options (read by `Show`/`Plot`'s renderer, stored as trailing
 `Rule[...]` arguments on the `Graphics[...]` object):
@@ -106,6 +116,22 @@ Rendering options (read by `Show`/`Plot`'s renderer, stored as trailing
 **Interactive controls** (within the window): mouse wheel to zoom,
 right-drag (or middle-drag) to pan, `Q`/`E` to rotate the view, `R` to
 reset, `Esc` or the window's close button to return to the REPL.
+
+**Toolbar** — a Plotly-style modebar of gray icon buttons sits in the
+top-right corner (hover for a tooltip):
+
+| Icon | Action |
+|---|---|
+| Camera | Download the plot as `mathilda_plot.png` (UI chrome excluded) in the current directory |
+| Magnifier | Zoom tool: left-drag a box to zoom to that region |
+| Move arrows | Pan tool: left-drag to move (the default active tool) |
+| Magnifier `+` | Zoom in about the center |
+| Magnifier `−` | Zoom out about the center |
+| Expand arrows | Autoscale to fit the data |
+| House | Reset axes to the initial view |
+
+The active drag tool (Pan or Zoom) is highlighted. Left-drag follows the
+selected tool; right/middle-drag always pans regardless of tool.
 
 **Features**:
 - `Protected`.

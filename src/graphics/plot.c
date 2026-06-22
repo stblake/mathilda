@@ -335,6 +335,7 @@ Expr* builtin_plot(Expr* res) {
     Expr* graphics = expr_new_function(expr_new_symbol(SYM_Graphics), gargs, gargc);
     free(gargs);
 
-    graphics_show(graphics);
+    /* The REPL front end renders any top-level Graphics[...] result, so
+     * we just return the object (no graphics_show here). See repl.c. */
     return graphics;
 }

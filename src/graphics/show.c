@@ -33,10 +33,11 @@ Expr* builtin_show(Expr* res) {
         if (!is_rule_arg(res->data.function.args[i])) return NULL;
     }
 
+    /* Rendering is owned by the front end (the REPL renders any top-level
+     * Graphics[...] result); Show[] just normalises the object and returns
+     * it. See the auto-display block in repl.c::process_input. */
     if (argc == 1) {
-        Expr* copy = expr_copy(g);
-        graphics_show(copy);
-        return copy;
+        return expr_copy(g);
     }
 
     /* Merge: start from g's own options, then let each Show[] option
@@ -73,7 +74,6 @@ Expr* builtin_show(Expr* res) {
     Expr* merged = expr_new_function(expr_new_symbol(SYM_Graphics), gargs, 1 + n);
     free(gargs);
 
-    graphics_show(merged);
     return merged;
 }
 
@@ -81,6 +81,7 @@ Expr* builtin_show(Expr* res) {
 #include <stdio.h>
 void graphics_show(const Expr* graphics_expr) {
     (void)graphics_expr;
-    printf("Show: graphics support not compiled in (install raylib and rebuild).\n");
+    printf("Graphics: not rendered -- graphics support not compiled in "
+           "(install raylib and rebuild).\n");
 }
 #endif

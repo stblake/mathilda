@@ -32,10 +32,12 @@ void graphics_init(void) {
         "axis-aligned filled rectangle.");
     register_inert("Circle",
         "Circle[{x,y}, r]\n\tA graphics primitive: a circle outline of "
-        "radius r centered at {x,y}.");
+        "radius r centered at {x,y}. Circle[{x,y}] takes radius 1 and "
+        "Circle[] is the unit circle at the origin.");
     register_inert("Disk",
         "Disk[{x,y}, r]\n\tA graphics primitive: a filled disk of radius r "
-        "centered at {x,y}.");
+        "centered at {x,y}. Disk[{x,y}] takes radius 1 and Disk[] is the "
+        "unit disk at the origin.");
     register_inert("Polygon",
         "Polygon[{{x1,y1}, {x2,y2}, ...}]\n\tA graphics primitive: a filled "
         "closed polygon through the given vertices.");

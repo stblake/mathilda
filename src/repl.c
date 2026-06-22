@@ -6,6 +6,7 @@
 #include "symtab.h"
 #include "repl_hooks.h"
 #include "sym_names.h"
+#include "show.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -110,6 +111,21 @@ void process_input(const char* input, int line_number) {
     printf("Out[%d]= ", line_number);
     expr_print(to_print);
     printf("\n"); // extra blank line
+
+    /* Mathematica's front end auto-displays a top-level Graphics[...]
+     * result. This REPL is the sole "front end", so it owns rendering:
+     * Show[]/Plot[] merely return a Graphics[...] object and we render it
+     * here. Routing every display through one path means `g // Graphics`,
+     * Show[...] and Plot[...] all render identically, and a trailing `;`
+     * (which yields Null) correctly suppresses the window. graphics_show
+     * borrows the expr (no ownership transfer); on a non-graphics build
+     * its stub prints a one-line "install raylib" hint instead. */
+    if (to_print && to_print->type == EXPR_FUNCTION
+        && to_print->data.function.head->type == EXPR_SYMBOL
+        && to_print->data.function.head->data.symbol == SYM_Graphics
+        && to_print->data.function.arg_count >= 1) {
+        graphics_show(to_print);
+    }
 
     expr_free(to_print);
     expr_free(parsed);

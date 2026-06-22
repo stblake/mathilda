@@ -59,6 +59,18 @@ static bool looks_like_point(const Expr* e) {
     return expr_point(e, &x, &y);
 }
 
+/* Resolve a Circle[...]/Disk[...] node's centre and radius, applying
+ * Mathematica's defaults: Circle[] is the unit circle at the origin,
+ * Circle[{x,y}] takes radius 1, Circle[{x,y}, r] is fully explicit.
+ * Returns false only when a supplied argument is present but unreadable. */
+static bool circle_params(const Expr* e, double* cx, double* cy, double* r) {
+    size_t n = e->data.function.arg_count;
+    *cx = 0; *cy = 0; *r = 1;
+    if (n >= 1 && !expr_point(e->data.function.args[0], cx, cy)) return false;
+    if (n >= 2 && !expr_to_d(e->data.function.args[1], r)) return false;
+    return true;
+}
+
 static bool expr_is_sym(const Expr* e, const char* sym) {
     return e && e->type == EXPR_SYMBOL && e->data.symbol == sym;
 }
@@ -202,9 +214,9 @@ static void compute_bbox(const Expr* node, PlotRange2D* bb) {
     } else if (name == SYM_Rectangle && n >= 2) {
         compute_bbox(node->data.function.args[0], bb);
         compute_bbox(node->data.function.args[1], bb);
-    } else if ((name == SYM_Circle || name == SYM_Disk) && n >= 2) {
+    } else if (name == SYM_Circle || name == SYM_Disk) {
         double cx, cy, r;
-        if (expr_point(node->data.function.args[0], &cx, &cy) && expr_to_d(node->data.function.args[1], &r)) {
+        if (circle_params(node, &cx, &cy, &r)) {
             update_bbox(bb, cx - r, cy - r);
             update_bbox(bb, cx + r, cy + r);
         }
@@ -304,9 +316,9 @@ static void draw_primitive(const Expr* node, DrawState* state) {
         }
         return;
     }
-    if ((name == SYM_Circle || name == SYM_Disk) && n >= 2) {
+    if (name == SYM_Circle || name == SYM_Disk) {
         double cx, cy, r;
-        if (expr_point(node->data.function.args[0], &cx, &cy) && expr_to_d(node->data.function.args[1], &r)) {
+        if (circle_params(node, &cx, &cy, &r)) {
             Vector2 center = { (float)cx, (float)-cy };
             if (name == SYM_Disk) DrawCircleV(center, (float)r, state->color);
             else DrawCircleLinesV(center, (float)r, state->color);
@@ -478,6 +490,177 @@ static void draw_extra_labels(const GfxOptions* opts, int win_w, int win_h) {
     }
 }
 
+/* ---------------- Toolbar (Plotly-style modebar) ----------------
+ *
+ * A row of icon buttons in the top-right corner whose actions mirror
+ * Plotly's 2D modebar. Everything here is screen-space UI chrome drawn
+ * after EndMode2D; the icons are hand-drawn vector glyphs (no image
+ * assets), in keeping with the Hershey vector font used elsewhere.
+ *
+ * Plotly's Box-Select / Lasso-Select are intentionally omitted: Mathilda
+ * renders continuous primitives, not a discrete dataset, so there is
+ * nothing to "select". */
+
+typedef enum { TOOL_PAN = 0, TOOL_ZOOM = 1 } ToolMode;
+
+typedef enum {
+    TB_SAVE = 0, TB_ZOOMBOX, TB_PAN, TB_ZOOMIN, TB_ZOOMOUT,
+    TB_AUTOSCALE, TB_RESET, TB_COUNT
+} ToolButton;
+
+#define TB_BTN    30.0f   /* button edge (px)            */
+#define TB_GAP     4.0f   /* gap between buttons (px)    */
+#define TB_MARGIN 10.0f   /* inset from window top/right */
+
+/* Screen rect of button i, laid left-to-right ending TB_MARGIN from the
+ * window's right edge. */
+static Rectangle tb_rect(int i, int win_w) {
+    float total = TB_COUNT * TB_BTN + (TB_COUNT - 1) * TB_GAP;
+    float x0 = (float)win_w - TB_MARGIN - total;
+    return (Rectangle){ x0 + i * (TB_BTN + TB_GAP), TB_MARGIN, TB_BTN, TB_BTN };
+}
+
+static int tb_hit(Vector2 m, int win_w) {
+    for (int i = 0; i < TB_COUNT; i++)
+        if (CheckCollisionPointRec(m, tb_rect(i, win_w))) return i;
+    return -1;
+}
+
+static const char* tb_tip(int k) {
+    switch (k) {
+        case TB_SAVE:      return "Download plot as PNG";
+        case TB_ZOOMBOX:   return "Zoom (drag a box)";
+        case TB_PAN:       return "Pan (drag to move)";
+        case TB_ZOOMIN:    return "Zoom in";
+        case TB_ZOOMOUT:   return "Zoom out";
+        case TB_AUTOSCALE: return "Autoscale to fit";
+        case TB_RESET:     return "Reset axes";
+        default:           return "";
+    }
+}
+
+/* Keep the camera's zoom within the same bounds the scroll-wheel uses. */
+static void clamp_zoom(Camera2D* c, float base) {
+    if (c->zoom < base * 0.05f) c->zoom = base * 0.05f;
+    if (c->zoom > base * 50.0f) c->zoom = base * 50.0f;
+}
+
+/* --- icon glyphs: each fills the inset content box `b` with colour `c` --- */
+
+static void icon_save(Rectangle b, Color c) {            /* camera */
+    DrawRectangleLinesEx((Rectangle){ b.x, b.y + b.height * 0.30f, b.width, b.height * 0.52f }, 2.0f, c);
+    DrawRectangleLinesEx((Rectangle){ b.x + b.width * 0.32f, b.y + b.height * 0.14f,
+                                      b.width * 0.28f, b.height * 0.18f }, 2.0f, c);
+    float lr = b.width * 0.16f;
+    DrawRing((Vector2){ b.x + b.width * 0.5f, b.y + b.height * 0.56f }, lr - 1.0f, lr + 1.0f,
+             0.0f, 360.0f, 24, c);
+}
+
+static void icon_magnifier(Rectangle b, Color c, int sign) { /* glass; sign: 0 plain, + in, - out */
+    Vector2 ctr = { b.x + b.width * 0.40f, b.y + b.height * 0.40f };
+    float r = b.width * 0.30f;
+    /* a filled 2px-wide annulus -- same visual weight as the 2px strokes
+     * used by every other glyph, so all icons read as one uniform gray */
+    DrawRing(ctr, r - 1.0f, r + 1.0f, 0.0f, 360.0f, 32, c);
+    DrawLineEx((Vector2){ ctr.x + r * 0.72f, ctr.y + r * 0.72f },
+               (Vector2){ b.x + b.width * 0.96f, b.y + b.height * 0.96f }, 2.0f, c);
+    if (sign != 0) {
+        float s = r * 0.5f;
+        DrawLineEx((Vector2){ ctr.x - s, ctr.y }, (Vector2){ ctr.x + s, ctr.y }, 2.0f, c);
+        if (sign > 0) DrawLineEx((Vector2){ ctr.x, ctr.y - s }, (Vector2){ ctr.x, ctr.y + s }, 2.0f, c);
+    }
+}
+
+static void icon_move(Rectangle b, Color c) {            /* four-way arrows */
+    float cx = b.x + b.width * 0.5f, cy = b.y + b.height * 0.5f;
+    float L = b.width * 0.46f, a = b.width * 0.14f;
+    DrawLineEx((Vector2){ cx - L, cy }, (Vector2){ cx + L, cy }, 2.0f, c);
+    DrawLineEx((Vector2){ cx, cy - L }, (Vector2){ cx, cy + L }, 2.0f, c);
+    DrawLineEx((Vector2){ cx, cy - L }, (Vector2){ cx - a, cy - L + a }, 2.0f, c);
+    DrawLineEx((Vector2){ cx, cy - L }, (Vector2){ cx + a, cy - L + a }, 2.0f, c);
+    DrawLineEx((Vector2){ cx, cy + L }, (Vector2){ cx - a, cy + L - a }, 2.0f, c);
+    DrawLineEx((Vector2){ cx, cy + L }, (Vector2){ cx + a, cy + L - a }, 2.0f, c);
+    DrawLineEx((Vector2){ cx - L, cy }, (Vector2){ cx - L + a, cy - a }, 2.0f, c);
+    DrawLineEx((Vector2){ cx - L, cy }, (Vector2){ cx - L + a, cy + a }, 2.0f, c);
+    DrawLineEx((Vector2){ cx + L, cy }, (Vector2){ cx + L - a, cy - a }, 2.0f, c);
+    DrawLineEx((Vector2){ cx + L, cy }, (Vector2){ cx + L - a, cy + a }, 2.0f, c);
+}
+
+static void icon_expand(Rectangle b, Color c) {          /* outward diagonal arrows */
+    float cx = b.x + b.width * 0.5f, cy = b.y + b.height * 0.5f;
+    float a = b.width * 0.16f;
+    struct { float ex, ey, dx, dy; } cor[4] = {
+        { b.x,           b.y,            1,  1 },
+        { b.x + b.width, b.y,           -1,  1 },
+        { b.x,           b.y + b.height, 1, -1 },
+        { b.x + b.width, b.y + b.height,-1, -1 },
+    };
+    for (int i = 0; i < 4; i++) {
+        Vector2 e = { cor[i].ex, cor[i].ey };
+        DrawLineEx((Vector2){ cx, cy }, e, 2.0f, c);
+        DrawLineEx(e, (Vector2){ e.x + cor[i].dx * a, e.y }, 2.0f, c);
+        DrawLineEx(e, (Vector2){ e.x, e.y + cor[i].dy * a }, 2.0f, c);
+    }
+}
+
+static void icon_home(Rectangle b, Color c) {            /* house */
+    float cx = b.x + b.width * 0.5f;
+    float roofY = b.y + b.height * 0.12f, eaveY = b.y + b.height * 0.45f, baseY = b.y + b.height * 0.88f;
+    float lx = b.x + b.width * 0.16f, rx = b.x + b.width * 0.84f;
+    DrawLineEx((Vector2){ lx, eaveY }, (Vector2){ cx, roofY }, 2.0f, c);
+    DrawLineEx((Vector2){ cx, roofY }, (Vector2){ rx, eaveY }, 2.0f, c);
+    float wlx = b.x + b.width * 0.26f, wrx = b.x + b.width * 0.74f;
+    DrawLineEx((Vector2){ wlx, eaveY }, (Vector2){ wlx, baseY }, 2.0f, c);
+    DrawLineEx((Vector2){ wrx, eaveY }, (Vector2){ wrx, baseY }, 2.0f, c);
+    DrawLineEx((Vector2){ wlx, baseY }, (Vector2){ wrx, baseY }, 2.0f, c);
+    float dlx = b.x + b.width * 0.44f, drx = b.x + b.width * 0.56f, dY = b.y + b.height * 0.62f;
+    DrawLineEx((Vector2){ dlx, baseY }, (Vector2){ dlx, dY }, 2.0f, c);
+    DrawLineEx((Vector2){ drx, baseY }, (Vector2){ drx, dY }, 2.0f, c);
+    DrawLineEx((Vector2){ dlx, dY }, (Vector2){ drx, dY }, 2.0f, c);
+}
+
+/* Draw the whole toolbar. `tool` highlights the active mode button;
+ * `hover` (a button index or -1) gets a hover background + tooltip. */
+static void draw_toolbar(int win_w, int tool, int hover) {
+    float total = TB_COUNT * TB_BTN + (TB_COUNT - 1) * TB_GAP;
+    Rectangle panel = { (float)win_w - TB_MARGIN - total - 5.0f, TB_MARGIN - 5.0f,
+                        total + 10.0f, TB_BTN + 10.0f };
+    DrawRectangleRounded(panel, 0.3f, 6, (Color){ 248, 248, 248, 225 });
+
+    /* All glyphs share one gray; the active mode is shown by the button's
+     * background tint, not by recolouring its icon. */
+    const Color icol = { 90, 90, 90, 255 };
+    for (int i = 0; i < TB_COUNT; i++) {
+        Rectangle r = tb_rect(i, win_w);
+        bool active = (i == TB_PAN && tool == TOOL_PAN) || (i == TB_ZOOMBOX && tool == TOOL_ZOOM);
+        if (i == hover)      DrawRectangleRounded(r, 0.3f, 6, (Color){ 220, 227, 236, 255 });
+        else if (active)     DrawRectangleRounded(r, 0.3f, 6, (Color){ 205, 222, 245, 255 });
+        Rectangle ic = { r.x + 6, r.y + 6, r.width - 12, r.height - 12 };
+        switch (i) {
+            case TB_SAVE:      icon_save(ic, icol);          break;
+            case TB_ZOOMBOX:   icon_magnifier(ic, icol, 0);  break;
+            case TB_PAN:       icon_move(ic, icol);          break;
+            case TB_ZOOMIN:    icon_magnifier(ic, icol, +1); break;
+            case TB_ZOOMOUT:   icon_magnifier(ic, icol, -1); break;
+            case TB_AUTOSCALE: icon_expand(ic, icol);        break;
+            case TB_RESET:     icon_home(ic, icol);          break;
+            default: break;
+        }
+    }
+
+    if (hover >= 0) {
+        const char* t = tb_tip(hover);
+        int tw = MeasureText(t, 12);
+        Rectangle r = tb_rect(hover, win_w);
+        float tx = r.x + r.width * 0.5f - tw * 0.5f;
+        if (tx + tw + 6 > win_w) tx = (float)win_w - tw - 6;
+        if (tx < 4) tx = 4;
+        float ty = r.y + r.height + 7;
+        DrawRectangle((int)tx - 5, (int)ty - 3, tw + 10, 19, (Color){ 40, 40, 40, 235 });
+        DrawText(t, (int)tx, (int)ty, 12, RAYWHITE);
+    }
+}
+
 /* ---------------- Main entry point ---------------- */
 
 void graphics_show(const Expr* graphics_expr) {
@@ -543,14 +726,70 @@ void graphics_show(const Expr* graphics_expr) {
     init_state.point_size = (float)(fmax(data_w, data_h) * 0.006);
     init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
 
+    int tool = TOOL_PAN;          /* active left-drag tool (toolbar-selected) */
+    bool selecting = false;       /* mid box-zoom drag */
+    bool left_drag_canvas = false;/* current left drag began on the canvas, not the toolbar */
+    Vector2 sel_start = { 0, 0 };
+    bool shot = false;            /* this frame renders chrome-free for a capture */
+    int toast = 0;                /* frames left to flash the "saved" confirmation */
+
     while (!WindowShouldClose()) {
+        Vector2 mouse = GetMousePosition();
+        int hover = tb_hit(mouse, (int)opts.width);
+
+        /* Scroll zoom, except while pointing at the toolbar. */
         float wheel = GetMouseWheelMove();
-        if (wheel != 0.0f) {
+        if (wheel != 0.0f && hover < 0) {
             camera.zoom *= (wheel > 0) ? 1.1f : (1.0f / 1.1f);
-            if (camera.zoom < base_zoom * 0.05f) camera.zoom = base_zoom * 0.05f;
-            if (camera.zoom > base_zoom * 50.0f) camera.zoom = base_zoom * 50.0f;
+            clamp_zoom(&camera, base_zoom);
         }
-        if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+
+        /* Left-press: a toolbar button fires its action; otherwise the press
+         * begins a canvas gesture (pan or box-zoom, per the active tool). */
+        if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+            if (hover >= 0) {
+                left_drag_canvas = false;
+                switch (hover) {
+                    case TB_SAVE:      shot = true; break;
+                    case TB_ZOOMBOX:   tool = TOOL_ZOOM; break;
+                    case TB_PAN:       tool = TOOL_PAN; break;
+                    case TB_ZOOMIN:    camera.zoom *= 1.3f;          clamp_zoom(&camera, base_zoom); break;
+                    case TB_ZOOMOUT:   camera.zoom *= (1.0f / 1.3f); clamp_zoom(&camera, base_zoom); break;
+                    case TB_AUTOSCALE: camera = home; break;
+                    case TB_RESET:     camera = home; break;
+                    default: break;
+                }
+            } else {
+                left_drag_canvas = true;
+                if (tool == TOOL_ZOOM) { selecting = true; sel_start = mouse; }
+            }
+        }
+
+        /* Left-release: finish a box-zoom by fitting the camera to the drawn
+         * rectangle (ignored if it was really just a click). */
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            if (selecting) {
+                if (fabsf(mouse.x - sel_start.x) > 4.0f && fabsf(mouse.y - sel_start.y) > 4.0f) {
+                    Vector2 a = GetScreenToWorld2D(sel_start, camera);
+                    Vector2 b = GetScreenToWorld2D(mouse, camera);
+                    float rw = fabsf(b.x - a.x), rh = fabsf(b.y - a.y);
+                    if (rw > 1e-9f && rh > 1e-9f) {
+                        camera.target = (Vector2){ (a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f };
+                        float zx = (float)opts.width / rw, zy = (float)opts.height / rh;
+                        camera.zoom = zx < zy ? zx : zy;
+                        clamp_zoom(&camera, base_zoom);
+                    }
+                }
+                selecting = false;
+            }
+            left_drag_canvas = false;
+        }
+
+        /* Pan: right/middle drag always; left drag only in Pan mode and only
+         * when the drag started on the canvas. */
+        bool panning = IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)
+                    || (tool == TOOL_PAN && left_drag_canvas && IsMouseButtonDown(MOUSE_BUTTON_LEFT));
+        if (panning) {
             Vector2 delta = GetMouseDelta();
             float ang = -camera.rotation * (float)M_PI / 180.0f;
             float dx = delta.x * cosf(ang) - delta.y * sinf(ang);
@@ -558,6 +797,7 @@ void graphics_show(const Expr* graphics_expr) {
             camera.target.x -= dx / camera.zoom;
             camera.target.y -= dy / camera.zoom;
         }
+
         if (IsKeyDown(KEY_Q)) camera.rotation -= 60.0f * GetFrameTime();
         if (IsKeyDown(KEY_E)) camera.rotation += 60.0f * GetFrameTime();
         if (IsKeyPressed(KEY_R)) camera = home;
@@ -577,10 +817,37 @@ void graphics_show(const Expr* graphics_expr) {
         if (opts.axes) draw_axes_labels(&visible, camera);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);
 
-        DrawText("scroll: zoom   right-drag: pan   Q/E: rotate   R: reset view   Esc: close",
-                 10, (int)opts.height - 22, 14, GRAY);
+        /* On a capture frame suppress every bit of UI chrome so the saved
+         * PNG holds only the plot; the capture happens just after the swap. */
+        if (!shot) {
+            if (selecting) {
+                Rectangle sel = { fminf(sel_start.x, mouse.x), fminf(sel_start.y, mouse.y),
+                                  fabsf(mouse.x - sel_start.x), fabsf(mouse.y - sel_start.y) };
+                DrawRectangleRec(sel, (Color){ 30, 80, 180, 40 });
+                DrawRectangleLinesEx(sel, 1.0f, (Color){ 30, 80, 180, 180 });
+            }
+            draw_toolbar((int)opts.width, tool, hover);
+            DrawText("drag: pan/zoom per tool   scroll: zoom   right-drag: pan   Q/E: rotate   R: reset   Esc: close",
+                     10, (int)opts.height - 22, 14, GRAY);
+            if (toast > 0) {
+                const char* msg = "Saved mathilda_plot.png";
+                int tw = MeasureText(msg, 16);
+                DrawRectangle(10, 10, tw + 16, 26, (Color){ 40, 40, 40, 220 });
+                DrawText(msg, 18, 15, 16, RAYWHITE);
+                toast--;
+            }
+        }
 
         EndDrawing();
+
+        /* EndDrawing has swapped buffers, so the chrome-free frame is now
+         * presented -- capture it here (raylib's own F12 capture uses this
+         * exact point), then clear the flag and flash a confirmation. */
+        if (shot) {
+            TakeScreenshot("mathilda_plot.png");
+            shot = false;
+            toast = 120;
+        }
     }
 
     CloseWindow();
