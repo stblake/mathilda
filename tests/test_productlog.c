@@ -147,7 +147,7 @@ void test_productlog_series() {
                    "x - x^2 + 3/2 x^3 - 8/3 x^4 + 125/24 x^5 + O[x]^6", 0);
     /* Branch point -1/E: Puiseux series in Sqrt[x + 1/E]. */
     assert_eval_startswith("Series[ProductLog[x], {x, -1/E, 2}]",
-                           "-1 + Sqrt[2 E] Sqrt[x - -1/E]");
+                           "-1 + Sqrt[2 E] Sqrt[x + 1/E]");
     /* Infinity: nested-logarithm asymptotic expansion (the x^0 coefficient). */
     assert_eval_eq("Normal[Series[ProductLog[x], {x, Infinity, 0}]]",
                    "Log[x] - Log[Log[x]] + Log[Log[x]]/Log[x] - "

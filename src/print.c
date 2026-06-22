@@ -795,20 +795,74 @@ Expr* builtin_texform(Expr* res) {
 
 static int64_t abs_i64(int64_t v) { return v < 0 ? -v : v; }
 
+/* If x0 is a syntactically-negative expansion point, sets *abs_out to a
+ * freshly-owned positive form and returns true; otherwise returns false.
+ * Recognises negative integers/bigints/reals/rationals and Times[] with a
+ * negative leading numeric factor, so that compound centres such as
+ * -Pi = Times[-1, Pi] and -1/E = Times[-1, Power[E, -1]] are normalised.
+ * Without this, series_build_base would wrap such an x0 in Times[-1, x0]
+ * and the Plus printer would emit a double minus ("x - -Pi"). */
+static bool series_extract_negative(Expr* x0, Expr** abs_out) {
+    int64_t rn, rd;
+    if (x0->type == EXPR_INTEGER && x0->data.integer < 0) {
+        *abs_out = expr_new_integer(-x0->data.integer); return true;
+    }
+    if (x0->type == EXPR_BIGINT && mpz_sgn(x0->data.bigint) < 0) {
+        *abs_out = negate_bigint(x0); return true;
+    }
+    if (x0->type == EXPR_REAL && x0->data.real < 0.0) {
+        *abs_out = expr_new_real(-x0->data.real); return true;
+    }
+    if (is_rational(x0, &rn, &rd) && rn < 0) {
+        *abs_out = make_rational(-rn, rd); return true;
+    }
+    if (x0->type == EXPR_FUNCTION &&
+        x0->data.function.head->type == EXPR_SYMBOL &&
+        x0->data.function.head->data.symbol == SYM_Times &&
+        x0->data.function.arg_count > 0) {
+        Expr* f = x0->data.function.args[0];
+        Expr* negf = NULL;
+        if (f->type == EXPR_INTEGER && f->data.integer < 0)
+            negf = expr_new_integer(-f->data.integer);
+        else if (f->type == EXPR_BIGINT && mpz_sgn(f->data.bigint) < 0)
+            negf = negate_bigint(f);
+        else if (f->type == EXPR_REAL && f->data.real < 0.0)
+            negf = expr_new_real(-f->data.real);
+        else if (is_rational(f, &rn, &rd) && rn < 0)
+            negf = make_rational(-rn, rd);
+        if (!negf) return false;
+
+        size_t n = x0->data.function.arg_count;
+        /* A normalised leading +1 is dropped, mirroring the Plus printer. */
+        if (negf->type == EXPR_INTEGER && negf->data.integer == 1 && n > 1) {
+            expr_free(negf);
+            if (n - 1 == 1) { *abs_out = expr_copy(x0->data.function.args[1]); return true; }
+            Expr** na = malloc(sizeof(Expr*) * (n - 1));
+            for (size_t k = 1; k < n; k++) na[k-1] = expr_copy(x0->data.function.args[k]);
+            *abs_out = expr_new_function(expr_new_symbol(SYM_Times), na, n - 1);
+            free(na);
+            return true;
+        }
+        Expr* t = expr_unshare(expr_copy(x0));
+        expr_free(t->data.function.args[0]);
+        t->data.function.args[0] = negf;
+        *abs_out = t;
+        return true;
+    }
+    return false;
+}
+
 /* Builds (x - x0), or just x when x0 is a literal zero. The result is a
- * fresh expression owned by the caller. Common negative-number cases for
- * x0 are normalised (e.g. x - (-2) becomes x + 2) so that the Plus printer
- * produces a clean subtraction. */
+ * fresh expression owned by the caller. Negative centres are normalised
+ * (e.g. x - (-2) becomes x + 2, x - (-Pi) becomes x + Pi) so that the Plus
+ * printer produces a clean subtraction. */
 static Expr* series_build_base(Expr* x, Expr* x0) {
     if (x0->type == EXPR_INTEGER && x0->data.integer == 0) return expr_copy(x);
     if (x0->type == EXPR_REAL && x0->data.real == 0.0) return expr_copy(x);
 
-    if (x0->type == EXPR_INTEGER && x0->data.integer < 0) {
-        Expr* args[2] = { expr_copy(x), expr_new_integer(-x0->data.integer) };
-        return expr_new_function(expr_new_symbol(SYM_Plus), args, 2);
-    }
-    if (x0->type == EXPR_REAL && x0->data.real < 0.0) {
-        Expr* args[2] = { expr_copy(x), expr_new_real(-x0->data.real) };
+    Expr* absx0 = NULL;
+    if (series_extract_negative(x0, &absx0)) {
+        Expr* args[2] = { expr_copy(x), absx0 };
         return expr_new_function(expr_new_symbol(SYM_Plus), args, 2);
     }
 
