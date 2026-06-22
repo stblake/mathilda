@@ -22,6 +22,7 @@ Expr* builtin_integerexponent(Expr* res);
 Expr* builtin_digitcount(Expr* res);
 Expr* builtin_fromdigits(Expr* res);
 Expr* builtin_integerstring(Expr* res);
+Expr* builtin_digitsum(Expr* res);
 
 void int_init(void);
 

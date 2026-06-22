@@ -234,6 +234,7 @@ extern const char* SYM_IntegerDigits;
 extern const char* SYM_IntegerLength;
 extern const char* SYM_IntegerExponent;
 extern const char* SYM_DigitCount;
+extern const char* SYM_DigitSum;
 extern const char* SYM_IntegerString;
 extern const char* SYM_IntegerPart;
 extern const char* SYM_Integers;

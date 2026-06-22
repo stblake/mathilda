@@ -36,12 +36,16 @@
  *                               Horner.
  *   FromDigits["string", b]     decode characters in base b.
  *
+ *   DigitSum[n]                 sum of the base-10 digits of |n|.
+ *   DigitSum[n, b]              sum of the base-b digits of |n|.
+ *
  * Sign of n is discarded.  IntegerDigits[0] -> {0}; IntegerLength[0] -> 0;
  * DigitCount[0] -> {0,0,...,0} of length b -- zero has no significant
- * digits (matching Mathematica).  IntegerDigits / IntegerLength thread
- * automatically via the Listable attribute; DigitCount and FromDigits are
- * intentionally NOT Listable (only Protected): the natural first argument
- * of each is itself a list, so threading would be wrong.
+ * digits (matching Mathematica).  DigitSum[0] -> 0.
+ * IntegerDigits / IntegerLength / DigitSum thread automatically via the
+ * Listable attribute; DigitCount and FromDigits are intentionally NOT
+ * Listable (only Protected): the natural first argument of each is itself
+ * a list, so threading would be wrong.
  *
  * All arithmetic is done in GMP, so both machine integers and arbitrary-
  * precision bignums are supported uniformly.
@@ -80,6 +84,10 @@ void int_init(void) {
     symtab_add_builtin("IntegerString", builtin_integerstring);
     symtab_get_def("IntegerString")->attributes |=
         (ATTR_PROTECTED | ATTR_LISTABLE);
+
+    symtab_add_builtin("DigitSum", builtin_digitsum);
+    symtab_get_def("DigitSum")->attributes |=
+        (ATTR_PROTECTED | ATTR_LISTABLE | ATTR_NUMERICFUNCTION);
 }
 
 /* Build an Expr from an mpz_t digit, demoting to EXPR_INTEGER if it fits. */
@@ -1244,5 +1252,126 @@ Expr* builtin_integerstring(Expr* res) {
 
     Expr* result = expr_new_string(out);
     free(out);
+    return result;
+}
+
+/* =====================================================================
+ * DigitSum
+ *
+ *   DigitSum[n]      sum of the base-10 digits of |n|.
+ *   DigitSum[n, b]   sum of the base-b digits of |n|, b >= 2.
+ *
+ * DigitSum[0] -> 0.  Sign is discarded.  Both machine integers and
+ * arbitrary-precision bignums are supported via GMP.
+ *
+ * Fast path: ulong base  — uses mpz_tdiv_q_ui (returns remainder
+ *   without a separate mpz_t for r).
+ * Slow path: bignum base — uses mpz_tdiv_qr.
+ * ===================================================================*/
+
+Expr* builtin_digitsum(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc < 1 || argc > 2) {
+        fprintf(stderr,
+                "DigitSum::argb: DigitSum called with %zu argument%s; "
+                "1 or 2 arguments are expected.\n",
+                argc, argc == 1 ? "" : "s");
+        return NULL;
+    }
+
+    /* --- n -------------------------------------------------------- */
+    Expr* n_expr = res->data.function.args[0];
+    if (!expr_is_integer_like(n_expr)) {
+        if (expr_is_numeric_like(n_expr)) {
+            char* call_str = expr_to_string(res);
+            fprintf(stderr,
+                    "DigitSum::int: Integer expected at position 1 in %s.\n",
+                    call_str ? call_str : "?");
+            free(call_str);
+            return NULL;
+        }
+        return NULL; /* symbolic — leave unevaluated silently */
+    }
+
+    /* --- base ----------------------------------------------------- */
+    mpz_t base;
+    int bignum_base = 0;
+    if (argc == 2) {
+        Expr* b_expr = res->data.function.args[1];
+        if (!expr_is_integer_like(b_expr)) {
+            if (expr_is_numeric_like(b_expr)) {
+                char* b_str   = expr_to_string(b_expr);
+                char* call_str = expr_to_string(res);
+                fprintf(stderr,
+                        "DigitSum::base: The base %s at position 2 of %s "
+                        "should be an integer greater than 1.\n",
+                        b_str ? b_str : "?",
+                        call_str ? call_str : "?");
+                free(b_str);
+                free(call_str);
+                return NULL;
+            }
+            return NULL; /* symbolic base — leave unevaluated */
+        }
+        expr_to_mpz(b_expr, base);
+        if (mpz_cmp_ui(base, 2) < 0) {
+            char* b_str   = expr_to_string(b_expr);
+            char* call_str = expr_to_string(res);
+            fprintf(stderr,
+                    "DigitSum::base: The base %s at position 2 of %s "
+                    "should be an integer greater than 1.\n",
+                    b_str ? b_str : "?",
+                    call_str ? call_str : "?");
+            free(b_str);
+            free(call_str);
+            mpz_clear(base);
+            return NULL;
+        }
+        bignum_base = !mpz_fits_ulong_p(base);
+    } else {
+        mpz_init_set_ui(base, 10);
+    }
+
+    /* --- compute digit sum ---------------------------------------- */
+    mpz_t abs_n;
+    expr_to_mpz(n_expr, abs_n);
+    mpz_abs(abs_n, abs_n); /* discard sign */
+
+    mpz_t sum, q;
+    mpz_init_set_ui(sum, 0);
+    mpz_init(q);
+
+    if (!bignum_base) {
+        /* Fast path: base fits in unsigned long. */
+        unsigned long b_val = mpz_get_ui(base);
+        while (mpz_sgn(abs_n) > 0) {
+            unsigned long rem = mpz_tdiv_q_ui(q, abs_n, b_val);
+            mpz_add_ui(sum, sum, rem);
+            mpz_swap(abs_n, q);
+        }
+    } else {
+        /* Slow path: bignum base — full mpz_tdiv_qr. */
+        mpz_t r;
+        mpz_init(r);
+        while (mpz_sgn(abs_n) > 0) {
+            mpz_tdiv_qr(q, r, abs_n, base);
+            mpz_add(sum, sum, r);
+            mpz_swap(abs_n, q);
+        }
+        mpz_clear(r);
+    }
+
+    mpz_clear(abs_n);
+    mpz_clear(q);
+    mpz_clear(base);
+
+    Expr* result;
+    if (mpz_fits_slong_p(sum)) {
+        result = expr_new_integer((int64_t)mpz_get_si(sum));
+    } else {
+        result = expr_new_bigint_from_mpz(sum);
+    }
+    mpz_clear(sum);
     return result;
 }
