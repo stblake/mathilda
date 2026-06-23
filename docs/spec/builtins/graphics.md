@@ -106,12 +106,26 @@ Rendering options (read by `Show`/`Plot`'s renderer, stored as trailing
 |---|---|---|---|
 | `Axes` | `False` | `True` | draw coordinate axes with tick labels |
 | `AspectRatio` | `Automatic` (fit window) | `1/GoldenRatio` | plot-box height/width ratio |
-| `PlotRange` | `Automatic` (fit data bounding box) | same | `{{xmin,xmax},{ymin,ymax}}` (fix both axes) or `{ymin,ymax}` (fix y only, x stays automatic) |
+| `PlotRange` | `Automatic` (data bbox, y spike-clipped) | same | `Automatic` (default), `All` (no clipping), `{{xmin,xmax},{ymin,ymax}}` (fix both axes), or `{ymin,ymax}` (fix y only, x stays automatic) |
 | `PlotStyle` | a default blue | same | style directive(s) used as the initial draw color |
 | `Background` | white | white | window background color |
 | `ImageSize` | `{800, 600}` | same | window size in pixels, or a single width |
 | `AxesLabel` | none | none | `{xlabel, ylabel}` |
 | `PlotLabel` | none | none | title drawn above the plot |
+
+**Automatic vertical range** — with `PlotRange -> Automatic` (the default),
+the y-extent is chosen to frame the visible body of the curve rather than its
+raw min/max. A function with an asymptote (e.g. `Tan`, `Sec`, `1/x`, `Gamma`)
+climbs to enormous finite values near each pole; taking those at face value
+would crush the interesting part of the curve to a flat line (`Plot[Tan[x],
+{x, -2 Pi, 2 Pi}]` would span ±10^16). The renderer detects such a curve by a
+near-vertical *runaway* segment — one whose slope is ~1000× the curve's median
+slope, the signature of a pole — and, only then, clips the y-range to a robust
+median/MAD band so the spikes run off-screen. Smooth curves (including steep
+ones like `x^5` or `Exp`, and curves with a vertical tangent like `Sqrt` or a
+removable singularity like `Sinc`) have no such runaway and keep their full,
+legitimate extent. `PlotRange -> All` disables the clipping and shows every
+sampled point; an explicit `{ymin, ymax}` overrides it outright.
 
 **Interactive controls** (within the window): mouse wheel to zoom *about
 the cursor* (the point under the mouse stays fixed, so you magnify whatever

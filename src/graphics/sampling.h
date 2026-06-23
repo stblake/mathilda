@@ -40,4 +40,22 @@ PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
 
 void plot_points_free(PlotPoint* pts);
 
+/*
+ * Robust [lo, hi] band for the vertical axis of a plot.
+ *
+ * Functions with asymptotes (Tan, 1/x, ...) produce a sparse heavy tail of
+ * finite-but-huge sampled y-values as the adaptive sampler climbs toward each
+ * singularity. Taking the raw min/max would let those spikes dominate the
+ * range and flatten the visible curve. This computes a median/MAD fence and
+ * intersects it with the true data extent: genuine extrema (parabola peaks,
+ * exponential growth) sit inside the fence and survive untouched, while sparse
+ * spikes are clamped to the fence so they run off-screen instead.
+ *
+ * `ys` is read-only and may be in any order. Falls back to the exact
+ * [min, max] when n < 8 or the bulk is flat (MAD == 0) -- too little signal to
+ * clip safely. With n == 0, returns lo > hi (an empty range) so the caller can
+ * detect "nothing to bound".
+ */
+void plot_robust_yrange(const double* ys, size_t n, double* out_lo, double* out_hi);
+
 #endif /* MATHILDA_GRAPHICS_SAMPLING_H */

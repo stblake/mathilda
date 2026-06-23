@@ -133,3 +133,56 @@ PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
 void plot_points_free(PlotPoint* pts) {
     free(pts);
 }
+
+static int cmp_double(const void* a, const void* b) {
+    double x = *(const double*)a, y = *(const double*)b;
+    return (x < y) ? -1 : (x > y) ? 1 : 0;
+}
+
+/* Median of an already-sorted ascending array (n >= 1). */
+static double sorted_median(const double* s, size_t n) {
+    return (n & 1) ? s[n / 2] : 0.5 * (s[n / 2 - 1] + s[n / 2]);
+}
+
+void plot_robust_yrange(const double* ys, size_t n, double* out_lo, double* out_hi) {
+    if (n == 0) { *out_lo = 1.0; *out_hi = -1.0; return; }
+
+    double* s = malloc(sizeof(double) * n);
+    if (!s) { /* degrade to a linear min/max scan */
+        double lo = ys[0], hi = ys[0];
+        for (size_t i = 1; i < n; i++) { if (ys[i] < lo) lo = ys[i]; if (ys[i] > hi) hi = ys[i]; }
+        *out_lo = lo; *out_hi = hi; return;
+    }
+    for (size_t i = 0; i < n; i++) s[i] = ys[i];
+    qsort(s, n, sizeof(double), cmp_double);
+
+    double data_min = s[0], data_max = s[n - 1];
+
+    /* Too few points to estimate a robust spread -- show everything. */
+    if (n < 8) { *out_lo = data_min; *out_hi = data_max; free(s); return; }
+
+    double m = sorted_median(s, n);
+
+    /* MAD = median(|y - m|). Reuse `s` for the deviations, then re-sort. */
+    for (size_t i = 0; i < n; i++) s[i] = fabs(s[i] - m);
+    qsort(s, n, sizeof(double), cmp_double);
+    double mad = sorted_median(s, n);
+    free(s);
+
+    /* Flat bulk: no robust scale to clip against -- show everything. */
+    if (mad <= 0.0) { *out_lo = data_min; *out_hi = data_max; return; }
+
+    /* 1.4826 makes the scale match a standard deviation for normal data; K is
+     * generous so smooth curves (Sin, polynomials, Exp growth) stay inside the
+     * fence and only sparse asymptote spikes get clamped. */
+    const double K = 4.0;
+    double scale = 1.4826 * mad;
+    double fence_lo = m - K * scale;
+    double fence_hi = m + K * scale;
+
+    /* Intersect with the true extent: this IS the spike guard. A genuine
+     * extreme that lies within the fence survives (min/max kept); one that
+     * shoots far past is clamped to the fence. */
+    *out_lo = (data_min > fence_lo) ? data_min : fence_lo;
+    *out_hi = (data_max < fence_hi) ? data_max : fence_hi;
+}

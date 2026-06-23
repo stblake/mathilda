@@ -7,6 +7,7 @@
 
 #include "show.h"
 #include "plot.h"
+#include "sampling.h"
 #include "hershey_font.h"
 #include "primitives.h"
 #include "sym_names.h"
@@ -108,6 +109,7 @@ typedef struct {
     bool axes;
     bool x_auto;        /* x extent auto-computed from the data */
     bool y_auto;        /* y extent auto-computed from the data */
+    bool clip_outliers; /* on the auto y-axis, clamp sparse asymptote spikes */
     PlotRange2D range;  /* explicit bounds; only the non-auto axes are read */
     double aspect_ratio; /* <= 0 means Automatic */
     RGBA8 style_color;
@@ -121,6 +123,7 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->axes = false;
     o->x_auto = true;
     o->y_auto = true;
+    o->clip_outliers = true;
     o->aspect_ratio = -1.0;
     o->style_color = (RGBA8){ 30, 80, 180, 255 };
     o->background = (RGBA8){ 255, 255, 255, 255 };
@@ -165,10 +168,17 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
                 if (expr_to_d(rhs, &s) && s > 0) { o->width = (long)s; o->height = (long)(s * 0.75); }
             }
         } else if (name == SYM_PlotRange) {
-            /* Two accepted forms, mirroring Wolfram:
+            /* Symbol forms first, mirroring Wolfram:
+             *   Automatic -- data-driven y with spike clipping (the default)
+             *   All       -- show every sampled point, no spike clipping */
+            if (rhs->type == EXPR_SYMBOL
+                && (rhs->data.symbol == SYM_Automatic || rhs->data.symbol == SYM_All)) {
+                o->clip_outliers = (rhs->data.symbol != SYM_All);
+            }
+            /* Two numeric forms:
              *   {{xmin, xmax}, {ymin, ymax}}  -- fix both axes
              *   {ymin, ymax}                  -- fix y only, x stays automatic */
-            if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
+            else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
                 && rhs->data.function.head->data.symbol == SYM_List
                 && rhs->data.function.arg_count == 2) {
                 const Expr* a0 = rhs->data.function.args[0];
@@ -233,6 +243,107 @@ static void compute_bbox(const Expr* node, PlotRange2D* bb) {
         }
     } else if (name == SYM_Text && n >= 2) {
         compute_bbox(node->data.function.args[1], bb);
+    }
+}
+
+/* Append a y-value to a growable buffer, doubling capacity as needed. */
+static void ybuf_push(double y, double** buf, size_t* len, size_t* cap) {
+    if (*len == *cap) {
+        *cap = *cap ? *cap * 2 : 64;
+        *buf = realloc(*buf, sizeof(double) * *cap);
+    }
+    (*buf)[(*len)++] = y;
+}
+
+static int cmp_double_asc(const void* a, const void* b) {
+    double x = *(const double*)a, y = *(const double*)b;
+    return (x < y) ? -1 : (x > y) ? 1 : 0;
+}
+
+/* Append the absolute slope |dy/dx| of each segment of one polyline. */
+static void polyline_slopes(const Expr* pts, double** buf, size_t* len, size_t* cap) {
+    size_t n = pts->data.function.arg_count;
+    double px = 0, py = 0; bool have = false;
+    for (size_t i = 0; i < n; i++) {
+        double x, y;
+        if (!expr_point(pts->data.function.args[i], &x, &y)) { have = false; continue; }
+        if (have) { double dx = x - px; if (dx != 0.0) ybuf_push(fabs((y - py) / dx), buf, len, cap); }
+        px = x; py = y; have = true;
+    }
+}
+
+/* Gather every Line segment's |slope| (recursing through List wrappers and
+ * both Line point-list shapes), mirroring draw_polyline's structure walk. */
+static void collect_slopes(const Expr* node, double** buf, size_t* len, size_t* cap) {
+    if (!node || node->type != EXPR_FUNCTION) return;
+    const Expr* h = node->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return;
+    const char* name = h->data.symbol;
+    size_t n = node->data.function.arg_count;
+
+    if (name == SYM_Line && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
+        const Expr* arg = node->data.function.args[0];
+        size_t m = arg->data.function.arg_count;
+        if (m > 0 && looks_like_point(arg->data.function.args[0])) {
+            polyline_slopes(arg, buf, len, cap);
+        } else {
+            for (size_t i = 0; i < m; i++)
+                if (arg->data.function.args[i]->type == EXPR_FUNCTION)
+                    polyline_slopes(arg->data.function.args[i], buf, len, cap);
+        }
+    } else if (name == SYM_List) {
+        for (size_t i = 0; i < n; i++) collect_slopes(node->data.function.args[i], buf, len, cap);
+    }
+}
+
+/* True when a curve in `prims` contains a near-vertical runaway -- the
+ * signature of an asymptote. tan(x) never lands exactly on a pole, so it has
+ * no break to key off; instead its climb produces a segment whose |slope| is
+ * astronomically larger than the curve's typical slope. A max-to-median slope
+ * ratio above ~1000 cleanly separates poles (Tan ~1e17, 1/x ~1e4, Gamma ~1e5)
+ * from merely steep smooth curves (x^5 ~200, x^3 ~16, Exp ~4), which the
+ * adaptive sampler keeps slope-bounded by refining. Only such curves get the
+ * spike-clipping band; everything smooth keeps its full, legitimate extent. */
+static bool prims_have_runaway(const Expr* prims) {
+    double* sl = NULL; size_t n = 0, cap = 0;
+    collect_slopes(prims, &sl, &n, &cap);
+    bool runaway = false;
+    if (n >= 4) {
+        qsort(sl, n, sizeof(double), cmp_double_asc);
+        double med = sl[n / 2], mx = sl[n - 1];
+        if (med > 0.0 && mx > 1000.0 * med) runaway = true;
+    }
+    free(sl);
+    return runaway;
+}
+
+/* Collect every primitive y-value into `buf` (same node set compute_bbox
+ * visits), so plot_robust_yrange can pick a spike-resistant vertical band.
+ * Mirrors compute_bbox's traversal exactly to stay consistent with it. */
+static void gather_ys(const Expr* node, double** buf, size_t* len, size_t* cap) {
+    if (!node || node->type != EXPR_FUNCTION) return;
+    const Expr* h = node->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return;
+    const char* name = h->data.symbol;
+    size_t n = node->data.function.arg_count;
+
+    if (name == SYM_List) {
+        double x, y;
+        if (n == 2 && expr_to_d(node->data.function.args[0], &x) && expr_to_d(node->data.function.args[1], &y)) {
+            ybuf_push(y, buf, len, cap);
+            return;
+        }
+        for (size_t i = 0; i < n; i++) gather_ys(node->data.function.args[i], buf, len, cap);
+    } else if ((name == SYM_Point || name == SYM_Line || name == SYM_Polygon) && n >= 1) {
+        gather_ys(node->data.function.args[0], buf, len, cap);
+    } else if (name == SYM_Rectangle && n >= 2) {
+        gather_ys(node->data.function.args[0], buf, len, cap);
+        gather_ys(node->data.function.args[1], buf, len, cap);
+    } else if (name == SYM_Circle || name == SYM_Disk) {
+        double cx, cy, r;
+        if (circle_params(node, &cx, &cy, &r)) { ybuf_push(cy - r, buf, len, cap); ybuf_push(cy + r, buf, len, cap); }
+    } else if (name == SYM_Text && n >= 2) {
+        gather_ys(node->data.function.args[1], buf, len, cap);
     }
 }
 
@@ -768,6 +879,22 @@ void graphics_show(const Expr* graphics_expr) {
         compute_bbox(prims, &range);
         if (range.xmin > range.xmax) { range.xmin = -1; range.xmax = 1; }
         if (range.ymin > range.ymax) { range.ymin = -1; range.ymax = 1; }
+        /* Replace the raw y-extent with a spike-resistant band so a curve like
+         * Tan[x] (whose adaptive samples climb to ~1e16 near its asymptotes)
+         * frames its visible body instead of collapsing to a flat line. Gated
+         * on prims_have_runaway: only curves with a near-vertical asymptote are
+         * clipped, so smooth steep curves (x^3, Exp) keep their full, legitimate
+         * extent. Skipped entirely under PlotRange -> All. */
+        if (opts.y_auto && opts.clip_outliers && prims_have_runaway(prims)) {
+            double* ys = NULL; size_t yn = 0, ycap = 0;
+            gather_ys(prims, &ys, &yn, &ycap);
+            if (yn > 0) {
+                double lo, hi;
+                plot_robust_yrange(ys, yn, &lo, &hi);
+                if (lo <= hi) { range.ymin = lo; range.ymax = hi; }
+            }
+            free(ys);
+        }
         double xpad = (range.xmax - range.xmin) * 0.08;
         double ypad = (range.ymax - range.ymin) * 0.08;
         if (xpad <= 0) xpad = 1.0;
