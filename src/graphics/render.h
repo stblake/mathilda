@@ -23,4 +23,10 @@ long gfx_window_height(long width, long height, double aspect_ratio,
                        bool aspect_full, bool height_pinned,
                        double data_w, double data_h);
 
+/* Number of minor (sub-)tick intervals per major frame-tick interval, chosen
+ * from the leading digit of `step` so minor ticks land on round values: a
+ * "nice" step of 1 splits into 5, 2 into 4, 5 into 5. Factored out of the
+ * frame renderer so the tick-subdivision policy can be unit-tested headless. */
+int frame_minor_divs(double step);
+
 #endif /* MATHILDA_GRAPHICS_RENDER_H */

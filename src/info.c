@@ -3330,4 +3330,28 @@ void info_init(void) {
         "ImageSize -> w sets the width to w pixels, with the height following\n"
         "from AspectRatio; ImageSize -> {w, h} fixes both the width and height\n"
         "in pixels. The default is a width of 800.");
+    symtab_set_docstring("Frame",
+        "Frame\n"
+        "\tis an option for Graphics and Plot that specifies whether to draw a\n"
+        "\tframe with ticks and labels around the plot.\n"
+        "\n"
+        "Frame -> True boxes all four edges; Frame -> False (or None) draws no\n"
+        "frame; Frame -> {{left, right}, {bottom, top}} toggles each edge with\n"
+        "True or False. In Plot a frame takes the place of the default Axes.");
+    symtab_set_docstring("FrameTicks",
+        "FrameTicks\n"
+        "\tis an option for Graphics and Plot that specifies the tick marks on\n"
+        "\tthe edges of a frame.\n"
+        "\n"
+        "FrameTicks -> Automatic (the default) draws major and minor ticks with\n"
+        "labels on every drawn frame edge; FrameTicks -> None keeps the frame\n"
+        "box but draws no ticks; the {{left, right}, {bottom, top}} form selects\n"
+        "Automatic or None per edge.");
+    symtab_set_docstring("FrameStyle",
+        "FrameStyle\n"
+        "\tis an option for Graphics and Plot that specifies the style of the\n"
+        "\tframe box, its ticks and its labels.\n"
+        "\n"
+        "FrameStyle -> RGBColor[...] or GrayLevel[...] sets the colour. The\n"
+        "default is a neutral gray.");
 }

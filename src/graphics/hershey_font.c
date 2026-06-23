@@ -115,11 +115,15 @@ float hershey_text_width(const char* text, float scale) {
     return w;
 }
 
-void hershey_draw_text(const char* text, float x, float y, float scale,
-                        float rotation_deg, Color color) {
+void hershey_draw_text_ex(const char* text, float x, float y, float scale,
+                          float rotation_deg, Color color, float thickness) {
     float theta = rotation_deg * (float)M_PI / 180.0f;
     float ct = cosf(theta), st = sinf(theta);
     float cursor = 0.0f;
+    /* Above a hairline, draw quads with a disc at each vertex so the stroke
+     * joins stay closed (DrawLineEx butt-caps would otherwise notch them). */
+    bool thick = thickness > 1.05f;
+    float cap_r = thickness * 0.5f;
 
     for (const char* p = text; *p; p++) {
         if (*p == '.') {
@@ -143,11 +147,24 @@ void hershey_draw_text(const char* text, float x, float y, float scale,
                 float lx = cursor + pt.x * scale;
                 float ly = pt.y * scale;
                 Vector2 cur = { x + lx * ct - ly * st, y - (lx * st + ly * ct) };
-                if (pen_down) DrawLineV(prev, cur, color);
+                if (pen_down) {
+                    if (thick) {
+                        DrawLineEx(prev, cur, thickness, color);
+                        DrawCircleV(prev, cap_r, color);
+                        DrawCircleV(cur, cap_r, color);
+                    } else {
+                        DrawLineV(prev, cur, color);
+                    }
+                }
                 prev = cur;
                 pen_down = true;
             }
         }
         cursor += GLYPH_ADVANCE * scale;
     }
+}
+
+void hershey_draw_text(const char* text, float x, float y, float scale,
+                        float rotation_deg, Color color) {
+    hershey_draw_text_ex(text, x, y, scale, rotation_deg, color, 1.0f);
 }

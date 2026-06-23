@@ -119,7 +119,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
     Expr** passthrough = malloc(sizeof(Expr*) * cap);
     size_t n = 0;
 
-    bool have_axes = false, have_aspect = false, have_style = false;
+    bool have_axes = false, have_aspect = false, have_style = false, have_frame = false;
 
     for (size_t i = 2; i < argc; i++) {
         Expr* arg = res->data.function.args[i];
@@ -178,6 +178,14 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
         } else {
             if (name == SYM_Axes) have_axes = true;
             else if (name == SYM_PlotStyle) have_style = true;
+            else if (name == SYM_Frame) {
+                /* A frame (Frame -> True or a per-edge spec) takes the place of
+                 * the interior Axes cross, so suppress Plot's Axes -> True
+                 * default below. Frame -> False/None leaves the axes default. */
+                if (!(rhs->type == EXPR_SYMBOL
+                      && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)))
+                    have_frame = true;
+            }
             passthrough[n++] = expr_copy(arg);
         }
     }
@@ -185,7 +193,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
     /* Plot-specific defaults (distinct from bare Graphics[]'s defaults of
      * Axes->False / AspectRatio->Automatic): inject only what the caller
      * didn't already specify. */
-    if (!have_axes) {
+    if (!have_axes && !have_frame) {
         Expr* a[2] = { expr_new_symbol(SYM_Axes), expr_new_symbol(SYM_True) };
         passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
     }

@@ -106,7 +106,56 @@ void test_plot_image_size_passthrough(void) {
                     "{400, 300}", 0);
 }
 
+void test_show_merges_frame_option(void) {
+    /* Frame, like Axes, is copied verbatim onto the Show'd Graphics. */
+    assert_eval_eq("Show[Graphics[{Point[{0,0}]}], Frame -> True][[2]]",
+                    "Frame -> True", 0);
+}
+
+void test_plot_frame_passthrough(void) {
+    /* Frame and its companion options pass through to the Graphics intact. */
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, Frame -> True], (Frame -> v_) -> v]]",
+        "True", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, Frame -> True, FrameTicks -> None],"
+        " (FrameTicks -> v_) -> v]]",
+        "None", 0);
+}
+
+void test_plot_frame_suppresses_axes_default(void) {
+    /* A frame replaces the interior axes cross, so Plot's Axes -> True default
+     * is withheld when Frame -> True is supplied (matching Wolfram). */
+    assert_eval_eq(
+        "Cases[Plot[Sin[x], {x, 0, 1}, Frame -> True], (Axes -> _)]",
+        "{}", 0);
+    /* But Frame -> False leaves the axes default in place. */
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, Frame -> False], (Axes -> v_) -> v]]",
+        "True", 0);
+    /* And a plain plot keeps Axes -> True. */
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}], (Axes -> v_) -> v]]",
+        "True", 0);
+}
+
 #ifdef USE_GRAPHICS
+/* The frame minor-tick subdivision policy frame_minor_divs() lives in
+ * render.c; exercise it directly. A "nice" step (1/2/5 x 10^k) chooses round
+ * minor spacings: 1 -> fifths, 2 -> quarters, 5 -> fifths, across magnitudes. */
+void test_frame_minor_divs_policy(void) {
+    ASSERT(frame_minor_divs(1.0)   == 5);
+    ASSERT(frame_minor_divs(2.0)   == 4);
+    ASSERT(frame_minor_divs(5.0)   == 5);
+    ASSERT(frame_minor_divs(10.0)  == 5);
+    ASSERT(frame_minor_divs(20.0)  == 4);
+    ASSERT(frame_minor_divs(50.0)  == 5);
+    ASSERT(frame_minor_divs(0.1)   == 5);
+    ASSERT(frame_minor_divs(0.2)   == 4);
+    ASSERT(frame_minor_divs(0.5)   == 5);
+    ASSERT(frame_minor_divs(0.0)   == 5); /* degenerate guard */
+}
+
 /* The window-shaping policy gfx_window_height() lives in render.c, which is
  * only compiled with a live Raylib; exercise it directly here. data_w/data_h
  * model a wide, short curve (Sin over a wide x-range). */
@@ -144,12 +193,16 @@ int main(void) {
     TEST(test_plot_honors_plot_points_option);
     TEST(test_show_requires_graphics_argument);
     TEST(test_show_merges_options);
+    TEST(test_show_merges_frame_option);
+    TEST(test_plot_frame_passthrough);
+    TEST(test_plot_frame_suppresses_axes_default);
     TEST(test_plot_aspect_ratio_default);
     TEST(test_plot_aspect_ratio_explicit_number);
     TEST(test_plot_aspect_ratio_symbolic_constant);
     TEST(test_plot_aspect_ratio_symbol_settings);
     TEST(test_plot_image_size_passthrough);
 #ifdef USE_GRAPHICS
+    TEST(test_frame_minor_divs_policy);
     TEST(test_window_height_policy);
 #endif
 

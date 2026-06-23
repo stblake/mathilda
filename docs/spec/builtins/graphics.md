@@ -104,7 +104,10 @@ Rendering options (read by `Show`/`Plot`'s renderer, stored as trailing
 
 | Option | Default (bare `Graphics`) | Default (via `Plot`) | Meaning |
 |---|---|---|---|
-| `Axes` | `False` | `True` | draw coordinate axes with tick labels |
+| `Axes` | `False` | `True` (unless `Frame` on) | draw coordinate axes with tick labels |
+| `Frame` | `False` | `False` | draw a tick-and-label frame around the plot: `True`/`None`/`False`, or per-edge `{{left,right},{bottom,top}}` of `True`/`False` |
+| `FrameTicks` | `Automatic` | `Automatic` | `Automatic`/`None`, or per-edge `{{left,right},{bottom,top}}` of `Automatic`/`None`; ticks appear only on drawn frame edges |
+| `FrameStyle` | gray | gray | `RGBColor`/`GrayLevel` for the frame box, ticks and labels |
 | `AspectRatio` | `Automatic` (true geometry) | `1/GoldenRatio` | window height-to-width ratio: `Automatic` shapes it from the data extent, `Full` keeps the `ImageSize` box and stretches the data to fill it, or an explicit ratio `a` (incl. symbolic like `1/GoldenRatio`) |
 | `PlotRange` | `Automatic` (data bbox, y spike-clipped) | same | `Automatic` (default), `All` (no clipping), `{{xmin,xmax},{ymin,ymax}}` (fix both axes), or `{ymin,ymax}` (fix y only, x stays automatic) |
 | `PlotStyle` | a default blue | same | style directive(s) used as the initial draw color |
@@ -137,6 +140,25 @@ is square); `Full` instead keeps the `ImageSize` box and stretches the data to
 fill it; and `ImageSize -> {w, h}` pins both dimensions, with `AspectRatio` then
 shaping the data within the fixed frame. The value may be any real, including a
 symbolic constant such as `1/GoldenRatio` or `GoldenRatio`.
+
+**Frame (`Frame`)** — `Frame -> True` rules the plot with a rectangle along its
+edges, replacing the through-the-origin `Axes` cross (in `Plot`, supplying
+`Frame -> True` withholds the default `Axes -> True`; pass `Axes -> True`
+explicitly to keep both). Each edge can be toggled independently with
+`Frame -> {{left, right}, {bottom, top}}`. The frame reserves a margin (~5% of
+each window dimension; the bottom and left a little more to hold the numeric
+labels and the help line) and the curve is **fitted to and clipped against** the
+interior, so it never spills past the box. Frame ticks come in two tiers: major
+ticks land on the same "nice" values as the axes, and minor sub-ticks subdivide
+each major interval — the number of subdivisions is read off the major step's
+leading digit so the minors always fall on round values (a step of `1` splits
+into 5, `2` into 4, `5` into 5). Minor ticks are half-length and unlabeled. Ticks
+point inward; the major-tick numeric labels sit just *outside* the frame in the
+reserved margin, on the bottom and left edges (or the top/right when those are
+the only ones drawn). The frame box, its ticks and its labels render at 1.5 px;
+the `Axes` lines, ticks and labels render at the same 1.5 px, so the plot looks
+identical in weight whether it is framed or axed. `FrameTicks -> None` keeps the
+box but drops all ticks and labels; `FrameStyle` colors the box, ticks and labels.
 
 **Interactive controls** (within the window): mouse wheel to zoom *about
 the cursor* (the point under the mouse stays fixed, so you magnify whatever

@@ -20,6 +20,12 @@
 void hershey_draw_text(const char* text, float x, float y, float scale,
                         float rotation_deg, Color color);
 
+/* As hershey_draw_text, but draws each stroke `thickness` pixels wide (with
+ * rounded joins so thick glyphs stay clean). thickness <= ~1 falls back to the
+ * hairline path. hershey_draw_text() is exactly this with thickness 1. */
+void hershey_draw_text_ex(const char* text, float x, float y, float scale,
+                          float rotation_deg, Color color, float thickness);
+
 /* Total advance width of `text` at the given scale, with no rotation
  * applied -- use this to center/right-align a label before drawing. */
 float hershey_text_width(const char* text, float scale);

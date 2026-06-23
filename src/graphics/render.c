@@ -106,8 +106,17 @@ static Color to_raylib(RGBA8 c) { Color out = { c.r, c.g, c.b, c.a }; return out
 
 /* ---------------- Option parsing ---------------- */
 
+/* Frame edge indices, used for the per-edge frame_edge[]/frame_ticks[]
+ * arrays. The order matches Mathematica's Frame -> {{left, right},
+ * {bottom, top}} once flattened. */
+enum { FR_LEFT = 0, FR_RIGHT = 1, FR_BOTTOM = 2, FR_TOP = 3 };
+
 typedef struct {
     bool axes;
+    bool frame;             /* any frame edge drawn at all */
+    bool frame_edge[4];     /* per edge: draw this frame line (L,R,B,T) */
+    bool frame_ticks[4];    /* per edge: draw ticks/labels (gated by frame_edge) */
+    RGBA8 frame_color;      /* FrameStyle colour for the box, ticks and labels */
     bool x_auto;        /* x extent auto-computed from the data */
     bool y_auto;        /* y extent auto-computed from the data */
     bool clip_outliers; /* on the auto y-axis, clamp sparse asymptote spikes */
@@ -123,8 +132,42 @@ typedef struct {
     const Expr* plot_label; /* borrowed */
 } GfxOptions;
 
+/* True when `e` is the symbol True or All (the "on" forms for Frame and
+ * FrameTicks edge settings); False/None/anything else reads as "off". */
+static bool frame_edge_on(const Expr* e) {
+    return e && e->type == EXPR_SYMBOL && (e->data.symbol == SYM_True || e->data.symbol == SYM_All);
+}
+
+/* True for the "show ticks" forms of a FrameTicks edge setting. Automatic and
+ * True request ticks; None and False suppress them. */
+static bool frame_ticks_on(const Expr* e) {
+    return e && e->type == EXPR_SYMBOL && (e->data.symbol == SYM_Automatic || e->data.symbol == SYM_True);
+}
+
+/* Read a nested {{left, right}, {bottom, top}} option value into per-edge
+ * results via `pred`. Returns false if the value isn't that 2x2 List shape,
+ * leaving `out` untouched so the caller can keep its default. */
+static bool parse_edge_pairs(const Expr* rhs, bool (*pred)(const Expr*), bool out[4]) {
+    if (!rhs || rhs->type != EXPR_FUNCTION || rhs->data.function.head->type != EXPR_SYMBOL
+        || rhs->data.function.head->data.symbol != SYM_List || rhs->data.function.arg_count != 2)
+        return false;
+    const Expr* lr = rhs->data.function.args[0];
+    const Expr* bt = rhs->data.function.args[1];
+    if (lr->type != EXPR_FUNCTION || lr->data.function.arg_count != 2
+        || bt->type != EXPR_FUNCTION || bt->data.function.arg_count != 2)
+        return false;
+    out[FR_LEFT]   = pred(lr->data.function.args[0]);
+    out[FR_RIGHT]  = pred(lr->data.function.args[1]);
+    out[FR_BOTTOM] = pred(bt->data.function.args[0]);
+    out[FR_TOP]    = pred(bt->data.function.args[1]);
+    return true;
+}
+
 static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->axes = false;
+    o->frame = false;
+    for (int e = 0; e < 4; e++) { o->frame_edge[e] = false; o->frame_ticks[e] = true; }
+    o->frame_color = (RGBA8){ 90, 90, 90, 255 }; /* matches DARKGRAY-ish axis tone */
     o->x_auto = true;
     o->y_auto = true;
     o->clip_outliers = true;
@@ -152,6 +195,35 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
 
         if (name == SYM_Axes) {
             o->axes = expr_is_sym(rhs, SYM_True);
+        } else if (name == SYM_Frame) {
+            /* Frame -> True       : box on all four edges.
+             * Frame -> False/None : no frame.
+             * Frame -> {{l,r},{b,t}} : per-edge, each True/False. */
+            if (frame_edge_on(rhs)) {
+                for (int e = 0; e < 4; e++) o->frame_edge[e] = true;
+            } else if (rhs->type == EXPR_SYMBOL
+                       && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)) {
+                for (int e = 0; e < 4; e++) o->frame_edge[e] = false;
+            } else {
+                parse_edge_pairs(rhs, frame_edge_on, o->frame_edge);
+            }
+            o->frame = o->frame_edge[0] || o->frame_edge[1] || o->frame_edge[2] || o->frame_edge[3];
+        } else if (name == SYM_FrameTicks) {
+            /* FrameTicks -> Automatic/True : ticks on every drawn edge (default).
+             * FrameTicks -> None/False     : frame box but no ticks or labels.
+             * FrameTicks -> {{l,r},{b,t}}  : per-edge, each Automatic/None. */
+            if (rhs->type == EXPR_SYMBOL
+                && (rhs->data.symbol == SYM_None || rhs->data.symbol == SYM_False)) {
+                for (int e = 0; e < 4; e++) o->frame_ticks[e] = false;
+            } else if (frame_ticks_on(rhs)) {
+                for (int e = 0; e < 4; e++) o->frame_ticks[e] = true;
+            } else {
+                parse_edge_pairs(rhs, frame_ticks_on, o->frame_ticks);
+            }
+        } else if (name == SYM_FrameStyle && rhs->type == EXPR_FUNCTION
+                   && rhs->data.function.head->type == EXPR_SYMBOL) {
+            if (rhs->data.function.head->data.symbol == SYM_RGBColor) o->frame_color = rgba_from_rgbcolor(rhs);
+            else if (rhs->data.function.head->data.symbol == SYM_GrayLevel) o->frame_color = rgba_from_graylevel(rhs);
         } else if (name == SYM_AspectRatio) {
             /* Automatic (default): keep the <=0 sentinel -> true geometry.
              * Full: fill the window; resolved to height/width after the loop
@@ -557,26 +629,29 @@ static PlotRange2D compute_visible_range(Camera2D camera, int win_w, int win_h) 
 /* World-space axis/tick lines -- call inside BeginMode2D so they pan and
  * zoom with the data. */
 /* `range` is in render space (post y-scale). `ysc` maps data-y -> render-y;
- * y ticks are placed at nice *data* values (data*ysc), so labels read true. */
-static void draw_axes_lines(const PlotRange2D* range, double ysc) {
+ * y ticks are placed at nice *data* values (data*ysc), so labels read true.
+ * `zoom` is the camera zoom: the strokes are drawn 1.5 px wide on screen (to
+ * match the frame's weight) by expressing the world-space width as 1.5/zoom. */
+static void draw_axes_lines(const PlotRange2D* range, double ysc, float zoom) {
     double ox = (range->xmin <= 0 && range->xmax >= 0) ? 0.0 : range->xmin;
     double oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
+    float w = (zoom > 0.0f) ? 1.5f / zoom : 1.5f; /* world units -> 1.5 px on screen */
 
-    DrawLineV((Vector2){ (float)range->xmin, (float)-oy }, (Vector2){ (float)range->xmax, (float)-oy }, DARKGRAY);
-    DrawLineV((Vector2){ (float)ox, (float)-range->ymin }, (Vector2){ (float)ox, (float)-range->ymax }, DARKGRAY);
+    DrawLineEx((Vector2){ (float)range->xmin, (float)-oy }, (Vector2){ (float)range->xmax, (float)-oy }, w, DARKGRAY);
+    DrawLineEx((Vector2){ (float)ox, (float)-range->ymin }, (Vector2){ (float)ox, (float)-range->ymax }, w, DARKGRAY);
 
     double xstep = nice_step(range->xmax - range->xmin, 8);
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
 
     for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
-        DrawLineV((Vector2){ (float)tx, (float)-(oy - xtick) }, (Vector2){ (float)tx, (float)-(oy + xtick) }, DARKGRAY);
+        DrawLineEx((Vector2){ (float)tx, (float)-(oy - xtick) }, (Vector2){ (float)tx, (float)-(oy + xtick) }, w, DARKGRAY);
     }
     double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
     double ystep = nice_step(dymax - dymin, 6);
     for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
         double ry = ty * ysc;
-        DrawLineV((Vector2){ (float)(ox - ytick), (float)-ry }, (Vector2){ (float)(ox + ytick), (float)-ry }, DARKGRAY);
+        DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry }, (Vector2){ (float)(ox + ytick), (float)-ry }, w, DARKGRAY);
     }
 }
 
@@ -610,7 +685,7 @@ static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double y
         /* Screen position of the tick's lower (below-axis) end. */
         Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
         float w = hershey_text_width(buf, scale);
-        hershey_draw_text(buf, tip.x - w / 2.0f, tip.y + gap + cap, scale, 0.0f, DARKGRAY);
+        hershey_draw_text_ex(buf, tip.x - w / 2.0f, tip.y + gap + cap, scale, 0.0f, DARKGRAY, 1.5f);
     }
     for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
         if (fabs(ty) < 1e-9) ty = 0.0;
@@ -618,7 +693,126 @@ static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double y
         /* Screen position of the tick's left (outside-axis) end. */
         Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
         float w = hershey_text_width(buf, scale);
-        hershey_draw_text(buf, tip.x - w - gap, tip.y + cap / 2.0f, scale, 0.0f, DARKGRAY);
+        hershey_draw_text_ex(buf, tip.x - w - gap, tip.y + cap / 2.0f, scale, 0.0f, DARKGRAY, 1.5f);
+    }
+}
+
+/* ---------------- Frame ----------------
+ *
+ * A Frame (Frame -> True) rules the plot with a rectangle along its edges,
+ * replacing the through-the-origin cross of Axes. Unlike the axes, the frame
+ * is a *fixed screen-space rectangle* inset from the window by a reserved
+ * margin (see graphics_show): the data is fitted to and clipped against this
+ * interior, so the curve never spills past the frame. The frame stays put
+ * while the data pans/zooms within it, and the tick values -- read from the
+ * data coordinates at the current frame edges -- update live, like a ruler.
+ *
+ * Ticks point inward; numeric labels for the major ticks sit just *outside*
+ * the frame, in the reserved margin (bottom & left edges by default, falling
+ * back to top & right). Major ticks land on the same "nice" values as the
+ * axes; minor (sub-)ticks subdivide each major interval, the count chosen from
+ * the leading digit of the major step so they always fall on round values: a
+ * step of 1 splits into 5 (minors every 0.2), 2 into 4 (every 0.5), 5 into 5
+ * (every 1). Minor ticks are half-length and unlabeled. */
+
+/* Minor-tick subdivisions per major interval, from the step's leading digit.
+ * Declared in render.h so the policy is unit-testable headless. */
+int frame_minor_divs(double step) {
+    if (step <= 0) return 5;
+    double mag = pow(10.0, floor(log10(step)));
+    double lead = step / mag;            /* ~1, 2 or 5 from nice_step */
+    if (lead < 1.5) return 5;            /* 1 -> 0.2 minors */
+    if (lead < 3.5) return 4;            /* 2 -> 0.5 minors */
+    return 5;                            /* 5 -> 1   minors */
+}
+
+/* Draw the frame box, ticks and labels in screen space. The frame occupies the
+ * fixed rectangle [rx, ry, rw, rh] (the reserved interior); `camera`/`ysc` map
+ * data coordinates to that rectangle. Call after EndMode2D so the numbers stay
+ * a crisp fixed size and the labels land in the margin outside the box. */
+static void draw_frame(float rx, float ry, float rw, float rh,
+                       Camera2D camera, double ysc, const GfxOptions* o) {
+    Color col = to_raylib(o->frame_color);
+    float L = rx, R = rx + rw, T = ry, B = ry + rh;
+    /* 1.5x the 1px hairline default used by the axes, applied uniformly to the
+     * frame box, its ticks and its labels. */
+    const float lw = 1.5f;
+
+    if (o->frame_edge[FR_BOTTOM]) DrawLineEx((Vector2){ L, B }, (Vector2){ R, B }, lw, col);
+    if (o->frame_edge[FR_TOP])    DrawLineEx((Vector2){ L, T }, (Vector2){ R, T }, lw, col);
+    if (o->frame_edge[FR_LEFT])   DrawLineEx((Vector2){ L, T }, (Vector2){ L, B }, lw, col);
+    if (o->frame_edge[FR_RIGHT])  DrawLineEx((Vector2){ R, T }, (Vector2){ R, B }, lw, col);
+
+    /* Data coordinates currently shown at the frame corners. wTL/wBR are in
+     * draw space (y-down, negated render-y); undo that to get data-y. */
+    Vector2 wTL = GetScreenToWorld2D((Vector2){ L, T }, camera);
+    Vector2 wBR = GetScreenToWorld2D((Vector2){ R, B }, camera);
+    double xL = wTL.x, xR = wBR.x;
+    double dymax = (-wTL.y) / ysc, dymin = (-wBR.y) / ysc;
+    if (!(xR > xL) || !(dymax > dymin) || !isfinite(xL) || !isfinite(dymax)) return;
+
+    const float scale = 1.5f;
+    const float cap = HERSHEY_CAP_HEIGHT * scale;
+    const float gap = 5.0f;
+    const float maj = 6.0f, minr = 3.0f; /* inward tick pixel lengths */
+    char buf[64];
+
+    /* Which edge carries labels: bottom/left preferred, else top/right. */
+    int xlab = (o->frame_edge[FR_BOTTOM] && o->frame_ticks[FR_BOTTOM]) ? FR_BOTTOM
+             : (o->frame_edge[FR_TOP] && o->frame_ticks[FR_TOP]) ? FR_TOP : -1;
+    int ylab = (o->frame_edge[FR_LEFT] && o->frame_ticks[FR_LEFT]) ? FR_LEFT
+             : (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT]) ? FR_RIGHT : -1;
+
+    /* X ticks along the bottom and/or top edges. */
+    double xstep = nice_step(xR - xL, 8);
+    int xsub = frame_minor_divs(xstep);
+    double xm = xstep / xsub;
+    if (xm > 0) {
+        long i0 = (long)ceil(xL / xm - 1e-9), i1 = (long)floor(xR / xm + 1e-9);
+        for (long i = i0; i <= i1; i++) {
+            double tx = i * xm;
+            bool major = (i % xsub == 0);
+            float len = major ? maj : minr;
+            float sx = GetWorldToScreen2D((Vector2){ (float)tx, 0.0f }, camera).x;
+            if (sx < L - 0.5f || sx > R + 0.5f) continue;
+            if (o->frame_edge[FR_BOTTOM] && o->frame_ticks[FR_BOTTOM])
+                DrawLineEx((Vector2){ sx, B }, (Vector2){ sx, B - len }, lw, col);
+            if (o->frame_edge[FR_TOP] && o->frame_ticks[FR_TOP])
+                DrawLineEx((Vector2){ sx, T }, (Vector2){ sx, T + len }, lw, col);
+            if (major && xlab >= 0) {
+                snprintf(buf, sizeof(buf), "%g", fabs(tx) < 1e-9 ? 0.0 : tx);
+                float w = hershey_text_width(buf, scale);
+                /* Outside the frame: below the bottom edge, or above the top. */
+                float baseline = (xlab == FR_BOTTOM) ? (B + gap + cap) : (T - gap);
+                hershey_draw_text_ex(buf, sx - w / 2.0f, baseline, scale, 0.0f, col, lw);
+            }
+        }
+    }
+
+    /* Y ticks along the left and/or right edges. */
+    double ystep = nice_step(dymax - dymin, 6);
+    int ysub = frame_minor_divs(ystep);
+    double ym = ystep / ysub;
+    if (ym > 0) {
+        long i0 = (long)ceil(dymin / ym - 1e-9), i1 = (long)floor(dymax / ym + 1e-9);
+        for (long i = i0; i <= i1; i++) {
+            double ty = i * ym;
+            bool major = (i % ysub == 0);
+            float len = major ? maj : minr;
+            float sy = GetWorldToScreen2D((Vector2){ 0.0f, (float)(-ty * ysc) }, camera).y;
+            if (sy < T - 0.5f || sy > B + 0.5f) continue;
+            if (o->frame_edge[FR_LEFT] && o->frame_ticks[FR_LEFT])
+                DrawLineEx((Vector2){ L, sy }, (Vector2){ L + len, sy }, lw, col);
+            if (o->frame_edge[FR_RIGHT] && o->frame_ticks[FR_RIGHT])
+                DrawLineEx((Vector2){ R, sy }, (Vector2){ R - len, sy }, lw, col);
+            if (major && ylab >= 0) {
+                snprintf(buf, sizeof(buf), "%g", fabs(ty) < 1e-9 ? 0.0 : ty);
+                float w = hershey_text_width(buf, scale);
+                /* Outside the frame: left of the left edge, or right of the right. */
+                float tx = (ylab == FR_LEFT) ? (L - gap - w) : (R + gap);
+                hershey_draw_text_ex(buf, tx, sy + cap / 2.0f, scale, 0.0f, col, lw);
+            }
+        }
     }
 }
 
@@ -960,9 +1154,31 @@ void graphics_show(const Expr* graphics_expr) {
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
 
+    /* Plot region: the rectangle the data is fitted to and clipped against.
+     * Without a frame it is the whole window (unchanged behaviour). A frame
+     * reserves a margin (~5% of each window dimension) around the region so the
+     * box, its outward tick labels and the bottom help line sit outside the
+     * data; the bottom/left margins are floored a little larger so multi-digit
+     * labels and the help text always fit. The data fits *inside* the region,
+     * so the curve never spills past the frame. */
+    float reg_x = 0.0f, reg_y = 0.0f;
+    float reg_w = (float)opts.width, reg_h = (float)opts.height;
+    if (opts.frame) {
+        float mL = (float)opts.width  * 0.05f; if (mL < 50.0f) mL = 50.0f;
+        float mR = (float)opts.width  * 0.05f; if (mR < 20.0f) mR = 20.0f;
+        float mT = (float)opts.height * 0.05f; if (mT < 20.0f) mT = 20.0f;
+        float mB = (float)opts.height * 0.05f; if (mB < 48.0f) mB = 48.0f;
+        /* Never let the margins swallow the whole window. */
+        if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
+            reg_x = mL; reg_y = mT;
+            reg_w = (float)opts.width - mL - mR;
+            reg_h = (float)opts.height - mT - mB;
+        }
+    }
+
     double aspect = opts.aspect_ratio > 0 ? opts.aspect_ratio : (data_h / data_w);
-    double fit_by_width  = opts.width / data_w;
-    double fit_by_height = opts.height / (data_w * aspect);
+    double fit_by_width  = reg_w / data_w;
+    double fit_by_height = reg_h / (data_w * aspect);
     float base_zoom = (float)(fit_by_width < fit_by_height ? fit_by_width : fit_by_height);
     if (base_zoom <= 0 || !isfinite(base_zoom)) base_zoom = 1.0f;
 
@@ -977,7 +1193,9 @@ void graphics_show(const Expr* graphics_expr) {
     if (!isfinite(ysc) || ysc <= 0) ysc = 1.0;
 
     Camera2D camera = { 0 };
-    camera.offset = (Vector2){ opts.width / 2.0f, opts.height / 2.0f };
+    /* Anchor the camera on the region centre (window centre when unframed) so
+     * the data fills the region rather than the whole window. */
+    camera.offset = (Vector2){ reg_x + reg_w / 2.0f, reg_y + reg_h / 2.0f };
     camera.target = (Vector2){ (float)((range.xmin + range.xmax) / 2.0), (float)(-(range.ymin + range.ymax) / 2.0 * ysc) };
     camera.rotation = 0.0f;
     camera.zoom = base_zoom;
@@ -1063,7 +1281,7 @@ void graphics_show(const Expr* graphics_expr) {
                     float rw = fabsf(b.x - a.x), rh = fabsf(b.y - a.y);
                     if (rw > 1e-9f && rh > 1e-9f) {
                         camera.target = (Vector2){ (a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f };
-                        float zx = (float)opts.width / rw, zy = (float)opts.height / rh;
+                        float zx = reg_w / rw, zy = reg_h / rh;
                         camera.zoom = zx < zy ? zx : zy;
                         clamp_zoom(&camera, base_zoom);
                     }
@@ -1127,13 +1345,18 @@ void graphics_show(const Expr* graphics_expr) {
         BeginDrawing();
         ClearBackground(to_raylib(opts.background));
 
+        /* With a frame, clip the data (and axes) to the region so nothing
+         * spills past the box; the frame, labels and chrome draw unclipped. */
+        if (opts.frame) BeginScissorMode((int)reg_x, (int)reg_y, (int)reg_w, (int)reg_h);
         BeginMode2D(camera);
-        if (opts.axes) draw_axes_lines(&visible, ysc);
+        if (opts.axes) draw_axes_lines(&visible, ysc, camera.zoom);
         DrawState state = init_state;
         draw_primitive(draw_prims, &state);
         EndMode2D();
+        if (opts.frame) EndScissorMode();
 
         if (opts.axes) draw_axes_labels(&visible, camera, ysc);
+        if (opts.frame) draw_frame(reg_x, reg_y, reg_w, reg_h, camera, ysc, &opts);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);
 
         /* On a capture frame suppress every bit of UI chrome so the saved
