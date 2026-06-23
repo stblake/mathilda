@@ -468,7 +468,12 @@ void core_init(void) {
     symtab_get_def("IntegerQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("EvenQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("OddQ")->attributes |= ATTR_PROTECTED;
-    symtab_get_def("Information")->attributes |= ATTR_PROTECTED;
+    /* HoldFirst (matching real Mathematica): ?x/Information[x] must inspect
+     * the symbol x itself, not its evaluated value -- otherwise a symbol
+     * with an eager OwnValue (e.g. the named color constants in
+     * src/graphics/graphics_init.c) would have its value, not its name,
+     * reach builtin_information, which only recognizes a bare symbol. */
+    symtab_get_def("Information")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
 
     symtab_get_def("Mod")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Quotient")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);

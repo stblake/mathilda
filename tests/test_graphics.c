@@ -139,6 +139,180 @@ void test_plot_frame_suppresses_axes_default(void) {
         "True", 0);
 }
 
+void test_axes_origin_passthrough(void) {
+    /* Absent by default (the renderer auto-computes the origin then). */
+    assert_eval_eq("Cases[Plot[Sin[x], {x, 0, 1}], (AxesOrigin -> _)]", "{}", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, AxesOrigin -> {1, 2}], (AxesOrigin -> v_) -> v]]",
+        "{1, 2}", 0);
+}
+
+void test_axes_style_and_ticks_style_passthrough(void) {
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, AxesStyle -> RGBColor[1, 0, 0]],"
+        " (AxesStyle -> v_) -> v]]",
+        "RGBColor[1, 0, 0]", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, TicksStyle -> GrayLevel[0.5]],"
+        " (TicksStyle -> v_) -> v]]",
+        "GrayLevel[0.5]", 0);
+}
+
+void test_frame_label_and_rotate_label_passthrough(void) {
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, Frame -> True, FrameLabel -> {\"t\", \"y\"}],"
+        " (FrameLabel -> v_) -> v]]",
+        "{\"t\", \"y\"}", 0);
+    /* RotateLabel defaults to absent (the renderer treats unset as True). */
+    assert_eval_eq("Cases[Plot[Sin[x], {x, 0, 1}], (RotateLabel -> _)]", "{}", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, RotateLabel -> False], (RotateLabel -> v_) -> v]]",
+        "False", 0);
+}
+
+void test_plot_range_padding_passthrough(void) {
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, PlotRangePadding -> None],"
+        " (PlotRangePadding -> v_) -> v]]",
+        "None", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, PlotRangePadding -> 0.2],"
+        " (PlotRangePadding -> v_) -> v]]",
+        "0.2", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, PlotRangePadding -> {0.1, 0.3}],"
+        " (PlotRangePadding -> v_) -> v]]",
+        "{0.1, 0.3}", 0);
+}
+
+void test_grid_lines_passthrough(void) {
+    /* Absent (no grid) by default. */
+    assert_eval_eq("Cases[Plot[Sin[x], {x, 0, 1}], (GridLines -> _)]", "{}", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, GridLines -> Automatic], (GridLines -> v_) -> v]]",
+        "Automatic", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, GridLines -> {{0, 0.5, 1}, None}],"
+        " (GridLines -> v_) -> v]]",
+        "{{0, 0.5, 1}, None}", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, GridLinesStyle -> GrayLevel[0.8]],"
+        " (GridLinesStyle -> v_) -> v]]",
+        "GrayLevel[0.8]", 0);
+}
+
+void test_prolog_epilog_passthrough(void) {
+    assert_eval_eq("Cases[Plot[Sin[x], {x, 0, 1}], (Prolog -> _) | (Epilog -> _)]", "{}", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, Prolog -> {GrayLevel[0.9], Disk[{0, 0}, 1]}],"
+        " (Prolog -> v_) -> v]]",
+        "{GrayLevel[0.9], Disk[{0, 0}, 1]}", 0);
+    /* Plot evaluates each option's RHS once before storing it (it must,
+     * since it's HoldAll), so a named color constant like Red resolves to
+     * its RGBColor[...] value here -- same as it would for a non-Held
+     * Graphics[]'s own arguments. */
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, Epilog -> {Red, Point[{0, 0}]}],"
+        " (Epilog -> v_) -> v]]",
+        "{RGBColor[1, 0, 0], Point[{0, 0}]}", 0);
+}
+
+void test_named_color_constants_resolve(void) {
+    /* Bare Graphics[] isn't Held, so named colors resolve at construction
+     * time regardless of Plot's evaluate-once-in-split_options fix. */
+    assert_eval_eq("FullForm[Red]", "RGBColor[1, 0, 0]", 0);
+    assert_eval_eq("FullForm[Graphics[{Blue, Point[{0,0}]}]]",
+                    "Graphics[List[RGBColor[0, 0, 1], Point[List[0, 0]]]]", 0);
+    /* And inside a Plot option, via the evaluate-once fix. */
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, PlotStyle -> Green], (PlotStyle -> v_) -> v]]",
+        "RGBColor[0, 1, 0]", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, Background -> LightGray], (Background -> v_) -> v]]",
+        "GrayLevel[0.85]", 0);
+    /* ?Red inspects the symbol, not its value (Information is HoldFirst). */
+    assert_eval_eq("StringTake[Information[Red], 3]", "\"Red\"", 0);
+}
+
+void test_hue_color_directive(void) {
+    assert_eval_eq("Graphics[{Hue[0.5], Point[{0,0}]}]", "-Graphics-", 0);
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, PlotStyle -> Hue[0.5]], (PlotStyle -> v_) -> v]]",
+        "Hue[0.5]", 0);
+}
+
+void test_color_function_builds_per_segment_colors(void) {
+    /* Without ColorFunction, a smooth curve over a small range is a single
+     * Line[] run. With it, each segment gets its own color directive +
+     * 2-point Line[] pair, so the primitive count grows well past 1. */
+    assert_eval_eq("Length[Plot[Sin[x], {x, 0, 1}][[1]]]", "1", 0);
+    assert_eval_eq(
+        "Length[Plot[Sin[x], {x, 0, 1}, ColorFunction -> \"Rainbow\"][[1]]] > 1",
+        "True", 0);
+    /* "Rainbow" resolves to a Hue[...] directive (the first primitive). */
+    assert_eval_eq(
+        "Head[Plot[Sin[x], {x, 0, 1}, ColorFunction -> \"Rainbow\"][[1]][[1]]]",
+        "Hue", 0);
+}
+
+void test_filling_builds_polygon(void) {
+    /* Default Filling -> Axis: Opacity[0.3], then the fill Polygon[], then
+     * (since ColorFunction isn't also set) a colour restore, before the
+     * curve's own Line[] outline. */
+    assert_eval_eq("Head[Plot[Sin[x], {x, 0, 1}, Filling -> Axis][[1]][[1]]]", "Opacity", 0);
+    assert_eval_eq("Head[Plot[Sin[x], {x, 0, 1}, Filling -> Axis][[1]][[2]]]", "Polygon", 0);
+    /* No Filling -> no Polygon at all. */
+    assert_eval_eq("Cases[Plot[Sin[x], {x, 0, 1}][[1]], Polygon[___]]", "{}", 0);
+    /* An explicit FillingStyle is used directly (no Opacity bracketing). */
+    assert_eval_eq(
+        "Head[Plot[Sin[x], {x, 0, 1}, Filling -> Axis, FillingStyle -> Red][[1]][[1]]]",
+        "RGBColor", 0);
+}
+
+void test_plot_legends_metadata(void) {
+    /* Absent by default. */
+    assert_eval_eq("Cases[Plot[Sin[x], {x, 0, 1}], $PlotLegendData[___]]", "{}", 0);
+    /* "Expressions": label derived from the function itself. */
+    assert_eval_eq(
+        "Cases[Plot[Sin[x], {x, 0, 1}, PlotLegends -> \"Expressions\"], $PlotLegendData[___]]",
+        "{$PlotLegendData[{RGBColor[0.2, 0.4, 0.8], \"Sin[x]\"}]}", 0);
+    /* An explicit label list is used as given, paired with the palette
+     * colors for a multi-curve plot. */
+    assert_eval_eq(
+        "Cases[Plot[{Sin[x], Cos[x]}, {x, 0, 1}, PlotLegends -> {\"s\", \"c\"}], $PlotLegendData[___]]",
+        "{$PlotLegendData[{RGBColor[0.368417, 0.506779, 0.709798], \"s\"},"
+        " {RGBColor[0.880722, 0.611041, 0.142051], \"c\"}]}", 0);
+}
+
+void test_region_function_and_exclusions_split_domain(void) {
+    /* RegionFunction excludes the middle band -- two disjoint runs. */
+    assert_eval_eq(
+        "Length[Plot[Sin[x], {x, -3, 3}, RegionFunction -> (Abs[#1] > 1 &)][[1]]]",
+        "2", 0);
+    /* Exclusions forces a break at x=0 even though Sin is perfectly smooth
+     * there. */
+    assert_eval_eq(
+        "Length[Plot[Sin[x], {x, -3, 3}, Exclusions -> {0}][[1]]]",
+        "2", 0);
+    /* Exclusions -> {x == a} (an equation) is accepted too. */
+    assert_eval_eq(
+        "Length[Plot[Sin[x], {x, -3, 3}, Exclusions -> {x == 0}][[1]]]",
+        "2", 0);
+}
+
+void test_label_style_passthrough(void) {
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, LabelStyle -> Red], (LabelStyle -> v_) -> v]]",
+        "RGBColor[1, 0, 0]", 0);
+    /* An explicit AxesStyle still passes through distinctly -- the
+     * fallback-vs-override resolution itself happens in render.c at draw
+     * time, not in this structural passthrough. */
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, LabelStyle -> Red, AxesStyle -> Blue],"
+        " (AxesStyle -> v_) -> v]]",
+        "RGBColor[0, 0, 1]", 0);
+}
+
 #ifdef USE_GRAPHICS
 /* The frame minor-tick subdivision policy frame_minor_divs() lives in
  * render.c; exercise it directly. A "nice" step (1/2/5 x 10^k) chooses round
@@ -201,6 +375,19 @@ int main(void) {
     TEST(test_plot_aspect_ratio_symbolic_constant);
     TEST(test_plot_aspect_ratio_symbol_settings);
     TEST(test_plot_image_size_passthrough);
+    TEST(test_axes_origin_passthrough);
+    TEST(test_axes_style_and_ticks_style_passthrough);
+    TEST(test_frame_label_and_rotate_label_passthrough);
+    TEST(test_plot_range_padding_passthrough);
+    TEST(test_grid_lines_passthrough);
+    TEST(test_prolog_epilog_passthrough);
+    TEST(test_named_color_constants_resolve);
+    TEST(test_hue_color_directive);
+    TEST(test_color_function_builds_per_segment_colors);
+    TEST(test_filling_builds_polygon);
+    TEST(test_plot_legends_metadata);
+    TEST(test_region_function_and_exclusions_split_domain);
+    TEST(test_label_style_passthrough);
 #ifdef USE_GRAPHICS
     TEST(test_frame_minor_divs_policy);
     TEST(test_window_height_policy);
