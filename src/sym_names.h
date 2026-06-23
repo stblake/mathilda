@@ -577,6 +577,9 @@ extern const char* SYM_PlotLabel;
 extern const char* SYM_AspectRatio;
 extern const char* SYM_Background;
 extern const char* SYM_ImageSize;
+/* Internal: carries Plot's function/var/options inside the returned
+ * Graphics[...] so the renderer can re-sample adaptively on zoom. */
+extern const char* SYM_PlotResample;
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*

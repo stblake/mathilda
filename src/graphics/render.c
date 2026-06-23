@@ -6,6 +6,7 @@
  * are no other sign flips anywhere else in this file. */
 
 #include "show.h"
+#include "plot.h"
 #include "hershey_font.h"
 #include "primitives.h"
 #include "sym_names.h"
@@ -105,8 +106,9 @@ static Color to_raylib(RGBA8 c) { Color out = { c.r, c.g, c.b, c.a }; return out
 
 typedef struct {
     bool axes;
-    bool range_auto;
-    PlotRange2D range;
+    bool x_auto;        /* x extent auto-computed from the data */
+    bool y_auto;        /* y extent auto-computed from the data */
+    PlotRange2D range;  /* explicit bounds; only the non-auto axes are read */
     double aspect_ratio; /* <= 0 means Automatic */
     RGBA8 style_color;
     RGBA8 background;
@@ -117,7 +119,8 @@ typedef struct {
 
 static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->axes = false;
-    o->range_auto = true;
+    o->x_auto = true;
+    o->y_auto = true;
     o->aspect_ratio = -1.0;
     o->style_color = (RGBA8){ 30, 80, 180, 255 };
     o->background = (RGBA8){ 255, 255, 255, 255 };
@@ -162,16 +165,24 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
                 if (expr_to_d(rhs, &s) && s > 0) { o->width = (long)s; o->height = (long)(s * 0.75); }
             }
         } else if (name == SYM_PlotRange) {
-            if (rhs->type == EXPR_FUNCTION && rhs->data.function.arg_count == 2) {
-                const Expr* xr = rhs->data.function.args[0];
-                const Expr* yr = rhs->data.function.args[1];
+            /* Two accepted forms, mirroring Wolfram:
+             *   {{xmin, xmax}, {ymin, ymax}}  -- fix both axes
+             *   {ymin, ymax}                  -- fix y only, x stays automatic */
+            if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
+                && rhs->data.function.head->data.symbol == SYM_List
+                && rhs->data.function.arg_count == 2) {
+                const Expr* a0 = rhs->data.function.args[0];
+                const Expr* a1 = rhs->data.function.args[1];
                 double xmin, xmax, ymin, ymax;
-                if (xr->type == EXPR_FUNCTION && xr->data.function.arg_count == 2
-                    && yr->type == EXPR_FUNCTION && yr->data.function.arg_count == 2
-                    && expr_to_d(xr->data.function.args[0], &xmin) && expr_to_d(xr->data.function.args[1], &xmax)
-                    && expr_to_d(yr->data.function.args[0], &ymin) && expr_to_d(yr->data.function.args[1], &ymax)) {
-                    o->range_auto = false;
+                if (a0->type == EXPR_FUNCTION && a0->data.function.arg_count == 2
+                    && a1->type == EXPR_FUNCTION && a1->data.function.arg_count == 2
+                    && expr_to_d(a0->data.function.args[0], &xmin) && expr_to_d(a0->data.function.args[1], &xmax)
+                    && expr_to_d(a1->data.function.args[0], &ymin) && expr_to_d(a1->data.function.args[1], &ymax)) {
+                    o->x_auto = false; o->y_auto = false;
                     o->range.xmin = xmin; o->range.xmax = xmax;
+                    o->range.ymin = ymin; o->range.ymax = ymax;
+                } else if (expr_to_d(a0, &ymin) && expr_to_d(a1, &ymax)) {
+                    o->y_auto = false;
                     o->range.ymin = ymin; o->range.ymax = ymax;
                 }
             }
@@ -232,6 +243,7 @@ typedef struct {
     float thickness;  /* world units; <= 0 means hairline */
     float point_size; /* world units (radius) */
     float text_scale; /* world units per Hershey grid unit, for Text[] */
+    float yscale;     /* data-y -> render-y factor (non-uniform PlotRange/AspectRatio) */
 } DrawState;
 
 static void draw_polyline(const Expr* pts_list, const DrawState* state) {
@@ -241,7 +253,7 @@ static void draw_polyline(const Expr* pts_list, const DrawState* state) {
     for (size_t i = 0; i < n; i++) {
         double x, y;
         if (!expr_point(pts_list->data.function.args[i], &x, &y)) { have_prev = false; continue; }
-        Vector2 cur = { (float)x, (float)-y };
+        Vector2 cur = { (float)x, (float)(-y * state->yscale) };
         if (have_prev) {
             if (state->thickness > 0.0001f) DrawLineEx(prev, cur, state->thickness, state->color);
             else DrawLineV(prev, cur, state->color);
@@ -283,12 +295,12 @@ static void draw_primitive(const Expr* node, DrawState* state) {
         const Expr* arg = node->data.function.args[0];
         double x, y;
         if (expr_point(arg, &x, &y)) {
-            DrawCircleV((Vector2){ (float)x, (float)-y }, state->point_size, state->color);
+            DrawCircleV((Vector2){ (float)x, (float)(-y * state->yscale) }, state->point_size, state->color);
         } else if (arg->type == EXPR_FUNCTION) {
             for (size_t i = 0; i < arg->data.function.arg_count; i++) {
                 double px, py;
                 if (expr_point(arg->data.function.args[i], &px, &py))
-                    DrawCircleV((Vector2){ (float)px, (float)-py }, state->point_size, state->color);
+                    DrawCircleV((Vector2){ (float)px, (float)(-py * state->yscale) }, state->point_size, state->color);
             }
         }
         return;
@@ -311,7 +323,8 @@ static void draw_primitive(const Expr* node, DrawState* state) {
         if (expr_point(node->data.function.args[0], &x1, &y1) && expr_point(node->data.function.args[1], &x2, &y2)) {
             double xmin = x1 < x2 ? x1 : x2, xmax = x1 < x2 ? x2 : x1;
             double ymin = y1 < y2 ? y1 : y2, ymax = y1 < y2 ? y2 : y1;
-            Rectangle r = { (float)xmin, (float)-ymax, (float)(xmax - xmin), (float)(ymax - ymin) };
+            Rectangle r = { (float)xmin, (float)(-ymax * state->yscale),
+                            (float)(xmax - xmin), (float)((ymax - ymin) * state->yscale) };
             DrawRectangleRec(r, state->color);
         }
         return;
@@ -319,7 +332,7 @@ static void draw_primitive(const Expr* node, DrawState* state) {
     if (name == SYM_Circle || name == SYM_Disk) {
         double cx, cy, r;
         if (circle_params(node, &cx, &cy, &r)) {
-            Vector2 center = { (float)cx, (float)-cy };
+            Vector2 center = { (float)cx, (float)(-cy * state->yscale) };
             if (name == SYM_Disk) DrawCircleV(center, (float)r, state->color);
             else DrawCircleLinesV(center, (float)r, state->color);
         }
@@ -333,7 +346,7 @@ static void draw_primitive(const Expr* node, DrawState* state) {
             size_t cnt = 0;
             for (size_t i = 0; i < m; i++) {
                 double x, y;
-                if (expr_point(arg->data.function.args[i], &x, &y)) poly[cnt++] = (Vector2){ (float)x, (float)-y };
+                if (expr_point(arg->data.function.args[i], &x, &y)) poly[cnt++] = (Vector2){ (float)x, (float)(-y * state->yscale) };
             }
             if (cnt >= 3) DrawTriangleFan(poly, (int)cnt, state->color);
             free(poly);
@@ -353,7 +366,7 @@ static void draw_primitive(const Expr* node, DrawState* state) {
             label = owned ? owned : "";
         }
         float w = hershey_text_width(label, state->text_scale);
-        hershey_draw_text(label, (float)x - w / 2.0f, (float)-y, state->text_scale, 0.0f, state->color);
+        hershey_draw_text(label, (float)x - w / 2.0f, (float)(-y * state->yscale), state->text_scale, 0.0f, state->color);
         if (owned) free(owned);
         return;
     }
@@ -399,7 +412,9 @@ static PlotRange2D compute_visible_range(Camera2D camera, int win_w, int win_h) 
 
 /* World-space axis/tick lines -- call inside BeginMode2D so they pan and
  * zoom with the data. */
-static void draw_axes_lines(const PlotRange2D* range) {
+/* `range` is in render space (post y-scale). `ysc` maps data-y -> render-y;
+ * y ticks are placed at nice *data* values (data*ysc), so labels read true. */
+static void draw_axes_lines(const PlotRange2D* range, double ysc) {
     double ox = (range->xmin <= 0 && range->xmax >= 0) ? 0.0 : range->xmin;
     double oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
 
@@ -407,15 +422,17 @@ static void draw_axes_lines(const PlotRange2D* range) {
     DrawLineV((Vector2){ (float)ox, (float)-range->ymin }, (Vector2){ (float)ox, (float)-range->ymax }, DARKGRAY);
 
     double xstep = nice_step(range->xmax - range->xmin, 8);
-    double ystep = nice_step(range->ymax - range->ymin, 6);
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
 
     for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
         DrawLineV((Vector2){ (float)tx, (float)-(oy - xtick) }, (Vector2){ (float)tx, (float)-(oy + xtick) }, DARKGRAY);
     }
-    for (double ty = ceil(range->ymin / ystep) * ystep; ty <= range->ymax + 1e-9; ty += ystep) {
-        DrawLineV((Vector2){ (float)(ox - ytick), (float)-ty }, (Vector2){ (float)(ox + ytick), (float)-ty }, DARKGRAY);
+    double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
+    double ystep = nice_step(dymax - dymin, 6);
+    for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
+        double ry = ty * ysc;
+        DrawLineV((Vector2){ (float)(ox - ytick), (float)-ry }, (Vector2){ (float)(ox + ytick), (float)-ry }, DARKGRAY);
     }
 }
 
@@ -428,11 +445,13 @@ static void draw_axes_lines(const PlotRange2D* range) {
  * `cap = HERSHEY_CAP_HEIGHT * scale` px, which the offsets account for:
  * x-labels drop the baseline a full cap-height below the tick so the whole
  * glyph clears it; y-labels recentre vertically on the tick by half a cap. */
-static void draw_axes_labels(const PlotRange2D* range, Camera2D camera) {
+static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double ysc) {
     double ox = (range->xmin <= 0 && range->xmax >= 0) ? 0.0 : range->xmin;
     double oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
     double xstep = nice_step(range->xmax - range->xmin, 8);
-    double ystep = nice_step(range->ymax - range->ymin, 6);
+    /* y ticks are stepped in data space; render position is ty*ysc below. */
+    double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
+    double ystep = nice_step(dymax - dymin, 6);
     /* World-space tick half-lengths, matching draw_axes_lines exactly. */
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
@@ -449,11 +468,11 @@ static void draw_axes_labels(const PlotRange2D* range, Camera2D camera) {
         float w = hershey_text_width(buf, scale);
         hershey_draw_text(buf, tip.x - w / 2.0f, tip.y + gap + cap, scale, 0.0f, DARKGRAY);
     }
-    for (double ty = ceil(range->ymin / ystep) * ystep; ty <= range->ymax + 1e-9; ty += ystep) {
+    for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
         if (fabs(ty) < 1e-9) ty = 0.0;
         snprintf(buf, sizeof(buf), "%g", ty);
         /* Screen position of the tick's left (outside-axis) end. */
-        Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)-ty }, camera);
+        Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
         float w = hershey_text_width(buf, scale);
         hershey_draw_text(buf, tip.x - w - gap, tip.y + cap / 2.0f, scale, 0.0f, DARKGRAY);
     }
@@ -505,7 +524,7 @@ typedef enum { TOOL_PAN = 0, TOOL_ZOOM = 1 } ToolMode;
 
 typedef enum {
     TB_SAVE = 0, TB_ZOOMBOX, TB_PAN, TB_ZOOMIN, TB_ZOOMOUT,
-    TB_AUTOSCALE, TB_RESET, TB_COUNT
+    TB_AUTOSCALE, TB_RESET, TB_CLOSE, TB_COUNT
 } ToolButton;
 
 #define TB_BTN    30.0f   /* button edge (px)            */
@@ -535,6 +554,7 @@ static const char* tb_tip(int k) {
         case TB_ZOOMOUT:   return "Zoom out";
         case TB_AUTOSCALE: return "Autoscale to fit";
         case TB_RESET:     return "Reset axes";
+        case TB_CLOSE:     return "Close window";
         default:           return "";
     }
 }
@@ -545,61 +565,96 @@ static void clamp_zoom(Camera2D* c, float base) {
     if (c->zoom > base * 50.0f) c->zoom = base * 50.0f;
 }
 
+/* --- glyph drawing helpers --------------------------------------------- *
+ * Raylib's DrawLineEx draws a bare quad with butt caps, so polylines show
+ * notches where segments meet and bare ends look chopped. These helpers
+ * give every glyph rounded caps (a disc at each endpoint closes the joints)
+ * and solid arrowheads, for a clean modebar-style finish. */
+
+#define TB_LW 2.2f   /* shared stroke width for all glyphs */
+
+/* A line segment with rounded end-caps. */
+static void stroke(Vector2 a, Vector2 b, Color c) {
+    DrawLineEx(a, b, TB_LW, c);
+    DrawCircleV(a, TB_LW * 0.5f, c);
+    DrawCircleV(b, TB_LW * 0.5f, c);
+}
+
+/* A filled triangle, winding-agnostic (raylib back-face culls one order, so
+ * drawing both guarantees it shows regardless of vertex orientation). */
+static void tri(Vector2 a, Vector2 b, Vector2 c, Color col) {
+    DrawTriangle(a, b, c, col);
+    DrawTriangle(a, c, b, col);
+}
+
+/* A solid arrowhead whose point sits at `tip`, opening back along unit
+ * direction `dir` (pointing toward the tip): `len` deep, `half` to a side. */
+static void arrowhead(Vector2 tip, Vector2 dir, float len, float half, Color c) {
+    Vector2 back = { tip.x - dir.x * len, tip.y - dir.y * len };
+    Vector2 perp = { -dir.y, dir.x };
+    Vector2 l = { back.x + perp.x * half, back.y + perp.y * half };
+    Vector2 r = { back.x - perp.x * half, back.y - perp.y * half };
+    tri(tip, l, r, c);
+}
+
 /* --- icon glyphs: each fills the inset content box `b` with colour `c` --- */
 
 static void icon_save(Rectangle b, Color c) {            /* camera */
-    DrawRectangleLinesEx((Rectangle){ b.x, b.y + b.height * 0.30f, b.width, b.height * 0.52f }, 2.0f, c);
-    DrawRectangleLinesEx((Rectangle){ b.x + b.width * 0.32f, b.y + b.height * 0.14f,
-                                      b.width * 0.28f, b.height * 0.18f }, 2.0f, c);
+    DrawRectangleRoundedLinesEx((Rectangle){ b.x, b.y + b.height * 0.30f, b.width, b.height * 0.52f },
+                                0.25f, 8, TB_LW, c);
+    DrawRectangleRoundedLinesEx((Rectangle){ b.x + b.width * 0.32f, b.y + b.height * 0.12f,
+                                             b.width * 0.30f, b.height * 0.20f }, 0.4f, 6, TB_LW, c);
     float lr = b.width * 0.16f;
-    DrawRing((Vector2){ b.x + b.width * 0.5f, b.y + b.height * 0.56f }, lr - 1.0f, lr + 1.0f,
-             0.0f, 360.0f, 24, c);
+    DrawRing((Vector2){ b.x + b.width * 0.5f, b.y + b.height * 0.56f },
+             lr - TB_LW * 0.5f, lr + TB_LW * 0.5f, 0.0f, 360.0f, 32, c);
 }
 
 static void icon_magnifier(Rectangle b, Color c, int sign) { /* glass; sign: 0 plain, + in, - out */
     Vector2 ctr = { b.x + b.width * 0.40f, b.y + b.height * 0.40f };
     float r = b.width * 0.30f;
-    /* a filled 2px-wide annulus -- same visual weight as the 2px strokes
-     * used by every other glyph, so all icons read as one uniform gray */
-    DrawRing(ctr, r - 1.0f, r + 1.0f, 0.0f, 360.0f, 32, c);
-    DrawLineEx((Vector2){ ctr.x + r * 0.72f, ctr.y + r * 0.72f },
-               (Vector2){ b.x + b.width * 0.96f, b.y + b.height * 0.96f }, 2.0f, c);
+    /* a filled annulus, half the stroke width to a side -- same visual
+     * weight as the strokes used by every other glyph */
+    DrawRing(ctr, r - TB_LW * 0.5f, r + TB_LW * 0.5f, 0.0f, 360.0f, 48, c);
+    stroke((Vector2){ ctr.x + r * 0.72f, ctr.y + r * 0.72f },
+           (Vector2){ b.x + b.width * 0.96f, b.y + b.height * 0.96f }, c);
     if (sign != 0) {
         float s = r * 0.5f;
-        DrawLineEx((Vector2){ ctr.x - s, ctr.y }, (Vector2){ ctr.x + s, ctr.y }, 2.0f, c);
-        if (sign > 0) DrawLineEx((Vector2){ ctr.x, ctr.y - s }, (Vector2){ ctr.x, ctr.y + s }, 2.0f, c);
+        stroke((Vector2){ ctr.x - s, ctr.y }, (Vector2){ ctr.x + s, ctr.y }, c);
+        if (sign > 0) stroke((Vector2){ ctr.x, ctr.y - s }, (Vector2){ ctr.x, ctr.y + s }, c);
     }
 }
 
 static void icon_move(Rectangle b, Color c) {            /* four-way arrows */
     float cx = b.x + b.width * 0.5f, cy = b.y + b.height * 0.5f;
-    float L = b.width * 0.46f, a = b.width * 0.14f;
-    DrawLineEx((Vector2){ cx - L, cy }, (Vector2){ cx + L, cy }, 2.0f, c);
-    DrawLineEx((Vector2){ cx, cy - L }, (Vector2){ cx, cy + L }, 2.0f, c);
-    DrawLineEx((Vector2){ cx, cy - L }, (Vector2){ cx - a, cy - L + a }, 2.0f, c);
-    DrawLineEx((Vector2){ cx, cy - L }, (Vector2){ cx + a, cy - L + a }, 2.0f, c);
-    DrawLineEx((Vector2){ cx, cy + L }, (Vector2){ cx - a, cy + L - a }, 2.0f, c);
-    DrawLineEx((Vector2){ cx, cy + L }, (Vector2){ cx + a, cy + L - a }, 2.0f, c);
-    DrawLineEx((Vector2){ cx - L, cy }, (Vector2){ cx - L + a, cy - a }, 2.0f, c);
-    DrawLineEx((Vector2){ cx - L, cy }, (Vector2){ cx - L + a, cy + a }, 2.0f, c);
-    DrawLineEx((Vector2){ cx + L, cy }, (Vector2){ cx + L - a, cy - a }, 2.0f, c);
-    DrawLineEx((Vector2){ cx + L, cy }, (Vector2){ cx + L - a, cy + a }, 2.0f, c);
+    float L = b.width * 0.48f;
+    float hl = b.width * 0.22f, hw = b.width * 0.15f;   /* head length / half-width */
+    /* shafts stop just short of each tip so the solid heads cap them */
+    float s = L - hl * 0.5f;
+    stroke((Vector2){ cx - s, cy }, (Vector2){ cx + s, cy }, c);
+    stroke((Vector2){ cx, cy - s }, (Vector2){ cx, cy + s }, c);
+    arrowhead((Vector2){ cx - L, cy }, (Vector2){ -1, 0 }, hl, hw, c);
+    arrowhead((Vector2){ cx + L, cy }, (Vector2){ +1, 0 }, hl, hw, c);
+    arrowhead((Vector2){ cx, cy - L }, (Vector2){ 0, -1 }, hl, hw, c);
+    arrowhead((Vector2){ cx, cy + L }, (Vector2){ 0, +1 }, hl, hw, c);
 }
 
 static void icon_expand(Rectangle b, Color c) {          /* outward diagonal arrows */
     float cx = b.x + b.width * 0.5f, cy = b.y + b.height * 0.5f;
-    float a = b.width * 0.16f;
-    struct { float ex, ey, dx, dy; } cor[4] = {
-        { b.x,           b.y,            1,  1 },
-        { b.x + b.width, b.y,           -1,  1 },
-        { b.x,           b.y + b.height, 1, -1 },
-        { b.x + b.width, b.y + b.height,-1, -1 },
+    float hl = b.width * 0.24f, hw = b.width * 0.15f;
+    Vector2 corner[4] = {
+        { b.x,           b.y           },
+        { b.x + b.width, b.y           },
+        { b.x,           b.y + b.height },
+        { b.x + b.width, b.y + b.height },
     };
     for (int i = 0; i < 4; i++) {
-        Vector2 e = { cor[i].ex, cor[i].ey };
-        DrawLineEx((Vector2){ cx, cy }, e, 2.0f, c);
-        DrawLineEx(e, (Vector2){ e.x + cor[i].dx * a, e.y }, 2.0f, c);
-        DrawLineEx(e, (Vector2){ e.x, e.y + cor[i].dy * a }, 2.0f, c);
+        Vector2 e = corner[i];
+        Vector2 d = { e.x - cx, e.y - cy };
+        float len = sqrtf(d.x * d.x + d.y * d.y);
+        if (len > 0) { d.x /= len; d.y /= len; }
+        stroke((Vector2){ cx, cy },
+               (Vector2){ e.x - d.x * hl * 0.5f, e.y - d.y * hl * 0.5f }, c);
+        arrowhead(e, d, hl, hw, c);
     }
 }
 
@@ -607,16 +662,24 @@ static void icon_home(Rectangle b, Color c) {            /* house */
     float cx = b.x + b.width * 0.5f;
     float roofY = b.y + b.height * 0.12f, eaveY = b.y + b.height * 0.45f, baseY = b.y + b.height * 0.88f;
     float lx = b.x + b.width * 0.16f, rx = b.x + b.width * 0.84f;
-    DrawLineEx((Vector2){ lx, eaveY }, (Vector2){ cx, roofY }, 2.0f, c);
-    DrawLineEx((Vector2){ cx, roofY }, (Vector2){ rx, eaveY }, 2.0f, c);
+    stroke((Vector2){ lx, eaveY }, (Vector2){ cx, roofY }, c);
+    stroke((Vector2){ cx, roofY }, (Vector2){ rx, eaveY }, c);
     float wlx = b.x + b.width * 0.26f, wrx = b.x + b.width * 0.74f;
-    DrawLineEx((Vector2){ wlx, eaveY }, (Vector2){ wlx, baseY }, 2.0f, c);
-    DrawLineEx((Vector2){ wrx, eaveY }, (Vector2){ wrx, baseY }, 2.0f, c);
-    DrawLineEx((Vector2){ wlx, baseY }, (Vector2){ wrx, baseY }, 2.0f, c);
+    stroke((Vector2){ wlx, eaveY }, (Vector2){ wlx, baseY }, c);
+    stroke((Vector2){ wrx, eaveY }, (Vector2){ wrx, baseY }, c);
+    stroke((Vector2){ wlx, baseY }, (Vector2){ wrx, baseY }, c);
     float dlx = b.x + b.width * 0.44f, drx = b.x + b.width * 0.56f, dY = b.y + b.height * 0.62f;
-    DrawLineEx((Vector2){ dlx, baseY }, (Vector2){ dlx, dY }, 2.0f, c);
-    DrawLineEx((Vector2){ drx, baseY }, (Vector2){ drx, dY }, 2.0f, c);
-    DrawLineEx((Vector2){ dlx, dY }, (Vector2){ drx, dY }, 2.0f, c);
+    stroke((Vector2){ dlx, baseY }, (Vector2){ dlx, dY }, c);
+    stroke((Vector2){ drx, baseY }, (Vector2){ drx, dY }, c);
+    stroke((Vector2){ dlx, dY }, (Vector2){ drx, dY }, c);
+}
+
+static void icon_close(Rectangle b, Color c) {           /* an X */
+    float m = b.width * 0.18f;
+    stroke((Vector2){ b.x + m, b.y + m },
+           (Vector2){ b.x + b.width - m, b.y + b.height - m }, c);
+    stroke((Vector2){ b.x + b.width - m, b.y + m },
+           (Vector2){ b.x + m, b.y + b.height - m }, c);
 }
 
 /* Draw the whole toolbar. `tool` highlights the active mode button;
@@ -633,7 +696,12 @@ static void draw_toolbar(int win_w, int tool, int hover) {
     for (int i = 0; i < TB_COUNT; i++) {
         Rectangle r = tb_rect(i, win_w);
         bool active = (i == TB_PAN && tool == TOOL_PAN) || (i == TB_ZOOMBOX && tool == TOOL_ZOOM);
-        if (i == hover)      DrawRectangleRounded(r, 0.3f, 6, (Color){ 220, 227, 236, 255 });
+        /* Close gets a red hover tint to flag its destructive action; every
+         * other button shares the neutral blue-gray highlight. */
+        if (i == hover) {
+            Color hb = (i == TB_CLOSE) ? (Color){ 240, 205, 205, 255 } : (Color){ 220, 227, 236, 255 };
+            DrawRectangleRounded(r, 0.3f, 6, hb);
+        }
         else if (active)     DrawRectangleRounded(r, 0.3f, 6, (Color){ 205, 222, 245, 255 });
         Rectangle ic = { r.x + 6, r.y + 6, r.width - 12, r.height - 12 };
         switch (i) {
@@ -644,6 +712,7 @@ static void draw_toolbar(int win_w, int tool, int hover) {
             case TB_ZOOMOUT:   icon_magnifier(ic, icol, -1); break;
             case TB_AUTOSCALE: icon_expand(ic, icol);        break;
             case TB_RESET:     icon_home(ic, icol);          break;
+            case TB_CLOSE:     icon_close(ic, (i == hover) ? (Color){ 190, 60, 60, 255 } : icol); break;
             default: break;
         }
     }
@@ -680,8 +749,20 @@ void graphics_show(const Expr* graphics_expr) {
     gfx_options_parse(graphics_expr, &opts);
     const Expr* prims = graphics_expr->data.function.args[0];
 
+    /* Live re-sampling: a Plot-produced Graphics carries its function so we
+     * can re-sample at the current zoom (plot_resample), keeping curves like
+     * Sin[1/x^2] smooth when magnified instead of exposing the home grid.
+     * draw_prims is what the loop draws; it starts as the static `prims` and
+     * is swapped for freshly sampled ones, which dyn_prims owns. */
+    const Expr* draw_prims = prims;
+    Expr* dyn_prims = NULL;
+    bool resample_ok = true;          /* cleared if this isn't a Plot object */
+    /* The x-span currently sampled (with margin) and the visible width at the
+     * last re-sample -- the loop re-samples once the view leaves either. */
+    double cov_lo = 0.0, cov_hi = 0.0, ref_vw = -1.0;
+
     PlotRange2D range = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
-    if (!opts.range_auto) {
+    if (!opts.x_auto && !opts.y_auto) {
         range = opts.range;
     } else {
         compute_bbox(prims, &range);
@@ -693,6 +774,10 @@ void graphics_show(const Expr* graphics_expr) {
         if (ypad <= 0) ypad = 1.0;
         range.xmin -= xpad; range.xmax += xpad;
         range.ymin -= ypad; range.ymax += ypad;
+        /* Override the explicitly fixed axis (e.g. PlotRange -> {ymin, ymax}
+         * pins y while x remains data-driven). */
+        if (!opts.x_auto) { range.xmin = opts.range.xmin; range.xmax = opts.range.xmax; }
+        if (!opts.y_auto) { range.ymin = opts.range.ymin; range.ymax = opts.range.ymax; }
     }
 
     double data_w = range.xmax - range.xmin;
@@ -700,6 +785,10 @@ void graphics_show(const Expr* graphics_expr) {
     if (data_w <= 0) data_w = 1;
     if (data_h <= 0) data_h = 1;
 
+    /* 4x MSAA smooths every vector stroke -- the plot curves, the axes, and
+     * the hand-drawn toolbar glyphs all read as crisp anti-aliased lines
+     * rather than the stair-stepped default. Must precede InitWindow. */
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow((int)opts.width, (int)opts.height, "Mathilda");
     SetTargetFPS(60);
 
@@ -709,9 +798,19 @@ void graphics_show(const Expr* graphics_expr) {
     float base_zoom = (float)(fit_by_width < fit_by_height ? fit_by_width : fit_by_height);
     if (base_zoom <= 0 || !isfinite(base_zoom)) base_zoom = 1.0f;
 
+    /* Non-uniform vertical scale: stretch data-y into "render space" so the
+     * x-range fills the width and the y-range fills its aspect-determined share
+     * of the height independently. With AspectRatio Automatic this collapses to
+     * 1 (true geometry); a forced AspectRatio (e.g. Plot's 1/GoldenRatio) makes
+     * PlotRange -> {ymin,ymax} actually frame the requested band, which a single
+     * uniform zoom cannot. The camera, mouse, and re-sampler all live in render
+     * space; only primitive y-coords and y-tick labels convert. */
+    double ysc = aspect * data_w / data_h;
+    if (!isfinite(ysc) || ysc <= 0) ysc = 1.0;
+
     Camera2D camera = { 0 };
     camera.offset = (Vector2){ opts.width / 2.0f, opts.height / 2.0f };
-    camera.target = (Vector2){ (float)((range.xmin + range.xmax) / 2.0), (float)(-(range.ymin + range.ymax) / 2.0) };
+    camera.target = (Vector2){ (float)((range.xmin + range.xmax) / 2.0), (float)(-(range.ymin + range.ymax) / 2.0 * ysc) };
     camera.rotation = 0.0f;
     camera.zoom = base_zoom;
     const Camera2D home = camera;
@@ -725,6 +824,7 @@ void graphics_show(const Expr* graphics_expr) {
     init_state.thickness = 1.5f / base_zoom;
     init_state.point_size = (float)(fmax(data_w, data_h) * 0.006);
     init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
+    init_state.yscale = (float)ysc;
 
     int tool = TOOL_PAN;          /* active left-drag tool (toolbar-selected) */
     bool selecting = false;       /* mid box-zoom drag */
@@ -733,15 +833,34 @@ void graphics_show(const Expr* graphics_expr) {
     bool shot = false;            /* this frame renders chrome-free for a capture */
     int toast = 0;                /* frames left to flash the "saved" confirmation */
 
+    /* Seed the sampled span from the curve's actual x-extent. */
+    {
+        PlotRange2D dbb = { DBL_MAX, -DBL_MAX, DBL_MAX, -DBL_MAX };
+        compute_bbox(prims, &dbb);
+        if (dbb.xmin < dbb.xmax) { cov_lo = dbb.xmin; cov_hi = dbb.xmax; }
+        else { cov_lo = range.xmin; cov_hi = range.xmax; }
+    }
+
     while (!WindowShouldClose()) {
         Vector2 mouse = GetMousePosition();
         int hover = tb_hit(mouse, (int)opts.width);
 
-        /* Scroll zoom, except while pointing at the toolbar. */
+        /* Scroll zoom, except while pointing at the toolbar. Zoom *about the
+         * cursor*: the world point under the mouse stays fixed, so scrolling
+         * magnifies wherever the user points instead of always diving toward
+         * the plot centre. This matters for any plot whose centre is the worst
+         * place to land -- e.g. Plot[Sin[1/x^2], {x, -2 Pi, 2 Pi}], where the
+         * centre is the x=0 essential singularity that no sampling can resolve;
+         * cursor-anchored zoom lets the user reach the resolvable detail the
+         * live re-sampler then refines. */
         float wheel = GetMouseWheelMove();
         if (wheel != 0.0f && hover < 0) {
+            Vector2 before = GetScreenToWorld2D(mouse, camera);
             camera.zoom *= (wheel > 0) ? 1.1f : (1.0f / 1.1f);
             clamp_zoom(&camera, base_zoom);
+            Vector2 after = GetScreenToWorld2D(mouse, camera);
+            camera.target.x += before.x - after.x;
+            camera.target.y += before.y - after.y;
         }
 
         /* Left-press: a toolbar button fires its action; otherwise the press
@@ -757,6 +876,7 @@ void graphics_show(const Expr* graphics_expr) {
                     case TB_ZOOMOUT:   camera.zoom *= (1.0f / 1.3f); clamp_zoom(&camera, base_zoom); break;
                     case TB_AUTOSCALE: camera = home; break;
                     case TB_RESET:     camera = home; break;
+                    case TB_CLOSE:     goto close_window;
                     default: break;
                 }
             } else {
@@ -805,16 +925,47 @@ void graphics_show(const Expr* graphics_expr) {
 
         PlotRange2D visible = compute_visible_range(camera, (int)opts.width, (int)opts.height);
 
+        /* Re-sample the curve for the current x-window when the view has
+         * moved enough -- zoomed past ~30% (resolution change) or panned to
+         * the edge of what we last sampled (new territory). Held off while a
+         * drag is in flight so gestures stay smooth: the resample lands on
+         * release; discrete scroll/zoom-button steps resample next frame.
+         * plot_resample returns NULL for a non-Plot Graphics, after which we
+         * stop trying and keep the static primitives. */
+        if (ref_vw < 0.0) ref_vw = visible.xmax - visible.xmin;
+        if (resample_ok
+            && !IsMouseButtonDown(MOUSE_BUTTON_LEFT)
+            && !IsMouseButtonDown(MOUSE_BUTTON_RIGHT)
+            && !IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+            double vw = visible.xmax - visible.xmin;
+            bool zoom_changed = vw < ref_vw * 0.7 || vw > ref_vw * 1.4;
+            double edge = vw * 0.02;
+            bool panned_off = visible.xmin < cov_lo + edge || visible.xmax > cov_hi - edge;
+            if (vw > 0.0 && isfinite(vw) && (zoom_changed || panned_off)) {
+                double margin = vw * 0.25;
+                double nx0 = visible.xmin - margin, nx1 = visible.xmax + margin;
+                Expr* np = plot_resample(graphics_expr, nx0, nx1);
+                if (np) {
+                    if (dyn_prims) expr_free(dyn_prims);
+                    dyn_prims = np;
+                    draw_prims = dyn_prims;
+                    cov_lo = nx0; cov_hi = nx1; ref_vw = vw;
+                } else {
+                    resample_ok = false;
+                }
+            }
+        }
+
         BeginDrawing();
         ClearBackground(to_raylib(opts.background));
 
         BeginMode2D(camera);
-        if (opts.axes) draw_axes_lines(&visible);
+        if (opts.axes) draw_axes_lines(&visible, ysc);
         DrawState state = init_state;
-        draw_primitive(prims, &state);
+        draw_primitive(draw_prims, &state);
         EndMode2D();
 
-        if (opts.axes) draw_axes_labels(&visible, camera);
+        if (opts.axes) draw_axes_labels(&visible, camera, ysc);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);
 
         /* On a capture frame suppress every bit of UI chrome so the saved
@@ -850,5 +1001,7 @@ void graphics_show(const Expr* graphics_expr) {
         }
     }
 
+close_window:
+    if (dyn_prims) expr_free(dyn_prims);
     CloseWindow();
 }

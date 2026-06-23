@@ -239,6 +239,101 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
     return prims;
 }
 
+/* Sample every body over [xmin,xmax] and assemble the flat primitive
+ * List[...] that becomes the first argument of Graphics[...]: palette colour
+ * directives interleaved for multi-curve plots, plain Line runs for a single
+ * curve (which inherits the PlotStyle colour at render time). Shadows `var`
+ * internally. Returns NULL when nothing is plottable. Shared by builtin_plot
+ * (initial draw) and plot_resample (re-draw on zoom). */
+static Expr* build_plot_primitives(Expr** bodies, size_t nfun, Expr* var,
+                                    double xmin, double xmax,
+                                    const PlotSampleOpts* sopts) {
+    if (nfun == 0 || !(xmin < xmax)) return NULL;
+
+    Rule* old_own = iter_spec_shadow(var);
+    Expr*** per = malloc(sizeof(Expr**) * nfun);
+    size_t* per_count = malloc(sizeof(size_t) * nfun);
+    size_t total = 0;
+    bool any = false;
+    for (size_t fi = 0; fi < nfun; fi++) {
+        per[fi] = sample_lines(bodies[fi], var, xmin, xmax, sopts, &per_count[fi]);
+        total += per_count[fi];
+        if (per_count[fi] > 0) any = true;
+    }
+    iter_spec_restore(var, old_own);
+
+    if (!any) { free(per); free(per_count); return NULL; }
+
+    bool multi = (nfun > 1);
+    size_t cap = total + (multi ? nfun : 0);
+    Expr** prims = malloc(sizeof(Expr*) * (cap > 0 ? cap : 1));
+    size_t prim_count = 0;
+    for (size_t fi = 0; fi < nfun; fi++) {
+        if (multi) prims[prim_count++] = palette_color(fi);
+        for (size_t j = 0; j < per_count[fi]; j++) prims[prim_count++] = per[fi][j];
+        free(per[fi]);
+    }
+    free(per); free(per_count);
+
+    Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, prim_count);
+    free(prims);
+    return prim_list;
+}
+
+/* Build the hidden $PlotResample[var, {bodies}, plotPoints, maxRecursion,
+ * maxPlotPoints] node embedded in the returned Graphics[...], capturing
+ * everything plot_resample needs to re-sample later. $PlotResample is
+ * HoldAll, so the bodies survive the Graphics re-evaluation unevaluated. */
+static Expr* build_resample_meta(Expr** bodies, size_t nfun, Expr* var,
+                                  const PlotSampleOpts* sopts) {
+    Expr** bcopies = malloc(sizeof(Expr*) * (nfun > 0 ? nfun : 1));
+    for (size_t i = 0; i < nfun; i++) bcopies[i] = expr_copy(bodies[i]);
+    Expr* blist = expr_new_function(expr_new_symbol(SYM_List), bcopies, nfun);
+    free(bcopies);
+    Expr* margs[5] = {
+        expr_copy(var),
+        blist,
+        expr_new_integer(sopts->plot_points),
+        expr_new_integer(sopts->max_recursion),
+        expr_new_integer(sopts->max_plot_points),
+    };
+    return expr_new_function(expr_new_symbol(SYM_PlotResample), margs, 5);
+}
+
+Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax) {
+    if (!graphics_expr || graphics_expr->type != EXPR_FUNCTION || !(xmin < xmax)) return NULL;
+
+    /* Locate the $PlotResample[var, {bodies}, pp, mr, mpp] metadata arg. */
+    const Expr* meta = NULL;
+    size_t argc = graphics_expr->data.function.arg_count;
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = graphics_expr->data.function.args[i];
+        if (a && a->type == EXPR_FUNCTION && a->data.function.head
+            && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol == SYM_PlotResample
+            && a->data.function.arg_count == 5) { meta = a; break; }
+    }
+    if (!meta) return NULL;
+
+    Expr* var = meta->data.function.args[0];
+    Expr* blist = meta->data.function.args[1];
+    if (!var || var->type != EXPR_SYMBOL) return NULL;
+    if (!blist || blist->type != EXPR_FUNCTION || !blist->data.function.head
+        || blist->data.function.head->type != EXPR_SYMBOL
+        || blist->data.function.head->data.symbol != SYM_List) return NULL;
+
+    PlotSampleOpts sopts = { .plot_points = 25, .max_recursion = 6, .max_plot_points = -1 };
+    Expr* a2 = meta->data.function.args[2];
+    Expr* a3 = meta->data.function.args[3];
+    Expr* a4 = meta->data.function.args[4];
+    if (a2 && a2->type == EXPR_INTEGER && a2->data.integer >= 2) sopts.plot_points = (long)a2->data.integer;
+    if (a3 && a3->type == EXPR_INTEGER && a3->data.integer >= 0) sopts.max_recursion = (int)a3->data.integer;
+    if (a4 && a4->type == EXPR_INTEGER) sopts.max_plot_points = (long)a4->data.integer;
+
+    return build_plot_primitives(blist->data.function.args, blist->data.function.arg_count,
+                                 var, xmin, xmax, &sopts);
+}
+
 Expr* builtin_plot(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
@@ -287,49 +382,27 @@ Expr* builtin_plot(Expr* res) {
         return NULL;
     }
 
-    /* Sample every curve under a single shadow of the iterator variable. */
-    Rule* old_own = iter_spec_shadow(ispec.var);
-    Expr*** per = malloc(sizeof(Expr**) * nfun);
-    size_t* per_count = malloc(sizeof(size_t) * nfun);
-    size_t total = 0;
-    bool any = false;
-    for (size_t fi = 0; fi < nfun; fi++) {
-        per[fi] = sample_lines(bodies[fi], ispec.var, xmin, xmax, &sopts, &per_count[fi]);
-        total += per_count[fi];
-        if (per_count[fi] > 0) any = true;
-    }
-    iter_spec_restore(ispec.var, old_own);
-    iter_spec_free(&ispec);
-
-    if (!any) {
-        free(per); free(per_count); /* all per[fi] are NULL when nothing plotted */
+    /* Sample every curve (shadowing the iterator variable) into the initial
+     * primitive list shown at the home view. */
+    Expr* prim_list = build_plot_primitives(bodies, nfun, ispec.var, xmin, xmax, &sopts);
+    if (!prim_list) {
+        iter_spec_free(&ispec);
         for (size_t i = 0; i < passthrough_count; i++) expr_free(passthrough[i]);
         free(passthrough);
         return NULL;
     }
 
-    /* Assemble the primitive list. With more than one curve, each curve's
-     * runs are introduced by a palette colour directive so the series read
-     * as distinct yet harmonious; a single curve keeps the PlotStyle colour
-     * that split_options supplied. */
-    bool multi = (nfun > 1);
-    size_t cap = total + (multi ? nfun : 0);
-    Expr** prims = malloc(sizeof(Expr*) * (cap > 0 ? cap : 1));
-    size_t prim_count = 0;
-    for (size_t fi = 0; fi < nfun; fi++) {
-        if (multi) prims[prim_count++] = palette_color(fi);
-        for (size_t j = 0; j < per_count[fi]; j++) prims[prim_count++] = per[fi][j];
-        free(per[fi]);
-    }
-    free(per); free(per_count);
+    /* Capture f/var/options so the renderer can re-sample at the current
+     * zoom (see plot_resample) -- this is what keeps a magnified Sin[1/x^2]
+     * smooth rather than revealing the original coarse grid. */
+    Expr* meta = build_resample_meta(bodies, nfun, ispec.var, &sopts);
+    iter_spec_free(&ispec);
 
-    Expr* prim_list = expr_new_function(expr_new_symbol(SYM_List), prims, prim_count);
-    free(prims);
-
-    size_t gargc = 1 + passthrough_count;
+    size_t gargc = 1 + passthrough_count + 1;
     Expr** gargs = malloc(sizeof(Expr*) * gargc);
     gargs[0] = prim_list;
     for (size_t i = 0; i < passthrough_count; i++) gargs[1 + i] = passthrough[i];
+    gargs[gargc - 1] = meta;
     free(passthrough);
 
     Expr* graphics = expr_new_function(expr_new_symbol(SYM_Graphics), gargs, gargc);

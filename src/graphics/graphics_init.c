@@ -67,6 +67,15 @@ void graphics_init(void) {
         "style directives. Rendered on demand by Show[]. Prints as "
         "-Graphics-.");
 
+    /* Internal: Plot embeds $PlotResample[var, {bodies}, opts...] inside the
+     * Graphics it returns so the renderer can re-sample on zoom. HoldAll
+     * keeps the bodies unevaluated through the Graphics re-evaluation. */
+    symtab_get_def("$PlotResample")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("$PlotResample",
+        "$PlotResample[var, {f...}, plotPoints, maxRecursion, maxPlotPoints]\n"
+        "\tInternal Plot metadata used by the renderer to re-sample curves "
+        "at the current zoom. Not intended for direct use.");
+
     symtab_add_builtin("Show", builtin_show);
     symtab_get_def("Show")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Show",

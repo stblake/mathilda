@@ -560,6 +560,7 @@ const char* SYM_PlotLabel = NULL;
 const char* SYM_AspectRatio = NULL;
 const char* SYM_Background = NULL;
 const char* SYM_ImageSize = NULL;
+const char* SYM_PlotResample = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -1114,6 +1115,7 @@ void sym_names_init(void) {
     SYM_AspectRatio                = intern_symbol("AspectRatio");
     SYM_Background                 = intern_symbol("Background");
     SYM_ImageSize                  = intern_symbol("ImageSize");
+    SYM_PlotResample               = intern_symbol("$PlotResample");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

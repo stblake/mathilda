@@ -106,16 +106,18 @@ Rendering options (read by `Show`/`Plot`'s renderer, stored as trailing
 |---|---|---|---|
 | `Axes` | `False` | `True` | draw coordinate axes with tick labels |
 | `AspectRatio` | `Automatic` (fit window) | `1/GoldenRatio` | plot-box height/width ratio |
-| `PlotRange` | `Automatic` (fit data bounding box) | same | `{{xmin,xmax},{ymin,ymax}}` |
+| `PlotRange` | `Automatic` (fit data bounding box) | same | `{{xmin,xmax},{ymin,ymax}}` (fix both axes) or `{ymin,ymax}` (fix y only, x stays automatic) |
 | `PlotStyle` | a default blue | same | style directive(s) used as the initial draw color |
 | `Background` | white | white | window background color |
 | `ImageSize` | `{800, 600}` | same | window size in pixels, or a single width |
 | `AxesLabel` | none | none | `{xlabel, ylabel}` |
 | `PlotLabel` | none | none | title drawn above the plot |
 
-**Interactive controls** (within the window): mouse wheel to zoom,
-right-drag (or middle-drag) to pan, `Q`/`E` to rotate the view, `R` to
-reset, `Esc` or the window's close button to return to the REPL.
+**Interactive controls** (within the window): mouse wheel to zoom *about
+the cursor* (the point under the mouse stays fixed, so you magnify whatever
+you point at rather than always diving toward the plot centre), right-drag
+(or middle-drag) to pan, `Q`/`E` to rotate the view, `R` to reset, `Esc` or
+the window's close button to return to the REPL.
 
 **Toolbar** — a Plotly-style modebar of gray icon buttons sits in the
 top-right corner (hover for a tooltip):
@@ -129,9 +131,21 @@ top-right corner (hover for a tooltip):
 | Magnifier `−` | Zoom out about the center |
 | Expand arrows | Autoscale to fit the data |
 | House | Reset axes to the initial view |
+| ✕ | Close the window (red hover tint; same as `Esc`) |
 
 The active drag tool (Pan or Zoom) is highlighted. Left-drag follows the
-selected tool; right/middle-drag always pans regardless of tool.
+selected tool; right/middle-drag always pans regardless of tool. All icons
+are anti-aliased hand-drawn vector glyphs (4× MSAA).
+
+**Live re-sampling** — for a window created by `Plot`, zooming or panning
+re-runs the adaptive sampler over the newly visible x-range, so a magnified
+curve keeps full resolution (e.g. `Plot[Sin[1/x^2], {x, 1, 3}]` stays
+smooth when zoomed in) rather than exposing the home view's coarse grid.
+Re-sampling lands on drag release to keep gestures smooth. Because the
+mouse wheel zooms about the cursor, you can drive the view into an
+off-centre region of interest and watch the sampler refine it — handy when
+the plot's centre is its worst point (the `x=0` essential singularity of
+`Sin[1/x^2]`, say, which no sampling can resolve).
 
 **Features**:
 - `Protected`.
