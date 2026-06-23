@@ -2385,6 +2385,25 @@ void info_init(void) {
         "\tform f[args...] it is stored as a DownValue on f.  Set has attribute\n"
         "\tHoldFirst so lhs is not evaluated before the assignment.");
 
+    // Options machinery
+    symtab_set_docstring("Options",
+        "Options[f] gives the list of default option rules for the symbol f.\n"
+        "\tOptions[expr] gives the options explicitly set in an expression such\n"
+        "\tas a graphics object.  Options[obj, name] gives the setting for the\n"
+        "\tnamed option; Options[obj, {names}] gives a list of settings.  Assign\n"
+        "\tto Options[f] to redefine all default options at once.");
+    symtab_set_docstring("SetOptions",
+        "SetOptions[s, name -> value, ...] sets default options for the symbol\n"
+        "\ts and returns the new Options[s].  It can change Protected (but not\n"
+        "\tLocked) symbols, and only changes existing options -- an unknown name\n"
+        "\traises SetOptions::optnf.  Use AppendTo[Options[s], ...] to add one.");
+    symtab_set_docstring("OptionValue",
+        "OptionValue[name] gives the value of an option named name in the\n"
+        "\toptions matched by OptionsPattern[] in the enclosing rule.\n"
+        "\tOptionValue[f, name] uses options associated with the head f;\n"
+        "\tOptionValue[f, opts, name] resolves from the explicit rules opts then\n"
+        "\tthe defaults from f; a trailing Hold wraps the result in Hold.");
+
     // In-place numeric assignment operators
     symtab_set_docstring("Increment",
         "Increment[x] or x++\n"

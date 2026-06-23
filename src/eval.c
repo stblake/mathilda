@@ -477,6 +477,44 @@ static bool is_assignable_lhs(Expr* lhs, Expr* rhs) {
  * Mathematica semantics.
  */
 static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
+    /* Options[sym] = {name -> value, ...} redefines the symbol's default
+     * option settings. Intercepted before the Protected guard below because
+     * Options itself is Protected; this writes the dedicated options store
+     * rather than a DownValue (mirrors SetOptions). The RHS must be a List of
+     * Rule/RuleDelayed with symbol/string names, else the assignment is left
+     * unevaluated. */
+    if (lhs->type == EXPR_FUNCTION
+        && lhs->data.function.head->type == EXPR_SYMBOL
+        && lhs->data.function.head->data.symbol == SYM_Options
+        && lhs->data.function.arg_count == 1
+        && lhs->data.function.args[0]->type == EXPR_SYMBOL) {
+        if (rhs->type == EXPR_FUNCTION
+            && rhs->data.function.head->type == EXPR_SYMBOL
+            && rhs->data.function.head->data.symbol == SYM_List) {
+            bool all_rules = true;
+            for (size_t i = 0; i < rhs->data.function.arg_count; i++) {
+                Expr* r = rhs->data.function.args[i];
+                if (!(r->type == EXPR_FUNCTION
+                      && r->data.function.head->type == EXPR_SYMBOL
+                      && (r->data.function.head->data.symbol == SYM_Rule
+                          || r->data.function.head->data.symbol == SYM_RuleDelayed)
+                      && r->data.function.arg_count == 2
+                      && (r->data.function.args[0]->type == EXPR_SYMBOL
+                          || r->data.function.args[0]->type == EXPR_STRING))) {
+                    all_rules = false;
+                    break;
+                }
+            }
+            if (all_rules) {
+                symtab_set_options(lhs->data.function.args[0]->data.symbol,
+                                   expr_copy(rhs));
+                eval_clock_bump();
+                return true;
+            }
+        }
+        return false;
+    }
+
     /* Block writes to Protected symbols. List destructuring is recursed
      * into below and each child runs through apply_assignment again, so
      * per-element protection checks happen naturally -- we only skip the

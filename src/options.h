@@ -65,4 +65,39 @@ const Expr* extract_extension_option(const Expr* res, size_t* new_argc);
 const Expr* extract_extension_option_full(const Expr* res, size_t* new_argc,
                                           bool* automatic_out);
 
+/* ----------------------------------------------------------------------
+ * Options / SetOptions / OptionValue builtins (src/options_builtin.c)
+ * -------------------------------------------------------------------- */
+
+/* Options[sym] / Options[expr] / Options[obj, name] / Options[obj, {names}].
+ * For a symbol, returns a copy of its registered default options (or {}); for
+ * a compound expression, returns the option rules explicitly present in its
+ * arguments. The two-argument forms select named settings. */
+Expr* builtin_options(Expr* res);
+
+/* SetOptions[s, name->val, ...] updates s's default options in place (bypassing
+ * Protected, refusing Locked) and returns the new Options[s]. Unknown option
+ * names emit SetOptions::optnf and leave the call unevaluated. */
+Expr* builtin_setoptions(Expr* res);
+
+/* OptionValue[name] / [f,name] / [f,opts,name] / [f,opts,name,Hold] — resolve
+ * an option value from an explicit rule list and/or the defaults derived from
+ * f. The bare and two-argument forms only resolve inside a rule whose LHS used
+ * OptionsPattern (see optionvalue_inject_context). */
+Expr* builtin_optionvalue(Expr* res);
+
+/* Register the three builtins, their attributes, and the comprehensive table
+ * of default options for option-accepting builtins. Call after every module
+ * _init so all option-name symbols are interned. */
+void options_builtin_init(void);
+
+/* Functional rewrite used by apply_down_values when a fired DownValue's LHS
+ * carried an OptionsPattern. Returns a NEW tree (caller frees the old one) in
+ * which each context-dependent OptionValue node is rewritten into the explicit
+ * OptionValue[head_sym, opts, name] form so builtin_optionvalue can resolve it.
+ * `opts` is the List of options matched by the OptionsPattern. The input tree
+ * is never mutated (it may share refcounted nodes with the stored rule). */
+Expr* optionvalue_inject_context(const Expr* e, const char* head_sym,
+                                 const Expr* opts);
+
 #endif /* MATHILDA_OPTIONS_H */

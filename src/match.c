@@ -26,6 +26,22 @@ static bool is_atom(const Expr* e) {
     return false;
 }
 
+/* An option argument: Rule[name,val] / RuleDelayed[name,val] with a
+ * symbol/string name. Used by OptionsPattern matching. */
+static bool mo_is_option_rule(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return false;
+    if (h->data.symbol != SYM_Rule && h->data.symbol != SYM_RuleDelayed) return false;
+    if (e->data.function.arg_count != 2) return false;
+    const Expr* lhs = e->data.function.args[0];
+    return lhs && (lhs->type == EXPR_SYMBOL || lhs->type == EXPR_STRING);
+}
+static bool mo_is_list(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_List;
+}
+
 MatchEnv* env_new(void) {
     MatchEnv* env = malloc(sizeof(MatchEnv));
     env->count = 0;
@@ -588,6 +604,57 @@ static bool match_args_internal(Expr** exprs, size_t n_exprs, Expr** pats, size_
     }
     
     Expr* opt_pat = current_p;
+
+    /* OptionsPattern[]: consume the remaining option arguments (each a
+     * Rule/RuleDelayed with a symbol/string name, or a List of such rules),
+     * flatten them, and bind the collected options under the reserved key
+     * "$OptionsPattern$" so OptionValue can resolve them when the rule fires.
+     * It is the least-specific, variable-arity slot, so it greedily takes the
+     * whole trailing option run; any remaining non-option argument makes this
+     * rule fail to match (e.g. f[OptionsPattern[]] does not match f[x]). */
+    if (opt_pat->type == EXPR_FUNCTION
+        && opt_pat->data.function.head->type == EXPR_SYMBOL
+        && opt_pat->data.function.head->data.symbol == SYM_OptionsPattern) {
+        size_t cap = (n_exprs ? n_exprs : 1), cnt = 0;
+        Expr** collected = malloc(sizeof(Expr*) * cap);
+        bool ok = true;
+        for (size_t i = 0; i < n_exprs && ok; i++) {
+            Expr* a = exprs[i];
+            if (mo_is_option_rule(a)) {
+                if (cnt == cap) { cap *= 2; collected = realloc(collected, sizeof(Expr*) * cap); }
+                collected[cnt++] = a;
+            } else if (mo_is_list(a)) {
+                for (size_t j = 0; j < a->data.function.arg_count; j++) {
+                    Expr* e2 = a->data.function.args[j];
+                    if (!mo_is_option_rule(e2)) { ok = false; break; }
+                    if (cnt == cap) { cap *= 2; collected = realloc(collected, sizeof(Expr*) * cap); }
+                    collected[cnt++] = e2;
+                }
+            } else {
+                ok = false;
+            }
+        }
+        if (ok) {
+            Expr** items = malloc(sizeof(Expr*) * (cnt ? cnt : 1));
+            for (size_t i = 0; i < cnt; i++) items[i] = expr_copy(collected[i]);
+            Expr* optlist = expr_new_function(expr_new_symbol(SYM_List), items, cnt);
+            free(items);
+            size_t saved = env->count;
+            env_set(env, "$OptionsPattern$", optlist);  /* env_set copies value */
+            expr_free(optlist);
+            /* Consume every remaining expr; the rest of the pattern list must
+             * match against zero arguments. */
+            if (match_args_internal(exprs + n_exprs, 0, pats + 1, n_pats - 1, env,
+                                    condition, pat_head, total_pats, parent)) {
+                free(collected);
+                return true;
+            }
+            env_rollback(env, saved);
+        }
+        free(collected);
+        return false;
+    }
+
     if (is_optional && is_shortest) {
         size_t saved_env_count = env->count;
         Expr* def_val = NULL;

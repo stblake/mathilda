@@ -301,6 +301,7 @@ set(COMMON_SRC
     ../src/sym_names.c
     ../src/repl_hooks.c
     ../src/options.c
+    ../src/options_builtin.c
     ../src/calculus/integrate.c
     ../src/calculus/integrate_interp.c
     ../src/calculus/integrate_unknown.c
@@ -473,6 +474,9 @@ target_include_directories(patterns_tests PRIVATE ../src)
 
 add_executable(replace_tests test_replace.c ${COMMON_SRC})
 target_include_directories(replace_tests PRIVATE ../src)
+
+add_executable(options_tests test_options.c ${COMMON_SRC})
+target_include_directories(options_tests PRIVATE ../src)
 
 add_executable(core_tests test_core.c ${COMMON_SRC})
 target_include_directories(core_tests PRIVATE ../src)

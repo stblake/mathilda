@@ -8,6 +8,7 @@
 #include "sym_names.h"
 #include "eval.h"
 #include "arithmetic.h"
+#include "options.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -60,6 +61,7 @@ SymbolDef* symtab_get_def(const char* symbol_name) {
     def->builtin_func = NULL;
     def->attributes = 0;
     def->docstring = NULL;
+    def->default_options = NULL;
 
     SymEntry* new_entry = malloc(sizeof(SymEntry));
     new_entry->def = def;
@@ -96,6 +98,17 @@ void symtab_set_docstring(const char* symbol_name, const char* doc) {
 const char* symtab_get_docstring(const char* symbol_name) {
     SymbolDef* def = symtab_get_def(symbol_name);
     return def->docstring;
+}
+
+void symtab_set_options(const char* symbol_name, Expr* list) {
+    SymbolDef* def = symtab_get_def(symbol_name);
+    if (def->default_options) expr_free(def->default_options);
+    def->default_options = list;
+}
+
+Expr* symtab_get_options(const char* symbol_name) {
+    SymbolDef* def = symtab_lookup(symbol_name);
+    return def ? def->default_options : NULL;
 }
 
 /* ============================================================
@@ -746,6 +759,7 @@ void symtab_remove_symbol(const char* symbol_name) {
                 curr = next;
             }
             if (entry->def->docstring) free(entry->def->docstring);
+            if (entry->def->default_options) expr_free(entry->def->default_options);
             /* symbol_name is interned and owned by sym_intern; do not free. */
             free(entry->def);
 
@@ -895,6 +909,7 @@ void symtab_clear(void) {
             entry->def->down_values = NULL;
 
             if (entry->def->docstring) free(entry->def->docstring);
+            if (entry->def->default_options) expr_free(entry->def->default_options);
             /* symbol_name is interned and owned by sym_intern; do not free. */
             free(entry->def);
             free(entry);
@@ -989,6 +1004,17 @@ Expr* apply_down_values(Expr* expr) {
         MatchEnv* env = env_new();
         if (match(expr, rule->pattern, env)) {
             Expr* result = replace_bindings(rule->replacement, env);
+            /* If the matched pattern carried an OptionsPattern, rewrite the
+             * context-dependent OptionValue[...] nodes in the RHS into explicit
+             * OptionValue[head, opts, name] form so they resolve against the
+             * supplied options and the head's defaults. */
+            Expr* opts = env_get(env, "$OptionsPattern$");
+            if (opts) {
+                Expr* resolved =
+                    optionvalue_inject_context(result, head->data.symbol, opts);
+                expr_free(result);
+                result = resolved;
+            }
             env_free(env);
             return result;
         }

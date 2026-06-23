@@ -68,3 +68,21 @@ Gives the number of elements or subexpressions that match a pattern.
 - Built-in default values include `0` for `Plus` and `1` for `Times` and `Power`.
 - Used automatically by the pattern matcher when `_.` is present in the pattern.
 
+## OptionsPattern
+- `OptionsPattern[]` matches the trailing option arguments of a call — each a
+  `name -> value` (or `name :> value`) rule, or a `List` of such rules, which is
+  flattened. As the least-specific, variable-arity slot it greedily consumes the
+  whole trailing option run; any remaining non-option argument makes the rule
+  fail to match.
+- Inside the rule's right-hand side, `OptionValue[name]` (and
+  `OptionValue[f, name]`) read the matched options, falling back to the defaults
+  registered with the head via `Options` (see
+  [Assignment and Rules](assignment-and-rules.md)).
+
+```mathematica
+In[1]:= Options[g] = {a -> 1, b -> 2};
+        g[OptionsPattern[]] := {OptionValue[a], OptionValue[b]}
+        {g[], g[a -> 17], g[{a -> 3, b -> 4}]}
+Out[1]= {{1, 2}, {17, 2}, {3, 4}}
+```
+

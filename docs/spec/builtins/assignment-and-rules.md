@@ -244,3 +244,72 @@ In[3]:= Unprotect[f]
 Out[3]= {"f"}
 ```
 
+## Options, SetOptions, OptionValue
+
+Default option settings are stored per symbol (the `DefaultValues`-equivalent),
+separate from its OwnValues/DownValues. Built-in option-accepting functions ship
+with their defaults pre-registered, so `Options[f]` is queryable for both kernel
+and user symbols.
+
+- `Options[f]` (symbol): the list of default option rules `{name -> value, ...}`,
+  or `{}` if none.
+- `Options[expr]` (compound expression): the option rules explicitly present in
+  the expression's arguments — e.g. the options of a `Graphics` object.
+- `Options[obj, name]` / `Options[obj, {n1, n2, ...}]`: the selected setting(s),
+  as a list of rules.
+- `Options[f] = {name -> value, ...}`: redefines **all** of `f`'s default options
+  at once (works through `Set`, bypassing the `Protected` attribute on `Options`).
+- `SetOptions[s, name -> value, ...]`: changes individual existing defaults and
+  returns the new `Options[s]`. It works on `Protected` (but not `Locked`)
+  symbols. It cannot **add** an option — an unknown name raises
+  `SetOptions::optnf` and leaves the call unevaluated. Use
+  `AppendTo[Options[s], name -> value]` (or `PrependTo`) to add one.
+- `OptionValue[name]`, `OptionValue[f, name]`, `OptionValue[f, opts, name]`,
+  `OptionValue[f, opts, name, Hold]`: resolve a single option value from the
+  explicit rules `opts` first, then the defaults derived from `f` (a symbol, a
+  rule, or a list of either). The bare and two-argument forms resolve inside a
+  rule whose left-hand side used `OptionsPattern[]` (see
+  [Pattern Matching](pattern-matching.md)). Option names may be symbols or
+  strings interchangeably, ignoring contexts; a trailing `Hold` wraps the
+  resolved value in `Hold`.
+
+**Features**:
+- `Options`, `SetOptions`, and `OptionValue` all have attribute `{Protected}`.
+- Default options survive `Clear[f]` (only rules are cleared) and are removed
+  with the symbol by `Remove[f]`.
+- The registered defaults mirror the options each builtin's evaluator actually
+  honors, with the value it falls back to when the option is absent. The sweep
+  covers, among others: `Integrate` (`Method`), `Limit` (`Direction`,
+  `Assumptions`), `Series`/`PowerExpand` (`Assumptions`), `D`/`Dt`
+  (`NonConstants`), `Sum`/`Product` (`Method`), `Simplify`/`FullSimplify`
+  (`Assumptions`, `ComplexityFunction`, `TransformationFunctions`),
+  `GroebnerBasis` (`MonomialOrder -> Lexicographic`, `CoefficientDomain ->
+  Rationals`, `Method`, `Sort`, `Modulus`), `Factor`/`Together`/`Cancel`/`Apart`
+  and the `Polynomial*` family (`Extension`, `Modulus`), `IrreduciblePolynomialQ`
+  /`SquareFreeQ` (`GaussianIntegers`, ...), the eigen/linear-algebra heads
+  (`Eigenvalues`/`Eigenvectors` → `Cubics`, `Quartics`; `LinearSolve`,
+  `LeastSquares`, `NullSpace`, `MatrixRank`, `PseudoInverse`,
+  `SingularValueDecomposition`), `PrimeQ`/`CoprimeQ`/`FactorInteger`
+  (`GaussianIntegers`), the `Random*` heads (`WorkingPrecision`), the numerical
+  calculus/root-finding heads (`NIntegrate`, `NSum`, `NProduct`, `NLimit`, `ND`,
+  `NSeries`, `NResidue`, `FindRoot`, `FindMinimum`, `FindMaximum`, `NRoots`,
+  `NSolve`, `Solve`, `Fit`), `Plot`, and the structural family that reads
+  `Heads` (`Cases`/`Count`/`DeleteCases`/`MemberQ`/`Map`/`Apply`/`MapAll`/`Level`
+  /`Depth`/`LeafCount` default `Heads -> False`; `Position`/`FreeQ` default
+  `Heads -> True`).
+
+```mathematica
+In[1]:= Options[LinearSolve]
+Out[1]= {Method -> Automatic, Modulus -> 0, ZeroTest -> Automatic}
+
+In[2]:= Options[f] = {a -> 1, b -> 2};
+        f[OptionsPattern[]] := {OptionValue[a], OptionValue[b]}
+        {f[], f[a -> 17], f[b -> 18], f[a -> 17, b -> 18]}
+Out[2]= {{1, 2}, {17, 2}, {1, 18}, {17, 18}}
+
+In[3]:= SetOptions[f, c -> 3]
+SetOptions::optnf: c is not a known option for f.
+        AppendTo[Options[f], c -> 3]
+Out[3]= {a -> 1, b -> 2, c -> 3}
+```
+

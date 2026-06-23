@@ -47,6 +47,11 @@ typedef struct {
     BuiltinFunc builtin_func; // C function evaluating this symbol
     uint32_t attributes;
     char* docstring;
+    /* Default option settings for this symbol, the DefaultValues-equivalent
+     * backing Options[f] / SetOptions[f]. A List[Rule[name,val], ...] owned
+     * by the SymbolDef, or NULL when the symbol has no registered options.
+     * Survives Clear[f] (only rules are cleared), freed on symbol removal. */
+    Expr* default_options;
 } SymbolDef;
 
 // Initialize the symbol table
@@ -84,6 +89,14 @@ void symtab_add_builtin(const char* symbol_name, BuiltinFunc func);
 // Set/get docstring for a symbol
 void symtab_set_docstring(const char* symbol_name, const char* doc);
 const char* symtab_get_docstring(const char* symbol_name);
+
+// Set/get the default option settings (a List[Rule[name,val], ...]) for a
+// symbol -- the store behind Options[f] and SetOptions[f]. symtab_set_options
+// takes ownership of `list` (freeing any previously stored options); pass NULL
+// to clear. symtab_get_options returns a borrowed pointer (do not free),
+// or NULL when the symbol has no registered options.
+void symtab_set_options(const char* symbol_name, Expr* list);
+Expr* symtab_get_options(const char* symbol_name);
 
 // Add an OwnValue rule (e.g., x = 4)
 void symtab_add_own_value(const char* symbol_name, Expr* pattern, Expr* replacement);

@@ -633,6 +633,11 @@ void core_init(void) {
     void graphics_init(void);
     graphics_init();
 
+    /* Options/SetOptions/OptionValue + the default-options registry. Runs last
+     * so every option-name symbol used by the registry is already interned. */
+    void options_builtin_init(void);
+    options_builtin_init();
+
     /* Flag every symbol interned so far as a System symbol. At this point in
      * startup the interner holds exactly the kernel's built-in names (cached
      * SYM_* pointers, registered builtins, option names with docstrings, ...).
@@ -1452,18 +1457,38 @@ Expr* builtin_prepend(Expr* res) {
     return final_res;
 }
 
+/* Assign new_val back to the target `sym`. For a plain symbol this is a direct
+ * OwnValue update; for any other assignable form (e.g. Options[f], a Part) it
+ * routes through Set so the appropriate handler in apply_assignment runs. In
+ * the symbol case it adopts new_val and returns it; otherwise it consumes
+ * new_val (handed to Set) and returns the assigned value. */
+static Expr* inplace_assign_back(Expr* sym, Expr* new_val) {
+    if (sym->type == EXPR_SYMBOL) {
+        symtab_add_own_value(sym->data.symbol, sym, new_val);
+        return new_val;
+    }
+    Expr** set_args = malloc(sizeof(Expr*) * 2);
+    set_args[0] = expr_copy(sym);
+    set_args[1] = new_val;                 /* adopt */
+    Expr* set_expr = expr_new_function(expr_new_symbol(SYM_Set), set_args, 2);
+    free(set_args);
+    Expr* assigned = evaluate(set_expr);
+    expr_free(set_expr);
+    return assigned;
+}
+
 Expr* builtin_append_to(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* sym = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
-    if (sym->type != EXPR_SYMBOL) return NULL;
-    
+    if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
+
     Expr* current_val = evaluate(sym);
     if (!current_val || current_val->type != EXPR_FUNCTION) {
         if (current_val) expr_free(current_val);
         return NULL;
     }
-    
+
     size_t new_count = current_val->data.function.arg_count + 1;
     Expr** new_args = malloc(sizeof(Expr*) * new_count);
     for (size_t i = 0; i < current_val->data.function.arg_count; i++) {
@@ -1472,25 +1497,25 @@ Expr* builtin_append_to(Expr* res) {
     new_args[new_count - 1] = expr_copy(elem);
     Expr* new_val = expr_new_function(expr_copy(current_val->data.function.head), new_args, new_count);
     free(new_args);
-    
-    symtab_add_own_value(sym->data.symbol, sym, new_val);
-    
+
+    Expr* result = inplace_assign_back(sym, new_val);
+
     expr_free(current_val);
-    return new_val;
+    return result;
 }
 
 Expr* builtin_prepend_to(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* sym = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
-    if (sym->type != EXPR_SYMBOL) return NULL;
-    
+    if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
+
     Expr* current_val = evaluate(sym);
     if (!current_val || current_val->type != EXPR_FUNCTION) {
         if (current_val) expr_free(current_val);
         return NULL;
     }
-    
+
     size_t new_count = current_val->data.function.arg_count + 1;
     Expr** new_args = malloc(sizeof(Expr*) * new_count);
     new_args[0] = expr_copy(elem);
@@ -1499,11 +1524,11 @@ Expr* builtin_prepend_to(Expr* res) {
     }
     Expr* new_val = expr_new_function(expr_copy(current_val->data.function.head), new_args, new_count);
     free(new_args);
-    
-    symtab_add_own_value(sym->data.symbol, sym, new_val);
-    
+
+    Expr* result = inplace_assign_back(sym, new_val);
+
     expr_free(current_val);
-    return new_val;
+    return result;
 }
 
 static Expr* rules_to_list(Rule* r) {
