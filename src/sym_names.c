@@ -167,6 +167,7 @@ const char* SYM_FromAbove = NULL;
 const char* SYM_FromBelow = NULL;
 const char* SYM_FromContinuedFraction = NULL;
 const char* SYM_FromDigits = NULL;
+const char* SYM_Full = NULL;
 const char* SYM_FullForm = NULL;
 const char* SYM_Function = NULL;
 const char* SYM_Beta = NULL;
@@ -724,6 +725,7 @@ void sym_names_init(void) {
     SYM_FromBelow                  = intern_symbol("FromBelow");
     SYM_FromContinuedFraction      = intern_symbol("FromContinuedFraction");
     SYM_FromDigits                 = intern_symbol("FromDigits");
+    SYM_Full                       = intern_symbol("Full");
     SYM_FullForm                   = intern_symbol("FullForm");
     SYM_Function                   = intern_symbol("Function");
     SYM_Beta                       = intern_symbol("Beta");

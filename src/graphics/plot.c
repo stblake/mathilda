@@ -157,9 +157,26 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
             expr_free(v);
             if (!on && !off) { free(passthrough); return false; }
             sopts->mesh = on;
+        } else if (name == SYM_AspectRatio) {
+            /* The renderer has no evaluator, so resolve the value here. The
+             * symbolic settings Automatic and Full are interpreted downstream
+             * and pass through verbatim; anything else (a plain ratio, or a
+             * symbolic-numeric one like 1/GoldenRatio) is numericalized to a
+             * real so render.c receives a machine number. A value that won't
+             * reduce to a positive real falls back to Automatic. */
+            have_aspect = true;
+            if (rhs->type == EXPR_SYMBOL
+                && (rhs->data.symbol == SYM_Automatic || rhs->data.symbol == SYM_Full)) {
+                passthrough[n++] = expr_copy(arg);
+            } else {
+                double v;
+                Expr* val = (numericize_bound(rhs, &v) && v > 0)
+                    ? expr_new_real(v) : expr_new_symbol(SYM_Automatic);
+                Expr* a[2] = { expr_new_symbol(SYM_AspectRatio), val };
+                passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
+            }
         } else {
             if (name == SYM_Axes) have_axes = true;
-            else if (name == SYM_AspectRatio) have_aspect = true;
             else if (name == SYM_PlotStyle) have_style = true;
             passthrough[n++] = expr_copy(arg);
         }

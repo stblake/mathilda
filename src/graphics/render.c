@@ -7,6 +7,7 @@
 
 #include "show.h"
 #include "plot.h"
+#include "render.h"
 #include "sampling.h"
 #include "hershey_font.h"
 #include "primitives.h"
@@ -111,7 +112,10 @@ typedef struct {
     bool y_auto;        /* y extent auto-computed from the data */
     bool clip_outliers; /* on the auto y-axis, clamp sparse asymptote spikes */
     PlotRange2D range;  /* explicit bounds; only the non-auto axes are read */
-    double aspect_ratio; /* <= 0 means Automatic */
+    double aspect_ratio; /* height/width; <= 0 means Automatic (true geometry) */
+    bool aspect_full;    /* AspectRatio -> Full: stretch to fill the window */
+    bool height_pinned;  /* ImageSize -> {w,h}: height is fixed, AspectRatio
+                          * shapes the data within rather than the window */
     RGBA8 style_color;
     RGBA8 background;
     long width, height;
@@ -125,6 +129,8 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->y_auto = true;
     o->clip_outliers = true;
     o->aspect_ratio = -1.0;
+    o->aspect_full = false;
+    o->height_pinned = false;
     o->style_color = (RGBA8){ 30, 80, 180, 255 };
     o->background = (RGBA8){ 255, 255, 255, 255 };
     o->width = 800;
@@ -147,8 +153,18 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
         if (name == SYM_Axes) {
             o->axes = expr_is_sym(rhs, SYM_True);
         } else if (name == SYM_AspectRatio) {
-            double v;
-            if (expr_to_d(rhs, &v) && v > 0) o->aspect_ratio = v;
+            /* Automatic (default): keep the <=0 sentinel -> true geometry.
+             * Full: fill the window; resolved to height/width after the loop
+             * since ImageSize may follow AspectRatio in the option list.
+             * Numeric a>0: explicit height-to-width ratio. */
+            if (expr_is_sym(rhs, SYM_Automatic)) {
+                o->aspect_ratio = -1.0; o->aspect_full = false;
+            } else if (expr_is_sym(rhs, SYM_Full)) {
+                o->aspect_full = true;
+            } else {
+                double v;
+                if (expr_to_d(rhs, &v) && v > 0) { o->aspect_ratio = v; o->aspect_full = false; }
+            }
         } else if (name == SYM_PlotStyle && rhs->type == EXPR_FUNCTION
                    && rhs->data.function.head->type == EXPR_SYMBOL) {
             if (rhs->data.function.head->data.symbol == SYM_RGBColor) o->style_color = rgba_from_rgbcolor(rhs);
@@ -162,7 +178,7 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
                 && rhs->data.function.head->data.symbol == SYM_List && rhs->data.function.arg_count == 2) {
                 double w, hh;
                 if (expr_to_d(rhs->data.function.args[0], &w)) o->width = (long)w;
-                if (expr_to_d(rhs->data.function.args[1], &hh)) o->height = (long)hh;
+                if (expr_to_d(rhs->data.function.args[1], &hh)) { o->height = (long)hh; o->height_pinned = true; }
             } else {
                 double s;
                 if (expr_to_d(rhs, &s) && s > 0) { o->width = (long)s; o->height = (long)(s * 0.75); }
@@ -205,6 +221,23 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
 
     if (o->width < 100) o->width = 100;
     if (o->height < 100) o->height = 100;
+
+    /* AspectRatio -> Full: a height-to-width ratio equal to the window's own
+     * ratio makes the data fill it edge to edge (fit_by_width == fit_by_height
+     * in the scaling below). Resolved here so it tracks the final ImageSize. */
+    if (o->aspect_full) o->aspect_ratio = (double)o->height / (double)o->width;
+}
+
+long gfx_window_height(long width, long height, double aspect_ratio,
+                       bool aspect_full, bool height_pinned,
+                       double data_w, double data_h) {
+    if (height_pinned || aspect_full) return height; /* keep the ImageSize box */
+    double a = aspect_ratio > 0 ? aspect_ratio : (data_h / data_w);
+    if (!isfinite(a) || a <= 0) return height;
+    long h = (long)(width * a + 0.5);
+    if (h < 100)  h = 100;
+    if (h > 2000) h = 2000;
+    return h;
 }
 
 /* ---------------- Bounding box ---------------- */
@@ -911,6 +944,14 @@ void graphics_show(const Expr* graphics_expr) {
     double data_h = range.ymax - range.ymin;
     if (data_w <= 0) data_w = 1;
     if (data_h <= 0) data_h = 1;
+
+    /* AspectRatio sets the *window's* height-to-width ratio, not merely the
+     * internal y-scale: a wide-screen Plot (default 1/GoldenRatio) opens a
+     * short, wide window with the curve filling it edge to edge, rather than
+     * a fixed box with the curve letterboxed inside. See gfx_window_height. */
+    opts.height = gfx_window_height(opts.width, opts.height, opts.aspect_ratio,
+                                    opts.aspect_full, opts.height_pinned,
+                                    data_w, data_h);
 
     /* 4x MSAA smooths every vector stroke -- the plot curves, the axes, and
      * the hand-drawn toolbar glyphs all read as crisp anti-aliased lines

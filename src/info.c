@@ -3311,4 +3311,23 @@ void info_init(void) {
         "With USE_MPFR builds, this is the smallest positive value at\n"
         "machine precision under MPFR's current exponent range; otherwise\n"
         "it equals $MinMachineNumber.");
+
+    // Graphics options
+    symtab_set_docstring("AspectRatio",
+        "AspectRatio\n"
+        "\tis an option for Graphics and Plot that specifies the ratio of\n"
+        "\theight to width of the rendered plot.\n"
+        "\n"
+        "AspectRatio -> Automatic sets the ratio from the actual coordinate\n"
+        "values (true geometry); AspectRatio -> Full stretches the graphics to\n"
+        "fill the enclosing region; AspectRatio -> a uses the explicit\n"
+        "height-to-width ratio a. Plot defaults to 1/GoldenRatio.");
+    symtab_set_docstring("ImageSize",
+        "ImageSize\n"
+        "\tis an option for Graphics and Plot that specifies the overall size\n"
+        "\tof the image to display.\n"
+        "\n"
+        "ImageSize -> w sets the width to w pixels, with the height following\n"
+        "from AspectRatio; ImageSize -> {w, h} fixes both the width and height\n"
+        "in pixels. The default is a width of 800.");
 }

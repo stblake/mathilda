@@ -105,11 +105,11 @@ Rendering options (read by `Show`/`Plot`'s renderer, stored as trailing
 | Option | Default (bare `Graphics`) | Default (via `Plot`) | Meaning |
 |---|---|---|---|
 | `Axes` | `False` | `True` | draw coordinate axes with tick labels |
-| `AspectRatio` | `Automatic` (fit window) | `1/GoldenRatio` | plot-box height/width ratio |
+| `AspectRatio` | `Automatic` (true geometry) | `1/GoldenRatio` | window height-to-width ratio: `Automatic` shapes it from the data extent, `Full` keeps the `ImageSize` box and stretches the data to fill it, or an explicit ratio `a` (incl. symbolic like `1/GoldenRatio`) |
 | `PlotRange` | `Automatic` (data bbox, y spike-clipped) | same | `Automatic` (default), `All` (no clipping), `{{xmin,xmax},{ymin,ymax}}` (fix both axes), or `{ymin,ymax}` (fix y only, x stays automatic) |
 | `PlotStyle` | a default blue | same | style directive(s) used as the initial draw color |
 | `Background` | white | white | window background color |
-| `ImageSize` | `{800, 600}` | same | window size in pixels, or a single width |
+| `ImageSize` | width `800` | same | `w` sets the width (height follows from `AspectRatio`), or `{w, h}` fixes both in pixels (then `AspectRatio` shapes the data inside the fixed box) |
 | `AxesLabel` | none | none | `{xlabel, ylabel}` |
 | `PlotLabel` | none | none | title drawn above the plot |
 
@@ -126,6 +126,17 @@ ones like `x^5` or `Exp`, and curves with a vertical tangent like `Sqrt` or a
 removable singularity like `Sinc`) have no such runaway and keep their full,
 legitimate extent. `PlotRange -> All` disables the clipping and shows every
 sampled point; an explicit `{ymin, ymax}` overrides it outright.
+
+**Window shape (`AspectRatio`)** — `AspectRatio` is the plot's height-to-width
+ratio and so sizes the *window itself*, not merely the y-scale inside a fixed
+box. A default `Plot` (`AspectRatio -> 1/GoldenRatio`) opens a short, wide
+window (e.g. `800 × 494`) with the curve filling it edge to edge. The window
+height is `round(width * ratio)`, clamped to a screen-friendly `[100, 2000]`
+band. `Automatic` takes the ratio from the data extent (so `Graphics[Circle[]]`
+is square); `Full` instead keeps the `ImageSize` box and stretches the data to
+fill it; and `ImageSize -> {w, h}` pins both dimensions, with `AspectRatio` then
+shaping the data within the fixed frame. The value may be any real, including a
+symbolic constant such as `1/GoldenRatio` or `GoldenRatio`.
 
 **Interactive controls** (within the window): mouse wheel to zoom *about
 the cursor* (the point under the mouse stays fixed, so you magnify whatever
