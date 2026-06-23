@@ -665,6 +665,14 @@ void info_init(void) {
         "-Infinity for k != 0. Inexact real or complex arguments evaluate\n"
         "numerically at machine or arbitrary (MPFR) precision. Satisfies\n"
         "D[ProductLog[z], z] = ProductLog[z]/(z (1 + ProductLog[z])). Listable.");
+    symtab_set_docstring("LegendreP",
+        "LegendreP[n, x]\n"
+        "\tgives the Legendre polynomial P_n(x).\n"
+        "LegendreP[n, m, x] gives the associated Legendre function P_n^m(x).\n"
+        "LegendreP[n, m, a, x] gives the Legendre function of type a (a in\n"
+        "{1, 2, 3}, default 1). Integer n yields the explicit polynomial; a\n"
+        "non-integer order with an inexact argument evaluates numerically at\n"
+        "machine or arbitrary (MPFR) precision, real or complex. Listable.");
     symtab_set_docstring("StieltjesGamma",
         "StieltjesGamma[n]\n"
         "\tgives the n-th Stieltjes constant gamma_n, the Laurent coefficients of\n"
@@ -691,6 +699,11 @@ void info_init(void) {
         "E is a mathematical constant: it has attributes Constant and Protected,\n"
         "NumericQ[E] is True, and D[E, x] is 0. N[E, prec] evaluates it to any\n"
         "precision.");
+    symtab_set_docstring("I",
+        "I\n"
+        "\tis the imaginary unit Sqrt[-1].\n"
+        "I represents the imaginary unit; I^2 evaluates to -1 and complex numbers\n"
+        "are written a + b I. It has attribute Protected, and N[I] is 0. + 1. I.");
     symtab_set_docstring("Catalan",
         "Catalan\n"
         "\tis Catalan's constant, with numerical value ~= 0.915966.\n"

@@ -406,8 +406,13 @@ IntegrateTable[x_ Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b}, x] := (-2 (2 a - 3 b x
 (* Formula 124 *)
 IntegrateTable[x_^2 Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b}, x] := (2 (8 a^2 - 12 a b x + 15 b^2 x^2))/(105 b^3) (a + b x)^(3/2);
 
-(* Formula 125 *)
-IntegrateTable[x_^m_ Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, m}, x] := 2/(b (2 m + 3)) (x^m (a + b x)^(3/2) - m a IntegrateTable[x^(m - 1) Sqrt[a + b x], x]);
+(* Formula 125.  A downward recursion m -> m - 1 that terminates at the m = 0
+ * base case (Formula 122).  It is valid only for positive integer m: for a
+ * non-integer m (e.g. Sqrt[x] Sqrt[a + b x], where m = 1/2) it would march
+ * m -> -1/2 -> -3/2 -> ... without ever reaching the base case, recursing until
+ * $RecursionLimit and emitting a spurious 1/0 as it crosses m = -3/2 (where the
+ * 2 m + 3 denominator vanishes).  Guarded like its siblings (Formulas 127, 134). *)
+IntegrateTable[x_^m_ Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, m}, x] && IntegerQ[m] && m > 0 := 2/(b (2 m + 3)) (x^m (a + b x)^(3/2) - m a IntegrateTable[x^(m - 1) Sqrt[a + b x], x]);
 
 (* Formula 126 *)
 IntegrateTable[Sqrt[a_ + b_. x_]/x_, x_] /; FreeQ[{a, b}, x] := 2 Sqrt[a + b x] + a IntegrateTable[1/(x Sqrt[a + b x]), x];
@@ -424,8 +429,10 @@ IntegrateTable[x_/Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b}, x] := (-2 (2 a - b x))
 (* Formula 130 *)
 IntegrateTable[x_^2/Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b}, x] := (2 (8 a^2 - 4 a b x + 3 b^2 x^2))/(15 b^3) Sqrt[a + b x];
 
-(* Formula 131 *)
-IntegrateTable[x_^m_/Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, m}, x] := 2/((2 m + 1) b) (x^m Sqrt[a + b x] - m a IntegrateTable[x^(m - 1)/Sqrt[a + b x], x]);
+(* Formula 131.  As with Formula 125, this m -> m - 1 recursion terminates at the
+ * m = 0 base case (Formula 128) only for positive integer m; a non-integer m
+ * would recurse unboundedly and hit a 1/0 at m = -1/2 (vanishing 2 m + 1). *)
+IntegrateTable[x_^m_/Sqrt[a_ + b_. x_], x_] /; FreeQ[{a, b, m}, x] && IntegerQ[m] && m > 0 := 2/((2 m + 1) b) (x^m Sqrt[a + b x] - m a IntegrateTable[x^(m - 1)/Sqrt[a + b x], x]);
 
 (* Formula 132 *)
 IntegrateTable[1/(x_ Sqrt[a_ + b_. x_]), x_] /; FreeQ[{a, b}, x] && a < 0 := 2/Sqrt[-a] ArcTan[Sqrt[(a + b x)/-a]];

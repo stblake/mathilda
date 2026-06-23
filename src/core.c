@@ -37,6 +37,7 @@
 #include "polylog.h"
 #include "lerchphi.h"
 #include "productlog.h"
+#include "legendre.h"
 #include "airyai.h"
 #include "airybi.h"
 #include "bessel.h"
@@ -468,7 +469,7 @@ void core_init(void) {
     symtab_get_def("IntegerQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("EvenQ")->attributes |= ATTR_PROTECTED;
     symtab_get_def("OddQ")->attributes |= ATTR_PROTECTED;
-    symtab_get_def("Information")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("Information")->attributes |= (ATTR_HOLDALL | ATTR_PROTECTED);
 
     symtab_get_def("Mod")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Quotient")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
@@ -504,6 +505,7 @@ void core_init(void) {
     polylog_init();
     lerchphi_init();
     productlog_init();
+    legendre_init();
     airyai_init();
     airybi_init();
     bessel_init();
