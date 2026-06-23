@@ -569,6 +569,7 @@ extern const char* SYM_Thickness;
 extern const char* SYM_PointSize;
 extern const char* SYM_PlotPoints;
 extern const char* SYM_MaxPlotPoints;
+extern const char* SYM_Mesh;
 extern const char* SYM_PlotRange;
 extern const char* SYM_PlotStyle;
 extern const char* SYM_Axes;

@@ -199,9 +199,17 @@ algorithm and option semantics will back future plotting functions
 
 | Option | Default | Meaning |
 |---|---|---|
-| `PlotPoints` | `25` | initial uniform sample count across `[xmin,xmax]` |
+| `PlotPoints` | `50` | initial uniform sample count across `[xmin,xmax]` |
 | `MaxRecursion` | `6` | max bisection depth per initial interval when curvature/a singularity demands it |
 | `MaxPlotPoints` | `Infinity` | overall cap on stored sample points |
+| `Mesh` | `None` | `All` overlays a dot at every evaluation point (in the curve's colour); `None` draws the line only. `True`/`False` are accepted as synonyms |
+
+The adaptive sampler judges each candidate segment by the maximum **vertical**
+gap between the curve and the straight chord at three interior probe points
+(1/4, 1/2, 3/4), normalized by the displayed y-extent. Probing more than the
+midpoint alone makes it robust to oscillatory functions (e.g. a sum of sines
+of different frequencies), where a single-midpoint test would resonate with the
+grid and miss the wiggle entirely no matter how high `MaxRecursion` is set.
 
 **Features**:
 - `HoldAll`, `Protected`.
@@ -224,4 +232,7 @@ Out[3]= Plot[Sin[x], {x, a, b}]
 
 In[4]:= Plot[{Sin[1/x], Cos[1/x]}, {x, -Pi, Pi}]
 Out[4]= -Graphics-
+
+In[5]:= Plot[Sin[x] + Sin[7 x], {x, -2, 2}, Mesh -> All]
+Out[5]= -Graphics-
 ```

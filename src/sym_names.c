@@ -552,6 +552,7 @@ const char* SYM_Thickness = NULL;
 const char* SYM_PointSize = NULL;
 const char* SYM_PlotPoints = NULL;
 const char* SYM_MaxPlotPoints = NULL;
+const char* SYM_Mesh = NULL;
 const char* SYM_PlotRange = NULL;
 const char* SYM_PlotStyle = NULL;
 const char* SYM_Axes = NULL;
@@ -1107,6 +1108,7 @@ void sym_names_init(void) {
     SYM_PointSize                  = intern_symbol("PointSize");
     SYM_PlotPoints                 = intern_symbol("PlotPoints");
     SYM_MaxPlotPoints              = intern_symbol("MaxPlotPoints");
+    SYM_Mesh                       = intern_symbol("Mesh");
     SYM_PlotRange                  = intern_symbol("PlotRange");
     SYM_PlotStyle                  = intern_symbol("PlotStyle");
     SYM_Axes                       = intern_symbol("Axes");

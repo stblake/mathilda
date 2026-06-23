@@ -81,6 +81,7 @@ typedef struct {
     long plot_points;
     int  max_recursion;
     long max_plot_points; /* <= 0 means unbounded */
+    bool mesh;            /* Mesh -> All: also emit the sample points as dots */
 } PlotSampleOpts;
 
 static bool is_rule_arg(Expr* e) {
@@ -106,9 +107,10 @@ static bool parse_long_value(Expr* rhs, long* out) {
  * badly-typed value) so the caller can decline evaluation entirely. */
 static bool split_options(Expr* res, PlotSampleOpts* sopts,
                            Expr*** passthrough_out, size_t* passthrough_count_out) {
-    sopts->plot_points = 25;
+    sopts->plot_points = 50;
     sopts->max_recursion = 6;
     sopts->max_plot_points = -1;
+    sopts->mesh = false;
 
     size_t argc = res->data.function.arg_count;
     /* +3 headroom for the Axes/AspectRatio/PlotStyle defaults potentially
@@ -143,6 +145,18 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
             expr_free(v);
             if (!ok) { free(passthrough); return false; }
             sopts->max_plot_points = lv;
+        } else if (name == SYM_Mesh) {
+            /* Mesh -> All (or True) overlays the evaluation points as dots;
+             * None/False (the default) draws the line only. Consumed here, so
+             * it never reaches the Graphics[...] result. */
+            Expr* v = evaluate(expr_copy(rhs));
+            bool on = (v->type == EXPR_SYMBOL
+                       && (v->data.symbol == SYM_All || v->data.symbol == SYM_True));
+            bool off = (v->type == EXPR_SYMBOL
+                        && (v->data.symbol == SYM_None || v->data.symbol == SYM_False));
+            expr_free(v);
+            if (!on && !off) { free(passthrough); return false; }
+            sopts->mesh = on;
         } else {
             if (name == SYM_Axes) have_axes = true;
             else if (name == SYM_AspectRatio) have_aspect = true;
@@ -212,7 +226,9 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
                                            sopts->max_plot_points, &npts);
     if (!pts || npts == 0) { plot_points_free(pts); return NULL; }
 
-    Expr** prims = malloc(sizeof(Expr*) * npts);
+    /* +2 headroom for the optional Mesh dots (a PointSize directive and one
+     * Point primitive holding every sample). */
+    Expr** prims = malloc(sizeof(Expr*) * (npts + 2));
     size_t prim_count = 0;
     size_t run_start = 0;
     for (size_t i = 1; i <= npts; i++) {
@@ -233,6 +249,27 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
             run_start = i;
         }
     }
+
+    /* Mesh -> All: overlay one dot per evaluation point, in the curve's colour
+     * (the directives precede these so the dots inherit it). Sized as a small
+     * fraction of the x-span, which render scales by the same zoom as the
+     * curve, so dots stay ~constant on screen regardless of the plot range. */
+    if (sopts->mesh && npts > 0) {
+        double msize = (xmax - xmin) * 0.0025;
+        Expr* ps_arg[1] = { expr_new_real(msize > 0 ? msize : 0.005) };
+        prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_PointSize), ps_arg, 1);
+
+        Expr** dots = malloc(sizeof(Expr*) * npts);
+        for (size_t j = 0; j < npts; j++) {
+            Expr* xy[2] = { expr_new_real(pts[j].x), expr_new_real(pts[j].y) };
+            dots[j] = expr_new_function(expr_new_symbol(SYM_List), xy, 2);
+        }
+        Expr* dot_list = expr_new_function(expr_new_symbol(SYM_List), dots, npts);
+        free(dots);
+        Expr* pt_args[1] = { dot_list };
+        prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_Point), pt_args, 1);
+    }
+
     plot_points_free(pts);
     if (prim_count == 0) { free(prims); return NULL; }
     *out_count = prim_count;
@@ -281,7 +318,7 @@ static Expr* build_plot_primitives(Expr** bodies, size_t nfun, Expr* var,
 }
 
 /* Build the hidden $PlotResample[var, {bodies}, plotPoints, maxRecursion,
- * maxPlotPoints] node embedded in the returned Graphics[...], capturing
+ * maxPlotPoints, mesh] node embedded in the returned Graphics[...], capturing
  * everything plot_resample needs to re-sample later. $PlotResample is
  * HoldAll, so the bodies survive the Graphics re-evaluation unevaluated. */
 static Expr* build_resample_meta(Expr** bodies, size_t nfun, Expr* var,
@@ -290,20 +327,21 @@ static Expr* build_resample_meta(Expr** bodies, size_t nfun, Expr* var,
     for (size_t i = 0; i < nfun; i++) bcopies[i] = expr_copy(bodies[i]);
     Expr* blist = expr_new_function(expr_new_symbol(SYM_List), bcopies, nfun);
     free(bcopies);
-    Expr* margs[5] = {
+    Expr* margs[6] = {
         expr_copy(var),
         blist,
         expr_new_integer(sopts->plot_points),
         expr_new_integer(sopts->max_recursion),
         expr_new_integer(sopts->max_plot_points),
+        expr_new_integer(sopts->mesh ? 1 : 0),
     };
-    return expr_new_function(expr_new_symbol(SYM_PlotResample), margs, 5);
+    return expr_new_function(expr_new_symbol(SYM_PlotResample), margs, 6);
 }
 
 Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax) {
     if (!graphics_expr || graphics_expr->type != EXPR_FUNCTION || !(xmin < xmax)) return NULL;
 
-    /* Locate the $PlotResample[var, {bodies}, pp, mr, mpp] metadata arg. */
+    /* Locate the $PlotResample[var, {bodies}, pp, mr, mpp, mesh] metadata arg. */
     const Expr* meta = NULL;
     size_t argc = graphics_expr->data.function.arg_count;
     for (size_t i = 1; i < argc; i++) {
@@ -311,7 +349,7 @@ Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax) {
         if (a && a->type == EXPR_FUNCTION && a->data.function.head
             && a->data.function.head->type == EXPR_SYMBOL
             && a->data.function.head->data.symbol == SYM_PlotResample
-            && a->data.function.arg_count == 5) { meta = a; break; }
+            && a->data.function.arg_count == 6) { meta = a; break; }
     }
     if (!meta) return NULL;
 
@@ -322,13 +360,15 @@ Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax) {
         || blist->data.function.head->type != EXPR_SYMBOL
         || blist->data.function.head->data.symbol != SYM_List) return NULL;
 
-    PlotSampleOpts sopts = { .plot_points = 25, .max_recursion = 6, .max_plot_points = -1 };
+    PlotSampleOpts sopts = { .plot_points = 50, .max_recursion = 6, .max_plot_points = -1, .mesh = false };
     Expr* a2 = meta->data.function.args[2];
     Expr* a3 = meta->data.function.args[3];
     Expr* a4 = meta->data.function.args[4];
+    Expr* a5 = meta->data.function.args[5];
     if (a2 && a2->type == EXPR_INTEGER && a2->data.integer >= 2) sopts.plot_points = (long)a2->data.integer;
     if (a3 && a3->type == EXPR_INTEGER && a3->data.integer >= 0) sopts.max_recursion = (int)a3->data.integer;
     if (a4 && a4->type == EXPR_INTEGER) sopts.max_plot_points = (long)a4->data.integer;
+    if (a5 && a5->type == EXPR_INTEGER) sopts.mesh = (a5->data.integer != 0);
 
     return build_plot_primitives(blist->data.function.args, blist->data.function.arg_count,
                                  var, xmin, xmax, &sopts);
