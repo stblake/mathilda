@@ -587,6 +587,46 @@ extern const char* SYM_PlotLabel;
 extern const char* SYM_AspectRatio;
 extern const char* SYM_Background;
 extern const char* SYM_ImageSize;
+extern const char* SYM_AxesOrigin;
+extern const char* SYM_AxesStyle;
+extern const char* SYM_TicksStyle;
+extern const char* SYM_FrameLabel;
+extern const char* SYM_RotateLabel;
+extern const char* SYM_PlotRangePadding;
+extern const char* SYM_GridLines;
+extern const char* SYM_GridLinesStyle;
+extern const char* SYM_Prolog;
+extern const char* SYM_Epilog;
+/* Named color constants (RGBColor[...] equivalents), recognized anywhere a
+ * graphics style directive is read. */
+extern const char* SYM_Black;
+extern const char* SYM_White;
+extern const char* SYM_Gray;
+extern const char* SYM_LightGray;
+extern const char* SYM_Red;
+extern const char* SYM_Green;
+extern const char* SYM_Blue;
+extern const char* SYM_Cyan;
+extern const char* SYM_Magenta;
+extern const char* SYM_Yellow;
+extern const char* SYM_Orange;
+extern const char* SYM_Pink;
+extern const char* SYM_Purple;
+extern const char* SYM_Brown;
+extern const char* SYM_Hue;
+extern const char* SYM_ColorFunction;
+extern const char* SYM_ColorFunctionScaling;
+extern const char* SYM_Filling;
+extern const char* SYM_FillingStyle;
+extern const char* SYM_Axis;
+extern const char* SYM_Bottom;
+extern const char* SYM_Top;
+extern const char* SYM_PlotLegends;
+extern const char* SYM_RegionFunction;
+extern const char* SYM_LabelStyle;
+/* Internal: carries Plot's per-curve legend swatch colors and labels
+ * inside the returned Graphics[...] for draw_legend() to read. */
+extern const char* SYM_PlotLegendData;
 /* Internal: carries Plot's function/var/options inside the returned
  * Graphics[...] so the renderer can re-sample adaptively on zoom. */
 extern const char* SYM_PlotResample;

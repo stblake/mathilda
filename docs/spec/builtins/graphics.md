@@ -90,6 +90,36 @@ In[1]:= Graphics[{RGBColor[1, 0, 0], Point[{0, 0}], Line[{{0,0},{1,1}}]}]
 Out[1]= -Graphics-
 ```
 
+## Named color constants
+`Black`, `White`, `Gray`, `LightGray`, `Red`, `Green`, `Blue`, `Cyan`,
+`Magenta`, `Yellow`, `Orange`, `Pink`, `Purple`, `Brown` are ordinary
+protected `OwnValue`s evaluating to an `RGBColor[...]`/`GrayLevel[...]`
+literal (e.g. `Red` is exactly `RGBColor[1, 0, 0]`) -- usable anywhere a
+color literal is, including `PlotStyle`, `Background`, `FrameStyle`,
+`AxesStyle`, `TicksStyle`, `GridLinesStyle`, and as a style directive
+directly inside a primitive list (`Graphics[{Blue, Point[{0,0}]}]`).
+
+Because `Plot`/`Show` are `HoldAll`/inert respectively, a non-`Held`
+`Graphics[...]`'s arguments evaluate normally (so `Blue` resolves the
+instant it's parsed), while `Plot` evaluates each of its own option values
+once before storing them, specifically so a named color used inside e.g.
+`Epilog -> {Red, ...}` resolves the same way.
+
+```mathematica
+In[1]:= Red
+Out[1]= RGBColor[1, 0, 0]
+
+In[2]:= Plot[Sin[x], {x, 0, 2 Pi}, PlotStyle -> Green, Background -> LightGray]
+Out[2]= -Graphics-
+```
+
+## Hue
+A style directive: `Hue[h]` (fully saturated, `h` in `[0,1]`, wrapping),
+`Hue[h, s, b]` (saturation, brightness), `Hue[h, s, b, a]` (with opacity) --
+standard HSB-to-RGB, recognized everywhere `RGBColor`/`GrayLevel` are
+(style directives, `PlotStyle`, `Background`, `FrameStyle`, `AxesStyle`,
+`TicksStyle`, `GridLinesStyle`, `ColorFunction`'s return value).
+
 ## Show
 Normalizes a `Graphics[...]` object for display; the REPL front end opens
 the window when the result is a top-level `Graphics` (see the auto-display
@@ -115,6 +145,17 @@ Rendering options (read by `Show`/`Plot`'s renderer, stored as trailing
 | `ImageSize` | width `800` | same | `w` sets the width (height follows from `AspectRatio`), or `{w, h}` fixes both in pixels (then `AspectRatio` shapes the data inside the fixed box) |
 | `AxesLabel` | none | none | `{xlabel, ylabel}` |
 | `PlotLabel` | none | none | title drawn above the plot |
+| `AxesOrigin` | `Automatic` (0 if in range, else clamp to the near edge) | same | `{x, y}` pins exactly where the axes cross |
+| `AxesStyle` | gray | gray | `RGBColor`/`GrayLevel` for the axis lines and tick marks |
+| `TicksStyle` | gray | gray | `RGBColor`/`GrayLevel` for the axis tick *labels* (independent of `AxesStyle`) |
+| `FrameLabel` | none | none | `{xlabel, ylabel}`, the `Frame`-mode equivalent of `AxesLabel`: xlabel below the frame, ylabel beside it |
+| `RotateLabel` | `True` | `True` | whether `FrameLabel`'s y-label is rotated 90° (`True`) or horizontal (`False`) |
+| `PlotRangePadding` | `0.08` (8%) | same | extra fraction of the data extent added on each side during auto-fit: a number (both axes), `{xfrac, yfrac}`, or `None` for no padding |
+| `GridLines` | `None` | `None` | `None` (no grid), `Automatic` (light lines at the same major ticks as `Axes`/`Frame`), or `{xspec, yspec}` with each independently `None`/`Automatic`/an explicit `List[...]` of positions |
+| `GridLinesStyle` | light gray | light gray | `RGBColor`/`GrayLevel` for the grid lines |
+| `Prolog` | none | none | extra primitive(s), drawn first in data coordinates (under the grid/axes/curve) |
+| `Epilog` | none | none | extra primitive(s), drawn last in data coordinates (on top of the curve; still pans/zooms with it) |
+| `LabelStyle` | none | none | `RGBColor`/`GrayLevel`/`Hue` fallback seeded into `AxesStyle`/`TicksStyle`/`FrameStyle` before any of those are individually resolved -- a specific one still overrides it, regardless of argument order |
 
 **Automatic vertical range** — with `PlotRange -> Automatic` (the default),
 the y-extent is chosen to frame the visible body of the curve rather than its
@@ -236,6 +277,13 @@ algorithm and option semantics will back future plotting functions
 | `MaxRecursion` | `6` | max bisection depth per initial interval when curvature/a singularity demands it |
 | `MaxPlotPoints` | `Infinity` | overall cap on stored sample points |
 | `Mesh` | `None` | `All` overlays a dot at every evaluation point (in the curve's colour); `None` draws the line only. `True`/`False` are accepted as synonyms |
+| `RegionFunction` | none | `f[x,y]` (or `f[x]`) -- a sample where this isn't `True` is dropped exactly like a singularity (the curve gaps there) |
+| `Exclusions` | `None` | `{x1, x2, ...}` or `{x == a, ...}`: forces a discontinuity at each given x, independent of curvature/singularity detection |
+| `ColorFunction` | none | a function `f[xscaled,yscaled]`/`f[xscaled]` returning a color literal (`RGBColor`/`GrayLevel`/`Hue`), applied per sampled segment -- or the string `"Rainbow"` for a built-in `Hue` sweep over x. Overrides `PlotStyle` for the curve itself |
+| `ColorFunctionScaling` | `True` | whether `ColorFunction` receives `x`/`y` scaled to `[0,1]` over the plot's range, or raw data values |
+| `Filling` | `None` | `Axis` (to `y=0`), `Bottom`/`Top` (to the run's own min/max y), or a number (to that y) -- one filled `Polygon[]` per sampled run, under the curve's outline |
+| `FillingStyle` | none | color for the fill; default is the curve's own color at `Opacity[0.3]` |
+| `PlotLegends` | none | `Automatic`/`"Expressions"` (label each curve with its own expression, via `ToString`) or an explicit list of label strings -- drawn as a small swatch+label box, top-right below the toolbar |
 
 The adaptive sampler judges each candidate segment by the maximum **vertical**
 gap between the curve and the straight chord at three interior probe points
@@ -253,6 +301,20 @@ grid and miss the wiggle entirely no matter how high `MaxRecursion` is set.
   `Graphics[]` result) -- no separate `Show[]` call is needed to see the
   plot, though `Show[Plot[...], opt -> val]` works for re-styling.
 
+**Not yet implemented**: `ColorFunction`'s companion `MeshFunctions`/
+`MeshShading` (finer control over an already-working `Mesh`), curve-to-curve
+`Filling -> {1 -> {2}}` for multi-curve plots, `Method` (one sampler, not
+multiple selectable algorithms), `ClippingStyle`, `PlotTheme`, and
+`BaseStyle` (broader than `LabelStyle`, overlapping confusingly with
+`PlotStyle`) are silently accepted on the option list (`Plot` copies any
+option it doesn't specifically recognize through onto the returned
+`Graphics[...]` rather than erroring) but have no rendering effect yet.
+Likewise, notebook-embedding-only options (`BaselinePosition`,
+`AlignmentPoint`, `CoordinatesToolOptions`, `ImageSizeRaw`, `PlotRegion`,
+`ImageMargins`, `ImagePadding`) and `WorkingPrecision` (the sampler is
+architecturally machine-precision `double` throughout) are accepted but
+inherently inert in a standalone window.
+
 ```mathematica
 In[1]:= Plot[Sin[x], {x, 0, 2 Pi}]
 Out[1]= -Graphics-
@@ -268,4 +330,14 @@ Out[4]= -Graphics-
 
 In[5]:= Plot[Sin[x] + Sin[7 x], {x, -2, 2}, Mesh -> All]
 Out[5]= -Graphics-
+
+In[6]:= Plot[Sin[x], {x, 0, 2 Pi}, GridLines -> Automatic,
+            Epilog -> {Red, Point[{0, 0}]}, AxesOrigin -> {0, 0}]
+Out[6]= -Graphics-
+
+In[7]:= Plot[Sin[x], {x, 0, 2 Pi}, ColorFunction -> "Rainbow", Filling -> Axis]
+Out[7]= -Graphics-
+
+In[8]:= Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}, PlotLegends -> "Expressions"]
+Out[8]= -Graphics-
 ```

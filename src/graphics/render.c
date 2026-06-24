@@ -13,6 +13,7 @@
 #include "primitives.h"
 #include "sym_names.h"
 #include "print.h"
+#include "eval.h"
 #include <raylib.h>
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -48,6 +49,28 @@ static bool expr_to_d(const Expr* e, double* out) {
             *out = n / d;
             return true;
         }
+    }
+    /* A symbolic-but-numeric coordinate (Pi/2, Sqrt[2], E, GoldenRatio, or
+     * arithmetic of these) isn't a plain literal -- plain evaluate() alone
+     * never reduces Pi to a number, only N[] does (e.g. Point[{Pi/2, 1}]
+     * would otherwise silently fail to draw at all). Numericize it the same
+     * way plot.c's numericize_bound resolves Plot's iterator bounds. Hand-
+     * authored Graphics[]/Epilog/Prolog content is typically small, so the
+     * extra evaluate() call here (vs. the sampler's already-literal curve
+     * points, which never reach this fallback) is not a hot-path concern. */
+    if (e->type == EXPR_SYMBOL || e->type == EXPR_FUNCTION) {
+        Expr* n_arg[1] = { expr_copy((Expr*)e) };
+        Expr* n_call = expr_new_function(expr_new_symbol("N"), n_arg, 1);
+        Expr* result = evaluate(n_call);
+        expr_free(n_call);
+        bool ok = false;
+        if (result->type == EXPR_REAL) { *out = result->data.real; ok = true; }
+        else if (result->type == EXPR_INTEGER) { *out = (double)result->data.integer; ok = true; }
+#ifdef USE_MPFR
+        else if (result->type == EXPR_MPFR) { *out = mpfr_get_d(result->data.mpfr, MPFR_RNDN); ok = true; }
+#endif
+        expr_free(result);
+        if (ok && isfinite(*out)) return true;
     }
     return false;
 }
@@ -102,7 +125,53 @@ static RGBA8 rgba_from_graylevel(const Expr* e) {
     return c;
 }
 
+/* Hue[h] (s=v=1), Hue[h,s,v], Hue[h,s,v,a] -- standard HSB/HSV to RGB. */
+static RGBA8 rgba_from_hue(const Expr* e) {
+    double h = 0, s = 1, v = 1, a = 1;
+    size_t n = e->data.function.arg_count;
+    if (n >= 1) expr_to_d(e->data.function.args[0], &h);
+    if (n >= 3) { expr_to_d(e->data.function.args[1], &s); expr_to_d(e->data.function.args[2], &v); }
+    if (n >= 4) expr_to_d(e->data.function.args[3], &a);
+    h = h - floor(h); /* wrap to [0,1), matching Mathematica's Hue */
+    if (s < 0) s = 0; if (s > 1) s = 1;
+    if (v < 0) v = 0; if (v > 1) v = 1;
+    double r, g, b;
+    if (s <= 0.0) {
+        r = g = b = v;
+    } else {
+        double hh = h * 6.0;
+        int i = (int)floor(hh);
+        double f = hh - i;
+        double p = v * (1.0 - s);
+        double q = v * (1.0 - f * s);
+        double t = v * (1.0 - (1.0 - f) * s);
+        switch (((i % 6) + 6) % 6) {
+            case 0: r = v; g = t; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t; g = p; b = v; break;
+            default: r = v; g = p; b = q; break;
+        }
+    }
+    RGBA8 c = { (unsigned char)(r * 255), (unsigned char)(g * 255), (unsigned char)(b * 255), (unsigned char)(a * 255) };
+    return c;
+}
+
 static Color to_raylib(RGBA8 c) { Color out = { c.r, c.g, c.b, c.a }; return out; }
+
+/* Resolves any recognized color-literal head (RGBColor, GrayLevel, Hue) to
+ * an RGBA8, leaving *out untouched (returning false) for anything else --
+ * the single place every color-bearing option/directive in this file goes
+ * through, so adding a future color form means touching only this. */
+static bool resolve_color(const Expr* e, RGBA8* out) {
+    if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol;
+    if (h == SYM_RGBColor)  { *out = rgba_from_rgbcolor(e); return true; }
+    if (h == SYM_GrayLevel) { *out = rgba_from_graylevel(e); return true; }
+    if (h == SYM_Hue)       { *out = rgba_from_hue(e); return true; }
+    return false;
+}
 
 /* ---------------- Option parsing ---------------- */
 
@@ -130,6 +199,20 @@ typedef struct {
     long width, height;
     const Expr* axes_label; /* borrowed */
     const Expr* plot_label; /* borrowed */
+
+    bool axes_origin_set;     /* AxesOrigin given explicitly */
+    double axes_origin_x, axes_origin_y;
+    RGBA8 axes_color;         /* AxesStyle: axis lines + tick marks */
+    RGBA8 ticks_color;        /* TicksStyle: tick label text */
+    const Expr* frame_label;  /* borrowed; FrameLabel -> {xlabel, ylabel} */
+    bool rotate_label;        /* RotateLabel: FrameLabel y-label orientation */
+    double pad_x_frac, pad_y_frac; /* PlotRangePadding (auto-fit only) */
+    bool grid_x_on, grid_y_on;     /* GridLines: draw vertical/horizontal lines at all */
+    const Expr* grid_x_list;  /* borrowed explicit x positions; NULL = Automatic majors */
+    const Expr* grid_y_list;  /* borrowed explicit y positions; NULL = Automatic majors */
+    RGBA8 grid_color;         /* GridLinesStyle */
+    const Expr* prolog;       /* borrowed; drawn first, in data space */
+    const Expr* epilog;       /* borrowed; drawn last, in data space */
 } GfxOptions;
 
 /* True when `e` is the symbol True or All (the "on" forms for Frame and
@@ -181,7 +264,39 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
     o->axes_label = NULL;
     o->plot_label = NULL;
 
+    o->axes_origin_set = false;
+    o->axes_origin_x = 0.0; o->axes_origin_y = 0.0;
+    o->axes_color = (RGBA8){ 90, 90, 90, 255 };
+    o->ticks_color = (RGBA8){ 90, 90, 90, 255 };
+    o->frame_label = NULL;
+    o->rotate_label = true;
+    o->pad_x_frac = 0.08; o->pad_y_frac = 0.08;
+    o->grid_x_on = false; o->grid_y_on = false;
+    o->grid_x_list = NULL; o->grid_y_list = NULL;
+    o->grid_color = (RGBA8){ 210, 210, 210, 255 };
+    o->prolog = NULL;
+    o->epilog = NULL;
+
     size_t argc = graphics->data.function.arg_count;
+
+    /* LabelStyle -> color seeds the axis/ticks/frame text-and-line defaults
+     * before the main pass below runs, so any of AxesStyle/TicksStyle/
+     * FrameStyle the caller also gives still overrides it, regardless of
+     * each option's position in the argument list. */
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* opt = graphics->data.function.args[i];
+        if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
+        const Expr* h0 = opt->data.function.head;
+        if (!h0 || h0->type != EXPR_SYMBOL || (h0->data.symbol != SYM_Rule && h0->data.symbol != SYM_RuleDelayed)) continue;
+        const Expr* lhs0 = opt->data.function.args[0];
+        if (lhs0->type == EXPR_SYMBOL && lhs0->data.symbol == SYM_LabelStyle) {
+            RGBA8 c;
+            if (resolve_color(opt->data.function.args[1], &c)) {
+                o->axes_color = c; o->ticks_color = c; o->frame_color = c;
+            }
+        }
+    }
+
     for (size_t i = 1; i < argc; i++) {
         const Expr* opt = graphics->data.function.args[i];
         if (!opt || opt->type != EXPR_FUNCTION || opt->data.function.arg_count != 2) continue;
@@ -220,10 +335,8 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
             } else {
                 parse_edge_pairs(rhs, frame_ticks_on, o->frame_ticks);
             }
-        } else if (name == SYM_FrameStyle && rhs->type == EXPR_FUNCTION
-                   && rhs->data.function.head->type == EXPR_SYMBOL) {
-            if (rhs->data.function.head->data.symbol == SYM_RGBColor) o->frame_color = rgba_from_rgbcolor(rhs);
-            else if (rhs->data.function.head->data.symbol == SYM_GrayLevel) o->frame_color = rgba_from_graylevel(rhs);
+        } else if (name == SYM_FrameStyle) {
+            resolve_color(rhs, &o->frame_color);
         } else if (name == SYM_AspectRatio) {
             /* Automatic (default): keep the <=0 sentinel -> true geometry.
              * Full: fill the window; resolved to height/width after the loop
@@ -237,14 +350,10 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
                 double v;
                 if (expr_to_d(rhs, &v) && v > 0) { o->aspect_ratio = v; o->aspect_full = false; }
             }
-        } else if (name == SYM_PlotStyle && rhs->type == EXPR_FUNCTION
-                   && rhs->data.function.head->type == EXPR_SYMBOL) {
-            if (rhs->data.function.head->data.symbol == SYM_RGBColor) o->style_color = rgba_from_rgbcolor(rhs);
-            else if (rhs->data.function.head->data.symbol == SYM_GrayLevel) o->style_color = rgba_from_graylevel(rhs);
-        } else if (name == SYM_Background && rhs->type == EXPR_FUNCTION
-                   && rhs->data.function.head->type == EXPR_SYMBOL) {
-            if (rhs->data.function.head->data.symbol == SYM_RGBColor) o->background = rgba_from_rgbcolor(rhs);
-            else if (rhs->data.function.head->data.symbol == SYM_GrayLevel) o->background = rgba_from_graylevel(rhs);
+        } else if (name == SYM_PlotStyle) {
+            resolve_color(rhs, &o->style_color);
+        } else if (name == SYM_Background) {
+            resolve_color(rhs, &o->background);
         } else if (name == SYM_ImageSize) {
             if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
                 && rhs->data.function.head->data.symbol == SYM_List && rhs->data.function.arg_count == 2) {
@@ -288,6 +397,62 @@ static void gfx_options_parse(const Expr* graphics, GfxOptions* o) {
             o->axes_label = rhs;
         } else if (name == SYM_PlotLabel) {
             o->plot_label = rhs;
+        } else if (name == SYM_AxesOrigin) {
+            double ox, oy;
+            if (expr_point(rhs, &ox, &oy)) {
+                o->axes_origin_set = true;
+                o->axes_origin_x = ox; o->axes_origin_y = oy;
+            }
+        } else if (name == SYM_AxesStyle) {
+            resolve_color(rhs, &o->axes_color);
+        } else if (name == SYM_TicksStyle) {
+            resolve_color(rhs, &o->ticks_color);
+        } else if (name == SYM_FrameLabel) {
+            o->frame_label = rhs;
+        } else if (name == SYM_RotateLabel) {
+            if (expr_is_sym(rhs, SYM_False)) o->rotate_label = false;
+            else if (expr_is_sym(rhs, SYM_True)) o->rotate_label = true;
+        } else if (name == SYM_PlotRangePadding) {
+            if (expr_is_sym(rhs, SYM_None)) {
+                o->pad_x_frac = 0.0; o->pad_y_frac = 0.0;
+            } else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
+                       && rhs->data.function.head->data.symbol == SYM_List && rhs->data.function.arg_count == 2) {
+                double px, py;
+                if (expr_to_d(rhs->data.function.args[0], &px)) o->pad_x_frac = px;
+                if (expr_to_d(rhs->data.function.args[1], &py)) o->pad_y_frac = py;
+            } else {
+                double p;
+                if (expr_to_d(rhs, &p)) { o->pad_x_frac = p; o->pad_y_frac = p; }
+            }
+        } else if (name == SYM_GridLines) {
+            /* None (default) : no grid.
+             * Automatic       : both axes, at the same major ticks as Axes/Frame.
+             * {xspec, yspec}  : independently None/Automatic/an explicit List[...]
+             *                   of positions per axis. */
+            if (expr_is_sym(rhs, SYM_None)) {
+                o->grid_x_on = false; o->grid_y_on = false;
+            } else if (expr_is_sym(rhs, SYM_Automatic)) {
+                o->grid_x_on = true; o->grid_y_on = true;
+                o->grid_x_list = NULL; o->grid_y_list = NULL;
+            } else if (rhs->type == EXPR_FUNCTION && rhs->data.function.head->type == EXPR_SYMBOL
+                       && rhs->data.function.head->data.symbol == SYM_List && rhs->data.function.arg_count == 2) {
+                const Expr* xs = rhs->data.function.args[0];
+                const Expr* ys = rhs->data.function.args[1];
+                if (expr_is_sym(xs, SYM_None)) o->grid_x_on = false;
+                else if (expr_is_sym(xs, SYM_Automatic)) { o->grid_x_on = true; o->grid_x_list = NULL; }
+                else if (xs->type == EXPR_FUNCTION && xs->data.function.head->type == EXPR_SYMBOL
+                         && xs->data.function.head->data.symbol == SYM_List) { o->grid_x_on = true; o->grid_x_list = xs; }
+                if (expr_is_sym(ys, SYM_None)) o->grid_y_on = false;
+                else if (expr_is_sym(ys, SYM_Automatic)) { o->grid_y_on = true; o->grid_y_list = NULL; }
+                else if (ys->type == EXPR_FUNCTION && ys->data.function.head->type == EXPR_SYMBOL
+                         && ys->data.function.head->data.symbol == SYM_List) { o->grid_y_on = true; o->grid_y_list = ys; }
+            }
+        } else if (name == SYM_GridLinesStyle) {
+            resolve_color(rhs, &o->grid_color);
+        } else if (name == SYM_Prolog) {
+            o->prolog = rhs;
+        } else if (name == SYM_Epilog) {
+            o->epilog = rhs;
         }
     }
 
@@ -490,8 +655,10 @@ static void draw_primitive(const Expr* node, DrawState* state) {
         for (size_t i = 0; i < n; i++) draw_primitive(node->data.function.args[i], state);
         return;
     }
-    if (name == SYM_RGBColor) { state->color = to_raylib(rgba_from_rgbcolor(node)); return; }
-    if (name == SYM_GrayLevel) { state->color = to_raylib(rgba_from_graylevel(node)); return; }
+    {
+        RGBA8 c;
+        if (resolve_color(node, &c)) { state->color = to_raylib(c); return; }
+    }
     if (name == SYM_Opacity) {
         double a;
         if (n >= 1 && expr_to_d(node->data.function.args[0], &a)) state->color.a = (unsigned char)(a * 255);
@@ -626,32 +793,90 @@ static PlotRange2D compute_visible_range(Camera2D camera, int win_w, int win_h) 
     return r;
 }
 
+/* Resolve where the axes cross: the explicit AxesOrigin override (its
+ * data-space y converted to render-space via ysc), or the default (0 if in
+ * range, else clamp to the near edge) when unset. */
+static void axes_origin(const PlotRange2D* range, double ysc, const GfxOptions* o,
+                         double* ox, double* oy) {
+    if (o->axes_origin_set) {
+        *ox = o->axes_origin_x;
+        *oy = o->axes_origin_y * ysc;
+        return;
+    }
+    *ox = (range->xmin <= 0 && range->xmax >= 0) ? 0.0 : range->xmin;
+    *oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
+}
+
 /* World-space axis/tick lines -- call inside BeginMode2D so they pan and
  * zoom with the data. */
 /* `range` is in render space (post y-scale). `ysc` maps data-y -> render-y;
  * y ticks are placed at nice *data* values (data*ysc), so labels read true.
  * `zoom` is the camera zoom: the strokes are drawn 1.5 px wide on screen (to
  * match the frame's weight) by expressing the world-space width as 1.5/zoom. */
-static void draw_axes_lines(const PlotRange2D* range, double ysc, float zoom) {
-    double ox = (range->xmin <= 0 && range->xmax >= 0) ? 0.0 : range->xmin;
-    double oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
+static void draw_axes_lines(const PlotRange2D* range, double ysc, float zoom, const GfxOptions* o) {
+    double ox, oy;
+    axes_origin(range, ysc, o, &ox, &oy);
     float w = (zoom > 0.0f) ? 1.5f / zoom : 1.5f; /* world units -> 1.5 px on screen */
+    Color col = to_raylib(o->axes_color);
 
-    DrawLineEx((Vector2){ (float)range->xmin, (float)-oy }, (Vector2){ (float)range->xmax, (float)-oy }, w, DARKGRAY);
-    DrawLineEx((Vector2){ (float)ox, (float)-range->ymin }, (Vector2){ (float)ox, (float)-range->ymax }, w, DARKGRAY);
+    DrawLineEx((Vector2){ (float)range->xmin, (float)-oy }, (Vector2){ (float)range->xmax, (float)-oy }, w, col);
+    DrawLineEx((Vector2){ (float)ox, (float)-range->ymin }, (Vector2){ (float)ox, (float)-range->ymax }, w, col);
 
     double xstep = nice_step(range->xmax - range->xmin, 8);
     double xtick = (range->ymax - range->ymin) * 0.015;
     double ytick = (range->xmax - range->xmin) * 0.015;
 
     for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep) {
-        DrawLineEx((Vector2){ (float)tx, (float)-(oy - xtick) }, (Vector2){ (float)tx, (float)-(oy + xtick) }, w, DARKGRAY);
+        DrawLineEx((Vector2){ (float)tx, (float)-(oy - xtick) }, (Vector2){ (float)tx, (float)-(oy + xtick) }, w, col);
     }
     double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
     double ystep = nice_step(dymax - dymin, 6);
     for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
         double ry = ty * ysc;
-        DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry }, (Vector2){ (float)(ox + ytick), (float)-ry }, w, DARKGRAY);
+        DrawLineEx((Vector2){ (float)(ox - ytick), (float)-ry }, (Vector2){ (float)(ox + ytick), (float)-ry }, w, col);
+    }
+}
+
+/* Light grid lines at major tick positions (GridLines -> Automatic) or
+ * explicit numeric positions (GridLines -> {xlist, ylist}). Call inside
+ * BeginMode2D, before the axes/curve, so they sit underneath everything. */
+static void draw_gridlines(const PlotRange2D* range, double ysc, float zoom, const GfxOptions* o) {
+    if (!o->grid_x_on && !o->grid_y_on) return;
+    float w = (zoom > 0.0f) ? 1.0f / zoom : 1.0f;
+    Color col = to_raylib(o->grid_color);
+
+    if (o->grid_x_on) {
+        if (o->grid_x_list) {
+            size_t n = o->grid_x_list->data.function.arg_count;
+            for (size_t i = 0; i < n; i++) {
+                double tx;
+                if (expr_to_d(o->grid_x_list->data.function.args[i], &tx))
+                    DrawLineEx((Vector2){ (float)tx, (float)-range->ymin }, (Vector2){ (float)tx, (float)-range->ymax }, w, col);
+            }
+        } else {
+            double xstep = nice_step(range->xmax - range->xmin, 8);
+            for (double tx = ceil(range->xmin / xstep) * xstep; tx <= range->xmax + 1e-9; tx += xstep)
+                DrawLineEx((Vector2){ (float)tx, (float)-range->ymin }, (Vector2){ (float)tx, (float)-range->ymax }, w, col);
+        }
+    }
+    if (o->grid_y_on) {
+        if (o->grid_y_list) {
+            size_t n = o->grid_y_list->data.function.arg_count;
+            for (size_t i = 0; i < n; i++) {
+                double ty;
+                if (expr_to_d(o->grid_y_list->data.function.args[i], &ty)) {
+                    double ry = ty * ysc;
+                    DrawLineEx((Vector2){ (float)range->xmin, (float)-ry }, (Vector2){ (float)range->xmax, (float)-ry }, w, col);
+                }
+            }
+        } else {
+            double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
+            double ystep = nice_step(dymax - dymin, 6);
+            for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
+                double ry = ty * ysc;
+                DrawLineEx((Vector2){ (float)range->xmin, (float)-ry }, (Vector2){ (float)range->xmax, (float)-ry }, w, col);
+            }
+        }
     }
 }
 
@@ -664,9 +889,10 @@ static void draw_axes_lines(const PlotRange2D* range, double ysc, float zoom) {
  * `cap = HERSHEY_CAP_HEIGHT * scale` px, which the offsets account for:
  * x-labels drop the baseline a full cap-height below the tick so the whole
  * glyph clears it; y-labels recentre vertically on the tick by half a cap. */
-static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double ysc) {
-    double ox = (range->xmin <= 0 && range->xmax >= 0) ? 0.0 : range->xmin;
-    double oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
+static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double ysc, const GfxOptions* o) {
+    double ox, oy;
+    axes_origin(range, ysc, o, &ox, &oy);
+    Color col = to_raylib(o->ticks_color);
     double xstep = nice_step(range->xmax - range->xmin, 8);
     /* y ticks are stepped in data space; render position is ty*ysc below. */
     double dymin = range->ymin / ysc, dymax = range->ymax / ysc;
@@ -685,7 +911,7 @@ static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double y
         /* Screen position of the tick's lower (below-axis) end. */
         Vector2 tip = GetWorldToScreen2D((Vector2){ (float)tx, (float)-(oy - xtick) }, camera);
         float w = hershey_text_width(buf, scale);
-        hershey_draw_text_ex(buf, tip.x - w / 2.0f, tip.y + gap + cap, scale, 0.0f, DARKGRAY, 1.5f);
+        hershey_draw_text_ex(buf, tip.x - w / 2.0f, tip.y + gap + cap, scale, 0.0f, col, 1.5f);
     }
     for (double ty = ceil(dymin / ystep) * ystep; ty <= dymax + 1e-9; ty += ystep) {
         if (fabs(ty) < 1e-9) ty = 0.0;
@@ -693,7 +919,7 @@ static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double y
         /* Screen position of the tick's left (outside-axis) end. */
         Vector2 tip = GetWorldToScreen2D((Vector2){ (float)(ox - ytick), (float)(-ty * ysc) }, camera);
         float w = hershey_text_width(buf, scale);
-        hershey_draw_text_ex(buf, tip.x - w - gap, tip.y + cap / 2.0f, scale, 0.0f, DARKGRAY, 1.5f);
+        hershey_draw_text_ex(buf, tip.x - w - gap, tip.y + cap / 2.0f, scale, 0.0f, col, 1.5f);
     }
 }
 
@@ -814,6 +1040,35 @@ static void draw_frame(float rx, float ry, float rw, float rh,
             }
         }
     }
+}
+
+/* Frame-mode equivalent of AxesLabel: xlabel centered below the frame's
+ * bottom edge, ylabel beside the left edge -- rotated 90 deg unless
+ * RotateLabel -> False. Call alongside draw_frame, in screen space. */
+static void draw_frame_label(float rx, float ry, float rw, float rh, const GfxOptions* o) {
+    if (!o->frame_label || o->frame_label->type != EXPR_FUNCTION || o->frame_label->data.function.arg_count != 2) return;
+    const Expr* xl = o->frame_label->data.function.args[0];
+    const Expr* yl = o->frame_label->data.function.args[1];
+
+    char* ox = NULL;
+    const char* xlabel = (xl->type == EXPR_STRING) ? xl->data.string : (ox = expr_to_string((Expr*)xl));
+    if (xlabel) {
+        float w = hershey_text_width(xlabel, 1.8f);
+        hershey_draw_text(xlabel, rx + rw / 2.0f - w / 2.0f, ry + rh + 40.0f, 1.8f, 0.0f, BLACK);
+    }
+    free(ox);
+
+    char* oy = NULL;
+    const char* ylabel = (yl->type == EXPR_STRING) ? yl->data.string : (oy = expr_to_string((Expr*)yl));
+    if (ylabel) {
+        if (o->rotate_label) {
+            hershey_draw_text(ylabel, rx - 32.0f, ry + rh / 2.0f, 1.8f, 90.0f, BLACK);
+        } else {
+            float w = hershey_text_width(ylabel, 1.8f);
+            hershey_draw_text(ylabel, rx - 16.0f - w, ry + rh / 2.0f, 1.8f, 0.0f, BLACK);
+        }
+    }
+    free(oy);
 }
 
 static void draw_extra_labels(const GfxOptions* opts, int win_w, int win_h) {
@@ -1068,6 +1323,64 @@ static void draw_toolbar(int win_w, int tool, int hover) {
     }
 }
 
+/* Finds the $PlotLegendData[{color,label}, ...] metadata arg on
+ * graphics_expr's option list, if present (built by plot.c's
+ * build_legend_meta when PlotLegends was given). Borrowed; NULL if absent. */
+static const Expr* find_legend_data(const Expr* graphics_expr) {
+    size_t argc = graphics_expr->data.function.arg_count;
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = graphics_expr->data.function.args[i];
+        if (a && a->type == EXPR_FUNCTION && a->data.function.head
+            && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol == SYM_PlotLegendData) return a;
+    }
+    return NULL;
+}
+
+/* Screen-space legend box: one swatch+label row per curve. Anchored
+ * top-right, like the toolbar, but below it (the toolbar already owns
+ * that corner) so the two never collide. */
+static void draw_legend(const Expr* legend_data, int win_w) {
+    size_t n = legend_data->data.function.arg_count;
+    if (n == 0) return;
+
+    const float row_h = 22.0f, swatch_w = 22.0f, pad = 8.0f, scale = 1.5f;
+    const float top = TB_MARGIN + TB_BTN + 10.0f;
+
+    float max_label_w = 0.0f;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* entry = legend_data->data.function.args[i];
+        if (entry->type != EXPR_FUNCTION || entry->data.function.arg_count != 2) continue;
+        const Expr* label = entry->data.function.args[1];
+        if (label->type != EXPR_STRING) continue;
+        float w = hershey_text_width(label->data.string, scale);
+        if (w > max_label_w) max_label_w = w;
+    }
+    float box_w = swatch_w + pad * 3 + max_label_w;
+    float box_h = pad * 2 + n * row_h;
+    float box_x = (float)win_w - TB_MARGIN - box_w;
+    float box_y = top;
+
+    DrawRectangleRec((Rectangle){ box_x, box_y, box_w, box_h }, (Color){ 255, 255, 255, 230 });
+    DrawRectangleLinesEx((Rectangle){ box_x, box_y, box_w, box_h }, 1.0f, (Color){ 150, 150, 150, 255 });
+
+    for (size_t i = 0; i < n; i++) {
+        const Expr* entry = legend_data->data.function.args[i];
+        if (entry->type != EXPR_FUNCTION || entry->data.function.arg_count != 2) continue;
+        RGBA8 c = { 0, 0, 0, 255 };
+        resolve_color(entry->data.function.args[0], &c);
+
+        float ry = box_y + pad + (float)i * row_h;
+        DrawRectangleRec((Rectangle){ box_x + pad, ry + 3.0f, swatch_w, row_h - 8.0f }, to_raylib(c));
+
+        const Expr* label = entry->data.function.args[1];
+        if (label->type == EXPR_STRING) {
+            hershey_draw_text(label->data.string, box_x + pad * 2 + swatch_w, ry + row_h - 6.0f,
+                               scale, 0.0f, BLACK);
+        }
+    }
+}
+
 /* ---------------- Main entry point ---------------- */
 
 void graphics_show(const Expr* graphics_expr) {
@@ -1086,6 +1399,7 @@ void graphics_show(const Expr* graphics_expr) {
     GfxOptions opts;
     gfx_options_parse(graphics_expr, &opts);
     const Expr* prims = graphics_expr->data.function.args[0];
+    const Expr* legend_data = find_legend_data(graphics_expr);
 
     /* Live re-sampling: a Plot-produced Graphics carries its function so we
      * can re-sample at the current zoom (plot_resample), keeping curves like
@@ -1122,10 +1436,13 @@ void graphics_show(const Expr* graphics_expr) {
             }
             free(ys);
         }
-        double xpad = (range.xmax - range.xmin) * 0.08;
-        double ypad = (range.ymax - range.ymin) * 0.08;
-        if (xpad <= 0) xpad = 1.0;
-        if (ypad <= 0) ypad = 1.0;
+        double xpad = (range.xmax - range.xmin) * opts.pad_x_frac;
+        double ypad = (range.ymax - range.ymin) * opts.pad_y_frac;
+        /* A zero-width range still needs *some* padding to be visible -- but
+         * only when padding is actually wanted (PlotRangePadding -> None
+         * means exactly 0, always). */
+        if (xpad <= 0 && opts.pad_x_frac > 0) xpad = 1.0;
+        if (ypad <= 0 && opts.pad_y_frac > 0) ypad = 1.0;
         range.xmin -= xpad; range.xmax += xpad;
         range.ymin -= ypad; range.ymax += ypad;
         /* Override the explicitly fixed axis (e.g. PlotRange -> {ymin, ymax}
@@ -1164,10 +1481,14 @@ void graphics_show(const Expr* graphics_expr) {
     float reg_x = 0.0f, reg_y = 0.0f;
     float reg_w = (float)opts.width, reg_h = (float)opts.height;
     if (opts.frame) {
-        float mL = (float)opts.width  * 0.05f; if (mL < 50.0f) mL = 50.0f;
+        /* FrameLabel adds one more text line outside the tick labels, so it
+         * needs extra room past the tick-label minimums above. */
+        float labelL = opts.frame_label ? 26.0f : 0.0f;
+        float labelB = opts.frame_label ? 26.0f : 0.0f;
+        float mL = (float)opts.width  * 0.05f; if (mL < 50.0f + labelL) mL = 50.0f + labelL;
         float mR = (float)opts.width  * 0.05f; if (mR < 20.0f) mR = 20.0f;
         float mT = (float)opts.height * 0.05f; if (mT < 20.0f) mT = 20.0f;
-        float mB = (float)opts.height * 0.05f; if (mB < 48.0f) mB = 48.0f;
+        float mB = (float)opts.height * 0.05f; if (mB < 48.0f + labelB) mB = 48.0f + labelB;
         /* Never let the margins swallow the whole window. */
         if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
             reg_x = mL; reg_y = mT;
@@ -1349,15 +1670,20 @@ void graphics_show(const Expr* graphics_expr) {
          * spills past the box; the frame, labels and chrome draw unclipped. */
         if (opts.frame) BeginScissorMode((int)reg_x, (int)reg_y, (int)reg_w, (int)reg_h);
         BeginMode2D(camera);
-        if (opts.axes) draw_axes_lines(&visible, ysc, camera.zoom);
+        if (opts.prolog) { DrawState ps = init_state; draw_primitive(opts.prolog, &ps); }
+        draw_gridlines(&visible, ysc, camera.zoom, &opts);
+        if (opts.axes) draw_axes_lines(&visible, ysc, camera.zoom, &opts);
         DrawState state = init_state;
         draw_primitive(draw_prims, &state);
+        if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
         EndMode2D();
         if (opts.frame) EndScissorMode();
 
-        if (opts.axes) draw_axes_labels(&visible, camera, ysc);
+        if (opts.axes) draw_axes_labels(&visible, camera, ysc, &opts);
         if (opts.frame) draw_frame(reg_x, reg_y, reg_w, reg_h, camera, ysc, &opts);
+        if (opts.frame) draw_frame_label(reg_x, reg_y, reg_w, reg_h, &opts);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);
+        if (legend_data) draw_legend(legend_data, (int)opts.width);
 
         /* On a capture frame suppress every bit of UI chrome so the saved
          * PNG holds only the plot; the capture happens just after the swap. */
