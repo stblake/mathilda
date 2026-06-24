@@ -34,6 +34,19 @@ ifneq ($(wildcard /opt/homebrew/lib),)
 LDFLAGS += -L/opt/homebrew/lib
 endif
 
+# pkg-config wrapper. On macOS, Homebrew installs its .pc files outside the
+# search path used by a MacPorts/system pkg-config, so `pkg-config --exists
+# raylib` (below) fails on a stock shell even when raylib is installed. Prepend
+# the Homebrew prefixes (Apple-Silicon + Intel) on Darwin so plain `make`
+# detects raylib — and graphics is built by default — without a manual
+# PKG_CONFIG_PATH override. Harmless on Linux (the directories simply don't
+# exist) and respects any PKG_CONFIG_PATH the user already exported.
+ifeq ($(shell uname -s),Darwin)
+  PKG_CONFIG = PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$$PKG_CONFIG_PATH" pkg-config
+else
+  PKG_CONFIG = pkg-config
+endif
+
 # BLAS/LAPACK for fast machine-precision linear-algebra kernels
 # (machine-precision QRDecomposition; later: Inverse, LinearSolve, Det,
 # Eigenvalues, LeastSquares, SVD).  Four-tier autodetection:
@@ -72,9 +85,9 @@ endif
 # the build still succeeds and Show/Plot fall back to a text placeholder
 # at runtime, matching the USE_MPFR=0 / USE_LAPACK=0 graceful-degrade policy.
 ifeq ($(USE_GRAPHICS), 1)
-  ifneq ($(shell pkg-config --exists raylib 2>/dev/null && echo y),)
-    CFLAGS  += -DUSE_GRAPHICS $(shell pkg-config --cflags raylib)
-    LDFLAGS += $(shell pkg-config --libs raylib)
+  ifneq ($(shell $(PKG_CONFIG) --exists raylib 2>/dev/null && echo y),)
+    CFLAGS  += -DUSE_GRAPHICS $(shell $(PKG_CONFIG) --cflags raylib)
+    LDFLAGS += $(shell $(PKG_CONFIG) --libs raylib)
   else
     $(warning Raylib not detected; building with USE_GRAPHICS=0 (Show/Plot will print a text placeholder))
     $(warning   macOS (Homebrew): brew install raylib)

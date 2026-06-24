@@ -47,6 +47,14 @@ endif()
 # symbolic Graphics[]/Plot[] construction path are still fully testable —
 # only render.c/hershey_font.c, which need a live display, are excluded).
 if(USE_GRAPHICS)
+    # On macOS, Homebrew installs its .pc files outside the search path used by
+    # a MacPorts/system pkg-config, so the probe below fails on a stock shell
+    # even when raylib is installed. Prepend the Homebrew prefixes (Apple-
+    # Silicon + Intel) so graphics is detected by default, matching the makefile.
+    if(APPLE)
+        set(ENV{PKG_CONFIG_PATH}
+            "/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    endif()
     find_package(PkgConfig QUIET)
     if(PkgConfig_FOUND)
         pkg_check_modules(RAYLIB QUIET raylib)
