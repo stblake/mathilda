@@ -61,6 +61,12 @@ void info_init(void) {
         "\tgives the number p(n) of unrestricted partitions of the integer n.\n"
         "n must be an integer; p(n) = 0 for n < 0. Threads over lists.\n"
         "For the partitions themselves use IntegerPartitions[n].");
+    symtab_set_docstring("PartitionsQ",
+        "PartitionsQ[n]\n"
+        "\tgives the number q(n) of partitions of the integer n into distinct\n"
+        "parts (equivalently, into odd parts). n must be an integer; q(n) = 0\n"
+        "for n < 0. Threads over lists. For the partitions themselves use\n"
+        "IntegerPartitions[n, All, Range[n]] with distinct parts.");
     symtab_set_docstring("GCD",
         "GCD[n1, n2, ...]\n"
         "\tgives the greatest common divisor of the integers ni.\n"

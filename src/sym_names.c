@@ -319,6 +319,7 @@ const char* SYM_ParameterVariables = NULL;
 const char* SYM_Part = NULL;
 const char* SYM_Partition = NULL;
 const char* SYM_PartitionsP = NULL;
+const char* SYM_PartitionsQ = NULL;
 const char* SYM_PadRight = NULL;
 const char* SYM_PadLeft = NULL;
 const char* SYM_Pattern = NULL;
@@ -926,6 +927,7 @@ void sym_names_init(void) {
     SYM_Part                       = intern_symbol("Part");
     SYM_Partition                  = intern_symbol("Partition");
     SYM_PartitionsP                = intern_symbol("PartitionsP");
+    SYM_PartitionsQ                = intern_symbol("PartitionsQ");
     SYM_PadRight                   = intern_symbol("PadRight");
     SYM_PadLeft                    = intern_symbol("PadLeft");
     SYM_Pattern                    = intern_symbol("Pattern");

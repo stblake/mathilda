@@ -844,10 +844,403 @@ Expr* builtin_partitionsp(Expr* res) {
     return result;
 }
 
+/* ===================================================================== */
+/* PartitionsQ[n] — q(n), the number of partitions of n into DISTINCT     */
+/* parts (equivalently, into odd parts; OEIS A000009).                    */
+/*                                                                        */
+/* Two engines, dispatched by size (see builtin_partitionsq):             */
+/*                                                                        */
+/*  1. partitionsq_recurrence — an exact GMP recurrence derived from the  */
+/*     Euler identity prod(1-x^k) prod(1+x^k) = prod(1-x^{2k}). It has    */
+/*     the same generalized-pentagonal shape as partitionsp_recurrence    */
+/*     plus an inhomogeneous term from prod(1-x^{2k}). O(n^1.5) time and  */
+/*     O(n sqrt n) bits of memory. Simple and robust; used for small n.   */
+/*                                                                        */
+/*  2. partitionsq_hrr — the Hardy-Ramanujan-Rademacher / Hagis exact     */
+/*     convergent series for q(n), evaluated in MPFR. Tiny working memory */
+/*     (O(sqrt n)-bit precision); used for large n where the recurrence's */
+/*     table would be prohibitive. References: P. Hagis, "Partitions into */
+/*     odd summands", Amer. J. Math. 85 (1963) 213-222; Rademacher,       */
+/*     "Topics in Analytic Number Theory"; eta-quotient Rademacher        */
+/*     invariants (Sussman arXiv:1710.03415, Guadalupe arXiv:2404.02367). */
+/* ===================================================================== */
+
+/* Threshold (in n) above which the HRR engine is preferred. Below it the
+ * recurrence is faster and needs no MPFR. */
+#define PARTITIONSQ_HRR_THRESHOLD 1000
+
+/* --- Engine 1: pentagonal-convolution recurrence ----------------------- */
+
+/* Compute q(n) for n >= 0 into the freshly-initialised result `out`.
+ * Returns 0 on success, -1 on allocation failure.
+ *
+ * From prod(1-x^k) * Q(x) = prod(1-x^{2k}) with Q(x) = sum q(n) x^n:
+ *     q(m) = r(m) + sum_{k>=1} (-1)^{k+1} [ q(m-g1_k) + q(m-g2_k) ]
+ * where g1_k = k(3k-1)/2, g2_k = k(3k+1)/2 are the generalized pentagonal
+ * numbers (identical to the p(n) recurrence) and the inhomogeneous term
+ *     r(m) = (-1)^k  when m = 2*g_k (i.e. m even and m/2 is generalized
+ *                    pentagonal with index k),  else 0
+ * is the coefficient of x^m in prod(1-x^{2k}). */
+int partitionsq_recurrence(unsigned long n, mpz_t out) {
+    mpz_t* q = malloc((n + 1) * sizeof(mpz_t));
+    if (!q) return -1;
+
+    for (unsigned long m = 0; m <= n; m++) mpz_init(q[m]);
+    mpz_set_ui(q[0], 1);
+
+    for (unsigned long m = 1; m <= n; m++) {
+        /* Homogeneous generalized-pentagonal sum (as in partitionsp). */
+        for (unsigned long k = 1;; k++) {
+            unsigned long g1 = k * (3 * k - 1) / 2;
+            if (g1 > m) break;
+            int sign = (k & 1UL) ? 1 : -1; /* (-1)^{k+1}: +1 for odd k */
+            if (sign > 0) mpz_add(q[m], q[m], q[m - g1]);
+            else          mpz_sub(q[m], q[m], q[m - g1]);
+
+            unsigned long g2 = k * (3 * k + 1) / 2;
+            if (g2 <= m) {
+                if (sign > 0) mpz_add(q[m], q[m], q[m - g2]);
+                else          mpz_sub(q[m], q[m], q[m - g2]);
+            }
+        }
+
+        /* Inhomogeneous term r(m) from prod(1-x^{2k}): nonzero only when
+         * m is even and m/2 is a generalized pentagonal number. */
+        if ((m & 1UL) == 0) {
+            unsigned long pm = m / 2;
+            for (unsigned long k = 1;; k++) {
+                unsigned long a1 = k * (3 * k - 1) / 2;
+                if (a1 > pm) break;
+                unsigned long a2 = k * (3 * k + 1) / 2;
+                if (a1 == pm || a2 == pm) {
+                    if (k & 1UL) mpz_sub_ui(q[m], q[m], 1); /* (-1)^k = -1 */
+                    else         mpz_add_ui(q[m], q[m], 1); /* (-1)^k = +1 */
+                    break;
+                }
+            }
+        }
+    }
+
+    mpz_set(out, q[n]);
+    for (unsigned long m = 0; m <= n; m++) mpz_clear(q[m]);
+    free(q);
+    return 0;
+}
+
+/* --- Engine 2: Hardy-Ramanujan-Rademacher / Hagis (MPFR) --------------- */
+#ifdef USE_MPFR
+
+/* gcd for the coprimality test in the character sum. */
+static unsigned long pq_gcd(unsigned long a, unsigned long b) {
+    while (b) { unsigned long t = a % b; a = b; b = t; }
+    return a;
+}
+
+/* Modified Bessel function I_1(x) for real x >= 0, into `out`.
+ * MPFR provides only the unmodified Bessel J/Y, so we sum the everywhere-
+ * positive power series I_1(x) = sum_{m>=0} (x/2)^{2m+1} / (m! (m+1)!),
+ * advanced by the term ratio (x/2)^2 / (m(m+1)). All terms are positive,
+ * so there is no cancellation even for large x; we stop once a term is
+ * `prec`+ guard bits below the running sum. */
+static void i1_mpfr(mpfr_t out, const mpfr_t x, mpfr_prec_t prec) {
+    if (mpfr_zero_p(x)) { mpfr_set_zero(out, 1); return; }
+
+    mpfr_t half, hx2, term, sum;
+    mpfr_init2(half, prec);
+    mpfr_init2(hx2, prec);
+    mpfr_init2(term, prec);
+    mpfr_init2(sum, prec);
+
+    mpfr_div_2ui(half, x, 1, MPFR_RNDN);   /* x/2 */
+    mpfr_mul(hx2, half, half, MPFR_RNDN);  /* (x/2)^2 */
+    mpfr_set(term, half, MPFR_RNDN);       /* m = 0 term: x/2 */
+    mpfr_set(sum, term, MPFR_RNDN);
+
+    for (unsigned long m = 1; m < 1000000UL; m++) {
+        mpfr_mul(term, term, hx2, MPFR_RNDN);
+        mpfr_div_ui(term, term, m, MPFR_RNDN);
+        mpfr_div_ui(term, term, m + 1, MPFR_RNDN);
+        mpfr_add(sum, sum, term, MPFR_RNDN);
+        if (mpfr_zero_p(term)) break;
+        if (mpfr_get_exp(sum) - mpfr_get_exp(term) > (mpfr_exp_t)prec + 16) break;
+    }
+
+    mpfr_set(out, sum, MPFR_RNDN);
+    mpfr_clear(half);
+    mpfr_clear(hx2);
+    mpfr_clear(term);
+    mpfr_clear(sum);
+}
+
+/* Dedekind sum s(h,k) as an exact rational, for 0 <= h < k, gcd(h,k)=1.
+ * Computed by reciprocity in O(log k) steps:
+ *     s(h,k) = -1/4 + (1/12)(h/k + k/h + 1/(hk)) - s(k mod h, h),
+ * with base case s(0,k) = 0. */
+static void pq_dedekind_sum(mpq_t out, unsigned long h, unsigned long k) {
+    if (h == 0) { mpq_set_ui(out, 0, 1); return; }
+
+    mpq_t acc, tmp, rec;
+    mpq_init(acc);
+    mpq_init(tmp);
+    mpq_init(rec);
+
+    /* acc = h/k + k/h + 1/(h k) */
+    mpq_set_ui(acc, h, k);          mpq_canonicalize(acc);
+    mpq_set_ui(tmp, k, h);          mpq_canonicalize(tmp);
+    mpq_add(acc, acc, tmp);
+    mpq_set_ui(tmp, 1, h * k);      mpq_canonicalize(tmp);
+    mpq_add(acc, acc, tmp);
+
+    /* acc *= 1/12 ; acc += -1/4 */
+    mpq_set_ui(tmp, 1, 12);         mpq_canonicalize(tmp);
+    mpq_mul(acc, acc, tmp);
+    mpq_set_si(tmp, -1, 4);         mpq_canonicalize(tmp);
+    mpq_add(acc, acc, tmp);
+
+    pq_dedekind_sum(rec, k % h, h);
+    mpq_sub(out, acc, rec);
+
+    mpq_clear(acc);
+    mpq_clear(tmp);
+    mpq_clear(rec);
+}
+
+/* The Hagis character sum (the analog of the Rademacher A_k(n) for q(n)):
+ *     A_k(n) = sum_{h mod k, gcd(h,k)=1} cos( pi(s(h,k) - s(2h,k)) - 2pi n h/k )
+ * which is real (the imaginary parts cancel). k is odd, so gcd(2h,k)=1
+ * whenever gcd(h,k)=1. A_1(n) = 1 (the single residue h = 0). */
+static void partitionsq_Ak(mpfr_t out, unsigned long k, unsigned long n,
+                           mpfr_prec_t prec) {
+    mpfr_t pi, ang, c;
+    mpfr_init2(pi, prec);
+    mpfr_init2(ang, prec);
+    mpfr_init2(c, prec);
+    mpfr_const_pi(pi, MPFR_RNDN);
+    mpfr_set_zero(out, 1);
+
+    mpq_t s1, s2, sd;
+    mpq_init(s1);
+    mpq_init(s2);
+    mpq_init(sd);
+
+    unsigned long nmod = n % k;
+    for (unsigned long h = 0; h < k; h++) {
+        if (pq_gcd(h, k) != 1) continue;   /* h = 0 only contributes for k = 1 */
+
+        pq_dedekind_sum(s1, h, k);
+        pq_dedekind_sum(s2, (2 * h) % k, k);
+        mpq_sub(sd, s1, s2);
+
+        /* ang = pi * (s(h,k) - s(2h,k)) */
+        mpfr_set_q(ang, sd, MPFR_RNDN);
+        mpfr_mul(ang, ang, pi, MPFR_RNDN);
+
+        /* ang -= 2 pi ((n h) mod k) / k */
+        unsigned long nh = (nmod * h) % k;
+        mpfr_mul_ui(c, pi, 2 * nh, MPFR_RNDN);
+        mpfr_div_ui(c, c, k, MPFR_RNDN);
+        mpfr_sub(ang, ang, c, MPFR_RNDN);
+
+        mpfr_cos(c, ang, MPFR_RNDN);
+        mpfr_add(out, out, c, MPFR_RNDN);
+    }
+
+    mpq_clear(s1);
+    mpq_clear(s2);
+    mpq_clear(sd);
+    mpfr_clear(pi);
+    mpfr_clear(ang);
+    mpfr_clear(c);
+}
+
+/* Evaluate the Hagis series for q(n) over odd k = 1,3,...,<= Kmax at the
+ * given precision, rounding the real sum to the nearest integer in `out`:
+ *     q(n) = (pi/sqrt(24n+1)) sum_{k odd} (1/k) A_k(n) I_1( pi sqrt(48n+2)/(12k) ).
+ * Stores in `dist` the distance from the sum to that integer and in
+ * `last_mag` the magnitude of the last term added (a tail estimate); the
+ * caller uses both to decide whether to trust the rounding. */
+static void hrr_q_eval(unsigned long n, unsigned long Kmax, mpfr_prec_t prec,
+                       mpz_t out, mpfr_t dist, mpfr_t last_mag) {
+    mpfr_t pi, pref, B, arg, Ak, I1, term, sum, rounded, tmp;
+    mpfr_init2(pi, prec);
+    mpfr_init2(pref, prec);
+    mpfr_init2(B, prec);
+    mpfr_init2(arg, prec);
+    mpfr_init2(Ak, prec);
+    mpfr_init2(I1, prec);
+    mpfr_init2(term, prec);
+    mpfr_init2(sum, prec);
+    mpfr_init2(rounded, prec);
+    mpfr_init2(tmp, prec);
+
+    mpfr_const_pi(pi, MPFR_RNDN);
+
+    /* pref = pi / sqrt(24n + 1) */
+    mpfr_set_ui(tmp, 24, MPFR_RNDN);
+    mpfr_mul_ui(tmp, tmp, n, MPFR_RNDN);
+    mpfr_add_ui(tmp, tmp, 1, MPFR_RNDN);
+    mpfr_sqrt(tmp, tmp, MPFR_RNDN);
+    mpfr_div(pref, pi, tmp, MPFR_RNDN);
+
+    /* B = pi sqrt(48n + 2) / 12 ; the Bessel argument is B/k */
+    mpfr_set_ui(B, 48, MPFR_RNDN);
+    mpfr_mul_ui(B, B, n, MPFR_RNDN);
+    mpfr_add_ui(B, B, 2, MPFR_RNDN);
+    mpfr_sqrt(B, B, MPFR_RNDN);
+    mpfr_mul(B, B, pi, MPFR_RNDN);
+    mpfr_div_ui(B, B, 12, MPFR_RNDN);
+
+    mpfr_set_zero(sum, 1);
+    mpfr_set_zero(last_mag, 1);
+    for (unsigned long k = 1; k <= Kmax; k += 2) {
+        partitionsq_Ak(Ak, k, n, prec);
+        if (mpfr_zero_p(Ak)) continue;
+
+        mpfr_div_ui(arg, B, k, MPFR_RNDN);
+        i1_mpfr(I1, arg, prec);
+
+        /* term = (1/k) A_k(n) I_1(B/k) */
+        mpfr_mul(term, Ak, I1, MPFR_RNDN);
+        mpfr_div_ui(term, term, k, MPFR_RNDN);
+        mpfr_add(sum, sum, term, MPFR_RNDN);
+
+        mpfr_abs(last_mag, term, MPFR_RNDN);
+    }
+
+    mpfr_mul(sum, sum, pref, MPFR_RNDN);
+    mpfr_mul(last_mag, last_mag, pref, MPFR_RNDN);
+
+    mpfr_round(rounded, sum);
+    mpfr_sub(dist, sum, rounded, MPFR_RNDN);
+    mpfr_abs(dist, dist, MPFR_RNDN);
+    mpfr_get_z(out, rounded, MPFR_RNDN);
+
+    mpfr_clear(pi);
+    mpfr_clear(pref);
+    mpfr_clear(B);
+    mpfr_clear(arg);
+    mpfr_clear(Ak);
+    mpfr_clear(I1);
+    mpfr_clear(term);
+    mpfr_clear(sum);
+    mpfr_clear(rounded);
+    mpfr_clear(tmp);
+}
+
+/* Compute q(n) for n >= 2 via the Hagis series into `out`. Returns 0 on
+ * success, -1 if it could not converge to a confident integer (the caller
+ * then falls back to the recurrence).
+ *
+ * Unlike p(n), no clean closed-form Rademacher remainder bound with
+ * explicit constants is available for this series, so termination is
+ * convergence-driven: we sum ~sqrt(n) odd-k terms and accept the rounding
+ * only when the sum lies within 1/4 of an integer and the last term is
+ * below 1/8 (so the unsummed tail cannot flip the rounding), growing the
+ * term count and precision otherwise. Correctness across the supported
+ * range is pinned by the exhaustive HRR-equals-recurrence cross-check in
+ * the unit tests. */
+int partitionsq_hrr(unsigned long n, mpz_t out) {
+    if (n < 2) return -1;
+
+    /* Working precision: q(n) ~ exp(pi sqrt(n/3)) has ~ pi sqrt(n/3)/ln2
+     * bits; add generous guard bits for accumulation and rounding. */
+    double e = M_PI * sqrt((double)n / 3.0);
+    mpfr_prec_t prec = (mpfr_prec_t)(e / 0.6931471805599453) + 96;
+    if (prec < 96) prec = 96;
+
+    unsigned long base = (unsigned long)ceil(sqrt((double)n));
+    unsigned long Kmax = 2 * base + 9;     /* ~ sqrt(n) odd terms to start */
+
+    mpfr_t dist, last_mag, q14, q18;
+    mpfr_init2(dist, 64);
+    mpfr_init2(last_mag, 64);
+    mpfr_init2(q14, 64);
+    mpfr_init2(q18, 64);
+    mpfr_set_d(q14, 0.25, MPFR_RNDN);
+    mpfr_set_d(q18, 0.125, MPFR_RNDN);
+
+    int rc = -1;
+    for (int attempt = 0; attempt < 16; attempt++) {
+        hrr_q_eval(n, Kmax | 1UL, prec, out, dist, last_mag);
+        if (mpfr_less_p(dist, q14) && mpfr_less_p(last_mag, q18)) {
+            rc = 0;
+            break;
+        }
+        Kmax = Kmax + Kmax / 2 + 4;          /* add more terms */
+        if (!mpfr_less_p(dist, q14)) prec *= 2; /* and precision if margin thin */
+    }
+
+    mpfr_clear(dist);
+    mpfr_clear(last_mag);
+    mpfr_clear(q14);
+    mpfr_clear(q18);
+    return rc;
+}
+
+#else  /* !USE_MPFR */
+
+/* Without MPFR the HRR engine is unavailable; signal fallback. */
+int partitionsq_hrr(unsigned long n, mpz_t out) {
+    (void)n; (void)out;
+    return -1;
+}
+
+#endif /* USE_MPFR */
+
+/* Emit `PartitionsQ::argx: PartitionsQ called with N arguments; 1 argument
+ * is expected.` to stderr and return NULL. */
+static Expr* qq_emit_argx(size_t argc) {
+    fprintf(stderr,
+            "PartitionsQ::argx: PartitionsQ called with %zu argument%s; "
+            "1 argument is expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* PartitionsQ[n] — number of partitions of n into distinct parts.
+ * Reads `res` only; returns NULL (unevaluated) for symbolic, non-integer or
+ * big-integer arguments. Negative n gives 0. */
+Expr* builtin_partitionsq(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return qq_emit_argx(argc);
+
+    Expr* arg = res->data.function.args[0];
+
+    /* A big-integer argument is astronomically large; leave unevaluated. */
+    if (!expr_is_integer_like(arg) || arg->type == EXPR_BIGINT) return NULL;
+
+    int64_t n = arg->data.integer;
+    if (n < 0) return expr_new_integer(0); /* q(n) = 0 for n < 0 */
+
+    mpz_t out;
+    mpz_init(out);
+
+    int rc = -1;
+    if (n >= PARTITIONSQ_HRR_THRESHOLD) {
+        rc = partitionsq_hrr((unsigned long)n, out);
+        if (rc != 0)                       /* fall back if HRR unavailable */
+            rc = partitionsq_recurrence((unsigned long)n, out);
+    } else {
+        rc = partitionsq_recurrence((unsigned long)n, out);
+    }
+    if (rc != 0) {
+        mpz_clear(out);
+        return NULL;
+    }
+
+    Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(out));
+    mpz_clear(out);
+    return result;
+}
+
 void partitions_init(void) {
     symtab_add_builtin("IntegerPartitions", builtin_integerpartitions);
     symtab_get_def("IntegerPartitions")->attributes |= ATTR_PROTECTED;
 
     symtab_add_builtin("PartitionsP", builtin_partitionsp);
     symtab_get_def("PartitionsP")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
+
+    symtab_add_builtin("PartitionsQ", builtin_partitionsq);
+    symtab_get_def("PartitionsQ")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
 }

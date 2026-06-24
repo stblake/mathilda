@@ -1,6 +1,6 @@
 # Number Theory
 
-Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
+Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`, `PartitionsQ`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
 
 ## GCD, LCM
 
@@ -560,6 +560,57 @@ Out[3]= 6927233917602120527467409170319882882996950147283323368445315320451
 
 In[4]:= Table[Times @@ PartitionsP[Last /@ FactorInteger[n]], {n, 12}]
 Out[4]= {1, 1, 1, 2, 1, 1, 1, 3, 2, 1, 1, 2}
+```
+
+## PartitionsQ
+
+Gives the number `q(n)` of partitions of the integer `n` into **distinct**
+parts — equivalently (Euler), into **odd** parts (OEIS A000009). It is the
+counting companion to `IntegerPartitions` with non-repeating parts.
+
+- `PartitionsQ[n]`: the distinct-parts partition count `q(n)` as an exact
+  (arbitrary-precision) integer.
+
+**Features**:
+- `Protected`, `Listable` — `PartitionsQ[{2, 4, 6}]` → `{1, 2, 4}`.
+- Two engines, dispatched by the size of `n` (threshold `n = 1000`):
+  - **Small `n`** — an exact GMP recurrence derived from the Euler identity
+    `∏(1−x^k)·∏(1+x^k) = ∏(1−x^{2k})`:
+    `q(m) = r(m) + Σ_k (−1)^(k−1) [q(m − g_k) + q(m − g_k')]` over the same
+    generalized pentagonal numbers `g_k = k(3k∓1)/2` as `PartitionsP`, with an
+    inhomogeneous term `r(m) = (−1)^k` when `m/2` is the generalized pentagonal
+    number `g_k` (else `0`). O(n^1.5) integer additions; O(n·√n)-bit table.
+  - **Large `n`** — the **Hardy–Ramanujan–Rademacher / Hagis** exact convergent
+    series evaluated in MPFR (Hagis, *Amer. J. Math.* 85 (1963) 213–222):
+    `q(n) = (π/√(24n+1)) · Σ_{k odd} (1/k)·A_k(n)·I₁(π√(48n+2)/(12k))`, summing
+    over **odd `k` only**, with the modified Bessel function `I₁` (computed by
+    its everywhere-positive power series, as MPFR has no `I₁`) and the character
+    sum `A_k(n) = Σ_{gcd(h,k)=1} cos(π(s(h,k) − s(2h,k)) − 2πnh/k)` built from
+    exact Dedekind sums `s(h,k)`. Working precision `≈ π√(n/3)/ln 2` bits plus
+    guard bits; memory stays tiny where the recurrence's table would be
+    prohibitive.
+- Unlike `PartitionsP`, the q-series has no clean closed-form Rademacher
+  remainder bound, so the HRR engine's term count is convergence-driven (sum
+  `≈√n` odd terms; accept only when the sum lies within `1/4` of an integer and
+  the last term is below `1/8`, growing terms/precision otherwise). Correctness
+  is pinned by an exhaustive HRR-equals-recurrence cross-check (every `n` up to
+  1500 plus a strided sample and large spot values to `n = 100000`; see
+  `tests/test_partitionsq.c`).
+- `q(0) = 1`; `q(n) = 0` for `n < 0`. The result auto-promotes to a big integer
+  (`q(1000)` has 22 digits; `q(100000)` has 245).
+- Non-integer, symbolic, or astronomically large (big-integer) arguments are
+  left unevaluated; `PartitionsQ` called with other than one argument emits
+  `PartitionsQ::argx` and is left unevaluated.
+
+```
+In[1]:= Table[PartitionsQ[k], {k, 0, 20}]
+Out[1]= {1, 1, 1, 2, 2, 3, 4, 5, 6, 8, 10, 12, 15, 18, 22, 27, 32, 38, 46, 54, 64}
+
+In[2]:= PartitionsQ[100]
+Out[2]= 444793
+
+In[3]:= PartitionsQ[{2, 4, 6}]
+Out[3]= {1, 2, 4}
 ```
 
 ## ContinuedFraction
