@@ -654,6 +654,10 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("GaussianIntegers", "False"));
     ob_commit(&b, "FactorInteger");
 
+    ob_init(&b);
+    ob_add(&b, r_sym("GaussianIntegers", "False"));
+    ob_commit(&b, "Divisors");
+
     /* ---- Random number generation ---- */
     const char* rand_fns[] = { "RandomInteger", "RandomReal", "RandomComplex" };
     for (size_t i = 0; i < sizeof(rand_fns) / sizeof(rand_fns[0]); i++) {

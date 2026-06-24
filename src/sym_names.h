@@ -113,6 +113,7 @@ extern const char* SYM_Direction;
 extern const char* SYM_DiscreteDelta;
 extern const char* SYM_Divide;
 extern const char* SYM_Divisible;
+extern const char* SYM_Divisors;
 extern const char* SYM_Dixon;
 extern const char* SYM_Do;
 extern const char* SYM_DollarMachineEpsilon;

@@ -442,6 +442,10 @@ add_executable(coprimeq_tests test_coprimeq.c ${COMMON_SRC})
 target_include_directories(coprimeq_tests PRIVATE ../src)
 add_test(NAME coprimeq_tests COMMAND coprimeq_tests)
 
+add_executable(divisors_tests test_divisors.c ${COMMON_SRC})
+target_include_directories(divisors_tests PRIVATE ../src)
+add_test(NAME divisors_tests COMMAND divisors_tests)
+
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)

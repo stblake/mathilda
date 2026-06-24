@@ -3253,6 +3253,7 @@ void info_init(void) {
         "d[n-1].");
 
     // Primes
+    symtab_set_docstring("Divisors", "Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.");
     symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
     symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");
     symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x.");
