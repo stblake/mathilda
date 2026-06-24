@@ -352,8 +352,8 @@ Out[2]= 0
 ### An optimisation problem
 
 The same machinery finds extrema. Minimise `g(x) = x³/3 − 4x` over the reals:
-differentiate, solve `g'(x) = 0` for the critical points, then evaluate `g`
-there to compare them.
+differentiate, solve `g'(x) = 0` for the critical points, then let Mathilda
+classify them with the **second derivative test** — no graphing or guesswork.
 
 ```mathematica
 In[1]:= D[x^3/3 - 4 x, x]
@@ -361,18 +361,40 @@ Out[1]= -4 + x^2
 
 In[2]:= Solve[x^2 - 4 == 0, x]
 Out[2]= {{x -> -2}, {x -> 2}}
-
-In[3]:= (x^3/3 - 4 x) /. x -> -2
-Out[3]= 16/3
-
-In[4]:= (x^3/3 - 4 x) /. x -> 2
-Out[4]= -16/3
 ```
 
-The derivative `g'(x) = x² − 4` vanishes at `x = ±2`. Evaluating `g` at each
-critical point gives `g(−2) = 16/3` (the local maximum) and `g(2) = −16/3` (the
-local minimum). Solving a derivative equal to zero, then substituting the
-solutions back, is the entire calculus of optimisation in three steps.
+The derivative `g'(x) = x² − 4` vanishes at `x = ±2`. To tell a maximum from a
+minimum, take the *second* derivative with `D[g, {x, 2}]` and evaluate its sign
+at each critical point: `g''(x) < 0` means the curve bends downward (a local
+maximum), `g''(x) > 0` means it bends upward (a local minimum).
+
+```mathematica
+In[3]:= D[x^3/3 - 4 x, {x, 2}]
+Out[3]= 2 x
+
+In[4]:= D[x^3/3 - 4 x, {x, 2}] /. x -> -2
+Out[4]= -4
+
+In[5]:= D[x^3/3 - 4 x, {x, 2}] /. x -> 2
+Out[5]= 4
+```
+
+`g''(x) = 2x` is negative at `x = −2` (`g'' = −4 < 0`, a local **maximum**) and
+positive at `x = 2` (`g'' = 4 > 0`, a local **minimum**). Substituting back into
+`g` confirms the values these extrema take:
+
+```mathematica
+In[6]:= (x^3/3 - 4 x) /. x -> -2
+Out[6]= 16/3
+
+In[7]:= (x^3/3 - 4 x) /. x -> 2
+Out[7]= -16/3
+```
+
+So `g(−2) = 16/3` is the local maximum and `g(2) = −16/3` the local minimum.
+Differentiate, solve `g' = 0`, then read the sign of `g''` at each root — the
+entire calculus of optimisation, with the maximum/minimum verdict computed
+rather than eyeballed.
 
 ### A geometric locus by elimination
 
@@ -415,6 +437,66 @@ Out[2]= {{x -> -1}, {x -> 3}}
 quadratic for `x = −1` and `x = 3`. Substituting each back into `y = 2x + 3`
 gives the two intersection points `(−1, 1)` and `(3, 9)` — the classic
 eliminate-then-solve recipe for intersecting any two curves.
+
+### Solving a polynomial system with `Resultant`
+
+When both equations are nonlinear, handing the *system* straight to `Solve` can
+leave it unevaluated — there is no single variable to isolate by inspection:
+
+```mathematica
+In[1]:= Solve[{x^2 + y^2 == 25, y == x^2 - 13}, {x, y}]
+Out[1]= Solve[{x^2 + y^2 == 25, y == -13 + x^2}, {x, y}]
+```
+
+`Resultant[p, q, x]` is the classical elimination tool that breaks the deadlock.
+It returns a polynomial in the *remaining* variable that vanishes exactly when
+`p` and `q` share a root in `x` — eliminating `x` from the pair algebraically,
+where eyeballing fails. Here the circle `x² + y² = 25` meets the parabola
+`y = x² − 13`:
+
+```mathematica
+In[1]:= Resultant[x^2 + y^2 - 25, x^2 - y - 13, x]
+Out[1]= 144 - 24 y - 23 y^2 + 2 y^3 + y^4
+
+In[2]:= Solve[144 - 24 y - 23 y^2 + 2 y^3 + y^4 == 0, y]
+Out[2]= {{y -> -4}, {y -> -4}, {y -> 3}, {y -> 3}}
+```
+
+Eliminating `x` collapses the two-variable system to one quartic in `y`, which
+factors as `(y² + y − 12)² = ((y + 4)(y − 3))²`. The roots repeat because each
+`y` is reached by a symmetric pair `x = ±√(y + 13)`: at `y = 3`, `x = ±4`; at
+`y = −4`, `x = ±3` — the four intersection points `(±4, 3)` and `(±3, −4)`.
+`Resultant` is the engine underneath `Eliminate`; reaching for it directly pays
+off when you want the eliminated polynomial itself, multiplicities and all.
+
+### Cracking a high-degree equation with `Decompose`
+
+A quartic like `x⁴ + x² + 1` looks daunting head-on, but it is secretly a
+*quadratic of a quadratic*. `Decompose` exposes that hidden layering, writing a
+polynomial as a chain of lower-degree maps:
+
+```mathematica
+In[1]:= Decompose[x^4 + x^2 + 1, x]
+Out[1]= {1 + x + x^2, x^2}
+```
+
+The result reads outermost-first: `x⁴ + x² + 1 = p(q(x))` with the outer
+`p(u) = u² + u + 1` and the inner `q(x) = x²`. That immediately halves the work
+— solve the outer quadratic for `u`, then the inner one for `x`:
+
+```mathematica
+In[2]:= Solve[u^2 + u + 1 == 0, u]
+Out[2]= {{u -> 1/2 (-1 - I Sqrt[3])}, {u -> 1/2 (-1 + I Sqrt[3])}}
+
+In[3]:= Solve[x^4 + x^2 + 1 == 0, x]
+Out[3]= {{x -> -Sqrt[1/2 (-1 - I Sqrt[3])]}, {x -> Sqrt[1/2 (-1 - I Sqrt[3])]}, {x -> -Sqrt[1/2 (-1 + I Sqrt[3])]}, {x -> Sqrt[1/2 (-1 + I Sqrt[3])]}}
+```
+
+Each root of the outer quadratic feeds `x = ±√u`, and `In[3]` confirms it: the
+four roots of the quartic are exactly the square roots of the two `u` values.
+`Decompose` turns "solve a degree-4 equation" into "solve two quadratics" — and
+it nests deeper, peeling a sextic such as `x⁶ + 3x⁴ + 3x² + 2` into
+`{2 + 3x + 3x² + x³, x²}`, a cubic composed with a square.
 
 ## Where to next
 
