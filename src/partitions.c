@@ -33,7 +33,16 @@
 #include <stdio.h>
 #include <string.h>
 #include <limits.h>
+#include <math.h>
 #include <gmp.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
+
+/* M_PI is POSIX, not C99; glibc hides it under -std=c99. */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 /* ----- small numeric helpers ------------------------------------------- */
 
@@ -504,7 +513,341 @@ Expr* builtin_integerpartitions(Expr* res) {
     return result;
 }
 
+/* ===================================================================== */
+/* PartitionsP[n] — the partition-counting function p(n).                 */
+/*                                                                        */
+/* Two engines, dispatched by size (see builtin_partitionsp):             */
+/*                                                                        */
+/*  1. partitionsp_recurrence — Euler's pentagonal-number-theorem         */
+/*     recurrence, exact GMP integers. O(n^1.5) time and O(n*sqrt n) bits */
+/*     of memory. Simple and robust; used for small n.                    */
+/*                                                                        */
+/*  2. partitionsp_hrr — the non-recursive Hardy-Ramanujan-Rademacher     */
+/*     exact formula evaluated in MPFR. O(n^{3/4}) cosine evaluations and */
+/*     O(sqrt n)-bit working precision, so memory stays tiny. Used for    */
+/*     large n, where the recurrence's table would be prohibitive.        */
+/*     Reference: F. Johansson, "Efficient implementation of the          */
+/*     Hardy-Ramanujan-Rademacher formula" (arXiv:1205.5991).             */
+/* ===================================================================== */
+
+/* Threshold (in n) above which the HRR engine is preferred. Below it the
+ * recurrence is faster and needs no MPFR. The documented big values
+ * (p(1024), p(2048), p(4096)) consequently exercise the HRR path. */
+#define PARTITIONSP_HRR_THRESHOLD 1000
+
+/* --- Engine 1: pentagonal recurrence ----------------------------------- */
+
+/* Compute p(n) for n >= 0 into the freshly-initialised result `out`.
+ * Returns 0 on success, -1 on allocation failure (out left at 0/uninit). */
+int partitionsp_recurrence(unsigned long n, mpz_t out) {
+    mpz_t* p = malloc((n + 1) * sizeof(mpz_t));
+    if (!p) return -1;
+
+    for (unsigned long m = 0; m <= n; m++) mpz_init(p[m]);
+    mpz_set_ui(p[0], 1);
+
+    for (unsigned long m = 1; m <= n; m++) {
+        /* p[m] accumulates the alternating pentagonal sum. */
+        for (unsigned long k = 1;; k++) {
+            /* g_k = k(3k-1)/2 ; once g_k > m no further k contributes. */
+            unsigned long g1 = k * (3 * k - 1) / 2;
+            if (g1 > m) break;
+            int sign = (k & 1UL) ? 1 : -1; /* +1 for odd k, -1 for even k */
+            if (sign > 0) mpz_add(p[m], p[m], p[m - g1]);
+            else          mpz_sub(p[m], p[m], p[m - g1]);
+
+            unsigned long g2 = k * (3 * k + 1) / 2;
+            if (g2 <= m) {
+                if (sign > 0) mpz_add(p[m], p[m], p[m - g2]);
+                else          mpz_sub(p[m], p[m], p[m - g2]);
+            }
+        }
+    }
+
+    mpz_set(out, p[n]);
+    for (unsigned long m = 0; m <= n; m++) mpz_clear(p[m]);
+    free(p);
+    return 0;
+}
+
+/* --- Engine 2: Hardy-Ramanujan-Rademacher (MPFR) ----------------------- */
+#ifdef USE_MPFR
+
+/* W_k(n) = sqrt(3/k) * A_k(n), where A_k(n) is the Rademacher exponential
+ * sum (Johansson eq. 1.6). We never form A_k(n) on its own: pulling the
+ * sqrt(3/k) into Selberg's identity (eq. 2.1) cancels its sqrt(k/3) prefactor,
+ * leaving, for k >= 3, the bare cosine sum
+ *     sum over l in [0, 2k) with (3l^2+l)/2 == -n (mod k) of
+ *         (-1)^l cos( pi (6l+1) / (6k) ).
+ * Computed with Johansson's Algorithm 1: the residue m = ((3l^2+l)/2 + n)
+ * mod k and its first difference r are advanced with integer adds only, so a
+ * cosine is evaluated solely at the O(sqrt k) solutions. k = 1 and k = 2 are
+ * the closed forms A_1 = 1, A_2 = (-1)^n scaled by sqrt(3/k). */
+static void hrr_Wk(mpfr_t out, unsigned long k, unsigned long n,
+                   const mpfr_t pi, mpfr_prec_t prec) {
+    if (k == 1) {                       /* sqrt(3) * 1 */
+        mpfr_sqrt_ui(out, 3, MPFR_RNDN);
+        return;
+    }
+    if (k == 2) {                       /* sqrt(3/2) * (-1)^n */
+        mpfr_set_ui(out, 3, MPFR_RNDN);
+        mpfr_div_ui(out, out, 2, MPFR_RNDN);
+        mpfr_sqrt(out, out, MPFR_RNDN);
+        if (n & 1UL) mpfr_neg(out, out, MPFR_RNDN);
+        return;
+    }
+
+    mpfr_t term, ang;
+    mpfr_init2(term, prec);
+    mpfr_init2(ang, prec);
+    mpfr_set_zero(out, 1);
+
+    unsigned long m = n % k;            /* l = 0 gives (3*0+0)/2 + n == n */
+    unsigned long r = 2;               /* first difference of (3l^2+l)/2 */
+    for (unsigned long l = 0; l < 2 * k; l++) {
+        if (m == 0) {
+            /* ang = pi * (6l + 1) / (6k) */
+            mpfr_mul_ui(ang, pi, 6 * l + 1, MPFR_RNDN);
+            mpfr_div_ui(ang, ang, 6 * k, MPFR_RNDN);
+            mpfr_cos(term, ang, MPFR_RNDN);
+            if (l & 1UL) mpfr_sub(out, out, term, MPFR_RNDN);
+            else         mpfr_add(out, out, term, MPFR_RNDN);
+        }
+        m += r;                         /* next residue (m, r < k => one wrap) */
+        if (m >= k) m -= k;
+        r += 3;
+        if (r >= k) r -= k;
+    }
+
+    mpfr_clear(term);
+    mpfr_clear(ang);
+}
+
+/* Rademacher truncation bound M(n,N) (Johansson eq. 1.8); |p(n)-partial|<M.
+ *     M = 44 pi^2/(225 sqrt 3) * N^{-1/2}
+ *       + pi sqrt2/75 * (N/(n-1))^{1/2} * sinh( (pi/N) sqrt(2n/3) ).
+ * Computed at the supplied precision; requires n >= 2. */
+static void hrr_remainder_bound(mpfr_t out, unsigned long n, unsigned long N,
+                                const mpfr_t pi, mpfr_prec_t prec) {
+    mpfr_t a, b, t;
+    mpfr_init2(a, prec);
+    mpfr_init2(b, prec);
+    mpfr_init2(t, prec);
+
+    /* term 1: 44 pi^2/(225 sqrt 3) * N^{-1/2} */
+    mpfr_mul(a, pi, pi, MPFR_RNDN);
+    mpfr_mul_ui(a, a, 44, MPFR_RNDN);
+    mpfr_sqrt_ui(t, 3, MPFR_RNDN);
+    mpfr_mul_ui(t, t, 225, MPFR_RNDN);
+    mpfr_div(a, a, t, MPFR_RNDN);
+    mpfr_sqrt_ui(t, N, MPFR_RNDN);
+    mpfr_div(a, a, t, MPFR_RNDN);
+
+    /* term 2: pi sqrt2/75 * sqrt(N/(n-1)) * sinh( (pi/N) sqrt(2n/3) ) */
+    mpfr_sqrt_ui(b, 2, MPFR_RNDN);
+    mpfr_mul(b, b, pi, MPFR_RNDN);
+    mpfr_div_ui(b, b, 75, MPFR_RNDN);
+    mpfr_set_ui(t, N, MPFR_RNDN);
+    mpfr_div_ui(t, t, n - 1, MPFR_RNDN);
+    mpfr_sqrt(t, t, MPFR_RNDN);
+    mpfr_mul(b, b, t, MPFR_RNDN);
+    /* sinh argument */
+    mpfr_set_ui(t, 2 * n, MPFR_RNDN);
+    mpfr_div_ui(t, t, 3, MPFR_RNDN);
+    mpfr_sqrt(t, t, MPFR_RNDN);
+    mpfr_mul(t, t, pi, MPFR_RNDN);
+    mpfr_div_ui(t, t, N, MPFR_RNDN);
+    mpfr_sinh(t, t, MPFR_RNDN);
+    mpfr_mul(b, b, t, MPFR_RNDN);
+
+    mpfr_add(out, a, b, MPFR_RNDN);
+    mpfr_clear(a);
+    mpfr_clear(b);
+    mpfr_clear(t);
+}
+
+/* Evaluate the HRR formula (Johansson eq. 1.4) at a fixed precision `prec`
+ * with `N` terms, rounding the real sum to the nearest integer in `out`.
+ * On success stores in `dist` the distance from the real sum to that integer
+ * (a sanity margin; the caller retries at higher precision if it is large). */
+static void hrr_eval(unsigned long n, unsigned long N, mpfr_prec_t prec,
+                     mpz_t out, mpfr_t dist) {
+    mpfr_t pi, C, x, U, sh, W, term, sum, rounded;
+    mpfr_init2(pi, prec);
+    mpfr_init2(C, prec);
+    mpfr_init2(x, prec);
+    mpfr_init2(U, prec);
+    mpfr_init2(sh, prec);
+    mpfr_init2(W, prec);
+    mpfr_init2(term, prec);
+    mpfr_init2(sum, prec);
+    mpfr_init2(rounded, prec);
+
+    mpfr_const_pi(pi, MPFR_RNDN);
+
+    /* C = (pi/6) sqrt(24n - 1) */
+    mpfr_set_ui(C, 24, MPFR_RNDN);
+    mpfr_mul_ui(C, C, n, MPFR_RNDN);
+    mpfr_sub_ui(C, C, 1, MPFR_RNDN);
+    mpfr_sqrt(C, C, MPFR_RNDN);
+    mpfr_mul(C, C, pi, MPFR_RNDN);
+    mpfr_div_ui(C, C, 6, MPFR_RNDN);
+
+    mpfr_set_zero(sum, 1);
+    for (unsigned long k = 1; k <= N; k++) {
+        hrr_Wk(W, k, n, pi, prec);
+        if (mpfr_zero_p(W)) continue;       /* A_k(n) = 0 ~ half the time */
+
+        /* x = C / k ; U(x) = cosh(x) - sinh(x)/x */
+        mpfr_div_ui(x, C, k, MPFR_RNDN);
+        mpfr_cosh(U, x, MPFR_RNDN);
+        mpfr_sinh(sh, x, MPFR_RNDN);
+        mpfr_div(sh, sh, x, MPFR_RNDN);
+        mpfr_sub(U, U, sh, MPFR_RNDN);
+
+        mpfr_mul(term, W, U, MPFR_RNDN);
+        mpfr_add(sum, sum, term, MPFR_RNDN);
+    }
+
+    /* multiply by the common factor 4/(24n - 1) */
+    mpfr_mul_ui(sum, sum, 4, MPFR_RNDN);
+    mpfr_set_ui(x, 24, MPFR_RNDN);
+    mpfr_mul_ui(x, x, n, MPFR_RNDN);
+    mpfr_sub_ui(x, x, 1, MPFR_RNDN);
+    mpfr_div(sum, sum, x, MPFR_RNDN);
+
+    mpfr_round(rounded, sum);
+    mpfr_sub(dist, sum, rounded, MPFR_RNDN);
+    mpfr_abs(dist, dist, MPFR_RNDN);
+    mpfr_get_z(out, rounded, MPFR_RNDN);
+
+    mpfr_clear(pi);
+    mpfr_clear(C);
+    mpfr_clear(x);
+    mpfr_clear(U);
+    mpfr_clear(sh);
+    mpfr_clear(W);
+    mpfr_clear(term);
+    mpfr_clear(sum);
+    mpfr_clear(rounded);
+}
+
+/* Compute p(n) for n >= 2 via the HRR formula into `out`. Returns 0 on
+ * success, -1 if it could not converge to a confident integer (the caller
+ * then falls back to the recurrence). */
+int partitionsp_hrr(unsigned long n, mpz_t out) {
+    if (n < 2) return -1;               /* M(n,N) divides by n-1 */
+
+    /* Number of terms: grow N from ceil(sqrt n) until the Rademacher bound
+     * M(n,N) < 1/4, guaranteeing the rounded sum is exact (eq. 1.8). */
+    unsigned long N = (unsigned long)ceil(sqrt((double)n));
+    if (N < 1) N = 1;
+
+    /* Working precision: the result has ~ C/ln2 bits where
+     * C = (pi/6) sqrt(24n-1); add guard bits for accumulation/rounding. */
+    double Cd = (M_PI / 6.0) * sqrt((double)24.0 * (double)n - 1.0);
+    mpfr_prec_t prec = (mpfr_prec_t)(Cd / 0.6931471805599453) + 64;
+    if (prec < 64) prec = 64;
+
+    /* Pick N with a low-precision evaluation of the bound. */
+    {
+        mpfr_t pi, bound, quarter;
+        mpfr_init2(pi, 64);
+        mpfr_init2(bound, 64);
+        mpfr_init2(quarter, 64);
+        mpfr_const_pi(pi, MPFR_RNDN);
+        mpfr_set_d(quarter, 0.25, MPFR_RNDN);
+        for (unsigned long guard = 0; guard < 1000000UL; guard++) {
+            hrr_remainder_bound(bound, n, N, pi, 64);
+            if (mpfr_less_p(bound, quarter)) break;
+            N++;
+        }
+        mpfr_clear(pi);
+        mpfr_clear(bound);
+        mpfr_clear(quarter);
+    }
+
+    /* Evaluate, retrying at higher precision if the rounding margin is thin
+     * (it should not be: truncation < 1/4 and rounding error is tiny). */
+    mpfr_t dist, margin;
+    mpfr_init2(dist, 64);
+    mpfr_init2(margin, 64);
+    mpfr_set_d(margin, 0.25, MPFR_RNDN);
+    int rc = -1;
+    for (int attempt = 0; attempt < 4; attempt++) {
+        hrr_eval(n, N, prec, out, dist);
+        if (mpfr_less_p(dist, margin)) { rc = 0; break; }
+        prec *= 2;
+    }
+    mpfr_clear(dist);
+    mpfr_clear(margin);
+    return rc;
+}
+
+#else  /* !USE_MPFR */
+
+/* Without MPFR the HRR engine is unavailable; signal fallback. */
+int partitionsp_hrr(unsigned long n, mpz_t out) {
+    (void)n; (void)out;
+    return -1;
+}
+
+#endif /* USE_MPFR */
+
+/* --- builtin ----------------------------------------------------------- */
+
+/* Emit `PartitionsP::argx: PartitionsP called with N arguments; 1 argument
+ * is expected.` to stderr and return NULL. */
+static Expr* pp_emit_argx(size_t argc) {
+    fprintf(stderr,
+            "PartitionsP::argx: PartitionsP called with %zu argument%s; "
+            "1 argument is expected.\n",
+            argc, argc == 1 ? "" : "s");
+    return NULL;
+}
+
+/* PartitionsP[n] — number of unrestricted partitions of the integer n.
+ * Reads `res` only; returns NULL (unevaluated) for symbolic, non-integer or
+ * out-of-range arguments. Negative n gives 0. */
+Expr* builtin_partitionsp(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 1) return pp_emit_argx(argc);
+
+    Expr* arg = res->data.function.args[0];
+
+    /* A big-integer argument is astronomically large; we cannot build a table
+     * of that size. Leave the call unevaluated. */
+    if (!expr_is_integer_like(arg) || arg->type == EXPR_BIGINT) return NULL;
+
+    int64_t n = arg->data.integer;
+    if (n < 0) return expr_new_integer(0); /* p(n) = 0 for n < 0 */
+
+    mpz_t out;
+    mpz_init(out);
+
+    int rc = -1;
+    if (n >= PARTITIONSP_HRR_THRESHOLD) {
+        rc = partitionsp_hrr((unsigned long)n, out);
+        if (rc != 0)                       /* fall back if HRR unavailable */
+            rc = partitionsp_recurrence((unsigned long)n, out);
+    } else {
+        rc = partitionsp_recurrence((unsigned long)n, out);
+    }
+    if (rc != 0) {
+        mpz_clear(out);
+        return NULL;
+    }
+
+    Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(out));
+    mpz_clear(out);
+    return result;
+}
+
 void partitions_init(void) {
     symtab_add_builtin("IntegerPartitions", builtin_integerpartitions);
     symtab_get_def("IntegerPartitions")->attributes |= ATTR_PROTECTED;
+
+    symtab_add_builtin("PartitionsP", builtin_partitionsp);
+    symtab_get_def("PartitionsP")->attributes |= (ATTR_LISTABLE | ATTR_PROTECTED);
 }

@@ -1,6 +1,6 @@
 # Number Theory
 
-Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
+Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
 
 ## GCD, LCM
 
@@ -513,6 +513,53 @@ Out[2]= {{20, 9, 9, 6, 6}, {20, 6, 6, 6, 6, 6}}
 
 In[3]:= IntegerPartitions[5, 10, {1, -1}]
 Out[3]= {{-1, -1, 1, 1, 1, 1, 1, 1, 1}, {-1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 1, 1}}
+```
+
+## PartitionsP
+
+Gives the number `p(n)` of unrestricted partitions of the integer `n` — the
+number of ways to write `n` as a sum of positive integers, where order is
+ignored. `PartitionsP[n] == Length[IntegerPartitions[n]]`.
+
+- `PartitionsP[n]`: the partition count `p(n)` as an exact (arbitrary-precision)
+  integer.
+
+**Features**:
+- `Protected`, `Listable` — `PartitionsP[{2, 4, 6}]` → `{2, 5, 11}`.
+- Two engines, dispatched by the size of `n` (threshold `n = 1000`):
+  - **Small `n`** — Euler's pentagonal-number-theorem recurrence
+    `p(m) = Σ_k (-1)^(k-1) [p(m - g_k) + p(m - g_k')]` over the generalized
+    pentagonal numbers `g_k = k(3k∓1)/2`, using exact GMP integers only.
+    O(n^1.5) integer additions; O(n·√n)-bit table.
+  - **Large `n`** — the non-recursive **Hardy–Ramanujan–Rademacher** exact
+    formula evaluated in MPFR (Johansson, arXiv:1205.5991): a convergent
+    series `p(n) = Σ_{k=1}^N √(3/k)·(4/(24n−1))·A_k(n)·U(C/k)` with
+    `U(x) = cosh x − sinh x / x`, `C = (π/6)√(24n−1)`. The exponential sums
+    `A_k(n)` use Selberg's cosine-sum identity (no Dedekind sums). The number
+    of terms `N` is chosen from Rademacher's rigorous remainder bound so the
+    rounded sum is provably exact; working precision is `≈ C/ln 2` bits plus
+    guard bits. Uses only O(√n)-bit precision, so memory stays tiny while the
+    recurrence's table would be prohibitive.
+- Both engines are cross-validated to agree exactly (see
+  `tests/test_partitionsp.c`). The result auto-promotes to a big integer
+  (`p(4096)` has 67 digits; `p(10000)` has 106).
+- `p(0) = 1`; `p(n) = 0` for `n < 0`.
+- Non-integer, symbolic, or astronomically large (big-integer) arguments are
+  left unevaluated; `PartitionsP` called with other than one argument emits
+  `PartitionsP::argx` and is left unevaluated.
+
+```
+In[1]:= Table[PartitionsP[k], {k, 0, 12}]
+Out[1]= {1, 1, 2, 3, 5, 7, 11, 15, 22, 30, 42, 56, 77}
+
+In[2]:= PartitionsP[100]
+Out[2]= 190569292
+
+In[3]:= PartitionsP[4096]
+Out[3]= 6927233917602120527467409170319882882996950147283323368445315320451
+
+In[4]:= Table[Times @@ PartitionsP[Last /@ FactorInteger[n]], {n, 12}]
+Out[4]= {1, 1, 1, 2, 1, 1, 1, 3, 2, 1, 1, 2}
 ```
 
 ## ContinuedFraction

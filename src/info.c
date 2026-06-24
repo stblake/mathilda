@@ -56,6 +56,11 @@ void info_init(void) {
         "fourth limits the result to the first m (m>0) or last |m| (m<0).\n"
         "n and the parts may be rational and negative; Length equals\n"
         "PartitionsP[n] for the plain form.");
+    symtab_set_docstring("PartitionsP",
+        "PartitionsP[n]\n"
+        "\tgives the number p(n) of unrestricted partitions of the integer n.\n"
+        "n must be an integer; p(n) = 0 for n < 0. Threads over lists.\n"
+        "For the partitions themselves use IntegerPartitions[n].");
     symtab_set_docstring("GCD",
         "GCD[n1, n2, ...]\n"
         "\tgives the greatest common divisor of the integers ni.\n"

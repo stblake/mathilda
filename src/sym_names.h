@@ -331,6 +331,7 @@ extern const char* SYM_Overflow;
 extern const char* SYM_ParameterVariables;
 extern const char* SYM_Part;
 extern const char* SYM_Partition;
+extern const char* SYM_PartitionsP;
 extern const char* SYM_PadRight;
 extern const char* SYM_PadLeft;
 extern const char* SYM_Pattern;
