@@ -47,6 +47,15 @@ void info_init(void) {
         "When n and d are integers, Rational auto-reduces by gcd, normalises\n"
         "the sign onto the numerator, and collapses to an Integer when d == 1.\n"
         "Rationals propagate through Plus / Times exactly via GMP.");
+    symtab_set_docstring("IntegerPartitions",
+        "IntegerPartitions[n]\n"
+        "\tgives the partitions of n in reverse-lexicographic order.\n"
+        "IntegerPartitions[n, k] gives partitions into at most k parts;\n"
+        "{k} exactly k; {kmin, kmax} between; {kmin, kmax, dk} stepped.\n"
+        "A third argument restricts the parts (sspec; All = Range[n]); a\n"
+        "fourth limits the result to the first m (m>0) or last |m| (m<0).\n"
+        "n and the parts may be rational and negative; Length equals\n"
+        "PartitionsP[n] for the plain form.");
     symtab_set_docstring("GCD",
         "GCD[n1, n2, ...]\n"
         "\tgives the greatest common divisor of the integers ni.\n"

@@ -127,6 +127,7 @@ set(COMMON_SRC
     ../src/times.c
     ../src/arithmetic.c
     ../src/numbertheory.c
+    ../src/partitions.c
     ../src/special_functions/gamma.c
     ../src/special_functions/beta.c
     ../src/special_functions/erf.c
@@ -1215,6 +1216,16 @@ else()
     target_link_libraries(extended_gcd_tests gmp m)
 endif()
 add_test(NAME extended_gcd_tests COMMAND extended_gcd_tests)
+
+add_executable(integer_partitions_tests test_integer_partitions.c ${COMMON_SRC})
+target_include_directories(integer_partitions_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integer_partitions_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(integer_partitions_tests build_ecm)
+else()
+    target_link_libraries(integer_partitions_tests gmp m)
+endif()
+add_test(NAME integer_partitions_tests COMMAND integer_partitions_tests)
 
 add_executable(integer_string_tests test_integer_string.c ${COMMON_SRC})
 target_include_directories(integer_string_tests PRIVATE ../src)

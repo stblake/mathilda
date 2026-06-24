@@ -1,6 +1,6 @@
 # Number Theory
 
-Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
+Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
 
 ## GCD, LCM
 
@@ -481,6 +481,38 @@ Out[10]= False
 
 In[11]:= SquareFreeQ[10^70 + 3]
 Out[11]= True
+```
+
+## IntegerPartitions
+
+- `IntegerPartitions[n]`: all partitions of `n` in reverse-lexicographic order. `Length[IntegerPartitions[n]] == PartitionsP[n]`.
+- `IntegerPartitions[n, k]`: partitions into at most `k` parts.
+- `IntegerPartitions[n, {k}]`: exactly `k` parts.
+- `IntegerPartitions[n, {kmin, kmax}]`: between `kmin` and `kmax` parts.
+- `IntegerPartitions[n, {kmin, kmax, dk}]`: into `kmin, kmin+dk, …` parts.
+- `IntegerPartitions[n, kspec, sspec]`: parts drawn only from `sspec` (a list of allowed values). `kspec` of `All` is `{0, Infinity}`; `sspec` of `All` is `Range[n]`.
+- `IntegerPartitions[n, kspec, sspec, m]`: the first `m` partitions (`m > 0`) or the last `|m|` (`m < 0`); `m` of `All` is `Infinity`.
+
+`n` and the `s_i` may be rational and/or negative. Attributes: `Protected`.
+
+**Implementation**: a single count-vector enumerator (`src/partitions.c`) over `P = reverse(sspec)`, assigning a count to each allowed part in descending order with exact GMP-rational (`mpq_t`) arithmetic. The default `Range[n]` path is the classic descending-part recursion (bounded by `remaining/part`); explicit `sspec` becomes a coin-problem enumeration bounded by `kmax`. Within each partition, parts appear in `P` order (descending for the default form).
+
+**Edge cases & messages**:
+- `IntegerPartitions[1/2]` → `{}` (no integer parts); `IntegerPartitions[1/2, All, {1/6, 1/3}]` → `{{1/3, 1/6}, {1/6, 1/6, 1/6}}`.
+- `IntegerPartitions[0]` → `{{}}` (the empty partition).
+- `IntegerPartitions::undef` — an unbounded part set (mixed signs or a zero part) with no finite length cap and no positive `m` would be infinitely large; the call is left unevaluated.
+- `IntegerPartitions::take` — fewer partitions exist than the requested `m`; the available ones are returned.
+- `IntegerPartitions::argb` — fewer than 1 or more than 4 arguments.
+
+```
+In[1]:= IntegerPartitions[5]
+Out[1]= {{5}, {4, 1}, {3, 2}, {3, 1, 1}, {2, 2, 1}, {2, 1, 1, 1}, {1, 1, 1, 1, 1}}
+
+In[2]:= IntegerPartitions[50, All, {6, 9, 20}]
+Out[2]= {{20, 9, 9, 6, 6}, {20, 6, 6, 6, 6, 6}}
+
+In[3]:= IntegerPartitions[5, 10, {1, -1}]
+Out[3]= {{-1, -1, 1, 1, 1, 1, 1, 1, 1}, {-1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 1, 1}}
 ```
 
 ## ContinuedFraction

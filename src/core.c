@@ -60,6 +60,7 @@
 #include "modular.h"
 #include "sort.h"
 #include "stats.h"
+#include "partitions.h"
 #include "fit.h"
 #include "info.h"
 #include "expand.h"
@@ -551,6 +552,7 @@ void core_init(void) {
     attr_init();
     purefunc_init();
     stats_init();
+    partitions_init();
     poly_init();
     facpoly_init();
     void squarefreeq_init(void);
