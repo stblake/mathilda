@@ -1,6 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "symtab.h"
 #include "match.h"
 #include "print.h"
@@ -92,7 +89,7 @@ void symtab_add_builtin(const char* symbol_name, BuiltinFunc func) {
 void symtab_set_docstring(const char* symbol_name, const char* doc) {
     SymbolDef* def = symtab_get_def(symbol_name);
     if (def->docstring) free(def->docstring);
-    def->docstring = doc ? strdup(doc) : NULL;
+    def->docstring = doc ? mathilda_strdup(doc) : NULL;
 }
 
 const char* symtab_get_docstring(const char* symbol_name) {

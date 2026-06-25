@@ -1,7 +1,3 @@
-#define _USE_MATH_DEFINES
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include <complex.h>
 #include "trig.h"
 #include "arithmetic.h"

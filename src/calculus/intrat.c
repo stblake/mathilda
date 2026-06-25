@@ -976,7 +976,7 @@ static Expr* intrat_apart_list(Expr* f, Expr* x, const Expr* alpha) {
  * Reserved for Phase 4's LogToReal closer (n-th-root-of-unity case);
  * unused in Phase 2 but kept here so the helper does not need to be
  * resurrected when Phase 4 lands. */
-__attribute__((unused))
+MATHILDA_MAYBE_UNUSED
 static bool intrat_nthroot_q(Expr* p, Expr* x, int* n_out, Expr** a_out, Expr** b_out) {
     /* Run Collect[p, x] to gather the polynomial in canonical form. */
     Expr* coll = expr_new_function(expr_new_symbol(SYM_Collect),

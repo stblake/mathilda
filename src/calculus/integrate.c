@@ -443,7 +443,13 @@ Expr* builtin_integrate(Expr* res) {
 
 void integrate_init(void) {
     symtab_add_builtin("Integrate", builtin_integrate);
-    symtab_get_def("Integrate")->attributes |= ATTR_PROTECTED | ATTR_LISTABLE;
+    /* NOT Listable: Listable would thread over a definite-integral range
+     * spec `{x, a, b}` element-wise (producing garbage like
+     * {Integrate[f,x], Integrate[f,a], Integrate[f,b]}).  Definite
+     * integration is not yet supported, so the `{x,a,b}` form falls through
+     * the EXPR_SYMBOL variable check in builtin_integrate and stays
+     * unevaluated. */
+    symtab_get_def("Integrate")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Integrate",
         "Integrate[f, x] gives the indefinite integral of f with respect to x.\n"
         "Integrate[f, x, Method -> \"<name>\"] dispatches directly to a single\n"

@@ -409,12 +409,22 @@ static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
     if (p) ac = malloc(sizeof(cpx_t) * p);
     if (q) bc = malloc(sizeof(cpx_t) * q);
     bool ok = true;
-    for (size_t i = 0; i < p && ok; i++)
+    /* Track how many entries were successfully initialised; a failing
+     * cpx_from_expr clears its own slot, so on the error path we must clear
+     * exactly the prior survivors (else their mpfr_t limbs leak). */
+    size_t na = 0, nb = 0;
+    for (size_t i = 0; i < p && ok; i++) {
         ok = cpx_from_expr(a->data.function.args[i], &ac[i], work);
-    for (size_t j = 0; j < q && ok; j++)
+        if (ok) na++;
+    }
+    for (size_t j = 0; j < q && ok; j++) {
         ok = cpx_from_expr(b->data.function.args[j], &bc[j], work);
+        if (ok) nb++;
+    }
     if (!ok) {
         cpx_clear(&zc);
+        for (size_t i = 0; i < na; i++) cpx_clear(&ac[i]);
+        for (size_t j = 0; j < nb; j++) cpx_clear(&bc[j]);
         free(ac); free(bc);
         return NULL;
     }

@@ -224,46 +224,35 @@ void mpoly_normalize(MPoly* p) {
         }
     }
 
-    /* Replace storage. */
+    /* Replace storage.  new_coefs was sized to the *original* term count
+     * (old_n) with every slot mpz_init'd; only the first `out` are live
+     * after merging.  Capture old_n before overwriting p->n_terms so the
+     * trailing initialised-but-unused slots can be cleared (otherwise they
+     * leak: cap shrinks to `out`, so mpoly_free never reaches them). */
+    size_t old_n = p->n_terms;
     for (size_t i = 0; i < p->cap; i++) mpz_clear(p->coefs[i]);
     free(p->coefs);
     free(p->exps);
 
-    p->exps    = new_exps;
-    p->coefs   = new_coefs;
-    p->n_terms = out;
-    p->cap     = p->n_terms;
+    p->exps  = new_exps;
+    p->coefs = new_coefs;
 
-    /* Re-init the trailing mpz_t slots (they were freshly malloc'd
-     * to size n_terms but we want cap == n_terms; nothing to init
-     * past out since we sized to p->n_terms exactly). */
-    /* new_coefs has p->n_terms initialised slots; we kept `out` of
-     * them, the rest are still initialised but unused.  Clear them
-     * so cap matches reality. */
-    for (size_t i = out; i < p->n_terms; i++) {
-        /* Already zeroed above; clear and mark unused.  Actually we
-         * need cap = n_terms = out, with all coefs[0..out-1] live and
-         * the rest gone. */
-    }
-    /* Trim down: shrink the coefs array to exactly `out` slots. */
-    if (out < p->n_terms) {
-        for (size_t i = out; i < p->n_terms; i++) mpz_clear(new_coefs[i]);
-        if (out == 0) {
-            free(p->coefs);
-            free(p->exps);
-            p->coefs = NULL;
-            p->exps  = NULL;
-            p->cap   = 0;
-        } else {
-            p->coefs = (mpz_t*)realloc(p->coefs, sizeof(mpz_t) * out);
-            if (p->n_vars > 0) {
-                p->exps = (int*)realloc(p->exps,
-                                        sizeof(int) * out * (size_t)p->n_vars);
-            }
-            p->cap = out;
+    /* Clear the unused tail [out, old_n), then trim arrays to `out`. */
+    for (size_t i = out; i < old_n; i++) mpz_clear(new_coefs[i]);
+    if (out == 0) {
+        free(p->coefs);
+        free(p->exps);
+        p->coefs = NULL;
+        p->exps  = NULL;
+    } else if (out < old_n) {
+        p->coefs = (mpz_t*)realloc(p->coefs, sizeof(mpz_t) * out);
+        if (p->n_vars > 0) {
+            p->exps = (int*)realloc(p->exps,
+                                    sizeof(int) * out * (size_t)p->n_vars);
         }
     }
     p->n_terms = out;
+    p->cap     = out;
 
     free(idx);
 }

@@ -1,6 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "modular.h"
 #include "symtab.h"
 #include "eval.h"
@@ -205,7 +202,7 @@ Expr* builtin_module(Expr* res) {
         if (orig_name) {
             char buf[256];
             snprintf(buf, sizeof(buf), "%s$%lld", orig_name, (long long)current_mn);
-            info[i].new_name = strdup(buf);
+            info[i].new_name = mathilda_strdup(buf);
             info[i].init_val = init_val;
 
             ScopingEnv* new_node = malloc(sizeof(ScopingEnv));
@@ -288,7 +285,7 @@ Expr* builtin_block(Expr* res) {
 
         if (name) {
             SymbolDef* def = symtab_get_def(name);
-            saved[i].name = strdup(name);
+            saved[i].name = mathilda_strdup(name);
             saved[i].old_own = def->own_values;
             saved[i].old_attrs = def->attributes;
             def->own_values = NULL; // Clear values

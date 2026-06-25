@@ -808,11 +808,14 @@ static void rbd_factor_mpz(mpz_t factor, mpz_t n, Expr* method_opt) {
         return;
     }
 
-    /* No explicit base: walk j = 3, 4, ... unbounded and try every coprime
-     * partition a + b = j with a > b >= 1. Mirrors the reference Python
-     * factor_rational_base() exhaustive search; runs until a factor is
-     * found (or the user interrupts). */
-    for (unsigned long j = 3; ; j++) {
+    /* No explicit base: walk j = 3, 4, ... and try every coprime partition
+     * a + b = j with a > b >= 1.  Mirrors the reference Python
+     * factor_rational_base() search, but bounded by a pair budget so a hard
+     * composite cannot hang the REPL (the reference runs until interrupted).
+     * On exhaustion `factor` stays 0 and the caller treats n as unfactored. */
+    const unsigned long RBD_MAX_PAIRS = 200000UL;
+    unsigned long pairs_tried = 0;
+    for (unsigned long j = 3; pairs_tried < RBD_MAX_PAIRS; j++) {
         for (unsigned long bb = 1; 2 * bb < j; bb++) {
             unsigned long aa = j - bb;
             /* coprimality */
@@ -826,6 +829,7 @@ static void rbd_factor_mpz(mpz_t factor, mpz_t n, Expr* method_opt) {
                 mpz_clears(a, b, NULL);
                 return;
             }
+            if (++pairs_tried >= RBD_MAX_PAIRS) break;
         }
     }
 

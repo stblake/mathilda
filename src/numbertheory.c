@@ -100,6 +100,75 @@ static Expr* mpz_pair_to_rational_expr(const mpz_t num_in, const mpz_t den_in) {
     return out;
 }
 
+/* int64 LCM with overflow detection. Returns LCM(|a|, |b|); sets *overflow
+ * when the result does not fit in int64_t (the int64 fast paths fall back to
+ * the GMP folds below in that case). Callers handle the zero operands. */
+static int64_t lcm_checked(int64_t a, int64_t b, bool *overflow) {
+    if (a == 0 || b == 0) return 0;
+    a = llabs(a);
+    b = llabs(b);
+    int64_t g = gcd(a, b);
+    __int128 prod = (__int128)(a / g) * (__int128)b;
+    if (prod > (__int128)INT64_MAX) {
+        *overflow = true;
+        return 0;
+    }
+    return (int64_t)prod;
+}
+
+/* GCD over rational-like args folded entirely in GMP: gcd(a/b, c/d) =
+ * gcd(a, c) / lcm(b, d). Used both for the BigInt-bearing case and as the
+ * int64 fast-path overflow fallback. Every arg must be rational-like. */
+static Expr* gcd_rational_mpz_fold(Expr* res, size_t count) {
+    mpz_t running_n, running_d, n, d;
+    mpz_init_set_ui(running_n, 0);
+    mpz_init_set_ui(running_d, 1);
+    mpz_inits(n, d, NULL);
+    for (size_t i = 0; i < count; i++) {
+        rational_like_to_mpz_pair(res->data.function.args[i], n, d);
+        mpz_abs(n, n);
+        mpz_abs(d, d);
+        if (i == 0) {
+            mpz_set(running_n, n);
+            mpz_set(running_d, d);
+        } else {
+            mpz_gcd(running_n, running_n, n);
+            mpz_lcm(running_d, running_d, d);
+        }
+    }
+    Expr* result = mpz_pair_to_rational_expr(running_n, running_d);
+    mpz_clears(running_n, running_d, n, d, NULL);
+    return result;
+}
+
+/* LCM over rational-like args folded entirely in GMP: lcm(a/b, c/d) =
+ * lcm(a, c) / gcd(b, d), with a zero numerator zeroing the running LCM.
+ * Used for the BigInt-bearing case and the int64 overflow fallback. */
+static Expr* lcm_rational_mpz_fold(Expr* res, size_t count) {
+    mpz_t running_n, running_d, n, d;
+    mpz_init_set_ui(running_n, 0);
+    mpz_init_set_ui(running_d, 0);
+    mpz_inits(n, d, NULL);
+    for (size_t i = 0; i < count; i++) {
+        rational_like_to_mpz_pair(res->data.function.args[i], n, d);
+        mpz_abs(n, n);
+        mpz_abs(d, d);
+        if (i == 0) {
+            mpz_set(running_n, n);
+            mpz_set(running_d, d);
+        } else if (mpz_sgn(running_n) == 0 || mpz_sgn(n) == 0) {
+            mpz_set_ui(running_n, 0);
+            mpz_set_ui(running_d, 1);
+        } else {
+            mpz_lcm(running_n, running_n, n);
+            mpz_gcd(running_d, running_d, d);
+        }
+    }
+    Expr* result = mpz_pair_to_rational_expr(running_n, running_d);
+    mpz_clears(running_n, running_d, n, d, NULL);
+    return result;
+}
+
 Expr* builtin_gcd(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t count = res->data.function.arg_count;
@@ -136,29 +205,12 @@ Expr* builtin_gcd(Expr* res) {
      * inside Rational). gcd(a/b, c/d) = gcd(a, c) / lcm(b, d) folded
      * pairwise. */
     if (all_rational_like && any_rational_needs_bigint) {
-        mpz_t running_n, running_d, n, d;
-        mpz_init_set_ui(running_n, 0);
-        mpz_init_set_ui(running_d, 1);
-        mpz_inits(n, d, NULL);
-        for (size_t i = 0; i < count; i++) {
-            rational_like_to_mpz_pair(res->data.function.args[i], n, d);
-            mpz_abs(n, n);
-            mpz_abs(d, d);
-            if (i == 0) {
-                mpz_set(running_n, n);
-                mpz_set(running_d, d);
-            } else {
-                mpz_gcd(running_n, running_n, n);
-                mpz_lcm(running_d, running_d, d);
-            }
-        }
-        Expr* result = mpz_pair_to_rational_expr(running_n, running_d);
-        mpz_clears(running_n, running_d, n, d, NULL);
-        return result;
+        return gcd_rational_mpz_fold(res, count);
     }
 
     int64_t running_n = 0;
     int64_t running_d = 1;
+    bool overflow = false;
 
     for (size_t i = 0; i < count; i++) {
         int64_t n, d;
@@ -170,7 +222,9 @@ Expr* builtin_gcd(Expr* res) {
             running_d = llabs(d);
         } else {
             running_n = gcd(running_n, n);
-            running_d = lcm(running_d, d);
+            /* gcd(a/b, c/d) denominator is lcm(b, d), which can overflow. */
+            running_d = lcm_checked(running_d, d, &overflow);
+            if (overflow) return gcd_rational_mpz_fold(res, count);
         }
     }
 
@@ -214,32 +268,12 @@ Expr* builtin_lcm(Expr* res) {
     /* Rational-bigint fold. lcm(a/b, c/d) = lcm(a, c) / gcd(b, d) folded
      * pairwise. A zero numerator in any term zeroes the running lcm. */
     if (all_rational_like && any_rational_needs_bigint) {
-        mpz_t running_n, running_d, n, d;
-        mpz_init_set_ui(running_n, 0);
-        mpz_init_set_ui(running_d, 0);
-        mpz_inits(n, d, NULL);
-        for (size_t i = 0; i < count; i++) {
-            rational_like_to_mpz_pair(res->data.function.args[i], n, d);
-            mpz_abs(n, n);
-            mpz_abs(d, d);
-            if (i == 0) {
-                mpz_set(running_n, n);
-                mpz_set(running_d, d);
-            } else if (mpz_sgn(running_n) == 0 || mpz_sgn(n) == 0) {
-                mpz_set_ui(running_n, 0);
-                mpz_set_ui(running_d, 1);
-            } else {
-                mpz_lcm(running_n, running_n, n);
-                mpz_gcd(running_d, running_d, d);
-            }
-        }
-        Expr* result = mpz_pair_to_rational_expr(running_n, running_d);
-        mpz_clears(running_n, running_d, n, d, NULL);
-        return result;
+        return lcm_rational_mpz_fold(res, count);
     }
 
     int64_t running_n = 0;
     int64_t running_d = 0;
+    bool overflow = false;
 
     for (size_t i = 0; i < count; i++) {
         int64_t n, d;
@@ -254,8 +288,9 @@ Expr* builtin_lcm(Expr* res) {
                 running_n = 0;
                 running_d = 1;
             } else {
-                running_n = lcm(running_n, n);
+                running_n = lcm_checked(running_n, n, &overflow);
                 running_d = gcd(running_d, d);
+                if (overflow) return lcm_rational_mpz_fold(res, count);
             }
         }
     }

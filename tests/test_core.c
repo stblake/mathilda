@@ -780,15 +780,15 @@ void test_gcd_lcm(void) {
      * gcd(a/b, c/d) = gcd(a, c) / lcm(b, d) and the LCM analog,
      * canonicalised at the end via mpz_pair_to_rational_expr. */
     assert_eval_eq("GCD[Rational[10^50, 3], Rational[10^60, 7]]",
-                   "100000000000000000000000000000000000000000000000000/21", 1);
+                   "Rational[100000000000000000000000000000000000000000000000000, 21]", 1);
     assert_eval_eq("GCD[Rational[10^30, 11], 5]",
-                   "5/11", 1);
+                   "Rational[5, 11]", 1);
     assert_eval_eq("GCD[2/3, 4/9]", "Rational[2, 9]", 1);
     assert_eval_eq("LCM[Rational[10^50, 3], Rational[10^60, 7]]",
                    "1000000000000000000000000000000000000000000000000000000000000", 1);
     assert_eval_eq("LCM[2/3, 4/9]", "Rational[4, 3]", 1);
     assert_eval_eq("GCD[0, Rational[10^30, 11]]",
-                   "1000000000000000000000000000000/11", 1);
+                   "Rational[1000000000000000000000000000000, 11]", 1);
 }
 
 void test_primeq(void) {

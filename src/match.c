@@ -1,6 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "match.h"
 #include <gmp.h>
 #include "part.h"
@@ -77,7 +74,7 @@ void env_set(MatchEnv* env, const char* symbol, Expr* value) {
         env->symbols = realloc(env->symbols, sizeof(char*) * env->capacity);
         env->values = realloc(env->values, sizeof(Expr*) * env->capacity);
     }
-    env->symbols[env->count] = strdup(symbol);
+    env->symbols[env->count] = mathilda_strdup(symbol);
     env->values[env->count] = expr_copy(value);
     env->count++;
 }

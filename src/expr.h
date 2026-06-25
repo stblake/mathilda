@@ -119,6 +119,20 @@ Expr* expr_new_mpfr_move(mpfr_t src);
 Expr* expr_new_mpfr_copy(const mpfr_t src);
 #endif
 
+/* Portable strdup: `strdup` is POSIX, not C99, and glibc hides it under
+ * -std=c99.  Returns a malloc'd copy of `s` (NULL if `s` is NULL). Caller
+ * frees with free(). Use this instead of strdup throughout the codebase. */
+char* mathilda_strdup(const char* s);
+
+/* Portable "this static function/variable may be unused" marker. Wraps the
+ * GNU/Clang attribute behind a guard so strict C99 elsewhere still builds
+ * (SPEC §10 forbids an unguarded __attribute__). */
+#if defined(__GNUC__) || defined(__clang__)
+#define MATHILDA_MAYBE_UNUSED __attribute__((unused))
+#else
+#define MATHILDA_MAYBE_UNUSED
+#endif
+
 /* Helpers used by arithmetic modules */
 void  expr_to_mpz(const Expr* e, mpz_t out);
 bool  expr_is_integer_like(const Expr* e);

@@ -793,7 +793,7 @@ typedef struct {
 
 static void elist_init(ExprList* el) { el->items = NULL; el->n = 0; el->cap = 0; }
 
-__attribute__((unused))
+MATHILDA_MAYBE_UNUSED
 static void elist_free_items(ExprList* el) {
     for (size_t i = 0; i < el->n; i++) expr_free(el->items[i]);
     free(el->items);
@@ -1253,7 +1253,7 @@ static int64_t eval_degree(Expr* p, Expr* x) {
 }
 
 /* Evaluate Variables[p]. Consumes p. Returns the List Expr* (owned). */
-__attribute__((unused))
+MATHILDA_MAYBE_UNUSED
 static Expr* eval_variables(Expr* p) {
     Expr* call = mk_unary("Variables", p);
     return eval_and_free(call);
@@ -1261,7 +1261,7 @@ static Expr* eval_variables(Expr* p) {
 
 /* Test whether `e` evaluates to zero (numeric, symbolic, or via
  * Cancel/Together).  Cheap path first. */
-__attribute__((unused))
+MATHILDA_MAYBE_UNUSED
 static bool is_zero_after_cancel(Expr* e) {
     if (!e) return true;
     if (e->type == EXPR_INTEGER && e->data.integer == 0) return true;

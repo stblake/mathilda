@@ -1,6 +1,3 @@
-#ifndef _GNU_SOURCE
-#define _GNU_SOURCE
-#endif
 #include "expr.h"
 #include "arithmetic.h"
 #include "sym_intern.h"
@@ -11,6 +8,15 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Portable strdup (strdup is POSIX, not C99). See expr.h. */
+char* mathilda_strdup(const char* s) {
+    if (!s) return NULL;
+    size_t n = strlen(s) + 1;
+    char* r = (char*)malloc(n);
+    if (r) memcpy(r, s, n);
+    return r;
+}
 
 // Create/allocate a new integer expression.
 Expr* expr_new_integer(int64_t value) {
@@ -67,7 +73,7 @@ Expr* expr_new_string(const char* str) {
     e->type = EXPR_STRING;
     e->refcount = 1;
     e->last_evaluated_at = 0;
-    e->data.string = strdup(str);
+    e->data.string = mathilda_strdup(str);
     if (!e->data.string) {
         free(e);
         return NULL;
@@ -281,7 +287,7 @@ Expr* expr_unshare(Expr* e) {
             fresh->data.symbol = e->data.symbol;  /* interned */
             break;
         case EXPR_STRING:
-            fresh->data.string = e->data.string ? strdup(e->data.string) : NULL;
+            fresh->data.string = e->data.string ? mathilda_strdup(e->data.string) : NULL;
             break;
         case EXPR_BIGINT:
             mpz_init(fresh->data.bigint);
