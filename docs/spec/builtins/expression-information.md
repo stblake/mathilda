@@ -94,26 +94,42 @@ Pipeline (each stage exits early on a definite verdict):
 2. **Rational normalisation** — `Together`, `Cancel`, `Expand` plus
    `is_zero_poly` decides every identity in `Q(x_1, …, x_n)` exactly.
 3. **Numeric precision ladder** — for closed-form numeric inputs,
-   numericalize at machine precision and compare against a
-   cancellation-aware threshold. Bump to MPFR (200/500/1000 bits) and
-   re-evaluate when the residual lies near the rounding-noise floor.
+   numericalize at machine precision. A residual that is a non-trivial
+   fraction of the operand scale is a genuine non-zero (`False`); a
+   smaller residual is ambiguous and the ladder is climbed (MPFR at
+   200/500/1000 bits). The verdict is then read from the *shrinkage
+   trend*: a true zero shrinks geometrically as bits are added, a
+   genuine non-zero plateaus at its true value. A `False` from a high
+   rung is trusted only once the residual has been observed to shrink —
+   proof that the requested precision is honoured downstream — so a
+   special function that silently stays at machine precision is not
+   rejected by a high rung's tiny threshold. This is what lets deeply
+   cancelling identities (e.g. `Gamma[x + 1] - x Gamma[x]`) survive.
 4. **Schwartz–Zippel** — for inputs with free symbols, substitute
-   random real/complex samples and recurse into the numeric stage, in
-   two phases. A *screen* phase evaluates many points at machine
-   precision only; any point that is decisively non-zero settles the
-   test as `False` cheaply. This catches expressions that are
-   identically zero on one real-analytic branch but non-zero on an
+   random **real** samples of moderate magnitude and recurse into the
+   numeric stage, in two phases. A *screen* phase evaluates many points
+   at machine precision only; any point that is *obviously* non-zero
+   settles the test as `False` cheaply. This catches expressions that
+   are identically zero on one real-analytic branch but non-zero on an
    adjacent one (e.g. `D[2 Sqrt[1 - Cos[x]], x] - Sqrt[1 + Cos[x]]`,
-   zero on `(0, π)` but not `(π, 2π)`) — only the sample's real-part
-   branch interval matters there, so more sample *points*, not larger
-   imaginary parts, defeat the coincidence. A *confirm* phase then
-   climbs the full precision ladder on a few points to reject
-   cancellation-hidden small non-zeros before declaring an identity.
-   Sampled imaginary parts are bounded in magnitude (real parts are
-   not): `Tan`/`Tanh` saturate to `±I` for large `|Im|`, where
-   `1 + Tan^2` cancels below machine epsilon and a true zero would
-   otherwise read as `O(1)`. Branch cuts depend on the sign of the
-   imaginary part, not its size, so they are still tested.
+   zero on `(0, π)` but not `(π, 2π)`) — more sample *points*, spread
+   across many periods of the moderate-magnitude range, defeat the
+   coincidence. A *confirm* phase then climbs the full precision ladder
+   on a few points to reject cancellation-hidden small non-zeros before
+   declaring an identity.
+
+   Sampling is on the real line by design: an analytic identity holding
+   on a real interval holds on a complex neighbourhood (identity
+   theorem), so real points confirm it, whereas complex samples cross
+   branch cuts of `Log`/`Sqrt`/`ArcTan` (and blow up special functions
+   like `Gamma`) where the symbolic identity legitimately fails,
+   manufacturing false negatives. The draw stream is seeded
+   deterministically from the input's structural hash, so the verdict
+   is a **pure function of the input** — no run-to-run flakiness — and
+   the user's `RandomInteger`/`SeedRandom` stream is left untouched.
+   The trade-off is that an expression zero only on the reals but
+   distinct on some complex branch (e.g. `Log[Exp[x]] - x` off the
+   principal strip) reads `True` under these real-variable semantics.
 
 Attributes: `Listable`, `Protected`.
 

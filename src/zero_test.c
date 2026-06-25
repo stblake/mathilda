@@ -18,9 +18,16 @@
  *             implies "True".
  *
  *   Stage 3 — Schwartz–Zippel. For inputs with free symbols, substitute
- *             each free symbol with a random rational (drawn from Q[i] so
- *             branch cuts are tested too), recurse into Stage 2, and
- *             require ZT_NUM_SAMPLES independent confirmations.
+ *             each free symbol with a random REAL rational of moderate
+ *             magnitude, recurse into Stage 2, and require independent
+ *             confirmations. Sampling is real-line only: an analytic identity
+ *             holding on a real interval holds on a complex neighbourhood
+ *             (identity theorem), so real points confirm it, while complex
+ *             samples needlessly cross branch cuts (Log/ArcTan/Sqrt) and blow
+ *             up special functions (Gamma), manufacturing false negatives.
+ *             The draw stream is seeded deterministically from the input's
+ *             structural hash, so the verdict is a pure function of the input
+ *             (no run-to-run flakiness) and the user's RNG stream is untouched.
  *
  * See ZERO_RECOGNISE_PLAN.md for design notes and references.
  */
@@ -34,6 +41,7 @@
 #include "internal.h"
 #include "numeric.h"
 #include "poly/poly.h"
+#include "random.h"
 #include "sym_names.h"
 #include "symtab.h"
 
@@ -70,14 +78,11 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
  * budget was too small here: for an expression that is identically zero on a
  * real-analytic branch but genuinely non-zero on an adjacent branch (e.g.
  * D[2 Sqrt[1-Cos[x]],x] - Sqrt[1+Cos[x]], zero on (0,pi) but not (pi,2pi)),
- * each random real part lands in a zero interval ~1/2 the time, so all-k-zero
+ * each random real point lands in a zero interval ~1/2 the time, so all-k-zero
  * — a false positive — had probability ~(1/2)^4 = 6%. With SCREEN_SAMPLES
  * points the half-and-half case drops to ~(1/2)^24, and a lopsided 3:1
- * zero:non-zero split to ~(3/4)^24 ~ 1e-3.  Note: a small imaginary
- * perturbation does NOT break this coincidence — by the identity theorem the
- * function is zero on a whole complex neighbourhood of each zero interval, so
- * only the sample's real-part branch interval matters; more POINTS, not
- * complex ones, is what defeats it.
+ * zero:non-zero split to ~(3/4)^24 ~ 1e-3. More POINTS, spread across many
+ * periods of the moderate-magnitude real range, is what defeats it.
  *
  * Phase B ("confirm") is reached only when every screen point looked zero. It
  * climbs the full precision ladder on a few fresh points to reject
@@ -86,23 +91,24 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
 #define ZT_SCREEN_SAMPLES  24
 #define ZT_CONFIRM_SAMPLES 4
 
-/* Sampling ranges for Stage 3. Numerators are uniform on
- * [-2^NUMERATOR_BITS, 2^NUMERATOR_BITS]; denominators on
- * [1, 2^DENOMINATOR_BITS]. Imaginary part draws a coin and, if set,
- * picks a second rational of the same form. */
-#define ZT_NUMERATOR_BITS    20
+/* Sampling ranges for Stage 3. Samples are real rationals: numerator uniform
+ * on [-2^NUMERATOR_BITS, 2^NUMERATOR_BITS], denominator on
+ * [1, 2^DENOMINATOR_BITS].
+ *
+ * The numerator magnitude is kept MODERATE on purpose. A large real argument
+ * overflows Exp/Gamma to Inf (silently degrading to UNKNOWN -> True) and
+ * inflates special-function magnitudes so that an identically-zero difference
+ * cancels far below the noise floor — exactly the catastrophic-cancellation
+ * false negatives this sampler must avoid. +-64 still spans ~10 periods of
+ * 2*pi, so periodic identities are still probed across many branches, and the
+ * full-granularity denominator keeps the distinct-value set large (~2^23) for
+ * the Schwartz-Zippel bound. Samples are purely real: an analytic identity
+ * true on a real interval is true on a complex neighbourhood (identity
+ * theorem), so real points suffice to confirm it, whereas complex points
+ * cross branch cuts of Log/Sqrt/ArcTan where the symbolic identity legitimately
+ * fails. */
+#define ZT_NUMERATOR_BITS    6
 #define ZT_DENOMINATOR_BITS  16
-
-/* Imaginary parts of samples are kept small in magnitude. Transcendental
- * kernels such as Tan/Tanh saturate to +-I once |Im| exceeds ~18: there
- * 1 + Tan^2 (= Sec^2) cancels to below machine epsilon, so an expression
- * that is identically zero evaluates to O(1) noise and a true zero is
- * misreported as non-zero. Branch cuts of Sqrt/Log/ArcTan depend on the
- * SIGN of the imaginary part, not its magnitude, so a small imaginary
- * perturbation still exercises them. The denominator keeps full
- * granularity (ZT_DENOMINATOR_BITS) so the sample set stays large for the
- * Schwartz-Zippel guarantee; only the magnitude is bounded (|Im| <= 8). */
-#define ZT_IMAG_NUMERATOR_BITS 3
 
 /* Safety bits in the cancellation threshold. The IEEE-cancellation rule of
  * thumb is that a result is "ambiguous" if smaller than scale * 2^(-p/2);
@@ -468,6 +474,16 @@ static double nonzero_threshold(double scale, long p_bits) {
     return scale * ldexp(1.0, -(int)shift);
 }
 
+/* Rung-0 (machine) obvious-non-zero gate. A residual exceeding scale * 2^-N is
+ * too large to be rounding noise (machine eps ~ 2^-52) or plausible deeper
+ * cancellation, so it settles FALSE without climbing the ladder (the fast path
+ * for typical non-zeros). N is set well below 52 so that a true zero whose
+ * cancellation runs PAST machine precision — residual up to ~2^-12 of scale,
+ * i.e. ~2^40x amplification — is sent to the precision ladder for verification
+ * rather than being misreported as non-zero here. This is the surgical fix for
+ * the catastrophic-cancellation false negatives (e.g. Gamma identities). */
+#define ZT_OBVIOUS_NONZERO_BITS 12
+
 /* Numericalize at the given precision, returning a freshly allocated
  * Expr*. spec.bits == 53 means machine; anything else uses MPFR (if
  * available). Returns NULL on failure or when MPFR is not compiled in
@@ -560,9 +576,12 @@ static double magnitude_scale_at(const Expr* e, NumericSpec spec) {
  * residual decisively exceeds the noise floor; TRUE if the residual is
  * indistinguishable from zero (very small relative to scale); UNKNOWN
  * if the numericalize couldn't reduce. *out_mag receives the residual
- * magnitude when non-UNKNOWN, otherwise 0.0. */
-static ZeroTestResult evaluate_rung(const Expr* e, long bits, double* out_mag) {
+ * magnitude when non-UNKNOWN, otherwise 0.0. *out_scale (when non-NULL)
+ * receives the operand-magnitude scale used for the threshold. */
+static ZeroTestResult evaluate_rung(const Expr* e, long bits,
+                                    double* out_mag, double* out_scale) {
     *out_mag = 0.0;
+    if (out_scale) *out_scale = 1.0;
     Expr* z = numericalize_at(e, bits);
     if (!z) return ZERO_TEST_UNKNOWN;
     if (!is_pure_numeric(z)) { expr_free(z); return ZERO_TEST_UNKNOWN; }
@@ -573,44 +592,80 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits, double* out_mag) {
     *out_mag = mag;
 
     double scale = magnitude_scale_at(e, spec_at_bits(bits));
+    if (out_scale) *out_scale = scale;
     double tol = nonzero_threshold(scale, bits);
     if (mag > tol) return ZERO_TEST_FALSE;
     return ZERO_TEST_TRUE;
 }
 
 /* Numeric Stage 2.  Strategy:
- *   1. Evaluate at machine precision. Verdict FALSE if mag exceeds the
- *      lenient nonzero threshold; otherwise TRUE-so-far.
- *   2. Climb the precision ladder. At each rung either confirm shrinkage
- *      (mag dropped substantially → still consistent with zero, continue)
- *      or detect non-shrinkage (the higher-precision call returned ~the
- *      same value, meaning the underlying numericalize path doesn't
- *      actually use the requested precision — e.g. Sin/Cos of
- *      Complex[Real, Real] which Mathilda evaluates with double-only).
- *      In the latter case fall back to the previous verdict. */
+ *   1. Machine precision. A residual that is a non-trivial fraction of the
+ *      operand scale (above the ZT_OBVIOUS_NONZERO_BITS gate) cannot be
+ *      rounding noise and settles FALSE immediately — the fast path for typical
+ *      non-zeros. A smaller residual is AMBIGUOUS: it may be a true zero whose
+ *      cancellation runs deeper than machine precision, so we climb rather than
+ *      reject it here.
+ *   2. Climb the precision ladder and decide on the SHRINKAGE TREND. A true
+ *      zero shrinks geometrically as bits are added; a genuine non-zero
+ *      plateaus at its true value. A FALSE verdict from a high rung is only
+ *      trusted once we have OBSERVED the residual shrink — proof that the
+ *      requested precision is honoured downstream. Special functions that
+ *      silently stay at machine precision (residual constant across rungs) must
+ *      NOT be rejected by a high rung's tiny threshold; they fall back to the
+ *      lenient machine verdict. This is what stops the cancellation false
+ *      negatives the previous absolute-threshold loop produced. */
 static ZeroTestResult decide_numeric(const Expr* e) {
-    double mag = 0.0;
-    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag);
+    double mag = 0.0, scale = 1.0;
+    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale);
     if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
-    if (r == ZERO_TEST_FALSE)   return ZERO_TEST_FALSE;
+
+    if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
+        return ZERO_TEST_FALSE;
 
     double prev_mag = mag;
+    bool honored = false;
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
-        long bits = PRECISION_LADDER[i];
         double m = 0.0;
-        ZeroTestResult rr = evaluate_rung(e, bits, &m);
+        ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL);
         if (rr == ZERO_TEST_UNKNOWN) {
-            /* MPFR path unavailable for this expression — accept the
-             * machine-precision verdict. */
+            /* MPFR path unavailable beyond here — accept the lenient machine
+             * verdict (the rung-0 residual was below the non-zero gate). */
             return ZERO_TEST_TRUE;
         }
-        if (rr == ZERO_TEST_FALSE) return ZERO_TEST_FALSE;
-        /* A genuine zero shrinks geometrically with precision; if the
-         * residual is essentially unchanged, the requested precision is
-         * not being honoured downstream. Accept the prior verdict. */
-        if (m > prev_mag * 0.5) return ZERO_TEST_TRUE;
-        prev_mag = m;
+        if (m < prev_mag * 0.5) {
+            /* Residual shrank: precision honoured, still consistent with zero. */
+            honored = true;
+            prev_mag = m;
+            continue;
+        }
+        /* Residual plateaued at this rung. */
+        if (honored) {
+            /* Precision is honoured (earlier shrinkage proved it) yet the
+             * residual stopped falling: its true non-zero value has emerged.
+             * Trust the rung's noise-floor verdict (FALSE if above the floor,
+             * TRUE if still within it). */
+            return rr;
+        }
+        /* Never shrank: the requested precision is not honoured downstream, so
+         * the rung's shrunken threshold is meaningless. Fall back to the lenient
+         * machine verdict (zero). */
+        return ZERO_TEST_TRUE;
     }
+    return ZERO_TEST_TRUE;
+}
+
+/* Cheap machine-precision screen verdict for Stage 3. FALSE only when the point
+ * is OBVIOUSLY non-zero (residual a non-trivial fraction of scale, beyond the
+ * cancellation band); TRUE when zero-ish at machine precision; UNKNOWN when it
+ * cannot be reduced. A single machine-precision evaluation — the deep
+ * cancellation check is deferred to the confirm phase's full ladder, so a
+ * borderline-cancelling true-zero point is NOT falsely rejected by the screen. */
+static ZeroTestResult screen_point(const Expr* e) {
+    double mag = 0.0, scale = 1.0;
+    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale);
+    if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
+    if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
+        return ZERO_TEST_FALSE;
     return ZERO_TEST_TRUE;
 }
 
@@ -640,11 +695,13 @@ static int64_t draw_int_range(int64_t lo, int64_t hi) {
     return out;
 }
 
-/* Build a random (possibly complex) sample value. Real-valued leaves
- * (EXPR_REAL) are used rather than exact Rational[n, d] because several
- * Mathilda numeric heads (notably Log of Complex[Rational, …]) only take
- * the fast numeric path when the components are already Real. Imaginary
- * part is drawn with probability 1/2 so branch cuts get exercised. */
+/* Build a random REAL sample value of moderate magnitude. A Real leaf
+ * (EXPR_REAL) is used rather than an exact Rational[n, d] because several
+ * Mathilda numeric heads only take the fast numeric path when the components
+ * are already Real. Sampling is real-only by design (see the ZT_NUMERATOR_BITS
+ * note): complex samples cross branch cuts and inflate special functions,
+ * which manufactures cancellation/branch false negatives for genuine
+ * real-line identities. */
 static Expr* sample_random_value(void) {
     int64_t num_bound = (int64_t)1 << ZT_NUMERATOR_BITS;
     int64_t den_bound = (int64_t)1 << ZT_DENOMINATOR_BITS;
@@ -652,21 +709,7 @@ static Expr* sample_random_value(void) {
     int64_t n_re = draw_int_range(-num_bound, num_bound);
     int64_t d_re = draw_int_range(1, den_bound);
     if (d_re == 0) d_re = 1;
-    Expr* re = expr_new_real((double)n_re / (double)d_re);
-
-    int64_t coin = draw_int_range(0, 1);
-    if (coin == 0) return re;
-
-    /* Bounded imaginary part: small numerator, full-granularity denominator
-     * (see ZT_IMAG_NUMERATOR_BITS). */
-    int64_t im_num_bound = (int64_t)1 << ZT_IMAG_NUMERATOR_BITS;
-    int64_t n_im = draw_int_range(-im_num_bound, im_num_bound);
-    if (n_im == 0) n_im = 1;  /* keep imaginary part non-trivial */
-    int64_t d_im = draw_int_range(1, den_bound);
-    if (d_im == 0) d_im = 1;
-    Expr* im = expr_new_real((double)n_im / (double)d_im);
-
-    return make_complex(re, im);
+    return expr_new_real((double)n_re / (double)d_re);
 }
 
 /* Substitute every free symbol in `e` with an entry from `(syms, vals)`,
@@ -706,11 +749,10 @@ static Expr* substitute_symbols(const Expr* e, const char** syms, Expr** vals, s
  * its cancellation threshold. The structural shape (Plus / Times / Sin / ...)
  * is preserved through substitute_symbols and numericalized per rung.
  *
- *   - screen == true : evaluate at machine precision only (rung 0). Cheap;
- *     rejects branch-dependent non-zeros that are O(1) at this point. If
- *     machine precision cannot reduce the point at all (UNKNOWN), fall back to
- *     the full ladder so the point is still classified rather than silently
- *     passing the screen.
+ *   - screen == true : machine precision only (screen_point). Cheap; rejects
+ *     points that are OBVIOUSLY non-zero at this point. If machine precision
+ *     cannot reduce the point at all (UNKNOWN), fall back to the full ladder so
+ *     the point is still classified rather than silently passing the screen.
  *   - screen == false: climb the full precision ladder (decide_numeric) to
  *     reject cancellation-hidden small non-zeros. */
 static ZeroTestResult sz_trial(const Expr* e, const char** syms, size_t nsyms,
@@ -725,8 +767,7 @@ static ZeroTestResult sz_trial(const Expr* e, const char** syms, size_t nsyms,
         r = decide_structural(sub);
         if (r == ZERO_TEST_UNKNOWN) {
             if (screen) {
-                double mag = 0.0;
-                r = evaluate_rung(sub, PRECISION_LADDER[0], &mag);
+                r = screen_point(sub);
                 if (r == ZERO_TEST_UNKNOWN) r = decide_numeric(sub);
             } else {
                 r = decide_numeric(sub);
@@ -740,6 +781,10 @@ static ZeroTestResult sz_trial(const Expr* e, const char** syms, size_t nsyms,
     return r;
 }
 
+/* Salt mixed into the structural-hash seed so the sample distribution can be
+ * re-tuned later (bump the salt) without colliding with any cached behaviour. */
+#define ZT_SEED_SALT 0x5A3D9E1Bull
+
 static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
     SymPtrSet syms; sps_init(&syms);
     collect_free(e, &syms);
@@ -747,6 +792,12 @@ static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
         sps_free(&syms);
         return ZERO_TEST_UNKNOWN;
     }
+
+    /* Seed the draw stream deterministically from the input's structural hash
+     * so the verdict is a pure function of the input (no run-to-run flakiness).
+     * The push/pop pair leaves the user's RandomInteger/SeedRandom stream
+     * exactly as it was. */
+    random_push_seed(expr_hash(e) ^ ZT_SEED_SALT);
 
     ZeroTestResult verdict = ZERO_TEST_TRUE;
 
@@ -770,6 +821,7 @@ static ZeroTestResult decide_schwartz_zippel(const Expr* e) {
     }
 
 done:
+    random_pop_seed();
     sps_free(&syms);
     return verdict;
 }

@@ -457,6 +457,61 @@ static void test_memory_smoke_load(void) {
 }
 
 /* ============================================================== */
+/*  10. Documented failure battery (POSSIBLE_ZEROQ_FAILURES.md)    */
+/* ============================================================== */
+
+/* Each case below is an identically-zero expression that the previous
+ * implementation reported False on some runs (flaky) or always (consistently
+ * wrong).  The verdict is now deterministic (the Schwartz-Zippel sampler is
+ * seeded from the input's structural hash, independent of the global PRNG), so
+ * a single assertion suffices.  The fixes: real-line sampling (no branch-cut
+ * crossings, no special-function magnitude blow-up) and a shrinkage-trend
+ * numeric ladder that does not commit False on deep cancellation.  We also
+ * reseed the global PRNG to a hostile value first to prove the verdict no
+ * longer depends on it. */
+
+static void test_battery_gamma_recurrence(void) {
+    /* Catastrophic cancellation: Gamma was large at the old complex samples,
+     * so the identically-zero difference read as non-zero. */
+    seed_rng(1);
+    assert_pzq("PossibleZeroQ[Gamma[x + 1] - x Gamma[x]]", "True");
+    seed_rng(999983);
+    assert_pzq("PossibleZeroQ[Gamma[x + 1] - x Gamma[x]]", "True");
+}
+
+static void test_battery_gamma_recurrence_perturbed(void) {
+    /* Control: the same shape plus 1 is a genuine non-zero -> False. */
+    seed_rng(7);
+    assert_pzq("PossibleZeroQ[Gamma[x + 1] - x Gamma[x] + 1]", "False");
+}
+
+static void test_battery_weierstrass_cosh_roundtrip(void) {
+    /* Antiderivative roundtrip whose closed form carries ArcTan/Log: the old
+     * complex samples crossed branch cuts.  This is the integrate_jeffrey
+     * flake. */
+    seed_rng(3);
+    assert_pzq(
+        "PossibleZeroQ[D[Integrate[1/(5 + 3 Cosh[x]), x] /. Floor[_] -> 0, x]"
+        " - 1/(5 + 3 Cosh[x])]", "True");
+}
+
+static void test_battery_weierstrass_cosh_product_roundtrip(void) {
+    seed_rng(5);
+    assert_pzq(
+        "PossibleZeroQ[D[Integrate[Cosh[x] Cosh[2 x], x, Method -> \"Weierstrass\"]"
+        " /. Floor[_] -> 0, x] - Cosh[x] Cosh[2 x]]", "True");
+}
+
+static void test_battery_log_exp_real_line(void) {
+    /* Log[Exp[x]] - x holds on the real line (and its complex neighbourhood);
+     * under real-first sampling it is True.  Off the principal strip it would
+     * differ, but real-variable identity semantics is what the Integrate gate
+     * and WL-style usage want. */
+    seed_rng(11);
+    assert_pzq("PossibleZeroQ[Log[Exp[x]] - x]", "True");
+}
+
+/* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
 
@@ -555,6 +610,13 @@ int main(void) {
 
     /* Group 9 — Memory smoke */
     TEST(test_memory_smoke_load);
+
+    /* Group 10 — Documented failure battery (POSSIBLE_ZEROQ_FAILURES.md) */
+    TEST(test_battery_gamma_recurrence);
+    TEST(test_battery_gamma_recurrence_perturbed);
+    TEST(test_battery_weierstrass_cosh_roundtrip);
+    TEST(test_battery_weierstrass_cosh_product_roundtrip);
+    TEST(test_battery_log_exp_real_line);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

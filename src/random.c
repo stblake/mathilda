@@ -61,6 +61,35 @@ static void ensure_rand_init(void) {
     }
 }
 
+/* Saved-state stack for random_push_seed/random_pop_seed. Depth 4 is ample:
+ * the only caller (PossibleZeroQ's sampler) does not recurse into the RNG. */
+#define RANDOM_SEED_STACK_DEPTH 4
+static gmp_randstate_t g_rand_saved[RANDOM_SEED_STACK_DEPTH];
+static int g_rand_saved_depth = 0;
+
+void random_push_seed(uint64_t seed) {
+    ensure_rand_init();
+    if (g_rand_saved_depth >= RANDOM_SEED_STACK_DEPTH) {
+        /* Stack full (unexpected): reseed without saving so behaviour stays
+         * deterministic; the matching pop is a no-op (see guard below). */
+        gmp_randseed_ui(g_rand_state, (unsigned long)seed);
+        g_rand_saved_depth++;
+        return;
+    }
+    gmp_randinit_set(g_rand_saved[g_rand_saved_depth], g_rand_state);
+    g_rand_saved_depth++;
+    gmp_randseed_ui(g_rand_state, (unsigned long)seed);
+}
+
+void random_pop_seed(void) {
+    if (g_rand_saved_depth <= 0) return;            /* unbalanced pop */
+    g_rand_saved_depth--;
+    if (g_rand_saved_depth >= RANDOM_SEED_STACK_DEPTH) return;  /* overflow push */
+    gmp_randclear(g_rand_state);
+    gmp_randinit_set(g_rand_state, g_rand_saved[g_rand_saved_depth]);
+    gmp_randclear(g_rand_saved[g_rand_saved_depth]);
+}
+
 /*
  * Generate a single random integer in [imin, imax] (inclusive).
  * imin and imax are given as mpz_t values.
