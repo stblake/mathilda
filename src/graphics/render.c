@@ -1487,7 +1487,12 @@ void graphics_show(const Expr* graphics_expr) {
         float labelB = opts.frame_label ? 26.0f : 0.0f;
         float mL = (float)opts.width  * 0.05f; if (mL < 50.0f + labelL) mL = 50.0f + labelL;
         float mR = (float)opts.width  * 0.05f; if (mR < 20.0f) mR = 20.0f;
-        float mT = (float)opts.height * 0.05f; if (mT < 20.0f) mT = 20.0f;
+        /* The top-right toolbar buttons occupy y in [TB_MARGIN, TB_MARGIN +
+         * TB_BTN]; floor the top margin below them (plus a small gap) so the
+         * frame's top edge and its tick labels are never drawn under the
+         * buttons. */
+        float mT_floor = TB_MARGIN + TB_BTN + 8.0f;
+        float mT = (float)opts.height * 0.05f; if (mT < mT_floor) mT = mT_floor;
         float mB = (float)opts.height * 0.05f; if (mB < 48.0f + labelB) mB = 48.0f + labelB;
         /* Never let the margins swallow the whole window. */
         if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
