@@ -54,9 +54,8 @@ static bool buf_over_budget(const SampleBuf* buf) {
  * steep stretches. A genuinely straight, gently-sloped line has short chords
  * (its Δy is small and Δx is grid-bounded) and is left untouched -- the cap is
  * only ever the binding constraint where the curve covers real screen distance
- * between samples. ~1/80 of the frame keeps the worst on-screen gap to about a
- * pixel without flooding flat regions. */
-#define MAX_CHORD_FRAC 0.0125
+ * between samples. */
+#define MAX_CHORD_FRAC 0.0225
 
 static bool sample_one(PlotSampleFn fn, void* ctx, double x, double* y) {
     return fn(x, ctx, y) && isfinite(*y);
