@@ -354,6 +354,38 @@ void test_window_height_policy(void) {
     ASSERT(gfx_window_height(800, 600, 0.01, false, false, dw, dh) == 100);
     ASSERT(gfx_window_height(800, 600, 50.0, false, false, dw, dh) == 2000);
 }
+
+/* Regression test for a real bug: Polygon[] silently rendered nothing for
+ * a clockwise vertex list (e.g. {{0,0},{0,1},{1,1},{1,0}}, the natural
+ * reading order for a square's corners) because raylib's DrawTriangleFan
+ * requires counter-clockwise winding, while Mathematica's Polygon[]
+ * imposes no winding convention on the caller. polygon_signed_area's sign
+ * is what the renderer checks to decide whether to reverse the vertex
+ * list before drawing -- confirmed by an actual screenshot during
+ * development (a un-reversed clockwise square rendered as a blank
+ * window), not just reasoned about. */
+void test_polygon_signed_area_winding_detection(void) {
+    /* Coordinates here are post-y-negation draw space (what render.c
+     * actually feeds polygon_signed_area), matching the exact failing case:
+     * Polygon[{{0,0},{0,1},{1,1},{1,0}}] -- the natural reading order for a
+     * unit square's corners -- becomes (0,0),(0,-1),(1,-1),(1,0) in draw
+     * space, which has positive signed area (the renderer reverses it). */
+    double cw_x[4] = { 0, 0, 1, 1 };
+    double cw_y[4] = { 0, -1, -1, 0 };
+    ASSERT(polygon_signed_area(cw_x, cw_y, 4) > 0.0);
+
+    /* The reverse vertex ordering of the same square: negative area --
+     * already correctly wound, the renderer leaves it alone. */
+    double ccw_x[4] = { 1, 1, 0, 0 };
+    double ccw_y[4] = { 0, -1, -1, 0 };
+    ASSERT(polygon_signed_area(ccw_x, ccw_y, 4) < 0.0);
+
+    /* A degenerate (zero-area) "polygon" -- e.g. all points collinear --
+     * is neither winding; must not crash or loop. */
+    double line_x[3] = { 0, 1, 2 };
+    double line_y[3] = { 0, 0, 0 };
+    ASSERT(polygon_signed_area(line_x, line_y, 3) == 0.0);
+}
 #endif
 
 int main(void) {
@@ -391,6 +423,7 @@ int main(void) {
 #ifdef USE_GRAPHICS
     TEST(test_frame_minor_divs_policy);
     TEST(test_window_height_policy);
+    TEST(test_polygon_signed_area_winding_detection);
 #endif
 
     printf("All graphics tests passed!\n");

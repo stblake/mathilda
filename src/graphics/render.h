@@ -29,4 +29,14 @@ long gfx_window_height(long width, long height, double aspect_ratio,
  * frame renderer so the tick-subdivision policy can be unit-tested headless. */
 int frame_minor_divs(double step);
 
+/* Signed area (shoelace formula) of a closed polygon given as parallel x/y
+ * arrays of length count. Positive in a y-down (screen-like) convention
+ * means the vertices are wound clockwise as drawn; Polygon[]'s fill
+ * reverses the vertex order whenever this is positive, since the
+ * underlying triangle-fan fill requires counter-clockwise winding but
+ * Polygon[] itself (like Mathematica's) imposes no winding convention on
+ * the caller. Factored out so the winding-detection policy is
+ * unit-testable headless. */
+double polygon_signed_area(const double* xs, const double* ys, int count);
+
 #endif /* MATHILDA_GRAPHICS_RENDER_H */

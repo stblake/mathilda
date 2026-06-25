@@ -67,7 +67,11 @@ centered at `{x,y}`. As with `Circle`, `Disk[{x,y}]` is radius 1 and
 
 ## Polygon
 A graphics primitive: `Polygon[{{x1,y1}, {x2,y2}, ...}]` is a filled,
-closed polygon through the given vertices.
+closed polygon through the given vertices, in either winding order --
+clockwise and counter-clockwise vertex lists both fill correctly (the
+renderer detects the winding via the shoelace formula and corrects it
+before drawing, since the underlying triangle-fan fill is
+winding-sensitive but `Polygon[]` itself, like Mathematica's, is not).
 
 ## Text
 A graphics primitive: `Text[expr, {x,y}]` renders `expr` (a string,
