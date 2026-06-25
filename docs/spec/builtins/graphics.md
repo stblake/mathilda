@@ -285,7 +285,7 @@ algorithm and option semantics will back future plotting functions
 | `Exclusions` | `None` | `{x1, x2, ...}` or `{x == a, ...}`: forces a discontinuity at each given x, independent of curvature/singularity detection |
 | `ColorFunction` | none | a function `f[xscaled,yscaled]`/`f[xscaled]` returning a color literal (`RGBColor`/`GrayLevel`/`Hue`), applied per sampled segment -- or the string `"Rainbow"` for a built-in `Hue` sweep over x. Overrides `PlotStyle` for the curve itself |
 | `ColorFunctionScaling` | `True` | whether `ColorFunction` receives `x`/`y` scaled to `[0,1]` over the plot's range, or raw data values |
-| `Filling` | `None` | `Axis` (to `y=0`), `Bottom`/`Top` (to the run's own min/max y), or a number (to that y) -- one filled `Polygon[]` per sampled run, under the curve's outline |
+| `Filling` | `None` | `Axis` (to `y=0`), `Bottom`/`Top` (to the run's own min/max y), or a number (to that y) -- a strip of small quad `Polygon[]`s (one per consecutive sampled-point pair) hugging the curve down to the baseline, under the curve's outline |
 | `FillingStyle` | none | color for the fill; default is the curve's own color at `Opacity[0.3]` |
 | `PlotLegends` | none | `Automatic`/`"Expressions"` (label each curve with its own expression, via `ToString`) or an explicit list of label strings -- drawn as a small swatch+label box, top-right below the toolbar |
 
