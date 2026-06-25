@@ -292,6 +292,16 @@ midpoint alone makes it robust to oscillatory functions (e.g. a sum of sines
 of different frequencies), where a single-midpoint test would resonate with the
 grid and miss the wiggle entirely no matter how high `MaxRecursion` is set.
 
+Every probe is first **clamped to the displayed y-band** — an explicit numeric
+`PlotRange` y, or (during zoom re-sampling) the current visible extent. This
+keeps refinement on the part of the curve the window actually shows: a function
+that dives far out of frame (a truncated Taylor series past its radius of
+convergence, a steep asymptote) would otherwise pour its whole detail budget
+into the off-screen plunge and leave the visible body and its on-screen crossing
+coarsely faceted. Clamped, the off-band stretch collapses onto the clip line and
+reads as flat, so the recursion concentrates where it is seen. With no explicit
+`PlotRange` y the curve is sampled over its full extent, exactly as before.
+
 **Features**:
 - `HoldAll`, `Protected`.
 - Declines to evaluate if the iterator spec isn't `{x, xmin, xmax}` with

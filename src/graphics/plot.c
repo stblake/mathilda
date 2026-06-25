@@ -60,6 +60,41 @@ static bool numericize_bound(Expr* e, double* out) {
     return ok;
 }
 
+/* True if `e` is a 2-element List of numericizable values, returning them. */
+static bool list2_nums(Expr* e, double* a, double* b) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_List
+        && e->data.function.arg_count == 2
+        && numericize_bound(e->data.function.args[0], a)
+        && numericize_bound(e->data.function.args[1], b);
+}
+
+/* Extract an explicit numeric y-band from a PlotRange value, mirroring the
+ * forms render.c honours: {{xmin,xmax},{ymin,ymax}} and {xspec,{ymin,ymax}}
+ * fix y via the second sublist, while a bare {ymin,ymax} pins y directly.
+ * Anything with a non-numeric (Automatic/All) y side leaves the outputs
+ * untouched and returns false. The band is fed to the sampler as a clip frame;
+ * see PlotSampleOpts. */
+static bool plotrange_yband(Expr* rhs, double* lo, double* hi) {
+    Expr* v = evaluate(expr_copy(rhs));
+    double a, b;
+    bool ok = false;
+    if (v->type == EXPR_FUNCTION && v->data.function.head
+        && v->data.function.head->type == EXPR_SYMBOL
+        && v->data.function.head->data.symbol == SYM_List
+        && v->data.function.arg_count == 2) {
+        Expr* a1 = v->data.function.args[1];
+        if (list2_nums(a1, &a, &b)) ok = true;                 /* {xspec, {ymin,ymax}} */
+        else ok = numericize_bound(v->data.function.args[0], &a)
+               && numericize_bound(a1, &b);                    /* {ymin, ymax} */
+    }
+    expr_free(v);
+    if (ok && a > b) { double t = a; a = b; b = t; }
+    if (ok && a < b) { *lo = a; *hi = b; return true; }
+    return false;
+}
+
 /* ---- RegionFunction: f[x,y] (2-arg) or f[x] (1-arg), tried in that order. ---- */
 
 static bool eval_region(Expr* region_fn, double x, double y) {
@@ -118,6 +153,11 @@ typedef struct {
     bool  color_function_scaling; /* default true */
     Expr* filling;         /* borrowed; held (Axis/Bottom/Top symbol, or a number); NULL = none */
     Expr* filling_style;   /* borrowed; held color; NULL = default (curve colour @ Opacity[0.3]) */
+    /* Displayed y-band from an explicit numeric PlotRange, fed to the sampler
+     * so a curve that dives off-screen (a divergent Taylor tail, a steep
+     * asymptote) doesn't starve refinement of its on-screen body. A degenerate
+     * band (lo >= hi) means "no explicit PlotRange y" -> sample full extent. */
+    double yclip_lo, yclip_hi;
 } PlotSampleOpts;
 
 static bool is_rule_arg(Expr* e) {
@@ -157,6 +197,8 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
     sopts->color_function_scaling = true;
     sopts->filling = NULL;
     sopts->filling_style = NULL;
+    sopts->yclip_lo = 0.0;
+    sopts->yclip_hi = -1.0; /* degenerate => no clip until an explicit PlotRange y is seen */
     *single_color_out = NULL;
 
     size_t argc = res->data.function.arg_count;
@@ -253,6 +295,13 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
                 if (!(rhs->type == EXPR_SYMBOL
                       && (rhs->data.symbol == SYM_False || rhs->data.symbol == SYM_None)))
                     have_frame = true;
+            }
+            else if (name == SYM_PlotRange) {
+                /* An explicit numeric y-range becomes the sampler's clip frame
+                 * so refinement concentrates on the on-screen curve rather than
+                 * an off-screen plunge. The value still passes through below to
+                 * the Graphics[...] result, which clips the display to it. */
+                plotrange_yband(rhs, &sopts->yclip_lo, &sopts->yclip_hi);
             }
             /* Plot is HoldAll, so this option's value would otherwise reach
              * the Graphics[...] result completely unevaluated -- e.g. a
@@ -478,7 +527,8 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
         size_t rn;
         PlotPoint* rpts = plot_sample_adaptive(plot_eval_fn, &ctx, ranges[r].lo, ranges[r].hi,
                                                 sopts->plot_points, sopts->max_recursion,
-                                                sopts->max_plot_points, &rn);
+                                                sopts->max_plot_points,
+                                                sopts->yclip_lo, sopts->yclip_hi, &rn);
         if (!rpts || rn == 0) { plot_points_free(rpts); continue; }
         for (size_t i = 0; i < rn; i++) {
             if (npts == cap) { cap = cap ? cap * 2 : 64; pts = realloc(pts, sizeof(PlotPoint) * cap); }
@@ -698,7 +748,8 @@ static Expr* opt_or_none(Expr* e) {
     return (e && e->type == EXPR_SYMBOL && e->data.symbol == SYM_None) ? NULL : e;
 }
 
-Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax) {
+Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax,
+                    double yclip_lo, double yclip_hi) {
     if (!graphics_expr || graphics_expr->type != EXPR_FUNCTION || !(xmin < xmax)) return NULL;
 
     /* Locate the $PlotResample[var, {bodies}, {opts...}] metadata arg. */
@@ -726,6 +777,9 @@ Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax) {
         .plot_points = 50, .max_recursion = 6, .max_plot_points = -1, .mesh = false,
         .region_function = NULL, .exclusions = NULL, .color_function = NULL,
         .color_function_scaling = true, .filling = NULL, .filling_style = NULL,
+        /* Re-sample against the current zoom's visible band so detail tracks
+         * what's on screen (a degenerate band from the caller disables it). */
+        .yclip_lo = yclip_lo, .yclip_hi = yclip_hi,
     };
     Expr** o = olist->data.function.args;
     if (o[0]->type == EXPR_INTEGER && o[0]->data.integer >= 2) sopts.plot_points = (long)o[0]->data.integer;

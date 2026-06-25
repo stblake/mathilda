@@ -47,6 +47,15 @@ static bool sample_one(PlotSampleFn fn, void* ctx, double x, double* y) {
     return fn(x, ctx, y) && isfinite(*y);
 }
 
+/* Clamp a sampled y into the displayed band [lo, hi] before the flatness test.
+ * A degenerate band (lo >= hi) means "no clip" and returns y unchanged. */
+static double clamp_band(double y, double lo, double hi) {
+    if (!(lo < hi)) return y;
+    if (y < lo) return lo;
+    if (y > hi) return hi;
+    return y;
+}
+
 /* Recursively refine the interval [a, b] (endpoints already classified as
  * valid/invalid by the caller) and append every point on the *right* side
  * of each accepted leaf segment to `buf` (the left endpoint of the very
@@ -63,11 +72,23 @@ static bool sample_one(PlotSampleFn fn, void* ctx, double x, double* y) {
  * off-period grid does not provide, so the wiggle is caught and refined.
  * Vertical (not perpendicular) deviation is exactly the on-screen error for a
  * y = f(x) curve, and normalizing by the spike-clamped yspan keeps the test in
- * the coordinates the curve is actually displayed in. */
+ * the coordinates the curve is actually displayed in.
+ *
+ * `yclip_lo`/`yclip_hi` are the displayed y-band (from an explicit PlotRange,
+ * or the current zoom's visible band). Every probe is clamped into it before
+ * the deviation is measured, so the test judges only the part of the curve the
+ * window actually shows. The payoff is for functions that dive far outside the
+ * frame -- a truncated Taylor series, a steep asymptote -- where the unclamped
+ * test would pour refinement into the off-screen plunge (both chord and probes
+ * agree it is "curved") and starve the visible crossing. Clamped, the off-band
+ * stretch collapses onto the clip line and reads as flat, redirecting the
+ * recursion budget to the on-screen body. A degenerate band (lo >= hi) is the
+ * no-clip default and leaves the original behaviour untouched. */
 static void subdivide(PlotSampleFn fn, void* ctx, SampleBuf* buf,
                        double ax, double ay, bool a_valid,
                        double bx, double by, bool b_valid,
-                       int depth, int max_recursion, double yspan) {
+                       int depth, int max_recursion, double yspan,
+                       double yclip_lo, double yclip_hi) {
     if (buf_over_budget(buf) || depth >= max_recursion) {
         if (b_valid) buf_push(buf, bx, by);
         else buf->pending_break = true;
@@ -80,14 +101,17 @@ static void subdivide(PlotSampleFn fn, void* ctx, SampleBuf* buf,
     if (a_valid && b_valid && m_valid) {
         /* Probe the two quarter points as well; reject (refine) if any of the
          * three interior samples strays from the chord, or if a probe falls in
-         * a gap (a singularity hides between the grid points). */
+         * a gap (a singularity hides between the grid points). Deviation is
+         * measured in the clamped (displayed) frame; see the header comment. */
         double q1x = (ax + mx) / 2.0, q3x = (mx + bx) / 2.0, q1y = 0.0, q3y = 0.0;
         bool q1_valid = sample_one(fn, ctx, q1x, &q1y);
         bool q3_valid = sample_one(fn, ctx, q3x, &q3y);
         if (q1_valid && q3_valid) {
-            double d1 = fabs(q1y - (ay + 0.25 * (by - ay)));
-            double d2 = fabs(my  - (ay + 0.50 * (by - ay)));
-            double d3 = fabs(q3y - (ay + 0.75 * (by - ay)));
+            double cay = clamp_band(ay, yclip_lo, yclip_hi);
+            double cby = clamp_band(by, yclip_lo, yclip_hi);
+            double d1 = fabs(clamp_band(q1y, yclip_lo, yclip_hi) - (cay + 0.25 * (cby - cay)));
+            double d2 = fabs(clamp_band(my,  yclip_lo, yclip_hi) - (cay + 0.50 * (cby - cay)));
+            double d3 = fabs(clamp_band(q3y, yclip_lo, yclip_hi) - (cay + 0.75 * (cby - cay)));
             double dev = d1 > d2 ? d1 : d2;
             if (d3 > dev) dev = d3;
             if (dev < FLAT_TOL * yspan) {
@@ -99,14 +123,16 @@ static void subdivide(PlotSampleFn fn, void* ctx, SampleBuf* buf,
          * singularity, exactly as the invalid-endpoint case below does. */
     }
 
-    subdivide(fn, ctx, buf, ax, ay, a_valid, mx, my, m_valid, depth + 1, max_recursion, yspan);
-    subdivide(fn, ctx, buf, mx, my, m_valid, bx, by, b_valid, depth + 1, max_recursion, yspan);
+    subdivide(fn, ctx, buf, ax, ay, a_valid, mx, my, m_valid, depth + 1, max_recursion, yspan, yclip_lo, yclip_hi);
+    subdivide(fn, ctx, buf, mx, my, m_valid, bx, by, b_valid, depth + 1, max_recursion, yspan, yclip_lo, yclip_hi);
 }
 
 PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
                                  double xmin, double xmax,
                                  long plot_points, int max_recursion,
-                                 long max_plot_points, size_t* out_count) {
+                                 long max_plot_points,
+                                 double yclip_lo, double yclip_hi,
+                                 size_t* out_count) {
     if (out_count) *out_count = 0;
     if (!fn || xmin >= xmax || plot_points < 2) return NULL;
     if (max_recursion < 0) max_recursion = 0;
@@ -133,7 +159,9 @@ PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
         double y = 0.0;
         bool valid = sample_one(fn, ctx, x, &y);
         gx[i] = x; gy[i] = y; gv[i] = valid;
-        if (valid) yvals[nvalid++] = y;
+        /* Clamp into the displayed band so an off-screen excursion can't
+         * inflate the robust y-extent and loosen the flatness tolerance. */
+        if (valid) yvals[nvalid++] = clamp_band(y, yclip_lo, yclip_hi);
     }
 
     /* The flatness test normalizes the curve-to-chord gap by the *robust*
@@ -157,7 +185,7 @@ PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
 
     for (long i = 1; i < plot_points; i++) {
         subdivide(fn, ctx, &buf, gx[i - 1], gy[i - 1], gv[i - 1],
-                  gx[i], gy[i], gv[i], 0, max_recursion, yspan);
+                  gx[i], gy[i], gv[i], 0, max_recursion, yspan, yclip_lo, yclip_hi);
     }
 
     free(gx); free(gy); free(gv);

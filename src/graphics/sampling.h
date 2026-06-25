@@ -29,6 +29,13 @@ typedef struct {
  *   max_recursion  max bisection depth per initial interval (MaxRecursion)
  *   max_plot_points  overall cap on stored points; <= 0 means unbounded
  *                    (MaxPlotPoints)
+ *   yclip_lo/yclip_hi  the displayed y-band (an explicit PlotRange, or the
+ *                    current zoom's visible extent). The flatness test clamps
+ *                    every probe into this band, so refinement tracks what the
+ *                    window actually shows instead of pouring detail into an
+ *                    off-screen excursion (a divergent Taylor tail, a steep
+ *                    asymptote). Pass a degenerate band (lo >= hi) to disable
+ *                    clipping and sample over the curve's full data extent.
  *
  * Returns a malloc'd array of *out_count points (caller frees with
  * plot_points_free), or NULL if xmin >= xmax or plot_points < 2.
@@ -36,7 +43,9 @@ typedef struct {
 PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
                                  double xmin, double xmax,
                                  long plot_points, int max_recursion,
-                                 long max_plot_points, size_t* out_count);
+                                 long max_plot_points,
+                                 double yclip_lo, double yclip_hi,
+                                 size_t* out_count);
 
 void plot_points_free(PlotPoint* pts);
 

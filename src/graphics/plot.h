@@ -17,7 +17,12 @@ Expr* builtin_plot(Expr* res);
  * metadata that builtin_plot embeds; returns a freshly sampled primitive
  * List[...] (caller owns, free with expr_free) for [xmin, xmax], or NULL
  * if the object has no such metadata (e.g. a hand-built Graphics) or
- * nothing is plottable over the window. */
-Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax);
+ * nothing is plottable over the window.
+ *
+ * [yclip_lo, yclip_hi] is the visible y-band the adaptive refinement should
+ * track (the current zoom's extent); pass a degenerate band (lo >= hi) to
+ * sample over the curve's full extent. */
+Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax,
+                    double yclip_lo, double yclip_hi);
 
 #endif /* MATHILDA_GRAPHICS_PLOT_H */

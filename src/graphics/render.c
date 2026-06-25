@@ -1651,7 +1651,9 @@ void graphics_show(const Expr* graphics_expr) {
             if (vw > 0.0 && isfinite(vw) && (zoom_changed || panned_off)) {
                 double margin = vw * 0.25;
                 double nx0 = visible.xmin - margin, nx1 = visible.xmax + margin;
-                Expr* np = plot_resample(graphics_expr, nx0, nx1);
+                /* Clip refinement to the on-screen y-band so a curve that
+                 * dives out of frame doesn't waste detail off-screen. */
+                Expr* np = plot_resample(graphics_expr, nx0, nx1, visible.ymin, visible.ymax);
                 if (np) {
                     if (dyn_prims) expr_free(dyn_prims);
                     dyn_prims = np;
