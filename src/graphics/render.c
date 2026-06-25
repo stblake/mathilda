@@ -1657,8 +1657,14 @@ void graphics_show(const Expr* graphics_expr) {
                 double margin = vw * 0.25;
                 double nx0 = visible.xmin - margin, nx1 = visible.xmax + margin;
                 /* Clip refinement to the on-screen y-band so a curve that
-                 * dives out of frame doesn't waste detail off-screen. */
-                Expr* np = plot_resample(graphics_expr, nx0, nx1, visible.ymin, visible.ymax);
+                 * dives out of frame doesn't waste detail off-screen. NOTE:
+                 * `visible` is in render space, where y is compressed by `ysc`
+                 * (the non-uniform vertical scale). The sampler works in data
+                 * coordinates, so undo that scale -- otherwise the clip band is
+                 * ysc-times too narrow and starves the steep, large-|y| parts of
+                 * the curve while the gentle middle is over-sampled. */
+                Expr* np = plot_resample(graphics_expr, nx0, nx1,
+                                         visible.ymin / ysc, visible.ymax / ysc);
                 if (np) {
                     if (dyn_prims) expr_free(dyn_prims);
                     dyn_prims = np;

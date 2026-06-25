@@ -43,6 +43,21 @@ static bool buf_over_budget(const SampleBuf* buf) {
  * under a pixel on a normal window, so accepted segments read as smooth. */
 #define FLAT_TOL 0.0025
 
+/* Upper bound on the screen-space length of any accepted leaf segment, as a
+ * fraction of the displayed frame (Euclidean over the x- and y-normalized
+ * axes). The vertical-deviation test above is blind to *steepness*: where a
+ * curve is steep but locally straight (e.g. Log[x] near 0, or any near-vertical
+ * approach to an asymptote) the chord can be sub-pixel-accurate yet the sample
+ * points -- and the Mesh dots drawn at them -- spread far apart, thinning
+ * abruptly by 2x at each grid boundary. Capping the chord length bounds the
+ * gap in BOTH axes at once, so points stay evenly spaced on screen through
+ * steep stretches. A genuinely straight, gently-sloped line has short chords
+ * (its Δy is small and Δx is grid-bounded) and is left untouched -- the cap is
+ * only ever the binding constraint where the curve covers real screen distance
+ * between samples. ~1/80 of the frame keeps the worst on-screen gap to about a
+ * pixel without flooding flat regions. */
+#define MAX_CHORD_FRAC 0.0125
+
 static bool sample_one(PlotSampleFn fn, void* ctx, double x, double* y) {
     return fn(x, ctx, y) && isfinite(*y);
 }
@@ -87,7 +102,7 @@ static double clamp_band(double y, double lo, double hi) {
 static void subdivide(PlotSampleFn fn, void* ctx, SampleBuf* buf,
                        double ax, double ay, bool a_valid,
                        double bx, double by, bool b_valid,
-                       int depth, int max_recursion, double yspan,
+                       int depth, int max_recursion, double yspan, double xspan,
                        double yclip_lo, double yclip_hi) {
     if (buf_over_budget(buf) || depth >= max_recursion) {
         if (b_valid) buf_push(buf, bx, by);
@@ -114,7 +129,14 @@ static void subdivide(PlotSampleFn fn, void* ctx, SampleBuf* buf,
             double d3 = fabs(clamp_band(q3y, yclip_lo, yclip_hi) - (cay + 0.75 * (cby - cay)));
             double dev = d1 > d2 ? d1 : d2;
             if (d3 > dev) dev = d3;
-            if (dev < FLAT_TOL * yspan) {
+            /* Screen-space length of the chord the renderer would draw, with
+             * each axis normalized by its displayed extent and y measured in
+             * the clamped frame (so an off-band plunge collapses to zero length
+             * and is not chased). See MAX_CHORD_FRAC. */
+            double cdx = (bx - ax) / xspan;
+            double cdy = (cby - cay) / yspan;
+            double chord = sqrt(cdx * cdx + cdy * cdy);
+            if (dev < FLAT_TOL * yspan && chord < MAX_CHORD_FRAC) {
                 buf_push(buf, bx, by);
                 return;
             }
@@ -123,8 +145,8 @@ static void subdivide(PlotSampleFn fn, void* ctx, SampleBuf* buf,
          * singularity, exactly as the invalid-endpoint case below does. */
     }
 
-    subdivide(fn, ctx, buf, ax, ay, a_valid, mx, my, m_valid, depth + 1, max_recursion, yspan, yclip_lo, yclip_hi);
-    subdivide(fn, ctx, buf, mx, my, m_valid, bx, by, b_valid, depth + 1, max_recursion, yspan, yclip_lo, yclip_hi);
+    subdivide(fn, ctx, buf, ax, ay, a_valid, mx, my, m_valid, depth + 1, max_recursion, yspan, xspan, yclip_lo, yclip_hi);
+    subdivide(fn, ctx, buf, mx, my, m_valid, bx, by, b_valid, depth + 1, max_recursion, yspan, xspan, yclip_lo, yclip_hi);
 }
 
 PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
@@ -177,6 +199,18 @@ PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
     free(yvals);
     if (!(yspan > 0.0)) yspan = 1.0;
 
+    /* Y scale that normalizes both the flatness gap and the chord length. When
+     * an explicit PlotRange band is in force this is the *displayed* height --
+     * the curve is drawn over exactly that span, so a fraction of it is the
+     * honest on-screen fraction. (The robust `yspan` above is the right scale
+     * only for the auto-range case, where it both feeds the visible axis and
+     * keeps a lone asymptote spike from loosening the test.) Using the robust
+     * extent when the band is wider over-weights Δy and over-subdivides steep
+     * stretches; using the band keeps screen-space spacing uniform -- and is the
+     * frame ParametricPlot will need, where the curve is not a graph of x. */
+    double ynorm = (yclip_hi > yclip_lo) ? (yclip_hi - yclip_lo) : yspan;
+    if (!(ynorm > 0.0)) ynorm = 1.0;
+
     SampleBuf buf;
     buf_init(&buf, max_plot_points);
 
@@ -185,7 +219,7 @@ PlotPoint* plot_sample_adaptive(PlotSampleFn fn, void* ctx,
 
     for (long i = 1; i < plot_points; i++) {
         subdivide(fn, ctx, &buf, gx[i - 1], gy[i - 1], gv[i - 1],
-                  gx[i], gy[i], gv[i], 0, max_recursion, yspan, yclip_lo, yclip_hi);
+                  gx[i], gy[i], gv[i], 0, max_recursion, ynorm, (xmax - xmin), yclip_lo, yclip_hi);
     }
 
     free(gx); free(gy); free(gv);
