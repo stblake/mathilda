@@ -49,7 +49,6 @@ src/
   repl.c            REPL entry point + main()
   core.{c,h}        Core builtins and module initialization hub
   plus.c / times.c / power.c / arithmetic.c   Arithmetic heads
-  numbertheory.c    GCD/LCM/Factorial/Binomial/PowerMod/PrimitiveRoot/...
   list.c / part.c / sort.c                    List + structural ops
   trig.c / hyperbolic.c / logexp.c / complex.c
   comparisons.c / boolean.c / cond.c / iter.c
@@ -57,6 +56,10 @@ src/
   rat.c / parfrac.c / expand.c
   modular.c / facint.c / piecewise.c / stats.c
   load.c / info.c / datetime.c
+  numbertheory/     GCD/LCM/ExtendedGCD/PowerMod/Factorial/Binomial/
+                    PrimitiveRoot/MultiplicativeOrder/Divisors/DivisorSigma/...
+                    (one builtin per file; shared helpers in nt_util.c /
+                    nt_gaussian.c, declared in numbertheory_internal.h)
   poly/             Polynomial subsystem (univariate, multivariate, factoring,
                     algebraic-number factoring, polynomial solving)
   linalg/           Dense linear algebra; eigen kernels split by algorithm

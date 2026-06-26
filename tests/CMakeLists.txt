@@ -75,6 +75,7 @@ endif()
 include_directories(/usr/local/include)
 include_directories(../src/list)
 include_directories(../src/linalg)
+include_directories(../src/numbertheory)
 include_directories(../src/poly)
 include_directories(../src/simp)
 include_directories(../src/calculus)
@@ -126,7 +127,23 @@ set(COMMON_SRC
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
-    ../src/numbertheory.c
+    ../src/numbertheory/numbertheory.c
+    ../src/numbertheory/nt_util.c
+    ../src/numbertheory/nt_gaussian.c
+    ../src/numbertheory/gcd.c
+    ../src/numbertheory/lcm.c
+    ../src/numbertheory/extendedgcd.c
+    ../src/numbertheory/powermod.c
+    ../src/numbertheory/factorial.c
+    ../src/numbertheory/factorialpower.c
+    ../src/numbertheory/factorial2.c
+    ../src/numbertheory/binomial.c
+    ../src/numbertheory/primitiveroot.c
+    ../src/numbertheory/multiplicativeorder.c
+    ../src/numbertheory/divisible.c
+    ../src/numbertheory/coprimeq.c
+    ../src/numbertheory/divisors.c
+    ../src/numbertheory/divisorsigma.c
     ../src/partitions.c
     ../src/special_functions/gamma.c
     ../src/special_functions/beta.c
