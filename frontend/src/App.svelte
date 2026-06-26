@@ -227,6 +227,25 @@
   function handleAddBelow(e: CustomEvent<{ id: string }>) {
     notebook.addCell(e.detail.id, 'code');
   }
+
+  // Cell id → focus-editor function, populated via 'register' events.
+  const cellFocusFns: Record<string, () => void> = {};
+
+  function handleRegister(e: CustomEvent<{ id: string; fn: () => void }>) {
+    cellFocusFns[e.detail.id] = e.detail.fn;
+  }
+
+  function handleFocusPrev(e: CustomEvent<{ id: string }>) {
+    const cells = $notebook;
+    const idx = cells.findIndex(c => c.id === e.detail.id);
+    if (idx > 0) cellFocusFns[cells[idx - 1].id]?.();
+  }
+
+  function handleFocusNext(e: CustomEvent<{ id: string }>) {
+    const cells = $notebook;
+    const idx = cells.findIndex(c => c.id === e.detail.id);
+    if (idx < cells.length - 1) cellFocusFns[cells[idx + 1].id]?.();
+  }
 </script>
 
 <svelte:window on:keydown={onKeydown} />
@@ -257,6 +276,9 @@
           on:run={handleRun}
           on:change={handleChange}
           on:addBelow={handleAddBelow}
+          on:focusPrev={handleFocusPrev}
+          on:focusNext={handleFocusNext}
+          on:register={handleRegister}
         />
       {/if}
     {/each}

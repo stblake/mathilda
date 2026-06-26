@@ -1,27 +1,31 @@
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
   import { EditorView, keymap } from '@codemirror/view';
-  import { EditorState } from '@codemirror/state';
+  import { EditorState, EditorSelection } from '@codemirror/state';
   import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
   import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
   import Output from './Output.svelte';
   import type { OutputItem, CellStatus } from './notebook';
-  import { selectedCells, selectOnly, toggleSelect, rangeSelect } from './notebook';
+  import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
 
   export let cellId: string;
   export let source: string;
   export let status: CellStatus;
   export let output: OutputItem[];
-  export let execIdx: number | undefined = undefined;  // In[n] label
+  export let execIdx: number | undefined = undefined;
 
   const dispatch = createEventDispatcher<{
-    run:      { id: string };
-    change:   { id: string; source: string };
-    addBelow: { id: string };
+    run:       { id: string };
+    change:    { id: string; source: string };
+    addBelow:  { id: string };
+    focusPrev: { id: string };
+    focusNext: { id: string };
+    register:  { id: string; fn: () => void };
   }>();
 
   let editorContainer: HTMLElement;
   let view: EditorView;
+
   $: selected = $selectedCells.has(cellId);
 
   onMount(() => {
@@ -34,7 +38,31 @@
           keymap.of([
             { key: 'Shift-Enter', run() { dispatch('run', { id: cellId }); return true; } },
             { key: 'Mod-Enter',   run() { dispatch('run', { id: cellId }); dispatch('addBelow', { id: cellId }); return true; } },
-            { key: 'Escape',      run() { editorContainer?.closest('.code-cell')?.blur(); return false; } },
+            // Arrow navigation at cell boundaries
+            {
+              key: 'ArrowUp',
+              run(v) {
+                const sel = v.state.selection.main;
+                const firstLine = v.state.doc.lineAt(0);
+                if (sel.head <= firstLine.to) {
+                  dispatch('focusPrev', { id: cellId });
+                  return true;
+                }
+                return false;
+              },
+            },
+            {
+              key: 'ArrowDown',
+              run(v) {
+                const sel = v.state.selection.main;
+                const lastLine = v.state.doc.lineAt(v.state.doc.length);
+                if (sel.head >= lastLine.from) {
+                  dispatch('focusNext', { id: cellId });
+                  return true;
+                }
+                return false;
+              },
+            },
             ...defaultKeymap,
             ...historyKeymap,
           ]),
@@ -52,11 +80,20 @@
             '.cm-content': { padding: '6px 0', textAlign: 'left' },
             '.cm-focused': { outline: 'none' },
             '.cm-line': { lineHeight: '1.6', textAlign: 'left' },
-            '.cm-cursor': { borderLeftColor: 'var(--accent)' },
           }),
         ],
       }),
       parent: editorContainer,
+    });
+
+    // Notify parent of our focus function for inter-cell navigation.
+    dispatch('register', {
+      id: cellId,
+      fn: () => {
+        view.focus();
+        const end = view.state.doc.length;
+        view.dispatch({ selection: EditorSelection.cursor(end) });
+      },
     });
   });
 
@@ -67,32 +104,31 @@
   }
 
   function onGutterClick(e: MouseEvent) {
-    // Don't interfere with the run button (it stops propagation itself).
+    e.stopPropagation();
     if (e.shiftKey) rangeSelect(cellId);
     else if (e.metaKey || e.ctrlKey) toggleSelect(cellId);
     else selectOnly(cellId);
   }
 
-  function onCellClick() {
-    // Clicking the body deselects all cells.
-    import('./notebook').then(m => m.clearSelection());
+  function onBodyClick(e: MouseEvent) {
+    // Clicking the cell body → clear selection (enter edit mode).
+    clearSelection();
   }
 </script>
 
-<!-- svelte-ignore a11y-click-events-have-key-events -->
-<!-- svelte-ignore a11y-no-static-element-interactions -->
+<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 <div
   class="code-cell"
   class:running={status === 'running'}
   class:selected
-  on:click={onCellClick}
+  on:click={onBodyClick}
 >
-  <!-- Left gutter — clickable for selection -->
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
+  <!-- Gutter: click to select -->
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div
     class="cell-gutter"
-    on:click|stopPropagation={onGutterClick}
-    title="Click to select • Shift+click to range select"
+    on:click={onGutterClick}
+    title="Click to select • Shift+click for range"
   >
     {#if execIdx != null}
       <span class="cell-label">In[{execIdx}]</span>
@@ -115,9 +151,9 @@
   <div class="cell-body">
     <div class="editor-wrap" bind:this={editorContainer}></div>
     {#if output.length > 0}
-      <div class="output-label">
-        {#if execIdx != null}<span class="out-tag">Out[{execIdx}]=</span>{/if}
-      </div>
+      {#if execIdx != null}
+        <div class="out-label"><span class="out-tag">Out[{execIdx}]=</span></div>
+      {/if}
       <Output items={output} />
     {/if}
   </div>
@@ -131,8 +167,7 @@
     border-radius: 6px;
     margin-bottom: 0.5rem;
     background: var(--cell-bg);
-    transition: border-color 0.15s, box-shadow 0.15s;
-    position: relative;
+    transition: border-color 0.12s, box-shadow 0.12s;
   }
   .code-cell:focus-within {
     border-color: var(--accent);
@@ -157,11 +192,12 @@
     min-width: 52px;
     cursor: pointer;
     user-select: none;
+    transition: background 0.1s;
   }
   .cell-gutter:hover { background: var(--gutter-hover); }
 
   .cell-label {
-    font-size: 0.68rem;
+    font-size: 0.67rem;
     color: var(--text-muted);
     font-family: 'SF Mono', monospace;
     white-space: nowrap;
@@ -171,7 +207,7 @@
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: var(--accent);
     padding: 2px 4px;
     border-radius: 3px;
@@ -194,9 +230,9 @@
   .cell-body { flex: 1; min-width: 0; }
   .editor-wrap { padding: 4px 6px 4px 4px; }
 
-  .output-label { padding: 0 0.5rem; }
+  .out-label { padding: 0 0.75rem 0; }
   .out-tag {
-    font-size: 0.68rem;
+    font-size: 0.67rem;
     color: var(--text-muted);
     font-family: 'SF Mono', monospace;
   }
