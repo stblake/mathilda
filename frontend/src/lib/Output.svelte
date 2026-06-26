@@ -51,35 +51,41 @@
 
 <style>
   .output {
-    padding: 0.5rem 1rem 0.5rem 1rem;
+    padding: 0.3rem 0.75rem 0.5rem;
     min-height: 1px;
+    text-align: left;
   }
   .out-expr {
-    font-size: 1.1em;
+    font-size: 1.05em;
     padding: 0.25rem 0;
-    color: #1a1a2e;
+    color: var(--out-text, #222);
+    text-align: left;
   }
   .out-error {
-    color: #c0392b;
-    font-family: monospace;
-    font-size: 0.9em;
-    background: #fdf0f0;
-    border-left: 3px solid #c0392b;
+    color: #e74c3c;
+    font-family: 'SF Mono', monospace;
+    font-size: 0.88em;
+    background: rgba(231,76,60,0.08);
+    border-left: 3px solid #e74c3c;
     padding: 0.4rem 0.8rem;
     border-radius: 3px;
+    text-align: left;
   }
   .out-stream {
-    color: #555;
-    font-size: 0.85em;
+    color: var(--text-muted);
+    font-size: 0.84em;
     margin: 0;
     white-space: pre-wrap;
     font-family: 'SF Mono', 'Fira Code', monospace;
+    text-align: left;
   }
   .out-plot {
     width: 100%;
-    min-height: 300px;
+    min-height: 320px;
   }
   .out-html {
     font-size: 0.95em;
+    text-align: left;
+    color: var(--text);
   }
 </style>
