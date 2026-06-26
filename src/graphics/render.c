@@ -85,6 +85,15 @@ static bool looks_like_point(const Expr* e) {
     return expr_point(e, &x, &y);
 }
 
+double polygon_signed_area(const double* xs, const double* ys, int count) {
+    double sum = 0.0;
+    for (int i = 0; i < count; i++) {
+        int j = (i + 1) % count;
+        sum += xs[i] * ys[j] - xs[j] * ys[i];
+    }
+    return sum;
+}
+
 /* Resolve a Circle[...]/Disk[...] node's centre and radius, applying
  * Mathematica's defaults: Circle[] is the unit circle at the origin,
  * Circle[{x,y}] takes radius 1, Circle[{x,y}, r] is fully explicit.
@@ -731,7 +740,24 @@ static void draw_primitive(const Expr* node, DrawState* state) {
                 double x, y;
                 if (expr_point(arg->data.function.args[i], &x, &y)) poly[cnt++] = (Vector2){ (float)x, (float)(-y * state->yscale) };
             }
-            if (cnt >= 3) DrawTriangleFan(poly, (int)cnt, state->color);
+            if (cnt >= 3) {
+                /* DrawTriangleFan requires counter-clockwise vertices (per
+                 * raylib's own doc comment), but Mathematica's Polygon[]
+                 * imposes no winding convention on the user -- a clockwise
+                 * list (e.g. the natural reading order for a rectangle's
+                 * corners) would otherwise render nothing at all. */
+                double* xs = malloc(sizeof(double) * cnt);
+                double* ys = malloc(sizeof(double) * cnt);
+                for (size_t i = 0; i < cnt; i++) { xs[i] = poly[i].x; ys[i] = poly[i].y; }
+                bool reverse = polygon_signed_area(xs, ys, (int)cnt) > 0.0;
+                free(xs); free(ys);
+                if (reverse) {
+                    for (size_t i = 0, j = cnt - 1; i < j; i++, j--) {
+                        Vector2 t = poly[i]; poly[i] = poly[j]; poly[j] = t;
+                    }
+                }
+                DrawTriangleFan(poly, (int)cnt, state->color);
+            }
             free(poly);
         }
         return;

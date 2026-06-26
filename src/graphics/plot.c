@@ -478,24 +478,84 @@ static double filling_baseline(Expr* filling, double run_ymin, double run_ymax) 
     return 0.0;
 }
 
-/* Traces the run's points forward then the baseline backward, closing a
- * simple polygon between the curve and the baseline. */
-static Expr* build_fill_polygon(const PlotPoint* pts, size_t run_start, size_t run_len, double baseline) {
-    size_t total = run_len + 2;
-    Expr** poly_pts = malloc(sizeof(Expr*) * total);
-    for (size_t j = 0; j < run_len; j++) {
-        Expr* xy[2] = { expr_new_real(pts[run_start + j].x), expr_new_real(pts[run_start + j].y) };
-        poly_pts[j] = expr_new_function(expr_new_symbol(SYM_List), xy, 2);
-    }
-    Expr* xyA[2] = { expr_new_real(pts[run_start + run_len - 1].x), expr_new_real(baseline) };
-    poly_pts[run_len] = expr_new_function(expr_new_symbol(SYM_List), xyA, 2);
-    Expr* xyB[2] = { expr_new_real(pts[run_start].x), expr_new_real(baseline) };
-    poly_pts[run_len + 1] = expr_new_function(expr_new_symbol(SYM_List), xyB, 2);
+/* One small quad Polygon[] per consecutive point pair in the run, each
+ * (p_i, p_{i+1}, (x_{i+1},baseline), (x_i,baseline)) -- rather than one
+ * big polygon tracing the whole run then back along the baseline.
+ *
+ * render.c's Polygon fill is a triangle *fan* from the first vertex, which
+ * only renders correctly for a star-shaped-from-vertex-0 outline (convex
+ * is the easy common case). A fill spanning an entire wavy run (e.g. a
+ * full period of Sin[x]) is nowhere close to that and fans out into a
+ * wedge of garbage triangles instead of hugging the curve. Each individual
+ * quad between two adjacent (and thus close-together) sample points is
+ * always simple regardless of the curve's overall shape, so this sidesteps
+ * the fan's star-shaped requirement entirely. Returns the quad count via
+ * *out_count (0 if run_len < 2); caller owns the returned array and Exprs. */
+/* Appends a 4-vertex Polygon[] (x0,y0)-(x1,y1)-(x1,baseline)-(x0,baseline)
+ * to `shapes` at *n, advancing *n by 1. */
+static void push_fill_quad(Expr** shapes, size_t* n, double x0, double y0,
+                            double x1, double y1, double baseline) {
+    Expr* c0[2] = { expr_new_real(x0), expr_new_real(y0) };
+    Expr* c1[2] = { expr_new_real(x1), expr_new_real(y1) };
+    Expr* c2[2] = { expr_new_real(x1), expr_new_real(baseline) };
+    Expr* c3[2] = { expr_new_real(x0), expr_new_real(baseline) };
+    Expr* verts[4] = {
+        expr_new_function(expr_new_symbol(SYM_List), c0, 2),
+        expr_new_function(expr_new_symbol(SYM_List), c1, 2),
+        expr_new_function(expr_new_symbol(SYM_List), c2, 2),
+        expr_new_function(expr_new_symbol(SYM_List), c3, 2),
+    };
+    Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, 4);
+    Expr* poly_args[1] = { vlist };
+    shapes[(*n)++] = expr_new_function(expr_new_symbol(SYM_Polygon), poly_args, 1);
+}
 
-    Expr* pts_list = expr_new_function(expr_new_symbol(SYM_List), poly_pts, total);
-    free(poly_pts);
-    Expr* poly_args[1] = { pts_list };
-    return expr_new_function(expr_new_symbol(SYM_Polygon), poly_args, 1);
+/* Appends a 3-vertex Polygon[] (triangle) to `shapes` at *n. */
+static void push_fill_triangle(Expr** shapes, size_t* n, double x0, double y0,
+                                double x1, double y1, double x2, double y2) {
+    Expr* a0[2] = { expr_new_real(x0), expr_new_real(y0) };
+    Expr* a1[2] = { expr_new_real(x1), expr_new_real(y1) };
+    Expr* a2[2] = { expr_new_real(x2), expr_new_real(y2) };
+    Expr* verts[3] = {
+        expr_new_function(expr_new_symbol(SYM_List), a0, 2),
+        expr_new_function(expr_new_symbol(SYM_List), a1, 2),
+        expr_new_function(expr_new_symbol(SYM_List), a2, 2),
+    };
+    Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, 3);
+    Expr* poly_args[1] = { vlist };
+    shapes[(*n)++] = expr_new_function(expr_new_symbol(SYM_Polygon), poly_args, 1);
+}
+
+static Expr** build_fill_quads(const PlotPoint* pts, size_t run_start, size_t run_len,
+                                double baseline, size_t* out_count) {
+    if (run_len < 2) { *out_count = 0; return NULL; }
+    size_t nseg = run_len - 1;
+    /* Worst case: every segment crosses the baseline and needs 2 triangles
+     * instead of 1 quad. */
+    Expr** shapes = malloc(sizeof(Expr*) * nseg * 2);
+    size_t n = 0;
+    for (size_t j = 0; j < nseg; j++) {
+        double x0 = pts[run_start + j].x,     y0 = pts[run_start + j].y;
+        double x1 = pts[run_start + j + 1].x, y1 = pts[run_start + j + 1].y;
+        double d0 = y0 - baseline, d1 = y1 - baseline;
+
+        if ((d0 > 0 && d1 < 0) || (d0 < 0 && d1 > 0)) {
+            /* The segment crosses the baseline -- one quad here would be a
+             * self-intersecting "bowtie" (its closing edge, lying exactly
+             * along the baseline, crosses the curve edge at the very point
+             * the curve crosses zero), which a triangle fan turns into a
+             * stray sliver right at the crossing. Split into two simple,
+             * always-fan-correct triangles instead, one on each side. */
+            double t = d0 / (d0 - d1);
+            double xc = x0 + t * (x1 - x0);
+            push_fill_triangle(shapes, &n, x0, y0, xc, baseline, x0, baseline);
+            push_fill_triangle(shapes, &n, xc, baseline, x1, y1, x1, baseline);
+        } else {
+            push_fill_quad(shapes, &n, x0, y0, x1, y1, baseline);
+        }
+    }
+    *out_count = n;
+    return shapes;
 }
 
 /* Sample one function `body` over [xmin,xmax] (split at any in-range
@@ -543,9 +603,12 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
     if (!pts || npts == 0) { free(pts); return NULL; }
 
     /* Worst case: every point becomes its own colored 2-point segment (2
-     * primitives each) plus up to 4 Filling-related primitives per run plus
-     * the Mesh overlay's PointSize/Point pair. */
-    Expr** prims = malloc(sizeof(Expr*) * (npts * 2 + 8));
+     * primitives each, ~2*npts) plus Filling's strip (up to 2*(npts-1)
+     * shapes, since a baseline-crossing segment becomes 2 triangles, plus
+     * 2 Opacity brackets and a color restore per run) plus the Mesh
+     * overlay's PointSize/Point pair. Generous on purpose -- a malloc
+     * over-allocation here is harmless, unlike under-allocating. */
+    Expr** prims = malloc(sizeof(Expr*) * (npts * 6 + 24));
     size_t prim_count = 0;
     size_t run_start = 0;
     for (size_t i = 1; i <= npts; i++) {
@@ -567,7 +630,10 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
                         Expr* op_arg[1] = { expr_new_real(0.3) };
                         prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_Opacity), op_arg, 1);
                     }
-                    prims[prim_count++] = build_fill_polygon(pts, run_start, run_len, baseline);
+                    size_t nquads;
+                    Expr** quads = build_fill_quads(pts, run_start, run_len, baseline, &nquads);
+                    for (size_t qi = 0; qi < nquads; qi++) prims[prim_count++] = quads[qi];
+                    free(quads);
                     if (!sopts->filling_style) {
                         Expr* op_arg2[1] = { expr_new_integer(1) };
                         prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_Opacity), op_arg2, 1);

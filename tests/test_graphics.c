@@ -269,6 +269,30 @@ void test_filling_builds_polygon(void) {
         "RGBColor", 0);
 }
 
+/* Regression test for a real bug: a fill segment that crosses the baseline
+ * (e.g. one sample point just above Filling -> Axis's y=0, the next just
+ * below) used to become a single self-intersecting "bowtie" quad, which
+ * render.c's triangle-fan Polygon fill turned into a stray sliver right at
+ * the crossing (visible as a small misplaced triangle in an actual
+ * screenshot). build_fill_quads now splits any baseline-crossing segment
+ * into two plain triangles instead of one quad. */
+void test_filling_splits_at_baseline_crossing(void) {
+    /* x in [-0.1, 0.1] straddles Sin's zero at x=0: with just 2 plot
+     * points (one negative y, one positive y) and recursion disabled, the
+     * single sampled segment crosses the baseline, so it must become two
+     * 3-vertex triangles, not one 4-vertex quad. */
+    assert_eval_eq(
+        "Cases[Plot[Sin[x], {x, -0.1, 0.1}, Filling -> Axis, MaxRecursion -> 0,"
+        " PlotPoints -> 2][[1]], Polygon[pts_] :> Length[pts]]",
+        "{3, 3}", 0);
+    /* x in [0.1, 0.3] stays entirely positive: the single segment doesn't
+     * cross the baseline, so it's the plain 4-vertex quad. */
+    assert_eval_eq(
+        "Cases[Plot[Sin[x], {x, 0.1, 0.3}, Filling -> Axis, MaxRecursion -> 0,"
+        " PlotPoints -> 2][[1]], Polygon[pts_] :> Length[pts]]",
+        "{4}", 0);
+}
+
 void test_plot_legends_metadata(void) {
     /* Absent by default. */
     assert_eval_eq("Cases[Plot[Sin[x], {x, 0, 1}], $PlotLegendData[___]]", "{}", 0);
@@ -354,6 +378,38 @@ void test_window_height_policy(void) {
     ASSERT(gfx_window_height(800, 600, 0.01, false, false, dw, dh) == 100);
     ASSERT(gfx_window_height(800, 600, 50.0, false, false, dw, dh) == 2000);
 }
+
+/* Regression test for a real bug: Polygon[] silently rendered nothing for
+ * a clockwise vertex list (e.g. {{0,0},{0,1},{1,1},{1,0}}, the natural
+ * reading order for a square's corners) because raylib's DrawTriangleFan
+ * requires counter-clockwise winding, while Mathematica's Polygon[]
+ * imposes no winding convention on the caller. polygon_signed_area's sign
+ * is what the renderer checks to decide whether to reverse the vertex
+ * list before drawing -- confirmed by an actual screenshot during
+ * development (a un-reversed clockwise square rendered as a blank
+ * window), not just reasoned about. */
+void test_polygon_signed_area_winding_detection(void) {
+    /* Coordinates here are post-y-negation draw space (what render.c
+     * actually feeds polygon_signed_area), matching the exact failing case:
+     * Polygon[{{0,0},{0,1},{1,1},{1,0}}] -- the natural reading order for a
+     * unit square's corners -- becomes (0,0),(0,-1),(1,-1),(1,0) in draw
+     * space, which has positive signed area (the renderer reverses it). */
+    double cw_x[4] = { 0, 0, 1, 1 };
+    double cw_y[4] = { 0, -1, -1, 0 };
+    ASSERT(polygon_signed_area(cw_x, cw_y, 4) > 0.0);
+
+    /* The reverse vertex ordering of the same square: negative area --
+     * already correctly wound, the renderer leaves it alone. */
+    double ccw_x[4] = { 1, 1, 0, 0 };
+    double ccw_y[4] = { 0, -1, -1, 0 };
+    ASSERT(polygon_signed_area(ccw_x, ccw_y, 4) < 0.0);
+
+    /* A degenerate (zero-area) "polygon" -- e.g. all points collinear --
+     * is neither winding; must not crash or loop. */
+    double line_x[3] = { 0, 1, 2 };
+    double line_y[3] = { 0, 0, 0 };
+    ASSERT(polygon_signed_area(line_x, line_y, 3) == 0.0);
+}
 #endif
 
 int main(void) {
@@ -385,12 +441,14 @@ int main(void) {
     TEST(test_hue_color_directive);
     TEST(test_color_function_builds_per_segment_colors);
     TEST(test_filling_builds_polygon);
+    TEST(test_filling_splits_at_baseline_crossing);
     TEST(test_plot_legends_metadata);
     TEST(test_region_function_and_exclusions_split_domain);
     TEST(test_label_style_passthrough);
 #ifdef USE_GRAPHICS
     TEST(test_frame_minor_divs_policy);
     TEST(test_window_height_policy);
+    TEST(test_polygon_signed_area_winding_detection);
 #endif
 
     printf("All graphics tests passed!\n");
