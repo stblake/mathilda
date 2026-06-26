@@ -17,6 +17,12 @@ time -- `brew install raylib` on macOS, `apt install libraylib-dev` on
 Debian/Ubuntu). When Raylib isn't available, the build still succeeds;
 `Show`/`Plot` print a one-line message instead of opening a window.
 
+A small 3D extension lives alongside this: `Plot3D[]` builds a
+`Graphics3D[...]` object (rendered with an orbit camera) the same way `Plot[]`
+builds a `Graphics[...]`, reusing the same primitive heads (`Polygon`, `Line`,
+color directives) with 3-coordinate `{x,y,z}` points instead of 2-coordinate
+`{x,y}` ones -- see `Graphics3D` and `Plot3D` below.
+
 ## Graphics
 A symbolic 2D graphics object.
 - `Graphics[primitives]`: wraps a (possibly nested) list of primitives and
@@ -354,4 +360,92 @@ Out[7]= -Graphics-
 
 In[8]:= Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}, PlotLegends -> "Expressions"]
 Out[8]= -Graphics-
+```
+
+## Graphics3D
+A symbolic 3D graphics object, as built by `Plot3D[]`.
+- `Graphics3D[primitives]`: wraps a (possibly nested) list of primitives and
+  style directives -- the *same* heads `Graphics[]` uses (`Polygon`, `Line`,
+  `RGBColor`/`GrayLevel`/`Hue`, `Opacity`), but with 3-coordinate `{x,y,z}`
+  points instead of 2-coordinate `{x,y}` ones, exactly mirroring how
+  Mathematica itself reuses primitive heads between `Graphics`/`Graphics3D`.
+- `Graphics3D[primitives, opt1 -> val1, ...]`: as above, with options (see
+  `Plot3D` below).
+- Like `Graphics`, it is an inert structural head -- nothing renders until
+  `Show[]`/`Plot3D[]` is called on it.
+- Rendered in an orbit-camera window: drag to rotate, scroll to zoom,
+  right-drag (or middle-drag) to pan, `R` to reset the view, `S` to save a
+  screenshot, `Esc` to close. There is no live re-sampling on
+  rotate/zoom -- unlike a 2D pan/zoom, orbiting the camera never changes
+  which `(x,y)` domain was sampled, so there is nothing to re-sample.
+
+**Features**:
+- `Protected`.
+- Prints as `-Graphics3D-` (use `FullForm[]` to inspect the underlying
+  expression).
+
+```mathematica
+In[1]:= Graphics3D[{Polygon[{{0,0,0}, {1,0,0}, {1,1,1}, {0,1,1}}]}]
+Out[1]= -Graphics3D-
+```
+
+## Plot3D
+Samples and displays a function of two real variables as a surface.
+- `Plot3D[f, {x, xmin, xmax}, {y, ymin, ymax}]`: samples `f` over a uniform
+  grid on `[xmin,xmax] x [ymin,ymax]`, opens an orbit-camera window showing
+  the surface, and returns it as a `Graphics3D[{Polygon[...], ...}, opts]`
+  object. Each grid cell becomes one quad `Polygon[]`; a cell with any
+  corner that doesn't evaluate to a finite real (or fails `RegionFunction`)
+  is simply omitted, leaving a hole in the surface.
+- `Plot3D[{f1, f2, ...}, {x,...}, {y,...}]`: plots several surfaces over the
+  same domain, each in a distinct palette colour (the same `ColorData[97]`
+  palette `Plot` uses).
+- `Plot3D[f, {x,...}, {y,...}, opts...]`: as above, with options below.
+- `HoldAll`: `f` and both iterator specs are not pre-evaluated.
+
+`Plot3D` reuses `Plot`'s option *semantics* wherever a 3D analogue makes
+sense, sharing the actual evaluation code (`src/graphics/plot_common.c`) for
+`RegionFunction`, `ColorFunction`, and the multi-curve/multi-surface palette:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `PlotPoints` | `25` | initial per-axis grid resolution (an `n x n` grid) |
+| `MaxRecursion` | `2` | doubles the *whole* grid's resolution (up to this many times, capped at 200 points/axis) while a cell-center-vs-bilinear-interpolant flatness check fails -- a global, crack-free analogue of `Plot`'s per-interval adaptive bisection (a per-cell quadtree would leave T-junction cracks where differently-refined cells meet) |
+| `Mesh` | `True` | overlays the grid wireframe on the surface (unlike `Plot`'s default `None` -- Mathematica's `Plot3D` shows mesh lines out of the box too); `None`/`False` draws the filled surface only |
+| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | the surface's fill color (single-surface case); ignored where `ColorFunction` overrides per cell |
+| `ColorFunction` | none | a function `f[xscaled,zscaled]`/`f[xscaled]` returning a color literal, evaluated once per grid cell at its center -- or the string `"Rainbow"`. Same function `Plot` uses, with `z` (height) standing in for `Plot`'s `y` |
+| `ColorFunctionScaling` | `True` | as in `Plot` |
+| `RegionFunction` | none | `f[x,y,z]` (Mathematica's `Plot3D` convention) tried first; falls back to `Plot`'s `f[x,y]`/`f[x]` forms if that doesn't resolve to `True`/`False`, so a `RegionFunction` written for `Plot` keeps working |
+| `PlotRange` | `Automatic` | an explicit `{zmin,zmax}` (or the last `{zmin,zmax}` of a longer nested list) feeds the same flatness check `MaxRecursion` uses, and bounds the rendered box |
+| `Axes` | `True` | draws a wireframe bounding box with tick labels |
+
+Other options (`PlotLabel`, `Background`, `ImageSize`, `AxesLabel`, ...) are
+evaluated once (since `Plot3D` is `HoldAll`) and copied through onto the
+`Graphics3D[...]` result, exactly like `Plot`'s fallback branch. 2D-only
+chrome with no 3D analogue in this engine (`Filling`, `FillingStyle`,
+`Exclusions`, `Frame*`, `GridLines*`, `PlotLegends`) is likewise not
+specially recognized -- it passes through inertly rather than erroring, so
+copying a `Plot[]` option list onto `Plot3D[]` by habit doesn't break
+anything, it just has no effect for those names.
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Declines to evaluate if either iterator spec isn't `{var, min, max}` with
+  numeric (possibly symbolic-but-numeric) bounds, if `PlotPoints -> 1` (or
+  any other malformed sampling option), or if no grid cell is valid (e.g. a
+  `RegionFunction` that excludes every sampled point).
+- Auto-displays, exactly like `Graphics`/`Plot`.
+
+```mathematica
+In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
+Out[1]= -Graphics3D-
+
+In[2]:= Plot3D[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, ColorFunction -> "Rainbow", Mesh -> None]
+Out[2]= -Graphics3D-
+
+In[3]:= Plot3D[x + y, {x, -2, 2}, {y, -2, 2}, RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 4]]
+Out[3]= -Graphics3D-
+
+In[4]:= Plot3D[{Sin[x + y], Cos[x - y]}, {x, -2, 2}, {y, -2, 2}]
+Out[4]= -Graphics3D-
 ```

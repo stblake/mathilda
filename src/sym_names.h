@@ -563,6 +563,7 @@ extern const char* SYM_DollarruSimplify;
  * Graphics[]/Show[]/Plot[] plus Plot's option names. MaxRecursion is
  * shared with the existing NIntegrate/ND option of the same name above. */
 extern const char* SYM_Graphics;
+extern const char* SYM_Graphics3D;
 extern const char* SYM_Point;
 extern const char* SYM_Line;
 extern const char* SYM_Rectangle;
@@ -572,6 +573,7 @@ extern const char* SYM_Polygon;
 extern const char* SYM_Text;
 extern const char* SYM_Show;
 extern const char* SYM_Plot;
+extern const char* SYM_Plot3D;
 extern const char* SYM_RGBColor;
 extern const char* SYM_GrayLevel;
 extern const char* SYM_Opacity;

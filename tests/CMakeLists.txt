@@ -377,15 +377,18 @@ set(COMMON_SRC
     ../src/numerical_roots/nsolve_system.c
     ../src/graphics/graphics_init.c
     ../src/graphics/sampling.c
+    ../src/graphics/plot_common.c
     ../src/graphics/plot.c
+    ../src/graphics/plot3d.c
     ../src/graphics/show.c
 )
 
-# render.c / hershey_font.c need a live Raylib + display; only compiled
-# into COMMON_SRC when USE_GRAPHICS actually resolved to ON above.
+# render.c / render3d.c / hershey_font.c need a live Raylib + display; only
+# compiled into COMMON_SRC when USE_GRAPHICS actually resolved to ON above.
 if(USE_GRAPHICS)
     list(APPEND COMMON_SRC
         ../src/graphics/render.c
+        ../src/graphics/render3d.c
         ../src/graphics/hershey_font.c
     )
 endif()
@@ -1505,6 +1508,10 @@ add_test(NAME graphics_sampling_tests COMMAND graphics_sampling_tests)
 add_executable(graphics_tests test_graphics.c ${COMMON_SRC})
 target_include_directories(graphics_tests PRIVATE ../src ../src/graphics)
 add_test(NAME graphics_tests COMMAND graphics_tests)
+
+add_executable(plot3d_tests test_plot3d.c ${COMMON_SRC})
+target_include_directories(plot3d_tests PRIVATE ../src ../src/graphics)
+add_test(NAME plot3d_tests COMMAND plot3d_tests)
 
 add_executable(context_tests test_context.c ${COMMON_SRC})
 target_include_directories(context_tests PRIVATE ../src)

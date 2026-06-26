@@ -546,6 +546,7 @@ const char* SYM_DollarSimplifyDebug = NULL;
 const char* SYM_DollarruSimplify = NULL;
 
 const char* SYM_Graphics = NULL;
+const char* SYM_Graphics3D = NULL;
 const char* SYM_Point = NULL;
 const char* SYM_Line = NULL;
 const char* SYM_Rectangle = NULL;
@@ -555,6 +556,7 @@ const char* SYM_Polygon = NULL;
 const char* SYM_Text = NULL;
 const char* SYM_Show = NULL;
 const char* SYM_Plot = NULL;
+const char* SYM_Plot3D = NULL;
 const char* SYM_RGBColor = NULL;
 const char* SYM_GrayLevel = NULL;
 const char* SYM_Opacity = NULL;
@@ -1154,6 +1156,7 @@ void sym_names_init(void) {
     SYM_DollarruSimplify           = intern_symbol("$ruSimplify");
 
     SYM_Graphics                   = intern_symbol("Graphics");
+    SYM_Graphics3D                 = intern_symbol("Graphics3D");
     SYM_Point                      = intern_symbol("Point");
     SYM_Line                       = intern_symbol("Line");
     SYM_Rectangle                  = intern_symbol("Rectangle");
@@ -1163,6 +1166,7 @@ void sym_names_init(void) {
     SYM_Text                       = intern_symbol("Text");
     SYM_Show                       = intern_symbol("Show");
     SYM_Plot                       = intern_symbol("Plot");
+    SYM_Plot3D                     = intern_symbol("Plot3D");
     SYM_RGBColor                   = intern_symbol("RGBColor");
     SYM_GrayLevel                  = intern_symbol("GrayLevel");
     SYM_Opacity                    = intern_symbol("Opacity");
