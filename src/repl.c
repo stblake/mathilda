@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <unistd.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 
@@ -132,6 +133,214 @@ void process_input(const char* input, int line_number) {
     expr_free(evaluated);
 }
 
+/* =====================================================================
+ * NDJSON pipe-mode protocol
+ *
+ * When stdin is not a terminal (i.e. the frontend spawned us as a
+ * sidecar), we switch from the readline REPL to a structured NDJSON
+ * protocol over stdio.
+ *
+ * Request  (one JSON object per line on stdin):
+ *   {"id": N, "expr": "Integrate[x^2, x]"}   -- evaluate expression
+ *   {"type": "ping"}                           -- readiness probe
+ *   {"type": "quit"}                           -- graceful shutdown
+ *
+ * Response (one JSON object per line on stdout):
+ *   {"id": N, "type": "expr",   "payload": "x^3/3"}
+ *   {"id": N, "type": "error",  "message": "Parse error"}
+ *   {"id": N, "type": "done"}
+ *   {"type": "pong"}
+ *
+ * stdout is set to unbuffered at startup so every response line is
+ * delivered to the pipe immediately.
+ * ===================================================================*/
+
+/* Extract a JSON string value for `key` into `buf` (null-terminated,
+ * basic escape sequences handled).  Returns 1 on success, 0 if absent.
+ * Not a general JSON parser — only handles our own well-formed messages. */
+static int json_get_string(const char* json, const char* key,
+                           char* buf, size_t buflen) {
+    char search[256];
+    snprintf(search, sizeof(search), "\"%s\"", key);
+    const char* p = strstr(json, search);
+    if (!p) return 0;
+    p += strlen(search);
+    while (*p == ' ' || *p == '\t' || *p == ':') p++;
+    if (*p != '"') return 0;
+    p++;
+    size_t i = 0;
+    while (*p && *p != '"' && i + 1 < buflen) {
+        if (*p == '\\' && *(p + 1)) {
+            p++;
+            switch (*p) {
+                case '"':  buf[i++] = '"';  break;
+                case '\\': buf[i++] = '\\'; break;
+                case '/':  buf[i++] = '/';  break;
+                case 'n':  buf[i++] = '\n'; break;
+                case 'r':  buf[i++] = '\r'; break;
+                case 't':  buf[i++] = '\t'; break;
+                default:   buf[i++] = *p;   break;
+            }
+        } else {
+            buf[i++] = *p;
+        }
+        p++;
+    }
+    buf[i] = '\0';
+    return 1;
+}
+
+/* Extract a JSON integer value for `key` into `*out`.
+ * Returns 1 on success, 0 if absent or not a digit sequence. */
+static int json_get_int(const char* json, const char* key, int* out) {
+    char search[256];
+    snprintf(search, sizeof(search), "\"%s\"", key);
+    const char* p = strstr(json, search);
+    if (!p) return 0;
+    p += strlen(search);
+    while (*p == ' ' || *p == '\t' || *p == ':') p++;
+    if (!(*p == '-' || isdigit((unsigned char)*p))) return 0;
+    *out = (int)strtol(p, NULL, 10);
+    return 1;
+}
+
+/* Write a JSON-escaped version of `s` into `out` (null-terminated).
+ * `outlen` includes the null terminator. */
+static void json_escape(const char* s, char* out, size_t outlen) {
+    size_t i = 0;
+    while (*s && i + 7 < outlen) {
+        unsigned char c = (unsigned char)*s;
+        if (c == '"') {
+            out[i++] = '\\'; out[i++] = '"';
+        } else if (c == '\\') {
+            out[i++] = '\\'; out[i++] = '\\';
+        } else if (c == '\n') {
+            out[i++] = '\\'; out[i++] = 'n';
+        } else if (c == '\r') {
+            out[i++] = '\\'; out[i++] = 'r';
+        } else if (c == '\t') {
+            out[i++] = '\\'; out[i++] = 't';
+        } else if (c < 0x20) {
+            i += (size_t)snprintf(out + i, outlen - i, "\\u%04x", c);
+        } else {
+            out[i++] = (char)c;
+        }
+        s++;
+    }
+    out[i] = '\0';
+}
+
+/* Emit a single NDJSON line to stdout and flush immediately. */
+static void pipe_emit(const char* line) {
+    puts(line);
+    fflush(stdout);
+}
+
+/* Evaluate `input` as a Mathilda expression, emit NDJSON response(s),
+ * and always terminate with a "done" message for correlation id `id`. */
+static void pipe_process_input(const char* input, int id) {
+    Expr* parsed = parse_expression(input);
+    if (!parsed) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error\"}", id);
+        pipe_emit(buf);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(buf);
+        return;
+    }
+
+    Expr* evaluated = evaluate(parsed);
+    expr_free(parsed);
+
+    if (!evaluated) {
+        /* Null result (e.g. trailing semicolon suppresses output). */
+        char buf[64];
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(buf);
+        return;
+    }
+
+    /* Convert expression to its printed string form. */
+    char* result_str = expr_to_string(evaluated);
+    expr_free(evaluated);
+
+    if (!result_str) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
+        pipe_emit(buf);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(buf);
+        return;
+    }
+
+    /* JSON-escape the result string and emit the expr response. */
+    size_t escaped_len = strlen(result_str) * 6 + 4;
+    char* escaped = malloc(escaped_len);
+    if (!escaped) {
+        free(result_str);
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
+        pipe_emit(buf);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(buf);
+        return;
+    }
+    json_escape(result_str, escaped, escaped_len);
+    free(result_str);
+
+    size_t line_len = escaped_len + 64;
+    char* json_line = malloc(line_len);
+    if (json_line) {
+        snprintf(json_line, line_len,
+                 "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\"}", id, escaped);
+        pipe_emit(json_line);
+        free(json_line);
+    }
+    free(escaped);
+
+    char done[64];
+    snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+    pipe_emit(done);
+}
+
+/* Main loop for pipe/sidecar mode. Reads NDJSON lines from stdin,
+ * dispatches to pipe_process_input, handles ping and quit. */
+static void pipe_mode_loop(void) {
+    char line[MAX_INPUT_LEN];
+    while (fgets(line, sizeof(line), stdin)) {
+        /* Strip trailing newline / carriage-return. */
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+        if (len == 0) continue;
+
+        /* Ping — readiness probe from the frontend. */
+        if (strstr(line, "\"ping\"")) {
+            pipe_emit("{\"type\":\"pong\"}");
+            continue;
+        }
+
+        /* Quit — graceful shutdown. */
+        if (strstr(line, "\"quit\"")) {
+            fflush(stdout);
+            break;
+        }
+
+        /* Evaluate request: {"id": N, "expr": "..."} */
+        int id = 0;
+        char expr_buf[MAX_INPUT_LEN];
+        if (!json_get_int(line, "id", &id) ||
+            !json_get_string(line, "expr", expr_buf, sizeof(expr_buf))) {
+            continue; /* unknown message type — silently skip */
+        }
+
+        pipe_process_input(expr_buf, id);
+    }
+}
+
 void repl_loop() {
     printf("\nMathilda - A tiny, LLM-generated, Mathematica-like computer algebra system.\n\n");
     printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
@@ -226,10 +435,22 @@ void repl_loop() {
 #include "core.h"
 
 int main() {
+    /* Detect pipe mode: when stdin is not a terminal the frontend has
+     * spawned us as a sidecar and we communicate via NDJSON over stdio.
+     * The interactive readline REPL is preserved when stdin is a tty. */
+    int pipe_mode = !isatty(fileno(stdin));
+
+    if (pipe_mode) {
+        /* Disable libc's 4 KB stdout buffer.  Without this, responses
+         * accumulate in the buffer and the frontend never receives them
+         * until the buffer fills or the process exits. */
+        setvbuf(stdout, NULL, _IONBF, 0);
+    }
+
     symtab_init();
     core_init();
-    
-    // Load internal init.m silently if it exists
+
+    /* Load internal init.m silently if it exists. */
     FILE* check_fp = fopen("./src/internal/init.m", "r");
     if (check_fp) {
         fclose(check_fp);
@@ -240,7 +461,11 @@ int main() {
             if (res) expr_free(res);
         }
     }
-    
-    repl_loop();
+
+    if (pipe_mode) {
+        pipe_mode_loop();
+    } else {
+        repl_loop();
+    }
     return 0;
 }
