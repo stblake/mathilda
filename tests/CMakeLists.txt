@@ -446,6 +446,10 @@ add_executable(divisors_tests test_divisors.c ${COMMON_SRC})
 target_include_directories(divisors_tests PRIVATE ../src)
 add_test(NAME divisors_tests COMMAND divisors_tests)
 
+add_executable(divisorsigma_tests test_divisorsigma.c ${COMMON_SRC})
+target_include_directories(divisorsigma_tests PRIVATE ../src)
+add_test(NAME divisorsigma_tests COMMAND divisorsigma_tests)
+
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)
 target_include_directories(iter_tests PRIVATE ../src)

@@ -29,5 +29,6 @@ Expr* builtin_binomial(Expr* res);
 Expr* builtin_divisible(Expr* res);
 Expr* builtin_coprimeq(Expr* res);
 Expr* builtin_divisors(Expr* res);
+Expr* builtin_divisorsigma(Expr* res);
 
 #endif

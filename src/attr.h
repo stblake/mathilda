@@ -17,6 +17,8 @@
 #define ATTR_PROTECTED      (1 << 7)
 #define ATTR_ONEIDENTITY    (1 << 8)
 #define ATTR_NHOLDREST      (1 << 9)
+#define ATTR_NHOLDFIRST     (1 << 15)
+#define ATTR_NHOLDALL       (ATTR_NHOLDFIRST | ATTR_NHOLDREST)
 #define ATTR_LOCKED          (1 << 10)
 #define ATTR_READPROTECTED   (1 << 11)
 #define ATTR_TEMPORARY       (1 << 12)

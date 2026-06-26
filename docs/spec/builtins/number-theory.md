@@ -421,6 +421,63 @@ In[6]:= Divisors[3, GaussianIntegers -> True]
 Out[6]= {1, 3}
 ```
 
+## DivisorSigma
+
+- `DivisorSigma[k, n]`: the divisor function `sigma_k(n)`, the sum of the
+  `k`-th powers of the (positive) divisors of `n`.
+- `DivisorSigma[k, n, GaussianIntegers -> True]`: the sum over Gaussian-integer
+  divisors.
+
+**Options**:
+- `GaussianIntegers -> False` (default): ordinary integer divisors. Set to
+  `True` to sum over the divisors in `Z[i]`. A non-real Gaussian-integer input
+  (e.g. `3 + I`) auto-enables Gaussian mode.
+
+**Features**:
+- `Listable`, `NHoldAll`, `Protected`.
+- Computed from the multiplicative formula
+  `sigma_k(n) = Product_i (p_i^((e_i+1) k) - 1) / (p_i^k - 1)` for
+  `n = Product_i p_i^e_i`, so a single path serves every exponent type: exact
+  integers and rationals for integer `k`, and symbolic / radical forms for
+  symbolic or rational `k`. `k == 0` returns the divisor count `sigma_0(n)`.
+- The sign of `n` is ignored; machine integers and GMP bigints are handled
+  uniformly.
+- In Gaussian mode the product runs over the first-quadrant associates
+  (`Re > 0`, `Im >= 0`) of the Gaussian prime factors of `n`. This is the
+  multiplicative definition — note it differs from naively summing
+  `d^k` over `Divisors[n, GaussianIntegers -> True]`.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `DivisorSigma::argrx` message.
+
+```mathematica
+In[1]:= DivisorSigma[1, 20]
+Out[1]= 42
+
+In[2]:= DivisorSigma[2, 20]
+Out[2]= 546
+
+In[3]:= DivisorSigma[0, 12]
+Out[3]= 6
+
+In[4]:= DivisorSigma[-2, 10]
+Out[4]= 13/10
+
+In[5]:= DivisorSigma[1/2, 12]
+Out[5]= (2 (-1 + 2 Sqrt[2]))/((-1 + Sqrt[2]) (-1 + Sqrt[3]))
+
+In[6]:= DivisorSigma[k, {2, 3, 6}]
+Out[6]= {(-1 + 2^(2 k))/(-1 + 2^k), (-1 + 3^(2 k))/(-1 + 3^k), ((-1 + 2^(2 k)) (-1 + 3^(2 k)))/((-1 + 2^k) (-1 + 3^k))}
+
+In[7]:= DivisorSigma[2, {1, 2, 3, 4, 5}]
+Out[7]= {1, 5, 10, 21, 26}
+
+In[8]:= DivisorSigma[1, 3 + I]
+Out[8]= 2 + 6 I
+
+In[9]:= DivisorSigma[2, 6, GaussianIntegers -> True]
+Out[9]= -30 + 20 I
+```
+
 ## EulerPhi
 
 Gives the Euler totient function $\phi(n)$.
