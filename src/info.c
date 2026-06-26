@@ -3193,6 +3193,11 @@ void info_init(void) {
         "representation of n.\n"
         "The sign of n is discarded; DigitCount[0] is a list of zeros.");
 
+    symtab_set_docstring("DigitSum",
+        "DigitSum[n] gives the sum of the decimal digits of the integer n.\n"
+        "DigitSum[n, b] gives the sum of the base-b digits of n.\n"
+        "The sign of n is discarded; DigitSum[0] is 0.");
+
     symtab_set_docstring("IntegerString",
         "IntegerString[n] gives a string consisting of the decimal digits "
         "in the integer n.\n"

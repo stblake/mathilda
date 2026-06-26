@@ -220,6 +220,7 @@ const char* SYM_IntegerDigits = NULL;
 const char* SYM_IntegerLength = NULL;
 const char* SYM_IntegerExponent = NULL;
 const char* SYM_DigitCount = NULL;
+const char* SYM_DigitSum = NULL;
 const char* SYM_IntegerString = NULL;
 const char* SYM_IntegerPart = NULL;
 const char* SYM_IntegerPartitions = NULL;
@@ -832,6 +833,7 @@ void sym_names_init(void) {
     SYM_IntegerLength              = intern_symbol("IntegerLength");
     SYM_IntegerExponent            = intern_symbol("IntegerExponent");
     SYM_DigitCount                 = intern_symbol("DigitCount");
+    SYM_DigitSum                   = intern_symbol("DigitSum");
     SYM_IntegerString              = intern_symbol("IntegerString");
     SYM_IntegerPart                = intern_symbol("IntegerPart");
     SYM_IntegerPartitions          = intern_symbol("IntegerPartitions");
