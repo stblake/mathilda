@@ -7,6 +7,7 @@
 #include "repl_hooks.h"
 #include "sym_names.h"
 #include "show.h"
+#include "graphics_json.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -258,6 +259,39 @@ static void pipe_process_input(const char* input, int id) {
         char buf[64];
         snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
         pipe_emit(buf);
+        return;
+    }
+
+    /* Graphics[...] result: serialize to Plotly JSON for the notebook. */
+    if (evaluated->type == EXPR_FUNCTION
+        && evaluated->data.function.head
+        && evaluated->data.function.head->type == EXPR_SYMBOL
+        && evaluated->data.function.head->data.symbol == SYM_Graphics) {
+        char* plotly = graphics_to_plotly_json(evaluated);
+        expr_free(evaluated);
+        if (plotly) {
+            /* Emit as a plot message — payload is raw JSON (not a string). */
+            size_t line_len = strlen(plotly) + 64;
+            char* json_line = malloc(line_len);
+            if (json_line) {
+                snprintf(json_line, line_len,
+                         "{\"id\":%d,\"type\":\"plot\",\"payload\":", id);
+                /* Append the raw Plotly JSON directly (not string-escaped). */
+                char* combined = malloc(strlen(json_line) + strlen(plotly) + 4);
+                if (combined) {
+                    strcpy(combined, json_line);
+                    strcat(combined, plotly);
+                    strcat(combined, "}");
+                    pipe_emit(combined);
+                    free(combined);
+                }
+                free(json_line);
+            }
+            free(plotly);
+        }
+        char done[64];
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(done);
         return;
     }
 
