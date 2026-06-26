@@ -1,7 +1,7 @@
 mod commands;
 mod kernel;
 
-use commands::{evaluate_cell, interrupt_kernel, load_notebook, ping_kernel, restart_kernel, save_notebook};
+use commands::{evaluate_cell, interrupt_kernel, load_library, load_notebook, ping_kernel, restart_kernel, save_library, save_notebook};
 use kernel::MathildaKernel;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{Emitter, Manager};
@@ -108,6 +108,8 @@ pub fn run() {
             ping_kernel,
             save_notebook,
             load_notebook,
+            save_library,
+            load_library,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

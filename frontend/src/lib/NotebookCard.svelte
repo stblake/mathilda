@@ -1,0 +1,532 @@
+<!--
+  NotebookCard.svelte
+  One draggable glass-dark notebook card on the infinite canvas.
+
+  Props:
+    nb          — CanvasNotebook from canvas.ts
+    currentZoom — the current animated zoom level (for drag delta correction)
+
+  Responsibilities:
+    • Drag title bar → update nb.x/nb.y via canvasState (delta / currentZoom)
+    • Glass-dark aesthetic with per-notebook colour accent
+    • Collapse toggle (⊞) and close (✕) buttons in title bar
+    • Double-click title to rename inline
+    • Expanded: full notebook cell UI (rows of cells via CellShell)
+    • Collapsed: compact card with "N cells" and last output preview
+    • Mount animation: scale(0.94)/opacity(0) → scale(1)/opacity(1), 180ms
+    • All cell execution logic self-contained
+    • kernelStatus store from notebook.ts for status display
+-->
+<script lang="ts">
+  import { onMount, tick } from 'svelte';
+  import { get } from 'svelte/store';
+  import CellShell from './CellShell.svelte';
+  import type { CanvasNotebook } from './canvas';
+  import {
+    canvasState,
+    removeNotebook,
+    toggleCollapse,
+    renameNotebook,
+  } from './canvas';
+  import {
+    kernelStatus,
+    selectedCells,
+    clearSelection,
+  } from './notebook';
+  import type { OutputItem, CellType } from './notebook';
+  import {
+    evaluateCell,
+  } from './ipc';
+  import type { OutputMessage } from './ipc';
+
+  export let nb: CanvasNotebook;
+  export let currentZoom: number = 1.0;
+
+  // Per-notebook accent colour from the deep-space palette
+  const PALETTE = ['#89b4fa','#a6e3a1','#f38ba8','#fab387','#cba6f7','#94e2d5'];
+  $: accentColor = PALETTE[parseInt(nb.id.replace('nb-', ''), 10) % PALETTE.length] ?? '#89b4fa';
+
+  // ---- Store subscription ----
+  // nb.store is a Svelte store (has .subscribe). Assign it to a local `let`
+  // so Svelte 4's `$nbStore` auto-subscription works in the template.
+  let nbStore = nb.store;
+  $: nbStore = nb.store;
+
+  // ---------------------------------------------------------------------------
+  // Mount animation
+
+  let mounted = false;
+  onMount(() => {
+    requestAnimationFrame(() => { mounted = true; });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Title bar drag → move card on canvas
+
+  let dragging   = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragNbX0   = 0;
+  let dragNbY0   = 0;
+
+  let cardEl: HTMLElement;
+
+  function onTitlePointerDown(e: PointerEvent) {
+    if ((e.target as HTMLElement).closest('button, input')) return;
+    e.stopPropagation();
+    dragging   = true;
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+    dragNbX0   = nb.x;
+    dragNbY0   = nb.y;
+    cardEl.setPointerCapture(e.pointerId);
+  }
+
+  function onTitlePointerMove(e: PointerEvent) {
+    if (!dragging) return;
+    e.stopPropagation();
+    const dxScreen = e.clientX - dragStartX;
+    const dyScreen = e.clientY - dragStartY;
+    const effectiveZoom = currentZoom || 1;
+    const newX = dragNbX0 + dxScreen / effectiveZoom;
+    const newY = dragNbY0 + dyScreen / effectiveZoom;
+    canvasState.update(s => ({
+      ...s,
+      notebooks: s.notebooks.map(n => n.id === nb.id ? { ...n, x: newX, y: newY } : n),
+    }));
+  }
+
+  function onTitlePointerUp(_e: PointerEvent) {
+    dragging = false;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Inline rename
+
+  let renaming = false;
+  let renameInput: HTMLInputElement;
+  let renameValue = '';
+
+  function startRename() {
+    renaming    = true;
+    renameValue = nb.title;
+    tick().then(() => {
+      renameInput?.focus();
+      renameInput?.select();
+    });
+  }
+
+  function commitRename() {
+    if (renameValue.trim()) renameNotebook(nb.id, renameValue.trim());
+    renaming = false;
+  }
+
+  function onRenameKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter') { e.preventDefault(); commitRename(); }
+    else if (e.key === 'Escape') { renaming = false; }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Collapse toggle
+
+  function onToggleCollapse() {
+    toggleCollapse(nb.id);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cell focus registry
+
+  const cellFocusFns: Record<string, () => void> = {};
+
+  function handleRegister(e: CustomEvent<{ id: string; fn: () => void }>) {
+    cellFocusFns[e.detail.id] = e.detail.fn;
+  }
+
+  // ---------------------------------------------------------------------------
+  // 4-directional row/cell add
+
+  async function addRowAbove(e: CustomEvent<{ rowId: string }>) {
+    const rowList = nb.store.getRows();
+    const ri = rowList.findIndex((r: any) => r.id === e.detail.rowId);
+    if (ri < 0) return;
+    const id = nb.store.insertRowAt(ri);
+    await tick(); cellFocusFns[id]?.();
+  }
+
+  async function addRowBelow(e: CustomEvent<{ rowId: string }>) {
+    const rowList = nb.store.getRows();
+    const ri = rowList.findIndex((r: any) => r.id === e.detail.rowId);
+    const id = nb.store.insertRowAt(ri + 1);
+    await tick(); cellFocusFns[id]?.();
+  }
+
+  async function addCellLeft(e: CustomEvent<{ rowId: string; cellIdx: number }>) {
+    const id = nb.store.insertCellInRow(e.detail.rowId, e.detail.cellIdx);
+    await tick(); cellFocusFns[id]?.();
+  }
+
+  async function addCellRight(e: CustomEvent<{ rowId: string; cellIdx: number }>) {
+    const id = nb.store.insertCellInRow(e.detail.rowId, e.detail.cellIdx);
+    await tick(); cellFocusFns[id]?.();
+  }
+
+  function addRow(type: CellType = 'code') {
+    const id = nb.store.addRow(type);
+    tick().then(() => cellFocusFns[id]?.());
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cell execution
+
+  async function runCell(cellId: string, source: string) {
+    if (!source.trim()) return;
+    nb.store.stampExec(cellId);
+    nb.store.clearOutput(cellId);
+    nb.store.setStatus(cellId, 'running');
+    kernelStatus.set('busy');
+    try {
+      await evaluateCell(source, (msg: OutputMessage) => {
+        const item = msgToOutputItem(msg);
+        if (!item) return;
+        if (msg.type === 'stream') nb.store.appendStream(cellId, (msg as any).text ?? '');
+        else nb.store.appendOutput(cellId, item);
+      });
+      nb.store.setStatus(cellId, 'done');
+    } catch (err) {
+      nb.store.appendOutput(cellId, { kind: 'error', text: String(err) });
+      nb.store.setStatus(cellId, 'error');
+      kernelStatus.set('dead');
+    } finally {
+      if (get(kernelStatus) !== 'dead') kernelStatus.set('ready');
+    }
+  }
+
+  function msgToOutputItem(msg: OutputMessage): OutputItem | null {
+    switch (msg.type) {
+      case 'expr':   return { kind: 'expr',   text: msg.payload };
+      case 'error':  return { kind: 'error',  text: msg.message };
+      case 'stream': return { kind: 'stream', text: (msg as any).text ?? '' };
+      case 'plot':   return { kind: 'plot',   data: msg.payload };
+      case 'html':   return { kind: 'html',   html: (msg as any).payload ?? '' };
+      default:       return null;
+    }
+  }
+
+  function handleRun(e: CustomEvent<{ id: string }>) {
+    const cell = nb.store.allCells().find((c: any) => c.id === e.detail.id);
+    if (cell) runCell(cell.id, cell.source);
+  }
+
+  function handleChange(e: CustomEvent<{ id: string; source: string }>) {
+    nb.store.updateSource(e.detail.id, e.detail.source);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Collapsed preview: first 60 chars of last output expression
+
+  $: lastOutputPreview = (() => {
+    const allRows = $nbStore;
+    if (!allRows || !allRows.length) return '';
+    const cells = allRows.flatMap((r: any) => r.cells ?? []);
+    const last = [...cells].reverse().find((c: any) => c.output?.length > 0);
+    if (!last) return '';
+    const item = last.output.find((o: any) => o.kind === 'expr' || o.kind === 'stream');
+    const text = item?.text ?? '';
+    return text.length > 60 ? text.slice(0, 60) + '…' : text;
+  })();
+
+  $: totalCells = (() => {
+    const allRows = $nbStore;
+    if (!allRows || !allRows.length) return 0;
+    return allRows.reduce((acc: number, r: any) => acc + (r.cells?.length ?? 0), 0);
+  })();
+
+  // ---------------------------------------------------------------------------
+  // Keyboard (scoped to card — stop propagation so canvas doesn't eat keys)
+
+  function onCardKeydown(e: KeyboardEvent) {
+    e.stopPropagation();
+  }
+</script>
+
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<div
+  class="nb-card"
+  class:mounted
+  class:collapsed={nb.collapsed}
+  style="
+    --accent: {accentColor};
+    --accent-glow: {accentColor}1a;
+  "
+  bind:this={cardEl}
+  on:keydown={onCardKeydown}
+>
+  <!-- Title bar -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div
+    class="card-titlebar"
+    on:pointerdown={onTitlePointerDown}
+    on:pointermove={onTitlePointerMove}
+    on:pointerup={onTitlePointerUp}
+    on:pointercancel={onTitlePointerUp}
+  >
+    <div class="titlebar-accent" style="background: {accentColor};"></div>
+
+    {#if renaming}
+      <!-- svelte-ignore a11y-autofocus -->
+      <input
+        class="title-input"
+        bind:this={renameInput}
+        bind:value={renameValue}
+        on:blur={commitRename}
+        on:keydown={onRenameKeydown}
+        on:pointerdown|stopPropagation
+      />
+    {:else}
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <span
+        class="card-title"
+        on:dblclick|stopPropagation={startRename}
+        title="Double-click to rename"
+      >{nb.title}</span>
+    {/if}
+
+    <div class="titlebar-actions">
+      
+      <button class="tb-btn" title="Collapse / expand" on:click|stopPropagation={onToggleCollapse}>
+        {nb.collapsed ? '⊟' : '⊞'}
+      </button>
+      <button class="tb-btn tb-close" title="Close notebook" on:click|stopPropagation={() => removeNotebook(nb.id)}>
+        ✕
+      </button>
+    </div>
+  </div>
+
+  <!-- Collapse wrapper -->
+  <div class="collapse-wrapper">
+    {#if nb.collapsed}
+      <!-- Collapsed summary -->
+      <div class="collapsed-body">
+        <span class="cell-count">{totalCells} cell{totalCells !== 1 ? 's' : ''}</span>
+        {#if lastOutputPreview}
+          <span class="last-preview">{lastOutputPreview}</span>
+        {/if}
+      </div>
+    {:else}
+      <!-- Full notebook UI -->
+      <div class="card-body">
+        <!-- Row list — iterate the store directly -->
+        {#each $nbStore as row, _ri (row.id)}
+          <div class="nb-row">
+            {#each row.cells as cell, ci (cell.id)}
+              <div class="cell-col" style="flex: 1 1 0; min-width: 0;">
+                <CellShell
+                  {cell}
+                  store={nb.store}
+                  rowId={row.id}
+                  cellIdx={ci}
+                  on:run={handleRun}
+                  on:change={handleChange}
+                  on:addAbove={addRowAbove}
+                  on:addBelow={addRowBelow}
+                  on:addLeft={addCellLeft}
+                  on:addRight={addCellRight}
+                  on:register={handleRegister}
+                />
+              </div>
+              {#if ci < row.cells.length - 1}
+                <div class="col-divider"></div>
+              {/if}
+            {/each}
+          </div>
+        {/each}
+
+        <!-- Add-row bar -->
+        <div class="add-row-bar">
+          <button on:click|stopPropagation={() => addRow('code')}>＋ Code</button>
+          <button on:click|stopPropagation={() => addRow('text')}>＋ Text</button>
+          <button on:click|stopPropagation={() => addRow('section')}>＋ Section</button>
+        </div>
+      </div>
+    {/if}
+  </div>
+</div>
+
+<style>
+  /* ---- Card shell ---- */
+  .nb-card {
+    position: relative;
+    border-radius: 12px;
+    background: rgba(12, 15, 28, 0.85);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow:
+      0 0 0 1px rgba(137,180,250,0.10),
+      0 24px 64px rgba(0,0,0,0.65),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    overflow: hidden;
+    /* Mount animation */
+    opacity: 0;
+    transform: scale(0.94);
+    transition:
+      opacity 180ms ease,
+      transform 180ms ease;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: #cdd6f4;
+  }
+
+  .nb-card.mounted {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* ---- Title bar ---- */
+  .card-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0 10px 0 0;
+    height: 36px;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    cursor: grab;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .card-titlebar:active { cursor: grabbing; }
+
+  .titlebar-accent {
+    width: 3px;
+    align-self: stretch;
+    border-radius: 12px 0 0 0;
+    flex-shrink: 0;
+  }
+
+  .card-title {
+    flex: 1;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #cdd6f4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 4px;
+    cursor: grab;
+  }
+
+  .title-input {
+    flex: 1;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid var(--accent, #89b4fa);
+    border-radius: 4px;
+    color: #cdd6f4;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 2px 6px;
+    outline: none;
+    margin-left: 4px;
+  }
+
+  .titlebar-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .tb-btn {
+    background: none;
+    border: none;
+    color: #585b70;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 2px 5px;
+    border-radius: 4px;
+    line-height: 1;
+    transition: color 0.12s, background 0.12s;
+  }
+  .tb-btn:hover { color: #cdd6f4; background: rgba(255,255,255,0.06); }
+  .tb-close:hover { color: #f38ba8; }
+
+  /* ---- Collapse wrapper ---- */
+  .collapse-wrapper {
+    overflow: hidden;
+  }
+
+  /* ---- Collapsed body ---- */
+  .collapsed-body {
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .cell-count {
+    font-size: 0.75rem;
+    color: #585b70;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .last-preview {
+    font-size: 0.75rem;
+    color: #585b70;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 340px;
+  }
+
+  /* ---- Expanded card body ---- */
+  .card-body {
+    max-height: 70vh;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(137,180,250,0.2) transparent;
+  }
+
+  .card-body::-webkit-scrollbar { width: 5px; }
+  .card-body::-webkit-scrollbar-track { background: transparent; }
+  .card-body::-webkit-scrollbar-thumb { background: rgba(137,180,250,0.2); border-radius: 3px; }
+
+  /* ---- Notebook rows ---- */
+  .nb-row {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+
+  .cell-col { min-width: 0; }
+
+  .col-divider {
+    width: 1px;
+    background: rgba(255,255,255,0.05);
+    flex-shrink: 0;
+  }
+
+  /* ---- Add-row bar ---- */
+  .add-row-bar {
+    padding: 0.5rem 0.5rem;
+    display: flex;
+    gap: 0.35rem;
+  }
+
+  .add-row-bar button {
+    background: none;
+    border: 1px dashed rgba(255,255,255,0.12);
+    color: #585b70;
+    border-radius: 4px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    transition: all 0.12s;
+  }
+
+  .add-row-bar button:hover {
+    border-color: var(--accent, #89b4fa);
+    color: var(--accent, #89b4fa);
+  }
+</style>

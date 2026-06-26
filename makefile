@@ -3,9 +3,35 @@ USE_MPFR ?= 1
 USE_LAPACK ?= 1
 USE_GRAPHICS ?= 1
 
+# Platform detection — used for readline and other OS-specific choices.
+# On Windows under MSYS2/MinGW, uname returns "MINGW64_NT-*" or similar;
+# map anything that isn't Darwin/Linux to "Windows" for build logic.
+UNAME_S := $(shell uname -s 2>/dev/null || echo Windows)
+ifneq ($(filter Darwin Linux,$(UNAME_S)),)
+  BUILD_PLATFORM := $(UNAME_S)
+else
+  BUILD_PLATFORM := Windows
+endif
+
 CC = gcc
 CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I/usr/local/include
-LDFLAGS = -lreadline -L/usr/local/lib -lgmp -lm
+
+# Readline is available on macOS and Linux but not on Windows (MinGW).
+# Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
+# or when only the pipe-mode sidecar is needed).
+USE_READLINE ?= 1
+ifeq ($(BUILD_PLATFORM),Windows)
+  override USE_READLINE := 0
+endif
+
+ifeq ($(USE_READLINE),0)
+  CFLAGS      += -DNO_READLINE
+  READLINE_LIBS =
+else
+  READLINE_LIBS = -lreadline
+endif
+
+LDFLAGS = $(READLINE_LIBS) -L/usr/local/lib -lgmp -lm
 
 ifeq ($(USE_ECM), 1)
 CFLAGS += -I./src/external/ecm
@@ -41,7 +67,7 @@ endif
 # detects raylib — and graphics is built by default — without a manual
 # PKG_CONFIG_PATH override. Harmless on Linux (the directories simply don't
 # exist) and respects any PKG_CONFIG_PATH the user already exported.
-ifeq ($(shell uname -s),Darwin)
+ifeq ($(BUILD_PLATFORM),Darwin)
   PKG_CONFIG = PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$$PKG_CONFIG_PATH" pkg-config
 else
   PKG_CONFIG = pkg-config
@@ -60,8 +86,7 @@ endif
 # the existing USE_MPFR=0 / USE_ECM=0 graceful-degrade policy so that
 # `git clone && make` always succeeds, no matter the host environment.
 ifeq ($(USE_LAPACK), 1)
-  UNAME_S := $(shell uname -s)
-  ifeq ($(UNAME_S),Darwin)
+  ifeq ($(BUILD_PLATFORM),Darwin)
     CFLAGS  += -DUSE_LAPACK -DMATHILDA_USE_ACCELERATE
     LDFLAGS += -framework Accelerate
   else ifneq ($(shell pkg-config --exists lapacke 2>/dev/null && echo y),)

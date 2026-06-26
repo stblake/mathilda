@@ -1,0 +1,76 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "Plots",
+  "notebooks": [
+    {
+      "id": "nb-function-plots",
+      "title": "Function Plots",
+      "x": 60,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Function Plots" }] },
+        { "cells": [{ "type": "text", "source": "Plot[f, {x, a, b}] samples the function f adaptively and renders it in a Raylib window. The sampler refines intervals where the chord length exceeds a threshold, ensuring smooth curves even for rapidly oscillating functions." }] },
+        { "cells": [{ "type": "subsection", "source": "Single Functions" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sin[x], {x, 0, 2*Pi}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[x^2 * Exp[-x], {x, -1, 6}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Log[x], {x, 0.01, 5}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Superimposed Curves" }] },
+        { "cells": [{ "type": "code", "source": "Plot[{Sin[x], Cos[x]}, {x, 0, 2*Pi}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[{Sin[x] + Sin[5*x], Sin[x]}, {x, 0, 2*Pi}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Interesting Shapes" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sin[x] + Sin[3*x] / 3 + Sin[5*x] / 5, {x, -Pi, Pi}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Abs[Sin[x]] * Cos[x], {x, -2*Pi, 2*Pi}]" }] },
+        { "cells": [{ "type": "text", "source": "The partial sum Sin[x]/1 + Sin[3x]/3 + Sin[5x]/5 + ... converges to a square wave (Fourier series). Each additional odd harmonic sharpens the corners. Adding more terms also makes the Gibbs overshoot near the discontinuity more visible." }] }
+      ]
+    },
+    {
+      "id": "nb-special-curves",
+      "title": "Special Curves",
+      "x": 760,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Special Curves" }] },
+        { "cells": [{ "type": "text", "source": "Many classical curves in mathematics can be expressed as explicit functions of one variable, or as two functions plotted together to create rich patterns." }] },
+        { "cells": [{ "type": "subsection", "source": "Trigonometric Patterns" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sin[5*x] * Cos[x], {x, 0, 2*Pi}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sin[3*x] * Sin[x]^2, {x, 0, 2*Pi}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Damped Oscillations" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Exp[-x/4] * Sin[3*x], {x, 0, 4*Pi}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[{Exp[-x/4] * Sin[3*x], Exp[-x/4], -Exp[-x/4]}, {x, 0, 4*Pi}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Rational & Algebraic" }] },
+        { "cells": [{ "type": "code", "source": "Plot[x / (1 + x^2), {x, -5, 5}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sqrt[1 - x^2], {x, -1, 1}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[{Sqrt[1 - x^2], -Sqrt[1 - x^2]}, {x, -1, 1}]" }] },
+        { "cells": [{ "type": "text", "source": "Plotting +/- Sqrt[1-x^2] together traces the unit circle. The damped oscillation Exp[-t/4]*Sin[3t] models an underdamped harmonic oscillator; the exponential envelopes show the decay rate." }] }
+      ]
+    },
+    {
+      "id": "nb-sequences",
+      "title": "Sequences & Number Plots",
+      "x": 1460,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Number Sequences via Plot" }] },
+        { "cells": [{ "type": "text", "source": "Continuous functions can encode integer sequences. Plotting smooth interpolants of combinatorial quantities reveals hidden structure — growth rates, oscillations, and asymptotic behaviour." }] },
+        { "cells": [{ "type": "subsection", "source": "Factorial & Gamma Growth" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Gamma[x + 1], {x, 0, 6}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Log[Gamma[x + 1]], {x, 1, 10}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Fibonacci via Closed Form" }] },
+        { "cells": [{ "type": "code", "source": "Plot[(((1 + Sqrt[5]) / 2)^x - ((1 - Sqrt[5]) / 2)^x) / Sqrt[5], {x, 1, 10}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Arithmetic Functions Continuously Extended" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sin[Pi * x] / (Pi * x), {x, -5, 5}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[{Sin[Pi * x], Sin[Pi * x] / (Pi * x)}, {x, -4, 4}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Zeta on the Real Line" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sin[x] * Sin[2*x] * Sin[3*x], {x, 0, 2*Pi}]" }] },
+        { "cells": [{ "type": "text", "source": "The Binet formula ((1+Sqrt[5])/2)^n - ((1-Sqrt[5])/2)^n) / Sqrt[5] extends Fibonacci numbers to real arguments. The sinc function Sin[Pi*x]/(Pi*x) is zero at all non-zero integers, forming the basis of Shannon sampling theory." }] }
+      ]
+    }
+  ]
+}

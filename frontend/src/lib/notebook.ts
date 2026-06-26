@@ -79,7 +79,7 @@ export function rangeSelect(toId: string) {
 // ---------------------------------------------------------------------------
 // Notebook store (holds NotebookRow[])
 
-function createNotebook() {
+export function createNotebook() {
   const { subscribe, update, set } = writable<NotebookRow[]>([makeRow()]);
 
   // --- helpers ---

@@ -1,0 +1,79 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "Number Theory",
+  "notebooks": [
+    {
+      "id": "nb-primes",
+      "title": "Primes & Factoring",
+      "x": 60,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Primes & Factoring" }] },
+        { "cells": [{ "type": "text", "source": "Mathilda provides a full suite of prime-related functions. PrimeQ uses trial division followed by Miller-Rabin probabilistic tests. FactorInteger calls GMP-ECM for large inputs." }] },
+        { "cells": [{ "type": "subsection", "source": "Primality Testing" }] },
+        { "cells": [{ "type": "code", "source": "PrimeQ[97]" }] },
+        { "cells": [{ "type": "code", "source": "PrimeQ[561]" }] },
+        { "cells": [{ "type": "code", "source": "Select[Range[50], PrimeQ]" }] },
+        { "cells": [{ "type": "subsection", "source": "Integer Factorization" }] },
+        { "cells": [{ "type": "code", "source": "FactorInteger[1234567890]" }] },
+        { "cells": [{ "type": "code", "source": "FactorInteger[2^32 - 1]" }] },
+        { "cells": [{ "type": "code", "source": "FactorInteger[720720]" }] },
+        { "cells": [{ "type": "subsection", "source": "Prime Navigation" }] },
+        { "cells": [{ "type": "code", "source": "NextPrime[100]" }] },
+        { "cells": [{ "type": "code", "source": "Table[NextPrime[10^n], {n, 1, 6}]" }] },
+        { "cells": [{ "type": "text", "source": "NextPrime[n] returns the smallest prime strictly greater than n. Twin primes p and p+2 can be found by checking NextPrime[p] == p+2." }] }
+      ]
+    },
+    {
+      "id": "nb-arithmetic-functions",
+      "title": "Arithmetic Functions",
+      "x": 760,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Arithmetic Functions" }] },
+        { "cells": [{ "type": "text", "source": "Classical multiplicative functions of number theory: Euler's totient, divisor sums, and the GCD/LCM family. These are foundational to modular arithmetic and cryptography." }] },
+        { "cells": [{ "type": "subsection", "source": "Euler Totient" }] },
+        { "cells": [{ "type": "code", "source": "EulerPhi[12]" }] },
+        { "cells": [{ "type": "code", "source": "Table[EulerPhi[n], {n, 1, 12}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Divisors" }] },
+        { "cells": [{ "type": "code", "source": "Divisors[24]" }] },
+        { "cells": [{ "type": "code", "source": "DivisorSigma[0, 24]" }] },
+        { "cells": [{ "type": "code", "source": "DivisorSigma[1, 24]" }] },
+        { "cells": [{ "type": "subsection", "source": "GCD & LCM" }] },
+        { "cells": [{ "type": "code", "source": "GCD[12, 8]" }] },
+        { "cells": [{ "type": "code", "source": "LCM[4, 6, 10]" }] },
+        { "cells": [{ "type": "code", "source": "CoprimeQ[35, 48]" }] },
+        { "cells": [{ "type": "text", "source": "DivisorSigma[k, n] is the sum of the kth powers of the divisors of n. DivisorSigma[0, n] counts the divisors; DivisorSigma[1, n] sums them. A number is perfect when DivisorSigma[1, n] == 2n." }] }
+      ]
+    },
+    {
+      "id": "nb-digit-arithmetic",
+      "title": "Digit Arithmetic",
+      "x": 1460,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Digit Arithmetic" }] },
+        { "cells": [{ "type": "text", "source": "Operations on the decimal (or other base) representations of integers. DigitSum, IntegerDigits, and FromDigits let you work with digits as lists." }] },
+        { "cells": [{ "type": "subsection", "source": "DigitSum" }] },
+        { "cells": [{ "type": "code", "source": "DigitSum[12345]" }] },
+        { "cells": [{ "type": "code", "source": "DigitSum[9999]" }] },
+        { "cells": [{ "type": "code", "source": "Table[DigitSum[n], {n, 1, 20}]" }] },
+        { "cells": [{ "type": "subsection", "source": "IntegerDigits" }] },
+        { "cells": [{ "type": "code", "source": "IntegerDigits[12345]" }] },
+        { "cells": [{ "type": "code", "source": "IntegerDigits[255, 2]" }] },
+        { "cells": [{ "type": "code", "source": "IntegerDigits[255, 16]" }] },
+        { "cells": [{ "type": "subsection", "source": "FromDigits & Conversions" }] },
+        { "cells": [{ "type": "code", "source": "FromDigits[{1, 0, 1, 1, 1, 1, 1, 1}, 2]" }] },
+        { "cells": [{ "type": "code", "source": "FromDigits[IntegerDigits[1234], 10]" }] },
+        { "cells": [{ "type": "text", "source": "IntegerDigits[n, b] returns the base-b digit list of n, most significant first. FromDigits[list, b] reconstructs the integer. Digit sums in base 9 detect divisibility by 9." }] }
+      ]
+    }
+  ]
+}

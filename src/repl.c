@@ -7,14 +7,28 @@
 #include "repl_hooks.h"
 #include "sym_names.h"
 #include "show.h"
-#include "graphics_json.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <unistd.h>
-#include <readline/readline.h>
-#include <readline/history.h>
+
+/* Portable isatty + fileno for pipe-mode detection */
+#ifdef _WIN32
+  #include <io.h>
+  #ifndef isatty
+    #define isatty _isatty
+  #endif
+  #ifndef fileno
+    #define fileno _fileno
+  #endif
+#else
+  #include <unistd.h>
+#endif
+
+#ifndef NO_READLINE
+  #include <readline/readline.h>
+  #include <readline/history.h>
+#endif
 
 #define MAX_INPUT_LEN 10240
 
@@ -134,21 +148,146 @@ void process_input(const char* input, int line_number) {
     expr_free(evaluated);
 }
 
+#ifndef NO_READLINE
+void repl_loop() {
+    printf("\nMathilda - A tiny, LLM-generated, Mathematica-like computer algebra system.\n\n");
+    printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
+    printf("End a line with '\\' to enter a multiline expression. Press Return to evaluate.\n");
+    printf("Exit by evaluating Quit[] or CONTROL-C.\n\n");
+
+    int line_number = 1;
+    char prompt[64];
+    char full_input[MAX_INPUT_LEN] = {0};
+    int in_multiline = 0;
+
+    while (1) {
+        int submit_now = 0;
+        if (!in_multiline) {
+            snprintf(prompt, sizeof(prompt), "In[%d]:= ", line_number);
+        } else {
+            prompt[0] = '\0';
+        }
+
+        char* line = readline(prompt);
+        if (!line) {
+            printf("\n");
+            /* EOF: run $Epilog before tearing down. */
+            repl_apply_epilog();
+            break;
+        }
+
+        size_t line_len = strlen(line);
+
+        /* Remove trailing whitespace to properly check for backslash. */
+        size_t check_len = line_len;
+        while (check_len > 0 && (line[check_len - 1] == ' ' || line[check_len - 1] == '\t')) {
+            check_len--;
+        }
+
+        int has_backslash = 0;
+        if (check_len > 0 && line[check_len - 1] == '\\') {
+            has_backslash = 1;
+            line[check_len - 1] = '\0';
+            line_len = strlen(line);
+        }
+
+        /* Check buffer limits. */
+        if (strlen(full_input) + line_len + 2 >= MAX_INPUT_LEN) {
+            printf("Input too long!\n");
+            full_input[0] = '\0';
+            in_multiline = 0;
+            free(line);
+            continue;
+        }
+
+        if (in_multiline) {
+            strcat(full_input, "\n");
+        }
+        strcat(full_input, line);
+
+        if (has_backslash) {
+            in_multiline = 1;
+        } else {
+            submit_now = 1;
+        }
+
+        if (submit_now) {
+            if (strlen(full_input) == 0) {
+                free(line);
+                continue;
+            }
+
+            add_history(full_input);
+
+            if (strcmp(full_input, "Quit[]") == 0) {
+                /* User-requested shutdown: run $Epilog first. */
+                repl_apply_epilog();
+                free(line);
+                break;
+            }
+
+            process_input(full_input, line_number);
+
+            full_input[0] = '\0';
+            in_multiline = 0;
+            line_number++;
+        }
+
+        free(line);
+    }
+
+    printf("\n");
+}
+#else
+/* Fallback interactive loop when readline is not available (e.g. Windows).
+ * Uses fgets; no history or line-editing. Pipe mode bypasses this entirely. */
+void repl_loop(void) {
+    printf("\nMathilda - A tiny, Mathematica-like computer algebra system.\n\n");
+    printf("Exit by evaluating Quit[] or pressing Ctrl+Z (Windows) / Ctrl+D (Unix).\n\n");
+
+    char line[MAX_INPUT_LEN];
+    int line_number = 1;
+
+    while (1) {
+        printf("In[%d]:= ", line_number);
+        fflush(stdout);
+        if (!fgets(line, sizeof(line), stdin)) {
+            printf("\n");
+            repl_apply_epilog();
+            break;
+        }
+        /* Strip trailing newline / carriage-return. */
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+        if (len == 0) continue;
+        if (strcmp(line, "Quit[]") == 0) {
+            repl_apply_epilog();
+            break;
+        }
+        process_input(line, line_number++);
+    }
+    printf("\n");
+}
+#endif
+
+#include "core.h"
+
 /* =====================================================================
- * NDJSON pipe-mode protocol
+ * Minimal NDJSON pipe-mode protocol
  *
  * When stdin is not a terminal (i.e. the frontend spawned us as a
- * sidecar), we switch from the readline REPL to a structured NDJSON
+ * sidecar), switch from the readline REPL to a simple line-based
  * protocol over stdio.
  *
- * Request  (one JSON object per line on stdin):
- *   {"id": N, "expr": "Integrate[x^2, x]"}   -- evaluate expression
- *   {"type": "ping"}                           -- readiness probe
- *   {"type": "quit"}                           -- graceful shutdown
+ * Request  (one line on stdin):
+ *   {"id": N, "expr": "1+1"}    -- evaluate expression
+ *   {"type": "ping"}             -- readiness probe
+ *   {"type": "quit"}             -- graceful shutdown
  *
  * Response (one JSON object per line on stdout):
- *   {"id": N, "type": "expr",   "payload": "x^3/3"}
- *   {"id": N, "type": "error",  "message": "Parse error"}
+ *   {"id": N, "type": "expr",  "payload": "2"}
+ *   {"id": N, "type": "error", "message": "Parse error"}
  *   {"id": N, "type": "done"}
  *   {"type": "pong"}
  *
@@ -156,9 +295,11 @@ void process_input(const char* input, int line_number) {
  * delivered to the pipe immediately.
  * ===================================================================*/
 
-/* Extract a JSON string value for `key` into `buf` (null-terminated,
- * basic escape sequences handled).  Returns 1 on success, 0 if absent.
- * Not a general JSON parser — only handles our own well-formed messages. */
+static void pipe_emit(const char* line) {
+    puts(line);
+    fflush(stdout);
+}
+
 static int json_get_string(const char* json, const char* key,
                            char* buf, size_t buflen) {
     char search[256];
@@ -183,7 +324,7 @@ static int json_get_string(const char* json, const char* key,
                 default:   buf[i++] = *p;   break;
             }
         } else {
-            buf[i++] = *p;
+            buf[i++] = (char)*p;
         }
         p++;
     }
@@ -191,8 +332,6 @@ static int json_get_string(const char* json, const char* key,
     return 1;
 }
 
-/* Extract a JSON integer value for `key` into `*out`.
- * Returns 1 on success, 0 if absent or not a digit sequence. */
 static int json_get_int(const char* json, const char* key, int* out) {
     char search[256];
     snprintf(search, sizeof(search), "\"%s\"", key);
@@ -205,8 +344,6 @@ static int json_get_int(const char* json, const char* key, int* out) {
     return 1;
 }
 
-/* Write a JSON-escaped version of `s` into `out` (null-terminated).
- * `outlen` includes the null terminator. */
 static void json_escape(const char* s, char* out, size_t outlen) {
     size_t i = 0;
     while (*s && i + 7 < outlen) {
@@ -222,7 +359,7 @@ static void json_escape(const char* s, char* out, size_t outlen) {
         } else if (c == '\t') {
             out[i++] = '\\'; out[i++] = 't';
         } else if (c < 0x20) {
-            i += (size_t)snprintf(out + i, outlen - i, "\\u%04x", c);
+            i += (size_t)snprintf(out + i, outlen - i, "\\u%04x", (unsigned)c);
         } else {
             out[i++] = (char)c;
         }
@@ -231,14 +368,6 @@ static void json_escape(const char* s, char* out, size_t outlen) {
     out[i] = '\0';
 }
 
-/* Emit a single NDJSON line to stdout and flush immediately. */
-static void pipe_emit(const char* line) {
-    puts(line);
-    fflush(stdout);
-}
-
-/* Evaluate `input` as a Mathilda expression, emit NDJSON response(s),
- * and always terminate with a "done" message for correlation id `id`. */
 static void pipe_process_input(const char* input, int id) {
     Expr* parsed = parse_expression(input);
     if (!parsed) {
@@ -255,47 +384,12 @@ static void pipe_process_input(const char* input, int id) {
     expr_free(parsed);
 
     if (!evaluated) {
-        /* Null result (e.g. trailing semicolon suppresses output). */
         char buf[64];
         snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
         pipe_emit(buf);
         return;
     }
 
-    /* Graphics[...] result: serialize to Plotly JSON for the notebook. */
-    if (evaluated->type == EXPR_FUNCTION
-        && evaluated->data.function.head
-        && evaluated->data.function.head->type == EXPR_SYMBOL
-        && evaluated->data.function.head->data.symbol == SYM_Graphics) {
-        char* plotly = graphics_to_plotly_json(evaluated);
-        expr_free(evaluated);
-        if (plotly) {
-            /* Emit as a plot message — payload is raw JSON (not a string). */
-            size_t line_len = strlen(plotly) + 64;
-            char* json_line = malloc(line_len);
-            if (json_line) {
-                snprintf(json_line, line_len,
-                         "{\"id\":%d,\"type\":\"plot\",\"payload\":", id);
-                /* Append the raw Plotly JSON directly (not string-escaped). */
-                char* combined = malloc(strlen(json_line) + strlen(plotly) + 4);
-                if (combined) {
-                    strcpy(combined, json_line);
-                    strcat(combined, plotly);
-                    strcat(combined, "}");
-                    pipe_emit(combined);
-                    free(combined);
-                }
-                free(json_line);
-            }
-            free(plotly);
-        }
-        char done[64];
-        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
-        pipe_emit(done);
-        return;
-    }
-
-    /* Convert expression to its printed string form. */
     char* result_str = expr_to_string(evaluated);
     expr_free(evaluated);
 
@@ -309,7 +403,6 @@ static void pipe_process_input(const char* input, int id) {
         return;
     }
 
-    /* JSON-escape the result string and emit the expr response. */
     size_t escaped_len = strlen(result_str) * 6 + 4;
     char* escaped = malloc(escaped_len);
     if (!escaped) {
@@ -340,144 +433,42 @@ static void pipe_process_input(const char* input, int id) {
     pipe_emit(done);
 }
 
-/* Main loop for pipe/sidecar mode. Reads NDJSON lines from stdin,
- * dispatches to pipe_process_input, handles ping and quit. */
 static void pipe_mode_loop(void) {
     char line[MAX_INPUT_LEN];
     while (fgets(line, sizeof(line), stdin)) {
-        /* Strip trailing newline / carriage-return. */
         size_t len = strlen(line);
         while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
             line[--len] = '\0';
         if (len == 0) continue;
 
-        /* Ping — readiness probe from the frontend. */
         if (strstr(line, "\"ping\"")) {
             pipe_emit("{\"type\":\"pong\"}");
             continue;
         }
-
-        /* Quit — graceful shutdown. */
         if (strstr(line, "\"quit\"")) {
             fflush(stdout);
             break;
         }
 
-        /* Evaluate request: {"id": N, "expr": "..."} */
         int id = 0;
         char expr_buf[MAX_INPUT_LEN];
         if (!json_get_int(line, "id", &id) ||
             !json_get_string(line, "expr", expr_buf, sizeof(expr_buf))) {
-            continue; /* unknown message type — silently skip */
+            continue;
         }
-
         pipe_process_input(expr_buf, id);
     }
 }
 
-void repl_loop() {
-    printf("\nMathilda - A tiny, LLM-generated, Mathematica-like computer algebra system.\n\n");
-    printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
-    printf("End a line with '\\' to enter a multiline expression. Press Return to evaluate.\n");
-    printf("Exit by evaluating Quit[] or CONTROL-C.\n\n");
-    
-    int line_number = 1;
-    char prompt[64];
-    char full_input[MAX_INPUT_LEN] = {0};
-    int in_multiline = 0;
-    
-    while (true) {
-        int submit_now = 0;
-        if (!in_multiline) {
-            snprintf(prompt, sizeof(prompt), "In[%d]:= ", line_number);
-        } else {
-            prompt[0] = '\0';
-        }
-        
-        char* line = readline(prompt);
-        if (!line) {
-            printf("\n");
-            /* EOF: run $Epilog before tearing down. */
-            repl_apply_epilog();
-            break;
-        }
-        
-        size_t line_len = strlen(line);
-        
-        // Remove trailing whitespace to properly check for backslash
-        size_t check_len = line_len;
-        while (check_len > 0 && (line[check_len - 1] == ' ' || line[check_len - 1] == '\t')) {
-            check_len--;
-        }
-        
-        int has_backslash = 0;
-        if (check_len > 0 && line[check_len - 1] == '\\') {
-            has_backslash = 1;
-            // Remove the backslash from the line
-            line[check_len - 1] = '\0';
-            line_len = strlen(line);
-        }
-        
-        // Check buffer limits
-        if (strlen(full_input) + line_len + 2 >= MAX_INPUT_LEN) {
-            printf("Input too long!\n");
-            full_input[0] = '\0';
-            in_multiline = 0;
-            free(line);
-            continue;
-        }
-        
-        if (in_multiline) {
-            strcat(full_input, "\n");
-        }
-        strcat(full_input, line);
-        
-        if (has_backslash) {
-            in_multiline = 1;
-        } else {
-            submit_now = 1;
-        }
-        
-        if (submit_now) {
-            if (strlen(full_input) == 0) {
-                free(line);
-                continue;
-            }
-            
-            add_history(full_input);
-            
-            if (strcmp(full_input, "Quit[]") == 0) {
-                /* User-requested shutdown: run $Epilog first. */
-                repl_apply_epilog();
-                free(line);
-                break;
-            }
-            
-            process_input(full_input, line_number);
-            
-            full_input[0] = '\0';
-            in_multiline = 0;
-            line_number++;
-        }
-        
-        free(line);
-    }
-    
-    printf("\n");
-}
-
-#include "core.h"
-
-int main() {
+int main(void) {
     /* Detect pipe mode: when stdin is not a terminal the frontend has
      * spawned us as a sidecar and we communicate via NDJSON over stdio.
      * The interactive readline REPL is preserved when stdin is a tty. */
     int pipe_mode = !isatty(fileno(stdin));
 
     if (pipe_mode) {
-        /* Disable libc's 4 KB stdout buffer.  Without this, responses
-         * accumulate in the buffer and the frontend never receives them
-         * until the buffer fills or the process exits. */
+        /* Disable libc's stdout buffer so every response line is delivered
+         * to the pipe immediately rather than accumulating. */
         setvbuf(stdout, NULL, _IONBF, 0);
     }
 

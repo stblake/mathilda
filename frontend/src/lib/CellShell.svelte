@@ -5,6 +5,9 @@
     • 4-directional add buttons (↑ ↓ ← →) that appear on hover
     • Selection state (left accent bar)
     • Run / output area for code cells
+
+  The `store` prop is the per-notebook store (createNotebook() instance).
+  All mutation calls go through store.xxx() instead of the global notebook singleton.
 -->
 <script lang="ts">
   import { onMount, onDestroy, createEventDispatcher } from 'svelte';
@@ -14,11 +17,13 @@
   import { syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
   import Output from './Output.svelte';
   import type { Cell, CellType, OutputItem } from './notebook';
-  import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection, notebook } from './notebook';
+  import { selectedCells, selectOnly, toggleSelect, rangeSelect, clearSelection } from './notebook';
 
   export let cell: Cell;
   export let rowId: string;
   export let cellIdx: number;
+  /** Per-notebook store instance — use store.xxx() for all mutations. */
+  export let store: any;
 
   const dispatch = createEventDispatcher<{
     run:       { id: string };
@@ -115,15 +120,15 @@
 
   function setType(t: CellType) {
     showTypePicker = false;
-    notebook.setCellType(cell.id, t);
+    // Use the store prop instead of the global notebook singleton
+    store.setCellType(cell.id, t);
     if (t === 'code') {
-      // Re-init editor next tick.
       setTimeout(initEditor, 10);
     }
   }
 
   // ---- Selection ----
-  function onBodyClick(e: MouseEvent) { clearSelection(); }
+  function onBodyClick(_e: MouseEvent) { clearSelection(); }
   function onHeaderClick(e: MouseEvent) {
     e.stopPropagation();
     if (e.shiftKey) rangeSelect(cell.id);
@@ -254,10 +259,10 @@
     border-top: 1px solid transparent;
     border-bottom: 1px solid transparent;
     transition: border-color 0.12s, background 0.12s;
-    background: var(--cell-bg);
+    background: var(--cell-bg, transparent);
   }
-  .cell-shell:focus-within  { border-top-color: var(--accent); }
-  .cell-shell.selected      { border-left: 3px solid var(--accent); }
+  .cell-shell:focus-within  { border-top-color: var(--accent, #89b4fa); }
+  .cell-shell.selected      { border-left: 3px solid var(--accent, #89b4fa); }
   .cell-shell.running       { background: rgba(243,156,18,0.04); }
 
   /* Non-code cell backgrounds */
@@ -273,7 +278,7 @@
     justify-content: center;
     width: 20px;
     height: 20px;
-    background: var(--accent);
+    background: var(--accent, #89b4fa);
     color: #fff;
     border: none;
     border-radius: 50%;
@@ -308,7 +313,7 @@
 
   .exec-label {
     font-size: 0.67rem;
-    color: var(--text-muted);
+    color: var(--text-muted, #585b70);
     font-family: 'SF Mono', monospace;
   }
 
@@ -317,13 +322,13 @@
     border: none;
     cursor: pointer;
     font-size: 0.75rem;
-    color: var(--accent);
+    color: var(--accent, #89b4fa);
     padding: 1px 3px;
     border-radius: 3px;
     line-height: 1;
     transition: background 0.1s;
   }
-  .run-btn:hover:not(:disabled) { background: var(--accent-glow); }
+  .run-btn:hover:not(:disabled) { background: var(--accent-glow, rgba(137,180,250,0.12)); }
   .run-btn:disabled { opacity: 0.3; cursor: default; }
 
   .spinner { animation: pulse 0.9s ease-in-out infinite; display: inline-block; color: #f39c12; }
@@ -334,26 +339,26 @@
 
   .type-badge {
     background: none;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border, rgba(255,255,255,0.08));
     border-radius: 4px;
     font-size: 0.65rem;
     font-family: 'SF Mono', monospace;
-    color: var(--text-muted);
+    color: var(--text-muted, #585b70);
     padding: 1px 5px;
     cursor: pointer;
     line-height: 1.4;
     transition: border-color 0.1s, color 0.1s;
   }
-  .type-badge:hover { border-color: var(--accent); color: var(--accent); }
+  .type-badge:hover { border-color: var(--accent, #89b4fa); color: var(--accent, #89b4fa); }
 
   .type-picker {
     position: absolute;
     top: calc(100% + 4px);
     left: 0;
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: rgba(12,15,28,0.95);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     z-index: 100;
     min-width: 260px;
     overflow: hidden;
@@ -368,25 +373,25 @@
     cursor: pointer;
     transition: background 0.1s;
   }
-  .type-option:hover  { background: var(--gutter-hover); }
-  .type-option.active { background: var(--accent-glow); }
+  .type-option:hover  { background: rgba(255,255,255,0.04); }
+  .type-option.active { background: rgba(137,180,250,0.08); }
 
   .type-opt-icon {
     font-size: 0.8rem;
     font-family: 'SF Mono', monospace;
-    color: var(--accent);
+    color: var(--accent, #89b4fa);
     width: 24px;
     text-align: center;
   }
   .type-opt-label {
     font-size: 0.88rem;
     font-weight: 500;
-    color: var(--text);
+    color: #cdd6f4;
     min-width: 80px;
   }
   .type-opt-desc {
     font-size: 0.75rem;
-    color: var(--text-muted);
+    color: #585b70;
   }
 
   .picker-backdrop {
@@ -398,11 +403,15 @@
   /* ---- Cell content ---- */
   .cell-content { padding: 0; }
 
+  /* CodeMirror text colour for dark canvas */
+  :global(.cm-editor .cm-content) { color: #cdd6f4; }
+  :global(.cm-editor .cm-line)    { color: #cdd6f4; }
+
   /* prose / heading cells */
   .prose-cell {
     padding: 6px 8px;
     font-size: 0.95rem;
-    color: var(--text);
+    color: #cdd6f4;
     min-height: 2em;
     outline: none;
     line-height: 1.6;
@@ -413,19 +422,19 @@
     padding: 6px 8px;
     margin: 0;
     font-weight: 700;
-    color: var(--text);
+    color: #cdd6f4;
     outline: none;
     text-align: left;
     border: none;
     background: transparent;
     width: 100%;
   }
-  h1.heading-cell { font-size: 1.5rem; border-bottom: 1px solid var(--border); padding-bottom: 0.3rem; }
+  h1.heading-cell { font-size: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.3rem; }
   h2.heading-cell { font-size: 1.15rem; }
 
   .out-label {
     font-size: 0.67rem;
-    color: var(--text-muted);
+    color: #585b70;
     font-family: 'SF Mono', monospace;
     padding: 0 8px;
     margin-top: 2px;

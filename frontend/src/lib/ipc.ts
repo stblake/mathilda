@@ -45,3 +45,11 @@ export async function saveNotebook(path: string, cells: CellData[]): Promise<voi
 export async function loadNotebook(path: string): Promise<CellData[]> {
   return await invoke<CellData[]>('load_notebook', { path });
 }
+
+export async function saveLibrary(path: string, json: string): Promise<void> {
+  await invoke<void>('save_library', { path, json });
+}
+
+export async function loadLibrary(path: string): Promise<string> {
+  return await invoke<string>('load_library', { path });
+}

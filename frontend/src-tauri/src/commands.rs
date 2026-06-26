@@ -112,3 +112,17 @@ pub async fn load_notebook(path: String) -> Result<Vec<Value>, String> {
 
     Ok(cells)
 }
+
+/// Save a library JSON blob to a .lb file.
+/// `json` is the full serialized library string (produced by `serializeLibrary` in canvas.ts).
+#[tauri::command]
+pub async fn save_library(path: String, json: String) -> Result<(), String> {
+    std::fs::write(&path, &json).map_err(|e| format!("save_library: {e}"))
+}
+
+/// Load a library from a .lb file.
+/// Returns the raw JSON string for parsing on the frontend.
+#[tauri::command]
+pub async fn load_library(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| format!("load_library: {e}"))
+}
