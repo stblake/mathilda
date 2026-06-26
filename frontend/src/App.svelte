@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { listen } from '@tauri-apps/api/event';
   import CodeCell from './lib/CodeCell.svelte';
@@ -96,15 +96,42 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Global keyboard handler for selected-cell operations.
+  // Global keyboard handler for selected-cell operations and insertion point.
   function onKeydown(e: KeyboardEvent) {
     const target = e.target as HTMLElement;
     const inEditor = target.closest('.cm-editor') != null;
 
+    // --- Insertion point mode ---
+    if (insertionIdx !== null) {
+      if (e.key === 'Escape') {
+        e.preventDefault(); insertionIdx = null; return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (insertionIdx > 0) insertionIdx--;
+        else { insertionIdx = null; cellFocusFns[$notebook[0]?.id]?.(); }
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const len = $notebook.length;
+        if (insertionIdx < len) insertionIdx++;
+        else { insertionIdx = null; cellFocusFns[$notebook[len - 1]?.id]?.(); }
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault(); createCellAtInsertion(''); return;
+      }
+      // Any printable character → spawn a new cell and type into it.
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault(); createCellAtInsertion(e.key); return;
+      }
+    }
+
+    // --- Normal mode ---
     if (!inEditor) {
       if ((e.key === 'Delete' || e.key === 'Backspace') && $selectedCells.size > 0) {
-        e.preventDefault();
-        deleteSelected();
+        e.preventDefault(); deleteSelected();
       }
       if (e.key === 'Escape') { e.preventDefault(); clearSelection(); }
     }
@@ -235,16 +262,40 @@
     cellFocusFns[e.detail.id] = e.detail.fn;
   }
 
+  // ---------------------------------------------------------------------------
+  // Insertion point — index of the gap where a new cell would be inserted.
+  // null = inactive; 0 = before first cell; N = between cell[N-1] and cell[N].
+
+  let insertionIdx: number | null = null;
+
   function handleFocusPrev(e: CustomEvent<{ id: string }>) {
     const cells = $notebook;
     const idx = cells.findIndex(c => c.id === e.detail.id);
-    if (idx > 0) cellFocusFns[cells[idx - 1].id]?.();
+    // Show insertion cursor in the gap above this cell.
+    if (idx >= 0) {
+      insertionIdx = idx;
+      clearSelection();
+    }
   }
 
   function handleFocusNext(e: CustomEvent<{ id: string }>) {
     const cells = $notebook;
     const idx = cells.findIndex(c => c.id === e.detail.id);
-    if (idx < cells.length - 1) cellFocusFns[cells[idx + 1].id]?.();
+    // Show insertion cursor in the gap below this cell.
+    if (idx >= 0 && idx + 1 <= cells.length) {
+      insertionIdx = idx + 1;
+      clearSelection();
+    }
+  }
+
+  async function createCellAtInsertion(initialChar: string) {
+    const idx = insertionIdx!;
+    insertionIdx = null;
+    const id = notebook.insertCellAt(idx, 'code', initialChar);
+    await tick();
+    // After tick the new CodeCell's onMount has run and registered its fn.
+    const fn = cellFocusFns[id];
+    if (fn) fn();
   }
 </script>
 
@@ -252,20 +303,16 @@
 
 <div class="app">
 
-  <!-- Minimal status bar — everything else is in the native menu -->
-  <div class="statusbar">
-    <span class="logo">Mathilda</span>
-    <div class="statusbar-right">
-      <button class="icon-btn" title="Toggle dark mode" on:click={() => darkMode.update(v => !v)}>
-        {$darkMode ? '☀' : '◑'}
-      </button>
-      <KernelStatus />
-    </div>
-  </div>
+  <!-- Notebook — full bleed, no status bar -->
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <main class="notebook" on:click={() => { clearSelection(); insertionIdx = null; }}>
 
-  <!-- Notebook cells -->
-  <main class="notebook" on:click={() => clearSelection()}>
-    {#each $notebook as cell (cell.id)}
+    <!-- Insertion point before first cell -->
+    {#if insertionIdx === 0}
+      <div class="insertion-cursor active"></div>
+    {/if}
+
+    {#each $notebook as cell, i (cell.id)}
       {#if cell.type === 'code'}
         <CodeCell
           cellId={cell.id}
@@ -280,6 +327,13 @@
           on:focusNext={handleFocusNext}
           on:register={handleRegister}
         />
+      {/if}
+
+      <!-- Insertion point after this cell -->
+      {#if insertionIdx === i + 1}
+        <div class="insertion-cursor active"></div>
+      {:else if i < $notebook.length - 1}
+        <div class="insertion-cursor"></div>
       {/if}
     {/each}
 
@@ -343,50 +397,28 @@
     overflow: hidden;
   }
 
-  /* Minimal status bar */
-  .statusbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.25rem 0.75rem;
-    background: var(--statusbar-bg);
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    z-index: 10;
-    height: 32px;
-  }
-  .logo {
-    font-weight: 700;
-    font-size: 0.9rem;
-    letter-spacing: -0.3px;
-    color: var(--text);
-    opacity: 0.7;
-  }
-  .statusbar-right {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-  .icon-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 1rem;
-    color: var(--text-muted);
-    padding: 2px 4px;
-    border-radius: 3px;
-    transition: color 0.1s;
-  }
-  .icon-btn:hover { color: var(--text); }
-
-  /* Notebook scroll area — edge-to-edge, narrow side padding */
+  /* Full-bleed notebook — no status bar, no side margins */
   .notebook {
     flex: 1;
     overflow-y: auto;
-    padding: 0.75rem 1rem;
-    max-width: 1100px;
+    padding: 0.5rem 0.5rem;
     width: 100%;
-    margin: 0 auto;
+  }
+
+  /* Insertion cursor — thin animated line between cells */
+  .insertion-cursor {
+    height: 4px;
+    margin: 1px 0;
+    border-radius: 2px;
+    transition: background 0.15s;
+  }
+  .insertion-cursor.active {
+    background: var(--accent);
+    animation: blink 1s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
   }
 
   .add-cell-row {

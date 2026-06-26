@@ -111,6 +111,13 @@ function createNotebook() {
       update(cells => cells.map(c => ({ ...c, execIdx: undefined })));
     },
 
+    /** Insert a new cell at absolute index, return its id. */
+    insertCellAt(idx: number, type: Cell['type'] = 'code', source = ''): string {
+      const cell = makeCell(type, source);
+      update(cells => [...cells.slice(0, idx), cell, ...cells.slice(idx)]);
+      return cell.id;
+    },
+
     serialize(): Array<{ type: string; source: string }> {
       return get({ subscribe }).map(c => ({ type: c.type, source: c.source }));
     },
