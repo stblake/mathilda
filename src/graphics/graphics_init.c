@@ -130,6 +130,14 @@ void graphics_init(void) {
         "primitives is a (possibly nested) list of graphics primitives and "
         "style directives. Rendered on demand by Show[]. Prints as "
         "-Graphics-.");
+    register_inert("Graphics3D",
+        "Graphics3D[primitives, opts...]\n\tA symbolic 3D graphics object, "
+        "as built by Plot3D[]. primitives is a (possibly nested) list of "
+        "the same primitives Graphics[] uses (Polygon, Line, color "
+        "directives, ...) but with 3-coordinate {x,y,z} points instead of "
+        "2-coordinate {x,y}. Rendered on demand by Show[] in an orbit-"
+        "camera window: drag to rotate, scroll to zoom, right-drag to pan, "
+        "R to reset, S to save a screenshot. Prints as -Graphics3D-.");
 
     /* Internal: Plot embeds $PlotResample[var, {bodies}, {opts...}] inside
      * the Graphics it returns so the renderer can re-sample on zoom. HoldAll
@@ -178,4 +186,23 @@ void graphics_init(void) {
         "ColorFunctionScaling (default True), Filling (Axis/Bottom/Top/a "
         "number), FillingStyle, PlotLegends (Automatic/\"Expressions\"/an "
         "explicit list), RegionFunction, Exclusions.");
+
+    symtab_add_builtin("Plot3D", builtin_plot3d);
+    symtab_get_def("Plot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("Plot3D",
+        "Plot3D[f, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n\tSamples f "
+        "over a uniform grid on [xmin,xmax] x [ymin,ymax], displays the "
+        "resulting surface in an interactive orbit-camera window, and "
+        "returns it as a Graphics3D[...] object. A list of functions "
+        "Plot3D[{f1, f2, ...}, {x,...}, {y,...}] draws each surface in a "
+        "distinct palette colour. Shares Plot's option semantics where "
+        "they apply: PlotPoints (per-axis grid resolution, default 25), "
+        "MaxRecursion (doubles the whole grid's resolution while a "
+        "flatness check fails, default 2 -- a global, crack-free analogue "
+        "of Plot's adaptive bisection), Mesh (overlay the grid wireframe; "
+        "default True, unlike Plot's None), PlotStyle, ColorFunction (a "
+        "function of scaled-x and z, or \"Rainbow\"), ColorFunctionScaling "
+        "(default True), RegionFunction (f[x,y,z], or Plot's f[x,y]/f[x] "
+        "forms), PlotRange (an explicit {zmin,zmax} z-band), Axes, "
+        "PlotLabel, Background, ImageSize.");
 }

@@ -269,6 +269,30 @@ void test_filling_builds_polygon(void) {
         "RGBColor", 0);
 }
 
+/* Regression test for a real bug: a fill segment that crosses the baseline
+ * (e.g. one sample point just above Filling -> Axis's y=0, the next just
+ * below) used to become a single self-intersecting "bowtie" quad, which
+ * render.c's triangle-fan Polygon fill turned into a stray sliver right at
+ * the crossing (visible as a small misplaced triangle in an actual
+ * screenshot). build_fill_quads now splits any baseline-crossing segment
+ * into two plain triangles instead of one quad. */
+void test_filling_splits_at_baseline_crossing(void) {
+    /* x in [-0.1, 0.1] straddles Sin's zero at x=0: with just 2 plot
+     * points (one negative y, one positive y) and recursion disabled, the
+     * single sampled segment crosses the baseline, so it must become two
+     * 3-vertex triangles, not one 4-vertex quad. */
+    assert_eval_eq(
+        "Cases[Plot[Sin[x], {x, -0.1, 0.1}, Filling -> Axis, MaxRecursion -> 0,"
+        " PlotPoints -> 2][[1]], Polygon[pts_] :> Length[pts]]",
+        "{3, 3}", 0);
+    /* x in [0.1, 0.3] stays entirely positive: the single segment doesn't
+     * cross the baseline, so it's the plain 4-vertex quad. */
+    assert_eval_eq(
+        "Cases[Plot[Sin[x], {x, 0.1, 0.3}, Filling -> Axis, MaxRecursion -> 0,"
+        " PlotPoints -> 2][[1]], Polygon[pts_] :> Length[pts]]",
+        "{4}", 0);
+}
+
 void test_plot_legends_metadata(void) {
     /* Absent by default. */
     assert_eval_eq("Cases[Plot[Sin[x], {x, 0, 1}], $PlotLegendData[___]]", "{}", 0);
@@ -417,6 +441,7 @@ int main(void) {
     TEST(test_hue_color_directive);
     TEST(test_color_function_builds_per_segment_colors);
     TEST(test_filling_builds_polygon);
+    TEST(test_filling_splits_at_baseline_crossing);
     TEST(test_plot_legends_metadata);
     TEST(test_region_function_and_exclusions_split_domain);
     TEST(test_label_style_passthrough);

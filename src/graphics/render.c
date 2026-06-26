@@ -8,6 +8,7 @@
 #include "show.h"
 #include "plot.h"
 #include "render.h"
+#include "render_common.h"
 #include "sampling.h"
 #include "hershey_font.h"
 #include "primitives.h"
@@ -33,7 +34,7 @@
 
 /* ---------------- Expr coercion ---------------- */
 
-static bool expr_to_d(const Expr* e, double* out) {
+bool expr_to_d(const Expr* e, double* out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *out = e->data.real; return true; }
@@ -167,13 +168,13 @@ static RGBA8 rgba_from_hue(const Expr* e) {
     return c;
 }
 
-static Color to_raylib(RGBA8 c) { Color out = { c.r, c.g, c.b, c.a }; return out; }
+Color to_raylib(RGBA8 c) { Color out = { c.r, c.g, c.b, c.a }; return out; }
 
 /* Resolves any recognized color-literal head (RGBColor, GrayLevel, Hue) to
  * an RGBA8, leaving *out untouched (returning false) for anything else --
  * the single place every color-bearing option/directive in this file goes
  * through, so adding a future color form means touching only this. */
-static bool resolve_color(const Expr* e, RGBA8* out) {
+bool resolve_color(const Expr* e, RGBA8* out) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol;
     if (h == SYM_RGBColor)  { *out = rgba_from_rgbcolor(e); return true; }
@@ -783,7 +784,7 @@ static void draw_primitive(const Expr* node, DrawState* state) {
 
 /* ---------------- Axes ---------------- */
 
-static double nice_step(double range, int target_ticks) {
+double nice_step(double range, int target_ticks) {
     if (range <= 0) return 1.0;
     double raw = range / target_ticks;
     double mag = pow(10.0, floor(log10(raw)));
