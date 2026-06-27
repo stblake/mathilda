@@ -80,6 +80,22 @@
     "url": "documentation/expression-information/$MinNumber/"
   },
   {
+    "name": "$PlotLegendData",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Stable",
+    "summary": "$PlotLegendData[{color1, label1}, ...]",
+    "url": "documentation/other-advanced/$PlotLegendData/"
+  },
+  {
+    "name": "$PlotResample",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "$PlotResample[var, {f...}, {plotPoints, maxRecursion, maxPlotPoints, mesh, regionFunction, exclusions, colorFunction, colorFunctionScaling, filling, fillingStyle}]",
+    "url": "documentation/other-advanced/$PlotResample/"
+  },
+  {
     "name": "$Post",
     "category": "Control Flow",
     "slug": "control-flow",
@@ -264,6 +280,14 @@
     "url": "documentation/lists-and-iteration/Array/"
   },
   {
+    "name": "AspectRatio",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "AspectRatio",
+    "url": "documentation/other-advanced/AspectRatio/"
+  },
+  {
     "name": "Assuming",
     "category": "Simplification",
     "slug": "simplification",
@@ -286,6 +310,14 @@
     "status": "Stable",
     "summary": "Attributes[s] gives the list of attributes for s.",
     "url": "documentation/expression-information/Attributes/"
+  },
+  {
+    "name": "BarnesG",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "BarnesG[z]",
+    "url": "documentation/special-functions/BarnesG/"
   },
   {
     "name": "Begin",
@@ -592,6 +624,14 @@
     "url": "documentation/number-theory/ContinuedFraction/"
   },
   {
+    "name": "CoprimeQ",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "CoprimeQ[n1, n2, ...]",
+    "url": "documentation/number-theory/CoprimeQ/"
+  },
+  {
     "name": "Cos",
     "category": "Elementary Functions",
     "slug": "elementary-functions",
@@ -784,6 +824,14 @@
     "url": "documentation/arithmetic/DigitCount/"
   },
   {
+    "name": "DigitSum",
+    "category": "Arithmetic",
+    "slug": "arithmetic",
+    "status": "Stable",
+    "summary": "DigitSum[n] gives the sum of the decimal digits of the integer n.",
+    "url": "documentation/arithmetic/DigitSum/"
+  },
+  {
     "name": "Dimensions",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -814,6 +862,30 @@
     "status": "Stable",
     "summary": "x / y or Divide[x, y] represents x / y; rewritten by the evaluator to",
     "url": "documentation/arithmetic/Divide/"
+  },
+  {
+    "name": "Divisible",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "Divisible[n, m]",
+    "url": "documentation/number-theory/Divisible/"
+  },
+  {
+    "name": "DivisorSigma",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.",
+    "url": "documentation/number-theory/DivisorSigma/"
+  },
+  {
+    "name": "Divisors",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.",
+    "url": "documentation/number-theory/Divisors/"
   },
   {
     "name": "Do",
@@ -1272,6 +1344,30 @@
     "url": "documentation/control-flow/For/"
   },
   {
+    "name": "Frame",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Frame",
+    "url": "documentation/other-advanced/Frame/"
+  },
+  {
+    "name": "FrameStyle",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "FrameStyle",
+    "url": "documentation/other-advanced/FrameStyle/"
+  },
+  {
+    "name": "FrameTicks",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "FrameTicks",
+    "url": "documentation/other-advanced/FrameTicks/"
+  },
+  {
     "name": "FreeQ",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -1400,6 +1496,14 @@
     "url": "documentation/linear-algebra/HankelMatrix/"
   },
   {
+    "name": "HarmonicNumber",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "HarmonicNumber[n]",
+    "url": "documentation/special-functions/HarmonicNumber/"
+  },
+  {
     "name": "Head",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -1472,6 +1576,22 @@
     "url": "documentation/algebra/HornerForm/"
   },
   {
+    "name": "HurwitzZeta",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "HurwitzZeta[s, a]",
+    "url": "documentation/special-functions/HurwitzZeta/"
+  },
+  {
+    "name": "Hyperfactorial",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "Hyperfactorial[n]",
+    "url": "documentation/special-functions/Hyperfactorial/"
+  },
+  {
     "name": "Hypergeometric0F1",
     "category": "Special Functions",
     "slug": "special-functions",
@@ -1504,6 +1624,14 @@
     "url": "documentation/special-functions/HypergeometricPFQ/"
   },
   {
+    "name": "I",
+    "category": "Mathematical Constants",
+    "slug": "mathematical-constants",
+    "status": "Stable",
+    "summary": "I",
+    "url": "documentation/mathematical-constants/I/"
+  },
+  {
     "name": "Identity",
     "category": "Expression Information",
     "slug": "expression-information",
@@ -1534,6 +1662,14 @@
     "status": "Stable",
     "summary": "Im[z] gives the imaginary part of numeric z, and 0 for real or real-valued (Re/Im/Abs/Arg) arguments.",
     "url": "documentation/arithmetic/Im/"
+  },
+  {
+    "name": "ImageSize",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "ImageSize",
+    "url": "documentation/other-advanced/ImageSize/"
   },
   {
     "name": "Increment",
@@ -1606,6 +1742,14 @@
     "status": "Stable",
     "summary": "IntegerLength[n] gives the number of decimal digits in the integer n.",
     "url": "documentation/arithmetic/IntegerLength/"
+  },
+  {
+    "name": "IntegerPartitions",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "IntegerPartitions[n]",
+    "url": "documentation/number-theory/IntegerPartitions/"
   },
   {
     "name": "IntegerQ",
@@ -1752,12 +1896,28 @@
     "url": "documentation/linear-algebra/LeastSquares/"
   },
   {
+    "name": "LegendreP",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "LegendreP[n, x]",
+    "url": "documentation/special-functions/LegendreP/"
+  },
+  {
     "name": "Length",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
     "status": "Stable",
     "summary": "Length[expr]",
     "url": "documentation/structural-manipulation/Length/"
+  },
+  {
+    "name": "LerchPhi",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "LerchPhi[z, s, a]",
+    "url": "documentation/special-functions/LerchPhi/"
   },
   {
     "name": "Less",
@@ -1806,6 +1966,14 @@
     "status": "Stable",
     "summary": "{e1, e2, ...} or List[e1, e2, ...]",
     "url": "documentation/other-advanced/List/"
+  },
+  {
+    "name": "ListPlot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "ListPlot[{y1, ..., yn}, opts...]",
+    "url": "documentation/graphics/ListPlot/"
   },
   {
     "name": "ListQ",
@@ -2072,12 +2240,28 @@
     "url": "documentation/numerical-calculus/NResidue/"
   },
   {
+    "name": "NRoots",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NRoots[lhs == rhs, var]",
+    "url": "documentation/numerical-calculus/NRoots/"
+  },
+  {
     "name": "NSeries",
     "category": "Numerical Calculus",
     "slug": "numerical-calculus",
     "status": "Stable",
     "summary": "NSeries[f, {x, x0, n}]",
     "url": "documentation/numerical-calculus/NSeries/"
+  },
+  {
+    "name": "NSolve",
+    "category": "Numerical Calculus",
+    "slug": "numerical-calculus",
+    "status": "Stable",
+    "summary": "NSolve[expr, vars]",
+    "url": "documentation/numerical-calculus/NSolve/"
   },
   {
     "name": "NSum",
@@ -2232,12 +2416,28 @@
     "url": "documentation/expression-information/OneIdentity/"
   },
   {
+    "name": "OptionValue",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "OptionValue[name] gives the value of an option named name in the",
+    "url": "documentation/assignment-and-rules/OptionValue/"
+  },
+  {
     "name": "Optional",
     "category": "Pattern Matching",
     "slug": "pattern-matching",
     "status": "Stable",
     "summary": "patt:def or Optional[patt, def]",
     "url": "documentation/pattern-matching/Optional/"
+  },
+  {
+    "name": "Options",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "Options[f] gives the list of default option rules for the symbol f.",
+    "url": "documentation/assignment-and-rules/Options/"
   },
   {
     "name": "OrderedQ",
@@ -2272,6 +2472,22 @@
     "url": "documentation/assignment-and-rules/OwnValues/"
   },
   {
+    "name": "PadLeft",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "PadLeft[list, n]",
+    "url": "documentation/structural-manipulation/PadLeft/"
+  },
+  {
+    "name": "PadRight",
+    "category": "Structural Manipulation",
+    "slug": "structural-manipulation",
+    "status": "Stable",
+    "summary": "PadRight[list, n]",
+    "url": "documentation/structural-manipulation/PadRight/"
+  },
+  {
     "name": "Part",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -2286,6 +2502,22 @@
     "status": "Stable",
     "summary": "Partition[list, n]",
     "url": "documentation/structural-manipulation/Partition/"
+  },
+  {
+    "name": "PartitionsP",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "PartitionsP[n]",
+    "url": "documentation/number-theory/PartitionsP/"
+  },
+  {
+    "name": "PartitionsQ",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "PartitionsQ[n]",
+    "url": "documentation/number-theory/PartitionsQ/"
   },
   {
     "name": "Permutations",
@@ -2310,6 +2542,14 @@
     "status": "Stable",
     "summary": "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]",
     "url": "documentation/control-flow/Piecewise/"
+  },
+  {
+    "name": "Plot",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "Plot[f, {x, xmin, xmax}, opts...]",
+    "url": "documentation/graphics/Plot/"
   },
   {
     "name": "Plus",
@@ -2496,11 +2736,19 @@
     "url": "documentation/structural-manipulation/Prepend/"
   },
   {
+    "name": "Prime",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.",
+    "url": "documentation/number-theory/Prime/"
+  },
+  {
     "name": "PrimePi",
     "category": "Number Theory",
     "slug": "number-theory",
     "status": "Stable",
-    "summary": "PrimePi[x] gives the number of primes less than or equal to x.",
+    "summary": "PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), \"Sieve\", \"Legendre\", \"Meissel\", \"Lehmer\", \"LMO\" (Lagarias-Miller-Odlyzko), \"DelegliseRivat\", or \"LucyHedgehog\".",
     "url": "documentation/number-theory/PrimePi/"
   },
   {
@@ -2536,6 +2784,22 @@
     "url": "documentation/expression-information/Print/"
   },
   {
+    "name": "Product",
+    "category": "Calculus",
+    "slug": "calculus",
+    "status": "Stable",
+    "summary": "Product[f, {i, imax}]",
+    "url": "documentation/calculus/Product/"
+  },
+  {
+    "name": "ProductLog",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "ProductLog[z]",
+    "url": "documentation/special-functions/ProductLog/"
+  },
+  {
     "name": "Protect",
     "category": "Assignment and Rules",
     "slug": "assignment-and-rules",
@@ -2566,6 +2830,14 @@
     "status": "Stable",
     "summary": "PutAppend[expr, \"filename\"] or expr >>> \"filename\"",
     "url": "documentation/file-io/PutAppend/"
+  },
+  {
+    "name": "QPochhammer",
+    "category": "Special Functions",
+    "slug": "special-functions",
+    "status": "Stable",
+    "summary": "QPochhammer[a, q, n]",
+    "url": "documentation/special-functions/QPochhammer/"
   },
   {
     "name": "QRDecomposition",
@@ -2776,6 +3048,14 @@
     "url": "documentation/assignment-and-rules/ReplaceRepeated/"
   },
   {
+    "name": "Rescale",
+    "category": "Lists and Iteration",
+    "slug": "lists-and-iteration",
+    "status": "Stable",
+    "summary": "Rescale[x, {min, max}]",
+    "url": "documentation/lists-and-iteration/Rescale/"
+  },
+  {
     "name": "Rest",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -2968,6 +3248,14 @@
     "url": "documentation/assignment-and-rules/SetDelayed/"
   },
   {
+    "name": "SetOptions",
+    "category": "Assignment and Rules",
+    "slug": "assignment-and-rules",
+    "status": "Stable",
+    "summary": "SetOptions[s, name -> value, ...] sets default options for the symbol",
+    "url": "documentation/assignment-and-rules/SetOptions/"
+  },
+  {
     "name": "SetPrecision",
     "category": "Arithmetic",
     "slug": "arithmetic",
@@ -2982,6 +3270,14 @@
     "status": "Stable",
     "summary": "Shortest[p] is a pattern object that matches the shortest sequence consistent with the pattern p.",
     "url": "documentation/pattern-matching/Shortest/"
+  },
+  {
+    "name": "Show",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "Show[graphics, opts...]",
+    "url": "documentation/graphics/Show/"
   },
   {
     "name": "Sign",

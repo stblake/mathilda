@@ -1,6 +1,6 @@
 # Mathematical Constants
 
-9 built-in function(s) in this category.
+10 built-in function(s) in this category.
 
 - [`Catalan`](Catalan.md) — Catalan  _(Experimental)_
 - [`Degree`](Degree.md) — Degree  _(Experimental)_
@@ -9,5 +9,6 @@
 - [`Glaisher`](Glaisher.md) — Glaisher  _(Stable)_
 - [`GoldenAngle`](GoldenAngle.md) — GoldenAngle  _(Stable)_
 - [`GoldenRatio`](GoldenRatio.md) — GoldenRatio  _(Experimental)_
+- [`I`](I.md) — I  _(Stable)_
 - [`Khinchin`](Khinchin.md) — Khinchin  _(Stable)_
 - [`Pi`](Pi.md) — Pi  _(Stable)_

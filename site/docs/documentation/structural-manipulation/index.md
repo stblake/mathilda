@@ -1,6 +1,6 @@
 # Structural Manipulation
 
-33 built-in function(s) in this category.
+35 built-in function(s) in this category.
 
 - [`Append`](Append.md) — Append[expr, elem] adds elem to the end of expr.  _(Stable)_
 - [`Delete`](Delete.md) — Delete[expr, n] deletes the element at position n in expr.  _(Stable)_
@@ -20,6 +20,8 @@
 - [`Min`](Min.md) — Min[x1, x2, ...]  _(Stable)_
 - [`Most`](Most.md) — Most[expr] gives all but the last element of expr.  _(Stable)_
 - [`OrderedQ`](OrderedQ.md) — OrderedQ[h[e1, e2, ...]] gives True if the elements are in canonical order, and False otherwise.  _(Stable)_
+- [`PadLeft`](PadLeft.md) — PadLeft[list, n]  _(Stable)_
+- [`PadRight`](PadRight.md) — PadRight[list, n]  _(Stable)_
 - [`Part`](Part.md) — expr[[i]] or Part[expr, i]  _(Stable)_
 - [`Partition`](Partition.md) — Partition[list, n]  _(Stable)_
 - [`Prepend`](Prepend.md) — Prepend[expr, elem] adds elem to the beginning of expr.  _(Stable)_
