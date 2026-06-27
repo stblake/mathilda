@@ -239,8 +239,16 @@ void test_named_color_constants_resolve(void) {
     assert_eval_eq(
         "First[Cases[Plot[Sin[x], {x, 0, 1}, Background -> LightGray], (Background -> v_) -> v]]",
         "GrayLevel[0.85]", 0);
+    /* Black/White are grey levels, not RGB (matching WL's InputForm). */
+    assert_eval_eq("FullForm[Black]", "GrayLevel[0]", 0);
+    assert_eval_eq("FullForm[White]", "GrayLevel[1]", 0);
+    /* The light variants resolve to their RGBColor[...] literals too. */
+    assert_eval_eq("FullForm[LightRed]", "RGBColor[1, 0.85, 0.85]", 0);
+    assert_eval_eq("FullForm[LightPurple]", "RGBColor[0.94, 0.88, 0.94]", 0);
     /* ?Red inspects the symbol, not its value (Information is HoldFirst). */
     assert_eval_eq("StringTake[Information[Red], 3]", "\"Red\"", 0);
+    /* Docstrings are now sourced from info.c. */
+    assert_eval_eq("StringTake[Information[LightOrange], 11]", "\"LightOrange\"", 0);
 }
 
 void test_hue_color_directive(void) {

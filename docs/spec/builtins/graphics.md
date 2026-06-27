@@ -105,10 +105,13 @@ Out[1]= -Graphics-
 ```
 
 ## Named color constants
-`Black`, `White`, `Gray`, `LightGray`, `Red`, `Green`, `Blue`, `Cyan`,
-`Magenta`, `Yellow`, `Orange`, `Pink`, `Purple`, `Brown` are ordinary
-protected `OwnValue`s evaluating to an `RGBColor[...]`/`GrayLevel[...]`
-literal (e.g. `Red` is exactly `RGBColor[1, 0, 0]`) -- usable anywhere a
+`Red`, `Green`, `Blue`, `Black`, `White`, `Gray`, `Cyan`, `Magenta`,
+`Yellow`, `Brown`, `Orange`, `Pink`, `Purple` and their light variants
+`LightRed`, `LightGreen`, `LightBlue`, `LightGray`, `LightCyan`,
+`LightMagenta`, `LightYellow`, `LightBrown`, `LightOrange`, `LightPink`,
+`LightPurple` are ordinary protected `OwnValue`s evaluating to an
+`RGBColor[...]`/`GrayLevel[...]` literal (e.g. `Red` is exactly
+`RGBColor[1, 0, 0]`, `Black` is `GrayLevel[0]`) -- usable anywhere a
 color literal is, including `PlotStyle`, `Background`, `FrameStyle`,
 `AxesStyle`, `TicksStyle`, `GridLinesStyle`, and as a style directive
 directly inside a primitive list (`Graphics[{Blue, Point[{0,0}]}]`).

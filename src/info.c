@@ -3422,4 +3422,56 @@ void info_init(void) {
         "a}] are also accepted. Components and opacity outside [0,1] are clipped.\n"
         "A style directive: sets the colour of subsequent graphics primitives,\n"
         "converted to RGB as r=(1-c)(1-k), g=(1-m)(1-k), b=(1-y)(1-k).");
+
+    /* Named colour constants. Each is an OwnValue (set in graphics_init) that
+     * evaluates to its RGBColor[...]/GrayLevel[...] literal; the docstrings
+     * are kept here, centrally, like CMYKColor. */
+    symtab_set_docstring("Red",
+        "Red\n\tThe named colour RGBColor[1, 0, 0].");
+    symtab_set_docstring("Green",
+        "Green\n\tThe named colour RGBColor[0, 1, 0].");
+    symtab_set_docstring("Blue",
+        "Blue\n\tThe named colour RGBColor[0, 0, 1].");
+    symtab_set_docstring("Black",
+        "Black\n\tThe named colour GrayLevel[0].");
+    symtab_set_docstring("White",
+        "White\n\tThe named colour GrayLevel[1].");
+    symtab_set_docstring("Gray",
+        "Gray\n\tThe named colour GrayLevel[0.5].");
+    symtab_set_docstring("Cyan",
+        "Cyan\n\tThe named colour RGBColor[0, 1, 1].");
+    symtab_set_docstring("Magenta",
+        "Magenta\n\tThe named colour RGBColor[1, 0, 1].");
+    symtab_set_docstring("Yellow",
+        "Yellow\n\tThe named colour RGBColor[1, 1, 0].");
+    symtab_set_docstring("Brown",
+        "Brown\n\tThe named colour RGBColor[0.6, 0.4, 0.2].");
+    symtab_set_docstring("Orange",
+        "Orange\n\tThe named colour RGBColor[1, 0.5, 0].");
+    symtab_set_docstring("Pink",
+        "Pink\n\tThe named colour RGBColor[1, 0.5, 0.5].");
+    symtab_set_docstring("Purple",
+        "Purple\n\tThe named colour RGBColor[0.5, 0, 0.5].");
+    symtab_set_docstring("LightRed",
+        "LightRed\n\tThe named colour RGBColor[1, 0.85, 0.85].");
+    symtab_set_docstring("LightGreen",
+        "LightGreen\n\tThe named colour RGBColor[0.88, 1, 0.88].");
+    symtab_set_docstring("LightBlue",
+        "LightBlue\n\tThe named colour RGBColor[0.87, 0.94, 1].");
+    symtab_set_docstring("LightGray",
+        "LightGray\n\tThe named colour GrayLevel[0.85].");
+    symtab_set_docstring("LightCyan",
+        "LightCyan\n\tThe named colour RGBColor[0.9, 1, 1].");
+    symtab_set_docstring("LightMagenta",
+        "LightMagenta\n\tThe named colour RGBColor[1, 0.9, 1].");
+    symtab_set_docstring("LightYellow",
+        "LightYellow\n\tThe named colour RGBColor[1, 1, 0.85].");
+    symtab_set_docstring("LightBrown",
+        "LightBrown\n\tThe named colour RGBColor[0.94, 0.91, 0.88].");
+    symtab_set_docstring("LightOrange",
+        "LightOrange\n\tThe named colour RGBColor[1, 0.9, 0.8].");
+    symtab_set_docstring("LightPink",
+        "LightPink\n\tThe named colour RGBColor[1, 0.925, 0.925].");
+    symtab_set_docstring("LightPurple",
+        "LightPurple\n\tThe named colour RGBColor[0.94, 0.88, 0.94].");
 }
