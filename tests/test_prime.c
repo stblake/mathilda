@@ -142,6 +142,44 @@ void test_primepi_lmo_stress() {
           "PrimePi[800000000 + 173 k, Method->\"LMO\"], {k, 0, 40}], Except[0]]", "0");
 }
 
+/* ---- Deleglise-Rivat: exact known values across magnitudes ---- */
+void test_primepi_dr_values() {
+    check("PrimePi[10^7, Method->\"DelegliseRivat\"]", "664579");
+    check("PrimePi[10^8, Method->\"DelegliseRivat\"]", "5761455");
+    check("PrimePi[10^9, Method->\"DelegliseRivat\"]", "50847534");
+    check("PrimePi[10^10, Method->\"DelegliseRivat\"]", "455052511");
+    check("PrimePi[10^11, Method->\"DelegliseRivat\"]", "4118054813");
+    /* non-power-of-ten points exercise the leaf split off the round magnitudes */
+    check("PrimePi[12345678, Method->\"DelegliseRivat\"]", "809227");
+    check("PrimePi[999999937, Method->\"DelegliseRivat\"]", "50847534");
+}
+
+/* Stress: DR must reproduce the Lucy oracle on every integer in a window.  Two
+ * windows just above the 10^6 table cutoff exercise the algorithm (not the
+ * direct table) where easy leaves dominate; one at 10^9 spans many sieve
+ * segments where hard leaves appear.  This is the off-by-one detector for the
+ * easy/hard leaf classification. */
+void test_primepi_dr_stress() {
+    check("Count[Table[PrimePi[1000000 + k, Method->\"DelegliseRivat\"] - "
+          "PrimePi[1000000 + k, Method->\"LucyHedgehog\"], {k, 1, 200}], Except[0]]", "0");
+    check("Count[Table[PrimePi[2000000 + k, Method->\"DelegliseRivat\"] - "
+          "PrimePi[2000000 + k, Method->\"Sieve\"], {k, 0, 150}], Except[0]]", "0");
+    check("Count[Table[PrimePi[10^9 + k, Method->\"DelegliseRivat\"] - "
+          "PrimePi[10^9 + k, Method->\"LMO\"], {k, 0, 80}], Except[0]]", "0");
+}
+
+/* DR agrees with every other method, including the Lehmer/Meissel combinatorial
+ * formulas and the trivially-correct sieve, at a scattered set of points. */
+void test_primepi_dr_agree() {
+    check("SameQ @@ {PrimePi[123456789, Method->\"DelegliseRivat\"], "
+          "PrimePi[123456789, Method->\"LMO\"], "
+          "PrimePi[123456789, Method->\"Meissel\"], "
+          "PrimePi[123456789, Method->\"Lehmer\"], PrimePi[123456789]}", "True");
+    check("SameQ @@ {PrimePi[55555555, Method->\"DelegliseRivat\"], "
+          "PrimePi[55555555, Method->\"Sieve\"], "
+          "PrimePi[55555555, Method->\"LucyHedgehog\"]}", "True");
+}
+
 /* Invalid / unknown Method leaves the call unevaluated. */
 void test_primepi_method_errors() {
     check("Head[PrimePi[100, Method->\"Bogus\"]]", "PrimePi");
@@ -174,6 +212,9 @@ int main() {
     TEST(test_primepi_methods_values);
     TEST(test_primepi_methods_agree);
     TEST(test_primepi_lmo_stress);
+    TEST(test_primepi_dr_values);
+    TEST(test_primepi_dr_stress);
+    TEST(test_primepi_dr_agree);
     TEST(test_primepi_method_errors);
     TEST(test_primepi_options);
     TEST(test_prime_roundtrip);

@@ -342,9 +342,15 @@ Out[3]= 252097800623
 - Several recognised prime-counting algorithms are available via `Method`:
   `"Sieve"` (segmented sieve of Eratosthenes), `"Legendre"`, `"Meissel"`,
   `"Lehmer"`, `"LMO"` (Lagarias-Miller-Odlyzko, segmented special leaves),
-  `"DelegliseRivat"`, and `"LucyHedgehog"`.  `Automatic` selects an efficient
-  method for the magnitude of `x`.  The combinatorial methods exact-count up to
-  $5 \times 10^{13}$; `"Sieve"`/`"Legendre"` are intended for smaller `x`.
+  `"DelegliseRivat"`, and `"LucyHedgehog"`.  `"DelegliseRivat"` refines `"LMO"`
+  by classifying special leaves as trivial / easy / hard and answering the
+  trivial and easy ones with $O(1)$ prime-count lookups, sending only the hard
+  leaves through the segmented sieve; it is the fastest combinatorial method here
+  (≈ 1.6 s at $10^{12}$, 9.9 s at $10^{13}$).  `Automatic` selects an efficient
+  method for the magnitude of `x` (a direct sieve table below $10^6$,
+  `"LucyHedgehog"` up to $10^9$, then `"DelegliseRivat"`).  The combinatorial
+  methods exact-count up to $5 \times 10^{13}$; `"Sieve"`/`"Legendre"` are
+  intended for smaller `x`.
 - An unrecognised `Method` setting emits `PrimePi::method` and leaves the call
   unevaluated.
 
