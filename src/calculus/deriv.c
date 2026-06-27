@@ -453,6 +453,16 @@ static Expr* elementary_fprime(const char* name, Expr* g) {
 /* Core recursive derivative                                               */
 /* ---------------------------------------------------------------------- */
 
+/* Total-derivative mode for ``Dt[f, x]``. When set, ``compute_deriv``
+ * (always called with a non-NULL ``x``) treats every symbol other than
+ * ``x`` and the distinguished constants as an *implicit* function of
+ * ``x``: such a symbol ``s`` contributes the unevaluated total
+ * derivative ``Dt[s, x]`` rather than ``0`` (the ``D`` convention).
+ * Numbers and Dt-constants still vanish. The flag is set only for the
+ * duration of a ``Dt[f, x]`` evaluation and saved/restored so nested
+ * re-entrant differentiation behaves correctly. */
+static bool g_dt_total_mode = false;
+
 /* Forward declarations. ``nonconsts`` may be NULL (no NonConstants
  * option in effect) or a fully canonicalised List[sym1, ...] of
  * symbols treated as implicit functions of x. */
@@ -585,6 +595,27 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
         if (f->type == EXPR_SYMBOL && nonconsts_contains(nonconsts, f)) {
             return build_unevaluated_d_nonconsts(f, x, nonconsts);
         }
+        /* Dt[f, x] total-derivative mode: every symbol other than x and
+         * the distinguished constants is an implicit function of x, so it
+         * does NOT vanish -- its contribution is the unevaluated total
+         * derivative Dt[sym, x]. Numbers and Dt-constants still vanish.
+         * Compound expressions fall through to the dispatch below; we must
+         * NOT apply the free-of-x short-circuit, or dependent sub-symbols
+         * would be dropped. */
+        if (g_dt_total_mode) {
+            if (f->type == EXPR_INTEGER || f->type == EXPR_REAL ||
+                f->type == EXPR_BIGINT)
+                return mk_int(0);
+#ifdef USE_MPFR
+            if (f->type == EXPR_MPFR) return mk_int(0);
+#endif
+            if (f->type == EXPR_SYMBOL) {
+                if (is_dt_constant_symbol(f)) return mk_int(0);
+                /* f is some other symbol (and not x, handled above). */
+                return mk_fn2("Dt", expr_copy(f), expr_copy(x));
+            }
+            /* Compound: skip the free-of-x short-circuit, fall through. */
+        } else {
         /* Don't short-circuit `Equal[...]` or `Inequality[...]` even when
          * they have no x: the dispatch below distributes D over each
          * value slot and lets the outer evaluator simplify the residue,
@@ -597,6 +628,7 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
         if (!f_is_equal_or_ineq &&
             expr_free_of(f, x) && !expr_contains_nonconst(f, nonconsts)) {
             return mk_int(0);
+        }
         }
     } else {
         /* Dt mode: numeric atoms and distinguished constants vanish. */
@@ -2239,6 +2271,12 @@ Expr* builtin_d(Expr* res) {
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;                 /* D[f] stays unevaluated */
 
+    /* D is always a partial derivative. Pin total-derivative mode off for
+     * the duration so a Dt-in-progress flag can never leak into a D node
+     * evaluated re-entrantly (e.g. via eval_and_free inside the core). */
+    bool saved_dt_mode = g_dt_total_mode;
+    g_dt_total_mode = false;
+
     Expr* f = res->data.function.args[0];
 
     /* Split trailing arguments into option Rules and var-specs. Options
@@ -2261,6 +2299,7 @@ Expr* builtin_d(Expr* res) {
     if (nspecs == 0) {
         if (nonconsts) expr_free(nonconsts);
         free(specs);
+        g_dt_total_mode = saved_dt_mode;
         return NULL;                        /* D[f, opts...] stays unevaluated */
     }
 
@@ -2277,6 +2316,7 @@ Expr* builtin_d(Expr* res) {
         Expr* r = build_unevaluated_d_nonconsts(f, specs[0], nonconsts);
         expr_free(nonconsts);
         free(specs);
+        g_dt_total_mode = saved_dt_mode;
         return r;
     }
 
@@ -2292,6 +2332,7 @@ Expr* builtin_d(Expr* res) {
             if (nonconsts) expr_free(nonconsts);
             free(specs);
             expr_free(current);
+            g_dt_total_mode = saved_dt_mode;
             return NULL;                       /* malformed spec */
         }
         Expr* stepped = NULL;
@@ -2314,6 +2355,7 @@ Expr* builtin_d(Expr* res) {
 
     if (nonconsts) expr_free(nonconsts);
     free(specs);
+    g_dt_total_mode = saved_dt_mode;
     return current;
 }
 
@@ -2333,8 +2375,30 @@ Expr* builtin_dt(Expr* res) {
         return compute_deriv(f, NULL, NULL);  /* may be NULL to stay unevaluated */
     }
 
-    /* Dt[f, var_specs...] is identical to D[f, var_specs...]: it gives
-     * the partial derivative. Forward to the D path. */
+    /* Terminal case: the total derivative of a bare symbol with respect
+     * to a single bare variable is its own normal form. compute_deriv (in
+     * g_dt_total_mode) re-emits Dt[s, x] for such a symbol, and
+     * higher_order_partial then evaluates that result -- which would
+     * re-enter this builtin and recurse without bound. Resolve the closed
+     * cases here and leave the genuinely irreducible form unevaluated. */
+    if (argc == 2 && f->type == EXPR_SYMBOL) {
+        Expr* v = res->data.function.args[1];
+        if (is_dt_constant_symbol(f)) return mk_int(0);   /* Dt[Pi, x] = 0 */
+        if (v->type == EXPR_SYMBOL) {
+            if (f->data.symbol == v->data.symbol) return mk_int(1);  /* Dt[x, x] */
+            return NULL;                                  /* Dt[s, x] stays */
+        }
+    }
+
+    /* Dt[f, x, ...] is the *total* derivative with respect to each
+     * variable: unlike D, every symbol other than the differentiation
+     * variable and the distinguished constants is treated as an implicit
+     * function of that variable. We reuse the shared partial-derivative
+     * machinery with g_dt_total_mode enabled so free symbols contribute
+     * Dt[sym, x] terms instead of vanishing. The flag is saved/restored to
+     * stay correct under nested (re-entrant) differentiation. */
+    bool saved_dt_mode = g_dt_total_mode;
+    g_dt_total_mode = true;
     Expr* current = expr_copy(f);
     for (size_t i = 1; i < argc; i++) {
         Expr* var = NULL;
@@ -2345,6 +2409,7 @@ Expr* builtin_dt(Expr* res) {
                             &is_array)) {
             emit_dvar_message(res->data.function.args[i]);
             expr_free(current);
+            g_dt_total_mode = saved_dt_mode;
             return NULL;
         }
         Expr* stepped = NULL;
@@ -2360,6 +2425,7 @@ Expr* builtin_dt(Expr* res) {
         current = stepped;
     }
 
+    g_dt_total_mode = saved_dt_mode;
     return current;
 }
 

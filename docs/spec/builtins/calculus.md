@@ -125,13 +125,18 @@ Total derivative.
   `ComplexInfinity`, `EulerGamma`, `Catalan`, `GoldenRatio`,
   `Degree`) vanish. Unknown symbols `y` appear as `Dt[y]` factors,
   modelling implicit functional dependence.
-- `Dt[f, x]`, `Dt[f, {x, n}]`, `Dt[f, x, y, ...]` -- delegate to
-  `D[...]` for partial-derivative behaviour.
+- `Dt[f, x]`, `Dt[f, {x, n}]`, `Dt[f, x, y, ...]` -- *total* derivative
+  with respect to each variable. Unlike `D`, every symbol other than the
+  differentiation variable and the distinguished constants is an implicit
+  function of that variable, so it contributes a `Dt[s, x]` term rather
+  than vanishing. `Dt[x, x]` is `1`; a bare `Dt[s, x]` is its own normal
+  form and stays unevaluated.
 
 **Features**:
 - `Protected`, `ReadProtected`.
 - Shares the elementary-function derivative table with `D`; the
-  only dispatch difference is the base-case handling of symbols.
+  only dispatch difference is the base-case handling of symbols
+  (free symbols become `Dt[s, x]` factors instead of `0`).
 
 **Examples**:
 ```mathematica
@@ -141,11 +146,14 @@ Out[1]= 2 y Dt[y] + Cos[x] Dt[x]
 In[2]:= Dt[Pi + 3 + x y]
 Out[2]= x Dt[y] + y Dt[x]
 
-In[3]:= Dt[y^2, x]
-Out[3]= 0
+In[3]:= Dt[x^n, x]
+Out[3]= x^(-1 + n) (n + x Log[x] Dt[n, x])
 
-In[4]:= Dt[x^2, {x, 2}]
-Out[4]= 2
+In[4]:= Dt[a x + b, x]
+Out[4]= a + x Dt[a, x] + Dt[b, x]
+
+In[5]:= Dt[x^2, {x, 2}]
+Out[5]= 2
 ```
 
 ## Derivative
