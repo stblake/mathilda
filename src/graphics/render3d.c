@@ -244,6 +244,116 @@ static void draw_box_ticks(const Box3D* bb, Camera cam, int win_w, int win_h, Co
     }
 }
 
+/* ---------------- 3D toolbar ---------------- *
+ * Three buttons: Save / Reset / Close.  Icon glyphs are the same hand-drawn
+ * vector shapes as render.c's 2D toolbar; the helpers are duplicated here
+ * because they are static in render.c and the two renderers are separate
+ * translation units. */
+
+#define TB3_BTN    30.0f
+#define TB3_GAP     4.0f
+#define TB3_MARGIN 10.0f
+#define TB3_LW      2.2f
+#define TB3_COUNT   3
+
+typedef enum { TB3_SAVE = 0, TB3_RESET, TB3_CLOSE } Tb3Btn;
+
+static Rectangle tb3_rect(int i, int win_w) {
+    float total = TB3_COUNT * TB3_BTN + (TB3_COUNT - 1) * TB3_GAP;
+    float x0 = (float)win_w - TB3_MARGIN - total;
+    return (Rectangle){ x0 + i * (TB3_BTN + TB3_GAP), TB3_MARGIN, TB3_BTN, TB3_BTN };
+}
+
+static int tb3_hit(Vector2 m, int win_w) {
+    for (int i = 0; i < TB3_COUNT; i++)
+        if (CheckCollisionPointRec(m, tb3_rect(i, win_w))) return i;
+    return -1;
+}
+
+static const char* tb3_tip(int k) {
+    switch (k) {
+        case TB3_SAVE:  return "Save as PNG";
+        case TB3_RESET: return "Reset view";
+        case TB3_CLOSE: return "Close window";
+        default:        return "";
+    }
+}
+
+static void tb3_stroke(Vector2 a, Vector2 b, Color c) {
+    DrawLineEx(a, b, TB3_LW, c);
+    DrawCircleV(a, TB3_LW * 0.5f, c);
+    DrawCircleV(b, TB3_LW * 0.5f, c);
+}
+
+static void tb3_icon_save(Rectangle b, Color c) {
+    DrawRectangleRoundedLinesEx((Rectangle){ b.x, b.y + b.height * 0.30f,
+                                             b.width, b.height * 0.52f }, 0.25f, 8, TB3_LW, c);
+    DrawRectangleRoundedLinesEx((Rectangle){ b.x + b.width * 0.32f, b.y + b.height * 0.12f,
+                                             b.width * 0.30f, b.height * 0.20f }, 0.4f, 6, TB3_LW, c);
+    float lr = b.width * 0.16f;
+    DrawRing((Vector2){ b.x + b.width * 0.5f, b.y + b.height * 0.56f },
+             lr - TB3_LW * 0.5f, lr + TB3_LW * 0.5f, 0.0f, 360.0f, 32, c);
+}
+
+static void tb3_icon_home(Rectangle b, Color c) {
+    float cx = b.x + b.width * 0.5f;
+    float roofY = b.y + b.height * 0.12f, eaveY = b.y + b.height * 0.45f, baseY = b.y + b.height * 0.88f;
+    float lx = b.x + b.width * 0.16f, rx = b.x + b.width * 0.84f;
+    tb3_stroke((Vector2){ lx, eaveY }, (Vector2){ cx, roofY }, c);
+    tb3_stroke((Vector2){ cx, roofY }, (Vector2){ rx, eaveY }, c);
+    float wlx = b.x + b.width * 0.26f, wrx = b.x + b.width * 0.74f;
+    tb3_stroke((Vector2){ wlx, eaveY }, (Vector2){ wlx, baseY }, c);
+    tb3_stroke((Vector2){ wrx, eaveY }, (Vector2){ wrx, baseY }, c);
+    tb3_stroke((Vector2){ wlx, baseY }, (Vector2){ wrx, baseY }, c);
+    float dlx = b.x + b.width * 0.44f, drx = b.x + b.width * 0.56f, dY = b.y + b.height * 0.62f;
+    tb3_stroke((Vector2){ dlx, baseY }, (Vector2){ dlx, dY }, c);
+    tb3_stroke((Vector2){ drx, baseY }, (Vector2){ drx, dY }, c);
+    tb3_stroke((Vector2){ dlx, dY }, (Vector2){ drx, dY }, c);
+}
+
+static void tb3_icon_close(Rectangle b, Color c) {
+    float m = b.width * 0.18f;
+    tb3_stroke((Vector2){ b.x + m, b.y + m },
+               (Vector2){ b.x + b.width - m, b.y + b.height - m }, c);
+    tb3_stroke((Vector2){ b.x + b.width - m, b.y + m },
+               (Vector2){ b.x + m, b.y + b.height - m }, c);
+}
+
+static void draw_toolbar3(int win_w, int hover) {
+    float total = TB3_COUNT * TB3_BTN + (TB3_COUNT - 1) * TB3_GAP;
+    Rectangle panel = { (float)win_w - TB3_MARGIN - total - 5.0f, TB3_MARGIN - 5.0f,
+                        total + 10.0f, TB3_BTN + 10.0f };
+    DrawRectangleRounded(panel, 0.3f, 6, (Color){ 248, 248, 248, 225 });
+
+    const Color icol = { 90, 90, 90, 255 };
+    for (int i = 0; i < TB3_COUNT; i++) {
+        Rectangle r = tb3_rect(i, win_w);
+        if (i == hover) {
+            Color hb = (i == TB3_CLOSE) ? (Color){ 240, 205, 205, 255 } : (Color){ 220, 227, 236, 255 };
+            DrawRectangleRounded(r, 0.3f, 6, hb);
+        }
+        Rectangle ic = { r.x + 6, r.y + 6, r.width - 12, r.height - 12 };
+        switch (i) {
+            case TB3_SAVE:  tb3_icon_save(ic, icol); break;
+            case TB3_RESET: tb3_icon_home(ic, icol); break;
+            case TB3_CLOSE: tb3_icon_close(ic, (i == hover) ? (Color){ 190, 60, 60, 255 } : icol); break;
+            default: break;
+        }
+    }
+
+    if (hover >= 0) {
+        const char* t = tb3_tip(hover);
+        int tw = MeasureText(t, 12);
+        Rectangle r = tb3_rect(hover, win_w);
+        float tx = r.x + r.width * 0.5f - (float)tw * 0.5f;
+        if (tx + (float)tw + 6 > (float)win_w) tx = (float)win_w - (float)tw - 6;
+        if (tx < 4) tx = 4;
+        float ty = r.y + r.height + 7;
+        DrawRectangle((int)tx - 5, (int)ty - 3, tw + 10, 19, (Color){ 40, 40, 40, 235 });
+        DrawText(t, (int)tx, (int)ty, 12, RAYWHITE);
+    }
+}
+
 /* ---------------- main loop ---------------- */
 
 void graphics3d_show(const Expr* graphics3d_expr) {
@@ -292,29 +402,49 @@ void graphics3d_show(const Expr* graphics3d_expr) {
 
     const Color axes_color = { 90, 90, 90, 255 };
 
-    while (!WindowShouldClose()) {
-        Vector2 mdelta = GetMouseDelta();
+    int tb3_hover = -1;
 
-        if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-            azimuth   -= mdelta.x * 0.005;
-            elevation += mdelta.y * 0.005;
-            const double lim = 89.0 * M_PI / 180.0;
-            if (elevation > lim) elevation = lim;
-            if (elevation < -lim) elevation = -lim;
-        } else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
-            /* Pan the orbit target along the camera's screen-aligned
-             * right/up axes, scaled by distance so the pan speed feels
-             * consistent regardless of zoom. */
-            Vector3 fwd = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
-            Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, camera.up));
-            Vector3 trueUp = Vector3CrossProduct(right, fwd);
-            float k = (float)(distance * 0.0015);
-            camera.target = Vector3Add(camera.target,
-                Vector3Add(Vector3Scale(right, -mdelta.x * k), Vector3Scale(trueUp, mdelta.y * k)));
+    while (!WindowShouldClose()) {
+        Vector2 mouse = GetMousePosition();
+        Vector2 mdelta = GetMouseDelta();
+        tb3_hover = tb3_hit(mouse, (int)opts.width);
+
+        /* Toolbar clicks: only act on a release inside the button so that
+         * a drag starting on the toolbar doesn't orbit the camera. */
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && tb3_hover >= 0) {
+            switch (tb3_hover) {
+                case TB3_SAVE:  TakeScreenshot("mathilda_plot.png"); break;
+                case TB3_RESET:
+                    azimuth = home_az; elevation = home_el;
+                    distance = home_dist; camera.target = home_target;
+                    break;
+                case TB3_CLOSE: goto done3d;
+            }
+        }
+
+        /* Only orbit/pan when the mouse is NOT over the toolbar. */
+        if (tb3_hover < 0) {
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+                azimuth   -= mdelta.x * 0.005;
+                elevation += mdelta.y * 0.005;
+                const double lim = 89.0 * M_PI / 180.0;
+                if (elevation > lim) elevation = lim;
+                if (elevation < -lim) elevation = -lim;
+            } else if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsMouseButtonDown(MOUSE_BUTTON_MIDDLE)) {
+                /* Pan the orbit target along the camera's screen-aligned
+                 * right/up axes, scaled by distance so the pan speed feels
+                 * consistent regardless of zoom. */
+                Vector3 fwd = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+                Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, camera.up));
+                Vector3 trueUp = Vector3CrossProduct(right, fwd);
+                float k = (float)(distance * 0.0015);
+                camera.target = Vector3Add(camera.target,
+                    Vector3Add(Vector3Scale(right, -mdelta.x * k), Vector3Scale(trueUp, mdelta.y * k)));
+            }
         }
 
         float wheel = GetMouseWheelMove();
-        if (wheel != 0.0f) {
+        if (wheel != 0.0f && tb3_hover < 0) {
             distance *= (wheel > 0) ? (1.0 / 1.1) : 1.1;
             if (distance < diag * 0.05) distance = diag * 0.05;
             if (distance > diag * 20.0) distance = diag * 20.0;
@@ -351,11 +481,15 @@ void graphics3d_show(const Expr* graphics3d_expr) {
                 free(s);
             }
         }
-        DrawText("drag: rotate   scroll: zoom   right-drag: pan   R: reset   S: save   Esc: close",
+
+        draw_toolbar3((int)opts.width, tb3_hover);
+
+        DrawText("drag: rotate   scroll: zoom   right-drag: pan",
                  10, (int)opts.height - 22, 14, GRAY);
 
         EndDrawing();
     }
+    done3d:;
 
     CloseWindow();
 }

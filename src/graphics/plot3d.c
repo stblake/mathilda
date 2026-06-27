@@ -192,9 +192,9 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
 /* ---- Grid sampling ---- */
 
 typedef struct {
-    double x, y, z;
-    bool   valid; /* false: f[x,y] didn't evaluate to a finite real, or
-                   * RegionFunction rejected the point */
+    double x, y, z; /* z = f(x,y) when fn_ok, else 0 */
+    bool   valid;   /* fn_ok AND RegionFunction accepted */
+    bool   fn_ok;   /* f(x,y) evaluated to a finite real (z is meaningful) */
 } GridPt;
 
 typedef struct {
@@ -219,6 +219,23 @@ static bool eval_region3(Expr* region_fn, double x, double y, double z) {
     if (true3) return true;
     if (false3) return false;
     return eval_region(region_fn, x, y);
+}
+
+/* Evaluate f(x,y) and store the result in *z_out when finite. Does NOT
+ * apply RegionFunction -- use plot3d_eval_fn for the combined check. */
+static bool plot3d_eval_z(double x, double y, Plot3DEvalCtx* ctx, double* z_out) {
+    Expr* xval = expr_new_real(x);
+    Expr* yval = expr_new_real(y);
+    symtab_add_own_value(ctx->varx->data.symbol, ctx->varx, xval);
+    symtab_add_own_value(ctx->vary->data.symbol, ctx->vary, yval);
+    Expr* result = evaluate(ctx->body);
+    double z;
+    bool ok = expr_to_real_double(result, &z) && isfinite(z);
+    expr_free(result);
+    expr_free(xval);
+    expr_free(yval);
+    if (ok) *z_out = z;
+    return ok;
 }
 
 static bool plot3d_eval_fn(double x, double y, Plot3DEvalCtx* ctx, double* z_out) {
@@ -249,9 +266,12 @@ static GridPt* build_grid(Plot3DEvalCtx* ctx, double xmin, double xmax, double y
             double y = ymin + (ymax - ymin) * (double)j / (double)(n - 1);
             if (j == n - 1) y = ymax;
             double z = 0.0;
-            bool ok = plot3d_eval_fn(x, y, ctx, &z);
+            bool fn_ok = plot3d_eval_z(x, y, ctx, &z);
+            bool valid = fn_ok && (!ctx->region_function ||
+                                    eval_region3(ctx->region_function, x, y, z));
             GridPt* p = &grid[i * n + j];
-            p->x = x; p->y = y; p->z = z; p->valid = ok;
+            p->x = x; p->y = y; p->z = fn_ok ? z : 0.0;
+            p->valid = valid; p->fn_ok = fn_ok;
         }
     }
     return grid;
@@ -343,6 +363,70 @@ static Expr* mesh_line(const GridPt* a, const GridPt* b) {
     return expr_new_function(expr_new_symbol(SYM_Line), largs, 1);
 }
 
+/* ---- Sutherland-Hodgman boundary clipping ---- */
+
+typedef struct {
+    double x, y, z;
+    bool   is_crossing; /* vertex inserted at the RegionFunction boundary */
+} ClipPt;
+
+/* Find t in (0,1) where the RegionFunction boundary crosses the segment
+ * from V (inside, valid=true) to I (outside, fn_ok=true but valid=false).
+ * Uses bisection: tlo stays inside, thi stays outside. */
+static double find_crossing_t(Expr* region_fn,
+                               const GridPt* V, const GridPt* I, int iters) {
+    double tlo = 0.0, thi = 1.0;
+    for (int k = 0; k < iters; k++) {
+        double tm = (tlo + thi) * 0.5;
+        double x  = V->x + tm * (I->x - V->x);
+        double y  = V->y + tm * (I->y - V->y);
+        double z  = V->z + tm * (I->z - V->z);
+        if (eval_region3(region_fn, x, y, z)) tlo = tm; else thi = tm;
+    }
+    return (tlo + thi) * 0.5;
+}
+
+/* Sutherland-Hodgman clip of a quad against the RegionFunction boundary.
+ * All four quad vertices must have fn_ok=true.  Vertices q0..q3 are given
+ * in CCW order viewed from z+∞: q0=p00, q1=p10, q2=p11, q3=p01.
+ * Writes up to 6 ClipPt vertices into `out`; returns the vertex count.
+ * Crossing-point vertices have is_crossing=true; original in-region vertices
+ * have is_crossing=false. */
+static int clip_quad_to_region(Expr* region_fn,
+                                const GridPt* q0, const GridPt* q1,
+                                const GridPt* q2, const GridPt* q3,
+                                ClipPt* out) {
+    const GridPt* poly[4] = { q0, q1, q2, q3 };
+    int nc = 0;
+
+    for (int i = 0; i < 4; i++) {
+        const GridPt* curr = poly[i];
+        const GridPt* prev = poly[(i + 3) & 3];
+
+        if (curr->valid) {
+            if (!prev->valid) {
+                /* Entering valid region: insert crossing on the edge prev→curr.
+                 * find_crossing_t(V=curr, I=prev) returns t on curr→prev so
+                 * the crossing is lerp(curr, prev, t). */
+                double t = find_crossing_t(region_fn, curr, prev, 8);
+                out[nc++] = (ClipPt){ curr->x + t*(prev->x - curr->x),
+                                      curr->y + t*(prev->y - curr->y),
+                                      curr->z + t*(prev->z - curr->z), true };
+            }
+            out[nc++] = (ClipPt){ curr->x, curr->y, curr->z, false };
+        } else {
+            /* Region-excluded (fn_ok guaranteed by caller): leaving the region. */
+            if (prev->valid) {
+                double t = find_crossing_t(region_fn, prev, curr, 8);
+                out[nc++] = (ClipPt){ prev->x + t*(curr->x - prev->x),
+                                      prev->y + t*(curr->y - prev->y),
+                                      prev->z + t*(curr->z - prev->z), true };
+            }
+        }
+    }
+    return nc;
+}
+
 /* Compute the z-range [*zlo, *zhi] of all valid grid points using the same
  * robust range as the adaptive sampler's flatness test. Returns false when
  * the grid has no valid points (empty zrange, zlo > zhi). */
@@ -427,24 +511,62 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
             for (long j = 0; j + 1 < n; j++) {
                 GridPt* p00 = &grid[i * n + j],     *p10 = &grid[(i + 1) * n + j];
                 GridPt* p01 = &grid[i * n + j + 1], *p11 = &grid[(i + 1) * n + j + 1];
-                if (!p00->valid || !p10->valid || !p01->valid || !p11->valid) continue;
-                any = true;
 
-                if (sopts->color_function) {
-                    double cx = (p00->x + p10->x + p01->x + p11->x) / 4.0;
-                    double cy = (p00->y + p10->y + p01->y + p11->y) / 4.0;
-                    double cz = (p00->z + p10->z + p01->z + p11->z) / 4.0;
-                    PUSH(eval_color_function3(sopts->color_function,
-                                              cx, cy, cz,
-                                              xmin, xmax, ymin, ymax, zlo, zhi,
-                                              sopts->color_function_scaling));
+                if (p00->valid && p10->valid && p01->valid && p11->valid) {
+                    /* Fast path: fully inside the region. */
+                    any = true;
+                    if (sopts->color_function) {
+                        double cx = (p00->x + p10->x + p01->x + p11->x) / 4.0;
+                        double cy = (p00->y + p10->y + p01->y + p11->y) / 4.0;
+                        double cz = (p00->z + p10->z + p01->z + p11->z) / 4.0;
+                        PUSH(eval_color_function3(sopts->color_function,
+                                                  cx, cy, cz,
+                                                  xmin, xmax, ymin, ymax, zlo, zhi,
+                                                  sopts->color_function_scaling));
+                    }
+                    Expr* verts[4] = { point3(p00->x, p00->y, p00->z),
+                                       point3(p10->x, p10->y, p10->z),
+                                       point3(p11->x, p11->y, p11->z),
+                                       point3(p01->x, p01->y, p01->z) };
+                    Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, 4);
+                    Expr* poly_args[1] = { vlist };
+                    PUSH(expr_new_function(expr_new_symbol(SYM_Polygon), poly_args, 1));
+
+                } else if (sopts->region_function
+                           && p00->fn_ok && p10->fn_ok && p01->fn_ok && p11->fn_ok) {
+                    /* Boundary cell: Sutherland-Hodgman clip against the RegionFunction
+                     * boundary to produce a smooth partial polygon instead of a staircase. */
+                    ClipPt clipped[8];
+                    int nc = clip_quad_to_region(sopts->region_function,
+                                                  p00, p10, p11, p01, clipped);
+                    if (nc >= 3) {
+                        any = true;
+                        if (sopts->color_function) {
+                            double cx = 0.0, cy = 0.0, cz = 0.0;
+                            for (int k = 0; k < nc; k++) {
+                                cx += clipped[k].x;
+                                cy += clipped[k].y;
+                                cz += clipped[k].z;
+                            }
+                            cx /= nc; cy /= nc; cz /= nc;
+                            PUSH(eval_color_function3(sopts->color_function,
+                                                      cx, cy, cz,
+                                                      xmin, xmax, ymin, ymax, zlo, zhi,
+                                                      sopts->color_function_scaling));
+                        }
+                        {
+                            Expr** verts = malloc(sizeof(Expr*) * (size_t)nc);
+                            for (int k = 0; k < nc; k++)
+                                verts[k] = point3(clipped[k].x, clipped[k].y, clipped[k].z);
+                            Expr* vlist = expr_new_function(expr_new_symbol(SYM_List),
+                                                             verts, (size_t)nc);
+                            free(verts);
+                            Expr* poly_args[1] = { vlist };
+                            PUSH(expr_new_function(expr_new_symbol(SYM_Polygon), poly_args, 1));
+                        }
+                    }
                 }
-
-                Expr* verts[4] = { point3(p00->x, p00->y, p00->z), point3(p10->x, p10->y, p10->z),
-                                    point3(p11->x, p11->y, p11->z), point3(p01->x, p01->y, p01->z) };
-                Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), verts, 4);
-                Expr* poly_args[1] = { vlist };
-                PUSH(expr_new_function(expr_new_symbol(SYM_Polygon), poly_args, 1));
+                /* fn_ok=false cells: function undefined there — skip entirely. */
             }
         }
 
@@ -515,28 +637,72 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
     } \
 } while (0)
 
+            /* Pass 1: staircase ExclusionStyle for fully-valid cells adjacent to
+             * cells where fn_ok=false (function undefined in excluded region).
+             * When fn_ok=true but region-excluded, the boundary is smooth — the
+             * clipping pass below draws it precisely; skip it here to avoid jagged
+             * staircase lines on top of the smooth outline. */
             for (long i = 0; i + 1 < n; i++) {
                 for (long j = 0; j + 1 < n; j++) {
                     GridPt* p00 = &grid[i*n+j],     *p10 = &grid[(i+1)*n+j];
                     GridPt* p01 = &grid[i*n+j+1],   *p11 = &grid[(i+1)*n+j+1];
                     if (!p00->valid || !p10->valid || !p01->valid || !p11->valid) continue;
 
-                    /* Bottom (p00–p10): no fully-valid cell below */
+                    /* Bottom (p00–p10): draw only when the cell below is neither
+                     * valid nor fn_ok (the fn_ok case is handled by the smooth pass). */
                     { bool nb = (j > 0)
-                             && grid[i*n+(j-1)].valid && grid[(i+1)*n+(j-1)].valid;
+                             && (grid[i*n+(j-1)].valid   || grid[i*n+(j-1)].fn_ok)
+                             && (grid[(i+1)*n+(j-1)].valid || grid[(i+1)*n+(j-1)].fn_ok);
                       if (!nb) { ENSURE_EXC_STYLE(); PUSH(mesh_line(p00, p10)); } }
-                    /* Top (p01–p11): no fully-valid cell above */
+                    /* Top (p01–p11) */
                     { bool na = (j + 2 < n)
-                             && grid[i*n+(j+2)].valid && grid[(i+1)*n+(j+2)].valid;
+                             && (grid[i*n+(j+2)].valid   || grid[i*n+(j+2)].fn_ok)
+                             && (grid[(i+1)*n+(j+2)].valid || grid[(i+1)*n+(j+2)].fn_ok);
                       if (!na) { ENSURE_EXC_STYLE(); PUSH(mesh_line(p01, p11)); } }
-                    /* Left (p00–p01): no fully-valid cell to the left */
+                    /* Left (p00–p01) */
                     { bool nl = (i > 0)
-                             && grid[(i-1)*n+j].valid && grid[(i-1)*n+(j+1)].valid;
+                             && (grid[(i-1)*n+j].valid   || grid[(i-1)*n+j].fn_ok)
+                             && (grid[(i-1)*n+j+1].valid || grid[(i-1)*n+j+1].fn_ok);
                       if (!nl) { ENSURE_EXC_STYLE(); PUSH(mesh_line(p00, p01)); } }
-                    /* Right (p10–p11): no fully-valid cell to the right */
+                    /* Right (p10–p11) */
                     { bool nr = (i + 2 < n)
-                             && grid[(i+2)*n+j].valid && grid[(i+2)*n+(j+1)].valid;
+                             && (grid[(i+2)*n+j].valid   || grid[(i+2)*n+j].fn_ok)
+                             && (grid[(i+2)*n+j+1].valid || grid[(i+2)*n+j+1].fn_ok);
                       if (!nr) { ENSURE_EXC_STYLE(); PUSH(mesh_line(p10, p11)); } }
+                }
+            }
+
+            /* Pass 2: smooth ExclusionStyle from boundary-clipped cells.
+             * For each cell where all fn_ok=true but some valid=false, the
+             * Sutherland-Hodgman polygon has crossing-point vertices that lie
+             * exactly on the RegionFunction boundary.  Edges between consecutive
+             * crossing points trace the boundary smoothly (chord approximation
+             * within one cell width). */
+            for (long i = 0; i + 1 < n; i++) {
+                for (long j = 0; j + 1 < n; j++) {
+                    GridPt* p00 = &grid[i*n+j],     *p10 = &grid[(i+1)*n+j];
+                    GridPt* p01 = &grid[i*n+j+1],   *p11 = &grid[(i+1)*n+j+1];
+                    /* Only boundary cells (some invalid, all fn_ok). */
+                    if (p00->valid && p10->valid && p01->valid && p11->valid) continue;
+                    if (!p00->fn_ok || !p10->fn_ok || !p01->fn_ok || !p11->fn_ok) continue;
+
+                    ClipPt clipped[8];
+                    int nc = clip_quad_to_region(sopts->region_function,
+                                                  p00, p10, p11, p01, clipped);
+                    if (nc < 3) continue;
+
+                    for (int k = 0; k < nc; k++) {
+                        int k2 = (k + 1) % nc;
+                        if (clipped[k].is_crossing && clipped[k2].is_crossing) {
+                            ENSURE_EXC_STYLE();
+                            GridPt ga, gb;
+                            ga.x = clipped[k].x;  ga.y = clipped[k].y;
+                            ga.z = clipped[k].z;  ga.valid = true; ga.fn_ok = true;
+                            gb.x = clipped[k2].x; gb.y = clipped[k2].y;
+                            gb.z = clipped[k2].z; gb.valid = true; gb.fn_ok = true;
+                            PUSH(mesh_line(&ga, &gb));
+                        }
+                    }
                 }
             }
 #undef ENSURE_EXC_STYLE
