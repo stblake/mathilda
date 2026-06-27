@@ -405,6 +405,14 @@ Plot-style defaults distinct from a bare `Graphics[]`: `Axes -> True`,
 `AspectRatio -> 1/GoldenRatio`. A supplied `Frame -> True` suppresses the
 default `Axes -> True`, as for `Plot`.
 
+Marker size is **adaptive**: when no explicit `PointSize` is given, the
+renderer shrinks the dots as the scatter grows denser, so a large point cloud
+stays legible instead of merging into an ink blob. The home-zoom radius is held
+to a small fraction of the mean inter-point spacing (≈ `sqrt(area / N)` for `N`
+points over the plot region), capped at the sparse default and floored at a
+sub-pixel minimum. It therefore depends on the point count, the window size, and
+the pixel resolution. An explicit `PointSize` overrides this entirely.
+
 ```mathematica
 In[1]:= ListPlot[{1, 4, 9, 16, 25}]
 Out[1]= -Graphics-

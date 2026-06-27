@@ -626,6 +626,38 @@ static void gather_ys(const Expr* node, double** buf, size_t* len, size_t* cap) 
     }
 }
 
+/* Total number of dots a scatter renders: every coordinate inside a Point[...]
+ * primitive (the single-point Point[{x,y}] and the cloud Point[{{x,y},...}]
+ * shapes draw_primitive handles), recursing through List wrappers. Mirrors the
+ * Point branch of draw_primitive so the count matches what is actually drawn.
+ * Drives the adaptive marker-size shrink at the home zoom. */
+static size_t count_points(const Expr* node) {
+    if (!node || node->type != EXPR_FUNCTION) return 0;
+    const Expr* h = node->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return 0;
+    const char* name = h->data.symbol;
+    size_t n = node->data.function.arg_count;
+
+    if (name == SYM_Point && n >= 1) {
+        const Expr* arg = node->data.function.args[0];
+        double x, y;
+        if (expr_point(arg, &x, &y)) return 1;
+        size_t c = 0;
+        if (arg->type == EXPR_FUNCTION)
+            for (size_t i = 0; i < arg->data.function.arg_count; i++) {
+                double px, py;
+                if (expr_point(arg->data.function.args[i], &px, &py)) c++;
+            }
+        return c;
+    }
+    if (name == SYM_List) {
+        size_t c = 0;
+        for (size_t i = 0; i < n; i++) c += count_points(node->data.function.args[i]);
+        return c;
+    }
+    return 0;
+}
+
 /* ---------------- Drawing ---------------- */
 
 typedef struct {
@@ -1604,12 +1636,34 @@ void graphics_show(const Expr* graphics_expr) {
      * line scales with zoom like point_size, rather than staying pinned to
      * a single pixel. base_zoom is guaranteed positive and finite above. */
     init_state.thickness = 1.5f / base_zoom;
-    /* Default marker radius for bare Point[] (e.g. ListPlot's scatter). In
-     * world units scaled by the data extent, so at the home zoom it renders a
-     * roughly constant fraction of the region width regardless of the data's
-     * magnitude. 0.003 (not the earlier 0.006) keeps a scatter from reading as
-     * chunky; callers that want bigger dots set PointSize explicitly. */
-    init_state.point_size = (float)(fmax(data_w, data_h) * 0.003);
+    /* Default marker radius for bare Point[] (e.g. ListPlot's scatter), sized in
+     * SCREEN px and converted to world units via base_zoom. Tying it to the
+     * rendered region (not the raw data extent) is essential: with the old
+     * fmax(data_w, data_h) basis, data with an extreme aspect ratio -- e.g. a
+     * tall Prime[n] sequence (y up to ~1583, x only 250) -- blew the dot up to
+     * ~6 px radius / ~12 px diameter, because the marker tracked data_h while
+     * the y-axis was visually compressed by yscale. As a fraction of the
+     * smaller region dimension the dot is now a stable on-screen size
+     * regardless of the data's shape. Callers wanting bigger dots set PointSize.
+     *
+     * Adaptive shrink: a dense scatter merges into an ink blob, so also cap the
+     * dot at a small fraction (0.12) of the mean inter-point pitch (~sqrt(area/N)
+     * px for N points over the reg_w x reg_h px region). The radius is the
+     * smaller of the default and that density limit, floored at a sub-pixel
+     * minimum so a huge scatter never vanishes. This is the home-zoom size;
+     * point_size is world units, so zooming in still enlarges dots. Honours all
+     * three knobs: point count N, window size (region px), and pixel resolution
+     * (px floor, converted back through base_zoom). */
+    double region_px = fmin((double)reg_w, (double)reg_h);
+    double r_px = 0.0067 * region_px;                   /* sparse-scatter default radius */
+    size_t npts = count_points(prims);
+    if (npts > 1) {
+        double area_px = (double)reg_w * (double)reg_h; /* plot region area, px^2 */
+        double dens_px = 0.12 * sqrt(area_px / (double)npts);
+        if (dens_px < r_px) r_px = dens_px;             /* never exceed default */
+    }
+    if (r_px < 0.6) r_px = 0.6;                         /* never sub-pixel-invisible */
+    init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
     init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
     init_state.yscale = (float)ysc;
 
