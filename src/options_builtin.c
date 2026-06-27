@@ -380,6 +380,11 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("Exclusions", "None"));
     ob_commit(&b, "NIntegrate");
 
+    /* ---- Number theory ---- */
+    ob_init(&b);
+    ob_add(&b, r_sym("Method", "Automatic"));
+    ob_commit(&b, "PrimePi");
+
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));
     ob_add(&b, r_sym("WorkingPrecision", "MachinePrecision"));

@@ -3262,7 +3262,8 @@ void info_init(void) {
     symtab_set_docstring("DivisorSigma", "DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.");
     symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
     symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");
-    symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x.");
+    symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x. Exact for x up to 5*10^13 via the Lagarias-Miller-Odlyzko combinatorial method; larger x is left unevaluated.");
+    symtab_set_docstring("Prime", "Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.");
     symtab_set_docstring("NextPrime", "NextPrime[x] gives the next prime after x.");
     symtab_set_docstring("Distribute",
         "Distribute[f[x1, x2, ...]]\n"

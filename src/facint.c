@@ -22,13 +22,13 @@
 #define METHOD_ECM 3
 
 
-#define MAX_PRIME_LIMIT 1000000 
-#define CACHE_A 100
-#define CACHE_X 20000
+#define MAX_PRIME_LIMIT 1000000
 
+/* Small-prime table shared by FactorInteger / trial division below.  The
+ * prime-counting function PrimePi (and Prime[n]) now live in
+ * src/numbertheory/prime.c with their own self-contained infrastructure. */
 static uint32_t *pi_primes = NULL;
 static uint32_t total_pi_primes = 0;
-static int32_t **phi_cache = NULL;
 
 static void init_primepi() {
     if (pi_primes) return;
@@ -50,88 +50,6 @@ static void init_primepi() {
         if (is_prime[i]) pi_primes[idx++] = i;
     }
     free(is_prime);
-
-    phi_cache = malloc(CACHE_A * sizeof(int32_t*));
-    for (int i = 0; i < CACHE_A; i++) {
-        phi_cache[i] = calloc(CACHE_X, sizeof(int32_t));
-    }
-}
-
-static uint64_t pi_base(uint64_t x) {
-    if (x < 2) return 0;
-    if (x > MAX_PRIME_LIMIT) {
-        if (x > pi_primes[total_pi_primes - 1]) x = pi_primes[total_pi_primes - 1];
-    }
-    
-    int64_t low = 0, high = (int64_t)total_pi_primes - 1, mid;
-    while (low <= high) {
-        mid = low + (high - low) / 2;
-        if (pi_primes[mid] <= x) low = mid + 1;
-        else high = mid - 1;
-    }
-    return (uint64_t)low; 
-}
-
-static uint64_t phi_rec(uint64_t x, uint64_t a) {
-    if (a == 0) return x;
-    if (a == 1) return x - x / 2;
-
-    if (a < CACHE_A && x < CACHE_X) {
-        if (phi_cache[a][x] != 0) return (uint64_t)phi_cache[a][x];
-    }
-
-    uint64_t result = phi_rec(x, a - 1) - phi_rec(x / pi_primes[a - 1], a - 1);
-
-    if (a < CACHE_A && x < CACHE_X) {
-        phi_cache[a][x] = (int32_t)result;
-    }
-    return result;
-}
-
-static uint64_t p2_calc(uint64_t x, uint64_t a) {
-    uint64_t sum = 0;
-    uint64_t b = pi_base((uint64_t)sqrt((double)x));
-    for (uint64_t i = a + 1; i <= b; i++) {
-        sum += pi_base(x / pi_primes[i - 1]) - i + 1;
-    }
-    return sum;
-}
-
-static uint64_t count_primes(uint64_t x) {
-    if (x <= MAX_PRIME_LIMIT) return pi_base(x);
-    init_primepi();
-    if (x <= MAX_PRIME_LIMIT) return pi_base(x);
-
-    uint64_t a = pi_base((uint64_t)cbrt((double)x));
-    uint64_t total_phi = phi_rec(x, a);
-    uint64_t total_p2 = p2_calc(x, a);
-
-    return total_phi + a - 1 - total_p2;
-}
-
-Expr* builtin_primepi(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
-    Expr* x_expr = res->data.function.args[0];
-
-    int64_t x_val;
-    if (x_expr->type == EXPR_INTEGER) {
-        x_val = x_expr->data.integer;
-    } else if (x_expr->type == EXPR_REAL) {
-        x_val = (int64_t)floor(x_expr->data.real);
-    } else {
-        int64_t n, d;
-        if (is_rational(x_expr, &n, &d)) {
-            x_val = n / d;
-            if (n < 0 && n % d != 0) x_val--;
-        } else {
-            return NULL;
-        }
-    }
-
-    if (x_val < 2) return expr_new_integer(0);
-    init_primepi();
-    uint64_t result = count_primes((uint64_t)x_val);
-    return expr_new_integer((int64_t)result);
 }
 
 /* Gaussian-integer primality test for a complex number a + b*I with
@@ -1372,13 +1290,12 @@ Expr* builtin_eulerphi(Expr* res) {
 
 void facint_init(void) {
     symtab_add_builtin("PrimeQ", builtin_primeq);
-    symtab_add_builtin("PrimePi", builtin_primepi);
     symtab_add_builtin("FactorInteger", builtin_factorinteger);
     symtab_add_builtin("NextPrime", builtin_nextprime);
     symtab_add_builtin("EulerPhi", builtin_eulerphi);
 
     symtab_get_def("PrimeQ")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
-    symtab_get_def("PrimePi")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
+    /* PrimePi is registered in numbertheory_init() (src/numbertheory/prime.c). */
     symtab_get_def("FactorInteger")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("EulerPhi")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("NextPrime")->attributes |= (ATTR_PROTECTED | ATTR_READPROTECTED | ATTR_LISTABLE);

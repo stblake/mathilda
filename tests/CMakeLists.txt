@@ -144,6 +144,8 @@ set(COMMON_SRC
     ../src/numbertheory/coprimeq.c
     ../src/numbertheory/divisors.c
     ../src/numbertheory/divisorsigma.c
+    ../src/numbertheory/prime.c
+    ../src/numbertheory/primecount.c
     ../src/partitions.c
     ../src/special_functions/gamma.c
     ../src/special_functions/beta.c
@@ -467,6 +469,10 @@ add_test(NAME divisors_tests COMMAND divisors_tests)
 add_executable(divisorsigma_tests test_divisorsigma.c ${COMMON_SRC})
 target_include_directories(divisorsigma_tests PRIVATE ../src)
 add_test(NAME divisorsigma_tests COMMAND divisorsigma_tests)
+
+add_executable(prime_tests test_prime.c ${COMMON_SRC})
+target_include_directories(prime_tests PRIVATE ../src)
+add_test(NAME prime_tests COMMAND prime_tests)
 
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)

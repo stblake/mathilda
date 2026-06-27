@@ -344,6 +344,7 @@ const char* SYM_PossibleZeroQ = NULL;
 const char* SYM_Power = NULL;
 const char* SYM_PowerExpand = NULL;
 const char* SYM_PrecisionGoal = NULL;
+const char* SYM_Prime = NULL;
 const char* SYM_Primes = NULL;
 const char* SYM_Product = NULL;
 const char* SYM_ProductLog = NULL;
@@ -963,6 +964,7 @@ void sym_names_init(void) {
     SYM_Product                    = intern_symbol("Product");
     SYM_ProductLog                 = intern_symbol("ProductLog");
     SYM_PrecisionGoal              = intern_symbol("PrecisionGoal");
+    SYM_Prime                      = intern_symbol("Prime");
     SYM_Primes                     = intern_symbol("Primes");
     SYM_PrimitiveRoot              = intern_symbol("PrimitiveRoot");
     SYM_PrimitiveRootList          = intern_symbol("PrimitiveRootList");

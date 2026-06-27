@@ -1,6 +1,6 @@
 # Number Theory
 
-Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`, `PartitionsQ`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
+Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `Prime`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`, `PartitionsQ`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
 
 ## GCD, LCM
 
@@ -307,20 +307,53 @@ In[9]:= PrimeQ[Exp[2 Pi I/3]]
 Out[9]= False
 ```
 
-## PrimePi
+## Prime
 
-- `PrimePi[x]`: Returns the number of primes less than or equal to `x`.
+- `Prime[n]`: the `n`-th prime $p_n$ (`Prime[1] = 2`, `Prime[2] = 3`, ...).
 
 **Features**:
 - `Listable`, `Protected`.
-- Uses Meissel-Lehmer algorithm for efficient counting.
+- Small `n` is read directly from a sieve table of the primes below $10^6$.
+- Large `n` inverts `PrimePi`: a Cipolla asymptotic estimate for $p_n$ is refined
+  by a Newton step against the exact prime counter, then `NextPrime`/`PrevPrime`
+  steps land exactly on $p_n$.  Exact for `n` up to about $1.4 \times 10^{12}$
+  ($p_n \le 5 \times 10^{13}$); beyond that the call is left unevaluated.
+- A non-positive-integer argument emits `Prime::intpp`; a wrong argument count
+  emits `Prime::argx`; both leave the call unevaluated.
 
 ```mathematica
-In[1]:= PrimePi[10]
-Out[1]= 4
+In[1]:= Prime[100]
+Out[1]= 541
 
-In[2]:= PrimePi[100]
-Out[2]= 25
+In[2]:= Prime[{1, 3, 4, 10}]
+Out[2]= {2, 5, 7, 29}
+
+In[3]:= Prime[10^10]
+Out[3]= 252097800623
+```
+
+## PrimePi
+
+- `PrimePi[x]`: the number of primes less than or equal to `x`.
+- `PrimePi[x, Method -> m]`: count with a specific algorithm.
+
+**Features**:
+- `Listable`, `Protected`.  Default `Method -> Automatic`.
+- Several recognised prime-counting algorithms are available via `Method`:
+  `"Sieve"` (segmented sieve of Eratosthenes), `"Legendre"`, `"Meissel"`,
+  `"Lehmer"`, `"LMO"` (Lagarias-Miller-Odlyzko, segmented special leaves),
+  `"DelegliseRivat"`, and `"LucyHedgehog"`.  `Automatic` selects an efficient
+  method for the magnitude of `x`.  The combinatorial methods exact-count up to
+  $5 \times 10^{13}$; `"Sieve"`/`"Legendre"` are intended for smaller `x`.
+- An unrecognised `Method` setting emits `PrimePi::method` and leaves the call
+  unevaluated.
+
+```mathematica
+In[1]:= PrimePi[10^9]
+Out[1]= 50847534
+
+In[2]:= PrimePi[10^9, Method -> "LMO"]
+Out[2]= 50847534
 
 In[3]:= PrimePi[{10, 100}]
 Out[3]= {4, 25}
