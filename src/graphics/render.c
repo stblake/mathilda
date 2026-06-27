@@ -1498,12 +1498,17 @@ void graphics_show(const Expr* graphics_expr) {
     SetTargetFPS(60);
 
     /* Plot region: the rectangle the data is fitted to and clipped against.
-     * Without a frame it is the whole window (unchanged behaviour). A frame
-     * reserves a margin (~5% of each window dimension) around the region so the
-     * box, its outward tick labels and the bottom help line sit outside the
-     * data; the bottom/left margins are floored a little larger so multi-digit
-     * labels and the help text always fit. The data fits *inside* the region,
-     * so the curve never spills past the frame. */
+     * A frame reserves a margin (~5% of each window dimension) around the
+     * region so the box, its outward tick labels and the bottom help line sit
+     * outside the data; the bottom/left margins are floored a little larger so
+     * multi-digit labels and the help text always fit. Plain Axes (no frame)
+     * reserve a smaller margin for the same reason: an axis can land on the
+     * data's edge (e.g. all-positive data puts the y-axis at the left edge),
+     * and its tick labels — and any AxesLabel/PlotLabel — are drawn just
+     * outside the data, so without a margin they fall off the window. With
+     * neither Axes nor Frame there is nothing outside the data to protect, so
+     * the data fills the whole window (unchanged behaviour). The data always
+     * fits *inside* the region. */
     float reg_x = 0.0f, reg_y = 0.0f;
     float reg_w = (float)opts.width, reg_h = (float)opts.height;
     if (opts.frame) {
@@ -1521,6 +1526,20 @@ void graphics_show(const Expr* graphics_expr) {
         float mT = (float)opts.height * 0.05f; if (mT < mT_floor) mT = mT_floor;
         float mB = (float)opts.height * 0.05f; if (mB < 48.0f + labelB) mB = 48.0f + labelB;
         /* Never let the margins swallow the whole window. */
+        if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
+            reg_x = mL; reg_y = mT;
+            reg_w = (float)opts.width - mL - mR;
+            reg_h = (float)opts.height - mT - mB;
+        }
+    } else if (opts.axes) {
+        /* Floors sized to the screen-space tick labels (draw_axes_labels):
+         * left clears a multi-digit y label, bottom a one-line x label plus
+         * its gap+cap drop, top a PlotLabel line, right the overflow of the
+         * last x label's half-width. */
+        float mL = (float)opts.width  * 0.05f; if (mL < 52.0f) mL = 52.0f;
+        float mR = (float)opts.width  * 0.03f; if (mR < 22.0f) mR = 22.0f;
+        float mT = (float)opts.height * 0.05f; if (mT < 34.0f) mT = 34.0f;
+        float mB = (float)opts.height * 0.05f; if (mB < 40.0f) mB = 40.0f;
         if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
             reg_x = mL; reg_y = mT;
             reg_w = (float)opts.width - mL - mR;
@@ -1560,7 +1579,12 @@ void graphics_show(const Expr* graphics_expr) {
      * line scales with zoom like point_size, rather than staying pinned to
      * a single pixel. base_zoom is guaranteed positive and finite above. */
     init_state.thickness = 1.5f / base_zoom;
-    init_state.point_size = (float)(fmax(data_w, data_h) * 0.006);
+    /* Default marker radius for bare Point[] (e.g. ListPlot's scatter). In
+     * world units scaled by the data extent, so at the home zoom it renders a
+     * roughly constant fraction of the region width regardless of the data's
+     * magnitude. 0.003 (not the earlier 0.006) keeps a scatter from reading as
+     * chunky; callers that want bigger dots set PointSize explicitly. */
+    init_state.point_size = (float)(fmax(data_w, data_h) * 0.003);
     init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
     init_state.yscale = (float)ysc;
 
