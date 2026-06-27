@@ -133,3 +133,49 @@ Expr* eval_color_function(Expr* color_fn, double x, double y,
     Expr* a[1] = { expr_new_real(0.5) };
     return expr_new_function(expr_new_symbol(SYM_GrayLevel), a, 1);
 }
+
+Expr* eval_color_function3(Expr* color_fn,
+                            double x,    double y,    double z,
+                            double xmin, double xmax,
+                            double ymin, double ymax,
+                            double zmin, double zmax,
+                            bool scaling) {
+    if (color_fn->type == EXPR_STRING && strcmp(color_fn->data.string, "Rainbow") == 0) {
+        /* Height-based: cold blue → hot red, capped at 0.8 hue to avoid
+         * wrapping back to red from the violet end. */
+        double t = (zmax > zmin) ? (z - zmin) / (zmax - zmin) : 0.0;
+        Expr* a[1] = { expr_new_real((1.0 - t) * 0.8) };
+        return expr_new_function(expr_new_symbol(SYM_Hue), a, 1);
+    }
+
+    double xs = (scaling && xmax > xmin) ? (x - xmin) / (xmax - xmin) : x;
+    double ys = (scaling && ymax > ymin) ? (y - ymin) / (ymax - ymin) : y;
+    double zs = (scaling && zmax > zmin) ? (z - zmin) / (zmax - zmin) : z;
+
+    /* Try f[xs, ys, zs] first (Mathematica's Plot3D ColorFunction convention). */
+    Expr* args3[3] = { expr_new_real(xs), expr_new_real(ys), expr_new_real(zs) };
+    Expr* call3 = expr_new_function(expr_copy(color_fn), args3, 3);
+    Expr* r3 = evaluate(call3);
+    expr_free(call3);
+    if (is_color_head(r3)) return r3;
+    expr_free(r3);
+
+    /* Fall back to f[xs, zs] — common for height-coloured ramps. */
+    Expr* args2[2] = { expr_new_real(xs), expr_new_real(zs) };
+    Expr* call2 = expr_new_function(expr_copy(color_fn), args2, 2);
+    Expr* r2 = evaluate(call2);
+    expr_free(call2);
+    if (is_color_head(r2)) return r2;
+    expr_free(r2);
+
+    /* Last resort: f[zs] — a univariate colour ramp indexed by height. */
+    Expr* args1[1] = { expr_new_real(zs) };
+    Expr* call1 = expr_new_function(expr_copy(color_fn), args1, 1);
+    Expr* r1 = evaluate(call1);
+    expr_free(call1);
+    if (is_color_head(r1)) return r1;
+    expr_free(r1);
+
+    Expr* a[1] = { expr_new_real(0.5) };
+    return expr_new_function(expr_new_symbol(SYM_GrayLevel), a, 1);
+}

@@ -46,4 +46,14 @@ bool eval_region(Expr* region_fn, double x, double y);
 Expr* eval_color_function(Expr* color_fn, double x, double y,
                            double xmin, double xmax, bool scaling);
 
+/* 3D variant: "Rainbow" sweeps over the scaled z (height) instead of x.
+ * Custom functions are tried as f[xs,ys,zs] → f[xs,zs] → f[zs] in order.
+ * Falls back to neutral gray if nothing resolves to a recognised color. */
+Expr* eval_color_function3(Expr* color_fn,
+                            double x,    double y,    double z,
+                            double xmin, double xmax,
+                            double ymin, double ymax,
+                            double zmin, double zmax,
+                            bool scaling);
+
 #endif /* MATHILDA_GRAPHICS_PLOT_COMMON_H */

@@ -3,20 +3,21 @@
  * Mirrors plot.c's shape as closely as the dimensionality allows: HoldAll
  * (the iterator vars have no value yet), a single split_options3() pass
  * that separates the sampler's own options from a passthrough list copied
- * onto the resulting Graphics3D[...], and the same RegionFunction/
- * ColorFunction/PlotStyle/multi-function-palette idioms as Plot -- in fact
- * the exact same code, via plot_common.h.
+ * onto the resulting Graphics3D[...] result -- exactly split_options's role
+ * in plot.c, just with the smaller set of options that have a 3D meaning.
+ * Anything not recognised here falls into the generic passthrough branch and
+ * is inertly ignored by the renderer.
  *
  * The one place 3D genuinely cannot reuse 2D's sampler (sampling.c) is the
- * adaptive refinement itself: that sampler bisects an *ordered* 1D
- * interval, which has no 2D analogue without inventing a per-cell quadtree
- * -- and a quadtree creates T-junction cracks where differently-refined
- * cells meet. Instead MaxRecursion here doubles the *whole* grid's
- * resolution when a cheap flatness spot-check fails, capped at a few
- * levels and a hard point-count ceiling. This stays crack-free (every
- * level is a uniform grid) and gives MaxRecursion real meaning, at the
- * cost of refining more than strictly necessary -- an acceptable trade for
- * "simple and clear" over a true adaptive mesh. */
+ * adaptive refinement itself: that sampler bisects an *ordered* 1D interval,
+ * which has no 2D analogue without inventing a per-cell quadtree -- and a
+ * quadtree creates T-junction cracks where differently-refined cells meet.
+ * Instead MaxRecursion here doubles the *whole* grid's resolution when a
+ * cheap flatness spot-check fails, capped at a few levels and a hard
+ * point-count ceiling. This stays crack-free (every level is a uniform grid)
+ * and gives MaxRecursion real meaning, at the cost of refining more than
+ * strictly necessary -- an acceptable trade for "simple and clear" over a
+ * true adaptive mesh. */
 
 #include "plot3d.h"
 #include "plot_common.h"
@@ -67,10 +68,11 @@ static bool plotrange_zband(Expr* rhs, double* lo, double* hi) {
 typedef struct {
     long plot_points;
     int  max_recursion;
-    bool mesh;             /* Mesh -> All/True (default): overlay grid wireframe */
-    Expr* region_function; /* borrowed; held; NULL = none */
-    Expr* color_function;  /* borrowed; held (function, or string "Rainbow"); NULL = none */
+    bool mesh;               /* Mesh -> All/True (default): overlay grid wireframe */
+    Expr* region_function;   /* borrowed; held; NULL = none */
+    Expr* color_function;    /* borrowed; held (function, or string "Rainbow"); NULL = none */
     bool  color_function_scaling; /* default true */
+    Expr* exclusion_style;   /* borrowed; held; NULL = none (use default dark-gray line) */
     /* Explicit numeric z-band from PlotRange, fed to the refinement test the
      * same way Plot's yclip feeds sampling.c's flatness test. Degenerate
      * (lo >= hi) means "no explicit PlotRange z" -> use the full data extent. */
@@ -79,11 +81,7 @@ typedef struct {
 
 /* Splits res's trailing Rule args (starting at index 3, after f/{x,..}/{y,..})
  * into the sampler options above and a passthrough list of evaluated Rule
- * expressions destined for the Graphics3D[...] result -- exactly
- * split_options's role in plot.c, just with the smaller set of options that
- * have a 3D meaning. Anything not recognized here (including 2D-only chrome
- * like Filling/Frame/GridLines, which simply have no 3D analogue) falls into
- * the generic passthrough branch and is inertly ignored by the renderer. */
+ * expressions destined for the Graphics3D[...] result. */
 static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
                             Expr*** passthrough_out, size_t* passthrough_count_out,
                             Expr** single_color_out) {
@@ -93,6 +91,7 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
     sopts->region_function = NULL;
     sopts->color_function = NULL;
     sopts->color_function_scaling = true;
+    sopts->exclusion_style = NULL;
     sopts->zclip_lo = 0.0;
     sopts->zclip_hi = -1.0;
     *single_color_out = NULL;
@@ -143,6 +142,13 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
             Expr* v = evaluate(expr_copy(rhs));
             sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol == SYM_False);
             expr_free(v);
+        } else if (name == SYM_ExclusionStyle) {
+            /* Store the raw rhs for use in the sampler; also pass through to
+             * the Graphics3D options so the renderer can inspect it if needed. */
+            sopts->exclusion_style = rhs;
+            Expr* val = evaluate(expr_copy(rhs));
+            Expr* a[2] = { expr_copy(lhs), val };
+            passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         } else if (name == SYM_PlotStyle) {
             have_style = true;
             if (*single_color_out) expr_free(*single_color_out);
@@ -206,7 +212,7 @@ static bool eval_region3(Expr* region_fn, double x, double y, double z) {
     Expr* args3[3] = { expr_new_real(x), expr_new_real(y), expr_new_real(z) };
     Expr* call3 = expr_new_function(expr_copy(region_fn), args3, 3);
     Expr* r3 = evaluate(call3);
-    expr_free(call3); /* evaluate() borrows its argument; the call node is ours to free */
+    expr_free(call3);
     bool true3 = (r3->type == EXPR_SYMBOL && r3->data.symbol == SYM_True);
     bool false3 = (r3->type == EXPR_SYMBOL && r3->data.symbol == SYM_False);
     expr_free(r3);
@@ -262,9 +268,9 @@ static double clamp_band3(double z, double lo, double hi) {
 
 /* Maximum deviation of the surface from its bilinear interpolant at each
  * cell center, as a fraction of the displayed z-extent -- the 2D analogue
- * of sampling.c's chord-vs-curve flatness test (see the file header
- * comment for why this drives whole-grid doubling rather than a per-cell
- * quadtree). One extra f[x,y] evaluation per cell. */
+ * of sampling.c's chord-vs-curve flatness test (see the file header comment
+ * for why this drives whole-grid doubling rather than a per-cell quadtree).
+ * One extra f[x,y] evaluation per cell. */
 #define FLAT_TOL3D 0.0025
 
 static bool surface_is_flat(Plot3DEvalCtx* ctx, const GridPt* grid, long n,
@@ -337,15 +343,53 @@ static Expr* mesh_line(const GridPt* a, const GridPt* b) {
     return expr_new_function(expr_new_symbol(SYM_Line), largs, 1);
 }
 
+/* Compute the z-range [*zlo, *zhi] of all valid grid points using the same
+ * robust range as the adaptive sampler's flatness test. Returns false when
+ * the grid has no valid points (empty zrange, zlo > zhi). */
+static bool grid_zrange(const GridPt* grid, long n, double* zlo, double* zhi) {
+    size_t total = (size_t)n * (size_t)n;
+    double* zs = malloc(sizeof(double) * total);
+    size_t zc = 0;
+    for (size_t k = 0; k < total; k++) {
+        if (grid[k].valid) zs[zc++] = grid[k].z;
+    }
+    plot_robust_yrange(zs, zc, zlo, zhi);
+    free(zs);
+    return *zlo < *zhi;
+}
+
+/* Return the per-surface color directive for surface `fi` of `nfun`.
+ * - single_color NULL -> fall back to palette
+ * - single_color is a List -> index into it (cycling if short)
+ * - single_color is a direct color -> use it for all surfaces */
+static Expr* surface_color(Expr* single_color, size_t fi, size_t nfun) {
+    (void)nfun;
+    if (!single_color) return palette_color(fi);
+
+    bool is_list = (single_color->type == EXPR_FUNCTION
+                    && single_color->data.function.head->type == EXPR_SYMBOL
+                    && single_color->data.function.head->data.symbol == SYM_List);
+    if (is_list) {
+        size_t len = single_color->data.function.arg_count;
+        if (len == 0) return palette_color(fi);
+        return expr_copy(single_color->data.function.args[fi % len]);
+    }
+
+    return expr_copy(single_color);
+}
+
 /* Sample every body over the grid and assemble the flat primitive
- * List[...] that becomes Graphics3D[...]'s first argument: a palette
- * colour per surface for multi-surface plots (Plot's same idiom), then
- * each valid grid cell as one Polygon[{p00,p10,p11,p01}] -- the *existing*
- * inert Polygon head, just with 3-coordinate points instead of 2 -- prefixed
- * by a ColorFunction-resolved color directive when ColorFunction is set.
- * Mesh -> True (the default) appends one wireframe Line per cell edge in a
- * fixed dark shade, after all of a surface's fills (so toggling the ambient
- * draw color happens once per surface, not once per cell). */
+ * List[...] that becomes Graphics3D[...]'s first argument.
+ *
+ * Features implemented here:
+ *   - Per-surface PlotStyle from single_color (List or direct color)
+ *   - ColorFunction using full 3D (x, y, z) coordinates and z-range via
+ *     eval_color_function3
+ *   - Interior-only mesh lines: boundary perimeter edges are never drawn,
+ *     giving a smooth silhouette instead of the jagged sawtooth that appears
+ *     when all four cell edges are drawn unconditionally
+ *   - ExclusionStyle: boundary edges between valid and excluded grid cells
+ *     drawn in the exclusion_style directive when RegionFunction is set */
 static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Expr* vary,
                                        double xmin, double xmax, double ymin, double ymax,
                                        const Plot3DSampleOpts* sopts, Expr* single_color) {
@@ -370,8 +414,15 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
         GridPt* grid = sample_surface(&ctx, xmin, xmax, ymin, ymax, sopts->plot_points, sopts->max_recursion,
                                        sopts->zclip_lo, sopts->zclip_hi, &n);
 
-        if (multi) PUSH(palette_color(fi));
+        /* Per-surface color directive from PlotStyle (or palette fallback for
+         * multi-surface plots). */
+        if (multi) PUSH(surface_color(single_color, fi, nfun));
 
+        /* Compute z-range once per surface for ColorFunction3 scaling. */
+        double zlo = 0.0, zhi = 1.0;
+        if (sopts->color_function) grid_zrange(grid, n, &zlo, &zhi);
+
+        /* ---- Fill polygons ---- */
         for (long i = 0; i + 1 < n; i++) {
             for (long j = 0; j + 1 < n; j++) {
                 GridPt* p00 = &grid[i * n + j],     *p10 = &grid[(i + 1) * n + j];
@@ -381,8 +432,11 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
 
                 if (sopts->color_function) {
                     double cx = (p00->x + p10->x + p01->x + p11->x) / 4.0;
+                    double cy = (p00->y + p10->y + p01->y + p11->y) / 4.0;
                     double cz = (p00->z + p10->z + p01->z + p11->z) / 4.0;
-                    PUSH(eval_color_function(sopts->color_function, cx, cz, xmin, xmax,
+                    PUSH(eval_color_function3(sopts->color_function,
+                                              cx, cy, cz,
+                                              xmin, xmax, ymin, ymax, zlo, zhi,
                                               sopts->color_function_scaling));
                 }
 
@@ -394,6 +448,14 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
             }
         }
 
+        /* ---- Interior mesh lines ----
+         *
+         * Draw the bottom and left edges of each valid cell, but only when
+         * the adjacent cell on that side is also fully valid.  This gives
+         * each interior grid line drawn exactly once and suppresses mesh
+         * lines at both the rectangular domain perimeter (no cell beyond
+         * the outer row/column) and at any RegionFunction exclusion
+         * boundary (invalid neighbour → line omitted). */
         if (sopts->mesh) {
             bool mesh_started = false;
             for (long i = 0; i + 1 < n; i++) {
@@ -401,21 +463,86 @@ static Expr* build_surface_primitives(Expr** bodies, size_t nfun, Expr* varx, Ex
                     GridPt* p00 = &grid[i * n + j],     *p10 = &grid[(i + 1) * n + j];
                     GridPt* p01 = &grid[i * n + j + 1], *p11 = &grid[(i + 1) * n + j + 1];
                     if (!p00->valid || !p10->valid || !p01->valid || !p11->valid) continue;
-                    if (!mesh_started) {
-                        Expr* a[1] = { expr_new_real(0.15) };
-                        PUSH(expr_new_function(expr_new_symbol(SYM_GrayLevel), a, 1));
-                        mesh_started = true;
+                    /* Bottom edge: only when the cell below is also fully valid. */
+                    if (j > 0) {
+                        GridPt* b0 = &grid[i * n + (j - 1)], *b1 = &grid[(i + 1) * n + (j - 1)];
+                        if (b0->valid && b1->valid) {
+                            if (!mesh_started) {
+                                Expr* _a[1] = { expr_new_real(0.15) };
+                                PUSH(expr_new_function(expr_new_symbol(SYM_GrayLevel), _a, 1));
+                                mesh_started = true;
+                            }
+                            PUSH(mesh_line(p00, p10));
+                        }
                     }
-                    PUSH(mesh_line(p00, p10));
-                    PUSH(mesh_line(p10, p11));
-                    PUSH(mesh_line(p11, p01));
-                    PUSH(mesh_line(p01, p00));
+                    /* Left edge: only when the cell to the left is also fully valid. */
+                    if (i > 0) {
+                        GridPt* l0 = &grid[(i - 1) * n + j], *l1 = &grid[(i - 1) * n + j + 1];
+                        if (l0->valid && l1->valid) {
+                            if (!mesh_started) {
+                                Expr* _a[1] = { expr_new_real(0.15) };
+                                PUSH(expr_new_function(expr_new_symbol(SYM_GrayLevel), _a, 1));
+                                mesh_started = true;
+                            }
+                            PUSH(mesh_line(p01, p00));
+                        }
+                    }
                 }
             }
         }
 
+        /* ---- ExclusionStyle: boundary of the valid region ----
+         *
+         * Walk every fully-valid cell and draw each of its 4 edges that
+         * borders either an invalid/excluded cell or the domain boundary.
+         * Using cell-level validity (all 4 corners valid) is critical:
+         * invalid grid points carry z=0 (the build_grid fallback), so the
+         * old vertex-mismatch approach drew lines from the surface down to
+         * the z=0 plane, making them invisible or misplaced.  Cell-level
+         * edges always have both endpoints on the actual surface. */
+        if (sopts->region_function) {
+            bool exc_started = false;
+
+#define ENSURE_EXC_STYLE() do { \
+    if (!exc_started) { \
+        if (sopts->exclusion_style) { \
+            PUSH(expr_copy(sopts->exclusion_style)); \
+        } else { \
+            Expr* _a[1] = { expr_new_real(0.35) }; \
+            PUSH(expr_new_function(expr_new_symbol(SYM_GrayLevel), _a, 1)); \
+        } \
+        exc_started = true; \
+    } \
+} while (0)
+
+            for (long i = 0; i + 1 < n; i++) {
+                for (long j = 0; j + 1 < n; j++) {
+                    GridPt* p00 = &grid[i*n+j],     *p10 = &grid[(i+1)*n+j];
+                    GridPt* p01 = &grid[i*n+j+1],   *p11 = &grid[(i+1)*n+j+1];
+                    if (!p00->valid || !p10->valid || !p01->valid || !p11->valid) continue;
+
+                    /* Bottom (p00–p10): no fully-valid cell below */
+                    { bool nb = (j > 0)
+                             && grid[i*n+(j-1)].valid && grid[(i+1)*n+(j-1)].valid;
+                      if (!nb) { ENSURE_EXC_STYLE(); PUSH(mesh_line(p00, p10)); } }
+                    /* Top (p01–p11): no fully-valid cell above */
+                    { bool na = (j + 2 < n)
+                             && grid[i*n+(j+2)].valid && grid[(i+1)*n+(j+2)].valid;
+                      if (!na) { ENSURE_EXC_STYLE(); PUSH(mesh_line(p01, p11)); } }
+                    /* Left (p00–p01): no fully-valid cell to the left */
+                    { bool nl = (i > 0)
+                             && grid[(i-1)*n+j].valid && grid[(i-1)*n+(j+1)].valid;
+                      if (!nl) { ENSURE_EXC_STYLE(); PUSH(mesh_line(p00, p01)); } }
+                    /* Right (p10–p11): no fully-valid cell to the right */
+                    { bool nr = (i + 2 < n)
+                             && grid[(i+2)*n+j].valid && grid[(i+2)*n+(j+1)].valid;
+                      if (!nr) { ENSURE_EXC_STYLE(); PUSH(mesh_line(p10, p11)); } }
+                }
+            }
+#undef ENSURE_EXC_STYLE
+        }
+
         free(grid);
-        (void)single_color;
     }
 #undef PUSH
 

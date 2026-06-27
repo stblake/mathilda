@@ -150,6 +150,7 @@ extern const char* SYM_Evaluate;
 extern const char* SYM_EvaluationMonitor;
 extern const char* SYM_Except;
 extern const char* SYM_Exclusions;
+extern const char* SYM_ExclusionStyle;
 extern const char* SYM_Exp;
 extern const char* SYM_ExtendedGCD;
 extern const char* SYM_Extension;

@@ -137,6 +137,7 @@ const char* SYM_InverseErf = NULL;
 const char* SYM_InverseErfc = NULL;
 const char* SYM_Except = NULL;
 const char* SYM_Exclusions = NULL;
+const char* SYM_ExclusionStyle = NULL;
 const char* SYM_Exp = NULL;
 const char* SYM_ExtendedGCD = NULL;
 const char* SYM_Extension = NULL;
@@ -745,6 +746,7 @@ void sym_names_init(void) {
     SYM_InverseErfc                = intern_symbol("InverseErfc");
     SYM_Except                     = intern_symbol("Except");
     SYM_Exclusions                 = intern_symbol("Exclusions");
+    SYM_ExclusionStyle             = intern_symbol("ExclusionStyle");
     SYM_Exp                        = intern_symbol("Exp");
     SYM_ExtendedGCD                = intern_symbol("ExtendedGCD");
     SYM_Extension                  = intern_symbol("Extension");

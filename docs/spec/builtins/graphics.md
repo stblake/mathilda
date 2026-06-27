@@ -411,11 +411,12 @@ sense, sharing the actual evaluation code (`src/graphics/plot_common.c`) for
 |---|---|---|
 | `PlotPoints` | `25` | initial per-axis grid resolution (an `n x n` grid) |
 | `MaxRecursion` | `2` | doubles the *whole* grid's resolution (up to this many times, capped at 200 points/axis) while a cell-center-vs-bilinear-interpolant flatness check fails -- a global, crack-free analogue of `Plot`'s per-interval adaptive bisection (a per-cell quadtree would leave T-junction cracks where differently-refined cells meet) |
-| `Mesh` | `True` | overlays the grid wireframe on the surface (unlike `Plot`'s default `None` -- Mathematica's `Plot3D` shows mesh lines out of the box too); `None`/`False` draws the filled surface only |
-| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | the surface's fill color (single-surface case); ignored where `ColorFunction` overrides per cell |
-| `ColorFunction` | none | a function `f[xscaled,zscaled]`/`f[xscaled]` returning a color literal, evaluated once per grid cell at its center -- or the string `"Rainbow"`. Same function `Plot` uses, with `z` (height) standing in for `Plot`'s `y` |
-| `ColorFunctionScaling` | `True` | as in `Plot` |
+| `Mesh` | `True` | overlays the grid wireframe on the surface (unlike `Plot`'s default `None` -- Mathematica's `Plot3D` shows mesh lines out of the box too); `None`/`False` draws the filled surface only. **Only interior grid lines are drawn** -- the perimeter edges of the domain are omitted, giving a smooth boundary silhouette |
+| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | the surface's fill color. For a single surface, a direct color literal; for multi-surface plots (`{f1,f2,...}`), a `List` of colors is indexed per surface (cycling if shorter than the surface count), or a single literal applies to all. Ignored per-cell where `ColorFunction` overrides |
+| `ColorFunction` | none | a function returning a color literal, evaluated at the center of each grid cell. **Calling convention** (tried in order): `f[xs, ys, zs]` (Mathematica's 3D convention), then `f[xs, zs]` (height ramp), then `f[zs]` (univariate height). The string `"Rainbow"` is built-in: it maps z-height to a blue-to-red hue sweep (`Hue[(1-t)*0.8]` where `t = (z-zmin)/(zmax-zmin)`) |
+| `ColorFunctionScaling` | `True` | when `True`, the arguments passed to `ColorFunction` are scaled to `[0,1]` within the data range; `False` passes raw coordinate values |
 | `RegionFunction` | none | `f[x,y,z]` (Mathematica's `Plot3D` convention) tried first; falls back to `Plot`'s `f[x,y]`/`f[x]` forms if that doesn't resolve to `True`/`False`, so a `RegionFunction` written for `Plot` keeps working |
+| `ExclusionStyle` | `GrayLevel[0.35]` | style directive (a color literal or `Thickness[...]` etc.) used to draw the boundary edges between included and excluded grid cells when `RegionFunction` is active |
 | `PlotRange` | `Automatic` | an explicit `{zmin,zmax}` (or the last `{zmin,zmax}` of a longer nested list) feeds the same flatness check `MaxRecursion` uses, and bounds the rendered box |
 | `Axes` | `True` | draws a wireframe bounding box with tick labels |
 
@@ -441,11 +442,17 @@ In[1]:= Plot3D[Sin[x] Cos[y], {x, -3, 3}, {y, -3, 3}]
 Out[1]= -Graphics3D-
 
 In[2]:= Plot3D[x^2 - y^2, {x, -2, 2}, {y, -2, 2}, ColorFunction -> "Rainbow", Mesh -> None]
-Out[2]= -Graphics3D-
+Out[2]= -Graphics3D-  (* Rainbow maps z-height to hue *)
 
 In[3]:= Plot3D[x + y, {x, -2, 2}, {y, -2, 2}, RegionFunction -> Function[{x, y, z}, x^2 + y^2 < 4]]
-Out[3]= -Graphics3D-
+Out[3]= -Graphics3D-  (* exclusion boundary drawn in default GrayLevel[0.35] *)
 
-In[4]:= Plot3D[{Sin[x + y], Cos[x - y]}, {x, -2, 2}, {y, -2, 2}]
-Out[4]= -Graphics3D-
+In[4]:= Plot3D[x + y, {x,-2,2}, {y,-2,2},RegionFunction -> Function[{x,y,z}, x^2+y^2 <4],ExclusionStyle -> RGBColor[1, 0.3, 0]]
+Out[4]= -Graphics3D-  (* exclusion boundary in orange *)
+
+In[5]:= Plot3D[{Sin[x + y], Cos[x - y]}, {x, -2, 2}, {y, -2, 2}]
+Out[5]= -Graphics3D-  (* palette colors for each surface *)
+
+In[6]:= Plot3D[{x^2, x^2 + 1}, {x,-2,2}, {y,-2,2},PlotStyle -> {Blue, Red}]
+Out[6]= -Graphics3D-  (* explicit per-surface colors *)
 ```
