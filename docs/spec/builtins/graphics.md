@@ -365,3 +365,60 @@ Out[7]= -Graphics-
 In[8]:= Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}, PlotLegends -> "Expressions"]
 Out[8]= -Graphics-
 ```
+
+## ListPlot
+Plots explicit data as a point (scatter) plot, returning a
+`Graphics[{Point[...], ...}, opts]` object rendered through the same engine
+as `Plot`/`Show`. Unlike `Plot` (which is `HoldAll` so its function body stays
+symbolic), `ListPlot`'s data is concrete and **is** evaluated, so
+`ListPlot[Range[10]]` and `ListPlot[Table[i^2, {i, 5}]]` work.
+
+Data is classified into one or more datasets:
+
+- `ListPlot[{y1, ..., yn}]` — a flat list of **heights**, plotted as the
+  points `{i, yi}` (`x` running over `DataRange`, default `1` to `n`).
+  Non-numeric entries are treated as missing and skipped (their index slot is
+  still consumed).
+- `ListPlot[{{x1, y1}, ..., {xn, yn}}]` — a list of **coordinate pairs**,
+  plotted as the given points (a scatter plot).
+- `ListPlot[{data1, data2, ...}]` — several **datasets** (any element that is
+  itself a sublist and not a flat pair list), each drawn in a distinct palette
+  colour (`ColorData[97]`, as for multi-curve `Plot`).
+
+A non-list argument, an empty list, or all-missing data leaves `ListPlot`
+unevaluated.
+
+`ListPlot`-specific options (the rest pass through to the `Graphics[...]`
+result and are interpreted by the renderer — see the `Show` table above):
+
+| Option | Default | Meaning |
+|---|---|---|
+| `Joined` | `False` | `True` connects the points with a `Line` polyline instead of drawing point markers |
+| `DataRange` | `Automatic` | the x-range `{xmin, xmax}` to assume for a heights list (`Automatic`/`All` = `1` to `n`); `DataRange -> All` forces a flat list of pairs to be read as several height datasets |
+| `Filling` | `None` | `Axis` / `Bottom` / `Top` / a number — draws a vertical stem from each point to that baseline |
+| `FillingStyle` | `Automatic` | colour/opacity directive for the stems (default `Opacity[0.3]`) |
+| `PlotStyle` | `Automatic` | colour for the points/line (default blue `RGBColor[0.2, 0.4, 0.8]`) |
+| `PlotLegends` | `None` | `{lbl1, ...}` labels each dataset; `Automatic` labels by index; emits the internal `$PlotLegendData` the renderer's legend box reads |
+| `PlotMarkers` | `None` | accepted; markers currently render with the default glyph |
+
+Plot-style defaults distinct from a bare `Graphics[]`: `Axes -> True`,
+`AspectRatio -> 1/GoldenRatio`. A supplied `Frame -> True` suppresses the
+default `Axes -> True`, as for `Plot`.
+
+```mathematica
+In[1]:= ListPlot[{1, 4, 9, 16, 25}]
+Out[1]= -Graphics-
+
+In[2]:= ListPlot[{{0, 0}, {1, 1}, {2, 4}, {3, 9}}]
+Out[2]= -Graphics-
+
+In[3]:= ListPlot[{{1, 1}, {2, 4}, {3, 9}}, Joined -> True]
+Out[3]= -Graphics-
+
+In[4]:= ListPlot[{Table[Sin[n], {n, 20}], Table[Cos[n], {n, 20}]},
+            PlotLegends -> {"sin", "cos"}]
+Out[4]= -Graphics-
+
+In[5]:= ListPlot[{1, 4, 9, 16}, Filling -> Axis]
+Out[5]= -Graphics-
+```

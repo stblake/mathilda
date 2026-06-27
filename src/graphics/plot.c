@@ -50,7 +50,7 @@ static bool expr_to_real_double(const Expr* e, double* out) {
  * numeric (2 Pi, E, Sqrt[2], ...) rather than a literal machine number, so
  * route them through N[] (exactly as a user typing N[2 Pi] would) before
  * extracting a double. */
-static bool numericize_bound(Expr* e, double* out) {
+bool numericize_bound(Expr* e, double* out) {
     Expr* n_arg[1] = { expr_copy(e) };
     Expr* n_call = expr_new_function(expr_new_symbol("N"), n_arg, 1);
     Expr* result = evaluate(n_call);
@@ -344,7 +344,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
  * Mathematica's default plot palette (ColorData[97], "the 97 colours"),
  * hand-tuned so any prefix of the list reads well together; we cycle it for
  * plots with more curves than entries. */
-static Expr* palette_color(size_t i) {
+Expr* palette_color(size_t i) {
     static const double pal[][3] = {
         { 0.368417, 0.506779, 0.709798 },
         { 0.880722, 0.611041, 0.142051 },

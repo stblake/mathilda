@@ -165,6 +165,36 @@ void graphics_init(void) {
         "object) in an interactive window and returns it, merging any "
         "given options into its option list.");
 
+    /* ListPlot's data must evaluate (ListPlot[Range[10]] / Table[...]), so —
+     * unlike Plot — it is a plain protected builtin, not HoldAll. The option
+     * keywords below are inert so they print and ?-document, but carry no
+     * value of their own. */
+    register_inert("Joined",
+        "Joined\n\tA ListPlot option: True connects the points with a line "
+        "instead of drawing markers (default False).");
+    register_inert("DataRange",
+        "DataRange\n\tA ListPlot option: the x-range {xmin, xmax} to assume "
+        "for a list of heights (default Automatic = 1 to n). DataRange -> All "
+        "reads a flat list of pairs as several height datasets.");
+    register_inert("PlotMarkers",
+        "PlotMarkers\n\tA ListPlot option naming the markers used for points "
+        "(default None). Currently accepted but rendered with the default "
+        "marker.");
+
+    symtab_add_builtin("ListPlot", builtin_listplot);
+    symtab_get_def("ListPlot")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ListPlot",
+        "ListPlot[{y1, ..., yn}, opts...]\n\tPlots the values as points "
+        "{i, yi} (a scatter/point plot). ListPlot[{{x1,y1}, ...}] plots the "
+        "given coordinate pairs; ListPlot[{data1, data2, ...}] overlays each "
+        "dataset in a distinct palette colour. Returns a Graphics[...] object. "
+        "Options: Joined (connect points; default False), DataRange (x-range "
+        "for heights), Filling (Axis/Bottom/Top/a number — draws stems), "
+        "FillingStyle, PlotMarkers, PlotStyle, PlotLegends, and the Graphics "
+        "options PlotRange, Axes (default True), AspectRatio (default "
+        "1/GoldenRatio), Frame, AxesLabel, GridLines, ImageSize, Background, "
+        "PlotLabel, Prolog, Epilog.");
+
     symtab_add_builtin("Plot", builtin_plot);
     symtab_get_def("Plot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("Plot",

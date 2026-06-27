@@ -25,4 +25,14 @@ Expr* builtin_plot(Expr* res);
 Expr* plot_resample(const Expr* graphics_expr, double xmin, double xmax,
                     double yclip_lo, double yclip_hi);
 
+/* Shared with listplot.c. Routes a (possibly symbolic-but-numeric, e.g.
+ * 2 Pi / Sqrt[2]) expression through N[] and extracts a finite double.
+ * Returns false if the result isn't a finite real. */
+bool numericize_bound(Expr* e, double* out);
+
+/* Shared with listplot.c. Returns a freshly owned RGBColor[...] directive
+ * from Mathematica's default plot palette (ColorData[97]), cycling for
+ * i beyond the table length. */
+Expr* palette_color(size_t i);
+
 #endif /* MATHILDA_GRAPHICS_PLOT_H */

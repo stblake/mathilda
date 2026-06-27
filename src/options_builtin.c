@@ -540,6 +540,25 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("PlotRange", "Automatic"));
     ob_commit(&b, "Plot");
 
+    ob_init(&b);
+    ob_add(&b, r_sym("Joined", "False"));
+    ob_add(&b, r_sym("DataRange", "Automatic"));
+    ob_add(&b, r_sym("Filling", "None"));
+    ob_add(&b, r_sym("FillingStyle", "Automatic"));
+    ob_add(&b, r_sym("PlotMarkers", "None"));
+    ob_add(&b, r_sym("PlotStyle", "Automatic"));
+    ob_add(&b, r_sym("PlotLegends", "None"));
+    ob_add(&b, r_sym("Axes", "True"));
+    /* AspectRatio -> 1/GoldenRatio (its Wolfram surface default). */
+    {
+        Expr* gr[2] = { expr_new_symbol("GoldenRatio"), expr_new_integer(-1) };
+        Expr* inv = expr_new_function(expr_new_symbol("Power"), gr, 2);
+        ob_add(&b, rule2(expr_new_symbol("AspectRatio"), inv));
+    }
+    ob_add(&b, r_sym("Frame", "False"));
+    ob_add(&b, r_sym("PlotRange", "Automatic"));
+    ob_commit(&b, "ListPlot");
+
     /* Graphics[] honours these via render.c's gfx_options_parse(); the set
      * mirrors that parser exactly. Alphabetical, in their Wolfram surface
      * defaults. Prolog/Epilog/LabelStyle default to {} (nothing extra to

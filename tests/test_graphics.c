@@ -346,6 +346,96 @@ void test_label_style_passthrough(void) {
         "RGBColor[0, 0, 1]", 0);
 }
 
+/* ---- ListPlot: symbolic Graphics[...] construction ---- */
+
+void test_listplot_returns_graphics_head(void) {
+    assert_eval_eq("Head[ListPlot[{1, 4, 9}]]", "Graphics", 0);
+    /* A non-list / all-missing argument leaves ListPlot unevaluated. */
+    assert_eval_eq("ListPlot[x]", "ListPlot[x]", 0);
+    assert_eval_eq("ListPlot[{}]", "ListPlot[{}]", 0);
+    assert_eval_eq("ListPlot[{a, b, c}]", "ListPlot[{a, b, c}]", 0);
+}
+
+void test_listplot_heights_form(void) {
+    /* {y1,...,yn} -> points {i, yi}. */
+    assert_eval_eq("FullForm[ListPlot[{1, 4, 9}][[1]]]",
+        "List[Point[List[List[1.0, 1.0], List[2.0, 4.0], List[3.0, 9.0]]]]", 0);
+    /* Data is evaluated (ListPlot is not HoldAll), so Table works. */
+    assert_eval_eq("Length[ListPlot[Table[i^2, {i, 1, 5}]][[1, 1, 1]]]", "5", 0);
+    /* A non-numeric height is missing; its index slot is skipped. */
+    assert_eval_eq("FullForm[ListPlot[{1, x, 3}][[1]]]",
+        "List[Point[List[List[1.0, 1.0], List[3.0, 3.0]]]]", 0);
+}
+
+void test_listplot_pairs_form(void) {
+    /* {{x,y},...} -> the given points (one Point primitive). */
+    assert_eval_eq("FullForm[ListPlot[{{0, 0}, {1, 1}, {2, 4}}][[1]]]",
+        "List[Point[List[List[0.0, 0.0], List[1.0, 1.0], List[2.0, 4.0]]]]", 0);
+}
+
+void test_listplot_datarange_maps_heights(void) {
+    /* DataRange -> {xmin, xmax} spreads heights uniformly across the range. */
+    assert_eval_eq("FullForm[ListPlot[{1, 4, 9}, DataRange -> {0, 1}][[1]]]",
+        "List[Point[List[List[0.0, 1.0], List[0.5, 4.0], List[1.0, 9.0]]]]", 0);
+}
+
+void test_listplot_joined_emits_line(void) {
+    /* Joined -> True draws a Line polyline instead of a Point cloud. */
+    assert_eval_eq("Head[ListPlot[{{1, 1}, {2, 4}}, Joined -> True][[1, 1]]]",
+        "Line", 0);
+    assert_eval_eq("Head[ListPlot[{{1, 1}, {2, 4}}][[1, 1]]]", "Point", 0);
+}
+
+void test_listplot_multiple_datasets_get_palette(void) {
+    /* A list of sublists that aren't 2-pairs is several datasets, each
+     * prefixed by a distinct palette colour directive. */
+    assert_eval_eq(
+        "Cases[ListPlot[{{1, 2, 3}, {4, 5, 6}}][[1]], RGBColor[___]]",
+        "{RGBColor[0.368417, 0.506779, 0.709798],"
+        " RGBColor[0.880722, 0.611041, 0.142051]}", 0);
+    /* DataRange -> All forces a flat list of pairs to be read as datasets. */
+    assert_eval_eq(
+        "Length[Cases[ListPlot[{{1, 1}, {2, 4}}, DataRange -> All][[1]], Point[___]]]",
+        "2", 0);
+}
+
+void test_listplot_filling_builds_stems(void) {
+    /* Filling -> Axis draws one vertical stem Line per point to y = 0,
+     * wrapped in Opacity, then restores the curve colour before the points. */
+    assert_eval_eq(
+        "Length[Cases[ListPlot[{1, 4, 9}, Filling -> Axis][[1]], Line[___]]]",
+        "3", 0);
+    assert_eval_eq(
+        "MemberQ[ListPlot[{1, 4, 9}, Filling -> Axis][[1]], Opacity[0.3]]",
+        "True", 0);
+}
+
+void test_listplot_default_options_injected(void) {
+    /* ListPlot injects Axes -> True and AspectRatio -> 1/GoldenRatio. */
+    assert_eval_eq("First[Cases[ListPlot[{1, 2, 3}], (Axes -> v_) -> v]]", "True", 0);
+    assert_eval_eq(
+        "Abs[First[Cases[ListPlot[{1, 2, 3}], (AspectRatio -> v_) -> v]]"
+        " - N[1/GoldenRatio]] < 10^-6", "True", 0);
+    /* An explicit PlotStyle is passed through and suppresses the default. */
+    assert_eval_eq(
+        "First[Cases[ListPlot[{1, 2}, PlotStyle -> Red], (PlotStyle -> v_) -> v]]",
+        "RGBColor[1, 0, 0]", 0);
+}
+
+void test_listplot_options_registered(void) {
+    assert_eval_eq("Options[ListPlot, Joined]", "{Joined -> False}", 0);
+    assert_eval_eq("Options[ListPlot, DataRange]", "{DataRange -> Automatic}", 0);
+}
+
+void test_listplot_legends_metadata(void) {
+    assert_eval_eq("Cases[ListPlot[{1, 2, 3}], $PlotLegendData[___]]", "{}", 0);
+    assert_eval_eq(
+        "Cases[ListPlot[{{1, 2, 3}, {4, 5, 6}}, PlotLegends -> {\"a\", \"b\"}],"
+        " $PlotLegendData[___]]",
+        "{$PlotLegendData[{RGBColor[0.368417, 0.506779, 0.709798], \"a\"},"
+        " {RGBColor[0.880722, 0.611041, 0.142051], \"b\"}]}", 0);
+}
+
 #ifdef USE_GRAPHICS
 /* The frame minor-tick subdivision policy frame_minor_divs() lives in
  * render.c; exercise it directly. A "nice" step (1/2/5 x 10^k) chooses round
@@ -455,6 +545,16 @@ int main(void) {
     TEST(test_plot_legends_metadata);
     TEST(test_region_function_and_exclusions_split_domain);
     TEST(test_label_style_passthrough);
+    TEST(test_listplot_returns_graphics_head);
+    TEST(test_listplot_heights_form);
+    TEST(test_listplot_pairs_form);
+    TEST(test_listplot_datarange_maps_heights);
+    TEST(test_listplot_joined_emits_line);
+    TEST(test_listplot_multiple_datasets_get_palette);
+    TEST(test_listplot_filling_builds_stems);
+    TEST(test_listplot_default_options_injected);
+    TEST(test_listplot_options_registered);
+    TEST(test_listplot_legends_metadata);
 #ifdef USE_GRAPHICS
     TEST(test_frame_minor_divs_policy);
     TEST(test_window_height_policy);

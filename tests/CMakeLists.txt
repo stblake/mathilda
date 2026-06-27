@@ -395,6 +395,7 @@ set(COMMON_SRC
     ../src/graphics/graphics_init.c
     ../src/graphics/sampling.c
     ../src/graphics/plot.c
+    ../src/graphics/listplot.c
     ../src/graphics/show.c
 )
 

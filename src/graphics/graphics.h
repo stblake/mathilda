@@ -9,6 +9,7 @@
 #include "primitives.h"
 #include "sampling.h"
 #include "plot.h"
+#include "listplot.h"
 #include "show.h"
 
 void graphics_init(void);

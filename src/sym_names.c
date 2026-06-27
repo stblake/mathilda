@@ -615,6 +615,10 @@ const char* SYM_RegionFunction = NULL;
 const char* SYM_LabelStyle = NULL;
 const char* SYM_PlotLegendData = NULL;
 const char* SYM_PlotResample = NULL;
+const char* SYM_ListPlot = NULL;
+const char* SYM_Joined = NULL;
+const char* SYM_DataRange = NULL;
+const char* SYM_PlotMarkers = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -1224,6 +1228,10 @@ void sym_names_init(void) {
     SYM_LabelStyle                 = intern_symbol("LabelStyle");
     SYM_PlotLegendData             = intern_symbol("$PlotLegendData");
     SYM_PlotResample               = intern_symbol("$PlotResample");
+    SYM_ListPlot                   = intern_symbol("ListPlot");
+    SYM_Joined                     = intern_symbol("Joined");
+    SYM_DataRange                  = intern_symbol("DataRange");
+    SYM_PlotMarkers                = intern_symbol("PlotMarkers");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

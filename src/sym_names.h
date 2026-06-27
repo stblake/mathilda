@@ -638,6 +638,10 @@ extern const char* SYM_PlotLegendData;
 /* Internal: carries Plot's function/var/options inside the returned
  * Graphics[...] so the renderer can re-sample adaptively on zoom. */
 extern const char* SYM_PlotResample;
+extern const char* SYM_ListPlot;     /* ListPlot[data, opts...] */
+extern const char* SYM_Joined;       /* ListPlot option: connect points */
+extern const char* SYM_DataRange;    /* ListPlot option: x-range for heights */
+extern const char* SYM_PlotMarkers;  /* ListPlot option: point glyphs */
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
