@@ -23,6 +23,13 @@ long gfx_window_height(long width, long height, double aspect_ratio,
                        bool aspect_full, bool height_pinned,
                        double data_w, double data_h);
 
+/* Convert a CMYK color to RGB using the standard (profile-free) subtractive
+ * model: r = (1-c)(1-k), g = (1-m)(1-k), b = (1-y)(1-k). Each input is first
+ * clipped to [0,1]; outputs land in [0,1]. Factored out of the renderer so the
+ * conversion is unit-testable headless. */
+void cmyk_to_rgb(double c, double m, double y, double k,
+                 double* r, double* g, double* b);
+
 /* Number of minor (sub-)tick intervals per major frame-tick interval, chosen
  * from the leading digit of `step` so minor ticks land on round values: a
  * "nice" step of 1 splits into 5, 2 into 4, 5 into 5. Factored out of the

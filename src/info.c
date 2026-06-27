@@ -3414,4 +3414,12 @@ void info_init(void) {
         "\n"
         "FrameStyle -> RGBColor[...] or GrayLevel[...] sets the colour. The\n"
         "default is a neutral gray.");
+    symtab_set_docstring("CMYKColor",
+        "CMYKColor[c, m, y, k]\n"
+        "\trepresents a color in the CMYK (cyan, magenta, yellow, black) space.\n"
+        "CMYKColor[c, m, y, k, a] specifies opacity a; CMYKColor[c, m, y] takes\n"
+        "k = 0. The list forms CMYKColor[{c, m, y, k}] and CMYKColor[{c, m, y, k,\n"
+        "a}] are also accepted. Components and opacity outside [0,1] are clipped.\n"
+        "A style directive: sets the colour of subsequent graphics primitives,\n"
+        "converted to RGB as r=(1-c)(1-k), g=(1-m)(1-k), b=(1-y)(1-k).");
 }

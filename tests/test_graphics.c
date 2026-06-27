@@ -250,6 +250,26 @@ void test_hue_color_directive(void) {
         "Hue[0.5]", 0);
 }
 
+void test_cmykcolor_directive(void) {
+    /* CMYKColor is an inert, protected style head: it stays unevaluated and
+     * carries the Protected attribute, with its docstring set in info.c. */
+    assert_eval_eq("Attributes[CMYKColor]", "{Protected}", 0);
+    assert_eval_eq("FullForm[CMYKColor[0.1, 0.2, 0.3, 0.4]]",
+                    "CMYKColor[0.1, 0.2, 0.3, 0.4]", 0);
+    assert_eval_eq("StringTake[Information[CMYKColor], 9]", "\"CMYKColor\"", 0);
+    /* All its surface forms are accepted inside a Graphics[] without error. */
+    assert_eval_eq("Head[Graphics[{CMYKColor[0, 1, 1, 0], Disk[]}]]", "Graphics", 0);
+    assert_eval_eq("Head[Graphics[{CMYKColor[0, 1, 1], Disk[]}]]", "Graphics", 0);
+    assert_eval_eq("Head[Graphics[{CMYKColor[0, 1, 1, 0, 0.5], Disk[]}]]", "Graphics", 0);
+    assert_eval_eq("Head[Graphics[{CMYKColor[{0, 1, 1, 0}], Disk[]}]]", "Graphics", 0);
+    assert_eval_eq("Head[Graphics[{CMYKColor[{0, 1, 1, 0, 0.5}], Disk[]}]]", "Graphics", 0);
+    /* As a Plot directive it passes through verbatim (no auto RGB conversion). */
+    assert_eval_eq(
+        "First[Cases[Plot[Sin[x], {x, 0, 1}, PlotStyle -> CMYKColor[1, 0, 0, 0]],"
+        " (PlotStyle -> v_) -> v]]",
+        "CMYKColor[1, 0, 0, 0]", 0);
+}
+
 void test_color_function_builds_per_segment_colors(void) {
     /* Without ColorFunction, a smooth curve over a small range is a single
      * Line[] run. With it, each segment gets its own color directive +
@@ -527,6 +547,34 @@ void test_polygon_signed_area_winding_detection(void) {
     double line_y[3] = { 0, 0, 0 };
     ASSERT(polygon_signed_area(line_x, line_y, 3) == 0.0);
 }
+
+/* The CMYK->RGB conversion cmyk_to_rgb() lives in render.c (USE_GRAPHICS only);
+ * exercise the subtractive-model math and the [0,1] input clipping directly. */
+void test_cmyk_to_rgb_conversion(void) {
+    double r, g, b;
+    /* Pure black ink (k=1) is black regardless of c/m/y. */
+    cmyk_to_rgb(0, 0, 0, 1, &r, &g, &b);
+    ASSERT(r == 0.0 && g == 0.0 && b == 0.0);
+    /* No ink at all is white. */
+    cmyk_to_rgb(0, 0, 0, 0, &r, &g, &b);
+    ASSERT(r == 1.0 && g == 1.0 && b == 1.0);
+    /* Full cyan -> pure red's complement: (0,1,1) in RGB. */
+    cmyk_to_rgb(1, 0, 0, 0, &r, &g, &b);
+    ASSERT(r == 0.0 && g == 1.0 && b == 1.0);
+    /* Full magenta -> (1,0,1); full yellow -> (1,1,0). */
+    cmyk_to_rgb(0, 1, 0, 0, &r, &g, &b);
+    ASSERT(r == 1.0 && g == 0.0 && b == 1.0);
+    cmyk_to_rgb(0, 0, 1, 0, &r, &g, &b);
+    ASSERT(r == 1.0 && g == 1.0 && b == 0.0);
+    /* Half black darkens an otherwise white pixel by half. */
+    cmyk_to_rgb(0, 0, 0, 0.5, &r, &g, &b);
+    ASSERT(r == 0.5 && g == 0.5 && b == 0.5);
+    /* Out-of-range inputs clip to [0,1] (negative c -> 0, k>1 -> 1 -> black). */
+    cmyk_to_rgb(-1, 0, 0, 0, &r, &g, &b);
+    ASSERT(r == 1.0 && g == 1.0 && b == 1.0);
+    cmyk_to_rgb(0, 0, 0, 2, &r, &g, &b);
+    ASSERT(r == 0.0 && g == 0.0 && b == 0.0);
+}
 #endif
 
 int main(void) {
@@ -557,6 +605,7 @@ int main(void) {
     TEST(test_prolog_epilog_passthrough);
     TEST(test_named_color_constants_resolve);
     TEST(test_hue_color_directive);
+    TEST(test_cmykcolor_directive);
     TEST(test_color_function_builds_per_segment_colors);
     TEST(test_filling_builds_polygon);
     TEST(test_filling_splits_at_baseline_crossing);
@@ -578,6 +627,7 @@ int main(void) {
     TEST(test_frame_minor_divs_policy);
     TEST(test_window_height_policy);
     TEST(test_polygon_signed_area_winding_detection);
+    TEST(test_cmyk_to_rgb_conversion);
 #endif
 
     printf("All graphics tests passed!\n");

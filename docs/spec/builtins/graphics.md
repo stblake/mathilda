@@ -134,6 +134,22 @@ standard HSB-to-RGB, recognized everywhere `RGBColor`/`GrayLevel` are
 (style directives, `PlotStyle`, `Background`, `FrameStyle`, `AxesStyle`,
 `TicksStyle`, `GridLinesStyle`, `ColorFunction`'s return value).
 
+## CMYKColor
+A style directive for the subtractive (print) color model used by inks.
+
+- `CMYKColor[c, m, y, k]`: cyan, magenta, yellow, black components in `[0,1]`.
+- `CMYKColor[c, m, y]`: equivalent to `k = 0`.
+- `CMYKColor[c, m, y, k, a]`: with opacity `a`.
+- `CMYKColor[{c, m, y, k}]` / `CMYKColor[{c, m, y, k, a}]`: list forms.
+
+Components and opacity outside `[0,1]` are clipped. At render time the color
+is converted to RGB by `r = (1-c)(1-k)`, `g = (1-m)(1-k)`, `b = (1-y)(1-k)`,
+so `CMYKColor` is recognized everywhere `RGBColor`/`GrayLevel`/`Hue` are.
+
+```mathematica
+In[1]:= Graphics[{CMYKColor[1, 0, 0, 0], Disk[]}]   (* a cyan disk *)
+```
+
 ## Show
 Normalizes a `Graphics[...]` object for display; the REPL front end opens
 the window when the result is a top-level `Graphics` (see the auto-display

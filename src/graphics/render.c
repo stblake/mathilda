@@ -167,18 +167,59 @@ static RGBA8 rgba_from_hue(const Expr* e) {
     return c;
 }
 
+static double clip01(double v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+void cmyk_to_rgb(double c, double m, double y, double k,
+                 double* r, double* g, double* b) {
+    c = clip01(c); m = clip01(m); y = clip01(y); k = clip01(k);
+    double w = 1.0 - k;
+    *r = (1.0 - c) * w;
+    *g = (1.0 - m) * w;
+    *b = (1.0 - y) * w;
+}
+
+/* CMYKColor[c,m,y], [c,m,y,k], [c,m,y,k,a], and the list forms
+ * CMYKColor[{c,m,y(,k(,a))}] -- a missing black is 0, a missing opacity 1. */
+static RGBA8 rgba_from_cmyk(const Expr* e) {
+    Expr** args = e->data.function.args;
+    size_t n = e->data.function.arg_count;
+    /* Accept the list form by reading components from the inner List. */
+    if (n == 1 && args[0] && args[0]->type == EXPR_FUNCTION
+        && args[0]->data.function.head->type == EXPR_SYMBOL
+        && args[0]->data.function.head->data.symbol == SYM_List) {
+        n = args[0]->data.function.arg_count;
+        args = args[0]->data.function.args;
+    }
+    double c = 0, m = 0, y = 0, k = 0, a = 1;
+    if (n >= 3) {
+        expr_to_d(args[0], &c);
+        expr_to_d(args[1], &m);
+        expr_to_d(args[2], &y);
+    }
+    if (n >= 4) expr_to_d(args[3], &k);
+    if (n >= 5) expr_to_d(args[4], &a);
+    double r, g, b;
+    cmyk_to_rgb(c, m, y, k, &r, &g, &b);
+    a = clip01(a);
+    RGBA8 col = { (unsigned char)(r * 255), (unsigned char)(g * 255),
+                  (unsigned char)(b * 255), (unsigned char)(a * 255) };
+    return col;
+}
+
 static Color to_raylib(RGBA8 c) { Color out = { c.r, c.g, c.b, c.a }; return out; }
 
-/* Resolves any recognized color-literal head (RGBColor, GrayLevel, Hue) to
- * an RGBA8, leaving *out untouched (returning false) for anything else --
- * the single place every color-bearing option/directive in this file goes
- * through, so adding a future color form means touching only this. */
+/* Resolves any recognized color-literal head (RGBColor, GrayLevel, Hue,
+ * CMYKColor) to an RGBA8, leaving *out untouched (returning false) for
+ * anything else -- the single place every color-bearing option/directive in
+ * this file goes through, so adding a future color form means touching only
+ * this. */
 static bool resolve_color(const Expr* e, RGBA8* out) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol;
     if (h == SYM_RGBColor)  { *out = rgba_from_rgbcolor(e); return true; }
     if (h == SYM_GrayLevel) { *out = rgba_from_graylevel(e); return true; }
     if (h == SYM_Hue)       { *out = rgba_from_hue(e); return true; }
+    if (h == SYM_CMYKColor) { *out = rgba_from_cmyk(e); return true; }
     return false;
 }
 

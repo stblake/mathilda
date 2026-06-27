@@ -562,6 +562,7 @@ const char* SYM_Show = NULL;
 const char* SYM_Plot = NULL;
 const char* SYM_RGBColor = NULL;
 const char* SYM_GrayLevel = NULL;
+const char* SYM_CMYKColor = NULL;
 const char* SYM_Opacity = NULL;
 const char* SYM_Thickness = NULL;
 const char* SYM_PointSize = NULL;
@@ -1179,6 +1180,7 @@ void sym_names_init(void) {
     SYM_Plot                       = intern_symbol("Plot");
     SYM_RGBColor                   = intern_symbol("RGBColor");
     SYM_GrayLevel                  = intern_symbol("GrayLevel");
+    SYM_CMYKColor                  = intern_symbol("CMYKColor");
     SYM_Opacity                    = intern_symbol("Opacity");
     SYM_Thickness                  = intern_symbol("Thickness");
     SYM_PointSize                  = intern_symbol("PointSize");

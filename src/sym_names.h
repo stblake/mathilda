@@ -579,6 +579,7 @@ extern const char* SYM_Show;
 extern const char* SYM_Plot;
 extern const char* SYM_RGBColor;
 extern const char* SYM_GrayLevel;
+extern const char* SYM_CMYKColor;
 extern const char* SYM_Opacity;
 extern const char* SYM_Thickness;
 extern const char* SYM_PointSize;

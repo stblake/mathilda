@@ -103,6 +103,9 @@ void graphics_init(void) {
     register_inert("Opacity",
         "Opacity[a]\n\tA style directive: sets the opacity (a in [0,1]) of "
         "subsequent primitives.");
+    /* CMYKColor is an inert, protected style directive like the colors above;
+     * its docstring is set centrally in info.c (info_init). */
+    symtab_get_def("CMYKColor")->attributes |= ATTR_PROTECTED;
     register_inert("Thickness",
         "Thickness[t]\n\tA style directive: sets the line thickness (in "
         "plot coordinates) of subsequent Line/Circle primitives.");
