@@ -35,4 +35,13 @@ bool numericize_bound(Expr* e, double* out);
  * i beyond the table length. */
 Expr* palette_color(size_t i);
 
+/* Shared with listplot.c. Builds a continuous Filling strip between the
+ * polyline through (xs[i], ys[i]) and the horizontal `baseline`: one quad per
+ * segment, split into two triangles where a segment crosses the baseline (so
+ * render.c's triangle-fan Polygon fill stays correct). Returns a malloc'd
+ * Expr* array (caller owns the array and the Exprs); *out_count is the shape
+ * count, 0 (and NULL returned) when n < 2. */
+Expr** gfx_build_fill_quads(const double* xs, const double* ys, size_t n,
+                            double baseline, size_t* out_count);
+
 #endif /* MATHILDA_GRAPHICS_PLOT_H */

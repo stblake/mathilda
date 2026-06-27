@@ -410,6 +410,24 @@ void test_listplot_filling_builds_stems(void) {
         "True", 0);
 }
 
+void test_listplot_joined_filling_builds_polygons(void) {
+    /* Joined -> True with Filling fills the continuous region under the
+     * connecting curve with Polygon[] quads (one per segment), not isolated
+     * per-point stem Lines -- so there are no fill Lines, only the single
+     * joined curve Line, and at least one Polygon. */
+    assert_eval_eq(
+        "Length[Cases[ListPlot[{0, 1, 2, 3}, Joined -> True, Filling -> Axis][[1]],"
+        " Polygon[___]]] >= 1", "True", 0);
+    /* Three points -> one connecting Line, and no stem Lines were emitted. */
+    assert_eval_eq(
+        "Length[Cases[ListPlot[{0, 1, 2, 3}, Joined -> True, Filling -> Axis][[1]],"
+        " Line[___]]]", "1", 0);
+    /* A segment crossing the baseline (y: 1 -> -1) splits into two triangles. */
+    assert_eval_eq(
+        "Length[Cases[ListPlot[{1, -1}, Joined -> True, Filling -> Axis][[1]],"
+        " Polygon[pts_] :> Length[pts]]]", "2", 0);
+}
+
 void test_listplot_default_options_injected(void) {
     /* ListPlot injects Axes -> True and AspectRatio -> 1/GoldenRatio. */
     assert_eval_eq("First[Cases[ListPlot[{1, 2, 3}], (Axes -> v_) -> v]]", "True", 0);
@@ -552,6 +570,7 @@ int main(void) {
     TEST(test_listplot_joined_emits_line);
     TEST(test_listplot_multiple_datasets_get_palette);
     TEST(test_listplot_filling_builds_stems);
+    TEST(test_listplot_joined_filling_builds_polygons);
     TEST(test_listplot_default_options_injected);
     TEST(test_listplot_options_registered);
     TEST(test_listplot_legends_metadata);

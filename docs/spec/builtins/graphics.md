@@ -395,8 +395,8 @@ result and are interpreted by the renderer — see the `Show` table above):
 |---|---|---|
 | `Joined` | `False` | `True` connects the points with a `Line` polyline instead of drawing point markers |
 | `DataRange` | `Automatic` | the x-range `{xmin, xmax}` to assume for a heights list (`Automatic`/`All` = `1` to `n`); `DataRange -> All` forces a flat list of pairs to be read as several height datasets |
-| `Filling` | `None` | `Axis` / `Bottom` / `Top` / a number — draws a vertical stem from each point to that baseline |
-| `FillingStyle` | `Automatic` | colour/opacity directive for the stems (default `Opacity[0.3]`) |
+| `Filling` | `None` | `Axis` / `Bottom` / `Top` / a number — fills down to that baseline. With `Joined -> True` the whole region under the connecting curve is filled continuously (quad/triangle `Polygon[]` strip, shared with `Plot`); otherwise a vertical stem is drawn from each point |
+| `FillingStyle` | `Automatic` | colour/opacity directive for the fill (default `Opacity[0.3]`) |
 | `PlotStyle` | `Automatic` | colour for the points/line (default blue `RGBColor[0.2, 0.4, 0.8]`) |
 | `PlotLegends` | `None` | `{lbl1, ...}` labels each dataset; `Automatic` labels by index; emits the internal `$PlotLegendData` the renderer's legend box reads |
 | `PlotMarkers` | `None` | accepted; markers currently render with the default glyph |

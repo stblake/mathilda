@@ -325,16 +325,27 @@ static void emit_dataset(Expr** prims, size_t* pc, const PointSet* ps, size_t id
             Expr* op_arg[1] = { expr_new_real(0.3) };
             prims[(*pc)++] = expr_new_function(expr_new_symbol(SYM_Opacity), op_arg, 1);
         }
-        for (size_t j = 0; j < ps->n; j++) {
-            Expr* lo[2] = { expr_new_real(ps->xs[j]), expr_new_real(base) };
-            Expr* hi[2] = { expr_new_real(ps->xs[j]), expr_new_real(ps->ys[j]) };
-            Expr* seg[2] = {
-                expr_new_function(expr_new_symbol(SYM_List), lo, 2),
-                expr_new_function(expr_new_symbol(SYM_List), hi, 2),
-            };
-            Expr* sl = expr_new_function(expr_new_symbol(SYM_List), seg, 2);
-            Expr* la[1] = { sl };
-            prims[(*pc)++] = expr_new_function(expr_new_symbol(SYM_Line), la, 1);
+        if (o->joined) {
+            /* The points are drawn as a connected polyline, so fill the whole
+             * continuous region between that curve and the baseline (one quad
+             * per segment, shared with Plot's filling), not isolated stems. */
+            size_t nq = 0;
+            Expr** quads = gfx_build_fill_quads(ps->xs, ps->ys, ps->n, base, &nq);
+            for (size_t j = 0; j < nq; j++) prims[(*pc)++] = quads[j];
+            free(quads);
+        } else {
+            /* Unconnected points: a vertical stem from the baseline to each. */
+            for (size_t j = 0; j < ps->n; j++) {
+                Expr* lo[2] = { expr_new_real(ps->xs[j]), expr_new_real(base) };
+                Expr* hi[2] = { expr_new_real(ps->xs[j]), expr_new_real(ps->ys[j]) };
+                Expr* seg[2] = {
+                    expr_new_function(expr_new_symbol(SYM_List), lo, 2),
+                    expr_new_function(expr_new_symbol(SYM_List), hi, 2),
+                };
+                Expr* sl = expr_new_function(expr_new_symbol(SYM_List), seg, 2);
+                Expr* la[1] = { sl };
+                prims[(*pc)++] = expr_new_function(expr_new_symbol(SYM_Line), la, 1);
+            }
         }
         if (!o->filling_style) {
             Expr* op2[1] = { expr_new_integer(1) };
@@ -412,10 +423,12 @@ Expr* builtin_listplot(Expr* res) {
     if (live == 0) { free(psets); goto fail_opts; }
 
     bool multi = (live > 1);
-    /* Worst case per dataset: 1 palette colour + (filling: style + n stems +
-     * close + restore) + 1 Point/Line. Generous. */
+    /* Worst case per dataset: 1 palette colour + (filling: style + fill shapes
+     * + close + restore) + 1 Point/Line. A Joined fill emits up to 2*(n-1)
+     * polygons (every segment crossing the baseline splits into 2 triangles),
+     * which dominates the n stems of the unjoined case. Generous. */
     size_t cap = 0;
-    for (size_t i = 0; i < live; i++) cap += psets[i].n + 8;
+    for (size_t i = 0; i < live; i++) cap += 2 * psets[i].n + 8;
     Expr** prims = malloc(sizeof(Expr*) * (cap ? cap : 1));
     size_t pc = 0;
     for (size_t i = 0; i < live; i++)
