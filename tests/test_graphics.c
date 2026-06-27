@@ -47,6 +47,15 @@ void test_show_requires_graphics_argument(void) {
     assert_eval_eq("Show[5]", "Show[5]", 0);
 }
 
+void test_graphics_options_registered(void) {
+    /* Options[Graphics] must list the options the renderer honours, not {}. */
+    assert_eval_eq("Length[Options[Graphics]] > 0", "True", 0);
+    assert_eval_eq("Options[Graphics, Axes]", "{Axes -> False}", 0);
+    assert_eval_eq("Options[Graphics, PlotRange]",
+                    "{PlotRange -> Automatic}", 0);
+    assert_eval_eq("OptionValue[Graphics, Frame]", "False", 0);
+}
+
 void test_show_merges_options(void) {
     assert_eval_eq("Show[Graphics[{Point[{0,0}]}], Axes -> True][[2]]",
                     "Axes -> True", 0);
@@ -422,6 +431,7 @@ int main(void) {
     TEST(test_plot_invalid_args_stay_unevaluated);
     TEST(test_plot_honors_plot_points_option);
     TEST(test_show_requires_graphics_argument);
+    TEST(test_graphics_options_registered);
     TEST(test_show_merges_options);
     TEST(test_show_merges_frame_option);
     TEST(test_plot_frame_passthrough);

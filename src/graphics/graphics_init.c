@@ -127,9 +127,15 @@ void graphics_init(void) {
 
     register_inert("Graphics",
         "Graphics[primitives, opts...]\n\tA symbolic 2D graphics object. "
-        "primitives is a (possibly nested) list of graphics primitives and "
-        "style directives. Rendered on demand by Show[]. Prints as "
-        "-Graphics-.");
+        "primitives is a (possibly nested) list of graphics primitives "
+        "(Point, Line, Rectangle, Circle, Disk, Polygon, Text) and style "
+        "directives (RGBColor, GrayLevel, Hue, Opacity, Thickness, "
+        "PointSize). Rendered on demand by Show[]. Prints as -Graphics-. "
+        "Options: AspectRatio, Axes, AxesLabel, AxesOrigin, AxesStyle, "
+        "Background, Epilog, Frame, FrameLabel, FrameStyle, FrameTicks, "
+        "GridLines, GridLinesStyle, ImageSize, LabelStyle, PlotLabel, "
+        "PlotRange, PlotRangePadding, PlotStyle, Prolog, RotateLabel, "
+        "TicksStyle.");
 
     /* Internal: Plot embeds $PlotResample[var, {bodies}, {opts...}] inside
      * the Graphics it returns so the renderer can re-sample on zoom. HoldAll

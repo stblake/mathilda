@@ -540,6 +540,35 @@ void options_register_defaults(void) {
     ob_add(&b, r_sym("PlotRange", "Automatic"));
     ob_commit(&b, "Plot");
 
+    /* Graphics[] honours these via render.c's gfx_options_parse(); the set
+     * mirrors that parser exactly. Alphabetical, in their Wolfram surface
+     * defaults. Prolog/Epilog/LabelStyle default to {} (nothing extra to
+     * draw / no overriding style). */
+    ob_init(&b);
+    ob_add(&b, r_sym("AspectRatio", "Automatic"));
+    ob_add(&b, r_sym("Axes", "False"));
+    ob_add(&b, r_sym("AxesLabel", "None"));
+    ob_add(&b, r_sym("AxesOrigin", "Automatic"));
+    ob_add(&b, r_sym("AxesStyle", "Automatic"));
+    ob_add(&b, r_sym("Background", "Automatic"));
+    ob_add(&b, r_list0("Epilog"));
+    ob_add(&b, r_sym("Frame", "False"));
+    ob_add(&b, r_sym("FrameLabel", "None"));
+    ob_add(&b, r_sym("FrameStyle", "Automatic"));
+    ob_add(&b, r_sym("FrameTicks", "Automatic"));
+    ob_add(&b, r_sym("GridLines", "None"));
+    ob_add(&b, r_sym("GridLinesStyle", "Automatic"));
+    ob_add(&b, r_sym("ImageSize", "Automatic"));
+    ob_add(&b, r_list0("LabelStyle"));
+    ob_add(&b, r_sym("PlotLabel", "None"));
+    ob_add(&b, r_sym("PlotRange", "Automatic"));
+    ob_add(&b, r_sym("PlotRangePadding", "Automatic"));
+    ob_add(&b, r_sym("PlotStyle", "Automatic"));
+    ob_add(&b, r_list0("Prolog"));
+    ob_add(&b, r_sym("RotateLabel", "True"));
+    ob_add(&b, r_sym("TicksStyle", "Automatic"));
+    ob_commit(&b, "Graphics");
+
     /* ---- Symbolic calculus ---- */
     ob_init(&b);
     ob_add(&b, r_sym("Method", "Automatic"));     /* "Automatic" | "BronsteinRational" | ... */

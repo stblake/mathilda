@@ -31,10 +31,20 @@ A symbolic 2D graphics object.
 - `Protected`.
 - Prints as `-Graphics-` (use `FullForm[]` to inspect the underlying
   expression).
+- `Options[Graphics]` reports the rendering options the engine honours (the
+  set read by the renderer's `gfx_options_parse`): `AspectRatio`, `Axes`,
+  `AxesLabel`, `AxesOrigin`, `AxesStyle`, `Background`, `Epilog`, `Frame`,
+  `FrameLabel`, `FrameStyle`, `FrameTicks`, `GridLines`, `GridLinesStyle`,
+  `ImageSize`, `LabelStyle`, `PlotLabel`, `PlotRange`, `PlotRangePadding`,
+  `PlotStyle`, `Prolog`, `RotateLabel`, `TicksStyle`. See `Show` below for
+  each option's effect.
 
 ```mathematica
 In[1]:= Graphics[{Point[{0, 0}]}]
 Out[1]= -Graphics-
+
+In[2]:= Options[Graphics, {Axes, PlotRange}]
+Out[2]= {Axes -> False, PlotRange -> Automatic}
 
 In[2]:= FullForm[Graphics[{Point[{0, 0}]}]]
 Out[2]= Graphics[List[Point[List[0, 0]]]]
