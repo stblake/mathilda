@@ -833,15 +833,37 @@ static void axes_origin(const PlotRange2D* range, double ysc, const GfxOptions* 
     *oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
 }
 
+/* Axis crossing for the default (unset AxesOrigin) case, but clamped into the
+ * data region rather than the visible window. `vis` is the visible render-space
+ * range (so the cross defaults track the viewport as you pan); `drange` is the
+ * data-space plot range (the rectangle the data is fitted to, inset from the
+ * window by the reserved label margin). Without this clamp, a 0-off-screen axis
+ * sticks to the window edge, where its outward tick labels — drawn just outside
+ * the axis — fall past the border and get cropped. Clamping pins the axis to
+ * the data's edge instead, so those labels land in the reserved margin. `oy` is
+ * returned in render space (×ysc), matching axes_origin. An explicit AxesOrigin
+ * is honoured verbatim (no clamp). */
+static void axes_origin_in_region(const PlotRange2D* vis, const PlotRange2D* drange,
+                                  double ysc, const GfxOptions* o, double* ox, double* oy) {
+    axes_origin(vis, ysc, o, ox, oy);
+    if (o->axes_origin_set) return;
+    double rylo = drange->ymin * ysc, ryhi = drange->ymax * ysc;
+    if (*ox < drange->xmin) *ox = drange->xmin;
+    if (*ox > drange->xmax) *ox = drange->xmax;
+    if (*oy < rylo) *oy = rylo;
+    if (*oy > ryhi) *oy = ryhi;
+}
+
 /* World-space axis/tick lines -- call inside BeginMode2D so they pan and
  * zoom with the data. */
 /* `range` is in render space (post y-scale). `ysc` maps data-y -> render-y;
  * y ticks are placed at nice *data* values (data*ysc), so labels read true.
  * `zoom` is the camera zoom: the strokes are drawn 1.5 px wide on screen (to
  * match the frame's weight) by expressing the world-space width as 1.5/zoom. */
-static void draw_axes_lines(const PlotRange2D* range, double ysc, float zoom, const GfxOptions* o) {
+static void draw_axes_lines(const PlotRange2D* range, const PlotRange2D* drange,
+                            double ysc, float zoom, const GfxOptions* o) {
     double ox, oy;
-    axes_origin(range, ysc, o, &ox, &oy);
+    axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
     float w = (zoom > 0.0f) ? 1.5f / zoom : 1.5f; /* world units -> 1.5 px on screen */
     Color col = to_raylib(o->axes_color);
 
@@ -915,9 +937,10 @@ static void draw_gridlines(const PlotRange2D* range, double ysc, float zoom, con
  * `cap = HERSHEY_CAP_HEIGHT * scale` px, which the offsets account for:
  * x-labels drop the baseline a full cap-height below the tick so the whole
  * glyph clears it; y-labels recentre vertically on the tick by half a cap. */
-static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double ysc, const GfxOptions* o) {
+static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange,
+                             Camera2D camera, double ysc, const GfxOptions* o) {
     double ox, oy;
-    axes_origin(range, ysc, o, &ox, &oy);
+    axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
     Color col = to_raylib(o->ticks_color);
     double xstep = nice_step(range->xmax - range->xmin, 8);
     /* y ticks are stepped in data space; render position is ty*ysc below. */
@@ -1534,12 +1557,14 @@ void graphics_show(const Expr* graphics_expr) {
     } else if (opts.axes) {
         /* Floors sized to the screen-space tick labels (draw_axes_labels):
          * left clears a multi-digit y label, bottom a one-line x label plus
-         * its gap+cap drop, top a PlotLabel line, right the overflow of the
-         * last x label's half-width. */
-        float mL = (float)opts.width  * 0.05f; if (mL < 52.0f) mL = 52.0f;
+         * its gap+cap drop *and* the bottom-of-window help-text line, top a
+         * PlotLabel line, right the overflow of the last x label's half-width.
+         * The bottom is the largest because a 0-off-screen x-axis is pinned to
+         * the region's bottom edge and its labels hang into this margin. */
+        float mL = (float)opts.width  * 0.06f; if (mL < 52.0f) mL = 52.0f;
         float mR = (float)opts.width  * 0.03f; if (mR < 22.0f) mR = 22.0f;
         float mT = (float)opts.height * 0.05f; if (mT < 34.0f) mT = 34.0f;
-        float mB = (float)opts.height * 0.05f; if (mB < 40.0f) mB = 40.0f;
+        float mB = (float)opts.height * 0.07f; if (mB < 52.0f) mB = 52.0f;
         if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
             reg_x = mL; reg_y = mT;
             reg_w = (float)opts.width - mL - mR;
@@ -1735,14 +1760,14 @@ void graphics_show(const Expr* graphics_expr) {
         BeginMode2D(camera);
         if (opts.prolog) { DrawState ps = init_state; draw_primitive(opts.prolog, &ps); }
         draw_gridlines(&visible, ysc, camera.zoom, &opts);
-        if (opts.axes) draw_axes_lines(&visible, ysc, camera.zoom, &opts);
+        if (opts.axes) draw_axes_lines(&visible, &range, ysc, camera.zoom, &opts);
         DrawState state = init_state;
         draw_primitive(draw_prims, &state);
         if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
         EndMode2D();
         if (opts.frame) EndScissorMode();
 
-        if (opts.axes) draw_axes_labels(&visible, camera, ysc, &opts);
+        if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
         if (opts.frame) draw_frame(reg_x, reg_y, reg_w, reg_h, camera, ysc, &opts);
         if (opts.frame) draw_frame_label(reg_x, reg_y, reg_w, reg_h, &opts);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);
