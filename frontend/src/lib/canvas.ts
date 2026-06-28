@@ -40,6 +40,7 @@ export const canvasState = writable({
   panX: 0,
   panY: 0,
   zoom:  1.0,
+  focusedId: null as string | null,  // which notebook is full-screen (null = canvas view)
 });
 
 export function addNotebook(title?: string) {
@@ -87,6 +88,10 @@ export function renameNotebook(id: string, title: string) {
 
 export function setPan(panX: number, panY: number) {
   canvasState.update(s => ({ ...s, panX, panY }));
+}
+
+export function setFocused(id: string | null) {
+  canvasState.update(s => ({ ...s, focusedId: id }));
 }
 
 export function setZoom(zoom: number, cx: number, cy: number) {

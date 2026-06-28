@@ -16,10 +16,8 @@
   import {
     canvasState,
     addNotebook,
+    setFocused,
   } from './canvas';
-
-  // Focused-notebook ID — when set the canvas shows just that notebook full-screen.
-  let focusedNbId: string | null = null;
 
   // ---------------------------------------------------------------------------
   // Animated display values — lerped towards store "targets" each rAF tick.
@@ -74,28 +72,23 @@
   function onWheel(e: WheelEvent) {
     e.preventDefault();
     if (e.ctrlKey) {
-      // Pinch-to-zoom centred on cursor
-      const factor  = 1 - e.deltaY * 0.008;
-      const rect    = canvasEl.getBoundingClientRect();
-      const cx      = e.clientX - rect.left;
-      const cy      = e.clientY - rect.top;
+      const factor = 1 - e.deltaY * 0.008;
+      // Pinching OUT (factor < 1) while in focused mode exits focus
+      if (factor < 1 && $canvasState.focusedId) {
+        setFocused(null);
+        return;
+      }
+      const rect = canvasEl?.getBoundingClientRect();
+      if (!rect) return;
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
       canvasState.update(s => {
-        const newZoom  = Math.max(0.08, Math.min(3, s.zoom * factor));
-        const zFactor  = newZoom / s.zoom;
-        return {
-          ...s,
-          zoom:  newZoom,
-          panX:  cx - zFactor * (cx - s.panX),
-          panY:  cy - zFactor * (cy - s.panY),
-        };
+        const newZoom = Math.max(0.08, Math.min(3, s.zoom * factor));
+        const zf = newZoom / s.zoom;
+        return { ...s, zoom: newZoom, panX: cx - zf * (cx - s.panX), panY: cy - zf * (cy - s.panY) };
       });
     } else {
-      // Two-finger scroll → translate
-      canvasState.update(s => ({
-        ...s,
-        panX: s.panX - e.deltaX,
-        panY: s.panY - e.deltaY,
-      }));
+      canvasState.update(s => ({ ...s, panX: s.panX - e.deltaX, panY: s.panY - e.deltaY }));
     }
     maybeAutoCollapse();
   }
@@ -223,19 +216,16 @@
 
 <svelte:window on:keydown={onKeydown} />
 
-{#if focusedNbId}
-  <!-- ── Focused (full-screen) mode ── -->
-  {@const fnb = $canvasState.notebooks.find(n => n.id === focusedNbId)}
+{#if $canvasState.focusedId}
+  <!-- ── Focused (full-screen) mode — pinch out to return ── -->
+  {@const fnb = $canvasState.notebooks.find(n => n.id === $canvasState.focusedId)}
   {#if fnb}
-    <div class="focused-view">
-      <div class="focused-bar">
-        <button class="back-btn" on:click={() => focusedNbId = null}>
-          ← Canvas
-        </button>
-        <span class="focused-title">{fnb.title}</span>
-      </div>
-      <div class="focused-body">
-        <NotebookCard nb={fnb} currentZoom={1} focused={true} on:focus />
+    <div
+      class="focused-view"
+      on:wheel|nonpassive={onWheel}
+    >
+      <div class="focused-view-inner">
+        <NotebookCard nb={fnb} currentZoom={1} focused={true} />
       </div>
     </div>
   {/if}
@@ -266,7 +256,7 @@
           <NotebookCard
             {nb}
             currentZoom={zoom}
-            on:focusNotebook={(e) => focusedNbId = e.detail.id}
+            on:focusNotebook={(e) => setFocused(e.detail.id)}
           />
         </div>
       {/each}
@@ -325,42 +315,13 @@
   .focused-view {
     position: fixed;
     inset: 0;
-    display: flex;
-    flex-direction: column;
     background: #050810;
+    overflow-y: auto;
     z-index: 50;
   }
-  .focused-bar {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.5rem 1rem;
-    background: rgba(255,255,255,0.03);
-    border-bottom: 1px solid rgba(255,255,255,0.07);
-    flex-shrink: 0;
-  }
-  .back-btn {
-    background: rgba(137,180,250,0.1);
-    border: 1px solid rgba(137,180,250,0.25);
-    color: #89b4fa;
-    border-radius: 6px;
-    padding: 0.25rem 0.7rem;
-    font-size: 0.82rem;
-    cursor: pointer;
-    transition: background 0.1s;
-  }
-  .back-btn:hover { background: rgba(137,180,250,0.2); }
-  .focused-title {
-    font-size: 0.9rem;
-    color: rgba(255,255,255,0.5);
-    font-weight: 500;
-  }
-  .focused-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 1rem 2rem;
+  .focused-view-inner {
     max-width: 900px;
     margin: 0 auto;
-    width: 100%;
+    padding: 1.5rem 1rem;
   }
 </style>

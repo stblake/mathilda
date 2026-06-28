@@ -84,9 +84,11 @@
           EditorView.theme({
             '&': { fontSize: '14px', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace", background: 'transparent' },
             '.cm-scroller': { overflow: 'auto', minHeight: '1.8em' },
-            '.cm-content': { padding: '6px 8px', textAlign: 'left' },
+            '.cm-content': { padding: '6px 8px', textAlign: 'left', caretColor: '#89b4fa' },
             '.cm-focused': { outline: 'none' },
             '.cm-line': { lineHeight: '1.6', textAlign: 'left' },
+            '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#89b4fa !important', borderLeftWidth: '2px !important' },
+            '.cm-selectionBackground': { background: 'rgba(137,180,250,0.2) !important' },
           }),
         ],
       }),
@@ -139,6 +141,17 @@
   // ---- Inline text editing (non-code) ----
   function onTextInput(e: Event) {
     dispatch('change', { id: cell.id, source: (e.target as HTMLElement).innerText });
+  }
+
+  // Focus ref for contenteditable cells (text/section/subsection)
+  let proseEl: HTMLElement;
+
+  // Register focus function for non-code cells once mounted
+  $: if (cell.type !== 'code' && proseEl) {
+    dispatch('register', {
+      id: cell.id,
+      fn: () => { proseEl?.focus(); },
+    });
   }
 </script>
 
@@ -217,6 +230,7 @@
       <div
         class="prose-cell"
         contenteditable="true"
+        bind:this={proseEl}
         on:input={onTextInput}
         on:click|stopPropagation
       >{cell.source}</div>
@@ -226,6 +240,7 @@
       <h1
         class="heading-cell"
         contenteditable="true"
+        bind:this={proseEl}
         on:input={onTextInput}
         on:click|stopPropagation
       >{cell.source}</h1>
@@ -235,6 +250,7 @@
       <h2
         class="heading-cell"
         contenteditable="true"
+        bind:this={proseEl}
         on:input={onTextInput}
         on:click|stopPropagation
       >{cell.source}</h2>

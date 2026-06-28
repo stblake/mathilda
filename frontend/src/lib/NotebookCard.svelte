@@ -19,6 +19,7 @@
 -->
 <script lang="ts">
   import { onMount, tick, createEventDispatcher } from 'svelte';
+  import { setFocused } from './canvas';
   const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
@@ -73,10 +74,13 @@
 
   let cardEl: HTMLElement;
 
+  let dragMoved = false;
+
   function onTitlePointerDown(e: PointerEvent) {
     if ((e.target as HTMLElement).closest('button, input')) return;
     e.stopPropagation();
     dragging   = true;
+    dragMoved  = false;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
     dragNbX0   = nb.x;
@@ -89,6 +93,7 @@
     e.stopPropagation();
     const dxScreen = e.clientX - dragStartX;
     const dyScreen = e.clientY - dragStartY;
+    if (Math.abs(dxScreen) > 4 || Math.abs(dyScreen) > 4) dragMoved = true;
     const effectiveZoom = currentZoom || 1;
     const newX = dragNbX0 + dxScreen / effectiveZoom;
     const newY = dragNbY0 + dyScreen / effectiveZoom;
@@ -174,7 +179,13 @@
 
   function addRow(type: CellType = 'code') {
     const id = nb.store.addRow(type);
-    tick().then(() => cellFocusFns[id]?.());
+    tick().then(() => {
+      // CodeMirror needs an extra frame; contenteditable needs focus() directly
+      const fn = cellFocusFns[id];
+      if (fn) { fn(); } else {
+        setTimeout(() => cellFocusFns[id]?.(), 60);
+      }
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -288,8 +299,8 @@
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <span
         class="card-title"
-        on:click|stopPropagation={startRename}
-        title="Click to rename"
+        on:dblclick|stopPropagation={startRename}
+        title="Double-click to rename"
       >{nb.title}</span>
     {/if}
 
@@ -297,8 +308,8 @@
       {#if !focused}
         <button
           class="tb-btn tb-focus"
-          title="Open full screen"
-          on:click|stopPropagation={() => dispatch('focusNotebook', { id: nb.id })}
+          title="Full screen (pinch out to return)"
+          on:click|stopPropagation={() => setFocused(nb.id)}
         >⤢</button>
         <button class="tb-btn" title="Collapse / expand" on:click|stopPropagation={onToggleCollapse}>
           {nb.collapsed ? '⊟' : '⊞'}
