@@ -274,6 +274,7 @@ const char* SYM_MinRecursion = NULL;
 const char* SYM_Mod = NULL;
 const char* SYM_Module = NULL;
 const char* SYM_Modulus = NULL;
+const char* SYM_MoebiusMu = NULL;
 const char* SYM_MonomialOrder = NULL;
 const char* SYM_MultiplicativeOrder = NULL;
 const char* SYM_ND = NULL;
@@ -903,6 +904,7 @@ void sym_names_init(void) {
     SYM_Mod                        = intern_symbol("Mod");
     SYM_Module                     = intern_symbol("Module");
     SYM_Modulus                    = intern_symbol("Modulus");
+    SYM_MoebiusMu                  = intern_symbol("MoebiusMu");
     SYM_MonomialOrder              = intern_symbol("MonomialOrder");
     SYM_MultiplicativeOrder        = intern_symbol("MultiplicativeOrder");
     SYM_ND                         = intern_symbol("ND");

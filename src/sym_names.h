@@ -287,6 +287,7 @@ extern const char* SYM_MinRecursion;
 extern const char* SYM_Mod;
 extern const char* SYM_Module;
 extern const char* SYM_Modulus;
+extern const char* SYM_MoebiusMu;
 extern const char* SYM_MonomialOrder;
 extern const char* SYM_MultiplicativeOrder;
 extern const char* SYM_ND;

@@ -517,6 +517,45 @@ In[9]:= DivisorSigma[2, 6, GaussianIntegers -> True]
 Out[9]= -30 + 20 I
 ```
 
+## MoebiusMu
+
+- `MoebiusMu[n]`: the Möbius function `mu(n)`. For
+  `n = u p_1^k_1 ... p_m^k_m` with `u` a unit and `p_i` primes, `mu(n)` is `0`
+  unless every `k_i` equals `1`, in which case it is `(-1)^m`. Equivalently
+  `mu(1) = 1`, `mu(n) = (-1)^m` for a product of `m` distinct primes, and
+  `mu(n) = 0` when `n` has a squared prime factor.
+
+**Features**:
+- `Listable`, `Protected`.
+- Computed directly from the prime factorisation (machine integers and GMP
+  bigints handled uniformly); the result is always `0`, `1`, or `-1`.
+- The sign of `n` is ignored (`mu(-n) = mu(n)`).
+- A non-real Gaussian-integer argument `Complex[a, b]` is handled over `Z[i]`:
+  the input is factored into Gaussian primes (the unit factor does not count),
+  giving `0` for a repeated Gaussian prime factor and `(-1)^m` otherwise.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `MoebiusMu::argx` message.
+
+```mathematica
+In[1]:= MoebiusMu[11]
+Out[1]= -1
+
+In[2]:= MoebiusMu[10]
+Out[2]= 1
+
+In[3]:= MoebiusMu[1440]
+Out[3]= 0
+
+In[4]:= MoebiusMu[{4, 10, 17, 20}]
+Out[4]= {0, 1, -1, 0}
+
+In[5]:= MoebiusMu[10^50 + 1]
+Out[5]= -1
+
+In[6]:= MoebiusMu[5 + 6 I]
+Out[6]= -1
+```
+
 ## EulerPhi
 
 Gives the Euler totient function $\phi(n)$.
