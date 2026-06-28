@@ -154,11 +154,7 @@
   on:click={onBodyClick}
 >
 
-  <!-- Directional add buttons (visible on hover) -->
-  <button class="add-btn add-top"    on:click|stopPropagation={() => dispatch('addAbove', { rowId })}>＋</button>
-  <button class="add-btn add-bottom" on:click|stopPropagation={() => dispatch('addBelow', { rowId })}>＋</button>
-  <button class="add-btn add-left"   on:click|stopPropagation={() => dispatch('addLeft',  { rowId, cellIdx })}>＋</button>
-  <button class="add-btn add-right"  on:click|stopPropagation={() => dispatch('addRight', { rowId, cellIdx: cellIdx + 1 })}>＋</button>
+  <!-- Directional add buttons removed for cleaner UI -->
 
   <!-- Cell header: type badge + run button + exec index -->
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
@@ -270,36 +266,7 @@
   .type-subsection { background: transparent; }
   .type-text       { background: transparent; }
 
-  /* ---- Directional add buttons ---- */
-  .add-btn {
-    position: absolute;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    width: 20px;
-    height: 20px;
-    background: var(--accent, #89b4fa);
-    color: #fff;
-    border: none;
-    border-radius: 50%;
-    font-size: 0.75rem;
-    cursor: pointer;
-    z-index: 20;
-    opacity: 0.8;
-    line-height: 1;
-    padding: 0;
-  }
-  .cell-shell:hover .add-btn { display: flex; }
-  .add-btn:hover { opacity: 1; transform: scale(1.1); }
-
-  .add-top    { top: -10px;  left: 50%; transform: translateX(-50%); }
-  .add-bottom { bottom: -10px; left: 50%; transform: translateX(-50%); }
-  .add-left   { left: -10px; top: 50%; transform: translateY(-50%); }
-  .add-right  { right: -10px; top: 50%; transform: translateY(-50%); }
-  .add-top:hover    { transform: translateX(-50%) scale(1.1); }
-  .add-bottom:hover { transform: translateX(-50%) scale(1.1); }
-  .add-left:hover   { transform: translateY(-50%) scale(1.1); }
-  .add-right:hover  { transform: translateY(-50%) scale(1.1); }
+  /* add buttons removed */
 
   /* ---- Cell header ---- */
   .cell-header {

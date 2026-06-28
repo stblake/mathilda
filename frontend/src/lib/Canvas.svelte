@@ -18,6 +18,9 @@
     addNotebook,
   } from './canvas';
 
+  // Focused-notebook ID — when set the canvas shows just that notebook full-screen.
+  let focusedNbId: string | null = null;
+
   // ---------------------------------------------------------------------------
   // Animated display values — lerped towards store "targets" each rAF tick.
 
@@ -105,6 +108,20 @@
   let dragStartY = 0;
   let dragPanX0  = 0;
   let dragPanY0  = 0;
+
+  // Double-click on empty canvas → new notebook at that world position
+  function onDblClick(e: MouseEvent) {
+    if ((e.target as HTMLElement).closest('.nb-card-wrapper')) return;
+    const rect   = canvasEl.getBoundingClientRect();
+    const worldX = (e.clientX - rect.left - panX) / zoom - 320;
+    const worldY = (e.clientY - rect.top  - panY) / zoom - 30;
+    addNotebook();
+    canvasState.update(s => {
+      const nbs = s.notebooks.slice();
+      nbs[nbs.length - 1] = { ...nbs[nbs.length - 1], x: worldX, y: worldY };
+      return { ...s, notebooks: nbs };
+    });
+  }
 
   function onPointerDown(e: PointerEvent) {
     if ((e.target as HTMLElement).closest('.nb-card')) return;
@@ -206,39 +223,62 @@
 
 <svelte:window on:keydown={onKeydown} />
 
-<!-- svelte-ignore a11y-no-static-element-interactions -->
-<div
-  class="canvas-stage"
-  style={gridBgStyle}
-  bind:this={canvasEl}
-  on:wheel|nonpassive={onWheel}
-  on:pointerdown={onPointerDown}
-  on:pointermove={onPointerMove}
-  on:pointerup={onPointerUp}
-  on:pointercancel={onPointerUp}
->
-  <div
-    class="canvas-world"
-    bind:this={worldEl}
-    style="transform: translate({panX}px, {panY}px) scale({zoom}); transform-origin: 0 0;"
-  >
-    {#each $canvasState.notebooks as nb (nb.id)}
-      <div
-        class="nb-card-wrapper"
-        style="left: {nb.x}px; top: {nb.y}px; width: {nb.width}px;"
-      >
-        <NotebookCard {nb} currentZoom={zoom} />
+{#if focusedNbId}
+  <!-- ── Focused (full-screen) mode ── -->
+  {@const fnb = $canvasState.notebooks.find(n => n.id === focusedNbId)}
+  {#if fnb}
+    <div class="focused-view">
+      <div class="focused-bar">
+        <button class="back-btn" on:click={() => focusedNbId = null}>
+          ← Canvas
+        </button>
+        <span class="focused-title">{fnb.title}</span>
       </div>
-    {/each}
-  </div>
+      <div class="focused-body">
+        <NotebookCard nb={fnb} currentZoom={1} focused={true} on:focus />
+      </div>
+    </div>
+  {/if}
+{:else}
+  <!-- ── Canvas mode ── -->
+  <!-- svelte-ignore a11y-no-static-element-interactions -->
+  <div
+    class="canvas-stage"
+    style={gridBgStyle}
+    bind:this={canvasEl}
+    on:wheel|nonpassive={onWheel}
+    on:pointerdown={onPointerDown}
+    on:pointermove={onPointerMove}
+    on:pointerup={onPointerUp}
+    on:pointercancel={onPointerUp}
+    on:dblclick={onDblClick}
+  >
+    <div
+      class="canvas-world"
+      bind:this={worldEl}
+      style="transform: translate({panX}px, {panY}px) scale({zoom}); transform-origin: 0 0;"
+    >
+      {#each $canvasState.notebooks as nb (nb.id)}
+        <div
+          class="nb-card-wrapper"
+          style="left: {nb.x}px; top: {nb.y}px; width: {nb.width}px;"
+        >
+          <NotebookCard
+            {nb}
+            currentZoom={zoom}
+            on:focusNotebook={(e) => focusedNbId = e.detail.id}
+          />
+        </div>
+      {/each}
+    </div>
 
-  <!-- Keyboard hints overlay -->
-  <div class="canvas-hints">
-    <span>⌘N new</span>
-    <span>⌘0 fit</span>
-    <span>scroll pan · ctrl+scroll zoom</span>
+    <div class="canvas-hints">
+      <span>⌘N new · dbl-click canvas</span>
+      <span>⌘0 fit all</span>
+      <span>scroll pan · pinch zoom</span>
+    </div>
   </div>
-</div>
+{/if}
 
 <style>
   .canvas-stage {
@@ -279,5 +319,48 @@
     color: rgba(255,255,255,0.22);
     pointer-events: none;
     letter-spacing: 0.02em;
+  }
+
+  /* ---- Focused (full-screen) view ---- */
+  .focused-view {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    background: #050810;
+    z-index: 50;
+  }
+  .focused-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255,255,255,0.03);
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    flex-shrink: 0;
+  }
+  .back-btn {
+    background: rgba(137,180,250,0.1);
+    border: 1px solid rgba(137,180,250,0.25);
+    color: #89b4fa;
+    border-radius: 6px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.82rem;
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .back-btn:hover { background: rgba(137,180,250,0.2); }
+  .focused-title {
+    font-size: 0.9rem;
+    color: rgba(255,255,255,0.5);
+    font-weight: 500;
+  }
+  .focused-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+    width: 100%;
   }
 </style>

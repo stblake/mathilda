@@ -18,7 +18,8 @@
     • kernelStatus store from notebook.ts for status display
 -->
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, createEventDispatcher } from 'svelte';
+  const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
   import type { CanvasNotebook } from './canvas';
@@ -41,6 +42,7 @@
 
   export let nb: CanvasNotebook;
   export let currentZoom: number = 1.0;
+  export let focused: boolean = false;  // true when rendered full-screen
 
   // Per-notebook accent colour from the deep-space palette
   const PALETTE = ['#89b4fa','#a6e3a1','#f38ba8','#fab387','#cba6f7','#94e2d5'];
@@ -286,19 +288,25 @@
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <span
         class="card-title"
-        on:dblclick|stopPropagation={startRename}
-        title="Double-click to rename"
+        on:click|stopPropagation={startRename}
+        title="Click to rename"
       >{nb.title}</span>
     {/if}
 
     <div class="titlebar-actions">
-      
-      <button class="tb-btn" title="Collapse / expand" on:click|stopPropagation={onToggleCollapse}>
-        {nb.collapsed ? '⊟' : '⊞'}
-      </button>
-      <button class="tb-btn tb-close" title="Close notebook" on:click|stopPropagation={() => removeNotebook(nb.id)}>
-        ✕
-      </button>
+      {#if !focused}
+        <button
+          class="tb-btn tb-focus"
+          title="Open full screen"
+          on:click|stopPropagation={() => dispatch('focusNotebook', { id: nb.id })}
+        >⤢</button>
+        <button class="tb-btn" title="Collapse / expand" on:click|stopPropagation={onToggleCollapse}>
+          {nb.collapsed ? '⊟' : '⊞'}
+        </button>
+        <button class="tb-btn tb-close" title="Close notebook" on:click|stopPropagation={() => removeNotebook(nb.id)}>
+          ✕
+        </button>
+      {/if}
     </div>
   </div>
 
