@@ -77,6 +77,7 @@
   let dragMoved = false;
 
   function onTitlePointerDown(e: PointerEvent) {
+    if (focused) return;  // no drag in full-screen mode
     if ((e.target as HTMLElement).closest('button, input')) return;
     e.stopPropagation();
     dragging   = true;
@@ -267,6 +268,7 @@
   class="nb-card"
   class:mounted
   class:collapsed={nb.collapsed}
+  class:focused-card={focused}
   style="
     --accent: {accentColor};
     --accent-glow: {accentColor}1a;
@@ -398,6 +400,27 @@
   .nb-card.mounted {
     opacity: 1;
     transform: scale(1);
+  }
+
+  /* Full-screen focused mode — edge to edge, no card chrome */
+  .nb-card.focused-card {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: #050810;
+    min-height: 100vh;
+    width: 100%;
+  }
+  .nb-card.focused-card .card-titlebar {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: rgba(5, 8, 16, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    cursor: default;
   }
 
   /* ---- Title bar ---- */

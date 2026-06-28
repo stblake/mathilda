@@ -157,13 +157,39 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Cmd+0 — fit all / Cmd+N — new notebook at centre
+  // Keyboard: Cmd+0 fit-all (Cmd+N is macOS "new window" and can't be reliably intercepted)
 
   function onKeydown(e: KeyboardEvent) {
-    const mod = e.metaKey || e.ctrlKey;
-    if (!mod) return;
-    if (e.key === '0') { e.preventDefault(); fitAll(); }
-    else if (e.key === 'n' || e.key === 'N') { e.preventDefault(); addAtCentre(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === '0') {
+      e.preventDefault(); fitAll();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Right-click context menu on empty canvas
+
+  let ctxMenu: { x: number; y: number; worldX: number; worldY: number } | null = null;
+
+  function onContextMenu(e: MouseEvent) {
+    if ((e.target as HTMLElement).closest('.nb-card-wrapper')) return;
+    e.preventDefault();
+    const rect   = canvasEl.getBoundingClientRect();
+    const worldX = (e.clientX - rect.left - panX) / zoom - 320;
+    const worldY = (e.clientY - rect.top  - panY) / zoom - 30;
+    ctxMenu = { x: e.clientX, y: e.clientY, worldX, worldY };
+  }
+
+  function closeCtxMenu() { ctxMenu = null; }
+
+  function ctxNewNotebook() {
+    if (!ctxMenu) return;
+    addNotebook();
+    canvasState.update(s => {
+      const nbs = s.notebooks.slice();
+      nbs[nbs.length - 1] = { ...nbs[nbs.length - 1], x: ctxMenu!.worldX, y: ctxMenu!.worldY };
+      return { ...s, notebooks: nbs };
+    });
+    ctxMenu = null;
   }
 
   function fitAll() {
@@ -242,6 +268,7 @@
     on:pointerup={onPointerUp}
     on:pointercancel={onPointerUp}
     on:dblclick={onDblClick}
+    on:contextmenu={onContextMenu}
   >
     <div
       class="canvas-world"
@@ -263,11 +290,24 @@
     </div>
 
     <div class="canvas-hints">
-      <span>⌘N new · dbl-click canvas</span>
+      <span>dbl-click or right-click → new</span>
       <span>⌘0 fit all</span>
       <span>scroll pan · pinch zoom</span>
     </div>
   </div>
+
+  <!-- Right-click context menu -->
+  {#if ctxMenu}
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+    <div class="ctx-backdrop" on:click={closeCtxMenu} on:contextmenu|preventDefault={closeCtxMenu}></div>
+    <div class="ctx-menu" style="left:{ctxMenu.x}px; top:{ctxMenu.y}px;">
+      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+      <div class="ctx-item" on:click={ctxNewNotebook}>＋ New Notebook here</div>
+      <div class="ctx-divider"></div>
+      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+      <div class="ctx-item" on:click={() => { fitAll(); closeCtxMenu(); }}>⊡ Fit All (⌘0)</div>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -311,7 +351,7 @@
     letter-spacing: 0.02em;
   }
 
-  /* ---- Focused (full-screen) view ---- */
+  /* ---- Focused (full-screen) view — truly edge to edge ---- */
   .focused-view {
     position: fixed;
     inset: 0;
@@ -320,8 +360,46 @@
     z-index: 50;
   }
   .focused-view-inner {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 1.5rem 1rem;
+    width: 100%;
+    /* No max-width, no side padding — notebook card fills the window */
+  }
+  /* Override card styles when in focused view so it has no border-radius or side margins */
+  .focused-view-inner :global(.nb-card) {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+    min-height: 100vh;
+  }
+
+  /* ---- Right-click context menu ---- */
+  .ctx-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 300;
+  }
+  .ctx-menu {
+    position: fixed;
+    z-index: 400;
+    background: rgba(18, 22, 38, 0.97);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.05) inset;
+    padding: 4px 0;
+    min-width: 200px;
+    backdrop-filter: blur(16px);
+  }
+  .ctx-item {
+    padding: 0.45rem 1rem;
+    font-size: 0.84rem;
+    color: #cdd6f4;
+    cursor: pointer;
+    transition: background 0.1s;
+    user-select: none;
+  }
+  .ctx-item:hover { background: rgba(137,180,250,0.12); }
+  .ctx-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.07);
+    margin: 3px 0;
   }
 </style>
