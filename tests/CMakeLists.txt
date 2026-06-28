@@ -145,6 +145,7 @@ set(COMMON_SRC
     ../src/numbertheory/divisors.c
     ../src/numbertheory/divisorsigma.c
     ../src/numbertheory/moebiusmu.c
+    ../src/numbertheory/jacobisymbol.c
     ../src/numbertheory/prime.c
     ../src/numbertheory/primecount.c
     ../src/partitions.c
@@ -1263,6 +1264,16 @@ else()
     target_link_libraries(extended_gcd_tests gmp m)
 endif()
 add_test(NAME extended_gcd_tests COMMAND extended_gcd_tests)
+
+add_executable(jacobisymbol_tests test_jacobisymbol.c ${COMMON_SRC})
+target_include_directories(jacobisymbol_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(jacobisymbol_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(jacobisymbol_tests build_ecm)
+else()
+    target_link_libraries(jacobisymbol_tests gmp m)
+endif()
+add_test(NAME jacobisymbol_tests COMMAND jacobisymbol_tests)
 
 add_executable(integer_partitions_tests test_integer_partitions.c ${COMMON_SRC})
 target_include_directories(integer_partitions_tests PRIVATE ../src)

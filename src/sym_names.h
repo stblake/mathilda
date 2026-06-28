@@ -249,6 +249,7 @@ extern const char* SYM_InverseFunction;
 extern const char* SYM_InverseFunctions;
 extern const char* SYM_IrreduciblePolynomialQ;
 extern const char* SYM_Jacobian;
+extern const char* SYM_JacobiSymbol;
 extern const char* SYM_Join;
 extern const char* SYM_Khinchin;
 extern const char* SYM_KroneckerDelta;

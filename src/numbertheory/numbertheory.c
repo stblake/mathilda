@@ -18,6 +18,7 @@ void numbertheory_init(void) {
     symtab_add_builtin("PrimitiveRoot", builtin_primitiveroot);
     symtab_add_builtin("PrimitiveRootList", builtin_primitiverootlist);
     symtab_add_builtin("MultiplicativeOrder", builtin_multiplicativeorder);
+    symtab_add_builtin("JacobiSymbol", builtin_jacobisymbol);
     symtab_add_builtin("Factorial", builtin_factorial);
     symtab_add_builtin("Factorial2", builtin_factorial2);
     symtab_add_builtin("FactorialPower", builtin_factorialpower);
@@ -37,6 +38,7 @@ void numbertheory_init(void) {
     symtab_get_def("PrimitiveRoot")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_get_def("PrimitiveRootList")->attributes |= ATTR_LISTABLE | ATTR_PROTECTED;
     symtab_get_def("MultiplicativeOrder")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("JacobiSymbol")->attributes |= (ATTR_PROTECTED | ATTR_LISTABLE);
     symtab_get_def("Factorial")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("Factorial2")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);
     symtab_get_def("FactorialPower")->attributes |= (ATTR_PROTECTED | ATTR_NUMERICFUNCTION | ATTR_LISTABLE);

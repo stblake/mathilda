@@ -176,6 +176,47 @@ In[7]:= MultiplicativeOrder[10, 22]
 Out[7]= MultiplicativeOrder[10, 22]
 ```
 
+## JacobiSymbol
+
+Gives the Jacobi symbol $(n/m)$.
+- `JacobiSymbol[n, m]`: the Jacobi symbol of `n` with respect to `m`,
+  returned as `-1`, `0`, or `1`.
+
+**Features**:
+- `Protected`, `Listable` — threads element-wise over lists and arrays.
+- For prime `m` the Jacobi symbol reduces to the Legendre symbol, equal to
+  `±1` according to whether `n` is a quadratic residue modulo `m`, and `0`
+  when `m` divides `n`.
+- Following the Wolfram Language, this is the full Kronecker-symbol
+  generalisation: the second argument `m` may be even or non-positive, and
+  the first argument `n` may be negative.
+- Computed with GMP `mpz_kronecker` in $O((\log m)^2)$ time, so `n` and `m`
+  may be arbitrary-precision bignums.
+- Non-integer numeric inputs and symbolic arguments flow through
+  unevaluated with no diagnostic.
+- Diagnostic: `JacobiSymbol::argrx` when called with other than 2 arguments.
+
+```mathematica
+In[1]:= JacobiSymbol[10, 5]
+Out[1]= 0
+
+In[2]:= Table[JacobiSymbol[n, m], {n, 0, 10}, {m, 1, n, 2}]
+Out[2]= {{}, {1}, {1}, {1, 0}, {1, 1}, {1, -1, 0}, {1, 0, 1},
+         {1, 1, -1, 0}, {1, -1, -1, 1}, {1, 0, 1, 1, 0}, {1, 1, 0, -1, 1}}
+
+In[3]:= JacobiSymbol[10^10 + 1, Prime[1000]]
+Out[3]= 1
+
+In[4]:= JacobiSymbol[7, 6]
+Out[4]= 1
+
+In[5]:= JacobiSymbol[{2, 3, 5, 7, 11}, 3]
+Out[5]= {-1, 0, -1, 1, -1}
+
+In[6]:= JacobiSymbol[-3, {1, 3, 5, 7}]
+Out[6]= {1, 0, -1, 1}
+```
+
 ## PrimitiveRoot
 
 Gives a primitive root of `n`, i.e. a generator of the multiplicative group

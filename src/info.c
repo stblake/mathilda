@@ -127,6 +127,14 @@ void info_init(void) {
         "Returns unevaluated when gcd(k, n) is not 1, when no power of k lands in the residue set, "
         "or when n is zero.  All arithmetic is exact via GMP, so k and n may be arbitrary-precision "
         "integers.");
+    symtab_set_docstring("JacobiSymbol",
+        "JacobiSymbol[n, m]\n"
+        "\tgives the Jacobi symbol (n/m).\n\n"
+        "For prime m the Jacobi symbol reduces to the Legendre symbol, equal to +-1 according "
+        "to whether n is a quadratic residue modulo m, and 0 when m divides n.  This is the full "
+        "Kronecker generalisation: the second argument may be even or non-positive and the first "
+        "may be negative.  Returns -1, 0, or 1.  Listable, and exact via GMP for arbitrary-precision "
+        "integers.");
     symtab_set_docstring("FindMinimum",
         "FindMinimum[f, {x, x0}]\n"
         "\tsearches for a local minimum of f starting from x = x0.\n"

@@ -236,6 +236,7 @@ const char* SYM_InverseFunction = NULL;
 const char* SYM_InverseFunctions = NULL;
 const char* SYM_IrreduciblePolynomialQ = NULL;
 const char* SYM_Jacobian = NULL;
+const char* SYM_JacobiSymbol = NULL;
 const char* SYM_Join = NULL;
 const char* SYM_Khinchin = NULL;
 const char* SYM_KroneckerDelta = NULL;
@@ -866,6 +867,7 @@ void sym_names_init(void) {
     SYM_InverseFunctions           = intern_symbol("InverseFunctions");
     SYM_IrreduciblePolynomialQ     = intern_symbol("IrreduciblePolynomialQ");
     SYM_Jacobian                   = intern_symbol("Jacobian");
+    SYM_JacobiSymbol               = intern_symbol("JacobiSymbol");
     SYM_Join                       = intern_symbol("Join");
     SYM_Khinchin                   = intern_symbol("Khinchin");
     SYM_KroneckerDelta             = intern_symbol("KroneckerDelta");

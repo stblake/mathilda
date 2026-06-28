@@ -25,6 +25,7 @@ Expr* builtin_powermod(Expr* res);
 Expr* builtin_primitiveroot(Expr* res);
 Expr* builtin_primitiverootlist(Expr* res);
 Expr* builtin_multiplicativeorder(Expr* res);
+Expr* builtin_jacobisymbol(Expr* res);
 Expr* builtin_factorial(Expr* res);
 Expr* builtin_factorial2(Expr* res);
 Expr* builtin_factorialpower(Expr* res);
