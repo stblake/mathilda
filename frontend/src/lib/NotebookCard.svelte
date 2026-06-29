@@ -535,8 +535,10 @@
       >{renameValue}</span>
     {:else}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- pointer-events restored so dblclick rename works -->
       <span
         class="card-title"
+        style="pointer-events:auto;"
         on:dblclick|stopPropagation={startRename}
         title="Double-click to rename"
       >{nb.title}</span>
@@ -755,6 +757,7 @@
 
   /* ---- Title bar ---- */
   .card-titlebar {
+    position: relative;    /* needed for absolute-centered title */
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -776,15 +779,19 @@
     flex-shrink: 0;
   }
 
+  /* Title absolutely centered in the titlebar — bold, ignores button widths */
   .card-title {
-    flex: 1;
-    font-size: 0.82rem;
-    font-weight: 600;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.84rem;
+    font-weight: 700;
     color: var(--text, #cdd6f4);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    padding-left: 4px;
+    max-width: 60%;
+    pointer-events: none;   /* let drag pass through to the titlebar */
     cursor: grab;
   }
 

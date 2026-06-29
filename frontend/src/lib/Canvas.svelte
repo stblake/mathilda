@@ -23,6 +23,11 @@
   } from './canvas';
 
   // ---------------------------------------------------------------------------
+  // Active notebook — the most recently clicked card renders on top (z-index)
+
+  let activeNbId: string | null = null;
+
+  // ---------------------------------------------------------------------------
   // Animated display values — lerped towards store "targets" each rAF tick.
 
   let panX  = 0;
@@ -274,9 +279,11 @@
       style="transform: translate({panX}px, {panY}px) scale({zoom}); transform-origin: 0 0;"
     >
       {#each $canvasState.notebooks as nb (nb.id)}
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
           class="nb-card-wrapper"
-          style="left: {nb.x}px; top: {nb.y}px; width: {nb.width}px;"
+          style="left:{nb.x}px;top:{nb.y}px;width:{nb.width}px;z-index:{activeNbId===nb.id?10:1};"
+          on:pointerdown|capture={() => activeNbId = nb.id}
         >
           <NotebookCard
             {nb}
