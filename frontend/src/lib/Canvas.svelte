@@ -82,14 +82,12 @@
   // Wheel handler
 
   function onWheel(e: WheelEvent) {
-    e.preventDefault();
     if (e.ctrlKey) {
+      // Pinch: always zoom the canvas (even over cards). Must preventDefault
+      // to stop browser from zooming the page.
+      e.preventDefault();
       const factor = 1 - e.deltaY * 0.008;
-      // Pinching OUT (factor < 1) while in focused mode exits focus
-      if (factor < 1 && $canvasState.focusedId) {
-        setFocused(null);
-        return;
-      }
+      if (factor < 1 && $canvasState.focusedId) { setFocused(null); return; }
       const rect = canvasEl?.getBoundingClientRect();
       if (!rect) return;
       const cx = e.clientX - rect.left;
@@ -100,6 +98,11 @@
         return { ...s, zoom: newZoom, panX: cx - zf * (cx - s.panX), panY: cy - zf * (cy - s.panY) };
       });
     } else {
+      // Two-finger scroll: if over a notebook card, let the browser scroll
+      // the card's overflow-y:auto body naturally (don't preventDefault).
+      if ((e.target as HTMLElement).closest('.nb-card')) return;
+      // Over empty canvas → pan
+      e.preventDefault();
       canvasState.update(s => ({ ...s, panX: s.panX - e.deltaX, panY: s.panY - e.deltaY }));
     }
   }
