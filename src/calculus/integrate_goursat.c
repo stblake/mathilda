@@ -169,6 +169,30 @@ static Expr* subst_eval(Expr* e, const Expr* from, Expr* to) {
     return eval_take(internal_replace_all((Expr*[]){ e, rule }, 2));
 }
 
+/* Re-express every power of the monic radicand Q in G as a power of the true
+ * radicand H = lc Q, keeping lc as a constant factor:
+ *      G /. Power[Q, p_] :> Power[lc Q, p] Power[lc, -p].
+ * Algebraically an identity (lc^p Q^p lc^-p = Q^p), so it leaves G a valid
+ * antiderivative -- but it changes the FORM.  We integrate gx/Sqrt[Q] with a
+ * MONIC Q (keeps the recursive Euler reduction rational and fast); naively
+ * restoring the leading coefficient via a Sqrt[lc] prefactor is WRONG because
+ * Sqrt[lc] Sqrt[Q] != Sqrt[lc Q] when Q < 0 (a branch-cut sign flip yielding a
+ * bogus antiderivative).  Rewriting instead makes the radical the true H, which
+ * after back-substitution resolves to the clean real Sqrt[R]*rational, and lc
+ * survives only as a constant where it cancels the prefactor's 1/Sqrt[lc].
+ * Consumes G; borrows Q, lc. */
+static Expr* rebase_radical(Expr* G, Expr* Q, Expr* lc) {
+    if (!G) return NULL;
+    Expr* blank = mk_fnv("Blank", NULL, 0);
+    Expr* ppat  = mk_fn2("Pattern", mk_sym("p"), blank);
+    Expr* lhs   = mk_pow(expr_copy(Q), ppat);
+    Expr* rhs   = mk_fn2("Times",
+        mk_pow(mk_fn2("Times", expr_copy(lc), expr_copy(Q)), mk_sym("p")),
+        mk_pow(expr_copy(lc), mk_neg(mk_sym("p"))));
+    Expr* rule  = mk_fn2("RuleDelayed", lhs, rhs);
+    return eval_take(internal_replace_all((Expr*[]){ G, rule }, 2));
+}
+
 /* PossibleZeroQ via the internal three-valued decision: strict TRUE only. */
 static bool is_zero(const Expr* e) {
     if (!e) return false;
@@ -183,6 +207,100 @@ static Expr* integrate_in(const Expr* g, const Expr* u) {
     if (!r) return NULL;
     if (contains_unintegrated(r)) { expr_free(r); return NULL; }
     return r;
+}
+
+/* True iff e is the symbol True. */
+static bool expr_is_true(Expr* e) {
+    if (!e) return false;
+    Expr* t = mk_sym("True");
+    bool r = expr_eq(e, t);
+    expr_free(t);
+    return r;
+}
+
+/* Robust differentiate-back check: is D[result, x] - f identically zero?
+ *
+ * The square-root reduction's antiderivative is a rational function of x and the
+ * un-simplified nested radical Sqrt[lc Q(back)]; PossibleZeroQ's symbolic/real
+ * sampling misfires on it (the (x - beta) poles of the unsimplified form, and
+ * the complex values on the stretch where R < 0, both break real-only sampling),
+ * rejecting genuinely correct results.  Instead evaluate D[result,x] - f
+ * numerically at several fixed rational points -- Abs collapses the R<0 complex
+ * branch to a real magnitude.  Accept iff every point at which the value is a
+ * finite number is ~0 (with at least two such points); reject if any finite
+ * value is plainly nonzero (the Ferrari-misfire case differs from f by O(1)).
+ * Borrows result, x, f. */
+static bool diff_back_ok(Expr* result, Expr* x, Expr* f) {
+    Expr* d = eval_take(mk_fn2("D", expr_copy(result), expr_copy(x)));
+    if (!d) return false;
+    Expr* diff = gsub(d, expr_copy(f));        /* D[result,x] - f */
+    if (!diff) return false;
+
+    static const long pn[8] = { 17, 23, 31, 29, 37, 41, 19, 43 };
+    static const long pd[8] = {  5,  7,  9, 11, 10, 12,  6,  8 };
+    Expr* tol_lo = make_rational(1, 1000000000000L);   /* 1e-12: accept below   */
+    Expr* tol_hi = make_rational(1, 1000000L);         /* 1e-6 : reject above   */
+    int good = 0; bool bad = false;
+    for (int i = 0; i < 8 && good < 3 && !bad; i++) {
+        Expr* pt  = make_rational(pn[i], pd[i]);
+        Expr* at  = subst_eval(expr_copy(diff), x, pt);   /* consumes pt */
+        Expr* mag = at ? eval_take(mk_fn2("N", mk_fn1("Abs", at), mk_int(30))) : NULL;
+        if (mag) {
+            Expr* lo = eval_take(mk_fn2("Less",    expr_copy(mag), expr_copy(tol_lo)));
+            Expr* hi = eval_take(mk_fn2("Greater", mag,            expr_copy(tol_hi)));
+            if (expr_is_true(lo)) good++;
+            else if (expr_is_true(hi)) bad = true;
+            if (lo) expr_free(lo);
+            if (hi) expr_free(hi);
+        }
+    }
+    expr_free(tol_lo); expr_free(tol_hi); expr_free(diff);
+    return good >= 2 && !bad;
+}
+
+/* Cheap numeric "is e definitely NOT identically zero in x?" test.
+ *
+ * The eigenspace elementarity criteria require certain projections of F to
+ * vanish.  Combining those projections symbolically (canonic = Together/Cancel
+ * over the splitting field of R) blows up super-polynomially when R has
+ * cyclotomic roots, so the obstructed (non-elementary) integrands -- which are
+ * exactly the ones that SHOULD be rejected -- are the slowest to reject.
+ *
+ * Decide it numerically on the *uncombined* expression instead: sample e at a
+ * spread of fixed rational points and N-evaluate |e| (Abs collapses the complex
+ * values that the cyclotomic radicals in e take to a real magnitude).  Return
+ * true as soon as one finite sample is decisively above the noise floor -- proof
+ * that e is not the zero function, so the criterion fails and the caller
+ * declines.  A false return ("every sampled point is ~0") only authorises the
+ * descent, whose antiderivative is independently verified by diff_back_ok, so a
+ * numeric false-positive-for-zero cannot produce a wrong result.  Borrows e, x. */
+static bool sample_clearly_nonzero(Expr* e, Expr* x) {
+    if (!e) return false;
+    static const long pn[8] = {  7, 13, 31, 23, 37, 19, 41, 29 };
+    static const long pd[8] = { 10,  5, 10,  7, 10,  6, 12, 11 };
+    Expr* tol_lo = make_rational(1, 1000000L);          /* 1e-6 : above noise floor */
+    Expr* tol_hi = mk_int(1000000000L);                 /* 1e9  : reject pole blow-ups */
+    bool nonzero = false;
+    for (int i = 0; i < 8 && !nonzero; i++) {
+        Expr* pt  = make_rational(pn[i], pd[i]);
+        Expr* at  = subst_eval(expr_copy(e), x, pt);   /* consumes pt */
+        Expr* mag = at ? eval_take(mk_fn2("N", mk_fn1("Abs", at), mk_int(30))) : NULL;
+        if (mag) {
+            /* Count a point as evidence of non-vanishing only when |e| is both
+             * above the noise floor AND finite/bounded -- a sample that lands on
+             * (or near) a pole of some f_j numericalises to Infinity even though
+             * the symbolic projection is identically zero, so such points must be
+             * skipped rather than mistaken for a genuine non-zero. */
+            Expr* lo = eval_take(mk_fn2("Greater", expr_copy(mag), expr_copy(tol_lo)));
+            Expr* hi = eval_take(mk_fn2("Less",    expr_copy(mag), expr_copy(tol_hi)));
+            if (expr_is_true(lo) && expr_is_true(hi)) nonzero = true;
+            if (lo) expr_free(lo);
+            if (hi) expr_free(hi);
+            expr_free(mag);
+        }
+    }
+    expr_free(tol_lo); expr_free(tol_hi);
+    return nonzero;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -376,7 +494,12 @@ static Expr* reduce_v4_piece(Expr* Fj, Expr* R, Expr* t, Expr* S) {
     Expr* lc = get_coeff(Rfact, u, 4);
     if (!lc || is_zero(lc)) { if (lc) expr_free(lc); expr_free(Rfact); goto done; }
 
-    /* Q(x) = sum_{k=0}^{2} (Coefficient[Rfact,u,2k]/lc) x^k. */
+    /* Q(x) = sum_{k=0}^{2} (Coefficient[Rfact,u,2k]/lc) x^k -- the MONIC even
+     * part of Rfact as a polynomial in x = u^2.  Integrating gx/Sqrt[Q] with a
+     * monic radicand keeps the recursive Euler reduction rational and fast.  The
+     * true radicand is H = lc Q; Sqrt[lc] is restored after integration by
+     * rebase_radical (NOT factored into the prefactor -- that is branch-unsafe,
+     * since Sqrt[lc] Sqrt[Q] != Sqrt[lc Q] when Q < 0). */
     Expr* Q = mk_int(0);
     for (int k = 0; k <= 2; k++) {
         Expr* c2k = get_coeff(Rfact, u, 2 * k);
@@ -401,14 +524,22 @@ static Expr* reduce_v4_piece(Expr* Fj, Expr* R, Expr* t, Expr* S) {
                          : mk_fn2("Plus", expr_copy(alpha), mk_neg(expr_copy(beta)));
     Expr* pre = mk_fn2("Times", pre_num,
         mk_inv(mk_fn2("Times", mk_int(2), mk_sqrt_expr(expr_copy(lc)))));
-    expr_free(lc);
 
-    /* Integrate gx / Sqrt[Q] in x. */
+    /* Integrate gx / Sqrt[Q] in x (Q monic -> exact, fast rational reduction). */
+    Expr* Qkeep = expr_copy(Q);
     Expr* integrand = mk_fn2("Times", gx, mk_pow_rat(Q, -1, 2));  /* consumes gx,Q */
     gs_depth++;
     Expr* G = integrate_in(integrand, x);
     gs_depth--;
     expr_free(integrand);
+    if (!G) { expr_free(pre); expr_free(Qkeep); expr_free(lc); goto done; }
+
+    /* Rewrite Sqrt[Q] -> Sqrt[lc Q]/Sqrt[lc] so the radical is the true H = lc Q
+     * (Sqrt[R]*rational after back-substitution) and Sqrt[lc] cancels the
+     * prefactor's 1/Sqrt[lc] as the real constant lc -- never straddling the
+     * branch cut on the variable radicand. */
+    G = rebase_radical(G, Qkeep, lc);
+    expr_free(Qkeep); expr_free(lc);
     if (!G) { expr_free(pre); goto done; }
 
     /* Back-substitute x -> (binf ? (t-alpha)^2 : ((t-alpha)/(t-beta))^2). */
@@ -458,27 +589,48 @@ static Expr* goursat_v4(Expr* F, Expr* R, Expr* t) {
     Expr* S3 = mobius_involution(r[0], r[3], r[1], r[2], t);
     Expr* S[3] = { S1, S2, S3 };
 
-    /* V4 projections of F. */
+    /* V4 projections of F.  Build the four substituted copies f_j = F(S_j(t))
+     * but DEFER the costly canonic: combining four rational functions over the
+     * cyclotomic splitting field of R via Together explodes super-polynomially
+     * (e.g. R = x^3 - 1, whose roots are the cube roots of unity), and the
+     * trivial-character projection P0 is only needed for a zero test. */
     Expr* f0 = expr_copy(F);
     Expr* f1 = subst_eval(expr_copy(F), t, expr_copy(S1));
     Expr* f2 = subst_eval(expr_copy(F), t, expr_copy(S2));
     Expr* f3 = subst_eval(expr_copy(F), t, expr_copy(S3));
 
-    Expr* P[4];
-    P[0] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), expr_copy(f1)),
-                                  expr_copy(f2), expr_copy(f3)));
+    Expr* P[4] = { NULL, NULL, NULL, NULL };
+    Expr* result = NULL;
+
+    /* Trivial-character projection P0 = (f0+f1+f2+f3)/4 must vanish, else the
+     * integral is obstructed (non-elementary).  Decide this on the *uncombined*
+     * sum by numeric sampling: a clearly non-zero sample declines instantly,
+     * sidestepping the cyclotomic Together blowup that a symbolic is_zero(P0)
+     * would trigger.  A passing (zero-ish) sample only authorises the descent,
+     * whose result is independently checked by the diff_back_ok guard in
+     * gs_core -- so a numeric false-positive cannot yield a wrong answer. */
+    if (f1 && f2 && f3) {
+        Expr* P0raw = mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), expr_copy(f1)),
+                                     expr_copy(f2), expr_copy(f3));
+        bool obstructed = sample_clearly_nonzero(P0raw, t);
+        expr_free(P0raw);
+        if (obstructed) {
+            expr_free(f0); expr_free(f1); expr_free(f2); expr_free(f3);
+            goto cleanup;
+        }
+    }
+
+    /* P0 looks vanishing -- now canonicalise the three non-trivial projections
+     * that the descent actually integrates. */
     P[1] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), expr_copy(f1)),
                                   mk_neg(expr_copy(f2)), mk_neg(expr_copy(f3))));
     P[2] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), mk_neg(expr_copy(f1))),
                                   expr_copy(f2), mk_neg(expr_copy(f3))));
     P[3] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), mk_neg(expr_copy(f1))),
                                   mk_neg(expr_copy(f2)), expr_copy(f3)));
-    for (int i = 0; i < 4; i++) P[i] = canonic(mk_fn2("Times", mk_rat(1, 4), P[i]));
+    for (int i = 1; i <= 3; i++)
+        if (P[i]) P[i] = canonic(mk_fn2("Times", mk_rat(1, 4), P[i]));
     expr_free(f0); expr_free(f1); expr_free(f2); expr_free(f3);
-
-    Expr* result = NULL;
-    /* Trivial-character projection must vanish, else obstructed. */
-    if (!P[0] || !is_zero(P[0])) goto cleanup;
 
     /* Sum the reductions of the non-zero projections P[1],P[2],P[3].  P[j] is
      * anti-invariant under the two involutions S[k], k != j-1; prefer one whose
@@ -591,6 +743,23 @@ static Expr* eigenproj3(Expr* H, Expr* z, int k) {
     return canonic(simplify_e(gdiv(mk_fn3("Plus", t0, t1, t2), mk_int(3))));
 }
 
+/* Raw (evaluate-only, NO canonic/Simplify) order-3 eigenprojection, used solely
+ * by the numeric criterion gate: the costly canonic/Simplify over the cyclotomic
+ * field is exactly the blowup we want to avoid before deciding the integral is
+ * obstructed, and numeric sampling does not need a canonical form.  Borrows H,z. */
+static Expr* eigenproj3_raw(Expr* H, Expr* z, int k) {
+    Expr* w  = mk_omega();
+    Expr* wz  = gmul(expr_copy(w), expr_copy(z));
+    Expr* w2z = gmul(mk_pow_int(expr_copy(w), 2), expr_copy(z));
+    Expr* Hw  = subst_eval(expr_copy(H), z, wz);
+    Expr* Hw2 = subst_eval(expr_copy(H), z, w2z);
+    Expr* t0 = expr_copy(H);
+    Expr* t1 = gmul(mk_pow_int(expr_copy(w), -k), Hw);
+    Expr* t2 = gmul(mk_pow_int(expr_copy(w), -2 * k), Hw2);
+    expr_free(w);
+    return eval_take(gdiv(mk_fn3("Plus", t0, t1, t2), mk_int(3)));
+}
+
 /* Integrate one J-piece in uOut and back-substitute uOut -> backval.  Returns
  * Integer 0 for a zero piece, NULL on non-closure, else the owned contribution
  * in t.  Borrows J, uOut, backval. */
@@ -661,12 +830,13 @@ static Expr* goursat_cubic(Expr* F, Expr* R, Expr* t, int pnum) {
     }
     K = canonic(gdiv(mk_neg(c0), expr_copy(cval)));   /* -c0/cval */
 
-    /* H (p=1/3) or Htilde (p=2/3). */
+    /* H (p=1/3) or Htilde (p=2/3).  Build the raw (un-canonicalised) integrand
+     * source `base` first; canonic is deferred until after the numeric gate. */
+    Expr* base = NULL;
     {
         Expr* Ftz = subst_eval(expr_copy(F), t, expr_copy(tz));
         Expr* cpow = (pnum == 1) ? mk_pow_rat(expr_copy(cval), -1, 3)
                                  : mk_pow_rat(expr_copy(cval), -2, 3);
-        Expr* base;
         if (pnum == 1) {
             base = binf
                 ? gmul(Ftz, cpow)
@@ -677,9 +847,24 @@ static Expr* goursat_cubic(Expr* F, Expr* R, Expr* t, int pnum) {
                 ? gmul(Ftz, cpow)
                 : gmul(gsub(expr_copy(alpha), expr_copy(beta)), gmul(Ftz, cpow));
         }
-        H = canonic(base);
     }
     expr_free(S);
+    if (!base) goto cleanup;
+
+    /* Numeric elementarity gate (p=1/3 needs H1==0, p=2/3 needs H0==0): sample
+     * the RAW criterion eigenprojection (no canonic/Simplify) and decline at
+     * once when it is decisively non-zero -- this is the cyclotomic-field
+     * Together/Simplify blowup that the obstructed cases would otherwise hit.
+     * A passing sample falls through to the exact same symbolic path as before;
+     * gs_core's diff_back_ok independently verifies any antiderivative. */
+    {
+        Expr* crit = eigenproj3_raw(base, z, (pnum == 1) ? 1 : 0);
+        bool obstructed = sample_clearly_nonzero(crit, z);
+        if (crit) expr_free(crit);
+        if (obstructed) { expr_free(base); goto cleanup; }
+    }
+
+    H = canonic(base);
     if (!H) goto cleanup;
 
     H0 = eigenproj3(H, z, 0);
@@ -789,6 +974,197 @@ cleanup:
 }
 
 /* ---------------------------------------------------------------------- */
+/* Period-3 case: sqrt(cubic) higher symmetry (Goursat 1887, Section 4)    */
+/*                                                                         */
+/* When R is a cubic linearly equivalent to t^3 - 1 there is an order-3    */
+/* Mobius S fixing one of the four ramification points {roots, Infinity}   */
+/* and cycling the other three.  If F is a non-trivial period-3 character  */
+/* of <S> (F(S) = alpha F with alpha = Exp[2 Pi I/3]) then                 */
+/* Int[F(t)/Sqrt[R(t)], t] is pseudo-elliptic.  This is the case the V4    */
+/* Theorems 1-2 (goursat_v4) do NOT cover: the V4 trivial projection is    */
+/* non-zero, but the period-3 trivial projection F + F(S) + F(S^2) = 0.    */
+/*                                                                         */
+/* Reduction (verified against the Section-4 worked example                */
+/*   (1/3) dx/Sqrt[x(1-x)] = (t-1)/(t+2) dt/Sqrt[t^3-1],  x=((t-1)/(t+2))^3 */
+/* ): with z = (t - a)/(t - a1) for the two fixed points a, a1 of S, the   */
+/* map becomes z -> alpha z, the differential dt/Sqrt[R] becomes           */
+/* dz/Sqrt[z(A z^3 + B)], and the alpha-character F1(z) = z phi(z^3).       */
+/* Setting x = z^3 yields the elementary (1/3) phi(x)/Sqrt[x(A x + B)] dx.  */
+/* ---------------------------------------------------------------------- */
+
+/* True iff g(z) is (numerically) invariant under z -> omega z, i.e. g is a
+ * function of z^3 alone -- the structural pre-condition for to_function_of_power
+ * to extract phi(x) faithfully (it silently drops non-multiple-of-3 powers).
+ * Used to detect the wrong fixed-point orientation (which turns an alpha-
+ * character into an alpha^2-character, making Fz/z carry a stray z). Borrows. */
+static bool is_cube_function(Expr* g, Expr* z) {
+    Expr* w  = mk_omega();
+    Expr* gw = subst_eval(expr_copy(g), z, gmul(w, expr_copy(z)));  /* g(omega z) */
+    Expr* diff = gsub(expr_copy(g), gw);
+    bool nonconst = sample_clearly_nonzero(diff, z);
+    expr_free(diff);
+    return !nonconst;
+}
+
+/* Reduce a pure alpha-character piece Fk (Fk(S)=alpha Fk; S the order-3 Mobius
+ * with fixed points {a, a1}, z=(t-a)/(t-a1) sending S to z->alpha z) to its
+ * elementary antiderivative in t, or NULL if Fk is not of this form for this
+ * fixed-point orientation / the reduced rational integral does not close.
+ * a or a1 may be NULL (Infinity).  Borrows Fk, R, t, a, a1. */
+static Expr* period3_reduce(Expr* Fk, Expr* R, Expr* t, Expr* a, Expr* a1) {
+    bool ainf = (a == NULL), a1inf = (a1 == NULL);
+    if (ainf && a1inf) return NULL;
+
+    Expr* z = fresh_var();
+    Expr* x = fresh_var();
+    Expr* result = NULL;
+    Expr* tz = NULL, *Fz = NULL, *phi = NULL, *Qz = NULL, *AB = NULL, *G = NULL;
+
+    /* t(z): z=(t-a)/(t-a1) sends a->0, a1->Infinity. */
+    if (a1inf)     tz = gadd(expr_copy(a), expr_copy(z));              /* z = t - a    */
+    else if (ainf) tz = gadd(expr_copy(a1), mk_inv(expr_copy(z)));     /* z = 1/(t-a1) */
+    else           tz = canonic(gdiv(gsub(expr_copy(a),
+                              gmul(expr_copy(a1), expr_copy(z))),
+                              gsub(mk_int(1), expr_copy(z))));
+    if (!tz) goto done;
+
+    /* Fz = Fk(t(z)) must be z * phi(z^3).  Verify Fz/z is a function of z^3
+     * (else this orientation gives the alpha^2-character -- decline it).  Do the
+     * check on the RAW (un-canonicalised) substitution: it is a fast numeric
+     * sample, and skipping the costly cyclotomic canonic on the common
+     * non-matching orientation/integrand is what keeps decline fast. */
+    Fz = subst_eval(expr_copy(Fk), t, expr_copy(tz));
+    if (!Fz) goto done;
+    Expr* FzOverZraw = gdiv(expr_copy(Fz), expr_copy(z));
+    bool cube_ok = is_cube_function(FzOverZraw, z);
+    if (!cube_ok) { expr_free(FzOverZraw); goto done; }
+    Expr* FzOverZ = canonic(FzOverZraw);   /* matched orientation only */
+    phi = FzOverZ ? to_function_of_power(FzOverZ, z, x, 3) : NULL;
+    if (FzOverZ) expr_free(FzOverZ);
+    if (!phi) goto done;
+
+    /* Qz = R(t(z)) (dz/dt)^2 must be z (A z^3 + B) for the finite-fixed-point
+     * reduction, i.e. Qz/z is a function of z^3.  (For a fixed point that is not
+     * a ramification point -- e.g. the t^3=x / fix-Infinity reduction -- Qz has
+     * a different shape that this branch does not handle; reject it fast on the
+     * raw form rather than tripping a div-by-zero in to_function_of_power.) */
+    {
+        Expr* dtz = eval_take(mk_fn2("D", expr_copy(tz), expr_copy(z)));
+        Expr* Rtz = subst_eval(expr_copy(R), t, expr_copy(tz));
+        Qz = gdiv(Rtz, mk_pow_int(dtz, 2));         /* raw, no canonic yet */
+    }
+    if (!Qz) goto done;
+    Expr* QzOverZraw = gdiv(expr_copy(Qz), expr_copy(z));
+    if (!is_cube_function(QzOverZraw, z)) { expr_free(QzOverZraw); goto done; }
+    Expr* QzOverZ = canonic(QzOverZraw);
+    AB = QzOverZ ? to_function_of_power(QzOverZ, z, x, 3) : NULL;
+    if (QzOverZ) expr_free(QzOverZ);
+    if (!AB) goto done;
+
+    /* integrand_x = (1/3) phi(x) / Sqrt[x (A x + B)]. */
+    {
+        Expr* rad = canonic(gmul(expr_copy(x), expr_copy(AB)));
+        if (!rad) goto done;
+        Expr* integrand = gmul(mk_rat(1, 3),
+            gmul(expr_copy(phi), mk_pow_rat(rad, -1, 2)));   /* consumes rad */
+        gs_depth++;
+        G = integrate_in(integrand, x);
+        gs_depth--;
+        expr_free(integrand);
+    }
+    if (!G) goto done;
+
+    /* back-substitute x -> z(t)^3. */
+    {
+        Expr* back;
+        if (a1inf)     back = mk_pow_int(gsub(expr_copy(t), expr_copy(a)), 3);
+        else if (ainf) back = mk_pow_int(mk_inv(gsub(expr_copy(t), expr_copy(a1))), 3);
+        else           back = mk_pow_int(gdiv(gsub(expr_copy(t), expr_copy(a)),
+                                              gsub(expr_copy(t), expr_copy(a1))), 3);
+        result = subst_eval(G, x, back);   /* consumes G, back */
+        G = NULL;
+    }
+
+done:
+    if (tz) expr_free(tz);
+    if (Fz) expr_free(Fz);
+    if (phi) expr_free(phi);
+    if (Qz) expr_free(Qz);
+    if (AB) expr_free(AB);
+    if (G) expr_free(G);
+    expr_free(z); expr_free(x);
+    return result;
+}
+
+/* Reduce a present character piece by trying both fixed-point orientations
+ * (one is the alpha-character orientation, the other alpha^2).  Returns the
+ * antiderivative or NULL.  Borrows all. */
+static Expr* period3_reduce_either(Expr* Fk, Expr* R, Expr* t, Expr* a, Expr* a1) {
+    Expr* r = period3_reduce(Fk, R, t, a, a1);
+    if (!r) r = period3_reduce(Fk, R, t, a1, a);
+    return r;
+}
+
+/* Period-3 Goursat (p = 1/2, R a cubic with the t^3-1 higher symmetry). */
+static Expr* goursat_period3(Expr* F, Expr* R, Expr* t) {
+    size_t nr = 0;
+    Expr** roots = poly_roots(R, t, &nr);
+    int dR = get_degree_poly(R, t);
+    if (dR != 3 || nr != 3) {
+        for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
+        if (roots) free(roots);
+        return NULL;
+    }
+
+    Expr* result = NULL;
+
+    /* Four ramification points; try each as the fixed point of an order-3
+     * Mobius cycling the other three. */
+    Expr* bp[4] = { roots[0], roots[1], roots[2], NULL /* Infinity */ };
+    for (int fix = 0; fix < 4 && !result; fix++) {
+        Expr* cyc[3]; int ci = 0;
+        for (int i = 0; i < 4; i++) if (i != fix) cyc[ci++] = bp[i];
+        Expr* S = cyclic_mobius(cyc, t);
+        if (!S) continue;
+
+        /* Period-3 trivial projection F + F(S) + F(S^2) must vanish (numeric
+         * gate on the *uncombined* sum -- a symbolic character projection in t
+         * would trigger the cyclotomic Together blowup).  Compose F(S^2) as
+         * (F(S))(S) rather than forming the cyclotomic S^2 = canonic(S.S). */
+        Expr* FS  = subst_eval(expr_copy(F), t, expr_copy(S));
+        Expr* FS2 = FS ? subst_eval(expr_copy(FS), t, expr_copy(S)) : NULL;
+        Expr* F0raw = mk_fn3("Plus", expr_copy(F), FS, FS2);
+        bool trivnz = sample_clearly_nonzero(F0raw, t);
+        expr_free(F0raw);
+        if (trivnz) { expr_free(S); continue; }
+
+        Expr* a = NULL; Expr* a1 = NULL;
+        bool okfp = fixed_points(S, t, &a, &a1);
+        expr_free(S);
+        if (!okfp) { if (a) expr_free(a); if (a1) expr_free(a1); continue; }
+        /* Solve returns the fixed points as un-simplified nested cyclotomic
+         * radicals (the cycled roots are cube roots of unity); Simplify collapses
+         * them to their closed values (e.g. 1 and -2), without which t(z) is a
+         * huge expression that stalls the downstream canonic. */
+        a  = simplify_e(a);
+        a1 = simplify_e(a1);
+
+        /* Reduce F directly: substituting the (simple) ORIGINAL F into t(z)
+         * collapses it BEFORE any cyclotomic projection (e.g. F(t(z)) = z for
+         * (t-1)/(t+2)), and period3_reduce's is_cube_function check verifies it
+         * is a pure alpha-character for this orientation -- trying both
+         * fixed-point orders covers alpha vs alpha^2. */
+        result = period3_reduce_either(F, R, t, a, a1);
+
+        if (a) expr_free(a); if (a1) expr_free(a1);
+    }
+
+    for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
+    if (roots) free(roots);
+    return result;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Fourth-root case: order-4 Mobius eigendescent (p = 1/4 and 3/4)        */
 /* ---------------------------------------------------------------------- */
 
@@ -872,6 +1248,24 @@ static Expr* eigenproj4(Expr* H, Expr* z, int k) {
     return canonic(simplify_e(gdiv(sum, mk_int(4))));
 }
 
+/* Raw (evaluate-only, NO canonic/Simplify) order-4 eigenprojection for the
+ * numeric criterion gate.  Borrows H,z.  See eigenproj3_raw. */
+static Expr* eigenproj4_raw(Expr* H, Expr* z, int k) {
+    Expr* I = mk_sym("I");
+    Expr* Hiz  = subst_eval(expr_copy(H), z, gmul(expr_copy(I), expr_copy(z)));
+    Expr* Hmz  = subst_eval(expr_copy(H), z, mk_neg(expr_copy(z)));
+    Expr* Hmiz = subst_eval(expr_copy(H), z,
+                            mk_neg(gmul(expr_copy(I), expr_copy(z))));
+    Expr* t0 = expr_copy(H);
+    Expr* t1 = gmul(mk_pow_int(expr_copy(I), -k), Hiz);
+    Expr* t2 = gmul(mk_pow_int(expr_copy(I), -2 * k), Hmz);
+    Expr* t3 = gmul(mk_pow_int(expr_copy(I), -3 * k), Hmiz);
+    expr_free(I);
+    Expr* sum = expr_new_function(mk_sym("Plus"),
+                    (Expr*[]){ t0, t1, t2, t3 }, 4);
+    return eval_take(gdiv(sum, mk_int(4)));
+}
+
 /* Fourth-root Goursat (p = pnum/4, pnum in {1,3}): R quartic, harmonic roots. */
 static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
     size_t nr = 0;
@@ -924,12 +1318,13 @@ static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
     K = canonic(gdiv(mk_neg(c0), expr_copy(cval)));
 
     /* H_p = (alpha-beta)(1-z)^(4p-2)(F/.t->tz)/cval^p  [binf: drop the
-     * (alpha-beta) and (1-z) factors].  4p-2 = -1 (p=1/4) or +1 (p=3/4). */
+     * (alpha-beta) and (1-z) factors].  4p-2 = -1 (p=1/4) or +1 (p=3/4).
+     * Build the raw source first; canonic is deferred until after the gate. */
+    Expr* base = NULL;
     {
         Expr* Ftz = subst_eval(expr_copy(F), t, expr_copy(tz));
         Expr* cpow = (pnum == 1) ? mk_pow_rat(expr_copy(cval), -1, 4)
                                  : mk_pow_rat(expr_copy(cval), -3, 4);
-        Expr* base;
         if (binf) {
             base = gmul(Ftz, cpow);
         } else {
@@ -938,8 +1333,30 @@ static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
             base = gmul(gmul(gsub(expr_copy(alpha), expr_copy(beta)), Ftz),
                         gmul(cpow, omz));
         }
-        H = canonic(base);
     }
+    if (!base) goto cleanup;
+
+    /* Numeric elementarity gate (p=1/4 needs H1==H2==0; p=3/4 needs H0==H1==0):
+     * sample the two RAW criterion eigenprojections and decline at once if
+     * either is decisively non-zero, sidestepping the cyclotomic-field
+     * canonic/Simplify blowup on the obstructed cases.  A passing sample falls
+     * through to the identical symbolic path; gs_core's diff_back_ok verifies
+     * any antiderivative. */
+    {
+        int ka = (pnum == 1) ? 1 : 0;
+        int kb = (pnum == 1) ? 2 : 1;
+        Expr* ca = eigenproj4_raw(base, z, ka);
+        bool obstructed = sample_clearly_nonzero(ca, z);
+        if (ca) expr_free(ca);
+        if (!obstructed) {
+            Expr* cb = eigenproj4_raw(base, z, kb);
+            obstructed = sample_clearly_nonzero(cb, z);
+            if (cb) expr_free(cb);
+        }
+        if (obstructed) { expr_free(base); goto cleanup; }
+    }
+
+    H = canonic(base);
     if (!H) goto cleanup;
 
     H0 = eigenproj4(H, z, 0);
@@ -1081,17 +1498,26 @@ static bool recognise(Expr* f, Expr* x, Expr** F, Expr** R,
             !expr_free_of(g->data.function.args[0], x)) {
             Expr* base = g->data.function.args[0];
             int64_t qn, qd;
-            if (is_rational(g->data.function.args[1], &qn, &qd)) {
-                int tpn = 0, tpd = 0;
-                if (qn == -1 && qd == 2) { tpn = 1; tpd = 2; }
-                else if (qn == -1 && qd == 3) { tpn = 1; tpd = 3; }
-                else if (qn == -2 && qd == 3) { tpn = 2; tpd = 3; }
-                else if (qn == -1 && qd == 4) { tpn = 1; tpd = 4; }
-                else if (qn == -3 && qd == 4) { tpn = 3; tpd = 4; }
-                if (tpd != 0) {
+            if (is_rational(g->data.function.args[1], &qn, &qd) && qd != 0) {
+                /* Reduce defensively (Rational nodes are already normalised, but
+                 * be safe) and force a positive denominator. */
+                if (qd < 0) { qn = -qn; qd = -qd; }
+                int64_t gg = gcd(qn < 0 ? -qn : qn, qd);
+                if (gg > 1) { qn /= gg; qd /= gg; }
+                /* Any rational exponent n/d with d in {2,3,4} is a radical.  Write
+                 * R^(n/d) = R^k * R^(-p) where p = pnum/d in {1/2,1/3,2/3,1/4,3/4}
+                 * (pnum = (-n) mod d in (0,d)) and the integer k = (n+pnum)/d folds
+                 * into the rational cofactor F as R^k.  This admits POSITIVE-power
+                 * radicals such as (1-x^3)^(1/3)/x = (1-x^3)/x * (1-x^3)^(-2/3),
+                 * not just radicals already in the denominator. */
+                if (qd == 2 || qd == 3 || qd == 4) {
                     if (rad) { goto fail; }      /* only one radical allowed */
+                    int64_t pnum_l = ((-qn) % qd + qd) % qd;   /* in (0, qd) */
+                    int64_t k = (qn + pnum_l) / qd;            /* integer */
                     rad = expr_copy(base);
-                    pn = tpn; pd = tpd;
+                    pn = (int)pnum_l; pd = (int)qd;
+                    if (k != 0)
+                        cof = mk_fn2("Times", cof, mk_pow_int(expr_copy(base), k));
                     continue;
                 }
             }
@@ -1146,6 +1572,11 @@ static Expr* gs_core(Expr* f, Expr* x) {
     Expr* result = NULL;
     if (pden == 2) {
         result = goursat_v4(F, R, x);
+        /* When V4 (Theorems 1-2) declines a square-root-of-cubic integrand, try
+         * the period-3 higher-symmetry reduction (Goursat 1887 Section 4), which
+         * covers the t^3-1-symmetric cases V4 misses (e.g.
+         * (t-1)/((t+2) Sqrt[t^3-1])). */
+        if (!result) result = goursat_period3(F, R, x);
     } else if (pden == 3) {
         result = goursat_cubic(F, R, x, pnum);
     } else if (pden == 4) {
@@ -1160,19 +1591,68 @@ static Expr* gs_core(Expr* f, Expr* x) {
      * (e.g. an irreducible quartic solved via Ferrari) -- catastrophic
      * cancellation can numericalise a genuinely nonzero projection to ~0, so the
      * criterion wrongly passes and an incorrect antiderivative (often the
-     * degenerate 0) is emitted.  Verify D[result, x] == f before returning; the
-     * check evaluates against the clean integrand f, not the nested radicals, so
-     * it reliably rejects such cases.  On failure, decline so the cascade
-     * continues.  (The clean factorable/biquadratic radicands -- every canonical
-     * pseudo-elliptic example -- pass this trivially.) */
-    if (result) {
-        Expr* d = eval_take(mk_fn2("D", expr_copy(result), expr_copy(x)));
-        Expr* diff = d ? gsub(d, expr_copy(f)) : NULL;
-        bool ok = diff && is_zero(diff);
-        if (diff) expr_free(diff);
-        if (!ok) { expr_free(result); result = NULL; }
-    }
+     * degenerate 0) is emitted.  Verify D[result, x] == f before returning (see
+     * diff_back_ok for why this is a numeric rather than a PossibleZeroQ check);
+     * on failure, decline so the cascade continues. */
+    if (result && !diff_back_ok(result, x, f)) { expr_free(result); result = NULL; }
     return result;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Termination guard                                                      */
+/* ---------------------------------------------------------------------- */
+/*
+ * The cube-/fourth-root descents canonicalise rational functions over the
+ * splitting field of R.  When R has cyclotomic roots (e.g. 1 - x^3, whose
+ * roots are the cube roots of unity) the core Together/Cancel/Simplify over
+ * that algebraic-number field can blow up super-polynomially for unlucky
+ * cofactors: Sqrt[1 - x^3]/x and (1 - x^3)^(1/3)/(1 + x) both spin for minutes
+ * inside Cancel/Simplify even though the same machinery dispatches
+ * (1 - x^3)^(1/3)/x in a tenth of a second.  Because try_goursat sits in the
+ * *default* Integrate cascade, an unbounded attempt would hang every
+ * Integrate[] of such an integrand -- not only explicit
+ * Method -> "GoursatAlgebraic" calls.
+ *
+ * Bound the whole outermost attempt with a CPU-time budget -- exactly the
+ * remedy the TimeConstrained docs prescribe for an open-ended computation --
+ * and decline (leave the integral for the rest of the cascade) on exhaustion.
+ * TimeConstrained's SIGPROF/ITIMER_PROF abort can interrupt the in-flight C
+ * canonicaliser (a purely cooperative check could not), which is what makes
+ * termination a hard guarantee on Linux/macOS.  Only the OUTERMOST attempt
+ * (gs_depth == 0) is wrapped; the recursive genus-0 descents run inside that
+ * single timer.  The documented price is a bounded leak of the abandoned
+ * computation on the rare timeout path.
+ */
+#define GS_TIME_BUDGET_SEC 6
+#define GS_RUN_HEAD "Integrate`GoursatAlgebraic`Run"
+
+/* Internal, cascade-invisible builtin that runs the unguarded core so the
+ * public entries can evaluate it under TimeConstrained.  Returns the symbol
+ * $Failed (never a valid antiderivative) when the core declines, so the guard
+ * sees one sentinel for both "declined" and "timed out". */
+static Expr* builtin_gs_run(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2)
+        return mk_sym("$Failed");
+    Expr* r = gs_core(res->data.function.args[0], res->data.function.args[1]);
+    return r ? r : mk_sym("$Failed");
+}
+
+/* Run gs_core under a CPU-time budget at the outermost level; nested recursive
+ * calls (gs_depth > 0) run directly under the already-armed timer.  Borrows
+ * f, x; returns the owned antiderivative or NULL (decline / timeout). */
+static Expr* gs_guarded(Expr* f, Expr* x) {
+    if (gs_depth > 0) return gs_core(f, x);
+    Expr* call = mk_fn3("TimeConstrained",
+        mk_fn2(GS_RUN_HEAD, expr_copy(f), expr_copy(x)),
+        mk_int(GS_TIME_BUDGET_SEC),
+        mk_sym("$Failed"));
+    Expr* r = eval_take(call);
+    if (!r) return NULL;
+    Expr* failed = mk_sym("$Failed");
+    bool decline = expr_eq(r, failed);
+    expr_free(failed);
+    if (decline) { expr_free(r); return NULL; }
+    return r;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1180,16 +1660,20 @@ static Expr* gs_core(Expr* f, Expr* x) {
 /* ---------------------------------------------------------------------- */
 
 Expr* integrate_goursat_try(Expr* f, Expr* x) {
-    return gs_core(f, x);
+    return gs_guarded(f, x);
 }
 
 Expr* builtin_integrate_goursat(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count != 2) return NULL;
-    return gs_core(res->data.function.args[0], res->data.function.args[1]);
+    return gs_guarded(res->data.function.args[0], res->data.function.args[1]);
 }
 
 void integrate_goursat_init(void) {
+    symtab_add_builtin(GS_RUN_HEAD, builtin_gs_run);
+    symtab_get_def(GS_RUN_HEAD)->attributes |=
+        ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
+
     symtab_add_builtin("Integrate`GoursatAlgebraic", builtin_integrate_goursat);
     symtab_get_def("Integrate`GoursatAlgebraic")->attributes |=
         ATTR_PROTECTED | ATTR_READPROTECTED;

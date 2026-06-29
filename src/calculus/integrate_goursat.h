@@ -13,6 +13,11 @@
  *   p = 1/2  (R cubic or quartic, simple roots):  the Klein four-group V4
  *            of root-pairing involutions (Goursat 1887).  Elementary iff the
  *            trivial-character projection F^(0) vanishes.
+ *   p = 1/2  (R cubic with the t^3-1 higher symmetry; Goursat 1887 Section 4):
+ *            an order-3 Mobius S fixing one ramification point and cycling the
+ *            other three.  Elementary iff F is a non-trivial period-3 character
+ *            F(S) = alpha F (alpha = Exp[2 Pi I/3]), i.e. the period-3 trivial
+ *            projection F + F(S) + F(S^2) vanishes.  Tried when V4 declines.
  *   p = 1/3, 2/3  (R cubic, or quadratic):  an order-3 Mobius cycle.
  *            Elementary iff the obstructive omega-eigencomponent vanishes
  *            (H1 at 1/3, H0 at 2/3).

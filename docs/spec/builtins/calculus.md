@@ -404,18 +404,31 @@ monotonically down.
      `DerivativeDivides`'s Eliminate/Solve search.  Non-elementary binomials
      return `NULL` (the cascade falls through to later methods).
   7. `Integrate\`GoursatAlgebraic[f, x]` — pseudo-elliptic integrands
-     `F(x)/R(x)^p` (`F` rational, `R` a polynomial, `p` in
-     `{1/2, 1/3, 2/3, 1/4, 3/4}`) by Goursat's algorithm and its cube-/fourth-root
-     generalisations (Blake 2026).  A Mobius automorphism cycling the roots of
-     `R` splits the integrand into eigencomponents that descend to genus-0 curves
-     when the elementarity criterion holds (`p=1/2`: Klein four-group `V4`,
-     trivial projection vanishes; `p=1/3,2/3`: order-3 cycle; `p=1/4,3/4`:
-     order-4 cycle on harmonic roots).  The rational reductions are integrated
-     recursively and back-substituted.  Obstructed (genuinely elliptic) integrands
-     and non-harmonic quartics return `NULL`.  A differentiate-back guard rejects
-     the rare cases where the eigenspace zero-test misfires on deeply nested
-     radical roots.  Uses `Solve[..., Cubics -> True, Quartics -> True]` (the
-     Ferrari quartic solver, added 2026-06-29).
+     `F(x) R(x)^q` (`F` rational, `R` a polynomial) with `q` any rational of
+     reduced denominator `2`, `3`, or `4` by Goursat's algorithm and its
+     cube-/fourth-root generalisations (Blake 2026).  The exponent is split
+     `R^q = R^k R^(-p)` with radical order `p in {1/2, 1/3, 2/3, 1/4, 3/4}` and
+     the integer `R^k` absorbed into `F`, so positive-power radicals such as
+     `(1-x^3)^(1/3)/x` are handled, not only radicals already in a denominator.
+     A Mobius automorphism cycling the roots of `R` splits the integrand into
+     eigencomponents that descend to genus-0 curves when the elementarity
+     criterion holds (`p=1/2`: Klein four-group `V4`, trivial projection
+     vanishes; `p=1/3,2/3`: order-3 cycle; `p=1/4,3/4`: order-4 cycle on
+     harmonic roots).  For `p=1/2` with `R` a cubic carrying the `t^3-1` higher
+     symmetry, when `V4` declines a Section-4 (Goursat 1887) period-3 reduction
+     is tried: an order-3 Mobius `S` fixes one ramification point and cycles the
+     other three, and the integral is elementary when `F` is a non-trivial
+     period-3 character `F(S) = Exp[2 Pi I/3] F` (so `(x-1)/((x+2) Sqrt[x^3-1])`
+     integrates).  The rational reductions are integrated recursively and
+     back-substituted.  Obstructed (genuinely elliptic) integrands,
+     non-harmonic quartics, and the cross-character A4 cases (Section 5, e.g.
+     `t/((t^3+8) Sqrt[t^3-1])`) return `NULL`.  A differentiate-back guard rejects the
+     rare cases where the eigenspace zero-test misfires on deeply nested radical
+     roots; the whole attempt runs under a CPU-time budget so a cyclotomic-root
+     `R` with an unlucky cofactor (where algebraic-number `Together`/`Cancel`
+     blows up) declines rather than hanging the cascade.  Uses
+     `Solve[..., Cubics -> True, Quartics -> True]` (the Ferrari quartic solver,
+     added 2026-06-29).
   8. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
      `Sin/Cos/Tan/Cot/Sec/Csc[x]` (or hyperbolic `Sinh/Cosh/.../Csch[x]`) with a
      kernel in a denominator; continuous `Tan[x/2]` / `Tanh[x/2]` substitution

@@ -67,6 +67,13 @@ static void test_sqrt(void) {
     ok("(t^2-2)/(t Sqrt[(t^2-1)(t^2-4)])");       /* finite f.p. S=2/t */
     ok("(t + (t^2-2)/t)/Sqrt[(t^2-1)(t^2-4)]");   /* two components  */
 
+    /* Regression: a component whose S2-involution reduction has a NEGATIVE
+     * leading coefficient lc in its descended quadratic Sqrt[lc Q].  The radical
+     * must stay Sqrt[lc Q]; factoring Sqrt[lc] into the prefactor is a branch-cut
+     * bug (Sqrt[lc] Sqrt[Q] != Sqrt[lc Q] when Q < 0) that previously left this
+     * integral unevaluated with a 1/0 message. */
+    ok("(t^4 + 2 t^3 - 4)/(t^2 Sqrt[(t^2-1)(t^2-4)])");
+
     declines("t^2/Sqrt[(t^2-1)(t^2-4)]");         /* V4-invariant: elliptic */
     declines("t/Sqrt[t^3+1]");                    /* cubic radicand: elliptic */
     declines("t/Sqrt[t^4+t+1]");                  /* irreducible quartic: elliptic */
@@ -100,6 +107,34 @@ static void test_fourth(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Period-3 higher-symmetry case for sqrt(cubic) (Goursat 1887 Sec.4). */
+/* R = t^3 - 1 has an order-3 Mobius S fixing one ramification point    */
+/* and cycling the other three; F is a non-trivial period-3 character   */
+/* (F(S) = alpha F).  NOT covered by the V4 Theorems 1-2: the V4 trivial */
+/* projection is non-zero, but F + F(S) + F(S^2) vanishes.              */
+/* ------------------------------------------------------------------ */
+static void test_period3(void) {
+    /* Goursat's Section-4 worked example:
+     *   (1/3) dx/Sqrt[x(1-x)] = (t-1)/(t+2) dt/Sqrt[t^3-1],  x=((t-1)/(t+2))^3,
+     * i.e. Integrate[(t-1)/((t+2) Sqrt[t^3-1]), t] = -(2/3) ArcTan[...].
+     * The closed antiderivative carries un-simplified nested radicals on which
+     * PossibleZeroQ's real-only sampling misfires across the t<1 branch cut, so
+     * (unlike `ok`) verify closure plus a numeric differentiate-back at a real
+     * point t>1 where the integrand is real.  (Closure already implies the
+     * method's internal diff_back_ok guard accepted it.) */
+    check_eq("FreeQ[Integrate[(t-1)/((t+2) Sqrt[t^3-1]), t], Integrate]", "True");
+    check_eq("FreeQ[Integrate[(t-1)/((t+2) Sqrt[t^3-1]), t,"
+             " Method -> \"GoursatAlgebraic\"], Integrate]", "True");
+    check_eq("N[Abs[(D[Integrate[(t-1)/((t+2) Sqrt[t^3-1]), t], t]"
+             " - (t-1)/((t+2) Sqrt[t^3-1])) /. t -> 17/5], 20] < 1/100000000000",
+             "True");
+
+    /* Genuinely elliptic cubic radicands still decline (the period-3 trivial
+     * projection does not vanish / no order-3 character). */
+    declines("1/Sqrt[t^3-1]");
+}
+
+/* ------------------------------------------------------------------ */
 /* Method plumbing + strictness.                                      */
 /* ------------------------------------------------------------------ */
 static void test_plumbing(void) {
@@ -127,6 +162,7 @@ int main(void) {
     TEST(test_sqrt);
     TEST(test_cube);
     TEST(test_fourth);
+    TEST(test_period3);
     TEST(test_plumbing);
 
     printf("All Integrate GoursatAlgebraic tests passed!\n");
