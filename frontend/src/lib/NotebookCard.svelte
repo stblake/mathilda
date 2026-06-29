@@ -287,6 +287,15 @@
   >
     <div class="titlebar-accent" style="background: {accentColor};"></div>
 
+    <!-- Back to canvas button — only in focused full-screen mode -->
+    {#if focused}
+      <button
+        class="tb-btn tb-back"
+        title="Back to canvas (pinch out)"
+        on:click|stopPropagation={() => setFocused(null)}
+      >← Canvas</button>
+    {/if}
+
     {#if renaming}
       <!-- svelte-ignore a11y-autofocus -->
       <input
@@ -491,6 +500,16 @@
   }
   .tb-btn:hover { color: #cdd6f4; background: rgba(255,255,255,0.06); }
   .tb-close:hover { color: #f38ba8; }
+  .tb-focus:hover { color: var(--accent, #89b4fa); }
+  .tb-back {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    color: var(--accent, #89b4fa);
+    border: 1px solid rgba(137,180,250,0.2);
+    border-radius: 5px;
+    margin-right: 4px;
+  }
+  .tb-back:hover { background: rgba(137,180,250,0.12) !important; border-color: var(--accent, #89b4fa); }
 
   /* ---- Collapse wrapper ---- */
   .collapse-wrapper {
@@ -527,6 +546,17 @@
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(137,180,250,0.2) transparent;
+  }
+
+  /* In focused (full-screen) mode, remove max-height — let .focused-view scroll */
+  .focused-card .card-body {
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  /* Also remove overflow:hidden clip from the focused card so nothing gets cut */
+  .focused-card {
+    overflow: visible !important;
   }
 
   .card-body::-webkit-scrollbar { width: 5px; }

@@ -103,12 +103,20 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Keyboard: Cmd+S / Cmd+O forwarded here from window
+  // Global UI scale (Cmd+= zoom in, Cmd+- zoom out, Cmd+0 reset)
+  let uiScale = 1.0;
+  $: document.documentElement.style.fontSize = `${uiScale * 16}px`;
 
   function onKeydown(e: KeyboardEvent) {
-    if (e.metaKey || e.ctrlKey) {
-      if (e.key === 's' || e.key === 'S') { e.preventDefault(); saveFile(); }
-      else if (e.key === 'o' || e.key === 'O') { e.preventDefault(); openFile(); }
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod) return;
+    if (e.key === 's' || e.key === 'S') { e.preventDefault(); saveFile(); return; }
+    if (e.key === 'o' || e.key === 'O') { e.preventDefault(); openFile(); return; }
+    // Cmd+= / Cmd++ → scale up; Cmd+- → scale down; Cmd+0 → reset
+    if (e.key === '=' || e.key === '+') {
+      e.preventDefault(); uiScale = Math.min(2.0, +(uiScale + 0.1).toFixed(1));
+    } else if (e.key === '-' || e.key === '_') {
+      e.preventDefault(); uiScale = Math.max(0.5, +(uiScale - 0.1).toFixed(1));
     }
   }
 </script>

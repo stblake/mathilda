@@ -174,6 +174,7 @@
   <div class="cell-header" on:click={onHeaderClick}>
 
     <!-- Type badge / picker trigger -->
+    <!-- Compact type switcher: click icon to open a horizontal pill strip -->
     <div class="type-badge-wrap">
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
       <button class="type-badge" on:click|stopPropagation={() => showTypePicker = !showTypePicker} title="Change cell type">
@@ -182,18 +183,14 @@
 
       {#if showTypePicker}
         <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-        <div class="type-picker" on:click|stopPropagation>
+        <div class="type-picker-row" on:click|stopPropagation>
           {#each TYPES as t}
-            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-            <div
-              class="type-option"
+            <button
+              class="type-pill"
               class:active={cell.type === t.id}
               on:click={() => setType(t.id)}
-            >
-              <span class="type-opt-icon">{t.icon}</span>
-              <span class="type-opt-label">{t.label}</span>
-              <span class="type-opt-desc">{t.desc}</span>
-            </div>
+              title={t.label}
+            >{t.icon} {t.label}</button>
           {/each}
         </div>
       {/if}
@@ -258,10 +255,10 @@
   </div>
 </div>
 
-<!-- Close type picker on outside click -->
+<!-- Close type picker when clicking outside -->
 {#if showTypePicker}
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="picker-backdrop" on:click={() => showTypePicker = false}></div>
+  <div style="position:fixed;inset:0;z-index:199;" on:click={() => showTypePicker = false}></div>
 {/if}
 
 <style>
@@ -334,54 +331,36 @@
   }
   .type-badge:hover { border-color: var(--accent, #89b4fa); color: var(--accent, #89b4fa); }
 
-  .type-picker {
+  /* Compact horizontal type picker — appears as a pill row below the badge */
+  .type-picker-row {
     position: absolute;
-    top: calc(100% + 4px);
+    top: calc(100% + 3px);
     left: 0;
-    background: rgba(12,15,28,0.95);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-    z-index: 100;
-    min-width: 260px;
-    overflow: hidden;
-    padding: 4px 0;
-  }
-
-  .type-option {
     display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.45rem 0.9rem;
-    cursor: pointer;
-    transition: background 0.1s;
+    gap: 3px;
+    background: rgba(12, 15, 28, 0.96);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 7px;
+    padding: 4px;
+    z-index: 200;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    white-space: nowrap;
   }
-  .type-option:hover  { background: rgba(255,255,255,0.04); }
-  .type-option.active { background: rgba(137,180,250,0.08); }
 
-  .type-opt-icon {
-    font-size: 0.8rem;
+  .type-pill {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 5px;
+    color: #6c7086;
+    font-size: 0.72rem;
     font-family: 'SF Mono', monospace;
-    color: var(--accent, #89b4fa);
-    width: 24px;
-    text-align: center;
+    padding: 2px 8px;
+    cursor: pointer;
+    transition: all 0.1s;
+    white-space: nowrap;
   }
-  .type-opt-label {
-    font-size: 0.88rem;
-    font-weight: 500;
-    color: #cdd6f4;
-    min-width: 80px;
-  }
-  .type-opt-desc {
-    font-size: 0.75rem;
-    color: #585b70;
-  }
-
-  .picker-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 99;
-  }
+  .type-pill:hover  { border-color: var(--accent, #89b4fa); color: var(--accent, #89b4fa); }
+  .type-pill.active { border-color: var(--accent, #89b4fa); color: var(--accent, #89b4fa); background: rgba(137,180,250,0.1); }
 
   /* ---- Cell content ---- */
   .cell-content { padding: 0; }
