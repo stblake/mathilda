@@ -256,13 +256,9 @@
   // Wheel: scroll card when an editor inside is focused; pan canvas otherwise.
 
   function onCardBodyWheel(e: WheelEvent) {
-    // Pinch (ctrlKey) always zooms the canvas — never stop it.
-    if (e.ctrlKey) return;
-    // Two-finger scroll: if an editor inside has focus, scroll the card content.
-    const active = document.activeElement;
-    if (active && cardEl?.contains(active)) {
-      e.stopPropagation();
-    }
+    // All wheel events (pan and pinch) pass through to the canvas.
+    // The card body's native overflow-y:auto scroll still works when focused
+    // because the browser handles it before the event reaches the canvas handler.
   }
 
   // ---------------------------------------------------------------------------
@@ -593,7 +589,6 @@
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div
         class="card-body"
-        on:wheel={onCardBodyWheel}
         style={nb.height != null ? `max-height: none; height: ${nb.height - TITLE_BAR_H}px; overflow-y: auto;` : ''}
 
       >
