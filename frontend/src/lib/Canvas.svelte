@@ -98,10 +98,12 @@
         return { ...s, zoom: newZoom, panX: cx - zf * (cx - s.panX), panY: cy - zf * (cy - s.panY) };
       });
     } else {
-      // Two-finger scroll: if over a notebook card, let the browser scroll
-      // the card's overflow-y:auto body naturally (don't preventDefault).
-      if ((e.target as HTMLElement).closest('.nb-card')) return;
-      // Over empty canvas → pan
+      // Two-finger scroll: scroll the notebook if a cell inside has focus;
+      // pan the canvas otherwise (including after pressing Escape).
+      const overCard = (e.target as HTMLElement).closest('.nb-card');
+      const cellFocused = overCard && document.activeElement && overCard.contains(document.activeElement);
+      if (cellFocused) return; // browser scrolls the card natively
+      // No focused cell → pan canvas
       e.preventDefault();
       canvasState.update(s => ({ ...s, panX: s.panX - e.deltaX, panY: s.panY - e.deltaY }));
     }
