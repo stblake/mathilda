@@ -456,3 +456,91 @@ Out[5]= -Graphics3D-  (* palette colors for each surface *)
 In[6]:= Plot3D[{x^2, x^2 + 1}, {x,-2,2}, {y,-2,2},PlotStyle -> {Blue, Red}]
 Out[6]= -Graphics3D-  (* explicit per-surface colors *)
 ```
+
+## ParametricPlot
+Samples and displays a parametric planar curve or filled region.
+
+**One-iterator form** — parametric curve:
+- `ParametricPlot[body, {t, tmin, tmax}]`: evaluates `body` (which must
+  produce a 2-element numeric list `{x, y}`) for each sampled `t` value;
+  returns `Graphics[{Line[...], ...}, opts]`. `body` may be a literal `{fx,
+  fy}` or any expression that evaluates to `{x, y}` (e.g. `r {Cos[t], Sin[t]}`
+  with `r` set to a number elsewhere).
+- `ParametricPlot[{{body1}, {body2}, ...}, {t, tmin, tmax}]`: plots multiple
+  curves over the same parameter range in distinct palette colours.
+
+**Two-iterator form** — filled parametric region:
+- `ParametricPlot[body, {t, tmin, tmax}, {r, rmin, rmax}]`: samples a
+  `PlotPoints × PlotPoints` grid of `(t, r)` pairs, maps each pair to `(x, y)`
+  via `body`, and emits filled `Polygon[{p00,p10,p11,p01}]` quads for each
+  valid grid cell.  Produces `Graphics[{Polygon[...], ...}, opts]`.  `Mesh ->
+  All` overlays the grid lines.
+
+`HoldAll`: the body and all iterator specs are not pre-evaluated.
+
+Adaptive sampling (1-iterator form) uses a 2D chord-deviation test in `(x, y)`
+space: the midpoint of each candidate segment is checked for Euclidean
+displacement from the linear interpolant of the two endpoints, normalised by the
+bounding-box diagonal.  Three interior probes per interval (quarter-point and
+midpoint) avoid aliasing against periodic curves.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `PlotPoints` | `25` | initial uniform sample count (1-iter) or grid size (2-iter) |
+| `MaxRecursion` | `6` | maximum adaptive-subdivision depth (1-iter only) |
+| `MaxPlotPoints` | `Infinity` | overall point cap (1-iter only) |
+| `Mesh` | `None` | `All` overlays sample dots (1-iter) or grid lines (2-iter) |
+| `PlotLegends` | none | `Automatic` or `"Expressions"` labels each curve with its body expression; an explicit `{l1, l2, ...}` uses those labels. Embeds `$PlotLegendData` in the Graphics result for the renderer to draw a legend box. |
+| `ColorFunction` | none | colors by parameter; `"Rainbow"` sweeps hue; a function `f[t_scaled]` (1-iter) or `f[t_scaled, r_scaled]` (2-iter). With `ColorFunctionScaling -> True` (default) inputs are scaled to `[0,1]` |
+| `ColorFunctionScaling` | `True` | whether to scale parameters before `ColorFunction` |
+| `RegionFunction` | none | `f[x,y]` mask; points where it returns `False` are excluded |
+| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/polygon color; overridden per-curve in multi-curve mode |
+| `AspectRatio` | `1` | square by default (both axes equally important) |
+| `Axes` | `True` | draws coordinate axes |
+
+All other display options (`PlotRange`, `PlotRangePadding`, `AxesLabel`,
+`AxesOrigin`, `AxesStyle`, `Frame`, `FrameLabel`, `FrameStyle`, `FrameTicks`,
+`GridLines`, `GridLinesStyle`, `Prolog`, `Epilog`, `PlotLabel`, `Background`,
+`ImageSize`, `TicksStyle`, `LabelStyle`, `RotateLabel`) are evaluated and
+passed through to the `Graphics[...]` result, where the renderer interprets
+them identically to how it does for bare `Graphics[]` objects.
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Declines to evaluate if bounds aren't numeric or `PlotPoints < 2`.
+- Auto-displays exactly like `Graphics`/`Plot`.
+
+```mathematica
+(* --- One-iterator: curves --- *)
+In[1]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi}]
+Out[1]= -Graphics-  (* unit circle, AspectRatio -> 1 *)
+
+In[2]:= ParametricPlot[{Sin[2 t], Sin[3 t]}, {t, 0, 2 Pi}]
+Out[2]= -Graphics-  (* Lissajous figure *)
+
+In[3]:= ParametricPlot[{{Cos[t], Sin[t]}, {2 Cos[t], Sin[t]}}, {t, 0, 2 Pi}]
+Out[3]= -Graphics-  (* two curves in palette colours *)
+
+In[4]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi},
+          ColorFunction -> (Hue[#] &)]
+Out[4]= -Graphics-  (* rainbow-colored circle *)
+
+In[5]:= ParametricPlot[{Cos[t], Sin[t]}, {t, 0, 2 Pi},
+          RegionFunction -> Function[{x, y}, x > 0]]
+Out[5]= -Graphics-  (* right semicircle only *)
+
+In[6]:= ParametricPlot[2 {Cos[t], Sin[t]}, {t, 0, 2 Pi}]
+Out[6]= -Graphics-  (* computed body (not a literal List) -- works fine *)
+
+(* --- Two-iterator: filled regions --- *)
+In[7]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2}]
+Out[7]= -Graphics-  (* annular region, r from 1 to 2 *)
+
+In[8]:= ParametricPlot[r^2 {Sqrt[t] Cos[t], Sin[t]},
+          {t, 0, 3 Pi/2}, {r, 1, 2}]
+Out[8]= -Graphics-  (* weighted spiral region *)
+
+In[9]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2},
+          Mesh -> All]
+Out[9]= -Graphics-  (* with grid lines overlaid *)
+```

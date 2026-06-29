@@ -558,6 +558,7 @@ const char* SYM_Text = NULL;
 const char* SYM_Show = NULL;
 const char* SYM_Plot = NULL;
 const char* SYM_Plot3D = NULL;
+const char* SYM_ParametricPlot = NULL;
 const char* SYM_RGBColor = NULL;
 const char* SYM_GrayLevel = NULL;
 const char* SYM_Opacity = NULL;
@@ -1169,6 +1170,7 @@ void sym_names_init(void) {
     SYM_Show                       = intern_symbol("Show");
     SYM_Plot                       = intern_symbol("Plot");
     SYM_Plot3D                     = intern_symbol("Plot3D");
+    SYM_ParametricPlot             = intern_symbol("ParametricPlot");
     SYM_RGBColor                   = intern_symbol("RGBColor");
     SYM_GrayLevel                  = intern_symbol("GrayLevel");
     SYM_Opacity                    = intern_symbol("Opacity");

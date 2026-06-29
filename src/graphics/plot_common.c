@@ -5,6 +5,7 @@
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
+#include "print.h"
 #include <gmp.h>
 #ifdef USE_MPFR
 #include <mpfr.h>
@@ -178,4 +179,45 @@ Expr* eval_color_function3(Expr* color_fn,
 
     Expr* a[1] = { expr_new_real(0.5) };
     return expr_new_function(expr_new_symbol(SYM_GrayLevel), a, 1);
+}
+
+/* build_legend_meta — shared by Plot, ParametricPlot, and Plot3D.
+ *
+ * `legends`: already-evaluated PlotLegends value (Automatic, "Expressions",
+ *   or an explicit {label1, label2, ...} List).  If NULL or resolves to None,
+ *   returns NULL (no legend).
+ * `bodies`: the nfun body/curve-spec expressions used as auto-labels.
+ * `single_color`: the resolved PlotStyle color for single-curve plots
+ *   (NULL falls back to palette_color(0)).
+ *
+ * Returns a fresh $PlotLegendData[{color1,label1}, ...] node, or NULL.
+ * The renderer (render.c: draw_legend) reads it at display time. */
+Expr* build_legend_meta(Expr* legends, Expr** bodies, size_t nfun, Expr* single_color) {
+    if (!legends) return NULL;
+    if (legends->type == EXPR_SYMBOL && legends->data.symbol == SYM_None) return NULL;
+    if (nfun == 0) return NULL;
+
+    bool explicit_list = (legends->type == EXPR_FUNCTION
+                          && legends->data.function.head->type == EXPR_SYMBOL
+                          && legends->data.function.head->data.symbol == SYM_List);
+    bool multi = (nfun > 1);
+
+    Expr** entries = malloc(sizeof(Expr*) * nfun);
+    for (size_t i = 0; i < nfun; i++) {
+        Expr* color = multi ? palette_color(i)
+                            : (single_color ? expr_copy(single_color) : palette_color(0));
+        Expr* label;
+        if (explicit_list && i < legends->data.function.arg_count) {
+            label = expr_copy(legends->data.function.args[i]);
+        } else {
+            char* s = (bodies && bodies[i]) ? expr_to_string(bodies[i]) : NULL;
+            label = expr_new_string(s ? s : "");
+            free(s);
+        }
+        Expr* a[2] = { color, label };
+        entries[i] = expr_new_function(expr_new_symbol(SYM_List), a, 2);
+    }
+    Expr* result = expr_new_function(expr_new_symbol(SYM_PlotLegendData), entries, nfun);
+    free(entries);
+    return result;
 }

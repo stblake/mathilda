@@ -613,38 +613,6 @@ static Expr* build_plot_primitives(Expr** bodies, size_t nfun, Expr* var,
     return prim_list;
 }
 
-/* PlotLegends -> Automatic | "Expressions" | {labels...}: builds the
- * internal $PlotLegendData[{color1,label1}, ...] metadata, read by
- * render.c's draw_legend(). `legends` is the (already-evaluated) option
- * value; bodies/nfun supply per-curve colors and "Expressions" labels.
- * Returns NULL if PlotLegends wasn't given (or resolves to None). */
-static Expr* build_legend_meta(Expr* legends, Expr** bodies, size_t nfun, Expr* single_color) {
-    if (!legends) return NULL;
-    if (legends->type == EXPR_SYMBOL && legends->data.symbol == SYM_None) return NULL;
-
-    bool explicit_list = (legends->type == EXPR_FUNCTION && legends->data.function.head->type == EXPR_SYMBOL
-                           && legends->data.function.head->data.symbol == SYM_List);
-    bool multi = (nfun > 1);
-
-    Expr** entries = malloc(sizeof(Expr*) * (nfun > 0 ? nfun : 1));
-    for (size_t i = 0; i < nfun; i++) {
-        Expr* color = multi ? palette_color(i) : (single_color ? expr_copy(single_color) : palette_color(0));
-        Expr* label;
-        if (explicit_list && i < legends->data.function.arg_count) {
-            label = expr_copy(legends->data.function.args[i]);
-        } else {
-            char* s = expr_to_string(bodies[i]);
-            label = expr_new_string(s ? s : "");
-            free(s);
-        }
-        Expr* a[2] = { color, label };
-        entries[i] = expr_new_function(expr_new_symbol(SYM_List), a, 2);
-    }
-    Expr* result = expr_new_function(expr_new_symbol(SYM_PlotLegendData), entries, nfun);
-    free(entries);
-    return result;
-}
-
 /* Build the hidden $PlotResample[var, {bodies}, {opts...}] node embedded in
  * the returned Graphics[...], capturing everything plot_resample needs to
  * re-sample later -- including ColorFunction/Filling/RegionFunction/

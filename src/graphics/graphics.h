@@ -10,6 +10,7 @@
 #include "sampling.h"
 #include "plot.h"
 #include "plot3d.h"
+#include "parametricplot.h"
 #include "show.h"
 
 void graphics_init(void);

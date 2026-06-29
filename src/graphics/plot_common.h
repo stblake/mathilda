@@ -10,7 +10,9 @@
 #define MATHILDA_GRAPHICS_PLOT_COMMON_H
 
 #include "expr.h"
+#include "print.h"
 #include <stdbool.h>
+#include <stddef.h>
 
 /* Coerce a literal numeric Expr (Integer/Real/BigInt/MPFR/Rational) to a
  * double. Returns false for anything else (including unevaluated symbolic
@@ -55,5 +57,13 @@ Expr* eval_color_function3(Expr* color_fn,
                             double ymin, double ymax,
                             double zmin, double zmax,
                             bool scaling);
+
+/* Build the $PlotLegendData[{color1,label1}, ...] metadata node that the
+ * renderer reads to draw a legend box.  `legends` is the already-evaluated
+ * PlotLegends option value; `bodies` / `nfun` supply per-curve body exprs
+ * (used as auto-labels for Automatic / "Expressions"); `single_color` is the
+ * resolved PlotStyle color for a single-curve plot (NULL → palette_color(0)).
+ * Returns NULL if no legend should be drawn (legends is NULL or None). */
+Expr* build_legend_meta(Expr* legends, Expr** bodies, size_t nfun, Expr* single_color);
 
 #endif /* MATHILDA_GRAPHICS_PLOT_COMMON_H */

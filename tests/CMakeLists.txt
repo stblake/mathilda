@@ -380,6 +380,7 @@ set(COMMON_SRC
     ../src/graphics/plot_common.c
     ../src/graphics/plot.c
     ../src/graphics/plot3d.c
+    ../src/graphics/parametricplot.c
     ../src/graphics/show.c
 )
 
@@ -1512,6 +1513,11 @@ add_test(NAME graphics_tests COMMAND graphics_tests)
 add_executable(plot3d_tests test_plot3d.c ${COMMON_SRC})
 target_include_directories(plot3d_tests PRIVATE ../src ../src/graphics)
 add_test(NAME plot3d_tests COMMAND plot3d_tests)
+
+add_executable(parametricplot_tests test_parametricplot.c ${COMMON_SRC})
+target_link_libraries(parametricplot_tests m)
+target_include_directories(parametricplot_tests PRIVATE ../src ../src/graphics)
+add_test(NAME parametricplot_tests COMMAND parametricplot_tests)
 
 add_executable(context_tests test_context.c ${COMMON_SRC})
 target_include_directories(context_tests PRIVATE ../src)

@@ -575,6 +575,7 @@ extern const char* SYM_Text;
 extern const char* SYM_Show;
 extern const char* SYM_Plot;
 extern const char* SYM_Plot3D;
+extern const char* SYM_ParametricPlot;
 extern const char* SYM_RGBColor;
 extern const char* SYM_GrayLevel;
 extern const char* SYM_Opacity;
