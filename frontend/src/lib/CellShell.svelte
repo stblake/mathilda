@@ -143,11 +143,18 @@
     dispatch('change', { id: cell.id, source: (e.target as HTMLElement).innerText });
   }
 
-  // Focus ref for contenteditable cells (text/section/subsection)
+  // Focus ref + contenteditable state management
   let proseEl: HTMLElement;
+  let _lastCellId = '';
 
-  // Register focus function for non-code cells once mounted
-  $: if (cell.type !== 'code' && proseEl) {
+  // Only update the DOM when the CELL IDENTITY changes (loading a new file),
+  // not on every store update caused by the user typing.
+  // If we update on every cell.source change, Svelte overwrites the user's
+  // typed content, causing the duplication bug.
+  $: if (proseEl && cell.id !== _lastCellId) {
+    proseEl.innerText = cell.source;
+    _lastCellId = cell.id;
+    // Register focus fn once the element exists
     dispatch('register', {
       id: cell.id,
       fn: () => { proseEl?.focus(); },
@@ -224,13 +231,14 @@
 
     {:else if cell.type === 'text'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- Content set via JS ($: proseEl update) to avoid contenteditable doubling -->
       <div
         class="prose-cell"
         contenteditable="true"
         bind:this={proseEl}
         on:input={onTextInput}
         on:click|stopPropagation
-      >{cell.source}</div>
+      ></div>
 
     {:else if cell.type === 'section'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -240,7 +248,7 @@
         bind:this={proseEl}
         on:input={onTextInput}
         on:click|stopPropagation
-      >{cell.source}</h1>
+      ></h1>
 
     {:else if cell.type === 'subsection'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -250,7 +258,7 @@
         bind:this={proseEl}
         on:input={onTextInput}
         on:click|stopPropagation
-      >{cell.source}</h2>
+      ></h2>
     {/if}
   </div>
 </div>
@@ -270,7 +278,8 @@
     transition: border-color 0.12s, background 0.12s;
     background: var(--cell-bg, transparent);
   }
-  .cell-shell:focus-within  { border-top-color: var(--accent, #89b4fa); }
+  /* Focus indicator: subtle left glow, not a full-width green stripe */
+  .cell-shell:focus-within  { box-shadow: inset 2px 0 0 var(--accent, #89b4fa); }
   .cell-shell.selected      { border-left: 3px solid var(--accent, #89b4fa); }
   .cell-shell.running       { background: rgba(243,156,18,0.04); }
 

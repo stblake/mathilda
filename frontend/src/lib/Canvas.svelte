@@ -117,6 +117,7 @@
   }
 
   function onPointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;  // left-click only; right-click is context menu
     if ((e.target as HTMLElement).closest('.nb-card')) return;
     dragging   = true;
     dragStartX = e.clientX;
@@ -316,8 +317,7 @@
     inset: 0;
     width: 100vw;
     height: 100vh;
-    /* deep space base; dot grid applied via inline style */
-    background-color: #050810;
+    background-color: var(--bg, #050810);
     overflow: hidden;
     cursor: default;
     /* prevent text selection while dragging */

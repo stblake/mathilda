@@ -77,7 +77,8 @@
   let dragMoved = false;
 
   function onTitlePointerDown(e: PointerEvent) {
-    if (focused) return;  // no drag in full-screen mode
+    if (e.button !== 0) return;  // left-click drag only
+    if (focused) return;         // no drag in full-screen mode
     if ((e.target as HTMLElement).closest('button, input')) return;
     e.stopPropagation();
     dragging   = true;

@@ -147,36 +147,44 @@
 {/if}
 
 <style>
-  /* ----  Global tokens for dark canvas aesthetic ---- */
+  /* ---- Light mode (default) ---- */
   :global(:root) {
-    --bg:          #050810;
-    --surface:     rgba(12,15,28,0.85);
-    --cell-bg:     transparent;
-    --border:      rgba(255,255,255,0.08);
-    --text:        #cdd6f4;
-    --text-muted:  #585b70;
+    --canvas-bg:   #0e1117;
+    --bg:          #0e1117;
+    --surface:     rgba(22,26,40,0.92);
+    --cell-bg:     rgba(26,30,50,0.7);
+    --border:      rgba(255,255,255,0.1);
+    --text:        #e0e4f0;
+    --text-muted:  #6c7086;
     --accent:      #89b4fa;
     --accent-glow: rgba(137,180,250,0.12);
-    --out-text:    #cdd6f4;
-    --gutter-bg:   rgba(255,255,255,0.02);
-    --gutter-hover:rgba(255,255,255,0.04);
+    --out-text:    #e0e4f0;
+    --gutter-bg:   rgba(255,255,255,0.03);
+    --gutter-hover:rgba(255,255,255,0.06);
   }
-  /* Keep light-mode fallback minimal (canvas is always dark) */
+  /* ---- Dark mode (deeper) ---- */
   :global(html.dark) {
+    --canvas-bg:   #050810;
     --bg:          #050810;
-    --surface:     rgba(12,15,28,0.85);
-    --border:      rgba(255,255,255,0.08);
+    --surface:     rgba(8,10,20,0.95);
+    --cell-bg:     rgba(10,12,22,0.8);
+    --border:      rgba(255,255,255,0.06);
     --text:        #cdd6f4;
-    --text-muted:  #585b70;
+    --text-muted:  #45475a;
     --accent:      #89b4fa;
-    --accent-glow: rgba(137,180,250,0.12);
+    --accent-glow: rgba(137,180,250,0.10);
+    --out-text:    #cdd6f4;
+    --gutter-bg:   rgba(255,255,255,0.015);
+    --gutter-hover:rgba(255,255,255,0.035);
   }
+  /* Canvas bg applied directly to body */
+  :global(html.dark body)  { background: #050810; }
+  :global(body)             { background: #0e1117; }
 
   :global(*, *::before, *::after) { box-sizing: border-box; }
   :global(body) {
     margin: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: #050810;
     color: #cdd6f4;
     overflow: hidden;
   }
