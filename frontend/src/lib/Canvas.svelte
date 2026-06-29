@@ -111,19 +111,17 @@
 
   // Double-click on empty canvas → new notebook at cursor world position
   function onDblClick(e: MouseEvent) {
-    if ((e.target as HTMLElement).closest('.nb-card-wrapper')) return;
-    if ((e.target as HTMLElement).closest('.nb-card')) return;
+    if ((e.target as HTMLElement).closest('.nb-card-wrapper, .nb-card, button')) return;
     const rect   = canvasEl?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const worldX = (e.clientX - rect.left - panX) / zoom - 320;
     const worldY = (e.clientY - rect.top  - panY) / zoom - 30;
-    addNotebookAt(worldX, worldY);
-    // Short delay then fit-all so user can see the new notebook
-    setTimeout(fitAll, 80);
+    addNotebookAt(worldX, worldY);  // notebook appears at cursor, no zoom change
   }
 
   function onPointerDown(e: PointerEvent) {
-    if (e.button !== 0) return;  // left-click only
-    if ((e.target as HTMLElement).closest('.nb-card')) return;
+    if (e.button !== 0) return;
+    // Don't capture when clicking interactive elements (buttons, inputs, etc.)
+    if ((e.target as HTMLElement).closest('.nb-card, button, input, a, [role="button"]')) return;
     dragging   = true;
     dragStartX = e.clientX;
     dragStartY = e.clientY;
@@ -181,14 +179,12 @@
   // ---------------------------------------------------------------------------
   // Right-click = add notebook at cursor world position
   function onContextMenu(e: MouseEvent) {
-    if ((e.target as HTMLElement).closest('.nb-card-wrapper')) return;
-    if ((e.target as HTMLElement).closest('.nb-card')) return;
+    if ((e.target as HTMLElement).closest('.nb-card-wrapper, .nb-card, button')) return;
     e.preventDefault();
     const rect   = canvasEl?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const worldX = (e.clientX - rect.left - panX) / zoom - 320;
     const worldY = (e.clientY - rect.top  - panY) / zoom - 30;
     addNotebookAt(worldX, worldY);
-    setTimeout(fitAll, 80);
   }
 
   function fitAll() {
@@ -299,7 +295,15 @@
     </div>
   </div>
 
-  <!-- Minimap disabled — was intercepting canvas clicks -->
+  <!-- Minimap: pointer-events:none so it never blocks canvas clicks -->
+  <Minimap
+    notebooks={$canvasState.notebooks}
+    {panX}
+    {panY}
+    {zoom}
+    viewportW={window.innerWidth}
+    viewportH={window.innerHeight}
+  />
 {/if}
 
 <style>

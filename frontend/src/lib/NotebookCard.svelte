@@ -386,6 +386,8 @@
   // Keyboard (scoped to card — stop propagation so canvas doesn't eat keys)
 
   async function onCardKeydown(e: KeyboardEvent) {
+    // Let Cmd+0 and Cmd+N pass through to Canvas for fit-all / add notebook
+    if ((e.metaKey || e.ctrlKey) && (e.key === '0' || e.key === 'n' || e.key === 'N')) return;
     e.stopPropagation();
     if (insertionIdx === null) return;
 

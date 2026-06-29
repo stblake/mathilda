@@ -1,6 +1,8 @@
 <!--
-  Minimap.svelte — disabled (was intercepting canvas clicks and had wrong math)
-  Re-enable once pointer-events and coordinate math are fixed.
+  Minimap.svelte
+  Bird's-eye overview of the canvas. Shows notebook positions and the
+  current viewport. Appears when zoom < 0.7. pointer-events: none so it
+  never blocks canvas interactions.
 -->
 <script lang="ts">
   import type { CanvasNotebook } from './canvas';
@@ -14,104 +16,132 @@
 
   const MAP_W = 160;
   const MAP_H = 110;
-  const CARD_H_APPROX = 400; // rough height estimate when expanded
+  const PAD   = 60;   // world-space padding around bounding box
 
-  // Bounding box of all notebooks in world space
-  $: bounds = (() => {
-    if (!notebooks.length) return { minX: 0, minY: 0, maxX: 1000, maxY: 600 };
+  const PALETTE = ['#89b4fa','#a6e3a1','#f38ba8','#fab387','#cba6f7','#94e2d5'];
+
+  $: show = zoom < 0.7;
+
+  // Compute world-space bounding box of all notebooks
+  $: bbox = (() => {
+    if (!notebooks.length) return { x: 0, y: 0, w: 1000, h: 700 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const nb of notebooks) {
-      const h = nb.collapsed ? 52 : CARD_H_APPROX;
+      const h = nb.collapsed ? 52 : (nb.height ?? 400);
       minX = Math.min(minX, nb.x);
       minY = Math.min(minY, nb.y);
       maxX = Math.max(maxX, nb.x + nb.width);
       maxY = Math.max(maxY, nb.y + h);
     }
-    // Add some padding
-    const pad = 100;
-    return { minX: minX - pad, minY: minY - pad, maxX: maxX + pad, maxY: maxY + pad };
+    return {
+      x: minX - PAD,
+      y: minY - PAD,
+      w: Math.max(1, maxX - minX + PAD * 2),
+      h: Math.max(1, maxY - minY + PAD * 2),
+    };
   })();
 
-  $: bbW = bounds.maxX - bounds.minX;
-  $: bbH = bounds.maxY - bounds.minY;
+  // Scale factors: world → minimap pixels
+  $: scaleX = MAP_W / bbox.w;
+  $: scaleY = MAP_H / bbox.h;
 
-  // Scale factor: world → minimap pixels
-  $: scale = Math.min(MAP_W / bbW, MAP_H / bbH);
+  function toMapX(wx: number) { return (wx - bbox.x) * scaleX; }
+  function toMapY(wy: number) { return (wy - bbox.y) * scaleY; }
 
-  function worldToMap(wx: number, wy: number): { x: number; y: number } {
-    return {
-      x: (wx - bounds.minX) * scale,
-      y: (wy - bounds.minY) * scale,
-    };
-  }
+  // Notebook rects in minimap space
+  $: nbRects = notebooks.map((nb, i) => ({
+    x: toMapX(nb.x),
+    y: toMapY(nb.y),
+    w: nb.width * scaleX,
+    h: (nb.collapsed ? 52 : (nb.height ?? 400)) * scaleY,
+    color: PALETTE[i % PALETTE.length],
+    title: nb.title,
+  }));
 
-  // Viewport rect in world space
+  // Viewport rect in minimap space
+  // The canvas-world is transformed by translate(panX, panY) scale(zoom).
+  // The top-left world coordinate visible = -panX/zoom, -panY/zoom
+  // The visible world size = viewportW/zoom × viewportH/zoom
   $: vpRect = (() => {
-    const vpW = viewportW / zoom;
-    const vpH = viewportH / zoom;
-    const vpX = -panX / zoom;
-    const vpY = -panY / zoom;
-    const a = worldToMap(vpX, vpY);
+    const wx = -panX / zoom;
+    const wy = -panY / zoom;
+    const ww = viewportW / zoom;
+    const wh = viewportH / zoom;
     return {
-      x: a.x,
-      y: a.y,
-      w: vpW * scale,
-      h: vpH * scale,
+      x: toMapX(wx),
+      y: toMapY(wy),
+      w: ww * scaleX,
+      h: wh * scaleY,
     };
   })();
-
-  const PALETTE = ['#89b4fa','#a6e3a1','#f38ba8','#fab387','#cba6f7','#94e2d5'];
-  function nbColor(nb: CanvasNotebook) {
-    return PALETTE[parseInt(nb.id.replace('nb-', ''), 10) % PALETTE.length] ?? '#89b4fa';
-  }
 </script>
 
-{#if zoom < 0.7}
+{#if show}
   <div class="minimap">
-    <svg width={MAP_W} height={MAP_H}>
-      <!-- Notebook rects -->
-      {#each notebooks as nb}
-        {@const pos = worldToMap(nb.x, nb.y)}
-        {@const w = nb.width * scale}
-        {@const h = (nb.collapsed ? 52 : CARD_H_APPROX) * scale}
+    <svg width={MAP_W} height={MAP_H} xmlns="http://www.w3.org/2000/svg">
+      <!-- Notebook rectangles -->
+      {#each nbRects as r}
         <rect
-          x={pos.x}
-          y={pos.y}
-          width={Math.max(2, w)}
-          height={Math.max(2, h)}
-          fill={nbColor(nb)}
-          fill-opacity="0.45"
-          rx="1"
+          x={Math.max(0, r.x)}
+          y={Math.max(0, r.y)}
+          width={Math.min(MAP_W, r.w)}
+          height={Math.min(MAP_H, r.h)}
+          fill={r.color}
+          fill-opacity="0.35"
+          rx="2"
         />
+        <!-- Notebook title label -->
+        <text
+          x={Math.max(2, r.x + 3)}
+          y={Math.max(8, r.y + 9)}
+          font-size="6"
+          fill={r.color}
+          fill-opacity="0.9"
+          font-family="SF Mono, monospace"
+        >{r.title.slice(0, 14)}</text>
       {/each}
 
-      <!-- Viewport rect -->
+      <!-- Viewport indicator -->
       <rect
         x={vpRect.x}
         y={vpRect.y}
         width={Math.max(4, vpRect.w)}
         height={Math.max(4, vpRect.h)}
         fill="none"
-        stroke="rgba(255,255,255,0.6)"
+        stroke="rgba(255,255,255,0.5)"
         stroke-width="1"
         rx="1"
       />
     </svg>
+    <div class="minimap-label">overview</div>
   </div>
 {/if}
 
 <style>
   .minimap {
     position: fixed;
-    left: 12px;
-    bottom: 40px;
+    bottom: 42px;
+    left: 14px;
     width: 160px;
     height: 110px;
-    background: rgba(8,10,20,0.85);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 6px;
+    background: rgba(8, 10, 20, 0.82);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 7px;
     overflow: hidden;
-    pointer-events: none;
+    pointer-events: none;   /* CRITICAL: never block canvas clicks */
     z-index: 90;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  }
+  .minimap-label {
+    position: absolute;
+    bottom: 3px;
+    right: 6px;
+    font-size: 0.55rem;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 0.05em;
+    font-family: 'SF Mono', monospace;
+  }
+  svg {
+    display: block;
   }
 </style>
