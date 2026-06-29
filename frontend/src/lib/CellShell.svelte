@@ -242,6 +242,9 @@
   }}>
     {#if cell.type === 'code'}
       <div bind:this={editorContainer}></div>
+      {#if cell.output.length > 0}
+        <Output items={cell.output} />
+      {/if}
 
     {:else if cell.type === 'text'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -279,19 +282,6 @@
     {/if}
   </div>
 
-  <!-- Output row: Out[n]= label in gutter-width column, output fills right -->
-  {#if cell.type === 'code' && cell.output.length > 0}
-    <div class="output-row">
-      <div class="output-gutter">
-        {#if cell.execIdx != null}
-          <span class="out-label">Out[{cell.execIdx}]</span>
-        {/if}
-      </div>
-      <div class="output-body">
-        <Output items={cell.output} />
-      </div>
-    </div>
-  {/if}
 </div>
 
 <!-- Close type picker when clicking outside -->
@@ -441,25 +431,6 @@
   h1.heading-cell { font-size: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.3rem; }
   h2.heading-cell { font-size: 1.15rem; }
 
-  /* Output row: mirrors the cell-shell flex layout so Out[n] aligns with In[n] */
-  .output-row {
-    display: flex;
-    flex-direction: row;
-    border-top: 1px solid var(--border, rgba(255,255,255,0.06));
-  }
-  .output-gutter {
-    width: 40px;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 6px 4px;
-    gap: 2px;
-  }
-  .output-body {
-    flex: 1;
-    min-width: 0;
-  }
   .out-label {
     font-size: 0.58rem;
     color: var(--text-muted, #585b70);
