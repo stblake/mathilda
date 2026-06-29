@@ -166,8 +166,15 @@
   // Keyboard: Cmd+0 fit-all (Cmd+N is macOS "new window" and can't be reliably intercepted)
 
   function onKeydown(e: KeyboardEvent) {
-    if ((e.metaKey || e.ctrlKey) && e.key === '0') {
-      e.preventDefault(); fitAll();
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && e.key === '0') { e.preventDefault(); fitAll(); return; }
+    // 'N' key (no modifier) when not in an editor → add notebook at centre
+    if (!mod && !e.shiftKey && e.key === 'n' && !$canvasState.focusedId) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.cm-editor') && !target.isContentEditable) {
+        e.preventDefault();
+        addAtCentre();
+      }
     }
   }
 
@@ -282,21 +289,17 @@
     </div>
 
     <div class="canvas-hints">
-      <span>double-click or right-click empty canvas → new notebook</span>
-      <span>⌘0 fit all</span>
-      <span>scroll = pan · pinch = zoom</span>
+      <button class="hint-new-btn" on:click={addAtCentre}>＋ New Notebook</button>
+      <span class="hint-sep">·</span>
+      <span>dbl-click or right-click canvas</span>
+      <span class="hint-sep">·</span>
+      <span>⌘0 fit · N key</span>
+      <span class="hint-sep">·</span>
+      <span>scroll pan · pinch zoom</span>
     </div>
   </div>
 
-  <!-- Minimap: visible when zoomed far out -->
-  <Minimap
-    notebooks={$canvasState.notebooks}
-    {panX}
-    {panY}
-    {zoom}
-    viewportW={window.innerWidth}
-    viewportH={window.innerHeight}
-  />
+  <!-- Minimap disabled — was intercepting canvas clicks -->
 {/if}
 
 <style>
@@ -332,12 +335,27 @@
     left: 50%;
     transform: translateX(-50%);
     display: flex;
-    gap: 1.2rem;
+    align-items: center;
+    gap: 0.7rem;
     font-size: 0.72rem;
-    color: rgba(255,255,255,0.22);
+    color: rgba(255,255,255,0.25);
     pointer-events: none;
     letter-spacing: 0.02em;
   }
+  .hint-new-btn {
+    background: rgba(137,180,250,0.15);
+    border: 1px solid rgba(137,180,250,0.35);
+    color: rgba(137,180,250,0.9);
+    border-radius: 5px;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 0.12s;
+    letter-spacing: 0.01em;
+  }
+  .hint-new-btn:hover { background: rgba(137,180,250,0.25); }
+  .hint-sep { opacity: 0.4; }
 
   /* ---- Floating add button ---- */
 

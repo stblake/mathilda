@@ -1,7 +1,6 @@
 <!--
-  Minimap.svelte
-  Shows a bird's-eye overview of the canvas when zoom < 0.7.
-  Props: notebooks, panX, panY, zoom, viewportW, viewportH
+  Minimap.svelte — disabled (was intercepting canvas clicks and had wrong math)
+  Re-enable once pointer-events and coordinate math are fixed.
 -->
 <script lang="ts">
   import type { CanvasNotebook } from './canvas';

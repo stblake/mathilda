@@ -174,47 +174,35 @@
   on:click={onBodyClick}
 >
 
-  <!-- Directional add buttons removed for cleaner UI -->
-
-  <!-- Cell header: type badge + run button + exec index -->
-  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="cell-header" on:click={onHeaderClick}>
-
-    <!-- Type badge / picker trigger -->
-    <!-- Compact type switcher: click icon to open a horizontal pill strip -->
-    <div class="type-badge-wrap">
-      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-      <button class="type-badge" on:click|stopPropagation={() => showTypePicker = !showTypePicker} title="Change cell type">
-        {TYPES.find(t => t.id === cell.type)?.icon ?? '▶'}
-      </button>
-
-      {#if showTypePicker}
-        <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-        <div class="type-picker-row" on:click|stopPropagation>
-          {#each TYPES as t}
-            <button
-              class="type-pill"
-              class:active={cell.type === t.id}
-              on:click={() => setType(t.id)}
-              title={t.label}
-            >{t.icon} {t.label}</button>
-          {/each}
-        </div>
-      {/if}
-    </div>
-
+  <!-- Compact left gutter: run button for code, type badge for others -->
+  <div class="cell-gutter" on:click|stopPropagation={onHeaderClick}>
     {#if cell.type === 'code'}
-      {#if cell.execIdx != null}
-        <span class="exec-label">In[{cell.execIdx}]</span>
-      {/if}
       <button
         class="run-btn"
         title="Run (Shift+Enter)"
         disabled={cell.status === 'running'}
         on:click|stopPropagation={() => dispatch('run', { id: cell.id })}
-      >
-        {#if cell.status === 'running'}<span class="spinner">●</span>{:else}▶{/if}
-      </button>
+      >{#if cell.status === 'running'}<span class="spinner">●</span>{:else}▶{/if}</button>
+      {#if cell.execIdx != null}
+        <span class="exec-label">In[{cell.execIdx}]</span>
+      {/if}
+    {:else}
+      <!-- Type badge for non-code cells: click to open type picker -->
+      <div class="type-badge-wrap">
+        <button class="type-badge" on:click|stopPropagation={() => showTypePicker = !showTypePicker} title="Change cell type">
+          {TYPES.find(t => t.id === cell.type)?.icon ?? 'T'}
+        </button>
+        {#if showTypePicker}
+          <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+          <div class="type-picker-row" on:click|stopPropagation>
+            {#each TYPES as t}
+              <button class="type-pill" class:active={cell.type === t.id} on:click={() => setType(t.id)} title={t.label}>
+                {t.icon} {t.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     {/if}
   </div>
 
@@ -274,39 +262,41 @@
 
 <style>
   /* ---- Shell ---- */
+  /* ---- Cell shell: flex row with narrow left gutter ---- */
   .cell-shell {
     position: relative;
+    display: flex;
+    flex-direction: row;
     border-top: 1px solid transparent;
-    border-bottom: 1px solid transparent;
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
     transition: border-color 0.12s, background 0.12s;
     background: var(--cell-bg, transparent);
   }
-  /* Focus indicator: subtle left glow, not a full-width green stripe */
-  .cell-shell:focus-within  { box-shadow: inset 2px 0 0 var(--accent, #89b4fa); }
+  .cell-shell:focus-within  { border-left: 2px solid var(--accent, #89b4fa); }
   .cell-shell.selected      { border-left: 3px solid var(--accent, #89b4fa); }
   .cell-shell.running       { background: rgba(243,156,18,0.04); }
 
-  /* Non-code cell backgrounds */
-  .type-section    { background: transparent; }
-  .type-subsection { background: transparent; }
-  .type-text       { background: transparent; }
-
-  /* add buttons removed */
-
-  /* ---- Cell header ---- */
-  .cell-header {
+  /* ---- Left gutter: run button + exec label stacked, no wasted horizontal space ---- */
+  .cell-gutter {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 0.4rem;
-    padding: 3px 6px 0;
+    justify-content: flex-start;
+    padding: 6px 4px 6px 4px;
+    width: 40px;
+    flex-shrink: 0;
     cursor: pointer;
     user-select: none;
+    gap: 2px;
   }
 
   .exec-label {
-    font-size: 0.67rem;
+    font-size: 0.58rem;
     color: var(--text-muted, #585b70);
     font-family: 'SF Mono', monospace;
+    white-space: nowrap;
+    writing-mode: horizontal-tb;
+    line-height: 1;
   }
 
   .run-btn {
@@ -375,7 +365,7 @@
   .type-pill.active { border-color: var(--accent, #89b4fa); color: var(--accent, #89b4fa); background: rgba(137,180,250,0.1); }
 
   /* ---- Cell content ---- */
-  .cell-content { padding: 0; }
+  .cell-content { padding: 0; flex: 1; min-width: 0; }
 
   /* CodeMirror text colour — inherits from CSS var so light/dark both work */
   :global(.cm-editor .cm-content) { color: var(--text, #cdd6f4); caret-color: #89b4fa; }
