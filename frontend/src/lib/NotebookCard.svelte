@@ -286,8 +286,6 @@
     on:pointerup={onTitlePointerUp}
     on:pointercancel={onTitlePointerUp}
   >
-    <div class="titlebar-accent" style="background: {accentColor};"></div>
-
     <!-- Back to canvas button — only in focused full-screen mode -->
     {#if focused}
       <button

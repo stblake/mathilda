@@ -117,7 +117,8 @@
   }
 
   function onPointerDown(e: PointerEvent) {
-    if (e.button !== 0) return;  // left-click only; right-click is context menu
+    if (e.button !== 0) return;   // left-click only; right-click is context menu
+    if (ctxMenu) return;          // don't start pan while context menu is open
     if ((e.target as HTMLElement).closest('.nb-card')) return;
     dragging   = true;
     dragStartX = e.clientX;
@@ -302,11 +303,9 @@
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <div class="ctx-backdrop" on:click={closeCtxMenu} on:contextmenu|preventDefault={closeCtxMenu}></div>
     <div class="ctx-menu" style="left:{ctxMenu.x}px; top:{ctxMenu.y}px;">
-      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-      <div class="ctx-item" on:click={ctxNewNotebook}>＋ New Notebook here</div>
+      <button class="ctx-item" on:click={ctxNewNotebook}>＋  New Notebook here</button>
       <div class="ctx-divider"></div>
-      <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-      <div class="ctx-item" on:click={() => { fitAll(); closeCtxMenu(); }}>⊡ Fit All (⌘0)</div>
+      <button class="ctx-item" on:click={() => { fitAll(); closeCtxMenu(); }}>⊡  Fit All  (⌘0)</button>
     </div>
   {/if}
 {/if}
@@ -389,12 +388,18 @@
     backdrop-filter: blur(16px);
   }
   .ctx-item {
+    display: block;
+    width: 100%;
     padding: 0.45rem 1rem;
     font-size: 0.84rem;
     color: #cdd6f4;
+    background: none;
+    border: none;
+    text-align: left;
     cursor: pointer;
     transition: background 0.1s;
     user-select: none;
+    font-family: inherit;
   }
   .ctx-item:hover { background: rgba(137,180,250,0.12); }
   .ctx-divider {

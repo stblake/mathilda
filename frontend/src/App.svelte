@@ -133,7 +133,7 @@
     title="Toggle dark mode"
     on:click={() => darkMode.update(v => !v)}
   >
-    {$darkMode ? '☀' : '◑'}
+    {$darkMode ? '◑' : '●'}
   </button>
   <KernelStatus />
 </div>
@@ -147,27 +147,27 @@
 {/if}
 
 <style>
-  /* ---- Light mode (default) ---- */
+  /* ---- Dim mode (default — softer dark) ---- */
   :global(:root) {
-    --canvas-bg:   #0e1117;
-    --bg:          #0e1117;
-    --surface:     rgba(22,26,40,0.92);
-    --cell-bg:     rgba(26,30,50,0.7);
-    --border:      rgba(255,255,255,0.1);
-    --text:        #e0e4f0;
+    --bg:          #1e1e2e;
+    --surface:     rgba(30,30,46,0.95);
+    --cell-bg:     rgba(36,36,54,0.9);
+    --border:      rgba(255,255,255,0.09);
+    --text:        #cdd6f4;
     --text-muted:  #6c7086;
     --accent:      #89b4fa;
-    --accent-glow: rgba(137,180,250,0.12);
-    --out-text:    #e0e4f0;
+    --accent-glow: rgba(137,180,250,0.14);
+    --out-text:    #cdd6f4;
     --gutter-bg:   rgba(255,255,255,0.03);
     --gutter-hover:rgba(255,255,255,0.06);
   }
-  /* ---- Dark mode (deeper) ---- */
+  :global(body) { background: #1e1e2e; }
+
+  /* ---- Dark mode (deep space) ---- */
   :global(html.dark) {
-    --canvas-bg:   #050810;
     --bg:          #050810;
-    --surface:     rgba(8,10,20,0.95);
-    --cell-bg:     rgba(10,12,22,0.8);
+    --surface:     rgba(8,10,22,0.96);
+    --cell-bg:     rgba(12,15,28,0.85);
     --border:      rgba(255,255,255,0.06);
     --text:        #cdd6f4;
     --text-muted:  #45475a;
@@ -175,11 +175,9 @@
     --accent-glow: rgba(137,180,250,0.10);
     --out-text:    #cdd6f4;
     --gutter-bg:   rgba(255,255,255,0.015);
-    --gutter-hover:rgba(255,255,255,0.035);
+    --gutter-hover:rgba(255,255,255,0.03);
   }
-  /* Canvas bg applied directly to body */
-  :global(html.dark body)  { background: #050810; }
-  :global(body)             { background: #0e1117; }
+  :global(html.dark body) { background: #050810; }
 
   :global(*, *::before, *::after) { box-sizing: border-box; }
   :global(body) {

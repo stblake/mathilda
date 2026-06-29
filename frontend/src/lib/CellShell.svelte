@@ -409,5 +409,7 @@
     font-family: 'SF Mono', monospace;
     padding: 0 8px;
     margin-top: 2px;
+    text-align: left;
+    display: block;
   }
 </style>
