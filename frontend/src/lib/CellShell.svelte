@@ -444,8 +444,8 @@
     background: transparent;
     width: 100%;
   }
-  h1.heading-cell { font-size: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.3rem; }
-  h2.heading-cell { font-size: 1.15rem; }
+  h1.heading-cell { font-size: 1.15rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.3rem; }
+  h2.heading-cell { font-size: 1.0rem; }
 
   .out-label {
     font-size: 0.58rem;
