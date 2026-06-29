@@ -111,9 +111,9 @@ Attempts to solve an equation or system of equations for one or more variables.
   - n-quadratic `a*x^(2n) + b*x^n + c == 0`: substitution `u = x^n` followed by
     two binomial sub-solves; 2n radical roots regardless of `Cubics` / `Quartics`.
   - Degree 3: held `Root[Function[t, p[t]], k]` objects unless `Cubics -> True`.
-  - Degree 4: held `Root[]` objects unless `Quartics -> True` (Ferrari is
-    deferred -- with `Quartics -> True` the four roots are emitted as held
-    `Root[]` for now).
+  - Degree 4: held `Root[]` objects unless `Quartics -> True`, which emits the
+    four roots in closed-form radicals via Ferrari's resolvent-cubic method
+    (Complexes only; a `Reals` request still yields `Root[]`).
   - Degree ≥ 5: held `Root[]` objects per irreducible factor.
 - `Integers` domain is implemented as a post-pass over the `Reals` output:
   every candidate value is type-checked against `EXPR_INTEGER` /
@@ -132,7 +132,7 @@ Attempts to solve an equation or system of equations for one or more variables.
 - `Cubics -> False`: Emit cubic roots as held `Root[]` objects (default).
   `Cubics -> True` switches to closed-form Cardano radicals.
 - `Quartics -> False`: Emit quartic roots as held `Root[]` objects (default).
-  Reserved: Ferrari closed form is deferred.
+  `Quartics -> True` switches to closed-form Ferrari radicals (Complexes only).
 - `InverseFunctions -> Automatic`: Enables the inverse-function specialist
   (default).  Set to `False` to disable the specialist; equations that can
   only be solved through inversion then return unevaluated.
@@ -582,5 +582,6 @@ explicit radical formulas.
 Option for `Solve` that controls whether quartic equations are solved via
 explicit radical formulas.
 - `Quartics -> False` (default): emit held `Root[]` objects.
-- `Quartics -> True`: reserved -- Ferrari is deferred; held `Root[]` objects
-  are still emitted in the current implementation.
+- `Quartics -> True`: emit closed-form radicals via Ferrari's resolvent-cubic
+  method (Complexes only; a `Reals` request still yields `Root[]`, since a
+  faithful real/non-real split of quartic radicals is not attempted).

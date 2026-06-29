@@ -1,0 +1,134 @@
+/* test_integrate_goursat.c
+ *
+ * Unit tests for Integrate`GoursatAlgebraic -- Goursat's pseudo-elliptic
+ * algorithm and its cube-/fourth-root generalisations for F(t)/R(t)^p,
+ * p in {1/2, 1/3, 2/3, 1/4, 3/4}.  Examples are the worked cases from
+ * GoursatAppendix.wl / GoursatExamples.wl and the two preprints.
+ *
+ * Correctness is asserted two ways together, because a differentiate-back
+ * check alone is fooled by an *unevaluated* integral:
+ *   1. the integral actually closes  -- FreeQ[Integrate[f,t], Integrate],
+ *   2. it differentiates back to f    -- PossibleZeroQ[D[..] - f].
+ * (The method itself already runs a differentiate-back guard internally, so a
+ * closed result is also a verified one; the test re-checks independently.)
+ */
+
+#include "core.h"
+#include "test_utils.h"
+#include "expr.h"
+#include "eval.h"
+#include "parse.h"
+#include "symtab.h"
+
+#include <stdio.h>
+#include <string.h>
+
+/* Evaluate `input`, assert its printed form equals `expected` (always aborts on
+ * mismatch, even under NDEBUG where libc assert() is compiled out). */
+static void check_eq(const char* input, const char* expected) {
+    Expr* p = parse_expression(input);
+    ASSERT(p != NULL);
+    Expr* r = evaluate(p);
+    char* s = expr_to_string(r);
+    if (strcmp(s, expected) != 0) {
+        fprintf(stderr, "FAIL: %s\n  expected: %s\n  actual:   %s\n",
+                input, expected, s);
+    }
+    ASSERT_STR_EQ(s, expected);
+    free(s);
+    expr_free(p);
+    expr_free(r);
+}
+
+/* Assert Integrate[f, t] yields a closed, correct antiderivative. */
+static void ok(const char* f) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "FreeQ[Integrate[%s, t], Integrate]", f);
+    check_eq(buf, "True");
+    snprintf(buf, sizeof(buf),
+             "PossibleZeroQ[D[Integrate[%s, t], t] - (%s)]", f, f);
+    check_eq(buf, "True");
+}
+
+/* Assert the forced GoursatAlgebraic method declines (non-elementary /
+ * obstructed / non-harmonic / out of shape) and stays unevaluated. */
+static void declines(const char* f) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+             "Head[Integrate[%s, t, Method -> \"GoursatAlgebraic\"]]", f);
+    check_eq(buf, "Integrate");
+}
+
+/* ------------------------------------------------------------------ */
+/* Square-root case: Goursat's V4 (p = 1/2).                          */
+/* ------------------------------------------------------------------ */
+static void test_sqrt(void) {
+    ok("t/Sqrt[(t^2-1)(t^2-4)]");                 /* Example 5.1     */
+    ok("(t^2-2)/(t Sqrt[(t^2-1)(t^2-4)])");       /* finite f.p. S=2/t */
+    ok("(t + (t^2-2)/t)/Sqrt[(t^2-1)(t^2-4)]");   /* two components  */
+
+    declines("t^2/Sqrt[(t^2-1)(t^2-4)]");         /* V4-invariant: elliptic */
+    declines("t/Sqrt[t^3+1]");                    /* cubic radicand: elliptic */
+    declines("t/Sqrt[t^4+t+1]");                  /* irreducible quartic: elliptic */
+}
+
+/* ------------------------------------------------------------------ */
+/* Cube-root case (p = 1/3, 2/3).                                     */
+/* ------------------------------------------------------------------ */
+static void test_cube(void) {
+    ok("1/(t^3-1)^(1/3)");                        /* Example 5.2          */
+    ok("t^2/(t^3-1)^(1/3)");                      /* -> (t^3-1)^(2/3)/2   */
+    ok("t^2/(t^3-1)^(2/3)");                      /* -> (t^3-1)^(1/3)     */
+
+    declines("t/(t^3-1)^(1/3)");                  /* obstructed (H1 != 0) */
+    declines("1/(t^2+t+1)^(1/3)");                /* quadratic radicand   */
+}
+
+/* ------------------------------------------------------------------ */
+/* Fourth-root case (p = 1/4, 3/4) on the harmonic quartic t^4 - 1.   */
+/* ------------------------------------------------------------------ */
+static void test_fourth(void) {
+    ok("1/(t^4-1)^(1/4)");                        /* V0 elementary        */
+    ok("t^3/(t^4-1)^(1/4)");                      /* -> (t^4-1)^(3/4)/3   */
+    ok("t^2/(t^4-1)^(3/4)");                      /* V2 elementary (dual) */
+    ok("t^3/(t^4-1)^(3/4)");                      /* -> (t^4-1)^(1/4)     */
+
+    declines("t/(t^4-1)^(1/4)");                  /* V1 obstructive       */
+    declines("t^2/(t^4-1)^(1/4)");                /* V2 obstructive       */
+    declines("1/(t^4-1)^(3/4)");                  /* V0 obstructive (flip)*/
+    declines("1/((t-1)(t-2)(t-3)(t-5))^(1/4)");   /* non-harmonic         */
+}
+
+/* ------------------------------------------------------------------ */
+/* Method plumbing + strictness.                                      */
+/* ------------------------------------------------------------------ */
+static void test_plumbing(void) {
+    /* Direct package head closes and round-trips. */
+    check_eq("FreeQ[Integrate`GoursatAlgebraic[1/(t^3-1)^(1/3), t],"
+             " Integrate`GoursatAlgebraic]", "True");
+    check_eq("PossibleZeroQ[D[Integrate`GoursatAlgebraic[1/(t^3-1)^(1/3), t], t]"
+             " - 1/(t^3-1)^(1/3)]", "True");
+
+    /* Method option reaches the same routine. */
+    check_eq("FreeQ[Integrate[t/Sqrt[(t^2-1)(t^2-4)], t,"
+             " Method -> \"GoursatAlgebraic\"], Integrate]", "True");
+
+    /* Strict: a non-pseudo-elliptic integrand is declined (no fallback). */
+    declines("Sin[t]");
+
+    /* Automatic cascade routes a pseudo-elliptic integrand here. */
+    check_eq("FreeQ[Integrate[t^2/(t^3-1)^(2/3), t], Integrate]", "True");
+}
+
+int main(void) {
+    symtab_init();
+    core_init();
+
+    TEST(test_sqrt);
+    TEST(test_cube);
+    TEST(test_fourth);
+    TEST(test_plumbing);
+
+    printf("All Integrate GoursatAlgebraic tests passed!\n");
+    return 0;
+}

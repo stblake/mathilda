@@ -1,0 +1,1204 @@
+/* integrate_goursat.c
+ *
+ * Goursat's pseudo-elliptic algorithm and its cube-/fourth-root
+ * generalisations.  See integrate_goursat.h for the mathematical overview and
+ * GoursatAppendix.wl for the reference implementation this file transcribes.
+ *
+ * ---------------------------------------------------------------------
+ * Strategy
+ * ---------------------------------------------------------------------
+ * The reductions live one tier above the arithmetic primitives: this file is a
+ * C *orchestration* of Mathilda's existing high-level builtins -- Solve (with
+ * Cubics/Quartics radical solving), Together/Cancel over algebraic-number
+ * extensions (Extension -> Automatic), PossibleZeroQ, Numerator/Denominator,
+ * Expand -- via the eval_take(mk_fn...) idiom already used by
+ * integrate_linratiorad.c.  A verbatim port of the WL appendix is impossible
+ * (it relies on Association, which Mathilda lacks), so the control flow is
+ * re-expressed in C while every algebraic step delegates to a builtin.
+ *
+ * 1. Recognition: split f into a rational cofactor F(t) and a single radical
+ *    R(t)^q with q in {-1/2,-1/3,-2/3,-1/4,-3/4}; R must be a polynomial.
+ * 2. Solve R == 0 for the roots (radicals via Cubics/Quartics -> True).
+ * 3. Build the order-(den p) Mobius automorphism cycling those roots, project
+ *    the integrand into eigencomponents, and test the elementarity criterion
+ *    of the relevant theorem with PossibleZeroQ.
+ * 4. On success, descend each non-obstructive eigenpiece to a genus-0 curve,
+ *    integrate the resulting rational function recursively, and back-substitute.
+ *    On failure (obstructed / roots not in radicals / a piece does not close)
+ *    return NULL so the Integrate cascade continues.
+ *
+ * Correct by construction: like the sibling radical integrators, no
+ * differentiate-back verification is performed -- the eigenspace criterion plus
+ * recursive closure are the guards.
+ *
+ * Memory: builtins take ownership of `res`; helpers below own every Expr they
+ * construct and free intermediates explicitly.  eval_take / *_ext / canonic /
+ * subst_eval consume their primary argument.  We never expr_free(res).  An
+ * Infinity root / fixed point is represented by a NULL Expr* sentinel.
+ */
+
+#include "integrate_goursat.h"
+
+#include "expr.h"
+#include "eval.h"
+#include "symtab.h"
+#include "attr.h"
+#include "common.h"
+#include "internal.h"
+#include "sym_intern.h"
+#include "sym_names.h"
+#include "arithmetic.h"
+#include "poly.h"
+#include "zero_test.h"
+
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* ---------------------------------------------------------------------- */
+/* Small builders / evaluation helpers (mirror integrate_chebychev.c)     */
+/* ---------------------------------------------------------------------- */
+
+static Expr* mk_int(int64_t v) { return expr_new_integer(v); }
+static Expr* mk_sym(const char* name) { return expr_new_symbol(name); }
+
+static Expr* mk_fn1(const char* name, Expr* a) {
+    return expr_new_function(mk_sym(name), (Expr*[]){ a }, 1);
+}
+static Expr* mk_fn2(const char* name, Expr* a, Expr* b) {
+    return expr_new_function(mk_sym(name), (Expr*[]){ a, b }, 2);
+}
+static Expr* mk_fn3(const char* name, Expr* a, Expr* b, Expr* c) {
+    return expr_new_function(mk_sym(name), (Expr*[]){ a, b, c }, 3);
+}
+static Expr* mk_fnv(const char* name, Expr** args, size_t n) {
+    return expr_new_function(mk_sym(name), args, n);
+}
+
+static Expr* mk_pow(Expr* base, Expr* exp) { return mk_fn2("Power", base, exp); }
+static Expr* mk_inv(Expr* e) { return mk_pow(e, mk_int(-1)); }
+static Expr* mk_neg(Expr* e) { return mk_fn2("Times", mk_int(-1), e); }
+static Expr* mk_rat(int64_t p, int64_t q) { return make_rational(p, q); }
+static Expr* mk_pow_rat(Expr* base, int64_t n, int64_t d) {
+    return mk_fn2("Power", base, make_rational(n, d));
+}
+static Expr* mk_pow_int(Expr* base, int64_t n) {
+    return mk_fn2("Power", base, mk_int(n));
+}
+static Expr* mk_sqrt_expr(Expr* e) { return mk_pow_rat(e, 1, 2); }
+static Expr* mk_rule(Expr* lhs, Expr* rhs) { return mk_fn2("Rule", lhs, rhs); }
+
+/* Readable arithmetic builders (each consumes its operands). */
+static Expr* gadd(Expr* a, Expr* b) { return mk_fn2("Plus", a, b); }
+static Expr* gsub(Expr* a, Expr* b) { return mk_fn2("Plus", a, mk_neg(b)); }
+static Expr* gmul(Expr* a, Expr* b) { return mk_fn2("Times", a, b); }
+static Expr* gdiv(Expr* a, Expr* b) { return mk_fn2("Times", a, mk_inv(b)); }
+
+/* Evaluate `call` to a fixed point, freeing `call`. */
+static Expr* eval_take(Expr* call) {
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
+/* True if `f` contains no subexpression structurally equal to `x`. */
+static bool expr_free_of(const Expr* f, const Expr* x) {
+    if (expr_eq((Expr*)f, (Expr*)x)) return false;
+    if (f->type == EXPR_FUNCTION) {
+        if (!expr_free_of(f->data.function.head, x)) return false;
+        for (size_t i = 0; i < f->data.function.arg_count; i++)
+            if (!expr_free_of(f->data.function.args[i], x)) return false;
+    }
+    return true;
+}
+
+/* True if `e` contains any unevaluated Integrate[...] call. */
+static bool contains_unintegrated(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Integrate)) return true;
+    if (contains_unintegrated(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_unintegrated(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Together[e, Extension -> Automatic]; consumes e. */
+static Expr* together_ext(Expr* e) {
+    if (!e) return NULL;
+    Expr* opt = mk_rule(mk_sym(SYM_Extension), mk_sym(SYM_Automatic));
+    return eval_take(internal_together((Expr*[]){ e, opt }, 2));
+}
+/* Cancel[e, Extension -> Automatic]; consumes e. */
+static Expr* cancel_ext(Expr* e) {
+    if (!e) return NULL;
+    Expr* opt = mk_rule(mk_sym(SYM_Extension), mk_sym(SYM_Automatic));
+    return eval_take(internal_cancel((Expr*[]){ e, opt }, 2));
+}
+/* canonic[e] = Cancel[Together[e, Extension -> Automatic], Extension ->
+ * Automatic]; consumes e. */
+static Expr* canonic(Expr* e) {
+    return cancel_ext(together_ext(e));
+}
+
+/* Expand[e]; consumes e. */
+static Expr* expand_e(Expr* e) {
+    if (!e) return NULL;
+    return eval_take(internal_expand((Expr*[]){ e }, 1));
+}
+/* Simplify[e]; consumes e.  Needed to collapse roots-of-unity identities
+ * (e.g. 1 + (-1)^(2/3) - (-1)^(1/3) -> 0) that Cancel/Together over the
+ * Extension field leaves intact. */
+static Expr* simplify_e(Expr* e) {
+    if (!e) return NULL;
+    return eval_take(mk_fn1("Simplify", e));
+}
+/* Numerator[e] / Denominator[e]; borrow e. */
+static Expr* numer_of(Expr* e) {
+    return eval_take(internal_numerator((Expr*[]){ expr_copy(e) }, 1));
+}
+static Expr* denom_of(Expr* e) {
+    return eval_take(internal_denominator((Expr*[]){ expr_copy(e) }, 1));
+}
+
+/* ReplaceAll[e, from -> to] then evaluate; consumes e and to, borrows from.
+ * (Pass expr_copy(to) when the replacement value is reused.) */
+static Expr* subst_eval(Expr* e, const Expr* from, Expr* to) {
+    if (!e) { if (to) expr_free(to); return NULL; }
+    Expr* rule = mk_rule(expr_copy((Expr*)from), to);
+    return eval_take(internal_replace_all((Expr*[]){ e, rule }, 2));
+}
+
+/* PossibleZeroQ via the internal three-valued decision: strict TRUE only. */
+static bool is_zero(const Expr* e) {
+    if (!e) return false;
+    return zero_test_decide(e) == ZERO_TEST_TRUE;
+}
+
+/* Recurse into the full integrator: Integrate[g, u].  Returns the closed
+ * antiderivative, or NULL if it does not close.  Borrows g and u. */
+static Expr* integrate_in(const Expr* g, const Expr* u) {
+    Expr* r = eval_take(mk_fn2("Integrate", expr_copy((Expr*)g),
+                               expr_copy((Expr*)u)));
+    if (!r) return NULL;
+    if (contains_unintegrated(r)) { expr_free(r); return NULL; }
+    return r;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Recursion guard + fresh-symbol counter                                 */
+/* ---------------------------------------------------------------------- */
+
+#define GS_MAX_DEPTH 6
+static int gs_depth = 0;
+static unsigned long gs_sym_counter = 0;
+
+static Expr* fresh_var(void) {
+    char b[96];
+    snprintf(b, sizeof(b), "Integrate`GoursatAlgebraic`u$%lu", gs_sym_counter++);
+    return expr_new_symbol(b);
+}
+
+/* ---------------------------------------------------------------------- */
+/* Root solving                                                           */
+/* ---------------------------------------------------------------------- */
+
+/* Solve[eq, t, Cubics -> True, Quartics -> True] and collect the distinct root
+ * values (RHS of each Rule[t, val]) into a freshly-malloc'd, owned array.
+ * Borrows eq, t.  Returns NULL with *n = 0 on no solutions / failure. */
+static Expr** solve_eq_roots(Expr* eq, Expr* t, size_t* n) {
+    *n = 0;
+    Expr* call = mk_fnv("Solve", (Expr*[]){
+        expr_copy(eq), expr_copy(t),
+        mk_rule(mk_sym(SYM_Cubics),   mk_sym(SYM_True)),
+        mk_rule(mk_sym(SYM_Quartics), mk_sym(SYM_True)) }, 4);
+    Expr* sol = eval_take(call);
+    if (!sol || !head_is(sol, SYM_List)) { if (sol) expr_free(sol); return NULL; }
+
+    size_t cap = sol->data.function.arg_count;
+    Expr** out = cap ? (Expr**)malloc(sizeof(Expr*) * cap) : NULL;
+    size_t cnt = 0;
+    for (size_t i = 0; i < sol->data.function.arg_count; i++) {
+        Expr* sub = sol->data.function.args[i];   /* List[Rule[t, val]] */
+        if (!head_is(sub, SYM_List) || sub->data.function.arg_count != 1) continue;
+        Expr* rule = sub->data.function.args[0];
+        if (!head_is(rule, SYM_Rule) || rule->data.function.arg_count != 2) continue;
+        Expr* val = rule->data.function.args[1];
+        bool dup = false;
+        for (size_t k = 0; k < cnt; k++)
+            if (expr_eq(out[k], val)) { dup = true; break; }
+        if (!dup) out[cnt++] = expr_copy(val);
+    }
+    expr_free(sol);
+    *n = cnt;
+    return out;
+}
+
+/* Distinct roots of polynomial R in t. */
+static Expr** poly_roots(Expr* R, Expr* t, size_t* n) {
+    Expr* eq = mk_fn2("Equal", expr_copy(R), mk_int(0));
+    Expr** rs = solve_eq_roots(eq, t, n);
+    expr_free(eq);
+    return rs;
+}
+
+/* Fixed points of a Mobius map S(t): solve S == t.  Writes alpha (always
+ * owned) and beta (owned, or NULL meaning the second fixed point is at
+ * Infinity -- i.e. S == t has a single finite solution).  Returns false on
+ * an unexpected (non Mobius) solution count.  Borrows S, t. */
+static bool fixed_points(Expr* S, Expr* t, Expr** alpha, Expr** beta) {
+    Expr* eq = mk_fn2("Equal", expr_copy(S), expr_copy(t));
+    size_t nf = 0;
+    Expr** fps = solve_eq_roots(eq, t, &nf);
+    expr_free(eq);
+    *alpha = NULL; *beta = NULL;
+    if (nf == 1) { *alpha = fps[0]; *beta = NULL; free(fps); return true; }
+    if (nf >= 2) {
+        *alpha = fps[0]; *beta = fps[1];
+        for (size_t i = 2; i < nf; i++) expr_free(fps[i]);
+        free(fps);
+        return true;
+    }
+    if (fps) free(fps);
+    return false;
+}
+
+/* ---------------------------------------------------------------------- */
+/* eigenpiece -> rational function of x = z^m                             */
+/* ---------------------------------------------------------------------- */
+
+/* ToFunctionOf{Square,Cube,Fourth}: H is a rational function of z whose
+ * numerator and denominator involve only multiples-of-m powers of z; return
+ * the rational function of x obtained by z^m -> x.  Returns Integer 0 when H is
+ * zero.  Borrows H, z; returns a freshly-owned, evaluated expression. */
+static Expr* to_function_of_power(Expr* H, Expr* z, Expr* x, int m) {
+    Expr* Hc = canonic(expr_copy(H));
+    if (!Hc) return NULL;
+    if (is_zero(Hc)) { expr_free(Hc); return mk_int(0); }
+
+    Expr* num = expand_e(numer_of(Hc));
+    Expr* den = expand_e(denom_of(Hc));
+    expr_free(Hc);
+    if (!num || !den) { if (num) expr_free(num); if (den) expr_free(den); return NULL; }
+
+    int dN = get_degree_poly(num, z);
+    int dD = get_degree_poly(den, z);
+
+    /* numerator polynomial in x: sum_k Coefficient[num, z, m k] x^k */
+    Expr* np = mk_int(0);
+    for (int k = 0; k * m <= dN; k++) {
+        Expr* ck = get_coeff(num, z, m * k);
+        if (!ck) ck = mk_int(0);
+        np = mk_fn2("Plus", np, mk_fn2("Times", ck, mk_pow_int(expr_copy(x), k)));
+    }
+    Expr* dp = mk_int(0);
+    for (int k = 0; k * m <= dD; k++) {
+        Expr* ck = get_coeff(den, z, m * k);
+        if (!ck) ck = mk_int(0);
+        dp = mk_fn2("Plus", dp, mk_fn2("Times", ck, mk_pow_int(expr_copy(x), k)));
+    }
+    expr_free(num); expr_free(den);
+    return canonic(mk_fn2("Times", np, mk_inv(dp)));
+}
+
+/* ---------------------------------------------------------------------- */
+/* Square-root case: Goursat's V4 theorem (p = 1/2)                       */
+/* ---------------------------------------------------------------------- */
+
+/* The Mobius involution swapping {a,b} with {c,d}.  Any slot may be NULL
+ * (Infinity).  Borrows a,b,c,d,t; returns a freshly-owned canonic rational
+ * function of t.  (Appendix MobiusInvolution.) */
+static Expr* mobius_involution(Expr* a, Expr* b, Expr* c, Expr* d, Expr* t) {
+    if (a == NULL) return mobius_involution(c, d, b, a, t);
+    if (b == NULL) return mobius_involution(c, d, a, b, t);
+    if (c == NULL) return mobius_involution(a, b, d, c, t);
+    if (d == NULL) {
+        /* (c t + a b - c (a+b)) / (t - c) */
+        Expr* num = mk_fn3("Plus",
+            mk_fn2("Times", expr_copy(c), expr_copy(t)),
+            mk_fn2("Times", expr_copy(a), expr_copy(b)),
+            mk_fn3("Times", mk_int(-1), expr_copy(c),
+                   mk_fn2("Plus", expr_copy(a), expr_copy(b))));
+        Expr* den = mk_fn2("Plus", expr_copy(t), mk_neg(expr_copy(c)));
+        return canonic(mk_fn2("Times", num, mk_inv(den)));
+    }
+    /* ((ab-cd) t + (a+b) c d - (c+d) a b) / (((a+b)-(c+d)) t - (ab-cd)) */
+    Expr* ab = mk_fn2("Times", expr_copy(a), expr_copy(b));
+    Expr* cd = mk_fn2("Times", expr_copy(c), expr_copy(d));
+    Expr* apb = mk_fn2("Plus", expr_copy(a), expr_copy(b));
+    Expr* cpd = mk_fn2("Plus", expr_copy(c), expr_copy(d));
+    Expr* ab_m_cd = mk_fn2("Plus", expr_copy(ab), mk_neg(expr_copy(cd)));
+
+    Expr* num = mk_fn3("Plus",
+        mk_fn2("Times", expr_copy(ab_m_cd), expr_copy(t)),
+        mk_fn2("Times", expr_copy(apb), expr_copy(cd)),
+        mk_neg(mk_fn2("Times", expr_copy(cpd), expr_copy(ab))));
+    Expr* den = mk_fn2("Plus",
+        mk_fn2("Times",
+            mk_fn2("Plus", expr_copy(apb), mk_neg(expr_copy(cpd))),
+            expr_copy(t)),
+        mk_neg(expr_copy(ab_m_cd)));
+    expr_free(ab); expr_free(cd); expr_free(apb); expr_free(cpd); expr_free(ab_m_cd);
+    return canonic(mk_fn2("Times", num, mk_inv(den)));
+}
+
+/* Reduce one V4 eigenpiece Fj (anti-invariant under involution S) to its
+ * elementary antiderivative.  Returns the owned antiderivative (in t), or NULL
+ * if the rational reduction does not close.  Borrows Fj, R, t, S. */
+static Expr* reduce_v4_piece(Expr* Fj, Expr* R, Expr* t, Expr* S) {
+    Expr* alpha = NULL; Expr* beta = NULL;
+    if (!fixed_points(S, t, &alpha, &beta)) return NULL;
+    bool binf = (beta == NULL);
+
+    Expr* u = fresh_var();     /* intermediate Mobius variable */
+    Expr* x = fresh_var();     /* output square variable        */
+    Expr* result = NULL;
+
+    /* tu : t as a function of u. */
+    Expr* tu = binf
+        ? mk_fn2("Plus", expr_copy(alpha), expr_copy(u))
+        : canonic(mk_fn2("Times",
+            mk_fn2("Plus", expr_copy(alpha),
+                   mk_neg(mk_fn2("Times", expr_copy(beta), expr_copy(u)))),
+            mk_inv(mk_fn2("Plus", mk_int(1), mk_neg(expr_copy(u))))));
+
+    /* Rfact = R(t(u)) [ (1-u)^4 ] expanded. */
+    Expr* Rsub = subst_eval(expr_copy(R), t, expr_copy(tu));
+    Expr* Rfact;
+    if (binf) {
+        Rfact = expand_e(Rsub);
+    } else {
+        Expr* om4 = mk_pow_int(mk_fn2("Plus", mk_int(1), mk_neg(expr_copy(u))), 4);
+        Rfact = expand_e(canonic(mk_fn2("Times", Rsub, om4)));
+    }
+    if (!Rfact) goto done;
+
+    Expr* lc = get_coeff(Rfact, u, 4);
+    if (!lc || is_zero(lc)) { if (lc) expr_free(lc); expr_free(Rfact); goto done; }
+
+    /* Q(x) = sum_{k=0}^{2} (Coefficient[Rfact,u,2k]/lc) x^k. */
+    Expr* Q = mk_int(0);
+    for (int k = 0; k <= 2; k++) {
+        Expr* c2k = get_coeff(Rfact, u, 2 * k);
+        if (!c2k) c2k = mk_int(0);
+        Q = mk_fn2("Plus", Q,
+            mk_fn3("Times", c2k, mk_inv(expr_copy(lc)), mk_pow_int(expr_copy(x), k)));
+    }
+    Q = canonic(Q);
+    expr_free(Rfact);
+
+    /* gu = Fj(t(u)) / u ; gx = ToFunctionOfSquare[gu]. */
+    Expr* Fu = canonic(subst_eval(expr_copy(Fj), t, expr_copy(tu)));
+    Expr* gu = canonic(mk_fn2("Times", Fu, mk_inv(expr_copy(u))));
+    Expr* gx = gu ? to_function_of_power(gu, u, x, 2) : NULL;
+    if (gu) expr_free(gu);
+    if (!gx || !Q) {
+        if (gx) expr_free(gx); if (Q) expr_free(Q); expr_free(lc); goto done;
+    }
+
+    /* prefactor = (binf ? 1 : alpha-beta) / (2 Sqrt[lc]). */
+    Expr* pre_num = binf ? mk_int(1)
+                         : mk_fn2("Plus", expr_copy(alpha), mk_neg(expr_copy(beta)));
+    Expr* pre = mk_fn2("Times", pre_num,
+        mk_inv(mk_fn2("Times", mk_int(2), mk_sqrt_expr(expr_copy(lc)))));
+    expr_free(lc);
+
+    /* Integrate gx / Sqrt[Q] in x. */
+    Expr* integrand = mk_fn2("Times", gx, mk_pow_rat(Q, -1, 2));  /* consumes gx,Q */
+    gs_depth++;
+    Expr* G = integrate_in(integrand, x);
+    gs_depth--;
+    expr_free(integrand);
+    if (!G) { expr_free(pre); goto done; }
+
+    /* Back-substitute x -> (binf ? (t-alpha)^2 : ((t-alpha)/(t-beta))^2). */
+    Expr* ta = mk_fn2("Plus", expr_copy(t), mk_neg(expr_copy(alpha)));
+    Expr* back = binf
+        ? mk_pow_int(ta, 2)
+        : mk_pow_int(mk_fn2("Times", ta,
+              mk_inv(mk_fn2("Plus", expr_copy(t), mk_neg(expr_copy(beta))))), 2);
+    Expr* Gs = subst_eval(G, x, back);   /* consumes back */
+    result = eval_take(mk_fn2("Times", pre, Gs));
+
+done:
+    if (alpha) expr_free(alpha);
+    if (beta)  expr_free(beta);
+    if (tu)    expr_free(tu);
+    expr_free(u); expr_free(x);
+    return result;
+}
+
+/* Goursat V4 (p = 1/2): F rational, R cubic/quartic with simple roots. */
+static Expr* goursat_v4(Expr* F, Expr* R, Expr* t) {
+    size_t nr = 0;
+    Expr** roots = poly_roots(R, t, &nr);
+    int dR = get_degree_poly(R, t);
+
+    /* Need four ramification points; a cubic contributes Infinity as the
+     * fourth.  Require simple roots (distinct-root count matches degree). */
+    Expr* r[4] = { NULL, NULL, NULL, NULL };
+    bool ok = false;
+    if (dR == 4 && nr == 4) {
+        for (int i = 0; i < 4; i++) r[i] = roots[i];
+        ok = true;
+    } else if (dR == 3 && nr == 3) {
+        for (int i = 0; i < 3; i++) r[i] = roots[i];
+        r[3] = NULL;  /* Infinity */
+        ok = true;
+    }
+    if (!ok) {
+        for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
+        if (roots) free(roots);
+        return NULL;
+    }
+
+    /* Three root-pairing involutions. */
+    Expr* S1 = mobius_involution(r[0], r[1], r[2], r[3], t);
+    Expr* S2 = mobius_involution(r[0], r[2], r[1], r[3], t);
+    Expr* S3 = mobius_involution(r[0], r[3], r[1], r[2], t);
+    Expr* S[3] = { S1, S2, S3 };
+
+    /* V4 projections of F. */
+    Expr* f0 = expr_copy(F);
+    Expr* f1 = subst_eval(expr_copy(F), t, expr_copy(S1));
+    Expr* f2 = subst_eval(expr_copy(F), t, expr_copy(S2));
+    Expr* f3 = subst_eval(expr_copy(F), t, expr_copy(S3));
+
+    Expr* P[4];
+    P[0] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), expr_copy(f1)),
+                                  expr_copy(f2), expr_copy(f3)));
+    P[1] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), expr_copy(f1)),
+                                  mk_neg(expr_copy(f2)), mk_neg(expr_copy(f3))));
+    P[2] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), mk_neg(expr_copy(f1))),
+                                  expr_copy(f2), mk_neg(expr_copy(f3))));
+    P[3] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), mk_neg(expr_copy(f1))),
+                                  mk_neg(expr_copy(f2)), expr_copy(f3)));
+    for (int i = 0; i < 4; i++) P[i] = canonic(mk_fn2("Times", mk_rat(1, 4), P[i]));
+    expr_free(f0); expr_free(f1); expr_free(f2); expr_free(f3);
+
+    Expr* result = NULL;
+    /* Trivial-character projection must vanish, else obstructed. */
+    if (!P[0] || !is_zero(P[0])) goto cleanup;
+
+    /* Sum the reductions of the non-zero projections P[1],P[2],P[3].  P[j] is
+     * anti-invariant under the two involutions S[k], k != j-1; prefer one whose
+     * S == t has a single finite fixed point (Infinity in the other slot). */
+    Expr* total = mk_int(0);
+    for (int j = 1; j <= 3; j++) {
+        if (!P[j] || is_zero(P[j])) continue;
+        /* candidate anti-involutions: indices in {0,1,2} \ {j-1}. */
+        int chosen = -1, first = -1;
+        for (int k = 0; k < 3; k++) {
+            if (k == j - 1) continue;
+            if (first < 0) first = k;
+            Expr* al = NULL; Expr* be = NULL;
+            if (fixed_points(S[k], t, &al, &be)) {
+                bool single = (be == NULL);
+                if (al) expr_free(al);
+                if (be) expr_free(be);
+                if (single) { chosen = k; break; }
+            }
+        }
+        if (chosen < 0) chosen = first;
+        Expr* piece = reduce_v4_piece(P[j], R, t, S[chosen]);
+        if (!piece) { expr_free(total); total = NULL; break; }
+        total = mk_fn2("Plus", total, piece);
+    }
+    if (total) result = eval_take(total);
+
+cleanup:
+    for (int i = 0; i < 4; i++) if (P[i]) expr_free(P[i]);
+    expr_free(S1); expr_free(S2); expr_free(S3);
+    for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
+    if (roots) free(roots);
+    return result;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Cube-root case: order-3 Mobius eigendescent (p = 1/3 and 2/3)          */
+/* ---------------------------------------------------------------------- */
+
+/* omega = Exp[2 Pi I/3], a primitive cube root of unity. */
+static Expr* mk_omega(void) {
+    return mk_fn1("Exp", mk_fn3("Times", mk_rat(2, 3), mk_sym("Pi"), mk_sym("I")));
+}
+
+/* The order-3 Mobius transformation cycling the three roots r[0]->r[1]->r[2].
+ * A NULL entry denotes Infinity.  Borrows r[*], t; returns owned canonic S(t).
+ * (Appendix CyclicMobius.) */
+static Expr* cyclic_mobius(Expr** r, Expr* t) {
+    int pinf = -1;
+    for (int i = 0; i < 3; i++) if (r[i] == NULL) pinf = i;
+
+    if (pinf >= 0) {
+        /* Two finite roots, in cyclic order starting after Infinity. */
+        Expr* r1 = r[(pinf + 1) % 3];
+        Expr* r2 = r[(pinf + 2) % 3];
+        /* S = (r1 t - (r1^2 - r1 r2 + r2^2)) / (t - r2) */
+        Expr* quad = gsub(gadd(mk_pow_int(expr_copy(r1), 2),
+                               mk_pow_int(expr_copy(r2), 2)),
+                          gmul(expr_copy(r1), expr_copy(r2)));
+        Expr* num = gsub(gmul(expr_copy(r1), expr_copy(t)), quad);
+        Expr* den = gsub(expr_copy(t), expr_copy(r2));
+        return canonic(gdiv(num, den));
+    }
+
+    /* Three finite roots: solve {(A r_i + B)/(C r_i + 1) == r_{i+1}}. */
+    Expr* A = fresh_var(); Expr* B = fresh_var(); Expr* C = fresh_var();
+    Expr* eqs[3];
+    for (int i = 0; i < 3; i++) {
+        Expr* ri  = r[i];
+        Expr* rip = r[(i + 1) % 3];
+        /* A ri + B == r_{i+1} (C ri + 1) */
+        Expr* lhs = gadd(gmul(expr_copy(A), expr_copy(ri)), expr_copy(B));
+        Expr* rhs = gmul(expr_copy(rip),
+                         gadd(gmul(expr_copy(C), expr_copy(ri)), mk_int(1)));
+        eqs[i] = mk_fn2("Equal", lhs, rhs);
+    }
+    Expr* eqlist = mk_fnv("List", eqs, 3);
+    Expr* vars = mk_fn3("List", expr_copy(A), expr_copy(B), expr_copy(C));
+    Expr* solset = eval_take(mk_fn2("Solve", eqlist, vars));
+
+    Expr* S = NULL;
+    if (solset && head_is(solset, SYM_List) && solset->data.function.arg_count >= 1) {
+        Expr* sol = solset->data.function.args[0];   /* List[Rule[A,_],...] */
+        Expr* Sexpr = gdiv(gadd(gmul(expr_copy(A), expr_copy(t)), expr_copy(B)),
+                           gadd(gmul(expr_copy(C), expr_copy(t)), mk_int(1)));
+        Expr* Ssub = eval_take(internal_replace_all(
+            (Expr*[]){ Sexpr, expr_copy(sol) }, 2));
+        S = canonic(Ssub);
+    }
+    if (solset) expr_free(solset);
+    expr_free(A); expr_free(B); expr_free(C);
+    return S;
+}
+
+/* P_k projection under z -> omega z: (H + w^-k H(wz) + w^-2k H(w^2 z))/3.
+ * Borrows H, z; returns owned canonic.  (Appendix EigenProjection.) */
+static Expr* eigenproj3(Expr* H, Expr* z, int k) {
+    Expr* w  = mk_omega();
+    Expr* wz  = gmul(expr_copy(w), expr_copy(z));
+    Expr* w2z = gmul(mk_pow_int(expr_copy(w), 2), expr_copy(z));
+    Expr* Hw  = subst_eval(expr_copy(H), z, wz);    /* consumes wz  */
+    Expr* Hw2 = subst_eval(expr_copy(H), z, w2z);   /* consumes w2z */
+    Expr* t0 = expr_copy(H);
+    Expr* t1 = gmul(mk_pow_int(expr_copy(w), -k), Hw);
+    Expr* t2 = gmul(mk_pow_int(expr_copy(w), -2 * k), Hw2);
+    expr_free(w);
+    /* Simplify before canonic: collapses 1 + omega + omega^2 -> 0 so that a
+     * vanishing eigencomponent is structurally zero, not a fake nonzero
+     * constant that breaks the z^3-coefficient extraction downstream. */
+    return canonic(simplify_e(gdiv(mk_fn3("Plus", t0, t1, t2), mk_int(3))));
+}
+
+/* Integrate one J-piece in uOut and back-substitute uOut -> backval.  Returns
+ * Integer 0 for a zero piece, NULL on non-closure, else the owned contribution
+ * in t.  Borrows J, uOut, backval. */
+static Expr* integ_backsub(Expr* J, Expr* uOut, Expr* backval) {
+    if (!J || is_zero(J)) return mk_int(0);
+    gs_depth++;
+    Expr* G = integrate_in(J, uOut);
+    gs_depth--;
+    if (!G) return NULL;
+    return subst_eval(G, uOut, expr_copy(backval));   /* backval borrowed */
+}
+
+/* Cube-root Goursat (p = pnum/3, pnum in {1,2}): R cubic (or quadratic). */
+static Expr* goursat_cubic(Expr* F, Expr* R, Expr* t, int pnum) {
+    size_t nr = 0;
+    Expr** roots = poly_roots(R, t, &nr);
+    int dR = get_degree_poly(R, t);
+
+    Expr* r[3] = { NULL, NULL, NULL };
+    bool ok = false;
+    if (dR == 3 && nr == 3) {
+        for (int i = 0; i < 3; i++) r[i] = roots[i];
+        ok = true;
+    } else if (dR == 2 && nr == 2) {
+        r[0] = roots[0]; r[1] = roots[1]; r[2] = NULL;  /* Infinity */
+        ok = true;
+    }
+    if (!ok) {
+        for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
+        if (roots) free(roots);
+        return NULL;
+    }
+
+    Expr* result = NULL;
+    Expr* z = NULL; Expr* x = NULL; Expr* uOut = NULL;
+    Expr* alpha = NULL; Expr* beta = NULL;
+    Expr* tz = NULL; Expr* H = NULL;
+    Expr* H0 = NULL; Expr* H1 = NULL; Expr* H2 = NULL;
+    Expr* cval = NULL; Expr* K = NULL;
+
+    Expr* S = cyclic_mobius(r, t);
+    if (!S) goto cleanup;
+    if (!fixed_points(S, t, &alpha, &beta)) { expr_free(S); goto cleanup; }
+    bool binf = (beta == NULL);
+
+    z = fresh_var(); x = fresh_var(); uOut = fresh_var();
+
+    /* t(z). */
+    tz = binf
+        ? gadd(expr_copy(alpha), expr_copy(z))
+        : canonic(gdiv(gsub(expr_copy(alpha), gmul(expr_copy(beta), expr_copy(z))),
+                       gsub(mk_int(1), expr_copy(z))));
+
+    /* R(t(z)) [ (1-z)^3 ]. */
+    Expr* Rsub = subst_eval(expr_copy(R), t, expr_copy(tz));
+    Expr* Rz = binf ? canonic(Rsub)
+                    : canonic(gmul(Rsub,
+                          mk_pow_int(gsub(mk_int(1), expr_copy(z)), 3)));
+    Expr* Rze = expand_e(Rz);
+    if (!Rze) { expr_free(S); goto cleanup; }
+    cval = get_coeff(Rze, z, 3);
+    Expr* c0 = get_coeff(Rze, z, 0);
+    expr_free(Rze);
+    if (!cval || !c0 || is_zero(cval)) {
+        if (cval) { expr_free(cval); cval = NULL; }
+        if (c0) expr_free(c0);
+        expr_free(S); goto cleanup;
+    }
+    K = canonic(gdiv(mk_neg(c0), expr_copy(cval)));   /* -c0/cval */
+
+    /* H (p=1/3) or Htilde (p=2/3). */
+    {
+        Expr* Ftz = subst_eval(expr_copy(F), t, expr_copy(tz));
+        Expr* cpow = (pnum == 1) ? mk_pow_rat(expr_copy(cval), -1, 3)
+                                 : mk_pow_rat(expr_copy(cval), -2, 3);
+        Expr* base;
+        if (pnum == 1) {
+            base = binf
+                ? gmul(Ftz, cpow)
+                : gmul(gmul(gsub(expr_copy(alpha), expr_copy(beta)), Ftz),
+                       gmul(cpow, mk_inv(gsub(mk_int(1), expr_copy(z)))));
+        } else {
+            base = binf
+                ? gmul(Ftz, cpow)
+                : gmul(gsub(expr_copy(alpha), expr_copy(beta)), gmul(Ftz, cpow));
+        }
+        H = canonic(base);
+    }
+    expr_free(S);
+    if (!H) goto cleanup;
+
+    H0 = eigenproj3(H, z, 0);
+    H1 = eigenproj3(H, z, 1);
+    H2 = eigenproj3(H, z, 2);
+
+    /* Elementarity criterion: p=1/3 needs H1==0, p=2/3 needs H0==0. */
+    if (pnum == 1) { if (!H1 || !is_zero(H1)) goto cleanup; }
+    else           { if (!H0 || !is_zero(H0)) goto cleanup; }
+
+    /* Common back-substitution atoms. */
+    Expr* cube_c  = mk_pow_rat(expr_copy(cval), 1, 3);          /* cval^(1/3) */
+    Expr* cube_R  = mk_pow_rat(expr_copy(R), 1, 3);             /* R^(1/3)    */
+    Expr* amb     = binf ? NULL : gsub(expr_copy(alpha), expr_copy(beta));
+
+    Expr* total = NULL;
+    if (pnum == 1) {
+        /* phi0 = ToFunctionOfCube[H0]; psi2 = ToFunctionOfCube[H2/z^2]. */
+        Expr* phi0 = to_function_of_power(H0, z, x, 3);
+        Expr* H2z2 = canonic(gdiv(expr_copy(H2), mk_pow_int(expr_copy(z), 2)));
+        Expr* psi2 = H2z2 ? to_function_of_power(H2z2, z, x, 3) : NULL;
+        if (H2z2) expr_free(H2z2);
+
+        /* J0 = (phi0 /. x->K/(1-u^3)) u/(1-u^3);  J2 = (psi2 /. x->u^3+K) u. */
+        Expr* om3 = gsub(mk_int(1), mk_pow_int(expr_copy(uOut), 3));   /* 1-u^3 */
+        Expr* J0 = phi0 ? canonic(gmul(
+            subst_eval(phi0, x, gdiv(expr_copy(K), expr_copy(om3))),
+            gdiv(expr_copy(uOut), expr_copy(om3)))) : NULL;
+        expr_free(om3);
+        Expr* J2 = NULL;
+        if (psi2) {
+            Expr* u3K = gadd(mk_pow_int(expr_copy(uOut), 3), expr_copy(K));
+            J2 = canonic(gmul(subst_eval(psi2, x, u3K), expr_copy(uOut)));
+        }
+
+        /* Back-substitutions. */
+        Expr* J0back = binf
+            ? gdiv(expr_copy(cube_R), gmul(expr_copy(cube_c),
+                   gsub(expr_copy(t), expr_copy(alpha))))
+            : gdiv(gmul(expr_copy(cube_R), expr_copy(amb)),
+                   gmul(expr_copy(cube_c), gsub(expr_copy(t), expr_copy(alpha))));
+        Expr* J2back = binf
+            ? gdiv(expr_copy(cube_R), expr_copy(cube_c))
+            : gdiv(gmul(expr_copy(cube_R), expr_copy(amb)),
+                   gmul(expr_copy(cube_c), gsub(expr_copy(t), expr_copy(beta))));
+
+        Expr* p0 = integ_backsub(J0, uOut, J0back);
+        Expr* p2 = (p0 != NULL) ? integ_backsub(J2, uOut, J2back) : NULL;
+        if (J0) expr_free(J0);
+        if (J2) expr_free(J2);
+        expr_free(J0back); expr_free(J2back);
+        if (p0 && p2) total = gadd(p0, p2);
+        else { if (p0) expr_free(p0); if (p2) expr_free(p2); }
+    } else {
+        /* phi1 = ToFunctionOfCube[H1/z]; phi2 = ToFunctionOfCube[H2/z^2]. */
+        Expr* H1z = canonic(gdiv(expr_copy(H1), expr_copy(z)));
+        Expr* phi1 = H1z ? to_function_of_power(H1z, z, x, 3) : NULL;
+        if (H1z) expr_free(H1z);
+        Expr* H2z2 = canonic(gdiv(expr_copy(H2), mk_pow_int(expr_copy(z), 2)));
+        Expr* phi2 = H2z2 ? to_function_of_power(H2z2, z, x, 3) : NULL;
+        if (H2z2) expr_free(H2z2);
+
+        /* J1 = -(phi1 /. x->K u^3/(u^3-1)) u/(u^3-1);  J2 = phi2 /. x->u^3+K. */
+        Expr* u3m1 = gsub(mk_pow_int(expr_copy(uOut), 3), mk_int(1));   /* u^3-1 */
+        Expr* J1 = phi1 ? canonic(mk_neg(gmul(
+            subst_eval(phi1, x, gdiv(gmul(expr_copy(K), mk_pow_int(expr_copy(uOut), 3)),
+                                     expr_copy(u3m1))),
+            gdiv(expr_copy(uOut), expr_copy(u3m1))))) : NULL;
+        expr_free(u3m1);
+        Expr* J2 = NULL;
+        if (phi2) {
+            Expr* u3K2 = gadd(mk_pow_int(expr_copy(uOut), 3), expr_copy(K));
+            J2 = canonic(subst_eval(phi2, x, u3K2));
+        }
+
+        Expr* J1back = binf
+            ? gdiv(gmul(expr_copy(cube_c), gsub(expr_copy(t), expr_copy(alpha))),
+                   expr_copy(cube_R))
+            : gdiv(gmul(expr_copy(cube_c), gsub(expr_copy(t), expr_copy(alpha))),
+                   gmul(expr_copy(cube_R), expr_copy(amb)));
+        Expr* J2back = binf
+            ? gdiv(expr_copy(cube_R), expr_copy(cube_c))
+            : gdiv(gmul(expr_copy(cube_R), expr_copy(amb)),
+                   gmul(expr_copy(cube_c), gsub(expr_copy(t), expr_copy(beta))));
+
+        Expr* p1 = integ_backsub(J1, uOut, J1back);
+        Expr* p2 = (p1 != NULL) ? integ_backsub(J2, uOut, J2back) : NULL;
+        if (J1) expr_free(J1);
+        if (J2) expr_free(J2);
+        expr_free(J1back); expr_free(J2back);
+        if (p1 && p2) total = gadd(p1, p2);
+        else { if (p1) expr_free(p1); if (p2) expr_free(p2); }
+    }
+
+    expr_free(cube_c); expr_free(cube_R); if (amb) expr_free(amb);
+    if (total) result = eval_take(total);
+
+cleanup:
+    if (z) expr_free(z); if (x) expr_free(x); if (uOut) expr_free(uOut);
+    if (alpha) expr_free(alpha); if (beta) expr_free(beta);
+    if (tz) expr_free(tz); if (H) expr_free(H);
+    if (H0) expr_free(H0); if (H1) expr_free(H1); if (H2) expr_free(H2);
+    if (cval) expr_free(cval); if (K) expr_free(K);
+    for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
+    if (roots) free(roots);
+    return result;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Fourth-root case: order-4 Mobius eigendescent (p = 1/4 and 3/4)        */
+/* ---------------------------------------------------------------------- */
+
+/* Cross-ratio (r1, r3; r2, r4) = ((r1-r2)(r3-r4)) / ((r1-r4)(r3-r2)).
+ * Borrows; returns owned (un-canonicalised). */
+static Expr* cross_ratio(Expr* r1, Expr* r2, Expr* r3, Expr* r4) {
+    Expr* num = gmul(gsub(expr_copy(r1), expr_copy(r2)),
+                     gsub(expr_copy(r3), expr_copy(r4)));
+    Expr* den = gmul(gsub(expr_copy(r1), expr_copy(r4)),
+                     gsub(expr_copy(r3), expr_copy(r2)));
+    return gdiv(num, den);
+}
+
+/* Find a harmonic cyclic ordering of four roots: an arrangement
+ * (r1,r2,r3,r4) with (r1,r3;r2,r4) = -1, which is exactly the condition for an
+ * order-4 Mobius cycling r1->r2->r3->r4 to exist (fourth-root paper Lemma 2.1).
+ * Fixes r1 = roots[0] and tries the 6 orderings of the rest.  On success fills
+ * `out` with borrowed pointers (into roots) and returns true. */
+static bool harmonic_order(Expr** roots, Expr** out) {
+    static const int perm[6][3] = {
+        {1,2,3},{1,3,2},{2,1,3},{2,3,1},{3,1,2},{3,2,1}
+    };
+    for (int p = 0; p < 6; p++) {
+        Expr* r1 = roots[0];
+        Expr* r2 = roots[perm[p][0]];
+        Expr* r3 = roots[perm[p][1]];
+        Expr* r4 = roots[perm[p][2]];
+        Expr* cr = cross_ratio(r1, r2, r3, r4);
+        Expr* test = gadd(cr, mk_int(1));       /* cr + 1 == 0 ? */
+        bool harm = is_zero(test);
+        expr_free(test);
+        if (harm) { out[0]=r1; out[1]=r2; out[2]=r3; out[3]=r4; return true; }
+    }
+    return false;
+}
+
+/* Order-4 Mobius cycling r[0]->r[1]->r[2]->r[3].  Solves
+ * {(A r_i + B)/(C r_i + 1) == r_{i+1} : i = 0,1,2} for {A,B,C}.  Borrows
+ * r[*], t; returns owned canonic S(t) or NULL.  (Appendix QuarticMobius.) */
+static Expr* quartic_mobius(Expr** r, Expr* t) {
+    Expr* A = fresh_var(); Expr* B = fresh_var(); Expr* C = fresh_var();
+    Expr* eqs[3];
+    for (int i = 0; i < 3; i++) {
+        Expr* lhs = gadd(gmul(expr_copy(A), expr_copy(r[i])), expr_copy(B));
+        Expr* rhs = gmul(expr_copy(r[i + 1]),
+                         gadd(gmul(expr_copy(C), expr_copy(r[i])), mk_int(1)));
+        eqs[i] = mk_fn2("Equal", lhs, rhs);
+    }
+    Expr* eqlist = mk_fnv("List", eqs, 3);
+    Expr* vars = mk_fn3("List", expr_copy(A), expr_copy(B), expr_copy(C));
+    Expr* solset = eval_take(mk_fn2("Solve", eqlist, vars));
+
+    Expr* S = NULL;
+    if (solset && head_is(solset, SYM_List) && solset->data.function.arg_count >= 1) {
+        Expr* sol = solset->data.function.args[0];
+        Expr* Sexpr = gdiv(gadd(gmul(expr_copy(A), expr_copy(t)), expr_copy(B)),
+                           gadd(gmul(expr_copy(C), expr_copy(t)), mk_int(1)));
+        S = canonic(eval_take(internal_replace_all(
+            (Expr*[]){ Sexpr, expr_copy(sol) }, 2)));
+    }
+    if (solset) expr_free(solset);
+    expr_free(A); expr_free(B); expr_free(C);
+    return S;
+}
+
+/* P_k projection under z -> i z: (H + i^-k H(iz) + i^-2k H(-z) + i^-3k H(-iz))/4.
+ * Borrows H, z; returns owned Simplify+canonic.  (Appendix EigenProjection4.) */
+static Expr* eigenproj4(Expr* H, Expr* z, int k) {
+    Expr* I = mk_sym("I");
+    Expr* Hiz  = subst_eval(expr_copy(H), z, gmul(expr_copy(I), expr_copy(z)));
+    Expr* Hmz  = subst_eval(expr_copy(H), z, mk_neg(expr_copy(z)));
+    Expr* Hmiz = subst_eval(expr_copy(H), z,
+                            mk_neg(gmul(expr_copy(I), expr_copy(z))));
+    Expr* t0 = expr_copy(H);
+    Expr* t1 = gmul(mk_pow_int(expr_copy(I), -k), Hiz);
+    Expr* t2 = gmul(mk_pow_int(expr_copy(I), -2 * k), Hmz);
+    Expr* t3 = gmul(mk_pow_int(expr_copy(I), -3 * k), Hmiz);
+    expr_free(I);
+    Expr* sum = expr_new_function(mk_sym("Plus"),
+                    (Expr*[]){ t0, t1, t2, t3 }, 4);
+    return canonic(simplify_e(gdiv(sum, mk_int(4))));
+}
+
+/* Fourth-root Goursat (p = pnum/4, pnum in {1,3}): R quartic, harmonic roots. */
+static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
+    size_t nr = 0;
+    Expr** roots = poly_roots(R, t, &nr);
+    int dR = get_degree_poly(R, t);
+    if (dR != 4 || nr != 4) {
+        for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
+        if (roots) free(roots);
+        return NULL;
+    }
+
+    Expr* result = NULL;
+    Expr* z = NULL; Expr* x = NULL; Expr* uOut = NULL;
+    Expr* alpha = NULL; Expr* beta = NULL;
+    Expr* tz = NULL; Expr* H = NULL;
+    Expr* H0 = NULL; Expr* H1 = NULL; Expr* H2 = NULL; Expr* H3 = NULL;
+    Expr* cval = NULL; Expr* K = NULL; Expr* S = NULL;
+
+    /* Roots must be harmonic; otherwise this theory does not apply. */
+    Expr* ord[4];
+    if (!harmonic_order(roots, ord)) goto cleanup;
+
+    S = quartic_mobius(ord, t);
+    if (!S) goto cleanup;
+    if (!fixed_points(S, t, &alpha, &beta)) goto cleanup;
+    bool binf = (beta == NULL);
+
+    z = fresh_var(); x = fresh_var(); uOut = fresh_var();
+
+    tz = binf
+        ? gadd(expr_copy(alpha), expr_copy(z))
+        : canonic(gdiv(gsub(expr_copy(alpha), gmul(expr_copy(beta), expr_copy(z))),
+                       gsub(mk_int(1), expr_copy(z))));
+
+    /* R(t(z)) [ (1-z)^4 ]. */
+    Expr* Rsub = subst_eval(expr_copy(R), t, expr_copy(tz));
+    Expr* Rz = binf ? canonic(Rsub)
+                    : canonic(gmul(Rsub,
+                          mk_pow_int(gsub(mk_int(1), expr_copy(z)), 4)));
+    Expr* Rze = expand_e(Rz);
+    if (!Rze) goto cleanup;
+    cval = get_coeff(Rze, z, 4);
+    Expr* c0 = get_coeff(Rze, z, 0);
+    expr_free(Rze);
+    if (!cval || !c0 || is_zero(cval)) {
+        if (cval) { expr_free(cval); cval = NULL; }
+        if (c0) expr_free(c0);
+        goto cleanup;
+    }
+    K = canonic(gdiv(mk_neg(c0), expr_copy(cval)));
+
+    /* H_p = (alpha-beta)(1-z)^(4p-2)(F/.t->tz)/cval^p  [binf: drop the
+     * (alpha-beta) and (1-z) factors].  4p-2 = -1 (p=1/4) or +1 (p=3/4). */
+    {
+        Expr* Ftz = subst_eval(expr_copy(F), t, expr_copy(tz));
+        Expr* cpow = (pnum == 1) ? mk_pow_rat(expr_copy(cval), -1, 4)
+                                 : mk_pow_rat(expr_copy(cval), -3, 4);
+        Expr* base;
+        if (binf) {
+            base = gmul(Ftz, cpow);
+        } else {
+            int e = (pnum == 1) ? -1 : 1;   /* (1-z)^(4p-2) */
+            Expr* omz = mk_pow_int(gsub(mk_int(1), expr_copy(z)), e);
+            base = gmul(gmul(gsub(expr_copy(alpha), expr_copy(beta)), Ftz),
+                        gmul(cpow, omz));
+        }
+        H = canonic(base);
+    }
+    if (!H) goto cleanup;
+
+    H0 = eigenproj4(H, z, 0);
+    H1 = eigenproj4(H, z, 1);
+    H2 = eigenproj4(H, z, 2);
+    H3 = eigenproj4(H, z, 3);
+
+    /* Criterion: p=1/4 needs H1==0 and H2==0; p=3/4 needs H0==0 and H1==0. */
+    if (pnum == 1) {
+        if (!H1 || !H2 || !is_zero(H1) || !is_zero(H2)) goto cleanup;
+    } else {
+        if (!H0 || !H1 || !is_zero(H0) || !is_zero(H1)) goto cleanup;
+    }
+
+    Expr* q4_c = mk_pow_rat(expr_copy(cval), 1, 4);    /* cval^(1/4) */
+    Expr* q4_R = mk_pow_rat(expr_copy(R), 1, 4);        /* R^(1/4)    */
+    Expr* amb  = binf ? NULL : gsub(expr_copy(alpha), expr_copy(beta));
+
+    Expr* total = NULL;
+    if (pnum == 1) {
+        /* phi0 = ToFunctionOfFourth[H0]; phi3 = ToFunctionOfFourth[H3/z^3]. */
+        Expr* phi0 = to_function_of_power(H0, z, x, 4);
+        Expr* H3z3 = canonic(gdiv(expr_copy(H3), mk_pow_int(expr_copy(z), 3)));
+        Expr* phi3 = H3z3 ? to_function_of_power(H3z3, z, x, 4) : NULL;
+        if (H3z3) expr_free(H3z3);
+
+        /* J0 = (phi0 /. x->K/(1-w^4)) w^2/(1-w^4); J3 = (phi3 /. x->u^4+K) u^2. */
+        Expr* om4 = gsub(mk_int(1), mk_pow_int(expr_copy(uOut), 4));
+        Expr* J0 = phi0 ? canonic(gmul(
+            subst_eval(phi0, x, gdiv(expr_copy(K), expr_copy(om4))),
+            gdiv(mk_pow_int(expr_copy(uOut), 2), expr_copy(om4)))) : NULL;
+        expr_free(om4);
+        Expr* J3 = NULL;
+        if (phi3) {
+            Expr* u4K = gadd(mk_pow_int(expr_copy(uOut), 4), expr_copy(K));
+            J3 = canonic(gmul(subst_eval(phi3, x, u4K),
+                              mk_pow_int(expr_copy(uOut), 2)));
+        }
+
+        Expr* J0back = binf
+            ? gdiv(expr_copy(q4_R), gmul(expr_copy(q4_c),
+                   gsub(expr_copy(t), expr_copy(alpha))))
+            : gdiv(gmul(expr_copy(q4_R), expr_copy(amb)),
+                   gmul(expr_copy(q4_c), gsub(expr_copy(t), expr_copy(alpha))));
+        Expr* J3back = binf
+            ? gdiv(expr_copy(q4_R), expr_copy(q4_c))
+            : gdiv(gmul(expr_copy(q4_R), expr_copy(amb)),
+                   gmul(expr_copy(q4_c), gsub(expr_copy(t), expr_copy(beta))));
+
+        Expr* p0 = integ_backsub(J0, uOut, J0back);
+        Expr* p3 = (p0 != NULL) ? integ_backsub(J3, uOut, J3back) : NULL;
+        if (J0) expr_free(J0);
+        if (J3) expr_free(J3);
+        expr_free(J0back); expr_free(J3back);
+        if (p0 && p3) total = gadd(p0, p3);
+        else { if (p0) expr_free(p0); if (p3) expr_free(p3); }
+    } else {
+        /* phi2 = ToFunctionOfFourth[H2/z^2]; phi3 = ToFunctionOfFourth[H3/z^3]. */
+        Expr* H2z2 = canonic(gdiv(expr_copy(H2), mk_pow_int(expr_copy(z), 2)));
+        Expr* phi2 = H2z2 ? to_function_of_power(H2z2, z, x, 4) : NULL;
+        if (H2z2) expr_free(H2z2);
+        Expr* H3z3 = canonic(gdiv(expr_copy(H3), mk_pow_int(expr_copy(z), 3)));
+        Expr* phi3 = H3z3 ? to_function_of_power(H3z3, z, x, 4) : NULL;
+        if (H3z3) expr_free(H3z3);
+
+        /* J2 = -(phi2 /. x->K s^4/(s^4-1)) s^2/(s^4-1); J3 = phi3 /. x->v^4+K. */
+        Expr* s4m1 = gsub(mk_pow_int(expr_copy(uOut), 4), mk_int(1));
+        Expr* J2 = phi2 ? canonic(mk_neg(gmul(
+            subst_eval(phi2, x, gdiv(gmul(expr_copy(K), mk_pow_int(expr_copy(uOut), 4)),
+                                     expr_copy(s4m1))),
+            gdiv(mk_pow_int(expr_copy(uOut), 2), expr_copy(s4m1))))) : NULL;
+        expr_free(s4m1);
+        Expr* J3 = NULL;
+        if (phi3) {
+            Expr* v4K = gadd(mk_pow_int(expr_copy(uOut), 4), expr_copy(K));
+            J3 = canonic(subst_eval(phi3, x, v4K));
+        }
+
+        Expr* J2back = binf
+            ? gdiv(gmul(expr_copy(q4_c), gsub(expr_copy(t), expr_copy(alpha))),
+                   expr_copy(q4_R))
+            : gdiv(gmul(expr_copy(q4_c), gsub(expr_copy(t), expr_copy(alpha))),
+                   gmul(expr_copy(q4_R), expr_copy(amb)));
+        Expr* J3back = binf
+            ? gdiv(expr_copy(q4_R), expr_copy(q4_c))
+            : gdiv(gmul(expr_copy(q4_R), expr_copy(amb)),
+                   gmul(expr_copy(q4_c), gsub(expr_copy(t), expr_copy(beta))));
+
+        Expr* p2 = integ_backsub(J2, uOut, J2back);
+        Expr* p3 = (p2 != NULL) ? integ_backsub(J3, uOut, J3back) : NULL;
+        if (J2) expr_free(J2);
+        if (J3) expr_free(J3);
+        expr_free(J2back); expr_free(J3back);
+        if (p2 && p3) total = gadd(p2, p3);
+        else { if (p2) expr_free(p2); if (p3) expr_free(p3); }
+    }
+
+    expr_free(q4_c); expr_free(q4_R); if (amb) expr_free(amb);
+    if (total) result = eval_take(total);
+
+cleanup:
+    if (S) expr_free(S);
+    if (z) expr_free(z); if (x) expr_free(x); if (uOut) expr_free(uOut);
+    if (alpha) expr_free(alpha); if (beta) expr_free(beta);
+    if (tz) expr_free(tz); if (H) expr_free(H);
+    if (H0) expr_free(H0); if (H1) expr_free(H1);
+    if (H2) expr_free(H2); if (H3) expr_free(H3);
+    if (cval) expr_free(cval); if (K) expr_free(K);
+    for (size_t i = 0; i < nr; i++) expr_free(roots[i]);
+    if (roots) free(roots);
+    return result;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Recognition: f = F(t) * R(t)^q,  q in {-1/2,-1/3,-2/3,-1/4,-3/4}       */
+/* ---------------------------------------------------------------------- */
+
+/* On success returns true with owned *F (rational cofactor) and *R (polynomial
+ * radicand), and the radical order p = pnum/pden (one of 1/2,1/3,2/3,1/4,3/4).
+ * On false nothing is allocated.  Borrows f, x. */
+static bool recognise(Expr* f, Expr* x, Expr** F, Expr** R,
+                      int* pnum, int* pden) {
+    Expr** factors; size_t nfac;
+    if (head_is(f, SYM_Times)) {
+        factors = f->data.function.args;
+        nfac    = f->data.function.arg_count;
+    } else {
+        factors = &f;
+        nfac    = 1;
+    }
+
+    Expr* cof = mk_int(1);
+    Expr* rad = NULL;
+    int pn = 0, pd = 0;
+
+    for (size_t i = 0; i < nfac; i++) {
+        Expr* g = factors[i];
+        if (head_is(g, SYM_Power) && g->data.function.arg_count == 2 &&
+            !expr_free_of(g->data.function.args[0], x)) {
+            Expr* base = g->data.function.args[0];
+            int64_t qn, qd;
+            if (is_rational(g->data.function.args[1], &qn, &qd)) {
+                int tpn = 0, tpd = 0;
+                if (qn == -1 && qd == 2) { tpn = 1; tpd = 2; }
+                else if (qn == -1 && qd == 3) { tpn = 1; tpd = 3; }
+                else if (qn == -2 && qd == 3) { tpn = 2; tpd = 3; }
+                else if (qn == -1 && qd == 4) { tpn = 1; tpd = 4; }
+                else if (qn == -3 && qd == 4) { tpn = 3; tpd = 4; }
+                if (tpd != 0) {
+                    if (rad) { goto fail; }      /* only one radical allowed */
+                    rad = expr_copy(base);
+                    pn = tpn; pd = tpd;
+                    continue;
+                }
+            }
+        }
+        /* Everything else folds into the cofactor (validated rational below). */
+        cof = mk_fn2("Times", cof, expr_copy(g));
+    }
+
+    if (!rad) goto fail;
+
+    /* Radicand must be a polynomial in x. */
+    Expr* Rexp = expand_e(expr_copy(rad));
+    Expr* vars[1] = { x };
+    if (!Rexp || !is_polynomial(Rexp, vars, 1)) { if (Rexp) expr_free(Rexp); goto fail; }
+
+    /* Cofactor must be a rational function of x. */
+    Expr* cc = canonic(expr_copy(cof));
+    Expr* cnum = cc ? expand_e(numer_of(cc)) : NULL;
+    Expr* cden = cc ? expand_e(denom_of(cc)) : NULL;
+    bool crat = cnum && cden && is_polynomial(cnum, vars, 1)
+                            && is_polynomial(cden, vars, 1);
+    if (cnum) expr_free(cnum);
+    if (cden) expr_free(cden);
+    if (!crat) { if (cc) expr_free(cc); expr_free(Rexp); goto fail; }
+
+    *F = cc ? cc : cof;
+    if (cc) expr_free(cof);
+    *R = Rexp;
+    expr_free(rad);
+    *pnum = pn; *pden = pd;
+    return true;
+
+fail:
+    expr_free(cof);
+    if (rad) expr_free(rad);
+    return false;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Core driver                                                            */
+/* ---------------------------------------------------------------------- */
+
+static Expr* gs_core(Expr* f, Expr* x) {
+    if (x->type != EXPR_SYMBOL)   return NULL;
+    if (expr_free_of(f, x))       return NULL;
+    if (gs_depth >= GS_MAX_DEPTH) return NULL;
+
+    Expr* F = NULL; Expr* R = NULL;
+    int pnum = 0, pden = 0;
+    if (!recognise(f, x, &F, &R, &pnum, &pden)) return NULL;
+
+    Expr* result = NULL;
+    if (pden == 2) {
+        result = goursat_v4(F, R, x);
+    } else if (pden == 3) {
+        result = goursat_cubic(F, R, x, pnum);
+    } else if (pden == 4) {
+        result = goursat_quartic(F, R, x, pnum);
+    }
+
+    expr_free(F);
+    expr_free(R);
+
+    /* Safety guard (differentiate-back).  The eigenspace elementarity criterion
+     * relies on PossibleZeroQ, which can misfire on deeply nested radical roots
+     * (e.g. an irreducible quartic solved via Ferrari) -- catastrophic
+     * cancellation can numericalise a genuinely nonzero projection to ~0, so the
+     * criterion wrongly passes and an incorrect antiderivative (often the
+     * degenerate 0) is emitted.  Verify D[result, x] == f before returning; the
+     * check evaluates against the clean integrand f, not the nested radicals, so
+     * it reliably rejects such cases.  On failure, decline so the cascade
+     * continues.  (The clean factorable/biquadratic radicands -- every canonical
+     * pseudo-elliptic example -- pass this trivially.) */
+    if (result) {
+        Expr* d = eval_take(mk_fn2("D", expr_copy(result), expr_copy(x)));
+        Expr* diff = d ? gsub(d, expr_copy(f)) : NULL;
+        bool ok = diff && is_zero(diff);
+        if (diff) expr_free(diff);
+        if (!ok) { expr_free(result); result = NULL; }
+    }
+    return result;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Public entry points                                                    */
+/* ---------------------------------------------------------------------- */
+
+Expr* integrate_goursat_try(Expr* f, Expr* x) {
+    return gs_core(f, x);
+}
+
+Expr* builtin_integrate_goursat(Expr* res) {
+    if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count != 2) return NULL;
+    return gs_core(res->data.function.args[0], res->data.function.args[1]);
+}
+
+void integrate_goursat_init(void) {
+    symtab_add_builtin("Integrate`GoursatAlgebraic", builtin_integrate_goursat);
+    symtab_get_def("Integrate`GoursatAlgebraic")->attributes |=
+        ATTR_PROTECTED | ATTR_READPROTECTED;
+    symtab_set_docstring("Integrate`GoursatAlgebraic",
+        "Integrate`GoursatAlgebraic[f, x] integrates pseudo-elliptic integrands\n"
+        "F(x)/R(x)^p (F rational, R a polynomial, p in {1/2,1/3,2/3,1/4,3/4}) by\n"
+        "Goursat's algorithm and its cube-/fourth-root generalisations: a Mobius\n"
+        "automorphism cycling the roots of R splits the integrand into\n"
+        "eigencomponents that descend to genus-0 curves when the elementarity\n"
+        "criterion holds.  Strict: returns unevaluated when f is not of this form,\n"
+        "the integral is non-elementary, or the roots are not solvable in radicals.");
+}

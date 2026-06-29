@@ -23,6 +23,7 @@
 #include "integrate_quadrad.h"
 #include "integrate_linratiorad.h"
 #include "integrate_chebychev.h"
+#include "integrate_goursat.h"
 #include "integrate_jeffrey.h"
 #include "intrat.h"
 #include "intrischnorman.h"
@@ -204,6 +205,16 @@ static Expr* try_weierstrass(Expr* f, Expr* x) {
     return integrate_jeffrey_try(f, x);
 }
 
+/* Stage 1e3: Goursat's pseudo-elliptic algorithm and its cube-/fourth-root
+ * generalisations.  Recognises F(x)/R(x)^p (p in {1/2,1/3,2/3,1/4,3/4}); when
+ * a Mobius automorphism of the roots of R makes the integrand pseudo-elliptic,
+ * descends to genus-0 curves and integrates in closed form.  Deterministic and
+ * correct by construction, so it runs ahead of the Eliminate/Solve search and
+ * Risch-Norman.  Non-elementary (obstructed) integrands return NULL. */
+static Expr* try_goursat(Expr* f, Expr* x) {
+    return integrate_goursat_try(f, x);
+}
+
 /* Stage 2: Risch-Norman heuristic (Bronstein pmint). */
 static Expr* try_risch(Expr* f, Expr* x) {
     Expr* result = call_stage("Integrate`RischNorman", f, x);
@@ -292,6 +303,7 @@ typedef enum {
     METHOD_QUADRATIC_RADICALS,
     METHOD_LINEAR_RATIO_RADICALS,
     METHOD_CHEBYCHEV,
+    METHOD_GOURSAT,
     METHOD_WEIERSTRASS,
     METHOD_RISCH,
     METHOD_CRCTABLE,
@@ -308,6 +320,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "QuadraticRadicals") == 0) return METHOD_QUADRATIC_RADICALS;
     if (strcmp(s, "LinearRatioRadicals") == 0) return METHOD_LINEAR_RATIO_RADICALS;
     if (strcmp(s, "ChebychevAlgebraic") == 0) return METHOD_CHEBYCHEV;
+    if (strcmp(s, "GoursatAlgebraic") == 0) return METHOD_GOURSAT;
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(s, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
@@ -425,6 +438,7 @@ Expr* builtin_integrate(Expr* res) {
                     "\"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", "
                     "\"LinearRadicals\", \"QuadraticRadicals\", "
                     "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
+                    "\"GoursatAlgebraic\", "
                     "\"Weierstrass\", \"RischNorman\", "
                     "\"CRCTable\".\n");
                 last_warned_hash = h;
@@ -464,6 +478,11 @@ Expr* builtin_integrate(Expr* res) {
              * rationalising substitution that closes (correct by construction),
              * so it runs ahead of the Eliminate/Solve search and Risch-Norman. */
             if (!result) result = try_chebychev(effective_f, x);
+            /* Goursat pseudo-elliptic (and cube-/fourth-root) reductions:
+             * deterministic, correct-by-construction descents to genus-0
+             * curves, so they run ahead of the Eliminate/Solve search and
+             * Risch-Norman. */
+            if (!result) result = try_goursat(effective_f, x);
             /* Weierstrass before derivative-divides: it is a domain-specific,
              * deterministic algorithm for rational trig/hyperbolic integrands
              * that is guaranteed to close (and verified by construction), so it
@@ -497,6 +516,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_CHEBYCHEV:
             result = try_chebychev(effective_f, x);
+            break;
+        case METHOD_GOURSAT:
+            result = try_goursat(effective_f, x);
             break;
         case METHOD_WEIERSTRASS:
             result = integrate_jeffrey_full(effective_f, x);
@@ -553,6 +575,7 @@ void integrate_init(void) {
         "  \"QuadraticRadicals\"  — Integrate`QuadraticRadicals (Euler substitution for Sqrt[a x^2 + b x + c])\n"
         "  \"LinearRatioRadicals\" — Integrate`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d))\n"
         "  \"ChebychevAlgebraic\" — Integrate`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem)\n"
+        "  \"GoursatAlgebraic\"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)\n"
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
@@ -585,6 +608,9 @@ void integrate_init(void) {
 
     /* Chebychev binomial differential: Integrate`ChebychevAlgebraic. */
     integrate_chebychev_init();
+
+    /* Goursat pseudo-elliptic / cube-/fourth-root: Integrate`GoursatAlgebraic. */
+    integrate_goursat_init();
 
     /* Continuous Weierstrass substitution (Jeffrey & Rich 1994):
      * Integrate`Weierstrass. */
