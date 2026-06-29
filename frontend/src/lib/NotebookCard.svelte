@@ -517,7 +517,7 @@
         class="tb-btn tb-back"
         title="Back to canvas (pinch out)"
         on:click|stopPropagation={() => setFocused(null)}
-      >← Canvas</button>
+      >⤡</button>
     {/if}
 
     {#if renaming}
@@ -841,13 +841,13 @@
   .tb-run-all:hover { background: rgba(166,227,161,0.22) !important; }
   .tb-close:hover { color: #f38ba8; }
   .tb-focus:hover { color: var(--accent, #89b4fa); }
+  /* ⤡ contract icon — mirrors ⤢ expand icon */
   .tb-back {
-    font-size: 0.75rem;
-    padding: 2px 8px;
+    font-size: 0.9rem;
+    padding: 2px 5px;
     color: var(--accent, #89b4fa);
-    border: 1px solid rgba(137,180,250,0.2);
-    border-radius: 5px;
-    margin-right: 4px;
+    border: none;
+    margin-right: 2px;
   }
   .tb-back:hover { background: rgba(137,180,250,0.12) !important; border-color: var(--accent, #89b4fa); }
 

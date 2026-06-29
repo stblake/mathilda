@@ -177,19 +177,19 @@
 
   /* ---- Light mode (html.light class applied when darkMode = false) ---- */
   :global(html.light) {
-    --bg:          #1a1b2e;
-    --surface:     #f0f0f5;
-    --cell-bg:     #f0f0f5;
-    --border:      rgba(0,0,0,0.12);
+    --bg:          #e8e9f0;  /* lighter canvas — less contrast with white cards */
+    --surface:     #f8f8fc;
+    --cell-bg:     #f8f8fc;
+    --border:      rgba(0,0,0,0.06);  /* much softer cell dividers */
     --text:        #1c1c2e;
-    --text-muted:  #555577;
+    --text-muted:  #666688;
     --accent:      #3b82f6;
-    --accent-glow: rgba(59,130,246,0.18);
+    --accent-glow: rgba(59,130,246,0.15);
     --out-text:    #1c1c2e;
-    --gutter-bg:   #e4e5ee;
-    --gutter-hover:#d8d9e8;
-    --card-bg:     #f0f0f5;
-    --card-border: rgba(0,0,0,0.14);
+    --gutter-bg:   #eeeef5;
+    --gutter-hover:#e4e5f0;
+    --card-bg:     #f8f8fc;
+    --card-border: rgba(0,0,0,0.08);
   }
   :global(html.light body) { background: #1a1b2e; }
 
@@ -204,8 +204,8 @@
   /* ---- Corner overlay ---- */
   .corner-overlay {
     position: fixed;
-    top: 10px;
-    right: 14px;
+    top: 8px;
+    right: 12px;
     display: flex;
     align-items: center;
     gap: 0.5rem;
@@ -214,17 +214,19 @@
   }
 
   .dark-toggle {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.08);
-    color: #585b70;
+    background: rgba(128,128,128,0.1);
+    border: 1px solid rgba(128,128,128,0.2);
+    color: var(--text-muted, #585b70);
     cursor: pointer;
     font-size: 0.9rem;
-    padding: 3px 6px;
+    padding: 4px 8px;
     border-radius: 6px;
     line-height: 1;
     transition: color 0.1s, background 0.1s;
+    min-width: 32px;
+    text-align: center;
   }
-  .dark-toggle:hover { color: #cdd6f4; background: rgba(255,255,255,0.09); }
+  .dark-toggle:hover { color: var(--text, #cdd6f4); background: rgba(128,128,128,0.2); }
 
   /* ---- Kernel dead banner ---- */
   .kernel-banner {
