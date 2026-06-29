@@ -27,6 +27,25 @@
   /** Side-by-side input/output layout (toggled from the focused toolbar) */
   export let horizontal: boolean = false;
 
+  // Draggable split ratio for horizontal layout (percent of width for input)
+  let splitRatio = 50;
+  let splitContainer: HTMLElement;
+  let draggingSplit = false;
+
+  function onSplitPointerDown(e: PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    draggingSplit = true;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+  function onSplitPointerMove(e: PointerEvent) {
+    if (!draggingSplit || !splitContainer) return;
+    const rect = splitContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    splitRatio = Math.max(15, Math.min(85, (x / rect.width) * 100));
+  }
+  function onSplitPointerUp() { draggingSplit = false; }
+
   const dispatch = createEventDispatcher<{
     run:       { id: string };
     change:    { id: string; source: string };
@@ -240,13 +259,29 @@
   <!-- Cell content — clicking anywhere in the body focuses the editor -->
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div
     class="cell-content"
     class:cell-horizontal={horizontal && cell.type === 'code'}
+    bind:this={splitContainer}
     on:click|stopPropagation={() => { if (cell.type === 'code' && view) view.focus(); }}
+    on:pointermove={onSplitPointerMove}
+    on:pointerup={onSplitPointerUp}
+    on:pointercancel={onSplitPointerUp}
   >
     {#if cell.type === 'code'}
-      <div class="input-pane" bind:this={editorContainer}></div>
+      <div
+        class="input-pane"
+        bind:this={editorContainer}
+        style={horizontal ? `flex: 0 0 ${splitRatio}%; max-width: ${splitRatio}%` : ''}
+      ></div>
+      {#if horizontal && cell.output.length > 0}
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div
+          class="split-handle"
+          on:pointerdown={onSplitPointerDown}
+        ></div>
+      {/if}
       {#if cell.output.length > 0}
         <div class="output-pane">
           <Output items={cell.output} />
@@ -410,8 +445,22 @@
     flex-direction: row;
     align-items: flex-start;
   }
-  .input-pane  { flex: 1; min-width: 0; }
+  .input-pane  { flex: 1; min-width: 0; overflow: hidden; }
   .output-pane { flex: 1; min-width: 0; border-left: 1px solid var(--border, rgba(255,255,255,0.06)); }
+
+  /* Draggable divider between input and output panes */
+  .split-handle {
+    flex: 0 0 5px;
+    width: 5px;
+    cursor: col-resize;
+    background: var(--border, rgba(255,255,255,0.06));
+    transition: background 0.1s;
+    position: relative;
+    z-index: 1;
+  }
+  .split-handle:hover, .split-handle:active {
+    background: var(--accent, #89b4fa);
+  }
 
   /* CodeMirror text colour — inherits from CSS var so light/dark both work */
   :global(.cm-editor .cm-content) { color: var(--text, #cdd6f4); caret-color: #89b4fa; }
