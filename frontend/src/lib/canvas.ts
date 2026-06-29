@@ -33,55 +33,30 @@ function makeCard(title: string, x: number, y: number): CanvasNotebook {
   };
 }
 
+// Single notebook to start — user can add more via right-click or double-click
+const _startNb = makeCard('Notebook 1', 60, 60);
+
 export const canvasState = writable({
-  notebooks: [
-    makeCard('Calculus',     40,  40),
-    makeCard('Number Theory',730, 40),
-    makeCard('Plots',        40, 520),
-  ] as CanvasNotebook[],
+  notebooks: [_startNb] as CanvasNotebook[],
   panX: 0,
   panY: 0,
-  zoom:  0.85,
+  zoom:  1.0,
   focusedId: null as string | null,
 });
 
-/** Populate the startup notebooks with cells. Call from onMount — not at module init time. */
+/** Pre-fill the starter notebook with a few example cells. Call from onMount. */
 export function loadStartupContent() {
-  canvasState.update(s => {
-    const [nb1, nb2, nb3] = s.notebooks;
-    if (!nb1 || !nb2 || !nb3) return s;
-
-    nb1.store.load([
-      { cells: [{ type: 'section', source: 'Derivatives'  }] },
-      { cells: [{ type: 'code',    source: 'D[Sin[x]^2, x]' }] },
-      { cells: [{ type: 'code',    source: 'D[x^x, x]' }] },
-      { cells: [{ type: 'section', source: 'Integration'  }] },
-      { cells: [{ type: 'code',    source: 'Integrate[x^2, {x, 0, 1}]' }] },
-      { cells: [{ type: 'code',    source: 'Integrate[Sin[x], {x, 0, Pi}]' }] },
-      { cells: [{ type: 'code',    source: 'Series[Exp[x], {x, 0, 5}]' }] },
-    ]);
-
-    nb2.width = 580;
-    nb2.store.load([
-      { cells: [{ type: 'section', source: 'Primes & Factoring' }] },
-      { cells: [{ type: 'code',    source: 'FactorInteger[2^32 - 1]' }] },
-      { cells: [{ type: 'code',    source: 'Select[Range[50], PrimeQ]' }] },
-      { cells: [{ type: 'code',    source: 'GCD[144, 89]' }] },
-      { cells: [{ type: 'section', source: 'Digit Functions' }] },
-      { cells: [{ type: 'code',    source: 'DigitSum[123456789]' }] },
-      { cells: [{ type: 'code',    source: 'Table[DigitSum[n!], {n, 1, 10}]' }] },
-    ]);
-
-    nb3.width = 700;
-    nb3.store.load([
-      { cells: [{ type: 'section', source: 'Function Plots' }] },
-      { cells: [{ type: 'code',    source: 'Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}]' }] },
-      { cells: [{ type: 'code',    source: 'Plot[Sin[x] + Sin[5 x], {x, 0, 4 Pi}, Filling -> Axis]' }] },
-      { cells: [{ type: 'code',    source: 'Plot[x^2 Exp[-x], {x, 0, 8}]' }] },
-    ]);
-
-    return s;
-  });
+  // Access notebooks directly from the store
+  const s = get(canvasState);
+  const nb = s.notebooks[0];
+  if (!nb) return;
+  nb.store.load([
+    { cells: [{ type: 'section', source: 'Welcome to Mathilda' }] },
+    { cells: [{ type: 'text',    source: 'Press Shift+Enter to evaluate cells. Right-click canvas to add notebooks.' }] },
+    { cells: [{ type: 'code',    source: '1 + 1' }] },
+    { cells: [{ type: 'code',    source: 'Factor[x^4 - 1]' }] },
+    { cells: [{ type: 'code',    source: 'Plot[Sin[x], {x, 0, 2 Pi}]' }] },
+  ]);
 }
 
 export function addNotebook(title?: string) {
