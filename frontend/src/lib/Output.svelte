@@ -31,18 +31,17 @@
   // Heuristic: expressions that are long lists of numbers/symbols don't
   // benefit from KaTeX (no fractions/superscripts) and KaTeX can't wrap them.
   // Render as code with word-break so they don't overflow the card.
-  function isLongList(text: string): boolean {
-    // More than ~120 chars AND high comma density → it's a list output
-    if (text.length < 120) return false;
+  // Heuristic: if output has >4 commas or is long, it's a list/sequence.
+  // KaTeX can't wrap math spans so we use plain code with word-break.
+  function isListOutput(text: string): boolean {
     const commas = (text.match(/,/g) ?? []).length;
-    return commas > 8 || text.length > 400;
+    return commas > 4 || text.length > 200;
   }
 
-  function renderKatex(text: string): string {
-    if (isLongList(text)) {
-      // Render as plain code that wraps; insert zero-width space after each
-      // comma so the browser can break there without destroying readability.
-      const wrapped = text.replace(/,\s*/g, ',​ ');
+  function renderOutput(text: string): string {
+    if (isListOutput(text)) {
+      // Break at comma+space so numbers wrap naturally within the card width
+      const wrapped = text.replace(/,\s+/g, ', ');
       return `<code class="out-code-wrap">${wrapped}</code>`;
     }
     try {
@@ -90,7 +89,7 @@
     <div class="out-item" class:expanded={expanded[idx]}>
       {#if item.kind === 'expr'}
         <div class="out-collapsible" use:measureOverflow={idx}>
-          <div class="out-expr">{@html renderKatex(item.text)}</div>
+          <div class="out-expr">{@html renderOutput(item.text)}</div>
         </div>
       {:else if item.kind === 'error'}
         <div class="out-error">{item.text}</div>
@@ -104,11 +103,11 @@
         <div class="out-html">{@html item.html}</div>
       {/if}
 
-      <!-- Toggle only when content actually overflows the cap -->
-      {#if overflows[idx]}
+      <!-- Always show toggle for collapsible output so user can expand/collapse -->
+      {#if item.kind !== 'plot' && item.kind !== 'error'}
         <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-        <div class="out-toggle" on:click={() => expanded[idx] = !expanded[idx]}>
-          {expanded[idx] ? '▲ collapse' : '▼ show more'}
+        <div class="out-toggle" class:hidden={!overflows[idx] && !expanded[idx]} on:click={() => expanded[idx] = !expanded[idx]}>
+          {expanded[idx] ? '▲ collapse' : '▼ show all'}
         </div>
       {/if}
     </div>
@@ -150,7 +149,6 @@
 
   /* Show-more button: hidden by default, shown only when content overflows */
   .out-toggle {
-    display: none;
     font-size: 0.68rem;
     color: var(--accent, #89b4fa);
     cursor: pointer;
@@ -160,8 +158,8 @@
     text-align: left;
   }
   .out-toggle:hover { opacity: 0.7; }
-
-  /* Toggle visibility is controlled by JS (overflows[] reactive dict) */
+  /* Hide when content fits and not yet expanded */
+  .out-toggle.hidden { display: none; }
 
   /* Expression output — overflow handled by parent .out-collapsible */
   .out-expr {
@@ -174,13 +172,13 @@
   /* Long list/sequence outputs rendered as wrapping code */
   :global(.out-code-wrap) {
     display: block;
-    font-family: inherit;
-    font-size: 1.05em;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.95em;
     color: var(--out-text, #cdd6f4);
-    white-space: pre-wrap;
+    white-space: normal;      /* allow wrap at spaces */
     word-break: break-word;
     overflow-wrap: break-word;
-    line-height: 1.5;
+    line-height: 1.7;
     padding: 0.15rem 0;
   }
 
