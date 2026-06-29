@@ -97,7 +97,7 @@
     <div class="out-item" class:expanded={expanded[idx]}>
       {#if item.kind === 'expr'}
         <div class="out-collapsible" use:measureOverflow={idx}>
-          <div class="out-expr">{@html renderOutput(item.text, (item as any).latex)}</div>
+          <div class="out-expr">{@html renderOutput(item.text, item.latex)}</div>
         </div>
       {:else if item.kind === 'error'}
         <div class="out-error">{item.text}</div>

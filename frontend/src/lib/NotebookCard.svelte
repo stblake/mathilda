@@ -376,7 +376,7 @@
 
   function msgToOutputItem(msg: OutputMessage): OutputItem | null {
     switch (msg.type) {
-      case 'expr':   return { kind: 'expr',   text: msg.payload };
+      case 'expr':   return { kind: 'expr', text: msg.payload, latex: (msg as any).latex };
       case 'error':  return { kind: 'error',  text: msg.message };
       case 'stream': return { kind: 'stream', text: (msg as any).text ?? '' };
       case 'plot':   return { kind: 'plot',   data: msg.payload };

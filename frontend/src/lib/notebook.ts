@@ -6,7 +6,7 @@ export type CellType = 'code' | 'text' | 'section' | 'subsection';
 export type CellStatus = 'idle' | 'running' | 'done' | 'error';
 
 export type OutputItem =
-  | { kind: 'expr';   text: string }
+  | { kind: 'expr';   text: string; latex?: string }  // latex = StandardForm LaTeX from kernel
   | { kind: 'error';  text: string }
   | { kind: 'stream'; text: string }
   | { kind: 'plot';   data: object }
