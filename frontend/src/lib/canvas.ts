@@ -33,52 +33,56 @@ function makeCard(title: string, x: number, y: number): CanvasNotebook {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Startup library — 3 notebooks pre-filled with example Mathilda code
-
-function makeStartupLibrary(): CanvasNotebook[] {
-  const nb1 = makeCard('Calculus', 40, 40);
-  nb1.store.load([
-    { cells: [{ type: 'section', source: 'Derivatives' }] },
-    { cells: [{ type: 'code',    source: 'D[Sin[x]^2, x]' }] },
-    { cells: [{ type: 'code',    source: 'D[x^x, x]' }] },
-    { cells: [{ type: 'section', source: 'Integration' }] },
-    { cells: [{ type: 'code',    source: 'Integrate[x^2, {x, 0, 1}]' }] },
-    { cells: [{ type: 'code',    source: 'Integrate[Sin[x], {x, 0, Pi}]' }] },
-    { cells: [{ type: 'code',    source: 'Series[Exp[x], {x, 0, 5}]' }] },
-  ]);
-
-  const nb2 = makeCard('Number Theory', 730, 40);
-  nb2.width = 580;
-  nb2.store.load([
-    { cells: [{ type: 'section', source: 'Primes & Factoring' }] },
-    { cells: [{ type: 'code',    source: 'FactorInteger[2^32 - 1]' }] },
-    { cells: [{ type: 'code',    source: 'Select[Range[50], PrimeQ]' }] },
-    { cells: [{ type: 'code',    source: 'GCD[144, 89]' }] },
-    { cells: [{ type: 'section', source: 'Digit Functions' }] },
-    { cells: [{ type: 'code',    source: 'DigitSum[123456789]' }] },
-    { cells: [{ type: 'code',    source: 'Table[DigitSum[n!], {n, 1, 10}]' }] },
-  ]);
-
-  const nb3 = makeCard('Plots', 40, 520);
-  nb3.width = 700;
-  nb3.store.load([
-    { cells: [{ type: 'section', source: 'Function Plots' }] },
-    { cells: [{ type: 'code',    source: 'Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}]' }] },
-    { cells: [{ type: 'code',    source: 'Plot[Sin[x] + Sin[5 x], {x, 0, 4 Pi}, Filling -> Axis]' }] },
-    { cells: [{ type: 'code',    source: 'Plot[x^2 Exp[-x], {x, 0, 8}]' }] },
-  ]);
-
-  return [nb1, nb2, nb3];
-}
-
 export const canvasState = writable({
-  notebooks: makeStartupLibrary() as CanvasNotebook[],
+  notebooks: [
+    makeCard('Calculus',     40,  40),
+    makeCard('Number Theory',730, 40),
+    makeCard('Plots',        40, 520),
+  ] as CanvasNotebook[],
   panX: 0,
   panY: 0,
   zoom:  0.85,
   focusedId: null as string | null,
 });
+
+/** Populate the startup notebooks with cells. Call from onMount — not at module init time. */
+export function loadStartupContent() {
+  canvasState.update(s => {
+    const [nb1, nb2, nb3] = s.notebooks;
+    if (!nb1 || !nb2 || !nb3) return s;
+
+    nb1.store.load([
+      { cells: [{ type: 'section', source: 'Derivatives'  }] },
+      { cells: [{ type: 'code',    source: 'D[Sin[x]^2, x]' }] },
+      { cells: [{ type: 'code',    source: 'D[x^x, x]' }] },
+      { cells: [{ type: 'section', source: 'Integration'  }] },
+      { cells: [{ type: 'code',    source: 'Integrate[x^2, {x, 0, 1}]' }] },
+      { cells: [{ type: 'code',    source: 'Integrate[Sin[x], {x, 0, Pi}]' }] },
+      { cells: [{ type: 'code',    source: 'Series[Exp[x], {x, 0, 5}]' }] },
+    ]);
+
+    nb2.width = 580;
+    nb2.store.load([
+      { cells: [{ type: 'section', source: 'Primes & Factoring' }] },
+      { cells: [{ type: 'code',    source: 'FactorInteger[2^32 - 1]' }] },
+      { cells: [{ type: 'code',    source: 'Select[Range[50], PrimeQ]' }] },
+      { cells: [{ type: 'code',    source: 'GCD[144, 89]' }] },
+      { cells: [{ type: 'section', source: 'Digit Functions' }] },
+      { cells: [{ type: 'code',    source: 'DigitSum[123456789]' }] },
+      { cells: [{ type: 'code',    source: 'Table[DigitSum[n!], {n, 1, 10}]' }] },
+    ]);
+
+    nb3.width = 700;
+    nb3.store.load([
+      { cells: [{ type: 'section', source: 'Function Plots' }] },
+      { cells: [{ type: 'code',    source: 'Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}]' }] },
+      { cells: [{ type: 'code',    source: 'Plot[Sin[x] + Sin[5 x], {x, 0, 4 Pi}, Filling -> Axis]' }] },
+      { cells: [{ type: 'code',    source: 'Plot[x^2 Exp[-x], {x, 0, 8}]' }] },
+    ]);
+
+    return s;
+  });
+}
 
 export function addNotebook(title?: string) {
   canvasState.update(s => {

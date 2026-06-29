@@ -17,6 +17,7 @@
     canvasState,
     addNotebook,
     setFocused,
+    loadStartupContent,
   } from './canvas';
 
   // ---------------------------------------------------------------------------
@@ -59,6 +60,8 @@
     // Seed display values immediately to avoid lerp-from-zero flash
     panX = targetPanX; panY = targetPanY; zoom = targetZoom;
     rafId = requestAnimationFrame(animate);
+    // Load startup notebook content now that we're in the browser context
+    loadStartupContent();
   });
 
   onDestroy(() => {
@@ -348,36 +351,4 @@
     min-height: 100vh;
   }
 
-  /* ---- Right-click context menu ---- */
-  .ctx-menu {
-    position: fixed;
-    z-index: 400;
-    background: rgba(18, 22, 38, 0.97);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.6), 0 1px 0 rgba(255,255,255,0.05) inset;
-    padding: 4px 0;
-    min-width: 200px;
-    backdrop-filter: blur(16px);
-  }
-  .ctx-item {
-    display: block;
-    width: 100%;
-    padding: 0.45rem 1rem;
-    font-size: 0.84rem;
-    color: #cdd6f4;
-    background: none;
-    border: none;
-    text-align: left;
-    cursor: pointer;
-    transition: background 0.1s;
-    user-select: none;
-    font-family: inherit;
-  }
-  .ctx-item:hover { background: rgba(137,180,250,0.12); }
-  .ctx-divider {
-    height: 1px;
-    background: rgba(255,255,255,0.07);
-    margin: 3px 0;
-  }
 </style>
