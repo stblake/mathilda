@@ -190,6 +190,8 @@ static uint32_t string_to_attribute(const char* name) {
     if (strcmp(name, "NumericFunction") == 0) return ATTR_NUMERICFUNCTION;
     if (strcmp(name, "Protected") == 0) return ATTR_PROTECTED;
     if (strcmp(name, "OneIdentity") == 0) return ATTR_ONEIDENTITY;
+    if (strcmp(name, "NHoldAll") == 0) return ATTR_NHOLDALL;
+    if (strcmp(name, "NHoldFirst") == 0) return ATTR_NHOLDFIRST;
     if (strcmp(name, "NHoldRest") == 0) return ATTR_NHOLDREST;
     if (strcmp(name, "Locked") == 0) return ATTR_LOCKED;
     if (strcmp(name, "ReadProtected") == 0) return ATTR_READPROTECTED;
@@ -336,7 +338,12 @@ Expr* builtin_attributes(Expr* res) {
     if (attrs & ATTR_NUMERICFUNCTION) count++;
     if (attrs & ATTR_PROTECTED) count++;
     if (attrs & ATTR_ONEIDENTITY) count++;
-    if (attrs & ATTR_NHOLDREST) count++;
+    if ((attrs & ATTR_NHOLDALL) == ATTR_NHOLDALL) {
+        count++;
+    } else {
+        if (attrs & ATTR_NHOLDFIRST) count++;
+        if (attrs & ATTR_NHOLDREST) count++;
+    }
     if (attrs & ATTR_LOCKED) count++;
     if (attrs & ATTR_READPROTECTED) count++;
     if (attrs & ATTR_TEMPORARY) count++;
@@ -357,7 +364,12 @@ Expr* builtin_attributes(Expr* res) {
     if (attrs & ATTR_LOCKED) attr_list[i++] = expr_new_symbol(SYM_Locked);
     if (attrs & ATTR_NUMERICFUNCTION) attr_list[i++] = expr_new_symbol(SYM_NumericFunction);
     if (attrs & ATTR_ONEIDENTITY) attr_list[i++] = expr_new_symbol(SYM_OneIdentity);
-    if (attrs & ATTR_NHOLDREST) attr_list[i++] = expr_new_symbol(SYM_NHoldRest);
+    if ((attrs & ATTR_NHOLDALL) == ATTR_NHOLDALL) {
+        attr_list[i++] = expr_new_symbol(SYM_NHoldAll);
+    } else {
+        if (attrs & ATTR_NHOLDFIRST) attr_list[i++] = expr_new_symbol(SYM_NHoldFirst);
+        if (attrs & ATTR_NHOLDREST) attr_list[i++] = expr_new_symbol(SYM_NHoldRest);
+    }
     if (attrs & ATTR_ORDERLESS) attr_list[i++] = expr_new_symbol(SYM_Orderless);
     if (attrs & ATTR_PROTECTED) attr_list[i++] = expr_new_symbol(SYM_Protected);
     if (attrs & ATTR_READPROTECTED) attr_list[i++] = expr_new_symbol(SYM_ReadProtected);

@@ -7,6 +7,7 @@
 #include "sym_names.h"
 #include "trig_canon.h"
 #include "internal.h"
+#include "series.h"
 #include <math.h>
 #include <complex.h>
 #include <stdio.h>
@@ -642,6 +643,14 @@ Expr* builtin_power(Expr* res) {
     if (exp->type == EXPR_INTEGER && exp->data.integer == 0) return expr_new_integer(1);
     if (exp->type == EXPR_INTEGER && exp->data.integer == 1) return expr_copy(base);
     if (base->type == EXPR_INTEGER && base->data.integer == 1) return expr_new_integer(1);
+
+    /* SeriesData arithmetic: a power series base raised to a power, or an
+     * ordinary base raised to a series exponent (e.g. 2^series). NULL leaves
+     * the Power symbolic. */
+    if (is_series_data(base) || is_series_data(exp)) {
+        Expr* r = series_power(base, exp);
+        if (r) return r;
+    }
 
     bool base_is_zero = false;
     if (base->type == EXPR_INTEGER && base->data.integer == 0) base_is_zero = true;

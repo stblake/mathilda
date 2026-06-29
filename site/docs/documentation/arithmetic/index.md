@@ -1,6 +1,6 @@
 # Arithmetic
 
-43 built-in function(s) in this category.
+44 built-in function(s) in this category.
 
 - [`Abs`](Abs.md) — Abs[z] gives the absolute value (modulus) of numeric z, Sqrt[Re[z]^2 + Im[z]^2] for complex z.  _(Stable)_
 - [`Accumulate`](Accumulate.md) — Accumulate[list]  _(Stable)_
@@ -12,6 +12,7 @@
 - [`Conjugate`](Conjugate.md) — Conjugate[z] gives the complex conjugate Re[z] - I Im[z] of numeric z; real and real-valued (Re/Im/Abs/Arg) arguments are returned unchanged.  _(Stable)_
 - [`Differences`](Differences.md) — Differences[list]  _(Stable)_
 - [`DigitCount`](DigitCount.md) — DigitCount[n] gives a list of the counts of digits 1, 2, ..., 9, 0 in the base-10 representation of n.  _(Stable)_
+- [`DigitSum`](DigitSum.md) — DigitSum[n] gives the sum of the decimal digits of the integer n.  _(Stable)_
 - [`Divide`](Divide.md) — x / y or Divide[x, y] represents x / y; rewritten by the evaluator to  _(Stable)_
 - [`Factorial`](Factorial.md) — n! or Factorial[n]  _(Stable)_
 - [`Factorial2`](Factorial2.md) — Factorial2[n] (also typeset n!!) gives the double factorial of n.  _(Stable)_

@@ -75,6 +75,7 @@ endif()
 include_directories(/usr/local/include)
 include_directories(../src/list)
 include_directories(../src/linalg)
+include_directories(../src/numbertheory)
 include_directories(../src/poly)
 include_directories(../src/simp)
 include_directories(../src/calculus)
@@ -126,7 +127,27 @@ set(COMMON_SRC
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
-    ../src/numbertheory.c
+    ../src/numbertheory/numbertheory.c
+    ../src/numbertheory/nt_util.c
+    ../src/numbertheory/nt_gaussian.c
+    ../src/numbertheory/gcd.c
+    ../src/numbertheory/lcm.c
+    ../src/numbertheory/extendedgcd.c
+    ../src/numbertheory/powermod.c
+    ../src/numbertheory/factorial.c
+    ../src/numbertheory/factorialpower.c
+    ../src/numbertheory/factorial2.c
+    ../src/numbertheory/binomial.c
+    ../src/numbertheory/primitiveroot.c
+    ../src/numbertheory/multiplicativeorder.c
+    ../src/numbertheory/divisible.c
+    ../src/numbertheory/coprimeq.c
+    ../src/numbertheory/divisors.c
+    ../src/numbertheory/divisorsigma.c
+    ../src/numbertheory/moebiusmu.c
+    ../src/numbertheory/jacobisymbol.c
+    ../src/numbertheory/prime.c
+    ../src/numbertheory/primecount.c
     ../src/partitions.c
     ../src/special_functions/gamma.c
     ../src/special_functions/beta.c
@@ -319,6 +340,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_linrad.c
     ../src/calculus/integrate_quadrad.c
     ../src/calculus/integrate_linratiorad.c
+    ../src/calculus/integrate_chebychev.c
     ../src/calculus/integrate_jeffrey.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
@@ -381,6 +403,7 @@ set(COMMON_SRC
     ../src/graphics/plot.c
     ../src/graphics/plot3d.c
     ../src/graphics/parametricplot.c
+    ../src/graphics/listplot.c
     ../src/graphics/show.c
 )
 
@@ -449,6 +472,18 @@ add_test(NAME coprimeq_tests COMMAND coprimeq_tests)
 add_executable(divisors_tests test_divisors.c ${COMMON_SRC})
 target_include_directories(divisors_tests PRIVATE ../src)
 add_test(NAME divisors_tests COMMAND divisors_tests)
+
+add_executable(divisorsigma_tests test_divisorsigma.c ${COMMON_SRC})
+target_include_directories(divisorsigma_tests PRIVATE ../src)
+add_test(NAME divisorsigma_tests COMMAND divisorsigma_tests)
+
+add_executable(moebiusmu_tests test_moebiusmu.c ${COMMON_SRC})
+target_include_directories(moebiusmu_tests PRIVATE ../src)
+add_test(NAME moebiusmu_tests COMMAND moebiusmu_tests)
+
+add_executable(prime_tests test_prime.c ${COMMON_SRC})
+target_include_directories(prime_tests PRIVATE ../src)
+add_test(NAME prime_tests COMMAND prime_tests)
 
 add_executable(iter_tests test_iter.c ${COMMON_SRC})
 target_link_libraries(iter_tests m)
@@ -1195,6 +1230,16 @@ else()
 endif()
 add_test(NAME digit_count_tests COMMAND digit_count_tests)
 
+add_executable(digit_sum_tests test_digit_sum.c ${COMMON_SRC})
+target_include_directories(digit_sum_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(digit_sum_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(digit_sum_tests build_ecm)
+else()
+    target_link_libraries(digit_sum_tests gmp m)
+endif()
+add_test(NAME digit_sum_tests COMMAND digit_sum_tests)
+
 add_executable(from_digits_tests test_from_digits.c ${COMMON_SRC})
 target_include_directories(from_digits_tests PRIVATE ../src)
 if(USE_ECM)
@@ -1224,6 +1269,16 @@ else()
     target_link_libraries(extended_gcd_tests gmp m)
 endif()
 add_test(NAME extended_gcd_tests COMMAND extended_gcd_tests)
+
+add_executable(jacobisymbol_tests test_jacobisymbol.c ${COMMON_SRC})
+target_include_directories(jacobisymbol_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(jacobisymbol_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(jacobisymbol_tests build_ecm)
+else()
+    target_link_libraries(jacobisymbol_tests gmp m)
+endif()
+add_test(NAME jacobisymbol_tests COMMAND jacobisymbol_tests)
 
 add_executable(integer_partitions_tests test_integer_partitions.c ${COMMON_SRC})
 target_include_directories(integer_partitions_tests PRIVATE ../src)
@@ -1480,6 +1535,15 @@ else()
     target_link_libraries(integrate_linratiorad_tests gmp m)
 endif()
 add_test(NAME integrate_linratiorad_tests COMMAND integrate_linratiorad_tests)
+
+add_executable(integrate_chebychev_tests test_integrate_chebychev.c ${COMMON_SRC})
+target_include_directories(integrate_chebychev_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_chebychev_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(integrate_chebychev_tests gmp m)
+endif()
+add_test(NAME integrate_chebychev_tests COMMAND integrate_chebychev_tests)
 
 add_executable(integrate_jeffrey_tests test_integrate_jeffrey.c ${COMMON_SRC})
 target_include_directories(integrate_jeffrey_tests PRIVATE ../src)

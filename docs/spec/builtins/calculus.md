@@ -125,13 +125,18 @@ Total derivative.
   `ComplexInfinity`, `EulerGamma`, `Catalan`, `GoldenRatio`,
   `Degree`) vanish. Unknown symbols `y` appear as `Dt[y]` factors,
   modelling implicit functional dependence.
-- `Dt[f, x]`, `Dt[f, {x, n}]`, `Dt[f, x, y, ...]` -- delegate to
-  `D[...]` for partial-derivative behaviour.
+- `Dt[f, x]`, `Dt[f, {x, n}]`, `Dt[f, x, y, ...]` -- *total* derivative
+  with respect to each variable. Unlike `D`, every symbol other than the
+  differentiation variable and the distinguished constants is an implicit
+  function of that variable, so it contributes a `Dt[s, x]` term rather
+  than vanishing. `Dt[x, x]` is `1`; a bare `Dt[s, x]` is its own normal
+  form and stays unevaluated.
 
 **Features**:
 - `Protected`, `ReadProtected`.
 - Shares the elementary-function derivative table with `D`; the
-  only dispatch difference is the base-case handling of symbols.
+  only dispatch difference is the base-case handling of symbols
+  (free symbols become `Dt[s, x]` factors instead of `0`).
 
 **Examples**:
 ```mathematica
@@ -141,11 +146,14 @@ Out[1]= 2 y Dt[y] + Cos[x] Dt[x]
 In[2]:= Dt[Pi + 3 + x y]
 Out[2]= x Dt[y] + y Dt[x]
 
-In[3]:= Dt[y^2, x]
-Out[3]= 0
+In[3]:= Dt[x^n, x]
+Out[3]= x^(-1 + n) (n + x Log[x] Dt[n, x])
 
-In[4]:= Dt[x^2, {x, 2}]
-Out[4]= 2
+In[4]:= Dt[a x + b, x]
+Out[4]= a + x Dt[a, x] + Dt[b, x]
+
+In[5]:= Dt[x^2, {x, 2}]
+Out[5]= 2
 ```
 
 ## Derivative
@@ -369,9 +377,9 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Nine-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
+- Ten-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
   `QuadraticRadicals` and `LinearRatioRadicals` added 2026-06-06; `Weierstrass`
-  added 2026-06-09):
+  added 2026-06-09; `ChebychevAlgebraic` added 2026-06-29):
   `Integrate[f, x]` (Method -> Automatic, default) tries each subroutine in
   order and returns the first non-`NULL` result:
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
@@ -387,16 +395,24 @@ monotonically down.
   5. `Integrate\`LinearRatioRadicals[f, x]` — rational functions of `x` and
      radicals `((a x + b)/(c x + d))^(m/n)` of one shared linear-fractional
      argument; rationalised by `u = ((a x + b)/(c x + d))^(1/n)`.
-  6. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
+  6. `Integrate\`ChebychevAlgebraic[f, x]` — Chebychev binomial differentials
+     `x^p (a x^r + b)^q` (`p, q, r` rational, `a, b` free of `x`).  Elementary
+     iff one of `q`, `(p+1)/r`, `q+(p+1)/r` is an integer (Chebychev's theorem),
+     with substitutions `x = u^N` (Type I), `u^s = a x^r + b` (Type II), or
+     `u = x^r` then `t^s = (a u + b)/u` (Type III) that rationalise `f`.
+     Recognition is a single structural scan, so it runs ahead of
+     `DerivativeDivides`'s Eliminate/Solve search.  Non-elementary binomials
+     return `NULL` (the cascade falls through to later methods).
+  7. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
      `Sin/Cos/Tan/Cot/Sec/Csc[x]` (or hyperbolic `Sinh/Cosh/.../Csch[x]`) with a
      kernel in a denominator; continuous `Tan[x/2]` / `Tanh[x/2]` substitution
      (Jeffrey & Rich 1994).  Runs ahead of `DerivativeDivides`: it is
      domain-specific, deterministic, correct by construction, and yields a real,
      continuous antiderivative rather than a complex-logarithm form.
-  7. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
+  8. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  8. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  9. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  9. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  10. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
@@ -404,10 +420,17 @@ monotonically down.
   - `"Automatic"` — default cascade above.
   - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.
   - `"DerivativeDivides"` — `Integrate\`DerivativeDivides[f, x]` (direct **and**
-    the more thorough Eliminate/Solve branch search).
+    the more thorough Eliminate/Solve branch search).  The list form
+    `Method -> {"DerivativeDivides", "Substitution" -> u}` **pins** the kernel
+    `u(x)`: instead of collecting and trialing every `x`-dependent subexpression,
+    only that one substitution is attempted (still both strategies, still strict
+    — no fallback to other kernels if `u` does not close the integral). E.g.
+    `Integrate[Sqrt[x]/(1 + Sqrt[x]), x, Method -> {"DerivativeDivides", "Substitution" -> Sqrt[x]}]`.
   - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
   - `"QuadraticRadicals"` — `Integrate\`QuadraticRadicals[f, x]`.
   - `"LinearRatioRadicals"` — `Integrate\`LinearRatioRadicals[f, x]`.
+  - `"ChebychevAlgebraic"` — `Integrate\`ChebychevAlgebraic[f, x]` (Chebychev
+    binomial differential `x^p (a x^r + b)^q`).
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).

@@ -28,6 +28,12 @@ static bool dive_fn(double x, void* ctx, double* y) {
     return true;
 }
 
+static bool log_fn(double x, void* ctx, double* y) {
+    (void)ctx;
+    if (x <= 0.0) return false;
+    *y = log(x);
+    return true;
+}
 static size_t count_in(const PlotPoint* pts, size_t n, double lo, double hi) {
     size_t c = 0;
     for (size_t i = 0; i < n; i++) if (pts[i].x >= lo && pts[i].x <= hi) c++;
@@ -110,6 +116,38 @@ void test_sampling_clip_band_focuses_on_screen(void) {
     plot_points_free(p1);
 }
 
+void test_sampling_chord_densifies_steep_region(void) {
+    /* Log[x] dives toward -inf near 0: steep but locally straight, so the
+     * vertical-deviation test alone judges its chords flat and the points (and
+     * Mesh dots) thin out abruptly. The chord-length cap keeps them dense. This
+     * mirrors Plot[Log[x], {x,0,3}, PlotRange -> {-4,3}]. */
+    size_t n;
+    PlotPoint* pts = plot_sample_adaptive(log_fn, NULL, 0.0, 3.0, 50, 6, -1, -4.0, 3.0, &n);
+    ASSERT(pts != NULL);
+    /* The vertical-only sampler produced 21 points in [0, 0.2]; the chord cap
+     * must do meaningfully better. */
+    size_t steep = count_in(pts, n, 0.0, 0.2);
+    ASSERT_MSG(steep >= 28, "expected the steep [0,0.2] band densified, got %zu", steep);
+    plot_points_free(pts);
+}
+
+void test_sampling_chord_density_tracks_steepness(void) {
+    /* The chord cap makes sample density follow the curve's on-screen steepness:
+     * Log[x] is near-vertical close to 0 and gentle out near x=3, so the steep
+     * band must be sampled far more densely (points per unit x) than the gentle
+     * band. This invariant holds for any MAX_CHORD_FRAC, unlike a fixed point
+     * count. Mirrors Plot[Log[x], {x,0,3}, PlotRange -> {-4,3}]. */
+    size_t n;
+    PlotPoint* pts = plot_sample_adaptive(log_fn, NULL, 0.0, 3.0, 50, 6, -1, -4.0, 3.0, &n);
+    ASSERT(pts != NULL);
+    double steep_density  = count_in(pts, n, 0.0, 0.3) / 0.3;  /* per unit x */
+    double gentle_density = count_in(pts, n, 2.0, 3.0) / 1.0;
+    ASSERT_MSG(steep_density > 2.0 * gentle_density,
+               "expected the steep band sampled much denser than the gentle band "
+               "(steep=%.1f/unit, gentle=%.1f/unit)", steep_density, gentle_density);
+    plot_points_free(pts);
+}
+
 /* ---- plot_robust_yrange: spike-resistant vertical auto-range ---- */
 
 void test_yrange_clips_asymptote_spikes(void) {
@@ -165,6 +203,8 @@ int main(void) {
     TEST(test_sampling_rejects_degenerate_range);
     TEST(test_sampling_rejects_too_few_plot_points);
     TEST(test_sampling_clip_band_focuses_on_screen);
+    TEST(test_sampling_chord_densifies_steep_region);
+    TEST(test_sampling_chord_density_tracks_steepness);
     TEST(test_yrange_clips_asymptote_spikes);
     TEST(test_yrange_keeps_legitimate_extrema);
     TEST(test_yrange_few_points_uses_full_extent);

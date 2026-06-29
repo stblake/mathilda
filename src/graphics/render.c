@@ -168,18 +168,51 @@ static RGBA8 rgba_from_hue(const Expr* e) {
     return c;
 }
 
+static double clip01(double v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+
+void cmyk_to_rgb(double c, double m, double y, double k,
+                        double* r, double* g, double* b) {
+    c = clip01(c); m = clip01(m); y = clip01(y); k = clip01(k);
+    double w = 1.0 - k;
+    *r = (1.0 - c) * w;
+    *g = (1.0 - m) * w;
+    *b = (1.0 - y) * w;
+}
+
+/* CMYKColor[c,m,y], [c,m,y,k], [c,m,y,k,a], and list forms. */
+static RGBA8 rgba_from_cmyk(const Expr* e) {
+    Expr** args = e->data.function.args;
+    size_t n = e->data.function.arg_count;
+    if (n == 1 && args[0] && args[0]->type == EXPR_FUNCTION
+        && args[0]->data.function.head->type == EXPR_SYMBOL
+        && args[0]->data.function.head->data.symbol == SYM_List) {
+        n = args[0]->data.function.arg_count;
+        args = args[0]->data.function.args;
+    }
+    double c = 0, m = 0, y = 0, k = 0, a = 1;
+    if (n >= 3) { expr_to_d(args[0], &c); expr_to_d(args[1], &m); expr_to_d(args[2], &y); }
+    if (n >= 4) expr_to_d(args[3], &k);
+    if (n >= 5) expr_to_d(args[4], &a);
+    double r, g, b;
+    cmyk_to_rgb(c, m, y, k, &r, &g, &b);
+    a = clip01(a);
+    RGBA8 col = { (unsigned char)(r * 255), (unsigned char)(g * 255),
+                  (unsigned char)(b * 255), (unsigned char)(a * 255) };
+    return col;
+}
+
 Color to_raylib(RGBA8 c) { Color out = { c.r, c.g, c.b, c.a }; return out; }
 
-/* Resolves any recognized color-literal head (RGBColor, GrayLevel, Hue) to
- * an RGBA8, leaving *out untouched (returning false) for anything else --
- * the single place every color-bearing option/directive in this file goes
- * through, so adding a future color form means touching only this. */
+/* Resolves any recognized color-literal head (RGBColor, GrayLevel, Hue,
+ * CMYKColor) to an RGBA8, leaving *out untouched (returning false) for
+ * anything else. */
 bool resolve_color(const Expr* e, RGBA8* out) {
     if (!e || e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol;
     if (h == SYM_RGBColor)  { *out = rgba_from_rgbcolor(e); return true; }
     if (h == SYM_GrayLevel) { *out = rgba_from_graylevel(e); return true; }
     if (h == SYM_Hue)       { *out = rgba_from_hue(e); return true; }
+    if (h == SYM_CMYKColor) { *out = rgba_from_cmyk(e); return true; }
     return false;
 }
 
@@ -627,6 +660,38 @@ static void gather_ys(const Expr* node, double** buf, size_t* len, size_t* cap) 
     }
 }
 
+/* Total number of dots a scatter renders: every coordinate inside a Point[...]
+ * primitive (the single-point Point[{x,y}] and the cloud Point[{{x,y},...}]
+ * shapes draw_primitive handles), recursing through List wrappers. Mirrors the
+ * Point branch of draw_primitive so the count matches what is actually drawn.
+ * Drives the adaptive marker-size shrink at the home zoom. */
+static size_t count_points(const Expr* node) {
+    if (!node || node->type != EXPR_FUNCTION) return 0;
+    const Expr* h = node->data.function.head;
+    if (!h || h->type != EXPR_SYMBOL) return 0;
+    const char* name = h->data.symbol;
+    size_t n = node->data.function.arg_count;
+
+    if (name == SYM_Point && n >= 1) {
+        const Expr* arg = node->data.function.args[0];
+        double x, y;
+        if (expr_point(arg, &x, &y)) return 1;
+        size_t c = 0;
+        if (arg->type == EXPR_FUNCTION)
+            for (size_t i = 0; i < arg->data.function.arg_count; i++) {
+                double px, py;
+                if (expr_point(arg->data.function.args[i], &px, &py)) c++;
+            }
+        return c;
+    }
+    if (name == SYM_List) {
+        size_t c = 0;
+        for (size_t i = 0; i < n; i++) c += count_points(node->data.function.args[i]);
+        return c;
+    }
+    return 0;
+}
+
 /* ---------------- Drawing ---------------- */
 
 typedef struct {
@@ -834,15 +899,37 @@ static void axes_origin(const PlotRange2D* range, double ysc, const GfxOptions* 
     *oy = (range->ymin <= 0 && range->ymax >= 0) ? 0.0 : range->ymin;
 }
 
+/* Axis crossing for the default (unset AxesOrigin) case, but clamped into the
+ * data region rather than the visible window. `vis` is the visible render-space
+ * range (so the cross defaults track the viewport as you pan); `drange` is the
+ * data-space plot range (the rectangle the data is fitted to, inset from the
+ * window by the reserved label margin). Without this clamp, a 0-off-screen axis
+ * sticks to the window edge, where its outward tick labels — drawn just outside
+ * the axis — fall past the border and get cropped. Clamping pins the axis to
+ * the data's edge instead, so those labels land in the reserved margin. `oy` is
+ * returned in render space (×ysc), matching axes_origin. An explicit AxesOrigin
+ * is honoured verbatim (no clamp). */
+static void axes_origin_in_region(const PlotRange2D* vis, const PlotRange2D* drange,
+                                  double ysc, const GfxOptions* o, double* ox, double* oy) {
+    axes_origin(vis, ysc, o, ox, oy);
+    if (o->axes_origin_set) return;
+    double rylo = drange->ymin * ysc, ryhi = drange->ymax * ysc;
+    if (*ox < drange->xmin) *ox = drange->xmin;
+    if (*ox > drange->xmax) *ox = drange->xmax;
+    if (*oy < rylo) *oy = rylo;
+    if (*oy > ryhi) *oy = ryhi;
+}
+
 /* World-space axis/tick lines -- call inside BeginMode2D so they pan and
  * zoom with the data. */
 /* `range` is in render space (post y-scale). `ysc` maps data-y -> render-y;
  * y ticks are placed at nice *data* values (data*ysc), so labels read true.
  * `zoom` is the camera zoom: the strokes are drawn 1.5 px wide on screen (to
  * match the frame's weight) by expressing the world-space width as 1.5/zoom. */
-static void draw_axes_lines(const PlotRange2D* range, double ysc, float zoom, const GfxOptions* o) {
+static void draw_axes_lines(const PlotRange2D* range, const PlotRange2D* drange,
+                            double ysc, float zoom, const GfxOptions* o) {
     double ox, oy;
-    axes_origin(range, ysc, o, &ox, &oy);
+    axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
     float w = (zoom > 0.0f) ? 1.5f / zoom : 1.5f; /* world units -> 1.5 px on screen */
     Color col = to_raylib(o->axes_color);
 
@@ -916,9 +1003,10 @@ static void draw_gridlines(const PlotRange2D* range, double ysc, float zoom, con
  * `cap = HERSHEY_CAP_HEIGHT * scale` px, which the offsets account for:
  * x-labels drop the baseline a full cap-height below the tick so the whole
  * glyph clears it; y-labels recentre vertically on the tick by half a cap. */
-static void draw_axes_labels(const PlotRange2D* range, Camera2D camera, double ysc, const GfxOptions* o) {
+static void draw_axes_labels(const PlotRange2D* range, const PlotRange2D* drange,
+                             Camera2D camera, double ysc, const GfxOptions* o) {
     double ox, oy;
-    axes_origin(range, ysc, o, &ox, &oy);
+    axes_origin_in_region(range, drange, ysc, o, &ox, &oy);
     Color col = to_raylib(o->ticks_color);
     double xstep = nice_step(range->xmax - range->xmin, 8);
     /* y ticks are stepped in data space; render position is ty*ysc below. */
@@ -1499,12 +1587,17 @@ void graphics_show(const Expr* graphics_expr) {
     SetTargetFPS(60);
 
     /* Plot region: the rectangle the data is fitted to and clipped against.
-     * Without a frame it is the whole window (unchanged behaviour). A frame
-     * reserves a margin (~5% of each window dimension) around the region so the
-     * box, its outward tick labels and the bottom help line sit outside the
-     * data; the bottom/left margins are floored a little larger so multi-digit
-     * labels and the help text always fit. The data fits *inside* the region,
-     * so the curve never spills past the frame. */
+     * A frame reserves a margin (~5% of each window dimension) around the
+     * region so the box, its outward tick labels and the bottom help line sit
+     * outside the data; the bottom/left margins are floored a little larger so
+     * multi-digit labels and the help text always fit. Plain Axes (no frame)
+     * reserve a smaller margin for the same reason: an axis can land on the
+     * data's edge (e.g. all-positive data puts the y-axis at the left edge),
+     * and its tick labels — and any AxesLabel/PlotLabel — are drawn just
+     * outside the data, so without a margin they fall off the window. With
+     * neither Axes nor Frame there is nothing outside the data to protect, so
+     * the data fills the whole window (unchanged behaviour). The data always
+     * fits *inside* the region. */
     float reg_x = 0.0f, reg_y = 0.0f;
     float reg_w = (float)opts.width, reg_h = (float)opts.height;
     if (opts.frame) {
@@ -1522,6 +1615,22 @@ void graphics_show(const Expr* graphics_expr) {
         float mT = (float)opts.height * 0.05f; if (mT < mT_floor) mT = mT_floor;
         float mB = (float)opts.height * 0.05f; if (mB < 48.0f + labelB) mB = 48.0f + labelB;
         /* Never let the margins swallow the whole window. */
+        if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
+            reg_x = mL; reg_y = mT;
+            reg_w = (float)opts.width - mL - mR;
+            reg_h = (float)opts.height - mT - mB;
+        }
+    } else if (opts.axes) {
+        /* Floors sized to the screen-space tick labels (draw_axes_labels):
+         * left clears a multi-digit y label, bottom a one-line x label plus
+         * its gap+cap drop *and* the bottom-of-window help-text line, top a
+         * PlotLabel line, right the overflow of the last x label's half-width.
+         * The bottom is the largest because a 0-off-screen x-axis is pinned to
+         * the region's bottom edge and its labels hang into this margin. */
+        float mL = (float)opts.width  * 0.06f; if (mL < 52.0f) mL = 52.0f;
+        float mR = (float)opts.width  * 0.03f; if (mR < 22.0f) mR = 22.0f;
+        float mT = (float)opts.height * 0.05f; if (mT < 34.0f) mT = 34.0f;
+        float mB = (float)opts.height * 0.07f; if (mB < 52.0f) mB = 52.0f;
         if (mL + mR < (float)opts.width  - 40.0f && mT + mB < (float)opts.height - 40.0f) {
             reg_x = mL; reg_y = mT;
             reg_w = (float)opts.width - mL - mR;
@@ -1561,7 +1670,34 @@ void graphics_show(const Expr* graphics_expr) {
      * line scales with zoom like point_size, rather than staying pinned to
      * a single pixel. base_zoom is guaranteed positive and finite above. */
     init_state.thickness = 1.5f / base_zoom;
-    init_state.point_size = (float)(fmax(data_w, data_h) * 0.006);
+    /* Default marker radius for bare Point[] (e.g. ListPlot's scatter), sized in
+     * SCREEN px and converted to world units via base_zoom. Tying it to the
+     * rendered region (not the raw data extent) is essential: with the old
+     * fmax(data_w, data_h) basis, data with an extreme aspect ratio -- e.g. a
+     * tall Prime[n] sequence (y up to ~1583, x only 250) -- blew the dot up to
+     * ~6 px radius / ~12 px diameter, because the marker tracked data_h while
+     * the y-axis was visually compressed by yscale. As a fraction of the
+     * smaller region dimension the dot is now a stable on-screen size
+     * regardless of the data's shape. Callers wanting bigger dots set PointSize.
+     *
+     * Adaptive shrink: a dense scatter merges into an ink blob, so also cap the
+     * dot at a small fraction (0.12) of the mean inter-point pitch (~sqrt(area/N)
+     * px for N points over the reg_w x reg_h px region). The radius is the
+     * smaller of the default and that density limit, floored at a sub-pixel
+     * minimum so a huge scatter never vanishes. This is the home-zoom size;
+     * point_size is world units, so zooming in still enlarges dots. Honours all
+     * three knobs: point count N, window size (region px), and pixel resolution
+     * (px floor, converted back through base_zoom). */
+    double region_px = fmin((double)reg_w, (double)reg_h);
+    double r_px = 0.0067 * region_px;                   /* sparse-scatter default radius */
+    size_t npts = count_points(prims);
+    if (npts > 1) {
+        double area_px = (double)reg_w * (double)reg_h; /* plot region area, px^2 */
+        double dens_px = 0.12 * sqrt(area_px / (double)npts);
+        if (dens_px < r_px) r_px = dens_px;             /* never exceed default */
+    }
+    if (r_px < 0.6) r_px = 0.6;                         /* never sub-pixel-invisible */
+    init_state.point_size = (base_zoom > 0) ? (float)(r_px / base_zoom) : (float)r_px;
     init_state.text_scale = (float)(fmax(data_w, data_h) * 0.03 / HERSHEY_CAP_HEIGHT);
     init_state.yscale = (float)ysc;
 
@@ -1684,8 +1820,14 @@ void graphics_show(const Expr* graphics_expr) {
                 double margin = vw * 0.25;
                 double nx0 = visible.xmin - margin, nx1 = visible.xmax + margin;
                 /* Clip refinement to the on-screen y-band so a curve that
-                 * dives out of frame doesn't waste detail off-screen. */
-                Expr* np = plot_resample(graphics_expr, nx0, nx1, visible.ymin, visible.ymax);
+                 * dives out of frame doesn't waste detail off-screen. NOTE:
+                 * `visible` is in render space, where y is compressed by `ysc`
+                 * (the non-uniform vertical scale). The sampler works in data
+                 * coordinates, so undo that scale -- otherwise the clip band is
+                 * ysc-times too narrow and starves the steep, large-|y| parts of
+                 * the curve while the gentle middle is over-sampled. */
+                Expr* np = plot_resample(graphics_expr, nx0, nx1,
+                                         visible.ymin / ysc, visible.ymax / ysc);
                 if (np) {
                     if (dyn_prims) expr_free(dyn_prims);
                     dyn_prims = np;
@@ -1706,14 +1848,14 @@ void graphics_show(const Expr* graphics_expr) {
         BeginMode2D(camera);
         if (opts.prolog) { DrawState ps = init_state; draw_primitive(opts.prolog, &ps); }
         draw_gridlines(&visible, ysc, camera.zoom, &opts);
-        if (opts.axes) draw_axes_lines(&visible, ysc, camera.zoom, &opts);
+        if (opts.axes) draw_axes_lines(&visible, &range, ysc, camera.zoom, &opts);
         DrawState state = init_state;
         draw_primitive(draw_prims, &state);
         if (opts.epilog) { DrawState es = init_state; draw_primitive(opts.epilog, &es); }
         EndMode2D();
         if (opts.frame) EndScissorMode();
 
-        if (opts.axes) draw_axes_labels(&visible, camera, ysc, &opts);
+        if (opts.axes) draw_axes_labels(&visible, &range, camera, ysc, &opts);
         if (opts.frame) draw_frame(reg_x, reg_y, reg_w, reg_h, camera, ysc, &opts);
         if (opts.frame) draw_frame_label(reg_x, reg_y, reg_w, reg_h, &opts);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);

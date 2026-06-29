@@ -52,6 +52,14 @@ Expr* integrate_derivdivides_try(Expr* f, Expr* x);
  * Eliminate's ::ifun / ::alg diagnostics.  Does NOT take ownership of `f`/`x`. */
 Expr* integrate_derivdivides_full(Expr* f, Expr* x);
 
+/* Explicit `Method -> {"DerivativeDivides", "Substitution" -> sub}` entry.
+ * Trials only the user-pinned kernel `sub` (no automatic kernel search),
+ * running the direct strategy and then the Eliminate/Solve branch-search.
+ * Strict: returns NULL (unevaluated) when `sub` does not close the integral —
+ * there is no fallback to other kernels.  Does NOT take ownership of `f`, `x`,
+ * or `sub`. */
+Expr* integrate_derivdivides_with_sub(Expr* f, Expr* x, Expr* sub);
+
 /* `Integrate`DerivativeDivides[f, x]` builtin.  Runs the direct strategy and
  * then the more thorough Eliminate/Solve branch-search (strategy 2).  Strict:
  * returns NULL (unevaluated) when neither strategy produces a result that

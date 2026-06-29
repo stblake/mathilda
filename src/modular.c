@@ -49,53 +49,95 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
+    // Table binds its iterator variables in the *iterator* specs (args 1..),
+    // each of the form {var, ...}; arg 0 is the body. Every other scoping
+    // construct (Module/Block/With/Function) binds in arg 0. They therefore
+    // need completely different substitution handling, so detect Table here.
+    bool is_table = is_scoping_construct(e)
+        && e->data.function.head->data.symbol == SYM_Table;
+
     // Handle shadowing in scoping constructs
     ScopingEnv* filtered_env = env;
-    
-    if (is_scoping_construct(e) && e->data.function.arg_count >= 1) {
-        Expr* vars = e->data.function.args[0];
-        if (vars->type == EXPR_FUNCTION && vars->data.function.head->data.symbol == SYM_List) {
-            // Create a filtered env that doesn't contain variables redefined here
-            for (size_t i = 0; i < vars->data.function.arg_count; i++) {
-                Expr* v = vars->data.function.args[i];
-                const char* shadowed_name = NULL;
-                if (v->type == EXPR_SYMBOL) shadowed_name = v->data.symbol;
-                else if (v->type == EXPR_FUNCTION && v->data.function.head->data.symbol == SYM_Set && v->data.function.arg_count == 2) {
-                    if (v->data.function.args[0]->type == EXPR_SYMBOL) shadowed_name = v->data.function.args[0]->data.symbol;
-                }
 
-                if (shadowed_name) {
-                    // This variable is shadowed, so we remove it from the env we pass down
-                    // For simplicity, we just rebuild the env list skipping shadowed names
-                    ScopingEnv* new_env = NULL;
-                    ScopingEnv* curr = filtered_env;
-                    while (curr) {
-                        if (strcmp(curr->old_name, shadowed_name) != 0) {
-                            ScopingEnv* node = malloc(sizeof(ScopingEnv));
-                            node->old_name = curr->old_name;
-                            node->replacement = curr->replacement;
-                            node->next = new_env;
-                            new_env = node;
-                        }
-                        curr = curr->next;
+    if (is_scoping_construct(e) && e->data.function.arg_count >= 1) {
+        // Collect the names this construct binds, so they are removed from the
+        // env we push into the body (lexical shadowing).
+        const char* shadow_buf[64];
+        size_t nshadow = 0;
+        if (is_table) {
+            for (size_t k = 1; k < e->data.function.arg_count && nshadow < 64; k++) {
+                Expr* it = e->data.function.args[k];
+                if (it->type == EXPR_FUNCTION
+                    && it->data.function.head->type == EXPR_SYMBOL
+                    && it->data.function.head->data.symbol == SYM_List
+                    && it->data.function.arg_count >= 1
+                    && it->data.function.args[0]->type == EXPR_SYMBOL) {
+                    shadow_buf[nshadow++] = it->data.function.args[0]->data.symbol;
+                }
+            }
+        } else {
+            Expr* vars = e->data.function.args[0];
+            if (vars->type == EXPR_FUNCTION && vars->data.function.head->data.symbol == SYM_List) {
+                for (size_t i = 0; i < vars->data.function.arg_count && nshadow < 64; i++) {
+                    Expr* v = vars->data.function.args[i];
+                    const char* nm = NULL;
+                    if (v->type == EXPR_SYMBOL) nm = v->data.symbol;
+                    else if (v->type == EXPR_FUNCTION && v->data.function.head->data.symbol == SYM_Set && v->data.function.arg_count == 2) {
+                        if (v->data.function.args[0]->type == EXPR_SYMBOL) nm = v->data.function.args[0]->data.symbol;
                     }
-                    if (filtered_env != env) {
-                        // Free the intermediate filtered env
-                        ScopingEnv* tmp = filtered_env;
-                        while (tmp) {
-                            ScopingEnv* next = tmp->next;
-                            free(tmp);
-                            tmp = next;
-                        }
-                    }
-                    filtered_env = new_env;
+                    if (nm) shadow_buf[nshadow++] = nm;
                 }
             }
         }
+
+        if (nshadow > 0) {
+            // Rebuild the env list skipping every shadowed name.
+            ScopingEnv* new_env = NULL;
+            for (ScopingEnv* curr = env; curr; curr = curr->next) {
+                bool shadowed = false;
+                for (size_t s = 0; s < nshadow; s++)
+                    if (strcmp(curr->old_name, shadow_buf[s]) == 0) { shadowed = true; break; }
+                if (!shadowed) {
+                    ScopingEnv* node = malloc(sizeof(ScopingEnv));
+                    node->old_name = curr->old_name;
+                    node->replacement = curr->replacement;
+                    node->next = new_env;
+                    new_env = node;
+                }
+            }
+            filtered_env = new_env;
+        }
     }
-    
+
     Expr** new_args = malloc(sizeof(Expr*) * e->data.function.arg_count);
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        // Table: arg 0 is the body (substitute normally with the shadowed
+        // env); args 1.. are iterator specs {var, lim...} where `var` is a
+        // binding occurrence (copied) and the limits are substituted.
+        if (is_table) {
+            if (i == 0) {
+                new_args[i] = substitute_scoping(e->data.function.args[i], filtered_env);
+            } else {
+                Expr* it = e->data.function.args[i];
+                if (it->type == EXPR_FUNCTION
+                    && it->data.function.head->type == EXPR_SYMBOL
+                    && it->data.function.head->data.symbol == SYM_List
+                    && it->data.function.arg_count >= 1
+                    && it->data.function.args[0]->type == EXPR_SYMBOL) {
+                    size_t na = it->data.function.arg_count;
+                    Expr** nb = malloc(sizeof(Expr*) * na);
+                    nb[0] = expr_copy(it->data.function.args[0]);
+                    for (size_t j = 1; j < na; j++)
+                        nb[j] = substitute_scoping(it->data.function.args[j], filtered_env);
+                    Expr* lhead = expr_copy(it->data.function.head);
+                    new_args[i] = expr_new_function(lhead, nb, na);
+                    free(nb);
+                } else {
+                    new_args[i] = substitute_scoping(it, filtered_env);
+                }
+            }
+            continue;
+        }
         // First argument of scoping constructs is the variable list:
         // substitute into each binding's RHS (which sees the outer
         // scope, i.e. the original env -- the rebound names propagate

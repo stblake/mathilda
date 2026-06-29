@@ -207,12 +207,13 @@ typedef struct {
 } ParamSampleOpts;
 
 /* `opts_start`: index of the first trailing Rule[] arg in res.
+ * `default_plot_points`: 25 for 1-iterator (adaptive), 75 for 2-iterator (uniform grid).
  * For 1-iterator form: 2.  For 2-iterator form: 3. */
-static bool split_options_param(Expr* res, size_t opts_start,
+static bool split_options_param(Expr* res, size_t opts_start, long default_plot_points,
                                   ParamSampleOpts* sopts,
                                   Expr*** pass_out, size_t* pass_count_out,
                                   Expr** single_color_out) {
-    sopts->plot_points            = 25;
+    sopts->plot_points            = default_plot_points;
     sopts->max_recursion          = 6;
     sopts->max_plot_points        = -1;
     sopts->mesh                   = false;
@@ -636,7 +637,7 @@ Expr* builtin_parametricplot(Expr* res) {
         Expr** pass;
         size_t npass;
         Expr* color = NULL;
-        if (!split_options_param(res, 3, &sopts, &pass, &npass, &color)) {
+        if (!split_options_param(res, 3, 75, &sopts, &pass, &npass, &color)) {
             expr_free(legends); return NULL;
         }
 
@@ -722,7 +723,7 @@ Expr* builtin_parametricplot(Expr* res) {
         Expr** pass;
         size_t npass;
         Expr* single_color = NULL;
-        if (!split_options_param(res, 2, &sopts, &pass, &npass, &single_color)) {
+        if (!split_options_param(res, 2, 25, &sopts, &pass, &npass, &single_color)) {
             expr_free(legends); return NULL;
         }
 

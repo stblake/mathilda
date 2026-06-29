@@ -116,7 +116,7 @@ no multivariate integration, no constant of integration.
 - `Protected`, `Listable`.
 - Nine-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
 
-**Attributes:** `Listable`, `Protected`.
+**Attributes:** `Protected`.
 
 ## Implementation status
 

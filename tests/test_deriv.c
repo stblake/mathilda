@@ -161,9 +161,15 @@ static void test_dt(void) {
     /* Known elementary functions still fire. */
     check_zero("Dt[Sin[x]] - Cos[x] Dt[x]");
     check_zero("Dt[y^2] - 2 y Dt[y]");
-    /* Dt with a variable argument reduces to D. */
+    /* Dt[f, x] is the TOTAL derivative: variables other than x are
+     * implicit functions of x, so they do not vanish (unlike D). */
     check("Dt[x^2, x]", "Times[2, x]");
-    check("Dt[y^2, x]", "0");
+    check("Dt[x, x]", "1");
+    check("Dt[n, x]", "Dt[n, x]");      /* irreducible, stays unevaluated */
+    check("Dt[Pi, x]", "0");            /* distinguished constant vanishes */
+    check_zero("Dt[y^2, x] - 2 y Dt[y, x]");
+    check_zero("Dt[a x, x] - (a + x Dt[a, x])");
+    check_zero("Dt[a x + b, x] - (a + x Dt[a, x] + Dt[b, x])");
     check("Dt[x^2, {x, 2}]", "2");
 }
 

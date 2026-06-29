@@ -180,7 +180,10 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
         Expr* rgb = expr_new_function(expr_new_symbol(SYM_RGBColor), rgb_args, 3);
         Expr* a[2] = { expr_new_symbol(SYM_PlotStyle), expr_copy(rgb) };
         passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
-        *single_color_out = rgb;
+        /* Do NOT set single_color_out here: the default blue goes into the
+         * passthrough for the single-surface renderer, but multi-surface plots
+         * must fall through to palette_color(fi) in surface_color(). */
+        expr_free(rgb);
     }
 
     *passthrough_out = passthrough;

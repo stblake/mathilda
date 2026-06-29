@@ -5,6 +5,7 @@
 #include "eval.h"
 #include "numeric.h"
 #include "sym_names.h"
+#include "series.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -373,6 +374,21 @@ Expr* builtin_plus(Expr* res) {
         if (n == 1) {
             Expr* sole = expr_copy(res->data.function.args[0]);
             return sole;
+        }
+    }
+
+    /* SeriesData arithmetic: if any summand is a power series, fold the whole
+     * Plus through the series algebra. Runs before inexact contagion, which
+     * would otherwise apply N to the whole SeriesData (turning its integer
+     * nmin/nmax/den into reals and defeating recognition); mixed-precision
+     * coefficients still combine correctly because so_add evaluates each sum.
+     * A NULL result means the operands are incompatible (e.g. different
+     * expansion points); fall through and keep them as a symbolic Plus. */
+    for (size_t i = 0; i < n; i++) {
+        if (is_series_data(res->data.function.args[i])) {
+            Expr* r = series_combine_plus(res->data.function.args, n);
+            if (r) return r;
+            break;
         }
     }
 

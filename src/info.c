@@ -127,6 +127,14 @@ void info_init(void) {
         "Returns unevaluated when gcd(k, n) is not 1, when no power of k lands in the residue set, "
         "or when n is zero.  All arithmetic is exact via GMP, so k and n may be arbitrary-precision "
         "integers.");
+    symtab_set_docstring("JacobiSymbol",
+        "JacobiSymbol[n, m]\n"
+        "\tgives the Jacobi symbol (n/m).\n\n"
+        "For prime m the Jacobi symbol reduces to the Legendre symbol, equal to +-1 according "
+        "to whether n is a quadratic residue modulo m, and 0 when m divides n.  This is the full "
+        "Kronecker generalisation: the second argument may be even or non-positive and the first "
+        "may be negative.  Returns -1, 0, or 1.  Listable, and exact via GMP for arbitrary-precision "
+        "integers.");
     symtab_set_docstring("FindMinimum",
         "FindMinimum[f, {x, x0}]\n"
         "\tsearches for a local minimum of f starting from x = x0.\n"
@@ -3193,6 +3201,11 @@ void info_init(void) {
         "representation of n.\n"
         "The sign of n is discarded; DigitCount[0] is a list of zeros.");
 
+    symtab_set_docstring("DigitSum",
+        "DigitSum[n] gives the sum of the decimal digits of the integer n.\n"
+        "DigitSum[n, b] gives the sum of the base-b digits of n.\n"
+        "The sign of n is discarded; DigitSum[0] is 0.");
+
     symtab_set_docstring("IntegerString",
         "IntegerString[n] gives a string consisting of the decimal digits "
         "in the integer n.\n"
@@ -3254,9 +3267,12 @@ void info_init(void) {
 
     // Primes
     symtab_set_docstring("Divisors", "Divisors[n] gives a list of the integers that divide n. Divisors[n, GaussianIntegers -> True] includes Gaussian-integer divisors.");
+    symtab_set_docstring("DivisorSigma", "DivisorSigma[k, n] gives the divisor function sigma_k(n), the sum of the k-th powers of the divisors of n. DivisorSigma[k, n, GaussianIntegers -> True] sums over Gaussian-integer divisors.");
+    symtab_set_docstring("MoebiusMu", "MoebiusMu[n] gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z[i].");
     symtab_set_docstring("FactorInteger", "FactorInteger[n] gives a list of the prime factors of the integer n, together with their exponents.");
     symtab_set_docstring("EulerPhi", "EulerPhi[n] gives the Euler totient function phi(n).");
-    symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x.");
+    symtab_set_docstring("PrimePi", "PrimePi[x] gives the number of primes less than or equal to x, exact for x up to 5*10^13 (larger x is left unevaluated). The option Method -> m selects the algorithm: Automatic (default), \"Sieve\", \"Legendre\", \"Meissel\", \"Lehmer\", \"LMO\" (Lagarias-Miller-Odlyzko), \"DelegliseRivat\", or \"LucyHedgehog\".");
+    symtab_set_docstring("Prime", "Prime[n] gives the nth prime number. Listable. Small n is read from a sieve table; large n inverts PrimePi via an asymptotic estimate refined against the exact prime counter. Defined for positive integers up to n ~ 1.4*10^12; non-positive-integer arguments give Prime::intpp.");
     symtab_set_docstring("NextPrime", "NextPrime[x] gives the next prime after x.");
     symtab_set_docstring("Distribute",
         "Distribute[f[x1, x2, ...]]\n"
@@ -3407,4 +3423,64 @@ void info_init(void) {
         "\n"
         "FrameStyle -> RGBColor[...] or GrayLevel[...] sets the colour. The\n"
         "default is a neutral gray.");
+    symtab_set_docstring("CMYKColor",
+        "CMYKColor[c, m, y, k]\n"
+        "\trepresents a color in the CMYK (cyan, magenta, yellow, black) space.\n"
+        "CMYKColor[c, m, y, k, a] specifies opacity a; CMYKColor[c, m, y] takes\n"
+        "k = 0. The list forms CMYKColor[{c, m, y, k}] and CMYKColor[{c, m, y, k,\n"
+        "a}] are also accepted. Components and opacity outside [0,1] are clipped.\n"
+        "A style directive: sets the colour of subsequent graphics primitives,\n"
+        "converted to RGB as r=(1-c)(1-k), g=(1-m)(1-k), b=(1-y)(1-k).");
+
+    /* Named colour constants. Each is an OwnValue (set in graphics_init) that
+     * evaluates to its RGBColor[...]/GrayLevel[...] literal; the docstrings
+     * are kept here, centrally, like CMYKColor. */
+    symtab_set_docstring("Red",
+        "Red\n\tThe named colour RGBColor[1, 0, 0].");
+    symtab_set_docstring("Green",
+        "Green\n\tThe named colour RGBColor[0, 1, 0].");
+    symtab_set_docstring("Blue",
+        "Blue\n\tThe named colour RGBColor[0, 0, 1].");
+    symtab_set_docstring("Black",
+        "Black\n\tThe named colour GrayLevel[0].");
+    symtab_set_docstring("White",
+        "White\n\tThe named colour GrayLevel[1].");
+    symtab_set_docstring("Gray",
+        "Gray\n\tThe named colour GrayLevel[0.5].");
+    symtab_set_docstring("Cyan",
+        "Cyan\n\tThe named colour RGBColor[0, 1, 1].");
+    symtab_set_docstring("Magenta",
+        "Magenta\n\tThe named colour RGBColor[1, 0, 1].");
+    symtab_set_docstring("Yellow",
+        "Yellow\n\tThe named colour RGBColor[1, 1, 0].");
+    symtab_set_docstring("Brown",
+        "Brown\n\tThe named colour RGBColor[0.6, 0.4, 0.2].");
+    symtab_set_docstring("Orange",
+        "Orange\n\tThe named colour RGBColor[1, 0.5, 0].");
+    symtab_set_docstring("Pink",
+        "Pink\n\tThe named colour RGBColor[1, 0.5, 0.5].");
+    symtab_set_docstring("Purple",
+        "Purple\n\tThe named colour RGBColor[0.5, 0, 0.5].");
+    symtab_set_docstring("LightRed",
+        "LightRed\n\tThe named colour RGBColor[1, 0.85, 0.85].");
+    symtab_set_docstring("LightGreen",
+        "LightGreen\n\tThe named colour RGBColor[0.88, 1, 0.88].");
+    symtab_set_docstring("LightBlue",
+        "LightBlue\n\tThe named colour RGBColor[0.87, 0.94, 1].");
+    symtab_set_docstring("LightGray",
+        "LightGray\n\tThe named colour GrayLevel[0.85].");
+    symtab_set_docstring("LightCyan",
+        "LightCyan\n\tThe named colour RGBColor[0.9, 1, 1].");
+    symtab_set_docstring("LightMagenta",
+        "LightMagenta\n\tThe named colour RGBColor[1, 0.9, 1].");
+    symtab_set_docstring("LightYellow",
+        "LightYellow\n\tThe named colour RGBColor[1, 1, 0.85].");
+    symtab_set_docstring("LightBrown",
+        "LightBrown\n\tThe named colour RGBColor[0.94, 0.91, 0.88].");
+    symtab_set_docstring("LightOrange",
+        "LightOrange\n\tThe named colour RGBColor[1, 0.9, 0.8].");
+    symtab_set_docstring("LightPink",
+        "LightPink\n\tThe named colour RGBColor[1, 0.925, 0.925].");
+    symtab_set_docstring("LightPurple",
+        "LightPurple\n\tThe named colour RGBColor[0.94, 0.88, 0.94].");
 }

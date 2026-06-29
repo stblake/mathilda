@@ -52,4 +52,52 @@ bool series_split_two_term(Expr* e, Expr* x,
                            Expr** a_out, Expr** b_out,
                            int64_t* exp_num, int64_t* exp_den);
 
+/*
+ * series_differentiate / series_integrate
+ *   Differentiate or integrate a SeriesData[x, x0, {coefs}, nmin, nmax, den]
+ *   object term-by-term in `var`. When `var` is the series variable the power
+ *   rule is applied to each term (integration uses constant 0, as in
+ *   Mathematica); when `var` is a different symbol the coefficients are
+ *   transformed and the powers kept (valid only when x0 is free of `var`).
+ *   Return a fresh SeriesData Expr on success, or NULL when the shape is
+ *   unsupported (e.g. non-integer orders) or, for integration, when a nonzero
+ *   (x-x0)^-1 term would require a Log. The caller then leaves D[]/Integrate[]
+ *   unevaluated.
+ */
+Expr* series_differentiate(Expr* sd, Expr* var);
+Expr* series_integrate(Expr* sd, Expr* var);
+
+/*
+ * SeriesData arithmetic
+ *   These drive the internal SeriesObj algebra (so_add / so_mul / so_pow_*)
+ *   from the arithmetic builtins so that Plus, Times and Power combine power
+ *   series the way Mathematica does. Divide and Subtract are covered for free
+ *   because they rewrite to Times[a, Power[b,-1]] and Plus[a, Times[-1,b]].
+ *
+ * is_series_data
+ *   Cheap structural test: e is SeriesData[x, x0, {coefs}, nmin, nmax, den].
+ *
+ * series_combine_plus / series_combine_times
+ *   Fold the operands of a Plus / Times node (at least one of which is a
+ *   SeriesData) into a single SeriesData. Operands that are not series are
+ *   series-expanded about the common (x, x0) to the controlling (minimum)
+ *   order. Returns a fresh SeriesData Expr, or NULL when the operands are
+ *   incompatible (different expansion variable or point, or a non-series
+ *   operand that cannot be expanded) -- the caller then leaves the node
+ *   unevaluated, matching Mathematica's behaviour for e.g. two series about
+ *   different points.
+ *
+ * series_power
+ *   base^exp where base and/or exp is a SeriesData. Integer exponents (incl.
+ *   negative, via series inversion) and exponents free of the series variable
+ *   are handled directly; an exponent that depends on the series variable (or
+ *   a non-series base raised to a series exponent, e.g. 2^series) is rewritten
+ *   as Exp[exp*Log[base]] and re-expanded. Returns NULL when the shape is
+ *   unsupported.
+ */
+bool  is_series_data(const Expr* e);
+Expr* series_combine_plus(Expr* const* args, size_t n);
+Expr* series_combine_times(Expr* const* args, size_t n);
+Expr* series_power(Expr* base, Expr* exp);
+
 #endif // SERIES_H

@@ -83,6 +83,16 @@ static bool has_symbol_head(Expr* e, const char* name) {
            strcmp(e->data.function.head->data.symbol, name) == 0;
 }
 
+/* Cheap structural test for SeriesData[x, x0, {coefs}, nmin, nmax, den]. Uses
+ * the interned SYM_SeriesData pointer so the arithmetic builtins can scan their
+ * arguments without a strcmp on the hot path. */
+bool is_series_data(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol == SYM_SeriesData &&
+           e->data.function.arg_count == 6;
+}
+
 /* Structural containment: true iff target does not appear anywhere in e. */
 static bool expr_free_of(Expr* e, Expr* target) {
     if (!e) return true;
@@ -289,6 +299,7 @@ typedef struct {
 } SeriesCtx;
 
 static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx);
+static SeriesObj* so_from_seriesdata(Expr* sd);
 
 static SeriesObj* so_alloc(Expr* x, Expr* x0, int64_t nmin, int64_t order, int64_t den) {
     SeriesObj* s = calloc(1, sizeof(SeriesObj));
@@ -2246,6 +2257,21 @@ static SeriesObj* series_expand(Expr* e, SeriesCtx* ctx) {
         return so_from_variable(ctx->x, ctx->x0, ctx->order, 1);
     }
 
+    /* e is itself a SeriesData about the same (x, x0): adopt it directly. This
+     * lets expressions that embed a series flow through the expander -- notably
+     * the Exp[exp*Log[base]] rewrite series_power uses for series exponents, and
+     * Series[] of an expression that already contains a SeriesData. A series
+     * about a different variable or point cannot be merged here, so we bail. */
+    if (is_series_data(e)) {
+        SeriesObj* s = so_from_seriesdata(e);
+        if (!s) return NULL;
+        if (!expr_eq(s->x, ctx->x) || !expr_eq(s->x0, ctx->x0)) {
+            so_free(s);
+            return NULL;
+        }
+        return s;
+    }
+
     if (e->type == EXPR_FUNCTION) {
         const char* head = (e->data.function.head->type == EXPR_SYMBOL)
                                ? e->data.function.head->data.symbol : NULL;
@@ -2568,6 +2594,365 @@ static Expr* series_build_xmx0(Expr* x, Expr* x0) {
 /* Convert a single validated SeriesData[x, x0, coefs, nmin, nmax, den] node
  * into an ordinary sum, dropping the O-term. Returns NULL if the node is
  * malformed (so the caller can leave it untouched). */
+/* ----------------------------------------------------------------------------
+ * Calculus on SeriesData (term-by-term differentiation / integration)
+ * -------------------------------------------------------------------------- */
+
+/* Read a validated SeriesData[x, x0, {coefs}, nmin, nmax, den] Expr into a
+ * fresh SeriesObj. Returns NULL if the shape is unsupported (non-integer
+ * nmin/nmax/den, missing List of coefficients, zero denominator); the caller
+ * then leaves the enclosing expression unevaluated. */
+static SeriesObj* so_from_seriesdata(Expr* sd) {
+    if (sd->type != EXPR_FUNCTION ||
+        !has_symbol_head(sd, "SeriesData") ||
+        sd->data.function.arg_count != 6) return NULL;
+    Expr** a = sd->data.function.args;
+    Expr* coefs = a[2];
+    if (!has_symbol_head(coefs, "List") ||
+        a[3]->type != EXPR_INTEGER ||
+        a[4]->type != EXPR_INTEGER ||
+        a[5]->type != EXPR_INTEGER ||
+        a[5]->data.integer <= 0) return NULL;
+    int64_t nmin  = a[3]->data.integer;
+    int64_t order = a[4]->data.integer;
+    int64_t den   = a[5]->data.integer;
+    size_t  k     = coefs->data.function.arg_count;
+    /* The coefficient list length must agree with order - nmin. */
+    if ((int64_t)k != order - nmin) return NULL;
+    SeriesObj* s = so_alloc(a[0], a[1], nmin, order, den);
+    for (size_t i = 0; i < k && i < s->coef_count; i++) {
+        so_set_coef(s, i, expr_copy(coefs->data.function.args[i]));
+    }
+    return s;
+}
+
+/* D[SeriesData[...], var] -- term-by-term differentiation. When var is the
+ * series variable, apply the power rule to each term; otherwise (var free of
+ * the expansion point) differentiate each coefficient, keeping the powers.
+ * Returns NULL when the shape is unsupported, so the caller falls back. */
+Expr* series_differentiate(Expr* sd, Expr* var) {
+    SeriesObj* s = so_from_seriesdata(sd);
+    if (!s) return NULL;
+
+    /* Differentiating with respect to a variable other than the series
+     * variable: thread D into the coefficients (powers unchanged). Only valid
+     * when the expansion point does not itself depend on var. */
+    if (!expr_eq(s->x, var)) {
+        if (!expr_free_of(s->x0, var)) { so_free(s); return NULL; }
+        SeriesObj* r = so_alloc(s->x, s->x0, s->nmin, s->order, s->den);
+        for (size_t i = 0; i < s->coef_count; i++) {
+            so_set_coef(r, i, simp(mk_fn2("D", expr_copy(s->coefs[i]), expr_copy(var))));
+        }
+        so_trim_leading(r);
+        Expr* out = so_to_expr(r);
+        so_free(s); so_free(r);
+        return out;
+    }
+
+    /* Power rule: a_i (x-x0)^((nmin+i)/den)
+     *   ->  a_i * (nmin+i)/den * (x-x0)^((nmin+i-den)/den). */
+    SeriesObj* r = so_alloc(s->x, s->x0, s->nmin - s->den, s->order - s->den, s->den);
+    for (size_t i = 0; i < s->coef_count && i < r->coef_count; i++) {
+        int64_t num = s->nmin + (int64_t)i;          /* old exponent numerator */
+        Expr* factor = make_rational(num, s->den);   /* (nmin+i)/den */
+        so_set_coef(r, i, simp(mk_times(expr_copy(s->coefs[i]), factor)));
+    }
+    so_trim_leading(r);
+    Expr* out = so_to_expr(r);
+    so_free(s); so_free(r);
+    return out;
+}
+
+/* Integrate[SeriesData[...], var] -- term-by-term integration. When var is the
+ * series variable, integrate each term (constant of integration 0, as in
+ * Mathematica); otherwise (var free of the expansion point) integrate each
+ * coefficient. Returns NULL when unsupported, including the residue case where
+ * a nonzero coefficient sits at exponent -1 (whose integral is a Log term that
+ * SeriesData cannot represent). */
+Expr* series_integrate(Expr* sd, Expr* var) {
+    SeriesObj* s = so_from_seriesdata(sd);
+    if (!s) return NULL;
+
+    /* Integration with respect to a variable other than the series variable:
+     * thread Integrate into the coefficients (powers unchanged). */
+    if (!expr_eq(s->x, var)) {
+        if (!expr_free_of(s->x0, var)) { so_free(s); return NULL; }
+        SeriesObj* r = so_alloc(s->x, s->x0, s->nmin, s->order, s->den);
+        for (size_t i = 0; i < s->coef_count; i++) {
+            so_set_coef(r, i, simp(mk_fn2("Integrate", expr_copy(s->coefs[i]), expr_copy(var))));
+        }
+        Expr* out = so_to_expr(r);
+        so_free(s); so_free(r);
+        return out;
+    }
+
+    /* Residue guard: a nonzero (x-x0)^-1 term would integrate to a Log. */
+    for (size_t i = 0; i < s->coef_count; i++) {
+        if (s->nmin + (int64_t)i + s->den == 0 && !is_lit_zero(s->coefs[i])) {
+            so_free(s);
+            return NULL;
+        }
+    }
+
+    /* Power rule: a_i (x-x0)^((nmin+i)/den)
+     *   ->  a_i * den/(nmin+i+den) * (x-x0)^((nmin+i+den)/den). */
+    SeriesObj* r = so_alloc(s->x, s->x0, s->nmin + s->den, s->order + s->den, s->den);
+    for (size_t i = 0; i < s->coef_count && i < r->coef_count; i++) {
+        int64_t denom = s->nmin + (int64_t)i + s->den;  /* new exponent numerator */
+        if (denom == 0) {
+            /* The (x-x0)^-1 slot: its coefficient is zero (guaranteed by the
+             * residue guard above), so the integrated coefficient is zero. */
+            so_set_coef(r, i, expr_new_integer(0));
+            continue;
+        }
+        Expr* factor = make_rational(s->den, denom);    /* den/(nmin+i+den) */
+        so_set_coef(r, i, simp(mk_times(expr_copy(s->coefs[i]), factor)));
+    }
+    so_trim_leading(r);
+    Expr* out = so_to_expr(r);
+    so_free(s); so_free(r);
+    return out;
+}
+
+/* ----------------------------------------------------------------------------
+ * SeriesData arithmetic (Plus / Times / Power dispatch targets)
+ *
+ * The strategy is uniform: convert every operand to a SeriesObj about the
+ * common (x, x0), then drive the existing so_add / so_mul / so_pow_* algebra.
+ * A non-series operand is expanded with the full series engine, so constants,
+ * the bare variable, polynomials, and transcendental functions all combine the
+ * way Mathematica does. Incompatible operands (different x or x0, or something
+ * the engine cannot expand) yield NULL so the caller leaves the node alone.
+ * -------------------------------------------------------------------------- */
+
+/* Convert a single Plus/Times operand to a SeriesObj about (x, x0), expanding
+ * to O-term exponent order_num/den. On an incompatible operand (a SeriesData
+ * about a different point, or an expression the engine cannot expand) sets
+ * *incompatible and returns NULL. */
+/* True iff `e` depends on the series variable `x` through a piecewise-constant
+ * / non-analytic head (Floor, Arg, Sign, ...). Such a factor has no power-series
+ * expansion about a generic point, and Mathematica keeps it as a symbolic
+ * coefficient OUTSIDE the SeriesData rather than folding it in -- e.g. the
+ * branch-point wrappers emit Times[(-1)^Floor[(Pi/2 - Arg[x])/(2 Pi)], series].
+ * series_combine must detect these and bail to a symbolic Plus/Times: feeding
+ * one to series_expand below otherwise loops forever (it never reduces). */
+static bool expr_nonanalytic_in(const Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (expr_free_of((Expr*)e, x)) return false;   /* no dependence -> safe */
+    Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol) {
+        static const char* const bad[] = {
+            "Floor", "Ceiling", "Round", "IntegerPart", "FractionalPart",
+            "Mod", "Quotient", "Sign", "Abs", "Arg", "UnitStep",
+            "KroneckerDelta", "Boole", "Max", "Min", NULL };
+        for (size_t i = 0; bad[i]; i++)
+            if (strcmp(h->data.symbol, bad[i]) == 0) return true;
+    }
+    if (expr_nonanalytic_in(h, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_nonanalytic_in(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* The underlying expansion variable behind a (possibly compound) formal series
+ * variable. Series about a finite point uses an atomic symbol; series at
+ * Infinity uses Power[var, -k] (e.g. Power[x,-1] = 1/x). Returns the base symbol
+ * (`x`) so callers can tell a genuine constant (free of `x`) from a factor that
+ * is structurally free of the formal variable 1/x yet still depends on x -- such
+ * as E^x in Times[E^x, SeriesData[1/x, ...]], which must NOT fold into the
+ * coefficients. Returns NULL for an unrecognised shape (treated as no base). */
+static Expr* series_base_var(Expr* x) {
+    if (!x) return NULL;
+    if (x->type == EXPR_SYMBOL) return x;
+    if (x->type == EXPR_FUNCTION &&
+        x->data.function.head->type == EXPR_SYMBOL &&
+        x->data.function.head->data.symbol == SYM_Power &&
+        x->data.function.arg_count == 2 &&
+        x->data.function.args[0]->type == EXPR_SYMBOL)
+        return x->data.function.args[0];
+    return NULL;
+}
+
+static SeriesObj* operand_to_series(Expr* op, Expr* x, Expr* x0,
+                                    int64_t order_num, int64_t den,
+                                    bool* incompatible) {
+    SeriesObj* s = NULL;
+    if (is_series_data(op)) {
+        s = so_from_seriesdata(op);
+        if (!s) { *incompatible = true; return NULL; }
+        if (!expr_eq(s->x, x) || !expr_eq(s->x0, x0)) {
+            so_free(s);
+            *incompatible = true;
+            return NULL;
+        }
+        if (s->den != den) {
+            SeriesObj* r = so_rescale(s, lcm_i64(s->den, den));
+            so_free(s);
+            s = r;
+        }
+    } else if (expr_free_of(op, x)) {
+        /* Free of the formal series variable. For a compound variable (series at
+         * Infinity, where x is 1/var), an operand that still depends on the
+         * underlying var is not a genuine constant and must not fold into the
+         * coefficients -- e.g. Times[E^x, SeriesData[1/x, ...]] stays symbolic. */
+        Expr* bv = series_base_var(x);
+        if (bv && bv != x && !expr_free_of(op, bv)) {
+            *incompatible = true;
+            return NULL;
+        }
+        /* Constant: folds into the a0 term. Fast path for the common
+         * `series + scalar` / `scalar * series` shapes. */
+        s = so_from_constant(op, x, x0, order_num, den);
+    } else if (expr_nonanalytic_in(op, x)) {
+        /* Piecewise-constant / non-analytic dependence on x (Floor, Arg, ...):
+         * no power-series expansion exists. Bail so the node stays symbolic,
+         * matching Mathematica's branch-point wrapper output. */
+        *incompatible = true;
+        return NULL;
+    } else {
+        /* Anything else: expand it as a series about (x, x0). Pad the internal
+         * order the same way builtin_series does so Laurent/Puiseux operands
+         * survive. */
+        bool x0_is_numeric = (x0->type == EXPR_INTEGER ||
+                              x0->type == EXPR_REAL ||
+                              x0->type == EXPR_BIGINT);
+        int64_t target = order_num > 0 ? order_num : 1;
+        int64_t pad = x0_is_numeric ? 12 : 2;
+        SeriesCtx ctx = {
+            x, x0, target + pad, target,
+            /* allow_branch_wrap */ true,
+            /* pending_add_const  */ NULL,
+            /* pending_log_coef   */ NULL,
+            /* pending_discriminator */ NULL,
+        };
+        s = series_expand(op, &ctx);
+        if (!s) { *incompatible = true; return NULL; }
+    }
+
+    /* Trim leading zeros so nmin reflects the true leading exponent. so_mul's
+     * order tracking (min(a.order+b.nmin, b.order+a.nmin)) depends on accurate
+     * nmin: an untrimmed identity series for `x` (nmin 0, coef0 = 0) would
+     * otherwise pull the product's O-term one power too low. */
+    so_trim_leading(s);
+    return s;
+}
+
+/* Shared core for Plus and Times: gather the SeriesData operands to find the
+ * controlling (x, x0, den) and minimum order, convert every operand, then fold
+ * with `combine` (so_add or so_mul). */
+static Expr* series_combine(Expr* const* args, size_t n,
+                            SeriesObj* (*combine)(SeriesObj*, SeriesObj*)) {
+    /* The controlling (x, x0) come from the first SeriesData operand; borrow
+     * them straight out of the live argument tree (no copy) so they stay valid
+     * for the whole call. The common denominator is the lcm of all SeriesData
+     * denominators, and the controlling O-term order is the minimum order over
+     * the SeriesData operands, rescaled to that denominator. */
+    Expr* x = NULL;
+    Expr* x0 = NULL;
+    int64_t den = 1;
+    int64_t order_num = INT64_MAX;
+    for (size_t i = 0; i < n; i++) {
+        if (!is_series_data(args[i])) continue;
+        Expr** sa = args[i]->data.function.args;
+        if (sa[3]->type != EXPR_INTEGER || sa[4]->type != EXPR_INTEGER ||
+            sa[5]->type != EXPR_INTEGER || sa[5]->data.integer <= 0) return NULL;
+        if (!x) {
+            x = sa[0]; x0 = sa[1]; den = sa[5]->data.integer;
+        } else {
+            if (!expr_eq(sa[0], x) || !expr_eq(sa[1], x0)) return NULL;
+            den = lcm_i64(den, sa[5]->data.integer);
+        }
+    }
+    if (!x) return NULL;                      /* no (well-formed) SeriesData */
+
+    /* Second pass: now that den is known, fold in each operand's order. */
+    for (size_t i = 0; i < n; i++) {
+        if (!is_series_data(args[i])) continue;
+        Expr** sa = args[i]->data.function.args;
+        int64_t o = sa[4]->data.integer * (den / sa[5]->data.integer);
+        if (o < order_num) order_num = o;
+    }
+    if (order_num == INT64_MAX) order_num = 1;
+
+    bool incompatible = false;
+    SeriesObj* acc = NULL;
+    for (size_t i = 0; i < n; i++) {
+        SeriesObj* t = operand_to_series(args[i], x, x0, order_num, den, &incompatible);
+        if (!t) {
+            if (acc) so_free(acc);
+            return NULL;                     /* incompatible -> stays symbolic */
+        }
+        if (!acc) {
+            acc = t;
+        } else {
+            SeriesObj* r = combine(acc, t);
+            so_free(acc); so_free(t);
+            acc = r;
+        }
+    }
+    if (!acc) return NULL;
+    so_trim_leading(acc);
+    Expr* out = so_to_expr(acc);
+    so_free(acc);
+    return out;
+}
+
+Expr* series_combine_plus(Expr* const* args, size_t n) {
+    return series_combine(args, n, so_add);
+}
+
+Expr* series_combine_times(Expr* const* args, size_t n) {
+    return series_combine(args, n, so_mul);
+}
+
+Expr* series_power(Expr* base, Expr* exp) {
+    bool base_series = is_series_data(base);
+    bool exp_series  = is_series_data(exp);
+    if (!base_series && !exp_series) return NULL;
+
+    /* Direct path: SeriesData base raised to a scalar (free of the series
+     * variable) exponent. Integer exponents go through so_pow_int (which
+     * handles negative powers via so_inv); other scalars through so_pow_expr. */
+    if (base_series) {
+        SeriesObj* b = so_from_seriesdata(base);
+        if (!b) return NULL;
+        if (expr_free_of(exp, b->x)) {
+            SeriesObj* r = so_pow_expr(b, exp);
+            so_free(b);
+            if (!r) return NULL;
+            so_trim_leading(r);
+            Expr* out = so_to_expr(r);
+            so_free(r);
+            return out;
+        }
+        so_free(b);
+    }
+
+    /* General path: the exponent depends on the series variable, or the base is
+     * an ordinary expression raised to a series exponent (e.g. 2^series).
+     * Rewrite base^exp = Exp[exp * Log[base]] and re-expand. The controlling
+     * (x, x0, order, den) comes from whichever operand is the series. */
+    Expr* sd = base_series ? base : exp;
+    Expr* x   = sd->data.function.args[0];
+    Expr* x0  = sd->data.function.args[1];
+    SeriesObj* probe = so_from_seriesdata(sd);
+    if (!probe) return NULL;
+    int64_t order_num = probe->order;
+    int64_t den = probe->den;
+    so_free(probe);
+
+    Expr* rewrite = mk_fn1("Exp",
+        mk_times(expr_copy(exp), mk_fn1("Log", expr_copy(base))));
+    bool incompatible = false;
+    SeriesObj* r = operand_to_series(rewrite, x, x0, order_num, den, &incompatible);
+    expr_free(rewrite);
+    if (!r) return NULL;
+    so_trim_leading(r);
+    Expr* out = so_to_expr(r);
+    so_free(r);
+    return out;
+}
+
 static Expr* seriesdata_to_normal(Expr* arg) {
     Expr* x      = arg->data.function.args[0];
     Expr* x0     = arg->data.function.args[1];

@@ -13,7 +13,8 @@ Zeta[s, a]
 Even positive integers give rational multiples of Pi^(2n), negative
 integers give rationals, Zeta[0] is -1/2, and Zeta[1] is ComplexInfinity;
 odd positive integers stay symbolic. Hurwitz zeta at a positive integer a
-reduces to Zeta[s] minus a finite power sum. Real, complex, machine and
+reduces to Zeta[s] minus a finite power sum, and Zeta[s, 1/2] is
+(2^s - 1) Zeta[s]. Real, complex, machine and
 arbitrary-precision (MPFR) numeric arguments evaluate numerically via
 mpfr_zeta (real Riemann) or an Euler-Maclaurin kernel. Listable.
 ```

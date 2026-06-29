@@ -11,7 +11,6 @@
 #include "symtab.h"
 #include "attr.h"
 #include "sym_names.h"
-#include "print.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -34,16 +33,10 @@ static void register_color(const char* name, Expr* value) {
     Expr* sym = expr_new_symbol(name);
     symtab_add_own_value(name, sym, value);
     expr_free(sym);
-
-    char doc[96];
-    char* printed = expr_to_string(value);
-    snprintf(doc, sizeof(doc), "%s\n\tA named color constant, equal to %s.",
-             name, printed ? printed : "...");
-    free(printed);
-    symtab_set_docstring(name, doc);
-
     expr_free(value);
     symtab_get_def(name)->attributes |= ATTR_PROTECTED;
+    /* Docstrings for the named colours live centrally in info.c (info_init),
+     * mirroring CMYKColor; info_init runs before graphics_init. */
 }
 
 /* `v` exactly 0 or 1 prints as a plain integer (matching Mathematica's own
@@ -103,24 +96,40 @@ void graphics_init(void) {
     register_inert("Opacity",
         "Opacity[a]\n\tA style directive: sets the opacity (a in [0,1]) of "
         "subsequent primitives.");
+    /* CMYKColor is an inert, protected style directive like the colors above;
+     * its docstring is set centrally in info.c (info_init). */
+    symtab_get_def("CMYKColor")->attributes |= ATTR_PROTECTED;
     register_inert("Thickness",
         "Thickness[t]\n\tA style directive: sets the line thickness (in "
         "plot coordinates) of subsequent Line/Circle primitives.");
 
-    register_color("Black",     rgb_color(0, 0, 0));
-    register_color("White",     rgb_color(1, 1, 1));
-    register_color("Gray",      gray_color(0.5));
-    register_color("LightGray", gray_color(0.85));
-    register_color("Red",       rgb_color(1, 0, 0));
-    register_color("Green",     rgb_color(0, 1, 0));
-    register_color("Blue",      rgb_color(0, 0, 1));
-    register_color("Cyan",      rgb_color(0, 1, 1));
-    register_color("Magenta",   rgb_color(1, 0, 1));
-    register_color("Yellow",    rgb_color(1, 1, 0));
-    register_color("Orange",    rgb_color(1, 0.5, 0));
-    register_color("Pink",      rgb_color(1, 0.5, 0.5));
-    register_color("Purple",    rgb_color(0.5, 0, 0.5));
-    register_color("Brown",     rgb_color(0.6, 0.4, 0.2));
+    /* Named colour constants -> RGBColor[...]/GrayLevel[...] literals.
+     * Black/White/Gray and the grey LightGray use GrayLevel; the rest use
+     * RGBColor, matching Mathematica's own InputForm values. */
+    register_color("Black",        gray_color(0));
+    register_color("White",        gray_color(1));
+    register_color("Gray",         gray_color(0.5));
+    register_color("Red",          rgb_color(1, 0, 0));
+    register_color("Green",        rgb_color(0, 1, 0));
+    register_color("Blue",         rgb_color(0, 0, 1));
+    register_color("Cyan",         rgb_color(0, 1, 1));
+    register_color("Magenta",      rgb_color(1, 0, 1));
+    register_color("Yellow",       rgb_color(1, 1, 0));
+    register_color("Brown",        rgb_color(0.6, 0.4, 0.2));
+    register_color("Orange",       rgb_color(1, 0.5, 0));
+    register_color("Pink",         rgb_color(1, 0.5, 0.5));
+    register_color("Purple",       rgb_color(0.5, 0, 0.5));
+    register_color("LightRed",     rgb_color(1, 0.85, 0.85));
+    register_color("LightGreen",   rgb_color(0.88, 1, 0.88));
+    register_color("LightBlue",    rgb_color(0.87, 0.94, 1));
+    register_color("LightGray",    gray_color(0.85));
+    register_color("LightCyan",    rgb_color(0.9, 1, 1));
+    register_color("LightMagenta", rgb_color(1, 0.9, 1));
+    register_color("LightYellow",  rgb_color(1, 1, 0.85));
+    register_color("LightBrown",   rgb_color(0.94, 0.91, 0.88));
+    register_color("LightOrange",  rgb_color(1, 0.9, 0.8));
+    register_color("LightPink",    rgb_color(1, 0.925, 0.925));
+    register_color("LightPurple",  rgb_color(0.94, 0.88, 0.94));
     register_inert("PointSize",
         "PointSize[s]\n\tA style directive: sets the radius (in plot "
         "coordinates) of subsequent Point primitives.");
@@ -166,6 +175,36 @@ void graphics_init(void) {
         "Show[graphics, opts...]\n\tDisplays graphics (a Graphics[...] "
         "object) in an interactive window and returns it, merging any "
         "given options into its option list.");
+
+    /* ListPlot's data must evaluate (ListPlot[Range[10]] / Table[...]), so —
+     * unlike Plot — it is a plain protected builtin, not HoldAll. The option
+     * keywords below are inert so they print and ?-document, but carry no
+     * value of their own. */
+    register_inert("Joined",
+        "Joined\n\tA ListPlot option: True connects the points with a line "
+        "instead of drawing markers (default False).");
+    register_inert("DataRange",
+        "DataRange\n\tA ListPlot option: the x-range {xmin, xmax} to assume "
+        "for a list of heights (default Automatic = 1 to n). DataRange -> All "
+        "reads a flat list of pairs as several height datasets.");
+    register_inert("PlotMarkers",
+        "PlotMarkers\n\tA ListPlot option naming the markers used for points "
+        "(default None). Currently accepted but rendered with the default "
+        "marker.");
+
+    symtab_add_builtin("ListPlot", builtin_listplot);
+    symtab_get_def("ListPlot")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("ListPlot",
+        "ListPlot[{y1, ..., yn}, opts...]\n\tPlots the values as points "
+        "{i, yi} (a scatter/point plot). ListPlot[{{x1,y1}, ...}] plots the "
+        "given coordinate pairs; ListPlot[{data1, data2, ...}] overlays each "
+        "dataset in a distinct palette colour. Returns a Graphics[...] object. "
+        "Options: Joined (connect points; default False), DataRange (x-range "
+        "for heights), Filling (Axis/Bottom/Top/a number — draws stems), "
+        "FillingStyle, PlotMarkers, PlotStyle, PlotLegends, and the Graphics "
+        "options PlotRange, Axes (default True), AspectRatio (default "
+        "1/GoldenRatio), Frame, AxesLabel, GridLines, ImageSize, Background, "
+        "PlotLabel, Prolog, Epilog.");
 
     symtab_add_builtin("Plot", builtin_plot);
     symtab_get_def("Plot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;

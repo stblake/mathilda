@@ -37,10 +37,20 @@ A symbolic 2D graphics object.
 - `Protected`.
 - Prints as `-Graphics-` (use `FullForm[]` to inspect the underlying
   expression).
+- `Options[Graphics]` reports the rendering options the engine honours (the
+  set read by the renderer's `gfx_options_parse`): `AspectRatio`, `Axes`,
+  `AxesLabel`, `AxesOrigin`, `AxesStyle`, `Background`, `Epilog`, `Frame`,
+  `FrameLabel`, `FrameStyle`, `FrameTicks`, `GridLines`, `GridLinesStyle`,
+  `ImageSize`, `LabelStyle`, `PlotLabel`, `PlotRange`, `PlotRangePadding`,
+  `PlotStyle`, `Prolog`, `RotateLabel`, `TicksStyle`. See `Show` below for
+  each option's effect.
 
 ```mathematica
 In[1]:= Graphics[{Point[{0, 0}]}]
 Out[1]= -Graphics-
+
+In[2]:= Options[Graphics, {Axes, PlotRange}]
+Out[2]= {Axes -> False, PlotRange -> Automatic}
 
 In[2]:= FullForm[Graphics[{Point[{0, 0}]}]]
 Out[2]= Graphics[List[Point[List[0, 0]]]]
@@ -82,8 +92,11 @@ winding-sensitive but `Polygon[]` itself, like Mathematica's, is not).
 ## Text
 A graphics primitive: `Text[expr, {x,y}]` renders `expr` (a string,
 number, or any expression -- non-strings are stringified the same way
-`ToString[]` would) as text centered at `{x,y}`, drawn with a built-in
-single-stroke vector font.
+`ToString[]` would) as text centered at `{x,y}`, drawn with the classic
+Hershey *Roman Simplex* single-stroke vector font (full printable ASCII,
+upper- and lowercase, with proportional advance widths). The glyph data is
+transcribed from the historical Hershey dataset (`tools/hershey.dat`) by
+`tools/gen_hershey.py` into `src/graphics/hershey_glyphs.inc`.
 
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
 Style directives. Placed alongside primitives in a `Graphics[]` primitive
@@ -101,10 +114,13 @@ Out[1]= -Graphics-
 ```
 
 ## Named color constants
-`Black`, `White`, `Gray`, `LightGray`, `Red`, `Green`, `Blue`, `Cyan`,
-`Magenta`, `Yellow`, `Orange`, `Pink`, `Purple`, `Brown` are ordinary
-protected `OwnValue`s evaluating to an `RGBColor[...]`/`GrayLevel[...]`
-literal (e.g. `Red` is exactly `RGBColor[1, 0, 0]`) -- usable anywhere a
+`Red`, `Green`, `Blue`, `Black`, `White`, `Gray`, `Cyan`, `Magenta`,
+`Yellow`, `Brown`, `Orange`, `Pink`, `Purple` and their light variants
+`LightRed`, `LightGreen`, `LightBlue`, `LightGray`, `LightCyan`,
+`LightMagenta`, `LightYellow`, `LightBrown`, `LightOrange`, `LightPink`,
+`LightPurple` are ordinary protected `OwnValue`s evaluating to an
+`RGBColor[...]`/`GrayLevel[...]` literal (e.g. `Red` is exactly
+`RGBColor[1, 0, 0]`, `Black` is `GrayLevel[0]`) -- usable anywhere a
 color literal is, including `PlotStyle`, `Background`, `FrameStyle`,
 `AxesStyle`, `TicksStyle`, `GridLinesStyle`, and as a style directive
 directly inside a primitive list (`Graphics[{Blue, Point[{0,0}]}]`).
@@ -129,6 +145,22 @@ A style directive: `Hue[h]` (fully saturated, `h` in `[0,1]`, wrapping),
 standard HSB-to-RGB, recognized everywhere `RGBColor`/`GrayLevel` are
 (style directives, `PlotStyle`, `Background`, `FrameStyle`, `AxesStyle`,
 `TicksStyle`, `GridLinesStyle`, `ColorFunction`'s return value).
+
+## CMYKColor
+A style directive for the subtractive (print) color model used by inks.
+
+- `CMYKColor[c, m, y, k]`: cyan, magenta, yellow, black components in `[0,1]`.
+- `CMYKColor[c, m, y]`: equivalent to `k = 0`.
+- `CMYKColor[c, m, y, k, a]`: with opacity `a`.
+- `CMYKColor[{c, m, y, k}]` / `CMYKColor[{c, m, y, k, a}]`: list forms.
+
+Components and opacity outside `[0,1]` are clipped. At render time the color
+is converted to RGB by `r = (1-c)(1-k)`, `g = (1-m)(1-k)`, `b = (1-y)(1-k)`,
+so `CMYKColor` is recognized everywhere `RGBColor`/`GrayLevel`/`Hue` are.
+
+```mathematica
+In[1]:= Graphics[{CMYKColor[1, 0, 0, 0], Disk[]}]   (* a cyan disk *)
+```
 
 ## Show
 Normalizes a `Graphics[...]` object for display; the REPL front end opens
@@ -311,6 +343,17 @@ into the off-screen plunge and leave the visible body and its on-screen crossing
 coarsely faceted. Clamped, the off-band stretch collapses onto the clip line and
 reads as flat, so the recursion concentrates where it is seen. With no explicit
 `PlotRange` y the curve is sampled over its full extent, exactly as before.
+
+This vertical-gap test is the **primary** refinement driver, and because a
+chord's sagitta grows with curvature, sample density tracks curvature: points
+cluster where the curve bends (the peaks of `Sin`, the ends of `x^3`, the body
+of a spike) and thin out where it is straight — including steep but locally
+linear stretches such as `Sin`'s zero-crossings. A secondary, deliberately
+loose chord-**length** cap (≈1/12 of the frame) acts only as a backstop, so a
+near-vertical asymptotic approach (e.g. `Log[x]` near `0`) cannot leave a
+conspicuous on-screen gap; it is kept generous on purpose, since a tight cap
+keys on slope rather than curvature and would invert the density, over-sampling
+straight-steep regions at the expense of the curvy ones.
 
 **Features**:
 - `HoldAll`, `Protected`.
@@ -543,4 +586,69 @@ Out[8]= -Graphics-  (* weighted spiral region *)
 In[9]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2},
           Mesh -> All]
 Out[9]= -Graphics-  (* with grid lines overlaid *)
+```
+
+## ListPlot
+Plots explicit data as a point (scatter) plot, returning a
+`Graphics[{Point[...], ...}, opts]` object rendered through the same engine
+as `Plot`/`Show`. Unlike `Plot` (which is `HoldAll` so its function body stays
+symbolic), `ListPlot`'s data is concrete and **is** evaluated, so
+`ListPlot[Range[10]]` and `ListPlot[Table[i^2, {i, 5}]]` work.
+
+Data is classified into one or more datasets:
+
+- `ListPlot[{y1, ..., yn}]` — a flat list of **heights**, plotted as the
+  points `{i, yi}` (`x` running over `DataRange`, default `1` to `n`).
+  Non-numeric entries are treated as missing and skipped (their index slot is
+  still consumed).
+- `ListPlot[{{x1, y1}, ..., {xn, yn}}]` — a list of **coordinate pairs**,
+  plotted as the given points (a scatter plot).
+- `ListPlot[{data1, data2, ...}]` — several **datasets** (any element that is
+  itself a sublist and not a flat pair list), each drawn in a distinct palette
+  colour (`ColorData[97]`, as for multi-curve `Plot`).
+
+A non-list argument, an empty list, or all-missing data leaves `ListPlot`
+unevaluated.
+
+`ListPlot`-specific options (the rest pass through to the `Graphics[...]`
+result and are interpreted by the renderer — see the `Show` table above):
+
+| Option | Default | Meaning |
+|---|---|---|
+| `Joined` | `False` | `True` connects the points with a `Line` polyline instead of drawing point markers |
+| `DataRange` | `Automatic` | the x-range `{xmin, xmax}` to assume for a heights list (`Automatic`/`All` = `1` to `n`); `DataRange -> All` forces a flat list of pairs to be read as several height datasets |
+| `Filling` | `None` | `Axis` / `Bottom` / `Top` / a number — fills down to that baseline. With `Joined -> True` the whole region under the connecting curve is filled continuously (quad/triangle `Polygon[]` strip, shared with `Plot`); otherwise a vertical stem is drawn from each point |
+| `FillingStyle` | `Automatic` | colour/opacity directive for the fill (default `Opacity[0.3]`) |
+| `PlotStyle` | `Automatic` | colour for the points/line (default blue `RGBColor[0.2, 0.4, 0.8]`) |
+| `PlotLegends` | `None` | `{lbl1, ...}` labels each dataset; `Automatic` labels by index; emits the internal `$PlotLegendData` the renderer's legend box reads |
+| `PlotMarkers` | `None` | accepted; markers currently render with the default glyph |
+
+Plot-style defaults distinct from a bare `Graphics[]`: `Axes -> True`,
+`AspectRatio -> 1/GoldenRatio`. A supplied `Frame -> True` suppresses the
+default `Axes -> True`, as for `Plot`.
+
+Marker size is **adaptive**: when no explicit `PointSize` is given, the
+renderer shrinks the dots as the scatter grows denser, so a large point cloud
+stays legible instead of merging into an ink blob. The home-zoom radius is held
+to a small fraction of the mean inter-point spacing (≈ `sqrt(area / N)` for `N`
+points over the plot region), capped at the sparse default and floored at a
+sub-pixel minimum. It therefore depends on the point count, the window size, and
+the pixel resolution. An explicit `PointSize` overrides this entirely.
+
+```mathematica
+In[1]:= ListPlot[{1, 4, 9, 16, 25}]
+Out[1]= -Graphics-
+
+In[2]:= ListPlot[{{0, 0}, {1, 1}, {2, 4}, {3, 9}}]
+Out[2]= -Graphics-
+
+In[3]:= ListPlot[{{1, 1}, {2, 4}, {3, 9}}, Joined -> True]
+Out[3]= -Graphics-
+
+In[4]:= ListPlot[{Table[Sin[n], {n, 20}], Table[Cos[n], {n, 20}]},
+            PlotLegends -> {"sin", "cos"}]
+Out[4]= -Graphics-
+
+In[5]:= ListPlot[{1, 4, 9, 16}, Filling -> Axis]
+Out[5]= -Graphics-
 ```

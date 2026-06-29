@@ -114,6 +114,7 @@ extern const char* SYM_DiscreteDelta;
 extern const char* SYM_Divide;
 extern const char* SYM_Divisible;
 extern const char* SYM_Divisors;
+extern const char* SYM_DivisorSigma;
 extern const char* SYM_Dixon;
 extern const char* SYM_Do;
 extern const char* SYM_DollarMachineEpsilon;
@@ -237,6 +238,7 @@ extern const char* SYM_IntegerDigits;
 extern const char* SYM_IntegerLength;
 extern const char* SYM_IntegerExponent;
 extern const char* SYM_DigitCount;
+extern const char* SYM_DigitSum;
 extern const char* SYM_IntegerString;
 extern const char* SYM_IntegerPart;
 extern const char* SYM_IntegerPartitions;
@@ -248,6 +250,7 @@ extern const char* SYM_InverseFunction;
 extern const char* SYM_InverseFunctions;
 extern const char* SYM_IrreduciblePolynomialQ;
 extern const char* SYM_Jacobian;
+extern const char* SYM_JacobiSymbol;
 extern const char* SYM_Join;
 extern const char* SYM_Khinchin;
 extern const char* SYM_KroneckerDelta;
@@ -286,9 +289,12 @@ extern const char* SYM_MinRecursion;
 extern const char* SYM_Mod;
 extern const char* SYM_Module;
 extern const char* SYM_Modulus;
+extern const char* SYM_MoebiusMu;
 extern const char* SYM_MonomialOrder;
 extern const char* SYM_MultiplicativeOrder;
 extern const char* SYM_ND;
+extern const char* SYM_NHoldAll;
+extern const char* SYM_NHoldFirst;
 extern const char* SYM_NHoldRest;
 extern const char* SYM_NIntegrate;
 extern const char* SYM_NLimit;
@@ -354,6 +360,7 @@ extern const char* SYM_PossibleZeroQ;
 extern const char* SYM_Power;
 extern const char* SYM_PowerExpand;
 extern const char* SYM_PrecisionGoal;
+extern const char* SYM_Prime;
 extern const char* SYM_Primes;
 extern const char* SYM_Product;
 extern const char* SYM_ProductLog;
@@ -578,6 +585,7 @@ extern const char* SYM_Plot3D;
 extern const char* SYM_ParametricPlot;
 extern const char* SYM_RGBColor;
 extern const char* SYM_GrayLevel;
+extern const char* SYM_CMYKColor;
 extern const char* SYM_Opacity;
 extern const char* SYM_Thickness;
 extern const char* SYM_PointSize;
@@ -621,6 +629,16 @@ extern const char* SYM_Orange;
 extern const char* SYM_Pink;
 extern const char* SYM_Purple;
 extern const char* SYM_Brown;
+extern const char* SYM_LightRed;
+extern const char* SYM_LightGreen;
+extern const char* SYM_LightBlue;
+extern const char* SYM_LightCyan;
+extern const char* SYM_LightMagenta;
+extern const char* SYM_LightYellow;
+extern const char* SYM_LightBrown;
+extern const char* SYM_LightOrange;
+extern const char* SYM_LightPink;
+extern const char* SYM_LightPurple;
 extern const char* SYM_Hue;
 extern const char* SYM_ColorFunction;
 extern const char* SYM_ColorFunctionScaling;
@@ -638,6 +656,10 @@ extern const char* SYM_PlotLegendData;
 /* Internal: carries Plot's function/var/options inside the returned
  * Graphics[...] so the renderer can re-sample adaptively on zoom. */
 extern const char* SYM_PlotResample;
+extern const char* SYM_ListPlot;     /* ListPlot[data, opts...] */
+extern const char* SYM_Joined;       /* ListPlot option: connect points */
+extern const char* SYM_DataRange;    /* ListPlot option: x-range for heights */
+extern const char* SYM_PlotMarkers;  /* ListPlot option: point glyphs */
 
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*

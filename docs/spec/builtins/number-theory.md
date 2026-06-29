@@ -1,6 +1,6 @@
 # Number Theory
 
-Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`, `PartitionsQ`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
+Integer and number-theoretic functions: greatest common divisor and least common multiple (`GCD`, `LCM`, `ExtendedGCD`), modular arithmetic (`PowerMod`, `MultiplicativeOrder`, `PrimitiveRoot`), primality and factorization (`PrimeQ`, `Prime`, `PrimePi`, `NextPrime`, `FactorInteger`, `SquareFreeQ`), arithmetic functions (`EulerPhi`), partitions (`IntegerPartitions`, `PartitionsP`, `PartitionsQ`), and continued fractions (`ContinuedFraction`, `FromContinuedFraction`).
 
 ## GCD, LCM
 
@@ -176,6 +176,47 @@ In[7]:= MultiplicativeOrder[10, 22]
 Out[7]= MultiplicativeOrder[10, 22]
 ```
 
+## JacobiSymbol
+
+Gives the Jacobi symbol $(n/m)$.
+- `JacobiSymbol[n, m]`: the Jacobi symbol of `n` with respect to `m`,
+  returned as `-1`, `0`, or `1`.
+
+**Features**:
+- `Protected`, `Listable` — threads element-wise over lists and arrays.
+- For prime `m` the Jacobi symbol reduces to the Legendre symbol, equal to
+  `±1` according to whether `n` is a quadratic residue modulo `m`, and `0`
+  when `m` divides `n`.
+- Following the Wolfram Language, this is the full Kronecker-symbol
+  generalisation: the second argument `m` may be even or non-positive, and
+  the first argument `n` may be negative.
+- Computed with GMP `mpz_kronecker` in $O((\log m)^2)$ time, so `n` and `m`
+  may be arbitrary-precision bignums.
+- Non-integer numeric inputs and symbolic arguments flow through
+  unevaluated with no diagnostic.
+- Diagnostic: `JacobiSymbol::argrx` when called with other than 2 arguments.
+
+```mathematica
+In[1]:= JacobiSymbol[10, 5]
+Out[1]= 0
+
+In[2]:= Table[JacobiSymbol[n, m], {n, 0, 10}, {m, 1, n, 2}]
+Out[2]= {{}, {1}, {1}, {1, 0}, {1, 1}, {1, -1, 0}, {1, 0, 1},
+         {1, 1, -1, 0}, {1, -1, -1, 1}, {1, 0, 1, 1, 0}, {1, 1, 0, -1, 1}}
+
+In[3]:= JacobiSymbol[10^10 + 1, Prime[1000]]
+Out[3]= 1
+
+In[4]:= JacobiSymbol[7, 6]
+Out[4]= 1
+
+In[5]:= JacobiSymbol[{2, 3, 5, 7, 11}, 3]
+Out[5]= {-1, 0, -1, 1, -1}
+
+In[6]:= JacobiSymbol[-3, {1, 3, 5, 7}]
+Out[6]= {1, 0, -1, 1}
+```
+
 ## PrimitiveRoot
 
 Gives a primitive root of `n`, i.e. a generator of the multiplicative group
@@ -307,20 +348,59 @@ In[9]:= PrimeQ[Exp[2 Pi I/3]]
 Out[9]= False
 ```
 
-## PrimePi
+## Prime
 
-- `PrimePi[x]`: Returns the number of primes less than or equal to `x`.
+- `Prime[n]`: the `n`-th prime $p_n$ (`Prime[1] = 2`, `Prime[2] = 3`, ...).
 
 **Features**:
 - `Listable`, `Protected`.
-- Uses Meissel-Lehmer algorithm for efficient counting.
+- Small `n` is read directly from a sieve table of the primes below $10^6$.
+- Large `n` inverts `PrimePi`: a Cipolla asymptotic estimate for $p_n$ is refined
+  by a Newton step against the exact prime counter, then `NextPrime`/`PrevPrime`
+  steps land exactly on $p_n$.  Exact for `n` up to about $1.4 \times 10^{12}$
+  ($p_n \le 5 \times 10^{13}$); beyond that the call is left unevaluated.
+- A non-positive-integer argument emits `Prime::intpp`; a wrong argument count
+  emits `Prime::argx`; both leave the call unevaluated.
 
 ```mathematica
-In[1]:= PrimePi[10]
-Out[1]= 4
+In[1]:= Prime[100]
+Out[1]= 541
 
-In[2]:= PrimePi[100]
-Out[2]= 25
+In[2]:= Prime[{1, 3, 4, 10}]
+Out[2]= {2, 5, 7, 29}
+
+In[3]:= Prime[10^10]
+Out[3]= 252097800623
+```
+
+## PrimePi
+
+- `PrimePi[x]`: the number of primes less than or equal to `x`.
+- `PrimePi[x, Method -> m]`: count with a specific algorithm.
+
+**Features**:
+- `Listable`, `Protected`.  Default `Method -> Automatic`.
+- Several recognised prime-counting algorithms are available via `Method`:
+  `"Sieve"` (segmented sieve of Eratosthenes), `"Legendre"`, `"Meissel"`,
+  `"Lehmer"`, `"LMO"` (Lagarias-Miller-Odlyzko, segmented special leaves),
+  `"DelegliseRivat"`, and `"LucyHedgehog"`.  `"DelegliseRivat"` refines `"LMO"`
+  by classifying special leaves as trivial / easy / hard and answering the
+  trivial and easy ones with $O(1)$ prime-count lookups, sending only the hard
+  leaves through the segmented sieve; it is the fastest combinatorial method here
+  (≈ 1.6 s at $10^{12}$, 9.9 s at $10^{13}$).  `Automatic` selects an efficient
+  method for the magnitude of `x` (a direct sieve table below $10^6$,
+  `"LucyHedgehog"` up to $10^9$, then `"DelegliseRivat"`).  The combinatorial
+  methods exact-count up to $5 \times 10^{13}$; `"Sieve"`/`"Legendre"` are
+  intended for smaller `x`.
+- An unrecognised `Method` setting emits `PrimePi::method` and leaves the call
+  unevaluated.
+
+```mathematica
+In[1]:= PrimePi[10^9]
+Out[1]= 50847534
+
+In[2]:= PrimePi[10^9, Method -> "LMO"]
+Out[2]= 50847534
 
 In[3]:= PrimePi[{10, 100}]
 Out[3]= {4, 25}
@@ -419,6 +499,102 @@ Out[5]= {1, 1 + I, 2}
 
 In[6]:= Divisors[3, GaussianIntegers -> True]
 Out[6]= {1, 3}
+```
+
+## DivisorSigma
+
+- `DivisorSigma[k, n]`: the divisor function `sigma_k(n)`, the sum of the
+  `k`-th powers of the (positive) divisors of `n`.
+- `DivisorSigma[k, n, GaussianIntegers -> True]`: the sum over Gaussian-integer
+  divisors.
+
+**Options**:
+- `GaussianIntegers -> False` (default): ordinary integer divisors. Set to
+  `True` to sum over the divisors in `Z[i]`. A non-real Gaussian-integer input
+  (e.g. `3 + I`) auto-enables Gaussian mode.
+
+**Features**:
+- `Listable`, `NHoldAll`, `Protected`.
+- Computed from the multiplicative formula
+  `sigma_k(n) = Product_i (p_i^((e_i+1) k) - 1) / (p_i^k - 1)` for
+  `n = Product_i p_i^e_i`, so a single path serves every exponent type: exact
+  integers and rationals for integer `k`, and symbolic / radical forms for
+  symbolic or rational `k`. `k == 0` returns the divisor count `sigma_0(n)`.
+- The sign of `n` is ignored; machine integers and GMP bigints are handled
+  uniformly.
+- In Gaussian mode the product runs over the first-quadrant associates
+  (`Re > 0`, `Im >= 0`) of the Gaussian prime factors of `n`. This is the
+  multiplicative definition — note it differs from naively summing
+  `d^k` over `Divisors[n, GaussianIntegers -> True]`.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `DivisorSigma::argrx` message.
+
+```mathematica
+In[1]:= DivisorSigma[1, 20]
+Out[1]= 42
+
+In[2]:= DivisorSigma[2, 20]
+Out[2]= 546
+
+In[3]:= DivisorSigma[0, 12]
+Out[3]= 6
+
+In[4]:= DivisorSigma[-2, 10]
+Out[4]= 13/10
+
+In[5]:= DivisorSigma[1/2, 12]
+Out[5]= (2 (-1 + 2 Sqrt[2]))/((-1 + Sqrt[2]) (-1 + Sqrt[3]))
+
+In[6]:= DivisorSigma[k, {2, 3, 6}]
+Out[6]= {(-1 + 2^(2 k))/(-1 + 2^k), (-1 + 3^(2 k))/(-1 + 3^k), ((-1 + 2^(2 k)) (-1 + 3^(2 k)))/((-1 + 2^k) (-1 + 3^k))}
+
+In[7]:= DivisorSigma[2, {1, 2, 3, 4, 5}]
+Out[7]= {1, 5, 10, 21, 26}
+
+In[8]:= DivisorSigma[1, 3 + I]
+Out[8]= 2 + 6 I
+
+In[9]:= DivisorSigma[2, 6, GaussianIntegers -> True]
+Out[9]= -30 + 20 I
+```
+
+## MoebiusMu
+
+- `MoebiusMu[n]`: the Möbius function `mu(n)`. For
+  `n = u p_1^k_1 ... p_m^k_m` with `u` a unit and `p_i` primes, `mu(n)` is `0`
+  unless every `k_i` equals `1`, in which case it is `(-1)^m`. Equivalently
+  `mu(1) = 1`, `mu(n) = (-1)^m` for a product of `m` distinct primes, and
+  `mu(n) = 0` when `n` has a squared prime factor.
+
+**Features**:
+- `Listable`, `Protected`.
+- Computed directly from the prime factorisation (machine integers and GMP
+  bigints handled uniformly); the result is always `0`, `1`, or `-1`.
+- The sign of `n` is ignored (`mu(-n) = mu(n)`).
+- A non-real Gaussian-integer argument `Complex[a, b]` is handled over `Z[i]`:
+  the input is factored into Gaussian primes (the unit factor does not count),
+  giving `0` for a repeated Gaussian prime factor and `(-1)^m` otherwise.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `MoebiusMu::argx` message.
+
+```mathematica
+In[1]:= MoebiusMu[11]
+Out[1]= -1
+
+In[2]:= MoebiusMu[10]
+Out[2]= 1
+
+In[3]:= MoebiusMu[1440]
+Out[3]= 0
+
+In[4]:= MoebiusMu[{4, 10, 17, 20}]
+Out[4]= {0, 1, -1, 0}
+
+In[5]:= MoebiusMu[10^50 + 1]
+Out[5]= -1
+
+In[6]:= MoebiusMu[5 + 6 I]
+Out[6]= -1
 ```
 
 ## EulerPhi

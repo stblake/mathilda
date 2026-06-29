@@ -11,8 +11,11 @@
  * Factorial2, FactorialPower, Binomial, PrimitiveRoot, PrimitiveRootList,
  * MultiplicativeOrder.
  *
- * Registration, attributes, and docstrings live in numbertheory_init(),
- * called from core_init() alongside the other subsystem initialisers. */
+ * The implementation is split one-file-per-builtin under src/numbertheory/
+ * (mirroring src/linalg/); cross-cutting private helpers live in
+ * numbertheory_internal.h.  Registration, attributes, and docstrings live
+ * in numbertheory_init(), called from core_init() alongside the other
+ * subsystem initialisers. */
 void numbertheory_init(void);
 
 Expr* builtin_gcd(Expr* res);
@@ -22,6 +25,7 @@ Expr* builtin_powermod(Expr* res);
 Expr* builtin_primitiveroot(Expr* res);
 Expr* builtin_primitiverootlist(Expr* res);
 Expr* builtin_multiplicativeorder(Expr* res);
+Expr* builtin_jacobisymbol(Expr* res);
 Expr* builtin_factorial(Expr* res);
 Expr* builtin_factorial2(Expr* res);
 Expr* builtin_factorialpower(Expr* res);
@@ -29,5 +33,9 @@ Expr* builtin_binomial(Expr* res);
 Expr* builtin_divisible(Expr* res);
 Expr* builtin_coprimeq(Expr* res);
 Expr* builtin_divisors(Expr* res);
+Expr* builtin_divisorsigma(Expr* res);
+Expr* builtin_moebiusmu(Expr* res);
+Expr* builtin_prime(Expr* res);
+Expr* builtin_primepi(Expr* res);
 
 #endif

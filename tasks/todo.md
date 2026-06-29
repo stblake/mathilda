@@ -1,3 +1,38 @@
+# Task: Implement genuine Deléglise–Rivat prime counting (2026-06-27)
+
+Replace the `count_dr → count_lmo` alias in `src/numbertheory/primecount.c`
+with a real Deléglise–Rivat implementation (easy/hard/trivial special-leaf
+split). Highly efficient, extensive tests, no leaks.
+
+## Plan
+- [ ] Rewrite `count_dr`: S2 = trivial + easy (PiTable, O(1)) + hard (segmented sieve)
+- [ ] S1 ordinary leaves + P2 shared with LMO shape; free-list mirrors every alloc
+- [ ] Tests: exact values, non-power-of-ten, per-integer stress vs Lucy oracle,
+      DR-vs-LMO agreement across leaf-class-exercising points
+- [ ] Clean -std=c99 -Wall -Wextra build; test_prime passes foreground
+- [ ] Benchmark DR vs LMO at 1e11..1e13; wire AUTOMATIC to the winner
+- [ ] Valgrind count_dr path vs macOS baseline
+- [ ] Docs: header comment, number-theory.md, docstring, changelog 2026-06-22.md
+
+## Review
+DONE. `count_dr` is now a genuine Deléglise–Rivat implementation (was
+`return count_lmo(x)`).
+- **Algorithm**: shared Meissel skeleton + identical S1/P2 as LMO; special leaves
+  split trivial/easy (O(1) PiTable via the Lehmer prune) vs hard (Fenwick query),
+  branched inline within ONE segmented pass (a separate easy pass would
+  re-enumerate ~1e8 leaves and be slower). Strictly ≤ LMO cost.
+- **Correct by construction** (easy-leaf identity = the prune phi_rec trusts) and
+  verified: exact pi(10^7..10^11) + non-power-of-ten; per-integer windows vs
+  Lucy/Sieve oracles (off-by-one detector); all-methods SameQ. test_prime passes.
+- **Perf**: DR beats Lucy from ~1e10 (1.6s vs 2.5s @1e12; 9.9s vs 13.5s @1e13).
+  Automatic rewired: table ≤1e6, Lucy ≤1e9, DR above (old stale TODO removed).
+- **Leaks**: valgrind on the DR path byte-identical to Sin[1.0] baseline; no
+  prime-counting frames in any leak stack.
+- **Docs**: header comment, number-theory.md, changelog 2026-06-22.md; docstring
+  already listed the method. Clean -std=c99 -Wall -Wextra.
+
+---
+
 # Task: Implement Frame -> True for Graphics / Plot
 
 WL spec: `Frame` draws a rectangle along the plot edges (vs. the through-origin

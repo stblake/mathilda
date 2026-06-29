@@ -53,7 +53,7 @@ Out[8]= {x -> 1.0}
 ## Implementation notes
 
 **Algorithm.** `FindRoot` (`HoldAll | Protected`) does iterative numerical
-root-finding (src/findroot.c). It Block-binds the search variables via temporary
+root-finding (src/numerical_roots/findroot.c). It Block-binds the search variables via temporary
 OwnValues so the global symbol table is unperturbed, restoring them on every
 exit path. The variable spec selects the method:
 
@@ -100,7 +100,7 @@ fails to converge.
 ## References
 
 - W. H. Press et al., *Numerical Recipes*, 3rd ed. (Cambridge, 2007) — Newton, secant, Brent's method.
-- Source: [`src/findroot.c`](https://github.com/stblake/mathilda/blob/main/src/findroot.c)
+- Source: [`src/numerical_roots/findroot.c`](https://github.com/stblake/mathilda/blob/main/src/numerical_roots/findroot.c)
 - Specification: [`docs/spec/builtins/calculus.md`](https://github.com/stblake/mathilda/blob/main/docs/spec/builtins/calculus.md)
 
 ## Notes & additional examples

@@ -22,6 +22,7 @@
 #include "integrate_linrad.h"
 #include "integrate_quadrad.h"
 #include "integrate_linratiorad.h"
+#include "integrate_chebychev.h"
 #include "integrate_jeffrey.h"
 #include "intrat.h"
 #include "intrischnorman.h"
@@ -35,6 +36,7 @@
 #include "internal.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "series.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -176,6 +178,19 @@ static Expr* try_linratiorad(Expr* f, Expr* x) {
     return integrate_linratiorad_try(f, x);
 }
 
+/* Stage 1e2: Chebychev binomial differential.  Recognises an integrand
+ * x^p (a x^r + b)^q with p, q, r rational and a, b free of x, and -- when one
+ * of q, (p+1)/r, q+(p+1)/r is an integer (Chebychev's theorem) -- applies the
+ * matching rationalising substitution (x = u^N, u^s = a x^r + b, or
+ * u = x^r then t^s = (a u + b)/u), integrates the rational result, and
+ * back-substitutes.  Recognition is a single structural scan, so it is cheap
+ * enough to run ahead of the Eliminate/Solve search in derivative-divides.
+ * Non-elementary binomials return NULL, so the cascade falls through to the
+ * later methods (which may one day carry special-function representations). */
+static Expr* try_chebychev(Expr* f, Expr* x) {
+    return integrate_chebychev_try(f, x);
+}
+
 /* Stage 1f: continuous Weierstrass substitution (Jeffrey & Rich 1994).
  * Recognises a rational function of the trig kernels Sin/Cos/Tan/Cot/Sec/Csc[x]
  * (or the hyperbolic kernels) carrying a kernel in a denominator, substitutes
@@ -276,6 +291,7 @@ typedef enum {
     METHOD_LINEAR_RADICALS,
     METHOD_QUADRATIC_RADICALS,
     METHOD_LINEAR_RATIO_RADICALS,
+    METHOD_CHEBYCHEV,
     METHOD_WEIERSTRASS,
     METHOD_RISCH,
     METHOD_CRCTABLE,
@@ -283,7 +299,32 @@ typedef enum {
     METHOD_INVALID
 } IntegrateMethod;
 
-static IntegrateMethod parse_method_option(Expr* opt) {
+/* Map a method-name string to its enum, or METHOD_INVALID if unrecognised. */
+static IntegrateMethod method_from_string(const char* s) {
+    if (strcmp(s, "Automatic")   == 0) return METHOD_AUTOMATIC;
+    if (strcmp(s, "BronsteinRational") == 0) return METHOD_RATIONAL;
+    if (strcmp(s, "DerivativeDivides") == 0) return METHOD_DERIVATIVE_DIVIDES;
+    if (strcmp(s, "LinearRadicals") == 0) return METHOD_LINEAR_RADICALS;
+    if (strcmp(s, "QuadraticRadicals") == 0) return METHOD_QUADRATIC_RADICALS;
+    if (strcmp(s, "LinearRatioRadicals") == 0) return METHOD_LINEAR_RATIO_RADICALS;
+    if (strcmp(s, "ChebychevAlgebraic") == 0) return METHOD_CHEBYCHEV;
+    if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
+    if (strcmp(s, "RischNorman") == 0) return METHOD_RISCH;
+    if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
+    if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
+    return METHOD_INVALID;
+}
+
+/* Parse the `Method -> ...` option.  The RHS may be:
+ *   - the symbol `Automatic` or a bare method-name string;
+ *   - a list `{"<method>", subopt -> val, ...}` carrying method sub-options
+ *     (mirrors the FactorInteger list-form in src/facint.c:1173).  The only
+ *     recognised sub-option is `"Substitution" -> u`, valid only for
+ *     "DerivativeDivides": on success `*out_sub` is set to an owned copy of `u`
+ *     (the caller must free it).
+ * `*out_sub` is always initialised (to NULL) before any other work. */
+static IntegrateMethod parse_method_option(Expr* opt, Expr** out_sub) {
+    *out_sub = NULL;
     if (opt->type != EXPR_FUNCTION) return METHOD_INVALID;
     if (opt->data.function.head->type != EXPR_SYMBOL) return METHOD_INVALID;
     const char* hd = opt->data.function.head->data.symbol;
@@ -297,18 +338,42 @@ static IntegrateMethod parse_method_option(Expr* opt) {
     /* Accept either a string ("Automatic") or the symbol Automatic. */
     if (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_Automatic)
         return METHOD_AUTOMATIC;
+
+    /* List form: {"<method>", subopt -> val, ...}. */
+    if (rhs->type == EXPR_FUNCTION &&
+        rhs->data.function.head->type == EXPR_SYMBOL &&
+        rhs->data.function.head->data.symbol == SYM_List &&
+        rhs->data.function.arg_count >= 1) {
+        Expr* mname = rhs->data.function.args[0];
+        if (mname->type != EXPR_STRING) return METHOD_INVALID;
+        IntegrateMethod m = method_from_string(mname->data.string);
+        if (m == METHOD_INVALID) return METHOD_INVALID;
+        for (size_t i = 1; i < rhs->data.function.arg_count; i++) {
+            Expr* so = rhs->data.function.args[i];
+            if (so->type != EXPR_FUNCTION ||
+                so->data.function.head->type != EXPR_SYMBOL) goto bad_subopt;
+            const char* sh = so->data.function.head->data.symbol;
+            if ((sh != SYM_Rule && sh != SYM_RuleDelayed) ||
+                so->data.function.arg_count != 2) goto bad_subopt;
+            Expr* skey = so->data.function.args[0];
+            Expr* sval = so->data.function.args[1];
+            if (skey->type == EXPR_STRING &&
+                strcmp(skey->data.string, "Substitution") == 0 &&
+                m == METHOD_DERIVATIVE_DIVIDES) {
+                if (*out_sub) expr_free(*out_sub);
+                *out_sub = expr_copy(sval);
+                continue;
+            }
+            goto bad_subopt;
+        }
+        return m;
+    bad_subopt:
+        if (*out_sub) { expr_free(*out_sub); *out_sub = NULL; }
+        return METHOD_INVALID;
+    }
+
     if (rhs->type != EXPR_STRING) return METHOD_INVALID;
-    if (strcmp(rhs->data.string, "Automatic")   == 0) return METHOD_AUTOMATIC;
-    if (strcmp(rhs->data.string, "BronsteinRational") == 0) return METHOD_RATIONAL;
-    if (strcmp(rhs->data.string, "DerivativeDivides") == 0) return METHOD_DERIVATIVE_DIVIDES;
-    if (strcmp(rhs->data.string, "LinearRadicals") == 0) return METHOD_LINEAR_RADICALS;
-    if (strcmp(rhs->data.string, "QuadraticRadicals") == 0) return METHOD_QUADRATIC_RADICALS;
-    if (strcmp(rhs->data.string, "LinearRatioRadicals") == 0) return METHOD_LINEAR_RATIO_RADICALS;
-    if (strcmp(rhs->data.string, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
-    if (strcmp(rhs->data.string, "RischNorman") == 0) return METHOD_RISCH;
-    if (strcmp(rhs->data.string, "CRCTable")    == 0) return METHOD_CRCTABLE;
-    if (strcmp(rhs->data.string, "Undefined")   == 0) return METHOD_UNDEFINED;
-    return METHOD_INVALID;
+    return method_from_string(rhs->data.string);
 }
 
 Expr* builtin_integrate(Expr* res) {
@@ -332,10 +397,25 @@ Expr* builtin_integrate(Expr* res) {
         if (interp) return interp;
     }
 
-    /* Parse the optional Method -> "..." option. */
+    /* SeriesData integrates term-by-term to a new SeriesData. Handle this
+     * before the inexact-rationalisation scan and method cascade, none of
+     * which understand the SeriesData head. */
+    if (f->type == EXPR_FUNCTION &&
+        f->data.function.head->type == EXPR_SYMBOL &&
+        f->data.function.head->data.symbol == SYM_SeriesData &&
+        f->data.function.arg_count == 6) {
+        Expr* r = series_integrate(f, x);
+        if (r) return r;   /* residue/unsupported -> fall through, stays unevaluated */
+    }
+
+    /* Parse the optional Method -> "..." option.  `method_sub` captures the
+     * user-pinned substitution from the
+     * `{"DerivativeDivides", "Substitution" -> u}` list form (NULL otherwise);
+     * it is freed below alongside `coerced`. */
     IntegrateMethod method = METHOD_AUTOMATIC;
+    Expr* method_sub = NULL;
     if (argc == 3) {
-        method = parse_method_option(res->data.function.args[2]);
+        method = parse_method_option(res->data.function.args[2], &method_sub);
         if (method == METHOD_INVALID) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
@@ -344,7 +424,8 @@ Expr* builtin_integrate(Expr* res) {
                     "Integrate::method: Method option value is not one of "
                     "\"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", "
                     "\"LinearRadicals\", \"QuadraticRadicals\", "
-                    "\"LinearRatioRadicals\", \"Weierstrass\", \"RischNorman\", "
+                    "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
+                    "\"Weierstrass\", \"RischNorman\", "
                     "\"CRCTable\".\n");
                 last_warned_hash = h;
             }
@@ -379,6 +460,10 @@ Expr* builtin_integrate(Expr* res) {
             if (!result) result = try_linrad(effective_f, x);
             if (!result) result = try_quadrad(effective_f, x);
             if (!result) result = try_linratiorad(effective_f, x);
+            /* Chebychev binomial differentials: a fast, deterministic
+             * rationalising substitution that closes (correct by construction),
+             * so it runs ahead of the Eliminate/Solve search and Risch-Norman. */
+            if (!result) result = try_chebychev(effective_f, x);
             /* Weierstrass before derivative-divides: it is a domain-specific,
              * deterministic algorithm for rational trig/hyperbolic integrands
              * that is guaranteed to close (and verified by construction), so it
@@ -395,8 +480,11 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_DERIVATIVE_DIVIDES:
             /* Explicit method runs the thorough Eliminate/Solve search in
              * addition to the direct quotient (the Automatic cascade uses the
-             * direct strategy only). */
-            result = integrate_derivdivides_full(effective_f, x);
+             * direct strategy only).  A user-pinned `"Substitution" -> u`
+             * restricts the search to that single kernel. */
+            result = method_sub
+                   ? integrate_derivdivides_with_sub(effective_f, x, method_sub)
+                   : integrate_derivdivides_full(effective_f, x);
             break;
         case METHOD_LINEAR_RADICALS:
             result = try_linrad(effective_f, x);
@@ -406,6 +494,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_LINEAR_RATIO_RADICALS:
             result = try_linratiorad(effective_f, x);
+            break;
+        case METHOD_CHEBYCHEV:
+            result = try_chebychev(effective_f, x);
             break;
         case METHOD_WEIERSTRASS:
             result = integrate_jeffrey_full(effective_f, x);
@@ -431,6 +522,7 @@ Expr* builtin_integrate(Expr* res) {
     if (result) result = intsimp_finalize(result, x);   /* takes ownership */
 
     if (coerced) expr_free(coerced);
+    if (method_sub) expr_free(method_sub);
 
     if (inexact.has_inexact && result) {
         Expr* numeric = common_numericalize_result(result, inexact.min_bits);
@@ -460,10 +552,13 @@ void integrate_init(void) {
         "  \"LinearRadicals\"     — Integrate`LinearRadicals (rationalise radicals of a x + b)\n"
         "  \"QuadraticRadicals\"  — Integrate`QuadraticRadicals (Euler substitution for Sqrt[a x^2 + b x + c])\n"
         "  \"LinearRatioRadicals\" — Integrate`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d))\n"
+        "  \"ChebychevAlgebraic\" — Integrate`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem)\n"
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
+        "Method -> {\"DerivativeDivides\", \"Substitution\" -> u} pins the kernel u(x),\n"
+        "trialing only that substitution.\n"
         "Named methods are strict: failure returns unevaluated, with no fallback.\n"
         "The CRCTable rules are loaded from disk on first use only.\n"
         "An applied 1-D InterpolatingFunction integrates to its antiderivative\n"
@@ -487,6 +582,9 @@ void integrate_init(void) {
 
     /* Linear-ratio-radical (Möbius) substitution: Integrate`LinearRatioRadicals. */
     integrate_linratiorad_init();
+
+    /* Chebychev binomial differential: Integrate`ChebychevAlgebraic. */
+    integrate_chebychev_init();
 
     /* Continuous Weierstrass substitution (Jeffrey & Rich 1994):
      * Integrate`Weierstrass. */

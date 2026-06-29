@@ -498,6 +498,33 @@ In[8]:= IntegerExponent[1.123]
 Out[8]= IntegerExponent[1.123]
 ```
 
+## DigitSum
+
+- `DigitSum[n]`: Sum of the decimal digits of the integer `n`. Sign of `n` is
+  discarded; `DigitSum[0]` returns `0`.
+- `DigitSum[n, b]`: Sum of the base-`b` digits of `n` (requires `b >= 2`).
+
+**Attributes:** `Listable`, `NumericFunction`, `Protected`.
+
+**Examples:**
+
+```mathematica
+In[1]:= DigitSum[1234]
+Out[1]= 10
+
+In[2]:= DigitSum[255, 16]
+Out[2]= 30
+
+In[3]:= DigitSum[{1234, 0, 99}]
+Out[3]= {10, 0, 18}
+```
+
+**Notes:**
+- `DigitSum[n]` is equivalent to `Total[IntegerDigits[n]]`.
+- Bignum inputs are supported via GMP.
+
+---
+
 ## DigitCount
 
 - `DigitCount[n]`: List of counts of digits `1, 2, ..., 9, 0` in the base-10

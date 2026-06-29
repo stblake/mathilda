@@ -1,13 +1,13 @@
-/* hershey_font.h — a minimal single-stroke vector font for graphics text.
+/* hershey_font.h — single-stroke vector font for graphics text.
  *
- * NOTE: despite the "Hershey-style" name (drawn as line strokes, not
- * filled glyph outlines, exactly like the classic Hershey vector fonts),
- * this is a small hand-authored stick alphabet, not a transcription of
- * the historical Hershey datasets. It covers digits, uppercase letters
- * (lowercase input folds to the uppercase glyph), and basic punctuation
- * -- enough for axis tick labels, AxesLabel/PlotLabel, and Text[]. This
- * is a deliberate placeholder pending proper font rendering (tracked in
- * docs/spec/builtins/graphics.md). Only built when USE_GRAPHICS is on. */
+ * This is a faithful transcription of the classic Hershey *Roman Simplex*
+ * occidental font (drawn as line strokes, not filled outlines, exactly like
+ * the historical Hershey vector fonts). Glyph data is generated from
+ * tools/hershey.dat by tools/gen_hershey.py into hershey_glyphs.inc and covers
+ * the full printable ASCII range (digits, upper- and lowercase letters,
+ * punctuation and symbols) with proportional advance widths -- used for axis
+ * tick labels, AxesLabel/PlotLabel, and Text[]. Only built when USE_GRAPHICS
+ * is on. */
 #ifndef MATHILDA_GRAPHICS_HERSHEY_FONT_H
 #define MATHILDA_GRAPHICS_HERSHEY_FONT_H
 

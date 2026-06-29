@@ -418,8 +418,14 @@ static Expr* try_eliminate_kernel(const Expr* f, const Expr* x, const Expr* w) {
 /* ---------------------------------------------------------------------- */
 
 /* `use_eliminate` selects whether the (diagnostic-emitting, more thorough)
- * Eliminate/Solve strategy is attempted in addition to the direct one. */
-static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate) {
+ * Eliminate/Solve strategy is attempted in addition to the direct one.
+ *
+ * `forced_kernel`, when non-NULL, pins the substitution: instead of collecting
+ * and trialing every x-dependent subexpression, only that single kernel u(x) is
+ * attempted.  Used by the explicit
+ * `Method -> {"DerivativeDivides", "Substitution" -> u}` option. */
+static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
+                     const Expr* forced_kernel) {
     if (x->type != EXPR_SYMBOL) return NULL;
     if (expr_free_of(f, x))      return NULL;   /* nothing to integrate in x */
     if (dd_depth >= DD_MAX_DEPTH) return NULL;
@@ -436,8 +442,16 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate) {
     expr_free(key);
 
     ExprVec kernels; vec_init(&kernels);
-    collect_kernels(f, x, f, &kernels);
     Expr* result = NULL;
+    if (forced_kernel) {
+        /* A user-pinned substitution must depend on x; otherwise it cannot
+         * reduce the integral and the integral stays unevaluated (strict, no
+         * fallback to the automatic kernel search). */
+        if (expr_free_of(forced_kernel, x)) { vec_free(&kernels); goto done; }
+        vec_add_unique(&kernels, forced_kernel);
+    } else {
+        collect_kernels(f, x, f, &kernels);
+    }
     if (kernels.n == 0) { vec_free(&kernels); goto done; }
     sort_kernels(&kernels);
 
@@ -471,13 +485,20 @@ done:
 
 Expr* integrate_derivdivides_try(Expr* f, Expr* x) {
     /* Automatic cascade: direct strategy only (fast, no diagnostics). */
-    return dd_core(f, x, false);
+    return dd_core(f, x, false, NULL);
 }
 
 Expr* integrate_derivdivides_full(Expr* f, Expr* x) {
     /* Explicit Method -> "DerivativeDivides": direct strategy, then the
      * thorough Eliminate/Solve branch-search. */
-    return dd_core(f, x, true);
+    return dd_core(f, x, true, NULL);
+}
+
+Expr* integrate_derivdivides_with_sub(Expr* f, Expr* x, Expr* sub) {
+    /* Explicit Method -> {"DerivativeDivides", "Substitution" -> sub}: trial
+     * only the user-pinned kernel `sub`, running both the direct and the
+     * thorough Eliminate/Solve strategies. */
+    return dd_core(f, x, true, sub);
 }
 
 Expr* builtin_integrate_derivdivides(Expr* res) {
@@ -486,7 +507,7 @@ Expr* builtin_integrate_derivdivides(Expr* res) {
     Expr* f = res->data.function.args[0];
     Expr* x = res->data.function.args[1];
     /* Explicit method: direct strategy, then the thorough Eliminate search. */
-    return dd_core(f, x, true);
+    return dd_core(f, x, true, NULL);
 }
 
 void integrate_derivdivides_init(void) {

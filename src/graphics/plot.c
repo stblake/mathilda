@@ -394,17 +394,23 @@ static void push_fill_triangle(Expr** shapes, size_t* n, double x0, double y0,
     shapes[(*n)++] = expr_new_function(expr_new_symbol(SYM_Polygon), poly_args, 1);
 }
 
-static Expr** build_fill_quads(const PlotPoint* pts, size_t run_start, size_t run_len,
-                                double baseline, size_t* out_count) {
-    if (run_len < 2) { *out_count = 0; return NULL; }
-    size_t nseg = run_len - 1;
+/* Shared with listplot.c (see plot.h). Builds a continuous Filling strip
+ * between the polyline through (xs[i], ys[i]) and the horizontal `baseline`,
+ * emitting one quad -- or two triangles across a baseline crossing -- per
+ * segment, for the per-segment rather than one-big-polygon reasons explained
+ * above push_fill_quad. Returns a malloc'd Expr* array (caller owns the array
+ * and the Exprs); *out_count is the shape count (0, NULL returned, if n < 2). */
+Expr** gfx_build_fill_quads(const double* xs, const double* ys, size_t n,
+                            double baseline, size_t* out_count) {
+    if (n < 2) { *out_count = 0; return NULL; }
+    size_t nseg = n - 1;
     /* Worst case: every segment crosses the baseline and needs 2 triangles
      * instead of 1 quad. */
     Expr** shapes = malloc(sizeof(Expr*) * nseg * 2);
-    size_t n = 0;
+    size_t m = 0;
     for (size_t j = 0; j < nseg; j++) {
-        double x0 = pts[run_start + j].x,     y0 = pts[run_start + j].y;
-        double x1 = pts[run_start + j + 1].x, y1 = pts[run_start + j + 1].y;
+        double x0 = xs[j],     y0 = ys[j];
+        double x1 = xs[j + 1], y1 = ys[j + 1];
         double d0 = y0 - baseline, d1 = y1 - baseline;
 
         if ((d0 > 0 && d1 < 0) || (d0 < 0 && d1 > 0)) {
@@ -416,13 +422,28 @@ static Expr** build_fill_quads(const PlotPoint* pts, size_t run_start, size_t ru
              * always-fan-correct triangles instead, one on each side. */
             double t = d0 / (d0 - d1);
             double xc = x0 + t * (x1 - x0);
-            push_fill_triangle(shapes, &n, x0, y0, xc, baseline, x0, baseline);
-            push_fill_triangle(shapes, &n, xc, baseline, x1, y1, x1, baseline);
+            push_fill_triangle(shapes, &m, x0, y0, xc, baseline, x0, baseline);
+            push_fill_triangle(shapes, &m, xc, baseline, x1, y1, x1, baseline);
         } else {
-            push_fill_quad(shapes, &n, x0, y0, x1, y1, baseline);
+            push_fill_quad(shapes, &m, x0, y0, x1, y1, baseline);
         }
     }
-    *out_count = n;
+    *out_count = m;
+    return shapes;
+}
+
+static Expr** build_fill_quads(const PlotPoint* pts, size_t run_start, size_t run_len,
+                                double baseline, size_t* out_count) {
+    if (run_len < 2) { *out_count = 0; return NULL; }
+    double* xs = malloc(sizeof(double) * run_len);
+    double* ys = malloc(sizeof(double) * run_len);
+    for (size_t j = 0; j < run_len; j++) {
+        xs[j] = pts[run_start + j].x;
+        ys[j] = pts[run_start + j].y;
+    }
+    Expr** shapes = gfx_build_fill_quads(xs, ys, run_len, baseline, out_count);
+    free(xs);
+    free(ys);
     return shapes;
 }
 
