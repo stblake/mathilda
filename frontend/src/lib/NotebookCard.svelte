@@ -19,7 +19,7 @@
 -->
 <script lang="ts">
   import { onMount, tick, createEventDispatcher } from 'svelte';
-  import { setFocused, setNotebookWidth } from './canvas';
+  import { setFocused, setNotebookWidth, setNotebookHeight } from './canvas';
   const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
@@ -100,6 +100,58 @@
   }
 
   function onResizePointerUp(_e: PointerEvent) { resizing = false; }
+
+  // ---------------------------------------------------------------------------
+  // Bottom / corner resize handles
+
+  let resizingBottom  = false;
+  let resizingCorner  = false;
+  let resizeStartY    = 0;
+  let resizeStartH    = 0;
+
+  const TITLE_BAR_H = 36;
+
+  function currentHeight(): number {
+    return nb.height ?? (cardEl?.offsetHeight ?? 400);
+  }
+
+  function onBottomResizeDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    resizingBottom = true;
+    resizeStartY   = e.clientY;
+    resizeStartH   = currentHeight();
+    resizeStartX   = e.clientX;
+    resizeStartW   = nb.width;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onCornerResizeDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    resizingCorner = true;
+    resizeStartY   = e.clientY;
+    resizeStartH   = currentHeight();
+    resizeStartX   = e.clientX;
+    resizeStartW   = nb.width;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onBottomResizeMove(e: PointerEvent) {
+    if (!resizingBottom && !resizingCorner) return;
+    e.stopPropagation();
+    const dy = (e.clientY - resizeStartY) / (currentZoom || 1);
+    setNotebookHeight(nb.id, resizeStartH + dy);
+    if (resizingCorner) {
+      const dx = (e.clientX - resizeStartX) / (currentZoom || 1);
+      setNotebookWidth(nb.id, resizeStartW + dx);
+    }
+  }
+
+  function onBottomResizeUp(_e: PointerEvent) {
+    resizingBottom = false;
+    resizingCorner = false;
+  }
 
   function onTitlePointerDown(e: PointerEvent) {
     if (e.button !== 0) return;  // left-click drag only
@@ -386,9 +438,9 @@
   bind:this={cardEl}
   tabindex="-1"
   on:keydown={onCardKeydown}
-  on:pointermove={onTitlePointerMove}
-  on:pointerup={onTitlePointerUp}
-  on:pointercancel={onTitlePointerUp}
+  on:pointermove={(e) => { onTitlePointerMove(e); onBottomResizeMove(e); }}
+  on:pointerup={(e) => { onTitlePointerUp(e); onBottomResizeUp(e); }}
+  on:pointercancel={(e) => { onTitlePointerUp(e); onBottomResizeUp(e); }}
 >
   <!-- Title bar — only pointerdown here; move/up handled by cardEl after setPointerCapture -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -448,6 +500,12 @@
       on:pointerup={onResizePointerUp}
       on:pointercancel={onResizePointerUp}
     ></div>
+    <!-- Bottom resize handle -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="resize-handle-bottom" on:pointerdown={onBottomResizeDown}></div>
+    <!-- Corner resize handle -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="resize-handle-corner" on:pointerdown={onCornerResizeDown}></div>
   {/if}
 
   <!-- Collapse wrapper -->
@@ -462,7 +520,10 @@
       </div>
     {:else}
       <!-- Full notebook UI -->
-      <div class="card-body">
+      <div
+        class="card-body"
+        style={nb.height != null ? `max-height: none; height: ${nb.height - TITLE_BAR_H}px; overflow-y: auto;` : ''}
+      >
         <!-- Insertion point before first row -->
         {#if insertionIdx === 0}
           <div class="insertion-cursor active"></div>
@@ -568,7 +629,7 @@
       opacity 180ms ease,
       transform 180ms ease;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    color: #cdd6f4;
+    color: var(--text, #cdd6f4);
   }
 
   .nb-card.mounted {
@@ -734,6 +795,30 @@
     z-index: 10;
   }
   .resize-handle:hover { background: rgba(137,180,250,0.25); border-radius: 4px; }
+
+  /* ---- Bottom resize handle ---- */
+  .resize-handle-bottom {
+    position: absolute;
+    bottom: -4px;
+    left: 0;
+    right: 8px;
+    height: 8px;
+    cursor: ns-resize;
+    z-index: 10;
+  }
+  .resize-handle-bottom:hover { background: rgba(137,180,250,0.25); border-radius: 4px; }
+
+  /* ---- Corner resize handle ---- */
+  .resize-handle-corner {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 12px;
+    height: 12px;
+    cursor: nwse-resize;
+    z-index: 11;
+  }
+  .resize-handle-corner:hover { background: rgba(137,180,250,0.4); border-radius: 2px; }
 
   /* ---- Insertion cursor between rows ---- */
   .insertion-cursor {

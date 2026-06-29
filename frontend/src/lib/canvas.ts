@@ -14,6 +14,7 @@ export type CanvasNotebook = {
   x:         number;
   y:         number;
   width:     number;   // card width in canvas pixels
+  height:    number | null; // card height override; null = auto
   collapsed: boolean;
   store:     NotebookStore;
 };
@@ -28,6 +29,7 @@ function makeCard(title: string, x: number, y: number): CanvasNotebook {
     title: title || `Notebook ${_nextId++}`,
     x, y,
     width: 640,
+    height: null,
     collapsed: false,
     store: createNotebook(),
   };
@@ -89,6 +91,14 @@ export function setNotebookWidth(id: string, width: number) {
   canvasState.update(s => ({
     ...s,
     notebooks: s.notebooks.map(nb => nb.id === id ? { ...nb, width: clamped } : nb),
+  }));
+}
+
+export function setNotebookHeight(id: string, height: number | null) {
+  const clamped = height === null ? null : Math.max(100, Math.min(4000, height));
+  canvasState.update(s => ({
+    ...s,
+    notebooks: s.notebooks.map(nb => nb.id === id ? { ...nb, height: clamped } : nb),
   }));
 }
 
@@ -181,6 +191,7 @@ export function loadLibraryData(json: string): string {
       x: nb.x,
       y: nb.y,
       width: nb.width ?? 640,
+      height: null,
       collapsed: nb.collapsed ?? false,
       store,
     };

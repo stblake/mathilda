@@ -377,9 +377,9 @@
   /* ---- Cell content ---- */
   .cell-content { padding: 0; }
 
-  /* CodeMirror text colour for dark canvas */
-  :global(.cm-editor .cm-content) { color: #cdd6f4; caret-color: #89b4fa; }
-  :global(.cm-editor .cm-line)    { color: #cdd6f4; }
+  /* CodeMirror text colour — inherits from CSS var so light/dark both work */
+  :global(.cm-editor .cm-content) { color: var(--text, #cdd6f4); caret-color: #89b4fa; }
+  :global(.cm-editor .cm-line)    { color: var(--text, #cdd6f4); }
   /* Force cursor visible — CM6 theme !important can be unreliable in WebKit */
   :global(.cm-editor .cm-cursor)       { border-left: 2px solid #89b4fa !important; }
   :global(.cm-editor .cm-dropCursor)   { border-left: 2px solid #89b4fa !important; }
@@ -390,7 +390,7 @@
   .prose-cell {
     padding: 6px 8px;
     font-size: 0.95rem;
-    color: #cdd6f4;
+    color: var(--text, #cdd6f4);
     min-height: 2em;
     outline: none;
     line-height: 1.6;
@@ -401,7 +401,7 @@
     padding: 6px 8px;
     margin: 0;
     font-weight: 700;
-    color: #cdd6f4;
+    color: var(--text, #cdd6f4);
     outline: none;
     text-align: left;
     border: none;

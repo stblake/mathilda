@@ -13,6 +13,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import NotebookCard from './NotebookCard.svelte';
+  import Minimap from './Minimap.svelte';
   import {
     canvasState,
     addNotebook,
@@ -290,7 +291,20 @@
       <span>⌘0 fit all</span>
       <span>scroll pan · pinch zoom</span>
     </div>
+
+    <!-- Floating add button - always visible in canvas mode -->
+    <button class="fab-add" on:click={addAtCentre} title="New notebook (or double-click canvas)">＋</button>
   </div>
+
+  <!-- Minimap: visible when zoomed far out -->
+  <Minimap
+    notebooks={$canvasState.notebooks}
+    {panX}
+    {panY}
+    {zoom}
+    viewportW={window.innerWidth}
+    viewportH={window.innerHeight}
+  />
 {/if}
 
 <style>
@@ -332,6 +346,29 @@
     pointer-events: none;
     letter-spacing: 0.02em;
   }
+
+  /* ---- Floating add button ---- */
+  .fab-add {
+    position: fixed;
+    bottom: 2.5rem;
+    right: 1.5rem;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--accent, #89b4fa);
+    color: #fff;
+    border: none;
+    font-size: 1.4rem;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: transform 0.12s, box-shadow 0.12s;
+  }
+  .fab-add:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(0,0,0,0.5); }
 
   /* ---- Focused (full-screen) view — truly edge to edge ---- */
   .focused-view {

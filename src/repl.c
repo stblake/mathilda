@@ -7,6 +7,7 @@
 #include "repl_hooks.h"
 #include "sym_names.h"
 #include "show.h"
+#include "graphics_json.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -387,6 +388,34 @@ static void pipe_process_input(const char* input, int id) {
         char buf[64];
         snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
         pipe_emit(buf);
+        return;
+    }
+
+    /* Graphics[...] → serialize as Plotly JSON for the notebook frontend. */
+    if (evaluated->type == EXPR_FUNCTION
+        && evaluated->data.function.head
+        && evaluated->data.function.head->type == EXPR_SYMBOL
+        && evaluated->data.function.head->data.symbol == SYM_Graphics) {
+        char* plotly = graphics_to_plotly_json(evaluated);
+        expr_free(evaluated);
+        if (plotly) {
+            size_t json_len = strlen(plotly) + 64;
+            char* json_line = malloc(json_len);
+            if (json_line) {
+                strcpy(json_line, "{\"id\":");
+                char id_buf[32]; snprintf(id_buf, sizeof(id_buf), "%d", id);
+                strcat(json_line, id_buf);
+                strcat(json_line, ",\"type\":\"plot\",\"payload\":");
+                strcat(json_line, plotly);
+                strcat(json_line, "}");
+                pipe_emit(json_line);
+                free(json_line);
+            }
+            free(plotly);
+        }
+        char done[64];
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(done);
         return;
     }
 

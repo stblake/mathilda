@@ -18,8 +18,9 @@
   // Dark mode (default to dark — canvas is always dark)
 
   const darkMode = writable(true);
+  // :root = dark defaults; add 'light' class when user switches to light mode
   $: if (typeof document !== 'undefined')
-    document.documentElement.classList.toggle('dark', $darkMode);
+    document.documentElement.classList.toggle('light', !$darkMode);
 
   // ---------------------------------------------------------------------------
   // Kernel init
@@ -133,7 +134,7 @@
     title="Toggle dark mode"
     on:click={() => darkMode.update(v => !v)}
   >
-    {$darkMode ? '◑' : '●'}
+    {$darkMode ? '◑' : '☀'}
   </button>
   <KernelStatus />
 </div>
@@ -147,26 +148,8 @@
 {/if}
 
 <style>
-  /* ---- Dim mode (default) — warm off-white cards, readable dark text ---- */
+  /* ---- Dark mode (default — :root always applies) ---- */
   :global(:root) {
-    --bg:          #1a1b2e;     /* canvas stays dark */
-    --surface:     #f0f0f5;
-    --cell-bg:     #f0f0f5;
-    --border:      rgba(0,0,0,0.12);
-    --text:        #1c1c2e;     /* deep dark text */
-    --text-muted:  #555577;
-    --accent:      #3b82f6;
-    --accent-glow: rgba(59,130,246,0.18);
-    --out-text:    #1c1c2e;
-    --gutter-bg:   #e4e5ee;
-    --gutter-hover:#d8d9e8;
-    --card-bg:     #f0f0f5;
-    --card-border: rgba(0,0,0,0.14);
-  }
-  :global(body) { background: #1a1b2e; }
-
-  /* ---- Dark mode ---- */
-  :global(html.dark) {
     --bg:          #050810;
     --surface:     rgba(8,10,22,0.96);
     --cell-bg:     rgba(12,15,28,0.85);
@@ -181,7 +164,25 @@
     --card-bg:     rgba(12,15,28,0.85);
     --card-border: rgba(255,255,255,0.08);
   }
-  :global(html.dark body) { background: #050810; }
+  :global(body) { background: #050810; }
+
+  /* ---- Light mode (html.light class applied when darkMode = false) ---- */
+  :global(html.light) {
+    --bg:          #1a1b2e;
+    --surface:     #f0f0f5;
+    --cell-bg:     #f0f0f5;
+    --border:      rgba(0,0,0,0.12);
+    --text:        #1c1c2e;
+    --text-muted:  #555577;
+    --accent:      #3b82f6;
+    --accent-glow: rgba(59,130,246,0.18);
+    --out-text:    #1c1c2e;
+    --gutter-bg:   #e4e5ee;
+    --gutter-hover:#d8d9e8;
+    --card-bg:     #f0f0f5;
+    --card-border: rgba(0,0,0,0.14);
+  }
+  :global(html.light body) { background: #1a1b2e; }
 
   :global(*, *::before, *::after) { box-sizing: border-box; }
   :global(body) {
