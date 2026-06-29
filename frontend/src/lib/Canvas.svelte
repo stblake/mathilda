@@ -347,6 +347,7 @@
     position: absolute;
   }
 
+  /* Canvas hints must NOT scale with Cmd+/- — use px not rem */
   .canvas-hints {
     position: fixed;
     bottom: 14px;
@@ -354,23 +355,25 @@
     transform: translateX(-50%);
     display: flex;
     align-items: center;
-    gap: 0.7rem;
-    font-size: 0.72rem;
+    gap: 10px;
+    font-size: 11px;   /* fixed px — immune to root font-size changes */
     color: rgba(255,255,255,0.25);
     pointer-events: none;
     letter-spacing: 0.02em;
+    white-space: nowrap;
   }
   .hint-new-btn {
     background: rgba(137,180,250,0.15);
     border: 1px solid rgba(137,180,250,0.35);
     color: rgba(137,180,250,0.9);
     border-radius: 5px;
-    padding: 0.2rem 0.7rem;
-    font-size: 0.75rem;
+    padding: 4px 10px;
+    font-size: 12px;   /* fixed px */
     cursor: pointer;
     pointer-events: auto;
     transition: background 0.12s;
     letter-spacing: 0.01em;
+    white-space: nowrap;
   }
   .hint-new-btn:hover { background: rgba(137,180,250,0.25); }
   .hint-sep { opacity: 0.4; }
