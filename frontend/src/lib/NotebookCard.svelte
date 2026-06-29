@@ -145,13 +145,19 @@
     renaming    = true;
     renameValue = nb.title;
     tick().then(() => {
-      renameInput?.focus();
-      renameInput?.select();
+      if (!renameInput) return;
+      renameInput.focus();
+      // Select all text in the contenteditable
+      const range = document.createRange();
+      range.selectNodeContents(renameInput);
+      const sel = window.getSelection();
+      if (sel) { sel.removeAllRanges(); sel.addRange(range); }
     });
   }
 
   function commitRename() {
-    if (renameValue.trim()) renameNotebook(nb.id, renameValue.trim());
+    const text = renameInput?.innerText?.trim() ?? renameValue.trim();
+    if (text) renameNotebook(nb.id, text);
     renaming = false;
   }
 
@@ -400,15 +406,17 @@
     {/if}
 
     {#if renaming}
-      <!-- svelte-ignore a11y-autofocus -->
-      <input
-        class="title-input"
+      <!-- In-place editable title — looks identical to the plain title -->
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <span
+        class="card-title renaming"
+        contenteditable="true"
         bind:this={renameInput}
-        bind:value={renameValue}
         on:blur={commitRename}
         on:keydown={onRenameKeydown}
         on:pointerdown|stopPropagation
-      />
+        on:click|stopPropagation
+      >{renameValue}</span>
     {:else}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
       <span
@@ -624,17 +632,12 @@
     cursor: grab;
   }
 
-  .title-input {
-    flex: 1;
-    background: rgba(255,255,255,0.07);
-    border: 1px solid var(--accent, #89b4fa);
-    border-radius: 4px;
-    color: #cdd6f4;
-    font-size: 0.82rem;
-    font-weight: 600;
-    padding: 2px 6px;
+  /* Renaming state: look identical to the title, just editable */
+  .card-title.renaming {
     outline: none;
-    margin-left: 4px;
+    border-bottom: 1.5px solid var(--accent, #89b4fa);
+    cursor: text;
+    min-width: 40px;
   }
 
   .titlebar-actions {

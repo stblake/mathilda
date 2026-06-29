@@ -60,8 +60,10 @@
     // Seed display values immediately to avoid lerp-from-zero flash
     panX = targetPanX; panY = targetPanY; zoom = targetZoom;
     rafId = requestAnimationFrame(animate);
-    // Load startup notebook content now that we're in the browser context
-    loadStartupContent();
+    // Load startup content after a tick to ensure all stores are ready
+    setTimeout(() => {
+      try { loadStartupContent(); } catch (e) { console.error('startup load failed:', e); }
+    }, 100);
   });
 
   onDestroy(() => {
