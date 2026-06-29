@@ -256,13 +256,13 @@
   // Wheel: scroll card when an editor inside is focused; pan canvas otherwise.
 
   function onCardBodyWheel(e: WheelEvent) {
+    // Pinch (ctrlKey) always zooms the canvas — never stop it.
+    if (e.ctrlKey) return;
+    // Two-finger scroll: if an editor inside has focus, scroll the card content.
     const active = document.activeElement;
     if (active && cardEl?.contains(active)) {
-      // An editor/input inside this card has focus → let browser scroll the card.
       e.stopPropagation();
-      // Don't prevent default so the card body's overflow-y:auto scroll works.
     }
-    // Otherwise bubble up to canvas-stage's onWheel for pan/zoom.
   }
 
   // ---------------------------------------------------------------------------
