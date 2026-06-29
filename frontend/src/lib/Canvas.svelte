@@ -97,7 +97,6 @@
     } else {
       canvasState.update(s => ({ ...s, panX: s.panX - e.deltaX, panY: s.panY - e.deltaY }));
     }
-    maybeAutoCollapse();
   }
 
   // ---------------------------------------------------------------------------
@@ -146,19 +145,7 @@
   // ---------------------------------------------------------------------------
   // Auto-collapse when zoomed out past threshold
 
-  const COLLAPSE_THRESHOLD = 0.40;
-  let prevAutoCollapsed: boolean | null = null;
-
-  function maybeAutoCollapse() {
-    const curZoom = get(canvasState).zoom;
-    const shouldCollapse = curZoom < COLLAPSE_THRESHOLD;
-    if (shouldCollapse === prevAutoCollapsed) return;
-    prevAutoCollapsed = shouldCollapse;
-    canvasState.update(s => ({
-      ...s,
-      notebooks: s.notebooks.map(nb => ({ ...nb, collapsed: shouldCollapse })),
-    }));
-  }
+  // Auto-collapse removed — notebooks stay expanded at all zoom levels.
 
   // ---------------------------------------------------------------------------
   // Keyboard: Cmd+0 fit-all (Cmd+N is macOS "new window" and can't be reliably intercepted)
