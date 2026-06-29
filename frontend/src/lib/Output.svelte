@@ -94,7 +94,7 @@
 
 <div class="output">
   {#each items as item, idx (idx)}
-    <div class="out-item" class:expanded={expanded[idx]}>
+    <div class="out-item" class:expanded={expanded[idx]} class:overflowing={overflows[idx]}>
       {#if item.kind === 'expr'}
         <div class="out-collapsible" use:measureOverflow={idx}>
           <div class="out-expr">{@html renderOutput(item.text, item.latex)}</div>
@@ -139,11 +139,16 @@
 
   /* Collapsible wrapper: clips vertically, scrolls horizontally */
   .out-collapsible {
-    width: 100%;       /* don't expand beyond parent */
-    min-width: 0;      /* flex child must have this for overflow-x to work */
+    width: 100%;
+    min-width: 0;
     max-height: 180px;
     overflow-x: auto;
     overflow-y: hidden;
+    /* Fade applied only when content actually overflows (via .overflowing class) */
+  }
+
+  /* Only fade when content genuinely overflows the cap */
+  .overflowing .out-collapsible {
     -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
     mask-image:         linear-gradient(to bottom, black 55%, transparent 100%);
   }
