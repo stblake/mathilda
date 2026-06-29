@@ -243,7 +243,6 @@
   {#if fnb}
     <div
       class="focused-view"
-      on:wheel|nonpassive={onWheel}
     >
       <div class="focused-view-inner">
         <NotebookCard nb={fnb} currentZoom={1} focused={true} />
