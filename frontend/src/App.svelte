@@ -68,9 +68,8 @@
       const title = loadLibraryData(json);
       libraryTitle = title;
       libraryPath  = path;
-      const filename = path.split('/').pop()?.replace('.lb', '') ?? title;
-      document.title = `Mathilda — ${filename}`;
-      try { await getCurrentWindow().setTitle(`Mathilda — ${filename}`); } catch {}
+      const filename = path.split('/').pop()?.replace(/\.lb$/i, '') ?? title;
+      setWindowTitle(filename);
     } catch (e) { console.error('Open failed:', e); }
   }
 
@@ -92,12 +91,17 @@
     try {
       const json = serializeLibrary(libraryTitle);
       await saveLibrary(path, json);
-      const filename = path.split('/').pop()?.replace('.lb', '') ?? 'Library';
+      const filename = path.split('/').pop()?.replace(/\.lb$/i, '') ?? 'Library';
       libraryTitle = filename;
-      // Set window title via both mechanisms for reliability
-      document.title = `Mathilda — ${filename}`;
-      try { await getCurrentWindow().setTitle(`Mathilda — ${filename}`); } catch {}
+      setWindowTitle(filename);
     } catch (e) { console.error('Save failed:', e); }
+  }
+
+  function setWindowTitle(name: string) {
+    const title = `Mathilda — ${name}`;
+    document.title = title;
+    // Tauri API as secondary (may not update native title bar in dev mode)
+    getCurrentWindow().setTitle(title).catch(() => {});
   }
 
   // ---------------------------------------------------------------------------

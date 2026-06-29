@@ -212,6 +212,23 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Minimap click: pan+zoom to the clicked notebook
+
+  function onMinimapNotebookClick(nb: import('./canvas').CanvasNotebook) {
+    const vw = canvasEl?.clientWidth  || window.innerWidth;
+    const vh = canvasEl?.clientHeight || window.innerHeight;
+    const nbH = nb.height ?? 420;
+    const pad = 60;
+    const newZoom = Math.min(1.2,
+      (vw - pad * 2) / nb.width,
+      (vh - pad * 2) / nbH
+    );
+    const newPanX = (vw - nb.width * newZoom) / 2 - nb.x * newZoom;
+    const newPanY = (vh - nbH   * newZoom) / 2 - nb.y * newZoom;
+    canvasState.update(s => ({ ...s, panX: newPanX, panY: newPanY, zoom: newZoom }));
+  }
+
+  // ---------------------------------------------------------------------------
   // Dot grid (reacts to animated pan/zoom)
 
   $: dotSpacing = 28 * zoom;
@@ -281,14 +298,13 @@
     </div>
   </div>
 
-  <!-- Minimap: pointer-events:none so it never blocks canvas clicks -->
+  <!-- Minimap: click a notebook rect to jump to it -->
   <Minimap
     notebooks={$canvasState.notebooks}
-    {panX}
-    {panY}
-    {zoom}
+    {panX} {panY} {zoom}
     viewportW={window.innerWidth}
     viewportH={window.innerHeight}
+    onNotebookClick={onMinimapNotebookClick}
   />
 {/if}
 

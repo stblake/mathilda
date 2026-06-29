@@ -1,8 +1,8 @@
 <!--
-  Minimap.svelte
-  Bird's-eye overview of the canvas. Shows notebook positions and the
-  current viewport. Appears when zoom < 0.7. pointer-events: none so it
-  never blocks canvas interactions.
+  Minimap.svelte — bird's-eye overview of the canvas.
+  Shows all notebooks proportionally sized/positioned.
+  Visible when zoom < 0.7. pointer-events auto so clicking works.
+  Clicking a notebook rect pans+zooms the canvas to that notebook.
 -->
 <script lang="ts">
   import type { CanvasNotebook } from './canvas';
@@ -13,18 +13,18 @@
   export let zoom: number = 1.0;
   export let viewportW: number = 1280;
   export let viewportH: number = 800;
+  // Callback when user clicks a notebook in the minimap
+  export let onNotebookClick: ((nb: CanvasNotebook) => void) | null = null;
 
-  const MAP_W = 160;
-  const MAP_H = 110;
-  const PAD   = 60;   // world-space padding around bounding box
-
-  const PALETTE = ['#89b4fa','#a6e3a1','#f38ba8','#fab387','#cba6f7','#94e2d5'];
+  const MAP_W = 280;
+  const MAP_H = 200;
+  const PAD   = 80;
 
   $: show = zoom < 0.7;
 
   // Compute world-space bounding box of all notebooks
   $: bbox = (() => {
-    if (!notebooks.length) return { x: 0, y: 0, w: 1000, h: 700 };
+    if (!notebooks.length) return { x: 0, y: 0, w: 1200, h: 800 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const nb of notebooks) {
       const h = nb.collapsed ? 52 : (nb.height ?? 400);
@@ -41,107 +41,139 @@
     };
   })();
 
-  // Scale factors: world → minimap pixels
-  $: scaleX = MAP_W / bbox.w;
-  $: scaleY = MAP_H / bbox.h;
+  // Uniform scale to fit bounding box into minimap, preserving aspect ratio
+  $: scale = Math.min(MAP_W / bbox.w, MAP_H / bbox.h);
+  $: offsetX = (MAP_W - bbox.w * scale) / 2;
+  $: offsetY = (MAP_H - bbox.h * scale) / 2;
 
-  function toMapX(wx: number) { return (wx - bbox.x) * scaleX; }
-  function toMapY(wy: number) { return (wy - bbox.y) * scaleY; }
+  function toMapX(wx: number) { return offsetX + (wx - bbox.x) * scale; }
+  function toMapY(wy: number) { return offsetY + (wy - bbox.y) * scale; }
 
-  // Notebook rects in minimap space
-  $: nbRects = notebooks.map((nb, i) => ({
-    x: toMapX(nb.x),
-    y: toMapY(nb.y),
-    w: nb.width * scaleX,
-    h: (nb.collapsed ? 52 : (nb.height ?? 400)) * scaleY,
-    color: PALETTE[i % PALETTE.length],
-    title: nb.title,
-  }));
+  const PALETTE = ['#89b4fa','#a6e3a1','#f38ba8','#fab387','#cba6f7','#94e2d5',
+                   '#89dceb','#f9e2af','#cba6f7','#b4befe'];
 
-  // Viewport rect in minimap space
-  // The canvas-world is transformed by translate(panX, panY) scale(zoom).
-  // The top-left world coordinate visible = -panX/zoom, -panY/zoom
-  // The visible world size = viewportW/zoom × viewportH/zoom
+  $: nbRects = notebooks.map((nb, i) => {
+    const h = nb.collapsed ? 52 : (nb.height ?? 400);
+    return {
+      nb,
+      x: toMapX(nb.x),
+      y: toMapY(nb.y),
+      w: Math.max(6, nb.width * scale),
+      h: Math.max(4, h * scale),
+      color: PALETTE[i % PALETTE.length],
+      label: nb.title.slice(0, 18),
+    };
+  });
+
+  // Viewport rectangle in minimap coords
   $: vpRect = (() => {
     const wx = -panX / zoom;
     const wy = -panY / zoom;
-    const ww = viewportW / zoom;
-    const wh = viewportH / zoom;
     return {
       x: toMapX(wx),
       y: toMapY(wy),
-      w: ww * scaleX,
-      h: wh * scaleY,
+      w: Math.max(8, (viewportW / zoom) * scale),
+      h: Math.max(8, (viewportH / zoom) * scale),
     };
   })();
+
+  // Click: find which notebook was clicked and call onNotebookClick
+  function handleClick(e: MouseEvent) {
+    e.stopPropagation();
+    if (!onNotebookClick) return;
+    const rect = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    for (const r of nbRects) {
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        onNotebookClick(r.nb);
+        return;
+      }
+    }
+  }
 </script>
 
 {#if show}
-  <div class="minimap">
-    <svg width={MAP_W} height={MAP_H} xmlns="http://www.w3.org/2000/svg">
+  <div class="minimap-wrap">
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+    <svg
+      width={MAP_W}
+      height={MAP_H}
+      class="minimap-svg"
+      on:click={handleClick}
+    >
       <!-- Notebook rectangles -->
       {#each nbRects as r}
         <rect
-          x={Math.max(0, r.x)}
-          y={Math.max(0, r.y)}
-          width={Math.min(MAP_W, r.w)}
-          height={Math.min(MAP_H, r.h)}
-          fill={r.color}
-          fill-opacity="0.35"
+          x={r.x} y={r.y}
+          width={r.w} height={r.h}
+          fill={r.color} fill-opacity="0.28"
+          rx="2"
+          class="nb-rect"
+        />
+        <rect
+          x={r.x} y={r.y}
+          width={r.w} height={r.h}
+          fill="none" stroke={r.color} stroke-opacity="0.5" stroke-width="0.8"
           rx="2"
         />
-        <!-- Notebook title label -->
-        <text
-          x={Math.max(2, r.x + 3)}
-          y={Math.max(8, r.y + 9)}
-          font-size="6"
-          fill={r.color}
-          fill-opacity="0.9"
-          font-family="SF Mono, monospace"
-        >{r.title.slice(0, 14)}</text>
+        {#if r.h > 10}
+          <text
+            x={r.x + 3} y={r.y + Math.min(10, r.h - 2)}
+            font-size="6.5" fill={r.color} fill-opacity="0.9"
+            font-family="SF Mono, monospace"
+            style="pointer-events:none"
+          >{r.label}</text>
+        {/if}
       {/each}
 
       <!-- Viewport indicator -->
       <rect
-        x={vpRect.x}
-        y={vpRect.y}
-        width={Math.max(4, vpRect.w)}
-        height={Math.max(4, vpRect.h)}
-        fill="none"
-        stroke="rgba(255,255,255,0.5)"
-        stroke-width="1"
+        x={vpRect.x} y={vpRect.y}
+        width={vpRect.w} height={vpRect.h}
+        fill="rgba(255,255,255,0.06)"
+        stroke="rgba(255,255,255,0.55)"
+        stroke-width="1.2"
         rx="1"
+        style="pointer-events:none"
       />
     </svg>
-    <div class="minimap-label">overview</div>
+    <div class="minimap-label">click to jump</div>
   </div>
 {/if}
 
 <style>
-  .minimap {
+  .minimap-wrap {
     position: fixed;
     bottom: 42px;
     left: 14px;
-    width: 160px;
-    height: 110px;
-    background: rgba(8, 10, 20, 0.82);
+    background: rgba(8, 10, 22, 0.88);
     border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 7px;
+    border-radius: 8px;
     overflow: hidden;
-    pointer-events: none;   /* CRITICAL: never block canvas clicks */
     z-index: 90;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+    /* pointer-events: auto so clicks reach the SVG */
+    pointer-events: auto;
+    cursor: pointer;
+    transition: box-shadow 0.15s;
   }
+  .minimap-wrap:hover {
+    box-shadow: 0 4px 28px rgba(0,0,0,0.6), 0 0 0 1px rgba(137,180,250,0.2);
+  }
+
+  .minimap-svg { display: block; }
+
+  .nb-rect { cursor: pointer; }
+  .nb-rect:hover { fill-opacity: 0.5 !important; }
+
   .minimap-label {
-    position: absolute;
-    bottom: 3px;
-    right: 6px;
-    font-size: 0.55rem;
-    color: rgba(255,255,255,0.25);
-    letter-spacing: 0.05em;
+    text-align: right;
+    padding: 1px 6px 3px;
+    font-size: 0.52rem;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 0.04em;
     font-family: 'SF Mono', monospace;
-  }
-  svg {
-    display: block;
+    line-height: 1;
   }
 </style>
