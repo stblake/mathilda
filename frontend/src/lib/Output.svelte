@@ -104,18 +104,22 @@
     padding: 0.3rem 0.75rem 0.5rem;
     min-height: 1px;
     text-align: left;
+    min-width: 0;    /* prevent output from pushing cell-content wider */
+    overflow: hidden; /* clip anything that escapes a collapsible */
   }
 
-  /* Each output item is a stacking context for the gradient/toggle */
   .out-item {
     position: relative;
     margin-bottom: 0.2rem;
+    min-width: 0;
   }
 
-  /* Collapsible wrapper: clips vertically, never clips horizontally */
+  /* Collapsible wrapper: clips vertically, scrolls horizontally */
   .out-collapsible {
+    width: 100%;       /* don't expand beyond parent */
+    min-width: 0;      /* flex child must have this for overflow-x to work */
     max-height: 180px;
-    overflow-x: auto;   /* scroll wide content rather than clip it */
+    overflow-x: auto;
     overflow-y: hidden;
     -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
     mask-image:         linear-gradient(to bottom, black 55%, transparent 100%);
