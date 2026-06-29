@@ -265,13 +265,22 @@
 
   // Returns true if row[ri] should be hidden because a parent section is collapsed.
   function isHidden(ri: number, rows: any[]): boolean {
+    const currentType = rows[ri]?.cells[0]?.type ?? 'code';
     for (let i = ri - 1; i >= 0; i--) {
       const cell = rows[i].cells[0];
       if (!cell) continue;
-      if (cell.type === 'section') return collapsedSections.has(rows[i].id);
+      if (cell.type === 'section') {
+        // A section at ri is a SIBLING of another section — never hidden by it.
+        if (currentType === 'section') return false;
+        // Code/text/subsection: hidden if this parent section is collapsed.
+        return collapsedSections.has(rows[i].id);
+      }
       if (cell.type === 'subsection') {
+        // Sibling subsection — not hidden by it.
+        if (currentType === 'subsection' || currentType === 'section') return false;
+        // Content under this subsection: hidden if it's collapsed.
         if (collapsedSections.has(rows[i].id)) return true;
-        // keep searching for parent section
+        // Subsection not collapsed — keep scanning for parent section.
       }
     }
     return false;
@@ -511,11 +520,10 @@
     {/if}
 
     <div class="titlebar-actions">
+      <!-- Run all cells — in both canvas and focused modes -->
+      <button class="tb-btn tb-run-all" title="Run all cells" on:click|stopPropagation={runAll}>▶▶</button>
       {#if focused}
-        <!-- Run all cells button in focused mode -->
-        <button class="tb-btn tb-run-all" title="Run all cells (Shift+Enter in each)" on:click|stopPropagation={runAll}>
-          ▶▶ Run
-        </button>
+        <!-- nothing extra in focused mode -->
       {:else}
         <button class="tb-btn" title="Rename" on:click|stopPropagation={startRename}>✎</button>
         <button class="tb-btn tb-focus" title="Full screen" on:click|stopPropagation={() => setFocused(nb.id)}>⤢</button>

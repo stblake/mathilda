@@ -12,9 +12,8 @@
   import Canvas from './lib/Canvas.svelte';
   import KernelStatus from './lib/KernelStatus.svelte';
   import { kernelStatus } from './lib/notebook';
-  import { pingKernel, restartKernel, saveNotebook, loadNotebook } from './lib/ipc';
+  import { pingKernel, restartKernel, saveLibrary, loadLibrary } from './lib/ipc';
   import { serializeLibrary, loadLibraryData } from './lib/canvas';
-  import { saveLibrary } from './lib/ipc';
 
   // ---------------------------------------------------------------------------
   // Dark mode (default to dark — canvas is always dark)
@@ -64,11 +63,14 @@
     if (!sel) return;
     const path = typeof sel === 'string' ? sel : (sel as string[])[0];
     try {
-      // loadNotebook returns raw file bytes as CellData[] — but for .lb we pass raw json
-      const raw = await loadNotebook(path) as any;
-      const json = typeof raw === 'string' ? raw : JSON.stringify(raw);
-      libraryTitle = loadLibraryData(json);
+      // Use loadLibrary (returns raw JSON string) not loadNotebook (parses as cells)
+      const json = await loadLibrary(path);
+      const title = loadLibraryData(json);
+      libraryTitle = title;
       libraryPath  = path;
+      const filename = path.split('/').pop()?.replace('.lb', '') ?? title;
+      document.title = `Mathilda — ${filename}`;
+      try { await getCurrentWindow().setTitle(`Mathilda — ${filename}`); } catch {}
     } catch (e) { console.error('Open failed:', e); }
   }
 
@@ -92,6 +94,8 @@
       await saveLibrary(path, json);
       const filename = path.split('/').pop()?.replace('.lb', '') ?? 'Library';
       libraryTitle = filename;
+      // Set window title via both mechanisms for reliability
+      document.title = `Mathilda — ${filename}`;
       try { await getCurrentWindow().setTitle(`Mathilda — ${filename}`); } catch {}
     } catch (e) { console.error('Save failed:', e); }
   }
