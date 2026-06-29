@@ -8,8 +8,25 @@
   // Max height before output is collapsed with a "Show more" toggle
   const MAX_HEIGHT = 180; // px
 
-  // Per-item expanded state
+  // Per-item expanded/overflow state
   let expanded: Record<number, boolean> = {};
+  let overflows: Record<number, boolean> = {};
+
+  // Svelte action: measures actual scrollHeight vs offsetHeight.
+  // Triggers reactivity only when overflow state changes.
+  function measureOverflow(node: HTMLElement, idx: number) {
+    function check() {
+      const does = node.scrollHeight > node.offsetHeight + 4;
+      if (overflows[idx] !== does) {
+        overflows[idx] = does;
+        overflows = { ...overflows };
+      }
+    }
+    // First check after mount, then again after async content (KaTeX, Plotly)
+    requestAnimationFrame(check);
+    const t = setTimeout(check, 150);
+    return { destroy() { clearTimeout(t); } };
+  }
 
   function renderKatex(text: string): string {
     try {
@@ -56,14 +73,13 @@
   {#each items as item, idx (idx)}
     <div class="out-item" class:expanded={expanded[idx]}>
       {#if item.kind === 'expr'}
-        <!-- Wrap in collapsible; inner div scrolls horizontally -->
-        <div class="out-collapsible">
+        <div class="out-collapsible" use:measureOverflow={idx}>
           <div class="out-expr">{@html renderKatex(item.text)}</div>
         </div>
       {:else if item.kind === 'error'}
         <div class="out-error">{item.text}</div>
       {:else if item.kind === 'stream'}
-        <div class="out-collapsible">
+        <div class="out-collapsible" use:measureOverflow={idx}>
           <pre class="out-stream">{item.text}</pre>
         </div>
       {:else if item.kind === 'plot'}
@@ -72,7 +88,8 @@
         <div class="out-html">{@html item.html}</div>
       {/if}
 
-      {#if item.kind !== 'plot'}
+      <!-- Toggle only when content actually overflows the cap -->
+      {#if overflows[idx]}
         <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
         <div class="out-toggle" on:click={() => expanded[idx] = !expanded[idx]}>
           {expanded[idx] ? '▲ collapse' : '▼ show more'}
@@ -124,12 +141,7 @@
   }
   .out-toggle:hover { opacity: 0.7; }
 
-  /* Show the toggle whenever the collapsible content might overflow.
-     We can't know exact overflow in CSS, so show it whenever the item
-     contains a collapsible — the toggle is harmless if content is short. */
-  .out-item:has(.out-collapsible) .out-toggle {
-    display: block;
-  }
+  /* Toggle visibility is controlled by JS (overflows[] reactive dict) */
 
   /* Expression output — overflow handled by parent .out-collapsible */
   .out-expr {
