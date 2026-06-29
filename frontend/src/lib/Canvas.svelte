@@ -118,10 +118,6 @@
 
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return;  // left-click only
-    // Clicking anywhere on the canvas closes the context menu.
-    // The ctx-menu is a SIBLING of canvas-stage, so clicks on its
-    // buttons never bubble here — they safely reach the button handlers.
-    if (ctxMenu) { ctxMenu = null; return; }
     if ((e.target as HTMLElement).closest('.nb-card')) return;
     dragging   = true;
     dragStartX = e.clientX;
@@ -171,9 +167,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Right-click context menu on empty canvas
-
-  let ctxMenu: { x: number; y: number; worldX: number; worldY: number } | null = null;
+  // Right-click = immediately add notebook at cursor position (no menu)
 
   function onContextMenu(e: MouseEvent) {
     if ((e.target as HTMLElement).closest('.nb-card-wrapper')) return;
@@ -181,21 +175,10 @@
     const rect   = canvasEl.getBoundingClientRect();
     const worldX = (e.clientX - rect.left - panX) / zoom - 320;
     const worldY = (e.clientY - rect.top  - panY) / zoom - 30;
-    ctxMenu = { x: e.clientX, y: e.clientY, worldX, worldY };
-  }
-
-  function closeCtxMenu() { ctxMenu = null; }
-
-  function ctxNewNotebook() {
-    if (!ctxMenu) return;
-    // Capture before any reactivity clears ctxMenu
-    const wx = ctxMenu.worldX;
-    const wy = ctxMenu.worldY;
-    ctxMenu = null;
     addNotebook();
     canvasState.update(s => {
       const nbs = s.notebooks.slice();
-      nbs[nbs.length - 1] = { ...nbs[nbs.length - 1], x: wx, y: wy };
+      nbs[nbs.length - 1] = { ...nbs[nbs.length - 1], x: worldX, y: worldY };
       return { ...s, notebooks: nbs };
     });
   }
@@ -298,20 +281,11 @@
     </div>
 
     <div class="canvas-hints">
-      <span>dbl-click or right-click → new</span>
+      <span>dbl-click or right-click → new notebook</span>
       <span>⌘0 fit all</span>
       <span>scroll pan · pinch zoom</span>
     </div>
   </div>
-
-  <!-- Right-click context menu -->
-  {#if ctxMenu}
-    <div class="ctx-menu" style="left:{ctxMenu.x}px; top:{ctxMenu.y}px;">
-      <button class="ctx-item" on:click={ctxNewNotebook}>＋  New Notebook here</button>
-      <div class="ctx-divider"></div>
-      <button class="ctx-item" on:click={() => { fitAll(); closeCtxMenu(); }}>⊡  Fit All  (⌘0)</button>
-    </div>
-  {/if}
 {/if}
 
 <style>
