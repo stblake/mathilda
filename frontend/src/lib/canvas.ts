@@ -63,13 +63,19 @@ export function loadStartupContent() {
 
 export function addNotebook(title?: string) {
   canvasState.update(s => {
-    // Offset new cards so they don't stack exactly.
-    const n   = s.notebooks.length;
-    const x   = 80  + (n % 4) * 680;
-    const y   = 60  + Math.floor(n / 4) * 500;
-    const nb  = makeCard(title ?? '', x, y);
+    const n  = s.notebooks.length;
+    const x  = 80 + (n % 4) * 680;
+    const y  = 60 + Math.floor(n / 4) * 500;
+    const nb = makeCard(title ?? '', x, y);
     return { ...s, notebooks: [...s.notebooks, nb] };
   });
+}
+
+/** Add a notebook at specific world coordinates — single atomic update. */
+export function addNotebookAt(worldX: number, worldY: number, title?: string) {
+  const nb = makeCard(title ?? '', worldX, worldY);
+  canvasState.update(s => ({ ...s, notebooks: [...s.notebooks, nb] }));
+  return nb.id;
 }
 
 export function removeNotebook(id: string) {

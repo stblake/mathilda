@@ -17,6 +17,7 @@
   import {
     canvasState,
     addNotebook,
+    addNotebookAt,
     setFocused,
     loadStartupContent,
   } from './canvas';
@@ -108,18 +109,16 @@
   let dragPanX0  = 0;
   let dragPanY0  = 0;
 
-  // Double-click on empty canvas → new notebook at that world position
+  // Double-click on empty canvas → new notebook at cursor world position
   function onDblClick(e: MouseEvent) {
     if ((e.target as HTMLElement).closest('.nb-card-wrapper')) return;
-    const rect   = canvasEl.getBoundingClientRect();
+    if ((e.target as HTMLElement).closest('.nb-card')) return;
+    const rect   = canvasEl?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const worldX = (e.clientX - rect.left - panX) / zoom - 320;
     const worldY = (e.clientY - rect.top  - panY) / zoom - 30;
-    addNotebook();
-    canvasState.update(s => {
-      const nbs = s.notebooks.slice();
-      nbs[nbs.length - 1] = { ...nbs[nbs.length - 1], x: worldX, y: worldY };
-      return { ...s, notebooks: nbs };
-    });
+    addNotebookAt(worldX, worldY);
+    // Short delay then fit-all so user can see the new notebook
+    setTimeout(fitAll, 80);
   }
 
   function onPointerDown(e: PointerEvent) {
@@ -173,20 +172,16 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Right-click = immediately add notebook at cursor position (no menu)
-
+  // Right-click = add notebook at cursor world position
   function onContextMenu(e: MouseEvent) {
     if ((e.target as HTMLElement).closest('.nb-card-wrapper')) return;
+    if ((e.target as HTMLElement).closest('.nb-card')) return;
     e.preventDefault();
-    const rect   = canvasEl.getBoundingClientRect();
+    const rect   = canvasEl?.getBoundingClientRect() ?? { left: 0, top: 0 };
     const worldX = (e.clientX - rect.left - panX) / zoom - 320;
     const worldY = (e.clientY - rect.top  - panY) / zoom - 30;
-    addNotebook();
-    canvasState.update(s => {
-      const nbs = s.notebooks.slice();
-      nbs[nbs.length - 1] = { ...nbs[nbs.length - 1], x: worldX, y: worldY };
-      return { ...s, notebooks: nbs };
-    });
+    addNotebookAt(worldX, worldY);
+    setTimeout(fitAll, 80);
   }
 
   function fitAll() {
@@ -287,13 +282,10 @@
     </div>
 
     <div class="canvas-hints">
-      <span>dbl-click or right-click → new notebook</span>
+      <span>double-click or right-click empty canvas → new notebook</span>
       <span>⌘0 fit all</span>
-      <span>scroll pan · pinch zoom</span>
+      <span>scroll = pan · pinch = zoom</span>
     </div>
-
-    <!-- Floating add button - always visible in canvas mode -->
-    <button class="fab-add" on:click={addAtCentre} title="New notebook (or double-click canvas)">＋</button>
   </div>
 
   <!-- Minimap: visible when zoomed far out -->
@@ -348,27 +340,6 @@
   }
 
   /* ---- Floating add button ---- */
-  .fab-add {
-    position: fixed;
-    bottom: 2.5rem;
-    right: 1.5rem;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: var(--accent, #89b4fa);
-    color: #fff;
-    border: none;
-    font-size: 1.4rem;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    line-height: 1;
-    transition: transform 0.12s, box-shadow 0.12s;
-  }
-  .fab-add:hover { transform: scale(1.08); box-shadow: 0 6px 20px rgba(0,0,0,0.5); }
 
   /* ---- Focused (full-screen) view — truly edge to edge ---- */
   .focused-view {
