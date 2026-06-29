@@ -127,7 +127,7 @@
 <!-- Full-viewport canvas -->
 <Canvas />
 
-<!-- Floating corner: kernel status + dark mode toggle -->
+<!-- Floating corner: dark mode toggle only (no kernel status badge) -->
 <div class="corner-overlay">
   <button
     class="dark-toggle"
@@ -136,7 +136,6 @@
   >
     {$darkMode ? '◑' : '☀'}
   </button>
-  <KernelStatus />
 </div>
 
 <!-- Kernel dead banner -->

@@ -82,7 +82,7 @@
               dispatch('change', { id: cell.id, source: view.state.doc.toString() });
           }),
           EditorView.theme({
-            '&': { fontSize: '14px', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace", background: 'transparent' },
+            '&': { fontSize: '1rem', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace", background: 'transparent' },
             '.cm-scroller': { overflow: 'auto', minHeight: '1.8em' },
             '.cm-content': { padding: '6px 8px', textAlign: 'left', caretColor: '#89b4fa' },
             '.cm-focused': { outline: 'none' },

@@ -648,18 +648,42 @@
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
-    background: #050810;
+    background: var(--bg, #050810);
     min-height: 100vh;
     width: 100%;
+    display: flex;
+    flex-direction: column;
   }
+
+  /* Title centered absolutely in focused mode */
   .nb-card.focused-card .card-titlebar {
     position: sticky;
     top: 0;
     z-index: 10;
-    background: rgba(5, 8, 16, 0.95);
+    background: rgba(5, 8, 16, 0.92);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     cursor: default;
+    /* Use relative + absolute to true-center the title */
+    position: sticky;
+  }
+  /* Title centered regardless of ← Canvas button width */
+  .nb-card.focused-card .card-title {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    max-width: 60%;
+  }
+
+  /* Card body fills remaining height in focused mode */
+  .nb-card.focused-card .collapse-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+  .nb-card.focused-card .card-body {
+    flex: 1;
   }
 
   /* ---- Title bar ---- */
