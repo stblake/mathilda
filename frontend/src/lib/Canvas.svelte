@@ -183,15 +183,25 @@
 
   function closeCtxMenu() { ctxMenu = null; }
 
+  // Close context menu when clicking outside it (no backdrop needed).
+  function handleWindowClick(e: MouseEvent) {
+    if (!ctxMenu) return;
+    if ((e.target as HTMLElement).closest('.ctx-menu')) return;
+    ctxMenu = null;
+  }
+
   function ctxNewNotebook() {
     if (!ctxMenu) return;
+    // Capture before any reactivity clears ctxMenu
+    const wx = ctxMenu.worldX;
+    const wy = ctxMenu.worldY;
+    ctxMenu = null;
     addNotebook();
     canvasState.update(s => {
       const nbs = s.notebooks.slice();
-      nbs[nbs.length - 1] = { ...nbs[nbs.length - 1], x: ctxMenu!.worldX, y: ctxMenu!.worldY };
+      nbs[nbs.length - 1] = { ...nbs[nbs.length - 1], x: wx, y: wy };
       return { ...s, notebooks: nbs };
     });
-    ctxMenu = null;
   }
 
   function fitAll() {
@@ -242,7 +252,7 @@
 
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window on:keydown={onKeydown} on:click={handleWindowClick} />
 
 {#if $canvasState.focusedId}
   <!-- ── Focused (full-screen) mode — pinch out to return ── -->
@@ -300,8 +310,6 @@
 
   <!-- Right-click context menu -->
   {#if ctxMenu}
-    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-    <div class="ctx-backdrop" on:click={closeCtxMenu} on:contextmenu|preventDefault={closeCtxMenu}></div>
     <div class="ctx-menu" style="left:{ctxMenu.x}px; top:{ctxMenu.y}px;">
       <button class="ctx-item" on:click={ctxNewNotebook}>＋  New Notebook here</button>
       <div class="ctx-divider"></div>
@@ -371,11 +379,6 @@
   }
 
   /* ---- Right-click context menu ---- */
-  .ctx-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 300;
-  }
   .ctx-menu {
     position: fixed;
     z-index: 400;

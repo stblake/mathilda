@@ -218,8 +218,11 @@
     {/if}
   </div>
 
-  <!-- Cell content -->
-  <div class="cell-content">
+  <!-- Cell content — clicking anywhere in the body focuses the editor -->
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <div class="cell-content" on:click|stopPropagation={() => {
+    if (cell.type === 'code' && view) view.focus();
+  }}>
     {#if cell.type === 'code'}
       <div bind:this={editorContainer}></div>
       {#if cell.output.length > 0}
@@ -375,8 +378,13 @@
   .cell-content { padding: 0; }
 
   /* CodeMirror text colour for dark canvas */
-  :global(.cm-editor .cm-content) { color: #cdd6f4; }
+  :global(.cm-editor .cm-content) { color: #cdd6f4; caret-color: #89b4fa; }
   :global(.cm-editor .cm-line)    { color: #cdd6f4; }
+  /* Force cursor visible — CM6 theme !important can be unreliable in WebKit */
+  :global(.cm-editor .cm-cursor)       { border-left: 2px solid #89b4fa !important; }
+  :global(.cm-editor .cm-dropCursor)   { border-left: 2px solid #89b4fa !important; }
+  :global(.cm-editor.cm-focused .cm-selectionBackground) { background: rgba(137,180,250,0.25) !important; }
+  :global(.cm-editor .cm-cursor-primary) { border-left-color: #89b4fa !important; }
 
   /* prose / heading cells */
   .prose-cell {
