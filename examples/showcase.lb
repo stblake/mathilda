@@ -1,0 +1,182 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "Mathilda Showcase",
+  "notebooks": [
+    {
+      "id": "nb-1",
+      "title": "Introduction",
+      "x": 50,
+      "y": 50,
+      "width": 580,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Welcome to Mathilda" }] },
+        { "cells": [{ "type": "text", "source": "A symbolic CAS modelled on Mathematica. Press Shift+Enter to evaluate cells." }] },
+        { "cells": [{ "type": "code", "source": "1 + 1" }] },
+        { "cells": [{ "type": "code", "source": "N[Pi, 30]" }] },
+        { "cells": [{ "type": "code", "source": "Sqrt[2] + Sqrt[3]" }] },
+        { "cells": [{ "type": "code", "source": "N[E, 20]" }] },
+        { "cells": [{ "type": "code", "source": "2^100" }] },
+        { "cells": [{ "type": "code", "source": "Factorial[20]" }] }
+      ]
+    },
+    {
+      "id": "nb-2",
+      "title": "Derivatives",
+      "x": 680,
+      "y": 50,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Differentiation" }] },
+        { "cells": [{ "type": "code", "source": "D[Sin[x]^2, x]" }] },
+        { "cells": [{ "type": "code", "source": "D[x^x, x]" }] },
+        { "cells": [{ "type": "code", "source": "D[Exp[x] Sin[x], x]" }] },
+        { "cells": [{ "type": "code", "source": "D[Sin[x], {x, 4}]" }] },
+        { "cells": [{ "type": "section", "source": "Integration" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[x^2, {x, 0, 1}]" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[Sin[x], x]" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[1/(1 + x^2), x]" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[Exp[-x^2], {x, -Infinity, Infinity}]" }] }
+      ]
+    },
+    {
+      "id": "nb-3",
+      "title": "Series & Limits",
+      "x": 50,
+      "y": 500,
+      "width": 560,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Power Series" }] },
+        { "cells": [{ "type": "code", "source": "Series[Sin[x], {x, 0, 7}]" }] },
+        { "cells": [{ "type": "code", "source": "Series[Exp[x], {x, 0, 5}]" }] },
+        { "cells": [{ "type": "code", "source": "Series[Log[1 + x], {x, 0, 6}]" }] },
+        { "cells": [{ "type": "section", "source": "Limits" }] },
+        { "cells": [{ "type": "code", "source": "Limit[Sin[x]/x, x -> 0]" }] },
+        { "cells": [{ "type": "code", "source": "Limit[(1 + 1/n)^n, n -> Infinity]" }] },
+        { "cells": [{ "type": "code", "source": "Limit[x Log[x], x -> 0]" }] }
+      ]
+    },
+    {
+      "id": "nb-4",
+      "title": "Number Theory",
+      "x": 660,
+      "y": 500,
+      "width": 580,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Primes" }] },
+        { "cells": [{ "type": "code", "source": "Select[Range[50], PrimeQ]" }] },
+        { "cells": [{ "type": "code", "source": "NextPrime[100]" }] },
+        { "cells": [{ "type": "section", "source": "Factorization & Arithmetic" }] },
+        { "cells": [{ "type": "code", "source": "FactorInteger[720720]" }] },
+        { "cells": [{ "type": "code", "source": "EulerPhi[100]" }] },
+        { "cells": [{ "type": "code", "source": "GCD[144, 89]" }] },
+        { "cells": [{ "type": "code", "source": "Divisors[360]" }] },
+        { "cells": [{ "type": "section", "source": "Digit Functions" }] },
+        { "cells": [{ "type": "code", "source": "DigitSum[123456789]" }] },
+        { "cells": [{ "type": "code", "source": "Table[DigitSum[2^n], {n, 1, 20}]" }] }
+      ]
+    },
+    {
+      "id": "nb-5",
+      "title": "Algebra",
+      "x": 50,
+      "y": 1000,
+      "width": 600,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Polynomial Algebra" }] },
+        { "cells": [{ "type": "code", "source": "Factor[x^4 - 1]" }] },
+        { "cells": [{ "type": "code", "source": "Factor[x^6 - y^6]" }] },
+        { "cells": [{ "type": "code", "source": "Expand[(x + y)^5]" }] },
+        { "cells": [{ "type": "section", "source": "Solving Equations" }] },
+        { "cells": [{ "type": "code", "source": "Solve[x^2 - 5 x + 6 == 0, x]" }] },
+        { "cells": [{ "type": "code", "source": "Solve[{x + y == 5, x - y == 1}, {x, y}]" }] },
+        { "cells": [{ "type": "section", "source": "Simplification" }] },
+        { "cells": [{ "type": "code", "source": "Simplify[(x^2 - 1)/(x - 1)]" }] },
+        { "cells": [{ "type": "code", "source": "Together[1/x + 1/(x + 1)]" }] }
+      ]
+    },
+    {
+      "id": "nb-6",
+      "title": "Function Plots",
+      "x": 700,
+      "y": 1000,
+      "width": 700,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "2D Function Plotting" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sin[x], {x, 0, 2 Pi}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}]" }] },
+        { "cells": [{ "type": "section", "source": "Advanced Plots" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Sin[x] + Sin[5 x], {x, 0, 4 Pi}, Filling -> Axis]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Exp[-x^2/2]/Sqrt[2 Pi], {x, -4, 4}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[{Sin[x], Sin[2 x], Sin[3 x]}, {x, 0, 2 Pi}]" }] },
+        { "cells": [{ "type": "code", "source": "Plot[Log[x], {x, 0.1, 5}]" }] }
+      ]
+    },
+    {
+      "id": "nb-7",
+      "title": "Linear Algebra",
+      "x": 50,
+      "y": 1560,
+      "width": 560,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Matrix Operations" }] },
+        { "cells": [{ "type": "code", "source": "Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]" }] },
+        { "cells": [{ "type": "code", "source": "Inverse[{{2, 1}, {1, 3}}]" }] },
+        { "cells": [{ "type": "code", "source": "Transpose[{{1, 2, 3}, {4, 5, 6}}]" }] },
+        { "cells": [{ "type": "section", "source": "Eigenvalues & Solving" }] },
+        { "cells": [{ "type": "code", "source": "Eigenvalues[{{2, 1}, {1, 2}}]" }] },
+        { "cells": [{ "type": "code", "source": "Eigenvectors[{{3, 1}, {1, 3}}]" }] },
+        { "cells": [{ "type": "code", "source": "LinearSolve[{{1, 2}, {3, 4}}, {5, 6}]" }] },
+        { "cells": [{ "type": "section", "source": "Advanced" }] },
+        { "cells": [{ "type": "code", "source": "NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]" }] },
+        { "cells": [{ "type": "code", "source": "MatrixPower[{{1, 1}, {1, 0}}, 10]" }] }
+      ]
+    },
+    {
+      "id": "nb-8",
+      "title": "Special Functions",
+      "x": 660,
+      "y": 1560,
+      "width": 600,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Gamma & Combinatorics" }] },
+        { "cells": [{ "type": "code", "source": "Gamma[5]" }] },
+        { "cells": [{ "type": "code", "source": "Gamma[1/2]" }] },
+        { "cells": [{ "type": "code", "source": "Binomial[10, 3]" }] },
+        { "cells": [{ "type": "section", "source": "Zeta & Number Sequences" }] },
+        { "cells": [{ "type": "code", "source": "Zeta[2]" }] },
+        { "cells": [{ "type": "code", "source": "Zeta[4]" }] },
+        { "cells": [{ "type": "code", "source": "Fibonacci[20]" }] },
+        { "cells": [{ "type": "code", "source": "Table[Fibonacci[n], {n, 1, 15}]" }] },
+        { "cells": [{ "type": "code", "source": "LucasL[10]" }] }
+      ]
+    },
+    {
+      "id": "nb-9",
+      "title": "Constants & Series",
+      "x": 1380,
+      "y": 50,
+      "width": 500,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "High-Precision Constants" }] },
+        { "cells": [{ "type": "code", "source": "N[Pi, 50]" }] },
+        { "cells": [{ "type": "code", "source": "N[E, 30]" }] },
+        { "cells": [{ "type": "code", "source": "N[GoldenRatio, 20]" }] },
+        { "cells": [{ "type": "section", "source": "Sums & Series" }] },
+        { "cells": [{ "type": "code", "source": "N[Sum[1/n^2, {n, 1, 100}]]" }] },
+        { "cells": [{ "type": "code", "source": "Series[Exp[x], {x, 0, 6}]" }] },
+        { "cells": [{ "type": "code", "source": "Limit[n^(1/n), n -> Infinity]" }] },
+        { "cells": [{ "type": "code", "source": "Sum[1/n^2, {n, 1, Infinity}]" }] }
+      ]
+    }
+  ]
+}

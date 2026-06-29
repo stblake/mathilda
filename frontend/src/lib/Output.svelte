@@ -21,28 +21,42 @@
   function mountPlot(node: HTMLElement, data: object) {
     import('plotly.js-dist-min').then((Plotly: any) => {
       const spec = data as any;
-      const dark = document.documentElement.classList.contains('dark');
+      // Dark mode is default; light mode is signalled by the 'light' class on <html>
+      const dark = !document.documentElement.classList.contains('light');
 
-      // Apply dark theme overrides when in dark mode
+      // Apply Catppuccin Mocha dark theme overrides, or light overrides
       const layoutOverride = dark ? {
-        plot_bgcolor:  '#1e1e2e',
-        paper_bgcolor: '#1e1e2e',
+        plot_bgcolor:  '#181825',
+        paper_bgcolor: '#181825',
         font: { color: '#cdd6f4' },
         xaxis: {
           ...(spec.layout?.xaxis ?? {}),
           gridcolor:    '#313244',
-          zerolinecolor:'#6c7086',
+          zerolinecolor:'#585b70',
           tickfont:     { color: '#cdd6f4' },
         },
         yaxis: {
           ...(spec.layout?.yaxis ?? {}),
           gridcolor:    '#313244',
-          zerolinecolor:'#6c7086',
+          zerolinecolor:'#585b70',
           tickfont:     { color: '#cdd6f4' },
         },
       } : {
         plot_bgcolor:  '#ffffff',
         paper_bgcolor: '#f5f5fa',
+        font: { color: '#1c1c2e' },
+        xaxis: {
+          ...(spec.layout?.xaxis ?? {}),
+          gridcolor:    '#d8d9e8',
+          zerolinecolor:'#9999bb',
+          tickfont:     { color: '#1c1c2e' },
+        },
+        yaxis: {
+          ...(spec.layout?.yaxis ?? {}),
+          gridcolor:    '#d8d9e8',
+          zerolinecolor:'#9999bb',
+          tickfont:     { color: '#1c1c2e' },
+        },
       };
 
       const layout = { ...(spec.layout ?? {}), ...layoutOverride };

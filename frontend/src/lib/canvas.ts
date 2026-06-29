@@ -39,30 +39,62 @@ function makeCard(title: string, x: number, y: number): CanvasNotebook {
   };
 }
 
-// Single notebook to start — user can add more via right-click or double-click
-const _startNb = makeCard('Notebook 1', 60, 60);
+// Three starter notebooks — user can add more via right-click or double-click
+const _startNb1 = makeCard('Introduction', 60, 60);
+const _startNb2 = makeCard('Calculus',    750, 60);
+const _startNb3 = makeCard('Plots',        60, 520);
 
 export const canvasState = writable({
-  notebooks: [_startNb] as CanvasNotebook[],
+  notebooks: [_startNb1, _startNb2, _startNb3] as CanvasNotebook[],
   panX: 0,
   panY: 0,
   zoom:  1.0,
   focusedId: null as string | null,
 });
 
-/** Pre-fill the starter notebook with a few example cells. Call from onMount. */
+/** Pre-fill the starter notebooks with rich example cells. Call from onMount. */
 export function loadStartupContent() {
-  // Access notebooks directly from the store
   const s = get(canvasState);
-  const nb = s.notebooks[0];
-  if (!nb) return;
-  nb.store.load([
-    { cells: [{ type: 'section', source: 'Welcome to Mathilda' }] },
-    { cells: [{ type: 'text',    source: 'Press Shift+Enter to evaluate cells. Right-click canvas to add notebooks.' }] },
-    { cells: [{ type: 'code',    source: '1 + 1' }] },
-    { cells: [{ type: 'code',    source: 'Factor[x^4 - 1]' }] },
-    { cells: [{ type: 'code',    source: 'Plot[Sin[x], {x, 0, 2 Pi}]' }] },
-  ]);
+
+  // Notebook 1 — Introduction
+  const nb1 = s.notebooks[0];
+  if (nb1) {
+    nb1.store.load([
+      { cells: [{ type: 'section', source: 'Welcome to Mathilda' }] },
+      { cells: [{ type: 'text',    source: 'A symbolic CAS modelled on Mathematica. Press Shift+Enter to evaluate cells. Right-click the canvas to add notebooks.' }] },
+      { cells: [{ type: 'code',    source: '1 + 1' }] },
+      { cells: [{ type: 'code',    source: 'N[Pi, 30]' }] },
+      { cells: [{ type: 'code',    source: 'Sqrt[2] + Sqrt[3]' }] },
+      { cells: [{ type: 'code',    source: 'N[E, 20]' }] },
+      { cells: [{ type: 'code',    source: 'Factor[x^4 - 1]' }] },
+    ]);
+  }
+
+  // Notebook 2 — Calculus
+  const nb2 = s.notebooks[1];
+  if (nb2) {
+    nb2.store.load([
+      { cells: [{ type: 'section', source: 'Derivatives' }] },
+      { cells: [{ type: 'code',    source: 'D[Sin[x]^2, x]' }] },
+      { cells: [{ type: 'code',    source: 'D[Exp[x] Sin[x], x]' }] },
+      { cells: [{ type: 'code',    source: 'D[x^x, x]' }] },
+      { cells: [{ type: 'section', source: 'Integration' }] },
+      { cells: [{ type: 'code',    source: 'Integrate[x^2, {x, 0, 1}]' }] },
+      { cells: [{ type: 'code',    source: 'Integrate[Sin[x], x]' }] },
+    ]);
+  }
+
+  // Notebook 3 — Plots
+  const nb3 = s.notebooks[2];
+  if (nb3) {
+    nb3.store.load([
+      { cells: [{ type: 'section', source: 'Function Plots' }] },
+      { cells: [{ type: 'code',    source: 'Plot[Sin[x], {x, 0, 2 Pi}]' }] },
+      { cells: [{ type: 'code',    source: 'Plot[{Sin[x], Cos[x]}, {x, 0, 2 Pi}]' }] },
+      { cells: [{ type: 'code',    source: 'Plot[Exp[-x^2/2]/Sqrt[2 Pi], {x, -4, 4}]' }] },
+      { cells: [{ type: 'code',    source: 'Plot[Sin[x] + Sin[5 x], {x, 0, 4 Pi}]' }] },
+    ]);
+  }
 }
 
 export function addNotebook(title?: string) {

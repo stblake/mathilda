@@ -8,11 +8,13 @@
   import { writable } from 'svelte/store';
   import { open, save } from '@tauri-apps/plugin-dialog';
   import { listen } from '@tauri-apps/api/event';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import Canvas from './lib/Canvas.svelte';
   import KernelStatus from './lib/KernelStatus.svelte';
   import { kernelStatus } from './lib/notebook';
   import { pingKernel, restartKernel, saveNotebook, loadNotebook } from './lib/ipc';
   import { serializeLibrary, loadLibraryData } from './lib/canvas';
+  import { saveLibrary } from './lib/ipc';
 
   // ---------------------------------------------------------------------------
   // Dark mode (default to dark — canvas is always dark)
@@ -87,10 +89,10 @@
   async function doSave(path: string) {
     try {
       const json = serializeLibrary(libraryTitle);
-      // saveNotebook expects CellData[] — wrap json as a single-cell hack,
-      // or rely on the Rust side to handle raw string. For now log a TODO.
-      // TODO: extend Tauri command to support raw-string save for library format.
-      console.log('Save to:', path, 'size:', json.length);
+      await saveLibrary(path, json);
+      const filename = path.split('/').pop()?.replace('.lb', '') ?? 'Library';
+      libraryTitle = filename;
+      try { await getCurrentWindow().setTitle(`Mathilda — ${filename}`); } catch {}
     } catch (e) { console.error('Save failed:', e); }
   }
 
