@@ -86,8 +86,11 @@ winding-sensitive but `Polygon[]` itself, like Mathematica's, is not).
 ## Text
 A graphics primitive: `Text[expr, {x,y}]` renders `expr` (a string,
 number, or any expression -- non-strings are stringified the same way
-`ToString[]` would) as text centered at `{x,y}`, drawn with a built-in
-single-stroke vector font.
+`ToString[]` would) as text centered at `{x,y}`, drawn with the classic
+Hershey *Roman Simplex* single-stroke vector font (full printable ASCII,
+upper- and lowercase, with proportional advance widths). The glyph data is
+transcribed from the historical Hershey dataset (`tools/hershey.dat`) by
+`tools/gen_hershey.py` into `src/graphics/hershey_glyphs.inc`.
 
 ## RGBColor / GrayLevel / Opacity / Thickness / PointSize
 Style directives. Placed alongside primitives in a `Graphics[]` primitive

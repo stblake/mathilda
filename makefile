@@ -122,6 +122,11 @@ $(SRC_DIR)/%.o: $(SRC_DIR)/%.c $(ECM_TARGET)
 $(SRC_DIR)/boolean.o: $(SRC_DIR)/boolean.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
+# hershey_font.c includes the generated glyph table; the pattern rule above only
+# tracks the .c, so name the .inc as an extra prerequisite to force a rebuild
+# when the font data is regenerated (tools/gen_hershey.py).
+$(SRC_DIR)/graphics/hershey_font.o: $(SRC_DIR)/graphics/hershey_glyphs.inc
+
 clean:
 	rm -f $(OBJ) $(TARGET)
 	rm -rf *.dSYM
