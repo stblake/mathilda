@@ -24,6 +24,8 @@
   export let cellIdx: number;
   /** Per-notebook store instance — use store.xxx() for all mutations. */
   export let store: any;
+  /** Side-by-side input/output layout (toggled from the focused toolbar) */
+  export let horizontal: boolean = false;
 
   const dispatch = createEventDispatcher<{
     run:       { id: string };
@@ -237,13 +239,18 @@
 
   <!-- Cell content — clicking anywhere in the body focuses the editor -->
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="cell-content" on:click|stopPropagation={() => {
-    if (cell.type === 'code' && view) view.focus();
-  }}>
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+  <div
+    class="cell-content"
+    class:cell-horizontal={horizontal && cell.type === 'code'}
+    on:click|stopPropagation={() => { if (cell.type === 'code' && view) view.focus(); }}
+  >
     {#if cell.type === 'code'}
-      <div bind:this={editorContainer}></div>
+      <div class="input-pane" bind:this={editorContainer}></div>
       {#if cell.output.length > 0}
-        <Output items={cell.output} />
+        <div class="output-pane">
+          <Output items={cell.output} />
+        </div>
       {/if}
 
     {:else if cell.type === 'text'}
@@ -396,6 +403,15 @@
 
   /* ---- Cell content ---- */
   .cell-content { padding: 0; flex: 1; min-width: 0; }
+
+  /* Horizontal (side-by-side) layout: input left, output right */
+  .cell-horizontal {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .input-pane  { flex: 1; min-width: 0; }
+  .output-pane { flex: 1; min-width: 0; border-left: 1px solid var(--border, rgba(255,255,255,0.06)); }
 
   /* CodeMirror text colour — inherits from CSS var so light/dark both work */
   :global(.cm-editor .cm-content) { color: var(--text, #cdd6f4); caret-color: #89b4fa; }

@@ -264,6 +264,9 @@
   // ---------------------------------------------------------------------------
   // Section collapse — track which section rows are collapsed
 
+  // Layout toggle: vertical (default) vs horizontal (input|output side-by-side)
+  let horizontal = false;
+
   let collapsedSections = new Set<string>();
 
   function toggleSection(rowId: string) {
@@ -544,6 +547,14 @@
       <!-- Run all cells — in both canvas and focused modes -->
       <button class="tb-btn tb-run-all" title="Run all cells" on:click|stopPropagation={runAll}>▶▶</button>
       {#if focused}
+        <!-- Layout toggle: vertical ↕ / horizontal ⇄ -->
+        <button
+          class="tb-btn tb-layout"
+          title={horizontal ? 'Switch to vertical layout' : 'Switch to horizontal layout'}
+          on:click|stopPropagation={() => horizontal = !horizontal}
+        >{horizontal ? '↕' : '⇄'}</button>
+      {/if}
+      {#if focused}
         <!-- nothing extra in focused mode -->
       {:else}
         <button class="tb-btn" title="Rename" on:click|stopPropagation={startRename}>✎</button>
@@ -626,6 +637,7 @@
                     on:register={handleRegister}
                     on:focusPrev={handleFocusPrev}
                     on:focusNext={handleFocusNext}
+                    {horizontal}
                   />
                 </div>
               </div>
@@ -647,6 +659,7 @@
                       on:register={handleRegister}
                       on:focusPrev={handleFocusPrev}
                       on:focusNext={handleFocusNext}
+                    {horizontal}
                     />
                   </div>
                   {#if ci < row.cells.length - 1}
