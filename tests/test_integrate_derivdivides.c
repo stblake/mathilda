@@ -144,6 +144,41 @@ static void test_strict_no_fallback(void) {
         "Integrate`DerivativeDivides[5, x]", "Integrate`DerivativeDivides");
 }
 
+/* User-pinned substitution:
+ *   Method -> {"DerivativeDivides", "Substitution" -> u}
+ * trials only the kernel u(x), running both the direct and Eliminate/Solve
+ * strategies, with no fallback to the automatic kernel search. */
+static void test_substitution_option(void) {
+    /* Headline example.  The direct quotient leaves a stray x
+     * (2x/(1+Sqrt[x])); only the Eliminate/Solve strategy closes it, reducing
+     * to the rational integral Integrate[2u^2/(1+u), u]. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[Sqrt[x]/(1 + Sqrt[x]), x,"
+        " Method -> {\"DerivativeDivides\", \"Substitution\" -> Sqrt[x]}], x]"
+        " - Sqrt[x]/(1 + Sqrt[x])]", "0", 0);
+    /* Trig integrand closed by the pinned kernel u = Cos[x]. */
+    assert_eval_eq(
+        "Simplify[D[Integrate[Sin[x]/Cos[x]^2, x,"
+        " Method -> {\"DerivativeDivides\", \"Substitution\" -> Cos[x]}], x]"
+        " - Sin[x]/Cos[x]^2]", "0", 0);
+    /* Strict: a substitution that cannot close the (non-elementary) integral
+     * returns unevaluated -- no fallback to other kernels. */
+    assert_head_unevaluated(
+        "Integrate[Sin[x^2], x,"
+        " Method -> {\"DerivativeDivides\", \"Substitution\" -> x^2}]",
+        "Integrate");
+    /* An unrecognised sub-option key is invalid: stays unevaluated. */
+    assert_head_unevaluated(
+        "Integrate[Sqrt[x]/(1 + Sqrt[x]), x,"
+        " Method -> {\"DerivativeDivides\", \"Bogus\" -> 1}]",
+        "Integrate");
+    /* "Substitution" is only valid for DerivativeDivides. */
+    assert_head_unevaluated(
+        "Integrate[x^3, x,"
+        " Method -> {\"BronsteinRational\", \"Substitution\" -> x}]",
+        "Integrate");
+}
+
 void test_integrate_derivdivides(void) {
     symtab_init();
     core_init();
@@ -154,6 +189,7 @@ void test_integrate_derivdivides(void) {
     TEST(test_radical_substitution_cot);
     TEST(test_method_plumbing);
     TEST(test_strict_no_fallback);
+    TEST(test_substitution_option);
 
     printf("All Integrate DerivativeDivides tests passed!\n");
 }

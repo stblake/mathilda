@@ -412,7 +412,12 @@ monotonically down.
   - `"Automatic"` — default cascade above.
   - `"BronsteinRational"` — `Integrate\`BronsteinRational[f, x]`.
   - `"DerivativeDivides"` — `Integrate\`DerivativeDivides[f, x]` (direct **and**
-    the more thorough Eliminate/Solve branch search).
+    the more thorough Eliminate/Solve branch search).  The list form
+    `Method -> {"DerivativeDivides", "Substitution" -> u}` **pins** the kernel
+    `u(x)`: instead of collecting and trialing every `x`-dependent subexpression,
+    only that one substitution is attempted (still both strategies, still strict
+    — no fallback to other kernels if `u` does not close the integral). E.g.
+    `Integrate[Sqrt[x]/(1 + Sqrt[x]), x, Method -> {"DerivativeDivides", "Substitution" -> Sqrt[x]}]`.
   - `"LinearRadicals"` — `Integrate\`LinearRadicals[f, x]`.
   - `"QuadraticRadicals"` — `Integrate\`QuadraticRadicals[f, x]`.
   - `"LinearRatioRadicals"` — `Integrate\`LinearRatioRadicals[f, x]`.
