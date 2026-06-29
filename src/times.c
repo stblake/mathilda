@@ -5,6 +5,7 @@
 #include "numeric.h"
 #include "sym_names.h"
 #include "trig_canon.h"
+#include "series.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -244,6 +245,21 @@ Expr* builtin_times(Expr* res) {
     if (n == 0) return expr_new_integer(1);
     if (n == 1) return expr_copy(res->data.function.args[0]);
 
+    /* SeriesData arithmetic: if any factor is a power series, fold the whole
+     * Times through the series algebra. Runs before inexact contagion, which
+     * would otherwise apply N to the whole SeriesData (turning its integer
+     * nmin/nmax/den into reals and defeating recognition); mixed-precision
+     * coefficients still combine correctly because so_mul evaluates each
+     * product. NULL (incompatible operands) falls through to the generic
+     * collector, leaving a symbolic Times. */
+    for (size_t i = 0; i < n; i++) {
+        if (is_series_data(res->data.function.args[i])) {
+            Expr* r = series_combine_times(res->data.function.args, n);
+            if (r) return r;
+            break;
+        }
+    }
+
     /* Inexact contagion: if any factor is an inexact Real/MPFR, numericalize
      * exact numeric parts in-place (Pi -> 3.14159, Sqrt[2] -> 1.41421, ...).
      * This is what turns `1. Pi` into `3.14159` instead of leaving it as a
@@ -326,7 +342,7 @@ Expr* builtin_times(Expr* res) {
 
     Expr* num_prod = expr_new_integer(1);
     Expr* complex_val = NULL;
-    
+
     BasePower* groups = malloc(sizeof(BasePower) * n);
     size_t group_count = 0;
 

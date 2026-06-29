@@ -1545,6 +1545,153 @@ static void test_series_calculus_other_variable(void) {
         "Times[Rational[1, 24], Power[a, 4]]], 0, 4, 1]");
 }
 
+/* ----------------------------------------------------------------------------
+ * Arithmetic on SeriesData: Plus, Times, Power, Divide, Subtract.
+ * -------------------------------------------------------------------------- */
+
+/* Adding a scalar folds into the constant (a0) term, order preserved. */
+static void test_series_plus_scalar(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x], {x, 0, 2}] + 1",
+        "SeriesData[x, 0, List[2, 1, Rational[1, 2]], 0, 3, 1]");
+}
+
+/* A bigint (78!) and a symbolic constant (Pi) both fold into a0. */
+static void test_series_plus_bigint_symbolic(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x], {x, 0, 2}] + Pi + 78!",
+        "SeriesData[x, 0, List[Plus["
+        "11324281178206297831457521158732046228731749579488251990048962825668835325234200766245086213177344000000000000000001"
+        ", Pi], 1, Rational[1, 2]], 0, 3, 1]");
+}
+
+/* Two series about the same point add coefficient-wise. */
+static void test_series_plus_two_series(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Sin[x], {x, 0, 4}] + Series[Cos[x], {x, 0, 4}]",
+        "SeriesData[x, 0, List[1, 1, Rational[-1, 2], Rational[-1, 6], "
+        "Rational[1, 24]], 0, 5, 1]");
+}
+
+/* Series about different expansion points cannot be merged; the Plus stays
+ * symbolic (unevaluated). */
+static void test_series_plus_different_center(void) {
+    setup_full();
+    assert_fullform(
+        "Head[Series[Exp[x], {x, 0, 2}] + Series[Exp[x], {x, 1, 3}]]",
+        "Plus");
+}
+
+/* Multiplying by the bare variable shifts every power up by one and raises the
+ * O-term order accordingly: x * (x - x^3/6 + x^5/120 + O[x]^6). */
+static void test_series_times_variable(void) {
+    setup_full();
+    assert_fullform(
+        "x Series[Sin[x], {x, 0, 5}]",
+        "SeriesData[x, 0, List[1, 0, Rational[-1, 6], 0, Rational[1, 120]], "
+        "2, 7, 1]");
+}
+
+/* Product of two series truncates to the minimum order (here O[x]^3). */
+static void test_series_times_two_series(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x], {x, 0, 2}] Series[Exp[x], {x, 0, 3}]",
+        "SeriesData[x, 0, List[1, 2, 2], 0, 3, 1]");
+}
+
+/* A scalar symbol distributes over every coefficient. */
+static void test_series_times_symbol(void) {
+    setup_full();
+    assert_fullform(
+        "a Series[Exp[x], {x, 0, 2}]",
+        "SeriesData[x, 0, List[a, a, Times[Rational[1, 2], a]], 0, 3, 1]");
+}
+
+/* Integer power of a series. */
+static void test_series_power_integer(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x], {x, 0, 2}]^3",
+        "SeriesData[x, 0, List[1, 3, Rational[9, 2]], 0, 3, 1]");
+}
+
+/* Negative integer power routes through series inversion. */
+static void test_series_power_inverse(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x], {x, 0, 2}]^(-1)",
+        "SeriesData[x, 0, List[1, -1, Rational[1, 2]], 0, 3, 1]");
+}
+
+/* Rational power: Sqrt[1 + x] = 1 + x/2 - x^2/8 + x^3/16 + O[x]^4. */
+static void test_series_power_rational(void) {
+    setup_full();
+    assert_fullform(
+        "Sqrt[Series[1 + x, {x, 0, 3}]]",
+        "SeriesData[x, 0, List[1, Rational[1, 2], Rational[-1, 8], "
+        "Rational[1, 16]], 0, 4, 1]");
+}
+
+/* Scalar base raised to a series exponent: 2^series = Exp[Log[2] series]. */
+static void test_series_power_scalar_base(void) {
+    setup_full();
+    assert_fullform(
+        "2^Series[x, {x, 0, 3}]",
+        "SeriesData[x, 0, List[1, Log[2], "
+        "Times[Rational[1, 2], Power[Log[2], 2]], "
+        "Times[Rational[1, 6], Power[Log[2], 3]]], 0, 4, 1]");
+}
+
+/* Exponent that depends on the series variable: (Exp[x])^x = Exp[x^2]. */
+static void test_series_power_series_exponent(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x], {x, 0, 3}]^Series[x, {x, 0, 3}]",
+        "SeriesData[x, 0, List[1, 0, 1, 0], 0, 4, 1]");
+}
+
+/* Division composes Times[a, Power[b,-1]]; (x Exp[x])/(Exp[x]/x) = x^2. */
+static void test_series_divide(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x]/x, {x, 0, 5}] / Series[x Exp[x], {x, 0, 4}]",
+        "SeriesData[x, 0, List[1, 0, 0, 0], -2, 2, 1]");
+}
+
+/* Subtraction composes Plus[a, Times[-1,b]]; identical series cancel to 0. */
+static void test_series_subtract(void) {
+    setup_full();
+    assert_fullform(
+        "Head[Series[Exp[x], {x, 0, 2}] - Series[Exp[x], {x, 0, 2}]]",
+        "SeriesData");
+    /* Cos - Sin keeps coefficient-wise differences. */
+    assert_fullform(
+        "Series[Cos[x], {x, 0, 3}] - Series[Sin[x], {x, 0, 3}]",
+        "SeriesData[x, 0, List[1, -1, Rational[-1, 2], Rational[1, 6]], 0, 4, 1]");
+}
+
+/* Mixed precision: adding a machine real folds into a0 as a real, leaving the
+ * remaining exact coefficients untouched (coefficient-wise, as in WL). */
+static void test_series_plus_real_contagion(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x], {x, 0, 2}] + 1.5",
+        "SeriesData[x, 0, List[2.5, 1, Rational[1, 2]], 0, 3, 1]");
+}
+
+/* Mixed precision: an MPFR (arbitrary-precision) constant likewise folds into
+ * a0; the remaining coefficients stay exact. */
+static void test_series_plus_mpfr(void) {
+    setup_full();
+    assert_fullform(
+        "Series[Exp[x], {x, 0, 2}] + N[1, 30]",
+        "SeriesData[x, 0, List[2.0, 1, Rational[1, 2]], 0, 3, 1]");
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_sin_cos);
@@ -1671,6 +1818,24 @@ int main(void) {
     TEST(test_series_integrate_laurent);
     TEST(test_series_integrate_residue_unevaluated);
     TEST(test_series_calculus_other_variable);
+
+    /* Arithmetic on SeriesData. */
+    TEST(test_series_plus_scalar);
+    TEST(test_series_plus_bigint_symbolic);
+    TEST(test_series_plus_two_series);
+    TEST(test_series_plus_different_center);
+    TEST(test_series_times_variable);
+    TEST(test_series_times_two_series);
+    TEST(test_series_times_symbol);
+    TEST(test_series_power_integer);
+    TEST(test_series_power_inverse);
+    TEST(test_series_power_rational);
+    TEST(test_series_power_scalar_base);
+    TEST(test_series_power_series_exponent);
+    TEST(test_series_divide);
+    TEST(test_series_subtract);
+    TEST(test_series_plus_real_contagion);
+    TEST(test_series_plus_mpfr);
 
     printf("All series tests passed.\n");
     return 0;

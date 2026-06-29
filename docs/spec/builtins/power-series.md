@@ -69,6 +69,45 @@ In[3]:= Integrate[Series[1/x^2 + 1, {x, 0, 3}], x]
 Out[3]= -1/x + x + O[x]^5
 ```
 
+### Arithmetic on SeriesData
+
+`Plus`, `Times`, and `Power` combine `SeriesData` objects (and `Divide` /
+`Subtract`, which reduce to `Times[a, Power[b,-1]]` and `Plus[a, Times[-1,b]]`).
+All operands are converted to series about the common `(x, x0)` and folded with
+the internal series algebra; the result is truncated to the **minimum** O-term
+order of the operands.
+
+- **Operands that are not series** are expanded about the same point and order:
+  a scalar (free of `x`) folds into the constant (`a0`) coefficient; the bare
+  variable, polynomials, and transcendental functions are series-expanded with
+  the full engine. Mixed exact/approximate coefficients (integer, bigint,
+  rational, machine real, MPFR) combine per-coefficient, so adding a real folds
+  it into `a0` while leaving the other coefficients exact, as in Mathematica.
+- **Incompatible operands** — series about a different variable or expansion
+  point — leave the `Plus`/`Times`/`Power` **unevaluated** (a symbolic sum or
+  product of the `SeriesData` objects).
+- **Power**: integer exponents (including negative, via series inversion) and
+  exponents free of the series variable are handled directly. An exponent that
+  depends on the series variable, or an ordinary base raised to a series
+  exponent (e.g. `2^Series[...]`), is computed as `Exp[exp*Log[base]]`.
+
+```mathematica
+In[1]:= Series[Exp[x], {x, 0, 2}] + 1
+Out[1]= 2 + x + x^2/2 + O[x]^3
+
+In[2]:= x Series[Sin[x], {x, 0, 5}]
+Out[2]= x^2 - x^4/6 + x^6/120 + O[x]^7
+
+In[3]:= Series[Exp[x], {x, 0, 2}] Series[Exp[x], {x, 0, 3}]
+Out[3]= 1 + 2 x + 2 x^2 + O[x]^3
+
+In[4]:= Series[Exp[x], {x, 0, 2}]^3
+Out[4]= 1 + 3 x + 9 x^2/2 + O[x]^3
+
+In[5]:= 2^Series[x, {x, 0, 3}]
+Out[5]= 1 + Log[2] x + Log[2]^2/2 x^2 + Log[2]^3/6 x^3 + O[x]^4
+```
+
 ## Series
 Produces the power-series expansion of an expression about a point.
 - `Series[f, {x, x0, n}]` — Taylor/Laurent/Puiseux expansion up to order `(x - x0)^n`.
