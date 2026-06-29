@@ -117,8 +117,11 @@
   }
 
   function onPointerDown(e: PointerEvent) {
-    if (e.button !== 0) return;   // left-click only; right-click is context menu
-    if (ctxMenu) return;          // don't start pan while context menu is open
+    if (e.button !== 0) return;  // left-click only
+    // Clicking anywhere on the canvas closes the context menu.
+    // The ctx-menu is a SIBLING of canvas-stage, so clicks on its
+    // buttons never bubble here — they safely reach the button handlers.
+    if (ctxMenu) { ctxMenu = null; return; }
     if ((e.target as HTMLElement).closest('.nb-card')) return;
     dragging   = true;
     dragStartX = e.clientX;
@@ -183,13 +186,6 @@
 
   function closeCtxMenu() { ctxMenu = null; }
 
-  // Close context menu when clicking outside it (no backdrop needed).
-  function handleWindowClick(e: MouseEvent) {
-    if (!ctxMenu) return;
-    if ((e.target as HTMLElement).closest('.ctx-menu')) return;
-    ctxMenu = null;
-  }
-
   function ctxNewNotebook() {
     if (!ctxMenu) return;
     // Capture before any reactivity clears ctxMenu
@@ -252,7 +248,7 @@
 
 </script>
 
-<svelte:window on:keydown={onKeydown} on:click={handleWindowClick} />
+<svelte:window on:keydown={onKeydown} />
 
 {#if $canvasState.focusedId}
   <!-- ── Focused (full-screen) mode — pinch out to return ── -->

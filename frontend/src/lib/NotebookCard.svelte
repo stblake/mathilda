@@ -19,7 +19,7 @@
 -->
 <script lang="ts">
   import { onMount, tick, createEventDispatcher } from 'svelte';
-  import { setFocused } from './canvas';
+  import { setFocused, setNotebookWidth } from './canvas';
   const dispatch = createEventDispatcher();
   import { get } from 'svelte/store';
   import CellShell from './CellShell.svelte';
@@ -75,6 +75,31 @@
   let cardEl: HTMLElement;
 
   let dragMoved = false;
+
+  // ---------------------------------------------------------------------------
+  // Right-edge resize handle
+
+  let resizing = false;
+  let resizeStartX = 0;
+  let resizeStartW = 0;
+
+  function onResizePointerDown(e: PointerEvent) {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    resizing = true;
+    resizeStartX = e.clientX;
+    resizeStartW = nb.width;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  }
+
+  function onResizePointerMove(e: PointerEvent) {
+    if (!resizing) return;
+    e.stopPropagation();
+    const dx = (e.clientX - resizeStartX) / (currentZoom || 1);
+    setNotebookWidth(nb.id, resizeStartW + dx);
+  }
+
+  function onResizePointerUp(_e: PointerEvent) { resizing = false; }
 
   function onTitlePointerDown(e: PointerEvent) {
     if (e.button !== 0) return;  // left-click drag only
@@ -395,20 +420,27 @@
 
     <div class="titlebar-actions">
       {#if !focused}
-        <button
-          class="tb-btn tb-focus"
-          title="Full screen (pinch out to return)"
-          on:click|stopPropagation={() => setFocused(nb.id)}
-        >⤢</button>
+        <button class="tb-btn" title="Rename" on:click|stopPropagation={startRename}>✎</button>
+        <button class="tb-btn tb-focus" title="Full screen" on:click|stopPropagation={() => setFocused(nb.id)}>⤢</button>
         <button class="tb-btn" title="Collapse / expand" on:click|stopPropagation={onToggleCollapse}>
           {nb.collapsed ? '⊟' : '⊞'}
         </button>
-        <button class="tb-btn tb-close" title="Close notebook" on:click|stopPropagation={() => removeNotebook(nb.id)}>
-          ✕
-        </button>
+        <button class="tb-btn tb-close" title="Close" on:click|stopPropagation={() => removeNotebook(nb.id)}>✕</button>
       {/if}
     </div>
   </div>
+
+  <!-- Right-edge resize handle -->
+  {#if !focused}
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div
+      class="resize-handle"
+      on:pointerdown={onResizePointerDown}
+      on:pointermove={onResizePointerMove}
+      on:pointerup={onResizePointerUp}
+      on:pointercancel={onResizePointerUp}
+    ></div>
+  {/if}
 
   <!-- Collapse wrapper -->
   <div class="collapse-wrapper">
@@ -564,8 +596,8 @@
     gap: 0.5rem;
     padding: 0 10px 0 0;
     height: 36px;
-    background: rgba(255,255,255,0.03);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: var(--gutter-bg, rgba(255,255,255,0.03));
+    border-bottom: 1px solid var(--border, rgba(255,255,255,0.06));
     cursor: grab;
     user-select: none;
     -webkit-user-select: none;
@@ -584,7 +616,7 @@
     flex: 1;
     font-size: 0.82rem;
     font-weight: 600;
-    color: #cdd6f4;
+    color: var(--text, #cdd6f4);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -623,7 +655,7 @@
     line-height: 1;
     transition: color 0.12s, background 0.12s;
   }
-  .tb-btn:hover { color: #cdd6f4; background: rgba(255,255,255,0.06); }
+  .tb-btn:hover { color: var(--text, #cdd6f4); background: rgba(128,128,128,0.12); }
   .tb-close:hover { color: #f38ba8; }
   .tb-focus:hover { color: var(--accent, #89b4fa); }
   .tb-back {
@@ -687,6 +719,18 @@
   .card-body::-webkit-scrollbar { width: 5px; }
   .card-body::-webkit-scrollbar-track { background: transparent; }
   .card-body::-webkit-scrollbar-thumb { background: rgba(137,180,250,0.2); border-radius: 3px; }
+
+  /* ---- Right-edge resize handle ---- */
+  .resize-handle {
+    position: absolute;
+    top: 0;
+    right: -4px;
+    width: 8px;
+    height: 100%;
+    cursor: ew-resize;
+    z-index: 10;
+  }
+  .resize-handle:hover { background: rgba(137,180,250,0.25); border-radius: 4px; }
 
   /* ---- Insertion cursor between rows ---- */
   .insertion-cursor {

@@ -68,6 +68,14 @@ export function setNotebookPos(id: string, x: number, y: number) {
   }));
 }
 
+export function setNotebookWidth(id: string, width: number) {
+  const clamped = Math.max(320, Math.min(1600, width));
+  canvasState.update(s => ({
+    ...s,
+    notebooks: s.notebooks.map(nb => nb.id === id ? { ...nb, width: clamped } : nb),
+  }));
+}
+
 export function toggleCollapse(id: string) {
   canvasState.update(s => ({
     ...s,

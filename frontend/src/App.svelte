@@ -147,24 +147,23 @@
 {/if}
 
 <style>
-  /* ---- Light mode (default) — white cells, dark text ---- */
+  /* ---- Dim mode (default) — warm off-white cards, readable dark text ---- */
   :global(:root) {
-    --bg:          #1e1e2e;     /* canvas stays dark */
-    --surface:     #ffffff;
-    --cell-bg:     #ffffff;
-    --border:      rgba(0,0,0,0.09);
-    --text:        #1a1a2e;
-    --text-muted:  #777;
-    --accent:      #4a90e2;
-    --accent-glow: rgba(74,144,226,0.15);
-    --out-text:    #1a1a2e;
-    --gutter-bg:   #f4f5f8;
-    --gutter-hover:#eaecf0;
-    /* notebook card gets white bg */
-    --card-bg:     rgba(255,255,255,0.96);
-    --card-border: rgba(0,0,0,0.1);
+    --bg:          #1a1b2e;     /* canvas stays dark */
+    --surface:     #f0f0f5;
+    --cell-bg:     #f0f0f5;
+    --border:      rgba(0,0,0,0.12);
+    --text:        #1c1c2e;     /* deep dark text */
+    --text-muted:  #555577;
+    --accent:      #3b82f6;
+    --accent-glow: rgba(59,130,246,0.18);
+    --out-text:    #1c1c2e;
+    --gutter-bg:   #e4e5ee;
+    --gutter-hover:#d8d9e8;
+    --card-bg:     #f0f0f5;
+    --card-border: rgba(0,0,0,0.14);
   }
-  :global(body) { background: #1e1e2e; }
+  :global(body) { background: #1a1b2e; }
 
   /* ---- Dark mode ---- */
   :global(html.dark) {
