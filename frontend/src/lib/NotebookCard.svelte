@@ -263,28 +263,32 @@
       : new Set([...collapsedSections, rowId]);
   }
 
-  // Returns true if row[ri] should be hidden because a parent section is collapsed.
-  function isHidden(ri: number, rows: any[]): boolean {
-    const currentType = rows[ri]?.cells[0]?.type ?? 'code';
-    for (let i = ri - 1; i >= 0; i--) {
-      const cell = rows[i].cells[0];
-      if (!cell) continue;
-      if (cell.type === 'section') {
-        // A section at ri is a SIBLING of another section — never hidden by it.
-        if (currentType === 'section') return false;
-        // Code/text/subsection: hidden if this parent section is collapsed.
-        return collapsedSections.has(rows[i].id);
+  // Reactive set of hidden row IDs — depends on BOTH $nbStore AND collapsedSections.
+  // Plain function (not isHidden()) so the $: makes Svelte track collapsedSections,
+  // ensuring {#if !hiddenRows.has(row.id)} re-evaluates immediately on toggle.
+  $: hiddenRows = (() => {
+    const hidden = new Set<string>();
+    const rows = $nbStore;
+    for (let ri = 0; ri < rows.length; ri++) {
+      const currentType = rows[ri]?.cells[0]?.type ?? 'code';
+      let hide = false;
+      for (let i = ri - 1; i >= 0; i--) {
+        const cell = rows[i]?.cells[0];
+        if (!cell) continue;
+        if (cell.type === 'section') {
+          if (currentType !== 'section') hide = collapsedSections.has(rows[i].id);
+          break; // stop at first section boundary
+        }
+        if (cell.type === 'subsection') {
+          if (currentType === 'section' || currentType === 'subsection') break;
+          if (collapsedSections.has(rows[i].id)) { hide = true; break; }
+          // Not collapsed — keep scanning for parent section.
+        }
       }
-      if (cell.type === 'subsection') {
-        // Sibling subsection — not hidden by it.
-        if (currentType === 'subsection' || currentType === 'section') return false;
-        // Content under this subsection: hidden if it's collapsed.
-        if (collapsedSections.has(rows[i].id)) return true;
-        // Subsection not collapsed — keep scanning for parent section.
-      }
+      if (hide) hidden.add(rows[ri].id);
     }
-    return false;
-  }
+    return hidden;
+  })();
 
   // ---------------------------------------------------------------------------
   // 4-directional row/cell add
@@ -577,7 +581,7 @@
         {/if}
 
         {#each $nbStore as row, ri (row.id)}
-          {#if !isHidden(ri, $nbStore)}
+          {#if !hiddenRows.has(row.id)}
             {@const firstCell = row.cells[0]}
             {@const isSection = firstCell?.type === 'section' || firstCell?.type === 'subsection'}
 
