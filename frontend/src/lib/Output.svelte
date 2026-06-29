@@ -56,20 +56,22 @@
   {#each items as item, idx (idx)}
     <div class="out-item" class:expanded={expanded[idx]}>
       {#if item.kind === 'expr'}
-        <div class="out-expr out-collapsible">
-          {@html renderKatex(item.text)}
+        <!-- Wrap in collapsible; inner div scrolls horizontally -->
+        <div class="out-collapsible">
+          <div class="out-expr">{@html renderKatex(item.text)}</div>
         </div>
       {:else if item.kind === 'error'}
         <div class="out-error">{item.text}</div>
       {:else if item.kind === 'stream'}
-        <pre class="out-stream out-collapsible">{item.text}</pre>
+        <div class="out-collapsible">
+          <pre class="out-stream">{item.text}</pre>
+        </div>
       {:else if item.kind === 'plot'}
         <div class="out-plot" use:mountPlot={item.data}></div>
       {:else if item.kind === 'html'}
         <div class="out-html">{@html item.html}</div>
       {/if}
 
-      <!-- Expand/collapse toggle — only visible when content overflows -->
       {#if item.kind !== 'plot'}
         <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
         <div class="out-toggle" on:click={() => expanded[idx] = !expanded[idx]}>
@@ -93,19 +95,18 @@
     margin-bottom: 0.2rem;
   }
 
-  /* Collapsible content: cap height, clip overflow */
+  /* Collapsible wrapper: clips vertically, never clips horizontally */
   .out-collapsible {
     max-height: 180px;
-    overflow: hidden;
-    /* Fade to transparent at the bottom so the clipping is graceful */
-    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
-    mask-image:         linear-gradient(to bottom, black 60%, transparent 100%);
+    overflow-x: auto;   /* scroll wide content rather than clip it */
+    overflow-y: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+    mask-image:         linear-gradient(to bottom, black 55%, transparent 100%);
   }
 
-  /* When expanded, remove the cap and fade */
   .expanded .out-collapsible {
     max-height: none;
-    overflow: visible;
+    overflow-y: visible;
     -webkit-mask-image: none;
     mask-image: none;
   }
@@ -130,15 +131,12 @@
     display: block;
   }
 
-  /* Expression output */
+  /* Expression output — overflow handled by parent .out-collapsible */
   .out-expr {
     font-size: 1.05em;
     padding: 0.25rem 0;
     color: var(--out-text, #222);
     text-align: left;
-    /* prevent long single-line math from overflowing horizontally */
-    overflow-x: auto;
-    overflow-y: hidden;
   }
 
   /* Error output */
