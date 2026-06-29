@@ -28,7 +28,23 @@
     return { destroy() { clearTimeout(t); } };
   }
 
+  // Heuristic: expressions that are long lists of numbers/symbols don't
+  // benefit from KaTeX (no fractions/superscripts) and KaTeX can't wrap them.
+  // Render as code with word-break so they don't overflow the card.
+  function isLongList(text: string): boolean {
+    // More than ~120 chars AND high comma density → it's a list output
+    if (text.length < 120) return false;
+    const commas = (text.match(/,/g) ?? []).length;
+    return commas > 8 || text.length > 400;
+  }
+
   function renderKatex(text: string): string {
+    if (isLongList(text)) {
+      // Render as plain code that wraps; insert zero-width space after each
+      // comma so the browser can break there without destroying readability.
+      const wrapped = text.replace(/,\s*/g, ',​ ');
+      return `<code class="out-code-wrap">${wrapped}</code>`;
+    }
     try {
       return katex.renderToString(text, { throwOnError: false, displayMode: false });
     } catch {
@@ -153,6 +169,19 @@
     padding: 0.25rem 0;
     color: var(--out-text, #222);
     text-align: left;
+  }
+
+  /* Long list/sequence outputs rendered as wrapping code */
+  :global(.out-code-wrap) {
+    display: block;
+    font-family: inherit;
+    font-size: 1.05em;
+    color: var(--out-text, #cdd6f4);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.5;
+    padding: 0.15rem 0;
   }
 
   /* Error output */
