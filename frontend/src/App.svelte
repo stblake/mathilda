@@ -147,23 +147,26 @@
 {/if}
 
 <style>
-  /* ---- Dim mode (default — softer dark) ---- */
+  /* ---- Light mode (default) — white cells, dark text ---- */
   :global(:root) {
-    --bg:          #1e1e2e;
-    --surface:     rgba(30,30,46,0.95);
-    --cell-bg:     rgba(36,36,54,0.9);
-    --border:      rgba(255,255,255,0.09);
-    --text:        #cdd6f4;
-    --text-muted:  #6c7086;
-    --accent:      #89b4fa;
-    --accent-glow: rgba(137,180,250,0.14);
-    --out-text:    #cdd6f4;
-    --gutter-bg:   rgba(255,255,255,0.03);
-    --gutter-hover:rgba(255,255,255,0.06);
+    --bg:          #1e1e2e;     /* canvas stays dark */
+    --surface:     #ffffff;
+    --cell-bg:     #ffffff;
+    --border:      rgba(0,0,0,0.09);
+    --text:        #1a1a2e;
+    --text-muted:  #777;
+    --accent:      #4a90e2;
+    --accent-glow: rgba(74,144,226,0.15);
+    --out-text:    #1a1a2e;
+    --gutter-bg:   #f4f5f8;
+    --gutter-hover:#eaecf0;
+    /* notebook card gets white bg */
+    --card-bg:     rgba(255,255,255,0.96);
+    --card-border: rgba(0,0,0,0.1);
   }
   :global(body) { background: #1e1e2e; }
 
-  /* ---- Dark mode (deep space) ---- */
+  /* ---- Dark mode ---- */
   :global(html.dark) {
     --bg:          #050810;
     --surface:     rgba(8,10,22,0.96);
@@ -176,6 +179,8 @@
     --out-text:    #cdd6f4;
     --gutter-bg:   rgba(255,255,255,0.015);
     --gutter-hover:rgba(255,255,255,0.03);
+    --card-bg:     rgba(12,15,28,0.85);
+    --card-border: rgba(255,255,255,0.08);
   }
   :global(html.dark body) { background: #050810; }
 

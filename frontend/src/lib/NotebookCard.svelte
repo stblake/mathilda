@@ -152,6 +152,49 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Insertion point — blinking horizontal cursor between cells
+  // 0 = before first row, i = between row[i-1] and row[i]
+
+  let insertionIdx: number | null = null;
+
+  function handleFocusPrev(e: CustomEvent<{ id: string }>) {
+    const rows = nb.store.getRows();
+    const ri = rows.findIndex((r: any) => r.cells.some((c: any) => c.id === e.detail.id));
+    if (ri >= 0) { insertionIdx = ri; tick().then(() => cardEl?.focus()); }
+  }
+
+  function handleFocusNext(e: CustomEvent<{ id: string }>) {
+    const rows = nb.store.getRows();
+    const ri = rows.findIndex((r: any) => r.cells.some((c: any) => c.id === e.detail.id));
+    if (ri >= 0) { insertionIdx = ri + 1; tick().then(() => cardEl?.focus()); }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Section collapse — track which section rows are collapsed
+
+  let collapsedSections = new Set<string>();
+
+  function toggleSection(rowId: string) {
+    collapsedSections = collapsedSections.has(rowId)
+      ? new Set([...collapsedSections].filter(id => id !== rowId))
+      : new Set([...collapsedSections, rowId]);
+  }
+
+  // Returns true if row[ri] should be hidden because a parent section is collapsed.
+  function isHidden(ri: number, rows: any[]): boolean {
+    for (let i = ri - 1; i >= 0; i--) {
+      const cell = rows[i].cells[0];
+      if (!cell) continue;
+      if (cell.type === 'section') return collapsedSections.has(rows[i].id);
+      if (cell.type === 'subsection') {
+        if (collapsedSections.has(rows[i].id)) return true;
+        // keep searching for parent section
+      }
+    }
+    return false;
+  }
+
+  // ---------------------------------------------------------------------------
   // 4-directional row/cell add
 
   async function addRowAbove(e: CustomEvent<{ rowId: string }>) {
@@ -259,8 +302,46 @@
   // ---------------------------------------------------------------------------
   // Keyboard (scoped to card — stop propagation so canvas doesn't eat keys)
 
-  function onCardKeydown(e: KeyboardEvent) {
+  async function onCardKeydown(e: KeyboardEvent) {
     e.stopPropagation();
+    if (insertionIdx === null) return;
+
+    if (e.key === 'Escape') { e.preventDefault(); insertionIdx = null; return; }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (insertionIdx > 0) { insertionIdx--; }
+      else {
+        insertionIdx = null;
+        const rows = nb.store.getRows();
+        if (rows[0]) cellFocusFns[rows[0].cells[0]?.id]?.();
+      }
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const rows = nb.store.getRows();
+      if (insertionIdx < rows.length) { insertionIdx++; }
+      else {
+        insertionIdx = null;
+        const last = rows[rows.length - 1];
+        if (last) cellFocusFns[last.cells[0]?.id]?.();
+      }
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const idx = insertionIdx; insertionIdx = null;
+      const id = nb.store.insertRowAt(idx);
+      await tick(); cellFocusFns[id]?.();
+      return;
+    }
+    // Printable char → create cell and type into it
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      const idx = insertionIdx; insertionIdx = null;
+      const id = nb.store.insertRowAt(idx, 'code', e.key);
+      await tick(); cellFocusFns[id]?.();
+    }
   }
 </script>
 
@@ -270,21 +351,19 @@
   class:mounted
   class:collapsed={nb.collapsed}
   class:focused-card={focused}
-  style="
-    --accent: {accentColor};
-    --accent-glow: {accentColor}1a;
-  "
+  style="--accent: {accentColor}; --accent-glow: {accentColor}1a;"
   bind:this={cardEl}
+  tabindex="-1"
   on:keydown={onCardKeydown}
+  on:pointermove={onTitlePointerMove}
+  on:pointerup={onTitlePointerUp}
+  on:pointercancel={onTitlePointerUp}
 >
-  <!-- Title bar -->
+  <!-- Title bar — only pointerdown here; move/up handled by cardEl after setPointerCapture -->
   <!-- svelte-ignore a11y-no-static-element-interactions -->
   <div
     class="card-titlebar"
     on:pointerdown={onTitlePointerDown}
-    on:pointermove={onTitlePointerMove}
-    on:pointerup={onTitlePointerUp}
-    on:pointercancel={onTitlePointerUp}
   >
     <!-- Back to canvas button — only in focused full-screen mode -->
     {#if focused}
@@ -344,30 +423,77 @@
     {:else}
       <!-- Full notebook UI -->
       <div class="card-body">
-        <!-- Row list — iterate the store directly -->
-        {#each $nbStore as row, _ri (row.id)}
-          <div class="nb-row">
-            {#each row.cells as cell, ci (cell.id)}
-              <div class="cell-col" style="flex: 1 1 0; min-width: 0;">
-                <CellShell
-                  {cell}
-                  store={nb.store}
-                  rowId={row.id}
-                  cellIdx={ci}
-                  on:run={handleRun}
-                  on:change={handleChange}
-                  on:addAbove={addRowAbove}
-                  on:addBelow={addRowBelow}
-                  on:addLeft={addCellLeft}
-                  on:addRight={addCellRight}
-                  on:register={handleRegister}
-                />
+        <!-- Insertion point before first row -->
+        {#if insertionIdx === 0}
+          <div class="insertion-cursor active"></div>
+        {/if}
+
+        {#each $nbStore as row, ri (row.id)}
+          {#if !isHidden(ri, $nbStore)}
+            {@const firstCell = row.cells[0]}
+            {@const isSection = firstCell?.type === 'section' || firstCell?.type === 'subsection'}
+
+            {#if isSection}
+              <!-- Section/Subsection row with collapse toggle -->
+              <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+              <div class="section-row" class:subsection={firstCell.type === 'subsection'}>
+                <button
+                  class="section-collapse-btn"
+                  on:click|stopPropagation={() => toggleSection(row.id)}
+                  title={collapsedSections.has(row.id) ? 'Expand' : 'Collapse'}
+                >{collapsedSections.has(row.id) ? '▶' : '▼'}</button>
+                <div class="cell-col" style="flex:1;min-width:0">
+                  <CellShell
+                    cell={firstCell}
+                    store={nb.store}
+                    rowId={row.id}
+                    cellIdx={0}
+                    on:run={handleRun}
+                    on:change={handleChange}
+                    on:addAbove={addRowAbove}
+                    on:addBelow={addRowBelow}
+                    on:addLeft={addCellLeft}
+                    on:addRight={addCellRight}
+                    on:register={handleRegister}
+                    on:focusPrev={handleFocusPrev}
+                    on:focusNext={handleFocusNext}
+                  />
+                </div>
               </div>
-              {#if ci < row.cells.length - 1}
-                <div class="col-divider"></div>
-              {/if}
-            {/each}
-          </div>
+            {:else}
+              <div class="nb-row">
+                {#each row.cells as cell, ci (cell.id)}
+                  <div class="cell-col" style="flex: 1 1 0; min-width: 0;">
+                    <CellShell
+                      {cell}
+                      store={nb.store}
+                      rowId={row.id}
+                      cellIdx={ci}
+                      on:run={handleRun}
+                      on:change={handleChange}
+                      on:addAbove={addRowAbove}
+                      on:addBelow={addRowBelow}
+                      on:addLeft={addCellLeft}
+                      on:addRight={addCellRight}
+                      on:register={handleRegister}
+                      on:focusPrev={handleFocusPrev}
+                      on:focusNext={handleFocusNext}
+                    />
+                  </div>
+                  {#if ci < row.cells.length - 1}
+                    <div class="col-divider"></div>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+          {/if}
+
+          <!-- Insertion point after this row -->
+          {#if insertionIdx === ri + 1}
+            <div class="insertion-cursor active"></div>
+          {:else if ri < $nbStore.length - 1}
+            <div class="insertion-cursor"></div>
+          {/if}
         {/each}
 
         <!-- Add-row bar -->
@@ -386,8 +512,8 @@
   .nb-card {
     position: relative;
     border-radius: 12px;
-    background: rgba(12, 15, 28, 0.85);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--card-bg, rgba(12,15,28,0.85));
+    border: 1px solid var(--card-border, rgba(255,255,255,0.08));
     box-shadow:
       0 0 0 1px rgba(137,180,250,0.10),
       0 24px 64px rgba(0,0,0,0.65),
@@ -561,6 +687,42 @@
   .card-body::-webkit-scrollbar { width: 5px; }
   .card-body::-webkit-scrollbar-track { background: transparent; }
   .card-body::-webkit-scrollbar-thumb { background: rgba(137,180,250,0.2); border-radius: 3px; }
+
+  /* ---- Insertion cursor between rows ---- */
+  .insertion-cursor {
+    height: 3px;
+    margin: 0;
+    border-radius: 2px;
+    transition: background 0.1s;
+    cursor: text;
+  }
+  .insertion-cursor.active {
+    background: var(--accent, #89b4fa);
+    animation: ins-blink 1s ease-in-out infinite;
+  }
+  @keyframes ins-blink { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+  /* ---- Section rows with collapse toggle ---- */
+  .section-row {
+    display: flex;
+    align-items: flex-start;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .section-row.subsection { padding-left: 1rem; }
+
+  .section-collapse-btn {
+    flex-shrink: 0;
+    width: 22px;
+    padding: 8px 4px 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 0.6rem;
+    cursor: pointer;
+    transition: color 0.1s;
+    line-height: 1;
+  }
+  .section-collapse-btn:hover { color: var(--accent); }
 
   /* ---- Notebook rows ---- */
   .nb-row {
