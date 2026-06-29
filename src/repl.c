@@ -8,6 +8,7 @@
 #include "sym_names.h"
 #include "show.h"
 #include "graphics_json.h"
+#include "print_latex.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -420,6 +421,7 @@ static void pipe_process_input(const char* input, int id) {
     }
 
     char* result_str = expr_to_string(evaluated);
+    char* latex_raw  = expr_to_latex(evaluated);   /* must be before expr_free */
     expr_free(evaluated);
 
     if (!result_str) {
@@ -447,15 +449,31 @@ static void pipe_process_input(const char* input, int id) {
     json_escape(result_str, escaped, escaped_len);
     free(result_str);
 
-    size_t line_len = escaped_len + 64;
+    /* latex_raw was produced above (before expr_free) — now escape it */
+    char* latex_esc  = NULL;
+    if (latex_raw) {
+        size_t llen = strlen(latex_raw) * 6 + 4;
+        latex_esc = malloc(llen);
+        if (latex_esc) json_escape(latex_raw, latex_esc, llen);
+        free(latex_raw);
+    }
+
+    size_t line_len = escaped_len + (latex_esc ? strlen(latex_esc) : 0) + 128;
     char* json_line = malloc(line_len);
     if (json_line) {
-        snprintf(json_line, line_len,
-                 "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\"}", id, escaped);
+        if (latex_esc && strlen(latex_esc) > 0) {
+            snprintf(json_line, line_len,
+                     "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\",\"latex\":\"%s\"}",
+                     id, escaped, latex_esc);
+        } else {
+            snprintf(json_line, line_len,
+                     "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\"}", id, escaped);
+        }
         pipe_emit(json_line);
         free(json_line);
     }
     free(escaped);
+    free(latex_esc);
 
     char done[64];
     snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);

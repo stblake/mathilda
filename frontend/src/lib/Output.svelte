@@ -38,9 +38,17 @@
     return commas > 4 || text.length > 200;
   }
 
-  function renderOutput(text: string): string {
+  function renderOutput(text: string, latex?: string): string {
+    // Prefer LaTeX from the kernel (StandardForm serialiser) when available
+    if (latex && latex.length > 0) {
+      try {
+        return katex.renderToString(latex, { throwOnError: false, displayMode: false });
+      } catch {
+        /* fall through to text rendering */
+      }
+    }
+    // Long lists: render as wrapping code, not KaTeX (which can't wrap)
     if (isListOutput(text)) {
-      // Break at comma+space so numbers wrap naturally within the card width
       const wrapped = text.replace(/,\s+/g, ', ');
       return `<code class="out-code-wrap">${wrapped}</code>`;
     }
@@ -89,7 +97,7 @@
     <div class="out-item" class:expanded={expanded[idx]}>
       {#if item.kind === 'expr'}
         <div class="out-collapsible" use:measureOverflow={idx}>
-          <div class="out-expr">{@html renderOutput(item.text)}</div>
+          <div class="out-expr">{@html renderOutput(item.text, (item as any).latex)}</div>
         </div>
       {:else if item.kind === 'error'}
         <div class="out-error">{item.text}</div>
