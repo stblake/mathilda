@@ -340,6 +340,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_linrad.c
     ../src/calculus/integrate_quadrad.c
     ../src/calculus/integrate_linratiorad.c
+    ../src/calculus/integrate_chebychev.c
     ../src/calculus/integrate_jeffrey.c
     ../src/calculus/intrat.c
     ../src/calculus/intrischnorman.c
@@ -1530,6 +1531,15 @@ else()
     target_link_libraries(integrate_linratiorad_tests gmp m)
 endif()
 add_test(NAME integrate_linratiorad_tests COMMAND integrate_linratiorad_tests)
+
+add_executable(integrate_chebychev_tests test_integrate_chebychev.c ${COMMON_SRC})
+target_include_directories(integrate_chebychev_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(integrate_chebychev_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+else()
+    target_link_libraries(integrate_chebychev_tests gmp m)
+endif()
+add_test(NAME integrate_chebychev_tests COMMAND integrate_chebychev_tests)
 
 add_executable(integrate_jeffrey_tests test_integrate_jeffrey.c ${COMMON_SRC})
 target_include_directories(integrate_jeffrey_tests PRIVATE ../src)

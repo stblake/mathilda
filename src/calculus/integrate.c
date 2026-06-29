@@ -22,6 +22,7 @@
 #include "integrate_linrad.h"
 #include "integrate_quadrad.h"
 #include "integrate_linratiorad.h"
+#include "integrate_chebychev.h"
 #include "integrate_jeffrey.h"
 #include "intrat.h"
 #include "intrischnorman.h"
@@ -177,6 +178,19 @@ static Expr* try_linratiorad(Expr* f, Expr* x) {
     return integrate_linratiorad_try(f, x);
 }
 
+/* Stage 1e2: Chebychev binomial differential.  Recognises an integrand
+ * x^p (a x^r + b)^q with p, q, r rational and a, b free of x, and -- when one
+ * of q, (p+1)/r, q+(p+1)/r is an integer (Chebychev's theorem) -- applies the
+ * matching rationalising substitution (x = u^N, u^s = a x^r + b, or
+ * u = x^r then t^s = (a u + b)/u), integrates the rational result, and
+ * back-substitutes.  Recognition is a single structural scan, so it is cheap
+ * enough to run ahead of the Eliminate/Solve search in derivative-divides.
+ * Non-elementary binomials return NULL, so the cascade falls through to the
+ * later methods (which may one day carry special-function representations). */
+static Expr* try_chebychev(Expr* f, Expr* x) {
+    return integrate_chebychev_try(f, x);
+}
+
 /* Stage 1f: continuous Weierstrass substitution (Jeffrey & Rich 1994).
  * Recognises a rational function of the trig kernels Sin/Cos/Tan/Cot/Sec/Csc[x]
  * (or the hyperbolic kernels) carrying a kernel in a denominator, substitutes
@@ -277,6 +291,7 @@ typedef enum {
     METHOD_LINEAR_RADICALS,
     METHOD_QUADRATIC_RADICALS,
     METHOD_LINEAR_RATIO_RADICALS,
+    METHOD_CHEBYCHEV,
     METHOD_WEIERSTRASS,
     METHOD_RISCH,
     METHOD_CRCTABLE,
@@ -292,6 +307,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "LinearRadicals") == 0) return METHOD_LINEAR_RADICALS;
     if (strcmp(s, "QuadraticRadicals") == 0) return METHOD_QUADRATIC_RADICALS;
     if (strcmp(s, "LinearRatioRadicals") == 0) return METHOD_LINEAR_RATIO_RADICALS;
+    if (strcmp(s, "ChebychevAlgebraic") == 0) return METHOD_CHEBYCHEV;
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(s, "RischNorman") == 0) return METHOD_RISCH;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
@@ -408,7 +424,8 @@ Expr* builtin_integrate(Expr* res) {
                     "Integrate::method: Method option value is not one of "
                     "\"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", "
                     "\"LinearRadicals\", \"QuadraticRadicals\", "
-                    "\"LinearRatioRadicals\", \"Weierstrass\", \"RischNorman\", "
+                    "\"LinearRatioRadicals\", \"ChebychevAlgebraic\", "
+                    "\"Weierstrass\", \"RischNorman\", "
                     "\"CRCTable\".\n");
                 last_warned_hash = h;
             }
@@ -443,6 +460,10 @@ Expr* builtin_integrate(Expr* res) {
             if (!result) result = try_linrad(effective_f, x);
             if (!result) result = try_quadrad(effective_f, x);
             if (!result) result = try_linratiorad(effective_f, x);
+            /* Chebychev binomial differentials: a fast, deterministic
+             * rationalising substitution that closes (correct by construction),
+             * so it runs ahead of the Eliminate/Solve search and Risch-Norman. */
+            if (!result) result = try_chebychev(effective_f, x);
             /* Weierstrass before derivative-divides: it is a domain-specific,
              * deterministic algorithm for rational trig/hyperbolic integrands
              * that is guaranteed to close (and verified by construction), so it
@@ -473,6 +494,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_LINEAR_RATIO_RADICALS:
             result = try_linratiorad(effective_f, x);
+            break;
+        case METHOD_CHEBYCHEV:
+            result = try_chebychev(effective_f, x);
             break;
         case METHOD_WEIERSTRASS:
             result = integrate_jeffrey_full(effective_f, x);
@@ -528,6 +552,7 @@ void integrate_init(void) {
         "  \"LinearRadicals\"     — Integrate`LinearRadicals (rationalise radicals of a x + b)\n"
         "  \"QuadraticRadicals\"  — Integrate`QuadraticRadicals (Euler substitution for Sqrt[a x^2 + b x + c])\n"
         "  \"LinearRatioRadicals\" — Integrate`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d))\n"
+        "  \"ChebychevAlgebraic\" — Integrate`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem)\n"
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischNorman\"        — Integrate`RischNorman (Bronstein pmint heuristic)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
@@ -557,6 +582,9 @@ void integrate_init(void) {
 
     /* Linear-ratio-radical (Möbius) substitution: Integrate`LinearRatioRadicals. */
     integrate_linratiorad_init();
+
+    /* Chebychev binomial differential: Integrate`ChebychevAlgebraic. */
+    integrate_chebychev_init();
 
     /* Continuous Weierstrass substitution (Jeffrey & Rich 1994):
      * Integrate`Weierstrass. */
