@@ -545,15 +545,13 @@
 
     <div class="titlebar-actions">
       <button class="tb-btn tb-run-all" title="Run all cells" on:click|stopPropagation={runAll}>▶▶</button>
-      {#if focused}
-        <!-- Focused mode: layout toggle only -->
-        <button
-          class="tb-btn"
-          title={horizontal ? 'Switch to vertical layout (↕)' : 'Switch to horizontal layout (⇄)'}
-          on:click|stopPropagation={() => { horizontal = !horizontal; }}
-        >{horizontal ? '↕' : '⇄'}</button>
-      {:else}
-        <!-- Canvas mode: rename, expand, collapse, close -->
+      <!-- Layout toggle always visible — input/output side-by-side or stacked -->
+      <button
+        class="tb-btn"
+        title={horizontal ? 'Vertical layout' : 'Horizontal layout'}
+        on:click|stopPropagation={() => { horizontal = !horizontal; }}
+      >{horizontal ? '↕' : '⇄'}</button>
+      {#if !focused}
         <button class="tb-btn" title="Rename" on:click|stopPropagation={startRename}>✎</button>
         <button class="tb-btn tb-focus" title="Full screen" on:click|stopPropagation={() => setFocused(nb.id)}>⤢</button>
         <button class="tb-btn" title="Collapse / expand" on:click|stopPropagation={onToggleCollapse}>
