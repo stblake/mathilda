@@ -319,6 +319,16 @@
   // ---------------------------------------------------------------------------
   // Cell execution
 
+  async function runAll() {
+    nb.store.resetExecCounter();
+    const cells = nb.store.allCells();
+    for (const cell of cells) {
+      if (cell.type === 'code' && cell.source.trim()) {
+        await runCell(cell.id, cell.source);
+      }
+    }
+  }
+
   async function runCell(cellId: string, source: string) {
     if (!source.trim()) return;
     nb.store.stampExec(cellId);
@@ -394,22 +404,42 @@
     if (e.key === 'Escape') { e.preventDefault(); insertionIdx = null; return; }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (insertionIdx > 0) { insertionIdx--; }
-      else {
+      const rows = nb.store.getRows();
+      // Arrow up from insertion point → enter the cell ABOVE the cursor
+      // insertionIdx N = gap between row[N-1] and row[N].
+      // "Above" = row[N-1], last cell in that row.
+      if (insertionIdx > 0) {
+        const targetRow = rows[insertionIdx - 1];
+        if (targetRow) {
+          insertionIdx = null;
+          const lastCell = targetRow.cells[targetRow.cells.length - 1];
+          if (lastCell) cellFocusFns[lastCell.id]?.();
+        } else {
+          insertionIdx = Math.max(0, insertionIdx - 1);
+        }
+      } else {
+        // Already at top — dismiss cursor
         insertionIdx = null;
-        const rows = nb.store.getRows();
-        if (rows[0]) cellFocusFns[rows[0].cells[0]?.id]?.();
       }
       return;
     }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       const rows = nb.store.getRows();
-      if (insertionIdx < rows.length) { insertionIdx++; }
-      else {
+      // Arrow down from insertion point → enter the cell BELOW the cursor
+      // insertionIdx N = gap between row[N-1] and row[N].
+      // "Below" = row[N], first cell in that row.
+      if (insertionIdx < rows.length) {
+        const targetRow = rows[insertionIdx];
+        if (targetRow) {
+          insertionIdx = null;
+          const firstCell = targetRow.cells[0];
+          if (firstCell) cellFocusFns[firstCell.id]?.();
+        } else {
+          insertionIdx = Math.min(rows.length, insertionIdx + 1);
+        }
+      } else {
         insertionIdx = null;
-        const last = rows[rows.length - 1];
-        if (last) cellFocusFns[last.cells[0]?.id]?.();
       }
       return;
     }
@@ -481,7 +511,12 @@
     {/if}
 
     <div class="titlebar-actions">
-      {#if !focused}
+      {#if focused}
+        <!-- Run all cells button in focused mode -->
+        <button class="tb-btn tb-run-all" title="Run all cells (Shift+Enter in each)" on:click|stopPropagation={runAll}>
+          ▶▶ Run
+        </button>
+      {:else}
         <button class="tb-btn" title="Rename" on:click|stopPropagation={startRename}>✎</button>
         <button class="tb-btn tb-focus" title="Full screen" on:click|stopPropagation={() => setFocused(nb.id)}>⤢</button>
         <button class="tb-btn" title="Collapse / expand" on:click|stopPropagation={onToggleCollapse}>
@@ -748,6 +783,15 @@
     transition: color 0.12s, background 0.12s;
   }
   .tb-btn:hover { color: var(--text, #cdd6f4); background: rgba(128,128,128,0.12); }
+  .tb-run-all {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    background: rgba(166,227,161,0.12);
+    border: 1px solid rgba(166,227,161,0.3);
+    color: #a6e3a1;
+    border-radius: 5px;
+  }
+  .tb-run-all:hover { background: rgba(166,227,161,0.22) !important; }
   .tb-close:hover { color: #f38ba8; }
   .tb-focus:hover { color: var(--accent, #89b4fa); }
   .tb-back {

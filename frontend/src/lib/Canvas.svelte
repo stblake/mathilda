@@ -366,7 +366,8 @@
   .focused-view {
     position: fixed;
     inset: 0;
-    background: #050810;
+    /* Use card-bg so light mode doesn't show dark canvas edges */
+    background: var(--card-bg, #050810);
     overflow-y: auto;
     z-index: 50;
   }

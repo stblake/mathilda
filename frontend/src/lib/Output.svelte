@@ -19,10 +19,34 @@
   }
 
   function mountPlot(node: HTMLElement, data: object) {
-    // Dynamically import Plotly to keep initial bundle lean.
     import('plotly.js-dist-min').then((Plotly: any) => {
       const spec = data as any;
-      Plotly.react(node, spec.data ?? [spec], spec.layout ?? {}, {
+      const dark = document.documentElement.classList.contains('dark');
+
+      // Apply dark theme overrides when in dark mode
+      const layoutOverride = dark ? {
+        plot_bgcolor:  '#1e1e2e',
+        paper_bgcolor: '#1e1e2e',
+        font: { color: '#cdd6f4' },
+        xaxis: {
+          ...(spec.layout?.xaxis ?? {}),
+          gridcolor:    '#313244',
+          zerolinecolor:'#6c7086',
+          tickfont:     { color: '#cdd6f4' },
+        },
+        yaxis: {
+          ...(spec.layout?.yaxis ?? {}),
+          gridcolor:    '#313244',
+          zerolinecolor:'#6c7086',
+          tickfont:     { color: '#cdd6f4' },
+        },
+      } : {
+        plot_bgcolor:  '#ffffff',
+        paper_bgcolor: '#f5f5fa',
+      };
+
+      const layout = { ...(spec.layout ?? {}), ...layoutOverride };
+      Plotly.react(node, spec.data ?? [spec], layout, {
         responsive: true,
         displayModeBar: true,
       });
