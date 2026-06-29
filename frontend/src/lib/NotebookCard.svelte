@@ -412,7 +412,13 @@
     // Let Cmd+0 and Cmd+N pass through to Canvas for fit-all / add notebook
     if ((e.metaKey || e.ctrlKey) && (e.key === '0' || e.key === 'n' || e.key === 'N')) return;
     e.stopPropagation();
-    if (insertionIdx === null) return;
+
+    // If the event came from a CHILD element (e.g. CodeMirror editor), the
+    // editor's keymap already handled it and fired handleFocusPrev/Next which
+    // set insertionIdx. Don't immediately process navigation on the SAME event —
+    // just let the cursor appear. The user must press again (while the card
+    // itself has focus) to navigate further.
+    if (insertionIdx === null || e.target !== cardEl) return;
 
     if (e.key === 'Escape') { e.preventDefault(); insertionIdx = null; return; }
     if (e.key === 'ArrowUp') {
