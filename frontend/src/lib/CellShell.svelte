@@ -143,6 +143,35 @@
     dispatch('change', { id: cell.id, source: (e.target as HTMLElement).innerText });
   }
 
+  // Arrow navigation for contenteditable cells (section/subsection/text).
+  // Dispatches focusPrev/focusNext so the notebook can show the insertion cursor.
+  function onProseKeydown(e: KeyboardEvent) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+
+    // Section/subsection headings are always single-line → navigate immediately.
+    if (cell.type === 'section' || cell.type === 'subsection') {
+      e.preventDefault();
+      dispatch(e.key === 'ArrowUp' ? 'focusPrev' : 'focusNext', { id: cell.id });
+      return;
+    }
+
+    // Text cells: only navigate when the cursor is at the very start or end.
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+
+    if (e.key === 'ArrowUp' && range.startOffset === 0) {
+      e.preventDefault();
+      dispatch('focusPrev', { id: cell.id });
+    } else if (e.key === 'ArrowDown') {
+      const node = range.startContainer;
+      const atEnd = node.nodeType === Node.TEXT_NODE
+        ? range.startOffset === (node.textContent?.length ?? 0)
+        : range.startOffset >= node.childNodes.length;
+      if (atEnd) { e.preventDefault(); dispatch('focusNext', { id: cell.id }); }
+    }
+  }
+
   // Focus ref + contenteditable state management
   let proseEl: HTMLElement;
   let _lastCellId = '';
@@ -213,12 +242,6 @@
   }}>
     {#if cell.type === 'code'}
       <div bind:this={editorContainer}></div>
-      {#if cell.output.length > 0}
-        {#if cell.execIdx != null}
-          <div class="out-label">Out[{cell.execIdx}]=</div>
-        {/if}
-        <Output items={cell.output} />
-      {/if}
 
     {:else if cell.type === 'text'}
       <!-- svelte-ignore a11y-click-events-have-key-events -->
@@ -228,6 +251,7 @@
         contenteditable="true"
         bind:this={proseEl}
         on:input={onTextInput}
+        on:keydown={onProseKeydown}
         on:click|stopPropagation
       ></div>
 
@@ -238,6 +262,7 @@
         contenteditable="true"
         bind:this={proseEl}
         on:input={onTextInput}
+        on:keydown={onProseKeydown}
         on:click|stopPropagation
       ></h1>
 
@@ -248,10 +273,25 @@
         contenteditable="true"
         bind:this={proseEl}
         on:input={onTextInput}
+        on:keydown={onProseKeydown}
         on:click|stopPropagation
       ></h2>
     {/if}
   </div>
+
+  <!-- Output row: Out[n]= label in gutter-width column, output fills right -->
+  {#if cell.type === 'code' && cell.output.length > 0}
+    <div class="output-row">
+      <div class="output-gutter">
+        {#if cell.execIdx != null}
+          <span class="out-label">Out[{cell.execIdx}]</span>
+        {/if}
+      </div>
+      <div class="output-body">
+        <Output items={cell.output} />
+      </div>
+    </div>
+  {/if}
 </div>
 
 <!-- Close type picker when clicking outside -->
@@ -401,13 +441,30 @@
   h1.heading-cell { font-size: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); padding-bottom: 0.3rem; }
   h2.heading-cell { font-size: 1.15rem; }
 
+  /* Output row: mirrors the cell-shell flex layout so Out[n] aligns with In[n] */
+  .output-row {
+    display: flex;
+    flex-direction: row;
+    border-top: 1px solid var(--border, rgba(255,255,255,0.06));
+  }
+  .output-gutter {
+    width: 40px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 6px 4px;
+    gap: 2px;
+  }
+  .output-body {
+    flex: 1;
+    min-width: 0;
+  }
   .out-label {
-    font-size: 0.67rem;
-    color: #585b70;
+    font-size: 0.58rem;
+    color: var(--text-muted, #585b70);
     font-family: 'SF Mono', monospace;
-    padding: 0 8px;
-    margin-top: 2px;
-    text-align: left;
-    display: block;
+    white-space: nowrap;
+    line-height: 1;
   }
 </style>
