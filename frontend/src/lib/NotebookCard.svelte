@@ -253,6 +253,19 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Wheel: scroll card when an editor inside is focused; pan canvas otherwise.
+
+  function onCardBodyWheel(e: WheelEvent) {
+    const active = document.activeElement;
+    if (active && cardEl?.contains(active)) {
+      // An editor/input inside this card has focus → let browser scroll the card.
+      e.stopPropagation();
+      // Don't prevent default so the card body's overflow-y:auto scroll works.
+    }
+    // Otherwise bubble up to canvas-stage's onWheel for pan/zoom.
+  }
+
+  // ---------------------------------------------------------------------------
   // Section collapse — track which section rows are collapsed
 
   let collapsedSections = new Set<string>();
@@ -574,10 +587,11 @@
         {/if}
       </div>
     {:else}
-      <!-- Full notebook UI — stop wheel so canvas doesn't pan when scrolling inside card -->
+      <!-- Full notebook UI -->
       <!-- svelte-ignore a11y-no-static-element-interactions -->
       <div
         class="card-body"
+        on:wheel={onCardBodyWheel}
         style={nb.height != null ? `max-height: none; height: ${nb.height - TITLE_BAR_H}px; overflow-y: auto;` : ''}
 
       >
