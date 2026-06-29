@@ -23,10 +23,14 @@ let _nextId = 1;
 const PALETTE = ['#4a90e2','#e67e22','#27ae60','#8e44ad','#e74c3c','#16a085'];
 
 function makeCard(title: string, x: number, y: number): CanvasNotebook {
-  const id = `nb-${_nextId}`;
+  // CRITICAL: always capture and increment _nextId so every card gets a unique id.
+  // The old pattern `title || \`Notebook ${_nextId++}\`` never incremented when
+  // title was non-empty, causing every subsequent makeCard('', ...) to get id="nb-1"
+  // and Svelte's keyed {#each} to collapse them into one rendered card.
+  const n = _nextId++;
   return {
-    id,
-    title: title || `Notebook ${_nextId++}`,
+    id: `nb-${n}`,
+    title: title || `Notebook ${n}`,
     x, y,
     width: 640,
     height: null,
