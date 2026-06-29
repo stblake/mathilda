@@ -39,18 +39,18 @@
   }
 
   function renderOutput(text: string, latex?: string): string {
-    // Prefer LaTeX from the kernel (StandardForm serialiser) when available
-    if (latex && latex.length > 0) {
-      try {
-        return katex.renderToString(latex, { throwOnError: false, displayMode: false });
-      } catch {
-        /* fall through to text rendering */
-      }
-    }
-    // Long lists: render as wrapping code, not KaTeX (which can't wrap)
+    // Long lists: always use wrapping code regardless of latex field.
+    // KaTeX renders math spans without line-breaking, so even \{1,2,...\}
+    // produces a single wide unbreakable line.
     if (isListOutput(text)) {
       const wrapped = text.replace(/,\s+/g, ', ');
       return `<code class="out-code-wrap">${wrapped}</code>`;
+    }
+    // Short expressions: prefer LaTeX from the kernel (StandardForm)
+    if (latex && latex.length > 0) {
+      try {
+        return katex.renderToString(latex, { throwOnError: false, displayMode: false });
+      } catch { /* fall through */ }
     }
     try {
       return katex.renderToString(text, { throwOnError: false, displayMode: false });

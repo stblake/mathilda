@@ -422,7 +422,9 @@
 
   async function onCardKeydown(e: KeyboardEvent) {
     // Let Cmd+0 and Cmd+N pass through to Canvas for fit-all / add notebook
-    if ((e.metaKey || e.ctrlKey) && (e.key === '0' || e.key === 'n' || e.key === 'N')) return;
+    // Let ALL Cmd/Ctrl combos pass through to App.svelte's window handler
+    // (Cmd+0 fit-all, Cmd+N new notebook, Cmd+=/- ui scale, Cmd+S/O save/open)
+    if (e.metaKey || e.ctrlKey) return;
     e.stopPropagation();
 
     // If the event came from a CHILD element (e.g. CodeMirror editor), the
