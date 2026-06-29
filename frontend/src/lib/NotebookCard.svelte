@@ -573,7 +573,7 @@
       <div
         class="card-body"
         style={nb.height != null ? `max-height: none; height: ${nb.height - TITLE_BAR_H}px; overflow-y: auto;` : ''}
-        on:wheel|stopPropagation
+
       >
         <!-- Insertion point before first row -->
         {#if insertionIdx === 0}

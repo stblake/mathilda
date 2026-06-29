@@ -53,3 +53,7 @@ export async function saveLibrary(path: string, json: string): Promise<void> {
 export async function loadLibrary(path: string): Promise<string> {
   return await invoke<string>('load_library', { path });
 }
+
+export async function setWindowTitle(title: string): Promise<void> {
+  await invoke<void>("set_window_title", { title });
+}

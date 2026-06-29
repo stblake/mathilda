@@ -126,3 +126,18 @@ pub async fn save_library(path: String, json: String) -> Result<(), String> {
 pub async fn load_library(path: String) -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("load_library: {e}"))
 }
+
+/// Set the native OS window title from the frontend.
+/// More reliable than the JS getCurrentWindow().setTitle() in WebKit.
+#[tauri::command]
+pub async fn set_window_title(
+    app: tauri::AppHandle,
+    title: String,
+) -> Result<(), String> {
+    use tauri::Manager;
+    if let Some(win) = app.get_webview_window("main") {
+        win.set_title(&title).map_err(|e| e.to_string())
+    } else {
+        Err("Window 'main' not found".into())
+    }
+}

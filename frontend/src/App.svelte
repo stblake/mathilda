@@ -12,7 +12,7 @@
   import Canvas from './lib/Canvas.svelte';
   import KernelStatus from './lib/KernelStatus.svelte';
   import { kernelStatus } from './lib/notebook';
-  import { pingKernel, restartKernel, saveLibrary, loadLibrary } from './lib/ipc';
+  import { pingKernel, restartKernel, saveLibrary, loadLibrary, setWindowTitle as setTitleCmd } from './lib/ipc';
   import { serializeLibrary, loadLibraryData } from './lib/canvas';
 
   // ---------------------------------------------------------------------------
@@ -100,8 +100,8 @@
   function setWindowTitle(name: string) {
     const title = `Mathilda — ${name}`;
     document.title = title;
-    // Tauri API as secondary (may not update native title bar in dev mode)
-    getCurrentWindow().setTitle(title).catch(() => {});
+    // Use Rust command — most reliable way to set native macOS title bar
+    setTitleCmd(title).catch(() => {});
   }
 
   // ---------------------------------------------------------------------------
