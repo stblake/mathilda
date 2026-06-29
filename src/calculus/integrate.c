@@ -35,6 +35,7 @@
 #include "internal.h"
 #include "sym_intern.h"
 #include "sym_names.h"
+#include "series.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -330,6 +331,17 @@ Expr* builtin_integrate(Expr* res) {
     {
         Expr* interp = integrate_interp(f, x);
         if (interp) return interp;
+    }
+
+    /* SeriesData integrates term-by-term to a new SeriesData. Handle this
+     * before the inexact-rationalisation scan and method cascade, none of
+     * which understand the SeriesData head. */
+    if (f->type == EXPR_FUNCTION &&
+        f->data.function.head->type == EXPR_SYMBOL &&
+        f->data.function.head->data.symbol == SYM_SeriesData &&
+        f->data.function.arg_count == 6) {
+        Expr* r = series_integrate(f, x);
+        if (r) return r;   /* residue/unsupported -> fall through, stays unevaluated */
     }
 
     /* Parse the optional Method -> "..." option. */

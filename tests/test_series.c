@@ -1472,6 +1472,79 @@ static void test_series_arcsin_branch_point(void) {
         "List[0, Times[-1, Power[2, Rational[1, 2]]], 0], 0, 3, 2]]]");
 }
 
+/* ----------------------------------------------------------------------------
+ * Calculus on SeriesData: term-by-term differentiation and integration.
+ * -------------------------------------------------------------------------- */
+
+/* Integrate[Series[Exp[x], {x,0,8}], x] raises the order and shifts powers up:
+ * x + x^2/2 + ... + x^9/362880 + O[x]^10. */
+static void test_series_integrate_exp(void) {
+    setup_full();
+    assert_fullform(
+        "Integrate[Series[Exp[x], {x, 0, 8}], x]",
+        "SeriesData[x, 0, List[1, Rational[1, 2], Rational[1, 6], "
+        "Rational[1, 24], Rational[1, 120], Rational[1, 720], "
+        "Rational[1, 5040], Rational[1, 40320], Rational[1, 362880]], 1, 10, 1]");
+}
+
+/* D[Series[Exp[x], {x,0,8}], x] lowers the order and shifts powers down,
+ * dropping the differentiated constant term: 1 + x + ... + x^7/5040 + O[x]^8. */
+static void test_series_differentiate_exp(void) {
+    setup_full();
+    assert_fullform(
+        "D[Series[Exp[x], {x, 0, 8}], x]",
+        "SeriesData[x, 0, List[1, 1, Rational[1, 2], Rational[1, 6], "
+        "Rational[1, 24], Rational[1, 120], Rational[1, 720], "
+        "Rational[1, 5040]], 0, 8, 1]");
+}
+
+/* Round-trip: D[Integrate[s, x], x] returns s with order reduced by one. */
+static void test_series_diff_integrate_roundtrip(void) {
+    setup_full();
+    assert_fullform(
+        "D[Integrate[Series[Exp[x], {x, 0, 8}], x], x]",
+        "SeriesData[x, 0, List[1, 1, Rational[1, 2], Rational[1, 6], "
+        "Rational[1, 24], Rational[1, 120], Rational[1, 720], "
+        "Rational[1, 5040], Rational[1, 40320]], 0, 9, 1]");
+}
+
+/* Laurent series with no residue integrates term-by-term:
+ * Integrate[1/x^2 + 1 + O[x]^4, x] = -1/x + x + O[x]^5. */
+static void test_series_integrate_laurent(void) {
+    setup_full();
+    assert_fullform(
+        "Integrate[Series[1/x^2 + 1, {x, 0, 3}], x]",
+        "SeriesData[x, 0, List[-1, 0, 1], -1, 5, 1]");
+    /* D of the same Laurent series: -2/x^3 + O[x]^3. */
+    assert_fullform(
+        "D[Series[1/x^2 + 1, {x, 0, 3}], x]",
+        "SeriesData[x, 0, List[-2], -3, 3, 1]");
+}
+
+/* A genuine (x)^-1 residue term has no SeriesData antiderivative (it is a
+ * Log), so Integrate must stay unevaluated rather than return garbage. */
+static void test_series_integrate_residue_unevaluated(void) {
+    setup_full();
+    assert_fullform(
+        "Head[Integrate[Series[1/x + 1, {x, 0, 3}], x]]",
+        "Integrate");
+}
+
+/* Differentiating / integrating with respect to a variable other than the
+ * series variable threads into the coefficients, keeping the powers of x. */
+static void test_series_calculus_other_variable(void) {
+    setup_full();
+    assert_fullform(
+        "D[Series[Exp[a x], {x, 0, 3}], a]",
+        "SeriesData[x, 0, List[0, 1, a, Times[Rational[1, 2], Power[a, 2]]], "
+        "0, 4, 1]");
+    assert_fullform(
+        "Integrate[Series[Exp[a x], {x, 0, 3}], a]",
+        "SeriesData[x, 0, List[a, Times[Rational[1, 2], Power[a, 2]], "
+        "Times[Rational[1, 6], Power[a, 3]], "
+        "Times[Rational[1, 24], Power[a, 4]]], 0, 4, 1]");
+}
+
 int main(void) {
     TEST(test_series_taylor_exp);
     TEST(test_series_sin_cos);
@@ -1590,6 +1663,14 @@ int main(void) {
     TEST(test_series_logintegral_at_zero);
     TEST(test_series_expintegralei_at_zero);
     TEST(test_series_infinity_no_inv_var_leak);
+
+    /* Calculus on SeriesData. */
+    TEST(test_series_integrate_exp);
+    TEST(test_series_differentiate_exp);
+    TEST(test_series_diff_integrate_roundtrip);
+    TEST(test_series_integrate_laurent);
+    TEST(test_series_integrate_residue_unevaluated);
+    TEST(test_series_calculus_other_variable);
 
     printf("All series tests passed.\n");
     return 0;

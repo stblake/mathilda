@@ -52,4 +52,19 @@ bool series_split_two_term(Expr* e, Expr* x,
                            Expr** a_out, Expr** b_out,
                            int64_t* exp_num, int64_t* exp_den);
 
+/*
+ * series_differentiate / series_integrate
+ *   Differentiate or integrate a SeriesData[x, x0, {coefs}, nmin, nmax, den]
+ *   object term-by-term in `var`. When `var` is the series variable the power
+ *   rule is applied to each term (integration uses constant 0, as in
+ *   Mathematica); when `var` is a different symbol the coefficients are
+ *   transformed and the powers kept (valid only when x0 is free of `var`).
+ *   Return a fresh SeriesData Expr on success, or NULL when the shape is
+ *   unsupported (e.g. non-integer orders) or, for integration, when a nonzero
+ *   (x-x0)^-1 term would require a Log. The caller then leaves D[]/Integrate[]
+ *   unevaluated.
+ */
+Expr* series_differentiate(Expr* sd, Expr* var);
+Expr* series_integrate(Expr* sd, Expr* var);
+
 #endif // SERIES_H

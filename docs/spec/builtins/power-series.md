@@ -38,6 +38,37 @@ In[5]:= SeriesData[x, 0, {1, 2, 3}, 1, 7, 2]
 Out[5]= Sqrt[x] + 2 x + 3 x^(3/2) + O[x]^(7/2)
 ```
 
+### Calculus on SeriesData
+
+`D` and `Integrate` operate on a `SeriesData` term-by-term, returning a new
+`SeriesData` (matching Mathematica).
+
+- **Differentiation w.r.t. the series variable** applies the power rule to each
+  term: the coefficient of `(x - x0)^((nmin+i)/den)` is multiplied by
+  `(nmin+i)/den` and the exponent drops by one. Both `nmin` and `nmax` decrease
+  by `den`; the differentiated constant term becomes a leading zero and is
+  trimmed.
+- **Integration w.r.t. the series variable** raises each term: the coefficient
+  is multiplied by `den/(nmin+i+den)` and the exponent rises by one. Both `nmin`
+  and `nmax` increase by `den`. The constant of integration is taken to be `0`.
+  A genuine `(x - x0)^-1` term (nonzero residue) integrates to a `Log` that
+  `SeriesData` cannot represent, so `Integrate` is left **unevaluated** in that
+  case.
+- **With respect to a different variable** (when the expansion point `x0` is
+  free of that variable), `D`/`Integrate` thread into the coefficients and keep
+  the powers of `(x - x0)` unchanged.
+
+```mathematica
+In[1]:= Integrate[Series[Exp[x], {x, 0, 8}], x]
+Out[1]= x + 1/2 x^2 + 1/6 x^3 + ... + 1/362880 x^9 + O[x]^10
+
+In[2]:= D[Series[Exp[x], {x, 0, 8}], x]
+Out[2]= 1 + x + 1/2 x^2 + ... + 1/5040 x^7 + O[x]^8
+
+In[3]:= Integrate[Series[1/x^2 + 1, {x, 0, 3}], x]
+Out[3]= -1/x + x + O[x]^5
+```
+
 ## Series
 Produces the power-series expansion of an expression about a point.
 - `Series[f, {x, x0, n}]` — Taylor/Laurent/Puiseux expansion up to order `(x - x0)^n`.

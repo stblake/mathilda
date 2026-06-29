@@ -53,6 +53,7 @@
 #include "attr.h"
 #include "sym_names.h"
 #include "print.h"
+#include "series.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1772,6 +1773,12 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
                 terms[i] = mk_fnN_adopt("Times", factors, fc);
             }
             return mk_fnN_adopt("Plus", terms, n);
+        }
+
+        /* --- SeriesData: term-by-term differentiation. --- */
+        if (h == SYM_SeriesData && n == 6) {
+            Expr* r = series_differentiate(f, x);
+            if (r) return r;
         }
 
         /* --- Known elementary unary function: F'(g) * D[g, x]. --- */

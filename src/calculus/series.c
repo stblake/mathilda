@@ -2568,6 +2568,126 @@ static Expr* series_build_xmx0(Expr* x, Expr* x0) {
 /* Convert a single validated SeriesData[x, x0, coefs, nmin, nmax, den] node
  * into an ordinary sum, dropping the O-term. Returns NULL if the node is
  * malformed (so the caller can leave it untouched). */
+/* ----------------------------------------------------------------------------
+ * Calculus on SeriesData (term-by-term differentiation / integration)
+ * -------------------------------------------------------------------------- */
+
+/* Read a validated SeriesData[x, x0, {coefs}, nmin, nmax, den] Expr into a
+ * fresh SeriesObj. Returns NULL if the shape is unsupported (non-integer
+ * nmin/nmax/den, missing List of coefficients, zero denominator); the caller
+ * then leaves the enclosing expression unevaluated. */
+static SeriesObj* so_from_seriesdata(Expr* sd) {
+    if (sd->type != EXPR_FUNCTION ||
+        !has_symbol_head(sd, "SeriesData") ||
+        sd->data.function.arg_count != 6) return NULL;
+    Expr** a = sd->data.function.args;
+    Expr* coefs = a[2];
+    if (!has_symbol_head(coefs, "List") ||
+        a[3]->type != EXPR_INTEGER ||
+        a[4]->type != EXPR_INTEGER ||
+        a[5]->type != EXPR_INTEGER ||
+        a[5]->data.integer <= 0) return NULL;
+    int64_t nmin  = a[3]->data.integer;
+    int64_t order = a[4]->data.integer;
+    int64_t den   = a[5]->data.integer;
+    size_t  k     = coefs->data.function.arg_count;
+    /* The coefficient list length must agree with order - nmin. */
+    if ((int64_t)k != order - nmin) return NULL;
+    SeriesObj* s = so_alloc(a[0], a[1], nmin, order, den);
+    for (size_t i = 0; i < k && i < s->coef_count; i++) {
+        so_set_coef(s, i, expr_copy(coefs->data.function.args[i]));
+    }
+    return s;
+}
+
+/* D[SeriesData[...], var] -- term-by-term differentiation. When var is the
+ * series variable, apply the power rule to each term; otherwise (var free of
+ * the expansion point) differentiate each coefficient, keeping the powers.
+ * Returns NULL when the shape is unsupported, so the caller falls back. */
+Expr* series_differentiate(Expr* sd, Expr* var) {
+    SeriesObj* s = so_from_seriesdata(sd);
+    if (!s) return NULL;
+
+    /* Differentiating with respect to a variable other than the series
+     * variable: thread D into the coefficients (powers unchanged). Only valid
+     * when the expansion point does not itself depend on var. */
+    if (!expr_eq(s->x, var)) {
+        if (!expr_free_of(s->x0, var)) { so_free(s); return NULL; }
+        SeriesObj* r = so_alloc(s->x, s->x0, s->nmin, s->order, s->den);
+        for (size_t i = 0; i < s->coef_count; i++) {
+            so_set_coef(r, i, simp(mk_fn2("D", expr_copy(s->coefs[i]), expr_copy(var))));
+        }
+        so_trim_leading(r);
+        Expr* out = so_to_expr(r);
+        so_free(s); so_free(r);
+        return out;
+    }
+
+    /* Power rule: a_i (x-x0)^((nmin+i)/den)
+     *   ->  a_i * (nmin+i)/den * (x-x0)^((nmin+i-den)/den). */
+    SeriesObj* r = so_alloc(s->x, s->x0, s->nmin - s->den, s->order - s->den, s->den);
+    for (size_t i = 0; i < s->coef_count && i < r->coef_count; i++) {
+        int64_t num = s->nmin + (int64_t)i;          /* old exponent numerator */
+        Expr* factor = make_rational(num, s->den);   /* (nmin+i)/den */
+        so_set_coef(r, i, simp(mk_times(expr_copy(s->coefs[i]), factor)));
+    }
+    so_trim_leading(r);
+    Expr* out = so_to_expr(r);
+    so_free(s); so_free(r);
+    return out;
+}
+
+/* Integrate[SeriesData[...], var] -- term-by-term integration. When var is the
+ * series variable, integrate each term (constant of integration 0, as in
+ * Mathematica); otherwise (var free of the expansion point) integrate each
+ * coefficient. Returns NULL when unsupported, including the residue case where
+ * a nonzero coefficient sits at exponent -1 (whose integral is a Log term that
+ * SeriesData cannot represent). */
+Expr* series_integrate(Expr* sd, Expr* var) {
+    SeriesObj* s = so_from_seriesdata(sd);
+    if (!s) return NULL;
+
+    /* Integration with respect to a variable other than the series variable:
+     * thread Integrate into the coefficients (powers unchanged). */
+    if (!expr_eq(s->x, var)) {
+        if (!expr_free_of(s->x0, var)) { so_free(s); return NULL; }
+        SeriesObj* r = so_alloc(s->x, s->x0, s->nmin, s->order, s->den);
+        for (size_t i = 0; i < s->coef_count; i++) {
+            so_set_coef(r, i, simp(mk_fn2("Integrate", expr_copy(s->coefs[i]), expr_copy(var))));
+        }
+        Expr* out = so_to_expr(r);
+        so_free(s); so_free(r);
+        return out;
+    }
+
+    /* Residue guard: a nonzero (x-x0)^-1 term would integrate to a Log. */
+    for (size_t i = 0; i < s->coef_count; i++) {
+        if (s->nmin + (int64_t)i + s->den == 0 && !is_lit_zero(s->coefs[i])) {
+            so_free(s);
+            return NULL;
+        }
+    }
+
+    /* Power rule: a_i (x-x0)^((nmin+i)/den)
+     *   ->  a_i * den/(nmin+i+den) * (x-x0)^((nmin+i+den)/den). */
+    SeriesObj* r = so_alloc(s->x, s->x0, s->nmin + s->den, s->order + s->den, s->den);
+    for (size_t i = 0; i < s->coef_count && i < r->coef_count; i++) {
+        int64_t denom = s->nmin + (int64_t)i + s->den;  /* new exponent numerator */
+        if (denom == 0) {
+            /* The (x-x0)^-1 slot: its coefficient is zero (guaranteed by the
+             * residue guard above), so the integrated coefficient is zero. */
+            so_set_coef(r, i, expr_new_integer(0));
+            continue;
+        }
+        Expr* factor = make_rational(s->den, denom);    /* den/(nmin+i+den) */
+        so_set_coef(r, i, simp(mk_times(expr_copy(s->coefs[i]), factor)));
+    }
+    so_trim_leading(r);
+    Expr* out = so_to_expr(r);
+    so_free(s); so_free(r);
+    return out;
+}
+
 static Expr* seriesdata_to_normal(Expr* arg) {
     Expr* x      = arg->data.function.args[0];
     Expr* x0     = arg->data.function.args[1];
