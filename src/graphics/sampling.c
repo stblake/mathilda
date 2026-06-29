@@ -39,23 +39,34 @@ static bool buf_over_budget(const SampleBuf* buf) {
 
 /* Maximum vertical deviation of the curve from the straight chord a->b that
  * the renderer would draw, as a fraction of the displayed y-extent. Below this
- * the segment is accepted as visually flat. ~1/400 of the y-range is well
- * under a pixel on a normal window, so accepted segments read as smooth. */
-#define FLAT_TOL 0.0025
+ * the segment is accepted as visually flat. This is the PRIMARY refinement
+ * driver: because deviation grows with the segment's curvature (the sagitta of
+ * a chord is ~|f''|*h^2/8), a threshold this small makes the sample density
+ * track curvature -- dense where the curve bends (the peaks of Sin, the ends of
+ * x^3, the body of a Runge spike), sparse where it is straight (the steep but
+ * locally linear zero-crossings of Sin, a sloped line). At ~1/1666 of the
+ * y-range it sits comfortably under a pixel on a normal window, so accepted
+ * segments read as smooth while the density stays curvature-proportional.
+ * (A looser value lets ordinary smooth curves pass as "flat" at the initial
+ * grid scale, leaving the chord cap below as the only refiner -- which keys on
+ * slope, not curvature, and inverts the density.) */
+#define FLAT_TOL 0.0006
 
 /* Upper bound on the screen-space length of any accepted leaf segment, as a
  * fraction of the displayed frame (Euclidean over the x- and y-normalized
- * axes). The vertical-deviation test above is blind to *steepness*: where a
- * curve is steep but locally straight (e.g. Log[x] near 0, or any near-vertical
- * approach to an asymptote) the chord can be sub-pixel-accurate yet the sample
- * points -- and the Mesh dots drawn at them -- spread far apart, thinning
- * abruptly by 2x at each grid boundary. Capping the chord length bounds the
- * gap in BOTH axes at once, so points stay evenly spaced on screen through
- * steep stretches. A genuinely straight, gently-sloped line has short chords
- * (its Δy is small and Δx is grid-bounded) and is left untouched -- the cap is
- * only ever the binding constraint where the curve covers real screen distance
- * between samples. */
-#define MAX_CHORD_FRAC 0.0225
+ * axes). This is a LOOSE BACKSTOP, not the primary driver: the deviation test
+ * above keys on curvature, but it is blind to *steepness*, so where a curve is
+ * steep but locally straight (e.g. Log[x] near 0, or any near-vertical approach
+ * to an asymptote) the chord can be sub-pixel-accurate yet the sample points --
+ * and the Mesh dots drawn at them -- spread far apart, thinning abruptly at a
+ * grid boundary. Capping the chord length bounds that gap in BOTH axes at once.
+ * It must stay generous (a large fraction of the frame): tightening it makes the
+ * cap out-compete the curvature test on ordinary moderately-sloped curves and
+ * pour samples into steep-but-straight stretches (Sin's zero-crossings) instead
+ * of the curvy parts (Sin's peaks), inverting the intended density. At ~1/12 of
+ * the frame it only ever binds where a single segment would otherwise leave a
+ * conspicuous on-screen gap. */
+#define MAX_CHORD_FRAC 0.08
 
 static bool sample_one(PlotSampleFn fn, void* ctx, double x, double* y) {
     return fn(x, ctx, y) && isfinite(*y);

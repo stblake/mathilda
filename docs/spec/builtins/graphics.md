@@ -338,6 +338,17 @@ coarsely faceted. Clamped, the off-band stretch collapses onto the clip line and
 reads as flat, so the recursion concentrates where it is seen. With no explicit
 `PlotRange` y the curve is sampled over its full extent, exactly as before.
 
+This vertical-gap test is the **primary** refinement driver, and because a
+chord's sagitta grows with curvature, sample density tracks curvature: points
+cluster where the curve bends (the peaks of `Sin`, the ends of `x^3`, the body
+of a spike) and thin out where it is straight — including steep but locally
+linear stretches such as `Sin`'s zero-crossings. A secondary, deliberately
+loose chord-**length** cap (≈1/12 of the frame) acts only as a backstop, so a
+near-vertical asymptotic approach (e.g. `Log[x]` near `0`) cannot leave a
+conspicuous on-screen gap; it is kept generous on purpose, since a tight cap
+keys on slope rather than curvature and would invert the density, over-sampling
+straight-steep regions at the expense of the curvy ones.
+
 **Features**:
 - `HoldAll`, `Protected`.
 - Declines to evaluate if the iterator spec isn't `{x, xmin, xmax}` with
