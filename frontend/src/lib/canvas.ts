@@ -53,11 +53,12 @@ const _nb7 = makeCard('Special Functions',  750,1650);
 const _nb8 = makeCard('Applied Math',      1430,1650);
 
 export const canvasState = writable({
-  notebooks: [_nb1,_nb2,_nb3,_nb4,_nb5,_nb6,_nb7,_nb8] as CanvasNotebook[],
-  panX: 0,
-  panY: 0,
-  zoom:  1.0,
-  focusedId: null as string | null,
+  notebooks:    [_nb1,_nb2,_nb3,_nb4,_nb5,_nb6,_nb7,_nb8] as CanvasNotebook[],
+  panX:         0,
+  panY:         0,
+  zoom:         1.0,
+  focusedId:    null as string | null,
+  selectedIds:  [] as string[],   // IDs of notebooks selected by rubber-band
 });
 
 /** Pre-fill the starter notebooks with rich example cells. Call from onMount. */
@@ -320,10 +321,12 @@ export function loadLibraryData(json: string): string {
   });
   // Reset nextId past the highest id in the file to avoid collisions
   canvasState.set({
-    notebooks: notebooks.length > 0 ? notebooks : [makeCard('Notebook 1', 60, 60)],
-    panX: 0,
-    panY: 0,
-    zoom: 1.0,
+    notebooks:   notebooks.length > 0 ? notebooks : [makeCard('Notebook 1', 60, 60)],
+    panX:        0,
+    panY:        0,
+    zoom:        1.0,
+    focusedId:   null,
+    selectedIds: [],
   });
   return data.title ?? 'Untitled Library';
 }

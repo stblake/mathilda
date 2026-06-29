@@ -443,23 +443,37 @@
   .cell-horizontal {
     display: flex;
     flex-direction: row;
-    align-items: flex-start;
+    align-items: stretch;   /* make all children fill the full cell height */
   }
   .input-pane  { flex: 1; min-width: 0; overflow: hidden; }
   .output-pane { flex: 1; min-width: 0; border-left: 1px solid var(--border, rgba(255,255,255,0.06)); }
 
   /* Draggable divider between input and output panes */
   .split-handle {
-    flex: 0 0 5px;
-    width: 5px;
+    flex: 0 0 12px;
+    width: 12px;
     cursor: col-resize;
-    background: var(--border, rgba(255,255,255,0.06));
-    transition: background 0.1s;
+    background: transparent;
     position: relative;
-    z-index: 1;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
-  .split-handle:hover, .split-handle:active {
+  /* Thin visual bar centered in the handle */
+  .split-handle::before {
+    content: '';
+    display: block;
+    width: 2px;
+    height: 48px;
+    max-height: 80%;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.18);
+    transition: background 0.15s, height 0.15s;
+  }
+  .split-handle:hover::before, .split-handle:active::before {
     background: var(--accent, #89b4fa);
+    height: 60px;
   }
 
   /* CodeMirror text colour — inherits from CSS var so light/dark both work */
