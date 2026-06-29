@@ -175,7 +175,8 @@
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 0.95em;
     color: var(--out-text, #cdd6f4);
-    white-space: normal;      /* allow wrap at spaces */
+    background: transparent;  /* override browser default <code> background */
+    white-space: normal;
     word-break: break-word;
     overflow-wrap: break-word;
     line-height: 1.7;
