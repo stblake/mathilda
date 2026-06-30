@@ -322,6 +322,40 @@ correct, just less pretty).
 
 ## 6. Phase 5 — Reconnect the integrators and remove the workarounds
 
+> **Status (2026-06-30): investigated, NOT a reconnect — two real blockers found.**
+> After Phases 1–2 made cyclotomic `Together`/`Cancel`/`PossibleZeroQ` fast,
+> `Integrate[t/((t^3+8) Sqrt[t^3-1]), t]` still declines (~24s, budget-bound), and
+> even the single cyclotomic *character* `(t-α)/((t+2α) Sqrt[t^3-1])` hangs.
+> Instrumented bisection of the Goursat path (`integrate_goursat.c`) located the
+> cause precisely — it is **not** simplification speed:
+>
+> 1. **`period3_reduce` is mathematically degenerate for cyclotomic fixed
+>    points.** All its `canonic`/`simplify_e` calls are now fast (`FzOverZ`
+>    0.007s, `QzOverZ` 0.078s, `simplify_e` 0.04s), but for cyclotomic fixed
+>    points the reduced inner integrand comes out as
+>    `(1/3)(ComplexInfinity·(…))/Sqrt[…(-1)^(1/3)… + u·Sqrt[-9 (-1)^(1/3)] …]` —
+>    a `ComplexInfinity` (division-by-zero in the Möbius/`to_function_of_power`
+>    step) wrapped around a nested-radical radicand. The reduction was only
+>    validated for the *rational* fixed points `{1, -2}` of Section 4; the
+>    cyclotomic-fixed-point geometry hits a degenerate case. The malformed
+>    integrand is then what hangs the recursive `integrate_in` (the cascade
+>    chokes on the `ComplexInfinity`/nested-radical form). **Fix needed:** a
+>    correct period-3 reduction for cyclotomic fixed points (guard the
+>    degenerate Möbius orientation; handle the fixed-point-at-a-ramification
+>    vs not-at-a-ramification cases that produce `ComplexInfinity`).
+> 2. **`t/(t^3+8)` is not a single period-3 character** — it is a sum of three
+>    (`t/(t^3+8) = Σ_c (1/18)(t-c)/(t+2c)`, c ∈ {1, α, α²}). `goursat_period3`
+>    only reduces a pure character (its trivial-projection gate rejects the
+>    sum), so the named integral additionally needs the **Section-5 character
+>    decomposition**: project F onto its three α^k-eigencomponents under one
+>    order-3 S, reduce each via (the fixed) `period3_reduce`, and sum.
+>
+> So Phase 5 = fix the cyclotomic `period3_reduce` degeneracy (blocker 1) +
+> implement character decomposition (blocker 2). Both are real algorithm work in
+> `integrate_goursat.c`, independent of the now-fast simplification primitives.
+> The original steps below (delete the numeric-gate workarounds) remain valid
+> *after* the reduction is correct.
+
 Once Phases 1–3 land:
 
 1. **Remove the numeric-gate workarounds** in
