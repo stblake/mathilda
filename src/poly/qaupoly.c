@@ -271,10 +271,24 @@ QAUPoly* qaupoly_gcd(const QAUPoly* a, const QAUPoly* b) {
     if (a->deg < 0 && b->deg < 0) return NULL;
     if (a->deg < 0) return qaupoly_make_monic(b);
     if (b->deg < 0) return qaupoly_make_monic(a);
-    /* Standard Euclidean: r0=a, r1=b; loop r0,r1 := r1, r0 mod r1
-     * until r1 = 0; gcd is r0 (then make monic). */
-    QAUPoly* r0 = qaupoly_copy(a);
-    QAUPoly* r1 = qaupoly_copy(b);
+    /* Monic Euclidean: r0=a, r1=b; loop r0,r1 := r1, r0 mod r1 until r1 = 0;
+     * gcd is r0 (then make monic).
+     *
+     * Each remainder is normalised to monic immediately.  Over a field of
+     * algebraic numbers Q(alpha) the bare Euclidean PRS suffers severe
+     * coefficient swell: qaupoly_divrem multiplies the dividend through by
+     * 1/lc(divisor), so a non-monic divisor inflates EVERY coefficient of the
+     * remainder by the (large) rational height of that leading field element,
+     * and the heights compound multiplicatively step over step (degree-12
+     * cyclotomic inputs produced 50+ digit numerators, making the subsequent
+     * PolynomialQuotient unusably slow).  Forcing each divisor monic keeps
+     * 1/lc = 1, so no leading-coefficient inflation is injected and the
+     * intermediate heights stay bounded.  Monic normalisation is GCD-
+     * preserving (the GCD is defined up to a unit; the final make_monic
+     * already canonicalises), so the result is identical -- only smaller. */
+    QAUPoly* r0 = qaupoly_make_monic(a);
+    QAUPoly* r1 = qaupoly_make_monic(b);
+    if (!r0 || !r1) { qaupoly_free(r0); qaupoly_free(r1); return NULL; }
     while (!qaupoly_is_zero(r1)) {
         QAUPoly *q, *r2;
         if (!qaupoly_divrem(r0, r1, &q, &r2)) {
@@ -285,6 +299,12 @@ QAUPoly* qaupoly_gcd(const QAUPoly* a, const QAUPoly* b) {
         qaupoly_free(q);
         qaupoly_free(r0);
         r0 = r1;
+        /* Renormalise the new remainder to monic before it becomes the next
+         * divisor (see rationale above). */
+        if (!qaupoly_is_zero(r2)) {
+            QAUPoly* m = qaupoly_make_monic(r2);
+            if (m) { qaupoly_free(r2); r2 = m; }
+        }
         r1 = r2;
     }
     qaupoly_free(r1);

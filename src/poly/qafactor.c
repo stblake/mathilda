@@ -1033,15 +1033,19 @@ static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
             expr_free(c_expanded);
             continue;
         }
-        if ((size_t)adeg >= ext->deg) {
-            /* α-degree exceeds the extension's; refuse.  In practice
-             * Mathilda auto-reduces e.g. Sqrt[2]^3 → 2 Sqrt[2] before
-             * we even see the input, so this branch only fires when
-             * the input is genuinely outside Q(α). */
-            expr_free(c_expanded);
-            ok = false;
-            break;
-        }
+        /* NOTE: `adeg` may be >= ext->deg.  The internal α-symbol always
+         * denotes the extension generator α (Stages 0/1 only ever introduce
+         * it as α), so any α-power is legitimately reducible modulo the
+         * minimal polynomial.  For radical generators the evaluator usually
+         * pre-reduces (Sqrt[2]^3 → 2 Sqrt[2]), but the opaque internal symbol
+         * carries no such auto-rule — and, critically, cyclotomic generators
+         * surface high powers after Stage-2 Expand of products/powers of the
+         * rewritten root-of-unity atoms (e.g. ((-1)^(2/3)+...)^3 expands to
+         * α^2, α^3, ...).  qa_alpha_power(ext, j) below reduces α^j mod P_α
+         * for ANY j via field multiplication, so we fold every power down
+         * rather than refusing.  A genuinely out-of-field atom is NOT an
+         * α-power: it stays a Power[base, p/q] node, contributes nothing to
+         * the α-degree, and is rejected by expr_coef_to_mpq() instead. */
 
         QANum* qn = qa_zero(ext);
         for (int j = 0; j <= adeg; j++) {

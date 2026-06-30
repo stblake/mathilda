@@ -238,6 +238,21 @@ Phase 5.
 
 ---
 
+> **Status (2026-06-30): Phase 3 core fix DONE (commit pending).** The diagnosis
+> below (combine-before-reduce in `rat.c`) turned out to be the *wrong* layer:
+> instrumentation of the Legendre–Clausen V4 projection showed `together_recursive_ext`
+> / `cancel_with_extension` were each individually fast — the 25 s hang was a
+> single `PolynomialQuotient[num, g, Extension]` that **fell to the multivariate
+> `Q[ζ,ζ²,t]` path** because `qa_expr_to_qaupoly` *refused* to lift coefficients
+> carrying `α^k`, `k ≥ deg(P_α)` (high powers surfaced by Stage-2 `Expand` of the
+> cubed Möbius substitutions, e.g. `((-1)^(2/3)+…)^3`). Fix: fold `α^k` mod `P_α`
+> via `qa_alpha_power` in `src/poly/qafactor.c`; plus monic-per-step `qaupoly_gcd`
+> in `src/poly/qaupoly.c` to curb Euclidean coefficient swell. Cyclotomic
+> `Together`/`Cancel` of the projection: **25 s → 0.06 s**, verified. The
+> `evaluate`-round-trip refactor in §4 below is now optional polish (the substrate
+> calls are already fast); bare `Simplify` of large cyclotomic *sums* (the §8 row)
+> remains slow via a different path (Factor + full simp_search).
+
 ## 4. Phase 3 — Reduce-before-combine and drop the `evaluate` round-trips (`src/rat.c`)
 
 **Goal.** Tighten the extension path in `Together`/`Cancel` so it (a) reduces

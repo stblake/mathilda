@@ -729,6 +729,26 @@ static void test_phasee_sqrt_sum_collapse_zero(void) {
         "0", 0);
 }
 
+/* Cyclotomic mixed-generator lift (Phase 3: reduce-into-substrate).  The
+ * input mixes (-1)^(1/3) and (-1)^(2/3) -- two surface forms of the same
+ * Q(zeta_6) generator -- inside a cubed Mobius denominator.  After the
+ * root-of-unity atoms are rewritten to the internal alpha-symbol and
+ * Stage-2 Expand multiplies out the cube, the coefficients carry alpha^2 /
+ * alpha^3.  Before the qa_expr_to_qaupoly high-power reduction fix the lift
+ * REFUSED those (alpha-degree >= ext->deg), so Cancel/Together fell back to
+ * the multivariate Q[zeta, zeta^2, t] subresultant path and the inner
+ * PolynomialQuotient spun for tens of seconds.  Now alpha^k is folded mod
+ * Phi_6 via qa_alpha_power and the arithmetic stays on the fast qaupoly
+ * substrate.  Asserting PossibleZeroQ==True checks correctness; the fact
+ * that the test returns at all (rather than timing out) is the perf guard. */
+static void test_cyclotomic_mixed_generator_lift(void) {
+    assert_eval_eq(
+        "PossibleZeroQ[(t/(8 + t^3) /. t -> (1 + (-1)^(1/3) - (-1)^(2/3) + t)/(-1 + t))"
+        " - Cancel[Together[t/(8 + t^3) /. t -> (1 + (-1)^(1/3) - (-1)^(2/3) + t)/(-1 + t),"
+        " Extension -> Automatic], Extension -> Automatic]]",
+        "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -813,6 +833,9 @@ int main(void) {
     TEST(test_phasee_power_pq_nonunit_rejected);
     TEST(test_phasee_quartic_radical);
     TEST(test_phasee_sqrt_sum_collapse_zero);
+
+    /* Phase 3: cyclotomic mixed-generator lift into the qaupoly substrate. */
+    TEST(test_cyclotomic_mixed_generator_lift);
 
     printf("All extension_auto_builtins tests passed!\n");
     return 0;
