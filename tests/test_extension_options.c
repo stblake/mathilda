@@ -149,15 +149,28 @@ void test_together_extension(void) {
            "Extension -> Sqrt[2]]",
            "(2 x)/(-2 + x^2)");
 
-    /* 1/(x - I) + 1/(x + I) = 2x/(x^2 + 1) over Q[I].  The new
-     * extension-aware Together path keeps the LCM in factored form
-     * (output of polynomiallcm_with_extension for the I case, where
-     * `I` as alpha_render does not literally match the parsed
-     * Complex[0,1] coefficients and the qa lift falls through to the
-     * no-α PolynomialLCM that returns a Times of factors).  Both
-     * forms are mathematically equivalent. */
+    /* 1/(x - I) + 1/(x + I) = 2x/(x^2 + 1) over Q[I].  Q[I] = Q(ζ_4) is
+     * the cyclotomic field for the primitive 4th root of unity, so the
+     * extension-aware Together now routes through the cyclotomic lift
+     * (rootofunity.c): the Complex[0,1] coefficients lift to the ζ_4
+     * basis and the denominator reduces to the canonical x^2 + 1,
+     * matching the Sqrt[2] case above and Mathematica. */
     run_eq("Together[1/(x - I) + 1/(x + I), Extension -> I]",
-           "(2 x)/((-I + x) (I + x))");
+           "(2 x)/(1 + x^2)");
+
+    /* Cyclotomic Q(ζ_6): a = (-1)^(1/3).  1/(x-a) + 1/(x+a) = 2x/(x^2-a^2),
+     * and a^2 = (-1)^(2/3) reduces modulo Φ_6 (ζ^2 = ζ - 1) to
+     * (-1)^(1/3) - 1, so the denominator collapses to x^2 + 1 - (-1)^(1/3).
+     * This is the reduce-mod-minimal-polynomial behavior that makes
+     * cyclotomic Together fast instead of blowing up the Q-path. */
+    run_eq("Together[1/(x - (-1)^(1/3)) + 1/(x + (-1)^(1/3)), "
+           "Extension -> (-1)^(1/3)]",
+           "(2 x)/(1 - (-1)^(1/3) + x^2)");
+
+    /* Same field auto-detected (base -1 collected by extension_autodetect)
+     * and cancelled: (x^2 - (-1)^(2/3))/(x - (-1)^(1/3)) = x + (-1)^(1/3). */
+    run_eq("Cancel[(x^2 - (-1)^(2/3))/(x - (-1)^(1/3)), Extension -> Automatic]",
+           "(-1)^(1/3) + x");
 
     /* No-extension default: the existing structural combine still works
      * for Sqrt[3] inputs because the LCM happens to factor cleanly. */

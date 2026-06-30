@@ -8,6 +8,7 @@
  * thin glue layer — all multivariate arithmetic is delegated. */
 
 #include "qafactor.h"
+#include "rootofunity.h"
 #include "expr.h"
 #include "expand.h"
 #include "internal.h"
@@ -615,6 +616,30 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
         return ext;
     }
 
+    /* Root of unity (-1)^(p/q)  →  cyclotomic field Q(ζ_{2q}).
+     *
+     * Mathilda canonicalises every root of unity as Power[-1, Rational[p,q]]
+     * (or Complex[0, ±1]).  The natural generator is ζ_{2q} = (-1)^(1/q),
+     * whose minimal polynomial is the cyclotomic polynomial Φ_{2q}; the
+     * user's α = (-1)^(p/q) = ζ_{2q}^p lives in Q(ζ_{2q}).  Representing it
+     * in the fixed Q-basis modulo Φ_{2q} makes the identities ζ^{2q}=1 and
+     * Σ ζ^k = 0 structural, so cyclotomic Together/Cancel/Simplify no longer
+     * blow up the rational-over-Q path.  render = the natural generator
+     * Power[-1, Rational[1, q]].  q == 1 (±1, rational) is not an extension. */
+    {
+        int64_t ru_p, ru_q;
+        if (expr_is_root_of_unity_pow(alpha_expr, &ru_p, &ru_q) && ru_q >= 2) {
+            QAExt* ext = qaext_cyclotomic(2ul * (unsigned long)ru_q);
+            if (ext) {
+                Expr* rat = expr_new_function(expr_new_symbol(SYM_Rational),
+                    (Expr*[]){ expr_new_integer(1), expr_new_integer(ru_q) }, 2);
+                *render_out = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_integer(-1), rat }, 2);
+                return ext;
+            }
+        }
+    }
+
     /* Sqrt[c]  →  P_α(y) = y² − c, render = Sqrt[c]. */
     {
         long c;
@@ -847,6 +872,56 @@ static Expr* expand_radicals_to_atomic_poly(const Expr* e,
     return out;
 }
 
+/* expand_roots_of_unity_to_atomic_poly: the cyclotomic analogue of
+ * expand_radicals_to_atomic_poly.  Walk `e` and rewrite every
+ * root-of-unity atom (-1)^(p/q) (or Complex[0, ±1]) whose denominator q
+ * divides `q_natural` into the polynomial-in-`alpha_sym_name` form
+ * representing α^k, where α = ζ_{2·q_natural} = (-1)^(1/q_natural) and
+ * k = p · (q_natural / q).  The power is reduced modulo the cyclotomic
+ * minimal polynomial Φ_{2·q_natural} via `qa_alpha_power_signed`, so the
+ * result contains `alpha_sym_name` only with integer exponents < φ(2q_nat)
+ * — ready for the coefficient-peeling step in qa_expr_to_qaupoly_with_alpha.
+ *
+ * `ext` must be the matching `qaext_cyclotomic(2·q_natural)` extension.
+ * Caller owns the returned Expr. */
+static Expr* expand_roots_of_unity_to_atomic_poly(const Expr* e,
+                                                  int64_t q_natural,
+                                                  const char* alpha_sym_name,
+                                                  const QAExt* ext) {
+    if (!e) return NULL;
+
+    int64_t p, q;
+    if (expr_is_root_of_unity_pow(e, &p, &q) && q >= 1
+        && q_natural > 0 && (q_natural % q) == 0) {
+        int64_t scale = q_natural / q;
+        if (scale != 0
+            && !(p > INT64_MAX / scale || p < INT64_MIN / scale)) {
+            long k = (long)(p * scale);
+            QANum* qn = qa_alpha_power_signed(ext, k);
+            if (qn) {
+                Expr* out = mpq_array_to_poly_expr(qn->coef, qn->ext->deg,
+                                                   alpha_sym_name);
+                qa_free(qn);
+                return out;
+            }
+        }
+    }
+
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (count ? count : 1));
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = expand_roots_of_unity_to_atomic_poly(
+            e->data.function.args[i], q_natural, alpha_sym_name, ext);
+    }
+    Expr* new_head = expand_roots_of_unity_to_atomic_poly(
+        e->data.function.head, q_natural, alpha_sym_name, ext);
+    Expr* out = expr_new_function(new_head, new_args, count);
+    free(new_args);
+    return out;
+}
+
 /* Lift an Expr polynomial in `var` (whose coefficients may be
  * polynomials in `alpha_render`) to a QAUPoly over `ext`.  Returns
  * NULL if any coefficient is not in Q(α) (e.g. contains a free symbol
@@ -899,13 +974,26 @@ static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
         }
     }
 
-    Expr* poly_expanded = (c_base_inferred != 0
-                           && c_base_inferred != 1 && c_base_inferred != -1)
-        ? expand_radicals_to_atomic_poly(poly,
-                                         c_base_inferred,
-                                         q_natural_inferred,
-                                         QA_ALPHA_INTERNAL, ext)
-        : expr_copy((Expr*)poly);
+    /* Cyclotomic generator: `alpha_render` is the natural root of unity
+     * (-1)^(1/q_nat).  Rewrite every root-of-unity atom in the input into a
+     * polynomial in QA_ALPHA_INTERNAL modulo Φ_{2 q_nat} (the y^q−c shape
+     * detection above does not match a cyclotomic minimal polynomial, so
+     * c_base_inferred is 0 here). */
+    int64_t ru_p, ru_q;
+    bool is_cyclotomic = alpha_render
+        && expr_is_root_of_unity_pow(alpha_render, &ru_p, &ru_q) && ru_q >= 2;
+
+    Expr* poly_expanded;
+    if (is_cyclotomic) {
+        poly_expanded = expand_roots_of_unity_to_atomic_poly(
+            poly, ru_q, QA_ALPHA_INTERNAL, ext);
+    } else if (c_base_inferred != 0
+               && c_base_inferred != 1 && c_base_inferred != -1) {
+        poly_expanded = expand_radicals_to_atomic_poly(
+            poly, c_base_inferred, q_natural_inferred, QA_ALPHA_INTERNAL, ext);
+    } else {
+        poly_expanded = expr_copy((Expr*)poly);
+    }
 
     /* Stage 1 — substitute α's surface form with an opaque symbol.
      * After Stage 0, any natural-form `Power[c, 1/q_natural]` has
@@ -3410,9 +3498,12 @@ static void autodetect_walk(const Expr* e, AutodetectGen* gens,
 
         if (q >= 2) {
             if (base && base->type == EXPR_INTEGER) {
-                /* Integer base: merge into the (base, q_lcm) generator set. */
+                /* Integer base: merge into the (base, q_lcm) generator set.
+                 * Base -1 is a root of unity (-1)^(1/q) = ζ_{2q}, resolved
+                 * by qa_resolve_extension's cyclotomic branch; merging by
+                 * the LCM of the q's gives a single ζ_{2·lcm} generator. */
                 int64_t c = base->data.integer;
-                if (c != 0 && c != 1 && c != -1) {
+                if (c != 0 && c != 1) {
                     if (!autodetect_add_int(gens, n, max, c, q, bail)) return;
                 }
                 /* Integer base has no sub-radicals to chase. */
