@@ -1019,6 +1019,7 @@ static Expr* period3_reduce(Expr* Fk, Expr* R, Expr* t, Expr* a, Expr* a1) {
     Expr* x = fresh_var();
     Expr* result = NULL;
     Expr* tz = NULL, *Fz = NULL, *phi = NULL, *Qz = NULL, *AB = NULL, *G = NULL;
+    Expr* wscale = NULL;   /* leading-coeff rescale: integration variable w = wscale * z^3 */
 
     /* t(z): z=(t-a)/(t-a1) sends a->0, a1->Infinity. */
     if (a1inf)     tz = gadd(expr_copy(a), expr_copy(z));              /* z = t - a    */
@@ -1061,31 +1062,67 @@ static Expr* period3_reduce(Expr* Fk, Expr* R, Expr* t, Expr* a, Expr* a1) {
     if (QzOverZ) expr_free(QzOverZ);
     if (!AB) goto done;
 
-    /* integrand_x = (1/3) phi(x) / Sqrt[x (A x + B)]. */
+    /* integrand_x = (1/3) phi(x) / Sqrt[x (A x + B)].
+     *
+     * rad = x(A x + B) = A x^2 + B x has a (generally cyclotomic) LEADING
+     * coefficient lc = A.  Mathilda's Sqrt-of-quadratic integrator handles an
+     * algebraic-number constant on the linear/constant term but NOT on the
+     * leading term (the Euler substitution needs Sqrt[lc] and chokes on an
+     * algebraic lc).  Rescale x -> w/lc so the radicand becomes the MONIC
+     * w^2 + B w (B = original linear coeff, kept intact on the linear term --
+     * NOT divided by lc, which would require the cyclotomic constant-ratio
+     * B/lc that Cancel/Simplify cannot reduce, e.g. (-1+zeta)/(1-zeta) -> -1):
+     *      (1/3) phi(x)/Sqrt[rad]  dx
+     *    = (1/(3 Sqrt[lc])) phi(w/lc)/Sqrt[w^2 + B w]  dw.
+     * The 1/Sqrt[lc] is a CONSTANT (branch-safe -- never straddles the
+     * w-dependent cut).  Integrate in w, then back-substitute w -> lc z(t)^3
+     * (since x = w/lc and x = z(t)^3 give w = lc z^3). */
     {
-        Expr* rad = canonic(gmul(expr_copy(x), expr_copy(AB)));
+        Expr* rad = expand_e(canonic(gmul(expr_copy(x), expr_copy(AB))));
         if (!rad) goto done;
-        Expr* integrand = gmul(mk_rat(1, 3),
-            gmul(expr_copy(phi), mk_pow_rat(rad, -1, 2)));   /* consumes rad */
+        Expr* lc = get_coeff(rad, x, 2);                 /* leading coeff A */
+        Expr* B  = get_coeff(rad, x, 1);                 /* linear coeff (kept) */
+        expr_free(rad);
+        if (!lc || is_zero(lc)) { if (lc) expr_free(lc); if (B) expr_free(B); goto done; }
+        if (!B) B = mk_int(0);
+        wscale = expr_copy(lc);                          /* w = lc * z^3 */
+        Expr* monicrad = canonic(gadd(mk_pow_int(expr_copy(x), 2),
+                                      gmul(B, expr_copy(x))));   /* w^2 + B w, consumes B */
+        Expr* phi_sub = subst_eval(expr_copy(phi), x,
+                                   gdiv(expr_copy(x), expr_copy(lc)));   /* phi(w/lc) */
+        if (!monicrad || !phi_sub) {
+            if (monicrad) expr_free(monicrad); if (phi_sub) expr_free(phi_sub);
+            expr_free(lc); goto done;
+        }
+        /* Pull the constant prefactor 1/(3 Sqrt[lc]) OUT of the integral: a
+         * nested-radical constant Sqrt[lc] left inside the integrand is mistaken
+         * for a second variable radical by the radical integrator and hangs it.
+         * Integrate the bare phi(w/lc)/Sqrt[w^2+Bw], then multiply the constant. */
+        Expr* integrand = gmul(phi_sub, mk_pow_rat(monicrad, -1, 2));  /* consumes phi_sub, monicrad */
         gs_depth++;
         G = integrate_in(integrand, x);
         gs_depth--;
         expr_free(integrand);
+        if (G) G = canonic(gmul(
+            gmul(mk_rat(1, 3), mk_inv(mk_sqrt_expr(expr_copy(lc)))), G));
+        expr_free(lc);
     }
     if (!G) goto done;
 
-    /* back-substitute x -> z(t)^3. */
+    /* back-substitute w -> wscale * z(t)^3  (w = lc x, x = z(t)^3). */
     {
         Expr* back;
         if (a1inf)     back = mk_pow_int(gsub(expr_copy(t), expr_copy(a)), 3);
         else if (ainf) back = mk_pow_int(mk_inv(gsub(expr_copy(t), expr_copy(a1))), 3);
         else           back = mk_pow_int(gdiv(gsub(expr_copy(t), expr_copy(a)),
                                               gsub(expr_copy(t), expr_copy(a1))), 3);
+        if (wscale) back = gmul(expr_copy(wscale), back);   /* w = wscale * z^3 */
         result = subst_eval(G, x, back);   /* consumes G, back */
         G = NULL;
     }
 
 done:
+    if (wscale) expr_free(wscale);
     if (tz) expr_free(tz);
     if (Fz) expr_free(Fz);
     if (phi) expr_free(phi);
@@ -1139,15 +1176,32 @@ static Expr* goursat_period3(Expr* F, Expr* R, Expr* t) {
         if (trivnz) { expr_free(S); continue; }
 
         Expr* a = NULL; Expr* a1 = NULL;
-        bool okfp = fixed_points(S, t, &a, &a1);
-        expr_free(S);
-        if (!okfp) { if (a) expr_free(a); if (a1) expr_free(a1); continue; }
-        /* Solve returns the fixed points as un-simplified nested cyclotomic
-         * radicals (the cycled roots are cube roots of unity); Simplify collapses
-         * them to their closed values (e.g. 1 and -2), without which t(z) is a
-         * huge expression that stalls the downstream canonic. */
-        a  = simplify_e(a);
-        a1 = simplify_e(a1);
+        /* Clean fixed points.  For the centered pure cubic R = lc((t-s)^3 + c)
+         * (the t^3-1 family) the order-3 Mobius fixing a finite root r has fixed
+         * points {r, 3s-2r} exactly (Goursat's ((t-r)/(t+2r))^3 substitutions,
+         * here s = sum-of-roots/3).  Supplying these directly -- instead of
+         * Solve[S==t] + Simplify, which for the cyclotomic roots returns nested
+         * radicals Sqrt[-9(-1)^(1/3)] that leave roots-of-unity uncollapsed and
+         * make to_function_of_power divide by zero (ComplexInfinity) -- keeps the
+         * reduction inside the pure cyclotomic field Q(zeta_3), where canonic is
+         * fast and complete.  s computed from the t^2 coefficient. */
+        if (fix < 3) {
+            Expr* c3 = get_coeff(R, t, 3);
+            Expr* c2 = get_coeff(R, t, 2);
+            Expr* s  = canonic(gdiv(mk_neg(c2 ? c2 : mk_int(0)),
+                                    gmul(mk_int(3), c3 ? c3 : mk_int(1))));
+            a  = expr_copy(bp[fix]);
+            a1 = canonic(gsub(gmul(mk_int(3), expr_copy(s)),
+                              gmul(mk_int(2), expr_copy(bp[fix]))));   /* 3s - 2r */
+            expr_free(s);
+            expr_free(S);
+        } else {
+            bool okfp = fixed_points(S, t, &a, &a1);
+            expr_free(S);
+            if (!okfp) { if (a) expr_free(a); if (a1) expr_free(a1); continue; }
+            a  = simplify_e(a);
+            a1 = simplify_e(a1);
+        }
 
         /* Reduce F directly: substituting the (simple) ORIGINAL F into t(z)
          * collapses it BEFORE any cyclotomic projection (e.g. F(t(z)) = z for

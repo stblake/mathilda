@@ -129,6 +129,21 @@ static void test_period3(void) {
              " - (t-1)/((t+2) Sqrt[t^3-1])) /. t -> 17/5], 20] < 1/100000000000",
              "True");
 
+    /* CYCLOTOMIC-fixed-point character: the order-3 Mobius fixing the cube root
+     * of unity alpha = (-1)^(2/3) has fixed points {alpha, -2 alpha} (Goursat's
+     * ((t-alpha)/(t+2alpha))^3 substitution).  Previously this hung
+     * (ComplexInfinity from Solve+Simplify returning nested radicals
+     * Sqrt[-9(-1)^(1/3)] that left roots-of-unity uncollapsed in
+     * to_function_of_power); now the clean fixed points keep the reduction in
+     * Q(zeta_3) and the descended Sqrt[quadratic] integrates after monic
+     * rescaling.  Closure + real-axis differentiate-back (the closed form is a
+     * complex Log on which PossibleZeroQ's real sampling misfires). */
+    check_eq("FreeQ[Integrate[(t-(-1)^(2/3))/((t+2(-1)^(2/3)) Sqrt[t^3-1]), t,"
+             " Method -> \"GoursatAlgebraic\"], Integrate]", "True");
+    check_eq("N[Abs[(D[Integrate[(t-(-1)^(2/3))/((t+2(-1)^(2/3)) Sqrt[t^3-1]), t], t]"
+             " - (t-(-1)^(2/3))/((t+2(-1)^(2/3)) Sqrt[t^3-1])) /. t -> 3], 20]"
+             " < 1/100000000000", "True");
+
     /* Genuinely elliptic cubic radicands still decline (the period-3 trivial
      * projection does not vanish / no order-3 character). */
     declines("1/Sqrt[t^3-1]");
