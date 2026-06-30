@@ -322,6 +322,7 @@ set(COMMON_SRC
     ../src/poly/qa.c
     ../src/poly/qaupoly.c
     ../src/poly/qafactor.c
+    ../src/poly/rootofunity.c
     ../src/poly/squarefreeq.c
     ../src/poly/irrpolyq.c
     ../src/poly/groebner.c
@@ -765,6 +766,17 @@ if(USE_ECM)
     add_dependencies(qafactor_tests build_ecm)
 else()
     target_link_libraries(qafactor_tests gmp m)
+endif()
+
+# Phase 1 (SIMPLIFY_IMPROVEMENT_PLAN): cyclotomic-extension primitives.
+add_executable(rootofunity_tests test_rootofunity.c ${COMMON_SRC})
+target_include_directories(rootofunity_tests PRIVATE ../src /usr/local/include)
+target_link_directories(rootofunity_tests PRIVATE /usr/local/lib)
+if(USE_ECM)
+    target_link_libraries(rootofunity_tests gmp m ${CMAKE_SOURCE_DIR}/../src/external/ecm/.libs/libecm.a)
+    add_dependencies(rootofunity_tests build_ecm)
+else()
+    target_link_libraries(rootofunity_tests gmp m)
 endif()
 
 # Phase G9: extension_autodetect — walk an expression and build its
