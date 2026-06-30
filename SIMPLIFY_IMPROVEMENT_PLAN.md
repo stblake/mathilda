@@ -175,7 +175,16 @@ because the constants now live in a bounded `Q`-basis. Verify before proceeding.
 
 ---
 
-## 3. Phase 2 — Zero-test ordering guard (`src/zero_test.c`)
+> **Status (2026-06-30): Phases 1 and 2 DONE.** Phase 1 commits `0687380`
+> (primitives) + `c76dd3f` (wiring): cyclotomic `Together`/`Cancel` non-terminating
+> → ~0.27s. Phase 2: `PossibleZeroQ` guard + `Simplify` single-generator
+> extension fix — the cyclotomic projection `PossibleZeroQ` is now ~40ms (was
+> ~20s+). Remaining: large cyclotomic *sums* under bare `Simplify` (combined
+> numerator not smaller by leaf-count → general pipeline) are still slow; Phase 3
+> (reduce-before-combine), Phase 4 (real-subfield output), and Phase 5 (reconnect
+> the Goursat integrator for `t/(t^3+8)`) are untouched.
+
+## 3. Phase 2 — Zero-test ordering guard (`src/zero_test.c`)  ✅ DONE
 
 **Goal.** Stop `PossibleZeroQ` from running the `Together`∘`Cancel` Stage 1 on
 algebraic-number expressions that still have free symbols — route them straight

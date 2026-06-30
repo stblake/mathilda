@@ -512,6 +512,88 @@ static void test_battery_log_exp_real_line(void) {
 }
 
 /* ============================================================== */
+/*  11. Algebraic-constant guard (Phase 2)                        */
+/*                                                                */
+/*  Expressions mixing free symbols with a radical / root of      */
+/*  unity bypass the Stage-1 Together∘Cancel (which blows up over  */
+/*  an extension Q(α)) and are decided by Schwartz–Zippel.  These  */
+/*  pin both correctness (true zeros → True, true non-zeros →      */
+/*  False) and termination (the projection would hang otherwise).  */
+/* ============================================================== */
+
+/* True zero over Q(ζ_6): (x - a)(x + a) - (x^2 - a^2), a = (-1)^(1/3),
+ * a^2 = (-1)^(2/3). */
+static void test_alg_cyclotomic_diff_of_squares(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[(x - (-1)^(1/3)) (x + (-1)^(1/3)) "
+               "- (x^2 - (-1)^(2/3))]", "True");
+}
+
+/* True zero: 1 + ζ_3 + ζ_3^2 = 0 with ζ_3 = (-1)^(2/3), scaled by free x. */
+static void test_alg_roots_of_unity_sum_zero(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[x (1 + (-1)^(2/3) + ((-1)^(2/3))^2)]", "True");
+}
+
+/* True zero: Sqrt[x]^2 - x. */
+static void test_alg_sqrt_square(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[Sqrt[x]^2 - x]", "True");
+}
+
+/* True zero: (Sqrt[x+1] - Sqrt[x])(Sqrt[x+1] + Sqrt[x]) - 1. */
+static void test_alg_conjugate_radical_product(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[(Sqrt[x+1] - Sqrt[x]) (Sqrt[x+1] + Sqrt[x]) - 1]",
+               "True");
+}
+
+/* The headline non-blowup case: the 4-term cyclotomic V4 projection of
+ * t/(t^3+8) over the involutions of t^3-1 (Exp[2πI/3] = (-1)^(2/3)
+ * inlined).  It is identically zero; before the guard this did not finish
+ * in minutes (Stage-1 Together over Q(ζ_3) is super-polynomial), now it is
+ * decided by sampling in ~40ms.  The test PASSING within the suite's normal
+ * runtime IS the termination regression guard. */
+static void test_alg_cyclotomic_projection_nonblowup(void) {
+    seed_rng(42);
+    assert_pzq(
+        "PossibleZeroQ[t/(8 + t^3) + (2 + t)/((-1 + t) (8 + (2 + t)^3/(-1 + t)^3))"
+        " + (-2 (-1)^(1/3) + t)/((-1 + (-1)^(2/3) t)"
+        " (8 + (-2 (-1)^(1/3) + t)^3/(-1 + (-1)^(2/3) t)^3))"
+        " + (2 (-1)^(2/3) + t)/((-1 - (-1)^(1/3) t)"
+        " (8 + (2 (-1)^(2/3) + t)^3/(-1 - (-1)^(1/3) t)^3))]", "True");
+}
+
+/* True non-zeros — the guard must still reach FALSE via sampling. */
+static void test_alg_nonzero_root_of_unity_shift(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[x + (-1)^(1/3)]", "False");
+}
+
+static void test_alg_nonzero_sqrt_shift(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[Sqrt[x] - 1]", "False");
+}
+
+static void test_alg_nonzero_quadratic(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[x^2 - (-1)^(1/3)]", "False");
+}
+
+static void test_alg_nonzero_radical_integrand(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[(x - 1)/((x + 2) Sqrt[x^3 - 1])]", "False");
+}
+
+/* No regression: a purely rational identity has no algebraic constant, so
+ * the guard does NOT fire and Stage-1 Together∘Cancel still proves it. */
+static void test_alg_rational_no_regression(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[1/x + 1/y - (x + y)/(x y)]", "True");
+    assert_pzq("PossibleZeroQ[(x^2 - 1)/(x - 1) - (x + 1)]", "True");
+}
+
+/* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
 
@@ -617,6 +699,18 @@ int main(void) {
     TEST(test_battery_weierstrass_cosh_roundtrip);
     TEST(test_battery_weierstrass_cosh_product_roundtrip);
     TEST(test_battery_log_exp_real_line);
+
+    /* Group 11 — Algebraic-constant guard (Phase 2) */
+    TEST(test_alg_cyclotomic_diff_of_squares);
+    TEST(test_alg_roots_of_unity_sum_zero);
+    TEST(test_alg_sqrt_square);
+    TEST(test_alg_conjugate_radical_product);
+    TEST(test_alg_cyclotomic_projection_nonblowup);
+    TEST(test_alg_nonzero_root_of_unity_shift);
+    TEST(test_alg_nonzero_sqrt_shift);
+    TEST(test_alg_nonzero_quadratic);
+    TEST(test_alg_nonzero_radical_integrand);
+    TEST(test_alg_rational_no_regression);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

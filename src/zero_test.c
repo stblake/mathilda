@@ -207,6 +207,35 @@ static bool has_free_symbols(const Expr* e) {
     return any;
 }
 
+/* True when `e` contains an algebraic-number constant that makes the
+ * Stage-1 rational normalization (Together ∘ Cancel) potentially blow up:
+ * a radical or root of unity, i.e. `Sqrt[...]` or `Power[base, p/q]` with
+ * a non-integer rational exponent (q != 1).  Such subexpressions live in
+ * an algebraic extension Q(α); combining them via Together/Cancel — which
+ * `decide_rational` invokes WITHOUT an Extension option — is
+ * super-polynomial in the extension degree (cyclotomic constants such as
+ * (-1)^(2/3) are the pathological case).  When the expression also has free
+ * symbols, the numeric Schwartz–Zippel stage decides identities by
+ * sampling and never performs symbolic combination, so it is both fast and
+ * sufficient (see zero_test_decide). */
+static bool expr_has_algebraic_constant(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* head = e->data.function.head;
+    if (head && head->type == EXPR_SYMBOL) {
+        if (head->data.symbol == SYM_Sqrt && e->data.function.arg_count == 1)
+            return true;
+        if (head->data.symbol == SYM_Power && e->data.function.arg_count == 2) {
+            int64_t p, q;
+            if (is_rational(e->data.function.args[1], &p, &q) && q != 1)
+                return true;
+        }
+        if (expr_has_algebraic_constant(head)) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_has_algebraic_constant(e->data.function.args[i])) return true;
+    return false;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Stage 0: structural shortcuts                                     */
 /* ------------------------------------------------------------------ */
@@ -835,6 +864,19 @@ ZeroTestResult zero_test_decide(const Expr* e) {
 
     r = decide_structural(e);
     if (r != ZERO_TEST_UNKNOWN) return r;
+
+    /* Phase 2 (SIMPLIFY_IMPROVEMENT_PLAN): when the expression mixes free
+     * symbols with an algebraic-number constant (radical / root of unity),
+     * skip the Stage-1 Together ∘ Cancel — over an extension Q(α) it blows
+     * up super-polynomially (cyclotomic constants are the worst case).  Go
+     * straight to numeric Schwartz–Zippel sampling, which decides true
+     * identities without any symbolic combination.  This loses no decision
+     * power: Stage 1's only trustworthy verdict is TRUE, and the sampler
+     * reaches the same TRUE for genuine identities (and FALSE for genuine
+     * non-zeros), so the public PossibleZeroQ result is unchanged — only
+     * the non-terminating symbolic path is avoided. */
+    if (has_free_symbols(e) && expr_has_algebraic_constant(e))
+        return decide_schwartz_zippel(e);
 
     r = decide_rational(e);
     if (r == ZERO_TEST_TRUE) return r;   /* never trust False from Stage 1 alone */

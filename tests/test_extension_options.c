@@ -172,6 +172,22 @@ void test_together_extension(void) {
     run_eq("Cancel[(x^2 - (-1)^(2/3))/(x - (-1)^(1/3)), Extension -> Automatic]",
            "(-1)^(1/3) + x");
 
+    /* Auto-detected cyclotomic Together with a = ζ_3 = (-1)^(2/3): a^2 =
+     * (-1)^(4/3) reduces modulo Φ_6 to -(-1)^(1/3), so x^2 - a^2 collapses
+     * to x^2 + (-1)^(1/3). */
+    run_eq("Together[1/(x - (-1)^(2/3)) + 1/(x + (-1)^(2/3)), "
+           "Extension -> Automatic]",
+           "(2 x)/((-1)^(1/3) + x^2)");
+
+    /* Higher order Q(ζ_10), a = (-1)^(1/5): φ(10) = 4, so (-1)^(2/5) is a
+     * basis element and stays — the denominator is x^2 - (-1)^(2/5). */
+    run_eq("Together[1/(x - (-1)^(1/5)) + 1/(x + (-1)^(1/5)), "
+           "Extension -> Automatic]",
+           "(2 x)/(-(-1)^(2/5) + x^2)");
+
+    /* Cancel over Q[I] with explicit Extension -> I. */
+    run_eq("Cancel[(x^2 + 1)/(x - I), Extension -> I]", "I + x");
+
     /* No-extension default: the existing structural combine still works
      * for Sqrt[3] inputs because the LCM happens to factor cleanly. */
     run_eq("Together[1/(x - Sqrt[3]) + 1/(x + Sqrt[3])]",

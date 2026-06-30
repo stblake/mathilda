@@ -802,11 +802,20 @@ Expr* builtin_simplify(Expr* res) {
              * primitive-element compositum construction inside
              * extension_autodetect. */
             QATower* qa_t = extension_autodetect(expr);
-            bool multigen = (qa_t && qa_t->n >= 2);
+            /* Use Together[Extension -> Automatic] whenever ANY algebraic
+             * tower is detected — including a single generator (n == 1).
+             * For a single radical (Sqrt) plain Together happens to work
+             * because Mathilda auto-reduces Sqrt powers, but for a single
+             * cyclotomic generator (e.g. (-1)^(2/3)) plain Together treats
+             * the root of unity as opaque and blows up super-polynomially;
+             * the extension path reduces it modulo Φ_n instead.  The
+             * leaf-count gate below still rejects any non-improving result,
+             * so radical cases are unaffected. */
+            bool use_extension = (qa_t != NULL);
             if (qa_t) qa_tower_free(qa_t);
 
             Expr* tog;
-            if (multigen) {
+            if (use_extension) {
                 tog = expr_new_function(
                     expr_new_symbol(SYM_Together),
                     (Expr*[]){
