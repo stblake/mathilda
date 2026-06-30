@@ -368,6 +368,25 @@ correct, just less pretty).
 >    in `integrate_goursat.c`. (Even with fast P1..P3, `reduce_v4_piece` would
 >    then need the same clean-fixed-point + monic-rescale treatment for its M2,M3
 >    cyclotomic involutions.)
+>
+> **Update (2026-06-30): Phase 3 substrate fix DONE (commit 3856b4f).** The
+> cyclotomic `Together`/`Cancel`/projection is now fast (25 s → 0.06 s), via the
+> `qa_expr_to_qaupoly` high-α-power reduction + monic `qaupoly_gcd` (NOT the
+> rat.c reduce-before-combine the §4 plan assumed — see the Phase-3 status banner
+> above §4). **But the named integral still declines, and the `reduce_v4_piece`
+> "clean-fixed-point" expectation above is INSUFFICIENT.** Measured: with
+> cyclotomic combine fast, `goursat_v4` runs P[1..3] (~0.08 s) and the three
+> `reduce_v4_piece` descents (each `integrate_in` is 0.000 s individually), but
+> the descent **recurses (gs_depth 0→1→…) while the radical tower grows
+> unbounded**. Denesting the V4 fixed points to clean `Q(ζ₆,√3)` elements
+> (`(-1)^(1/3)(-1∓√3)`) works at the REPL, but the descent **re-nests**:
+> `Sqrt[lc]` with `lc` a cyclotomic-tower element introduces a *higher* root of
+> unity (`Sqrt[-12(-1)^(1/3)]` = ζ₆→ζ₁₂), and some pieces yield `gx =
+> Indeterminate` (a wrong projection↔involution pairing in `to_function_of_power`).
+> So landing the integral is a genuine **V4/Section-5 cyclotomic-tower descent
+> rework** (bound Sqrt-of-cyclotomic tower growth; correct the
+> projection↔involution pairing), not a localized fix. See memory note
+> *project_cyclotomic_extension_support* for the full measured diagnosis.
 
 Once Phases 1–3 land:
 
