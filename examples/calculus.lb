@@ -1,0 +1,94 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "Calculus",
+  "notebooks": [
+    {
+      "id": "nb-derivatives",
+      "title": "Derivatives",
+      "x": 60,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Derivatives" }] },
+        { "cells": [{ "type": "text", "source": "Mathilda computes symbolic derivatives using D[expr, var]. The evaluator applies the full chain rule, product rule, and quotient rule automatically via rewrite rules." }] },
+        { "cells": [{ "type": "subsection", "source": "Basic Derivatives" }] },
+        { "cells": [{ "type": "code", "source": "D[x^5, x]" }] },
+        { "cells": [{ "type": "code", "source": "D[Sin[x] * Cos[x], x]" }] },
+        { "cells": [{ "type": "code", "source": "D[Exp[x^2], x]" }] },
+        { "cells": [{ "type": "subsection", "source": "Chain Rule" }] },
+        { "cells": [{ "type": "code", "source": "D[Sin[x^3 + 1], x]" }] },
+        { "cells": [{ "type": "code", "source": "D[Log[Cos[x]], x]" }] },
+        { "cells": [{ "type": "subsection", "source": "Higher-Order Derivatives" }] },
+        { "cells": [{ "type": "code", "source": "D[Sin[x], {x, 4}]" }] },
+        { "cells": [{ "type": "code", "source": "D[x * Exp[x], {x, 3}]" }] },
+        { "cells": [{ "type": "text", "source": "The second argument {x, n} requests the nth derivative with respect to x. All standard differentiation identities are encoded as DownValues loaded from deriv.m at startup." }] }
+      ]
+    },
+    {
+      "id": "nb-integration",
+      "title": "Integration",
+      "x": 760,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Integration" }] },
+        { "cells": [{ "type": "text", "source": "Integrate[expr, x] returns the indefinite antiderivative. Integrate[expr, {x, a, b}] computes the definite integral over [a, b]. The Risch-Norman algorithm handles a broad class of elementary functions." }] },
+        { "cells": [{ "type": "subsection", "source": "Indefinite Integrals" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[x^3, x]" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[Sin[x] * Exp[x], x]" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[1 / (1 + x^2), x]" }] },
+        { "cells": [{ "type": "subsection", "source": "Definite Integrals" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[x^2, {x, 0, 1}]" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[Sin[x], {x, 0, Pi}]" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[Exp[-x^2], {x, 0, Infinity}]" }] },
+        { "cells": [{ "type": "text", "source": "The Gaussian integral over [0, Infinity) equals Sqrt[Pi]/2. Mathilda recognises standard special-function integrals including the error function." }] }
+      ]
+    },
+    {
+      "id": "nb-limits-series",
+      "title": "Limits & Series",
+      "x": 1460,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Limits & Series" }] },
+        { "cells": [{ "type": "text", "source": "Limit[expr, x -> a] computes the limiting value as x approaches a. Series[expr, {x, a, n}] produces a Taylor/Laurent expansion to order n around x = a." }] },
+        { "cells": [{ "type": "subsection", "source": "Limits" }] },
+        { "cells": [{ "type": "code", "source": "Limit[Sin[x] / x, x -> 0]" }] },
+        { "cells": [{ "type": "code", "source": "Limit[(1 + 1/n)^n, n -> Infinity]" }] },
+        { "cells": [{ "type": "code", "source": "Limit[(Exp[x] - 1) / x, x -> 0]" }] },
+        { "cells": [{ "type": "subsection", "source": "Taylor Series" }] },
+        { "cells": [{ "type": "code", "source": "Series[Exp[x], {x, 0, 6}]" }] },
+        { "cells": [{ "type": "code", "source": "Series[Sin[x], {x, 0, 7}]" }] },
+        { "cells": [{ "type": "code", "source": "Series[Log[1 + x], {x, 0, 5}]" }] },
+        { "cells": [{ "type": "text", "source": "Series returns a SeriesData object carrying the expansion coefficients and order term O[x]^(n+1). Combine series with Normal[] to strip the order term and get a plain polynomial." }] }
+      ]
+    },
+    {
+      "id": "nb-multivariable",
+      "title": "Multivariable Calculus",
+      "x": 2160,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Multivariable Calculus" }] },
+        { "cells": [{ "type": "text", "source": "Partial derivatives, gradients, and iterated integrals extend the one-variable calculus to functions of several variables." }] },
+        { "cells": [{ "type": "subsection", "source": "Partial Derivatives" }] },
+        { "cells": [{ "type": "code", "source": "D[x^2 * y + y^3, x]" }] },
+        { "cells": [{ "type": "code", "source": "D[x^2 * y + y^3, y]" }] },
+        { "cells": [{ "type": "code", "source": "D[Sin[x * y], x, y]" }] },
+        { "cells": [{ "type": "subsection", "source": "Gradient" }] },
+        { "cells": [{ "type": "code", "source": "Table[D[x^2 + y^2 + z^2, var], {var, {x, y, z}}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Iterated Integrals" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[Integrate[x * y, {x, 0, 1}], {y, 0, 1}]" }] },
+        { "cells": [{ "type": "code", "source": "Integrate[Integrate[x^2 + y^2, {x, 0, y}], {y, 0, 1}]" }] },
+        { "cells": [{ "type": "text", "source": "Nested Integrate calls handle iterated integrals. The inner integral is evaluated first; the result (a function of the outer variable) is then integrated." }] }
+      ]
+    }
+  ]
+}
