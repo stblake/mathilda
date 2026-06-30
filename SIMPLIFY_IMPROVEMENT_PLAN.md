@@ -322,39 +322,37 @@ correct, just less pretty).
 
 ## 6. Phase 5 — Reconnect the integrators and remove the workarounds
 
-> **Status (2026-06-30): investigated, NOT a reconnect — two real blockers found.**
-> After Phases 1–2 made cyclotomic `Together`/`Cancel`/`PossibleZeroQ` fast,
-> `Integrate[t/((t^3+8) Sqrt[t^3-1]), t]` still declines (~24s, budget-bound), and
-> even the single cyclotomic *character* `(t-α)/((t+2α) Sqrt[t^3-1])` hangs.
-> Instrumented bisection of the Goursat path (`integrate_goursat.c`) located the
-> cause precisely — it is **not** simplification speed:
+> **Status (2026-06-30): blocker 1 FIXED & shipped (commit a4d2f1d); blocker 2
+> re-diagnosed as a cyclotomic `Together` PERFORMANCE wall, not a Goursat
+> algorithm gap.**
 >
-> 1. **`period3_reduce` is mathematically degenerate for cyclotomic fixed
->    points.** All its `canonic`/`simplify_e` calls are now fast (`FzOverZ`
->    0.007s, `QzOverZ` 0.078s, `simplify_e` 0.04s), but for cyclotomic fixed
->    points the reduced inner integrand comes out as
->    `(1/3)(ComplexInfinity·(…))/Sqrt[…(-1)^(1/3)… + u·Sqrt[-9 (-1)^(1/3)] …]` —
->    a `ComplexInfinity` (division-by-zero in the Möbius/`to_function_of_power`
->    step) wrapped around a nested-radical radicand. The reduction was only
->    validated for the *rational* fixed points `{1, -2}` of Section 4; the
->    cyclotomic-fixed-point geometry hits a degenerate case. The malformed
->    integrand is then what hangs the recursive `integrate_in` (the cascade
->    chokes on the `ComplexInfinity`/nested-radical form). **Fix needed:** a
->    correct period-3 reduction for cyclotomic fixed points (guard the
->    degenerate Möbius orientation; handle the fixed-point-at-a-ramification
->    vs not-at-a-ramification cases that produce `ComplexInfinity`).
-> 2. **`t/(t^3+8)` is not a single period-3 character** — it is a sum of three
->    (`t/(t^3+8) = Σ_c (1/18)(t-c)/(t+2c)`, c ∈ {1, α, α²}). `goursat_period3`
->    only reduces a pure character (its trivial-projection gate rejects the
->    sum), so the named integral additionally needs the **Section-5 character
->    decomposition**: project F onto its three α^k-eigencomponents under one
->    order-3 S, reduce each via (the fixed) `period3_reduce`, and sum.
->
-> So Phase 5 = fix the cyclotomic `period3_reduce` degeneracy (blocker 1) +
-> implement character decomposition (blocker 2). Both are real algorithm work in
-> `integrate_goursat.c`, independent of the now-fast simplification primitives.
-> The original steps below (delete the numeric-gate workarounds) remain valid
-> *after* the reduction is correct.
+> 1. **~~`period3_reduce` degenerate for cyclotomic fixed points~~ — FIXED.**
+>    The `ComplexInfinity` was NOT a geometric degeneracy: it came from
+>    `Solve[S==t]`+`Simplify` returning *nested* radicals `Sqrt[-9(-1)^(1/3)]`
+>    ∈ Q(ζ₃,√ζ₃) (not pure cyclotomic) so `canonic` left roots-of-unity
+>    uncollapsed and `to_function_of_power`'s denominator vanished. Fix: supply
+>    the **exact** fixed points `{r, 3s-2r}` for the centered pure cubic
+>    R=lc((t-s)³+c) (Goursat's `((t-r)/(t+2r))³` subs) so the reduction stays in
+>    Q(ζ₃); plus rescale the descended genus-0 radicand to monic `w²+Bw` (keeping
+>    B on the linear term, pulling the `1/(3√lc)` constant out). Single cyclotomic
+>    characters now integrate correctly (real-axis diff-back ~1e-16, ~0.2s).
+> 2. **The Legendre–Clausen *sum* `t/((t^3+8) Sqrt[t^3-1])` still declines —
+>    blocked by cyclotomic `Together` PERFORMANCE, not a missing reduction.**
+>    Ground-truth instrumentation: the sum reaches `goursat_v4`, the P0 gate
+>    passes (it is in the V4-anti-invariant space), then **hangs at
+>    `P[1]=canonic(f0+f1-f2-f3)`** — the 4-term cyclotomic V4 projection. REPL
+>    confirms `Together[f0±f1±f2±f3, Extension->Automatic]` of those Q(ζ₃)
+>    rationals **times out (>20s)**; only the 6 s `TimeConstrained` budget
+>    eventually aborts it. The clean partition `F = φ+φ1+φ2+φ3` *is* the V4 one
+>    (Section 5), which `goursat_v4` already computes — per-root/σ-projections
+>    provably *cannot* extract the three characters (F is a σ-eigenfunction → the
+>    extraction linear system is inconsistent; and closed-form σ-scaling
+>    `∫g(αᵖt)/√=α²ᵖG(αᵖt)` is branch-broken under complex args). So **blocker 2 =
+>    make the cyclotomic V4-projection `Together`/`Cancel` fast** — this is Phase 3
+>    (reduce-before-combine in `rat.c`/`qa`), a separate core-CAS effort, NOT work
+>    in `integrate_goursat.c`. (Even with fast P1..P3, `reduce_v4_piece` would
+>    then need the same clean-fixed-point + monic-rescale treatment for its M2,M3
+>    cyclotomic involutions.)
 
 Once Phases 1–3 land:
 
