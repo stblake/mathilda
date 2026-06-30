@@ -460,12 +460,133 @@ static Expr* mobius_involution(Expr* a, Expr* b, Expr* c, Expr* d, Expr* t) {
     return canonic(mk_fn2("Times", num, mk_inv(den)));
 }
 
+/* ---------------------------------------------------------------------- */
+/* Cyclotomic-tower fixed-point denesting                                  */
+/* ---------------------------------------------------------------------- */
+/*
+ * `Solve[S == t]` returns the V4 involution's fixed points via the quadratic
+ * formula, so they carry a nested radical `Sqrt[disc]` whose discriminant `disc`
+ * is a CYCLOTOMIC CONSTANT (S's coefficients live in the splitting field of R).
+ * Left opaque, that `Sqrt[disc]` is an out-of-field tower element: substituting
+ * such a fixed point into `t(u)` leaves `R(t(u))·(1-u)^4` un-reducible (the
+ * radical reads as an independent variable), so the descended `lc`/`Q`/`gx` keep
+ * spurious `(1-u)` denominators and `Sqrt[cyclotomic]` coefficients, and the
+ * genus-0 piece never closes -- `integrate_in` re-recognises a cubic-radical
+ * Goursat problem and the descent recurses until the depth/time guard fires.
+ *
+ * But `disc` is, by construction, a rational multiple of a root of unity (e.g.
+ * `12 (-1)^(2/3)`), whose square root IS a tower element expressible over the
+ * generators (`Sqrt[12 (-1)^(2/3)] = 2 Sqrt[3] (-1)^(1/3)`).  Denest it: detect
+ * `disc = c (-1)^(p/q)` numerically (verified exactly), then `PowerExpand` the
+ * monomial.  The fixed points become explicit cyclotomic-tower elements and the
+ * whole descent stays rational over that field.
+ */
+
+/* True iff e contains an inexact (Real / MPFR) leaf. */
+static bool contains_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+#ifdef EXPR_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_FUNCTION) {
+        if (contains_inexact(e->data.function.head)) return true;
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (contains_inexact(e->data.function.args[i])) return true;
+    }
+    return false;
+}
+
+/* If constant b (free of var) equals a rational multiple of a root of unity,
+ * c*(-1)^(p/q), return that exact monomial form; else NULL.  Borrows b, var. */
+static Expr* monomialize_root_of_unity(Expr* b, Expr* var) {
+    if (!expr_free_of(b, var)) return NULL;
+    Expr* nb = eval_take(mk_fn1("N", expr_copy(b)));
+    if (!nb) return NULL;
+    Expr* tol = make_rational(1, 1000000);
+    Expr* c  = eval_take(mk_fn2("Rationalize", mk_fn1("Abs", expr_copy(nb)),
+                                expr_copy(tol)));
+    Expr* qq = eval_take(mk_fn2("Rationalize",
+                   gdiv(mk_fn1("Arg", nb), mk_sym("Pi")), tol));  /* consumes nb, tol */
+    if (!c || !qq) { if (c) expr_free(c); if (qq) expr_free(qq); return NULL; }
+    Expr* cand = eval_take(mk_fn2("Times", c, mk_pow(mk_int(-1), qq)));  /* consumes c, qq */
+    if (!cand) return NULL;
+    /* Require an EXACT candidate (Rationalize must have produced rationals) and
+     * exact equality with b -- never inject an inexact fixed point. */
+    if (contains_inexact(cand)) { expr_free(cand); return NULL; }
+    Expr* chk = gsub(expr_copy(b), expr_copy(cand));
+    bool ok = is_zero(chk);
+    expr_free(chk);
+    if (!ok) { expr_free(cand); return NULL; }
+    return cand;
+}
+
+/* Collect distinct Power[base, m/2] (m odd, base free of var) subexpressions. */
+static void collect_const_halfpowers(Expr* e, Expr* var,
+                                     Expr*** out, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* exp = e->data.function.args[1];
+        bool half = false;
+        for (int m = 1; m <= 9 && !half; m += 2) {
+            Expr* r = make_rational(m, 2);
+            half = expr_eq(exp, r);
+            expr_free(r);
+        }
+        if (half && expr_free_of(e->data.function.args[0], var)) {
+            bool dup = false;
+            for (size_t i = 0; i < *n; i++) if (expr_eq((*out)[i], e)) { dup = true; break; }
+            if (!dup) {
+                if (*n == *cap) {
+                    *cap = *cap ? *cap * 2 : 4;
+                    *out = (Expr**)realloc(*out, *cap * sizeof(Expr*));
+                }
+                (*out)[(*n)++] = e;
+            }
+        }
+    }
+    collect_const_halfpowers(e->data.function.head, var, out, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        collect_const_halfpowers(e->data.function.args[i], var, out, n, cap);
+}
+
+/* Denest every constant cyclotomic half-power in e (see block comment).
+ * Returns a new owned tree, or NULL when nothing was denested.  Borrows e, var. */
+static Expr* denest_const_radicals(Expr* e, Expr* var) {
+    Expr** nodes = NULL; size_t nn = 0, cap = 0;
+    collect_const_halfpowers(e, var, &nodes, &nn, &cap);
+    Expr* out = NULL;
+    for (size_t i = 0; i < nn; i++) {
+        Expr* p = nodes[i];                       /* Power[base, exp] */
+        Expr* mono = monomialize_root_of_unity(p->data.function.args[0], var);
+        if (!mono) continue;
+        Expr* repl = eval_take(mk_fn1("PowerExpand",
+                         mk_pow(mono, expr_copy(p->data.function.args[1]))));
+        if (!repl) continue;
+        Expr* rule = mk_rule(expr_copy(p), repl);   /* consumes repl */
+        Expr* base_e = out ? out : e;
+        Expr* nx = eval_take(internal_replace_all(
+                       (Expr*[]){ expr_copy(base_e), rule }, 2));
+        if (out) expr_free(out);
+        out = nx;
+    }
+    free(nodes);
+    return out;
+}
+
 /* Reduce one V4 eigenpiece Fj (anti-invariant under involution S) to its
  * elementary antiderivative.  Returns the owned antiderivative (in t), or NULL
  * if the rational reduction does not close.  Borrows Fj, R, t, S. */
 static Expr* reduce_v4_piece(Expr* Fj, Expr* R, Expr* t, Expr* S) {
     Expr* alpha = NULL; Expr* beta = NULL;
     if (!fixed_points(S, t, &alpha, &beta)) return NULL;
+    /* Denest cyclotomic-tower nested radicals in the fixed points so the descent
+     * stays rational over the splitting field (else it recurses; see block
+     * comment above). */
+    { Expr* ad = denest_const_radicals(alpha, t);
+      if (ad) { expr_free(alpha); alpha = ad; } }
+    if (beta) { Expr* bd = denest_const_radicals(beta, t);
+                if (bd) { expr_free(beta); beta = bd; } }
     bool binf = (beta == NULL);
 
     Expr* u = fresh_var();     /* intermediate Mobius variable */
@@ -559,6 +680,46 @@ done:
     return result;
 }
 
+/* Count expression nodes (a cheap structural-complexity proxy). */
+static long node_count(const Expr* e) {
+    if (!e) return 0;
+    long n = 1;
+    if (e->type == EXPR_FUNCTION) {
+        n += node_count(e->data.function.head);
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            n += node_count(e->data.function.args[i]);
+    }
+    return n;
+}
+
+/* Score an involution by the cleanliness of its (denested) fixed points: each
+ * V4 projection is anti-invariant under TWO involutions, and the descent over
+ * whichever we pick must stay in that involution's fixed-point field.  A
+ * complex (cyclotomic-tower) fixed point drags the reduction into a larger
+ * tower whose nested radicals do not all denest -- so heavily prefer REAL fixed
+ * points, then break ties by structural size.  Lower is better.  Borrows S, t. */
+static long involution_score(Expr* S, Expr* t) {
+    Expr* al = NULL; Expr* be = NULL;
+    if (!fixed_points(S, t, &al, &be)) return 1000000000L;
+    long score = 0;
+    Expr* fps[2] = { al, be };
+    for (int i = 0; i < 2; i++) {
+        if (!fps[i]) continue;
+        Expr* d = denest_const_radicals(fps[i], t);
+        Expr* f = d ? d : fps[i];
+        Expr* im  = eval_take(mk_fn2("N", mk_fn1("Im", expr_copy(f)), mk_int(20)));
+        Expr* big = im ? eval_take(mk_fn2("Greater", mk_fn1("Abs", im),
+                                   make_rational(1, 1000000000L))) : NULL;
+        if (big && expr_is_true(big)) score += 1000000;   /* non-real: penalise */
+        if (big) expr_free(big);
+        score += node_count(f);
+        if (d) expr_free(d);
+    }
+    if (al) expr_free(al);
+    if (be) expr_free(be);
+    return score;
+}
+
 /* Goursat V4 (p = 1/2): F rational, R cubic/quartic with simple roots. */
 static Expr* goursat_v4(Expr* F, Expr* R, Expr* t) {
     size_t nr = 0;
@@ -638,20 +799,15 @@ static Expr* goursat_v4(Expr* F, Expr* R, Expr* t) {
     Expr* total = mk_int(0);
     for (int j = 1; j <= 3; j++) {
         if (!P[j] || is_zero(P[j])) continue;
-        /* candidate anti-involutions: indices in {0,1,2} \ {j-1}. */
-        int chosen = -1, first = -1;
+        /* candidate anti-involutions: indices in {0,1,2} \ {j-1}.  Pick the one
+         * with the cleanest (preferably real) fixed points, so the descent stays
+         * in the smallest cyclotomic tower and its nested radicals all denest. */
+        int chosen = -1; long best = 0;
         for (int k = 0; k < 3; k++) {
             if (k == j - 1) continue;
-            if (first < 0) first = k;
-            Expr* al = NULL; Expr* be = NULL;
-            if (fixed_points(S[k], t, &al, &be)) {
-                bool single = (be == NULL);
-                if (al) expr_free(al);
-                if (be) expr_free(be);
-                if (single) { chosen = k; break; }
-            }
+            long sc = involution_score(S[k], t);
+            if (chosen < 0 || sc < best) { chosen = k; best = sc; }
         }
-        if (chosen < 0) chosen = first;
         Expr* piece = reduce_v4_piece(P[j], R, t, S[chosen]);
         if (!piece) { expr_free(total); total = NULL; break; }
         total = mk_fn2("Plus", total, piece);
@@ -1611,6 +1767,147 @@ fail:
 }
 
 /* ---------------------------------------------------------------------- */
+/* Output normalisation: re-express nested radicals over Sqrt[R]           */
+/* ---------------------------------------------------------------------- */
+/*
+ * The square-root descent integrates in a Mobius-substituted coordinate, so its
+ * antiderivative carries a NESTED radical Sqrt[g] -- g a rational function of x
+ * that, by construction, equals R times a perfect rational square (R is the
+ * integrand's own radicand).  Sqrt[g] is therefore (rational)*Sqrt[R], but the
+ * generic Cancel/Together that builds the result never extracts the square
+ * factor (doing so is branch-cut-sensitive in general, so Simplify rightly
+ * refuses it without assumptions).  The upshot: the returned antiderivative
+ * carries a DIFFERENT radical from the integrand, and D[result,x] // Simplify
+ * cannot reduce to the integrand (it would have to relate two distinct nested
+ * radicals).  Re-express Sqrt[g] -> (rational)*Sqrt[R] here, where the integrator
+ * KNOWS g/R is a perfect square and fixes the sole branch (a global +/- sign)
+ * numerically -- a correct-by-construction normalisation of the *result*, not a
+ * change to Simplify.  The rewrite is adopted only if the differentiate-back
+ * guard still passes on the rewritten form.
+ */
+
+/* True iff e contains an unresolved Power[_, 1/2] (a square root). */
+static bool has_sqrt(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* half = make_rational(1, 2);
+        bool m = expr_eq(e->data.function.args[1], half);
+        expr_free(half);
+        if (m) return true;
+    }
+    if (has_sqrt(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_sqrt(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Collect distinct radicands g of Power[g, 1/2] subexpressions of e.  Pointers
+ * are borrowed into e; *out is realloc'd (caller free()s the array only). */
+static void collect_sqrt_radicands(Expr* e, Expr*** out, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* half = make_rational(1, 2);
+        bool m = expr_eq(e->data.function.args[1], half);
+        expr_free(half);
+        if (m) {
+            Expr* g = e->data.function.args[0];
+            bool dup = false;
+            for (size_t i = 0; i < *n; i++)
+                if (expr_eq((*out)[i], g)) { dup = true; break; }
+            if (!dup) {
+                if (*n == *cap) {
+                    *cap = *cap ? *cap * 2 : 4;
+                    *out = (Expr**)realloc(*out, *cap * sizeof(Expr*));
+                }
+                (*out)[(*n)++] = g;
+            }
+        }
+    }
+    collect_sqrt_radicands(e->data.function.head, out, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        collect_sqrt_radicands(e->data.function.args[i], out, n, cap);
+}
+
+/* Return true if the real part of cand/Sqrt[g] sampled at a fixed rational
+ * point is decisively -1, i.e. cand must be negated to equal +Sqrt[g] (the two
+ * differ at most by a global sign, the only branch freedom).  Borrows all. */
+static bool radical_sign_negative(Expr* cand, Expr* g, Expr* x) {
+    static const long pn[6] = { 17, 23, 31, 37, 19, 43 };
+    static const long pd[6] = {  5,  7,  9, 10,  6,  8 };
+    Expr* ratio = mk_fn2("Times", expr_copy(cand),
+                         mk_inv(mk_sqrt_expr(expr_copy(g))));
+    Expr* half = make_rational(1, 2);
+    bool neg = false;
+    for (int i = 0; i < 6; i++) {
+        Expr* pt = make_rational(pn[i], pd[i]);
+        Expr* at = subst_eval(expr_copy(ratio), x, pt);   /* consumes pt */
+        Expr* re = at ? eval_take(mk_fn2("N", mk_fn1("Re", at), mk_int(20))) : NULL;
+        if (re) {
+            Expr* big = eval_take(mk_fn2("Greater",
+                                  mk_fn1("Abs", expr_copy(re)), expr_copy(half)));
+            if (expr_is_true(big)) {                     /* exact ratio is +/-1 */
+                Expr* lt0 = eval_take(mk_fn2("Less", expr_copy(re), mk_int(0)));
+                neg = expr_is_true(lt0);
+                if (lt0) expr_free(lt0);
+                expr_free(big); expr_free(re);
+                break;
+            }
+            expr_free(big); expr_free(re);
+        }
+    }
+    expr_free(half); expr_free(ratio);
+    return neg;
+}
+
+/* If the radicand g (a rational function of x) is R times a perfect rational
+ * square, return the single-radical form s*Sqrt[R] equal to Sqrt[g] (with the
+ * global sign fixed numerically); else NULL.  Borrows g, R, x. */
+static Expr* sqrt_over_R(Expr* g, Expr* R, Expr* x) {
+    /* h = Factor[Cancel[Together[g/R]]] -- factoring exposes the square part. */
+    Expr* h = eval_take(mk_fn1("Factor",
+                  canonic(gdiv(expr_copy(g), expr_copy(R)))));
+    if (!h) return NULL;
+    /* s = PowerExpand[Sqrt[h]] is radical-free iff h is a perfect rational
+     * square (times a constant whose own root PowerExpand resolves). */
+    Expr* s = eval_take(mk_fn1("PowerExpand", mk_sqrt_expr(expr_copy(h))));
+    bool ok = s && !has_sqrt(s);
+    if (ok) {
+        Expr* chk = gsub(mk_pow_int(expr_copy(s), 2), expr_copy(h));
+        ok = is_zero(chk);
+        expr_free(chk);
+    }
+    expr_free(h);
+    if (!ok) { if (s) expr_free(s); return NULL; }
+    Expr* cand = canonic(mk_fn2("Times", s, mk_sqrt_expr(expr_copy(R))));
+    if (!cand) return NULL;
+    if (radical_sign_negative(cand, g, x)) cand = eval_take(mk_neg(cand));
+    return cand;
+}
+
+/* Re-express the antiderivative `res` so every nested Sqrt[g] that is a rational
+ * multiple of Sqrt[R] is written (rational)*Sqrt[R].  Returns a new owned tree,
+ * or NULL when nothing is rewritten.  Borrows res, R, x. */
+static Expr* reexpress_over_radical(Expr* res, Expr* R, Expr* x) {
+    Expr** rad = NULL; size_t nr = 0, cap = 0;
+    collect_sqrt_radicands(res, &rad, &nr, &cap);
+    Expr* out = NULL;
+    for (size_t i = 0; i < nr; i++) {
+        Expr* g = rad[i];
+        if (expr_eq(g, R)) continue;            /* already over Sqrt[R] */
+        Expr* cand = sqrt_over_R(g, R, x);
+        if (!cand) continue;
+        Expr* rule = mk_rule(mk_sqrt_expr(expr_copy(g)), cand);   /* consumes cand */
+        Expr* base = out ? out : res;
+        Expr* nx = eval_take(internal_replace_all(
+                       (Expr*[]){ expr_copy(base), rule }, 2));
+        if (out) expr_free(out);
+        out = nx;
+    }
+    free(rad);
+    return out;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Core driver                                                            */
 /* ---------------------------------------------------------------------- */
 
@@ -1635,6 +1932,17 @@ static Expr* gs_core(Expr* f, Expr* x) {
         result = goursat_cubic(F, R, x, pnum);
     } else if (pden == 4) {
         result = goursat_quartic(F, R, x, pnum);
+    }
+
+    /* Normalise the result's nested radical over the integrand's own Sqrt[R]
+     * (square-root case only), so D[result,x] // Simplify reduces to f.  Adopt
+     * the rewrite only if the differentiate-back guard still passes on it. */
+    if (result && pden == 2) {
+        Expr* improved = reexpress_over_radical(result, R, x);
+        if (improved) {
+            if (diff_back_ok(improved, x, f)) { expr_free(result); result = improved; }
+            else expr_free(improved);
+        }
     }
 
     expr_free(F);

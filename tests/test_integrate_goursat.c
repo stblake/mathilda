@@ -129,6 +129,14 @@ static void test_period3(void) {
              " - (t-1)/((t+2) Sqrt[t^3-1])) /. t -> 17/5], 20] < 1/100000000000",
              "True");
 
+    /* Regression (output normalisation): the antiderivative is now returned over
+     * the integrand's OWN radical Sqrt[t^3-1] -- not the Mobius-substituted
+     * nested radical Sqrt[w^2-w], w=((t-1)/(t+2))^3 -- so it verifies
+     * SYMBOLICALLY via D[..] // Simplify (a single shared radical reduces over
+     * the rational field), the user-facing behaviour the form-fix restores. */
+    check_eq("Simplify[D[Integrate[(t-1)/((t+2) Sqrt[t^3-1]), t], t]"
+             " - (t-1)/((t+2) Sqrt[t^3-1])]", "0");
+
     /* CYCLOTOMIC-fixed-point character: the order-3 Mobius fixing the cube root
      * of unity alpha = (-1)^(2/3) has fixed points {alpha, -2 alpha} (Goursat's
      * ((t-alpha)/(t+2alpha))^3 substitution).  Previously this hung
