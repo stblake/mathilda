@@ -11,6 +11,7 @@
 #include "plot.h"
 #include "plot3d.h"
 #include "parametricplot.h"
+#include "parametricplot3d.h"
 #include "listplot.h"
 #include "show.h"
 

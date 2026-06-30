@@ -247,6 +247,43 @@ void graphics_init(void) {
         "AxesOrigin, Frame, FrameLabel, GridLines, Prolog, Epilog, "
         "PlotLabel, Background, ImageSize (all passed through to Graphics).");
 
+    symtab_add_builtin("ParametricPlot3D", builtin_parametricplot3d);
+    symtab_get_def("ParametricPlot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("ParametricPlot3D",
+        "ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, opts...]\n"
+        "\tAdaptively samples the parametric 3D space curve (fx(t), fy(t), fz(t)) "
+        "over [tmin, tmax] and returns a Graphics3D[...] object (auto-displayed in "
+        "an orbit-camera window). The body may be any expression that evaluates to "
+        "a 3-element {x,y,z} list. Multiple curves: "
+        "ParametricPlot3D[{{fx1,fy1,fz1}, ...}, {t,...}].\n"
+        "ParametricPlot3D[{fx, fy, fz}, {t, tmin, tmax}, {u, umin, umax}, opts...]\n"
+        "\tTwo-iterator form: samples a PlotPoints x PlotPoints grid of (t,u) "
+        "pairs, maps each to {x,y,z}, and emits Polygon[] quads — a parametric "
+        "3D surface patch. Options: "
+        "PlotPoints (initial sample count/grid size, default 25), "
+        "MaxRecursion (adaptive refinement depth for curves, default 6), "
+        "MaxPlotPoints (overall point cap, default Infinity), "
+        "Mesh (All/True: overlays sample dots for curves or grid lines for "
+        "surfaces; default None), "
+        "PlotLegends (Automatic/\"Expressions\"/{labels...}), "
+        "ColorFunction (\"Rainbow\" or f[x,y,z] receiving scaled spatial coords, "
+        "or f[x,z] / f[z] for height-based coloring), "
+        "ColorFunctionScaling (default True), "
+        "RegionFunction (f[x,y,z] mask; falls back to f[x,y] forms), "
+        "PlotStyle, Axes, PlotRange, AxesLabel, PlotLabel, Background, ImageSize "
+        "(all passed through to Graphics3D). "
+        "Lighting -> None disables shading (flat colors); default is Automatic "
+        "(Lambertian shading, same as Plot3D).");
+
+    /* Lighting is an inert option keyword recognised by the renderer. */
+    symtab_get_def("Lighting")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Lighting",
+        "Lighting\n\tA Graphics3D / Plot3D / ParametricPlot3D option controlling "
+        "surface shading. Lighting -> Automatic (default): per-face Lambertian "
+        "(flat) shading with a fixed directional light; ambient 0.3, diffuse 0.7. "
+        "Lighting -> None (or False): disables shading and draws surfaces in their "
+        "raw PlotStyle/ColorFunction color.");
+
     symtab_add_builtin("Plot3D", builtin_plot3d);
     symtab_get_def("Plot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_set_docstring("Plot3D",
@@ -264,5 +301,6 @@ void graphics_init(void) {
         "function of scaled-x and z, or \"Rainbow\"), ColorFunctionScaling "
         "(default True), RegionFunction (f[x,y,z], or Plot's f[x,y]/f[x] "
         "forms), PlotRange (an explicit {zmin,zmax} z-band), Axes, "
-        "PlotLabel, Background, ImageSize.");
+        "PlotLabel, Background, ImageSize, "
+        "Lighting (Automatic (default, Lambertian shading) or None to disable).");
 }

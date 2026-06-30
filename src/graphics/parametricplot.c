@@ -473,13 +473,10 @@ static Expr** build_param_region(Expr* body, Expr* var1, Expr* var2,
     Expr** prims = malloc(sizeof(Expr*) * (size_t)(ncells + nmesh + 4));
     size_t pc = 0;
 
-    /* Color + 50% opacity directives up front (for non-ColorFunction paths).
-     * Opacity is emitted after the color so it modifies the color's alpha.  */
-    if (color && !sopts->color_function) {
+    /* Color directive up front (solid by default; pass PlotStyle -> {color, Opacity[a]}
+     * to get a transparent region fill). */
+    if (color && !sopts->color_function)
         prims[pc++] = expr_copy(color);
-        Expr* oa[1] = { expr_new_real(0.5) };
-        prims[pc++] = expr_new_function(expr_new_symbol(SYM_Opacity), oa, 1);
-    }
 
     /* Polygon quads. */
     for (long i = 0; i < n-1; i++) {

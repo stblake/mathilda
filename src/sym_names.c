@@ -566,6 +566,8 @@ const char* SYM_Show = NULL;
 const char* SYM_Plot = NULL;
 const char* SYM_Plot3D = NULL;
 const char* SYM_ParametricPlot = NULL;
+const char* SYM_ParametricPlot3D = NULL;
+const char* SYM_Lighting = NULL;
 const char* SYM_RGBColor = NULL;
 const char* SYM_GrayLevel = NULL;
 const char* SYM_CMYKColor = NULL;
@@ -1200,6 +1202,8 @@ void sym_names_init(void) {
     SYM_Plot                       = intern_symbol("Plot");
     SYM_Plot3D                     = intern_symbol("Plot3D");
     SYM_ParametricPlot             = intern_symbol("ParametricPlot");
+    SYM_ParametricPlot3D           = intern_symbol("ParametricPlot3D");
+    SYM_Lighting                   = intern_symbol("Lighting");
     SYM_RGBColor                   = intern_symbol("RGBColor");
     SYM_GrayLevel                  = intern_symbol("GrayLevel");
     SYM_CMYKColor                  = intern_symbol("CMYKColor");

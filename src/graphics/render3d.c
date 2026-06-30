@@ -70,6 +70,7 @@ static void compute_bbox3(const Expr* node, Box3D* bb) {
 
 typedef struct {
     bool axes;
+    bool lighting;          /* Lambertian shading on Polygon faces; default true */
     RGBA8 style_color;
     RGBA8 background;
     long width, height;
@@ -78,6 +79,7 @@ typedef struct {
 
 static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
     o->axes = false;
+    o->lighting = true;
     o->style_color = (RGBA8){ 30, 80, 180, 255 };
     o->background = (RGBA8){ 255, 255, 255, 255 };
     o->width = 800; o->height = 600;
@@ -95,7 +97,12 @@ static void gfx3d_options_parse(const Expr* graphics3d, Gfx3DOptions* o) {
         if (lhs->type != EXPR_SYMBOL) continue;
         const char* name = lhs->data.symbol;
 
-        if (name == SYM_Axes) {
+        if (name == SYM_Lighting) {
+            /* Lighting -> None/False disables shading; anything else keeps it on. */
+            o->lighting = !(rhs->type == EXPR_SYMBOL
+                            && (rhs->data.symbol == SYM_None
+                                || rhs->data.symbol == SYM_False));
+        } else if (name == SYM_Axes) {
             o->axes = (rhs->type == EXPR_SYMBOL && rhs->data.symbol == SYM_True);
         } else if (name == SYM_PlotStyle) {
             resolve_color(rhs, &o->style_color);
@@ -126,7 +133,26 @@ static Vector3 to_v3(double x, double y, double z) {
     return (Vector3){ (float)x, (float)z, (float)y };
 }
 
-typedef struct { Color color; } DrawState3D;
+/* Lambertian intensity: ambient + diffuse * |n·L|.
+ * |n·L| (absolute value) gives two-sided lighting so back faces are also shaded
+ * rather than receiving only the flat ambient term — important since backface
+ * culling is disabled for mathematical surfaces.
+ * `light_dir` is computed per-frame from the camera's local axes so that the
+ * lit face always appears consistently relative to the viewer as they orbit. */
+static Color shade_color(Color base, Vector3 face_normal, Vector3 light_dir) {
+    const float Ka = 0.30f;  /* ambient */
+    const float Kd = 0.70f;  /* diffuse */
+    float ndotl = fabsf(Vector3DotProduct(face_normal, light_dir));
+    float intensity = Ka + Kd * ndotl;
+    return (Color){
+        (unsigned char)(base.r * intensity),
+        (unsigned char)(base.g * intensity),
+        (unsigned char)(base.b * intensity),
+        base.a,
+    };
+}
+
+typedef struct { Color color; bool lighting; Vector3 light_dir; } DrawState3D;
 
 /* Reads a 3-coordinate {x,y,z} List into a Vector3 (already axis-remapped). */
 static bool expr_point3(const Expr* e, Vector3* out) {
@@ -176,11 +202,23 @@ static void draw_primitive3(const Expr* node, DrawState3D* state) {
                 if (expr_point3(arg->data.function.args[i], &v[cnt])) cnt++;
             }
             /* Fan from vertex 0, exactly Polygon's 2D contract (render.c) --
-             * valid here because every Polygon Plot3D builds is a convex
-             * quad. Backface culling is disabled for the whole 3D draw
-             * pass (see graphics3d_show), so winding doesn't matter for
+             * valid here because every Polygon Plot3D/ParametricPlot3D builds
+             * is a convex quad. Backface culling is disabled for the whole 3D
+             * draw pass (see graphics3d_show), so winding doesn't matter for
              * visibility. */
-            for (size_t i = 1; i + 1 < cnt; i++) DrawTriangle3D(v[0], v[i], v[i + 1], state->color);
+            if (cnt >= 3) {
+                Color draw_color = state->color;
+                if (state->lighting) {
+                    /* Face normal from the first two edges of the fan.
+                     * Vector3CrossProduct and Vector3Normalize are from raymath.h. */
+                    Vector3 e1 = Vector3Subtract(v[1], v[0]);
+                    Vector3 e2 = Vector3Subtract(v[2], v[0]);
+                    Vector3 n  = Vector3Normalize(Vector3CrossProduct(e1, e2));
+                    draw_color = shade_color(state->color, n, state->light_dir);
+                }
+                for (size_t i = 1; i + 1 < cnt; i++)
+                    DrawTriangle3D(v[0], v[i], v[i + 1], draw_color);
+            }
             free(v);
         }
         return;
@@ -463,9 +501,23 @@ void graphics3d_show(const Expr* graphics3d_expr) {
         BeginDrawing();
         ClearBackground(to_raylib(opts.background));
 
+        /* Camera-relative light direction: fixed in view space so the shading
+         * updates as the user orbits.  Light is at upper-right-front in camera
+         * space ({0.3, 1.0, 0.5} right/up/forward), transformed to world space
+         * via the camera's local axes, then normalised. */
+        Vector3 fwd   = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
+        Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, camera.up));
+        Vector3 cam_up = Vector3CrossProduct(right, fwd);
+        Vector3 light_dir = Vector3Normalize(
+            Vector3Add(Vector3Add(Vector3Scale(right,  0.3f),
+                                  Vector3Scale(cam_up,  1.0f)),
+                                  Vector3Scale(fwd,     0.5f)));
+
         BeginMode3D(camera);
         rlDisableBackfaceCulling(); /* surfaces are visible from both sides */
-        DrawState3D state = { .color = to_raylib(opts.style_color) };
+        DrawState3D state = { .color    = to_raylib(opts.style_color),
+                              .lighting = opts.lighting,
+                              .light_dir = light_dir };
         draw_primitive3(prims, &state);
         if (opts.axes) draw_box3(&bb, axes_color);
         EndMode3D(); /* EndMode3D flushes the render batch; rlDisableBackfaceCulling

@@ -462,6 +462,7 @@ sense, sharing the actual evaluation code (`src/graphics/plot_common.c`) for
 | `ExclusionStyle` | `GrayLevel[0.35]` | style directive (a color literal or `Thickness[...]` etc.) used to draw the boundary edges between included and excluded grid cells when `RegionFunction` is active |
 | `PlotRange` | `Automatic` | an explicit `{zmin,zmax}` (or the last `{zmin,zmax}` of a longer nested list) feeds the same flatness check `MaxRecursion` uses, and bounds the rendered box |
 | `Axes` | `True` | draws a wireframe bounding box with tick labels |
+| `Lighting` | `Automatic` | surface shading model. `Automatic` (default): per-face Lambertian flat shading — each polygon's face normal is dotted with a directional light that is **fixed relative to the camera** (upper-right-front in view space: `0.3 right + 1.0 up + 0.5 forward`, normalised), so the lit/dark pattern updates as you orbit. Intensity `I = 0.3 + 0.7 × |n·L|` (ambient 0.3 + diffuse 0.7, two-sided so back faces are lit too). `None` or `False`: disables shading and draws surfaces in their raw `PlotStyle`/`ColorFunction` color |
 
 Other options (`PlotLabel`, `Background`, `ImageSize`, `AxesLabel`, ...) are
 evaluated once (since `Plot3D` is `HoldAll`) and copied through onto the
@@ -517,7 +518,8 @@ Samples and displays a parametric planar curve or filled region.
   `PlotPoints × PlotPoints` grid of `(t, r)` pairs, maps each pair to `(x, y)`
   via `body`, and emits filled `Polygon[{p00,p10,p11,p01}]` quads for each
   valid grid cell.  Produces `Graphics[{Polygon[...], ...}, opts]`.  `Mesh ->
-  All` overlays the grid lines.
+  All` overlays the grid lines.  The fill is **solid** by default; use
+  `PlotStyle -> {color, Opacity[a]}` to get a transparent region.
 
 `HoldAll`: the body and all iterator specs are not pre-evaluated.
 
@@ -537,7 +539,7 @@ midpoint) avoid aliasing against periodic curves.
 | `ColorFunction` | none | colors by parameter; `"Rainbow"` sweeps hue; a function `f[t_scaled]` (1-iter) or `f[t_scaled, r_scaled]` (2-iter). With `ColorFunctionScaling -> True` (default) inputs are scaled to `[0,1]` |
 | `ColorFunctionScaling` | `True` | whether to scale parameters before `ColorFunction` |
 | `RegionFunction` | none | `f[x,y]` mask; points where it returns `False` are excluded |
-| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/polygon color; overridden per-curve in multi-curve mode |
+| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/polygon color; a `List` of directives is accepted, so `PlotStyle -> {Blue, Opacity[0.4]}` gives a semi-transparent fill for the two-iterator form |
 | `AspectRatio` | `1` | square by default (both axes equally important) |
 | `Axes` | `True` | draws coordinate axes |
 
@@ -586,6 +588,106 @@ Out[8]= -Graphics-  (* weighted spiral region *)
 In[9]:= ParametricPlot[{r Cos[t], r Sin[t]}, {t, 0, 2 Pi}, {r, 1, 2},
           Mesh -> All]
 Out[9]= -Graphics-  (* with grid lines overlaid *)
+```
+
+## ParametricPlot3D
+Samples and displays a parametric 3D space curve or surface patch, returning
+a `Graphics3D[...]` object rendered in an orbit-camera window.
+
+**One-iterator form** — parametric space curve:
+- `ParametricPlot3D[body, {t, tmin, tmax}]`: evaluates `body` (which must
+  produce a 3-element numeric list `{x, y, z}`) for each sampled `t` value;
+  returns `Graphics3D[{Line[...], ...}, opts]`. `body` may be a literal
+  `{fx, fy, fz}` or any expression that evaluates to `{x, y, z}`.
+- `ParametricPlot3D[{{body1}, {body2}, ...}, {t, tmin, tmax}]`: plots
+  multiple space curves over the same parameter range in distinct palette
+  colours.
+
+**Two-iterator form** — parametric 3D surface patch:
+- `ParametricPlot3D[body, {t, tmin, tmax}, {u, umin, umax}]`: samples a
+  `PlotPoints × PlotPoints` grid of `(t, u)` pairs, maps each to `{x, y, z}`
+  via `body`, and emits filled `Polygon[{p00,p10,p11,p01}]` quads for each
+  valid grid cell. Produces `Graphics3D[{Polygon[...], ...}, opts]`.
+
+`HoldAll`: the body and all iterator specs are not pre-evaluated.
+
+Adaptive sampling (1-iterator form) uses a 3D Euclidean chord-deviation test
+in `(x, y, z)` space, normalized by the curve's bounding-box diagonal. Three
+interior probes per interval prevent aliasing against periodic curves, exactly
+mirroring `ParametricPlot`'s 2D algorithm extended to 3D.
+
+`ColorFunction` receives **scaled spatial coordinates** `{xs, ys, zs}` (in
+`[0,1]` over the sampled range when `ColorFunctionScaling -> True`), not
+parameter values — this matches `Plot3D`'s convention and means a function
+like `Function[{x,y,z}, Hue[z]]` colors by height. `"Rainbow"` maps hue to
+the z-extent for surfaces and to z-range for curves. `RegionFunction` is
+tried as `f[x,y,z]` first, then falls back to `f[x,y]` forms.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `PlotPoints` | `25` | initial uniform sample count (1-iter) or grid size (2-iter) |
+| `MaxRecursion` | `6` | maximum adaptive-subdivision depth (1-iter only) |
+| `MaxPlotPoints` | `Infinity` | overall point cap (1-iter only) |
+| `Mesh` | `None` | `All`/`True` overlays sample dots (1-iter) or grid lines (2-iter) |
+| `PlotLegends` | none | `Automatic` or `"Expressions"` labels each curve; an explicit `{l1,...}` uses those labels |
+| `ColorFunction` | none | `"Rainbow"` or `f[x,y,z]`/`f[x,z]`/`f[z]` (scaled spatial); colors per segment (1-iter) or per cell (2-iter) |
+| `ColorFunctionScaling` | `True` | whether spatial coords are scaled to `[0,1]` before `ColorFunction` |
+| `RegionFunction` | none | `f[x,y,z]` mask; points where it returns `False` are excluded |
+| `PlotStyle` | `RGBColor[0.2,0.4,0.8]` | curve/surface color; a `List` of directives is accepted, so `PlotStyle -> {Blue, Opacity[0.4]}` gives a semi-transparent surface for the two-iterator form |
+| `Axes` | `True` | draws the 3D bounding-box wireframe with tick labels |
+| `Lighting` | `Automatic` | `Automatic`: per-face Lambertian shading (same model as `Plot3D`); `None`/`False`: raw flat color |
+
+All other options (`PlotRange`, `AxesLabel`, `PlotLabel`, `Background`,
+`ImageSize`, ...) are evaluated and passed through to the `Graphics3D[...]`
+result. `AspectRatio` is silently ignored (the orbit camera has no fixed
+aspect ratio). Interactive controls are the same as `Plot3D` (drag to rotate,
+scroll to zoom, `R` to reset, `S` for screenshot, `Esc` to close).
+
+**Features**:
+- `HoldAll`, `Protected`.
+- Declines to evaluate if bounds aren't numeric or `PlotPoints < 2`.
+- Auto-displays exactly like `Graphics3D`/`Plot3D`.
+
+```mathematica
+(* --- One-iterator: space curves --- *)
+In[1]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}]
+Out[1]= -Graphics3D-  (* helix *)
+
+In[2]:= ParametricPlot3D[{Sin[2 t] Cos[t], Sin[2 t] Sin[t], Cos[t]}, {t, 0, 2 Pi}]
+Out[2]= -Graphics3D-  (* spherical Lissajous *)
+
+In[3]:= ParametricPlot3D[{{Cos[t], Sin[t], 0}, {Cos[t], 0, Sin[t]}}, {t, 0, 2 Pi}]
+Out[3]= -Graphics3D-  (* two circles in different planes *)
+
+In[4]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi},
+          ColorFunction -> "Rainbow"]
+Out[4]= -Graphics3D-  (* hue sweeps with z-height *)
+
+In[5]:= ParametricPlot3D[{Cos[t], Sin[t], t/5}, {t, 0, 4 Pi}, Mesh -> All]
+Out[5]= -Graphics3D-  (* with sample dots *)
+
+(* --- Two-iterator: surface patches --- *)
+In[6]:= ParametricPlot3D[{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]},
+          {u, 0, 2 Pi}, {v, 0, Pi}]
+Out[6]= -Graphics3D-  (* unit sphere *)
+
+In[7]:= ParametricPlot3D[{(2 + Cos[v]) Cos[u], (2 + Cos[v]) Sin[u], Sin[v]},
+          {u, 0, 2 Pi}, {v, 0, 2 Pi}]
+Out[7]= -Graphics3D-  (* torus, R=2, r=1 *)
+
+In[8]:= ParametricPlot3D[{u Cos[v], u Sin[v], u},
+          {u, 0, 2}, {v, 0, 2 Pi},
+          ColorFunction -> "Rainbow", Mesh -> All]
+Out[8]= -Graphics3D-  (* cone with rainbow coloring and mesh *)
+
+In[9]:= ParametricPlot3D[{{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]},
+          {2 Cos[u] Sin[v], 2 Sin[u] Sin[v], 2 Cos[v]}},
+          {u, 0, 2 Pi}, {v, 0, Pi}]
+Out[9]= -Graphics3D-  (* two concentric spheres in palette colours *)
+
+In[10]:= ParametricPlot3D[{Cos[u] Sin[v], Sin[u] Sin[v], Cos[v]},
+           {u, 0, 2 Pi}, {v, 0, Pi}, Lighting -> None]
+Out[10]= -Graphics3D-  (* flat color, no shading *)
 ```
 
 ## ListPlot
