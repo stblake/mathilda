@@ -392,6 +392,14 @@
     "url": "documentation/arithmetic/Binomial/"
   },
   {
+    "name": "Black",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Black",
+    "url": "documentation/other-advanced/Black/"
+  },
+  {
     "name": "Blank",
     "category": "Pattern Matching",
     "slug": "pattern-matching",
@@ -424,6 +432,14 @@
     "url": "documentation/scoping-constructs/Block/"
   },
   {
+    "name": "Blue",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Blue",
+    "url": "documentation/other-advanced/Blue/"
+  },
+  {
     "name": "Boole",
     "category": "Control Flow",
     "slug": "control-flow",
@@ -432,12 +448,28 @@
     "url": "documentation/control-flow/Boole/"
   },
   {
+    "name": "Brown",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Brown",
+    "url": "documentation/other-advanced/Brown/"
+  },
+  {
     "name": "ByteCount",
     "category": "Expression Information",
     "slug": "expression-information",
     "status": "Stable",
     "summary": "ByteCount[expr] gives the number of bytes used internally by Mathilda to store expr.",
     "url": "documentation/expression-information/ByteCount/"
+  },
+  {
+    "name": "CMYKColor",
+    "category": "Graphics",
+    "slug": "graphics",
+    "status": "Stable",
+    "summary": "CMYKColor[c, m, y, k]",
+    "url": "documentation/graphics/CMYKColor/"
   },
   {
     "name": "Cancel",
@@ -686,6 +718,14 @@
     "status": "Experimental",
     "summary": "Cubics is an option for Solve that controls whether cubic",
     "url": "documentation/solutions-of-equations/Cubics/"
+  },
+  {
+    "name": "Cyan",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Cyan",
+    "url": "documentation/other-advanced/Cyan/"
   },
   {
     "name": "D",
@@ -1128,6 +1168,110 @@
     "url": "documentation/structural-manipulation/Extract/"
   },
   {
+    "name": "FLINT`Det",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`Det[m] gives the determinant of the square matrix m when every entry is an integer or rational, computed exactly and directly via FLINT (fmpq_mat_det). Returns unevaluated for a matrix with any non-rational entry.",
+    "url": "documentation/flint/Det/"
+  },
+  {
+    "name": "FLINT`Factor",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`Factor[p] gives the irreducible factorisation of the polynomial p over the rationals, computed directly via FLINT (fmpq_mpoly_factor), as Times[const, factor^exp, ...]. Multivariate. Returns unevaluated if p is not a polynomial over Q.",
+    "url": "documentation/flint/Factor/"
+  },
+  {
+    "name": "FLINT`FactorSquareFree",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`FactorSquareFree[p] gives the squarefree factorisation of the polynomial p over the rationals, computed directly via FLINT (fmpq_mpoly_factor_squarefree). Returns unevaluated if out of scope.",
+    "url": "documentation/flint/FactorSquareFree/"
+  },
+  {
+    "name": "FLINT`HurwitzZeta",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`HurwitzZeta[s, a] gives the numeric value of the Hurwitz zeta function via FLINT (acb_dirichlet_hurwitz), to the precision of the arguments. Unevaluated for symbolic arguments or at a pole.",
+    "url": "documentation/flint/HurwitzZeta/"
+  },
+  {
+    "name": "FLINT`Inverse",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`Inverse[m] gives the inverse of the square matrix m when every entry is an integer or rational, computed exactly via FLINT (fmpq_mat_inv). Returns unevaluated for a singular or non-rational matrix.",
+    "url": "documentation/flint/Inverse/"
+  },
+  {
+    "name": "FLINT`LinearSolve",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`LinearSolve[m, b] solves the square system m.x == b exactly via FLINT (fmpq_mat_solve) when m is a nonsingular rational matrix and b a rational vector or matrix. Returns unevaluated for a non-square, singular, or non-rational system.",
+    "url": "documentation/flint/LinearSolve/"
+  },
+  {
+    "name": "FLINT`MatrixRank",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`MatrixRank[m] gives the rank of the matrix m when every entry is an integer or rational, computed exactly via FLINT (fmpq_mat_rref). Returns unevaluated for a matrix with any non-rational entry.",
+    "url": "documentation/flint/MatrixRank/"
+  },
+  {
+    "name": "FLINT`PolyGamma",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`PolyGamma[n, z] gives the numeric value of the n-th derivative of the digamma function (n = 0 is digamma) via FLINT (acb_polygamma), to the precision of the arguments. Unevaluated for symbolic arguments or at a pole.",
+    "url": "documentation/flint/PolyGamma/"
+  },
+  {
+    "name": "FLINT`PolynomialGCD",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`PolynomialGCD[a, b] gives the monic greatest common divisor of the polynomials a and b over the rationals, computed directly via FLINT (fmpq_mpoly_gcd). Multivariate. Returns unevaluated if an argument is not a polynomial over Q.",
+    "url": "documentation/flint/PolynomialGCD/"
+  },
+  {
+    "name": "FLINT`Resultant",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`Resultant[a, b, x] gives the resultant of the polynomials a and b eliminating the variable x, over the rationals, computed directly via FLINT (fmpq_mpoly_resultant). Other variables are treated as coefficients. Returns unevaluated if out of scope.",
+    "url": "documentation/flint/Resultant/"
+  },
+  {
+    "name": "FLINT`RowReduce",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`RowReduce[m] gives the reduced row echelon form of the matrix m when every entry is an integer or rational, computed exactly via FLINT (fmpq_mat_rref). Returns unevaluated for a matrix with any non-rational entry.",
+    "url": "documentation/flint/RowReduce/"
+  },
+  {
+    "name": "FLINT`StieltjesGamma",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`StieltjesGamma[n] and FLINT`StieltjesGamma[n, a] give the numeric value of the n-th Stieltjes constant (generalized, at a) for a non-negative integer n, via FLINT (acb_dirichlet_stieltjes). Unevaluated for negative or non-integer n.",
+    "url": "documentation/flint/StieltjesGamma/"
+  },
+  {
+    "name": "FLINT`Zeta",
+    "category": "FLINT context",
+    "slug": "flint",
+    "status": "Stable",
+    "summary": "FLINT`Zeta[s] gives the numeric value of the Riemann zeta function at the numeric argument s (real or complex), computed to the precision of s (machine precision for exact s) via FLINT's rigorous acb arithmetic (acb_dirichlet_zeta). Unevaluated for symbolic s or at the pole s = 1.",
+    "url": "documentation/flint/Zeta/"
+  },
+  {
     "name": "Factor",
     "category": "Algebra",
     "slug": "algebra",
@@ -1464,6 +1608,14 @@
     "url": "documentation/mathematical-constants/GoldenRatio/"
   },
   {
+    "name": "Gray",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Gray",
+    "url": "documentation/other-advanced/Gray/"
+  },
+  {
     "name": "Greater",
     "category": "Comparisons",
     "slug": "comparisons",
@@ -1478,6 +1630,14 @@
     "status": "Stable",
     "summary": "x >= y or GreaterEqual[x, y]",
     "url": "documentation/comparisons/GreaterEqual/"
+  },
+  {
+    "name": "Green",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Green",
+    "url": "documentation/other-advanced/Green/"
   },
   {
     "name": "GroebnerBasis",
@@ -1832,6 +1992,14 @@
     "url": "documentation/algebra/IrreduciblePolynomialQ/"
   },
   {
+    "name": "JacobiSymbol",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "JacobiSymbol[n, m]",
+    "url": "documentation/number-theory/JacobiSymbol/"
+  },
+  {
     "name": "Join",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -1944,6 +2112,94 @@
     "url": "documentation/structural-manipulation/Level/"
   },
   {
+    "name": "LightBlue",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightBlue",
+    "url": "documentation/other-advanced/LightBlue/"
+  },
+  {
+    "name": "LightBrown",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightBrown",
+    "url": "documentation/other-advanced/LightBrown/"
+  },
+  {
+    "name": "LightCyan",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightCyan",
+    "url": "documentation/other-advanced/LightCyan/"
+  },
+  {
+    "name": "LightGray",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightGray",
+    "url": "documentation/other-advanced/LightGray/"
+  },
+  {
+    "name": "LightGreen",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightGreen",
+    "url": "documentation/other-advanced/LightGreen/"
+  },
+  {
+    "name": "LightMagenta",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightMagenta",
+    "url": "documentation/other-advanced/LightMagenta/"
+  },
+  {
+    "name": "LightOrange",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightOrange",
+    "url": "documentation/other-advanced/LightOrange/"
+  },
+  {
+    "name": "LightPink",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightPink",
+    "url": "documentation/other-advanced/LightPink/"
+  },
+  {
+    "name": "LightPurple",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightPurple",
+    "url": "documentation/other-advanced/LightPurple/"
+  },
+  {
+    "name": "LightRed",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightRed",
+    "url": "documentation/other-advanced/LightRed/"
+  },
+  {
+    "name": "LightYellow",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "LightYellow",
+    "url": "documentation/other-advanced/LightYellow/"
+  },
+  {
     "name": "Limit",
     "category": "Calculus",
     "slug": "calculus",
@@ -2038,6 +2294,14 @@
     "status": "Stable",
     "summary": "MachineNumberQ[expr] gives True if expr is a machine-precision real or complex number, and False otherwise.",
     "url": "documentation/expression-information/MachineNumberQ/"
+  },
+  {
+    "name": "Magenta",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Magenta",
+    "url": "documentation/other-advanced/Magenta/"
   },
   {
     "name": "MantissaExponent",
@@ -2158,6 +2422,14 @@
     "status": "Stable",
     "summary": "Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.",
     "url": "documentation/scoping-constructs/Module/"
+  },
+  {
+    "name": "MoebiusMu",
+    "category": "Number Theory",
+    "slug": "number-theory",
+    "status": "Stable",
+    "summary": "MoebiusMu[n] gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z[i].",
+    "url": "documentation/number-theory/MoebiusMu/"
   },
   {
     "name": "Most",
@@ -2440,6 +2712,14 @@
     "url": "documentation/assignment-and-rules/Options/"
   },
   {
+    "name": "Orange",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Orange",
+    "url": "documentation/other-advanced/Orange/"
+  },
+  {
     "name": "OrderedQ",
     "category": "Structural Manipulation",
     "slug": "structural-manipulation",
@@ -2542,6 +2822,14 @@
     "status": "Stable",
     "summary": "Piecewise[{{val_1, cond_1}, {val_2, cond_2}, ...}]",
     "url": "documentation/control-flow/Piecewise/"
+  },
+  {
+    "name": "Pink",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Pink",
+    "url": "documentation/other-advanced/Pink/"
   },
   {
     "name": "Plot",
@@ -2816,6 +3104,14 @@
     "url": "documentation/linear-algebra/PseudoInverse/"
   },
   {
+    "name": "Purple",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Purple",
+    "url": "documentation/other-advanced/Purple/"
+  },
+  {
     "name": "Put",
     "category": "File I/O",
     "slug": "file-io",
@@ -2966,6 +3262,14 @@
     "status": "Stable",
     "summary": "RealExponent[x] gives Log[10, |x|] -- the base-10 real exponent of x.",
     "url": "documentation/arithmetic/RealExponent/"
+  },
+  {
+    "name": "Red",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Red",
+    "url": "documentation/other-advanced/Red/"
   },
   {
     "name": "ReleaseHold",
@@ -3864,12 +4168,28 @@
     "url": "documentation/control-flow/While/"
   },
   {
+    "name": "White",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "White",
+    "url": "documentation/other-advanced/White/"
+  },
+  {
     "name": "With",
     "category": "Scoping Constructs",
     "slug": "scoping-constructs",
     "status": "Stable",
     "summary": "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.",
     "url": "documentation/scoping-constructs/With/"
+  },
+  {
+    "name": "Yellow",
+    "category": "Other & Advanced",
+    "slug": "other-advanced",
+    "status": "Experimental",
+    "summary": "Yellow",
+    "url": "documentation/other-advanced/Yellow/"
   },
   {
     "name": "Zeta",

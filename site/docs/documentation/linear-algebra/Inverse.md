@@ -77,6 +77,7 @@ Inexact (`Real`/MPFR) matrices are routed through the standard `common_scan_inex
 - For matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.
 - Issues `Inverse::sing` warning and returns unevaluated if the matrix is singular.
 - Issues `Inverse::matsq` warning and returns unevaluated if the argument is not a non-empty square matrix.
+- **FLINT acceleration** (when built with FLINT): an all-integer/rational matrix is inverted exactly via `fmpq_mat_inv` in polynomial time (default/division-free method); the inverse is unique so the result matches the classical path. Singular or symbolic matrices fall through unchanged. Exposed directly as `` FLINT`Inverse `` (see the FLINT` context section in *Structural Manipulation*).
 - Satisfies the relation `a . Inverse[a] == Inverse[a] . a == IdentityMatrix[n]`.
 - Satisfies the relation `Inverse[a . b] == Inverse[b] . Inverse[a]`.
 - Accepts an optional `Method -> "<name>"` argument that selects the inversion algorithm. Shares the same method-name grammar as `RowReduce` and `LinearSolve`.

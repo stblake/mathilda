@@ -48,6 +48,14 @@ MATHILDA = ROOT / "Mathilda"
 
 GITHUB_BLOB = "https://github.com/stblake/mathilda/blob/main"
 
+# The ``FLINT` `` context. Its routines are documented in a dedicated section
+# rather than the per-``System``` category machinery: they are backtick-qualified
+# (so excluded from ``discover_builtins`` and the spec-heading heuristic) and are
+# grouped together as the direct-access wrappers over the FLINT-backed kernels.
+FLINT_SLUG = "flint"
+FLINT_TITLE = "FLINT context"
+FLINT_SPEC = SPEC_DIR / "flint.md"
+
 # A built-in name: an uppercase-initial identifier, or a $-system symbol.
 # Context-qualified internal helpers (e.g. ``Solve`SolveLinearSystem``) contain a
 # backtick and therefore fail this pattern; they are intentionally excluded from
@@ -235,6 +243,57 @@ def discover_builtins():
     return found
 
 
+DOC_CALL_ANY_RE = re.compile(r'symtab_set_docstring\s*\(')
+FLINT_NAME_RE = re.compile(r"^FLINT`[A-Za-z0-9]+")
+
+
+def discover_flint_builtins():
+    """Return {full_name: {"doc": str, "module": "src/xxx.c"}} for the
+    ``FLINT` `` context routines.
+
+    Unlike the public ``System``` builtins, the FLINT wrappers register their
+    docstring against a *symbol constant* first argument
+    (``symtab_set_docstring(SYM_FLINT_Zeta, "FLINT`Zeta ...")``) rather than a
+    string literal, so ``DOC_CALL_RE`` misses them. Here the routine name is
+    recovered from the leading ``FLINT`Name`` token of the docstring text."""
+    found = {}
+    for cfile in sorted(SRC.rglob("*.c")):
+        if "external" in cfile.parts:
+            continue
+        text = cfile.read_text(errors="replace")
+        for m in DOC_CALL_ANY_RE.finditer(text):
+            # Skip the first argument (a symbol or string) up to its comma, then
+            # parse the concatenated docstring literals that follow.
+            comma = text.find(",", m.end())
+            if comma == -1:
+                continue
+            doc = _parse_concatenated_literals(text, comma + 1).strip()
+            nm = FLINT_NAME_RE.match(doc)
+            if not nm:
+                continue
+            name = nm.group(0)
+            rel = cfile.relative_to(ROOT).as_posix()
+            if name not in found or len(doc) > len(found[name]["doc"]):
+                found[name] = {"doc": doc, "module": rel}
+    return found
+
+
+def parse_flint_spec():
+    """Parse ``docs/spec/builtins/flint.md`` into an ordered list of
+    ``(full_name, body)`` pairs, one per ``## FLINT`Name`` H2 section, preserving
+    spec order for the nav. Section bodies feed the shared example miner."""
+    if not FLINT_SPEC.exists():
+        return []
+    text = FLINT_SPEC.read_text(errors="replace")
+    out = []
+    parts = re.split(r"^##\s+(.+)$", text, flags=re.M)
+    for h, body in zip(parts[1::2], parts[2::2]):
+        head = h.strip().strip("`")
+        if head.startswith("FLINT`"):
+            out.append((head, body))
+    return out
+
+
 # ===========================================================================
 # 2. Drive the binary
 # ===========================================================================
@@ -296,6 +355,10 @@ def parse_spec_files():
     categories = []
     sections = {}
     for md in sorted(SPEC_DIR.glob("*.md")):
+        # The FLINT spec is consumed by the dedicated FLINT pass, not the
+        # per-System-category machinery (its backtick names have no System page).
+        if md.name == FLINT_SPEC.name:
+            continue
         text = md.read_text(errors="replace")
         h1 = re.search(r"^#\s+(.+)$", text, re.M)
         title = h1.group(1).strip() if h1 else md.stem.replace("-", " ").title()
@@ -559,6 +622,75 @@ def render_page(info):
 
 
 # ===========================================================================
+# FLINT context section
+# ===========================================================================
+def emit_flint_section(tests_text, lim_text):
+    """Build and write the dedicated ``FLINT` `` documentation section.
+
+    Discovers the backtick-qualified FLINT routines, queries their attributes,
+    verifies the examples mined from ``docs/spec/builtins/flint.md``, and writes
+    ``documentation/flint/<Suffix>.md`` (one page per routine) plus the category
+    index and ``.pages`` nav. Returns an ordered list of entry dicts
+    ``{name, slug, status, summary, url}`` for the landing page and JSON index."""
+    flint = discover_flint_builtins()
+    if not flint:
+        return []
+
+    spec_order = parse_flint_spec()
+    bodies = {name: body for name, body in spec_order}
+    # Spec order first, then any registered routine missing from the spec.
+    names = [n for n, _ in spec_order if n in flint]
+    names += [n for n in sorted(flint) if n not in bodies]
+
+    attrs = get_attributes(names)
+    spec_rel = FLINT_SPEC.relative_to(ROOT).as_posix()
+
+    cdir = DOC_OUT / FLINT_SLUG
+    cdir.mkdir(parents=True, exist_ok=True)
+
+    entries = []
+    verified = 0
+    for name in names:
+        slug = name.split("`", 1)[1]            # filesystem/URL-safe suffix
+        body = bodies.get(name, "")
+        blocks = []
+        for inputs in mine_example_inputs(body):
+            pairs = verify_block(inputs)
+            if pairs:
+                blocks.append(pairs)
+                verified += len(pairs)
+        status = derive_status(name, flint[name]["doc"], bool(blocks),
+                               tests_text, lim_text)
+        refs = build_references(name, flint[name]["module"], FLINT_SLUG, spec_rel)
+        notes = render_impl_notes(name, attrs.get(name, []), body)
+        info = {
+            "name": name, "doc": flint[name]["doc"], "attrs": attrs.get(name, []),
+            "examples": blocks, "status": status, "references": refs,
+            "notes": notes, "overlay_body": None,
+        }
+        (cdir / f"{slug}.md").write_text(render_page(info))
+        summary = flint[name]["doc"].split("\n", 1)[0] if flint[name]["doc"] else ""
+        entries.append({"name": name, "slug": slug, "status": status,
+                        "summary": summary,
+                        "url": f"documentation/{FLINT_SLUG}/{slug}/"})
+
+    # category index + awesome-pages nav
+    idx = [f"# {FLINT_TITLE}", "",
+           f"{len(entries)} routine(s) in the ``FLINT` `` context — direct "
+           "access to the FLINT-backed kernels.", ""]
+    for e in entries:
+        first = e["summary"]
+        idx.append(f"- [`{e['name']}`]({e['slug']}.md) — {first}  _({e['status']})_"
+                   if first else f"- [`{e['name']}`]({e['slug']}.md)  _({e['status']})_")
+    (cdir / "index.md").write_text("\n".join(idx) + "\n")
+    (cdir / ".pages").write_text(
+        f"title: {FLINT_TITLE}\nnav:\n  - index.md\n  - ...\n")
+
+    print(f"  FLINT section: {len(entries)} routines, {verified} verified examples.")
+    return entries
+
+
+# ===========================================================================
 # Main
 # ===========================================================================
 def main():
@@ -699,6 +831,11 @@ def main():
             (cdir / f"{name}.md").write_text(render_page(pages[name]))
             npages += 1
 
+    # ---- FLINT` context section (its own generation path) -----------------
+    flint_entries = emit_flint_section(tests_text, lim_text)
+    npages += len(flint_entries)
+    n_cats = len([s for s in cat_order if by_cat.get(s)]) + (1 if flint_entries else 0)
+
     # ---- documentation centre landing page --------------------------------
     DOC_OUT.mkdir(parents=True, exist_ok=True)
     landing = ["# Documentation Center", "",
@@ -707,7 +844,7 @@ def main():
                "docstring), **Examples** (verified against the current build), "
                "**Implementation notes**, **Implementation status**, and "
                "**References**.", "",
-               f"_{len(pages)} functions across {len([s for s in cat_order if by_cat.get(s)])} "
+               f"_{len(pages) + len(flint_entries)} functions across {n_cats} "
                "categories. Use the search box (press `/`) to jump to any function._",
                "", "## Categories", ""]
     for slug in cat_order:
@@ -719,11 +856,18 @@ def main():
         landing.append("")
         landing.append("  ".join(f"[`{n}`]({slug}/{n}.md)" for n in members))
         landing.append("")
+    if flint_entries:
+        landing.append(f"### [{FLINT_TITLE}]({FLINT_SLUG}/index.md)")
+        landing.append("")
+        landing.append("  ".join(
+            f"[`{e['name']}`]({FLINT_SLUG}/{e['slug']}.md)" for e in flint_entries))
+        landing.append("")
     landing.append("## Alphabetical index")
     landing.append("")
-    for name in sorted(pages):
-        slug = pages[name]["category"]
-        landing.append(f"- [`{name}`]({slug}/{name}.md)")
+    alpha = [(name, pages[name]["category"], name) for name in pages]
+    alpha += [(e["name"], FLINT_SLUG, e["slug"]) for e in flint_entries]
+    for name, slug, stem in sorted(alpha):
+        landing.append(f"- [`{name}`]({slug}/{stem}.md)")
     (DOC_OUT / "index.md").write_text("\n".join(landing) + "\n")
 
     # nav ordering for the documentation/ folder
@@ -737,6 +881,11 @@ def main():
         "summary": (pages[n]["doc"].split("\n", 1)[0] if pages[n]["doc"] else ""),
         "url": f"documentation/{pages[n]['category']}/{n}/",
     } for n in sorted(pages)]
+    index += [{
+        "name": e["name"], "category": FLINT_TITLE, "slug": FLINT_SLUG,
+        "status": e["status"], "summary": e["summary"], "url": e["url"],
+    } for e in flint_entries]
+    index.sort(key=lambda d: d["name"])
     (ASSETS / "builtins.json").write_text(json.dumps(index, indent=2))
 
     # ---- summary ----------------------------------------------------------

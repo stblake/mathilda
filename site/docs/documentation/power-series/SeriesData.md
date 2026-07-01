@@ -38,6 +38,17 @@ In[5]:= SeriesData[x, 0, {1, 2, 3}, 1, 7, 2]
 Out[5]= Sqrt[x] + 2 x + 3 x^(3/2) + O[x]^(7/2)
 ```
 
+```mathematica
+In[1]:= Integrate[Series[Exp[x], {x, 0, 8}], x]
+Out[1]= x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5 + 1/720 x^6 + 1/5040 x^7 + 1/40320 x^8 + 1/362880 x^9 + O[x]^10
+
+In[2]:= D[Series[Exp[x], {x, 0, 8}], x]
+Out[2]= 1 + x + 1/2 x^2 + 1/6 x^3 + 1/24 x^4 + 1/120 x^5 + 1/720 x^6 + 1/5040 x^7 + O[x]^8
+
+In[3]:= Integrate[Series[1/x^2 + 1, {x, 0, 3}], x]
+Out[3]= -1/x + x + O[x]^5
+```
+
 ## Implementation notes
 
 **Data structures.** `SeriesData[x, x0, {a0, ..., a_{k-1}}, nmin, nmax, den]` is

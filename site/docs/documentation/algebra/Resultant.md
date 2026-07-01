@@ -65,6 +65,7 @@ expressions and handed to the linalg `Det` builtin.
 - Inputs containing algebraic-number coefficients (e.g. `Sqrt[N]`, cube roots — any `Power[X, Rational[a,b]]` with `b > 1`) are routed to the Sylvester+Det path instead, because the subresultant chain bloats geometrically when `Power[base, k/m]` forms can't be combined with their `Times[base^q, Sqrt[base]]` equivalents by `Plus` alone.
 - A size-budget guard inside the subresultant path falls back to Sylvester+Det for any pathological input where chain elements exceed ~30x the input leaf-count.
 - Automatically preserves multiplicativity (e.g., $Res(A \cdot B, Q) = Res(A, Q) Res(B, Q)$ and $Res(A^k, Q) = Res(A, Q)^k$).
+- **FLINT acceleration** (when built with FLINT): plain rational inputs are computed via `fmpq_mpoly_resultant`, which avoids the subresultant PRS coefficient growth on higher-degree / multivariate inputs. FLINT's convention matches the classical output exactly; inputs with algebraic-number or otherwise non-rational coefficients fall through to the paths above. The same kernel is exposed directly as `` FLINT`Resultant `` (see the FLINT` context section).
 
 **Attributes:** `Listable`, `Protected`.
 

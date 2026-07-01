@@ -1,6 +1,6 @@
 # Number Theory
 
-23 built-in function(s) in this category.
+25 built-in function(s) in this category.
 
 - [`ContinuedFraction`](ContinuedFraction.md) — ContinuedFraction[x, n]  _(Stable)_
 - [`CoprimeQ`](CoprimeQ.md) — CoprimeQ[n1, n2, ...]  _(Stable)_
@@ -13,7 +13,9 @@
 - [`FromContinuedFraction`](FromContinuedFraction.md) — FromContinuedFraction[{a1, a2, ..., an}]  _(Stable)_
 - [`GCD`](GCD.md) — GCD[n1, n2, ...]  _(Stable)_
 - [`IntegerPartitions`](IntegerPartitions.md) — IntegerPartitions[n]  _(Stable)_
+- [`JacobiSymbol`](JacobiSymbol.md) — JacobiSymbol[n, m]  _(Stable)_
 - [`LCM`](LCM.md) — LCM[n1, n2, ...]  _(Stable)_
+- [`MoebiusMu`](MoebiusMu.md) — MoebiusMu[n] gives the Moebius function mu(n): 0 if n has a squared prime factor, otherwise (-1)^k where k is the number of distinct primes. A non-real Gaussian-integer argument is handled over Z[i].  _(Stable)_
 - [`MultiplicativeOrder`](MultiplicativeOrder.md) — MultiplicativeOrder[k, n]  _(Stable)_
 - [`NextPrime`](NextPrime.md) — NextPrime[x] gives the next prime after x.  _(Stable)_
 - [`PartitionsP`](PartitionsP.md) — PartitionsP[n]  _(Stable)_

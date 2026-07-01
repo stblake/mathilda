@@ -15,10 +15,14 @@ subroutine, bypassing the default cascade.  Accepted method names:
   "LinearRadicals"     — Integrate`LinearRadicals (rationalise radicals of a x + b)
   "QuadraticRadicals"  — Integrate`QuadraticRadicals (Euler substitution for Sqrt[a x^2 + b x + c])
   "LinearRatioRadicals" — Integrate`LinearRatioRadicals (rationalise radicals of (a x + b)/(c x + d))
+  "ChebychevAlgebraic" — Integrate`ChebychevAlgebraic (binomial x^p (a x^r + b)^q via Chebychev's theorem)
+  "GoursatAlgebraic"   — Integrate`GoursatAlgebraic (pseudo-elliptic F/R^p, p in {1/2,1/3,2/3,1/4,3/4}, via Mobius eigendescent)
   "Weierstrass"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)
   "RischNorman"        — Integrate`RischNorman (Bronstein pmint heuristic)
   "CRCTable"           — Integrate`CRCTable (lazy-loaded CRC integral table)
   "Undefined"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)
+Method -> {"DerivativeDivides", "Substitution" -> u} pins the kernel u(x),
+trialing only that substitution.
 Named methods are strict: failure returns unevaluated, with no fallback.
 The CRCTable rules are loaded from disk on first use only.
 An applied 1-D InterpolatingFunction integrates to its antiderivative
@@ -114,7 +118,7 @@ heuristic (pmint may give up) backed by a finite table. No definite integrals,
 no multivariate integration, no constant of integration.
 
 - `Protected`, `Listable`.
-- Nine-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
+- Eleven-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
 
 **Attributes:** `Protected`.
 
