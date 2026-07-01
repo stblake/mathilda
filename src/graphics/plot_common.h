@@ -58,6 +58,11 @@ Expr* eval_color_function3(Expr* color_fn,
                             double zmin, double zmax,
                             bool scaling);
 
+/* Thermal color ramp matching Mathematica's default StreamPlot palette:
+ * dark blue-purple (t=0) → purple → red → orange → bright yellow (t=1).
+ * r, g, b are written as [0,1] doubles. */
+void thermal_rgb(double t, double* r, double* g, double* b);
+
 /* Build the $PlotLegendData[{color1,label1}, ...] metadata node that the
  * renderer reads to draw a legend box.  `legends` is the already-evaluated
  * PlotLegends option value; `bodies` / `nfun` supply per-curve body exprs

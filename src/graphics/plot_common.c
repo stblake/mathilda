@@ -221,3 +221,24 @@ Expr* build_legend_meta(Expr* legends, Expr** bodies, size_t nfun, Expr* single_
     free(entries);
     return result;
 }
+
+/* thermal_rgb — 5-stop RGB interpolation approximating Mathematica's default
+ * StreamPlot speed colormap: dark blue-purple at t=0, bright yellow at t=1. */
+void thermal_rgb(double t, double* r, double* g, double* b) {
+    static const double stops[5][3] = {
+        { 0.04, 0.00, 0.30 }, /* dark blue-purple */
+        { 0.40, 0.00, 0.60 }, /* purple           */
+        { 0.80, 0.10, 0.20 }, /* red              */
+        { 1.00, 0.55, 0.00 }, /* orange           */
+        { 1.00, 0.95, 0.20 }, /* bright yellow    */
+    };
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    double idx = t * 4.0;
+    int    i   = (int)idx;
+    if (i > 3) i = 3;
+    double f = idx - (double)i;
+    *r = stops[i][0] + f * (stops[i + 1][0] - stops[i][0]);
+    *g = stops[i][1] + f * (stops[i + 1][1] - stops[i][1]);
+    *b = stops[i][2] + f * (stops[i + 1][2] - stops[i][2]);
+}

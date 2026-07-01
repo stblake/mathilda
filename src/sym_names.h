@@ -663,6 +663,15 @@ extern const char* SYM_Joined;       /* ListPlot option: connect points */
 extern const char* SYM_DataRange;    /* ListPlot option: x-range for heights */
 extern const char* SYM_PlotMarkers;  /* ListPlot option: point glyphs */
 
+/* StreamPlot[{fx,fy}, {x,...}, {y,...}, opts...] */
+extern const char* SYM_StreamPlot;
+extern const char* SYM_Arrow;          /* Arrow[{{x1,y1},...}] primitive */
+extern const char* SYM_StreamPoints;   /* seed density/placement */
+extern const char* SYM_StreamScale;    /* stream length control */
+extern const char* SYM_StreamStyle;    /* style directives for streams */
+extern const char* SYM_StreamColorFunction; /* color by position/speed */
+extern const char* SYM_StreamColorBar;      /* internal: color-scale bar metadata */
+
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
  * pointer; in practice it is called from core_init(). */

@@ -639,6 +639,13 @@ const char* SYM_ListPlot = NULL;
 const char* SYM_Joined = NULL;
 const char* SYM_DataRange = NULL;
 const char* SYM_PlotMarkers = NULL;
+const char* SYM_StreamPlot = NULL;
+const char* SYM_Arrow = NULL;
+const char* SYM_StreamPoints = NULL;
+const char* SYM_StreamScale = NULL;
+const char* SYM_StreamStyle = NULL;
+const char* SYM_StreamColorFunction = NULL;
+const char* SYM_StreamColorBar = NULL;
 
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
@@ -1272,6 +1279,13 @@ void sym_names_init(void) {
     SYM_Joined                     = intern_symbol("Joined");
     SYM_DataRange                  = intern_symbol("DataRange");
     SYM_PlotMarkers                = intern_symbol("PlotMarkers");
+    SYM_StreamPlot                 = intern_symbol("StreamPlot");
+    SYM_Arrow                      = intern_symbol("Arrow");
+    SYM_StreamPoints               = intern_symbol("StreamPoints");
+    SYM_StreamScale                = intern_symbol("StreamScale");
+    SYM_StreamStyle                = intern_symbol("StreamStyle");
+    SYM_StreamColorFunction        = intern_symbol("StreamColorFunction");
+    SYM_StreamColorBar             = intern_symbol("$StreamColorBar");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a

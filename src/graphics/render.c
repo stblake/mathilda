@@ -828,6 +828,57 @@ static void draw_primitive(const Expr* node, DrawState* state) {
         }
         return;
     }
+    if (name == SYM_Arrow && n >= 1 && node->data.function.args[0]->type == EXPR_FUNCTION) {
+        /* Arrow[{{x1,y1},...,{xn,yn}}]: polyline shaft + filled arrowhead triangle.
+         * All sizing is in plot coordinates — no viewport-pixel dependency — so
+         * the head stays proportional to the segment at any zoom level. */
+        const Expr* arg = node->data.function.args[0];
+        size_t m = arg->data.function.arg_count;
+        if (m < 2) return;
+        double* px = malloc(sizeof(double) * m);
+        double* py = malloc(sizeof(double) * m);
+        size_t cnt = 0;
+        for (size_t i = 0; i < m; i++) {
+            double x, y;
+            if (expr_point(arg->data.function.args[i], &x, &y))
+                { px[cnt] = x; py[cnt++] = -y * state->yscale; }
+        }
+        if (cnt >= 2) {
+            double dx = px[cnt - 1] - px[cnt - 2];
+            double dy = py[cnt - 1] - py[cnt - 2];
+            double seg_len = sqrt(dx * dx + dy * dy);
+            if (seg_len < 1e-30) { free(px); free(py); return; }
+
+            /* head_len = 40% of the segment, capped at 12× line thickness so
+             * long arrows don't get disproportionately large heads. */
+            double head_len = seg_len * 0.40;
+            double thick_cap = (double)state->thickness * 12.0;
+            if (thick_cap > 0 && head_len > thick_cap) head_len = thick_cap;
+            if (head_len > seg_len) head_len = seg_len;
+
+            double ux = dx / seg_len;
+            double uy = dy / seg_len;
+            double shaft_ex = px[cnt - 1] - ux * head_len;
+            double shaft_ey = py[cnt - 1] - uy * head_len;
+
+            for (size_t i = 0; i + 1 < cnt; i++) {
+                double ex = (i + 2 == cnt) ? shaft_ex : px[i + 1];
+                double ey = (i + 2 == cnt) ? shaft_ey : py[i + 1];
+                DrawLineEx((Vector2){ (float)px[i], (float)py[i] },
+                           (Vector2){ (float)ex, (float)ey },
+                           state->thickness, state->color);
+            }
+
+            double hw = head_len * 0.40; /* half-width */
+            double nx = -uy, ny = ux;
+            Vector2 tip   = { (float)px[cnt - 1], (float)py[cnt - 1] };
+            Vector2 base1 = { (float)(shaft_ex + nx * hw), (float)(shaft_ey + ny * hw) };
+            Vector2 base2 = { (float)(shaft_ex - nx * hw), (float)(shaft_ey - ny * hw) };
+            DrawTriangle(base2, base1, tip, state->color);
+        }
+        free(px); free(py);
+        return;
+    }
     if (name == SYM_Text && n >= 2) {
         double x, y;
         if (!expr_point(node->data.function.args[1], &x, &y)) return;
@@ -1452,6 +1503,69 @@ static const Expr* find_legend_data(const Expr* graphics_expr) {
     return NULL;
 }
 
+/* Finds $StreamColorBar[spd_min, spd_max] in the Graphics option list.
+ * Returns the node (borrowed) or NULL if absent. */
+static const Expr* find_color_bar(const Expr* graphics_expr) {
+    size_t argc = graphics_expr->data.function.arg_count;
+    for (size_t i = 1; i < argc; i++) {
+        const Expr* a = graphics_expr->data.function.args[i];
+        if (a && a->type == EXPR_FUNCTION && a->data.function.head
+            && a->data.function.head->type == EXPR_SYMBOL
+            && a->data.function.head->data.symbol == SYM_StreamColorBar
+            && a->data.function.arg_count == 2)
+            return a;
+    }
+    return NULL;
+}
+
+/* Screen-space vertical color scale bar for StreamPlot's speed gradient.
+ * bar_x/y: top-left of the strip; bar_w/bar_h: dimensions in pixels.
+ * Labels are drawn to the right of the strip. */
+static void draw_color_bar(float bar_x, float bar_y, float bar_w, float bar_h,
+                           double spd_min, double spd_max) {
+    int bands = (int)bar_h;
+    if (bands < 1) bands = 1;
+
+    /* Gradient strip — top = spd_max (t=1), bottom = spd_min (t=0). */
+    for (int i = 0; i < bands; i++) {
+        double t = 1.0 - (double)i / (double)(bands > 1 ? bands - 1 : 1);
+        double rv, gv, bv;
+        thermal_rgb(t, &rv, &gv, &bv);
+        Color c = { (unsigned char)(rv * 255.0 + 0.5),
+                    (unsigned char)(gv * 255.0 + 0.5),
+                    (unsigned char)(bv * 255.0 + 0.5), 255 };
+        DrawRectangle((int)bar_x, (int)(bar_y + (float)i), (int)bar_w, 1, c);
+    }
+    DrawRectangleLinesEx((Rectangle){ bar_x, bar_y, bar_w, bar_h }, 1.0f,
+                         (Color){ 80, 80, 80, 255 });
+
+    /* 5 tick marks with numeric labels. */
+    const int nticks = 5;
+    const float scale = 1.2f;
+    float text_x = bar_x + bar_w + 5.0f;
+    for (int k = 0; k < nticks; k++) {
+        double frac = (double)k / (double)(nticks - 1);
+        double spd  = spd_min + frac * (spd_max - spd_min);
+        float  ty   = bar_y + (float)(bar_h * (1.0 - frac));
+
+        /* Tick line */
+        DrawLine((int)(bar_x + bar_w), (int)ty,
+                 (int)(bar_x + bar_w + 4), (int)ty,
+                 (Color){ 80, 80, 80, 255 });
+
+        /* Label: integer when round, else 1 decimal */
+        char buf[32];
+        double rounded = (double)(int)(spd + 0.5);
+        if (spd >= 0.0 && spd - rounded < 0.05 && rounded - spd < 0.05)
+            snprintf(buf, sizeof(buf), "%d", (int)rounded);
+        else
+            snprintf(buf, sizeof(buf), "%.1f", spd);
+
+        hershey_draw_text(buf, text_x, ty + 3.0f, scale, 0.0f,
+                          (Color){ 60, 60, 60, 255 });
+    }
+}
+
 /* Screen-space legend box: one swatch+label row per curve. Anchored
  * top-right, like the toolbar, but below it (the toolbar already owns
  * that corner) so the two never collide. */
@@ -1524,6 +1638,7 @@ void graphics_show(const Expr* graphics_expr) {
     const Expr* draw_prims = prims;
     Expr* dyn_prims = NULL;
     bool resample_ok = true;          /* cleared if this isn't a Plot object */
+    const Expr* color_bar_data = find_color_bar(graphics_expr);
     /* The x-span currently sampled (with margin) and the visible width at the
      * last re-sample -- the loop re-samples once the view leaves either. */
     double cov_lo = 0.0, cov_hi = 0.0, ref_vw = -1.0;
@@ -1860,6 +1975,22 @@ void graphics_show(const Expr* graphics_expr) {
         if (opts.frame) draw_frame_label(reg_x, reg_y, reg_w, reg_h, &opts);
         draw_extra_labels(&opts, (int)opts.width, (int)opts.height);
         if (legend_data) draw_legend(legend_data, (int)opts.width);
+
+        /* Vertical color-scale bar for StreamPlot speed gradients. */
+        if (color_bar_data) {
+            double cb_spd_min = 0.0, cb_spd_max = 1.0;
+            const Expr* a0 = color_bar_data->data.function.args[0];
+            const Expr* a1 = color_bar_data->data.function.args[1];
+            if (a0->type == EXPR_REAL) cb_spd_min = a0->data.real;
+            if (a1->type == EXPR_REAL) cb_spd_max = a1->data.real;
+            const float cb_margin = 50.0f;
+            const float cb_w = 18.0f;
+            float cb_h = opts.height - 2.0f * cb_margin;
+            if (cb_h < 20.0f) cb_h = 20.0f;
+            float cb_x = opts.width - 70.0f;
+            float cb_y = cb_margin;
+            draw_color_bar(cb_x, cb_y, cb_w, cb_h, cb_spd_min, cb_spd_max);
+        }
 
         /* On a capture frame suppress every bit of UI chrome so the saved
          * PNG holds only the plot; the capture happens just after the swap. */

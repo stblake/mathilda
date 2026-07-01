@@ -35,6 +35,10 @@ bool numericize_bound(Expr* e, double* out);
  * i beyond the table length. */
 Expr* palette_color(size_t i);
 
+/* Thermal color ramp for StreamPlot: dark blue-purple (t=0) → bright yellow (t=1).
+ * Writes [0,1] RGB components; shared with render.c for drawing the color scale bar. */
+void thermal_rgb(double t, double* r, double* g, double* b);
+
 /* Shared with listplot.c. Builds a continuous Filling strip between the
  * polyline through (xs[i], ys[i]) and the horizontal `baseline`: one quad per
  * segment, split into two triangles where a segment crosses the baseline (so

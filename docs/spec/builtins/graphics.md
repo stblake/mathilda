@@ -754,3 +754,92 @@ Out[4]= -Graphics-
 In[5]:= ListPlot[{1, 4, 9, 16}, Filling -> Axis]
 Out[5]= -Graphics-
 ```
+
+## StreamPlot
+
+Traces streamlines of a 2-D vector field `{vx, vy}` by RK4 integration
+from a uniform grid of seed points, renders each stream as an
+`Arrow[...]` primitive (a directed polyline with an arrowhead at its
+end), and returns a `Graphics[...]` object (auto-displayed).
+
+`StreamPlot` is `HoldAll`: the field components `vx`, `vy` and the
+iterator specs are held unevaluated — `x` and `y` have no values until
+the sampler substitutes numeric coordinates, exactly like `Plot`'s
+function body.
+
+```mathematica
+StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}]
+StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]
+```
+
+**Options**
+
+| Option | Default | Meaning |
+|---|---|---|
+| `StreamPoints` | `Automatic` (15×15 grid) | Integer `n` for an n×n seed grid; `Automatic` uses the default 15×15 |
+| `StreamScale` | `Automatic` | `Automatic` limits each stream to ≈ 8% of the domain diagonal; `None` lets streams run until they leave the domain; a positive real sets the fraction of the diagonal |
+| `StreamStyle` | *(thin steel-blue)* | A style directive or list applied to every stream (e.g. `Thickness[0.003]`, `RGBColor[...]`) |
+| `StreamColorFunction` | `None` | `f[x,y,vx,vy,speed]` (or fewer args) → color directive per stream at its midpoint; `"Rainbow"` maps scaled speed to hue |
+| `ColorFunction` | `None` | Alias for `StreamColorFunction` |
+| `RegionFunction` | `None` | `f[x,y]` mask; seeds and integration steps outside the region are skipped |
+| `PlotLegends` | `None` | `Automatic` / `"Expressions"` / explicit list |
+| `PlotPoints` | — | Alias for `StreamPoints` (integer only) |
+
+All other options (`PlotRange`, `Axes`, `AspectRatio`, `Frame`, `AxesLabel`,
+`GridLines`, `PlotLabel`, `Background`, `ImageSize`, …) pass through to the
+`Graphics[...]` result.
+
+Default style: `Axes -> True`, `AspectRatio -> 1` (square domain).
+
+**Arrow primitive** — `Arrow[{{x1,y1}, ..., {xn,yn}}]` draws a directed
+polyline with a filled arrowhead triangle at the final point. The
+arrowhead size scales with line thickness and viewport size so it remains
+visible at any zoom level. `Arrow` is an inert protected head (like `Line`
+or `Polygon`) and can be used directly inside `Graphics[...]`.
+
+```mathematica
+(* --- Basic stream plots --- *)
+In[1]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}]
+Out[1]= -Graphics-   (* circular rotation *)
+
+In[2]:= StreamPlot[{1 - y^2, x}, {x, -3, 3}, {y, -2, 2}]
+Out[2]= -Graphics-   (* nonlinear field *)
+
+In[3]:= StreamPlot[{Sin[x + y], Cos[x - y]}, {x, 0, 2 Pi}, {y, 0, 2 Pi}]
+Out[3]= -Graphics-
+
+(* --- Denser seeding --- *)
+In[4]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, StreamPoints -> 25]
+Out[4]= -Graphics-
+
+(* --- StreamScale: let streams run freely --- *)
+In[5]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, StreamScale -> None]
+Out[5]= -Graphics-
+
+(* --- Speed-colored streams --- *)
+In[6]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, StreamColorFunction -> "Rainbow"]
+Out[6]= -Graphics-
+
+(* --- Custom style --- *)
+In[7]:= StreamPlot[{x, -y}, {x, -2, 2}, {y, -2, 2}, StreamStyle -> {Thickness[0.004], RGBColor[0.8, 0.2, 0.1]}]
+Out[7]= -Graphics-
+
+(* --- RegionFunction: mask to a disk --- *)
+In[8]:= StreamPlot[{-y, x}, {x, -2, 2}, {y, -2, 2}, RegionFunction -> Function[{x, y}, x^2 + y^2 < 1.5^2]]
+Out[8]= -Graphics-
+
+(* --- Arrow primitive directly --- *)
+In[9]:= Graphics[{Blue, Arrow[{{0,0}, {1,0}, {1,1}}]}]
+Out[9]= -Graphics-
+```
+
+**Features**:
+- `HoldAll`, `Protected`.
+- RK4 integration; step size adapts to seed density and domain size.
+- Declines to evaluate if the field arg is not a 2-element List, or if
+  bounds aren't numeric.
+- `StreamColorFunction` is evaluated at each stream's midpoint; tries
+  `f[x,y,vx,vy,speed]` → `f[x,y,vx,vy]` → `f[x,y]` → `f[speed]` in
+  order, using the first form that returns a recognized color.
+- Arrow arrowhead size is viewport-relative: it stays visible regardless
+  of `PlotRange` scale or interactive zoom.

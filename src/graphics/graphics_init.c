@@ -169,6 +169,17 @@ void graphics_init(void) {
         "\tInternal Plot metadata read by the renderer to draw a legend box. "
         "Not intended for direct use.");
 
+    /* Internal: StreamPlot embeds $StreamColorBar[spd_min, spd_max] when
+     * PlotLegends -> Automatic is set and speed-based coloring is active.
+     * The renderer draws a vertical gradient color scale bar from spd_min
+     * (dark blue-purple) to spd_max (bright yellow). */
+    symtab_get_def("$StreamColorBar")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("$StreamColorBar",
+        "$StreamColorBar[speed_min, speed_max]\n"
+        "\tInternal StreamPlot metadata. Instructs the renderer to draw a "
+        "vertical speed color scale bar (dark blue = slow, yellow = fast). "
+        "Not intended for direct use.");
+
     symtab_add_builtin("Show", builtin_show);
     symtab_get_def("Show")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Show",
@@ -283,6 +294,33 @@ void graphics_init(void) {
         "(flat) shading with a fixed directional light; ambient 0.3, diffuse 0.7. "
         "Lighting -> None (or False): disables shading and draws surfaces in their "
         "raw PlotStyle/ColorFunction color.");
+
+    symtab_add_builtin("StreamPlot", builtin_streamplot);
+    symtab_get_def("StreamPlot")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_set_docstring("StreamPlot",
+        "StreamPlot[{vx, vy}, {x, xmin, xmax}, {y, ymin, ymax}, opts...]\n"
+        "\tTraces streamlines of the 2-D vector field {vx, vy} by RK4 integration\n"
+        "\tfrom a grid of seed points, and returns a Graphics[{Arrow[...], ...}, opts]\n"
+        "\tobject (auto-displayed). StreamPlot is HoldAll: vx, vy, and the iterator\n"
+        "\tspecs are held unevaluated until x and y are given numeric values.\n"
+        "\n"
+        "\tOptions:\n"
+        "\t  StreamPoints  - Integer n (n x n seed grid) or Automatic (default 15 x 15).\n"
+        "\t  StreamScale   – Automatic (8%% of domain diagonal, default), None (full run),\n"
+        "\t                   or a real fraction of the domain diagonal.\n"
+        "\t  StreamStyle   – Style directive(s) applied to all streams.\n"
+        "\t  StreamColorFunction / ColorFunction\n"
+        "\t                 – f[x,y,vx,vy,speed] (or fewer args) returning a color,\n"
+        "\t                   or \"Rainbow\" (hue = scaled speed).\n"
+        "\t  RegionFunction – f[x,y] mask; seeds outside the region are skipped.\n"
+        "\t  PlotLegends   – Automatic / \"Expressions\" / explicit label list.\n"
+        "\t  Standard Graphics options (PlotRange, Axes, AspectRatio, Frame, …)\n"
+        "\t                   pass through to the Graphics[...] result.");
+
+    register_inert("Arrow",
+        "Arrow[{{x1,y1}, {x2,y2}, ...}]\n"
+        "\tA graphics primitive: a directed polyline with an arrowhead at its\n"
+        "\tlast point. Used by StreamPlot to draw streamlines.");
 
     symtab_add_builtin("Plot3D", builtin_plot3d);
     symtab_get_def("Plot3D")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
