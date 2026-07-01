@@ -177,6 +177,33 @@ static void test_apart_cbrt2_explicit_vs_auto(void) {
         "Apart[1/((x - Power[2, 1/3]) (x^2 + Power[2, 1/3] x + Power[2, 2/3])), x, Extension -> Power[2, 1/3]]");
 }
 
+static void test_apart_tower_sqrt2_sqrt3(void) {
+    /* Auto-detected radical tower Q(Sqrt[2], Sqrt[3]): a denominator with
+     * two distinct radical roots must be pulled apart over the whole tower,
+     * identically to the explicit generator list. */
+    assert_eval_same(
+        "Apart[x/((x - Sqrt[2]) (x + Sqrt[3])), x, Extension -> Automatic]",
+        "Apart[x/((x - Sqrt[2]) (x + Sqrt[3])), x, Extension -> {Sqrt[2], Sqrt[3]}]");
+    /* And it genuinely decomposes (Head is Plus, not a single fraction). */
+    assert_eval_eq(
+        "Head[Apart[x/((x - Sqrt[2]) (x + Sqrt[3])), x, Extension -> Automatic]]",
+        "Plus", 0);
+}
+
+static void test_apart_parametric_sqrt_k(void) {
+    /* Partial fractions over a PARAMETRIC radical field Q(a,b,k)(Sqrt k): the
+     * classical RowReduce (symbolic Gaussian elimination over Sqrt[k] entries)
+     * blows up, so Apart takes the Bézout modular-inverse fast path. Verify it
+     * terminates and preserves value, for distinct linear factors and for an
+     * irreducible quadratic factor (the ArcTan case). */
+    assert_eval_eq("PossibleZeroQ[Apart[1/((x - a Sqrt[k]) (x - b Sqrt[k])), x] "
+                   "- 1/((x - a Sqrt[k]) (x - b Sqrt[k]))]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[Apart[1/((x^2 + k) (x - Sqrt[k])), x] "
+                   "- 1/((x^2 + k) (x - Sqrt[k]))]", "True", 0);
+    /* It actually decomposes (Head Plus, not a single fraction). */
+    assert_eval_eq("Head[Apart[1/((x - a Sqrt[k]) (x - b Sqrt[k])), x]]", "Plus", 0);
+}
+
 /* =========================== Bail-out paths =========================== */
 
 static void test_extension_none_blocks_autodetect(void) {
@@ -495,16 +522,27 @@ static void test_plcm_multivar_three_poly_vars_expanded(void) {
 
 /* --- Phase D boundary: divisibility-by-γ-only-unit cases --- */
 static void test_pgcd_multivar_divisible_by_unit(void) {
-    /* One input divides the other.  Q(γ)-GCD = (x - 1)(Sqrt[2] + Sqrt[3]) —
-     * Phase D recovers this exactly because the "unit" Sqrt[2]+Sqrt[3]
-     * appears as a polynomial-in-γ factor in both inputs (one occurrence
-     * each), so the Q[γ,x]-GCD agrees with the canonical Q(γ)[x]-GCD. */
+    /* One input divides the other. The factors Sqrt[2]+Sqrt[3] and
+     * Sqrt[2]-Sqrt[3] are UNITS in Q(Sqrt[2],Sqrt[3]) (their product is -1), so
+     * the true GCD is x - 1. The FLINT tower engine returns that canonical monic
+     * form. The classical Phase D path, treating γ = Sqrt[2]+Sqrt[3] as a
+     * polynomial variable, instead recovers the associate (x-1)(Sqrt[2]+Sqrt[3])
+     * — correct up to the unit. */
+#ifdef USE_FLINT
+    assert_eval_eq(
+        "PolynomialGCD["
+        "(x - 1) (Sqrt[2] + Sqrt[3]), "
+        "(x - 1) (Sqrt[2] + Sqrt[3]) (Sqrt[2] - Sqrt[3]), "
+        "Extension -> Automatic]",
+        "-1 + x", 0);
+#else
     assert_eval_eq(
         "PolynomialGCD["
         "(x - 1) (Sqrt[2] + Sqrt[3]), "
         "(x - 1) (Sqrt[2] + Sqrt[3]) (Sqrt[2] - Sqrt[3]), "
         "Extension -> Automatic]",
         "-Sqrt[2] - Sqrt[3] + Sqrt[2] x + Sqrt[3] x", 0);
+#endif
 }
 
 static void test_pgcd_multivar_high_gamma_power_collapse(void) {
@@ -774,6 +812,8 @@ int main(void) {
 
     TEST(test_apart_no_extension);
     TEST(test_apart_cbrt2_explicit_vs_auto);
+    TEST(test_apart_tower_sqrt2_sqrt3);
+    TEST(test_apart_parametric_sqrt_k);
 
     TEST(test_extension_none_blocks_autodetect);
     TEST(test_explicit_alpha_wins_over_automatic);

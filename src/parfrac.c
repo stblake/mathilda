@@ -22,6 +22,30 @@
  * coming from extension_autodetect).  Defined below `builtin_apart`. */
 static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha);
 
+/* True if `e` contains a symbolic radical Power[base, Rational[p,q]] (q >= 2)
+ * whose base is not an integer — i.e. a Sqrt[k]-style radical over a parameter.
+ * These are the coefficients that make the classical partial-fraction RowReduce
+ * (symbolic Gaussian elimination) blow up; the residue-formula fast path is
+ * gated on this so plain-rational Apart keeps its existing output. */
+static bool apart_has_symbolic_radical(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_SYMBOL && h->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2) {
+        const Expr* base = e->data.function.args[0];
+        const Expr* exp  = e->data.function.args[1];
+        if (exp->type == EXPR_FUNCTION && exp->data.function.head
+            && exp->data.function.head->type == EXPR_SYMBOL
+            && exp->data.function.head->data.symbol == SYM_Rational
+            && base->type != EXPR_INTEGER && base->type != EXPR_BIGINT) {
+            return true;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (apart_has_symbolic_radical(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* builtin_apart(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
@@ -36,15 +60,26 @@ Expr* builtin_apart(Expr* res) {
     if (apart_argc != 1 && apart_argc != 2) return NULL;
 
     /* Auto-detect: when Extension -> Automatic was given but no explicit α,
-     * scan the input for a single algebraic generator.  Tier-1 routes only
-     * single-generator detections (n == 1); multi-generator towers fall
-     * back to no-extension. */
+     * scan the input for algebraic generators.  A single generator (n == 1)
+     * is passed as the bare α; a multi-generator tower (n >= 2) is passed as
+     * the List {α_1, ..., α_n}, which the downstream Together / Factor calls
+     * honour (Factor via qa_factor_with_extension_tower, Together via
+     * qa_cancel_with_tower). This lets Apart split a denominator like
+     * (x - Sqrt[2])(x + Sqrt[3]) over the whole tower Q(Sqrt[2], Sqrt[3]). */
     Expr* apart_alpha_auto = NULL;
     QATower* apart_auto_tower = NULL;
     if (!apart_alpha && auto_flag) {
         apart_auto_tower = extension_autodetect(res->data.function.args[0]);
         if (apart_auto_tower && apart_auto_tower->n == 1) {
             apart_alpha_auto = expr_copy(apart_auto_tower->alpha_renders[0]);
+            apart_alpha = apart_alpha_auto;
+        } else if (apart_auto_tower && apart_auto_tower->n >= 2) {
+            Expr** gens = malloc(sizeof(Expr*) * apart_auto_tower->n);
+            for (int i = 0; i < apart_auto_tower->n; i++)
+                gens[i] = expr_copy(apart_auto_tower->alpha_renders[i]);
+            apart_alpha_auto = expr_new_function(
+                expr_new_symbol(SYM_List), gens, (size_t)apart_auto_tower->n);
+            free(gens);
             apart_alpha = apart_alpha_auto;
         }
     }
@@ -216,7 +251,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
     
     Expr* Q = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQuotient), (Expr*[]){expr_copy(N), expr_copy(D), expr_copy(var)}, 3));
     Expr* R = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialRemainder), (Expr*[]){expr_copy(N), expr_copy(D), expr_copy(var)}, 3));
-    
+
     /* Factor the denominator over Q (default) or Q(α) when an Extension
      * option was supplied to Apart.  Splitting D over the extension lets
      * partial-fraction decomposition produce e.g. linear factors in
@@ -239,7 +274,7 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
             expr_new_symbol(SYM_Factor), (Expr*[]){expr_copy(D)}, 1));
     }
     expr_free(N); expr_free(D);
-    
+
     size_t num_args = 1;
     Expr** args = &f_den;
     if (f_den->type == EXPR_FUNCTION && f_den->data.function.head->data.symbol == SYM_Times) {
@@ -281,6 +316,86 @@ static Expr* apart_impl(Expr* res, size_t apart_argc, const Expr* apart_alpha) {
         return res;
     }
     
+    /* Fast path — Bézout modular-inverse partial fraction for a squarefree
+     * denominator over a radical field.  The classical solve below builds an
+     * S×(S+1) matrix and RowReduces it; over Sqrt[k]-laden coefficients that
+     * symbolic Gaussian elimination blows up (the parametric rational-
+     * integrator's Apart blocker), and even after the Sqrt[k]->S collapse a
+     * multivariate-rational RowReduce is exponential.  Instead, for distinct
+     * irreducible factors p_i (multiplicity 1, ANY degree — so it also covers
+     * the irreducible quadratics that yield ArcTan), the partial fraction is
+     *     R/D = sum_i A_i / p_i,   A_i = R * (D/p_i)^{-1} mod p_i,
+     * where (D/p_i)^{-1} mod p_i comes from PolynomialExtendedGCD(D/p_i, p_i)
+     * = {g, {u, v}} with u*(D/p_i) + v*p_i = g (a unit, since the factors are
+     * coprime): A_i = PolynomialRemainder[R*u, p_i, x] / g.  Every step is a
+     * low-degree operation over the field, each a fast Sqrt[k] Cancel via the
+     * FLINT parametric path.  Gated on a symbolic radical so plain-rational
+     * Apart keeps its existing (RowReduce) output. */
+    {
+        bool squarefree = (m > 0);
+        bool bases_have_radical = false;
+        for (size_t i = 0; i < m; i++) {
+            if (ks[i] != 1) { squarefree = false; break; }
+            if (apart_has_symbolic_radical(bases[i])) bases_have_radical = true;
+        }
+        if (squarefree && (bases_have_radical || apart_has_symbolic_radical(R))) {
+            Expr* sum = Q;   /* take ownership of the polynomial part */
+            for (size_t i = 0; i < m; i++) {
+                /* q_i = D / p_i = C * prod_{j != i} p_j. */
+                Expr* qi = expr_copy(C);
+                for (size_t j = 0; j < m; j++) {
+                    if (j == i) continue;
+                    qi = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){qi, expr_copy(bases[j])}, 2));
+                }
+                /* {g, {u, v}} = PolynomialExtendedGCD[q_i, p_i, x]. */
+                Expr* egcd = eval_and_free(expr_new_function(
+                    expr_new_symbol(SYM_PolynomialExtendedGCD),
+                    (Expr*[]){ qi, expr_copy(bases[i]), expr_copy(var) }, 3));
+                Expr* g_unit = NULL; Expr* u = NULL;
+                if (egcd->type == EXPR_FUNCTION && egcd->data.function.arg_count == 2
+                    && egcd->data.function.args[1]->type == EXPR_FUNCTION
+                    && egcd->data.function.args[1]->data.function.arg_count >= 1) {
+                    g_unit = expr_copy(egcd->data.function.args[0]);
+                    u = expr_copy(egcd->data.function.args[1]->data.function.args[0]);
+                }
+                expr_free(egcd);
+                if (!g_unit || !u) {   /* unexpected shape: abandon fast path */
+                    if (g_unit) expr_free(g_unit);
+                    if (u) expr_free(u);
+                    expr_free(sum); sum = NULL; break;
+                }
+                /* A_i = PolynomialRemainder[R*u, p_i, x] / g. */
+                Expr* Ru = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){expr_copy(R), u}, 2));
+                Expr* rem = eval_and_free(expr_new_function(
+                    expr_new_symbol(SYM_PolynomialRemainder),
+                    (Expr*[]){ Ru, expr_copy(bases[i]), expr_copy(var) }, 3));
+                Expr* g_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){g_unit, expr_new_integer(-1)}, 2));
+                Expr* Ai = eval_and_free(expr_new_function(expr_new_symbol(SYM_Cancel),
+                    (Expr*[]){ eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){rem, g_inv}, 2)) }, 1));
+                /* term = A_i / p_i. */
+                Expr* pi_inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){expr_copy(bases[i]), expr_new_integer(-1)}, 2));
+                Expr* term = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){Ai, pi_inv}, 2));
+                sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){sum, term}, 2));
+            }
+            if (sum) {
+                expr_free(R); expr_free(C); expr_free(f_den);
+                for (size_t i = 0; i < m; i++) expr_free(bases[i]);
+                free(bases); free(ks); expr_free(var);
+                return sum;
+            }
+            /* fast path bailed (Q consumed into a freed sum): rebuild Q=0 so the
+             * classical path below still has a valid polynomial part. */
+            Q = expr_new_integer(0);
+        }
+    }
+
     Expr* D_main = expr_new_integer(1);
     for (size_t i = 0; i < m; i++) {
         Expr* term = ks[i] == 1 ? expr_copy(bases[i]) : eval_and_free(expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){expr_copy(bases[i]), expr_new_integer(ks[i])}, 2));

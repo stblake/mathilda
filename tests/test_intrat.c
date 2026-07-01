@@ -254,6 +254,19 @@ static void test_intrationallogpart(void) {
            "RootSum[Function[t, 1 + 4 t^2], Function[t, t Log[2 t + x]]]");
 }
 
+/* Regression: a rational integrand whose coefficients live in a radical
+ * tower Q(Sqrt[2], Sqrt[3]) once drove IntRationalLogPart into a
+ * non-terminating poly_div_rem loop — the leading Sqrt[6] = Sqrt[2] Sqrt[3]
+ * coefficient never cancelled under the tower-blind whole-polynomial
+ * Together/Cancel subtraction. Division now subtracts coefficient-wise, so
+ * this terminates. The antiderivative is correct but sits in a nested-radical
+ * form Cancel cannot reduce to 0, so verify it numerically at a sample point
+ * (this also guards against re-introducing the hang). */
+static void test_intrationallogpart_tower_terminates(void) {
+    run_eq("PossibleZeroQ[(D[Integrate[1/((x - Sqrt[2]) (x - Sqrt[3])), x], x]"
+           " - 1/((x - Sqrt[2]) (x - Sqrt[3]))) /. x -> 37/10]", "True");
+}
+
 static void test_integrate_lrt_linear_q(void) {
     /* When the resultant Q factors completely into linear pieces over
      * Q, the integrator now closes the integral end-to-end. */
@@ -703,6 +716,7 @@ int main(void) {
     TEST(test_helpers_extract_constants);
     TEST(test_helpers_apartlist);
     TEST(test_intrationallogpart);
+    TEST(test_intrationallogpart_tower_terminates);
     TEST(test_integrate_lrt_linear_q);
     TEST(test_integrate_lrt_naivelogpart_fallback);
     TEST(test_integrate_parametric_biquadratic_closes);

@@ -54,6 +54,7 @@
 #include "qa.h"
 #include "qaupoly.h"
 #include "qafactor.h"
+#include "flint_bridge.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -1467,30 +1468,66 @@ static void poly_div_rem(Expr* p, Expr* q, Expr* x, Expr** out_Q, Expr** out_R) 
         expr_free(lcR);
 
         Expr* x_pow = internal_power((Expr*[]){expr_copy(x), expr_new_integer(d)}, 2);
-        Expr* term = internal_times((Expr*[]){q_coeff, x_pow}, 2);
+        Expr* term = internal_times((Expr*[]){expr_copy(q_coeff), x_pow}, 2);
 
         Expr* new_Q = internal_plus((Expr*[]){expr_copy(Q), expr_copy(term)}, 2);
         expr_free(Q);
         Q = new_Q;
 
-        Expr* term_B = internal_times((Expr*[]){term, expr_copy(expandedB)}, 2);
-        Expr* neg_term_B = internal_times((Expr*[]){expr_new_integer(-1), term_B}, 2);
-        Expr* diff = internal_plus((Expr*[]){expr_copy(R), neg_term_B}, 2);
         Expr* new_R;
         if (q_coeff_pure) {
             /* No new rational structure introduced; expand alone is      */
             /* enough to combine like terms.                              */
+            Expr* term_B = internal_times((Expr*[]){term, expr_copy(expandedB)}, 2);
+            Expr* neg_term_B = internal_times((Expr*[]){expr_new_integer(-1), term_B}, 2);
+            Expr* diff = internal_plus((Expr*[]){expr_copy(R), neg_term_B}, 2);
             new_R = expr_expand(diff);
             expr_free(diff);
         } else {
-            /* Symbolic / rational q_coeff -- run together()+cancel()      */
-            /* to unify denominators introduced by Power[lcB,-1].          */
-            Expr* together = internal_together((Expr*[]){diff}, 1);
-            Expr* cancelled = internal_cancel((Expr*[]){together}, 1);
-            new_R = expr_expand(cancelled);
-            expr_free(cancelled);
+            /* Symbolic / rational q_coeff: subtract COEFFICIENT-WISE in x.
+             * The whole-polynomial Together/Cancel path is blind to
+             * algebraic relations among nested radicals (e.g. the identity
+             * Sqrt[6] = Sqrt[2] Sqrt[3] over a tower Q(Sqrt[2], Sqrt[3])),
+             * so it can leave the leading coefficient lcR - q_coeff*lcB as
+             * a nonzero-*looking* artifact even though it is 0 -- degR then
+             * never drops and this loop spins forever.
+             *
+             * Instead build new_R = sum_{k<degR} (coeff_k(R) - q_coeff *
+             * coeff_{k-d}(B)) x^k, simplifying each coefficient on its own
+             * (where the radical relation *does* cancel), and drop the x^degR
+             * term outright: it equals lcR - q_coeff*lcB = 0 by construction.
+             * This guarantees a strict degree decrease each iteration. */
+            expr_free(term);
+            Expr* acc = expr_new_integer(0);
+            for (int k = 0; k < degR; k++) {
+                Expr* rc = get_coeff_expanded(R, x, k);
+                Expr* contrib;
+                int bk = k - d;
+                if (bk >= 0 && bk <= degB) {
+                    Expr* bc = get_coeff_expanded(expandedB, x, bk);
+                    Expr* qb = internal_times((Expr*[]){expr_copy(q_coeff), bc}, 2);
+                    Expr* negqb = internal_times((Expr*[]){expr_new_integer(-1), qb}, 2);
+                    contrib = internal_plus((Expr*[]){rc, negqb}, 2);
+                } else {
+                    contrib = rc;
+                }
+                /* Simplify this single coefficient so radical relations cancel. */
+                Expr* tg = internal_together((Expr*[]){contrib}, 1);
+                Expr* cc = internal_cancel((Expr*[]){tg}, 1);
+                if (!is_zero_poly(cc)) {
+                    Expr* xk = internal_power((Expr*[]){expr_copy(x), expr_new_integer(k)}, 2);
+                    Expr* term_k = internal_times((Expr*[]){cc, xk}, 2);
+                    /* internal_plus takes ownership of acc; do not free it. */
+                    acc = internal_plus((Expr*[]){acc, term_k}, 2);
+                } else {
+                    expr_free(cc);
+                }
+            }
+            new_R = expr_expand(acc);
+            expr_free(acc);
         }
 
+        expr_free(q_coeff);
         expr_free(R);
         R = new_R;
     }
@@ -1589,6 +1626,23 @@ Expr* builtin_polynomialquotient(Expr* res) {
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
     }
 
+#ifdef USE_FLINT
+    /* Parametric radical field Q(t..)(sqrt k): divide via gr_poly over
+     * fmpz_mpoly_q (the classical poly_div_rem over radical rational-function
+     * coefficients is slow — the integrator's partial-fraction step). */
+    {
+        Expr* dr = flint_parametric_field_divrem(p, q, x);
+        if (dr && dr->type == EXPR_FUNCTION && dr->data.function.arg_count == 2) {
+            Expr* quotient = expr_copy(dr->data.function.args[0]);
+            expr_free(dr);
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return quotient;
+        }
+        if (dr) expr_free(dr);
+    }
+#endif
+
     Expr *Q, *R;
     poly_div_rem(p, q, x, &Q, &R);
     if (!Q) return NULL;
@@ -1632,6 +1686,20 @@ Expr* builtin_polynomialremainder(Expr* res) {
         if (alpha_auto) { expr_free(alpha_auto); alpha_auto = NULL; }
         if (auto_tower) { qa_tower_free(auto_tower); auto_tower = NULL; }
     }
+
+#ifdef USE_FLINT
+    {
+        Expr* dr = flint_parametric_field_divrem(p, q, x);
+        if (dr && dr->type == EXPR_FUNCTION && dr->data.function.arg_count == 2) {
+            Expr* remainder = expr_copy(dr->data.function.args[1]);
+            expr_free(dr);
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return remainder;
+        }
+        if (dr) expr_free(dr);
+    }
+#endif
 
     Expr *Q, *R;
     poly_div_rem(p, q, x, &Q, &R);
@@ -2059,6 +2127,25 @@ Expr* builtin_polynomialgcd(Expr* res) {
             alpha = alpha_auto;
         }
     }
+
+#ifdef USE_FLINT
+    /* Algebraic-extension engine (FLINT): the two-argument GCD over a coefficient
+     * ring carrying radicals / roots of unity / a radical tower, which the
+     * classical Euclidean path under-reduces. The field is detected from the
+     * operands themselves, so this fires for the bare `PolynomialGCD[a, b]` that
+     * Cancel/Together issue, as well as with a trailing Extension option. Plain
+     * Q[x] and parametric inputs return NULL here and fall through. */
+    if (poly_argc == 2) {
+        Expr* fg = flint_extension_gcd(res->data.function.args[0],
+                                       res->data.function.args[1]);
+        if (fg) {
+            if (alpha_auto) expr_free(alpha_auto);
+            if (auto_tower) qa_tower_free(auto_tower);
+            return fg;
+        }
+    }
+#endif
+
     if (poly_argc != res->data.function.arg_count) {
         if (poly_argc == 0) {
             if (alpha_auto) expr_free(alpha_auto);
@@ -4264,7 +4351,18 @@ Expr* builtin_resultant(Expr* res) {
     if (!is_poly1 || !is_poly2) {
         return NULL;
     }
-    
+
+#ifdef USE_FLINT
+    /* Parametric radical field Q(t..)(sqrt k): the classical symbolic
+     * subresultant PRS blows up on the radical coefficients (this is what makes
+     * Rothstein-Trager's Res_x(A - t D', D) over Q(a,b,k)(sqrt k) hang). FLINT
+     * computes it fast via the sqrt(k) -> S collapse. */
+    {
+        Expr* fr = flint_parametric_sqrt_resultant(p1, p2, var);
+        if (fr) return fr;
+    }
+#endif
+
     return resultant_internal(p1, p2, var);
 }
 
@@ -4673,6 +4771,17 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
             return NULL;
         }
     }
+
+#ifdef USE_FLINT
+    /* Parametric radical field Q(t..)(sqrt k): the classical Euclidean xgcd
+     * over the radical coefficients blows up (the rational integrator's
+     * partial-fraction Bézout step). Route through gr_poly over FLINT's
+     * rational-function ring fmpz_mpoly_q. Only the 3-arg (no Modulus) form. */
+    if (!mod_p) {
+        Expr* fx = flint_parametric_field_xgcd(A, B, x);
+        if (fx) return fx;
+    }
+#endif
 
     Expr* r0 = expr_expand(A);
     Expr* r1 = expr_expand(B);

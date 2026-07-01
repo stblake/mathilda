@@ -15,6 +15,7 @@
 #include "mvfactor3.h"
 #include "sym_names.h"
 #include "qafactor.h"
+#include "flint_bridge.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

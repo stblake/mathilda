@@ -5,6 +5,7 @@ option(USE_ECM "Use ECM library for factorisation" ON)
 option(USE_MPFR "Use MPFR for arbitrary-precision reals (N[expr, prec])" ON)
 option(USE_LAPACK "Use BLAS/LAPACK for fast machine-precision linear algebra" ON)
 option(USE_GRAPHICS "Use Raylib for the 2D graphics engine (Graphics[]/Show[]/Plot[] rendering)" ON)
+option(USE_FLINT "Use FLINT (>= 3.0) for algebraic-extension polynomial arithmetic" ON)
 
 if(USE_MPFR)
     add_compile_definitions(USE_MPFR)
@@ -69,6 +70,32 @@ if(USE_GRAPHICS)
         message(WARNING "  macOS (Homebrew): brew install raylib")
         message(WARNING "  Ubuntu/Debian:    sudo apt install libraylib-dev")
         set(USE_GRAPHICS OFF)
+    endif()
+endif()
+
+# FLINT (>= 3.0) autodetection for the algebraic-extension engine. Mirrors the
+# makefile's pkg-config probe with the same >= 3.0 version floor (ANTIC) and
+# graceful degrade: when absent, flint_bridge.c compiles to stubs and the
+# flint_bridge_tests binary skips itself at runtime.
+if(USE_FLINT)
+    if(APPLE)
+        set(ENV{PKG_CONFIG_PATH}
+            "/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$ENV{PKG_CONFIG_PATH}")
+    endif()
+    find_package(PkgConfig QUIET)
+    if(PkgConfig_FOUND)
+        pkg_check_modules(FLINT QUIET flint>=3.0)
+    endif()
+    if(FLINT_FOUND)
+        add_compile_definitions(USE_FLINT)
+        include_directories(${FLINT_INCLUDE_DIRS})
+        link_directories(${FLINT_LIBRARY_DIRS})
+        link_libraries(${FLINT_LIBRARIES})
+    else()
+        message(WARNING "FLINT >= 3.0 not detected; building tests with USE_FLINT=OFF")
+        message(WARNING "  macOS (Homebrew): brew install flint")
+        message(WARNING "  Ubuntu/Debian:    sudo apt install libflint-dev   (needs >= 3.0)")
+        set(USE_FLINT OFF)
     endif()
 endif()
 
@@ -315,6 +342,7 @@ set(COMMON_SRC
     ../src/rationalize.c
     ../src/common.c
     ../src/poly/zupoly.c
+    ../src/poly/flint_bridge.c
     ../src/poly/bpoly.c
     ../src/poly/mpoly.c
     ../src/poly/mvfactor.c
@@ -443,6 +471,10 @@ add_executable(zero_test_tests test_zero_test.c ${COMMON_SRC})
 target_link_libraries(zero_test_tests m)
 target_include_directories(zero_test_tests PRIVATE ../src)
 add_test(NAME zero_test_tests COMMAND zero_test_tests)
+
+add_executable(flint_bridge_tests test_flint_bridge.c ${COMMON_SRC})
+target_include_directories(flint_bridge_tests PRIVATE ../src)
+add_test(NAME flint_bridge_tests COMMAND flint_bridge_tests)
 
 add_executable(list_tests test_list.c ${COMMON_SRC})
 target_include_directories(list_tests PRIVATE ../src)

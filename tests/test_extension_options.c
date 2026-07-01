@@ -127,9 +127,15 @@ void test_cancel_extension(void) {
     run_eq("Cancel[(x^4 - 4)/(x^2 - 2), Extension -> Sqrt[2]]",
            "2 + x^2");
 
-    /* No extension: Sqrt[2] is treated as opaque, so the cancellation
-     * does not fire and the input is returned essentially unchanged. */
+    /* Without an explicit extension option: the FLINT engine auto-detects the
+     * field Q(Sqrt[2]) from the operands and cancels rigorously,
+     * (x^2 - 2)/(x - Sqrt[2]) = x + Sqrt[2]. Without FLINT, Sqrt[2] is opaque to
+     * the classical path and the fraction is returned essentially unchanged. */
+#ifdef USE_FLINT
+    run_eq("Cancel[(x^2 - 2)/(x - Sqrt[2])]", "Sqrt[2] + x");
+#else
     run_eq("Cancel[(x^2 - 2)/(x - Sqrt[2])]", "(-2 + x^2)/(-Sqrt[2] + x)");
+#endif
 
     /* Cube-root extension: (x^3 - 2)/(x - 2^(1/3)) = x^2 + 2^(1/3) x + 2^(2/3). */
     run_eq("Cancel[(x^3 - 2)/(x - 2^(1/3)), Extension -> 2^(1/3)]",

@@ -1666,6 +1666,10 @@ QATower* qa_resolve_extension_tower(Expr* const* alpha_exprs, int n) {
     return t;
 }
 
+/* Forward decls: defined below (shared with the Cancel/Together tower path). */
+static Expr* decompose_redundant_sqrts(const Expr* e, const QATower* t);
+static Expr* tower_substitute_alphas(const Expr* e, const QATower* t);
+
 Expr* qa_factor_with_extension_tower(const Expr* poly,
                                      Expr* const* alpha_exprs,
                                      int n_alphas,
@@ -1681,20 +1685,25 @@ Expr* qa_factor_with_extension_tower(const Expr* poly,
     QATower* t = qa_resolve_extension_tower(alpha_exprs, n_alphas);
     if (!t) return NULL;
 
-    /* Substitute each user-side α_i (its surface form) with its
-     * polynomial-in-γ_internal Expr in the input.  After this pass,
-     * `poly_internal`'s only "extension symbol" is QA_ALPHA_INTERNAL,
-     * so qa_factor_inner can lift it directly without further surface-
-     * level substitution. */
-    Expr* poly_internal = expr_copy((Expr*)poly);
-    for (int i = 0; i < t->n; i++) {
-        Expr* alpha_in_gamma_int = qanum_to_expr_in_gamma_sym(
-            t->alphas[i], QA_ALPHA_INTERNAL);
-        Expr* old = poly_internal;
-        poly_internal = expr_subst(old, t->alpha_renders[i], alpha_in_gamma_int);
-        expr_free(old);
-        expr_free(alpha_in_gamma_int);
-    }
+    /* Decompose composite radicals (e.g. Sqrt[6] -> Times[Sqrt[2], Sqrt[3]])
+     * into the tower's prime-Sqrt generators BEFORE substitution, exactly as
+     * qa_cancel_with_tower does. Without this, a cross term like Sqrt[6] that
+     * arises from expanding (x - Sqrt[2])(x - Sqrt[3]) is neither Sqrt[2] nor
+     * Sqrt[3], so the per-generator substitution below misses it, leaving a
+     * stray radical that qa_factor_inner cannot lift -> the factor silently
+     * fails. */
+    Expr* poly_decomposed = decompose_redundant_sqrts(poly, t);
+
+    /* Substitute each tower generator α_i with its polynomial-in-γ form
+     * (a polynomial in QA_ALPHA_INTERNAL). Reuse tower_substitute_alphas —
+     * the same routine the Cancel/Together tower path uses — which matches
+     * radicals by base value via expand_radicals_to_atomic_poly, so it
+     * catches the Sqrt-headed factors produced by decompose_redundant_sqrts
+     * (a bare structural expr_subst against the Power[c,1/2]-form renders
+     * would miss them). After this pass `poly_internal`'s only extension
+     * symbol is QA_ALPHA_INTERNAL, so qa_factor_inner lifts it directly. */
+    Expr* poly_internal = tower_substitute_alphas(poly_decomposed, t);
+    expr_free(poly_decomposed);
 
     Expr* result = qa_factor_inner(
         poly_internal, t->ext,
@@ -4462,10 +4471,10 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
         expr_free(num_back);
     } else {
         Expr* inv_args[2] = { den_back, expr_new_integer(-1) };
-        Expr* inv = evaluate(expr_new_function(
+        Expr* inv = eval_and_free(expr_new_function(
             expr_new_symbol(SYM_Power), inv_args, 2));
         Expr* times_args[2] = { num_back, inv };
-        result = evaluate(expr_new_function(
+        result = eval_and_free(expr_new_function(
             expr_new_symbol(SYM_Times), times_args, 2));
     }
 

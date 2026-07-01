@@ -1,6 +1,20 @@
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
+#ifdef USE_FLINT
+    /* Parametric radical field Q(t..)(sqrt k), k a free symbol: factor over the
+     * field via FLINT (sqrt(k) -> S collapse -> multivariate factoring over Q).
+     * The classical algebraic-factoring path (qafactor/Trager) is built for
+     * constant radicands and blows up / hangs on a symbolic radicand — this is
+     * the Apart/Factor blocker in the parametric rational integrator. Only fires
+     * when a Sqrt[symbol] is actually present, matching WL's default of factoring
+     * over the field the input's radicals generate. */
+    if (res->data.function.arg_count == 1) {
+        Expr* pf = flint_parametric_sqrt_factor(res->data.function.args[0]);
+        if (pf) return pf;
+    }
+#endif
+
     /* Phase G5: Extension -> α option.  Walk trailing args looking for
      * Rule[Extension, α] / RuleDelayed[Extension, α].  When present,
      * dispatch to the algebraic-factoring path in qafactor.c (Trager).

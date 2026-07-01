@@ -641,6 +641,26 @@ static void test_g6_x2_minus_3_q_sqrt2_sqrt3(void) {
         "(x - Sqrt[3]) (x + Sqrt[3])");
 }
 
+/* Composite-radical coefficient: the input already carries the cross term
+ * Sqrt[6] = Sqrt[2] Sqrt[3] (as it does after expanding (x-Sqrt[2])(x-Sqrt[3])).
+ * Sqrt[6] is neither generator Sqrt[2] nor Sqrt[3], so it must be decomposed
+ * into the prime-Sqrt basis before the tower substitution — otherwise the
+ * stray radical survives and the factor silently fails (returns the input). */
+static void test_g6_composite_radical_coeff(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - (Sqrt[2] + Sqrt[3]) x + Sqrt[6], "
+        "Extension -> {Sqrt[2], Sqrt[3]}]",
+        "(x - Sqrt[2]) (x - Sqrt[3])");
+}
+
+/* Same, over a different prime pair (Sqrt[15] = Sqrt[3] Sqrt[5]). */
+static void test_g6_composite_radical_coeff_15(void) {
+    assert_factor_eq_str(
+        "Factor[x^2 - (Sqrt[3] + Sqrt[5]) x + Sqrt[15], "
+        "Extension -> {Sqrt[3], Sqrt[5]}]",
+        "(x - Sqrt[3]) (x - Sqrt[5])");
+}
+
 /* Generator-order independence: same compositum, swapped list order. */
 static void test_g6_order_independence(void) {
     assert_factor_eq_str(
@@ -864,6 +884,8 @@ int main(void) {
     TEST(test_g6_min_poly_sqrt2_sqrt3);
     TEST(test_g6_x2_minus_2_q_sqrt2_sqrt3);
     TEST(test_g6_x2_minus_3_q_sqrt2_sqrt3);
+    TEST(test_g6_composite_radical_coeff);
+    TEST(test_g6_composite_radical_coeff_15);
     TEST(test_g6_order_independence);
     TEST(test_g6_x4_plus_1_q_sqrt2_i);
     TEST(test_g6_alpha_in_input);

@@ -2,6 +2,7 @@ USE_ECM ?= 1
 USE_MPFR ?= 1
 USE_LAPACK ?= 1
 USE_GRAPHICS ?= 1
+USE_FLINT ?= 1
 
 CC = gcc
 CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I/usr/local/include
@@ -93,6 +94,29 @@ ifeq ($(USE_GRAPHICS), 1)
     $(warning   macOS (Homebrew): brew install raylib)
     $(warning   Ubuntu/Debian:    sudo apt install libraylib-dev)
     override USE_GRAPHICS := 0
+  endif
+endif
+
+# FLINT (>= 3.0) for fast, rigorous polynomial arithmetic over algebraic
+# extensions — multivariate GCD/factoring over Q (fmpq_mpoly), univariate
+# GCD/factoring over a number field Q(alpha) (the generic-ring `gr` layer +
+# ANTIC, merged into FLINT at 3.0), and the finite-field multivariate workhorse
+# (fq_nmod_mpoly) used by the parametric Q(t)(alpha) outer loop. See
+# ALGEBRAIC_EXTENSION_ARITHMETIC_PLAN.md. Hard deps (GMP, MPFR) are already
+# linked. System library only (LGPL-3, GPLv3-compatible) — never vendored.
+# Autodetected via pkg-config with a >= 3.0 version floor (older packages lack
+# ANTIC); when absent the build still succeeds and the algebraic-extension
+# Cancel/Together/Apart/Factor paths fall back to the classical (slower but
+# rigorous) code, matching the USE_MPFR=0 / USE_LAPACK=0 graceful-degrade policy.
+ifeq ($(USE_FLINT), 1)
+  ifneq ($(shell $(PKG_CONFIG) --exists 'flint >= 3.0' 2>/dev/null && echo y),)
+    CFLAGS  += -DUSE_FLINT $(shell $(PKG_CONFIG) --cflags flint)
+    LDFLAGS += $(shell $(PKG_CONFIG) --libs flint)
+  else
+    $(warning FLINT >= 3.0 not detected; building with USE_FLINT=0 (algebraic-extension GCD/Factor use the classical fallback))
+    $(warning   macOS (Homebrew): brew install flint)
+    $(warning   Ubuntu/Debian:    sudo apt install libflint-dev   (needs >= 3.0 for ANTIC))
+    override USE_FLINT := 0
   endif
 endif
 
