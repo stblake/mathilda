@@ -155,6 +155,19 @@ static Expr* simplify_e(Expr* e) {
     if (!e) return NULL;
     return eval_take(mk_fn1("Simplify", e));
 }
+/* PowerExpand[e]; consumes e.  Collapses Sqrt of a perfect square (e.g.
+ * Sqrt[k^2] -> k) under the positive-branch convention the integrator already
+ * uses for radicands.  Applied to the V4 fixed points so a parameter-dependent
+ * involution such as t -> 1/(k^2 t), whose fixed points Solve returns as the
+ * spurious nested radicals +-Sqrt[k^2]/k^2, reduces to the intended +-1/k --
+ * otherwise Sqrt[k^2] rides through lc/Q/gx as a SECOND algebraic generator and
+ * the genus-0 integrand never closes.  A no-op on genuinely nested radicals
+ * (Sqrt[1-k^2]) and on numeric constants; the final answer is still checked by
+ * diff_back_ok. */
+static Expr* powerexpand_e(Expr* e) {
+    if (!e) return NULL;
+    return eval_take(mk_fn1("PowerExpand", e));
+}
 /* Numerator[e] / Denominator[e]; borrow e. */
 static Expr* numer_of(Expr* e) {
     return eval_take(internal_numerator((Expr*[]){ expr_copy(e) }, 1));
@@ -262,32 +275,52 @@ static void gs_log_expr(const char* label, Expr* e) {
     if (s) free(s);
 }
 
-/* Robust differentiate-back check: is D[result, x] - f identically zero?
+/* Differentiate-back verification: is D[result, x] - f identically zero?
  *
- * The square-root reduction's antiderivative is a rational function of x and the
- * un-simplified nested radical Sqrt[lc Q(back)]; PossibleZeroQ's symbolic/real
- * sampling misfires on it (the (x - beta) poles of the unsimplified form, and
- * the complex values on the stretch where R < 0, both break real-only sampling),
- * rejecting genuinely correct results.  Instead evaluate D[result,x] - f
- * numerically at several fixed rational points -- Abs collapses the R<0 complex
- * branch to a real magnitude.  Accept iff every point at which the value is a
- * finite number is ~0 (with at least two such points); reject if any finite
- * value is plainly nonzero (the Ferrari-misfire case differs from f by O(1)).
- * Borrows result, x, f. */
+ * The ideal check is PossibleZeroQ[D[result,x] - f], and verification must NOT
+ * use Simplify.  But PossibleZeroQ currently has two failure modes on this
+ * subsystem's outputs (see POSSIBLE_ZEROQ_FAILURES.md): it MISFIRES (returns a
+ * false negative) on the residual cyclotomic-tower nested radicals of the
+ * period-3 higher-symmetry cases across a branch cut, and it is too SLOW on the
+ * very large parametric antiderivatives to fit the descent's CPU budget.  Until
+ * PossibleZeroQ handles both, verify numerically: pin the free parameters
+ * (variables other than x) to fixed rationals, then sample x and require the
+ * magnitude of D[result,x] - f to vanish (Abs collapses the R<0 complex branch).
+ * Accept iff enough sampled points are ~0 and none is plainly non-zero.  Borrows
+ * result, x, f. */
 static bool diff_back_ok(Expr* result, Expr* x, Expr* f) {
     Expr* d = eval_take(mk_fn2("D", expr_copy(result), expr_copy(x)));
     if (!d) return false;
     Expr* diff = gsub(d, expr_copy(f));        /* D[result,x] - f */
     if (!diff) return false;
 
+    /* Pin free parameters (e.g. the k in R = x(1-x)(1-k^2 x)) so the check is a
+     * decisive single-variable numeric test rather than a symbolic one. */
+    Expr* dd = expr_copy(diff);
+    {
+        Expr* vars = eval_take(mk_fn1("Variables", expr_copy(diff)));
+        if (vars && head_is(vars, SYM_List)) {
+            static const long an[8] = { 12, 17, 23, 29, 31, 37, 41, 43 };
+            static const long ad[8] = {  7,  5,  9, 11, 13, 10,  6,  8 };
+            size_t j = 0;
+            for (size_t i = 0; dd && i < vars->data.function.arg_count; i++) {
+                Expr* v = vars->data.function.args[i];
+                if (expr_eq(v, x)) continue;
+                dd = subst_eval(dd, v, make_rational(an[j % 8], ad[j % 8])); j++;
+            }
+        }
+        if (vars) expr_free(vars);
+    }
+    expr_free(diff);
+    if (!dd) return false;
+
     static const long pn[8] = { 17, 23, 31, 29, 37, 41, 19, 43 };
     static const long pd[8] = {  5,  7,  9, 11, 10, 12,  6,  8 };
-    Expr* tol_lo = make_rational(1, 1000000000000L);   /* 1e-12: accept below   */
-    Expr* tol_hi = make_rational(1, 1000000L);         /* 1e-6 : reject above   */
+    Expr* tol_lo = make_rational(1, 1000000000000L);   /* 1e-12: accept below */
+    Expr* tol_hi = make_rational(1, 1000000L);         /* 1e-6 : reject above */
     int good = 0; bool bad = false;
     for (int i = 0; i < 8 && good < 3 && !bad; i++) {
-        Expr* pt  = make_rational(pn[i], pd[i]);
-        Expr* at  = subst_eval(expr_copy(diff), x, pt);   /* consumes pt */
+        Expr* at  = subst_eval(expr_copy(dd), x, make_rational(pn[i], pd[i]));
         Expr* mag = at ? eval_take(mk_fn2("N", mk_fn1("Abs", at), mk_int(30))) : NULL;
         if (mag) {
             Expr* lo = eval_take(mk_fn2("Less",    expr_copy(mag), expr_copy(tol_lo)));
@@ -298,7 +331,7 @@ static bool diff_back_ok(Expr* result, Expr* x, Expr* f) {
             if (hi) expr_free(hi);
         }
     }
-    expr_free(tol_lo); expr_free(tol_hi); expr_free(diff);
+    expr_free(tol_lo); expr_free(tol_hi); expr_free(dd);
     return good >= 2 && !bad;
 }
 
@@ -547,6 +580,17 @@ static Expr* monomialize_root_of_unity(Expr* b, Expr* var) {
     if (!expr_free_of(b, var)) return NULL;
     Expr* nb = eval_take(mk_fn1("N", expr_copy(b)));
     if (!nb) return NULL;
+    /* This denesting is valid ONLY for a genuine numeric cyclotomic constant.
+     * With a symbolic PARAMETER present (e.g. the k in R = x(1-x)(1-k^2 x)) the
+     * base is free of the integration variable yet still depends on k, so N[b]
+     * retains Abs[..]/Arg[..]/k and the Rationalize[Arg[b]/Pi] heuristic below
+     * fabricates a spurious rational approximation of 1/Pi (113/355) times
+     * Arg[k^2] -- injecting Arg/Abs junk into the descent that then never
+     * closes.  Require N[b] to reduce to an actual number before proceeding. */
+    Expr* isnum = eval_take(mk_fn1("NumberQ", expr_copy(nb)));
+    bool numeric = expr_is_true(isnum);
+    if (isnum) expr_free(isnum);
+    if (!numeric) { expr_free(nb); return NULL; }
     Expr* tol = make_rational(1, 1000000);
     Expr* c  = eval_take(mk_fn2("Rationalize", mk_fn1("Abs", expr_copy(nb)),
                                 expr_copy(tol)));
@@ -631,7 +675,17 @@ static Expr* reduce_v4_piece(Expr* Fj, Expr* R, Expr* t, Expr* S) {
       if (ad) { expr_free(alpha); alpha = ad; } }
     if (beta) { Expr* bd = denest_const_radicals(beta, t);
                 if (bd) { expr_free(beta); beta = bd; } }
+    /* Collapse Sqrt[perfect-square] fixed points (e.g. Sqrt[k^2]/k^2 -> 1/k) so a
+     * parameter-dependent involution's descent stays over Q(param) with the single
+     * radical Sqrt[Q] instead of carrying Sqrt[k^2] as a spurious 2nd generator. */
+    { Expr* ap = powerexpand_e(expr_copy(alpha));
+      if (ap) { expr_free(alpha); alpha = ap; } }
+    if (beta) { Expr* bp = powerexpand_e(expr_copy(beta));
+                if (bp) { expr_free(beta); beta = bp; } }
     bool binf = (beta == NULL);
+    gs_log_expr("    reduce_v4_piece: alpha", alpha);
+    if (beta) gs_log_expr("    reduce_v4_piece: beta", beta);
+    else gs_log("    reduce_v4_piece: beta = Infinity");
 
     Expr* u = fresh_var();     /* intermediate Mobius variable */
     Expr* x = fresh_var();     /* output square variable        */
@@ -696,6 +750,7 @@ static Expr* reduce_v4_piece(Expr* Fj, Expr* R, Expr* t, Expr* S) {
     gs_depth++;
     Expr* G = integrate_in(integrand, x);
     gs_depth--;
+    gs_log("    reduce_v4_piece: genus-0 integrate_in %s", G ? "CLOSED" : "did NOT close");
     expr_free(integrand);
     if (!G) { expr_free(pre); expr_free(Qkeep); expr_free(lc); goto done; }
 
@@ -845,7 +900,8 @@ static Expr* goursat_v4(Expr* F, Expr* R, Expr* t) {
      * S == t has a single finite fixed point (Infinity in the other slot). */
     Expr* total = mk_int(0);
     for (int j = 1; j <= 3; j++) {
-        if (!P[j] || is_zero(P[j])) continue;
+        if (!P[j] || is_zero(P[j])) { gs_log("  projection P[%d] is zero -- skip", j); continue; }
+        gs_log_expr("  nonzero projection", P[j]);
         /* candidate anti-involutions: indices in {0,1,2} \ {j-1}.  Pick the one
          * with the cleanest (preferably real) fixed points, so the descent stays
          * in the smallest cyclotomic tower and its nested radicals all denest. */
@@ -853,9 +909,14 @@ static Expr* goursat_v4(Expr* F, Expr* R, Expr* t) {
         for (int k = 0; k < 3; k++) {
             if (k == j - 1) continue;
             long sc = involution_score(S[k], t);
+            gs_log("    candidate involution S[%d] score=%ld", k, sc);
             if (chosen < 0 || sc < best) { chosen = k; best = sc; }
         }
+        gs_log("  chose involution S[%d] (score=%ld) for P[%d]", chosen, best, j);
+        gs_log_expr("    chosen S", S[chosen]);
         Expr* piece = reduce_v4_piece(P[j], R, t, S[chosen]);
+        if (piece) gs_log_expr("  piece antiderivative", piece);
+        else gs_log("  piece FAILED to close (reduce_v4_piece -> NULL)");
         if (!piece) { expr_free(total); total = NULL; break; }
         total = mk_fn2("Plus", total, piece);
     }
@@ -2043,7 +2104,9 @@ static Expr* gs_core(Expr* f, Expr* x) {
      * (square-root case only), so D[result,x] // Simplify reduces to f.  Adopt
      * the rewrite only if the differentiate-back guard still passes on it. */
     if (result && pden == 2) {
+        gs_log("reexpress_over_radical: START");
         Expr* improved = reexpress_over_radical(result, R, x);
+        gs_log("reexpress_over_radical: DONE (%s)", improved ? "rewrote" : "no change");
         if (improved) {
             if (diff_back_ok(improved, x, f)) { expr_free(result); result = improved; }
             else expr_free(improved);
