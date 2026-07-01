@@ -1,0 +1,15 @@
+# Core formats — install all of these for full coverage.
+python-docx>=1.1
+openpyxl>=3.1
+pandas>=2.2
+pypdf>=4.3
+python-pptx>=0.6
+PyYAML>=6.0
+
+# Optional — image OCR fallback.
+# pytesseract>=0.3
+# Pillow>=10.0
+
+# Optional — scanned PDFs.
+# pdf2image>=1.17
+# pdfplumber>=0.11

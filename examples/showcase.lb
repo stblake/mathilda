@@ -1,0 +1,187 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "Mathilda Showcase",
+  "notebooks": [
+    {
+      "id": "nb-101", "title": "Calculus I — Derivatives", "x": 50, "y": 50, "width": 660, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Derivatives"}]},
+        {"cells": [{"type": "text", "source": "The derivative measures instantaneous rate of change. Mathilda supports symbolic differentiation via D[f, x]."}]},
+        {"cells": [{"type": "code", "source": "D[Sin[x]^2, x]"}]},
+        {"cells": [{"type": "code", "source": "D[Exp[x] Sin[x], x]"}]},
+        {"cells": [{"type": "code", "source": "D[x^x, x]"}]},
+        {"cells": [{"type": "code", "source": "D[Log[x^2 + 1], x]"}]},
+        {"cells": [{"type": "section", "source": "Higher-Order & Partial"}]},
+        {"cells": [{"type": "text", "source": "The n-th derivative and partial differentiation of multivariate expressions."}]},
+        {"cells": [{"type": "code", "source": "D[Sin[x], {x, 4}]"}]},
+        {"cells": [{"type": "code", "source": "D[x^2 y^3, x, y]"}]},
+        {"cells": [{"type": "code", "source": "D[Sin[x y], x]"}]},
+        {"cells": [{"type": "section", "source": "Chain Rule Examples"}]},
+        {"cells": [{"type": "code", "source": "D[Sin[Exp[x]], x]"}]},
+        {"cells": [{"type": "code", "source": "D[Log[Sin[x]], x]"}]},
+        {"cells": [{"type": "code", "source": "D[Sqrt[1 + x^2], x]"}]}
+      ]
+    },
+    {
+      "id": "nb-102", "title": "Calculus II — Integration", "x": 760, "y": 50, "width": 660, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Definite Integrals"}]},
+        {"cells": [{"type": "text", "source": "Definite integration computes the signed area under a curve between two bounds."}]},
+        {"cells": [{"type": "code", "source": "Integrate[x^2, {x, 0, 1}]"}]},
+        {"cells": [{"type": "code", "source": "Integrate[Sin[x], {x, 0, Pi}]"}]},
+        {"cells": [{"type": "code", "source": "Integrate[Exp[-x^2], {x, -Infinity, Infinity}]"}]},
+        {"cells": [{"type": "code", "source": "Integrate[1/(1 + x^2), {x, 0, 1}]"}]},
+        {"cells": [{"type": "section", "source": "Indefinite Integrals"}]},
+        {"cells": [{"type": "text", "source": "Symbolic antiderivatives — the reverse of differentiation."}]},
+        {"cells": [{"type": "code", "source": "Integrate[Sin[x] Cos[x], x]"}]},
+        {"cells": [{"type": "code", "source": "Integrate[Log[x], x]"}]},
+        {"cells": [{"type": "code", "source": "Integrate[x Exp[-x], x]"}]},
+        {"cells": [{"type": "section", "source": "Series & Limits"}]},
+        {"cells": [{"type": "text", "source": "Taylor series expand functions as infinite polynomials around a point."}]},
+        {"cells": [{"type": "code", "source": "Series[Sin[x], {x, 0, 7}]"}]},
+        {"cells": [{"type": "code", "source": "Series[Exp[x], {x, 0, 6}]"}]},
+        {"cells": [{"type": "code", "source": "Limit[Sin[x]/x, x -> 0]"}]},
+        {"cells": [{"type": "code", "source": "Limit[(1 + 1/n)^n, n -> Infinity]"}]}
+      ]
+    },
+    {
+      "id": "nb-103", "title": "Calculus III — Plots", "x": 50, "y": 650, "width": 700, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Function Visualization"}]},
+        {"cells": [{"type": "text", "source": "Plot[] generates adaptive-sampled 2D plots. Multiple functions can be overlaid."}]},
+        {"cells": [{"type": "code", "source": "Plot[Sin[x], {x, 0, 2 Pi}]"}]},
+        {"cells": [{"type": "code", "source": "Plot[{Sin[x], Cos[x], Sin[2x]}, {x, 0, 2 Pi}]"}]},
+        {"cells": [{"type": "section", "source": "Filled & Special Plots"}]},
+        {"cells": [{"type": "text", "source": "Filling->Axis shades the area between the curve and the x-axis."}]},
+        {"cells": [{"type": "code", "source": "Plot[Sin[x] + Sin[5 x], {x, 0, 4 Pi}, Filling -> Axis]"}]},
+        {"cells": [{"type": "code", "source": "Plot[Exp[-x^2/2]/Sqrt[2 Pi], {x, -4, 4}, Filling -> Axis]"}]},
+        {"cells": [{"type": "code", "source": "Plot[{x^2, x^3, Sqrt[x]}, {x, 0, 2}]"}]}
+      ]
+    },
+    {
+      "id": "nb-104", "title": "Algebra & Polynomials", "x": 1480, "y": 50, "width": 620, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Factoring & Expanding"}]},
+        {"cells": [{"type": "text", "source": "Polynomial manipulation: factoring into irreducibles, expanding products."}]},
+        {"cells": [{"type": "code", "source": "Factor[x^4 - 1]"}]},
+        {"cells": [{"type": "code", "source": "Factor[x^6 - y^6]"}]},
+        {"cells": [{"type": "code", "source": "Expand[(x + y)^5]"}]},
+        {"cells": [{"type": "code", "source": "Expand[(a - b)^4]"}]},
+        {"cells": [{"type": "section", "source": "Solving Equations"}]},
+        {"cells": [{"type": "text", "source": "Solve finds all solutions; simultaneous systems use list notation."}]},
+        {"cells": [{"type": "code", "source": "Solve[x^2 - 5 x + 6 == 0, x]"}]},
+        {"cells": [{"type": "code", "source": "Solve[x^3 - 6 x + 4 == 0, x]"}]},
+        {"cells": [{"type": "code", "source": "Solve[{x + y == 5, x - y == 1}, {x, y}]"}]},
+        {"cells": [{"type": "section", "source": "Simplification"}]},
+        {"cells": [{"type": "text", "source": "Simplify applies algebraic identities; Together combines fractions."}]},
+        {"cells": [{"type": "code", "source": "Simplify[(x^2 - 1)/(x - 1)]"}]},
+        {"cells": [{"type": "code", "source": "Together[1/x + 1/(x + 1) + 1/(x + 2)]"}]},
+        {"cells": [{"type": "code", "source": "Simplify[Sin[x]^2 + Cos[x]^2]"}]}
+      ]
+    },
+    {
+      "id": "nb-105", "title": "Number Theory", "x": 1480, "y": 680, "width": 620, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Primes & Factoring"}]},
+        {"cells": [{"type": "text", "source": "Number theory studies the intrinsic properties of integers — primality, divisibility, and structure."}]},
+        {"cells": [{"type": "code", "source": "Select[Range[50], PrimeQ]"}]},
+        {"cells": [{"type": "code", "source": "NextPrime[1000]"}]},
+        {"cells": [{"type": "code", "source": "FactorInteger[720720]"}]},
+        {"cells": [{"type": "code", "source": "FactorInteger[2^32 - 1]"}]},
+        {"cells": [{"type": "section", "source": "Arithmetic Functions"}]},
+        {"cells": [{"type": "text", "source": "EulerPhi counts integers coprime to n; Divisors lists all divisors."}]},
+        {"cells": [{"type": "code", "source": "EulerPhi[100]"}]},
+        {"cells": [{"type": "code", "source": "Divisors[360]"}]},
+        {"cells": [{"type": "code", "source": "GCD[144, 89]"}]},
+        {"cells": [{"type": "code", "source": "Table[EulerPhi[n], {n, 1, 20}]"}]},
+        {"cells": [{"type": "section", "source": "Digit Functions"}]},
+        {"cells": [{"type": "text", "source": "Digital root, digit sum, and base representations."}]},
+        {"cells": [{"type": "code", "source": "DigitSum[123456789]"}]},
+        {"cells": [{"type": "code", "source": "Table[DigitSum[2^n], {n, 1, 20}]"}]},
+        {"cells": [{"type": "code", "source": "IntegerDigits[255, 16]"}]}
+      ]
+    },
+    {
+      "id": "nb-106", "title": "Linear Algebra", "x": 1480, "y": 1380, "width": 620, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Matrix Operations"}]},
+        {"cells": [{"type": "text", "source": "Matrices encode linear transformations. Determinant, inverse, and transpose are fundamental operations."}]},
+        {"cells": [{"type": "code", "source": "Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]"}]},
+        {"cells": [{"type": "code", "source": "Inverse[{{2, 1}, {1, 3}}]"}]},
+        {"cells": [{"type": "code", "source": "Transpose[{{1, 2, 3}, {4, 5, 6}}]"}]},
+        {"cells": [{"type": "code", "source": "MatrixPower[{{1, 1}, {1, 0}}, 10]"}]},
+        {"cells": [{"type": "section", "source": "Eigenvalues & Eigenvectors"}]},
+        {"cells": [{"type": "text", "source": "Eigenvalues reveal the principal axes of a linear transformation."}]},
+        {"cells": [{"type": "code", "source": "Eigenvalues[{{2, 1}, {1, 2}}]"}]},
+        {"cells": [{"type": "code", "source": "Eigenvectors[{{3, 1}, {1, 3}}]"}]},
+        {"cells": [{"type": "section", "source": "Systems of Equations"}]},
+        {"cells": [{"type": "text", "source": "LinearSolve solves Ax=b; NullSpace finds the kernel of a matrix."}]},
+        {"cells": [{"type": "code", "source": "LinearSolve[{{1, 2}, {3, 4}}, {5, 6}]"}]},
+        {"cells": [{"type": "code", "source": "NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]"}]}
+      ]
+    },
+    {
+      "id": "nb-107", "title": "Special Functions", "x": 50, "y": 1350, "width": 640, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Gamma & Factorial"}]},
+        {"cells": [{"type": "text", "source": "The Gamma function extends factorial to complex arguments: Γ(n) = (n-1)! for integers."}]},
+        {"cells": [{"type": "code", "source": "Gamma[5]"}]},
+        {"cells": [{"type": "code", "source": "Gamma[1/2]"}]},
+        {"cells": [{"type": "code", "source": "N[Gamma[1/4], 20]"}]},
+        {"cells": [{"type": "section", "source": "Zeta & Constants"}]},
+        {"cells": [{"type": "text", "source": "The Riemann Zeta function encodes the distribution of prime numbers."}]},
+        {"cells": [{"type": "code", "source": "Zeta[2]"}]},
+        {"cells": [{"type": "code", "source": "Zeta[4]"}]},
+        {"cells": [{"type": "code", "source": "N[Pi, 50]"}]},
+        {"cells": [{"type": "code", "source": "N[GoldenRatio, 30]"}]},
+        {"cells": [{"type": "section", "source": "Combinatorics & Sequences"}]},
+        {"cells": [{"type": "text", "source": "Fibonacci numbers, Lucas numbers, and binomial coefficients appear throughout mathematics."}]},
+        {"cells": [{"type": "code", "source": "Table[Fibonacci[n], {n, 1, 15}]"}]},
+        {"cells": [{"type": "code", "source": "LucasL[10]"}]},
+        {"cells": [{"type": "code", "source": "Table[Binomial[n, 2], {n, 1, 12}]"}]},
+        {"cells": [{"type": "code", "source": "Sum[1/n^2, {n, 1, 100}]"}]}
+      ]
+    },
+    {
+      "id": "nb-108", "title": "Symbolic Summation", "x": 740, "y": 1350, "width": 620, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Finite Sums"}]},
+        {"cells": [{"type": "text", "source": "Sum computes closed-form expressions for symbolic series, bypassing term-by-term addition."}]},
+        {"cells": [{"type": "code", "source": "Sum[k, {k, 1, n}]"}]},
+        {"cells": [{"type": "code", "source": "Sum[k^2, {k, 1, n}]"}]},
+        {"cells": [{"type": "code", "source": "Sum[k^3, {k, 1, n}]"}]},
+        {"cells": [{"type": "code", "source": "Sum[1/k^2, {k, 1, Infinity}]"}]},
+        {"cells": [{"type": "section", "source": "Products & Tables"}]},
+        {"cells": [{"type": "text", "source": "Table generates lists; nested Table creates matrices."}]},
+        {"cells": [{"type": "code", "source": "Table[n^2 + n + 41, {n, 0, 10}]"}]},
+        {"cells": [{"type": "code", "source": "Table[GCD[m, n], {m, 1, 6}, {n, 1, 6}]"}]},
+        {"cells": [{"type": "code", "source": "Table[Mod[m n, 7], {m, 1, 6}, {n, 1, 6}]"}]},
+        {"cells": [{"type": "section", "source": "Numerical Experiments"}]},
+        {"cells": [{"type": "text", "source": "N[] evaluates to arbitrary precision; use it to explore convergence."}]},
+        {"cells": [{"type": "code", "source": "N[Sum[(-1)^n/(2n+1), {n, 0, 1000}]]"}]},
+        {"cells": [{"type": "code", "source": "N[Sum[1/Fibonacci[n], {n, 1, 100}], 20]"}]}
+      ]
+    },
+    {
+      "id": "nb-109", "title": "Applied Math Sampler", "x": 50, "y": 2050, "width": 680, "collapsed": false,
+      "rows": [
+        {"cells": [{"type": "section", "source": "Partial Fractions & Rational Functions"}]},
+        {"cells": [{"type": "text", "source": "Partial fraction decomposition is essential for integration of rational functions."}]},
+        {"cells": [{"type": "code", "source": "Apart[1/(x^2 - 1)]"}]},
+        {"cells": [{"type": "code", "source": "Apart[(x^2 + 1)/((x - 1)(x + 2))]"}]},
+        {"cells": [{"type": "code", "source": "Together[1/(x-1) - 1/(x+1)]"}]},
+        {"cells": [{"type": "section", "source": "Modular Arithmetic"}]},
+        {"cells": [{"type": "text", "source": "Modular arithmetic underlies cryptography and number theory algorithms."}]},
+        {"cells": [{"type": "code", "source": "PowerMod[2, 100, 13]"}]},
+        {"cells": [{"type": "code", "source": "Table[Mod[2^n, 7], {n, 0, 12}]"}]},
+        {"cells": [{"type": "code", "source": "GCD[ExtendedGCD[48, 18][[2, 1]] 48 + ExtendedGCD[48, 18][[2, 2]] 18, 1]"}]},
+        {"cells": [{"type": "section", "source": "Generating Functions"}]},
+        {"cells": [{"type": "text", "source": "Series expansions serve as generating functions for combinatorial sequences."}]},
+        {"cells": [{"type": "code", "source": "Series[1/(1 - x), {x, 0, 8}]"}]},
+        {"cells": [{"type": "code", "source": "Series[1/(1 - x - x^2), {x, 0, 10}]"}]},
+        {"cells": [{"type": "code", "source": "Series[Exp[x]/(1 - x), {x, 0, 6}]"}]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "Linear Algebra",
+  "notebooks": [
+    {
+      "id": "nb-matrix-ops",
+      "title": "Matrix Operations",
+      "x": 60,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Matrix Operations" }] },
+        { "cells": [{ "type": "text", "source": "Matrices in Mathilda are represented as nested lists: a 2x2 matrix is {{a, b}, {c, d}}. All standard operations (Det, Inverse, Transpose, Trace) are available as builtins." }] },
+        { "cells": [{ "type": "subsection", "source": "Determinant & Trace" }] },
+        { "cells": [{ "type": "code", "source": "Det[{{1, 2}, {3, 4}}]" }] },
+        { "cells": [{ "type": "code", "source": "Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]" }] },
+        { "cells": [{ "type": "code", "source": "Tr[{{1, 2}, {3, 4}}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Inverse & Transpose" }] },
+        { "cells": [{ "type": "code", "source": "Inverse[{{1, 2}, {3, 4}}]" }] },
+        { "cells": [{ "type": "code", "source": "Transpose[{{1, 2, 3}, {4, 5, 6}}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Matrix Power & Products" }] },
+        { "cells": [{ "type": "code", "source": "MatrixPower[{{1, 1}, {1, 0}}, 10]" }] },
+        { "cells": [{ "type": "code", "source": "{{1, 2}, {3, 4}} . {{5, 6}, {7, 8}}" }] },
+        { "cells": [{ "type": "text", "source": "MatrixPower[M, n] computes the nth matrix power via repeated squaring. The Fibonacci matrix {{1,1},{1,0}}^n has Fibonacci[n+1] in its top-left corner." }] }
+      ]
+    },
+    {
+      "id": "nb-eigenvalues",
+      "title": "Eigenvalues",
+      "x": 760,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Eigenvalues & Eigenvectors" }] },
+        { "cells": [{ "type": "text", "source": "Eigenvalues[M] and Eigenvectors[M] solve the characteristic equation det(M - lambda I) = 0. For symbolic matrices, results are exact; for numeric matrices, the QR algorithm is used." }] },
+        { "cells": [{ "type": "subsection", "source": "Eigenvalues" }] },
+        { "cells": [{ "type": "code", "source": "Eigenvalues[{{1, 2}, {2, 1}}]" }] },
+        { "cells": [{ "type": "code", "source": "Eigenvalues[{{2, 1, 0}, {1, 2, 1}, {0, 1, 2}}]" }] },
+        { "cells": [{ "type": "code", "source": "Eigenvalues[{{0, -1}, {1, 0}}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Eigenvectors" }] },
+        { "cells": [{ "type": "code", "source": "Eigenvectors[{{1, 2}, {2, 1}}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Characteristic Polynomial" }] },
+        { "cells": [{ "type": "code", "source": "CharacteristicPolynomial[{{1, 2}, {3, 4}}, x]" }] },
+        { "cells": [{ "type": "code", "source": "Factor[CharacteristicPolynomial[{{1, 2}, {2, 1}}, x]]" }] },
+        { "cells": [{ "type": "text", "source": "The characteristic polynomial det(M - x*I) of a symmetric matrix always has real roots. The rotation matrix {{0,-1},{1,0}} has purely imaginary eigenvalues +/- I, confirming no real eigenvectors." }] }
+      ]
+    },
+    {
+      "id": "nb-solving-systems",
+      "title": "Solving Systems",
+      "x": 1460,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Solving Linear Systems" }] },
+        { "cells": [{ "type": "text", "source": "LinearSolve[A, b] solves A.x == b for x using Gaussian elimination with partial pivoting. NullSpace[A] finds the kernel; RowReduce[A] produces the reduced row echelon form." }] },
+        { "cells": [{ "type": "subsection", "source": "LinearSolve" }] },
+        { "cells": [{ "type": "code", "source": "LinearSolve[{{2, 1}, {5, 3}}, {1, 2}]" }] },
+        { "cells": [{ "type": "code", "source": "LinearSolve[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}, {1, 1, 1}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Row Reduction" }] },
+        { "cells": [{ "type": "code", "source": "RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]" }] },
+        { "cells": [{ "type": "code", "source": "RowReduce[{{1, 2, 1, 3}, {2, 4, 3, 7}, {3, 6, 4, 10}}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Null Space" }] },
+        { "cells": [{ "type": "code", "source": "NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]" }] },
+        { "cells": [{ "type": "code", "source": "NullSpace[{{1, 0, -1}, {0, 1, -1}}]" }] },
+        { "cells": [{ "type": "text", "source": "RowReduce returns the reduced row echelon form (RREF). Pivot columns identify linearly independent columns; free columns correspond to the null space. The rank-nullity theorem states rank + nullity = number of columns." }] }
+      ]
+    }
+  ]
+}
