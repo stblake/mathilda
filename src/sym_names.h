@@ -657,6 +657,26 @@ extern const char* SYM_Joined;       /* ListPlot option: connect points */
 extern const char* SYM_DataRange;    /* ListPlot option: x-range for heights */
 extern const char* SYM_PlotMarkers;  /* ListPlot option: point glyphs */
 
+/* FLINT` context: direct REPL access to the FLINT-backed kernels that also
+ * accelerate the corresponding System` builtins transparently. Each is a thin
+ * wrapper over src/poly/flint_bridge.c (and, later, the matrix / numeric
+ * bridges). Registered in the owning subsystem's *_init(); return NULL (input
+ * out of scope) or when built without FLINT, so callers see an unevaluated
+ * FLINT`f[...]. */
+extern const char* SYM_FLINT_PolynomialGCD;   /* FLINT`PolynomialGCD[a,b] */
+extern const char* SYM_FLINT_Resultant;       /* FLINT`Resultant[a,b,x]   */
+extern const char* SYM_FLINT_Factor;          /* FLINT`Factor[p]          */
+extern const char* SYM_FLINT_FactorSquareFree;/* FLINT`FactorSquareFree[p]*/
+extern const char* SYM_FLINT_Det;             /* FLINT`Det[m]             */
+extern const char* SYM_FLINT_Inverse;         /* FLINT`Inverse[m]         */
+extern const char* SYM_FLINT_LinearSolve;     /* FLINT`LinearSolve[m,b]   */
+extern const char* SYM_FLINT_RowReduce;       /* FLINT`RowReduce[m]       */
+extern const char* SYM_FLINT_MatrixRank;      /* FLINT`MatrixRank[m]      */
+extern const char* SYM_FLINT_Zeta;            /* FLINT`Zeta[s]            */
+extern const char* SYM_FLINT_HurwitzZeta;     /* FLINT`HurwitzZeta[s,a]   */
+extern const char* SYM_FLINT_PolyGamma;       /* FLINT`PolyGamma[n,z]     */
+extern const char* SYM_FLINT_StieltjesGamma;  /* FLINT`StieltjesGamma[n]  */
+
 /* Populate every SYM_* by interning its name string. Idempotent: safe
  * to call repeatedly. Must run before any consumer reads a SYM_*
  * pointer; in practice it is called from core_init(). */

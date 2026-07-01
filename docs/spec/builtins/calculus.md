@@ -428,7 +428,19 @@ monotonically down.
      `R` with an unlucky cofactor (where algebraic-number `Together`/`Cancel`
      blows up) declines rather than hanging the cascade.  Uses
      `Solve[..., Cubics -> True, Quartics -> True]` (the Ferrari quartic solver,
-     added 2026-06-29).
+     added 2026-06-29).  The Boolean global `Integrate\`GoursatDebug` (default
+     `False`; added 2026-06-30) traces the descent to stderr when set `True`:
+     whether the integrand matches the `F(x) R(x)^(-p)` form (and the recognised
+     `F`, `R`, `p`), which involution / eigenspace criterion is tested and
+     whether it holds (`V4` trivial projection, the order-3/order-4
+     ω-eigencomponents, the period-3 trivial projection per fixed point), and the
+     differentiate-back verdict.  The flag is latched once at the outermost call,
+     so recursive genus-0 reductions share it and indent by depth.
+     A graded battery of worked examples (every exponent `p`, both numerator and
+     denominator radicals, and every involution equation, with the negative
+     controls that decline) is collected in
+     [`GOURSAT_EXERCISES.md`](../../../GOURSAT_EXERCISES.md) and mirrored as the
+     `test_graded` ladder in `tests/test_integrate_goursat.c`.
   8. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
      `Sin/Cos/Tan/Cot/Sec/Csc[x]` (or hyperbolic `Sinh/Cosh/.../Csch[x]`) with a
      kernel in a denominator; continuous `Tan[x/2]` / `Tanh[x/2]` substitution

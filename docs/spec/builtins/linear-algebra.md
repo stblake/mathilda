@@ -439,6 +439,7 @@ Gives the determinant of a square matrix.
 - `Protected`.
 - Evaluates the determinant of a square matrix symbolically or numerically using Laplace expansion.
 - Returns a warning `Det::matsq` if `m` is not a non-empty square matrix.
+- **FLINT acceleration** (when built with FLINT): a matrix whose entries are all integer or rational is computed exactly via `fmpq_mat_det` in polynomial time, avoiding the `O(n!)` Laplace expansion (e.g. a 12×12 Hilbert determinant is instant and exact). Symbolic matrices fall through to Laplace. The same kernel is exposed directly as `` FLINT`Det `` (see the FLINT` context section in *Structural Manipulation*).
 
 ```mathematica
 In[1]:= Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]
@@ -585,6 +586,7 @@ Gives the inverse of a square matrix.
 - For matrices with approximate real or complex numbers, the inverse is generated to the maximum possible precision given the input.
 - Issues `Inverse::sing` warning and returns unevaluated if the matrix is singular.
 - Issues `Inverse::matsq` warning and returns unevaluated if the argument is not a non-empty square matrix.
+- **FLINT acceleration** (when built with FLINT): an all-integer/rational matrix is inverted exactly via `fmpq_mat_inv` in polynomial time (default/division-free method); the inverse is unique so the result matches the classical path. Singular or symbolic matrices fall through unchanged. Exposed directly as `` FLINT`Inverse `` (see the FLINT` context section in *Structural Manipulation*).
 - Satisfies the relation `a . Inverse[a] == Inverse[a] . a == IdentityMatrix[n]`.
 - Satisfies the relation `Inverse[a . b] == Inverse[b] . Inverse[a]`.
 - Accepts an optional `Method -> "<name>"` argument that selects the inversion algorithm. Shares the same method-name grammar as `RowReduce` and `LinearSolve`.
@@ -740,6 +742,7 @@ Gives the row-reduced form of the matrix `m`.
 **Features**:
 - `Protected`.
 - Uses fraction-free division logic to perform exact algorithmic reduction across numerical, rational, and symbolics expressions natively avoiding division errors.
+- **FLINT acceleration** (when built with FLINT): an all-integer/rational matrix is reduced exactly via `fmpq_mat_rref`; the reduced row echelon form is unique so it matches the classical result, computed in polynomial time. Symbolic matrices fall through. Exposed directly as `` FLINT`RowReduce `` (see the FLINT` context section in *Structural Manipulation*).
 - Lives in `src/linalg/linsolve.c`; the helper primitives (Laplace cofactor determinant, exact polynomial division, tensor flatten / dimensions) are exposed from `src/linalg/util.c` and `src/linalg/det.c`.
 - Accepts an optional `Method -> "<name>"` argument:
   - `Method -> Automatic` or `Method -> "Automatic"` (default) — alias for `"DivisionFreeRowReduction"`.
@@ -842,12 +845,17 @@ Gives the rank of a matrix.
 - Works on numerical (Integer / Rational / Real / MPFR / Complex),
   big-integer, and symbolic matrices, square or rectangular.
 - **Two execution paths**:
-  - *Exact path* (every leaf is exact, no `Tolerance`): routes
+  - *Exact path* (every leaf is exact, no `Tolerance`): an all-integer/rational
+    matrix gets its rank directly from FLINT (`fmpq_mat_rref`) in polynomial
+    time when built with FLINT (rank is basis-independent, so the value matches
+    the classical count); otherwise routes
     through `RowReduce[m, Method -> "<name>"]` and counts the
     non-zero rows of the RREF, using `is_zero_poly` for structural
     zero. Honors the same `Method` grammar as NullSpace / RowReduce /
     LinearSolve / Inverse (`Automatic` / `"DivisionFreeRowReduction"`
-    / `"OneStepRowReduction"` / `"CofactorExpansion"`).
+    / `"OneStepRowReduction"` / `"CofactorExpansion"`). The FLINT kernel is
+    also exposed directly as `` FLINT`MatrixRank `` (see *Structural
+    Manipulation*).
   - *Numerical path* (any inexact leaf, or any explicit `Tolerance`):
     runs partial-pivot Gaussian forward-elimination over a portable
     `double`-complex kernel with tolerance-aware pivot selection: a
@@ -1615,6 +1623,13 @@ Finds `x` that solves the matrix equation `m . x == b`.
 - The argument `b` may be a vector (in which case the result is a
   vector) or a matrix (in which case the result is a matrix whose
   `k`-th column solves `m . x == b[[All, k]]`).
+- **FLINT acceleration** (when built with FLINT): a square, nonsingular,
+  all-integer/rational system is solved exactly via `fmpq_mat_solve` in
+  polynomial time; the unique solution matches the classical division-free
+  result. Non-square, singular, or symbolic systems fall through to the
+  classical solver (which handles rectangular / underdetermined / inconsistent
+  cases). Exposed directly as `` FLINT`LinearSolve `` (see *Structural
+  Manipulation*).
 - Higher-rank tensor inputs are supported. A rank-N `m` with
   dimensions `{d_1, ..., d_{N-1}, n}` is interpreted as a
   `(d_1 * ... * d_{N-1}) x n` linear system whose leading dimensions

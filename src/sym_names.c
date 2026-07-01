@@ -16,6 +16,19 @@ const char* SYM_AbsoluteTime = NULL;
 const char* SYM_Accumulate = NULL;
 const char* SYM_AccuracyGoal = NULL;
 const char* SYM_Algebraics = NULL;
+const char* SYM_FLINT_PolynomialGCD = NULL;
+const char* SYM_FLINT_Resultant = NULL;
+const char* SYM_FLINT_Factor = NULL;
+const char* SYM_FLINT_FactorSquareFree = NULL;
+const char* SYM_FLINT_Det = NULL;
+const char* SYM_FLINT_Inverse = NULL;
+const char* SYM_FLINT_LinearSolve = NULL;
+const char* SYM_FLINT_RowReduce = NULL;
+const char* SYM_FLINT_MatrixRank = NULL;
+const char* SYM_FLINT_Zeta = NULL;
+const char* SYM_FLINT_HurwitzZeta = NULL;
+const char* SYM_FLINT_PolyGamma = NULL;
+const char* SYM_FLINT_StieltjesGamma = NULL;
 const char* SYM_All = NULL;
 const char* SYM_Alternatives = NULL;
 const char* SYM_And = NULL;
@@ -1268,4 +1281,22 @@ void sym_names_init(void) {
      * by the user. Interning them here lets intern_mark_all_system() flag them.
      * (Surd: real n-th root.) */
     intern_symbol("Surd");
+
+    /* FLINT` context: direct-access wrappers over the FLINT-backed kernels.
+     * The backtick-qualified names live in the FLINT` context (not System`),
+     * matching how they are typed at the REPL. Registered as builtins in the
+     * owning subsystem's *_init(). */
+    SYM_FLINT_PolynomialGCD    = intern_symbol("FLINT`PolynomialGCD");
+    SYM_FLINT_Resultant        = intern_symbol("FLINT`Resultant");
+    SYM_FLINT_Factor           = intern_symbol("FLINT`Factor");
+    SYM_FLINT_FactorSquareFree = intern_symbol("FLINT`FactorSquareFree");
+    SYM_FLINT_Det              = intern_symbol("FLINT`Det");
+    SYM_FLINT_Inverse          = intern_symbol("FLINT`Inverse");
+    SYM_FLINT_LinearSolve      = intern_symbol("FLINT`LinearSolve");
+    SYM_FLINT_RowReduce        = intern_symbol("FLINT`RowReduce");
+    SYM_FLINT_MatrixRank       = intern_symbol("FLINT`MatrixRank");
+    SYM_FLINT_Zeta             = intern_symbol("FLINT`Zeta");
+    SYM_FLINT_HurwitzZeta      = intern_symbol("FLINT`HurwitzZeta");
+    SYM_FLINT_PolyGamma        = intern_symbol("FLINT`PolyGamma");
+    SYM_FLINT_StieltjesGamma   = intern_symbol("FLINT`StieltjesGamma");
 }

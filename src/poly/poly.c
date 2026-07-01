@@ -4361,6 +4361,17 @@ Expr* builtin_resultant(Expr* res) {
         Expr* fr = flint_parametric_sqrt_resultant(p1, p2, var);
         if (fr) return fr;
     }
+    /* Plain Q[x_1..x_n] resultant: eliminate `var` via FLINT's
+     * fmpq_mpoly_resultant. The classical subresultant PRS
+     * (resultant_internal) is correct but its coefficients blow up on
+     * higher-degree / multivariate inputs. FLINT's convention matches WL's
+     * (verified across asymmetric-degree, non-monic and sign-sensitive
+     * cases). Returns NULL — falling through to the PRS — when a coefficient
+     * is not rational-polynomial in the remaining symbols. */
+    if (!internal_args_contain_inexact(res)) {
+        Expr* fr = flint_polynomial_resultant(p1, p2, var);
+        if (fr) return fr;
+    }
 #endif
 
     return resultant_internal(p1, p2, var);

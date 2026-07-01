@@ -102,6 +102,45 @@ Expr* flint_extension_gcd(const Expr* a, const Expr* b);
 Expr* flint_polynomial_gcd(const Expr* a, const Expr* b);
 
 /*
+ * Plain multivariate polynomial operations over Q[x_1..x_n] (no algebraic
+ * extension): the rational analogues of the extension helpers above, exposed
+ * for the System` builtins (PolynomialGCD/Resultant/Factor) and the FLINT`
+ * context wrappers. Each returns a fresh Expr the caller owns, or NULL when the
+ * input is not a polynomial over Q in recognisable variables / out of scope /
+ * FLINT absent, so the caller keeps its classical path.
+ *
+ *   flint_polynomial_resultant: Res_x(a, b) with `var` the elimination
+ *     variable (a symbol); all other free symbols are coefficients.
+ *   flint_polynomial_factor / _squarefree: irreducible / squarefree
+ *     factorisation over Q, rendered as Times[const, base^exp, ...].
+ *
+ * (GCD is flint_multivariate_gcd / flint_polynomial_gcd above.) These emit
+ * FLINT-canonical output (monic factors/GCD over Q); the System`-builtin
+ * callers renormalise to Mathematica's primitive-over-Z convention.
+ */
+Expr* flint_polynomial_resultant(const Expr* a, const Expr* b, const Expr* var);
+Expr* flint_polynomial_factor(const Expr* p);
+Expr* flint_polynomial_factor_squarefree(const Expr* p);
+
+/*
+ * Univariate integer-polynomial factorisation via FLINT (fmpz_poly_factor).
+ * Recognises `p` as a polynomial in exactly one variable (detected with FLINT's
+ * own bignum-safe variable scan, so it is robust to large coefficients) whose
+ * coefficients are all integers (EXPR_INTEGER or EXPR_BIGINT). Returns the
+ * factorisation as an evaluated Times[content, factor^exp, ...] Expr the caller
+ * owns, in Mathematica's convention: each irreducible factor is primitive with
+ * positive leading coefficient (so 4x^2-9 -> (2x-3)(2x+3), NOT the monic
+ * 4(x-3/2)(x+3/2) an fmpq factorisation would give) and the signed integer
+ * content is emitted as a separate factor. Returns NULL when `p` is not a
+ * univariate polynomial over Z (multivariate, rational/symbolic coefficient,
+ * a denominator, degree < 1) or FLINT is absent, so the caller keeps its
+ * classical path. This is the transparent fast path for Factor[] on univariate
+ * integer polynomials — and it fixes a classical-pipeline bug where a bignum
+ * coefficient is misclassified as a variable and its term dropped.
+ */
+Expr* flint_univariate_factor_auto(const Expr* p);
+
+/*
  * Univariate GCD over a parametric radical field Q(t_1..t_p)(sqrt k) where the
  * radicand k is itself a free symbol (parameter), not an integer — the
  * `p >= 1, r = 1, deg = 2` regime, i.e. the Goursat blocker ring Q(a,b,k)(sqrt k).

@@ -50,8 +50,10 @@
 #include "arithmetic.h"
 #include "poly.h"
 #include "zero_test.h"
+#include "print.h"
 
 #include <stdbool.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -216,6 +218,48 @@ static bool expr_is_true(Expr* e) {
     bool r = expr_eq(e, t);
     expr_free(t);
     return r;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Debug tracing -- controlled by the global Integrate`GoursatDebug        */
+/* ---------------------------------------------------------------------- */
+/*
+ * When the user sets Integrate`GoursatDebug = True the descent narrates its
+ * progress to stderr: whether the integrand matches the expected pseudo-elliptic
+ * form, which involution / eigenspace criterion is tested and whether it holds,
+ * and the recursive genus-0 reductions.  The flag is read ONCE at the outermost
+ * entry (gs_set_debug, called from gs_guarded at gs_depth == 0) into the static
+ * gs_debug so the recursive descents -- which run inside a separate
+ * TimeConstrained sub-evaluation -- share the setting without re-evaluating the
+ * symbol per log site.  Off by default: every log site is a single int test.
+ */
+static int gs_debug = 0;
+static int gs_depth;   /* recursion depth, defined below; borrowed for indenting */
+
+/* Read the current value of Integrate`GoursatDebug (True -> 1, else 0). */
+static void gs_set_debug(void) {
+    Expr* v = evaluate(mk_sym("Integrate`GoursatDebug"));
+    gs_debug = expr_is_true(v) ? 1 : 0;
+    if (v) expr_free(v);
+}
+
+/* Emit a formatted trace line (indented by the current recursion depth). */
+static void gs_log(const char* fmt, ...) {
+    if (!gs_debug) return;
+    fprintf(stderr, "[Goursat]%*s ", 2 * gs_depth, "");
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+}
+
+/* Emit a trace line "label: <expr>" with the expression pretty-printed. */
+static void gs_log_expr(const char* label, Expr* e) {
+    if (!gs_debug) return;
+    char* s = e ? expr_to_string(e) : NULL;
+    gs_log("%s: %s", label, s ? s : (e ? "<unprintable>" : "<null>"));
+    if (s) free(s);
 }
 
 /* Robust differentiate-back check: is D[result, x] - f identically zero?
@@ -770,16 +814,19 @@ static Expr* goursat_v4(Expr* F, Expr* R, Expr* t) {
      * would trigger.  A passing (zero-ish) sample only authorises the descent,
      * whose result is independently checked by the diff_back_ok guard in
      * gs_core -- so a numeric false-positive cannot yield a wrong answer. */
+    gs_log("  V4 criterion: trivial-character projection P0 = (f0+f1+f2+f3)/4 must vanish");
     if (f1 && f2 && f3) {
         Expr* P0raw = mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), expr_copy(f1)),
                                      expr_copy(f2), expr_copy(f3));
         bool obstructed = sample_clearly_nonzero(P0raw, t);
         expr_free(P0raw);
         if (obstructed) {
+            gs_log("  P0 is decisively non-zero -- OBSTRUCTED for V4, declining");
             expr_free(f0); expr_free(f1); expr_free(f2); expr_free(f3);
             goto cleanup;
         }
     }
+    gs_log("  P0 looks vanishing -- descending the non-trivial V4 projections");
 
     /* P0 looks vanishing -- now canonicalise the three non-trivial projections
      * that the descent actually integrates. */
@@ -1013,12 +1060,19 @@ static Expr* goursat_cubic(Expr* F, Expr* R, Expr* t, int pnum) {
      * Together/Simplify blowup that the obstructed cases would otherwise hit.
      * A passing sample falls through to the exact same symbolic path as before;
      * gs_core's diff_back_ok independently verifies any antiderivative. */
+    gs_log("  cube criterion: omega-eigencomponent H%d of H must vanish",
+           (pnum == 1) ? 1 : 0);
     {
         Expr* crit = eigenproj3_raw(base, z, (pnum == 1) ? 1 : 0);
         bool obstructed = sample_clearly_nonzero(crit, z);
         if (crit) expr_free(crit);
-        if (obstructed) { expr_free(base); goto cleanup; }
+        if (obstructed) {
+            gs_log("  numeric gate: H%d is decisively non-zero -- OBSTRUCTED (non-elementary), declining",
+                   (pnum == 1) ? 1 : 0);
+            expr_free(base); goto cleanup;
+        }
     }
+    gs_log("  numeric gate: criterion eigencomponent looks vanishing -- proceeding to exact descent");
 
     H = canonic(base);
     if (!H) goto cleanup;
@@ -1028,8 +1082,18 @@ static Expr* goursat_cubic(Expr* F, Expr* R, Expr* t, int pnum) {
     H2 = eigenproj3(H, z, 2);
 
     /* Elementarity criterion: p=1/3 needs H1==0, p=2/3 needs H0==0. */
-    if (pnum == 1) { if (!H1 || !is_zero(H1)) goto cleanup; }
-    else           { if (!H0 || !is_zero(H0)) goto cleanup; }
+    if (pnum == 1) {
+        if (!H1 || !is_zero(H1)) {
+            gs_log("  exact criterion: H1 != 0 -- criterion FAILS, declining");
+            goto cleanup;
+        }
+    } else {
+        if (!H0 || !is_zero(H0)) {
+            gs_log("  exact criterion: H0 != 0 -- criterion FAILS, declining");
+            goto cleanup;
+        }
+    }
+    gs_log("  exact criterion HOLDS -- descending eigenpieces to genus-0");
 
     /* Common back-substitution atoms. */
     Expr* cube_c  = mk_pow_rat(expr_copy(cval), 1, 3);          /* cval^(1/3) */
@@ -1324,12 +1388,16 @@ static Expr* goursat_period3(Expr* F, Expr* R, Expr* t) {
          * gate on the *uncombined* sum -- a symbolic character projection in t
          * would trigger the cyclotomic Together blowup).  Compose F(S^2) as
          * (F(S))(S) rather than forming the cyclotomic S^2 = canonic(S.S). */
+        gs_log("  period-3 (fixed point #%d): trivial projection F + F(S) + F(S^2) must vanish", fix);
         Expr* FS  = subst_eval(expr_copy(F), t, expr_copy(S));
         Expr* FS2 = FS ? subst_eval(expr_copy(FS), t, expr_copy(S)) : NULL;
         Expr* F0raw = mk_fn3("Plus", expr_copy(F), FS, FS2);
         bool trivnz = sample_clearly_nonzero(F0raw, t);
         expr_free(F0raw);
-        if (trivnz) { expr_free(S); continue; }
+        if (trivnz) {
+            gs_log("  period-3: trivial projection non-zero for this fixed point -- trying next");
+            expr_free(S); continue;
+        }
 
         Expr* a = NULL; Expr* a1 = NULL;
         /* Clean fixed points.  For the centered pure cubic R = lc((t-s)^3 + c)
@@ -1496,7 +1564,11 @@ static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
 
     /* Roots must be harmonic; otherwise this theory does not apply. */
     Expr* ord[4];
-    if (!harmonic_order(roots, ord)) goto cleanup;
+    if (!harmonic_order(roots, ord)) {
+        gs_log("  quartic: the four roots of R are NOT harmonic (cross-ratio != -1) -- declining");
+        goto cleanup;
+    }
+    gs_log("  quartic: roots are harmonic -- building order-4 Mobius automorphism");
 
     S = quartic_mobius(ord, t);
     if (!S) goto cleanup;
@@ -1555,6 +1627,8 @@ static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
     {
         int ka = (pnum == 1) ? 1 : 0;
         int kb = (pnum == 1) ? 2 : 1;
+        gs_log("  quartic criterion: i-eigencomponents H%d and H%d of H must both vanish",
+               ka, kb);
         Expr* ca = eigenproj4_raw(base, z, ka);
         bool obstructed = sample_clearly_nonzero(ca, z);
         if (ca) expr_free(ca);
@@ -1563,8 +1637,12 @@ static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
             obstructed = sample_clearly_nonzero(cb, z);
             if (cb) expr_free(cb);
         }
-        if (obstructed) { expr_free(base); goto cleanup; }
+        if (obstructed) {
+            gs_log("  numeric gate: an eigencomponent is decisively non-zero -- OBSTRUCTED, declining");
+            expr_free(base); goto cleanup;
+        }
     }
+    gs_log("  numeric gate: criterion eigencomponents look vanishing -- proceeding to exact descent");
 
     H = canonic(base);
     if (!H) goto cleanup;
@@ -1576,10 +1654,17 @@ static Expr* goursat_quartic(Expr* F, Expr* R, Expr* t, int pnum) {
 
     /* Criterion: p=1/4 needs H1==0 and H2==0; p=3/4 needs H0==0 and H1==0. */
     if (pnum == 1) {
-        if (!H1 || !H2 || !is_zero(H1) || !is_zero(H2)) goto cleanup;
+        if (!H1 || !H2 || !is_zero(H1) || !is_zero(H2)) {
+            gs_log("  exact criterion: H1==0 && H2==0 FAILS -- declining");
+            goto cleanup;
+        }
     } else {
-        if (!H0 || !H1 || !is_zero(H0) || !is_zero(H1)) goto cleanup;
+        if (!H0 || !H1 || !is_zero(H0) || !is_zero(H1)) {
+            gs_log("  exact criterion: H0==0 && H1==0 FAILS -- declining");
+            goto cleanup;
+        }
     }
+    gs_log("  exact criterion HOLDS -- descending eigenpieces to genus-0");
 
     Expr* q4_c = mk_pow_rat(expr_copy(cval), 1, 4);    /* cval^(1/4) */
     Expr* q4_R = mk_pow_rat(expr_copy(R), 1, 4);        /* R^(1/4)    */
@@ -1913,26 +1998,46 @@ static Expr* reexpress_over_radical(Expr* res, Expr* R, Expr* x) {
 
 static Expr* gs_core(Expr* f, Expr* x) {
     if (x->type != EXPR_SYMBOL)   return NULL;
-    if (expr_free_of(f, x))       return NULL;
-    if (gs_depth >= GS_MAX_DEPTH) return NULL;
+    if (expr_free_of(f, x))       { gs_log("decline: integrand is free of the variable"); return NULL; }
+    if (gs_depth >= GS_MAX_DEPTH) { gs_log("decline: recursion depth limit (%d) reached", GS_MAX_DEPTH); return NULL; }
+
+    gs_log("------------------------------------------------------------");
+    gs_log_expr("integrand f", f);
+    gs_log_expr("variable", x);
 
     Expr* F = NULL; Expr* R = NULL;
     int pnum = 0, pden = 0;
-    if (!recognise(f, x, &F, &R, &pnum, &pden)) return NULL;
+    if (!recognise(f, x, &F, &R, &pnum, &pden)) {
+        gs_log("FORM: no match -- no single radical R(x)^(n/d) with reduced d in {2,3,4}; declining");
+        return NULL;
+    }
+    gs_log("FORM: matched -- reduced to canonical F(x)*R(x)^(-p), p = %d/%d", pnum, pden);
+    gs_log("       (any rational radical exponent n/d, radical in numerator OR denominator, folds here:");
+    gs_log("        R^(n/d) = R^k * R^(-p), the integer R^k absorbed into F)");
+    gs_log_expr("  cofactor F", F);
+    gs_log_expr("  radicand R", R);
 
     Expr* result = NULL;
     if (pden == 2) {
+        gs_log("BRANCH: square-root case -- Goursat V4 (order-2 Mobius, Theorems 1-2)");
         result = goursat_v4(F, R, x);
         /* When V4 (Theorems 1-2) declines a square-root-of-cubic integrand, try
          * the period-3 higher-symmetry reduction (Goursat 1887 Section 4), which
          * covers the t^3-1-symmetric cases V4 misses (e.g.
          * (t-1)/((t+2) Sqrt[t^3-1])). */
-        if (!result) result = goursat_period3(F, R, x);
+        if (!result) {
+            gs_log("V4 declined -- trying period-3 higher-symmetry reduction (Goursat 1887 Sec 4)");
+            result = goursat_period3(F, R, x);
+        }
     } else if (pden == 3) {
+        gs_log("BRANCH: cube-root case -- order-3 Mobius eigendescent (p = %d/3)", pnum);
         result = goursat_cubic(F, R, x, pnum);
     } else if (pden == 4) {
+        gs_log("BRANCH: fourth-root case -- order-4 Mobius eigendescent (p = %d/4)", pnum);
         result = goursat_quartic(F, R, x, pnum);
     }
+    gs_log(result ? "descent produced a candidate antiderivative"
+                  : "descent did not close -- no candidate");
 
     /* Normalise the result's nested radical over the integrand's own Sqrt[R]
      * (square-root case only), so D[result,x] // Simplify reduces to f.  Adopt
@@ -1956,7 +2061,13 @@ static Expr* gs_core(Expr* f, Expr* x) {
      * degenerate 0) is emitted.  Verify D[result, x] == f before returning (see
      * diff_back_ok for why this is a numeric rather than a PossibleZeroQ check);
      * on failure, decline so the cascade continues. */
-    if (result && !diff_back_ok(result, x, f)) { expr_free(result); result = NULL; }
+    if (result && !diff_back_ok(result, x, f)) {
+        gs_log("VERIFY: differentiate-back guard FAILED -- discarding candidate, declining");
+        expr_free(result); result = NULL;
+    } else if (result) {
+        gs_log("VERIFY: differentiate-back guard passed");
+        gs_log_expr("RESULT", result);
+    }
     return result;
 }
 
@@ -2004,6 +2115,7 @@ static Expr* builtin_gs_run(Expr* res) {
  * f, x; returns the owned antiderivative or NULL (decline / timeout). */
 static Expr* gs_guarded(Expr* f, Expr* x) {
     if (gs_depth > 0) return gs_core(f, x);
+    gs_set_debug();   /* latch Integrate`GoursatDebug for this whole attempt */
     Expr* call = mk_fn3("TimeConstrained",
         mk_fn2(GS_RUN_HEAD, expr_copy(f), expr_copy(x)),
         mk_int(GS_TIME_BUDGET_SEC),
@@ -2036,15 +2148,32 @@ void integrate_goursat_init(void) {
     symtab_get_def(GS_RUN_HEAD)->attributes |=
         ATTR_HOLDALL | ATTR_PROTECTED | ATTR_READPROTECTED;
 
+    /* User-settable trace switch.  Default False; when set True the descent
+     * narrates its progress (form recognition, criterion tests, reductions) to
+     * stderr.  Left unprotected so the user can assign it. */
+    {
+        Expr* pat = expr_new_symbol("Integrate`GoursatDebug");
+        Expr* val = expr_new_symbol(SYM_False);
+        symtab_add_own_value("Integrate`GoursatDebug", pat, val);
+        expr_free(pat); expr_free(val);
+    }
+    symtab_set_docstring("Integrate`GoursatDebug",
+        "Integrate`GoursatDebug is a Boolean switch (default False); when set True,\n"
+        "Integrate`GoursatAlgebraic prints a trace of form recognition, the\n"
+        "involution/eigenspace criterion tests, and the recursive reductions to stderr.");
+
     symtab_add_builtin("Integrate`GoursatAlgebraic", builtin_integrate_goursat);
     symtab_get_def("Integrate`GoursatAlgebraic")->attributes |=
         ATTR_PROTECTED | ATTR_READPROTECTED;
     symtab_set_docstring("Integrate`GoursatAlgebraic",
         "Integrate`GoursatAlgebraic[f, x] integrates pseudo-elliptic integrands\n"
-        "F(x)/R(x)^p (F rational, R a polynomial, p in {1/2,1/3,2/3,1/4,3/4}) by\n"
-        "Goursat's algorithm and its cube-/fourth-root generalisations: a Mobius\n"
-        "automorphism cycling the roots of R splits the integrand into\n"
-        "eigencomponents that descend to genus-0 curves when the elementarity\n"
-        "criterion holds.  Strict: returns unevaluated when f is not of this form,\n"
-        "the integral is non-elementary, or the roots are not solvable in radicals.");
+        "F(x) R(x)^(n/d) (F rational, R a polynomial, n/d any rational of reduced\n"
+        "denominator d in {2,3,4}) by Goursat's algorithm and its cube-/fourth-root\n"
+        "generalisations.  The radical may be in the numerator or the denominator:\n"
+        "R^(n/d) is reduced to R^k R^(-p) with p in {1/2,1/3,2/3,1/4,3/4} and the\n"
+        "integer power R^k folded into F.  A Mobius automorphism cycling the roots of\n"
+        "R splits the integrand into eigencomponents that descend to genus-0 curves\n"
+        "when the elementarity criterion holds.  Strict: returns unevaluated when f\n"
+        "is not of this form, the integral is non-elementary, or the roots are not\n"
+        "solvable in radicals.");
 }

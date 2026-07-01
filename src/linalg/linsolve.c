@@ -40,6 +40,7 @@
 #include "poly.h"
 #include "expand.h"
 #include "sym_names.h"
+#include "flint_mat_bridge.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -104,6 +105,19 @@ static Expr* rowreduce_divfree(Expr* arg) {
     Expr** matrix = malloc(sizeof(Expr*) * (size_t)m * (size_t)n);
     size_t idx = 0;
     flatten_tensor(arg, matrix, &idx);
+
+    /* Exact fast path: the reduced row echelon form is unique, so FLINT's
+     * exact rational RREF (fmpq_mat_rref) is identical to the classical
+     * division-free result — but computed in polynomial time. Non-rational
+     * matrices return NULL and fall through to the classical path. */
+    {
+        Expr* frref = flint_mat_rref(matrix, m, n);
+        if (frref) {
+            for (int i = 0; i < m * n; i++) expr_free(matrix[i]);
+            free(matrix);
+            return frref;
+        }
+    }
 
     Expr* P = expr_new_integer(1);
     int r = 0;
@@ -519,6 +533,25 @@ static Expr* linearsolve_divfree(Expr* m, Expr* b,
     {
         size_t idx = 0;
         flatten_tensor(b, flat_b, &idx);
+    }
+
+    /* Exact fast path: a square nonsingular rational system has a unique
+     * solution, so FLINT's fmpq_mat_solve yields the same answer as the
+     * classical division-free reduction, in polynomial time. FLINT returns
+     * NULL for non-square / singular / non-rational systems, which fall
+     * through to the classical solver (rectangular, underdetermined,
+     * inconsistent handling + LinearSolve::nosol). `matrix` is allocated but
+     * not yet populated at this point, so only free() the array. */
+    {
+        Expr** fsol = flint_mat_solve(flat_m, r, c, flat_b, k);
+        if (fsol) {
+            for (int i = 0; i < r * c; i++) expr_free(flat_m[i]);
+            for (int i = 0; i < r * k; i++) expr_free(flat_b[i]);
+            free(flat_m);
+            free(flat_b);
+            free(matrix);
+            return build_solution_tensor(fsol, c, trail_dims, trail_rank);
+        }
     }
 
     for (int i = 0; i < r; i++) {

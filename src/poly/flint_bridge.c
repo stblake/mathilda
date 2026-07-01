@@ -16,6 +16,7 @@
 #include "attr.h"
 #include "eval.h"
 #include "poly.h"
+#include "sym_names.h"
 
 #ifdef USE_FLINT
 
@@ -26,6 +27,7 @@
 #include <flint/fmpq.h>
 #include <flint/fmpq_poly.h>
 #include <flint/fmpz_poly.h>
+#include <flint/fmpz_poly_factor.h>
 #include <flint/fmpq_mat.h>
 #include <flint/mpoly.h>
 #include <flint/fmpz_mpoly.h>
@@ -1467,8 +1469,11 @@ static Expr* flint_multivariate_factor_impl(const Expr* p, int squarefree) {
     if (vs.count == 0) { varset_free(&vs); return NULL; }
     qsort(vs.names, vs.count, sizeof(char*), cmp_str);
 
+    /* ORD_DEGLEX so that term 0 of each factor is its highest-total-degree
+     * (deglex tie-break) leading term — used below to normalise the factor's
+     * sign to Mathematica's positive-leading-coefficient convention. */
     fmpq_mpoly_ctx_t ctx;
-    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_LEX);
+    fmpq_mpoly_ctx_init(ctx, (slong)vs.count, ORD_DEGLEX);
     fmpq_mpoly_t P;
     fmpq_mpoly_init(P, ctx);
     fmpq_mpoly_factor_t fac;
@@ -1483,16 +1488,31 @@ static Expr* flint_multivariate_factor_impl(const Expr* p, int squarefree) {
         fmpq_t c; fmpq_init(c);
         fmpq_mpoly_factor_get_constant_fmpq(c, fac, ctx);
 
+        /* Slot 0 is reserved for the (possibly sign-adjusted) content, which
+         * is filled in after the factor loop so that sign flips can be folded
+         * into it.  Polynomial factors occupy slots 1.. */
         size_t nterms = (size_t)nf + 1;
         Expr** factors = malloc(sizeof(Expr*) * nterms);
-        size_t nt = 0;
-        if (!fmpq_is_one(c)) factors[nt++] = expr_from_fmpq_local(c);
-        fmpq_clear(c);
+        factors[0] = NULL;
+        size_t nt = 1;
 
+        int sign_flip = 0;      /* parity of factor-sign flips, folded into c */
+        fmpq_t lc; fmpq_init(lc);
         fmpq_mpoly_t base; fmpq_mpoly_init(base, ctx);
         for (slong i = 0; i < nf; i++) {
             fmpq_mpoly_factor_get_base(base, fac, i, ctx);
             slong e = fmpq_mpoly_factor_get_exp_si(fac, i, ctx);
+            /* Normalise the factor to a positive leading coefficient (highest
+             * total degree, deglex tie-break) — Mathematica's convention —
+             * folding the discarded -1 into the content (via (-1)^e) so the
+             * product is unchanged.  Avoids ugly forms like -(k - u^2). */
+            if (fmpq_mpoly_length(base, ctx) > 0) {
+                fmpq_mpoly_get_term_coeff_fmpq(lc, base, 0, ctx);
+                if (fmpq_sgn(lc) < 0) {
+                    fmpq_mpoly_neg(base, base, ctx);
+                    if (e & 1) sign_flip ^= 1;
+                }
+            }
             Expr* be = mpoly_to_expr(base, ctx, &vs);
             if (!be) continue;
             if (e == 1) {
@@ -1503,10 +1523,18 @@ static Expr* flint_multivariate_factor_impl(const Expr* p, int squarefree) {
             }
         }
         fmpq_mpoly_clear(base, ctx);
+        fmpq_clear(lc);
 
-        if (nt == 0)      out = expr_new_integer(1);
-        else if (nt == 1) out = factors[0];
-        else              out = expr_new_function(expr_new_symbol("Times"), factors, nt);
+        if (sign_flip) fmpq_neg(c, c);
+        if (!fmpq_is_one(c)) factors[0] = expr_from_fmpq_local(c);
+        fmpq_clear(c);
+
+        size_t start = factors[0] ? 0 : 1;   /* skip empty content slot */
+        size_t count = nt - start;
+        if (count == 0)      out = expr_new_integer(1);
+        else if (count == 1) out = factors[start];
+        else                 out = expr_new_function(expr_new_symbol("Times"),
+                                                      factors + start, count);
         free(factors);
     }
 
@@ -1942,11 +1970,167 @@ Expr* flint_extension_divexact(const Expr* a, const Expr* b) {
     return parametric_sqrt_op(a, b, ABSOP_DIVEXACT);   /* Q(t..)(sqrt k) */
 }
 
-/* M1/M2 scaffolding builtin: Flint`GCD[a, b] — exercises the full chain. */
-static Expr* builtin_flint_gcd(Expr* res) {
+/* ================================================================== */
+/*  Plain multivariate Q[x..] public wrappers (resultant / factor).    */
+/*  GCD is already public (flint_multivariate_gcd/flint_polynomial_gcd).*/
+/* ================================================================== */
+
+Expr* flint_polynomial_resultant(const Expr* a, const Expr* b, const Expr* var) {
+    if (!var || var->type != EXPR_SYMBOL) return NULL;
+    return flint_multivariate_resultant(a, b, var->data.symbol);
+}
+
+Expr* flint_polynomial_factor(const Expr* p) {
+    return flint_multivariate_factor_impl(p, 0);
+}
+
+Expr* flint_polynomial_factor_squarefree(const Expr* p) {
+    return flint_multivariate_factor_impl(p, 1);
+}
+
+/* fmpz -> Expr (Integer or BigInt, normalised). */
+static Expr* fz_to_expr(const fmpz_t z) {
+    mpz_t m; mpz_init(m);
+    fmpz_get_mpz(m, z);
+    Expr* e = expr_bigint_normalize(expr_new_bigint_from_mpz(m));
+    mpz_clear(m);
+    return e;
+}
+
+/* Build the (unevaluated) monomial term  coeff * var^deg  (deg >= 0). The
+ * coeff==1 / deg in {0,1} simplifications are left to the caller's eval pass. */
+static Expr* uni_term(const fmpz_t coeff, const Expr* var, int deg) {
+    Expr* c = fz_to_expr(coeff);
+    if (deg == 0) return c;
+    Expr* pw = (deg == 1)
+        ? expr_copy((Expr*)var)
+        : expr_new_function(expr_new_symbol("Power"),
+              (Expr*[]){ expr_copy((Expr*)var), expr_new_integer(deg) }, 2);
+    return expr_new_function(expr_new_symbol("Times"), (Expr*[]){ c, pw }, 2);
+}
+
+/* One primitive fmpz_poly factor -> (unevaluated) Plus Expr in `var`. */
+static Expr* uni_poly_to_expr(const fmpz_poly_t f, const Expr* var) {
+    slong d = fmpz_poly_degree(f);
+    if (d < 0) return expr_new_integer(0);
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)(d + 1));
+    size_t nt = 0;
+    fmpz_t c; fmpz_init(c);
+    for (slong j = 0; j <= d; j++) {
+        fmpz_poly_get_coeff_fmpz(c, f, j);
+        if (fmpz_is_zero(c)) continue;
+        terms[nt++] = uni_term(c, var, (int)j);
+    }
+    fmpz_clear(c);
+    Expr* out;
+    if (nt == 0)      out = expr_new_integer(0);
+    else if (nt == 1) out = terms[0];
+    else              out = expr_new_function(expr_new_symbol("Plus"), terms, nt);
+    free(terms);
+    return out;
+}
+
+static Expr* flint_univariate_factor(const Expr* P, const Expr* var) {
+    if (!P || !var || var->type != EXPR_SYMBOL) return NULL;
+    int deg = get_degree_poly((Expr*)P, (Expr*)var);
+    if (deg < 1) return NULL;
+
+    fmpz_poly_t G;
+    fmpz_poly_init(G);
+    int ok = 1;
+    for (int i = 0; i <= deg && ok; i++) {
+        Expr* c = get_coeff((Expr*)P, (Expr*)var, i);
+        if (c->type == EXPR_INTEGER) {
+            fmpz_poly_set_coeff_si(G, i, c->data.integer);
+        } else if (c->type == EXPR_BIGINT) {
+            fmpz_t z; fmpz_init(z);
+            fmpz_set_mpz(z, c->data.bigint);
+            fmpz_poly_set_coeff_fmpz(G, i, z);
+            fmpz_clear(z);
+        } else {
+            ok = 0;   /* Rational / symbolic coefficient -> classical path */
+        }
+        expr_free(c);
+    }
+
+    Expr* out = NULL;
+    if (ok && fmpz_poly_degree(G) >= 1) {
+        /* fmpz_poly_factor stores the signed content in fac->c and the
+         * primitive, positive-leading irreducible factors in fac->p[i] with
+         * multiplicities fac->exp[i] — exactly the classical convention. */
+        fmpz_poly_factor_t fac;
+        fmpz_poly_factor_init(fac);
+        fmpz_poly_factor(fac, G);
+
+        size_t cap = (size_t)fac->num + 1;
+        Expr** factors = malloc(sizeof(Expr*) * cap);
+        size_t nt = 0;
+        if (!fmpz_is_one(&fac->c))
+            factors[nt++] = fz_to_expr(&fac->c);
+        for (slong i = 0; i < fac->num; i++) {
+            Expr* be = uni_poly_to_expr(fac->p + i, var);
+            slong e = fac->exp[i];
+            if (e == 1) {
+                factors[nt++] = be;
+            } else {
+                factors[nt++] = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ be, expr_new_integer((int64_t)e) }, 2);
+            }
+        }
+        if (nt == 0)      out = expr_new_integer(1);
+        else if (nt == 1) out = factors[0];
+        else              out = expr_new_function(expr_new_symbol("Times"), factors, nt);
+        free(factors);
+
+        fmpz_poly_factor_clear(fac);
+    }
+    fmpz_poly_clear(G);
+    if (out) out = eval_and_free(out);
+    return out;
+}
+
+Expr* flint_univariate_factor_auto(const Expr* p) {
+    if (!p) return NULL;
+    /* Detect the variable set with FLINT's own scan (bignum-safe, and it bails
+     * on denominators / radicals / out-of-scope heads). We only handle the
+     * single-variable case; multivariate stays on the classical path. */
+    VarSet vs;
+    memset(&vs, 0, sizeof vs);
+    if (!collect_vars(p, &vs) || vs.count != 1) { varset_free(&vs); return NULL; }
+    Expr* var = expr_new_symbol(vs.names[0]);
+    varset_free(&vs);
+    Expr* out = flint_univariate_factor(p, var);
+    expr_free(var);
+    return out;
+}
+
+/* ================================================================== */
+/*  FLINT` context: direct REPL access to the FLINT-backed kernels.    */
+/*  Thin wrappers over the bridge functions; each returns NULL (leaving */
+/*  FLINT`f[...] unevaluated) when the argument is out of FLINT's scope.*/
+/* ================================================================== */
+
+static Expr* builtin_flint_polynomialgcd(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     return flint_polynomial_gcd(res->data.function.args[0],
                                 res->data.function.args[1]);
+}
+
+static Expr* builtin_flint_resultant(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    return flint_polynomial_resultant(res->data.function.args[0],
+                                      res->data.function.args[1],
+                                      res->data.function.args[2]);
+}
+
+static Expr* builtin_flint_factor(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return flint_polynomial_factor(res->data.function.args[0]);
+}
+
+static Expr* builtin_flint_factorsquarefree(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
+    return flint_polynomial_factor_squarefree(res->data.function.args[0]);
 }
 
 void flint_bridge_init(void) {
@@ -1956,12 +2140,36 @@ void flint_bridge_init(void) {
      * them at normal exit; safe because no FLINT call outlives main(). */
     atexit(flint_cleanup_master);
 
-    symtab_add_builtin("Flint`GCD", builtin_flint_gcd);
-    symtab_get_def("Flint`GCD")->attributes |= ATTR_PROTECTED;
-    symtab_set_docstring("Flint`GCD",
-        "Flint`GCD[a, b] gives the GCD of the polynomials a and b over the "
-        "rationals via FLINT. Internal M1 scaffolding for the algebraic-"
-        "extension engine.");
+    symtab_add_builtin(SYM_FLINT_PolynomialGCD, builtin_flint_polynomialgcd);
+    symtab_get_def(SYM_FLINT_PolynomialGCD)->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring(SYM_FLINT_PolynomialGCD,
+        "FLINT`PolynomialGCD[a, b] gives the monic greatest common divisor of "
+        "the polynomials a and b over the rationals, computed directly via "
+        "FLINT (fmpq_mpoly_gcd). Multivariate. Returns unevaluated if an "
+        "argument is not a polynomial over Q.");
+
+    symtab_add_builtin(SYM_FLINT_Resultant, builtin_flint_resultant);
+    symtab_get_def(SYM_FLINT_Resultant)->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring(SYM_FLINT_Resultant,
+        "FLINT`Resultant[a, b, x] gives the resultant of the polynomials a and "
+        "b eliminating the variable x, over the rationals, computed directly "
+        "via FLINT (fmpq_mpoly_resultant). Other variables are treated as "
+        "coefficients. Returns unevaluated if out of scope.");
+
+    symtab_add_builtin(SYM_FLINT_Factor, builtin_flint_factor);
+    symtab_get_def(SYM_FLINT_Factor)->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring(SYM_FLINT_Factor,
+        "FLINT`Factor[p] gives the irreducible factorisation of the polynomial "
+        "p over the rationals, computed directly via FLINT "
+        "(fmpq_mpoly_factor), as Times[const, factor^exp, ...]. Multivariate. "
+        "Returns unevaluated if p is not a polynomial over Q.");
+
+    symtab_add_builtin(SYM_FLINT_FactorSquareFree, builtin_flint_factorsquarefree);
+    symtab_get_def(SYM_FLINT_FactorSquareFree)->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring(SYM_FLINT_FactorSquareFree,
+        "FLINT`FactorSquareFree[p] gives the squarefree factorisation of the "
+        "polynomial p over the rationals, computed directly via FLINT "
+        "(fmpq_mpoly_factor_squarefree). Returns unevaluated if out of scope.");
 }
 
 #else /* !USE_FLINT */

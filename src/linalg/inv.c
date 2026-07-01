@@ -49,6 +49,7 @@
 #include "poly.h"
 #include "expand.h"
 #include "sym_names.h"
+#include "flint_mat_bridge.h"
 #include "common.h"
 
 #include <stdbool.h>
@@ -548,6 +549,24 @@ Expr* builtin_inverse(Expr* res) {
     }
 
     int n = (int)dims[0];
+
+    /* Exact fast path: an all-rational matrix inverts in polynomial time via
+     * FLINT (fmpq_mat_inv), and the inverse is unique so the result is
+     * identical to the classical division-free path. A singular or
+     * non-rational matrix returns NULL here and falls through unchanged (the
+     * classical path then emits Inverse::sing or works symbolically). Only the
+     * default/division-free methods are short-circuited; an explicit
+     * CofactorExpansion / OneStep request keeps its own code path. */
+    if (method == MATSOL_AUTOMATIC || method == MATSOL_DIVFREE) {
+        Expr** flat = malloc(sizeof(Expr*) * (size_t)n * (size_t)n);
+        size_t fidx = 0;
+        flatten_tensor(arg, flat, &fidx);
+        Expr* fout = flint_mat_inverse(flat, n);
+        for (size_t i = 0; i < fidx; i++) expr_free(flat[i]);
+        free(flat);
+        if (fout) return fout;
+    }
+
     switch (method) {
         case MATSOL_AUTOMATIC:
         case MATSOL_DIVFREE:    return inverse_divfree(arg, n);

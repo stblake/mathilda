@@ -49,6 +49,7 @@
 #include "print.h"
 #include "poly.h"
 #include "sym_names.h"
+#include "flint_mat_bridge.h"
 
 #include <float.h>
 #include <gmp.h>
@@ -440,7 +441,15 @@ Expr* builtin_matrixrank(Expr* res) {
     }
 
     if (rank_value < 0) {
-        /* Exact path. */
+        /* Exact path.  An all-rational matrix gets its rank directly from
+         * FLINT (fmpq_mat_rref) without materialising the full RREF Expr;
+         * rank is basis-independent so the value matches the classical count.
+         * Non-rational (symbolic) matrices return -1 and use RowReduce. */
+        int frank = flint_mat_rank(flat, rows, cols);
+        if (frank >= 0) rank_value = frank;
+    }
+
+    if (rank_value < 0) {
         Expr* rref = call_rowreduce(m, opts.method);
         if (rref) {
             int64_t rref_dims[64];

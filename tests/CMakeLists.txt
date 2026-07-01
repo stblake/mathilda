@@ -291,6 +291,7 @@ set(COMMON_SRC
     ../src/linalg/util.c
     ../src/linalg/dot.c
     ../src/linalg/det.c
+    ../src/linalg/flint_mat_bridge.c
     ../src/linalg/cross.c
     ../src/linalg/norm.c
     ../src/linalg/normalize.c
@@ -405,6 +406,7 @@ set(COMMON_SRC
     ../src/solvetrig.c
     ../src/zero_test.c
     ../src/numeric_complex.c
+    ../src/flint_num_bridge.c
     ../src/numerical_calculus/quadrature.c
     ../src/numerical_calculus/seqaccel.c
     ../src/numerical_calculus/dequad.c

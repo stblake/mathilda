@@ -15,6 +15,7 @@
 #include "eval.h"
 #include "deriv.h"
 #include "poly.h"
+#include "flint_bridge.h"
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "sym_intern.h"
@@ -265,6 +266,26 @@ static bool expr_qx_is_squarefree(Expr* R, const char* x_name) {
      * canonical Plus-of-monomials form. */
     Expr* dR_eval = evaluate(dR);
     expr_free(dR);
+
+    /* Fast path: gcd(R, R') over Q via FLINT (fmpq_mpoly_gcd).  R is the
+     * univariate rational norm polynomial, so this is squarely in FLINT's
+     * wheelhouse and collapses the squarefree-shift search that otherwise
+     * dominates Trager's runtime (the classical content/pseudo-remainder
+     * PolynomialGCD below is ~88% of Factor[…, Extension -> …] on higher
+     * norm degrees).  flint_multivariate_gcd returns NULL for anything it
+     * cannot represent (numeric, non-polynomial) or when USE_FLINT is off,
+     * in which case we fall through to the classical path unchanged.  Only
+     * the degree of the gcd matters here, so the FLINT-monic normalisation
+     * of its output is irrelevant. */
+    Expr* fg = flint_multivariate_gcd(R, dR_eval);
+    if (fg) {
+        expr_free(dR_eval);
+        Expr* x_fcheck = expr_new_symbol(x_name);
+        int fdeg = get_degree_poly(fg, x_fcheck);
+        expr_free(x_fcheck);
+        expr_free(fg);
+        return (fdeg <= 0);
+    }
 
     /* PolynomialGCD is variadic over polynomials (no variable arg);
      * passing a third symbol "x" silently coerces it into a

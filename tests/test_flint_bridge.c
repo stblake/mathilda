@@ -7,7 +7,7 @@
  * Two avenues are exercised:
  *   (1) the C entry point flint_multivariate_gcd() directly — granular, and
  *       able to assert the NULL "bail to classical path" contract;
- *   (2) the scaffolding builtin Flint`GCD[...] through the evaluator — full
+ *   (2) the scaffolding builtin FLINT`PolynomialGCD[...] through the evaluator — full
  *       integration (dispatch, Expr round-trip, re-evaluation/canonicalisation).
  *
  * GCD is defined up to a unit; FLINT returns the *monic* representative (lead
@@ -134,7 +134,7 @@ static void check_gcd_nf_null(const char* a, const char* b) {
     expr_free(eb);
 }
 
-/* Builtin path: Flint`GCD[...] through the evaluator. */
+/* Builtin path: FLINT`PolynomialGCD[...] through the evaluator. */
 static void check_builtin(const char* input, const char* expected) {
     Expr* e = eval_str(input);
     char* s = expr_to_string(e);
@@ -362,9 +362,9 @@ static void test_cyclotomic(void) {
     check_gcd_cyc("x - (-1)^(1/3)", "x - (-1)^(2/3)", "1");
 
     /* Semantic cross-checks, independent of the output basis. */
-    check_builtin("PossibleZeroQ[Flint`GCD[x^2 + x + 1, x - (-1)^(2/3)] "
+    check_builtin("PossibleZeroQ[FLINT`PolynomialGCD[x^2 + x + 1, x - (-1)^(2/3)] "
                   "- (x - (-1)^(2/3))]", "True");
-    check_builtin("PossibleZeroQ[Flint`GCD[x^4 + x^3 + x^2 + x + 1, x - (-1)^(2/5)] "
+    check_builtin("PossibleZeroQ[FLINT`PolynomialGCD[x^4 + x^3 + x^2 + x + 1, x - (-1)^(2/5)] "
                   "- (x - (-1)^(2/5))]", "True");
 
     /* Bail-outs -> NULL. */
@@ -437,7 +437,7 @@ static void test_tower(void) {
                     "-Sqrt[2] - Sqrt[3] - Sqrt[5] + x");
 
     /* Semantic cross-checks. */
-    check_builtin("PossibleZeroQ[Flint`GCD[(x - Sqrt[2] - Sqrt[3])*(x - 1), "
+    check_builtin("PossibleZeroQ[FLINT`PolynomialGCD[(x - Sqrt[2] - Sqrt[3])*(x - 1), "
                   "(x - Sqrt[2] - Sqrt[3])*(x - 2)] - (x - Sqrt[2] - Sqrt[3])]", "True");
 
     /* Bail-outs -> NULL. */
@@ -550,7 +550,7 @@ static void test_parametric(void) {
     check_gcd_param("x - Sqrt[k]", "x + 1", "1");
     /* shared repeated radical factor (x - sqrt k)^2 (verified semantically,
      * since the raw unit sign of the GCD is FLINT-order dependent). */
-    check_builtin("PossibleZeroQ[Flint`GCD[(x - Sqrt[k])^2*(x + a), "
+    check_builtin("PossibleZeroQ[FLINT`PolynomialGCD[(x - Sqrt[k])^2*(x + a), "
                   "(x - Sqrt[k])^2*(x + b)] - (x - Sqrt[k])^2]", "True");
 
     /* Semantic cross-checks through the consumer (canonical surface form). */
@@ -566,7 +566,7 @@ static void test_parametric(void) {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Builtin path through the evaluator (Flint`GCD[...])               */
+/*  Builtin path through the evaluator (FLINT`PolynomialGCD[...])               */
 /* ------------------------------------------------------------------ */
 /*  Parametric radical resultant (the Rothstein-Trager bottleneck)     */
 /* ------------------------------------------------------------------ */
@@ -641,19 +641,168 @@ static void test_parametric_field_ops(void) {
 /* ------------------------------------------------------------------ */
 
 static void test_builtin_path(void) {
-    check_builtin("Flint`GCD[(x+y)*(x-2 y), (x+y)*(x+3 y)]", "x + y");
-    check_builtin("Flint`GCD[x^2 - 1, x^2 + 2 x + 1]", "1 + x");
-    check_builtin("Flint`GCD[x^2 - 1/4, x - 1/2]", "-1/2 + x");
-    check_builtin("Flint`GCD[x^3 y - x y^3, x^2 y^2 - y^4]", "x^2 y - y^3");
-    check_builtin("Flint`GCD[x^2 - 2, x - 1]", "1");
+    check_builtin("FLINT`PolynomialGCD[(x+y)*(x-2 y), (x+y)*(x+3 y)]", "x + y");
+    check_builtin("FLINT`PolynomialGCD[x^2 - 1, x^2 + 2 x + 1]", "1 + x");
+    check_builtin("FLINT`PolynomialGCD[x^2 - 1/4, x - 1/2]", "-1/2 + x");
+    check_builtin("FLINT`PolynomialGCD[x^3 y - x y^3, x^2 y^2 - y^4]", "x^2 y - y^3");
+    check_builtin("FLINT`PolynomialGCD[x^2 - 2, x - 1]", "1");
     /* number-field path is reached through the same builtin */
-    check_builtin("Flint`GCD[x^2 - 2, x - Sqrt[2]]", "-Sqrt[2] + x");
-    check_builtin("Flint`GCD[Sqrt[2] x, x]", "x");
+    check_builtin("FLINT`PolynomialGCD[x^2 - 2, x - Sqrt[2]]", "-Sqrt[2] + x");
+    check_builtin("FLINT`PolynomialGCD[Sqrt[2] x, x]", "x");
     /* out-of-scope: stays unevaluated (head printed back, deferring to other
      * paths) — never silently wrong */
-    check_builtin("Flint`GCD[6, 4]", "Flint`GCD[6, 4]");
+    check_builtin("FLINT`PolynomialGCD[6, 4]", "FLINT`PolynomialGCD[6, 4]");
     /* listability is not claimed; wrong arity stays unevaluated */
-    check_builtin("Flint`GCD[x^2 - 1]", "Flint`GCD[-1 + x^2]");
+    check_builtin("FLINT`PolynomialGCD[x^2 - 1]", "FLINT`PolynomialGCD[-1 + x^2]");
+}
+
+/* ------------------------------------------------------------------ */
+/*  FLINT` context: Resultant / Factor / FactorSquareFree direct       */
+/*  wrappers, plus the transparent Resultant acceleration (which must   */
+/*  match the classical convention exactly).                            */
+/* ------------------------------------------------------------------ */
+
+static void test_flint_poly_ops(void) {
+    /* FLINT`Resultant[a, b, x] — eliminate x. */
+    check_builtin("FLINT`Resultant[x^2 - a, x^2 - b, x]", "a^2 - 2 a b + b^2");
+    check_builtin("FLINT`Resultant[x^2 - a, x - b, x]", "-a + b^2");
+    check_builtin("FLINT`Resultant[3 x + 1, 2 x^2 - 5, x]", "-43");
+    /* out of scope (non-symbol variable) stays unevaluated */
+    check_builtin("FLINT`Resultant[x, x, 3]", "FLINT`Resultant[x, x, 3]");
+
+    /* FLINT`Factor[p] — irreducible over Q, multivariate. */
+    check_builtin("FLINT`Factor[x^4 - 1]", "(-1 + x) (1 + x) (1 + x^2)");
+    check_builtin("FLINT`Factor[x^2 - 2 x y + y^2]", "(x - y)^2");
+    check_builtin("FLINT`Factor[2 x^2 + 4 x + 2]", "2 (1 + x)^2");
+    /* irreducible input returns itself */
+    check_builtin("FLINT`Factor[x^2 + 1]", "1 + x^2");
+    /* out of scope: symbolic (non-polynomial) coefficient stays unevaluated */
+    check_builtin("FLINT`Factor[Sin[x]]", "FLINT`Factor[Sin[x]]");
+
+    /* FLINT`FactorSquareFree[p] — group by multiplicity, no irreducible split. */
+    check_builtin("FLINT`FactorSquareFree[(x - 1)^2 (x + 1)]", "(1 + x) (-1 + x)^2");
+
+    /* Transparent Resultant now routes plain Q through FLINT and MUST equal
+     * the classical convention (verified sign/degree-independent). */
+    check_builtin("PossibleZeroQ[Resultant[x^2 - a, x - b, x] - (b^2 - a)]", "True");
+    check_builtin("PossibleZeroQ[Resultant[2 x^2 + 3, x^3 - x, x] - 75]", "True");
+    check_builtin("Resultant[3 x + 1, 2 x^2 - 5, x]", "-43");
+
+    /* Transparent univariate Factor via FLINT (fmpz_poly_factor). Mathematica's
+     * primitive-positive-leading convention: 4x^2-9 -> (2x-3)(2x+3), NOT the
+     * monic 4(x-3/2)(x+3/2) an fmpq factorisation gives. */
+    check_builtin("Factor[x^2 - 1]", "(-1 + x) (1 + x)");
+    check_builtin("Factor[4 x^2 - 9]", "(-3 + 2 x) (3 + 2 x)");
+    check_builtin("Factor[2 x^2 - 2]", "2 (-1 + x) (1 + x)");
+    check_builtin("Factor[-x^2 + 1]", "-(-1 + x) (1 + x)");
+    /* Bignum coefficients (> int64): previously returned UNFACTORED because a
+     * bignum coefficient was misclassified as a variable and dropped. */
+    check_builtin("Factor[Expand[(x - 10000000000) (x - 20000000000)]]",
+                  "(-20000000000 + x) (-10000000000 + x)");
+    check_builtin("Factor[Expand[(x^2 - 7) (x - 12345678901234567890)]]",
+                  "(-12345678901234567890 + x) (-7 + x^2)");
+    /* Rational-coefficient univariate falls through to the classical path. */
+    check_builtin("Factor[x^2 - 1/4]", "1/4 (-1 + 2 x) (1 + 2 x)");
+
+    /* Transparent MULTIVARIATE Factor via FLINT (fmpq_mpoly_factor). The
+     * classical heuristic factorer is exponential in the variable count and
+     * stalls (>20s) on x^99 - y^99; FLINT returns it in milliseconds. Output is
+     * the primitive positive-leading convention with rational content split out,
+     * matching Mathematica. A globally negative lead is pulled out as -1
+     * (-x^2+y^2 -> -(x-y)(x+y)), the WL-canonical form. */
+    check_builtin("Factor[x^2 - y^2]", "(x + y) (x - y)");
+    check_builtin("Factor[-x^2 + y^2]", "-(x + y) (x - y)");
+    check_builtin("Factor[4 x^2 - 9 y^2]", "(2 x - 3 y) (2 x + 3 y)");
+    check_builtin("Factor[2 x^2 - 2 y^2]", "2 (x + y) (x - y)");
+    check_builtin("Factor[6 x^2 y + 9 x y^2]", "3 x y (2 x + 3 y)");
+    check_builtin("Factor[x^2/4 - y^2/9]", "1/36 (3 x - 2 y) (3 x + 2 y)");
+    /* Irreducible multivariate: single factor, unchanged. */
+    check_builtin("Factor[x + y + z]", "x + y + z");
+    /* Rational function: FLINT declines (denominator) -> classical Together. */
+    check_builtin("Factor[1/(x - y) + 1/(x + y)]", "(2 x)/((x + y) (x - y))");
+    /* Non-polynomial head: FLINT declines (Sin) -> classical treats Sin[x]
+     * as a generator. */
+    check_builtin("Factor[Sin[x]^2 - y^2]", "(Sin[x] + y) (Sin[x] - y)");
+}
+
+/* ------------------------------------------------------------------ */
+/*  FLINT` matrix context: Det (exact integer/rational), plus the      */
+/*  transparent Det acceleration that must match the classical value.   */
+/* ------------------------------------------------------------------ */
+
+static void test_flint_mat_ops(void) {
+    check_builtin("FLINT`Det[{{1, 2}, {3, 4}}]", "-2");
+    check_builtin("FLINT`Det[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]", "-3");
+    check_builtin("FLINT`Det[{{1/2, 1/3}, {1/5, 1/7}}]", "1/210");
+    /* symbolic entry: out of scope -> unevaluated */
+    check_builtin("FLINT`Det[{{a, b}, {c, d}}]", "FLINT`Det[{{a, b}, {c, d}}]");
+    /* non-square -> unevaluated */
+    check_builtin("FLINT`Det[{{1, 2, 3}, {4, 5, 6}}]",
+                  "FLINT`Det[{{1, 2, 3}, {4, 5, 6}}]");
+
+    /* Transparent Det routes rational matrices through FLINT and MUST equal
+     * the classical determinant. Symbolic matrices stay on Laplace. */
+    check_builtin("Det[{{1, 2}, {3, 4}}]", "-2");
+    check_builtin("Det[{{a, b}, {c, d}}]", "-b c + a d");
+    check_builtin("Det[{{2, 0, 0}, {0, 3, 0}, {0, 0, 5}}]", "30");
+
+    /* FLINT`Inverse — exact rational inverse; MUST equal System`Inverse. */
+    check_builtin("FLINT`Inverse[{{1, 2}, {3, 4}}]", "{{-2, 1}, {3/2, -1/2}}");
+    check_builtin("Inverse[{{1, 2}, {3, 4}}]", "{{-2, 1}, {3/2, -1/2}}");
+    /* singular -> unevaluated (classical path emits Inverse::sing) */
+    check_builtin("FLINT`Inverse[{{1, 2}, {2, 4}}]",
+                  "FLINT`Inverse[{{1, 2}, {2, 4}}]");
+    /* symbolic -> unevaluated */
+    check_builtin("FLINT`Inverse[{{a, b}, {c, d}}]",
+                  "FLINT`Inverse[{{a, b}, {c, d}}]");
+
+    /* FLINT`RowReduce — reduced row echelon form; MUST equal System`RowReduce. */
+    check_builtin("FLINT`RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]",
+                  "{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}");
+    check_builtin("RowReduce[{{1, 2, 3}, {4, 5, 6}, {7, 8, 10}}]",
+                  "{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}}");
+
+    /* FLINT`MatrixRank — exact rank; MUST equal System`MatrixRank. */
+    check_builtin("FLINT`MatrixRank[{{1, 2, 3}, {2, 4, 6}, {1, 0, 1}}]", "2");
+    check_builtin("MatrixRank[{{1, 2, 3}, {2, 4, 6}, {1, 0, 1}}]", "2");
+    check_builtin("MatrixRank[{{1, 2}, {2, 4}}]", "1");
+
+    /* FLINT`LinearSolve — vector and matrix RHS; MUST equal System`LinearSolve. */
+    check_builtin("FLINT`LinearSolve[{{1, 2}, {3, 4}}, {5, 6}]", "{-4, 9/2}");
+    check_builtin("LinearSolve[{{1, 2}, {3, 4}}, {5, 6}]", "{-4, 9/2}");
+    check_builtin("FLINT`LinearSolve[{{1, 2}, {3, 4}}, {{5}, {6}}]",
+                  "{{-4}, {9/2}}");
+    /* singular system -> unevaluated (classical path handles / warns) */
+    check_builtin("FLINT`LinearSolve[{{1, 2}, {2, 4}}, {1, 3}]",
+                  "FLINT`LinearSolve[{{1, 2}, {2, 4}}, {1, 3}]");
+}
+
+/* ------------------------------------------------------------------ */
+/*  FLINT` numeric context: Zeta / HurwitzZeta / PolyGamma /           */
+/*  StieltjesGamma via arb/acb. Asserted by tolerance against known    */
+/*  closed forms (float surface strings are not stable to compare).     */
+/* ------------------------------------------------------------------ */
+
+static void test_flint_num_ops(void) {
+    /* Zeta[2] = pi^2/6, cross-checked against the hand-rolled kernel. */
+    check_builtin("Abs[FLINT`Zeta[2] - N[Zeta[2]]] < 10^-12", "True");
+    /* precision propagates from the argument */
+    check_builtin("Precision[FLINT`Zeta[2.0`40]] > 30", "True");
+    /* near the first non-trivial Riemann zero: |zeta| is ~0 */
+    check_builtin("Abs[FLINT`Zeta[0.5 + 14.134725141734695 I]] < 10^-6", "True");
+    /* HurwitzZeta[s, 1] = Zeta[s] */
+    check_builtin("Abs[FLINT`HurwitzZeta[3, 1] - N[Zeta[3]]] < 10^-12", "True");
+    /* digamma(1) = -EulerGamma;  psi'(2) = pi^2/6 - 1 */
+    check_builtin("Abs[FLINT`PolyGamma[0, 1] + EulerGamma] < 10^-12", "True");
+    check_builtin("Abs[FLINT`PolyGamma[1, 2] - (Pi^2/6 - 1)] < 10^-12", "True");
+    /* Stieltjes gamma_0 = EulerGamma (new numeric capability) */
+    check_builtin("Abs[FLINT`StieltjesGamma[0] - EulerGamma] < 10^-12", "True");
+    check_builtin("Abs[FLINT`StieltjesGamma[1] - (-0.0728158454836767)] < 10^-10", "True");
+
+    /* out of scope / poles / bad args stay unevaluated */
+    check_builtin("FLINT`Zeta[x]", "FLINT`Zeta[x]");
+    check_builtin("FLINT`Zeta[1]", "FLINT`Zeta[1]");
+    check_builtin("FLINT`StieltjesGamma[-1]", "FLINT`StieltjesGamma[-1]");
 }
 
 /* ------------------------------------------------------------------ */
@@ -693,7 +842,7 @@ static void test_consumers(void) {
 /* ------------------------------------------------------------------ */
 
 static void test_attributes(void) {
-    check_builtin("MemberQ[Attributes[Flint`GCD], Protected]", "True");
+    check_builtin("MemberQ[Attributes[FLINT`PolynomialGCD], Protected]", "True");
 }
 
 /* ------------------------------------------------------------------ */
@@ -724,6 +873,9 @@ int main(void) {
     TEST(test_parametric_field_ops);
     TEST(test_goursat_descent_operands);
     TEST(test_builtin_path);
+    TEST(test_flint_poly_ops);
+    TEST(test_flint_mat_ops);
+    TEST(test_flint_num_ops);
     TEST(test_consumers);
     TEST(test_attributes);
 

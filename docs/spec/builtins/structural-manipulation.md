@@ -848,6 +848,7 @@ Factors a polynomial over the integers.
 
 **Features**:
 - `Listable`, `Protected`.
+- **FLINT acceleration** (when built with FLINT): a univariate polynomial over Z is factored via `fmpz_poly_factor`, and a genuine multivariate polynomial over Q via `fmpq_mpoly_factor`, both from a guarded fast path at the top of `builtin_factor` (plain single-argument form only). This turns the exponential-in-variable-count classical multivariate factoriser — which hangs on inputs like `Factor[x^99 - y^99]` (> 20 s) — into a few-millisecond call. Each irreducible factor is normalised to a positive leading coefficient (highest total degree, deglex tie-break — Mathematica's convention), with the discarded sign folded into a separated rational content, so e.g. `Factor[y^2 - x^2]` → `-(x - y)(x + y)`. Inputs that are not a polynomial over Q (a denominator, fractional/symbolic exponent, or a non-polynomial head such as `Sqrt`/`Sin`) fall through to the classical path unchanged; `Extension`/`GaussianIntegers`/`Modulus` option forms travel their own branch and are untouched. See also the `` FLINT`Factor `` builtin.
 - When given a rational expression, first resolves dependencies over `Together` before factoring.
 - Uses exact root isolation (Rational Root Theorem limits) and binomial descents structured identically to Zassenhaus recombination, evaluating combinations exact and memory safe.
 - Threads natively across lists, logic structures, and numeric groupings perfectly.
@@ -1152,6 +1153,7 @@ Computes the resultant of two polynomials.
 - Inputs containing algebraic-number coefficients (e.g. `Sqrt[N]`, cube roots — any `Power[X, Rational[a,b]]` with `b > 1`) are routed to the Sylvester+Det path instead, because the subresultant chain bloats geometrically when `Power[base, k/m]` forms can't be combined with their `Times[base^q, Sqrt[base]]` equivalents by `Plus` alone.
 - A size-budget guard inside the subresultant path falls back to Sylvester+Det for any pathological input where chain elements exceed ~30x the input leaf-count.
 - Automatically preserves multiplicativity (e.g., $Res(A \cdot B, Q) = Res(A, Q) Res(B, Q)$ and $Res(A^k, Q) = Res(A, Q)^k$).
+- **FLINT acceleration** (when built with FLINT): plain rational inputs are computed via `fmpq_mpoly_resultant`, which avoids the subresultant PRS coefficient growth on higher-degree / multivariate inputs. FLINT's convention matches the classical output exactly; inputs with algebraic-number or otherwise non-rational coefficients fall through to the paths above. The same kernel is exposed directly as `` FLINT`Resultant `` (see the FLINT` context section).
 
 ```mathematica
 In[1]:= Resultant[x^2 - 2x + 7, x^3 - x + 5, x]
@@ -1515,3 +1517,70 @@ HornerForm::poly: 1+x^a is not a polynomial.
 Out[4]= HornerForm[1 + x^a, x]
 ```
 
+
+## FLINT` context (direct FLINT kernels)
+
+The `FLINT`` context exposes FLINT's kernels directly at the REPL, in parallel
+with the transparent acceleration of the corresponding `System`` builtins. Each
+is `Protected`, carries a docstring (`?FLINT`Factor`), and its symbol is interned
+in `sym_names.c`. All require a build with FLINT (`USE_FLINT`); without it — or
+when the argument is out of FLINT's scope (non-polynomial / non-rational
+coefficients, a symbolic matrix, a symbolic function argument or a pole) — the
+call is returned unevaluated rather than approximated.
+
+Polynomial kernels (`fmpq_mpoly`):
+
+- `` FLINT`PolynomialGCD[a, b] `` — the **monic** GCD of `a` and `b` over the
+  rationals (`fmpq_mpoly_gcd`), multivariate. Note this is FLINT's monic
+  representative (e.g. `` FLINT`PolynomialGCD[2 x - 1, 4 x^2 - 1] `` is
+  `x - 1/2`), which differs from `PolynomialGCD`'s primitive-over-Z form
+  (`2 x - 1`).
+- `` FLINT`Resultant[a, b, x] `` — the resultant eliminating `x`
+  (`fmpq_mpoly_resultant`); other free symbols are treated as coefficients.
+- `` FLINT`Factor[p] `` — irreducible factorisation over Q
+  (`fmpq_mpoly_factor`), returned as `Times[const, factor^exp, …]`,
+  multivariate. (`System`Factor` on a **univariate** polynomial over Z is
+  transparently routed through FLINT's `fmpz_poly_factor`, giving primitive
+  positive-leading factors + integer content — Mathematica's convention. This
+  also fixes a bug where a univariate polynomial with a bignum coefficient came
+  back unfactored. Transparent *multivariate* Factor is not rewired: FLINT's
+  factor sign-form / ordering differs from the classical output.)
+- `` FLINT`FactorSquareFree[p] `` — squarefree factorisation
+  (`fmpq_mpoly_factor_squarefree`).
+
+Exact linear algebra (integer / rational matrices, `fmpq_mat`); each also
+transparently accelerates the corresponding `System`` builtin on all-rational
+matrices (the results — determinant, inverse, RREF, unique solution, rank — are
+unique / basis-independent, so they match the classical output):
+
+- `` FLINT`Det[m] `` — exact determinant via `fmpq_mat_det` (see *Linear
+  Algebra → Det*).
+- `` FLINT`Inverse[m] `` — exact inverse via `fmpq_mat_inv`; unevaluated for a
+  singular or non-rational matrix.
+- `` FLINT`RowReduce[m] `` — reduced row echelon form via `fmpq_mat_rref`.
+- `` FLINT`LinearSolve[m, b] `` — square nonsingular solve via `fmpq_mat_solve`
+  (vector or matrix RHS); unevaluated otherwise.
+- `` FLINT`MatrixRank[m] `` — rank via `fmpq_mat_rref`.
+
+Arbitrary-precision special functions (arb/acb ball arithmetic; result
+precision follows the arguments, machine precision for exact input):
+
+- `` FLINT`Zeta[s] `` — Riemann ζ (`acb_dirichlet_zeta`).
+- `` FLINT`HurwitzZeta[s, a] `` — Hurwitz ζ (`acb_dirichlet_hurwitz`).
+- `` FLINT`PolyGamma[n, z] `` — ψ⁽ⁿ⁾, `n = 0` is digamma (`acb_polygamma`).
+- `` FLINT`StieltjesGamma[n] `` / `` [n, a] `` — Stieltjes constants
+  (`acb_dirichlet_stieltjes`); non-negative integer `n`.
+
+```mathematica
+In[1]:= FLINT`Factor[x^2 - 2 x y + y^2]
+Out[1]= (x - y)^2
+
+In[2]:= FLINT`Resultant[x^2 - a, x^2 - b, x]
+Out[2]= a^2 - 2 a b + b^2
+
+In[3]:= FLINT`Det[{{1/2, 1/3}, {1/5, 1/7}}]
+Out[3]= 1/210
+
+In[4]:= FLINT`Zeta[2] - N[Pi^2/6]
+Out[4]= 0.
+```

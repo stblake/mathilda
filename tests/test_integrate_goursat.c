@@ -59,6 +59,93 @@ static void declines(const char* f) {
     check_eq(buf, "Integrate");
 }
 
+/* Like `ok`, but FORCES Method -> "GoursatAlgebraic" so the result is
+ * guaranteed to come from the Goursat integrator (not the Automatic cascade):
+ * the integral closes and differentiates back to f. */
+static void okg(const char* f) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf),
+             "FreeQ[Integrate[%s, t, Method -> \"GoursatAlgebraic\"], Integrate]", f);
+    check_eq(buf, "True");
+    snprintf(buf, sizeof(buf),
+             "PossibleZeroQ[D[Integrate[%s, t, Method -> \"GoursatAlgebraic\"], t]"
+             " - (%s)]", f, f);
+    check_eq(buf, "True");
+}
+
+/* Forced GoursatAlgebraic, but verify by a NUMERIC differentiate-back at the
+ * real point t = `pt` (a string like "17/5").  For closed forms carrying
+ * complex Logs / large nested radicals on which PossibleZeroQ's real-only
+ * sampling misfires across a branch cut.  Closure already implies the method's
+ * internal diff_back_ok guard accepted the result. */
+static void okg_num(const char* f, const char* pt) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "FreeQ[Integrate[%s, t, Method -> \"GoursatAlgebraic\"], Integrate]", f);
+    check_eq(buf, "True");
+    snprintf(buf, sizeof(buf),
+             "N[Abs[(D[Integrate[%s, t, Method -> \"GoursatAlgebraic\"], t] - (%s))"
+             " /. t -> %s], 20] < 1/100000000000", f, f, pt);
+    check_eq(buf, "True");
+}
+
+/* ------------------------------------------------------------------ */
+/* Graded exercise ladder (easy -> hard), mirroring GOURSAT_EXERCISES.md.  */
+/* Every case is FORCED through Method -> "GoursatAlgebraic", so each is     */
+/* genuinely solved by the Goursat integrator.  The ladder spans positive   */
+/* (radical in the numerator) and negative (denominator) exponents for      */
+/* p in {1/2, 1/3, 2/3, 1/4, 3/4} and exercises every involution equation.  */
+/* ------------------------------------------------------------------ */
+static void test_graded(void) {
+    /* -- Tier 1: recognise + fold; antiderivative is a single radical power. */
+    okg("t^2/(t^3-1)^(1/3)");      /* neg p=1/3  -> (t^3-1)^(2/3)/2  */
+    okg("t^2/(t^3-1)^(2/3)");      /* neg p=2/3  -> (t^3-1)^(1/3)    */
+    okg("t^3/(t^4-1)^(3/4)");      /* neg p=3/4  -> (t^4-1)^(1/4)    */
+    okg("t^3/(t^4-1)^(1/4)");      /* neg p=1/4  -> (t^4-1)^(3/4)/3  */
+
+    /* -- Tier 2: positive exponent (radical in the numerator). */
+    okg("t^2 (t^3-1)^(1/3)");      /* pos p=1/3 -> (t^3-1)^(4/3)/4   */
+    okg("t^2 (t^3-1)^(2/3)");      /* pos p=2/3 -> (t^3-1)^(5/3)/5   */
+    okg("t^3 (t^4-1)^(1/4)");      /* pos p=1/4 -> (t^4-1)^(5/4)/5   */
+    okg("t^3 (t^4-1)^(3/4)");      /* pos p=3/4 -> (t^4-1)^(7/4)/7   */
+
+    /* -- Tier 3: genuine cube-root involution (ArcTan + Log). */
+    okg("1/(t^3-1)^(1/3)");        /* p=1/3, H1 == 0                 */
+    okg("t/(t^3-1)^(2/3)");        /* p=2/3, H0 == 0 (dual)          */
+    okg("1/(t (t^3-1)^(2/3))");    /* p=2/3, H0 == 0, pole cofactor  */
+    okg("1/(t^3-8)^(1/3)");        /* p=1/3, shifted radicand        */
+
+    /* -- Tier 4: genuine fourth-root involution (ArcTan + ArcTanh),
+     *    harmonic quartic. */
+    okg("1/(t^4-1)^(1/4)");        /* p=1/4, H1 == H2 == 0           */
+    okg("t^2/(t^4-1)^(3/4)");      /* p=3/4, H0 == H1 == 0 (dual)    */
+    okg("1/(t^4-16)^(1/4)");       /* harmonic quartic != t^4-1      */
+    okg("t^2/(t^4-16)^(3/4)");     /* harmonic quartic != t^4-1      */
+
+    /* -- Tier 5: Goursat's original square-root V4 (ArcTanh + Log). */
+    okg("t/Sqrt[(t^2-1)(t^2-4)]");                /* V4, P0 == 0      */
+    okg("(t^2-2)/(t Sqrt[(t^2-1)(t^2-4)])");      /* finite-f.p. S=2/t */
+    okg("(t^2-2)/(t Sqrt[(t^2-4)(t^2-9)])");      /* different radicand */
+    okg("(t^4 + 2 t^3 - 4)/(t^2 Sqrt[(t^2-1)(t^2-4)])"); /* neg-lc descent */
+
+    /* -- Tier 6: positive square-root exponent (numerator; large closed
+     *    form -> numeric differentiate-back). */
+    okg_num("t Sqrt[(t^2-1)(t^2-4)]", "7/2");     /* pos p=1/2        */
+
+    /* -- Tier 7 (hardest): period-3 higher symmetry.  Order-3 Mobius S with
+     *    F a non-trivial character (F + F(S) + F(S^2) == 0); the V4 trivial
+     *    projection is non-zero.  Complex-Log closed form -> numeric check. */
+    okg_num("(t-1)/((t+2) Sqrt[t^3-1])", "17/5");
+
+    /* -- Involution gates genuinely fail: these must DECLINE. */
+    declines("t/(t^3-1)^(1/3)");          /* cube H1 != 0            */
+    declines("1/(t^3-1)^(2/3)");          /* cube H0 != 0            */
+    declines("t/(t^4-1)^(1/4)");          /* fourth V1 obstructive   */
+    declines("t^2 (t^4-1)^(3/4)");        /* non-elementary (Chebyshev) */
+    declines("t^2/Sqrt[(t^2-1)(t^2-4)]"); /* V4-invariant: elliptic  */
+    declines("1/Sqrt[t^3-1]");            /* period-3 proj. != 0     */
+}
+
 /* ------------------------------------------------------------------ */
 /* Square-root case: Goursat's V4 (p = 1/2).                          */
 /* ------------------------------------------------------------------ */
@@ -187,6 +274,7 @@ int main(void) {
     TEST(test_fourth);
     TEST(test_period3);
     TEST(test_plumbing);
+    TEST(test_graded);
 
     printf("All Integrate GoursatAlgebraic tests passed!\n");
     return 0;

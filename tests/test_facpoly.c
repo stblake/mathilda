@@ -85,10 +85,14 @@ void test_factor_xp_minus_c_regression() {
              "Plus[-2, Power[x, 26]]");
     /* End-to-end user case: the irreducibility short-circuit's
      * univariate images (y^13 - c, z^14 - c) used to trigger the
-     * same hang.  Full factorisation completes in single-digit
-     * hundreds of milliseconds. */
+     * same hang.  Now factored transparently via FLINT (fmpq_mpoly_factor)
+     * in milliseconds.  FLINT emits every irreducible factor with a positive
+     * leading coefficient (Mathematica's convention) and collects the global
+     * sign into a leading -1, so the two sign-bearing factors read as
+     * y^13 - x - 1 and z^14 + y - 1 with an overall -1 — the same product as
+     * (and cleaner than) the classical heuristic factorer's sign spread. */
     run_test("Factor[Expand[x^2 (1 - x^12) (1 + x - y^13) (1 - y - z^14)]]",
-             "Times[Power[x, 2], Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, x, Power[x, 2]], Plus[1, Times[-1, x], Power[x, 2]], Plus[1, Times[-1, Power[x, 2]], Power[x, 4]], Plus[-1, Times[-1, x], Power[y, 13]], Plus[1, Times[-1, y], Times[-1, Power[z, 14]]]]");
+             "Times[-1, Power[x, 2], Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, x, Power[x, 2]], Plus[1, Times[-1, x], Power[x, 2]], Plus[1, Times[-1, Power[x, 2]], Power[x, 4]], Plus[-1, Times[-1, x], Power[y, 13]], Plus[-1, y, Power[z, 14]]]");
 }
 
 /* Regression: the bivariate Hensel path (Stage-2 Wang x-scale recovery)
@@ -117,7 +121,11 @@ void test_factor() {
     run_test("Factor[1 - x^3]", "Times[-1, Plus[-1, x], Plus[1, x, Power[x, 2]]]");
     run_test("Factor[x^10 - y^10]", "Times[Plus[x, y], Plus[x, Times[-1, y]], Plus[Power[x, 4], Times[-1, Times[Power[x, 3], y]], Times[Power[x, 2], Power[y, 2]], Times[-1, Times[x, Power[y, 3]]], Power[y, 4]], Plus[Power[x, 4], Times[Power[x, 3], y], Times[Power[x, 2], Power[y, 2]], Times[x, Power[y, 3]], Power[y, 4]]]");
     run_test("Factor[x^3 - 6x^2 + 11x - 6]", "Times[Plus[-3, x], Plus[-2, x], Plus[-1, x]]");
-    run_test("Factor[2x^3 y - 2a^2 x y - 3a^2 x^2 + 3a^4]", "Times[Plus[a, x], Plus[Times[-1, a], x], Plus[Times[-3, Power[a, 2]], Times[2, Times[x, y]]]]");
+    /* Now factored transparently via FLINT, which normalises each irreducible
+     * factor to a positive leading coefficient (a - x, 3a^2 - 2 x y) rather
+     * than the classical heuristic factorer's mixed signs (-a + x, -3a^2 + 2xy);
+     * the two sign flips cancel, so the product is identical. */
+    run_test("Factor[2x^3 y - 2a^2 x y - 3a^2 x^2 + 3a^4]", "Times[Plus[a, x], Plus[a, Times[-1, x]], Plus[Times[3, Power[a, 2]], Times[-2, Times[x, y]]]]");
     run_test("Factor[(x^3+2x^2)/(x^2-4y^2)-(x+2)/(x^2-4y^2)]", "Times[Plus[-1, x], Plus[1, x], Plus[2, x], Power[Plus[x, Times[-2, y]], -1], Power[Plus[x, Times[2, y]], -1]]");
     run_test("Factor[{x^2-1, x^4-1, x^8-1}]", "List[Times[Plus[-1, x], Plus[1, x]], Times[Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]]], Times[Plus[-1, x], Plus[1, x], Plus[1, Power[x, 2]], Plus[1, Power[x, 4]]]]");
     run_test("Factor[1 < 1 + 2 x + x^2 + 1/(1+x) < 2]", "Inequality[1, Less, Times[Plus[2, x], Power[Plus[1, x], -1], Plus[1, x, Power[x, 2]]], Less, 2]");

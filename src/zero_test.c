@@ -110,6 +110,16 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
 #define ZT_NUMERATOR_BITS    6
 #define ZT_DENOMINATOR_BITS  16
 
+/* For a precision-honoured ALGEBRAIC expression whose numeric residual never
+ * shrinks across the ladder, a residual exceeding scale * 2^(-ZT_ALG_NONZERO_BITS)
+ * is above the machine-noise floor (~2^-52) and is a genuine non-zero, not a
+ * cancellation-hidden zero.  Set a few bits inside 52 so a true algebraic zero
+ * pinned at machine rounding noise (residual ~ scale * 2^-52) still gets the
+ * lenient zero verdict, while a resolvable small value (e.g. Sqrt[10^12+1]-10^6
+ * ~ scale * 2^-42) is correctly rejected.  (A true algebraic zero with deeper
+ * machine cancellation would SHRINK under MPFR and never reach this branch.) */
+#define ZT_ALG_NONZERO_BITS  48
+
 /* Safety bits in the cancellation threshold. The IEEE-cancellation rule of
  * thumb is that a result is "ambiguous" if smaller than scale * 2^(-p/2);
  * we add a couple of extra bits as a guard against fma / parsing slop. */
@@ -391,6 +401,66 @@ static bool expr_abs_double(const Expr* e, double* out) {
     return false;
 }
 
+/* Signed real value of a numeric leaf (Integer / Real / BigInt / MPFR /
+ * Rational[int, int]).  Returns false for anything that is not a real numeric
+ * scalar (symbols, Complex, unevaluated functions).  Used to read a Power's
+ * exponent with its sign so magnitude_scale handles reciprocals correctly. */
+static bool expr_signed_double(const Expr* e, double* out) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer;      return true; }
+    if (e->type == EXPR_REAL)    { *out = e->data.real;                 return true; }
+    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint);    return true; }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR)    { *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
+#endif
+    int64_t n = 0, d = 1;
+    if (is_rational((Expr*)e, &n, &d) && d != 0) { *out = (double)n / (double)d; return true; }
+    return false;
+}
+
+/* True iff every node of `e` is an algebraic-number construction: a numeric
+ * leaf, Complex[…], Rational[…], Power[base, p/q] (rational exponent), Sqrt[…],
+ * Plus[…] or Times[…] of the same.  For such an expression MPFR numericalize
+ * honours the requested precision exactly (no special function is silently
+ * pinned to machine precision), so a residual that does NOT shrink as bits are
+ * added is a genuine non-zero rather than a cancellation-hidden zero.  Bare
+ * symbols (transcendental constants Pi/E/…; free variables are substituted out
+ * before the numeric stage) and all other heads return false. */
+static bool is_algebraic_expr(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_REAL || e->type == EXPR_BIGINT
+#ifdef USE_MPFR
+        || e->type == EXPR_MPFR
+#endif
+        ) return true;
+    if (e->type == EXPR_SYMBOL || e->type == EXPR_STRING) return false;
+    if (e->type == EXPR_FUNCTION) {
+        Expr* re = NULL; Expr* im = NULL;
+        if (is_complex((Expr*)e, &re, &im))
+            return is_algebraic_expr(re) && is_algebraic_expr(im);
+        int64_t rn = 0, rd = 1;
+        if (is_rational((Expr*)e, &rn, &rd)) return true;
+        const Expr* h = e->data.function.head;
+        if (!h || h->type != EXPR_SYMBOL) return false;
+        const char* nm = h->data.symbol;
+        size_t argc = e->data.function.arg_count;
+        if (nm == SYM_Power && argc == 2) {
+            int64_t pn = 0, pd = 1;
+            if (!is_rational(e->data.function.args[1], &pn, &pd)) return false;
+            return is_algebraic_expr(e->data.function.args[0]);
+        }
+        if (nm == SYM_Sqrt && argc == 1)
+            return is_algebraic_expr(e->data.function.args[0]);
+        if (nm == SYM_Plus || nm == SYM_Times) {
+            for (size_t i = 0; i < argc; ++i)
+                if (!is_algebraic_expr(e->data.function.args[i])) return false;
+            return true;
+        }
+        return false;
+    }
+    return false;
+}
+
 /* Estimate the operand-magnitude scale of `e` at machine precision. This
  * is the denominator in the cancellation-aware ambiguity threshold:
  * results below scale * 2^(-p/2) are indistinguishable from rounding
@@ -461,9 +531,16 @@ static double magnitude_scale(const Expr* e) {
         }
         if (head_name == SYM_Power && argc == 2) {
             double base = magnitude_scale(e->data.function.args[0]);
-            double exp  = magnitude_scale(e->data.function.args[1]);
             if (base <= 0.0) base = 1.0;
-            double v = pow(base, exp);
+            /* Use the SIGNED exponent value, not its magnitude: Power[x, -1] has
+             * magnitude 1/x, not x.  Scoring a reciprocal/denominator as x^|−1|
+             * grossly inflates the operand scale of any expression with a
+             * denominator, which then drowns a genuine non-zero below the
+             * cancellation noise floor (a Schwartz-Zippel false zero). */
+            double expv;
+            if (!expr_signed_double(e->data.function.args[1], &expv))
+                expv = magnitude_scale(e->data.function.args[1]); /* symbolic exp */
+            double v = pow(base, expv);
             if (!isfinite(v) || v <= 0.0) return base; /* fall back */
             return v;
         }
@@ -675,9 +752,17 @@ static ZeroTestResult decide_numeric(const Expr* e) {
              * TRUE if still within it). */
             return rr;
         }
-        /* Never shrank: the requested precision is not honoured downstream, so
-         * the rung's shrunken threshold is meaningless. Fall back to the lenient
-         * machine verdict (zero). */
+        /* Never shrank. For a precision-honoured ALGEBRAIC expression (MPFR is
+         * exact for radicals/arithmetic), a residual that stays well ABOVE the
+         * machine-noise floor is a genuine non-zero whose operand scale is merely
+         * inflated by cancellation (e.g. Sqrt[10^12+1] - 10^6 + z, or a canonic
+         * cyclotomic eigenprojection) — settle it FALSE rather than mistaking it
+         * for a cancellation-hidden zero.  Otherwise (transcendental heads whose
+         * MPFR path may silently stay at machine precision, or a residual down at
+         * the noise floor) keep the lenient machine verdict (zero). */
+        if (is_algebraic_expr(e) && scale > 0.0 &&
+            m > scale * ldexp(1.0, -ZT_ALG_NONZERO_BITS))
+            return ZERO_TEST_FALSE;
         return ZERO_TEST_TRUE;
     }
     return ZERO_TEST_TRUE;
@@ -735,10 +820,22 @@ static Expr* sample_random_value(void) {
     int64_t num_bound = (int64_t)1 << ZT_NUMERATOR_BITS;
     int64_t den_bound = (int64_t)1 << ZT_DENOMINATOR_BITS;
 
-    int64_t n_re = draw_int_range(-num_bound, num_bound);
-    int64_t d_re = draw_int_range(1, den_bound);
-    if (d_re == 0) d_re = 1;
-    return expr_new_real((double)n_re / (double)d_re);
+    /* Sample magnitude is bounded BELOW by 1 (an integer part in [1, num_bound])
+     * plus a full-granularity fractional part for a rich distinct-value set.
+     * Keeping |value| >= 1 is essential for polynomial/algebraic identity
+     * testing: a sample drawn from (-1, 1) drives a high-degree monomial
+     * (u^2, u^3, ...) far below the operand-magnitude scale, so a GENUINE
+     * non-zero such as Sqrt[2] u^3 collapses into the rounding-noise band and is
+     * misread as an identity (Schwartz-Zippel false positive).  An analytic
+     * identity that holds on [1, num_bound] holds everywhere it is analytic
+     * (identity theorem), so excluding the small-magnitude shell loses no
+     * decision power while removing the false-zero failure mode.  The numerator
+     * magnitude stays moderate (<= ~num_bound) to avoid overflowing Exp/Gamma. */
+    int64_t whole  = draw_int_range(1, num_bound);
+    int64_t frac_n = draw_int_range(0, den_bound - 1);
+    double  val    = (double)whole + (double)frac_n / (double)den_bound;
+    if (draw_int_range(0, 1)) val = -val;
+    return expr_new_real(val);
 }
 
 /* Substitute every free symbol in `e` with an entry from `(syms, vals)`,
