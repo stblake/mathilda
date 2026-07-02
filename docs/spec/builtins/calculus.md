@@ -377,9 +377,9 @@ monotonically down.
 
 **Features**:
 - `Protected`, `Listable`.
-- Ten-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
+- Eleven-stage dispatch cascade (`DerivativeDivides`, `LinearRadicals`,
   `QuadraticRadicals` and `LinearRatioRadicals` added 2026-06-06; `Weierstrass`
-  added 2026-06-09; `ChebychevAlgebraic` added 2026-06-29):
+  added 2026-06-09; `ChebychevAlgebraic` and `GoursatAlgebraic` added 2026-06-29):
   `Integrate[f, x]` (Method -> Automatic, default) tries each subroutine in
   order and returns the first non-`NULL` result:
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
@@ -403,16 +403,54 @@ monotonically down.
      Recognition is a single structural scan, so it runs ahead of
      `DerivativeDivides`'s Eliminate/Solve search.  Non-elementary binomials
      return `NULL` (the cascade falls through to later methods).
-  7. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
+  7. `Integrate\`GoursatAlgebraic[f, x]` — pseudo-elliptic integrands
+     `F(x) R(x)^q` (`F` rational, `R` a polynomial) with `q` any rational of
+     reduced denominator `2`, `3`, or `4` by Goursat's algorithm and its
+     cube-/fourth-root generalisations (Blake 2026).  The exponent is split
+     `R^q = R^k R^(-p)` with radical order `p in {1/2, 1/3, 2/3, 1/4, 3/4}` and
+     the integer `R^k` absorbed into `F`, so positive-power radicals such as
+     `(1-x^3)^(1/3)/x` are handled, not only radicals already in a denominator.
+     A Mobius automorphism cycling the roots of `R` splits the integrand into
+     eigencomponents that descend to genus-0 curves when the elementarity
+     criterion holds (`p=1/2`: Klein four-group `V4`, trivial projection
+     vanishes; `p=1/3,2/3`: order-3 cycle; `p=1/4,3/4`: order-4 cycle on
+     harmonic roots).  For `p=1/2` with `R` a cubic carrying the `t^3-1` higher
+     symmetry, when `V4` declines a Section-4 (Goursat 1887) period-3 reduction
+     is tried: an order-3 Mobius `S` fixes one ramification point and cycles the
+     other three, and the integral is elementary when `F` is a non-trivial
+     period-3 character `F(S) = Exp[2 Pi I/3] F` (so `(x-1)/((x+2) Sqrt[x^3-1])`
+     integrates).  The rational reductions are integrated recursively and
+     back-substituted.  Obstructed (genuinely elliptic) integrands,
+     non-harmonic quartics, and the cross-character A4 cases (Section 5, e.g.
+     `t/((t^3+8) Sqrt[t^3-1])`) return `NULL`.  A differentiate-back guard rejects the
+     rare cases where the eigenspace zero-test misfires on deeply nested radical
+     roots; the whole attempt runs under a CPU-time budget so a cyclotomic-root
+     `R` with an unlucky cofactor (where algebraic-number `Together`/`Cancel`
+     blows up) declines rather than hanging the cascade.  Uses
+     `Solve[..., Cubics -> True, Quartics -> True]` (the Ferrari quartic solver,
+     added 2026-06-29).  The Boolean global `Integrate\`GoursatDebug` (default
+     `False`; added 2026-06-30) traces the descent to stderr when set `True`:
+     whether the integrand matches the `F(x) R(x)^(-p)` form (and the recognised
+     `F`, `R`, `p`), which involution / eigenspace criterion is tested and
+     whether it holds (`V4` trivial projection, the order-3/order-4
+     ω-eigencomponents, the period-3 trivial projection per fixed point), and the
+     differentiate-back verdict.  The flag is latched once at the outermost call,
+     so recursive genus-0 reductions share it and indent by depth.
+     A graded battery of worked examples (every exponent `p`, both numerator and
+     denominator radicals, and every involution equation, with the negative
+     controls that decline) is collected in
+     [`GOURSAT_EXERCISES.md`](../../../GOURSAT_EXERCISES.md) and mirrored as the
+     `test_graded` ladder in `tests/test_integrate_goursat.c`.
+  8. `Integrate\`Weierstrass[f, x]` — rational functions of the trig kernels
      `Sin/Cos/Tan/Cot/Sec/Csc[x]` (or hyperbolic `Sinh/Cosh/.../Csch[x]`) with a
      kernel in a denominator; continuous `Tan[x/2]` / `Tanh[x/2]` substitution
      (Jeffrey & Rich 1994).  Runs ahead of `DerivativeDivides`: it is
      domain-specific, deterministic, correct by construction, and yields a real,
      continuous antiderivative rather than a complex-logarithm form.
-  8. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
+  9. `Integrate\`DerivativeDivides[f, x]` — substitution `u(x)`; in the
      cascade the quiet, branch-correct **direct quotient** strategy only.
-  9. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
-  10. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
+  10. `Integrate\`RischNorman[f, x]` — Bronstein pmint, all integrands.
+  11. `Integrate\`CRCTable[f, x]` — CRC integral table lookup (lazy-loaded
      from `src/internal/CRCMathTablesIntegrals.m` on first call).
   If every stage gives up the call bubbles back unevaluated.
 - `Method -> "<name>"` option (3rd argument) bypasses the cascade and
@@ -431,6 +469,8 @@ monotonically down.
   - `"LinearRatioRadicals"` — `Integrate\`LinearRatioRadicals[f, x]`.
   - `"ChebychevAlgebraic"` — `Integrate\`ChebychevAlgebraic[f, x]` (Chebychev
     binomial differential `x^p (a x^r + b)^q`).
+  - `"GoursatAlgebraic"` — `Integrate\`GoursatAlgebraic[f, x]` (pseudo-elliptic
+    `F/R^p`, `p` in `{1/2, 1/3, 2/3, 1/4, 3/4}`, via Mobius eigendescent).
   - `"Weierstrass"` — `Integrate\`Weierstrass[f, x]` (no denominator gate: applies
     to any rational function of the trig/hyperbolic kernels of `x`, including
     polynomial trig).

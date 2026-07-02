@@ -1,6 +1,20 @@
 Expr* builtin_factor(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
+#ifdef USE_FLINT
+    /* Parametric radical field Q(t..)(sqrt k), k a free symbol: factor over the
+     * field via FLINT (sqrt(k) -> S collapse -> multivariate factoring over Q).
+     * The classical algebraic-factoring path (qafactor/Trager) is built for
+     * constant radicands and blows up / hangs on a symbolic radicand — this is
+     * the Apart/Factor blocker in the parametric rational integrator. Only fires
+     * when a Sqrt[symbol] is actually present, matching WL's default of factoring
+     * over the field the input's radicals generate. */
+    if (res->data.function.arg_count == 1) {
+        Expr* pf = flint_parametric_sqrt_factor(res->data.function.args[0]);
+        if (pf) return pf;
+    }
+#endif
+
     /* Phase G5: Extension -> α option.  Walk trailing args looking for
      * Rule[Extension, α] / RuleDelayed[Extension, α].  When present,
      * dispatch to the algebraic-factoring path in qafactor.c (Trager).
@@ -234,6 +248,57 @@ Expr* builtin_factor(Expr* res) {
             return final;
         }
     }
+
+#ifdef USE_FLINT
+    /* Univariate integer-polynomial fast path via FLINT (fmpz_poly_factor):
+     * fast, and bignum-safe. It must run BEFORE the Together / collect_variables
+     * machinery below, which misclassifies a bignum coefficient as a variable
+     * (is_number omits EXPR_BIGINT) and routes a univariate bignum polynomial
+     * into the multivariate path, dropping its constant term and returning it
+     * unfactored. flint_univariate_factor_auto self-detects the single variable
+     * with a bignum-safe scan and emits Mathematica's primitive-positive-leading
+     * factor convention. Returns NULL for anything that is not a univariate
+     * polynomial over Z (multivariate, rational/symbolic coefficients, a
+     * denominator), which then takes the classical path unchanged. */
+    {
+        Expr* uf = flint_univariate_factor_auto(arg);
+        if (uf) {
+            if (memo_key) {
+                factor_memo_put(memo, memo_key, uf);
+                expr_free(memo_key);
+            }
+            return uf;
+        }
+    }
+
+    /* Multivariate integer/rational-polynomial fast path via FLINT
+     * (fmpq_mpoly_factor).  The classical heuristic multivariate factorer is
+     * exponential in the number of variables and stalls badly on inputs like
+     * x^99 - y^99 (>20 s), while FLINT returns in milliseconds.  Only fires for
+     * the plain single-argument form (no Extension / GaussianIntegers / Modulus
+     * option), so algebraic-field factoring is untouched.  flint_polynomial_factor
+     * returns NULL for anything that is not a genuine multivariate polynomial
+     * over Q (a denominator, a fractional or symbolic exponent, a non-polynomial
+     * head such as Sqrt / Sin / Complex) — those fall through to the classical
+     * path below unchanged.  The emitted form is FLINT's primitive, positive-
+     * leading-coefficient factor convention with a separated rational content,
+     * which matches Mathematica's (and the classical path's) output for
+     * factorable polynomials; the sole systematic difference is that a globally
+     * negative leading term is pulled out as an explicit -1 (e.g. y^2 - x^2 ->
+     * -(x - y)(x + y)), which is Mathematica's convention and more canonical
+     * than the classical (x + y)(-x + y).  The evaluator re-sorts the Orderless
+     * Times afterwards, so factor ordering is independent of FLINT. */
+    if (res->data.function.arg_count == 1) {
+        Expr* mf = flint_polynomial_factor(arg);
+        if (mf) {
+            if (memo_key) {
+                factor_memo_put(memo, memo_key, mf);
+                expr_free(memo_key);
+            }
+            return mf;
+        }
+    }
+#endif
 
     Expr* together = eval_and_free(expr_new_function(expr_new_symbol("Together"), (Expr*[]){expr_copy(arg)}, 1));
     Expr* n_call = expr_new_function(expr_new_symbol("Numerator"), (Expr*[]){expr_copy(together)}, 1);

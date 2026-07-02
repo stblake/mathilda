@@ -5,6 +5,7 @@
 #include "attr.h"
 #include "arithmetic.h"
 #include "poly.h"
+#include "flint_bridge.h"
 #include "expand.h"
 #include "rationalize.h"
 #include "sym_names.h"
@@ -243,6 +244,21 @@ static Expr* cancel_exact_div_wrapper(Expr* num, Expr* den) {
 
     for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
     free(vars);
+
+#ifdef USE_FLINT
+    /* The classical exact_poly_div treats an algebraic generator (Sqrt[k],
+     * zeta_n, …) as a free variable and so cannot divide e.g. x^2-2 by x-Sqrt[2]
+     * (which needs Sqrt[2]^2 = 2). When it fails, try exact division in the
+     * actual extension field; only an exact quotient is returned. */
+    if (!res) {
+        Expr* fq = flint_extension_divexact(exp_num, exp_den);
+        if (fq) {
+            expr_free(exp_num);
+            expr_free(exp_den);
+            return fq;
+        }
+    }
+#endif
 
     if (res) {
         expr_free(exp_num);
@@ -992,8 +1008,102 @@ static int pick_best_tower_generator(const Expr* arg, const QATower* t) {
     return best_idx;
 }
 
+#ifdef USE_FLINT
+/* Cancel a single fraction rigorously over a detected algebraic-extension field
+ * (Q(sqrt d), Q(zeta_n), radical tower) using the FLINT engine: g = gcd(num,den)
+ * then num/g, den/g by exact division. Returns NULL — deferring to the classical
+ * extension path — when no algebraic generator is present, the fraction is
+ * already reduced (g = 1), or an exact division does not apply. */
+static Expr* flint_cancel_fraction(Expr* arg) {
+    /* Parametric radical field Q(t..)(sqrt k): normalise the whole rational
+     * function via fmpz_mpoly_q. This covers a Plus of fractions (a sum whose
+     * Numerator/Denominator does not combine, so the extract-num/den path below
+     * bails and drops to the slow QA extension path — the LogToReal A^2+B^2
+     * bottleneck). */
+    {
+        Expr* fn = flint_parametric_field_normalize(arg);
+        if (fn) return fn;
+    }
+    Expr* num; Expr* den;
+    extract_num_den(arg, &num, &den);
+    if (den->type == EXPR_INTEGER && den->data.integer == 1) {
+        expr_free(num); expr_free(den); return NULL;
+    }
+    /* Parametric radical Q(t..)(sqrt k): the classical fallback does NOT
+     * terminate for a symbolic radicand, so once FLINT engages this field we
+     * finish the reduction ourselves even when num, den are already coprime
+     * (g == 1). Try it explicitly first so we can distinguish this regime. */
+    Expr* pg = flint_parametric_sqrt_gcd(num, den);
+    int parametric = (pg != NULL);
+    Expr* g;
+    if (parametric) {
+        g = eval_and_free(pg);
+    } else {
+        /* Number field / cyclotomic / tower: the classical extension path is
+         * fast AND does more (e.g. the roots-of-unity simplification the
+         * cube-root Goursat descent relies on). Only take over when there is an
+         * actual common factor; hand a coprime pair (g == 1) back to it. */
+        g = flint_extension_gcd(num, den);
+        if (!g) { expr_free(num); expr_free(den); return NULL; }
+        g = eval_and_free(g);   /* the bridge returns a raw tree; normalise it */
+    }
+    if (g->type == EXPR_INTEGER && g->data.integer == 1) {
+        expr_free(g);
+        if (!parametric) { expr_free(num); expr_free(den); return NULL; }
+        /* Parametric coprime: reduced form is num/den itself; returning NULL
+         * would drop into the non-terminating classical path. */
+        Expr* inv1 = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){den, expr_new_integer(-1)}, 2));
+        return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){num, inv1}, 2));
+    }
+    Expr* nn = flint_extension_divexact(num, g);
+    Expr* nd = flint_extension_divexact(den, g);
+    expr_free(g);
+    expr_free(num);
+    expr_free(den);
+    if (!nn || !nd) {
+        if (nn) expr_free(nn);
+        if (nd) expr_free(nd);
+        return NULL;
+    }
+    if (nd->type == EXPR_INTEGER && nd->data.integer == 1) {
+        expr_free(nd);
+        return eval_and_free(nn);
+    }
+    /* Capture whether the divided-out denominator is a numeric constant before
+     * it is consumed below. */
+    bool nd_numeric = (nd->type == EXPR_INTEGER) || head_is(nd, SYM_Rational);
+    Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){nd, expr_new_integer(-1)}, 2));
+    Expr* prod = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){nn, inv}, 2));
+    /* A numeric denominator (e.g. the unit -1 from a GCD that FLINT normalised
+     * monic in its own variable order rather than in x) leaves the result as
+     * Times[scalar, Plus[...]], which does not auto-distribute — expand so the
+     * sign/scale folds in and the surface form matches the classical path
+     * (Sqrt[k] + x, not -(-Sqrt[k] - x)). */
+    if (nd_numeric) {
+        Expr* out = expr_expand(prod);
+        expr_free(prod);
+        return out;
+    }
+    return prod;
+}
+#endif
+
 static Expr* builtin_cancel_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
+
+#ifdef USE_FLINT
+    /* Rigorous algebraic-extension cancellation via FLINT, ahead of the QA
+     * extension path. Returns NULL for plain-rational / non-extension inputs,
+     * which then take the existing code below. */
+    if (res->data.function.arg_count == 1) {
+        Expr* fc = flint_cancel_fraction(res->data.function.args[0]);
+        if (fc) return fc;
+    }
+#endif
 
     /* Strip a trailing Extension -> α option, if any.  When the user
      * passed `Extension -> Automatic`, run extension_autodetect on the
@@ -1009,6 +1119,19 @@ static Expr* builtin_cancel_compute(Expr* res) {
         if (argc != 1) return NULL;
     }
     Expr* arg = res->data.function.args[0];
+
+#ifdef USE_FLINT
+    /* Also route the Cancel[e, Extension -> ...] form (2-arg, after option
+     * stripping) through FLINT — the QA autodetect path below does not detect a
+     * symbolic radicand Sqrt[k] (parametric Q(a,b,k)(Sqrt k)) and the multivariate
+     * Together/Cancel it falls back to hangs. The 1-arg fast path handled the
+     * bare Cancel[e] above; this covers the Extension-carrying calls (e.g. the
+     * Goursat descent's canonic = Cancel[Together[e, Ext], Ext]). */
+    {
+        Expr* fc = flint_cancel_fraction(arg);
+        if (fc) return fc;
+    }
+#endif
 
     Expr* alpha_auto = NULL;
     QATower* auto_tower = NULL;
@@ -1327,6 +1450,19 @@ static Expr* builtin_together_compute(Expr* res) {
     const Expr* alpha = extract_extension_option_full(res, &argc, &auto_flag);
     if (argc != 1) return NULL;
     Expr* arg = res->data.function.args[0];
+
+#ifdef USE_FLINT
+    /* Together = combine into a single fraction + cancel common factors, which
+     * is exactly flint_cancel_fraction (extract num/den, GCD, exact-divide).
+     * Route the algebraic-extension cases (incl. the parametric Q(a,b,k)(Sqrt k)
+     * the QA autodetect below cannot see) through FLINT; NULL for plain-rational
+     * or nothing-to-do inputs falls through to the classical path. Fixes the
+     * Goursat descent's together_ext over the radical tower/parametric ring. */
+    {
+        Expr* fc = flint_cancel_fraction(arg);
+        if (fc) return fc;
+    }
+#endif
 
     Expr* alpha_auto = NULL;
     QATower* auto_tower = NULL;

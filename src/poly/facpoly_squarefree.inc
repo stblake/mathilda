@@ -347,6 +347,16 @@ static Expr* factor_square_free_dispatcher(Expr* e) {
 Expr* builtin_factorsquarefree(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
 
+#ifdef USE_FLINT
+    /* Parametric radical field Q(t..)(sqrt k): squarefree-factor over the field
+     * via FLINT (sqrt(k) -> S collapse). Only fires when a Sqrt[symbol] is
+     * present; the classical pipeline blows up on a symbolic radicand. */
+    {
+        Expr* pf = flint_parametric_sqrt_factor_squarefree(res->data.function.args[0]);
+        if (pf) return pf;
+    }
+#endif
+
     /* The square-free factorisation pipeline (PolynomialGCD against the
      * derivative) requires rational coefficients. */
     if (internal_args_contain_inexact(res)) {

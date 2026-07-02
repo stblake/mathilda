@@ -26,7 +26,7 @@ In[3]:= VandermondeMatrix[{a, b, c}, 2]
 Out[3]= {{1, a}, {1, b}, {1, c}}
 
 In[4]:= Factor[Det[VandermondeMatrix[{a, b, c}]]]
-Out[4]= (-a + b) (-a + c) (-b + c)
+Out[4]= -(a - b) (a - c) (b - c)
 
 In[5]:= LinearSolve[VandermondeMatrix[{1, 2, 3}], {6, 11, 18}]
 Out[5]= {3, 2, 1}

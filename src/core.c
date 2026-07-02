@@ -71,6 +71,7 @@
 #include "fibonacci.h"
 #include "lucas.h"
 #include "facpoly.h"
+#include "flint_bridge.h"
 #include "solve.h"
 #include "findroot.h"
 #include "datetime.h"
@@ -555,6 +556,11 @@ void core_init(void) {
     partitions_init();
     poly_init();
     facpoly_init();
+    flint_bridge_init();
+    void flint_mat_bridge_init(void);
+    flint_mat_bridge_init();
+    void flint_num_bridge_init(void);
+    flint_num_bridge_init();
     void squarefreeq_init(void);
     squarefreeq_init();
     void irrpolyq_init(void);

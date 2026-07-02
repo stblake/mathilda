@@ -8,12 +8,14 @@
  * thin glue layer — all multivariate arithmetic is delegated. */
 
 #include "qafactor.h"
+#include "rootofunity.h"
 #include "expr.h"
 #include "expand.h"
 #include "internal.h"
 #include "eval.h"
 #include "deriv.h"
 #include "poly.h"
+#include "flint_bridge.h"
 #include "arithmetic.h"
 #include "sym_names.h"
 #include "sym_intern.h"
@@ -264,6 +266,26 @@ static bool expr_qx_is_squarefree(Expr* R, const char* x_name) {
      * canonical Plus-of-monomials form. */
     Expr* dR_eval = evaluate(dR);
     expr_free(dR);
+
+    /* Fast path: gcd(R, R') over Q via FLINT (fmpq_mpoly_gcd).  R is the
+     * univariate rational norm polynomial, so this is squarely in FLINT's
+     * wheelhouse and collapses the squarefree-shift search that otherwise
+     * dominates Trager's runtime (the classical content/pseudo-remainder
+     * PolynomialGCD below is ~88% of Factor[…, Extension -> …] on higher
+     * norm degrees).  flint_multivariate_gcd returns NULL for anything it
+     * cannot represent (numeric, non-polynomial) or when USE_FLINT is off,
+     * in which case we fall through to the classical path unchanged.  Only
+     * the degree of the gcd matters here, so the FLINT-monic normalisation
+     * of its output is irrelevant. */
+    Expr* fg = flint_multivariate_gcd(R, dR_eval);
+    if (fg) {
+        expr_free(dR_eval);
+        Expr* x_fcheck = expr_new_symbol(x_name);
+        int fdeg = get_degree_poly(fg, x_fcheck);
+        expr_free(x_fcheck);
+        expr_free(fg);
+        return (fdeg <= 0);
+    }
 
     /* PolynomialGCD is variadic over polynomials (no variable arg);
      * passing a third symbol "x" silently coerces it into a
@@ -615,6 +637,30 @@ QAExt* qa_resolve_extension(const Expr* alpha_expr, Expr** render_out) {
         return ext;
     }
 
+    /* Root of unity (-1)^(p/q)  →  cyclotomic field Q(ζ_{2q}).
+     *
+     * Mathilda canonicalises every root of unity as Power[-1, Rational[p,q]]
+     * (or Complex[0, ±1]).  The natural generator is ζ_{2q} = (-1)^(1/q),
+     * whose minimal polynomial is the cyclotomic polynomial Φ_{2q}; the
+     * user's α = (-1)^(p/q) = ζ_{2q}^p lives in Q(ζ_{2q}).  Representing it
+     * in the fixed Q-basis modulo Φ_{2q} makes the identities ζ^{2q}=1 and
+     * Σ ζ^k = 0 structural, so cyclotomic Together/Cancel/Simplify no longer
+     * blow up the rational-over-Q path.  render = the natural generator
+     * Power[-1, Rational[1, q]].  q == 1 (±1, rational) is not an extension. */
+    {
+        int64_t ru_p, ru_q;
+        if (expr_is_root_of_unity_pow(alpha_expr, &ru_p, &ru_q) && ru_q >= 2) {
+            QAExt* ext = qaext_cyclotomic(2ul * (unsigned long)ru_q);
+            if (ext) {
+                Expr* rat = expr_new_function(expr_new_symbol(SYM_Rational),
+                    (Expr*[]){ expr_new_integer(1), expr_new_integer(ru_q) }, 2);
+                *render_out = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_integer(-1), rat }, 2);
+                return ext;
+            }
+        }
+    }
+
     /* Sqrt[c]  →  P_α(y) = y² − c, render = Sqrt[c]. */
     {
         long c;
@@ -847,6 +893,56 @@ static Expr* expand_radicals_to_atomic_poly(const Expr* e,
     return out;
 }
 
+/* expand_roots_of_unity_to_atomic_poly: the cyclotomic analogue of
+ * expand_radicals_to_atomic_poly.  Walk `e` and rewrite every
+ * root-of-unity atom (-1)^(p/q) (or Complex[0, ±1]) whose denominator q
+ * divides `q_natural` into the polynomial-in-`alpha_sym_name` form
+ * representing α^k, where α = ζ_{2·q_natural} = (-1)^(1/q_natural) and
+ * k = p · (q_natural / q).  The power is reduced modulo the cyclotomic
+ * minimal polynomial Φ_{2·q_natural} via `qa_alpha_power_signed`, so the
+ * result contains `alpha_sym_name` only with integer exponents < φ(2q_nat)
+ * — ready for the coefficient-peeling step in qa_expr_to_qaupoly_with_alpha.
+ *
+ * `ext` must be the matching `qaext_cyclotomic(2·q_natural)` extension.
+ * Caller owns the returned Expr. */
+static Expr* expand_roots_of_unity_to_atomic_poly(const Expr* e,
+                                                  int64_t q_natural,
+                                                  const char* alpha_sym_name,
+                                                  const QAExt* ext) {
+    if (!e) return NULL;
+
+    int64_t p, q;
+    if (expr_is_root_of_unity_pow(e, &p, &q) && q >= 1
+        && q_natural > 0 && (q_natural % q) == 0) {
+        int64_t scale = q_natural / q;
+        if (scale != 0
+            && !(p > INT64_MAX / scale || p < INT64_MIN / scale)) {
+            long k = (long)(p * scale);
+            QANum* qn = qa_alpha_power_signed(ext, k);
+            if (qn) {
+                Expr* out = mpq_array_to_poly_expr(qn->coef, qn->ext->deg,
+                                                   alpha_sym_name);
+                qa_free(qn);
+                return out;
+            }
+        }
+    }
+
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+
+    size_t count = e->data.function.arg_count;
+    Expr** new_args = (Expr**)malloc(sizeof(Expr*) * (count ? count : 1));
+    for (size_t i = 0; i < count; i++) {
+        new_args[i] = expand_roots_of_unity_to_atomic_poly(
+            e->data.function.args[i], q_natural, alpha_sym_name, ext);
+    }
+    Expr* new_head = expand_roots_of_unity_to_atomic_poly(
+        e->data.function.head, q_natural, alpha_sym_name, ext);
+    Expr* out = expr_new_function(new_head, new_args, count);
+    free(new_args);
+    return out;
+}
+
 /* Lift an Expr polynomial in `var` (whose coefficients may be
  * polynomials in `alpha_render`) to a QAUPoly over `ext`.  Returns
  * NULL if any coefficient is not in Q(α) (e.g. contains a free symbol
@@ -899,13 +995,26 @@ static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
         }
     }
 
-    Expr* poly_expanded = (c_base_inferred != 0
-                           && c_base_inferred != 1 && c_base_inferred != -1)
-        ? expand_radicals_to_atomic_poly(poly,
-                                         c_base_inferred,
-                                         q_natural_inferred,
-                                         QA_ALPHA_INTERNAL, ext)
-        : expr_copy((Expr*)poly);
+    /* Cyclotomic generator: `alpha_render` is the natural root of unity
+     * (-1)^(1/q_nat).  Rewrite every root-of-unity atom in the input into a
+     * polynomial in QA_ALPHA_INTERNAL modulo Φ_{2 q_nat} (the y^q−c shape
+     * detection above does not match a cyclotomic minimal polynomial, so
+     * c_base_inferred is 0 here). */
+    int64_t ru_p, ru_q;
+    bool is_cyclotomic = alpha_render
+        && expr_is_root_of_unity_pow(alpha_render, &ru_p, &ru_q) && ru_q >= 2;
+
+    Expr* poly_expanded;
+    if (is_cyclotomic) {
+        poly_expanded = expand_roots_of_unity_to_atomic_poly(
+            poly, ru_q, QA_ALPHA_INTERNAL, ext);
+    } else if (c_base_inferred != 0
+               && c_base_inferred != 1 && c_base_inferred != -1) {
+        poly_expanded = expand_radicals_to_atomic_poly(
+            poly, c_base_inferred, q_natural_inferred, QA_ALPHA_INTERNAL, ext);
+    } else {
+        poly_expanded = expr_copy((Expr*)poly);
+    }
 
     /* Stage 1 — substitute α's surface form with an opaque symbol.
      * After Stage 0, any natural-form `Power[c, 1/q_natural]` has
@@ -945,15 +1054,19 @@ static QAUPoly* qa_expr_to_qaupoly_with_alpha(const Expr* poly,
             expr_free(c_expanded);
             continue;
         }
-        if ((size_t)adeg >= ext->deg) {
-            /* α-degree exceeds the extension's; refuse.  In practice
-             * Mathilda auto-reduces e.g. Sqrt[2]^3 → 2 Sqrt[2] before
-             * we even see the input, so this branch only fires when
-             * the input is genuinely outside Q(α). */
-            expr_free(c_expanded);
-            ok = false;
-            break;
-        }
+        /* NOTE: `adeg` may be >= ext->deg.  The internal α-symbol always
+         * denotes the extension generator α (Stages 0/1 only ever introduce
+         * it as α), so any α-power is legitimately reducible modulo the
+         * minimal polynomial.  For radical generators the evaluator usually
+         * pre-reduces (Sqrt[2]^3 → 2 Sqrt[2]), but the opaque internal symbol
+         * carries no such auto-rule — and, critically, cyclotomic generators
+         * surface high powers after Stage-2 Expand of products/powers of the
+         * rewritten root-of-unity atoms (e.g. ((-1)^(2/3)+...)^3 expands to
+         * α^2, α^3, ...).  qa_alpha_power(ext, j) below reduces α^j mod P_α
+         * for ANY j via field multiplication, so we fold every power down
+         * rather than refusing.  A genuinely out-of-field atom is NOT an
+         * α-power: it stays a Power[base, p/q] node, contributes nothing to
+         * the α-degree, and is rejected by expr_coef_to_mpq() instead. */
 
         QANum* qn = qa_zero(ext);
         for (int j = 0; j <= adeg; j++) {
@@ -1574,6 +1687,10 @@ QATower* qa_resolve_extension_tower(Expr* const* alpha_exprs, int n) {
     return t;
 }
 
+/* Forward decls: defined below (shared with the Cancel/Together tower path). */
+static Expr* decompose_redundant_sqrts(const Expr* e, const QATower* t);
+static Expr* tower_substitute_alphas(const Expr* e, const QATower* t);
+
 Expr* qa_factor_with_extension_tower(const Expr* poly,
                                      Expr* const* alpha_exprs,
                                      int n_alphas,
@@ -1589,20 +1706,25 @@ Expr* qa_factor_with_extension_tower(const Expr* poly,
     QATower* t = qa_resolve_extension_tower(alpha_exprs, n_alphas);
     if (!t) return NULL;
 
-    /* Substitute each user-side α_i (its surface form) with its
-     * polynomial-in-γ_internal Expr in the input.  After this pass,
-     * `poly_internal`'s only "extension symbol" is QA_ALPHA_INTERNAL,
-     * so qa_factor_inner can lift it directly without further surface-
-     * level substitution. */
-    Expr* poly_internal = expr_copy((Expr*)poly);
-    for (int i = 0; i < t->n; i++) {
-        Expr* alpha_in_gamma_int = qanum_to_expr_in_gamma_sym(
-            t->alphas[i], QA_ALPHA_INTERNAL);
-        Expr* old = poly_internal;
-        poly_internal = expr_subst(old, t->alpha_renders[i], alpha_in_gamma_int);
-        expr_free(old);
-        expr_free(alpha_in_gamma_int);
-    }
+    /* Decompose composite radicals (e.g. Sqrt[6] -> Times[Sqrt[2], Sqrt[3]])
+     * into the tower's prime-Sqrt generators BEFORE substitution, exactly as
+     * qa_cancel_with_tower does. Without this, a cross term like Sqrt[6] that
+     * arises from expanding (x - Sqrt[2])(x - Sqrt[3]) is neither Sqrt[2] nor
+     * Sqrt[3], so the per-generator substitution below misses it, leaving a
+     * stray radical that qa_factor_inner cannot lift -> the factor silently
+     * fails. */
+    Expr* poly_decomposed = decompose_redundant_sqrts(poly, t);
+
+    /* Substitute each tower generator α_i with its polynomial-in-γ form
+     * (a polynomial in QA_ALPHA_INTERNAL). Reuse tower_substitute_alphas —
+     * the same routine the Cancel/Together tower path uses — which matches
+     * radicals by base value via expand_radicals_to_atomic_poly, so it
+     * catches the Sqrt-headed factors produced by decompose_redundant_sqrts
+     * (a bare structural expr_subst against the Power[c,1/2]-form renders
+     * would miss them). After this pass `poly_internal`'s only extension
+     * symbol is QA_ALPHA_INTERNAL, so qa_factor_inner lifts it directly. */
+    Expr* poly_internal = tower_substitute_alphas(poly_decomposed, t);
+    expr_free(poly_decomposed);
 
     Expr* result = qa_factor_inner(
         poly_internal, t->ext,
@@ -3410,9 +3532,12 @@ static void autodetect_walk(const Expr* e, AutodetectGen* gens,
 
         if (q >= 2) {
             if (base && base->type == EXPR_INTEGER) {
-                /* Integer base: merge into the (base, q_lcm) generator set. */
+                /* Integer base: merge into the (base, q_lcm) generator set.
+                 * Base -1 is a root of unity (-1)^(1/q) = ζ_{2q}, resolved
+                 * by qa_resolve_extension's cyclotomic branch; merging by
+                 * the LCM of the q's gives a single ζ_{2·lcm} generator. */
                 int64_t c = base->data.integer;
-                if (c != 0 && c != 1 && c != -1) {
+                if (c != 0 && c != 1) {
                     if (!autodetect_add_int(gens, n, max, c, q, bail)) return;
                 }
                 /* Integer base has no sub-radicals to chase. */
@@ -4367,10 +4492,10 @@ static Expr* qa_cancel_with_poly_radical_impl(const Expr* arg) {
         expr_free(num_back);
     } else {
         Expr* inv_args[2] = { den_back, expr_new_integer(-1) };
-        Expr* inv = evaluate(expr_new_function(
+        Expr* inv = eval_and_free(expr_new_function(
             expr_new_symbol(SYM_Power), inv_args, 2));
         Expr* times_args[2] = { num_back, inv };
-        result = evaluate(expr_new_function(
+        result = eval_and_free(expr_new_function(
             expr_new_symbol(SYM_Times), times_args, 2));
     }
 

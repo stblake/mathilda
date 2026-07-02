@@ -48,6 +48,7 @@ Out[4]= {{1, 0}, {0, 1}}
 
 - `Protected`.
 - Uses fraction-free division logic to perform exact algorithmic reduction across numerical, rational, and symbolics expressions natively avoiding division errors.
+- **FLINT acceleration** (when built with FLINT): an all-integer/rational matrix is reduced exactly via `fmpq_mat_rref`; the reduced row echelon form is unique so it matches the classical result, computed in polynomial time. Symbolic matrices fall through. Exposed directly as `` FLINT`RowReduce `` (see the FLINT` context section in *Structural Manipulation*).
 - Lives in `src/linalg/linsolve.c`; the helper primitives (Laplace cofactor determinant, exact polynomial division, tensor flatten / dimensions) are exposed from `src/linalg/util.c` and `src/linalg/det.c`.
 - Accepts an optional `Method -> "<name>"` argument:
   - `Method -> Automatic` or `Method -> "Automatic"` (default) — alias for `"DivisionFreeRowReduction"`.

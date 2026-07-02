@@ -1,0 +1,667 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "StandardForm Typesetting Showcase",
+  "notebooks": [
+    {
+      "id": "nb-201",
+      "title": "Calculus & Analysis",
+      "x": 50,
+      "y": 50,
+      "width": 680,
+      "collapsed": false,
+      "rows": [
+        {
+          "cells": [
+            {
+              "type": "section",
+              "source": "Calculus & Analysis"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "text",
+              "source": "Explore derivatives, integrals, limits, and series expansions. These fundamental calculus concepts showcase StandardForm's ability to render complex mathematical notation."
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "D[Sin[x] * Cos[x], x]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Integrate[1 / (1 + x^2), {x, 0, 1}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Integrate[Exp[-x^2], x]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Limit[(1 + 1/n)^n, n -> Infinity]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Series[Sin[x], {x, 0, 5}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Series[1/(1 - x), {x, 0, 6}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "D[x^3 * Log[x], {x, 2}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Integrate[x * Exp[-x], {x, 0, Infinity}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Limit[Sin[x]/x, x -> 0]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "D[ArcTan[x], x]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Series[Exp[x] * Sin[x], {x, 0, 4}]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nb-202",
+      "title": "Algebra & Polynomials",
+      "x": 50,
+      "y": 850,
+      "width": 680,
+      "collapsed": false,
+      "rows": [
+        {
+          "cells": [
+            {
+              "type": "section",
+              "source": "Algebra & Polynomials"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "text",
+              "source": "Factor, expand, and solve polynomial and algebraic expressions. Demonstrates fraction simplification, radical expressions, and equation solving."
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Factor[x^3 - 1]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Expand[(x + y)^5]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Solve[x^2 - 5*x + 6 == 0, x]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Factor[x^4 + 4]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Expand[(a + b)^2 * (a - b)^2]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Solve[x^3 + 2*x^2 - x - 2 == 0, x]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "1/3 + 1/6 + 1/9"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Sqrt[2] + Sqrt[3]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Factor[x^6 - 1]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Solve[x^2 + 1 == 0, x]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nb-203",
+      "title": "Special Functions",
+      "x": 790,
+      "y": 50,
+      "width": 660,
+      "collapsed": false,
+      "rows": [
+        {
+          "cells": [
+            {
+              "type": "section",
+              "source": "Special Functions"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "text",
+              "source": "Classical and advanced special functions including Gamma, Zeta, Bessel, and harmonic functions. These functions are essential in mathematical physics and analysis."
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Gamma[5]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Gamma[1/2]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Zeta[2]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Zeta[3]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "BesselJ[0, x]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "BesselJ[1, 2]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "HarmonicNumber[10]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "HarmonicNumber[n]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Erf[x]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Erf[1]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "PolyLog[2, x]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Pochhammer[a, n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nb-204",
+      "title": "Number Theory",
+      "x": 790,
+      "y": 850,
+      "width": 660,
+      "collapsed": false,
+      "rows": [
+        {
+          "cells": [
+            {
+              "type": "section",
+              "source": "Number Theory"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "text",
+              "source": "Prime testing, factorization, combinatorial functions, and Euler's totient. Essential for cryptography, coding theory, and discrete mathematics."
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "PrimeQ[17]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "FactorInteger[60]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Binomial[10, 3]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Factorial[7]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "EulerPhi[100]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "GCD[48, 18]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Binomial[n, k]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "FactorInteger[1000]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Select[Range[1, 30], PrimeQ]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Fibonacci[10]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nb-205",
+      "title": "Linear Algebra",
+      "x": 1510,
+      "y": 50,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        {
+          "cells": [
+            {
+              "type": "section",
+              "source": "Linear Algebra"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "text",
+              "source": "Matrix operations, eigenvalues, determinants, and linear transformations. Includes real and complex matrices essential for applied mathematics and physics."
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Det[{{1, 2}, {3, 4}}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Inverse[{{1, 2}, {3, 4}}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Transpose[{{1, 2, 3}, {4, 5, 6}}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Eigenvalues[{{1, 2}, {2, 1}}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Det[{{a, b}, {c, d}}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "LinearSolve[{{1, 2}, {3, 4}}, {5, 6}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Eigenvalues[{{1, I}, {-I, 1}}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Conjugate[3 + 4*I]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Re[5 + 2*I]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Im[3 - 7*I]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "nb-206",
+      "title": "Sequences & Series",
+      "x": 1510,
+      "y": 750,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        {
+          "cells": [
+            {
+              "type": "section",
+              "source": "Sequences & Series"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "text",
+              "source": "Fibonacci sequences, summation, product notation, and generating functions. Essential for combinatorics, analysis, and discrete mathematics applications."
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Fibonacci[15]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Table[Fibonacci[n], {n, 1, 10}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Sum[1/n^2, {n, 1, Infinity}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Sum[x^n/n!, {n, 0, Infinity}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Product[1 - 1/n^2, {n, 2, Infinity}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Sum[n^2, {n, 1, 10}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "LucasL[10]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Table[n!, {n, 0, 6}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Product[n, {n, 1, 5}]"
+            }
+          ]
+        },
+        {
+          "cells": [
+            {
+              "type": "code",
+              "source": "Sum[1/Factorial[n], {n, 0, Infinity}]"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -867,3 +867,28 @@ Lessons:
   `fullsimplify_corpus_tests`/`crc_corpus_tests` from `tests/build/` (so `../` ->
   `tests/`); `intrat_corpus_tests` wants `IntegrateRationalTests.m` in the repo
   root. A "could not load … as a List" failure is a cwd issue, not a result DIFF.
+
+## PossibleZeroQ false-zeros masquerade as integrator/algorithm bugs (2026-06-30)
+- **Symptom**: `Integrate[(1-x^3)^(1/3)/x, x, Method->"GoursatAlgebraic"]` (and
+  similar cube-root cases) silently declined, looking like a Goursat descent bug.
+- **Actual cause**: two bugs in `zero_test.c`'s Schwartz–Zippel sampler made
+  `PossibleZeroQ` return `True` for genuine non-zeros with an algebraic constant
+  (radical / root of unity) times a free variable. The Goursat descent gates each
+  eigenpiece with `is_zero` (`integ_backsub`), so a false-zero collapsed the
+  answer to `0` → differentiate-back guard rejected it → decline.
+  1. Samples clustered near 0 (`|n|≤64`, `d≤2^16` → `|val|≪1`); a `u^3` term
+     vanished below the operand scale. Fix: bound `|sample| ≥ 1`.
+  2. `magnitude_scale` scored `Power[denom,-1]` as `denom` (used `|exp|`), wildly
+     inflating the cancellation-threshold scale. Fix: use the SIGNED exponent.
+- **Lesson**: when a high-level algorithm (Integrate/Simplify/Solve) inexplicably
+  declines or returns 0 on an input that is provably correct, suspect
+  `PossibleZeroQ` FIRST. Reproduce the exact sub-expression the algorithm tests
+  (instrument the gate, print it) and call `PossibleZeroQ` on it directly. A
+  *variable-name-dependent* (flaky) verdict is a tell-tale of a sampler/seed bug.
+- **Lesson**: a Goursat decline is not proof of non-elementarity. Verify the
+  eigenprojection numerically (it's evaluate-only, reliable) before concluding.
+  The ω-character criterion `H1==0` (cube) genuinely fails for `F` with a pole at
+  a non-ramification point (e.g. `1/(x(1-x^2)^(1/3))`): that integral is
+  elementary via Chebyshev's binomial mechanism, NOT the Goursat reduction — the
+  WL reference `CubicRootElementaryQ` rejects it too. Hand-derived
+  `H1 = -2(-4)^(-1/3) z/(1+z^3) ≠ 0` confirms it's inherent, not a code bug.

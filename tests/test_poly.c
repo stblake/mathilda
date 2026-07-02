@@ -104,6 +104,15 @@ void test_polynomial_div_rem() {
     run_test("PolynomialRemainder[x^3, a x+b, x]", "Times[-1, Power[a, -3], Power[b, 3]]");
     run_test("PolynomialRemainder[x^2+x+1, 2x+1, x]", "Rational[3, 4]");
     run_test("PolynomialRemainder[x^2+ b x+1, a x+1, x]", "Plus[1, Power[a, -2], Times[-1, Times[Power[a, -1], b]]]");
+
+    /* Radical (algebraic-number) coefficients: the symbolic-q_coeff branch
+     * subtracts coefficient-wise so the leading term cancels via the field
+     * relation Sqrt[2] Sqrt[3] = Sqrt[6]. The old whole-polynomial
+     * Together/Cancel path is blind to such relations over a radical tower
+     * and spins forever (the IntRationalLogPart hang). */
+    run_test("PolynomialRemainder[x^2 - Sqrt[6], Sqrt[2] x - Sqrt[3], x]",
+             "Plus[Rational[3, 2], Times[-1, Power[6, Rational[1, 2]]]]");
+    run_test("PolynomialRemainder[x^2 - (Sqrt[2]+Sqrt[3]) x + Sqrt[6], x - Sqrt[2], x]", "0");
 }
 
 void test_collect() {

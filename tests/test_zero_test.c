@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /* Evaluate a Mathilda input string and assert that the result prints as
  * the given expected symbol ("True" / "False" / "{True, False, ...}"). */
@@ -44,6 +45,41 @@ static void assert_pzq(const char* input, const char* expected) {
     }
     free(s);
     expr_free(evald);
+}
+
+/* Assert the verdict AND that it is produced within `budget_s` seconds. Used as
+ * a coarse regression guard for the large-antiderivative round-trip perf fix
+ * (the precision-ladder early-exit): the bound is deliberately generous so it
+ * only trips on a gross regression, never on machine-speed jitter. */
+static void assert_pzq_timed(const char* input, const char* expected,
+                             double budget_s) {
+    Expr* parsed = parse_expression(input);
+    ASSERT(parsed != NULL);
+    clock_t t0 = clock();
+    Expr* evald = evaluate(parsed);
+    double dt = (double)(clock() - t0) / (double)CLOCKS_PER_SEC;
+    expr_free(parsed);
+    char* s = expr_to_string(evald);
+    if (strcmp(s, expected) != 0) {
+        fprintf(stderr, "FAIL: %s\n  expected: %s\n  actual:   %s\n",
+                input, expected, s);
+        free(s); expr_free(evald); exit(1);
+    }
+    if (dt > budget_s) {
+        fprintf(stderr, "FAIL (too slow): %s\n  verdict %s ok, but took %.2fs "
+                "(budget %.2fs)\n", input, s, dt, budget_s);
+        free(s); expr_free(evald); exit(1);
+    }
+    free(s);
+    expr_free(evald);
+}
+
+/* Assert the verdict is STABLE across many independent evaluations (the
+ * structural-hash seeding makes Stage-3 a pure function of the input; the
+ * rigorous stages don't sample at all). Catches any reintroduction of
+ * run-to-run flakiness. */
+static void assert_pzq_stable(const char* input, const char* expected, int reps) {
+    for (int i = 0; i < reps; ++i) assert_pzq(input, expected);
 }
 
 /* Convenience: re-seed the PRNG to a known value for reproducibility. */
@@ -512,6 +548,217 @@ static void test_battery_log_exp_real_line(void) {
 }
 
 /* ============================================================== */
+/*  11. Algebraic-constant guard (Phase 2)                        */
+/*                                                                */
+/*  Expressions mixing free symbols with a radical / root of      */
+/*  unity bypass the Stage-1 Together∘Cancel (which blows up over  */
+/*  an extension Q(α)) and are decided by Schwartz–Zippel.  These  */
+/*  pin both correctness (true zeros → True, true non-zeros →      */
+/*  False) and termination (the projection would hang otherwise).  */
+/* ============================================================== */
+
+/* True zero over Q(ζ_6): (x - a)(x + a) - (x^2 - a^2), a = (-1)^(1/3),
+ * a^2 = (-1)^(2/3). */
+static void test_alg_cyclotomic_diff_of_squares(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[(x - (-1)^(1/3)) (x + (-1)^(1/3)) "
+               "- (x^2 - (-1)^(2/3))]", "True");
+}
+
+/* True zero: 1 + ζ_3 + ζ_3^2 = 0 with ζ_3 = (-1)^(2/3), scaled by free x. */
+static void test_alg_roots_of_unity_sum_zero(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[x (1 + (-1)^(2/3) + ((-1)^(2/3))^2)]", "True");
+}
+
+/* True zero: Sqrt[x]^2 - x. */
+static void test_alg_sqrt_square(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[Sqrt[x]^2 - x]", "True");
+}
+
+/* True zero: (Sqrt[x+1] - Sqrt[x])(Sqrt[x+1] + Sqrt[x]) - 1. */
+static void test_alg_conjugate_radical_product(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[(Sqrt[x+1] - Sqrt[x]) (Sqrt[x+1] + Sqrt[x]) - 1]",
+               "True");
+}
+
+/* The headline non-blowup case: the 4-term cyclotomic V4 projection of
+ * t/(t^3+8) over the involutions of t^3-1 (Exp[2πI/3] = (-1)^(2/3)
+ * inlined).  It is identically zero; before the guard this did not finish
+ * in minutes (Stage-1 Together over Q(ζ_3) is super-polynomial), now it is
+ * decided by sampling in ~40ms.  The test PASSING within the suite's normal
+ * runtime IS the termination regression guard. */
+static void test_alg_cyclotomic_projection_nonblowup(void) {
+    seed_rng(42);
+    assert_pzq(
+        "PossibleZeroQ[t/(8 + t^3) + (2 + t)/((-1 + t) (8 + (2 + t)^3/(-1 + t)^3))"
+        " + (-2 (-1)^(1/3) + t)/((-1 + (-1)^(2/3) t)"
+        " (8 + (-2 (-1)^(1/3) + t)^3/(-1 + (-1)^(2/3) t)^3))"
+        " + (2 (-1)^(2/3) + t)/((-1 - (-1)^(1/3) t)"
+        " (8 + (2 (-1)^(2/3) + t)^3/(-1 - (-1)^(1/3) t)^3))]", "True");
+}
+
+/* True non-zeros — the guard must still reach FALSE via sampling. */
+static void test_alg_nonzero_root_of_unity_shift(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[x + (-1)^(1/3)]", "False");
+}
+
+static void test_alg_nonzero_sqrt_shift(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[Sqrt[x] - 1]", "False");
+}
+
+static void test_alg_nonzero_quadratic(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[x^2 - (-1)^(1/3)]", "False");
+}
+
+static void test_alg_nonzero_radical_integrand(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[(x - 1)/((x + 2) Sqrt[x^3 - 1])]", "False");
+}
+
+/* No regression: a purely rational identity has no algebraic constant, so
+ * the guard does NOT fire and Stage-1 Together∘Cancel still proves it. */
+static void test_alg_rational_no_regression(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[1/x + 1/y - (x + y)/(x y)]", "True");
+    assert_pzq("PossibleZeroQ[(x^2 - 1)/(x - 1) - (x + 1)]", "True");
+}
+
+/* ============================================================== */
+/*  12. Zippel rigor — pure rational functions decide False        */
+/*      RIGOROUSLY (exact Q-normalization, no sampling).           */
+/* ============================================================== */
+
+/* Genuine non-zero pure rational functions: the normalized numerator is a
+ * non-zero polynomial over Q, so False is exact (DeMillo-Lipton-Schwartz-Zippel
+ * realized by exact arithmetic — no probability of error, no random draw). */
+static void test_rigor_linear_nonzero(void) {
+    assert_pzq("PossibleZeroQ[x + y]", "False");
+}
+static void test_rigor_multivar_monomial_nonzero(void) {
+    assert_pzq("PossibleZeroQ[x y z - 1]", "False");
+}
+static void test_rigor_rational_form_nonzero(void) {
+    assert_pzq("PossibleZeroQ[(x + 1)/(x - 1)]", "False");
+}
+static void test_rigor_negative_power_nonzero(void) {
+    /* 1/x^2 + 1/y is a rational function (Power with integer exponents). */
+    assert_pzq("PossibleZeroQ[1/x^2 + 1/y]", "False");
+}
+static void test_rigor_binomial_residue_nonzero(void) {
+    /* (x + y)^2 - x^2 - y^2 = 2 x y, a non-zero polynomial. */
+    assert_pzq("PossibleZeroQ[(x + y)^2 - x^2 - y^2]", "False");
+}
+static void test_rigor_high_degree_nonzero(void) {
+    assert_pzq("PossibleZeroQ[x^25 - x^24 + x - 1]", "False");
+}
+static void test_rigor_three_var_rational_nonzero(void) {
+    assert_pzq("PossibleZeroQ[a/(b c) + b/(a c) - c/(a b)]", "False");
+}
+/* Rigor must be DETERMINISTIC and require no PRNG: reseed hostile, verify. */
+static void test_rigor_deterministic_no_prng(void) {
+    seed_rng(999983);
+    assert_pzq_stable("PossibleZeroQ[x + y]", "False", 5);
+    seed_rng(1);
+    assert_pzq_stable("PossibleZeroQ[(x + y)^2 - x^2 - y^2]", "False", 5);
+}
+/* The rigorous-False path must NOT be misapplied to expressions whose apparent
+ * "non-zero numerator" is only an artifact of treating a transcendental head as
+ * an opaque indeterminate — these are genuine identities and must stay True. */
+static void test_rigor_not_misapplied_trig(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[Sin[2 x] - 2 Sin[x] Cos[x]]", "True");
+}
+static void test_rigor_not_misapplied_tan(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[Tan[x] - Sin[x]/Cos[x]]", "True");
+}
+static void test_rigor_not_misapplied_exp(void) {
+    seed_rng(42);
+    assert_pzq("PossibleZeroQ[Exp[x + y] - Exp[x] Exp[y]]", "True");
+}
+/* Named ALGEBRAIC constants satisfy polynomial relations, so they must be
+ * EXCLUDED from the pure-rational class (else GoldenRatio^2 - GoldenRatio - 1,
+ * an identity, would be mis-decided False). */
+static void test_rigor_algebraic_constant_excluded(void) {
+    assert_pzq("PossibleZeroQ[GoldenRatio^2 - GoldenRatio - 1]", "True");
+}
+/* Pure-rational identities still decide True (Stage 1's TRUE path, unchanged). */
+static void test_rigor_pure_rational_zero_still_true(void) {
+    assert_pzq("PossibleZeroQ[(x^3 - 1)/(x - 1) - (x^2 + x + 1)]", "True");
+    assert_pzq("PossibleZeroQ[1/(x (x + 1)) - (1/x - 1/(x + 1))]", "True");
+}
+
+/* ============================================================== */
+/*  13. Precision-ladder early-exit — deep-cancellation zeros      */
+/*      stay True; genuine tiny non-zeros stay False.              */
+/* ============================================================== */
+
+/* Radical denesting identities cancel to ~machine-epsilon and only survive via
+ * the MPFR ladder; the deep-zero early-exit must still return True. */
+static void test_ladder_denest_sqrt6(void) {
+    assert_pzq("PossibleZeroQ[Sqrt[5 + 2 Sqrt[6]] - Sqrt[3] - Sqrt[2]]", "True");
+}
+static void test_ladder_denest_sqrt2(void) {
+    assert_pzq("PossibleZeroQ[Sqrt[3 + 2 Sqrt[2]] - 1 - Sqrt[2]]", "True");
+}
+static void test_ladder_denest_cube(void) {
+    /* (2 + Sqrt[5])^(1/3) - (1 + Sqrt[5])/2 :  a Ramanujan-style denesting. */
+    assert_pzq("PossibleZeroQ[(2 + Sqrt[5])^(1/3) - (1 + Sqrt[5])/2]", "True");
+}
+/* Genuine small non-zeros must NOT be swallowed by the early-exit: a residual
+ * that plateaus (never shrinks) at its true value is decisively False. */
+static void test_ladder_tiny_nonzero_resolvable(void) {
+    /* Sqrt[10^12 + 1] - 10^6 ~ 5e-7 : small but a genuine non-zero. */
+    assert_pzq("PossibleZeroQ[Sqrt[10^12 + 1] - 10^6]", "False");
+}
+static void test_ladder_close_irrational_nonzero(void) {
+    assert_pzq("PossibleZeroQ[Sqrt[2] - 1.41421356]", "False");
+}
+/* Free-symbol algebraic true-zero routed through the confirm ladder (the exact
+ * path the early-exit optimizes) must stay True across hostile seeds. */
+static void test_ladder_conjugate_radical_symbolic(void) {
+    for (int64_t s = 1; s <= 4; ++s) {
+        seed_rng(s);
+        assert_pzq(
+            "PossibleZeroQ[(Sqrt[x + 1] - Sqrt[x]) (Sqrt[x + 1] + Sqrt[x]) - 1]",
+            "True");
+    }
+}
+
+/* ============================================================== */
+/*  14. Large-tree performance guard (POSSIBLE_ZEROQ_FAILURES B2)  */
+/* ============================================================== */
+
+/* A large identically-zero algebraic expression with free symbols forces the
+ * Schwartz-Zippel confirm phase to climb the MPFR ladder on a big tree — the
+ * exact cost pattern of case B2 (the parametric Goursat round-trip). Before the
+ * ladder early-exit each confirm sample climbed to 1000 bits on the whole tree;
+ * now it stops once the residual has provably shrunk. We assert both the
+ * correct verdict (True) and a generous wall-clock ceiling so a regression that
+ * re-introduces the full-ladder cost is caught. The zero factor
+ * (Sqrt[x]^2 - x) is multiplied by a large expanded multinomial to inflate the
+ * tree without changing the verdict. */
+static void test_perf_large_algebraic_zero(void) {
+    seed_rng(42);
+    assert_pzq_timed(
+        "PossibleZeroQ[(Sqrt[x]^2 - x) Expand[(a + b + c + d)^10]]",
+        "True", 4.0);
+}
+/* A large PURE-rational non-zero must be decided instantly by the rigorous
+ * Stage-1 path (no sampling, no ladder) — a strong upper bound proves it. */
+static void test_perf_large_rational_nonzero_instant(void) {
+    assert_pzq_timed(
+        "PossibleZeroQ[Expand[(a + b + c + d)^12] - Expand[(a + b + c + d)^12] + a]",
+        "False", 2.0);
+}
+
+/* ============================================================== */
 /*  Main driver                                                   */
 /* ============================================================== */
 
@@ -617,6 +864,45 @@ int main(void) {
     TEST(test_battery_weierstrass_cosh_roundtrip);
     TEST(test_battery_weierstrass_cosh_product_roundtrip);
     TEST(test_battery_log_exp_real_line);
+
+    /* Group 11 — Algebraic-constant guard (Phase 2) */
+    TEST(test_alg_cyclotomic_diff_of_squares);
+    TEST(test_alg_roots_of_unity_sum_zero);
+    TEST(test_alg_sqrt_square);
+    TEST(test_alg_conjugate_radical_product);
+    TEST(test_alg_cyclotomic_projection_nonblowup);
+    TEST(test_alg_nonzero_root_of_unity_shift);
+    TEST(test_alg_nonzero_sqrt_shift);
+    TEST(test_alg_nonzero_quadratic);
+    TEST(test_alg_nonzero_radical_integrand);
+    TEST(test_alg_rational_no_regression);
+
+    /* Group 12 — Zippel rigor (pure rational functions decide False exactly) */
+    TEST(test_rigor_linear_nonzero);
+    TEST(test_rigor_multivar_monomial_nonzero);
+    TEST(test_rigor_rational_form_nonzero);
+    TEST(test_rigor_negative_power_nonzero);
+    TEST(test_rigor_binomial_residue_nonzero);
+    TEST(test_rigor_high_degree_nonzero);
+    TEST(test_rigor_three_var_rational_nonzero);
+    TEST(test_rigor_deterministic_no_prng);
+    TEST(test_rigor_not_misapplied_trig);
+    TEST(test_rigor_not_misapplied_tan);
+    TEST(test_rigor_not_misapplied_exp);
+    TEST(test_rigor_algebraic_constant_excluded);
+    TEST(test_rigor_pure_rational_zero_still_true);
+
+    /* Group 13 — Precision-ladder early-exit */
+    TEST(test_ladder_denest_sqrt6);
+    TEST(test_ladder_denest_sqrt2);
+    TEST(test_ladder_denest_cube);
+    TEST(test_ladder_tiny_nonzero_resolvable);
+    TEST(test_ladder_close_irrational_nonzero);
+    TEST(test_ladder_conjugate_radical_symbolic);
+
+    /* Group 14 — Large-tree performance guard (B2) */
+    TEST(test_perf_large_algebraic_zero);
+    TEST(test_perf_large_rational_nonzero_instant);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

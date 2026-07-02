@@ -498,6 +498,129 @@ static Expr** solve_cubic_radical(Expr* a, Expr* b, Expr* c, Expr* d,
     return out_arr;
 }
 
+/* Ferrari: a*x^4 + b*x^3 + c*x^2 + d*x + e == 0.
+ *
+ * Reduce to a monic depressed quartic u^4 + p u^2 + q u + r via x = u - B/4
+ * (B = b/a), then solve through the resolvent cubic
+ *     8 y^3 + 8 p y^2 + (2 p^2 - 8 r) y - q^2 = 0.
+ * For a nonzero resolvent root y (w = Sqrt[2 y]) the depressed quartic
+ * factors into the two quadratics
+ *     u^2 - w u + (p/2 + y + q/(2 w)) = 0,
+ *     u^2 + w u + (p/2 + y - q/(2 w)) = 0,
+ * whose four roots are
+ *     u = ( w +/- Sqrt[-2 y - 2 p - 2 q/w]) / 2,
+ *     u = (-w +/- Sqrt[-2 y - 2 p + 2 q/w]) / 2,    x = u - B/4.
+ * When q == 0 the depressed quartic is biquadratic, solved directly via
+ * u^2 = (-p +/- Sqrt[p^2 - 4 r])/2 (this also sidesteps the w = 0 root of
+ * the resolvent).  All four roots are returned with no Reals filtering --
+ * the dg == 4 dispatch only takes this radical path for the Complexes
+ * domain (a faithful real/non-real split of quartic radicals is not
+ * attempted; Reals falls through to Root[] objects). */
+static Expr** solve_quartic_radical(Expr* a, Expr* b, Expr* c, Expr* d,
+                                    Expr* e, size_t* out_n) {
+    /* monic coefficients B, C, D, E (= b/a, c/a, d/a, e/a) */
+    Expr* inv_a = eval_and_free(mk_inv(expr_copy(a)));
+    Expr* B = eval_and_free(mk_fn2("Times", expr_copy(b), expr_copy(inv_a)));
+    Expr* C = eval_and_free(mk_fn2("Times", expr_copy(c), expr_copy(inv_a)));
+    Expr* D = eval_and_free(mk_fn2("Times", expr_copy(d), expr_copy(inv_a)));
+    Expr* E = eval_and_free(mk_fn2("Times", expr_copy(e), expr_copy(inv_a)));
+    expr_free(inv_a);
+
+    Expr* B2 = eval_and_free(mk_pow(expr_copy(B), mk_int(2)));
+    Expr* B3 = eval_and_free(mk_pow(expr_copy(B), mk_int(3)));
+    Expr* B4 = eval_and_free(mk_pow(expr_copy(B), mk_int(4)));
+
+    /* p = C - 3 B^2/8 */
+    Expr* p = eval_and_free(mk_fn2("Plus", expr_copy(C),
+        mk_neg(eval_and_free(mk_fn2("Times", mk_rat(3, 8), expr_copy(B2))))));
+    /* q = D - B C/2 + B^3/8 */
+    Expr* q = eval_and_free(mk_fn3("Plus", expr_copy(D),
+        mk_neg(eval_and_free(mk_fn3("Times", mk_rat(1, 2),
+                                             expr_copy(B), expr_copy(C)))),
+        eval_and_free(mk_fn2("Times", mk_rat(1, 8), expr_copy(B3)))));
+    /* r = E - B D/4 + B^2 C/16 - 3 B^4/256 */
+    Expr* r = eval_and_free(mk_fn4("Plus", expr_copy(E),
+        mk_neg(eval_and_free(mk_fn3("Times", mk_rat(1, 4),
+                                             expr_copy(B), expr_copy(D)))),
+        eval_and_free(mk_fn3("Times", mk_rat(1, 16),
+                                      expr_copy(B2), expr_copy(C))),
+        mk_neg(eval_and_free(mk_fn2("Times", mk_rat(3, 256), expr_copy(B4))))));
+
+    expr_free(B2); expr_free(B3); expr_free(B4);
+    expr_free(C); expr_free(D); expr_free(E);
+
+    /* x = u - B/4 */
+    Expr* shift = eval_and_free(mk_fn2("Times", mk_rat(-1, 4), expr_copy(B)));
+
+    Expr** out = (Expr**)malloc(sizeof(Expr*) * 4);
+
+    if (is_definite_zero(q)) {
+        /* Biquadratic depressed quartic: u^2 = (-p +/- Sqrt[p^2 - 4 r])/2. */
+        Expr* disc = eval_and_free(mk_fn2("Plus",
+            eval_and_free(mk_pow(expr_copy(p), mk_int(2))),
+            mk_neg(eval_and_free(mk_fn2("Times", mk_int(4), expr_copy(r))))));
+        Expr* sq = eval_and_free(mk_sqrt(disc));
+        Expr* u2a = eval_and_free(mk_fn2("Times", mk_rat(1, 2),
+            mk_fn2("Plus", mk_neg(expr_copy(p)), expr_copy(sq))));
+        Expr* u2b = eval_and_free(mk_fn2("Times", mk_rat(1, 2),
+            mk_fn2("Plus", mk_neg(expr_copy(p)), mk_neg(expr_copy(sq)))));
+        expr_free(sq);
+        Expr* ua = eval_and_free(mk_sqrt(expr_copy(u2a)));
+        Expr* ub = eval_and_free(mk_sqrt(expr_copy(u2b)));
+        expr_free(u2a); expr_free(u2b);
+        Expr* us[4] = { expr_copy(ua), mk_neg(expr_copy(ua)),
+                        expr_copy(ub), mk_neg(expr_copy(ub)) };
+        expr_free(ua); expr_free(ub);
+        for (int k = 0; k < 4; k++)
+            out[k] = eval_and_free(mk_fn2("Plus", us[k], expr_copy(shift)));
+    } else {
+        /* Resolvent cubic 8 y^3 + 8 p y^2 + (2 p^2 - 8 r) y - q^2 = 0;
+         * any of its (necessarily nonzero, since q != 0) roots works. */
+        Expr* rc = eval_and_free(mk_fn2("Plus",
+            eval_and_free(mk_fn2("Times", mk_int(2),
+                eval_and_free(mk_pow(expr_copy(p), mk_int(2))))),
+            mk_neg(eval_and_free(mk_fn2("Times", mk_int(8), expr_copy(r))))));
+        Expr* rb = eval_and_free(mk_fn2("Times", mk_int(8), expr_copy(p)));
+        Expr* rd = mk_neg(eval_and_free(mk_pow(expr_copy(q), mk_int(2))));
+        size_t nc = 0;
+        Expr** ys = solve_cubic_radical(mk_int(8), rb, rc, rd, false, &nc);
+        Expr* y = expr_copy(ys[0]);
+        for (size_t i = 0; i < nc; i++) expr_free(ys[i]);
+        free(ys);
+
+        Expr* w  = eval_and_free(mk_sqrt(
+            mk_fn2("Times", mk_int(2), expr_copy(y))));
+        Expr* qw = eval_and_free(mk_fn3("Times", mk_int(2), expr_copy(q),
+                                                  mk_inv(expr_copy(w))));
+        /* base = -2 y - 2 p */
+        Expr* base = eval_and_free(mk_fn2("Plus",
+            mk_neg(eval_and_free(mk_fn2("Times", mk_int(2), expr_copy(y)))),
+            mk_neg(eval_and_free(mk_fn2("Times", mk_int(2), expr_copy(p))))));
+        Expr* d1 = eval_and_free(mk_fn2("Plus", expr_copy(base), mk_neg(expr_copy(qw))));
+        Expr* d2 = eval_and_free(mk_fn2("Plus", expr_copy(base), expr_copy(qw)));
+        expr_free(base); expr_free(qw); expr_free(y);
+        Expr* s1 = eval_and_free(mk_sqrt(expr_copy(d1)));
+        Expr* s2 = eval_and_free(mk_sqrt(expr_copy(d2)));
+        expr_free(d1); expr_free(d2);
+        Expr* us[4];
+        us[0] = eval_and_free(mk_fn2("Times", mk_rat(1, 2),
+            mk_fn2("Plus", expr_copy(w), expr_copy(s1))));
+        us[1] = eval_and_free(mk_fn2("Times", mk_rat(1, 2),
+            mk_fn2("Plus", expr_copy(w), mk_neg(expr_copy(s1)))));
+        us[2] = eval_and_free(mk_fn2("Times", mk_rat(1, 2),
+            mk_fn2("Plus", mk_neg(expr_copy(w)), expr_copy(s2))));
+        us[3] = eval_and_free(mk_fn2("Times", mk_rat(1, 2),
+            mk_fn2("Plus", mk_neg(expr_copy(w)), mk_neg(expr_copy(s2)))));
+        expr_free(w); expr_free(s1); expr_free(s2);
+        for (int k = 0; k < 4; k++)
+            out[k] = eval_and_free(mk_fn2("Plus", us[k], expr_copy(shift)));
+    }
+
+    expr_free(p); expr_free(q); expr_free(r); expr_free(B); expr_free(shift);
+    *out_n = 4;
+    return out;
+}
+
 /* ------------------------------------------------------------------ *
  *  Root[] object construction.                                        *
  * ------------------------------------------------------------------ */
@@ -989,6 +1112,27 @@ static bool handle_factor(Expr* g, Expr* var, bool reals_only,
         size_t outc = 0;
         Expr** rs = solve_cubic_radical(a, b, c, d, reals_only, &outc);
         expr_free(a); expr_free(b); expr_free(c); expr_free(d);
+        sl_extend_with_mult(sl, rs, outc, mult);
+        free(rs);
+        return true;
+    }
+
+    /* Ferrari radical quartic (Quartics -> True).  Only over Complexes:
+     * the radical path returns all four roots and does not attempt a
+     * real/non-real split, so a Reals request falls through to Root[]. */
+    if (dg == 4 && opts->quartics_radical && !reals_only) {
+        Expr* a = get_coeff(g, var, 4);
+        Expr* b = get_coeff(g, var, 3);
+        Expr* c = get_coeff(g, var, 2);
+        Expr* d = get_coeff(g, var, 1);
+        Expr* e = get_coeff(g, var, 0);
+        if (!a || !b || !c || !d || !e) {
+            expr_free(a); expr_free(b); expr_free(c); expr_free(d); expr_free(e);
+            return false;
+        }
+        size_t outc = 0;
+        Expr** rs = solve_quartic_radical(a, b, c, d, e, &outc);
+        expr_free(a); expr_free(b); expr_free(c); expr_free(d); expr_free(e);
         sl_extend_with_mult(sl, rs, outc, mult);
         free(rs);
         return true;

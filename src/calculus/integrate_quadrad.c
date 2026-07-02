@@ -79,6 +79,13 @@ static Expr* mk_fn3(const char* name, Expr* a, Expr* b, Expr* c) {
     return expr_new_function(expr_new_symbol(name), args, 3);
 }
 
+/* Small algebraic builders.  Every one ADOPTS its Expr* arguments (expr_new_function
+ * takes ownership of the pointer array), matching the nested-mk_fn style below. */
+static Expr* mk_neg(Expr* e)     { return mk_fn2("Times", mk_int(-1), e); }
+static Expr* mk_inv(Expr* e)     { return mk_fn2("Power", e, mk_int(-1)); }
+static Expr* mk_pow_int(Expr* base, int64_t n) { return mk_fn2("Power", base, mk_int(n)); }
+static Expr* mk_sqrt(Expr* e)    { return mk_fn1("Sqrt", e); }
+
 /* Evaluate `call` to a fixed point, freeing `call`. */
 static Expr* eval_take(Expr* call) {
     Expr* r = evaluate(call);
@@ -330,6 +337,314 @@ static QrSub qr_euler3(Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x, Expr* u) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Closed-form path (preferred): partial fractions + standard reductions. */
+/*                                                                        */
+/* The Euler substitution below always closes but emits Log-of-radical    */
+/* antiderivatives.  For the common shape rational(x)/Sqrt[rad] this path  */
+/* instead writes the answer with ArcTan / ArcTanh / ArcSinh / ArcSin /    */
+/* Log directly (matching Mathematica): split the integrand as            */
+/*     f = E(x) + H(x)/Sqrt[rad]        (E, H rational in x)               */
+/* integrate E as a rational function, and reduce H by partial fractions   */
+/* into the standard building blocks                                       */
+/*     I_n  = Integrate[x^n / Sqrt[rad], x]      (reduction down to I0)    */
+/*     J(p) = Integrate[1/((x-p) Sqrt[rad]), x]  (ArcTanh / ArcTan)        */
+/* Each block is an exact identity (differentiates back to its integrand), */
+/* so the assembled sum needs no verification.  Any shape it cannot fully  */
+/* decompose (higher-order poles, irreducible-quadratic denominators, a    */
+/* non-closing rational part) returns NULL and qr_core falls back to the   */
+/* Euler substitution -- nothing that closes today stops closing.          */
+/* ---------------------------------------------------------------------- */
+
+/* Best-effort numeric sign of a parameter expression: exact test first,
+ * then a probe substituting each free variable with a distinct small positive
+ * rational and taking the sign of N[.].  The choice it feeds (ArcTanh vs ArcTan)
+ * is cosmetic -- both differentiate back to the same integrand -- so a wrong or
+ * unknown (0) guess is harmless. */
+static int qr_sign_probe(Expr* e) {
+    int s = expr_numeric_sign(e);
+    if (s != 0) return s;
+    Expr* vars = eval_take(mk_fn1("Variables", expr_copy(e)));
+    if (!vars || !head_is(vars, SYM_List)) { if (vars) expr_free(vars); return 0; }
+    static const int64_t pr[] = { 2, 3, 5, 7, 11, 13, 17, 19 };
+    Expr* subd = expr_copy(e);
+    for (size_t i = 0; i < vars->data.function.arg_count && subd; i++) {
+        Expr* rule = mk_fn2("Rule", expr_copy(vars->data.function.args[i]),
+                                    make_rational(pr[i % 8], pr[(i + 3) % 8]));
+        subd = eval_take(internal_replace_all((Expr*[]){ subd, rule }, 2));
+    }
+    expr_free(vars);
+    if (!subd) return 0;
+    Expr* nn = eval_take(mk_fn2("N", subd, mk_int(30)));
+    int r = nn ? expr_numeric_sign(nn) : 0;
+    if (nn) expr_free(nn);
+    return r;
+}
+
+/* Fold a polynomial in y (= Sqrt[rad], so y^2 -> rad) to its even (parity 0) or
+ * odd (parity 1) part as a polynomial in x: sum over matching powers of
+ * Coefficient[poly, y, pw] * rad^((pw-parity)/2).  Borrows poly,y,rad. */
+static Expr* qr_fold_y(Expr* poly, Expr* y, Expr* rad, int parity) {
+    int d = get_degree_poly(poly, y);
+    Expr* acc = mk_int(0);
+    for (int pw = parity; pw >= 0 && pw <= d; pw += 2) {
+        Expr* ck = get_coeff(poly, y, pw);
+        if (!ck) continue;
+        acc = mk_fn2("Plus", acc,
+            mk_fn2("Times", ck, mk_pow_int(expr_copy(rad), (pw - parity) / 2)));
+    }
+    return cancel_together(acc);
+}
+
+/* Split f = E(x) + H(x)/Sqrt[rad] with E,H rational in x, via y = Sqrt[rad] and
+ * the conjugate over y^2 = rad.  Sets *E_out,*H_out (owned) and returns true;
+ * false on failure.  Borrows f,rad,x. */
+static bool qr_split(Expr* f, Expr* rad, Expr* x, Expr** E_out, Expr** H_out) {
+    char yname[96];
+    snprintf(yname, sizeof yname, "Integrate`QuadraticRadicals`g$%lu", qr_sym_counter++);
+    Expr* y = expr_new_symbol(yname);
+    Expr* one = mk_int(1);
+    Expr* exy = poly_subst_radical_to_gen(f, rad, one, 2, yname);
+    expr_free(one);
+    if (exy) exy = cancel_together(exy);
+    if (!exy) { expr_free(y); return false; }
+
+    Expr* num = eval_take(mk_fn1("Numerator",   expr_copy(exy)));
+    Expr* den = eval_take(mk_fn1("Denominator", expr_copy(exy)));
+    expr_free(exy);
+    Expr* vars2[2] = { x, y };
+    if (!num || !den || !is_polynomial(num, vars2, 2) || !is_polynomial(den, vars2, 2)) {
+        if (num) expr_free(num); if (den) expr_free(den); expr_free(y); return false;
+    }
+
+    Expr* n0 = qr_fold_y(num, y, rad, 0), *n1 = qr_fold_y(num, y, rad, 1);
+    Expr* d0 = qr_fold_y(den, y, rad, 0), *d1 = qr_fold_y(den, y, rad, 1);
+    expr_free(num); expr_free(den); expr_free(y);
+    if (!n0 || !n1 || !d0 || !d1) {
+        if (n0) expr_free(n0); if (n1) expr_free(n1);
+        if (d0) expr_free(d0); if (d1) expr_free(d1); return false;
+    }
+
+    /* denom = d0^2 - rad d1^2 (the norm of the conjugate). */
+    Expr* denom = cancel_together(mk_fn2("Plus", mk_pow_int(expr_copy(d0), 2),
+        mk_neg(mk_fn2("Times", expr_copy(rad), mk_pow_int(expr_copy(d1), 2)))));
+    /* E = (n0 d0 - rad n1 d1)/denom. */
+    Expr* E = cancel_together(mk_fn2("Times",
+        mk_fn2("Plus", mk_fn2("Times", expr_copy(n0), expr_copy(d0)),
+            mk_neg(mk_fn3("Times", expr_copy(rad), expr_copy(n1), expr_copy(d1)))),
+        mk_inv(expr_copy(denom))));
+    /* H = rad (n1 d0 - n0 d1)/denom. */
+    Expr* H = cancel_together(mk_fn3("Times", expr_copy(rad),
+        mk_fn2("Plus", mk_fn2("Times", expr_copy(n1), expr_copy(d0)),
+            mk_neg(mk_fn2("Times", expr_copy(n0), expr_copy(d1)))),
+        mk_inv(expr_copy(denom))));
+    expr_free(n0); expr_free(n1); expr_free(d0); expr_free(d1); expr_free(denom);
+    if (!E || !H) { if (E) expr_free(E); if (H) expr_free(H); return false; }
+    *E_out = E; *H_out = H; return true;
+}
+
+/* I0 = Integrate[1/Sqrt[rad], x], rad = a x^2 + b x + c.  ArcSinh / ArcSin / Log
+ * by the signs of a and the discriminant 4ac-b^2 (Log form for symbolic a).
+ * Borrows a,b,c,rad,x; returns owned. */
+static Expr* qr_I0(Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x) {
+    int sa = expr_numeric_sign(a);
+    Expr* disc = eval_take(mk_fn2("Plus",
+        mk_fn3("Times", mk_int(4), expr_copy(a), expr_copy(c)),
+        mk_neg(mk_pow_int(expr_copy(b), 2))));         /* 4 a c - b^2 */
+    int sd = disc ? expr_numeric_sign(disc) : 0;
+    Expr* lin = mk_fn2("Plus", mk_fn3("Times", mk_int(2), expr_copy(a), expr_copy(x)),
+                               expr_copy(b));           /* 2 a x + b */
+    /* Form selection so the derivative stays Simplify-reducible AND the branch is
+     * stable under the differentiate-back sampler:
+     *  - numeric a with a PERFECT-SQUARE |disc|: the pretty ArcSinh/ArcSin;
+     *  - otherwise (numeric a with non-square disc, or symbolic a): the Log form
+     *    below, whose derivative cancels algebraically without a leftover
+     *    Sqrt[rational*rad] that Simplify cannot pull apart, and which -- unlike
+     *    ArcSinh[.../Sqrt[disc]] when disc<0 -- has no spurious branch jump at the
+     *    numeric sample points the Goursat verifier probes.  (The symbolic-a
+     *    pure-polynomial case, where the Log form's symbolic Simplify is costly,
+     *    is declined in qr_direct so it routes to the Euler substitution.) */
+    Expr* res = NULL;
+    int64_t rn, rd;
+    if (sa > 0 && sd > 0) {
+        Expr* sq = eval_take(mk_sqrt(expr_copy(disc)));           /* Sqrt[4ac-b^2] */
+        if (sq && is_rational(sq, &rn, &rd))
+            res = mk_fn2("Times", mk_inv(mk_sqrt(expr_copy(a))),
+                mk_fn1("ArcSinh", mk_fn2("Times", expr_copy(lin), mk_inv(sq))));
+        else if (sq) expr_free(sq);
+    } else if (sa < 0 && sd < 0) {
+        Expr* sq = eval_take(mk_sqrt(mk_neg(expr_copy(disc))));   /* Sqrt[b^2-4ac] */
+        if (sq && is_rational(sq, &rn, &rd))
+            res = mk_neg(mk_fn2("Times", mk_inv(mk_sqrt(mk_neg(expr_copy(a)))),
+                mk_fn1("ArcSin", mk_fn2("Times", expr_copy(lin), mk_inv(sq)))));
+        else if (sq) expr_free(sq);
+    }
+    if (disc) expr_free(disc);
+    if (!res) {   /* (1/Sqrt[a]) Log[2 a x + b + 2 Sqrt[a] Sqrt[rad]] */
+        res = mk_fn2("Times", mk_inv(mk_sqrt(expr_copy(a))),
+            mk_fn1("Log", mk_fn2("Plus", expr_copy(lin),
+                mk_fn3("Times", mk_int(2), mk_sqrt(expr_copy(a)), mk_sqrt(expr_copy(rad))))));
+    }
+    expr_free(lin);
+    return eval_take(res);
+}
+
+/* I_n = Integrate[x^n/Sqrt[rad], x], n >= 0, via the standard reduction
+ *   I_n = x^{n-1} Sqrt[rad]/(n a) - ((2n-1)b)/(2 n a) I_{n-1}
+ *                                 - ((n-1)c)/(n a)   I_{n-2}.
+ * Borrows a,b,c,rad,x; returns owned. */
+static Expr* qr_In(int n, Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x) {
+    if (n <= 0) return qr_I0(a, b, c, rad, x);
+    Expr* Im1 = qr_In(n - 1, a, b, c, rad, x);
+    Expr* na  = mk_fn2("Times", mk_int(n), expr_copy(a));
+    Expr* term1 = mk_fn2("Times",
+        mk_fn2("Times", mk_pow_int(expr_copy(x), n - 1), mk_sqrt(expr_copy(rad))),
+        mk_inv(expr_copy(na)));
+    Expr* term2 = mk_fn2("Times",
+        mk_fn3("Times", mk_int(-(2 * n - 1)), expr_copy(b),
+               mk_inv(mk_fn2("Times", mk_int(2), expr_copy(na)))), Im1);
+    Expr* sum = mk_fn2("Plus", term1, term2);
+    if (n >= 2) {
+        Expr* Im2 = qr_In(n - 2, a, b, c, rad, x);
+        sum = mk_fn2("Plus", sum, mk_fn2("Times",
+            mk_fn3("Times", mk_int(-(n - 1)), expr_copy(c), mk_inv(expr_copy(na))), Im2));
+    }
+    expr_free(na);
+    return eval_take(sum);
+}
+
+/* J(p) = Integrate[1/((x-p) Sqrt[rad]), x], A = rad(p):
+ *   A>0 : -(1/Sqrt[A])  ArcTanh[(2A + (2 a p + b)(x-p))/(2 Sqrt[A]  Sqrt[rad])]
+ *   A<0 :  (1/Sqrt[-A]) ArcTan [(2A + (2 a p + b)(x-p))/(2 Sqrt[-A] Sqrt[rad])]
+ * A == 0 (pole at a branch point) -> NULL.  Borrows p,a,b,c,rad,x. */
+static Expr* qr_Jp(Expr* p, Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x) {
+    Expr* A = eval_take(mk_fn3("Plus",
+        mk_fn2("Times", expr_copy(a), mk_pow_int(expr_copy(p), 2)),
+        mk_fn2("Times", expr_copy(b), expr_copy(p)), expr_copy(c)));
+    if (!A) return NULL;
+    int sA = qr_sign_probe(A);
+    if (sA == 0) {
+        Expr* z = eval_take(mk_fn1("PossibleZeroQ", expr_copy(A)));
+        bool zero = z && z->type == EXPR_SYMBOL && z->data.symbol == SYM_True;
+        if (z) expr_free(z);
+        if (zero) { expr_free(A); return NULL; }   /* pole on a branch point */
+        sA = 1;                                     /* indeterminate -> ArcTanh */
+    }
+    Expr* B   = mk_fn2("Plus", mk_fn3("Times", mk_int(2), expr_copy(a), expr_copy(p)),
+                               expr_copy(b));                        /* 2 a p + b */
+    Expr* xmp = mk_fn2("Plus", expr_copy(x), mk_neg(expr_copy(p))); /* x - p */
+    Expr* numArg = mk_fn2("Plus", mk_fn2("Times", mk_int(2), expr_copy(A)),
+                                  mk_fn2("Times", B, xmp));          /* 2A + B(x-p) */
+    Expr* res;
+    if (sA > 0) {
+        Expr* sq = mk_sqrt(expr_copy(A));
+        res = mk_neg(mk_fn2("Times", mk_inv(expr_copy(sq)),
+            mk_fn1("ArcTanh", mk_fn2("Times", numArg,
+                mk_inv(mk_fn3("Times", mk_int(2), sq, mk_sqrt(expr_copy(rad))))))));
+    } else {
+        Expr* sq = mk_sqrt(mk_neg(expr_copy(A)));
+        res = mk_fn2("Times", mk_inv(expr_copy(sq)),
+            mk_fn1("ArcTan", mk_fn2("Times", numArg,
+                mk_inv(mk_fn3("Times", mk_int(2), sq, mk_sqrt(expr_copy(rad)))))));
+    }
+    expr_free(A);
+    return eval_take(res);
+}
+
+/* Closed-form driver.  Borrows f,x,rad,a,b,c; returns owned antiderivative or
+ * NULL (caller then tries the Euler substitution). */
+static Expr* qr_direct(Expr* f, Expr* x, Expr* rad, Expr* a, Expr* b, Expr* c) {
+    Expr* E = NULL, *H = NULL;
+    if (!qr_split(f, rad, x, &E, &H)) return NULL;
+
+    Expr* total = mk_int(0);
+    bool okflag = true;
+    bool has_pole = false;   /* did any 1/((x-p)Sqrt[rad]) term (-> ArcTan/ArcTanh) appear? */
+
+    /* Rational (non-radical) part E. */
+    if (!is_int_zero(E)) {
+        if (expr_free_of(E, x)) {
+            total = mk_fn2("Plus", total, mk_fn2("Times", expr_copy(E), expr_copy(x)));
+        } else {
+            qr_depth++;
+            Expr* gE = integrate_in(E, x);
+            qr_depth--;
+            if (!gE) okflag = false;
+            else total = mk_fn2("Plus", total, gE);
+        }
+    }
+    expr_free(E);
+    if (!okflag) { expr_free(H); expr_free(total); return NULL; }
+
+    /* Radical part: partial-fraction H, classify each term. */
+    Expr* Hp = eval_take(mk_fn2("Apart", H, expr_copy(x)));   /* consumes H */
+    if (!Hp) { expr_free(total); return NULL; }
+
+    Expr* poly_acc = mk_int(0);
+    Expr* one_term[1] = { Hp };
+    size_t nterms; Expr** terms;
+    if (head_is(Hp, SYM_Plus)) { nterms = Hp->data.function.arg_count; terms = Hp->data.function.args; }
+    else                       { nterms = 1; terms = one_term; }
+
+    for (size_t i = 0; i < nterms && okflag; i++) {
+        Expr* t = terms[i];
+        Expr* dent = eval_take(mk_fn1("Expand",
+                        eval_take(mk_fn1("Denominator", expr_copy(t)))));
+        if (!dent) { okflag = false; break; }
+        if (expr_free_of(dent, x)) {          /* polynomial-in-x term */
+            poly_acc = mk_fn2("Plus", poly_acc, expr_copy(t));
+            expr_free(dent);
+            continue;
+        }
+        int deg = get_degree_poly(dent, x);
+        if (deg != 1) { expr_free(dent); okflag = false; break; }   /* higher/irreducible pole */
+        Expr* A1 = get_coeff(dent, x, 1);
+        Expr* A0 = get_coeff(dent, x, 0);
+        expr_free(dent);
+        Expr* numt = eval_take(mk_fn1("Numerator", expr_copy(t)));
+        if (!A1 || !A0 || !numt || !expr_free_of(numt, x)) {
+            if (A1) expr_free(A1); if (A0) expr_free(A0); if (numt) expr_free(numt);
+            okflag = false; break;
+        }
+        /* term = numt/(A1 x + A0) = (numt/A1)/(x - p), p = -A0/A1. */
+        Expr* p     = cancel_together(mk_fn2("Times", mk_neg(A0), mk_inv(expr_copy(A1))));
+        Expr* coeff = cancel_together(mk_fn2("Times", numt, mk_inv(A1)));
+        Expr* J = p ? qr_Jp(p, a, b, c, rad, x) : NULL;
+        if (p) expr_free(p);
+        if (!J) { if (coeff) expr_free(coeff); okflag = false; break; }
+        has_pole = true;
+        total = mk_fn2("Plus", total, mk_fn2("Times", coeff, J));
+    }
+    expr_free(Hp);
+    if (!okflag) { expr_free(poly_acc); expr_free(total); return NULL; }
+
+    /* Polynomial part: sum_n Coefficient[poly,x,n] * I_n. */
+    poly_acc = eval_take(mk_fn1("Expand", poly_acc));
+    if (poly_acc && !is_int_zero(poly_acc)) {
+        int pd = get_degree_poly(poly_acc, x);
+        if (pd < 0) okflag = false;
+        for (int n = 0; n <= pd && okflag; n++) {
+            Expr* qn = get_coeff(poly_acc, x, n);
+            if (!qn || is_int_zero(qn)) { if (qn) expr_free(qn); continue; }
+            Expr* In = qr_In(n, a, b, c, rad, x);
+            if (!In) { expr_free(qn); okflag = false; break; }
+            total = mk_fn2("Plus", total, mk_fn2("Times", qn, In));
+        }
+    }
+    if (poly_acc) expr_free(poly_acc);
+    if (!okflag) { expr_free(total); return NULL; }
+
+    /* A pure polynomial-over-Sqrt[rad] integrand with a SYMBOLIC leading
+     * coefficient (no ArcTan/ArcTanh pole term) gains nothing here over the Euler
+     * substitution -- and its Log-form I_n derivative makes a symbolic Simplify
+     * (the differentiate-back check outside the parametric Goursat path) very
+     * costly.  Decline so qr_core falls back to Euler; the parametric Goursat
+     * genus-0 pieces always carry a pole, so they keep this closed form. */
+    if (!has_pole && expr_numeric_sign(a) == 0) { expr_free(total); return NULL; }
+
+    return eval_take(total);
+}
+
+/* ---------------------------------------------------------------------- */
 /* Core driver                                                            */
 /* ---------------------------------------------------------------------- */
 
@@ -357,6 +672,12 @@ static Expr* qr_core(Expr* f, Expr* x) {
     c = get_coeff(rade, x, 0);
     if (!a || !b || !c) goto done;
     if (is_int_zero(b) && is_int_zero(c)) goto done;   /* degenerate Sqrt[a x^2] */
+
+    /* --- Preferred closed-form path (ArcTan/ArcTanh/ArcSinh/ArcSin/Log). ---
+     * Emits clean antiderivatives directly; falls through to the Euler
+     * substitution below when it cannot fully decompose the integrand. */
+    result = qr_direct(f, x, rad, a, b, c);
+    if (result) goto done;
 
     /* --- 3. Choose exactly one real-valued Euler substitution. --- */
     int branch;

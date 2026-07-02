@@ -22,11 +22,14 @@ Out[1]= Cos[x] Dt[x] + 2 y Dt[y]
 In[2]:= Dt[Pi + 3 + x y]
 Out[2]= Dt[x] y + x Dt[y]
 
-In[3]:= Dt[y^2, x]
-Out[3]= 0
+In[3]:= Dt[x^n, x]
+Out[3]= x^(-1 + n) (n + x Log[x] Dt[n, x])
 
-In[4]:= Dt[x^2, {x, 2}]
-Out[4]= 2
+In[4]:= Dt[a x + b, x]
+Out[4]= a + x Dt[a, x] + Dt[b, x]
+
+In[5]:= Dt[x^2, {x, 2}]
+Out[5]= 2
 ```
 
 ## Implementation notes

@@ -8,6 +8,7 @@
 #include "eval.h"
 #include "print.h"
 #include "sym_names.h"
+#include "flint_mat_bridge.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -55,6 +56,18 @@ Expr* builtin_det(Expr* res) {
     Expr** flat = malloc(sizeof(Expr*) * n * n);
     size_t idx = 0;
     flatten_tensor(arg, flat, &idx);
+
+    /* FLINT fast path: an all-integer / all-rational matrix has an exact
+     * determinant computed by fmpq_mat_det in polynomial time, versus the
+     * O(n!) Laplace expansion below. Returns NULL (falling through) when any
+     * entry is symbolic, or when built without FLINT. The exact value matches
+     * the Laplace result. */
+    Expr* fdet = flint_mat_det(flat, n);
+    if (fdet) {
+        for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
+        free(flat);
+        return fdet;
+    }
 
     int* cols = malloc(sizeof(int) * n);
     for (int i = 0; i < n; i++) cols[i] = i;

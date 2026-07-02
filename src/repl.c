@@ -8,12 +8,30 @@
 #include "sym_names.h"
 #include "show.h"
 #include "render3d.h"
+#include "graphics_json.h"
+#include "print_latex.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#include <readline/readline.h>
-#include <readline/history.h>
+
+/* Portable isatty + fileno for pipe-mode detection */
+#ifdef _WIN32
+  #include <io.h>
+  #ifndef isatty
+    #define isatty _isatty
+  #endif
+  #ifndef fileno
+    #define fileno _fileno
+  #endif
+#else
+  #include <unistd.h>
+#endif
+
+#ifndef NO_READLINE
+  #include <readline/readline.h>
+  #include <readline/history.h>
+#endif
 
 #define MAX_INPUT_LEN 10240
 
@@ -134,25 +152,26 @@ void process_input(const char* input, int line_number) {
     expr_free(evaluated);
 }
 
+#ifndef NO_READLINE
 void repl_loop() {
     printf("\nMathilda - A tiny, LLM-generated, Mathematica-like computer algebra system.\n\n");
     printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
     printf("End a line with '\\' to enter a multiline expression. Press Return to evaluate.\n");
     printf("Exit by evaluating Quit[] or CONTROL-C.\n\n");
-    
+
     int line_number = 1;
     char prompt[64];
     char full_input[MAX_INPUT_LEN] = {0};
     int in_multiline = 0;
-    
-    while (true) {
+
+    while (1) {
         int submit_now = 0;
         if (!in_multiline) {
             snprintf(prompt, sizeof(prompt), "In[%d]:= ", line_number);
         } else {
             prompt[0] = '\0';
         }
-        
+
         char* line = readline(prompt);
         if (!line) {
             printf("\n");
@@ -160,24 +179,23 @@ void repl_loop() {
             repl_apply_epilog();
             break;
         }
-        
+
         size_t line_len = strlen(line);
-        
-        // Remove trailing whitespace to properly check for backslash
+
+        /* Remove trailing whitespace to properly check for backslash. */
         size_t check_len = line_len;
         while (check_len > 0 && (line[check_len - 1] == ' ' || line[check_len - 1] == '\t')) {
             check_len--;
         }
-        
+
         int has_backslash = 0;
         if (check_len > 0 && line[check_len - 1] == '\\') {
             has_backslash = 1;
-            // Remove the backslash from the line
             line[check_len - 1] = '\0';
             line_len = strlen(line);
         }
-        
-        // Check buffer limits
+
+        /* Check buffer limits. */
         if (strlen(full_input) + line_len + 2 >= MAX_INPUT_LEN) {
             printf("Input too long!\n");
             full_input[0] = '\0';
@@ -185,53 +203,328 @@ void repl_loop() {
             free(line);
             continue;
         }
-        
+
         if (in_multiline) {
             strcat(full_input, "\n");
         }
         strcat(full_input, line);
-        
+
         if (has_backslash) {
             in_multiline = 1;
         } else {
             submit_now = 1;
         }
-        
+
         if (submit_now) {
             if (strlen(full_input) == 0) {
                 free(line);
                 continue;
             }
-            
+
             add_history(full_input);
-            
+
             if (strcmp(full_input, "Quit[]") == 0) {
                 /* User-requested shutdown: run $Epilog first. */
                 repl_apply_epilog();
                 free(line);
                 break;
             }
-            
+
             process_input(full_input, line_number);
-            
+
             full_input[0] = '\0';
             in_multiline = 0;
             line_number++;
         }
-        
+
         free(line);
     }
-    
+
     printf("\n");
 }
+#else
+/* Fallback interactive loop when readline is not available (e.g. Windows).
+ * Uses fgets; no history or line-editing. Pipe mode bypasses this entirely. */
+void repl_loop(void) {
+    printf("\nMathilda - A tiny, Mathematica-like computer algebra system.\n\n");
+    printf("Exit by evaluating Quit[] or pressing Ctrl+Z (Windows) / Ctrl+D (Unix).\n\n");
+
+    char line[MAX_INPUT_LEN];
+    int line_number = 1;
+
+    while (1) {
+        printf("In[%d]:= ", line_number);
+        fflush(stdout);
+        if (!fgets(line, sizeof(line), stdin)) {
+            printf("\n");
+            repl_apply_epilog();
+            break;
+        }
+        /* Strip trailing newline / carriage-return. */
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+        if (len == 0) continue;
+        if (strcmp(line, "Quit[]") == 0) {
+            repl_apply_epilog();
+            break;
+        }
+        process_input(line, line_number++);
+    }
+    printf("\n");
+}
+#endif
 
 #include "core.h"
 
-int main() {
+/* =====================================================================
+ * Minimal NDJSON pipe-mode protocol
+ *
+ * When stdin is not a terminal (i.e. the frontend spawned us as a
+ * sidecar), switch from the readline REPL to a simple line-based
+ * protocol over stdio.
+ *
+ * Request  (one line on stdin):
+ *   {"id": N, "expr": "1+1"}    -- evaluate expression
+ *   {"type": "ping"}             -- readiness probe
+ *   {"type": "quit"}             -- graceful shutdown
+ *
+ * Response (one JSON object per line on stdout):
+ *   {"id": N, "type": "expr",  "payload": "2"}
+ *   {"id": N, "type": "error", "message": "Parse error"}
+ *   {"id": N, "type": "done"}
+ *   {"type": "pong"}
+ *
+ * stdout is set to unbuffered at startup so every response line is
+ * delivered to the pipe immediately.
+ * ===================================================================*/
+
+static void pipe_emit(const char* line) {
+    puts(line);
+    fflush(stdout);
+}
+
+static int json_get_string(const char* json, const char* key,
+                           char* buf, size_t buflen) {
+    char search[256];
+    snprintf(search, sizeof(search), "\"%s\"", key);
+    const char* p = strstr(json, search);
+    if (!p) return 0;
+    p += strlen(search);
+    while (*p == ' ' || *p == '\t' || *p == ':') p++;
+    if (*p != '"') return 0;
+    p++;
+    size_t i = 0;
+    while (*p && *p != '"' && i + 1 < buflen) {
+        if (*p == '\\' && *(p + 1)) {
+            p++;
+            switch (*p) {
+                case '"':  buf[i++] = '"';  break;
+                case '\\': buf[i++] = '\\'; break;
+                case '/':  buf[i++] = '/';  break;
+                case 'n':  buf[i++] = '\n'; break;
+                case 'r':  buf[i++] = '\r'; break;
+                case 't':  buf[i++] = '\t'; break;
+                default:   buf[i++] = *p;   break;
+            }
+        } else {
+            buf[i++] = (char)*p;
+        }
+        p++;
+    }
+    buf[i] = '\0';
+    return 1;
+}
+
+static int json_get_int(const char* json, const char* key, int* out) {
+    char search[256];
+    snprintf(search, sizeof(search), "\"%s\"", key);
+    const char* p = strstr(json, search);
+    if (!p) return 0;
+    p += strlen(search);
+    while (*p == ' ' || *p == '\t' || *p == ':') p++;
+    if (!(*p == '-' || isdigit((unsigned char)*p))) return 0;
+    *out = (int)strtol(p, NULL, 10);
+    return 1;
+}
+
+static void json_escape(const char* s, char* out, size_t outlen) {
+    size_t i = 0;
+    while (*s && i + 7 < outlen) {
+        unsigned char c = (unsigned char)*s;
+        if (c == '"') {
+            out[i++] = '\\'; out[i++] = '"';
+        } else if (c == '\\') {
+            out[i++] = '\\'; out[i++] = '\\';
+        } else if (c == '\n') {
+            out[i++] = '\\'; out[i++] = 'n';
+        } else if (c == '\r') {
+            out[i++] = '\\'; out[i++] = 'r';
+        } else if (c == '\t') {
+            out[i++] = '\\'; out[i++] = 't';
+        } else if (c < 0x20) {
+            i += (size_t)snprintf(out + i, outlen - i, "\\u%04x", (unsigned)c);
+        } else {
+            out[i++] = (char)c;
+        }
+        s++;
+    }
+    out[i] = '\0';
+}
+
+static void pipe_process_input(const char* input, int id) {
+    Expr* parsed = parse_expression(input);
+    if (!parsed) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error\"}", id);
+        pipe_emit(buf);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(buf);
+        return;
+    }
+
+    Expr* evaluated = evaluate(parsed);
+    expr_free(parsed);
+
+    if (!evaluated) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(buf);
+        return;
+    }
+
+    /* Graphics[...] → serialize as Plotly JSON for the notebook frontend. */
+    if (evaluated->type == EXPR_FUNCTION
+        && evaluated->data.function.head
+        && evaluated->data.function.head->type == EXPR_SYMBOL
+        && evaluated->data.function.head->data.symbol == SYM_Graphics) {
+        char* plotly = graphics_to_plotly_json(evaluated);
+        expr_free(evaluated);
+        if (plotly) {
+            size_t json_len = strlen(plotly) + 64;
+            char* json_line = malloc(json_len);
+            if (json_line) {
+                strcpy(json_line, "{\"id\":");
+                char id_buf[32]; snprintf(id_buf, sizeof(id_buf), "%d", id);
+                strcat(json_line, id_buf);
+                strcat(json_line, ",\"type\":\"plot\",\"payload\":");
+                strcat(json_line, plotly);
+                strcat(json_line, "}");
+                pipe_emit(json_line);
+                free(json_line);
+            }
+            free(plotly);
+        }
+        char done[64];
+        snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(done);
+        return;
+    }
+
+    char* result_str = expr_to_string(evaluated);
+    char* latex_raw  = expr_to_latex(evaluated);   /* must be before expr_free */
+    expr_free(evaluated);
+
+    if (!result_str) {
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
+        pipe_emit(buf);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(buf);
+        return;
+    }
+
+    size_t escaped_len = strlen(result_str) * 6 + 4;
+    char* escaped = malloc(escaped_len);
+    if (!escaped) {
+        free(result_str);
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+                 "{\"id\":%d,\"type\":\"error\",\"message\":\"Out of memory\"}", id);
+        pipe_emit(buf);
+        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(buf);
+        return;
+    }
+    json_escape(result_str, escaped, escaped_len);
+    free(result_str);
+
+    /* latex_raw was produced above (before expr_free) — now escape it */
+    char* latex_esc  = NULL;
+    if (latex_raw) {
+        size_t llen = strlen(latex_raw) * 6 + 4;
+        latex_esc = malloc(llen);
+        if (latex_esc) json_escape(latex_raw, latex_esc, llen);
+        free(latex_raw);
+    }
+
+    size_t line_len = escaped_len + (latex_esc ? strlen(latex_esc) : 0) + 128;
+    char* json_line = malloc(line_len);
+    if (json_line) {
+        if (latex_esc && strlen(latex_esc) > 0) {
+            snprintf(json_line, line_len,
+                     "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\",\"latex\":\"%s\"}",
+                     id, escaped, latex_esc);
+        } else {
+            snprintf(json_line, line_len,
+                     "{\"id\":%d,\"type\":\"expr\",\"payload\":\"%s\"}", id, escaped);
+        }
+        pipe_emit(json_line);
+        free(json_line);
+    }
+    free(escaped);
+    free(latex_esc);
+
+    char done[64];
+    snprintf(done, sizeof(done), "{\"id\":%d,\"type\":\"done\"}", id);
+    pipe_emit(done);
+}
+
+static void pipe_mode_loop(void) {
+    char line[MAX_INPUT_LEN];
+    while (fgets(line, sizeof(line), stdin)) {
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
+            line[--len] = '\0';
+        if (len == 0) continue;
+
+        if (strstr(line, "\"ping\"")) {
+            pipe_emit("{\"type\":\"pong\"}");
+            continue;
+        }
+        if (strstr(line, "\"quit\"")) {
+            fflush(stdout);
+            break;
+        }
+
+        int id = 0;
+        char expr_buf[MAX_INPUT_LEN];
+        if (!json_get_int(line, "id", &id) ||
+            !json_get_string(line, "expr", expr_buf, sizeof(expr_buf))) {
+            continue;
+        }
+        pipe_process_input(expr_buf, id);
+    }
+}
+
+int main(void) {
+    /* Detect pipe mode: when stdin is not a terminal the frontend has
+     * spawned us as a sidecar and we communicate via NDJSON over stdio.
+     * The interactive readline REPL is preserved when stdin is a tty. */
+    int pipe_mode = !isatty(fileno(stdin));
+
+    if (pipe_mode) {
+        /* Disable libc's stdout buffer so every response line is delivered
+         * to the pipe immediately rather than accumulating. */
+        setvbuf(stdout, NULL, _IONBF, 0);
+    }
+
     symtab_init();
     core_init();
-    
-    // Load internal init.m silently if it exists
+
+    /* Load internal init.m silently if it exists. */
     FILE* check_fp = fopen("./src/internal/init.m", "r");
     if (check_fp) {
         fclose(check_fp);
@@ -242,7 +535,11 @@ int main() {
             if (res) expr_free(res);
         }
     }
-    
-    repl_loop();
+
+    if (pipe_mode) {
+        pipe_mode_loop();
+    } else {
+        repl_loop();
+    }
     return 0;
 }

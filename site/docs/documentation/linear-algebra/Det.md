@@ -41,6 +41,7 @@ Out[3]= c (-e g + d h) - b (-f g + d i) + a (-f h + e i)
 - `Protected`.
 - Evaluates the determinant of a square matrix symbolically or numerically using Laplace expansion.
 - Returns a warning `Det::matsq` if `m` is not a non-empty square matrix.
+- **FLINT acceleration** (when built with FLINT): a matrix whose entries are all integer or rational is computed exactly via `fmpq_mat_det` in polynomial time, avoiding the `O(n!)` Laplace expansion (e.g. a 12×12 Hilbert determinant is instant and exact). Symbolic matrices fall through to Laplace. The same kernel is exposed directly as `` FLINT`Det `` (see the FLINT` context section in *Structural Manipulation*).
 
 **Attributes:** `Protected`.
 

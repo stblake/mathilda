@@ -31,7 +31,7 @@ In[3]:= Factor[x^10 - y^10]
 Out[3]= (x + y) (x - y) (x^4 - x^3 y + x^2 y^2 - x y^3 + y^4) (x^4 + x^3 y + x^2 y^2 + x y^3 + y^4)
 
 In[4]:= Factor[2x^3 y - 2a^2 x y - 3a^2 x^2 + 3a^4]
-Out[4]= (a + x) (-a + x) (-3 a^2 + 2 x y)
+Out[4]= (a + x) (a - x) (3 a^2 - 2 x y)
 
 In[5]:= Factor[(x^3 + 2x^2)/(x^2 - 4y^2) - (x + 2)/(x^2 - 4y^2)]
 Out[5]= ((-1 + x) (1 + x) (2 + x))/((x - 2 y) (x + 2 y))
@@ -56,6 +56,7 @@ The univariate **Berlekamp–Zassenhaus** core (`factor_zassenhaus`): take the p
 **Complexity / limits.** Modular coefficients are carried in `int64`/`int128`, so the chosen `p^k` is bounded below `10^15`; the Zassenhaus recombination is exponential in the number of modular factors (the classical worst case). The integer-arithmetic UPoly path caps degree at 10000. Multivariate factoring is heuristic (`heuristic_factor`) rather than a complete algorithm.
 
 - `Listable`, `Protected`.
+- **FLINT acceleration** (when built with FLINT): a univariate polynomial over Z is factored via `fmpz_poly_factor`, and a genuine multivariate polynomial over Q via `fmpq_mpoly_factor`, both from a guarded fast path at the top of `builtin_factor` (plain single-argument form only). This turns the exponential-in-variable-count classical multivariate factoriser — which hangs on inputs like `Factor[x^99 - y^99]` (> 20 s) — into a few-millisecond call. Each irreducible factor is normalised to a positive leading coefficient (highest total degree, deglex tie-break — Mathematica's convention), with the discarded sign folded into a separated rational content, so e.g. `Factor[y^2 - x^2]` → `-(x - y)(x + y)`. Inputs that are not a polynomial over Q (a denominator, fractional/symbolic exponent, or a non-polynomial head such as `Sqrt`/`Sin`) fall through to the classical path unchanged; `Extension`/`GaussianIntegers`/`Modulus` option forms travel their own branch and are untouched. See also the `` FLINT`Factor `` builtin.
 - When given a rational expression, first resolves dependencies over `Together` before factoring.
 - Uses exact root isolation (Rational Root Theorem limits) and binomial descents structured identically to Zassenhaus recombination, evaluating combinations exact and memory safe.
 - Threads natively across lists, logic structures, and numeric groupings perfectly.

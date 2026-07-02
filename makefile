@@ -2,10 +2,37 @@ USE_ECM ?= 1
 USE_MPFR ?= 1
 USE_LAPACK ?= 1
 USE_GRAPHICS ?= 1
+USE_FLINT ?= 1
+
+# Platform detection — used for readline and other OS-specific choices.
+# On Windows under MSYS2/MinGW, uname returns "MINGW64_NT-*" or similar;
+# map anything that isn't Darwin/Linux to "Windows" for build logic.
+UNAME_S := $(shell uname -s 2>/dev/null || echo Windows)
+ifneq ($(filter Darwin Linux,$(UNAME_S)),)
+  BUILD_PLATFORM := $(UNAME_S)
+else
+  BUILD_PLATFORM := Windows
+endif
 
 CC = gcc
 CFLAGS = -O3 -std=c99 -Wall -Wextra -g -I./src -I./src/list -I./src/linalg -I./src/numbertheory -I./src/poly -I./src/simp -I./src/calculus -I./src/sum -I./src/product -I./src/special_functions -I./src/numerical_calculus -I./src/numerical_roots -I./src/graphics -I/usr/local/include
-LDFLAGS = -lreadline -L/usr/local/lib -lgmp -lm
+
+# Readline is available on macOS and Linux but not on Windows (MinGW).
+# Build with USE_READLINE=0 to disable it explicitly (e.g. for cross-builds
+# or when only the pipe-mode sidecar is needed).
+USE_READLINE ?= 1
+ifeq ($(BUILD_PLATFORM),Windows)
+  override USE_READLINE := 0
+endif
+
+ifeq ($(USE_READLINE),0)
+  CFLAGS      += -DNO_READLINE
+  READLINE_LIBS =
+else
+  READLINE_LIBS = -lreadline
+endif
+
+LDFLAGS = $(READLINE_LIBS) -L/usr/local/lib -lgmp -lm
 
 ifeq ($(USE_ECM), 1)
 CFLAGS += -I./src/external/ecm
@@ -41,7 +68,7 @@ endif
 # detects raylib — and graphics is built by default — without a manual
 # PKG_CONFIG_PATH override. Harmless on Linux (the directories simply don't
 # exist) and respects any PKG_CONFIG_PATH the user already exported.
-ifeq ($(shell uname -s),Darwin)
+ifeq ($(BUILD_PLATFORM),Darwin)
   PKG_CONFIG = PKG_CONFIG_PATH="/opt/homebrew/lib/pkgconfig:/usr/local/lib/pkgconfig:$$PKG_CONFIG_PATH" pkg-config
 else
   PKG_CONFIG = pkg-config
@@ -60,8 +87,7 @@ endif
 # the existing USE_MPFR=0 / USE_ECM=0 graceful-degrade policy so that
 # `git clone && make` always succeeds, no matter the host environment.
 ifeq ($(USE_LAPACK), 1)
-  UNAME_S := $(shell uname -s)
-  ifeq ($(UNAME_S),Darwin)
+  ifeq ($(BUILD_PLATFORM),Darwin)
     CFLAGS  += -DUSE_LAPACK -DMATHILDA_USE_ACCELERATE
     LDFLAGS += -framework Accelerate
   else ifneq ($(shell pkg-config --exists lapacke 2>/dev/null && echo y),)
@@ -93,6 +119,29 @@ ifeq ($(USE_GRAPHICS), 1)
     $(warning   macOS (Homebrew): brew install raylib)
     $(warning   Ubuntu/Debian:    sudo apt install libraylib-dev)
     override USE_GRAPHICS := 0
+  endif
+endif
+
+# FLINT (>= 3.0) for fast, rigorous polynomial arithmetic over algebraic
+# extensions — multivariate GCD/factoring over Q (fmpq_mpoly), univariate
+# GCD/factoring over a number field Q(alpha) (the generic-ring `gr` layer +
+# ANTIC, merged into FLINT at 3.0), and the finite-field multivariate workhorse
+# (fq_nmod_mpoly) used by the parametric Q(t)(alpha) outer loop. See
+# ALGEBRAIC_EXTENSION_ARITHMETIC_PLAN.md. Hard deps (GMP, MPFR) are already
+# linked. System library only (LGPL-3, GPLv3-compatible) — never vendored.
+# Autodetected via pkg-config with a >= 3.0 version floor (older packages lack
+# ANTIC); when absent the build still succeeds and the algebraic-extension
+# Cancel/Together/Apart/Factor paths fall back to the classical (slower but
+# rigorous) code, matching the USE_MPFR=0 / USE_LAPACK=0 graceful-degrade policy.
+ifeq ($(USE_FLINT), 1)
+  ifneq ($(shell $(PKG_CONFIG) --exists 'flint >= 3.0' 2>/dev/null && echo y),)
+    CFLAGS  += -DUSE_FLINT $(shell $(PKG_CONFIG) --cflags flint)
+    LDFLAGS += $(shell $(PKG_CONFIG) --libs flint)
+  else
+    $(warning FLINT >= 3.0 not detected; building with USE_FLINT=0 (algebraic-extension GCD/Factor use the classical fallback))
+    $(warning   macOS (Homebrew): brew install flint)
+    $(warning   Ubuntu/Debian:    sudo apt install libflint-dev   (needs >= 3.0 for ANTIC))
+    override USE_FLINT := 0
   endif
 endif
 

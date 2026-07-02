@@ -32,6 +32,22 @@ void test_simplify_collect_by_variable(void) {
     assert_eval_eq("Simplify[a x + b x + c]", "c + (a + b) x", 0);
 }
 
+/* ---- Cyclotomic / algebraic-number (Phase 1) ---- */
+
+void test_simplify_cyclotomic(void) {
+    /* 1/(x-a) + 1/(x+a) = 2x/(x^2 - a^2), a = (-1)^(1/3).  Simplify's
+     * algebraic fast-path now routes single-generator cyclotomic sums
+     * through Together[Extension -> Automatic], reducing a^2 = (-1)^(2/3)
+     * modulo Φ_6 to (-1)^(1/3) - 1.  Before Phase 1 this combined over an
+     * opaque (-1)^(1/3) without reduction (or, for larger sums, blew up). */
+    assert_eval_eq("Simplify[1/(x - (-1)^(1/3)) + 1/(x + (-1)^(1/3))]",
+                   "(2 x)/(1 - (-1)^(1/3) + x^2)", 0);
+
+    /* Q[I] = Q(ζ_4): denominator (x-I)(x+I) reduces to x^2 + 1. */
+    assert_eval_eq("Simplify[1/(x - I) + 1/(x + I)]",
+                   "(2 x)/(1 + x^2)", 0);
+}
+
 /* ---- Trigonometric ---- */
 
 void test_simplify_pythagorean(void) {
@@ -1329,6 +1345,7 @@ int main(void) {
     TEST(test_simplify_half_angle_tangent_via_sin_cos_cube);
     TEST(test_simplify_tan_z_compound_angle_factorisation);
     TEST(test_simplify_sqrt_half_sin_y_combination);
+    TEST(test_simplify_cyclotomic);
 
     printf("All Simplify tests passed!\n");
     return 0;

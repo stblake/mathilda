@@ -93,6 +93,16 @@ Pipeline (each stage exits early on a definite verdict):
    constants like `Pi` are decided in O(1).
 2. **Rational normalisation** — `Together`, `Cancel`, `Expand` plus
    `is_zero_poly` decides every identity in `Q(x_1, …, x_n)` exactly.
+   For a **pure rational function** of its free symbols (only exact
+   rational coefficients, free symbols, and `Plus`/`Times`/integer
+   `Power`), this normalisation is complete over `Q`, so a non-zero
+   normalised numerator is a **rigorous** `False` — the exact realisation
+   of the DeMillo–Lipton–Schwartz–Zippel guarantee, decided with no
+   sampling and no probability of error (e.g. `x + y`, `(x + 1)/(x - 1)`).
+   The `False` is trusted only under this pure-rational gate; a
+   transcendental head treated as an opaque indeterminate (`Sin[2 x] -
+   2 Sin[x] Cos[x]`) can look like a non-zero polynomial and so defers to
+   the numeric sampler instead.
 3. **Numeric precision ladder** — for closed-form numeric inputs,
    numericalize at machine precision. A residual that is a non-trivial
    fraction of the operand scale is a genuine non-zero (`False`); a
@@ -105,6 +115,11 @@ Pipeline (each stage exits early on a definite verdict):
    special function that silently stays at machine precision is not
    rejected by a high rung's tiny threshold. This is what lets deeply
    cancelling identities (e.g. `Gamma[x + 1] - x Gamma[x]`) survive.
+   Once a residual has *both* shrunk geometrically and fallen far below
+   any plausible cancellation floor, the identity is settled `True`
+   without climbing the remaining (500/1000-bit) rungs — a decisive
+   speed-up on large antiderivative round-trips (tens of thousands of
+   leaves) that leaves every verdict unchanged.
 4. **Schwartz–Zippel** — for inputs with free symbols, substitute
    random **real** samples of moderate magnitude and recurse into the
    numeric stage, in two phases. A *screen* phase evaluates many points

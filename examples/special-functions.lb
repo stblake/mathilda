@@ -1,0 +1,79 @@
+{
+  "version": "1",
+  "type": "mathilda-library",
+  "title": "Special Functions",
+  "notebooks": [
+    {
+      "id": "nb-gamma-zeta",
+      "title": "Gamma & Zeta",
+      "x": 60,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Gamma & Zeta Functions" }] },
+        { "cells": [{ "type": "text", "source": "The Gamma function generalises the factorial to complex arguments: Gamma[n] = (n-1)! for positive integers. The Riemann Zeta function connects number theory to complex analysis." }] },
+        { "cells": [{ "type": "subsection", "source": "Gamma Function" }] },
+        { "cells": [{ "type": "code", "source": "Gamma[5]" }] },
+        { "cells": [{ "type": "code", "source": "Gamma[1/2]" }] },
+        { "cells": [{ "type": "code", "source": "Table[Gamma[n], {n, 1, 8}]" }] },
+        { "cells": [{ "type": "code", "source": "N[Gamma[1/3], 20]" }] },
+        { "cells": [{ "type": "subsection", "source": "Log Gamma & Digamma" }] },
+        { "cells": [{ "type": "code", "source": "LogGamma[100]" }] },
+        { "cells": [{ "type": "subsection", "source": "Riemann Zeta" }] },
+        { "cells": [{ "type": "code", "source": "Zeta[2]" }] },
+        { "cells": [{ "type": "code", "source": "Zeta[4]" }] },
+        { "cells": [{ "type": "code", "source": "N[Zeta[3], 30]" }] },
+        { "cells": [{ "type": "text", "source": "Zeta[2] = Pi^2/6 (the Basel problem, solved by Euler). Zeta[4] = Pi^4/90. Zeta[3] (Apery's constant) has no known closed form in terms of Pi. The EulerGamma constant is the limit of the harmonic series minus Log[n]." }] }
+      ]
+    },
+    {
+      "id": "nb-combinatorics",
+      "title": "Combinatorics",
+      "x": 760,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Combinatorics" }] },
+        { "cells": [{ "type": "text", "source": "Combinatorial functions count arrangements and structures. Fibonacci numbers, Lucas numbers, binomial coefficients, and factorials are all first-class builtins in Mathilda." }] },
+        { "cells": [{ "type": "subsection", "source": "Fibonacci & Lucas Numbers" }] },
+        { "cells": [{ "type": "code", "source": "Table[Fibonacci[n], {n, 1, 15}]" }] },
+        { "cells": [{ "type": "code", "source": "Fibonacci[50]" }] },
+        { "cells": [{ "type": "code", "source": "Table[LucasL[n], {n, 0, 12}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Binomial Coefficients" }] },
+        { "cells": [{ "type": "code", "source": "Binomial[10, 3]" }] },
+        { "cells": [{ "type": "code", "source": "Table[Binomial[6, k], {k, 0, 6}]" }] },
+        { "cells": [{ "type": "code", "source": "Table[Table[Binomial[n, k], {k, 0, n}], {n, 0, 5}]" }] },
+        { "cells": [{ "type": "subsection", "source": "Factorial" }] },
+        { "cells": [{ "type": "code", "source": "Table[n!, {n, 0, 10}]" }] },
+        { "cells": [{ "type": "code", "source": "100!" }] },
+        { "cells": [{ "type": "text", "source": "Mathilda uses GMP for arbitrary-precision integers, so 100! and even 1000! compute exactly in milliseconds. The golden ratio Phi = (1+Sqrt[5])/2 satisfies Fibonacci[n] = Round[(Phi^n)/Sqrt[5]]." }] }
+      ]
+    },
+    {
+      "id": "nb-transcendental",
+      "title": "Transcendental Functions",
+      "x": 1460,
+      "y": 60,
+      "width": 640,
+      "collapsed": false,
+      "rows": [
+        { "cells": [{ "type": "section", "source": "Transcendental & Special Functions" }] },
+        { "cells": [{ "type": "text", "source": "Beyond elementary functions lie the higher transcendentals: Bessel functions, hypergeometric series, orthogonal polynomials, and more. These arise throughout physics and engineering." }] },
+        { "cells": [{ "type": "subsection", "source": "Bessel Functions" }] },
+        { "cells": [{ "type": "code", "source": "BesselJ[0, 1]" }] },
+        { "cells": [{ "type": "code", "source": "Table[N[BesselJ[0, x], 8], {x, 0, 5}]" }] },
+        { "cells": [{ "type": "code", "source": "BesselJ[1, Pi]" }] },
+        { "cells": [{ "type": "subsection", "source": "Hypergeometric" }] },
+        { "cells": [{ "type": "code", "source": "HypergeometricPFQ[{1, 1}, {2}, -1]" }] },
+        { "cells": [{ "type": "code", "source": "N[HypergeometricPFQ[{1/2}, {3/2}, -1], 15]" }] },
+        { "cells": [{ "type": "subsection", "source": "Polylogarithm" }] },
+        { "cells": [{ "type": "code", "source": "PolyLog[2, 1]" }] },
+        { "cells": [{ "type": "code", "source": "PolyLog[2, 1/2]" }] },
+        { "cells": [{ "type": "code", "source": "N[PolyLog[3, 1], 20]" }] },
+        { "cells": [{ "type": "text", "source": "PolyLog[2, 1] = Zeta[2] = Pi^2/6 (the dilogarithm at 1). BesselJ[0, x] is the oscillating solution to Bessel's equation of order zero; its first zero near x=2.4048 is the fundamental mode of a circular drum." }] }
+      ]
+    }
+  ]
+}
