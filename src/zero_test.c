@@ -125,6 +125,18 @@ static const long PRECISION_LADDER[] = { 53, 200, 500, 1000 };
  * we add a couple of extra bits as a guard against fma / parsing slop. */
 #define ZT_AMBIGUITY_GUARD_BITS 4
 
+/* Deep-zero early-exit for the precision ladder. Once a residual has been
+ * OBSERVED to shrink geometrically AND has fallen below scale * 2^(-N), it is a
+ * genuine zero to overwhelming confidence: a real non-zero cannot shrink below
+ * its own magnitude, and no algebraic/transcendental identity this system
+ * produces cancels past ~N bits. Climbing the remaining (500/1000-bit) rungs
+ * on a large tree is then pure cost — the dominant expense on big parametric
+ * antiderivative round-trips (a 60k-leaf D[r,x]-f numericalised at 1000 bits
+ * costs ~0.8 s per sample). N is set far above machine precision (52) and any
+ * realistic cancellation depth, yet far below the first MPFR rung (200 bits)
+ * so a true zero triggers it at that rung. */
+#define ZT_DEEP_ZERO_BITS 96
+
 /* ------------------------------------------------------------------ */
 /*  Forward declarations                                              */
 /* ------------------------------------------------------------------ */
@@ -246,6 +258,57 @@ static bool expr_has_algebraic_constant(const Expr* e) {
     return false;
 }
 
+/* True when `e` is a PURE RATIONAL FUNCTION of its free symbols over Q: every
+ * node is an exact rational coefficient (Integer / BigInt / Rational[int,int]),
+ * a free symbol (NOT a named constant — GoldenRatio etc. satisfy algebraic
+ * relations that a polynomial-in-the-indeterminate view would miss), or a
+ * Plus / Times / Power-with-INTEGER-exponent thereof.
+ *
+ * For such an expression the Stage-1 normalization (Together ∘ Cancel + Expand,
+ * over Q) is EXACT and COMPLETE, so a non-zero normalized numerator is a
+ * RIGOROUS non-zero — the exact realization of the DeMillo–Lipton–Schwartz–
+ * Zippel guarantee, with no probability of a sampling false verdict.  This lets
+ * decide_rational commit a trustworthy FALSE (not just its usual TRUE), and
+ * removes such inputs from the numeric sampler entirely.
+ *
+ * Deliberately conservative: inexact coefficients (Real/MPFR — rigor is over Q),
+ * Complex/Gaussian atoms (I is algebraic), non-integer or symbolic exponents
+ * (radicals / transcendental powers), and every other head (Sin, Log, Sqrt,
+ * user functions) make it return false, so the input keeps its previous path. */
+static bool is_pure_rational_function(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (e->type == EXPR_REAL) return false;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return false;
+#endif
+    if (e->type == EXPR_STRING) return false;
+    if (e->type == EXPR_SYMBOL) return !is_known_constant(e->data.symbol);
+    if (e->type == EXPR_FUNCTION) {
+        int64_t rn = 0, rd = 1;
+        if (is_rational((Expr*)e, &rn, &rd)) return true;   /* Rational[int,int] */
+        Expr* re = NULL; Expr* im = NULL;
+        if (is_complex((Expr*)e, &re, &im)) return false;    /* Gaussian: I is algebraic */
+        const Expr* h = e->data.function.head;
+        if (!h || h->type != EXPR_SYMBOL) return false;
+        const char* nm = h->data.symbol;
+        size_t argc = e->data.function.arg_count;
+        if (nm == SYM_Plus || nm == SYM_Times) {
+            for (size_t i = 0; i < argc; ++i)
+                if (!is_pure_rational_function(e->data.function.args[i])) return false;
+            return true;
+        }
+        if (nm == SYM_Power && argc == 2) {
+            /* Exponent must be an exact integer (positive or negative) — any
+             * rational/symbolic exponent introduces a radical or transcendental. */
+            if (!expr_is_integer_like(e->data.function.args[1])) return false;
+            return is_pure_rational_function(e->data.function.args[0]);
+        }
+        return false;
+    }
+    return false;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Stage 0: structural shortcuts                                     */
 /* ------------------------------------------------------------------ */
@@ -347,7 +410,16 @@ static ZeroTestResult decide_rational(const Expr* e) {
         }
     }
     expr_free(canon);
-    return z ? ZERO_TEST_TRUE : ZERO_TEST_UNKNOWN;
+    if (z) return ZERO_TEST_TRUE;
+    /* Normalization completed but the numerator is a non-zero polynomial.  If the
+     * whole input is a pure rational function of its free symbols over Q, the
+     * normalization was exact and complete, so this is a RIGOROUS non-zero
+     * (no sampling, no probability of error).  Otherwise stay UNKNOWN: a
+     * transcendental atom (Sin[x], Log[x], …) treated as an opaque indeterminate
+     * can make a genuine identity look like a non-zero polynomial, so FALSE here
+     * would be unsound — defer to the numeric sampler. */
+    if (is_pure_rational_function(e)) return ZERO_TEST_FALSE;
+    return ZERO_TEST_UNKNOWN;
 }
 
 /* ------------------------------------------------------------------ */
@@ -683,9 +755,19 @@ static double magnitude_scale_at(const Expr* e, NumericSpec spec) {
  * indistinguishable from zero (very small relative to scale); UNKNOWN
  * if the numericalize couldn't reduce. *out_mag receives the residual
  * magnitude when non-UNKNOWN, otherwise 0.0. *out_scale (when non-NULL)
- * receives the operand-magnitude scale used for the threshold. */
+ * receives the operand-magnitude scale used for the threshold.
+ *
+ * `in_scale`: when >= 0, the caller supplies a precomputed operand scale and
+ * we SKIP the (expensive) per-argument numericalization in magnitude_scale_at.
+ * The operand magnitude is essentially precision-independent (it is a sum/
+ * product of operand values, not a cancelling residual), so a scale computed
+ * once at machine precision is reused for every higher rung — this removes a
+ * redundant full second numericalization pass at each MPFR rung, the dominant
+ * cost on large (tens-of-thousands-of-leaves) antiderivative round-trips.
+ * Pass a negative value to compute the scale at this rung's precision. */
 static ZeroTestResult evaluate_rung(const Expr* e, long bits,
-                                    double* out_mag, double* out_scale) {
+                                    double* out_mag, double* out_scale,
+                                    double in_scale) {
     *out_mag = 0.0;
     if (out_scale) *out_scale = 1.0;
     Expr* z = numericalize_at(e, bits);
@@ -697,7 +779,8 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
     if (!ok || !isfinite(mag)) return ZERO_TEST_UNKNOWN;
     *out_mag = mag;
 
-    double scale = magnitude_scale_at(e, spec_at_bits(bits));
+    double scale = (in_scale >= 0.0) ? in_scale
+                                     : magnitude_scale_at(e, spec_at_bits(bits));
     if (out_scale) *out_scale = scale;
     double tol = nonzero_threshold(scale, bits);
     if (mag > tol) return ZERO_TEST_FALSE;
@@ -722,7 +805,7 @@ static ZeroTestResult evaluate_rung(const Expr* e, long bits,
  *      negatives the previous absolute-threshold loop produced. */
 static ZeroTestResult decide_numeric(const Expr* e) {
     double mag = 0.0, scale = 1.0;
-    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale);
+    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0);
     if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
 
     if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
@@ -732,7 +815,10 @@ static ZeroTestResult decide_numeric(const Expr* e) {
     bool honored = false;
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = 0.0;
-        ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL);
+        /* Reuse the machine-precision operand scale (precision-independent) so
+         * each higher rung numericalizes the tree ONCE, not twice. */
+        ZeroTestResult rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
+                                          scale > 0.0 ? scale : -1.0);
         if (rr == ZERO_TEST_UNKNOWN) {
             /* MPFR path unavailable beyond here — accept the lenient machine
              * verdict (the rung-0 residual was below the non-zero gate). */
@@ -742,6 +828,16 @@ static ZeroTestResult decide_numeric(const Expr* e) {
             /* Residual shrank: precision honoured, still consistent with zero. */
             honored = true;
             prev_mag = m;
+            /* Deep-zero early exit: the residual has shrunk geometrically AND is
+             * now far below any plausible cancellation floor, so it is a genuine
+             * zero.  Stop before the costly 500/1000-bit rungs (see
+             * ZT_DEEP_ZERO_BITS).  This is the surgical fix for the "correct but
+             * over budget" large-antiderivative round-trips (POSSIBLE_ZEROQ_
+             * FAILURES.md case B2): it does not change any verdict — a genuine
+             * non-zero cannot shrink below its own magnitude — only the number of
+             * rungs climbed for a confirmed zero. */
+            if (scale > 0.0 && m < scale * ldexp(1.0, -ZT_DEEP_ZERO_BITS))
+                return ZERO_TEST_TRUE;
             continue;
         }
         /* Residual plateaued at this rung. */
@@ -776,7 +872,7 @@ static ZeroTestResult decide_numeric(const Expr* e) {
  * borderline-cancelling true-zero point is NOT falsely rejected by the screen. */
 static ZeroTestResult screen_point(const Expr* e) {
     double mag = 0.0, scale = 1.0;
-    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale);
+    ZeroTestResult r = evaluate_rung(e, PRECISION_LADDER[0], &mag, &scale, -1.0);
     if (r == ZERO_TEST_UNKNOWN) return ZERO_TEST_UNKNOWN;
     if (scale > 0.0 && mag > scale * ldexp(1.0, -ZT_OBVIOUS_NONZERO_BITS))
         return ZERO_TEST_FALSE;
@@ -976,7 +1072,10 @@ ZeroTestResult zero_test_decide(const Expr* e) {
         return decide_schwartz_zippel(e);
 
     r = decide_rational(e);
-    if (r == ZERO_TEST_TRUE) return r;   /* never trust False from Stage 1 alone */
+    /* Trust TRUE always; trust FALSE only for the rigorous pure-rational path
+     * (decide_rational returns FALSE exclusively when is_pure_rational_function
+     * holds, where the Q-normalization is exact and complete). */
+    if (r != ZERO_TEST_UNKNOWN) return r;
 
     if (!has_free_symbols(e)) {
         r = decide_numeric(e);

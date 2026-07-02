@@ -89,46 +89,58 @@ not a blanket property of `Tan`/integral roundtrips.
 
 The square-root Goursat descent verifies its candidate antiderivative with
 `PossibleZeroQ[D[result, x] - f]` (this is the correct design — verification
-should use `PossibleZeroQ`, never `Simplify`). Two failure modes currently force
-that gate to fall back to a numeric differentiate-back check (`diff_back_ok` in
-`src/calculus/integrate_goursat.c`) instead of trusting `PossibleZeroQ` directly.
-Both should be fixed in `src/zero_test.c`; then the numeric fallback can be
-removed and the gate becomes a one-line `PossibleZeroQ`.
+should use `PossibleZeroQ`, never `Simplify`). Two cases were flagged. **Resolved
+2026-07-02**: B1 turned out **not** to be a `PossibleZeroQ` defect, and B2 was a
+performance issue that is now fixed. The descent keeps its positive-real numeric
+gate (`diff_back_ok`) because it encodes domain knowledge `PossibleZeroQ` cannot
+and should not assume (see B1).
 
-### Case B1 — MISFIRE (false negative) on cyclotomic-tower nested radicals
+### Case B1 — RESOLVED: not a bug (the integral is only valid on the positive real axis)
 
 ```
 f  = (t - (-1)^(2/3)) / ((t + 2 (-1)^(2/3)) Sqrt[t^3 - 1])
 r  = Integrate[f, t, Method -> "GoursatAlgebraic"]   (* period-3 reduction, 139 leaves *)
-PossibleZeroQ[D[r, t] - f]   ==>  False   (in 0.0026 s)   (* WRONG: the difference is 0 *)
+PossibleZeroQ[D[r, t] - f]   ==>  False              (* CORRECT, not a false negative *)
 ```
 
-`D[r,t] - f` **is** identically zero (the numeric differentiate-back accepts it,
-and the period-3 reduction is correct-by-construction). `PossibleZeroQ` returns
-`False` — a genuine false negative. `r` carries residual cyclotomic-tower nested
-radicals (`(-1)^(2/3)`, `Sqrt` of expressions over `Q(ζ_3)`) and the real/complex
-Schwartz–Zippel sample lands across a branch cut where the *sampled* residual is
-non-zero (same **branch-cut / saturation** mechanism as cases #2/#3/A above, but
-driven by the algebraic-number nesting rather than a transcendental head). This
-is the direct cause of the two `test_period3` failures when the gate is switched
-to pure `PossibleZeroQ`.
+`D[r,t] - f` is **not** identically zero on `ℂ`. The antiderivative `r` is only
+valid on the branch it was built on — the positive real axis, where `Sqrt[t^3-1]`
+is on its principal sheet (`t > 1`). Off that branch it is a genuine non-zero:
 
-### Case B2 — TOO SLOW (correct but over budget) on large parametric outputs
+| point | `Abs[D[r,t] - f]` |
+|-------|-------------------|
+| `t = 3.4`  (on branch)  | `1.9e-14`  (zero) |
+| `t = -3.4` (off branch) | `0.20`     (**non-zero**) |
+
+This is the **identical numeric signature** of `Sqrt[x^2] - x` and
+`Log[x^2] - 2 Log[x]` — zero on the positive axis, non-zero on the negative — both
+of which the test suite *requires* to return `False`. No sampling policy (real,
+complex, or exact-algebraic point evaluation) can return `True` for B1 while
+keeping those `False`: they are the same equivalence class. Only genuine
+algebraic-function-field zero testing (radicals as field generators over
+`Q(t)(ζ_n)(√…)`) could distinguish them, and that is out of scope.
+
+So `PossibleZeroQ` returning `False` is correct. The Goursat descent verifies its
+antiderivative with `diff_back_ok` (positive-real fixed samples) precisely because
+it *knows* the answer is a positive-real-axis identity — domain knowledge a general
+zero-test must not assume. That gate is the right design and is retained.
+
+### Case B2 — FIXED (performance): large parametric outputs now settle in ~1.9 s
 
 ```
 f = (1 + k x) / ((-1 + k x) Sqrt[(1 - x) x (1 - k^2 x)])
 r = Integrate[f, x, Method -> "GoursatAlgebraic"]   (* parametric V4, 9495 leaves *)
-PossibleZeroQ[D[r, x] - f]   ==>  True   (correct)   BUT takes 4.8 s
+PossibleZeroQ[D[r, x] - f]   ==>  True   (correct)   4.8 s  →  1.9 s
 ```
 
-Here `PossibleZeroQ` is **correct** but the verdict costs ~4.8 s: `D[r,x] - f`
-expands to ~60 700 leaves and the sampler numericalises that whole tree at each
-sample point / precision-ladder rung. The descent runs under a 6 s
-`TimeConstrained` budget, so the verification alone can exhaust it and the
-integral spuriously declines. The result is large because the answer is left
-un-`Simplify`-ed by design; a `PossibleZeroQ` that samples **before** fully
-expanding the difference (or short-circuits once a rung is decisively zero at
-machine precision) would settle it in well under budget.
+`PossibleZeroQ` was always **correct** here; the cost was climbing the full
+`{53,200,500,1000}`-bit precision ladder on the ~60 700-leaf residual tree at every
+confirm sample. Fixed in `src/zero_test.c` by (a) a **deep-zero early-exit**: once a
+residual has both shrunk geometrically and fallen far below any plausible
+cancellation floor, the identity is settled `True` without the 500/1000-bit rungs;
+and (b) reusing the precision-independent operand scale across rungs instead of
+recomputing it (a redundant second numericalisation pass per rung). Every verdict
+is unchanged; the cost drops to ~1.9 s, comfortably inside the descent's 6 s budget.
 
 **Reproduce** (both): set `Method -> "GoursatAlgebraic"`, take the printed `r`,
 and evaluate `Timing[PossibleZeroQ[D[r, var] - f]]`.
