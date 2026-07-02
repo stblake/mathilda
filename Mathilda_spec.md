@@ -51,6 +51,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | Pattern matching (`MatchQ`, `Cases`, `DeleteCases`, `Position`, `Count`, ...) | [`builtins/pattern-matching.md`](docs/spec/builtins/pattern-matching.md) |
 | File I/O (`Get`, `Put`, `PutAppend`, `>>`, `>>>`) | [`builtins/file-io.md`](docs/spec/builtins/file-io.md) |
 | Graphics (`Graphics`, `Show`, `Plot`, `Point`, `Line`, `Rectangle`, `Circle`, `Disk`, `Polygon`, `Text`, ...) | [`builtins/graphics.md`](docs/spec/builtins/graphics.md) |
+| Graphs (`Graph`, `DirectedEdge`, `UndirectedEdge`, `GraphQ`, `VertexList`, `EdgeList`, `AdjacencyMatrix`, `FindShortestPath`, `GraphPlot`, ...) | [`builtins/graphs.md`](docs/spec/builtins/graphs.md) |
 
 ## Changelog
 
@@ -68,5 +69,6 @@ Detailed feature-addition and bug-fix notes, organized by week (Mon – Sun, key
 | 2026-06-08 → 2026-06-14 | [`changelog/2026-06-08.md`](docs/spec/changelog/2026-06-08.md) |
 | 2026-06-15 → 2026-06-21 | [`changelog/2026-06-15.md`](docs/spec/changelog/2026-06-15.md) |
 | 2026-06-22 → 2026-06-28 | [`changelog/2026-06-22.md`](docs/spec/changelog/2026-06-22.md) |
+| 2026-06-29 → 2026-07-05 | [`changelog/2026-06-29.md`](docs/spec/changelog/2026-06-29.md) |
 
 New entries land in the file for the current week (use the Monday-date of that week as the filename, format `YYYY-MM-DD.md`). When a change touches a built-in's documented behavior, the corresponding `docs/spec/builtins/*.md` file is updated as well; the changelog records the rationale and timing.

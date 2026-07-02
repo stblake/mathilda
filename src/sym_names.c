@@ -616,6 +616,38 @@ const char* SYM_LabelStyle = NULL;
 const char* SYM_PlotLegendData = NULL;
 const char* SYM_PlotResample = NULL;
 
+/* Graph subsystem (src/graph/). */
+const char* SYM_Graph = NULL;
+const char* SYM_DirectedEdge = NULL;
+const char* SYM_UndirectedEdge = NULL;
+const char* SYM_TwoWayRule = NULL;
+const char* SYM_GraphQ = NULL;
+const char* SYM_DirectedGraphQ = NULL;
+const char* SYM_ConnectedGraphQ = NULL;
+const char* SYM_VertexList = NULL;
+const char* SYM_EdgeList = NULL;
+const char* SYM_VertexCount = NULL;
+const char* SYM_EdgeCount = NULL;
+const char* SYM_AdjacencyList = NULL;
+const char* SYM_VertexDegree = NULL;
+const char* SYM_VertexInDegree = NULL;
+const char* SYM_VertexOutDegree = NULL;
+const char* SYM_AdjacencyMatrix = NULL;
+const char* SYM_IncidenceMatrix = NULL;
+const char* SYM_AdjacencyGraph = NULL;
+const char* SYM_CompleteGraph = NULL;
+const char* SYM_CycleGraph = NULL;
+const char* SYM_PathGraph = NULL;
+const char* SYM_RandomGraph = NULL;
+const char* SYM_FindShortestPath = NULL;
+const char* SYM_GraphDistance = NULL;
+const char* SYM_ConnectedComponents = NULL;
+const char* SYM_WeaklyConnectedComponents = NULL;
+const char* SYM_StronglyConnectedComponents = NULL;
+const char* SYM_FindSpanningTree = NULL;
+const char* SYM_VertexConnectivity = NULL;
+const char* SYM_GraphPlot = NULL;
+
 void sym_names_init(void) {
     /* intern_symbol is idempotent and stable, so this can run multiple
      * times without re-allocating. */
@@ -1224,6 +1256,38 @@ void sym_names_init(void) {
     SYM_LabelStyle                 = intern_symbol("LabelStyle");
     SYM_PlotLegendData             = intern_symbol("$PlotLegendData");
     SYM_PlotResample               = intern_symbol("$PlotResample");
+
+    /* Graph subsystem (src/graph/). */
+    SYM_Graph                      = intern_symbol("Graph");
+    SYM_DirectedEdge               = intern_symbol("DirectedEdge");
+    SYM_UndirectedEdge             = intern_symbol("UndirectedEdge");
+    SYM_TwoWayRule                 = intern_symbol("TwoWayRule");
+    SYM_GraphQ                     = intern_symbol("GraphQ");
+    SYM_DirectedGraphQ             = intern_symbol("DirectedGraphQ");
+    SYM_ConnectedGraphQ            = intern_symbol("ConnectedGraphQ");
+    SYM_VertexList                 = intern_symbol("VertexList");
+    SYM_EdgeList                   = intern_symbol("EdgeList");
+    SYM_VertexCount                = intern_symbol("VertexCount");
+    SYM_EdgeCount                  = intern_symbol("EdgeCount");
+    SYM_AdjacencyList              = intern_symbol("AdjacencyList");
+    SYM_VertexDegree               = intern_symbol("VertexDegree");
+    SYM_VertexInDegree             = intern_symbol("VertexInDegree");
+    SYM_VertexOutDegree            = intern_symbol("VertexOutDegree");
+    SYM_AdjacencyMatrix            = intern_symbol("AdjacencyMatrix");
+    SYM_IncidenceMatrix            = intern_symbol("IncidenceMatrix");
+    SYM_AdjacencyGraph             = intern_symbol("AdjacencyGraph");
+    SYM_CompleteGraph              = intern_symbol("CompleteGraph");
+    SYM_CycleGraph                 = intern_symbol("CycleGraph");
+    SYM_PathGraph                  = intern_symbol("PathGraph");
+    SYM_RandomGraph                = intern_symbol("RandomGraph");
+    SYM_FindShortestPath           = intern_symbol("FindShortestPath");
+    SYM_GraphDistance              = intern_symbol("GraphDistance");
+    SYM_ConnectedComponents        = intern_symbol("ConnectedComponents");
+    SYM_WeaklyConnectedComponents  = intern_symbol("WeaklyConnectedComponents");
+    SYM_StronglyConnectedComponents = intern_symbol("StronglyConnectedComponents");
+    SYM_FindSpanningTree           = intern_symbol("FindSpanningTree");
+    SYM_VertexConnectivity         = intern_symbol("VertexConnectivity");
+    SYM_GraphPlot                  = intern_symbol("GraphPlot");
 
     /* System symbols that have no kernel implementation and no cached SYM_*
      * pointer, but must still be recognized as System` (not qualified into a
