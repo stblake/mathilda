@@ -34,63 +34,97 @@
 
 static int geom_counter = 0;   /* unique coefficient-symbol suffix */
 
-/* base^var with exponent structurally equal to var, base free of var and not
- * the trivial 0/1?  If so return base (copied), else NULL. */
+/* Return the per-step geometric ratio of a single factor e(var), or NULL if e
+ * is not a (constant times) geometric factor in var.
+ *
+ * A factor g(var) is geometric with ratio rho iff  g(var+1)/g(var)  is free of
+ * var -- then g(var) = C rho^var for some var-free C.  This ratio test is
+ * representation-independent, so it catches every surface form of the same
+ * factor alike:  r^i,  r^(-i),  (r^i)^(-1),  (1/r)^i,  r^(a i + b),  2^(-k)
+ * (held as (2^k)^(-1)), ...  Polynomial factors fail the test -- e.g.
+ * (k+1)^2/k^2 still depends on k -- and are left in the polynomial part by the
+ * caller.  The var-free C stays in the polynomial part too, since divide_off
+ * removes exactly rho^var.
+ *
+ * The plain case e = Power[base, var] (base free of var) is short-circuited to
+ * avoid the substitute/evaluate round-trip on the hot path. */
 static Expr* var_power_base(Expr* e, Expr* var) {
-    if (e->type != EXPR_FUNCTION) return NULL;
-    if (e->data.function.head->type != EXPR_SYMBOL) return NULL;
-    if (e->data.function.head->data.symbol != SYM_Power) return NULL;
-    if (e->data.function.arg_count != 2) return NULL;
-    Expr* base = e->data.function.args[0];
-    Expr* exp  = e->data.function.args[1];
-    if (!expr_eq(exp, var)) return NULL;
-    if (!sum_free_of(base, var)) return NULL;
-    if (base->type == EXPR_INTEGER &&
-        (base->data.integer == 0 || base->data.integer == 1)) return NULL;
-    return expr_copy(base);
-}
+    /* Constant factor: not geometric. */
+    if (sum_free_of(e, var)) return NULL;
 
-/* Multiply acc (owned) by base^(-var) and evaluate, cancelling base^var. */
-static Expr* divide_off(Expr* acc, Expr* base, Expr* var) {
-    Expr* inv = expr_new_function(expr_new_symbol(SYM_Power),
-                    (Expr*[]){ expr_copy(base),
-                               expr_new_function(expr_new_symbol(SYM_Times),
-                                   (Expr*[]){ sum_int(-1), expr_copy(var) }, 2) }, 2);
-    Expr* prod = expr_new_function(expr_new_symbol(SYM_Times),
-                     (Expr*[]){ acc, inv }, 2);
-    Expr* r = evaluate(prod);
-    expr_free(prod);
-    return r;
-}
-
-/* Detect f = p(i) * r^i.  Sets *r_out (product of the bases of all r^i factors)
- * and *p_out (f with those factors divided off, which must be a polynomial in
- * var -- each base is cancelled individually so q1^i q2^i works).  Returns
- * false if f has no exponential factor or the remainder is not polynomial. */
-static bool find_geometric(Expr* f, Expr* var, Expr** r_out, Expr** p_out) {
-    Expr* direct = var_power_base(f, var);
-    if (direct) {
-        *r_out = direct;
-        *p_out = divide_off(expr_copy(f), direct, var);
-        return true;
+    /* Fast path: Power[base, var] with base free of var and not 0/1. */
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_Power
+        && e->data.function.arg_count == 2
+        && expr_eq(e->data.function.args[1], var)
+        && sum_free_of(e->data.function.args[0], var)) {
+        Expr* base = e->data.function.args[0];
+        if (!(base->type == EXPR_INTEGER &&
+              (base->data.integer == 0 || base->data.integer == 1)))
+            return expr_copy(base);
     }
-    if (!(f->type == EXPR_FUNCTION && f->data.function.head->type == EXPR_SYMBOL
-          && f->data.function.head->data.symbol == SYM_Times))
-        return false;
 
-    Expr* r = NULL;
-    Expr* p = expr_copy(f);
-    for (size_t k = 0; k < f->data.function.arg_count; k++) {
-        Expr* b = var_power_base(f->data.function.args[k], var);
-        if (!b) continue;
-        p = divide_off(p, b, var);                 /* cancel b^i out of p */
-        if (!r) { r = b; }
-        else {
-            Expr* tr = expr_new_function(expr_new_symbol(SYM_Times),
-                           (Expr*[]){ r, b }, 2);
-            r = evaluate(tr);
-            expr_free(tr);
+    /* General ratio test: rho = g(var+1) / g(var). */
+    Expr* vp1 = expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy(var), sum_int(1) }, 2);
+    Expr* eshift = sum_subst(e, var, vp1);            /* g(var+1) */
+    expr_free(vp1);
+    Expr* einv = expr_new_function(expr_new_symbol(SYM_Power),
+                     (Expr*[]){ expr_copy(e), sum_int(-1) }, 2);
+    Expr* ratio_raw = expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ eshift, einv }, 2);   /* consumes both */
+    Expr* ratio = evaluate(ratio_raw);
+    expr_free(ratio_raw);
+    if (!sum_free_of(ratio, var) ||
+        (ratio->type == EXPR_INTEGER &&
+         (ratio->data.integer == 0 || ratio->data.integer == 1))) {
+        expr_free(ratio); return NULL;
+    }
+    return ratio;
+}
+
+/* Detect f = p(i) * r^i.  Sets *r_out (product of the ratios of all geometric
+ * factors) and *p_out (the polynomial part, which must be a polynomial in var).
+ * Returns false if f has no geometric factor.
+ *
+ * Each factor g that is geometric (var_power_base returns its ratio rho) equals
+ * C * rho^var for a var-free constant C = g|_{var->0}; we accumulate rho into r
+ * and multiply C into the polynomial part.  Multiplying (rather than dividing
+ * the whole f by a reconstructed rho^var) sidesteps base-representation
+ * mismatches -- e.g. the factor 2^(-k) has ratio 1/2, and 2^(-k)/(1/2)^k would
+ * not cancel structurally though it is 1.  q1^i q2^i still works: each power is
+ * its own geometric factor. */
+static bool find_geometric(Expr* f, Expr* var, Expr** r_out, Expr** p_out) {
+    bool is_times = (f->type == EXPR_FUNCTION
+                     && f->data.function.head->type == EXPR_SYMBOL
+                     && f->data.function.head->data.symbol == SYM_Times);
+    size_t n = is_times ? f->data.function.arg_count : 1;
+
+    Expr* r = NULL;                 /* product of ratios */
+    Expr* p = sum_int(1);           /* accumulated polynomial part */
+    for (size_t k = 0; k < n; k++) {
+        Expr* g = is_times ? f->data.function.args[k] : f;
+        Expr* rho = var_power_base(g, var);
+        Expr* factor;               /* what to fold into the polynomial part */
+        if (rho) {
+            if (!r) { r = rho; }
+            else {
+                Expr* tr = expr_new_function(expr_new_symbol(SYM_Times),
+                               (Expr*[]){ r, rho }, 2);
+                r = evaluate(tr);
+                expr_free(tr);
+            }
+            /* C = g |_{var -> 0}, the var-free constant with g = C rho^var. */
+            Expr* zero = sum_int(0);
+            factor = sum_subst(g, var, zero);
+            expr_free(zero);
+        } else {
+            factor = expr_copy(g);
         }
+        Expr* tp = expr_new_function(expr_new_symbol(SYM_Times),
+                       (Expr*[]){ p, factor }, 2);
+        p = evaluate(tp);
+        expr_free(tp);
     }
     if (!r) { expr_free(p); return false; }
     *r_out = r;
@@ -210,15 +244,40 @@ Expr* builtin_sum_geometric(Expr* res) {
     bool definite;
     if (!sum_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
 
-    /* Infinite (convergence-dependent) sums are deferred. */
-    if (definite && imax->type == EXPR_SYMBOL && imax->data.symbol == SYM_Infinity)
-        return NULL;
+    bool infinite = (definite && imax->type == EXPR_SYMBOL
+                     && imax->data.symbol == SYM_Infinity);
+
+    /* Canonicalise the (held) summand so exponential factors are in base^exp
+     * form: the parser leaves 1/2^k as (2^k)^(-1), whose base 2^k contains the
+     * variable, and divide_off then cannot cancel it back out of the polynomial
+     * part.  evaluate rewrites it to 2^(-k) (a var-free base), which cancels
+     * cleanly.  This does not expand or run Together, so it is safe on the
+     * symbolic r^var forms the memory warns about. */
+    Expr* fn = evaluate(expr_copy(f));
 
     Expr *r = NULL, *p = NULL;
-    if (!find_geometric(f, var, &r, &p)) return NULL;
+    if (!find_geometric(fn, var, &r, &p)) { expr_free(fn); return NULL; }
+    expr_free(fn);
 
     Expr* vars[1] = { var };
     if (!is_polynomial(p, vars, 1)) { expr_free(p); expr_free(r); return NULL; }
+
+    /* Infinite range converges iff |r| < 1: the summand p(k) r^k is a polynomial
+     * times a decaying exponential, so the boundary term q(n+1) r^(n+1) -> 0 and
+     * the sum collapses to -F(imin).  An undecidable ratio (symbolic r) or
+     * |r| >= 1 (including the divergent r = -1 and r = 1 edges) is deferred:
+     * we return NULL so the sum is left unevaluated rather than fabricated. */
+    if (infinite) {
+        Expr* lt = expr_new_function(expr_new_symbol(SYM_Less),
+                       (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Abs),
+                                      (Expr*[]){ expr_copy(r) }, 1),
+                                  sum_int(1) }, 2);
+        Expr* conv = evaluate(lt);
+        expr_free(lt);
+        bool converges = (conv->type == EXPR_SYMBOL && conv->data.symbol == SYM_True);
+        expr_free(conv);
+        if (!converges) { expr_free(p); expr_free(r); return NULL; }
+    }
 
     Expr* q = solve_q(p, r, var);
     expr_free(p);
@@ -243,6 +302,14 @@ Expr* builtin_sum_geometric(Expr* res) {
     if (!definite) {
         out = F;
         F = NULL;
+    } else if (infinite) {
+        /* |r| < 1 was verified above, so F(n+1) = q(n+1) r^(n+1) -> 0 and the
+         * sum from imin to infinity is  lim_n [F(n+1) - F(imin)] = -F(imin). */
+        Expr* Flo = sum_subst(F, var, imin);
+        Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ sum_int(-1), Flo }, 2);   /* Flo consumed */
+        out = evaluate(neg);
+        expr_free(neg);
     } else {
         Expr* up = expr_new_function(expr_new_symbol(SYM_Plus),
                        (Expr*[]){ expr_copy(imax), sum_int(1) }, 2);

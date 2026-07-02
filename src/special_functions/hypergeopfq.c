@@ -224,6 +224,14 @@ static Expr* sqrt_of(Expr* z) {
  * Returns the evaluated elementary expression, or NULL if no rule matches.
  * Valid as analytic continuations for all z, so safe to run before the
  * numeric series. */
+/* Does e equal the (reduced) rational num/den? */
+static bool hg_is_rat(Expr* e, int64_t num, int64_t den) {
+    Expr* r = make_rational(num, den);
+    bool ok = expr_eq(e, r);
+    expr_free(r);
+    return ok;
+}
+
 static Expr* try_reduce(Expr* a, Expr* b, Expr* z) {
     size_t p = a->data.function.arg_count;
     size_t q = b->data.function.arg_count;
@@ -271,14 +279,84 @@ static Expr* try_reduce(Expr* a, Expr* b, Expr* z) {
                       (Expr*[]){ em1, invz }, 2);
         }
     } else if (p == 2 && q == 1) {
-        /* 2F1(1,1;2;z) = -Log[1 - z] / z */
-        if (is_int_val(au[0], 1) && is_int_val(au[1], 1) && is_int_val(bl[0], 2)) {
+        int64_t tw;
+        bool u11 = is_int_val(au[0], 1) && is_int_val(au[1], 1);
+        bool u12 = (is_int_val(au[0], 1) && is_int_val(au[1], 2)) ||
+                   (is_int_val(au[0], 2) && is_int_val(au[1], 1));
+        if (u11 && is_int_val(bl[0], 2)) {
+            /* 2F1(1,1;2;z) = -Log[1 - z] / z */
             Expr* lg = expr_new_function(expr_new_symbol(SYM_Log),
                            (Expr*[]){ one_minus(z) }, 1);
             Expr* invz = expr_new_function(expr_new_symbol(SYM_Power),
                              (Expr*[]){ expr_copy(z), expr_new_integer(-1) }, 2);
             out = expr_new_function(expr_new_symbol(SYM_Times),
                       (Expr*[]){ expr_new_integer(-1), lg, invz }, 3);
+        } else if (u11 && is_half_int(bl[0], &tw) && tw == 1) {
+            /* 2F1(1,1;1/2;z) = 1/(1-z) + Sqrt[z] ArcSin[Sqrt[z]] / (1-z)^(3/2).
+             * (Central-binomial family, e.g. Sum[2^k/Binomial[2k,k],{k,0,Inf}].) */
+            Expr* t1 = expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ one_minus(z), expr_new_integer(-1) }, 2);
+            Expr* asin = expr_new_function(expr_new_symbol(SYM_ArcSin),
+                             (Expr*[]){ sqrt_of(z) }, 1);
+            Expr* omz32 = expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ one_minus(z), make_rational(-3, 2) }, 2);
+            Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ sqrt_of(z), asin, omz32 }, 3);
+            out = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ t1, t2 }, 2);
+        } else if (u11 && is_half_int(bl[0], &tw) && tw == 3) {
+            /* 2F1(1,1;3/2;z) = ArcSin[Sqrt[z]] / (Sqrt[z] Sqrt[1-z]). */
+            Expr* asin = expr_new_function(expr_new_symbol(SYM_ArcSin),
+                             (Expr*[]){ sqrt_of(z) }, 1);
+            Expr* invsq = expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ sqrt_of(z), expr_new_integer(-1) }, 2);
+            Expr* invomz = expr_new_function(expr_new_symbol(SYM_Power),
+                               (Expr*[]){ one_minus(z), make_rational(-1, 2) }, 2);
+            out = expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ asin, invsq, invomz }, 3);
+        } else if (u12 && is_half_int(bl[0], &tw) && tw == 3) {
+            /* 2F1(2,1;3/2;z) = 1/(2(1-z)) + ArcSin[Sqrt[z]] / (2 Sqrt[z] (1-z)^(3/2)).
+             * (e.g. Sum[2^k/Binomial[2k,k],{k,1,Inf}] = 1 + Pi/2.) */
+            Expr* t1 = expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ make_rational(1, 2),
+                                      expr_new_function(expr_new_symbol(SYM_Power),
+                                          (Expr*[]){ one_minus(z), expr_new_integer(-1) }, 2) }, 2);
+            Expr* asin = expr_new_function(expr_new_symbol(SYM_ArcSin),
+                             (Expr*[]){ sqrt_of(z) }, 1);
+            Expr* invsq = expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ sqrt_of(z), expr_new_integer(-1) }, 2);
+            Expr* omz32 = expr_new_function(expr_new_symbol(SYM_Power),
+                              (Expr*[]){ one_minus(z), make_rational(-3, 2) }, 2);
+            Expr* t2 = expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ make_rational(1, 2), asin, invsq, omz32 }, 4);
+            out = expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ t1, t2 }, 2);
+        }
+    } else if (p == 4 && q == 3) {
+        /* Very-well-poised Ramanujan 1/Pi series (table-backed; general 1/Pi
+         * summation is an open problem).  The classic central-binomial-cubed
+         * family Sum[(4k+1) Binomial[2k,k]^3/(-64)^k] maps to
+         *     4F3({1/2,1/2,1/2,5/4}, {1/4,1,1}, -1) = 2/Pi.
+         * Matched as a multiset (parameter order is not canonical). */
+        if (is_int_val(z, -1)) {
+            int c_half = 0, c_54 = 0, other_u = 0;
+            for (size_t i = 0; i < 4; i++) {
+                if (hg_is_rat(au[i], 1, 2))      c_half++;
+                else if (hg_is_rat(au[i], 5, 4)) c_54++;
+                else                             other_u++;
+            }
+            int c_14 = 0, c_1 = 0, other_l = 0;
+            for (size_t j = 0; j < 3; j++) {
+                if (hg_is_rat(bl[j], 1, 4))   c_14++;
+                else if (is_int_val(bl[j], 1)) c_1++;
+                else                           other_l++;
+            }
+            if (c_half == 3 && c_54 == 1 && other_u == 0
+                && c_14 == 1 && c_1 == 2 && other_l == 0) {
+                out = expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ expr_new_integer(2),
+                                     expr_new_function(expr_new_symbol(SYM_Power),
+                                         (Expr*[]){ expr_new_symbol(SYM_Pi),
+                                                    expr_new_integer(-1) }, 2) }, 2);
+            }
         }
     }
 

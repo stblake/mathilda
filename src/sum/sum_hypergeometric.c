@@ -40,6 +40,50 @@
 
 #define SUM_HG_MAX_DEGREE 256   /* cap on the linear-factor deflation loop */
 
+/* True iff e still contains a HypergeometricPFQ head anywhere (i.e. the pFq did
+ * not reduce to a closed form). */
+static bool hg_contains_pfq(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol == SYM_HypergeometricPFQ) return true;
+    if (hg_contains_pfq(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (hg_contains_pfq(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Rewrite Binomial[a, b] -> a! / (b! (a-b)!) throughout e (returns an owned
+ * copy; e is not consumed).  Mathilda's Simplify reduces Factorial ratios but
+ * not Binomial/Gamma/Pochhammer ratios, so this exposes the rational term ratio
+ * of a binomial hypergeometric term (e.g. 2^k/Binomial[2k,k]) to the detector. */
+static Expr* hg_expand_binomial(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    const Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    if (h->type == EXPR_SYMBOL && strcmp(h->data.symbol, "Binomial") == 0 && n == 2) {
+        Expr* a = hg_expand_binomial(e->data.function.args[0]);
+        Expr* b = hg_expand_binomial(e->data.function.args[1]);
+        Expr* amb = expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_copy(a),
+                       expr_new_function(expr_new_symbol(SYM_Times),
+                           (Expr*[]){ expr_new_integer(-1), expr_copy(b) }, 2) }, 2);
+        Expr* fa   = expr_new_function(expr_new_symbol(SYM_Factorial), (Expr*[]){ a }, 1);
+        Expr* fb   = expr_new_function(expr_new_symbol(SYM_Factorial), (Expr*[]){ b }, 1);
+        Expr* famb = expr_new_function(expr_new_symbol(SYM_Factorial), (Expr*[]){ amb }, 1);
+        return expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ fa,
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ fb, expr_new_integer(-1) }, 2),
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ famb, expr_new_integer(-1) }, 2) }, 3);
+    }
+    Expr** nargs = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) nargs[i] = hg_expand_binomial(e->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(h), nargs, n);
+    free(nargs);
+    return out;
+}
+
 /* e is a polynomial in var? */
 static bool hg_poly_in(Expr* e, Expr* var) {
     Expr* vars[1] = { var };
@@ -143,15 +187,17 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
     if (!is_infinity_sym(imax)) return NULL;
     if (imin->type != EXPR_INTEGER) return NULL;
 
-    /* Term ratio t(k+1)/t(k), reduced to a rational function num/den in var. */
+    /* Term ratio t(k+1)/t(k), reduced to a rational function num/den in var.
+     * Binomials are first expanded to factorials so the ratio simplifies. */
+    Expr* fx = hg_expand_binomial(f);
     Expr* nv = expr_new_function(expr_new_symbol(SYM_Plus),
                    (Expr*[]){ expr_copy(var), sum_int(1) }, 2);
-    Expr* tshift = sum_subst(f, var, nv);
+    Expr* tshift = sum_subst(fx, var, nv);
     expr_free(nv);
     Expr* ratio_raw = expr_new_function(expr_new_symbol(SYM_Times),
                           (Expr*[]){ tshift,
                                      expr_new_function(expr_new_symbol(SYM_Power),
-                                         (Expr*[]){ expr_copy(f), sum_int(-1) }, 2) }, 2);
+                                         (Expr*[]){ fx, sum_int(-1) }, 2) }, 2);
     Expr* simp = sum_eval("Simplify", (Expr*[]){ ratio_raw }, 1);
     Expr* ratio = sum_eval("Together", (Expr*[]){ simp }, 1);
     Expr* num = sum_eval("Numerator", (Expr*[]){ expr_copy(ratio) }, 1);
@@ -217,13 +263,38 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
      * NOT return it (e.g. Sum[2^k, {k,0,Infinity}] must stay Infinity/unevaluated,
      * not 1/(1-2) = -1).  p > q+1 always diverges.  When z is symbolic the gate
      * passes and the closed form is returned as the conventional CAS answer. */
-    bool diverges = false;
+    bool diverges = false, boundary = false;
     if (up_n > lo_n + 1) {
         diverges = true;
     } else if (up_n == lo_n + 1) {
         Expr* absz = sum_eval("Abs", (Expr*[]){ expr_copy(z) }, 1);
         Expr* nz = sum_eval("N", (Expr*[]){ absz }, 1);
-        if (nz->type == EXPR_REAL && nz->data.real >= 1.0 - 1e-12) diverges = true;
+        if (nz->type == EXPR_REAL) {
+            if (nz->data.real > 1.0 + 1e-9) {
+                diverges = true;                                    /* |z| > 1 */
+            } else if (nz->data.real > 1.0 - 1e-9) {
+                /* |z| == 1: the series converges only for z != 1 (Dirichlet:
+                 * partial sums of z^k stay bounded) AND when the term magnitude
+                 * decays, i.e. the growth exponent sigma = Sum(up) - Sum(lo) - 1
+                 * is < 0.  Otherwise it diverges and the pFq closed form would be
+                 * a spurious analytic continuation. */
+                Expr** st = malloc(sizeof(Expr*) * (up_n + lo_n + 1));
+                size_t sn = 0;
+                for (size_t i = 0; i < up_n; i++) st[sn++] = expr_copy(up[i]);
+                for (size_t j = 0; j < lo_n; j++)
+                    st[sn++] = expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ sum_int(-1), expr_copy(lo[j]) }, 2);
+                st[sn++] = sum_int(-1);
+                Expr* tot = expr_new_function(expr_new_symbol(SYM_Plus), st, sn);
+                free(st);
+                Expr* nsig = sum_eval("N", (Expr*[]){ tot }, 1);
+                bool converges = (nsig->type == EXPR_REAL && nsig->data.real < -1e-9);
+                expr_free(nsig);
+                bool z_is_one = (z->type == EXPR_INTEGER && z->data.integer == 1);
+                if (converges && !z_is_one) boundary = true;
+                else diverges = true;
+            }
+        }
         expr_free(nz);
     }
     if (diverges) {
@@ -241,6 +312,16 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
     Expr* pfq = expr_new_function(expr_new_symbol(SYM_HypergeometricPFQ),
                     (Expr*[]){ upList, loList, z }, 3);
     Expr* result = sum_eval("Times", (Expr*[]){ prefactor, pfq }, 2);
+
+    /* On the |z| == 1 boundary the pFq series is only conditionally convergent
+     * (or divergent).  The closed form is safe to return ONLY when HypergeometricPFQ
+     * actually reduced it to a genuine closed form (e.g. a very-well-poised
+     * Ramanujan 4F3 -> 2/Pi); if it stayed a HypergeometricPFQ, returning it would
+     * fabricate the divergent analytic continuation, so we leave Sum[...] held. */
+    if (boundary && hg_contains_pfq(result)) {
+        expr_free(result);
+        return NULL;
+    }
     return result;
 }
 

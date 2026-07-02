@@ -52,6 +52,18 @@ static void test_reductions(void) {
     assert_eval_eq("HypergeometricPFQ[{},{1/2},z]", "Cosh[2 Sqrt[z]]", 0); /* 0F1 */
     assert_eval_eq("HypergeometricPFQ[{},{3/2},z]",
                    "(1/2 Sinh[2 Sqrt[z]])/Sqrt[z]", 0);                 /* 0F1 */
+    /* 2F1 central-binomial / arcsin family (drives Sum[.../Binomial[2k,k]]). */
+    assert_eval_eq("HypergeometricPFQ[{1,1},{1/2},z]",
+                   "1/(1 - z) + (Sqrt[z] ArcSin[Sqrt[z]])/(1 - z)^(3/2)", 0);
+    assert_eval_eq("HypergeometricPFQ[{1,1},{3/2},z]",
+                   "ArcSin[Sqrt[z]]/(Sqrt[z] Sqrt[1 - z])", 0);
+    assert_eval_eq("HypergeometricPFQ[{2,1},{3/2},z]",
+                   "1/2/(1 - z) + 1/2 ArcSin[Sqrt[z]]/(Sqrt[z] (1 - z)^(3/2))", 0);
+    /* Very-well-poised Ramanujan 4F3 (central-binomial-cubed 1/Pi class). */
+    assert_eval_eq("HypergeometricPFQ[{1/2,1/2,1/2,5/4},{1/4,1,1},-1]", "2/Pi", 0);
+    /* A nearby but non-matching 4F3 must NOT reduce. */
+    assert_eval_eq("HypergeometricPFQ[{1/2,1/2,1/2,7/4},{3/4,1,1},-1]",
+                   "HypergeometricPFQ[{1/2, 1/2, 1/2, 7/4}, {3/4, 1, 1}, -1]", 0);
 }
 
 /* ---- convenience heads ---------------------------------------------- */

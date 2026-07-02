@@ -89,6 +89,12 @@ static int64_t ipow(int64_t base, int64_t exp, bool* overflow) {
     if (base == 1) return 1;
     if (base == -1) return (exp % 2 == 0) ? 1 : -1;
 
+    /* Invariant maintained across iterations: |b| <= INT64_MAX. This keeps the
+     * products below safe inside __int128 (|res| <= INT64_MAX and |b| <=
+     * INT64_MAX give |res*b| <= 2^126 < 2^127). A squaring that would breach the
+     * invariant is caught immediately and routed to the bigint path -- otherwise
+     * `b` could grow past 2^64 and the subsequent `res *= b` would itself wrap
+     * __int128 (e.g. 64^22 = 2^132 wrapped to exactly 0 mod 2^128). */
     __int128_t res = 1;
     __int128_t b = base;
     while (exp > 0) {
@@ -101,11 +107,11 @@ static int64_t ipow(int64_t base, int64_t exp, bool* overflow) {
         }
         exp /= 2;
         if (exp > 0) {
+            b *= b;   /* |b| <= INT64_MAX here, so |b*b| <= 2^126 (no __int128 wrap) */
             if (b > INT64_MAX || b < INT64_MIN) {
                 *overflow = true;
                 return 0;
             }
-            b *= b;
         }
     }
     return (int64_t)res;

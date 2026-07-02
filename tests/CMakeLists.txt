@@ -383,6 +383,9 @@ set(COMMON_SRC
     ../src/sum/sum_gosper.c
     ../src/sum/sum_hypergeometric.c
     ../src/sum/sum_rational.c
+    ../src/sum/sum_euler.c
+    ../src/sum/sum_alternating.c
+    ../src/sum/sum_trigonometric.c
     ../src/product/product.c
     ../src/product/product_util.c
     ../src/product/product_telescoping.c
@@ -529,6 +532,21 @@ target_include_directories(sum_tests PRIVATE ../src)
 add_executable(sum_rational_tests test_sum_rational.c ${COMMON_SRC})
 target_link_libraries(sum_rational_tests m)
 target_include_directories(sum_rational_tests PRIVATE ../src)
+
+add_executable(sum_euler_tests test_sum_euler.c ${COMMON_SRC})
+target_link_libraries(sum_euler_tests m)
+target_include_directories(sum_euler_tests PRIVATE ../src)
+add_test(NAME sum_euler_tests COMMAND sum_euler_tests)
+
+add_executable(sum_alternating_tests test_sum_alternating.c ${COMMON_SRC})
+target_link_libraries(sum_alternating_tests m)
+target_include_directories(sum_alternating_tests PRIVATE ../src)
+add_test(NAME sum_alternating_tests COMMAND sum_alternating_tests)
+
+add_executable(sum_trigonometric_tests test_sum_trigonometric.c ${COMMON_SRC})
+target_link_libraries(sum_trigonometric_tests m)
+target_include_directories(sum_trigonometric_tests PRIVATE ../src)
+add_test(NAME sum_trigonometric_tests COMMAND sum_trigonometric_tests)
 
 add_executable(product_tests test_product.c ${COMMON_SRC})
 target_link_libraries(product_tests m)

@@ -79,6 +79,9 @@ typedef enum {
     SUM_METHOD_GEOMETRIC,
     SUM_METHOD_GOSPER,
     SUM_METHOD_RATIONAL,
+    SUM_METHOD_EULER,
+    SUM_METHOD_ALTERNATING,
+    SUM_METHOD_TRIGONOMETRIC,
     SUM_METHOD_INVALID
 } SumMethod;
 
@@ -109,6 +112,9 @@ static SumMethod parse_method_option(const Expr* opt) {
     if (strcmp(m, "Gosper") == 0)                    return SUM_METHOD_GOSPER;
     if (strcmp(m, "HypergeometricTermGosper") == 0)  return SUM_METHOD_GOSPER;
     if (strcmp(m, "Rational") == 0)                  return SUM_METHOD_RATIONAL;
+    if (strcmp(m, "Euler") == 0)                     return SUM_METHOD_EULER;
+    if (strcmp(m, "Alternating") == 0)               return SUM_METHOD_ALTERNATING;
+    if (strcmp(m, "Trigonometric") == 0)             return SUM_METHOD_TRIGONOMETRIC;
     return SUM_METHOD_INVALID;
 }
 
@@ -161,14 +167,20 @@ static Expr* dispatch_def(SumMethod method, Expr* f, Expr* var,
             Expr* r = try_def("Sum`Polynomial", f, var, imin, imax);
             if (!r) r = try_def("Sum`Geometric", f, var, imin, imax);
             if (!r) r = try_def("Sum`Gosper", f, var, imin, imax);
+            if (!r) r = try_def("Sum`Alternating", f, var, imin, imax);
+            if (!r) r = try_def("Sum`Trigonometric", f, var, imin, imax);
             if (!r) r = try_def("Sum`Rational", f, var, imin, imax);
+            if (!r) r = try_def("Sum`Euler", f, var, imin, imax);
             if (!r) r = try_def("Sum`Hypergeometric", f, var, imin, imax);
             return r;
         }
-        case SUM_METHOD_POLYNOMIAL: return try_def("Sum`Polynomial", f, var, imin, imax);
-        case SUM_METHOD_GEOMETRIC:  return try_def("Sum`Geometric",  f, var, imin, imax);
-        case SUM_METHOD_GOSPER:     return try_def("Sum`Gosper",     f, var, imin, imax);
-        case SUM_METHOD_RATIONAL:   return try_def("Sum`Rational",   f, var, imin, imax);
+        case SUM_METHOD_POLYNOMIAL:   return try_def("Sum`Polynomial", f, var, imin, imax);
+        case SUM_METHOD_GEOMETRIC:    return try_def("Sum`Geometric",  f, var, imin, imax);
+        case SUM_METHOD_GOSPER:       return try_def("Sum`Gosper",     f, var, imin, imax);
+        case SUM_METHOD_RATIONAL:     return try_def("Sum`Rational",   f, var, imin, imax);
+        case SUM_METHOD_EULER:        return try_def("Sum`Euler",      f, var, imin, imax);
+        case SUM_METHOD_ALTERNATING:  return try_def("Sum`Alternating", f, var, imin, imax);
+        case SUM_METHOD_TRIGONOMETRIC: return try_def("Sum`Trigonometric", f, var, imin, imax);
         default:                    return NULL;
     }
 }
@@ -432,4 +444,10 @@ void sum_init(void) {
     sum_hypergeometric_init();
     void sum_rational_init(void);
     sum_rational_init();
+    void sum_euler_init(void);
+    sum_euler_init();
+    void sum_alternating_init(void);
+    sum_alternating_init();
+    void sum_trigonometric_init(void);
+    sum_trigonometric_init();
 }

@@ -596,6 +596,66 @@ static Expr* pg_numeric_complex(long n, Expr* re, Expr* im) {
 }
 #endif /* USE_MPFR */
 
+/* ------------------------------------------------------------------ */
+/* Gauss digamma theorem: exact psi(p/q) at rational arguments          */
+/* ------------------------------------------------------------------ */
+
+/* Times[args...] / Plus[args...] with an owned array (adopted). */
+static Expr* pg_call(const char* sym, Expr** a, size_t n) {
+    return expr_new_function(expr_new_symbol(sym), a, n);
+}
+static Expr* pg_int(int64_t v) { return expr_new_integer(v); }
+
+/* Gauss digamma theorem for a positive, non-integer rational z = num/den:
+ *   psi(a/q) = -gamma - ln(2q) - (pi/2) cot(pi a/q)
+ *              + 2 Sum_{n=1}^{floor((q-1)/2)} cos(2 pi n a/q) ln(sin(n pi/q)),
+ * where a/q in (0,1) is the fractional part; the integer part M is added back
+ * with psi(x+1) = psi(x) + 1/x, i.e. + Sum_{j=0}^{M-1} q/(a + j q).
+ *
+ * Every trig factor has a rational multiple of pi as argument and reduces to an
+ * algebraic/elementary value on evaluation, so the result is elementary.
+ * Returns NULL for non-positive or large-denominator arguments (stay symbolic).*/
+static Expr* pg_gauss_digamma(int64_t num, int64_t den) {
+    if (num <= 0 || den < 2 || den > POLYGAMMA_EXACT_ARG_CAP) return NULL;
+    int64_t M = num / den;          /* integer part >= 0 */
+    int64_t a = num - M * den;      /* fractional numerator, 0 < a < den */
+
+    size_t cap = 3 + (size_t)(den / 2) + (size_t)M;
+    Expr** terms = malloc(sizeof(Expr*) * cap);
+    size_t nt = 0;
+
+    /* -gamma */
+    terms[nt++] = pg_call(SYM_Times, (Expr*[]){ pg_int(-1),
+                     expr_new_symbol(SYM_EulerGamma) }, 2);
+    /* -ln(2q) */
+    terms[nt++] = pg_call(SYM_Times, (Expr*[]){ pg_int(-1),
+                     pg_call(SYM_Log, (Expr*[]){ pg_int(2 * den) }, 1) }, 2);
+    /* -(pi/2) cot(pi a/q) */
+    Expr* cotarg = pg_call(SYM_Times, (Expr*[]){ expr_new_symbol(SYM_Pi),
+                       make_rational(a, den) }, 2);
+    terms[nt++] = pg_call(SYM_Times, (Expr*[]){ make_rational(-1, 2),
+                     expr_new_symbol(SYM_Pi),
+                     pg_call(SYM_Cot, (Expr*[]){ cotarg }, 1) }, 3);
+    /* 2 sum cos(2 pi n a/q) ln(sin(n pi/q)) */
+    for (int64_t n = 1; n <= (den - 1) / 2; n++) {
+        Expr* cosarg = pg_call(SYM_Times, (Expr*[]){ pg_int(2),
+                           expr_new_symbol(SYM_Pi), make_rational(n * a, den) }, 3);
+        Expr* sinarg = pg_call(SYM_Times, (Expr*[]){ expr_new_symbol(SYM_Pi),
+                           make_rational(n, den) }, 2);
+        terms[nt++] = pg_call(SYM_Times, (Expr*[]){ pg_int(2),
+                         pg_call(SYM_Cos, (Expr*[]){ cosarg }, 1),
+                         pg_call(SYM_Log, (Expr*[]){
+                             pg_call(SYM_Sin, (Expr*[]){ sinarg }, 1) }, 1) }, 3);
+    }
+    /* + Sum_{j=0}^{M-1} q/(a + j q) */
+    for (int64_t j = 0; j < M; j++)
+        terms[nt++] = make_rational(den, a + j * den);
+
+    Expr* sum = pg_call(SYM_Plus, terms, nt);
+    free(terms);
+    return eval_and_free(sum);
+}
+
 /* ================================================================== */
 /* Dispatch                                                            */
 /* ================================================================== */
@@ -623,6 +683,16 @@ static Expr* polygamma_two_arg(Expr* order, Expr* z) {
     if (pg_pos_int(z, &m)) {
         Expr* exact = pg_exact_at_positive_int(n, m);
         return exact; /* NULL -> stays symbolic (even order, or past caps) */
+    }
+
+    /* Digamma (n = 0) at a positive rational argument: Gauss digamma theorem
+     * gives an elementary closed form (e.g. psi(3/4) - psi(1/4) = pi). */
+    if (n == 0) {
+        int64_t rn, rd;
+        if (is_rational(z, &rn, &rd) && rn > 0) {
+            Expr* g = pg_gauss_digamma(rn, rd);
+            if (g) return g;
+        }
     }
 
     if (n > POLYGAMMA_NUMERIC_ORDER_CAP) return NULL;
