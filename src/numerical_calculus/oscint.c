@@ -12,6 +12,10 @@
 #include "oscint.h"
 #include "seqaccel.h"
 
+#ifdef USE_MPFR
+#  include "denint.h"   /* denint_tanhsinh_mpfr — full-precision lobe panels */
+#endif
+
 #include <math.h>
 #include <stdlib.h>
 
@@ -203,3 +207,111 @@ bool osc_integrate_machine(GkSampleMachine f, void* ctx, double a, double b,
     *abserr = cabs(s2 - s1);
     return ok1 && ok2 && *abserr <= reltol * cabs(s2) + 1e-12;
 }
+
+#ifdef USE_MPFR
+/* Magnitude of an MPFR complex value as a double (for the geometry-only gates). */
+static double osc_mpfr_mag(const mpfr_t re, const mpfr_t im) {
+    return hypot(mpfr_get_d(re, MPFR_RNDN), mpfr_get_d(im, MPFR_RNDN));
+}
+
+bool osc_integrate_mpfr(GkSampleMachine fgeo, void* geoctx,
+                        DeQuadSampleMPFR fmp, void* mpctx,
+                        double a, long bits, double reltol,
+                        int max_panels, int panel_levels,
+                        mpfr_t out_re, mpfr_t out_im, double* abserr) {
+    mpfr_set_zero(out_re, 1); mpfr_set_zero(out_im, 1);
+    *abserr = INFINITY;
+    if (reltol <= 0.0) reltol = 1e-10;
+    if (panel_levels < 8) panel_levels = 8;
+
+    /* Locate the oscillation geometry with the cheap machine sampler. */
+    double hp; int comp;
+    if (!osc_halfperiod_comp(fgeo, geoctx, a, 0.0, true, &hp, &comp) || !(hp > 0.0))
+        return false;
+
+    /* Each lobe is integrated to (a little tighter than) the target tolerance so
+     * per-panel error does not accumulate across the hundreds of cancelling
+     * lobes.  Its endpoints are zeros of the oscillation, so a lobe is smooth
+     * and single-signed — exactly what tanh-sinh resolves quickly. */
+    double panel_tol = reltol;
+
+    mpfr_t* Sr = malloc((size_t)max_panels * sizeof(mpfr_t));
+    mpfr_t* Si = malloc((size_t)max_panels * sizeof(mpfr_t));
+    if (!Sr || !Si) { free(Sr); free(Si); return false; }
+
+    mpfr_t total_r, total_i, pr, pi, x0m, x1m, accr, acci, bestr, besti;
+    mpfr_inits2((mpfr_prec_t)bits, total_r, total_i, pr, pi, x0m, x1m,
+                accr, acci, bestr, besti, (mpfr_ptr)0);
+    mpfr_set_zero(total_r, 1); mpfr_set_zero(total_i, 1);
+    mpfr_set_zero(bestr, 1);   mpfr_set_zero(besti, 1);
+
+    /* Wynn's epsilon extracts a bounded number of digits per column, so the
+     * machine path's degree-6 cap (ample for ~15 digits) would floor the
+     * extrapolation error far above a high-precision tolerance and never
+     * converge — exhausting every panel.  In MPFR's wide working precision the
+     * high-degree tableau corner is numerically safe, so scale the cap to the
+     * requested digits (~one Wynn degree per four digits). */
+    int dcap = (int)(-log10(reltol) / 4.0) + 6;
+    if (dcap < 6) dcap = 6;
+    if (dcap > 80) dcap = 80;
+
+    int n = 0;
+    double err = INFINITY, maxS = 0.0;
+    bool conv = false;
+    double scale = hp, x = a;
+    for (int k = 0; k < max_panels; k++) {
+        double z;
+        if (!osc_next_zero(fgeo, geoctx, comp, x, scale, &z)) break;
+        mpfr_set_d(x0m, x, MPFR_RNDN);
+        mpfr_set_d(x1m, z, MPFR_RNDN);
+        double perr;
+        denint_tanhsinh_mpfr(fmp, mpctx, x0m, x1m, bits, panel_tol,
+                             panel_levels, pr, pi, &perr);
+        /* Accept the panel's best estimate whenever it is a finite number
+         * (mirrors the machine osc_panel, which keeps a non-converged panel). */
+        if (mpfr_number_p(pr) && mpfr_number_p(pi)) {
+            mpfr_add(total_r, total_r, pr, MPFR_RNDN);
+            mpfr_add(total_i, total_i, pi, MPFR_RNDN);
+        }
+        scale = z - x;
+        x = z;
+
+        mpfr_init2(Sr[n], (mpfr_prec_t)bits); mpfr_init2(Si[n], (mpfr_prec_t)bits);
+        mpfr_set(Sr[n], total_r, MPFR_RNDN);  mpfr_set(Si[n], total_i, MPFR_RNDN);
+        n++;
+        double mag = osc_mpfr_mag(total_r, total_i);
+        if (mag > maxS) maxS = mag;
+
+        if (n >= 5) {
+            int deg = (n - 1) / 2; if (deg > dcap) deg = dcap; if (deg < 1) deg = 1;
+            double sstep; bool fin;
+            if (seqaccel_wynn_mpfr((const mpfr_t*)Sr, (const mpfr_t*)Si, n, deg,
+                                   bits, accr, acci, &sstep, &fin)
+                && fin && isfinite(sstep)) {
+                double amag = osc_mpfr_mag(accr, acci);
+                /* Reject Wynn's singular-denominator blow-ups; keep the
+                 * smallest-step estimate (late high-degree entries degrade as
+                 * the tableau corner goes singular). */
+                if (amag <= 1e3 * maxS + 1.0 && sstep < err) {
+                    mpfr_set(bestr, accr, MPFR_RNDN);
+                    mpfr_set(besti, acci, MPFR_RNDN);
+                    err = sstep;
+                    /* Precision-scaled gate (no fixed double-precision floor). */
+                    if (sstep <= reltol * amag + 1e-300) { conv = true; break; }
+                }
+            }
+        }
+    }
+
+    /* Fall back to the raw partial sum if extrapolation never met tolerance. */
+    if (conv) { mpfr_set(out_re, bestr,   MPFR_RNDN); mpfr_set(out_im, besti,   MPFR_RNDN); }
+    else      { mpfr_set(out_re, total_r, MPFR_RNDN); mpfr_set(out_im, total_i, MPFR_RNDN); }
+    *abserr = err;
+
+    for (int i = 0; i < n; i++) { mpfr_clear(Sr[i]); mpfr_clear(Si[i]); }
+    free(Sr); free(Si);
+    mpfr_clears(total_r, total_i, pr, pi, x0m, x1m,
+                accr, acci, bestr, besti, (mpfr_ptr)0);
+    return conv;
+}
+#endif /* USE_MPFR */

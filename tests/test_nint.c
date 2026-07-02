@@ -238,6 +238,18 @@ static void test_high_precision(void) {
     /* The result carries the requested precision (not machine). */
     ASSERT_EQ_STR("Precision[NIntegrate[Exp[-x^2],{x,0,Infinity},WorkingPrecision->50]] > 40",
                   "True");
+    /* Semi-infinite *oscillatory* Fourier integrals at high precision, via the
+     * Ooura–Mori double-exponential rule (exp-sinh cannot resolve the slowly
+     * decaying oscillatory tail).  Regression for the WorkingPrecision branch
+     * that used to return a wrong, non-converged value here. */
+    ASSERT_CLOSE("NIntegrate[(x Sin[x])/(x^2+4),{x,0,Infinity},WorkingPrecision->100]",
+                 "Pi/(2 E^2)", 1e-90);
+    ASSERT_CLOSE("NIntegrate[Cos[x]/(x^2+1),{x,0,Infinity},WorkingPrecision->80]",
+                 "Pi/(2 E)", 1e-70);
+    ASSERT_CLOSE("NIntegrate[Sin[x]/x,{x,0,Infinity},WorkingPrecision->60]",
+                 "Pi/2", 1e-50);
+    ASSERT_CLOSE("NIntegrate[(x Sin[2 x])/(x^2+1),{x,0,Infinity},WorkingPrecision->80]",
+                 "Pi/(2 E^2)", 1e-70);
 }
 
 static void test_accuracygoal(void) {

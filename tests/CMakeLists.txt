@@ -419,6 +419,7 @@ set(COMMON_SRC
     ../src/numerical_calculus/gkadapt.c
     ../src/numerical_calculus/denint.c
     ../src/numerical_calculus/oscint.c
+    ../src/numerical_calculus/oscde.c
     ../src/numerical_calculus/mcint.c
     ../src/numerical_calculus/cubature.c
     ../src/numerical_calculus/ncrule.c

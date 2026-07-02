@@ -616,8 +616,10 @@ when an inner bound depends on an outer variable (or is infinite/complex).
 Implemented in
 `src/numerical_calculus/nint.{c,h}` with the rule kernels `gkadapt`
 (Gauss-Kronrod), `denint` (tanh-sinh / sinh-sinh), `dequad` (exp-sinh, shared
-with NSum), `oscint` (oscillatory), `cubature` (adaptive Genz-Malik
-multidimensional cubature), and `mcint` (Monte-Carlo).  Attributes:
+with NSum), `oscint` (oscillatory: integrate-between-the-zeros + Wynn epsilon,
+machine and MPFR), `oscde` (Ooura–Mori double-exponential rule for semi-infinite
+Fourier integrals), `cubature` (adaptive Genz-Malik multidimensional cubature),
+and `mcint` (Monte-Carlo).  Attributes:
 `HoldAll, Protected`.  The integration variable is `Block`-localised and the
 integrand evaluated/numericalised at each sample point.
 
@@ -629,7 +631,8 @@ integrand evaluated/numericalised at each sample point.
 | finite real, endpoint singularity | tanh-sinh double-exponential |
 | arbitrary `WorkingPrecision` (> machine) | double-exponential at the target precision + guard bits (MPFR) |
 | semi-infinite / doubly-infinite | exp-sinh / sinh-sinh |
-| oscillatory (many periods / slow tail) | integrate between zeros + Wynn epsilon (finite: half-period panels) |
+| semi-infinite Fourier `∫_0^∞ amp·{Sin\|Cos}(ω x) dx` | Ooura–Mori double-exponential rule (nodes land on the oscillation's zeros) — the fast, high-precision path (hundreds of digits in a few thousand samples) |
+| oscillatory (many periods / slow tail), general | integrate between zeros + Wynn epsilon (finite: half-period panels; MPFR-accelerated at high `WorkingPrecision`) |
 | doubly-infinite, non-decaying oscillation (e.g. `Exp[I x^2]`, `Cos[x^2]`) | split at 0, each half integrated between the zeros + Wynn epsilon (sinh-sinh fallback) |
 | oscillatory endpoint singularity (e.g. `Cos[Log[x]/x]/x` at 0) | exponential endpoint map `x = a + (b−a)e^{−t}` onto a half line, then integrate between the (accelerating) zeros + Wynn epsilon |
 | multidimensional, constant rectangular box (2 ≤ d ≤ 5) | adaptive Genz-Malik cubature (degree-7 / degree-5 error) |
@@ -675,6 +678,25 @@ tractable.  When the reduction axis's phase derivative is independent of the
 outer variable the collocation matrix is factored once and re-used across outer
 samples.  (Two-dimensional; higher dimensions fall through to cubature /
 iterated quadrature.)
+
+#### Semi-infinite Fourier integrals (Ooura–Mori DE)
+
+A semi-infinite oscillatory integral `∫_0^∞ amp(x)·{Sin[ω x]|Cos[ω x]} dx` with a
+slowly-decaying amplitude (e.g. `x Sin[x]/(x²+4)`, `Sin[x]/x`) defeats exp-sinh —
+its tail never decays monotonically — and integrate-between-the-zeros needs one
+quadrature panel *per half-period*, which is ruinous at high `WorkingPrecision`
+(each panel demands full precision, so hundreds of digits cost hundreds of
+thousands of samples).  Automatic instead recognises the aligned Fourier form and
+applies the **Ooura–Mori double-exponential rule** (`oscde`): the substitution
+`x = (M/ω) φ(t)`, `φ(t) = t/(1 − exp(−2t − α(1−e^{−t}) − β(e^t−1)))`, `M = π/h`,
+sends the abscissae `ω x(kh) → kπ` onto the oscillation's zeros double
+exponentially, so the offset trapezoidal rule reaches hundreds of digits in a few
+thousand samples (reference: Ooura & Mori, *J. Comput. Appl. Math.* 112, 1999).
+The abscissa scale `M = π/h` is formed in MPFR — a double-rounded `M` would floor
+`sin(x_k)` at ~1e-16 in the tail and cap accuracy at machine precision.  The rule
+fires only for a zero-offset linear phase from the lower limit 0 (sine nodes on
+`kπ/ω`, cosine on `(k+½)π/ω`); a misaligned phase, a complex-exponential kernel,
+or a non-zero lower limit falls back to the integrate-between-the-zeros engine.
 
 #### Equally-spaced composite rules
 
