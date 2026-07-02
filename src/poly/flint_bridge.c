@@ -300,7 +300,14 @@ static Expr* mpoly_to_expr(const fmpq_mpoly_t P, const fmpq_mpoly_ctx_t ctx,
 
 int flint_bridge_available(void) { return 1; }
 
-Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) {
+/* Shared core: compute the multivariate GCD of a, b over Q[vars]. When
+ * `normalize` is false the raw FLINT (monic) GCD is returned; when true the
+ * result is rescaled to the primitive-integer, positive-leading associate
+ * that Mathilda's classical PolynomialGCD path produces — i.e. Gauss's
+ * lemma: content(gcd) = gcd(content a, content b), pp(gcd) = pp(monic gcd).
+ * Returns NULL for numeric or non-polynomial input (caller falls back). */
+static Expr* flint_multivariate_gcd_core(const Expr* a, const Expr* b,
+                                         int normalize) {
     if (!a || !b) return NULL;
 
     VarSet vs;
@@ -319,8 +326,30 @@ Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) {
 
     Expr* out = NULL;
     if (to_mpoly(a, A, ctx, &vs) && to_mpoly(b, B, ctx, &vs)) {
-        if (fmpq_mpoly_gcd(G, A, B, ctx))
+        if (fmpq_mpoly_gcd(G, A, B, ctx)) {
+            if (normalize && !fmpq_mpoly_is_zero(G, ctx)) {
+                /* pp(G): divide out G's own (rational) content, leaving a
+                 * primitive-integer polynomial with positive leading
+                 * coefficient (FLINT's GCD is monic, so content is positive
+                 * and the leading term stays positive after division). */
+                fmpq_t cg; fmpq_init(cg);
+                fmpq_mpoly_content(cg, G, ctx);
+                if (!fmpq_is_zero(cg))
+                    fmpq_mpoly_scalar_div_fmpq(G, G, cg, ctx);
+                fmpq_clear(cg);
+
+                /* content(gcd) = gcd(content A, content B) — reinstates the
+                 * integer content the classical path carries. */
+                fmpq_t cA, cB, cc; fmpq_init(cA); fmpq_init(cB); fmpq_init(cc);
+                fmpq_mpoly_content(cA, A, ctx);
+                fmpq_mpoly_content(cB, B, ctx);
+                fmpq_gcd(cc, cA, cB);
+                if (!fmpq_is_zero(cc))
+                    fmpq_mpoly_scalar_mul_fmpq(G, G, cc, ctx);
+                fmpq_clear(cA); fmpq_clear(cB); fmpq_clear(cc);
+            }
             out = mpoly_to_expr(G, ctx, &vs);
+        }
     }
 
     fmpq_mpoly_clear(A, ctx);
@@ -329,6 +358,14 @@ Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) {
     fmpq_mpoly_ctx_clear(ctx);
     varset_free(&vs);
     return out;
+}
+
+Expr* flint_multivariate_gcd(const Expr* a, const Expr* b) {
+    return flint_multivariate_gcd_core(a, b, 0);
+}
+
+Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b) {
+    return flint_multivariate_gcd_core(a, b, 1);
 }
 
 /* Multivariate exact division a / b over Q[x_1..x_n]. Returns the quotient

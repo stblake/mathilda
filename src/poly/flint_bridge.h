@@ -46,6 +46,16 @@ int flint_bridge_available(void);
 Expr* flint_multivariate_gcd(const Expr* a, const Expr* b);
 
 /*
+ * As flint_multivariate_gcd, but rescales the result to the primitive-integer,
+ * positive-leading associate that Mathilda's classical PolynomialGCD path
+ * returns (Gauss's lemma: content(gcd) = gcd(content a, content b)). This makes
+ * it a transparent drop-in for the two-argument PolynomialGCD that Cancel /
+ * Together / Simplify issue, with identical output but far greater speed on
+ * multivariate polynomials over Q. Same NULL-fallback contract as above.
+ */
+Expr* flint_multivariate_gcd_normalized(const Expr* a, const Expr* b);
+
+/*
  * Univariate GCD over a real quadratic number field Q(sqrt d) (M2, p=0, r=1).
  *
  * Recognises `a`, `b` as univariate polynomials in a single variable x whose

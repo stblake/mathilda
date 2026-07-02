@@ -883,6 +883,46 @@ static Expr* goursat_v4(Expr* F, Expr* R, Expr* t) {
     }
     gs_log("  P0 looks vanishing -- descending the non-trivial V4 projections");
 
+    /* Goursat Theorem 1 fast path.  When F is ALREADY anti-invariant under one
+     * of the three involutions (F + F(S_k) == 0), a single direct reduction
+     * reduce_v4_piece(F, S_k) yields the antiderivative -- the character split
+     * (Theorem 2) is unnecessary and actively harmful here: it decomposes such
+     * an F into two more-complex pieces F_j = (F -/+ F(S_i))/2 whose genus-0
+     * integrands are non-constant, so the two reductions bloat and (in this
+     * integrator, lacking a full Simplify) never recombine.  Reducing F
+     * directly keeps the genus-0 integrand as simple as the integrand permits
+     * (a constant, for the parametric (1+k x)/((k x-1) Sqrt[R]) family), giving
+     * the compact single-term answer.  f0=F, f1=F(S1), f2=F(S2), f3=F(S3) are
+     * still live here; the anti-invariance test is a pure rational zero test
+     * (no radicals), so is_zero is reliable.  Fall back to the Theorem-2 split
+     * if no single involution works or the direct reduction fails to close. */
+    {
+        Expr* fS[3] = { f1, f2, f3 };
+        int t1 = -1; long t1sc = 0;
+        for (int k = 0; k < 3; k++) {
+            if (!fS[k]) continue;
+            Expr* s = canonic(mk_fn2("Plus", expr_copy(f0), expr_copy(fS[k])));
+            bool anti = s && is_zero(s);
+            if (s) expr_free(s);
+            if (anti) {
+                long sc = involution_score(S[k], t);
+                gs_log("  Theorem 1: F is anti-invariant under S[%d] (score=%ld)", k, sc);
+                if (t1 < 0 || sc < t1sc) { t1 = k; t1sc = sc; }
+            }
+        }
+        if (t1 >= 0) {
+            gs_log("  Theorem 1: reducing F directly under S[%d] -- no character split", t1);
+            Expr* piece = reduce_v4_piece(F, R, t, S[t1]);
+            if (piece) {
+                gs_log_expr("  Theorem-1 piece antiderivative", piece);
+                result = eval_take(piece);
+                expr_free(f0); expr_free(f1); expr_free(f2); expr_free(f3);
+                goto cleanup;
+            }
+            gs_log("  Theorem-1 direct reduction did not close -- falling back to Theorem-2 split");
+        }
+    }
+
     /* P0 looks vanishing -- now canonicalise the three non-trivial projections
      * that the descent actually integrates. */
     P[1] = canonic(mk_fn3("Plus", mk_fn2("Plus", expr_copy(f0), expr_copy(f1)),
@@ -1947,6 +1987,21 @@ static bool has_sqrt(const Expr* e) {
     return false;
 }
 
+/* If exponent e is a rational with denominator 2 (numerator necessarily odd),
+ * report 2*e (the odd numerator, carrying the sign) in *two_e and return true;
+ * else false.  Recognises the half-integer powers Power[base, m/2] that carry a
+ * single square-root generator.  Borrows e. */
+static bool is_half_power(const Expr* e, int64_t* two_e) {
+    if (!e || !head_is((Expr*)e, SYM_Rational)
+        || e->data.function.arg_count != 2) return false;
+    Expr* p = e->data.function.args[0];
+    Expr* q = e->data.function.args[1];
+    if (p->type != EXPR_INTEGER || q->type != EXPR_INTEGER) return false;
+    if (q->data.integer != 2) return false;   /* reduced -> numerator is odd */
+    *two_e = p->data.integer;
+    return true;
+}
+
 /* Collect distinct radicands g of Power[g, 1/2] subexpressions of e.  Pointers
  * are borrowed into e; *out is realloc'd (caller free()s the array only). */
 static void collect_sqrt_radicands(Expr* e, Expr*** out, size_t* n, size_t* cap) {
@@ -2054,6 +2109,170 @@ static Expr* reexpress_over_radical(Expr* res, Expr* R, Expr* x) {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Split-radical recombination                                            */
+/*                                                                        */
+/* reexpress_over_radical above heals an ISOLATED Sqrt[g] node.  The       */
+/* eigendescent can instead leave the single radical Sqrt[R] split across  */
+/* a Times as a PRODUCT/QUOTIENT of factor-wise roots -- e.g.              */
+/*   Sqrt[R] / (Sqrt[x] Sqrt[(1-x)(1-k^2 x)])                              */
+/* for R = x(1-x)(1-k^2 x).  Each factor alone is not a rational multiple  */
+/* of Sqrt[R] (x/R and (1-x)(1-k^2 x)/R are not perfect squares), so the   */
+/* per-node pass cannot touch it -- yet the COMBINED radicand is R^2 and    */
+/* the whole term collapses to a pure rational.  Left split it is both a    */
+/* spurious branch point (an apparent Sqrt[x] singularity the true         */
+/* antiderivative does not have) and several independent radical generators */
+/* that make a downstream Simplify blow up on multivariate GCDs.  The pass  */
+/* below merges the x-dependent half-power factors of each Times into one   */
+/* radicand and reduces it over R, restoring the canonical single-generator */
+/* form.  Correct-by-construction: an algebraic identity on the integrand's */
+/* domain, numeric global-sign fixed here and re-verified by diff_back_ok.  */
+/* ---------------------------------------------------------------------- */
+
+/* Numeric global-sign of a relative to b: pin the free parameters (variables
+ * other than x) to fixed rationals, sample x, and return +1 if a/b is decisively
+ * +1, -1 if decisively -1, else 0 (indeterminate -- caller must not rewrite).
+ * The only branch freedom after merging roots is a global sign, so this pins it.
+ * Borrows a, b, x. */
+static int numeric_sign_ratio(Expr* a, Expr* b, Expr* x) {
+    Expr* ratio = gdiv(expr_copy(a), expr_copy(b));
+    Expr* vars = eval_take(mk_fn1("Variables", expr_copy(ratio)));
+    if (vars && head_is(vars, SYM_List)) {
+        static const long an[8] = { 12, 17, 23, 29, 31, 37, 41, 43 };
+        static const long ad[8] = {  7,  5,  9, 11, 13, 10,  6,  8 };
+        size_t j = 0;
+        for (size_t i = 0; ratio && i < vars->data.function.arg_count; i++) {
+            Expr* v = vars->data.function.args[i];
+            if (expr_eq(v, x)) continue;
+            ratio = subst_eval(ratio, v, make_rational(an[j % 8], ad[j % 8])); j++;
+        }
+    }
+    if (vars) expr_free(vars);
+    if (!ratio) return 0;
+
+    static const long pn[6] = { 17, 23, 31, 37, 19, 43 };
+    static const long pd[6] = {  5,  7,  9, 10,  6,  8 };
+    Expr* eps = make_rational(1, 1000000L);
+    int sign = 0;
+    for (int i = 0; i < 6 && sign == 0; i++) {
+        Expr* at = subst_eval(expr_copy(ratio), x, make_rational(pn[i], pd[i]));
+        if (!at) continue;
+        Expr* dp = eval_take(mk_fn2("N", mk_fn1("Abs",
+                       gsub(expr_copy(at), mk_int(1))), mk_int(20)));
+        Expr* dm = eval_take(mk_fn2("N", mk_fn1("Abs",
+                       gadd(expr_copy(at), mk_int(1))), mk_int(20)));
+        expr_free(at);
+        if (dp) {
+            Expr* lt = eval_take(mk_fn2("Less", expr_copy(dp), expr_copy(eps)));
+            if (expr_is_true(lt)) sign = 1;
+            expr_free(lt);
+        }
+        if (sign == 0 && dm) {
+            Expr* lt = eval_take(mk_fn2("Less", expr_copy(dm), expr_copy(eps)));
+            if (expr_is_true(lt)) sign = -1;
+            expr_free(lt);
+        }
+        if (dp) expr_free(dp);
+        if (dm) expr_free(dm);
+    }
+    expr_free(eps); expr_free(ratio);
+    return sign;
+}
+
+/* Reduce Sqrt[rho] (rho a rational function of x) to canonical form over R:
+ *   - a rational,          if rho is a perfect rational square;
+ *   - a rational * Sqrt[R], if rho/R is a perfect rational square;
+ *   - else NULL.
+ * Result equals +Sqrt[rho] up to the global sign the caller fixes numerically.
+ * Borrows rho, R, x. */
+static Expr* reduce_sqrt_over_R(Expr* rho, Expr* R, Expr* x) {
+    /* Perfect square?  Factor exposes the square part; PowerExpand takes the
+     * root, which is radical-free exactly when rho is a rational square. */
+    Expr* h = eval_take(mk_fn1("Factor", expr_copy(rho)));
+    if (h) {
+        Expr* s = powerexpand_e(mk_sqrt_expr(expr_copy(h)));
+        if (s && !has_sqrt(s)) {
+            Expr* chk = gsub(mk_pow_int(expr_copy(s), 2), expr_copy(h));
+            bool ok = is_zero(chk);
+            expr_free(chk);
+            if (ok) { expr_free(h); return s; }
+        }
+        if (s) expr_free(s);
+        expr_free(h);
+    }
+    /* Otherwise fall to the square*R case (sqrt_over_R returns rational*Sqrt[R],
+     * already global-sign fixed against Sqrt[rho]). */
+    return sqrt_over_R(rho, R, x);
+}
+
+/* Merge the x-dependent square-root factors of a single Times node t into the
+ * one generator Sqrt[R].  Gather every Power[base, m/2] factor whose base
+ * involves x; with two or more, form the combined rational radicand rho (bases
+ * of +m/2 into the numerator, -m/2 into the denominator), reduce Sqrt[rho] over
+ * R, reattach the integer-power leftovers and all non-radical (and constant-
+ * radical) factors, then numeric-sign-fix the whole summand against t.  Returns a
+ * NEW node equal to t in canonical single-generator form, or NULL when nothing
+ * merges or the merged radicand does not reduce over R.  Borrows t, R, x. */
+static Expr* combine_times_radicals(Expr* t, Expr* R, Expr* x) {
+    if (!head_is(t, SYM_Times)) return NULL;
+    size_t n = t->data.function.arg_count;
+
+    Expr* num  = mk_int(1);   /* product of bases carrying a +1/2 part */
+    Expr* den  = mk_int(1);   /* product of bases carrying a -1/2 part */
+    Expr* rest = mk_int(1);   /* non-radical factors + integer-power leftovers */
+    int nrad = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = t->data.function.args[i];
+        int64_t two_e = 0;
+        if (head_is(f, SYM_Power) && f->data.function.arg_count == 2
+            && is_half_power(f->data.function.args[1], &two_e)
+            && !expr_free_of(f->data.function.args[0], x)) {
+            Expr* base = f->data.function.args[0];
+            int64_t sgn = (two_e > 0) ? 1 : -1;
+            if (sgn > 0) num = gmul(num, expr_copy(base));
+            else         den = gmul(den, expr_copy(base));
+            int64_t k = (two_e - sgn) / 2;            /* integer leftover power */
+            if (k != 0) rest = gmul(rest, mk_pow_int(expr_copy(base), k));
+            nrad++;
+        } else {
+            rest = gmul(rest, expr_copy(f));
+        }
+    }
+    if (nrad < 2) { expr_free(num); expr_free(den); expr_free(rest); return NULL; }
+
+    Expr* rho  = canonic(gdiv(num, den));             /* consumes num, den */
+    Expr* repl = rho ? reduce_sqrt_over_R(rho, R, x) : NULL;
+    if (rho) expr_free(rho);
+    if (!repl) { expr_free(rest); return NULL; }
+
+    Expr* cand = eval_take(gmul(rest, repl));          /* consumes rest, repl */
+    if (!cand) return NULL;
+    int sgn = numeric_sign_ratio(cand, t, x);
+    if (sgn == 0) { expr_free(cand); return NULL; }    /* unverifiable -> leave */
+    if (sgn < 0)  cand = eval_take(mk_neg(cand));
+    return cand;
+}
+
+/* Functional rebuild of e that merges split square-root products at every Times
+ * node (combine_times_radicals) into the single generator Sqrt[R].  Returns a
+ * NEW owned tree (a copy when nothing merges).  Borrows e, R, x. */
+static Expr* combine_radicals(Expr* e, Expr* R, Expr* x) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    Expr* head = combine_radicals(e->data.function.head, R, x);
+    size_t n = e->data.function.arg_count;
+    Expr** args = (n > 0) ? (Expr**)malloc(n * sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++)
+        args[i] = combine_radicals(e->data.function.args[i], R, x);
+    Expr* node = expr_new_function(head, args, n);     /* adopts head + args[i] */
+    if (args) free(args);
+    if (head_is(node, SYM_Times)) {
+        Expr* merged = combine_times_radicals(node, R, x);
+        if (merged) { expr_free(node); node = merged; }
+    }
+    return node;
+}
+
+/* ---------------------------------------------------------------------- */
 /* Core driver                                                            */
 /* ---------------------------------------------------------------------- */
 
@@ -2111,6 +2330,30 @@ static Expr* gs_core(Expr* f, Expr* x) {
             if (diff_back_ok(improved, x, f)) { expr_free(result); result = improved; }
             else expr_free(improved);
         }
+
+        /* reexpress_over_radical re-expresses each nested radical as
+         * rational*Sqrt[R] one node at a time; when the evaluator has already
+         * distributed a factored radicand across a term, that leaves the single
+         * radical Sqrt[R] SPLIT as a product of factor roots
+         * (Sqrt[x] Sqrt[(1-x)(1-k^2 x)] Sqrt[R] / ... instead of Sqrt[R]).  That
+         * split is a spurious branch point AND several independent radical
+         * generators that make a downstream Simplify blow up on multivariate
+         * GCDs.  It is only visible on the fully-evaluated form, so evaluate and
+         * then recombine the x-dependent factor roots of each Times back into the
+         * single generator Sqrt[R].  Correct by construction (an identity on the
+         * integrand's domain, numeric global-sign fixed); adopt only if the
+         * differentiate-back guard still passes. */
+        gs_log("combine_radicals: START");
+        Expr* flat = evaluate(expr_copy(result));
+        Expr* merged = flat ? combine_radicals(flat, R, x) : NULL;
+        gs_log("combine_radicals: DONE (%s)",
+               (merged && flat && !expr_eq(merged, flat)) ? "rewrote" : "no change");
+        if (merged) {
+            if (flat && !expr_eq(merged, flat) && diff_back_ok(merged, x, f)) {
+                expr_free(result); result = merged;
+            } else expr_free(merged);
+        }
+        if (flat) expr_free(flat);
     }
 
     expr_free(F);

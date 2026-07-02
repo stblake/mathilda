@@ -436,6 +436,15 @@ monotonically down.
      ω-eigencomponents, the period-3 trivial projection per fixed point), and the
      differentiate-back verdict.  The flag is latched once at the outermost call,
      so recursive genus-0 reductions share it and indent by depth.
+     Before returning (square-root case), the antiderivative is normalised so its
+     one radical is the single generator `Sqrt[R]`: any term left carrying `Sqrt[R]`
+     *split* across a numerator/denominator as a product of factor roots
+     (`Sqrt[x] Sqrt[(1-x)(1-k^2 x)] ...`) has its `x`-dependent half-power factors
+     recombined into one radicand and reduced over `R` (to a rational when it is a
+     perfect square, else `rational*Sqrt[R]`), removing the spurious branch point and
+     keeping a downstream `Simplify` to a single radical generator.  Constant radicals
+     are left intact, and the rewrite is kept only if the differentiate-back guard
+     still passes.
      A graded battery of worked examples (every exponent `p`, both numerator and
      denominator radicals, and every involution equation, with the negative
      controls that decline) is collected in

@@ -618,7 +618,23 @@ static Expr* cancel_recursive(Expr* e) {
     }
 
     cancel_recursive_inside_gcd++;
-    Expr* g = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialGCD), (Expr*[]){expr_copy(num), expr_copy(den)}, 2));
+    Expr* g = NULL;
+#ifdef USE_FLINT
+    /* Fast path: the numerator/denominator here are ordinary polynomials
+     * over Q (rational subterms were rejected by the soundness gate above).
+     * FLINT's packed fmpq_mpoly GCD is dramatically faster than the generic
+     * Expr subresultant Euclid the PolynomialGCD builtin falls back to on
+     * multivariate input — the dominant cost of Cancel/Together/Simplify on
+     * multi-generator algebraic fractions (e.g. simp_algebraic's Sqrt->g_i
+     * substituted polynomials). The result is normalised to the same
+     * primitive-integer, positive-leading associate the builtin returns, so
+     * the surrounding cancellation and sign logic is unaffected. NULL
+     * (non-polynomial / numeric input) falls through to the builtin. */
+    g = flint_multivariate_gcd_normalized(num, den);
+    if (g) g = eval_and_free(g);
+#endif
+    if (!g)
+        g = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialGCD), (Expr*[]){expr_copy(num), expr_copy(den)}, 2));
     cancel_recursive_inside_gcd--;
     
     Expr* new_num = cancel_exact_div_wrapper(num, g);
