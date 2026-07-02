@@ -373,12 +373,34 @@ static void json_escape(const char* s, char* out, size_t outlen) {
 static void pipe_process_input(const char* input, int id) {
     Expr* parsed = parse_expression(input);
     if (!parsed) {
-        char buf[256];
-        snprintf(buf, sizeof(buf),
-                 "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error\"}", id);
-        pipe_emit(buf);
-        snprintf(buf, sizeof(buf), "{\"id\":%d,\"type\":\"done\"}", id);
-        pipe_emit(buf);
+        /* Echo the exact received input in the error so a stray/invisible
+         * character or bracket mismatch in the caller's text is diagnosable
+         * rather than an opaque "Parse error". */
+        size_t esc_cap = strlen(input) * 6 + 8;
+        char* esc = malloc(esc_cap);
+        char* buf = NULL;
+        if (esc) {
+            json_escape(input, esc, esc_cap);
+            size_t bcap = esc_cap + 128;
+            buf = malloc(bcap);
+            if (buf)
+                snprintf(buf, bcap,
+                    "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error: %s\"}",
+                    id, esc);
+        }
+        if (buf) {
+            pipe_emit(buf);
+        } else {
+            char sbuf[128];
+            snprintf(sbuf, sizeof(sbuf),
+                "{\"id\":%d,\"type\":\"error\",\"message\":\"Parse error\"}", id);
+            pipe_emit(sbuf);
+        }
+        free(esc);
+        free(buf);
+        char dbuf[64];
+        snprintf(dbuf, sizeof(dbuf), "{\"id\":%d,\"type\":\"done\"}", id);
+        pipe_emit(dbuf);
         return;
     }
 
