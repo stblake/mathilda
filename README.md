@@ -73,6 +73,7 @@ To build and run Mathilda you need:
 * **GMP** (`libgmp` / `gmp-dev`) — arbitrary-precision integers *(required)*
 * **GNU Readline** (`libreadline` / `readline-dev`) — interactive line editing *(required)*
 * **MPFR** (`libmpfr` / `mpfr-dev`) — arbitrary-precision reals *(enabled by default)*
+* **FLINT** ≥ 3.0 (`libflint` / `flint-dev`) — fast, rigorous polynomial arithmetic over algebraic extensions and rigorous `acb` numerics *(optional, auto-detected)*
 * **LAPACK / BLAS** — fast machine-precision linear algebra *(optional, auto-detected)*
 * **CMake** — only required to build the test suite
 
@@ -81,6 +82,7 @@ The optional backends are controlled by build-time flags and **degrade gracefull
 | Flag | Default | Effect when on |
 |------|---------|----------------|
 | `USE_MPFR`  | `1` | Arbitrary-precision reals: `N[expr, prec]`, `Precision`/`Accuracy`, precision literals. Build without it via `make USE_MPFR=0`. |
+| `USE_FLINT` | `1` | Fast, rigorous FLINT (≥ 3.0) kernels: multivariate polynomial GCD/factoring over ℚ, univariate GCD/factoring over number fields ℚ(α) (via the `gr` layer + ANTIC), the finite-field workhorse behind parametric ℚ(t)(α) work, and rigorous `acb` numerics (`Zeta`, `HurwitzZeta`, `PolyGamma`, `StieltjesGamma`). Auto-detected via `pkg-config` with a ≥ 3.0 version floor. Falls back to the classical (slower but still rigorous) path (`USE_FLINT=0`) when absent. |
 | `USE_LAPACK`| `1` | Fast machine-precision linear algebra. Auto-detected: Apple **Accelerate** on macOS, `lapacke`/`lapack`/`blas` on Linux. Falls back to the pure-C path (`USE_LAPACK=0`) if none is found. |
 | `USE_ECM`   | `1` | Elliptic Curve Method factorization via the vendored GMP-ECM (`src/external/ecm/`), built automatically. |
 
@@ -97,6 +99,9 @@ sudo apt install libgmp-dev        # GMP — arbitrary-precision integers
 sudo apt install libmpfr-dev       # MPFR — arbitrary-precision reals
 sudo apt install libreadline-dev   # GNU Readline — interactive REPL
 
+# Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic
+sudo apt install libflint-dev      # Debian Bookworm+/Ubuntu 24.04+ ship >= 3.0
+
 # Optional: LAPACK / BLAS for fast machine-precision linear algebra
 sudo apt install liblapacke-dev libopenblas-dev
 
@@ -105,12 +110,21 @@ sudo apt install cmake
 ```
 
 On Fedora/RHEL the equivalents are `gmp-devel`, `mpfr-devel`, `readline-devel`,
-`lapack-devel`/`openblas-devel`, plus `autoconf automake libtool cmake`.
+`flint-devel` (≥ 3.0), `lapack-devel`/`openblas-devel`, plus
+`autoconf automake libtool cmake`.
+
+> **Note on FLINT versions.** Mathilda requires **FLINT ≥ 3.0** (the release that
+> merged ANTIC for number-field arithmetic). Distributions that only package
+> FLINT 2.x — e.g. Ubuntu 22.04 or Debian Bullseye — are detected as too old and
+> the build automatically falls back to `USE_FLINT=0`. Install a newer FLINT from
+> source or a backport if you want the accelerated paths on those systems.
 
 **macOS (Homebrew):**
 
 ```bash
 brew install gmp mpfr readline cmake
+# Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic:
+brew install flint
 # autoconf/automake/libtool are needed to build the vendored GMP-ECM:
 brew install autoconf automake libtool
 ```

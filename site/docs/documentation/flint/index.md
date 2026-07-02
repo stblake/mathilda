@@ -2,6 +2,24 @@
 
 13 routine(s) in the ``FLINT` `` context — direct access to the FLINT-backed kernels.
 
+## Building with FLINT
+
+These routines require Mathilda to be compiled against [FLINT](https://flintlib.org/) **>= 3.0** (the release that merged ANTIC for number-field arithmetic). FLINT is **optional** and **auto-detected**: the makefile enables it (`USE_FLINT=1`, the default) whenever `pkg-config` reports `flint >= 3.0`, and otherwise prints a warning and falls back to `USE_FLINT=0` — the classical, still-rigorous algebraic-extension and numeric paths.
+
+```bash
+# Install FLINT >= 3.0
+brew install flint                    # macOS (Homebrew)
+sudo apt install libflint-dev         # Ubuntu 24.04+/Debian Bookworm+
+
+# Build — FLINT is picked up automatically
+make -j
+
+# Force it off (classical fallback):
+make -j USE_FLINT=0
+```
+
+Confirm the installed version with `pkg-config --modversion flint`. When FLINT is unavailable these `` `FLINT` `` routines are not registered, and the public builtins that delegate to them (`Factor`, `PolynomialGCD`, `Cancel`, `Together`, `Zeta`, …) transparently use the classical implementations.
+
 - [`FLINT`PolynomialGCD`](PolynomialGCD.md) — FLINT`PolynomialGCD[a, b] gives the monic greatest common divisor of the polynomials a and b over the rationals, computed directly via FLINT (fmpq_mpoly_gcd). Multivariate. Returns unevaluated if an argument is not a polynomial over Q.  _(Stable)_
 - [`FLINT`Resultant`](Resultant.md) — FLINT`Resultant[a, b, x] gives the resultant of the polynomials a and b eliminating the variable x, over the rationals, computed directly via FLINT (fmpq_mpoly_resultant). Other variables are treated as coefficients. Returns unevaluated if out of scope.  _(Stable)_
 - [`FLINT`Factor`](Factor.md) — FLINT`Factor[p] gives the irreducible factorisation of the polynomial p over the rationals, computed directly via FLINT (fmpq_mpoly_factor), as Times[const, factor^exp, ...]. Multivariate. Returns unevaluated if p is not a polynomial over Q.  _(Stable)_

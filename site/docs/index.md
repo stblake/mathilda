@@ -127,8 +127,9 @@ Out[9]= {{193707721, 1}, {761838257287, 1}}
 ## Build & run
 
 Mathilda builds with a C99 toolchain and links GMP, MPFR and GNU Readline.
-LAPACK/BLAS is optional (auto-detected) and accelerates machine-precision
-linear algebra.
+FLINT (≥ 3.0) and LAPACK/BLAS are optional (both auto-detected): FLINT provides
+fast, rigorous algebraic-extension arithmetic and `acb` numerics, and LAPACK/BLAS
+accelerates machine-precision linear algebra.
 
 ### Install dependencies
 
@@ -141,6 +142,9 @@ linear algebra.
     # Required libraries
     sudo apt install libgmp-dev libmpfr-dev libreadline-dev
 
+    # Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic
+    sudo apt install libflint-dev
+
     # Optional: LAPACK/BLAS (fast linear algebra) and CMake (test suite)
     sudo apt install liblapacke-dev libopenblas-dev cmake
     ```
@@ -149,6 +153,7 @@ linear algebra.
 
     ```bash
     brew install gmp mpfr readline cmake
+    brew install flint                       # optional: FLINT-backed kernels
     brew install autoconf automake libtool   # for the vendored GMP-ECM
     # LAPACK/BLAS is provided by Apple's Accelerate framework — no install needed.
     ```
@@ -161,6 +166,14 @@ cd mathilda
 make -j            # builds ./Mathilda
 ./Mathilda         # start the interactive REPL
 ```
+
+!!! tip "Building with FLINT"
+    FLINT (≥ 3.0) is enabled automatically when `pkg-config` finds it — no flag
+    needed. If it is missing or older than 3.0, the build prints a warning and
+    falls back to `USE_FLINT=0` (the classical, still-rigorous paths). Force it
+    off with `make USE_FLINT=0`, and confirm the installed version with
+    `pkg-config --modversion flint`. See the
+    [FLINT context](documentation/flint/index.md) for the routines it powers.
 
 Then type an expression and press Return. Ask for help on any function with
 `?Name`:

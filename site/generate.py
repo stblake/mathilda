@@ -677,7 +677,31 @@ def emit_flint_section(tests_text, lim_text):
     # category index + awesome-pages nav
     idx = [f"# {FLINT_TITLE}", "",
            f"{len(entries)} routine(s) in the ``FLINT` `` context — direct "
-           "access to the FLINT-backed kernels.", ""]
+           "access to the FLINT-backed kernels.", "",
+           "## Building with FLINT", "",
+           "These routines require Mathilda to be compiled against "
+           "[FLINT](https://flintlib.org/) **>= 3.0** (the release that merged "
+           "ANTIC for number-field arithmetic). FLINT is **optional** and "
+           "**auto-detected**: the makefile enables it (`USE_FLINT=1`, the "
+           "default) whenever `pkg-config` reports `flint >= 3.0`, and otherwise "
+           "prints a warning and falls back to `USE_FLINT=0` — the classical, "
+           "still-rigorous algebraic-extension and numeric paths.", "",
+           "```bash",
+           "# Install FLINT >= 3.0",
+           "brew install flint                    # macOS (Homebrew)",
+           "sudo apt install libflint-dev         # Ubuntu 24.04+/Debian Bookworm+",
+           "",
+           "# Build — FLINT is picked up automatically",
+           "make -j",
+           "",
+           "# Force it off (classical fallback):",
+           "make -j USE_FLINT=0",
+           "```", "",
+           "Confirm the installed version with `pkg-config --modversion flint`. "
+           "When FLINT is unavailable these `` `FLINT` `` routines are not "
+           "registered, and the public builtins that delegate to them (`Factor`, "
+           "`PolynomialGCD`, `Cancel`, `Together`, `Zeta`, …) transparently use "
+           "the classical implementations.", ""]
     for e in entries:
         first = e["summary"]
         idx.append(f"- [`{e['name']}`]({e['slug']}.md) — {first}  _({e['status']})_"

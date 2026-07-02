@@ -19,6 +19,10 @@ frontend on macOS, Linux, and Windows.
 
 ```bash
 brew install gmp readline
+# Optional: MPFR arbitrary-precision reals
+brew install mpfr
+# Optional: FLINT (>= 3.0) — fast, rigorous algebraic-extension arithmetic + acb numerics
+brew install flint
 # Optional: hardware-accelerated linear algebra (already in Xcode CLT as Accelerate)
 # Optional: 2D graphics rendering for Plot[]/Show[]
 brew install raylib
@@ -57,6 +61,9 @@ sudo apt-get install -y \
 
 # Optional: MPFR for arbitrary-precision numerics
 sudo apt-get install -y libmpfr-dev
+
+# Optional: FLINT (>= 3.0) for fast, rigorous algebraic-extension arithmetic
+sudo apt-get install -y libflint-dev    # needs >= 3.0 (Ubuntu 24.04+/Debian Bookworm+)
 
 # Optional: graphics rendering for Plot[]/Show[]
 sudo apt-get install -y libraylib-dev   # or build raylib from source
@@ -175,6 +182,7 @@ cargo tauri dev
 |------|---------|--------|
 | `USE_ECM=0` | `1` | Disable GMP-ECM factorization (skips vendored ECM build) |
 | `USE_MPFR=0` | `1` | Disable MPFR arbitrary-precision reals |
+| `USE_FLINT=0` | `1` | Disable FLINT (≥ 3.0) kernels (falls back to the classical algebraic-extension GCD/Factor and non-FLINT numerics). Auto-disabled when FLINT ≥ 3.0 is not found by `pkg-config`. |
 | `USE_READLINE=0` | `1` | Disable GNU Readline (required on Windows; auto-detected) |
 | `USE_GRAPHICS=0` | `1` | Disable Raylib 2D graphics engine |
 | `USE_LAPACK=0` | `1` | Disable BLAS/LAPACK linear-algebra kernels |
@@ -206,6 +214,16 @@ Upgrade to Ubuntu 22.04 (Jammy) or Debian Bookworm.
 If you pass `USE_MPFR=1` (the default), MPFR must be installed. The makefile
 links `-lmpfr` automatically when `USE_MPFR=1`. Omit it by passing
 `USE_MPFR=0` (disables arbitrary-precision numerics with a runtime warning).
+
+**FLINT not detected / builds without the accelerated paths**
+Mathilda needs **FLINT ≥ 3.0** (the release that merged ANTIC for number-field
+arithmetic). If `pkg-config --exists 'flint >= 3.0'` fails, the makefile prints a
+warning and continues with `USE_FLINT=0`, using the classical (slower but still
+rigorous) algebraic-extension code. Install a recent FLINT:
+- macOS: `brew install flint`
+- Ubuntu 24.04+/Debian Bookworm+: `sudo apt-get install libflint-dev`
+- Older distros ship FLINT 2.x, which lacks ANTIC — build FLINT ≥ 3.0 from source
+  or use a backport. Confirm with `pkg-config --modversion flint`.
 
 **make: command not found (Windows)**
 Ensure `C:\msys64\usr\bin` is on your Windows `PATH` so the MSYS2 `make`
