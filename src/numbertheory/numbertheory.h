@@ -38,5 +38,6 @@ Expr* builtin_moebiusmu(Expr* res);
 Expr* builtin_liouvillelambda(Expr* res);
 Expr* builtin_prime(Expr* res);
 Expr* builtin_primepi(Expr* res);
+Expr* builtin_primeomega(Expr* res);
 
 #endif

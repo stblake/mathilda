@@ -640,6 +640,48 @@ In[6]:= LiouvilleLambda[8, GaussianIntegers -> True]
 Out[6]= 1
 ```
 
+## PrimeOmega
+
+- `PrimeOmega[n]`: the number of prime factors of `n` counted **with
+  multiplicity**, `Omega(n)`. For `n = u p_1^k_1 ... p_m^k_m` with `u` a unit
+  and `p_i` primes, `PrimeOmega[n] = k_1 + ... + k_m`. This is the exponent sum
+  that `LiouvilleLambda` reduces via `lambda(n) = (-1)^Omega(n)`.
+
+**Features**:
+- `Listable`, `Protected`.
+- Completely additive: `Omega(m n) = Omega(m) + Omega(n)`.
+- Computed directly from the prime factorisation (machine integers and GMP
+  bigints handled uniformly).
+- `PrimeOmega[1]` (and `PrimeOmega[-1]`) is `0`; the sign of `n` is ignored
+  (`Omega(-n) = Omega(n)`).
+- Gaussian integers: `PrimeOmega[n, GaussianIntegers -> True]`, or a non-real
+  Gaussian-integer argument `Complex[a, b]`, factors `n` over `Z[i]` and counts
+  the Gaussian prime factors with multiplicity. Because `2` factors as
+  `-i (1 + i)^2` in `Z[i]`, `PrimeOmega[12, GaussianIntegers -> True]` is `5`
+  (from `(1 + i)^4 3`) while `PrimeOmega[12]` is `3`.
+- Non-integer or zero `n` is left unevaluated; a wrong argument count issues a
+  `PrimeOmega::argt` message.
+
+```mathematica
+In[1]:= PrimeOmega[30]
+Out[1]= 3
+
+In[2]:= PrimeOmega[12]
+Out[2]= 3
+
+In[3]:= PrimeOmega[{4, 12, 24}]
+Out[3]= {2, 3, 4}
+
+In[4]:= PrimeOmega[30!]
+Out[4]= 59
+
+In[5]:= PrimeOmega[5 + 9 I]
+Out[5]= 2
+
+In[6]:= PrimeOmega[12, GaussianIntegers -> True]
+Out[6]= 5
+```
+
 ## EulerPhi
 
 Gives the Euler totient function $\phi(n)$.
