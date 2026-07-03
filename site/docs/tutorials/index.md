@@ -1,8 +1,9 @@
 # Tutorials
 
 A guided path through Mathilda, from your first REPL session to writing your own
-pattern-based rules and doing symbolic calculus. Every example is worked end to
-end and **verified against the current Mathilda build**.
+pattern-based rules, doing symbolic calculus, and closing infinite series and
+products into constants. Every example is worked end to end and **verified
+against the current Mathilda build**.
 
 Work through them in order if you're new — each one builds on the last.
 
@@ -63,6 +64,18 @@ Work through them in order if you're new — each one builds on the last.
     The higher transcendental functions: `Gamma`, `Zeta`, `PolyGamma`, `Erf`,
     `PolyLog`, the Bernoulli and Euler numbers, and the hypergeometric family —
     with their exact reductions and numerical values.
+
+-   :material-sigma: __[11. Symbolic summation](11-symbolic-summation.md)__
+
+    Close infinite series into constants with `Sum`: telescoping and Gosper's
+    algorithm, the Basel problem and the zeta family, Euler sums and multiple
+    zeta values, binomial sums, and the hypergeometric machines for `π`.
+
+-   :material-pi: __[12. Infinite products](12-infinite-products.md)__
+
+    Evaluate infinite products with `Product`: rational telescoping, the
+    Wallis/Viète trigonometric factorizations, Euler prime products for `ζ`,
+    and the exponential products for `e`, `γ`, and Glaisher's constant.
 
 </div>
 
